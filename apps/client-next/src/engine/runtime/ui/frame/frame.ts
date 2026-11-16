@@ -4,20 +4,50 @@
 frame.ts - draw primitives and window admission for one UI frame
 
 UiFrame borrows the current frame's arrays and its UI resource owners.
+The authored widgets (statics, labels, buttons and chrome placed by a node
+of an if*.txt layout, and the simple message box) draw through the wider
+UiAuthoredFrame.
 The coordinator retains input and window lifetime; these functions append
-draw commands and controls, and admit complete windows as one unit.
+draw commands and controls. A complete window is admitted as one unit by
+admission.ts, re-exported here so the coordinator reaches one module.
 
 ===========================================================================
 */
 import type { UiRect, UiQuad } from "@/engine/contracts/ui";
 import type { BuffViewerIcon } from "@/engine/foundation/ui/buff-viewer";
-import type { CloseControlId, UiFrame } from "./frame-contract";
-import { closedPanel } from "@/engine/foundation/ui/panels";
-import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
-import { DESKTOP_HEIGHT, DESKTOP_WIDTH, fitUiGroup } from "@/engine/foundation/ui/layout";
-import { frameRing } from "@/engine/foundation/ui/frame-ring";
+import type { CloseControlId, UiAuthoredFrame, UiFrame } from "./frame-contract";
+import { frameParts, frameRing } from "@/engine/foundation/ui/frame-ring";
 import { comboBoxChrome } from "@/engine/foundation/ui/combo-box";
 import { buttonAccess, buttonTextColor } from "@/engine/foundation/ui/button-state";
+import {
+	authoredClientRect,
+	authoredPaintOrder,
+	authoredRect,
+	type AuthoredControl,
+	type AuthoredLayout
+} from "@/engine/foundation/ui/authored-layout";
+import { barChrome } from "@/engine/foundation/ui/bar";
+import { guideTokens, hasSml2Markup } from "@/engine/foundation/ui/guide-content";
+import { skillPointReadouts } from "@/engine/foundation/ui/hud-readouts";
+import { latticeCells } from "@/engine/foundation/ui/inventory-layout";
+import { normalTile } from "@/engine/foundation/ui/normal-tile";
+import { MESSAGE_FRAME, MESSAGE_TILE, partyProposalAssets } from "@/engine/foundation/ui/party-proposal";
+import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
+import { captionWords, narrowFace, textLines } from "@/engine/foundation/ui/text-lines";
+import { messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
+
+export { beginWindow, endWindow, unloadedImages } from "./admission";
+import { image, rect } from "./draw";
+
+export { image, rect } from "./draw";
+export {
+	equipmentOverlay,
+	ITEM_SLOT_PREFIXES,
+	itemCount,
+	itemEffects,
+	nativeItem,
+	type ItemSlotContext
+} from "./item-slot";
 
 /*
 ================
@@ -46,25 +76,6 @@ export function windowOrigin(
 			[ r[0] + 10, r[1], r[2] - 21, 34 ]
 	} );
 	return r;
-}
-
-/*
-================
-rect
-================
-*/
-export function rect(
-	frame: UiFrame,
-	{ r, color, textureId = "", uv = [ 0, 0, 1, 1 ], clip = frame.full }: {
-		r: UiRect;
-		color: UiQuad["color"];
-		textureId?: string;
-		uv?: UiRect;
-		clip?: UiRect;
-	}
-) {
-	const quads = frame.quads;
-	if ( r[2] > 0 && r[3] > 0 ) quads.push( { rect: r, color, texture: textureId, uv, clip } );
 }
 
 /*
@@ -107,26 +118,6 @@ export function buffViewer(
 
 /*
 ================
-image
-================
-*/
-export function image(
-	frame: UiFrame,
-	{ r, path, color = frame.white, uv = [ 0, 0, 1, 1 ], clip = frame.full }: {
-		r: UiRect;
-		path: string;
-		color?: UiQuad["color"];
-		uv?: UiRect;
-		clip?: UiRect;
-	}
-) {
-	const paths = frame.paths, resources = frame.resources;
-	paths.push( path );
-	if ( resources.has( path ) ) rect( frame, { r: r, color: color, textureId: path, uv: uv, clip: clip } );
-}
-
-/*
-================
 additiveImage
 ================
 */
@@ -159,119 +150,6 @@ export function label(
 			vAlign: 0
 		} )
 	);
-}
-
-/*
-================
-beginWindow
-================
-*/
-export function beginWindow( frame: UiFrame ) {
-	const quads = frame.quads,
-		controls = frame.controls,
-		blocks = frame.blocks,
-		paths = frame.paths,
-		commonWindowPaths = frame.commonWindowPaths;
-	const mark = [ quads.length, controls.length, blocks.length, paths.length ] as const;
-	paths.push( ...commonWindowPaths );
-	return mark;
-}
-
-/*
-================
-endWindow
-================
-*/
-export function endWindow(
-	frame: UiFrame,
-	mark: readonly [number, number, number, number],
-	owner = "primary",
-	source?: UiRect
-) {
-	const admittedWindows = frame.admittedWindows,
-		paths = frame.paths,
-		resources = frame.resources,
-		windowMissing = frame.windowMissing,
-		contentImages = frame.contentImages,
-		phase = frame.phase,
-		w = frame.w,
-		h = frame.h,
-		fontPath = frame.fontPath,
-		quads = frame.quads,
-		controls = frame.controls,
-		blocks = frame.blocks,
-		compact = frame.compact,
-		full = frame.full;
-	const compactWindowDrag = frame.compactPolicy.windowDrag, compactCloseControl = frame.compactPolicy.closeControl;
-	const admittedWindow = admittedWindows.get( owner );
-	// Everything still loading is reported (tests wait on it before a raster);
-	// only the window's own art holds its admission.
-	const unloaded = paths.slice( mark[3] ).filter( path => !resources.has( path ) );
-	windowMissing.push( ...unloaded );
-	const gaps = unloaded.filter( path => !contentImages.has( path ) );
-	const key = phase + ":" + w + ":" + h;
-	if ( !fontPath || !resources.has( fontPath ) || gaps.length ) {
-		quads.length = mark[0];
-		controls.length = mark[1];
-		blocks.length = mark[2];
-		// Keep a fully admitted popup until its replacement is ready. Old image
-		// demand stays alive; stale content controls cannot dispatch new-tab actions.
-		if ( admittedWindow?.key === key ) {
-			quads.push( ...admittedWindow.quads );
-			blocks.push( ...admittedWindow.blocks );
-			paths.push( ...admittedWindow.paths );
-			controls.push(
-				...admittedWindow.controls.map( c => ({
-					...c,
-					disabled: closedPanel( c.id ) !== undefined || c.id.startsWith( "select-window:" ) ?
-						c.disabled :
-						true
-				}) )
-			);
-		}
-	} else {
-		// Fit within this window before caching/publication; text behind a modal
-		// must not become a neighboring column of that modal.
-		if ( compact ) {
-			const windowBounds = owner === "item-mall" || owner === "compact-guild" || compact.top < 200 ?
-				full :
-				compact.bounds;
-			fitUiGroup( quads, controls, mark[0], mark[1], windowBounds, full, {
-				blocks,
-				firstBlock: mark[2],
-				disableDrag: compactWindowDrag,
-				...(source ? { sourceBounds: source } : {})
-			} );
-			for ( let i = mark[1]; i < controls.length; i++ ) {
-				controls[i] = compactCloseControl( controls[i]!, windowBounds );
-			}
-		} else if ( w < DESKTOP_WIDTH || h < DESKTOP_HEIGHT ) {
-			// Port-only, not native: a fine pointer below the original's
-			// smallest screen mode keeps the desktop windows; one that
-			// cannot hold the viewport is scaled into it, and a window
-			// that already fits keeps the place the player dragged it to.
-			// A scaled window drops its window drags like the compact
-			// fit does: a drag would write fitted coordinates back as
-			// the remembered native position.
-			fitUiGroup( quads, controls, mark[0], mark[1], full, full, {
-				blocks,
-				firstBlock: mark[2],
-				disableDrag: compactWindowDrag,
-				leaveWhenFits: true,
-				...(source ? { sourceBounds: source } : {})
-			} );
-		}
-		const painted = resolveTextOverlaps( quads.slice( mark[0] ) );
-		quads.length = mark[0];
-		quads.push( ...painted );
-		admittedWindows.set( owner, {
-			key,
-			quads: painted,
-			controls: controls.slice( mark[1] ),
-			blocks: blocks.slice( mark[2] ),
-			paths: paths.slice( mark[3] )
-		} );
-	}
 }
 
 /*
@@ -416,4 +294,615 @@ export function comboBox(
 	quads.push( ...chrome.quads );
 	quads.push( ...text.quads( value, chrome.textRect, r, white, { hAlign: 1, vAlign: 1 } ) );
 	controls.push( { id, label, rect: r, kind: "button", disabled } );
+}
+
+// ============================================================================
+
+// A label closer than this to its window's left edge has left its window
+// (the frame's border is about this wide; the Experimental "Fit window labels").
+const WINDOW_LABEL_MARGIN = 6;
+// A fitted button caption keeps this far inside each side of its plate.
+const CAPTION_MARGIN = 4;
+// The blank between a wrapped label's two lines, below the first line's
+// descent: one label reads as one, apart from the rows beside it.
+const WRAP_LEADING = 1;
+
+/*
+================
+wrappedLabelBand
+
+Where a wrapped label's two lines go (the Experimental "Fit window
+labels"): the top of the first line's rect, laid at its top (vAlign 0),
+and the pitch to the second. A box sized for one line has no room for
+two at the font's full extent (two such lines ran 8 pixels into each
+neighbouring row, #3673), so the pair stacks at its ink height plus
+WRAP_LEADING, and tighter, down to the ink height where the first line's
+descent meets the second line's letters, when room ([above, below],
+layout labelRoom) needs it. The pair's ink is centred on the box, then
+moved inside the band; a pair taller than its band even at the tightest
+pitch stays centred on the band. Without room the band is unbounded.
+================
+*/
+function wrappedLabelBand( box: UiRect, room: readonly [number, number] | undefined, ink: {
+	top: number;
+	height: number;
+} ) {
+	const [above, below] = room ?? [ Infinity, Infinity ];
+	const bandTop = box[1] - above, bandBottom = box[1] + box[3] + below;
+	const pitch = Math.max( ink.height, Math.min( ink.height + WRAP_LEADING, bandBottom - bandTop - ink.height ) );
+	const block = pitch + ink.height;
+	let inkTop = box[1] + (box[3] - block) / 2;
+	if ( block <= bandBottom - bandTop ) inkTop = Math.min( Math.max( inkTop, bandTop ), bandBottom - block );
+	else inkTop = bandTop + (bandBottom - bandTop - block) / 2;
+	return { top: inkTop - ink.top, pitch };
+}
+// The lattice cell of CIFLattice art (36 x 36 inventory squares).
+const LATTICE_CELL = 36;
+// The Yes/No pair's buttons are this wide (52E720).
+const MESSAGE_BUTTON_WIDTH = 76;
+
+/*
+================
+authoredImage
+================
+*/
+export function authoredImage(
+	frame: UiAuthoredFrame,
+	{ node, ox, oy, path = node.texture, fraction = 1, tint = frame.white }: {
+		node: AuthoredControl;
+		ox: number;
+		oy: number;
+		path?: string;
+		fraction?: number;
+		tint?: UiQuad["color"];
+	}
+) {
+	if ( !path ) return;
+	const r = authoredRect( node, ox, oy );
+	image( frame, {
+		r: [ r[0], r[1], r[2] * fraction, r[3] ],
+		path,
+		color: tint,
+		uv: [ node.uv[0], node.uv[1], node.uv[2] * fraction, node.uv[3] ]
+	} );
+}
+
+/*
+================
+authoredText
+
+A static's text in its client rect. clipToControl keeps it inside
+that rect: true ends a long line with an ellipsis, "clip" cuts it
+at the edge. A static that carries a text key is a label; label
+overrides that for a caption or a value its caller lets run past its
+box like one (the academy's "80(80)" level in its 19-pixel field).
+================
+*/
+export function authoredText(
+	frame: UiAuthoredFrame,
+	{ node, ox, oy, value, clipToControl = false, fontStyle = 0, label = node.text !== "" }: {
+		node: AuthoredControl;
+		ox: number;
+		oy: number;
+		value: string;
+		clipToControl?: boolean | "clip";
+		fontStyle?: number;
+		label?: boolean;
+	}
+) {
+	const quads = frame.quads, paths = frame.paths, text = frame.text, full = frame.full;
+	const box = authoredClientRect( node, ox, oy );
+	// SML2 markup (843100) renders through the text board's layout, never
+	// as plain characters: the Item Mall subtitles and alchemy texts.
+	if ( hasSml2Markup( value ) ) {
+		// Markup the guide layout cannot read falls back to plain text.
+		let tokens: ReturnType<typeof guideTokens> | null = null;
+		try {
+			tokens = guideTokens( value );
+		} catch {
+			tokens = null;
+		}
+		if ( tokens ) {
+			const out = text.guide( tokens, box, clipToControl ? box : full, node.color, frame.resources.size );
+			quads.push( ...out.quads );
+			paths.push( ...out.paths );
+			return;
+		}
+	}
+	// Port-only (Experimental "Fit window labels", off is the original):
+	// an authored label (the static carries a text key; value fields
+	// with an empty authored text keep the native fitting) wider than
+	// its box (the trade window's "Purchase amount", right-aligned in
+	// 63 pixels, with a wider text face, or the consignment window's
+	// "Large category", right-aligned at x = 74 in a 43-pixel box)
+	// wraps onto two lines instead of running past its window's left
+	// edge or into the next control. A right-aligned label's lines may
+	// use the room to the window's left margin; the wrap width splits
+	// the label near its middle (never under its longest word) so a
+	// label whose room is the rest of the window still breaks in two
+	// instead of ellipsizing. A label its caller keeps inside its box
+	// (clipToControl, the guild page's "Guild master" before the race
+	// mark) wraps too, its lines inside the box's columns, instead of
+	// being cut to "Guild ma..." (#3674).
+	if ( clipToControl !== "clip" && frame.fitWindowLabels() && label && value.includes( " " ) ) {
+		const measure = ( line: string ) => text.run( line, 0, node.fontIndex ).width;
+		const width = measure( value );
+		if ( width > box[2] ) {
+			const room = node.hAlign === 2 && !clipToControl ?
+					Math.max( box[2], box[0] + box[2] - (ox + WINDOW_LABEL_MARGIN) ) :
+					box[2],
+				balanced = Math.max(
+					box[2],
+					Math.ceil( width / 2 ),
+					...value.split( " " ).map( measure )
+				);
+			// The balanced split first (its widest line stays farthest
+			// from the window's edge), the room-wide split after it.
+			for ( const wrapWidth of balanced < room ? [ balanced, room ] : [ room ] ) {
+				const lines = textLines( value, wrapWidth, measure );
+				if ( lines.length !== 2 || !lines.every( line => measure( line ) <= room ) ) continue;
+				const lineHeight = text.extentHeight( node.fontIndex ?? 0 ),
+					{ top, pitch } = wrappedLabelBand( box, node.room, text.lineInk( node.fontIndex ?? 0 ) );
+				lines.forEach( ( line, index ) =>
+					quads.push(
+						...text.quads(
+							line,
+							[ box[0], top + index * pitch, box[2], lineHeight ],
+							full,
+							node.color,
+							{
+								fontIndex: node.fontIndex,
+								fontStyle,
+								hAlign: node.hAlign,
+								vAlign: 0
+							}
+						)
+					)
+				);
+				return;
+			}
+		}
+	}
+	quads.push(
+		...text.quads( value, box, clipToControl ? box : full, node.color, {
+			fontIndex: node.fontIndex,
+			fontStyle,
+			hAlign: node.hAlign,
+			vAlign: node.vAlign,
+			// A label may run past its box; a value field's text keeps to it.
+			label,
+			...(clipToControl ?
+				{ overflow: clipToControl === "clip" ? "clip" as const : "ellipsis" as const } :
+				{})
+		} )
+	);
+}
+
+/*
+================
+authoredSkillPoints
+
+A skill point count in its static: the first of skillPointReadouts
+that fits the static's width (port-only shortening, hud-readouts.ts).
+The underbar's GDR_STATIC_SP (48) and the restoration page's
+GDR_SKILL_TEXT_SP_NUM (45) overflow at beta counts.
+================
+*/
+export function authoredSkillPoints(
+	frame: UiAuthoredFrame,
+	{ node, ox, oy, points }: { node: AuthoredControl; ox: number; oy: number; points: number; }
+) {
+	const room = authoredClientRect( node, ox, oy )[2], readouts = skillPointReadouts( points );
+	authoredText( frame, {
+		node,
+		ox,
+		oy,
+		value: readouts.find( value => frame.text.run( value, 0, node.fontIndex ).width <= room ) ??
+			readouts.at( -1 )!
+	} );
+}
+
+/*
+================
+authoredButton
+================
+*/
+export function authoredButton(
+	frame: UiAuthoredFrame,
+	{ node, ox, oy, id, label, disabled = false }: {
+		node: AuthoredControl;
+		ox: number;
+		oy: number;
+		id: string;
+		label: string;
+		disabled?: boolean;
+	}
+) {
+	const pressed = frame.pressed, hover = frame.hover, focus = frame.focus;
+	const r = authoredRect( node, ox, oy ), family = frame.buttonFamily( node.texture );
+	frame.paths.push( ...family );
+	frame.controls.push( { id, label, rect: r, kind: "button", disabled } );
+	frame.blocks.push( r );
+	const state = disabled ?
+		3 :
+		pressed === id && hover === id ?
+		2 :
+		pressed === null && (hover === id || focus === id) ?
+		1 :
+		0;
+	if ( family.every( frame.resources.has ) ) rect( frame, { r, color: frame.white, textureId: family[state]! } );
+}
+
+/*
+================
+fittedCaption
+
+Port-only, not native (Experimental "Fit window labels", off is the
+original): a button caption wider than its plate keeps the leading
+words that fit ("Delete message" -> "Delete", "Check for duplicate
+entries" -> "Check"); a single word still wider takes the narrow face
+("Dismiss" on the academy's 44-pixel plate). Returns the caption and
+the node to draw it with.
+================
+*/
+export function fittedCaption(
+	frame: UiAuthoredFrame,
+	{ node, ox, oy, caption }: { node: AuthoredControl; ox: number; oy: number; caption: string; }
+): { value: string; node: AuthoredControl; } {
+	if ( !frame.fitWindowLabels() ) return { value: caption, node };
+	const room = authoredRect( node, ox, oy )[2] - 2 * CAPTION_MARGIN,
+		measure = ( line: string, fontIndex: number ) => frame.text.run( line, 0, fontIndex ).width;
+	const value = captionWords( caption, room, line => measure( line, node.fontIndex ) ),
+		fontIndex = narrowFace( value, room, node.fontIndex, measure );
+	return { value, node: fontIndex === node.fontIndex ? node : { ...node, fontIndex } };
+}
+
+/*
+================
+authoredLabeledButton
+================
+*/
+export function authoredLabeledButton(
+	frame: UiAuthoredFrame,
+	{ node, ox, oy, id, caption, disabled = false }: {
+		node: AuthoredControl;
+		ox: number;
+		oy: number;
+		id: string;
+		caption: string;
+		disabled?: boolean;
+	}
+) {
+	const shown = fittedCaption( frame, { node, ox, oy, caption } );
+	authoredButton( frame, { node, ox, oy, id, label: shown.value, disabled } );
+	authoredText( frame, { node: shown.node, ox, oy, value: shown.value } );
+}
+
+/*
+================
+authoredChrome
+
+One node's own art. Resource sections are reverse-insertion lists
+(9BD240), so a page's native child paint order is the reverse of
+controlsByName (authoredPaintOrder), not numeric control ID.
+================
+*/
+export function authoredChrome(
+	frame: UiAuthoredFrame,
+	{ node, ox, oy }: { node: AuthoredControl; ox: number; oy: number; }
+) {
+	const quads = frame.quads, paths = frame.paths, resources = frame.resources, full = frame.full;
+	const PARTS = frame.chrome.parts;
+	// CIFScrollManager inherits CIFFrame (6F3830), but some resources omit its skin.
+	if ( node.type === "CIFScrollManager" && !node.texture ) return;
+	const r = authoredRect( node, ox, oy );
+	if (
+		node.type === "CIFFrame" || node.type === "CIFSubFrame" || node.type === "CIF_NPCTalk" ||
+		node.type === "CIFScrollManager"
+	) {
+		paths.push( ...PARTS.map( p => node.texture + p + ".png" ) );
+		quads.push(
+			...frameRing(
+				r,
+				node.texture,
+				PARTS.map( p => resources.size( node.texture + p + ".png" ) ),
+				full
+			)
+		);
+		if ( node.text ) {
+			quads.push(
+				...frame.text.quads(
+					frame.copy( node.text ),
+					[ r[0] + 10, r[1] + 7, r[2] - 20, 12 ],
+					full,
+					node.color,
+					{ hAlign: 1, vAlign: 0 }
+				)
+			);
+		}
+	} else if ( node.type === "CIFBarWnd" ) {
+		const bar = barChrome( r, node.texture, resources.size, full );
+		paths.push( ...bar.paths );
+		quads.push( ...bar.quads );
+		if ( node.text ) authoredText( frame, { node, ox, oy, value: frame.copy( node.text ) } );
+	} else if ( node.type === "CIFStretchWnd" ) {
+		const ring = stretchRing( r, node.texture, resources.size, full );
+		paths.push( ...ring.paths );
+		quads.push( ...ring.quads );
+	} else if ( node.type === "CIFLattice" ) {
+		for (
+			const cell of latticeCells(
+				r[0],
+				r[1],
+				Math.floor( r[2] / LATTICE_CELL ),
+				Math.floor( r[3] / LATTICE_CELL )
+			)
+		) {
+			const path = node.texture + cell.part + ".png";
+			paths.push( path );
+			if ( resources.has( path ) ) {
+				rect( frame, { r: cell.rect, color: frame.white, textureId: path } );
+			}
+		}
+	} else if ( node.type === "CIFNormalTile" ) {
+		paths.push( node.texture );
+		quads.push( ...normalTile( r, node.texture, resources.size( node.texture ), full ) );
+	} else if ( node.type === "CIFStatic" || node.type === "CIFPartySlot" ) {
+		if ( node.texture ) authoredImage( frame, { node, ox, oy } );
+		if ( node.type === "CIFStatic" && node.text ) {
+			authoredText( frame, { node, ox, oy, value: frame.copy( node.text ) } );
+		}
+	} else if ( node.type === "CIFPML" ) {
+		const out = frame.text.guide(
+			guideTokens( frame.copy( node.text ) ),
+			r,
+			r,
+			node.color,
+			resources.size,
+			{
+				align: node.hAlign === 1 ? "center" : node.hAlign === 2 ? "right" : "left",
+				vAlign: node.vAlign
+			}
+		);
+		quads.push( ...out.quads );
+		paths.push( ...out.paths );
+	}
+}
+
+/*
+================
+nativePage
+
+Every node of a layout in native paint order, except the ids listed.
+================
+*/
+export function nativePage(
+	frame: UiAuthoredFrame,
+	{ layout, px, py, exclude = [] }: { layout: AuthoredLayout; px: number; py: number; exclude?: readonly number[]; }
+) {
+	for ( const node of authoredPaintOrder( layout ) ) {
+		if ( !exclude.includes( node.id ) ) authoredChrome( frame, { node, ox: px, oy: py } );
+	}
+}
+
+/*
+================
+MessageBox
+
+A simple message box's caption, body lines and buttons. single picks
+CIFSimpleMessageBox type 0 (Confirm, the yes id) or 2 (Cancel, the no
+id); without it the box is type 1 with Yes and No.
+================
+*/
+export interface MessageBox {
+	readonly title: string;
+	readonly lines: readonly string[];
+	readonly yes: string;
+	readonly no: string;
+	readonly yesDisabled?: boolean;
+	readonly single?: "confirm" | "cancel";
+}
+
+/*
+================
+simpleMessageBox
+
+The CIFSimpleMessageBox every confirmation or notice on the HUD
+opens: the tiled CIFMessageBox client under its frame ring, the
+caption, the body lines left at (30,65) and the centred Yes/No pair
+(52E720), sized by its lines (textMessageBoxLayout). Its sisters draw
+through this one owner so they share one look. The caller owns the
+blocks and controls around it.
+================
+*/
+export function simpleMessageBox( frame: UiAuthoredFrame, box: MessageBox ) {
+	const quads = frame.quads, text = frame.text, resources = frame.resources, full = frame.full;
+	const white: UiQuad["color"] = frame.white, PARTS = frame.chrome.parts;
+	const lines = messageBoxLines( box.lines, value => text.run( value ).width );
+	const layout = textMessageBoxLayout( frame.w, frame.h, lines.map( line => text.run( line ).width ) );
+	frame.paths.push( ...partyProposalAssets() );
+	quads.push(
+		...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+		...frameRing(
+			layout.frame,
+			MESSAGE_FRAME,
+			PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+			full
+		),
+		...text.quads( box.title, layout.title, full, white, { hAlign: 1, vAlign: 0 } )
+	);
+	for ( const [i, line] of lines.entries() ) {
+		quads.push( ...text.quads( line, layout.lines[i]!, full, white, { vAlign: 0 } ) );
+	}
+	if ( box.single === "confirm" ) {
+		button( frame, {
+			id: box.yes,
+			value: frame.copy( "UIIT_CTL_CONFIRM" ),
+			x: layout.single[0],
+			y: layout.single[1],
+			width: MESSAGE_BUTTON_WIDTH,
+			disabled: !!box.yesDisabled
+		} );
+	} else if ( box.single === "cancel" ) {
+		button( frame, {
+			id: box.no,
+			value: frame.copy( "UIIT_CTL_CANCEL" ),
+			x: layout.single[0],
+			y: layout.single[1],
+			width: MESSAGE_BUTTON_WIDTH
+		} );
+	} else {
+		button( frame, {
+			id: box.yes,
+			value: frame.copy( "UIIT_CTL_YES" ),
+			x: layout.accept[0],
+			y: layout.accept[1],
+			width: MESSAGE_BUTTON_WIDTH,
+			disabled: !!box.yesDisabled
+		} );
+		button( frame, {
+			id: box.no,
+			value: frame.copy( "UIIT_CTL_NO" ),
+			x: layout.refuse[0],
+			y: layout.refuse[1],
+			width: MESSAGE_BUTTON_WIDTH
+		} );
+	}
+	return layout;
+}
+
+// ============================================================================
+
+const IFCOMMON = "/assets/images/Media_extracted/interface/ifcommon/";
+const FRAME_PARTS = frameParts();
+// An unavailable tab with "Grey disabled tabs" on: half-alpha plate, grey label.
+const GREY_TAB_PLATE = [ 1, 1, 1, 0x80 / 255 ] as const;
+const GREY_TAB_LABEL = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
+// CIFMainFrame::OnCreate 6F8230: shared title/drag width is frame minus 21.
+const NATIVE_TITLE_TRIM = 21;
+const SPIN_ARROW = 16;
+
+/*
+================
+nativeFrame
+
+A main frame at (px, py) sized by its authored node: the frame ring, the
+close button and the centred caption.
+================
+*/
+export function nativeFrame(
+	frame: UiAuthoredFrame,
+	{ node, px, py, caption, closeId }: {
+		node: AuthoredControl;
+		px: number;
+		py: number;
+		caption: string;
+		closeId: CloseControlId;
+	}
+) {
+	const r: UiRect = [ px, py, node.rect[2], node.rect[3] ];
+	frame.blocks.push( r );
+	frame.paths.push( ...FRAME_PARTS.map( p => node.texture + p + ".png" ) );
+	frame.quads.push(
+		...frameRing(
+			r,
+			node.texture,
+			FRAME_PARTS.map( p => frame.resources.size( node.texture + p + ".png" ) ),
+			frame.full
+		)
+	);
+	closeButton( frame, px + r[2] - 26, py + 10, closeId );
+	frame.quads.push(
+		...frame.text.quads( caption, [ px + 10, py + 12, r[2] - NATIVE_TITLE_TRIM, 12 ], frame.full, frame.white, {
+			hAlign: 1,
+			vAlign: 0
+		} )
+	);
+}
+
+/*
+================
+nativeTab
+
+A disabled tab is unavailable: it refuses input and, as the original,
+looks like an unselected one; with the Experimental row Grey disabled
+tabs on (the default) its plate is dimmed and its label grey. A busy
+tab is only waiting for the server (its owner's request is pending):
+it refuses input and always keeps the original look, so a pending
+trade never flashes grey.
+================
+*/
+export function nativeTab(
+	frame: UiAuthoredFrame,
+	{ id, caption, r, selected, style }: {
+		id: string;
+		caption: string;
+		r: UiRect;
+		selected: boolean;
+		style: { family: string; disabled?: boolean; busy?: boolean; client?: UiRect; };
+	}
+) {
+	const { family, disabled = false, busy = false, client = [ 0, 0, 0, 0 ] } = style;
+	const content: UiRect = [
+		r[0] + client[0],
+		r[1] + client[1],
+		r[2] - client[0] - client[2],
+		r[3] - client[1] - client[3]
+	];
+	const path = IFCOMMON + family + (selected ? "_on" : "_off") + ".png";
+	const grey = disabled && frame.greyDisabledTabs();
+	image( frame, { r, path, color: grey ? GREY_TAB_PLATE : frame.white } );
+	frame.controls.push( { id, label: caption, rect: r, kind: "button", selected, disabled: disabled || busy } );
+	frame.quads.push(
+		...frame.text.quads( caption, content, frame.full, grey ? GREY_TAB_LABEL : frame.white, {
+			hAlign: 1,
+			vAlign: 1,
+			fontStyle: selected ? 2 : 0
+		} )
+	);
+}
+
+/*
+================
+nativeSpin
+
+A page spinner: previous and next arrows either side of the page number.
+================
+*/
+export function nativeSpin(
+	frame: UiAuthoredFrame,
+	{ node, px, py, previous, next, page, pages }: {
+		node: AuthoredControl;
+		px: number;
+		py: number;
+		previous: string;
+		next: string;
+		page: number;
+		pages: number;
+	}
+) {
+	const r = authoredRect( node, px, py );
+	for (
+		const [id, side, xx, disabled] of [
+			[ previous, "left", r[0], page <= 0 ],
+			[ next, "right", r[0] + r[2] - SPIN_ARROW, page + 1 >= pages ]
+		] as const
+	) {
+		const n: AuthoredControl = {
+			...node,
+			type: "CIFButton",
+			rect: [ xx, r[1], SPIN_ARROW, SPIN_ARROW ],
+			texture: IFCOMMON + "com_" + side + "_arrow.png"
+		};
+		authoredButton( frame, { node: n, ox: 0, oy: 0, id, label: id, disabled } );
+	}
+	frame.quads.push(
+		...frame.text.quads(
+			String( page + 1 ),
+			[ r[0] + SPIN_ARROW, r[1], r[2] - 2 * SPIN_ARROW, r[3] ],
+			frame.full,
+			frame.white,
+			{ hAlign: 1, vAlign: 1 }
+		)
+	);
 }

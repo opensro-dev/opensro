@@ -25,6 +25,8 @@ const {
 	crestRegisterKeys,
 	crestRegisterResult,
 	crestRegisterUploadPayload,
+	CREST_CHANGE_COOLDOWN_MINUTES,
+	CREST_COOLDOWN_TEXT,
 	CREST_IMAGE_MAX_BYTES
 } = await import(
 	sourceFileUrl( "src/engine/foundation/gameplay/crest-register.ts" ).href
@@ -195,15 +197,24 @@ test("the lane's refusals print their native lines and free the flight", () => {
 	notices = game.take()?.notices ?? [];
 	assert.equal( notices.at( -1 )?.key, "UIIT_MSG_CREST_REGISTER_FAIL" );
 
+	// #3525: a register inside the server's change cooldown (a delete and
+	// a quick re-register) says so, never the install-path line.
+	upload();
+	game.receive( { opcode: CREST_UPLOAD_CONTROL, payload: json( { ok: false, reason: "cooldown" } ) }, 5 );
+	notices = game.take()?.notices ?? [];
+	assert.equal( notices.at( -1 )?.key, "" );
+	assert.equal( notices.at( -1 )?.text, CREST_COOLDOWN_TEXT );
+	assert.ok( CREST_COOLDOWN_TEXT.includes( `${CREST_CHANGE_COOLDOWN_MINUTES} minutes` ) );
+
 	// The gate's notice byte names the refusal more precisely.
 	upload();
 	game.receive(
 		{ opcode: CREST_UPLOAD_CONTROL, payload: json( { ok: false, reason: "refused", code: 188 } ) },
-		5
+		6
 	);
 	notices = game.take()?.notices ?? [];
 	assert.equal( notices.at( -1 )?.key, "UIIT_MSG_GUILD_ITEM_RIGHT_LIMIT" );
-	assert.equal( sent.length, 4 );
+	assert.equal( sent.length, 5 );
 });
 
 test("a guild register's success answer raises the completion box", () => {

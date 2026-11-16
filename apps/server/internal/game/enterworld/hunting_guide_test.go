@@ -122,8 +122,10 @@ func (source *countedHuntingGuide) HuntingGuide() []monster.HuntingGuideEntry {
 ================
 TestHuntingGuidePublicationSetting
 
-Off must skip construction, omit the wire identity, and refuse even a known
-content-addressed URL. On keeps the native reference bytes unchanged.
+The atlas is built once and published as spawnAtlas whatever the setting
+(#3489: the M window's lists read it). huntingGuide, the overlay's offer,
+rides the wire only while SRO_HUNTING_GUIDE is on. Neither changes the
+native reference identity.
 ================
 */
 func TestHuntingGuidePublicationSetting(t *testing.T) {
@@ -143,8 +145,14 @@ func TestHuntingGuidePublicationSetting(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if (refs.HuntingGuide != nil) != want || (source.calls == 1) != want || source.calls > 1 {
-				t.Fatalf("setting %q: guide %v, construction calls %d", setting, refs.HuntingGuide, source.calls)
+			if refs.SpawnAtlas == nil || source.calls != 1 {
+				t.Fatalf("setting %q: atlas %v, construction calls %d", setting, refs.SpawnAtlas, source.calls)
+			}
+			if (refs.HuntingGuide != nil) != want || (want && refs.HuntingGuide != refs.SpawnAtlas) {
+				t.Fatalf("setting %q: guide %v", setting, refs.HuntingGuide)
+			}
+			if refs.SpawnAtlas.SHA256 != enabled.SpawnAtlas.SHA256 {
+				t.Fatal("the setting changed the atlas bytes")
 			}
 			if refs.SHA256 != enabled.SHA256 || refs.Bytes != enabled.Bytes {
 				t.Fatal("optional setting changed native reference identity")
@@ -153,18 +161,35 @@ func TestHuntingGuidePublicationSetting(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if !strings.Contains(string(wire), `"spawnAtlas"`) {
+				t.Fatalf("atlas missing from the wire identity: %s", wire)
+			}
 			if strings.Contains(string(wire), `"huntingGuide"`) != want {
 				t.Fatalf("unexpected wire identity: %s", wire)
 			}
 			recorder := httptest.NewRecorder()
-			refs.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, enabled.HuntingGuide.Path, nil))
-			status := http.StatusNotFound
-			if want {
-				status = http.StatusOK
-			}
-			if recorder.Code != status {
-				t.Fatalf("guide request status %d, want %d", recorder.Code, status)
+			refs.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, enabled.SpawnAtlas.Path, nil))
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("atlas request status %d, want 200", recorder.Code)
 			}
 		})
+	}
+}
+
+/*
+================
+TestSpawnAtlasNeedsRows
+
+A population without rows (a test world) publishes no atlas at all.
+================
+*/
+func TestSpawnAtlasNeedsRows(t *testing.T) {
+	t.Setenv(EnvHuntingGuide, "on")
+	refs, err := NewBrowserReferences(BrowserReferenceSources{Skills: oneSkillCatalogue{}, HuntingGuide: huntingGuideRows{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refs.SpawnAtlas != nil || refs.HuntingGuide != nil {
+		t.Fatal("an empty population published an atlas")
 	}
 }

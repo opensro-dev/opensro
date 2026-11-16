@@ -39,6 +39,8 @@ func TestCrowPlumeBooks(t *testing.T) {
 			}
 			seedPlayerStatus(rt, c, abnormal.Poison, 10000, clock.NowMs(), mob.Gid)
 			seedPlayerStatus(rt, c, abnormal.Burn, 10000, clock.NowMs(), mob.Gid)
+			seedPlayerStatus(rt, c, abnormal.Stun, 10000, clock.NowMs(), mob.Gid)
+			seedPlayerStatus(rt, member, abnormal.Root, 10000, clock.NowMs(), mob.Gid)
 			stats, _, err := rt.playerCombatStats(testDivision, c)
 			if err != nil {
 				t.Fatal(err)
@@ -58,8 +60,14 @@ func TestCrowPlumeBooks(t *testing.T) {
 				t.Fatal("crow healing tier")
 			}
 			block := rt.playerAbnormal(testDivision, c.Name)
-			if block.Has(abnormal.Poison) != (tier == 1) || !block.Has(abnormal.Burn) {
-				t.Fatal("must cure exactly one poison/burn")
+			for _, status := range []abnormal.Status{abnormal.Poison, abnormal.Burn, abnormal.Stun} {
+				if (block != nil && block.Has(status)) != (tier == 1) {
+					t.Fatal("full negative-effect cleanse", tier, status)
+				}
+			}
+			partyBlock := rt.playerAbnormal(testDivision, member.Name)
+			if (partyBlock != nil && partyBlock.Has(abnormal.Root)) != (tier != 3) {
+				t.Fatal("party root cleanse", tier)
 			}
 			if (*member.CurrentHP > 1) != (tier == 3) || *far.CurrentHP != 1 {
 				t.Fatal("party tier/range")
@@ -116,5 +124,18 @@ func TestCrowPlumeReuseAndSourceRetirement(t *testing.T) {
 	rt.advanceCrowPlume(key, clock.NowMs())
 	if state.plume != nil || *c.CurrentHP != hp {
 		t.Fatal("unsummoned crow retained healing")
+	}
+}
+
+/*
+================
+TestPetCrowVisualsStayOffWithoutExpansion
+================
+*/
+func TestPetCrowVisualsStayOffWithoutExpansion(t *testing.T) {
+	var rt Runtime
+	rt.queueCrowVisual(testDivision, crowVisual{gid: 1, kind: crowPlumeVisual, book: 3})
+	if len(rt.monsterLegRecipients) != 0 {
+		t.Fatal("disabled expansion published a crow cue")
 	}
 }

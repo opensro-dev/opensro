@@ -3,8 +3,10 @@
 
 loot.go - party-owned rotating pickup recipients
 
-Retail moves the first member entry to the tail and returns its GID.
-Pickup eligibility is evaluated by the action owner after this rotation;
+Retail moves the first member entry to the tail and returns its GID
+(the reference server erases the head of its member list and re-inserts
+it at the end). Pickup eligibility is evaluated by the action owner after
+this rotation;
 the party half of it (may a member take another member's drop) lives here,
 so the GameWorld wiring and the action tests share one rule.
 
@@ -18,6 +20,10 @@ NextLootMember
 
 Reconcile the rotation against current membership without changing roster
 order. The same registry lock owns joins, leaves and the pickup cursor.
+Callers ask while they choose the recipient, before any grant: the
+reference server's two recipient selections (the player's ground pickup
+and the pet's) both rotate first, so a pickup refused afterwards still
+spends the member's turn (#3423).
 ================
 */
 func (r *Registry) NextLootMember(division, name string) uint32 {

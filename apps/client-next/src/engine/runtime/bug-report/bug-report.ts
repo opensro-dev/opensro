@@ -39,7 +39,7 @@ import { createBugReportDialog, type OutgoingReport, type SendOutcome } from "./
 import { createRecording } from "./recording";
 import { createReportArchive, createDiagnosticUpload, diagnosticUploadBudget, diagnosticValue } from "./archive";
 import { fitTrack } from "./transcode";
-import { createJournal, JOURNAL_WINDOW_MS, refusalReason } from "./journal";
+import { createJournal, JOURNAL_WINDOW_MS, refusalReason, timelineEvents } from "./journal";
 import { createAssetHistory } from "./asset-history";
 
 const ROUTE = "/title/bug-report";
@@ -632,12 +632,9 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		const fromMs = Math.min( zeroMs - 2000, performance.now() - JOURNAL_WINDOW_MS );
 		const timeline = {
 			note: "t is seconds from the first frame of replay.mp4 (negative: before the recording); " +
-				"clip is the part sent with the report.",
+				"lastT is a grouped event's last repeat on the same clock; clip is the part sent with the report.",
 			clip: report.range,
-			events: journal.since( fromMs ).map( ( { atMs, ...event } ) => ({
-				t: +((atMs - zeroMs) / 1000).toFixed( 3 ),
-				...event
-			}) )
+			events: timelineEvents( journal.since( fromMs ), zeroMs )
 		};
 		const current = options.state();
 		const gameplay: Record<string, unknown> = {};

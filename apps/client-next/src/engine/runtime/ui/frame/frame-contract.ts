@@ -27,6 +27,7 @@ import type { AuthoredLayout } from "@/engine/foundation/ui/authored-layout";
 import type { CosReference } from "@/engine/foundation/ui/cos-command";
 import type { FortressMapCatalog } from "@/engine/foundation/gameplay/fortress-map";
 import type { CameraDataRow } from "@/engine/foundation/ui/camera-waypoints";
+import type { GuideBlock, GuideToken } from "@/engine/foundation/ui/guide-content";
 
 /*
 ================
@@ -158,7 +159,13 @@ export interface UiFrame {
 	readonly text: {
 		quads( value: string, rect: UiRect, clip: UiRect, color: UiQuad["color"], style?: GlyphStyle ): UiQuad[];
 	};
-	readonly resources: { has( path: string ): boolean; size( path: string ): readonly [number, number] | undefined; };
+	readonly resources: {
+		has( path: string ): boolean;
+		size( path: string ): readonly [number, number] | undefined;
+		// True for an image no load will ever deliver (absent from the
+		// manifest); it must not hold a window (#3407).
+		absent?( path: string ): boolean;
+	};
 	readonly windowPlacement: {
 		frame(
 			id: string,
@@ -183,4 +190,37 @@ export interface UiFrame {
 	pressed: string | null;
 	hover: string | null;
 	focus: string | null;
+	// The Experimental "Fit window labels" row; absent reads as off (a
+	// window's admission fits its text with it, ui-glyphs resolveTextOverlaps).
+	fitWindowLabels?(): boolean;
+}
+
+/*
+================
+UiAuthoredFrame
+
+The frame the authored widgets (authored.ts) draw into: the whole text
+owner (widths, line height and SML2 layout besides quads), the system-text
+catalogue, the button art family of a texture and the Experimental "Fit
+window labels" and "Grey disabled tabs" preferences. The coordinator's drawFrame is one.
+================
+*/
+export interface UiAuthoredFrame extends UiFrame {
+	readonly text: UiFrame["text"] & {
+		run( value: string, fontStyle?: number, fontIndex?: number ): { width: number; };
+		extentHeight( index?: number, style?: number ): number;
+		lineInk( index?: number, style?: number ): { top: number; height: number; };
+		guide(
+			tokens: readonly GuideToken[],
+			rect: UiRect,
+			clip: UiRect,
+			color: UiQuad["color"],
+			size: ( path: string ) => readonly [number, number] | undefined,
+			block?: GuideBlock
+		): { quads: UiQuad[]; paths: string[]; height: number; };
+	};
+	copy( key: string ): string;
+	buttonFamily( texture: string ): readonly string[];
+	fitWindowLabels(): boolean;
+	greyDisabledTabs(): boolean;
 }

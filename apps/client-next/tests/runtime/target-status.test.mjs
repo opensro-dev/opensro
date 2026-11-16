@@ -54,7 +54,7 @@ test("retail difficulty thresholds and monster HP grade/party multipliers", () =
 		3,
 		4
 	] );
-	for ( const [rarity, multiple] of [ [ 0, 1 ], [ 1, 2 ], [ 3, 1 ], [ 4, 20 ], [ 5, 100 ], [ 6, 4 ] ] ) {
+	for ( const [rarity, multiple] of [ [ 0, 1 ], [ 1, 2 ], [ 3, 1 ], [ 4, 20 ], [ 5, 100 ], [ 6, 4 ], [ 7, 30 ] ] ) {
 		for ( const party of [ 0, 1 ] ) {
 			assert.equal(
 				monsterMaximumHp( { ...entity, rarity, rarityAuxIcon: party } ),
@@ -74,6 +74,15 @@ test("grade 8 (imported uniques) gets the unique title and a gauge; unlisted gra
 		assert.ok( output.gradeIcon.endsWith( "tw_icon_unique.png" ) );
 	}
 	assert.equal( monsterMaximumHp( { ...entity, rarity: 2 } ), undefined );
+});
+test("grade 7 (the summon scroll's and Pandora's waves) gets its title, the elite icon and a full gauge", () => {
+	const strong = { ...entity, name: "Yeti", level: 59, maxHp: 7059, rarity: 7 };
+	assert.equal( monsterMaximumHp( strong ), 7059 * 30 );
+	const output = defined( targetStatus( layouts, strong, 60, 7059 * 30, k => k, s => s.length * 6, "" ) );
+	const gauge = defined( output.images.find( image => image.node.name.includes( "HPGAUGE" ) ) );
+	assert.equal( gauge.fraction, 1 );
+	assert.ok( output.gradeIcon.endsWith( "tw_icon_elite.png" ) );
+	assert.ok( output.texts.some( text => JSON.stringify( text ).includes( "UIIT_STT_MOB_STRONG" ) ) );
 });
 test("all supported target families use exclusive authored layouts and native width changes", () => {
 	const monster = render( entity );

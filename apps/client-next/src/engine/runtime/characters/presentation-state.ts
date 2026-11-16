@@ -16,6 +16,7 @@ import { MOVEMENT_MODE_SEATED, type EntityState } from "@/engine/contracts/world
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import type { DeathModel, Resource, PresentationIdleState, PresentationOutput } from "./internal/presentation-contract";
+import { recordDegradation } from "@/engine/foundation/session/degradation-record";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 
 /*
@@ -117,7 +118,7 @@ export function createPresentationState() {
 		*/
 		step(
 			frame: PresentationStateFrame,
-			output: Pick<PresentationOutput, "failure">,
+			output: Pick<PresentationOutput, "degradations" | "degradedKeys">,
 			published: PresentationStateCatalog
 		) {
 			const {
@@ -174,7 +175,7 @@ export function createPresentationState() {
 				enterDeath( entry, shownDead, {
 					previousMask: state?.actionMask ?? 0,
 					deathModel: deathModels.has( resource.codename ),
-					deathLoop: resource.clips.includes( "deathLoop" ) || resource.clips.includes( "deathloop" ),
+					deathLoop: resource.clipFacts.loopsDeath,
 					uncensored
 				} );
 				if ( shownDead || entity.mountedOn || entity.movementMode === MOVEMENT_MODE_SEATED ) {
@@ -183,7 +184,13 @@ export function createPresentationState() {
 					if ( hit?.downAt !== undefined ) {
 						const recoveryMs = recoveryByCodename.get( resource.codename );
 						if ( recoveryMs === undefined ) {
-							output.failure = `Missing native recovery duration ${resource.codename}`;
+							// The knockdown keeps standing: no recovery length to
+							// time the get-up by (recordDegradation).
+							recordDegradation(
+								output,
+								"presentation-recovery-duration",
+								`Missing native recovery duration ${resource.codename}`
+							);
 						} else {entry.posture = transitionPosture( entry.posture, {
 								kind: "down",
 								at: hit.downAt,
@@ -229,7 +236,7 @@ export function createPresentationState() {
 							};
 						} else if (
 							action !== null && !moving && !castByActor.has( entity.gid ) &&
-							resource.clips.includes( `emote${action}` )
+							resource.clipFacts.names.has( `emote${action}` )
 						) {
 							entry.posture = transitionPosture( entry.posture, {
 								kind: "emote",

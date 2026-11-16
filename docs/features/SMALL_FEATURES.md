@@ -129,17 +129,12 @@ European characters a **5,000 total mastery-level budget**. This is an explicit
 beta policy, not a native rule. Individual mastery ceilings, character-level
 requirements, skill prerequisites and SP prices remain unchanged.
 
-The Nomad game-world job enables it by default for the current beta through
-`beta_mastery = "on"`. Localhost and production use this same job and code.
-Directly launched game-world binaries retain native rules unless the environment
-switch is enabled.
-
-To return to native rules, put `off` in `<state-dir>/beta-mastery.txt`
-(`apps/server/.state/cluster/beta-mastery.txt` with the default layout) and
-deploy normally. The deployer passes this persistent setting to the Nomad
-job's `beta_mastery` variable; it survives future releases. Put `on` in the
-same file to re-enable beta limits. A missing file defaults to on for this beta;
-an empty or invalid file refuses deployment. For a directly launched binary, unset
+It is off by default (native, owner 2026-11-13). To turn it on, put `on` in
+`<state-dir>/beta-mastery.txt` (`apps/server/.state/cluster/beta-mastery.txt`
+with the default layout) and deploy normally. The deployer passes this
+persistent setting to the Nomad job's `beta_mastery` variable; it survives
+future releases. Put `off` in the same file, or remove it, to keep native
+limits. An empty or invalid file refuses deployment. For a directly launched binary, unset
 `SRO_BETA_MASTERY` or set it to `off`, then restart. Native total allowances
 are Chinese **300** and European **min(2 × character level, 240)**.
 

@@ -19,6 +19,12 @@ type LetterRecord struct {
 	PackedReceiveTime uint32 `json:"packedReceiveTime"`
 	ReadFlag          uint8  `json:"readFlag"`
 	Body              string `json:"body"`
+	// UnknownFields are the stored letter's top-level fields this
+	// binary does not know, a newer release's (store/json.go, #3090).
+	// A letter has no identity but its place in the mailbox, so the
+	// letter carries them itself and the store writes them back with
+	// it. Only the store sets them; game code copies letters whole.
+	UnknownFields string `json:"-"`
 }
 
 // LetterDelivery is DeliverLetter's verdict. The letter lane answers

@@ -10,6 +10,7 @@ and render statistics.
 ===========================================================================
 */
 import type { Geometry } from "./geometry";
+import type { EnvironmentStages } from "@/engine/foundation/rendering/environment-stages";
 /*
 ================
 WorldMaterial
@@ -17,7 +18,8 @@ WorldMaterial
 */
 export interface WorldMaterial {
 	readonly deferredParticle?: boolean;
-	readonly environmentReflection?: boolean;
+	/** The environment map's native stage setup (EnvironmentStages); absent draws none. */
+	readonly environmentReflection?: EnvironmentStages;
 	/** D3DCMPFUNC, default GREATEREQUAL. */
 	readonly alphaCompare?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 	readonly colorTimeline?: import("@/engine/foundation/rendering/material-timeline").MaterialTimeline;
@@ -136,6 +138,9 @@ export interface WorldGroup {
 		readonly sceneryRange?: boolean;
 		readonly cells: readonly (readonly [number, number])[];
 		readonly cellRadius: number;
+		// A seasonal world layer member: drawn only while its event group
+		// is active (foundation/world/world-layers.ts).
+		readonly layer?: number;
 	}[];
 	readonly animation?: { readonly model: string; readonly primitive: number; readonly clip: string; };
 	readonly instanceRadius?: number;

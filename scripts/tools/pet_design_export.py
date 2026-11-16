@@ -20,7 +20,7 @@ CLIENT_MODULE = "apps/client-next/src/engine/foundation/ui/pet-design-data.ts"
 SECTIONS = ("rules", "pets", "skills", "treeSkills", "gear", "affixes", "procs")
 UNIQUE_ID_SECTIONS = ("skills", "treeSkills", "affixes")
 GEAR_DEGREES = 9
-TREE_SKILL_BOOKS = 60
+TREE_SKILL_BOOKS = 75
 
 
 # ================

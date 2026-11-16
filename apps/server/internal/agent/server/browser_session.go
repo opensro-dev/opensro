@@ -289,6 +289,52 @@ func (server *Server) handleBrowserCharacterSelect(w http.ResponseWriter, r *htt
 
 /*
 ================
+retiresBrowserState
+
+Whether a refused request may still forget browser state: the same
+POST + JSON shape the handlers demand, so a cross-site simple form
+cannot clear a player's cookies either.
+================
+*/
+func retiresBrowserState(r *http.Request) bool {
+	return r.Method == http.MethodPost && strings.HasPrefix(r.Header.Get("Content-Type"), "application/json")
+}
+
+/*
+================
+retireBrowserSession
+
+Logout refused for an outdated protocol still does what the player
+asked: it revokes the presented sessions and clears the session and
+character cookies, as handleBrowserLogout does.
+================
+*/
+func (server *Server) retireBrowserSession(w http.ResponseWriter, r *http.Request) {
+	if !retiresBrowserState(r) {
+		return
+	}
+	server.revokeRequestSessions(r)
+	server.setBrowserSession(w, r, "", true)
+}
+
+/*
+================
+retireBrowserCharacter
+
+Leaving for character select, refused for an outdated protocol, still
+forgets the remembered character, so the reload the refusal asks for
+lands on the roster instead of re-entering the world (ops #329).
+================
+*/
+func (server *Server) retireBrowserCharacter(w http.ResponseWriter, r *http.Request) {
+	if !retiresBrowserState(r) {
+		return
+	}
+	server.setBrowserCharacter(w, r, "", time.Unix(1, 0))
+}
+
+/*
+================
 liveSession
 
 A verified session still names a stored account and an enabled shard. A

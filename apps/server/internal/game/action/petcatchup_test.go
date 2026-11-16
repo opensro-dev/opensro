@@ -56,7 +56,7 @@ func strandedPet(t *testing.T, band uint16, ownerAt simulation.Spawn) (*Runtime,
 		})
 	gid := c.ActiveCOS.GID
 	state := rt.petSessionFor(testDivision, c.Name, gid)
-	state.follower = simulation.NewPetFollower(gid, simulation.Spawn{RegionID: 0x62a8, X: 500, Z: 500})
+	state.mover.FollowFrom(gid, simulation.Spawn{RegionID: 0x62a8, X: 500, Z: 500})
 	return rt, petOwnerKey{division: testDivision, name: strings.ToLower(c.Name), gid: gid}, state
 }
 
@@ -69,10 +69,10 @@ func TestStrandedPetWarpsToAnOwnerTwoSectorsAway(t *testing.T) {
 	owner := simulation.Spawn{RegionID: 0x62aa, X: 300, Z: 500}
 	rt, key, state := strandedWolf(t, owner)
 	var frames []simulation.Frame
-	for now := int64(2_000_000); now < 2_005_000 && state.follower.Position(now).RegionID != owner.RegionID; now += 100 {
+	for now := int64(2_000_000); now < 2_005_000 && state.mover.AnyFollower().Position(now).RegionID != owner.RegionID; now += 100 {
 		frames = append(frames, rt.advancePet(key, now)...)
 	}
-	at := state.follower.Position(2_005_000)
+	at := state.mover.AnyFollower().Position(2_005_000)
 	if at.RegionID != owner.RegionID || at.X != owner.X || at.Z != owner.Z {
 		t.Fatalf("the walled-in pet stayed at %+v, want a warp to its owner %+v", at, owner)
 	}
@@ -103,12 +103,12 @@ func TestWalledInPetWarpsToAnAdjacentOwnerAfterTenStalledStops(t *testing.T) {
 	var frames []simulation.Frame
 	for now := int64(2_000_000); now < 2_005_000 && warpedAt < 0; now += 100 {
 		frames = append(frames, rt.advancePet(key, now)...)
-		if at := state.follower.Position(now); at.RegionID == owner.RegionID && at.X == owner.X {
+		if at := state.mover.AnyFollower().Position(now); at.RegionID == owner.RegionID && at.X == owner.X {
 			warpedAt = int(now-2_000_000) / 100
 		}
 	}
 	if warpedAt < 0 {
-		t.Fatalf("the walled-in pet never warped to its adjacent owner; it is at %+v", state.follower.Position(2_005_000))
+		t.Fatalf("the walled-in pet never warped to its adjacent owner; it is at %+v", state.mover.AnyFollower().Position(2_005_000))
 	}
 	// One follow evaluation per 100 ms tick, each a refused step: the warp
 	// cannot come before the tenth.

@@ -8,6 +8,7 @@ one-monster nests on the default world, and a switch off reaps
 exactly what the marker enrolled.
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import hashlib
 import json
 import os
@@ -17,7 +18,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import hunting2_import as hunting2  # noqa: E402
 import jupiter_import as jupiter  # noqa: E402
 
@@ -187,7 +187,8 @@ class Hunting2ImportTest(unittest.TestCase):
 			population = json.loads((text_root / hunting2.FIELD_FILE).read_text(encoding="utf-8"))
 			self.assertEqual(population["Version"], 2)
 			self.assertTrue(all(row["WorldID"] == 1 for row in population["Rows"]))
-			self.assertTrue(all(row["MaxCount"] == 1 and row["Radius"] == 0 for row in population["Rows"]))
+			self.assertTrue(all(row["MaxCount"] == 1 and row["Radius"] == hunting2.cap110.CLIENT_NEST_RADIUS and
+				row["GenerateRadius"] == hunting2.cap110.CLIENT_NEST_GENERATE_RADIUS for row in population["Rows"]))
 			self.assertEqual(population["Rows"][0]["Controls"]["SightRange"], 100)
 			shard = (text_root / hunting2.CHARACTER_SHARD).read_bytes().decode("utf-16")
 			self.assertIn("MOB_TQ_INSIDE", shard)

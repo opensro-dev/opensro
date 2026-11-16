@@ -30,6 +30,7 @@ import { copyReferencedWaterImages, resolveWaterTextures } from "../assets/copyW
 import { buildTitleSectorObjectResources } from "../objects/buildTitleSectorObjectResources.mjs";
 import { buildRegionNavmeshData } from "../navmesh/buildRegionNavmeshData.mjs";
 import { exists } from "../io.mjs";
+import { placementLayer, readWorldLayerTable } from "./worldLayers.mjs";
 
 /*
 ================
@@ -389,7 +390,10 @@ readJmxMapObjectPlacementSector
 */
 export async function readJmxMapObjectPlacementSector( sectorX, sectorY, sourceExtractedRoot, sourceGameRoot ) {
 	const objects2Path = path.join( sourceExtractedRoot, "Map_extracted", String( sectorY ), `${sectorX}.o2` );
-	const objects = parseJmxMapObjectPlacementO2( await readFile( objects2Path ), objects2Path );
+	const [objects, layers] = await Promise.all( [
+		readFile( objects2Path ).then( buffer => parseJmxMapObjectPlacementO2( buffer, objects2Path ) ),
+		readWorldLayerTable( sourceExtractedRoot )
+	] );
 
 	return {
 		sectorId: toHex16( (sectorY << 8) | sectorX ),
@@ -410,6 +414,10 @@ export async function readJmxMapObjectPlacementSector( sectorX, sectorY, sourceE
 		blocks: objects.blocks,
 		placements: objects.placements.map( ( placement ) => ({
 			...placement,
+			// A seasonal layer member (worldLayers.mjs); absent on ordinary placements.
+			...(placementLayer( layers, placement ) === undefined ?
+				{} :
+				{ layer: placementLayer( layers, placement ) }),
 			sourceSector: {
 				sectorId: toHex16( (sectorY << 8) | sectorX ),
 				sectorX,

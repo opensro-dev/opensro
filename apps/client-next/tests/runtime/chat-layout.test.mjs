@@ -164,8 +164,23 @@ const EVENT_LINES = [
 		channel: 7,
 		name: "",
 		text: "Looter has dropped D6 Star Blade (Seal Of Star) from Tiger Girl",
-		outgoing: false
-	}
+		outgoing: false,
+		// The drop notice arrives on the port-only 0x81 channel.
+		event: true
+	},
+	// The operator's restart warning, a native type-7 notice.
+	{ channel: 7, name: "", text: "Server restart in two minutes.", outgoing: false }
+];
+
+const TAB_LINES = [
+	{ channel: 1, name: "Peer", text: "hello everyone", outgoing: false },
+	{ channel: 2, name: "Pal", text: "psst, still there?", outgoing: false },
+	{ channel: 4, name: "Peer", text: "hello party", outgoing: false },
+	{ channel: 5, name: "Peer", text: "hello guild", outgoing: false },
+	{ channel: 11, name: "Peer", text: "hello ally", outgoing: false },
+	{ channel: 3, name: "", gid: 7, text: "gm speaking", outgoing: false },
+	{ channel: 10, name: "", text: "type ten line", outgoing: false },
+	{ channel: 0xff, name: "", text: "type ff line", outgoing: false }
 ];
 
 /*
@@ -187,7 +202,38 @@ test("without the Event tab the four native tabs keep notices in All", () => {
 	assert.ok( visibleLabels( result ).some( label => label.includes( "Seal Of Star" ) ) );
 });
 
-test("the Event tab holds channel-7 notices and All skips them", () => {
+// Native filings put a whisper, a GM line and the type 10 and 0xff lines
+// on every native tab (6ad280 files types 2, 3, 0xa and 0xff into the
+// All, Party, Guild and Ally lists alike), so each channel tab shows its
+// own channel beside them and nothing else; the port-only Event tab
+// stays notice-only, those lines included out (#3356, #3370).
+test("whisper, GM and type 10 lines show on every native chat tab beside the tab's own channel", () => {
+	for ( const eventTab of [ false, true ] ) {
+		const shows = ( tab, text ) =>
+			visibleLabels( chatLayout( input( { lines: TAB_LINES, welcome: "", eventTab, tab, rows: 12 } ) ) )
+				.some( label => label.includes( text ) );
+		// The addressed sender prefix pins the whisper row even where its
+		// text wraps onto a second displayed row.
+		const everyTab = [
+			"Pal(UIIT_CHATERR_WHISPER_FROM_MESSAGE):psst",
+			"gm speaking",
+			"type ten line",
+			"type ff line"
+		];
+		for ( const text of everyTab ) {
+			for ( const tab of [ 0, 1, 2, 3 ] ) assert.ok( shows( tab, text ), `${text} on tab ${tab}` );
+			if ( eventTab ) assert.ok( !shows( 4, text ), `${text}: the Event tab stays notice-only` );
+		}
+		assert.ok( shows( 1, "hello party" ) && !shows( 1, "hello guild" ) && !shows( 1, "hello ally" ) );
+		assert.ok( shows( 2, "hello guild" ) && !shows( 2, "hello party" ) );
+		assert.ok( shows( 3, "hello ally" ) && !shows( 3, "hello party" ) );
+		for ( const tab of [ 1, 2, 3 ] ) {
+			assert.ok( !shows( tab, "hello everyone" ), `general chat stays off tab ${tab}` );
+		}
+	}
+});
+
+test("the Event tab holds channel-7 notices and All skips the event notices", () => {
 	const tabs = chatLayout( input( { lines: EVENT_LINES, welcome: "", eventTab: true } ) );
 	assert.deepEqual(
 		tabs.controls.filter( c => c.id.startsWith( "chat-tab:" ) ).map( c => [ c.id, c.label ] ),
@@ -202,12 +248,14 @@ test("the Event tab holds channel-7 notices and All skips them", () => {
 	const all = visibleLabels( chatLayout( input( { lines: EVENT_LINES, welcome: "", eventTab: true, tab: 0 } ) ) );
 	assert.ok( all.some( label => label.includes( "hello all" ) ) );
 	assert.ok( !all.some( label => label.includes( "Seal Of Star" ) ) );
+	assert.ok( all.some( label => label.includes( "Server restart" ) ), "All keeps the restart warning" );
 	const party = visibleLabels( chatLayout( input( { lines: EVENT_LINES, welcome: "", eventTab: true, tab: 1 } ) ) );
 	assert.deepEqual( party.filter( label => label.includes( "hello" ) ).length, 1 );
 	assert.ok( !party.some( label => label.includes( "Seal Of Star" ) ) );
 	const event = visibleLabels( chatLayout( input( { lines: EVENT_LINES, welcome: "", eventTab: true, tab: 4 } ) ) );
 	assert.ok( event.length >= 1 );
 	assert.ok( event.some( label => label.includes( "Seal Of Star" ) ) );
+	assert.ok( event.some( label => label.includes( "Server restart" ) ) );
 	assert.ok( !event.some( label => label.includes( "hello" ) ) );
 });
 

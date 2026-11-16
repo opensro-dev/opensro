@@ -12,9 +12,7 @@ never in both places, or in neither, after a crash.
 package store
 
 import (
-	"bytes"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -134,7 +132,13 @@ writeAccountStorageTx
 ================
 */
 func writeAccountStorageTx(tx *sql.Tx, account string, storage domain.AccountStorage) error {
-	record, err := json.Marshal(storage)
+	// The replaced row's unknown fields are written again (json.go).
+	unknown, err := storedUnknownFields[domain.AccountStorage](tx,
+		"SELECT record FROM account_storage WHERE account_id = ?", account)
+	if err != nil {
+		return err
+	}
+	record, err := encodeRecordFields(storage, unknown)
 	if err != nil {
 		return err
 	}
@@ -169,9 +173,9 @@ decodeAccountStorage
 */
 func decodeAccountStorage(record string) (domain.AccountStorage, error) {
 	var storage domain.AccountStorage
-	dec := json.NewDecoder(bytes.NewReader([]byte(record)))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&storage); err != nil {
+	// Unknown top-level fields stay on disk: writeAccountStorageTx
+	// reads them back before replacing the row (json.go).
+	if _, err := decodeRecordFields([]byte(record), &storage); err != nil {
 		return storage, fmt.Errorf("storage: record: %w", err)
 	}
 	return storage, validateAccountStorage(storage)

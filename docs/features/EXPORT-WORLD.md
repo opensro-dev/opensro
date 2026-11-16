@@ -63,7 +63,7 @@ every nest stands in an admitted region and names an admitted kind
 (`monster.AppendExportWorld`); anything else refuses startup. With
 no population file yet, the flag on boots the native population.
 
-Character kinds convert into the identity band **190000**, reserved
+Character kinds convert into the identity band **250000**, reserved
 here: no other layer may take it. The archive's character shard and
 `tables/dungeoninfo.txt` ride along unread - conversions, spawns,
 NPCs, teleports and dungeon rows are each area's own import PR

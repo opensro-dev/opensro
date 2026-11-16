@@ -194,7 +194,7 @@ func TestWolfEligibilityAndProgressReset(t *testing.T) {
 			case "far":
 				at := rt.LiveSpawnFor(testDivision, c)
 				at.X += 201
-				state.follower = simulation.NewPetFollower(c.ActiveCOS.GID, at)
+				state.mover.FollowFrom(c.ActiveCOS.GID, at)
 			case "town":
 				c.World.Spawn.RegionID = testInt64(0x62a8)
 				rt.Worlds.Forget(simulation.WorldKey(testDivision, c.Name))

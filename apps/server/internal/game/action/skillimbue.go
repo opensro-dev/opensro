@@ -45,6 +45,14 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 	if !instantShape || !selfOnly || !casterReady {
 		return OpResult{DiagnosticRefusal: "instant-effect-admission-refused"}
 	}
+	// The arena decision gate contextSkillAdmission applies (skilladmit.go).
+	if rt.sookDecisionHolds(division, snapshot) {
+		return offensiveRefusal(0x3005)
+	}
+	// And its stall and exchange gate (#3433).
+	if rt.stallBusy(division, snapshot.Name) {
+		return offensiveRefusal(0x3009)
+	}
 	now := rt.Now().UnixMilli()
 	// Natively activity != 2 executes through events 0 and 2 immediately,
 	// before inspecting the ordinary command queue. An open attack is allowed.
@@ -234,8 +242,10 @@ func (rt *Runtime) resolvePlayerImpactBehindWall(division, name string, skill en
 	}
 	var extra combat.Result
 	if imbueLanes != 0 {
+		// The weapon-imbue lanes get the same 0x20 ignore-defense flag byte.
 		extra, err = combat.ResolveCalculation(attacker, defender, combat.AttackCalculation{
 			Attack: imbue.Attack, OriginalFlags: skill.Attack.Flags, Lanes: imbueLanes, Player: true,
+			IgnoreDefense: result.ResultFlags&combat.IgnoreDefenseResultFlag != 0,
 		}, rt.CombatRoll)
 	}
 	if err != nil {

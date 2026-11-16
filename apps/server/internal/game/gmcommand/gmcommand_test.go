@@ -500,3 +500,27 @@ func TestLowSpecGmCommandsWireAndDispatch(t *testing.T) {
 		t.Fatalf("siege period dispatch = %x, %+v", out.Ack, owner)
 	}
 }
+
+// liveOwner is the action owner's live-region port: the region the
+// target stands in now, which the saved row may trail.
+type liveOwner struct{ region uint16 }
+
+func (o liveOwner) ToggleGMBodyStatus(string, string, uint8) bool { return false }
+
+func (o liveOwner) LiveRegionFor(string, *enterworld.Character) uint16 { return o.region }
+
+// TestPrivilegedFindUserReportsTheLiveRegion: a target that walked on
+// since its last save is found where it stands, not where the row says.
+func TestPrivilegedFindUserReportsTheLiveRegion(t *testing.T) {
+	sender := gmChar("Gm", true, 0x1000)
+	target := gmChar("Remo", false, 0x62A8)
+	presence := &stubPresence{online: map[string]bool{"remo": true}}
+
+	outcome := HandleGmCommand(testDeps(sender, target), presence, testDivision, sender, nameFrame(SubFindUser, "Remo"), liveOwner{region: 0x62AA})
+
+	guide := "Remo (region 0x62AA)"
+	want := append([]byte{AckResultOK, SubFindUser, byte(len(guide)), byte(len(guide) >> 8)}, []byte(guide)...)
+	if !bytes.Equal(outcome.Ack, want) {
+		t.Fatalf("FINDUSER ack\n got % X\nwant % X", outcome.Ack, want)
+	}
+}

@@ -48,6 +48,62 @@ toggle is required. Legacy saved client opt-outs are ignored. With the server
 flag off, state probes are silent and the pet window stays native.
 Open pet information with **Insert**.
 
+### Native health and level-90 progression
+
+Pet base maximum HP remains the native per-level character row. Equipment
+and defensive skills modify survival without replacing that base HP.
+
+Books unlock at pet levels **10 / 40 / 90**. The first two books reach rank
+10 at levels 40 and 90. All ten ranks of the third book are available at
+level 90, still costing skill points and requiring the previous book at
+rank 10. This changes requirements, not the point budget: one starter point
+plus one point per two pet levels. Players must choose where to spend them.
+
+
+### Cumulative books and crow support
+
+For every pet, a higher book upgrades the same skill family: it retains the
+earlier books' behavior and adds its own effect. Only the highest learned
+passive book runs; earlier passive icons are not separately selectable.
+
+The crow revision remains behind `SRO_ATTACK_PET_EXPANSION`. Learned ranks and
+gear remain intact. Values below scale across the three books' learned ranks,
+reaching the maximum at the final rank available at pet level 90.
+
+| Family | Book I | Book II adds | Book III adds |
+| --- | --- | --- | --- |
+| Rejuvenating Plume | Owner healing, 10–30% total maximum HP; half immediately, half over five seconds. Base cooldown 20–15 seconds. | Crow healing and removal of all negative abnormal effects. | Party healing/cleansing within 20 m; healing decreases 20% per additional recipient. |
+| Stormbrood | Egg hatches after 30 seconds; unhealable clone lives ten minutes, copies stats and gear blues, but no learned skills. Base recharge 20–15 minutes. | Three stored casts. | Existing 500% death burst. Maximum ten live eggs/clones remains. |
+| Mana Spring | Actual crow damage restores 10–30% as owner MP. | Also restores nearby party MP. | Every 10,000 actual MP restored deals 5,000 true monster damage within 5 m of the crow. Unused progress carries; full MP grants no progress. Replaces the former cooldown recovery. |
+| Tailwind | One stack every five seconds, ten stacks maximum; full-stack movement bonus scales 20–50%. Only received HP damage clears stacks. Safe-zone stacking remains. | At full stacks, stuns an attacking monster before its damaging hit, keeping stacks. Successful guard has a 30-second recipient cooldown. | Party members gain their own stacks and guard cooldown. |
+
+Crow attacks now use magic damage with a 112% profile, versus the penguin's
+160% (70% of the penguin profile, before differing gear and skills). Flag-off
+native attacks are unchanged. Raven's Refuge replaces Guiding Feathers.
+
+### Raven's Refuge
+
+Replaces Guiding Feathers, preserving book IDs 58/59/60, learned ranks and
+existing individual-skill gear bonuses. All books are cumulative. HP trigger threshold scales from
+20% at the first learned rank to 40% at the final rank available at pet level
+90. Below that threshold, damage reduction is a fixed 15%.
+
+Book II adds an emergency heal for 10% maximum HP when incoming damage first
+crosses the threshold. Its base cooldown scales from 300 seconds at the first
+rank to 120 seconds at maximum progression. Book III extends both protection
+and healing to party members within 20 m; each recipient has an independent
+heal cooldown. Healing above the threshold ends damage reduction. These values
+are capped even with equipment skill bonuses. A fatal hit cannot trigger the
+heal: this is protection, not resurrection. Cooldowns persist on each recipient
+through relogging, changing crows and server restarts. Several crows do not stack
+the 15% reduction or bypass that recovery cooldown. Direct monster attacks and
+monster damage-over-time both use the protection; native flag-off care/combat
+is unchanged. The buff icon appears only while below the threshold.
+
+Raven's persisted recipient cooldown requires the schema 43 to 44 offline
+authority upgrade, even when pets are disabled. Back up the database and stop
+authority writers before upgrading; do not lower schema metadata.
+
 ### Bear: Iron Hide shields
 
 Iron Hide now grants absorption separately from HP for **5 seconds**. Tier I
@@ -77,7 +133,7 @@ gear-rank and Unbroken Spirit empowerment bonuses still apply.
 | Bear | High HP/defense; lower attack | Challenging Roar; Iron Hide | Unbroken Spirit; Guardian’s Bond; Crushing Paw |
 | Wolf | Physical offense | Hunting Howl; Savage Rend | Execute; Bloodscent; Blood Hunt |
 | Penguin | Ranged magic/control; lower HP | Ice Lance; Blizzard | Shatter; Arcane Resonance; Frozen Hourglass |
-| Three Footed Crow | Owner support | Mend; Mark Prey | Carrion Feast; Swift Wings; Murder of Crows |
+| Three Footed Crow | Ranged owner/party support | Rejuvenating Plume; Stormbrood | Mana Spring; Tailwind; Raven's Refuge |
 
 Bear **Guardian’s Bond** replaces Last Stand; learned book IDs and ranks are
 retained. A living summoned bear must be within 12 m. This expansion applies to
@@ -150,6 +206,29 @@ A 30-second skill takes 15 seconds at 50%, 6 seconds at 80%, and still 6 seconds
 if the uncapped sum is 100% or 150%. Counters round to integer events with a
 minimum of one. Cooldown blues currently roll on harnesses/charms, not collars.
 The total 80% ceiling is source policy, **not a DB setting**.
+
+## Imported pet kinds (#3328)
+
+The later-source pet import (`scripts/pet_import.py`, from #3262/#3283)
+adds the kinds only a later source holds. Gate names, confirmed for
+#3328: there is **no** `SRO_PETS_ARCHIVE`. The pass as a whole rides
+`SRO_PETS` (default on, explicit off values only), and the archive
+source rides the one shared pinned zip, `SRO_AVATARS_ZIP`, under that
+same switch — one optional supply chain, not two.
+
+What each imported kind still owes is named by the import report; the
+server side shipped here:
+
+| Kind | Kind of pet | Server rule |
+| --- | --- | --- |
+| Fox (`COS_P_FOX`, levels 1–140) | attack | The design's fifth pet: `pets` entry (120/30/65/65) plus 15 `skills` and 15 `treeSkills` rows on the wolf's implemented families, so the expansion serves it whole when `SRO_ATTACK_PET_EXPANSION` is on. |
+| Winter snowman (`COS_P_WINTER_SNOWMAN`) | pickup | No design entry: the pickup lane is generic. Its two scrolls (ordinary and event copy) summon it through the persistent summoner. |
+| Fellow kinds (`COS_F_*`) | fellow | Inference, recorded in `pet_import.py`: fellows ride the attack-pet lane — summoned by their rows' own band, fighting with their native per-level rows, no `petdesign` entry (the design is attack-pet only). |
+
+Summon scrolls sell in the Item Mall's Pet shop (`SRO_MALL_CATEGORIES`
+on): the fox in Growth, the snowman's two scrolls with the silk pickup
+pets, each its own authored package at 30 silk, listed only when the
+import wrote the item row.
 
 ## Configuration map
 

@@ -4,13 +4,14 @@
 test_pet_import.py - the later clients' pet import
 
 Synthetic rows cover the default-on switch, kind classification,
-selection (existing, deferred fellow kinds, skipped kinds without a
-scroll or a model), identity retention and reassignment, and the
-pinned-archive source's import, refusal and removal, all without a
-real client tree.
+selection (existing, fellow kinds on their lane, deferred unknown
+prefixes, skipped kinds without a scroll or a model), identity
+retention and reassignment, and the pinned-archive source's import,
+refusal and removal, all without a real client tree.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import hashlib
 import json
 import os
@@ -20,12 +21,16 @@ import tempfile
 import unittest
 import unittest.mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import alexandria_npcs as characters  # noqa: E402
 import avatar_archive  # noqa: E402
 import cap110_items as items  # noqa: E402
 import pet_import as importer  # noqa: E402
 
-CHAR_COLUMNS = 104
+# A later client's characterdata width (VSRO and v1.696 alike).
+CHAR_COLUMNS = characters.VSRO_CHARACTER_COLUMNS
+# The v1.150 column the NPC model builder reads the material kind from
+# (buildNpcModelAssets.mjs): later column 93, shifted by the skill pairs.
+MATERIAL_KIND_COLUMN = 109
 
 
 # ================
@@ -78,6 +83,7 @@ class KindTests(unittest.TestCase):
 		self.assertEqual(importer.kind_of("COS_T_MULE", [char_row("COS_T_MULE", 1)]), "transport")
 		self.assertEqual(importer.kind_of("COS_C_CAMEL9", [char_row("COS_C_CAMEL9", 1)]), "vehicle")
 		self.assertEqual(importer.kind_of("COS_F_FAIRY", [char_row("COS_F_FAIRY", 1)]), "fellow")
+		self.assertEqual(importer.kind_of("COS_X_WISP", [char_row("COS_X_WISP", 1)]), "unknown")
 		self.assertEqual(importer.kind_of("COS_GUARD_CH", [char_row("COS_GUARD_CH", 1)]), "excluded")
 
 
@@ -105,11 +111,40 @@ class SelectionTests(unittest.TestCase):
 		self.assertEqual((kind["kind"], kind["levels"]), ("attack", [1, 40]))
 		self.assertIn("pet skill rows", kind["needs"])
 
-	def test_fellow_kind_is_deferred_not_imported(self):
+	# ================
+	# test_rows_join_in_the_v1150_layout
+	#
+	# A later client's 104-column row is written in v1.150's 120: the
+	# material kind (later column 93) lands at 109, where the NPC model
+	# builder reads it. Copied as-is, column 109 did not exist and the
+	# manifest wrote null, which the client refuses.
+	# ================
+	def test_rows_join_in_the_v1150_layout(self):
+		later = char_row("COS_P_FOX_001", 9001)
+		later[characters.SKILL_PAIRS_AT] = "3"
+		chars, _, _ = self.select([later], [scroll("ITEM_PET_FOX", 9003, "COS_P_FOX")])
+		self.assertEqual(len(chars[0]), characters.NATIVE_CHARACTER_COLUMNS)
+		self.assertEqual(chars[0][MATERIAL_KIND_COLUMN], "3")
+		self.assertEqual((chars[0][importer.CHAR_CODE], chars[0][importer.CHAR_MODEL]), ("COS_P_FOX_001", "cos\\newpet.bsr"))
+
+	def test_fellow_kind_rides_the_attack_lane(self):
+		# Fellows are admitted like attack kinds (#3328): rows and scroll
+		# import, they fight with their native rows, and the report owes
+		# no design entry (the expansion's design is attack-pet only).
 		chars, item_rows, report = self.select(
 			[char_row("COS_F_FAIRY", 9001)], [scroll("ITEM_PET_FAIRY", 9002, "COS_F_FAIRY")])
+		self.assertEqual((len(chars), len(item_rows)), (1, 1))
+		kind = report["added"][0]
+		self.assertEqual((kind["family"], kind["kind"]), ("COS_F_FAIRY", "fellow"))
+		self.assertEqual(kind["needs"], [])
+
+	def test_unknown_prefix_is_deferred_not_imported(self):
+		# A COS_ prefix kind_of does not name waits for its lane: with
+		# fellow admissible, the fallthrough must not summon it as one.
+		chars, item_rows, report = self.select(
+			[char_row("COS_X_WISP", 9001)], [scroll("ITEM_PET_WISP", 9002, "COS_X_WISP")])
 		self.assertEqual((chars, item_rows), ([], []))
-		self.assertEqual(report["deferred"][0]["family"], "COS_F_FAIRY")
+		self.assertEqual(report["deferred"][0]["family"], "COS_X_WISP")
 
 	def test_kind_without_a_scroll_is_skipped(self):
 		chars, _, report = self.select([char_row("COS_P_DOG", 9001)], [])
@@ -288,6 +323,28 @@ class ArchiveTests(unittest.TestCase):
 			self.assertEqual(report["missingNameText"], [])
 			name_rows = importer.characters.translation_rows((output / importer.TEXT_ROOT / "textdataname.txt").read_bytes())
 			self.assertTrue({"SN_COS_P_DOG", "SN_ITEM_PET_DOG"} <= {row[1] for row in name_rows if len(row) > 1})
+
+	def test_v1696_name_text_behind_a_shard_index_is_found(self):
+		# v1.696 ships textdata_object.txt as an index of TextData_Object_<n>
+		# parts, and each part's rows carry 17 columns: a numeric text id
+		# after the service cell, "0" where a translation is absent.
+		with tempfile.TemporaryDirectory() as folder:
+			base = Path(folder)
+			native, output = base / "native", base / "out"
+			self._tree(native, *native_wolf())
+			def v1696(key, english):
+				return ["1", "1400", key, "k", "0", "0", "0", "0", "0", english, "0", "0", "0", english, english, english, english]
+			texts = [v1696("SN_COS_P_DOG", "Dog"), v1696("SN_ITEM_PET_DOG", "Dog scroll")]
+			entries = self._entries([char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")])
+			text = "media/" + importer.tables.TEXTDATA
+			entries[f"{text}textdata_object.txt"] = importer._encode([["TextData_Object_1000.txt"]])
+			entries[f"{text}textdata_object_1000.txt"] = importer._encode(texts)
+			zip_path, pin_path = self._archive(base, entries)
+			report = self._run(zip_path, pin_path, native, output)
+			self.assertEqual(report["missingNameText"], [])
+			name_rows = importer.characters.translation_rows((output / importer.TEXT_ROOT / "textdataname.txt").read_bytes())
+			english = {row[1]: row[8] for row in name_rows if len(row) > 8}
+			self.assertEqual((english.get("SN_COS_P_DOG"), english.get("SN_ITEM_PET_DOG")), ("Dog", "Dog scroll"))
 
 	def test_a_pass_that_selects_nothing_drops_its_manifest_lines(self):
 		with tempfile.TemporaryDirectory() as folder:

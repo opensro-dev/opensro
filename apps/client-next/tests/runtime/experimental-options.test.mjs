@@ -85,7 +85,6 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		sceneFxaa: false,
 		ambientOcclusion: false,
 		skyDetail: false,
-		waterRefraction: false,
 		// Smooth camera is on by default (owner 2026-10-15).
 		smoothCamera: true,
 		// Enchant sparks are on by default (owner 2026-10-17).
@@ -93,7 +92,9 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		// The shared actor room is on by default (owner 2026-10-14).
 		sharedActorRoom: true,
 		vHidesCompanions: false,
-		dungeonCharacterPvs: true
+		dungeonCharacterPvs: true,
+		// Silent wing flight is on by default (owner 2026-11-15, #3547).
+		silentWingFlight: true
 	} );
 	for (
 		const key of [
@@ -106,7 +107,6 @@ test("every video stage defaults off and only an explicit true enables it", () =
 			"sunShadow",
 			"perPixelLighting",
 			"ambientOcclusion",
-			"waterRefraction",
 			"msaa",
 			"sceneFxaa"
 		]
@@ -351,6 +351,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		smartPetPickup: true,
 		sunDropMarker: false,
 		warpArrivalSound: false,
+		christmasCarols: true,
 		petPickupKinds: undefined
 	} );
 	for ( const value of [ 1, "true", null, {} ] ) {
@@ -370,6 +371,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		smartPetPickup: true,
 		sunDropMarker: false,
 		warpArrivalSound: false,
+		christmasCarols: true,
 		petPickupKinds: undefined
 	} );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );
@@ -699,6 +701,19 @@ test("quest target markers default off (tracked quest only) and stay out of the 
 	assert.equal( on.questTrackerMarkers, true );
 	assert.ok(
 		EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "questTrackerMarkers" ) )
+	);
+});
+
+test("unique spawn points default on, only an explicit false turns them off, and stay out of the worker", () => {
+	for ( const value of [ undefined, null, {}, { uniqueSpawnPoints: 0 }, { uniqueSpawnPoints: "false" } ] ) {
+		const options = experimentalOptions( value );
+		assert.equal( options.uniqueSpawnPoints, true );
+		assert.equal( "uniqueSpawnPoints" in experimentalGameplay( options ), false );
+		assert.equal( "uniqueSpawnPoints" in experimentalVideo( options ), false );
+	}
+	assert.equal( experimentalOptions( { uniqueSpawnPoints: false } ).uniqueSpawnPoints, false );
+	assert.ok(
+		EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "uniqueSpawnPoints" ) )
 	);
 });
 

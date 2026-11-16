@@ -21,14 +21,15 @@ const betaMasteryPolicyFile = "beta-mastery.txt"
 ================
 configuredBetaMastery
 
-New beta installations default on. Operators put off in the state-directory
-file once to retain native limits across all subsequent deployments.
+Native limits unless the operator puts on in the state-directory file
+(owner, 2026-11-13: restore the native Chinese 300 / European
+min(2 x level, 240) totals). The file survives every later deployment.
 ================
 */
 func configuredBetaMastery(stateDir string) (string, error) {
 	data, err := os.ReadFile(filepath.Join(stateDir, betaMasteryPolicyFile))
 	if os.IsNotExist(err) {
-		return "on", nil
+		return "off", nil
 	}
 	if err != nil {
 		return "", fmt.Errorf("beta mastery policy: %w", err)

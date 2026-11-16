@@ -188,13 +188,6 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-ambient-occlusion",
 						label: "Ambient occlusion",
 						description: "Shade corners and contact seams from depth."
-					},
-					{
-						// Port-only, not native (device/water-refraction.ts).
-						key: "waterRefraction",
-						id: "experimental-water-refraction",
-						label: "Water refraction",
-						description: "Water bends the ground below and foams at the shore."
 					}
 				]
 			},
@@ -309,8 +302,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "mallCategories",
 						id: "experimental-mall-categories",
 						label: "Item Mall categories",
-						description:
-							"The later mall's categories, HOT shop and item search (needs a shard that lists them)."
+						description: "The later mall's categories, HOT shop and item search."
 					}
 				]
 			},
@@ -421,6 +413,18 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "Play the portal-out cue when you arrive."
 					},
 					{
+						key: "silentWingFlight",
+						id: "experimental-silent-wing-flight",
+						label: "Silent wing flight",
+						description: "Wing dresses fly without footstep sounds."
+					},
+					{
+						key: "christmasCarols",
+						id: "experimental-christmas-carols",
+						label: "Christmas carols",
+						description: "Carols in the snow and in towns at Christmas."
+					},
+					{
 						key: "webTransport",
 						id: "experimental-web-transport",
 						label: "WebTransport connection",
@@ -441,6 +445,14 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-monster-guide",
 						label: "Monster hunting guide",
 						description: "Monster portraits and approximate level ranges on M."
+					},
+					{
+						// Port-only, not native: on by default (the owner's choice,
+						// 2026-11-07); the M window only, never the minimap.
+						key: "uniqueSpawnPoints",
+						id: "experimental-unique-spawn-points",
+						label: "Unique spawn points",
+						description: "Adds a Unique spawns box to M: every unique's nests."
 					}
 				]
 			},
@@ -614,7 +626,7 @@ export function experimentalTabs(
 	session: SessionState | null | undefined,
 	hdAvailable: boolean
 ): readonly ExperimentalTab[] {
-	const guide = session?.phase === "world" && !!session.huntingGuide;
+	const guide = session?.phase === "world" && !!session.huntingGuide?.overlay;
 	const listed = ( row: ExperimentalRow ) =>
 		(guide || row.key !== "monsterGuide") && (hdAvailable || row.key !== "hdTextures");
 	return EXPERIMENTAL_TABS

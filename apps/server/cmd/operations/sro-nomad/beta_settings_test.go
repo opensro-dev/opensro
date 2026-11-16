@@ -84,8 +84,8 @@ func betaSettingsVariables(t *testing.T) map[string]any {
 TestBetaSettingsDeploymentDefaults
 
 The public defaults are native (#606): a deployment that names no beta
-value runs the original rules. Only the durable mastery policy keeps its
-own default (betamastery.go).
+value runs the original rules, the durable mastery policy included
+(betamastery.go).
 ================
 */
 func TestBetaSettingsDeploymentDefaults(t *testing.T) {
@@ -94,7 +94,7 @@ func TestBetaSettingsDeploymentDefaults(t *testing.T) {
 	want := map[string]string{
 		"beta_starter_kit":       "off",
 		"beta_player_map":        "off",
-		"beta_mastery":           "on",
+		"beta_mastery":           "off",
 		"beta_silk":              "off",
 		"beta_silk_active_only":  "off",
 		"beta_growth":            "off",
@@ -183,8 +183,8 @@ func TestBetaSettingsDeploymentOff(t *testing.T) {
 			t.Errorf("%s = %#v, want explicit off", name, got)
 		}
 	}
-	if got := variables["beta_mastery"]; got != "on" {
-		t.Fatalf("durable mastery default = %#v, want on", got)
+	if got := variables["beta_mastery"]; got != "off" {
+		t.Fatalf("durable mastery default = %#v, want native off", got)
 	}
 }
 

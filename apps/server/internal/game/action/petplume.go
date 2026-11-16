@@ -58,7 +58,7 @@ func (rt *Runtime) castCrowPlume(division string, owner *enterworld.Character, g
 	}) {
 		return petTrainingReceipt("The ability could not be applied.")
 	}
-	frames = append(frames, crowVisualFrame(crowVisual{gid: gid, kind: crowPlumeVisual, book: uint8(skill.Option), at: step.state.follower.Position(now)}))
+	frames = append(frames, crowVisualFrame(crowVisual{gid: gid, kind: crowPlumeVisual, book: uint8(skill.Option), at: step.state.mover.AnyFollower().Position(now)}))
 	members := rt.crowSupportRecipients(step, skill.Option == 3, false)
 	ownerGID := enterworld.ObjectIDForCharacter(step.snapshot)
 	var ordered []uint32
@@ -135,20 +135,19 @@ func (rt *Runtime) healCrowPlume(step petCombatStep, cast *crowPlumeCast, share 
 			if frame, ok := rt.petOwnerHeal(step.key.division, member, cast.percent*share*scale); ok {
 				public = append(public, frame)
 			}
-			if member.ID != step.state.character.ID {
-				return true
-			}
 			if cleanse {
 				owner := rt.newPlayerAbnormalOwner(step.key.division, member, step.nowMs)
-				for _, status := range []abnormal.Status{abnormal.Poison, abnormal.Burn} {
+				for status := abnormal.Status(0); status < abnormal.SlotCount; status++ {
 					if owner.block.Clear(owner, status) {
 						owner.changed = true
-						break
 					}
 				}
 				owner.commit()
 				cured := rt.playerAbnormalPublication(step.key.division, member, owner)
 				public, private = append(public, cured.public...), append(private, cured.actor...)
+			}
+			if member.ID != step.state.character.ID {
+				return true
 			}
 			if skill.Option >= 2 {
 				pet := member.CompanionByGID(step.pet.GID)
@@ -156,6 +155,16 @@ func (rt *Runtime) healCrowPlume(step petCombatStep, cast *crowPlumeCast, share 
 					amount := uint32(float64(step.ref.MaxHP) * cast.percent * share / 100)
 					pet.CurrentHP = uint32(min(uint64(step.ref.MaxHP), uint64(pet.CurrentHP)+uint64(amount)))
 					public = append(public, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(pet.GID, 0, pet.CurrentHP)})
+					if cleanse {
+						owner := rt.newCosAbnormalOwnerForPet(step.key.division, member, pet, step.nowMs)
+						for status := abnormal.Status(0); status < abnormal.SlotCount; status++ {
+							if owner.block.Clear(owner, status) {
+								owner.changed = true
+							}
+						}
+						owner.commit()
+						public = append(public, rt.cosAbnormalPublication(pet.GID, owner)...)
+					}
 				}
 			}
 			return true

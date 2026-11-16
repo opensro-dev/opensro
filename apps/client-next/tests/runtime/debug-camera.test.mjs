@@ -274,6 +274,7 @@ function cameraWorldFixture( t ) {
 		videoOptions: unexpectedCameraWork,
 		experimentalVideo: unexpectedCameraWork,
 		setSelectionDecal: unexpectedCameraWork,
+		setWorldLayers: unexpectedCameraWork,
 		setWorldRenderMode: unexpectedCameraWork,
 		setFootprints: unexpectedCameraWork,
 		setSunDropMarkers: unexpectedCameraWork,

@@ -14,6 +14,7 @@ locks root (never the live "generated-assets" name), cleaned up after.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import json
 import os
 import shutil
@@ -27,7 +28,6 @@ import unittest.mock
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(SCRIPTS_DIR))
 import rebuild_lock  # noqa: E402
 
 LOCK_ENV = [

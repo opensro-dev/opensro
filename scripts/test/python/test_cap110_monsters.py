@@ -3,6 +3,7 @@
 test_cap110_monsters.py - reference identity and optional equipment boundaries.
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import copy
 import json
 import tempfile
@@ -565,6 +566,60 @@ class Cap110MonstersTest(unittest.TestCase):
 		self.assertNotIn("extra", staged["Properties"]["items"]["ITEM_NATIVE"])
 
 	# ================
+	# test_client_only_build_mirrors_d10_and_joins_backup_gear
+	#
+	# #3405: with no export, D11 takes D10's banding over 102-110, the
+	# backup's live expansion rows join the installed items only, the
+	# rare rows above 94 stay unrollable, and an empty row is refused.
+	# ================
+	def test_client_only_build_mirrors_d10_and_joins_backup_gear(self):
+		normal = [[0.0] * 36 for _ in range(180)]
+		for level, groups in ((91, (27,)), (94, (28,)), (95, (28, 29)), (98, (29,)), (101, (29,))):
+			for group in groups:
+				normal[level - 1][group] = 0.0035
+		for level in (92, 93):
+			normal[level - 1] = list(normal[90])
+		for level in (96, 97):
+			normal[level - 1] = list(normal[94])
+		for level in (99, 100):
+			normal[level - 1] = list(normal[97])
+		rows = {r["MonLevel"]: r for r in loot.mirrored_normal_classes(normal)}
+		self.assertEqual(rows[101]["ProbGroup30"], 0.0035)
+		self.assertEqual(rows[102]["ProbGroup31"], 0.0035)
+		self.assertEqual(rows[105]["ProbGroup32"], 0.0035)
+		self.assertEqual((rows[106]["ProbGroup32"], rows[106]["ProbGroup33"]), (0.0035, 0.0035))
+		self.assertEqual(rows[110]["ProbGroup33"], 0.0035)
+		self.assertNotIn(0.0035, [rows[105]["ProbGroup31"], rows[110]["ProbGroup32"]])
+
+		code, missing, older = "ITEM_CH_SWORD_11_A", "ITEM_EU_SWORD_11_A", "ITEM_CH_BLADE_10_A"
+		drops = {"assignments": [
+			{"service": 1, "codename": code, "item": 1, "weight": 140, "absolute": 100, "class": -1, "lsn": [1]},
+			{"service": 1, "codename": missing, "item": 2, "weight": 100, "absolute": 100, "class": -1, "lsn": [1]},
+			{"service": 1, "codename": older, "item": 3, "weight": 100, "absolute": 100, "class": -1, "lsn": [1]},
+			{"service": 0, "codename": older, "item": 3, "weight": 100, "absolute": 100, "class": -1, "lsn": [2]},
+			{"service": 1, "codename": "ITEM_CH_SWORD_09_A", "item": 4, "weight": 100, "absolute": 100,
+				"class": -1, "lsn": [1]},
+		]}
+		got = loot.backup_assignments(drops, {code, older, "ITEM_CH_SWORD_09_A"})
+		self.assertEqual(got, [{"CodeName128": code, "Service": 1, "Prob_Relative": 140, "Prob_Absolute": 100}])
+
+		item = ["0"] * 160
+		item[0], item[2], item[10], item[33], item[61], item[158] = "1", code, "1", "101", "31", "9"
+		item[9:13] = ["3", "1", "6", "2"]
+		rare = [[0.0] * 60 for _ in range(180)]
+		rare[101][29] = 1e-9
+		base = {"equipment.json": {"version": 2, "widths": {"normal": 36, "rare": 60},
+			"normal": normal, "rare": rare, "items": []}, "properties.json": {"items": {}, "magic": [], "assignments": []}}
+		compiled = loot.compile_field_equipment(base, [item], got, list(rows.values()), loot.authored_classes(rare))
+		loot.require_expansion_rows(compiled)
+		self.assertGreater(compiled["Equipment"]["normal"][104][31], 0)
+		self.assertEqual([i["group"] for i in compiled["Equipment"]["items"]], [30])
+		self.assertFalse(any(p > 1e-6 for p in compiled["Equipment"]["rare"][101]))
+		compiled["Equipment"]["normal"][104] = [0.0] * 36
+		with self.assertRaisesRegex(ValueError, "level 105"):
+			loot.require_expansion_rows(compiled)
+
+	# ================
 	# test_no_export_names_no_assignments
 	# ================
 	def test_no_export_names_no_assignments(self):
@@ -595,6 +650,24 @@ class Cap110MonstersTest(unittest.TestCase):
 		])
 
 	# ================
+	# test_client_nest_radii_are_the_evidence_commonest
+	# ================
+	def test_client_nest_radii_are_the_evidence_commonest(self):
+		# The synthesized radii are the commonest of the native population
+		# evidence's respawning nests, as the respawn window and sight are.
+		evidence = (Path(__file__).resolve().parents[3] / "apps" / "server" / "internal" / "game" /
+			"world" / "monster" / "data" / "v1188_population_evidence.tsv")
+		radii, generate = {}, {}
+		for line in evidence.read_text(encoding="utf-8").splitlines():
+			columns = line.split("\t")
+			if line.startswith("#") or len(columns) != 22 or columns[11] != "1":
+				continue
+			radii[float(columns[5])] = radii.get(float(columns[5]), 0) + 1
+			generate[float(columns[6])] = generate.get(float(columns[6]), 0) + 1
+		self.assertEqual(max(radii, key=radii.get), monsters.CLIENT_NEST_RADIUS)
+		self.assertEqual(max(generate, key=generate.get), monsters.CLIENT_NEST_GENERATE_RADIUS)
+
+	# ================
 	# test_client_population_stands_at_the_placements
 	#
 	# One outdoor placement of an admitted species is one nest on its
@@ -615,7 +688,12 @@ class Cap110MonstersTest(unittest.TestCase):
 		self.assertEqual([(r["NestID"], r["RegionID"], r["X"], r["Z"]) for r in rows],
 			[(1, 19001, 10.5, 20.25), (2, 19002, 30.0, 40.0)])
 		row = rows[0]
-		self.assertEqual((row["WorldID"], row["MaxCount"], row["Radius"], row["GenerateRadius"]), (1, 1, 0, 0))
+		# A nest with controls but radius 0 is always outside its home for
+		# the server (InsideHome: distance < radius), so it never wanders
+		# or pursues: the synthesized posture carries a real radius.
+		self.assertEqual((row["WorldID"], row["MaxCount"], row["Radius"], row["GenerateRadius"]),
+			(1, 1, monsters.CLIENT_NEST_RADIUS, monsters.CLIENT_NEST_GENERATE_RADIUS))
+		self.assertGreater(row["Radius"], 0)
 		self.assertEqual((row["Respawn"], row["RespawnDelayMinSec"], row["RespawnDelayMaxSec"]), (True, 1, 3))
 		self.assertIsNone(row["Champion"])
 		self.assertEqual(row["Controls"]["SightRange"], monsters.CLIENT_NEST_SIGHT_RANGE)
@@ -628,7 +706,9 @@ class Cap110MonstersTest(unittest.TestCase):
 	#
 	# Stage 1's client-only seeds: the sectors the admitted species'
 	# outdoor placements stand in. The below-window species and the
-	# dungeon placement seed nothing.
+	# dungeon placement seed nothing. The manifest names its shard in
+	# the client's mixed case (CharacterData_5000.txt in the real one),
+	# which must still resolve against the lower-case archive index.
 	# ================
 	def test_client_outdoor_regions_seed_the_placed_sectors(self):
 		with tempfile.TemporaryDirectory() as root:
@@ -638,7 +718,7 @@ class Cap110MonstersTest(unittest.TestCase):
 			low = self.later_row("MOB_SD_LOW", 0, 99)
 			low[1], low[5] = "7003", "UIO_OBJ_MOB_SD_LOW"
 			media = {
-				"characterdata.txt": utf16([["characterdata_6000.txt"]]),
+				"characterdata.txt": utf16([["CharacterData_6000.txt"]]),
 				"characterdata_6000.txt": utf16([field, low]),
 				"npcpos.txt": utf16([
 					["7001", "19001", "1.0", "0.0", "2.0"],
@@ -691,10 +771,13 @@ class Cap110MonstersTest(unittest.TestCase):
 			"textdata_object.txt": utf16([
 				["1", "UIO_OBJ_MOB_SD_FIELD", "x", "x", "Field monster", "f", "x", "a", "b", "c"],
 				["2", "UIO_OBJ_MOB_SD_LOW", "x", "x", "Low monster", "l", "x", "a", "b", "c"]]),
+			# The v1.188 characterinfo rows are 16 wide, as the shipped
+			# MOB_SD_MONT row (sound, height 3.5, ..., three trailing columns).
 			"skilleffect.txt": utf16([
 				["#section", "characterinfo"],
-				["MOB_SD_FIELD"] + ["0"] * 12,
-				["MOB_SD_LOW"] + ["0"] * 12,
+				["MOB_SD_FIELD", "MOB_TK_BONEGENERAL", "3.5"] + ["none"] * 5 +
+					["0,14,-3.6", "hit_2_metal", "none", "0", "0", "note", "", ""],
+				["MOB_SD_LOW"] + ["0"] * 15,
 				["#section", "skillaniset"]]),
 		}
 		(vsro / "Media.pk2").write_bytes(archive_bytes(media))
@@ -728,8 +811,20 @@ class Cap110MonstersTest(unittest.TestCase):
 			shard = (text_root / monsters.CHARACTER_SHARD).read_bytes().decode("utf-16")
 			self.assertIn("MOB_SD_FIELD", shard)
 			self.assertNotIn("MOB_SD_LOW", shard)
-			marker = json.loads((output / monsters.MARKER).read_text(encoding="utf-8"))
+			marker_text = (output / monsters.MARKER).read_text(encoding="utf-8")
+			marker = json.loads(marker_text)
 			self.assertEqual(marker["source"], "client")
+			# The marker is written in key order, so its bytes never follow
+			# the set order the claimed species arrive in.
+			self.assertEqual(marker_text, json.dumps(marker, indent=2, sort_keys=True) + "\n")
+			# The admitted species carries its own characterinfo height
+			# (the name board's anchor), cut to the native width.
+			effect = (text_root / "skilleffect.txt").read_bytes().decode("utf-16").splitlines()
+			field = [line.split("	") for line in effect if line.startswith("MOB_SD_FIELD	")]
+			self.assertEqual(len(field), 1)
+			self.assertEqual(field[0][:3], ["MOB_SD_FIELD", "MOB_TK_BONEGENERAL", "3.5"])
+			self.assertEqual(len(field[0]), monsters.characters.SKILL_EFFECT_COLUMNS)
+			self.assertIn("MOB_SD_FIELD", marker["characterInfo"])
 
 	# ================
 	# test_export_still_wins_when_it_is_named

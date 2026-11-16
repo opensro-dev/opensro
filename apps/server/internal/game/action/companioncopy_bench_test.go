@@ -200,7 +200,7 @@ func petFollowFixture(tb testing.TB) (*Runtime, petOwnerKey, int64) {
 		now += 100
 	}
 	state := rt.petSessionFor(testDivision, c.Name, petGID)
-	if state == nil || state.follower == nil {
+	if state == nil || state.mover.AnyFollower() == nil {
 		tb.Fatal("pet never took up its follow; the bench would price the bind instead")
 	}
 	return rt, key, now

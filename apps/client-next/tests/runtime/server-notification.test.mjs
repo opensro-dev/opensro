@@ -270,6 +270,59 @@ test("an item break notice (port-only channel 0x82) shows like channel 7 unless 
 	assert.equal( defined( defined( stillShown.take() ).notices ).at( -1 )?.text, text );
 });
 
+test("a failed-reinforce notice (channel 0x82, #3260) links its item and keeps the break row", () => {
+	// The announced item's body as ItemBody.Encode writes it: RefObjID,
+	// the plus byte, then the rest of the fixed 18-byte header. The link
+	// section names no player: an empty name, then the body.
+	const item = Buffer.alloc( 18 );
+	item.writeUInt32LE( 1234, 0 );
+	item[4] = 8;
+	const text = "[leChiffre] has failed in augmenting <<Blade>> to [+9]: destroyed.",
+		payload = Buffer.concat( [
+			Buffer.from( [ 0x82, text.length, 0 ] ),
+			Buffer.from( text, "utf16le" ),
+			Buffer.from( [ 0, 0, item.length, 0 ] ),
+			item
+		] );
+	// The frame reads as a break notice (never a plus one, whatever the
+	// linked item's plus byte), its text verbatim.
+	const notice = defined( serverNotification( 0x3667, payload ) );
+	assert.equal( notice.itemBreak, true );
+	assert.equal( notice.plusSeven, undefined );
+	assert.equal( notice.dropPlus, undefined );
+	assert.equal( notice.text, text );
+	// On by default: the banner notice and a (Notify): chat line.
+	const shown = createGameplay( () => {} );
+	shown.receive( { opcode: 0x3667, payload }, 100 );
+	const state = defined( shown.take() );
+	assert.equal( defined( defined( state.notices ).at( -1 ) ).text, text );
+	assert.equal( defined( defined( state.chat ).lines.at( -1 ) ).text, text );
+	// The break row off hides it; the drop/plus row never widens or
+	// narrows this one.
+	const hidden = createGameplay( () => {} );
+	hidden.experimental( {
+		predictedRunUp: false,
+		jobKillNotices: true,
+		dropPlusNotices: true,
+		plusSevenNotices: true,
+		breakNotices: false
+	} );
+	hidden.receive( { opcode: 0x3667, payload }, 100 );
+	const quiet = hidden.take();
+	assert.equal( quiet?.notices?.some( n => n.text === text ) ?? false, false );
+	assert.equal( quiet?.chat?.lines.some( l => l.text === text ) ?? false, false );
+	const stillShown = createGameplay( () => {} );
+	stillShown.experimental( {
+		predictedRunUp: false,
+		jobKillNotices: true,
+		dropPlusNotices: false,
+		plusSevenNotices: true,
+		breakNotices: true
+	} );
+	stillShown.receive( { opcode: 0x3667, payload }, 100 );
+	assert.equal( defined( defined( stillShown.take() ).notices ).at( -1 )?.text, text );
+});
+
 test("a plus notice above +11 (channel 0x81) renders its text verbatim; the client caps no plus", () => {
 	const text = "Looter advanced Blade to +13",
 		payload = Buffer.concat( [ Buffer.from( [ 0x81, text.length, 0 ] ), Buffer.from( text, "utf16le" ) ] );

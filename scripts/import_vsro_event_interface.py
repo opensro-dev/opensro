@@ -138,7 +138,7 @@ def main():
 	parser.add_argument("--vsro-root", required=True, help="the pinned VSRO client folder")
 	args = parser.parse_args()
 	verify_vsro_archive(args.vsro_root, "Media")
-	data = (Path(args.vsro_root) / "Media.pk2").read_bytes()
+	data = sro_pk2.map_archive(Path(args.vsro_root) / "Media.pk2")
 	directory = sro_pk2.read_directory(data)
 	entries = {}
 	for entry in (directory.values() if isinstance(directory, dict) else directory):

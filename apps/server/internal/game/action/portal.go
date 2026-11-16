@@ -14,8 +14,10 @@ import (
 	"opensro.online/server/internal/data/texttable"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/commerce"
+	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
@@ -33,6 +35,47 @@ var qinshiTombTeleportDataTSV string
 
 //go:embed data/qinshi_tomb_teleportlink.tsv
 var qinshiTombTeleportLinkTSV string
+
+// Port-only, not native (#3314): the Muhan arena gates' teleport rows
+// and links, from the pinned v1.696 client (scripts/muhan_import.py),
+// appended only while SRO_MUHAN is on.
+//
+//go:embed data/muhan_teleportdata.tsv
+var muhanTeleportDataTSV string
+
+//go:embed data/muhan_teleportlink.tsv
+var muhanTeleportLinkTSV string
+
+// Port-only, not native: the Jangan town gate's links to the Qin-Shi
+// Emperor Tomb floors 1-4, appended only while SRO_JANGAN_TOMB_TELEPORT
+// and SRO_QINSHI_TOMB are both on.
+//
+//go:embed data/jangan_tomb_teleportlink.tsv
+var janganTombTeleportLinkTSV string
+
+// EnvJanganTombTeleport turns the Jangan gate's tomb floor rows on.
+const EnvJanganTombTeleport = "SRO_JANGAN_TOMB_TELEPORT"
+
+/*
+================
+JanganTombTeleportEnabled
+
+Port-only, not native: the Jangan town gate also offers the Qin-Shi
+Emperor Tomb floors 1-4. The rows land on the tomb, so they follow
+SRO_QINSHI_TOMB too: with the tomb closed the gate keeps its native
+menu. Mirrored by scripts/build/shared/janganTombTeleport.mjs.
+================
+*/
+func JanganTombTeleportEnabled() bool {
+	if !monster.QinShiTombFromEnv() {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvJanganTombTeleport))) {
+	case "1", "on", "true", "yes":
+		return true
+	}
+	return false
+}
 
 /*
 ================
@@ -142,11 +185,17 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 	if monster.QinShiTombFromEnv() {
 		key += "+qinshi_tomb"
 	}
+	if monster.MuhanEnabled() {
+		key += "+muhan"
+	}
 	if on, _ := alexandria.EnabledFromEnv(); on {
 		key += "+alexandria"
 	}
 	if pharaohtemple.Enabled() {
 		key += "+pharaoh_temple"
+	}
+	if JanganTombTeleportEnabled() {
+		key += "+jangan_tomb_teleport"
 	}
 	parsed := portalCatalogParses.Get(key, func() *portalCatalogParse {
 		catalog, err := parsePortalCatalog(dir)
@@ -231,6 +280,11 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 		// walk-in teleport source/destination rows (IDs 136..148).
 		rows = append(rows, monster.SplitTabbedText(qinshiTombTeleportDataTSV)...)
 	}
+	if monster.MuhanEnabled() {
+		// Port-only, not native (#3314): append the arena manager hub and
+		// the eight Muhan gate rows (IDs 227..235) from the v1.696 client.
+		rows = append(rows, monster.SplitTabbedText(muhanTeleportDataTSV)...)
+	}
 	for i, r := range rows {
 		if r[0] != "1" {
 			continue
@@ -307,6 +361,15 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 		// Port-only, not native: append the 77 Qin-Shi Emperor Tomb teleport
 		// links (72 walk-in links + 5 building links 125 and 131..134).
 		rows = append(rows, monster.SplitTabbedText(qinshiTombTeleportLinkTSV)...)
+	}
+	if monster.MuhanEnabled() {
+		// Port-only, not native (#3314): append the 16 Muhan links (hub to
+		// gates, gates back to the town gate), fee 0 and condition-free.
+		rows = append(rows, monster.SplitTabbedText(muhanTeleportLinkTSV)...)
+	}
+	if JanganTombTeleportEnabled() {
+		// Port-only, not native: the Jangan gate's tomb floor links.
+		rows = append(rows, monster.SplitTabbedText(janganTombTeleportLinkTSV)...)
 	}
 	for i, r := range rows {
 		if r[0] != "1" {

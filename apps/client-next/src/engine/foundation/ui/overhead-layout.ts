@@ -3,11 +3,13 @@
 
 overhead-layout.ts - the rows stacked over a character's name
 
-The guild or companion-owner row, the vitals (quick status), the fortress
-mark and crest, a stall's title, and (port-only, #2958) a 5-star caravan's
-star row over its transport; speech rises above the highest row.
+The guild or companion-owner row, the vitals (quick status), the fortress mark and
+crest, a stall's title, and (port-only, #2958) a 5-star caravan's star
+row over its transport; speech rises above the highest row.
 withoutBoardPass is the same stack with the /id byte clear: only the stall
-title and speech board remain.
+title and speech board remain. A Contributor's title (port-only, #3358)
+is no row of its own: it rides the name board, left of the name, as
+the owner asked (titledNameRow).
 
 ===========================================================================
 */
@@ -34,6 +36,35 @@ const STALL_TITLE_RISE = 20;
 // cos-trade-info.ts); the row rides this far above the highest row.
 const CARAVAN_STAR_PATH = "/assets/images/Media_extracted/interface/ifcommon/com_star.png";
 const CARAVAN_STAR_RISE = 20;
+// Port-only, not native (#3358): a rostered player's Contributor title,
+// yellow (0xffff00) as the owner asked, on the name board left of the
+// name, in the guild and fortress wars too (owner, 2026-11-14), not on
+// a row of its own. v1.150 has no such placement to copy: its one
+// player title, the fortress officer title, rides the guild row as
+// "[Guild(Title)]" (client 86BA5F). The roster is the server's word
+// (contributor-titles.ts); with SRO_CONTRIBUTOR_TITLES off no frame
+// arrives and no title ever shows.
+export const CONTRIBUTOR_TITLE_TEXT = "Contributor";
+export const CONTRIBUTOR_TITLE_COLOR = [ 1, 1, 0, 1 ] as const;
+// The gap between the title and the name on the board, in pixels.
+export const TITLE_NAME_GAP = 4;
+
+/*
+================
+titledNameRow
+
+The name board's one line with a title in front: the title's left edge
+and the name's, both relative to the board's centre, so the pair is
+centred together as one board. With no title the name is centred alone,
+exactly as before.
+================
+*/
+export function titledNameRow( titleWidth: number, nameWidth: number ) {
+	const lead = titleWidth > 0 ? titleWidth + TITLE_NAME_GAP : 0,
+		total = lead + nameWidth,
+		left = -(total >> 1);
+	return { left, nameLeft: left + lead, total };
+}
 
 /*
 ================
@@ -134,6 +165,13 @@ export function overheadLayout(
 		social?.wars?.some( w => w.name === name ) ?
 		[ 1, 0, 0, 1 ] :
 		[ 102 / 255, 185 / 255, 1, 1 ];
+	// Port-only, not native (#3358): the Contributor title in front of a
+	// rostered player's name, the local player's own included; the board
+	// pass below hides it with the name board's other rows.
+	const contributorText = (entity.kind === "player" || entity.kind === "local-player") && entity.name &&
+			game.contributorTitles?.includes( entity.name ) ?
+		CONTRIBUTOR_TITLE_TEXT :
+		"";
 	const status = quickStatus( entity, local, game, options ),
 		guildY = guildText ? -20 : 0,
 		ownerY = companionOwnerShown( entity, options ) ? COMPANION_OWNER_Y : 0,
@@ -166,7 +204,13 @@ export function overheadLayout(
 			iconPath( game.fortress?.fortresses.find( f => f.id === ownerFortress.id )?.icon ) :
 			null;
 	// 751430 / 86A26D: a stall's title rides above the rest (SetOverheadStallTitle, 0xFFFEB5FF).
-	const stallText = entity.appearanceState?.[6] === STALL_TITLE_MODE && entity.titleText ? entity.titleText : "",
+	// 869750 (SetStallName) stores the title bracketed - "[" + title + "]" - and the
+	// spawn row (869DF0) and the 0x30DF open both draw that bracketed form; only the
+	// 0x34B7 rename handler passes the raw packet string to the board, the one native
+	// slip. entity.titleText stays raw for the stall window; the board brackets here.
+	const stallText = entity.appearanceState?.[6] === STALL_TITLE_MODE && entity.titleText ?
+			"[" + entity.titleText + "]" :
+			"",
 		stallY = statusY - (stallText ? STALL_TITLE_RISE : 0);
 	// Port-only, not native (#2958): the fifth star shows on the
 	// transport's nameplate, five stars in the bag window's row and tint,
@@ -180,6 +224,8 @@ export function overheadLayout(
 		guildText,
 		guildColor: color,
 		guildY,
+		contributorText,
+		contributorColor: CONTRIBUTOR_TITLE_COLOR,
 		status,
 		statusY,
 		speechY,
@@ -212,6 +258,7 @@ export function withoutBoardPass( layout: OverheadLayout ): OverheadLayout {
 		fortressCrest: null,
 		guildText: "",
 		guildY: 0,
+		contributorText: "",
 		status: null,
 		statusY: 0,
 		fortressMark: null,

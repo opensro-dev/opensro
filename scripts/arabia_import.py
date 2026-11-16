@@ -84,25 +84,35 @@ import cap110_monsters as monsters  # noqa: E402
 import cap110_skill_effects as effects  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
 import sro_pk2  # noqa: E402
-from alexandria_map_tables import native_text_row  # noqa: E402
+from alexandria_map_tables import native_text_row, overview_box  # noqa: E402
+from arabia_map_tiles import (  # noqa: E402
+	import_map_labels,
+	import_map_tiles,
+	map_tile_paths,
+	remove_map_labels,
+	restore_map_tiles,
+)
 from arabia_gates import prepare_gates  # noqa: E402
-from prepare_client_resources import safe_target, write_atomically  # noqa: E402
+from prepare_client_resources import write_atomically  # noqa: E402
 from skytemple_import import (  # noqa: E402
 	copy_resource_closure,
+	copy_sector_navmesh,
 	later_object_texts,
 	merge_object_catalog_remap,
 	o2_object_ids,
 	open_archive,
 	patch_o2_objects,
+	remove_owned as shared_remove_owned,
 	source_root,
 	verify_archives,
 )
-from sro_paths import MAIN_CHECKOUT_ROOT  # noqa: E402
+from sro_paths import MAIN_CHECKOUT_ROOT, trees_overlap  # noqa: E402
 
 FLAG = "SRO_ARABIA"
 SOURCE_ENV = "SRO_V1696_ROOT"
 NESTS_ENV = "SRO_ARABIA_NESTS"
 MARKER = ".opensro-arabia.json"
+MAPINFO_TABLE = "worldmap_mapinfo.txt"
 # The 200000 identity band: 120000 is the cap-110 family's, 130000 the
 # pet import's (140000/150000 held for its later sources), 160000 the
 # Sky Temple's, 170000 Jupiter's, 180000 the second hunting grounds',
@@ -340,6 +350,64 @@ def npc_placements(npc_rows, npcpos_rows, codename_by_id, regions):
 
 
 # ================
+# SPEECH_ENGLISH
+#
+# Authored English for the talk lines the v1.696 client ships in Korean
+# only (no English cell in any of its language columns). The asset
+# build refuses an active textquest row without English
+# (englishCompletions.mjs, assertEnglishCompletionCoverage), and the
+# shared catalog cannot hold these keys: it must name only rows the
+# native build has, and these exist only while SRO_ARABIA is on. So the
+# layer that adds the rows carries their English, under the catalog's
+# contract: each entry records the exact Korean it translates, applies
+# only while the source has no English, and a changed Korean refuses
+# the build as stale rather than showing an outdated line.
+# (key: (Korean source, English)). Translated from the v1.696 Korean,
+# 2026-11-15, freeze 2c9e87fdf's variant build.
+# ================
+SPEECH_ENGLISH = {
+	"SN_BOSS_DUNGEON_ALCHEMIST_BS": (
+		"저는 오랜 연구 끝에 마침내 유피테르 신전에 숨겨져 있다는 비밀의 방의 입구를 열 수 있었습니다. "
+		"하지만 전 입구만을 열 수 있을 뿐.. 비밀의 방이 어떤 곳인지 알지 못합니다.",
+		"After long research I was finally able to open the entrance to the secret chamber said to be "
+		"hidden in the Jupiter Temple. But I could only open the entrance.. I do not know what kind of "
+		"place the secret chamber is.",
+	),
+	"SN_LAST_FIELD_PRIEST_BS": (
+		"샴발라에 다녀는 와 봤나? 최근 많은 모험가들이 샴발라를 다녀온 후로  무언가에 홀리듯 사라졌다 "
+		"나타나곤 했지. 그리고 얼마 지나지 않아 대도시를 중심으로 역병이 창궐하고 있다네.",
+		"Have you ever been to Shambala? Lately many adventurers who came back from Shambala would vanish, "
+		"as if bewitched by something, and then turn up again. And not long after, a plague broke out, "
+		"spreading from the great cities.",
+	),
+	"SN_LOST_TOMB_DUNGEON_ALCHEMIST_BS": (
+		"유피테르 신전에 숨겨져 있는 또 다른 입구를 찾아냈습니다. 이곳은 상층, 하층으로 구성된 무덤으로 "
+		"파악이 됐으나  굳게 잠겨져 있어 조사가 중단됐습니다.",
+		"I have found another entrance hidden in the Jupiter Temple. It proved to be a tomb with an upper "
+		"and a lower level, but it is firmly locked, so the survey has stopped.",
+	),
+}
+
+
+# ================
+# speech_english
+#
+# A talk row's English: the source's own when it has one, else the
+# authored line (SPEECH_ENGLISH) for that key and Korean, else "".
+# ================
+def speech_english(key, korean, english):
+	if english:
+		return english
+	authored = SPEECH_ENGLISH.get(key)
+	if authored is None:
+		return ""
+	source, line = authored
+	if source.strip() != korean.strip():
+		raise ValueError(f"stale Arabia talk English for {key}: the v1.696 Korean changed")
+	return line
+
+
+# ================
 # later_speech_texts
 #
 # The later client's NPC talk strings (the SN_..._BS/_PS keys its
@@ -363,8 +431,9 @@ def later_speech_texts(read):
 				continue
 			english = next((row[at] for at in (9, 13, 14, 15, 16)
 				if len(row) > at and row[at] not in ("0", "")), "")
-			rows.append([row[0], row[2], row[3] if len(row) > 3 else "",
-				"", "", "", "", "", english, ""])
+			korean = row[3] if len(row) > 3 else ""
+			rows.append([row[0], row[2], korean,
+				"", "", "", "", "", speech_english(row[2], korean, english), ""])
 	return rows
 
 
@@ -388,78 +457,13 @@ def format_coord(value):
 # ================
 # remove_owned
 #
-# The off path: everything the marker owns leaves - the shards, the
-# population, the NPC standings and talk rows, the copied files and
-# the owned name, characterinfo, animation and gate rows. The variant
-# build rewrites the gate tables, the catalogues and mapinfo from the
-# native tables on every run, so a standalone off run strips the gate
-# rows itself and a build-run off finds none.
+# The off path is the Sky Temple family's one implementation
+# (skytemple_import.remove_owned) over Arabia's shard names and
+# region prefix; the speech, chat and standing sets this import's
+# marker records ride the same reap.
 # ================
 def remove_owned(output, prior):
-	text_root = output / TEXT_ROOT
-	if prior:
-		symbols = set(prior.get("nameSymbols", [])) | set(prior.get("gateTextSymbols", []))
-		if symbols:
-			text_path = text_root / "textdataname.txt"
-			write_atomically(text_path, monsters.encode_rows(
-				monsters.drop_symboled_rows(characters.translation_rows(text_path.read_bytes()), symbols)))
-		speech_symbols = set(prior.get("speechSymbols", []))
-		if speech_symbols:
-			quest_path = text_root / "textquest.txt"
-			if quest_path.exists():
-				write_atomically(quest_path, monsters.encode_rows(
-					[row for row in tables.table_rows(quest_path.read_bytes())
-						if len(row) <= 1 or row[1] not in speech_symbols]))
-		effect_path = text_root / "skilleffect.txt"
-		effect_text = effects.remove_animation_bases(
-			tables.decode_table(effect_path.read_bytes()), set(prior.get("animationBases", [])))
-		write_atomically(effect_path, b"\xff\xfe" + monsters.drop_characterinfo_rows(
-			effect_text, set(prior.get("characterInfo", []))).encode("utf-16-le"))
-		gate_codes = set(prior.get("gateCodes", []))
-		data_path = text_root / "teleportdata.txt"
-		data_rows = tables.table_rows(data_path.read_bytes()) if gate_codes else []
-		removed_ids = {row[1] for row in data_rows if len(row) > 2 and row[2] in gate_codes}
-		if removed_ids:
-			write_atomically(data_path, monsters.encode_rows(
-				[row for row in data_rows if len(row) <= 2 or row[2] not in gate_codes]))
-			building_path = text_root / "teleportbuilding.txt"
-			write_atomically(building_path, monsters.encode_rows(
-				[row for row in tables.table_rows(building_path.read_bytes())
-					if len(row) <= 2 or row[2] not in set(prior.get("gateBuildingCodes", []))]))
-			link_path = text_root / "teleportlink.txt"
-			write_atomically(link_path, monsters.encode_rows(
-				[row for row in tables.table_rows(link_path.read_bytes())
-					if len(row) <= 2 or (row[1] not in removed_ids and row[2] not in removed_ids)]))
-		chat_codes = set(prior.get("chatCodes", prior.get("npcCodes", [])))
-		if chat_codes:
-			chat_path = text_root / "npcchat.txt"
-			if chat_path.exists():
-				write_atomically(chat_path, monsters.encode_rows(
-					[row for row in tables.table_rows(chat_path.read_bytes())
-						if len(row) <= 1 or row[1] not in chat_codes]))
-		npc_ids = {str(identity) for identity in prior.get("npcIds", [])}
-		if npc_ids:
-			npcpos_path = text_root / "npcpos.txt"
-			if npcpos_path.exists():
-				write_atomically(npcpos_path, monsters.encode_rows(
-					[row for row in tables.table_rows(npcpos_path.read_bytes())
-						if len(row) < 1 or row[0] not in npc_ids]))
-		region_ids = {str(region) for region in prior.get("regions", [])}
-		if region_ids:
-			region_path = text_root / "regioncode.txt"
-			write_atomically(region_path, monsters.encode_rows(
-				[row for row in tables.table_rows(region_path.read_bytes())
-					if len(row) <= 2 or row[1] not in region_ids or not row[2].startswith(REGION_PREFIX)]))
-	for name in (CHARACTER_SHARD, SKILL_SHARD, POPULATION_FILE):
-		(text_root / name).unlink(missing_ok=True)
-	manifest = text_root / "skilldata.txt"
-	if manifest.exists():
-		write_atomically(manifest, monsters.encode_rows(
-			[r for r in tables.table_rows(manifest.read_bytes()) if r[0].lower() != SKILL_SHARD]))
-	for relative in prior.get("files", []):
-		safe_target(output, relative).unlink(missing_ok=True)
-	(output / MARKER).unlink(missing_ok=True)
-	return {"enabled": False}
+	return shared_remove_owned(output, prior, CHARACTER_SHARD, SKILL_SHARD, POPULATION_FILE, MARKER, REGION_PREFIX)
 
 
 # ================
@@ -481,11 +485,13 @@ def arabia_resource_closure(seeds, archives, native, output):
 # ================
 def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_closure):
 	native, output = Path(native).resolve(), Path(output).resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("arabia output must be separate from the native extraction")
 	marker = output / MARKER
 	prior = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}
 	if not enabled():
+		restore_map_tiles(output, prior)
+		remove_map_labels(output / TEXT_ROOT, prior)
 		return remove_owned(output, prior)
 	root = Path(source) if source else source_root()
 	verify_archives(root)
@@ -511,6 +517,16 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		placements = npc_placements(extraction["npcs"], tables.table_rows(read("npcpos.txt")),
 			codename_by_id, regions)
 
+		native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != CHARACTER_SHARD
+			for r in tables.table_rows(p.read_bytes())]
+		# The Alexandria rule (alexandria_npcs.merge_npc_tables): an NPC
+		# kind the tables already hold keeps its row and its id, and only
+		# its Arabia standings are added. Converting it again shipped a
+		# second row under the same codename (NPC_CH_GACHA_MACHINE,
+		# NPC_CH_GACHA_OPERATOR, NPC_CH_EVENT_KISAENG1), which the NPC
+		# model build refuses (2026-11-15).
+		native_by_code = {r[2]: r for r in native_chars if len(r) > 2}
+
 		# A standing no source can name does not stand: the later
 		# client's own npcpos plants event props (a circus bear, a
 		# carnival frame) whose NameStrID no text shard of either
@@ -524,6 +540,10 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		nameless = {}
 		for place in placements:
 			row = later.get(place[0])
+			# A native kind is named by its native row, which the
+			# native client already ships.
+			if place[0] in native_by_code:
+				continue
 			if row is not None and row[5] not in later_name_keys and row[5] not in native_name_keys:
 				nameless[place[0]] = nameless.get(place[0], 0) + 1
 		if nameless:
@@ -533,11 +553,9 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 					f"table of either client ({nameless[code]} standings)")
 
 		refs = select_kinds(later, {row["Codename"] for row in extraction["monsters"]}, window=True)
-		npc_refs = select_kinds(later, {place[0] for place in placements}, window=False)
+		npc_refs = select_kinds(later, {place[0] for place in placements} - set(native_by_code), window=False)
 		all_refs = {**refs, **npc_refs}
 
-		native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != CHARACTER_SHARD
-			for r in tables.table_rows(p.read_bytes())]
 		occupied = {int(r[1]) for r in native_chars}
 		allocated = monsters.allocate_identities(occupied, sorted(all_refs), prior.get("characters", {}))
 		for code, row in sorted(all_refs.items()):
@@ -621,11 +639,21 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		# rules (a codename the native tables already have keeps its
 		# native row; shops ride only for native stores, and Baghdad's
 		# are not native, so none ride).
-		npcpos_rows = [[str(allocated[code]), str(region), format_coord(x), format_coord(y), format_coord(z)]
+		all_npcpos_rows = [[native_by_code[code][1] if code in native_by_code else str(allocated[code]),
+			str(region), format_coord(x), format_coord(y), format_coord(z)]
 			for code, region, x, y, z in placements]
 		existing_standings = {tuple(row[:5]) for row in tables.table_rows((text_root / "npcpos.txt").read_bytes())
 			if len(row) >= 5}
-		npcpos_rows = [row for row in npcpos_rows if tuple(row) not in existing_standings]
+		npcpos_rows = [row for row in all_npcpos_rows if tuple(row) not in existing_standings]
+		# A native kind's standings share its native id with the standings
+		# the native world already has, so the off path cannot strip them
+		# by id: the marker names these rows exactly. A rebuild finds its
+		# own earlier rows already standing and keeps owning the ones the
+		# prior marker named; a row the native world had stays native.
+		native_ids = {row[1] for row in native_by_code.values()}
+		prior_standings = {tuple(row) for row in prior.get("npcStandings", [])}
+		native_kind_standings = [row for row in all_npcpos_rows if row[0] in native_ids
+			and (tuple(row) not in existing_standings or tuple(row) in prior_standings)]
 		if npcpos_rows:
 			write_atomically(text_root / "npcpos.txt", characters.append_rows(
 				(text_root / "npcpos.txt").read_bytes(), npcpos_rows))
@@ -819,17 +847,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			archive_hashes["Particles"] = tables.sha256_of(particles)
 			archives = {"Data": (data, data_index),
 				"Particles": (particles, tables.archive_index(particles))}
-			for sector_x, sector_y in sectors:
-				nav = tables.navmesh_path(sector_x, sector_y)
-				entry = data_index.get(nav)
-				if entry is None:
-					raise ValueError(f"v1.696 Data.pk2 has no {nav}")
-				target = output / "Data_extracted" / "navmesh" / Path(nav).name
-				stored = sro_pk2.payload(data, entry)
-				if target.exists() and target.read_bytes() == stored:
-					continue
-				variant.replace_file(target, stored)
-				copied.append("Data_extracted/" + nav)
+			copied += copy_sector_navmesh(data, data_index, sectors, output, object_remap)
 			merged_objects = tables.object_catalog((output / "Map_extracted" / "object.ifo").read_bytes())
 			final_ids = {object_remap.get(object_id, object_id) for object_id in used_objects}
 			if not final_ids <= set(merged_objects):
@@ -853,7 +871,16 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		mapinfo = output / "Data_extracted" / "navmesh" / "mapinfo.mfo"
 		variant.replace_file(mapinfo, variant.enable_regions(mapinfo.read_bytes(), sectors))
 
-		files = sorted({entry for entry in set(prior.get("files", [])) | set(copied) if not entry.startswith("clash:")})
+		mapinfo_table = text_root / MAPINFO_TABLE
+		box = overview_box(mapinfo_table.read_bytes()) if mapinfo_table.exists() else None
+		pins, label_keys, label_art, map_pages = import_map_labels(media, media_index, text_root, regions)
+		owned_tiles, replaced_tiles = import_map_tiles(media, media_index, output,
+			map_tile_paths(regions, box) + label_art)
+		copied += owned_tiles
+		replaced_tiles = sorted(set(prior.get("replacedTiles", [])) | set(replaced_tiles))
+
+		files = sorted({entry for entry in set(prior.get("files", [])) | set(copied)
+			if not entry.startswith("clash:") and entry not in replaced_tiles})
 		summary = {
 			"enabled": True,
 			"characters": {code: int(row[1]) for code, row in all_refs.items()},
@@ -863,6 +890,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			"npcs": len(npc_refs),
 			"npcPlacements": len(placements),
 			"npcIds": sorted(int(allocated[code]) for code in npc_refs),
+			"npcStandings": native_kind_standings,
 			"npcCodes": sorted(npc_refs),
 			"chatCodes": sorted(chat_codes_owned),
 			"hiveCapped": extraction["hiveCapped"],
@@ -895,6 +923,10 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			"speechSymbols": speech_symbols,
 			"speechUnresolved": speech_unresolved,
 			"files": files,
+			"replacedTiles": replaced_tiles,
+			"mapPins": sorted(set(prior.get("mapPins", [])) | set(pins)),
+			"mapTexts": sorted(set(prior.get("mapTexts", [])) | set(label_keys)),
+			"mapPages": sorted(set(prior.get("mapPages", [])) | set(map_pages)),
 			"archives": archive_hashes,
 		}
 		write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())

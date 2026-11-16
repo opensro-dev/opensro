@@ -58,9 +58,13 @@ type InventoryRow struct {
 	// bump). Persisted as JSON numbers: real option magnitudes are u32, so
 	// every encoded value stays far below the 2^53 float boundary.
 	MagicOptions []uint64 `json:"magicOptions,omitempty"`
-	// TransformRefObjID is a monster capsule's Data (item record +0x38,
-	// the capsule's data word): the monster the mask turns its user into.
-	TransformRefObjID uint32 `json:"transformRefObjId,omitempty"`
+	// Data is the item record's data word (+0x38), whose meaning the
+	// item's type gives: a monster capsule's is the monster the mask turns
+	// its user into; a Devil's Spirit's (3/1/14, port-only behind
+	// SRO_NASRUN) is its awakening expiry in Unix seconds, 0 while
+	// dormant (nasrun/clock.go). No item is both. The JSON key keeps the
+	// capsule's original name so every saved record still decodes.
+	Data uint32 `json:"transformRefObjId,omitempty"`
 	// ForgeBound marks an item forged by the GM item-forge tool (port
 	// only, issue #1980): it refuses trade, NPC sale, stall offer and
 	// player drop. Absent on every native row.
@@ -391,6 +395,16 @@ type Character struct {
 	// MostWanted is the character's job-kill streak (port-only, not native:
 	// SRO_MOST_WANTED, action/mostwanted.go; schema 24). Nil is no streak.
 	MostWanted *MostWanted `json:"mostWanted,omitempty"`
+	// SookArenaActive marks a character inside (or entering) an Event
+	// So-ok survival run (port-only, not native: SRO_SOOK_SURVIVAL_ARENA).
+	// SookArenaDay and SookArenaEntries were the schema 42 per-character
+	// daily count; since schema 43 the account's SookArenaAccount owns it
+	// (#3322), and these two are only the seed that record is derived
+	// from at first load, kept so schema 42 records still load.
+	SookArenaActive  bool        `json:"sookArenaActive,omitempty"`
+	SookArenaDay     int32       `json:"sookArenaDay,omitempty"`
+	SookArenaEntries uint8       `json:"sookArenaEntries,omitempty"`
+	SookChest        *ArenaChest `json:"sookChest,omitempty"`
 	// HalloweenBoxDay is the 04:00-UTC day (progression.HalloweenDayKey)
 	// the character's daily jewelry-box count belongs to, and
 	// HalloweenBoxCount the boxes minted that day from every source
@@ -399,13 +413,17 @@ type Character struct {
 	// account's HalloweenBoxAccount owns the count (#2547); these fields
 	// are the legacy per-character seed the account record is derived
 	// from at first load, kept so schema 34/35 records still load.
-	// Port-only, not native: UTC admission count for Event So-ok survival.
-	SookArenaActive   bool        `json:"sookArenaActive,omitempty"`
-	SookArenaDay      int32       `json:"sookArenaDay,omitempty"`
-	SookArenaEntries  uint8       `json:"sookArenaEntries,omitempty"`
-	SookChest         *ArenaChest `json:"sookChest,omitempty"`
-	HalloweenBoxDay   int64       `json:"halloweenBoxDay,omitempty"`
-	HalloweenBoxCount int64       `json:"halloweenBoxCount,omitempty"`
+	HalloweenBoxDay   int64 `json:"halloweenBoxDay,omitempty"`
+	HalloweenBoxCount int64 `json:"halloweenBoxCount,omitempty"`
+	// NasrunTokens is the character's Devil's Spirit token balance, earned
+	// on unique kills and spent at the token shop; NasrunTokenDay is the
+	// token day (nasrun.TokenDay) NasrunTokenDayCount belongs to, the
+	// tokens earned that day under the daily cap (port-only, not native:
+	// SRO_NASRUN, game/nasrun/tokens.go; schema 46). Bound to the
+	// character: nothing moves a balance to another.
+	NasrunTokens        int64 `json:"nasrunTokens,omitempty"`
+	NasrunTokenDay      int64 `json:"nasrunTokenDay,omitempty"`
+	NasrunTokenDayCount int64 `json:"nasrunTokenDayCount,omitempty"`
 	// LevelReachedAt is when the character first reached each milestone level
 	// (PublicLevelMilestones), in Unix milliseconds, for the site's
 	// world-firsts (port-only, not native).
@@ -496,6 +514,8 @@ type Character struct {
 	// the owner, one lane per pet-potion TID4 the v1.150 client sends (4,
 	// 5, 7).
 	PetPotionCooldowns [3]int64 `json:"petPotionCooldowns,omitempty"`
+	// Port-only recipient cooldown survives relogging and changing crows.
+	RavenRefugeReadyAtMs int64 `json:"ravenRefugeReadyAtMs,omitempty"`
 
 	// Job is the job guild membership (the v1.188 job record at player
 	// object +0x1FB4).

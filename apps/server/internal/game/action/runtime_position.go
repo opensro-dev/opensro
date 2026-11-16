@@ -625,6 +625,18 @@ func (rt *Runtime) LiveSpawnFor(divisionID string, character *enterworld.Charact
 
 /*
 ==================
+LiveRegionFor
+
+The live region for the GM /FINDUSER answer (gmcommand.LivePositions):
+the saved spawn trails the walk, the live world does not.
+==================
+*/
+func (rt *Runtime) LiveRegionFor(divisionID string, character *enterworld.Character) uint16 {
+	return rt.LiveSpawnFor(divisionID, character).RegionID
+}
+
+/*
+==================
 liveNav
 
 liveNav is liveSpawn plus the surface owner retained at that point.

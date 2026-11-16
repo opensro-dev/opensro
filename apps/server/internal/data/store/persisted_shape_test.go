@@ -105,6 +105,7 @@ var strictRecords = []struct {
 	{"account-storage", reflect.TypeOf(domain.AccountStorage{})},
 	{"unique-kill", reflect.TypeOf(domain.UniqueKill{})},
 	{"halloween-box-account", reflect.TypeOf(domain.HalloweenBoxAccount{})},
+	{"sook-arena-account", reflect.TypeOf(domain.SookArenaAccount{})},
 }
 
 /*
@@ -156,6 +157,8 @@ func TestRecordFieldsBelongToTheCurrentSchema(t *testing.T) {
 var tableOnlySchemaSteps = map[int]string{
 	25: "layout 10 adds economy_ledger (economy_ledger.go)",
 	39: "layout 12 adds silk_history (silkhistory.go)",
+	45: "layout 13 adds trade_history (trade_history.go)",
+	47: "layout 14 adds caravan_agent_memories and caravan_route_heat (caravan_agents.go)",
 }
 
 /*

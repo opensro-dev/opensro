@@ -12,6 +12,7 @@ cache, and encode again when the settings change.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import os
 import shutil
 import sys
@@ -21,7 +22,6 @@ from pathlib import Path
 
 from PIL import Image
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "build" / "catalogue"))
 import webp_pool  # noqa: E402
 
 # Distinct images and how many copies of each the pairs name.

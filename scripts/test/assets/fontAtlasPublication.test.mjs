@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { publishAssetPackManifest, validatePackedFontAtlases } from "../../build/assetPackPublication.mjs";
 import { ASSET_SCHEMA } from "../../build/assetSchema.mjs";
-import { ASSET_PACK_MAGIC } from "../../build/shared/packFormat.mjs";
+import { ASSET_PACK_INDEX_MAX_BYTES, ASSET_PACK_MAGIC } from "../../build/shared/packFormat.mjs";
 
 const hash = b => createHash( "sha256" ).update( b ).digest( "hex" );
 const png = Buffer.from(
@@ -110,4 +110,13 @@ test("partial staging may omit cross-group images; final publication must contai
 	index.assets.pop();
 	await validatePackedFontAtlases( index, root, { partial: true } );
 	await assert.rejects( validatePackedFontAtlases( index, root ), /image missing/ );
+});
+test("refuses a pack index larger than the client reads before replacing the served manifest", async t => {
+	const { root, index, filename } = await fixture( t );
+	await writeFile( filename, "previous valid publication" );
+	// Whitespace keeps the index valid JSON: only its size is wrong.
+	const body = JSON.stringify( index );
+	const oversized = Buffer.from( body.slice( 0, -1 ) + " ".repeat( ASSET_PACK_INDEX_MAX_BYTES ) + "}" );
+	await assert.rejects( publishAssetPackManifest( root, filename, oversized ), /the client reads at most/ );
+	assert.equal( await readFile( filename, "utf8" ), "previous valid publication" );
 });

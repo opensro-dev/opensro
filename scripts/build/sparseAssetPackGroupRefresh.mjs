@@ -18,6 +18,7 @@ import { assertInsideRoot, containedPublicFile, normalizePublicAssetPath } from 
 import { mapWithConcurrency } from "./shared/asyncUtils.mjs";
 import { openFileHashCache } from "./shared/fileHashCache.mjs";
 import { sha256Hex } from "./shared/hash.mjs";
+import { compareText } from "./shared/textOrder.mjs";
 
 const HASH_CONCURRENCY = 8;
 
@@ -125,7 +126,7 @@ export async function patchAssetPackGroupFromLooseFiles( options ) {
 		const deltaHash = sha256Hex( Buffer.from( JSON.stringify(
 			looseRows
 				.filter( ( row ) => !previousByPath.has( row.publicPath.toLowerCase() ) )
-				.sort( ( a, b ) => a.publicPath.localeCompare( b.publicPath ) )
+				.sort( ( a, b ) => compareText( a.publicPath, b.publicPath ) )
 		) ) );
 		const newRoot = path.join( outputRoot, "slots", `new-${deltaHash}` );
 		const appended = await buildAssetPacks( {
@@ -150,9 +151,7 @@ export async function patchAssetPackGroupFromLooseFiles( options ) {
 		reusedPackCount += appended.reusedPackCount;
 	}
 
-	const nextAssets = [ ...nextAssetsByPath.values() ].sort( ( left, right ) =>
-		left.path.localeCompare( right.path )
-	);
+	const nextAssets = [ ...nextAssetsByPath.values() ].sort( ( left, right ) => compareText( left.path, right.path ) );
 	const nextGroup = {
 		...structuredClone( previousGroup ),
 		packs: nextPacks.flat(),
@@ -265,5 +264,5 @@ function uniquePublicPaths( values ) {
 		const normalized = normalizePublicAssetPath( value );
 		byLower.set( normalized.toLowerCase(), normalized );
 	}
-	return [ ...byLower.values() ].sort( ( left, right ) => left.localeCompare( right ) );
+	return [ ...byLower.values() ].sort( ( left, right ) => compareText( left, right ) );
 }

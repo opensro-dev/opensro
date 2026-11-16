@@ -6,19 +6,19 @@
 		{
 			"target": "client",
 			"file": "revtool-seed-client.xz",
-			"sha256": "969a4190ea0ef26b5627f611bf6abd20ed126c0a8df596e96cd4299ddca8f72a",
-			"bytes": 259848,
+			"sha256": "02446d0fabb75b864ebc3b7deff98beb72e9bd73d57f56d6881fdf8eb6c63eaa",
+			"bytes": 378264,
 			"binary_sha256": "375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a",
-			"functions": 95290,
+			"functions": 95342,
 			"ledger_lines": 944
 		},
 		{
 			"target": "server",
 			"file": "revtool-seed-server.xz",
-			"sha256": "fb78d15757002c57bb60db3e81980e1d3829d2e544a943937885ca135c6dc8eb",
-			"bytes": 199160,
+			"sha256": "7d965fbd10f945c27faf65b1d9cb40454d52973a03975416b729d67b9cb97f13",
+			"bytes": 290384,
 			"binary_sha256": "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290",
-			"functions": 77195,
+			"functions": 77256,
 			"ledger_lines": 303
 		}
 	]

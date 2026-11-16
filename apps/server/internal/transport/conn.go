@@ -53,6 +53,15 @@ type datagramSendFailureReporter interface {
 	DatagramSendFailures() uint64
 }
 
+// frameBatchWriter is the optional Conn extension that writes several
+// reliable frames with one transport write (session_write.go): the
+// receiver reads exactly the frames WriteFrame would have delivered one
+// by one, in order. Like WriteFrame it has one caller, the session's
+// writer, and it does not retain the slice.
+type frameBatchWriter interface {
+	WriteFrames(frames []Frame) error
+}
+
 // clientFacter is the optional Conn extension carrying the client
 // facts the accept request presented (clientaddr.go): the User-Agent
 // header. The session snapshots them at attach for the connection

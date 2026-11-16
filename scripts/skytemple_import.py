@@ -68,7 +68,7 @@ import sro_pk2  # noqa: E402
 from alexandria_map_tables import native_text_row  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
 from skytemple_gates import FIELD_WORLD, d_arrival, prepare_gates  # noqa: E402
-from sro_paths import MAIN_CHECKOUT_ROOT  # noqa: E402
+from sro_paths import MAIN_CHECKOUT_ROOT, trees_overlap  # noqa: E402
 
 FLAG = "SRO_SKYTEMPLE"
 SOURCE_ENV = "SRO_V1696_ROOT"
@@ -91,6 +91,11 @@ LAST_LEVEL = 178
 CLIENT_NEST_RESPAWN_MIN_SEC = 1
 CLIENT_NEST_RESPAWN_MAX_SEC = 3
 CLIENT_NEST_SIGHT_RANGE = 100
+# The home radius and spawn spread: the evidence's commonest for a
+# respawning nest, as cap110_monsters.py CLIENT_NEST_RADIUS explains (a
+# radius 0 nest keeps its monsters homing forever).
+CLIENT_NEST_RADIUS = 700
+CLIENT_NEST_GENERATE_RADIUS = 600
 
 
 # JMXVMAPO1001 placements, as scripts/build/world/jmx/JMXVMAPO1001.mjs:
@@ -101,6 +106,15 @@ MAPO_SIGNATURE_BYTES = 12
 MAPO_BLOCKS = 36
 MAPO_LOD_GROUPS = 4
 MAPO_RECORD_BYTES = 30
+# JMXVNVM 1000 region navmesh, as scripts/build/world/navmesh/parseNavmesh.mjs:
+# a 12-byte signature, a u16 object count, then per object 32 bytes whose
+# first u32 is the object id and whose last u16 is its link edge count,
+# followed by that many 6-byte link edges.
+NVM_SIGNATURE = b"JMXVNVM 1000"
+NVM_SIGNATURE_BYTES = 12
+NVM_OBJECT_BYTES = 32
+NVM_LINK_COUNT_OFFSET = 30
+NVM_LINK_EDGE_BYTES = 6
 
 PARSED_EXTENSIONS = (".bsr", ".bmt", ".efp", ".cpd")
 ARCHIVE_FOLDERS = {"Data": "Data_extracted", "Particles": "Particles_extracted"}
@@ -271,9 +285,8 @@ def client_controls():
 #
 # The field nests from the placements alone, in the Version-2 envelope
 # the cap-110 populations use. One placement of an admitted kind is one
-# nest standing on its point - radius 0, the posture of a native anchor
-# whose database evidence the server does not hold - holding one
-# monster. Nest identities are sequential over the sorted placements,
+# nest standing on its point, with the evidence's commonest home radius
+# and spawn spread, holding one monster. Nest identities are sequential over the sorted placements,
 # so a rebuild of the same client writes the same file.
 # ================
 def build_population(found, refs):
@@ -282,7 +295,8 @@ def build_population(found, refs):
 	for nest_id, (code, region, x, y, z) in enumerate(ordered, 1):
 		rows.append({
 			"Codename": code, "NestID": nest_id, "WorldID": FIELD_WORLD, "RegionID": region,
-			"X": x, "Y": y, "Z": z, "Radius": 0, "GenerateRadius": 0, "MaxCount": 1,
+			"X": x, "Y": y, "Z": z, "Radius": CLIENT_NEST_RADIUS,
+			"GenerateRadius": CLIENT_NEST_GENERATE_RADIUS, "MaxCount": 1,
 			"RespawnDelayMinSec": CLIENT_NEST_RESPAWN_MIN_SEC,
 			"RespawnDelayMaxSec": CLIENT_NEST_RESPAWN_MAX_SEC,
 			"Respawn": True, "InitialDir": 0, "ChampionGenPercentage": 0,
@@ -332,6 +346,80 @@ def patch_o2_objects(data, remap):
 					struct.pack_into("<I", out, at, remap[object_id])
 				at += MAPO_RECORD_BYTES
 	return bytes(out)
+
+
+# ================
+# nvm_object_offsets
+#
+# The byte offset of every object record in a region navmesh. The object
+# list is the file's first section; the cells and edges after it carry
+# object indices, never object ids, so they are left alone.
+# ================
+def nvm_object_offsets(data):
+	if data[:NVM_SIGNATURE_BYTES] != NVM_SIGNATURE:
+		raise ValueError("not a JMXVNVM 1000 navmesh")
+	(count,) = struct.unpack_from("<H", data, NVM_SIGNATURE_BYTES)
+	offsets, at = [], NVM_SIGNATURE_BYTES + 2
+	for _object in range(count):
+		if at + NVM_OBJECT_BYTES > len(data):
+			raise ValueError(f"navmesh object list runs past its {len(data)} bytes")
+		offsets.append(at)
+		(links,) = struct.unpack_from("<H", data, at + NVM_LINK_COUNT_OFFSET)
+		at += NVM_OBJECT_BYTES + links * NVM_LINK_EDGE_BYTES
+	return offsets
+
+
+# ================
+# nvm_object_ids
+# ================
+def nvm_object_ids(data):
+	"""The object ids a region navmesh places."""
+	return {struct.unpack_from("<I", data, at)[0] for at in nvm_object_offsets(data)}
+
+
+# ================
+# patch_nvm_objects
+#
+# A region navmesh with its object ids remapped, as patch_o2_objects
+# remaps the sector's placements. The client resolves a navmesh object
+# through object.ifo by this id (navigation.ts), so a navmesh copied
+# unpatched beside a patched .o2 names the later client's id for an
+# object the merged catalogue moved: Baghdad's dungeon exits, gates and
+# palace failed to load that way ("Missing navigation BSR 2631").
+# ================
+def patch_nvm_objects(data, remap):
+	offsets = nvm_object_offsets(data)
+	if not remap:
+		return data
+	out = bytearray(data)
+	for at in offsets:
+		(object_id,) = struct.unpack_from("<I", out, at)
+		if object_id in remap:
+			struct.pack_into("<I", out, at, remap[object_id])
+	return bytes(out)
+
+
+# ================
+# copy_sector_navmesh
+#
+# Each sector's region navmesh from the later Data.pk2 into the variant,
+# its object ids remapped with the sector placements' (patch_nvm_objects),
+# rewritten only when its bytes change. Returns the variant paths written.
+# ================
+def copy_sector_navmesh(data, data_index, sectors, output, remap):
+	copied = []
+	for sector_x, sector_y in sectors:
+		nav = tables.navmesh_path(sector_x, sector_y)
+		entry = data_index.get(nav)
+		if entry is None:
+			raise ValueError(f"v1.696 Data.pk2 has no {nav}")
+		target = output / "Data_extracted" / "navmesh" / Path(nav).name
+		stored = patch_nvm_objects(sro_pk2.payload(data, entry), remap)
+		if target.exists() and target.read_bytes() == stored:
+			continue
+		variant.replace_file(target, stored)
+		copied.append("Data_extracted/" + nav)
+	return copied
 
 
 # ================
@@ -412,7 +500,7 @@ def later_object_texts(read):
 # the missing bytes is not an option.
 # ================
 def copy_resource_closure(seeds, archives, native, output, tolerate_gaps=False):
-	from cap110_item_import import normalized_path, resource_dependencies
+	from cap110_item_import import normalized_path, resource_dependencies, tolerant_dependencies
 	pending = {("Data", normalized_path(seed)) for seed in seeds}
 	seen, written, missing_sounds, missing_effects = set(), [], [], []
 	missing_files, unparsed_files = [], []
@@ -460,18 +548,15 @@ def copy_resource_closure(seeds, archives, native, output, tolerate_gaps=False):
 				requests.append({"path": name, "bytes": base64.b64encode(raw).decode("ascii"),
 					"native": origin, "sounds": "data", "particles": "all"})
 		if requests:
-			try:
+			if not tolerate_gaps:
 				dependencies = resource_dependencies(requests)
-			except ValueError:
-				if not tolerate_gaps:
-					raise
+			else:
 				dependencies = []
-				for request in requests:
-					try:
-						dependencies.append(resource_dependencies([request])[0])
-					except ValueError:
+				for request, result in zip(requests, tolerant_dependencies(requests)):
+					if isinstance(result, ValueError):
 						unparsed_files.append(request["path"])
-						dependencies.append([])
+						result = []
+					dependencies.append(result)
 			for names in dependencies:
 				for dep in names:
 					if isinstance(dep, dict):
@@ -494,14 +579,17 @@ def copy_resource_closure(seeds, archives, native, output, tolerate_gaps=False):
 # ================
 # remove_owned
 #
-# The off path: everything the marker owns leaves - the shards, the
-# population, the copied files and the owned name, characterinfo,
-# animation and gate rows. The variant build rewrites the gate tables,
-# the catalogues and mapinfo from the native tables on every run, so a
-# standalone off run strips the gate rows itself and a build-run off
-# finds none.
+# The off path, the Sky Temple family's one implementation (Arabia
+# calls it with its own shard names and region prefix): everything
+# the marker owns leaves - the shards, the population, the NPC
+# standings and talk rows, the copied files and the owned name,
+# characterinfo, animation and gate rows. The variant build rewrites
+# the gate tables, the catalogues and mapinfo from the native tables
+# on every run, so a standalone off run strips the gate rows itself
+# and a build-run off finds none.
 # ================
-def remove_owned(output, prior):
+def remove_owned(output, prior, character_shard=CHARACTER_SHARD, skill_shard=SKILL_SHARD,
+		population_file=POPULATION_FILE, marker=MARKER, region_prefix=REGION_PREFIX):
 	text_root = output / TEXT_ROOT
 	if prior:
 		symbols = set(prior.get("nameSymbols", [])) | set(prior.get("gateTextSymbols", []))
@@ -509,6 +597,13 @@ def remove_owned(output, prior):
 			text_path = text_root / "textdataname.txt"
 			write_atomically(text_path, monsters.encode_rows(
 				monsters.drop_symboled_rows(characters.translation_rows(text_path.read_bytes()), symbols)))
+		speech_symbols = set(prior.get("speechSymbols", []))
+		if speech_symbols:
+			quest_path = text_root / "textquest.txt"
+			if quest_path.exists():
+				write_atomically(quest_path, monsters.encode_rows(
+					[row for row in tables.table_rows(quest_path.read_bytes())
+						if len(row) <= 1 or row[1] not in speech_symbols]))
 		effect_path = text_root / "skilleffect.txt"
 		effect_text = effects.remove_animation_bases(
 			tables.decode_table(effect_path.read_bytes()), set(prior.get("animationBases", [])))
@@ -529,21 +624,38 @@ def remove_owned(output, prior):
 			write_atomically(link_path, monsters.encode_rows(
 				[row for row in tables.table_rows(link_path.read_bytes())
 					if len(row) <= 2 or (row[1] not in removed_ids and row[2] not in removed_ids)]))
+		chat_codes = set(prior.get("chatCodes", prior.get("npcCodes", [])))
+		if chat_codes:
+			chat_path = text_root / "npcchat.txt"
+			if chat_path.exists():
+				write_atomically(chat_path, monsters.encode_rows(
+					[row for row in tables.table_rows(chat_path.read_bytes())
+						if len(row) <= 1 or row[1] not in chat_codes]))
+		npc_ids = {str(identity) for identity in prior.get("npcIds", [])}
+		# Standings of kinds the native tables own carry the native id,
+		# so they leave by their exact row, never by id (Arabia).
+		npc_standings = {tuple(row) for row in prior.get("npcStandings", [])}
+		if npc_ids or npc_standings:
+			npcpos_path = text_root / "npcpos.txt"
+			if npcpos_path.exists():
+				write_atomically(npcpos_path, monsters.encode_rows(
+					[row for row in tables.table_rows(npcpos_path.read_bytes())
+						if len(row) < 1 or (row[0] not in npc_ids and tuple(row[:5]) not in npc_standings)]))
 		region_ids = {str(region) for region in prior.get("regions", [])}
 		if region_ids:
 			region_path = text_root / "regioncode.txt"
 			write_atomically(region_path, monsters.encode_rows(
 				[row for row in tables.table_rows(region_path.read_bytes())
-					if len(row) <= 2 or row[1] not in region_ids or not row[2].startswith(REGION_PREFIX)]))
-	for name in (CHARACTER_SHARD, SKILL_SHARD, POPULATION_FILE):
+					if len(row) <= 2 or row[1] not in region_ids or not row[2].startswith(region_prefix)]))
+	for name in (character_shard, skill_shard, population_file):
 		(text_root / name).unlink(missing_ok=True)
 	manifest = text_root / "skilldata.txt"
 	if manifest.exists():
 		write_atomically(manifest, monsters.encode_rows(
-			[r for r in tables.table_rows(manifest.read_bytes()) if r[0].lower() != SKILL_SHARD]))
+			[r for r in tables.table_rows(manifest.read_bytes()) if r[0].lower() != skill_shard]))
 	for relative in prior.get("files", []):
 		safe_target(output, relative).unlink(missing_ok=True)
-	(output / MARKER).unlink(missing_ok=True)
+	(output / marker).unlink(missing_ok=True)
 	return {"enabled": False}
 
 
@@ -552,7 +664,7 @@ def remove_owned(output, prior):
 # ================
 def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 	native, output = Path(native).resolve(), Path(output).resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("sky temple output must be separate from the native extraction")
 	marker = output / MARKER
 	prior = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}
@@ -774,17 +886,7 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 			archive_hashes["Particles"] = tables.sha256_of(particles)
 			archives = {"Data": (data, data_index),
 				"Particles": (particles, tables.archive_index(particles))}
-			for sector_x, sector_y in sectors:
-				nav = tables.navmesh_path(sector_x, sector_y)
-				entry = data_index.get(nav)
-				if entry is None:
-					raise ValueError(f"v1.696 Data.pk2 has no {nav}")
-				target = output / "Data_extracted" / "navmesh" / Path(nav).name
-				stored = sro_pk2.payload(data, entry)
-				if target.exists() and target.read_bytes() == stored:
-					continue
-				variant.replace_file(target, stored)
-				copied.append("Data_extracted/" + nav)
+			copied += copy_sector_navmesh(data, data_index, sectors, output, object_remap)
 			merged_objects = tables.object_catalog((output / "Map_extracted" / "object.ifo").read_bytes())
 			final_ids = {object_remap.get(object_id, object_id) for object_id in used_objects}
 			if not final_ids <= set(merged_objects):

@@ -497,6 +497,20 @@ class TestDoctorRizin(unittest.TestCase):
 		self.assertEqual(result["schema"], "sro-revtool-doctor-v1")
 		self.assertTrue(result["ok"])
 
+	def test_cli_doctor_on_an_unindexed_db_fails_closed(self):
+		# A contributor's first `--backend rizin doctor`, before any
+		# `index`: the DB carries no backend mark yet. It used to fall
+		# into the dump doctor and crash on args.lock.
+		tmp = tempfile.TemporaryDirectory()
+		self.addCleanup(tmp.cleanup)
+		binary = os.path.join(tmp.name, "SRO_Client.exe")
+		with open(binary, "wb") as fh:
+			fh.write(b"MZ")
+		db = os.path.join(tmp.name, "fresh.db")
+		rc, out = capture(rz.main, ["--db", db, "--binary", binary, "doctor"])
+		self.assertEqual(rc, 2)
+		self.assertIn("doctor: FAIL", out)
+
 	def test_doctor_fails_without_the_project(self):
 		con, db, rzdb, binary = self.open_rizin()
 		os.remove(rzdb)

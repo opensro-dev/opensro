@@ -77,6 +77,27 @@ func TestExpandedPetFramesDoNotReuseReleasedProtocols(t *testing.T) {
 
 /*
 ================
+TestLayeredRegionPlacementsReloadProtocol16Tabs
+
+A protocol-16 tab ignores a placement's seasonal layer and would draw
+every season's props from a rebuilt region bundle, so it gets the 426.
+================
+*/
+func TestLayeredRegionPlacementsReloadProtocol16Tabs(t *testing.T) {
+	released, ok := ContractsOf(16)
+	if !ok || released.Chat != 2 || released.World != 0 {
+		t.Fatalf("released protocol 16 changed: %+v", released)
+	}
+	if Current <= 16 || WorldContract != 1 {
+		t.Fatal("layered region placements need a new protocol")
+	}
+	if reached, recorder := serve(t, http.MethodPost, "16"); reached || recorder.Code != http.StatusUpgradeRequired {
+		t.Fatal("a protocol-16 tab would draw every season's decoration")
+	}
+}
+
+/*
+================
 TestAnyOtherDeclarationIsRefusedAsOutdated
 
 Browsers older than the handshake declare nothing; a stale or garbled
@@ -124,7 +145,8 @@ TestEveryReleasedProtocolNamesDistinctContracts
 func TestEveryReleasedProtocolNamesDistinctContracts(t *testing.T) {
 	current, ok := ContractsOf(Current)
 	if !ok || current != (Contracts{Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
-		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract, Wanted: WantedContract, Chat: ChatContract}) {
+		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract, Wanted: WantedContract, Chat: ChatContract,
+		World: WorldContract}) {
 		t.Fatalf("protocol %d names %+v, want the current contract constants", Current, current)
 	}
 	seen := map[Contracts]int{}

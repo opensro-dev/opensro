@@ -29,7 +29,8 @@ import (
 // Content discipline: param ids are v1.150-NATIVE magicoption.txt rows
 // (extracted/Media_extracted/server_dep/silkroad/textdata/magicoption.txt,
 // ~255 rows), resolved by MATTR_* CODENAME + degree - never transplanted
-// from the v1.188 shard dump.
+// from the v1.188 shard dump. The one exception is the seven v1.188 avatar
+// rows (ids 370..376) that avatarv188.go owns and load() appends.
 
 /*
 ==================
@@ -89,9 +90,11 @@ type TextdataMagicOptions struct {
 
 	once      sync.Once
 	byParamID map[uint32]*MagicOptionRow
+	loadErr   error
 }
 
-// NewTextdataMagicOptions returns a lazy loader over dir (magicoption.txt).
+// NewTextdataMagicOptions returns a lazy loader over dir (magicoption.txt)
+// with the v1.188 avatar rows (ids 370..376) applied.
 /*
 ================
 NewTextdataMagicOptions
@@ -99,6 +102,19 @@ NewTextdataMagicOptions
 */
 func NewTextdataMagicOptions(dir string) *TextdataMagicOptions {
 	return &TextdataMagicOptions{dir: dir}
+}
+
+/*
+================
+Load
+
+Load populates the table once and returns any id-collision error on the
+v1.188 avatar rows.
+================
+*/
+func (t *TextdataMagicOptions) Load() error {
+	t.once.Do(t.load)
+	return t.loadErr
 }
 
 // MagicOptionByParamID implements MagicOptionSource.
@@ -234,6 +250,23 @@ func (t *TextdataMagicOptions) load() {
 			Degree:      degree,
 			Descriptors: descriptors,
 		}
+	}
+	// Always append the v1.188 avatar Lucky and 4x stacking rows absent from
+	// v1.150 magicoption.txt (Media.pk2 rows 370..376; avatar-luck-and-4x-stacking.md),
+	// refusing any id collision with the loaded table. A collision leaves the
+	// table empty, so a caller that skips Load() fails closed instead of
+	// serving a half-applied table.
+	overlays := AvatarV188MagicOptions()
+	for _, overlay := range overlays {
+		if _, exists := t.byParamID[overlay.ParamID]; exists {
+			t.loadErr = AvatarV188OptionCollisionError(overlay.ParamID)
+			t.byParamID = map[uint32]*MagicOptionRow{}
+			return
+		}
+	}
+	for _, overlay := range overlays {
+		row := overlay
+		t.byParamID[row.ParamID] = &row
 	}
 	log.Infof("bootstrap: magicoption.txt loaded from %s (%d row(s))", t.dir, len(t.byParamID))
 }

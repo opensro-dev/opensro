@@ -27,6 +27,7 @@ import {
 	compileWalkTable,
 	fadeKeeps,
 	residentSlots,
+	setWalkLayers,
 	FADE_KEEPS_IN,
 	FADE_KEEPS_OUT,
 	SLOT_SCENERY,
@@ -35,6 +36,7 @@ import {
 	WALK_SKY,
 	WALK_TERRAIN
 } from "./walk-table";
+import { sameWorldLayers } from "@/engine/foundation/world/world-layers";
 import { footprintGeometry, footprintTextures } from "@/engine/foundation/rendering/footprints";
 import { createMaterialTimeline } from "@/engine/foundation/rendering/material-timeline";
 import { createTextureFactorPulse } from "@/engine/foundation/rendering/texture-factor-pulse";
@@ -107,6 +109,7 @@ import {
 	WORLD_SCENE_BYTES
 } from "@/engine/foundation/rendering/world-scene";
 import type { WorldScene, WorldCamera, WorldRenderStats, WorldGroup, TerrainRange } from "@/engine/contracts/scene";
+import type { SceneryEmitter } from "@/engine/contracts/scenery";
 import { createTextureMotion } from "@/engine/foundation/rendering/texture-motion";
 import type {
 	GeometryCommands,
@@ -694,6 +697,8 @@ export function createWorldRenderer(
 	// selection walk's scratch (visible order indices, transparent depths).
 	let orderLayers: (TerrainLayer | undefined)[] = [], orderDraws: (GeometryDraw | undefined)[] = [];
 	let orderVisible = new Int32Array( 0 ), orderDepth = new Float64Array( 0 );
+	// The seasonal world layers drawn (world-layers.ts), kept across scenes.
+	let eventLayers: ReadonlySet<number> = new Set();
 	// The current scene's groups in walk order, with their typed bounds.
 	let walk = compileWalkTable( [], pickBounds );
 	// Instanced selection caches by walk index, so the walk does not look them up.
@@ -717,7 +722,7 @@ export function createWorldRenderer(
 		orderDraws = groups.map( group => draws.get( group ) );
 		orderVisible = new Int32Array( groups.length );
 		orderDepth = new Float64Array( groups.length );
-		walk = compileWalkTable( sceneGroups, pickBounds );
+		walk = compileWalkTable( sceneGroups, pickBounds, eventLayers );
 		walkCaches = new Array( sceneGroups.length );
 		for ( let i = 0; i < sceneGroups.length; i++ ) walk.order[i] = groupOrder.get( sceneGroups[i]! )!;
 		shadowSurfaces.reset();
@@ -778,6 +783,9 @@ export function createWorldRenderer(
 	let animated: WorldGroup[] = [], activeAnimated: WorldGroup[] = [];
 	let dynamicAnimation = false;
 	const clothMeshes = new Map<WorldGroup, ReturnType<typeof createClothVertices>>();
+	// The cloth groups the last selection walk found in view; the others
+	// pause (createClothVertices pause).
+	const activeCloth = new Set<WorldGroup>();
 	// The draw each cloth stream was last written to; a new draw needs it all.
 	const clothDraws = new Map<WorldGroup, unknown>();
 	const dirtyAnimation = new Set<WorldGroup>();
@@ -859,6 +867,7 @@ export function createWorldRenderer(
 		for ( const group of clothMeshes.keys() ) {
 			if ( scene?.groups.includes( group ) ) continue;
 			clothMeshes.delete( group );
+			activeCloth.delete( group );
 			clothDraws.delete( group );
 		}
 		for ( const group of scene?.groups ?? [] ) {
@@ -938,6 +947,12 @@ export function createWorldRenderer(
 			const draw = draws.get( group );
 			if ( !draw || !draw.instanceCount ) continue;
 			const fresh = clothDraws.get( group ) !== draw;
+			// A9EFB0 steps a compound's cloth (A77C40) only on a frame the
+			// compound is visible: out of view its time passes and is not owed.
+			if ( !force && !fresh && !activeCloth.has( group ) ) {
+				cloth.pause( seconds );
+				continue;
+			}
 			// Cloth steps at 20 Hz; between steps an unposed stream is unchanged,
 			// so neither the CPU copy nor the GPU upload is repeated. hold runs
 			// last: it records the frame when it allows the skip.
@@ -1280,6 +1295,9 @@ export function createWorldRenderer(
 		objects only while the active block's visibility list names it
 		(the same dungeonVisibility test as the walk below), so torches in
 		hidden rooms and on other floors neither draw nor take actor slots.
+		holderVisible answers from the last selection walk's frustum: an
+		emitter whose compound's sphere is outside it keeps its slot but its
+		clock stops (A9EFB0 ticks attached objects on the visible path).
 		================
 		*/
 		scenery() {
@@ -1304,7 +1322,16 @@ export function createWorldRenderer(
 					return row === undefined ||
 						fades.visited( row ) === selectedFadeFrame && fades.published( row ) > 0;
 				} ),
-				night: time < .25 || time > .75
+				night: time < .25 || time > .75,
+				holderVisible: ( emitter: SceneryEmitter ) =>
+					!pickFrustum || !emitter.holder ||
+					visibleFrustumSphere(
+						pickFrustum,
+						emitter.holder[0],
+						emitter.holder[1],
+						emitter.holder[2],
+						emitter.holder[3]
+					)
 			};
 		},
 		/*
@@ -1413,6 +1440,18 @@ export function createWorldRenderer(
 		weather( value: import("@/engine/foundation/gameplay/weather").WeatherOptions | null ) {
 			weatherOptions = value;
 			weather.set( value );
+		},
+		/*
+		================
+		worldLayers
+
+		The seasonal layers to draw; an equal set keeps the resident lists.
+		================
+		*/
+		worldLayers( value: ReadonlySet<number> ) {
+			if ( sameWorldLayers( value, eventLayers ) ) return;
+			eventLayers = value;
+			setWalkLayers( walk, value );
 		},
 		/*
 		================
@@ -1639,6 +1678,21 @@ export function createWorldRenderer(
 				}
 			}
 			textureWaiters.delete( path );
+		},
+		/*
+		================
+		releaseRetired
+
+		The release half of prepare, safe to run while no frame can: retired
+		scenes hold up to WORLD_SCENE_BYTES of CPU geometry and their GPU
+		draws until the next visible frame, so a hidden tab that keeps
+		crossing regions grew without bound (BUG-070's world half). Outside a
+		frame the device destroys at once (retirement.ts).
+		================
+		*/
+		releaseRetired( geometry: GeometryCommands, textures: ImageCommands ) {
+			while ( retired.length ) release( retired.pop()!, geometry );
+			if ( prune ) collectUnused( textures );
 		},
 		prepare(
 			geometry: GeometryCommands,
@@ -2503,6 +2557,10 @@ export function createWorldRenderer(
 			// Draw order of the visible groups, without walking every resident one;
 			// the phase boundaries fall out of the same pass.
 			activeAnimated = animated.filter( group => visibleMarks[groupOrder.get( group ) ?? -1] === 1 );
+			activeCloth.clear();
+			for ( const group of clothMeshes.keys() ) {
+				if ( visibleMarks[groupOrder.get( group ) ?? -1] === 1 ) activeCloth.add( group );
+			}
 			let visibleCount = 0;
 			terrainEnd = -1;
 			transparentStart = -1;
@@ -2689,6 +2747,7 @@ export function createWorldRenderer(
 			if ( disposed ) return;
 			disposed = true;
 			clothMeshes.clear();
+			activeCloth.clear();
 			clothDraws.clear();
 			for ( const row of footprintDraws.values() ) geometry?.release( row.draw );
 			footprintDraws.clear();

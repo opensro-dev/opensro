@@ -39,6 +39,7 @@ import { createBugReport, diagnosticActors } from "./bug-report/bug-report";
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { frameProbe } from "./frame-probes";
 import { createFrameWork } from "./frame-work";
+import { hiddenFrameRenders } from "@/engine/foundation/rendering/hidden-render";
 import { createFramePacing } from "./frame-pacing";
 import { createRenderer } from "./renderer/renderer";
 import { createViewer } from "./viewer/viewer";
@@ -52,6 +53,7 @@ import type { Pose } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
 import { worldAudioPosition } from "@/engine/foundation/world/world-space";
+import { activeWorldLayers } from "@/engine/foundation/world/world-layers";
 
 // The build's ordered background install list (buildBackgroundInstallAsset.mjs).
 const BACKGROUND_INSTALL_LIST = "/assets/delivery/background-install.json";
@@ -1294,6 +1296,8 @@ export function startRuntime(
 						{ ...(presentation.gameplay()?.weather ?? { mode: 1, amount: 0 }), eventRain } :
 						null
 				);
+				// The seasonal decoration follows the event groups the server set.
+				renderer.setWorldLayers( activeWorldLayers( presentation.gameplay()?.eventGroups ) );
 				// CGInterface_UpdateCameraOrbitTarget (68F830) locks third person
 				// behind the drawn body's turning yaw (+0x88, written per step by
 				// 86CBA0), not the logical heading, which snaps on each click.
@@ -1450,20 +1454,21 @@ export function startRuntime(
 				markStage( "ui" );
 				renderer.setDamageText( characters.damageText() );
 				// Hidden maintenance still acknowledges every ordered publication, but
-				// cannot display a frame, so it skips GPU preparation. A pending world
-				// entry is the exception: scene admission happens only inside the
-				// renderer frame, and 0x3012 game-ready waits on it. The native client
-				// keeps updating while inactive and only stops drawing: Application_PumpIdleFrame
-				// (A0F430) runs OnUpdate every idle frame, CGFXMainFrame_RenderFrame (A11650)
-				// sleeps 20 ms instead of drawing while g_bIsWindowActive is 0, and the loading
-				// screen finishes in CPSMission_OnUpdate (728E10, sends 0x324C). A background
-				// tab must finish its entry too.
-				const admitting = !readySent && sessionState?.phase === "world";
+				// cannot display a frame, so it skips GPU preparation, except while a
+				// load waits on scene admission: the world entry (0x3012 game-ready
+				// waits on it) or a frontend loading phase. hidden-render.ts has the
+				// native trace (A0F430, A11650, 728E10).
+				const admitting = hiddenFrameRenders( frontendState.phase, sessionState?.phase, readySent );
 				const rendered = visible || admitting ?
 					renderer.frame( platform.readViewport(), now / 1000, frameId, frameProbe() ) :
 					undefined;
 				if ( rendered ) {
 					await rendered;
+				} else if ( !visible ) {
+					// BUG-070: without a frame the release half of retirement never
+					// ran, so a hidden tab kept retired scenes, draws and texture
+					// sources alive without bound until it was shown again.
+					renderer.maintenance?.();
 				}
 				if ( disposed ) return;
 				markStage( "render-preparation-submit" );
@@ -1562,6 +1567,16 @@ export function startRuntime(
 				if ( now - lastReport >= 250 ) {
 					lastReport = now;
 					runtimeErrors.update( "Characters", characters.error() );
+					// A presentation data gap skips one cosmetic step and is
+					// reported, not fatal (presentation-contract.ts).
+					for ( const degradation of characters.takePresentationDegradations() ) {
+						sessionCommand( {
+							kind: "client-report",
+							incidentKind: "degraded",
+							code: degradation.code,
+							message: degradation.message
+						} );
+					}
 					runtimeErrors.update( "Navigation", navigation.reconnecting() ? null : navigation.error() );
 					runtimeErrors.update( "World", world.reconnecting() ? null : world.error() );
 					runtimeErrors.update( "Audio", audio.error() );

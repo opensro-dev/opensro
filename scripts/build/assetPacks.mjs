@@ -36,7 +36,12 @@ import { publishBytesAtomically } from "./shared/atomicPublish.mjs";
 import { createLimiter, mapWithConcurrency, settleAll } from "./shared/asyncUtils.mjs";
 import { openFileHashCache } from "./shared/fileHashCache.mjs";
 import { openMemberCompression } from "./shared/memberCompression.mjs";
-import { ASSET_PACK_HEADER_FORMAT, ASSET_PACK_MAGIC, ASSET_PACK_VERSION } from "./shared/packFormat.mjs";
+import {
+	ASSET_PACK_HEADER_FORMAT,
+	ASSET_PACK_MAGIC,
+	ASSET_PACK_VERSION,
+	assertPackIndexFits
+} from "./shared/packFormat.mjs";
 import { listFiles } from "./shared/fsUtils.mjs";
 import { sha256Hex } from "./shared/hash.mjs";
 import { archiveGeneratedArtifact } from "./artifacts/generatedArtifactArchive.mjs";
@@ -45,6 +50,7 @@ import { collectPackGarbage } from "./assetPackGarbage.mjs";
 import { readJsonOrUndefined } from "./shared/jsonOut.mjs";
 import { baselinePacksOf, planPackLayout, packSlotOf } from "./assetPackLayout.mjs";
 import { currentClaims, isClaimed } from "./shared/publicationLedger.mjs";
+import { compareText } from "./shared/textOrder.mjs";
 
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDir, "..", ".." );
@@ -102,7 +108,7 @@ export async function listPublicAssetFiles( options = {} ) {
 		}
 	}
 
-	return uniquePublicPaths( files, admission ).sort( ( left, right ) => left.localeCompare( right ) );
+	return uniquePublicPaths( files, admission ).sort( ( left, right ) => compareText( left, right ) );
 }
 
 /*
@@ -182,8 +188,8 @@ export async function buildAssetPacks( options = {} ) {
 		index.assets.push( ...groupResult.assets );
 	}
 
-	index.groups.sort( ( left, right ) => left.name.localeCompare( right.name ) );
-	index.assets.sort( ( left, right ) => left.path.localeCompare( right.path ) );
+	index.groups.sort( ( left, right ) => compareText( left.name, right.name ) );
+	index.assets.sort( ( left, right ) => compareText( left.path, right.path ) );
 	// The build/server contract for the HD channel (#2800): the main index
 	// certifies that this published tree carries the HD set's own index, so
 	// the client can list the Experimental row without ever fetching /hd.
@@ -296,7 +302,7 @@ export function unretiredBaselineLosses( baselineIndex, publishedPaths, claimedP
 		if ( !isClaimed( asset.path, claimedPaths ) ) continue;
 		losses.push( asset.path );
 	}
-	return losses.sort( ( left, right ) => left.localeCompare( right ) );
+	return losses.sort( ( left, right ) => compareText( left, right ) );
 }
 
 /*
@@ -360,7 +366,7 @@ async function buildAssetPackGroup(
 		};
 	} );
 
-	files.sort( ( left, right ) => left.publicPath.localeCompare( right.publicPath ) );
+	files.sort( ( left, right ) => compareText( left.publicPath, right.publicPath ) );
 	await mapWithConcurrency( files, FILE_HASH_CONCURRENCY, async ( file ) => {
 		file.sha256 = await hashCache.hashFile( file.absolutePath, file.stat );
 	} );
@@ -614,6 +620,7 @@ possible with rename-over on the readers that hit this path.
 ================
 */
 async function publishIndex( indexPath, bytes ) {
+	assertPackIndexFits( bytes, indexPath );
 	await publishBytesAtomically( indexPath, bytes, { logLabel: "asset-packs" } );
 }
 

@@ -6,6 +6,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/clientdata"
@@ -174,6 +175,98 @@ func TestPortalStructureGrantAndDestinationTransaction(t *testing.T) {
 	}
 	if *c.Gold != before-int64(rt.portals.links[[2]uint32{1, 2}].fee) {
 		t.Fatal("city fee not committed")
+	}
+}
+
+/*
+================
+TestMuhanCatalogJoinsOnlyWithTheFlag
+
+Port-only, not native (#3314): with SRO_MUHAN on, the catalogue gains
+the arena manager hub and the eight gates (227..235) with the 16 links
+between them and back to the town gate; off, none of them exists. The
+on-catalogue load also proves the gate rows name worlds the instance
+registry knows (worlds 103..111) and the links are fee-free.
+================
+*/
+func TestMuhanCatalogJoinsOnlyWithTheFlag(t *testing.T) {
+	clientdata.RequireGameData(t)
+	dir := gamedatatest.TextdataDir(t)
+
+	t.Setenv(monster.EnvMuhan, "off")
+	off, err := loadPortalCatalog(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := off.destinations[227]; ok {
+		t.Fatal("hub present with the flag off")
+	}
+
+	// Registration is the bootstrap's half of the flag (devdeps.go):
+	// the catalogue reads the worlds only once they are registered.
+	if err := instance.RegisterPortOnly(instance.MuhanDefinitions()); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(monster.EnvMuhan, "on")
+	on, err := loadPortalCatalog(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for id := uint32(227); id <= 235; id++ {
+		if _, ok := on.destinations[id]; !ok {
+			t.Fatalf("teleport %d missing with the flag on", id)
+		}
+		if on.sources[on.destinations[id].ref] != id {
+			t.Fatalf("teleport %d does not own its manager ref", id)
+		}
+	}
+	for gate := uint32(228); gate <= 235; gate++ {
+		for _, key := range [][2]uint32{{227, gate}, {gate, 5}} {
+			link, ok := on.links[key]
+			if !ok {
+				t.Fatalf("link %v missing with the flag on", key)
+			}
+			if link.fee != 0 || len(link.conditions) != 0 {
+				t.Fatalf("link %v charges or restricts: %+v", key, link)
+			}
+		}
+	}
+}
+
+/*
+================
+TestMuhanArenaSoloPartyAdmission
+
+Port-only, not native (#3314): the arena half of the world admission.
+A solo arena refuses a player in a live party, a party arena refuses
+one without; no Monsters seam is wired, so an admitted player ends at
+the missing-world refusal beyond the arena check.
+================
+*/
+func TestMuhanArenaSoloPartyAdmission(t *testing.T) {
+	if err := instance.RegisterPortOnly(instance.MuhanDefinitions()); err != nil {
+		t.Fatal(err)
+	}
+	solo := portalDestination{world: 103}
+	partyGate := portalDestination{world: 105}
+	lone := &Runtime{}
+	if _, refusal := lone.portalWorldAdmission(testDivision, &enterworld.Character{}, partyGate); refusal == 0 {
+		t.Fatal("party arena admitted a lone player")
+	}
+	// No Monsters seam: a non-default destination ends at the missing
+	// world refusal (3); reaching it proves the arena let the player by.
+	if _, refusal := lone.portalWorldAdmission(testDivision, &enterworld.Character{}, solo); refusal != 3 {
+		t.Fatalf("solo arena lone player: refusal %d, want the missing-world 3", refusal)
+	}
+	joined := &Runtime{RewardParties: func(string) []RewardParty {
+		return []RewardParty{{Members: []uint32{100007, 100008}}}
+	}}
+	member := &enterworld.Character{ID: 7}
+	if _, refusal := joined.portalWorldAdmission(testDivision, member, solo); refusal == 0 {
+		t.Fatal("solo arena admitted a party member")
+	}
+	if _, refusal := joined.portalWorldAdmission(testDivision, member, partyGate); refusal != 3 {
+		t.Fatalf("party arena party member: refusal %d, want the missing-world 3 past the arena", refusal)
 	}
 }
 

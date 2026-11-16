@@ -41,7 +41,7 @@ func (rt *Runtime) HandleTargetInteract(
 		return queued
 	}
 	previous := rt.captureActionSession(divisionID, character)
-	result := rt.handleTargetInteractLocked(divisionID, character, payload)
+	result := rt.handleTargetInteractLocked(divisionID, character, payload, rt.handlerDoors())
 	switch wire.ClassifyTargetActionLane(payload) {
 	case wire.TargetActionBasicAttack, wire.TargetActionFollow, wire.TargetActionSkill:
 		return rt.publishActionSession(divisionID, character, result, previous)
@@ -57,7 +57,7 @@ Keep admission, continuation replacement and the private action-state reply
 inside the same division transaction.
 ================
 */
-func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *enterworld.Character, payload []byte) OpResult {
+func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *enterworld.Character, payload []byte, doors characterDoors) OpResult {
 	switch wire.ClassifyTargetActionLane(payload) {
 	case wire.TargetActionFollow:
 		request, err := wire.DecodeFollowTarget(payload)
@@ -86,7 +86,7 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 			return stand
 		}
 
-		return rt.beginBasicAttack(divisionID, character, engage, nowMs)
+		return rt.beginBasicAttack(divisionID, character, engage, nowMs, doors)
 
 	case wire.TargetActionSkill:
 		// Client 6FCD50 flags 00/01 and 878100 flag 02 share this
@@ -152,7 +152,7 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 			}
 		}
 
-		return rt.dispatchRetainingAttack(divisionID, character, snapshot, cast)
+		return rt.dispatchRetainingAttack(divisionID, character, snapshot, cast, doors)
 
 	case wire.TargetActionFortressStructure:
 		// 692CB0's CICATStruct [02][01][01][gid] form is retail-valid,
@@ -425,7 +425,7 @@ caster, posture, target): dispatchRetainingAttack restores the replaced
 attack when it does.
 ================
 */
-func (rt *Runtime) dispatchSkillCommand(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction) OpResult {
+func (rt *Runtime) dispatchSkillCommand(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, doors characterDoors) OpResult {
 	source := rt.deps.SkillData()
 	if source == nil {
 		return rt.acceptSkillCast(divisionID, character, snapshot, cast)
@@ -443,33 +443,33 @@ func (rt *Runtime) dispatchSkillCommand(divisionID string, character, snapshot *
 	case skillRoutePosition:
 		return rt.acceptPositionSkill(divisionID, character, snapshot, cast, skill)
 	case skillRouteMirage:
-		result, _ := rt.acceptMirage(divisionID, character, snapshot, cast, skill, now, nil, rt.handlerDoors())
+		result, _ := rt.acceptMirage(divisionID, character, snapshot, cast, skill, now, nil, doors)
 		return result
 	case skillRouteDiscordWave:
 		return rt.acceptDiscordWave(divisionID, character, snapshot, cast, skill, now)
 	case skillRouteTaunt:
-		return rt.acceptUntargetedTaunt(tauntCast{division: divisionID, character: character, snapshot: snapshot, skill: skill, doors: rt.handlerDoors()}, cast)
+		return rt.acceptUntargetedTaunt(tauntCast{division: divisionID, character: character, snapshot: snapshot, skill: skill, doors: doors}, cast)
 	case skillRouteSupport:
 		return rt.acceptSupportSkill(divisionID, character, snapshot, cast, skill)
 	case skillRouteTimedTarget:
 		return rt.acceptTimedTargetEffect(divisionID, character, snapshot, cast, skill, now)
 	case skillRouteTimedSelf:
-		result, _ := rt.acceptTimedSelfEffect(divisionID, character, snapshot, cast, skill, now, nil, rt.handlerDoors())
+		result, _ := rt.acceptTimedSelfEffect(divisionID, character, snapshot, cast, skill, now, nil, doors)
 		return result
 	case skillRoutePartyBuff:
 		return rt.acceptPartyBuff(divisionID, character, snapshot, cast, skill)
 	case skillRouteWall:
 		return rt.acceptWall(divisionID, character, snapshot, cast, skill)
 	case skillRouteStatusCast:
-		result, _ := rt.acceptUntargetedStatusCast(divisionID, character, snapshot, cast, skill, now, nil, rt.handlerDoors())
+		result, _ := rt.acceptUntargetedStatusCast(divisionID, character, snapshot, cast, skill, now, nil, doors)
 		return result
 	case skillRouteAreaBurst:
 		return rt.acceptAreaBurst(divisionID, character, snapshot, cast, skill, now)
 	case skillRouteTrap:
-		result, _ := rt.acceptCombatTrap(divisionID, character, snapshot, cast, skill, now, nil, rt.handlerDoors())
+		result, _ := rt.acceptCombatTrap(divisionID, character, snapshot, cast, skill, now, nil, doors)
 		return result
 	}
-	return rt.beginOffensiveSkill(divisionID, character, snapshot, cast)
+	return rt.beginOffensiveSkill(divisionID, character, snapshot, cast, doors)
 }
 
 /*
@@ -484,12 +484,12 @@ command of its own puts the running attack and its queued continuation back.
 Only movement and an accepted command end auto-attack.
 ================
 */
-func (rt *Runtime) dispatchRetainingAttack(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction) OpResult {
+func (rt *Runtime) dispatchRetainingAttack(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, doors characterDoors) OpResult {
 	key := simulation.WorldKey(divisionID, snapshot.Name)
 	prior, attacking := rt.combatIntentFor(divisionID, snapshot.Name)
 	session, published := rt.actionSessions.Load(key)
 	rt.ClearCombatIntent(divisionID, snapshot.Name)
-	result := rt.dispatchSkillCommand(divisionID, character, snapshot, cast)
+	result := rt.dispatchSkillCommand(divisionID, character, snapshot, cast, doors)
 	if !attacking || !commandRefused(result) {
 		return result
 	}

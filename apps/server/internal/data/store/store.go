@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -96,6 +97,10 @@ type Options struct {
 	// OpenProbe is the test seam that holds an open step open; nil in
 	// production. A returned error stops the open.
 	OpenProbe func(ctx context.Context, step string) error
+	// readHeadroom widens the read window past StoreReadHeadroom; only
+	// this package's tests set it (#3091), production reads the
+	// constant alone.
+	readHeadroom int
 }
 
 // InventorySeedFunc installs the starter inventory and gold on a character
@@ -153,6 +158,8 @@ type changeSet struct {
 	tradeRewards   bool
 	jobRankings    bool
 	halloweenBoxes bool
+	// sookArenaAccounts is the survival arena's account plane (#3322).
+	sookArenaAccounts bool
 }
 
 func newChangeSet() changeSet {
@@ -180,7 +187,8 @@ func (changes changeSet) empty() bool {
 		len(changes.dissolvedCamp) == 0 &&
 		!changes.tradeRewards &&
 		!changes.jobRankings &&
-		!changes.halloweenBoxes
+		!changes.halloweenBoxes &&
+		!changes.sookArenaAccounts
 }
 
 // groundState owns the boundary between the live gameplay registry and its
@@ -264,6 +272,19 @@ type Store struct {
 	// wire order (domain.LetterStore contract); mutation is
 	// copy-then-swap through MutateMailbox only.
 	mailboxes map[string]map[int64][]domain.LetterRecord
+	// residues are the unknown top-level fields of the rows the
+	// commit rewrites from the store's own state, kept from the load so
+	// a write never drops a newer release's data (json.go, #3090).
+	residues recordResidues
+	// schemaStamp and layoutStamp are the meta version stamps every
+	// commit writes: the loaded store's, or this binary's when higher
+	// (adoptDB). A store opened inside the read window keeps its newer
+	// stamps (#3091).
+	schemaStamp int
+	layoutStamp int
+	// readHeadroom is the read window this store opens with
+	// (StoreReadHeadroom, or a test's wider one).
+	readHeadroom int
 
 	// guilds / guildMembers are the guild plane (the guilds and
 	// guild_members tables): division -> guild id -> the guild row and
@@ -277,6 +298,15 @@ type Store struct {
 	// guild plane's owner - does the invalidation. Dissolving a guild
 	// deletes its entry, and a missing entry reads as no revision.
 	guildRevisions map[guildKey]uint64
+	// guildViews is the memoised member-view plane (guilds.go
+	// guildMemberViewsLocked, #3291): the last projected roster per
+	// guild, validated against the stored rows and live levels on
+	// every read and republished only when either moved. guildViewMu
+	// guards the map alone - reads hold mu in read mode, which admits
+	// concurrent readers - and a published view is never mutated,
+	// only replaced.
+	guildViewMu sync.Mutex
+	guildViews  map[guildKey][]domain.GuildMemberRecord
 
 	// camps / campMembers are the training-camp plane (the
 	// training_camps and training_camp_members tables): the guild
@@ -321,6 +351,9 @@ type Store struct {
 	batch tickBatch
 	// ledger attributes every committed gold change (economy_ledger.go).
 	ledger economyLedger
+	// trades holds the trade rows noted by committed trades until the
+	// commit that writes them (trade_history.go).
+	trades tradeHistoryState
 
 	// defaultSkills is Options.DefaultSkills and serves current-schema
 	// character creation.
@@ -412,6 +445,7 @@ func Open(dir string, opts Options) (*Store, error) {
 		asyncCommit:      opts.AsyncCommit,
 		openCtx:          openCtx,
 		openProbe:        opts.OpenProbe,
+		readHeadroom:     max(StoreReadHeadroom, opts.readHeadroom),
 		now:              now,
 		writeFile:        writeFileAtomic,
 	}
@@ -534,10 +568,11 @@ func (s *Store) loadDBLadder(mainExists bool) error {
 	if cErr := s.openCtx.Err(); cErr != nil {
 		return cErr
 	}
-	if isVersionMismatch(err) {
-		// A healthy database this binary cannot serve. Not corruption:
-		// the file stays exactly where it is, and the older bak
-		// generation must NOT load - that would be a silent rollback.
+	if refusedInPlace(err) {
+		// A healthy database this binary cannot serve, or one whose boot
+		// layout write failed on the volume. Not corruption: the file
+		// stays exactly where it is, and the older bak generation must
+		// NOT load - that would be a silent rollback.
 		// Refuse; the operator swaps the binary.
 		return err
 	}
@@ -572,7 +607,14 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 		db.Close()
 		return nil, nil, err
 	}
-	loaded, err := loadDB(db, CurrentVersion, CurrentLayoutVersion)
+	// A layout behind this binary's by additive steps inside the read
+	// window gains its empty tables first (#3094); loadDB then sees the
+	// current layout. Outside the window nothing is written.
+	if err := createBootLayoutTables(db, layoutSteps, s.readHeadroom); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
+	loaded, err := loadDB(db, CurrentVersion, CurrentLayoutVersion, s.readHeadroom)
 	if err != nil {
 		db.Close()
 		return nil, nil, err
@@ -590,6 +632,16 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 	// same file ignores them (loadDB has already shape-checked them
 	// when they existed).
 	if err := ensureEconomyBuckets(db); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
+	// The market tables (port-only, SRO_CONSIGNMENT): additive too.
+	if err := ensureMarket(db); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
+	// The referral tables (#3518) are additive the same way.
+	if err := ensureReferrals(db); err != nil {
 		db.Close()
 		return nil, nil, err
 	}
@@ -639,6 +691,11 @@ func (s *Store) recoverFromDBBak(cause error) error {
 		if isVersionMismatch(err) {
 			return fmt.Errorf("%s is for a different binary version: %w", DBBakFileName, err)
 		}
+		if refusedInPlace(err) {
+			// The restored bak read cleanly; only the boot's layout write
+			// failed on the volume. Keep it in place for the next boot.
+			return fmt.Errorf("%s restored, but its boot layout write failed: %w", DBBakFileName, err)
+		}
 		if quarantined, qErr := quarantine(s.dbBakPath, s.now()); qErr == nil {
 			log.Errorf("store: %s also failed to load (%v); quarantined to %s", DBBakFileName, err, quarantined)
 		}
@@ -658,43 +715,31 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	s.rebuildAllCharacterLookupsLocked()
 	s.deleted = loaded.deleted
 	s.ground.loadedRecords = loaded.ground
+	// loadDB allocates every plane map, so none is nil here.
 	s.mailboxes = loaded.mailboxes
-	if s.mailboxes == nil {
-		s.mailboxes = map[string]map[int64][]domain.LetterRecord{}
-	}
 	s.guilds = loaded.guilds
-	if s.guilds == nil {
-		s.guilds = map[string]map[int64]domain.GuildRecord{}
-	}
 	s.guildMembers = loaded.guildMembers
-	if s.guildMembers == nil {
-		s.guildMembers = map[string]map[int64][]domain.GuildMemberRecord{}
-	}
 	s.camps = loaded.camps
-	if s.camps == nil {
-		s.camps = map[string]map[int64]domain.TrainingCampRecord{}
-	}
 	s.campMembers = loaded.campMembers
-	if s.campMembers == nil {
-		s.campMembers = map[string]map[int64][]domain.TrainingCampMemberRecord{}
-	}
 	s.nameReservations = loaded.nameReservations
-	if s.nameReservations == nil {
-		s.nameReservations = map[string]map[string]NameReservation{}
-	}
 	s.meta = loaded.meta
-	if s.meta.NextCharID == nil {
-		s.meta.NextCharID = map[string]int64{}
-	}
-	if s.meta.NextGuildID == nil {
-		s.meta.NextGuildID = map[string]int64{}
-	}
 	// A load-seeded halloween plane (loadedDB.halloweenSeeded) holds
 	// derived bytes, not the disk's: flag it so the first commit
 	// writes its row, as every commit did before the plane skip.
 	if loaded.halloweenSeeded {
 		s.changes.halloweenBoxes = true
 	}
+	// The survival arena plane takes the same first-commit write when
+	// it was seeded from the schema 42 per-character counts (#3322).
+	if loaded.sookArenaSeeded {
+		s.changes.sookArenaAccounts = true
+	}
+	s.residues = loaded.residues
+	// The stamps every commit writes: never below what the store
+	// already holds (a newer store inside the read window keeps its
+	// own), never below this binary's.
+	s.schemaStamp = max(loaded.version, CurrentVersion)
+	s.layoutStamp = max(loaded.layout, CurrentLayoutVersion)
 	s.ground.loadedGidCounter = loaded.meta.GidCounter
 	s.charDivision = map[*domain.Character]string{}
 	s.committedDigests = map[committedCharacterKey][32]byte{}

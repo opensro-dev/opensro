@@ -100,6 +100,7 @@ func (door storeGuildDoor) Guild(divisionID string, guildID int64) (domain.Guild
 	}
 	members, coherent := door.guildMemberViewsLocked(
 		divisionID,
+		guildID,
 		door.s.guildMembers[divisionID][guildID],
 	)
 	if !coherent {
@@ -234,7 +235,7 @@ func (door storeGuildDoor) UpdateGuildAs(
 	s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
 	s.commitLocked(label)
 
-	committedMembers, coherent := door.guildMemberViewsLocked(divisionID, storedMembers)
+	committedMembers, coherent := door.guildMemberViewsLocked(divisionID, guildID, storedMembers)
 	if !coherent {
 		return refused, domain.GuildRefusalInconsistentMembership
 	}
@@ -503,7 +504,7 @@ func (door storeGuildDoor) AddGuildMemberAs(
 	s.markCharacterLocked(joiner)
 	s.commitLocked(fmt.Sprintf("guild-add-member %s/%d", divisionID, guildID))
 
-	committedMembers, coherent := door.guildMemberViewsLocked(divisionID, storedMembers)
+	committedMembers, coherent := door.guildMemberViewsLocked(divisionID, guildID, storedMembers)
 	if !coherent {
 		return refused, domain.GuildRefusalInconsistentMembership
 	}
@@ -566,6 +567,9 @@ func (door storeGuildDoor) DissolveGuildAs(
 	// re-writing their last pre-dissolve state would have).
 	delete(s.changes.guilds, key)
 	delete(s.guildRevisions, key)
+	s.guildViewMu.Lock()
+	delete(s.guildViews, key)
+	s.guildViewMu.Unlock()
 	s.changes.dissolvedGuild[key] = true
 	for _, character := range memberCharacters {
 		character.GuildID = nil
@@ -646,7 +650,7 @@ func (door storeGuildDoor) DonateGuildPoints(
 	s.markCharacterLocked(donor)
 	s.commitLocked(fmt.Sprintf("guild-gp-donate %s/%d", divisionID, guildID))
 
-	committedMembers, coherent := door.guildMemberViewsLocked(divisionID, storedMembers)
+	committedMembers, coherent := door.guildMemberViewsLocked(divisionID, guildID, storedMembers)
 	if !coherent {
 		return refused, domain.GuildRefusalInconsistentMembership
 	}
@@ -797,6 +801,7 @@ func (door storeGuildDoor) authorizedGuildActorLocked(
 	}
 	members, coherent := door.guildMemberViewsLocked(
 		divisionID,
+		guildID,
 		door.s.guildMembers[divisionID][guildID],
 	)
 	if !coherent {
@@ -914,60 +919,6 @@ func (door storeGuildDoor) removeGuildMemberLocked(
 		RemovedMember: target,
 		MembersBefore: membersBefore,
 	}, domain.GuildRefusalNone
-}
-
-// guildMemberViewsLocked projects character-owned roster fields while the
-// store lock keeps membership and character state coherent. Stored guild rows
-// deliberately carry no mutable character level.
-/*
-================
-guildMemberViewsLocked
-================
-*/
-func (door storeGuildDoor) guildMemberViewsLocked(
-	divisionID string,
-	members []domain.GuildMemberRecord,
-) ([]domain.GuildMemberRecord, bool) {
-	views := make([]domain.GuildMemberRecord, len(members))
-	for index, member := range members {
-		character := door.s.characterByIDLocked(divisionID, member.CharID)
-		if character == nil {
-			return nil, false
-		}
-		member.Level = guildMemberLevel(character)
-		views[index] = member
-	}
-	return views, true
-}
-
-// guildMembersForStorage strips character-owned projections before a member
-// set becomes live or durable. This makes accidental stale-level retention
-// impossible even in the in-memory aggregate.
-/*
-================
-guildMembersForStorage
-================
-*/
-func guildMembersForStorage(members []domain.GuildMemberRecord) []domain.GuildMemberRecord {
-	stored := make([]domain.GuildMemberRecord, len(members))
-	for index, member := range members {
-		member.Level = 0
-		stored[index] = member
-	}
-	return stored
-}
-
-/*
-================
-guildMemberLevel
-================
-*/
-func guildMemberLevel(character *domain.Character) uint8 {
-	level := resolvedCharacterLevel(character)
-	if level > 0xff {
-		level = 0xff
-	}
-	return uint8(level)
 }
 
 // maxGuildIDLocked is the watermark safety net for an unseeded division

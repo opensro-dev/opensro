@@ -380,6 +380,19 @@ export function createItemMall() {
 		},
 		/*
 		================
+		isOpen
+
+		Whether the mall window is open. The frame's gates (auto-potions,
+		the quick-slot bar, travel) ask only this; read() builds the whole
+		window model, offer lists included, and costs a kilobyte a frame
+		when asked for one flag.
+		================
+		*/
+		isOpen(): boolean {
+			return visible;
+		},
+		/*
+		================
 		read
 		================
 		*/

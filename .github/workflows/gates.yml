@@ -1,0 +1,57 @@
+# gates.yml - lift `status: gated` the moment an issue's Ungate when line holds
+#
+# A gated issue says when it opens (scripts/github/issueGates.mjs): an
+# issue closing, a pull request reaching the live release, a time, or an
+# owner decision. This sweep reads every open gated issue, lifts the label
+# where every condition holds, and asks once on an issue that says nothing
+# (thirty-two gated issues piled up by 2026-11-14 because no gate said
+# what would lift it).
+#
+# Trust: schedule, workflow_dispatch and issues events run from the
+# default branch, so the script checked out here is the reviewed copy on
+# main. Issue text is read through the API inside the script as data; it
+# is never interpolated into this file or a shell. The token may only
+# write issues (labels, comments). The workflow's own edits are made with
+# GITHUB_TOKEN, which starts no new workflow run.
+name: gates
+
+on:
+  schedule:
+    # Hourly: a release or an issue closing lifts its gates within the hour.
+    - cron: "41 * * * *"
+  issues:
+    # A gate added or edited is read at once.
+    types: [ labeled, edited ]
+  workflow_dispatch:
+
+concurrency:
+  # One sweep at a time; a queued one reads the newest state anyway.
+  group: gates
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  sweep:
+    # An issue event matters only for a gated issue.
+    if: >-
+      github.event_name != 'issues' ||
+      contains(github.event.issue.labels.*.name, 'status: gated')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the default branch's gates script
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/github
+          persist-credentials: false
+
+      - name: Sweep the gated issues
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { run } = await import( `${ process.env.GITHUB_WORKSPACE }/scripts/github/issueGates.mjs` );
+            await run( { github, context, core } );

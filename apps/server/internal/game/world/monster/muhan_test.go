@@ -58,6 +58,54 @@ func TestLoadMuhanWavesFollowsTheSwitch(t *testing.T) {
 	}
 }
 
+const muhanNPCsFixture = `{"Version": 2, "Rows": [
+	{"Codename": "NPC_MUHAN_SOLO_75_MANAGER", "NestID": 39604, "WorldID": 103, "RegionID": 27091,
+		"X": 779, "Y": 628, "Z": 1108, "Radius": 0, "GenerateRadius": 0, "MaxCount": 1,
+		"RespawnDelayMinSec": 0, "RespawnDelayMaxSec": 0, "Respawn": true, "InitialDir": 0,
+		"SpawnType": 0, "ChampionGenPercentage": 0, "Controls": {"ID": 1489, "ObjectID": 40421}, "Champion": null},
+	{"Codename": "NPC_MUHAN_CHANGE_SOLO_75_A", "NestID": 39605, "WorldID": 103, "RegionID": 27091,
+		"X": 1142, "Y": 382, "Z": 1128, "Radius": 0, "GenerateRadius": 0, "MaxCount": 1,
+		"RespawnDelayMinSec": 0, "RespawnDelayMaxSec": 0, "Respawn": true, "InitialDir": 0,
+		"SpawnType": 0, "ChampionGenPercentage": 0, "Controls": {"ID": 1481, "ObjectID": 40458}, "Champion": null}
+]}
+`
+
+/*
+================
+TestAppendMuhanNPCsJoinsArenaWorlds
+
+The arena NPCs join their wave world; a wave kind in the NPC file,
+and a nest naming an unknown world, refuse before startup.
+================
+*/
+func TestAppendMuhanNPCsJoinsArenaWorlds(t *testing.T) {
+	template := Template{Refs: map[uint32]MonsterRef{
+		101: {Codename: "NPC_MUHAN_SOLO_75_MANAGER"},
+		102: {Codename: "NPC_MUHAN_CHANGE_SOLO_75_A"},
+		103: {Codename: "MOB_MUHAN_L75"},
+	}}
+	got, err := appendMuhanNPCData(template, []byte(muhanNPCsFixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Nests) != 2 {
+		t.Fatalf("nests: got %d, want 2", len(got.Nests))
+	}
+	for _, nest := range got.Nests {
+		if nest.WorldCode != "GROUP_MUHAN_SOLO_75" || nest.RegionID != 27091 || nest.MaxCount != 1 || !nest.Respawn {
+			t.Fatalf("nest joined wrong: %+v", nest)
+		}
+	}
+	bad := `{"Version": 2, "Rows": [{"Codename": "MOB_MUHAN_L75", "NestID": 1, "WorldID": 103, "RegionID": 27091, "MaxCount": 1}]}`
+	if _, err := appendMuhanNPCData(template, []byte(bad)); err == nil {
+		t.Fatal("a wave kind in the npc file joined; want a refusal")
+	}
+	badWorld := `{"Version": 2, "Rows": [{"Codename": "NPC_MUHAN_SOLO_75_MANAGER", "NestID": 1, "WorldID": 99, "RegionID": 27091, "MaxCount": 1}]}`
+	if _, err := appendMuhanNPCData(template, []byte(badWorld)); err == nil {
+		t.Fatal("a nest in the unbound shell world joined; want a refusal")
+	}
+}
+
 /*
 ================
 TestParseMuhanWavesRefusesMalformedTables
@@ -73,6 +121,41 @@ func TestParseMuhanWavesRefusesMalformedTables(t *testing.T) {
 	} {
 		if _, err := ParseMuhanWaves([]byte(data)); err == nil {
 			t.Fatalf("%s: parsed, want a refusal", name)
+		}
+	}
+}
+
+/*
+================
+TestMuhanTransformsContract
+
+Off never reads the pairing; on, a missing file, a wrong version, an
+empty table, a non-Muhan codename or an NPC paired twice fails before
+startup, and a sound row loads as written.
+================
+*/
+func TestMuhanTransformsContract(t *testing.T) {
+	if rows, err := LoadMuhanTransforms(t.TempDir(), false); err != nil || rows != nil {
+		t.Fatalf("off read the pairing: %v %v", rows, err)
+	}
+	if _, err := LoadMuhanTransforms(t.TempDir(), true); err == nil {
+		t.Fatal("on without the pairing file loaded")
+	}
+	good := `{"NpcCodename":"NPC_MUHAN_CHANGE_SOLO_75_A","SkillCodename":"SKILL_MUHAN_A_75_BUFF01","MonsterCodename":"MOB_MUHAN_CHANGE_SOLO_75_A"}`
+	rows, err := ParseMuhanTransforms([]byte(`{"Version":2,"Rows":[` + good + `]}`))
+	if err != nil || len(rows) != 1 || rows[0].MonsterCodename != "MOB_MUHAN_CHANGE_SOLO_75_A" {
+		t.Fatalf("sound pairing: %v %v", rows, err)
+	}
+	for name, body := range map[string]string{
+		"version":   `{"Version":1,"Rows":[` + good + `]}`,
+		"empty":     `{"Version":2,"Rows":[]}`,
+		"form":      `{"Version":2,"Rows":[{"NpcCodename":"NPC_MUHAN_CHANGE_SOLO_75_A","SkillCodename":"SKILL_MUHAN_A_75_BUFF01","MonsterCodename":"MOB_MUHAN_L75"}]}`,
+		"npc":       `{"Version":2,"Rows":[{"NpcCodename":"NPC_MUHAN_SOLO_75_MANAGER","SkillCodename":"SKILL_MUHAN_A_75_BUFF01","MonsterCodename":"MOB_MUHAN_CHANGE_SOLO_75_A"}]}`,
+		"twice":     `{"Version":2,"Rows":[` + good + `,` + good + `]}`,
+		"malformed": `{"Version":2,"Rows":`,
+	} {
+		if _, err := ParseMuhanTransforms([]byte(body)); err == nil {
+			t.Errorf("%s: loaded", name)
 		}
 	}
 }

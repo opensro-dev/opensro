@@ -225,7 +225,7 @@ func TestPoisonCoatingVictimLifetimeAndModifiers(t *testing.T) {
 			c.Skills = append(c.Skills, passive.ID)
 			rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: row.ID}.Encode())
 			rt.CombatRoll = func() (uint32, error) { return 0, nil }
-			hit := rt.beginBasicAttack(testDivision, c, wire.BasicAttackEngage{TargetGid: target.Gid}, clock.NowMs())
+			hit := rt.beginBasicAttack(testDivision, c, wire.BasicAttackEngage{TargetGid: target.Gid}, clock.NowMs(), rt.handlerDoors())
 			rt.advanceProjectileCasts(clock.NowMs() + int64(attack.ActionCastingTimeMs) + 1)
 			poisoned, _ := rt.Monsters.Get(testDivision, target.Gid)
 			if poisoned.Abnormal == nil {

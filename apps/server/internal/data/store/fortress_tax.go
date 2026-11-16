@@ -12,7 +12,6 @@ commit; neither in-memory owner changes when a write fails.
 package store
 
 import (
-	"encoding/json"
 	"math"
 
 	"opensro.online/server/internal/domain"
@@ -67,10 +66,6 @@ func (door storeFortressDoor) CollectFortressTax(division string, record domain.
 	next := *actor
 	next.Gold = &gold
 	record.TaxGold -= amount
-	raw, err := json.Marshal(record)
-	if err != nil {
-		return 0, domain.FortressTaxErrFailure, err
-	}
 	tx, err := s.beginCharacterTxLocked()
 	if err != nil {
 		return 0, domain.FortressTaxErrFailure, err
@@ -83,7 +78,7 @@ func (door storeFortressDoor) CollectFortressTax(division string, record domain.
 	if err != nil {
 		return 0, domain.FortressTaxErrFailure, err
 	}
-	if _, err = tx.Exec("INSERT INTO fortresses (division, fortress_id, record) VALUES (?, ?, ?) ON CONFLICT(division, fortress_id) DO UPDATE SET record = excluded.record", division, record.FortressID, string(raw)); err != nil {
+	if err = upsertFortressTx(tx.Tx, division, record); err != nil {
 		return 0, domain.FortressTaxErrFailure, err
 	}
 	if err = tx.Commit(); err != nil {

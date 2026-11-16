@@ -14,6 +14,7 @@ func TestEvidenceCommandCatalog(t *testing.T) {
 		"spawnable-npcs",
 		"creatable-monsters",
 		"fortress-structures",
+		"unique-nests",
 	}
 	got := make([]string, 0, len(evidenceCommands))
 	seen := make(map[string]bool, len(evidenceCommands))

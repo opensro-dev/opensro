@@ -183,7 +183,7 @@ func (rt *Runtime) castWolfHowl(division string, owner *enterworld.Character, gi
 	rt.wolfHowls.rows[step.key] = howl
 	rt.wolfHowls.Unlock()
 	var public []wire.Frame
-	for _, frame := range step.state.follower.Stop(now) {
+	for _, frame := range step.state.mover.AnyFollower().Stop(now) {
 		public = append(public, wire.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
 	}
 	public = append(public, rt.wolfHowlFrames(division, howl)...)

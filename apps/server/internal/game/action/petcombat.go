@@ -251,7 +251,7 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 		rt.cancelPetCombat(step.key, step.state, step.nowMs)
 		return nil, false
 	}
-	skill, ok := rt.petAttackSkill(step, intent, simulation.AttackTarget{Distance: float32(areaDistance(step.state.follower.Position(step.nowMs), targetAt)), BodyRadius: targetRadius})
+	skill, ok := rt.petAttackSkill(step, intent, simulation.AttackTarget{Distance: float32(areaDistance(step.state.mover.AnyFollower().Position(step.nowMs), targetAt)), BodyRadius: targetRadius})
 	if !ok {
 		rt.petDiagnostic(step.key.division, step.snapshot.Name, step.pet.GID, "fight ended: no usable attack skill", log.Fields{"target": intent.target, "ref": step.ref.Codename})
 		rt.cancelPetCombat(step.key, step.state, step.nowMs)
@@ -273,7 +273,7 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 		rt.cancelPetCombat(step.key, step.state, step.nowMs)
 		return nil, false
 	}
-	at := step.state.follower.Position(step.nowMs)
+	at := step.state.mover.AnyFollower().Position(step.nowMs)
 	if intent.castToken == 0 && !spacing.Contains(at, targetAt) {
 		if !intent.pursuing {
 			intent.pursuingSinceMs = step.nowMs
@@ -281,14 +281,14 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 		if step.nowMs-intent.pursuingSinceMs >= petApproachStallMs {
 			rt.petDiagnostic(step.key.division, step.snapshot.Name, step.pet.GID, "approach not reaching strike range", log.Fields{
 				"target": intent.target, "distance": simulation.WorldDistance2D(at, targetAt), "admission": spacing.AdmissionRadius(),
-				"standOff": spacing.StandOffRadius(), "moving": step.state.follower.Moving(step.nowMs), "pursuingMs": step.nowMs - intent.pursuingSinceMs,
+				"standOff": spacing.StandOffRadius(), "moving": step.state.mover.AnyFollower().Moving(step.nowMs), "pursuingMs": step.nowMs - intent.pursuingSinceMs,
 			})
 		}
 		intent.pursuing = true
-		return step.state.follower.Approach(targetAt, float64(rt.cosPacedRun(step.ref, step.run)), step.nowMs, spacing.StandOffRadius(), step.constraint), true
+		return step.state.mover.AnyFollower().Approach(targetAt, float64(rt.cosPacedRun(step.ref, step.run)), step.nowMs, spacing.StandOffRadius(), step.constraint), true
 	}
 	intent.pursuing = false
-	frames = step.state.follower.Stop(step.nowMs)
+	frames = step.state.mover.AnyFollower().Stop(step.nowMs)
 	if intent.castToken == 0 && step.nowMs < intent.nextAttackMs {
 		return frames, true
 	}
@@ -452,7 +452,7 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 		level = step.ref.Level
 	}
 	plans, planned := rt.planCreatureMonsterImpacts(monsterImpactCaster{division: division,
-		actor: actor, credit: ownerGID, level: level, from: step.state.follower.Position(step.nowMs)}, skill, target, formulas, step.nowMs)
+		actor: actor, credit: ownerGID, level: level, from: step.state.mover.AnyFollower().Position(step.nowMs)}, skill, target, formulas, step.nowMs)
 	if !planned {
 		return petStrikeResult{}, false
 	}
@@ -597,7 +597,7 @@ func (rt *Runtime) petStrikePlayer(step petCombatStep, target combatTarget, skil
 		}) {
 		return petStrikeResult{}, false
 	}
-	from := step.state.follower.Position(step.nowMs)
+	from := step.state.mover.AnyFollower().Position(step.nowMs)
 	if err := rt.planStrikeDisplacement(&hit.strike, actor, from, target.at); err != nil {
 		return petStrikeResult{}, false
 	}

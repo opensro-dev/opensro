@@ -40,8 +40,6 @@ export const OFF = Object.freeze( {
 	ambientOcclusion: false,
 	// Off by default: sky detail is a port-only deviation.
 	skyDetail: false,
-	// Off by default: water refraction is a port-only deviation.
-	waterRefraction: false,
 	// On by default (owner 2026-10-25): a press walks at once and stops
 	// where the server casts.
 	predictedRunUp: true,
@@ -120,11 +118,19 @@ export const OFF = Object.freeze( {
 	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
 	// Off by default (#840): the maps mark the tracked quest's targets only.
 	questTrackerMarkers: false,
+	// On by default (owner 2026-11-07): the world map's unique nest signs.
+	uniqueSpawnPoints: true,
 	// Off by default (#1640): only the native plate and no ground ring.
 	sunDropMarker: false,
 	// Off by default: port-only portal-out cue on arrival; the native
 	// gate has no traced caller, so silence is the native default.
 	warpArrivalSound: false,
+	// On by default (owner 2026-11-15, #3547): a wing dress flies without
+	// the Default run's fallback footsteps.
+	silentWingFlight: true,
+	// On by default (owner 2026-11-15): port-only carols during the
+	// Christmas event's snowfalls; no v1.150 code sets the native carol mode.
+	christmasCarols: true,
 	// Off by default (#2496): the seal line under the item name instead of
 	// after the requirement rows (558FF0 at 56B099).
 	sealUnderHeading: false,

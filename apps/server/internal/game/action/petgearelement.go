@@ -83,7 +83,7 @@ func (rt *Runtime) advancePetGearPoisonSession(key petOwnerKey, state *petSessio
 		state.trained.poison = nil
 		return
 	}
-	step, ok := rt.elementalCompanion(key.division, state.character, key.gid, companion.PetKind(pet.Codename), now)
+	step, ok := rt.elementalCompanionMatching(key.division, state.character, elementalQuery{gid: key.gid, kind: companion.PetKind(pet.Codename), gear: true}, now)
 	if !ok {
 		state.trained.poison = nil
 		return

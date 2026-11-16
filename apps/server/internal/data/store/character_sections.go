@@ -44,7 +44,7 @@ var characterSectionFields = [][]string{
 	// progress: level, experience, points and gold.
 	{"Level", "MaxLevel", "Experience", "ExperiencePercent", "SkillPoints", "StatPoints", "Strength", "Intellect", "Gold", "LevelReachedAt"},
 	// cooldowns: the ticking timers.
-	{"ItemGroupCooldowns", "OffensiveSkillCooldowns", "SharedSkillCooldowns", "SkillActionRecoveryUntilMs", "ItemUseCooldowns", "ItemCureCooldowns", "PetPotionCooldowns", "TimedSkillJobs", "FortressReturnUntilMs", "MercenarySummonUntilMs", "CampDisbandedAtMs"},
+	{"ItemGroupCooldowns", "OffensiveSkillCooldowns", "SharedSkillCooldowns", "SkillActionRecoveryUntilMs", "ItemUseCooldowns", "ItemCureCooldowns", "PetPotionCooldowns", "RavenRefugeReadyAtMs", "TimedSkillJobs", "FortressReturnUntilMs", "MercenarySummonUntilMs", "CampDisbandedAtMs"},
 	// companions: summoned and captured creatures and their skills.
 	{"ActiveCOS", "Mercenaries", "PetSkillWindows", "ParamJobs", "CompositeJobs"},
 	// inventory: bags, avatar bag and stall dressing.

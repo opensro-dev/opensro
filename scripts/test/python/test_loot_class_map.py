@@ -6,6 +6,7 @@ Real client records from the committed loot snapshot (client-source.json)
 and assignment rows shaped as the backups author them.
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 
 import json
 import pathlib
@@ -13,7 +14,6 @@ import sys
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "build"))
 from loot_class_map import class_for
 
 CLIENT = json.loads((ROOT / "data/loot/client-source.json").read_text(encoding="utf-8"))["items"]

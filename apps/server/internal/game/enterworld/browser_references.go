@@ -41,7 +41,11 @@ type BrowserReferences struct {
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256"`
 	Bytes  int    `json:"bytes"`
-	// Port-only, not native: a separately loaded, static beginner atlas.
+	// The static spawn atlas the M window's lists read (hunting_guide.go),
+	// always published when the population has rows.
+	SpawnAtlas *BrowserReferences `json:"spawnAtlas,omitempty"`
+	// Port-only, not native: the same atlas, published only while
+	// SRO_HUNTING_GUIDE is on; its presence offers the portrait overlay.
 	HuntingGuide *BrowserReferences `json:"huntingGuide,omitempty"`
 	gzipData     []byte
 	// itemIDs and objectIDs are the published item and object rows; a
@@ -182,9 +186,12 @@ func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, 
 		return nil, err
 	}
 	result.itemIDs, result.objectIDs = itemIDs, objectIDs
-	result.HuntingGuide, err = newHuntingGuideReference(sources.HuntingGuide)
+	result.SpawnAtlas, err = newSpawnAtlasReference(sources.HuntingGuide)
 	if err != nil {
 		return nil, err
+	}
+	if HuntingGuideFromEnv() {
+		result.HuntingGuide = result.SpawnAtlas
 	}
 	return result, nil
 }
@@ -218,8 +225,8 @@ ServeHTTP
 */
 
 func (r *BrowserReferences) ServeHTTP(w http.ResponseWriter, q *http.Request) {
-	if r.HuntingGuide != nil && q.URL.Path == r.HuntingGuide.Path {
-		r.HuntingGuide.ServeHTTP(w, q)
+	if r.SpawnAtlas != nil && q.URL.Path == r.SpawnAtlas.Path {
+		r.SpawnAtlas.ServeHTTP(w, q)
 		return
 	}
 	if q.URL.Path != r.Path {

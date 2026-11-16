@@ -11,6 +11,7 @@ not refuse them: each main runs against an empty VSRO root and returns.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import contextlib
 import io
 import os
@@ -20,7 +21,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import cap110_item_import  # noqa: E402
 import cap110_monsters  # noqa: E402
 import cap110_rewards  # noqa: E402

@@ -187,6 +187,28 @@ func LoadCatalog(dir string, source enterworld.ItemRefSource) (*Catalog, error) 
 	if len(c.Items) == 0 || len(c.Magic) == 0 {
 		return nil, fmt.Errorf("alchemy: itemdata and magicoption tables are required")
 	}
+	// Always append the v1.188 avatar Lucky and 4x stacking rows absent from
+	// v1.150 magicoption.txt (Media.pk2 rows 370..376; avatar-luck-and-4x-stacking.md);
+	// refuse any id collision with the loaded table.
+	for _, overlay := range enterworld.AvatarV188MagicOptions() {
+		id := uint16(overlay.ParamID)
+		if _, exists := c.Magic[id]; exists {
+			return nil, enterworld.AvatarV188OptionCollisionError(overlay.ParamID)
+		}
+		m := Magic{
+			ID:     id,
+			Name:   overlay.OptionName,
+			Degree: int(overlay.Degree),
+			Tag:    overlay.Tag,
+		}
+		if overlay.RangeWords != nil {
+			m.Params = *overlay.RangeWords
+		}
+		for _, cat := range overlay.Descriptors {
+			m.Categories = append(m.Categories, strings.ToLower(cat))
+		}
+		c.Magic[id] = m
+	}
 	if _, ok := c.Option("MATTR_DEC_MAXDUR", 3); !ok {
 		return nil, fmt.Errorf("alchemy: missing native durability curse level 3")
 	}

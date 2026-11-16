@@ -25,8 +25,10 @@ What an area spawns, who stands in it and where its gates lead are
 its own import PR's rows (#3329): this importer carries no
 population and converts no character kinds. The archive's character
 shard rides along unread for those PRs, and the character identity
-band 190000 is reserved here for their conversions - no other layer
-may take it. Dungeon rows (tables/dungeoninfo.txt) likewise wait
+band 250000 is reserved here for their conversions - no other layer
+may take it (190000 is GOD's temples' and the gears stones', 240000
+the winter event's; 250000 is the first band no layer holds).
+Dungeon rows (tables/dungeoninfo.txt) likewise wait
 for their own slices.
 
 ===========================================================================

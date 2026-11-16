@@ -48,7 +48,7 @@ func TestPetCounterGroupedOwner(t *testing.T) {
 			state := rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID)
 			bearAt := at
 			bearAt.X += 300
-			state.follower = simulation.NewPetFollower(c.ActiveCOS.GID, bearAt)
+			state.mover.FollowFrom(c.ActiveCOS.GID, bearAt)
 			c.MissionInventory = []enterworld.InventoryRow{{Slot: 13, Summon: c.ActiveCOS}}
 			c.ActiveCOS = nil
 			rolls := 0

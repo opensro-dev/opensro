@@ -1013,7 +1013,10 @@ def main(argv=None) -> int:
 	sp.add_argument("--ledger", default=None,
 	                help="claim/event ledger path (default: selected DB's ledger)")
 	sp.add_argument("--json", action="store_true", help="emit machine-readable result")
-	sp.set_defaults(handler=lambda a, c, _rz: revtool.cmd_doctor(a, c), need_rizin=False)
+	# The backend is explicit here, so the rizin audit runs even on a DB
+	# no `index` has marked yet: the dump doctor would read BN-only
+	# arguments this parser never defines (args.lock) and crash.
+	sp.set_defaults(handler=lambda a, c, _rz: revtool.cmd_doctor_rizin(a, c), need_rizin=False)
 
 	sp = sub.add_parser("sync", help="git-mergeable JSONL export/import for collaboration")
 	sp.add_argument("action", choices=["export", "import", "status", "conflicts", "resolve"])
@@ -1025,12 +1028,17 @@ def main(argv=None) -> int:
 
 	args = parser.parse_args(argv)
 	con = revtool.open_db(args.db)
-	rz = open_session(args, con, args.need_rizin)
 	try:
-		return args.handler(args, con, rz)
+		rz = open_session(args, con, args.need_rizin)
+		try:
+			return args.handler(args, con, rz)
+		finally:
+			if rz is not None:
+				rz.close()
 	finally:
-		if rz is not None:
-			rz.close()
+		# The dump CLI closes its DB the same way; a held handle keeps
+		# Windows from removing the file (or its folder) afterwards.
+		con.close()
 
 
 if __name__ == "__main__":

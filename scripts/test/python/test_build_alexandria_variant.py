@@ -13,16 +13,17 @@ through to the native file.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import struct
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import build_alexandria_variant as variant  # noqa: E402
 import import_vsro_alexandria as stage1  # noqa: E402
 from test_import_vsro_alexandria import terrain  # noqa: E402
+from alexandria_map_tables import overview_tiles  # noqa: E402
 
 NATIVE_TILES = (
 	b'JMXV2DTI1001\r\n4\r\n'
@@ -103,6 +104,7 @@ class AvailabilityTests(unittest.TestCase):
 	def test_a_non_mfo_file_is_refused(self):
 		with self.assertRaises(ValueError):
 			variant.enable_regions(b"nope" * 10, [(1, 1)])
+
 
 
 def table(rows):
@@ -415,6 +417,29 @@ class MapTests(unittest.TestCase):
 		self.assertEqual(names["SN_ZONE_11050"], "Blacksmith")
 
 	# ================
+	# test_city_labels_name_shops_and_districts_not_npcs
+	#
+	# A town page of either client labels its shops and districts; an NPC
+	# name label on the city page would print every NPC on the zoomed map.
+	# ================
+	def test_city_labels_name_shops_and_districts_not_npcs(self):
+		native, vsro = self.tables()
+		shop = pin("11050", "SN_ZONE_11050")
+		npc = pin("99010", "SN_NPC_SD_M_AREA_POTION")
+		vsro["worldmap_localinfo.txt"] = variant.append_rows(vsro["worldmap_localinfo.txt"],
+			[["1"] + row + ["0"] for row in [shop, npc]])
+		vsro["textdata_object.txt"] = variant.append_rows(vsro["textdata_object.txt"], [
+			text("SN_ZONE_11050", "k", "t", "s", "j", "Blacksmith"),
+			text("SN_NPC_SD_M_AREA_POTION", "k", "t", "s", "j", "Potion Merchant Titi")
+		])
+		merged, _ = variant.merge_map_tables(native, vsro, self.REGIONS)
+		rows = {r[0]: r for r in stage1.table_rows(merged["worldmap_localinfo.txt"])}
+		self.assertEqual(rows["11050"], shop)
+		self.assertNotIn("99010", rows)
+		names = {r[1] for r in stage1.table_rows(merged["textdataname.txt"]) if len(r) > 1}
+		self.assertNotIn("SN_NPC_SD_M_AREA_POTION", names)
+
+	# ================
 	# test_overview_labels_follow_the_imported_field_regions
 	# ================
 	def test_overview_labels_follow_the_imported_field_regions(self):
@@ -457,16 +482,21 @@ class MapTests(unittest.TestCase):
 		self.assertEqual(row[8:10], ["4224", "1408"])
 		self.assertEqual(row[14:], ["0", "192", "192", "0", "xxx"])
 
-	def test_the_overview_tiles_are_the_ones_the_wider_box_adds(self):
-		wide = variant.overview_tiles((46, 113, 177, 70))
-		native = variant.overview_tiles((66, 113, 177, 82))
+	# ================
+	# test_a_widened_page_takes_every_tile_from_the_later_art
+	#
+	# The v1.150 frame is painted into row 85 and column 66; inside the
+	# widened box those tiles must take the later art like every other.
+	# ================
+	def test_a_widened_page_takes_every_tile_from_the_later_art(self):
+		wide = overview_tiles((46, 113, 177, 70))
+		native = overview_tiles((66, 113, 177, 82))
 		self.assertEqual((len(native), len(wide)), (28 * 8, 33 * 11))
-		added = variant.map_media_paths([], (46, 113, 177, 70), (66, 113, 177, 82))
-		new_tiles = [path for path in added if "map_world_" in path]
-		self.assertEqual(len(new_tiles), 33 * 11 - 28 * 8)
-		self.assertIn("interface/worldmap/map/map_world_46x113.ddj", new_tiles)
-		self.assertIn("interface/worldmap/map/map_world_174x73.ddj", new_tiles)
-		self.assertNotIn("interface/worldmap/map/map_world_66x113.ddj", new_tiles)
+		paths = variant.map_media_paths([], (46, 113, 177, 70), (66, 113, 177, 82))
+		self.assertEqual([path for path in paths if "map_world_" in path], wide)
+		self.assertIn("interface/worldmap/map/map_world_118x85.ddj", paths)
+		self.assertIn("interface/worldmap/map/map_world_66x101.ddj", paths)
+		self.assertIn("interface/worldmap/map/map_world_46x113.ddj", paths)
 
 	def test_media_paths_name_the_map_art_and_one_minimap_tile_per_region(self):
 		paths = variant.map_media_paths(self.REGIONS)
@@ -475,115 +505,14 @@ class MapTests(unittest.TestCase):
 		self.assertIn("minimap/49x90.ddj", paths)
 
 	# ================
-	# test_overlapping_overview_tiles_are_replaced_only_for_imported_land
+	# test_an_unwidened_page_keeps_its_art_beside_the_import
 	# ================
-	def test_overlapping_overview_tiles_are_replaced_only_for_imported_land(self):
-		box, native_box = (46, 113, 177, 70), (66, 113, 177, 82)
-		paths = variant.map_media_paths([(67, 84)], box, native_box)
+	def test_an_unwidened_page_keeps_its_art_beside_the_import(self):
+		box = (66, 113, 177, 82)
+		self.assertEqual(variant.page_tiles(box, box, [(67, 84)]), ["interface/worldmap/map/map_world_66x85.ddj"])
+		paths = variant.map_media_paths([(67, 84)], box, box)
 		self.assertIn("interface/worldmap/map/map_world_66x85.ddj", paths)
-		self.assertNotIn("interface/worldmap/map/map_world_66x113.ddj", paths)
-		self.assertEqual(variant.overview_tiles(box, [(67, 84)]),
-			["interface/worldmap/map/map_world_66x85.ddj"])
-
-	# ================
-	# test_seam_tiles_join_the_import_through_empty_v150_tiles_only
-	#
-	# Import at (67, 88): tile 66x89 takes later art. 70x89 and 74x89 show no
-	# v1.150 region, so they join it; 78x89 holds v1.150 land and stops the
-	# walk, so 82x89 behind it stays even though it is empty too.
-	# ================
-	def test_seam_tiles_join_the_import_through_empty_v150_tiles_only(self):
-		box, native_box = (46, 113, 177, 70), (66, 113, 177, 82)
-		empty = {(x, y) for x in (70, 74, 82) for y in (89,)}
-		land = lambda x, y: (x - (x - 66) % 4, y + (89 - y) % 4) not in empty
-		seams = variant.seam_tiles(box, native_box, [(67, 88)], land, lambda path: True)
-		self.assertEqual(seams, [
-			"interface/worldmap/map/map_world_70x89.ddj", "interface/worldmap/map/map_world_74x89.ddj"
-		])
-
-	# ================
-	# test_seam_tiles_keep_identical_art_and_the_walk_stops_there
-	# ================
-	def test_seam_tiles_keep_identical_art_and_the_walk_stops_there(self):
-		box, native_box = (46, 113, 177, 70), (66, 113, 177, 82)
-		same = "interface/worldmap/map/map_world_70x89.ddj"
-		empty = {(70, 89), (74, 89)}
-		land = lambda x, y: (x - (x - 66) % 4, y + (89 - y) % 4) not in empty
-		seams = variant.seam_tiles(box, native_box, [(67, 88)], land, lambda path: path != same)
-		# 74x89 is reachable only through 70x89, whose art is the same.
-		self.assertEqual(seams, [])
-
-	# ================
-	# test_seam_tiles_join_the_later_art_south_of_the_v150_box
-	# ================
-	def test_seam_tiles_join_the_later_art_south_of_the_v150_box(self):
-		box, native_box = (46, 113, 177, 70), (66, 113, 177, 82)
-		land = lambda x, y: (x - (x - 66) % 4, y + (85 - y) % 4) != (150, 85)
-		seams = variant.seam_tiles(box, native_box, [], land, lambda path: True)
-		self.assertEqual(seams, ["interface/worldmap/map/map_world_150x85.ddj"])
-
-	# ================
-	# test_region_available_reads_what_enable_regions_writes
-	# ================
-	def test_region_available_reads_what_enable_regions_writes(self):
-		blank = variant.MFO_SIGNATURE + bytes(variant.MFO_HEADER_BYTES - len(variant.MFO_SIGNATURE) + 8192)
-		marked = variant.enable_regions(blank, [(67, 84)])
-		self.assertTrue(variant.region_available(marked, 67, 84))
-		self.assertFalse(variant.region_available(marked, 68, 84))
-		self.assertFalse(variant.region_available(blank, 67, 84))
-
-
-def cp949(rows):
-	return ("\r\n".join(rows) + "\r\n").encode("cp949")
-
-
-class MusicTests(unittest.TestCase):
-	TOWN = "알렉"
-	FIELD = "델타"
-
-	def tables(self):
-		native = {
-			"regioninfo.txt": cp949(["#TOWN\t도적\t\t\t\t\t", "182\t96\tALL\t\t\t\t"]),
-			"effectenvsnd.txt": cp949(["<1>\t도적\t\t\t\t\t", '\t"EasternEurope_Field.ogg"\t\t\t\t\t'])
-		}
-		vsro = {
-			"regioninfo.txt": cp949([
-				"#TOWN\t" + self.TOWN + "\t\t\t\t\t", "48\t95\tALL\t\t\t\t", "\t\t\t\t\t\t", "\t\t\t\t\t\t",
-				"#FIELD\t" + self.FIELD + "\t\t\t\t\t", "50\t93\tALL\t\t\t\t", "#FIELD\tother\t\t\t\t\t", "1\t2\tALL\t\t\t\t"
-			]),
-			"effectenvsnd.txt": cp949([
-				"<1>\t" + self.TOWN + "\t\t\t\t", '\t"Egypt_Town_Alexandria1.ogg"\t\t\t', "\t<2>\t낮\t\t\t",
-				'\t\t\t<3>\t"night_wind.wav"\t0~0', "<1>\t" + self.FIELD + "\t\t\t\t", '\t"Egypt_Field_Delta.ogg"\t\t\t',
-				"<1>\tother\t\t\t\t", '\t"Other.ogg"\t\t\t'
-			])
-		}
-		return native, vsro
-
-	def test_the_areas_are_appended_in_the_native_layout_and_name_their_tracks(self):
-		native, vsro = self.tables()
-		merged, tracks = variant.merge_music_tables(native, vsro, areas=(self.TOWN, self.FIELD))
-		self.assertEqual(tracks, ["Egypt_Field_Delta.ogg", "Egypt_Town_Alexandria1.ogg"])
-		regions = merged["regioninfo.txt"].decode("cp949").split("\r\n")
-		self.assertEqual(regions[:2], ["#TOWN\t도적\t\t\t\t\t", "182\t96\tALL\t\t\t\t"])
-		self.assertIn("48\t95\tALL\t\t\t\t", regions)
-		self.assertIn("50\t93\tALL\t\t\t\t", regions)
-		self.assertNotIn("1\t2\tALL\t\t\t\t", regions)
-		sounds = merged["effectenvsnd.txt"].decode("cp949").split("\r\n")
-		self.assertTrue(all(len(row.split("\t")) == variant.EFFECTENVSND_COLUMNS for row in sounds if row))
-		self.assertIn('\t\t\t<3>\t"night_wind.wav"\t0~0\t', sounds)
-		self.assertNotIn("<1>\tother\t\t\t\t\t", sounds)
-
-	def test_an_area_the_native_tables_have_is_left_alone(self):
-		native, vsro = self.tables()
-		merged, _ = variant.merge_music_tables(native, vsro, areas=(self.TOWN,))
-		again, tracks = variant.merge_music_tables(merged, vsro, areas=(self.TOWN,))
-		self.assertEqual(tracks, [])
-		self.assertEqual(again, merged)
-
-	def test_a_missing_area_is_refused(self):
-		native, vsro = self.tables()
-		with self.assertRaises(SystemExit):
-			variant.merge_music_tables(native, vsro, areas=("nowhere",))
+		self.assertNotIn("interface/worldmap/map/map_world_70x85.ddj", paths)
 
 
 class LinkTests(unittest.TestCase):
@@ -682,3 +611,54 @@ class AddGatesTests(unittest.TestCase):
 	def test_add_gates_keeps_the_authored_level_under_the_110_cap(self):
 		_, merged, _ = self.run_add_gates("110")
 		self.assertEqual(self.entry_level(merged), ["1", "95", "999"])
+
+
+# ================
+# ClearContentTests
+#
+# A rebuild over last release's variant starts from an empty extracted/
+# tree (ops #368 review): link_tree skips a target that exists, so a kept
+# tree would keep a re-extracted native file's old bytes and a dropped
+# file forever. The build state and the generated tree beside it stay,
+# and a native file a link named is untouched.
+# ================
+class ClearContentTests(unittest.TestCase):
+	def setUp(self):
+		self.root = tempfile.TemporaryDirectory()
+		self.addCleanup(self.root.cleanup)
+		base = Path(self.root.name)
+		self.native = base / "native" / "extracted"
+		(self.native / "Media_extracted").mkdir(parents=True)
+		self.native_file = self.native / "Media_extracted" / "a.txt"
+		self.native_file.write_bytes(b"new native bytes")
+		self.variant = base / "variant"
+
+	def test_a_rebuild_takes_the_new_native_bytes_and_drops_what_left(self):
+		kept = self.variant / "extracted" / "Media_extracted"
+		kept.mkdir(parents=True)
+		(kept / "a.txt").write_bytes(b"last release")
+		(kept / "dropped.txt").write_bytes(b"gone from the sources")
+		(self.variant / ".state").mkdir()
+		(self.variant / ".state" / "variant-content.json").write_text("{}", encoding="utf-8")
+		(self.variant / ".generated").mkdir()
+		(self.variant / variant.VARIANT_MANIFEST).write_text("{}", encoding="utf-8")
+		out = variant.clear_content(self.variant, self.native)
+		out.mkdir(parents=True)
+		variant.link_tree(self.native / "Media_extracted", out / "Media_extracted")
+		self.assertEqual((out / "Media_extracted" / "a.txt").read_bytes(), b"new native bytes")
+		self.assertFalse((out / "Media_extracted" / "dropped.txt").exists())
+		self.assertFalse((self.variant / variant.VARIANT_MANIFEST).exists())
+		self.assertTrue((self.variant / ".state" / "variant-content.json").is_file())
+		self.assertTrue((self.variant / ".generated").is_dir())
+
+	def test_clearing_a_linked_tree_leaves_the_native_file(self):
+		out = variant.clear_content(self.variant, self.native)
+		out.mkdir(parents=True)
+		variant.link_tree(self.native / "Media_extracted", out / "Media_extracted")
+		variant.clear_content(self.variant, self.native)
+		self.assertEqual(self.native_file.read_bytes(), b"new native bytes")
+
+	def test_the_native_extraction_is_never_cleared(self):
+		with self.assertRaises(SystemExit):
+			variant.clear_content(self.native.parent, self.native)
+		self.assertTrue(self.native_file.is_file())

@@ -136,7 +136,8 @@ export function alchemySelection(
 	if ( item.slot < 13 ) return null;
 	const flags = item.typeFlags & 0xfffe,
 		equipment = isAlchemyEquipment( flags ),
-		process = [ "compound", "advanced", "dissolve" ].includes( mode );
+		process = [ "compound", "advanced", "dissolve" ].includes( mode ),
+		rondoResets = flags === 0x35ec && (mode === "advanced" || slots.length >= alchemySlotCapacity( mode ));
 	if ( !slots.length ) {
 		if ( process ) {
 			if ( equipment ) mode = "dissolve";
@@ -144,6 +145,23 @@ export function alchemySelection(
 			else if ( flags === 0x25ec || flags === 0x35ec ) mode = "compound";
 			else return null;
 		} else if ( !equipment ) return null;
+	} else if ( !process && equipment ) {
+		// 62B80B..62B8E9: equipment bound while a target is slotted clears
+		// reagent slots 1 and 2 and rebinds slot 0, replacing the target.
+		return { mode, slots: [ item.slot ] };
+	} else if ( mode === "dissolve" && equipment ) {
+		// 624CFD..624D5A: the dissolve page binds equipment straight into its
+		// single equipment slot, overwriting whatever it held.
+		return { mode, slots: [ item.slot, ...slots.slice( 1 ) ] };
+	} else if ( process && (flags === 0x1dec || rondoResets) ) {
+		// 6248F1 (621AE0, the 3/3/11/6 rondo 0x35ec) and 624A6B (550770,
+		// 0x1dec): a main item bound while slot 0 is held (551420) resets all
+		// nine slots and rebinds slot 0, so it starts a fresh selection rather
+		// than being refused. The port also takes the rondo as a compound
+		// filler and as the dissolve pill, so there it resets only once no
+		// slot is left for it; advanced never takes it, so there it always
+		// resets, as natively.
+		return alchemySelection( mode, [], item );
 	} else if ( !process ) {
 		// 62B6D0: magic stones (3/3/11/1 0x0dec, 3/3/11/7 0x3dec) take the magic-option
 		// branch, attribute stones (3/3/11/2 0x15ec) the attribute one. A stone

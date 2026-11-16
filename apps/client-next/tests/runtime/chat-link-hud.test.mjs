@@ -38,6 +38,37 @@ test("the second link replaces the first at a limit of one", () => {
 	assert.deepEqual( hud.labels( "chat-text" ), [ "<B>" ] );
 });
 
+// The production limit (SRO_CHAT_ITEM_LINKS_PER_MESSAGE, the wire maximum).
+const PRODUCTION_LIMIT = 8;
+
+test("several links share a line in marker order at the production limit", () => {
+	const hud = createChatLinkHud();
+	const first = hud.insert( "chat-text", "wts ", 4, A, PRODUCTION_LIMIT );
+	// The second goes in ahead of the first: links follow the markers, not the clicks.
+	const second = hud.insert( "chat-text", first.text, 0, B, PRODUCTION_LIMIT );
+	assert.deepEqual( second, { text: M + "wts " + M, caret: 1 } );
+	assert.deepEqual( hud.links( "chat-text" ), [ B.ref, A.ref ] );
+	assert.deepEqual( hud.labels( "chat-text" ), [ "<B>", "<A>" ] );
+});
+
+test("the ninth link replaces the oldest at the production limit", () => {
+	const hud = createChatLinkHud();
+	const item = slot => ({ ref: { source: 0, slot }, label: `<${slot}>` });
+	let line = { text: "", caret: 0 };
+	for ( let slot = 0; slot < PRODUCTION_LIMIT; slot++ ) {
+		line = hud.insert( "chat-text", line.text, line.text.length, item( slot ), PRODUCTION_LIMIT );
+	}
+	assert.equal( line.text, M.repeat( PRODUCTION_LIMIT ) );
+	assert.equal( hud.links( "chat-text" ).length, PRODUCTION_LIMIT );
+	line = hud.insert( "chat-text", line.text, line.text.length, item( 99 ), PRODUCTION_LIMIT );
+	assert.equal( line.text, M.repeat( PRODUCTION_LIMIT ) );
+	assert.deepEqual(
+		hud.links( "chat-text" ).map( ref => ref.slot ),
+		[ 1, 2, 3, 4, 5, 6, 7, 99 ],
+		"the first (oldest) link went, the new one took the end"
+	);
+});
+
 test("a backspace over the token drops the link", () => {
 	const hud = createChatLinkHud();
 	hud.insert( "chat-text", "ab", 1, A, 1 );
@@ -69,7 +100,8 @@ test("the editor draws the label where the marker sits", () => {
 
 test("slot ids resolve to the item and the link the server reads", () => {
 	const blade = { slot: 14, name: "Blade", plus: 7, typeFlags: 0 };
-	const cape = { slot: 1, name: "Cape", plus: 0, typeFlags: 2 << 11 };
+	// An avatar dress: type 3/1/13, TID4 2 (avatar-socket.ts).
+	const cape = { slot: 1, name: "Cape", plus: 0, typeFlags: 0x6ac | 2 << 11 };
 	const sources = {
 		inventory: [ blade ],
 		avatarInventory: [ cape ],

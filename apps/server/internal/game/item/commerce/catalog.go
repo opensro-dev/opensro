@@ -41,7 +41,8 @@ Offer
 type Offer struct {
 	Slot uint8
 	Ref  *enterworld.ItemRef
-	// Price is in Currency: PaymentGold, PaymentGuildPoint or PaymentHonor.
+	// Price is in Currency: PaymentGold, PaymentGuildPoint, PaymentHonor or
+	// (port-only, SRO_NASRUN) PaymentNasrunToken.
 	// When a package is priced in both gold and an auxiliary currency
 	// (GROUP_STORE_*_GUILD or GROUP_STORE_*_HONOR), Price is the gold row,
 	// Currency is PaymentGold, and GuildPointPrice / HonorPrice holds the
@@ -65,6 +66,11 @@ const (
 	// PaymentHonor is Training Camp honor (GROUP_STORE_*_HONOR packages;
 	// client 689CDE UIIT_MSG_TC_LACK_HONOR_POINT).
 	PaymentHonor uint8 = 32
+	// PaymentNasrunToken is the Devil's Spirit token balance (port-only,
+	// not native: SRO_NASRUN, #3456 step 3b; nasrungoods.go). v1.150
+	// authors no price row with 64, so Load never admits one: only the
+	// token goods carry it.
+	PaymentNasrunToken uint8 = 64
 )
 
 /*
@@ -123,7 +129,11 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 		tables[name] = rows
 	}
 	tabIDs := map[string]int32{}
-	c := &Catalog{Tabs: map[int32][]Offer{}, Magic: enterworld.NewTextdataMagicOptions(dir), tabIDs: tabIDs}
+	magic := enterworld.NewTextdataMagicOptions(dir)
+	if err := magic.Load(); err != nil {
+		return nil, fmt.Errorf("commerce: %w", err)
+	}
+	c := &Catalog{Tabs: map[int32][]Offer{}, Magic: magic, tabIDs: tabIDs}
 	for _, r := range tables["refshoptab"] {
 		if len(r) >= 6 && r[0] == "1" {
 			n, e := strconv.ParseInt(r[2], 10, 32)

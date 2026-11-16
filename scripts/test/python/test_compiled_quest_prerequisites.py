@@ -10,13 +10,13 @@ synthetic QuestSpec rows; they read no Go source or licensed game data.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 
 import copy
 import pathlib
 import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "build"))
 from generate_compiled_quests import parse_authored_codenames, resolve_prerequisites
 
 

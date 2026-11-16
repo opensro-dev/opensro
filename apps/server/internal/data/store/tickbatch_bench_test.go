@@ -181,7 +181,7 @@ func BenchmarkEncodeCharacter(b *testing.B) {
 	c := chars[0]
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		record, err := encodeCharacter(testDivision, c)
+		record, err := encodeCharacter(testDivision, c, "")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -202,12 +202,12 @@ func BenchmarkEncodeCharacterBorrowed(b *testing.B) {
 	_, chars := benchBurstFixture(b)
 	c := chars[0]
 	var scratch jsonscratch.Scratch
-	if _, err := encodeCharacterBorrowed(&scratch, testDivision, c); err != nil {
+	if _, err := encodeCharacterBorrowed(&scratch, testDivision, c, ""); err != nil {
 		b.Fatal(err)
 	}
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		record, err := encodeCharacterBorrowed(&scratch, testDivision, c)
+		record, err := encodeCharacterBorrowed(&scratch, testDivision, c, "")
 		if err != nil {
 			b.Fatal(err)
 		}

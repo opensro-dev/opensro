@@ -86,6 +86,27 @@ test("retail timer decay, replacement, expiration and skipped polls consume the 
 	assert.deepEqual( camera.step( 750, [] ), [ 0, 0 ] );
 	assert.equal( rng.takeTrace().length, 0 );
 });
+test("a rewound maintenance frame no longer kills the session; the clock ratchet survives reset", () => {
+	const rng = createPresentationRandom( 11, 1, 100 ), camera = createCameraScripts( rng );
+	camera.step( 1000, [] );
+	// Every producer stamps the clamped presentation clock (1000) while the
+	// host frame clock reads a few milliseconds less: animation-frame and
+	// maintenance performance.now() readings interleave (#2561). The event is
+	// the shake of the local player's own landing hit on that frame.
+	let shook = null;
+	assert.doesNotThrow( () => (shook = camera.step( 995, [ command( 1000 ) ] )) );
+	assert.deepEqual( shook, [ 0, 0 ] );
+	// The ratchet, not the raw reading, drives the decay: 996 stays clamped
+	// at 1000 and does not sample a period early.
+	assert.deepEqual( camera.step( 996, [] ), [ 0, 0 ] );
+	assert.equal( rng.takeTrace().length, 0 );
+	// reset() drops the shake but never rewinds the clock.
+	camera.reset();
+	assert.doesNotThrow( () => camera.step( 997, [ command( 1000 ) ] ) );
+	// A stamp genuinely beyond every reading the camera has ever seen stays
+	// a producer defect and stays fatal.
+	assert.throws( () => camera.step( 1005, [ command( 1500 ) ] ), /Invalid camera script event/ );
+});
 test("shake moves native world X/Y target and collision segment without accumulating or rotating with yaw", () => {
 	const base = {
 		originRegion: 257,

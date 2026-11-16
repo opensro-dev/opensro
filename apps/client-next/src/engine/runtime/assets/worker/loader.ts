@@ -55,7 +55,10 @@ const DOWNLOAD_RETRY_DELAYS_MS = [ 250, 1000 ] as const;
 // Both come before the 120 s worker watchdog, so callers see a typed
 // transient failure, not a dead worker. Bytes that keep trickling in extend
 // a download until navigation's 60 s load deadline (also transient) or the
-// watchdog.
+// watchdog. A retry resumes after the bytes earlier attempts kept
+// (PartialRead, #3354), and an attempt that carried the read further than
+// any before it spends no retry: a path that delivers in bursts finishes,
+// one that never delivers still fails after the three attempts above.
 const DOWNLOAD_NO_PROGRESS_MS = 15000;
 const TRANSIENT_HTTP_STATUS = new Set( [ 408, 429, 500, 502, 503, 504 ] );
 // Stands in for the effect catalog's bytes once the decoder holds it parsed.
@@ -295,18 +298,29 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		// load's byte note in downloadBytes.
 		activeDownloads++;
 		markFetching();
+		const partial: PartialRead = { chunks: [], size: 0, whole: null };
+		// failures counts the retries spent since the read last moved
+		// further; reached is the furthest byte any attempt kept.
+		let failures = 0, reached = 0;
 		try {
-			for ( let attempt = 0;; attempt++ ) {
+			for ( ;; ) {
 				signal.throwIfAborted();
 				try {
-					return await downloadAttempt( url, limit, signal, range, observeValidator );
+					return await downloadAttempt( { url, limit, signal, range, partial }, observeValidator );
 				} catch ( error ) {
 					const transient = error instanceof TypeError || error instanceof NoProgressError ||
 						transientAssetFault( error ) ||
 						(error instanceof Error && "status" in error &&
 							TRANSIENT_HTTP_STATUS.has( Number( error.status ) ));
-					const delay = DOWNLOAD_RETRY_DELAYS_MS[attempt];
 					if ( signal.aborted || !transient ) throw error;
+					// Bytes only a resumable read keeps count as progress; a
+					// whole read that cannot resume starts over, as before.
+					if ( !range && !partial.whole ) forgetPartial( partial );
+					if ( partial.size > reached ) {
+						reached = partial.size;
+						failures = 0;
+					}
+					const delay = DOWNLOAD_RETRY_DELAYS_MS[failures++];
 					if ( delay === undefined ) throw assetFailure( String( error ), true );
 					await retryDownloadAfter( delay, signal );
 				}
@@ -352,13 +366,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	immediately; manifest, hash and decoder validation stay with their owners.
 	================
 	*/
-	async function downloadAttempt(
-		url: string,
-		limit: number,
-		signal: AbortSignal,
-		range?: import("./packs/packs").PackRange,
-		observeValidator?: ( validator: string | null ) => void
-	) {
+	async function downloadAttempt( read: DownloadRead, observeValidator?: ( validator: string | null ) => void ) {
+		const { url, signal } = read;
 		// The attempt aborts on the caller's cancellation or on its own stall
 		// timer; only the stall becomes NoProgressError (transient). Every
 		// received chunk restarts the timer, and so does the end of a
@@ -381,7 +390,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		};
 		stallWindows.add( restart );
 		try {
-			return await downloadBytes( { url, limit, signal: attempt.signal, range }, restart, observeValidator );
+			return await downloadBytes( { ...read, signal: attempt.signal }, restart, observeValidator );
 		} catch ( error ) {
 			// The caller's cancellation wins whatever else ended the attempt: a
 			// cancel racing the stall must surface its own reason, not the stall.
@@ -406,25 +415,43 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		progressed: () => void,
 		observeValidator?: ( validator: string | null ) => void
 	) {
-		const { url, limit, signal, range } = read;
+		const { url, limit, signal, range, partial } = read;
+		const offset = partial.size;
+		// Every byte an earlier attempt kept is already here: a body that
+		// ended between its last chunk and its close needs no request.
+		if ( offset > 0 && offset === (range ? range.end - range.start + 1 : partial.whole?.total) ) {
+			return joinPartial( partial );
+		}
 		const started = performance.now();
 		// Cache Storage owns verified members. Keep partial HTTP responses out
-		// of the browser cache: different ranges share the container URL.
+		// of the browser cache: different ranges share the container URL,
+		// and a resumed whole read asks for a range too.
 		const response = await fetch( url, {
 			signal,
 			credentials: "omit",
 			redirect: "error",
-			cache: range ?
+			cache: range || offset > 0 ?
 				"no-store" :
 				/\/marks\/[GA][0-9_]+\.crb$/.test(
 						new URL( url ).pathname
 					) ?
 				"default" :
 				"no-cache",
-			headers: range ? { Range: `bytes=${range.start}-${range.end}` } : undefined
+			headers: range ?
+				{ Range: `bytes=${range.start + offset}-${range.end}` } :
+				offset > 0 ?
+				{ Range: `bytes=${offset}-` } :
+				undefined
 		} );
 		progressed();
 		if ( response.ok && observeValidator ) observeValidator( response.headers.get( "etag" ) );
+		if ( offset > 0 && response.status === 416 ) {
+			// The kept bytes no longer fit the object (it changed under the
+			// read): a transport fact, and the next attempt starts over.
+			void response.body?.cancel().catch( () => {} );
+			forgetPartial( partial );
+			throw assetFailure( "Invalid asset range response", true );
+		}
 		if ( !response.ok || !response.body ) {
 			// Cleanup is not awaited: a cancel that never settles must not hold the slot.
 			void response.body?.cancel().catch( () => {} );
@@ -433,16 +460,35 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		if (
 			range &&
 			(response.status !== 206 ||
-				response.headers.get( "content-range" ) !== `bytes ${range.start}-${range.end}/${range.total}`)
+				response.headers.get( "content-range" ) !==
+					`bytes ${range.start + offset}-${range.end}/${range.total}`)
 		) {
 			void response.body.cancel().catch( () => {} );
 			// A middlebox that ignores Range - answering 200 with the whole
 			// object, or a 206 naming some other range - is a transport
 			// fact: the read retries, then enters the bounded recovery
-			// marked transient (#2337).
+			// marked transient (#2337). What it kept is not trusted.
+			forgetPartial( partial );
 			throw assetFailure( "Invalid asset range response", true );
 		}
-		const bytes = await readBytes( response.body, limit, {
+		if ( !range && response.status === 200 ) {
+			// A whole answer starts the object over, whatever was kept: a
+			// server that ignored the resume, or a first attempt.
+			forgetPartial( partial );
+			partial.whole = resumableWhole( response.headers );
+		} else if ( !range && offset > 0 && !resumedWhole( response, partial, offset ) ) {
+			void response.body.cancel().catch( () => {} );
+			forgetPartial( partial );
+			throw assetFailure( "Invalid asset range response", true );
+		}
+		const prefix = partial.size;
+		// At least one byte: a kept prefix at the limit still reports the
+		// limit when one more byte arrives.
+		const bytes = await readBytes( response.body, Math.max( 1, limit - prefix ), {
+			kept: chunk => {
+				partial.chunks.push( chunk );
+				partial.size += chunk.byteLength;
+			},
 			received: size => {
 				// An empty chunk is not progress.
 				if ( size > 0 ) progressed();
@@ -465,7 +511,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			if ( timing ) received += timing.transferSize;
 			progress();
 		}
-		return bytes;
+		return prefix === 0 ? bytes : joinPartial( partial );
 	}
 	/*
 	================
@@ -1096,6 +1142,91 @@ interface DownloadRead {
 	readonly limit: number;
 	readonly signal: AbortSignal;
 	readonly range?: import("./packs/packs").PackRange;
+	readonly partial: PartialRead;
+}
+
+/*
+================
+PartialRead
+
+What one download kept across its attempts (#3354): the chunks received
+so far, in order, and their total. A ranged read resumes by narrowing its
+range. A whole read resumes only when its full answer named the object
+(whole): a strong ETag, its length, byte ranges, and no content coding,
+so a stream offset is a file offset. Without that, a retry starts over.
+================
+*/
+interface PartialRead {
+	chunks: Uint8Array[];
+	size: number;
+	whole: { readonly validator: string; readonly total: number; } | null;
+}
+
+/*
+================
+forgetPartial
+
+Drops the kept bytes; a whole read's resume terms go with them.
+================
+*/
+function forgetPartial( partial: PartialRead ) {
+	partial.chunks = [];
+	partial.size = 0;
+	partial.whole = null;
+}
+
+/*
+================
+joinPartial
+
+The kept chunks as one buffer: the read's bytes, across its attempts.
+================
+*/
+function joinPartial( partial: PartialRead ): Uint8Array<ArrayBuffer> {
+	const bytes = new Uint8Array( partial.size );
+	let at = 0;
+	for ( const chunk of partial.chunks ) {
+		bytes.set( chunk, at );
+		at += chunk.byteLength;
+	}
+	return bytes;
+}
+
+/*
+================
+resumableWhole
+
+A whole answer's resume terms, or null when a later attempt could not
+ask for its tail safely. A weak or missing ETag cannot prove the tail
+belongs to the same bytes; a content coding makes stream offsets differ
+from file offsets; a server that does not announce byte ranges may
+answer a resume with the whole object anyway. Headers a cross-origin
+server does not expose read as absent, so such a read starts over.
+================
+*/
+function resumableWhole( headers: Headers ): PartialRead["whole"] {
+	const validator = headers.get( "etag" ), total = Number( headers.get( "content-length" ) );
+	const coding = headers.get( "content-encoding" );
+	if ( !validator || validator.startsWith( "W/" ) ) return null;
+	if ( coding && coding !== "identity" ) return null;
+	if ( headers.get( "accept-ranges" ) !== "bytes" ) return null;
+	if ( !Number.isSafeInteger( total ) || total <= 0 ) return null;
+	return { validator, total };
+}
+
+/*
+================
+resumedWhole
+
+Whether a whole read's resumed answer is exactly the tail it asked for,
+of the same object: 206, the range from offset to the end, and the
+validator the first answer named.
+================
+*/
+function resumedWhole( response: Response, partial: PartialRead, offset: number ): boolean {
+	const whole = partial.whole;
+	return !!whole && response.status === 206 && response.headers.get( "etag" ) === whole.validator &&
+		response.headers.get( "content-range" ) === `bytes ${offset}-${whole.total - 1}/${whole.total}`;
 }
 
 /*

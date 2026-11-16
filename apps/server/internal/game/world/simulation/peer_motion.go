@@ -62,28 +62,108 @@ publishPeerPath
 
 The client's 0x775CB0 only reseeds the source. The native 0xB738 destination is
 required to keep the navigation and locomotion owners active between ticks.
+It is the one packet the original sends a viewer per accepted move
+(position_stream.go); the 0x3122 move state rides with it only in the
+port-only stream, since the original sends that state on a run/walk
+toggle, which the movement lane publishes itself.
 ================
 */
 func (t *Ticker) publishPeerPath(state *divisionTickState, session SessionSnapshot, nowMs int64) {
 	gid := PlayerObjectID(session.CharacterID)
 	path := pathForPeer(session.World)
 	var frames []Frame
-	for viewer, shown := range state.shownPeers {
-		if !shown[gid] {
-			continue
-		}
+	state.forEachPeerWatcher(gid, func(viewer string) {
 		if previous, found := state.peerPaths[viewer][gid]; found && previous == path {
-			continue
+			return
 		}
 		if frames == nil {
 			source := MovementSourceFromSpawn(session.World.LiveSpawnAt(nowMs))
 			goal := session.World.Spawn
-			frames = []Frame{
-				{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: gid, StateType: wire.StateChannelMove, Value: session.World.MovementMode}).Encode(), Current: session.MovementCurrent},
-				{Opcode: OpMovementAck, Payload: BuildMovementAckPayload(gid, MovementRequest{Mode: MovementAckDestinationMode, RegionID: goal.RegionID, X: goal.X, Y: goal.Y, Z: goal.Z}, &source), Current: session.MovementCurrent},
+			ack := Frame{Opcode: OpMovementAck, Payload: BuildMovementAckPayload(gid, MovementRequest{Mode: MovementAckDestinationMode, RegionID: goal.RegionID, X: goal.X, Y: goal.Y, Z: goal.Z}, &source), Current: session.MovementCurrent}
+			frames = []Frame{ack}
+			if t.PositionStream {
+				frames = []Frame{
+					{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: gid, StateType: wire.StateChannelMove, Value: session.World.MovementMode}).Encode(), Current: session.MovementCurrent},
+					ack,
+				}
 			}
 		}
 		t.Push.PushToSession(viewer, frames)
 		state.rememberPeerPath(viewer, gid, session.World)
+	})
+}
+
+//============================================================================
+
+/*
+================
+indexPeerWatchers
+
+Inverts shownPeers for the session legs. Each moving peer used to scan
+every viewer's shown set (sessions x viewers lookups per tick, the
+quadratic that dominated the legs at a few hundred sessions); with the
+inversion it visits only the viewers that show it. The slices are
+reused across ticks: a gid's list is truncated for the next tick, and a
+gid no viewer showed last tick is pruned.
+================
+*/
+func (state *divisionTickState) indexPeerWatchers() {
+	if state.peerWatchers == nil {
+		state.peerWatchers = make(map[uint32][]string)
+	}
+	for gid, viewers := range state.peerWatchers {
+		// A gid nobody showed last tick leaves, so the reset walks only
+		// the gids shown last tick, not every gid the division ever showed.
+		if len(viewers) == 0 {
+			delete(state.peerWatchers, gid)
+			continue
+		}
+		state.peerWatchers[gid] = viewers[:0]
+	}
+	for viewer, shown := range state.shownPeers {
+		for gid, on := range shown {
+			if on {
+				state.peerWatchers[gid] = append(state.peerWatchers[gid], viewer)
+			}
+		}
+	}
+	state.peerWatchersValid = true
+}
+
+/*
+================
+dropPeerWatchers
+
+Ends the inversion's validity: outside the session legs shownPeers may
+change, and forEachPeerWatcher falls back to the full scan.
+================
+*/
+func (state *divisionTickState) dropPeerWatchers() {
+	state.peerWatchersValid = false
+}
+
+/*
+================
+forEachPeerWatcher
+
+Calls fn for every viewer whose shown set holds gid. Each candidate is
+rechecked against shownPeers, so a stale inversion can only skip work,
+never invent a viewer; viewer order was a map walk before and carries
+no meaning (each viewer's queue is its own).
+================
+*/
+func (state *divisionTickState) forEachPeerWatcher(gid uint32, fn func(viewer string)) {
+	if !state.peerWatchersValid {
+		for viewer, shown := range state.shownPeers {
+			if shown[gid] {
+				fn(viewer)
+			}
+		}
+		return
+	}
+	for _, viewer := range state.peerWatchers[gid] {
+		if state.shownPeers[viewer][gid] {
+			fn(viewer)
+		}
 	}
 }

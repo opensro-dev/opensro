@@ -40,7 +40,8 @@ function copyUiProduct( scene: UiScene, previous: UiScene | undefined, validated
 	if (
 		!Number.isSafeInteger( scene.revision ) || !Number.isFinite( scene.width ) ||
 		!Number.isFinite( scene.height ) || scene.width <= 0 || scene.height <= 0 || scene.width > 32768 ||
-		scene.height > 32768 || scene.quads.length > 8192 || uiRecordCount( scene.quads ) > UI_RECORD_LIMIT
+		scene.height > 32768 || scene.quads.length > UI_RECORD_LIMIT ||
+		uiRecordCount( scene.quads ) > UI_RECORD_LIMIT
 	) throw new Error( "Invalid UI scene" );
 	/*
 	================
@@ -97,6 +98,7 @@ function copyUiProduct( scene: UiScene, previous: UiScene | undefined, validated
 		if (
 			quad.uvTurn !== undefined && ![ 0, 1, 2, 3 ].includes( quad.uvTurn ) ||
 			quad.tiled !== undefined && typeof quad.tiled !== "boolean" ||
+			quad.additive !== undefined && typeof quad.additive !== "boolean" ||
 			quad.alphaCutoff !== undefined &&
 				(!Number.isFinite( quad.alphaCutoff ) || quad.alphaCutoff < 0 || quad.alphaCutoff > 1)
 		) throw Error( "Invalid UI sampling" );
@@ -152,6 +154,10 @@ function copyUiProduct( scene: UiScene, previous: UiScene | undefined, validated
 			...(quad.rotation !== undefined ? { rotation: quad.rotation } : {}),
 			...(quad.uvTurn !== undefined ? { uvTurn: quad.uvTurn } : {}),
 			...(quad.tiled ? { tiled: true } : {}),
+			// The blend travels with the quad: dropping it drew every additive
+			// effect sheet (Magic POP's deco, the alchemy result) blended, its
+			// black square and all (#3446).
+			...(quad.additive ? { additive: true } : {}),
 			...(quad.alphaCutoff !== undefined ? { alphaCutoff: quad.alphaCutoff } : {}),
 			...(quad.characterAnchor !== undefined ? { characterAnchor: quad.characterAnchor } : {}),
 			...(quad.layer ? { layer: quad.layer } : {}),

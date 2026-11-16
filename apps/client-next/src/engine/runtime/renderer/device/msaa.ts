@@ -39,8 +39,7 @@ transientUsage
 Port-only, not native: Chrome 146's TRANSIENT_ATTACHMENT usage, or 0 where
 the browser lacks it. A transient attachment lives for one render pass, so
 a tile-based GPU keeps its samples in tile memory and never writes them to
-VRAM. The 4x colour qualifies: it is cleared, resolved inside the pass and
-discarded. The 4x depth does not: the depth resolve samples it.
+VRAM. The 4x depth never qualifies: the depth resolve samples it.
 ================
 */
 export function transientUsage( usage: object = GPUTextureUsage ) {
@@ -123,8 +122,9 @@ export function createMsaa( device: GPUDevice, retire: Retire = destroyNow ) {
 		prepare
 
 		The 4x buffers for a w x h frame in the scene target's format,
-		(re)created when the size or format changed; undefined (and no
-		target) while the stage is off.
+		(re)created when the size or the format changed; undefined (and no
+		target) while the stage is off. One pass clears and discards the 4x
+		colour, so it is transient where the browser allows it.
 		================
 		*/
 		prepare( w: number, h: number, sceneFormat: GPUTextureFormat, enabled: boolean ) {

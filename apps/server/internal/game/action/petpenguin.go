@@ -229,7 +229,7 @@ func (rt *Runtime) penguinShards(step petCombatStep, mob monster.Instance, damag
 		if !valid || target.monster == nil || target.gid == mob.Gid || !samePlaneAdjacent(center, target.at) || areaDistance(center, target.at) > 50 {
 			continue
 		}
-		world, _ := step.state.follower.Presentation()
+		world, _ := step.state.mover.AnyFollower().Presentation()
 		if rt.LineOfSight != nil && !rt.LineOfSight(center, world.LiveOwnerAt(step.nowMs), target.at) {
 			continue
 		}
@@ -396,7 +396,7 @@ func (rt *Runtime) advancePenguinSession(key petOwnerKey, state *petSession, now
 			if !valid || target.monster == nil || !samePlaneAdjacent(storm.center, target.at) || areaDistance(storm.center, target.at) > radius {
 				continue
 			}
-			world, _ := state.follower.Presentation()
+			world, _ := state.mover.AnyFollower().Presentation()
 			if rt.LineOfSight != nil && !rt.LineOfSight(storm.center, world.LiveOwnerAt(now), target.at) {
 				continue
 			}
@@ -412,10 +412,9 @@ func (rt *Runtime) advancePenguinSession(key petOwnerKey, state *petSession, now
 				pulse.trained.shatter = s.ValueAt(level)
 			}
 			if hit, ok := rt.strikePetTarget(pulse, target, skill); ok {
+				// The pulse's HP reaches the monster's holders with the
+				// tick's other changes (monstervitals.go).
 				public := hit.strike.public
-				if current, found := rt.Monsters.Get(key.division, target.gid); found {
-					public = append(public, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(target.gid, 0, current.CurrentHP)})
-				}
 				// The public audience excludes the owner, who needs the same pulse updates.
 				state.public = append(state.public, public...)
 				output = append(output, simFrames(public)...)

@@ -442,6 +442,12 @@ test("62B0B0 words the outcome and plays its effect once", () => {
 	assert.equal( result.alchemyEffectTexture( 0x80 ), "interface/alchemy/alcm_effect_fail_1" );
 	assert.equal( result.alchemyEffectTexture( 0x10 ), "interface/alchemy/alcm_effect_success" );
 	assert.equal( result.alchemyEffectTexture( 0x40 ), "interface/alchemy/alcm_effect_fail_1" );
+	// #3441: the success atlas is opaque art (black behind white light), so it
+	// is added over the medallion; the failure atlas blends by its own alpha.
+	assert.equal( result.alchemyEffectAdditive( 0x10 ), true );
+	assert.equal( result.alchemyEffectAdditive( 0x20 ), false );
+	assert.equal( result.alchemyEffectAdditive( 0x40 ), false );
+	assert.equal( result.alchemyEffectAdditive( 0x80 ), false );
 	// Sixteen 64 px cells of a 4x4 atlas, 50 ms each, then nothing.
 	assert.deepEqual( result.alchemyEffectCell( 0 ), [ 0, 0, .25, .25 ] );
 	assert.deepEqual( result.alchemyEffectCell( 5 * 50 ), [ .25, .25, .25, .25 ] );

@@ -6,8 +6,8 @@ map-teleport.ts - world map double-click teleport target
 DELIBERATE ADDITION, NOT NATIVE: retail's world map handles only mouse move,
 down and up (CIFWorldMap_OnMouseMessage 57F430). This is a GM-only port tool.
 
-A double-click on the world map picks an outdoor point and asks
-for confirmation; Yes issues the existing GM coordinate warp. The server owns
+A double-click on the world map picks an outdoor point, or on a dungeon
+floor's page a point of that floor, and asks for confirmation; Yes issues the existing GM coordinate warp. The server owns
 privilege, area, surface and stranding checks, and snaps the unknown height
 (MAP_WARP_UNKNOWN_Y lies below every terrain, so entry lifts it to ground).
 
@@ -43,26 +43,40 @@ export interface MapTeleportTarget {
 ================
 createMapTeleport
 
-The last painted map frame and the target awaiting confirmation.
+The painted page's inverse pick and the target awaiting confirmation.
 ================
 */
 export function createMapTeleport() {
-	let frame: {
-		page: number;
-		clip: UiRect;
-		pan: readonly [number, number];
-		center: Pose;
-		layout?: WorldMapLayout;
-	} | null = null;
+	// The painted page's inverse pick: the world page's projection or a
+	// dungeon floor's (cave-map.ts). Cleared whenever neither is painted,
+	// so a double-click never resolves against a page no longer shown.
+	let picker: (( x: number, y: number ) => MapTeleportTarget | null) | null = null;
 	let pending: MapTeleportTarget | null = null;
 	return {
 		view( page: number, clip: UiRect, pan: readonly [number, number], center: Pose, layout?: WorldMapLayout ) {
-			frame = { page, clip, pan: [ pan[0], pan[1] ], center, layout };
+			const frame = { page, clip, pan: [ pan[0], pan[1] ] as const, center, layout };
+			// A field point stays inside its region: the server rejects a
+			// local x or z of 1920, and toFixed(1) would round 1919.96 up
+			// to it. A dungeon floor's coordinates need no such clamp.
+			picker = ( x, y ) => {
+				const point = worldMapPoint( frame.page, frame.clip, frame.pan, frame.center, x, y, frame.layout );
+				return point ?
+					{
+						...point,
+						x: Math.min( point.x, MAP_WARP_LOCAL_MAX ),
+						z: Math.min( point.z, MAP_WARP_LOCAL_MAX )
+					} :
+					null;
+			};
+		},
+		viewCave( pick: ( x: number, y: number ) => MapTeleportTarget | null ) {
+			picker = pick;
+		},
+		hide() {
+			picker = null;
 		},
 		pick( x: number, y: number ): MapTeleportTarget | null {
-			pending = frame ?
-				worldMapPoint( frame.page, frame.clip, frame.pan, frame.center, x, y, frame.layout ) :
-				null;
+			pending = picker ? picker( x, y ) : null;
 			return pending;
 		},
 		choose( target: MapTeleportTarget ) {
@@ -75,8 +89,7 @@ export function createMapTeleport() {
 			pending = null;
 		},
 		command( target: MapTeleportTarget ): string {
-			const x = Math.min( target.x, MAP_WARP_LOCAL_MAX ), z = Math.min( target.z, MAP_WARP_LOCAL_MAX );
-			return `/warp ${target.regionId} ${x.toFixed( 1 )} ${MAP_WARP_UNKNOWN_Y} ${z.toFixed( 1 )}`;
+			return `/warp ${target.regionId} ${target.x.toFixed( 1 )} ${MAP_WARP_UNKNOWN_Y} ${target.z.toFixed( 1 )}`;
 		}
 	};
 }

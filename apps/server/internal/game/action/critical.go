@@ -16,6 +16,10 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 )
 
+// ignoreDefenseProbabilityPrefix is the reference server's probability-history
+// key namespace for MATTR_AVATAR_MDIA (0x4D000000 | (skillID & 0xFFFFFF)).
+const ignoreDefenseProbabilityPrefix uint32 = 0x4D000000
+
 /*
 ================
 criticalActor
@@ -105,11 +109,25 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 			return combat.WallOutcome{}, err
 		}
 	}
+	// In the reference server's hit-outcome routine, MATTR_AVATAR_MDIA rolls
+	// after critical and before the damage lanes so the random stream order matches.
+	ignoreDefense := false
+	if actor.monster == 0 {
+		if chance := combat.IgnoreDefenseChance(attacker, defender); chance > 0 {
+			mdiaKey := ignoreDefenseProbabilityPrefix | skill.ID&0xffffff
+			procced, mdiaNext, err := combat.CriticalOutcome(chance, rt.criticals.actors[actor][mdiaKey], rt.CombatRoll)
+			if err != nil {
+				return combat.WallOutcome{}, err
+			}
+			rt.rememberProbability(actor, mdiaKey, mdiaNext)
+			ignoreDefense = procced
+		}
+	}
 	var out combat.WallOutcome
 	var err error
 	calculation := combat.AttackCalculation{
 		Attack: skill.Attack, OriginalFlags: skill.Attack.Flags, Lanes: request.lanes,
-		Player: actor.monster == 0, Critical: critical,
+		Player: actor.monster == 0, Critical: critical, IgnoreDefense: ignoreDefense,
 	}
 	if wall != nil {
 		out, err = combat.ResolveCalculationAgainstWall(attacker, defender, combat.WallCalculation{Attack: calculation, Wall: *wall}, rt.CombatRoll)

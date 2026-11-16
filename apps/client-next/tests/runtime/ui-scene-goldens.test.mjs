@@ -28,8 +28,28 @@ import {
 	SCENE_GOLDENS_UPDATE
 } from "../helpers/scene-golden.mjs";
 import { SCENE_SCRIPTS } from "../helpers/scene-scripts.mjs";
+import { EXPANDED_BUILD } from "../helpers/expanded-build.mjs";
 
 const ASSETS_HERE = existsSync( CLIENT_PUBLIC_ROOT + "/assets/fonts/native-ui-font-atlas.json" );
+
+// The goldens record the native build. An expanded build (Alexandria and
+// cap 110) draws more in these scenes: the world map shows Alexandria's
+// teleports. They skip there, with the reason, and every other scene
+// still has to match the native recording.
+const NATIVE_SCENES = new Set( [ "panel-map" ] );
+
+/*
+================
+sceneSkip
+================
+*/
+function sceneSkip( name ) {
+	if ( !ASSETS_HERE ) return "needs the generated asset tree";
+	if ( EXPANDED_BUILD && NATIVE_SCENES.has( name ) ) {
+		return "native scene: this build adds the Alexandria and cap-110 content";
+	}
+	return false;
+}
 
 /*
 ================
@@ -103,7 +123,7 @@ async function runScript( uiFixture, script ) {
 }
 
 for ( const script of SCENE_SCRIPTS ) {
-	test( `scene golden: ${script.name}`, { skip: !ASSETS_HERE && "needs the generated asset tree" }, async () => {
+	test( `scene golden: ${script.name}`, { skip: sceneSkip( script.name ) }, async () => {
 		const { uiFixture } = await import( "../helpers/ui-fixture.mjs" );
 		const text = await runScript( uiFixture, script );
 		const failure = checkSceneGolden( script.name, text );

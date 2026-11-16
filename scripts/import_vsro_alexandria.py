@@ -50,7 +50,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sro_pk2  # noqa: E402
-from prepare_client_resources import safe_target, write_atomically  # noqa: E402
+from pin_file import read_pin_field  # noqa: E402
+import state_document  # noqa: E402
+from prepare_client_resources import file_digest, safe_target, write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT  # noqa: E402
 
 FLAG_ENV = "SRO_ALEXANDRIA"
@@ -75,6 +77,17 @@ CITY_NAME_PREFIX = "RN_SD_EGYPT01"
 # Gate codes of the city's own ferry and sand-desert gates (teleportdata).
 CITY_GATE_PREFIX = "GATE_SD"
 CITY_GATE_EXTRA = ("GATE_NPC_SD_M_AREA_FERRY",)
+# Port-only, not native: the far ends of the city's two outdoor crossings
+# (Delta West to Kings Valley, Delta East to the Storm Desert), which the
+# variant links (build_alexandria_variant GATE_CODES). Their regions seed
+# terrain components like the field's, so a crossing never lands on a
+# region the client has no terrain for.
+CROSSING_GATE_CODES = ("GATE_STORMDESERT_GATE", "GATE_KINGSVALLEY_GATE")
+# teleportdata columns: code name, and the gate's own region id.
+TELEPORT_CODE_COLUMN = 2
+TELEPORT_REGION_COLUMN = 5
+# A region id with this bit set names a dungeon, not an outdoor sector.
+DUNGEON_REGION_BIT = 0x8000
 
 TEXTDATA = "server_dep/silkroad/textdata/"
 MAP_EXTENSIONS = (".m", ".o", ".o2", ".t")
@@ -173,6 +186,53 @@ def mfo_regions(mapinfo):
 		if mapinfo[MFO_HEADER_BYTES + (region_id >> 3)] & (0x80 >> (region_id & 7)):
 			found.add(region_xy(region_id))
 	return found
+
+
+# ================
+# gate_seed_regions
+#
+# The outdoor (sectorX, sectorY) of each gate in codes, read from a
+# teleportdata table. A code the table lacks stops the build: a crossing
+# with no far end would be linked to nothing.
+# ================
+def gate_seed_regions(teleportdata_raw, codes=CROSSING_GATE_CODES):
+	found, seen = set(), set()
+	for row in table_rows(teleportdata_raw):
+		if len(row) <= TELEPORT_REGION_COLUMN or row[TELEPORT_CODE_COLUMN].strip() not in codes:
+			continue
+		value = row[TELEPORT_REGION_COLUMN].strip()
+		if not value.lstrip("-").isdigit():
+			continue
+		seen.add(row[TELEPORT_CODE_COLUMN].strip())
+		region = int(value) & 0xFFFF
+		if not region & DUNGEON_REGION_BIT:
+			found.add(region_xy(region))
+	missing = sorted(set(codes) - seen)
+	if missing:
+		raise SystemExit(f"teleportdata.txt has no outdoor gate {', '.join(missing)}")
+	return found
+
+
+# ================
+# gates_without_terrain
+#
+# The codes, among codes, of the gates that stand on an outdoor region
+# outside terrain (the variant's regions plus the native ones). The client
+# cannot load such a region, so a teleport there ends the session ("No
+# published region"); the variant build refuses it instead.
+# ================
+def gates_without_terrain(teleportdata_raw, codes, terrain):
+	missing = []
+	for row in table_rows(teleportdata_raw):
+		if len(row) <= TELEPORT_REGION_COLUMN or row[TELEPORT_CODE_COLUMN].strip() not in codes:
+			continue
+		value = row[TELEPORT_REGION_COLUMN].strip()
+		if not value.lstrip("-").isdigit():
+			continue
+		region = int(value) & 0xFFFF
+		if not region & DUNGEON_REGION_BIT and region_xy(region) not in terrain:
+			missing.append(row[TELEPORT_CODE_COLUMN].strip())
+	return sorted(missing)
 
 
 # ================
@@ -281,9 +341,36 @@ def object_placeholder(row):
 #============================================================================
 
 
+# An archive's directory is walked and decrypted once per process (#3590):
+# the import steps reopen the same pinned archives for every file they read,
+# and each walk of Media.pk2 cost about a second. The key is the archive's
+# length with digests of its head (the header and root directory block) and
+# its tail (where an appended patch lands). The archives are read-only
+# inputs the pin gate checked, so within one process the key names one
+# directory.
+INDEX_HEAD_BYTES = 1 << 20
+INDEX_TAIL_BYTES = 1 << 16
+_archive_indexes = {}
+
+
+def archive_key(data):
+	"""The process-local identity of one archive's bytes (archive_index)."""
+	size = len(data)
+	head = hashlib.sha256(data[:INDEX_HEAD_BYTES]).hexdigest()
+	tail = hashlib.sha256(data[max(0, size - INDEX_TAIL_BYTES):]).hexdigest()
+	return size, head, tail
+
+
 def archive_index(data):
-	"""{lower-case path with forward slashes: entry} of one PK2."""
-	return {entry.path.replace("\\", "/").lower(): entry for entry in sro_pk2.read_directory(data)}
+	"""{lower-case path with forward slashes: entry} of one PK2, walked once per process."""
+	key = archive_key(data)
+	index = _archive_indexes.get(key)
+	if index is None:
+		index = {entry.path.replace("\\", "/").lower(): entry for entry in sro_pk2.read_directory(data)}
+		_archive_indexes[key] = index
+	# Entries hold only offsets, valid for any mapping of the same bytes; the
+	# copy keeps one caller's edits out of another's index.
+	return dict(index)
 
 
 def open_archive(root, name):
@@ -313,17 +400,16 @@ def sha256_of(data):
 #============================================================================
 
 _verified_archives = set()
+# What this process verified, for the next step of the same build (#3590):
+# {resolved path: {"name", "size", "mtimeNs", "sha256"}}.
+_verified_digests = {}
+VERIFIED_ARCHIVES_NAME = "verified-archives.json"
+VERIFIED_ARCHIVES_FORMAT = "sro-verified-vsro-archives"
 
 
 def archive_pins():
 	"""The pinned VSRO archive hashes (vsro_archive_pins.json beside this tool)."""
-	try:
-		pin = json.loads(PIN_FILE.read_text(encoding="utf-8"))
-	except (OSError, ValueError) as error:
-		raise SystemExit(f"{PIN_FILE} is unreadable: {error}")
-	if pin.get("format") != PIN_FORMAT or not isinstance(pin.get("archives"), dict):
-		raise SystemExit(f"{PIN_FILE} is not a {PIN_FORMAT} pin file")
-	return pin["archives"]
+	return read_pin_field(PIN_FILE, PIN_FORMAT, "archives")
 
 
 def verify_vsro_archive(root, name, pins=None):
@@ -341,23 +427,60 @@ def verify_vsro_archive(root, name, pins=None):
 		raise SystemExit(f"{PIN_FILE.name} pins no {name}.pk2; pin the archive before reading it")
 	if not path.is_file():
 		raise SystemExit(f"{path} not found; --vsro-root must be the pinned VSRO client folder")
-	hasher = hashlib.sha256()
-	with open(path, "rb") as handle:
-		for chunk in iter(lambda: handle.read(HASH_CHUNK), b""):
-			hasher.update(chunk)
-	actual = hasher.hexdigest()
+	actual = file_digest(path)
 	if actual != expected:
 		raise SystemExit(
 			f"{path} does not match the pinned VSRO archive: sha256 is {actual}, pinned is {expected}. "
 			"Alexandria is built from one pinned VSRO client (#1745); its archives are never committed."
 		)
 	_verified_archives.add(key)
+	stat = path.stat()
+	_verified_digests[key] = {"name": name, "size": stat.st_size, "mtimeNs": stat.st_mtime_ns, "sha256": actual}
 
 
 def require_vsro_pin(root, names, pins=None):
 	"""Every archive in names against its pin, before any of them is read."""
 	for name in names:
 		verify_vsro_archive(root, name, pins)
+
+
+# ================
+# write_verified_archives
+#
+# Record the archives this process hashed to their pins, beside the
+# stage 1 output, so the variant step of the same build need not hash
+# them again (#3590).
+# ================
+def write_verified_archives(folder):
+	state_document.write_document(Path(folder) / VERIFIED_ARCHIVES_NAME, VERIFIED_ARCHIVES_FORMAT, "archives", _verified_digests)
+
+
+# ================
+# admit_verified_archives
+#
+# Trust an earlier step's verification of one archive only while the file
+# still has the size and mtime it was hashed at and its recorded digest is
+# today's pin. Anything else is hashed again by verify_vsro_archive, so the
+# pin stays exactly as strict. Returns how many archives were admitted.
+# ================
+def admit_verified_archives(folder, pins=None):
+	archives = state_document.read_document(Path(folder) / VERIFIED_ARCHIVES_NAME, VERIFIED_ARCHIVES_FORMAT, "archives")
+	if archives is None:
+		return 0
+	expected = archive_pins() if pins is None else pins
+	admitted = 0
+	for key, record in archives.items():
+		try:
+			stat = Path(key).stat()
+		except OSError:
+			continue
+		if (stat.st_size, stat.st_mtime_ns) != (record.get("size"), record.get("mtimeNs")):
+			continue
+		if record.get("sha256") != expected.get(record.get("name")):
+			continue
+		_verified_archives.add(key)
+		admitted += 1
+	return admitted
 
 
 # ================
@@ -382,8 +505,15 @@ def field_seed_regions(vsro_root):
 	return client_outdoor_regions(vsro_root)
 
 
+# ================
+# table_text
+#
+# One textdata table's bytes. archive_index keys are lower-case, and a
+# manifest names its shards in mixed case (CharacterData_5000.txt), so
+# the name is lowered here, once, for every caller.
+# ================
 def table_text(media, index, name):
-	entry = index.get(TEXTDATA + name)
+	entry = index.get(TEXTDATA + name.lower())
 	if entry is None:
 		raise SystemExit(f"Media.pk2 has no {TEXTDATA}{name}")
 	return sro_pk2.payload(media, entry)
@@ -435,8 +565,11 @@ def import_alexandria(vsro_root, extracted, native_mapinfo=None):
 		# terrain components, not an exhaustive list of regions worth importing.
 		# Empty connecting terrain and mountain sectors have no monster nests.
 		fields = field_seed_regions(vsro_root)
-		regions = connected_regions(city, vsro_only_regions(data_data, data_index, native_mapinfo), fields)
-		log(f"{len(city)} city regions, {len(regions)} regions with the fields around it")
+		crossings = gate_seed_regions(table_text(media_data, media_index, "teleportdata.txt"))
+		regions = connected_regions(
+			city, vsro_only_regions(data_data, data_index, native_mapinfo), set(fields) | crossings
+		)
+		log(f"{len(city)} city regions, {len(regions)} regions with the fields and crossings around it")
 
 		tile_ids, copied, missing = set(), [], []
 		for sector_x, sector_y in regions:
@@ -562,6 +695,7 @@ def main():
 	# parents: the variant build's isolated stage 1 game root starts empty.
 	EXTRACTED_ROOT.mkdir(parents=True, exist_ok=True)
 	manifest = import_alexandria(Path(args.vsro_root), EXTRACTED_ROOT, args.native_mapinfo)
+	write_verified_archives(EXTRACTED_ROOT / OUTPUT_FOLDER)
 	log(f"{len(manifest['files'])} files copied, {len(manifest['missing'])} absent from the archives")
 	log(f"extracted/{OUTPUT_FOLDER}/{MANIFEST_NAME} written")
 

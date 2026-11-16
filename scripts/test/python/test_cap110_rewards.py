@@ -3,6 +3,7 @@
 test_cap110_rewards.py - the monsters' database rewards and their items.
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import json
 from pathlib import Path
 import tempfile

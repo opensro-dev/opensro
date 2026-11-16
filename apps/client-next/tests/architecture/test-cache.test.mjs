@@ -12,11 +12,16 @@ outlive its runner. A file over its per-file budget fails the run although
 its tests pass, and a suite over its whole-suite budget fails although
 every file passes (#2929).
 
+The cases run at once (#3711): each drives its own fixture folder and
+cache, and a run is a child process, so the file costs about its slowest
+case rather than their sum. Run one at a time, the file sat at its 20 s
+per-file budget on CI.
+
 ===========================================================================
 */
-import { test } from "node:test";
+import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -26,22 +31,39 @@ const runner = path.join( root, "tools/run-tests.mjs" );
 
 /*
 ================
+spawnText
+
+A child process run to its end without blocking the event loop, so the
+cases run at once: its exit status and its whole stdout and stderr.
+================
+*/
+function spawnText( command, args, options ) {
+	return new Promise( resolve => {
+		const child = spawn( command, args, { ...options, stdio: [ "ignore", "pipe", "pipe" ] } );
+		let stdout = "", stderr = "";
+		child.stdout.setEncoding( "utf8" ).on( "data", chunk => stdout += chunk );
+		child.stderr.setEncoding( "utf8" ).on( "data", chunk => stderr += chunk );
+		child.on( "error", error => resolve( { status: null, signal: null, stdout, stderr, error } ) );
+		child.on( "close", ( status, signal ) => resolve( { status, signal, stdout, stderr, error: undefined } ) );
+	} );
+}
+
+/*
+================
 runRunner
 
 Runs the fixture suite; returns the exit code and the runner's whole
 stdout and stderr, for the cases that assert on what the runner printed.
 ================
 */
-function runRunner( suite, environment = {} ) {
+async function runRunner( suite, environment = {} ) {
 	// A top-level run: without node --test's child context, which would turn
 	// the runner's own reporting into the parent's protocol.
 	const { NODE_TEST_CONTEXT, ...env } = process.env;
-	const result = spawnSync( process.execPath, [ runner, suite ], {
+	return spawnText( process.execPath, [ runner, suite ], {
 		cwd: root,
-		encoding: "utf8",
 		env: { ...env, ...environment, SRO_TEST_CACHE_DIR: path.join( suite, ".cache" ), SRO_CHECK_FORCE: "" }
 	} );
-	return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "", error: result.error };
 }
 
 /*
@@ -51,8 +73,8 @@ runSuite
 Runs the fixture suite; returns its exit code and summary counts.
 ================
 */
-function runSuite( suite, environment = {} ) {
-	const result = runRunner( suite, environment );
+async function runSuite( suite, environment = {} ) {
+	const result = await runRunner( suite, environment );
 	const summary = result.stdout.split( "\n" ).find( line => line.startsWith( "tests:" ) ) ?? "";
 	const counts = /(\d+) reused unchanged, (\d+) run, (\d+) failed/.exec( summary );
 	assert.ok(
@@ -68,126 +90,321 @@ function runSuite( suite, environment = {} ) {
 	};
 }
 
-test("a pass is reused until an input it read changes; a failure is never reused", () => {
-	const suite = path.join( root, "temp", `test-cache-fixture-${process.pid}` );
-	fs.mkdirSync( suite, { recursive: true } );
-	try {
-		const dependency = path.join( suite, "value.mjs" );
-		fs.writeFileSync( dependency, "export const value = 1;\n" );
-		fs.writeFileSync(
-			path.join( suite, "reads.test.mjs" ),
-			'import { test } from "node:test";\nimport assert from "node:assert/strict";\n' +
-				'import { value } from "./value.mjs";\ntest( "reads", () => assert.equal( value, 1 ) );\n'
-		);
-		fs.writeFileSync(
-			path.join( suite, "alone.test.mjs" ),
-			'import { test } from "node:test";\ntest( "alone", () => {} );\n'
-		);
+/*
+================
+recordsFileOf
 
-		assert.deepEqual( runSuite( suite ), { status: 0, reused: 0, ran: 2, failed: 0 } );
-		assert.deepEqual(
-			runSuite( suite ),
-			{ status: 0, reused: 2, ran: 0, failed: 0 },
-			"unchanged inputs reuse both"
-		);
+The fixture cache's one records file (one per cache key).
+================
+*/
+function recordsFileOf( suite ) {
+	const dir = path.join( suite, ".cache" );
+	const names = fs.readdirSync( dir ).filter( name => /^index-[0-9a-f]{16}\.json$/.test( name ) );
+	assert.equal( names.length, 1, `one records file in ${dir}: ${names}` );
+	return path.join( dir, names[0] );
+}
 
-		assert.deepEqual(
-			runSuite( suite, {
-				SRO_REBUILD_LOCK_NAME: "generated-assets",
-				SRO_REBUILD_LOCK_TOKEN: "next-verification-owner",
-				SRO_REBUILD_LOCK_DIR: path.join( suite, "owner.lock" )
-			} ),
-			{ status: 0, reused: 2, ran: 0, failed: 0 },
-			"a different verification lock owner preserves unchanged test passes"
-		);
+describe( "the test runner", { concurrency: true }, () => {
+	test("a pass is reused until an input it read changes; a failure is never reused", async () => {
+		const suite = path.join( root, "temp", `test-cache-fixture-${process.pid}` );
+		fs.mkdirSync( suite, { recursive: true } );
+		try {
+			const dependency = path.join( suite, "value.mjs" );
+			fs.writeFileSync( dependency, "export const value = 1;\n" );
+			fs.writeFileSync(
+				path.join( suite, "reads.test.mjs" ),
+				'import { test } from "node:test";\nimport assert from "node:assert/strict";\n' +
+					'import { value } from "./value.mjs";\ntest( "reads", () => assert.equal( value, 1 ) );\n'
+			);
+			fs.writeFileSync(
+				path.join( suite, "alone.test.mjs" ),
+				'import { test } from "node:test";\ntest( "alone", () => {} );\n'
+			);
 
-		fs.appendFileSync( dependency, "// edited\n" );
-		assert.deepEqual( runSuite( suite ), { status: 0, reused: 1, ran: 1, failed: 0 }, "the importer reruns" );
+			assert.deepEqual( await runSuite( suite ), { status: 0, reused: 0, ran: 2, failed: 0 } );
+			assert.deepEqual(
+				await runSuite( suite ),
+				{ status: 0, reused: 2, ran: 0, failed: 0 },
+				"unchanged inputs reuse both"
+			);
 
-		fs.writeFileSync( dependency, "export const value = 2;\n" );
-		assert.deepEqual( runSuite( suite ), { status: 1, reused: 1, ran: 1, failed: 1 } );
-		assert.deepEqual( runSuite( suite ), { status: 1, reused: 1, ran: 1, failed: 1 }, "a failure reruns" );
-	} finally {
-		fs.rmSync( suite, { recursive: true, force: true } );
-	}
-});
+			assert.deepEqual(
+				await runSuite( suite, {
+					SRO_REBUILD_LOCK_NAME: "generated-assets",
+					SRO_REBUILD_LOCK_TOKEN: "next-verification-owner",
+					SRO_REBUILD_LOCK_DIR: path.join( suite, "owner.lock" )
+				} ),
+				{ status: 0, reused: 2, ran: 0, failed: 0 },
+				"a different verification lock owner preserves unchanged test passes"
+			);
 
-test("a file over its per-file budget fails the run although its tests pass", () => {
-	const suite = path.join( root, "temp", `test-budget-fixture-${process.pid}` );
-	fs.mkdirSync( suite, { recursive: true } );
-	try {
-		fs.writeFileSync(
-			path.join( suite, "quick.test.mjs" ),
-			'import { test } from "node:test";\ntest( "quick", () => {} );\n'
-		);
-		// A 1 ms budget: the file's tests pass, but starting its process
-		// alone costs more than that, so the run must fail on the budget
-		// line alone - the failure CI enforces (#2929).
-		const run = runRunner( suite, { SRO_TEST_FILE_BUDGET_MS: "1" } );
-		assert.match( run.stdout, /tests: 1 files, 0 reused unchanged, 1 run, 0 failed/ );
-		assert.match( run.stdout, /tests slowest: .*quick\.test\.mjs/ );
-		assert.match( run.stdout, /tests budget: .*quick\.test\.mjs ran .* over its .* per-file budget/ );
-		assert.equal( run.status, 1, "an over-budget file fails the run" );
-	} finally {
-		fs.rmSync( suite, { recursive: true, force: true } );
-	}
-});
+			fs.appendFileSync( dependency, "// edited\n" );
+			assert.deepEqual(
+				await runSuite( suite ),
+				{ status: 0, reused: 1, ran: 1, failed: 0 },
+				"the importer reruns"
+			);
 
-test("a suite over its whole-suite budget fails the run although every file passes", () => {
-	const suite = path.join( root, "temp", `test-suite-budget-fixture-${process.pid}` );
-	fs.mkdirSync( suite, { recursive: true } );
-	try {
-		fs.writeFileSync(
-			path.join( suite, "quick.test.mjs" ),
-			'import { test } from "node:test";\ntest( "quick", () => {} );\n'
-		);
-		// A 1 ms whole-suite budget: the file passes and sits far under
-		// its per-file budget, but the run around it - this process, the
-		// hashing, the file's own process - costs more than that, so the
-		// run must fail on the suite line alone (#2929).
-		const run = runRunner( suite, { SRO_TEST_SUITE_BUDGET_MS: "1" } );
-		assert.match( run.stdout, /tests: 1 files, 0 reused unchanged, 1 run, 0 failed/ );
-		assert.doesNotMatch( run.stdout, /tests budget: .*quick\.test\.mjs/ );
-		assert.match( run.stdout, /tests budget: the suite ran .* over its .* whole-suite budget/ );
-		assert.equal( run.status, 1, "an over-budget suite fails the run" );
-	} finally {
-		fs.rmSync( suite, { recursive: true, force: true } );
-	}
-});
+			fs.writeFileSync( dependency, "export const value = 2;\n" );
+			assert.deepEqual( await runSuite( suite ), { status: 1, reused: 1, ran: 1, failed: 1 } );
+			assert.deepEqual(
+				await runSuite( suite ),
+				{ status: 1, reused: 1, ran: 1, failed: 1 },
+				"a failure reruns"
+			);
+		} finally {
+			fs.rmSync( suite, { recursive: true, force: true } );
+		}
+	});
 
-test("a test process stops at the runner's heap ceiling instead of growing on", () => {
-	const suite = path.join( root, "temp", `test-heap-fixture-${process.pid}` );
-	fs.mkdirSync( suite, { recursive: true } );
-	try {
-		// About 512 MB of live arrays: it passes without a ceiling, so the
-		// fixture stays bounded even if the ceiling were ever removed.
-		fs.writeFileSync(
-			path.join( suite, "grows.test.mjs" ),
-			'import { test } from "node:test";\nimport assert from "node:assert/strict";\n' +
-				'test( "grows", () => {\n\tconst keep = [];\n' +
-				"\tfor ( let i = 0; i < 64; i++ ) keep.push( new Array( 1 << 20 ).fill( i ) );\n" +
-				"\tassert.equal( keep.length, 64 );\n} );\n"
-		);
-		assert.deepEqual(
-			runSuite( suite, { SRO_TEST_HEAP_MB: "64" } ),
-			{ status: 1, reused: 0, ran: 1, failed: 1 },
-			"a test past the ceiling fails instead of allocating on"
-		);
-	} finally {
-		fs.rmSync( suite, { recursive: true, force: true } );
-	}
-});
+	test("the shared records name checkout files relatively and keep another worktree's records", async () => {
+		// ops #335: records live in the main checkout, shared by every worktree,
+		// so their ids must not hold this checkout's path, and one run's write
+		// must not drop what another worktree recorded meanwhile.
+		const suite = path.join( root, "temp", `test-cache-shared-${process.pid}` );
+		fs.mkdirSync( suite, { recursive: true } );
+		try {
+			fs.writeFileSync( path.join( suite, "value.mjs" ), "export const value = 1;\n" );
+			fs.writeFileSync(
+				path.join( suite, "reads.test.mjs" ),
+				'import { test } from "node:test";\nimport assert from "node:assert/strict";\n' +
+					'import { value } from "./value.mjs";\ntest( "reads", () => assert.equal( value, 1 ) );\n'
+			);
+			assert.deepEqual( await runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+			const indexPath = recordsFileOf( suite );
+			const index = JSON.parse( fs.readFileSync( indexPath, "utf8" ) );
+			const ids = Object.values( index.records ).flatMap( record => Object.keys( record.inputs ) );
+			const checkout = path.resolve( root, "../.." ).toLowerCase();
+			assert.ok( ids.some( id => id.includes( "\t~/" ) ), "checkout inputs are relative" );
+			assert.ok( !ids.some( id => id.toLowerCase().includes( checkout ) ), "no id holds this checkout's path" );
+			assert.ok( !("stats" in index), "the stat memo is not shared" );
+			assert.ok( fs.existsSync( path.join( suite, ".cache", "stats.json" ) ) );
 
-test("a test process is killed at the resident memory ceiling, typed arrays included", () => {
-	const suite = path.join( root, "temp", `test-rss-fixture-${process.pid}` );
-	fs.mkdirSync( suite, { recursive: true } );
-	try {
-		// 64 typed arrays of 8 MB, outside the JS heap ceiling's reach, built
-		// slowly enough for the watchdog to look. About 512 MB at most, so it
-		// stays bounded (and passes) if the watchdog were ever removed.
-		fs.writeFileSync(
-			path.join( suite, "grows.test.mjs" ),
-			`import { test } from "node:test";
+			index.records["another/worktree.test.mjs"] = { inputs: {} };
+			fs.writeFileSync( indexPath, JSON.stringify( index ) );
+			fs.appendFileSync( path.join( suite, "value.mjs" ), "// edited\n" );
+			assert.deepEqual( await runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+			const after = JSON.parse( fs.readFileSync( indexPath, "utf8" ) );
+			assert.ok( "another/worktree.test.mjs" in after.records, "another worktree's record survives" );
+		} finally {
+			fs.rmSync( suite, { recursive: true, force: true } );
+		}
+	});
+
+	test("a pass holds in a fresh built tree whose files hash the same, and only there", async () => {
+		// B3: a release builds into a fresh variant root with the built tree's
+		// variable set; with that path in the key and in the ids, the release
+		// client check ran 815 of 815 files cold (710 s on 11-17).
+		const suite = path.join( root, "temp", `test-cache-tree-${process.pid}` );
+		const first = path.join( suite, "tree-a" ), second = path.join( suite, "tree-b" );
+		fs.mkdirSync( first, { recursive: true } );
+		fs.mkdirSync( second, { recursive: true } );
+		try {
+			const resolver = pathToFileURL( path.resolve( root, "../../scripts/lib/generatedRoot.mjs" ) ).href;
+			fs.writeFileSync( path.join( first, "data.txt" ), "one" );
+			fs.writeFileSync( path.join( second, "data.txt" ), "one" );
+			fs.writeFileSync(
+				path.join( suite, "tree.test.mjs" ),
+				'import { test } from "node:test";\nimport assert from "node:assert/strict";\n' +
+					'import fs from "node:fs";\nimport path from "node:path";\n' +
+					`import { GENERATED_ROOT } from ${JSON.stringify( resolver )};\n` +
+					'test( "reads the tree", () => assert.ok( fs.readFileSync( path.join( GENERATED_ROOT, "data.txt" ) ).length ) );\n'
+			);
+			const inTree = tree => ({ SRO_GENERATED_ROOT: tree });
+
+			assert.deepEqual( await runSuite( suite, inTree( first ) ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+			const index = JSON.parse( fs.readFileSync( recordsFileOf( suite ), "utf8" ) );
+			const ids = Object.values( index.records ).flatMap( record => Object.keys( record.inputs ) );
+			assert.ok( ids.includes( "R\t@generated/data.txt" ), "the tree's file is named relative to the tree" );
+
+			assert.deepEqual(
+				await runSuite( suite, inTree( second ) ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"a fresh tree with the same bytes reuses the pass"
+			);
+
+			fs.writeFileSync( path.join( second, "data.txt" ), "two" );
+			assert.deepEqual(
+				await runSuite( suite, inTree( second ) ),
+				{ status: 0, reused: 0, ran: 1, failed: 0 },
+				"the tree's own changed file reruns it"
+			);
+			assert.deepEqual(
+				await runSuite( suite, inTree( first ) ),
+				{ status: 0, reused: 0, ran: 1, failed: 0 },
+				"and the first tree, now different from the record, reruns too"
+			);
+
+			// Whether a location variable is set is a test input: code branches
+			// on it (assetPacks.mjs reads the pack baseline only when it is set).
+			const unsetSuite = { SRO_GENERATED_ROOT: first };
+			assert.deepEqual( await runSuite( suite, unsetSuite ), { status: 0, reused: 1, ran: 0, failed: 0 } );
+			// An unnamed release exports it blank, which every reader treats as
+			// unset: blank shares the unset key, so it cannot vouch for a set one.
+			assert.deepEqual(
+				await runSuite( suite, { ...unsetSuite, SRO_ASSET_PACK_BASELINE: " " } ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"a blank baseline is the unset key"
+			);
+			assert.deepEqual(
+				await runSuite( suite, {
+					...unsetSuite,
+					SRO_ASSET_PACK_BASELINE: path.join( suite, "baseline-a.json" )
+				} ),
+				{ status: 0, reused: 0, ran: 1, failed: 0 },
+				"a pass with the baseline unset does not vouch for a run with it set"
+			);
+			assert.deepEqual(
+				await runSuite( suite, {
+					...unsetSuite,
+					SRO_ASSET_PACK_BASELINE: path.join( suite, "baseline-b.json" )
+				} ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"but another baseline path reuses the pass recorded with one set"
+			);
+		} finally {
+			fs.rmSync( suite, { recursive: true, force: true } );
+		}
+	});
+
+	test("a run under another key keeps this key's records", async () => {
+		// B4: the shared records held one key, so a release check (its feature
+		// flags make another key) replaced the hub's records, and the hub's
+		// next run replaced the release's: on 11-17 the hub file held 3.
+		const suite = path.join( root, "temp", `test-cache-keys-${process.pid}` );
+		fs.mkdirSync( suite, { recursive: true } );
+		try {
+			fs.writeFileSync(
+				path.join( suite, "alone.test.mjs" ),
+				'import { test } from "node:test";\ntest( "alone", () => {} );\n'
+			);
+			const release = { SRO_ARABIA: "on" };
+			assert.deepEqual( await runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+			assert.deepEqual( await runSuite( suite, release ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+			assert.deepEqual(
+				await runSuite( suite ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"the hub's key still reuses after a release run"
+			);
+			assert.deepEqual(
+				await runSuite( suite, release ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"and the release's key reuses after a hub run"
+			);
+		} finally {
+			fs.rmSync( suite, { recursive: true, force: true } );
+		}
+	});
+
+	test("a worktree's .git link is recorded as the main checkout it names, not its worktree name", async () => {
+		// ops #335: the hub resolver reads each worktree's .git link, whose
+		// bytes name the worktree; hashed as bytes, 190 of 766 runtime files
+		// reran in every other worktree. Only the hub it names may count.
+		const suite = path.join( root, "temp", `test-cache-link-${process.pid}` );
+		const link = path.join( suite, "tree", ".git" );
+		const hub = path.join( suite, "hub" );
+		fs.mkdirSync( path.dirname( link ), { recursive: true } );
+		try {
+			fs.writeFileSync( link, `gitdir: ${hub}/.git/worktrees/fix-a\n` );
+			fs.writeFileSync(
+				path.join( suite, "link.test.mjs" ),
+				'import { test } from "node:test";\nimport fs from "node:fs";\n' +
+					'test( "reads the link", () => fs.readFileSync( new URL( "./tree/.git", import.meta.url ) ) );\n'
+			);
+			assert.deepEqual( await runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+			fs.writeFileSync( link, `gitdir: ${hub}/.git/worktrees/fix-b\n` );
+			assert.deepEqual(
+				await runSuite( suite ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"another worktree reuses it"
+			);
+			fs.writeFileSync( link, `gitdir: ${path.join( suite, "other" )}/.git/worktrees/fix-b\n` );
+			assert.deepEqual(
+				await runSuite( suite ),
+				{ status: 0, reused: 0, ran: 1, failed: 0 },
+				"another hub reruns it"
+			);
+		} finally {
+			fs.rmSync( suite, { recursive: true, force: true } );
+		}
+	});
+
+	test("a file over its per-file budget fails the run although its tests pass", async () => {
+		const suite = path.join( root, "temp", `test-budget-fixture-${process.pid}` );
+		fs.mkdirSync( suite, { recursive: true } );
+		try {
+			fs.writeFileSync(
+				path.join( suite, "quick.test.mjs" ),
+				'import { test } from "node:test";\ntest( "quick", () => {} );\n'
+			);
+			// A 1 ms budget: the file's tests pass, but starting its process
+			// alone costs more than that, so the run must fail on the budget
+			// line alone - the failure CI enforces (#2929).
+			const run = await runRunner( suite, { SRO_TEST_FILE_BUDGET_MS: "1" } );
+			assert.match( run.stdout, /tests: 1 files, 0 reused unchanged, 1 run, 0 failed/ );
+			assert.match( run.stdout, /tests slowest: .*quick\.test\.mjs/ );
+			assert.match( run.stdout, /tests budget: .*quick\.test\.mjs ran .* over its .* per-file budget/ );
+			assert.equal( run.status, 1, "an over-budget file fails the run" );
+		} finally {
+			fs.rmSync( suite, { recursive: true, force: true } );
+		}
+	});
+
+	test("a suite over its whole-suite budget fails the run although every file passes", async () => {
+		const suite = path.join( root, "temp", `test-suite-budget-fixture-${process.pid}` );
+		fs.mkdirSync( suite, { recursive: true } );
+		try {
+			fs.writeFileSync(
+				path.join( suite, "quick.test.mjs" ),
+				'import { test } from "node:test";\ntest( "quick", () => {} );\n'
+			);
+			// A 1 ms whole-suite budget: the file passes and sits far under
+			// its per-file budget, but the run around it - this process, the
+			// hashing, the file's own process - costs more than that, so the
+			// run must fail on the suite line alone (#2929).
+			const run = await runRunner( suite, { SRO_TEST_SUITE_BUDGET_MS: "1" } );
+			assert.match( run.stdout, /tests: 1 files, 0 reused unchanged, 1 run, 0 failed/ );
+			assert.doesNotMatch( run.stdout, /tests budget: .*quick\.test\.mjs/ );
+			assert.match( run.stdout, /tests budget: the suite ran .* over its .* whole-suite budget/ );
+			assert.equal( run.status, 1, "an over-budget suite fails the run" );
+		} finally {
+			fs.rmSync( suite, { recursive: true, force: true } );
+		}
+	});
+
+	test("a test process stops at the runner's heap ceiling instead of growing on", async () => {
+		const suite = path.join( root, "temp", `test-heap-fixture-${process.pid}` );
+		fs.mkdirSync( suite, { recursive: true } );
+		try {
+			// About 512 MB of live arrays: it passes without a ceiling, so the
+			// fixture stays bounded even if the ceiling were ever removed.
+			fs.writeFileSync(
+				path.join( suite, "grows.test.mjs" ),
+				'import { test } from "node:test";\nimport assert from "node:assert/strict";\n' +
+					'test( "grows", () => {\n\tconst keep = [];\n' +
+					"\tfor ( let i = 0; i < 64; i++ ) keep.push( new Array( 1 << 20 ).fill( i ) );\n" +
+					"\tassert.equal( keep.length, 64 );\n} );\n"
+			);
+			assert.deepEqual(
+				await runSuite( suite, { SRO_TEST_HEAP_MB: "64" } ),
+				{ status: 1, reused: 0, ran: 1, failed: 1 },
+				"a test past the ceiling fails instead of allocating on"
+			);
+		} finally {
+			fs.rmSync( suite, { recursive: true, force: true } );
+		}
+	});
+
+	test("a test process is killed at the resident memory ceiling, typed arrays included", async () => {
+		const suite = path.join( root, "temp", `test-rss-fixture-${process.pid}` );
+		fs.mkdirSync( suite, { recursive: true } );
+		try {
+			// 64 typed arrays of 8 MB, outside the JS heap ceiling's reach, built
+			// slowly enough for the watchdog to look. About 512 MB at most, so it
+			// stays bounded (and passes) if the watchdog were ever removed.
+			fs.writeFileSync(
+				path.join( suite, "grows.test.mjs" ),
+				`import { test } from "node:test";
 import assert from "node:assert/strict";
 test( "grows", () => {
 	const keep = [];
@@ -199,58 +416,86 @@ test( "grows", () => {
 	assert.equal( keep.length, 64 );
 } );
 `
-		);
-		assert.deepEqual(
-			runSuite( suite, { SRO_TEST_RSS_MB: "256" } ),
-			{ status: 1, reused: 0, ran: 1, failed: 1 },
-			"a test past the resident memory ceiling is killed instead of allocating on"
-		);
-	} finally {
-		fs.rmSync( suite, { recursive: true, force: true } );
-	}
-});
+			);
+			assert.deepEqual(
+				await runSuite( suite, { SRO_TEST_RSS_MB: "256" } ),
+				{ status: 1, reused: 0, ran: 1, failed: 1 },
+				"a test past the resident memory ceiling is killed instead of allocating on"
+			);
+		} finally {
+			fs.rmSync( suite, { recursive: true, force: true } );
+		}
+	});
 
-test("a test process whose runner is gone exits", () => {
-	const watchdog = path.join( root, "tools/lib/test-process-watchdog.mjs" );
-	// A stand-in runner, killed below. The orphan spins in a synchronous loop
-	// for at most ORPHAN_LIMIT_MS, so it ends on its own if the watchdog
-	// were ever removed.
-	const ORPHAN_LIMIT_MS = 20000;
-	const runnerStandIn = spawn( process.execPath, [ "-e", "setTimeout( () => {}, 60000 );" ], { stdio: "ignore" } );
-	try {
-		const started = Date.now();
-		const orphan = spawnSync(
-			process.execPath,
-			[
-				"--import",
-				pathToFileURL( watchdog ).href,
-				"-e",
-				// The runner dies first; the orphan then spins where no timer of its
-				// own could fire.
-				`process.kill( ${runnerStandIn.pid} ); const until = Date.now() + ${ORPHAN_LIMIT_MS};` +
-				"while ( Date.now() < until );"
-			],
-			{
-				encoding: "utf8",
-				env: { ...process.env, SRO_TEST_RUNNER_PID: String( runnerStandIn.pid ), SRO_TEST_RSS_MB: "" }
-			}
-		);
-		const elapsed = Date.now() - started;
-		assert.match( orphan.stderr, /its test runner \(pid \d+\) is gone/ );
-		assert.ok( elapsed < ORPHAN_LIMIT_MS / 2, `the orphan ran ${elapsed} ms after its runner died` );
-	} finally {
-		runnerStandIn.kill();
-	}
-});
+	test("a test process whose runner is gone exits", async () => {
+		const watchdog = path.join( root, "tools/lib/test-process-watchdog.mjs" );
+		// A stand-in runner, killed below. The orphan spins in a synchronous loop
+		// for at most ORPHAN_LIMIT_MS, so it ends on its own if the watchdog
+		// were ever removed.
+		const ORPHAN_LIMIT_MS = 20000;
+		const runnerStandIn = spawn( process.execPath, [ "-e", "setTimeout( () => {}, 60000 );" ], {
+			stdio: "ignore"
+		} );
+		try {
+			const started = Date.now();
+			const orphan = await spawnText(
+				process.execPath,
+				[
+					"--import",
+					pathToFileURL( watchdog ).href,
+					"-e",
+					// The runner dies first; the orphan then spins where no timer of its
+					// own could fire.
+					`process.kill( ${runnerStandIn.pid} ); const until = Date.now() + ${ORPHAN_LIMIT_MS};` +
+					"while ( Date.now() < until );"
+				],
+				{
+					env: { ...process.env, SRO_TEST_RUNNER_PID: String( runnerStandIn.pid ), SRO_TEST_RSS_MB: "" }
+				}
+			);
+			const elapsed = Date.now() - started;
+			assert.match( orphan.stderr, /its test runner \(pid \d+\) is gone/ );
+			assert.ok( elapsed < ORPHAN_LIMIT_MS / 2, `the orphan ran ${elapsed} ms after its runner died` );
+		} finally {
+			runnerStandIn.kill();
+		}
+	});
 
-test("only the test's own temporary files are excluded from its inputs", async () => {
-	const os = await import( "node:os" );
-	const { scratchPath } = await import( "../../tools/lib/test-input-recorder.mjs" );
-	const temp = path.resolve( os.tmpdir() );
-	assert.equal( scratchPath( path.join( temp, "fixture", "a.bin" ) ), true );
-	// A sibling sharing the prefix is not inside the temporary directory.
-	assert.equal( scratchPath( temp + "-sibling" + path.sep + "a.bin" ), false );
-	// The checkout's files are inputs wherever the checkout lives.
-	assert.equal( scratchPath( path.join( root, "src", "bootstrap.ts" ) ), false );
-	assert.equal( scratchPath( path.join( root, "temp", "fixture.mjs" ) ), false );
-});
+	test("only the test's own temporary files are excluded from its inputs", async () => {
+		const os = await import( "node:os" );
+		const { scratchPath } = await import( "../../tools/lib/test-input-recorder.mjs" );
+		const temp = path.resolve( os.tmpdir() );
+		assert.equal( scratchPath( path.join( temp, "fixture", "a.bin" ) ), true );
+		// A sibling sharing the prefix is not inside the temporary directory.
+		assert.equal( scratchPath( temp + "-sibling" + path.sep + "a.bin" ), false );
+		// The checkout's files are inputs wherever the checkout lives.
+		assert.equal( scratchPath( path.join( root, "src", "bootstrap.ts" ) ), false );
+		assert.equal( scratchPath( path.join( root, "temp", "fixture.mjs" ) ), false );
+	});
+
+	test("a cache that cannot be saved costs a rerun, never a passing run's verdict", async () => {
+		// Every worktree renames onto the one shared records file, and on
+		// Windows a rename racing another fails with EPERM. A cache folder that
+		// is a file fails the save the same way on every platform.
+		const suite = path.join( root, "temp", `test-cache-unsaved-${process.pid}` );
+		fs.mkdirSync( suite, { recursive: true } );
+		try {
+			fs.writeFileSync( path.join( suite, ".cache" ), "not a folder\n" );
+			fs.writeFileSync(
+				path.join( suite, "alone.test.mjs" ),
+				'import { test } from "node:test";\ntest( "alone", () => {} );\n'
+			);
+			const result = await runRunner( suite );
+			assert.equal( result.status, 0, result.stdout + result.stderr );
+			assert.match( result.stdout, /tests: 1 files, 0 reused unchanged, 1 run, 0 failed/ );
+			assert.match( result.stdout, /test cache: not saved/ );
+			assert.deepEqual(
+				await runSuite( suite ),
+				{ status: 0, reused: 0, ran: 1, failed: 0 },
+				"nothing was kept"
+			);
+		} finally {
+			fs.rmSync( suite, { recursive: true, force: true } );
+		}
+	});
+} );

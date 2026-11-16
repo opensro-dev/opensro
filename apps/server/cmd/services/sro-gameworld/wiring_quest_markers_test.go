@@ -148,3 +148,77 @@ func TestQuestMarkerDerivationForget(t *testing.T) {
 		t.Fatalf("live session lost its derivation: calls=%d", derive.calls)
 	}
 }
+
+/*
+================
+TestQuestMarkerGenerationFollowsContent
+
+A key move whose derive returns the same rows (a step moved the write
+epoch) keeps the generation, so the tick skips the publication diff;
+different rows advance it, and every session's generation is its own.
+================
+*/
+func TestQuestMarkerGenerationFollowsContent(t *testing.T) {
+	character := &enterworld.Character{}
+	derived := &questMarkerDerivations{}
+	derive := &countedDerivation{rows: map[uint32][18]byte{7: markerRow(1)}}
+
+	derived.rows(42, character, 5, true, 20, derive.derive)
+	first := derived.gen(42)
+	if first == 0 {
+		t.Fatal("a derived row set has no generation")
+	}
+	// The epoch moves, the content does not: a fresh map, same rows.
+	derive.rows = map[uint32][18]byte{7: markerRow(1)}
+	derived.rows(42, character, 6, true, 20, derive.derive)
+	if derive.calls != 2 || derived.gen(42) != first {
+		t.Fatalf("same content: calls=%d gen=%d, want 2 and %d", derive.calls, derived.gen(42), first)
+	}
+	// Different rows advance it.
+	derive.rows = map[uint32][18]byte{7: markerRow(2)}
+	derived.rows(42, character, 7, true, 20, derive.derive)
+	if derived.gen(42) == first {
+		t.Fatal("changed rows kept the generation")
+	}
+	if derived.gen(43) != 0 {
+		t.Fatal("an unseen session has a generation")
+	}
+}
+
+/*
+================
+TestQuestMarkerSessionSkipsOnlyADiffedGeneration
+
+The skip is the session's own: a generation it already diffed sends
+nothing, even if handed other rows (proof the diff did not run); a
+reset (world re-entry) re-emits the full set at the same generation,
+so a teleport still refills the client; a fresh session (reconnect, or
+after a send failure dropped the old one) and generation 0 always diff.
+================
+*/
+func TestQuestMarkerSessionSkipsOnlyADiffedGeneration(t *testing.T) {
+	rows := map[uint32][18]byte{7: markerRow(1)}
+	var s questMarkerSession
+	if frames := s.update(rows, 3); len(frames) != 1 {
+		t.Fatalf("first update sent %d frames, want 1", len(frames))
+	}
+	if frames := s.update(map[uint32][18]byte{7: markerRow(2)}, 3); frames != nil {
+		t.Fatalf("a diffed generation ran the diff: %d frames", len(frames))
+	}
+	s.reset()
+	if frames := s.update(rows, 3); len(frames) != 1 || frames[0].Opcode != 0x3498 {
+		t.Fatalf("re-entry at an unchanged generation lost the refill: %v", frames)
+	}
+	if frames := s.update(map[uint32][18]byte{}, 4); len(frames) != 1 || frames[0].Opcode != 0x30ea {
+		t.Fatalf("a new generation did not diff: %v", frames)
+	}
+	var fresh questMarkerSession
+	if frames := fresh.update(rows, 4); len(frames) != 1 {
+		t.Fatalf("a fresh session at a known generation sent %d frames, want 1", len(frames))
+	}
+	// Generation 0 is never a skip, even twice: changed rows still diff.
+	fresh.update(rows, 0)
+	if frames := fresh.update(map[uint32][18]byte{7: markerRow(5)}, 0); len(frames) != 1 {
+		t.Fatalf("generation 0 skipped the diff: %d frames", len(frames))
+	}
+}

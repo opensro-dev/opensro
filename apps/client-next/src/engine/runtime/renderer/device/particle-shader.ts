@@ -11,7 +11,7 @@ the next one (particle-presentation.ts, a deliberate smoothing
 deviation). The steps follow the CPU order they replace:
 
   instance  the tick matrix, turned by its rotation step and moved by its
-            motion (particleElementMatrix), then carried by the actor's
+            motion (ribbonElementFrames), then carried by the actor's
             holder follow when its links ride the holder
             (particle-holder-link.ts followMatrix, native B153A0);
   palette   the actor palette; columns scaled by the presented scale and,

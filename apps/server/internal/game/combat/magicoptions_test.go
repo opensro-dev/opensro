@@ -168,3 +168,61 @@ func TestAbnormalBlockWritesThePlayerKeeper(t *testing.T) {
 		t.Fatal("division did not reach the incoming lane", stats.PhysicalIncoming)
 	}
 }
+
+/*
+================
+TestAvatarDress4xMdiaAndLucaInCombat
+
+Four stacked MDIA options on a worn dress sum onto keeper param 0xBC (4x1=4),
+and four stacked LUCK ('luca') options write param 0xAD (4x1=4) without
+erroring in magicOptionWrites.
+================
+*/
+func TestAvatarDress4xMdiaAndLucaInCombat(t *testing.T) {
+	rows := optionRows()
+	for id, name := range map[uint32]string{
+		254: "MATTR_AVATAR_MDIA",
+		370: "MATTR_AVATAR_MDIA_2",
+		371: "MATTR_AVATAR_MDIA_3",
+		372: "MATTR_AVATAR_MDIA_4",
+	} {
+		rows[id] = &enterworld.MagicOptionRow{ParamID: id, OptionName: name, Tag: optionTag("mdia")}
+	}
+	for id, name := range map[uint32]string{
+		373: "MATTR_AVATAR_LUCK",
+		374: "MATTR_AVATAR_LUCK_2",
+		375: "MATTR_AVATAR_LUCK_3",
+		376: "MATTR_AVATAR_LUCK_4",
+	} {
+		rows[id] = &enterworld.MagicOptionRow{ParamID: id, OptionName: name, Tag: optionTag("luca")}
+	}
+	dressRef := &enterworld.ItemRef{RefObjID: 2, Codename: "TEST_DRESS", TypeIDs: [4]int64{3, 1, 13, 2}, Combat: &enterworld.ItemCombatRef{}}
+	dress := domain.InventoryRow{
+		Slot: 1, RefObjID: 2, Codename: dressRef.Codename, VarianceBits: "0", Durability: 1,
+		MagicOptions: []uint64{
+			encodedOption(254, 1), encodedOption(370, 1), encodedOption(371, 1), encodedOption(372, 1),
+		},
+	}
+	c := &domain.Character{
+		Level: pointer(20), Strength: pointer(60), Intellect: pointer(60),
+		AvatarInventory: &domain.AvatarInventory{Rows: []domain.InventoryRow{dress}},
+	}
+	stats, _, err := PlayerStats(c, Catalogs{Items: itemRefs{dressRef.Codename: dressRef}, MagicOptions: rows})
+	if err != nil {
+		t.Fatalf("4x mdia PlayerStats: %v", err)
+	}
+	if got, _ := stats.Param(0xbc); got != 4 {
+		t.Fatalf("4x mdia param 0xBC = %v, want 4", got)
+	}
+
+	c.AvatarInventory.Rows[0].MagicOptions = []uint64{
+		encodedOption(373, 1), encodedOption(374, 1), encodedOption(375, 1), encodedOption(376, 1),
+	}
+	stats, _, err = PlayerStats(c, Catalogs{Items: itemRefs{dressRef.Codename: dressRef}, MagicOptions: rows})
+	if err != nil {
+		t.Fatalf("4x luca PlayerStats: %v", err)
+	}
+	if got, _ := stats.Param(paramAvatarAlchemyLuck); got != 4 {
+		t.Fatalf("4x luca param %#x = %v, want 4", paramAvatarAlchemyLuck, got)
+	}
+}

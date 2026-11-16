@@ -60,14 +60,14 @@ export async function captureLightingStages(
 		perPixelLighting: false,
 		ambientOcclusion: false,
 		skyDetail: false,
-		waterRefraction: false,
 		msaa: false,
 		sceneFxaa: false,
 		smoothCamera: false,
 		enchantSparks: false,
 		sharedActorRoom: false,
 		vHidesCompanions: false,
-		dungeonCharacterPvs: false
+		dungeonCharacterPvs: false,
+		silentWingFlight: false
 	};
 	if ( startup ) renderer.experimentalVideo( { ...options, hdrToneMap: true, sunShadow: true } );
 	// The dome: one apex, eight rim vertices with smooth outward normals,

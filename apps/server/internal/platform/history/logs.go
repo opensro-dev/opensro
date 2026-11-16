@@ -51,6 +51,15 @@ func (j *Journal) Levels() []log.Level {
 /*
 ================
 Fire
+
+Every line at warning or above is stored, and so is an info line that
+names no session. A chattier line (info, or debug if a test fires one)
+carrying a session is the transport lane's per-session chatter: the
+supervisor log keeps it, but the journal does not store it as an event
+(#3307) - one session looping three times a second otherwise writes
+the whole raw window on its own. A session's lifecycle facts are
+already rows in the sessions table, and explicit history events
+(refusals, incidents) are recorded beside this hook, never through it.
 ================
 */
 func (j *Journal) Fire(entry *log.Entry) error {
@@ -68,6 +77,9 @@ func (j *Journal) Fire(entry *log.Entry) error {
 	e.Session = e.Fields["session"]
 	if e.Session != "" {
 		e.Session = j.SessionID(e.Session)
+	}
+	if e.Session != "" && entry.Level >= log.InfoLevel {
+		return nil
 	}
 	e.Opcode = e.Fields["opcode"]
 	if value, ok := entry.Data["stack"]; ok {

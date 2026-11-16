@@ -8,7 +8,8 @@ cave-map.test.mjs - a dungeon page lays out around the player
 import "../helpers/native-source-loader.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-const { caveDungeonFloors, caveMapCatalog, caveMapPage, caveMapView } = await import(
+import { defined } from "../helpers/defined.mjs";
+const { caveDungeonFloors, caveMapCatalog, caveMapPage, caveMapView, cavePageLocal } = await import(
 	"../../src/engine/foundation/ui/cave-map.ts"
 );
 
@@ -50,6 +51,7 @@ function view( overrides ) {
 		catalog: CATALOG,
 		clip: CLIP,
 		pan: [ 0, 0 ],
+		local: true,
 		...overrides
 	} );
 }
@@ -105,4 +107,57 @@ test("a page is found by region and floor, and a bad catalogue is refused", () =
 	// an import from another shape: refused whole.
 	assert.throws( () => caveMapCatalog( { ...CATALOG, maps: [ { ...PAGE, caption: "" } ] } ) );
 	assert.throws( () => caveMapCatalog( { ...CATALOG, monsterLevelNote: undefined } ) );
+});
+
+// The floors of both dungeons, as the published catalogue names them:
+// Donwhang (0x8001) by floor index in one region, the Tomb (0x8007
+// down to 0x8002) by layer, one region a floor.
+const FLOORS = caveMapCatalog( {
+	format: "sro-later-dungeon-map",
+	version: 2,
+	imageRoot: "/assets/images/x/",
+	signIcon: "map_world_iconwf",
+	monsterLevelNote: "Display 6 lv.higher monsters from the current character's level",
+	maps: [
+		{ ...PAGE, regionId: 0x8001, floorIndex: 0, layer: 1, floorLabel: "DH_A01_FLOOR01" },
+		{ ...PAGE, regionId: 0x8001, floorIndex: 1, layer: 2, floorLabel: "DH_A01_FLOOR02" },
+		{ ...PAGE, regionId: 0x8007, floorIndex: 0, layer: 1, floorLabel: "QT_A01_FLOOR01" },
+		{ ...PAGE, regionId: 0x8006, floorIndex: 0, layer: 2, floorLabel: "QT_A01_FLOOR02" }
+	]
+} );
+const DONWHANG_ONE = defined( FLOORS.maps[0] ), DONWHANG_TWO = defined( FLOORS.maps[1] );
+const TOMB_ONE = defined( FLOORS.maps[2] ), TOMB_TWO = defined( FLOORS.maps[3] );
+// Above ground in Jangan, beside the Donwhang cave mouth.
+const JANGAN = { regionId: 97 * 256 + 168, x: 960, y: 0, z: 960, angle: 0 };
+
+test("a dungeon viewed from above ground is not the player's floor (issue #3239)", () => {
+	assert.equal( cavePageLocal( FLOORS, DONWHANG_ONE, JANGAN, undefined ), false );
+	assert.equal( cavePageLocal( FLOORS, TOMB_ONE, JANGAN, undefined ), false );
+	// And its page draws no "you are here" sign.
+	const shown = view( { page: DONWHANG_ONE, pose: JANGAN, center: JANGAN, local: false } );
+	assert.equal( shown.quads.some( quad => quad.texture.endsWith( "mm_sign_character.png" ) ), false );
+});
+
+test("the player's own floor is local, the dungeon's other floors are not", () => {
+	const inCave = { regionId: 0x8001, x: 100, y: 0, z: 100, angle: 0 };
+	// Donwhang's floors share one region: the resolved floor decides.
+	assert.equal( cavePageLocal( FLOORS, DONWHANG_ONE, inCave, 0 ), true );
+	assert.equal( cavePageLocal( FLOORS, DONWHANG_TWO, inCave, 0 ), false );
+	assert.equal( cavePageLocal( FLOORS, DONWHANG_ONE, inCave, undefined ), false );
+	// The Tomb's floors are regions of their own.
+	const inTomb = { regionId: 0x8006, x: 100, y: 0, z: 100, angle: 0 };
+	assert.equal( cavePageLocal( FLOORS, TOMB_TWO, inTomb, 0 ), true );
+	assert.equal( cavePageLocal( FLOORS, TOMB_ONE, inTomb, 0 ), false );
+	const shown = view( { local: true } );
+	assert.equal( shown.quads.some( quad => quad.texture.endsWith( "mm_sign_character.png" ) ), true );
+});
+
+test("a picked species' sign draws at its anchor on the page", () => {
+	const shown = view( { mark: { x: 0, z: 0 } } );
+	const sign = shown.quads.find( quad => quad.texture.endsWith( "mm_sign_monster.png" ) );
+	assert.ok( sign );
+	// World zero projects where the player's sign centres in the
+	// first test: 150 - 8 into the clip.
+	assert.deepEqual( sign?.rect.slice( 0, 2 ), [ CLIP[0] + 150 - 8, CLIP[1] + 150 - 8 ] );
+	assert.equal( view().quads.some( quad => quad.texture.endsWith( "mm_sign_monster.png" ) ), false );
 });

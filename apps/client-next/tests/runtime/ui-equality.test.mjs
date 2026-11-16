@@ -45,6 +45,8 @@ test("retained UI compares pixels, anchors, masks and preview state without losi
 			{ rotation: .1 },
 			{ uvTurn: 1 },
 			{ alphaCutoff: .5 },
+			{ tiled: true },
+			{ additive: true },
 			{ characterAnchor: 5 },
 			{ portraitGid: 5 },
 			{ mask: { texture: "mask", rect: [ 0, 0, 1, 1 ] } },
@@ -58,45 +60,107 @@ test("retained UI compares pixels, anchors, masks and preview state without losi
 	}
 	assert.equal( sameUiQuads( [ first ], [] ), false );
 });
-test("focus, caret, controls and loading changes remain observable even when pixels are unchanged", () => {
-	const first = {
-		title: "world",
-		message: "ready",
-		controls: [ { id: "chat", kind: "text", label: "Chat", rect: [ 0, 0, 100, 20 ], value: "" } ],
-		focusRequest: { id: "chat", revision: 1, caret: 0 }
+/** @type {Required<Extract<import("../../src/engine/contracts/ui").UiHelpSource, { kind: "effect" }>>} */
+const effectHelp = { kind: "effect", gid: 7, token: 3, skill: 11, viewer: true, suppressed: true };
+/** @type {Required<Extract<import("../../src/engine/contracts/ui").UiHelpSource, { kind: "abnormal" }>>} */
+const abnormalHelp = { kind: "abnormal", gid: 7, bit: 4, viewer: true, unlevelled: true };
+/*
+================
+everyControlField
+
+A control with every field of the UiControl contract set. Required<> makes
+verify:test-types fail when the contract gains a field this sample lacks,
+so a new field cannot skip the comparison below unnoticed.
+================
+*/
+function everyControlField( id, helpSource ) {
+	/** @type {Required<import("../../src/engine/contracts/ui").UiControl>} */
+	const control = {
+		hitPolygon: [ [ 0, 0 ], [ 10, 0 ], [ 5, 8 ] ],
+		multiline: true,
+		valueText: "5 of 9",
+		whisperTarget: "Friend",
+		textAlign: "left",
+		textInsets: [ 1, 2, 3, 4 ],
+		rightActivate: true,
+		helpSource,
+		helpText: "Help",
+		captureKeys: true,
+		draggable: true,
+		carry: true,
+		inspect: true,
+		keepFocusOnAltPress: true,
+		min: 1,
+		max: 9,
+		maxLength: 20,
+		id,
+		label: "Label",
+		rect: [ 10, 20, 30, 40 ],
+		kind: "text",
+		value: "value",
+		disabled: true,
+		selected: true
 	};
-	assert.equal( sameUiSemantics( first, structuredClone( first ) ), true );
-	for (
-		const update of [
-			{ title: "dock" },
-			{ message: "error" },
-			{ loading: true },
-			{ loadingVisible: true },
-			{ loadingProgress: .5 },
-			{ loadingStatus: "upload" },
-			{ loadingError: "failed" },
-			{ hudCorner: [ 1, 2, 3, 4 ] },
-			{ hudToolsTop: 80 },
-			{ focusRequest: { id: "chat", revision: 2, caret: 0 } },
-			{ focusRequest: { id: "chat", revision: 1, caret: 1 } }
-		]
-	) assert.equal( sameUiSemantics( first, { ...first, ...update } ), false );
-	for (
-		const update of [
-			{ id: "password" },
-			{ kind: "password" },
-			{ label: "Password" },
-			{ rect: [ 1, 0, 100, 20 ] },
-			{ value: "hello" },
-			{ disabled: true },
-			{ selected: true },
-			{ captureKeys: true },
-			{ draggable: true },
-			{ min: 1 },
-			{ max: 2 },
-			{ maxLength: 10 }
-		]
-	) assert.equal( sameUiSemantics( first, { ...first, controls: [ { ...first.controls[0], ...update } ] } ), false );
+	return control;
+}
+/** @type {Required<import("../../src/engine/contracts/ui").UiSemantics>} */
+const everySemanticsField = {
+	loadingVisible: true,
+	titleCredit: true,
+	hudCorner: [ 1, 2, 3, 4 ],
+	hudToolsTop: 80,
+	/** @type {Required<NonNullable<import("../../src/engine/contracts/ui").UiSemantics["focusRequest"]>>} */
+	focusRequest: { id: "chat", revision: 1, caret: 2, anchor: 1 },
+	loadingStatus: "Loading",
+	loadingProgress: .5,
+	loading: true,
+	loadingError: "failed",
+	title: "world",
+	message: "ready",
+	controls: [ everyControlField( "chat", effectHelp ), everyControlField( "buff", abnormalHelp ) ]
+};
+/*
+================
+leafChanges
+
+Every copy of value that differs from it in exactly one leaf (a number,
+string or boolean at any depth), plus each array one element shorter.
+Each comes with the path of what changed.
+================
+*/
+function* leafChanges( value, path = "" ) {
+	if ( Array.isArray( value ) ) {
+		for ( let i = 0; i < value.length; i++ ) {
+			for ( const [at, changed] of leafChanges( value[i], `${path}[${i}]` ) ) {
+				yield [ at, [ ...value.slice( 0, i ), changed, ...value.slice( i + 1 ) ] ];
+			}
+		}
+		yield [ `${path}.length`, value.slice( 0, -1 ) ];
+	} else if ( value && typeof value === "object" ) {
+		for ( const key of Object.keys( value ) ) {
+			for ( const [at, changed] of leafChanges( value[key], `${path}.${key}` ) ) {
+				yield [ at, { ...value, [key]: changed } ];
+			}
+		}
+	} else yield [ path, typeof value === "number" ? value + 1 : typeof value === "string" ? value + "!" : !value ];
+}
+test("every field of the semantics contract, at every depth, makes semantics unequal", () => {
+	assert.equal( sameUiSemantics( everySemanticsField, structuredClone( everySemanticsField ) ), true );
+	for ( const [path, changed] of leafChanges( everySemanticsField ) ) {
+		assert.equal( sameUiSemantics( everySemanticsField, changed ), false, path );
+		assert.equal( sameUiSemantics( changed, everySemanticsField ), false, path );
+	}
+	for ( const absent of [ "focusRequest", "hudCorner" ] ) {
+		assert.equal( sameUiSemantics( everySemanticsField, { ...everySemanticsField, [absent]: undefined } ), false );
+	}
+	const [chat] = everySemanticsField.controls;
+	for ( const absent of [ "helpSource", "hitPolygon", "textInsets" ] ) {
+		const changed = {
+			...everySemanticsField,
+			controls: [ { ...chat, [absent]: undefined }, everySemanticsField.controls[1] ]
+		};
+		assert.equal( sameUiSemantics( everySemanticsField, changed ), false, absent );
+	}
 });
 
 test("a doll quad whose camera moved is a new quad (the 3D viewer's zoom)", () => {

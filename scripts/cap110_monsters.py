@@ -49,8 +49,10 @@ import cap110_skill_database as skill_database
 import cap110_skill_effects as effects
 from cap110_skills import MAX_ID
 import import_vsro_alexandria as tables
+import skilldata_enc as skill_tables
 import sro_pk2
 from prepare_client_resources import write_atomically
+from sro_paths import trees_overlap
 
 FLAG = "SRO_CAP110_MONSTERS"
 SOURCE_ENV = "SRO_CAP110_MONSTER_DATABASE"
@@ -112,6 +114,14 @@ FAMILIES = (FIELD_FAMILY, TOMB_FAMILY, QINSHI_FAMILY)
 CLIENT_NEST_RESPAWN_MIN_SEC = 1
 CLIENT_NEST_RESPAWN_MAX_SEC = 3
 CLIENT_NEST_SIGHT_RANGE = 100
+# The nest's home radius and spawn spread, the same evidence's commonest
+# values for a respawning nest (700 and 600). The server gives a nest with
+# controls its home test (monster/pursuit_controls.go InsideHome: distance
+# < radius), so radius 0 left every client-only monster outside its home
+# forever: homing, never wandering or pursuing (Alexandria's field stood
+# still and never fought back).
+CLIENT_NEST_RADIUS = 700
+CLIENT_NEST_GENERATE_RADIUS = 600
 
 
 # ================
@@ -393,10 +403,9 @@ def client_claimed_codes(placements):
 #
 # The field nests from the client's placements alone, in the same
 # Version-2 envelope project_population writes. One outdoor placement
-# of an admitted species is one nest standing on its point - radius 0,
-# the posture of a native anchor whose database evidence the server
-# does not hold - holding one monster, with the synthesized ordinary
-# controls. Nest identities are sequential over the sorted placements,
+# of an admitted species is one nest standing on its point, with the
+# evidence's commonest home radius and spawn spread, holding one monster,
+# with the synthesized ordinary controls. Nest identities are sequential over the sorted placements,
 # so a rebuild of the pinned client writes the same file. Drops and AI
 # follow the server's rules for any nest; the export's authored rows
 # are the enrichment, never a requirement.
@@ -408,7 +417,8 @@ def client_field_population(placements, refs):
 	for nest_id, (code, region, x, y, z) in enumerate(ordered, 1):
 		rows.append({
 			"Codename": code, "NestID": nest_id, "WorldID": FIELD_WORLD, "RegionID": region,
-			"X": x, "Y": y, "Z": z, "Radius": 0, "GenerateRadius": 0, "MaxCount": 1,
+			"X": x, "Y": y, "Z": z, "Radius": CLIENT_NEST_RADIUS,
+			"GenerateRadius": CLIENT_NEST_GENERATE_RADIUS, "MaxCount": 1,
 			"RespawnDelayMinSec": CLIENT_NEST_RESPAWN_MIN_SEC,
 			"RespawnDelayMaxSec": CLIENT_NEST_RESPAWN_MAX_SEC,
 			"Respawn": True, "InitialDir": 0, "ChampionGenPercentage": 0,
@@ -573,11 +583,34 @@ def characterinfo_codenames(effect_text):
 
 
 # ================
+# later_characterinfo_rows
+#
+# The later client's characterinfo rows, cut to the native record. Its rows
+# are 16 wide (MOB_SD_MONT: sound, height 3.5, ..., then a 0, a note and two
+# empty columns) where the native ones are 13; the first SKILL_EFFECT_KEPT
+# columns are the same record, so a width test of exactly 13 admitted no row
+# and every species fell back to the default height, its name board at the
+# waist.
+# ================
+def later_characterinfo_rows(effect_text):
+	section, rows = None, []
+	for line in effect_text.splitlines():
+		header = effects.section_name(line)
+		if header is not None:
+			section = header
+			continue
+		columns = line.split("	")
+		if section == "characterinfo" and len(columns) >= characters.SKILL_EFFECT_COLUMNS:
+			rows.append(columns[:characters.SKILL_EFFECT_KEPT])
+	return rows
+
+
+# ================
 # add_monsters
 # ================
 def add_monsters(vsro_root, native, output, source_root=None):
 	native, output = Path(native).resolve(), Path(output).resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("monster overlay must be separate from native extraction")
 	marker = output / MARKER
 	prior = read_json(marker) if marker.exists() else {}
@@ -655,10 +688,14 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		needed = {int(s) for r in refs.values() for s in r[89:99] if int(s)}
 		# ================
 		# load_client_skills
+		#
+		# The client's skills as the client reads them: its encrypted
+		# skilldataenc set (skilldata_enc.py), whose plain twin is an older
+		# copy that lacks the Egypt field monsters' own skills.
 		# ================
 		def load_client_skills():
-			return {int(r[1]): r for shard in tables.table_rows(read("skilldata.txt"))
-				for r in tables.table_rows(read(shard[0])) if len(r) > 3 and r[1].isdigit()}
+			rows = skill_tables.client_skill_rows(read, lambda name: tables.TEXTDATA + name.lower() in index)
+			return {int(r[1]): r for r in rows if len(r) > 3 and r[1].isdigit()}
 		if source_root is None:
 			# The client is its own skill source: its monsters name its
 			# own skill rows, joined by codename exactly as the export's
@@ -723,8 +760,7 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		effect_text, _ = effects.merge_skill_effect_text(effect_text, selected)
 		known_info = {r[0] for r in tables.table_rows(effect_text.encode("utf-16")) if r}
 		effect_prefixes = tuple(prefix for family in enabled for prefix in family["Prefixes"])
-		info = [r[:characters.SKILL_EFFECT_KEPT] for r in tables.table_rows(read("skilleffect.txt"))
-			if len(r) == characters.SKILL_EFFECT_COLUMNS and r[0].startswith(effect_prefixes) and r[0] not in known_info]
+		info = [r for r in later_characterinfo_rows(later_effects) if r[0].startswith(effect_prefixes) and r[0] not in known_info]
 		# Same rule for the characterinfo rows: a species no longer
 		# referenced loses its row, one still referenced keeps it.
 		owned_info = characterinfo_codenames(effect_text) & set(refs)
@@ -775,7 +811,10 @@ def add_monsters(vsro_root, native, output, source_root=None):
 			if has_assignments(source_root):
 				snapshot.append(ASSIGNMENTS_NAME + ".json")
 			summary["snapshotHashes"] = {name: sro_pk2.digest((source_root / name).read_bytes()) for name in snapshot}
-		write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())
+		# Sorted keys: the claims (and so refs) follow set order, which moves
+		# with each process's hash seed, so an unsorted marker changed bytes
+		# on every rebuild of an unchanged variant (the identities do not).
+		write_atomically(marker, (json.dumps(summary, indent=2, sort_keys=True) + "\n").encode())
 		return summary
 
 

@@ -15,7 +15,7 @@ gameplay. It reads one JSON file and nothing else.
 With the switch off the file is never read and nothing is admitted;
 with it on, a missing file admits nothing (no area packed yet is
 the ordinary state until an area import lands), and a malformed
-one fails the load by name. The character identity band 190000 is
+one fails the load by name. The character identity band 250000 is
 reserved for the areas' kind conversions (the build records it);
 this index carries codenames, not identities.
 

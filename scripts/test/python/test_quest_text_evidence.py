@@ -8,13 +8,13 @@ The older popup owns advertised counts; newer SQL supplies unspecified values
 and item rewards. No licensed input or generated output is read or written.
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 
 import pathlib
 import sys
 import tempfile
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "build"))
 from import_quest_text_evidence import advertised_rewards, plain, read_table
 from generate_compiled_quests import Unsupported, delivery_items, handover_pages, project, rewards
 

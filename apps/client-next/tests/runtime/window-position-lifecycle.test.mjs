@@ -66,8 +66,10 @@ const LAID_OUT = {
 		store: [ 892, 242 ],
 		storageRoom: [ 892, 242 ],
 		exchange: [ 892, 242 ],
-		worldMap: [ 314, 148 ],
-		cosWindow: [ 314, 148 ],
+		// The M window is the v1.188 650 x 422 (map-chrome.ts), centred
+		// in 1280 x 720 at (315, 149); the COS window shares its default.
+		worldMap: [ 315, 149 ],
+		cosWindow: [ 315, 149 ],
 		gameGuide: [ 100, 110 ],
 		alchemyBox: [ 100, 110 ],
 		autoPotion: [ 100, 110 ],
@@ -125,8 +127,9 @@ test("a fresh viewport mismatch clears UI-owned origins and ignores legacy quick
 	assert.equal( saved[1].width, 1024 );
 	assert.equal( saved[1].height, 768 );
 	assert.deepEqual( saved[1].windows.mainPopup, [ 636, 290 ] );
-	assert.deepEqual( saved[1].windows.worldMap, [ 186, 172 ] );
-	assert.deepEqual( saved[1].windows.extendedQuickslot, [ 186, 172 ], "old quickslot origin was not restored" );
+	assert.deepEqual( saved[1].windows.worldMap, [ 187, 173 ] );
+	// The 650 x 422 map centred in 1024 x 768; the legacy [900, 500] is ignored.
+	assert.deepEqual( saved[1].windows.extendedQuickslot, [ 187, 173 ], "old quickslot origin was not restored" );
 });
 
 test("UI disposal before world entry leaves the stored record untouched", () => {
@@ -158,7 +161,37 @@ test("mismatched placement saves authored eager origins before layout and leaves
 		f.dispose();
 		assert.equal( saved.length, 2, "the initial snapshot did not retire this session" );
 		assert.deepEqual( saved[1].windows.mainPopup, [ 1212, 422 ] );
-		assert.deepEqual( saved[1].windows.worldMap, [ 474, 238 ] );
+		// The 650 x 422 map centred in 1600 x 900.
+		assert.deepEqual( saved[1].windows.worldMap, [ 475, 239 ] );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the map opens without its chrome art when the build lacks it", () => {
+	// #3407: a build made before the later client's map art was imported
+	// has none of these files. They draw nothing, as a native static with
+	// no texture does; they never load, so they must not hold the window.
+	const WMAP = "/assets/images/Media_extracted/interface/worldmap/";
+	const absent = Object.fromEntries( [
+		...[ 1, 2, 3, 4 ].map( n => "wmap_window_edge_" + n + ".png" ),
+		"wmap_wnd_bottom_frame.png",
+		"wmap_wnd_corner_02.png",
+		"wmap_button_automatic.png",
+		"wmap_button_passivity.png"
+	].map( name => [ WMAP + name, { absent: true } ] ) );
+	const f = uiFixture( undefined, undefined, undefined, undefined, undefined, undefined, undefined, {}, absent );
+	try {
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "key", code: "KeyM" } );
+		// A frame that changes nothing publishes no semantics, so look at
+		// every frame's product.
+		let admitted = false;
+		for ( let frame = 1; frame <= 3; frame++ ) {
+			const semantics = f.ui.step( f.state, frame );
+			admitted ||= !!semantics?.controls.some( control => control.id === "map-drag" );
+		}
+		assert.ok( admitted, "the map is admitted without its chrome art" );
 	} finally {
 		f.dispose();
 	}
@@ -180,7 +213,9 @@ test("resizing the map saves its displayed clamped origin rather than its old dr
 		const drag = semantics?.controls.find( control => control.id === "map-drag" );
 		assert.ok( drag, "the resized map is visibly admitted" );
 		const origin = [ drag.rect[0] - 20, drag.rect[1] - 4 ];
-		assert.deepEqual( origin, [ 148, 176 ] );
+		// Clamped into 800 x 600 by the 650-wide window and its 456-deep
+		// extent (the foot frame reaches 34 below the 422 window).
+		assert.deepEqual( origin, [ 150, 144 ] );
 		f.dispose();
 		assert.deepEqual( saved.at( -1 ).windows.worldMap, origin );
 	} finally {

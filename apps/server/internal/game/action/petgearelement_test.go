@@ -8,8 +8,10 @@ package action
 import (
 	"encoding/binary"
 	"opensro.online/server/internal/game/companion"
+	"opensro.online/server/internal/game/world/simulation"
 	"strings"
 	"testing"
+	"time"
 )
 
 /*
@@ -80,5 +82,52 @@ func TestPetGearElementsSeparateAndDoNotProc(t *testing.T) {
 	}
 	if step.state.trained.attacks != 0 || step.state.trained.procReadyAt != 0 {
 		t.Fatal("recursive counters/procs")
+	}
+}
+
+/*
+================
+TestPetBonusHitFramesLeaveInTheTickThatStruck
+
+A pet's bonus hit queues its damage label on the monster leg, and the HP
+it took reaches the monster's holder with the tick's other changes. Both
+leave in the tick that committed the hit: held for the next tick they
+arrive behind the hits that tick commits first.
+================
+*/
+func TestPetBonusHitFramesLeaveInTheTickThatStruck(t *testing.T) {
+	rt, clock, c, mob := wolfFieldFixture(t, 1)
+	rt.Selected.Set(testDivision, c.Name, mob.Gid)
+	step, ok := rt.wolfCompanion(testDivision, c, c.ActiveCOS.GID, clock.NowMs())
+	if !ok {
+		t.Fatal("no companion")
+	}
+	step.trained = &petTrainedStrike{mods: companion.Modifiers{PoisonAdd: 12}}
+	rt.petGearElements(step, mob.Gid)
+	rt.Monsters.DrainChangedVitals(nil)
+	clock.now = clock.now.Add(time.Second)
+	label, held := false, uint32(0)
+	for _, batch := range rt.TickHook()(clock.NowMs()) {
+		for _, frame := range batch.Frames {
+			if frame.Opcode == abnormalDamageCreditOpcode && binary.LittleEndian.Uint32(frame.Payload) == mob.Gid {
+				label = true
+			}
+			if frame.Opcode == simulation.OpVitalsUpdate && binary.LittleEndian.Uint32(frame.Payload) == mob.Gid && frame.Payload[6]&1 != 0 {
+				if batch.OnlyCharacterID != c.ID {
+					t.Fatal("the bonus hit's HP reached a non-holder")
+				}
+				held = binary.LittleEndian.Uint32(frame.Payload[7:])
+			}
+		}
+	}
+	after, _ := rt.Monsters.Get(testDivision, mob.Gid)
+	if after.CurrentHP >= mob.CurrentHP {
+		t.Fatal("the poison tick did not land in this tick")
+	}
+	if !label {
+		t.Fatal("the tick that dealt the bonus damage did not publish its label")
+	}
+	if held != after.CurrentHP {
+		t.Fatal("the holder did not receive the HP the bonus hit left", held, after.CurrentHP)
 	}
 }

@@ -24,7 +24,7 @@ and minimap tiles, every Data file the native tree lacks, and the monster import
 | Part | Result (real inputs) |
 | --- | --- |
 | Regions | 2 (27091, 27092), the halls every arena binds |
-| Monsters | 36 `MOB_MUHAN_*` kinds in `characterdata_200000.txt` / `skilldata_200000.txt`: one combat kind per level a wave can name (72-80, 82-90, 92-100, 102-110) |
+| Monsters | 36 `MOB_MUHAN_*` kinds in `characterdata_220000.txt` / `skilldata_220000.txt`: one combat kind per level a wave can name (72-80, 82-90, 92-100, 102-110) |
 | Waves | 160 rows (8 arenas × 20) in `muhan-waves.txt`, Version 2: point, delay, count, level offset, radius, monster type |
 | Worlds | `GROUP_MUHAN_SOLO_75/85/95/105` and `GROUP_MUHAN_PARTY_75/85/95/105`, registered as permanent worlds (type 0, one layer) while the switch is on |
 
@@ -59,17 +59,43 @@ These are inferences and port choices, not native evidence:
   closing and reopening an instance on a schedule.
 - **Ambient runs.** The arenas are permanent worlds whose timers run whether or not anyone stands inside (the
   tomb chain's posture: the world owns its timers, including regions without viewers). Nothing raises the player
-  level cap, and solo versus party rides the world codename alone until the entry slice gives it meaning.
+  level cap.
 - **No authored drops.** The import writes no reward table: the kinds keep the native loot posture.
 
-## Left for the entry slice
+## Entry (the #3314 slice)
 
-Recorded so the follow-up needs no second pass over the sources (#3314 tracks it):
+- **Managers and gates.** The importer now also admits the 24 manager/change NPC nests (`muhan-npcs.txt`);
+  with the switch on they join their arena worlds as ordinary nests. The pinned v1.696 client's teleport
+  tables give the entry shape: an arena manager hub (teleport 227, the manager building) links to the eight
+  gates (228..235), and each gate links back to the town gate (teleport 5), fee 0 and condition-free. The
+  server appends those rows behind the same switch (its committed overlays), and the client bake publishes
+  the same rows into the destination menu behind the shard's deployed posture.
+- **Solo/party rule.** A solo arena refuses a player in a live party and a party arena refuses one without
+  (the world admission's arena branch, refusal byte 2): solo versus party no longer rides the codename alone.
+- **Return.** The exit links land on the town gate; the arenas are permanent worlds, so a relog inside one
+  resumes there, as in the other port-only worlds.
 
-- **Entry.** The manager NPCs (`NPC_MUHAN_<SOLO|PARTY>_<band>_MANAGER`) and the gates/teleports that admit a
-  player or party to an arena, with the solo/party rule. The port has no entry machinery for port-only instanced
-  content yet (the same gap as the Jupiter temples' admission and the #1800 step-3 slice-4 work).
-- **Transforms.** The 16 `_RefMuhanMonsterTransMask` rows (change NPC, `SKILL_MUHAN_*_BUFF01`, `MOB_MUHAN_CHANGE_*`
-  form) the export records.
-- **Rewards.** Any wave-clear or run rewards: the source's reward tables were not imported.
+## Transforms (the #3349 slice)
+
+- **Pairing.** The importer turns the export's 16 `_RefMuhanMonsterTransMask` rows into
+  `muhan-transforms.txt` (change NPC -> `SKILL_MUHAN_*_BUFF01` -> `MOB_MUHAN_CHANGE_*` form). It admits the paired
+  forms into the character shard after the wave level map is built, so a form never becomes a wave kind, and
+  stages the BUFF01 skills by codename. The server loads the pairing behind the same switch and refuses to boot
+  when a row's NPC, form or skill does not resolve, or the skill is not an msch word 7 change.
+- **What word 7 does (native, read in the disassembly).** The v1.188 server's effect switch handles msch words
+  1-6; word 7 has no case and only records the instance. Its cast gate checks word 1 alone, and its buff
+  replacement exempts word 1 alone, so the BUFF01 replaces as an ordinary category-3 buff. No v1.150 skill
+  carries word 7. The addresses are in the #3349 checkpoint.
+- **The change (inference).** Word 7 means "become the form paired with this skill": the mask's body change with
+  the pairing's RefObj. Selecting a change NPC offers Talk (the later client has no npcchat row for one), and
+  Talk casts the BUFF01 as the mask capsule casts its skill. The form fills the transform block with the
+  form's skin and speeds for the buff's 900 s, and the mask's guards come with it (a form above the caster,
+  riding, sitting or a posture change refuse; berserk refuses as natively), as do every end path a mask has.
+  The change NPC stays its arena's nest entity: the eight arenas share region 27091, so a static roster NPC
+  would stand in all of them.
+
+## Still left
+
+- **Rewards.** Any wave-clear or run rewards: the source exports no reward table, so there is nothing to
+  import; the kinds keep the native loot posture (see "No authored drops").
 - **The unbanded shells.** Worlds 99-102 carry no data in the source and stay out unless the source grows some.

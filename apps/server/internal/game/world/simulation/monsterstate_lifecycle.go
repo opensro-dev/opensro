@@ -338,21 +338,38 @@ Off or unset keeps the authored row.
 */
 func (s *MonsterState) nestDelay(nest monster.NestRow, ratePct float32) (uint32, uint32) {
 	minSec, maxSec := nest.RespawnDelayMinSec, nest.RespawnDelayMaxSec
-	unique := false
-	if ref, ok := s.template.Refs[nest.RefObjID]; ok {
-		unique = nestIsUnique(nest, ref)
-	}
-	if BetaUniqueRespawnEnabled() && nest.Respawn && unique {
+	if BetaUniqueRespawnEnabled() && nest.Respawn && s.nestUnique(nest) {
 		minSec, maxSec = betaUniqueRespawnMinSec, betaUniqueRespawnMaxSec
 	}
-	// The cave window never outranks the unique rule: a unique's authored
-	// 1800-3600 seconds (the tomb guardians, Flame Master and White Snake
-	// rows) must not collapse to 1-3 seconds when both flags are on, as
-	// the deployment enables them.
-	if nest.Respawn && !unique && JanganCaveRespawnEnabled() && janganCaveRegion(nest.RegionID) {
+	if s.janganCaveWindow(nest) {
 		minSec, maxSec = janganCaveRespawnMinSec, janganCaveRespawnMaxSec
 	}
 	return monster.NestDelay(minSec, maxSec, ratePct, s.randomWord)
+}
+
+/*
+================
+MonsterState.nestUnique
+================
+*/
+func (s *MonsterState) nestUnique(nest monster.NestRow) bool {
+	ref, ok := s.template.Refs[nest.RefObjID]
+	return ok && monster.NestIsUnique(nest, ref)
+}
+
+/*
+================
+MonsterState.janganCaveWindow
+
+Port-only, not native (#2719): the nest draws SRO_JANGAN_CAVE_RESPAWN's
+1-3 second window. The cave window never outranks the unique rule: a
+unique's authored 1800-3600 seconds (the tomb guardians, Flame Master and
+White Snake rows) must not collapse to 1-3 seconds when both flags are on,
+as the deployment enables them.
+================
+*/
+func (s *MonsterState) janganCaveWindow(nest monster.NestRow) bool {
+	return nest.Respawn && janganCaveRegion(nest.RegionID) && JanganCaveRespawnEnabled() && !s.nestUnique(nest)
 }
 
 /*
@@ -454,6 +471,49 @@ func (state *divisionMonsterState) visitedFill(key populationFillKey, spawnsBefo
 
 /*
 ================
+MonsterState.visitedFillUnit
+
+visitedFill, except that a unit with a member in the cave window settles
+at its first visit that places a monster. Port-only, not native: the boot
+fill is the first placement, not the steady respawn. A 1-3 second timer
+elapses again by the next once-a-second visit whenever the tick runs
+late, so an ordinary tomb hive placed something at nearly every visit
+until every member was full, and admission waited for the whole tomb
+(about 40 s against 2 s with the flag off). The boot visit already placed
+every member whose timer elapsed (the hive's spawn states start at
+last hatch 0); later visits are respawn pacing. Every other unit keeps
+the native rule.
+================
+*/
+func (s *MonsterState) visitedFillUnit(state *divisionMonsterState, key populationFillKey, spawnsBefore uint64, rescheduled bool) {
+	if _, pending := state.fillPending[key]; pending && state.spawns != spawnsBefore && s.caveWindowUnit(key) {
+		delete(state.fillPending, key)
+		return
+	}
+	state.visitedFill(key, spawnsBefore, rescheduled)
+}
+
+/*
+================
+MonsterState.caveWindowUnit
+
+A nest, or a hive with a member, that draws the cave window.
+================
+*/
+func (s *MonsterState) caveWindowUnit(key populationFillKey) bool {
+	if key.hive == "" {
+		return s.janganCaveWindow(s.template.Nests[key.nest])
+	}
+	for _, index := range s.template.HiveNestIndexes(key.hive) {
+		if s.janganCaveWindow(s.template.Nests[index]) {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
 scheduleNest
 ================
 */
@@ -525,7 +585,7 @@ func (s *MonsterState) runDueHiveTicks(state *divisionMonsterState, nowMs int64)
 			} else {
 				s.tickOverwriteHive(state, tick.group.hive, nowMs)
 			}
-			state.visitedFill(populationFillKey{hive: tick.group.hive}, spawns, h.scheduled != 0)
+			s.visitedFillUnit(state, populationFillKey{hive: tick.group.hive}, spawns, h.scheduled != 0)
 			continue
 		}
 		n := state.nests[tick.group.nest]
@@ -535,7 +595,7 @@ func (s *MonsterState) runDueHiveTicks(state *divisionMonsterState, nowMs int64)
 		n.scheduled = 0
 		spawns := state.spawns
 		s.tickNest(state, tick.group.nest, nowMs)
-		state.visitedFill(populationFillKey{nest: tick.group.nest}, spawns, n.scheduled != 0)
+		s.visitedFillUnit(state, populationFillKey{nest: tick.group.nest}, spawns, n.scheduled != 0)
 	}
 }
 

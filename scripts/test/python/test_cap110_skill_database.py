@@ -8,13 +8,13 @@ cross-source chains, rebuild stability, and refusal to drop published content.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import sys
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import cap110_skill_database as database
 import cap110_skills as skills
 from test_cap110_skills import make_skill

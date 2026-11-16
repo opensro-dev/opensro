@@ -17,12 +17,20 @@ when its resident memory passes TEST_RSS_MB or when this runner is gone, so
 neither a runaway test nor an orphan can take the machine.
 
 Hashes are memoised by size and modification time, so validating an
-unchanged tree is a stat sweep. The cache lives in .state/client-test-cache
-and is keyed by the Node version, platform and test environment; any change
-there discards it. SRO_CHECK_FORCE=1 runs everything.
+unchanged tree is a stat sweep. The records live in the main checkout's
+.state/client-test-cache, shared by every worktree: an input inside the
+checkout is named relative to it (tools/lib/test-cache-ids.mjs), so a pass
+in one worktree is reused by another whose files hash the same, and a fresh
+worktree starts warm (ops #335: 177 s cold, 9 s warm). Inputs under the
+built tree and the other location roots are named relative to their tree,
+and those variables stay out of the key, so a release's fresh variant root
+validates the same records (test-cache-ids.mjs). The size and mtime
+memo names absolute paths, so it stays in each checkout's own .state. Both
+are keyed by the Node version, platform and test environment; any change
+there discards them. SRO_CHECK_FORCE=1 runs everything.
 
 Every run times the files it actually executed and prints the thirty
-slowest; a file over its per-file budget (TEST_FILE_BUDGET_MS) fails the
+slowest; a file over its per-file budget (TEST_FILE_BUDGET_MS, when set) fails the
 run, and a run over its whole-suite budget (TEST_SUITE_BUDGET_MS, when
 one is set) fails too (#2907, #2929), so suite time cannot creep back
 one file at a time or in aggregate.
@@ -36,13 +44,23 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { resolveMainCheckout } from "../../../scripts/lib/generatedRoot.mjs";
+import { pruneRecordFiles, recordsPath, statsPath as statsFilePath } from "./lib/test-cache-files.mjs";
+import { LOCATION_VARIABLES, cacheRoots, decodeTarget, encodeTarget } from "./lib/test-cache-ids.mjs";
 import { logPathFor } from "./lib/test-input-recorder.mjs";
 
-const CACHE_FORMAT = 1;
+// 2: checkout-relative input ids, and the stat memo split from the records.
+// 3: ids relative to the built tree and the other location roots, whose
+// paths left the key (test-cache-ids.mjs).
+const CACHE_FORMAT = 3;
+// The key's value for a set location variable, whatever its path.
+const LOCATION_SET = "(set)";
 const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
 const repoRoot = path.resolve( clientRoot, "../.." );
-const cacheDir = process.env.SRO_TEST_CACHE_DIR ?? path.join( repoRoot, ".state", "client-test-cache" );
-const indexPath = path.join( cacheDir, "index.json" );
+const SKIP_FLAG = "--skip=";
+// The trees input ids are named against (test-cache-ids.mjs cacheRoots).
+const roots = cacheRoots( repoRoot );
+const statsPath = statsFilePath( repoRoot );
 const recorderUrl = pathToFileURL( path.join( clientRoot, "tools/lib/test-input-recorder.mjs" ) ).href;
 const watchdogUrl = pathToFileURL( path.join( clientRoot, "tools/lib/test-process-watchdog.mjs" ) ).href;
 // The environment a test can see beyond its files.
@@ -69,13 +87,15 @@ const TEST_RSS_MB = Number( process.env.SRO_TEST_RSS_MB ) || TEST_HEAP_MB + RSS_
 // A file that runs longer than this fails the run and names itself, so
 // suite time cannot creep back file by file (the Go server's 30 s budget
 // is the same idea). Only files that actually ran are timed; a reused
-// pass spent nothing. The default stays 60 s: the full check's runtime
-// lane is unmeasured and still slow before the shards land (#2924-#2928),
-// so the tight budget is set where the profile was measured - the CI
-// source lane sets 20 s via SRO_TEST_FILE_BUDGET_MS (the slowest ordinary
-// file took 14.6 s there; docs/agents/client-test-profile.md).
-// SRO_TEST_FILE_BUDGET_MS overrides it everywhere.
-const TEST_FILE_BUDGET_MS = Number( process.env.SRO_TEST_FILE_BUDGET_MS ) || 60000;
+// pass spent nothing. The budget is wall time, so it binds only in the
+// lane that measured it: the CI source lane sets 20 s via
+// SRO_TEST_FILE_BUDGET_MS (the slowest ordinary file took 14.6 s there;
+// docs/agents/client-test-profile.md), and the named caps below bind
+// with it. No cap by default, as the whole-suite budget: the full check
+// runs every file beside its other heavy gates, and its wall times
+// measured the contention, not the files (#3459: ui-behavior 48 s alone,
+// 83-114 s inside the check).
+const TEST_FILE_BUDGET_MS = Number( process.env.SRO_TEST_FILE_BUDGET_MS ) || 0;
 // The whole run's wall budget (#2929): the five-minute client budget
 // #2907 named, enforced on the run itself instead of only implied by
 // the per-file caps, so aggregate creep fails too. No cap by default,
@@ -122,19 +142,41 @@ function fileBudgets() {
 /*
 ================
 testFiles
+
+The files the targets name. A directory gives its test files except those a
+--skip=<list.json> argument names (a {"tests": [file name...]} list, as
+tests/runtime/asset-backed-tests.json): CI's source lane runs a directory
+minus its asset-backed files without one argument per file, which would
+pass Windows' 32 KiB command line at ~600 files.
 ================
 */
-function testFiles( targets ) {
+function testFiles( args ) {
+	const skip = new Set();
+	for ( const arg of args.filter( ( a ) => a.startsWith( SKIP_FLAG ) ) ) {
+		const list = path.resolve( clientRoot, arg.slice( SKIP_FLAG.length ) );
+		for ( const name of JSON.parse( fs.readFileSync( list, "utf8" ) ).tests ) skip.add( name );
+	}
 	const files = [];
-	for ( const target of targets ) {
+	for ( const target of args.filter( ( a ) => !a.startsWith( SKIP_FLAG ) ) ) {
 		const full = path.resolve( clientRoot, target );
 		if ( fs.statSync( full ).isDirectory() ) {
 			for ( const name of fs.readdirSync( full ).sort() ) {
-				if ( name.endsWith( ".test.mjs" ) ) files.push( path.join( full, name ) );
+				if ( name.endsWith( ".test.mjs" ) && !skip.has( name ) ) files.push( path.join( full, name ) );
 			}
 		} else files.push( full );
 	}
 	return files;
+}
+
+/*
+================
+locationPresence
+
+A location variable's part of the key: whether it names anything.
+================
+*/
+function locationPresence( value ) {
+	return value?.trim() ? LOCATION_SET : "";
 }
 
 /*
@@ -147,11 +189,22 @@ function cacheKey() {
 		// Runner switches and inherited lock ownership are not test inputs.
 		// A fresh lock token must not discard every unchanged test pass.
 		Object.keys( process.env ).filter( key =>
-			key.startsWith( "SRO_" ) && key !== "SRO_CHECK_FORCE" && !key.startsWith( "SRO_TEST_" ) &&
-				!key.startsWith( "SRO_REBUILD_LOCK_" ) ||
-			ENV_KEYS.includes( key )
+			(key.startsWith( "SRO_" ) && key !== "SRO_CHECK_FORCE" && !key.startsWith( "SRO_TEST_" ) &&
+					!key.startsWith( "SRO_REBUILD_LOCK_" ) ||
+				ENV_KEYS.includes( key )) &&
+			// A blank location variable is unset, and an unset one has no entry.
+			!(LOCATION_VARIABLES.has( key ) && !locationPresence( process.env[key] ))
 		)
-			.sort().map( key => [ key, process.env[key] ] )
+			// A location variable's path is no test input: the files under it
+			// are recorded by content, relative to its tree. Whether it is set
+			// is one: code branches on it (assetPacks.mjs reads the pack
+			// baseline only when SRO_ASSET_PACK_BASELINE is set), so a pass
+			// with it unset never vouches for a run with it set. Blank counts
+			// as unset, as its readers trim it (an unnamed release exports
+			// SRO_ASSET_PACK_BASELINE="").
+			.sort().map(
+				key => [ key, LOCATION_VARIABLES.has( key ) ? locationPresence( process.env[key] ) : process.env[key] ]
+			)
 	);
 	return JSON.stringify( {
 		format: CACHE_FORMAT,
@@ -168,13 +221,79 @@ readIndex
 ================
 */
 function readIndex( key ) {
-	const empty = { key, stats: {}, records: {} };
-	if ( process.env.SRO_CHECK_FORCE === "1" ) return empty;
+	const index = { key, stats: {}, records: {} };
+	if ( process.env.SRO_CHECK_FORCE === "1" ) return index;
+	// One records file per key (test-cache-files.mjs): a run under another
+	// key never replaces this key's records.
+	index.records = readKeyed( recordsPath( repoRoot, key ), key, "records" );
+	index.stats = readKeyed( statsPath, key, "stats" );
+	return index;
+}
+
+/*
+================
+readKeyed
+
+One cache file's field, or empty when the file is missing, unreadable or
+written under another key.
+================
+*/
+function readKeyed( file, key, field ) {
 	try {
-		const index = JSON.parse( fs.readFileSync( indexPath, "utf8" ) );
-		return index.key === key ? index : empty;
+		const body = JSON.parse( fs.readFileSync( file, "utf8" ) );
+		return body.key === key && body[field] ? body[field] : {};
 	} catch {
-		return empty;
+		return {};
+	}
+}
+
+/*
+================
+writeKeyed
+
+Replaces one cache file atomically (a temporary file renamed over it).
+The records file is shared by every worktree, and on Windows a rename onto
+a file another run is renaming or reading fails with EPERM (four writers
+racing on one file failed 90% of renames). A lost write costs a rerun,
+never a wrong reuse, so it is reported and the run's verdict stands.
+================
+*/
+function writeKeyed( file, body ) {
+	const temporary = file + "." + process.pid;
+	try {
+		fs.mkdirSync( path.dirname( file ), { recursive: true } );
+		fs.writeFileSync( temporary, JSON.stringify( body ) );
+		fs.renameSync( temporary, file );
+	} catch ( error ) {
+		try {
+			fs.rmSync( temporary, { force: true } );
+		} catch {
+			// force covers only ENOENT: Linux answers ENOTDIR when the cache
+			// folder is a file, and then there is no temporary to remove.
+		}
+		process.stdout.write( `test cache: not saved (${error.code ?? error.message}): ${file}\n` );
+	}
+}
+
+/*
+================
+worktreeLink
+
+The identity of a linked worktree's .git file: the main checkout it
+names, not its bytes. Its one line is "gitdir: <hub>/.git/worktrees/<name>",
+and the only thing read from it in a test process is the hub
+(resolveMainCheckout); git itself runs as a child, which no record covers.
+Hashing the bytes made every worktree's records stale in every other
+worktree: 190 of 766 runtime files reran on 11-14 for this alone (ops #335).
+Undefined for any other file.
+================
+*/
+function worktreeLink( file, stat ) {
+	if ( path.basename( file ) !== ".git" || !stat.isFile() ) return undefined;
+	try {
+		return "worktree of " + resolveMainCheckout( path.dirname( file ) );
+	} catch {
+		return undefined; // an unreadable link is hashed like any file
 	}
 }
 
@@ -217,7 +336,8 @@ function createFingerprints( index ) {
 			} else {
 				value = stat.isDirectory() ?
 					"dir" :
-					known( file, stat ) ?? remember( file, stat, fs.readFileSync( file ) );
+					worktreeLink( file, stat ) ?? known( file, stat ) ??
+						remember( file, stat, fs.readFileSync( file ) );
 			}
 		} catch {
 			value = "missing";
@@ -243,7 +363,8 @@ function createFingerprints( index ) {
 					} else {
 						value = stat.isDirectory() ?
 							"dir" :
-							known( file, stat ) ?? remember( file, stat, await fs.promises.readFile( file ) );
+							worktreeLink( file, stat ) ?? known( file, stat ) ??
+								remember( file, stat, await fs.promises.readFile( file ) );
 					}
 				} catch {
 					value = "missing";
@@ -264,7 +385,9 @@ valid
 function valid( record, fingerprint, name ) {
 	for ( const [id, value] of Object.entries( record.inputs ) ) {
 		const tab = id.indexOf( "\t" );
-		if ( fingerprint( id.slice( 0, tab ), id.slice( tab + 1 ) ) !== value ) {
+		const target = decodeTarget( roots, id.slice( tab + 1 ) );
+		// A tree this run does not set cannot vouch for what the test read.
+		if ( target === null || fingerprint( id.slice( 0, tab ), target ) !== value ) {
 			if ( process.env.SRO_TEST_CACHE_EXPLAIN ) process.stdout.write( `rerun ${name}: ${id} changed\n` );
 			return false;
 		}
@@ -302,7 +425,9 @@ function recordOf( logDir, file, fingerprint ) {
 		const kind = line[0], target = line.slice( 2 );
 		if ( kind === "W" || written.has( target.toLowerCase() ) ) continue;
 		// A probe and a read of the same file share the read's content hash.
-		const id = (kind === "E" ? "E" : kind) + "\t" + target;
+		// The id names the target relative to the checkout or tree holding
+		// it, so another worktree or variant root can validate the record.
+		const id = (kind === "E" ? "E" : kind) + "\t" + encodeTarget( roots, target );
 		inputs[id] = fingerprint( kind, target );
 	}
 	return { inputs };
@@ -328,8 +453,11 @@ async function main() {
 	await fingerprint.prefetch(
 		recorded.flatMap( record =>
 			Object.keys( record.inputs ).map(
-				id => [ id.slice( 0, id.indexOf( "\t" ) ), id.slice( id.indexOf( "\t" ) + 1 ) ]
-			)
+				id => [
+					id.slice( 0, id.indexOf( "\t" ) ),
+					decodeTarget( roots, id.slice( id.indexOf( "\t" ) + 1 ) )
+				]
+			).filter( ( [, target] ) => target !== null )
 		)
 	);
 	const pending = files.filter( file => {
@@ -338,6 +466,9 @@ async function main() {
 	} );
 	const reused = files.length - pending.length;
 	const failed = new Set(), passed = new Set();
+	// Each file this run executed: its new record, or null when it is not
+	// to be reused (failed, passed nothing, or did something no hash holds).
+	const changes = new Map();
 	// Per-file wall time of the files that run (#2907), from each file
 	// node's own reported duration. Reused files never appear here -
 	// they spent nothing this run.
@@ -380,20 +511,27 @@ async function main() {
 			const settled = createFingerprints( index );
 			for ( const file of pending ) {
 				const key = path.relative( repoRoot, file );
-				delete index.records[key];
 				// Only a file that passed at least one test and failed none.
-				if ( failed.has( file ) || !passed.has( file ) ) continue;
-				const record = recordOf( logDir, file, settled );
-				if ( record ) index.records[key] = record;
+				const record = failed.has( file ) || !passed.has( file ) ? null : recordOf( logDir, file, settled );
+				changes.set( key, record );
 			}
 		} finally {
 			fs.rmSync( logDir, { recursive: true, force: true } );
 		}
 	}
-	fs.mkdirSync( cacheDir, { recursive: true } );
-	const temporary = indexPath + "." + process.pid;
-	fs.writeFileSync( temporary, JSON.stringify( index ) );
-	fs.renameSync( temporary, indexPath );
+	// The records are shared: another worktree may have written since this
+	// run read them, so only this run's own files change in the newest copy.
+	// Two runs finishing together can still lose one's records; that costs
+	// a rerun, never a wrong reuse, since every input is hashed on read.
+	const indexPath = recordsPath( repoRoot, index.key );
+	const records = readKeyed( indexPath, index.key, "records" );
+	for ( const [key, record] of changes ) {
+		if ( record ) records[key] = record;
+		else delete records[key];
+	}
+	writeKeyed( indexPath, { key: index.key, records } );
+	writeKeyed( statsPath, { key: index.key, stats: index.stats } );
+	pruneRecordFiles( repoRoot );
 	const seconds = ((performance.now() - started) / 1000).toFixed( 1 );
 	process.stdout.write(
 		`tests: ${files.length} files, ${reused} reused unchanged, ${pending.length} run, ${failed.size} failed in ${seconds}s\n`
@@ -414,7 +552,7 @@ async function main() {
 	const capOf = file =>
 		budgets.get( path.relative( clientRoot, file ).replaceAll( "\\", "/" ) ) ??
 			TEST_FILE_BUDGET_MS;
-	const overBudget = slowest.filter( ( [file, s] ) => s * 1000 > capOf( file ) );
+	const overBudget = TEST_FILE_BUDGET_MS > 0 ? slowest.filter( ( [file, s] ) => s * 1000 > capOf( file ) ) : [];
 	for ( const [file, s] of overBudget ) {
 		process.stdout.write(
 			`tests budget: ${path.relative( clientRoot, file )} ran ${s.toFixed( 1 )}s, over its ` +

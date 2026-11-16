@@ -81,7 +81,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 	rt.petMu.Lock()
 	session := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(c.Name), gid: q.CosGID}]
 	rt.petMu.Unlock()
-	if session == nil || session.character != c || session.follower == nil || session.follower.GID() != q.CosGID {
+	if session == nil || session.character != c || session.mover.AnyFollower() == nil || session.mover.AnyFollower().GID() != q.CosGID {
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
 
@@ -92,7 +92,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 	if item, found := rt.characterGround(division, c, q.GroundGID); found && item.ArenaPowerup != 0 {
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
-	at := session.follower.Position(now.UnixMilli())
+	at := session.mover.AnyFollower().Position(now.UnixMilli())
 	var sharedOwner uint32
 	if item, ok := rt.characterGround(division, c, q.GroundGID); ok && item.OwnerJID != 0 && rt.CanPickupOwnedDrop != nil && rt.CanPickupOwnedDrop(division, c.Name, item.OwnerJID) {
 		sharedOwner = item.OwnerJID
@@ -185,7 +185,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			if count == 0 {
 				count = 1
 			}
-			grant, fault := inv.GrantStack(inventory.Item{TradeOwner: item.TradeOwner, RecordID: item.RecordID, RefObjID: item.RefObjID, Codename: item.Codename, TypeFlags: item.TypeFlags, Quantity: count, Plus: item.Plus, VarianceBits: item.VarianceBits, Durability: item.Durability, MagicOptions: item.MagicOptions, TransformRefObjID: item.TransformRefObjID, Summon: domain.CloneCOS(item.Summon), ForgeBound: item.ForgeBound}, rt.maxStackFor(item.TypeFlags, item.Codename))
+			grant, fault := inv.GrantStack(inventory.Item{TradeOwner: item.TradeOwner, RecordID: item.RecordID, RefObjID: item.RefObjID, Codename: item.Codename, TypeFlags: item.TypeFlags, Quantity: count, Plus: item.Plus, VarianceBits: item.VarianceBits, Durability: item.Durability, MagicOptions: item.MagicOptions, Data: item.Data, Summon: domain.CloneCOS(item.Summon), ForgeBound: item.ForgeBound}, rt.maxStackFor(item.TypeFlags, item.Codename))
 			if fault != nil {
 				code := fault.Code
 				if code == wire.ErrCodeStorageFull {
@@ -217,7 +217,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 				refusalCause = "grant-build"
 				return false
 			}
-			body := wire.ItemBody{TradeOwner: granted.TradeOwner, TypeFlags: granted.TypeFlags, RefObjID: granted.RefObjID, Quantity: granted.Quantity, Plus: granted.Plus, VarianceBits: granted.VarianceBits, Durability: granted.Durability, MagicOptions: granted.MagicOptions, TransformRefObjID: granted.TransformRefObjID, Summon: domain.CloneCOS(granted.Summon)}
+			body := wire.ItemBody{TradeOwner: granted.TradeOwner, TypeFlags: granted.TypeFlags, RefObjID: granted.RefObjID, Quantity: granted.Quantity, Plus: granted.Plus, VarianceBits: granted.VarianceBits, Durability: granted.Durability, MagicOptions: granted.MagicOptions, Data: granted.Data, Summon: domain.CloneCOS(granted.Summon)}
 			plain := wire.EncodePickupItemResult(grant.DestSlot, body)
 			receipt = wire.NewWriter(len(plain) + 4).U8(1).U8(wire.MoveTypeCosPickup).U32(q.CosGID).Bytes(plain[2:]).Payload()
 			remainder = grant.GroundRemainder
@@ -267,9 +267,11 @@ type petPickupAt struct {
 sharePetPickup
 
 A pet's pickup runs the party's item share as the owner's own pickup does:
-The reference server's ground pickup serves move type 0x11 as it serves 6,
-and its party loot selection picks the recipient by the
-party's rotation. Non-alchemy quest items (the reference server's pet pickup
+The reference server's ground pickup serves move type 0x11 as it serves 6
+(its item-move handler table holds the same player ground pickup for
+both), and its party loot selection picks the recipient by the party's
+rotation. It rotates while it selects, before the grant, so a refused
+grant still spends the turn (#3423). Non-alchemy quest items (the reference server's pet pickup
 recipient selection) also route to
 the owner's player bag (0x1C -> the player's ground-pickup grant) and update
 quest inventory rather than entering the pet container. When the rotation
@@ -347,6 +349,11 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 				// The reference server's ground pickup on 0x706D routes
 				// 0xB06D [2, 0x07] to the full recipient and 0xB06D [2, 0xDA] to
 				// the picker (without player OpActionState on move type 0x11).
+				// No fallback to the picker's pet or the next member: when
+				// the grant for another member fails bag-full, the reference
+				// server's ground pickup tells that member 0x1807 and answers
+				// the picker 0x18DA (#3423). Only the pet-command path
+				// spills, below.
 				return OpResult{
 					Frames:     []wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: []byte{2, wire.ErrCodePartyInventoryFull}}},
 					Recipients: []RecipientFrames{{CharacterID: recipient.ID, Frames: result.Frames}},
@@ -466,7 +473,7 @@ func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterw
 			TradeOwner: current.TradeOwner, RecordID: current.RecordID, RefObjID: current.RefObjID,
 			Codename: current.Codename, TypeFlags: current.TypeFlags, Quantity: count, Plus: current.Plus,
 			VarianceBits: current.VarianceBits, Durability: current.Durability, MagicOptions: current.MagicOptions,
-			TransformRefObjID: current.TransformRefObjID, Summon: domain.CloneCOS(current.Summon),
+			Data: current.Data, Summon: domain.CloneCOS(current.Summon),
 		}, rt.maxStackFor(current.TypeFlags, current.Codename))
 		if fault != nil {
 			peerBagFull = fault.Code == wire.ErrCodeStorageFull
@@ -490,7 +497,7 @@ func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterw
 			TradeOwner: granted.TradeOwner, TypeFlags: granted.TypeFlags, RefObjID: granted.RefObjID,
 			Quantity: granted.Quantity, Plus: granted.Plus, VarianceBits: granted.VarianceBits,
 			Durability: granted.Durability, MagicOptions: granted.MagicOptions,
-			TransformRefObjID: granted.TransformRefObjID, Summon: domain.CloneCOS(granted.Summon),
+			Data: granted.Data, Summon: domain.CloneCOS(granted.Summon),
 		}
 		plain := wire.EncodePickupItemResult(grant.DestSlot, body)
 		receipt := wire.NewWriter(len(plain) + 4).U8(1).U8(wire.MoveTypeCosPickup).U32(peerPetGID).Bytes(plain[2:]).Payload()

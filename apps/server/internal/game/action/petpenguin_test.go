@@ -98,6 +98,9 @@ func TestPenguinStormPulsesAndFinalFreeze(t *testing.T) {
 			learnPetBook(t, c, 33+book)
 			learnPetBook(t, c, 42+book)
 			castPenguinFixture(t, rt, clock, c, mob, 33+book)
+			// The owner holds the monster its pet fights, so the storm's HP
+			// reaches the owner with each tick's changes.
+			rt.Selected.Set(testDivision, c.Name, mob.Gid)
 			step, _ := rt.penguinCompanion(testDivision, c, clock.NowMs())
 			first, _ := rt.Monsters.Get(testDivision, mob.Gid)
 			if len(step.state.penguin.storms) != 1 {
@@ -314,7 +317,7 @@ func TestPenguinShatterOwnerGateAndFrozenKillBurst(t *testing.T) {
 		t.Fatal("native freeze missing")
 	}
 	step, _ := rt.penguinCompanion(testDivision, c, clock.NowMs())
-	at := step.state.follower.Position(clock.NowMs())
+	at := step.state.mover.AnyFollower().Position(clock.NowMs())
 	at.X += 35
 	near := wolfSpawnAt(t, rt, c, at, clock.NowMs())
 	wolfWeaken(t, rt, frozen, 1)
@@ -401,7 +404,7 @@ func TestPenguinLancePiercesForwardOnly(t *testing.T) {
 	rt, clock, c, primary := penguinFixture(t)
 	learnPetBook(t, c, 32)
 	step, _ := rt.penguinCompanion(testDivision, c, clock.NowMs())
-	from := step.state.follower.Position(clock.NowMs())
+	from := step.state.mover.AnyFollower().Position(clock.NowMs())
 	ahead := from
 	ahead.X += 95
 	second := wolfSpawnAt(t, rt, c, ahead, clock.NowMs())
@@ -546,7 +549,7 @@ func TestPenguinEchoFrozenKillStillShattersWithoutProgress(t *testing.T) {
 		rt.TickHook()(clock.NowMs())
 	}
 	step, _ := rt.penguinCompanion(testDivision, c, clock.NowMs())
-	at := step.state.follower.Position(clock.NowMs())
+	at := step.state.mover.AnyFollower().Position(clock.NowMs())
 	at.X += 35
 	near := wolfSpawnAt(t, rt, c, at, clock.NowMs())
 	frozen, _ := rt.Monsters.Get(testDivision, mob.Gid)

@@ -5,9 +5,11 @@ owning Binary Ninja. This tutorial gets you from a retail executable to readable
 instructions and a saved, reviewable finding. It does not produce an automatic
 C++ reconstruction or run the entire game inside Python.
 
-If digging through your own binary is the problem, start with Rizin instead:
-[RIZIN.md](RIZIN.md) is the recommended free tool, and it finds functions,
-cross-references and RTTI. Python here stays the zero-install fallback for
+If digging through your own binary is the problem, start with
+[revtool](../../tools/re/revtool/README.md): it puts the maintainers' published
+function names (the seed) into a Rizin project and searches them. Rizin itself
+([RIZIN.md](RIZIN.md)) is the recommended free tool underneath, and it finds
+functions, cross-references and RTTI. Python here stays the zero-install fallback for
 reading a bounded instruction range and for scripted checks.
 
 The v1.150 client defines data, wire messages and UI. For server-only mechanics,

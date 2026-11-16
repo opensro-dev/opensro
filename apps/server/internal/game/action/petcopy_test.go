@@ -66,10 +66,10 @@ func petCopyTrace(t *testing.T, full bool) string {
 		trace += fmt.Sprintf("%+v\n", rt.advancePet(key, nowMs))
 	}
 	state := rt.petSessionFor(testDivision, c.Name, petGID)
-	if state == nil || state.follower == nil {
+	if state == nil || state.mover.AnyFollower() == nil {
 		t.Fatal("pet never took up its follow; the trace would agree vacuously")
 	}
-	return trace + fmt.Sprintf("follower gid=%d pos=%+v", state.follower.GID(), state.follower.Position(1300))
+	return trace + fmt.Sprintf("follower gid=%d pos=%+v", state.mover.AnyFollower().GID(), state.mover.AnyFollower().Position(1300))
 }
 
 /*
@@ -231,7 +231,7 @@ func petCounterTrace(t *testing.T, full bool) string {
 	state := rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID)
 	bearAt := at
 	bearAt.X += 300
-	state.follower = simulation.NewPetFollower(c.ActiveCOS.GID, bearAt)
+	state.mover.FollowFrom(c.ActiveCOS.GID, bearAt)
 	c.MissionInventory = []enterworld.InventoryRow{{Slot: 13, Summon: c.ActiveCOS}}
 	c.ActiveCOS = nil
 	petPeriodicFatten(c)
@@ -752,7 +752,7 @@ func TestPetAreaVictimsReadNothingOutsideTheCompanionCopy(t *testing.T) {
 	stuffOwnerInventories(victim)
 	state := rt.petSessionFor(testDivision, owner.Name, owner.ActiveCOS.GID)
 	at := rt.liveSpawn(simulation.WorldKey(testDivision, owner.Name), owner, clock.NowMs())
-	state.follower = simulation.NewPetFollower(owner.ActiveCOS.GID, at)
+	state.mover.FollowFrom(owner.ActiveCOS.GID, at)
 	step := petCombatStep{
 		key:   petOwnerKey{division: testDivision, name: owner.Name, gid: owner.ActiveCOS.GID},
 		state: state, snapshot: owner, pet: owner.ActiveCOS, ref: ref, nowMs: clock.NowMs(),

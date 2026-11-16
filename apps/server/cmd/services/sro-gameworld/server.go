@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/viper"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/config"
+	"opensro.online/server/internal/config/shardsettings"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/platform/logging"
 	"opensro.online/server/internal/platform/processguard"
@@ -30,6 +31,7 @@ func main() {
 	logging.InstallFormat()
 	config.Initialize()
 	logging.Init()
+	applyCatalogueDefaults()
 
 	// Nomad sends CTRL_BREAK_EVENT on Windows, which Go exposes as
 	// os.Interrupt. SIGTERM covers Unix containers and service hosts.
@@ -289,4 +291,28 @@ func transportBindPort(addr string) string {
 		return ""
 	}
 	return port
+}
+
+/*
+================
+applyCatalogueDefaults
+
+The shard catalogue the client reads is built with every unset
+catalogue setting at its deployment default (sro-catalogue), and a
+deploy hands this process the same values through its job. A process
+started without the job (pnpm local) would otherwise read those unset
+settings as off and run rules the client was told are on: the Qin-Shi
+Tomb's walk-in door (SRO_QINSHI_TOMB, default on) stood shut on
+localhost while the catalogue listed the tomb. Filling the same
+defaults here keeps the two one contract on every host.
+================
+*/
+func applyCatalogueDefaults() {
+	filled, err := shardsettings.ApplyCatalogueDefaults(os.Getenv, os.Setenv)
+	if err != nil {
+		log.Fatalf("startup: catalogue defaults: %v", err)
+	}
+	if len(filled) > 0 {
+		log.Infof("startup: unset catalogue settings at their deployment defaults: %s", strings.Join(filled, ", "))
+	}
 }

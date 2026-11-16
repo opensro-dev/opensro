@@ -28,10 +28,21 @@ test("retail axe BSR preserves the environment modifier that overrides BMT cover
 			characterEnvironment( 0x340, [ { ...modifier, words24: [ 0xffffffff, ...modifier.words24.slice( 1 ) ] } ] ),
 		/null environment texture/
 	);
+	// Bit 0 clear picks AEEAD0's table by words24[2]: the axe's own words
+	// name entry 0 (AEE560), which ships in no model.
 	assert.throws(
 		() => characterEnvironment( 0x340, [ { ...modifier, baseWords: [ ...modifier.baseWords.slice( 0, 5 ), 2 ] } ] ),
-		/blend variant/
+		/blend table entry 0 /
 	);
+	const added = { ...modifier, baseWords: [ ...modifier.baseWords.slice( 0, 5 ), 2 ], words24: [ 1, 65536, 1, 7 ] };
+	assert.deepEqual( characterEnvironment( 0x340, [ added ] ), { textureId: 1, mode: 2 } );
+	assert.throws(
+		() => characterEnvironment( 0x340, [ { ...added, words24: [ 1, 65536, 1, 4 ] } ] ),
+		/entry 1 with colour op 4 /
+	);
+	// The material's cull-none stays its own: the shader retires it only
+	// while the ADD stages draw.
+	assert.equal( characterMaterialState( 0x341, [ added ] ).doubleSided, true );
 	assert.deepEqual( characterMaterialState( 0x340, [ modifier ] ), {
 		alphaCutoff: 1 / 255,
 		fadeAlphaOnly: true,
@@ -44,6 +55,34 @@ test("retail axe BSR preserves the environment modifier that overrides BMT cover
 		0
 	);
 	assert.throws( () => characterMaterialState( 0x340, [ { ...modifier, stateId: 1 } ] ), /runtime ownership/ );
+});
+
+test("a material-pass environment record draws only its own subset but covers every subset", () => {
+	// AB08C0 calls word-1 kind 2 records once per material; AEE6D0 sets the
+	// coverage before it compares word 3 with the subset's iMtrlID.
+	const scoped = {
+		kind: 2,
+		stateId: -1,
+		baseWords: [ 1056964608, 2, 256, 5, 0, 3 ],
+		words24: [ 1, 65536, 1, 7 ]
+	};
+	assert.deepEqual( characterEnvironment( 0x340, [ scoped ], 5 ), { textureId: 1, mode: 1 } );
+	assert.equal( characterEnvironment( 0x340, [ scoped ], 4 ), undefined );
+	assert.equal( characterEnvironment( 0x340, [ scoped ] ), undefined );
+	assert.deepEqual( characterMaterialState( 0x340, [ scoped ], 4 ), characterMaterialState( 0x340, [ scoped ], 5 ) );
+	assert.equal( characterMaterialState( 0x340, [ scoped ], 4 ).alphaCutoff, 1 / 255 );
+	assert.equal( characterEnvironment( 0x10340, [ scoped ], 5 ), undefined );
+	// The last record called for a subset wins: each call rewrites the stages.
+	const second = { ...scoped, baseWords: [ ...scoped.baseWords.slice( 0, 5 ), 2 ] };
+	assert.deepEqual( characterEnvironment( 0x340, [ scoped, second ], 5 ), { textureId: 1, mode: 2 } );
+	assert.deepEqual( characterEnvironment( 0x340, [ second, scoped ], 5 ), { textureId: 1, mode: 1 } );
+	// A material-pass record that names every material, or a mixed pair, has no native contract.
+	assert.throws(
+		() => characterMaterialState( 0x340, [ { ...scoped, baseWords: [ 1056964608, 2, 256, 0xffffffff, 0, 3 ] } ] ),
+		/runtime ownership/
+	);
+	const general = { ...scoped, baseWords: [ 1056964608, 1, 256, 0xffffffff, 0, 3 ] };
+	assert.throws( () => characterEnvironment( 0x340, [ general, scoped ], 5 ), /pass order/ );
 });
 
 test("native baseline alpha bypasses and culling remain independent", () => {
@@ -78,11 +117,12 @@ test("all published character parts retain their own native material and modifie
 			for ( const primitive of mesh.primitives ) {
 				const material = json.materials[primitive.material];
 				const native = resolveCharacterMaterialBinding( sources, mesh.name, material.name );
-				const expected = characterMaterialState( native.flags, native.environmentModifiers );
+				const index = material.extras.sroMaterialIndex;
+				const expected = characterMaterialState( native.flags, native.environmentModifiers, index );
 				assert.equal( material.alphaCutoff ?? 0, expected.alphaCutoff, asset + ":" + material.name );
 				assert.equal( material.doubleSided, expected.doubleSided, asset + ":" + material.name );
 				assert.equal( material.extras.sroFadeAlphaOnly, expected.fadeAlphaOnly, asset + ":" + material.name );
-				const reflection = characterEnvironment( native.flags, native.environmentModifiers );
+				const reflection = characterEnvironment( native.flags, native.environmentModifiers, index );
 				assert.deepEqual( material.extras.sroEnvironment, reflection, asset + ": reflection descriptor" );
 				if ( reflection && reflection.textureId !== 0xffffffff ) {
 					const texture = json.textures[material.extras.sroEnvironmentTexture];

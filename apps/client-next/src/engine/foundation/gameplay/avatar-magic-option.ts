@@ -165,7 +165,20 @@ export function avatarMagicOptionText( codename: string, value: number, text: ( 
 		case "MATTR_AVATAR_MPRG":
 			return `${text( "PARAM_AVATAR_MPRG" )} ${value}% ${increase}`;
 		case "MATTR_AVATAR_MDIA":
+		case "MATTR_AVATAR_MDIA_2":
+		case "MATTR_AVATAR_MDIA_3":
+		case "MATTR_AVATAR_MDIA_4":
+			// v1.188 sro_client.exe static table 0x66A4C9..0x66A71C maps all
+			// four MDIA stacking variants to PARAM_AVATAR_MDIA + UIIT_STT_PROBABILITY.
 			return `${text( "PARAM_AVATAR_MDIA" )} ${value}% ${text( "UIIT_STT_PROBABILITY" )}`;
+		case "MATTR_AVATAR_LUCK":
+		case "MATTR_AVATAR_LUCK_2":
+		case "MATTR_AVATAR_LUCK_3":
+		case "MATTR_AVATAR_LUCK_4":
+			// v1.188 sro_client.exe static table 0x66A4C9..0x66A71C maps all
+			// four LUCK variants to PARAM_LUCK + PARAM_INCREASE. INFERENCE: uses
+			// the "%s %d%% %s" rate form, as for every rate option.
+			return `${text( "PARAM_LUCK" )} ${value}% ${increase}`;
 	}
 	return "";
 }

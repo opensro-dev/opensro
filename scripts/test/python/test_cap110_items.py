@@ -8,6 +8,7 @@ degree-12 link trimming, translation ownership and off/on/off rebuilds.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import os
 from pathlib import Path
 import sys
@@ -15,7 +16,6 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import cap110_items as items  # noqa: E402
 import cap110_item_import as importer  # noqa: E402
 from test_client_preparation import ArchiveBuilder  # noqa: E402
@@ -427,6 +427,33 @@ class ImportTests(unittest.TestCase):
 			with patch.object(importer, "resource_dependencies", side_effect=lambda requests: [[] for _ in requests]):
 				assets = importer.copy_asset_closure([row], root / "native", root / "out", {"Data": (None, {}), "Media": (None, {})})
 			self.assertEqual(len(assets), 2)
+	# ================
+	# test_tolerant_dependencies_isolates_bad_files_by_halving
+	#
+	# The result matches one audit run per request, at a fraction of the runs.
+	# ================
+	def test_tolerant_dependencies_isolates_bad_files_by_halving(self):
+		bad = {"res/bad_3.bsr", "res/bad_41.bsr"}
+		requests = [{"path": f"res/{'bad' if i in (3, 41) else 'ok'}_{i}.bsr"} for i in range(64)]
+		runs = []
+
+		def audit(batch):
+			runs.append(len(batch))
+			if any(request["path"] in bad for request in batch):
+				raise ValueError("Error: cannot parse")
+			return [[request["path"] + ".dep"] for request in batch]
+
+		with patch.object(importer, "resource_dependencies", side_effect=audit):
+			results = importer.tolerant_dependencies(requests)
+		for request, result in zip(requests, results):
+			if request["path"] in bad:
+				self.assertIsInstance(result, ValueError)
+			else:
+				self.assertEqual(result, [request["path"] + ".dep"])
+		self.assertEqual(len(results), len(requests))
+		# 2 bad files in 64: at most 1 + 2 * 2 * log2(64) = 25 runs, never 65.
+		self.assertLessEqual(len(runs), 25)
+
 	# ================
 	# test_split_weapons_and_both_harp_models_use_the_shared_resolver
 	# ================

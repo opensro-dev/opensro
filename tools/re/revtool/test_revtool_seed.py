@@ -217,9 +217,12 @@ class ScanTests(unittest.TestCase):
 class FakePipe:
 	"""rzpipe stand-in: af/afn mutate a fake aflj, Ps is recorded."""
 
-	def __init__(self, drop=(), preloaded=None):
+	def __init__(self, drop=(), preloaded=None, cut_once=()):
 		self.funcs = dict(preloaded or {})
 		self.drop = set(drop)
+		# Rows whose first af+ reaches rizin with its last character cut,
+		# the way a 4095-byte batch did: the function lands at va >> 4.
+		self.cut_once = set(cut_once)
 		self.saved = None
 		self.duplicated = 0
 
@@ -230,7 +233,10 @@ class FakePipe:
 				continue
 			if parts[0] == "af+" and parts[2] == "@":
 				va = int(parts[3], 16)
-				if va in self.funcs:
+				if va in self.cut_once:
+					self.cut_once.discard(va)
+					self.funcs[va >> 4] = parts[1]
+				elif va in self.funcs:
 					self.duplicated += 1
 				elif va not in self.drop:
 					self.funcs[va] = parts[1]
@@ -238,6 +244,8 @@ class FakePipe:
 				va = int(parts[3], 16)
 				if va in self.funcs:
 					self.funcs[va] = parts[1]
+			elif parts[0] == "af-" and parts[1] == "@":
+				self.funcs.pop(int(parts[2], 16), None)
 			elif parts[0] == "Ps":
 				self.saved = parts[1].strip('"')
 				Path(self.saved).write_bytes(b"rzdb")
@@ -277,6 +285,35 @@ class ApplyTests(unittest.TestCase):
 		self.assertEqual((defined, named), (3, 3))
 		self.assertEqual((ok, sampled), (1, 1))
 		self.assertEqual(pipe.funcs[0x401020], "CIFDraw")
+
+	def test_apply_repairs_a_damaged_command(self):
+		# A cut `af+` left a zero-size twin at va >> 4 and no function at
+		# va; apply retries the row whole and removes the twin.
+		pipe = FakePipe(cut_once={0x401040})
+		stats = {}
+		with tempfile.TemporaryDirectory() as td:
+			defined, named, _ok, _sampled = revtool_seed.apply_seed(
+				self._payload(), "binary.exe", os.path.join(td, "out.rzdb"),
+				opener=lambda binary: pipe, stats=stats)
+		self.assertEqual((defined, named), (4, 4))
+		self.assertEqual(pipe.funcs[0x401040], "sub_401040")
+		self.assertNotIn(0x401040 >> 4, pipe.funcs)
+		self.assertEqual((stats["retried"], stats["ghosts"]), (1, 1))
+
+	def test_apply_batches_stay_inside_rizins_line_buffer(self):
+		# rizin reads a command line into 4096 bytes; rzpipe adds a newline.
+		sent = []
+		class Recorder:
+			def cmd(self, text):
+				sent.append(text)
+		# 63 characters plus the joining newline: 64 of them fill 4096
+		# bytes exactly, the case the old cap sent as a 4095-byte line.
+		commands = [f"af+ SeedBatchProbeFunction_{n:04d}_paddingpaddingpaddin @ 0x{0x401000 + n * 16:x}"
+					for n in range(2000)]
+		self.assertEqual({len(command) for command in commands}, {63})
+		revtool_seed._batched(Recorder(), commands)
+		self.assertEqual("\n".join(sent).split("\n"), commands)
+		self.assertLess(max(len(text) + 1 for text in sent), 4096)
 
 	def test_apply_renames_functions_rizin_defined_on_load(self):
 		# entry0-style rows rizin defines itself: rename, never af+ again.

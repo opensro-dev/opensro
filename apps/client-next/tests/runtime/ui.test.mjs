@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 const { copyUi, prepareUi, createUiPreparation } = await import(
 	sourceFileUrl( "src/engine/foundation/ui/ui.ts" ).href
 );
+const { UI_RECORD_LIMIT } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 test("UI admission isolates retained commands and rejects malformed replacements", () => {
 	const scene = {
 		revision: 1,
@@ -34,9 +35,36 @@ test("UI admission isolates retained commands and rejects malformed replacements
 	scene.quads[0].rect[0] = 90;
 	assert.equal( owned.quads[0].rect[0], 0 );
 	assert.throws( () => copyUi( { ...scene, width: 0 } ), /Invalid/ );
-	assert.throws( () => copyUi( { ...scene, quads: Array( 8193 ).fill( scene.quads[0] ) } ), /Invalid/ );
+	// A crowd's name tags pass the old fixed 8192 (ui-crowd-records.test.mjs);
+	// the bound is the device's, UI_RECORD_LIMIT.
+	assert.equal( copyUi( { ...scene, quads: Array( 8193 ).fill( scene.quads[0] ) } ).quads.length, 8193 );
+	assert.throws(
+		() => copyUi( { ...scene, quads: Array( UI_RECORD_LIMIT + 1 ).fill( scene.quads[0] ) } ),
+		/Invalid/
+	);
 	scene.quads[0].color[0] = NaN;
 	assert.throws( () => copyUi( scene ), /Invalid/ );
+});
+
+test("an additive quad keeps its blend across admission (#3446)", () => {
+	// The effect sheets (Magic POP's deco, the alchemy result) are opaque
+	// art drawn additively; a copy that drops the flag draws their black.
+	const sheet = {
+		rect: [ 0, 0, 64, 64 ],
+		uv: [ 0, 0, .25, .25 ],
+		clip: [ 0, 0, 100, 100 ],
+		color: [ 1, 1, 1, 1 ],
+		texture: "alcm_effect_prepare",
+		additive: true
+	};
+	const plain = { ...sheet, additive: undefined };
+	const owned = copyUi( { revision: 1, width: 100, height: 100, quads: [ sheet, plain ] } );
+	assert.equal( owned.quads[0].additive, true );
+	assert.equal( owned.quads[1].additive, undefined );
+	assert.throws(
+		() => copyUi( { revision: 1, width: 100, height: 100, quads: [ { ...sheet, additive: 1 } ] } ),
+		/Invalid/
+	);
 });
 
 test("UI masks are admitted by value and reject degenerate sampling rectangles", () => {

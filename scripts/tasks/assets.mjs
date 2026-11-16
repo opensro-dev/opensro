@@ -54,6 +54,7 @@ export const REFRESH_FAMILIES = [
 	"restriction-text",
 	"return-scroll",
 	"slot-effect",
+	"unique-nests",
 	"world-map-markers"
 ];
 

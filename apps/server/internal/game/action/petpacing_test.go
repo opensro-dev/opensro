@@ -61,7 +61,8 @@ func TestPacedFollowSpeedMatchesNativeAtFullFactor(t *testing.T) {
 	if run < ref.RunSpeed {
 		t.Fatalf("native run %v below authored %v: the battle reset would fire", run, ref.RunSpeed)
 	}
-	state := &petSession{follower: simulation.NewPetFollower(pet.GID, simulation.Spawn{RegionID: 0x62aa}), character: c}
+	state := &petSession{character: c}
+	state.mover.FollowFrom(pet.GID, simulation.Spawn{RegionID: 0x62aa})
 	step := petCombatStep{key: petOwnerKey{division: testDivision, name: strings.ToLower(c.Name), gid: pet.GID}, state: state,
 		snapshot: c, pet: pet, ref: ref, run: run, nowMs: 1000}
 	if frames := rt.setCompanionFollowSpeed(step, 100); len(frames) != 0 {

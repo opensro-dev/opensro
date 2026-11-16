@@ -62,7 +62,7 @@ import { dungeonObjectMatrix, identity, mapPlacement } from "@/engine/foundation
 import type { Bundle, Material, Mesh, ObjectBranch } from "./internal/resource-contract";
 import { validDungeonBlocks } from "./internal/dungeon-block-publication";
 import { sceneryMaterial } from "@/engine/foundation/rendering/scenery-modifiers";
-import { sceneryParticles } from "@/engine/foundation/rendering/scenery-particles";
+import { holderSphere, placeSceneryEmitters, sceneryParticles } from "@/engine/foundation/rendering/scenery-particles";
 import { worldObjectMaterial } from "@/engine/foundation/rendering/world-material";
 import { finiteNumbers } from "@/engine/foundation/rendering/geometry-validation";
 
@@ -314,6 +314,9 @@ noteMaterial
 				materialFor( ref, material, index );
 			};
 			const compoundReady = new Map<ObjectBranch, boolean>(), fadeRadii = new Map<ObjectBranch, number>();
+			// Each compound's own sphere: its scenery emitters are in view while
+			// it is (A9EFB0 ticks attached objects on the visible path).
+			const holderSpheres = new Map<ObjectBranch, readonly number[] | null>();
 			const placements = objectPart ? b.objects.placements : [];
 			for ( const p of placements ) {
 				const key = [ Number( p.regionId ), p.objectId, p.uid, p.position.x, p.position.y, p.position.z ].join(
@@ -380,7 +383,8 @@ noteMaterial
 					range: p.lodGroupIndex === 2 ? 2020 : 480,
 					sceneryRange: p.lodGroupIndex === 2,
 					cellRadius: p.lodGroupIndex === 2 ? 15 : 7,
-					cells: placementCells.get( key )!
+					cells: placementCells.get( key )!,
+					...(p.layer === undefined ? {} : { layer: p.layer })
 				};
 				for ( const [branchIndex, ref] of branches.entries() ) {
 					const refEntry = refMaterial( ref ),
@@ -395,7 +399,10 @@ noteMaterial
 								radians( p.yaw )
 							);
 					const animation = animatedByPath.get( ref.sourcePath === undefined ? "" : lower( ref.sourcePath ) );
-					const emitters = sceneryParticles(
+					// A seasonal layer member's emitters are left out: emitters have
+					// no per-layer switch yet, and a lantern flame must not burn
+					// in a town whose decoration is hidden.
+					const emitters = p.layer !== undefined ? [] : sceneryParticles(
 						ref.modifiers?.particleModifiers,
 						key,
 						branchIndex,
@@ -404,11 +411,10 @@ noteMaterial
 						message => warnings.push( `${ref.sourcePath}: ${message}` )
 					);
 					reserve( emitters.length * 512 );
-					for ( const emitter of emitters ) {
-						scenery.push(
-							p.dungeonBlock === undefined ? emitter : { ...emitter, dungeonBlock: p.dungeonBlock }
-						);
+					if ( emitters.length && !holderSpheres.has( rootRef ) ) {
+						holderSpheres.set( rootRef, holderSphere( branches, meshes ) );
 					}
+					placeSceneryEmitters( scenery, emitters, p.dungeonBlock, holderSpheres.get( rootRef ), matrix );
 					if ( animation?.model ) {
 						reserve( 256 );
 						let placements = animatedPlacements.get( animation.glbPublicPath );
@@ -496,7 +502,9 @@ noteMaterial
 						// BSR's per-mesh dword (A7CAB0) only when the BSR carries one. Keep
 						// opted-out parts drawn, but never admit them as camera obstacles.
 						reserve( 256 );
-						if ( ref.renderMeshSection?.cameraCollision?.[meshIndex] !== false ) {
+						// Seasonal decoration is never a camera obstacle: it can be
+						// hidden, and the camera must not stop on a prop it cannot see.
+						if ( p.layer === undefined && ref.renderMeshSection?.cameraCollision?.[meshIndex] !== false ) {
 							group.collision.push( {
 								instance: group.matrices.length / 16,
 								object: key,

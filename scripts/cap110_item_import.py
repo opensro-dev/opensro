@@ -27,7 +27,7 @@ import cap110_items as items
 import import_vsro_alexandria as tables
 import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
-from sro_paths import EXTRACTED_ROOT, REPO_ROOT
+from sro_paths import EXTRACTED_ROOT, REPO_ROOT, trees_overlap
 
 FLAG = "SRO_CAP110_ITEMS"
 REPORT_NAME = ".opensro-cap110-items.json"
@@ -37,7 +37,7 @@ GLOW_ROOT = Path("Media_extracted") / "resinfo"
 GLOW_TABLE = "itemoption.txt"
 GLOW_TIERS = "itemtypenumber.txt"
 RARE_TABLE = "itemrare.txt"
-PARSED_EXTENSIONS = (".bsr", ".bmt", ".efp")
+PARSED_EXTENSIONS = (".bsr", ".bmt", ".efp", ".cpd")
 
 
 # ================
@@ -80,11 +80,34 @@ def resource_dependencies(requests):
 		input=json.dumps(requests), capture_output=True, text=True, encoding="utf-8", check=False
 	)
 	if result.returncode != 0:
-		raise ValueError(f"resource dependency audit failed:\n{result.stderr}")
+		# The exit status names a child killed from outside (empty stderr,
+		# as under memory pressure on 2026-11-15); stderr alone said nothing.
+		raise ValueError(f"resource dependency audit failed (exit {result.returncode}):\n{result.stderr}")
 	dependencies = json.loads(result.stdout)
 	if len(dependencies) != len(requests):
 		raise ValueError("resource parser response count mismatch")
 	return dependencies
+
+
+# ================
+# tolerant_dependencies
+#
+# resource_dependencies for a batch that may hold files the audit cannot
+# parse. One such file fails its whole batch, so a failing batch is split
+# in halves until each failure is a single request: k bad files in n cost
+# about 2k*log2(n) parser runs, where one run per request cost n (the
+# v1.696 Arabia closure spent about 170 s of its 5 minutes that way, two
+# bad files in a batch of hundreds). Returns one entry per request, in
+# request order: its dependency list, or the ValueError its own run raised.
+# ================
+def tolerant_dependencies(requests):
+	try:
+		return resource_dependencies(requests)
+	except ValueError as error:
+		if len(requests) <= 1:
+			return [error] * len(requests)
+	middle = len(requests) // 2
+	return tolerant_dependencies(requests[:middle]) + tolerant_dependencies(requests[middle:])
 
 
 # ================
@@ -94,11 +117,7 @@ def resource_dependencies(requests):
 # modifier dependencies fail rather than yielding an incomplete certificate.
 # ================
 def copy_asset_closure(equipment, native, output, archives, worn=True):
-	native_paths = {name: {
-		normalized_path(path.relative_to(native / folder).as_posix()): path
-		for path in (native / folder).rglob("*") if path.is_file()
-	} for name, folder in FOLDERS.items()}
-	pending, seen, records = set(items.direct_assets(equipment)), set(), []
+	pending = set(items.direct_assets(equipment))
 	# worn is false for rows that are carried, not worn (alchemy materials,
 	# tokens): they have an icon and a drop model but no worn mesh.
 	# A comma pair (set armour's plain and full-set model) was already cut
@@ -117,6 +136,22 @@ def copy_asset_closure(equipment, native, output, archives, worn=True):
 			raise ValueError(f"equipment has no worn model: {row[items.CODENAME]}")
 	for names in worn_models:
 		pending.update(("Data", normalized_path(name)) for name in names)
+	return copy_resource_closure(pending, native, output, archives)
+
+
+# ================
+# copy_resource_closure
+#
+# Copies each (archive, path) in pending and everything it references,
+# native files first, then the later archives. Shared by the equipment
+# import and the world layer import (world_layer_import.py).
+# ================
+def copy_resource_closure(pending, native, output, archives):
+	native_paths = {name: {
+		normalized_path(path.relative_to(native / folder).as_posix()): path
+		for path in (native / folder).rglob("*") if path.is_file()
+	} for name, folder in FOLDERS.items()}
+	pending, seen, records = set(pending), set(), []
 	while pending:
 		batch, requests = sorted(pending), []
 		pending = set()
@@ -161,7 +196,7 @@ def copy_asset_closure(equipment, native, output, archives, worn=True):
 # ================
 def add_items(vsro_root, native, output):
 	native, output = native.resolve(), output.resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("item output must be separate from the native extraction")
 	marker = output / REPORT_NAME
 	prior = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}

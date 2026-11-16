@@ -33,7 +33,7 @@ export const ENTRY_WITNESSES = {
 	"Job ranking": [ "job-rank-close", "job-rank-prev" ],
 	"Magic Pang": [ "gacha-prize:1", "gacha-prize:2" ],
 	"Magic option": [ "magic-option-close", "magic-option-slot" ],
-	"Map": [ "map-pan", "map-follow" ],
+	"Map": [ "map-pan", "map-pin" ],
 	"Option": [ "option-tab:0", "option-ok" ],
 	"Party": [ "party-invite", "select-window:Party" ],
 	"Party Matching": [ "party-match:purpose", "party-search-name" ],

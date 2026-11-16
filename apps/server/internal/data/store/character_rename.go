@@ -160,7 +160,7 @@ func (s *Store) renameCharacterLocked(division string, selected *domain.Characte
 		}
 	}
 	for id, members := range guilds {
-		if err := replaceGuildTx(tx.Tx, division, id, s.guilds[division][id], members); err != nil {
+		if err := replaceGuildTx(tx.Tx, division, id, s.guilds[division][id], members, &s.residues); err != nil {
 			return err
 		}
 	}
@@ -169,7 +169,7 @@ func (s *Store) renameCharacterLocked(division string, selected *domain.Characte
 			return err
 		}
 	}
-	if err := replaceGroundTx(tx.Tx, &s.encodeScratch, ground); err != nil {
+	if err := replaceGroundTx(tx.Tx, &s.encodeScratch, ground, s.residues.ground); err != nil {
 		return err
 	}
 	if reservation != nil {

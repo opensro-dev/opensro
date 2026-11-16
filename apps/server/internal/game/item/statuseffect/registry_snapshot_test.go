@@ -341,3 +341,81 @@ func TestSnapshotSeesTheOtherWriters(t *testing.T) {
 		viewMatches(t, r, "d", "anna")
 	})
 }
+
+/*
+================
+TestJobCheckpointsKeepQuietOwnersPublished
+
+One owner's due checkpoint must not republish the world (#3291):
+TakeJobCheckpoints marks only the owners its clocks moved or whose
+checkpoint it consumed, so a quiet owner's next Snapshot serves the
+very slice it published before. On the unconditional mark this
+fails: every sweep recopied every owner's view.
+================
+*/
+func TestJobCheckpointsKeepQuietOwnersPublished(t *testing.T) {
+	r := NewRegistry()
+	r.Apply(Effect{
+		DivisionID: "d", CharacterName: "quiet", SkillID: 1, SkillGroup: 1,
+		InstanceToken: 1, State: StateActive,
+	})
+	r.Apply(Effect{
+		DivisionID: "d", CharacterName: "worker", SkillID: 2, SkillGroup: 2,
+		InstanceToken: 2, State: StateActive, Persistent: true,
+		StartedAtMs: 0, ExpiresAtMs: 600000,
+	})
+	quiet := r.Snapshot("d", "quiet")
+	worker := r.Snapshot("d", "worker")
+	if len(r.TakeJobCheckpoints(300000)) != 1 {
+		t.Fatal("the worker's 300-second checkpoint did not land, so the sweep proved nothing")
+	}
+	after := r.Snapshot("d", "quiet")
+	if len(after) != len(quiet) || &after[0] != &quiet[0] {
+		t.Fatal("a quiet owner's view was recopied by another owner's checkpoint")
+	}
+	if next := r.Snapshot("d", "worker"); len(next) == len(worker) && len(next) > 0 && &next[0] == &worker[0] {
+		t.Fatal("the worker's own view was not republished after its checkpoint")
+	}
+}
+
+/*
+================
+BenchmarkSnapshotSweepAfterJobCheckpoints
+
+The checkpoint sweep's price to the snapshot lane (#3291): fifty
+owners of twelve rows, one worker whose checkpoint falls due every
+300 job-seconds. Per step the sweep runs and every owner's view is
+read, as the action lane does when a checkpoint lands. Before the
+mark was narrowed, the sweep staled all fifty views and the reads
+recopied each (slice allocs); now only the worker's republishes.
+================
+*/
+func BenchmarkSnapshotSweepAfterJobCheckpoints(b *testing.B) {
+	r := NewRegistry()
+	names := make([]string, 50)
+	for i := range names {
+		names[i] = string(rune('a'+i/26)) + string(rune('a'+i%26)) + "owner"
+		for j := 0; j < 12; j++ {
+			r.Apply(Effect{
+				DivisionID: "d", CharacterName: names[i],
+				SkillID: uint32(100 + j), SkillGroup: uint32(100 + j),
+				InstanceToken: uint32(1000 + i*12 + j), State: StateActive,
+			})
+		}
+	}
+	r.Apply(Effect{
+		DivisionID: "d", CharacterName: names[0], SkillID: 999, SkillGroup: 999,
+		InstanceToken: 9999, State: StateActive, Persistent: true,
+		StartedAtMs: 0, ExpiresAtMs: 3600000,
+	})
+	now := int64(0)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for step := 0; step < b.N; step++ {
+		now += 300000
+		r.TakeJobCheckpoints(now)
+		for _, name := range names {
+			_ = r.Snapshot("d", name)
+		}
+	}
+}

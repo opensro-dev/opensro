@@ -14,7 +14,7 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { emoteRoute: route, emoteAttachments: attachments } = await import(
+const { emoteRoute: route, emoteAttachments: attachments, stallAttachments: stall } = await import(
 	sourceFileUrl( "src/engine/foundation/animation/emote.ts" ).href
 );
 test("native COS discriminator requires runtime class, action and complete family/subtype", () => {
@@ -36,4 +36,10 @@ test("emote hand flags preserve action 2, restore on interruption and honor moun
 	assert.equal( attachments( true, "emote0", undefined, true, true ), true );
 	assert.equal( attachments( true, "emote0", "emote2", true, false ), false );
 	assert.equal( attachments( false, undefined, "emote0", false, false ), false );
+});
+test("a living player keeping a stall has empty hands until the stall closes (#3443)", () => {
+	assert.equal( stall( true, true, false ), true, "the keeper's greeting waves empty hands" );
+	assert.equal( stall( true, false, false ), false, "a closed stall returns the weapon" );
+	assert.equal( stall( true, true, true ), false, "a dead keeper is not posed at the stall" );
+	assert.equal( stall( false, true, false ), false, "only players keep stalls" );
 });

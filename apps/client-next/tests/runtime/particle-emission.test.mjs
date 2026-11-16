@@ -346,3 +346,173 @@ test("BAN parent motion evaluates hierarchy at actor.time without smearing late 
 	assert.ok( Math.abs( lastBones[44] - 20 ) < 1e-5 );
 	c.dispose( gpu, null );
 });
+
+/*
+================
+crowdFixture
+
+A renderer holding bodies and the glow emitters attached to them, one
+model per actor so every admitted actor is its own draw. step() returns
+the gids whose geometry the frame drew; a model's first vertex carries its
+actor's gid, since admission copies the geometry. Each glow reserves the
+largest particle capacity, so a few dozen fill the render budget.
+================
+*/
+function crowdFixture( body ) {
+	const c = createCharacters(), reference = createParticleReference(), births = new Map();
+	const gpu = {
+		upload( data ) {
+			return { gid: data.positions[0], indexCount: 3, instanceCount: 1 };
+		},
+		updateInstances( draw ) {
+			return draw;
+		},
+		updateBones() {},
+		presentParticles( draw, particles ) {
+			births.set( draw.gid, reference.present( draw, particles ).matrices[12] );
+		},
+		release( draw ) {
+			reference.release( draw );
+		}
+	};
+	const images = {
+		upload() {
+			return {};
+		},
+		release() {}
+	};
+
+	const node = name => ({ name, parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] });
+	const geometry = ( gid, vertices = 3 ) => {
+		const positions = new Float32Array( vertices * 3 );
+		positions[0] = gid;
+		return { positions, indices: new Uint32Array( [ 0, 1, 2 ] ), transform: identity() };
+	};
+	return {
+		c,
+		// The x of each glow's first live particle, as the last frame drew it.
+		births,
+		/*
+		================
+		addBody
+
+		A body of nodes joints, drawing vertices vertices.
+		================
+		*/
+		addBody( gid, { nodes = 1, vertices = 3 } = body ) {
+			const inverseBind = new Float32Array( nodes * 16 );
+			for ( let i = 0; i < nodes; i++ ) inverseBind.set( identity(), i * 16 );
+			c.model( "body" + gid, {
+				nodes: Array.from(
+					{ length: nodes },
+					( _, i ) => ({ ...node( i ? "n" + i : "root" ), parent: i ? 0 : -1 })
+				),
+				images: [],
+				clips: [],
+				primitives: [ {
+					name: "mesh",
+					node: 0,
+					joints: Array.from( { length: nodes }, ( _, i ) => i ),
+					inverseBind,
+					image: -1,
+					geometry: geometry( gid, vertices )
+				} ]
+			}, [] );
+			return {
+				gid,
+				model: "body" + gid,
+				pose: { regionId: 1, x: gid * 10, y: 0, z: 0, yaw: 0 },
+				clip: "",
+				time: 0,
+				loop: true,
+				scale: 1
+			};
+		},
+		/*
+		================
+		addGlow
+		================
+		*/
+		addGlow( gid, holder ) {
+			c.model( "glow" + gid, {
+				nodes: [ node( "root" ) ],
+				images: [],
+				clips: [ { name: "effect", duration: 30, channels: [] } ],
+				primitives: [ {
+					name: "particle",
+					node: 0,
+					joints: [ 0 ],
+					inverseBind: identity(),
+					image: -1,
+					emission: { births: [ 0 ], lifetime: 30, capacity: 8192 },
+					geometry: geometry( gid )
+				} ]
+			}, [] );
+			return {
+				gid,
+				model: "glow" + gid,
+				pose: { regionId: 1, x: 0, y: 0, z: 0, yaw: 0 },
+				attachment: { gid: holder, bone: "root", offset: [ 0, 0, 0 ] },
+				clip: "effect",
+				time: 1,
+				loop: true,
+				scale: 1
+			};
+		},
+		step( rows ) {
+			c.actors( rows );
+			return new Set( c.prepare( gpu, images, 1 ).map( draw => draw.gid ) );
+		},
+		dispose() {
+			c.dispose( gpu, images );
+		}
+	};
+}
+
+test("a crowd's glows never take the render budget its bodies need: bodies plan first, glows share the rest", () => {
+	// 16 bodies of 1024 joints (about 390 KB of pose each), two glows each.
+	const f = crowdFixture( { nodes: 1024 } ), bodies = [], glows = [];
+	for ( let gid = 1; gid <= 16; gid++ ) bodies.push( f.addBody( gid ) );
+	for ( let i = 0; i < 32; i++ ) glows.push( f.addGlow( 1000 + i, bodies[i % 16].gid ) );
+	const drawn = f.step( [ ...bodies, ...glows ] );
+	assert.deepEqual( bodies.filter( b => !drawn.has( b.gid ) ).map( b => b.gid ), [], "every body draws" );
+	const glowsDrawn = glows.filter( g => drawn.has( g.gid ) ).length;
+	assert.ok( glowsDrawn > 0 && glowsDrawn < glows.length, "the budget holds only some glows" );
+	// The glows that draw are the first in admission order (nearest first).
+	assert.deepEqual( glows.map( g => drawn.has( g.gid ) ), glows.map( ( _, i ) => i < glowsDrawn ) );
+	assert.equal( f.c.stats().deferredActors, glows.length - glowsDrawn );
+	assert.equal( f.c.stats().deferredBodies, 0 );
+	assert.ok( f.c.stats().renderBytes <= 64 << 20 );
+	// A refused glow keeps no particle history, so frame after frame the
+	// same bodies still draw.
+	assert.deepEqual( f.step( [ ...bodies, ...glows ] ), drawn );
+	f.dispose();
+});
+
+test("a glow whose holder the render budget refused is not admitted, even when it would fit", () => {
+	// Each body's batch takes about 34 MB of the 64 MB budget: one fits.
+	const f = crowdFixture( { vertices: 300000 } );
+	const near = f.addBody( 1 ), far = f.addBody( 2 ), nearGlow = f.addGlow( 1001, 1 ), farGlow = f.addGlow( 1002, 2 );
+	const drawn = f.step( [ near, far, nearGlow, farGlow ] );
+	assert.ok( drawn.has( near.gid ) && drawn.has( nearGlow.gid ) );
+	assert.ok( !drawn.has( far.gid ) );
+	assert.equal( f.c.stats().deferredBodies, 1 );
+	assert.ok( !drawn.has( farGlow.gid ), "a glow never draws without its holder" );
+	f.dispose();
+});
+
+test("a glow the render budget refused restarts when it is admitted again", () => {
+	const f = crowdFixture( { nodes: 1 } ), holder = f.addBody( 1 ), crowd = [];
+	const glows = Array.from( { length: 11 }, ( _, i ) => f.addGlow( 1000 + i, 1 ) );
+	assert.ok( f.step( [ holder, ...glows ] ).has( glows[10].gid ) );
+	assert.equal( f.births.get( glows[10].gid ), 10, "born at its holder" );
+	// Nearer bodies arrive and take the budget: the eleventh glow gives way.
+	for ( let gid = 2; gid <= 17; gid++ ) crowd.push( f.addBody( gid, { nodes: 1024 } ) );
+	assert.ok( !f.step( [ holder, ...crowd, ...glows ] ).has( glows[10].gid ) );
+	// They leave, and the holder has moved: the glow starts over where its
+	// holder is now, not from the particles it had before it gave way.
+	const moved = { ...holder, pose: { ...holder.pose, x: 50 } };
+	assert.ok( f.step( [ moved, ...glows ] ).has( glows[10].gid ) );
+	assert.equal( f.births.get( glows[10].gid ), 50 );
+	f.dispose();
+});

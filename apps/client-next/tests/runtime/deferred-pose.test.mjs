@@ -85,8 +85,11 @@ test("deferred poses preserve seeks, long clocks, CPU sockets, layers and failed
 	assert.equal( b.gpuSample(), null );
 	assert.deepEqual( b.socket( "socket" ), a.socket( "socket" ) );
 	const revision = b.revision();
+	// A rejected request (an invalid layer weight) must not poison the
+	// retained pose or its revision. A missing clip is no longer rejected:
+	// it plays the rest pose (missing-clip.test.mjs).
 	assert.throws( () =>
-		b.evaluate( "", 0, false, [ ...layers, { clip: "missing", time: 0, weight: 1, lane: "timed" } ], true )
+		b.evaluate( "", 0, false, [ ...layers, { clip: "move", time: 0, weight: 2, lane: "timed" } ], true )
 	);
 	assert.equal( b.revision(), revision );
 	assert.deepEqual( b.socket( "socket" ), a.socket( "socket" ) );

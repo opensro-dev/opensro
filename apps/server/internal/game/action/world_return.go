@@ -129,7 +129,10 @@ func (rt *Runtime) bindResidentRegionVia(key string, nowMs int64, door func(*ent
 	rt.deps.Read(owner.division, func() {
 		inWorld = instance.ID(domain.CharacterWorldInstance(c)) == lease.ID
 		if inWorld {
-			pose = rt.liveSpawn(key, c, nowMs)
+			// The tick's own time: prepare already stepped the walk.
+			pose = rt.Worlds.SnapshotAt(key, func() simulation.WorldState {
+				return simulation.SeedWorldState(c)
+			}, nowMs).LiveSpawnAt(nowMs)
 		}
 	})
 	if !inWorld {

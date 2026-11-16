@@ -9,6 +9,7 @@ export default {
         "scripts/test/world/worldFormats.test.mjs",
         "scripts/test/world/outdoorObjectIndex.test.mjs",
         "scripts/test/world/dungeonBlockObjects.test.mjs",
+        "scripts/test/world/worldLayers.test.mjs",
       ]
     }
   ]

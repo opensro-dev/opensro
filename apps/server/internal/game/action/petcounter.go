@@ -80,7 +80,7 @@ func (rt *Runtime) petCounterStun(hit petCounterHit) []wire.Frame {
 		return nil
 	}
 	state := rt.petSessionFor(hit.division, owner.Name, pet.GID)
-	if state == nil || state.follower == nil {
+	if state == nil || state.mover.AnyFollower() == nil {
 		return nil
 	}
 	ref, found := rt.cosReference(pet)
@@ -122,7 +122,7 @@ func (rt *Runtime) petCounterStun(hit petCounterHit) []wire.Frame {
 			continue
 		}
 		state.trained.counterHits[index] = 0
-		stunned := rt.applyPetStatus(step, row, hit.attacker)
+		stunned, stunLanded := rt.applyPetStatus(step, row, hit.attacker)
 		frames = append(frames, stunned...)
 		nearby, areaStunned := 0, 0
 		if skill.Option == 3 {
@@ -136,9 +136,9 @@ func (rt *Runtime) petCounterStun(hit petCounterHit) []wire.Frame {
 					}
 					nearby++
 					if rt.petChance(50) {
-						extra := rt.applyPetStatus(step, row, mob.Gid)
+						extra, landed := rt.applyPetStatus(step, row, mob.Gid)
 						frames = append(frames, extra...)
-						if len(extra) > 0 {
+						if landed {
 							areaStunned++
 						}
 					}
@@ -151,7 +151,7 @@ func (rt *Runtime) petCounterStun(hit petCounterHit) []wire.Frame {
 		}
 		rt.petDiagnostic(hit.division, owner.Name, pet.GID, reason, log.Fields{
 			"tier": skill.Option, "hits": petCounterHits, "victim": hit.victim, "attacker": hit.attacker,
-			"stun_applied": len(stunned) > 0, "area_in_range": nearby, "area_stunned": areaStunned,
+			"stun_applied": stunLanded, "area_in_range": nearby, "area_stunned": areaStunned,
 		})
 	}
 	return frames
@@ -163,27 +163,31 @@ applyPetStatus
 
 Reuse native status resolution/publication with a zero-damage plan, as Scream
 Mask does. Unique monsters keep their immunity; applying the status deals no immediate damage.
+The frames are the status publication; landed says the plan committed on a
+survivor that carries a status after it. A status refreshed without a new
+mask publishes nothing and still landed.
 ================
 */
-func (rt *Runtime) applyPetStatus(step petCombatStep, row enterworld.SkillRow, gid uint32) []wire.Frame {
+func (rt *Runtime) applyPetStatus(step petCombatStep, row enterworld.SkillRow, gid uint32) (frames []wire.Frame, landed bool) {
 	target, ok := rt.resolvePetCombatTarget(step, gid)
 	if !ok || target.monster == nil {
-		return nil
+		return nil, false
 	}
 	mob := *target.monster
 	if rarity := mob.Rarity() & 0x0f; rarity == 3 || rarity == 8 {
-		return nil
+		return nil, false
 	}
 	actor := criticalActor{division: step.key.division, monster: step.pet.GID}
 	records, err := rt.rollMonsterImpactStatus(monsterImpactCaster{division: step.key.division, actor: actor, level: step.pet.Level}, &row.Abnormal, mob)
 	if err != nil || len(records) == 0 {
-		return nil
+		return nil, false
 	}
 	plan := simulation.MonsterDamagePlan{GID: mob.Gid, ExpectedHP: mob.CurrentHP, Abnormal: records,
 		AbnormalSources: rt.Monsters.PrepareAbnormalSources(step.key.division, records)}
 	results, applied := rt.Monsters.ApplyDamageBatch(step.key.division, []simulation.MonsterDamagePlan{plan})
 	if !applied {
-		return nil
+		return nil, false
 	}
-	return rt.monsterImpactAbnormalFrames(step.key.division, mob.Gid, results)
+	live, ok := rt.Monsters.Get(step.key.division, mob.Gid)
+	return rt.monsterImpactAbnormalFrames(step.key.division, mob.Gid, results), ok && live.CurrentHP > 0 && live.AbnormalMask() != 0
 }

@@ -9,13 +9,13 @@ classes kept only while a lower class can take their roll.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 
 import pathlib
 import sys
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "build"))
 import generate_loot_catalog as catalog
 
 

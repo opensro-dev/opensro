@@ -381,11 +381,13 @@ LeaveOutcome
 type LeaveOutcome struct {
 	// Leaver is the departed member.
 	Leaver Member
-	// WasLeader reports the native leave-vs-dissolve split: the leader
-	// leaving dissolves the whole party.
+	// WasLeader reports the leader left.
 	WasLeader bool
-	// Dissolved reports the party is gone - either the leader left, or
-	// the departure dropped the roster below the two-member minimum.
+	// Successor is the member who took the lead when the leader left a
+	// party that survives it; zero otherwise.
+	Successor Member
+	// Dissolved reports the party is gone: the departure dropped the
+	// roster below the two-member minimum.
 	Dissolved bool
 	// Others is every OTHER pre-departure member, in roster order - the
 	// fan-out audience.
@@ -393,10 +395,15 @@ type LeaveOutcome struct {
 }
 
 // Leave removes a character from their party: the 0x704F path and the
-// disconnect hooks. The leader leaving DISSOLVES the party (the native
-// split the client fold notes - 0x704F is empty and the server decides
-// by leadership); a member leaving that would leave fewer than two
-// members dissolves it too (a one-member party is not a party).
+// disconnect hooks. A departure that would leave fewer than two members
+// dissolves the party (a one-member party is not a party). Otherwise a
+// leader's departure hands the lead to the longest-standing member, the
+// first of the others in join order (#3438).
+//
+// INFERENCE: the v1.150 client folds a 0x3E58 type-9 LEADER DELEGATE
+// (761870) and prints UIIT_MSG_PARTY_HOST_ROLE_DELEGATED, yet offers no
+// control that asks for a delegation; only the server's own handover on
+// the leader's departure sends it. Join order is how the roster is kept.
 /*
 ================
 Leave
@@ -416,12 +423,16 @@ func (r *Registry) Leave(divisionID, name string) (LeaveOutcome, string) {
 		WasLeader: leaver.MemberID == p.leaderID,
 		Others:    others,
 	}
-	if outcome.WasLeader || len(others) < 2 {
+	if len(others) < 2 {
 		outcome.Dissolved = true
 		for _, member := range p.members {
 			delete(r.byKey, memberKey(p.divisionID, member.Name))
 		}
 		return outcome, ""
+	}
+	if outcome.WasLeader {
+		outcome.Successor = others[0]
+		p.leaderID = outcome.Successor.MemberID
 	}
 	p.members = others
 	delete(r.byKey, key)

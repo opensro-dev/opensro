@@ -201,7 +201,7 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 	case SubLieName, SubRealName:
 		return handleWho(deps, presence, divisionID, request)
 	case SubFindUser:
-		return handleFindUser(deps, presence, divisionID, sender, request)
+		return handleFindUser(deps, presence, divisionID, request, status)
 	case SubGrantSilk:
 		// Operator tooling (action/operator_silk.go): the ack carries the
 		// recipient's new balance.
@@ -347,7 +347,7 @@ type BodyStatusCommands interface {
 // it mutates nothing.
 // A target that is unknown or offline is refused with the result-2 ack (the
 // native FINDUSER-fail leg, generic subcmd-1 system message).
-func handleFindUser(deps Dependencies, presence PresenceView, divisionID string, sender *enterworld.Character, request Request) Outcome {
+func handleFindUser(deps Dependencies, presence PresenceView, divisionID string, request Request, status []BodyStatusCommands) Outcome {
 	if !request.HasName || request.Name == "" {
 		return Outcome{
 			Refusal: "gmcommand: /FINDUSER with an empty name",
@@ -363,14 +363,27 @@ func handleFindUser(deps Dependencies, presence PresenceView, divisionID string,
 			Ack:     EncodeAckFail(SubFindUser),
 		}
 	}
-	return Outcome{Ack: EncodeAckGuide(SubFindUser, findUserGuideText(target))}
+	return Outcome{Ack: EncodeAckGuide(SubFindUser, findUserGuideText(divisionID, target, status))}
+}
+
+// LivePositions is the action owner's live-region port. The saved spawn
+// on the record trails the walk (it is written back at settles, not per
+// step), so an online character's region is the live world's, never the
+// row's.
+type LivePositions interface {
+	LiveRegionFor(divisionID string, character *enterworld.Character) uint16
 }
 
 // findUserGuideText builds the guide string the client shows for a located
-// user: the stored name plus, when a spawn pose is persisted, its region id.
-// This is the only server-authored content in the lane; it reports real
-// state (name + region) and nothing invented.
-func findUserGuideText(target *enterworld.Character) string {
+// user: the name plus its live region (the persisted one only when no
+// live owner is wired). This is the only server-authored content in the
+// lane; it reports real state (name + region) and nothing invented.
+func findUserGuideText(divisionID string, target *enterworld.Character, status []BodyStatusCommands) string {
+	if len(status) > 0 {
+		if live, ok := status[0].(LivePositions); ok {
+			return fmt.Sprintf("%s (region 0x%04X)", target.Name, live.LiveRegionFor(divisionID, target))
+		}
+	}
 	if target.World != nil && target.World.Spawn != nil && target.World.Spawn.RegionID != nil {
 		return fmt.Sprintf("%s (region 0x%04X)", target.Name, uint16(*target.World.Spawn.RegionID))
 	}

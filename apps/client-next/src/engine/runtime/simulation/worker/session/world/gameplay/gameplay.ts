@@ -107,6 +107,7 @@ import { crestDeleteKeys, crestDeleteKind } from "@/engine/foundation/gameplay/c
 import {
 	crestRegisterKeys,
 	crestRegisterKind,
+	crestRegisterRefusalLine,
 	crestRegisterResult,
 	crestRegisterUploadPayload
 } from "@/engine/foundation/gameplay/crest-register";
@@ -256,7 +257,13 @@ import {
 	abnormalSnapshotNotices,
 	type AbnormalRecord
 } from "@/engine/foundation/gameplay/abnormal-snapshot";
-import { debugWeather, entryEnvironment, environmentPacket } from "@/engine/foundation/gameplay/event-environment";
+import {
+	debugWeather,
+	entryEnvironment,
+	environmentPacket,
+	eventMusicMode,
+	transferEnvironment
+} from "@/engine/foundation/gameplay/event-environment";
 import {
 	cosContainerRequest,
 	cosContainerResult,
@@ -275,7 +282,13 @@ import {
 } from "@/engine/foundation/gameplay/pet-assist";
 import { cosBehaviorResult, applyCosBehavior, cosBehaviorRequest } from "@/engine/foundation/gameplay/cos-behavior";
 import { createFeedback } from "./feedback/feedback";
-import { saleResult, soldInventory, commerceJson, commerceInteger } from "@/engine/foundation/gameplay/commerce";
+import {
+	saleResult,
+	soldInventory,
+	commerceJson,
+	commerceInteger,
+	liveShopTransport
+} from "@/engine/foundation/gameplay/commerce";
 import { actionEmote, quickSlotItemSlot, quickSlot, TRACE_ACTION_ID } from "@/engine/foundation/gameplay/quickslots";
 import { reconcileQuickslotInventory } from "@/engine/foundation/gameplay/quickslot-inventory";
 import { createTraining } from "./training/training";
@@ -342,6 +355,7 @@ import { createTargeting } from "./targeting/targeting";
 import { createMoveReservation, type GroundCommand } from "./reservation/reservation";
 import { createBetaPlayerMap } from "./beta-map/beta-map";
 import { createCaravanStars } from "./caravan-stars/caravan-stars";
+import { createContributorTitles } from "./contributor-titles/contributor-titles";
 import { createTradeProgress } from "./trade-progress/trade-progress";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createMostWanted } from "./most-wanted/most-wanted";
@@ -445,11 +459,6 @@ const SKILL_RIDING_REFUSAL = 0x21;
 // The guild notices' category; 0x1F refuses a ban of the master or oneself.
 const GUILD_NOTICE_CATEGORY = 0x10;
 const GUILD_BAN_REFUSED = 0x1f;
-// The 0xB45A grant bits that open the talk window on selection: shop 0x1,
-// talk 0x2, recall point 0x40, teleport 0x80 and return point 0x100. The
-// Bandit Den gate has no link out, so 0x100 (row 0x10, "Teleport to return
-// point") is its only bit; without it the gate's menu never opened.
-const TALK_WINDOW_CAPABILITIES = 0x1c3;
 // Server 0x3011 (529D6D), the victim's death kind; CPSMission 74FE50 here.
 const DEATH_NOTICE = 0x37ce;
 // 75B8D0: the transport bag's trade level [u8].
@@ -601,6 +610,7 @@ export function createGameplay(
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
 		caravanStars = createCaravanStars(),
+		contributorTitles = createContributorTitles(),
 		tradeProgress = createTradeProgress(),
 		uniqueRank = createUniqueDamageRank(),
 		mostWanted = createMostWanted(),
@@ -1057,7 +1067,7 @@ scroll's kind-0 row does not.
 		if ( local.movementMode === MOVEMENT_SEATED ) return "seated";
 		if ( now < groundSkillMoveSuppressUntil ) return "suppressed";
 		if ( teleportMode === 1 ) return "teleport";
-		if ( interactionBlocked() ) return "blocked";
+		if ( interactionBlocked() || inventory.tradePinned() ) return "blocked";
 		if ( frozen() ) return "frozen";
 		if ( castLocked( now ) ) return "cast";
 		if ( local.mountedOn && (!activeCos || activeCos.gid !== local.mountedOn || activeCos.dead) ) return "mounted";
@@ -1320,6 +1330,9 @@ fails; retry persistence without restoring stale slot occupancy.
 	let plusSevenNotices = true;
 	// The Experimental "Item break notices" row, on the same terms.
 	let breakNotices = true;
+	// Port-only (Experimental "Christmas carols"): carols while the
+	// Christmas event group is on (eventMusicMode).
+	let christmasCarols = false;
 	// The Experimental "Highlight event notices" row (#2727): while on, a
 	// shard event notice queues with the event colour; off is the native
 	// beige line.
@@ -1338,6 +1351,27 @@ fails; retry persistence without restoring stale slot occupancy.
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	const cosSelection = createCosSelection();
 	let activeCos: GameplayState["activeCos"], cosResult: GameplayState["cosResult"];
+	// The last presented shop with its live transport (liveShopTransport),
+	// kept so an unchanged shop keeps its identity between frames.
+	type PresentedShop = NonNullable<ReturnType<typeof inventory.state>["shop"]>;
+	let liveShopCache: { source: PresentedShop; gid: number | undefined; shop: PresentedShop; } | undefined;
+	/*
+	================
+	liveShop
+
+	The shop as the view shows it: a specialty page follows the transport
+	that is out now (band 2, COS_CLASS_TRANSPORT), not the one the shop
+	answer named.
+	================
+	*/
+	function liveShop( source: PresentedShop ): PresentedShop {
+		const record = activeCos ? cosRecords.get( activeCos.gid ) : undefined;
+		const gid = record && record.band === 2 && !activeCos!.dead ? record.gid : undefined;
+		if ( liveShopCache?.source !== source || liveShopCache.gid !== gid ) {
+			liveShopCache = { source, gid, shop: liveShopTransport( source, gid ) };
+		}
+		return liveShopCache.shop;
+	}
 	// 6E6150 keys a kind-3 row by its item id, so distinct items stack.
 	let cosWindows: readonly CosItemWindow[] = [];
 	const cosItemRefs2 = new Map<number, CosItemWindowReference>();
@@ -1589,10 +1623,12 @@ bag keeps one marker row, not the whole bag.
 clearState
 
 Retire session facts together so a later character cannot inherit bindings,
-selected entities, cooldowns or world-entry state.
+selected entities, cooldowns or world-entry state. keepChat keeps the
+conversation for a re-entry (#3435); the chat owner's bootstrap still
+clears it when another character enters.
 ================
 	*/
-	function clearState() {
+	function clearState( keepChat = false ) {
 		actionSession.clear();
 		// The next character's report must not carry this one's bag rows.
 		inventoryJournal = [];
@@ -1604,6 +1640,7 @@ selected entities, cooldowns or world-entry state.
 		moveReservation.clear();
 		betaMap.clear();
 		caravanStars.clear();
+		contributorTitles.clear();
 		uniqueRank.clear();
 		mostWanted.clear();
 		petTraining.clear();
@@ -1649,7 +1686,8 @@ selected entities, cooldowns or world-entry state.
 		progression = { masteries: [] };
 		skillGroups.clear();
 		movement.clear();
-		chat.clear();
+		if ( keepChat ) chat.suspend();
+		else chat.clear();
 		pickup.clear();
 		cosPickup.clear();
 		quests.clear();
@@ -1775,6 +1813,7 @@ The Experimental window's gameplay rows (experimentalGameplay).
 			dropPlusNotices = value.dropPlusNotices !== false;
 			plusSevenNotices = value.plusSevenNotices !== false;
 			breakNotices = value.breakNotices !== false;
+			christmasCarols = value.christmasCarols === true;
 			highlightEventNotices = value.highlightEventNotices !== false;
 			homingProjectiles = value.homingProjectiles === true;
 			smartPetPickup = value.smartPetPickup !== false;
@@ -2714,6 +2753,14 @@ state here before a command can claim a native wire conversation.
 			if (
 				interactionBlocked() &&
 				[ "move", "ground-move", "attack", "pickup", "cos-attack" ].includes( command.kind )
+			) return null;
+			// INFERENCE (#3433): a stall or an open exchange pins the player as
+			// the server does (action PlayerInteractionLocked): no walk, attack
+			// or skill, so a teleport cannot carry it out. Nothing is sent, so
+			// nothing is predicted and snapped back.
+			if (
+				inventory.tradePinned() &&
+				[ "move", "ground-move", "attack", "skill", "pickup", "cos-attack" ].includes( command.kind )
 			) return null;
 			// 6932D7..69338D: a ground click cancels a running action and a
 			// logout countdown before the seated and navigation checks.
@@ -3699,6 +3746,26 @@ state here before a command can claim a native wire conversation.
 				if ( inventory.state().shop?.npc !== targeting.state().target ) {
 					throw Error( "Merchant selection changed" );
 				}
+				// 567824/567830: a trade good bought with no transport out
+				// prints the line and sends nothing; with one out the buy is
+				// the COS buy (liveShopTransport), never one into the bag.
+				if ( command.kind === "shop-buy" ) {
+					const tab = command.tab, slot = command.slot;
+					const offer = inventory.state().shop?.offers.find(
+						row => row.tab === tab && row.slot === slot
+					);
+					const bought = offer?.items?.[0] ?? offer?.previews?.[0];
+					if ( bought && isTradeGoods( bought.typeFlags ) ) {
+						notices = [ ...notices.slice( -99 ), {
+							key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
+							value: 0,
+							sequence: ++noticeSequence,
+							nativeType: 0
+						} ];
+						dirty = true;
+						return null;
+					}
+				}
 				return inventory.trade(
 					command.kind === "shop-buy",
 					command.slot,
@@ -4134,6 +4201,13 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if ( caravanStars.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
+				if ( contributorTitles.receive( frame ) ) {
+					// The login prompt raises its notice dialog (port-only 0x3FC2).
+					const prompt = contributorTitles.takePrompt();
+					if ( prompt ) notices = [ ...notices.slice( -99 ), { ...prompt, sequence: ++noticeSequence } ];
 					dirty = true;
 					return true;
 				}
@@ -5237,14 +5311,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( !result.ok ) {
 						const notice = result.code !== undefined ?
 							constantNativeNotice( 1, result.code ) :
-							{
-								key: result.reason === "overlap" ?
-									crestRegisterKeys( "guild" ).refused :
-									result.reason === "invalid" ?
-									crestRegisterKeys( "guild" ).error :
-									crestRegisterKeys( "guild" ).fail,
-								value: 0
-							};
+							crestRegisterRefusalLine( "guild", result.reason );
 						if ( notice ) {
 							notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 						}
@@ -5663,7 +5730,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					const selection = targeting.state();
 					if (
 						frame.opcode === 0xb45a && frame.payload[0] === 1 && previousTarget.targetPending &&
-						!selection.targetPending && ((selection.targetCapabilities ?? 0) & TALK_WINDOW_CAPABILITIES)
+						!selection.targetPending && targeting.opensTalkPane()
 					) npcConversation.select( selection.target );
 					else if ( !selection.target ) npcConversation.clear();
 				}
@@ -6103,7 +6170,7 @@ The published plane when something changed since the last take, else null.
 				...npcState,
 				abnormalRecords,
 				returnScroll,
-				musicMode,
+				musicMode: eventMusicMode( musicMode, environment.groups, christmasCarols ),
 				gmReplies,
 				tradeStars,
 				// Port-only (#3163): the cargo's distance to the next star,
@@ -6183,6 +6250,7 @@ The published plane when something changed since the last take, else null.
 				moveHeld: moveReservation.holding(),
 				pickupPredictable,
 				...i,
+				...(i.shop ? { shop: liveShop( i.shop ) } : {}),
 				inventoryJournal,
 				...c,
 				...targeting.state(),
@@ -6190,6 +6258,9 @@ The published plane when something changed since the last take, else null.
 				...skillPress.state(),
 				betaPlayers: betaMap.players(),
 				caravanStars: caravanStars.gids(),
+				// Port-only (#3358): the shown Contributor roster
+				// (contributor-titles.ts), under SRO_CONTRIBUTOR_TITLES.
+				contributorTitles: contributorTitles.names(),
 				uniqueDamageRank: uniqueRank.current(),
 				mostWanted: mostWanted.current(),
 				petTraining: petTraining.state(),
@@ -6260,7 +6331,7 @@ World transfer retires spatial work while retaining character/session data.
 			skillPress.clear();
 			localGid = 0;
 			worldClock = undefined;
-			environment = entryEnvironment( {} ).state;
+			environment = transferEnvironment( environment );
 			activeCos = undefined;
 			cosResult = undefined;
 			cosError = null;
@@ -6275,10 +6346,10 @@ World transfer retires spatial work while retaining character/session data.
 reset
 ================
 		*/
-		reset() {
+		reset( keepChat = false ) {
 			live = false;
 			deferredSends = [];
-			clearState();
+			clearState( keepChat );
 			dirty = true;
 		},
 		/*

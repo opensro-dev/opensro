@@ -76,6 +76,9 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		// panics and the ticker recovers it.
 		rt.beginTickSnapshots()
 		defer rt.endTickSnapshots()
+		// Once a tick: drop EntryActionSpeed copies no session read
+		// over the last full tick (keptCastCopy).
+		defer rt.rotateKeptCasts()
 		// Every step commits inside character doors and routes its private
 		// tail later. Each step holds the publication gate over its commit
 		// and the capture of its recipients (sealTickPrivate), ordering
@@ -149,6 +152,10 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advanceFortressForges", func() { rt.Fortresses.AdvanceItemForges(nowMs) })
 		step("advanceGuildVotes", func() { rt.advanceGuildVotes(nowMs) })
 		step("advanceHalloweenWaves", rt.advanceHalloweenWaves)
+		step("advanceChristmasWaves", rt.advanceChristmasWaves)
+		step("advanceChristmasSnowSlaves", rt.advanceChristmasSnowSlaves)
+		step("advancePandoraBoxes", rt.advancePandoraBoxes)
+		frames("advanceEventGroups", rt.advanceEventGroups)
 		// Retirement is presentation-only. Reward state was already committed
 		// by the fatal hit, while the zero-HP source remains resolvable through
 		// the authored death-animation completion.
@@ -201,6 +208,14 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		})
 		frames("advanceNaturalRecovery", rt.advanceNaturalRecovery)
 		frames("advancePets", rt.advancePets)
+		// The steps since the first drain queue frames on the monster leg
+		// too: above all a pet's result-less hits (a bonus hit, gear poison,
+		// the brood's burst), whose HP frame carries the HP the hit left.
+		// The second drain sends them in the tick that committed them. Held
+		// for the next tick's first drain, they went out behind the hits
+		// that tick commits first (a prepared cast's release), with an HP
+		// those hits had already lowered.
+		step("drainMonsterLegRecipientsAfterPets", func() { out = append(out, rt.drainMonsterLegRecipients()...) })
 		// The caravan tick after the pets: a fired caravan reads the transport's
 		// cargo and live position as this tick left them.
 		step("advanceCaravans", func() { rt.advanceCaravans(nowMs) })
@@ -225,6 +240,13 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("retireActionSessions", func() { out = append(out, rt.retireActionSessions()...) })
 		frames("advanceFlagWar", rt.advanceFlagWar)
 		frames("advanceFlagWarMatches", rt.advanceFlagWarMatches)
+		// After every step that can change a monster's HP or status, so
+		// the vitals a holder receives carry this tick's changes
+		// (monstervitals.go).
+		// A holder that a moving monster left beyond its range holds it no
+		// more, before this tick's vitals pick their holders.
+		step("retireDistantHolders", func() { rt.retireDistantHolders(nowMs) })
+		frames("publishMonsterVitals", rt.publishMonsterVitals)
 		// Last, so a notice any step above queued leaves this same tick.
 		frames("drainAnnouncements", rt.drainAnnouncements)
 		return out

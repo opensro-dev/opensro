@@ -15,17 +15,25 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const load = file => import( sourceFileUrl( file ).href );
-const { snapshotParticleTick, continueRotation, createStepCache, ROTATION_WORK } = await load(
+const { snapshotParticleTick, tickRotationStep, turnByStep, ROTATION_WORK } = await load(
 	"src/engine/foundation/animation/particle-presentation.ts"
 );
-const { writeEmittedRecord, writeGraphRecord, PARTICLE_RECORD, PARTICLE_ACTOR, ACTOR_PALETTE, ACTOR_FRACTION } =
-	await load(
-		"src/engine/foundation/animation/particle-records.ts"
-	);
+const {
+	writeEmittedRecord,
+	writeGraphRecord,
+	writeRibbonTick,
+	PARTICLE_RECORD,
+	PARTICLE_ACTOR,
+	ACTOR_PALETTE,
+	ACTOR_FRACTION
+} = await load( "src/engine/foundation/animation/particle-records.ts" );
 const { presentSlot } = await import( "../helpers/particle-reference.mjs" );
-const { createParticleGraph, advanceParticleGraph, particleElementMatrix } = await load(
-	"src/engine/foundation/animation/particle-graph.ts"
+const { advanceParticleGraph } = await load( "src/engine/foundation/animation/particle-graph.ts" );
+const { createParticleGraph, ribbonElementFrames, SLOT_ALIVE, SLOT_OCCUPIED, SLOT_SNAPSHOT } = await load(
+	"src/engine/foundation/animation/particle-graph-slots.ts"
 );
+const { createParticleGraphPlan } = await load( "src/engine/foundation/animation/particle-graph-plan.ts" );
+const { particleElements } = await import( "../helpers/particle-slots.mjs" );
 const { createZoomEase, ZOOM_EASE_TIME_MS } = await load( "src/engine/foundation/rendering/camera-zoom-ease.ts" );
 
 const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
@@ -38,6 +46,24 @@ const spinZ = angle => {
 	return m;
 };
 const angleZ = ( m, offset = 0 ) => Math.atan2( m[offset + 1], m[offset] );
+// One element drawn both as a ribbon and by a particle stream.
+const DRAWS = [ { particleEmitter: 0, ribbon: {} }, { particleEmitter: 0 } ];
+const graphEmitter = overrides => ({
+	parent: -1,
+	parents: [ 0 ],
+	births: [ 0 ],
+	frames: 40,
+	keepMatrix: false,
+	keepOrigin: true,
+	positionDepth: 0,
+	matrixDepth: 0,
+	velocityDepth: 0,
+	followDepth: 0,
+	scales: [],
+	positions: [],
+	rotations: [],
+	...overrides
+});
 const particle = overrides => ({
 	position: [ 0, 0, 0 ],
 	velocity: [ 0, 0, 0 ],
@@ -93,26 +119,60 @@ test("fraction zero and a fresh particle draw the tick state", () => {
 	assert.ok( Math.abs( angleZ( palette ) - .3 ) < 1e-6 );
 });
 
-test("a graph record draws the frame particleElementMatrix draws, between ticks and across a reset", () => {
-	const state = particle( { position: [ 1, 2, 3 ], rotation: spinZ( .1 ) } ), matrix = spinZ( .4 );
-	const element = { matrix, previousPosition: [ 1, 2, 3 ], state, clockBirth: 0 };
-	snapshotParticleTick( state, matrix );
+/*
+================
+continued
+
+current continued by fraction of the rotation the last tick took from
+previous: the tick's step (tickRotationStep), turned by each frame
+(turnByStep).
+================
+*/
+function continued( previous, current, fraction, out, offset ) {
+	const step = new Float64Array( 4 ), work = new Float64Array( ROTATION_WORK );
+	tickRotationStep( previous, current, step, 0, work );
+	turnByStep( current, step[0], step[1], step[2], step[3], fraction, out, offset, work );
+}
+
+test("a graph record draws the frame the CPU ribbon draws, between ticks and across a reset", () => {
+	const graph = [ graphEmitter() ];
+	const state = createParticleGraph( graph, 0, createParticleGraphPlan( graph, DRAWS ) ), s = state.plan.base[0];
+	const vector = ( array, value ) => array.set( value, s * 3 );
+	// One live element with its tick pose, written by hand tick by tick.
+	state.counts[0] = 1;
+	state.flags[s] = SLOT_OCCUPIED | SLOT_ALIVE | SLOT_SNAPSHOT;
+	vector( state.position, [ 1, 2, 3 ] );
+	state.rotation.set( spinZ( .1 ), s * 16 );
+	state.matrix.set( spinZ( .4 ), s * 16 );
+	const snapshot = () => {
+		state.previousPosition.set( state.position.subarray( s * 3, s * 3 + 3 ), s * 3 );
+		state.previousScale.set( state.scale.subarray( s * 3, s * 3 + 3 ), 0 );
+		state.previousRotation.set( state.rotation.subarray( s * 16, s * 16 + 16 ), 0 );
+		state.previousMatrix.set( state.matrix.subarray( s * 16, s * 16 + 16 ), 0 );
+	};
 	for ( const [turn, position] of [ [ .7, [ 2, 2, 5 ] ], [ 3, [ 2, 4, 5 ] ], [ .7, [ 2, 4, 5 ] ] ] ) {
-		element.previousPosition.splice( 0, 3, ...state.position );
-		snapshotParticleTick( state, matrix );
-		matrix.set( spinZ( turn ) );
-		state.position = position;
-		state.frame++;
+		snapshot();
+		state.matrix.set( spinZ( turn ), s * 16 );
+		vector( state.position, position );
+		state.frames[s]++;
 		const records = new Float32Array( PARTICLE_RECORD ), actors = new Float32Array( PARTICLE_ACTOR );
-		writeGraphRecord( records, 0, element, new Float64Array( ROTATION_WORK ) );
+		writeGraphRecord( records, 0, state, s, 0, 0 );
+		writeRibbonTick( state.ribbonTicks, state.plan.ribbons[0], state, s, 0, 0 );
 		actors.set( identity(), ACTOR_PALETTE );
 		for ( const fraction of [ 0, .3, .9 ] ) {
-			actors[0] = state.frame / 20;
+			actors[0] = state.frames[s] / 20;
 			actors[ACTOR_FRACTION] = fraction;
 			const particles = { rows: 1, slots: 1, graph: true, view: 0, lifetime: 100, loop: false, actors };
 			const slot = presentSlot( particles, records, 0 ), expected = new Float32Array( 16 );
 			assert.ok( slot, "the element is drawn" );
-			particleElementMatrix( element, expected, 0, fraction );
+			ribbonElementFrames(
+				state,
+				0,
+				fraction,
+				new Float32Array( 20 ),
+				expected,
+				new Float64Array( ROTATION_WORK )
+			);
 			slot.matrix.forEach( ( value, i ) =>
 				assert.ok( Math.abs( value - expected[i] ) < 1e-5, `${turn} ${fraction} ${i}` )
 			);
@@ -122,7 +182,7 @@ test("a graph record draws the frame particleElementMatrix draws, between ticks 
 
 test("a rotation reset is drawn as is, not swept", () => {
 	const out = new Float32Array( 16 );
-	continueRotation( spinZ( 0 ), spinZ( 2.5 ), .5, out, 0 );
+	continued( spinZ( 0 ), spinZ( 2.5 ), .5, out, 0 );
 	assert.ok( Math.abs( angleZ( out ) - 2.5 ) < 1e-6 );
 });
 
@@ -133,36 +193,25 @@ test("rotation continues on top of a scaled frame and keeps translation", () => 
 		m[12] = 7;
 	}
 	const out = new Float32Array( 32 );
-	continueRotation( previous, current, .5, out, 16 );
+	continued( previous, current, .5, out, 16 );
 	assert.ok( Math.abs( angleZ( out, 16 ) - .25 ) < 1e-5 );
 	assert.ok( Math.abs( Math.hypot( out[16], out[17], out[18] ) - 3 ) < 1e-5, "the column scale survives" );
 	assert.equal( out[16 + 12], 7 );
 });
 
 test("graph elements record their previous tick for the drawn frame", () => {
-	const graph = [ {
-		parent: -1,
-		parents: [ 0 ],
-		births: [ 0 ],
-		frames: 40,
-		keepMatrix: false,
-		keepOrigin: true,
-		positionDepth: 0,
-		matrixDepth: 0,
-		velocityDepth: 0,
-		followDepth: 0,
-		scales: [],
-		positions: [],
-		rotations: [],
-		program: { vectors: [ { name: "SetVelocity", value: [ 2, 0, 0 ], flags: 0, frames: [ 0 ] } ] }
-	} ];
-	const state = createParticleGraph( graph, 0 ), table = new Float32Array( [ .5 ] );
-	advanceParticleGraph( state, graph, .2, identity(), table );
-	const element = state.elements[0][0];
-	assert.deepEqual( element.state.previous.position, [ 6, 0, 0 ] );
-	assert.deepEqual( element.state.position, [ 8, 0, 0 ] );
+	const graph = [
+		graphEmitter( {
+			program: { vectors: [ { name: "SetVelocity", value: [ 2, 0, 0 ], flags: 0, frames: [ 0 ] } ] }
+		} )
+	];
+	const state = createParticleGraph( graph, 0, createParticleGraphPlan( graph, DRAWS ) );
+	advanceParticleGraph( state, graph, .2, identity(), new Float32Array( [ .5 ] ) );
+	const element = particleElements( state, 0 )[0];
+	assert.deepEqual( element.previousPosition, [ 6, 0, 0 ] );
+	assert.deepEqual( element.position, [ 8, 0, 0 ] );
 	const drawn = new Float32Array( 16 );
-	particleElementMatrix( element, drawn, 0, .25 );
+	ribbonElementFrames( state, 0, .25, new Float32Array( 20 ), drawn, new Float64Array( ROTATION_WORK ) );
 	assert.equal( drawn[12], 8.5 );
 });
 
@@ -188,62 +237,4 @@ test("the drawn zoom glides to the wheel distance and lands", () => {
 	assert.ok( Math.abs( a - b ) < 1e-9 );
 	ease.reset();
 	assert.equal( ease.step( 150, 2000 ), 150, "a reset draws the target at once" );
-});
-
-test("a step cache gives the uncached rotation exactly, across ticks, hits and resets", () => {
-	let seed = 9;
-	const random = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
-	// A rotation about a random axis, scaled, as a tick pose.
-	const pose = () => {
-		const m = identity(), x = random() - .5, y = random() - .5, z = random() - .5, length = Math.hypot( x, y, z );
-		const angle = random() * 6,
-			c = Math.cos( angle ),
-			s = Math.sin( angle ),
-			t = 1 - c,
-			u = x / length,
-			v = y / length,
-			w = z / length,
-			scale = .5 + random();
-		const r = [
-			t * u * u + c,
-			t * u * v + s * w,
-			t * u * w - s * v,
-			t * u * v - s * w,
-			t * v * v + c,
-			t * v * w + s * u,
-			t * u * w + s * v,
-			t * v * w - s * u,
-			t * w * w + c
-		];
-		for ( let column = 0; column < 3; column++ ) {
-			for ( let row = 0; row < 3; row++ ) m[column * 4 + row] = r[column * 3 + row] * scale;
-		}
-		m[12] = random() * 100;
-		return m;
-	};
-	const cache = createStepCache(), cached = new Float32Array( 16 ), plain = new Float32Array( 16 );
-	let rotated = 0, previous = pose();
-	for ( let tick = 0; tick < 400; tick++ ) {
-		// Small steps (drawn turning), large ones (a reset) and unchanged ones.
-		const kind = tick % 3, current = kind === 2 ? previous.slice() : kind === 1 ? pose() : previous.map( v => v );
-		if ( kind === 0 ) {
-			const step = spinZ( random() * .8 - .4 );
-			const out = new Float32Array( 16 );
-			for ( let c = 0; c < 4; c++ ) {
-				for ( let r = 0; r < 4; r++ ) {
-					out[c * 4 + r] = previous[r] * step[c * 4] + previous[4 + r] * step[c * 4 + 1] +
-						previous[8 + r] * step[c * 4 + 2] + previous[12 + r] * step[c * 4 + 3];
-				}
-			}
-			current.set( out );
-		}
-		for ( const fraction of [ .1, .5, .9, .5 ] ) {
-			continueRotation( previous, current, fraction, cached, 0, undefined, cache );
-			continueRotation( previous, current, fraction, plain, 0 );
-			assert.deepEqual( [ ...cached ], [ ...plain ], `tick ${tick} fraction ${fraction}` );
-			if ( cached.some( ( v, i ) => v !== current[i] ) ) rotated++;
-		}
-		previous = current;
-	}
-	assert.ok( rotated > 100, `only ${rotated} frames rotated` );
 });

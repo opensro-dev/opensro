@@ -15,6 +15,8 @@ import (
 	"math"
 	"strings"
 	"time"
+
+	"opensro.online/server/internal/domain"
 )
 
 const (
@@ -72,18 +74,49 @@ func Day(now time.Time) int32 { return int32(now.UTC().Unix() / 86400) }
 
 /*
 ================
-Admit - only the successful relocation transaction stores this result.
+Used - the entries spent today; a count from an earlier UTC day has none.
+================
+*/
+func Used(day int32, entries uint8, now time.Time) uint8 {
+	if day != Day(now) {
+		return 0
+	}
+	return entries
+}
+
+/*
+================
+Admit
+
+Spends one of the account's daily entries (domain.SookArenaAccount,
+#3322). Only the successful relocation transaction stores this result;
+a refusal returns the count unchanged.
 ================
 */
 func Admit(day int32, entries uint8, now time.Time) (int32, uint8, bool) {
-	today := Day(now)
-	if day != today {
-		entries = 0
-	}
-	if entries >= 3 {
+	used := Used(day, entries, now)
+	if used >= domain.SookArenaDailyEntries {
 		return day, entries, false
 	}
-	return today, entries + 1, true
+	return Day(now), used + 1, true
+}
+
+/*
+================
+Refund
+
+Gives back the entry an admission spent on spentDay, when the entry
+failed after the admission committed. Another character of the account
+may have entered in between, so the refund takes one entry off the
+current count instead of restoring a snapshot; a count that has rolled
+to a later day no longer holds the spent entry and is left alone.
+================
+*/
+func Refund(day int32, entries uint8, spentDay int32) uint8 {
+	if day != spentDay || entries == 0 {
+		return entries
+	}
+	return entries - 1
 }
 
 /*

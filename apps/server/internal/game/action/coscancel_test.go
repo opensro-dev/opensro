@@ -97,7 +97,7 @@ func TestCosCancellationPreservesDurablePetAndRetiresPickup(t *testing.T) {
 	if !reflect.DeepEqual(c.ActiveCOS, &want) {
 		t.Fatal("cancellation lost durable pet progress or inventory", c.ActiveCOS)
 	}
-	if state.pickup != nil || state.follower != nil || rt.PetPresentation(testDivision, c.Name) != nil {
+	if state.pickup != nil || state.mover.AnyFollower() != nil || rt.PetPresentation(testDivision, c.Name) != nil {
 		t.Fatal("cancellation retained the live pet")
 	}
 	if repeated := rt.HandleCosCancel(testDivision, c, payload); len(repeated.Broadcast) != 0 {

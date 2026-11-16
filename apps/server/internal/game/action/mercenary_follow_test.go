@@ -48,7 +48,7 @@ func mercenaryFormationFixture(t *testing.T) *doorRuntime {
 		state := d.rt.petSessionFor(testDivision, d.character.Name, pet.GID)
 		from := owner
 		from.X -= 300
-		state.follower = simulation.NewPetFollower(pet.GID, from)
+		state.mover.FollowFrom(pet.GID, from)
 	}
 	return d
 }
@@ -69,7 +69,7 @@ func TestMercenaryFormationLifecycleAndSpeedPublication(t *testing.T) {
 			t.Fatal("formation did not move", frames)
 		}
 		state := d.rt.petSessionFor(testDivision, c.Name, pet.GID)
-		before, _ := state.follower.Presentation()
+		before, _ := state.mover.AnyFollower().Presentation()
 		if !before.MoveSegment.Valid() || !pet.FollowRunSet {
 			t.Fatal("movement/source missing", before, pet.FollowRunSet)
 		}
@@ -106,7 +106,7 @@ func TestMercenaryFormationRelocationPublishesNewVisibilityGeneration(t *testing
 	d := mercenaryFormationFixture(t)
 	pet := d.character.Mercenaries[0]
 	state := d.rt.petSessionFor(testDivision, d.character.Name, pet.GID)
-	state.follower = simulation.NewPetFollower(pet.GID, simulation.Spawn{RegionID: 0x62a5, X: 200, Z: 500})
+	state.mover.FollowFrom(pet.GID, simulation.Spawn{RegionID: 0x62a5, X: 200, Z: 500})
 	generation := state.generation
 	frames := d.rt.advancePet(petOwnerKey{division: testDivision, name: strings.ToLower(d.character.Name), gid: pet.GID}, 1000000)
 	if state.generation != generation+1 || len(frames) != 2 || frames[0].Opcode != wire.OpObjectDespawn || frames[1].Opcode != wire.OpSingleObjectSpawn {
@@ -133,12 +133,12 @@ func TestMercenaryFormationCompletionAndDeathReleaseSlots(t *testing.T) {
 	state := d.rt.petSessionFor(testDivision, d.character.Name, pet.GID)
 	owner := d.rt.petSessionFor(testDivision, d.character.Name, 0)
 	d.rt.advancePet(key, 1000000)
-	state.follower.Displace(simulation.Spawn{RegionID: 0x62a8, X: 440, Z: 500}, 1000050)
+	state.mover.AnyFollower().Displace(simulation.Spawn{RegionID: 0x62a8, X: 440, Z: 500}, 1000050)
 	d.rt.advancePet(key, 1000100)
 	if owner.formationSlots != (monster.ApproachSlots{}) {
 		t.Fatal("exactly 60 retained reservation", owner.formationSlots)
 	}
-	state.follower.Displace(simulation.Spawn{RegionID: 0x62a8, X: 200, Z: 500}, 1000150)
+	state.mover.AnyFollower().Displace(simulation.Spawn{RegionID: 0x62a8, X: 200, Z: 500}, 1000150)
 	d.rt.advancePet(key, 1000200)
 	d.rt.deps.Mutate(d.character, "test-soldier-death", func() { pet.CurrentHP = 0 })
 	d.rt.advancePet(key, 1000300)
@@ -161,14 +161,14 @@ func TestMercenaryFormationBattleTimerSurvivesFollowReentry(t *testing.T) {
 	step := petCombatStep{key: key, state: state, snapshot: d.character.Snapshot(), pet: pet, ref: ref, run: 60, nowMs: 1000000}
 	d.rt.advanceCompanionBattleFollowTimer(step)
 	d.rt.releasePetFormation(key, state)
-	before, _ := state.follower.Presentation()
+	before, _ := state.mover.AnyFollower().Presentation()
 	d.rt.advancePet(key, 1000050)
-	after, _ := state.follower.Presentation()
+	after, _ := state.mover.AnyFollower().Presentation()
 	if after.MoveSegment != before.MoveSegment {
 		t.Fatal("unexpired battle timer lost on follow entry")
 	}
 	d.rt.advancePet(key, 1000150)
-	after, _ = state.follower.Presentation()
+	after, _ = state.mover.AnyFollower().Presentation()
 	if !after.MoveSegment.Valid() {
 		t.Fatal("expired follow timer did not move")
 	}
@@ -189,7 +189,7 @@ func TestMercenaryFormationSharesSlotsWithAttackAndPickupPets(t *testing.T) {
 		c.ActiveCOS = pet
 		owner := d.rt.petSessionFor(testDivision, c.Name, 0)
 		state := d.rt.bindCompanionSession(testDivision, owner, pet)
-		state.follower = simulation.NewPetFollower(pet.GID, simulation.Spawn{RegionID: 0x62a8, X: 200, Z: 500})
+		state.mover.FollowFrom(pet.GID, simulation.Spawn{RegionID: 0x62a8, X: 200, Z: 500})
 		for _, cos := range c.Companions() {
 			d.rt.advancePet(petOwnerKey{division: testDivision, name: strings.ToLower(c.Name), gid: cos.GID}, 1000000)
 		}

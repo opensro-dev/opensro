@@ -35,19 +35,30 @@ func (d *Deps) warpDestinationOnPlane(kind simulation.PlaneKind, p simulation.Sp
 	return d.outdoorWarpDestination(p)
 }
 
+// gmWarpUnknownHeight is the height a map double-click sends (client
+// map-teleport.ts MAP_WARP_UNKNOWN_Y): below every surface, meaning "the
+// ground here". Port-only, not native (the map warp is a GM port tool).
+const gmWarpUnknownHeight = -10000
+
 /*
 ================
 Deps.caveWarpDestination
 
 A cave destination is valid when the dungeon spawn surface covers it.
-The surface decides validity only; the caller's Y is never rewritten.
+A typed /warp keeps its Y; a map pick, which knows no height, stands on
+the floor's surface nearest below-everything, the lowest one at the
+point (a floor page names its own region, so that is the floor's own
+ground unless a deck stands over it).
 ================
 */
 func (d *Deps) caveWarpDestination(p simulation.Spawn) (simulation.Spawn, bool) {
 	if d.SpawnSurfaceHeight == nil {
 		return p, false
 	}
-	_, ok := d.SpawnSurfaceHeight(p.RegionID, p.X, p.Y, p.Z)
+	h, ok := d.SpawnSurfaceHeight(p.RegionID, p.X, p.Y, p.Z)
+	if ok && p.Y <= gmWarpUnknownHeight {
+		p.Y = h
+	}
 	return p, ok
 }
 

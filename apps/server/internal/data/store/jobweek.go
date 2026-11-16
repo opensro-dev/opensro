@@ -14,7 +14,6 @@ package store
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -92,35 +91,38 @@ func (s *Store) JobRankings(division string) domain.JobRankings {
 ================
 loadJobRankings
 
-Authorities before schema 19 have no snapshot and start at week 0.
+Authorities before schema 19 have no snapshot and start at week 0. A
+division's unknown top-level fields are returned for the next write
+(json.go).
 ================
 */
-func loadJobRankings(db *sql.DB) (map[string]domain.JobRankings, error) {
+func loadJobRankings(db *sql.DB) (map[string]domain.JobRankings, map[string]unknownFields, error) {
 	var raw string
 	err := db.QueryRow("SELECT value FROM meta WHERE key = ?", metaKeyJobRankings).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
-		return map[string]domain.JobRankings{}, nil
+		return map[string]domain.JobRankings{}, nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var rankings map[string]domain.JobRankings
-	if err := decodeJSONStrict([]byte(raw), &rankings); err != nil {
-		return nil, fmt.Errorf("job rankings: %w", err)
+	unknown, err := decodePlaneFields([]byte(raw), &rankings)
+	if err != nil {
+		return nil, nil, fmt.Errorf("job rankings: %w", err)
 	}
 	for division, ranking := range rankings {
 		if division == "" || strings.TrimSpace(division) != division || ranking.Week < 0 {
-			return nil, fmt.Errorf("invalid job rankings for division %q", division)
+			return nil, nil, fmt.Errorf("invalid job rankings for division %q", division)
 		}
 		for _, lists := range ranking.Lists {
 			for _, list := range lists {
 				if len(list) > domain.JobRankRows {
-					return nil, fmt.Errorf("job rankings for division %q exceed %d rows", division, domain.JobRankRows)
+					return nil, nil, fmt.Errorf("job rankings for division %q exceed %d rows", division, domain.JobRankRows)
 				}
 			}
 		}
 	}
-	return rankings, nil
+	return rankings, unknown, nil
 }
 
 /*
@@ -128,14 +130,15 @@ func loadJobRankings(db *sql.DB) (map[string]domain.JobRankings, error) {
 jobRankingsRecord
 
 The meta row's bytes for the rankings plane; empty when no week has
-closed, in which case no writer puts a row down.
+closed, in which case no writer puts a row down. unknown holds the
+divisions' stored unknown fields.
 ================
 */
-func jobRankingsRecord(rankings map[string]domain.JobRankings) (string, error) {
+func jobRankingsRecord(rankings map[string]domain.JobRankings, unknown map[string]unknownFields) (string, error) {
 	if len(rankings) == 0 {
 		return "", nil
 	}
-	raw, err := json.Marshal(rankings)
+	raw, err := encodePlaneFields(rankings, unknown)
 	if err != nil {
 		return "", err
 	}
@@ -148,7 +151,7 @@ writeJobRankings
 ================
 */
 func writeJobRankings(tx *sql.Tx, rankings map[string]domain.JobRankings) error {
-	record, err := jobRankingsRecord(rankings)
+	record, err := jobRankingsRecord(rankings, nil)
 	if err != nil || record == "" {
 		return err
 	}

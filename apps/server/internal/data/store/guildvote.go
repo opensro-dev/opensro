@@ -131,7 +131,7 @@ func (door storeGuildDoor) CloseDueGuildVotes(divisionID string, nowMs int64, fo
 		guild := s.guilds[divisionID][guildID]
 		vote := guild.Vote
 		guild.Vote = nil
-		members, coherent := door.guildMemberViewsLocked(divisionID, s.guildMembers[divisionID][guildID])
+		members, coherent := door.guildMemberViewsLocked(divisionID, guildID, s.guildMembers[divisionID][guildID])
 		if !coherent {
 			continue
 		}

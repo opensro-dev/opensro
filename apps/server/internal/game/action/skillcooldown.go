@@ -86,11 +86,13 @@ parameters and are filtered out of the one parameter this read
 serves. The cast copy keeps all of that: every non-inventory child,
 the equipment and avatar rows and every companion-carrying bag row.
 TestEntryActionSpeedCastCopyMatchesFullCopy pins this root against
-the full copy.
+the full copy. The copy is kept across ticks while the record's write
+epoch holds (keptCastCopy, #3427): prepareTick reads this for every
+session before any tick bracket opens.
 ================
 */
 func (rt *Runtime) EntryActionSpeed(division, name string) float32 {
-	character := rt.characterSnapshotCast(division, rt.findCharacter(division, name))
+	character := rt.keptCastCopy(division, rt.findCharacter(division, name))
 	if character == nil {
 		return 100
 	}

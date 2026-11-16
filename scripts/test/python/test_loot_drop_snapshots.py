@@ -8,13 +8,13 @@ its source item id, page offset, record offset and page LSN, so the catalog
 generator can choose between them and audit the choice.
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 
 import pathlib
 import struct
 import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "build"))
 from import_loot_evidence import PAGE_LSN_OFFSET, read_assignments
 
 ASSIGN_RECORD_AT = 96

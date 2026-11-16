@@ -18,7 +18,7 @@ TestConfiguredBetaMastery
 */
 func TestConfiguredBetaMastery(t *testing.T) {
 	dir := t.TempDir()
-	if got, err := configuredBetaMastery(dir); err != nil || got != "on" {
+	if got, err := configuredBetaMastery(dir); err != nil || got != "off" {
 		t.Fatalf("default: %q %v", got, err)
 	}
 	for _, value := range []string{"on", "off", " OFF\n", "", "typo"} {

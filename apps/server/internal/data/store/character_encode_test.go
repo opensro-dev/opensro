@@ -42,11 +42,11 @@ func TestEncodeCharacterBorrowedMatchesMarshal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	owned, err := encodeCharacter(testDivision, c)
+	owned, err := encodeCharacter(testDivision, c, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	borrowed, err := encodeCharacterBorrowed(&s.encodeScratch, testDivision, c)
+	borrowed, err := encodeCharacterBorrowed(&s.encodeScratch, testDivision, c, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,16 +86,16 @@ func TestEncodeCharacterBorrowedAllocatesLess(t *testing.T) {
 	c := seededCharacter()
 	c.Aggressions = map[uint32]uint32{300: 3, 20: 2, 1: 1}
 	var scratch jsonscratch.Scratch
-	if _, err := encodeCharacterBorrowed(&scratch, testDivision, c); err != nil {
+	if _, err := encodeCharacterBorrowed(&scratch, testDivision, c, ""); err != nil {
 		t.Fatal(err)
 	}
 	borrowed := fewestAllocsPerRun(func() {
-		if _, err := encodeCharacterBorrowed(&scratch, testDivision, c); err != nil {
+		if _, err := encodeCharacterBorrowed(&scratch, testDivision, c, ""); err != nil {
 			t.Fatal(err)
 		}
 	})
 	owned := fewestAllocsPerRun(func() {
-		if _, err := encodeCharacter(testDivision, c); err != nil {
+		if _, err := encodeCharacter(testDivision, c, ""); err != nil {
 			t.Fatal(err)
 		}
 	})

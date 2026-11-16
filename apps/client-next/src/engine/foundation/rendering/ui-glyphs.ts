@@ -27,12 +27,17 @@ export interface FontAtlas {
 	atlasHeight: number;
 	fonts: Record<string, { recordHeight: number; ascent: number; descent: number; glyphs: Record<string, Glyph>; }>;
 }
+// Full-width ASCII forms and their distance from ASCII.
+const FULLWIDTH_FIRST = 0xFF01, FULLWIDTH_LAST = 0xFF5E, FULLWIDTH_OFFSET = 0xFEE0;
 export interface GlyphStyle {
 	fontIndex?: number;
 	fontStyle?: number;
 	hAlign?: number;
 	vAlign?: number;
 	overflow?: "ellipsis" | "clip" | "avoid-overlap";
+	// A label rather than a value in its field: under "Fit window labels"
+	// its line may leave its box (resolveTextOverlaps).
+	label?: boolean;
 }
 /*
 ================
@@ -41,12 +46,21 @@ drawableGlyph
 C0/C1 controls are layout directives, never drawable glyphs. Native
 CTextBoard breaks or skips them; baking the '?' replacement quad for a
 newline (as shipped guide START strings contain) invents visible glyphs.
+A full-width form (U+FF01-FF5E, the later client's "Lv.126～130") the
+atlas lacks draws as its ASCII letter rather than as '?': the native
+client draws it through a GDI font that holds the wide form, the
+port's atlas holds only the narrow one.
 ================
 */
 export function drawableGlyph( glyphs: Record<string, Glyph>, c: string ): Glyph | null {
 	const code = c.codePointAt( 0 )!;
 	if ( code < 32 || (code >= 0x7F && code <= 0x9F) ) return null;
-	return glyphs[String( code )] ?? glyphs["63"]!;
+	const own = glyphs[String( code )];
+	if ( own ) return own;
+	if ( code >= FULLWIDTH_FIRST && code <= FULLWIDTH_LAST ) {
+		return glyphs[String( code - FULLWIDTH_OFFSET )] ?? glyphs["63"]!;
+	}
+	return glyphs["63"]!;
 }
 /*
 ================
@@ -233,10 +247,106 @@ export function titleText(
 	if ( overflow === "ellipsis" ) return [ run ];
 	// Text wider than its box carries the shortened run that overlap fitting
 	// (resolveTextOverlaps) swaps in when its ink would enter a neighbour.
-	const fitted = overflow === "avoid-overlap" && laid.width > Math.max( 0, rect[2] ) ?
+	const wide = overflow === "avoid-overlap" && laid.width > Math.max( 0, rect[2] );
+	const fitted = wide ?
 		textRunQuad( layoutGlyphs( atlas, value, rect, clip, color, { ...style, overflow: "ellipsis" } ).quads ) :
 		undefined;
-	return [ Object.freeze( { ...run, textLayout: { box: rect, fitted } } ) ];
+	const wrapped = wide ? wrappedRun( atlas, value, rect, clip, color, style ) : undefined;
+	const narrow = wide ? narrowRun( atlas, value, rect, clip, color, style ) : undefined;
+	return [ Object.freeze( {
+		...run,
+		textLayout: {
+			box: rect,
+			fitted,
+			...(wrapped ? { wrapped } : {}),
+			...(narrow ? { narrow } : {}),
+			...(style.label ? { label: true } : {})
+		}
+	} ) ];
+}
+
+// The retail UI's small face, the narrower sibling of face 0 ("Experience"
+// is 53 pixels in it, 59 in face 0).
+export const NARROW_FONT_INDEX = 1;
+
+/*
+================
+narrowRun
+
+Port-only, not native (the Experimental "Fit window labels"): a face 0
+text too wide for its box on one line in NARROW_FONT_INDEX, when that
+fits the box. Undefined for any other face or a line still too wide.
+resolveTextOverlaps tries it after a label's slide.
+================
+*/
+function narrowRun(
+	atlas: FontAtlas,
+	value: string,
+	rect: UiRect,
+	clip: UiRect,
+	color: UiQuad["color"],
+	style: GlyphStyle
+): UiQuad | undefined {
+	if ( (style.fontIndex ?? 0) !== 0 || style.fontStyle === 2 || !atlas.fonts[String( NARROW_FONT_INDEX )] ) {
+		return undefined;
+	}
+	const laid = layoutGlyphs( atlas, value, rect, clip, color, { ...style, fontIndex: NARROW_FONT_INDEX } );
+	if ( laid.width > rect[2] ) return undefined;
+	return textRunQuad( laid.quads ) ?? undefined;
+}
+
+// The blank between a wrapped text's two lines, below the first line's
+// descent.
+const WRAP_LEADING = 1;
+// A layoutGlyphs line box is the font's record height plus this (CTextBoard).
+const LINE_EXTRA_HEIGHT = 5;
+
+/*
+================
+wrappedRun
+
+Port-only, not native (the Experimental "Fit window labels"): a text too
+wide for its box on two lines, each inside the box's columns, split at
+the space that keeps the wider line narrowest. The pair stacks at its ink
+height plus WRAP_LEADING and its ink is centred on the box; each line
+keeps the box's horizontal alignment. Undefined for a text without a
+space or with a line still wider than the box. resolveTextOverlaps tries
+it before the shortened run.
+================
+*/
+function wrappedRun(
+	atlas: FontAtlas,
+	value: string,
+	rect: UiRect,
+	clip: UiRect,
+	color: UiQuad["color"],
+	style: GlyphStyle
+): UiQuad | undefined {
+	const font = atlas.fonts[String( style.fontIndex ?? 0 ) + (style.fontStyle === 2 ? ":2" : "")];
+	if ( !font ) return undefined;
+	const measure = ( line: string ) =>
+		Array.from( line ).reduce( ( sum, c ) => sum + (drawableGlyph( font.glyphs, c )?.advanceX ?? 0), 0 );
+	let best: readonly [string, string] | null = null, bestWidth = Infinity;
+	for ( let at = value.indexOf( " " ); at > 0; at = value.indexOf( " ", at + 1 ) ) {
+		const lines = [ value.slice( 0, at ).trimEnd(), value.slice( at + 1 ).trimStart() ] as const;
+		const widest = Math.max( measure( lines[0] ), measure( lines[1] ) );
+		if ( lines[0] && lines[1] && widest <= rect[2] && widest < bestWidth ) {
+			best = lines;
+			bestWidth = widest;
+		}
+	}
+	if ( !best ) return undefined;
+	const inkHeight = font.recordHeight + font.descent, inkAbove = font.ascent - font.recordHeight;
+	const pitch = inkHeight + WRAP_LEADING, lineHeight = font.recordHeight + LINE_EXTRA_HEIGHT;
+	const top = rect[1] + (rect[3] - (pitch + inkHeight)) / 2 - inkAbove;
+	const quads = best.flatMap( ( line, index ) =>
+		layoutGlyphs( atlas, line, [ rect[0], top + index * pitch, rect[2], lineHeight ], clip, color, {
+			...style,
+			vAlign: 0,
+			overflow: "avoid-overlap"
+		} ).quads
+	);
+	return textRunQuad( quads ) ?? undefined;
 }
 
 /*
@@ -346,40 +456,149 @@ is replaced by its shortened run only when its ink would enter another,
 horizontally disjoint text box: overlapping boxes are intentional layers,
 not neighbouring columns. Anchored labels neither fit nor block. Resolve
 once per complete UI projection; layouts are dropped from the result.
+
+Port-only, not native: with fit (the Experimental "Fit window labels",
+on by default; off keeps the shortened run as the only repair) a
+colliding run is kept whole where it can be, in this order: its two-line
+wrap inside its box (clear of every text box but its layers, the rows
+above and below too), and for a label (GlyphStyle label; a value keeps
+to its field) its line slid sideways (still spanning its box, so
+at most its overflow) until no neighbour box holds its ink, and its line
+where the ink stays
+FIT_INK_GAP clear of every neighbour's ink (a centred or right-aligned
+neighbour leaves its box's near side empty). Only a run none of them
+places is shortened (#3674).
 ================
 */
-export function resolveTextOverlaps( quads: readonly UiQuad[] ): UiQuad[] {
+export function resolveTextOverlaps( quads: readonly UiQuad[], fit = false ): UiQuad[] {
 	const boxes: UiQuad[] = [];
 	for ( const q of quads ) {
 		if ( !q.textLayout ) continue;
 		if ( !q.run ) throw Error( "UI text layout without a text run" );
 		if ( !q.characterAnchor && !q.worldAnchor ) boxes.push( q );
 	}
-	const fitted = new Set<UiTextLayout>();
+	const placed = new Map<UiTextLayout, UiQuad | null>();
 	for ( const q of boxes ) {
 		const layout = q.textLayout!;
-		if ( layout.fitted === undefined || fitted.has( layout ) ) continue;
+		if ( layout.fitted === undefined || placed.has( layout ) ) continue;
 		const box = layout.box;
-		for ( const neighbor of boxes ) {
-			if ( neighbor.textLayout === layout ) continue;
+		const neighbors = boxes.filter( neighbor => {
+			if ( neighbor.textLayout === layout ) return false;
 			const other = neighbor.textLayout!.box;
-			if ( !(box[0] + box[2] <= other[0] || other[0] + other[2] <= box[0]) ) continue;
-			if ( runInkEnters( q, other ) ) {
-				fitted.add( layout );
-				break;
-			}
+			return box[0] + box[2] <= other[0] || other[0] + other[2] <= box[0];
+		} );
+		const enters = ( run: UiQuad ) => neighbors.some( neighbor => runInkEnters( run, neighbor.textLayout!.box ) );
+		if ( !enters( q ) ) continue;
+		if ( !fit ) {
+			placed.set( layout, layout.fitted );
+			continue;
 		}
+		// The wrap reaches above and below its box, so it is held off the
+		// rows over and under it too, not only the columns beside it;
+		// a box over the label's own is a layer, as above.
+		const rows = boxes.filter( neighbor =>
+			neighbor.textLayout !== layout && !rectsOverlap( box, neighbor.textLayout!.box )
+		);
+		const wrapEnters = ( run: UiQuad ) => rows.some( neighbor => runInkEnters( run, neighbor.textLayout!.box ) );
+		placed.set( layout, fittedPlacement( q, neighbors, enters, wrapEnters ) );
 	}
 	const emitted = new Set<UiTextLayout>(), result: UiQuad[] = [];
 	for ( const q of quads ) {
+		// A quad without a layout is passed on as itself: only a layout's
+		// quad is copied, to drop the layout.
+		if ( !q.textLayout ) {
+			result.push( q );
+			continue;
+		}
 		const { textLayout, ...paint } = q;
-		if ( !textLayout || !fitted.has( textLayout ) ) {
-			result.push( textLayout ? paint : q );
+		if ( !placed.has( textLayout ) ) {
+			result.push( paint );
 			continue;
 		}
 		if ( emitted.has( textLayout ) ) continue;
 		emitted.add( textLayout );
-		if ( textLayout.fitted ) result.push( { ...paint, ...textLayout.fitted, color: paint.color } );
+		const run = placed.get( textLayout );
+		if ( run ) result.push( { ...paint, ...run, color: paint.color } );
 	}
 	return result;
+}
+
+/*
+================
+rectsOverlap
+================
+*/
+function rectsOverlap( a: UiRect, b: UiRect ): boolean {
+	return a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
+}
+
+// A line kept whole by its ink stays this far from a neighbour's ink.
+const FIT_INK_GAP = 2;
+
+/*
+================
+fittedPlacement
+
+The run a colliding text is drawn with under "Fit window labels"
+(resolveTextOverlaps): its wrap, its slid line, its line in the narrow
+face, its whole line or, last, its shortened run (null when no glyph of
+that fits). A value tries only its wrap and its narrow line.
+================
+*/
+function fittedPlacement(
+	q: UiQuad,
+	neighbors: readonly UiQuad[],
+	enters: ( run: UiQuad ) => boolean,
+	wrapEnters: ( run: UiQuad ) => boolean
+): UiQuad | null {
+	const { textLayout, ...run } = q, layout = textLayout!;
+	if ( layout.wrapped && !wrapEnters( layout.wrapped ) ) return layout.wrapped;
+	const narrow = layout.narrow && !enters( layout.narrow ) ? layout.narrow : undefined;
+	// A value keeps to its field: only a label's line leaves its box.
+	if ( !layout.label ) return narrow ?? layout.fitted ?? null;
+	const [inkLeft, inkRight] = inkExtent( q ), reach = Math.max( 0, inkRight - inkLeft - layout.box[2] );
+	const shifts: number[] = [];
+	for ( const neighbor of neighbors ) {
+		const other = neighbor.textLayout!.box;
+		shifts.push( other[0] - inkRight, other[0] + other[2] - inkLeft );
+	}
+	shifts.sort( ( a, b ) => Math.abs( a ) - Math.abs( b ) );
+	for ( const dx of shifts ) {
+		if ( Math.abs( dx ) > reach ) break;
+		// The slid line still spans its own box: a value never leaves
+		// its field (the character panel's 28-pixel honour value).
+		if ( inkLeft + dx > layout.box[0] || inkRight + dx < layout.box[0] + layout.box[2] ) continue;
+		const slid: UiQuad = { ...run, rect: [ q.rect[0] + dx, q.rect[1], q.rect[2], q.rect[3] ] };
+		if ( !enters( slid ) ) return slid;
+	}
+	if ( narrow ) return narrow;
+	const clear = neighbors.every( neighbor => {
+		const [left, right, top, bottom] = inkExtent( neighbor );
+		return !runInkEnters( q, [
+			left - FIT_INK_GAP,
+			top - FIT_INK_GAP,
+			right - left + 2 * FIT_INK_GAP,
+			bottom - top + 2 * FIT_INK_GAP
+		] );
+	} );
+	return clear ? run : layout.fitted ?? null;
+}
+
+/*
+================
+inkExtent
+
+The left, right, top and bottom of a run's glyph cells inside its clip.
+================
+*/
+function inkExtent( quad: UiQuad ): [number, number, number, number] {
+	let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
+	for ( const glyph of quad.run!.glyphs ) {
+		const r = textRunGlyphRect( quad, glyph ), c = quad.clip;
+		left = Math.min( left, Math.max( r[0], c[0] ) );
+		right = Math.max( right, Math.min( r[0] + r[2], c[0] + c[2] ) );
+		top = Math.min( top, Math.max( r[1], c[1] ) );
+		bottom = Math.max( bottom, Math.min( r[1] + r[3], c[1] + c[3] ) );
+	}
+	return [ left, right, top, bottom ];
 }

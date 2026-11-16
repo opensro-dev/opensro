@@ -20,6 +20,7 @@ const { createEntities } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/entities/entities.ts"
 );
 const { createPresentationState } = await import( "../../src/engine/runtime/characters/presentation-state.ts" );
+const { clipFacts } = await import( "../../src/engine/runtime/characters/presentation-catalog.ts" );
 
 const LOCAL_GID = 7;
 const MODEL = 1933;
@@ -58,12 +59,14 @@ function harness() {
 	} );
 	owner.receive( { opcode: 0x32a6, payload: Buffer.from( [ LOCAL_GID, 0, 0, 0, 0, 0, 0, 0 ] ) }, 0 );
 	const state = createPresentationState();
+	const clips = [ "stand", "death", "deathloop" ];
 	const published = {
 		catalog: new Map( [ [ MODEL, {
 			codename: "CHAR_FIXTURE",
 			refObjId: MODEL,
 			glb: "/assets/char/fixture.glb",
-			clips: [ "stand", "death", "deathloop" ]
+			clips,
+			clipFacts: clipFacts( clips )
 		} ] ] ),
 		recoveryByCodename: new Map( [ [ "CHAR_FIXTURE", 2000 ] ] ),
 		animationStates: new Map(),
@@ -99,7 +102,7 @@ function harness() {
 					pendingDeaths: new Set(),
 					uncensored: false
 				},
-				{ failure: null },
+				{ degradations: [], degradedKeys: new Set() },
 				published
 			);
 			return defined( state.idleStates.get( LOCAL_GID ) );

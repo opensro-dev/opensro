@@ -82,11 +82,17 @@ measurable against it.
 ## Scope
 
 This is the source lane (`check.mjs --source`) — the only client check CI
-runs at main. The full `pnpm --filter @sro/client-next check` adds gates
-(`verify:ui-action-census`, the asset audits, the whole `tests/runtime`
-lane) that need the retail asset build, so no CI run at main measures them;
-their cost lives on licensed asset workspaces. The slowest-30 table above
-is therefore the source lane's 27 files, whole.
+runs at main. Since ops #335 it is two jobs on two runners:
+`--source=gates` (client-source: the architecture suites and the
+typechecks, the lane measured above) and `--source=runtime`
+(client-runtime: every `tests/runtime` file except the asset-backed ones
+in `tests/runtime/asset-backed-tests.json`, which
+`tools/list-asset-backed-tests.mjs` derives from the test cache's records).
+The full `pnpm --filter @sro/client-next check` adds the gates that need the
+retail asset build (`verify:ui-action-census`, the asset audits, the
+asset-backed runtime files), so no CI run at main measures them; their cost
+lives on licensed asset workspaces. The slowest-30 table above is the
+client-source lane's 27 files, whole, as measured before the split.
 
 ## Tightening (2026-11-08, #2929)
 
@@ -95,7 +101,9 @@ source lane now runs with a 20 s per-file budget and a 300 s whole-suite
 wall budget (`SRO_TEST_FILE_BUDGET_MS`, `SRO_TEST_SUITE_BUDGET_MS`, set
 in source-linux.yml) — the slowest ordinary file above took 14.6 s in
 the worse of two profiled runs, so 20 s binds at a third of the old cap
-with headroom for runner jitter. The runner's own defaults stay 60 s
-with no suite cap: the full check's runtime lane is unmeasured and
-still slow before the shards land, and a default must not bind what
-nobody has measured. The ledger entry above is unchanged.
+with headroom for runner jitter. The runner itself sets neither budget
+(the per-file default was 60 s until #3459): the full check runs every
+file beside its other heavy gates, and inside it ui-behavior measured
+83-114 s against 48 s alone, so a default there measured contention, not
+the files. The named caps bind wherever a per-file budget is set. The
+ledger entry above is unchanged.

@@ -188,13 +188,13 @@ func TestHalloweenBoxesRefuseCorruptRows(t *testing.T) {
 	if _, err := s.syncDBLocked().Exec("INSERT INTO meta (key, value) VALUES (?, ?)", metaKeyHalloweenBoxes, `{"account-a":{"day":1,"count":-1}}`); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := loadHalloweenBoxes(s.syncDBLocked()); err == nil {
+	if _, _, _, err := loadHalloweenBoxes(s.syncDBLocked()); err == nil {
 		t.Fatal("a negative count loaded")
 	}
 	if _, err := s.syncDBLocked().Exec("UPDATE meta SET value = ? WHERE key = ?", `{" ":{"day":1,"count":1}}`, metaKeyHalloweenBoxes); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := loadHalloweenBoxes(s.syncDBLocked()); err == nil {
+	if _, _, _, err := loadHalloweenBoxes(s.syncDBLocked()); err == nil {
 		t.Fatal("a blank account key loaded")
 	}
 }
@@ -282,7 +282,7 @@ func TestHalloweenGourdCountSurvivesSaveLoad(t *testing.T) {
 	if _, err := reopened.db.Exec("INSERT INTO meta (key, value) VALUES (?, ?)", metaKeyHalloweenBoxes, `{"account-a":{"day":20736,"count":17}}`); err != nil {
 		t.Fatal(err)
 	}
-	accounts, _, err := loadHalloweenBoxes(reopened.db)
+	accounts, _, _, err := loadHalloweenBoxes(reopened.db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,7 +292,7 @@ func TestHalloweenGourdCountSurvivesSaveLoad(t *testing.T) {
 	if _, err := reopened.db.Exec("UPDATE meta SET value = ? WHERE key = ?", `{"account-a":{"day":20736,"count":17,"gourdCount":-1}}`, metaKeyHalloweenBoxes); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := loadHalloweenBoxes(reopened.db); err == nil {
+	if _, _, _, err := loadHalloweenBoxes(reopened.db); err == nil {
 		t.Fatal("a negative gourd count loaded")
 	}
 }

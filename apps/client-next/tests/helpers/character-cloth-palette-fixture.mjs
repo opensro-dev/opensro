@@ -8,6 +8,13 @@ The shared presentation RNG trace makes cloth scheduling changes observable.
 The baseline runs the shipped renderer, with no source rewriting or private
 renderer implementation.
 
+A skinned cloth draw is skinned on the GPU, with a cloth stream for the
+vertices the solver owns (cloth-stream.ts). Its captured vertices are the
+ones its vertex shader draws, composed the shader's way: the stream where
+it says so, else the vertex skinned by the CPU's own arithmetic
+(cloth-skin.ts), so they compare bit for bit with the baseline, which the
+CPU drew. Its palette is consumed into those vertices, as before.
+
 ===========================================================================
 */
 import "./native-source-loader.mjs";
@@ -16,15 +23,22 @@ import { createHash } from "node:crypto";
 import { clothVertexCase } from "./cloth-vertex-cases.mjs";
 import { createStrictGpu, GPU_BUFFER_USAGE, GPU_TEXTURE_USAGE } from "./strict-gpu.mjs";
 const { createCharacters } = await import( "../../src/engine/runtime/renderer/characters/characters.ts" );
+const { createCharacterPose } = await import( "../../src/engine/foundation/animation/animation-pose.ts" );
 const { createPresentationRandom } = await import( "../../src/engine/runtime/random/random.ts" );
 const { identity } = await import( "../../src/engine/foundation/rendering/world-math.ts" );
 const { radians } = await import( "../../src/engine/foundation/math/angles.ts" );
 const { createGeometryResources } = await import( "../../src/engine/runtime/renderer/device/geometry.ts" );
+const { skinClothVertex } = await import( "../../src/engine/foundation/animation/cloth-skin.ts" );
+const { CLOTH_STREAM_WORDS, STREAM_POSITION, STREAM_NORMAL, CLOTH_NO_SLOT } = await import(
+	"../../src/engine/foundation/animation/cloth-stream.ts"
+);
+const { packGeometryVertices } = await import( "../../src/engine/foundation/rendering/geometry-vertices.ts" );
 const JOINTS = 8;
 const FRAME_COUNT = 120;
 const RANDOM_SEED = 0x1188;
 const INSTANCE_FLOATS = 40;
 const INSTANCE_PALETTE_OFFSET = 17;
+const INSTANCE_CLOTH_BASE = 19;
 const PRIMITIVE_NAMES = [ "body", "cloth-a", "body-alias", "distinct", "cloth-b" ];
 
 /*
@@ -164,8 +178,10 @@ Record the data a draw consumes. Palette offsets are expanded during hashing
 so deduplicated buffers compare against ordinary per-instance palettes.
 ================
 */
-function captureGeometry( tags, gpuAvailable ) {
+function captureGeometry( tags, gpuAvailable, gpuTakes ) {
 	let gpuCalls = 0;
+	// What a sampling GPU holds, by the palette source's buffer (gpuTakes).
+	const gpuMemory = new Map(), references = new Map();
 	let device = deviceFixture();
 	const commands = {
 		...device.resources.commands,
@@ -186,6 +202,15 @@ function captureGeometry( tags, gpuAvailable ) {
 				bones: source.bones?.slice(),
 				offsets: offsets?.slice(),
 				capturedVertices: undefined,
+				// A skinned cloth draw's mesh, its slot map and the stream its
+				// owner wrote, one entry a slot.
+				cloth: source.clothStream ?
+					{
+						geometry: source,
+						map: slotMap( source.clothStream, source.positions.length / 3 ),
+						stream: new Uint32Array( source.clothStream.length * CLOTH_STREAM_WORDS )
+					} :
+					undefined,
 				fade: undefined,
 				appearance: undefined,
 				lights: undefined,
@@ -221,6 +246,15 @@ function captureGeometry( tags, gpuAvailable ) {
 		updateBones( draw, bones, revision ) {
 			const uploaded = device.resources.commands.updateBones( draw.deviceDraw, bones, revision );
 			draw.bones = bones.slice();
+			// The slots the GPU sampled hold its palette, not the poisoned CPU copy.
+			const memory = gpuMemory.get( bones.buffer ), base = bones.byteOffset / 4;
+			if ( memory ) {
+				// Its own bone buffer would receive the stale CPU copy instead.
+				assert.ok( draw.offsets, `${draw.tag} reads sampled palettes through the shared palette` );
+				for ( let k = 0; k < draw.bones.length; k++ ) {
+					if ( Number.isNaN( draw.bones[k] ) ) draw.bones[k] = memory[base + k];
+				}
+			}
 			return uploaded;
 		},
 		/*
@@ -232,6 +266,15 @@ function captureGeometry( tags, gpuAvailable ) {
 			device.resources.commands.writeVertices( draw.deviceDraw, offset, vertices );
 			assert.equal( offset, 0 );
 			draw.capturedVertices = vertices.slice();
+		},
+		/*
+		================
+		writeClothStream
+		================
+		*/
+		writeClothStream( draw, first, entries ) {
+			device.resources.commands.writeClothStream( draw.deviceDraw, first, entries );
+			draw.cloth.stream.set( entries, first * CLOTH_STREAM_WORDS );
 		},
 		/*
 		================
@@ -256,6 +299,34 @@ function captureGeometry( tags, gpuAvailable ) {
 		commands.prepareGpuBones = () => {
 			gpuCalls++;
 			return false;
+		};
+	}
+	// A device that samples skeletons (gpuTakes): each slot it takes lands in
+	// its own memory, computed by the CPU's evaluator for the same clip and
+	// time, and the CPU copy of that slot is poisoned, as a real GPU leaves it
+	// stale. A consumer that reads the CPU copy reads NaN.
+	if ( gpuTakes ) {
+		commands.prepareGpuBones = ( source, model, primitive, samples ) => {
+			gpuCalls++;
+			let memory = gpuMemory.get( source.buffer );
+			if ( !memory ) {
+				memory = new Float32Array( source.buffer.byteLength / 4 );
+				gpuMemory.set( source.buffer, memory );
+			}
+			let reference = references.get( model );
+			if ( !reference ) {
+				reference = createCharacterPose( model );
+				references.set( model, reference );
+			}
+			const stride = primitive.joints.length * 16, base = source.byteOffset / 4;
+			for ( let i = 0; i < samples.length; i++ ) {
+				const sample = samples[i];
+				if ( !sample ) continue;
+				reference.evaluate( sample.clip.name, sample.time, false );
+				reference.palette( primitive, memory, base + i * stride );
+				source.fill( NaN, i * stride, (i + 1) * stride );
+			}
+			return true;
 		};
 	}
 	return {
@@ -311,11 +382,18 @@ function captureGeometry( tags, gpuAvailable ) {
 						packed.slice( row * INSTANCE_FLOATS, row * INSTANCE_FLOATS + 16 ),
 						draw.instances.slice( row * 16, row * 16 + 16 )
 					);
+					// The shaders find a cloth draw's stream after its skin entries.
+					assert.equal(
+						packed[row * INSTANCE_FLOATS + INSTANCE_CLOTH_BASE],
+						draw.cloth ? draw.cloth.geometry.positions.length / 3 : 0
+					);
 				}
 				if ( !draw.bones ) continue;
 				const palette = entries.find( entry => entry.binding === 7 ).resource.buffer;
 				const uploaded = new Float32Array( device.bytes.get( palette ).buffer );
-				buffers.add( palette );
+				// The byte count measures body palette sharing; a cloth draw's
+				// palette upload replaced its vertex stream upload instead.
+				if ( !draw.cloth ) buffers.add( palette );
 				for ( let row = 0; row < draw.deviceDraw.instanceCount; row++ ) {
 					const offset = packed[row * INSTANCE_FLOATS + INSTANCE_PALETTE_OFFSET] * 16;
 					const expected = (draw.offsets?.[row] ?? row * JOINTS) * 16;
@@ -356,6 +434,43 @@ function captureGeometry( tags, gpuAvailable ) {
 
 /*
 ================
+slotMap
+
+Each vertex's stream slot, or CLOTH_NO_SLOT, from the slots of an upload's
+clothStream, as the device's slot map holds them.
+================
+*/
+function slotMap( slots, count ) {
+	const map = new Uint32Array( count ).fill( CLOTH_NO_SLOT );
+	slots.forEach( ( vertex, slot ) => map[vertex] = slot );
+	return map;
+}
+
+/*
+================
+clothVertices
+
+A skinned cloth draw's vertices as its vertex shader composes them: each
+vertex skinned by its palette, except where its slot's cloth stream entry
+says the solver owns the position or the normal.
+================
+*/
+function clothVertices( draw ) {
+	const { geometry, map, stream } = draw.cloth, floats = new Float32Array( stream.buffer );
+	const vertices = packGeometryVertices( geometry ), skin = new Float64Array( 6 );
+	for ( let i = 0; i < geometry.positions.length / 3; i++ ) {
+		const entry = map[i] * CLOTH_STREAM_WORDS, flags = map[i] === CLOTH_NO_SLOT ? 0 : stream[entry + 3];
+		skinClothVertex( geometry, draw.bones, i, skin );
+		for ( let axis = 0; axis < 3; axis++ ) {
+			vertices[i * 14 + axis] = flags & STREAM_POSITION ? floats[entry + axis] : skin[axis];
+			vertices[i * 14 + 3 + axis] = flags & STREAM_NORMAL ? floats[entry + 4 + axis] : skin[3 + axis];
+		}
+	}
+	return vertices;
+}
+
+/*
+================
 drawDigest
 
 Hash float storage bytes, preserving signed zero and exact float32 results.
@@ -366,13 +481,14 @@ function drawDigest( draws, randomTrace ) {
 	const hash = createHash( "sha256" );
 	for ( const draw of draws ) {
 		hash.update( JSON.stringify( { tag: draw.tag, material: draw.material } ) );
+		const vertices = draw.cloth ? clothVertices( draw ) : draw.capturedVertices;
 		for ( const key of [ "instances", "vertices", "fade", "appearance", "lights", "transform" ] ) {
-			const values = key === "vertices" ? draw.capturedVertices : draw[key];
+			const values = key === "vertices" ? vertices : draw[key];
 			hash.update( `${key}:${values?.byteLength ?? -1}:` );
 			if ( values ) hash.update( Buffer.from( values.buffer, values.byteOffset, values.byteLength ) );
 		}
-		hash.update( draw.bones ? "bones:" : "no-bones:" );
-		if ( draw.bones ) {
+		hash.update( draw.bones && !draw.cloth ? "bones:" : "no-bones:" );
+		if ( draw.bones && !draw.cloth ) {
 			for ( let instance = 0; instance < draw.instances.length / 16; instance++ ) {
 				const offset = (draw.offsets?.[instance] ?? instance * JOINTS) * 16;
 				const palette = draw.bones.subarray( offset, offset + JOINTS * 16 );
@@ -387,21 +503,88 @@ function drawDigest( draws, randomTrace ) {
 
 /*
 ================
+offStretchActors
+
+The far-cloth scenario's actors for frame: three wearers cross the cloth
+distance (fraction .25, characters.ts drawCloth) in both directions at
+different frames; far ones are crowded at fraction .8, so the level of
+detail holds every other pose sample, except wearer 2's second stretch,
+at fraction .5 in no crowd: sampled every frame. Wearer 1 stays off for 40 frames,
+comes near for two, goes off for one, and later changes clip while off and
+leaves view for eight frames; wearer 2 starts off; wearer 3 goes off for
+one frame in every nine. The clock's frame times (clothVertexCase) restart
+the cloth both on a solver step and between steps. With allFar, every
+wearer stays beyond the distance and in view throughout, on one clip.
+================
+*/
+function offStretchActors( frame, allFar ) {
+	const far = allFar ? [ true, true, true ] : [
+		frame >= 20 && frame < 60 || frame === 62 || frame >= 90,
+		frame < 30 || frame >= 75 && frame < 95,
+		frame % 9 === 4
+	];
+	const absent = allFar ? [ false, false, false ] : [ frame >= 105 && frame < 113, frame >= 50 && frame < 53, false ];
+	/** @type {import("../../src/engine/contracts/character.ts").CharacterActor[]} */
+	const actors = [];
+	for ( let i = 0; i < 3; i++ ) {
+		if ( absent[i] ) continue;
+		const gid = i + 1;
+		actors.push( {
+			gid,
+			model: "body-first",
+			clip: gid === 1 && frame >= 100 && !allFar ? "stand" : "move",
+			time: (frame * .031 + gid * .13) % 1,
+			loop: true,
+			scale: 1,
+			pose: { regionId: 257, x: gid * 10, y: 0, z: 100, yaw: radians( gid / 10 ) },
+			animationLod: !far[i] ?
+				{ fraction: .1, crowded: false } :
+				gid === 2 && frame >= 75 && !allFar ?
+				{ fraction: .5, crowded: false } :
+				{ fraction: .8, crowded: true }
+		} );
+	}
+	return actors;
+}
+
+/*
+================
+streamDigest
+
+The cloth streams the frame's cloth draws hold, every word.
+================
+*/
+function streamDigest( draws ) {
+	const hash = createHash( "sha256" );
+	for ( const draw of draws ) {
+		if ( draw.cloth ) hash.update( new Uint8Array( draw.cloth.stream.buffer ) );
+	}
+	return hash.digest( "hex" );
+}
+
+/*
+================
 captureClothPalettes
 ================
 */
 export function captureClothPalettes(
 	gpuAvailable = false,
 	admitUnusedClip = false,
-	{ moving = false, variants = false } = {}
+	// offStretch: "mixed" or "far", the far-cloth scenario (offStretchActors).
+	{
+		moving = false,
+		variants = false,
+		gpuTakes = false,
+		offStretch = /** @type {false | "mixed" | "far"} */ (false)
+	} = {}
 ) {
 	const random = createPresentationRandom( RANDOM_SEED, 1, 100000 );
 	const owner = createCharacters( random ), tags = new Map();
 	owner.model( "body-first", model( false, tags ), [] );
 	owner.model( "cloth-first", model( true, tags ), [] );
-	const geometry = captureGeometry( tags, gpuAvailable ), clock = clothVertexCase( true, true );
+	const geometry = captureGeometry( tags, gpuAvailable, gpuTakes ), clock = clothVertexCase( true, true );
 	const frames = [];
-	let boneWriteBytes = 0;
+	let boneWriteBytes = 0, cpuEvaluations = 0;
 	try {
 		for ( let frame = 0; frame < FRAME_COUNT; frame++ ) {
 			if ( admitUnusedClip && frame === 31 ) {
@@ -427,7 +610,7 @@ export function captureClothPalettes(
 			if ( view ) view[0] = view[5] = view[10] = .001;
 			const gids = frame % 19 === 0 ? [] : frame % 3 === 0 ? [ 2, 3 ] : [ 1, 2, 3 ];
 			/** @type {import("../../src/engine/contracts/character.ts").CharacterActor[]} */
-			const actors = gids.map( gid => ({
+			const actors = offStretch ? offStretchActors( frame, offStretch === "far" ) : gids.map( gid => ({
 				gid,
 				model: frame % 13 === 0 && gid === 2 ? "cloth-first" : "body-first",
 				clip: frame % 5 === 0 ? "stand" : "move",
@@ -472,12 +655,11 @@ export function captureClothPalettes(
 				view,
 				preview,
 				input.seconds,
-				false,
 				true,
 				true,
-				input.enabled
+				!!offStretch || input.enabled
 			));
-			assert.equal( draws.length, gids.length * PRIMITIVE_NAMES.length );
+			assert.equal( draws.length, actors.length * PRIMITIVE_NAMES.length );
 			if ( variants ) {
 				for ( const draw of draws ) {
 					assert.equal(
@@ -505,8 +687,11 @@ export function captureClothPalettes(
 				}
 			}
 			const trace = random.takeTrace();
-			boneWriteBytes += geometry.verify( draws );
+			// The device's buffers hold the poisoned CPU copy where the GPU sampled.
+			if ( !gpuTakes ) boneWriteBytes += geometry.verify( draws );
 			frames.push( {
+				streams: streamDigest( draws ),
+				cpuEvaluations: owner.stats().cpuEvaluations,
 				clothPlacementWrites: geometry.clothPlacementWrites( draws ),
 				poseEligibility: owner.stats( true ).poseEligibility,
 				digest: drawDigest( draws, trace ),
@@ -517,9 +702,10 @@ export function captureClothPalettes(
 				)
 			} );
 		}
+		cpuEvaluations = owner.stats().cpuEvaluations;
 	} finally {
 		owner.dispose( geometry.commands, null );
 		geometry.dispose();
 	}
-	return { frames, gpuCalls: geometry.gpuCalls(), boneWriteBytes };
+	return { frames, gpuCalls: geometry.gpuCalls(), boneWriteBytes, cpuEvaluations };
 }

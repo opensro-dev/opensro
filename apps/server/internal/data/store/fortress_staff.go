@@ -11,7 +11,6 @@ staff flags and charges 3000 GP and 30000 gold before acknowledging.
 package store
 
 import (
-	"encoding/json"
 	"opensro.online/server/internal/domain"
 )
 
@@ -67,10 +66,6 @@ func (door storeFortressDoor) HireFortressStaff(division string, record domain.F
 	gold := *actor.Gold - domain.FortressStaffGold
 	next.Gold = &gold
 	guild.GP -= domain.FortressStaffGP
-	raw, err := json.Marshal(record)
-	if err != nil {
-		return 2, err
-	}
 	tx, err := s.beginCharacterTxLocked()
 	if err != nil {
 		return 2, err
@@ -83,10 +78,10 @@ func (door storeFortressDoor) HireFortressStaff(division string, record domain.F
 	if err != nil {
 		return 2, err
 	}
-	if err = replaceGuildTx(tx.Tx, division, guildID, guild, s.guildMembers[division][guildID]); err != nil {
+	if err = replaceGuildTx(tx.Tx, division, guildID, guild, s.guildMembers[division][guildID], &s.residues); err != nil {
 		return 2, err
 	}
-	if _, err = tx.Exec("INSERT INTO fortresses (division, fortress_id, record) VALUES (?, ?, ?) ON CONFLICT(division, fortress_id) DO UPDATE SET record = excluded.record", division, record.FortressID, string(raw)); err != nil {
+	if err = upsertFortressTx(tx.Tx, division, record); err != nil {
 		return 2, err
 	}
 	if err = tx.Commit(); err != nil {

@@ -16,7 +16,10 @@ import os
 # build_jobs
 #
 # SRO_BUILD_JOBS (scripts/build/shared/buildParallelism.mjs owns the rule):
-# a positive integer, else every core but one.
+# a positive integer, else every core but one. Under the Node build the
+# variable is always set, to a count capped by free memory; a stage run on
+# its own has no free-memory reading, so set SRO_BUILD_JOBS for it by hand
+# on a small machine.
 # ================
 def build_jobs() -> int:
     raw = os.environ.get("SRO_BUILD_JOBS", "")

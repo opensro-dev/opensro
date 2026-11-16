@@ -23,6 +23,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -43,6 +44,10 @@ type questMarkerRows struct {
 	epoch     uint64
 	hour      int
 	rows      map[uint32][18]byte
+	// gen names this row set's content: it changes only when a derive
+	// returns different rows, so a publication already at gen has
+	// nothing to send (the tick skips its diff entirely).
+	gen uint64
 }
 
 /*
@@ -72,6 +77,7 @@ closure; sessions that leave drop out with their publications.
 */
 type questMarkerDerivations struct {
 	bySession map[uint64]*questMarkerRows
+	nextGen   uint64
 }
 
 /*
@@ -91,8 +97,94 @@ func (d *questMarkerDerivations) rows(sessionID uint64, character *enterworld.Ch
 	if d.bySession == nil {
 		d.bySession = make(map[uint64]*questMarkerRows)
 	}
-	d.bySession[sessionID] = &questMarkerRows{character: character, epoch: epoch, hour: hour, rows: rows}
+	previous := d.bySession[sessionID]
+	if previous != nil && previous.character == character && sameMarkerRows(previous.rows, rows) {
+		// A write that moved the epoch but not the markers (a step, a
+		// vitals tick) keeps the row set and its gen: same content.
+		previous.epoch, previous.hour = epoch, hour
+		return previous.rows
+	}
+	d.nextGen++
+	d.bySession[sessionID] = &questMarkerRows{character: character, epoch: epoch, hour: hour, rows: rows, gen: d.nextGen}
 	return rows
+}
+
+/*
+================
+gen
+
+The content generation of the session's current rows (0: none yet).
+================
+*/
+func (d *questMarkerDerivations) gen(sessionID uint64) uint64 {
+	if entry := d.bySession[sessionID]; entry != nil {
+		return entry.gen
+	}
+	return 0
+}
+
+/*
+================
+sameMarkerRows
+================
+*/
+func sameMarkerRows(a, b map[uint32][18]byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for id, row := range a {
+		if other, ok := b[id]; !ok || other != row {
+			return false
+		}
+	}
+	return true
+}
+
+/*
+================
+questMarkerSession
+
+One session's marker publication and the row generation it last
+diffed, owned together so they are created, reset and dropped
+together: a fresh session and a reset one hold generation 0, which
+always diffs.
+================
+*/
+type questMarkerSession struct {
+	publication quest.MarkerPublication
+	gen         uint64
+}
+
+/*
+================
+questMarkerSession.reset
+
+World re-entry: the publication forgets its rows (the next update
+re-emits the full set) and the generation with them, so an unchanged
+generation cannot skip the refill.
+================
+*/
+func (s *questMarkerSession) reset() {
+	s.publication.Reset()
+	s.gen = 0
+}
+
+/*
+================
+questMarkerSession.update
+
+The frames that bring the client to rows of generation gen. A
+generation already diffed has an empty diff by construction
+(Update only diffs rows against the last rows it was given), so
+Update's slices, map and sort are skipped.
+================
+*/
+func (s *questMarkerSession) update(rows map[uint32][18]byte, gen uint64) []wire.Frame {
+	if gen != 0 && gen == s.gen {
+		return nil
+	}
+	s.gen = gen
+	return s.publication.Update(rows)
 }
 
 /*
@@ -142,7 +234,7 @@ array.
 ================
 */
 func (game *gameplayPlane) questMarkerTick() simulation.TickHook {
-	publications := make(map[uint64]*quest.MarkerPublication)
+	publications := make(map[uint64]*questMarkerSession)
 	// entered is each session's last seen scene revision.
 	entered := make(map[uint64]uint64)
 	derived := &questMarkerDerivations{}
@@ -188,14 +280,14 @@ func (game *gameplayPlane) questMarkerTick() simulation.TickHook {
 			})
 			publication := publications[session.ID]
 			if publication == nil {
-				publication = &quest.MarkerPublication{}
+				publication = &questMarkerSession{}
 				publications[session.ID] = publication
 			}
 			if revision, active := session.SceneRevision(); active && entered[session.ID] != revision {
 				entered[session.ID] = revision
-				publication.Reset()
+				publication.reset()
 			}
-			for _, frame := range publication.Update(rows) {
+			for _, frame := range publication.update(rows, derived.gen(session.ID)) {
 				if err := session.Send(frame.Opcode, frame.Payload); err != nil {
 					delete(publications, session.ID)
 					log.Debugf("quest marker publication failed for session %d: %v", session.ID, err)

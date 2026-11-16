@@ -200,3 +200,32 @@ func TestResolveGMWarpDestinationLegacyParity(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestCaveMapWarpStandsOnTheFloor
+
+A map double-click on a dungeon page sends no height: the destination
+stands on the surface the dungeon resolves there, while a typed /warp
+keeps the height it named.
+================
+*/
+func TestCaveMapWarpStandsOnTheFloor(t *testing.T) {
+	gm := &Character{GMPrivilege: true}
+	var hint float64
+	d := &Deps{
+		CanEnterWorldRegion: func(*Character, uint16) bool { return true },
+		SpawnSurfaceHeight: func(_ uint16, _, y, _ float64) (float64, bool) {
+			hint = y
+			return 212.5, true
+		},
+	}
+	picked, ok := d.ResolveGMWarpDestination(gm, simulation.Spawn{RegionID: 0x8007, X: -10560, Y: gmWarpUnknownHeight, Z: 2880})
+	if !ok || picked.Y != 212.5 || hint != gmWarpUnknownHeight {
+		t.Fatalf("map pick resolved %+v ok=%v (hint %v), want Y 212.5", picked, ok, hint)
+	}
+	typed, ok := d.ResolveGMWarpDestination(gm, simulation.Spawn{RegionID: 0x8007, X: -10560, Y: 40, Z: 2880})
+	if !ok || typed.Y != 40 {
+		t.Fatalf("typed warp resolved %+v ok=%v, want its own Y 40", typed, ok)
+	}
+}

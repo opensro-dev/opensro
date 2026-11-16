@@ -52,6 +52,9 @@ queueCrowVisual
 ================
 */
 func (rt *Runtime) queueCrowVisual(division string, c crowVisual) {
+	if !rt.AttackPetExpansion {
+		return
+	}
 	rt.queueMonsterLegFrames(rt.sealTickPrivate([]simulation.DivisionFrames{{DivisionID: division, SourceGID: c.gid, Frames: simFrames([]wire.Frame{crowVisualFrame(c)})}}))
 }
 

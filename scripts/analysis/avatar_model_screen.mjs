@@ -59,7 +59,7 @@ function screenVerdict( request ) {
 		}
 		for ( const material of parsed.materials ) {
 			try {
-				characterMaterialState( material.flags, request.environmentModifiers );
+				characterMaterialState( material.flags, request.environmentModifiers, material.materialIndex );
 			} catch ( error ) {
 				return { code: request.code, ok: false, reason: String( error?.message ?? error ) };
 			}

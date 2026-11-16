@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 const { createPresentationActions } = await import(
 	"../../src/engine/runtime/characters/presentation-actions.ts"
 );
+const { clipFacts } = await import( "../../src/engine/runtime/characters/presentation-catalog.ts" );
 
 /*
 ================
@@ -23,11 +24,13 @@ fixture
 function fixture() {
 	const actions = createPresentationActions();
 	const definition = { durationMs: 1000, trackEvents: [], timeWarpCurve: { scale: 0, records: [] }, soundEvents: [] };
+	const clips = [ "ready", "wait", "shot" ];
 	const body = {
 		refObjId: 1,
 		codename: "CASTER",
 		glb: "/caster.glb",
-		clips: [ "ready", "wait", "shot" ],
+		clips,
+		clipFacts: clipFacts( clips ),
 		animationStates: { ready: definition, wait: definition, shot: definition }
 	};
 	let activeResource = body;
@@ -44,7 +47,8 @@ function fixture() {
 		movementMode: 2,
 		appearanceState: [ 1, 0, 0 ]
 	};
-	const output = { failure: null };
+	/** @type {{ failure: string | null, degradations: import("../../src/engine/contracts/network").Degradation[], degradedKeys: Set<string> }} */
+	const output = { failure: null, degradations: [], degradedKeys: new Set() };
 	const published = {
 		catalog: new Map(),
 		nativeMotionUrls: new Map(),
@@ -54,6 +58,7 @@ function fixture() {
 	};
 	return {
 		body,
+		output,
 		/*
 		================
 		setResource
@@ -176,6 +181,7 @@ test("swapping the caster model retires its cast motion for good: no corpse time
 		codename: "CASTER_CORPSE",
 		glb: "/caster-corpse.glb",
 		clips: [ "death" ],
+		clipFacts: clipFacts( [ "death" ] ),
 		animationStates: {}
 	};
 	const otherBody = {
@@ -183,6 +189,7 @@ test("swapping the caster model retires its cast motion for good: no corpse time
 		codename: "CASTER_OTHER",
 		glb: "/caster-other.glb",
 		clips: [ "ready", "wait", "shot" ],
+		clipFacts: clipFacts( [ "ready", "wait", "shot" ] ),
 		animationStates: f.body.animationStates
 	};
 	assert.equal( f.step( 0, undefined ).waitingActors.has( 1 ), true );
@@ -209,4 +216,28 @@ test("swapping the caster model retires its cast motion for good: no corpse time
 		"deleted clock must not resume after model restore"
 	);
 	assert.equal( restored.waitingActors.has( 1 ), false );
+});
+
+/*
+================
+TestAMissingPhaseTimelineDegradesOnce
+
+A model without the clip an action's phase names (production: transports,
+the westguardian, an adventurer body) skips that cast's motion and files
+one degraded report; it never fails the presentation, so the session lives.
+================
+*/
+test("a missing action phase timeline degrades once instead of failing", () => {
+	const f = fixture();
+	f.setResource( {
+		...f.body,
+		clips: [ "ready", "wait" ],
+		clipFacts: clipFacts( [ "ready", "wait" ] ),
+		animationStates: { ready: f.body.animationStates.ready, wait: f.body.animationStates.wait }
+	} );
+	f.step( 0, undefined );
+	f.step( 0.1, undefined );
+	assert.equal( f.output.failure, null );
+	assert.deepEqual( f.output.degradations.map( d => d.code ), [ "presentation-action-timeline" ] );
+	assert.match( f.output.degradations[0].message, /CASTER \(skill 1\)/ );
 });

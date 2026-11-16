@@ -30,8 +30,8 @@ package party_test
 //	   (0x751A)              0xB0D5 + 0x35D6 seed, A and B get 0x3E58
 //	                         type-2 JOIN {C's masked row};
 //	A banishes C (0x7664) -> type-3 BOOTED {gid C} to all three;
-//	A (leader) leaves     -> type-1 BROKEN to A and B (the native
-//	   (0x704F)              leader-leave dissolve); registry empty;
+//	A (leader) leaves     -> type-1 BROKEN to A and B (one member
+//	   (0x704F)              would remain); registry empty;
 //	join-anyone reform    -> B leads with option bit 0x4; the NON-leader
 //	                         A extends with C successfully (prompt +
 //	                         accept both hops);
@@ -699,8 +699,9 @@ func TestPartyLaneEndToEndOverWire(t *testing.T) {
 	sendFrame(t, connB, party.OpPartyBanishRequest, u32le(gidA))
 	gameReadyBarrier(t, connB, "post-nonleader-banish")
 
-	// ---- the LEADER leaves (0x704F): the native dissolve split -
-	// type-1 BROKEN to every member including the initiator ----
+	// ---- the LEADER leaves (0x704F) a party of two: one member would
+	// remain, so type-1 BROKEN to every member including the initiator
+	// (a larger party hands the lead on, leaderhandover_e2e_test.go) ----
 	sendFrame(t, connA, party.OpPartyLeaveRequest, nil)
 	broken := party.EncodePartyBroken3E58()
 	expectExactFrame(t, connA, party.OpPartyUpdate, broken, "A's dissolve BROKEN")
@@ -909,7 +910,7 @@ func TestPartyConsentRaceEdges(t *testing.T) {
 	// B answers - the join-kind accept finds no party.
 	sendFrame(t, connA2, party.OpPartyJoinInviteRequest, u32le(gidB))
 	expectPartyPrompt(t, connB, gidA, "B's join proposal from A", 3, 3)
-	sendFrame(t, connA2, party.OpPartyLeaveRequest, nil) // the leader leaves: dissolve
+	sendFrame(t, connA2, party.OpPartyLeaveRequest, nil) // the leader of two leaves: dissolve
 	expectExactFrame(t, connA2, party.OpPartyUpdate, party.EncodePartyBroken3E58(), "A's dissolve BROKEN")
 	expectExactFrame(t, connC, party.OpPartyUpdate, party.EncodePartyBroken3E58(), "C's dissolve BROKEN")
 	sendFrame(t, connB, party.OpInvitationProposal, consentFrame(1))

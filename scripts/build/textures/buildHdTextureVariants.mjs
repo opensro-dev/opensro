@@ -47,7 +47,7 @@ The exported pass also takes a publicRoot override for fixture trees
 */
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { cpus } from "node:os";
+import { buildJobs } from "../shared/buildParallelism.mjs";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -59,6 +59,7 @@ import {
 	decodeNativeTextureLevel
 } from "../../../apps/client-next/src/engine/foundation/assets/native-texture.ts";
 import { hdTextureVariantPath } from "../../../apps/client-next/src/engine/foundation/assets/texture-variants.ts";
+import { compareText } from "../shared/textOrder.mjs";
 
 const run = promisify( execFile );
 
@@ -100,7 +101,7 @@ options
 */
 function options( argv ) {
 	const out = {
-		jobs: Math.max( 1, cpus().length - 1 ),
+		jobs: buildJobs(),
 		only: "/assets/",
 		limit: Infinity,
 		out: null
@@ -144,7 +145,7 @@ function worldObjectTextures( root, only ) {
 		}
 	};
 	walk( path.join( root, "assets", "world" ) );
-	return out.sort( ( a, b ) => a[1].localeCompare( b[1] ) );
+	return out.sort( ( a, b ) => compareText( a[1], b[1] ) );
 }
 
 /*
@@ -483,7 +484,7 @@ clients read the originals (the ASTC pass's rule).
 */
 export async function buildHdTextureVariants( flags = {} ) {
 	flags = {
-		jobs: Math.max( 1, cpus().length - 1 ),
+		jobs: buildJobs(),
 		only: "/assets/",
 		limit: Infinity,
 		out: null,

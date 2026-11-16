@@ -36,13 +36,19 @@ poll that stalls after every asset has arrived reports no error
 (BR-261108-1908-A644: the bar full, the asset queue idle for minutes,
 the session still at character-select, clicks dead), so without a
 bound the loading screen is permanent. The bound runs on the step
-clock (flow.elapsed), so a hidden tab does not spend it, and it only
+clock (flow.elapsed), which hidden maintenance frames still advance,
+so those frames render during these phases (hidden-render.ts); it only
 runs while nothing changes at all: a slow load that keeps moving is
 never cut. The worker's admission deadline (session/world.ts) is the
 model; this is its frontend counterpart.
 ================
 */
 const LOADING_STALL_LIMIT_SECONDS = 60;
+// A refused world entry shows its native error code's message
+// (characterStatus, SRO_Client 0x73EE40). 1 is the accepted answer and
+// 0 names no code, so either falls back to the generic (S2).
+const ENTRY_ACCEPTED_CODE = 1;
+const ENTRY_GENERIC_REFUSAL = 2;
 /*
 ================
 pageHidden
@@ -405,10 +411,14 @@ export function createFrontend(
 				(entering || entryPending || flow.snapshot().phase === "loading-world") && session?.error &&
 				session.revision > entryRevision && session.phase === "character-select"
 			) {
-				// The player sees only "(S2)": report the stage and the session's
-				// reason, so a refused entry is never silent (client-report).
+				// The player sees one status line: report the stage and the
+				// session's reason, so a refused entry is never silent
+				// (client-report). A refusal that named its native code shows
+				// that code's message; anything else is the generic (S2).
 				// A maintenance refusal is a designed answer, not an incident:
 				// the typed refusal the mint carried files it apart (#2557).
+				const named = session.entryFailure?.nativeErrorCode ?? 0;
+				const nativeError = named > ENTRY_ACCEPTED_CODE ? named : ENTRY_GENERIC_REFUSAL;
 				send( {
 					kind: "client-report",
 					incidentKind: "runtime",
@@ -416,7 +426,7 @@ export function createFrontend(
 						"world_entry_maintenance" :
 						"world_entry_rejected",
 					message:
-						`Entry rejected (S2) at ${flow.snapshot().phase}/${
+						`Entry rejected (S${nativeError}) at ${flow.snapshot().phase}/${
 							entryPending ? "pending" : entering ? "entering" : "loading"
 						}: ${session.error}` +
 						(session.entryFailure ?
@@ -428,7 +438,7 @@ export function createFrontend(
 				entryPending = false;
 				entering = false;
 				flow.entryRejected();
-				status = characterStatus( 2 );
+				status = characterStatus( nativeError );
 				statusUntil = now + 15000;
 				messageSound();
 			}

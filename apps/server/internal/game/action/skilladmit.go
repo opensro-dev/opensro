@@ -155,14 +155,38 @@ type admitContext struct {
 
 /*
 ================
+sookDecisionHolds
+
+Port-only, not native (#3189): while a Survival Arena chest decision is
+open (paused, no countdown yet) no skill starts, so nothing is prepared on
+a frozen stage clock. The countdown that follows allows self buffs. Every
+skill entry asks this one owner: the instant self-effect path admits
+outside contextSkillAdmission and used to skip it (#3368).
+================
+*/
+func (rt *Runtime) sookDecisionHolds(division string, c *enterworld.Character) bool {
+	run := rt.sookRun(division, c)
+	return run != nil && run.program.PausedAt != 0 && run.program.ResumeAt == 0
+}
+
+/*
+================
 contextSkillAdmission
 
 Preserve native prerequisite order across direct and item-owned skill paths.
 ================
 */
 func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64, target *admitTarget, prepared *pendingProjectileCast, mask admitMask, context admitContext) uint16 {
-	if run := rt.sookRun(division, c); run != nil && run.program.PausedAt != 0 && run.program.ResumeAt == 0 {
+	if rt.sookDecisionHolds(division, c) {
 		return 0x3005
+	}
+	// INFERENCE (#3433): a player keeping a stall, visiting one or trading
+	// casts nothing, so a teleport (Ghost Walk, a dash) cannot carry it out
+	// of the stall or the exchange. 0x3009 is the client's silent refusal.
+	// An item's own skill keeps the item-use door's rule instead (refused
+	// at a stall, allowed in an exchange).
+	if !context.Indirect && rt.stallBusy(division, c.Name) {
+		return 0x3009
 	}
 	// Natively frozen, asleep or stunned refuses, unless the skill has nmf.
 	// The codename exemptions (MOB_RM_SEALSTONE, MSKILL_SD_SETH_ATTACK10)
@@ -539,6 +563,12 @@ The native msch gate. Body mode 1 (berserk) refuses every word with 0x3031, then
 
 Only a monster mask's indirect cast carries a RefObj; a pressed skill has
 none, so word 1 refuses it with 0x3006.
+
+Port-only, not native: word 7 (the Muhan change) gets word 1's check. The
+v1.188 gate checks word 1 alone and gives word 7 no body change; here it
+does change the body (transformWord), so the guards that keep that body
+change sound come with it (#3349, inference). Buff replacement stays
+native: only word 1 is exempt there.
 ==================
 */
 func (rt *Runtime) mschRefusal(division string, c *enterworld.Character, mode, transformRef uint32, now int64) uint16 {
@@ -546,7 +576,7 @@ func (rt *Runtime) mschRefusal(division string, c *enterworld.Character, mode, t
 		return 0x3031
 	}
 	switch mode {
-	case 1:
+	case 1, mschMuhanChange:
 		return rt.transformRefusal(division, c, transformRef, now)
 	case 2:
 		riding := c.ActiveCOS != nil && c.ActiveCOS.Mounted

@@ -192,6 +192,9 @@ export async function startHeadlessSimulation( { workerUrl, origin, cookies = []
 						} );
 					}
 				}
+				// A walking path that continues the last one arrives as its change
+				// (message.walkingPaths, walking-path-wire.ts), so the entity kept
+				// here can lack movementPath.walkingPath. This owner reads no path.
 				if ( event.kind === "spawn" || event.kind === "state" ) {
 					state.entities.set( event.entity.gid, event.entity );
 				} else if ( event.kind === "despawn" ) state.entities.delete( event.gid );

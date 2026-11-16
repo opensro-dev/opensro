@@ -11,6 +11,7 @@ hovers resolve through the same owners (BUG-084).
 
 ===========================================================================
 */
+import { avatarSocket } from "@/engine/foundation/gameplay/avatar-socket";
 import type { GameplayState, InventoryItem } from "@/engine/contracts/gameplay";
 import type { ActionSlot } from "./action-layout";
 import { quickSlotItemSlot } from "../gameplay/quickslots";
@@ -38,7 +39,7 @@ export function tooltipItems(
 	else if ( id.startsWith( "item-mall-slot:" ) ) {
 		item = game.inventory.find( row => row.slot === Number( id.slice( "item-mall-slot:".length ) ) );
 	} else if ( id.startsWith( "avatar:" ) ) {
-		item = game.avatarInventory?.find( row => row.typeFlags >>> 11 === Number( id.slice( 7 ) ) );
+		item = game.avatarInventory?.find( row => avatarSocket( row.typeFlags ) === Number( id.slice( 7 ) ) );
 	} else if ( id.startsWith( "cos-player:" ) ) {
 		item = game.inventory.find( row => row.slot === Number( id.slice( 11 ) ) );
 	} else if ( id.startsWith( "alchemy-slot:" ) ) {

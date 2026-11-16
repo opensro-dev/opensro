@@ -15,7 +15,11 @@ not below the roll pays. The rows and weights are the owner's event table
 (#2131), port-only like the rest of the event. Above that rolled tier sits
 the flat-price prize list the 2008 notice's list cannot give: the exact
 row chosen at its stated price — the eight event helmets, and (owner,
-2026-11-04, #2548) the four Elixir A rows a capped character can use.
+2026-11-04, #2548) the four elixirs a capped character can use. The
+elixirs are the Intensifying (B) ones the alchemy shop sells and monsters
+drop (owner 2026-11-16, #general): while the shard's rate table is on
+(item/alchemy/rates.go) A and B roll the same chance, so one elixir per
+kind keeps every source handing out the same item.
 How many boxes one rolled gift costs is an inference
 (HalloweenBoxesPerGift): the notice and talk line B read as one box,
 neither states a count. The daily box cap, its 04:00 UTC reset and the
@@ -55,13 +59,13 @@ const HalloweenBoxesPerGift = 1
 ================
 HalloweenEvent
 
-The zero value is off and windowless: the native game.
+The Halloween Day event's switch and window (seasonal_event.go), and
+its wave timetable (halloween_waves.go). The zero value is off and
+windowless: the native game.
 ================
 */
 type HalloweenEvent struct {
-	enabled  bool
-	startsAt time.Time
-	endsAt   time.Time
+	SeasonalEvent
 }
 
 /*
@@ -70,104 +74,29 @@ HalloweenEventFromEnv
 ================
 */
 func HalloweenEventFromEnv() HalloweenEvent {
-	event := HalloweenEvent{}
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvHalloweenEvent))) {
-	case "on", "1", "true":
-		event.enabled = true
-	}
-	window := strings.Split(strings.TrimSpace(os.Getenv(EnvHalloweenEventWindow)), "/")
-	if len(window) == 2 {
-		startsAt, startErr := time.Parse(time.RFC3339, strings.TrimSpace(window[0]))
-		endsAt, endErr := time.Parse(time.RFC3339, strings.TrimSpace(window[1]))
-		if startErr == nil && endErr == nil && endsAt.After(startsAt) {
-			event.startsAt, event.endsAt = startsAt.UTC(), endsAt.UTC()
-		}
-	}
-	return event
-}
-
-/*
-================
-HalloweenEvent.Enabled
-
-Whether the switch is on, whatever the window says.
-================
-*/
-func (e HalloweenEvent) Enabled() bool { return e.enabled }
-
-/*
-================
-HalloweenEvent.WindowValid
-
-Whether a usable window is configured. An event switched on without one
-never runs; the composition root warns about that posture at boot.
-================
-*/
-func (e HalloweenEvent) WindowValid() bool { return !e.startsAt.IsZero() && e.endsAt.After(e.startsAt) }
-
-/*
-================
-HalloweenEvent.Window
-
-The configured window, and whether it is usable.
-================
-*/
-func (e HalloweenEvent) Window() (startsAt, endsAt time.Time, valid bool) {
-	return e.startsAt, e.endsAt, e.WindowValid()
-}
-
-/*
-================
-HalloweenEvent.ActiveAt
-
-The event runs from the window's start up to (not including) its end.
-================
-*/
-func (e HalloweenEvent) ActiveAt(now time.Time) bool {
-	return e.enabled && e.WindowValid() && !now.Before(e.startsAt) && now.Before(e.endsAt)
-}
-
-/*
-================
-HalloweenEvent.EndsAt
-
-The window's end, the first instant the event no longer runs; zero when
-no window is configured.
-================
-*/
-func (e HalloweenEvent) EndsAt() time.Time { return e.endsAt }
-
-/*
-================
-HalloweenEvent.CleanupDueAt
-
-Once a configured window has ended, remaining boxes leave at the first
-world entry after the end. This follows the window alone: a shard that
-ran the event and later flips the switch off still retires the boxes its
-window created. With no window configured nothing is ever due.
-================
-*/
-func (e HalloweenEvent) CleanupDueAt(now time.Time) bool {
-	return e.WindowValid() && !now.Before(e.endsAt)
+	return HalloweenEvent{seasonalEventFromEnv(EnvHalloweenEvent, EnvHalloweenEventWindow)}
 }
 
 /*
 ================
 HalloweenGift
 
-One row of the exchange's rolled gift table: what it pays, how many,
-and its weight on the sibling roll's scale.
+One row of a seasonal exchange's rolled gift table: what it pays, how
+many, and its weight on the sibling roll's scale. FemaleCodename, when
+set, is what a female character receives instead (a sexed costume
+piece); Halloween's rows carry none.
 ================
 */
 type HalloweenGift struct {
-	Codename string
-	Count    uint32
-	Weight   float64
+	Codename       string
+	FemaleCodename string
+	Count          uint32
+	Weight         float64
 }
 
 // The owner's table (#2131), weights out of 100: buff and 500 scrolls
 // singly, grains in stacks of twenty, the buff scrolls in threes, and one
-// rare band of the four plain Elixirs at 4.5% in all. The band sits on
+// rare band of the four elixirs at 4.5% in all. The band sits on
 // the rows monsters already drop, and the daily box cap bounds it.
 var halloweenConsumableGifts = []HalloweenGift{
 	{Codename: "ITEM_ETC_E051123_EVATION_SCROLL", Count: 1, Weight: 8},
@@ -183,10 +112,10 @@ var halloweenConsumableGifts = []HalloweenGift{
 	{Codename: "ITEM_ETC_E051123_HIT_SCROLL", Count: 3, Weight: 3.875},
 	{Codename: "ITEM_ETC_E051123_SPEED_UP_SCROLL", Count: 3, Weight: 3.875},
 	{Codename: "ITEM_ETC_E051123_AGILITY_SCROLL", Count: 3, Weight: 3.875},
-	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", Count: 1, Weight: 1.125},
-	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A", Count: 1, Weight: 1.125},
-	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A", Count: 1, Weight: 1.125},
-	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A", Count: 1, Weight: 1.125},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B", Count: 1, Weight: 1.125},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_B", Count: 1, Weight: 1.125},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_B", Count: 1, Weight: 1.125},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_B", Count: 1, Weight: 1.125},
 }
 
 /*
@@ -254,9 +183,10 @@ HalloweenPrize
 One row of the flat-price tier So-ok sells above the rolled gifts: the
 exact item a player picks and its price in boxes. Helmet rows add the
 sex they are made for and sell only to it; every other row sells to
-anyone. The Elixir rows are the four A recipes the rolled table can
+anyone. The Elixir rows are the four elixirs the rolled table can
 already pay at 4.5% in all — sold, not rolled, at half a day of boxes
-(#2548). No B row: those already sit in the alchemy shop for gold.
+(#2548). They are the same B recipes the alchemy shop sells for gold, so
+the game hands out one elixir per kind everywhere (owner 2026-11-16).
 ================
 */
 type HalloweenPrize struct {
@@ -275,10 +205,10 @@ var halloweenPrizes = []HalloweenPrize{
 	{Codename: "ITEM_ETC_E071030_W_BLUE_EGHEAD", Price: HalloweenHelmetPrice, Female: true, Helmet: true},
 	{Codename: "ITEM_ETC_E071030_W_RED_EGHEAD", Price: HalloweenHelmetPrice, Female: true, Helmet: true},
 	{Codename: "ITEM_ETC_E071030_W_BLACK_EGHEAD", Price: HalloweenHelmetPrice, Female: true, Helmet: true},
-	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", Price: HalloweenElixirPrice},
-	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A", Price: HalloweenElixirPrice},
-	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A", Price: HalloweenElixirPrice},
-	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A", Price: HalloweenElixirPrice},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B", Price: HalloweenElixirPrice},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_B", Price: HalloweenElixirPrice},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_B", Price: HalloweenElixirPrice},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_B", Price: HalloweenElixirPrice},
 }
 
 /*

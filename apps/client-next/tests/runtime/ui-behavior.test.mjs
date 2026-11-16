@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
 import { uiFixture, fontAtlas } from "../helpers/ui-fixture.mjs";
+import { correctedUiSystemCatalog } from "../helpers/corrected-text.mjs";
 /*
 ================
 load
@@ -2004,6 +2005,54 @@ test("guild-war notice modal owns input, dismisses locally and reopens only for 
 	}
 });
 
+test("an answered notice dialog sends its button's chat command and closes", () => {
+	for (
+		const [id, text] of [ [ "notice-dialog-confirm", "/contributor here" ], [
+			"notice-dialog-cancel",
+			"/contributor keep"
+		] ]
+	) {
+		const sent = [], f = uiFixture( c => sent.push( c ) );
+		try {
+			for ( let now = 0; now < 1000; now += 100 ) f.rawStep( { ...f.state }, now );
+			f.state.gameplay = {
+				...f.state.gameplay,
+				notices: [ {
+					sequence: 1,
+					key: "",
+					value: 0,
+					bannerOnly: true,
+					dialog: {
+						title: "UIIT_PORT_CONTRIBUTOR_TITLE",
+						lines: [ "UIIT_PORT_CONTRIBUTOR_ELSEWHERE" ],
+						answers: {
+							confirmLabel: "UIIT_PORT_CONTRIBUTOR_MOVE",
+							confirmChat: "/contributor here",
+							cancelLabel: "UIIT_PORT_CONTRIBUTOR_KEEP",
+							cancelChat: "/contributor keep"
+						}
+					}
+				} ]
+			};
+			let scene = f.rawStep( { ...f.state }, 1100 );
+			const control = name => scene.controls.find( c => c.id === name );
+			assert.ok( control( "notice-dialog-confirm" ) && control( "notice-dialog-cancel" ) );
+			// Side by side under the body, neither overlapping the other.
+			assert.ok(
+				control( "notice-dialog-confirm" ).rect[0] + control( "notice-dialog-confirm" ).rect[2] <=
+					control( "notice-dialog-cancel" ).rect[0]
+			);
+			assert.deepEqual( sent, [] );
+			f.ui.event( { kind: "activate", id } );
+			scene = f.rawStep( { ...f.state }, 1110 ) ?? scene;
+			assert.deepEqual( sent.filter( c => c.command?.kind === "chat" ).map( c => c.command.text ), [ text ] );
+			assert.equal( control( "notice-dialog-confirm" ), undefined );
+		} finally {
+			f.dispose();
+		}
+	}
+});
+
 test("the friend-conclusion box formats the two-name line and leaves the acceptance plain", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	try {
@@ -2110,7 +2159,18 @@ test("message scrolling uses current layout and a modal blocks captured backgrou
 });
 
 test("party proposal projects native controls, blocks background input and preserves response ownership", () => {
-	const sent = [], f = uiFixture( c => sent.push( c ) );
+	const sent = [],
+		f = uiFixture(
+			c => sent.push( c ),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{},
+			correctedUiSystemCatalog( [ "UIIT_STT_PARTY_SOMEUSER", "UIIT_STT_PARTY_PROPOSAL_ASK" ] )
+		);
 	try {
 		f.ui.step( f.state, 0 );
 		f.ui.event( { kind: "activate", id: "open-window:Inventory" } );
@@ -2123,8 +2183,8 @@ test("party proposal projects native controls, blocks background input and prese
 		f.ui.event( { kind: "drag", id: "invite-drag", dx: 90, dy: -20 } );
 		semantic = f.ui.step( invite, 110 );
 		assert.deepEqual( semantic.controls.find( c => c.id === "invite-accept" ).rect, [ 812, 481, 76, 24 ] );
-		assert.ok( f.hasText( "[Player]has" ) );
-		assert.ok( f.hasText( "Party application success. Will you accept it?" ) );
+		assert.ok( f.hasText( "[Player] has" ) );
+		assert.ok( f.hasText( "invited you to a party. Will you accept?" ) );
 		assert.equal( f.ui.blocks( 100, 100 ), true );
 		f.ui.event( { kind: "activate", id: "logout" } );
 		f.ui.event( { kind: "activate", id: "submit" } );
@@ -2150,7 +2210,18 @@ test("party proposal projects native controls, blocks background input and prese
 	}
 });
 test("guild proposal uses native agreement text, guild admission and independent drag lifetime", () => {
-	const sent = [], f = uiFixture( c => sent.push( c ) );
+	const sent = [],
+		f = uiFixture(
+			c => sent.push( c ),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{},
+			correctedUiSystemCatalog( [ "UIIT_MSG_GUILD_JOIN_REQUEST" ] )
+		);
 	try {
 		for ( let t = 0; t < 1000; t += 100 ) f.ui.step( f.state, t );
 		f.state.gameplay = { ...f.state.gameplay, social: { invitation: { type: 5, gid: 1 } } };
@@ -2158,7 +2229,7 @@ test("guild proposal uses native agreement text, guild admission and independent
 		assert.ok( !scene?.controls.some( c => c.id === "invite-accept" ), "native requires inviter guild data" );
 		f.state.entities = [ { ...f.state.entities[0], guildName: "Silkroad" } ];
 		scene = f.ui.step( f.state, 1200 );
-		assert.ok( f.hasText( "[Player]has applied for your guild." ) );
+		assert.ok( f.hasText( "[Player] has invited you to join a guild." ) );
 		assert.ok( f.hasText( "Do you want to join [Silkroad]guild?" ) );
 		assert.deepEqual( scene.controls.filter( c => c.kind === "button" ).map( c => [ c.id, c.label, c.rect ] ), [ [
 			"invite-accept",
@@ -2314,7 +2385,9 @@ test("displayed changes redraw without a dependency list and unchanged output st
 		for ( let i = 1; i <= 5; i++ ) f.ui.step( f.state, i * 20 );
 		assert.ok( f.hasText( "Lv 1" ) );
 		const mounted = { ...f.state, gameplay: { ...f.state.gameplay, progression: { level: 2, masteries: [] } } };
-		assert.ok( f.ui.step( mounted, 200 ) );
+		let published = f.scenes.length;
+		f.ui.step( mounted, 200 );
+		assert.ok( f.scenes.length > published );
 		assert.ok( f.hasText( "Lv 2" ) );
 		const selected = {
 			...mounted,
@@ -2326,7 +2399,9 @@ test("displayed changes redraw without a dependency list and unchanged output st
 			...selected,
 			entities: [ selected.entities[0], { ...selected.entities[1], name: "Renamed NPC" } ]
 		};
-		assert.ok( f.ui.step( renamed, 400 ) );
+		published = f.scenes.length;
+		f.ui.step( renamed, 400 );
+		assert.ok( f.scenes.length > published );
 		assert.ok( f.hasText( "Renamed NPC" ) );
 		const count = f.scenes.length, uploads = f.textures.length;
 		for ( let now = 500; now < 5000; now += 100 ) assert.equal( f.ui.step( renamed, now ), null );
@@ -3618,8 +3693,8 @@ test("Apply commits every tab, as OK does, and keeps the Options window open", (
 		assert.equal( saved[0].records[0][9], 0 );
 		// The input tab is committed with the rest.
 		assert.equal( bindings.length, 1 );
-		const result = f.ui.step( f.state, 1700 );
-		assert.ok( result.controls.some( c => c.id === "option-apply" ) );
+		f.ui.step( f.state, 1700 );
+		assert.ok( f.presented()?.controls.some( c => c.id === "option-apply" ) );
 		f.ui.event( { kind: "activate", id: "option-video-record:1" } );
 		f.ui.event( { kind: "activate", id: "option-video-choice:10:0" } );
 		f.ui.event( { kind: "activate", id: "option-cancel" } );
@@ -3658,8 +3733,8 @@ test("player and lower-bar retention invalidate independently for vitals, progre
 		assert.equal( resized.player.rebuilds, sp.player.rebuilds + 1 );
 		assert.equal( resized.bar.rebuilds, sp.bar.rebuilds + 1 );
 		f.ui.event( { kind: "activate", id: "ability-details" } );
-		const semantics = f.ui.step( { ...f.state }, 1004 );
-		assert.ok( semantics.controls.some( c => c.id === "ability-details" ) );
+		f.ui.step( { ...f.state }, 1004 );
+		assert.ok( f.presented()?.controls.some( c => c.id === "ability-details" ) );
 		assert.equal( f.ui.stats().layoutRetention.player.rebuilds, resized.player.rebuilds + 1 );
 	} finally {
 		f.dispose();
@@ -6945,6 +7020,68 @@ test("Escape closes the stall network window instead of opening the System menu"
 	}
 });
 
+test("Escape leaves or closes the stall window instead of opening the System menu", () => {
+	for ( const [phase, owner, kind] of [ [ "visitor", 2, "stall-leave" ], [ "owner", 1, "stall-close" ] ] ) {
+		const commands = [], f = uiFixture( c => commands.push( c.command ) );
+		try {
+			f.state.gameplay = {
+				...f.state.gameplay,
+				stall: { ...emptyStall(), phase, owner, open: true }
+			};
+			let now = 1000;
+			const draw = () => {
+				for ( let i = 0; i < 10; i++ ) f.ui.step( f.state, now += 100 );
+			};
+			const stallCommands = () => commands.filter( c => c.kind === "stall-leave" || c.kind === "stall-close" );
+			draw();
+			// 5A0DC0 -> 69C7C0 shows the main popup on its Inventory tab beside
+			// the stall: that window is topmost and takes the first Escape.
+			assert.equal( f.ui.stats().panel, "Inventory", "the stall shows Inventory beside it" );
+			f.ui.event( { kind: "key", code: "Escape" } );
+			draw();
+			assert.deepEqual( stallCommands(), [], `a ${phase}'s first Escape closes Inventory` );
+			assert.equal( f.ui.stats().panel, "", "Inventory closed" );
+			f.ui.event( { kind: "key", code: "Escape" } );
+			assert.deepEqual(
+				stallCommands(),
+				[ { kind } ],
+				`a ${phase}'s Escape does what the stall's close control does`
+			);
+			assert.notEqual( f.ui.stats().panel, "System", "and does not open the System menu over it" );
+		} finally {
+			f.dispose();
+		}
+	}
+});
+
+test("Escape closes a window beside the stall before it closes the stall", () => {
+	const commands = [], f = uiFixture( c => commands.push( c.command ) );
+	try {
+		let now = 0, scene;
+		const draw = () => {
+			for ( let i = 0; i < 10; i++ ) scene = f.ui.step( f.state, now += 100 ) ?? scene;
+			return scene;
+		};
+		const stallCommands = () => commands.filter( c => c.kind === "stall-leave" || c.kind === "stall-close" );
+		// The HUD takes a window press only once it has drawn.
+		draw();
+		f.ui.event( { kind: "activate", id: "open-window:Guild" } );
+		draw();
+		assert.ok( scene.controls.find( row => row.id === "close-window:Guild" ), "Guild opened" );
+		f.state.gameplay = { ...f.state.gameplay, stall: { ...emptyStall(), phase: "owner", owner: 1, open: true } };
+		draw();
+		assert.ok( scene.controls.find( row => row.id === "close-window:Guild" ), "Guild stays open beside the stall" );
+		f.ui.event( { kind: "key", code: "Escape" } );
+		draw();
+		assert.deepEqual( stallCommands(), [], "the first Escape closes Guild, not the owner's stall" );
+		assert.equal( !!scene.controls.find( row => row.id === "close-window:Guild" ), false, "Guild closed" );
+		f.ui.event( { kind: "key", code: "Escape" } );
+		assert.deepEqual( stallCommands(), [ { kind: "stall-close" } ], "the next Escape closes the stall" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("a stall beside a separate window keeps that window open", () => {
 	const f = uiFixture();
 	try {
@@ -7022,6 +7159,78 @@ test("survival arena death suppresses town rebirth while ordinary deaths keep it
 			}
 		} finally {
 			f.ui.dispose();
+		}
+	}
+});
+
+/*
+================
+stall offer click-carry
+
+CIFInventory_OnSlotTransfer (59B1D0): a stall slot (window 0x21) released
+on the bag sends 0x71A8 kind 3 for its owner. Item slots move by click-carry
+(a click lifts the icon onto the cursor, the next click drops it), so the
+owner's offer must lift as the bag's items do, or a priced item can only
+leave by closing the whole stall.
+================
+*/
+test("an owner's stall offer lifts by click and leaves the stall on the bag in modify mode", async () => {
+	const item = {
+		slot: 13,
+		quantity: 20,
+		refObjId: 7,
+		typeFlags: 0x8ec,
+		icon: "item/etc/hp_potion_01.ddj",
+		name: "Potion"
+	};
+	const offer = { slot: 0, bagSlot: 13, quantity: 5, price: 300, item: { ...item, quantity: 5 } };
+	for ( const history of [ "never opened", "opened, then modified" ] ) {
+		const commands = [], f = uiFixture( c => commands.push( c.command ) );
+		try {
+			const stall = { ...emptyStall(), phase: "owner", owner: 1, offers: [ offer ] };
+			f.state.gameplay = {
+				...f.state.gameplay,
+				inventorySlotCount: 45,
+				equipmentSlotCount: 13,
+				inventory: [ item ],
+				stall: { ...stall, open: history !== "never opened" }
+			};
+			let now = 1000, scene;
+			const draw = async () => {
+				for ( let i = 0; i < 10; i++ ) {
+					scene = f.ui.step( f.state, now += 100 ) ?? scene;
+					// The icon resources load asynchronously.
+					await new Promise( resolve => setTimeout( resolve, 5 ) );
+				}
+			};
+			const control = id => scene.controls.find( row => row.id === id );
+			const removes = () => commands.filter( c => c.kind === "stall-remove" );
+			await draw();
+			if ( history !== "never opened" ) {
+				assert.ok( !control( "stall-slot:0" ).carry, "an open stall's offer does not lift" );
+				f.state.gameplay = { ...f.state.gameplay, stall: { ...stall, open: false } };
+				await draw();
+			}
+			const source = control( "stall-slot:0" ), bag = control( "slot:20" ).rect;
+			assert.equal( source.carry, true, `${history}: the offer lifts by click` );
+			// The lift: the platform reports a carry as drag events from the slot.
+			f.ui.event( { kind: "drag", id: "stall-slot:0", dx: 5, dy: 5 } );
+			await draw();
+			const cursor = [ source.rect[0] + 16 + 5 - 16, source.rect[1] + 16 + 5 - 16, 32, 32 ];
+			assert.ok(
+				f.scenes.at( -1 ).quads.some( q =>
+					q.texture?.includes( "hp_potion_01" ) && q.rect.every( ( v, i ) => v === cursor[i] )
+				),
+				`${history}: the carried icon is the offered bag item`
+			);
+			// A drop off the bag leaves the offer where it is.
+			f.ui.event( { kind: "drag-end", id: "stall-slot:0", x: 2, y: 2 } );
+			assert.deepEqual( removes(), [], `${history}: a drop outside the bag removes nothing` );
+			f.ui.event( { kind: "drag", id: "stall-slot:0", dx: 5, dy: 5 } );
+			f.ui.event( { kind: "drag-end", id: "stall-slot:0", x: bag[0] + 4, y: bag[1] + 4 } );
+			assert.deepEqual( removes(), [ { kind: "stall-remove", slot: 0 } ], `${history}: the bag takes it back` );
+		} finally {
+			f.dispose();
 		}
 	}
 });

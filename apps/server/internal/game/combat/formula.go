@@ -23,6 +23,9 @@ const (
 	physicalAttackFlag uint32 = 0x04
 	magicalAttackFlag  uint32 = 0x08
 	normalResultFlag   uint8  = 0x01
+	// IgnoreDefenseResultFlag is the hit-record flag byte bit (0x20) set when
+	// MATTR_AVATAR_MDIA procs, skipping parry and defense in every lane.
+	IgnoreDefenseResultFlag uint8 = 0x20
 )
 
 // Roll32767 returns one value in the same inclusive 0..32767 domain as the
@@ -139,6 +142,9 @@ type AttackCalculation struct {
 	Lanes         uint32
 	Player        bool
 	Critical      bool
+	// IgnoreDefense is the 0x20 MATTR_AVATAR_MDIA proc from the reference
+	// server's hit-outcome routine.
+	IgnoreDefense bool
 	wall          bool
 }
 
@@ -193,14 +199,64 @@ func ResolveCalculation(attacker, defender Stats, calculation AttackCalculation,
 	if total > uint64(wire.MaxSkillActionDamage) {
 		total = uint64(wire.MaxSkillActionDamage)
 	}
+	if defender.OneDamageHits && total > 0 {
+		// One lane keeps the single point, so the lane split still sums
+		// to the hit.
+		total = uint64(OneDamageCap(defender, uint32(total)))
+		if physicalDamage > 0 {
+			physicalDamage, magicalDamage = 1, 0
+		} else {
+			magicalDamage = 1
+		}
+	}
+	return Result{
+		Damage:         uint32(total),
+		MagicalDamage:  magicalDamage,
+		PhysicalDamage: physicalDamage,
+		ResultFlags:    resultFlags(attacker, calculation),
+	}, nil
+}
+
+/*
+================
+OneDamageCap
+
+A defender marked OneDamageHits (the winter Snow Slave,
+monster.oneDamageHitCodenames) takes exactly 1 from any hit that deals
+damage; a zero stays zero. The v1.188 server keeps a table of special
+targets, each with a fixed damage word, and its winter event registers
+MOB_EV_WINTER_SNOWMAN there with damage 1; a hit on a listed monster,
+direct or periodic, takes that word in place of the formula's. Every
+damage formula a monster defender meets ends here: the att lanes
+(ResolveCalculation), the fixed pdmg hit, the life steal and the hawk's
+periodic hit (HawkDamage). The row exists only where the winter import
+ran (SRO_CHRISTMAS_EVENT), so a native root never meets it.
+================
+*/
+func OneDamageCap(defender Stats, damage uint32) uint32 {
+	if defender.OneDamageHits && damage > 0 {
+		return 1
+	}
+	return damage
+}
+
+/*
+================
+resultFlags
+================
+*/
+func resultFlags(attacker Stats, calculation AttackCalculation) uint8 {
 	flags := normalResultFlag
-	if critical && attack.Flags&physicalAttackFlag != 0 {
+	if calculation.Critical && calculation.Attack.Flags&physicalAttackFlag != 0 {
 		flags = 2
 	}
 	if attacker.Berserk {
 		flags |= 4
 	}
-	return Result{Damage: uint32(total), MagicalDamage: magicalDamage, PhysicalDamage: physicalDamage, ResultFlags: flags}, nil
+	if calculation.IgnoreDefense {
+		flags |= IgnoreDefenseResultFlag
+	}
+	return flags
 }
 
 /*
@@ -301,7 +357,12 @@ func resolveLane(attacker, defender Stats, calculation AttackCalculation, lane l
 	attackPoint = parameterAttackPoint(attackPoint, attacker.SkillParameters, attack.Parameters, magical)
 	attackPoint = stealthStrikePoint(attackPoint, attacker, attack.Parameters, magical)
 
-	damage := attackPoint/(parry/100+1) - defense
+	// In both damage lanes the 0x20 proc skips the parry division and the
+	// defense subtraction; both paths then share the same clamp at zero.
+	damage := attackPoint
+	if !calculation.IgnoreDefense {
+		damage = attackPoint/(parry/100+1) - defense
+	}
 	if damage < 0 {
 		damage = 0
 	}

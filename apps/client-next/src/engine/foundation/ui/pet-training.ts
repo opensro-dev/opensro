@@ -283,16 +283,11 @@ export function petEffect( design: PetSkillDesign, value: number, effectiveLevel
 	if ( wolf ) return wolf.join( ". " ) + ".";
 	const rank2 = effectiveLevel >= PET_DESIGN.rules.rank2Level || design.option > 1;
 	const rank3 = effectiveLevel >= PET_DESIGN.rules.rank3Level || design.option > 1;
-	if ( design.family === "Rejuvenating Plume" ) {
-		return `Restore ${formatValue( value )}% maximum HP: half immediately, half over 5 seconds.` +
-			(design.option >= 2 ? " Also heals the crow and removes one poison or burn from the owner." : "") +
-			(design.option === 3 ? " Party range 20 m; each additional recipient receives 20% less healing." : "");
-	}
-
-	if ( design.family === "Stormbrood" ) {
-		return "Destructible egg hatches after 30 s into an unhealable crow. Clone lasts 10 min; stats and normal attacks only. Maximum 10 eggs/clones." +
-			(design.option >= 2 ? " Stores 3 casts." : "") +
-			(design.option === 3 ? " Clone death: 8 m wind burst, 500% normal attack damage; up to 8 monsters." : "");
+	if (
+		design.family === "Rejuvenating Plume" || design.family === "Stormbrood" ||
+		design.family === "Mana Spring" || design.family === "Tailwind"
+	) {
+		return petSkillEffectLines( design, value, effectiveLevel ).join( ". " ) + ".";
 	}
 
 	if ( design.family === "Unbroken Spirit" ) {
@@ -317,14 +312,8 @@ export function petEffect( design: PetSkillDesign, value: number, effectiveLevel
 			" Blocked hits and periodic damage do not count. Shielded hits count. Unique monsters are immune.";
 	}
 
-	if ( design.family === "Guiding Feathers" ) {
-		return `Crow hits grant +${formatValue( value )}% hit ratio per Precision stack for 10 s, up to 5.` +
-			(design.option >= 2 ?
-				` At 5 stacks, your next damaging skill deals ${
-					20 + (effectiveLevel - 1) * 2
-				}% more damage and consumes Precision.` :
-				"") +
-			(design.option === 3 ? " Party members within 20 m gain independent stacks." : "");
+	if ( design.family === "Raven's Refuge" ) {
+		return petSkillEffectLines( design, value, effectiveLevel ).join( ". " );
 	}
 
 	if ( design.family === "Challenging Roar" ) {
@@ -477,17 +466,18 @@ export function petSkillTooltip(
 		add( value, white );
 	}
 	if ( skill.effectiveLevel > skill.level ) add( `Skills +${skill.effectiveLevel - skill.level}`, white );
-	if ( design.cooldown !== null ) {
+	if ( design.cooldown !== null && (design.family !== "Raven's Refuge" || design.option >= 2) ) {
 		const recharge = Math.max(
-			0,
+			design.family === "Rejuvenating Plume" ?
+				15 :
+				design.family === "Stormbrood" ?
+				900 :
+				design.family === "Raven's Refuge" ?
+				120 :
+				0,
 			design.cooldown +
 				(design.cooldownPerLevel ?? 0) *
-					(Math.max(
-						1,
-						design.family === "Stormbrood" ?
-							Math.min( 10, skill.effectiveLevel ) :
-							skill.effectiveLevel
-					) - 1)
+					(Math.max( 1, skill.effectiveLevel ) - 1)
 		);
 		add(
 			`Base recharge: ${
@@ -543,14 +533,17 @@ function petSkillEffectLines( d: PetSkillDesign, value: number, rank: number ): 
 			return [
 				`Restore ${v}% maximum HP`,
 				"Half immediately; half over 5 s",
-				...(d.option >= 2 ? [ "Also heals the crow", "Removes one poison or burn from owner" ] : []),
+				...(d.option >= 2 ?
+					[ "Also heals the crow", "Cleanses all negative effects from healed recipients" ] :
+					[]),
 				...(d.option === 3 ? [ "Party range 20 m", "Each additional recipient: 20% less healing" ] : [])
 			];
 		case "Stormbrood":
 			return [
 				"Egg hatches after 30 s",
 				"Clone lasts 10 min and cannot be healed",
-				"Copies stats and normal attacks only",
+				"Copies stats, gear blues and normal attacks",
+				"Does not copy learned skills",
 				...(d.option >= 2 ? [ "3 stored casts" ] : []),
 				"Maximum 10 eggs/clones",
 				...(d.option === 3 ? [ "On death: 500% attack wind burst", "Radius 8 m; up to 8 monsters" ] : [])
@@ -560,35 +553,44 @@ function petSkillEffectLines( d: PetSkillDesign, value: number, rank: number ): 
 			return [
 				`Restore MP equal to ${v}% of bird damage`,
 				d.option >= 2 ? "Owner and party members within 20 m" : "Owner only",
-				...(d.option === 3 ? [ "Each damaging attack: character/pet reuse -0.5 s" ] : []),
+				...(d.option === 3 ?
+					[
+						"Every 10,000 MP restored: 5,000 true damage",
+						"Burst radius 5 m around crow; excess MP progress carries over"
+					] :
+					[]),
 				"Uses actual damage; blocked hits grant nothing"
 			];
 		case "Tailwind":
 			return [
 				`Movement speed +${v}% per stack`,
 				"Gain 1 stack every 5 s; maximum 10",
-				"Dealing or taking damage removes all stacks",
+				"Only taking damage removes stacks",
 				...(d.option >= 2 ?
 					[
-						"At 10 stacks: next hit dealt or taken stuns that enemy for 2 s",
+						"At 10 stacks: stun attacker for 2 s before damage",
+						"Prevents the hit and keeps stacks; stun reuse 30 s",
 						"Native resistance and unique immunity apply"
 					] :
 					[]),
 				...(d.option === 3 ? [ "Party members within 20 m gain independent stacks" ] : [])
 			];
-		case "Guiding Feathers":
+		case "Raven's Refuge":
 			return [
-				`Hit ratio +${v}% per Precision stack`,
-				"Crow hits grant 1 stack; maximum 5",
-				"Duration 10 s; crow hits refresh duration",
+				`Below ${formatValue( Math.min( 40, value ) )}% HP: damage taken -15%`,
 				...(d.option >= 2 ?
 					[
-						`At 5 stacks: next damaging skill +${20 + (rank - 1) * 2}% damage`,
-						"Successful skill consumes your Precision",
-						"Normal attacks do not consume stacks"
+						"Crossing below the threshold: recover 10% maximum HP",
+						"Must survive the hit; does not resurrect",
+						"Recovery cooldown persists through relogging and changing crows"
 					] :
 					[]),
-				...(d.option === 3 ? [ "Party range 20 m; independent counters" ] : [])
+				...(d.option === 3 ?
+					[
+						"Also protects party members within 20 m",
+						"Each recipient has an independent recovery cooldown"
+					] :
+					[])
 			];
 
 		case "Challenging Roar":

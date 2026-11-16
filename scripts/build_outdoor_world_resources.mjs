@@ -33,7 +33,7 @@ Options:
   --plan                 Discover and report without writing files.
   --force                Rebuild selected region files and shared resources.
   --force-shared         Rebuild only the shared render/object resource stores.
-  --jobs=N               Concurrent region builders (default SRO_BUILD_JOBS, else cores - 1).
+  --jobs=N               Concurrent region builders (default SRO_BUILD_JOBS, else buildJobs()).
   --region=HEX[,HEX...]  Incrementally build specific valid region ids.
   --no-catalog           Do not update the global world-region catalog.
   --help                 Show this help.

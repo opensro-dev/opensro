@@ -30,6 +30,11 @@ const PICKUP_RANGE = 500;
 const DROP_RETRY_MS = 5000;
 const PET_RETRY_MS = 3000;
 const DISABLE_RETRY_MS = 1000;
+// Port-only (smartPetPickup): how long a drop the owner's full player bag
+// refused (0xB5) stays out of the proposal set, unless bag space changes
+// first. The player bag can free space without a pet receipt (a sale, a
+// manual drop), so the hold also ends on its own.
+const OWNER_BAG_RETRY_MS = 30000;
 
 /*
 ================
@@ -108,6 +113,14 @@ export function createCosPickup() {
 	const dropRetry = new Map<number, number>();
 	const petRetry = new Map<number, number>();
 	const bagFull = new Set<number>();
+	// Port-only (smartPetPickup): drops refused with 0xB5, the owner's
+	// player bag is full, mapped to the time their hold ends. 0xB5 names
+	// only the drop that must enter the owner's bag (a personal quest
+	// item, server cosground.go sharePetPickup); the pet's own bag still
+	// has room, so the pet keeps picking up everything else. Pausing the
+	// whole pet here (as for 0xB4) starved every other drop behind one
+	// quest item (a player report: a Sun staff left on the ground).
+	const ownerBagFull = new Map<number, number>();
 	return {
 		/*
 ================
@@ -126,6 +139,7 @@ track
 			receipts.delete( event.gid );
 			petRetry.delete( event.gid );
 			bagFull.delete( event.gid );
+			ownerBagFull.delete( event.gid );
 			for ( const [gid, target] of pending ) {
 				if ( target === event.gid ) {
 					pending.delete( gid );
@@ -142,7 +156,10 @@ ordered-map tie break independently of the browser's spawn arrival order.
 ================
 		*/
 		step( frame: PickupFrame ): WireFrame[] {
-			if ( frame.smartPetPickup === false && bagFull.size > 0 ) bagFull.clear();
+			if ( frame.smartPetPickup === false ) {
+				bagFull.clear();
+				ownerBagFull.clear();
+			}
 			const local = frame.local;
 			if ( !local || local.appearanceState?.[0] === 2 ) return [];
 			const frames: WireFrame[] = [], claimed = new Set( pending.values() );
@@ -159,7 +176,8 @@ ordered-map tie break independently of the browser's spawn arrival order.
 					const category = drop ? pickupCategory( drop.typeFlags ) : 0;
 					if (
 						!item || !drop || drop.claimantGid || claimed.has( gid ) || retired.has( gid ) ||
-						(dropRetry.get( gid ) ?? 0) > frame.now || !(mode & category)
+						(dropRetry.get( gid ) ?? 0) > frame.now || (ownerBagFull.get( gid ) ?? 0) > frame.now ||
+						!(mode & category)
 					) continue;
 					// Port-only (#841): the item filter narrows the native
 					// admission above; it can only ever refuse a proposal.
@@ -209,8 +227,10 @@ result
 The return value asks gameplay to submit the native disable-setting request
 for full/disabled inventory feedback; settings change only on server receipt.
 Port-only, not native: when smartPetPickup is enabled, 0xB4/0xB5 keeps bit
-0x80 enabled and pauses non-gold item pickup for that pet until spaceChanged
-fires so gold pickup continues without spamming 0x769E.
+0x80 enabled. 0xB4 (the pet's bag is full) pauses non-gold item pickup for
+that pet until spaceChanged fires, so gold pickup continues without
+spamming 0x769E. 0xB5 (the owner's player bag is full) holds back only the
+refused drop, since every other drop still fits the pet's own bag.
 ================
 		*/
 		result( result: PickupResult, now: number, smartPetPickup = false ): boolean {
@@ -224,8 +244,19 @@ fires so gold pickup continues without spamming 0x769E.
 				drops.delete( result.itemGid );
 				retired.add( result.itemGid );
 			} else if ( code === 0x13 || code === 0x99 ) dropRetry.set( result.itemGid, now + DROP_RETRY_MS );
-			else if ( code === 0x14 || code === 0x9c ) petRetry.set( result.gid, now + PET_RETRY_MS );
+			else if ( code === 0x9c && smartPetPickup ) {
+				// Port-only (smartPetPickup): an item-share party answers 0x9C
+				// for a drop it cannot land yet (a quest item for a full owner
+				// bag, a full peer pet). Pausing the pet re-proposed the same
+				// nearest drop every 3 s and starved every other one; holding
+				// back that drop lets the pet take the rest meanwhile.
+				dropRetry.set( result.itemGid, now + DROP_RETRY_MS );
+			} else if ( code === 0x14 || code === 0x9c ) petRetry.set( result.gid, now + PET_RETRY_MS );
 			else if ( code === 0xb4 || code === 0xb5 ) {
+				if ( smartPetPickup && code === 0xb5 ) {
+					ownerBagFull.set( result.itemGid, now + OWNER_BAG_RETRY_MS );
+					return false;
+				}
 				if ( smartPetPickup ) {
 					bagFull.add( result.gid );
 					dropRetry.set( result.itemGid, now + DROP_RETRY_MS );
@@ -248,6 +279,7 @@ Clears the smartPetPickup full-bag pause when pet or player bag space changes.
 			if ( gid !== undefined ) bagFull.delete( gid );
 			else bagFull.clear();
 			dropRetry.clear();
+			ownerBagFull.clear();
 		},
 		/*
 ================
@@ -265,6 +297,7 @@ clear
 			dropRetry.clear();
 			petRetry.clear();
 			bagFull.clear();
+			ownerBagFull.clear();
 		}
 	};
 }

@@ -20,6 +20,7 @@ const { createModelDecoder } = await import( "../../src/engine/runtime/assets/wo
 const { createCharacterPose } = await import( "../../src/engine/foundation/animation/animation-pose.ts" );
 const { withWolfHowl, withWolfRend } = await import( "../../src/engine/foundation/animation/bear-roar.ts" );
 const { createPresentationState } = await import( "../../src/engine/runtime/characters/presentation-state.ts" );
+const { clipFacts } = await import( "../../src/engine/runtime/characters/presentation-catalog.ts" );
 
 for ( const rig of [ "p_wolf_01", "p_wolf_02", "p_wolf_white_01", "p_wolf_white_02" ] ) {
 	test(`${rig}: the howl lifts the muzzle, opens the jaw and keeps the paws down`, () => {
@@ -127,7 +128,8 @@ test("a wolf's howl emote selects pet-howl; Savage Rend and other pets do not", 
 		heading: 0,
 		emote: { action: 3, atMs: 0, revision: 1 }
 	};
-	const body = { refObjId: 1, codename: "COS_P_WOLF_090", glb: "/wolf.glb", clips: [ "stand", "attack1", "emote0" ] };
+	const clips = [ "stand", "attack1", "emote0" ];
+	const body = { refObjId: 1, codename: "COS_P_WOLF_090", glb: "/wolf.glb", clips, clipFacts: clipFacts( clips ) };
 	const published = {
 		catalog: new Map( [ [ 1, body ] ] ),
 		recoveryByCodename: new Map(),
@@ -151,10 +153,10 @@ test("a wolf's howl emote selects pet-howl; Savage Rend and other pets do not", 
 		pendingDeaths: new Set(),
 		uncensored: false
 	};
-	state.step( frame, { failure: null }, published );
+	state.step( frame, { degradations: [], degradedKeys: new Set() }, published );
 	const posture = defined( defined( state.idleStates.get( 1 ) ).posture );
 	assert.equal( posture.kind === "emote" ? posture.clip : "", "pet-howl" );
-	state.step( { ...frame, seconds: 3 }, { failure: null }, published );
+	state.step( { ...frame, seconds: 3 }, { degradations: [], degradedKeys: new Set() }, published );
 	assert.equal( defined( state.idleStates.get( 1 ) ).posture, undefined );
 	// Rend plays through the bite's cast; 0xF0+ signals only draw effects.
 	/** @type {[number, string][]} */
@@ -166,7 +168,7 @@ test("a wolf's howl emote selects pet-howl; Savage Rend and other pets do not", 
 		entity.emote.action = action;
 		entity.emote.revision++;
 		body.codename = codename;
-		state.step( { ...frame, seconds: 4 }, { failure: null }, published );
+		state.step( { ...frame, seconds: 4 }, { degradations: [], degradedKeys: new Set() }, published );
 		assert.equal( defined( state.idleStates.get( 1 ) ).posture, undefined, `${codename} action ${action}` );
 	}
 });

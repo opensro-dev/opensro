@@ -7,7 +7,7 @@ Port-only approximate guidance from static outdoor anchors.
 
 ===========================================================================
 */
-import { featuresAt } from "@/engine/foundation/world/plane";
+import { featuresAt, planeKindOf } from "@/engine/foundation/world/plane";
 import type { UiControl, UiQuad, UiRect } from "@/engine/contracts/ui";
 import type { worldMapFrame } from "./world-map";
 const MAX_MONSTERS = 4096, MAX_POINTS = 65536, MAX_NAME = 128;
@@ -45,6 +45,10 @@ HuntingCatalogue
 export interface HuntingCatalogue {
 	readonly monsters: readonly HuntingMonster[];
 	readonly regions: ReadonlyMap<number, readonly HuntingPoint[]>;
+	// Dungeon-region anchors (issue #3239), keyed by their raw region
+	// id with points in region-local coordinates: the outdoor regions
+	// above key anchors by world sector, which a dungeon region is not.
+	readonly dungeons: ReadonlyMap<number, readonly HuntingPoint[]>;
 	readonly sections: readonly HuntingSection[];
 }
 // The level filter's span (issue #3167): with the filter on, the map
@@ -53,6 +57,58 @@ export interface HuntingCatalogue {
 // UIIT_STT_WORLDMAP_LEVEL_MONSTER_LIST, "Display 6 lv.higher monsters
 // from the current character's level"; the v2.355 export says the same).
 export const MONSTER_LEVEL_FILTER_SPAN = 6;
+
+/*
+================
+LevelBand
+
+The level filter's band (issue #3167): the species it keeps, from
+min to max inclusive. The later label reads "6 lv.higher monsters
+from the current character's level", so the band starts at the
+character's level and ends span levels above it. Inferred, since no
+client binary shows the comparison (the key resolves through data):
+a cap with no floor, as the port first shipped, left a level-91
+character's list full of level-1 species and the box seemed to do
+nothing.
+================
+*/
+export interface LevelBand {
+	readonly min: number;
+	readonly max: number;
+}
+
+/*
+================
+inLevelBand
+
+Whether a species of this level passes the filter; no band passes all.
+================
+*/
+export function inLevelBand( level: number, band: LevelBand | undefined ): boolean {
+	return band === undefined || (level >= band.min && level <= band.max);
+}
+
+/*
+================
+sameLevelBand
+
+Whether two bands keep the same species (no band equals no band).
+================
+*/
+export function sameLevelBand( a: LevelBand | undefined, b: LevelBand | undefined ): boolean {
+	return a?.min === b?.min && a?.max === b?.max;
+}
+
+/*
+================
+levelBand
+
+The band for a character of this level.
+================
+*/
+export function levelBand( characterLevel: number ): LevelBand {
+	return { min: characterLevel, max: characterLevel + MONSTER_LEVEL_FILTER_SPAN };
+}
 
 /*
 ================
@@ -91,55 +147,146 @@ monsterDirectory
 The region and monster list (issue #3167), grouped from the
 catalogue's anchors: one row per species per region at its first
 anchor there, species sorted by level then name, regions sorted by
-their lowest level. maxLevel, when given, is the level filter's cap:
-species above it, and regions it empties, are hidden.
+their lowest level. band, when given, is the level filter: species
+outside it, and regions it empties, are hidden.
 ================
 */
 export function monsterDirectory(
 	catalogue: HuntingCatalogue,
-	maxLevel?: number
+	band?: LevelBand
 ): readonly MonsterDirectoryRegion[] {
 	const regions: MonsterDirectoryRegion[] = [];
 	for ( const [region, points] of catalogue.regions ) {
-		const byId = new Map<number, MonsterDirectoryMonster>();
-		for ( const point of points ) {
-			if ( maxLevel !== undefined && point.monster.level > maxLevel ) continue;
-			if ( !byId.has( point.monster.refObjId ) ) {
-				byId.set( point.monster.refObjId, { monster: point.monster, region, x: point.x, z: point.z } );
-			}
-		}
-		if ( byId.size === 0 ) continue;
-		const monsters = [ ...byId.values() ].sort(
-			( a, b ) => a.monster.level - b.monster.level || a.monster.name.localeCompare( b.monster.name )
-		);
-		regions.push( {
-			region,
-			minLevel: monsters[0]!.monster.level,
-			maxLevel: monsters[monsters.length - 1]!.monster.level,
-			monsters
-		} );
+		const row = directoryRegion( region, points, band );
+		if ( row ) regions.push( row );
 	}
 	return regions.sort( ( a, b ) => a.minLevel - b.minLevel || a.region - b.region );
 }
 
 /*
 ================
+directoryByName
+
+The drawer's groups (issue #3554): one per shown name, not one per
+region sector. A zone spans many sectors, and per-sector groups gave
+eight rows all reading "Grassland Lv.1~2". The later client's Monster
+tree (monster.txt, worldmap-guide.ts) has one main row per hunting
+area with its species under it, so sectors that share a name merge.
+v1.150 has no such list (the drawer is #3167's), so the area row is
+the model. names holds each sector's shown name (a sector it lacks
+stands alone under its own id). A merged group keeps its first sector's id (the lowest
+level, as the list sorts), lists each species once at the anchor of
+the first sector that holds it, and spans the sectors' levels.
+================
+*/
+export function directoryByName(
+	regions: readonly MonsterDirectoryRegion[],
+	names: ReadonlyMap<number, string>
+): readonly MonsterDirectoryRegion[] {
+	const groups = new Map<string, { region: number; monsters: Map<number, MonsterDirectoryMonster>; }>();
+	for ( const row of regions ) {
+		const name = names.get( row.region ) ?? "#" + row.region;
+		let group = groups.get( name );
+		if ( !group ) {
+			group = { region: row.region, monsters: new Map() };
+			groups.set( name, group );
+		}
+		for ( const entry of row.monsters ) {
+			if ( !group.monsters.has( entry.monster.refObjId ) ) group.monsters.set( entry.monster.refObjId, entry );
+		}
+	}
+	const merged: MonsterDirectoryRegion[] = [];
+	for ( const group of groups.values() ) {
+		const monsters = [ ...group.monsters.values() ].sort(
+			( a, b ) => a.monster.level - b.monster.level || a.monster.name.localeCompare( b.monster.name )
+		);
+		merged.push( {
+			region: group.region,
+			minLevel: monsters[0]!.monster.level,
+			maxLevel: monsters[monsters.length - 1]!.monster.level,
+			monsters
+		} );
+	}
+	return merged.sort( ( a, b ) => a.minLevel - b.minLevel || a.region - b.region );
+}
+
+/*
+================
+directoryRegion
+
+One region's directory row from its anchors: one row per species at
+its first anchor there, sorted by level then name; undefined when the
+level band empties the region.
+================
+*/
+function directoryRegion(
+	region: number,
+	points: readonly HuntingPoint[],
+	band?: LevelBand
+): MonsterDirectoryRegion | undefined {
+	const byId = new Map<number, MonsterDirectoryMonster>();
+	for ( const point of points ) {
+		if ( !inLevelBand( point.monster.level, band ) ) continue;
+		if ( !byId.has( point.monster.refObjId ) ) {
+			byId.set( point.monster.refObjId, { monster: point.monster, region, x: point.x, z: point.z } );
+		}
+	}
+	if ( byId.size === 0 ) return undefined;
+	const monsters = [ ...byId.values() ].sort(
+		( a, b ) => a.monster.level - b.monster.level || a.monster.name.localeCompare( b.monster.name )
+	);
+	return {
+		region,
+		minLevel: monsters[0]!.monster.level,
+		maxLevel: monsters[monsters.length - 1]!.monster.level,
+		monsters
+	};
+}
+
+/*
+================
+dungeonDirectory
+
+The species of one dungeon region (issue #3239), as the world
+directory rows read: a dungeon page lists its own floor's region
+from the catalogue's dungeon anchors. Donwhang's floors share one
+region, so its pages list the cave's species together; the Tomb's
+floors are regions of their own.
+================
+*/
+export function dungeonDirectory(
+	catalogue: HuntingCatalogue,
+	regionId: number,
+	band?: LevelBand
+): MonsterDirectoryRegion | undefined {
+	const points = catalogue.dungeons.get( regionId );
+	return points ? directoryRegion( regionId, points, band ) : undefined;
+}
+
+/*
+================
 filterHuntingGuide
 
-The catalogue as the level filter shows it: species above maxLevel
+The catalogue as the level filter shows it: species outside the band
 are out, and the sections are rebuilt from the surviving anchors so
 an emptied area leaves the map with its species.
 ================
 */
-export function filterHuntingGuide( catalogue: HuntingCatalogue, maxLevel: number ): HuntingCatalogue {
+export function filterHuntingGuide( catalogue: HuntingCatalogue, band: LevelBand ): HuntingCatalogue {
 	const regions = new Map<number, readonly HuntingPoint[]>();
 	for ( const [region, points] of catalogue.regions ) {
-		const kept = points.filter( point => point.monster.level <= maxLevel );
+		const kept = points.filter( point => inLevelBand( point.monster.level, band ) );
 		if ( kept.length > 0 ) regions.set( region, kept );
 	}
+	const dungeons = new Map<number, readonly HuntingPoint[]>();
+	for ( const [region, points] of catalogue.dungeons ) {
+		const kept = points.filter( point => inLevelBand( point.monster.level, band ) );
+		if ( kept.length > 0 ) dungeons.set( region, kept );
+	}
 	return {
-		monsters: catalogue.monsters.filter( monster => monster.level <= maxLevel ),
+		monsters: catalogue.monsters.filter( monster => inLevelBand( monster.level, band ) ),
 		regions,
+		dungeons,
 		sections: buildHuntingSections( regions )
 	};
 }
@@ -158,15 +305,20 @@ export function decodeHuntingGuide( value: unknown ): HuntingCatalogue {
 		!Array.isArray( data.rows ) || data.rows.length > MAX_MONSTERS
 	) throw Error( "Invalid hunting guide" );
 	const monsters: HuntingMonster[] = [], regions = new Map<number, HuntingPoint[]>(), ids = new Set<number>();
+	const dungeons = new Map<number, HuntingPoint[]>();
 	let count = 0;
 	for ( const value of data.rows ) {
-		const row = value as HuntingMonster & { points: { regionId: number; x: number; z: number; }[]; };
+		const row = value as HuntingMonster & {
+			points: { regionId: number; x: number; z: number; }[];
+			dungeonPoints?: { regionId: number; x: number; z: number; }[];
+		};
 		if (
 			!row || !Number.isInteger( row.refObjId ) || row.refObjId <= 0 || ids.has( row.refObjId ) ||
 			typeof row.name !== "string" || !row.name.trim() || row.name.length > MAX_NAME ||
 			typeof row.nameKey !== "string" || row.nameKey.length > MAX_NAME ||
 			!Number.isInteger( row.level ) || row.level < 1 || row.level > 255 || !Array.isArray( row.points ) ||
-			(count += row.points.length) > MAX_POINTS
+			(row.dungeonPoints !== undefined && !Array.isArray( row.dungeonPoints )) ||
+			(count += row.points.length + (row.dungeonPoints?.length ?? 0)) > MAX_POINTS
 		) throw Error( "Invalid hunting guide row" );
 		const monster: HuntingMonster = {
 			refObjId: row.refObjId,
@@ -194,8 +346,23 @@ export function decodeHuntingGuide( value: unknown ): HuntingCatalogue {
 			points.push( { monster, x, z } );
 			regions.set( key, points );
 		}
+		// Dungeon anchors (issue #3239) keep their region-local
+		// coordinates: a dungeon region has no outdoor sector to key by.
+		for ( const p of row.dungeonPoints ?? [] ) {
+			if (
+				!p || !Number.isInteger( p.regionId ) || p.regionId < 0 || p.regionId > MAX_REGION_ID ||
+				planeKindOf( p.regionId ) !== "cave" ||
+				!Number.isFinite( p.x ) || !Number.isFinite( p.z ) ||
+				Math.abs( p.x ) > MAX_LOCAL_POSITION || Math.abs( p.z ) > MAX_LOCAL_POSITION
+			) {
+				throw Error( "Invalid hunting guide dungeon location" );
+			}
+			const points = dungeons.get( p.regionId ) ?? [];
+			points.push( { monster, x: p.x, z: p.z } );
+			dungeons.set( p.regionId, points );
+		}
 	}
-	return { monsters, regions, sections: buildHuntingSections( regions ) };
+	return { monsters, regions, dungeons, sections: buildHuntingSections( regions ) };
 }
 
 /*

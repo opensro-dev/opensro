@@ -24,6 +24,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/instance"
+	"opensro.online/server/internal/game/world/muhan"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -148,6 +149,15 @@ func (rt *Runtime) portalWorldAdmission(division string, c *enterworld.Character
 	if world.Siege() {
 		if refusal := rt.fortressEntry(division, c, arrival, world); refusal != 0 {
 			return 0, refusal
+		}
+	}
+	if arena, ok := muhan.Lookup(int(arrival.world)); ok {
+		// Port-only, not native (#3314): the solo/party rule the world
+		// codename carried alone until now. A solo arena refuses a
+		// player in a live party; a party arena refuses one without.
+		party := rt.rewardPartyOf(division, enterworld.ObjectIDForCharacter(c))
+		if arena.Solo && party != nil || !arena.Solo && party == nil {
+			return 0, 2
 		}
 	}
 	destination := portalWorld(arrival)

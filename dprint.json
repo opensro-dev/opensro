@@ -53,7 +53,8 @@
 		"apps/client-next/src/engine/foundation/assets/penguin-blizzard-atlas.ts",
 		"apps/server/internal/game/companion/petdesign.json",
 		"apps/client-next/tests/runtime/ui-census.json",
-		"apps/client-next/tests/runtime/ui-action-census.json"
+		"apps/client-next/tests/runtime/ui-action-census.json",
+		"apps/client-next/tests/runtime/asset-backed-tests.json"
 	],
 	"plugins": [
 		"./node_modules/@dprint/typescript/plugin.wasm"

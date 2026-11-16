@@ -13,7 +13,6 @@ package store
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -125,7 +124,9 @@ func readGuildWars(db *sql.DB, division string) ([]domain.GuildWarRecord, error)
 			return nil, err
 		}
 		var war domain.GuildWarRecord
-		if err := decodeJSONStrict([]byte(raw), &war); err != nil {
+		// Unknown top-level fields stay on disk: writeGuildWarTx reads
+		// them back before replacing the row.
+		if _, err := decodeRecordFields([]byte(raw), &war); err != nil {
 			return nil, err
 		}
 		if war.ID != id || a <= 0 || b <= 0 || a == b || war.Guilds != [2]int64{a, b} || war.ScoreIndex >= guildWarScoreOptions || war.Stake > guildWarMaxCombinedStake || war.EndMs < 0 {
@@ -156,7 +157,12 @@ writeGuildWarTx
 ================
 */
 func writeGuildWarTx(tx *sql.Tx, division string, war domain.GuildWarRecord) error {
-	raw, err := json.Marshal(war)
+	unknown, err := storedUnknownFields[domain.GuildWarRecord](tx,
+		"SELECT record FROM guild_wars WHERE division = ? AND id = ?", division, war.ID)
+	if err != nil {
+		return err
+	}
+	raw, err := encodeRecordFields(war, unknown)
 	if err != nil {
 		return err
 	}
@@ -332,7 +338,7 @@ func (door storeGuildWarDoor) AccountGuildWarCombat(division string, combat doma
 				member.Dword38++
 			}
 		}
-		if err = replaceGuildTx(tx, division, gid, s.guilds[division][gid], nextMembers[i]); err != nil {
+		if err = replaceGuildTx(tx, division, gid, s.guilds[division][gid], nextMembers[i], &s.residues); err != nil {
 			return record, 2, err
 		}
 	}
@@ -384,7 +390,7 @@ func (door storeGuildWarDoor) EndGuildWar(division string, id uint32, winner int
 		return 2, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err = replaceGuildTx(tx, division, winner, guild, s.guildMembers[division][winner]); err != nil {
+	if err = replaceGuildTx(tx, division, winner, guild, s.guildMembers[division][winner], &s.residues); err != nil {
 		return 2, err
 	}
 	if _, err = tx.Exec("DELETE FROM guild_wars WHERE division = ? AND id = ?", division, id); err != nil {

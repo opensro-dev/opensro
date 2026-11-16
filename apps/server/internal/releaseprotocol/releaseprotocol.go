@@ -49,13 +49,24 @@ type Contracts struct {
 	Movement   int // the 0xB738 movement acknowledgement's source block
 	Wanted     int // the port-only 0x3FBA most-wanted state frame
 	Chat       int // the port-only item-link tails on player chat
+	World      int // the seasonal layer a region bundle's placement carries
 }
 
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	// Protocol 17 adds survival checkpoint rewards alongside protocol 16 pet chat links.
+	// Protocol 17 adds survival checkpoint rewards and tags the seasonal
+	// decoration's placements with their world layer (see WorldContract
+	// 1). Protocol 16 grows a pet chat link to name its pet (see
+	// ChatContract 2).
 	Current = 17
+	// The world contract: 1 tags a region bundle placement with the
+	// seasonal layer that owns it (layerobject.json, #3265), drawn only
+	// while that layer's event group is on. Region bundles keep their
+	// path across releases, so a protocol-16 tab that loads a rebuilt one
+	// ignores the tag and draws every season's props at once; the bump
+	// sends it the 426 that reloads it onto a client that filters them.
+	WorldContract = 1
 	// The chat contract: 1 carries the port-only item links
 	// (SRO_CHAT_ITEM_LINKS): a link block after the text of a 0x7367 request
 	// and of a 0x75BD Global Chatting use, and the linked item bodies after
@@ -144,9 +155,10 @@ var history = map[int]Contracts{
 	13: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2},
 	14: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 1},
 	15: {Bootstrap: 2, Roster: 2, References: 3, Companions: 3, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 1},
+	16: {Bootstrap: 2, Roster: 2, References: 3, Companions: 3, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 2},
 	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
 		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract, Wanted: WantedContract,
-		Chat: ChatContract},
+		Chat: ChatContract, World: WorldContract},
 }
 
 /*
@@ -171,6 +183,23 @@ state, and the browser sends the declared request next.
 ================
 */
 func Require(next http.Handler) http.Handler {
+	return RequireRetiring(nil, next)
+}
+
+/*
+================
+RequireRetiring
+
+Require for a route whose job is to forget browser state: leaving the
+world for character select, or logging out. An outdated tab's request is
+still refused, so the tab learns to reload, but retire runs first on
+the refused request. Forgetting is subtractive and its wire shape has
+never changed, and a forget that only a current tab could make left an
+outdated tab's remembered character in place, so its next reload walked
+straight back into the world (ops #329). retire may be nil.
+================
+*/
+func RequireRetiring(retire func(http.ResponseWriter, *http.Request), next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
@@ -178,6 +207,9 @@ func Require(next http.Handler) http.Handler {
 		}
 		declared, err := strconv.Atoi(r.Header.Get(Header))
 		if err != nil || declared != Current {
+			if retire != nil {
+				retire(w, r)
+			}
 			refuse(w)
 			return
 		}

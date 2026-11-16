@@ -56,7 +56,7 @@ func BroodRow(row domain.PetRowCooldown, skill SkillDef, level uint8, now int64,
 	if skill.Option >= 2 {
 		capacity = 3
 	}
-	period := int64((600 - float64(min(uint8(10), max(uint8(1), level))-1)*300/9) * 1000 * max(0, 100-mods.CooldownPct) / 100)
+	period := int64(skill.CooldownAt(level) * 1000 * max(0, 100-mods.CooldownPct) / 100)
 	period = max(int64(1), period)
 	if row.Capacity == 0 {
 		row = domain.PetRowCooldown{Kind: ChargeKind, Capacity: capacity, Charges: 1, RechargeMs: period}

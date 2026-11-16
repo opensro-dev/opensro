@@ -71,6 +71,9 @@ func LoadTextdataCatalogs(dir string) (*TextdataCatalogs, error) {
 	if err := catalogs.Skills.Load(); err != nil {
 		return nil, fmt.Errorf("textdata readiness: %w", err)
 	}
+	if err := catalogs.MagicOptions.Load(); err != nil {
+		return nil, fmt.Errorf("textdata readiness: %w", err)
+	}
 	if catalogs.MagicOptions.Len() == 0 {
 		return nil, fmt.Errorf("textdata readiness: no magicoption rows loaded from %s", dir)
 	}

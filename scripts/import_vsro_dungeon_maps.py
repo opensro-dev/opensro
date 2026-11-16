@@ -58,6 +58,10 @@ KOREAN_COLUMN = 2
 LABEL_ROW = "1"
 SIGN_ROW = "2"
 SIGN_ICON = "map_world_iconwf"
+# The later table leads with a service column, so v1.150's font cell (13,
+# which the client's decodeMapLabels reads) is 14 here. Cell 13 is the one
+# before it, 2 on every cave label, which drew them in a larger font (#3514).
+LABEL_FONT_COLUMN = 14
 
 
 def table_text(raw):
@@ -138,7 +142,7 @@ def add_signs(rows, lines, names):
 				"text": row_text(cells[3].strip(), cells[6], names),
 				"x": x,
 				"y": y,
-				"font": int(cells[13] or 0),
+				"font": int(cells[LABEL_FONT_COLUMN] or 0),
 				"color": [int(cells[15]), int(cells[16]), int(cells[17])]
 			})
 		elif cells[2] == SIGN_ROW and SIGN_ICON in cells[3]:
@@ -207,7 +211,7 @@ def main():
 	if not args.vsro_root:
 		raise SystemExit("Pass --vsro-root or set SRO_VSRO_ROOT to the pinned VSRO client folder.")
 	verify_vsro_archive(args.vsro_root, "Media")
-	data = (Path(args.vsro_root) / "Media.pk2").read_bytes()
+	data = sro_pk2.map_archive(Path(args.vsro_root) / "Media.pk2")
 	directory = sro_pk2.read_directory(data)
 	entries = {
 		entry_name(entry).lower().replace("\\", "/"): entry

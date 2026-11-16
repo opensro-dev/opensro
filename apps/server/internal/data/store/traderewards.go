@@ -13,7 +13,6 @@ package store
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -72,29 +71,31 @@ func (s *Store) TradeRewards(division string) domain.TradeRewardPool {
 ================
 loadTradeRewards
 
-Older authorities have no pool key and start at zero. Unknown fields or
-negative funds are corruption, not a reason to silently discard the pool.
+Older authorities have no pool key and start at zero. Negative funds are
+corruption, not a reason to silently discard the pool. A pool's unknown
+top-level fields are returned by division for the next write (json.go).
 ================
 */
-func loadTradeRewards(db *sql.DB) (map[string]domain.TradeRewardPool, error) {
+func loadTradeRewards(db *sql.DB) (map[string]domain.TradeRewardPool, map[string]unknownFields, error) {
 	var raw string
 	err := db.QueryRow("SELECT value FROM meta WHERE key = ?", metaKeyTradeRewards).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
-		return map[string]domain.TradeRewardPool{}, nil
+		return map[string]domain.TradeRewardPool{}, nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var pools map[string]domain.TradeRewardPool
-	if err := decodeJSONStrict([]byte(raw), &pools); err != nil {
-		return nil, fmt.Errorf("trade reward pools: %w", err)
+	unknown, err := decodePlaneFields([]byte(raw), &pools)
+	if err != nil {
+		return nil, nil, fmt.Errorf("trade reward pools: %w", err)
 	}
 	for division, pool := range pools {
 		if division == "" || strings.TrimSpace(division) != division || pool.Hunters < 0 || pool.Thieves < 0 {
-			return nil, fmt.Errorf("invalid trade reward pool for division %q", division)
+			return nil, nil, fmt.Errorf("invalid trade reward pool for division %q", division)
 		}
 	}
-	return pools, nil
+	return pools, unknown, nil
 }
 
 /*
@@ -102,14 +103,15 @@ func loadTradeRewards(db *sql.DB) (map[string]domain.TradeRewardPool, error) {
 tradeRewardsRecord
 
 The meta row's bytes for the pool plane; empty when no pool exists, in
-which case no writer puts a row down.
+which case no writer puts a row down. unknown holds the pools' stored
+unknown fields by division.
 ================
 */
-func tradeRewardsRecord(pools map[string]domain.TradeRewardPool) (string, error) {
+func tradeRewardsRecord(pools map[string]domain.TradeRewardPool, unknown map[string]unknownFields) (string, error) {
 	if len(pools) == 0 {
 		return "", nil
 	}
-	raw, err := json.Marshal(pools)
+	raw, err := encodePlaneFields(pools, unknown)
 	if err != nil {
 		return "", err
 	}
@@ -122,7 +124,7 @@ writeTradeRewards
 ================
 */
 func writeTradeRewards(tx *sql.Tx, pools map[string]domain.TradeRewardPool) error {
-	record, err := tradeRewardsRecord(pools)
+	record, err := tradeRewardsRecord(pools, nil)
 	if err != nil || record == "" {
 		return err
 	}

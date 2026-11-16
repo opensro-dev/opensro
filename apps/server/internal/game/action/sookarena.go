@@ -164,8 +164,8 @@ func (rt *Runtime) enterSookArenaInsideDoor(division string, c *enterworld.Chara
 	if _, open := rt.storageSession(division, c.Name); open {
 		return refuse("Close storage first.")
 	}
-	if _, _, ok := sookarena.Admit(c.SookArenaDay, c.SookArenaEntries, rt.Now()); !ok && !resume {
-		return refuse("Survival Arena: all three entries for today have been used (UTC).")
+	if !resume && !rt.sookEntryLeft(c) {
+		return refuse(sookEntriesSpentText)
 	}
 	refs := rt.sookArena.pool.StageNormals(int(rewardLevel(c)), 0)
 	if len(refs) == 0 {
@@ -203,7 +203,7 @@ func (rt *Runtime) enterSookArenaInsideDoor(division string, c *enterworld.Chara
 	if lease.Generation == 0 {
 		return refuse("Survival Arena: all solo arenas are occupied. Try again shortly.")
 	}
-	day, entries, active := c.SookArenaDay, c.SookArenaEntries, c.SookArenaActive
+	active, accountID := c.SookArenaActive, c.AccountID
 	// The instance lane commits its anchor before relocation; mark that crash window too.
 	if !rt.deps.Update(c, "sook-entry-pending", func() bool {
 		if c.DeletePending {
@@ -215,20 +215,41 @@ func (rt *Runtime) enterSookArenaInsideDoor(division string, c *enterworld.Chara
 		rt.closeInstanceWorld(division, lease)
 		return refuse("Survival Arena: entry could not be saved. Try again.")
 	}
+	// The account owns the daily count (#3322): the entry is spent in
+	// the relocation's own door, so of two characters of one account
+	// entering together only those the remaining entries cover get in.
+	var spentDay int32
+	var shown uint8
+	spent, exhausted := false, false
 	status := rt.transferCharacterToInstanceAdmitted(division, c, lease, center, func() bool {
+		account := rt.deps.SookArenaAccount(accountID)
 		if resume {
+			shown = sookarena.Used(account.Day, account.Entries, rt.Now())
 			return true
 		}
-		nextDay, nextEntries, ok := sookarena.Admit(c.SookArenaDay, c.SookArenaEntries, rt.Now())
+		nextDay, nextEntries, ok := sookarena.Admit(account.Day, account.Entries, rt.Now())
 		if !ok {
+			exhausted = true
 			return false
 		}
-		c.SookArenaDay, c.SookArenaEntries, c.SookArenaActive = nextDay, nextEntries, true
+		account.Day, account.Entries = nextDay, nextEntries
+		c.SookArenaActive = true
+		spent, spentDay, shown = true, nextDay, nextEntries
 		return true
 	})
 	if status != instance.Success {
-		rt.deps.Update(c, "sook-entry-rollback", func() bool { c.SookArenaDay, c.SookArenaEntries, c.SookArenaActive = day, entries, active; return true })
+		rt.deps.Update(c, "sook-entry-rollback", func() bool {
+			c.SookArenaActive = active
+			if spent {
+				account := rt.deps.SookArenaAccount(accountID)
+				account.Entries = sookarena.Refund(account.Day, account.Entries, spentDay)
+			}
+			return true
+		})
 		rt.closeInstanceWorld(division, lease)
+		if exhausted {
+			return refuse(sookEntriesSpentText)
+		}
 		return refuse("Survival Arena: entry failed; your daily entry was not spent.")
 	}
 	run := &sookArenaRun{division: division, name: c.Name, ownerID: c.ID, lease: lease, center: center, refs: refs, program: sookarena.New(rt.Now().UnixMilli()), bossPowerups: map[uint32]bool{}}
@@ -249,7 +270,33 @@ func (rt *Runtime) enterSookArenaInsideDoor(division string, c *enterworld.Chara
 	}
 	rt.sookArena.runs.Store(simulation.WorldKey(division, c.Name), run)
 	rt.sookArena.byWorld.Store(instanceWorldKey{division, lease.ID}, run)
-	return []wire.Frame{sookBanner(fmt.Sprintf("Survival: five stages, EXP/SP x5, chest rewards, no floor loot. Entry %d/3. First wave in 20s.", c.SookArenaEntries)), rt.arenaChestFrame(c, run, "")}
+	return []wire.Frame{sookBanner(fmt.Sprintf("Survival: five stages, EXP/SP x5, chest rewards, no floor loot. Entry %d/%d. First wave in 20s.", shown, domain.SookArenaDailyEntries)), rt.arenaChestFrame(c, run, "")}
+}
+
+// sookEntriesSpentText is the refusal once the account has spent its
+// daily entries (#3322): every character of the account shares them.
+const sookEntriesSpentText = "Survival Arena: your account has used all three entries for today (UTC)."
+
+/*
+================
+sookEntryLeft
+
+Whether the character's account has an entry left today (#3322), so a
+spent account is refused before an arena world opens. The account
+record is read only inside a write door; this one commits nothing (its
+closure answers false), it only orders the read against another
+character's entry. The entry itself re-checks and spends inside the
+relocation door (enterSookArenaInsideDoor).
+================
+*/
+func (rt *Runtime) sookEntryLeft(c *enterworld.Character) bool {
+	left := false
+	rt.deps.Update(c, "sook-entry-check", func() bool {
+		account := rt.deps.SookArenaAccount(c.AccountID)
+		_, _, left = sookarena.Admit(account.Day, account.Entries, rt.Now())
+		return false
+	})
+	return left
 }
 
 /*

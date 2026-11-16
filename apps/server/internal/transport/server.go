@@ -404,7 +404,7 @@ func NewServer(cfg Config) (*Server, error) {
 	// peer that never offers it is served exactly as before.
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:    4096,
-		WriteBufferSize:   4096,
+		WriteBufferSize:   wsWriteBufferSize,
 		CheckOrigin:       checkOrigin,
 		EnableCompression: true,
 	}
@@ -439,6 +439,7 @@ func NewServer(cfg Config) (*Server, error) {
 	tcpMux.HandleFunc(PathHealth, s.handleHealthz)
 	tcpMux.HandleFunc(PathStandby, s.handleStandbyz)
 	tcpMux.HandleFunc(PathReady, s.handleReadyz)
+	tcpMux.HandleFunc(PathMetricsTick, s.handleMetricsTick)
 	tcpMux.HandleFunc(PathMetrics, func(w http.ResponseWriter, r *http.Request) {
 		if !allowReadMethod(w, r) {
 			return

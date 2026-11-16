@@ -23,12 +23,14 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravan"
+	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/moderation"
+	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/restriction"
@@ -38,6 +40,7 @@ import (
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/social/community"
+	"opensro.online/server/internal/game/social/contributor"
 	"opensro.online/server/internal/game/social/guild"
 	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/match"
@@ -51,6 +54,7 @@ import (
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
+	"opensro.online/server/internal/platform/jobhonor"
 	"opensro.online/server/internal/transport"
 )
 
@@ -67,9 +71,11 @@ type gameplayPlane struct {
 	hub        *transport.Hub
 	deps       *enterworld.Deps
 	items      *action.Runtime
-	movement   *movement.Runtime
-	water      *movement.WaterValidator
-	presence   *livepresence.Directory
+	// jobHonor is the job honor ledger the public board reads; nil off.
+	jobHonor *jobhonor.Service
+	movement *movement.Runtime
+	water    *movement.WaterValidator
+	presence *livepresence.Directory
 	// mutes is the chat mute book (moderation_wiring.go), set once the
 	// shard is known; the console's conduct actions reach it.
 	mutes         *moderation.Book
@@ -86,6 +92,12 @@ type gameplayPlane struct {
 	quests        *quest.Runtime
 	// betaSilk earns the beta's Item Mall silk (nil when SRO_BETA_SILK is off).
 	betaSilk *action.BetaSilk
+	// contributors is the Contributor title (nil when
+	// SRO_CONTRIBUTOR_TITLES is off; wiring_contributor.go).
+	contributors *contributor.Registry
+	// caravanAgents is the AI Caravan & Thief runtime (nil when
+	// SRO_AI_CARAVANS is off; wiring_caravanai.go).
+	caravanAgents *caravanai.Runtime
 }
 
 /*
@@ -106,6 +118,9 @@ func newGameplayPlane(
 	authoredAreas *worldarea.Catalog,
 	textdata *enterworld.TextdataCatalogs,
 ) (*gameplayPlane, error) {
+	// SRO_CHRISTMAS_EVENT_MODE=so_ok_2006 (port-only, not native): So-ok
+	// wears Santa So-Ok for the window (wiring_christmas.go).
+	devPaths.NpcSpawns.Look = sookChristmasNpcLook()
 	deps, err := newBootstrapDependencies(authorityStore, devPaths, characterRoster, ownedShard, textdata)
 	if err != nil {
 		return nil, err
@@ -123,6 +138,8 @@ func newGameplayPlane(
 	}
 	items.PetPolicies = companion.PoliciesFromEnv()
 	items.AttackPetExpansion = companion.AttackPetExpansionEnabled()
+	items.NasrunSocket = nasrun.Enabled(os.Getenv(nasrun.Env))
+	items.NasrunTokens = items.NasrunSocket
 	items.Guilds = deps.Guilds
 	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
 	if err := items.ValidateLootReferences(); err != nil {
@@ -143,6 +160,15 @@ func newGameplayPlane(
 	}
 	// Port-only, not native: the reverse return scroll's map destinations.
 	if err := configureReverseReturnMap(items, devPaths.TextdataDir); err != nil {
+		return nil, err
+	}
+	// Port-only, not native (#3349): the Muhan change NPCs' pairing. Off
+	// reads nothing and installs nothing.
+	muhanTransforms, err := monster.LoadMuhanTransforms(devPaths.TextdataDir, monster.MuhanEnabled())
+	if err != nil {
+		return nil, err
+	}
+	if err := items.ConfigureMuhanTransforms(muhanTransforms); err != nil {
 		return nil, err
 	}
 	// One clock for the bootstrap and the tick sweep, read through the runtime
@@ -204,6 +230,13 @@ func newGameplayPlane(
 	if items.MaterialDrops.Off() {
 		log.Infof("loot: alchemy material drops OFF (%s)", progression.EnvAlchemyMaterialDropsOff)
 	}
+	// SRO_ABOVE_DEGREE9_DROPS_OFF (port-only, not native; owner
+	// 2026-11-16): while the area polls run, no monster drops an item above
+	// degree 9.
+	items.AboveDegree9Drops = progression.AboveDegree9DropsFromEnv()
+	if items.AboveDegree9Drops.Off() {
+		log.Infof("loot: drops above degree %d OFF (%s)", progression.MaxDropDegree, progression.EnvAboveDegree9DropsOff)
+	}
 	// SRO_SUN_EVENT_ONLY (port-only, not native): degree-9 Seal of Sun gear
 	// leaves monster drops and NPC shops; it returns only as an event reward.
 	items.SunEventOnly = progression.SunEventOnlyFromEnv()
@@ -216,6 +249,12 @@ func newGameplayPlane(
 	// SRO_HALLOWEEN_HELMET_SEAL (port-only, not native): the event
 	// helmets stay sealed at the transfer doors after the event.
 	items.HalloweenHelmetSeal = halloweenHelmetSealFromEnv()
+	// SRO_CHRISTMAS_EVENT (port-only, not native in this client build):
+	// the Christmas event's switch and UTC window (wiring_christmas.go).
+	items.Christmas = christmasEventFromEnv()
+	// SRO_CHRISTMAS_EVENT_MODE=so_ok_2006 (port-only, not native): So-Ok's
+	// Christmas Gift on the same switch and window (wiring_christmas.go).
+	items.SoOkChristmas = sookChristmasFromEnv(deps.ItemReferences())
 	// SRO_UNIQUE_GAP_EXEMPT / SRO_UNIQUE_POP_TICKET / SRO_UNIQUE_MAX_LEVEL_LOOT
 	// / SRO_UNIQUE_SEAL_DROPS (port-only, not native): uniques ignore the
 	// level-gap admission, one Magic Pop ticket per kill, a top-band unique's
@@ -235,6 +274,9 @@ func newGameplayPlane(
 		return nil, err
 	}
 	extraGoods = append(extraGoods, xlGoods...)
+	// SRO_NASRUN (port-only, not native, #3456 3b): the Devil's Spirit
+	// token goods on the honor stores (commerce/nasrungoods.go).
+	extraGoods = append(extraGoods, commerce.NasrunGoodsFromEnv()...)
 	// SRO_ALEXANDRIA_HIDE_D11_GOODS (port-only, not native, #2842):
 	// degree-11 goods leave Alexandria's own shops as ConfigureCommerce
 	// loads them, so it is set first. "off" (the default) is native:
@@ -361,6 +403,9 @@ func newGameplayPlane(
 	}
 	movementRuntime := movement.NewRuntime(deps, items.Worlds)
 	movementRuntime.Validator = water
+	// SRO_POSITION_STREAM (port-only, not native): the ticker reads the
+	// same switch (worldsession.NewTicker).
+	movementRuntime.PositionStream = simulation.PositionStreamFromEnv()
 	movementRuntime.PathGuard = movement.NewPathGuardFromEnv(water)
 	movementRuntime.ClientClip = movement.NewClientClipFromEnv(water)
 	// Surface ownership (native source pNavCell): every character walk starts
@@ -397,6 +442,7 @@ func newGameplayPlane(
 	movementRuntime.RetireMoveEffects = items.RetireMoveEffects
 	movementRuntime.AttackLocked = items.PlayerAttackLocked
 	movementRuntime.MotionLocked = items.PlayerMotionLocked
+	movementRuntime.InteractionLocked = items.PlayerInteractionLocked
 	movementRuntime.AdvanceResidentRegion = items.AdvanceResidentRegion
 	movementRuntime.CompanionPresentations = items.CompanionPresentations
 	movementRuntime.SpawnSkills = items.SpawnEntrySkills
@@ -779,8 +825,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		})
 	}
 	game.deps.NormalizeEntryQuests = quests.NormalizeEntryRecords
-	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredHalloweenBoxes
-	game.deps.EntryEventFrames = game.items.HalloweenEntryFrames
+	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredEventItems
+	game.deps.EntryEventFrames = game.items.EntryEventFrames
+	game.deps.EntryEventGroups = game.items.EntryEventGroups
 	if err := game.validateQuestMarkerRoster(); err != nil {
 		return err
 	}
@@ -904,6 +951,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.chat.ModerationLog = moderationLog
 	game.items.ModerationLog = moderationLog
 	wireChatReports(game)
+	if err := wireContributorTitles(game); err != nil {
+		return err
+	}
 	game.chat.Unions = game.unions
 	game.chat.Stalls = game.items.Stalls
 	if game.deps.ChatItemLinks > 0 {
@@ -912,6 +962,10 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		game.items.ChatItemLinks = links
 		log.Infof("chat: item links ON, %d per line (%s)", links.Limit, chat.EnvChatItemLinks)
 	}
+	// /FINDUSER reads the live region through the same owner (an
+	// optional port: a missing method would silently fall back to the
+	// saved row, so the build pins it).
+	var _ gmcommand.LivePositions = game.items
 	gmcommand.Register(hub, game.deps, game.presence, game.items)
 	game.matches.Register(hub)
 	game.parties.Register(hub)

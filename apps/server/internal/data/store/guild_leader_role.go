@@ -18,7 +18,6 @@ package store
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 
 	"opensro.online/server/internal/domain"
@@ -61,7 +60,8 @@ func leaderRoleRepairs(db *sql.DB) ([]leaderRoleRepair, error) {
 			return nil, err
 		}
 		member := domain.GuildMemberRecord{}
-		if err := decodeJSONStrict([]byte(record), &member); err != nil {
+		unknown, err := decodeRecordFields([]byte(record), &member)
+		if err != nil {
 			return nil, fmt.Errorf("division %s guild %d member record: %w", repair.division, repair.guildID, err)
 		}
 		role := member.FortressRole
@@ -74,7 +74,7 @@ func leaderRoleRepairs(db *sql.DB) ([]leaderRoleRepair, error) {
 			continue
 		}
 		member.FortressRole = role
-		encoded, err := json.Marshal(member)
+		encoded, err := encodeRecordFields(member, unknown)
 		if err != nil {
 			return nil, err
 		}

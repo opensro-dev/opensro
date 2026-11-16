@@ -538,6 +538,9 @@ func (rt *Runtime) HandleMasteryLevelUp(divisionID string, character *enterworld
 	// Characters already above their allowance are never repaired or
 	// broken by this gate - their stored levels stand and every plane
 	// keeps reading them; they simply refuse further training with 07:05.
+	// Their way back under the budget is the native one (owner, #3551):
+	// the mall restoration potion lowers a mastery a level per potion with
+	// its SP returned (withdrawal.go), and the main tree then trains.
 
 	trained := false
 	refusal := wire.ErrCodeMasteryLevelLimit

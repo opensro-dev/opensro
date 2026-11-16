@@ -24,9 +24,19 @@ the native bytes on every build before any later-world merge runs,
 so a build with a switch off leaves native catalogs behind on its
 own. Both imports are port-only, not native.
 
+Four worlds ride this engine (#3326). jupiter and god are driven by
+their population exports end to end (add_world). muhan (waves name
+kinds by level, not by nest) and hunting2 (the client's own npcpos
+placements; it postdates the shard backup) drive their own monster
+passes and take the shared region merge and reap through
+merge_world, reap_monsters and reap_world, so the off path above is
+decided once for all four. skytemple_import and arabia_import are
+the other family: they merge catalogues over the variant's current
+ones inside build_alexandria_variant and share their machinery
+through skytemple_import; they take no WorldImport spec.
+
 ===========================================================================
 """
-import hashlib
 import json
 import mmap
 import os
@@ -40,7 +50,9 @@ import cap110_monsters as cap110
 import cap110_skill_effects as effects
 import import_vsro_alexandria as tables
 import sro_pk2
-from prepare_client_resources import write_atomically
+from pin_file import read_pin_field
+from prepare_client_resources import file_digest, write_atomically
+from sro_paths import trees_overlap
 
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 PIN_FORMAT = "opensro-vsro-archive-pins-v1"
@@ -56,30 +68,37 @@ _verified_archives = set()
 # its own (which groups its nests claim, what admits a kind, which
 # population files it writes, what its summary reports, which regions
 # it covers). Frozen: a spec is a fact about the world, not state.
+#
+# A world whose population the nest export drives fills every field
+# (jupiter, god). A world whose kinds no nest export names drives
+# its own monster pass on the same merge and reap (muhan's waves,
+# hunting2's client placements): its export-driving fields stay
+# empty, and add_monsters / add_world refuse such a spec by name -
+# merge_world, reap_monsters and reap_world are its entry points.
 # ================
 @dataclass(frozen=True)
 class WorldImport:
 	label: str
 	flag: str
-	requires: str | None
 	root_env: str
-	source_env: str
-	population_name: str
-	source_sha256: str
 	character_shard: str
 	skill_shard: str
 	marker: str
 	pin_file: Path
 	pin_sentence: str
 	region_label: str
-	worlds_required: tuple
 	population_files: tuple
-	info_prefixes: tuple
-	claim_groups: Callable
-	admit: Callable
-	build_populations: Callable
-	summarize_populations: Callable
-	regions_of: Callable
+	requires: str | None = None
+	source_env: str = ""
+	population_name: str = ""
+	source_sha256: str = ""
+	worlds_required: tuple = ()
+	info_prefixes: tuple = ()
+	claim_groups: Callable = None
+	admit: Callable = None
+	build_populations: Callable = None
+	summarize_populations: Callable = None
+	regions_of: Callable = None
 
 
 #============================================================================
@@ -92,13 +111,22 @@ class WorldImport:
 # ================
 def archive_pins(spec):
 	"""The pinned v1.696 archive hashes (v1696_archive_pins.json beside this tool)."""
-	try:
-		pin = json.loads(spec.pin_file.read_text(encoding="utf-8"))
-	except (OSError, ValueError) as error:
-		raise SystemExit(f"{spec.pin_file} is unreadable: {error}")
-	if pin.get("format") != PIN_FORMAT or not isinstance(pin.get("archives"), dict):
-		raise SystemExit(f"{spec.pin_file} is not a {PIN_FORMAT} pin file")
-	return pin["archives"]
+	return read_pin_field(spec.pin_file, PIN_FORMAT, "archives")
+
+
+# ================
+# client_root
+#
+# The v1.696 client folder an import reads: the caller's, else the root
+# environment variable's. An empty or unset value refuses. Not
+# Path("") tested by str(): that is ".", the working directory, which
+# then fails the pin check with a misleading archive message.
+# ================
+def client_root(given, root_env, env=os.environ):
+	named = str(given or "").strip() or env.get(root_env, "").strip()
+	if not named:
+		raise SystemExit(f"Pass the v1.696 client folder or set {root_env}.")
+	return Path(named)
 
 
 # ================
@@ -121,11 +149,7 @@ def require_pin(spec, root, names, pins_for):
 			raise SystemExit(f"{spec.pin_file.name} pins no {name}.pk2; pin the archive before reading it")
 		if not path.is_file():
 			raise SystemExit(f"{path} not found; --v1696-root must be the pinned v1.696 client folder")
-		hasher = hashlib.sha256()
-		with open(path, "rb") as stream:
-			for chunk in iter(lambda: stream.read(1 << 20), b""):
-				hasher.update(chunk)
-		actual = hasher.hexdigest()
+		actual = file_digest(path)
 		if actual != expected:
 			raise SystemExit(
 				f"{path} does not match the pinned v1.696 archive: sha256 is {actual}, pinned is {expected}. "
@@ -294,7 +318,7 @@ def reap_monsters(spec, output, prior):
 # ================
 def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_enabled, pins_for):
 	native, output = Path(native).resolve(), Path(output).resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError(f"{spec.label} overlay must be separate from native extraction")
 	marker = output / spec.marker
 	prior = cap110.read_json(marker) if marker.exists() else {}
@@ -302,6 +326,8 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 	if not enabled:
 		reap_monsters(spec, output, prior)
 		return {"enabled": False}
+	if spec.claim_groups is None:
+		raise ValueError(f"{spec.label} import drives its own monster pass; add_monsters does not serve it")
 	require_pairing(spec)
 	if not v1696_root:
 		raise SystemExit(f"Pass the v1.696 client folder or set {spec.root_env}.")
@@ -325,7 +351,7 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 		def read(name):
 			return tables.table_text(media, index, name.lower())
 
-		later = {row[2]: row for shard in tables.table_rows(read("characterdata.txt")) for row in tables.table_rows(read(shard[0]))}
+		later = later_characters(read)
 		claims = {}
 		for family, codes in claimed.items():
 			for code in codes:
@@ -340,75 +366,118 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 			missing = sorted(codes - set(refs))
 			if missing:
 				raise ValueError(f"{spec.label} {family} nests name unadmitted monsters: {missing}")
-		native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != spec.character_shard for r in tables.table_rows(p.read_bytes())]
-		occupied = {int(r[1]) for r in native_chars}
-		allocated = cap110.allocate_identities(occupied, sorted(refs), prior.get("characters", {}))
-		for code, row in refs.items():
-			row[1] = str(allocated[code])
-		native_skills = [r for p in text_root.glob("skilldata_*.txt") if p.name != spec.skill_shard for r in tables.table_rows(p.read_bytes()) if len(r) == 118]
-		needed = {int(s) for r in refs.values() for s in r[89:99] if int(s)}
-		client_skills = [r for shard in tables.table_rows(read("skilldata.txt"))
-			for r in tables.table_rows(read(shard[0])) if len(r) > 3 and r[1].isdigit()]
-		added, skill_map = cap110.merge_skills(native_skills, client_skills, needed, prior.get("skills", {}))
-		for row in refs.values():
-			row[89:99] = [str(skill_map[int(s)]) if int(s) else "0" for s in row[89:99]]
+		staged = stage_kinds(spec.label, read, refs, text_root, prior, spec.character_shard, spec.skill_shard,
+			lambda code: code.startswith(spec.info_prefixes))
 		populations = spec.build_populations(rows, sub_enabled)
-		# Sorted by identity: the codename set has no stable order, and a
-		# rebuild should write the same bytes.
-		write_atomically(text_root / spec.character_shard, cap110.encode_rows(sorted(refs.values(), key=lambda row: int(row[1]))))
-		write_atomically(text_root / spec.skill_shard, cap110.encode_rows(added))
-		manifest = tables.table_rows((text_root / "skilldata.txt").read_bytes())
-		manifest = [r for r in manifest if r[0].lower() != spec.skill_shard] + [[spec.skill_shard]]
-		write_atomically(text_root / "skilldata.txt", cap110.encode_rows(manifest))
 		for group, filename in spec.population_files:
 			population_path = text_root / filename
 			if group in populations:
 				write_atomically(population_path, (json.dumps(populations[group]) + "\n").encode())
 			else:
 				population_path.unlink(missing_ok=True)
-		base_text = (text_root / "textdataname.txt").read_bytes()
-		known = {r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
-		wanted = {r[5] for r in refs.values()} - known
-		object_raw = b"\xff\xfe" + later_object_text(read).encode("utf-16-le")
-		texts = [[r[0], r[1], r[2], "", "", r[5], r[4], r[7], r[8], r[9], ""] for r in
-			(later_text_row(row) for row in characters.translation_rows(object_raw)) if len(r) >= 10 and r[1] in wanted]
-		if wanted - {r[1] for r in texts}:
-			raise ValueError(f"missing {spec.label} monster names")
-		# Name rows a previous build owned leave with the species that
-		# named them: the marker's list is the previous build's owned set.
-		stale_names = set(prior.get("nameSymbols", [])) - {r[5] for r in refs.values()}
-		if stale_names:
-			base_text = cap110.encode_rows(cap110.drop_symboled_rows(characters.translation_rows(base_text), stale_names))
-		write_atomically(text_root / "textdataname.txt", characters.append_rows(base_text, texts))
-		effect_path = text_root / "skilleffect.txt"
-		effect_text = tables.decode_table(effect_path.read_bytes())
-		later_effects = tables.decode_table(read("skilleffect.txt"))
-		selected = effects.select_later_rows(later_effects, {r[3] for r in added} - effects.native_bases(effect_text))
-		unknown = effects.missing_animation_states([line for rows in selected.values() for _, line in rows], effect_text)
-		if unknown:
-			raise ValueError("monster animation states absent natively: " + str(sorted(unknown)))
-		effect_text, _ = effects.merge_skill_effect_text(effect_text, selected)
-		known_info = {r[0] for r in tables.table_rows(effect_text.encode("utf-16")) if r}
-		info = [r[:characters.SKILL_EFFECT_KEPT] for r in tables.table_rows(read("skilleffect.txt"))
-			if len(r) == characters.SKILL_EFFECT_COLUMNS and r[0].startswith(spec.info_prefixes) and r[0] not in known_info]
-		# Same rule for the characterinfo rows: a species no longer
-		# referenced loses its row, one still referenced keeps it.
-		owned_info = cap110.characterinfo_codenames(effect_text) & set(refs)
-		stale_info = set(prior.get("characterInfo", [])) - owned_info
-		if stale_info:
-			effect_text = cap110.drop_characterinfo_rows(effect_text, stale_info)
-		write_atomically(effect_path, characters.skill_effect_section(effect_text.encode("utf-16"), info))
 		summary = {"enabled": True, "npcRows": npc_rows,
-			"characters": {c: int(r[1]) for c, r in refs.items()}, "skills": {r[3]: int(r[1]) for r in added},
+			"characters": staged["characters"], "skills": staged["skills"],
 			**spec.summarize_populations(populations, rows, claimed, refs, sub_enabled),
-			"animationBases": sorted(set(prior.get("animationBases", [])) | {base for rows in selected.values() for base, _ in rows}),
-			"characterInfo": sorted(owned_info | {r[0] for r in info}),
-			"nameSymbols": sorted(({r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
-				| {r[1] for r in texts}) & {r[5] for r in refs.values()}),
+			"animationBases": staged["animationBases"], "characterInfo": staged["characterInfo"], "nameSymbols": staged["nameSymbols"],
 			"sourcePopulationSha256": spec.source_sha256,
 			"populationFileSha256": sro_pk2.digest((source_root / spec.population_name).read_bytes())}
 		write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())
 		return summary
+
+
+#============================================================================
+# Kind staging, shared by every later-world monster pass
+#============================================================================
+
+
+# ================
+# later_characters
+#
+# Every character row the later client's characterdata shards carry,
+# by codename.
+# ================
+def later_characters(read):
+	return {row[2]: row for shard in tables.table_rows(read("characterdata.txt")) for row in tables.table_rows(read(shard[0]))}
+
+
+# ================
+# stage_kinds
+#
+# Stage converted later kinds into the variant: allocate their
+# identities beside every other shard, merge the skills they name into
+# the import's skill shard, write the character and skill shards and
+# the skill manifest, add their names, and merge their skill effects
+# and characterinfo rows. refs maps codename to its converted row and
+# is renumbered in place; info_owned picks the characterinfo rows the
+# import claims; extra_skills names skills to stage that no kind's
+# skill columns reach. Returns the summary keys every later-world marker
+# records, so the reap finds exactly what this build owned.
+# ================
+def stage_kinds(label, read, refs, text_root, prior, character_shard, skill_shard, info_owned, extra_skills=()):
+	native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != character_shard for r in tables.table_rows(p.read_bytes())]
+	occupied = {int(r[1]) for r in native_chars}
+	allocated = cap110.allocate_identities(occupied, sorted(refs), prior.get("characters", {}))
+	for code, row in refs.items():
+		row[1] = str(allocated[code])
+	native_skills = [r for p in text_root.glob("skilldata_*.txt") if p.name != skill_shard for r in tables.table_rows(p.read_bytes()) if len(r) == 118]
+	needed = {int(s) for r in refs.values() for s in r[89:99] if int(s)}
+	client_skills = [r for shard in tables.table_rows(read("skilldata.txt"))
+		for r in tables.table_rows(read(shard[0])) if len(r) > 3 and r[1].isdigit()]
+	# Skills no staged kind names in its skill columns (a Muhan change
+	# form's BUFF01, cast by its NPC) are staged by codename.
+	extra = {r[3]: int(r[1]) for r in client_skills if r[3] in set(extra_skills)}
+	if set(extra_skills) - set(extra):
+		raise ValueError(f"{label} skills absent from the later client: {sorted(set(extra_skills) - set(extra))}")
+	needed |= set(extra.values())
+	added, skill_map = cap110.merge_skills(native_skills, client_skills, needed, prior.get("skills", {}))
+	for row in refs.values():
+		row[89:99] = [str(skill_map[int(s)]) if int(s) else "0" for s in row[89:99]]
+	# Sorted by identity: the codename set has no stable order, and a
+	# rebuild should write the same bytes.
+	write_atomically(text_root / character_shard, cap110.encode_rows(sorted(refs.values(), key=lambda row: int(row[1]))))
+	write_atomically(text_root / skill_shard, cap110.encode_rows(added))
+	manifest = tables.table_rows((text_root / "skilldata.txt").read_bytes())
+	manifest = [r for r in manifest if r[0].lower() != skill_shard] + [[skill_shard]]
+	write_atomically(text_root / "skilldata.txt", cap110.encode_rows(manifest))
+	base_text = (text_root / "textdataname.txt").read_bytes()
+	known = {r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
+	wanted = {r[5] for r in refs.values()} - known
+	object_raw = b"\xff\xfe" + later_object_text(read).encode("utf-16-le")
+	texts = [[r[0], r[1], r[2], "", "", r[5], r[4], r[7], r[8], r[9], ""] for r in
+		(later_text_row(row) for row in characters.translation_rows(object_raw)) if len(r) >= 10 and r[1] in wanted]
+	if wanted - {r[1] for r in texts}:
+		raise ValueError(f"missing {label} monster names")
+	# Name rows a previous build owned leave with the species that
+	# named them: the marker's list is the previous build's owned set.
+	stale_names = set(prior.get("nameSymbols", [])) - {r[5] for r in refs.values()}
+	if stale_names:
+		base_text = cap110.encode_rows(cap110.drop_symboled_rows(characters.translation_rows(base_text), stale_names))
+	write_atomically(text_root / "textdataname.txt", characters.append_rows(base_text, texts))
+	effect_path = text_root / "skilleffect.txt"
+	effect_text = tables.decode_table(effect_path.read_bytes())
+	later_effects = tables.decode_table(read("skilleffect.txt"))
+	selected = effects.select_later_rows(later_effects, {r[3] for r in added} - effects.native_bases(effect_text))
+	unknown = effects.missing_animation_states([line for rows in selected.values() for _, line in rows], effect_text)
+	if unknown:
+		raise ValueError("monster animation states absent natively: " + str(sorted(unknown)))
+	effect_text, _ = effects.merge_skill_effect_text(effect_text, selected)
+	known_info = {r[0] for r in tables.table_rows(effect_text.encode("utf-16")) if r}
+	info = [r[:characters.SKILL_EFFECT_KEPT] for r in tables.table_rows(read("skilleffect.txt"))
+		if len(r) == characters.SKILL_EFFECT_COLUMNS and info_owned(r[0]) and r[0] not in known_info]
+	# Same rule for the characterinfo rows: a species no longer
+	# referenced loses its row, one still referenced keeps it.
+	owned_info = cap110.characterinfo_codenames(effect_text) & set(refs)
+	stale_info = set(prior.get("characterInfo", [])) - owned_info
+	if stale_info:
+		effect_text = cap110.drop_characterinfo_rows(effect_text, stale_info)
+	write_atomically(effect_path, characters.skill_effect_section(effect_text.encode("utf-16"), info))
+	return {
+		"characters": {c: int(r[1]) for c, r in refs.items()}, "skills": {r[3]: int(r[1]) for r in added},
+		"animationBases": sorted(set(prior.get("animationBases", [])) | {base for rows in selected.values() for base, _ in rows}),
+		"characterInfo": sorted(owned_info | {r[0] for r in info}),
+		"nameSymbols": sorted(({r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
+			| {r[1] for r in texts}) & {r[5] for r in refs.values()}),
+	}
 
 
 #============================================================================
@@ -470,10 +539,35 @@ def merge_region_tables(native, later, region_ids):
 # ================
 # add_world
 #
-# One world's variant-side merge: the regions' terrain remapped onto
-# the merged tile catalog, their navmesh and availability bits, every
-# Data file the native tree lacks, the regions' minimap tiles and
-# names, and the monster population.
+# An export-driven world's whole import: the pairing and pin checks,
+# the pinned population export, the regions it covers, and the merge
+# itself (merge_world). A spec with no export-driving shape refuses
+# here: that world drives its own monster pass (see WorldImport).
+# ================
+def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for):
+	if spec.regions_of is None:
+		raise ValueError(f"{spec.label} import drives its own monster pass; add_world does not serve it")
+	native, out = Path(native), Path(out)
+	require_pairing(spec)
+	v1696_root = client_root(v1696_root, spec.root_env)
+	source_root = source_root or os.environ.get(spec.source_env, "")
+	if not source_root:
+		raise SystemExit(f"{spec.source_env} names no population export folder")
+	require_pin(spec, v1696_root, ("Map", "Media", "Data"), pins_for)
+	export = read_population(spec, source_root)
+	regions = spec.regions_of(export, sub_enabled)
+	return merge_world(spec, native, out, v1696_root, regions,
+		lambda: add_monsters(spec, v1696_root, native, out, source_root, True, sub_enabled, pins_for))
+
+
+# ================
+# merge_world
+#
+# One world's variant-side merge over a resolved region set: the
+# regions' terrain remapped onto the merged tile catalog, their
+# navmesh and availability bits, every Data file the native tree
+# lacks, the regions' minimap tiles and names, and the monster
+# population (build_monsters, the caller's own pass, run last).
 #
 # The variant root is reused across builds (see the header): the
 # merge enrols what it writes in the marker's regionMerge record -
@@ -485,19 +579,10 @@ def merge_region_tables(native, later, region_ids):
 # build before this merge runs. The availability bits and the two
 # name tables are undone from the record itself (reap_regions).
 # ================
-def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for):
+def merge_world(spec, native, out, v1696_root, regions, build_monsters):
 	import build_alexandria_variant as variant
 	native, out = Path(native), Path(out)
-	require_pairing(spec)
-	v1696_root = Path(v1696_root or os.environ.get(spec.root_env, ""))
-	if not str(v1696_root):
-		raise SystemExit(f"Pass the v1.696 client folder or set {spec.root_env}.")
-	source_root = source_root or os.environ.get(spec.source_env, "")
-	if not source_root:
-		raise SystemExit(f"{spec.source_env} names no population export folder")
-	require_pin(spec, v1696_root, ("Map", "Media", "Data"), pins_for)
-	export = read_population(spec, source_root)
-	regions = spec.regions_of(export, sub_enabled)
+	v1696_root = Path(v1696_root)
 	# The temple sets' named interiors are dungeon regions (bit 15):
 	# no sector terrain exists for them - their geometry is the DOF
 	# tree the Data pass below copies, published into the client's
@@ -628,7 +713,7 @@ def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for)
 	for name, content in merged_tables.items():
 		variant.replace_file(out / textdata / name, content)
 
-	monsters = add_monsters(spec, v1696_root, native, out, source_root, True, sub_enabled, pins_for)
+	monsters = build_monsters()
 	record = {
 		"files": sorted(written),
 		"sectors": sorted({tuple(sector) for sector in prior_record.get("sectors", [])} | set(sectors)),
@@ -728,7 +813,7 @@ def reap_regions(spec, native, out, record):
 # ================
 def reap_world(spec, native, out):
 	native, out = Path(native).resolve(), Path(out).resolve()
-	if native == out or native in out.parents or out in native.parents:
+	if trees_overlap(native, out):
 		raise ValueError(f"{spec.label} overlay must be separate from native extraction")
 	marker = out / spec.marker
 	prior = cap110.read_json(marker) if marker.exists() else {}

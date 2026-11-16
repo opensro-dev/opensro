@@ -155,8 +155,6 @@ func (rt *Runtime) planAreaVictims(in areaPlanInput) (areaStrikePlan, bool) {
 				continue
 			}
 			attacker := in.attacker
-			_, precision := rt.crowPlayerBonuses(in.division, in.snapshot, target.Gid, in.skill, in.now)
-			attacker.HitRate *= 1 + precision/100
 			formula, err := rt.resolvePlayerImpact(in.division, in.snapshot.Name, in.skill, attacker, defender, in.now, in.chained && index > 0)
 			if err != nil {
 				return areaStrikePlan{}, false
@@ -167,7 +165,6 @@ func (rt *Runtime) planAreaVictims(in areaPlanInput) (areaStrikePlan, bool) {
 		}
 		percent = percent * uint64(100-in.reduction) / fullAreaPercent
 		rt.penguinOwnerShatter(in.division, in.snapshot, target, plan.formulas, in.now)
-		rt.crowPlayerDamage(in.division, in.snapshot, target, in.skill, plan.formulas, in.now)
 		total = 0
 		for _, f := range plan.formulas {
 			if !f.Blocked {
@@ -786,9 +783,6 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 			continue
 		}
 		rt.transferSookDamage(sookTransferHit{division: division, character: character, at: simulation.Spawn{RegionID: victim.pose.RegionID, X: victim.pose.X, Y: victim.pose.Y, Z: victim.pose.Z}, impacts: commit.committed[victim.sequence], now: nowMs})
-		frames := rt.tailwindDamage(division, character, victim.target.gid, nowMs)
-		out.Frames = append(out.Frames, frames...)
-		out.Broadcast = append(out.Broadcast, frames...)
 		break
 	}
 	if rootID == 0 {
@@ -814,7 +808,6 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		}
 		rt.penguinOwnerHit(division, character, skill, penguinVictims, penguinHits, nowMs)
 		rt.wolfExecuteAttack(division, character, 0, 1, targets, nowMs)
-		rt.crowPlayerAttack(division, character, skill, targets, nowMs)
 	}
 	return mergeOpResults(out, published.returned), skillCastAccepted
 }

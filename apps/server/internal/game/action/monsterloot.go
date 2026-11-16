@@ -601,6 +601,11 @@ func (rt *Runtime) planMonsterKillLoot(
 		Angle:    pose.Heading,
 	}
 	now := time.UnixMilli(nowMs)
+	// Port-only, not native: with SRO_CHRISTMAS_EVENT a Snow Slave
+	// carries its Red Santa Socks and nothing else (christmas_loot.go).
+	if socks, only := rt.christmasSocksOnly(snapshot, monster, at, now); only {
+		return socks
+	}
 	capacity, passes, _ := loot.MonsterDropBudget(monster.Rarity(), monster.Ref.Codename)
 	// Port-only, not native: the beta rate scales a kill's drops, its
 	// assigned rewards and ordinary passes and the capacity bounding them, so
@@ -755,6 +760,20 @@ func (rt *Runtime) planMonsterKillLoot(
 	if box, ok := rt.halloweenBoxDrop(snapshot, monster, at, snapshot.Name, now); ok {
 		box.OwnerJID = ownerJID
 		admitted = append(admitted, rt.scatterMonsterDrop(box, at, monster.Rarity()))
+	}
+	// Port-only, not native: while So-Ok's Christmas Gift runs, an
+	// ordinary kill can leave one Jewel Box (sook_christmas.go), after
+	// admission and the drop cap like the Halloween box above.
+	if box, ok := rt.sookChristmasBoxDrop(snapshot, monster, at, now); ok {
+		box.OwnerJID = ownerJID
+		admitted = append(admitted, rt.scatterMonsterDrop(box, at, monster.Rarity()))
+	}
+	// Port-only, not native: with SRO_CHRISTMAS_EVENT a winter unique
+	// leaves its Red Santa Socks (christmas_loot.go), after admission and
+	// the drop cap like the box above.
+	for _, sock := range rt.christmasSockDrops(monster, at, snapshot.Name, now) {
+		sock.OwnerJID = ownerJID
+		admitted = append(admitted, rt.scatterMonsterDrop(sock, at, monster.Rarity()))
 	}
 	return admitted
 }

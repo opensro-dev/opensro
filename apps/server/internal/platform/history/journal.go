@@ -31,6 +31,11 @@ import (
 const QueueCapacity = 4096
 const CheckpointPeriod = 15 * time.Second
 
+// MaxEventsPerAccount bounds the raw events one account may hold: a
+// twentieth of the raw window (see checkpoint), so one account's flood
+// prunes its own oldest events instead of everyone's (#3307).
+const MaxEventsPerAccount = 10000
+
 /*
 ================
 Event
@@ -453,8 +458,11 @@ ON CONFLICT(id) DO UPDATE SET account=excluded.account, character=excluded.chara
 ================
 checkpoint
 
-Raw events retain 90 days (at most 200,000 rows). Session summaries and
-intervals are retained for all-time totals. The boundary is visible in health.
+Raw events retain 90 days (at most 200,000 rows), and at most
+MaxEventsPerAccount of them per account: the global window alone let
+two flooding accounts evict every other account's recent history
+(#3307). Session summaries and intervals are retained for all-time
+totals. The boundary is visible in health.
 ================
 */
 func (j *Journal) checkpoint(now int64) error {
@@ -478,6 +486,9 @@ func (j *Journal) checkpoint(now int64) error {
 			}
 		}
 		if err == nil {
+			err = pruneAccountBudget(tx, MaxEventsPerAccount)
+		}
+		if err == nil {
 			err = tx.Commit()
 		}
 	}
@@ -486,6 +497,44 @@ func (j *Journal) checkpoint(now int64) error {
 		j.failed.Add(failed)
 	}
 	return err
+}
+
+/*
+================
+pruneAccountBudget
+
+Deletes every account's raw events past its newest budget, so a flood
+from one account costs that account its own oldest evidence and no one
+else's. The accounts over budget are listed and the listing closed
+before any delete runs: the transaction holds one connection, and a
+delete issued while the listing is still open would wait on it.
+================
+*/
+func pruneAccountBudget(tx *sql.Tx, budget int) error {
+	rows, err := tx.Query(`SELECT account FROM events GROUP BY account HAVING COUNT(*) > ?`, budget)
+	if err != nil {
+		return err
+	}
+	var accounts []string
+	for rows.Next() {
+		var account string
+		if err := rows.Scan(&account); err != nil {
+			rows.Close()
+			return err
+		}
+		accounts = append(accounts, account)
+	}
+	if err := firstError(rows.Err(), rows.Close()); err != nil {
+		return err
+	}
+	for _, account := range accounts {
+		if _, err := tx.Exec(`DELETE FROM events WHERE account = ? AND seq <= (
+			SELECT seq FROM events WHERE account = ? ORDER BY seq DESC LIMIT 1 OFFSET ?)`,
+			account, account, budget); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 /*

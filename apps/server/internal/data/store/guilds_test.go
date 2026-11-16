@@ -397,7 +397,7 @@ func TestLoadRefusesDeletePendingGuildMember(t *testing.T) {
 		member.DeleteReservedAt = time.Now().UTC().Format(time.RFC3339)
 	})
 
-	if _, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion); err == nil ||
+	if _, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion, 0); err == nil ||
 		!strings.Contains(err.Error(), "delete-pending character") {
 		t.Fatalf("loadDB malformed social graph error = %v", err)
 	}

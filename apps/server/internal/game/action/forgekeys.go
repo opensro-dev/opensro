@@ -753,7 +753,7 @@ func (b *forgeBuilder) assemble(now time.Time) (inventory.Item, bool) {
 		}
 	}
 	if b.spec.transformSet {
-		item.TransformRefObjID = b.spec.transformRef
+		item.Data = b.spec.transformRef
 	}
 	if b.spec.petLevel >= 0 || b.spec.petNameSet {
 		summon, ok := b.forgeSummon(now)

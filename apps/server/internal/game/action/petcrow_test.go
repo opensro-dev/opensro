@@ -23,11 +23,6 @@ func TestCrowManaSpringBooks(t *testing.T) {
 		t.Run(fmt.Sprint(tier), func(t *testing.T) {
 			rt, clock, c, _, key := tailwindFixture(t, 1)
 			skill := learnPetBook(t, c, 51+tier)
-			for rank := uint8(1); rank <= skill.MaxLevel; rank++ {
-				if got := skill.ValueAt(rank); got != 10 {
-					t.Fatalf("rank %d restores %v%%, want 10%%", rank, got)
-				}
-			}
 			c.ActiveCOS.Training.Rows[1] = domain.PetRowCooldown{ReadyAtMs: clock.NowMs() + 1000}
 			member := nearbyCharacter(rt, c, 21, "spring-party", 50)
 			far := nearbyCharacter(rt, c, 22, "spring-far", 201)
@@ -51,42 +46,37 @@ func TestCrowManaSpringBooks(t *testing.T) {
 			}
 			step.trained = &petTrainedStrike{}
 			rt.crowManaSpring(step, 200)
-			if *c.CurrentMP != 21 {
+			recovery := int64(200 * skill.ValueAt(1) / 100)
+			if *c.CurrentMP != 1+recovery {
 				t.Fatal("actual damage MP", *c.CurrentMP)
 			}
 			want := int64(1)
 			if tier >= 2 {
-				want = 21
+				want = 1 + recovery
 			}
 			if *member.CurrentMP != want || *far.CurrentMP != 1 {
 				t.Fatal("party MP/range", *member.CurrentMP, *far.CurrentMP)
 			}
 			petRemaining := c.ActiveCOS.Training.Rows[1].ReadyAtMs - clock.NowMs()
 			expected := int64(1000)
-			if tier == 3 {
-				expected = 500
-			}
 			if petRemaining != expected {
 				t.Fatal("pet reuse tier", petRemaining)
 			}
 			remaining := c.OffensiveSkillCooldowns[1] - clock.NowMs()
 			want = 1000
-			if tier == 3 {
-				want = 500
-			}
 			if remaining != want || c.SharedSkillCooldowns[1]-clock.NowMs() != want {
 				t.Fatal("reuse paid per impact", remaining)
 			}
-			if tier == 3 && (member.OffensiveSkillCooldowns[1]-clock.NowMs() != 500 || c.OffensiveSkillCooldowns[2] != clock.NowMs()) {
-				t.Fatal("party reuse or zero clamp")
+			if member.OffensiveSkillCooldowns[1]-clock.NowMs() != 1000 || c.OffensiveSkillCooldowns[2] != clock.NowMs()+100 {
+				t.Fatal("Mana Spring changed skill cooldowns")
 			}
 			rt.crowManaSpring(step, 0)
-			if *c.CurrentMP != 21 || c.OffensiveSkillCooldowns[1]-clock.NowMs() != want {
+			if *c.CurrentMP != 1+recovery || c.OffensiveSkillCooldowns[1]-clock.NowMs() != want {
 				t.Fatal("blocked attack granted recovery")
 			}
 			rt.AttackPetExpansion = false
 			rt.crowManaSpring(step, 200)
-			if *c.CurrentMP != 21 {
+			if *c.CurrentMP != 1+recovery {
 				t.Fatal("flag off granted recovery")
 			}
 		})

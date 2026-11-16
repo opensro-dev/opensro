@@ -72,11 +72,6 @@ export interface ExperimentalOptions {
 	// atmospheric glow and a rim light against the sky (pipelines.ts's
 	// stages.w). Off by default; off is the native gradient and disc.
 	readonly skyDetail: boolean;
-	// Port-only, not native: the water refracts the frame behind it and
-	// whitens at the shore (device/water-refraction.ts), drawing apart
-	// from the main pass. Off by default; off is the native blended
-	// reflection, byte for byte.
-	readonly waterRefraction: boolean;
 	// Port-only, not native: the scene renders through a 4x multisampled
 	// colour and depth buffer and resolves into the frame (the original
 	// presents single-sampled). Off by default; off is byte-identical to
@@ -274,6 +269,14 @@ export interface ExperimentalOptions {
 	// the world map and the minimap, not only the one quest the journal
 	// tracks. Off unless turned on; off is the native tracked quest only.
 	readonly questTrackerMarkers: boolean;
+	// Port-only, not native: the world map (M, never the minimap) offers a
+	// "Unique spawns" box at its foot, off until ticked; with both on it
+	// draws one unique sign on every nest a unique may spawn from, all
+	// candidates of a unique together (foundation/ui/unique-nests.ts). A
+	// place only: no hover, no alive or dead state, no timer. The row is on
+	// by default (the owner's choice, 2026-11-07), the box off (2026-11-13);
+	// row off is the native map.
+	readonly uniqueSpawnPoints: boolean;
 	// Port-only, not native (#1640): the player's own degree-9-or-higher
 	// Seal of Sun drops get a gold name plate and a soft ground ring, so
 	// the top seal reads differently the moment it lands. Other players'
@@ -284,6 +287,17 @@ export interface ExperimentalOptions {
 	// 0x68eafd in 0x68e530 never reaches it on the traced path - so the
 	// native arrival is silent. Off unless turned on.
 	readonly warpArrivalSound: boolean;
+	// Port-only, not native (#3547): a wing dress's flight plays no ground
+	// footsteps. The wing set has no sound binding, so the native client
+	// falls back to the Default run's snd_run1 (0xADEAB5 -> 0xADEADE). On
+	// by default (the owner's choice, 2026-11-15); off is the native steps.
+	readonly silentWingFlight: boolean;
+	// Port-only, not native: the four Christmas carols (event_carol_01..04,
+	// music mode 1) while the Christmas event group (1) is on. The native
+	// carol branch (8F7A43) is reached only through the music manager's
+	// SetMusicMode (8FC550, vtable slot 0x58), which no v1.150 code calls,
+	// so the native event plays the region music. Off unless turned on.
+	readonly christmasCarols: boolean;
 	// Port-only, not native (#2496): a rare item's seal line sits under the
 	// item name. 558FF0 appends it after the requirement rows (the 56B099
 	// call in FormatWeapon, after 568500). Off unless turned on; off is the
@@ -461,7 +475,8 @@ experimentalOptions
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices, confirmGuildBan,
-petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion and dungeonCharacterPvs, which only an explicit false turns off.
+petClickOpensWindow, smartPetPickup, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion, silentWingFlight, dungeonCharacterPvs and
+christmasCarols (owner, 2026-11-15: on by default, off by the player's choice), which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
@@ -495,7 +510,6 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		perPixelLighting: enabled( "perPixelLighting" ),
 		ambientOcclusion: enabled( "ambientOcclusion" ),
 		skyDetail: enabled( "skyDetail" ),
-		waterRefraction: enabled( "waterRefraction" ),
 		msaa: enabled( "msaa" ),
 		sceneFxaa: enabled( "sceneFxaa" ),
 		predictedRunUp: record.predictedRunUp !== false,
@@ -535,8 +549,11 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		petFilterOther: record.petFilterOther !== false,
 		touchInspect: record.touchInspect !== false,
 		questTrackerMarkers: enabled( "questTrackerMarkers" ),
+		uniqueSpawnPoints: record.uniqueSpawnPoints !== false,
 		sunDropMarker: enabled( "sunDropMarker" ),
 		warpArrivalSound: enabled( "warpArrivalSound" ),
+		silentWingFlight: record.silentWingFlight !== false,
+		christmasCarols: record.christmasCarols !== false,
 		sealUnderHeading: enabled( "sealUnderHeading" ),
 		setBonusTooltip: enabled( "setBonusTooltip" ),
 		silkHistory: enabled( "silkHistory" ),
@@ -609,7 +626,6 @@ export interface ExperimentalVideo {
 	readonly perPixelLighting: boolean;
 	readonly ambientOcclusion: boolean;
 	readonly skyDetail: boolean;
-	readonly waterRefraction: boolean;
 	readonly msaa: boolean;
 	readonly sceneFxaa: boolean;
 	readonly smoothCamera: boolean;
@@ -617,6 +633,7 @@ export interface ExperimentalVideo {
 	readonly sharedActorRoom: boolean;
 	readonly vHidesCompanions: boolean;
 	readonly dungeonCharacterPvs: boolean;
+	readonly silentWingFlight: boolean;
 }
 
 /*
@@ -638,14 +655,14 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		perPixelLighting: options.perPixelLighting,
 		ambientOcclusion: options.ambientOcclusion,
 		skyDetail: options.skyDetail,
-		waterRefraction: options.waterRefraction,
 		msaa: options.msaa,
 		sceneFxaa: options.sceneFxaa,
 		smoothCamera: options.smoothCamera,
 		enchantSparks: options.enchantSparks,
 		sharedActorRoom: options.sharedActorRoom,
 		vHidesCompanions: options.vHidesCompanions,
-		dungeonCharacterPvs: options.dungeonCharacterPvs
+		dungeonCharacterPvs: options.dungeonCharacterPvs,
+		silentWingFlight: options.silentWingFlight
 	};
 }
 
@@ -669,6 +686,7 @@ export interface ExperimentalGameplay {
 	readonly smartPetPickup?: boolean;
 	readonly sunDropMarker?: boolean;
 	readonly warpArrivalSound?: boolean;
+	readonly christmasCarols?: boolean;
 	// The pickup pet filter's kind mask (ground-item's PICKUP_KIND bits);
 	// undefined while the filter row is off, which is the native loop.
 	readonly petPickupKinds?: number;
@@ -692,6 +710,7 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		smartPetPickup: options.smartPetPickup,
 		sunDropMarker: options.sunDropMarker,
 		warpArrivalSound: options.warpArrivalSound,
+		christmasCarols: options.christmasCarols,
 		petPickupKinds: options.petPickupFilter ?
 			(options.petFilterGold ? PICKUP_KIND_GOLD : 0) |
 			(options.petFilterEquipment ? PICKUP_KIND_EQUIPMENT : 0) |

@@ -31,6 +31,17 @@ export interface UiTextLayout {
 	// enter a neighbouring text box; null when no glyph of it fits, absent
 	// when the text fits its box.
 	readonly fitted?: UiQuad | null;
+	// Port-only (the Experimental "Fit window labels"): the text on two
+	// lines inside its box's columns, tried before the shortened run;
+	// absent when the text has no space or a line would not fit.
+	readonly wrapped?: UiQuad;
+	// Port-only (the same row): the line in the UI's narrow face, when the
+	// text is in face 0 and that line fits its box ("Experience" on the
+	// job ranking's 56-pixel head); tried after a label's slide.
+	readonly narrow?: UiQuad;
+	// A label (an authored static's text key, not a value in its field)
+	// may be slid or kept whole past its box under "Fit window labels".
+	readonly label?: boolean;
 }
 /*
 ================
@@ -95,7 +106,8 @@ export interface UiQuad {
 	readonly tiled?: boolean;
 	readonly alphaCutoff?: number;
 	// Drawn with additive blending (source added to what is behind it). Effect sheets such as
-	// ga_effect_* and alcm_effect_prepare carry no alpha: black is "nothing", so the quad adds light.
+	// ga_effect_*, alcm_effect_prepare and alcm_effect_success carry no alpha: black is "nothing",
+	// so the quad adds light.
 	readonly additive?: boolean;
 	readonly characterAnchor?: number;
 	readonly mask?: { readonly texture: string; readonly rect: UiRect; };

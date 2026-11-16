@@ -125,7 +125,9 @@ A row's JSON must name the row's own fortress.
 */
 func decodeFortressRecord(id uint32, raw string) (domain.FortressRecord, error) {
 	var record domain.FortressRecord
-	if err := decodeJSONStrict([]byte(raw), &record); err != nil {
+	// Unknown top-level fields stay on disk: the row's writer reads
+	// them back before replacing it (upsertFortressTx).
+	if _, err := decodeRecordFields([]byte(raw), &record); err != nil {
 		return record, fmt.Errorf("fortress %d: %w", id, err)
 	}
 	if record.FortressID != id || record.GuildID < 0 || record.TempGuildID < 0 || record.TaxRate < -20 || record.TaxRate > 20 || record.TaxGold < 0 {
@@ -203,12 +205,34 @@ func (door storeFortressDoor) SaveFortress(divisionID string, record domain.Fort
 	if _, err := decodeFortressRecord(record.FortressID, string(raw)); err != nil {
 		return err
 	}
-	_, err = s.syncDBLocked().Exec(
-		"INSERT INTO fortresses (division, fortress_id, record) VALUES (?, ?, ?) ON CONFLICT(division, fortress_id) DO UPDATE SET record = excluded.record",
-		divisionID, record.FortressID, string(raw))
-	if err != nil {
+	if err = upsertFortressTx(s.syncDBLocked(), divisionID, record); err != nil {
 		s.recordWriteFailureLocked("fortress", err)
 	}
+	return err
+}
+
+/*
+================
+upsertFortressTx
+
+The fortress row's one writer. The game builds a fortress record from
+its own state, so the unknown fields the replaced row was stored with
+are read back from it here and written again (json.go, #3090).
+================
+*/
+func upsertFortressTx(w rowWriter, division string, record domain.FortressRecord) error {
+	unknown, err := storedUnknownFields[domain.FortressRecord](w,
+		"SELECT record FROM fortresses WHERE division = ? AND fortress_id = ?", division, record.FortressID)
+	if err != nil {
+		return err
+	}
+	raw, err := encodeRecordFields(record, unknown)
+	if err != nil {
+		return err
+	}
+	_, err = w.Exec(
+		"INSERT INTO fortresses (division, fortress_id, record) VALUES (?, ?, ?) ON CONFLICT(division, fortress_id) DO UPDATE SET record = excluded.record",
+		division, record.FortressID, string(raw))
 	return err
 }
 
@@ -284,7 +308,9 @@ A row's JSON must name the row's own fortress and event zone.
 */
 func decodeFortressStructure(fortressID, zone uint32, raw string) (domain.FortressStructureRecord, error) {
 	var structure domain.FortressStructureRecord
-	if err := decodeJSONStrict([]byte(raw), &structure); err != nil {
+	// Unknown top-level fields stay on disk: SaveFortressStructure
+	// reads them back before replacing the row.
+	if _, err := decodeRecordFields([]byte(raw), &structure); err != nil {
 		return structure, fmt.Errorf("fortress %d structure %d: %w", fortressID, zone, err)
 	}
 	if structure.FortressID != fortressID || structure.EventStructID != zone || structure.RefObjID == 0 || structure.OwnerGuildID < 0 {
@@ -314,8 +340,16 @@ func (door storeFortressDoor) SaveFortressStructure(divisionID string, structure
 		if structure.RefObjID == 0 || structure.OwnerGuildID < 0 {
 			return fmt.Errorf("fortress %d structure %d: inconsistent record", structure.FortressID, structure.EventStructID)
 		}
+		// The replaced row's unknown fields are written again (json.go).
+		var unknown unknownFields
+		unknown, err = storedUnknownFields[domain.FortressStructureRecord](s.syncDBLocked(),
+			"SELECT record FROM fortress_structures WHERE division = ? AND fortress_id = ? AND event_struct_id = ?",
+			divisionID, structure.FortressID, structure.EventStructID)
+		if err != nil {
+			return err
+		}
 		var raw []byte
-		if raw, err = json.Marshal(structure); err != nil {
+		if raw, err = encodeRecordFields(structure, unknown); err != nil {
 			return err
 		}
 		_, err = s.syncDBLocked().Exec(

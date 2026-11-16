@@ -10,7 +10,7 @@ package enterworld
 
 import (
 	"fmt"
-	"opensro.online/server/internal/releaseprotocol"
+	"slices"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -18,6 +18,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/releaseprotocol"
 )
 
 // Stable bootstrap and wire-policy values live with the assembly they govern.
@@ -205,6 +206,12 @@ an authoritative relocation/revival commits.
 ================
 */
 func buildCharacterProjection(deps *Deps, divisionID string, character *Character) *BootstrapResult {
+	// Both callers pass a snapshot, so the running events' groups join the
+	// entry without touching the stored record; a fresh slice keeps the
+	// snapshot from sharing the record's backing array.
+	if deps.EntryEventGroups != nil {
+		character.EnterEventGroupIds = withEventGroups(character.EnterEventGroupIds, deps.EntryEventGroups())
+	}
 	entry := ResolveLocalPlayerEntry(character, deps.Roster)
 	if deps.EntryPopulationLease != nil {
 		lease, valid := deps.EntryPopulationLease(divisionID, character.Name)
@@ -845,4 +852,25 @@ func adoptEntryPlacement(deps *Deps, divisionID, name string, saved StartProfile
 	}
 	deps.AdoptEntrySpawn(divisionID, name, simulation.Spawn{RegionID: uint16(placed.RegionID), X: placed.X, Y: placed.Y,
 		Z: placed.Z, Angle: uint16(placed.Angle)})
+}
+
+/*
+================
+withEventGroups
+
+The character's event groups followed by each running one it lacks, in a
+new slice; none running returns the character's own list unchanged.
+================
+*/
+func withEventGroups(own, running []uint32) []uint32 {
+	if len(running) == 0 {
+		return own
+	}
+	out := append(make([]uint32, 0, len(own)+len(running)), own...)
+	for _, group := range running {
+		if !slices.Contains(out, group) {
+			out = append(out, group)
+		}
+	}
+	return out
 }

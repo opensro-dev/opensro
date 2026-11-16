@@ -17,6 +17,11 @@ HuntingGuideSource
 export interface HuntingGuideSource {
 	readonly url: string;
 	readonly bytes: number;
+	// Port-only (SRO_HUNTING_GUIDE): the shard offers the portrait overlay,
+	// the Experimental "Monster hunting guide" row. Without it the atlas
+	// still feeds the M window's monster list, filter and region pages
+	// (#3167, #3489).
+	readonly overlay?: boolean;
 }
 
 // Two MiB; shared contracts expose literal scalar constants.

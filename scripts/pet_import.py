@@ -18,9 +18,12 @@ Selection is by codename family (the codename minus its trailing level
 number): COS_P_ kinds with leveled rows are attack (growth) pets, COS_P_
 kinds with one level are pickup pets, COS_T_ are transports, COS_C_ are
 vehicles and trade animals. COS_GUARD_ and COS_GUILD_ rows are mercenary
-and guild systems, not pets, and never candidates. A kind with no server
-lane yet (fellow pets and any other prefix) is deferred and reported,
-never half imported: its rows wait for the lane that can run them.
+and guild systems, not pets, and never candidates. Fellow kinds
+(COS_F_) ride the attack-pet lane (#3328, inference recorded there):
+the persistent summoner admits them by their rows' own band and they
+fight with their native per-level rows, like every summonable kind
+without a petdesign entry. A kind of any other prefix is deferred
+and reported, never half imported: its rows wait for a lane.
 
 A chosen kind brings its characterdata rows, the summon scrolls whose
 itemdata column 119 names it, and the name text for both. The pet's model
@@ -55,6 +58,8 @@ import avatar_archive
 import cap110_item_import as shared
 import cap110_items as items
 import import_vsro_alexandria as tables
+import later_world_import
+from pin_file import read_pin_field
 from prepare_client_resources import safe_target, write_atomically
 import sro_pk2
 from sro_paths import EXTRACTED_ROOT, REPO_ROOT
@@ -96,8 +101,10 @@ SOURCES = (VSRO_SOURCE, V1696_SOURCE, ARCHIVE_SOURCE)
 EXCLUDED_PREFIXES = ("COS_GUARD_", "COS_GUILD_")
 LEVEL_SUFFIX = re.compile(r"_\d+$")
 # Kinds the server's COS lanes already run (the summoning, pickup, growth,
-# transport and riding lanes); anything else defers until its lane exists.
-LANE_KINDS = ("pickup", "attack", "transport", "vehicle")
+# transport, riding and fellow lanes); anything else defers until its
+# lane exists. Fellows need no petdesign entry: they run their native
+# rows, and the report's design-entry need stays attack-only.
+LANE_KINDS = ("pickup", "attack", "transport", "vehicle", "fellow")
 
 
 # ================
@@ -107,7 +114,9 @@ LANE_KINDS = ("pickup", "attack", "transport", "vehicle")
 # empty value is on, only an explicit off value turns it off. An
 # unreadable value is refused rather than guessed. The archive source
 # has its own gate (AVATARS_ENV names the pinned archive; unset imports
-# nothing).
+# nothing). Gate names, confirmed against #3262 for #3328: there is no
+# SRO_PETS_ARCHIVE; the archive source rides the shared pinned zip
+# (SRO_AVATARS_ZIP) under this same SRO_PETS switch.
 # ================
 def enabled(env=os.environ):
 	value = env.get(FLAG, "").strip().lower()
@@ -138,7 +147,11 @@ def kind_of(family, rows):
 		return "transport"
 	if family.startswith("COS_C_"):
 		return "vehicle"
-	return "fellow"
+	if family.startswith("COS_F_"):
+		return "fellow"
+	# Anything else waits for its lane (the banner's rule): a prefix
+	# this map does not name is deferred, never fellow by default.
+	return "unknown"
 
 
 # ================
@@ -162,7 +175,10 @@ def previous_targets(prior):
 # missing(family, rows) names absent resources. Scrolls are the later
 # item rows whose associated-character column names the family (or one
 # of its rows); a kind without one cannot be obtained and is skipped.
-# Returns (char_rows, item_rows, report) with identities applied.
+# Returns (char_rows, item_rows, report) with identities applied and the
+# character rows in the v1.150 layout (alexandria_npcs.convert_character,
+# the one owner of the 104 -> 120 column map). The item rows need no map:
+# itemdata is 160 columns in every client.
 # ================
 def select_pets(native_chars, native_items, earlier_codes, later_chars, later_items, previous=None, missing=lambda family, rows: [], reserved_ids=()):
 	native_codes = {row[CHAR_CODE] for row in native_chars if len(row) > CHAR_CODE}
@@ -226,13 +242,20 @@ def select_pets(native_chars, native_items, earlier_codes, later_chars, later_it
 		levels = sorted({int(row[CHAR_LEVEL]) for row in rows if len(row) > CHAR_LEVEL and row[CHAR_LEVEL].isdigit()})
 		for row in rows:
 			claim(row[CHAR_CODE], int(row[CHAR_ID]))
-			converted = list(row)
+			# The later clients' characterdata is 104 columns (VSRO and v1.696
+			# alike) and v1.150's is 120; the server and client read the v1.150
+			# layout, so a row joins in it. Copied as-is, a pet row had no column
+			# 109 and the NPC manifest wrote its material kind as null, which the
+			# client refuses ("Invalid monster material kind").
+			converted = characters.convert_character(row)
 			id_map[row[CHAR_CODE]] = {"source": int(row[CHAR_ID]), "target": targets[row[CHAR_CODE]]}
 			converted[CHAR_ID] = str(targets[row[CHAR_CODE]])
 			char_rows.append(converted)
 		needs = ["petdesign entry"]
 		if kind == "attack":
 			needs.append("pet skill rows")
+		if kind == "fellow":
+			needs = []  # native rows only; the expansion design is attack-pet only
 		report_kinds.append({
 			"family": family, "kind": kind, "rows": len(rows),
 			"levels": [levels[0], levels[-1]] if len(levels) > 1 else levels,
@@ -272,9 +295,13 @@ def later_tables_from_media(media, index, object_text_required=True):
 
 	# A client Media always carries the object text, so a pk2 read stops
 	# without it; the pinned archive may carry pet rows without it, and a
-	# kind whose name never arrived is reported, never fatal.
+	# kind whose name never arrived is reported, never fatal. v1.696's
+	# textdata_object.txt is a shard index, not the table: read through
+	# later_object_text, which follows it (and reads a flat VSRO table as
+	# itself). Read raw, every v1.696 pet's name went missing and the
+	# asset build refused the release (21 item titles, 2026-11-15).
 	if object_text_required or tables.TEXTDATA + "textdata_object.txt" in index:
-		object_text = read("textdata_object.txt")
+		object_text = b"\xff\xfe" + later_world_import.later_object_text(read).encode("utf-16-le")
 	else:
 		object_text = b""
 	return (_shard_rows(read, "characterdata.txt", "characterdata"),
@@ -373,8 +400,12 @@ def _merge_name_text(output, char_rows, item_rows, later_text, report):
 	known = {row[1] for row in characters.translation_rows(base) if len(row) > 1}
 	wanted = ({row[CHAR_NAME_KEY] for row in char_rows if len(row) > CHAR_NAME_KEY}
 		| {row[items.NAME_KEY] for row in item_rows if len(row) > items.NAME_KEY}) - known
+	# later_text_row brings a v1.696 17-column row (text id after the
+	# service cell) to the VSRO layout this merge reads, as stage_kinds
+	# does; a VSRO row passes through unchanged.
 	texts = [[row[0], row[1], row[2], "", "", row[5], row[4], row[7], row[8], row[9], ""]
-		for row in characters.translation_rows(later_text) if len(row) >= 10 and row[1] in wanted]
+		for row in (later_world_import.later_text_row(row) for row in characters.translation_rows(later_text))
+		if len(row) >= 10 and row[1] in wanted]
 	if texts:
 		write_atomically(name_path, characters.append_rows(base, texts))
 	report["missingNameText"] = sorted(wanted - {row[1] for row in texts})
@@ -424,10 +455,7 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 		if not Path(source["pins"]).is_file():
 			remove_import(output, source)
 			return _disabled(source, "archive pins not in tree")
-		pins = json.loads(Path(source["pins"]).read_text(encoding="utf-8"))
-		if pins.get("format") != PIN_FORMAT:
-			raise ValueError(f"{source['pins']}: unknown pin format")
-		tables.require_vsro_pin(root, tuple(FOLDERS), pins["archives"])
+		tables.require_vsro_pin(root, tuple(FOLDERS), read_pin_field(source["pins"], PIN_FORMAT, "archives"))
 	native_chars, native_items = native_tables(native)
 	later_chars, later_items, later_text = later_tables_from_pk2(root)
 	res_root = Path(native) / "Data_extracted" / "res"

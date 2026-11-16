@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { stampPath } from "../../checks/checkStamps.mjs";
 import { yieldCpu } from "../../lib/processPriority.mjs";
 
 const helper = fileURLToPath( new URL( "../../lib/processPriority.mjs", import.meta.url ) );
@@ -144,7 +145,7 @@ test("run_if_changed starts its gate below normal", t => {
 		const printed = Number( /PRIORITY=(-?\d+)/.exec( run.stdout )?.[1] );
 		assert.ok( printed >= os.constants.priority.PRIORITY_BELOW_NORMAL, `gate priority ${printed}: ${run.stdout}` );
 	} finally {
-		rmSync( path.join( repository, ".state", "check-stamps", `${name}.json` ), { force: true } );
+		rmSync( stampPath( name ), { force: true } );
 		rmSync( scratch, { recursive: true, force: true } );
 	}
 });

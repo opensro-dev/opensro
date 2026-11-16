@@ -332,6 +332,8 @@ func TestBurnProductionSourceDepartureAndFatalPublication(t *testing.T) {
 			row := installFireImbue(t, rt, c)
 			rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: row.ID}.Encode())
 			rt.CombatRoll = func() (uint32, error) { return 0, nil }
+			// The client selects what it strikes.
+			rt.Selected.Set(testDivision, c.Name, target.Gid)
 			rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
 			current, _ := rt.Monsters.Get(testDivision, target.Gid)
 			if !burnSlot(current).Active {
@@ -341,6 +343,9 @@ func TestBurnProductionSourceDepartureAndFatalPublication(t *testing.T) {
 			if departed {
 				rt.ForgetCharacter(testDivision, c.Name)
 			}
+			// The striker holds the burning monster until it departs: only a
+			// holder receives the fatal tick's HP, with the burn's cause in
+			// the tick's word.
 			batches := rt.TickHook()(clock.NowMs() + 1)
 			privateDamage, zeroHP := 0, 0
 			for _, b := range batches {
@@ -353,13 +358,16 @@ func TestBurnProductionSourceDepartureAndFatalPublication(t *testing.T) {
 					}
 					if f.Opcode == simulation.OpVitalsUpdate && len(f.Payload) >= 11 && f.Payload[6]&1 != 0 && binary.LittleEndian.Uint32(f.Payload) == target.Gid && binary.LittleEndian.Uint32(f.Payload[7:]) == 0 {
 						zeroHP++
-						if binary.LittleEndian.Uint16(f.Payload[4:]) != 2 {
+						if b.OnlyCharacterID != c.ID {
+							t.Fatal("the burning monster's HP reached a non-holder")
+						}
+						if simulation.VitalsSourceFlags(binary.LittleEndian.Uint16(f.Payload[4:]))&simulation.VitalsSourceStatusDamage == 0 {
 							t.Fatal("wrong abnormal damage cause")
 						}
 					}
 				}
 			}
-			if zeroHP != 1 || privateDamage != map[bool]int{false: 1, true: 0}[departed] {
+			if zeroHP != map[bool]int{false: 1, true: 0}[departed] || privateDamage != map[bool]int{false: 1, true: 0}[departed] {
 				t.Fatal("fatal burn publication", zeroHP, privateDamage)
 			}
 			current, _ = rt.Monsters.Get(testDivision, target.Gid)

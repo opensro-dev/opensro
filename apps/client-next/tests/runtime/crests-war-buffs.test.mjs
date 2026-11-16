@@ -21,7 +21,10 @@ await mkdir( "temp/artifacts/crests-war-buffs", { recursive: true } );
 async function load( path, name ) {
 	return import( sourceFileUrl( "src/engine/" + path ).href );
 }
-const { decodeGuildCrest, guildCrestFiles, entityCrestFiles } = await load( "foundation/ui/guild-crest.ts", "crest" );
+const { decodeGuildCrest, guildCrestFiles, guildCrestUrl, entityCrestFiles } = await load(
+	"foundation/ui/guild-crest.ts",
+	"crest"
+);
 const { socialPacket, emptySocial } = await load( "foundation/gameplay/social.ts", "social" );
 const { buffBoard: renderBuffBoard } = await load( "foundation/ui/buff-board.ts", "buff" );
 function buffBoard( game, time ) {
@@ -78,6 +81,22 @@ test("native palette indices are opaque RGB and vertically inverted exactly once
 		left: -36
 	} ] );
 	assert.deepEqual( guildCrestFiles( 1, 10, [ 0, 20, 0xffffffff ] ), [] );
+});
+test("crest URLs stay under the Agent API base, its /api path included", () => {
+	// Hosted and dev edges route only /api to Agent; a root /marks/ path
+	// reaches the client's index.html instead of the crest.
+	assert.equal(
+		guildCrestUrl( "http://127.0.0.1:5180/api", "G1_1_1.crb" ),
+		"http://127.0.0.1:5180/api/marks/G1_1_1.crb"
+	);
+	assert.equal(
+		guildCrestUrl( "https://game.example/api/", "A1_2_3.crb" ),
+		"https://game.example/api/marks/A1_2_3.crb"
+	);
+	assert.equal(
+		guildCrestUrl( "https://api.game.example", "G1_10_2.crb" ),
+		"https://api.game.example/marks/G1_10_2.crb"
+	);
 });
 test("war updates retain ending relations, orient scores and reject partial writes", () => {
 	let s = packet( base, 0x32bb, [ 1, ...war( 7 ) ] );

@@ -242,3 +242,35 @@ func TestTransportFollowTetherFromEnv(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestFollowingTransportStaysWhereItWalkedWhenItsTraderDies
+
+A following transport's live pose is its follower; the parked anchor
+still holds the dismount spot. The trader's death stops the follower,
+and the transport must keep the pose it walked to - for thieves that
+find it, its cargo and the follow that resumes on revival - instead of
+jumping back to where the trader stepped off.
+================
+*/
+func TestFollowingTransportStaysWhereItWalkedWhenItsTraderDies(t *testing.T) {
+	rt, clock, c := caravanFixture(t)
+	rt.TransportFollow = true
+	parked, _ := dismountedTransportApart(rt, c)
+	advanceTransportTicks(rt, clock, 20)
+	walked := rt.cosLiveSpawn(testDivision, c, clock.NowMs())
+	if simulation.WorldDistance2D(walked, parked) < 100 {
+		t.Fatalf("the transport only walked to %+v from %+v", walked, parked)
+	}
+	*c.CurrentHP = 0
+	advanceTransportTicks(rt, clock, 1)
+	if at := rt.cosLiveSpawn(testDivision, c, clock.NowMs()); simulation.WorldDistance2D(at, walked) > 1 {
+		t.Fatalf("the dead trader's transport reads %+v, want where it walked (%+v); parked was %+v", at, walked, parked)
+	}
+	*c.CurrentHP = 100
+	advanceTransportTicks(rt, clock, 1)
+	if at := rt.cosLiveSpawn(testDivision, c, clock.NowMs()); simulation.WorldDistance2D(at, parked) < simulation.WorldDistance2D(walked, parked)/2 {
+		t.Fatalf("the revived trader's transport set out from %+v, back near the dismount %+v", at, parked)
+	}
+}

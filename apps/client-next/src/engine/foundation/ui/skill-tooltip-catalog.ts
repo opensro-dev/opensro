@@ -629,11 +629,16 @@ An incremental decode of the catalogue. Each step(rows) decodes at most
 that many rows and returns the finished catalogue once every row is in,
 null before. The HUD steps it once per frame so 27,835 rows never land in
 one frame; every admission check still runs before the catalogue exists.
+
+Every row is decoded here, so a malformed one rejects the catalogue as
+before, but only its id, chain, group and level are kept: the views are
+built again on demand (SkillPane_CreateCatalog).
 ================
 */
 export function createTooltipSkillDecoder( value: unknown ): { step( rows: number ): TooltipSkillCatalog | null; } {
 	const rows = SkillPane_ValidRows( value ), specs = SkillPane_ParamSpecs(), efrTag = SkillPane_ParamTag( "efr" );
-	const result = new Map<number, SkillTooltipRowView>(), scanned = SkillPane_CreateRow();
+	const index = new Map<number, number>(), scanned = SkillPane_CreateRow();
+	const chains = new Uint32Array( rows.length ), groupKeys: string[] = new Array<string>( rows.length );
 	let next = 0, done: TooltipSkillCatalog | null = null;
 	return {
 		/*
@@ -647,14 +652,33 @@ export function createTooltipSkillDecoder( value: unknown ): { step( rows: numbe
 			for ( ; next < end; next++ ) {
 				SkillPane_ScanRow( rows[next], scanned );
 				const row = SkillPane_DecodeSkillRow( scanned, specs, efrTag );
-				if ( !row.id || result.has( row.id ) ) throw Error( "Duplicate tooltip skill" );
-				result.set( row.id, row );
+				if ( !row.id || index.has( row.id ) ) throw Error( "Duplicate tooltip skill" );
+				index.set( row.id, next );
+				chains[next] = row.chainNextSkillId;
+				groupKeys[next] = row.groupId + ":" + row.basicLevel;
 			}
 			if ( next < rows.length ) return null;
-			done = SkillPane_FinishCatalog( result );
+			done = SkillPane_FinishCatalog( { rows, specs, efrTag, index, chains, groupKeys } );
 			return done;
 		}
 	};
+}
+
+/*
+================
+SkillPane_Admitted
+
+A catalogue every row of which passed admission: the source rows, the row
+index of each skill id, and each row's chain successor and group key.
+================
+*/
+interface SkillPane_Admitted {
+	readonly rows: readonly unknown[];
+	readonly specs: ReadonlyMap<number, SkillPaneParamSpec>;
+	readonly efrTag: number;
+	readonly index: ReadonlyMap<number, number>;
+	readonly chains: Uint32Array;
+	readonly groupKeys: readonly string[];
 }
 
 /*
@@ -665,20 +689,133 @@ Checks chain references and builds `groups`: for each group:basicLevel,
 the first row that is no other row's chain successor.
 ================
 */
-function SkillPane_FinishCatalog( result: Map<number, SkillTooltipRowView> ): TooltipSkillCatalog {
+function SkillPane_FinishCatalog( admitted: SkillPane_Admitted ): TooltipSkillCatalog {
+	const { index, chains, groupKeys } = admitted;
 	const children = new Set<number>();
-	for ( const row of result.values() ) {
-		if ( row.chainNextSkillId && !result.has( row.chainNextSkillId ) ) {
-			throw Error( "Missing tooltip chain reference" );
+	for ( let i = 0; i < chains.length; i++ ) {
+		if ( chains[i] && !index.has( chains[i]! ) ) throw Error( "Missing tooltip chain reference" );
+		children.add( chains[i]! );
+	}
+	const groups = new Map<string, number>();
+	for ( const [id, row] of index ) {
+		const key = groupKeys[row]!;
+		if ( !children.has( id ) && !groups.has( key ) ) groups.set( key, id );
+	}
+	return SkillPane_CreateCatalog( admitted, groups );
+}
+
+/*
+================
+SkillPane_CreateCatalog
+
+The catalogue as a read-only map whose views are built when first asked
+for and then kept, so a skill shows the same object every time. The 27,835
+decoded views were about 34 MB of small objects that stayed alive for the
+session: every full collection marked them, though a session shows a few
+hundred at most. The source rows are one string each and cost the
+collector next to nothing. Iterating decodes every row without keeping it
+(entries). The result is map-like, not a Map: see TooltipSkillCatalog.
+================
+*/
+function SkillPane_CreateCatalog(
+	admitted: SkillPane_Admitted,
+	groupHeads: ReadonlyMap<string, number>
+): TooltipSkillCatalog {
+	const { rows, specs, efrTag, index } = admitted;
+	const views = new Map<number, SkillTooltipRowView>(), scanned = SkillPane_CreateRow();
+	/*
+	================
+	view
+	================
+	*/
+	const view = ( id: number ): SkillTooltipRowView | undefined => {
+		const kept = views.get( id );
+		if ( kept ) return kept;
+		const row = index.get( id );
+		if ( row === undefined ) return undefined;
+		SkillPane_ScanRow( rows[row], scanned );
+		const decoded = SkillPane_DecodeSkillRow( scanned, specs, efrTag );
+		views.set( id, decoded );
+		return decoded;
+	};
+	/*
+	================
+	entries
+
+	A view already asked for is the kept one; any other row is decoded for
+	the caller and not kept, so one pass over the catalogue does not bring
+	back the views this owner exists to drop. The group heads are few and
+	groups.get keeps them anyway, so groupEntries goes through view.
+	================
+	*/
+	function* entries(): MapIterator<[number, SkillTooltipRowView]> {
+		for ( const [id, row] of index ) {
+			const kept = views.get( id );
+			if ( kept ) {
+				yield [ id, kept ];
+				continue;
+			}
+			SkillPane_ScanRow( rows[row], scanned );
+			yield [ id, SkillPane_DecodeSkillRow( scanned, specs, efrTag ) ];
 		}
-		children.add( row.chainNextSkillId );
 	}
-	const groups = new Map<string, SkillTooltipRowView>();
-	for ( const row of result.values() ) {
-		const key = row.groupId + ":" + row.basicLevel;
-		if ( !children.has( row.id ) && !groups.has( key ) ) groups.set( key, row );
+	/*
+	================
+	groupEntries
+	================
+	*/
+	function* groupEntries(): MapIterator<[string, SkillTooltipRowView]> {
+		for ( const [key, id] of groupHeads ) yield [ key, view( id )! ];
 	}
-	return Object.assign( result, { groups } );
+	/*
+	================
+	values
+	================
+	*/
+	function* values(): MapIterator<SkillTooltipRowView> {
+		for ( const [, row] of entries() ) yield row;
+	}
+	/*
+	================
+	groupValues
+	================
+	*/
+	function* groupValues(): MapIterator<SkillTooltipRowView> {
+		for ( const [, row] of groupEntries() ) yield row;
+	}
+	const groups: ReadonlyMap<string, SkillTooltipRowView> = {
+		get size() {
+			return groupHeads.size;
+		},
+		get: key => {
+			const id = groupHeads.get( key );
+			return id === undefined ? undefined : view( id );
+		},
+		has: key => groupHeads.has( key ),
+		keys: () => groupHeads.keys(),
+		values: groupValues,
+		entries: groupEntries,
+		forEach( callback, thisArg ) {
+			for ( const [key, row] of groupEntries() ) callback.call( thisArg, row, key, groups );
+		},
+		[Symbol.iterator]: groupEntries
+	};
+	const catalog: TooltipSkillCatalog = {
+		groups,
+		get size() {
+			return index.size;
+		},
+		get: view,
+		has: id => index.has( id ),
+		keys: () => index.keys(),
+		values,
+		entries,
+		forEach( callback, thisArg ) {
+			for ( const [id, row] of entries() ) callback.call( thisArg, row, id, catalog );
+		},
+		[Symbol.iterator]: entries
+	};
+	return catalog;
 }
 
 /*

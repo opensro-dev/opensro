@@ -424,8 +424,11 @@ advanced book descriptions
 test("advanced tooltips include inherited proficiency in the current effect", () => {
 	const mend = petSkillDesign( 47 ), mark = petSkillDesign( 50 ), howl = petSkillDesign( 2 );
 	assert.ok( mend && mark && howl );
-	assert.match( petEffect( mend, 20, 1 ), /20% maximum HP: half immediately, half over 5 seconds/ );
-	assert.match( petEffect( mark, 20, 1 ), /hatches after 30 s.*Stores 3 casts/ );
+	assert.match(
+		petEffect( mend, 20, 1 ),
+		/20% maximum HP.*Half immediately; half over 5 s.*Cleanses all negative effects/
+	);
+	assert.match( petEffect( mark, 20, 1 ), /hatches after 30 s.*3 stored casts/ );
 	assert.match( petEffect( howl, 20, 1 ), /Attack speed \+20%.*Wolf and owner/ );
 	const paw = petSkillDesign( 30 ), feathers = petSkillDesign( 42 ), murder = petSkillDesign( 60 );
 	assert.ok( paw && feathers && murder );
@@ -457,8 +460,8 @@ test("advanced tooltips include inherited proficiency in the current effect", ()
 		/Proficiency/
 	);
 	assert.match( petEffect( feathers, 10, 1 ), /Maximum stacks 5/ );
-	assert.match( petEffect( murder, 200, 1 ), /Crow hits grant/ );
-	assert.match( petEffect( murder, 200, 1 ), /Party members within 20 m/ );
+	assert.match( petEffect( murder, 40, 1 ), /Below 40% HP/ );
+	assert.match( petEffect( murder, 40, 1 ), /party members within 20 m/ );
 });
 
 /*
@@ -605,7 +608,7 @@ test("each skill family uses its atlas cell and stack badges reuse native level 
 		assert.ok( uv[0] >= 0 && uv[1] >= 0 && uv[0] + uv[2] <= 1 && uv[1] + uv[3] <= 1 );
 		if ( d.family === "Crushing Paw" ) assert.equal( petSkillStack( state, d, skill ), 9 );
 		if ( d.family === "Unbroken Spirit" ) assert.equal( petSkillStack( state, d, skill ), 10 );
-		if ( d.family === "Guiding Feathers" ) assert.equal( petSkillStack( state, d, skill ), 0 );
+		if ( d.family === "Raven's Refuge" ) assert.equal( petSkillStack( state, d, skill ), null );
 		assert.equal( petSkillStack( state, d, { ...skill, level: 0 } ), null );
 	}
 	assert.equal( cells.size, 20 );

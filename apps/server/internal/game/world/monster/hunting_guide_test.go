@@ -52,4 +52,10 @@ func TestHuntingGuideFiltersAndKeepsAllLocations(t *testing.T) {
 		len(guide[0].Points) != 2 || guide[0].Points[0].X != 100 || guide[0].Points[1].X != 400 {
 		t.Fatalf("public hunting guide lost locations or admitted special populations: %#v", guide)
 	}
+	// The dungeon-region variant is no outdoor point: it rides in
+	// DungeonPoints for the M window's dungeon pages (issue #3239).
+	if len(guide[0].DungeonPoints) != 1 || guide[0].DungeonPoints[0].RegionID != 0x8001 ||
+		guide[0].DungeonPoints[0].X != 900 {
+		t.Fatalf("dungeon anchor did not ride apart from the outdoor points: %#v", guide[0].DungeonPoints)
+	}
 }

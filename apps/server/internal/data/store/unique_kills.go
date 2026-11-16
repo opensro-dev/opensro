@@ -46,7 +46,9 @@ A row's JSON must carry its own sequence, a unique and a time.
 */
 func decodeUniqueKill(seq int64, raw string) (domain.UniqueKill, error) {
 	var kill domain.UniqueKill
-	if err := decodeJSONStrict([]byte(raw), &kill); err != nil {
+	// A kill row is written once and never replaced, so its unknown
+	// top-level fields simply stay on disk (json.go).
+	if _, err := decodeRecordFields([]byte(raw), &kill); err != nil {
 		return kill, fmt.Errorf("unique kill %d: %w", seq, err)
 	}
 	if kill.Seq != seq || kill.RefObjID == 0 || kill.AtMs <= 0 {

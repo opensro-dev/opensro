@@ -15,6 +15,11 @@ import (
 	"opensro.online/server/internal/game/paramkeeper"
 )
 
+// The reference server's item option pass writes avatar Lucky ('luca') into
+// keeper param 0xAD as own + value, and only its elixir reinforce chance
+// reads it (research/findings/avatar-luck-and-4x-stacking.md).
+const paramAvatarAlchemyLuck uint16 = 0xad
+
 // magicOption is one decoded item option (the server's option decoder): the definition tag and
 // the high-dword magnitude.
 type magicOption struct {
@@ -115,6 +120,8 @@ func magicOptionWrites(codename string, options []magicOption, source uint32) ([
 			flat(2, float32(int32(own[2])+int32(o.value)))
 		case optionTag("mdia"):
 			flat(0xbc, float32(int32(own[0xbc])+int32(o.value)))
+		case optionTag("luca"):
+			flat(paramAvatarAlchemyLuck, float32(int32(own[paramAvatarAlchemyLuck])+int32(o.value)))
 		case optionTag("hp"):
 			// Accumulates onto the item's own contribution like hpa
 			// below: the keeper replaces per source, so a plain write

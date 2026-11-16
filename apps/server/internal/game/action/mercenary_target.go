@@ -36,7 +36,7 @@ func (rt *Runtime) acquireMercenaryTarget(step petCombatStep) {
 	if step.ref.TidWord>>11 != domain.MercenaryBand || step.state.combat != nil {
 		return
 	}
-	at := step.state.follower.Position(step.nowMs)
+	at := step.state.mover.AnyFollower().Position(step.nowMs)
 	best, gid := uint32(mercenarySightRange), uint32(0)
 	admit := func(target uint32, pose simulation.Spawn) {
 		// Natively the distance is stored as float32 before the inclusive sight test.

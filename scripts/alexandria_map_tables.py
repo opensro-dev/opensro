@@ -78,7 +78,8 @@ def merge_map_tables(native, vsro, regions):
 	region code of each city region (regioncode.txt), its zone names
 	(textzonename.txt), the local map (worldmap_mapinfo.txt), the landmark,
 	world-map and gate rows of worldmap_localinfo.txt and the SN_ texts they
-	name (textdataname.txt), including the city's authored shop/NPC markers.
+	name (textdataname.txt), including the city's authored shop/NPC markers;
+	the city's labels name shops and districts only, as on a native town page.
 	Returns {name: bytes} and a summary.
 	"""
 	region_ids = {(y << 8) | x for x, y in regions}
@@ -119,10 +120,13 @@ def merge_map_tables(native, vsro, regions):
 			continue
 		# Later tables also carry NPC lookup-only rows without a glyph or
 		# coordinates. Only complete static records enter the v1.150 map table.
-		city_label = row[8] == MAP_ALEXANDRIA_ID and row[2] == "1" and row[3].startswith("SN_")
+		# A town page labels its shops and districts (SN_ZONE_), never its
+		# NPCs: no v1.150 or v1.188 town page names an NPC (the 1.188 table's
+		# Alexandria page has only 11050-11068 and 26000-26009).
+		city_label = row[8] == MAP_ALEXANDRIA_ID and row[2] == "1" and row[3].startswith("SN_ZONE_")
 		city_icon = row[8] == MAP_ALEXANDRIA_ID and row[2] == "2" and row[3].lower().endswith(".ddj")
 		city_icon = city_icon and all(value.isdigit() and int(value) > 0 for value in row[13:15])
-		field_label = row[8] == OVERVIEW_ID and row[2] == "1" and row[3].startswith("SN_")
+		field_label = row[8] == OVERVIEW_ID and row[2] == "1" and row[3].startswith("SN_ZONE_")
 		field_label = field_label and all(value.isdigit() for value in row[9:11])
 		field_label = field_label and ((int(row[10]) << 8) | int(row[9])) in region_ids
 		# The overview's own icons (teleports, gates) inside the widened region
@@ -230,48 +234,25 @@ def overview_tiles(box, regions=None):
 
 
 # ================
-# seam_tiles
+# page_tiles
 #
-# Port-only, not native. The v1.150 overview draws decorative sea and blank
-# land around its world; the later client draws Egypt there. A tile that
-# shows no v1.150 region carries no v1.150 information, so where it touches
-# later art it takes the later art too, or the page shows a patchwork of
-# the two styles around Alexandria. The walk spreads only through such
-# tiles, so the v1.150 world and the decoration away from the import stay.
+# Port-only, not native. The v1.150 overview paints a dark frame into its
+# outermost tiles (the bottom of row 85 and the left of column 66). Once
+# the box grows west and south those tiles sit inside the page, and the
+# frame cuts across it as a band beside Flame Mountain and a stripe west
+# of Constantinople. The later client's overview is one painting of the
+# whole widened box: inside the v1.150 box its tiles are byte for byte the
+# v1.150 ones, except where the frame was or where the coast, lake and road
+# run on across the old edge. So a widened page takes every tile from the
+# later art, and the frame stays only on the page's real edge. An unwidened
+# box keeps the v1.150 page and replaces only the tiles that hold imported
+# land.
 # ================
-def seam_tiles(box, native_box, regions, native_land, differs):
-	"""
-	Overview tiles inside native_box that join the imported art to the page:
-	reachable (edge to edge) from a later-art tile through tiles with no
-	native_land(x, y) region whose later art differs(path) from the native.
-	"""
-	left, top, right, bottom = box
-	native_tiles = set(overview_tiles(native_box))
-	later = set(overview_tiles(box, regions)) | (set(overview_tiles(box)) - native_tiles)
-
-	def tile(x, y):
-		return f"interface/worldmap/map/map_world_{x}x{y}.ddj"
-
-	def open_tile(x, y):
-		return (tile(x, y) in native_tiles and tile(x, y) not in later
-			and not any(native_land(rx, ry) for rx in range(x, x + OVERVIEW_TILE_REGIONS)
-				for ry in range(y - OVERVIEW_TILE_REGIONS + 1, y + 1))
-			and differs(tile(x, y)))
-
-	step = OVERVIEW_TILE_REGIONS
-	cells = [(x, y) for y in range(top, bottom - 1, -step) for x in range(left, right + 1, step)]
-	frontier = [(x, y) for x, y in cells if tile(x, y) in later]
-	seams, seen = [], set(frontier)
-	while frontier:
-		x, y = frontier.pop()
-		for nx, ny in ((x - step, y), (x + step, y), (x, y - step), (x, y + step)):
-			if (nx, ny) in seen or not (left <= nx <= right and bottom <= ny <= top):
-				continue
-			seen.add((nx, ny))
-			if open_tile(nx, ny):
-				seams.append(tile(nx, ny))
-				frontier.append((nx, ny))
-	return sorted(seams)
+def page_tiles(box, native_box, regions):
+	"""The overview tiles the variant writes from the later client's art."""
+	if box != native_box:
+		return overview_tiles(box)
+	return overview_tiles(box, regions)
 
 
 # ================
@@ -280,12 +261,10 @@ def seam_tiles(box, native_box, regions, native_land, differs):
 def map_media_paths(regions, box=None, native_box=None):
 	"""
 	The Media.pk2 files the map needs: the local-map art, the minimap tiles and
-	the overview tiles the widened box adds or whose imported land changes.
+	the overview tiles page_tiles takes from the later art.
 	"""
 	tiles = [f"minimap/{x}x{y}.ddj" for x, y in regions]
-	overview = overview_tiles(box) if box else []
-	known = set(overview_tiles(native_box)) if native_box else set()
-	changed = set(overview_tiles(box, regions)) if box else set()
-	return list(MAP_TEXTURES) + tiles + [path for path in overview if path not in known or path in changed]
+	overview = page_tiles(box, native_box, regions) if box else []
+	return list(MAP_TEXTURES) + tiles + overview
 
 

@@ -221,7 +221,11 @@ func main() {
 		fail("open authority (is the GameWorld stopped?): %v", err)
 	}
 	defer s.Close()
-	w := &swapper{items: enterworld.NewTextdataItems(*textdata), magic: enterworld.NewTextdataMagicOptions(*textdata)}
+	magic := enterworld.NewTextdataMagicOptions(*textdata)
+	if err := magic.Load(); err != nil {
+		fail("magic options: %v", err)
+	}
+	w := &swapper{items: enterworld.NewTextdataItems(*textdata), magic: magic}
 	characters, err := characterNames(*names)
 	if err != nil {
 		fail("%v", err)

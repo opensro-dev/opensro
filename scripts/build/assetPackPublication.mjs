@@ -18,8 +18,9 @@ import { createHash } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import { publishBytesAtomically } from "./shared/atomicPublish.mjs";
 import { validateAssetPackIndex } from "./assetPackIndexValidation.mjs";
-import { decodeStoredMember, readPackPrefix, storedMemberBytes } from "./shared/packFormat.mjs";
+import { assertPackIndexFits, decodeStoredMember, readPackPrefix, storedMemberBytes } from "./shared/packFormat.mjs";
 import { collectPackGarbage } from "./assetPackGarbage.mjs";
+import { compareText } from "./shared/textOrder.mjs";
 
 const hash = bytes => createHash( "sha256" ).update( bytes ).digest( "hex" );
 
@@ -84,6 +85,7 @@ export async function validatePackedFontAtlases( index, publicRoot, { partial = 
 // game-models already held the same GLBs; the client refused the whole index
 // and every asset request failed.
 export async function publishAssetPackManifest( publicRoot, filename, bytes, options = {} ) {
+	assertPackIndexFits( bytes, filename );
 	const index = JSON.parse( bytes.toString( "utf8" ) );
 	validateAssetPackIndex( index );
 	const mainIndex = path.resolve( filename ) === path.resolve( publicRoot, "assets", "packs", "manifest.json" );
@@ -158,7 +160,7 @@ The published order: groups by name, assets by path.
 function sortedIndex( index ) {
 	return {
 		...index,
-		groups: [ ...index.groups ].sort( ( a, b ) => a.name.localeCompare( b.name ) ),
-		assets: [ ...index.assets ].sort( ( a, b ) => a.path.localeCompare( b.path ) )
+		groups: [ ...index.groups ].sort( ( a, b ) => compareText( a.name, b.name ) ),
+		assets: [ ...index.assets ].sort( ( a, b ) => compareText( a.path, b.path ) )
 	};
 }

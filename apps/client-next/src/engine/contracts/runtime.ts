@@ -259,6 +259,9 @@ export interface Renderer extends Disposable {
 	// Port-only, not native: whether holding V also hides other players'
 	// companions (Experimental, off by default).
 	vHidesCompanions?(): boolean;
+	// Port-only, not native (#3547): whether a wing dress's flight drops
+	// its fallback footsteps (Experimental, on by default).
+	silentWingFlight?(): boolean;
 	// Port-only, not native (Experimental "Dungeon character PVS", on by
 	// default): whether dungeon character PVS and floor admission are on.
 	dungeonCharacterPvs?(): boolean;
@@ -310,6 +313,8 @@ export interface Renderer extends Disposable {
 	): import("./character").CharacterActor["pose"] | null;
 	pickEntity( x: number, y: number, excluded: number, blindHeld?: boolean, filtered?: boolean ): number | null;
 	setWeather( value: import("@/engine/foundation/gameplay/weather").WeatherOptions | null ): void;
+	/** The seasonal world layers to draw (foundation/world/world-layers.ts). */
+	setWorldLayers( value: ReadonlySet<number> ): void;
 	setWorldClock( value: { timeOfDay: number; lunarDay: number; } | null ): void;
 	setUi( scene: import("./ui").UiScene | null ): void;
 	/** The damage text a scene's world annotations show this frame (UiScene.damageText). */
@@ -325,6 +330,13 @@ export interface Renderer extends Disposable {
 		clip: import("@/engine/foundation/animation/native-clip").NativeClip
 	): number;
 	setTeleportGates( entities: readonly import("./world").EntityState[] ): void;
+	/**
+	 * The release half of a frame for a tab that cannot display one: a hidden
+	 * page still adopts scenes and retires actors, and without this drain
+	 * their scenes, draws and texture sources wait for the next visible
+	 * frame (BUG-070). Optional so test stubs stay valid.
+	 */
+	maintenance?(): void;
 	setCharacterActors(
 		actors: readonly import("./character").CharacterActor[],
 		portraits?: readonly import("./character").CharacterActor[]

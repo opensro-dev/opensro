@@ -73,6 +73,32 @@ test("mall category order preserves the independent wire shop address and six-ro
 	assert.equal( mall.read().visible, false );
 });
 
+test("isOpen answers what read().visible does through open, close and reset", () => {
+	const mall = createItemMall();
+	const agree = expected => {
+		assert.equal( mall.isOpen(), expected );
+		assert.equal( mall.read().visible, expected );
+	};
+	agree( false );
+	mall.open();
+	agree( true );
+	mall.close();
+	agree( false );
+	mall.open();
+	mall.reset();
+	agree( false );
+});
+
+test("each rail is one shared table, so reading it allocates nothing", () => {
+	// The frame reads a rail every step (the mall model's categories).
+	assert.equal( mallCategories(), mallCategories() );
+	assert.equal( mallCategoriesLater(), mallCategoriesLater() );
+	const mall = createItemMall();
+	assert.equal( mall.read().categories, mallCategories() );
+	mall.setCategoriesLater( true );
+	assert.equal( mall.read().categories, mallCategoriesLater() );
+});
+
 test("compact pages keep action indices and purchase identity aligned through rotation", () => {
 	const mall = createItemMall(), state = catalogue();
 	mall.open();

@@ -64,7 +64,7 @@ func TestAdvancePetRefusedCompanionSkipsOwnerCopy(t *testing.T) {
 	key := petOwnerKey{division: testDivision, name: strings.ToLower(c.Name), gid: gid}
 
 	rt.advancePet(key, 1000)
-	if state := rt.petSessionFor(testDivision, c.Name, gid); state == nil || state.follower == nil {
+	if state := rt.petSessionFor(testDivision, c.Name, gid); state == nil || state.mover.AnyFollower() == nil {
 		t.Fatal("healthy pet did not take up its follow")
 	}
 
@@ -131,7 +131,7 @@ func TestAdvancePetBagRowCompanionAdmitsAndRefuses(t *testing.T) {
 	key := petOwnerKey{division: testDivision, name: strings.ToLower(c.Name), gid: petGID}
 
 	rt.advancePet(key, 1000)
-	if state := rt.petSessionFor(testDivision, c.Name, petGID); state == nil || state.follower == nil {
+	if state := rt.petSessionFor(testDivision, c.Name, petGID); state == nil || state.mover.AnyFollower() == nil {
 		t.Fatal("bag-row pet did not take up its follow")
 	}
 	pet.CurrentHP = 0

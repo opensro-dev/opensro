@@ -72,11 +72,59 @@ func (rt *Runtime) OperatorCharacter(division, name string) (map[string]any, err
 		return nil, fmt.Errorf("character not found")
 	}
 	world := rt.Worlds.Snapshot(simulation.WorldKey(division, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) })
-	return map[string]any{"id": c.ID, "name": c.Name, "level": c.Level, "hp": c.CurrentHP, "mp": c.CurrentMP,
+	walk, run := world.MovementSpeeds()
+	return map[string]any{"id": c.ID, "name": c.Name, "level": c.Level, "gold": goldOf(c), "hp": c.CurrentHP, "mp": c.CurrentMP,
 		"savedWorld": c.World, "liveWorld": world, "teleportMode": c.NativeTeleportMode,
+		"movementSpeeds": OperatorSpeeds{Walk: walk, Run: run}, "effects": rt.operatorEffects(division, c.Name),
 		"bodyStatus": c.NativeBodyStatus, "companions": c.Companions(), "inventory": c.MissionInventory,
 		"pk": c.PK, "pvpState": c.PVPState(), "aggressions": c.Aggressions,
 		"strength": domain.CharacterStrength(c), "intellect": domain.CharacterIntellect(c), "statPoints": c.StatPoints}, nil
+}
+
+/*
+================
+OperatorSpeeds
+
+The walk and run speeds the server's mover times paths with (WorldState
+keeps them out of its JSON). A client running at another speed rubber-bands,
+so a speed report needs both sides.
+================
+*/
+type OperatorSpeeds struct {
+	Walk float32 `json:"walk"`
+	Run  float32 `json:"run"`
+}
+
+/*
+================
+OperatorEffect
+
+One installed status effect, enough to tell which buff a speed comes from.
+================
+*/
+type OperatorEffect struct {
+	SkillID         uint32 `json:"skillId"`
+	Token           uint32 `json:"token"`
+	State           uint8  `json:"state"`
+	MovementPercent uint32 `json:"movementPercent,omitempty"`
+	Persistent      bool   `json:"persistent,omitempty"`
+	StopRequested   bool   `json:"stopRequested,omitempty"`
+	ExpiresAtMs     int64  `json:"expiresAtMs,omitempty"`
+}
+
+/*
+================
+operatorEffects
+================
+*/
+func (rt *Runtime) operatorEffects(division, name string) []OperatorEffect {
+	rows := []OperatorEffect{}
+	for _, effect := range rt.effects.Snapshot(division, name) {
+		rows = append(rows, OperatorEffect{SkillID: effect.SkillID, Token: effect.InstanceToken, State: uint8(effect.State),
+			MovementPercent: effect.MovementPercent, Persistent: effect.Persistent, StopRequested: effect.StopRequested,
+			ExpiresAtMs: effect.ExpiresAtMs})
+	}
+	return rows
 }
 
 /*

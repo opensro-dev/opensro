@@ -3,6 +3,7 @@
 test_skytemple_import.py - the Sky Temple import's admission and build rules.
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import json
 import os
 import struct
@@ -153,6 +154,22 @@ def placement_o2(object_id=None):
 
 
 # ================
+# region_navmesh
+#
+# A JMXVNVM 1000 navmesh whose object list places these ids; an id given
+# as (id, links) carries that many 6-byte link edges. The cell, edge and
+# height sections the importers never read are a stand-in tail.
+# ================
+def region_navmesh(*objects):
+	out = bytearray(b"JMXVNVM 1000") + struct.pack("<H", len(objects))
+	for entry in objects:
+		object_id, links = entry if isinstance(entry, tuple) else (entry, 0)
+		out += struct.pack("<I", object_id) + bytes(26) + struct.pack("<H", links)
+		out += bytes(range(6)) * links
+	return bytes(out + b"cells")
+
+
+# ================
 # mapinfo
 # ================
 def mapinfo():
@@ -217,6 +234,7 @@ class SkytempleHelpersTest(unittest.TestCase):
 		self.assertEqual(population["Rows"][0]["RegionID"], 21209)
 		row = population["Rows"][0]
 		self.assertEqual((row["MaxCount"], row["RespawnDelayMinSec"], row["RespawnDelayMaxSec"]), (1, 1, 3))
+		self.assertEqual((row["Radius"], row["GenerateRadius"]), (700, 600))
 		self.assertEqual(row["Controls"]["SightRange"], 100)
 		self.assertIsNone(row["Champion"])
 
@@ -230,6 +248,28 @@ class SkytempleHelpersTest(unittest.TestCase):
 		self.assertEqual(sky.o2_object_ids(patched), {901})
 		with self.assertRaisesRegex(ValueError, "parsed"):
 			sky.o2_object_ids(data + b"x")
+
+	# ================
+	# test_nvm_round_trip
+	#
+	# The object list is walked past each object's link edges, and only
+	# the ids change: a navmesh copied beside a remapped .o2 must name the
+	# same ids the placements do.
+	# ================
+	def test_nvm_round_trip(self):
+		data = region_navmesh((777, 2), 778)
+		self.assertEqual(sky.nvm_object_ids(data), {777, 778})
+		patched = sky.patch_nvm_objects(data, {777: 901})
+		self.assertEqual(sky.nvm_object_ids(patched), {901, 778})
+		self.assertEqual(len(patched), len(data))
+		# Signature and count, then the first object's u32 id: every byte
+		# outside that id, its link edges and the second object included, stays.
+		self.assertEqual(patched[:14] + patched[18:], data[:14] + data[18:])
+		self.assertIs(sky.patch_nvm_objects(data, {}), data)
+		with self.assertRaisesRegex(ValueError, "not a JMXVNVM"):
+			sky.patch_nvm_objects(b"nvm", {})
+		with self.assertRaisesRegex(ValueError, "runs past"):
+			sky.nvm_object_ids(data[:30])
 
 	# ================
 	# test_object_catalog_remap
@@ -425,7 +465,7 @@ def build_trees(base):
 		map_files[f"{y}/{x}.o"] = b"o"
 		map_files[f"{y}/{x}.o2"] = placement_o2(777 if (x, y) == (217, 82) else None)
 	(source / "Map.pk2").write_bytes(map_archive(map_files))
-	data_files = {f"navmesh/nv_{region_id(x, y):04x}.nvm": b"nvm" for _letter, x, y in sectors()}
+	data_files = {f"navmesh/nv_{region_id(x, y):04x}.nvm": region_navmesh() for _letter, x, y in sectors()}
 	(source / "Data.pk2").write_bytes(data_archive(data_files))
 	(source / "Particles.pk2").write_bytes(data_archive({}))
 	return native, output, source

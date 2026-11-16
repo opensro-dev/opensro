@@ -64,17 +64,39 @@ skeletons differ - so pick a donor of the item's own race.
 ================
 */
 export function createDonorPool( resolvedRoster ) {
-	const donorFor = ( race, gender ) =>
-		resolvedRoster.find(
-			( m ) => !m.isMount && m.codename.includes( `_${race}_${gender === "M" ? "MAN" : "WOMAN"}_` )
-		) ?? resolvedRoster.find( ( m ) => !m.isMount && (gender === "M" ? /_MAN_/ : /_WOMAN_/).test( m.codename ) );
-	const donors = new Map();
-	const donorSkeletons = new Map(); // donor.bsrPath -> parsed BSK (byName)
+	const loadDonor = createDonorLoader();
 	return async ( race, gender ) => {
-		const donorKey = `${race}|${gender}`;
-		if ( !donors.has( donorKey ) ) donors.set( donorKey, donorFor( race, gender ) );
-		const donor = donors.get( donorKey );
-		if ( !donor ) return null;
+		const donor = chooseDonor( resolvedRoster, race, gender );
+		return donor ? loadDonor( donor ) : null;
+	};
+}
+
+/*
+================
+chooseDonor
+
+The roster model that wears a (race, gender)'s items: one of the item's
+own race, else any of its gender; undefined when none. A cached item-set
+build keys on the choice (buildEquipmentVisuals.mjs), since a roster
+change can move a body to another donor without touching its files.
+================
+*/
+export function chooseDonor( resolvedRoster, race, gender ) {
+	return resolvedRoster.find(
+		( m ) => !m.isMount && m.codename.includes( `_${race}_${gender === "M" ? "MAN" : "WOMAN"}_` )
+	) ?? resolvedRoster.find( ( m ) => !m.isMount && (gender === "M" ? /_MAN_/ : /_WOMAN_/).test( m.codename ) );
+}
+
+/*
+================
+createDonorLoader
+
+Loads a chosen donor's skeleton once per donor BSR: { donor, donorSkel }.
+================
+*/
+export function createDonorLoader() {
+	const donorSkeletons = new Map(); // donor.bsrPath -> parsed BSK (byName)
+	return async ( donor ) => {
 		let donorSkel = donorSkeletons.get( donor.bsrPath );
 		if ( !donorSkel ) {
 			const donorChar = parseCharacterBsr( await loadDataAsset( donor.bsrPath ), donor.bsrPath );
@@ -297,7 +319,9 @@ export async function buildAuxiliarySet( bsrPath, glb, part ) {
 		bsr = parseCharacterBsr( buffer, bsrPath ),
 		link = parseAttachPartLink( buffer );
 	if ( !bsr.skeletonAttachBone ) throw Error( `Missing auxiliary socket ${bsrPath}` );
-	const avatar = await assembleAvatar( bsrPath, { slotForMesh: () => `part:${part}` } );
+	// standSharesWalk: a one-motion part (one BAN for every state) still
+	// needs its stand clip, which the runtime starts it on.
+	const avatar = await assembleAvatar( bsrPath, { slotForMesh: () => `part:${part}`, standSharesWalk: true } );
 	const clips = avatar.clips.map( c => c.role );
 	if ( !clips.includes( "stand" ) ) throw Error( `Missing auxiliary initial track ${bsrPath}` );
 	writeIntoPublicTreeSync( path.join( publicAssets, glb.slice( "/assets/".length ) ), avatarToGlb( avatar ) );
@@ -345,15 +369,16 @@ Port-only, not native: shinmu.cpd (MOB_TQ_FLAMEMASTER / MOB_QT_TQ_FLAMEMASTER)
 names degree-10 armor/weapon BSRs (heavy_10_*.bsr, spear_10.bsr) that v1.150
 Data.pk2 does not ship because v1.150 caps at degree 9. When SRO_QINSHI_TOMB
 is on and a _10 branch is absent, substitute the matching _09 BSR from the
-same directory so the Floor 5 unique boss can assemble.
+same directory so the Floor 5 unique boss can assemble. tombCombat is the
+posture to use; undefined reads the shard's (qinshiTombBranchFallback).
 ================
 */
-async function resolveCompoundBranchBsr( branchPath ) {
+async function resolveCompoundBranchBsr( branchPath, tombCombat ) {
 	const direct = await loadOptionalDataAsset( branchPath );
 	if ( direct !== null ) {
 		return { bsrPath: branchPath, buffer: direct };
 	}
-	const fallbackPath = qinshiTombBranchFallback( branchPath );
+	const fallbackPath = qinshiTombBranchFallback( branchPath, tombCombat );
 	if ( fallbackPath !== null ) {
 		const fallback = await loadOptionalDataAsset( fallbackPath );
 		if ( fallback !== null ) {
@@ -390,15 +415,17 @@ branch 0 is the kind-0 character body BSR (skeleton, aggregateBox, animation
 sets); branches 1..N are kind-5 item/hair/weapon BSRs attached through
 CCompound_AttachResourceWithMaterialSet (0x00a9e310) whose c == 1 cover keys
 hide matching body prims via CCompChar_ApplyItemCovers (0x00a89bd0).
+options.tombCombat is the tomb posture for the degree-10 branch fallback
+(resolveCompoundBranchBsr); a cached bake passes the one it is keyed on.
 ================
 */
-export async function assembleCompoundCharacter( cpdPath, source ) {
+export async function assembleCompoundCharacter( cpdPath, source, options = {} ) {
 	const cpdBuffer = source ?? (await loadDataAsset( cpdPath ));
 	const cpd = parseCompound( cpdBuffer, cpdPath );
 	if ( cpd.branches.length === 0 ) {
 		throw new Error( `${cpdPath}: compound has no branches` );
 	}
-	const baseBranch = await resolveCompoundBranchBsr( cpd.branches[0] );
+	const baseBranch = await resolveCompoundBranchBsr( cpd.branches[0], options.tombCombat );
 	const baseBsrPath = baseBranch.bsrPath;
 	const baseBuf = baseBranch.buffer;
 	const baseBsr = parseCharacterBsr( baseBuf, baseBsrPath );
@@ -412,7 +439,7 @@ export async function assembleCompoundCharacter( cpdPath, source ) {
 	const slotByMesh = new Map();
 
 	for ( let branchIndex = 1; branchIndex < cpd.branches.length; branchIndex++ ) {
-		const resolved = await resolveCompoundBranchBsr( cpd.branches[branchIndex] );
+		const resolved = await resolveCompoundBranchBsr( cpd.branches[branchIndex], options.tombCombat );
 		const itemBsrPath = resolved.bsrPath;
 		const itemBuf = resolved.buffer;
 		const itemBsr = parseJmxResourceBsr( itemBuf, itemBsrPath );

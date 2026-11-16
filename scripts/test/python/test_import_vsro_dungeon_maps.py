@@ -5,11 +5,11 @@ test_import_vsro_dungeon_maps.py - the Dungeonmap rows, signs and tiles
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import import_vsro_dungeon_maps as importer
 
@@ -97,7 +97,8 @@ class DungeonMapSignTests(unittest.TestCase):
 		label = rows[0]["labels"][0]
 		self.assertEqual(label["text"], "English A")
 		self.assertEqual((label["x"], label["y"]), (120, 34))
-		self.assertEqual(label["font"], 16)
+		# The font is cell 14; cell 13 before it is not the font (#3514).
+		self.assertEqual(label["font"], 9)
 		self.assertEqual(label["color"], [255, 128, 0])
 		self.assertEqual(rows[0]["signs"], [])
 

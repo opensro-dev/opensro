@@ -68,6 +68,7 @@ import {
 } from "@/engine/foundation/animation/status-presentation";
 import type { CharacterActor } from "@/engine/contracts/character";
 import { survivalEffectActors } from "./survival-effects";
+import { carriedPose, createCorrectionCarry, predictedCast } from "./correction-carry";
 import { impactSource } from "@/engine/foundation/animation/impact-source";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { projectileSpace, sampleProjectile, stepHomingProjectile } from "@/engine/foundation/animation/projectile-time";
@@ -84,7 +85,7 @@ import type { EffectCatalog, EffectStage, EffectVisual, EffectTrigger } from "@/
 import { importedModelBasis, nativeRootOffset } from "@/engine/foundation/rendering/world-math";
 import { SPINE_AIM_BONE } from "@/engine/foundation/animation/spine-aim";
 import { createSpineAims } from "./spine-aims";
-import type { GameplayState, Pose } from "@/engine/contracts/gameplay";
+import type { GameplayState, Pose, VitalState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import { characterHeadingYaw, nativeHeadingYaw, radians, type Radians } from "@/engine/foundation/math/angles";
 import { hawkInitial, hawkEvent, hawkAnimation, stepHawk, type HawkState } from "@/engine/foundation/animation/hawk";
@@ -132,6 +133,9 @@ type EffectGameplay = Pick<
 	| "attachedEffects"
 	| "homingProjectiles"
 	| "petTraining"
+	| "movementRevision"
+	| "movementPath"
+	| "movementTransition"
 >;
 // TID4 6 in the COS type word: the captured quest monster.
 const CAPTURED_MONSTER_TYPE = 6 << 11;
@@ -143,6 +147,20 @@ const CAPTURED_MONSTER_TYPE = 6 << 11;
 // (trimToEffectBudget); only a cast arriving with every slot taken by
 // other casts skips its visuals.
 const EFFECT_ACTOR_BUDGET = 2048;
+// What effects change on a character's own model (appearance), and one
+// motion an attached effect imposes on its host (hostMotions).
+type EffectAppearance = Readonly<{
+	pointLight?: NonNullable<CharacterActor["pointLight"]>;
+	weaponHidden: boolean;
+	boneRotation?: CharacterActor["boneRotation"];
+	materialTint: readonly [number, number, number] | undefined;
+	scale: number;
+}>;
+type HostMotion = Readonly<{ set: string; id: number; key: string; started: number; stoppedAt: number | undefined; }>;
+// What effects change on a character with none of them: the appearance and
+// the host motions every such character is handed, shared and frozen.
+const PLAIN_APPEARANCE: EffectAppearance = Object.freeze( { weaponHidden: false, materialTint: undefined, scale: 1 } );
+const NO_HOST_MOTIONS: readonly HostMotion[] = Object.freeze( [] );
 const CROW_EFFECT_LIMIT = 64;
 // A one-shot whose model is still not resident this long after its spawn is dropped.
 const UNREADY_ONE_SHOT_SECONDS = 15;
@@ -404,6 +422,7 @@ export function createCharacterEffects(
 	}
 	const impactIndexes = new Map<number, ReadonlyMap<string, number>>();
 	const seen = new Set<string>(), active = new Map<number, EffectVisual>(), unsupported = new Set<string>();
+	const correctionCarry = createCorrectionCarry();
 	const pendingTriggers = new Map<string, EffectTrigger>();
 	// Effects the budget turned away since the last takeBudget, and the
 	// actors the last step drew: the frame probe's evidence that a crowd
@@ -483,6 +502,13 @@ export function createCharacterEffects(
 		string,
 		{ effect: Attachment; visuals: AttachedVisual[]; stopped: boolean; started: number; stoppedAt?: number; }
 	>();
+	// The attached keys on each host, in attached's order: hostMotions reads
+	// its host's rows only.
+	const attachedByHost = new Map<number, Set<string>>();
+	// The appearance each character was last handed while any effect changes
+	// it, kept while every field holds: one identity per change, which the
+	// presentation stamps compare.
+	const appearances = new Map<number, EffectAppearance>();
 	const materials = new Map<
 			number,
 			{
@@ -615,6 +641,17 @@ export function createCharacterEffects(
 		return `${effect.recordName ?? "skill"}:${effect.gid}:${effect.token}:${effect.skill}:${effect.phase}:${
 			effect.receivedAtMs ?? "entry"
 		}`;
+	}
+	/*
+	================
+	dropAttached
+	Removes one attached effect and its host's index entry.
+	================
+	*/
+	function dropAttached( key: string, gid: number ) {
+		attached.delete( key );
+		const keys = attachedByHost.get( gid );
+		if ( keys?.delete( key ) && !keys.size ) attachedByHost.delete( gid );
 	}
 	const persistent = new Map<string, { started: number; actors: CharacterActor[]; }>();
 	/*
@@ -1275,6 +1312,24 @@ export function createCharacterEffects(
 				}
 				const castStates = new Map( gameplay?.casts.map( cast => [ cast.token, cast ] ) ?? [] );
 				const current = new Set( castStates.keys() );
+				// A server correction of the local mover carries the world-placed
+				// visuals of its predicted casts with it (correction-carry.ts): the
+				// press placed them where the walk had run ahead. A cast the server
+				// opened unpredicted placed them at native timing and keeps them.
+				const carry = correctionCarry.step( gameplay?.localGid !== undefined ? gameplay : null );
+				if ( carry ) {
+					for ( const [gid, visual] of active ) {
+						const cast = castStates.get( visual.token );
+						if (
+							!cast || !predictedCast( cast ) || visual.owner !== gameplay!.localGid ||
+							visual.attachment.kind !== "world" || visual.flight
+						) continue;
+						active.set( gid, {
+							...visual,
+							actor: { ...visual.actor, pose: carriedPose( visual.actor.pose, carry ) }
+						} );
+					}
+				}
 				const byGid = new Map( entities.map( entity => [ entity.gid, entity ] ) );
 				// All effect anchors sit on the body as drawn (#1442): the local
 				// player's anchor is the frame's drawn pose when the frame
@@ -1373,12 +1428,19 @@ export function createCharacterEffects(
 					Object.assign( row, sample, { previous: clock } );
 				}
 				// 85C590 owns named PARAM_ decorations and one material register.
-				// Dead appearance and zero hp do not gate it.
+				// Dead appearance and zero hp do not gate it. The vitals index
+				// keeps find()'s first row per gid; the revisions map mutates in
+				// place - its only reader iterates the stored row inside this
+				// same step, so the per-entity copy bought nothing.
+				const vitalsByGid = new Map<number, VitalState>();
+				for ( const row of gameplay?.vitals ?? [] ) {
+					if ( !vitalsByGid.has( row.gid ) ) vitalsByGid.set( row.gid, row );
+				}
 				for ( const entity of entities ) {
-					const mask = (gameplay?.vitals ?? []).find( v => v.gid === entity.gid )?.abnormal ?? 0;
+					const mask = vitalsByGid.get( entity.gid )?.abnormal ?? 0;
 					const prior = statuses.get( entity.gid );
 					const view = status.view( entity.gid, mask, entity.appearanceState?.[2] ?? 0 ); // +0x2B6 (85EC00): 1 = berserk skips the material calls
-					const revisions = new Map( prior?.revisions );
+					const revisions = prior?.revisions ?? new Map<string, number>();
 					for ( const name of view.names ) if ( !revisions.has( name ) ) revisions.set( name, clock );
 					for ( const name of revisions.keys() ) if ( !view.names.includes( name ) ) revisions.delete( name );
 					statuses.set( entity.gid, { view, revisions } );
@@ -1429,6 +1491,7 @@ export function createCharacterEffects(
 					row.previous = now;
 				}
 				for ( const gid of hwan.keys() ) if ( !byGid.has( gid ) ) hwan.delete( gid );
+				for ( const gid of appearances.keys() ) if ( !byGid.has( gid ) ) appearances.delete( gid );
 				for ( const gid of statuses.keys() ) {
 					if ( !byGid.has( gid ) ) {
 						statuses.delete( gid );
@@ -2213,13 +2276,20 @@ export function createCharacterEffects(
 				const result: CharacterActor[] = [];
 				for ( let i = crowEffects.length - 1; i >= 0; i-- ) {
 					const burst = crowEffects[i]!;
-					// Port-only arena one-shots wait for their own models; other crow cues retain existing timing.
-					if ( burst.started === undefined && burst.cue === 9 ) {
+					// Pet cues and the arena roar keep their full visible lifetime after admission.
+					if ( burst.started === undefined && burst.cue !== 10 ) {
 						burst.queuedAt ??= now;
-						const paths = [
-							"/assets/effects/challenging-roar-aura",
-							"/assets/effects/challenging-roar-shockwave"
-						];
+						const paths = burst.cue === 9 ?
+							[ "/assets/effects/challenging-roar-aura", "/assets/effects/challenging-roar-shockwave" ] :
+							[
+								burst.cue === 0 ?
+									"/assets/effects/crow-wind-burst" :
+									burst.cue === 1 ?
+									"/assets/effects/crow-heal-wisp" :
+									burst.cue === 4 ?
+									"/assets/effects/crow-mana-wisp" :
+									"/assets/effects/crow-feather"
+							];
 						let admitted = true;
 						for ( const path of paths ) if ( !ready( path ) ) admitted = false;
 						if ( !admitted ) {
@@ -2251,12 +2321,6 @@ export function createCharacterEffects(
 					}
 					if ( burst.cue > 0 ) {
 						// Native unlit materials bypass instance tint; recovery colors live in the textures.
-						const model = burst.cue === 1 ?
-							"/assets/effects/crow-heal-wisp" :
-							burst.cue === 4 ?
-							"/assets/effects/crow-mana-wisp" :
-							"/assets/effects/crow-feather";
-						if ( !ready( model ) ) continue;
 						const tint: readonly [number, number, number] = burst.cue === 2 ?
 							[ .8, .65, .4 ] :
 							burst.cue >= 6 && burst.cue <= 7 ?
@@ -2266,6 +2330,12 @@ export function createCharacterEffects(
 						const u = age / 1.2, count = (3 + burst.book) * (recovery ? 2 : 1);
 						for ( let feather = 0; feather < count; feather++ ) {
 							const mote = recovery && feather % 2 === 1;
+							const model = burst.cue === 1 ?
+								"/assets/effects/crow-heal-wisp" :
+								burst.cue === 4 ?
+								"/assets/effects/crow-mana-wisp" :
+								"/assets/effects/crow-feather";
+							if ( !ready( model ) ) continue;
 							if ( recovery ) {
 								const phase = (u + feather * .61803398875) % 1;
 								const mana = burst.cue === 4, angle = feather * 2.39996323 + phase * (mana ? 2.4 : .8);
@@ -2333,7 +2403,6 @@ export function createCharacterEffects(
 						}
 						continue;
 					}
-					if ( !ready( "/assets/effects/crow-wind-burst" ) ) continue;
 					for ( let band = 0; band < 3; band++ ) {
 						const u = (age - band * .1) / .9;
 						if ( u < 0 || u >= 1 ) continue;
@@ -2959,6 +3028,9 @@ export function createCharacterEffects(
 								started: now,
 								...(stopped ? { stoppedAt: now } : {})
 							} );
+							const keys = attachedByHost.get( effect.gid );
+							if ( keys ) keys.add( key );
+							else attachedByHost.set( effect.gid, new Set( [ key ] ) );
 							if ( !effect.recordName ) {
 								activations.push( { gid: effect.gid, skill: effect.skill, at: now } );
 							}
@@ -2972,7 +3044,7 @@ export function createCharacterEffects(
 						const owner = presentation.get( row.effect.gid );
 						if ( !byGid.has( row.effect.gid ) ) {
 							releaseMaterial( key );
-							attached.delete( key );
+							dropAttached( key, row.effect.gid );
 							continue;
 						}
 						if ( !row.stopped && !wanted.has( key ) ) {
@@ -3199,7 +3271,9 @@ export function createCharacterEffects(
 						}
 						if ( row.stopped && !row.visuals.length ) {
 							releaseMaterial( key );
-							if ( !wanted.has( key ) && now - (row.stoppedAt ?? now) >= .2 ) attached.delete( key );
+							if ( !wanted.has( key ) && now - (row.stoppedAt ?? now) >= .2 ) {
+								dropAttached( key, row.effect.gid );
+							}
 						}
 					}
 					// Past the budget the farthest attached effects give way; the
@@ -4050,20 +4124,44 @@ export function createCharacterEffects(
 		================
 		appearance
 		What effects change on a character's own model: hit light, hidden
-		weapon, material tint and status decoration.
+		weapon, material tint and status decoration. The same frozen object
+		while every field holds; an aimed character's is new each call, as
+		its spine aim's rotation is read new.
 		================
 		*/
-		appearance( gid: number ) {
+		appearance( gid: number ): EffectAppearance {
 			const spineRotation = spineAims.rotation( gid );
 			const roar = roarAppearances.get( gid );
-			const pointLight = roar?.pointLight ?? hitLights.get( gid );
-			return {
+			const pointLight = roar?.pointLight ?? hitLights.get( gid ),
+				weaponHidden = hiddenWeapons.has( gid ),
+				materialTint = roar?.materialTint ?? materials.get( gid )?.color,
+				scale = (hwan.get( gid )?.value ?? 1) * (roar?.scale ?? 1);
+			if ( spineRotation ) {
+				return Object.freeze( {
+					...(pointLight ? { pointLight } : {}),
+					weaponHidden,
+					boneRotation: { bone: SPINE_AIM_BONE, rotation: spineRotation },
+					materialTint,
+					scale
+				} );
+			}
+			if ( !pointLight && !weaponHidden && !materialTint && scale === 1 ) {
+				appearances.delete( gid );
+				return PLAIN_APPEARANCE;
+			}
+			const kept = appearances.get( gid );
+			if (
+				kept && kept.pointLight === pointLight && kept.weaponHidden === weaponHidden &&
+				kept.materialTint === materialTint && kept.scale === scale
+			) return kept;
+			const appearance = Object.freeze( {
 				...(pointLight ? { pointLight } : {}),
-				weaponHidden: hiddenWeapons.has( gid ),
-				...(spineRotation ? { boneRotation: { bone: SPINE_AIM_BONE, rotation: spineRotation } } : {}),
-				materialTint: roar?.materialTint ?? materials.get( gid )?.color,
-				scale: (hwan.get( gid )?.value ?? 1) * (roar?.scale ?? 1)
-			};
+				weaponHidden,
+				materialTint,
+				scale
+			} );
+			appearances.set( gid, appearance );
+			return appearance;
 		},
 		/*
 		================
@@ -4131,18 +4229,26 @@ export function createCharacterEffects(
 		/*
 		================
 		hostMotions
-		The motions attached effects impose on their host character.
+		The motions attached effects impose on their host character, in
+		attached's order; the shared empty list when there are none.
 		================
 		*/
-		hostMotions( gid: number ) {
-			return [ ...attached.values() ].filter( row =>
-				row.effect.gid === gid && (row.effect.phase === 1 || catalog?.[String( row.effect.skill )]?.overlap)
-			).flatMap( row => {
-				const motion = catalog?.[String( row.effect.skill )]?.attachedMotion;
-				return motion ?
-					[ { ...motion, key: attachedKey( row.effect ), started: row.started, stoppedAt: row.stoppedAt } ] :
-					[];
-			} );
+		hostMotions( gid: number ): readonly HostMotion[] {
+			let motions: HostMotion[] | undefined;
+			for ( const key of attachedByHost.get( gid ) ?? [] ) {
+				const row = attached.get( key )!, record = catalog?.[String( row.effect.skill )];
+				if ( row.effect.phase !== 1 && !record?.overlap ) continue;
+				const motion = record?.attachedMotion;
+				if ( motion ) {
+					(motions ??= []).push( {
+						...motion,
+						key: attachedKey( row.effect ),
+						started: row.started,
+						stoppedAt: row.stoppedAt
+					} );
+				}
+			}
+			return motions ?? NO_HOST_MOTIONS;
 		},
 		/*
 		================
@@ -4220,6 +4326,7 @@ export function createCharacterEffects(
 		================
 		*/
 		reset() {
+			correctionCarry.reset();
 			external.clear();
 			crowEffects.length = 0;
 			externalSerial = 0;
@@ -4257,6 +4364,8 @@ export function createCharacterEffects(
 			visualStarts.clear();
 			active.clear();
 			attached.clear();
+			attachedByHost.clear();
+			appearances.clear();
 			persistent.clear();
 			unsupported.clear();
 			failure = null;
@@ -4297,6 +4406,8 @@ export function createCharacterEffects(
 			visualStarts.clear();
 			active.clear();
 			attached.clear();
+			attachedByHost.clear();
+			appearances.clear();
 			persistent.clear();
 			impactIndexes.clear();
 			catalog = null;

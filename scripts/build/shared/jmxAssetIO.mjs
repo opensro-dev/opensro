@@ -10,6 +10,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extractedRoot, imageSourceRoot, normalizeAssetPath } from "../world/paths.mjs";
 import { parseJmxBmtMaterialSet, resolveBmtTexturePath } from "../world/objects/formats.mjs";
+import { noteRead } from "../graph/reads.mjs";
 
 /** Root of extracted game data (prim/, res/, …). */
 export const dataRoot = path.join( extractedRoot, "Data_extracted" );
@@ -19,9 +20,11 @@ export function dataAssetPath( gamePath ) {
 	return path.join( dataRoot, ...normalizeAssetPath( gamePath ).split( "/" ) );
 }
 
-/** Read a game-relative asset from Data_extracted. */
+/** Read a game-relative asset from Data_extracted (noted for actions, graph/reads.mjs). */
 export async function loadDataAsset( gamePath ) {
-	return readFile( dataAssetPath( gamePath ) );
+	const file = dataAssetPath( gamePath );
+	noteRead( file );
+	return readFile( file );
 }
 
 /** Map a game-relative .ddj (or other texture ref) to its converted PNG on disk. */
@@ -29,6 +32,9 @@ export function convertedTexturePath( textureGamePath ) {
 	const source = normalizeAssetPath( textureGamePath );
 	// The converter preserves the source extension for DDJ/TGA stem collisions.
 	const qualified = path.join( imageSourceRoot, "Data_extracted", ...`${source}.png`.split( "/" ) );
+	// The choice depends on the probe: an action that reads the fallback reruns
+	// once the qualified name appears (graph/reads.mjs).
+	noteRead( qualified );
 	if ( existsSync( qualified ) ) return qualified;
 	const normalized = source.replace( /\.ddj$/i, ".png" );
 	return path.join( imageSourceRoot, "Data_extracted", ...normalized.split( "/" ) );

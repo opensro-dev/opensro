@@ -16,6 +16,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { exportDataAsset } from "../shared/dataAssetExport.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
+import { janganTombTeleportEnabled, loadJanganTombTeleportLinkRows } from "../shared/janganTombTeleport.mjs";
+import { loadMuhanTeleportDataRows, loadMuhanTeleportLinkRows, muhanEnabled } from "../shared/muhan.mjs";
 import { loadQinShiTombTeleportLinkRows, qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
 import { readTextDataLinesSync, splitTextDataRow } from "../shared/textDataIo.mjs";
 import { extractedRoot, gameRoot, publicRoot } from "../world/paths.mjs";
@@ -63,7 +65,14 @@ export function buildTeleportDataAsset() {
 				columns[55] === "xxx" ? "" : columns[55] ?? ""
 			] )
 	);
-	const teleportRows = readRows( teleportDataPath )
+	const rawTeleportRows = [ ...readRows( teleportDataPath ) ];
+	// Port-only, not native (#3314): when SRO_MUHAN is enabled, include
+	// the arena manager hub and the eight Muhan gate rows (227..235)
+	// from the server's overlay; v1.150 teleportdata.txt has none.
+	if ( muhanEnabled() ) {
+		rawTeleportRows.push( ...loadMuhanTeleportDataRows().rows );
+	}
+	const teleportRows = rawTeleportRows
 		.filter( ( columns ) => Number( columns[0] ) !== 0 )
 		.map( ( columns ) => ({
 			id: Number( columns[1] ) >>> 0,
@@ -87,6 +96,19 @@ export function buildTeleportDataAsset() {
 				rawLinkRows.push( columns );
 			}
 		}
+	}
+	// Port-only, not native (#3314): when SRO_MUHAN is enabled, include
+	// the 16 Muhan links (hub 227 to gates 228..235, gates back to the
+	// town gate 5). Every source is a Muhan row appended above, so no
+	// building-source filter applies.
+	if ( muhanEnabled() ) {
+		rawLinkRows.push( ...loadMuhanTeleportLinkRows().rows );
+	}
+	// Port-only, not native: when SRO_JANGAN_TOMB_TELEPORT (and the tomb)
+	// is on, include the Jangan gate's tomb floor links; every row
+	// they name already exists in v1.150 teleportdata.txt.
+	if ( janganTombTeleportEnabled() ) {
+		rawLinkRows.push( ...loadJanganTombTeleportLinkRows().rows );
 	}
 	const linkRows = rawLinkRows
 		.filter( ( columns ) => Number( columns[0] ) !== 0 )

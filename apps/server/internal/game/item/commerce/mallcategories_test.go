@@ -206,6 +206,17 @@ func TestMallCategoriesOn(t *testing.T) {
 	if offer := mallOfferNamed(catalog, "PACKAGE_ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_01"); offer != nil && offer.Badge != "" {
 		t.Fatalf("a shipped alchemy offer is badged %q", offer.Badge)
 	}
+	// The imported pet scrolls (#3328) wait for their rows: this
+	// catalogue's item table imports none, so no pet listing stands.
+	for _, code := range []string{
+		"PACKAGE_ITEM_COS_P_FOX_SCROLL",
+		"PACKAGE_ITEM_COS_P_WINTER_SNOWMAN_SCROLL",
+		"PACKAGE_ITEM_COS_P_WINTER_SNOWMAN_EVENT_SCROLL",
+	} {
+		if offer := mallOfferNamed(catalog, code); offer != nil {
+			t.Fatalf("%s is listed without its imported item row", code)
+		}
+	}
 }
 
 /*

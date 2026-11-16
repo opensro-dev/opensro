@@ -32,7 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import import_vsro_alexandria as stage1  # noqa: E402
 import sro_pk2  # noqa: E402
-from prepare_client_resources import safe_target, write_atomically  # noqa: E402
+from prepare_client_resources import file_digest, safe_target, write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT  # noqa: E402
 
 ROOT_ENV = "SRO_VSRO_ROOT"
@@ -40,22 +40,6 @@ MANIFEST_FORMAT = "opensro-vsro-item-glow-v1"
 MANIFEST_NAME = ".opensro-vsro-item-glow.json"
 OUTPUT_FOLDER = "VsroItemGlow_extracted"
 TABLES = ("resinfo/itemtypenumber.txt", "resinfo/itemoption.txt", "resinfo/itemoptionefp.txt")
-HASH_CHUNK_BYTES = 1 << 20
-
-
-"""
-================
-archive_digest
-
-The archive's sha256, read in chunks so a 700 MB Media.pk2 is never held.
-================
-"""
-def archive_digest(path):
-	digest = hashlib.sha256()
-	with open(path, "rb") as source:
-		for chunk in iter(lambda: source.read(HASH_CHUNK_BYTES), b""):
-			digest.update(chunk)
-	return digest.hexdigest()
 
 
 """
@@ -86,7 +70,7 @@ def import_item_glow(media, output):
 		files[name] = hashlib.sha256(found[name]).hexdigest()
 	manifest = {
 		"format": MANIFEST_FORMAT,
-		"source": {"archive": "Media.pk2", "sha256": archive_digest(media)},
+		"source": {"archive": "Media.pk2", "sha256": file_digest(media)},
 		"files": files
 	}
 	write_atomically(output / MANIFEST_NAME, (json.dumps(manifest, indent=2) + "\n").encode())

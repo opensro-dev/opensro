@@ -11,14 +11,15 @@ the native-versus-VSRO catalog comparison.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import hashlib
+import os
 import struct
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import import_vsro_alexandria as alex  # noqa: E402
 
 
@@ -116,6 +117,55 @@ class AvailabilityTests(unittest.TestCase):
 	def test_the_seeds_stay_even_with_no_candidates(self):
 		self.assertEqual(alex.connected_regions([(5, 6), (4, 6)], set()), [(4, 6), (5, 6)])
 
+	# ================
+	# test_crossing_gates_seed_the_terrain_at_their_far_end
+	#
+	# Delta West's link lands in Kings Valley: that region and the terrain
+	# touching it are imported, so the teleport has somewhere to land.
+	# ================
+	def test_crossing_gates_seed_the_terrain_at_their_far_end(self):
+		def gate(code, region):
+			return ["1", "181", code, "27758", "SN_ZONE", str(region), "910", "221", "1793", "50", "0", "0", "1"]
+		raw = utf16_table([
+			gate("GATE_KINGSVALLEY_GATE", (74 << 8) | 57),
+			gate("GATE_STORMDESERT_GATE", (84 << 8) | 65),
+			gate("GATE_TOMB_GATE_OUT_1", 0x8000 | 12),
+			gate("GATE_SD1", (90 << 8) | 48)
+		])
+		crossings = alex.gate_seed_regions(raw)
+		self.assertEqual(crossings, {(57, 74), (65, 84)})
+		self.assertEqual(alex.gate_seed_regions(raw, ("GATE_TOMB_GATE_OUT_1",)), set())
+		candidates = {(57, 74), (58, 74), (65, 84), (90, 90)}
+		self.assertEqual(alex.connected_regions([(48, 90)], candidates, crossings),
+			[(57, 74), (58, 74), (65, 84), (48, 90)])
+
+	def test_a_missing_crossing_gate_stops_the_import(self):
+		raw = utf16_table([["1", "180", "GATE_STORMDESERT_GATE", "0", "SN", str((84 << 8) | 65)]])
+		with self.assertRaises(SystemExit):
+			alex.gate_seed_regions(raw)
+
+	# ================
+	# test_a_gate_on_a_region_without_terrain_is_reported
+	#
+	# A gate whose outdoor region is outside the terrain (the variant's plus
+	# the native, read from the native mapinfo.mfo) would end the session on
+	# arrival; dungeon gates and gates outside codes are not this check's.
+	# ================
+	def test_a_gate_on_a_region_without_terrain_is_reported(self):
+		def at(code, region):
+			return ["1", "1", code, "0", "SN", str(region), "0", "0", "0", "50", "0", "0", "1"]
+		raw = utf16_table([
+			at("GATE_SD1", (90 << 8) | 48),
+			at("GATE_NATIVE", (100 << 8) | 100),
+			at("GATE_KINGSVALLEY_GATE", (74 << 8) | 57),
+			at("GATE_TOMB_GATE_OUT_1", 0x8000 | 12),
+			at("GATE_ELSEWHERE", (10 << 8) | 10)
+		])
+		codes = ("GATE_SD1", "GATE_NATIVE", "GATE_KINGSVALLEY_GATE", "GATE_TOMB_GATE_OUT_1")
+		terrain = {(48, 90)} | alex.mfo_regions(availability({(100, 100)}))
+		self.assertEqual(alex.gates_without_terrain(raw, codes, terrain), ["GATE_KINGSVALLEY_GATE"])
+		self.assertEqual(alex.gates_without_terrain(raw, codes, terrain | {(57, 74)}), [])
+
 
 class TerrainTests(unittest.TestCase):
 	def test_tile_ids_drop_the_scale_bits(self):
@@ -191,12 +241,79 @@ class PinTests(unittest.TestCase):
 		with self.assertRaises(SystemExit):
 			alex.require_vsro_pin(self.vsro, ("Map", "Media"), pins)
 
+	# ================
+	# test_a_later_step_admits_an_unchanged_verified_archive
+	#
+	# #3590: the variant step trusts stage 1's hash only while the file keeps
+	# the size and mtime it was hashed at and the digest is today's pin. The
+	# swapped bytes below keep both, so admission (not a second hash) is what
+	# lets them through; a moved mtime or a stale pin hashes again and fails.
+	# ================
+	def test_a_later_step_admits_an_unchanged_verified_archive(self):
+		pins = self.pin("Media", b"the pinned client")
+		alex._verified_digests.clear()
+		alex.verify_vsro_archive(self.vsro, "Media", pins)
+		alex.write_verified_archives(self.vsro)
+		archive = self.vsro / "Media.pk2"
+		stat = archive.stat()
+		archive.write_bytes(b"the pinned cliEnt")
+		os.utime(archive, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+		alex._verified_archives.clear()
+		self.assertEqual(alex.admit_verified_archives(self.vsro, pins), 1)
+		alex.verify_vsro_archive(self.vsro, "Media", pins)
+		alex._verified_archives.clear()
+		os.utime(archive, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+		self.assertEqual(alex.admit_verified_archives(self.vsro, pins), 0)
+		with self.assertRaises(SystemExit):
+			alex.verify_vsro_archive(self.vsro, "Media", pins)
+
+	def test_a_record_of_another_pin_is_not_admitted(self):
+		pins = self.pin("Media", b"the pinned client")
+		alex._verified_digests.clear()
+		alex.verify_vsro_archive(self.vsro, "Media", pins)
+		alex.write_verified_archives(self.vsro)
+		alex._verified_archives.clear()
+		self.assertEqual(alex.admit_verified_archives(self.vsro, {"Media": "0" * 64}), 0)
+		self.assertEqual(alex.admit_verified_archives(self.vsro / "absent", pins), 0)
+
 	def test_the_checked_in_pin_names_every_archive_the_chain_reads(self):
 		pins = alex.archive_pins()
 		self.assertEqual(set(pins), set(alex.ARCHIVE_NAMES))
 		for digest in pins.values():
 			self.assertEqual(len(digest), 64)
 			self.assertTrue(all(c in "0123456789abcdef" for c in digest), digest)
+
+
+class ArchiveIndexTests(unittest.TestCase):
+	"""#3590: a directory is walked once per process for the same archive bytes."""
+
+	def setUp(self):
+		alex._archive_indexes.clear()
+		self.addCleanup(alex._archive_indexes.clear)
+		self.walks = 0
+		original = alex.sro_pk2.read_directory
+
+		def counting(data, blocks=None):
+			self.walks += 1
+			return [alex.sro_pk2.Entry(r"Server_Dep\A.txt", len(data), 1)]
+
+		alex.sro_pk2.read_directory = counting
+		self.addCleanup(setattr, alex.sro_pk2, "read_directory", original)
+
+	def test_the_same_bytes_are_walked_once(self):
+		first = alex.archive_index(b"archive one")
+		second = alex.archive_index(bytes(b"archive one"))
+		self.assertEqual(self.walks, 1)
+		self.assertEqual(list(first), ["server_dep/a.txt"])
+		first.clear()
+		self.assertEqual(list(second), ["server_dep/a.txt"], "a caller's edit stays in its own copy")
+		self.assertEqual(list(alex.archive_index(b"archive one")), ["server_dep/a.txt"])
+
+	def test_other_bytes_are_walked_again(self):
+		alex.archive_index(b"archive one")
+		index = alex.archive_index(b"archive two!")
+		self.assertEqual(self.walks, 2)
+		self.assertEqual(index["server_dep/a.txt"].offset, len(b"archive two!"))
 
 
 if __name__ == "__main__":

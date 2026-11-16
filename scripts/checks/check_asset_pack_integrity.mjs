@@ -4,7 +4,7 @@
 //
 // Byte-hashing is the expensive part (~GBs of packs), so it can be short-circuited
 // through a persistent stat-keyed hash cache (scripts/build/shared/fileHashCache.mjs),
-// kept in a check-owned file (.state/asset-integrity-hash-cache.json) so this gate
+// kept in a check-owned file (buildStatePath( "asset-integrity-hash-cache.json" )) so this gate
 // never mutates the shared build cache that concurrent build lanes read.
 //
 // Safety model - the cache can only CONFIRM, never overrule:
@@ -27,9 +27,10 @@
 //   SRO_ASSET_INTEGRITY_CACHE_PATH   override the cache file location (tests use this
 //                                    so temp trees never touch the production cache).
 
-import { CLIENT_PUBLIC_ROOT } from "../lib/generatedRoot.mjs";
+import { buildStatePath, CLIENT_PUBLIC_ROOT } from "../lib/generatedRoot.mjs";
 import {
 	ASSET_PACK_HEADER_FORMAT,
+	ASSET_PACK_INDEX_MAX_BYTES,
 	ASSET_PACK_MAGIC,
 	ASSET_PACK_VERSION,
 	decodeStoredMember,
@@ -40,11 +41,8 @@ import {
 import { createHash } from "node:crypto";
 import { open, readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { fileHashCacheDisabled, openFileHashCache } from "../build/shared/fileHashCache.mjs";
 
-const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
-const rebuildRoot = path.resolve( scriptDir, "..", ".." );
 const defaultPublicRoot = CLIENT_PUBLIC_ROOT;
 const manifestPath = path.resolve(
 	process.argv[2] ?? path.join( defaultPublicRoot, "assets", "packs", "manifest.json" )
@@ -61,9 +59,17 @@ const cacheDisabledBy = process.env.SRO_ASSET_INTEGRITY_NO_CACHE === "1" ?
 	null;
 const cachePath = process.env.SRO_ASSET_INTEGRITY_CACHE_PATH ?
 	path.resolve( process.env.SRO_ASSET_INTEGRITY_CACHE_PATH ) :
-	path.join( rebuildRoot, ".state", "asset-integrity-hash-cache.json" );
+	buildStatePath( "asset-integrity-hash-cache.json" );
 const hashCache = cacheDisabledBy ? null : await openFileHashCache( cachePath );
 
+// The browser refuses a bigger index outright (packs.ts PACK_INDEX_LIMIT_BYTES),
+// so every asset of the build would fail to load: refuse it here first.
+const manifestBytes = (await stat( manifestPath )).size;
+if ( manifestBytes > ASSET_PACK_INDEX_MAX_BYTES ) {
+	throw new Error(
+		`pack index ${manifestPath} is ${manifestBytes} bytes; the client reads at most ${ASSET_PACK_INDEX_MAX_BYTES}`
+	);
+}
 const manifest = JSON.parse( await readFile( manifestPath, "utf8" ) );
 const packByPath = new Map();
 const packGroupByPath = new Map();

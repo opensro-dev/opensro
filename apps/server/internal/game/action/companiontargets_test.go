@@ -81,7 +81,7 @@ func companionTargetsFixture(tb testing.TB) (*Runtime, *fakeClock, *enterworld.C
 			rt.petSessions[petOwnerKey{division: testDivision, name: strings.ToLower(c.Name), gid: gid}] = state
 			rt.petMu.Unlock()
 		}
-		state.follower = simulation.NewPetFollower(gid, spawn)
+		state.mover.FollowFrom(gid, spawn)
 		state.refObjID = 9
 	}
 	return rt, clock, c, gid1, gid2

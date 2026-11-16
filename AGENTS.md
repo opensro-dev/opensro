@@ -23,11 +23,14 @@ Machine-specific notes belong in an untracked `CLAUDE.local.md`, not here.
 - `apps/client-next/` - browser client (TypeScript, WebGPU, Vite).
 - `scripts/` - asset pipeline, product checks, `pnpm task` runner.
 - `../research/` - reverse-engineering evidence and native reconstruction.
-  Read it for evidence; never import from it.
+  Read it for evidence; never import from it. It is the maintainers' tree
+  and a public clone does not have it: read the binaries with revtool
+  (see "Reading the original binaries" below).
 
 Scope rule: the v1.150 client defines what exists (data, wire, UI). For
 server-only mechanics take the v1.188 `SR_GameServer` rule, trimmed to the
-v1.150 feature set. When neither binary shows a rule, infer how the original
+v1.150 feature set. Check both binaries with revtool before you decide
+either way. When neither binary shows a rule, infer how the original
 would have implemented it, record the inference in a code comment, and ship
 it. Do not leave "no evidence" open questions.
 
@@ -39,10 +42,17 @@ rules behind an `SRO_<FEATURE>` environment flag whose off value is native
 (as `SRO_BETA_GROWTH`), with the code marked "port-only, not native". Test
 both settings. [CONTRIBUTING.md](.github/CONTRIBUTING.md) has the contributor version.
 
-## Reverse engineering without Binary Ninja
+## Reading the original binaries (revtool, no Binary Ninja needed)
 
-For native investigations, read [docs/native/REVERSE_ENGINEERING.md](docs/native/REVERSE_ENGINEERING.md)
-and [docs/native/RESEARCH_PROGRESS.md](docs/native/RESEARCH_PROGRESS.md). Binary Ninja is optional.
+Whenever a change, review or bug verdict depends on what the original client
+or server does (a packet, a refusal, a formula, a UI rule), read the binary
+before you write code or a verdict. Start with revtool
+([tools/re/revtool/README.md](tools/re/revtool/README.md), its quick start):
+rizin plus the published seed give every function's address and the
+maintainers' names (about 14,000 client and 12,000 server labels), with
+`find`, `strings`, `view` and `xref`. Then read
+[docs/native/REVERSE_ENGINEERING.md](docs/native/REVERSE_ENGINEERING.md) and
+[docs/native/RESEARCH_PROGRESS.md](docs/native/RESEARCH_PROGRESS.md). Binary Ninja is optional.
 When the task requires RE, agents should set up the documented isolated Python
 environment and install its pinned packages, subject to the session's network
 and execution permissions. Do not install globally or download retail binaries.
@@ -271,7 +281,9 @@ The agent bus refuses them for Cursor agents.
 Speed: the gates run concurrently, and the two heavy ones (the Go server
 gate and the client check) are skipped when nothing they read changed since
 one of their recent passes (`scripts/checks/run_if_changed.mjs`; stamps live
-in the ignored `.state/check-stamps/`). A skipped gate prints "up to date".
+in the main checkout's ignored `.state/check-stamps/`, and the client test
+cache in its `.state/client-test-cache/`, both shared by every worktree, so a
+fresh worktree starts warm). A skipped gate prints "up to date".
 Set `SRO_CHECK_FORCE=1` to run everything regardless; CI and fresh clones
 have no stamps and always run everything.
 

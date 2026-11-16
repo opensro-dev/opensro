@@ -17,7 +17,6 @@ import { createSingleUseBundleEncoder } from "./bundle-encoder";
 import { createFinish } from "./finish";
 import { createHdr } from "./hdr";
 import { createAmbientOcclusion } from "./ambient-occlusion";
-import { createWaterRefraction } from "./water-refraction";
 import { createMsaa, MSAA_SAMPLE_COUNT } from "./msaa";
 import { createParticleQuery } from "./particle-query";
 import { createGpuAnimationResources } from "./animation";
@@ -122,7 +121,6 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 	let bloom: ReturnType<typeof createBloom> | null = null;
 	let hdr: ReturnType<typeof createHdr> | null = null;
 	let occlusion: ReturnType<typeof createAmbientOcclusion> | null = null;
-	let waterStage: ReturnType<typeof createWaterRefraction> | null = null;
 	let msaaStage: ReturnType<typeof createMsaa> | null = null;
 	let finish: ReturnType<typeof createFinish> | null = null;
 	let particleQuery: ReturnType<typeof createParticleQuery> | null = null;
@@ -304,11 +302,13 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				================
 				submit
 
-				Submit the completed command buffer through the current device generation.
+				Submit the completed command buffer through the current device
+				generation, after the dynamic materials' writes (geometry.ts).
 				================
 				*/
 				submit( buffer: GPUCommandBuffer ) {
 					current();
+					geometry!.flushMaterials();
 					geometry!.uploads.submit( buffer );
 				}
 			} );
@@ -510,7 +510,6 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 			hdr = createHdr( created, navigator.gpu.getPreferredCanvasFormat(), retirement.retire );
 
 			occlusion = createAmbientOcclusion( created, retirement.retire );
-			waterStage = createWaterRefraction( created, retirement.retire );
 			msaaStage = createMsaa( created, retirement.retire );
 
 			finish = createFinish( created, navigator.gpu.getPreferredCanvasFormat() );
@@ -627,28 +626,6 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 			const draw = occlusion.prepare( width, height, enabled, camera );
 			geometry?.refreshAmbientOcclusion( draw?.view ?? null );
 			return draw;
-		},
-		/*
-		================
-		waterRefraction
-
-		The experimental refracted water stage (port-only, not native;
-		device/water-refraction.ts): its copy targets prepared per frame in
-		the scene format against the camera's near/far, and their views
-		installed as geometry bindings 16/17 whenever they change. While
-		off it owns nothing and the bindings fall back to the white view.
-		================
-		*/
-		waterRefraction(
-			width: number,
-			height: number,
-			enabled: boolean,
-			camera: import("@/engine/contracts/scene").WorldCamera
-		) {
-			if ( phase !== "running" || !waterStage ) throw Error( "Water refraction device is not ready" );
-			const stage = waterStage.prepare( width, height, sceneFormat(), enabled, camera );
-			geometry?.refreshWaterRefraction( stage?.colourView ?? null, stage?.depthView ?? null );
-			return stage;
 		},
 		/*
 		================
@@ -986,8 +963,6 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 			hdr = null;
 			occlusion?.dispose();
 			occlusion = null;
-			waterStage?.dispose();
-			waterStage = null;
 			msaaStage?.dispose();
 			msaaStage = null;
 			finish?.dispose();

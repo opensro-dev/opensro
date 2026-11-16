@@ -47,6 +47,7 @@ import { buildQuestDataAsset } from "./data/buildQuestDataAsset.mjs";
 import { buildCharacterDataCountryAsset } from "./data/buildCharacterDataCountryAsset.mjs";
 import { buildCosPresentationAsset } from "./data/buildCosPresentationAsset.mjs";
 import { buildFortressMapAsset } from "./data/buildFortressMapAsset.mjs";
+import { buildUniqueNestsAsset } from "./data/buildUniqueNestsAsset.mjs";
 import { buildGInterfaceSectionsAsset } from "./data/buildGInterfaceSectionsAsset.mjs";
 import { buildSiegeFortressDataAsset } from "./data/buildSiegeFortressDataAsset.mjs";
 import { buildMissionPresentationAsset } from "./data/buildMissionPresentationAsset.mjs";
@@ -77,13 +78,24 @@ import { formatOptimizationSummary } from "./jsonAssetCompression.mjs";
 import { packPublicTree } from "./packPublicTree.mjs";
 import { buildJobs } from "./shared/buildParallelism.mjs";
 import { claimPublicPaths, recordClaims } from "./shared/publicationLedger.mjs";
-import { importLaterDungeonMapsStep, importLaterWorldMapButtonsStep } from "./laterClientImports.mjs";
+import {
+	importLaterDungeonMapsStep,
+	importLaterOptionalTeleportStep,
+	importLaterTombMinimapStep,
+	importLaterWorldMapButtonsStep,
+	importLaterWorldMapGuideStep
+} from "./laterClientImports.mjs";
 
 export {
 	laterDungeonMapImportPlan,
 	laterDungeonMapPublicPaths,
+	laterOptionalTeleportImportPlan,
+	laterTombMinimapImportPlan,
+	laterTombMinimapPublicPaths,
 	laterWorldMapButtonsImportPlan,
-	laterWorldMapButtonPublicPaths
+	laterWorldMapButtonPublicPaths,
+	laterWorldMapGuideImportPlan,
+	laterWorldMapGuidePublicPaths
 } from "./laterClientImports.mjs";
 import { createLaneMemo, outputSignatures, signatureHash } from "./shared/laneMemo.mjs";
 import { dataRootsHash, serverRosterRoots } from "./shared/resourceBuildFingerprint.mjs";
@@ -204,6 +216,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	buildCharacterDataCountryAsset,
 	buildCosPresentationAsset,
 	buildFortressMapAsset,
+	buildUniqueNestsAsset,
 	buildGInterfaceSectionsAsset,
 	buildSiegeFortressDataAsset,
 	buildMissionPresentationAsset,
@@ -231,6 +244,9 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	buildHdTexturePacks: buildHdTexturePacksStep,
 	importLaterDungeonMaps: importLaterDungeonMapsStep,
 	importLaterWorldMapButtons: importLaterWorldMapButtonsStep,
+	importLaterWorldMapGuide: importLaterWorldMapGuideStep,
+	importLaterOptionalTeleport: importLaterOptionalTeleportStep,
+	importLaterTombMinimap: importLaterTombMinimapStep,
 	packTree: packPublicTree
 } );
 
@@ -319,7 +335,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	//     sequential internally: the region bundles share Map_extracted image
 	//     targets, and the animated world objects step scans every
 	//     assets/world/<area>/region-*.json bundle written above it.
-	// The shared file-hash cache (.state/file-hash-cache.json) is only opened by
+	// The shared file-hash cache (buildStatePath( "file-hash-cache.json" )) is only opened by
 	// buildAssetPacks and buildWebAssetManifest, which stay strictly sequential in
 	// the tail below, so its whole-file save() can never interleave.
 	const interfaceImagesLane = async () => {
@@ -549,6 +565,9 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// The battle aide's fortress map: its pages, placed zones and structure
 	// references (fortressMap.json, decoded by foundation/gameplay/fortress-map.ts).
 	const fortressMap = await steps.buildFortressMapAsset();
+	// Port-only: the world map's unique nests (uniqueNests.json, decoded by
+	// foundation/ui/unique-nests.ts for the Experimental unique spawn signs).
+	const uniqueNests = await steps.buildUniqueNestsAsset();
 	// WIP Toggle*Window plane (ginterface.txt raw section lines ->
 	// ginterface-sections.json, decoded once in sectionWindowPlane.ts and driven
 	// through the REAL CIFWnd_CreateChildrenFromLayout CreateControlsFromSection deserializer).
@@ -616,6 +635,15 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// The dungeon pages' own buttons ride the same archive and rule
 	// (issue #3210): the step claims them before the pack tail.
 	const laterWorldMapButtons = await timed( "laterWorldMapButtons", () => steps.importLaterWorldMapButtons() );
+	// The M map guide's tables and art (#3387) come from the v1.696
+	// archive under the same rule, claimed before the pack tail.
+	const laterWorldMapGuide = await timed( "laterWorldMapGuide", () => steps.importLaterWorldMapGuide() );
+	// The reverse return map's destination table rides the v1.188 archive
+	// too, but lands in the game root for the server game-data build.
+	const laterOptionalTeleport = await timed( "laterOptionalTeleport", () => steps.importLaterOptionalTeleport() );
+	// The Ch'in Tomb's floor minimap rides the v1.188 archive under the same
+	// rule, claimed before the pack tail.
+	const laterTombMinimap = await timed( "laterTombMinimap", () => steps.importLaterTombMinimap() );
 	// The ordered pack tail lives in packPublicTree.mjs, shared with the
 	// standalone repack. Only the outdoor gate is per-caller: when the world lane
 	// produced no outdoor region group there is nothing to list. A full build
@@ -677,6 +705,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		characterDataCountry,
 		cosPresentation,
 		fortressMap,
+		uniqueNests,
 		ginterfaceSections,
 		siegeFortressData,
 		nameFilter,
@@ -689,6 +718,9 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		hdTexturePacks,
 		laterDungeonMaps,
 		laterWorldMapButtons,
+		laterWorldMapGuide,
+		laterOptionalTeleport,
+		laterTombMinimap,
 		packGroups,
 		claimAudit,
 		jsonOptimization,
@@ -750,6 +782,7 @@ export function formatResourceBuildSummary( results ) {
 		characterDataCountry,
 		cosPresentation,
 		fortressMap,
+		uniqueNests,
 		ginterfaceSections,
 		siegeFortressData,
 		nameFilter,

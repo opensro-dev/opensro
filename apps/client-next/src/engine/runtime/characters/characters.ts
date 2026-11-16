@@ -49,6 +49,7 @@ import type { GameplayState, Pose } from "@/engine/contracts/gameplay";
 import type { CharacterActor } from "@/engine/contracts/character";
 import { createPresentationCatalog } from "./presentation-catalog";
 import { createActorPresentation } from "./actor-presentation";
+import { PRESENTATION_DUE } from "./presentation-due";
 import { createDockPreview } from "./dock-preview";
 import { createPresentationWeather, type WeatherLifecycleEvent } from "./presentation-weather";
 import { createSpawnFades } from "./spawn-fades";
@@ -67,6 +68,7 @@ import {
 import type {
 	Auxiliary,
 	CharacterPresentationState,
+	PresentationDue,
 	PresentationAppearance,
 	PresentationDisappear,
 	PresentationOutput
@@ -144,7 +146,11 @@ export function createCharacterPresentation(
 		release( key: string, now: number ): void;
 		finishedCasts(): void;
 	},
-	soundEnabled?: () => boolean
+	soundEnabled?: () => boolean,
+	// When an entity's appearance is resolved and its motion decided again
+	// (presentation-due.ts); a test passes always-due rules to compare
+	// against every entity in full.
+	due: PresentationDue = PRESENTATION_DUE
 ) {
 	let probe: CharacterFrameProbe | undefined;
 	let frameWork: import("@/engine/contracts/runtime").FrameWork | undefined;
@@ -183,7 +189,9 @@ export function createCharacterPresentation(
 		cameraFade: null,
 		previewReady: false,
 		dockReady: false,
-		commonReady: false
+		commonReady: false,
+		degradations: [],
+		degradedKeys: new Set()
 	};
 	const weather = createPresentationWeather();
 	const states = new Map<number, CharacterPresentationState>();
@@ -269,7 +277,8 @@ export function createCharacterPresentation(
 		states,
 		statusOwner,
 		wornEquipment,
-		presentationState
+		presentationState,
+		due
 	} );
 	/*
 	================
@@ -840,8 +849,13 @@ export function createCharacterPresentation(
 		sunDropMarkers.step( entities );
 		const settled = new Set<number>();
 		for ( const entity of entities ) {
-			const state = states.get( entity.gid ), resource = published.catalog.get( appearanceRef( entity ) );
-			if ( state?.dead && resource ) {
+			// Only a dead character reads its resource. presentation-state's
+			// pass already asked appearanceRef for every entity this frame,
+			// so the trade dress and skin it consults change nothing here.
+			const state = states.get( entity.gid );
+			if ( !state?.dead ) continue;
+			const resource = published.catalog.get( appearanceRef( entity ) );
+			if ( resource ) {
 				const clip = state.postureClip ??
 						(state.clip === "deathquick" || state.clip === "downdie" ? state.clip : "death"),
 					start = state.postureStarted ?? state.started;
@@ -1167,6 +1181,19 @@ export function createCharacterPresentation(
 		damageText: () =>
 			presentationEvents.state.damageTexts as readonly import("@/engine/contracts/damage-text").DamageText[],
 		error: () => output.failure ?? resources.error() ?? effects.error(),
+		/*
+		================
+		takePresentationDegradations
+
+		The skipped presentation steps since the last call (runtime.ts files
+		them as degraded client reports); each is recorded once per lifetime.
+		================
+		*/
+		takePresentationDegradations() {
+			const taken = output.degradations;
+			output.degradations = [];
+			return taken;
+		},
 		failure: () =>
 			resources.failure() ??
 				(effects.error() ?

@@ -13,11 +13,11 @@ restocked tab adds nothing.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import alexandria_shop_d10 as d10  # noqa: E402
 import alexandria_shop_d11 as d11  # noqa: E402
 from import_vsro_alexandria import table_rows  # noqa: E402

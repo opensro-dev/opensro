@@ -67,13 +67,13 @@ is written with every ground write, so a moved counter persists even
 when no item row changed.
 ================
 */
-func writeGroundChangesTx(tx sqlExecer, scratch *jsonscratch.Scratch, committed map[string][]domain.GroundItemRecord, changes *domain.GroundChanges) error {
+func writeGroundChangesTx(tx sqlExecer, scratch *jsonscratch.Scratch, committed map[string][]domain.GroundItemRecord, changes *domain.GroundChanges, residues map[groundResidueKey]unknownFields) error {
 	if changes.Full {
-		if _, _, err := writeGroundDiffTx(tx, scratch, committed, changes.Snapshot.Divisions); err != nil {
+		if _, _, err := writeGroundDiffTx(tx, scratch, committed, changes.Snapshot.Divisions, residues); err != nil {
 			return err
 		}
 	} else {
-		writer := newGroundRowWriter(tx, scratch)
+		writer := newGroundRowWriter(tx, scratch, residues)
 		defer writer.close()
 		for i := range changes.Rows {
 			row := &changes.Rows[i]

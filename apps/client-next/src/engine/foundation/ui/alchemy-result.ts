@@ -52,6 +52,22 @@ export function alchemyEffectTexture( flags: number ): string {
 
 /*
 ================
+alchemyEffectAdditive
+
+Whether the atlas is drawn additively. alcm_effect_success is opaque art
+(DXT3, alpha 255 in every texel: white light on black), so blended it paints
+a black square over the medallion (#3441); added, its black adds nothing.
+alcm_effect_fail_1 carries its own alpha and blends as authored.
+INFERENCE: the original can only show the opaque atlas by adding it to what
+is behind, as the port already draws the gacha's opaque ga_effect_* sheets.
+================
+*/
+export function alchemyEffectAdditive( flags: number ): boolean {
+	return (flags & ALCHEMY_SUCCESS) !== 0;
+}
+
+/*
+================
 alchemyEffectCell
 
 The atlas cell shown elapsedMs after the result, as UV [u, v, w, h], or

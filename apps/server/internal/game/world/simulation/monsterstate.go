@@ -175,6 +175,10 @@ type MonsterState struct {
 	// must never answer through a dead state pointer.
 	scopePhase  scopePopulations
 	scopeFolded map[scopeStampKey]interestMemoStamp
+	// vitals holds the cause word of every monster whose HP or status
+	// changed since the last DrainChangedVitals (monster_vitals.go).
+	// Guarded by mu.
+	vitals map[monsterVitalsKey]VitalsSourceFlags
 }
 
 /*
@@ -716,7 +720,7 @@ func (s *MonsterState) UniqueReturnAnchors() []monster.SpawnPoint {
 	var points []monster.SpawnPoint
 	for _, nest := range s.template.Nests {
 		ref, ok := s.template.Refs[nest.RefObjID]
-		if !ok || !nestIsUnique(nest, ref) || (nest.WorldCode != "" && nest.WorldCode != "INS_DEFAULT") ||
+		if !ok || !monster.NestIsUnique(nest, ref) || (nest.WorldCode != "" && nest.WorldCode != "INS_DEFAULT") ||
 			!FeaturesAt(nest.RegionID).UniqueReturnAnchors {
 			continue
 		}

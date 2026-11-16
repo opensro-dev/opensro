@@ -16,6 +16,9 @@ import { defined } from "../helpers/defined.mjs";
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
+const { talkPaneOpens } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/targeting/targeting.ts"
+);
 
 const SELECT = 0x745a;
 const SELECT_RESULT = 0xb45a;
@@ -71,6 +74,22 @@ function fixture( kind = "npc", fortress = false ) {
 	}
 	/*
 	================
+	vitalsGrant
+
+	A monster's or COS's grant: [u8 vitals=1][u32 hp][u32 word].
+	================
+	*/
+	function vitalsGrant( gid = NPC_GID, word = 0 ) {
+		const payload = Buffer.alloc( 14 );
+		payload[0] = 1;
+		payload.writeUInt32LE( gid, 1 );
+		payload[5] = 1;
+		payload.writeUInt32LE( 100, 6 );
+		payload.writeUInt32LE( word, 10 );
+		game.receive( { opcode: SELECT_RESULT, payload }, 1 );
+	}
+	/*
+	================
 	select
 	================
 	*/
@@ -88,20 +107,72 @@ function fixture( kind = "npc", fortress = false ) {
 		const state = defined( game.take(), "gameplay snapshot" );
 		return { ...state, npcConversation: defined( state.npcConversation, "NPC conversation" ) };
 	}
-	return { game, sent, transport, entity, grant, select, snapshot };
+	return { game, sent, transport, entity, grant, vitalsGrant, select, snapshot };
 }
 
-test("a zero-capability NPC has no visible menu and permits another selection request", () => {
+test("a zero-capability NPC opens an empty talk pane, as native", () => {
+	// CPSMission_OnNpcSelectResponse0xB45A shows a CICNPC's pane on every
+	// grant and builds its rows from the word (5D9100): no bits, no rows.
 	const f = fixture();
 	try {
 		f.select();
 		f.grant( NPC_GID, 0 );
-		assert.equal( f.snapshot().npcConversation.phase, "closed" );
-		assert.equal( f.select( 2 )?.opcode, SELECT );
-		assert.equal( f.select( 3 ), null, "A fresh pending grant still coalesces" );
+		const state = f.snapshot();
+		assert.equal( state.npcConversation.phase, "menu" );
+		assert.equal( state.targetCapabilities, undefined, "The pane carries no service rows" );
+		assert.equal( f.select( 2 ), null, "The visible pane suppresses a repeat selection" );
 	} finally {
 		f.game.dispose();
 	}
+});
+
+test("a teleport gate opens its talk pane whatever its grant word", () => {
+	// The CITeleportGate branch (0x7650b8) shows the pane with the gate
+	// caption as its greeting; the word only decides the rows.
+	const f = fixture( "teleport" );
+	try {
+		f.select();
+		f.grant( NPC_GID, 0 );
+		assert.equal( f.snapshot().npcConversation.phase, "menu" );
+	} finally {
+		f.game.dispose();
+	}
+});
+
+test("a monster opens the talk pane only for the talk bit without 0x10", () => {
+	// CICMonster and CICCos are the only gated kinds:
+	// (bits & 0x10) == 0 && (bits & 2) != 0.
+	for (
+		const { word, phase } of [
+			{ word: 0, phase: "closed" },
+			{ word: 2, phase: "menu" },
+			{ word: 0x12, phase: "closed" },
+			{ word: 0x10, phase: "closed" }
+		]
+	) {
+		const f = fixture( "monster" );
+		try {
+			f.select();
+			f.vitalsGrant( NPC_GID, word );
+			assert.equal( f.snapshot().npcConversation.phase, phase, `word ${word}` );
+		} finally {
+			f.game.dispose();
+		}
+	}
+});
+
+test("an unspawned target's talk pane follows the grant's shape", () => {
+	const npc = Buffer.alloc( 11 );
+	npc[0] = 1;
+	const vitals = Buffer.alloc( 14 );
+	vitals[0] = 1;
+	vitals[5] = 1;
+	assert.equal( talkPaneOpens( undefined, false, npc ), true, "The NPC arm always opens" );
+	assert.equal( talkPaneOpens( undefined, false, vitals ), false, "The vitals arm takes the monster rule" );
+	vitals.writeUInt32LE( 2, 10 );
+	assert.equal( talkPaneOpens( undefined, false, vitals ), true );
+	assert.equal( talkPaneOpens( "cos", false, vitals ), true, "A COS shares the monster rule" );
+	assert.equal( talkPaneOpens( "player", false, npc ), false, "A player never opens the pane" );
 });
 
 test("the Bandit Den gate's return-point grant alone opens the talk menu", () => {
@@ -322,6 +393,49 @@ test("an open alchemy window blocks world-click movement until it closes", () =>
 		assert.equal( move( 4 )?.opcode, MOVEMENT_REQUEST, "the closed window lets the player walk" );
 	} finally {
 		f.game.dispose();
+	}
+});
+
+test("a stall or an open exchange pins the player: no walk and no skill until it closes", () => {
+	// #3433: the server refuses both (action PlayerInteractionLocked), so the
+	// client sends neither and predicts no walk or teleport.
+	const STALL_CREATE_RESULT = 0xb049, STALL_CLOSE_RESULT = 0xb42c;
+	const EXCHANGE_OPENED = 0x3219, EXCHANGE_CANCEL_RESULT = 0xb2db;
+	const cases = [
+		{
+			name: "stall",
+			open: { opcode: STALL_CREATE_RESULT, payload: Uint8Array.of( 1 ) },
+			close: { opcode: STALL_CLOSE_RESULT, payload: Uint8Array.of( 1 ) }
+		},
+		{
+			name: "exchange",
+			open: { opcode: EXCHANGE_OPENED, payload: Uint8Array.of( 9, 0, 0, 0 ) },
+			close: { opcode: EXCHANGE_CANCEL_RESULT, payload: Uint8Array.of( 1 ) }
+		}
+	];
+	for ( const { name, open, close } of cases ) {
+		const f = fixture();
+		const move = now =>
+			f.game.command(
+				{ kind: "move", destination: { regionId: 1, x: 600, y: 0, z: 0, angle: 0 } },
+				now,
+				undefined
+			);
+		const press = now => f.game.command( { kind: "skill", skillId: 1 }, now, undefined );
+		try {
+			f.game.command( { kind: "navigation", regionId: 1, bundle: navigation() }, 0, undefined );
+			f.game.receive( open, 1 );
+			const before = f.sent.length;
+			assert.equal( move( 2 ), null, `${name}: a click is ignored` );
+			assert.equal( press( 3 ), null, `${name}: a skill press is ignored` );
+			assert.equal( f.sent.length, before, `${name}: nothing is sent` );
+			f.game.receive( close, 4 );
+			assert.equal( move( 5 )?.opcode, MOVEMENT_REQUEST, `${name}: the closed window lets the player walk` );
+			// The press now reaches the skill path, which refuses the unlearned row.
+			assert.throws( () => press( 6 ), /not learned/, `${name}: the closed window lets the press through` );
+		} finally {
+			f.game.dispose();
+		}
 	}
 });
 

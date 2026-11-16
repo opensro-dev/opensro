@@ -17,9 +17,6 @@ const ACTION_EXCHANGE = 1006;
 // CIFJobAlias_OpenSubmitConfirm (646470): changing an alias costs the
 // character's level (player +0x820) times this much gold.
 const JOB_ALIAS_MODIFY_GOLD_PER_LEVEL = 50000;
-// A label closer than this to its window's left edge has left its window
-// (the frame's border is about this wide; the Experimental "Fit window labels").
-const WINDOW_LABEL_MARGIN = 6;
 // GDR_COS_INFO_NAME_BTN in ifcosinfo.txt: the pet's Name button.
 const COS_INFO_NAME_BUTTON = 26;
 // The Friends list (iffriend.txt id 30, 328 x 256): eleven 23-pixel
@@ -34,10 +31,13 @@ const LETTER_BODY_EDIT = "letter-body";
 // popups framed by LETTER_CHILD_FRAME.
 const LETTER_CHILD_WIDTH = 439;
 const LETTER_CHILD_HEIGHT = 271;
-// A fitted button caption keeps this far inside each side of its plate.
-const CAPTION_MARGIN = 4;
 const FRIEND_ROW_STEP = 23;
 const FRIEND_SCROLL_TRACK = 224;
+// The Guild tab's member list (ifguild.txt GDR_GUILD_USERVIEW_SCROLLMGR,
+// id 82, 328 x 139): six 23-pixel gil_bar02 rows (5E8850) and the same
+// vertical scroll as the Friends list, 139 - 2 * 16 pixels of track.
+const GUILD_MEMBER_VISIBLE_ROWS = 6;
+const GUILD_MEMBER_SCROLL_TRACK = 107;
 // 695420 case 9 opens the own stall's title prompt, case 0xD toggles the
 // stall network window (CGInterface_ToggleStallNetworkWindow 69DB80).
 const ACTION_STALL = 1009;
@@ -69,6 +69,13 @@ const STALL_CHAT_ROW = 15;
 // CIFEdit geometry is not yet located, so the width and the line box
 // below are inference from the authored-layout model (#2615).
 const EDIT_CARET_WIDTH = 2;
+import {
+	AVATAR_STORAGE_SLOTS,
+	avatarSocket,
+	isAvatarItem,
+	SPIRIT_SLOT,
+	SPIRIT_SOCKET
+} from "@/engine/foundation/gameplay/avatar-socket";
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import {
 	FRIEND_LIST_LIMIT,
@@ -114,8 +121,6 @@ import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
 import { portalMenu } from "@/engine/foundation/gameplay/portal";
 import { restoreSlotEntry } from "@/engine/foundation/gameplay/commerce";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
-import { itemEquipmentOverlay, equipmentWarningUv } from "@/engine/foundation/ui/item-equipment-overlay";
-import { itemCountQuads } from "@/engine/foundation/ui/item-count";
 import { flagWarTimerDigitTexture, flagWarTimerReading } from "@/engine/foundation/ui/flagwar-timer-plate";
 import { returnScrollBar } from "@/engine/foundation/ui/return-scroll";
 import { nameColorRgba } from "@/engine/foundation/gameplay/name-color";
@@ -154,6 +159,7 @@ import {
 	type EventInterfaceLayout
 } from "@/engine/foundation/ui/event-interface";
 import { jobContributionSelf, jobRankPage, jobRankPages } from "@/engine/foundation/gameplay/job-rank";
+import { columnHeadKey, columnHeadLayout } from "@/engine/foundation/ui/column-heads";
 import { createMapTeleport } from "./hud/map-teleport";
 import { createGmHelper, GM_HELPER_HEIGHT, GM_HELPER_ROWS, GM_HELPER_ROW_HEIGHT } from "./hud/gm-helper";
 import type { GmCatalog } from "@/engine/foundation/gameplay/gm-command";
@@ -375,6 +381,7 @@ import {
 } from "@/engine/foundation/gameplay/fortress-production";
 import {
 	ALCHEMY_DESTROYED,
+	alchemyEffectAdditive,
 	alchemyEffectCell,
 	alchemyEffectTexture,
 	alchemyResultLines
@@ -490,10 +497,7 @@ import {
 	equipmentSlotMirror,
 	itemIsMallItem,
 	itemIsRare,
-	itemSlotBlockedOverlay,
-	itemSlotOverlays,
-	itemSlotWash,
-	slotSeed
+	itemSlotBlockedOverlay
 } from "@/engine/foundation/ui/item-slot-effects";
 import {
 	COS_CLASS_ATTACK,
@@ -580,11 +584,10 @@ import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
 import { skillTooltip } from "@/engine/foundation/ui/skill-tooltip";
 import { tooltipColor, type TooltipRow } from "@/engine/foundation/ui/tooltip-rows";
-import { latticeCells } from "@/engine/foundation/ui/inventory-layout";
-import { sameUiQuads, sameUiSemantics } from "@/engine/foundation/ui/ui-equality";
+import { uiPublication } from "@/engine/foundation/ui/ui-equality";
 import { createRetainedLayout } from "@/engine/foundation/ui/retained-layout";
 import { targetPetBuffs, buffBoard, buffTimerRoot } from "@/engine/foundation/ui/buff-board";
-import { entityCrestFiles } from "@/engine/foundation/ui/guild-crest";
+import { entityCrestFiles, guildCrestUrl } from "@/engine/foundation/ui/guild-crest";
 import { checkedNameError } from "@/engine/foundation/ui/character-create";
 import { barChrome } from "@/engine/foundation/ui/bar";
 import {
@@ -659,7 +662,13 @@ import {
 	audioLevelText
 } from "@/engine/foundation/audio/volume-control";
 import { chatScrollbar } from "@/engine/foundation/ui/chat-scrollbar";
-import { companionOwnerNameplate, overheadLayout, withoutBoardPass } from "@/engine/foundation/ui/overhead-layout";
+import {
+	companionOwnerNameplate,
+	CONTRIBUTOR_TITLE_COLOR,
+	overheadLayout,
+	titledNameRow,
+	withoutBoardPass
+} from "@/engine/foundation/ui/overhead-layout";
 import { vitalWarning } from "@/engine/foundation/ui/vital-warning";
 import {
 	beginnerMarkShown,
@@ -697,7 +706,7 @@ import {
 	TRANSPORT_POTION_RETRY_MS
 } from "@/engine/foundation/gameplay/transport-auto-potion";
 import { selectChatTab, composeChat, chatTabPrefix, chatFeedbackText } from "@/engine/foundation/ui/chat-presentation";
-import { captionWords, textBoardLines, textBoxLines, textLines } from "@/engine/foundation/ui/text-lines";
+import { textBoardLines, textBoxLines, textLines } from "@/engine/foundation/ui/text-lines";
 import { bagTabDropSlot } from "@/engine/foundation/ui/bag-tab-drop";
 import { PET_NAME_MAX, petNameError } from "@/engine/foundation/gameplay/pet-name";
 import { createSpeech } from "./hud/speech";
@@ -772,7 +781,8 @@ import { createTitleUi } from "./title/title";
 import { serverListRefreshDue, titleStatusKey, titleStatusMessage } from "@/engine/foundation/ui/title-status";
 import { buttonAccess, buttonTextColor } from "@/engine/foundation/ui/button-state";
 import * as frameDraw from "./frame/frame";
-import type { CloseControlId, UiFrame } from "./frame/frame-contract";
+import { ITEM_SLOT_PREFIXES, type ItemSlotContext } from "./frame/frame";
+import type { CloseControlId, UiAuthoredFrame } from "./frame/frame-contract";
 import { createUiText } from "./text/text";
 import { createUiAssets } from "./resources/resources";
 import { frameParts, frameRing } from "@/engine/foundation/ui/frame-ring";
@@ -919,8 +929,6 @@ const COS_LOW_SATIETY = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
 // unselected one (SetStateTextures 5376A0 falls back to the off texture at
 // 53784F). The dim borrows the original's own disabled-face alpha 0x80
 // (CIFButton_SetEnabledWithFaceAlpha 541640) and grey label 0xFF999999.
-const GREY_TAB_PLATE = [ 1, 1, 1, 0x80 / 255 ] as const;
-const GREY_TAB_LABEL = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
 // Port-only, not native: the Experimental window keeps the native option
 // window's width and one height on every tab; its list frame starts under
 // the tabs.
@@ -967,10 +975,24 @@ const ROOT = "/assets/images/Media_extracted/",
 // 683B40 assigns the notice root this texture after creating it.
 const MALL_NOTICE_FRAME = ROOT + "interface/mall/mall_communicate.png";
 const PARTS = frameParts();
+// The Contributor login prompt's copy (port-only, not native; owner
+// 2026-11-14): the client has no text rows for it, so hudCopy serves
+// these keys. The account names stay off the wire, so the prompt names
+// no account.
+const CONTRIBUTOR_PROMPT_COPY: Readonly<Record<string, string>> = {
+	UIIT_PORT_CONTRIBUTOR_TITLE: "Contributor title",
+	UIIT_PORT_CONTRIBUTOR_ELSEWHERE: "Your Contributor title is on another of your accounts.\nMove it to this account?",
+	UIIT_PORT_CONTRIBUTOR_HOLDER:
+		"Your Contributor title is on this account.\nTo move it, log in on another account and type /contributor here.",
+	UIIT_PORT_CONTRIBUTOR_MOVE: "Move it here",
+	UIIT_PORT_CONTRIBUTOR_KEEP: "Keep it there"
+};
 const FRAME = ROOT + "interface/frame/mframe_wnd_";
 // msgbox2_window_ has no centre tile: the letter popups' own tiles and black
 // squares (ifletterread / ifletterwrite ids 1-6) fill them.
 const LETTER_CHILD_FRAME = ROOT + "interface/messagebox/msgbox2_window_";
+// ifapprenticeshiphonorranking's RankingListBtn column heads (ids 20-24).
+const ACADEMY_HONOR_HEADER_IDS = [ 20, 21, 22, 23, 24 ] as const;
 const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
 const PARTY_MATCH_VISIBLE_ROWS = 12;
 // The properties dialog (ifsetpartymode) lists Auto Share above Distribution
@@ -1097,7 +1119,6 @@ const SKIN_SLIDER_TRAVEL = 85;
 // CIFStall_OnCreate (5A2D60): the "Sell goods" tab's rect in the window.
 const STALL_TAB_X = 0x1c, STALL_TAB_Y = 0x56, STALL_TAB_W = 0x50, STALL_TAB_H = 0x18;
 // Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
-const ITEM_SLOT_PREFIXES = [ "slot:", "avatar:", "storage-slot:", "cos-slot:", "gacha-bag:", "gacha-card" ] as const;
 const BUTTON_FOCUS = BUTTON.replace( ".png", "_focus.png" ),
 	BUTTON_PRESS = BUTTON.replace( ".png", "_press.png" ),
 	BUTTON_DISABLE = BUTTON.replace( ".png", "_disable.png" );
@@ -1714,6 +1735,7 @@ export function createUi( ports: UiPorts ) {
 		activeNoticeDialog: {
 			readonly title: string;
 			readonly lines: readonly string[];
+			readonly answers?: import("@/engine/foundation/gameplay/system-notices").NoticeDialogAnswers;
 			readonly arguments?: readonly string[];
 			readonly localizedArguments?: readonly (string | null)[];
 		} | undefined,
@@ -1826,6 +1848,11 @@ export function createUi( ports: UiPorts ) {
 		socialPage = 0,
 		confirmSocial = "",
 		partyOptions = 4;
+	// The Guild tab's member list scroll (ifguild.txt id 82): the first
+	// visible row, one row per wheel tick or arrow click.
+	// Whether the last frame drew the paged compact guild list instead of
+	// the native window, so the wheel moves the list that is on screen.
+	let guildMemberOffset = 0, compactGuildShown = false;
 	// The nickname box 0x17 asks about (5E35E0): the member and the nickname.
 	let grantAsk: { readonly id: number; readonly member: string; readonly name: string; } | null = null;
 	// The crest delete's confirm box (52F460 types 0x16/0x19, #2282):
@@ -2116,6 +2143,9 @@ export function createUi( ports: UiPorts ) {
 	*/
 	function hudCopy( key: string ) {
 		if ( key === "UIIT_PORT_SOOK_ARENA" ) return "Survival Arena (5 stages, EXP/SP x5)";
+		// The Contributor login prompt (port-only, contributor-titles.ts).
+		const contributorCopy = CONTRIBUTOR_PROMPT_COPY[key];
+		if ( contributorCopy ) return contributorCopy;
 		return hud.data()?.strings[key] ?? "";
 	}
 	/*
@@ -2376,6 +2406,7 @@ export function createUi( ports: UiPorts ) {
 		grantPowerHud.close();
 		if ( next !== "Guild tools" ) socialMember = 0;
 		socialPage = 0;
+		guildMemberOffset = 0;
 		inventorySlot = -1;
 		goldDialog = false;
 		splitStack = null;
@@ -2612,20 +2643,26 @@ export function createUi( ports: UiPorts ) {
 		const bag = game.inventory,
 			avatars = game.avatarInventory ?? [],
 			item = (equip ? bag : avatars).find( i => i.slot === source );
-		if ( !item || (item.typeFlags & 0x7fe) !== 0x6ac ) return;
+		if ( !item || !isAvatarItem( item.typeFlags ) ) return;
+		const socket = avatarSocket( item.typeFlags );
 		if ( equip ) {
-			if ( avatars.some( i => i.typeFlags >>> 11 === item.typeFlags >>> 11 ) ) {
+			if ( avatars.some( i => avatarSocket( i.typeFlags ) === socket ) ) {
 				hudMessages.append( hudCopy( "UIIT_MSG_STRGERR_EQUIPITEM" ), 0xffff7070 );
 				return;
 			}
 			// 594BC7: an attachment (class 3) with no dress (class 2) worn
 			// refuses with this line (ChatSystemMessage type 5, as the
 			// class refusal above); no move is sent.
-			if ( item.typeFlags >>> 11 === 3 && !avatars.some( i => i.typeFlags >>> 11 === 2 ) ) {
+			if ( socket === 3 && !avatars.some( i => avatarSocket( i.typeFlags ) === 2 ) ) {
 				hudMessages.append( hudCopy( "UIIT_STT_AVATAR_MAIL_ONLY_WEAR" ), 0xffff7070 );
 				return;
 			}
-			destination = Array.from( { length: 4 }, ( _, i ) => i ).find( i => !avatars.some( a => a.slot === i ) );
+			// The Spirit has storage slot 4 to itself (avatar-socket.ts, port-only).
+			destination = socket === SPIRIT_SOCKET ?
+				SPIRIT_SLOT :
+				Array.from( { length: AVATAR_STORAGE_SLOTS }, ( _, i ) => i ).find( i =>
+					!avatars.some( a => a.slot === i )
+				);
 		} else {destination ??= Array.from( { length: Math.max( 0, (game.inventorySlotCount ?? 13) - 13 ) }, ( _, i ) =>
 				i + 13 ).find( i =>
 					!bag.some( a =>
@@ -4132,6 +4169,8 @@ export function createUi( ports: UiPorts ) {
 		else if ( id === "friend-sort" ) friendOffset = 0;
 		else if ( id === "friend-up" ) friendOffset = Math.max( 0, friendOffset - 1 );
 		else if ( id === "friend-down" ) friendOffset++;
+		else if ( id === "guild-member-up" ) guildMemberOffset = Math.max( 0, guildMemberOffset - 1 );
+		else if ( id === "guild-member-down" ) guildMemberOffset++;
 		else if ( id === "friend-whisper" ) {
 			const row = view.gameplay?.friends?.rows.find( r => r.jid === friendSelected );
 			if ( row ) beginWhisper( row.name );
@@ -5949,6 +5988,7 @@ export function createUi( ports: UiPorts ) {
 				guildTab = tab;
 				socialMember = 0;
 				socialPage = 0;
+				guildMemberOffset = 0;
 			}
 		} // 5C50B0 / 81AFB0: only the local academy master opens mode 2.
 		else if ( id === "academy-notice" ) {
@@ -6008,6 +6048,7 @@ export function createUi( ports: UiPorts ) {
 			guildDescending = guildSort === sort ? !guildDescending : false;
 			guildSort = sort;
 			socialPage = 0;
+			guildMemberOffset = 0;
 		} else if ( id.startsWith( "alchemy-count:" ) ) {
 			alchemyQuantity = String( Math.max( 1, Number( alchemyQuantity ) + Number( id.slice( 14 ) ) ) );
 		} else if ( id === "alchemy-all" ) {
@@ -6226,7 +6267,7 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
-			if ( itemMall.read().visible ) {
+			if ( itemMall.isOpen() ) {
 				if ( event.kind === "edit" && view?.gameplay?.itemMall ) {
 					const state = itemMall.read( view.gameplay.itemMall );
 					if ( event.id === "item-mall-search" ) {
@@ -6283,7 +6324,17 @@ export function createUi( ports: UiPorts ) {
 			// Both physical Enter keys are native VK_RETURN, including modal handlers.
 			if ( event.kind === "key" && event.code === "NumpadEnter" ) event = { ...event, code: "Enter" };
 			if ( activeNoticeDialog && view?.session?.phase === "world" ) {
-				if ( event.kind === "activate" && event.id === "notice-dialog-confirm" ) {
+				// An answered dialog (port-only) sends its button's chat command.
+				const answers = activeNoticeDialog.answers;
+				const answer = event.kind !== "activate" ?
+					undefined :
+					event.id === "notice-dialog-confirm" ?
+					answers?.confirmChat ?? "" :
+					event.id === "notice-dialog-cancel" && answers?.cancelChat ?
+					answers.cancelChat :
+					undefined;
+				if ( answer !== undefined ) {
+					if ( answer ) sendGameplay( { kind: "chat", channel: 1, text: answer } );
 					activeNoticeDialog = undefined;
 					noticeDialogPosition = null;
 					dirty = true;
@@ -7137,16 +7188,23 @@ export function createUi( ports: UiPorts ) {
 					event.kind === "key" && event.code === "Enter" && !composing ||
 					event.kind === "activate" && event.id === "map-teleport-confirm"
 				) {
-					mapTeleport.clear();
-					dirty = true;
 					if ( teleportTarget.reversePoint !== undefined ) {
+						// A busy bag holds the reverse answer: the confirmation
+						// stays until the use is sent or the choice is really gone.
 						const command = reverseScrollHud.choosePoint( teleportTarget.reversePoint, view );
 						if ( command ) {
+							mapTeleport.clear();
+							dirty = true;
 							sendGameplay( command );
 							setPanel( "" );
+						} else if ( !reverseScrollHud.mapping() ) {
+							mapTeleport.clear();
+							dirty = true;
 						}
 						return;
 					}
+					mapTeleport.clear();
+					dirty = true;
 					if ( view?.session?.phase === "world" && view.gameplay?.eligibility?.gm ) {
 						sendGameplay( { kind: "gm-command", line: mapTeleport.command( teleportTarget ) } );
 					}
@@ -7337,7 +7395,8 @@ export function createUi( ports: UiPorts ) {
 						members ? social?.guild?.members.length ?? 0 : social?.wars?.length ?? 0,
 						members ? 3 : guildTab === 2 ? 6 : 9
 					);
-				} else socialPage = Math.max( 0, socialPage + Math.sign( event.delta ) );
+				} else if ( compactGuildShown ) socialPage = Math.max( 0, socialPage + Math.sign( event.delta ) );
+				else guildMemberOffset = Math.max( 0, guildMemberOffset + Math.sign( event.delta ) );
 				dirty = true;
 				return;
 			}
@@ -7368,6 +7427,10 @@ export function createUi( ports: UiPorts ) {
 			}
 			if ( event.kind === "scroll" && panel === "Experimental" ) {
 				experimental.scroll( Math.sign( event.delta ), experimentalRange( view?.session ) );
+				dirty = true;
+				return;
+			}
+			if ( event.kind === "scroll" && panel === "Map" && mapHud.scroll( event ) ) {
 				dirty = true;
 				return;
 			}
@@ -7520,6 +7583,16 @@ export function createUi( ports: UiPorts ) {
 					return;
 				}
 			}
+			if ( event.kind === "drag" && event.id === "guild-member-thumb" && panel === "Guild" ) {
+				const members = view?.gameplay?.social?.guild?.members.length ?? 0,
+					extra = Math.max( 0, members - GUILD_MEMBER_VISIBLE_ROWS );
+				guildMemberOffset = Math.max(
+					0,
+					Math.min( extra, guildMemberOffset + event.dy * extra / GUILD_MEMBER_SCROLL_TRACK )
+				);
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "drag" && event.id === "friend-thumb" && panel === "Guild" ) {
 				const extra = Math.max( 0, (view?.gameplay?.friends?.rows.length ?? 0) - FRIEND_VISIBLE_ROWS );
 				friendOffset = Math.max( 0, Math.min( extra, friendOffset + event.dy * extra / FRIEND_SCROLL_TRACK ) );
@@ -7552,6 +7625,36 @@ export function createUi( ports: UiPorts ) {
 					dirty = true;
 				}
 				return;
+			}
+			if (
+				panel === GRANT_PANEL && (event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end")
+			) {
+				// CIFGrantMagicAttributeWnd's list is a CIFScrollManager (6EB3E0).
+				// Its wheel slot (6F35A0) steps the scrollbar one row per wheel
+				// message, up for a positive delta. Inference: a browser deltaY > 0
+				// is a negative Win32 wheel delta, so it moves the list down. The
+				// thumb moves it like the arrows, as its CIFVerticalScroll does.
+				const grant = view?.gameplay?.magicOption,
+					item = view?.gameplay?.inventory.find( r => r.slot === grant?.item ),
+					part = item ? grantableAvatarPart( item.typeFlags ) : null,
+					count = grant?.parts.find( p => p.part === part )?.options.length ?? 0;
+				if ( event.kind === "scroll" ) {
+					const area = controls.find( c => c.id === "magic-option-list" );
+					if ( area && containsPoint( area.rect, event.x, event.y ) ) {
+						magicOptionHud.scroll( Math.sign( event.delta ), count );
+						dirty = true;
+						return;
+					}
+				} else if ( event.id === "magic-option-thumb" ) {
+					if ( event.kind === "drag-end" ) magicOptionHud.endDrag();
+					else {
+						const up = controls.find( c => c.id === "magic-option-up" ),
+							down = controls.find( c => c.id === "magic-option-down" );
+						if ( up && down ) magicOptionHud.drag( event.dy, down.rect[1] - up.rect[1] - 32, count );
+					}
+					dirty = true;
+					return;
+				}
 			}
 			if ( event.kind === "scroll" && panel === "Blocking" ) {
 				const area = controls.find( c => c.id === "blocking-list" );
@@ -8414,9 +8517,13 @@ export function createUi( ports: UiPorts ) {
 				const avatar = event.id.startsWith( "avatar:" ),
 					slot = event.id === "gacha-card" ?
 						gachaHud.frame( gachaInput() ).cardSlot :
+						event.id.startsWith( "stall-slot:" ) ?
+						// The offer's icon is its bag item's: carriedRow reads the bag slot.
+						view?.gameplay?.stall?.offers.find( row => row.slot === Number( event.id.slice( 11 ) ) )
+							?.bagSlot :
 						avatar ?
 						view?.gameplay?.avatarInventory?.find( i =>
-							i.typeFlags >>> 11 === Number( event.id.slice( 7 ) )
+							avatarSocket( i.typeFlags ) === Number( event.id.slice( 7 ) )
 						)?.slot :
 						Number( event.id.slice( event.id.indexOf( ":" ) + 1 ) );
 				if ( slot === undefined ) return;
@@ -8983,13 +9090,13 @@ export function createUi( ports: UiPorts ) {
 						dirty = true;
 						return;
 					}
-					if ( item && (item.typeFlags & 0x7fe) === 0x6ac ) moveAvatar( true, item.slot );
+					if ( item && isAvatarItem( item.typeFlags ) ) moveAvatar( true, item.slot );
 					else if ( item && useInventorySlot( item.slot ) ) dirty = true;
 					return;
 				}
 				if ( event.id.startsWith( "avatar:" ) ) {
 					const item = view.gameplay.avatarInventory?.find( row =>
-						row.typeFlags >>> 11 === Number( event.id.slice( 7 ) )
+						avatarSocket( row.typeFlags ) === Number( event.id.slice( 7 ) )
 					);
 					if ( item ) moveAvatar( false, item.slot );
 					return;
@@ -9013,7 +9120,7 @@ export function createUi( ports: UiPorts ) {
 				if ( event.shift ) return;
 				if ( event.id.startsWith( "avatar:" ) ) {
 					const item = view?.gameplay?.avatarInventory?.find( i =>
-						i.typeFlags >>> 11 === Number( event.id.slice( 7 ) )
+						avatarSocket( i.typeFlags ) === Number( event.id.slice( 7 ) )
 					);
 					if ( item ) moveAvatar( false, item.slot );
 					return;
@@ -9024,7 +9131,7 @@ export function createUi( ports: UiPorts ) {
 				}
 				if ( event.id.startsWith( "slot:" ) && view?.gameplay ) {
 					const avatar = view.gameplay.inventory.find( i =>
-						i.slot === Number( event.id.slice( 5 ) ) && (i.typeFlags & 0x7fe) === 0x6ac
+						i.slot === Number( event.id.slice( 5 ) ) && isAvatarItem( i.typeFlags )
 					);
 					if ( avatar ) {
 						moveAvatar( true, avatar.slot );
@@ -9183,6 +9290,19 @@ export function createUi( ports: UiPorts ) {
 					// shared close every window gets (53D480).
 					if ( view?.gameplay?.stall?.network.open ) {
 						sendGameplay( { kind: "stall-network-open", open: false } );
+						dirty = true;
+						return;
+					}
+					// The stall window (CIFStall) is game state too: Escape
+					// did nothing but open the System menu, so a player could
+					// not leave a stall from the keyboard. A panel drawn beside
+					// it (Inventory, or a separate window the stall leaves open) is
+					// the window Escape closes first, as the topmost one; then
+					// the stall's shared close sends what its close control
+					// sends: leave for a visitor, close for the owner.
+					const stallPhase = view?.gameplay?.stall?.phase;
+					if ( !panel && (stallPhase === "owner" || stallPhase === "visitor") ) {
+						activate( stallPhase === "owner" ? "stall-close" : "stall-leave" );
 						dirty = true;
 						return;
 					}
@@ -9430,7 +9550,7 @@ export function createUi( ports: UiPorts ) {
 			}
 			// 0x366A reset -> CGInterface_CloseTransientWindowsOnReset (685400) destroys
 			// the ItemMall section. A world transfer starting is that reset here.
-			if ( next.travel && !view?.travel && itemMall.read().visible ) {
+			if ( next.travel && !view?.travel && itemMall.isOpen() ) {
 				itemMall.close();
 				dirty = true;
 			}
@@ -9579,7 +9699,7 @@ export function createUi( ports: UiPorts ) {
 			) {
 				const game = next.gameplay, references = hud.data()?.cosReferences, clock = next.simulationTimeMs ?? 0;
 				const potionState = companionPotions.state(), potionSettings = potionState.saved;
-				const potionBlocked = transportPotionBlocked( game ) || itemMall.read().visible ||
+				const potionBlocked = transportPotionBlocked( game ) || itemMall.isOpen() ||
 					!!(carriedItem || carriedShortcut);
 				const potionRetrying = potionState.lastSentMs !== undefined && clock >= potionState.lastSentMs &&
 					clock - potionState.lastSentMs < TRANSPORT_POTION_RETRY_MS;
@@ -10195,7 +10315,7 @@ export function createUi( ports: UiPorts ) {
 			else {
 				// 572770 reads the selected/dragged control; 561D50 checks the
 				// Item Mall child (69B2E0), not arbitrary nonmodal windows.
-				const blocked = !!(carriedItem || carriedShortcut), itemMallOpen = itemMall.read().visible;
+				const blocked = !!(carriedItem || carriedShortcut), itemMallOpen = itemMall.isOpen();
 				if ( autoPotionInput.sync( blocked, itemMallOpen ) ) {
 					sendGameplay( { kind: "auto-potion-input", blocked, itemMallOpen } );
 				}
@@ -10312,6 +10432,7 @@ export function createUi( ports: UiPorts ) {
 					socialAmount = "";
 					socialMember = 0;
 					socialPage = 0;
+					guildMemberOffset = 0;
 					confirmSocial = "";
 					selectedSkill = 0;
 					skillPage = 0;
@@ -10408,7 +10529,7 @@ export function createUi( ports: UiPorts ) {
 			if ( fontPath ) paths.push( fontPath );
 			const w = next.width, h = next.height, full: UiRect = [ 0, 0, w, h ];
 			const compact = compactHud.layout( w, h, displayClass.coarsePointer );
-			const drawFrame: UiFrame = {
+			const drawFrame: UiAuthoredFrame = {
 				quads,
 				controls,
 				blocks,
@@ -10432,7 +10553,24 @@ export function createUi( ports: UiPorts ) {
 				fontPath,
 				pressed,
 				hover,
-				focus
+				focus,
+				copy: hudCopy,
+				buttonFamily: hud.buttonFamily,
+				fitWindowLabels: () => experimental.state().saved.fitWindowLabels,
+				greyDisabledTabs: () => experimental.state().saved.greyDisabledTabs
+			};
+			const itemSlots: ItemSlotContext = {
+				gameplay: next.gameplay,
+				gender: next.session?.characters?.find( row => row.name === next.session?.character )?.gender,
+				simulationTimeMs: next.simulationTimeMs ?? 0,
+				warningPhase: equipmentWarningPhase,
+				iconPath,
+				carryFree: () => !repairHud.armed() && cosHud.itemTargetCursor() === null,
+				touchInspect: () => experimental.state().saved.touchInspect,
+				markEffect: () => slotEffects.mark(),
+				warningShown: () => {
+					equipmentWarningVisible = true;
+				}
 			};
 			let targetBottom = 0, compactTelemetryTop = 4;
 			// The chat strip the party board must stay clear of, counting only
@@ -10522,8 +10660,9 @@ export function createUi( ports: UiPorts ) {
 			additiveImage
 
 			An effect sheet without alpha, drawn additively: black adds nothing. INFERENCE: the
-			native effect statics (ga_effect_*, alcm_effect_prepare) are opaque DXT1 art, so the
-			original can only show them by adding them to what is behind.
+			native effect statics (ga_effect_*, alcm_effect_prepare, alcm_effect_success) are opaque
+			art, alpha 255 in every texel, so the original can only show them by adding them to what
+			is behind.
 			================
 			*/
 			function additiveImage( r: UiRect, path: string, uv: UiRect = [ 0, 0, 1, 1 ] ) {
@@ -10817,14 +10956,7 @@ export function createUi( ports: UiPorts ) {
 				fraction = 1,
 				tint: UiQuad["color"] = white
 			) {
-				if ( !path ) return;
-				const r = authoredRect( node, ox, oy );
-				image( [ r[0], r[1], r[2] * fraction, r[3] ], path, tint, [
-					node.uv[0],
-					node.uv[1],
-					node.uv[2] * fraction,
-					node.uv[3]
-				] );
+				return frameDraw.authoredImage( drawFrame, { node, ox, oy, path, fraction, tint } );
 			}
 
 			if ( gmObserved < 0 ) gmObserved = Math.max( 0, ...(game?.gmReplies ?? []).map( reply => reply.sequence ) );
@@ -10853,89 +10985,7 @@ export function createUi( ports: UiPorts ) {
 				clipToControl: boolean | "clip" = false,
 				fontStyle = 0
 			) {
-				const box = authoredClientRect( node, ox, oy );
-				// SML2 markup (843100) renders through the text board's layout, never
-				// as plain characters: the Item Mall subtitles and alchemy texts.
-				if ( hasSml2Markup( value ) ) {
-					// Markup the guide layout cannot read falls back to plain text.
-					let tokens: ReturnType<typeof guideTokens> | null = null;
-					try {
-						tokens = guideTokens( value );
-					} catch {
-						tokens = null;
-					}
-					if ( tokens ) {
-						const out = text.guide( tokens, box, clipToControl ? box : full, node.color, resources.size );
-						quads.push( ...out.quads );
-						paths.push( ...out.paths );
-						return;
-					}
-				}
-				// Port-only (Experimental "Fit window labels", off is the original):
-				// an authored label (the static carries a text key; value fields
-				// with an empty authored text keep the native fitting) wider than
-				// its box (the trade window's "Purchase amount", right-aligned in
-				// 63 pixels, with a wider text face, or the consignment window's
-				// "Large category", right-aligned at x = 74 in a 43-pixel box)
-				// wraps onto two lines instead of running past its window's left
-				// edge or into the next control. A right-aligned label's lines may
-				// use the room to the window's left margin; the wrap width splits
-				// the label near its middle (never under its longest word) so a
-				// label whose room is the rest of the window still breaks in two
-				// instead of ellipsizing.
-				if (
-					!clipToControl && experimental.state().saved.fitWindowLabels && node.text !== "" &&
-					value.includes( " " )
-				) {
-					const measure = ( line: string ) => text.run( line, 0, node.fontIndex ).width;
-					const width = measure( value );
-					if ( width > box[2] ) {
-						const room = node.hAlign === 2 ?
-								Math.max( box[2], box[0] + box[2] - (ox + WINDOW_LABEL_MARGIN) ) :
-								box[2],
-							balanced = Math.max(
-								box[2],
-								Math.ceil( width / 2 ),
-								...value.split( " " ).map( measure )
-							);
-						// The balanced split first (its widest line stays farthest
-						// from the window's edge), the room-wide split after it.
-						for ( const wrapWidth of balanced < room ? [ balanced, room ] : [ room ] ) {
-							const lines = textLines( value, wrapWidth, measure );
-							if ( lines.length !== 2 || !lines.every( line => measure( line ) <= room ) ) continue;
-							const lineHeight = text.extentHeight( node.fontIndex ?? 0 ),
-								top = box[1] + (box[3] - 2 * lineHeight) / 2;
-							lines.forEach( ( line, index ) =>
-								quads.push(
-									...text.quads(
-										line,
-										[ box[0], top + index * lineHeight, box[2], lineHeight ],
-										full,
-										node.color,
-										{
-											fontIndex: node.fontIndex,
-											fontStyle,
-											hAlign: node.hAlign,
-											vAlign: 1
-										}
-									)
-								)
-							);
-							return;
-						}
-					}
-				}
-				quads.push(
-					...text.quads( value, box, clipToControl ? box : full, node.color, {
-						fontIndex: node.fontIndex,
-						fontStyle,
-						hAlign: node.hAlign,
-						vAlign: node.vAlign,
-						...(clipToControl ?
-							{ overflow: clipToControl === "clip" ? "clip" as const : "ellipsis" as const } :
-							{})
-					} )
-				);
+				return frameDraw.authoredText( drawFrame, { node, ox, oy, value, clipToControl, fontStyle } );
 			}
 			/*
 			================
@@ -10948,13 +10998,7 @@ export function createUi( ports: UiPorts ) {
 			================
 			*/
 			function authoredSkillPoints( node: AuthoredControl, ox: number, oy: number, points: number ) {
-				const room = authoredClientRect( node, ox, oy )[2], readouts = skillPointReadouts( points );
-				authoredText(
-					node,
-					ox,
-					oy,
-					readouts.find( value => text.run( value, 0, node.fontIndex ).width <= room ) ?? readouts.at( -1 )!
-				);
+				return frameDraw.authoredSkillPoints( drawFrame, { node, ox, oy, points } );
 			}
 			/*
 			================
@@ -11062,18 +11106,7 @@ export function createUi( ports: UiPorts ) {
 				label: string,
 				disabled = false
 			) {
-				const r = authoredRect( node, ox, oy ), family = hud.buttonFamily( node.texture );
-				paths.push( ...family );
-				controls.push( { id, label, rect: r, kind: "button", disabled } );
-				blocks.push( r );
-				const state = disabled ?
-					3 :
-					pressed === id && hover === id ?
-					2 :
-					pressed === null && (hover === id || focus === id) ?
-					1 :
-					0;
-				if ( family.every( resources.has ) ) rect( r, white, family[state]! );
+				return frameDraw.authoredButton( drawFrame, { node, ox, oy, id, label, disabled } );
 			}
 			/*
 			================
@@ -11088,19 +11121,7 @@ export function createUi( ports: UiPorts ) {
 				caption: string,
 				disabled = false
 			) {
-				// Port-only, not native (Experimental "Fit window labels", off is
-				// the original): a button caption wider than its plate keeps the
-				// leading words that fit ("Delete message" -> "Delete", "Check
-				// for duplicate entries" -> "Check").
-				const shown = experimental.state().saved.fitWindowLabels ?
-					captionWords(
-						caption,
-						authoredRect( node, ox, oy )[2] - 2 * CAPTION_MARGIN,
-						line => text.run( line, 0, node.fontIndex ).width
-					) :
-					caption;
-				authoredButton( node, ox, oy, id, shown, disabled );
-				authoredText( node, ox, oy, shown );
+				return frameDraw.authoredLabeledButton( drawFrame, { node, ox, oy, id, caption, disabled } );
 			}
 			// Resource sections are reverse-insertion lists (9BD240), so native child
 			// paint order is the reverse of controlsByName, not numeric control ID.
@@ -11110,71 +11131,7 @@ export function createUi( ports: UiPorts ) {
 			================
 			*/
 			function authoredChrome( node: AuthoredControl, ox: number, oy: number ) {
-				// CIFScrollManager inherits CIFFrame (6F3830), but some resources omit its skin.
-				if ( node.type === "CIFScrollManager" && !node.texture ) return;
-				const r = authoredRect( node, ox, oy );
-				if (
-					node.type === "CIFFrame" || node.type === "CIFSubFrame" || node.type === "CIF_NPCTalk" ||
-					node.type === "CIFScrollManager"
-				) {
-					paths.push( ...PARTS.map( p => node.texture + p + ".png" ) );
-					quads.push(
-						...frameRing(
-							r,
-							node.texture,
-							PARTS.map( p => resources.size( node.texture + p + ".png" ) ),
-							full
-						)
-					);
-					if ( node.text ) {
-						quads.push(
-							...text.quads(
-								hudCopy( node.text ),
-								[ r[0] + 10, r[1] + 7, r[2] - 20, 12 ],
-								full,
-								node.color,
-								{ hAlign: 1, vAlign: 0 }
-							)
-						);
-					}
-				} else if ( node.type === "CIFBarWnd" ) {
-					const bar = barChrome( r, node.texture, resources.size, full );
-					paths.push( ...bar.paths );
-					quads.push( ...bar.quads );
-					if ( node.text ) authoredText( node, ox, oy, hudCopy( node.text ) );
-				} else if ( node.type === "CIFStretchWnd" ) {
-					const ring = stretchRing( r, node.texture, resources.size, full );
-					paths.push( ...ring.paths );
-					quads.push( ...ring.quads );
-				} else if ( node.type === "CIFLattice" ) {
-					for ( const cell of latticeCells( r[0], r[1], Math.floor( r[2] / 36 ), Math.floor( r[3] / 36 ) ) ) {
-						const path = node.texture + cell.part + ".png";
-						paths.push( path );
-						if ( resources.has( path ) ) {
-							rect( cell.rect, white, path );
-						}
-					}
-				} else if ( node.type === "CIFNormalTile" ) {
-					paths.push( node.texture );
-					quads.push( ...normalTile( r, node.texture, resources.size( node.texture ), full ) );
-				} else if ( node.type === "CIFStatic" || node.type === "CIFPartySlot" ) {
-					if ( node.texture ) authoredImage( node, ox, oy );
-					if ( node.type === "CIFStatic" && node.text ) authoredText( node, ox, oy, hudCopy( node.text ) );
-				} else if ( node.type === "CIFPML" ) {
-					const out = text.guide(
-						guideTokens( hudCopy( node.text ) ),
-						r,
-						r,
-						node.color,
-						resources.size,
-						{
-							align: node.hAlign === 1 ? "center" : node.hAlign === 2 ? "right" : "left",
-							vAlign: node.vAlign
-						}
-					);
-					quads.push( ...out.quads );
-					paths.push( ...out.paths );
-				}
+				return frameDraw.authoredChrome( drawFrame, { node, ox, oy } );
 			}
 			/*
 			================
@@ -11339,56 +11296,8 @@ export function createUi( ports: UiPorts ) {
 			blocks and controls around it.
 			================
 			*/
-			function simpleMessageBox(
-				box: {
-					title: string;
-					lines: readonly string[];
-					yes: string;
-					no: string;
-					yesDisabled?: boolean;
-					// CIFSimpleMessageBox types 0 (Confirm, yes id) and 2 (Cancel, no id).
-					single?: "confirm" | "cancel";
-				}
-			) {
-				const lines = messageBoxLines( box.lines, value => text.run( value ).width );
-				const layout = textMessageBoxLayout( w, h, lines.map( line => text.run( line ).width ) );
-				paths.push( ...partyProposalAssets() );
-				quads.push(
-					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
-					...frameRing(
-						layout.frame,
-						MESSAGE_FRAME,
-						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
-						full
-					),
-					...text.quads( box.title, layout.title, full, white, { hAlign: 1, vAlign: 0 } )
-				);
-				for ( const [i, line] of lines.entries() ) {
-					quads.push( ...text.quads( line, layout.lines[i]!, full, white, { vAlign: 0 } ) );
-				}
-				if ( box.single === "confirm" ) {
-					button(
-						box.yes,
-						hudCopy( "UIIT_CTL_CONFIRM" ),
-						layout.single[0],
-						layout.single[1],
-						76,
-						!!box.yesDisabled
-					);
-				} else if ( box.single === "cancel" ) {
-					button( box.no, hudCopy( "UIIT_CTL_CANCEL" ), layout.single[0], layout.single[1], 76 );
-				} else {
-					button(
-						box.yes,
-						hudCopy( "UIIT_CTL_YES" ),
-						layout.accept[0],
-						layout.accept[1],
-						76,
-						!!box.yesDisabled
-					);
-					button( box.no, hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
-				}
-				return layout;
+			function simpleMessageBox( box: frameDraw.MessageBox ) {
+				return frameDraw.simpleMessageBox( drawFrame, box );
 			}
 			/*
 			================
@@ -11396,9 +11305,7 @@ export function createUi( ports: UiPorts ) {
 			================
 			*/
 			function nativePage( layout: AuthoredLayout, px: number, py: number, exclude: readonly number[] = [] ) {
-				for ( const node of authoredPaintOrder( layout ) ) {
-					if ( !exclude.includes( node.id ) ) authoredChrome( node, px, py );
-				}
+				return frameDraw.nativePage( drawFrame, { layout, px, py, exclude } );
 			}
 			/*
 			================
@@ -11480,28 +11387,11 @@ export function createUi( ports: UiPorts ) {
 				caption: string,
 				closeId: CloseControlId
 			) {
-				const r: UiRect = [ px, py, node.rect[2], node.rect[3] ];
-				blocks.push( r );
-				paths.push( ...PARTS.map( p => node.texture + p + ".png" ) );
-				quads.push(
-					...frameRing( r, node.texture, PARTS.map( p => resources.size( node.texture + p + ".png" ) ), full )
-				);
-				// CIFMainFrame::OnCreate 6F8230: shared title/drag width is frame minus 21.
-				closeButton( px + r[2] - 26, py + 10, closeId );
-				quads.push(
-					...text.quads( caption, [ px + 10, py + 12, r[2] - 21, 12 ], full, white, { hAlign: 1, vAlign: 0 } )
-				);
+				frameDraw.nativeFrame( drawFrame, { node, px, py, caption, closeId } );
 			}
 			/*
 			================
 			nativeTab
-
-			A disabled tab is unavailable: it refuses input and, as the original,
-			looks like an unselected one; with the Experimental row Grey disabled
-			tabs on (the default) its plate is dimmed and its label grey. A busy
-			tab is only waiting for the server (its owner's request is pending):
-			it refuses input and always keeps the original look, so a pending
-			trade never flashes grey.
 			================
 			*/
 			function nativeTab(
@@ -11511,24 +11401,7 @@ export function createUi( ports: UiPorts ) {
 				selected: boolean,
 				style: { family: string; disabled?: boolean; busy?: boolean; client?: UiRect; }
 			) {
-				const { family, disabled = false, busy = false, client = [ 0, 0, 0, 0 ] } = style;
-				const content: UiRect = [
-					r[0] + client[0],
-					r[1] + client[1],
-					r[2] - client[0] - client[2],
-					r[3] - client[1] - client[3]
-				];
-				const path = ROOT + "interface/ifcommon/" + family + (selected ? "_on" : "_off") + ".png";
-				const grey = disabled && experimental.state().saved.greyDisabledTabs;
-				image( r, path, grey ? GREY_TAB_PLATE : white );
-				controls.push( { id, label: caption, rect: r, kind: "button", selected, disabled: disabled || busy } );
-				quads.push(
-					...text.quads( caption, content, full, grey ? GREY_TAB_LABEL : white, {
-						hAlign: 1,
-						vAlign: 1,
-						fontStyle: selected ? 2 : 0
-					} )
-				);
+				frameDraw.nativeTab( drawFrame, { id, caption, r, selected, style } );
 			}
 			equipmentWarningVisible = false;
 			cautionVisible = false;
@@ -11542,51 +11415,15 @@ export function createUi( ports: UiPorts ) {
 				item: import("@/engine/contracts/gameplay").InventoryItem | undefined,
 				r: UiRect
 			) {
-				if ( !item || !next.gameplay ) return;
-				const gender = next.session?.characters?.find( row => row.name === next.session?.character )?.gender;
-				const overlay = itemEquipmentOverlay( item, next.gameplay.progression ?? { masteries: [] }, {
-					country: next.gameplay.guide?.country,
-					sex: gender === 0 ? 1 : gender === 1 ? 0 : undefined
-				}, next.gameplay.inventory );
-				if ( overlay ) {
-					const warning = overlay === "icon_item_warning";
-					if ( warning ) equipmentWarningVisible = true;
-					image(
-						r,
-						ROOT + "icon/" + overlay + ".png",
-						white,
-						warning ? equipmentWarningUv( equipmentWarningPhase ) : [ 0, 0, 1, 1 ]
-					);
-				}
+				frameDraw.equipmentOverlay( drawFrame, itemSlots, { item, r } );
 			}
 			/*
 			================
 			itemEffects
-
-			Item-slot painters share the same overlays and animation clock.
 			================
 			*/
 			function itemEffects( id: string, owned: import("@/engine/contracts/gameplay").InventoryItem, r: UiRect ) {
-				// CIFSlotWithHelp's item effects (item-slot-effects.ts): the dead
-				// companion wash, then the animated sheets. 0x3645 flashes target
-				// the inventory and equipment slots.
-				const wash = itemSlotWash( owned );
-				if ( wash ) rect( r, wash );
-				const flashes = id.startsWith( "slot:" ) ?
-					(game?.itemFlashes ?? []).filter( f => f.slot === owned.slot ) :
-					[];
-				const overlays = itemSlotOverlays(
-					owned,
-					r,
-					slotSeed( id + ":" + owned.refObjId ),
-					next.simulationTimeMs ?? 0,
-					flashes,
-					game?.levelCap === EXPANSION_LEVEL_CAP
-				);
-				for ( const overlay of overlays ) {
-					image( overlay.rect, overlay.path, white, overlay.uv );
-					slotEffects.mark();
-				}
+				frameDraw.itemEffects( drawFrame, itemSlots, { id, owned, r } );
 			}
 			/*
 			================
@@ -11600,30 +11437,7 @@ export function createUi( ports: UiPorts ) {
 				disabled = false,
 				selected = false
 			) {
-				const path = iconPath( item?.icon ), drawn = paths.length;
-				if ( path ) {
-					image( r, path );
-					if ( item && "typeFlags" in item ) {
-						const owned = item as import("@/engine/contracts/gameplay").InventoryItem;
-						equipmentOverlay( owned, r );
-						itemEffects( id, owned, r );
-					}
-				}
-				for ( const content of paths.slice( drawn ) ) contentImages.add( content );
-				controls.push( {
-					id,
-					label: item?.name ?? "",
-					rect: r,
-					kind: "button",
-					disabled,
-					selected,
-					rightActivate: !!item && (id.startsWith( "slot:" ) || id.startsWith( "storage-slot:" )),
-					draggable: !!item && !repairHud.armed() && cosHud.itemTargetCursor() === null,
-					carry: !repairHud.armed() && cosHud.itemTargetCursor() === null && !!item &&
-						ITEM_SLOT_PREFIXES.some( prefix => id.startsWith( prefix ) ),
-					inspect: !!item && experimental.state().saved.touchInspect
-				} );
-				itemCount( item, r );
+				frameDraw.nativeItem( drawFrame, itemSlots, { id, item, r, disabled, selected } );
 			}
 			/*
 			================
@@ -11636,16 +11450,7 @@ export function createUi( ports: UiPorts ) {
 					| undefined,
 				r: UiRect
 			) {
-				const unlimited = item?.refObjId !== undefined && !!game?.unlimitedItems?.includes( item.refObjId );
-				for ( const q of itemCountQuads( item, r, full, unlimited ) ) {
-					// The infinity sign is solid quads; digit sprites are resources.
-					if ( !q.texture ) {
-						quads.push( q );
-						continue;
-					}
-					paths.push( q.texture );
-					if ( resources.has( q.texture ) ) quads.push( q );
-				}
+				frameDraw.itemCount( drawFrame, itemSlots, { item, r } );
 			}
 			/*
 			================
@@ -11661,29 +11466,7 @@ export function createUi( ports: UiPorts ) {
 				page: number,
 				pages: number
 			) {
-				const r = authoredRect( node, px, py ), base = ROOT + "interface/ifcommon/";
-				for (
-					const [id, side, xx, disabled] of [ [ previous, "left", r[0], page <= 0 ], [
-						next,
-						"right",
-						r[0] + r[2] - 16,
-						page + 1 >= pages
-					] ] as const
-				) {
-					const n: AuthoredControl = {
-						...node,
-						type: "CIFButton",
-						rect: [ xx, r[1], 16, 16 ],
-						texture: base + "com_" + side + "_arrow.png"
-					};
-					authoredButton( n, 0, 0, id, id, disabled );
-				}
-				quads.push(
-					...text.quads( String( page + 1 ), [ r[0] + 16, r[1], r[2] - 32, r[3] ], full, white, {
-						hAlign: 1,
-						vAlign: 1
-					} )
-				);
+				frameDraw.nativeSpin( drawFrame, { node, px, py, previous, next, page, pages } );
 			}
 			/*
 			================
@@ -11833,9 +11616,6 @@ export function createUi( ports: UiPorts ) {
 			const worldVisible = (phase === "world" || retainedWorld) && !loading && next.worldReady &&
 				(!next.frontend || next.frontend.phase === "world");
 			worldShown = worldVisible;
-			if ( worldVisible && game && game.arenaChest === undefined ) {
-				sendGameplay( { kind: "arena-decision", operation: 0, id: "" } );
-			}
 			if ( !(phase === "world" || retainedWorld) ) windowWarm.reset();
 			// One unseen window build per idle frame; see window-warm.ts.
 			const warming = windowWarm.begin(
@@ -12724,6 +12504,8 @@ export function createUi( ports: UiPorts ) {
 						];
 					key.push( experimental.state().saved.noticeLinks );
 					key.push( experimental.state().saved.eventChatTab );
+					// Port-only (#3358): the contributor roster retags lines.
+					key.push( ...(game?.contributorTitles ?? []) );
 					// Port-only item links: the row and the input's labels change the layout.
 					key.push( chatLinksOn() );
 					key.push( ...chatLinkHud.labels( "chat-text" ) );
@@ -12744,6 +12526,7 @@ export function createUi( ports: UiPorts ) {
 						() =>
 							chatLayout( {
 								chatTimestamps: experimental.state().saved.chatTimestamps,
+								contributorTitles: game?.contributorTitles,
 								noticeLinks: experimental.state().saved.noticeLinks,
 								chatItemLinks: chatLinksOn(),
 								inputLabels: chatLinkHud.labels( "chat-text" ),
@@ -13666,7 +13449,6 @@ export function createUi( ports: UiPorts ) {
 					endWindow,
 					windowBox,
 					authoredButton,
-					authoredLabeledButton,
 					closeButton,
 					image
 				} );
@@ -15320,14 +15102,31 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 												label,
 												false
 											);
-											if ( label ) authoredText( child, sx, sy, label );
+											if ( label ) {
+												const shown = frameDraw.fittedCaption( drawFrame, {
+													node: child,
+													ox: sx,
+													oy: sy,
+													caption: label
+												} );
+												authoredText( shown.node, sx, sy, shown.value );
+											}
 										}
 										continue;
 									}
 									authoredChrome( child, sx, sy );
 									if ( child.id === 11 ) authoredText( child, sx, sy, member.name );
 									if ( child.id === 13 ) {
-										authoredText( child, sx, sy, member.entryLevel + "(" + member.level + ")" );
+										// Under "Fit window labels" the "80(80)" level runs
+										// past its 19-pixel field into the free room, as a
+										// label does, instead of reading "8...".
+										frameDraw.authoredText( drawFrame, {
+											node: child,
+											ox: sx,
+											oy: sy,
+											value: member.entryLevel + "(" + member.level + ")",
+											label: true
+										} );
 									}
 									if ( child.id === 14 && rank ) {
 										authoredText( child, sx, sy, hudCopy( rankKeys[rank]! ) );
@@ -15374,11 +15173,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										!academyIsLeader( camp ));
 							authoredButton( node, ox, oy, id, copy, disabled );
 							if ( copy ) {
+								// The caption fitted to its plate (fittedCaption).
+								const shown = frameDraw.fittedCaption( drawFrame, { node, ox, oy, caption: copy } );
 								authoredText(
-									disabled ? { ...node, color: tooltipColor( 0xff999999 ) } : node,
+									disabled ? { ...shown.node, color: tooltipColor( 0xff999999 ) } : shown.node,
 									ox,
 									oy,
-									copy
+									shown.value
 								);
 							}
 							continue;
@@ -15389,7 +15190,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								authoredText( { ...node, color: tooltipColor( 0xffffe194 ) }, ox, oy, leader.name );
 							}
 							if ( node.id === 44 ) {
-								authoredText( node, ox, oy, leader.entryLevel + "(" + leader.level + ")" );
+								// The leader's level, fitted as the members' (above).
+								frameDraw.authoredText( drawFrame, {
+									node,
+									ox,
+									oy,
+									value: leader.entryLevel + "(" + leader.level + ")",
+									label: true
+								} );
 							}
 							if ( node.id === 45 && academyRank( leader ) === 7 ) {
 								authoredText( node, ox, oy, hudCopy( "UIIT_STT_TC_GUARDIAN" ) );
@@ -15535,11 +15343,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								hasParty || !!game?.partyMatching?.own :
 								false;
 							authoredButton( node, ox, oy, id, copy, disabled );
+							const shown = frameDraw.fittedCaption( drawFrame, { node, ox, oy, caption: copy } );
 							authoredText(
-								disabled ? { ...node, color: tooltipColor( 0xff999999 ) } : node,
+								disabled ? { ...shown.node, color: tooltipColor( 0xff999999 ) } : shown.node,
 								ox,
 								oy,
-								copy
+								shown.value
 							);
 						}
 						if ( node.type === "CIFPartySlot" ) {
@@ -15854,12 +15663,32 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// 592C50: avatar mode retains the special-dress socket, replaces the
 					// other twelve equipment controls, and swaps buttons 13/14 in place.
 					if ( avatarView ) {
-						for ( const node of Object.values( equipment ).filter( n => n.id >= 113 && n.id <= 116 ) ) {
-							const type = node.id - 112,
-								r = authoredRect( node, ex, ey ),
-								item = game?.avatarInventory?.find( i => i.typeFlags >>> 11 === type ),
+						const sockets = Object.values( equipment ).filter( n => n.id >= 113 && n.id <= 116 )
+							.sort( ( a, b ) => a.id - b.id )
+							.map( node => ({ type: node.id - 112, r: authoredRect( node, ex, ey ) }) );
+						// Port-only, not native (SRO_NASRUN, #3456): a worn Devil's Spirit
+						// gets a fifth socket one socket pitch past the flag's. The
+						// v1.150 layout has no node for it; only a server with the
+						// switch on stores a Spirit, so a native shard draws four.
+						if (
+							sockets.length === 4 &&
+							game?.avatarInventory?.some( i => avatarSocket( i.typeFlags ) === SPIRIT_SOCKET )
+						) {
+							const third = sockets[2]!, fourth = sockets[3]!;
+							sockets.push( {
+								type: SPIRIT_SOCKET,
+								r: [
+									fourth.r[0] * 2 - third.r[0],
+									fourth.r[1] * 2 - third.r[1],
+									fourth.r[2],
+									fourth.r[3]
+								]
+							} );
+						}
+						for ( const { type, r } of sockets ) {
+							const item = game?.avatarInventory?.find( i => avatarSocket( i.typeFlags ) === type ),
 								path = ROOT + "interface/equipment/equip_slot_" +
-									[ "helm", "cloth", "pandernt", "plag" ][type - 1] + ".png";
+									[ "helm", "cloth", "pandernt", "plag", "helm" ][type - 1] + ".png";
 							paths.push( path );
 							if ( resources.has( path ) ) {
 								rect( [ r[0] - 4, r[1] - 4, 40, 40 ], white, path );
@@ -15874,7 +15703,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							// 5965E0: a one-piece dress (data byte +0x51d == 0) disables
 							// the empty attachment slot under the int_effect overlay.
 							const attachmentBlocked = type === 3 && avatarAttachmentBlocked(
-								game?.avatarInventory?.find( i => i.typeFlags >>> 11 === 2 ),
+								game?.avatarInventory?.find( i => avatarSocket( i.typeFlags ) === 2 ),
 								item
 							);
 							if ( attachmentBlocked ) {
@@ -16250,6 +16079,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								inspect: experimental.state().saved.touchInspect
 							} );
 							if ( owned ) {
+								// The cooldown sweep the quickslot draws, on the skill window's
+								// own icon: a cast shares its cooldown group with every rank of
+								// the chain, so the used skill's lower ranks sweep with it.
+								const defined = training.skill( owned.id );
+								if ( defined ) {
+									paths.push( ...quickslotTimerPaths() );
+									quads.push(
+										...quickslotCooldownQuads(
+											game?.skillCooldowns ?? [],
+											defined.id,
+											defined.cooldownGroup ?? 0,
+											quickslotTime,
+											r,
+											full
+										).filter( q => resources.has( q.texture ) )
+									);
+								}
 								const tab = ROOT + "interface/skill/skl_level_tab.png";
 								paths.push( tab );
 								if ( resources.has( tab ) ) rect( [ r[0] + 19, r[1] + 17, 16, 16 ], white, tab );
@@ -16508,21 +16354,26 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						if ( infoSlot.GDR_QUESTINFO_SLOT!.texture ) {
 							authoredImage( infoSlot.GDR_QUESTINFO_SLOT!, ox, oy );
 						}
-						authoredText( infoSlot.GDR_QUESTINFO_SLOT_TITLE!, ox, oy, entry.title );
+						// Port-only, not native (owner decision on #2806, on by
+						// default): the native statics draw one unbounded line
+						// (CIFQuestInfoGuideSlot_Populate 62E240), sized for the
+						// Korean names; the English title, NPC and condition run
+						// past the plate, so each is cut at its control's edge.
+						authoredText( infoSlot.GDR_QUESTINFO_SLOT_TITLE!, ox, oy, entry.title, "clip" );
 						authoredText(
 							infoSlot.GDR_QUESTINFO_SLOT_NPC_STATIC!,
 							ox,
 							oy,
 							hudCopy( infoSlot.GDR_QUESTINFO_SLOT_NPC_STATIC!.text )
 						);
-						authoredText( infoSlot.GDR_QUESTINFO_SLOT_NPC!, ox, oy, entry.notify );
+						authoredText( infoSlot.GDR_QUESTINFO_SLOT_NPC!, ox, oy, entry.notify, "clip" );
 						authoredText(
 							infoSlot.GDR_QUESTINFO_SLOT_CONDITION_STATIC!,
 							ox,
 							oy,
 							hudCopy( infoSlot.GDR_QUESTINFO_SLOT_CONDITION_STATIC!.text )
 						);
-						authoredText( infoSlot.GDR_QUESTINFO_SLOT_CONDITION!, ox, oy, entry.condition );
+						authoredText( infoSlot.GDR_QUESTINFO_SLOT_CONDITION!, ox, oy, entry.condition, "clip" );
 					}
 					closeButton( px + QUEST_INFO_WINDOW_WIDTH - 22, py + 6, "quest-info-close" );
 					endWindow( infoAdmission, "quest-info" );
@@ -17364,7 +17215,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								hudData.portals,
 								target?.refObjId ?? 0,
 								key => hudData.zones[key] ?? copy( key ),
-								game.targetTaxRate ?? 0
+								{ taxRate: game.targetTaxRate ?? 0, group: npcPanel.destinationGroup() }
 							) :
 							null,
 						canTalk: !!(capabilities & 2),
@@ -17455,7 +17306,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					paths.push( ...output.paths );
 					// Independent window admission: a cold NPC must not reuse another popup's
 					// retained image or expose hit regions before its chrome/font is ready.
-					const missing = paths.slice( mark[3] ).filter( path => !resources.has( path ) );
+					const missing = frameDraw.unloadedImages( resources, paths, mark[3] );
 					windowMissing.push( ...missing );
 					if ( !fontPath || !resources.has( fontPath ) || missing.length ) {
 						quads.length = mark[0];
@@ -17630,9 +17481,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					const deco = page.GDR_AB_REINFORCE_PROCESS_DECO,
 						cell = alchemyEffect && alchemyEffectCell( alchemyClock - alchemyEffect.startedAt );
 					if ( !processing && deco && alchemyEffect && cell ) {
-						const effect = ROOT + alchemyEffectTexture( alchemyEffect.flags ) + ".png";
-						paths.push( effect );
-						if ( resources.has( effect ) ) image( authoredRect( deco, px, py + 150 ), effect, white, cell );
+						const effect = ROOT + alchemyEffectTexture( alchemyEffect.flags ) + ".png",
+							r = authoredRect( deco, px, py + 150 );
+						if ( alchemyEffectAdditive( alchemyEffect.flags ) ) additiveImage( r, effect, cell );
+						else {
+							paths.push( effect );
+							if ( resources.has( effect ) ) image( r, effect, white, cell );
+						}
 					}
 					const slots = Object.values( page ).filter( n => n.type === "CIFSlotWithHelp" ).sort( ( a, b ) =>
 						a.id - b.id
@@ -18382,7 +18237,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						// 646FC0 relabels the title (20) and header (28) by job, and shows the
 						// own entry (10, 13-16) or the "no entry" line (60).
 						if ( contribution ) custom.push( 10, 13, 14, 15, 16, 20, 28, 60 );
-						nativePage( layout, px, py, custom );
+						nativePage( columnHeadLayout( layout ), px, py, custom );
 						const say = ( id: number, value: string ) => {
 							const node = byId( id );
 							if ( node ) authoredText( node, px, py, value );
@@ -18424,7 +18279,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							nativePage( slotLayout, sx, sy, [ 10, 11, 12, 13, 14 ] );
 							for ( const node of slotNodes ) {
 								const value = slot[node.id];
-								if ( value !== undefined ) authoredText( node, sx, sy, value );
+								if ( value === undefined ) continue;
+								// The title of level ("Apprentice Merchant" in 82 pixels)
+								// is fitted as a label under "Fit window labels" rather
+								// than cut to "Apprentice M...".
+								frameDraw.authoredText( drawFrame, {
+									node,
+									ox: sx,
+									oy: sy,
+									value,
+									label: node.name === "GDR_JOB_RANK_GRADENAME"
+								} );
 							}
 						}
 						const spin = byId( spinId );
@@ -18470,6 +18335,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						] );
 					nativeFrame( root, px, py, hudCopy( root.text ), "academy-honor-close" );
 					nativePage( layout, px, py, [ 3, 4, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 ] );
+					// 6E8C10 creates RankingListBtn and leaves it shown: the five column
+					// heads (Rank, Class, Guardian, Level, Graduation; CIFButton ids
+					// 20-24 on the gil_subj_button plates) beside the Guild bar (25).
+					// No handler of the window reads them, so they draw as plates
+					// with their captions and take no input.
+					for ( const id of ACADEMY_HONOR_HEADER_IDS ) {
+						const head = byId( id );
+						if ( !head ) continue;
+						authoredImage( head, px, py );
+						authoredText( head, px, py, hudCopy( head.text ) );
+					}
 					const confirm = byId( 3 );
 					if ( confirm ) {
 						authoredLabeledButton( confirm, px, py, "academy-honor-confirm", hudCopy( confirm.text ) );
@@ -18478,6 +18354,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						const holder = byId( 30 + index );
 						if ( !holder ) continue;
 						const [sx, sy] = authoredRect( holder, px, py );
+						// CIFApprenticeShipHonorSlot (6E91D0) derives from CIFBarWnd (its
+						// base 6F5990 sets the CIFBarWnd vtable), so every one of the ten
+						// slots 6E8C10 creates draws its com_bar01_ bar, filled or not.
+						const bar = barChrome( authoredRect( holder, px, py ), holder.texture, resources.size, full );
+						paths.push( ...bar.paths );
+						quads.push( ...bar.quads );
 						nativePage( slotLayout, sx, sy, [ 1, 2, 3, 4, 5, 6 ] );
 						if ( !slot ) continue;
 						for ( const node of slotNodes ) {
@@ -18550,6 +18432,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					const select = ROOT + "interface/guild/gil_bar02_select.png",
 						deselect = ROOT + "interface/guild/gil_bar02_deselect.png";
 					paths.push( select, deselect );
+					// The scroll manager's area (32) takes the wheel; pushed before the
+					// rows so a row stays the topmost control under the cursor.
+					const listArea = at( 32 );
+					if ( listArea ) {
+						controls.push( {
+							id: "magic-option-list",
+							label: "Magic option list",
+							rect: authoredRect( listArea, px, py ),
+							kind: "region"
+						} );
+					}
 					for ( let i = 0; i < MAGIC_OPTION_LIST_ROWS; i++ ) {
 						const bar = at( 0x28 + i ), option = options[choice.top + i];
 						if ( !bar ) continue;
@@ -20088,7 +19981,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							rect: cellRect,
 							kind: "button",
 							disabled: !offer && !(owner && !state.open),
-							draggable: owner && !state.open && !!offer
+							draggable: owner && !state.open && !!offer,
+							// Item slots move by click-carry: the offer lifts the way a
+							// bag item does, and the bag's release removes it.
+							carry: owner && !state.open && !!offer
 						} );
 						// GDR_STALLSLOT_MODIFY is added after the slot, so it stays
 						// topmost over the cell's top-right corner.
@@ -20859,6 +20755,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						paths.push( ...bar.paths );
 						quads.push( ...bar.quads );
 					}
+					// The scroll manager draws its vertical scroll even when every row fits,
+					// as the sibling Hostility list (600120). A union holds at most
+					// ALLIANCE_MAX_GUILDS (8) guilds against nine rows, so it never moves.
+					const unionScroll = chatScrollbar(
+						"union-scroll",
+						[ gx + list.rect[0] + list.rect[2] - 16, gy + list.rect[1] + 16, 16, list.rect[3] - 32 ],
+						rows.length,
+						Math.floor( list.rect[3] / 23 ),
+						0,
+						resources.size,
+						full,
+						hover,
+						pressed
+					);
+					paths.push( ...unionScroll.paths );
+					quads.push( ...unionScroll.quads );
+					controls.push( ...unionScroll.controls );
 					rows.slice( 0, Math.floor( list.rect[3] / 23 ) ).forEach( ( row, i ) => {
 						const ox = gx + list.rect[0], oy = gy + list.rect[1] + i * 23;
 						authoredText( slotAt( 11 ), ox, oy, row.name );
@@ -21757,7 +21670,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						quads.push( ...memberScroll.quads );
 						controls.push( ...memberScroll.controls );
 					}
-					if ( compact && (w < 477 || h < 393) ) {
+					compactGuildShown = !!compact && (w < 477 || h < 393);
+					if ( compactGuildShown ) {
 						const admission = beginWindow();
 						appendCompactGuild();
 						endWindow( admission, "compact-guild" );
@@ -21898,7 +21812,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 												"UIIT_STT_TITLE",
 												"UIIT_STT_GUILD_POSITION"
 											][guildNameMode]! :
-											node.text
+											columnHeadKey( node.text )
 									);
 								authoredLabeledButton( node, gx, gy, "guild-sort:" + id, caption );
 							}
@@ -21953,7 +21867,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									),
 									s = at( 82 ),
 									slot = hudData.windows.ifguildmemberslot!;
-								socialPage = Math.min( socialPage, Math.max( 0, Math.ceil( rows.length / 6 ) - 1 ) );
+								guildMemberOffset = Math.max(
+									0,
+									Math.min(
+										Math.max( 0, rows.length - GUILD_MEMBER_VISIBLE_ROWS ),
+										guildMemberOffset
+									)
+								);
+								const first = Math.round( guildMemberOffset );
 								// Register the empty region first so member/authority controls win hits.
 								controls.push( {
 									id: "guild-list",
@@ -21975,7 +21896,29 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										gy + 138,
 										self?.grade === 0
 									);
-								} else {rows.slice( socialPage * 6, socialPage * 6 + 6 ).forEach( ( row, i ) => {
+								} else {
+									// The scroll manager's vertical scroll sits at its right edge,
+									// between 16-pixel arrows, as the Friends list's (iffriend id 30).
+									const scroll = chatScrollbar(
+										"guild-member",
+										[
+											gx + s.rect[0] + s.rect[2] - 16,
+											gy + s.rect[1] + 16,
+											16,
+											GUILD_MEMBER_SCROLL_TRACK
+										],
+										Math.max( GUILD_MEMBER_VISIBLE_ROWS, rows.length ),
+										GUILD_MEMBER_VISIBLE_ROWS,
+										Math.max( 0, rows.length - GUILD_MEMBER_VISIBLE_ROWS ) - guildMemberOffset,
+										resources.size,
+										full,
+										hover,
+										pressed
+									);
+									paths.push( ...scroll.paths );
+									quads.push( ...scroll.quads );
+									controls.push( ...scroll.controls );
+									rows.slice( first, first + GUILD_MEMBER_VISIBLE_ROWS ).forEach( ( row, i ) => {
 										const ox = gx + s.rect[0], oy = gy + s.rect[1] + i * 23;
 										if ( row.id === socialMember ) {
 											image(
@@ -22041,7 +21984,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 											kind: "button",
 											selected: row.id === socialMember
 										} );
-									} );}
+									} );
+								}
 								// 5E3090 mode 3 hides the command section beneath the panel.
 								if ( !grantPowerHud.isOpen() ) {
 									for (
@@ -22225,8 +22169,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							entity.gid !== next.hoveredEntity && !nameInRange( boardAt( entity ), local, game.pose )
 						) continue;
 						if (
-							overlay.fortressMark || overlay.caravanMark || overlay.guildText || overlay.status ||
-							overlay.stallText
+							overlay.fortressMark || overlay.caravanMark || overlay.guildText ||
+							overlay.contributorText ||
+							overlay.status || overlay.stallText
 						) {
 							overlaid.add( entity.gid );
 						}
@@ -22326,7 +22271,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							}
 							if ( next.session?.crestPrefix !== undefined && next.session.marksBase ) {
 								for ( const crest of entityCrestFiles( entity, game, next.session.crestPrefix ) ) {
-									const path = new URL( "/marks/" + crest.file, next.session.marksBase ).href;
+									const path = guildCrestUrl( next.session.marksBase, crest.file );
 									paths.push( path );
 									if ( resources.has( path ) ) {
 										quads.push( {
@@ -22465,6 +22410,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							} );
 						}
 					}
+					// Port-only (#3358): a Contributor's title rides the name
+					// board, left of the name (overhead-layout.ts titledNameRow).
+					const title = overheads.get( entity.gid )?.contributorText ?? "",
+						titleWidth = title ? text.run( title, selected ? 2 : 0 ).width : 0;
 					if ( named && beginnerMarkShown( entity, options ) ) {
 						const name = boardText(
 								entity,
@@ -22478,7 +22427,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							quads.push( {
 								characterAnchor: entity.gid,
 								alphaCutoff: 128 / 255,
-								rect: [ -(width >> 1) - 21.5, -(height >> 1) - 1.5, 16, 16 ],
+								rect: [ titledNameRow( titleWidth, width ).left - 21.5, -(height >> 1) - 1.5, 16, 16 ],
 								clip: full,
 								uv: [ 0, 0, 1, 1 ],
 								texture: path,
@@ -22494,11 +22443,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						),
 						width = text.run( name, selected ? 2 : 0 ).width,
 						height = text.boardHeight();
-					const left = -(width >> 1), top = -(height >> 1);
+					const row = titledNameRow( name ? titleWidth : 0, width ),
+						left = row.nameLeft,
+						top = -(height >> 1);
 					if ( name && height ) {
 						quads.push( {
 							characterAnchor: entity.gid,
-							rect: [ left - 1, top - 1, width + 2, height + 2 ],
+							rect: [ row.left - 1, top - 1, row.total + 2, height + 2 ],
 							clip: full,
 							uv: [ 0, 0, 1, 1 ],
 							texture: "",
@@ -22526,13 +22477,31 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// CICUser 858810 gives the actual [GM] name prefix priority over player
 					// relation colors. This is presentation, never a privilege check.
 					const nameColor: UiQuad["color"] = nameColorRgba( entity.nameColor ?? 0xffffffff );
+					if ( name && title ) {
+						quads.push(
+							...text.quads(
+								title,
+								[ row.left, top, titleWidth, height ],
+								full,
+								CONTRIBUTOR_TITLE_COLOR,
+								{
+									vAlign: 0,
+									fontStyle: selected ? 2 : 0
+								}
+							).map( q => ({ ...q, characterAnchor: entity.gid }) )
+						);
+					}
 					quads.push(
 						...text.quads( name, [ left, top, width, height ], full, nameColor, {
 							vAlign: 0,
 							fontStyle: selected ? 2 : 0
 						} ).map( q => ({ ...q, characterAnchor: entity.gid }) )
 					);
-					const ownerEntity = next.entities.find( owner => owner.gid === entity.ownerGid );
+					// Only a companion's owner plate reads its owner; a scan of
+					// every row per player board was the HUD's largest cost.
+					const ownerEntity = entity.kind === "cos" ?
+						next.entities.find( owner => owner.gid === entity.ownerGid ) :
+						undefined;
 					// 854BB8: with no guild record the soldier's row keeps the
 					// owner's name colour, so the label colour is passed only
 					// when the owner actually has a guild (another player by
@@ -22690,20 +22659,22 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								av - bv :
 								String( av ).localeCompare( String( bv ) )) * (academyAscending ? 1 : -1);
 						} );
-					const projected = academyLayout(
-						guideData,
-						{ ...academy, rows },
-						academySelection,
-						ax,
-						ay,
-						full,
-						resources.size,
-						( s, r, c, color, style ) => text.quads( s, r, c, color, style ),
+					const projected = academyLayout( {
+						data: guideData,
+						state: { ...academy, rows },
+						selected: academySelection,
+						x: ax,
+						y: ay,
+						clip: full,
+						size: resources.size,
+						text: ( s, r, c, color, style ) => text.quads( s, r, c, color, style ),
+						measure: ( value, fontIndex ) => text.run( value, 0, fontIndex ).width,
 						hover,
 						pressed,
-						{ name: academyName, grade: academyGrade, kind: academyKind, open: academyCombo },
-						level
-					);
+						filter: { name: academyName, grade: academyGrade, kind: academyKind, open: academyCombo },
+						level,
+						fitLabels: experimental.state().saved.fitWindowLabels
+					} );
 					quads.push( ...projected.quads );
 					paths.push( ...projected.paths );
 					controls.push( ...projected.controls );
@@ -23301,7 +23272,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							"%s",
 							() => inviter?.guildName ?? ""
 						) :
-						copy( guild ? "UIIT_MSG_GUILD_JOIN_REQUEST" : "UIIT_STT_PARTY_SOMEUSER", "[%s]has" ).replace(
+						copy( guild ? "UIIT_MSG_GUILD_JOIN_REQUEST" : "UIIT_STT_PARTY_SOMEUSER", "[%s] has" ).replace(
 							"%s",
 							() => inviter?.name ?? ""
 						),
@@ -24759,51 +24730,70 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						] :
 						[ view?.session?.character ?? "", aliasWindow.checked ];
 				const filled = fillMarkup( message, args );
-				// Markup the guide layout cannot read falls back to plain text.
-				let markup: ReturnType<typeof guideTokens> | null = null;
-				if ( hasSml2Markup( filled ) ) {
-					try {
-						markup = guideTokens( filled );
-					} catch {
-						markup = null;
-					}
-				}
-				const layout = guildQuestionLayout(
-					w,
-					h,
-					markup ?
-						text.guide( markup, [ 0, 0, 300, 1000 ], [ 0, 0, 300, 1000 ], white, resources.size ).height :
-						12,
-					false
-				);
-				controls = drawFrame.controls = [];
-				blocks = drawFrame.blocks = [ full ];
-				paths.push( ...partyProposalAssets() );
-				quads.push(
-					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
-					...frameRing(
-						layout.frame,
-						MESSAGE_FRAME,
-						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
-						full
-					),
-					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
-						hAlign: 1,
-						vAlign: 0
-					} )
-				);
-				if ( markup ) {
-					const out = text.guide( markup, layout.name, full, white, resources.size );
-					quads.push( ...out.quads );
-					paths.push( ...out.paths );
-				} else quads.push( ...text.quads( filled, layout.name, full, white, { hAlign: 1, vAlign: 0 } ) );
 				const [yes, no] = academyAsk ?
 					[ "academy-confirm-yes", "academy-confirm-no" ] :
 					jobAsk ?
 					[ "job-confirm-yes", "job-confirm-no" ] :
 					[ "job-alias-yes", "job-alias-no" ];
-				button( yes, hudCopy( "UIIT_CTL_YES" ), ...layout.accept.slice( 0, 3 ) as [number, number, number] );
-				button( no, hudCopy( "UIIT_CTL_NO" ), ...layout.refuse.slice( 0, 3 ) as [number, number, number] );
+				if ( academyAsk || jobAsk ) {
+					// 5D26F0 types 4-6 and the camp confirms are CIFSimpleMessageBox
+					// type 1: 52DB20 sizes the box to its widest line (600 px wrap), each
+					// <br> starting a line, with Yes and No centred under them (#3550).
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
+					simpleMessageBox( {
+						title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+						lines: markupLines( filled ),
+						yes,
+						no
+					} );
+				} else {
+					// Markup the guide layout cannot read falls back to plain text.
+					let markup: ReturnType<typeof guideTokens> | null = null;
+					if ( hasSml2Markup( filled ) ) {
+						try {
+							markup = guideTokens( filled );
+						} catch {
+							markup = null;
+						}
+					}
+					const layout = guildQuestionLayout(
+						w,
+						h,
+						markup ?
+							text.guide( markup, [ 0, 0, 300, 1000 ], [ 0, 0, 300, 1000 ], white, resources.size )
+								.height :
+							12,
+						false
+					);
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+						...frameRing(
+							layout.frame,
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						),
+						...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+							hAlign: 1,
+							vAlign: 0
+						} )
+					);
+					if ( markup ) {
+						const out = text.guide( markup, layout.name, full, white, resources.size );
+						quads.push( ...out.quads );
+						paths.push( ...out.paths );
+					} else quads.push( ...text.quads( filled, layout.name, full, white, { hAlign: 1, vAlign: 0 } ) );
+					button(
+						yes,
+						hudCopy( "UIIT_CTL_YES" ),
+						...layout.accept.slice( 0, 3 ) as [number, number, number]
+					);
+					button( no, hudCopy( "UIIT_CTL_NO" ), ...layout.refuse.slice( 0, 3 ) as [number, number, number] );
+				}
 			}
 			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) guildManagerHud.reset();
 			else if ( game.social?.compensation !== undefined && !guildManagerHud.question() ) {
@@ -26348,7 +26338,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					h,
 					noticeDialogLines( hudCopy, activeNoticeDialog ),
 					value => text.run( value ).width,
-					noticeDialogPosition
+					noticeDialogPosition,
+					!!activeNoticeDialog.answers?.cancelLabel
 				);
 				noticeDialogFrame = layout.frame;
 				controls = drawFrame.controls = [];
@@ -26389,14 +26380,27 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				}
 				button(
 					"notice-dialog-confirm",
-					hudCopy( "UIIT_CTL_CONFIRM" ),
+					hudCopy( activeNoticeDialog.answers?.confirmLabel ?? "UIIT_CTL_CONFIRM" ),
 					layout.confirm[0],
 					layout.confirm[1],
-					76,
+					layout.confirm[2],
 					false,
 					false,
 					6
 				);
+				const cancelLabel = activeNoticeDialog.answers?.cancelLabel;
+				if ( cancelLabel ) {
+					button(
+						"notice-dialog-cancel",
+						hudCopy( cancelLabel ),
+						layout.cancel[0],
+						layout.cancel[1],
+						layout.cancel[2],
+						false,
+						false,
+						6
+					);
+				}
 			}
 			if ( phase === "disconnected" ) {
 				/*
@@ -26457,7 +26461,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					6
 				);
 			}
-			if ( worldVisible && game && itemMall.read().visible && hud.data() ) {
+			if ( worldVisible && game && itemMall.isOpen() && hud.data() ) {
 				const data = hud.data()!;
 				// Port-only (#3257): the Experimental mall categories row
 				// puts the later rail in force; the row off is the native
@@ -26912,13 +26916,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								] );}
 						}
 					}
-					const missing = paths.slice( mallAdmission[3] ).filter( path => !resources.has( path ) );
+					const missing = frameDraw.unloadedImages( resources, paths, mallAdmission[3] );
 					windowMissing.push( ...missing );
 					if ( !fontPath || !resources.has( fontPath ) || missing.length ) {
 						quads.length = mallAdmission[0];
 						controls = drawFrame.controls = [];
 					} else {
-						const painted = resolveTextOverlaps( quads.slice( mallAdmission[0] ) );
+						const painted = resolveTextOverlaps(
+							quads.slice( mallAdmission[0] ),
+							experimental.state().saved.fitWindowLabels
+						);
 						quads.length = mallAdmission[0];
 						quads.push( ...painted );
 					}
@@ -28188,7 +28195,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									honor: lookup( "UIIT_STT_TC_HONOR_POINT" ),
 									point: lookup( "UIIT_STT_SILKMALL_P_POINT" ),
 									guildPoint: lookup( "UIIT_STT_GUILD_POINT" ),
-									guildPointUnit: lookup( "UIIT_STT_GUILD_POINT_GP" )
+									guildPointUnit: lookup( "UIIT_STT_GUILD_POINT_GP" ),
+									// Port-only (SRO_NASRUN): no native string names the token.
+									nasrunToken: "Devil's Spirit tokens",
+									nasrunTokenHeld: "You hold"
 								} )
 							];
 						}
@@ -28422,7 +28432,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				titleCredit: next.frontend?.phase === "login" && !loading,
 				// The DOM tools keep their own row beside the map, below combat chrome.
 				hudCorner: compact ?
-					[ w, itemMall.read().visible ? 52 : compactTelemetryTop, 0, 0 ] as UiRect :
+					[ w, itemMall.isOpen() ? 52 : compactTelemetryTop, 0, 0 ] as UiRect :
 					hudCorner,
 				// The DOM tools stay at the top right beside the minimap on desktop;
 				// companion status icons hang below them (cosStatusDesktopTop, BUG-087).
@@ -28482,9 +28492,22 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					)
 				);
 			}
-			for ( const item of game?.inventory ?? [] ) {
-				const path = iconPath( item.icon );
-				if ( path ) paths.push( path );
+			// Every item list the player already holds is warm, not only the bag:
+			// a pet's bag, the avatar slots and an opened storage drew their icons
+			// a few frames after their window (the icons were first demanded by the
+			// window itself).
+			for (
+				const items of [
+					game?.inventory,
+					game?.avatarInventory,
+					game?.storage?.items,
+					...(game?.cosRecords ?? []).map( record => record.inventory )
+				]
+			) {
+				for ( const item of items ?? [] ) {
+					const path = iconPath( item.icon );
+					if ( path ) paths.push( path );
+				}
 			}
 			// Publication: the demand is final for this layout. Frozen, it lets
 			// resources.step skip re-reading it on the frames until the next layout.
@@ -28503,19 +28526,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			gauges.end();
 			// Text runs travel to the renderer whole: the GPU packer writes one record
 			// per glyph straight into its buffer (text-run.ts, device/ui.ts).
-			quads = drawFrame.quads = resolveTextOverlaps( quads );
+			quads = drawFrame.quads = resolveTextOverlaps( quads, experimental.state().saved.fitWindowLabels );
 			probe?.detailEnd( "ui-finalize" );
 			probe?.detailBegin( "ui-compare" );
-			const unchanged = lastProduct && lastProduct.width === w && lastProduct.height === h &&
-				lastProduct.damageText === worldVisible && sameUiQuads( lastProduct.quads, quads ) &&
-				sameUiSemantics( lastProduct.semantics, semantics );
+			// Semantics are returned only when they change (uiPublication): a
+			// walker's minimap dot republishes quads alone.
+			const product = { width: w, height: h, damageText: worldVisible, quads, semantics };
+			const publication = uiPublication( lastProduct, product );
 			probe?.detailEnd( "ui-compare" );
-			if ( unchanged ) return null;
+			if ( publication === "unchanged" ) return null;
 			probe?.detailBegin( "ui-publish" );
-			lastProduct = { width: w, height: h, damageText: worldVisible, quads, semantics };
+			// Keep the semantics last returned: the next comparison is against what was presented.
+			lastProduct = publication === "present" || !lastProduct ?
+				product :
+				{ ...product, semantics: lastProduct.semantics };
 			publish( { revision: ++revision, width: w, height: h, quads, damageText: worldVisible } );
 			probe?.detailEnd( "ui-publish" );
-			return semantics;
+			return publication === "present" ? semantics : null;
 		},
 		/*
 		================

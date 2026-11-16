@@ -115,3 +115,31 @@ func TestSequentialPassivesAlwaysUseHighestLearnedBook(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestEveryThirdBookCanMaxAtLevel90
+
+Port-only: the final book spends points at the level cap, without requiring 126.
+================
+*/
+func TestEveryThirdBookCanMaxAtLevel90(t *testing.T) {
+	for _, species := range D.Pets {
+		for row := range RowCount {
+			p := &domain.CharacterCOS{Codename: species.CodenamePrefix + "_090", Level: 90, Training: domain.PetTraining{TreeVersion: 2, BonusPoints: 150}}
+			for _, s := range SkillsForPet(p) {
+				if s.Row != row {
+					continue
+				}
+				for rank := uint8(0); rank < s.MaxLevel; rank++ {
+					if s.Option == 3 && NextLevelRequirement(s, rank) != 90 {
+						t.Fatalf("%s rank %d exceeds cap", s.Name, rank+1)
+					}
+					if msg := Learn(p, s.ID); msg != "" {
+						t.Fatalf("%s rank %d: %s", s.Name, rank+1, msg)
+					}
+				}
+			}
+		}
+	}
+}

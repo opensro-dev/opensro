@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+	betterSoloTimes,
 	budgetOffenders,
 	isLintRunnerRefusal,
 	overBudgetPackages,
@@ -98,6 +99,35 @@ test("soloVerdicts judges the solo times, and no solo time never fits", () => {
 		{ pkg: "opensro.online/server/internal/config", seconds: 31, solo: 31.5, fits: false },
 		{ pkg: "opensro.online/server/internal/game/action", seconds: 135.4, solo: undefined, fits: false }
 	] );
+});
+
+/*
+================
+betterSoloTimes
+================
+*/
+test("betterSoloTimes keeps each package's better launch", () => {
+	// The first launch paid the one-off toll; the second shows the work
+	// (#3306). A package over on both keeps its better, still-over time.
+	const first = new Map( [
+		[ "opensro.online/server/internal/gates", 39.5 ],
+		[ "opensro.online/server/internal/data/store", 45 ]
+	] );
+	const second = new Map( [
+		[ "opensro.online/server/internal/gates", 2.1 ],
+		[ "opensro.online/server/internal/data/store", 41 ]
+	] );
+	assert.deepEqual(
+		betterSoloTimes( first, second ),
+		new Map( [
+			[ "opensro.online/server/internal/gates", 2.1 ],
+			[ "opensro.online/server/internal/data/store", 41 ]
+		] )
+	);
+	// A package timed in only one run keeps that time; an untimed package
+	// stays absent, so it keeps no verdict in its favour.
+	assert.deepEqual( betterSoloTimes( first, new Map() ), first );
+	assert.deepEqual( betterSoloTimes( new Map(), second ), second );
 });
 
 /*

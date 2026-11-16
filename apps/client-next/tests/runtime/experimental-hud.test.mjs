@@ -48,7 +48,7 @@ test("safe loading defaults off and persists only after Confirm", () => {
 test("the HD row is listed only while the published build carries the set (#2800)", () => {
 	const world = /** @type {import("../../src/engine/contracts/session").SessionState} */ ({
 		phase: "world",
-		huntingGuide: { url: "http://localhost/hunting.json", bytes: 1 }
+		huntingGuide: { url: "http://localhost/hunting.json", bytes: 1, overlay: true }
 	});
 	const keys = tabs => tabs.flatMap( tab => experimentalRows( tab ).map( row => row.key ) );
 	assert.ok( keys( experimentalTabs( world, true ) ).includes( "hdTextures" ), "the set is published" );
@@ -136,8 +136,7 @@ test("new environment preferences persist only on Confirm and Default remains a 
 			"hdrToneMap",
 			"sunShadow",
 			"perPixelLighting",
-			"ambientOcclusion",
-			"waterRefraction"
+			"ambientOcclusion"
 		])
 	) {
 		const hud = createExperimentalHud();
@@ -197,8 +196,13 @@ test("six tabs group every preference once, in the spec's sections", () => {
 	] );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => experimentalRows( tab ).map( row => row.key ) );
 	// Every option has a row; the own-walk presenter has none (owner 2026-10-25).
-	// 64 since the mall categories row (#3257) joined Items and mall.
-	assert.equal( keys.length, 64 );
+	// 65: the Entire-map level checkbox (#3258) left when the v1.188
+	// window's own foot checkbox became the map's native switch, and the
+	// unique spawn points row (#3417) joined World map (M); 66: Silent wing
+	// flight (#3547) joined Sound and connection; 65: Water refraction left
+	// at the owner's request (2026-11-15); 66: the Christmas carols row
+	// joined Sound and connection.
+	assert.equal( keys.length, 66 );
 	assert.deepEqual( [ ...keys ].sort(), Object.keys( OFF ).sort() );
 	const kinds = EXPERIMENTAL_TABS.flatMap( experimentalRows ).filter( row => row.parent );
 	assert.deepEqual(
@@ -244,11 +248,24 @@ test("a gesture under the click slop is a click and moves nothing", () => {
 	assert.equal( hud.endDrag(), false, "past the slop it is a drag, even without a row step" );
 });
 
-test("gating drops the row, then an emptied section", () => {
-	// No world session: no hunting guide, so its emptied World map (M)
-	// section goes and the next section leads the tab; no HD set.
-	const map = experimentalTabs( null, false ).find( tab => tab.title === "Map" );
-	assert.deepEqual( map?.sections[0]?.rows.map( row => row.key ), [ "questTrackerMarkers" ] );
+test("gating drops the guide row without a world session, and no HD set drops HD", () => {
+	// No world session: no hunting guide, so its row goes. World map (M)
+	// stays: the unique spawn points row (#3417) needs no session.
+	const worldMap = ( session ) =>
+		experimentalTabs( session, false ).find( tab => tab.title === "Map" )?.sections.find(
+			section => section.title === "World map (M)"
+		);
+	assert.deepEqual( worldMap( null )?.rows.map( row => row.key ), [ "uniqueSpawnPoints" ] );
+	const world = /** @type {any} */ ({ phase: "world", huntingGuide: { url: "fixture", bytes: 1, overlay: true } });
+	assert.deepEqual(
+		worldMap( world )?.rows.map( row => row.key ),
+		[ "monsterGuide", "uniqueSpawnPoints" ],
+		"with a session the guide's row is listed"
+	);
+	// An atlas without the overlay (SRO_HUNTING_GUIDE off, #3489) feeds
+	// the M window's lists but offers no guide row.
+	const atlasOnly = /** @type {any} */ ({ phase: "world", huntingGuide: { url: "fixture", bytes: 1 } });
+	assert.deepEqual( worldMap( atlasOnly )?.rows.map( row => row.key ), [ "uniqueSpawnPoints" ] );
 	assert.ok( !experimentalRows( experimentalTabs( null, false )[0] ).some( row => row.key === "hdTextures" ) );
 });
 

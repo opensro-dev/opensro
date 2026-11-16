@@ -25,7 +25,8 @@ load
 async function load( path, name ) {
 	return import( sourceFileUrl( "src/engine/" + path ).href );
 }
-const { overheadLayout } = await load( "foundation/ui/overhead-layout.ts", "overhead" );
+const { overheadLayout, withoutBoardPass } = await load( "foundation/ui/overhead-layout.ts", "overhead" );
+const { STALL_TITLE_MODE } = await load( "foundation/gameplay/interaction-approach.ts", "interaction" );
 const {
 	partyColumns,
 	partyDistanceShade,
@@ -88,6 +89,27 @@ test("guild/status/speech share native stack independently of hidden base names"
 		overheadLayout( peer, local, { ...game, social: { ...game.social, members: [] } }, options ).speechY,
 		-20
 	);
+});
+test("stall title rides bracketed above the stack (869750 wraps the stored name)", () => {
+	const options = { ...defaultGameOptions(), playerNames: false, ownName: false, partyStatus: true };
+	const appearanceState = [ 0, 0, 0, 0, 0, 0, STALL_TITLE_MODE, 0, 0 ];
+	const stalling = { ...peer, appearanceState, titleText: "Cheap blades" };
+	const row = overheadLayout( stalling, local, game, options );
+	// SetStallName stores "[" + title + "]"; the board draws that form, raw in the window.
+	assert.equal( row.stallText, "[Cheap blades]" );
+	assert.equal( row.stallY, row.statusY - 20 );
+	assert.equal( row.speechY, row.stallY );
+	// No title, or the state byte is not the stall mode: no stall row, no lift.
+	assert.equal( overheadLayout( { ...stalling, titleText: undefined }, local, game, options ).stallText, "" );
+	assert.equal(
+		overheadLayout( { ...stalling, appearanceState: [ 0, 0, 0, 0, 0, 0, 0, 0, 0 ] }, local, game, options )
+			.stallText,
+		""
+	);
+	// The /id-clear pass keeps only the bracketed stall title, at its own rise.
+	const bare = withoutBoardPass( row );
+	assert.equal( bare.stallText, "[Cheap blades]" );
+	assert.equal( bare.stallY, -20 );
 });
 test("party slot viewer: bbuf and phase-1 effects, one row per list, abnormal bits appended", () => {
 	const skillCatalog = [ { id: 1, icon: "skill/china/sword_smash_a.ddj", buffSecondary: true }, {

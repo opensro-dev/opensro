@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -29,6 +30,25 @@ upsertMetaTx
 */
 func upsertMetaTx(tx sqlExecer, key, value string) error {
 	_, err := tx.Exec("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value)
+	return err
+}
+
+/*
+================
+stampVersionTx
+
+Writes a version stamp (schema or layout) that never goes down: the
+stored stamp stays when it is the higher one (#3091). A binary that
+opened a newer store inside its read window must not restamp it to its
+own version, or the newer binary could never open it again after a
+revert. The comparison runs in the statement, so it holds for a stamp
+the caller never read.
+================
+*/
+func stampVersionTx(tx sqlExecer, key string, version int) error {
+	_, err := tx.Exec("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = "+
+		"CASE WHEN CAST(meta.value AS INTEGER) > CAST(excluded.value AS INTEGER) THEN meta.value ELSE excluded.value END",
+		key, fmt.Sprint(version))
 	return err
 }
 
@@ -100,7 +120,7 @@ func (w *characterRowTx) upsertCharacter(division string, c *domain.Character) e
 			return nil
 		}
 	}
-	record, err := encodeCharacter(division, c)
+	record, err := encodeCharacter(division, c, w.store.residues.characters[key])
 	if err != nil {
 		return err
 	}
@@ -189,12 +209,13 @@ func (w *characterRowTx) Rollback() error {
 ================
 encodeCharacter
 
-The character row's JSON. The commit times it apart from the write
+The character row's JSON, with the unknown fields the row was stored
+with (json.go). The commit times it apart from the write
 (lock_timing.go).
 ================
 */
-func encodeCharacter(division string, c *domain.Character) ([]byte, error) {
-	record, err := json.Marshal(c)
+func encodeCharacter(division string, c *domain.Character, unknown unknownFields) ([]byte, error) {
+	record, err := encodeRecordFields(c, unknown)
 	if err != nil {
 		// Plain-data structs do not fail to marshal; when one does, the
 		// whole commit fails LOUD instead of silently dropping a
@@ -217,8 +238,13 @@ Callers consume the record synchronously (writeCharacterTx copies it
 into the statement), so the borrowed lifetime is exact.
 ================
 */
-func encodeCharacterBorrowed(scratch *jsonscratch.Scratch, division string, c *domain.Character) ([]byte, error) {
+func encodeCharacterBorrowed(scratch *jsonscratch.Scratch, division string, c *domain.Character, unknown unknownFields) ([]byte, error) {
 	record, err := scratch.Marshal(c)
+	if err == nil {
+		// A row with unknown fields (json.go) leaves the scratch for
+		// its own merged copy; every other row stays borrowed.
+		record, err = unknown.merge(record)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("marshaling character %s/%s: %w", division, c.Name, err)
 	}
@@ -250,7 +276,7 @@ func writeCharacterTx(tx *sql.Tx, division string, c *domain.Character, record [
 replaceGroundTx
 ================
 */
-func replaceGroundTx(tx *sql.Tx, scratch *jsonscratch.Scratch, divisions map[string][]domain.GroundItemRecord) error {
+func replaceGroundTx(tx *sql.Tx, scratch *jsonscratch.Scratch, divisions map[string][]domain.GroundItemRecord, residues map[groundResidueKey]unknownFields) error {
 	if _, err := tx.Exec("DELETE FROM ground_items"); err != nil {
 		return err
 	}
@@ -262,6 +288,9 @@ func replaceGroundTx(tx *sql.Tx, scratch *jsonscratch.Scratch, divisions map[str
 	for _, divisionID := range divisionIDs {
 		for _, item := range divisions[divisionID] {
 			record, err := scratch.Marshal(item)
+			if err == nil {
+				record, err = residues[groundResidueKey{division: divisionID, gid: item.Gid}].merge(record)
+			}
 			if err != nil {
 				return fmt.Errorf("marshaling ground %s/gid %d: %w", divisionID, item.Gid, err)
 			}
@@ -270,6 +299,7 @@ func replaceGroundTx(tx *sql.Tx, scratch *jsonscratch.Scratch, divisions map[str
 			}
 		}
 	}
+	keepGroundResidues(residues, divisions)
 	return nil
 }
 
@@ -302,8 +332,8 @@ The walk writes through one groundRowWriter (#1943 W3): the changed
 rows of a churn-heavy commit no longer pay tx.Exec's prepare each.
 ================
 */
-func writeGroundDiffTx(tx sqlExecer, scratch *jsonscratch.Scratch, committed, next map[string][]domain.GroundItemRecord) (int, int, error) {
-	writer := newGroundRowWriter(tx, scratch)
+func writeGroundDiffTx(tx sqlExecer, scratch *jsonscratch.Scratch, committed, next map[string][]domain.GroundItemRecord, residues map[groundResidueKey]unknownFields) (int, int, error) {
+	writer := newGroundRowWriter(tx, scratch, residues)
 	defer writer.close()
 	divisionIDs := make([]string, 0, len(next)+len(committed))
 	for divisionID := range next {
@@ -381,6 +411,8 @@ type groundRowWriter struct {
 	scratch    *jsonscratch.Scratch
 	upsertStmt *sql.Stmt
 	deleteStmt *sql.Stmt
+	// residues are the ground rows' stored unknown fields (json.go).
+	residues map[groundResidueKey]unknownFields
 }
 
 /*
@@ -388,8 +420,8 @@ type groundRowWriter struct {
 newGroundRowWriter
 ================
 */
-func newGroundRowWriter(tx sqlExecer, scratch *jsonscratch.Scratch) *groundRowWriter {
-	return &groundRowWriter{tx: tx, scratch: scratch}
+func newGroundRowWriter(tx sqlExecer, scratch *jsonscratch.Scratch, residues map[groundResidueKey]unknownFields) *groundRowWriter {
+	return &groundRowWriter{tx: tx, scratch: scratch, residues: residues}
 }
 
 /*
@@ -402,6 +434,9 @@ old per-row tx.Exec form did (upsertGroundTx, folded in here).
 */
 func (w *groundRowWriter) upsert(divisionID string, item *domain.GroundItemRecord) error {
 	record, err := w.scratch.Marshal(item)
+	if err == nil {
+		record, err = w.residues[groundResidueKey{division: divisionID, gid: item.Gid}].merge(record)
+	}
 	if err != nil {
 		return fmt.Errorf("marshaling ground %s/gid %d: %w", divisionID, item.Gid, err)
 	}
@@ -418,8 +453,11 @@ One ground row removed by gid.
 ================
 */
 func (w *groundRowWriter) deleteRow(divisionID string, gid uint32) error {
-	_, err := w.exec(&w.deleteStmt, deleteGroundSQL, divisionID, gid)
-	return err
+	if _, err := w.exec(&w.deleteStmt, deleteGroundSQL, divisionID, gid); err != nil {
+		return err
+	}
+	forgetGroundResidue(w.residues, divisionID, gid)
+	return nil
 }
 
 /*
@@ -498,7 +536,8 @@ func replaceMailboxTx(tx sqlExecer, division string, charID int64, mailbox []dom
 		return err
 	}
 	for seq, letter := range mailbox {
-		record, err := json.Marshal(letter)
+		// The letter carries its own unknown fields (json.go).
+		record, err := encodeRecordFields(letter, unknownFields(letter.UnknownFields))
 		if err != nil {
 			return fmt.Errorf("marshaling memo %s/%d[%d]: %w", division, charID, seq, err)
 		}
@@ -519,22 +558,25 @@ func replaceMailboxTx(tx sqlExecer, division string, charID int64, mailbox []dom
 replaceGuildTx
 ================
 */
-func replaceGuildTx(tx sqlExecer, division string, guildID int64, guild domain.GuildRecord, members []domain.GuildMemberRecord) error {
+func replaceGuildTx(tx sqlExecer, division string, guildID int64, guild domain.GuildRecord, members []domain.GuildMemberRecord, residues *recordResidues) error {
 	if _, err := tx.Exec("DELETE FROM guilds WHERE division = ? AND guild_id = ?", division, guildID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec("DELETE FROM guild_members WHERE division = ? AND guild_id = ?", division, guildID); err != nil {
 		return err
 	}
-	record, err := json.Marshal(guild)
+	record, err := encodeRecordFields(guild, residues.guilds[groupResidueKey{division: division, id: guildID}])
 	if err != nil {
 		return fmt.Errorf("marshaling guild %s/%d: %w", division, guildID, err)
 	}
 	if _, err := tx.Exec("INSERT INTO guilds (division, guild_id, record) VALUES (?, ?, ?)", division, guildID, string(record)); err != nil {
 		return err
 	}
+	pruneMembers(residues.guildMembers, division, guildID, func(charID int64) bool {
+		return slices.ContainsFunc(members, func(member domain.GuildMemberRecord) bool { return member.CharID == charID })
+	})
 	for seq, member := range members {
-		memberRecord, err := json.Marshal(member)
+		memberRecord, err := encodeRecordFields(member, residues.guildMembers[memberResidueKey{division: division, group: guildID, charID: member.CharID}])
 		if err != nil {
 			return fmt.Errorf("marshaling guild member %s/%d[%d]: %w", division, guildID, seq, err)
 		}
@@ -553,13 +595,14 @@ func replaceGuildTx(tx sqlExecer, division string, guildID int64, guild domain.G
 deleteGuildTx
 ================
 */
-func deleteGuildTx(tx sqlExecer, division string, guildID int64) error {
+func deleteGuildTx(tx sqlExecer, division string, guildID int64, residues *recordResidues) error {
 	if _, err := tx.Exec("DELETE FROM guilds WHERE division = ? AND guild_id = ?", division, guildID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec("DELETE FROM guild_members WHERE division = ? AND guild_id = ?", division, guildID); err != nil {
 		return err
 	}
+	forgetGroupResidues(residues.guilds, residues.guildMembers, division, guildID)
 	return nil
 }
 
@@ -574,22 +617,25 @@ func deleteGuildTx(tx sqlExecer, division string, guildID int64) error {
 replaceCampTx
 ================
 */
-func replaceCampTx(tx sqlExecer, division string, campID int64, camp domain.TrainingCampRecord, members []domain.TrainingCampMemberRecord) error {
+func replaceCampTx(tx sqlExecer, division string, campID int64, camp domain.TrainingCampRecord, members []domain.TrainingCampMemberRecord, residues *recordResidues) error {
 	if _, err := tx.Exec("DELETE FROM training_camps WHERE division = ? AND camp_id = ?", division, campID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec("DELETE FROM training_camp_members WHERE division = ? AND camp_id = ?", division, campID); err != nil {
 		return err
 	}
-	record, err := json.Marshal(camp)
+	record, err := encodeRecordFields(camp, residues.camps[groupResidueKey{division: division, id: campID}])
 	if err != nil {
 		return fmt.Errorf("marshaling training camp %s/%d: %w", division, campID, err)
 	}
 	if _, err := tx.Exec("INSERT INTO training_camps (division, camp_id, record) VALUES (?, ?, ?)", division, campID, string(record)); err != nil {
 		return err
 	}
+	pruneMembers(residues.campMembers, division, campID, func(charID int64) bool {
+		return slices.ContainsFunc(members, func(member domain.TrainingCampMemberRecord) bool { return member.CharID == charID })
+	})
 	for seq, member := range members {
-		memberRecord, err := json.Marshal(member)
+		memberRecord, err := encodeRecordFields(member, residues.campMembers[memberResidueKey{division: division, group: campID, charID: member.CharID}])
 		if err != nil {
 			return fmt.Errorf("marshaling training camp member %s/%d[%d]: %w", division, campID, seq, err)
 		}
@@ -608,13 +654,16 @@ func replaceCampTx(tx sqlExecer, division string, campID int64, camp domain.Trai
 deleteCampTx
 ================
 */
-func deleteCampTx(tx sqlExecer, division string, campID int64) error {
+func deleteCampTx(tx sqlExecer, division string, campID int64, residues *recordResidues) error {
 	if _, err := tx.Exec("DELETE FROM training_camps WHERE division = ? AND camp_id = ?", division, campID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec("DELETE FROM training_camp_members WHERE division = ? AND camp_id = ?", division, campID); err != nil {
 		return err
 	}
+	// The camp id is the master's character id: a camp the master opens
+	// again must not inherit this one's residue.
+	forgetGroupResidues(residues.camps, residues.campMembers, division, campID)
 	return nil
 }
 
@@ -647,7 +696,7 @@ func seedAuthorityDBTx(tx *sql.Tx, data *authoritySeed) error {
 		for _, c := range data.characters[divisionID] {
 			// A fresh database behind no live store: no retained
 			// digest exists yet, so the raw row writer is exact here.
-			record, err := encodeCharacter(divisionID, c)
+			record, err := encodeCharacter(divisionID, c, "")
 			if err != nil {
 				return err
 			}
@@ -675,10 +724,10 @@ func seedAuthorityDBTx(tx *sql.Tx, data *authoritySeed) error {
 			return err
 		}
 	}
-	if err := upsertMetaTx(tx, metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion)); err != nil {
+	if err := stampVersionTx(tx, metaKeySchemaVersion, CurrentVersion); err != nil {
 		return err
 	}
-	if err := upsertMetaTx(tx, metaKeyLayoutVersion, fmt.Sprintf("%d", CurrentLayoutVersion)); err != nil {
+	if err := stampVersionTx(tx, metaKeyLayoutVersion, CurrentLayoutVersion); err != nil {
 		return err
 	}
 	if err := upsertMetaTx(tx, metaKeyGidCounter, fmt.Sprintf("%d", data.meta.GidCounter)); err != nil {
@@ -691,6 +740,9 @@ func seedAuthorityDBTx(tx *sql.Tx, data *authoritySeed) error {
 		return err
 	}
 	if err := writeHalloweenBoxes(tx, data.meta.HalloweenBoxes); err != nil {
+		return err
+	}
+	if err := writeSookArenaAccounts(tx, data.meta.SookArenaAccounts); err != nil {
 		return err
 	}
 	return upsertMetaTx(tx, metaKeyUpdatedAtMs, fmt.Sprintf("%d", data.updatedAt))

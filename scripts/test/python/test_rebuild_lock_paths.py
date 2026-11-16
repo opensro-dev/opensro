@@ -12,13 +12,13 @@ relative_lock_path must fall back to the absolute path instead.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import os
 import sys
 import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import rebuild_lock  # noqa: E402
 
 

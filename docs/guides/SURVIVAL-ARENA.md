@@ -10,7 +10,9 @@ Available only on servers that enable the experimental Survival Arena event.
 2. Talk to **Event So-ok** and choose **Survival Arena (5 stages, EXP/SP x5)**.
 3. You enter your own arena. A **20-second countdown** gives you time to prepare.
 
-You have **three entries per character per UTC day**. Enter alive, without a
+You have **three entries per account per UTC day**, shared by all of the
+account's characters: an entry one character spends is gone for the others
+until 00:00 UTC. Enter alive, without a
 job suit, and finish any stall, exchange or storage interaction first. Other
 players have separate runs and cannot take your monsters or eggs.
 
