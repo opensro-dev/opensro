@@ -164,6 +164,25 @@ test("a label with a space wraps inside its box's columns", () => {
 	assert.ok( drawn[0].rect[3] <= drawn[1].rect[1] + 3, "the second line sits under the first" );
 });
 
+test("a wrap that would reach the rows above and below is refused", () => {
+	// The split box's label with a row 2 pixels over and under its box:
+	// the pair (two ink heights and a pixel) is taller than the 19-pixel
+	// box, so it would put ink in both rows.
+	/** @type {Rect} */
+	const box = [ 34, 106, 64, 19 ];
+	const label = titleText( fontAtlas, "Retained number", box, CLIP, WHITE, { hAlign: 1, vAlign: 0 } );
+	const count = titleText( fontAtlas, "48", [ 105, 106, 41, 19 ], CLIP, WHITE, { overflow: "clip", vAlign: 0 } );
+	const above = titleText( fontAtlas, "Above", [ 34, 92, 64, 12 ], CLIP, WHITE, { hAlign: 1, vAlign: 1 } );
+	const below = titleText( fontAtlas, "Below", [ 34, 127, 64, 12 ], CLIP, WHITE, { hAlign: 1, vAlign: 1 } );
+	const painted = resolveTextOverlaps( [ ...above, ...label, ...count, ...below ], true );
+	const drawn = lines( painted ).map( l => l.text );
+	assert.ok( !drawn.includes( "number" ), `no wrapped second line in ${JSON.stringify( drawn )}` );
+	assert.ok( drawn.includes( "Retained ..." ), "a value-style label falls back to its shortened run" );
+	assert.deepEqual( inkCrossings( painted ), [] );
+	// Without the rows the same label wraps (the case above).
+	assert.ok( lines( resolveTextOverlaps( [ ...label, ...count ], true ) ).some( l => l.text === "number" ) );
+});
+
 test("a single word slides clear of its neighbour's box, at most its overflow", () => {
 	// ifguildwaragree.txt: the stake label (33, 51 wide) and the gold field
 	// at 108, laid at the window's origin.

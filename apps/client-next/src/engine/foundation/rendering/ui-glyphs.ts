@@ -423,7 +423,8 @@ once per complete UI projection; layouts are dropped from the result.
 Port-only, not native: with fit (the Experimental "Fit window labels",
 on by default; off keeps the shortened run as the only repair) a
 colliding run is kept whole where it can be, in this order: its two-line
-wrap inside its box, and for a label (GlyphStyle label; a value keeps
+wrap inside its box (clear of every text box but its layers, the rows
+above and below too), and for a label (GlyphStyle label; a value keeps
 to its field) its line slid sideways (still spanning its box, so
 at most its overflow) until no neighbour box holds its ink, and its line
 where the ink stays
@@ -451,7 +452,18 @@ export function resolveTextOverlaps( quads: readonly UiQuad[], fit = false ): Ui
 		} );
 		const enters = ( run: UiQuad ) => neighbors.some( neighbor => runInkEnters( run, neighbor.textLayout!.box ) );
 		if ( !enters( q ) ) continue;
-		placed.set( layout, fit ? fittedPlacement( q, neighbors, enters ) : layout.fitted );
+		if ( !fit ) {
+			placed.set( layout, layout.fitted );
+			continue;
+		}
+		// The wrap reaches above and below its box, so it is held off the
+		// rows over and under it too, not only the columns beside it;
+		// a box over the label's own is a layer, as above.
+		const rows = boxes.filter( neighbor =>
+			neighbor.textLayout !== layout && !rectsOverlap( box, neighbor.textLayout!.box )
+		);
+		const wrapEnters = ( run: UiQuad ) => rows.some( neighbor => runInkEnters( run, neighbor.textLayout!.box ) );
+		placed.set( layout, fittedPlacement( q, neighbors, { enters, wrapEnters } ) );
 	}
 	const emitted = new Set<UiTextLayout>(), result: UiQuad[] = [];
 	for ( const q of quads ) {
@@ -466,6 +478,15 @@ export function resolveTextOverlaps( quads: readonly UiQuad[], fit = false ): Ui
 		if ( run ) result.push( { ...paint, ...run, color: paint.color } );
 	}
 	return result;
+}
+
+/*
+================
+rectsOverlap
+================
+*/
+function rectsOverlap( a: UiRect, b: UiRect ): boolean {
+	return a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
 }
 
 // A line kept whole by its ink stays this far from a neighbour's ink.
@@ -483,10 +504,10 @@ its shortened run (null when no glyph of that fits).
 function fittedPlacement(
 	q: UiQuad,
 	neighbors: readonly UiQuad[],
-	enters: ( run: UiQuad ) => boolean
+	{ enters, wrapEnters }: { enters( run: UiQuad ): boolean; wrapEnters( run: UiQuad ): boolean; }
 ): UiQuad | null {
 	const { textLayout, ...run } = q, layout = textLayout!;
-	if ( layout.wrapped && !enters( layout.wrapped ) ) return layout.wrapped;
+	if ( layout.wrapped && !wrapEnters( layout.wrapped ) ) return layout.wrapped;
 	// A value keeps to its field: only a label's line leaves its box.
 	if ( !layout.label ) return layout.fitted ?? null;
 	const [inkLeft, inkRight] = inkExtent( q ), reach = Math.max( 0, inkRight - inkLeft - layout.box[2] );
