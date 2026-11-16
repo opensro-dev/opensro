@@ -421,9 +421,7 @@ def add_muhan(native, out, v1696_root=None, source_root=None):
 	if not flag_enabled():
 		later_world_import.reap_world(SPEC, native, out)
 		return {"enabled": False}
-	v1696_root = Path(v1696_root or os.environ.get(ROOT_ENV, ""))
-	if not str(v1696_root):
-		raise SystemExit(f"Pass the v1.696 client folder or set {ROOT_ENV}.")
+	v1696_root = later_world_import.client_root(v1696_root, ROOT_ENV)
 	source_root = source_root or os.environ.get(SOURCE_ENV, "")
 	if not source_root:
 		raise SystemExit(f"{SOURCE_ENV} names no population export folder")

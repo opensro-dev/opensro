@@ -2553,6 +2553,14 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/animation/cloth-stream.ts",
+			"provider": "src/engine/runtime/renderer/characters/characters.ts",
+			"functions": [
+				"paletteOf",
+				"callback:paletteOf"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/renderer/characters/characters.ts",
 			"provider": "src/engine/runtime/random/random.ts",
 			"functions": [

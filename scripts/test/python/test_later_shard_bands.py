@@ -24,9 +24,10 @@ import hunting2_import as hunting2  # noqa: E402
 import jupiter_import as jupiter  # noqa: E402
 import muhan_import as muhan  # noqa: E402
 import skytemple_import as skytemple  # noqa: E402
+import styria_import as styria  # noqa: E402
 
 # Every module that stages its own character (and skill) shard.
-SHARD_OWNERS = (arabia, cap110, constantinople, god, hunting2, jupiter, muhan, skytemple)
+SHARD_OWNERS = (arabia, cap110, constantinople, god, hunting2, jupiter, muhan, skytemple, styria)
 LAYER_FLAGS = (arabia.FLAG, muhan.FLAG)
 
 
