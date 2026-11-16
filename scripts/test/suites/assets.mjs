@@ -91,6 +91,7 @@ export default {
 		"scripts/test/assets/stallNetworkAssets.test.mjs",
 		"scripts/test/assets/terrainBlockTextures.test.mjs",
 		"scripts/test/assets/objectTextureLevels.test.mjs",
-		"scripts/test/assets/hdTextureVariants.test.mjs"
+		"scripts/test/assets/hdTextureVariants.test.mjs",
+		"scripts/test/assets/textureVariantMasks.test.mjs"
 	]
 };
