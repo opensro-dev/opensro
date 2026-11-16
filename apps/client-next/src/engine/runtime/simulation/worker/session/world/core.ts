@@ -34,6 +34,8 @@ import { partyInviteTarget, partyProposalPendingNotice } from "@/engine/foundati
 import { gameplayDelta, samePlainData } from "@/engine/foundation/gameplay/gameplay-snapshot";
 import { createEntities } from "./entities/entities";
 import { createGameplay } from "./gameplay/gameplay";
+import { decodeMovementSpeeds } from "@/engine/foundation/gameplay/native-movement";
+import { speedFrameRoute } from "@/engine/foundation/gameplay/speed-journal";
 import type { WireFrame } from "@/engine/contracts/network";
 import type { GameplayCommand } from "@/engine/contracts/gameplay";
 import {
@@ -204,6 +206,18 @@ publishes its category-4 notice (player-attack.ts).
 			},
 			capeTeam: id => capeTeams.get( id )
 		};
+	}
+	/*
+================
+knownMount
+
+The mount gid rides when the client knows that mount, as the speed and
+movement routing resolves it (CCharactor_GetActiveMoverEntity 0x85E000).
+================
+	*/
+	function knownMount( gid: number ): number | undefined {
+		const mount = entities.read( gid )?.mountedOn;
+		return mount && entities.read( mount ) ? mount : undefined;
 	}
 	/*
 ================
@@ -395,7 +409,25 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 			const local = entities.read( localGid ),
 				effective = local?.mountedOn ? entities.read( local.mountedOn ) : local;
 			if ( effective ) gameplay.speeds( effective, now );
+			// Port-only diagnostics (#3508): which entity the frame's speeds
+			// landed on and which the local mover then read (speed-journal.ts).
+			const channels = decodeMovementSpeeds( frame.payload ),
+				route = speedFrameRoute( channels.gid, localGid, knownMount );
+			if ( route.local ) {
+				gameplay.noteSpeedFrame( {
+					atMs: now,
+					gid: channels.gid,
+					appliedGid: route.appliedGid,
+					moverGid: effective?.gid ?? 0,
+					walkSpeed: channels.walkSpeed,
+					runSpeed: channels.runSpeed
+				} );
+			}
 		}
+		// The local identity as this frame left it: the frame that seeds the
+		// local player journals its mount state at once.
+		const journaled = gameplay.localIdentity();
+		if ( journaled ) gameplay.noteMount( entities.read( journaled )?.mountedOn ?? 0, now );
 		if (
 			frame.opcode === OBJECT_STATE_REFRESH_OPCODE && frame.payload.length === 6 && frame.payload[4] === 0 &&
 			frame.payload[5] === 2
