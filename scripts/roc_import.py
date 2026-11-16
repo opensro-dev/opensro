@@ -85,8 +85,8 @@ GATE_CODES = ("GATE_RC_MOUNTAIN_GATE", "GATE_RC_TAHOMET_GATE", "GATE_RC_ROC_GATE
 # The wait room, RN_RM_ROCAPEX_WAIT: the one arena region v1.150 lacks
 # (its zone names ship; its regioncode row, sector and navmesh do not).
 WAIT_REGION = 25792
-# The archives the region merge reads, all pinned.
-MERGE_ARCHIVES = ("Map", "Data", "Media", "Particles")
+# The archives the region merge reads, all pinned: the family's one list.
+MERGE_ARCHIVES = later_world_import.MERGE_ARCHIVES
 TELEPORT_TABLES = ("teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt")
 
 LEVEL_COLUMN = 57
