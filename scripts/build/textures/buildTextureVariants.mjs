@@ -14,9 +14,17 @@ A variant has no CPU decoder, so picking cannot read its alpha back. Each
 one whose source has any alpha below 255 carries that alpha (level 0, one
 byte a texel, decoded bit-exactly from the BC blocks) after its levels,
 so a variant picks exactly as the original; an opaque source carries none
-(native-texture.ts NTX_PICK_ALPHA). The mask is taken from the source at
-every run, outside the encoder cache. WebGPU requires a block-compressed
-level 0 to be whole blocks, so a texture under 4x4 keeps its original.
+(native-texture.ts NTX_PICK_ALPHA). The mask has its own cache beside the
+encoder's, keyed by the source's SHA-256 and by the code hash of this
+module and the decoder it imports, so a fix to either recomputes every
+mask while an unchanged texture is never decoded again. Cache records are
+written whole (a temp name, then a rename). WebGPU requires a
+block-compressed level 0 to be whole blocks, so a texture under 4x4 keeps
+its original.
+
+A cache hit is file reads and writes only, done asynchronously so the
+workers overlap them. Before, each hit decoded its level 0 on the one
+thread, and the 15200 hits of a seeded release build took 71 s.
 
 	node scripts/build/textures/buildTextureVariants.mjs
 		[--jobs N] [--only /assets/prefix] [--limit N]
@@ -34,7 +42,18 @@ the variant reads, for side-by-side frames on a machine without ASTC.
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { buildJobs } from "../shared/buildParallelism.mjs";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { codeHash } from "../shared/codeStamp.mjs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	renameSync,
+	rmSync,
+	writeFileSync
+} from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -73,6 +92,7 @@ const GL_RG = 0x8227;
 const KTX_CHANNELS = { [GL_RED]: 1, [GL_RG]: 2, [GL_RGB]: 3, [GL_RGBA]: 4 };
 const PRESET = "-medium";
 const VARIANT = "astc";
+const DECODER_DIGEST_CHARS = 16;
 
 /*
 ================
@@ -235,6 +255,69 @@ export function pickAlphaSection( texture ) {
 
 /*
 ================
+maskCacheRoot
+
+The mask cache for one mask writer: a folder named by its code hash
+(maskCodeHash), so a change to the mask starts an empty one.
+================
+*/
+export function maskCacheRoot( cacheRoot, decoder ) {
+	return path.join( cacheRoot, `pick-alpha-${decoder.slice( 0, DECODER_DIGEST_CHARS )}` );
+}
+
+/*
+================
+maskCodeHash
+
+The code hash of everything that shapes a mask (codeStamp.mjs, the owner
+every builder stamp uses): this module, which writes the tag, the
+opacity rule and the byte order (pickAlphaSection), and the client's NTX
+decoder it imports. A change to either serves no stale mask.
+================
+*/
+export function maskCodeHash() {
+	return codeHash( import.meta.url );
+}
+
+/*
+================
+writeCacheFile
+
+A cache record written whole: to a temp name, then renamed over the
+target, so a build killed mid-write leaves no torn record. A torn empty
+mask would read as an opaque source.
+================
+*/
+function writeCacheFile( target, bytes ) {
+	const temporary = `${target}.${process.pid}.tmp`;
+	writeFileSync( temporary, bytes );
+	renameSync( temporary, target );
+}
+
+/*
+================
+cachedPickAlpha
+
+The source's picking mask from the mask cache (an empty file is an opaque
+source), or computed by pick and recorded on a miss. The record is written
+synchronously: two textures of the same bytes share a digest, and another
+worker must never read a half-written mask.
+================
+*/
+export async function cachedPickAlpha( maskRoot, digest, pick ) {
+	const file = path.join( maskRoot, `${digest}.pka` );
+	try {
+		return await readFile( file );
+	} catch ( error ) {
+		if ( error.code !== "ENOENT" ) throw error;
+	}
+	const mask = pick();
+	writeCacheFile( file, mask );
+	return mask;
+}
+
+/*
+================
 encodeTexture
 
 One native texture to its ASTC 4x4 NTX and, when asked, its decoded BGRA NTX.
@@ -295,10 +378,36 @@ export async function buildTextureVariants( flags = {} ) {
 		path.join( flags.out, "intermediate", "texture-variants", cacheName ) :
 		generatedPath( "intermediate", "texture-variants", cacheName );
 	const outputRoot = flags.out ? path.join( flags.out, "client-public" ) : CLIENT_PUBLIC_ROOT;
-	mkdirSync( cacheRoot, { recursive: true } );
+	const maskRoot = maskCacheRoot( cacheRoot, await maskCodeHash() );
+	mkdirSync( maskRoot, { recursive: true } );
 	const textures = nativeTextures( CLIENT_PUBLIC_ROOT, flags.only ).slice( 0, flags.limit );
 	let next = 0, encoded = 0, cached = 0, unaligned = 0, masked = 0, sourceBytes = 0, variantBytes = 0;
+	// One job per source digest in flight: textures of the same bytes await
+	// it instead of reading a cache file another worker is writing.
+	const inFlight = new Map();
 	const startedAt = performance.now();
+	/*
+	================
+	produce
+
+	The encoded levels, round trip and picking mask of one source, from the
+	caches or encoded and recorded there.
+	================
+	*/
+	async function produce( digest, source, texture, scratch ) {
+		const cachedVariant = path.join( cacheRoot, `${digest}.ntx` ),
+			cachedBack = path.join( cacheRoot, `${digest}.back.ntx` );
+		const mask = await cachedPickAlpha( maskRoot, digest, () => pickAlphaSection( texture ) );
+		if ( existsSync( cachedVariant ) && (!flags.roundtrip || existsSync( cachedBack )) ) {
+			const variant = await readFile( cachedVariant );
+			const back = flags.roundtrip ? await readFile( cachedBack ) : null;
+			return { variant, back, mask, hit: true };
+		}
+		const result = await encodeTexture( astcenc, source, scratch, !!flags.roundtrip );
+		writeCacheFile( cachedVariant, result.variant );
+		if ( result.roundtrip ) writeCacheFile( cachedBack, result.roundtrip );
+		return { variant: result.variant, back: result.roundtrip, mask, hit: false };
+	}
 	/*
 	================
 	worker
@@ -309,33 +418,25 @@ export async function buildTextureVariants( flags = {} ) {
 		try {
 			while ( next < textures.length ) {
 				const [file, publicPath] = textures[next++];
-				const source = readFileSync( file ), digest = createHash( "sha256" ).update( source ).digest( "hex" );
+				const source = await readFile( file ), digest = createHash( "sha256" ).update( source ).digest( "hex" );
 				const texture = decodeNativeTexture( new Uint8Array( source ) );
 				if ( texture.width % ASTC_BLOCK || texture.height % ASTC_BLOCK ) {
 					unaligned++;
 					continue;
 				}
-				const cachedVariant = path.join( cacheRoot, `${digest}.ntx` ),
-					cachedBack = path.join( cacheRoot, `${digest}.back.ntx` );
-				let variant, back = null;
-				if ( existsSync( cachedVariant ) && (!flags.roundtrip || existsSync( cachedBack )) ) {
-					variant = readFileSync( cachedVariant );
-					if ( flags.roundtrip ) back = readFileSync( cachedBack );
-					cached++;
-				} else {
-					const result = await encodeTexture( astcenc, source, scratch, !!flags.roundtrip );
-					variant = result.variant;
-					back = result.roundtrip;
-					writeFileSync( cachedVariant, variant );
-					if ( back ) writeFileSync( cachedBack, back );
-					encoded++;
+				let job = inFlight.get( digest );
+				if ( !job ) {
+					job = produce( digest, source, texture, scratch ).finally( () => inFlight.delete( digest ) );
+					inFlight.set( digest, job );
 				}
-				const mask = pickAlphaSection( texture );
+				const { variant: levels, back, mask, hit } = await job;
+				if ( hit ) cached++;
+				else encoded++;
 				if ( mask.length ) masked++;
-				variant = Buffer.concat( [ variant, mask ] );
+				const variant = Buffer.concat( [ levels, mask ] );
 				const target = path.join( outputRoot, ...textureVariantPath( publicPath, VARIANT ).split( "/" ) );
 				mkdirSync( path.dirname( target ), { recursive: true } );
-				writeFileSync( target, variant );
+				await writeFile( target, variant );
 				if ( !flags.out && isPublicationOpen() ) claimPublicFile( target );
 				if ( back ) {
 					const mirror = path.join( flags.roundtrip, ...publicPath.split( "/" ) );

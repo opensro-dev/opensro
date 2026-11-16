@@ -52,6 +52,7 @@ import import_vsro_alexandria as tables
 import mall_avatar_import as avatars
 import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
+from sro_paths import trees_overlap
 
 FLAG = "SRO_NASRUN"
 MARKER = ".opensro-nasrun.json"
@@ -196,7 +197,7 @@ def remove_import(output, prior, marker, shard, manifest):
 # ================
 def add_nasrun(vsro_root, native, output):
 	native, output = Path(native).resolve(), Path(output).resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("Nasrun output must be separate from the native extraction")
 	marker = output / MARKER
 	prior = cap110.read_json(marker) if marker.exists() else {}

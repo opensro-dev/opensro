@@ -40,7 +40,6 @@ apps/client-next/src/engine/foundation/animation/presentation-ids.ts
 apps/client-next/src/engine/foundation/animation/preview-idle.ts
 apps/client-next/src/engine/foundation/animation/projectile-curve.ts
 apps/client-next/src/engine/foundation/animation/random-idle.ts
-apps/client-next/src/engine/foundation/animation/scenery-emission.ts
 apps/client-next/src/engine/foundation/animation/skill-motion.ts
 apps/client-next/src/engine/foundation/animation/status-presentation.ts
 apps/client-next/src/engine/foundation/assets/asset-budget.ts
@@ -87,7 +86,6 @@ apps/client-next/src/engine/foundation/navigation/vertex-direction.ts
 apps/client-next/src/engine/foundation/rendering/dock-camera.ts
 apps/client-next/src/engine/foundation/rendering/dock-slots.ts
 apps/client-next/src/engine/foundation/rendering/flares.ts
-apps/client-next/src/engine/foundation/rendering/geometry-vertices.ts
 apps/client-next/src/engine/foundation/rendering/material-timeline.ts
 apps/client-next/src/engine/foundation/rendering/modifier-delta.ts
 apps/client-next/src/engine/foundation/rendering/pick-volume.ts
@@ -132,7 +130,6 @@ apps/client-next/src/engine/foundation/ui/retained-layout.ts
 apps/client-next/src/engine/foundation/ui/skill-layout.ts
 apps/client-next/src/engine/foundation/ui/skill-tooltip-data.ts
 apps/client-next/src/engine/foundation/ui/stretch-ring.ts
-apps/client-next/src/engine/foundation/ui/tooltip-rows.ts
 apps/client-next/src/engine/foundation/ui/vertical-spin.ts
 apps/client-next/src/engine/foundation/ui/vital-warning.ts
 apps/client-next/src/engine/runtime/assets/worker/entry.ts
@@ -347,7 +344,6 @@ scripts/build/world/navmesh/parseNavmesh.mjs
 scripts/build/world/objects/compound.mjs
 scripts/build/world/sworld/deriveTitleTerrainSectorCoverage.mjs
 scripts/checks/lib/methodBlock.mjs
-scripts/clean_release_workspace.mjs
 scripts/lib/clipOracleWalkPlane.mjs
 scripts/lib/missionMovementFixture.mjs
 scripts/lib/probeCharacter.mjs
@@ -368,7 +364,6 @@ scripts/test/assets/optionalDataAsset.test.mjs
 scripts/test/assets/pythonRun.test.mjs
 scripts/test/assets/rebuildLockInterop.test.mjs
 scripts/test/assets/skillPaneImageReferences.test.mjs
-scripts/test/helpers/outdoorRegionPayloadCheck.mjs
 scripts/test/lib/generatedAssetTestMode.mjs
 scripts/test/mission/effectProgramClosure.test.mjs
 scripts/test/mission/minimapArtCoverage.test.mjs

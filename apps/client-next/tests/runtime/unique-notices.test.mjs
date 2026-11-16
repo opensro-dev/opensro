@@ -18,6 +18,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { defined } from "../helpers/defined.mjs";
 import path from "node:path";
 import { serverGameDataRoot } from "../../../../scripts/build/world/paths.mjs";
+import { EXPANDED_BUILD } from "../helpers/expanded-build.mjs";
 const { isSpecialtySellEnd, uniqueNotice, uniqueReferences } = await import(
 	"../../src/engine/foundation/gameplay/unique-notices.ts"
 );
@@ -26,6 +27,29 @@ const { createGameplay } = await import(
 );
 const { noticeText, createHudMessages } = await import( "../../src/engine/runtime/ui/hud/messages.ts" );
 const { createUniqueBanner } = await import( "../../src/engine/runtime/ui/hud/unique-banner.ts" );
+// The rank-3 MOB_ rows of the native characterdata (v1.150 server data):
+// an expanded build must keep every one of them.
+const NATIVE_UNIQUE_CODES = [
+	"MOB_AM_IVY",
+	"MOB_AM_IVY_L3",
+	"MOB_CH_TIGERWOMAN",
+	"MOB_CH_TIGERWOMAN_L2",
+	"MOB_CH_TIGERWOMAN_L3",
+	"MOB_EU_KERBEROS",
+	"MOB_EU_KERBEROS_L3",
+	"MOB_KK_ISYUTARU",
+	"MOB_KK_ISYUTARU_L2",
+	"MOB_KK_ISYUTARU_L3",
+	"MOB_OA_URUCHI",
+	"MOB_OA_URUCHI_L2",
+	"MOB_OA_URUCHI_L3",
+	"MOB_RM_TAHOMET",
+	"MOB_RM_TAHOMET_L2",
+	"MOB_RM_TAHOMET_L3",
+	"MOB_TK_BONELORD",
+	"MOB_TK_BONELORD_L2",
+	"MOB_TK_BONELORD_L3"
+];
 const symbols = [ "CH_TIGERWOMAN", "KK_ISYUTARU", "OA_URUCHI", "TK_BONELORD", "RM_TAHOMET", "EU_KERBEROS" ];
 const refObjSnapshot = symbols.map( ( s, i ) => ({
 	refObjId: i + 1,
@@ -59,11 +83,22 @@ test("every shipped unique reference resolves appearance and death text without 
 		) {
 			const f = line.split( "\t" );
 			if ( f[0] === "1" && f[2]?.startsWith( "MOB_" ) && Number( f[15] ) === 3 ) {
-				rows.push( { refObjId: Number( f[1] ), kind: "monster", nameStrId: f[5], name: names[f[5]] } );
+				rows.push( {
+					refObjId: Number( f[1] ),
+					kind: "monster",
+					nameStrId: f[5],
+					name: names[f[5]],
+					code: f[2]
+				} );
 			}
 		}
 	}
-	assert.equal( rows.length, 19 );
+	// The native data ships 19 uniques. An expanded build adds later ones
+	// (Arabia's Karkadann, Mad General and Mustafa); every row, added or
+	// native, must still resolve its notices below.
+	const codes = rows.map( row => row.code );
+	if ( !EXPANDED_BUILD ) assert.deepEqual( [ ...codes ].sort(), NATIVE_UNIQUE_CODES );
+	else assert.deepEqual( NATIVE_UNIQUE_CODES.filter( code => !codes.includes( code ) ), [] );
 	const refs = uniqueReferences( { refObjSnapshot: rows } );
 	for ( const row of rows ) {
 		for ( const [kind, killer] of [ [ 5, "" ], [ 6, "asd2" ], [ 6, "???" ] ] ) {

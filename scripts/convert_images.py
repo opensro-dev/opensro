@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import os
 import shutil
 import struct
@@ -20,13 +21,14 @@ import subprocess
 import sys
 import tempfile
 import time
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 
 from PIL import Image
 
+import state_document
 from build_parallelism import build_jobs
 from rebuild_lock import generated_assets_lock
 from sro_paths import EXTRACTED_ROOT, GAME_ROOT, GENERATED_ROOT
@@ -40,6 +42,13 @@ SOURCE_ROOTS = [
 ]
 OUTPUT_ROOT = GENERATED_ROOT / "intermediate" / "images"
 MANIFEST_PATH = GENERATED_ROOT / "intermediate" / "image-manifest.csv"
+# Which candidate files are images, by path, size and mtime: discovery opens
+# a file to read its header only when it is new or changed. Opening a file
+# costs about 7.5 ms on the build PC against 0.11 ms for a stat (3000 DDJ
+# files, 2026-11-15; the on-access scan reads each opened file), so
+# classifying 25k candidates by header took 186 s of every asset build.
+DISCOVERY_CACHE_PATH = GENERATED_ROOT / "intermediate" / "image-discovery.json"
+DISCOVERY_CACHE_FORMAT = "sro-image-discovery"
 SUPPORTED_EXTENSIONS = {".ddj", ".tga", ".dat"}
 # Assets handed to a worker per round trip: small enough to balance, large
 # enough that pickling stays negligible next to a decode.
@@ -180,6 +189,7 @@ def discover_assets(filters: list[str] | None = None) -> list[ImageAsset]:
     # stat'ed all ~57k extracted entries (3.4 s against 0.3 s, measured
     # 2026-10-08). The extension is checked on the name before any Path or
     # header read.
+    named: list[tuple[Path, Path]] = []
     for root in scan_roots:
         if not root.exists():
             continue
@@ -188,10 +198,10 @@ def discover_assets(filters: list[str] | None = None) -> list[ImageAsset]:
             for name in names:
                 if os.path.splitext(name)[1].lower() not in SUPPORTED_EXTENSIONS:
                     continue
-                path = Path(directory, name)
-                if is_image_asset(path):
-                    candidates.append(path)
-                    relatives[path] = relative_directory / name
+                named.append((Path(directory, name), relative_directory / name))
+    for path, relative in classify_candidates(named, persist=not filters):
+        candidates.append(path)
+        relatives[path] = relative
 
     candidates.sort(key=lambda value: relatives[value].as_posix().lower())
     output_paths = build_output_paths(candidates, relatives)
@@ -208,6 +218,60 @@ def discover_assets(filters: list[str] | None = None) -> list[ImageAsset]:
             )
         )
     return assets
+
+
+# ================
+# classify_candidates
+#
+# The named files that are image assets, in input order. A file whose
+# path, size and mtime match the discovery cache keeps its recorded
+# answer; any other is classified by its header (is_image_asset), those
+# reads in parallel. A full scan (persist) rewrites the cache with what it
+# saw, so files that left the tree leave it too.
+# ================
+def classify_candidates(named: list[tuple[Path, Path]], persist: bool) -> list[tuple[Path, Path]]:
+    cache = load_discovery_cache()
+    keys: list[tuple[str, int, int]] = []
+    answers: dict[int, bool] = {}
+    pending: list[int] = []
+    for index, (path, relative) in enumerate(named):
+        try:
+            stat = os.stat(path)
+        except OSError:
+            keys.append(("", 0, 0))
+            answers[index] = False
+            continue
+        key = (relative.as_posix(), stat.st_size, stat.st_mtime_ns)
+        keys.append(key)
+        known = cache.get(key[0])
+        if known is not None and known[0] == key[1] and known[1] == key[2]:
+            answers[index] = known[2]
+        else:
+            pending.append(index)
+    if pending:
+        with ThreadPoolExecutor(max_workers=build_jobs()) as pool:
+            for index, answer in zip(pending, pool.map(lambda i: is_image_asset(named[i][0]), pending)):
+                answers[index] = answer
+    if persist:
+        entries = {key[0]: [key[1], key[2], answers[index]] for index, key in enumerate(keys) if key[0]}
+        write_discovery_cache(entries)
+    return [named[index] for index in range(len(named)) if answers[index]]
+
+
+# ================
+# load_discovery_cache / write_discovery_cache
+#
+# {relative path: [size, mtime_ns, is image]}; an unreadable or foreign
+# file is an empty cache, so the worst case is a cold discovery.
+# ================
+def load_discovery_cache() -> dict[str, list]:
+    return state_document.read_document(DISCOVERY_CACHE_PATH, DISCOVERY_CACHE_FORMAT, "entries") or {}
+
+
+def write_discovery_cache(entries: dict[str, list]) -> None:
+    # Written only when it changes, like the manifest, so a no-op run leaves
+    # the intermediate tree's stat fingerprints alone (state_document.py).
+    state_document.write_document(DISCOVERY_CACHE_PATH, DISCOVERY_CACHE_FORMAT, "entries", entries)
 
 
 # ================

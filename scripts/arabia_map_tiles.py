@@ -21,7 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_alexandria_variant as variant  # noqa: E402
 import sro_pk2  # noqa: E402
-from alexandria_map_tables import LOCALINFO_COLUMNS, append_rows, overview_tiles  # noqa: E402
+from alexandria_map_tables import LOCALINFO_COLUMNS, MAPINFO_COLUMNS, append_rows, overview_tiles  # noqa: E402
 from import_vsro_alexandria import TEXTDATA, decode_table, table_rows  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
 
@@ -103,6 +103,11 @@ def restore_map_tiles(output, prior):
 
 LOCALINFO = "worldmap_localinfo.txt"
 MAPINFO = "worldmap_mapinfo.txt"
+# v1.696 keeps the map pages in wlocalmap.txt: the v1.150 worldmap_mapinfo
+# row's 19 columns, then a title key and three later fields.
+LATER_MAPINFO = "wlocalmap.txt"
+# A town page row: id, kind 1, name, the page art.
+PAGE_KIND, PAGE_ART = "1", 3
 TEXT_NAMES = "textdataname.txt"
 # v1.696 worldmap_localinfo: service, then the v1.150 row's 20 columns,
 # then three later ones (NPC keys, two flags) the v1.150 layout lacks.
@@ -147,19 +152,18 @@ def later_rows(raw):
 # the area names (Qarq, the Desert of Dreams, the Arabian Coast, the two
 # outposts), Baghdad's name and city badge, and the NPC and gate icons.
 # The owner found the M map showed Arabia's art with no names on it
-# (2026-11-15). A click destination the variant has no page for (Baghdad's
-# town page 18) becomes 0: the badge shows and its click opens nothing,
-# as the Alexandria merge drops icons to unpublished pages rather than
-# point them nowhere (inference: no published page, no click).
+# (2026-11-15). Rows standing on a page this import adds (Baghdad's town
+# page 18: its NPC, market and gate pins) come too. A click destination
+# the variant has no page for becomes 0: the badge shows and its click
+# opens nothing, as the Alexandria merge drops icons to unpublished pages
+# rather than point them nowhere (inference: no published page, no click).
 # ================
-def map_label_rows(rows, regions, native_ids, pages):
+def map_label_rows(rows, regions, native_ids, pages, added_pages=frozenset()):
 	out = []
 	for row in rows:
 		if len(row) < LATER_LOCALINFO_COLUMNS or row[0] != "1" or row[1] in native_ids:
 			continue
-		if row[PAGE] != OVERVIEW_PAGE or not (row[SECTOR_X].isdigit() and row[SECTOR_Y].isdigit()):
-			continue
-		if ((int(row[SECTOR_Y]) << 8) | int(row[SECTOR_X])) not in regions:
+		if row[PAGE] not in added_pages and not overview_row_in(row, regions):
 			continue
 		label = row[KIND] == LABEL_KIND and row[KEY].startswith("SN_")
 		image = row[KIND] == IMAGE_KIND and row[KEY].lower().endswith(".ddj")
@@ -170,6 +174,32 @@ def map_label_rows(rows, regions, native_ids, pages):
 			native[NATIVE_DESTINATION] = OVERVIEW_PAGE
 		out.append(native)
 	return out
+
+
+# ================
+# overview_row_in
+# ================
+def overview_row_in(row, regions):
+	if row[PAGE] != OVERVIEW_PAGE or not (row[SECTOR_X].isdigit() and row[SECTOR_Y].isdigit()):
+		return False
+	return ((int(row[SECTOR_Y]) << 8) | int(row[SECTOR_X])) in regions
+
+
+# ================
+# map_page_rows
+#
+# The town pages Arabia's overview badges open (Baghdad, page 18) that
+# the variant lacks, as v1.150 worldmap_mapinfo rows: the first 19
+# columns of the v1.696 wlocalmap row, the shape the Alexandria merge
+# publishes for Alexandria's page 12. The owner clicked Baghdad on the
+# M map and it opened nothing (2026-11-15).
+# ================
+def map_page_rows(later_pages, later_pins, regions, pages):
+	wanted = {row[DESTINATION] for row in later_pins
+		if len(row) >= LATER_LOCALINFO_COLUMNS and row[0] == "1" and overview_row_in(row, regions)}
+	return [row[:MAPINFO_COLUMNS] for row in later_pages
+		if len(row) >= MAPINFO_COLUMNS and row[0] in wanted and row[0] not in pages and row[1] == PAGE_KIND
+		and row[PAGE_ART].lower().endswith(".ddj")]
 
 
 # ================
@@ -193,9 +223,10 @@ def label_texts(media, media_index, keys):
 # ================
 # import_map_labels
 #
-# Appends Arabia's overview rows to worldmap_localinfo.txt and their
+# Appends the town pages Arabia's badges open to worldmap_mapinfo.txt,
+# Arabia's overview and page rows to worldmap_localinfo.txt and their
 # names to textdataname.txt, and returns (pin ids, text keys, image
-# paths) for the marker and the tile copy. Rows a prior run added are
+# paths, page ids) for the marker and the tile copy. Rows a prior run added are
 # already there and are not added twice. An extraction without the map
 # tables (or a source without its localinfo) has no overview to label.
 #
@@ -209,11 +240,19 @@ def import_map_labels(media, media_index, text_root, regions):
 	local_path, names_path = text_root / LOCALINFO, text_root / TEXT_NAMES
 	tables = (local_path, names_path, text_root / MAPINFO)
 	if not all(path.exists() for path in tables) or TEXTDATA + LOCALINFO not in media_index:
-		return [], [], []
+		return [], [], [], []
 	native = table_rows(local_path.read_bytes())
-	pages = {row[0] for row in table_rows((text_root / MAPINFO).read_bytes()) if row}
+	map_path = text_root / MAPINFO
+	pages = {row[0] for row in table_rows(map_path.read_bytes()) if row}
 	later = later_rows(sro_pk2.payload(media, media_index[TEXTDATA + LOCALINFO]))
-	pins = map_label_rows(later, regions, {row[0] for row in native if row}, pages)
+	later_pages = []
+	if TEXTDATA + LATER_MAPINFO in media_index:
+		later_pages = later_rows(sro_pk2.payload(media, media_index[TEXTDATA + LATER_MAPINFO]))
+	page_rows = map_page_rows(later_pages, later, regions, pages)
+	if page_rows:
+		write_atomically(map_path, append_rows(map_path.read_bytes(), page_rows))
+	added = {row[0] for row in page_rows}
+	pins = map_label_rows(later, regions, {row[0] for row in native if row}, pages | added, added)
 	name_rows = table_rows(names_path.read_bytes())
 	known = {row[1] for row in name_rows if len(row) > 1}
 	wanted = {row[2] for row in pins if row[1] == LABEL_KIND} - known
@@ -224,9 +263,10 @@ def import_map_labels(media, media_index, text_root, regions):
 		write_atomically(local_path, append_rows(local_path.read_bytes(), pins))
 	if texts:
 		write_atomically(names_path, append_rows(names_path.read_bytes(), texts))
-	images = sorted({row[2].replace("\\", "/").lower()[:-len(".ddj")] + face + ".ddj"
-		for row in pins if row[1] == IMAGE_KIND for face in IMAGE_FACES})
-	return [row[0] for row in pins], [row[1] for row in texts], images
+	images = {row[2].replace("\\", "/").lower()[:-len(".ddj")] + face + ".ddj"
+		for row in pins if row[1] == IMAGE_KIND for face in IMAGE_FACES}
+	images |= {row[PAGE_ART].replace("\\", "/").lower() for row in page_rows}
+	return [row[0] for row in pins], [row[1] for row in texts], sorted(images), sorted(added)
 
 
 # ================
@@ -239,11 +279,12 @@ def import_map_labels(media, media_index, text_root, regions):
 # ================
 def remove_map_labels(text_root, prior):
 	pins, texts = set(prior.get("mapPins", [])), set(prior.get("mapTexts", []))
-	for name, column, owned in ((LOCALINFO, 0, pins), (TEXT_NAMES, 1, texts)):
+	added = set(prior.get("mapPages", []))
+	for name, column, owned in ((LOCALINFO, 0, pins), (TEXT_NAMES, 1, texts), (MAPINFO, 0, added)):
 		path = text_root / name
 		if not owned or not path.exists():
 			continue
-		lines = decode_table(path.read_bytes()).lstrip("﻿").split(ROW_END)
+		lines = decode_table(path.read_bytes()).lstrip("\ufeff").split(ROW_END)
 		kept = [line for line in lines if not owned_line(line, column, owned)]
 		write_atomically(path, b"\xff\xfe" + ROW_END.join(kept).encode("utf-16-le"))
 

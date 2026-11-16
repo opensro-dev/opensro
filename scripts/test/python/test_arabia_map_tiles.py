@@ -62,6 +62,30 @@ class MapTiles(unittest.TestCase):
 		self.assertTrue(all(len(row) == 20 for row in pins))
 		self.assertEqual(pins[1][6], "0", "no page to open, no click")
 
+	def test_baghdad_page_comes_with_its_pins(self):
+		def later(key, kind, destination, page, x, y):
+			return ["1", key, kind, "SN_ZONE_" + key, "", "", "", destination, page, str(x), str(y)] + ["0"] * 13
+		badge = later("100000", "2", "18", "0", 80, 90)
+		badge[3] = r"interface\worldmap\map\city_bagdad.ddj"
+		pins = [badge, later("99214", "1", "0", "18", -1, -1), later("99300", "1", "0", "17", -1, -1)]
+		page = ["18", "1", "Baghdad", r"interface\worldmap\map\map_bagdad.ddj"] + ["1"] * 15 + ["xxx", "TITLE", "1", "xxx", "1.0"]
+		other = ["19", "1", "Dungeon", r"interface\worldmap\map\map_bagdad_dungeon.ddj"] + ["1"] * 15
+		rows = arabia.map_page_rows([page, other], pins, {OUTDOOR: "a"}, {"0", "1"})
+		self.assertEqual(rows, [page[:19]], "only the page an Arabia badge opens, in the v1.150 width")
+		kept = arabia.map_label_rows(pins, {OUTDOOR: "a"}, set(), {"0", "1", "18"}, {"18"})
+		self.assertEqual([row[0] for row in kept], ["100000", "99214"])
+		self.assertEqual(kept[0][6], "18", "the badge opens the town page")
+
+	def test_remove_drops_an_added_page(self):
+		native = "0\t0\tworld\r\n"
+		with tempfile.TemporaryDirectory() as temp:
+			path = Path(temp) / arabia.MAPINFO
+			path.write_bytes(b"\xff\xfe" + native.encode("utf-16-le"))
+			raw = path.read_bytes()
+			path.write_bytes(arabia.append_rows(raw, [["18", "1", "Baghdad"]]))
+			arabia.remove_map_labels(Path(temp), {"mapPages": ["18"]})
+			self.assertEqual(path.read_bytes(), raw)
+
 	def test_later_text_reads_utf16_without_bom(self):
 		line = ["1", "9669", "SN_ZONE_26000_15", "K", "0", "0", "0", "0", "0", "Expeditionary Force Outpost"]
 		raw = ("\t".join(line) + "\n").encode("utf-16-le")

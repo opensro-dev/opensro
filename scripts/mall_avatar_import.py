@@ -49,9 +49,10 @@ import avatar_archive
 import cap110_item_import as shared
 import cap110_items as items
 import import_vsro_alexandria as tables
+from pin_file import read_pin_field
 import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
-from sro_paths import EXTRACTED_ROOT, REPO_ROOT
+from sro_paths import EXTRACTED_ROOT, REPO_ROOT, trees_overlap
 
 FLAG = "SRO_MALL_AVATARS"
 FLAG_OFF = ("0", "off", "false", "no")
@@ -687,7 +688,7 @@ def vsro_text_row(row):
 # ================
 def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 	native, output = native.resolve(), output.resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("avatar output must be separate from the native extraction")
 	marker = output / source["report"]
 	prior = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}
@@ -842,13 +843,7 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 def source_pins(source):
 	if source["pins"] is None:
 		return None
-	try:
-		pin = json.loads(Path(source["pins"]).read_text(encoding="utf-8"))
-	except (OSError, ValueError) as error:
-		raise SystemExit(f"{source['pins']} is unreadable: {error}")
-	if pin.get("format") != PIN_FORMAT or not isinstance(pin.get("archives"), dict):
-		raise SystemExit(f"{source['pins']} is not a {PIN_FORMAT} pin file")
-	return pin["archives"]
+	return read_pin_field(source["pins"], PIN_FORMAT, "archives")
 
 
 # ================
