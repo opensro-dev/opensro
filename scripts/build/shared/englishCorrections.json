@@ -212,6 +212,10 @@
 			"after": "Defeat in a war with [%s] guild",
 			"why": "The loss twin of UIIT_MSG_GUILDWAR_WINERGUILD's Victory."
 		},
+		"UIIT_MSG_GUILDWAR_NOTENEMYGUILD": {
+			"before": "<No hopstile Guild>",
+			"after": "<No hostile Guild>"
+		},
 		"UIIT_MSG_GUILDWAR_WINERGUILD": {
 			"before": "Victory in a war with [%s]gild",
 			"after": "Victory in a war with [%s] guild"
