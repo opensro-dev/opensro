@@ -63,6 +63,7 @@ import {
 import { type PickBounds, type PickRay } from "@/engine/foundation/rendering/picking";
 import { faceEffectMesh } from "@/engine/foundation/rendering/effect-billboard";
 import { characterRadius, createCharacterBoundsCache } from "@/engine/foundation/animation/character-bounds";
+import { createClipTimelineCache } from "@/engine/foundation/animation/animation-timelines";
 import {
 	CHARACTER_ASSEMBLIES,
 	CHARACTER_MODELS,
@@ -214,6 +215,55 @@ export function fillRowPointLights(
 
 /*
 ================
+createPoseOrder
+
+The order in which the needed actors' poses are evaluated, in one
+renderer-owned scratch. Without a frame budget it is frame order. With one,
+protected (non-optional) actors come first, then the oldest sample (none
+counts as -1); Array.prototype.sort is stable, so ties keep frame order.
+Each key is read once, before any pose is evaluated, so the comparator does
+no lookups. Only needed actors are keyed: a stable sort of a subsequence
+keeps the relative order a sort of the whole frame gives it. The returned
+array is reused by the next call.
+================
+*/
+export function createPoseOrder() {
+	let optional = new Uint8Array( CHARACTER_ACTORS );
+	let sampled = new Float64Array( CHARACTER_ACTORS );
+	const needed: CharacterActor[] = [];
+	const indices: number[] = [];
+	const ordered: CharacterActor[] = [];
+	const compare = ( a: number, b: number ) => optional[a]! - optional[b]! || sampled[a]! - sampled[b]!;
+	return function order(
+		frameActors: readonly CharacterActor[],
+		wanted: ReadonlySet<number>,
+		sample?: ( gid: number ) => number | undefined
+	): readonly CharacterActor[] {
+		needed.length = 0;
+		for ( const actor of frameActors ) {
+			if ( wanted.has( actor.gid ) ) needed.push( actor );
+		}
+		if ( !sample ) return needed;
+		if ( optional.length < needed.length ) {
+			optional = new Uint8Array( needed.length );
+			sampled = new Float64Array( needed.length );
+		}
+		indices.length = 0;
+		for ( let i = 0; i < needed.length; i++ ) {
+			const actor = needed[i]!;
+			optional[i] = actor.animationLod?.optional ? 1 : 0;
+			sampled[i] = sample( actor.gid ) ?? -1;
+			indices.push( i );
+		}
+		indices.sort( compare );
+		ordered.length = 0;
+		for ( const index of indices ) ordered.push( needed[index]! );
+		return ordered;
+	};
+}
+
+/*
+================
 RibbonBuffers
 
 One ribbon primitive's vertex streams, sized for its batch's capacity.
@@ -264,9 +314,15 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	let blockLights: readonly (readonly DungeonBlockLight[])[] | undefined;
 	// Per-geometry radius work: an assembled character reuses its parts'.
 	const bounds = createCharacterBoundsCache();
+	// Per-clip pose charge: re-planning every assembly of a body when a clip
+	// is admitted reads each clip's key times once.
+	const timelines = createClipTimelineCache();
 	const models = new Map<string, {
 		model: CharacterModel;
 		plan: ReturnType<typeof createCharacterRenderPlan>;
+		// The id names an effect program: its group draws in the
+		// translucent tier. Fixed by the id, so set once at admission.
+		effect: boolean;
 		images: WorldTexture[];
 		textures: ImageDraw[];
 		owned: boolean;
@@ -306,9 +362,17 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	const deferredPoints = new Map<number, { position: readonly number[]; offset: number; }>();
 	const hierarchy = createCharacterHierarchy(), snapshots = createActorSnapshots();
 	// Per admitted model: the native pick box, and the bind bounds that size
-	// labels and shadows. Both are immutable for the model's lifetime.
+	// labels and shadows. The pick box is immutable for the model's lifetime.
+	// The bind bounds are the clip-less rest pose, which reads only the nodes
+	// and primitives; a clip admission replaces every assembly's model object
+	// but keeps both arrays, so they are keyed by those arrays. Keyed by model,
+	// each admitted clip re-posed every assembly of its body: 1.3 ms a frame
+	// in a 200-player town (2026-10-21).
 	const pickVolumes = new WeakMap<CharacterModel, PickBounds>(),
-		bindBounds = new WeakMap<CharacterModel, PickBounds>();
+		bindBounds = new WeakMap<
+			CharacterModel["primitives"],
+			{ nodes: CharacterModel["nodes"]; bounds: PickBounds; }
+		>();
 	/*
 	================
 	pickVolumeOf
@@ -328,12 +392,13 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	================
 	*/
 	const bindBoundsOf = ( model: CharacterModel ) => {
-		let bounds = bindBounds.get( model );
-		if ( !bounds ) {
-			bounds = characterBindBounds( model );
-			bindBounds.set( model, bounds );
+		let entry = bindBounds.get( model.primitives );
+		if ( !entry || entry.nodes !== model.nodes ) {
+			// Without clips the pose registers none: the rest pose never reads them.
+			entry = { nodes: model.nodes, bounds: characterBindBounds( { ...model, clips: [] } ) };
+			bindBounds.set( model.primitives, entry );
 		}
-		return bounds;
+		return entry.bounds;
 	};
 	const textures = new Map<WorldTexture, ImageDraw>();
 	// Snapshots retain identity while their fields change. Recheck the complete
@@ -366,7 +431,8 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	// submits no character draws; the portrait instances are their own
 	// owners and never hear it.
 	let charactersShown = true;
-	const poseOrder: CharacterActor[] = [];
+	const poseOrder = createPoseOrder();
+	const sampledPose = ( gid: number ) => ownedPoses.get( gid )?.sampled;
 	// Birth transforms belong to the actor lifetime, not GPU batches. Keep them
 	// across culling, batch membership changes and device recreation.
 	const particleRandom: ParticleRandom = { table: particleRandomTable(), index: 0 };
@@ -407,7 +473,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	// deferredActors: visible actors the render budget kept from drawing;
 	// deferredBodies: those of them without emission.
 	let residentBytes = 0, ownedModels = 0, renderBytes = 0, deferredActors = 0, deferredBodies = 0;
-	let retained: Set<string> | null = null, retainedScratch = new Set<string>();
+	let retained: Set<string> | null = null;
 	// Residency depends on model membership, not interpolated poses or clocks.
 	// Snapshot the model ids: actor snapshots are mutated by the next publication.
 	let residencyDirty = true, residencyPasses = 0, hasMaterialClocks = false;
@@ -1362,21 +1428,26 @@ the next full prepare pass, so this may run between frames.
 	emission cycle moves backwards or changes.
 	================
 	*/
-	function particleHistory( frame: PrepareFrame, actor: CharacterActor, model: CharacterModel, storage: number ) {
+	function particleHistory(
+		frame: PrepareFrame,
+		actor: CharacterActor,
+		model: CharacterModel,
+		plan: ModelResource["plan"]
+	) {
 		let history = particleBirths.get( actor.gid );
 		if (
 			!history || history.model !== actor.model || actor.time < history.time ||
 			history.cycle !== (frame.cycles.get( actor.gid ) ?? 0)
 		) {
 			const graph = model.particleGraph ?
-				createParticleGraph( model.particleGraph, particleRandom.index ) :
+				createParticleGraph( model.particleGraph, particleRandom.index, plan.particleGraph ) :
 				undefined;
 			history = {
 				model: actor.model,
 				time: actor.time,
 				cycle: frame.cycles.get( actor.gid ) ?? 0,
 				origin: frame.origin,
-				bytes: storage,
+				bytes: plan.particleBytes,
 				graph,
 				link: graph ?
 					{
@@ -1585,7 +1656,7 @@ the next full prepare pass, so this may run between frames.
 	*/
 	function advanceEmitter( frame: PrepareFrame, actor: CharacterActor, resource: ModelResource ) {
 		const { byGid, origin } = frame, model = resource.model;
-		const history = particleHistory( frame, actor, model, resource.plan.particleBytes );
+		const history = particleHistory( frame, actor, model, resource.plan );
 		const transform = transformFor( actor, byGid, origin, frame.transforms );
 		if ( !transform ) return;
 		const shift = regionOffsetXZ( origin, history.origin );
@@ -1961,23 +2032,12 @@ the next full prepare pass, so this may run between frames.
 	evaluateNeededPoses
 
 	Evaluate every needed actor's pose. Oldest cosmetic samples get the next
-	budget slice. Admission and draw order remain unchanged; a busy crowd
-	cannot starve its tail.
+	budget slice (createPoseOrder). Admission and draw order remain unchanged;
+	a busy crowd cannot starve its tail.
 	================
 	*/
 	function evaluateNeededPoses( frameActors: readonly CharacterActor[], needed: ReadonlySet<number> ) {
-		poseOrder.length = 0;
-		poseOrder.push( ...frameActors );
-		if ( frameWork ) {
-			poseOrder.sort( ( a, b ) =>
-				Number( !!a.animationLod?.optional ) - Number( !!b.animationLod?.optional ) ||
-				(ownedPoses.get( a.gid )?.sampled ?? -1) - (ownedPoses.get( b.gid )?.sampled ?? -1)
-			);
-		}
-		for ( const actor of poseOrder ) {
-			if ( !needed.has( actor.gid ) ) {
-				continue;
-			}
+		for ( const actor of poseOrder( frameActors, needed, frameWork ? sampledPose : undefined ) ) {
 			const model = models.get( actor.model )?.model;
 			if ( !model ) {
 				continue;
@@ -2495,7 +2555,9 @@ the next full prepare pass, so this may run between frames.
 						{ clothStream: true } :
 						{ joints: undefined, weights: undefined, bones: undefined, dynamicVertices: true } :
 					{}),
-				transform: preview ? view! : identity()
+				transform: preview ? view! : identity(),
+				// updateModifiers rewrites a clocked primitive's material every frame.
+				...(group.plan.dynamicMaterials[p] ? { dynamicMaterial: true } : {})
 			},
 			resource.textures[primitive.image],
 			paletteOffsets,
@@ -3162,7 +3224,8 @@ the next full prepare pass, so this may run between frames.
 			if ( disposed || models.has( id ) ) throw Error( "Invalid borrowed character resource" );
 			models.set( id, {
 				model,
-				plan: createCharacterRenderPlan( model ),
+				plan: createCharacterRenderPlan( model, timelines ),
+				effect: id.includes( EFFECT_PROGRAMS ),
 				images: [ ...images ],
 				textures: [],
 				owned: false,
@@ -3315,12 +3378,12 @@ the next full prepare pass, so this may run between frames.
 		================
 		*/
 		retain( ids: readonly string[] ) {
-			retainedScratch.clear();
-			for ( const id of ids ) retainedScratch.add( id );
-			if ( !retained || retained.size !== retainedScratch.size || ids.some( id => !retained!.has( id ) ) ) {
-				const previous = retained;
-				retained = retainedScratch;
-				retainedScratch = previous ?? new Set();
+			// A new set each call, not a long-lived scratch cleared and refilled
+			// every frame: V8 allocates a long-lived set's next table in the old
+			// generation, where only a full collection frees it.
+			const next = new Set( ids );
+			if ( !retained || retained.size !== next.size || ids.some( id => !retained!.has( id ) ) ) {
+				retained = next;
 				residencyDirty = true;
 			}
 		},
@@ -3350,7 +3413,7 @@ the next full prepare pass, so this may run between frames.
 			for ( const [key, row] of models ) {
 				if ( key === id || row.dependencies?.[0] === id ) {
 					row.model = { ...row.model, clips: model.clips };
-					row.plan = createCharacterRenderPlan( row.model );
+					row.plan = createCharacterRenderPlan( row.model, timelines );
 					// Admission precedes visibility; include new root motion before
 					// any actor or outgoing layer can sample the appended catalog.
 					row.radius = Math.max( row.radius, characterRadius( row.model, bounds ) );
@@ -3378,7 +3441,7 @@ the next full prepare pass, so this may run between frames.
 			// Borrowed catalogs follow the same envelope lifetime as owned ones.
 			resource.radius = Math.max( resource.radius, characterRadius( model, bounds ) );
 			resource.model = model;
-			resource.plan = createCharacterRenderPlan( model );
+			resource.plan = createCharacterRenderPlan( model, timelines );
 			framePoses?.delete( id );
 		},
 		/*
@@ -3408,7 +3471,8 @@ the next full prepare pass, so this may run between frames.
 				const admitted = structuredClone( model );
 				models.set( id, {
 					model: admitted,
-					plan: createCharacterRenderPlan( admitted ),
+					plan: createCharacterRenderPlan( admitted, timelines ),
+					effect: id.includes( EFFECT_PROGRAMS ),
 					images: [ ...images ],
 					textures: [],
 					owned: true,
@@ -3504,7 +3568,8 @@ the next full prepare pass, so this may run between frames.
 			const assembled = { ...body.model, nodes: assembledNodes, primitives };
 			models.set( id, {
 				model: assembled,
-				plan: createCharacterRenderPlan( assembled ),
+				plan: createCharacterRenderPlan( assembled, timelines ),
+				effect: id.includes( EFFECT_PROGRAMS ),
 				images: pixels,
 				textures: [],
 				owned: false,
@@ -3708,9 +3773,8 @@ the next full prepare pass, so this may run between frames.
 				orderedGroups.forEach( ( [id, rows], index ) => {
 					const sample = rows[0]!;
 					const fading = frame.opacity( sample ) < 1;
-					const effect = sample.model.includes( EFFECT_PROGRAMS );
-					const blended = fading || effect ||
-						models.get( sample.model )!.model.primitives.some( p => !!p.geometry.material?.blend );
+					const resource = models.get( sample.model )!, effect = resource.effect;
+					const blended = fading || effect || resource.plan.blended;
 					let depth = -Infinity;
 					if ( blended ) {
 						for ( const row of rows ) depth = Math.max( depth, actorDepth( row ) );
@@ -3813,7 +3877,6 @@ the next full prepare pass, so this may run between frames.
 			portraits = [];
 			retained?.clear();
 			retained = null;
-			retainedScratch.clear();
 			actors = [];
 			requestedAssemblies.clear();
 		}

@@ -65,6 +65,7 @@ import {
 	decodeNativeTextureLevel
 } from "../../../apps/client-next/src/engine/foundation/assets/native-texture.ts";
 import { textureVariantPath } from "../../../apps/client-next/src/engine/foundation/assets/texture-variants.ts";
+import { compareText } from "../shared/textOrder.mjs";
 
 const run = promisify( execFile );
 
@@ -144,7 +145,7 @@ function nativeTextures( root, only ) {
 		}
 	};
 	walk( path.join( root, "assets" ) );
-	return out.sort( ( a, b ) => a[1].localeCompare( b[1] ) );
+	return out.sort( ( a, b ) => compareText( a[1], b[1] ) );
 }
 
 /*

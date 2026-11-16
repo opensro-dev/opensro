@@ -242,23 +242,27 @@ export function buildQuestDataAsset() {
 		textEntries[key] = (isPlaceholderText( english ) ? "" : english).replaceAll( "\\n", "\n" );
 	}
 
-	// The Halloween Day talk rows (SN_TALK_QEV_CH_EVENT_KISAENG_071030_A..E)
-	// live only in textevent.txt, which no catalog reads: So-ok's talk
-	// option is composed by the server, and the client renders whatever
-	// symbol the wire carries through this one text map. Merge exactly
-	// those five rows (additive, format unchanged, version stays 5).
-	// Retail ships all five in English; A and C carry theirs in
-	// multi-line cells (a row-per-line read misses them). A row whose
-	// English ever goes missing is skipped here and fails the
-	// completeness check below instead of shipping blank.
+	// So-ok's seasonal talk rows live only in textevent.txt, which no
+	// catalog reads: the Halloween Day rows (SN_TALK_QEV_CH_EVENT_KISAENG_
+	// 071030_A..E) and the Christmas rows (..._071225_A..E, port-only
+	// event, server action/christmas.go). Her talk option is composed by
+	// the server, and the client renders whatever symbol the wire carries
+	// through this one text map. Merge exactly those rows (additive,
+	// format unchanged, version stays 5). Retail ships all ten in English;
+	// A and C carry theirs in multi-line cells (a row-per-line read misses
+	// them). A row whose English ever goes missing is skipped here and
+	// fails the completeness check below instead of shipping blank.
 	// textevent.txt is deliberately NOT added to ENGLISH_COMPLETION_FILES:
 	// its other rows belong to events this build does not run, and the
 	// coverage gate would demand translations for all of them.
-	const HALLOWEEN_TALK_PREFIX = "SN_TALK_QEV_CH_EVENT_KISAENG_071030_";
-	const halloweenTalkFound = new Set();
+	const SEASONAL_TALK_PREFIXES = [
+		"SN_TALK_QEV_CH_EVENT_KISAENG_071030_",
+		"SN_TALK_QEV_CH_EVENT_KISAENG_071225_"
+	];
+	const seasonalTalkFound = new Set();
 	for ( const cols of readLocalizedTextDataRowsSync( textEventPath ) ) {
 		const key = cols[1]?.trim();
-		if ( !key?.startsWith( HALLOWEEN_TALK_PREFIX ) || key in textEntries ) {
+		if ( !key || !SEASONAL_TALK_PREFIXES.some( ( prefix ) => key.startsWith( prefix ) ) || key in textEntries ) {
 			continue;
 		}
 		const english = cols[8]?.trim() ?? "";
@@ -266,13 +270,13 @@ export function buildQuestDataAsset() {
 			continue;
 		}
 		textEntries[key] = english.replaceAll( "\\n", "\n" );
-		halloweenTalkFound.add( key );
+		seasonalTalkFound.add( key );
 	}
-	for ( const suffix of [ "A", "B", "C", "D", "E" ] ) {
-		if ( !halloweenTalkFound.has( HALLOWEEN_TALK_PREFIX + suffix ) ) {
-			throw new Error(
-				`[questdata] Halloween talk row ${HALLOWEEN_TALK_PREFIX + suffix} missing from textevent.txt`
-			);
+	for ( const prefix of SEASONAL_TALK_PREFIXES ) {
+		for ( const suffix of [ "A", "B", "C", "D", "E" ] ) {
+			if ( !seasonalTalkFound.has( prefix + suffix ) ) {
+				throw new Error( `[questdata] seasonal talk row ${prefix + suffix} missing from textevent.txt` );
+			}
 		}
 	}
 

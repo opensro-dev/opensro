@@ -6,7 +6,8 @@ buffer-slabs.test.mjs - tests for buffer-slabs.ts
 Slab ranges bind at aligned offsets with their exact size, a retired range
 returns to its slab only when the open frame closes (so no recorded pass
 reads bytes a later draw owns), freed neighbours merge, large requests
-keep a buffer of their own, and emptied slabs past one are destroyed.
+keep a buffer of their own, and emptied slabs past one are destroyed. A
+staged set uploads each written buffer's dirty span in one write.
 
 ===========================================================================
 */
@@ -18,7 +19,7 @@ import { pathToFileURL } from "node:url";
 import { root } from "../../tools/project.mjs";
 
 const source = name => pathToFileURL( path.join( root, "src/engine/runtime/renderer/device", name ) ).href;
-const { createBufferSlabs } = await import( source( "buffer-slabs.ts" ) );
+const { createBufferSlabs, createStagedSlabs } = await import( source( "buffer-slabs.ts" ) );
 const { createRetirement } = await import( source( "retirement.ts" ) );
 
 /*
@@ -27,10 +28,17 @@ fakeDevice
 ================
 */
 function fakeDevice() {
-	const buffers = [];
+	const buffers = [], writes = [];
 	return {
 		buffers,
+		writes,
 		limits: {},
+		queue: {
+			writeBuffer( buffer, offset, data, start, size ) {
+				if ( buffer.destroyed ) throw Error( "written while destroyed" );
+				writes.push( { buffer, offset, start, size } );
+			}
+		},
 		createBuffer( descriptor ) {
 			const buffer = {
 				...descriptor,
@@ -112,4 +120,41 @@ test("a set keeps one empty slab and destroys the others once their frame closes
 	assert.equal( device.buffers.filter( buffer => buffer.destroyed ).length, 2 );
 	assert.equal( slabs.allocate( 64 ).binding.buffer.destroyed, 0, "the next scene reuses the kept slab" );
 	assert.equal( device.buffers.length, 3 );
+});
+
+test("a staged set writes each dirty buffer once, never a destroyed one", () => {
+	const device = fakeDevice(), retirement = createRetirement();
+	const slabs = createStagedSlabs( device, "geometry-material", 0, retirement.retire );
+	const ranges = [ 0, 1, 2, 3, 4 ].map( () => slabs.allocate( 1 << 20 ) );
+	const [a, b, c, d, e] = ranges, row = Float32Array.of( 1, 2, 3, 4 );
+	assert.notEqual( e.binding.buffer, a.binding.buffer, "the fifth range opens a second slab" );
+	slabs.write( c, row, 16 );
+	slabs.write( a, row, 8 );
+	slabs.write( e, row, 16 );
+	assert.equal( slabs.flush(), 2 );
+	assert.deepEqual( device.writes.map( w => [ w.buffer, w.offset, w.size ] ), [
+		[ a.binding.buffer, 0, c.binding.offset + 16 ],
+		[ e.binding.buffer, 0, 16 ]
+	] );
+	assert.equal( slabs.flush(), 0, "nothing written since" );
+	// A written range whose slab empties, beside another empty one, and is
+	// destroyed before the flush.
+	slabs.write( a, row, 16 );
+	slabs.free( e );
+	for ( const range of [ a, b, c, d ] ) slabs.free( range );
+	assert.equal( a.binding.buffer.destroyed, 1 );
+	assert.equal( slabs.flush(), 0 );
+});
+
+test("a staged write inside a range lands at its offset and never past the range", () => {
+	const device = fakeDevice(), retirement = createRetirement();
+	const slabs = createStagedSlabs( device, "geometry-material-dynamic", 0, retirement.retire );
+	const a = slabs.allocate( 256 ), b = slabs.allocate( 256 ), row = Float32Array.of( 1, 2, 3, 4 );
+	slabs.write( b, row, 16, 192 );
+	slabs.write( b, row.subarray( 0, 3 ), 12, 128 );
+	assert.equal( slabs.flush(), 1 );
+	assert.deepEqual( device.writes.map( w => [ w.offset, w.size ] ), [ [ b.binding.offset + 128, 80 ] ] );
+	assert.throws( () => slabs.write( a, row, 16, 244 ), /Invalid staged slab write/ );
+	assert.throws( () => slabs.write( a, row, 16, 2 ), /Invalid staged slab write/ );
+	assert.equal( slabs.flush(), 0, "a refused write marks nothing" );
 });

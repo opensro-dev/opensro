@@ -11,6 +11,7 @@ CCObjAnimation resource, independent of its owner's action state 15.
 
 import { loadEquipmentRecords } from "./equipmentVisualRecords.mjs";
 import { normalizeBsrResourcePath } from "./resourceGlbOutput.mjs";
+import { compareText } from "../shared/textOrder.mjs";
 
 export const DEFAULT_BOOTH_MODELS = [
 	"res/item/china/item/cj_store.bsr",
@@ -47,7 +48,7 @@ export function collectBoothModelRoster( itemRecords ) {
 		resource.fields.requiredBy.push( row.code );
 		resources.set( bsrPath, resource );
 	}
-	return [ ...resources.values() ].sort( ( a, b ) => a.bsrPath.localeCompare( b.bsrPath ) );
+	return [ ...resources.values() ].sort( ( a, b ) => compareText( a.bsrPath, b.bsrPath ) );
 }
 
 /*

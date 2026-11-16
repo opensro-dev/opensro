@@ -75,18 +75,18 @@ func invItemsFromRowsWithin(rows []enterworld.InventoryRow, slotEnd int64) []inv
 		}
 
 		out = append(out, inventory.Item{
-			RecordID:          row.RecordID,
-			TradeOwner:        row.TradeOwner,
-			Slot:              uint8(row.Slot),
-			RefObjID:          row.RefObjID,
-			Codename:          row.Codename,
-			TypeFlags:         row.TypeFlags,
-			Plus:              uint8(clampInt64(row.Plus, 0, 0xFF)),
-			VarianceBits:      variance,
-			Durability:        uint32(clampInt64(row.Durability, 0, 0xFFFFFFFF)),
-			Quantity:          uint16(quantity),
-			MagicOptions:      append([]uint64(nil), row.MagicOptions...),
-			TransformRefObjID: row.TransformRefObjID, Summon: domain.CloneCOS(row.Summon),
+			RecordID:     row.RecordID,
+			TradeOwner:   row.TradeOwner,
+			Slot:         uint8(row.Slot),
+			RefObjID:     row.RefObjID,
+			Codename:     row.Codename,
+			TypeFlags:    row.TypeFlags,
+			Plus:         uint8(clampInt64(row.Plus, 0, 0xFF)),
+			VarianceBits: variance,
+			Durability:   uint32(clampInt64(row.Durability, 0, 0xFFFFFFFF)),
+			Quantity:     uint16(quantity),
+			MagicOptions: append([]uint64(nil), row.MagicOptions...),
+			Data:         row.Data, Summon: domain.CloneCOS(row.Summon),
 			ForgeBound: row.ForgeBound,
 		})
 	}
@@ -111,18 +111,18 @@ func rowsFromInvItems(items []inventory.Item) []enterworld.InventoryRow {
 			summon.InventorySlot = item.Slot
 		}
 		out = append(out, enterworld.InventoryRow{
-			RecordID:          item.RecordID,
-			TradeOwner:        item.TradeOwner,
-			Slot:              int64(item.Slot),
-			RefObjID:          item.RefObjID,
-			Codename:          item.Codename,
-			TypeFlags:         item.TypeFlags,
-			Plus:              int64(item.Plus),
-			VarianceBits:      strconv.FormatUint(item.VarianceBits, 10),
-			Durability:        int64(item.Durability),
-			StackCount:        int64(item.Quantity),
-			MagicOptions:      append([]uint64(nil), item.MagicOptions...),
-			TransformRefObjID: item.TransformRefObjID, Summon: summon,
+			RecordID:     item.RecordID,
+			TradeOwner:   item.TradeOwner,
+			Slot:         int64(item.Slot),
+			RefObjID:     item.RefObjID,
+			Codename:     item.Codename,
+			TypeFlags:    item.TypeFlags,
+			Plus:         int64(item.Plus),
+			VarianceBits: strconv.FormatUint(item.VarianceBits, 10),
+			Durability:   int64(item.Durability),
+			StackCount:   int64(item.Quantity),
+			MagicOptions: append([]uint64(nil), item.MagicOptions...),
+			Data:         item.Data, Summon: summon,
 			ForgeBound: item.ForgeBound,
 		})
 	}

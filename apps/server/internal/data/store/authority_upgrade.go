@@ -68,6 +68,8 @@ const preSookArenaAccountVersion = 42
 const preRavenRefugeVersion = 43
 const preNameReservationLayoutVersion = 10
 const preSilkHistoryLayoutVersion = 11
+const preTradeHistoryVersion = 44
+const preTradeHistoryLayoutVersion = 12
 
 /*
 ================
@@ -207,7 +209,7 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	if err := stampVersionTx(tx, metaKeyLayoutVersion, CurrentLayoutVersion); err != nil {
 		return backupPath, err
 	}
-	// Schema 44 only adds an optional deadline: preserve every existing record.
+	// Schemas 44 and 45 add only an optional deadline and a table: preserve every existing record.
 	if err := stampVersionTx(tx, metaKeySchemaVersion, CurrentVersion); err != nil {
 		return backupPath, err
 	}

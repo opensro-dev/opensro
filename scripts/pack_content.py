@@ -31,6 +31,7 @@ from pathlib import Path
 import alexandria_npcs as text_tables
 import content_archive
 import import_vsro_alexandria as tables
+from prepare_client_resources import file_digest
 
 AREAS_FORMAT = "opensro-content-areas-v1"
 SECTOR_EXTENSIONS = (".t", ".m", ".o", ".o2")
@@ -208,7 +209,7 @@ def pack(export_root, areas, output):
 		"format": "opensro-content-pack-v1", "portOnly": True,
 		"areas": packed, "excludedAreas": excluded, "excludedRows": dropped_rows,
 		"files": len(entries), "bytes": output.stat().st_size,
-		"sha256": content_archive.file_digest(output),
+		"sha256": file_digest(output),
 	}
 
 

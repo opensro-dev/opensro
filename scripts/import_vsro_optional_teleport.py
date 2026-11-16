@@ -39,7 +39,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import import_vsro_alexandria as stage1  # noqa: E402
 import sro_pk2  # noqa: E402
-from prepare_client_resources import safe_target, write_atomically  # noqa: E402
+from prepare_client_resources import file_digest, safe_target, write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT  # noqa: E402
 
 ROOT_ENV = "SRO_VSRO_ROOT"
@@ -58,7 +58,6 @@ TABLE_COLUMNS = 19
 # column 8.
 NAMES_CODE_COLUMN = 1
 NAMES_ENGLISH_COLUMN = 8
-HASH_CHUNK_BYTES = 1 << 20
 MAX_NAME_CHARS = 64
 
 
@@ -179,21 +178,6 @@ def read_payloads(media, wanted):
 
 """
 ================
-archive_digest
-
-The archive's sha256, read in chunks so a 700 MB Media.pk2 is never held.
-================
-"""
-def archive_digest(path):
-	digest = hashlib.sha256()
-	with open(path, "rb") as source:
-		for chunk in iter(lambda: source.read(HASH_CHUNK_BYTES), b""):
-			digest.update(chunk)
-	return digest.hexdigest()
-
-
-"""
-================
 import_optional_teleport
 ================
 """
@@ -205,7 +189,7 @@ def import_optional_teleport(media, output):
 		"format": OUTPUT_FORMAT,
 		"source": {
 			"archive": "Media.pk2",
-			"sha256": archive_digest(media),
+			"sha256": file_digest(media),
 			"files": dict(sorted(PINNED.items()))
 		},
 		"rows": rows

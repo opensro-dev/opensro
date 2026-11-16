@@ -64,6 +64,12 @@ func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Characte
 			if spirit && (!rt.NasrunSocket || q.DestSlot != nasrun.SpiritSlot) {
 				return false
 			}
+			// Only an awake Spirit is worn (the v1.188 server refuses 0x18F9);
+			// a dormant one must be used first (nasrun/clock.go).
+			if spirit && !nasrun.Awake(item.Data, rt.Now().Unix()) {
+				result = failureResult(wire.ErrCodeSpiritAsleep)
+				return false
+			}
 			// Slot 4 is the Spirit's alone; v1.150's avatars keep 0..3.
 			if !spirit && q.DestSlot >= nasrun.AvatarStorageSlots {
 				return false

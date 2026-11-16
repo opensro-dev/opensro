@@ -143,6 +143,16 @@ def tree_state_root(tree_root: Path) -> Path:
 	return Path(tree_root) / ".state"
 
 
+# ================
+# trees_overlap
+#
+# Whether two resolved folders are the same or one holds the other. Every
+# importer refuses to write its overlay into (or around) the tree it reads.
+# ================
+def trees_overlap(a: Path, b: Path) -> bool:
+	return a == b or a in b.parents or b in a.parents
+
+
 BUILD_STATE_ROOT = resolve_build_state_root()
 
 

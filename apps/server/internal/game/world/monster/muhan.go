@@ -31,7 +31,11 @@ import (
 const EnvMuhan = "SRO_MUHAN"
 const muhanWavesFile = "muhan-waves.txt"
 const muhanNPCsFile = "muhan-npcs.txt"
+const muhanTransformsFile = "muhan-transforms.txt"
 const muhanNPCPrefix = "NPC_MUHAN_"
+const muhanChangeNPCPrefix = "NPC_MUHAN_CHANGE_"
+const muhanChangeFormPrefix = "MOB_MUHAN_CHANGE_"
+const muhanSkillPrefix = "SKILL_MUHAN_"
 
 /*
 ================
@@ -178,6 +182,85 @@ func ParseMuhanWaves(data []byte) ([]MuhanWave, error) {
 	}
 	if len(document.Rows) == 0 {
 		return nil, fmt.Errorf("muhan waves: no rows")
+	}
+	return document.Rows, nil
+}
+
+/*
+================
+MuhanTransform
+
+One change pairing, as the import writes it (Version 2, from the
+later server's _RefMuhanMonsterTransMask): the change NPC whose Talk
+casts SkillCodename, a BUFF01 whose msch word 7 becomes the monster
+form MonsterCodename. Port-only, not native.
+================
+*/
+type MuhanTransform struct {
+	NpcCodename     string `json:"NpcCodename"`
+	SkillCodename   string `json:"SkillCodename"`
+	MonsterCodename string `json:"MonsterCodename"`
+}
+
+// muhanTransformsDocument is the Version-2 envelope of muhan-transforms.txt.
+type muhanTransformsDocument struct {
+	Version int              `json:"Version"`
+	Rows    []MuhanTransform `json:"Rows"`
+}
+
+/*
+================
+LoadMuhanTransforms
+
+Off never reads the optional file. On fails before startup when the
+pairing is absent or malformed: a change NPC with no pairing would
+answer a Talk with nothing, so a partial set must not reach gameplay.
+Resolving the skill and the form against the loaded tables is the
+action runtime's install check.
+================
+*/
+func LoadMuhanTransforms(textdataDir string, enabled bool) ([]MuhanTransform, error) {
+	if !enabled {
+		return nil, nil
+	}
+	data, err := os.ReadFile(filepath.Join(textdataDir, muhanTransformsFile))
+	if err != nil {
+		return nil, fmt.Errorf("muhan transforms: %w", err)
+	}
+	return ParseMuhanTransforms(data)
+}
+
+/*
+================
+ParseMuhanTransforms
+
+The pairing's own contract: a Version-2 envelope with rows, each a
+change NPC (once), a Muhan skill and a change form. The import refuses
+the same defects; the server refuses them again rather than trust a
+hand-edited file.
+================
+*/
+func ParseMuhanTransforms(data []byte) ([]MuhanTransform, error) {
+	var document muhanTransformsDocument
+	if err := json.Unmarshal(data, &document); err != nil {
+		return nil, fmt.Errorf("muhan transforms: %w", err)
+	}
+	if document.Version != 2 {
+		return nil, fmt.Errorf("muhan transforms: version %d, want 2", document.Version)
+	}
+	if len(document.Rows) == 0 {
+		return nil, fmt.Errorf("muhan transforms: no rows")
+	}
+	seen := make(map[string]bool, len(document.Rows))
+	for _, row := range document.Rows {
+		if !strings.HasPrefix(row.NpcCodename, muhanChangeNPCPrefix) || !strings.HasPrefix(row.SkillCodename, muhanSkillPrefix) ||
+			!strings.HasPrefix(row.MonsterCodename, muhanChangeFormPrefix) {
+			return nil, fmt.Errorf("muhan transforms: row %+v names a non-muhan npc, skill or form", row)
+		}
+		if seen[row.NpcCodename] {
+			return nil, fmt.Errorf("muhan transforms: npc %s is paired twice", row.NpcCodename)
+		}
+		seen[row.NpcCodename] = true
 	}
 	return document.Rows, nil
 }

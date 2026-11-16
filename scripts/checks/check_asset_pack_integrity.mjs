@@ -4,7 +4,7 @@
 //
 // Byte-hashing is the expensive part (~GBs of packs), so it can be short-circuited
 // through a persistent stat-keyed hash cache (scripts/build/shared/fileHashCache.mjs),
-// kept in a check-owned file (.state/asset-integrity-hash-cache.json) so this gate
+// kept in a check-owned file (buildStatePath( "asset-integrity-hash-cache.json" )) so this gate
 // never mutates the shared build cache that concurrent build lanes read.
 //
 // Safety model - the cache can only CONFIRM, never overrule:

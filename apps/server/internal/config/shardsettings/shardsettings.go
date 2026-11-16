@@ -195,6 +195,10 @@ var Settings = []Setting{
 	{Env: "SRO_HALLOWEEN_EVENT", NomadVar: "halloween_event", Default: "off", Catalogue: true},
 	{Env: "SRO_HALLOWEEN_EVENT_WINDOW", NomadVar: "halloween_event_window", Default: "", Catalogue: true},
 	{Env: "SRO_HALLOWEEN_HELMET_SEAL", NomadVar: "halloween_helmet_seal", Default: "off"},
+	// Port-only, not native: the Christmas event's snow and town
+	// decoration (progression/christmas.go). Off is native.
+	{Env: "SRO_CHRISTMAS_EVENT", NomadVar: "christmas_event", Default: "off"},
+	{Env: "SRO_CHRISTMAS_EVENT_WINDOW", NomadVar: "christmas_event_window", Default: ""},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_MALL_STARTER_SILK", NomadVar: "mall_starter_silk", Default: "700"},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
@@ -479,6 +483,10 @@ var Settings = []Setting{
 	// deployment default is native ("off"); "on" restores the 2026-10-14
 	// beta removal.
 	{Env: "SRO_ALCHEMY_MATERIAL_DROPS_OFF", NomadVar: "alchemy_material_drops_off", Default: "off", Catalogue: true},
+	// Owner, 2026-11-16 (#general): no drops above degree 9 while the area
+	// polls run. The registry default keeps today's drops; the release
+	// controls switch it on.
+	{Env: "SRO_ABOVE_DEGREE9_DROPS_OFF", NomadVar: "above_degree9_drops_off", Default: "off", Catalogue: true},
 	{Env: "SRO_BETA_DROP_CAP", NomadVar: "beta_drop_cap", Default: "0", Catalogue: true, Validation: ValueBetaGrowth},
 	// Owner, 2026-10-19: gold falls at 100 times retail (was 250).
 	{Env: "SRO_BETA_GOLD_RATE", NomadVar: "beta_gold_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
@@ -528,6 +536,12 @@ var Settings = []Setting{
 	// before the Legend IV server tables); opened in the shard defaults
 	// 2026-10-21 (GH #1013). "off" is native.
 	{Env: "SRO_QINSHI_TOMB", NomadVar: "qinshi_tomb", Default: "on", Catalogue: true},
+	// Port-only, not native: the Jangan town gate also offers the Qin-Shi
+	// Emperor Tomb floors 1-4 (40000 gold, level 70+, the Alexandria
+	// rows' terms; floor 4 by corner), shown by the client as one
+	// "Ch'in Tomb" row opening the floor list. Needs SRO_QINSHI_TOMB.
+	// "off" is native.
+	{Env: "SRO_JANGAN_TOMB_TELEPORT", NomadVar: "jangan_tomb_teleport", Default: "off"},
 	// The Alexandria city of a build_alexandria_variant.py game root: its
 	// regions, gates and NPCs (port-only, not native; internal/game/world/
 	// alexandria). "off" is native and hides them from a variant's data;

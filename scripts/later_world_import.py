@@ -37,7 +37,6 @@ through skytemple_import; they take no WorldImport spec.
 
 ===========================================================================
 """
-import hashlib
 import json
 import mmap
 import os
@@ -51,7 +50,9 @@ import cap110_monsters as cap110
 import cap110_skill_effects as effects
 import import_vsro_alexandria as tables
 import sro_pk2
-from prepare_client_resources import write_atomically
+from pin_file import read_pin_field
+from prepare_client_resources import file_digest, write_atomically
+from sro_paths import trees_overlap
 
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 PIN_FORMAT = "opensro-vsro-archive-pins-v1"
@@ -110,13 +111,7 @@ class WorldImport:
 # ================
 def archive_pins(spec):
 	"""The pinned v1.696 archive hashes (v1696_archive_pins.json beside this tool)."""
-	try:
-		pin = json.loads(spec.pin_file.read_text(encoding="utf-8"))
-	except (OSError, ValueError) as error:
-		raise SystemExit(f"{spec.pin_file} is unreadable: {error}")
-	if pin.get("format") != PIN_FORMAT or not isinstance(pin.get("archives"), dict):
-		raise SystemExit(f"{spec.pin_file} is not a {PIN_FORMAT} pin file")
-	return pin["archives"]
+	return read_pin_field(spec.pin_file, PIN_FORMAT, "archives")
 
 
 # ================
@@ -154,11 +149,7 @@ def require_pin(spec, root, names, pins_for):
 			raise SystemExit(f"{spec.pin_file.name} pins no {name}.pk2; pin the archive before reading it")
 		if not path.is_file():
 			raise SystemExit(f"{path} not found; --v1696-root must be the pinned v1.696 client folder")
-		hasher = hashlib.sha256()
-		with open(path, "rb") as stream:
-			for chunk in iter(lambda: stream.read(1 << 20), b""):
-				hasher.update(chunk)
-		actual = hasher.hexdigest()
+		actual = file_digest(path)
 		if actual != expected:
 			raise SystemExit(
 				f"{path} does not match the pinned v1.696 archive: sha256 is {actual}, pinned is {expected}. "
@@ -327,7 +318,7 @@ def reap_monsters(spec, output, prior):
 # ================
 def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_enabled, pins_for):
 	native, output = Path(native).resolve(), Path(output).resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError(f"{spec.label} overlay must be separate from native extraction")
 	marker = output / spec.marker
 	prior = cap110.read_json(marker) if marker.exists() else {}
@@ -418,10 +409,11 @@ def later_characters(read):
 # the skill manifest, add their names, and merge their skill effects
 # and characterinfo rows. refs maps codename to its converted row and
 # is renumbered in place; info_owned picks the characterinfo rows the
-# import claims. Returns the summary keys every later-world marker
+# import claims; extra_skills names skills to stage that no kind's
+# skill columns reach. Returns the summary keys every later-world marker
 # records, so the reap finds exactly what this build owned.
 # ================
-def stage_kinds(label, read, refs, text_root, prior, character_shard, skill_shard, info_owned):
+def stage_kinds(label, read, refs, text_root, prior, character_shard, skill_shard, info_owned, extra_skills=()):
 	native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != character_shard for r in tables.table_rows(p.read_bytes())]
 	occupied = {int(r[1]) for r in native_chars}
 	allocated = cap110.allocate_identities(occupied, sorted(refs), prior.get("characters", {}))
@@ -431,6 +423,12 @@ def stage_kinds(label, read, refs, text_root, prior, character_shard, skill_shar
 	needed = {int(s) for r in refs.values() for s in r[89:99] if int(s)}
 	client_skills = [r for shard in tables.table_rows(read("skilldata.txt"))
 		for r in tables.table_rows(read(shard[0])) if len(r) > 3 and r[1].isdigit()]
+	# Skills no staged kind names in its skill columns (a Muhan change
+	# form's BUFF01, cast by its NPC) are staged by codename.
+	extra = {r[3]: int(r[1]) for r in client_skills if r[3] in set(extra_skills)}
+	if set(extra_skills) - set(extra):
+		raise ValueError(f"{label} skills absent from the later client: {sorted(set(extra_skills) - set(extra))}")
+	needed |= set(extra.values())
 	added, skill_map = cap110.merge_skills(native_skills, client_skills, needed, prior.get("skills", {}))
 	for row in refs.values():
 		row[89:99] = [str(skill_map[int(s)]) if int(s) else "0" for s in row[89:99]]
@@ -815,7 +813,7 @@ def reap_regions(spec, native, out, record):
 # ================
 def reap_world(spec, native, out):
 	native, out = Path(native).resolve(), Path(out).resolve()
-	if native == out or native in out.parents or out in native.parents:
+	if trees_overlap(native, out):
 		raise ValueError(f"{spec.label} overlay must be separate from native extraction")
 	marker = out / spec.marker
 	prior = cap110.read_json(marker) if marker.exists() else {}
