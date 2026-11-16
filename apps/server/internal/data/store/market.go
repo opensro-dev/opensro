@@ -271,6 +271,11 @@ func (s *Store) MarketBuy(req domain.MarketBuyRequest) (domain.MarketSale, error
 			return domain.MarketSale{}, domain.ErrMarketUnavailable
 		}
 		payerDivision = division
+		// The live record, never the row on disk: a deferred write
+		// (MutateCharacterDeferred, queued before the logout) has already run
+		// on it and only waits for the tick batch, which beginTxLocked flushes
+		// before this transaction opens. The buy then neither spends gold the
+		// record no longer holds nor writes back a balance that loses it.
 		paidGold = ledgerGold(payer) - listing.Price
 		if paidGold < 0 {
 			return domain.MarketSale{}, domain.ErrMarketFunds
