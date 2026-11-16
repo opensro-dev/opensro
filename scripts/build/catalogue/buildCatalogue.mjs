@@ -27,7 +27,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { clientPublicPath, generatedPath } from "../../lib/generatedRoot.mjs";
+import { buildStatePath, clientPublicPath, generatedPath } from "../../lib/generatedRoot.mjs";
 import { sharedCacheEnvironment } from "../../lib/goEnvironment.mjs";
 import { runPython } from "../shared/pythonRun.mjs";
 import { playerNotes } from "./playerNotes.mjs";
@@ -49,7 +49,7 @@ const serverRoot = path.join( repositoryRoot, "apps", "server" );
 const SHARD_SETTINGS = path.join( serverRoot, "config", "shard-settings.json" );
 // The WebP encoders' content cache (webp_pool.py): an image unchanged since
 // any earlier build is copied, not encoded again.
-const WEBP_CACHE = path.join( repositoryRoot, ".state", "catalogue-webp-cache" );
+const WEBP_CACHE = buildStatePath( "catalogue-webp-cache" );
 // A requirement value no item asks for: requirements read as met (white),
 // since the catalogue has no player to compare against.
 const MET = 0xffff;
