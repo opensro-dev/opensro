@@ -507,7 +507,8 @@ export function publishCharacters(
 			actor.gid === localHiddenGid
 		) hiddenGids.add( actor.gid );
 	}
-	let grew = true;
+	// Only a hidden holder hides what rides on it.
+	let grew = hiddenGids.size > 0;
 	while ( grew ) {
 		grew = false;
 		for ( const actor of next.values() ) {
