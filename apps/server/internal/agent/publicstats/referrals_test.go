@@ -171,7 +171,7 @@ func TestReferralRoutesLinkListAndApprove(t *testing.T) {
 	}
 
 	code, body = authorizedGet(s, "/v1/referral-codes/ALPHA234", testWriteToken)
-	if code != http.StatusOK || !strings.Contains(string(body), `"inviter":"Kekw"`) {
+	if code != http.StatusOK || !strings.Contains(string(body), `"inviter":"Kekw"`) || !strings.Contains(string(body), `"account":"alpha"`) {
 		t.Fatalf("code lookup %d %s, want the shown character Kekw", code, body)
 	}
 	if code, _ := authorizedGet(s, "/v1/referral-codes/NOPE2345", testWriteToken); code != http.StatusNotFound {

@@ -5,7 +5,7 @@ referrals.go - the website's referral routes (#3518, port-only)
 
 	GET /v1/accounts/{id}/referrals          -> 200 own code, rules, invites
 	PUT /v1/accounts/{id}/referrer  {"code","held"} -> 204
-	GET /v1/referral-codes/{code}            -> 200 {"inviter"}, 404 unknown
+	GET /v1/referral-codes/{code}            -> 200 {"inviter","account"}, 404
 	GET /v1/referrals/held                   -> 200 referrals waiting for staff
 	PUT /v1/referrals/{referee}/approved     -> 204
 
@@ -17,7 +17,9 @@ Privacy: a player's own list names no invited account and no character of
 one, only when each joined and how far it got. The code lookup the sign-up
 page shows names the inviter by their highest character that is not
 hidden, or nothing: the inviter handed the code out, and the page only
-says whose invitation it is. The held list is for staff (the website's
+says whose invitation it is. The lookup also carries the inviter's account
+id for the website's own use (comparing the two sign-ins' connections); the
+site never shows it. The held list is for staff (the website's
 admin page) and carries account ids.
 
 The website decides "held": it sees both sign-ins' connections, the game
@@ -223,7 +225,7 @@ func (s *Service) referralCode(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.mu.Unlock()
-	writeJSON(w, map[string]string{"inviter": inviter})
+	writeJSON(w, map[string]string{"inviter": inviter, "account": owner})
 }
 
 /*
