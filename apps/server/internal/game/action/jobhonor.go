@@ -17,6 +17,18 @@ the sales between two loads of goods, so a run opens when its trader
 buys goods or its thief picks some up. The account's daily cap lives in
 the ledger, shared by every character of the account.
 
+A thief's steal decays per victim (the spec's per-victim decay): the
+thief's account scores a victim trader's goods in full the first time in
+an honor day, at half the second, and not at all after. A thieves'
+merchant pays for the goods' whole value, so without the decay a
+player's own trader alt on another account could buy a dear stack, have
+the player's thief take it and score a fresh run four times a day at no
+risk. The victim is the goods' trade owner (the native owner alias);
+several stacks of one load picked up into one unsold run are one steal.
+The steal counts are memory only: a restart forgets them, as it forgets
+the open runs. INFERENCE: worth a restart's reset, which the operator
+alone can cause.
+
 The hunter's escort damage, the job kill decay, the hot route and the
 ambush are later slices of #3530.
 
@@ -32,6 +44,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/platform/jobhonor"
 )
 
 // EnvJobHonor turns the port-only job honor on ("on", "1", "true").
@@ -47,6 +60,9 @@ const (
 	honorTraderGoldPerPoint = 10_000
 	honorThiefGoldPerPoint  = 5_000
 	honorRunPointCap        = 250
+	// honorStealsScored is how many steals of one victim in one honor
+	// day score at all; each after the first scores half the one before.
+	honorStealsScored = 2
 )
 
 /*
@@ -81,13 +97,31 @@ func JobHonorFromEnv() bool {
 ================
 honorRuns
 
-The points each character's current run has scored, by character id.
-Its zero value is ready; the composition root never touches it.
+Each character's current run, by character id, and the day's steal
+counts. Its zero value is ready; the composition root never touches it.
 ================
 */
 type honorRuns struct {
 	mu     sync.Mutex
-	scored map[int64]int
+	runs   map[int64]*honorRun
+	steals map[honorSteal]int
+}
+
+// honorRun is one run: the points it scored, and for a thief's haul the
+// victim and the halvings its steal decay applies (honorStealsScored or
+// more scores nothing).
+type honorRun struct {
+	scored int
+	victim string
+	decay  int
+}
+
+// honorSteal keys the per-victim decay: the thief's account, the victim
+// owner alias, the honor day.
+type honorSteal struct {
+	account string
+	victim  string
+	day     int64
 }
 
 /*
@@ -124,7 +158,44 @@ func (rt *Runtime) openHonorRun(c *enterworld.Character) {
 	}
 	rt.jobHonorRuns.mu.Lock()
 	defer rt.jobHonorRuns.mu.Unlock()
-	delete(rt.jobHonorRuns.scored, c.ID)
+	delete(rt.jobHonorRuns.runs, c.ID)
+}
+
+/*
+================
+openStealRun
+
+A thief's haul of victim's goods. More of the same victim's goods into
+a run that has not sold yet are the same steal; otherwise a new run
+opens and the steal counts toward the victim's decay for the day.
+================
+*/
+func (rt *Runtime) openStealRun(c *enterworld.Character, victim string, at time.Time) {
+	if rt == nil || rt.JobHonor == nil || c == nil {
+		return
+	}
+	rt.jobHonorRuns.mu.Lock()
+	defer rt.jobHonorRuns.mu.Unlock()
+	runs := &rt.jobHonorRuns
+	if run := runs.runs[c.ID]; run != nil && run.victim == victim && run.scored == 0 {
+		return
+	}
+	day := jobhonor.DayStart(at).Unix()
+	if runs.runs == nil {
+		runs.runs = map[int64]*honorRun{}
+	}
+	if runs.steals == nil {
+		runs.steals = map[honorSteal]int{}
+	}
+	// Yesterday's counts can never apply again.
+	for key := range runs.steals {
+		if key.day != day {
+			delete(runs.steals, key)
+		}
+	}
+	key := honorSteal{account: c.AccountID, victim: victim, day: day}
+	runs.runs[c.ID] = &honorRun{victim: victim, decay: runs.steals[key]}
+	runs.steals[key]++
 }
 
 /*
@@ -146,14 +217,27 @@ func (rt *Runtime) scoreTradeSale(c *enterworld.Character, job uint8, profit int
 	}
 	rt.jobHonorRuns.mu.Lock()
 	defer rt.jobHonorRuns.mu.Unlock()
-	if rt.jobHonorRuns.scored == nil {
-		rt.jobHonorRuns.scored = map[int64]int{}
+	if rt.jobHonorRuns.runs == nil {
+		rt.jobHonorRuns.runs = map[int64]*honorRun{}
 	}
-	points = min(points, honorRunPointCap-rt.jobHonorRuns.scored[c.ID])
+	run := rt.jobHonorRuns.runs[c.ID]
+	if run == nil {
+		run = &honorRun{}
+		rt.jobHonorRuns.runs[c.ID] = run
+	}
+	if job == domain.JobThief {
+		// A thief's sale with no steal behind it (goods the thief never
+		// hauled this run) scores nothing; a decayed steal halves.
+		if run.victim == "" || run.decay >= honorStealsScored {
+			return 0
+		}
+		points >>= run.decay
+	}
+	points = min(points, honorRunPointCap-run.scored)
 	if points <= 0 {
 		return 0
 	}
 	kept := rt.JobHonor.AwardJobHonor(c.AccountID, c.ID, int(job), points, at)
-	rt.jobHonorRuns.scored[c.ID] += kept
+	run.scored += kept
 	return kept
 }

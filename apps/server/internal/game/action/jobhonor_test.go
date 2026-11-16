@@ -102,3 +102,59 @@ func TestNothingScoresWithTheFlagOff(t *testing.T) {
 		t.Fatalf("a runtime with no sink scored %d", got)
 	}
 }
+
+func TestAThiefsStealsDecayPerVictimEachHonorDay(t *testing.T) {
+	at := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	rt := honorRuntime(t, at)
+	thief := honorCharacter(1, "thief-account")
+	full := int64(honorRunPointCap) * honorThiefGoldPerPoint
+	steal := func(victim string, when time.Time) int {
+		rt.openStealRun(thief, victim, when)
+		return rt.scoreTradeSale(thief, domain.JobThief, full, when)
+	}
+	// An alt trader on another account feeding the same player's thief:
+	// full, half, then nothing from that victim for the rest of the day.
+	for i, want := range []int{honorRunPointCap, honorRunPointCap / 2, 0, 0} {
+		if got := steal("AltTrader", at); got != want {
+			t.Fatalf("steal %d of one victim kept %d, want %d", i+1, got, want)
+		}
+	}
+	if got := steal("OtherTrader", at); got != honorRunPointCap {
+		t.Fatalf("another victim kept %d", got)
+	}
+	// Another of the same account's thieves shares the decay.
+	second := honorCharacter(2, "thief-account")
+	rt.openStealRun(second, "AltTrader", at)
+	if got := rt.scoreTradeSale(second, domain.JobThief, full, at); got != 0 {
+		t.Fatalf("the account's second thief kept %d from a spent victim", got)
+	}
+	if got := steal("AltTrader", at.Add(24*time.Hour)); got != honorRunPointCap {
+		t.Fatalf("the next honor day kept %d", got)
+	}
+}
+
+func TestOneLoadPickedUpInStacksIsOneSteal(t *testing.T) {
+	at := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	rt := honorRuntime(t, at)
+	thief := honorCharacter(1, "thief-account")
+	full := int64(honorRunPointCap) * honorThiefGoldPerPoint
+	for range 3 {
+		rt.openStealRun(thief, "Victim", at)
+	}
+	if got := rt.scoreTradeSale(thief, domain.JobThief, full, at); got != honorRunPointCap {
+		t.Fatalf("one load in three stacks kept %d", got)
+	}
+	rt.openStealRun(thief, "Victim", at)
+	if got := rt.scoreTradeSale(thief, domain.JobThief, full, at); got != honorRunPointCap/2 {
+		t.Fatalf("the second load kept %d, want half", got)
+	}
+}
+
+func TestAThiefsSaleWithNoStealScoresNothing(t *testing.T) {
+	at := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	rt := honorRuntime(t, at)
+	thief := honorCharacter(1, "thief-account")
+	if got := rt.scoreTradeSale(thief, domain.JobThief, 1_000_000_000, at); got != 0 {
+		t.Fatalf("a sale with no haul kept %d", got)
+	}
+}
