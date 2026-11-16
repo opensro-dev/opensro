@@ -76,3 +76,50 @@ func (s *MonsterState) FieldNest(codename string) (monster.NestRow, bool) {
 	}
 	return nests[len(nests)/2], true
 }
+
+/*
+================
+MonsterState.OpenWorldNests
+
+Every open-world nest of an ordinary monster, in template order: the
+ground a world event may scatter over. A cave, another world's plane and
+a unique's nest are left out (a unique's ground is its own event). The
+template never changes, so this reads it without a lock.
+================
+*/
+func (s *MonsterState) OpenWorldNests() []monster.NestRow {
+	var nests []monster.NestRow
+	for _, nest := range s.template.Nests {
+		if !FeaturesAt(nest.RegionID).QuestMonsterSpawns || nest.WorldCode != "" && nest.WorldCode != fieldDefaultWorld {
+			continue
+		}
+		if ref, found := s.template.Refs[nest.RefObjID]; found && !monster.NestIsUnique(nest, ref) {
+			nests = append(nests, nest)
+		}
+	}
+	return nests
+}
+
+/*
+================
+MonsterState.CountByCodename
+
+How many monsters of the codename a division holds now, alive or still
+lying dead, without copying the population.
+================
+*/
+func (s *MonsterState) CountByCodename(division, codename string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.divs[division]
+	if state == nil {
+		return 0
+	}
+	count := 0
+	for _, instance := range state.instances.values() {
+		if instance.Ref.Codename == codename {
+			count++
+		}
+	}
+	return count
+}

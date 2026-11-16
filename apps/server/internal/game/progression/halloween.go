@@ -55,13 +55,13 @@ const HalloweenBoxesPerGift = 1
 ================
 HalloweenEvent
 
-The zero value is off and windowless: the native game.
+The Halloween Day event's switch and window (seasonal_event.go), and
+its wave timetable (halloween_waves.go). The zero value is off and
+windowless: the native game.
 ================
 */
 type HalloweenEvent struct {
-	enabled  bool
-	startsAt time.Time
-	endsAt   time.Time
+	SeasonalEvent
 }
 
 /*
@@ -70,99 +70,24 @@ HalloweenEventFromEnv
 ================
 */
 func HalloweenEventFromEnv() HalloweenEvent {
-	event := HalloweenEvent{}
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvHalloweenEvent))) {
-	case "on", "1", "true":
-		event.enabled = true
-	}
-	window := strings.Split(strings.TrimSpace(os.Getenv(EnvHalloweenEventWindow)), "/")
-	if len(window) == 2 {
-		startsAt, startErr := time.Parse(time.RFC3339, strings.TrimSpace(window[0]))
-		endsAt, endErr := time.Parse(time.RFC3339, strings.TrimSpace(window[1]))
-		if startErr == nil && endErr == nil && endsAt.After(startsAt) {
-			event.startsAt, event.endsAt = startsAt.UTC(), endsAt.UTC()
-		}
-	}
-	return event
-}
-
-/*
-================
-HalloweenEvent.Enabled
-
-Whether the switch is on, whatever the window says.
-================
-*/
-func (e HalloweenEvent) Enabled() bool { return e.enabled }
-
-/*
-================
-HalloweenEvent.WindowValid
-
-Whether a usable window is configured. An event switched on without one
-never runs; the composition root warns about that posture at boot.
-================
-*/
-func (e HalloweenEvent) WindowValid() bool { return !e.startsAt.IsZero() && e.endsAt.After(e.startsAt) }
-
-/*
-================
-HalloweenEvent.Window
-
-The configured window, and whether it is usable.
-================
-*/
-func (e HalloweenEvent) Window() (startsAt, endsAt time.Time, valid bool) {
-	return e.startsAt, e.endsAt, e.WindowValid()
-}
-
-/*
-================
-HalloweenEvent.ActiveAt
-
-The event runs from the window's start up to (not including) its end.
-================
-*/
-func (e HalloweenEvent) ActiveAt(now time.Time) bool {
-	return e.enabled && e.WindowValid() && !now.Before(e.startsAt) && now.Before(e.endsAt)
-}
-
-/*
-================
-HalloweenEvent.EndsAt
-
-The window's end, the first instant the event no longer runs; zero when
-no window is configured.
-================
-*/
-func (e HalloweenEvent) EndsAt() time.Time { return e.endsAt }
-
-/*
-================
-HalloweenEvent.CleanupDueAt
-
-Once a configured window has ended, remaining boxes leave at the first
-world entry after the end. This follows the window alone: a shard that
-ran the event and later flips the switch off still retires the boxes its
-window created. With no window configured nothing is ever due.
-================
-*/
-func (e HalloweenEvent) CleanupDueAt(now time.Time) bool {
-	return e.WindowValid() && !now.Before(e.endsAt)
+	return HalloweenEvent{seasonalEventFromEnv(EnvHalloweenEvent, EnvHalloweenEventWindow)}
 }
 
 /*
 ================
 HalloweenGift
 
-One row of the exchange's rolled gift table: what it pays, how many,
-and its weight on the sibling roll's scale.
+One row of a seasonal exchange's rolled gift table: what it pays, how
+many, and its weight on the sibling roll's scale. FemaleCodename, when
+set, is what a female character receives instead (a sexed costume
+piece); Halloween's rows carry none.
 ================
 */
 type HalloweenGift struct {
-	Codename string
-	Count    uint32
-	Weight   float64
+	Codename       string
+	FemaleCodename string
+	Count          uint32
+	Weight         float64
 }
 
 // The owner's table (#2131), weights out of 100: buff and 500 scrolls

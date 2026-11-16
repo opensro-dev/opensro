@@ -247,7 +247,9 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 				recordedImage = image;
 			}
 			const bundles: GPURenderBundle[] = imageBundle ? [ imageBundle ] : [];
-			nextAnchors.clear();
+			// A new set, not a cleared one: both anchor sets live for many
+			// frames, and a long-lived set's next table is old-generation garbage.
+			nextAnchors = new Set();
 			recordGeometry( bundles, world, geometry );
 			const previousAnchors = anchors;
 			anchors = nextAnchors;
