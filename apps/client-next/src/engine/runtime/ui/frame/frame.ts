@@ -33,7 +33,7 @@ import { latticeCells } from "@/engine/foundation/ui/inventory-layout";
 import { normalTile } from "@/engine/foundation/ui/normal-tile";
 import { MESSAGE_FRAME, MESSAGE_TILE, partyProposalAssets } from "@/engine/foundation/ui/party-proposal";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
-import { captionWords, narrowFace, textLines } from "@/engine/foundation/ui/text-lines";
+import { captionWords, fitLines, narrowFace, textLines } from "@/engine/foundation/ui/text-lines";
 import { messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 
 export { beginWindow, endWindow, unloadedImages } from "./admission";
@@ -303,6 +303,8 @@ export function comboBox(
 const WINDOW_LABEL_MARGIN = 6;
 // A fitted button caption keeps this far inside each side of its plate.
 const CAPTION_MARGIN = 4;
+// A fitted tab caption stays inside this much of its plate's bevel.
+const TAB_CAPTION_BEVEL = 2;
 // The blank between a wrapped label's two lines, below the first line's
 // descent: one label reads as one, apart from the rows beside it.
 const WRAP_LEADING = 1;
@@ -555,6 +557,49 @@ export function fittedCaption(
 	const value = captionWords( caption, room, line => measure( line, node.fontIndex ) ),
 		fontIndex = narrowFace( value, room, node.fontIndex, measure );
 	return { value, node: fontIndex === node.fontIndex ? node : { ...node, fontIndex } };
+}
+
+/*
+================
+fittedLabel
+
+Port-only, not native (Experimental "Fit window labels"): a static's
+text laid inside room, a rect its caller measured from the art around
+it, in the first of values that fitLines places there (one line, two,
+the narrow face, two narrow). The lines keep the node's horizontal
+alignment and centre on room's height. False, with nothing drawn, when
+the row is off or no value fits: the caller draws the native static.
+================
+*/
+export function fittedLabel(
+	frame: UiAuthoredFrame,
+	{ node, room, values }: { node: AuthoredControl; room: UiRect; values: readonly string[]; }
+): boolean {
+	if ( !frame.fitWindowLabels() ) return false;
+	const text = frame.text, measure = ( line: string, face: number ) => text.run( line, 0, face ).width;
+	for ( const value of values ) {
+		const fit = fitLines( value, room[2], node.fontIndex ?? 0, measure );
+		if ( !fit ) continue;
+		const style = { fontIndex: fit.fontIndex, hAlign: node.hAlign, vAlign: 0 },
+			lineHeight = text.extentHeight( fit.fontIndex ),
+			ink = text.lineInk( fit.fontIndex );
+		const { top, pitch } = fit.lines.length === 1 ?
+			{ top: room[1] + (room[3] - ink.height) / 2 - ink.top, pitch: 0 } :
+			wrappedLabelBand( room, undefined, ink );
+		fit.lines.forEach( ( line, index ) =>
+			frame.quads.push(
+				...text.quads(
+					line,
+					[ room[0], top + index * pitch, room[2], lineHeight ],
+					frame.full,
+					node.color,
+					style
+				)
+			)
+		);
+		return true;
+	}
+	return false;
 }
 
 /*
@@ -857,9 +902,31 @@ export function nativeTab(
 		...frame.text.quads( caption, content, frame.full, grey ? GREY_TAB_LABEL : frame.white, {
 			hAlign: 1,
 			vAlign: 1,
-			fontStyle: selected ? 2 : 0
+			...tabCaptionFace( frame, caption, r[2] - 2 * TAB_CAPTION_BEVEL, selected ? 2 : 0 )
 		} )
 	);
+}
+
+/*
+================
+tabCaptionFace
+
+The face and weight a tab draws its caption in. A selected tab's caption
+is bold (fontStyle 2). Port-only, not native (Experimental "Fit window
+labels"): a caption wider than its plate inside the bevel (the stall's
+one runtime tab, "Items to sell" bold on an 80-pixel com_long_tab, or
+Magic Pang's "Equipment", 69 pixels on 60) drops to the regular weight,
+then to the narrow face; the atlas has no bold narrow face. The measure
+is the plate, not the content insets: the guild's "Guild info" (62 bold,
+content 60) is centred past its insets but well inside its 72-pixel
+plate, and keeps the native face, as everything does off.
+================
+*/
+function tabCaptionFace( frame: UiAuthoredFrame, caption: string, room: number, fontStyle: number ) {
+	const native = { fontIndex: 0, fontStyle };
+	if ( !frame.fitWindowLabels() || frame.text.run( caption, fontStyle, 0 ).width <= room ) return native;
+	const fontIndex = narrowFace( caption, room, 0, ( line, face ) => frame.text.run( line, 0, face ).width );
+	return { fontIndex, fontStyle: 0 };
 }
 
 /*

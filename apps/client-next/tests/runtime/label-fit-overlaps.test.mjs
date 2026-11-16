@@ -25,7 +25,7 @@ const { titleText, resolveTextOverlaps } = await import( "../../src/engine/found
 const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 const { extendedRecipes } = await import( "../../tools/ui-gallery/extended.ts" );
 const { OPENERS } = await import( "../../tools/ui-gallery/entry-recipes.mjs" );
-const { guildSnapshot } = await import( "../../tools/ui-gallery/scenarios.ts" );
+const { guildSnapshot, seedJourney } = await import( "../../tools/ui-gallery/scenarios.ts" );
 
 const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 
@@ -226,11 +226,13 @@ openRecipe
 
 The scene a gallery recipe settles into, with "Fit window labels" on or
 off. "open-window:<panel>" opens a registry panel the way its sidebar
-button does; "opener:<name>" runs the gallery's opener of that name.
+button does; "opener:<name>" runs the gallery's opener of that name;
+"seeded" opens nothing, for a window seed's state shows by itself. seed
+edits the fixture's state before anything opens.
 ================
 */
-async function openRecipe( id, fit ) {
-	const recipe = id.startsWith( "open-window:" ) ?
+async function openRecipe( id, fit, seed = state => state ) {
+	const recipe = id === "seeded" ? { open: () => {} } : id.startsWith( "open-window:" ) ?
 		{ open: context => context.ui.event( { kind: "activate", id } ) } :
 		id.startsWith( "opener:" ) ?
 		{ open: context => OPENERS[id.slice( "opener:".length )]( context, context.step ) } :
@@ -240,6 +242,7 @@ async function openRecipe( id, fit ) {
 	let now = 0, seen = null;
 	f.state.gameplay.social = guildSnapshot();
 	f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { fitWindowLabels: fit } ) } );
+	seed( f.state );
 	const step = async () => {
 		for ( let i = 0; i < 6; i++ ) seen = f.ui.step( f.state, now += 300 ) ?? seen;
 	};
@@ -322,4 +325,64 @@ test("a grade column is headed Grade, not level, with the row on or off (#3712)"
 			assert.ok( !drawn.some( text => /^level|Level ?level/.test( text ) ), `${id}: ${JSON.stringify( drawn )}` );
 		}
 	}
+});
+
+/*
+================
+artRect
+
+The rect of a quad drawn from a texture whose path ends with name: the
+first, or the nearest left of x (the window's own frame, not another
+window's).
+================
+*/
+function artRect( quads, name, x = Infinity ) {
+	const rects = quads.filter( q => String( q.texture?.src ?? q.texture ).endsWith( name ) ).map( q => q.rect );
+	const rect = x === Infinity ? rects[0] : rects.filter( r => r[0] < x ).sort( ( a, b ) => b[0] - a[0] )[0];
+	assert.ok( rect, name );
+	return rect;
+}
+
+// A full bag of 32 and one of 30 behind the 13 equipment slots.
+const MALL_BAG = { inventorySlotCount: 13 + 32 + 30, equipmentSlotCount: 13 };
+
+test("the merchant, stall and Item Mall labels stay inside their art (#3728)", async () => {
+	// Merchant: off, "Repurchase" runs left out of the window; on, "Buy"
+	// over "back" sits between the window frame and the buyback strip.
+	const merchant = await openRecipe( "breadth:merchant", true );
+	const strip = artRect( merchant, "com_redeem_window.png" ),
+		frame = artRect( merchant, "mframe_wnd_left_side.png", strip[0] );
+	for ( const text of [ "Buy", "back" ] ) {
+		const line = lineNamed( merchant, text );
+		assert.ok( line.rect[0] > frame[0] && line.rect[2] <= strip[0], `${text} at ${line.rect}` );
+	}
+	// The gallery's shop names its tab, as a real shop's refshoptab does:
+	// "Potion", selected and so bold (glyphs this file's map does not name).
+	const shopTab = artRect( merchant, "com_short_tab_on.png" );
+	assert.ok(
+		lines( merchant ).some( l =>
+			l.text.length === "Potion".length && l.rect[0] > shopTab[0] && l.rect[2] < shopTab[0] + shopTab[2] &&
+			l.rect[1] > shopTab[1] && l.rect[3] < shopTab[1] + shopTab[3]
+		),
+		"a caption on the shop tab"
+	);
+	assert.ok( lineNamed( await openRecipe( "breadth:merchant", false ), "Repurchase" ).rect[0] < frame[0] );
+
+	// Stall: the selected tab's bold "Items to sell" reached the 80-pixel
+	// tab's bevel; on, it reads in the regular weight inside it.
+	const stall = fit =>
+		openRecipe( "seeded", fit, state => {
+			state.gameplay.stall = seedJourney( "stall-owner" ).gameplay.stall;
+		} );
+	const onStall = await stall( true ), tab = artRect( onStall, "com_long_tab_on.png" );
+	const sell = lineNamed( onStall, "Items to sell" );
+	assert.ok( sell.rect[0] >= tab[0] + 4 && sell.rect[2] <= tab[0] + tab[2] - 4, `${sell.rect} in ${tab}` );
+	assert.ok( !lines( await stall( false ) ).some( l => l.text === "Items to sell" ), "off keeps the bold face" );
+
+	// Item Mall: off, "32 spaces" is drawn on its bag icon; on, "32" over
+	// "spaces" starts right of it.
+	const mall = fit => openRecipe( "dialog:item-mall", fit, state => Object.assign( state.gameplay, MALL_BAG ) );
+	const onMall = await mall( true ), icon = artRect( onMall, "mall_inven_icon.png" );
+	for ( const text of [ "32", "spaces" ] ) assert.ok( lineNamed( onMall, text ).rect[0] > icon[0] + icon[2] );
+	assert.ok( lineNamed( await mall( false ), "32 spaces" ).rect[0] < icon[0] + icon[2] );
 });
