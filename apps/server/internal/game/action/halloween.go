@@ -17,7 +17,8 @@ every source counting toward it; a Gourd kill always pays its box past
 the level gap, still under the cap, and pays one to every character who
 damaged the Gourd, each under their own account's cap. The character
 whose mint reaches the cap is told so once that day. After the window,
-the first world entry takes the remaining boxes.
+the first world entry takes the remaining boxes, and the GameWorld's boot
+sweep (HalloweenBoxHolders) takes them from characters who never enter again.
 
 ===========================================================================
 */
@@ -417,6 +418,84 @@ func (rt *Runtime) RemoveExpiredHalloweenBoxes(character *enterworld.Character) 
 		return false
 	}
 	return removeEventItems(character, progression.HalloweenBoxCodename)
+}
+
+/*
+================
+Runtime.HalloweenBoxHolders
+
+The boot sweep's picker: the characters of roster that still hold a
+Halloween box once the window has ended, so a character who never
+enters again does not keep one in the stored record (#3587). It only
+reads; the caller removes the boxes through RemoveExpiredHalloweenBoxes
+inside the store's multi-record door, the same single owner and filter
+the entry cleanup uses. Nil while the window has not ended, so a sweep
+before the close, or with the event off, picks nobody.
+================
+*/
+func (rt *Runtime) HalloweenBoxHolders(roster []*enterworld.Character) []*enterworld.Character {
+	if !rt.Halloween.CleanupDueAt(rt.Now()) {
+		return nil
+	}
+	var holders []*enterworld.Character
+	for _, character := range roster {
+		if character != nil && holdsEventItem(character, progression.HalloweenBoxCodename) {
+			holders = append(holders, character)
+		}
+	}
+	return holders
+}
+
+/*
+================
+holdsEventItem
+
+Whether any row of codename sits in a container removeEventItems
+sweeps. The two walk the same containers: a container added to one
+belongs in the other.
+================
+*/
+func holdsEventItem(character *enterworld.Character, codename string) bool {
+	if rowsHoldEventItem(character.MissionInventory, codename) {
+		return true
+	}
+	if character.AvatarInventory != nil && rowsHoldEventItem(character.AvatarInventory.Rows, codename) {
+		return true
+	}
+	if cosHoldsEventItem(character.ActiveCOS, codename) {
+		return true
+	}
+	for _, mercenary := range character.Mercenaries {
+		if cosHoldsEventItem(mercenary, codename) {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
+cosHoldsEventItem
+================
+*/
+func cosHoldsEventItem(pet *enterworld.CharacterCOS, codename string) bool {
+	return pet != nil && pet.Container != nil && rowsHoldEventItem(pet.Container.Rows, codename)
+}
+
+/*
+================
+rowsHoldEventItem
+
+Follows each summon row into the bag it carries, as removeEventRows does.
+================
+*/
+func rowsHoldEventItem(rows []enterworld.InventoryRow, codename string) bool {
+	for _, row := range rows {
+		if row.Codename == codename || cosHoldsEventItem(row.Summon, codename) {
+			return true
+		}
+	}
+	return false
 }
 
 /*
