@@ -49,6 +49,10 @@ MAP_DIR = "Map_extracted"
 DATA_DIR = "Data_extracted"
 MEDIA_DIR = "Media_extracted"
 REGIONINFO = Path(MEDIA_DIR) / "textdata" / "regioninfo.txt"
+# The reserved identity band's shard (250000, see the banner). No area
+# import stages it yet; naming it here puts the band in
+# test_later_shard_bands, so no other layer can take it unseen.
+CHARACTER_SHARD = "characterdata_250000.txt"
 
 
 # ================
