@@ -199,15 +199,18 @@ export const extendedRecipes: readonly ExtendedRecipe[] = [
 		],
 		control: "item-mall-close",
 		async open( context ) {
+			// The server sends text keys (refshoptab column 5, refpackageitem
+			// column 6; mallcatalog.go), which the UI resolves: literal captions
+			// would draw blank name bars and an empty tab.
 			context.state.gameplay.itemMall = {
-				tabs: [ { shop: 2, tab: 0, category: "MALL_CONSUME", label: "Consumables" } ],
+				tabs: [ { shop: 2, tab: 0, category: "MALL_CONSUME", label: "UIIT_STT_SILKMALL_ETC" } ],
 				offers: Array.from( { length: 8 }, ( _, slot ) => ({
 					group: 852,
 					shop: 2,
 					tab: 0,
 					slot,
 					packageId: 20000 + slot,
-					name: "Review package " + (slot + 1),
+					name: "SN_PACKAGE_ITEM_TEST_POTION",
 					description: "Synthetic offer; purchases are not sent.",
 					icon: "item/etc/hp_potion_01.ddj",
 					silk: 20,

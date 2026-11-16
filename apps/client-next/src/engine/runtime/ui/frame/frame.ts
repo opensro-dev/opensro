@@ -33,7 +33,7 @@ import { latticeCells } from "@/engine/foundation/ui/inventory-layout";
 import { normalTile } from "@/engine/foundation/ui/normal-tile";
 import { MESSAGE_FRAME, MESSAGE_TILE, partyProposalAssets } from "@/engine/foundation/ui/party-proposal";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
-import { captionWords, narrowFace, textLines } from "@/engine/foundation/ui/text-lines";
+import { CAPTION_MARGIN, captionWords, narrowFace, textLines } from "@/engine/foundation/ui/text-lines";
 import { messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 
 export { beginWindow, endWindow, unloadedImages } from "./admission";
@@ -301,8 +301,6 @@ export function comboBox(
 // A label closer than this to its window's left edge has left its window
 // (the frame's border is about this wide; the Experimental "Fit window labels").
 const WINDOW_LABEL_MARGIN = 6;
-// A fitted button caption keeps this far inside each side of its plate.
-const CAPTION_MARGIN = 4;
 // The blank between a wrapped label's two lines, below the first line's
 // descent: one label reads as one, apart from the rows beside it.
 const WRAP_LEADING = 1;
@@ -701,6 +699,9 @@ export interface MessageBox {
 	readonly no: string;
 	readonly yesDisabled?: boolean;
 	readonly single?: "confirm" | "cancel";
+	// Per drawn line; white where absent. 52E720's SetTextAndResize takes
+	// each appended line's own colour (5D3EB0's gold name line).
+	readonly colors?: readonly UiQuad["color"][];
 }
 
 /*
@@ -732,7 +733,7 @@ export function simpleMessageBox( frame: UiAuthoredFrame, box: MessageBox ) {
 		...text.quads( box.title, layout.title, full, white, { hAlign: 1, vAlign: 0 } )
 	);
 	for ( const [i, line] of lines.entries() ) {
-		quads.push( ...text.quads( line, layout.lines[i]!, full, white, { vAlign: 0 } ) );
+		quads.push( ...text.quads( line, layout.lines[i]!, full, box.colors?.[i] ?? white, { vAlign: 0 } ) );
 	}
 	if ( box.single === "confirm" ) {
 		button( frame, {

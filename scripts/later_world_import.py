@@ -18,7 +18,8 @@ into the same extracted root and only fills gaps, so what a build
 writes stays until another build rewrites it. The marker each import
 writes is therefore the reap's enrolment: the monster pass's owned
 rows and files, and the region merge's (files written, availability
-sectors, region ids, zone-name prefixes). The tile and object
+sectors, region ids, zone-name prefixes; the particle files the
+merged models name are enrolled with the Data files). The tile and object
 catalogs need no enrolment: the Alexandria stage rebuilds both from
 the native bytes on every build before any later-world merge runs,
 so a build with a switch off leaves native catalogs behind on its
@@ -37,6 +38,7 @@ through skytemple_import; they take no WorldImport spec.
 
 ===========================================================================
 """
+import contextlib
 import json
 import mmap
 import os
@@ -58,6 +60,14 @@ TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 PIN_FORMAT = "opensro-vsro-archive-pins-v1"
 
 _verified_archives = set()
+# The v1.696 archives a region merge reads. Particles carries the effect
+# programs the merged models name (particle_closure); every caller pins
+# this set before merge_world reads it.
+MERGE_ARCHIVES = ("Map", "Media", "Data", "Particles")
+# The merged Data files that seed the particle closure: the models and
+# compound objects, the files whose particle sets name effect programs.
+PARTICLE_SEED_EXTENSIONS = (".bsr", ".cpd")
+DATA_PREFIX = "data_extracted/"
 
 
 # ================
@@ -553,7 +563,7 @@ def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for)
 	source_root = source_root or os.environ.get(spec.source_env, "")
 	if not source_root:
 		raise SystemExit(f"{spec.source_env} names no population export folder")
-	require_pin(spec, v1696_root, ("Map", "Media", "Data"), pins_for)
+	require_pin(spec, v1696_root, MERGE_ARCHIVES, pins_for)
 	export = read_population(spec, source_root)
 	regions = spec.regions_of(export, sub_enabled)
 	return merge_world(spec, native, out, v1696_root, regions,
@@ -566,7 +576,8 @@ def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for)
 # One world's variant-side merge over a resolved region set: the
 # regions' terrain remapped onto the merged tile catalog, their
 # navmesh and availability bits, every Data file the native tree
-# lacks, the regions' minimap tiles and names, and the monster
+# lacks and the particle closure of its models, the regions' minimap
+# tiles and names, and the monster
 # population (build_monsters, the caller's own pass, run last).
 #
 # The variant root is reused across builds (see the header): the
@@ -683,6 +694,11 @@ def merge_world(spec, native, out, v1696_root, regions, build_monsters):
 	mapinfo = out / "Data_extracted" / "navmesh" / "mapinfo.mfo"
 	variant.replace_file(mapinfo, variant.enable_regions(mapinfo.read_bytes(), sectors))
 
+	# Particles: the effect programs the merged models name, and what
+	# those programs use. The Data pass above copies the models alone.
+	particles = particle_closure(native, out, v1696_root, written)
+	written |= set(particles["added"])
+
 	# Media: the regions' minimap tiles and their code and zone rows.
 	media_path, media_handle, media_data = tables.open_archive(v1696_root, "Media")
 	try:
@@ -727,8 +743,59 @@ def merge_world(spec, native, out, v1696_root, regions, build_monsters):
 		"enabled": True, "regions": len(regions), "localRegions": len(local_regions), "mapFilesAdded": len(terrains),
 		"tileTexturesAdded": textures, "mapFilesMissing": sorted(map_missing),
 		"dataFilesAdded": data_added, "navmeshAdded": nav_added, "minimapTiles": minimaps,
+		"particleFilesAdded": len(particles["added"]), "particleGaps": particles["gaps"],
 		**table_summary, "monsters": monsters
 	}
+
+
+# ================
+# particle_closure
+#
+# The particle half of a region merge. The Data pass copies every model
+# the native tree lacks, and those models' particle sets name effect
+# programs (.efp) the Particles archive holds; the client's effect build
+# refuses a model whose program it cannot resolve. So every model and
+# compound object the merge has enrolled - this build's and earlier
+# builds' alike, since a kept variant may hold models an older build
+# merged without their effects - seeds the closure walk the Sky Temple
+# and Arabia imports use, over the v1.696 Data and Particles archives.
+#
+# Later-client content ships with holes, so the walk tolerates them
+# (the Arabia posture) and the summary names them; it never invents
+# a missing file. Returns the files this build wrote, as enrolment
+# paths (the record's lower-case, overlay-relative form), and the gaps.
+# ================
+def particle_closure(native, out, v1696_root, written, closure=None, archives=None):
+	if closure is None:
+		import skytemple_import
+		closure = skytemple_import.copy_resource_closure
+	archives = archives or closure_archives
+	seeds = sorted(path[len(DATA_PREFIX):] for path in written
+		if path.startswith(DATA_PREFIX) and path.endswith(PARTICLE_SEED_EXTENSIONS))
+	if not seeds:
+		return {"added": [], "gaps": {}}
+	with archives(v1696_root) as opened:
+		result = closure(seeds, opened, native, out, tolerate_gaps=True)
+	added = sorted(path.lower() for path in result["files"])
+	gaps = {key: result[key] for key in ("missingEffects", "missingFiles", "unparsedFiles") if result.get(key)}
+	return {"added": added, "gaps": gaps}
+
+
+# ================
+# closure_archives
+#
+# The v1.696 Data and Particles archives in the closure walk's shape
+# ({name: (mmap, index)}), closed when the walk is done.
+# ================
+@contextlib.contextmanager
+def closure_archives(v1696_root):
+	opened = {name: tables.open_archive(v1696_root, name) for name in ("Data", "Particles")}
+	try:
+		yield {name: (data, tables.archive_index(data)) for name, (_, _, data) in opened.items()}
+	finally:
+		for _, handle, data in opened.values():
+			data.close()
+			handle.close()
 
 
 # ================

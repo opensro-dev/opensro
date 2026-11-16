@@ -19,8 +19,9 @@ The UI draws from this owner every frame.
 import type { GuildVote } from "@/engine/foundation/gameplay/social";
 
 // A guild name and a character name both fit twelve characters
-// (UIIT_MSG_GUILDERR_INVALID_GUILDNAME_LEN).
-const GUILD_FIELD_MAX_LENGTH = 12;
+// (UIIT_MSG_GUILDERR_INVALID_GUILDNAME_LEN); 52C870 mode 2 caps the create
+// box's edit at 0xC (52CE64).
+export const GUILD_FIELD_MAX_LENGTH = 12;
 
 /*
 ================

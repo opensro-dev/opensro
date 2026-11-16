@@ -472,7 +472,7 @@ def add_muhan(native, out, v1696_root=None, source_root=None):
 	source_root = source_root or os.environ.get(SOURCE_ENV, "")
 	if not source_root:
 		raise SystemExit(f"{SOURCE_ENV} names no population export folder")
-	require_v1696_pin(v1696_root, ("Map", "Media", "Data"))
+	require_v1696_pin(v1696_root, later_world_import.MERGE_ARCHIVES)
 	export = read_population(source_root)
 	regions = population_regions(export)
 	return later_world_import.merge_world(SPEC, native, out, v1696_root, regions,
