@@ -26,6 +26,32 @@ const DEFAULT_BODY_VOLUME = 2;
 export const MAX_MISSING_CLIPS = 8;
 /*
 ================
+CharacterPoseInputs
+
+Everything a pose's skeleton and palettes are a function of: its resolved
+layers (clip, wrapped time, weight, lane), its body volume and its bone
+rotator. An evaluator of the same model given these (restore) builds the
+same skeleton, bit for bit, as the one they were read from (inputs).
+================
+*/
+export type CharacterPoseInputs = {
+	readonly layers: { clip: CharacterClip | undefined; time: number; weight: number; lane: "event" | "timed"; }[];
+	volume: number;
+	female: boolean;
+	// The rotator's node, or -1, and its rotation (x y z w).
+	rotated: number;
+	readonly rotation: Float32Array;
+};
+/*
+================
+createCharacterPoseInputs
+================
+*/
+export function createCharacterPoseInputs(): CharacterPoseInputs {
+	return { layers: [], volume: DEFAULT_BODY_VOLUME, female: false, rotated: -1, rotation: new Float32Array( 4 ) };
+}
+/*
+================
 createCharacterPose
 ================
 */
@@ -345,6 +371,21 @@ materialize
 		cpuPending = false;
 		cpuEvaluations++;
 	}
+	/*
+================
+setBodyVolume
+================
+	*/
+	function setBodyVolume( index = DEFAULT_BODY_VOLUME, isFemale = false ) {
+		if ( volume === index && female === isFemale ) return;
+		volume = index;
+		female = isFemale;
+		poseVersion++;
+		paletteVersion++;
+		for ( let i = 0; i < model.nodes.length; i++ ) {
+			thickness[i] = bodyBoneScale( model.nodes[i]!.name, index, isFemale );
+		}
+	}
 	return {
 		/*
 ================
@@ -379,16 +420,7 @@ quaternion scratch is charged and allocated only when playback needs it.
         bodyVolume
         ================
         */
-		bodyVolume( index = DEFAULT_BODY_VOLUME, isFemale = false ) {
-			if ( volume === index && female === isFemale ) return;
-			volume = index;
-			female = isFemale;
-			poseVersion++;
-			paletteVersion++;
-			for ( let i = 0; i < model.nodes.length; i++ ) {
-				thickness[i] = bodyBoneScale( model.nodes[i]!.name, index, isFemale );
-			}
-		},
+		bodyVolume: setBodyVolume,
 		revision: () => poseVersion,
 		/*
         ================
@@ -484,6 +516,65 @@ quaternion scratch is charged and allocated only when playback needs it.
 		},
 		gpuSample,
 		cpuEvaluations: () => cpuEvaluations,
+		/*
+        ================
+        inputs
+
+        Copies the inputs of the skeleton this pose holds, or would build on
+        its next palette, into into (CharacterPoseInputs). Cheap: a few
+        numbers a layer, no skeleton. False for a pose never evaluated.
+        ================
+        */
+		inputs( into: CharacterPoseInputs ): boolean {
+			if ( !hasPose || rotationChanged ) return false;
+			into.layers.length = resolved.length;
+			for ( let i = 0; i < resolved.length; i++ ) {
+				const layer = resolved[i]!, copy = into.layers[i];
+				if ( copy ) {
+					copy.clip = layer.clip;
+					copy.time = layer.time;
+					copy.weight = layer.weight;
+					copy.lane = layer.lane;
+				} else into.layers[i] = { ...layer };
+			}
+			into.volume = volume;
+			into.female = female;
+			into.rotated = rotatedNode;
+			into.rotation.set( boneRotation );
+			return true;
+		},
+		/*
+        ================
+        restore
+
+        Takes the inputs another evaluator of this model read (inputs): the
+        next palette or socket is the skeleton that evaluator held then. A
+        clip this evaluator has not admitted is registered first, so it
+        samples it as the other did.
+        ================
+        */
+		restore( inputs: CharacterPoseInputs ) {
+			setBodyVolume( inputs.volume, inputs.female );
+			if ( rotatedNode >= 0 && rotatedNode !== inputs.rotated ) releasedNode = rotatedNode;
+			rotatedNode = inputs.rotated;
+			boneRotation.set( inputs.rotation );
+			pendingLayers.length = inputs.layers.length;
+			for ( let i = 0; i < inputs.layers.length; i++ ) {
+				const layer = inputs.layers[i]!;
+				if ( layer.clip && clips.get( layer.clip.name ) !== layer.clip ) {
+					registerClip( layer.clip );
+					directMatrices = false;
+				}
+				pendingLayers[i] = { ...layer };
+			}
+			const previous = resolved;
+			resolved = pendingLayers;
+			pendingLayers = previous;
+			rotationChanged = false;
+			hasPose = true;
+			poseVersion++;
+			cpuPending = true;
+		},
 		/*
         ================
         palette

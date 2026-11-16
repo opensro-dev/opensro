@@ -12,7 +12,12 @@ and buyback entries do not inherit a cached or guessed price.
 
 import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { MallOffer } from "@/engine/contracts/item-mall";
-import { SHOP_CURRENCY_GUILD_POINT, SHOP_CURRENCY_HONOR, type ShopPrice } from "@/engine/foundation/gameplay/commerce";
+import {
+	SHOP_CURRENCY_GUILD_POINT,
+	SHOP_CURRENCY_HONOR,
+	SHOP_CURRENCY_NASRUN_TOKEN,
+	type ShopPrice
+} from "@/engine/foundation/gameplay/commerce";
 import type { TooltipRow } from "./tooltip-rows";
 
 const PRICE_COLOR = 0xffffffff;
@@ -31,6 +36,10 @@ export interface CommerceLabels {
 	readonly point: string;
 	readonly guildPoint: string;
 	readonly guildPointUnit: string;
+	// Port-only (SRO_NASRUN): no native string names the token, so the
+	// caller passes the port's own words.
+	readonly nasrunToken: string;
+	readonly nasrunTokenHeld: string;
 }
 
 /*
@@ -64,10 +73,12 @@ export function commerceTooltip(
 		if ( price !== undefined ) rows = [ { currency: 0, amount: price } ];
 	}
 	if ( !rows.length ) return [];
-	return [
-		{ value: " ", color: 0 },
-		...rows.map( row => ({ value: priceLine( row, labels ), color: PRICE_COLOR }) )
-	];
+	const lines = rows.map( row => ({ value: priceLine( row, labels ), color: PRICE_COLOR }) );
+	// A token offer also shows the balance it is paid from.
+	if ( rows.some( row => row.currency === SHOP_CURRENCY_NASRUN_TOKEN ) && shop.nasrunTokens !== undefined ) {
+		lines.push( { value: `${labels.nasrunTokenHeld} : ${shop.nasrunTokens}`, color: PRICE_COLOR } );
+	}
+	return [ { value: " ", color: 0 }, ...lines ];
 }
 
 /*
@@ -80,6 +91,7 @@ function priceLine(
 	labels: CommerceLabels
 ) {
 	if ( row.currency === SHOP_CURRENCY_HONOR ) return `${labels.honor} : ${row.amount}${labels.point}`;
+	if ( row.currency === SHOP_CURRENCY_NASRUN_TOKEN ) return `${labels.nasrunToken} : ${row.amount}`;
 	if ( row.currency === SHOP_CURRENCY_GUILD_POINT ) {
 		return `${labels.guildPoint} : ${row.amount}${labels.guildPointUnit}`;
 	}

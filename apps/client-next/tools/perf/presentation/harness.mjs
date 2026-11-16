@@ -62,7 +62,10 @@ const RENDERER_SINKS = {
 		images.length
 	],
 	setCharacterAnimation: ( body, name, source ) => [ body, name, source.duration ],
-	retainCharacterModels: ids => [ ids ],
+	// The renderer reads the list as a set and ignores a set equal to the
+	// one it holds (retainedSet): recorded is the set it then holds, in
+	// its order, on the calls that change it.
+	retainCharacterModels: ids => [ [ ...new Set( ids ) ] ],
 	setFootprints: rows => [ rows ],
 	setSunDropMarkers: rows => [ rows ]
 };
@@ -312,10 +315,12 @@ createPresentationHarness
 ROOT is a repository checkout; session is a parsed session object
 (scenarios.mjs). options.due, when given, replaces the presentation's
 appearance and motion rules (presentation-due.ts), so a run can present
-every entity in full or count the rules' answers. options.source, when
-given, serves the published bytes in place of the built tree (pathname,
-as "/assets/...", to a Uint8Array or null for an absent file): a scene of
-its own needs no built assets. The harness owns Math.random until dispose.
+every entity in full or count the rules' answers; options.actors, when
+given, sees every published actor list as the renderer receives it.
+options.source, when given, serves the published bytes in place of the
+built tree (pathname, as "/assets/...", to a Uint8Array or null for an
+absent file): a scene of its own needs no built assets. The harness owns
+Math.random until dispose.
 ================
 */
 export async function createPresentationHarness( root, session, options = {} ) {
@@ -373,6 +378,22 @@ export async function createPresentationHarness( root, session, options = {} ) {
 			return world.finishedCasts();
 		}
 	};
+	// The model set the renderer was last handed to retain.
+	let retained = null;
+	/*
+	================
+	retainedSet
+
+	Whether a retainCharacterModels list changes the renderer's set (as
+	characters.ts retain decides), taking it when it does.
+	================
+	*/
+	function retainedSet( ids ) {
+		const set = new Set( ids );
+		if ( retained && retained.size === set.size && [ ...set ].every( id => retained.has( id ) ) ) return false;
+		retained = set;
+		return true;
+	}
 	const rig = presentationRig( {
 		assets,
 		random,
@@ -410,7 +431,8 @@ export async function createPresentationHarness( root, session, options = {} ) {
 					const sink = RENDERER_SINKS[key];
 					if ( !sink || typeof value !== "function" ) return value;
 					return ( ...args ) => {
-						record( key, sink( ...args ) );
+						if ( key !== "retainCharacterModels" || retainedSet( args[0] ) ) record( key, sink( ...args ) );
+						if ( key === "setCharacterActors" ) options.actors?.( ...args );
 						return value.apply( target, args );
 					};
 				}

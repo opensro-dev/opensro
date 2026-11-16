@@ -34,7 +34,7 @@ import {
 	instanceCapacity,
 	ROW_STATE_FLOATS
 } from "@/engine/foundation/rendering/geometry-instances";
-import { CLOTH_STREAM_WORDS } from "@/engine/foundation/animation/cloth-stream";
+import { CLOTH_NO_SLOT, CLOTH_STREAM_WORDS, validClothStreamSlots } from "@/engine/foundation/animation/cloth-stream";
 import { createWaterReflection } from "./water-reflection";
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
 import { dungeonHeightFog } from "@/engine/foundation/rendering/dungeon-fog";
@@ -115,8 +115,10 @@ createGeometryResources
 ================
 markCloth
 
-A cloth draw's instance records carry its stream base in opacity.w (record
-float 19), which the vertex shaders read; every other draw keeps 0 there.
+A cloth draw's instance records carry its vertex count V in opacity.w
+(record float 19), which the vertex shaders read; every other draw keeps 0
+there. Its skin table holds the skin entries [0, V), the slot map [V, 2V)
+and the stream from 2V on (upload).
 ================
 */
 function markCloth( packed: Float32Array, clothBase: number ): Float32Array {
@@ -512,9 +514,12 @@ export function createGeometryResources(
 		vertexFloats: number;
 		skin: GPUBuffer;
 		bones: GPUBuffer;
-		// A cloth mesh's stream base: the vertex count, where its cloth stream
-		// starts in the skin table (cloth-stream.ts); 0 for any other draw.
+		// A cloth mesh's vertex count, where its slot map starts in the skin
+		// table, its stream starting at twice that (cloth-stream.ts); 0 for
+		// any other draw.
 		clothBase: number;
+		// The cloth stream's entries: one a slot.
+		clothSlots: number;
 		// The bone and index buffers' sizes, read once: a GPUBuffer's size
 		// crosses into the browser on every read, and updates run every frame.
 		boneBytes: number;
@@ -957,8 +962,8 @@ export function createGeometryResources(
 		writeClothStream
 
 		Writes entries of a cloth draw's stream (CLOTH_STREAM_WORDS words a
-		vertex, cloth-stream.ts) from vertex first on. Only an upload marked
-		clothStream has a stream.
+		slot, cloth-stream.ts) from slot first on, after the skin entries and
+		the slot map. Only an upload with a clothStream has a stream.
 		================
 		*/
 		writeClothStream( draw: GeometryDraw, first: number, entries: Uint32Array ) {
@@ -967,11 +972,11 @@ export function createGeometryResources(
 			if ( !meta.clothBase ) throw Error( "Geometry was uploaded without a cloth stream" );
 			if (
 				!Number.isInteger( first ) || first < 0 || entries.length % CLOTH_STREAM_WORDS ||
-				first + entries.length / CLOTH_STREAM_WORDS > meta.clothBase
+				first + entries.length / CLOTH_STREAM_WORDS > meta.clothSlots
 			) throw Error( "Invalid cloth stream write" );
 			// The writer copies bytes, so the words travel as they are.
 			const words = new Float32Array( entries.buffer, entries.byteOffset, entries.length );
-			writeStream( meta.skin, (meta.clothBase + first) * CLOTH_STREAM_WORDS * 4, words, meta.cpuUploads );
+			writeStream( meta.skin, (2 * meta.clothBase + first) * CLOTH_STREAM_WORDS * 4, words, meta.cpuUploads );
 		},
 		/*
 		================
@@ -1285,6 +1290,7 @@ export function createGeometryResources(
 					data.vertices :
 					packGeometryVertices( data );
 				const clothBase = data.clothStream ? data.positions.length / 3 : 0,
+					clothSlots = data.clothStream?.length ?? 0,
 					vertexStore = skinned ?
 						undefined :
 						slice( vertexSlabs.allocate( interleaved!.byteLength ), interleaved! ),
@@ -1330,19 +1336,31 @@ export function createGeometryResources(
 				if ( data.clothStream && (!skinned || data.dynamicVertices) ) {
 					throw Error( "A cloth stream needs a skinned mesh" );
 				}
+				if ( data.clothStream && !validClothStreamSlots( data.clothStream, clothBase ) ) {
+					throw Error( "Invalid cloth stream slots" );
+				}
 				if ( data.joints && data.weights && data.bones ) {
 					if ( mesh && !clothBase ) skinBuffer = mesh.skin;
 					else {
-						// A cloth mesh's table holds its stream after the skin entries,
-						// all zero: until the owner writes it, the GPU skins every vertex.
-						const packed = new ArrayBuffer( data.joints.length * 8 * (clothBase ? 2 : 1) ),
+						// A cloth mesh's table, in entries of a skin entry's 8 words: its
+						// V skin entries, then a slot map of one entry a vertex (word 0:
+						// the vertex's stream slot, or CLOTH_NO_SLOT), then the stream's
+						// entries, all zero: until the owner writes it, the GPU skins
+						// every vertex.
+						const vertices = data.joints.length / 4,
+							entries = vertices + (clothBase ? vertices + clothSlots : 0),
+							packed = new ArrayBuffer( entries * CLOTH_STREAM_WORDS * 4 ),
 							joints = new Uint32Array( packed ),
 							weights = new Float32Array( packed );
-						for ( let v = 0; v < data.joints.length / 4; v++ ) {
+						for ( let v = 0; v < vertices; v++ ) {
 							for ( let c = 0; c < 4; c++ ) {
 								joints[v * 8 + c] = data.joints[v * 4 + c]!;
 								weights[v * 8 + 4 + c] = data.weights[v * 4 + c]!;
 							}
+						}
+						if ( clothBase ) {
+							for ( let v = 0; v < vertices; v++ ) joints[(clothBase + v) * 8] = CLOTH_NO_SLOT;
+							for ( let k = 0; k < clothSlots; k++ ) joints[(clothBase + data.clothStream![k]!) * 8] = k;
 						}
 						skinBuffer = buffer( "geometry-skin", joints, GPUBufferUsage.STORAGE );
 					}
@@ -1521,6 +1539,7 @@ export function createGeometryResources(
 					skin: skinBuffer,
 					bones: boneBuffer,
 					clothBase,
+					clothSlots,
 					boneBytes: boneBuffer.size,
 					cpuUploads: !particles || boneBuffer === defaultBones || !!palette,
 					indexBytes: data.indices.byteLength,

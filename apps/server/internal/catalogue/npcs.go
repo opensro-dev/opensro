@@ -238,8 +238,12 @@ currencyName
 ================
 */
 func currencyName(currency uint8) string {
-	if currency == commerce.PaymentHonor {
+	switch currency {
+	case commerce.PaymentHonor:
 		return "honor"
+	case commerce.PaymentNasrunToken:
+		// Port-only (SRO_NASRUN): the Devil's Spirit token goods.
+		return "nasrun token"
 	}
 	return "gold"
 }

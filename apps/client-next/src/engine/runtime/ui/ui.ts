@@ -7216,16 +7216,23 @@ export function createUi( ports: UiPorts ) {
 					event.kind === "key" && event.code === "Enter" && !composing ||
 					event.kind === "activate" && event.id === "map-teleport-confirm"
 				) {
-					mapTeleport.clear();
-					dirty = true;
 					if ( teleportTarget.reversePoint !== undefined ) {
+						// A busy bag holds the reverse answer: the confirmation
+						// stays until the use is sent or the choice is really gone.
 						const command = reverseScrollHud.choosePoint( teleportTarget.reversePoint, view );
 						if ( command ) {
+							mapTeleport.clear();
+							dirty = true;
 							sendGameplay( command );
 							setPanel( "" );
+						} else if ( !reverseScrollHud.mapping() ) {
+							mapTeleport.clear();
+							dirty = true;
 						}
 						return;
 					}
+					mapTeleport.clear();
+					dirty = true;
 					if ( view?.session?.phase === "world" && view.gameplay?.eligibility?.gm ) {
 						sendGameplay( { kind: "gm-command", line: mapTeleport.command( teleportTarget ) } );
 					}
@@ -24802,51 +24809,70 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						] :
 						[ view?.session?.character ?? "", aliasWindow.checked ];
 				const filled = fillMarkup( message, args );
-				// Markup the guide layout cannot read falls back to plain text.
-				let markup: ReturnType<typeof guideTokens> | null = null;
-				if ( hasSml2Markup( filled ) ) {
-					try {
-						markup = guideTokens( filled );
-					} catch {
-						markup = null;
-					}
-				}
-				const layout = guildQuestionLayout(
-					w,
-					h,
-					markup ?
-						text.guide( markup, [ 0, 0, 300, 1000 ], [ 0, 0, 300, 1000 ], white, resources.size ).height :
-						12,
-					false
-				);
-				controls = drawFrame.controls = [];
-				blocks = drawFrame.blocks = [ full ];
-				paths.push( ...partyProposalAssets() );
-				quads.push(
-					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
-					...frameRing(
-						layout.frame,
-						MESSAGE_FRAME,
-						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
-						full
-					),
-					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
-						hAlign: 1,
-						vAlign: 0
-					} )
-				);
-				if ( markup ) {
-					const out = text.guide( markup, layout.name, full, white, resources.size );
-					quads.push( ...out.quads );
-					paths.push( ...out.paths );
-				} else quads.push( ...text.quads( filled, layout.name, full, white, { hAlign: 1, vAlign: 0 } ) );
 				const [yes, no] = academyAsk ?
 					[ "academy-confirm-yes", "academy-confirm-no" ] :
 					jobAsk ?
 					[ "job-confirm-yes", "job-confirm-no" ] :
 					[ "job-alias-yes", "job-alias-no" ];
-				button( yes, hudCopy( "UIIT_CTL_YES" ), ...layout.accept.slice( 0, 3 ) as [number, number, number] );
-				button( no, hudCopy( "UIIT_CTL_NO" ), ...layout.refuse.slice( 0, 3 ) as [number, number, number] );
+				if ( academyAsk || jobAsk ) {
+					// 5D26F0 types 4-6 and the camp confirms are CIFSimpleMessageBox
+					// type 1: 52DB20 sizes the box to its widest line (600 px wrap), each
+					// <br> starting a line, with Yes and No centred under them (#3550).
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
+					simpleMessageBox( {
+						title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+						lines: markupLines( filled ),
+						yes,
+						no
+					} );
+				} else {
+					// Markup the guide layout cannot read falls back to plain text.
+					let markup: ReturnType<typeof guideTokens> | null = null;
+					if ( hasSml2Markup( filled ) ) {
+						try {
+							markup = guideTokens( filled );
+						} catch {
+							markup = null;
+						}
+					}
+					const layout = guildQuestionLayout(
+						w,
+						h,
+						markup ?
+							text.guide( markup, [ 0, 0, 300, 1000 ], [ 0, 0, 300, 1000 ], white, resources.size )
+								.height :
+							12,
+						false
+					);
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+						...frameRing(
+							layout.frame,
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						),
+						...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+							hAlign: 1,
+							vAlign: 0
+						} )
+					);
+					if ( markup ) {
+						const out = text.guide( markup, layout.name, full, white, resources.size );
+						quads.push( ...out.quads );
+						paths.push( ...out.paths );
+					} else quads.push( ...text.quads( filled, layout.name, full, white, { hAlign: 1, vAlign: 0 } ) );
+					button(
+						yes,
+						hudCopy( "UIIT_CTL_YES" ),
+						...layout.accept.slice( 0, 3 ) as [number, number, number]
+					);
+					button( no, hudCopy( "UIIT_CTL_NO" ), ...layout.refuse.slice( 0, 3 ) as [number, number, number] );
+				}
 			}
 			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) guildManagerHud.reset();
 			else if ( game.social?.compensation !== undefined && !guildManagerHud.question() ) {
@@ -28273,7 +28299,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									honor: lookup( "UIIT_STT_TC_HONOR_POINT" ),
 									point: lookup( "UIIT_STT_SILKMALL_P_POINT" ),
 									guildPoint: lookup( "UIIT_STT_GUILD_POINT" ),
-									guildPointUnit: lookup( "UIIT_STT_GUILD_POINT_GP" )
+									guildPointUnit: lookup( "UIIT_STT_GUILD_POINT_GP" ),
+									// Port-only (SRO_NASRUN): no native string names the token.
+									nasrunToken: "Devil's Spirit tokens",
+									nasrunTokenHeld: "You hold"
 								} )
 							];
 						}

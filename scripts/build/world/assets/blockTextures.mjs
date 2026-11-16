@@ -29,6 +29,7 @@ import { fileURLToPath } from "node:url";
 import { publishFileFromTemp } from "../../shared/atomicPublish.mjs";
 import { claimPublicFile } from "../../shared/publicationLedger.mjs";
 import { exists } from "../io.mjs";
+import { noteRead } from "../../graph/reads.mjs";
 import { generatedRoot } from "../paths.mjs";
 import { sha256Hex } from "../../shared/hash.mjs";
 import { runPython } from "../../shared/pythonRun.mjs";
@@ -102,6 +103,8 @@ format, or null. Missing files return null (the caller owns that error).
 ================
 */
 export async function probeBlockTextureFile( absolutePath ) {
+	// Noted before the cache: a later tracked step probing it must see it too.
+	noteRead( absolutePath );
 	const cached = probedFiles.get( absolutePath );
 	if ( cached !== undefined ) return cached;
 	let format = null;

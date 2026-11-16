@@ -26,22 +26,34 @@ import { buildJobs } from "../shared/buildParallelism.mjs";
 import { createLimiter } from "../shared/asyncUtils.mjs";
 import { defineAction, outputPath } from "./action.mjs";
 import { dropRecord, keyOf, materialize, readRecord, storeOutputs } from "./store.mjs";
+import { trackReads } from "./reads.mjs";
 
 /*
 ================
 orderActions
 
-The actions by name, after checking the graph: a duplicate name, a
-dependency on an unknown action and a cycle are refused before anything
-runs.
+The actions by name, after checking the graph: a duplicate name, two
+actions declaring one output file, a dependency on an unknown action and
+a cycle are refused before anything runs. Two writers of one file would
+run at once and the record of either could hold the other's bytes.
 ================
 */
 export function orderActions( specs ) {
 	const byName = new Map();
+	const writerOf = new Map();
 	for ( const spec of specs ) {
 		const action = defineAction( spec );
 		if ( byName.has( action.name ) ) throw new Error( `two actions are named ${action.name}` );
 		byName.set( action.name, action );
+		for ( const name of action.outputs ) {
+			// Case-folded: the build runs on case-insensitive file systems.
+			const file = outputPath( action, name ).toLowerCase();
+			const other = writerOf.get( file );
+			if ( other ) {
+				throw new Error( `actions ${other} and ${action.name} both write ${outputPath( action, name )}` );
+			}
+			writerOf.set( file, action.name );
+		}
 	}
 	for ( const action of byName.values() ) {
 		for ( const dep of action.deps ) {
@@ -71,7 +83,8 @@ Runs every action. options:
 	jobs    how many actions run at once (default buildJobs())
 	env     the environment actions are keyed and run under
 	log     receives one line per action
-Returns { name: { key, hit, placed } }.
+Returns { name: { key, hit, placed, result } }: result is what the run
+returned, or on a hit what the run that stored the record returned.
 ================
 */
 export async function runGraph( specs, options ) {
@@ -95,16 +108,23 @@ export async function runGraph( specs, options ) {
 			return reuse( action, key );
 		}
 		const done = (async () => {
-			const record = await readRecord( store, key );
-			if ( record ) return { hit: true, placed: await materialize( store, action, record ) };
+			const record = await readRecord( store, key, action );
+			if ( record ) {
+				return { hit: true, placed: await materialize( store, action, record ), result: record.result };
+			}
 			await dropRecord( store, key );
 			// The action writes its declared outputs; their folders are the graph's.
 			for ( const name of action.outputs ) {
 				await mkdir( path.dirname( outputPath( action, name ) ), { recursive: true } );
 			}
-			await action.run( { action, key, env, outputRoot: action.outputRoot } );
-			await storeOutputs( store, action, key );
-			return { hit: false, placed: action.outputs.length };
+			// A step that finds its inputs as it runs has them recorded
+			// (reads.mjs); any other step's reads are its declared inputs.
+			const context = { action, key, env, outputRoot: action.outputRoot };
+			const { reads, result } = action.discoverRoots ?
+				await trackReads( () => action.run( context ) ) :
+				{ reads: undefined, result: await action.run( context ) };
+			await storeOutputs( store, action, key, { reads, result } );
+			return { hit: false, placed: action.outputs.length, result };
 		})();
 		byKey.set( key, done );
 		const outcome = await done;
@@ -112,9 +132,9 @@ export async function runGraph( specs, options ) {
 	};
 
 	const reuse = async ( action, key ) => {
-		const record = await readRecord( store, key );
+		const record = await readRecord( store, key, action );
 		if ( !record ) throw new Error( `action ${action.name}: shares key ${key} with an action that stored nothing` );
-		return { key, hit: true, placed: await materialize( store, action, record ) };
+		return { key, hit: true, placed: await materialize( store, action, record ), result: record.result };
 	};
 
 	const start = ( action ) => {

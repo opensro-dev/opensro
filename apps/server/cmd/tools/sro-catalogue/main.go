@@ -198,6 +198,8 @@ func shardShops(dir string, items enterworld.ItemRefSource) (*commerce.Catalog, 
 		return nil, err
 	}
 	extra = append(extra, xl...)
+	// The GameWorld appends the same Devil's Spirit token goods (SRO_NASRUN).
+	extra = append(extra, commerce.NasrunGoodsFromEnv()...)
 	shops, err := commerce.LoadWithExtraGoods(dir, items, extra)
 	if err != nil {
 		return nil, err

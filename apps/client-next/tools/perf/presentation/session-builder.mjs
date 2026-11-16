@@ -123,6 +123,29 @@ export function gearFor( catalogs, rng, codename ) {
 
 /*
 ================
+sunGearFor
+
+A degree 9 Sun set (the _C_RARE rows) for a body, enchanted as a bench
+crowd wears it: armor +9, the weapon and shield +12, so every part carries
+its rare glow programs (equipment-particles.ts).
+================
+*/
+export function sunGearFor( catalogs, rng, codename ) {
+	const { race, sex, key } = bodyKey( codename );
+	const family = rng.pick( ARMOR_FAMILIES );
+	const parts = [ rng.pick( [ "HA", "CA" ] ), "BA", "SA", "AA", "LA", "FA" ];
+	const worn = parts.map( part => wear( catalogs, `ITEM_${race}_${sex}_${family}_09_${part}_C_RARE`, key, 9 ) );
+	const weapons = race === "CH" ?
+		[ "SWORD", "BLADE", "SPEAR", "TBLADE", "BOW" ] :
+		[ "SWORD", "STAFF", "CROSSBOW", "DAGGER", "AXE" ];
+	const weapon = rng.pick( weapons );
+	worn.push( wear( catalogs, `ITEM_${race}_${weapon}_09_C_RARE`, key, 12 ) );
+	if ( weapon === "SWORD" ) worn.push( wear( catalogs, `ITEM_${race}_SHIELD_09_C_RARE`, key, 12 ) );
+	return worn.filter( item => item );
+}
+
+/*
+================
 heading
 
 The native angle word for a step from one point to another (0..65535).
