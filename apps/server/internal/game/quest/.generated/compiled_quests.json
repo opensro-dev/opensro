@@ -1387,6 +1387,66 @@
 		"HandOverSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_07"
 	},
 	{
+		"Codename": "QNO_RM_MEETROC_1",
+		"MaxCompletions": 1,
+		"MinLevel": 80,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_RM_VILLAGECHIEF",
+		"EndNpcCodename": "NPC_RM_VILLAGECHIEF",
+		"OfferPromptSymbol": "SN_TALK_QNO_RM_MEETROC_1_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_RM_MEETROC_1_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_RM_MEETROC_1_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_RM_MEETROC_1_08",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_RM_MEETROC_1_04",
+		"AchievedNowSymbol": "SN_TALK_QNO_RM_MEETROC_1_09",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [],
+		"Objective": 3,
+		"Objectives": [
+			{
+				"ContentsSymbol": "SN_CON_QNO_RM_MEETROC_1_01",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_RM_MEETROC_1_01",
+				"CollectCount": 1,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_QT_RM_FEATHERMASK_01"
+					],
+					"ChancePercent": 50.0
+				}
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_RM_MEETROC_1_02",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_RM_MEETROC_1_02",
+				"CollectCount": 1,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_QT_RM_ROCKY_CLON_01"
+					],
+					"ChancePercent": 100.0
+				}
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_RM_MEETROC_1_03",
+				"Objective": 4,
+				"HandOverNpcCodename": "NPC_RM_SLAVE1",
+				"HandOverSymbol": "SN_TALK_QNO_RM_MEETROC_1_05",
+				"ExchangeItems": [
+					{
+						"ItemCodename": "ITEM_QNO_RM_MEETROC_1_03",
+						"Count": 1
+					}
+				],
+				"ExchangeFullSymbol": "SN_TALK_QNO_RM_MEETROC_1_07",
+				"NotAchievedSymbol": "SN_TALK_QNO_RM_MEETROC_1_06"
+			}
+		]
+	},
+	{
 		"Codename": "QNO_RM_OLDWOMAN_7",
 		"MaxCompletions": 1,
 		"MinLevel": 79,
