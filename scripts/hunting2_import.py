@@ -62,6 +62,7 @@ import import_vsro_alexandria as tables
 import jupiter_import as jupiter
 import later_world_import
 from prepare_client_resources import write_atomically
+from sro_paths import trees_overlap
 
 FLAG = "SRO_HUNTING2"
 ROOT_ENV = "SRO_V1696_ROOT"
@@ -223,7 +224,7 @@ def require_v1696_pin(root, names):
 # ================
 def add_monsters(v1696_root, native, output):
 	native, output = Path(native).resolve(), Path(output).resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("hunting2 overlay must be separate from native extraction")
 	marker = output / MARKER
 	prior = cap110.read_json(marker) if marker.exists() else {}
@@ -293,9 +294,7 @@ def add_hunting2(native, out, v1696_root=None):
 	if not flag_enabled():
 		later_world_import.reap_world(SPEC, native, out)
 		return {"enabled": False}
-	v1696_root = Path(v1696_root or os.environ.get(ROOT_ENV, ""))
-	if not str(v1696_root):
-		raise SystemExit(f"Pass the v1.696 client folder or set {ROOT_ENV}.")
+	v1696_root = later_world_import.client_root(v1696_root, ROOT_ENV)
 	require_v1696_pin(v1696_root, ("Map", "Media", "Data"))
 	with open(v1696_root / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
 		index = tables.archive_index(media)

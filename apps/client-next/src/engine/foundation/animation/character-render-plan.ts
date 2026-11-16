@@ -10,7 +10,17 @@ materials run a clock.
 ===========================================================================
 */
 import type { CharacterModel, CharacterClip } from "@/engine/contracts/character";
-import { CHARACTER_ACTORS, characterPoseBytes, characterBatchBytes } from "./character-budget";
+import {
+	CHARACTER_ACTORS,
+	characterPoseBytes,
+	characterBatchBytes,
+	characterMeshBytes,
+	characterSharedMesh,
+	characterSharedPalette
+} from "./character-budget";
+import { meshArrays } from "@/engine/foundation/rendering/geometry-vertices";
+import { createParticleGraphPlan } from "@/engine/foundation/animation/particle-graph-plan";
+import type { ClipTimelineCache } from "./animation-timelines";
 /*
 ================
 isCharacterAnimationExtension
@@ -31,10 +41,11 @@ export function isCharacterAnimationExtension( previous: CharacterModel, next: C
 createCharacterRenderPlan
 
 Immutable admitted model topology owns this plan. Frame clocks, visibility,
-event cursors and matrices never enter it. Replacement models get new plans.
+event cursors and matrices never enter it. Replacement models get new plans;
+the timeline cache keeps a re-plan from hashing its clips' key times again.
 ================
 */
-export function createCharacterRenderPlan( model: CharacterModel ) {
+export function createCharacterRenderPlan( model: CharacterModel, timelines?: ClipTimelineCache ) {
 	const clips = new Map<string, CharacterClip>();
 	for ( const clip of model.clips ) if ( !clips.has( clip.name ) ) clips.set( clip.name, clip );
 	const emission = model.primitives.some( p => p.emission ),
@@ -62,13 +73,23 @@ export function createCharacterRenderPlan( model: CharacterModel ) {
 		clips,
 		emission,
 		exactCapacity,
-		poseBytes: characterPoseBytes( model ),
+		poseBytes: characterPoseBytes( model, timelines ),
+		// The shared meshes this model draws, each with its one GPU copy's
+		// bytes; the frame plan charges each once, whatever batches draw it.
+		meshes: model.primitives.filter( characterSharedMesh ).map( p => ({
+			positions: p.geometry.positions,
+			arrays: meshArrays( p.geometry ),
+			bytes: characterMeshBytes( p.geometry )
+		}) ),
 		clocked: model.primitives.some( p => p.emission || p.materialFrames ),
+		// An authored alpha-blended material: the group draws in the
+		// translucent tier, back to front, whatever its opacity.
+		blended: model.primitives.some( p => !!p.geometry.material?.blend ),
 		billboard: model.primitives.some( p => p.billboard || p.ribbon ),
 		continuousGraph: model.particleGraph?.some( e => e.loop || e.emission ) ?? false,
-		sharedPalette: !model.primitives.some( p =>
-			p.emission || p.ribbon || p.billboard || !p.geometry.joints || !p.geometry.weights
-		),
+		// The tables every tick of the model's particle graphs reads.
+		particleGraph: model.particleGraph ? createParticleGraphPlan( model.particleGraph ) : undefined,
+		sharedPalette: characterSharedPalette( model ),
 		particleBytes: model.primitives.reduce(
 			( sum, p ) => sum + (p.emission?.capacity ?? p.emission?.births.length ?? 0) * 320,
 			0

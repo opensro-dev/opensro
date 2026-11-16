@@ -1229,12 +1229,13 @@ test("renderer budgets expanded instances across models and frees old batches be
 	assert.equal( held, 0 );
 });
 
-test("cold effects reserve only the active load slot and cannot displace resident actors", async () => {
+test("cold effects take only free load slots and cannot displace resident actors", async () => {
 	const { createCharacterResources } = await load( "src/engine/runtime/characters/resources/resources.ts" );
 	const pending = new Map(), requests = [], retentions = [];
 	let serial = 0;
+	// Four request slots shared with the world, as the asset owner has.
 	const assets = {
-		available: () => 4,
+		available: () => 4 - pending.size,
 		/*
 		================
 		request
@@ -1295,8 +1296,9 @@ test("cold effects reserve only the active load slot and cannot displace residen
 	assert.equal( owner.ready( "/assets/body.glb" ), true );
 	owner.retainWanted( [] );
 	// The incident frame: presentation pre-plans the local player before transient
-	// effects compete, the attack asks for two cold effect programs, and neither
-	// holds a load slot. None of that may unadmit the decoded body.
+	// effects compete and the attack asks for two cold effect programs. The
+	// player's reservation keeps its slot; the effects take the others. None of
+	// that may unadmit the decoded body.
 	owner.begin( 1 );
 	assert.equal( owner.plan( [ "/assets/cold-player.glb" ] ), true );
 	assert.equal( owner.ready( "/assets/effects/programs.json#hit-a" ), false );
@@ -1305,12 +1307,15 @@ test("cold effects reserve only the active load slot and cannot displace residen
 	assert.equal( owner.ready( "/assets/cold-player.glb" ), false );
 	owner.retainWanted( [] );
 	assert.ok( retentions.at( -1 ).includes( "/assets/body.glb" ) );
-	assert.equal( requests.length, 2, "the pre-planned player owns the only load slot" );
+	assert.ok( requests.at( -1 ).endsWith( "/assets/cold-player.glb" ), "the pre-planned player holds a load slot" );
+	assert.equal( requests.length, 4 );
+	assert.equal( assets.available(), 1, "a slot stays free for the world, the interface and audio" );
+	// The three loads land together and are admitted together.
 	owner.begin( 2 );
 	owner.poll();
 	assert.equal( owner.ready( "/assets/cold-player.glb" ), true );
 	assert.equal( owner.ready( "/assets/body.glb" ), true );
-	assert.equal( owner.ready( "/assets/effects/programs.json#hit-a" ), false );
+	assert.equal( owner.ready( "/assets/effects/programs.json#hit-a" ), true );
 	owner.retainWanted( [] );
 	owner.begin( 3 );
 	owner.poll();
@@ -1326,7 +1331,7 @@ test("cold effects reserve only the active load slot and cannot displace residen
 		true,
 		"a repeated attack reuses decoded resources"
 	);
-	assert.equal( requests.length, 3 );
+	assert.equal( requests.length, 4 );
 	owner.retainWanted( [] );
 	owner.reset();
 	assert.deepEqual( retentions.at( -1 ), [] );

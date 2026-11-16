@@ -149,6 +149,9 @@ type DropTablesFile struct {
 	// SunEventOnly says degree-9 Seal of Sun gear neither drops nor is sold
 	// (progression.SunEventOnly); its chances are already left out.
 	SunEventOnly bool `json:"sunEventOnly,omitempty" doc:"Port-only: degree-9 Seal of Sun gear (rarity 2, ItemClass 27) neither drops nor is sold; it comes only as an event reward. Its chances are left out of these tables, and a Sun pick drops nothing, so every other chance is unchanged."`
+	// AboveDegree9DropsOff says no item above degree 9 drops
+	// (progression.AboveDegree9Drops).
+	AboveDegree9DropsOff bool `json:"aboveDegree9DropsOff,omitempty" doc:"Port-only: no monster drops an item above degree 9 (equipment by ItemClass, and the alchemy goods of types 3/3/10 and 3/3/11, whose ItemClass is the degree). Their chances in these tables then drop nothing and are not re-rolled, so every other chance is unchanged. Only present while the rule is on."`
 	// PetGear is the attack-pet gear derived drop (petgear.go), present
 	// only while the expansion runs at a positive factor.
 	PetGear *PetGearRule `json:"petGear,omitempty"`
@@ -169,7 +172,8 @@ level a monster has.
 */
 func BuildDropTables(monsters []Monster, itemID func(string) uint32, header Header) DropTablesFile {
 	file := DropTablesFile{Header: header, RareChance: action.RareEquipmentChance(0), Equipment: map[string]EquipmentTable{},
-		Special: map[string][]DropChance{}, Consumables: map[string][]DropChance{}, SunEventOnly: progression.SunEventOnlyFromEnv().Enabled()}
+		Special: map[string][]DropChance{}, Consumables: map[string][]DropChance{}, SunEventOnly: progression.SunEventOnlyFromEnv().Enabled(),
+		AboveDegree9DropsOff: progression.AboveDegree9DropsFromEnv().Off()}
 	for _, category := range loot.ConsumableFamilies() {
 		var shares []FamilyShare
 		for _, share := range category {

@@ -17,6 +17,7 @@ import { listFiles } from "./shared/fsUtils.mjs";
 import { writeJsonIfChanged } from "./shared/jsonOut.mjs";
 import { currentClaims, isClaimed, isPublicationOpen } from "./shared/publicationLedger.mjs";
 import { INTERACTIVE_IMAGE_PATTERN, uiImagePreloadReason } from "./shared/uiImageEligibility.mjs";
+import { compareText } from "./shared/textOrder.mjs";
 
 const publicRoot = CLIENT_PUBLIC_ROOT;
 const assetsRoot = path.join( publicRoot, "assets" );
@@ -100,7 +101,7 @@ comparePreloadImages
 function comparePreloadImages( left, right ) {
 	const leftBase = preloadSortBase( left.path );
 	const rightBase = preloadSortBase( right.path );
-	const baseOrder = leftBase.localeCompare( rightBase );
+	const baseOrder = compareText( leftBase, rightBase );
 	if ( baseOrder !== 0 ) {
 		return baseOrder;
 	}
