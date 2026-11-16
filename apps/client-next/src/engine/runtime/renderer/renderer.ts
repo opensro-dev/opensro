@@ -17,7 +17,7 @@ import {
 import { uiTextureResidency } from "@/engine/foundation/rendering/ui-texture-residency";
 import { cameraBasis } from "@/engine/foundation/rendering/world-math";
 import { createPortrait } from "./characters/portrait";
-import { projectCharacterLabels } from "@/engine/foundation/ui/character-labels";
+import { createLabelProjection } from "@/engine/foundation/ui/character-labels";
 import { damageTextAssets, damageTextQuads } from "@/engine/foundation/ui/damage-text";
 import { pickDestination } from "@/engine/foundation/rendering/pick-destination";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
@@ -104,6 +104,8 @@ export function createRenderer(
 		return bounds ? viewerCamera( dollBounds( bounds ), DOLL_FRONT, aspect ) : undefined;
 	}
 	const uiPreparation = createUiPreparation();
+	// Last frame's placed labels: a still label keeps its packed GPU records.
+	const labelProjection = createLabelProjection();
 	let uiProduct: ReturnType<typeof prepareUi> | null = null;
 	const uiTextures = new Map<string, UiTexture>(), dirtyUi = new Set<string>();
 	let residentUi = new Set<string>(), residentUiProduct: ReturnType<typeof prepareUi> | null = null;
@@ -782,7 +784,7 @@ export function createRenderer(
 				// annotations beside them. Runtime supplies logical UI extents;
 				// using that same extent keeps actor and label projections together.
 				const projectedUi = uiScene && (anchored?.size || uiProduct?.worldAnchors || damage.length) ?
-					projectCharacterLabels(
+					labelProjection.project(
 						uiScene,
 						preview || !anchored?.size ?
 							new Map() :

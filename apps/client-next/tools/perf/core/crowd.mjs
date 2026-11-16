@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { createCodec } from "../../../src/engine/runtime/simulation/worker/network/codec/codec.ts";
+import { createCodec, MAX_RESERVED_OPCODE } from "../../../src/engine/runtime/simulation/worker/network/codec/codec.ts";
 import {
 	openProbeAgentSession,
 	fetchProbeSessionJson,
@@ -22,12 +22,54 @@ import {
 } from "../../../../../scripts/lib/probeSession.mjs";
 import { resetMissionMovementFixture } from "../../../../../scripts/lib/missionMovementFixture.mjs";
 import { assertCharacterAllowed } from "../../../../../scripts/lib/probeCharacter.mjs";
+import { parseActivity, startActivity } from "./crowd-activity.mjs";
 
 const MAX_PEERS = 32;
+// The --seed a living crowd uses when none is named.
+export const DEFAULT_ACTIVITY_SEED = 1;
 const ADMISSION_TIMEOUT_MS = 30000;
 // A full 32-peer refill is (32 - 10) x 6 s; retries beyond that are a fault.
 const MAX_LOGIN_RETRIES = 40;
 const DEFAULT_RETRY_AFTER_S = 6;
+// The client's acknowledgement cadence and its large-frame bound
+// (network.ts STREAM_ACK_INTERVAL_MS, STREAM_ACK_LARGE_FRAME_BYTES).
+const STREAM_ACK_INTERVAL_MS = 1000, STREAM_ACK_LARGE_FRAME_BYTES = 1 << 20;
+
+/*
+================
+createStreamAck
+
+A peer's stream position, kept and acknowledged as the client's network
+owner does (network.ts acknowledge): one count a frame above the
+session-internal range, told to the server at most once a second, and at
+once after a frame of a megabyte or more. The server keeps every
+unacknowledged ordered frame for a resume, in a window of 4 MiB a
+session; a peer that never acknowledges is detached once the window
+fills ("writer parked on a full resume ring"). A standing crowd takes
+hours to fill it, 200 walking and chatting peers about a minute.
+
+counted( bytes ) records one applied frame; flush() tells the server
+when the position moved and the interval allows. now() is the clock.
+================
+*/
+export function createStreamAck( send, now = () => performance.now() ) {
+	let position = 0, acked = 0, sentAt = -Infinity, large = false;
+	const flush = () => {
+		if ( position === acked || !large && now() - sentAt < STREAM_ACK_INTERVAL_MS ) return;
+		acked = position;
+		sentAt = now();
+		large = false;
+		send( position );
+	};
+	return {
+		counted( bytes ) {
+			position = (position + 1) >>> 0;
+			if ( bytes >= STREAM_ACK_LARGE_FRAME_BYTES ) large = true;
+			flush();
+		},
+		flush
+	};
+}
 
 /*
 ================
@@ -48,6 +90,11 @@ async function connectPeer( session, character ) {
 	// opcodes: frames received per opcode, so a scenario can count what the
 	// server answered (server-tick-bench.mjs --scenario return: 0x3369 resets).
 	const evidence = { character, frames: 0, ready: false, closed: false, dead: new Set(), opcodes: new Map() };
+	// listen( fn ): a scenario's own reader of every decoded frame (crowd-activity.mjs).
+	const listeners = [];
+	const stream = createStreamAck( position => {
+		if ( socket.readyState === WebSocket.OPEN ) socket.send( codec.encode( codec.streamAck( position ) ) );
+	} );
 	try {
 		await new Promise( ( resolve, reject ) => {
 			const timer = setTimeout( () => reject( Error( "Crowd peer admission timed out" ) ), ADMISSION_TIMEOUT_MS );
@@ -79,6 +126,8 @@ async function connectPeer( session, character ) {
 						socket.send( codec.encode( codec.enterWorld( session.divisionId, character, enter ) ) );
 					} else if ( frame.opcode === 3 ) {
 						socket.send( codec.encode( { opcode: 4, payload: frame.payload } ) );
+						// The server's ping is the peer's clock while no frame arrives.
+						stream.flush();
 					} else if ( frame.opcode === 7 ) {
 						assert.ok( frame.payload.length >= 9 && frame.payload[0] === 1, "Crowd EnterWorld accepted" );
 						socket.send( codec.encode( { opcode: 0x3012, payload: new Uint8Array() } ) );
@@ -89,6 +138,8 @@ async function connectPeer( session, character ) {
 						evidence.closed = true;
 						fail( "Crowd peer received server goodbye" );
 					}
+					for ( const listener of listeners ) listener( frame );
+					if ( frame.opcode > MAX_RESERVED_OPCODE ) stream.counted( frame.payload.byteLength );
 				} catch ( error ) {
 					fail( String( error ) );
 				}
@@ -98,7 +149,8 @@ async function connectPeer( session, character ) {
 			evidence,
 			close: () => socket.close(),
 			// A scenario's own frames after admission (server-tick-bench.mjs).
-			send: ( opcode, payload ) => socket.send( codec.encode( { opcode, payload } ) )
+			send: ( opcode, payload ) => socket.send( codec.encode( { opcode, payload } ) ),
+			listen: listener => listeners.push( listener )
 		};
 	} catch ( error ) {
 		socket.close();
@@ -158,10 +210,14 @@ createCrowd
 Provisioning is explicitly loopback-only and requires the existing local
 authority token. Scratch actors form a grid inside the observer's sector.
 loadoutFor( index ), when given, names each peer's level, intellect and
-skills (server-tick-bench.mjs).
+skills (server-tick-bench.mjs). act and seed, when given, start a scripted
+activity once every peer is in (crowd-activity.mjs); crowd.activity is its
+evidence, and close() stops it before the sockets close.
 ================
 */
-export async function createCrowd( { count, fixture, provisioningUrl, tokenPath, journalPath, loadoutFor } ) {
+export async function createCrowd(
+	{ count, fixture, provisioningUrl, tokenPath, journalPath, loadoutFor, act = "", seed = DEFAULT_ACTIVITY_SEED }
+) {
 	assert.ok( Number.isInteger( count ) && count > 0 && count <= MAX_PEERS );
 	const url = new URL( provisioningUrl );
 	assert.ok( url.protocol === "http:" && [ "127.0.0.1", "localhost", "[::1]" ].includes( url.hostname ) );
@@ -169,6 +225,9 @@ export async function createCrowd( { count, fixture, provisioningUrl, tokenPath,
 	const accounts = [], peers = [], characters = [], byIndex = new Map();
 	const prefix = randomBytes( 3 ).toString( "hex" );
 	const login = createLoginGate();
+	// Parsed before any account exists: a bad --act must not cost logins.
+	const activity = parseActivity( act );
+	let running = null;
 	/*
 	================
 	provision
@@ -189,6 +248,7 @@ export async function createCrowd( { count, fixture, provisioningUrl, tokenPath,
 	================
 	*/
 	async function close() {
+		running?.stop();
 		for ( const peer of peers ) peer.close();
 		const results = await Promise.allSettled(
 			accounts.map( id => provision( `/v1/accounts/${id}/disabled`, "PUT", { disabled: true } ) )
@@ -285,12 +345,22 @@ export async function createCrowd( { count, fixture, provisioningUrl, tokenPath,
 		const settled = await Promise.allSettled( Array.from( { length: count }, ( _, index ) => admit( index ) ) );
 		const failed = settled.filter( result => result.status === "rejected" );
 		if ( failed.length ) throw failed[0].reason;
-		return {
-			peers: peers.map( peer => peer.evidence ),
+		const crowd = {
+			peers: [ ...byIndex.keys() ].sort( ( a, b ) => a - b ).map( index => byIndex.get( index ).evidence ),
 			close,
 			// send( index, opcode, payload ) writes one frame as peer index.
-			send: ( index, opcode, payload ) => byIndex.get( index )?.send( opcode, payload )
+			send: ( index, opcode, payload ) => byIndex.get( index )?.send( opcode, payload ),
+			listen: ( index, listener ) => byIndex.get( index )?.listen( listener )
 		};
+		running = startActivity( {
+			crowd,
+			count,
+			activity,
+			seed,
+			spotFor: index => crowdGridSpot( fixture, index )
+		} );
+		crowd.activity = running.evidence;
+		return crowd;
 	} catch ( error ) {
 		let failure = error instanceof Error ? error : new Error( String( error ) );
 		try {
@@ -315,11 +385,20 @@ const CROWD_POLL_MS = 250;
 crowdKey
 
 What a held crowd must match for a bench to use it: peer count, fixture
-and its start, since the grid is laid out from the start position.
+and its start, since the grid is laid out from the start position, and
+the activity with its seed, so a standing and a living crowd never stand
+in for each other.
 ================
 */
-export function crowdKey( count, fixture ) {
-	return JSON.stringify( { count, id: fixture.id, start: fixture.start } );
+export function crowdKey( count, fixture, act = "", seed = DEFAULT_ACTIVITY_SEED ) {
+	const activity = parseActivity( act );
+	return JSON.stringify( {
+		count,
+		id: fixture.id,
+		start: fixture.start,
+		act: activity.label,
+		seed: activity.label === "still" ? null : seed
+	} );
 }
 
 /*
@@ -330,9 +409,12 @@ Uses a crowd the host already holds instead of admitting a new one. Returns
 null when no host answers or it holds another crowd. peers is refreshed
 from the host while attached, so a peer that drops during a window shows
 closed by the next check; close() detaches and leaves the crowd to the host.
+activity is the host's activity evidence, refreshed the same way.
 ================
 */
-export async function attachCrowd( { count, fixture, hostUrl = CROWD_HOST_URL } ) {
+export async function attachCrowd(
+	{ count, fixture, act = "", seed = DEFAULT_ACTIVITY_SEED, hostUrl = CROWD_HOST_URL }
+) {
 	const url = new URL( "/crowd", hostUrl );
 	assert.ok( [ "127.0.0.1", "localhost", "[::1]" ].includes( url.hostname ), "Crowd host must be loopback" );
 	let held;
@@ -343,20 +425,22 @@ export async function attachCrowd( { count, fixture, hostUrl = CROWD_HOST_URL } 
 	} catch {
 		return null;
 	}
-	if ( held.key !== crowdKey( count, fixture ) ) {
-		console.log( `[crowd] host holds ${held.key}, not this fixture; admitting a new crowd` );
+	if ( held.key !== crowdKey( count, fixture, act, seed ) ) {
+		console.log( `[crowd] host holds ${held.key}, not this crowd; admitting a new crowd` );
 		return null;
 	}
-	const peers = held.peers;
+	const peers = held.peers, activity = held.activity;
 	assert.ok( peers.length === count && peers.every( peer => peer.ready && !peer.closed ), "Held crowd is not whole" );
+	assert.ok( activity, "Held crowd names no activity" );
 	let polling = true;
 	const poll = async () => {
 		while ( polling ) {
 			await delay( CROWD_POLL_MS );
 			try {
 				const response = await fetch( url, { signal: AbortSignal.timeout( 2000 ) } );
-				const fresh = (await response.json()).peers;
+				const body = await response.json(), fresh = body.peers;
 				for ( let i = 0; i < peers.length; i++ ) Object.assign( peers[i], fresh[i] ?? { closed: true } );
+				Object.assign( activity, body.activity );
 			} catch {
 				// A host that stopped answering holds nothing a bench can trust.
 				for ( const peer of peers ) peer.closed = true;
@@ -367,6 +451,7 @@ export async function attachCrowd( { count, fixture, hostUrl = CROWD_HOST_URL } 
 	console.log( `[crowd] attached to the held crowd of ${count} at ${hostUrl}` );
 	return {
 		peers,
+		activity,
 		// The host owns these sessions: a bench must not wait for them to
 		// leave the server or disable their accounts.
 		held: true,
@@ -381,7 +466,8 @@ export async function attachCrowd( { count, fixture, hostUrl = CROWD_HOST_URL } 
 obtainCrowd
 
 A held crowd when one matches, else a newly admitted one. Either result
-has the same { peers, close } shape; a held one also says held: true.
+has the same { peers, activity, close } shape; a held one also says
+held: true.
 ================
 */
 export async function obtainCrowd( options ) {

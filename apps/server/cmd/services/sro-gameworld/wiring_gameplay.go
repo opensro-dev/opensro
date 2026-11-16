@@ -210,6 +210,13 @@ func newGameplayPlane(
 	if items.MaterialDrops.Off() {
 		log.Infof("loot: alchemy material drops OFF (%s)", progression.EnvAlchemyMaterialDropsOff)
 	}
+	// SRO_ABOVE_DEGREE9_DROPS_OFF (port-only, not native; owner
+	// 2026-11-16): while the area polls run, no monster drops an item above
+	// degree 9.
+	items.AboveDegree9Drops = progression.AboveDegree9DropsFromEnv()
+	if items.AboveDegree9Drops.Off() {
+		log.Infof("loot: drops above degree %d OFF (%s)", progression.MaxDropDegree, progression.EnvAboveDegree9DropsOff)
+	}
 	// SRO_SUN_EVENT_ONLY (port-only, not native): degree-9 Seal of Sun gear
 	// leaves monster drops and NPC shops; it returns only as an event reward.
 	items.SunEventOnly = progression.SunEventOnlyFromEnv()
@@ -222,6 +229,9 @@ func newGameplayPlane(
 	// SRO_HALLOWEEN_HELMET_SEAL (port-only, not native): the event
 	// helmets stay sealed at the transfer doors after the event.
 	items.HalloweenHelmetSeal = halloweenHelmetSealFromEnv()
+	// SRO_CHRISTMAS_EVENT (port-only, not native in this client build):
+	// the Christmas event's switch and UTC window (wiring_christmas.go).
+	items.Christmas = christmasEventFromEnv()
 	// SRO_UNIQUE_GAP_EXEMPT / SRO_UNIQUE_POP_TICKET / SRO_UNIQUE_MAX_LEVEL_LOOT
 	// / SRO_UNIQUE_SEAL_DROPS (port-only, not native): uniques ignore the
 	// level-gap admission, one Magic Pop ticket per kill, a top-band unique's
@@ -786,7 +796,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		})
 	}
 	game.deps.NormalizeEntryQuests = quests.NormalizeEntryRecords
-	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredHalloweenBoxes
+	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredEventItems
 	game.deps.EntryEventFrames = game.items.EntryEventFrames
 	game.deps.EntryEventGroups = game.items.EntryEventGroups
 	if err := game.validateQuestMarkerRoster(); err != nil {

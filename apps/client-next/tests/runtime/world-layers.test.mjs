@@ -50,7 +50,12 @@ function layeredGroup() {
 test("an event group's bit 0 draws its layer", () => {
 	assert.equal( activeWorldLayers( undefined ).size, 0 );
 	assert.equal( activeWorldLayers( { 5: 0 } ).size, 0 );
-	assert.deepEqual( [ ...activeWorldLayers( { 1: 1, 5: 1, 7: 2 } ) ].sort(), [ 1, 5 ] );
+	assert.deepEqual( [ ...activeWorldLayers( { 3: 1, 5: 1, 7: 2 } ) ].sort(), [ 3, 5 ] );
+	assert.deepEqual(
+		[ ...activeWorldLayers( { 1: 1, 7: 1 } ) ],
+		[ 7 ],
+		"the native event group (snow) draws no layer: the festival decoration stays off at Christmas"
+	);
 	const groups = { 5: 1 };
 	assert.ok(
 		sameWorldLayers( activeWorldLayers( groups ), activeWorldLayers( groups ) ),

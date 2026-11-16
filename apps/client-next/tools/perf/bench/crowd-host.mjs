@@ -6,7 +6,7 @@ crowd-host.mjs - holds one admitted crowd for many benches
 Usage:
   node tools/perf/bench/crowd-host.mjs --fixture FILE.json [--count 32]
        [--port 8796] [--provisioning http://127.0.0.1:8789] [--token FILE]
-       [--journal FILE]
+       [--journal FILE] [--act walk=0.5,chat=0.2] [--seed 1]
 
 Admitting 32 authenticated peers is bounded by the Agent's login budget
 (burst 10, one per 6 s), minutes per bench. The host pays it once per
@@ -16,6 +16,11 @@ evidence) and POST /shutdown on loopback only. When any peer drops (server
 restart, kick) it disables its accounts and exits: a broken crowd is never
 offered to a bench.
 
+--act gives a share of the peers scripted input from --seed
+(core/crowd-activity.mjs): walkers click near their spot, chatters speak
+in All chat, the rest stand. The activity is part of the crowd's key, and
+GET /crowd carries its evidence, which a bench copies into its rows.
+
 ===========================================================================
 */
 import path from "node:path";
@@ -23,11 +28,12 @@ import { createServer } from "node:http";
 import { mkdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parseOptions } from "../core/report.mjs";
-import { createCrowd, crowdKey } from "../core/crowd.mjs";
+import { createCrowd, crowdKey, DEFAULT_ACTIVITY_SEED } from "../core/crowd.mjs";
 
 const REPO_ROOT = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "../../../../.." );
 const USAGE =
-	"crowd-host.mjs --fixture FILE.json [--count 32] [--port 8796] [--provisioning URL] [--token FILE] [--journal FILE]";
+	"crowd-host.mjs --fixture FILE.json [--count 32] [--port 8796] [--provisioning URL] [--token FILE] [--journal FILE] " +
+	"[--act walk=SHARE,chat=SHARE] [--seed N]";
 const HEALTH_MS = 1000;
 
 const options = parseOptions( process.argv.slice( 2 ), {
@@ -36,11 +42,16 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	port: 8796,
 	provisioning: "http://127.0.0.1:8789",
 	token: path.join( REPO_ROOT, "apps/server/.state/cluster/agent-provisioning-token" ),
-	journal: path.join( REPO_ROOT, ".state/crowd-host/crowd-cleanup.json" )
+	journal: path.join( REPO_ROOT, ".state/crowd-host/crowd-cleanup.json" ),
+	act: "",
+	seed: DEFAULT_ACTIVITY_SEED
 }, USAGE );
 if ( !options.fixture ) throw Error( `usage: ${USAGE}` );
+if ( !Number.isInteger( options.seed ) || options.seed < 0 ) {
+	throw Error( `--seed must be a whole number\nusage: ${USAGE}` );
+}
 const fixture = JSON.parse( await readFile( options.fixture, "utf8" ) );
-const key = crowdKey( options.count, fixture );
+const key = crowdKey( options.count, fixture, options.act, options.seed );
 
 await mkdir( path.dirname( options.journal ), { recursive: true } );
 const started = performance.now();
@@ -49,7 +60,9 @@ const crowd = await createCrowd( {
 	fixture,
 	provisioningUrl: options.provisioning,
 	tokenPath: options.token,
-	journalPath: options.journal
+	journalPath: options.journal,
+	act: options.act,
+	seed: options.seed
 } );
 console.log(
 	`[crowd-host] ${options.count} peers admitted in ${((performance.now() - started) / 1000).toFixed( 1 )} s`
@@ -78,7 +91,7 @@ async function shutdown( reason ) {
 const server = createServer( ( request, response ) => {
 	if ( request.method === "GET" && request.url === "/crowd" ) {
 		response.setHeader( "content-type", "application/json" );
-		response.end( JSON.stringify( { key, peers: crowd.peers } ) );
+		response.end( JSON.stringify( { key, peers: crowd.peers, activity: crowd.activity } ) );
 	} else if ( request.method === "POST" && request.url === "/shutdown" ) {
 		response.end( "stopping\n" );
 		shutdown( "requested" );

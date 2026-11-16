@@ -218,12 +218,19 @@ test("an immutable skinned mesh has one GPU copy across draws, counted by refere
 		dynamic = c.upload( { ...mesh, dynamicVertices: true, bones: new Float32Array( 16 ) } );
 	assert.notEqual( other.vertices, a.vertices );
 	assert.notEqual( dynamic.vertices, a.vertices );
-	// A cloth stream's owner writes the stream into its skin table: two
-	// wearers of one dress never share it.
+	// Two wearers of one dress draw its vertices and indices from the same
+	// copy, but each its own skin table: the owner writes the stream into it.
 	const cloth = [ 0, 1 ].map( () => c.upload( { ...mesh, clothStream: true, bones: new Float32Array( 16 ) } ) );
+	assert.deepEqual( streams( cloth[0] ).slice( 0, 2 ), streams( a ).slice( 0, 2 ) );
+	assert.deepEqual( streams( cloth[1] ).slice( 0, 2 ), streams( a ).slice( 0, 2 ) );
 	assert.notEqual( binding( cloth[0], 6 ), binding( a, 6 ) );
 	assert.notEqual( binding( cloth[0], 6 ), binding( cloth[1], 6 ) );
-	for ( const draw of cloth ) c.release( draw );
+	assert.equal( binding( cloth[0], 6 ).size, binding( a, 6 ).size * 2, "skin entries, then the stream" );
+	const ownTable = binding( cloth[0], 6 );
+	c.release( cloth[0] );
+	assert.equal( ownTable.destroyed, 1, "a wearer's table retires with its draw" );
+	assert.equal( a.vertices.destroyed, 0, "the mesh stays for its other draws" );
+	c.release( cloth[1] );
 	assert.throws( () => c.updateIndices( a, Uint32Array.of( 0, 1, 2 ) ), /shared mesh/ );
 	const shared = streams( a );
 	c.release( a );
@@ -302,13 +309,16 @@ test("only immutable skinned primitives are charged as shared meshes", async () 
 	);
 	const skinned = { name: "body", node: 0, image: -1, joints: [ 0 ], inverseBind: I(), geometry: geometry() };
 	assert.equal( characterSharedMesh( skinned ), true );
-	// Cloth and ribbons rewrite their streams, and an unskinned mesh lives in
-	// the slabs: each batch keeps its own copy, charged with the batch.
+	// A skinned cloth piece's solver writes only its own skin table.
+	assert.equal( characterSharedMesh( { ...skinned, cloth: {} } ), true );
+	// Ribbons and unskinned cloth rewrite their streams, and an unskinned mesh
+	// lives in the slabs: each batch keeps its own copy, charged with the batch.
+	const unskinned = { ...geometry(), joints: undefined, weights: undefined };
 	for (
 		const own of [
-			{ ...skinned, cloth: {} },
 			{ ...skinned, ribbon: {} },
-			{ ...skinned, geometry: { ...geometry(), joints: undefined, weights: undefined } }
+			{ ...skinned, cloth: {}, geometry: unskinned },
+			{ ...skinned, geometry: unskinned }
 		]
 	) {
 		assert.equal( characterSharedMesh( own ), false );
@@ -322,4 +332,11 @@ test("only immutable skinned primitives are charged as shared meshes", async () 
 		geometry().positions.length / 3 * 14 * 4 * 2 + geometry().indices.byteLength
 	);
 	assert.equal( characterMeshBytes( geometry() ), 3 * 56 + 3 * 4 + 3 * 32, "stream, indices and skin table once" );
+	// A shared cloth row keeps its solver state (92 bytes a vertex) and its
+	// own skin table with the stream (twice the 32-byte skin entries).
+	const cloth = { ...skinned, cloth: {} };
+	assert.equal(
+		characterBatchBytes( model( cloth ), 1 ) - characterBatchBytes( model( skinned ), 1 ),
+		3 * 92 + 3 * 32 * 2
+	);
 });
