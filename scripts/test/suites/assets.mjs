@@ -63,6 +63,7 @@ export default {
 		"scripts/test/assets/effectRemapGuard.test.mjs",
 		"scripts/test/assets/characterModelAssetContracts.test.mjs",
 		"scripts/test/assets/qinshiTombOverlay.test.mjs",
+		"scripts/test/assets/shardSwitchPosture.test.mjs",
 		"scripts/test/assets/muhanOverlay.test.mjs",
 		"scripts/test/assets/janganTombTeleport.test.mjs",
 		"scripts/test/assets/actorLocomotionRootMotion.test.mjs",
