@@ -15,7 +15,7 @@ media; saving a new report drops the oldest ones first.
 */
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { zipStore, type ZipFile } from "@/engine/foundation/archive/zip";
-import { MOVEMENT_ERROR_CODES, REFUSAL_OTHER, REFUSAL_REASONS, STACK_FRAME_V8, UI_CONTROL_PREFIX } from "./journal";
+import { MAX_ERROR_FRAMES, MOVEMENT_ERROR_CODES, REFUSAL_OTHER, REFUSAL_REASONS, UI_CONTROL_PREFIX } from "./journal";
 import {
 	GPU_TOKEN_PATTERN,
 	reportedDegradedPipelines,
@@ -119,19 +119,9 @@ const ENGINE_ERROR_MESSAGES = [
 	"Array buffer allocation failed",
 	"Array size is not a small enough positive integer."
 ];
-// A shared stack keeps this many frames under its header.
-const MAX_SHARED_STACK_FRAMES = 12;
-// A SpiderMonkey or JavaScriptCore frame ("fn@url:1:2", "@url:1:2"): such a
-// stack has no header and starts at its first frame.
-const STACK_FRAME_AT_SIGN = /^[^\s@]*@\S*:\d+:\d+$/;
-// A local file URL up to its last folder ("file:///C:/Users/name/dir/"),
-// cut so a local build's frame keeps only the file's name.
-const STACK_FILE_FOLDERS = /file:\/\/\/(?:[^\s)]*\/)?/gi;
-// The scheme and host of a frame's URL ("https://host", "blob:https://host",
-// "chrome-extension://id"): cut, so a frame keeps only its path.
-const STACK_URL_ORIGIN = /(?:blob:)?[a-z][a-z0-9+.-]*:\/\/[^/\s)]*/gi;
-// A query or fragment between a frame's path and its line:column.
-const STACK_URL_QUERY = /[?#][^\s):]*/g;
+// A frame as the journal verified it ("    at /assets/index-abc.js:1:2"):
+// a script path of the page and two numbers, nothing else.
+const SHARED_STACK_FRAME = /^ {4}at \/[\w\-.~%@+/]*:\d{1,7}:\d{1,7}$/;
 // A stack header's class: "RangeError: ..." or a bare "Error".
 const STACK_HEADER_CLASS = /^([A-Za-z]*(?:Error|Exception))(?::|$)/;
 
@@ -534,52 +524,29 @@ function sharedValue( value: unknown, field = "" ): unknown {
 
 /*
 ================
-certifiedHeaderLines
-
-The journal's count of a V8 stack's header lines, when it recorded a
-whole one.
-================
-*/
-function certifiedHeaderLines( headerLines: unknown ): number | undefined {
-	return typeof headerLines === "number" && Number.isInteger( headerLines ) && headerLines >= 1 ?
-		headerLines :
-		undefined;
-}
-
-/*
-================
 sharedErrorEvent
 
 An error event as the shared copy carries it. The class comes from the
 stack's header; the header is rebuilt from that class and an engine
 message, so the thrown message's free text never rides along on line 1.
-A V8 stack opens with the class and the whole message, which can span
-lines shaped like frames: those lines are skipped by count, never by
-shape. Only the journal's headerLines is trusted for that count (it
-records one only when the stack opens with the error's current header);
-a class-header stack without it ships no frames. Of the rest only lines of a real frame's shape are kept: V8's
-under a class header, "fn@url:line:col" in a headerless stack. Each
-frame keeps its path, line and column with the URL's scheme, host and
-query cut (a local file keeps only its name), and the first
-MAX_SHARED_STACK_FRAMES frames are kept. sharedValue then admits only
-engine classes and messages.
+No line of the stack itself is shared: its frames are the journal's
+frames, each one a location the journal matched to a script the page
+loaded (stackFrames), so a message line shaped like a frame, however the
+message was built or changed, never ships. Each is checked again for that
+shape, and the first MAX_ERROR_FRAMES are kept. sharedValue then admits
+only engine classes and messages.
 ================
 */
 function sharedErrorEvent( event: Record<string, unknown> ): Record<string, unknown> {
-	const { stack, message, headerLines, ...rest } = event;
-	const lines = typeof stack === "string" ? stack.split( "\n" ) : [];
-	const errorClass = STACK_HEADER_CLASS.exec( lines[0] ?? "" )?.[1];
+	const { stack, message, frames: journalFrames, ...rest } = event;
+	const firstLine = typeof stack === "string" ? stack.split( "\n", 1 )[0] ?? "" : "";
+	const errorClass = STACK_HEADER_CLASS.exec( firstLine )?.[1];
 	const engineMessage = typeof message === "string" && ENGINE_ERROR_MESSAGES.includes( message ) ?
 		message :
 		undefined;
-	const frameShape = errorClass ? STACK_FRAME_V8 : STACK_FRAME_AT_SIGN;
-	const frames = lines
-		.slice( errorClass ? certifiedHeaderLines( headerLines ) ?? lines.length : 0 )
-		.filter( line => frameShape.test( line ) )
-		.slice( 0, MAX_SHARED_STACK_FRAMES )
-		.map( line =>
-			line.replace( STACK_FILE_FOLDERS, "" ).replace( STACK_URL_ORIGIN, "" ).replace( STACK_URL_QUERY, "" )
-		);
+	const frames = (Array.isArray( journalFrames ) ? journalFrames : [])
+		.filter( ( frame ): frame is string => typeof frame === "string" && SHARED_STACK_FRAME.test( frame ) )
+		.slice( 0, MAX_ERROR_FRAMES );
 	const header = (errorClass ?? "Error") + (engineMessage ? ": " + engineMessage : "");
 	return {
 		...rest,
