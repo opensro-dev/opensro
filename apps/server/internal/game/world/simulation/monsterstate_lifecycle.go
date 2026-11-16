@@ -480,7 +480,7 @@ elapses again by the next once-a-second visit whenever the tick runs
 late, so an ordinary tomb hive placed something at nearly every visit
 until every member was full, and admission waited for the whole tomb
 (about 40 s against 2 s with the flag off). The boot visit already placed
-every member whose timer elapsed (AI_InitHiveSpawnStates arms them at
+every member whose timer elapsed (the hive's spawn states start at
 last hatch 0); later visits are respawn pacing. Every other unit keeps
 the native rule.
 ================
