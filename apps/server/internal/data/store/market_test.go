@@ -462,7 +462,7 @@ func TestMarketBuyNeverSpendsGiftSilk(t *testing.T) {
 	if _, err := s.syncDBLocked().Exec(`INSERT INTO mall_accounts (account_id, silk, gift_silk, points) VALUES (?, 0, 800, 0)`, marketBuyer); err != nil {
 		t.Fatal(err)
 	}
-	buy := MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}
+	buy := domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}
 	if _, err := s.MarketBuy(buy); !errors.Is(err, domain.ErrMarketFunds) {
 		t.Fatalf("gift Silk paid a listing: %v", err)
 	}
