@@ -1,7 +1,8 @@
 /*
 ===========================================================================
 
-palette-bindings.test.mjs - tests for animation-pose.ts, palette-bindings.ts
+palette-bindings.test.mjs - tests for animation-pose.ts, palette-bindings.ts,
+character-budget.ts, character-render-plan.ts
 
 Loads the TypeScript sources directly through the shared native loader
 (tests/helpers/native-source-loader.mjs), so the tests exercise the same
@@ -14,6 +15,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 const { createCharacterPose } = await import( "../../src/engine/foundation/animation/animation-pose.ts" );
 const { paletteBindings } = await import( "../../src/engine/foundation/animation/palette-bindings.ts" );
+const { characterPoseBytes, createCharacterPlanCaches } = await import(
+	"../../src/engine/foundation/animation/character-budget.ts"
+);
+const { createCharacterRenderPlan } = await import( "../../src/engine/foundation/animation/character-render-plan.ts" );
 const identity = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
 test("binding reuse requires identical ordered joints and matrix bits", () => {
 	const base = { joints: [ 0, 1 ], inverseBind: Float32Array.of( ...identity(), ...identity() ) };
@@ -90,4 +95,71 @@ test("shared binding palettes equal independent poses through animation, diverge
 			assert.deepEqual( a.subarray( 16, 48 ), b.subarray( 16, 48 ) );
 		}
 	}
+});
+// A body of five parts on one 44-joint skin, each part with its own copy of
+// the inverse binds, as a decoded glTF skin delivers them.
+const skinned = ( parts, joints ) => {
+	const binds = Float32Array.from( { length: joints * 16 }, ( _, i ) => i % 5 ? 0 : 1 );
+	return {
+		nodes: Array.from( { length: joints }, ( _, i ) => ({
+			name: "n" + i,
+			parent: i - 1,
+			translation: [ 0, i, 0 ],
+			rotation: [ 0, 0, 0, 1 ],
+			scale: [ 1, 1, 1 ]
+		}) ),
+		images: [],
+		clips: [],
+		primitives: Array.from( { length: parts }, () => ({
+			joints: Array.from( { length: joints }, ( _, i ) => i ),
+			inverseBind: binds.slice(),
+			geometry: { positions: new Float32Array( 9 ), indices: new Uint32Array( 3 ) }
+		}) )
+	};
+};
+const paletteCharge = model => characterPoseBytes( model ) - characterPoseBytes( { ...model, primitives: [] } );
+test("a pose is charged one palette per distinct binding, not one per primitive", () => {
+	const body = skinned( 5, 44 );
+	assert.equal( paletteCharge( body ), 44 * 64 );
+	new Uint32Array( body.primitives[3].inverseBind.buffer )[7] ^= 1;
+	assert.equal( paletteCharge( body ), 2 * 44 * 64 );
+	const apart = skinned( 3, 4 );
+	apart.primitives.forEach( ( p, i ) => p.joints = p.joints.map( j => (j + i) % 4 ) );
+	assert.equal( paletteCharge( apart ), 3 * 4 * 64 );
+});
+test("the pose charge is the palette bytes a pose holds once every primitive is asked", () => {
+	const body = skinned( 5, 44 );
+	body.primitives.push( { joints: [ 2, 1 ], inverseBind: Float32Array.of( ...identity(), ...identity() ) } );
+	const pose = createCharacterPose( body ), out = new Float32Array( 44 * 16 ), original = globalThis.Float32Array;
+	pose.socket( "n0" );
+	let held = 0;
+	globalThis.Float32Array = new Proxy( original, {
+		construct( target, args ) {
+			const array = new target( ...args );
+			held += array.byteLength;
+			return array;
+		}
+	} );
+	try {
+		for ( let round = 0; round < 2; round++ ) for ( const p of body.primitives ) pose.palette( p, out );
+	} finally {
+		globalThis.Float32Array = original;
+	}
+	assert.equal( held, paletteCharge( body ) );
+});
+test("re-planning a body, or the body extended by a clip, computes its bindings once", () => {
+	const caches = createCharacterPlanCaches(), store = caches.bindings.set.bind( caches.bindings );
+	let computed = 0;
+	caches.bindings.set = ( primitives, bindings ) => {
+		computed++;
+		return store( primitives, bindings );
+	};
+	const body = skinned( 5, 44 ), clip = { name: "stand", duration: 1, channels: [] };
+	assert.equal( createCharacterRenderPlan( body, caches ).poseBytes, characterPoseBytes( body ) );
+	assert.equal( createCharacterRenderPlan( body, caches ).poseBytes, characterPoseBytes( body ) );
+	assert.equal( computed, 1 );
+	// Admitting a clip re-plans { ...model, clips }: the same primitive list.
+	const extended = { ...body, clips: [ clip ] };
+	assert.equal( createCharacterRenderPlan( extended, caches ).poseBytes, characterPoseBytes( extended ) );
+	assert.equal( computed, 1 );
 });
