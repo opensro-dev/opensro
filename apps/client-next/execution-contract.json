@@ -2563,6 +2563,14 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/animation/cloth-stream.ts",
+			"provider": "src/engine/runtime/renderer/characters/characters.ts",
+			"functions": [
+				"paletteOf",
+				"callback:paletteOf"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/renderer/characters/characters.ts",
 			"provider": "src/engine/runtime/random/random.ts",
 			"functions": [
@@ -4007,6 +4015,13 @@
 			"function": "resolve",
 			"kind": "callback",
 			"reason": "The per-actor phase declares the local player's worn sources to the resource owner, synchronously, so its single load slot serves a fresh equip ahead of unrelated character assets."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "resources.failed",
+			"function": "resolve",
+			"kind": "callback",
+			"reason": "Port-only: a character seen for the first time waits unseen for its worn parts; the resource owner's failure query, read synchronously, ends the wait for a part that keeps failing."
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-appearance.ts",

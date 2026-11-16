@@ -30,19 +30,20 @@ not recorded.
 ===========================================================================
 */
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { CLIENT_PUBLIC_ROOT } from "../../lib/generatedRoot.mjs";
+import { buildStatePath, CLIENT_PUBLIC_ROOT } from "../../lib/generatedRoot.mjs";
 import { mapWithConcurrency } from "./asyncUtils.mjs";
 import { codeHash } from "./codeStamp.mjs";
 import { claimPublicPaths, recordClaims } from "./publicationLedger.mjs";
+import { writeStateJson } from "./stateFile.mjs";
 import { buildKnobLines, hashRoots } from "./resourceBuildFingerprint.mjs";
 import { rebuildRoot } from "../world/paths.mjs";
 
 // v4: the knobs are buildKnobLines, the effective tomb posture included.
 const MEMO_VERSION = 4;
-const MEMO_ROOT = path.join( rebuildRoot, ".state", "lane-memo" );
+const MEMO_ROOT = buildStatePath( "lane-memo" );
 const STAT_CONCURRENCY = 64;
 const KEY_PARTS = [ "startup", "environment", "entry", "roots" ];
 
@@ -288,7 +289,6 @@ export function createLaneMemo( {
 		================
 		*/
 		async commit() {
-			await mkdir( memoRoot, { recursive: true } );
 			for ( const [name, record] of pending ) {
 				const file = path.join( memoRoot, `${name}.json` );
 				const payload = {
@@ -297,8 +297,7 @@ export function createLaneMemo( {
 					outputs: await outputSignatures( record.claims, publicRoot ),
 					result: record.result
 				};
-				await writeFile( `${file}.tmp`, JSON.stringify( payload ) );
-				await rename( `${file}.tmp`, file );
+				await writeStateJson( file, payload );
 			}
 			pending.clear();
 		}

@@ -327,7 +327,8 @@ measure
 
 Runs one scenario for ms while drive does its input, and returns its frame
 statistics. The rAF loop records frame intervals; the frame probe records
-main-thread frame and world time.
+main-thread frame and world time. windowMs is the page-clock span the
+counted intervals cover.
 ================
 */
 export async function measure( page, name, ms, drive ) {
@@ -342,7 +343,7 @@ export async function measure( page, name, ms, drive ) {
 	} );
 	const started = Date.now();
 	await drive( () => Date.now() - started < ms );
-	const [intervals, rows, movement, inputs, longFrames, timeOriginMs] = await page.evaluate( () => {
+	const [intervals, rows, movement, inputs, longFrames, timeOriginMs, lastFrameMs] = await page.evaluate( () => {
 		globalThis.__benchLoop = false;
 		return [
 			globalThis.__benchIntervals.slice( 2 ),
@@ -350,7 +351,8 @@ export async function measure( page, name, ms, drive ) {
 			globalThis.__benchMovement,
 			globalThis.__benchInputs,
 			globalThis.__benchLongFrames,
-			performance.timeOrigin
+			performance.timeOrigin,
+			globalThis.__benchLastFrame
 		];
 	} );
 	const sorted = [ ...intervals ].sort( ( a, b ) => a - b ), at = q => sorted[Math.floor( (sorted.length - 1) * q )];
@@ -366,6 +368,9 @@ export async function measure( page, name, ms, drive ) {
 		timeOriginMs,
 		frames: intervals.length,
 		fps: 1000 / mean( intervals ),
+		// The span the counted intervals cover (page performance.now() ms):
+		// fps is frames over exactly this span.
+		windowMs: { start: lastFrameMs - intervals.reduce( ( a, b ) => a + b, 0 ), end: lastFrameMs },
 		p50: at( .5 ),
 		p95: at( .95 ),
 		p99: at( .99 ),

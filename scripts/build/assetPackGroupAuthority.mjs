@@ -18,6 +18,7 @@ import { refreshPrecompressedSidecars } from "./generatedManifestSidecars.mjs";
 import { containedPublicFile, normalizePublicAssetPath } from "./shared/assetPaths.mjs";
 import { mapWithConcurrency } from "./shared/asyncUtils.mjs";
 import { patchAssetPackGroupFromLooseFiles } from "./sparseAssetPackGroupRefresh.mjs";
+import { compareText } from "./shared/textOrder.mjs";
 
 const DISCOVERY_CONCURRENCY = 16;
 const PACKED_JSON_SUFFIX = ".json.gz";
@@ -136,5 +137,5 @@ function uniquePaths( values ) {
 		const normalized = normalizePublicAssetPath( value );
 		paths.set( normalized.toLowerCase(), normalized );
 	}
-	return [ ...paths.values() ].sort( ( left, right ) => left.localeCompare( right ) );
+	return [ ...paths.values() ].sort( ( left, right ) => compareText( left, right ) );
 }

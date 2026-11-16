@@ -22,6 +22,30 @@ import { createTextureFactorPulse } from "@/engine/foundation/rendering/texture-
 
 /*
 ================
+materialClockShape
+
+What a model's immutable primitives fix for its clocks: the bytes one
+instance reserves, whether any material runs a clock, and per primitive
+whether a kind-1 modifier samples it through the animated material.
+================
+*/
+function materialClockShape( model: CharacterModel ) {
+	const animated = model.primitives.map( p => {
+		const mods = p.modifierSource?.modifiers;
+		return !!mods &&
+			(mods.materialModifiers.some( m => m.kind === 1 ) || mods.textureModifiers.some( m => m.kind === 1 ));
+	} );
+	return {
+		bytes: characterMaterialClockBytes( model ),
+		active: model.primitives.some( ( p, i ) =>
+			p.equipmentGlow || animated[i] || p.geometry.material?.colorTimeline || p.geometry.material?.uvVelocity ||
+			p.geometry.material?.uvAtlas || p.geometry.material?.textureFactorPulse
+		),
+		animated
+	};
+}
+/*
+================
 createModelMaterialClocks
 
 One owner id owns one material row. Producers hand every model instance
@@ -39,7 +63,17 @@ export function createModelMaterialClocks( assertUniqueOwners = false ) {
 			clocks: (MaterialClock | null)[];
 		}
 	>();
-	const dynamic = new WeakMap<CharacterModel, boolean>();
+	// Keyed by the admitted model object: a replacement or a catalog
+	// extension is a new object, so it never reads another model's shape.
+	const shapes = new WeakMap<CharacterModel, ReturnType<typeof materialClockShape>>();
+	const shapeOf = ( resource: CharacterModel ) => {
+		let shape = shapes.get( resource );
+		if ( !shape ) {
+			shape = materialClockShape( resource );
+			shapes.set( resource, shape );
+		}
+		return shape;
+	};
 	let bytes = 0, deltaFor = createModifierDelta();
 	return {
 		step(
@@ -51,24 +85,15 @@ export function createModelMaterialClocks( assertUniqueOwners = false ) {
 			let required = 0;
 			for ( const actor of actors ) {
 				const resource = model( actor.model );
-				if ( resource ) required += characterMaterialClockBytes( resource );
+				if ( resource ) required += shapeOf( resource ).bytes;
 			}
 			if ( required > CHARACTER_RENDER_BYTES ) throw Error( "Material clock budget exceeded" );
 			bytes = required;
 			for ( const actor of actors ) {
 				const resource = model( actor.model );
 				if ( !resource ) continue;
-				let active = dynamic.get( resource );
-				if ( active === undefined ) {
-					active = resource.primitives.some( p =>
-						p.equipmentGlow || p.modifierSource?.modifiers.materialModifiers.some( m => m.kind === 1 ) ||
-						p.modifierSource?.modifiers.textureModifiers.some( m => m.kind === 1 ) ||
-						p.geometry.material?.colorTimeline || p.geometry.material?.uvVelocity ||
-						p.geometry.material?.uvAtlas || p.geometry.material?.textureFactorPulse
-					);
-					dynamic.set( resource, active );
-				}
-				if ( !active ) continue;
+				const shape = shapeOf( resource );
+				if ( !shape.active ) continue;
 				const id = actor.modifierId ?? actor.gid;
 				if ( keep.has( id ) ) {
 					if ( assertUniqueOwners ) throw Error( "Duplicate material instance owner" );
@@ -108,14 +133,10 @@ export function createModelMaterialClocks( assertUniqueOwners = false ) {
 				}
 				row.animated.begin( seconds );
 				for ( let i = 0; i < row.clocks.length; i++ ) {
-					const p = resource.primitives[i]!, mods = p.modifierSource?.modifiers;
+					const p = resource.primitives[i]!;
 					const glow = row.clocks[i]?.glow;
 					glow?.step( delta, (actor.animationLod?.fraction ?? 0) <= .5 && (actor.opacity ?? 1) === 1 );
-					if (
-						mods &&
-						(mods.materialModifiers.some( m => m.kind === 1 ) ||
-							mods.textureModifiers.some( m => m.kind === 1 ))
-					) row.clocks[i] = { ...row.animated.sample( p, actor ), glow };
+					if ( shape.animated[i] ) row.clocks[i] = { ...row.animated.sample( p, actor ), glow };
 					else {
 						const clock = row.clocks[i];
 						if ( clock ) {
