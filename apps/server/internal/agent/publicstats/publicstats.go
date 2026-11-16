@@ -147,6 +147,11 @@ type Sources struct {
 	// contributor; a save the store refuses returns its own error. Nil
 	// leaves the write unserved.
 	TakeContributorTitle func(accountID string) error
+	// Referrals serves the website's referral routes (referrals.go); nil
+	// is SRO_REFERRALS off, and the routes answer 404. ReferralRules are
+	// the constants those routes show.
+	Referrals     ReferralSource
+	ReferralRules ReferralRules
 	// Sample reads the shard's online count and the hub's cumulative
 	// counters for P7 (status.go); nil leaves the status figures zero.
 	Sample func() (online int, metrics transport.Metrics)

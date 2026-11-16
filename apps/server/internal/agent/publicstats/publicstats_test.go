@@ -371,6 +371,9 @@ this pins the generator, not a hand-copied list.
 */
 func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 	s := privacyService(newFixture(), testWriteToken)
+	// A joined and a held invitation, so the referral answers carry rows.
+	s.src.Referrals = &fakeReferrals{rows: []domain.Referral{{Referee: "gamma", Referrer: "alpha", LinkedMs: 1},
+		{Referee: "delta", Referrer: "alpha", LinkedMs: 2, Held: true, QualifiedMs: 0}}}
 	// A named line and a notice, so both forms of character meet the schema.
 	s.src.Chat = func() []chatfeed.Line {
 		return []chatfeed.Line{{At: time.UnixMilli(1000), Kind: chatfeed.KindChat, Character: "Kekw", Author: "Kekw", Text: "hi"},
@@ -417,6 +420,9 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 		"/v1/accounts/{id}/characters":        "/v1/accounts/alpha/characters",
 		"/v1/accounts/{id}/contributor-title": "/v1/accounts/alpha/contributor-title",
 		"/v1/accounts/{id}/trades":            "/v1/accounts/alpha/trades",
+		"/v1/accounts/{id}/referrals":         "/v1/accounts/alpha/referrals",
+		"/v1/referral-codes/{code}":           "/v1/referral-codes/ALPHA234",
+		"/v1/referrals/held":                  "/v1/referrals/held",
 		"/public/v1/status":                   "/public/v1/status",
 		"/public/v1/schedule":                 "/public/v1/schedule",
 		"/public/v1/fortresses":               "/public/v1/fortresses",
