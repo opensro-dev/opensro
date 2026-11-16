@@ -673,6 +673,10 @@ type Runtime struct {
 	// NasrunSocket opens the Devil's Spirit's fifth avatar socket
 	// (SRO_NASRUN; game/nasrun; port-only, not native). False is native.
 	NasrunSocket bool
+	// NasrunTokens pays Devil's Spirit tokens on unique kills
+	// (SRO_NASRUN; nasrun_tokens.go; port-only, not native). False is
+	// native: no kill pays a token.
+	NasrunTokens bool
 	// PetInventoryPages raises grab pet and transport bags to their
 	// configured pages, each kind on its own (companion inventorypages.go;
 	// port-only, not native; owner 2026-11-07). Zero is native.
