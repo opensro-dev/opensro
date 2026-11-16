@@ -30,6 +30,7 @@ package quest
 
 import (
 	"math"
+	"opensro.online/server/internal/game/tunables"
 
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
@@ -75,7 +76,6 @@ const (
 	stablePurifySeconds      = 10
 	stableRegion             = 0x6a4b
 	stableRadius             = 200 // the holy-water handler's 0xC8
-	stablePurifyChance       = 50  // the purify timer fails rand % 101 above 0x32
 	amuletFirstQuest         = "QNO_WC_WAREHOUSE_W_2"
 	amuletSecondQuest        = "QNO_WC_WAREHOUSE_W_3"
 	amuletHunted             = "ITEM_QNO_WC_WAREHOUSE_W_2_01"
@@ -504,7 +504,7 @@ func (rt *Runtime) beginHolyWater(c *enterworld.Character, at simulation.Spawn, 
 		return []wire.Frame{questNotification("SN_TALK_QNO_EU_EASTEU_1_10")}, false
 	}
 	frames, started := rt.startGatherJob(c, gatherJob{quest: def.RefID, remaining: stablePurifySeconds, nextMs: nowMs + questSecondMs,
-		award: stableFilth, failSymbol: "SN_TALK_QNO_EU_EASTEU_1_12", roll: gatherAtMost, chance: stablePurifyChance})
+		award: stableFilth, failSymbol: "SN_TALK_QNO_EU_EASTEU_1_12", roll: gatherAtMost, chance: stablePurifyChance()})
 	if !started {
 		return []wire.Frame{questNotification("SN_TALK_QNO_EU_EASTEU_3_13")}, false
 	}
@@ -705,4 +705,18 @@ func (rt *Runtime) AdvanceItemUse(c *enterworld.Character, nowMs int64) []wire.F
 		return true
 	})
 	return frames
+}
+
+/*
+================
+stablePurifyChance
+
+The stable's purify chance, in rand % 101 (at most it yields a Stable
+Filth). Native is 0x32, the purify timer's; SRO_STABLE_PURIFY_CHANCE
+(game/tunables, port-only, not native) lets an operator raise it (#3714).
+Read when the purification starts, so one run keeps one value.
+================
+*/
+func stablePurifyChance() uint8 {
+	return uint8(tunables.Current().Int(tunables.StablePurifyChance))
 }
