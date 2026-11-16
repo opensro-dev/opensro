@@ -40,8 +40,20 @@ from the bag into warehouse slot 0.
 */
 func marketFixture(t *testing.T) (*Store, *testClock, *domain.Character, *domain.Character) {
 	t.Helper()
+	return marketFixtureIn(t, t.TempDir())
+}
+
+/*
+================
+marketFixtureIn
+
+marketFixture in a given directory, for a test that reopens the store.
+================
+*/
+func marketFixtureIn(t *testing.T, dir string) (*Store, *testClock, *domain.Character, *domain.Character) {
+	t.Helper()
 	clock := newTestClock()
-	s := openTest(t, t.TempDir(), clock)
+	s := openTest(t, dir, clock)
 	seller := seededCharacter()
 	buyer := seededCharacter()
 	buyer.Name = "MarketBuyer"
@@ -315,6 +327,53 @@ func TestMarketBuyWithGold(t *testing.T) {
 	}
 	if n := swordCount(t, s, seller, buyer); n != 1 {
 		t.Fatalf("after the gold sale the sword is in %d places", n)
+	}
+}
+
+/*
+================
+TestMarketBuyKeepsADeferredGoldWrite
+
+A gold write queued before the logout (MutateCharacterDeferred, still in
+the tick batch) is part of what the buy spends from, and survives it on
+disk: the buy reads the live record, and its transaction opens only after
+the deferred rows are flushed (beginTxLocked), so each door's ledger row
+books its own change.
+================
+*/
+func TestMarketBuyKeepsADeferredGoldWrite(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	s, clock, _, buyer := marketFixtureIn(t, dir)
+	listing := listSword(t, s, domain.MarketGold, 12600)
+	s.BeginTickBatch()
+	s.MutateCharacterDeferred(buyer, "quest-reward", func() { buyer.Gold = int64Ptr(*buyer.Gold + 500) })
+	// 12345 alone cannot pay 12600; with the queued 500 it can.
+	if _, err := s.MarketBuy(MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer,
+		Payer: buyer, Rules: testMarketRules}); err != nil {
+		t.Fatalf("the buy did not see the deferred gold: %v", err)
+	}
+	const want = 12345 + 500 - 12600
+	if *buyer.Gold != want {
+		t.Fatalf("the buyer holds %d gold, want %d", *buyer.Gold, want)
+	}
+	// Each door books its own change: the reward's +500 was flushed before
+	// the buy's transaction, so the buy's row is the price alone.
+	var paid int64
+	if err := s.syncDBLocked().QueryRow("SELECT gold FROM economy_ledger WHERE door = 'market-buy' AND char_id = ?", buyer.ID).Scan(&paid); err != nil || paid != -12600 {
+		t.Fatalf("the buy booked %d gold, %v; want -12600", paid, err)
+	}
+	var rewarded int64
+	if err := s.syncDBLocked().QueryRow("SELECT gold FROM economy_ledger WHERE door = 'quest-reward' AND char_id = ?", buyer.ID).Scan(&rewarded); err != nil || rewarded != 500 {
+		t.Fatalf("the deferred reward booked %d gold, %v; want 500", rewarded, err)
+	}
+	s.FlushTickBatch()
+	s.Close()
+	reopened := openTest(t, dir, clock)
+	for _, c := range reopened.Characters().CharactersForDivision(testDivision) {
+		if c.Name == buyer.Name && (c.Gold == nil || *c.Gold != want) {
+			t.Fatalf("on disk the buyer holds %v gold, want %d", c.Gold, want)
+		}
 	}
 }
 
