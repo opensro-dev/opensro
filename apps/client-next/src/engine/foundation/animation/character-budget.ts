@@ -96,13 +96,15 @@ export function characterMaterialClockBytes( model: CharacterModel ): number {
 characterSharedMesh
 
 Whether a primitive draws from a mesh the device keeps one GPU copy of,
-shared by every batch that draws it (device/geometry.ts sharedMesh): an
-immutable skinned primitive. Cloth and ribbons rewrite their vertices each
-frame, so each batch keeps its own stream.
+shared by every batch that draws it (device/geometry.ts sharedMesh): a
+skinned primitive that is not a ribbon. A skinned cloth piece shares it
+too: its solver writes only the stream in the piece's own skin table
+(cloth-stream.ts), never the vertices. Ribbons and unskinned cloth rewrite
+their vertices each frame, so each batch keeps its own stream.
 ================
 */
 export function characterSharedMesh( primitive: CharacterModel["primitives"][number] ): boolean {
-	return !primitive.cloth && !primitive.ribbon && !!primitive.geometry.joints && !!primitive.geometry.weights;
+	return !primitive.ribbon && !!primitive.geometry.joints && !!primitive.geometry.weights;
 }
 /*
 ================
@@ -136,7 +138,7 @@ characterBatchBytes
 
 Charge retained batch capacity rather than only this frame's visible
 population. A shared mesh is charged once per frame plan, not here
-(characterMeshBytes); a batch's own streams (cloth, ribbons, unskinned
+(characterMeshBytes); a batch's own streams (ribbons, unskinned cloth and
 meshes) keep a GPU copy and a CPU mirror each.
 ================
 */
@@ -180,7 +182,9 @@ export function characterBatchBytes( model: CharacterModel, count: number ): num
 				0) +
 			palettes( primitive, instances ) + slots * 112 + instances * 96 +
 			(characterSharedMesh( primitive ) ?
-				0 :
+				// A shared cloth piece keeps a skin table of its own: the skin
+				// entries, then its solver's stream (device/geometry.ts).
+				primitive.cloth ? (geometry.joints?.length ?? 0) * 8 * 2 : 0 :
 				geometry.positions.length / 3 * 14 * 4 * 2 + geometry.indices.byteLength +
 				(geometry.joints?.length ?? 0) * 8 * 2) +
 			64 + 96 + 20;
