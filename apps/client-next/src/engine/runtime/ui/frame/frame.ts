@@ -33,7 +33,8 @@ import { latticeCells } from "@/engine/foundation/ui/inventory-layout";
 import { normalTile } from "@/engine/foundation/ui/normal-tile";
 import { MESSAGE_FRAME, MESSAGE_TILE, partyProposalAssets } from "@/engine/foundation/ui/party-proposal";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
-import { captionWords, textLines } from "@/engine/foundation/ui/text-lines";
+import { NARROW_FONT_INDEX } from "@/engine/foundation/rendering/ui-glyphs";
+import { captionWords, fitLines, textLines } from "@/engine/foundation/ui/text-lines";
 import { messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 
 export { beginWindow, endWindow, unloadedImages } from "./admission";
@@ -306,9 +307,6 @@ const CAPTION_MARGIN = 4;
 // A caption the fit had to shrink or wrap may come this close to the
 // plate's edge: inside the bevel, which is about two pixels wide.
 const CAPTION_TIGHT_MARGIN = 2;
-// The atlas's ui-small face (native-ui-font-atlas.json font 1): one
-// pixel shorter and about a sixth narrower than the ui-default face 0.
-const SMALL_CAPTION_FONT = 1;
 // The blank between a wrapped label's two lines, below the first line's
 // descent: one label reads as one, apart from the rows beside it.
 const WRAP_LEADING = 1;
@@ -379,18 +377,21 @@ authoredText
 
 A static's text in its client rect. clipToControl keeps it inside
 that rect: true ends a long line with an ellipsis, "clip" cuts it
-at the edge.
+at the edge. A static that carries a text key is a label; label
+overrides that for a caption or a value its caller lets run past its
+box like one (the academy's "80(80)" level in its 19-pixel field).
 ================
 */
 export function authoredText(
 	frame: UiAuthoredFrame,
-	{ node, ox, oy, value, clipToControl = false, fontStyle = 0 }: {
+	{ node, ox, oy, value, clipToControl = false, fontStyle = 0, label = node.text !== "" }: {
 		node: AuthoredControl;
 		ox: number;
 		oy: number;
 		value: string;
 		clipToControl?: boolean | "clip";
 		fontStyle?: number;
+		label?: boolean;
 	}
 ) {
 	const quads = frame.quads, paths = frame.paths, text = frame.text, full = frame.full;
@@ -427,7 +428,7 @@ export function authoredText(
 	// (clipToControl, the guild page's "Guild master" before the race
 	// mark) wraps too, its lines inside the box's columns, instead of
 	// being cut to "Guild ma..." (#3674).
-	if ( clipToControl !== "clip" && frame.fitWindowLabels() && node.text !== "" && value.includes( " " ) ) {
+	if ( clipToControl !== "clip" && frame.fitWindowLabels() && label && value.includes( " " ) ) {
 		const measure = ( line: string ) => text.run( line, 0, node.fontIndex ).width;
 		const width = measure( value );
 		if ( width > box[2] ) {
@@ -472,8 +473,8 @@ export function authoredText(
 			fontStyle,
 			hAlign: node.hAlign,
 			vAlign: node.vAlign,
-			// A keyed static is a label; a value field's text keeps to its box.
-			label: node.text !== "",
+			// A label may run past its box; a value field's text keeps to it.
+			label,
 			...(clipToControl ?
 				{ overflow: clipToControl === "clip" ? "clip" as const : "ellipsis" as const } :
 				{})
@@ -573,11 +574,12 @@ How a button's caption is drawn inside its plate and client box. Port-only, not 
 every caption whole in its own face and lets it run past the plate,
 #3675). A caption wider than its room is, in order of preference:
 
-  the whole caption in the ui-small face ("Dismiss" on the party
+  the whole caption in the narrow face, NARROW_FONT_INDEX ("Dismiss" on the party
   window's 44-pixel plate, "Block Removal", the Item Mall's "Buy Item
   Worn" in its 77-pixel client box);
-  the whole caption on two lines inside the plate, in its own face and
-  then the small one ("Block" / "Registration" on an 88 x 24 plate);
+  the whole caption on two lines inside the plate (fitLines), in its
+  own face and then the narrow one ("Block" / "Registration" on an
+  88 x 24 plate);
   the leading words that fit ("Delete message" -> "Delete", "Check for
   duplicate entries" -> "Check").
 
@@ -597,19 +599,17 @@ function buttonCaptionFit(
 	const comfortable = Math.min( box[2], plate[2] - 2 * CAPTION_MARGIN ),
 		room = Math.min( box[2], plate[2] - 2 * CAPTION_TIGHT_MARGIN );
 	if ( text.run( caption, 0, own ).width <= comfortable ) return whole;
-	if ( text.run( caption, 0, SMALL_CAPTION_FONT ).width <= room ) {
-		return { label: caption, fontIndex: SMALL_CAPTION_FONT, lines: [ caption ] };
+	const measure = ( line: string, fontIndex: number ) => text.run( line, 0, fontIndex ).width;
+	if ( measure( caption, NARROW_FONT_INDEX ) <= room ) {
+		return { label: caption, fontIndex: NARROW_FONT_INDEX, lines: [ caption ] };
 	}
-	if ( caption.includes( " " ) ) {
-		for ( const font of [ own, SMALL_CAPTION_FONT ] ) {
-			const measure = ( line: string ) => text.run( line, 0, font ).width;
-			const lines = textLines( caption, room, measure );
-			const ink = text.lineInk( font );
-			// The pair's ink may fill the plate's height: a line's ink
-			// counts its descent, which most captions leave empty.
-			if ( lines.length === 2 && 2 * ink.height + WRAP_LEADING <= plate[3] ) {
-				return { label: caption, fontIndex: font, lines };
-			}
+	// Two lines, own face first (fitLines); on a plate the pair must also
+	// fit its height. The pair's ink may fill it: a line's ink counts its
+	// descent, which most captions leave empty.
+	for ( const face of [ own, NARROW_FONT_INDEX ] ) {
+		const fit = fitLines( caption, room, face, measure );
+		if ( fit?.lines.length === 2 && 2 * text.lineInk( fit.fontIndex ).height + WRAP_LEADING <= plate[3] ) {
+			return { label: caption, fontIndex: fit.fontIndex, lines: fit.lines };
 		}
 	}
 	const words = captionWords( caption, comfortable, line => text.run( line, 0, own ).width );

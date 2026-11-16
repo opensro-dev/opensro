@@ -252,10 +252,47 @@ export function titleText(
 		textRunQuad( layoutGlyphs( atlas, value, rect, clip, color, { ...style, overflow: "ellipsis" } ).quads ) :
 		undefined;
 	const wrapped = wide ? wrappedRun( atlas, value, rect, clip, color, style ) : undefined;
+	const narrow = wide ? narrowRun( atlas, value, rect, clip, color, style ) : undefined;
 	return [ Object.freeze( {
 		...run,
-		textLayout: { box: rect, fitted, ...(wrapped ? { wrapped } : {}), ...(style.label ? { label: true } : {}) }
+		textLayout: {
+			box: rect,
+			fitted,
+			...(wrapped ? { wrapped } : {}),
+			...(narrow ? { narrow } : {}),
+			...(style.label ? { label: true } : {})
+		}
 	} ) ];
+}
+
+// The retail UI's small face, the narrower sibling of face 0 ("Experience"
+// is 53 pixels in it, 59 in face 0).
+export const NARROW_FONT_INDEX = 1;
+
+/*
+================
+narrowRun
+
+Port-only, not native (the Experimental "Fit window labels"): a face 0
+text too wide for its box on one line in NARROW_FONT_INDEX, when that
+fits the box. Undefined for any other face or a line still too wide.
+resolveTextOverlaps tries it after a label's slide.
+================
+*/
+function narrowRun(
+	atlas: FontAtlas,
+	value: string,
+	rect: UiRect,
+	clip: UiRect,
+	color: UiQuad["color"],
+	style: GlyphStyle
+): UiQuad | undefined {
+	if ( (style.fontIndex ?? 0) !== 0 || style.fontStyle === 2 || !atlas.fonts[String( NARROW_FONT_INDEX )] ) {
+		return undefined;
+	}
+	const laid = layoutGlyphs( atlas, value, rect, clip, color, { ...style, fontIndex: NARROW_FONT_INDEX } );
+	if ( laid.width > rect[2] ) return undefined;
+	return textRunQuad( laid.quads ) ?? undefined;
 }
 
 // The blank between a wrapped text's two lines, below the first line's
@@ -503,8 +540,9 @@ const FIT_INK_GAP = 2;
 fittedPlacement
 
 The run a colliding text is drawn with under "Fit window labels"
-(resolveTextOverlaps): its wrap, its slid line, its whole line or, last,
-its shortened run (null when no glyph of that fits).
+(resolveTextOverlaps): its wrap, its slid line, its line in the narrow
+face, its whole line or, last, its shortened run (null when no glyph of
+that fits). A value tries only its wrap and its narrow line.
 ================
 */
 function fittedPlacement(
@@ -515,8 +553,9 @@ function fittedPlacement(
 ): UiQuad | null {
 	const { textLayout, ...run } = q, layout = textLayout!;
 	if ( layout.wrapped && !wrapEnters( layout.wrapped ) ) return layout.wrapped;
+	const narrow = layout.narrow && !enters( layout.narrow ) ? layout.narrow : undefined;
 	// A value keeps to its field: only a label's line leaves its box.
-	if ( !layout.label ) return layout.fitted ?? null;
+	if ( !layout.label ) return narrow ?? layout.fitted ?? null;
 	const [inkLeft, inkRight] = inkExtent( q ), reach = Math.max( 0, inkRight - inkLeft - layout.box[2] );
 	const shifts: number[] = [];
 	for ( const neighbor of neighbors ) {
@@ -532,6 +571,7 @@ function fittedPlacement(
 		const slid: UiQuad = { ...run, rect: [ q.rect[0] + dx, q.rect[1], q.rect[2], q.rect[3] ] };
 		if ( !enters( slid ) ) return slid;
 	}
+	if ( narrow ) return narrow;
 	const clear = neighbors.every( neighbor => {
 		const [left, right, top, bottom] = inkExtent( neighbor );
 		return !runInkEnters( q, [
