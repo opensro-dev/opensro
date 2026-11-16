@@ -1,0 +1,17 @@
+{
+  "shards": [
+    {
+      "id": "global-official",
+      "name": "OpenSRO",
+      "nativeServerId": 1,
+      "nativeFarmId": 0,
+      "capacity": 1000,
+      "default": true,
+      "test": false,
+      "enabled": true,
+      "controlUrl": "http://gameworld-global-official:8791",
+      "transportUrl": "http://gameworld-global-official:8788",
+      "publicTransportUrl": "/shards/global-official"
+    }
+  ]
+}
