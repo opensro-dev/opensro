@@ -358,3 +358,50 @@ func TestSwapItemsOfflineCoversDormantCompanions(t *testing.T) {
 	}
 	t.Fatal("owner not reloaded")
 }
+
+/*
+================
+TestSwapItemsOfflineCoversThePendingSookChest
+
+A survival arena chest still pending on the character (rolled before a
+full bag or a disconnect) holds its rows until they are claimed: the
+preview counts its row, and -apply rewrites it and survives a reopen.
+================
+*/
+func TestSwapItemsOfflineCoversThePendingSookChest(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	owner := &domain.Character{Name: "Chested"}
+	if err := s.CreateCharacter(testDivision, "acct-chested", owner); err != nil {
+		t.Fatal(err)
+	}
+	s.Mutate("swap-chest-fixture", func() {
+		owner.SookChest = &domain.ArenaChest{ID: "run-1", Pending: true,
+			Items: []domain.InventoryRow{{Slot: 0, RefObjID: 1, Codename: "SUN", StackCount: 3}}}
+	})
+	preview, err := s.SwapItemsOffline(testDivision, []string{"Chested"}, sunToMoon, false)
+	if err != nil || len(preview) != 1 || preview[0].Container != "sook chest" {
+		t.Fatalf("preview %v %+v", err, preview)
+	}
+	if owner.SookChest.Items[0].Codename != "SUN" {
+		t.Fatal("a preview changed memory")
+	}
+	if applied, err := s.SwapItemsOffline(testDivision, []string{"Chested"}, sunToMoon, true); err != nil || len(applied) != 1 {
+		t.Fatalf("apply %v %+v", err, applied)
+	}
+	s.Close()
+
+	reopened := openTest(t, dir, newTestClock())
+	for _, c := range reopened.Characters().CharactersForDivision(testDivision) {
+		if c.Name != "Chested" {
+			continue
+		}
+		if c.SookChest == nil || c.SookChest.Items[0].Codename != "MOON" || c.SookChest.Items[0].StackCount != 3 {
+			t.Fatalf("chest %+v", c.SookChest)
+		}
+		return
+	}
+	t.Fatal("character not reloaded")
+}

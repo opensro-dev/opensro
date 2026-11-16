@@ -365,6 +365,19 @@ func (s *Store) swapItemsOfflineLocked(division string, scope swapScope, swap It
 				return nil, err
 			}
 		}
+		// The survival arena's rolled chest (domain.ArenaChest) keeps its
+		// items on the character until they are claimed, across a full bag
+		// and a reconnect, so a pending chest can hold a plain elixir. The
+		// chest is copied before the swap so the snapshot never shares rows
+		// with the live record.
+		if next.SookChest != nil {
+			chest := *next.SookChest
+			chest.Items = append([]domain.InventoryRow(nil), chest.Items...)
+			next.SookChest = &chest
+			if err := swapRows(name, "sook chest", chest.Items, swap, &out); err != nil {
+				return nil, err
+			}
+		}
 		if len(out) > before {
 			characters[selected] = next
 		}
