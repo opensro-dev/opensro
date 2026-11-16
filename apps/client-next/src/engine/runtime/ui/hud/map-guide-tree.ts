@@ -16,12 +16,15 @@ art), drawn with the chat window's faces: the com_scroll_bar track, the
 gold chat_arrow_up / _down arrows and the com_scroll_button thumb, which
 drags. The owner's v1.696 screenshot of the Monster tab shows exactly
 these; the bone-knot gd_scroll_* art (#3392) is not what the guide draws.
-This module paints one frame of the tree; the map tools own which group
-is open, the scroll and the rows themselves.
+The wheel over the panel steps one row a notch (0xB48B20, issue #3515).
+This module paints one frame of the tree and owns its scroll
+(createGuideScroll); the map tools own which group is open and the rows
+themselves.
 
 ===========================================================================
 */
 import type { UiControl, UiQuad, UiRect } from "@/engine/contracts/ui";
+import { containsPoint } from "@/engine/foundation/ui/hit-test";
 import type { GlyphStyle } from "@/engine/foundation/rendering/ui-glyphs";
 import type { GuideRow } from "@/engine/foundation/ui/worldmap-guide";
 
@@ -76,10 +79,15 @@ const SCROLL_TRACK: UiRect = [ 264, 72, 16, 146 ];
 const SCROLL_BUTTON = 16;
 // A main row's id prefix, in both trees.
 export const GUIDE_MAIN = "map-guide-main:";
-export const GUIDE_SCROLL_ID = "map-guide-scroll";
+const GUIDE_SCROLL_ID = "map-guide-scroll";
+const GUIDE_SCROLL_UP = GUIDE_SCROLL_ID + "-up";
+const GUIDE_SCROLL_DOWN = GUIDE_SCROLL_ID + "-down";
 export const GUIDE_SCROLL_THUMB = GUIDE_SCROLL_ID + "-thumb";
 // The thumb's travel in pixels, for turning a drag into rows.
-export const GUIDE_SCROLL_TRAVEL = SCROLL_TRACK[3];
+const GUIDE_SCROLL_TRAVEL = SCROLL_TRACK[3];
+// A hair under a whole row of drag still counts as one, so a drag across
+// the whole travel reaches the last row.
+const DRAG_ROW_SLACK = 1e-6;
 // The badge's room at a row's right end (port-only instance badge).
 const BADGE_WIDTH = 44;
 const BADGE_TEXT = "Inst.";
@@ -155,6 +163,67 @@ export interface GuideTree {
 		quads( value: string, rect: UiRect, clip: UiRect, color: UiQuad["color"], style?: GlyphStyle ): UiQuad[];
 	};
 	size( path: string ): readonly [number, number] | undefined;
+}
+
+/*
+================
+createGuideScroll
+
+The tree's first shown row and every input that moves it: an arrow a
+row, the thumb's drag by the rows its pixels stand for over the travel,
+and the wheel over the open panel one row a notch whatever the delta
+(v1.696 steps its bar by the line step on the delta's sign alone,
+0xB48B20, issue #3515). The map tools report the panel's rect each
+frame and the paint the rows; the position never passes the last page.
+================
+*/
+export function createGuideScroll() {
+	let first = 0, range = 0, carry = 0;
+	let bounds: UiRect | null = null;
+	const clamp = ( value: number ) => Math.max( 0, Math.min( range, value ) );
+	return {
+		first: () => first,
+		reset() {
+			first = 0;
+			carry = 0;
+		},
+		// The open panel's rect, or null while it is shut.
+		place( rect: UiRect | null ) {
+			bounds = rect;
+		},
+		// The painted rows' count; the position clamps to what they leave.
+		rows( count: number ) {
+			range = Math.max( 0, count - GUIDE_TREE_ROWS );
+			first = clamp( first );
+		},
+		// An arrow's click; false for other ids.
+		activate( id: string ): boolean {
+			if ( id !== GUIDE_SCROLL_UP && id !== GUIDE_SCROLL_DOWN ) return false;
+			first = clamp( first + (id === GUIDE_SCROLL_DOWN ? 1 : -1) );
+			return true;
+		},
+		// The thumb's drag; false for other ids.
+		drag( id: string, dy: number ): boolean {
+			if ( id !== GUIDE_SCROLL_THUMB ) return false;
+			if ( range <= 0 ) return true;
+			carry += (dy * range) / GUIDE_SCROLL_TRAVEL;
+			const step = Math.trunc( carry + (carry > 0 ? DRAG_ROW_SLACK : -DRAG_ROW_SLACK) );
+			carry -= step;
+			const next = first + step;
+			first = clamp( next );
+			// Past either end the thumb holds there, and so does the drag:
+			// pixels spent beyond the end are not owed back on the return.
+			if ( next !== first ) carry = 0;
+			return true;
+		},
+		// The wheel; false when it is not over the open panel.
+		wheel( x: number, y: number, delta: number ): boolean {
+			if ( !bounds || delta === 0 || !containsPoint( bounds, x, y ) ) return false;
+			first = clamp( first + Math.sign( delta ) );
+			carry = 0;
+			return true;
+		}
+	};
 }
 
 /*

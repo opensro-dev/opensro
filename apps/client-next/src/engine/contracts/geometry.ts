@@ -37,6 +37,13 @@ export interface Geometry {
 	// Such materials share staged slabs that reach the GPU in one write a
 	// frame; any other material is written once (its rare updates still work).
 	readonly dynamicMaterial?: boolean;
+	// Each instance row carries its own equipment glow colour and UV in a
+	// row-state stream beside the instances (updateRowStates), which the
+	// draw's shader variant reads in place of the material's (every other
+	// draw keeps the plain shader and no row-state binding): rows of several actors share
+	// one draw while each keeps its own glow phase. Gain, alpha test and the
+	// enabled bit stay in the material uniform (updateEquipmentGlow).
+	readonly rowStates?: boolean;
 	// A skinned cloth mesh's stream slots: the vertex each entry of its cloth
 	// stream holds, in index order (cloth-stream.ts clothStreamSlots). Its
 	// skin table carries a slot map of one entry a vertex and the stream,

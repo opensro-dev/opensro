@@ -75,6 +75,34 @@ export interface PresentationOutput {
 
 /*
 ================
+ClipFacts
+
+What presentation reads of a body's clip list for every actor every
+frame, derived once when the catalogue admits the row (presentation-
+catalog.ts clipFacts): the names as a set, and the clip each role takes
+among the names a body may hold. A row's clip list is never edited after
+admission; a manifest admitted later makes new rows with new facts.
+================
+*/
+export interface ClipFacts {
+	readonly names: ReadonlySet<string>;
+	// The base clip when the body lacks its role: stand, else its first clip.
+	readonly fallback: string;
+	// 8E64F0's death from the down state 4: deathquick, else downdie, else death.
+	readonly quickDeath: string;
+	// The death base loop: deathLoop, else deathloop, else death.
+	readonly deathLoop: string;
+	// Whether the body holds either death loop (presentation-state enterDeath).
+	readonly loopsDeath: boolean;
+	readonly sitting: string;
+	readonly sitDown: string;
+	readonly standUp: string;
+	// The hit reaction: hit1, else hit, else none ("").
+	readonly hit: string;
+}
+
+/*
+================
 Resource
 ================
 */
@@ -103,6 +131,8 @@ export interface Resource {
 	refObjId: number;
 	glb: string;
 	clips: readonly string[];
+	// Derived from clips at admission; a row built from another keeps both.
+	clipFacts: ClipFacts;
 	previewGlb?: string;
 	previewClips?: readonly string[];
 }
@@ -131,6 +161,8 @@ appearance overlays and child booth actors share this resource shape.
 export interface SecondaryModel {
 	readonly glb: string;
 	readonly clips: readonly string[];
+	// A death model's facts replace the body's with its clips (resourceFor).
+	readonly clipFacts: ClipFacts;
 	readonly animationStates?: Record<string, AnimationMetadata>;
 	readonly ambientParticles?: readonly ModelParticle[];
 	readonly animationParticles?: readonly AnimationParticleSet[];
@@ -284,6 +316,163 @@ export interface CharacterPresentationState {
 	equipmentParticles?: readonly ModelParticle[];
 	defaultWear?: { resource: Resource; keys: readonly string[]; };
 	fortressIndex?: number;
+	// The last steady decision and the inputs it was taken from
+	// (MotionRetained); undefined after any frame that was not steady.
+	motion?: MotionRetained;
+	// The last steady resolve (actor-appearance.ts) and its inputs
+	// (AppearanceRetained); undefined after any resolve that was not steady.
+	appearance?: AppearanceRetained;
+}
+
+/*
+================
+MotionStamp
+
+What a steady decide (actor-motion.ts) read, as values and identities: a
+frame whose stamp equals the retained one's would decide the same again.
+The entity row stands for every row field decide reads: the world
+projection replaces a row on any change and freezes it (presentation.ts).
+The published catalogue's epoch stands for its animation states, motion
+URLs and dress. Each other term is one read of an owner decide makes.
+================
+*/
+export interface MotionStamp {
+	readonly entity: EntityState;
+	readonly glb: string;
+	readonly codename: string;
+	readonly clips: readonly string[];
+	readonly clipFacts: ClipFacts;
+	readonly animationStates: Record<string, AnimationMetadata> | undefined;
+	// The appearance's avatar commit; every empty commit is one value.
+	readonly commit: readonly number[] | undefined;
+	readonly manifest: number;
+	readonly hpZero: boolean;
+	readonly abnormal: number;
+	readonly healthDead: boolean;
+	readonly pendingDeath: boolean;
+	// The token of a hit with damage, the only hit that changes the state.
+	readonly hitToken: string | undefined;
+	readonly cast: CastState | undefined;
+	readonly waiting: boolean;
+	readonly actionLayers: number;
+	readonly hostMotions: number;
+	readonly stance: boolean;
+	readonly posture: Posture | undefined;
+	// An idle fidget is set on a clip the body holds.
+	readonly idle: boolean;
+	readonly poseMoving: boolean;
+	readonly weaponSet: string | undefined;
+	readonly armed: boolean;
+	readonly local: boolean;
+}
+
+/*
+================
+MotionRetained
+
+A steady decision, its stamp, and the presentation frame it was last
+presented at: it stands for decide only on the very next frame, so a
+frame the entity was not presented (unselected, not resolved, a throw)
+ends it.
+================
+*/
+export interface MotionRetained {
+	readonly decision: MotionDecision;
+	readonly stamp: MotionStamp;
+	frame: number;
+}
+
+/*
+================
+MotionDue
+
+Whether decide must run for an entity this frame. retained and stamp are
+both given only when a steady decision from the previous frame exists;
+the production rule is presentation-due.ts motionDue, and a test passes
+an always-due rule to present every entity in full.
+================
+*/
+export type MotionDue = ( retained: MotionRetained | undefined, stamp: MotionStamp | undefined ) => boolean;
+
+/*
+================
+AppearanceStamp
+
+What a steady resolve (actor-appearance.ts) read besides the residency it
+asks again every frame: the entity row (every row field it reads), the
+published catalogue's epoch (catalog, dress, items and item ids), the
+resource resourceFor answers (its skin, disguise, death model, stage and
+variant), and the reads of the equipment dress: the active skin, the
+hidden weapon, the emptied hands, the fortress clothes' inputs and the
+server's dress rules.
+================
+*/
+export interface AppearanceStamp {
+	readonly entity: EntityState;
+	readonly manifest: number;
+	readonly resource: Resource | undefined;
+	readonly disguise: AppearanceChoice | undefined;
+	readonly skin: TransformSkin | undefined;
+	readonly local: boolean;
+	readonly weaponHidden: boolean;
+	readonly emoteHidden: boolean;
+	readonly dead: boolean;
+	// The fortress clothes last shown (fortressAppearance's own input).
+	readonly fortressIndex: number | undefined;
+	// The local player's arena team, -1 without a local player.
+	readonly localTeam: number;
+	readonly normalFortressClothes: boolean;
+	readonly fortress: GameplayState["fortress"];
+	readonly social: GameplayState["social"];
+	readonly serverName: string | undefined;
+	readonly enchantSparks: boolean;
+	readonly jobSuitHidesArmor: boolean;
+	readonly moonlitThiefSuit: boolean;
+}
+
+/*
+================
+AppearanceRetained
+
+A steady resolve's result and what it asked the resource owner, in its
+order: the body, its particle programs, then the worn parts (parts) and
+the assembly it set (assembly). A skipped resolve asks the same again, so
+the cache order, the wanted and planned sets and every retry stay as a
+resolve leaves them; it stands only on the next frame, like
+MotionRetained.
+================
+*/
+export interface AppearanceRetained {
+	readonly result: ActorAppearance;
+	readonly stamp: AppearanceStamp;
+	readonly parts: readonly string[] | undefined;
+	readonly assembly: readonly CharacterAttachment[] | undefined;
+	frame: number;
+}
+
+/*
+================
+AppearanceDue
+
+Whether resolve must run for an entity this frame, given as MotionDue is.
+================
+*/
+export type AppearanceDue = (
+	retained: AppearanceRetained | undefined,
+	stamp: AppearanceStamp | undefined
+) => boolean;
+
+/*
+================
+PresentationDue
+
+The rules that decide when an entity's appearance is resolved and its
+motion decided again (presentation-due.ts); a test passes always-due ones.
+================
+*/
+export interface PresentationDue {
+	readonly appearance: AppearanceDue;
+	readonly motion: MotionDue;
 }
 
 /*
@@ -491,6 +680,7 @@ export interface ActorOwner {
 		readonly idleStates: ReadonlyMap<number, PresentationIdleState>;
 		readonly combatStanceEnds: ReadonlyMap<number, number>;
 	};
+	readonly due: PresentationDue;
 }
 
 /*
@@ -546,6 +736,41 @@ export interface ActorPass {
 	readonly animationHolders: { actor: CharacterActor; sets: readonly AnimationParticleSet[]; }[];
 	readonly particleHolders: { actor: CharacterActor; particles: readonly ModelParticle[]; }[];
 	readonly localEntity: EntityState | undefined;
+}
+
+/*
+================
+MotionDecision
+
+What actor-motion.ts decide hands advance (actor-advance.ts) for one
+actor this frame: its retained state, the layers to play at this frame's
+time, the overlay installations decide bound, and the choices the
+published actor is built from.
+================
+*/
+export interface MotionDecision {
+	readonly state: CharacterPresentationState;
+	readonly nativePose: Pose;
+	readonly renderPose: Pose;
+	// Advance writes each dispatched layer back in place.
+	readonly layers: CharacterLayer[];
+	// The overlay installations bound this frame; advance drops the others.
+	readonly activationKeys: ReadonlySet<string>;
+	readonly installations: Map<string, AnimationActivation>;
+	readonly cast: CastState | undefined;
+	readonly dead: boolean;
+	readonly authorityDead: boolean;
+	readonly seat: number | undefined;
+	readonly clip: string;
+	readonly looping: boolean;
+	readonly posture: Posture | undefined;
+	readonly armedIdle: string;
+	// The action mask after this frame's transitions (0x200: state 9, feet).
+	readonly actionMask: number;
+	// decide changed no retained state and nothing it decided depends on
+	// the clock but the locomotion layers: with the same stamp next frame
+	// it would decide the same, so advance may run on this decision again.
+	readonly steady: boolean;
 }
 
 /*

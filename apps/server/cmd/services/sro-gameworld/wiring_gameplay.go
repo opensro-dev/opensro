@@ -23,6 +23,7 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravan"
+	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
@@ -94,6 +95,9 @@ type gameplayPlane struct {
 	// contributors is the Contributor title (nil when
 	// SRO_CONTRIBUTOR_TITLES is off; wiring_contributor.go).
 	contributors *contributor.Registry
+	// caravanAgents is the AI Caravan & Thief runtime (nil when
+	// SRO_AI_CARAVANS is off; wiring_caravanai.go).
+	caravanAgents *caravanai.Runtime
 }
 
 /*
@@ -114,6 +118,9 @@ func newGameplayPlane(
 	authoredAreas *worldarea.Catalog,
 	textdata *enterworld.TextdataCatalogs,
 ) (*gameplayPlane, error) {
+	// SRO_CHRISTMAS_EVENT_MODE=so_ok_2006 (port-only, not native): So-ok
+	// wears Santa So-Ok for the window (wiring_christmas.go).
+	devPaths.NpcSpawns.Look = sookChristmasNpcLook()
 	deps, err := newBootstrapDependencies(authorityStore, devPaths, characterRoster, ownedShard, textdata)
 	if err != nil {
 		return nil, err
@@ -245,6 +252,9 @@ func newGameplayPlane(
 	// SRO_CHRISTMAS_EVENT (port-only, not native in this client build):
 	// the Christmas event's switch and UTC window (wiring_christmas.go).
 	items.Christmas = christmasEventFromEnv()
+	// SRO_CHRISTMAS_EVENT_MODE=so_ok_2006 (port-only, not native): So-Ok's
+	// Christmas Gift on the same switch and window (wiring_christmas.go).
+	items.SoOkChristmas = sookChristmasFromEnv(deps.ItemReferences())
 	// SRO_UNIQUE_GAP_EXEMPT / SRO_UNIQUE_POP_TICKET / SRO_UNIQUE_MAX_LEVEL_LOOT
 	// / SRO_UNIQUE_SEAL_DROPS (port-only, not native): uniques ignore the
 	// level-gap admission, one Magic Pop ticket per kill, a top-band unique's
@@ -390,6 +400,9 @@ func newGameplayPlane(
 	}
 	movementRuntime := movement.NewRuntime(deps, items.Worlds)
 	movementRuntime.Validator = water
+	// SRO_POSITION_STREAM (port-only, not native): the ticker reads the
+	// same switch (worldsession.NewTicker).
+	movementRuntime.PositionStream = simulation.PositionStreamFromEnv()
 	movementRuntime.PathGuard = movement.NewPathGuardFromEnv(water)
 	movementRuntime.ClientClip = movement.NewClientClipFromEnv(water)
 	// Surface ownership (native source pNavCell): every character walk starts

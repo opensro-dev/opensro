@@ -8,6 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 const { gmRequest } = await import( "../../src/engine/foundation/gameplay/gm-command.ts" );
 const { createAppearanceLookup } = await import( "../../src/engine/runtime/characters/appearance-lookup.ts" );
+const { clipFacts } = await import( "../../src/engine/runtime/characters/presentation-catalog.ts" );
 
 test("training dummy command resolves only published levels through native GM spawn", () => {
 	const monster = code => {
@@ -29,7 +30,13 @@ test("training dummy command resolves only published levels through native GM sp
 });
 
 test("dummy namespace reuses the wooden model without changing normal monsters", () => {
-	const body = { refObjId: 1933, codename: "MOB_CH_MANGNYANG", glb: "/wooden.glb", clips: [] };
+	const body = {
+		refObjId: 1933,
+		codename: "MOB_CH_MANGNYANG",
+		glb: "/wooden.glb",
+		clips: [],
+		clipFacts: clipFacts( [] )
+	};
 	const entity = { gid: 1, kind: "monster", regionId: 24744, x: 0, y: 0, z: 0, heading: 0, name: "Dummy" };
 	const lookup = createAppearanceLookup( {
 		referenceAppearances: { skin: () => undefined, get: () => undefined },
