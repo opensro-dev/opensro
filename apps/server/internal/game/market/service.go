@@ -104,6 +104,11 @@ type Service struct {
 	Tradeable  func(row domain.InventoryRow) bool
 	Characters func(account string) []*domain.Character
 	Online     func(characterID int64) bool
+	// WhileOffline runs a write against the character only while it holds
+	// no world admission, under the gate entry admits under, and reports
+	// online (write not run) otherwise. Online above is the published
+	// session list, for display only: it can lag an entry.
+	WhileOffline func(c *domain.Character, write func() error) (online bool, err error)
 }
 
 /*
@@ -287,12 +292,27 @@ func (s *Service) Buy(account string, body publicstats.MarketBuyBody) (publicsta
 		if payer == nil {
 			return publicstats.MarketSaleView{}, publicstats.ErrNotOwned
 		}
-		if s.Online(payer.ID) {
-			return publicstats.MarketSaleView{}, publicstats.ErrMarketOnline
-		}
 		request.Payer = payer
 	}
-	sale, err := s.Store.MarketBuy(request)
+	var sale domain.MarketSale
+	buy := func() error {
+		var err error
+		sale, err = s.Store.MarketBuy(request)
+		return err
+	}
+	if request.Payer == nil {
+		err = buy()
+	} else {
+		// The payer's record is written only while no entry admits it:
+		// WhileOffline holds the gate entry admits under, so an entry
+		// either comes first and refuses the buy, or follows and reads
+		// the paid gold.
+		var online bool
+		online, err = s.WhileOffline(request.Payer, buy)
+		if online {
+			return publicstats.MarketSaleView{}, publicstats.ErrMarketOnline
+		}
+	}
 	if err != nil {
 		return publicstats.MarketSaleView{}, err
 	}

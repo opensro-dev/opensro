@@ -54,5 +54,8 @@ func marketService(gameplay *gameplayPlane, authority *store.Store, shard string
 			return out
 		},
 		Online: online,
+		WhileOffline: func(c *domain.Character, write func() error) (bool, error) {
+			return gameplay.items.WhileOffline(shard, c.Name, write)
+		},
 	}
 }

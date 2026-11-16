@@ -27,6 +27,10 @@ type fakeServiceStore struct {
 	bought  []domain.MarketBuyRequest
 	byID    map[int64]domain.MarketListing
 	storage domain.AccountStorage
+	// enteredDuringBuy marks characters whose entry lands after the
+	// session list was read: the list says offline, the admission gate
+	// says online.
+	enteredDuringBuy map[int64]bool
 }
 
 func (f *fakeServiceStore) MarketList(req domain.MarketListRequest) (domain.MarketListing, error) {
@@ -112,6 +116,12 @@ func testService(store *fakeServiceStore) *Service {
 		Tradeable:  func(row domain.InventoryRow) bool { return !row.ForgeBound },
 		Characters: func(string) []*domain.Character { return []*domain.Character{kekw, lulu} },
 		Online:     func(id int64) bool { return id == kekw.ID },
+		WhileOffline: func(c *domain.Character, write func() error) (bool, error) {
+			if c.ID == kekw.ID || store.enteredDuringBuy[c.ID] {
+				return true, nil
+			}
+			return false, write()
+		},
 	}
 }
 
@@ -246,5 +256,16 @@ func TestGoldBuyNeedsAnOfflineCharacterOfTheAccount(t *testing.T) {
 	}
 	if _, err := s.Buy("alpha", publicstats.MarketBuyBody{Listing: 3, Version: 1}); !errors.Is(err, domain.ErrMarketNotFound) {
 		t.Fatalf("another shard's listing: %v", err)
+	}
+
+	// Lulu enters between the session list and the buy: the list still
+	// says offline, but the admission gate refuses, and nothing is paid.
+	store.enteredDuringBuy = map[int64]bool{2: true}
+	bought := len(store.bought)
+	if _, err := s.Buy("alpha", publicstats.MarketBuyBody{Listing: 1, Version: 1, Character: "Lulu"}); !errors.Is(err, publicstats.ErrMarketOnline) {
+		t.Fatalf("a buy paid by a character entering the world: %v", err)
+	}
+	if len(store.bought) != bought {
+		t.Fatal("a buy refused at the gate reached the store")
 	}
 }

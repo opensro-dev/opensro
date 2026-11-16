@@ -34,7 +34,9 @@ No make-an-offer and no minimum price in the first version.
   nothing.
 - Gold proceeds go to the seller's account warehouse, never onto a character, because an online character's record
   belongs to its action lane.
-- A gold buy from the website must name an offline character; the caller refuses an online one.
+- A gold buy from the website must name an offline character. The buy runs under the gate world entry admits under
+  (`action.Runtime.WhileOffline`), so an entry either comes first and the buy answers `online`, or follows and reads the
+  paid gold. The published session list is display only: it can lag an entry.
 - Gift Silk never pays and never receives, so gift Silk cannot become gold.
 - Every sale is a `market_sales` row naming both accounts, and a gold sale is an economy ledger row (`market_sale`,
   a transfer).
