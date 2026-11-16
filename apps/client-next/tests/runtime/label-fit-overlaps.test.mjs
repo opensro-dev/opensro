@@ -24,6 +24,7 @@ import { fontAtlas, uiFixture } from "../helpers/ui-fixture.mjs";
 const { titleText, resolveTextOverlaps } = await import( "../../src/engine/foundation/rendering/ui-glyphs.ts" );
 const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 const { extendedRecipes } = await import( "../../tools/ui-gallery/extended.ts" );
+const { OPENERS } = await import( "../../tools/ui-gallery/entry-recipes.mjs" );
 const { guildSnapshot } = await import( "../../tools/ui-gallery/scenarios.ts" );
 
 const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
@@ -225,12 +226,14 @@ openRecipe
 
 The scene a gallery recipe settles into, with "Fit window labels" on or
 off. "open-window:<panel>" opens a registry panel the way its sidebar
-button does.
+button does; "opener:<name>" runs the gallery's opener of that name.
 ================
 */
 async function openRecipe( id, fit ) {
 	const recipe = id.startsWith( "open-window:" ) ?
 		{ open: context => context.ui.event( { kind: "activate", id } ) } :
+		id.startsWith( "opener:" ) ?
+		{ open: context => OPENERS[id.slice( "opener:".length )]( context, context.step ) } :
 		extendedRecipes.find( r => r.id === id );
 	assert.ok( recipe, id );
 	const f = uiFixture();
@@ -267,7 +270,12 @@ const WINDOWS = [
 	{ id: "open-window:Guild", on: [ "Guild", "master" ], off: "Guild ma..." },
 	{ id: "reach:guild-war-agreement", on: [ "Compensation" ], off: "Compe..." },
 	{ id: "inspect:guild-war-declaration", on: [ "Compensation" ], off: "Compe..." },
-	{ id: "inspect:inventory-split", on: [ "Retained", "number", "Distributed", "number" ], off: "Retained ..." }
+	{ id: "inspect:inventory-split", on: [ "Retained", "number", "Distributed", "number" ], off: "Retained ..." },
+	// #3712: the academy's level value, the matching search labels and
+	// the job ranking's title of level.
+	{ id: "breadth:academy-master", on: [ "Lv80(80)" ], off: "Lv8..." },
+	{ id: "inspect:academy-matching", on: [ "Recruitment", "Condition", "Honor", "Grade" ], off: "Recr..." },
+	{ id: "opener:Job ranking", on: [ "Apprentice", "Merchant" ], off: "Apprentice M..." }
 ];
 
 for ( const { id, on, off } of WINDOWS ) {
@@ -280,3 +288,38 @@ for ( const { id, on, off } of WINDOWS ) {
 		assert.ok( lines( await openRecipe( id, false ) ).some( l => l.text === off ), `off draws ${off}` );
 	});
 }
+
+// The academy's dismiss plate (party/pt_button.ddj) is 44 pixels wide.
+const DISMISS_PLATE = 44;
+
+/*
+================
+lineNamed
+================
+*/
+function lineNamed( quads, text ) {
+	const line = lines( quads ).find( l => l.text === text );
+	assert.ok( line, `${text} in ${JSON.stringify( lines( quads ).map( l => l.text ) )}` );
+	return line;
+}
+
+test("a caption wider than its plate takes the narrow face (#3712)", async () => {
+	for ( const fit of [ true, false ] ) {
+		const matching = await openRecipe( "inspect:academy-matching", fit );
+		const graduates = lineNamed( matching, "Graduates" ), member = lineNamed( matching, "Member" );
+		// On, the heads keep a gap; off, "Graduates" runs into "Member" as before.
+		assert.equal( graduates.rect[2] < member.rect[0], fit, `fit ${fit}: ${graduates.rect} | ${member.rect}` );
+		const dismiss = lineNamed( await openRecipe( "breadth:academy-master", fit ), "Dismiss" );
+		assert.equal( dismiss.rect[2] - dismiss.rect[0] < DISMISS_PLATE - 4, fit, `fit ${fit}: ${dismiss.rect}` );
+	}
+});
+
+test("a grade column is headed Grade, not level, with the row on or off (#3712)", async () => {
+	for ( const fit of [ true, false ] ) {
+		for ( const id of [ "open-window:Guild", "opener:Job ranking" ] ) {
+			const drawn = lines( await openRecipe( id, fit ) ).map( l => l.text );
+			assert.ok( drawn.some( text => text.startsWith( "Grade" ) ), `${id}: ${JSON.stringify( drawn )}` );
+			assert.ok( !drawn.some( text => /^level|Level ?level/.test( text ) ), `${id}: ${JSON.stringify( drawn )}` );
+		}
+	}
+});

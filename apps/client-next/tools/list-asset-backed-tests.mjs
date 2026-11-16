@@ -15,7 +15,8 @@ The test cache already knows what each file read: every passing file's
 record names each input. A file is asset-backed when any input lies outside
 the checkout (the extracted client, the shared .generated) or in a tree only
 a workstation has (.generated, .state, temp, .tools inside the checkout).
-This tool reads the shared records and writes the list to
+This tool reads the shared records of every cache key (the latest write of
+a file wins) and writes the list to
 tests/runtime/asset-backed-tests.json. Run it after a full local
 `node tools/run-tests.mjs tests/runtime` when you add or change what a test
 reads; a file without a record (one that starts a program) keeps its
@@ -28,7 +29,7 @@ keeps an asset-free file out of CI, as before.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { recordsPath } from "./lib/test-cache-files.mjs";
+import { recordFiles } from "./lib/test-cache-files.mjs";
 import { CHECKOUT_PREFIX } from "./lib/test-cache-ids.mjs";
 
 const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
@@ -95,9 +96,12 @@ main
 ================
 */
 function main() {
-	const index = JSON.parse( fs.readFileSync( recordsPath( repoRoot ), "utf8" ) );
+	const records = {};
+	for ( const file of recordFiles( repoRoot ) ) {
+		Object.assign( records, JSON.parse( fs.readFileSync( file, "utf8" ) ).records );
+	}
 	const files = fs.readdirSync( RUNTIME_DIR ).filter( ( name ) => name.endsWith( ".test.mjs" ) );
-	const tests = classify( { records: index.records ?? {}, files, previous: readList() } );
+	const tests = classify( { records, files, previous: readList() } );
 	const body = { generatedBy: "apps/client-next/tools/list-asset-backed-tests.mjs", tests };
 	fs.writeFileSync( LIST_PATH, JSON.stringify( body, null, "\t" ) + "\n" );
 	console.log(

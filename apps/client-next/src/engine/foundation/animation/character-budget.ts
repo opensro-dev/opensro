@@ -10,9 +10,14 @@ budgets bound memory; the structural limits reject malformed sources.
 ===========================================================================
 */
 import { clothData, clothBytes, type ClothData } from "./cloth";
-import { clipTimelineBytes, createClipTimelineCache, type ClipTimelineCache } from "./animation-timelines";
+import {
+	clipTimelineBytes,
+	createClipTimelineCache,
+	type ClipNodeChannelCache,
+	type ClipTimelineCache
+} from "./animation-timelines";
 import { paletteBindings } from "./palette-bindings";
-import { CLOTH_STREAM_WORDS, clothStreamSlots } from "./cloth-stream";
+import { CLOTH_STREAM_WORDS, clothStreamJoints, clothStreamSlots } from "./cloth-stream";
 import type { CharacterModel } from "@/engine/contracts/character";
 import type { NativeTexture } from "@/engine/contracts/texture";
 import { validateNativeTexture } from "@/engine/foundation/assets/native-texture";
@@ -55,18 +60,27 @@ export const POSE_CLIP_ENTRY_BYTES = 96;
 CharacterPlanCaches
 
 What a render plan derives from a model's immutable parts, owned by the
-character renderer: per-clip timeline charges, per-primitive-list palette
-bindings, and per-cloth-piece stream slots. Admitting a clip keeps a
-model's primitive list, and with it each primitive's cloth data, which an
-assembly shares with every other wearer of the part (characters.ts
-assembly spreads the part's primitive), so a re-plan of every assembly of
-the body computes none of them again.
+character renderer: per-clip timeline charges and channel-by-node indexes
+(every pose of the renderer shares the clip's one), per-primitive-list
+palette bindings, and per-cloth-piece stream slots and the palette entries
+they read. Admitting a clip keeps a model's primitive list, and with it
+each primitive's cloth data and mesh, which an assembly shares with every
+other wearer of the part (characters.ts assembly spreads the part's
+primitive), so a re-plan of every assembly of the body computes none of
+them again. The indexes are a few words a channel, slot or entry, held
+once for the renderer, not per pose or per plan.
 ================
 */
 export type CharacterPlanCaches = {
 	readonly timelines: ClipTimelineCache;
+	readonly nodeChannels: ClipNodeChannelCache;
 	readonly bindings: WeakMap<CharacterModel["primitives"], ReturnType<typeof paletteBindings>>;
 	readonly clothSlots: WeakMap<ClothData, Int32Array>;
+	// With the mesh they were read from: the entries depend on it too.
+	readonly clothJoints: WeakMap<
+		ClothData,
+		{ readonly mesh: CharacterModel["primitives"][number]["geometry"]; readonly joints: Int32Array; }
+	>;
 };
 /*
 ================
@@ -74,7 +88,13 @@ createCharacterPlanCaches
 ================
 */
 export function createCharacterPlanCaches(): CharacterPlanCaches {
-	return { timelines: createClipTimelineCache(), bindings: new WeakMap(), clothSlots: new WeakMap() };
+	return {
+		timelines: createClipTimelineCache(),
+		nodeChannels: new WeakMap(),
+		bindings: new WeakMap(),
+		clothSlots: new WeakMap(),
+		clothJoints: new WeakMap()
+	};
 }
 /*
 ================
@@ -95,6 +115,31 @@ export function characterClothSlots( cloth: ClothData, caches?: CharacterPlanCac
 }
 /*
 ================
+characterClothJoints
+
+The palette entries a skinned cloth piece's stream reads (cloth-stream.ts
+clothStreamJoints), computed once per cloth data when the plan caches are
+given: a piece's cloth data and mesh come from one decoded primitive. The
+entries are kept with that mesh, so a cloth data met with another mesh is
+read again, not trusted.
+================
+*/
+export function characterClothJoints(
+	primitive: Pick<CharacterModel["primitives"][number], "cloth" | "geometry">,
+	caches?: CharacterPlanCaches
+): Int32Array {
+	let read = caches?.clothJoints.get( primitive.cloth! );
+	if ( !read || read.mesh !== primitive.geometry ) {
+		read = {
+			mesh: primitive.geometry,
+			joints: clothStreamJoints( primitive.geometry, characterClothSlots( primitive.cloth!, caches ) )
+		};
+		caches?.clothJoints.set( primitive.cloth!, read );
+	}
+	return read.joints;
+}
+/*
+================
 characterPoseBytes
 
 Charge pose evaluation storage separately from immutable source data. A
@@ -112,8 +157,9 @@ export function characterPoseBytes( model: CharacterModel, caches?: CharacterPla
 		caches?.bindings.set( model.primitives, bindings );
 	}
 	// Local/global and attachment bind matrices, mutable and retained rest TRS, blend scratch,
-	// weights, sample and one exact palette per binding/pose revision.
-	return model.nodes.length * ((16 + 16 + 16 + 3 + 4 + 3 + 10 + 10 + 6) * 4 + 2) + 16 +
+	// weights, socket chain scratch, sample, per-node flags and one exact palette per
+	// binding/pose revision.
+	return model.nodes.length * ((16 + 16 + 16 + 3 + 4 + 3 + 10 + 10 + 6 + 1) * 4 + 3) + 16 +
 		model.primitives.reduce(
 			( bytes, primitive ) =>
 				bytes + ((bindings.get( primitive ) ?? primitive) === primitive ? primitive.joints.length * 64 : 0),

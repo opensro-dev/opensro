@@ -21,11 +21,8 @@ import {
 	removeSupersededResourceOutputs,
 	resourceGlbOutput
 } from "../../build/char/resourceGlbOutput.mjs";
-import {
-	bakeCharacterResource,
-	expandCharacterInfoCodenames,
-	resolveNpcModel
-} from "../../build/char/buildNpcModelAssets.mjs";
+import { expandCharacterInfoCodenames, resolveNpcModel } from "../../build/char/buildNpcModelAssets.mjs";
+import { bakeCharacterResource } from "../../build/char/npcResourceBake.mjs";
 import { preserveFreshNpcVatReferences } from "../../build/char/buildNpcVatAssets.mjs";
 import {
 	enabledCosReferences,

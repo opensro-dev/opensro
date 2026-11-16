@@ -503,13 +503,80 @@ function drawDigest( draws, randomTrace ) {
 
 /*
 ================
+offStretchActors
+
+The far-cloth scenario's actors for frame: three wearers cross the cloth
+distance (fraction .25, characters.ts drawCloth) in both directions at
+different frames; far ones are crowded at fraction .8, so the level of
+detail holds every other pose sample, except wearer 2's second stretch,
+at fraction .5 in no crowd: sampled every frame. Wearer 1 stays off for 40 frames,
+comes near for two, goes off for one, and later changes clip while off and
+leaves view for eight frames; wearer 2 starts off; wearer 3 goes off for
+one frame in every nine. The clock's frame times (clothVertexCase) restart
+the cloth both on a solver step and between steps. With allFar, every
+wearer stays beyond the distance and in view throughout, on one clip.
+================
+*/
+function offStretchActors( frame, allFar ) {
+	const far = allFar ? [ true, true, true ] : [
+		frame >= 20 && frame < 60 || frame === 62 || frame >= 90,
+		frame < 30 || frame >= 75 && frame < 95,
+		frame % 9 === 4
+	];
+	const absent = allFar ? [ false, false, false ] : [ frame >= 105 && frame < 113, frame >= 50 && frame < 53, false ];
+	/** @type {import("../../src/engine/contracts/character.ts").CharacterActor[]} */
+	const actors = [];
+	for ( let i = 0; i < 3; i++ ) {
+		if ( absent[i] ) continue;
+		const gid = i + 1;
+		actors.push( {
+			gid,
+			model: "body-first",
+			clip: gid === 1 && frame >= 100 && !allFar ? "stand" : "move",
+			time: (frame * .031 + gid * .13) % 1,
+			loop: true,
+			scale: 1,
+			pose: { regionId: 257, x: gid * 10, y: 0, z: 100, yaw: radians( gid / 10 ) },
+			animationLod: !far[i] ?
+				{ fraction: .1, crowded: false } :
+				gid === 2 && frame >= 75 && !allFar ?
+				{ fraction: .5, crowded: false } :
+				{ fraction: .8, crowded: true }
+		} );
+	}
+	return actors;
+}
+
+/*
+================
+streamDigest
+
+The cloth streams the frame's cloth draws hold, every word.
+================
+*/
+function streamDigest( draws ) {
+	const hash = createHash( "sha256" );
+	for ( const draw of draws ) {
+		if ( draw.cloth ) hash.update( new Uint8Array( draw.cloth.stream.buffer ) );
+	}
+	return hash.digest( "hex" );
+}
+
+/*
+================
 captureClothPalettes
 ================
 */
 export function captureClothPalettes(
 	gpuAvailable = false,
 	admitUnusedClip = false,
-	{ moving = false, variants = false, gpuTakes = false } = {}
+	// offStretch: "mixed" or "far", the far-cloth scenario (offStretchActors).
+	{
+		moving = false,
+		variants = false,
+		gpuTakes = false,
+		offStretch = /** @type {false | "mixed" | "far"} */ (false)
+	} = {}
 ) {
 	const random = createPresentationRandom( RANDOM_SEED, 1, 100000 );
 	const owner = createCharacters( random ), tags = new Map();
@@ -543,7 +610,7 @@ export function captureClothPalettes(
 			if ( view ) view[0] = view[5] = view[10] = .001;
 			const gids = frame % 19 === 0 ? [] : frame % 3 === 0 ? [ 2, 3 ] : [ 1, 2, 3 ];
 			/** @type {import("../../src/engine/contracts/character.ts").CharacterActor[]} */
-			const actors = gids.map( gid => ({
+			const actors = offStretch ? offStretchActors( frame, offStretch === "far" ) : gids.map( gid => ({
 				gid,
 				model: frame % 13 === 0 && gid === 2 ? "cloth-first" : "body-first",
 				clip: frame % 5 === 0 ? "stand" : "move",
@@ -590,9 +657,9 @@ export function captureClothPalettes(
 				input.seconds,
 				true,
 				true,
-				input.enabled
+				!!offStretch || input.enabled
 			));
-			assert.equal( draws.length, gids.length * PRIMITIVE_NAMES.length );
+			assert.equal( draws.length, actors.length * PRIMITIVE_NAMES.length );
 			if ( variants ) {
 				for ( const draw of draws ) {
 					assert.equal(
@@ -623,6 +690,8 @@ export function captureClothPalettes(
 			// The device's buffers hold the poisoned CPU copy where the GPU sampled.
 			if ( !gpuTakes ) boneWriteBytes += geometry.verify( draws );
 			frames.push( {
+				streams: streamDigest( draws ),
+				cpuEvaluations: owner.stats().cpuEvaluations,
 				clothPlacementWrites: geometry.clothPlacementWrites( draws ),
 				poseEligibility: owner.stats( true ).poseEligibility,
 				digest: drawDigest( draws, trace ),

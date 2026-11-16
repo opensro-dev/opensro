@@ -14,7 +14,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { bakeCharacterResource } from "../../build/char/buildNpcModelAssets.mjs";
+import { bakeCharacterResource } from "../../build/char/npcResourceBake.mjs";
 import { loadBoothModelRoster } from "../../build/char/boothModelRoster.mjs";
 import { bakeNpcSecondaryResources } from "../../build/char/npcSecondaryResources.mjs";
 import { splitNpcManifestModels } from "../../build/shared/npcManifest.mjs";

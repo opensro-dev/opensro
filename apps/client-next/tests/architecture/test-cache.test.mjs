@@ -54,12 +54,19 @@ runRunner
 
 Runs the fixture suite; returns the exit code and the runner's whole
 stdout and stderr, for the cases that assert on what the runner printed.
+
+The fixture's environment is exactly the one the case names: the parent's
+SRO_* variables are dropped, as they are cache-key inputs. A release check
+exports SRO_ARABIA=on, so a case comparing an unset flag with "on" saw
+two equal keys there (r195, 11-17) and passed only on the hub.
 ================
 */
 async function runRunner( suite, environment = {} ) {
 	// A top-level run: without node --test's child context, which would turn
 	// the runner's own reporting into the parent's protocol.
-	const { NODE_TEST_CONTEXT, ...env } = process.env;
+	const env = Object.fromEntries(
+		Object.entries( process.env ).filter( ( [key] ) => key !== "NODE_TEST_CONTEXT" && !key.startsWith( "SRO_" ) )
+	);
 	return spawnText( process.execPath, [ runner, suite ], {
 		cwd: root,
 		env: { ...env, ...environment, SRO_TEST_CACHE_DIR: path.join( suite, ".cache" ), SRO_CHECK_FORCE: "" }
@@ -88,6 +95,20 @@ async function runSuite( suite, environment = {} ) {
 		ran: Number( counts[2] ),
 		failed: Number( counts[3] )
 	};
+}
+
+/*
+================
+recordsFileOf
+
+The fixture cache's one records file (one per cache key).
+================
+*/
+function recordsFileOf( suite ) {
+	const dir = path.join( suite, ".cache" );
+	const names = fs.readdirSync( dir ).filter( name => /^index-[0-9a-f]{16}\.json$/.test( name ) );
+	assert.equal( names.length, 1, `one records file in ${dir}: ${names}` );
+	return path.join( dir, names[0] );
 }
 
 describe( "the test runner", { concurrency: true }, () => {
@@ -157,7 +178,7 @@ describe( "the test runner", { concurrency: true }, () => {
 					'import { value } from "./value.mjs";\ntest( "reads", () => assert.equal( value, 1 ) );\n'
 			);
 			assert.deepEqual( await runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 } );
-			const indexPath = path.join( suite, ".cache", "index.json" );
+			const indexPath = recordsFileOf( suite );
 			const index = JSON.parse( fs.readFileSync( indexPath, "utf8" ) );
 			const ids = Object.values( index.records ).flatMap( record => Object.keys( record.inputs ) );
 			const checkout = path.resolve( root, "../.." ).toLowerCase();
@@ -172,6 +193,111 @@ describe( "the test runner", { concurrency: true }, () => {
 			assert.deepEqual( await runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 } );
 			const after = JSON.parse( fs.readFileSync( indexPath, "utf8" ) );
 			assert.ok( "another/worktree.test.mjs" in after.records, "another worktree's record survives" );
+		} finally {
+			fs.rmSync( suite, { recursive: true, force: true } );
+		}
+	});
+
+	test("a pass holds in a fresh built tree whose files hash the same, and only there", async () => {
+		// B3: a release builds into a fresh variant root with the built tree's
+		// variable set; with that path in the key and in the ids, the release
+		// client check ran 815 of 815 files cold (710 s on 11-17).
+		const suite = path.join( root, "temp", `test-cache-tree-${process.pid}` );
+		const first = path.join( suite, "tree-a" ), second = path.join( suite, "tree-b" );
+		fs.mkdirSync( first, { recursive: true } );
+		fs.mkdirSync( second, { recursive: true } );
+		try {
+			const resolver = pathToFileURL( path.resolve( root, "../../scripts/lib/generatedRoot.mjs" ) ).href;
+			fs.writeFileSync( path.join( first, "data.txt" ), "one" );
+			fs.writeFileSync( path.join( second, "data.txt" ), "one" );
+			fs.writeFileSync(
+				path.join( suite, "tree.test.mjs" ),
+				'import { test } from "node:test";\nimport assert from "node:assert/strict";\n' +
+					'import fs from "node:fs";\nimport path from "node:path";\n' +
+					`import { GENERATED_ROOT } from ${JSON.stringify( resolver )};\n` +
+					'test( "reads the tree", () => assert.ok( fs.readFileSync( path.join( GENERATED_ROOT, "data.txt" ) ).length ) );\n'
+			);
+			const inTree = tree => ({ SRO_GENERATED_ROOT: tree });
+
+			assert.deepEqual( await runSuite( suite, inTree( first ) ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+			const index = JSON.parse( fs.readFileSync( recordsFileOf( suite ), "utf8" ) );
+			const ids = Object.values( index.records ).flatMap( record => Object.keys( record.inputs ) );
+			assert.ok( ids.includes( "R\t@generated/data.txt" ), "the tree's file is named relative to the tree" );
+
+			assert.deepEqual(
+				await runSuite( suite, inTree( second ) ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"a fresh tree with the same bytes reuses the pass"
+			);
+
+			fs.writeFileSync( path.join( second, "data.txt" ), "two" );
+			assert.deepEqual(
+				await runSuite( suite, inTree( second ) ),
+				{ status: 0, reused: 0, ran: 1, failed: 0 },
+				"the tree's own changed file reruns it"
+			);
+			assert.deepEqual(
+				await runSuite( suite, inTree( first ) ),
+				{ status: 0, reused: 0, ran: 1, failed: 0 },
+				"and the first tree, now different from the record, reruns too"
+			);
+
+			// Whether a location variable is set is a test input: code branches
+			// on it (assetPacks.mjs reads the pack baseline only when it is set).
+			const unsetSuite = { SRO_GENERATED_ROOT: first };
+			assert.deepEqual( await runSuite( suite, unsetSuite ), { status: 0, reused: 1, ran: 0, failed: 0 } );
+			// An unnamed release exports it blank, which every reader treats as
+			// unset: blank shares the unset key, so it cannot vouch for a set one.
+			assert.deepEqual(
+				await runSuite( suite, { ...unsetSuite, SRO_ASSET_PACK_BASELINE: " " } ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"a blank baseline is the unset key"
+			);
+			assert.deepEqual(
+				await runSuite( suite, {
+					...unsetSuite,
+					SRO_ASSET_PACK_BASELINE: path.join( suite, "baseline-a.json" )
+				} ),
+				{ status: 0, reused: 0, ran: 1, failed: 0 },
+				"a pass with the baseline unset does not vouch for a run with it set"
+			);
+			assert.deepEqual(
+				await runSuite( suite, {
+					...unsetSuite,
+					SRO_ASSET_PACK_BASELINE: path.join( suite, "baseline-b.json" )
+				} ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"but another baseline path reuses the pass recorded with one set"
+			);
+		} finally {
+			fs.rmSync( suite, { recursive: true, force: true } );
+		}
+	});
+
+	test("a run under another key keeps this key's records", async () => {
+		// B4: the shared records held one key, so a release check (its feature
+		// flags make another key) replaced the hub's records, and the hub's
+		// next run replaced the release's: on 11-17 the hub file held 3.
+		const suite = path.join( root, "temp", `test-cache-keys-${process.pid}` );
+		fs.mkdirSync( suite, { recursive: true } );
+		try {
+			fs.writeFileSync(
+				path.join( suite, "alone.test.mjs" ),
+				'import { test } from "node:test";\ntest( "alone", () => {} );\n'
+			);
+			const release = { SRO_ARABIA: "on" };
+			assert.deepEqual( await runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+			assert.deepEqual( await runSuite( suite, release ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+			assert.deepEqual(
+				await runSuite( suite ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"the hub's key still reuses after a release run"
+			);
+			assert.deepEqual(
+				await runSuite( suite, release ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"and the release's key reuses after a hub run"
+			);
 		} finally {
 			fs.rmSync( suite, { recursive: true, force: true } );
 		}

@@ -4,8 +4,8 @@
 cloth-vertex-cases.mjs - deterministic weighted cloth streams and animation
 
 Exercises all four skin influences, authored and default normals, pin kinds,
-option changes and frame debt with the solver's existing varied fixture, and
-pins no solver step reads.
+option changes and frame debt with the solver's existing varied fixture,
+pins no solver step reads, and long off stretches with frames out of view.
 
 ===========================================================================
 */
@@ -91,6 +91,28 @@ export function withUnreadPins( base ) {
 				( _, i ) => Math.sin( i * .17 + frame * .031 )
 			);
 			return { ...source, palette };
+		}
+	};
+}
+
+/*
+================
+withOffStretches
+
+The case with longer off stretches than its one-frame gaps: off for 30
+frames of which it is out of view (absent: not drawn) for eight, for four, for five and
+for two, so it restarts after its clock's 300, 100 and 16 ms frames, on a
+step and between steps.
+================
+*/
+export function withOffStretches( base ) {
+	return {
+		...base,
+		input( frame ) {
+			const source = base.input( frame );
+			const off = frame >= 40 && frame < 70 || frame >= 80 && frame < 84 || frame >= 100 && frame < 105 ||
+				frame >= 110 && frame < 112;
+			return { ...source, enabled: source.enabled && !off, absent: frame >= 50 && frame < 58 };
 		}
 	};
 }

@@ -35,6 +35,10 @@ export interface UiTextLayout {
 	// lines inside its box's columns, tried before the shortened run;
 	// absent when the text has no space or a line would not fit.
 	readonly wrapped?: UiQuad;
+	// Port-only (the same row): the line in the UI's narrow face, when the
+	// text is in face 0 and that line fits its box ("Experience" on the
+	// job ranking's 56-pixel head); tried after a label's slide.
+	readonly narrow?: UiQuad;
 	// A label (an authored static's text key, not a value in its field)
 	// may be slid or kept whole past its box under "Fit window labels".
 	readonly label?: boolean;
