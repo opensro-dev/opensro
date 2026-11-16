@@ -74,11 +74,13 @@ null. Port-only, not native: shinmu.cpd (the tomb flamemaster) names
 degree-10 armor and spear BSRs that Data.pk2 lacks because v1.150 caps at
 degree 9; with the tomb on, the matching _09 BSR from the same directory
 stands in so the Floor 5 boss can assemble. The bake and the effect
-references both take it, so they see the same branches.
+references both take it, so they see the same branches. A cached bake
+passes the posture it was keyed on (npcResourceBake.mjs bakeTables)
+instead of reading the shard switch inside the step.
 ================
 */
-export function qinshiTombBranchFallback( branchPath ) {
-	if ( !qinshiTombCombatEnabled() || !DEGREE_10_BRANCH.test( branchPath ) ) {
+export function qinshiTombBranchFallback( branchPath, tombCombat = qinshiTombCombatEnabled() ) {
+	if ( !tombCombat || !DEGREE_10_BRANCH.test( branchPath ) ) {
 		return null;
 	}
 	return branchPath.replace( DEGREE_10_BRANCH, "_09" );
