@@ -7,6 +7,23 @@ Converts the extracted client textures (DDJ, DDS, TGA, BMP) into PNG
 under .generated/intermediate/images and keeps the conversion manifest.
 Roots come from sro_paths.py.
 
+The asset build decides what to convert by content (plan slice B2,
+scripts/build/images/imageActions.mjs): it asks for the plan
+
+	convert_images.py --plan <plan.json>
+
+(every image asset, its output name and kind, and the toolchain that
+writes the PNG bytes), keys each image on its source bytes, this
+converter's code and that toolchain, lays the hits down from the action
+store, and hands the misses back
+
+	convert_images.py --convert-list <list.json>
+
+which converts exactly those and writes the manifest for every asset.
+A run with no flag, or with path filters (a model builder's targeted
+pass), still keeps a PNG newer than its source; that mtime rule retires
+with the stat machinery (plan slice B5).
+
 ===========================================================================
 """
 from __future__ import annotations
@@ -50,6 +67,7 @@ MANIFEST_PATH = GENERATED_ROOT / "intermediate" / "image-manifest.csv"
 DISCOVERY_CACHE_PATH = GENERATED_ROOT / "intermediate" / "image-discovery.json"
 DISCOVERY_CACHE_FORMAT = "sro-image-discovery"
 SUPPORTED_EXTENSIONS = {".ddj", ".tga", ".dat"}
+PLAN_FORMAT = "sro-image-plan"
 # Assets handed to a worker per round trip: small enough to balance, large
 # enough that pickling stays negligible next to a decode.
 CONVERT_CHUNK = 32
@@ -76,7 +94,14 @@ def main() -> int:
 
     # Optional CLI filters: only convert assets whose relative path contains any
     # of the given substrings (case-insensitive). Useful for targeted re-converts.
-    filters = [arg.lower() for arg in sys.argv[1:]]
+    arguments = sys.argv[1:]
+    if arguments[:1] == ["--plan"] and len(arguments) == 2:
+        return write_plan(Path(arguments[1]))
+    listed = None
+    if arguments[:1] == ["--convert-list"] and len(arguments) == 2:
+        listed = set(json.loads(Path(arguments[1]).read_text(encoding="utf-8")))
+        arguments = []
+    filters = [arg.lower() for arg in arguments]
     assets = discover_assets(filters)
     if filters:
         assets = [a for a in assets if any(f in a.relative.as_posix().lower() for f in filters)]
@@ -101,8 +126,14 @@ def main() -> int:
 
     # Results come back in input order, so the manifest is identical
     # whatever the process count.
+    if listed is not None:
+        # The caller keyed every asset by content: convert what it lists,
+        # keep the rest exactly as it laid them down.
+        modes = ["force" if output_name(asset) in listed else "keep" for asset in assets]
+    else:
+        modes = ["force" if force_convert else "auto"] * len(assets)
     with ProcessPoolExecutor(max_workers=jobs) as pool:
-        results = pool.map(convert_one, assets, [force_convert] * len(assets), chunksize=CONVERT_CHUNK)
+        results = pool.map(convert_one, assets, modes, chunksize=CONVERT_CHUNK)
         for index, (asset, (status, detail)) in enumerate(zip(assets, results), start=1):
             if status == "failed":
                 failed.append((asset, detail))
@@ -114,7 +145,7 @@ def main() -> int:
                 writer.writerow(
                     [
                         asset.relative.as_posix(),
-                        asset.output.relative_to(OUTPUT_ROOT).as_posix(),
+                        output_name(asset),
                         asset.kind,
                         detail,
                     ]
@@ -145,14 +176,63 @@ def main() -> int:
 
 
 # ================
+# write_plan
+#
+# Every image asset (source below the extracted root, output below the
+# image root, kind) and the toolchain, as JSON, for imageActions.mjs. The
+# discovery cache is kept as a full run keeps it.
+# ================
+def write_plan(target: Path) -> int:
+    assets = discover_assets([])
+    plan = {
+        "format": PLAN_FORMAT,
+        "toolchain": toolchain(),
+        "assets": [
+            {"source": asset.relative.as_posix(), "output": output_name(asset), "kind": asset.kind}
+            for asset in assets
+        ],
+    }
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(plan, separators=(",", ":")), encoding="utf-8")
+    print(f"Planned {len(assets)} image assets.")
+    return 0
+
+
+# ================
+# toolchain
+#
+# What besides this module's code decides the PNG bytes: the Python and
+# Pillow that encode them, and the ffmpeg the fallback runs.
+# ================
+def toolchain() -> str:
+    import PIL
+
+    ffmpeg = shutil.which("ffmpeg")
+    version = "no ffmpeg"
+    if ffmpeg:
+        result = subprocess.run([ffmpeg, "-version"], capture_output=True, text=True, check=False)
+        version = (result.stdout.splitlines() or ["ffmpeg (unreadable version)"])[0]
+    return f"python {sys.version.split()[0]}; pillow {PIL.__version__}; {version}"
+
+
+# ================
+# output_name
+# ================
+def output_name(asset: ImageAsset) -> str:
+    return asset.output.relative_to(OUTPUT_ROOT).as_posix()
+
+
+# ================
 # convert_one
 #
 # One asset in a worker process: ("skipped" | "converted", source bytes) or
 # ("failed", the error). Every conversion failure is reported, none raised.
+# mode is "force" (convert), "keep" (the caller holds a current output) or
+# "auto" (convert unless the output is newer than the source).
 # ================
-def convert_one(asset: ImageAsset, force_convert: bool) -> tuple[str, int | str]:
+def convert_one(asset: ImageAsset, mode: str) -> tuple[str, int | str]:
     try:
-        if not force_convert and output_is_fresh(asset):
+        if mode == "keep" or mode == "auto" and output_is_fresh(asset):
             return "skipped", asset.source.stat().st_size
         convert_asset(asset)
         return "converted", asset.source.stat().st_size
@@ -368,18 +448,28 @@ def detect_kind(path: Path) -> str:
 
 # ================
 # convert_asset
+#
+# The PNG is written beside its target and renamed over it, never written
+# in place: the asset build's action store hard-links each converted PNG
+# (imageActions.mjs), and an in-place write would rewrite the stored copy
+# and every other path linked to it. The temp name keeps the .png suffix
+# ffmpeg picks its encoder by.
 # ================
 def convert_asset(asset: ImageAsset) -> None:
     asset.output.parent.mkdir(parents=True, exist_ok=True)
     suffix = asset.source.suffix.lower()
-
-    if suffix == ".ddj":
-        payload = extract_ddj_payload(asset.source)
-        save_image_payload(payload, asset.output, source_for_fallback=asset.source)
-    elif suffix in {".tga", ".dat"}:
-        save_image_file(asset.source, asset.output)
-    else:
+    if suffix not in {".ddj", ".tga", ".dat"}:
         raise ValueError(f"unsupported image extension: {suffix}")
+    temporary = asset.output.with_name(f"{asset.output.stem}.{os.getpid()}.tmp.png")
+    try:
+        if suffix == ".ddj":
+            payload = extract_ddj_payload(asset.source)
+            save_image_payload(payload, temporary, source_for_fallback=asset.source)
+        else:
+            save_image_file(asset.source, temporary)
+        os.replace(temporary, asset.output)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 # ================

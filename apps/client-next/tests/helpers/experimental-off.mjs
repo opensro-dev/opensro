@@ -128,6 +128,9 @@ export const OFF = Object.freeze( {
 	// On by default (owner 2026-11-15, #3547): a wing dress flies without
 	// the Default run's fallback footsteps.
 	silentWingFlight: true,
+	// On by default (owner 2026-11-15): port-only carols during the
+	// Christmas event's snowfalls; no v1.150 code sets the native carol mode.
+	christmasCarols: true,
 	// Off by default (#2496): the seal line under the item name instead of
 	// after the requirement rows (558FF0 at 56B099).
 	sealUnderHeading: false,

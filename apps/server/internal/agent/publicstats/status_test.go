@@ -348,3 +348,61 @@ func TestStatusSamplesTheCensusAtMostEveryMinute(t *testing.T) {
 		t.Fatalf("reads past the minute: got %d, want 2", reads)
 	}
 }
+
+/*
+================
+TestFortressesNameOwnersAndTheWarState
+
+P11: every fortress in the wiring's order, an unclaimed one with a null
+owner, and the shard's state from the schedule's war window (the fixture's
+war is running).
+================
+*/
+func TestFortressesNameOwnersAndTheWarState(t *testing.T) {
+	f := newFixture()
+	s := f.service()
+	s.src.Fortresses = func() []FortressEntry {
+		return []FortressEntry{{Town: "jangan", Owner: "Silk", TaxRate: 12}, {Town: "hotan"}}
+	}
+	var answer FortressesResponse
+	if code := get(t, s, "/public/v1/fortresses", &answer); code != http.StatusOK {
+		t.Fatalf("fortresses answered %d", code)
+	}
+	if answer.State != "war" || answer.War == nil || !answer.War.Running || answer.War.EndsAt == nil ||
+		answer.Registration != nil {
+		t.Fatalf("state %q war %+v registration %+v", answer.State, answer.War, answer.Registration)
+	}
+	if len(answer.Fortresses) != 2 || answer.Fortresses[0].Owner == nil || *answer.Fortresses[0].Owner != "Silk" ||
+		answer.Fortresses[0].TaxRate != 12 || answer.Fortresses[1].Owner != nil {
+		t.Fatalf("fortresses %+v", answer.Fortresses)
+	}
+}
+
+/*
+================
+TestFortressStateFollowsTheWindows
+
+Registration running and the war ahead reads as registration; nothing
+running reads as peace, with the next windows still given.
+================
+*/
+func TestFortressStateFollowsTheWindows(t *testing.T) {
+	now := time.Date(2026, 11, 18, 3, 0, 0, 0, time.UTC)
+	cases := []struct {
+		events []ScheduledEvent
+		want   string
+	}{
+		{[]ScheduledEvent{{Kind: "fortress-registration", Start: now.Add(-time.Hour), End: now.Add(time.Hour), Running: true},
+			{Kind: "fortress", Start: now.Add(10 * time.Hour), End: now.Add(12 * time.Hour)}}, "registration"},
+		{[]ScheduledEvent{{Kind: "fortress-registration", Start: now.Add(24 * time.Hour), End: now.Add(30 * time.Hour)},
+			{Kind: "fortress", Start: now.Add(34 * time.Hour), End: now.Add(36 * time.Hour)}}, "peace"},
+	}
+	for _, c := range cases {
+		s := New(Sources{Now: func() time.Time { return now }, Schedule: func(time.Time) []ScheduledEvent { return c.events }})
+		var answer FortressesResponse
+		get(t, s, "/public/v1/fortresses", &answer)
+		if answer.State != c.want || answer.War == nil || answer.Registration == nil || len(answer.Fortresses) != 0 {
+			t.Fatalf("want %s, got %+v", c.want, answer)
+		}
+	}
+}

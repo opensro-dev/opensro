@@ -209,6 +209,7 @@ export interface UiAuthoredFrame extends UiFrame {
 	readonly text: UiFrame["text"] & {
 		run( value: string, fontStyle?: number, fontIndex?: number ): { width: number; };
 		extentHeight( index?: number, style?: number ): number;
+		lineInk( index?: number, style?: number ): { top: number; height: number; };
 		guide(
 			tokens: readonly GuideToken[],
 			rect: UiRect,

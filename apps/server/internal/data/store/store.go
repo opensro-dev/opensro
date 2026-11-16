@@ -351,6 +351,9 @@ type Store struct {
 	batch tickBatch
 	// ledger attributes every committed gold change (economy_ledger.go).
 	ledger economyLedger
+	// trades holds the trade rows noted by committed trades until the
+	// commit that writes them (trade_history.go).
+	trades tradeHistoryState
 
 	// defaultSkills is Options.DefaultSkills and serves current-schema
 	// character creation.

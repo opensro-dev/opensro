@@ -409,10 +409,11 @@ def later_characters(read):
 # the skill manifest, add their names, and merge their skill effects
 # and characterinfo rows. refs maps codename to its converted row and
 # is renumbered in place; info_owned picks the characterinfo rows the
-# import claims. Returns the summary keys every later-world marker
+# import claims; extra_skills names skills to stage that no kind's
+# skill columns reach. Returns the summary keys every later-world marker
 # records, so the reap finds exactly what this build owned.
 # ================
-def stage_kinds(label, read, refs, text_root, prior, character_shard, skill_shard, info_owned):
+def stage_kinds(label, read, refs, text_root, prior, character_shard, skill_shard, info_owned, extra_skills=()):
 	native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != character_shard for r in tables.table_rows(p.read_bytes())]
 	occupied = {int(r[1]) for r in native_chars}
 	allocated = cap110.allocate_identities(occupied, sorted(refs), prior.get("characters", {}))
@@ -422,6 +423,12 @@ def stage_kinds(label, read, refs, text_root, prior, character_shard, skill_shar
 	needed = {int(s) for r in refs.values() for s in r[89:99] if int(s)}
 	client_skills = [r for shard in tables.table_rows(read("skilldata.txt"))
 		for r in tables.table_rows(read(shard[0])) if len(r) > 3 and r[1].isdigit()]
+	# Skills no staged kind names in its skill columns (a Muhan change
+	# form's BUFF01, cast by its NPC) are staged by codename.
+	extra = {r[3]: int(r[1]) for r in client_skills if r[3] in set(extra_skills)}
+	if set(extra_skills) - set(extra):
+		raise ValueError(f"{label} skills absent from the later client: {sorted(set(extra_skills) - set(extra))}")
+	needed |= set(extra.values())
 	added, skill_map = cap110.merge_skills(native_skills, client_skills, needed, prior.get("skills", {}))
 	for row in refs.values():
 		row[89:99] = [str(skill_map[int(s)]) if int(s) else "0" for s in row[89:99]]

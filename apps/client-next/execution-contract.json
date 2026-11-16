@@ -64,7 +64,7 @@
 		{
 			"consumer": "src/engine/runtime/ui/frame/frame.ts",
 			"provider": "src/engine/runtime/ui/text/text.ts",
-			"functions": ["guide", "run", "extentHeight"]
+			"functions": ["guide", "run", "extentHeight", "lineInk"]
 		},
 		{
 			"consumer": "src/engine/runtime/ui/frame/frame.ts",

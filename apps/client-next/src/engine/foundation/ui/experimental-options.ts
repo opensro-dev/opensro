@@ -292,6 +292,12 @@ export interface ExperimentalOptions {
 	// falls back to the Default run's snd_run1 (0xADEAB5 -> 0xADEADE). On
 	// by default (the owner's choice, 2026-11-15); off is the native steps.
 	readonly silentWingFlight: boolean;
+	// Port-only, not native: the four Christmas carols (event_carol_01..04,
+	// music mode 1) while the Christmas event group (1) is on. The native
+	// carol branch (8F7A43) is reached only through the music manager's
+	// SetMusicMode (8FC550, vtable slot 0x58), which no v1.150 code calls,
+	// so the native event plays the region music. Off unless turned on.
+	readonly christmasCarols: boolean;
 	// Port-only, not native (#2496): a rare item's seal line sits under the
 	// item name. 558FF0 appends it after the requirement rows (the 56B099
 	// call in FormatWeapon, after 568500). Off unless turned on; off is the
@@ -469,7 +475,8 @@ experimentalOptions
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices, confirmGuildBan,
-petClickOpensWindow, smartPetPickup, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion, silentWingFlight and dungeonCharacterPvs, which only an explicit false turns off.
+petClickOpensWindow, smartPetPickup, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion, silentWingFlight, dungeonCharacterPvs and
+christmasCarols (owner, 2026-11-15: on by default, off by the player's choice), which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
@@ -546,6 +553,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		sunDropMarker: enabled( "sunDropMarker" ),
 		warpArrivalSound: enabled( "warpArrivalSound" ),
 		silentWingFlight: record.silentWingFlight !== false,
+		christmasCarols: record.christmasCarols !== false,
 		sealUnderHeading: enabled( "sealUnderHeading" ),
 		setBonusTooltip: enabled( "setBonusTooltip" ),
 		silkHistory: enabled( "silkHistory" ),
@@ -678,6 +686,7 @@ export interface ExperimentalGameplay {
 	readonly smartPetPickup?: boolean;
 	readonly sunDropMarker?: boolean;
 	readonly warpArrivalSound?: boolean;
+	readonly christmasCarols?: boolean;
 	// The pickup pet filter's kind mask (ground-item's PICKUP_KIND bits);
 	// undefined while the filter row is off, which is the native loop.
 	readonly petPickupKinds?: number;
@@ -701,6 +710,7 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		smartPetPickup: options.smartPetPickup,
 		sunDropMarker: options.sunDropMarker,
 		warpArrivalSound: options.warpArrivalSound,
+		christmasCarols: options.christmasCarols,
 		petPickupKinds: options.petPickupFilter ?
 			(options.petFilterGold ? PICKUP_KIND_GOLD : 0) |
 			(options.petFilterEquipment ? PICKUP_KIND_EQUIPMENT : 0) |

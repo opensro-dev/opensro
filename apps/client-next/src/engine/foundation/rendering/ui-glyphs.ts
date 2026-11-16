@@ -463,13 +463,19 @@ export function resolveTextOverlaps( quads: readonly UiQuad[], fit = false ): Ui
 			neighbor.textLayout !== layout && !rectsOverlap( box, neighbor.textLayout!.box )
 		);
 		const wrapEnters = ( run: UiQuad ) => rows.some( neighbor => runInkEnters( run, neighbor.textLayout!.box ) );
-		placed.set( layout, fittedPlacement( q, neighbors, { enters, wrapEnters } ) );
+		placed.set( layout, fittedPlacement( q, neighbors, enters, wrapEnters ) );
 	}
 	const emitted = new Set<UiTextLayout>(), result: UiQuad[] = [];
 	for ( const q of quads ) {
+		// A quad without a layout is passed on as itself: only a layout's
+		// quad is copied, to drop the layout.
+		if ( !q.textLayout ) {
+			result.push( q );
+			continue;
+		}
 		const { textLayout, ...paint } = q;
-		if ( !textLayout || !placed.has( textLayout ) ) {
-			result.push( textLayout ? paint : q );
+		if ( !placed.has( textLayout ) ) {
+			result.push( paint );
 			continue;
 		}
 		if ( emitted.has( textLayout ) ) continue;
@@ -504,7 +510,8 @@ its shortened run (null when no glyph of that fits).
 function fittedPlacement(
 	q: UiQuad,
 	neighbors: readonly UiQuad[],
-	{ enters, wrapEnters }: { enters( run: UiQuad ): boolean; wrapEnters( run: UiQuad ): boolean; }
+	enters: ( run: UiQuad ) => boolean,
+	wrapEnters: ( run: UiQuad ) => boolean
 ): UiQuad | null {
 	const { textLayout, ...run } = q, layout = textLayout!;
 	if ( layout.wrapped && !wrapEnters( layout.wrapped ) ) return layout.wrapped;
