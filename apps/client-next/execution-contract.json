@@ -969,6 +969,7 @@
 				"updateMaterialColors",
 				"updateTextureTransform",
 				"updateEquipmentGlow",
+				"updateRowStates",
 				"presentParticles",
 				"updateTextureFactor",
 				"writeVertices",

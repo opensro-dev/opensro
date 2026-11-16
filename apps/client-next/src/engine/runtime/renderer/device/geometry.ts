@@ -18,9 +18,21 @@ a CPU mirror, and flushMaterials sends them in one write a slab before
 each frame submit. Every other material is written once and its rare
 updates go straight to the queue.
 
+A draw uploaded with rowStates also owns a row-state table beside its
+instances (binding 16, ROW_STATE_FLOATS a row): each row's equipment glow
+colour and UV, which the shader reads in place of the material's while
+equipmentUV.w is set. Rows of several actors then share one draw and keep
+their own glow phases. The table lives in a staged slab set too, so a
+frame's row states reach the GPU in the same flush. Every other draw binds
+a 32-byte dummy and never reads it.
+
 ===========================================================================
 */
-import { createInstancePacking, instanceCapacity } from "@/engine/foundation/rendering/geometry-instances";
+import {
+	createInstancePacking,
+	instanceCapacity,
+	ROW_STATE_FLOATS
+} from "@/engine/foundation/rendering/geometry-instances";
 import { CLOTH_STREAM_WORDS } from "@/engine/foundation/animation/cloth-stream";
 import { createWaterReflection } from "./water-reflection";
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
@@ -277,6 +289,14 @@ export function createGeometryResources(
 	const dynamicMaterialSlabs = createStagedSlabs( created, "geometry-material-dynamic", uniformUsage, retire );
 	// updateEquipmentGlow's packed vec4 pair, reused by every call.
 	const glowUniform = new Float32Array( 8 );
+	// Row states (Geometry.rowStates), rewritten every frame like the
+	// dynamic materials and flushed with them.
+	const rowStateSlabs = createStagedSlabs(
+		created,
+		"geometry-row-states",
+		GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+		retire
+	);
 	// Vertex and index ranges align to their element: a draw addresses them
 	// by baseVertex and firstIndex (VERTEX_BYTES is the packed 14-float vertex).
 	const vertexSlabs = createBufferSlabs(
@@ -315,6 +335,19 @@ export function createGeometryResources(
 			}
 		};
 	}
+	/*
+	================
+	rowStateStore
+
+	A rowStates draw's table for capacity rows, zeroed: a staged mirror is
+	its range's whole truth, and a recycled range holds another draw's rows.
+	================
+	*/
+	function rowStateStore( capacity: number ): BufferSlice {
+		const floats = capacity * ROW_STATE_FLOATS, store = rowStateSlabs.allocate( floats * 4 );
+		rowStateSlabs.write( store, new Float32Array( floats ), floats * 4 );
+		return store;
+	}
 	const defaultSkin = created.createBuffer( {
 			label: "geometry-default-skin",
 			size: 32,
@@ -324,7 +357,19 @@ export function createGeometryResources(
 			label: "geometry-default-bones",
 			size: 64,
 			usage: GPUBufferUsage.STORAGE
+		} ),
+		// Binding 16 of a draw without row states: one row, never read (its
+		// material's equipmentUV.w is 0).
+		defaultRowStates = created.createBuffer( {
+			label: "geometry-default-row-states",
+			size: ROW_STATE_FLOATS * 4,
+			usage: GPUBufferUsage.STORAGE
 		} );
+	const defaultRowStatesBinding: Binding = Object.freeze( {
+		buffer: defaultRowStates,
+		offset: 0,
+		size: ROW_STATE_FLOATS * 4
+	} );
 	/*
 	================
 	SharedPalette
@@ -402,6 +447,7 @@ export function createGeometryResources(
 		uniform: Binding,
 		storage: Binding,
 		material: Binding,
+		rowStates: Binding,
 		pipeline: GPURenderPipeline,
 		clampedSampling: boolean,
 		image?: ImageDraw,
@@ -424,6 +470,7 @@ export function createGeometryResources(
 				{ binding: 0, resource: uniform },
 				{ binding: 1, resource: storage },
 				{ binding: 2, resource: material },
+				{ binding: 16, resource: rowStates },
 				{
 					binding: 3,
 					resource: clampedSampling ? lightmapSampler : worldSampler
@@ -450,12 +497,16 @@ export function createGeometryResources(
 		uniform: Binding;
 		material: Binding;
 		instances: Binding;
+		// Binding 16: the draw's row-state table, or the dummy.
+		rowStates: Binding;
 		// The slab ranges behind the three bindings (no transform for a world
 		// draw); owned marks an instance table with a buffer of its own.
 		stores: {
 			transform?: BufferSlice;
 			material: BufferSlice;
 			instances: BufferSlice;
+			// The row-state table of a rowStates draw (rowStateSlabs).
+			rowStates?: BufferSlice;
 			owned: boolean;
 			// Absent for a skinned draw, whose streams are buffers of its own.
 			vertices?: BufferSlice;
@@ -530,6 +581,7 @@ export function createGeometryResources(
 					meta.uniform,
 					meta.instances,
 					meta.material,
+					meta.rowStates,
 					draw.pipeline,
 					meta.clampedSampling,
 					meta.image,
@@ -564,6 +616,7 @@ export function createGeometryResources(
 						meta.uniform,
 						meta.instances,
 						meta.material,
+						meta.rowStates,
 						pipeline,
 						meta.clampedSampling,
 						meta.image,
@@ -631,6 +684,7 @@ export function createGeometryResources(
 							meta.uniform,
 							meta.instances,
 							meta.material,
+							meta.rowStates,
 							draw.pipeline,
 							meta.clampedSampling,
 							meta.image,
@@ -653,6 +707,7 @@ export function createGeometryResources(
 						meta.uniform,
 						meta.instances,
 						meta.material,
+						meta.rowStates,
 						pipeline,
 						meta.clampedSampling,
 						meta.image,
@@ -1008,7 +1063,11 @@ export function createGeometryResources(
 				if ( count > draw.instanceCapacity ) {
 					const capacity = instanceCapacity( count ),
 						storage = instanceStore( capacity * 160, meta.stores.owned );
+					// The row states grow with the instances; the owner rewrites
+					// them after the instances (updateRowStates).
+					let rows: BufferSlice | undefined;
 					try {
+						rows = meta.stores.rowStates ? rowStateStore( capacity ) : undefined;
 						writeStream( storage.binding.buffer, storage.binding.offset, packed, meta.cpuUploads );
 						DeviceDraw.rebind(
 							meta.selection,
@@ -1016,6 +1075,7 @@ export function createGeometryResources(
 								meta.uniform,
 								storage.binding,
 								meta.material,
+								rows?.binding ?? meta.rowStates,
 								draw.pipeline,
 								meta.clampedSampling,
 								meta.image,
@@ -1031,8 +1091,14 @@ export function createGeometryResources(
 						retire( meta.stores.instances );
 						meta.stores.instances = storage;
 						meta.instances = storage.binding;
+						if ( rows ) {
+							retire( meta.stores.rowStates! );
+							meta.stores.rowStates = rows;
+							meta.rowStates = rows.binding;
+						}
 					} catch ( error ) {
 						retire( storage );
+						if ( rows ) retire( rows );
 						throw error;
 					}
 				}
@@ -1076,6 +1142,22 @@ export function createGeometryResources(
 		},
 		/*
 		================
+		updateRowStates
+
+		A rowStates draw's row states from row 0, ROW_STATE_FLOATS a row,
+		into the staged mirror; the GPU sees them after the next flush.
+		================
+		*/
+		updateRowStates( draw: GeometryDraw, states: Float32Array ) {
+			const meta = metadata.get( draw ), store = meta?.stores.rowStates;
+			if ( !store ) throw Error( "Unknown row-state draw" );
+			let valid = states.length % ROW_STATE_FLOATS === 0 && states.byteLength <= store.binding.size;
+			for ( let i = 0; valid && i < states.length; i++ ) valid = Number.isFinite( states[i] );
+			if ( !valid ) throw Error( "Invalid row states" );
+			rowStateSlabs.write( store, states, states.byteLength );
+		},
+		/*
+		================
 		updateEquipmentGlow
 		================
 		*/
@@ -1098,7 +1180,8 @@ export function createGeometryResources(
 			glowUniform[3] = enabled ? gain : 0;
 			glowUniform.set( uv, 4 );
 			glowUniform[6] = alphaTest ? 1 : 0;
-			glowUniform[7] = 0;
+			// equipmentUV.w: a rowStates draw reads colour and UV from its rows.
+			glowUniform[7] = meta.stores.rowStates ? 1 : 0;
 			writeMaterial( meta, 192, glowUniform );
 		},
 		/*
@@ -1226,6 +1309,8 @@ export function createGeometryResources(
 					owned = !!(data.joints && data.weights && data.bones && !paletteOffsets);
 				const storage = instanceStore( capacity * 160, owned );
 				slices.push( storage );
+				const rowStates = data.rowStates ? rowStateStore( capacity ) : undefined;
+				if ( rowStates ) slices.push( rowStates );
 				if ( instances.byteLength ) {
 					gpu.queue.writeBuffer(
 						storage.binding.buffer,
@@ -1342,6 +1427,8 @@ export function createGeometryResources(
 						// receivers; portrait/doll coordinates belong to another scene.
 						data.world === true ? 1 : 0,
 						mat?.water && environmentImage ? 1 : 0,
+						// equipmentColor and equipmentUV (updateEquipmentGlow); w, the
+						// glow colour and UV come from the row states.
 						0,
 						0,
 						0,
@@ -1349,7 +1436,7 @@ export function createGeometryResources(
 						0,
 						0,
 						0,
-						0,
+						data.rowStates ? 1 : 0,
 						...packTextureStage( mat?.textureStage ),
 						// The stage policy: x, DIFFUSE is the BSR shader's oD0; y, the
 						// draw blends nothing, so its surviving pixels are opaque; z, stage 1
@@ -1371,6 +1458,7 @@ export function createGeometryResources(
 					uniform,
 					storage.binding,
 					material.binding,
+					rowStates?.binding ?? defaultRowStatesBinding,
 					selected,
 					clampedSampling,
 					image,
@@ -1412,10 +1500,12 @@ export function createGeometryResources(
 					uniform,
 					material: material.binding,
 					instances: storage.binding,
+					rowStates: rowStates?.binding ?? defaultRowStatesBinding,
 					stores: {
 						transform,
 						material,
 						instances: storage,
+						rowStates,
 						owned,
 						vertices: vertexStore,
 						indices: indexStore
@@ -1491,6 +1581,7 @@ export function createGeometryResources(
 				if ( meta.stores.indices ) retire( meta.stores.indices );
 				retire( meta.stores.material );
 				retire( meta.stores.instances );
+				if ( meta.stores.rowStates ) retire( meta.stores.rowStates );
 			}
 			releasePalette( meta?.palette );
 			releaseMesh( drawMeshes.get( draw ) );
@@ -1525,13 +1616,15 @@ export function createGeometryResources(
 		================
 		flushMaterials
 
-		The dynamic materials' updates in one write a slab. The device calls
-		it before every frame submit, the deferred frame's included, so the
-		writes precede the commands that read them; endFrame calls it too.
+		The dynamic materials' and the row states' updates in one write a
+		slab. The device calls it before every frame submit, the deferred
+		frame's included, so the writes precede the commands that read them;
+		endFrame calls it too.
 		================
 		*/
 		flushMaterials() {
 			dynamicMaterialSlabs.flush();
+			rowStateSlabs.flush();
 		},
 		/*
 		================
@@ -1545,6 +1638,7 @@ export function createGeometryResources(
 		endFrame() {
 			try {
 				dynamicMaterialSlabs.flush();
+				rowStateSlabs.flush();
 			} finally {
 				uploads.endFrame();
 			}
@@ -1584,6 +1678,7 @@ export function createGeometryResources(
 						meta.uniform,
 						meta.instances,
 						meta.material,
+						meta.rowStates,
 						draw.pipeline,
 						meta.clampedSampling,
 						meta.image,
@@ -1637,6 +1732,7 @@ export function createGeometryResources(
 						meta.uniform,
 						meta.instances,
 						meta.material,
+						meta.rowStates,
 						pipeline,
 						meta.clampedSampling,
 						meta.image,
@@ -1714,6 +1810,7 @@ export function createGeometryResources(
 			transformSlabs.dispose();
 			materialSlabs.dispose();
 			dynamicMaterialSlabs.dispose();
+			rowStateSlabs.dispose();
 			instanceSlabs.dispose();
 			vertexSlabs.dispose();
 			indexSlabs.dispose();
@@ -1726,6 +1823,7 @@ export function createGeometryResources(
 			shadowDummy.destroy();
 			defaultSkin.destroy();
 			defaultBones.destroy();
+			defaultRowStates.destroy();
 		}
 	};
 }

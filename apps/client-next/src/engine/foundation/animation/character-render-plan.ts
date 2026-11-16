@@ -15,7 +15,8 @@ import {
 	characterPoseBytes,
 	characterBatchBytes,
 	characterMeshBytes,
-	characterSharedMesh
+	characterSharedMesh,
+	characterRowGlow
 } from "./character-budget";
 import { meshArrays } from "@/engine/foundation/rendering/geometry-vertices";
 /*
@@ -55,12 +56,15 @@ export function createCharacterRenderPlan( model: CharacterModel ) {
 			p.geometry.material?.textureFactorPulse)
 	);
 	// Ordinary power-of-two batches have a fixed allocation plus a per-slot cost.
-	// Store two scalars instead of a model-by-actor table. Emitted slots scale
+	// Store three scalars instead of a model-by-actor table. Emitted slots scale
 	// with the padded actor capacity too. Ribbons retain their exact capacity.
+	// A one-row batch carries no row states (characterBatchBytes), so the
+	// per-slot cost is measured from two and four rows.
 	const one = exactCapacity ? 0 : characterBatchBytes( model, 1 ),
 		two = exactCapacity ? 0 : characterBatchBytes( model, 2 ),
-		base = one * 2 - two,
-		stride = two - one;
+		four = exactCapacity ? 0 : characterBatchBytes( model, 4 ),
+		stride = (four - two) / 2,
+		base = two - stride * 2;
 	return {
 		cloth: model.primitives.some( p => p.cloth ),
 		equipmentGlow: model.primitives.some( p => p.equipmentGlow ),
@@ -69,6 +73,19 @@ export function createCharacterRenderPlan( model: CharacterModel ) {
 			p.modifierSource?.modifiers.textureModifiers.some( m => m.kind === 1 )
 		),
 		materialClocked: dynamicMaterials.includes( true ),
+		// A clock the row states do not carry: anything but an equipment glow
+		// on a primitive whose instances are actor rows (characterRowGlow). Its
+		// values live in the material uniform, so its actors keep batches of
+		// their own (characters.ts batchKey).
+		drawClocked: model.primitives.some( p =>
+			p.modifierSource?.modifiers.materialModifiers.some( m => m.kind === 1 ) ||
+			p.modifierSource?.modifiers.textureModifiers.some( m => m.kind === 1 ) ||
+			p.geometry.material?.colorTimeline || p.geometry.material?.uvVelocity || p.geometry.material?.uvAtlas ||
+			p.geometry.material?.textureFactorPulse || p.equipmentGlow && !characterRowGlow( p )
+		),
+		// A blended primitive: the batch draws far to near by its farthest row
+		// (tier 2), so merging actors would reorder blended pixels.
+		blended: model.primitives.some( p => !!p.geometry.material?.blend ),
 		dynamicMaterials,
 		clips,
 		emission,
@@ -107,6 +124,8 @@ export function createCharacterRenderPlan( model: CharacterModel ) {
 				0 :
 				exactCapacity ?
 				characterBatchBytes( model, count ) :
+				count === 1 ?
+				one :
 				base + stride * 2 ** Math.ceil( Math.log2( count ) );
 		}
 	};

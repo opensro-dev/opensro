@@ -372,6 +372,10 @@ struct Instance {matrix:mat4x4f,opacity:vec4f,color:vec4f,window:vec4f,pointPosi
 @group(0) @binding(1) var<storage,read> instances:array<Instance>;
 struct Material {color:vec4f,options:vec4f,skin:vec4f,window:vec4f,lighting:vec4f,policy:vec4f,localFog:vec4f,localFogSettings:vec4f,ambient:vec4f,uvU:vec4f,uvV:vec4f,reflection:vec4f,equipmentColor:vec4f,equipmentUV:vec4f,stage:vec4f,stagePolicy:vec4f,textureFactor:vec4f}
 @group(0) @binding(2) var<uniform> material:Material;
+// geometry.ts row states: per instance row, (glow r, g, b, 0) and (glow u, v,
+// 0, 0). Read only while equipmentUV.w is set; every other draw binds a
+// one-row dummy and keeps the material's glow colour and UV.
+@group(0) @binding(16) var<storage,read> rowStates:array<vec4f>;
 // texture-stage.ts: D3D9 stage 0, every op it defines. CURRENT is the
 // diffuse colour at stage 0; TEMP starts at zero; SPECULAR is the vertex
 // specular, which the port's lighting does not produce (zero).
@@ -474,7 +478,7 @@ fn waterBumpOffset(uv:vec2f)->vec2f{
  let dudv=(textureSampleLevel(sphereMap,waterBumpSampler,uv*vec2f(.25,-.25)+vec2f(0,1),0,0).rg*255.0-128.0)/127.0;
  return vec2f(dot(waterPass.bump.xy,dudv),dot(waterPass.bump.zw,dudv));
 }
-struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1) normal:vec3f,@location(2) color:vec4f,@location(3) maskUV:vec2f,@location(4) viewZ:f32,@location(5) objectLighting:vec3f,@location(6) @interpolate(flat) opacity:f32,@location(7) worldXZ:vec2f,@location(8) @interpolate(flat) materialTint:vec3f,@location(9) sphereUV:vec2f,@location(10) equipmentUV:vec2f}
+struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1) normal:vec3f,@location(2) color:vec4f,@location(3) maskUV:vec2f,@location(4) viewZ:f32,@location(5) objectLighting:vec3f,@location(6) @interpolate(flat) opacity:f32,@location(7) worldXZ:vec2f,@location(8) @interpolate(flat) materialTint:vec3f,@location(9) sphereUV:vec2f,@location(10) equipmentUV:vec2f,@location(13) @interpolate(flat) equipmentColor:vec3f}
 @vertex fn vs(@location(0) position:vec3f,@location(1) normal:vec3f,@location(2) uv:vec2f,@location(3) color:vec4f,@location(4) maskUV:vec2f,@builtin(instance_index) i:u32,@builtin(vertex_index) vertex:u32)->Out {
  var o:Out;let instance=instances[i].matrix;o.opacity=instances[i].opacity.x;var p=vec4f(position,1);var n=vec4f(normal,0);
  // A cloth draw marks its instances with its stream base (opacity.w,
@@ -495,7 +499,9 @@ struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin
  if(material.skin.x!=0&&cloth==0u){lightingNormal=normalize(lightingNormal);}
  // A61887 + A5F103: transpose(world*view*diag(.8,.8,1));
  // native shader SPEC adds .5 after transforming, without renormalizing.
- o.equipmentUV=uv+material.equipmentUV.xy;
+ var glowUV=material.equipmentUV.xy;o.equipmentColor=material.equipmentColor.rgb;
+ if(material.equipmentUV.w>0.5){glowUV=rowStates[2u*i+1u].xy;o.equipmentColor=rowStates[2u*i].rgb;}
+ o.equipmentUV=uv+glowUV;
  o.sphereUV=vec2f(0);
  if(material.reflection.x>0.5&&env.reflection.w>0.5){
   let reflectionNormal=(instance*vec4f(lightingNormal,0)).xyz;
@@ -675,7 +681,7 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
   lit=clamp(stage1*select(surfaceLight,vec3f(1),material.options.y>0.5)*input.color.rgb*2.0,vec3f(0),vec3f(1));
  }
  // AEF8E0: option texture * packed TFACTOR (MODULATE/2X), then ADD base.
- if(material.equipmentColor.w>0.0){lit=clamp(tex.rgb+clamp(equipment*material.equipmentColor.rgb*material.equipmentColor.w,vec3f(0),vec3f(1)),vec3f(0),vec3f(1));}
+ if(material.equipmentColor.w>0.0){lit=clamp(tex.rgb+clamp(equipment*input.equipmentColor*material.equipmentColor.w,vec3f(0),vec3f(1)),vec3f(0),vec3f(1));}
  let animated=material.skin.z>0.5;
  let waterShading=clamp(env.water.rgb,vec3f(0),vec3f(1));
  let fogSource=select(env.fog,material.localFog,material.policy.y>0.5);

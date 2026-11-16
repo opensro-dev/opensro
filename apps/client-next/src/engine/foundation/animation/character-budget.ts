@@ -15,6 +15,7 @@ import type { CharacterModel } from "@/engine/contracts/character";
 import type { NativeTexture } from "@/engine/contracts/texture";
 import { validateNativeTexture } from "@/engine/foundation/assets/native-texture";
 import { DECODED_IMAGE_BYTES, imageBytes } from "@/engine/foundation/assets/image-budget";
+import { ROW_STATE_FLOATS } from "@/engine/foundation/rendering/geometry-instances";
 // Retail colored fireworks contain 100 parent particles with 50 children each.
 export const CHARACTER_PARTICLE_BIRTHS = 8192;
 export const CHARACTER_PRIMITIVES = 1024;
@@ -102,6 +103,18 @@ export function characterSharedMesh( primitive: CharacterModel["primitives"][num
 }
 /*
 ================
+characterRowGlow
+
+An equipment glow on a primitive whose instances are its batch's actor
+rows (not particle slots or ribbon strips): a batch of several rows keeps
+each row's glow colour and UV in a row-state table (characters.ts).
+================
+*/
+export function characterRowGlow( primitive: CharacterModel["primitives"][number] ): boolean {
+	return !!primitive.equipmentGlow && !primitive.emission && !primitive.ribbon;
+}
+/*
+================
 characterMeshBytes
 
 The one GPU copy of a shared mesh: its packed vertex stream (14 floats a
@@ -141,6 +154,8 @@ export function characterBatchBytes( model: CharacterModel, count: number ): num
 				160 :
 				0) +
 			instances * primitive.joints.length * 64 * 2 + slots * 112 + instances * 96 +
+			// The row-state table (ROW_STATE_FLOATS a slot) exists from two rows on.
+			(count > 1 && characterRowGlow( primitive ) ? slots * ROW_STATE_FLOATS * 4 : 0) +
 			(characterSharedMesh( primitive ) ?
 				0 :
 				geometry.positions.length / 3 * 14 * 4 * 2 + geometry.indices.byteLength +
