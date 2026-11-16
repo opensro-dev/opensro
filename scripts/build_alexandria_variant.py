@@ -126,9 +126,14 @@ LEVEL_CAP_EXPANSION_VALUES = ("110",)
 LINK_COLUMNS = 21
 LINK_KIND_LEVEL = 1
 # The condition kinds the v1.150 server's portal catalogue evaluates
-# (portalAdmission): 1 level, 2 transport, 7 thief suit with a transport
-# (#1749 PR-C(ii)). Any other kind is dropped and reported, below.
-LINK_KINDS_EVALUATED = (1, 2, 7)
+# (portalAdmission): 1 level, 2 transport, 4 and 5 an item held (5 spends
+# one), 6 outside job mode (portal_conditions.go, #3399), 7 thief suit
+# with a transport (#1749 PR-C(ii)). Any other kind is dropped and
+# reported, below.
+LINK_KINDS_EVALUATED = (1, 2, 4, 5, 6, 7)
+# The item kinds: Data_1 is an item identity of the source client, which
+# the variant's item tables number differently.
+LINK_KINDS_ITEM = (4, 5)
 TELEPORT_COLUMNS = 13
 BUILDING_COLUMNS = 58
 
@@ -289,15 +294,20 @@ def by_column(raw, column, width=0):
 # ================
 # translate_link
 # ================
-def translate_link(row, ids, level_cap, dropped=None):
+def translate_link(row, ids, level_cap, dropped=None, items=None):
 	"""
 	One VSRO teleportlink row for the native table: its two ends renumbered by
 	teleport code, the scheduling word set to the one v1.150 server accepts
-	(1), a level condition clamped to the build's cap and conditions of a
-	kind the server does not evaluate dropped. Every drop is appended to
-	dropped (when given) as {"from", "to", "kind", "operands"} with the
-	renumbered ends, so the loss is reported, never silent (#1749 PR-C(i);
-	kinds 3-6 still have no port evaluator, PR-C(ii)).
+	(1), a level condition clamped to the build's cap, an item condition's
+	item renumbered through items ({source item id: variant item id}) and
+	conditions of a kind the server does not evaluate dropped. Every drop is
+	appended to dropped (when given) as {"from", "to", "kind", "operands"}
+	with the renumbered ends, so the loss is reported, never silent (#1749
+	PR-C(i); kind 3 still has no port evaluator).
+
+	Returns None when an item condition names an item items does not map:
+	dropping that condition would open a keyed gate to everyone, so the
+	whole link stays out (merge_gate_tables reports it).
 	"""
 	columns = list(row[:LINK_COLUMNS])
 	columns[1], columns[2] = ids[row[1]], ids[row[2]]
@@ -305,6 +315,12 @@ def translate_link(row, ids, level_cap, dropped=None):
 	for at in range(6, LINK_COLUMNS, 3):
 		if columns[at] == str(LINK_KIND_LEVEL) and int(columns[at + 1]) > level_cap:
 			columns[at + 1] = str(level_cap)
+		if int(columns[at]) in LINK_KINDS_ITEM:
+			item = (items or {}).get(columns[at + 1])
+			if item is None:
+				return None
+			columns[at + 1] = item
+			continue
 		# A condition kind the v1.150 server does not evaluate is dropped;
 		# the server refuses the whole catalogue otherwise.
 		if int(columns[at]) != 0 and int(columns[at]) not in LINK_KINDS_EVALUATED:
@@ -320,7 +336,7 @@ def translate_link(row, ids, level_cap, dropped=None):
 # ================
 # merge_gate_tables
 # ================
-def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP, flatten=()):
+def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP, flatten=(), items=None):
 	"""
 	The native tables with the gates in codes added. native and vsro map
 	"teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt" and
@@ -328,8 +344,11 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 	between the clients, so links are renumbered by code; the new gates take
 	their VSRO ids, which the native table does not use. A gate named in
 	flatten has its destination world set to the persistent world (the
-	temple's source world 60 does not exist in the port). Returns {name: bytes}
-	for the changed files, and the list of gates added.
+	temple's source world 60 does not exist in the port). items maps the
+	source client's item ids to the variant's for item conditions
+	(translate_link); a link whose item does not map is left out and
+	listed under omittedLinks. Returns {name: bytes} for the changed files,
+	and the list of gates added.
 	"""
 	native_gates = by_column(native["teleportdata.txt"], 2, TELEPORT_COLUMNS)
 	vsro_gates = by_column(vsro["teleportdata.txt"], 2, TELEPORT_COLUMNS)
@@ -353,14 +372,21 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 		row for row in stage1.table_rows(vsro["teleportbuilding.txt"])
 		if len(row) >= BUILDING_COLUMNS and row[1] in building_ids
 	]
-	links, dropped_conditions = [], []
+	links, dropped_conditions, omitted_links = [], [], []
 	for row in stage1.table_rows(vsro["teleportlink.txt"]):
 		if len(row) != LINK_COLUMNS or row[0] != "1" or not ({row[1], row[2]} & new_ids):
 			continue
 		other = row[2] if row[1] in new_ids else row[1]
 		if other not in new_ids and (other not in vsro_codes or vsro_codes[other] not in native_ids):
 			continue
-		links.append(translate_link(row, ids, level_cap, dropped_conditions))
+		translated = translate_link(row, ids, level_cap, dropped_conditions, items)
+		if translated is None:
+			omitted_links.append({
+				"from": ids[row[1]], "to": ids[row[2]],
+				"items": sorted({row[at + 1] for at in range(6, LINK_COLUMNS, 3) if int(row[at]) in LINK_KINDS_ITEM})
+			})
+			continue
+		links.append(translated)
 
 	text_keys = {row[4] for row in data_rows} | {row[5] for row in buildings}
 	native_keys = {row[1] for row in stage1.table_rows(native["text"]) if len(row) > 1}
@@ -380,6 +406,8 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 		# Link conditions the native catalogue cannot evaluate yet, reported
 		# so the loss is visible in the build output and manifest (#1749).
 		**({"droppedConditions": dropped_conditions} if dropped_conditions else {}),
+		# Keyed links whose item the variant does not carry (translate_link).
+		**({"omittedLinks": omitted_links} if omitted_links else {}),
 		**({"worldsFlattened": [code for code in codes if code in flatten]} if set(codes) & set(flatten) else {})
 	}
 
@@ -715,9 +743,22 @@ def add_gates(vsro_root, native, out):
 	for dropped in summary.get("droppedConditions", []):
 		log(f"gates: link {dropped['from']} -> {dropped['to']}: condition kind {dropped['kind']} "
 			f"({', '.join(dropped['operands'])}) dropped; the v1.150 server has no evaluator for it")
+	log_omitted_links("gates", summary)
 	for name, content in merged.items():
 		replace_file(out / textdata / ("textdataname.txt" if name == "text" else name), content)
 	return summary, merged
+
+
+# ================
+# log_omitted_links
+#
+# One line per keyed link merge_gate_tables left out: the gate it would
+# have joined stays shut rather than open without its key.
+# ================
+def log_omitted_links(label, summary):
+	for omitted in summary.get("omittedLinks", []):
+		log(f"{label}: link {omitted['from']} -> {omitted['to']} left out; the variant carries no item "
+			f"{', '.join(omitted['items'])} its condition names")
 
 
 # ================
