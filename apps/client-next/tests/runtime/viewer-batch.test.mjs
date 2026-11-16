@@ -408,3 +408,46 @@ test("a batch's presentation clock never runs back between monsters", () =>
 		// (characters.ts retireDespawned): it retires before the next draws.
 		assert.ok( Math.min( ...next ) - lastOfFirst >= 1.5, `next ${next} after ${lastOfFirst}` );
 	} ));
+
+/*
+================
+batchStill
+
+Draws one monster of a batch until its readback is asked for, then lets
+the drawing bound end it so the batch takes the next. Returns the monster's
+own presentation time at the moment its still shows (seconds since its
+first step) and the batch clock's absolute seconds then.
+================
+*/
+async function batchStill( viewer, harness, still, start ) {
+	still.catch( () => {} );
+	const from = harness.steps.length, reads = harness.reads();
+	let now = start;
+	while ( harness.reads() === reads ) {
+		viewer.frame( now );
+		now += 16;
+		if ( now - start > 60000 ) throw Error( "the still never reached its readback" );
+	}
+	const shown = harness.steps.at( -1 ), first = harness.steps[from];
+	for ( let at = now + 1000; at <= now + 301000; at += 1000 ) viewer.frame( at );
+	await assert.rejects( still, /timeout/ );
+	return { own: shown - first, absolute: shown, next: now + 302000 };
+}
+
+test("a monster's still is the same moment wherever it falls in a batch", () =>
+	withBrowserGlobals( async () => {
+		// The batch clock keeps running across monsters (BATCH_GAP_MS), but a
+		// new monster is a new gid, and actor-motion.ts starts its idle at its
+		// own first step (state.started, age = seconds - started). So the
+		// picture reads the monster's own time, which must not depend on what
+		// was drawn before it.
+		const harness = clockHost( "?monster=1933&still=1&batch=1", 1 );
+		const viewer = createViewer( harness.host );
+		const first = await batchStill( viewer, harness, scope.window.__viewerStill, 0 );
+		harness.reset( 25 );
+		const other = await batchStill( viewer, harness, scope.window.__viewerNext( 1934 ), first.next );
+		harness.reset( 7 );
+		const third = await batchStill( viewer, harness, scope.window.__viewerNext( 1933 ), other.next );
+		assert.ok( third.absolute - first.absolute >= 4, "the batch clock ran on between the two draws" );
+		assert.equal( third.own, first.own );
+	} ));

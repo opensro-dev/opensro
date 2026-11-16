@@ -68,14 +68,21 @@ const GLOW_WARMUP_MS = 600;
 // keeps its content-named publication (buildMonsterPortraitAssets.mjs,
 // #3104). With wall time the pose followed how long the model took to
 // load: 20 of 24 sampled portraits differed between two batches.
-const STILL_FRAME_MS = 1000 / 60;
+//
+// The clock counts in seconds, and both steps are binary fractions
+// (1/64 s a frame, 2 s between monsters), so every sum and difference is
+// exact. The renderer samples a monster at its own time (actor-motion.ts:
+// seconds minus its first step), and an exact clock gives that time the
+// same bits wherever the monster falls in a batch. With 1000/60 ms steps
+// the 3rd monster's time came out 6e-17 off the 1st's (viewer-batch test).
+const STILL_FRAME_SECONDS = 1 / 64;
 // How far a batch's clock jumps between two monsters: past the 1.5 s a
 // despawned doll's fading copy lives (characters.ts retireDespawned), so
 // the copy and its models retire before the next monster draws. The clock
 // never runs backwards: a copy dated after a reset clock would never age
 // out, and a long batch then failed "Character model residency exceeds
 // budget" (MOB_EV_JINN, 23488).
-const BATCH_GAP_MS = 2000;
+const BATCH_GAP_SECONDS = 2;
 // How long a framed doll waits for its effect programs before it settles
 // without them (an effect that cannot load must not fail the picture).
 const GLOW_WAIT_MS = 8000;
@@ -358,7 +365,7 @@ export function createViewer( host: ViewerHost ) {
 	let last = -1, elapsed = 0, revision = 0, settled = 0, reading = false, finished = false;
 	// When the framed doll began waiting for its glows, and when they all drew.
 	let glowWaitAt = -1, glowingAt = -1;
-	// A still's presentation clock (STILL_FRAME_MS): it stands still until
+	// A still's presentation clock in seconds (STILL_FRAME_SECONDS): it stands still until
 	// the doll is framed and its glows draw, then steps once a drawn frame.
 	let pose = 0;
 	let camera: WorldCamera | null = null;
@@ -435,7 +442,7 @@ export function createViewer( host: ViewerHost ) {
 		// The glow wait is the new monster's own (8EA960's glows are per doll).
 		glowWaitAt = -1;
 		glowingAt = -1;
-		pose += BATCH_GAP_MS;
+		pose += BATCH_GAP_SECONDS;
 		reading = false;
 		finished = false;
 		camera = null;
@@ -584,8 +591,8 @@ export function createViewer( host: ViewerHost ) {
 				dressed = true;
 			}
 			// The interactive view animates in real time; a still on its own
-			// clock (STILL_FRAME_MS).
-			const seconds = (request?.still ? pose : elapsed) / 1000;
+			// clock (STILL_FRAME_SECONDS).
+			const seconds = request?.still ? pose : elapsed / 1000;
 			host.characters.step( entities, null, seconds );
 			// A riding unique waits for its ride, which the doll draws with it.
 			const ride = host.characters.linkedRide( entity );
@@ -617,14 +624,14 @@ export function createViewer( host: ViewerHost ) {
 			// draw and have run GLOW_WARMUP_MS, or after GLOW_WAIT_MS without them.
 			// The warm-up counts on the presentation clock, the give-up on wall
 			// time (an effect still loading is not part of the picture).
-			const glows = host.characters.glows( entity.gid ), clock = request?.still ? pose : elapsed;
+			const glows = host.characters.glows( entity.gid ), clock = request?.still ? pose * 1000 : elapsed;
 			if ( glows ) {
 				if ( glowWaitAt < 0 ) glowWaitAt = elapsed;
 				if ( glowingAt < 0 && host.characters.glowing( entity.gid ) ) glowingAt = clock;
 			}
 			// A still's clock runs only once its glows are drawn: how many
 			// frames their programs took to load never reaches the pose.
-			if ( request?.still && (!glows || glowingAt >= 0) ) pose += STILL_FRAME_MS;
+			if ( request?.still && (!glows || glowingAt >= 0) ) pose += STILL_FRAME_SECONDS;
 			if ( glows ) {
 				const warmed = glowingAt >= 0 && clock - glowingAt >= GLOW_WARMUP_MS;
 				if ( !warmed && elapsed - glowWaitAt < GLOW_WAIT_MS ) return "draw";
