@@ -48,6 +48,7 @@ import (
 // with the reason; every other setting is a rule (public_rules_test.go).
 var unlistedSettings = map[string]string{
 	progression.EnvHalloweenEventWindow: "the dates of the Halloween event rule, not a rule of its own",
+	progression.EnvChristmasEventWindow: "the dates of the Christmas event rule, not a rule of its own",
 	action.EnvGMSetSpeed:                "a GM command, not a rule players meet",
 	action.EnvGMItemForge:               "a GM command, not a rule players meet",
 	monster.EnvTrainingDummy:            "GM-only training targets",
@@ -324,6 +325,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "No Halloween event runs: monsters drop no jewelry boxes and So-ok offers no gift exchange.",
 				Now:    "During the event window, monsters drop jewelry boxes and So-ok exchanges each box for a random gift or sixty boxes for an event helmet; boxes left when the window ends are removed at the next world entry.",
 				Why:    "The original Halloween Day event, rebuilt for its seasonal window."},
+			{Flag: progression.EnvChristmasEvent, On: progression.ChristmasEventFromEnv().ActiveAt(time.Now()),
+				Native: "No Christmas event runs: the towns stay undecorated, no event snow falls and no winter monsters come.",
+				Now:    "While the event runs, the towns wear their Christmas decoration, and every two hours it snows for an hour: Snow Slaves fill every field during the snowfall and melt when it stops. Every hit on a Snow Slave lands for 1, so it falls in five hits. They drop Red Santa Socks; So-ok trades each pair for a present. A White Knight comes to three fields every hour at half past, and Princess Miyene at 13:00 and 21:00 UTC. When the event ends, the socks leave every bag.",
+				Why:    "The original Christmas event's snow, with the later client's town decoration, for its seasonal window."},
 			{Flag: progression.EnvHalloweenHelmetSeal, On: progression.HalloweenHelmetSealFromEnv().Enabled(),
 				Native: "The event helmets trade like any other item.",
 				Now:    "The eight event helmets cannot be traded, stalled, stored, given to a pet or dropped: they stay with the character that earned them. A helmet may still be sold to an NPC merchant, which destroys it; the sale never puts it on the buyback bench, so no other player can take it.",

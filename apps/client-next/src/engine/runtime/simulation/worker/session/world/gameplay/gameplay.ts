@@ -257,7 +257,13 @@ import {
 	abnormalSnapshotNotices,
 	type AbnormalRecord
 } from "@/engine/foundation/gameplay/abnormal-snapshot";
-import { debugWeather, entryEnvironment, environmentPacket } from "@/engine/foundation/gameplay/event-environment";
+import {
+	debugWeather,
+	entryEnvironment,
+	environmentPacket,
+	eventMusicMode,
+	transferEnvironment
+} from "@/engine/foundation/gameplay/event-environment";
 import {
 	cosContainerRequest,
 	cosContainerResult,
@@ -1324,6 +1330,9 @@ fails; retry persistence without restoring stale slot occupancy.
 	let plusSevenNotices = true;
 	// The Experimental "Item break notices" row, on the same terms.
 	let breakNotices = true;
+	// Port-only (Experimental "Christmas carols"): carols while the
+	// Christmas event group is on (eventMusicMode).
+	let christmasCarols = false;
 	// The Experimental "Highlight event notices" row (#2727): while on, a
 	// shard event notice queues with the event colour; off is the native
 	// beige line.
@@ -1804,6 +1813,7 @@ The Experimental window's gameplay rows (experimentalGameplay).
 			dropPlusNotices = value.dropPlusNotices !== false;
 			plusSevenNotices = value.plusSevenNotices !== false;
 			breakNotices = value.breakNotices !== false;
+			christmasCarols = value.christmasCarols === true;
 			highlightEventNotices = value.highlightEventNotices !== false;
 			homingProjectiles = value.homingProjectiles === true;
 			smartPetPickup = value.smartPetPickup !== false;
@@ -6160,7 +6170,7 @@ The published plane when something changed since the last take, else null.
 				...npcState,
 				abnormalRecords,
 				returnScroll,
-				musicMode,
+				musicMode: eventMusicMode( musicMode, environment.groups, christmasCarols ),
 				gmReplies,
 				tradeStars,
 				// Port-only (#3163): the cargo's distance to the next star,
@@ -6321,7 +6331,7 @@ World transfer retires spatial work while retaining character/session data.
 			skillPress.clear();
 			localGid = 0;
 			worldClock = undefined;
-			environment = entryEnvironment( {} ).state;
+			environment = transferEnvironment( environment );
 			activeCos = undefined;
 			cosResult = undefined;
 			cosError = null;

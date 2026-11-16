@@ -221,3 +221,23 @@ test("dungeon water rejects missing frames and invalid block ownership before pu
 	order.dungeonBlocks.reverse();
 	assert.throws( () => decoder.decode( order ) );
 });
+test("the reset that follows a browser entry keeps the entry's event groups and their snow", () => {
+	// The browser's entry blob comes before the 0x3369 that opens its own
+	// packet sequence: the Christmas snow (group 1) and the seasonal
+	// decoration (groups 5, 7) must outlive that reset.
+	const game = createGameplay( () => {} );
+	game.bootstrap( { character: { enterEventGroupIds: [ 5, 1, 7 ] } } );
+	const entered = defined( game.take() );
+	assert.deepEqual( entered.weather, { mode: 3, amount: 20 } );
+	assert.deepEqual( entered.eventGroups, { 1: 1, 5: 1, 7: 1 } );
+	game.resetWorld();
+	const reset = game.take();
+	assert.deepEqual( reset?.weather ?? entered.weather, { mode: 3, amount: 20 } );
+	assert.deepEqual( reset?.eventGroups ?? entered.eventGroups, { 1: 1, 5: 1, 7: 1 } );
+	// A later entry still replaces the groups whole: the event over.
+	game.bootstrap( {} );
+	const later = defined( game.take() );
+	assert.deepEqual( later.eventGroups, {} );
+	assert.deepEqual( later.weather, { mode: 1, amount: 0 } );
+	game.dispose();
+});

@@ -299,3 +299,155 @@ test("an interactive view waits out a latched failure and fails named at the dra
 			/asset-load: \/assets\/res\/tomb\/flame\.bsr: model part failed to load$/
 		);
 	} ));
+
+/*
+================
+clockHost
+
+A viewer host whose known monster lands after loadFrames frames and
+frames at once; it records the presentation seconds of every step. Its
+readbacks never answer, so the last step before the first read is the
+moment the still shows.
+================
+*/
+function clockHost( search, loadFrames ) {
+	let reads = 0, frames = 0;
+	const steps = /** @type {number[]} */ ([]);
+	const host = {
+		canvas: { width: 100, height: 100 },
+		picture: { clientWidth: 100, clientHeight: 100, addEventListener() {} },
+		search,
+		wake: () => {},
+		renderer: {
+			setViewerLight() {},
+			phase: () => "ready",
+			setUi() {},
+			frame() {},
+			characterBounds: () => [ -1, 0, -1, 1, 2, 1 ],
+			readDoll: () => {
+				reads++;
+				return new Promise( () => {} );
+			}
+		},
+		characters: {
+			receiveLifecycle() {},
+			step: ( _entities, _input, seconds ) => {
+				frames++;
+				steps.push( seconds );
+			},
+			ready: () => frames > loadFrames,
+			knows: () => true,
+			itemType: () => undefined,
+			dressed: () => true,
+			glows: () => false,
+			glowing: () => false,
+			linkedRide: () => undefined,
+			error: () => null
+		}
+	};
+	return {
+		host: /** @type {any} */ (host),
+		reads: () => reads,
+		steps,
+		reset: ( frames_ ) => {
+			frames = 0;
+			loadFrames = frames_;
+		}
+	};
+}
+
+/*
+================
+shownAt
+
+Draws with the given frame times until the first readback and returns
+the presentation seconds of the frame it reads.
+================
+*/
+function shownAt( viewer, harness, times ) {
+	for ( const now of times ) {
+		viewer.frame( now );
+		if ( harness.reads() ) return harness.steps.at( -1 );
+	}
+	throw Error( "the still never reached its readback" );
+}
+
+test("a still shows the same moment however long its model took and however the frames fell", () =>
+	withBrowserGlobals( async () => {
+		const quick = clockHost( "?monster=1933&still=1&batch=1", 1 );
+		scope.window.__viewerStill?.catch( () => {} );
+		const fast = shownAt( createViewer( quick.host ), quick, [ 0, 16, 33, 50, 66, 83, 100, 116 ] );
+		const slow = clockHost( "?monster=1933&still=1&batch=1", 40 );
+		const irregular = Array.from( { length: 200 }, ( _, i ) => i * 97 + (i % 3) * 41 );
+		const late = shownAt( createViewer( slow.host ), slow, irregular );
+		// Wall time would show the slow model seconds later in its animation.
+		assert.equal( late, fast );
+		assert.ok( fast < 1, "the still shows its first presentation moments, not a load's length" );
+	} ));
+
+test("a batch's presentation clock never runs back between monsters", () =>
+	withBrowserGlobals( async () => {
+		const harness = clockHost( "?monster=1933&still=1&batch=1", 1 );
+		const viewer = createViewer( harness.host );
+		const first = scope.window.__viewerStill;
+		first.catch( () => {} );
+		shownAt( viewer, harness, Array.from( { length: 20 }, ( _, i ) => i * 16 ) );
+		// The readback never answers: the drawing bound ends this monster, so
+		// the batch takes the next one.
+		for ( let now = 1000; now <= 301000; now += 1000 ) viewer.frame( now );
+		await assert.rejects( first, /timeout/ );
+		const lastOfFirst = Math.max( ...harness.steps );
+		harness.reset( 1 );
+		const from = harness.steps.length;
+		scope.window.__viewerNext( 1933 ).catch( () => {} );
+		viewer.frame( 302000 );
+		viewer.frame( 302016 );
+		const next = harness.steps.slice( from );
+		assert.ok( next.length > 0, "the next monster steps" );
+		// Past the 1.5 s a departed doll's fading copy lives
+		// (characters.ts retireDespawned): it retires before the next draws.
+		assert.ok( Math.min( ...next ) - lastOfFirst >= 1.5, `next ${next} after ${lastOfFirst}` );
+	} ));
+
+/*
+================
+batchStill
+
+Draws one monster of a batch until its readback is asked for, then lets
+the drawing bound end it so the batch takes the next. Returns the monster's
+own presentation time at the moment its still shows (seconds since its
+first step) and the batch clock's absolute seconds then.
+================
+*/
+async function batchStill( viewer, harness, still, start ) {
+	still.catch( () => {} );
+	const from = harness.steps.length, reads = harness.reads();
+	let now = start;
+	while ( harness.reads() === reads ) {
+		viewer.frame( now );
+		now += 16;
+		if ( now - start > 60000 ) throw Error( "the still never reached its readback" );
+	}
+	const shown = harness.steps.at( -1 ), first = harness.steps[from];
+	for ( let at = now + 1000; at <= now + 301000; at += 1000 ) viewer.frame( at );
+	await assert.rejects( still, /timeout/ );
+	return { own: shown - first, absolute: shown, next: now + 302000 };
+}
+
+test("a monster's still is the same moment wherever it falls in a batch", () =>
+	withBrowserGlobals( async () => {
+		// The batch clock keeps running across monsters (BATCH_GAP_MS), but a
+		// new monster is a new gid, and actor-motion.ts starts its idle at its
+		// own first step (state.started, age = seconds - started). So the
+		// picture reads the monster's own time, which must not depend on what
+		// was drawn before it.
+		const harness = clockHost( "?monster=1933&still=1&batch=1", 1 );
+		const viewer = createViewer( harness.host );
+		const first = await batchStill( viewer, harness, scope.window.__viewerStill, 0 );
+		harness.reset( 25 );
+		const other = await batchStill( viewer, harness, scope.window.__viewerNext( 1934 ), first.next );
+		harness.reset( 7 );
+		const third = await batchStill( viewer, harness, scope.window.__viewerNext( 1933 ), other.next );
+		assert.ok( third.absolute - first.absolute >= 4, "the batch clock ran on between the two draws" );
+		assert.equal( third.own, first.own );
+	} ));

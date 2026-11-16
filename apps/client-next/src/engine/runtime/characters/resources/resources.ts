@@ -48,7 +48,17 @@ export function createCharacterResources(
 	origin: string
 ) {
 	const durations = new Map<string, ReadonlyMap<string, number>>();
-	const loaded = new Set<string>(), wanted = new Set<string>(), planned = new Set<string>();
+	// Decoded sources, each with the use stamp of its last admission: the
+	// cache retires the least recently used first. A stamp, not a delete and
+	// re-add per use: that churned a long-lived set every frame, and V8 puts
+	// such a set's next table in the old generation, where only a full
+	// collection frees it.
+	const loaded = new Map<string, number>();
+	let useStamp = 0;
+	// The frame's admission intent. begin starts each frame with new sets
+	// instead of clearing these: a long-lived set's next table is allocated
+	// in the old generation, where only a full collection frees it.
+	let wanted = new Set<string>(), planned = new Set<string>();
 	// The local player's worn sources for this frame (prioritize). A free
 	// load slot serves them before any other cold source starts: a newly
 	// equipped part must not wait behind unrelated actors.
@@ -283,7 +293,7 @@ export function createCharacterResources(
 					completed.path,
 					new Map( model.clips.map( clip => [ clip.name, clip.duration ] ) )
 				);
-				loaded.add( completed.path );
+				loaded.set( completed.path, ++useStamp );
 				failures.delete( completed.path );
 			} else if ( completed.animation && result.kind === "bytes" ) {
 				const { body, name } = completed.animation,
@@ -330,8 +340,8 @@ export function createCharacterResources(
 		*/
 		begin( seconds: number ) {
 			now = seconds;
-			wanted.clear();
-			planned.clear();
+			wanted = new Set();
+			planned = new Set();
 			plannedBytes = 0;
 			reservations = new Set();
 		},
@@ -455,7 +465,7 @@ export function createCharacterResources(
 						path,
 						new Map( built.model.clips.map( clip => [ clip.name, clip.duration ] ) )
 					);
-					loaded.add( path );
+					loaded.set( path, ++useStamp );
 				}
 			} else {
 				request( path, true );
@@ -463,8 +473,7 @@ export function createCharacterResources(
 			if ( !loaded.has( path ) ) return false;
 			// Most recently used last: the cache retires the oldest inactive
 			// source first when the frame takes its room back.
-			loaded.delete( path );
-			loaded.add( path );
+			loaded.set( path, ++useStamp );
 			return true;
 		},
 
@@ -488,22 +497,35 @@ export function createCharacterResources(
 			// retire before the next poll can admit its decode.
 			let bytes = plannedBytes + heldClasses() * CHARACTER_SOURCE_BYTES,
 				count = planned.size;
-			const keep = new Set( planned );
-			for ( const path of [ ...loaded ].reverse() ) {
-				if ( !keep.has( path ) ) {
-					const cost = costs.get( path )!;
-					if ( count < CHARACTER_MODELS && bytes + cost <= CHARACTER_RESIDENT_BYTES ) {
-						keep.add( path );
-						count++;
-						bytes += cost;
-					}
+			// Most frames keep everything: every inactive source fits, so every
+			// prefix of the recency order fits too and nothing is retired. Only
+			// an overflowing cache pays for the sort.
+			let inactive = 0, inactiveBytes = 0;
+			for ( const path of loaded.keys() ) {
+				if ( !planned.has( path ) ) {
+					inactive++;
+					inactiveBytes += costs.get( path )!;
 				}
 			}
-			for ( const path of loaded ) {
-				if ( !keep.has( path ) ) {
-					loaded.delete( path );
-					durations.delete( path );
-					costs.delete( path );
+			if ( count + inactive > CHARACTER_MODELS || bytes + inactiveBytes > CHARACTER_RESIDENT_BYTES ) {
+				const keep = new Set( planned );
+				const recentFirst = [ ...loaded.keys() ].sort( ( a, b ) => loaded.get( b )! - loaded.get( a )! );
+				for ( const path of recentFirst ) {
+					if ( !keep.has( path ) ) {
+						const cost = costs.get( path )!;
+						if ( count < CHARACTER_MODELS && bytes + cost <= CHARACTER_RESIDENT_BYTES ) {
+							keep.add( path );
+							count++;
+							bytes += cost;
+						}
+					}
+				}
+				for ( const path of loaded.keys() ) {
+					if ( !keep.has( path ) ) {
+						loaded.delete( path );
+						durations.delete( path );
+						costs.delete( path );
+					}
 				}
 			}
 			for ( const path of failures.keys() ) {
@@ -511,7 +533,7 @@ export function createCharacterResources(
 					failures.delete( path );
 				}
 			}
-			renderer.retainCharacterModels( [ ...wanted, ...loaded, ...assemblies ] );
+			renderer.retainCharacterModels( [ ...wanted, ...loaded.keys(), ...assemblies ] );
 		},
 
 		/*
