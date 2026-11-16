@@ -635,10 +635,6 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 		db.Close()
 		return nil, nil, err
 	}
-	if err := ensureCaravanAgentTables(db); err != nil {
-		db.Close()
-		return nil, nil, err
-	}
 	// The market tables (port-only, SRO_CONSIGNMENT): additive too.
 	if err := ensureMarket(db); err != nil {
 		db.Close()

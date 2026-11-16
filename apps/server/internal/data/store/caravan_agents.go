@@ -3,9 +3,10 @@
 
 caravan_agents.go - bounded SQLite persistence for AI caravan memories and route heat
 
-Port-only tables created on store open with no schema stamp move, following
-ensureEconomyBuckets (#3187): an older binary on the same state.db ignores
-them, and a fresh database creates them from dbSchema. Every write enforces
+Port-only, not native (SRO_AI_CARAVANS). The two tables are layout 14's
+additive step (layout_steps.go, schema 47): a fresh database creates them
+from dbSchema, an older store gets them empty at boot inside the read
+window or from the offline upgrade, and an older binary never reads them. Every write enforces
 strict row-count and byte-size caps by pruning the oldest updated_at_ms rows
 in the same transaction so the database cannot grow unbounded.
 
@@ -14,7 +15,6 @@ in the same transaction so the database cannot grow unbounded.
 package store
 
 import (
-	"database/sql"
 	"fmt"
 	"strings"
 
@@ -48,20 +48,6 @@ CREATE TABLE IF NOT EXISTS caravan_route_heat (
 CREATE INDEX IF NOT EXISTS idx_caravan_route_heat_updated
   ON caravan_route_heat (division, updated_at_ms);
 `
-
-/*
-================
-ensureCaravanAgentTables
-
-Creates the AI caravan memory and route danger tables on open when absent.
-================
-*/
-func ensureCaravanAgentTables(db *sql.DB) error {
-	if _, err := db.Exec(caravanAgentSchema); err != nil {
-		return fmt.Errorf("create caravan agent tables: %w", err)
-	}
-	return nil
-}
 
 /*
 ================
