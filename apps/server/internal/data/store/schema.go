@@ -159,7 +159,10 @@ func isVersionMismatch(err error) bool {
 // (port-only, trade_history.go), the record of each committed exchange and
 // stall sale. The schema stamp is what makes a release run the offline
 // upgrade that adds it; the upgrade rewrites no record.
-const CurrentVersion = 45
+// Version 46 adds the optional per-character Devil's Spirit token balance
+// and its daily count (port-only, SRO_NASRUN, game/nasrun/tokens.go). The
+// offline upgrade preserves all records; absent fields stay zero.
+const CurrentVersion = 46
 
 /*
 ================
@@ -230,12 +233,13 @@ var storeSteps = map[int]storeStep{
 	41: {true, "optional account gourdCount", 12, 13},
 	42: {true, "optional arena entry markers and reward chest", 12, 13},
 	43: {false, "the survival arena count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 12, 13},
-	// 44 is no longer the current schema: its low end is the layout it ran
-	// at, and its high end follows the current layout (layouts 25 and up
-	// always end at the current one). The current schema (45) takes the
-	// wide low end.
+	// 44 and 45 are no longer the current schema: each low end is the
+	// layout it ran at, and its high end follows the current layout
+	// (layouts 25 and up always end at the current one). The current
+	// schema (46) takes the wide low end.
 	44: {true, "optional top-level ravenRefugeReadyAtMs recovery deadline", 12, 13},
-	45: {true, "no record change; layout 13 adds trade_history", 5, 13},
+	45: {true, "no record change; layout 13 adds trade_history", 13, 13},
+	46: {true, "optional per-character Nasrun token balance and daily count", 5, 13},
 }
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
