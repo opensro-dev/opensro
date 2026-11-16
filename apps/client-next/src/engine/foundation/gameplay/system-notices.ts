@@ -11,6 +11,7 @@ the shard's job-kill and drop/plus notices (0x3667), and the command restriction
 */
 import { sealTier } from "./item-seal";
 import { decodeNoticeLinks } from "./notice-links";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 /*
 ================
@@ -240,7 +241,7 @@ export function serverNotification( opcode: number, p: Uint8Array ): SystemNotic
 		new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( 3, 14 ) ) === "Pet trainer";
 	if ( trainer ) {
 		if ( p.length < 16 ) throw Error( "Truncated pet trainer receipt" );
-		const length = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 14, true );
+		const length = viewOf( p ).getUint16( 14, true );
 		if ( length > 100 || p.length !== 16 + length * 2 ) throw Error( "Invalid pet trainer receipt length" );
 		return {
 			key: "",
@@ -251,7 +252,7 @@ export function serverNotification( opcode: number, p: Uint8Array ): SystemNotic
 	}
 	if ( !isServerNoticeChannel( p[0] ) ) return null;
 	if ( p.length < 3 ) throw Error( "Truncated server notification" );
-	const n = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 1, true );
+	const n = viewOf( p ).getUint16( 1, true );
 	// Port-only: a drop/plus notice may carry its links after the text
 	// (notice-links.ts), and so may a failed-reinforcement notice on the
 	// break channel (#3260); the banner shows the text alone either way.
@@ -344,7 +345,7 @@ export function restrictionNotice( opcode: number, p: Uint8Array ): SystemNotice
 	if ( p.length !== 5 ) throw Error( "Invalid command restriction notice" );
 	const kind = p[0]!;
 	if ( kind !== 0 && kind !== 1 ) return null;
-	const date = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true );
+	const date = viewOf( p ).getUint32( 1, true );
 	const hour = (date >>> 15) & 31, afternoon = hour > 12;
 	return {
 		key: kind === 0 ? "UIIT_MSG_GM_PUNISHMENT_CHAT_BLOCK" : "UIIT_MSG_GM_PUNISHMENT_TRADE_BLOCK",

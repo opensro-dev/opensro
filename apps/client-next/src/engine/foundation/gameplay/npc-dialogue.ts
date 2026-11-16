@@ -1,10 +1,11 @@
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 export type NpcGid = number & { readonly __npcGid: unique symbol; };
 // B338 -> 75AE50 -> 67ABE0. The selected NPC contributes only these two
 // capability bits; the acknowledged service owns the remaining lock mask.
 export function npcInteractionMask( payload: Uint8Array, capabilities: number ): number | null {
 	if ( payload.length === 2 && payload[0] === 2 ) return null;
 	if ( payload[0] !== 1 || payload.length < 5 ) throw Error( "Invalid NPC interaction acknowledgement" );
-	const mask = new DataView( payload.buffer, payload.byteOffset, payload.byteLength ).getUint32( 1, true );
+	const mask = viewOf( payload ).getUint32( 1, true );
 	if ( payload.length !== (mask === 0x800 ? 6 : 5) ) throw Error( "Invalid NPC interaction service payload" );
 	return (mask | (capabilities & 0x1400)) >>> 0;
 }
@@ -90,7 +91,7 @@ export function npcConversationTransition( state: NpcConversation, event: NpcCon
 }
 // CPSMission 763C10 / CIFNPCTalk 5D60C0.
 export function decodeNpcDialogue( p: Uint8Array ): NpcDialogue {
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	let offset = 0;
 	function take( n: number ) {
 		if ( offset + n > p.length ) throw Error( "Truncated NPC dialogue" );

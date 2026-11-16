@@ -15,6 +15,7 @@ caller, not by 6FEF10, see #1878).
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import type { WorldTravel } from "@/engine/contracts/world";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 /*
 ================
@@ -52,7 +53,7 @@ travelMode
 ================
 */
 export function travelMode( frame: WireFrame, localGid: number, itemCooldownMs = 0 ): WorldTravel["mode"] | null {
-	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const p = frame.payload, v = viewOf( p );
 	if ( frame.opcode === 0x3122 ) {
 		if ( p.length !== 6 ) throw Error( "Invalid travel character state" );
 		return localGid !== 0 && v.getUint32( 0, true ) === localGid && p[4] === 0 && p[5] === 2 ? 1 : null;

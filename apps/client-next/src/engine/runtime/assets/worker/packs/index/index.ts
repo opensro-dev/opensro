@@ -1,4 +1,5 @@
 import type { PackEntry, PackDescriptor } from "../internal/pack-contract";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 // The pack layout version (scripts/build/shared/packFormat.mjs).
 export const PACK_MAGIC = "SROPACK2", PACK_VERSION = 2;
 export function createPackIndex() {
@@ -144,7 +145,7 @@ export function createPackIndex() {
 				(!partial && bytes.length !== pack.bytes) || bytes.length < 12 ||
 				new TextDecoder().decode( bytes.subarray( 0, 8 ) ) !== PACK_MAGIC
 			) throw new Error( "Invalid pack identity" );
-			const start = 12 + new DataView( bytes.buffer, bytes.byteOffset, bytes.byteLength ).getUint32( 8, true );
+			const start = 12 + viewOf( bytes ).getUint32( 8, true );
 			if ( start > bytes.length ) throw new Error( "Truncated pack header" );
 			const header = object(
 				JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( bytes.subarray( 12, start ) ) )

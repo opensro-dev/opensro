@@ -10,6 +10,7 @@ remains owned until acknowledgement, so latency cannot redirect a late reply.
 */
 import type { GateRow } from "@/engine/contracts/gameplay";
 import { TARGET_RELEASE_TIMEOUT, type WireFrame } from "@/engine/contracts/network";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 /*
 ================
@@ -70,7 +71,7 @@ rule. Inferred, as no other kind has a recorded grant.
 */
 export function talkPaneOpens( kind: string | undefined, gate: boolean, p: Uint8Array ): boolean {
 	if ( gate || kind === "npc" ) return true;
-	const view = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const view = viewOf( p );
 	const monsterRule = ( word: number ) => (word & MONSTER_TALK_BLOCK_BIT) === 0 && (word & MONSTER_TALK_BIT) !== 0;
 	const vitalsArm = p.length === VITALS_GRANT_BYTES && p[5] === 1;
 	if ( kind === "monster" || kind === "cos" ) return vitalsArm && monsterRule( view.getUint32( 10, true ) );
@@ -89,7 +90,7 @@ u16 point id. Null when the bytes after the base are not exactly that.
 ================
 */
 function decodeGateRows( p: Uint8Array, at: number ): GateRow[] | null {
-	const view = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const view = viewOf( p );
 	if ( at >= p.length ) return null;
 	const count = p[at++]!;
 	const rows: GateRow[] = [];
@@ -305,7 +306,7 @@ receive
 			// 11-byte answer is a fortress gate's tax tail or an NPC grant,
 			// which only the replied entity's class settles (#2870).
 			const gid = p.length >= 5 ?
-				new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true ) :
+				viewOf( p ).getUint32( 1, true ) :
 				0;
 			const replied = gid ? readEntity( gid ) : undefined;
 			const gate = replied?.kind === "teleport" || pending?.family === "teleport" ||
@@ -315,7 +316,7 @@ receive
 			// rows after the base (CIFNPCTalk_AppendTeleportRows 5D32C0).
 			const base = gate ? (fortress ? 11 : TELEPORT_GRANT_BYTES) : 0;
 			const rows = gate && p.length > base && p.length >= 9 &&
-					(new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 5, true ) & GATE_ROWS_FLAG) !== 0 ?
+					(viewOf( p ).getUint32( 5, true ) & GATE_ROWS_FLAG) !== 0 ?
 				decodeGateRows( p, base ) :
 				null;
 			if ( gate && p.length !== base && !rows ) throw Error( "Invalid teleport grant" );
@@ -327,12 +328,12 @@ receive
 			target = gid;
 			localSelection = false;
 			taxRate = gate && fortress ?
-				new DataView( p.buffer, p.byteOffset, p.byteLength ).getInt16( 9, true ) :
+				viewOf( p ).getInt16( 9, true ) :
 				0;
 			capabilities = gate ?
-				new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 5, true ) :
+				viewOf( p ).getUint32( 5, true ) :
 				p.length === 11 ?
-				new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 6, true ) :
+				viewOf( p ).getUint32( 6, true ) :
 				0;
 			// The NPC grant's trailing byte is the flag-war row mode
 			// (the reference server's event byte: 1 offers sign-up, 2 offers cancel, else no row).

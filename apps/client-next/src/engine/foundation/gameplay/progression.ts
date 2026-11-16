@@ -12,6 +12,7 @@ it. Experience deltas (0x30D2) belong to the level owner, not here.
 */
 import { playerStats, type PlayerStats } from "./player-stats";
 import type { SystemNotice } from "./system-notices";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 /*
 ================
@@ -52,7 +53,7 @@ export function progressionPacket( state: Progression, opcode: number, p: Uint8A
 		if ( p[0] === 2 && p.length === 2 ) return { ...state, error: "Stat allocation rejected: " + p[1] };
 		throw Error( "Invalid stat allocation acknowledgement" );
 	}
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	if ( opcode === 0x30b3 ) {
 		// Type 1: [u8 1][u64 balance][u8 notify]; the notice is the caller's.
 		if ( p[0] === 1 ) {
@@ -97,7 +98,7 @@ loss (progression applyDeathPenalty).
 */
 export function skillPointNotice( held: number | undefined, p: Uint8Array ): SystemNotice | null {
 	if ( p[0] !== 2 || p.length !== 6 || p[5] === 0 || held === undefined ) return null;
-	const next = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true );
+	const next = viewOf( p ).getUint32( 1, true );
 	const lost = held - next;
 	return lost > 0 ?
 		{

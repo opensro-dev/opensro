@@ -11,6 +11,7 @@ buyback ledger. Pure decoders: the inventory owner applies their results.
 */
 import { itemTooltipReference, type ItemTooltipReference } from "./item-tooltip-reference";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 /*
 ================
@@ -24,7 +25,7 @@ export function saleResult( opcode: number, p: Uint8Array ) {
 	if ( opcode !== 0xb06d || p[0] !== 1 || (p[1] !== 9 && p[1] !== 20) ) return null;
 	const cos = p[1] === 20, offset = cos ? 6 : 2;
 	if ( p.length !== offset + 8 ) throw Error( "Invalid sale result" );
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength ),
+	const v = viewOf( p ),
 		cosGid = cos ? v.getUint32( 2, true ) : undefined,
 		slot = p[offset]!,
 		quantity = v.getUint16( offset + 1, true ),

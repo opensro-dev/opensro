@@ -28,6 +28,7 @@ import {
 	type FortressServiceReply
 } from "./fortress-services";
 import type { FortressZoneRecord } from "./fortress-map";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // Enabled v1.150 siegefortressbattlerank.txt rows, in unsigned threshold
 // order (7E1C60); names are the 7BB8C0 switch, icons are row column 5.
@@ -251,7 +252,7 @@ export function fortressPacket( state: FortressState, frame: WireFrame, now = 0 
 			null;
 	}
 	if ( frame.opcode !== OP_FORTRESS_WAR_STATE ) return null;
-	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const p = frame.payload, v = viewOf( p );
 	let o = 0;
 	function take( n: number ) {
 		if ( o + n > p.length ) throw Error( "Truncated fortress frame" );
@@ -364,7 +365,7 @@ WARAPPLY_COMPLETE; a withdrawal reads the war or union cancel text.
 export function fortressRegistrationNotice( state: FortressState, frame: WireFrame ): SystemNotice | null {
 	const p = frame.payload;
 	if ( frame.opcode !== OP_FORTRESS_WAR_STATE || (p[0] !== 0x0c && p[0] !== 0x0d) || p.length !== 6 ) return null;
-	const id = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true ), kind = p[5]!;
+	const id = viewOf( p ).getUint32( 1, true ), kind = p[5]!;
 	const key = p[0] === 0x0c ?
 		"UIIT_MSG_FORT_OFFICIAL_WARAPPLY_COMPLETE" :
 		kind === FORTRESS_REQUEST_ATTACK ?
@@ -389,7 +390,7 @@ export function fortressBattleRankNotice( frame: WireFrame, localName: string ):
 	let name = localName, rank = p[2]!;
 	if ( p[1] === 0 ) {
 		if ( p.length < 5 ) throw Error( "Truncated fortress battle rank name" );
-		const n = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 2, true );
+		const n = viewOf( p ).getUint16( 2, true );
 		if ( p.length !== n + 5 ) throw Error( "Invalid fortress battle rank length" );
 		name = new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( 4, 4 + n ) );
 		rank = p[4 + n]!;
@@ -438,7 +439,7 @@ export function fortressStructureState( frame: WireFrame ): FortressStructureSta
 	const p = frame.payload;
 	if ( frame.opcode !== OP_FORTRESS_WAR_STATE || p[0] !== FORTRESS_STRUCTURE_STATE ) return null;
 	if ( p.length < 15 ) throw Error( "Truncated fortress structure state" );
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	const row = {
 		fortressId: v.getUint32( 1, true ),
 		gid: v.getUint32( 5, true ),
@@ -471,7 +472,7 @@ export function fortressCaptureNotice(
 	const p = frame.payload;
 	if ( frame.opcode !== OP_FORTRESS_WAR_STATE ) return null;
 	if ( p[0] === FORTRESS_CONQUEST ) {
-		const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+		const v = viewOf( p );
 		if ( p.length < 7 ) throw Error( "Truncated fortress conquest" );
 		const id = v.getUint32( 1, true ), n = v.getUint16( 5, true );
 		if ( p.length !== 23 + n ) throw Error( "Invalid fortress conquest length" );
@@ -758,7 +759,7 @@ export function fortressManagerReply(
 	previous: FortressApplication | null
 ): FortressManagerReply | null {
 	if ( frame.opcode !== OP_FORTRESS_INTERACTION_RESULT ) return null;
-	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength ), subtype = p[0];
+	const p = frame.payload, v = viewOf( p ), subtype = p[0];
 	if ( subtype !== FORTRESS_WAR_STATUS && subtype !== FORTRESS_WAR_APPLY && subtype !== FORTRESS_WAR_WITHDRAW ) {
 		return null;
 	}

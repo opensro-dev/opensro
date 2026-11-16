@@ -26,6 +26,7 @@ import type {
 	PetTrainingRow,
 	PetTrainingSkill
 } from "@/engine/contracts/gameplay";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const OP_PET_TRAINING_STATE = 0x3fb1;
 export const OP_PET_SKILL_COUNTERS = 0x3fb6;
@@ -80,7 +81,7 @@ a protocol error, never a partial one.
 			if ( frame.opcode === 0x3fbd ) {
 				const p = frame.payload;
 				if ( p.length !== 11 ) throw Error( "Invalid Hunting Howl state length" );
-				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const v = viewOf( p );
 				const gid = v.getUint32( 0, true ),
 					book = p[4]!,
 					speedPercent = v.getUint16( 5, true ) / 10,
@@ -106,7 +107,7 @@ a protocol error, never a partial one.
 			if ( frame.opcode === 0x3fb9 ) {
 				const p = frame.payload;
 				if ( p.length !== 8 ) throw Error( "Invalid Guiding Feathers length" );
-				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const v = viewOf( p );
 				const gid = v.getUint32( 0, true ),
 					book = p[4]!,
 					stacks = p[5]!,
@@ -126,7 +127,7 @@ a protocol error, never a partial one.
 			if ( frame.opcode === 0x3fb7 ) {
 				const p = frame.payload;
 				if ( p.length !== 8 ) throw Error( "Invalid Tailwind state length" );
-				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const v = viewOf( p );
 				const gid = v.getUint32( 0, true ),
 					book = p[4]!,
 					stacks = p[5]!,
@@ -156,11 +157,11 @@ a protocol error, never a partial one.
 					(p.length >= 17 &&
 						(p[12]! > 4 ||
 							(p[12] === 0) !==
-								(new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 13, true ) === 0)))
+								(viewOf( p ).getUint32( 13, true ) === 0)))
 				) {
 					throw Error( "Invalid pet skill counters" );
 				}
-				const gid = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 0, true );
+				const gid = viewOf( p ).getUint32( 0, true );
 				if ( state?.gid === gid ) {
 					state = {
 						...state,
@@ -177,7 +178,7 @@ a protocol error, never a partial one.
 							...(p.length >= 17 ?
 								{
 									hunt: p[12]!,
-									huntTarget: new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32(
+									huntTarget: viewOf( p ).getUint32(
 										13,
 										true
 									)
@@ -189,7 +190,7 @@ a protocol error, never a partial one.
 				return true;
 			}
 			if ( frame.opcode !== OP_PET_TRAINING_STATE ) return false;
-			const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const p = frame.payload, v = viewOf( p );
 			let at = 0;
 			const take = ( n: number ) => {
 				if ( at + n > p.length ) throw new Error( "Truncated pet training state" );

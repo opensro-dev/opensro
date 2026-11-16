@@ -374,6 +374,7 @@ import {
 	journalInventoryFrame
 } from "@/engine/foundation/gameplay/inventory-journal";
 import type { Degradation, WireFrame } from "@/engine/contracts/network";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 /*
 ================
 unlimitedItemIds
@@ -4597,7 +4598,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					// satiety; the entity lane then swaps every viewer's model.
 					const p = frame.payload;
 					if ( p.length !== 9 ) throw Error( "Invalid COS reference change" );
-					const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+					const v = viewOf( p );
 					const gid = v.getUint32( 0, true ), refObjId = v.getUint32( 5, true );
 					if ( !gid || !refObjId ) throw Error( "Invalid COS reference" );
 					const record = cosRecords.get( gid );
@@ -4639,7 +4640,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( frame.opcode === 0x3508 && frame.payload[4] === 4 ) {
 					const p = frame.payload;
 					if ( p.length !== 7 ) throw Error( "Invalid COS satiety update" );
-					const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+					const v = viewOf( p );
 					const gid = v.getUint32( 0, true ), satiety = v.getUint16( 5, true );
 					if ( !gid || satiety > 10000 ) throw Error( "Invalid COS satiety value" );
 					const record = cosRecords.get( gid );
@@ -4665,7 +4666,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					localGid,
 					frame.opcode === 0x3508 && frame.payload.length >= 4 ?
 						cosRecords.get(
-							new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+							viewOf( frame.payload )
 								.getUint32( 0, true )
 						) :
 						undefined
@@ -4734,7 +4735,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( frame.opcode === 0x36bf ) {
 					const p = frame.payload;
 					if ( p.length < 2 ) throw Error( "Invalid talk notice" );
-					const length = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 0, true );
+					const length = viewOf( p ).getUint16( 0, true );
 					if ( p.length !== length + 2 ) throw Error( "Invalid talk notice length" );
 					const key = new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( 2 ) );
 					if ( npcConversation.interactionLocked() ) {
@@ -4869,7 +4870,7 @@ Packet handling must not depend on which HUD panel is currently open.
 						if ( payload[0] !== 1 || payload.length !== (mastery ? 6 : 5) ) {
 							throw Error( "Invalid restoration receipt" );
 						}
-						const id = new DataView( payload.buffer, payload.byteOffset, payload.byteLength ).getUint32(
+						const id = viewOf( payload ).getUint32(
 							1,
 							true
 						);
@@ -4929,7 +4930,7 @@ Packet handling must not depend on which HUD panel is currently open.
 						training.receipt(
 							frame.opcode,
 							frame.payload[0] === 1 ?
-								new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+								viewOf( frame.payload )
 									.getUint32( 1, true ) :
 								undefined
 						);
@@ -4949,7 +4950,7 @@ Packet handling must not depend on which HUD panel is currently open.
 						return true;
 					}
 					if ( p[0] !== 1 || p.length !== 5 ) throw new Error( "Invalid skill learn response" );
-					const id = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true ),
+					const id = viewOf( p ).getUint32( 1, true ),
 						group = skillGroups.get( id );
 					if ( group === undefined ) throw new Error( "Missing learned skill reference authority" );
 					const replaced = new Set( bindings.skills.filter( old => {
@@ -5081,7 +5082,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					// packet before selector-specific reads (including pickup GID).
 					if ( p[0] === 2 && p[2] === 0 ) return true;
 					if ( p.length !== at + 4 + (p[1] === 8 ? 4 : 0) ) throw new Error( "Invalid COS result" );
-					const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+					const v = viewOf( p );
 					cosResult = {
 						subtype: p[0]!,
 						selector: p[1]!,
@@ -5209,7 +5210,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					(frame.payload[1] === 0x11 || frame.payload[1] === 0x12)
 				) {
 					if ( frame.payload.length < 7 ) throw Error( "Invalid COS ground result" );
-					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+					const gid = viewOf( frame.payload )
 							.getUint32( 2, true ),
 						record = cosRecords.get( gid );
 					if ( !record ) throw Error( "Absent COS ground owner" );
@@ -5238,7 +5239,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 0x15
 				) {
 					if ( frame.payload.length < 7 ) throw Error( "Invalid COS grant result" );
-					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+					const gid = viewOf( frame.payload )
 							.getUint32( 2, true ),
 						record = cosRecords.get( gid );
 					if ( !record ) throw Error( "Absent COS grant owner" );
@@ -5267,7 +5268,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 0x16
 				) {
 					if ( frame.payload.length !== 7 ) throw Error( "Invalid COS removal result" );
-					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+					const gid = viewOf( frame.payload )
 							.getUint32( 2, true ),
 						record = cosRecords.get( gid );
 					if ( !record ) throw Error( "Absent COS removal owner" );
@@ -5503,7 +5504,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					// an assist target starts its countdown (+0xAB30).
 					petAssistCountdowns = haltedPetAssistCountdowns(
 						petAssistCountdowns,
-						new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+						viewOf( frame.payload )
 							.getUint32( 0, true ),
 						petAssists,
 						now
@@ -5525,7 +5526,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				}
 				if (
 					fight && frame.opcode === 0x33a6 &&
-					new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength ).getUint32(
+					viewOf( frame.payload ).getUint32(
 							0,
 							true
 						) === localGid

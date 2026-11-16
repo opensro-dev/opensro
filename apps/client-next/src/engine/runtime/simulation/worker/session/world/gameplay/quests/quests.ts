@@ -19,6 +19,7 @@ import {
 } from "@/engine/foundation/gameplay/quest";
 import type { QuestRecord, QuestMarker, QuestProgressEvent, QuestGathering } from "@/engine/contracts/gameplay";
 import type { WireFrame } from "@/engine/contracts/network";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 const MAX_QUESTS = 256;
 const MAX_COMPLETED = 65535;
@@ -160,7 +161,7 @@ export function createQuests( send: ( frame: WireFrame ) => void ) {
 			const p = frame.payload;
 			if ( frame.opcode === 0x36bd ) {
 				if ( p.length !== 5 ) throw Error( "Invalid gathering start" );
-				const refId = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 0, true );
+				const refId = viewOf( p ).getUint32( 0, true );
 				if ( !refId || !Number.isFinite( now ) ) throw Error( "Invalid gathering identity or clock" );
 				gathering = { refId, startedAtMs: now, durationMs: p[4]! * SECOND_MS };
 				return true;
@@ -168,7 +169,7 @@ export function createQuests( send: ( frame: WireFrame ) => void ) {
 			if ( frame.opcode === 0xb75d ) {
 				if ( p[0] === 2 && p.length === 2 ) return true;
 				if ( p[0] !== 1 || p.length !== 5 ) throw Error( "Invalid gathering cancellation" );
-				const refId = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true );
+				const refId = viewOf( p ).getUint32( 1, true );
 				if ( gathering?.refId === refId ) gathering = undefined;
 				return true;
 			}

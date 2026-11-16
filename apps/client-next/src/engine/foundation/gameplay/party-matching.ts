@@ -13,6 +13,7 @@ import { readPartyMember, type PartyMember } from "./party-member";
 import type { SystemNotice } from "./system-notices";
 import { NO_JOB_CLASS } from "./job-guild";
 import { NATIVE_LEVEL_CAP } from "./level-cap";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 const PARTY_JOIN_TIMEOUT_MS = 10000;
 const PARTY_JOIN_NO_REPLY = 2;
 
@@ -221,7 +222,7 @@ export function partyMatchPacket(
 ): PartyMatching | null {
 	const op = frame.opcode;
 	if ( ![ 0xb588, 0xb5bf, 0xb6ff, 0xb3dc, 0xb535, 0x75bf ].includes( op ) ) return null;
-	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const p = frame.payload, v = viewOf( p );
 	let at = 0;
 	const u = ( n: number ) => {
 		if ( at + n > p.length ) throw Error( "Truncated party matching packet" );

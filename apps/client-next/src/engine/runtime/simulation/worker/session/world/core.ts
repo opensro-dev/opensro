@@ -36,6 +36,7 @@ import { createEntities } from "./entities/entities";
 import { createGameplay } from "./gameplay/gameplay";
 import type { WireFrame } from "@/engine/contracts/network";
 import type { GameplayCommand } from "@/engine/contracts/gameplay";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // PLAYER_ATTACK_LEVEL_NOTICE is 693F1A's ShowSystemNotification(4, 0x16).
 const PLAYER_ATTACK_LEVEL_NOTICE = 0x16;
@@ -335,7 +336,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 		const chatSender =
 			frame.opcode === 0x3667 && frame.payload.length >= 5 && (frame.payload[0] === 1 || frame.payload[0] === 3) ?
 				entities.read(
-					new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength ).getUint32(
+					viewOf( frame.payload ).getUint32(
 						1,
 						true
 					)
@@ -413,7 +414,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 		const selectedMode = travelMode( frame, localGid, itemCooldown );
 		if ( selectedMode !== null ) loadingMode = selectedMode;
 		if ( frame.opcode === 0x30e3 || frame.opcode === 0xb2f5 ) {
-			const v = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength );
+			const v = viewOf( frame.payload );
 			const gid = v.getUint32( frame.opcode === 0x30e3 ? 16 : 0, true ), e = entities.read( gid );
 			// 775B50 halts the named object's active mover, so a correction
 			// naming the mount the local player rides (a stunned transport,
@@ -450,7 +451,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 			if ( entity?.kind === "local-player" && !entity.mountedOn ) gameplay.heading( entity.heading );
 		}
 		if ( frame.opcode === 0x32a6 ) {
-			const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+			const gid = viewOf( frame.payload )
 				.getUint32( 0, true );
 			const entity = entities.read( gid );
 			if ( entity ) {

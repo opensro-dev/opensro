@@ -42,6 +42,7 @@ import type { Degradation, WireFrame } from "@/engine/contracts/network";
 import { SYSTEM_PET_APPEAR } from "@/engine/contracts/orb";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 import { JOB_SUIT_SLOT, partyActiveJob } from "@/engine/foundation/gameplay/party-matching";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 // The kinds whose spawn builds a CICharactor (players, NPCs, monsters, COS,
 // fortress structures); ground items and skill objects are not characters.
 const CHARACTER_KINDS = new Set( [ "player", "local-player", "npc", "monster", "cos", "structure" ] );
@@ -627,7 +628,7 @@ export function createEntities(
 		if ( p.length < 4 ) {
 			throw new Error( "Truncated spawn" );
 		}
-		const v = new DataView( p.buffer, p.byteOffset, p.byteLength ),
+		const v = viewOf( p ),
 			refObjId = v.getUint32( 0, true ),
 			ref = refs.get( refObjId );
 		if ( refObjId === DYNAMIC_OBJECT_REFERENCE ) {
@@ -1034,7 +1035,7 @@ export function createEntities(
 			if ( frame.opcode === 0x3fbe ) {
 				const p = frame.payload;
 				if ( p.length !== 18 ) throw Error( "Invalid brood wind length" );
-				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const v = viewOf( p );
 				const gid = v.getUint32( 0, true ), regionId = v.getUint16( 4, true );
 				const x = v.getFloat32( 6, true ), y = v.getFloat32( 10, true ), z = v.getFloat32( 14, true );
 				if ( gid < 0x08000000 || gid >= 0x0a800000 || !regionId || ![ x, y, z ].every( Number.isFinite ) ) {
@@ -1046,7 +1047,7 @@ export function createEntities(
 			if ( frame.opcode === 0x3fbb ) {
 				const p = frame.payload;
 				if ( p.length !== 20 ) throw Error( "Invalid crow effect length" );
-				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const v = viewOf( p );
 				const gid = v.getUint32( 0, true ), cue = p[4]!, book = p[5]!, regionId = v.getUint16( 6, true );
 				const x = v.getFloat32( 8, true ), y = v.getFloat32( 12, true ), z = v.getFloat32( 16, true );
 				if (
@@ -1062,7 +1063,7 @@ export function createEntities(
 			if ( frame.opcode === 0x3fb5 ) {
 				const p = frame.payload;
 				if ( p.length !== 10 ) throw Error( "Invalid pet Resolve length" );
-				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const v = viewOf( p );
 				const gid = v.getUint32( 0, true ),
 					stacks = v.getUint8( 4 ),
 					tier = v.getUint8( 5 ),
@@ -1097,7 +1098,7 @@ export function createEntities(
 			if ( frame.opcode === 0x3fb3 ) {
 				const p = frame.payload;
 				if ( p.length !== 4 ) throw Error( "Invalid pet counter pulse length" );
-				const gid = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 0, true );
+				const gid = viewOf( p ).getUint32( 0, true );
 				if ( !gid ) throw Error( "Invalid pet counter pulse recipient" );
 				const entity = entities.get( gid );
 				if ( entity ) {
@@ -1112,7 +1113,7 @@ export function createEntities(
 			if ( frame.opcode === 0x3fb2 ) {
 				const p = frame.payload;
 				if ( p.length !== 21 ) throw Error( "Invalid shield state length" );
-				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const v = viewOf( p );
 				const gid = v.getUint32( 0, true ),
 					amount = v.getUint32( 4, true ),
 					maxHp = v.getUint32( 8, true ),
@@ -1141,7 +1142,7 @@ export function createEntities(
 			// Any frame but the dead monster's own drops ends its publication.
 			const followsDeath = dropSource;
 			dropSource = 0;
-			const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const p = frame.payload, v = viewOf( p );
 			if ( frame.opcode === 0x3449 ) {
 				if ( p.length !== 8 ) throw Error( "Invalid external item effect" );
 				const source = entities.get( v.getUint32( 0, true ) ), item = v.getUint32( 4, true );

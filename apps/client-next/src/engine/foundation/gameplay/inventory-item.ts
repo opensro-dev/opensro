@@ -11,6 +11,7 @@ the summoner item's subtype, the way the writer laid the record out.
 ===========================================================================
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // The port-only pet gear rows (scripts/build/shared/portItemRows.mjs); the
 // server's item/wire PetGearRefFirst..PetGearRefLast.
@@ -52,7 +53,7 @@ export function decodeInventoryItem(
 	refs: ReadonlyMap<number, number>,
 	objRefs: ReadonlyMap<number, number> = new Map()
 ): { item: InventoryItem | null; next: number; } {
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	let o = offset;
 	/*
 ================

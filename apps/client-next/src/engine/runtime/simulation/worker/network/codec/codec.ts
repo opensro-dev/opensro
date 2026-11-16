@@ -9,6 +9,7 @@ sends and receives. The server's envelope.go is the wire authority.
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 // Wire authority: apps/server/internal/transport/envelope.go (protocol v2).
 const SERVER_LIMIT = 16 << 20, CLIENT_LIMIT = 64 << 10;
 // The session-internal range (envelope.go maxReservedOpcode): HELLO,
@@ -41,7 +42,7 @@ export function createCodec() {
 				throw new Error( "Invalid inbound frame length" );
 			}
 			return {
-				opcode: new DataView( bytes.buffer, bytes.byteOffset, bytes.byteLength ).getUint16( 0, true ),
+				opcode: viewOf( bytes ).getUint16( 0, true ),
 				payload: bytes.subarray( 2 )
 			};
 		},
@@ -85,7 +86,7 @@ export function createCodec() {
 			}
 			return {
 				resumed: payload[1] === 1,
-				sessionId: new DataView( payload.buffer, payload.byteOffset, payload.byteLength ).getBigUint64(
+				sessionId: viewOf( payload ).getBigUint64(
 					2,
 					true
 				),

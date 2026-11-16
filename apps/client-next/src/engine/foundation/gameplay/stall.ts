@@ -37,6 +37,7 @@ import type { WireFrame } from "@/engine/contracts/network";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import { groupedNumber } from "@/engine/foundation/ui/guide-content";
 import { decodeInventoryItem } from "./inventory-item";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const STALL_SLOTS = 10;
 // 0x7367/0x3667 type 9: the stall window's own chat box (CIFChatModule
@@ -263,7 +264,7 @@ Folds one frame; null for frames the stall does not own.
 ================
 */
 export function stallFrame( state: StallState, frame: WireFrame, ctx: StallContext ): StallOutcome | null {
-	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const p = frame.payload, v = viewOf( p );
 	let o = 0;
 	const take = ( n: number ) => {
 		if ( o + n > p.length ) throw Error( "Truncated stall frame" );

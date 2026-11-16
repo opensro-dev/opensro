@@ -92,6 +92,7 @@ import { equipDurabilityWarning } from "@/engine/foundation/audio/item-sounds";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import { MALL_BALANCE_CONTROL, MALL_SILK_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 import { MAX_INVENTORY_SLOT_COUNT } from "@/engine/foundation/gameplay/quickslots";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 const NPC_SHOP_CAPABILITY = 0x1;
 // Capacity announce 0x3092 [kind][capacity]; kind 1 is the bag. The server
@@ -1180,7 +1181,7 @@ cosPurchase
 			if ( p.length < 11 || p[0] !== 1 || p[1] !== 19 || p.length !== 11 + p[8]! ) {
 				throw Error( "Invalid COS purchase result" );
 			}
-			const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const v = viewOf( p );
 			if (
 				pending?.movementType !== 19 || !pending.snapshot || pending.cosGid !== v.getUint32( 2, true ) ||
 				pending.tab !== p[6] || pending.source !== p[7] ||
@@ -1260,7 +1261,7 @@ frame is not that echo (a rejection takes the generic receive path).
 			if ( !pending?.storage || p[0] !== 1 || p[1] !== storageWireType( pending.movementType!, room.guild ) ) {
 				return null;
 			}
-			const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const v = viewOf( p );
 			const echo = pending.movementType === STORAGE_MOVE_ROOM ?
 				p.length === 6 && p[2] === pending.source && p[3] === pending.destination &&
 				v.getUint16( 4, true ) === pending.quantity :
@@ -1341,7 +1342,7 @@ cosTransferred
 			if ( p.length !== 8 || p[0] !== 1 || (p[1] !== 0x1a && p[1] !== 0x1b) ) {
 				throw Error( "Invalid COS transfer result" );
 			}
-			const gid = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true );
+			const gid = viewOf( p ).getUint32( 2, true );
 			const matched = pending && pending.opcode === 0xb06d && pending.movementType === p[1] &&
 				pending.cosGid === gid && record.gid === gid && pending.source === p[6] &&
 				pending.destination === p[7];
@@ -1384,7 +1385,7 @@ cosGround
 		*/
 		cosGround( frame: import("@/engine/contracts/network").WireFrame, now: number ) {
 			if ( busy() ) throw Error( "Inventory command unavailable" );
-			const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const p = frame.payload, v = viewOf( p );
 			if ( frame.opcode !== 0x706d || !(p[0] === 0x11 && p.length === 9 || p[0] === 0x12 && p.length === 6) ) {
 				throw Error( "Invalid COS ground request" );
 			}
@@ -1422,7 +1423,7 @@ cosGrounded
 ================
 		*/
 		cosGrounded( p: Uint8Array ) {
-			const gid = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true );
+			const gid = viewOf( p ).getUint32( 2, true );
 			const matched = !!pending && pending.cosGid === gid && pending.movementType === p[1] &&
 				(p[1] !== 0x12 || pending.source === p[6]);
 			// A pet's pickup holds no lock in the original client: a receipt
@@ -1440,7 +1441,7 @@ cosMove
 		*/
 		cosMove( frame: import("@/engine/contracts/network").WireFrame, now: number ) {
 			if ( busy() ) throw Error( "Inventory command unavailable" );
-			const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const p = frame.payload, v = viewOf( p );
 			if ( frame.opcode !== 0x706d || p.length !== 9 || p[0] !== 0x10 ) {
 				throw Error( "Invalid COS inventory command" );
 			}
@@ -1463,7 +1464,7 @@ cosMoved
 ================
 		*/
 		cosMoved( p: Uint8Array ) {
-			const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const v = viewOf( p );
 			if (
 				p.length !== 10 || pending?.movementType !== 0x10 || pending.cosGid !== v.getUint32( 2, true ) ||
 				pending.source !== p[6] || pending.destination !== p[7] || pending.quantity !== v.getUint16( 8, true )
@@ -1783,7 +1784,7 @@ receive
 			// A successful receipt alone does not create this category timer.
 			if ( op === 0x3792 && p[0] === 2 && p[1] === 4 ) {
 				if ( p.length !== 6 ) throw Error( "Invalid guild soldier cooldown" );
-				const seconds = new DataView( p.buffer, p.byteOffset, p.byteLength ).getInt32( 2, true );
+				const seconds = viewOf( p ).getInt32( 2, true );
 				if ( seconds > 0 ) {
 					itemCooldowns = [ ...itemCooldowns.filter( row => row.category !== 30 ), {
 						category: 30,
@@ -1903,7 +1904,7 @@ receive
 					const cue of alchemy.compound(
 						success,
 						success && op !== 0xb549 ?
-							new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true ) :
+							viewOf( p ).getUint32( 2, true ) :
 							undefined,
 						p[0] === 2 ? p[1]! : null
 					)
@@ -2001,7 +2002,7 @@ receive
 					} );
 					return true;
 				}
-				const value = new DataView( p.buffer, p.byteOffset, p.byteLength ).getInt32( 1, true ),
+				const value = viewOf( p ).getInt32( 1, true ),
 					old = item.durability | 0;
 				const cue = value > old ?
 					(old === 0 ? "SND_REVIVE" : "SND_REPAIR") :
@@ -2094,7 +2095,7 @@ receive
 			if ( op === 0xb06d && p[0] === 1 && p[1] === 0x22 ) {
 				if (
 					p.length !== 6 || !pending || pending.buybackIndex !== p[3] || !pending.snapshot ||
-					new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 4, true ) !== pending.quantity ||
+					viewOf( p ).getUint16( 4, true ) !== pending.quantity ||
 					p[2] !== pending.destination || slots.get( p[2]! )?.quantity !== pending.quantity
 				) throw Error( "Unmatched native buyback restore" );
 				const item = slots.get( p[2]! )!;
@@ -2137,7 +2138,7 @@ receive
 			if ( op !== 0xb06d && op !== 0xb5bd ) {
 				return false;
 			}
-			const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const v = viewOf( p );
 			if ( p[0] === 2 ) {
 				if ( p.length !== 2 ) {
 					throw new Error( "Invalid inventory rejection" );

@@ -15,6 +15,7 @@ import type { WireFrame } from "@/engine/contracts/network";
 import type { AcademyState } from "./academy";
 import { constantNativeNotice } from "./native-notice";
 import type { SystemNotice } from "./system-notices";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // 76FC90 reads one extra u32 when 0xB7C5 fails with error 0x1D.
 const ACADEMY_DISBAND_WAIT_CODE = 0x1d;
@@ -91,7 +92,7 @@ export function academyStatusNotice(
 	}
 	// 7740F9: subtype 3 is voluntary leave (1), expulsion (2) or silent (3).
 	if ( p[0] === 3 ) {
-		const id = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true );
+		const id = viewOf( p ).getUint32( 1, true );
 		const flag = p[5]!;
 		const member = state.members?.find( m => m.id === id );
 		if ( flag === 1 ) {
@@ -122,7 +123,7 @@ export function academyStatusNotice(
 	}
 	// 774622: subtype 4 is voluntary (0) or compulsory (1) graduation.
 	if ( p[0] === 4 ) {
-		const id = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true );
+		const id = viewOf( p ).getUint32( 1, true );
 		const flag = p[5]!;
 		if ( flag !== 0 && flag !== 1 ) return null;
 		const member = state.members?.find( m => m.id === id );
@@ -150,7 +151,7 @@ export function academyStatusNotice(
 	// flag 1 from the mentor lane's world-bound / session-closed
 	// hooks.
 	if ( p[0] === 5 && p[5] === 1 ) {
-		const id = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true );
+		const id = viewOf( p ).getUint32( 1, true );
 		const member = state.members?.find( m => m.id === id );
 		const after = next.members?.find( m => m.id === id );
 		if ( !member || !after ) return null;
@@ -200,7 +201,7 @@ export function academyBuffNotices(
 	if ( p[0] !== 0 || p.length < 2 ) return [];
 	const count = p[1]! << 24 >> 24;
 	if ( count <= 0 || 2 + count * 12 > p.length ) return [];
-	const view = new DataView( p.buffer, p.byteOffset, p.byteLength ), notices: SystemNotice[] = [];
+	const view = viewOf( p ), notices: SystemNotice[] = [];
 	for ( let i = 0; i < count; i++ ) {
 		const donor = state.members?.find( m => m.id === view.getUint32( 2 + i * 12 + 4, true ) );
 		if ( donor && donor.kind !== 0 ) {
