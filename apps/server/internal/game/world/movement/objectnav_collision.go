@@ -125,6 +125,11 @@ func (v *WaterValidator) worldPointOnObjectDeck(worldX, worldZ, y float64) bool 
 // outside-object path requires the complete client 403FB0/428300 probe semantics.
 const objectEdgeContactWindowUnits = 2.0
 
+// deckWallBackoffUnits is how far short of a closed object's wall a walker
+// crossing another object's deck is taken to stand (closedWallAtStand): one
+// unit, well outside the outline's 0.01u nudge margin.
+const deckWallBackoffUnits = 1.0
+
 // objectNavEdgeBlocks decides whether crossing one edge, approached from
 // the given side, stops the native walk (semantics + data ground truth in
 // the section banner above).
@@ -189,6 +194,9 @@ type objectContactOptions struct {
 	// puts the walker on another surface, this mesh's edges are not in the
 	// walker's way (it is on a different deck, or on this one's terrain).
 	walk *navWalk
+	// placementY is the world height of the placement this mesh belongs
+	// to: the walk's surface heights are world heights, the mesh's local.
+	placementY float64
 	// walkerAt is the chord fraction the terrain walker stood at when it
 	// stepped this object (native visit or its last exit back onto terrain).
 	// 428300's blocked branch nudges that position, not the chord start.
@@ -239,6 +247,46 @@ any contact was found; response, when set, receives the contact point.
 */
 /*
 ================
+closedWallAtStand
+
+Whether a walker standing on another object's surface at chord fraction
+t still meets this edge: an outline edge of a closed mesh (every outline
+edge blocking, no way in or out) whose height range holds the surface it
+stands on, within closedObjectYSlack. That is the rule InsideClosedObject
+encloses a pose by (placementguard.go), so a walk never crosses into a
+pose the closed-object rescue would call trapped.
+
+A walker on another object's deck passes this mesh's edges when the
+deck runs over or under them (a bridge over a fence). A closed object
+sitting on that deck is not under it. Without this test a walk across a
+raised walkable object (asset 1609, Constantinople 0x694F, its surface
+4.5 units above the planter's floor) went straight through the wall of
+a planter beside it (asset 1639). Once inside, the walker was on
+terrain, where every wall applies, so it could never walk out (#3668).
+
+INFERENCE: neither binary is cited for object-on-object contact. The
+height band is InsideClosedObject's (a deck over a closed footprint is
+tens of units higher), and the rule is limited to closed meshes, which
+no walk can enter legitimately, so no authored passage changes.
+================
+*/
+func closedWallAtStand(mesh *objectNavMesh, outline bool, walk *navWalk, t, placementY float64) bool {
+	if !outline {
+		return false
+	}
+	height, ok := walk.heightAt(t)
+	if !ok {
+		return false
+	}
+	local := height - placementY
+	if local < mesh.minY-closedObjectYSlack || local > mesh.maxY+closedObjectYSlack {
+		return false
+	}
+	return closedMesh(mesh)
+}
+
+/*
+================
 objectEdgeGroupChordContactDetail
 ================
 */
@@ -283,12 +331,16 @@ func objectEdgeGroupChordContactDetail(
 		edgeY := ay + (by-ay)*u
 		chordY := y0 + (y1-y0)*t
 		owner, owned := opts.path.cellAt(t)
+		deckWall := false
 		if owned && (!opts.ownedMesh || (int(edges.srcCell[i]) != owner && int(edges.dstCell[i]) != owner)) {
 			continue
 		}
 		if !owned {
 			if other, _, elsewhere := opts.walk.objectAt(t); elsewhere && other != opts.path {
-				continue
+				if !closedWallAtStand(mesh, outline, opts.walk, t, opts.placementY) {
+					continue
+				}
+				deckWall = true
 			}
 		}
 		if !owned && opts.terrainEntry != nil && !opts.terrainEntry(t) {
@@ -298,7 +350,13 @@ func objectEdgeGroupChordContactDetail(
 			continue
 		}
 		ox, oz := x0, z0
-		if !owned && opts.walkerAt != nil {
+		if deckWall {
+			// The walker crossed the deck up to the wall: it stands just
+			// short of the crossing, not where the terrain walker last
+			// visited this placement's cells.
+			at := math.Max(0, t-deckWallBackoffUnits/math.Hypot(x1-x0, z1-z0))
+			ox, oz = x0+(x1-x0)*at, z0+(z1-z0)*at
+		} else if !owned && opts.walkerAt != nil {
 			at := opts.walkerAt(t)
 			ox, oz = x0+(x1-x0)*at, z0+(z1-z0)*at
 		}
@@ -507,7 +565,7 @@ func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, to
 						continue
 					}
 					walkerAt := func(t float64) float64 { return math.Max(visit, walk.lastExitBefore(t)) }
-					if t, ok := objectMeshChordContactDetail(mesh, ox0, oz0, oy0, ox1, oz1, oy1, math.Inf(1), func(edge int, _ bool, _ float64) bool { return passages.permits(i, edge) }, &local, objectContactOptions{exits: true, path: path, ownedMesh: path != nil, terrainEntry: terrainEntry, walk: walk, walkerAt: walkerAt}); ok {
+					if t, ok := objectMeshChordContactDetail(mesh, ox0, oz0, oy0, ox1, oz1, oy1, math.Inf(1), func(edge int, _ bool, _ float64) bool { return passages.permits(i, edge) }, &local, objectContactOptions{exits: true, path: path, ownedMesh: path != nil, terrainEntry: terrainEntry, walk: walk, placementY: placement.y, walkerAt: walkerAt}); ok {
 						key := visit
 						if path != nil {
 							key = t // an owned mesh is walked cell by cell: its own contact order
