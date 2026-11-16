@@ -101,6 +101,10 @@ var unlistedSettings = map[string]string{
 	// Cosmetic item rows the variant build imports; the GameWorld reads no
 	// such switch, the items simply exist in the built data.
 	"SRO_MALL_AVATARS": "mall avatar build input, consumed when the server data is built",
+	// The Styria Clash arena map (#3272 slice 1): the variant build merges
+	// its ground; nothing links to it and the GameWorld reads no switch
+	// until the Battle Arena engine (#3648) makes it a rule.
+	"SRO_STYRIA_CLASH": "Styria Clash arena map build input; players cannot reach it until #3648",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
 	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",
@@ -637,6 +641,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Qin-Shi Emperor Tomb has its geometry and entrance in the v1.150 client, without monster spawns or walk-in gates; its door moves nobody.",
 				Now:    "Qin-Shi Emperor Tomb is open on all six floors: its door by Jangan admits players of level 70 and above, its gates move between floors, and its monsters are awake.",
 				Why:    "Opens the Jangan tomb dungeon shipped in the v1.150 client assets (GH #1013); the original returns with one setting."},
+			{Flag: action.EnvJanganTombTeleport, On: action.JanganTombTeleportEnabled(),
+				Native: "The Jangan teleporter does not lead into Qin-Shi Emperor Tomb; players walk in through its door.",
+				Now:    "The Jangan teleporter also offers Qin-Shi Emperor Tomb floors 1 to 3 and each corner of floor 4 for 40,000 gold, from level 70.",
+				Why:    "A quicker way to the tomb floors, on the same terms as the Alexandria rows of the same gate."},
 			{Flag: action.EnvFlagWarStartUTC, On: true,
 				Native: "Capture the Flag runs on the reference server's event schedule.",
 				Now: fmt.Sprintf("One Capture the Flag match a day at %02d:%02d UTC; sign-up opens ten minutes before the start at Event So-Ok (level 20 and up).",

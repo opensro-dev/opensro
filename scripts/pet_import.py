@@ -59,6 +59,7 @@ import cap110_item_import as shared
 import cap110_items as items
 import import_vsro_alexandria as tables
 import later_world_import
+from pin_file import read_pin_field
 from prepare_client_resources import safe_target, write_atomically
 import sro_pk2
 from sro_paths import EXTRACTED_ROOT, REPO_ROOT
@@ -454,10 +455,7 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 		if not Path(source["pins"]).is_file():
 			remove_import(output, source)
 			return _disabled(source, "archive pins not in tree")
-		pins = json.loads(Path(source["pins"]).read_text(encoding="utf-8"))
-		if pins.get("format") != PIN_FORMAT:
-			raise ValueError(f"{source['pins']}: unknown pin format")
-		tables.require_vsro_pin(root, tuple(FOLDERS), pins["archives"])
+		tables.require_vsro_pin(root, tuple(FOLDERS), read_pin_field(source["pins"], PIN_FORMAT, "archives"))
 	native_chars, native_items = native_tables(native)
 	later_chars, later_items, later_text = later_tables_from_pk2(root)
 	res_root = Path(native) / "Data_extracted" / "res"

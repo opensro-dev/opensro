@@ -4032,7 +4032,10 @@ test("body avatar override restores normal run and restarts same-name replacemen
 		assert.equal( a.clip, role );
 		const age = a.time;
 		a = step( [ ids[0] ] );
-		assert.ok( a.time > age, "unchanged override keeps clock" );
+		// The wearer first draws dressed, its wing set playing from that frame,
+		// so the 1 s loop can wrap inside this step: the clock reads exactly
+		// the 0.4 s stepped past age, modulo the loop. A restart reads 0.4.
+		assert.ok( Math.abs( a.time - (age + .4) % 1 ) < 1e-6, "unchanged override keeps clock" );
 		a = step( [ ids[1] ] );
 		assert.equal( a.clip, "stand", "native re-entry rejects movement before restoring standing" );
 		movementRevision++;
@@ -4864,6 +4867,71 @@ test("a characterInfo ride joins its rider, follows its motions and links by the
 		f.step( riders.slice( 1 ), 4 );
 		assert.equal( f.actors.some( actor => actor.pickOwner === 1 ), false, "the ride leaves with its rider" );
 	} finally {
+		f.dispose();
+	}
+});
+
+test("a character seen for the first time waits unseen for its worn parts instead of showing its bare body", () => {
+	// The original loads a wearer's parts with the wearer and never shows one
+	// undressed; this port loads them one at a time. A crowd seen at world
+	// entry stood naked for seconds until each part came in.
+	const roster = publishedRoster();
+	const appearance = {
+		items: publishedItems(),
+		roster: {
+			models: [ {
+				refObjId: 1,
+				codename: "CHAR_CH_MAN_TEST",
+				glb: "/assets/1.glb",
+				clips: [ "stand", "walk", "run" ]
+			} ],
+			dress: roster.dress
+		}
+	};
+	const id = Number(
+		Object.entries( roster.dress.equipment ).find( ( [, r] ) => r.slot === 1 && r.bodies.CH_M?.glb )?.[0]
+	);
+	assert.ok( id, "the roster carries a CH_M chest garment" );
+	const part = "http://localhost" + roster.dress.equipment[id].bodies.CH_M.glb;
+	for ( const failing of [ false, true ] ) {
+		const blockedPaths = new Set( [ part ] );
+		const f = fixture(
+			{},
+			2,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			{},
+			{ appearance, blockedPaths }
+		);
+		f.warm();
+		// A gid the warm-up never drew: a character seen for the first time.
+		const wearer = [ entity( 7, { kind: "player", refObjId: 1, equipment: [ { slot: 1, refObjId: id } ] } ) ];
+		const drawn = () => f.actors.find( a => a.gid === 7 );
+		let now = 0;
+		const stepTo = target => {
+			while ( now < target ) f.presentation.step( wearer, null, now = Math.min( target, now + .05 ) );
+		};
+		stepTo( 1 );
+		assert.equal( f.presentation.error(), null );
+		assert.equal( drawn(), undefined, "the wearer stays unseen while its chest garment loads" );
+		if ( failing ) {
+			// A part that never arrives must not hide its wearer for good.
+			stepTo( 6.5 );
+			assert.equal( drawn()?.model, "/assets/1.glb", "after the bounded wait the body shows as before" );
+		} else {
+			blockedPaths.clear();
+			stepTo( 2 );
+			assert.match( drawn()?.model ?? "", /^assembly:/, "the wearer first appears dressed" );
+		}
 		f.dispose();
 	}
 });

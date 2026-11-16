@@ -86,8 +86,8 @@ type Item struct {
 	// CSOItem body carries (wire.ItemBody.MagicOptions). Only
 	// equipment-family rows carry them; they ride every move/drop/pickup
 	// so a bag shuffle can never strip a persisted option.
-	MagicOptions      []uint64
-	TransformRefObjID uint32 // monster capsule Data
+	MagicOptions []uint64
+	Data         uint32 // item record data word (+0x38): capsule monster, Spirit clock
 	// RecordID projects the native item-record +20/+24 search identity when
 	// supplied by an owner. Its DB allocation/load lifecycle is not implemented
 	// by this field. A newly split row starts at zero; RefObjID is not a substitute.
@@ -108,15 +108,15 @@ Body
 */
 func (i Item) Body() wire.ItemBody {
 	return wire.ItemBody{
-		TradeOwner:        i.TradeOwner,
-		RefObjID:          i.RefObjID,
-		TypeFlags:         i.TypeFlags,
-		Plus:              i.Plus,
-		VarianceBits:      i.VarianceBits,
-		Durability:        i.Durability,
-		Quantity:          i.Quantity,
-		MagicOptions:      append([]uint64(nil), i.MagicOptions...),
-		TransformRefObjID: i.TransformRefObjID, Summon: domain.CloneCOS(i.Summon),
+		TradeOwner:   i.TradeOwner,
+		RefObjID:     i.RefObjID,
+		TypeFlags:    i.TypeFlags,
+		Plus:         i.Plus,
+		VarianceBits: i.VarianceBits,
+		Durability:   i.Durability,
+		Quantity:     i.Quantity,
+		MagicOptions: append([]uint64(nil), i.MagicOptions...),
+		Data:         i.Data, Summon: domain.CloneCOS(i.Summon),
 	}
 }
 
@@ -616,7 +616,7 @@ only value-carrying stones may retain a nonzero assimilation byte.
 */
 func retainedOversizedStack(item Item, stackCap uint16) bool {
 	if stackCap == 0 || item.Quantity <= stackCap || item.VarianceBits != 0 ||
-		len(item.MagicOptions) != 0 || item.TransformRefObjID != 0 || item.Summon != nil || item.TradeOwner != "" {
+		len(item.MagicOptions) != 0 || item.Data != 0 || item.Summon != nil || item.TradeOwner != "" {
 		return false
 	}
 	const itemTypeMask uint16 = 0xfffe
