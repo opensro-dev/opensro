@@ -26,6 +26,7 @@ import { buildConfigResources } from "./config.mjs";
 import { buildFontResources } from "./fonts.mjs";
 import { buildLauncherResources, copyLauncherAssets } from "./launcher.mjs";
 import { buildTextResources } from "./text.mjs";
+import { extractRetailCursors } from "./cursors.mjs";
 import { buildTitleResources } from "./title.mjs";
 import { buildUiImagePreloadManifest } from "./uiImagePreload.mjs";
 import { buildBackgroundInstallAsset } from "./data/buildBackgroundInstallAsset.mjs";
@@ -53,7 +54,6 @@ import { buildSiegeFortressDataAsset } from "./data/buildSiegeFortressDataAsset.
 import { buildMissionPresentationAsset } from "./data/buildMissionPresentationAsset.mjs";
 import { buildNameFilterAsset } from "./data/buildNameFilterAsset.mjs";
 import { buildStallNetworkAssets } from "./data/buildStallNetworkAssets.mjs";
-import { runPython } from "./shared/pythonRun.mjs";
 import { runConvertImages } from "./shared/convertImagesRunner.mjs";
 import { buildNativeLensResources } from "./shared/nativeLensResources.mjs";
 import { buildNativeCharacterTextures } from "./shared/nativeCharacterTextures.mjs";
@@ -72,12 +72,11 @@ import {
 	buildWorldRegionCatalog,
 	loadOutdoorWorldRegionResourceGroup
 } from "./world/index.mjs";
-import { publicRoot, rebuildRoot } from "./world/paths.mjs";
 
 import { formatOptimizationSummary } from "./jsonAssetCompression.mjs";
 import { packPublicTree } from "./packPublicTree.mjs";
 import { buildJobs } from "./shared/buildParallelism.mjs";
-import { claimPublicPaths, recordClaims } from "./shared/publicationLedger.mjs";
+import { recordClaims } from "./shared/publicationLedger.mjs";
 import {
 	importLaterDungeonMapsStep,
 	importLaterOptionalTeleportStep,
@@ -100,32 +99,6 @@ export {
 import { createLaneMemo, outputSignatures, signatureHash } from "./shared/laneMemo.mjs";
 import { dataRootsHash, serverRosterRoots } from "./shared/resourceBuildFingerprint.mjs";
 import { fileURLToPath } from "node:url";
-
-const RETAIL_CURSOR_IDS = [ "0x95", "0x96", "0x97", "0x98", "0x99", "0x9a", "0xa0", "0xa1", "0xa3", "0xa6" ];
-/*
-================
-extractRetailCursors
-
-Extract cursor resources through the shared retail source paths.
-================
-*/
-async function extractRetailCursors() {
-	const result = await runPython(
-		[ "scripts/extract_client_cursors.py", ...RETAIL_CURSOR_IDS ],
-		{
-			task: "[cursors] embedded retail cursor extraction",
-			cwd: rebuildRoot,
-			context: [
-				"Browser cursor paths are client presentation resources and must be published before pack indexing."
-			]
-		}
-	);
-	const output = result.stdout.trim();
-	if ( output ) console.log( output );
-	// The Python extractor writes the cursors; this step owns them.
-	claimPublicPaths( RETAIL_CURSOR_IDS.map( id => `/assets/cursors/sro_client_cursor_${id}.png` ) );
-	return { count: RETAIL_CURSOR_IDS.length };
-}
 
 /*
 ================
@@ -162,14 +135,14 @@ async function buildHdTexturePacksStep() {
 
 // The modules that hold each memoized lane's steps: laneMemo.mjs keys a lane
 // by their code closures. The world lane is not memoized; it reads the
-// outdoor build's public output, which no lane key covers. Nor are fonts
-// and audio (plan B5): the fonts lane's repairs are actions
-// (fontResources.mjs), and warm, the lane costs about 1.8 s, mostly the GDI
-// atlas; audio's copies confirm unchanged files by digest, about 1.9 s warm.
+// outdoor build's public output, which no lane key covers. Nor are fonts,
+// audio and cursors (plan B5): the cursors and the font repairs are actions
+// (cursors.mjs, fontResources.mjs), so warm, the fonts lane costs about 1.8 s
+// (mostly the GDI atlas); audio's copies confirm unchanged files by digest,
+// about 1.9 s warm.
 const LANE_MODULES = {
 	interfaceImages: [ "./cif.mjs", "./launcher.mjs", "./world/assets/copyMissionMinimapTileImages.mjs" ],
 	text: [ "./text.mjs", "./launcher.mjs", "./config.mjs" ],
-	cursors: [ "../extract_client_cursors.py" ],
 	titleCharacters: [
 		"./char/buildRoster.mjs",
 		"./char/buildCrowdVatAssets.mjs",
@@ -487,7 +460,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		lane( "text", { modules: laneModules( "text" ) }, textLane ),
 		fontsLane,
 		audioLane,
-		lane( "cursors", { modules: laneModules( "cursors" ) }, cursorAssetsLane ),
+		cursorAssetsLane,
 		lane( "title-characters", { modules: laneModules( "titleCharacters" ) }, titleCharacterAssetsLane ),
 		lane( "npc", { modules: laneModules( "npc" ), roots: serverRosterRoots() }, npcAssetsLane ),
 		worldLane
