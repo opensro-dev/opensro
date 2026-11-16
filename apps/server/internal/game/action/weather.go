@@ -5,8 +5,9 @@ weather.go - delivers the climate cycle's weather to players (0x3BDE)
 
 The reference shard runs one weather state per climate
 (world/climate) and the game server tells each player the weather of the
-region it stands in. This file is that delivery, behind SRO_WEATHER (off
-by default: no frame at all, every client stays clear):
+region it stands in. This file is that delivery, behind SRO_WEATHER (on
+by default, as natively; off sends no frame at all and every client
+stays clear):
 
   - a climate's current weather changes: every player whose region
     belongs to that climate gets the new weather (advanceWeather);

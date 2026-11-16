@@ -51,6 +51,11 @@ const (
 	minStepDistance = 10
 	maxStepDistance = 510
 
+	// The port caps a drawn amount at maxAmount. Natively the amount is an
+	// 8-bit add (add dl, base; cmp dl, 0xFF), so a sum over 255 wraps
+	// instead. No shipped row reaches it (the largest is 3002's
+	// 150 + 40 = 190), so the cap is not a native rule to rely on, and
+	// it must not be "fixed" into a wrap either.
 	maxAmount = 255
 
 	// An InitialAmount of zero draws randomInitialBase + rand%randomInitialSpan.
