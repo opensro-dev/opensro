@@ -104,6 +104,7 @@ var unlistedSettings = map[string]string{
 	// The Styria Clash arena map (#3272 slice 1): the variant build merges
 	// its ground; nothing links to it and the GameWorld reads no switch
 	// until the Battle Arena engine (#3648) makes it a rule.
+	"SRO_REFERRALS":    "the website's referral page shows its own numbers from the referral route",
 	"SRO_STYRIA_CLASH": "Styria Clash arena map build input; players cannot reach it until #3648",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.

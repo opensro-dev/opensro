@@ -653,6 +653,7 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 			return nil
 		})
 	}
+	application.goReferralSweep(groupContext, group)
 	if application.mutes != nil {
 		group.Go(func() error {
 			runMuteReaper(groupContext, application.mutes)
