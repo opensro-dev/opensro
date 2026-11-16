@@ -338,7 +338,9 @@ type Ticker struct {
 	// static roster in that world's sessions' NPC scope pass only. Nil
 	// means none.
 	WorldNpcs func(world uint32) []NpcDef
-	Interval  time.Duration
+	// RosterAt: Roster or its seasonal look variant (npc_looks.go).
+	RosterAt func(nowMs int64) []NpcDef
+	Interval time.Duration
 	// ShardCount is the fixed worker count. Values <= 0 use
 	// DefaultTickShards. Division IDs are assigned by a stable hash.
 	ShardCount int
@@ -913,12 +915,7 @@ func (t *Ticker) runSessionLegs(state *divisionTickState, session SessionSnapsho
 
 	// All authored NPCs (including ferry managers and city gates) must enter
 	// and leave with the viewer throughout travel, not only during login.
-	roster := t.Roster
-	if t.WorldNpcs != nil {
-		if extra := t.WorldNpcs(session.WorldInstance); len(extra) > 0 {
-			roster = append(append(make([]NpcDef, 0, len(t.Roster)+len(extra)), t.Roster...), extra...)
-		}
-	}
+	roster := t.sessionRoster(session.WorldInstance, nowMs)
 	// The legs of one division run in order on one worker, so the
 	// division's scope scratch is free to carry from session to session;
 	// the push below copies the frames before it returns.

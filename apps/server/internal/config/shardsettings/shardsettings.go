@@ -213,6 +213,14 @@ var Settings = []Setting{
 	// decoration (progression/christmas.go). Off is native.
 	{Env: "SRO_CHRISTMAS_EVENT", NomadVar: "christmas_event", Default: "off"},
 	{Env: "SRO_CHRISTMAS_EVENT_WINDOW", NomadVar: "christmas_event_window", Default: ""},
+	// Port-only, not native: which Christmas event the switch runs,
+	// "winter" (#3603) or "so_ok_2006" (So-Ok's Christmas Gift,
+	// progression/christmas_mode.go), and the 2006 event's box chance in
+	// percent and gift weights (CODENAME=WEIGHT,...; empty keeps the
+	// owner's table).
+	{Env: "SRO_CHRISTMAS_EVENT_MODE", NomadVar: "christmas_event_mode", Default: "winter"},
+	{Env: "SRO_CHRISTMAS_SOOK_BOX_CHANCE", NomadVar: "christmas_sook_box_chance", Default: "1.5"},
+	{Env: "SRO_CHRISTMAS_SOOK_GIFTS", NomadVar: "christmas_sook_gifts", Default: ""},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_MALL_STARTER_SILK", NomadVar: "mall_starter_silk", Default: "700"},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
