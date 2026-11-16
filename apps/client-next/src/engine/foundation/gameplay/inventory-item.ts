@@ -11,7 +11,8 @@ the summoner item's subtype, the way the writer laid the record out.
 ===========================================================================
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
-import { viewOf } from "@/engine/foundation/binary/byte-view";
+// Value imports here stay relative: the asset pipeline and script tests load
+// this file in Node, which does not resolve the "@/" alias (so no viewOf).
 
 // The port-only pet gear rows (scripts/build/shared/portItemRows.mjs); the
 // server's item/wire PetGearRefFirst..PetGearRefLast.
@@ -53,7 +54,7 @@ export function decodeInventoryItem(
 	refs: ReadonlyMap<number, number>,
 	objRefs: ReadonlyMap<number, number> = new Map()
 ): { item: InventoryItem | null; next: number; } {
-	const v = viewOf( p );
+	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
 	let o = offset;
 	/*
 ================

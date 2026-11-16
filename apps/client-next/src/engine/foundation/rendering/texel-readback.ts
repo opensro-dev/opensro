@@ -10,7 +10,8 @@ the HDR stage is on (clamped to 0..1, alpha kept). Pure.
 
 ===========================================================================
 */
-import { viewOf } from "@/engine/foundation/binary/byte-view";
+// Value imports here stay relative: the asset pipeline and script tests load
+// this file in Node, which does not resolve the "@/" alias (so no viewOf).
 
 // COPY_ROW_ALIGNMENT is WebGPU's bytesPerRow alignment for a buffer copy.
 export const COPY_ROW_ALIGNMENT = 256;
@@ -85,7 +86,7 @@ export function unpackRgba8( source: Uint8Array, width: number, height: number, 
 	if ( source.byteLength < stride * (height - 1) + width * texel ) throw Error( "Short texture copy" );
 	const out = new Uint8ClampedArray( width * height * 4 );
 	const halves = format === "rgba16float" ?
-		viewOf( source ) :
+		new DataView( source.buffer, source.byteOffset, source.byteLength ) :
 		null;
 	for ( let y = 0; y < height; y++ ) {
 		for ( let x = 0; x < width; x++ ) {

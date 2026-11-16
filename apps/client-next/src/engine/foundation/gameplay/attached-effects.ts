@@ -9,7 +9,8 @@ from the packet length. Server instance tokens own retirement.
 
 ===========================================================================
 */
-import { viewOf } from "@/engine/foundation/binary/byte-view";
+// Value imports here stay relative: the asset pipeline and script tests load
+// this file in Node, which does not resolve the "@/" alias (so no viewOf).
 
 const MAX_EFFECT_REFERENCES = 65536;
 const MAX_WIRE_U32 = 0xffffffff;
@@ -52,7 +53,7 @@ Decode one retained hawk's target/result notification atomically.
 */
 export function hawkCommand( payload: Uint8Array ) {
 	if ( payload.length !== HAWK_COMMAND_BYTES ) throw Error( "Invalid summoned-hawk command" );
-	const view = viewOf( payload );
+	const view = new DataView( payload.buffer, payload.byteOffset, payload.byteLength );
 	return { token: view.getUint32( 0, true ), target: view.getUint32( 4, true ), damage: view.getUint16( 8, true ) };
 }
 // 8E38A3: the high bit fills result+8 (fatal), not result+A (critical).
@@ -178,7 +179,7 @@ export function attachedEffect(
 	refs: ReadonlyMap<number, AttachedEffectReference>
 ): AttachedEffect {
 	if ( payload.length < ATTACHED_EFFECT_HEADER_BYTES ) throw Error( "Invalid attached effect packet" );
-	const v = viewOf( payload ),
+	const v = new DataView( payload.buffer, payload.byteOffset, payload.byteLength ),
 		ref = refs.get( v.getUint32( 4, true ) );
 	if ( !ref ) throw Error( "Missing attached effect reference authority" );
 	const hasPhase = ref.status;
@@ -212,7 +213,7 @@ export function endedEffectTokens( payload: Uint8Array ): readonly number[] {
 	if ( count === undefined || payload.length !== 1 + count * WIRE_U32_BYTES ) {
 		throw Error( "Invalid effect teardown packet" );
 	}
-	const v = viewOf( payload );
+	const v = new DataView( payload.buffer, payload.byteOffset, payload.byteLength );
 	return Array.from( { length: count }, ( _, i ) => v.getUint32( 1 + i * WIRE_U32_BYTES, true ) );
 }
 

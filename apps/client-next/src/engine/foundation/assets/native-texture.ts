@@ -12,7 +12,8 @@ The format rules also serve CPU residency accounting and input validation.
 */
 import type { NativeTexture } from "@/engine/contracts/texture";
 import type { TextureFeature } from "./texture-variants";
-import { viewOf } from "@/engine/foundation/binary/byte-view";
+// Value imports here stay relative: the asset pipeline and script tests load
+// this file in Node, which does not resolve the "@/" alias (so no viewOf).
 
 const NTX_MAGIC = 0x3158544e;
 const HEADER_BYTES = 20;
@@ -158,7 +159,7 @@ export function decodeNativeTexture( bytes: Uint8Array ): NativeTexture {
 	if ( bytes.byteLength < HEADER_BYTES || bytes.byteLength > MAX_TEXTURE_BYTES + HEADER_BYTES ) {
 		throw Error( "Invalid native texture extent" );
 	}
-	const view = viewOf( bytes );
+	const view = new DataView( bytes.buffer, bytes.byteOffset, bytes.byteLength );
 	if ( view.getUint32( 0, true ) !== NTX_MAGIC ) throw Error( "Invalid native texture header" );
 	const width = view.getUint32( 4, true ), height = view.getUint32( 8, true );
 	const code = view.getUint32( 12, true ), count = view.getUint32( 16, true );
@@ -316,7 +317,7 @@ export function decodeNativeSurface( surface: {
 		return result;
 	}
 	const blockBytes = nativeTextureBlockBytes( format ), columns = Math.ceil( width / BLOCK_SIDE );
-	const data = viewOf( bytes );
+	const data = new DataView( bytes.buffer, bytes.byteOffset, bytes.byteLength );
 	// One palette for the surface: a per-block array and a per-pixel subarray
 	// view were the asset worker's largest garbage while decoding regions.
 	const scratch = new Uint8Array( BLOCK_SIDE * CHANNELS );
