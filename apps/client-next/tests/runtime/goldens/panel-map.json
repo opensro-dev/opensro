@@ -94,7 +94,7 @@
   "{\"characterAnchor\":1,\"clip\":[0,0,1600,900],\"color\":[1,1,1,1],\"rect\":[14,-2,3,7],\"sampling\":\"nearest\",\"texture\":\"/assets/fonts/native-ui-font-atlas.png\",\"uv\":[0.961,0.001,0.006,0.008]}",
   "{\"clip\":[0,0,1600,900],\"color\":[1,1,1,1],\"rect\":[4,7,212,70],\"texture\":\"/assets/images/Media_extracted/interface/ifcommon/window_all.png\",\"uv\":[0.724,0,0.207,0.137]}",
   "{\"clip\":[0,0,1600,900],\"color\":[1,1,1,1],\"rect\":[19,14,48,48],\"texture\":\"/assets/images/Media_extracted/interface/playerminiinfo/pmi_face.png\",\"uv\":[0,0,1,1]}",
-  "{\"clip\":[0,0,1600,900],\"color\":[1,1,1,1],\"portraitGid\":1,\"rect\":[19,14,48,48],\"texture\":\"__portrait\",\"uv\":[0,0,1,1]}",
+  "{\"clip\":[0,0,1600,900],\"color\":[1,1,1,1],\"mask\":{\"rect\":[19,14,48,48],\"texture\":\"/assets/images/Media_extracted/interface/playerminiinfo/pmi_face.png\"},\"portraitGid\":1,\"rect\":[19,14,48,48],\"texture\":\"__portrait\",\"uv\":[0,0,1,1]}",
   "{\"clip\":[0,0,1600,900],\"color\":[1,1,1,1],\"rect\":[45,63,20,20],\"texture\":\"/assets/images/Media_extracted/interface/playerminiinfo/pmi_button.png\",\"uv\":[0,0,1,1]}",
   "{\"clip\":[0,0,1600,900],\"color\":[1,1,1,1],\"rect\":[76,14,6,9],\"sampling\":\"nearest\",\"texture\":\"/assets/fonts/native-ui-font-atlas.png\",\"uv\":[0.549,0.001,0.012,0.01]}",
   "{\"clip\":[0,0,1600,900],\"color\":[1,1,1,1],\"rect\":[84,14,1,9],\"sampling\":\"nearest\",\"texture\":\"/assets/fonts/native-ui-font-atlas.png\",\"uv\":[0.891,0.001,0.002,0.01]}",

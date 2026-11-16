@@ -26,6 +26,8 @@ import { createFrontendFixture } from "./frontend-fixture";
 import { createStageFixture } from "./frontend-stage-fixture";
 import { createPresentationRandom } from "../../src/engine/runtime/random/random";
 
+// A draw no later than this after the last, when the tab paints slowly.
+const FALLBACK_FRAME_MS = 16;
 const parameters = new URLSearchParams( location.search );
 // Old direct fixture links resolve to the actual owner; the duplicate is retired from navigation.
 const requestedId = parameters.get( "scenario" ) === "frontend:race" ?
@@ -61,7 +63,7 @@ const trace: { time: number; kind: string; detail: unknown; }[] = [];
 const queue: SessionCommand[] = [];
 const pending: number[] = [];
 let semantics: UiSemantics | null = null, clock = 1000, ready = false, stable = 0;
-let stopped = false, animation = 0, lastReport = 0, error: string | null = null;
+let stopped = false, animation = 0, fallback = 0, lastReport = 0, reportedReady = false, error: string | null = null;
 let playing = false;
 let toolsVisible = true, recording = false, petMode = 0;
 let entryBaseline: Set<string> | null = null;
@@ -629,6 +631,29 @@ function snapshot() {
 
 /*
 ================
+schedule
+
+Queue the next draw on whichever comes first: the display's animation
+frame or a short timer. Loading is paced by draws (the asset owner refills
+its four request slots once per UI step), and Chrome runs a tab it is not
+painting - one behind another tab, or driven by a browser probe - at about
+one animation frame a second. An entry's ~400 startup reads then took about
+100 s to settle; the timer keeps a gallery frame loading at full speed
+whether or not the tab is on screen.
+================
+*/
+function schedule() {
+	const run = ( time: number ) => {
+		cancelAnimationFrame( animation );
+		clearTimeout( fallback );
+		void draw( time );
+	};
+	animation = requestAnimationFrame( run );
+	fallback = window.setTimeout( () => run( performance.now() ), FALLBACK_FRAME_MS );
+}
+
+/*
+================
 draw
 ================
 */
@@ -693,11 +718,13 @@ async function draw( time: number ) {
 	} catch ( failure ) {
 		error = String( failure );
 	}
-	if ( time - lastReport > 500 ) {
+	// Readiness is reported on the draw it changes, not up to 500 ms later.
+	if ( time - lastReport > 500 || ready !== reportedReady ) {
 		lastReport = time;
+		reportedReady = ready;
 		parent.postMessage( { type: "gallery-status", report: snapshot() }, location.origin );
 	}
-	if ( !stopped ) animation = requestAnimationFrame( draw );
+	if ( !stopped ) schedule();
 }
 
 /*
@@ -709,6 +736,7 @@ function dispose() {
 	if ( stopped ) return;
 	stopped = true;
 	cancelAnimationFrame( animation );
+	clearTimeout( fallback );
 	dialog.dispose();
 	frontendFixture.dispose();
 	stageFixture.dispose();
@@ -725,4 +753,4 @@ window.addEventListener( "message", message => {
 window.addEventListener( "pagehide", dispose, { once: true } );
 // Explicit read/action seam for the owned browser probe; never patches source.
 Object.assign( window, { __uiGallery: { snapshot, action, event } } );
-animation = requestAnimationFrame( draw );
+schedule();

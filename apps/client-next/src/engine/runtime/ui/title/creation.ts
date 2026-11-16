@@ -15,11 +15,27 @@ import type { TitleLayout, TitleNode, TitleInteraction } from "./internal/title-
 
 import type { CreationSnapshot } from "@/engine/contracts/frontend";
 import type { UiQuad, UiRect, UiControl } from "@/engine/contracts/ui";
-import { titleText, titleTextBox, type FontAtlas } from "@/engine/foundation/rendering/ui-glyphs";
+import { titleText, titleTextBox, titleTextWidth, type FontAtlas } from "@/engine/foundation/rendering/ui-glyphs";
+import { CAPTION_MARGIN, captionWords } from "@/engine/foundation/ui/text-lines";
 import { creationRange, creationModelCodename, creationProtectors } from "@/engine/foundation/ui/character-create";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { buttonAccess, buttonTextColor } from "@/engine/foundation/ui/button-state";
 import type { ButtonAccess } from "@/engine/foundation/ui/button-state";
+/*
+================
+CreationView
+
+The screen the window is drawn on: its size, whether the creation
+controls take input, and the Experimental "Fit window labels" row.
+================
+*/
+export interface CreationView {
+	readonly w: number;
+	readonly h: number;
+	readonly interactive: boolean;
+	readonly fitLabels: boolean;
+}
+
 /*
 ================
 drawCreation
@@ -31,10 +47,9 @@ export function drawCreation(
 	catalog: Record<string, string>,
 	state: CreationSnapshot,
 	input: TitleInteraction,
-	w: number,
-	h: number,
-	interactive: boolean
+	view: CreationView
 ) {
+	const { w, h, interactive, fitLabels } = view;
 	const quads: UiQuad[] = [],
 		controls: UiControl[] = [],
 		paths: string[] = [ font.image ],
@@ -110,17 +125,29 @@ export function drawCreation(
 		image( !disabled && input.pressed === id ? press : !disabled && input.hover === id ? focus : path, r, alpha );
 		const inset = n.clientRect ?? { x: 0, y: 0, width: 0, height: 0 },
 			pressed = !disabled && input.pressed === id ? 1 : 0;
-		const caption = catalog[n.text ?? ""] ?? "";
-		if ( caption ) {
+		const caption = catalog[n.text ?? ""] ?? "",
+			area: UiRect = [
+				r[0] + inset.x + pressed,
+				r[1] + inset.y + pressed,
+				r[2] - inset.x - inset.width,
+				r[3] - inset.y - inset.height
+			];
+		// Port-only, not native (Experimental "Fit window labels", off is the
+		// original): a caption wider than its plate keeps its leading words,
+		// as authoredLabeledButton does in game ("Unique check" -> "Unique",
+		// whose 75 pixels fill retail's 75-pixel GDR_BTN_CHECK, bevel and all).
+		const shown = fitLabels ?
+			captionWords(
+				caption,
+				area[2] - 2 * CAPTION_MARGIN,
+				value => titleTextWidth( font, value, { fontIndex: n.fontIndex } )
+			) :
+			caption;
+		if ( shown ) {
 			text(
 				n,
-				caption,
-				[
-					r[0] + inset.x + pressed,
-					r[1] + inset.y + pressed,
-					r[2] - inset.x - inset.width,
-					r[3] - inset.y - inset.height
-				],
+				shown,
+				area,
 				alpha,
 				false,
 				buttonAccess( disabled )
