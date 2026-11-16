@@ -20,6 +20,9 @@ isolated staging stack; the live service is refused always (target.go).
 		-provision-token-file <cluster-state>/agent-provisioning-token \
 		-accounts accounts.json -out report-dir
 
+-churn-rate N runs churn mode instead (churn.go, #3321): the first
+account enters and drops N times a second for -churn-for.
+
 ===========================================================================
 */
 
@@ -108,6 +111,8 @@ func main() {
 		provURL     = flag.String("provision-url", "http://127.0.0.1:8789", "Agent account provisioning API base URL (provisioning.DefaultPort)")
 		provToken   = flag.String("provision-token-file", "", "file holding the cluster's agent-provisioning-token (required with -provision)")
 		dataBuild   = flag.String("data-build", "", "game-data build id the target runs (its manifest contentDigest), recorded in the report header")
+		churnRate   = flag.Float64("churn-rate", 0, "churn mode (#3321): fresh enter/drop attempts per second by the first account, instead of the staircase")
+		churnFor    = flag.Duration("churn-for", 5*time.Minute, "how long churn mode runs")
 	)
 	flag.Parse()
 	if *accountsArg == "" || *outDir == "" {
@@ -143,6 +148,9 @@ func main() {
 		os.Exit(2)
 	}
 	for _, sessions := range steps {
+		if *churnRate > 0 {
+			break
+		}
 		if sessions > len(accounts) {
 			fmt.Fprintf(os.Stderr, "step %d wants %d sessions but only %d accounts are seeded; provision more or lower the step\n", sessions, sessions, len(accounts))
 			os.Exit(2)
@@ -172,6 +180,17 @@ func main() {
 	if err := writeHeader(*outDir, cfg, steps, *dataBuild); err != nil {
 		fmt.Fprintf(os.Stderr, "report header: %v\n", err)
 		os.Exit(1)
+	}
+	if *churnRate > 0 {
+		churn := churnOptions{rate: *churnRate, duration: *churnFor, metricsURL: *metricsURL, pprofBase: *pprofBase, profileSecs: *profileSecs}
+		summary, err := runChurn(cfg, churn, accounts[0], *outDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "churn: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("churn: %d attempts in %.0f s, entered %d, stages %v, evictions delta %s%s\n",
+			summary.Attempts, summary.Seconds, summary.Entered, summary.Stages, deltaText(summary.EvictionsDelta), tickLine(summary.Tick))
+		return
 	}
 	for _, sessions := range steps {
 		summary, err := runStep(cfg, opts, accounts, sessions, *outDir)
@@ -432,4 +451,18 @@ func saveURL(url, path string, timeout time.Duration) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o644)
+}
+
+/*
+================
+deltaText
+
+A counter delta for the console line, or why it is missing.
+================
+*/
+func deltaText(delta *int64) string {
+	if delta == nil {
+		return "unavailable"
+	}
+	return fmt.Sprintf("%d", *delta)
 }

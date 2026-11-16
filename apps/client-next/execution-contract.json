@@ -974,6 +974,7 @@
 				"updateMaterialColors",
 				"updateTextureTransform",
 				"updateEquipmentGlow",
+				"updateRowStates",
 				"presentParticles",
 				"updateTextureFactor",
 				"writeVertices",
@@ -2611,10 +2612,26 @@
 		},
 		{
 			"consumer": "src/engine/foundation/animation/animation-dispatch.ts",
-			"provider": "src/engine/runtime/characters/actor-motion.ts",
+			"provider": "src/engine/runtime/characters/actor-advance.ts",
 			"functions": [
 				"callback:step:2"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/actor-motion.ts",
+			"provider": "src/engine/runtime/characters/presentation-due.ts",
+			"functions": [
+				"motionDue"
+			],
+			"reason": "characters.ts lends the motion rule to the per-actor phase through its owner; a test passes its own rule at construction."
+		},
+		{
+			"consumer": "src/engine/runtime/characters/actor-appearance.ts",
+			"provider": "src/engine/runtime/characters/presentation-due.ts",
+			"functions": [
+				"appearanceDue"
+			],
+			"reason": "characters.ts lends the appearance rule to the per-actor phase through its owner; a test passes its own rule at construction."
 		},
 		{
 			"consumer": "src/engine/foundation/animation/model-emission.ts",
@@ -3565,9 +3582,9 @@
 			"reason": "The current entity LOD owner supplies the existing concealment distance."
 		},
 		{
-			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"file": "src/engine/runtime/characters/actor-advance.ts",
 			"expression": "renderer.silentWingFlight",
-			"function": "present",
+			"function": "advance",
 			"kind": "callback",
 			"reason": "The parent renderer reports whether the Experimental silent wing flight row is on; it changes nothing."
 		},
@@ -4042,8 +4059,22 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "resourceFor",
+			"function": "appearanceStamp",
+			"kind": "callback",
+			"reason": "Characters owner lends this synchronous helper (resourceFor) to the per-actor phase; the original loop called it directly."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
 			"expression": "resources.ready",
 			"function": "resolve",
+			"kind": "callback",
+			"reason": "Characters owner lends its synchronous resource admission and clip lookup to the per-actor phase; the original loop made the same calls."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "resources.ready",
+			"function": "replay",
 			"kind": "callback",
 			"reason": "Characters owner lends its synchronous resource admission and clip lookup to the per-actor phase; the original loop made the same calls."
 		},
@@ -4063,8 +4094,22 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "referenceAppearances.get",
+			"function": "appearanceStamp",
+			"kind": "callback",
+			"reason": "Characters reference-appearance owner lends its synchronous lookup to the per-actor phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
 			"expression": "activeSkin",
 			"function": "resolve",
+			"kind": "callback",
+			"reason": "Characters owner lends this synchronous helper (activeSkin) to the per-actor phase; the original loop called it directly."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "activeSkin",
+			"function": "appearanceStamp",
 			"kind": "callback",
 			"reason": "Characters owner lends this synchronous helper (activeSkin) to the per-actor phase; the original loop called it directly."
 		},
@@ -4077,8 +4122,22 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "renderer.setCharacterAssembly",
+			"function": "replay",
+			"kind": "callback",
+			"reason": "The parent lends renderer assembly publication to the synchronous per-actor phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
 			"expression": "renderer.enchantSparks",
 			"function": "resolve",
+			"kind": "callback",
+			"reason": "Port-only, not native: the per-actor phase reads the renderer's Experimental enchant-sparks setting when it assembles an appearance."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "renderer.enchantSparks",
+			"function": "appearanceStamp",
 			"kind": "callback",
 			"reason": "Port-only, not native: the per-actor phase reads the renderer's Experimental enchant-sparks setting when it assembles an appearance."
 		},
@@ -4097,72 +4156,135 @@
 			"reason": "Characters effect owner lends its synchronous appearance and host-motion reads to the per-actor phase."
 		},
 		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "effects.appearance",
+			"function": "appearanceStamp",
+			"kind": "callback",
+			"reason": "Characters effect owner lends its synchronous appearance and host-motion reads to the per-actor phase."
+		},
+		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "probe?.detailBegin",
-			"function": "present",
+			"function": "decide",
+			"kind": "callback",
+			"reason": "Optional runtime-owned frame observer, passed with the frame; production supplies none."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-advance.ts",
+			"expression": "probe?.detailBegin",
+			"function": "advance",
 			"kind": "callback",
 			"reason": "Optional runtime-owned frame observer, passed with the frame; production supplies none."
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "logicalPose",
-			"function": "present",
+			"function": "decide",
+			"kind": "callback",
+			"reason": "Current frame pose lookup from presentation-samples, passed by the parent without retaining it."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"expression": "logicalPose",
+			"function": "reuse",
 			"kind": "callback",
 			"reason": "Current frame pose lookup from presentation-samples, passed by the parent without retaining it."
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "allocateActor",
-			"function": "present",
+			"function": "decide",
 			"kind": "callback",
 			"reason": "Characters owner lends this synchronous helper (allocateActor) to the per-actor phase; the original loop called it directly."
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "health?.dead",
-			"function": "present",
+			"function": "decide",
+			"kind": "callback",
+			"reason": "Effective health owner supplied by the parent; the same synchronous death check as before the move."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"expression": "health?.dead",
+			"function": "motionStamp",
 			"kind": "callback",
 			"reason": "Effective health owner supplied by the parent; the same synchronous death check as before the move."
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "localMover",
-			"function": "present",
+			"function": "decide",
+			"kind": "callback",
+			"reason": "Current frame mover predicate from presentation-samples, passed by the parent without retaining it."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"expression": "localMover",
+			"function": "motionStamp",
+			"kind": "callback",
+			"reason": "Current frame mover predicate from presentation-samples, passed by the parent without retaining it."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-advance.ts",
+			"expression": "localMover",
+			"function": "advance",
 			"kind": "callback",
 			"reason": "Current frame mover predicate from presentation-samples, passed by the parent without retaining it."
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "statusOwner.view",
-			"function": "present",
+			"function": "decide",
 			"kind": "callback",
 			"reason": "Characters status owner lends its synchronous status view to the per-actor phase."
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "referenceAppearances.get",
-			"function": "present",
+			"function": "decide",
+			"kind": "callback",
+			"reason": "Characters reference-appearance owner lends its synchronous lookup to the per-actor phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"expression": "referenceAppearances.get",
+			"function": "motionStamp",
 			"kind": "callback",
 			"reason": "Characters reference-appearance owner lends its synchronous lookup to the per-actor phase."
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "wornEquipment",
-			"function": "present",
+			"function": "decide",
+			"kind": "callback",
+			"reason": "Characters owner lends this synchronous helper (wornEquipment) to the per-actor phase; the original loop called it directly."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"expression": "wornEquipment",
+			"function": "motionStamp",
 			"kind": "callback",
 			"reason": "Characters owner lends this synchronous helper (wornEquipment) to the per-actor phase; the original loop called it directly."
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "resources.animation",
-			"function": "present",
+			"function": "decide",
 			"kind": "callback",
 			"reason": "Characters owner lends its synchronous resource admission and clip lookup to the per-actor phase; the original loop made the same calls."
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "posePresentation.moving",
-			"function": "present",
+			"function": "decide",
+			"kind": "callback",
+			"reason": "Characters pose owner lends its synchronous presented-pose reads to the per-actor phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"expression": "posePresentation.moving",
+			"function": "motionStamp",
 			"kind": "callback",
 			"reason": "Characters pose owner lends its synchronous presented-pose reads to the per-actor phase."
 		},
@@ -4211,91 +4333,119 @@
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "footContact",
-			"function": "present",
+			"function": "decide",
+			"kind": "callback",
+			"reason": "Footprint owner lends its synchronous footContact callback through characters.ts to the per-actor phase; admission order is unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-advance.ts",
+			"expression": "footContact",
+			"function": "advance",
 			"kind": "callback",
 			"reason": "Footprint owner lends its synchronous footContact callback through characters.ts to the per-actor phase; admission order is unchanged."
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "resources.duration",
-			"function": "present",
+			"function": "decide",
+			"kind": "callback",
+			"reason": "Characters owner lends its synchronous resource admission and clip lookup to the per-actor phase; the original loop made the same calls."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-advance.ts",
+			"expression": "resources.duration",
+			"function": "advance",
 			"kind": "callback",
 			"reason": "Characters owner lends its synchronous resource admission and clip lookup to the per-actor phase; the original loop made the same calls."
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "effects.hostMotions",
-			"function": "present",
+			"function": "decide",
+			"kind": "callback",
+			"reason": "Characters effect owner lends its synchronous appearance and host-motion reads to the per-actor phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"expression": "effects.hostMotions",
+			"function": "motionStamp",
 			"kind": "callback",
 			"reason": "Characters effect owner lends its synchronous appearance and host-motion reads to the per-actor phase."
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "probe?.detailEnd",
-			"function": "present",
+			"function": "decide",
 			"kind": "callback",
 			"reason": "Optional runtime-owned frame observer, passed with the frame; production supplies none."
 		},
 		{
-			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"file": "src/engine/runtime/characters/actor-advance.ts",
+			"expression": "probe?.detailEnd",
+			"function": "advance",
+			"kind": "callback",
+			"reason": "Optional runtime-owned frame observer, passed with the frame; production supplies none."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-advance.ts",
 			"expression": "soundContext",
 			"function": "soundSource",
 			"kind": "callback",
 			"reason": "Current frame sound-context builder from the event phase, passed by the parent without retaining it."
 		},
 		{
-			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"file": "src/engine/runtime/characters/actor-advance.ts",
 			"expression": "soundSurface",
 			"function": "soundSource",
 			"kind": "callback",
 			"reason": "Characters owner lends this synchronous helper (soundSurface) to the per-actor phase; the original loop called it directly."
 		},
 		{
-			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"file": "src/engine/runtime/characters/actor-advance.ts",
 			"expression": "resources.duration",
 			"function": "callback:step:2",
 			"kind": "callback",
 			"reason": "Characters owner lends its synchronous resource admission and clip lookup to the per-actor phase; the original loop made the same calls."
 		},
 		{
-			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"file": "src/engine/runtime/characters/actor-advance.ts",
 			"expression": "sounds.advance",
-			"function": "present",
+			"function": "advance",
 			"kind": "callback",
 			"reason": "Characters sound owner lends its synchronous cue advance and activation retention to the per-actor phase."
 		},
 		{
-			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"file": "src/engine/runtime/characters/actor-advance.ts",
 			"expression": "sounds.retainActivations",
-			"function": "present",
+			"function": "advance",
 			"kind": "callback",
 			"reason": "Characters sound owner lends its synchronous cue advance and activation retention to the per-actor phase."
 		},
 		{
-			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"file": "src/engine/runtime/characters/actor-advance.ts",
 			"expression": "effects.appearance",
-			"function": "present",
+			"function": "advance",
 			"kind": "callback",
 			"reason": "Characters effect owner lends its synchronous appearance and host-motion reads to the per-actor phase."
 		},
 		{
-			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"file": "src/engine/runtime/characters/actor-advance.ts",
 			"expression": "entityLod.fraction",
-			"function": "present",
+			"function": "advance",
 			"kind": "callback",
 			"reason": "Characters LOD owner lends its synchronous per-entity distance and crowd reads to the per-actor phase."
 		},
 		{
-			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"file": "src/engine/runtime/characters/actor-advance.ts",
 			"expression": "entityLod.crowded",
-			"function": "present",
+			"function": "advance",
 			"kind": "callback",
 			"reason": "Characters LOD owner lends its synchronous per-entity distance and crowd reads to the per-actor phase."
 		},
 		{
-			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"file": "src/engine/runtime/characters/actor-advance.ts",
 			"expression": "entityLod.distance",
-			"function": "present",
+			"function": "advance",
 			"kind": "callback",
 			"reason": "Characters LOD owner lends its synchronous per-entity distance and crowd reads to the per-actor phase."
 		},

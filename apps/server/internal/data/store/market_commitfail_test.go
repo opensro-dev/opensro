@@ -131,7 +131,7 @@ var marketDoorCases = []marketDoorCase{
 	{"list from the warehouse", func(t *testing.T) (*Store, func() error, []*domain.Character) {
 		s, _, seller, buyer := marketFixture(t)
 		return s, func() error {
-			_, err := s.MarketList(MarketListRequest{Division: testDivision, Account: marketSeller, Slot: 0,
+			_, err := s.MarketList(domain.MarketListRequest{Division: testDivision, Account: marketSeller, Slot: 0,
 				Currency: domain.MarketSilk, Price: 50, Admit: admitAll, Rules: testMarketRules})
 			return err
 		}, []*domain.Character{seller, buyer}
@@ -143,7 +143,7 @@ var marketDoorCases = []marketDoorCase{
 			t.Fatal(err)
 		}
 		return s, func() error {
-			_, err := s.MarketList(MarketListRequest{Division: testDivision, Account: marketSeller, Character: seller,
+			_, err := s.MarketList(domain.MarketListRequest{Division: testDivision, Account: marketSeller, Character: seller,
 				Slot: 13, Currency: domain.MarketGold, Price: 1000, Admit: admitAll, Rules: testMarketRules})
 			return err
 		}, []*domain.Character{seller}
@@ -155,7 +155,7 @@ var marketDoorCases = []marketDoorCase{
 			t.Fatal(err)
 		}
 		return s, func() error {
-			_, err := s.MarketBuy(MarketBuyRequest{ListingID: listing.ID, Version: listing.Version,
+			_, err := s.MarketBuy(domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version,
 				BuyerAccount: marketBuyer, Rules: testMarketRules})
 			return err
 		}, []*domain.Character{seller, buyer}
@@ -164,7 +164,7 @@ var marketDoorCases = []marketDoorCase{
 		s, _, seller, buyer := marketFixture(t)
 		listing := listSword(t, s, domain.MarketGold, 1000)
 		return s, func() error {
-			_, err := s.MarketBuy(MarketBuyRequest{ListingID: listing.ID, Version: listing.Version,
+			_, err := s.MarketBuy(domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version,
 				BuyerAccount: marketBuyer, Payer: buyer, Rules: testMarketRules})
 			return err
 		}, []*domain.Character{seller, buyer}

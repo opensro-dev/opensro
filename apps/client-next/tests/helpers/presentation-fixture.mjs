@@ -137,7 +137,10 @@ listener and night); spec.wrap sees the finished port before the
 presentation does, so a recorder can stand in front of every call.
 spec.random is the shared presentation RNG; spec.rendererRandom, when
 given, is the one the renderer's cloth draws from (the client passes the
-same object, the tests none). prepare() runs the renderer's CPU frame.
+same object, the tests none). spec.due, when given, replaces the rules
+that decide when an entity's appearance is resolved and its motion
+decided again (presentation-due.ts). prepare() runs the renderer's CPU
+frame.
 ================
 */
 export function presentationRig( spec ) {
@@ -224,7 +227,8 @@ export function presentationRig( spec ) {
 		spec.random,
 		spec.surface,
 		spec.health,
-		spec.soundEnabled
+		spec.soundEnabled,
+		spec.due
 	);
 	return {
 		characters,

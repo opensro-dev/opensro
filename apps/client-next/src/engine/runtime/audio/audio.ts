@@ -32,6 +32,7 @@ import { createUiSoundCatalog, type UiSoundHandle } from "@/engine/foundation/ui
 import { createItemSoundCatalog, createItemDropSoundCatalog } from "@/engine/foundation/audio/item-sound-catalog";
 import { itemSoundCategory } from "@/engine/foundation/audio/item-sounds";
 import { createMusic } from "./music/music";
+import { regionMusicMode } from "@/engine/foundation/gameplay/event-environment";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { SoundEvent } from "@/engine/contracts/audio";
 import { hypot3 } from "@/engine/foundation/math/hypot";
@@ -278,7 +279,10 @@ stepAmbient
 		}
 		// 8F7688..8F7965: null region or missing named profile skips music;
 		// a valid profile reaches all four mode arms on this same timer.
-		if ( ambientEnabled && ambientLookup && requestedAmbient ) music.regional( requestedAmbient.music, musicMode );
+		// Port-only: the town carols play only inside a carol town's profile.
+		if ( ambientEnabled && ambientLookup && requestedAmbient ) {
+			music.regional( requestedAmbient.music, regionMusicMode( musicMode, requestedAmbient.name ) );
+		}
 		for ( const state of ambientLayers ) {
 			const { layer } = state;
 			if ( layer.min === 0 ) continue;

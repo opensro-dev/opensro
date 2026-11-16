@@ -558,3 +558,20 @@ func TestNewTickerPublishesExactTickZones(t *testing.T) {
 		t.Fatalf("tick_zones phase:total = %+v, want the one tick", got)
 	}
 }
+
+/*
+================
+TestNewTickerReadsThePositionStreamSwitch
+
+The boot composition carries SRO_POSITION_STREAM to the ticker; unset is
+the native fan-out (simulation/position_stream.go).
+================
+*/
+func TestNewTickerReadsThePositionStreamSwitch(t *testing.T) {
+	for value, want := range map[string]bool{"": false, "on": true} {
+		t.Setenv(simulation.EnvPositionStream, value)
+		if got := NewTicker(nil, nil).PositionStream; got != want {
+			t.Fatalf("%s=%q: ticker stream %v, want %v", simulation.EnvPositionStream, value, got, want)
+		}
+	}
+}
