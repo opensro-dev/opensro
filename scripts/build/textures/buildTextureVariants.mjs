@@ -63,7 +63,7 @@ import {
 	rmSync,
 	writeFileSync
 } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -489,6 +489,11 @@ export async function buildTextureVariants( flags = {} ) {
 					const target = outputPath( action, action.outputs[0] );
 					if ( !flags.out && isPublicationOpen() ) claimPublicFile( target );
 					stored++;
+					// The summary's BC side counts every texture, as the ASTC
+					// side does: a stored variant's source is sized, never read.
+					// Await first, then add (as placed above).
+					const { size } = await stat( file );
+					sourceBytes += size;
 					variantBytes += record.outputs[0].size;
 					continue;
 				}
