@@ -113,7 +113,7 @@ movement fields with the store's.
 ================
 */
 func (a *crowdActor) WorldSnapshotInto(dst *simulation.SessionSnapshot) {
-	a.worlds.SnapshotInto(a.key, &dst.World, a.seed)
+	watch := a.worlds.SnapshotIntoWatched(a.key, &dst.World, a.seed)
 	worlds, key := a.worlds, a.key
 	lifeRevision, spawn, movementMode := dst.World.LifeRevision, dst.World.Spawn, dst.World.MovementMode
 	var segment simulation.MoveSegment
@@ -127,6 +127,9 @@ func (a *crowdActor) WorldSnapshotInto(dst *simulation.SessionSnapshot) {
 	dst.CombatEligible = true
 	dst.NativeBodyStatus = 0
 	dst.MovementCurrent = func() bool {
+		if watch.Unchanged() {
+			return true
+		}
 		expected := simulation.WorldState{LifeRevision: lifeRevision, Spawn: spawn, MovementMode: movementMode}
 		if hasSegment {
 			expected.MoveSegment = &segment
