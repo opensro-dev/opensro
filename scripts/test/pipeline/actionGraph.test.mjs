@@ -9,7 +9,7 @@ rerun runs nothing and lays nothing down; a deleted output comes back
 from the store; another worktree's output root is filled without a run;
 a failure records nothing and stops what depends on it; two builds
 storing at once both finish with whole files; an in-place write through
-a hard link is caught.
+a hard link is caught; two actions writing one file are refused.
 
 ===========================================================================
 */
@@ -260,6 +260,16 @@ test("the same key twice in one build runs once", async ( t ) => {
 	assert.equal( await readFile( path.join( f.root, "again", "A.txt" ), "utf8" ), "ALPHA" );
 });
 
+test("two actions writing one file are refused before either runs", async ( t ) => {
+	const f = await fixture( t );
+	const runs = [];
+	await assert.rejects(
+		build( f, [ upper( f, runs ), upper( f, runs, { name: "upper-twin", params: { other: true } } ) ] ),
+		/both write/
+	);
+	assert.deepEqual( runs, [] );
+});
+
 test("independent actions run at once within the budget", async ( t ) => {
 	const f = await fixture( t );
 	let running = 0, peak = 0;
@@ -324,7 +334,7 @@ test("a damaged object is never recorded again under its name", async ( t ) => {
 });
 
 test("a malformed graph is refused before anything runs", () => {
-	const spec = name => ({ name, outputRoot: "out", outputs: [ "x" ], run: async () => {} });
+	const spec = name => ({ name, outputRoot: "out", outputs: [ `${name}.out` ], run: async () => {} });
 	assert.throws( () => orderActions( [ spec( "a" ), spec( "a" ) ] ), /two actions are named a/ );
 	assert.throws( () => orderActions( [ { ...spec( "a" ), deps: [ "b" ] } ] ), /unknown action b/ );
 	assert.throws(

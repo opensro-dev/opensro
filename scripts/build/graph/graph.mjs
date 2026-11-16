@@ -32,17 +32,28 @@ import { trackReads } from "./reads.mjs";
 ================
 orderActions
 
-The actions by name, after checking the graph: a duplicate name, a
-dependency on an unknown action and a cycle are refused before anything
-runs.
+The actions by name, after checking the graph: a duplicate name, two
+actions declaring one output file, a dependency on an unknown action and
+a cycle are refused before anything runs. Two writers of one file would
+run at once and the record of either could hold the other's bytes.
 ================
 */
 export function orderActions( specs ) {
 	const byName = new Map();
+	const writerOf = new Map();
 	for ( const spec of specs ) {
 		const action = defineAction( spec );
 		if ( byName.has( action.name ) ) throw new Error( `two actions are named ${action.name}` );
 		byName.set( action.name, action );
+		for ( const name of action.outputs ) {
+			// Case-folded: the build runs on case-insensitive file systems.
+			const file = outputPath( action, name ).toLowerCase();
+			const other = writerOf.get( file );
+			if ( other ) {
+				throw new Error( `actions ${other} and ${action.name} both write ${outputPath( action, name )}` );
+			}
+			writerOf.set( file, action.name );
+		}
 	}
 	for ( const action of byName.values() ) {
 		for ( const dep of action.deps ) {
