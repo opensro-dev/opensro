@@ -34,6 +34,7 @@ import {
 import type { CastState } from "@/engine/contracts/gameplay";
 import { castPhase, damageTicks, skillPulse } from "@/engine/foundation/gameplay/combat-result";
 import { MAX_OPEN_CASTS, openCastOverflow } from "@/engine/foundation/gameplay/open-casts";
+import { TARGET_INTERACT_OPCODE } from "@/engine/contracts/opcodes";
 /*
 ================
 createCombat
@@ -397,7 +398,7 @@ export function createCombat(
 		attack( gid: number ) {
 			const p = Uint8Array.of( 1, 1, 1, 0, 0, 0, 0 );
 			new DataView( p.buffer ).setUint32( 3, gid, true );
-			return { opcode: 0x72cd, payload: p };
+			return { opcode: TARGET_INTERACT_OPCODE, payload: p };
 		},
 		/*
 		================
@@ -459,7 +460,7 @@ export function createCombat(
 			if ( gid ) {
 				v.setUint32( 7, gid, true );
 			}
-			return { opcode: 0x72cd, payload: p };
+			return { opcode: TARGET_INTERACT_OPCODE, payload: p };
 		},
 		/*
 		================
