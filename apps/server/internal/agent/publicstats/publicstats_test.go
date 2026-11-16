@@ -384,6 +384,13 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 			FoundedAtMs: 1760000000000},
 			{ID: 2, Name: "Tea", Level: 1, Members: []GuildEntryMember{{CharID: 2}}, Union: []int64{1}}}
 	}
+	// One trade with a network sale's commission and a further page, so the
+	// trades schema meets a filled list, a cursor and the item lists.
+	s.src.Trades = func(string, string, *domain.TradeCursor, int) (domain.TradePage, error) {
+		row := domain.TradeRecord{AtMs: 5000, CharName: "Kekw", Kind: domain.TradeKindStallNetworkSell, OtherName: "Other",
+			GoldReceived: 990, Commission: 10, ItemsGiven: []domain.TradeItem{{RefObjID: 3630, Quantity: 5}}}
+		return domain.TradePage{Entries: []domain.TradeEntry{{Seq: 9, Record: row}}, More: true}, nil
+	}
 	var doc map[string]any
 	get(t, s, "/public/v1/schema", &doc)
 	endpoints, _ := doc["endpoints"].(map[string]any)
@@ -397,8 +404,10 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 		"/public/v1/characters/{name}":    "/public/v1/characters/Kekw",
 		"/public/v1/rules":                "/public/v1/rules",
 		"/v1/accounts/{id}/characters":    "/v1/accounts/alpha/characters",
+		"/v1/accounts/{id}/trades":        "/v1/accounts/alpha/trades",
 		"/public/v1/status":               "/public/v1/status",
 		"/public/v1/schedule":             "/public/v1/schedule",
+		"/public/v1/fortresses":           "/public/v1/fortresses",
 		"/public/v1/rankings":             "/public/v1/rankings?by=gear",
 		"/public/v1/chat":                 "/public/v1/chat",
 		"/public/v1/events":               "/public/v1/events",

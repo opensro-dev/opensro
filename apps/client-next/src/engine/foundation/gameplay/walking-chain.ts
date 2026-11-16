@@ -72,9 +72,27 @@ writeWorldVector
 
 a -> b's world-space vector, height included, written into out; false when
 the two poses are not in one coordinate space.
+
+Two poses of one region share its frame: no sector offset, and nothing to
+ask about the coordinate space. A walking chain's samples lie 2 units apart
+(walking-history.ts), so nearly every edge of one is that case, and the
+chain is scanned edge by edge several times a frame for each walker. The
+general path's nested calls kept this helper out of line there: with about
+ten walkers among eighty characters the scan and this helper took 11.5 ms
+of each main-thread second and left 23 MB of boxed numbers a second behind;
+5.3 ms and none with it (2026-11-15, Chrome on an M3). The sum with zero
+is the general path's own (the offset is written first, then the
+difference added), so a difference of negative zero reads back as zero on
+both. world-vector.test.mjs holds the two equal bit for bit.
 ================
 */
 export function writeWorldVector( a: Pose, b: Pose, out: [number, number, number] ): boolean {
+	if ( a.regionId === b.regionId ) {
+		out[0] = 0 + (a.x - b.x);
+		out[1] = a.y - b.y;
+		out[2] = 0 + (a.z - b.z);
+		return true;
+	}
 	if ( !sameCoordinateSpace( a.regionId, b.regionId ) ) {
 		return false;
 	}

@@ -137,7 +137,10 @@ type Arena = {
 	top: number;
 	live: number;
 	readonly free: [number, number][];
-	readonly pending: Set<Stream>;
+	// The arena's streams this frame. encode replaces it with a new set
+	// instead of clearing it (V8 puts a long-lived set's next table in the
+	// old generation, where only a full collection frees it).
+	pending: Set<Stream>;
 	output?: Output;
 };
 
@@ -153,7 +156,9 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 		dispatches = 0,
 		slots = 0,
 		pageIndex = 0;
-	const streams = new Map<GeometryDraw, Stream>(), pending = new Set<Arena>(), pages: Page[] = [];
+	const streams = new Map<GeometryDraw, Stream>(), pages: Page[] = [];
+	// The arenas with streams this frame: a new set after each encode.
+	let pending = new Set<Arena>();
 	const arenas: Arena[] = [], oldOutputs: Output[] = [], batch: Stream[] = [];
 	const storageLimit = Math.min(
 		device.limits.maxStorageBufferBindingSize ?? DEFAULT_STORAGE_BYTES,
@@ -732,9 +737,9 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 			if ( !pipeline ) {
 				for ( const arena of pending ) {
 					for ( const stream of arena.pending ) encodeCpuStream( stream );
-					arena.pending.clear();
+					arena.pending = new Set();
 				}
-				pending.clear();
+				pending = new Set();
 				return;
 			}
 			for ( const arena of pending ) {
@@ -765,9 +770,9 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 				}
 				if ( batch.length ) encodeBatch( encoder, timing, batch, target );
 				batch.length = 0;
-				arena.pending.clear();
+				arena.pending = new Set();
 			}
-			pending.clear();
+			pending = new Set();
 		},
 		release,
 		stats: () => ({

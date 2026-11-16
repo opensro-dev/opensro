@@ -6,6 +6,8 @@ text.ts - the UI's bitmap font: measurement and glyph layout
 Owns font admission and two bounded memos, run widths and glyph layouts,
 so labels that repeat frame to frame are not laid out again. Each local
 layout retains one immutable absolute placement; callers own their lists.
+A memo lookup allocates nothing: a HUD rebuild makes some hundreds of them
+(#3563), and a joined-string key cost more than the hit saved.
 
 ===========================================================================
 */
@@ -19,6 +21,18 @@ const FONT_BYTE_LIMIT = 4 << 20;
 const BOARD_EXTRA_HEIGHT = 5;
 const MAX_WIDTHS = 2048;
 const MAX_LAYOUTS = 4096;
+// Key fields of the two memos (TextMemo.probe slots).
+const WIDTH_FIELDS = 2;
+const LAYOUT_FIELDS = 17;
+// Memo hashing: FNV-1a over 32-bit words. A number contributes its value
+// scaled to 1/65536 px and truncated, so values that compare equal (0 and
+// -0) hash equal; finer differences only collide, and collisions compare
+// every field.
+const HASH_SEED = 0x811C9DC5;
+const HASH_PRIME = 0x01000193;
+const HASH_SCALE = 65536;
+const HASH_NAN = 0x7FC00000;
+const HASH_UNDEFINED = 0x2F;
 
 /*
 ================
@@ -45,8 +59,10 @@ raster atlas can diverge from selection/caret geometry.
 ================
 */
 export function createUiText( assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">, base: string ) {
-	// Owned by this font admission; finite FIFO storage survives idle HUD frames.
-	const widths = new Map<string, number>(), layouts = new Map<string, UiQuad | null>();
+	// Owned by this font admission; bounded storage survives idle HUD frames.
+	// Widths evict first in, first out; layouts evict the least recently used.
+	const widths = createTextMemo<number>( MAX_WIDTHS, WIDTH_FIELDS, false ),
+		layouts = createTextMemo<UiQuad | null>( MAX_LAYOUTS, LAYOUT_FIELDS, true );
 	const placements = new WeakMap<UiQuad, UiTextPlacement>();
 	let state: { kind: "idle"; } | { kind: "loading"; id: number; } | { kind: "ready"; font: FontAtlas; } | {
 		kind: "failed";
@@ -64,7 +80,7 @@ export function createUiText( assets: Pick<AssetOwner, "available" | "request" |
 				if ( result ) {
 					try {
 						if ( result.kind !== "bytes" ) throw Error( "Retail font resource unavailable" );
-						layouts.clear();
+						clearTextMemo( layouts );
 						state = {
 							kind: "ready",
 							font: decodeUiFont(
@@ -112,6 +128,21 @@ export function createUiText( assets: Pick<AssetOwner, "available" | "request" |
 		},
 		/*
 		================
+		lineInk
+
+		Where a line's letters fall in a rect it is laid at the top of
+		(vAlign 0): from the cell's height above the baseline (the
+		baseline is the rect's top plus the ascent) to the descent below
+		it. The label wrap spaces its two lines by this (frame.ts).
+		================
+		*/
+		lineInk: ( index = 0, style = 0 ) => {
+			if ( state.kind !== "ready" ) return { top: 0, height: 0 };
+			const font = state.font.fonts[String( index ) + (style === 2 ? ":2" : "")]!;
+			return { top: font.ascent - font.recordHeight, height: font.recordHeight + font.descent };
+		},
+		/*
+		================
 		path
 		================
 		*/
@@ -146,13 +177,14 @@ export function createUiText( assets: Pick<AssetOwner, "available" | "request" |
 		*/
 		run( value: string, fontStyle = 0, fontIndex = 0 ) {
 			if ( state.kind !== "ready" ) return { width: 0 };
-			const text = value, key = fontIndex + ":" + fontStyle + ":" + text, cached = widths.get( key );
-			if ( cached !== undefined ) return { width: cached };
+			widths.probe[0] = fontIndex;
+			widths.probe[1] = fontStyle;
+			const cached = findTextMemo( widths, value );
+			if ( cached ) return { width: cached.result };
 			const font = state.font.fonts[String( fontIndex ) + (fontStyle === 2 ? ":2" : "")]!;
 			let width = 0;
-			for ( const c of text ) width += drawableGlyph( font.glyphs, c )?.advanceX ?? 0;
-			if ( widths.size >= MAX_WIDTHS ) widths.delete( widths.keys().next().value! );
-			widths.set( key, width );
+			for ( const c of value ) width += drawableGlyph( font.glyphs, c )?.advanceX ?? 0;
+			addTextMemo( widths, value, width );
 			return { width };
 		},
 		/*
@@ -170,27 +202,36 @@ export function createUiText( assets: Pick<AssetOwner, "available" | "request" |
 		quads( value: string, rect: UiRect, clip: UiRect, color: UiQuad["color"], style: GlyphStyle = {} ) {
 			if ( state.kind !== "ready" ) return [];
 			const nx = Math.floor( rect[0] ), ny = Math.floor( rect[1] );
-			const localRect: UiRect = [ rect[0] - nx, rect[1] - ny, rect[2], rect[3] ],
-				localClip: UiRect = [ clip[0] - nx, clip[1] - ny, clip[2], clip[3] ];
-			const key = [
-				value,
-				localRect,
-				localClip,
-				color,
-				style.fontIndex,
-				style.fontStyle,
-				style.hAlign,
-				style.vAlign,
-				style.overflow
-			].join( "|" );
-			let cached = layouts.get( key );
-			if ( cached !== undefined ) {
-				layouts.delete( key );
-				layouts.set( key, cached );
+			const rx = rect[0] - nx, ry = rect[1] - ny, cx = clip[0] - nx, cy = clip[1] - ny;
+			// The key is the old joined key's fields, value by value: the local
+			// rect and clip, the colour and the style.
+			const key = layouts.probe;
+			key[0] = rx;
+			key[1] = ry;
+			key[2] = rect[2];
+			key[3] = rect[3];
+			key[4] = cx;
+			key[5] = cy;
+			key[6] = clip[2];
+			key[7] = clip[3];
+			key[8] = color[0];
+			key[9] = color[1];
+			key[10] = color[2];
+			key[11] = color[3];
+			key[12] = style.fontIndex;
+			key[13] = style.fontStyle;
+			key[14] = style.hAlign;
+			key[15] = style.vAlign;
+			key[16] = style.overflow;
+			const entry = findTextMemo( layouts, value );
+			let cached: UiQuad | null;
+			if ( entry ) {
+				cached = entry.result;
 			} else {
+				const localRect: UiRect = [ rx, ry, rect[2], rect[3] ],
+					localClip: UiRect = [ cx, cy, clip[2], clip[3] ];
 				cached = titleText( state.font, value, localRect, localClip, color, style )[0] ?? null;
-				if ( layouts.size >= MAX_LAYOUTS ) layouts.delete( layouts.keys().next().value! );
-				layouts.set( key, cached );
+				addTextMemo( layouts, value, cached );
 			}
 			if ( !cached ) return [];
 			const placed = placements.get( cached );
@@ -223,12 +264,210 @@ export function createUiText( assets: Pick<AssetOwner, "available" | "request" |
 		================
 		*/
 		dispose() {
-			widths.clear();
-			layouts.clear();
+			clearTextMemo( widths );
+			clearTextMemo( layouts );
 			if ( state.kind === "loading" ) assets.cancel( state.id );
 			state = { kind: "disposed" };
 		}
 	};
+}
+
+// ============================================================================
+
+/*
+================
+TextKeyField
+
+One scalar of a memo key. The old joined-string key wrote a number as
+String( n ), which is one-to-one up to SameValueZero (0 and -0 both "0",
+NaN "NaN"), and undefined as "", which no number writes.
+================
+*/
+type TextKeyField = number | string | undefined;
+
+/*
+================
+TextMemoEntry
+
+One memoized result: its key (the string and a snapshot of the fields), its
+hash bucket chain and its place in the memo's age list.
+================
+*/
+interface TextMemoEntry<T> {
+	readonly hash: number;
+	readonly text: string;
+	readonly fields: readonly TextKeyField[];
+	readonly result: T;
+	chain: TextMemoEntry<T> | null;
+	older: TextMemoEntry<T> | null;
+	newer: TextMemoEntry<T> | null;
+}
+
+/*
+================
+TextMemo
+
+A bounded memo keyed by one string and a fixed number of scalar fields, with
+no allocation on a lookup: the caller writes a lookup's fields into probe,
+then calls findTextMemo and, on a miss, addTextMemo. Fields compare by
+SameValueZero, so two keys share an entry exactly when their joined strings
+would have been equal: the joined key's trailing pieces held no separator,
+so it read back to one key. The age list runs oldest to newest; with recency
+a hit moves to the newest end (least recently used is evicted), without it
+the first entry in is the first out. limit bounds the entry count.
+================
+*/
+interface TextMemo<T> {
+	readonly limit: number;
+	readonly recency: boolean;
+	readonly probe: TextKeyField[];
+	readonly buckets: Map<number, TextMemoEntry<T>>;
+	size: number;
+	oldest: TextMemoEntry<T> | null;
+	newest: TextMemoEntry<T> | null;
+}
+
+/*
+================
+createTextMemo
+================
+*/
+function createTextMemo<T>( limit: number, fields: number, recency: boolean ): TextMemo<T> {
+	return {
+		limit,
+		recency,
+		probe: new Array<TextKeyField>( fields ).fill( undefined ),
+		buckets: new Map(),
+		size: 0,
+		oldest: null,
+		newest: null
+	};
+}
+
+/*
+================
+hashTextKey
+
+FNV-1a over the string's UTF-16 units, then one word per field. Fields equal
+by SameValueZero hash equal (-0 * HASH_SCALE | 0 is 0).
+================
+*/
+function hashTextKey( text: string, fields: readonly TextKeyField[] ): number {
+	let hash = HASH_SEED;
+	for ( let i = 0; i < text.length; i++ ) hash = Math.imul( hash ^ text.charCodeAt( i ), HASH_PRIME );
+	for ( let i = 0; i < fields.length; i++ ) {
+		const field = fields[i];
+		let word: number;
+		if ( typeof field === "number" ) {
+			word = field === field ? (field * HASH_SCALE) | 0 : HASH_NAN;
+		} else if ( typeof field === "string" ) {
+			word = field.length;
+			for ( let j = 0; j < field.length; j++ ) word = Math.imul( word ^ field.charCodeAt( j ), HASH_PRIME );
+		} else {
+			word = HASH_UNDEFINED;
+		}
+		hash = Math.imul( hash ^ word, HASH_PRIME );
+	}
+	return hash;
+}
+
+/*
+================
+sameTextKeyFields
+
+SameValueZero per field: === except that NaN equals NaN.
+================
+*/
+function sameTextKeyFields( a: readonly TextKeyField[], b: readonly TextKeyField[] ): boolean {
+	for ( let i = 0; i < a.length; i++ ) {
+		const x = a[i], y = b[i];
+		if ( x !== y && (x === x || y === y) ) return false;
+	}
+	return true;
+}
+
+/*
+================
+findTextMemo
+
+The entry for text and the probe's fields, or null. With recency a hit
+becomes the newest entry.
+================
+*/
+function findTextMemo<T>( memo: TextMemo<T>, text: string ): TextMemoEntry<T> | null {
+	const hash = hashTextKey( text, memo.probe );
+	let entry = memo.buckets.get( hash ) ?? null;
+	while ( entry && (entry.text !== text || !sameTextKeyFields( entry.fields, memo.probe )) ) entry = entry.chain;
+	if ( !entry || !memo.recency || entry === memo.newest ) return entry;
+	// Unlink, then append at the newest end.
+	if ( entry.older ) entry.older.newer = entry.newer;
+	else memo.oldest = entry.newer;
+	entry.newer!.older = entry.older;
+	entry.older = memo.newest;
+	entry.newer = null;
+	memo.newest!.newer = entry;
+	memo.newest = entry;
+	return entry;
+}
+
+/*
+================
+addTextMemo
+
+Adds the result for text and the probe's fields, which findTextMemo just
+missed. A full memo first evicts its oldest entry.
+================
+*/
+function addTextMemo<T>( memo: TextMemo<T>, text: string, result: T ): void {
+	if ( memo.size >= memo.limit && memo.oldest ) evictTextMemo( memo, memo.oldest );
+	const hash = hashTextKey( text, memo.probe );
+	const entry: TextMemoEntry<T> = {
+		hash,
+		text,
+		fields: memo.probe.slice(),
+		result,
+		chain: memo.buckets.get( hash ) ?? null,
+		older: memo.newest,
+		newer: null
+	};
+	memo.buckets.set( hash, entry );
+	if ( memo.newest ) memo.newest.newer = entry;
+	else memo.oldest = entry;
+	memo.newest = entry;
+	memo.size++;
+}
+
+/*
+================
+evictTextMemo
+================
+*/
+function evictTextMemo<T>( memo: TextMemo<T>, entry: TextMemoEntry<T> ): void {
+	let link = memo.buckets.get( entry.hash )!;
+	if ( link === entry ) {
+		if ( entry.chain ) memo.buckets.set( entry.hash, entry.chain );
+		else memo.buckets.delete( entry.hash );
+	} else {
+		while ( link.chain !== entry ) link = link.chain!;
+		link.chain = entry.chain;
+	}
+	if ( entry.older ) entry.older.newer = entry.newer;
+	else memo.oldest = entry.newer;
+	if ( entry.newer ) entry.newer.older = entry.older;
+	else memo.newest = entry.older;
+	memo.size--;
+}
+
+/*
+================
+clearTextMemo
+================
+*/
+function clearTextMemo<T>( memo: TextMemo<T> ): void {
+	memo.buckets.clear();
+	memo.size = 0;
+	memo.oldest = null;
+	memo.newest = null;
 }
 
 /*

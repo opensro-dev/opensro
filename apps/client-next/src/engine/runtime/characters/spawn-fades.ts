@@ -54,7 +54,10 @@ export function createSpawnFades( linkedRides: ReadonlyMap<number, number> ) {
 	// CIDecoAppear (spawn-fade.ts): each spawned monster's ramp start, null
 	// while armed and waiting for its first drawable frame. fadeSeen holds the
 	// gids already armed, so one present the whole time fades only once.
-	const spawnFades = new Map<number, number | null>(), fadeSeen = new Set<number>(), fadePresent = new Set<number>();
+	const spawnFades = new Map<number, number | null>(), fadeSeen = new Set<number>();
+	// The entities of the frame being applied: a new set each frame, so its
+	// table stays in the young generation (a cleared long-lived one does not).
+	let fadePresent = new Set<number>();
 	// The linked ride's own ramp, keyed by its rider's entity gid.
 	const rideFades = new Map<number, number | null>();
 	return {
@@ -70,7 +73,7 @@ export function createSpawnFades( linkedRides: ReadonlyMap<number, number> ) {
 		================
 		*/
 		apply( entities: readonly EntityState[], next: Map<number, CharacterActor>, seconds: number ) {
-			fadePresent.clear();
+			fadePresent = new Set();
 			for ( const entity of entities ) {
 				fadePresent.add( entity.gid );
 				if ( !spawnFadeKind( entity.kind ) ) continue;
