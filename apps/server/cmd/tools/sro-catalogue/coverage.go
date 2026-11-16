@@ -156,6 +156,7 @@ var catalogueExempt = map[string]string{
 	"SRO_JOB_KILL_NOTICES_PER_MINUTE":          "a cap on the job-kill notices; the catalogue publishes no notices",
 	"SRO_JOB_KILL_REPEAT_MINUTES":              "the repeat window of the job-kill notice; the catalogue publishes no notices",
 	"SRO_SOX_NOTICE_MIN_DEGREE":                "the degree floor of the seal-drop notice; the catalogue publishes no notices",
+	"SRO_STABLE_PURIFY_CHANCE":                 "the stable quest's purify chance, read at run time; the catalogue publishes no quest rolls",
 	"SRO_SHORT_NOTICE_SHOW_MS":                 "a player's own notice timing; the catalogue publishes no client presentation",
 	"SRO_SHORT_NOTICE_FADE_MS":                 "a player's own notice timing; the catalogue publishes no client presentation",
 	"SRO_CHAT_ACK_TIMEOUT_MS":                  "the client's chat wait; the catalogue publishes no client presentation",
