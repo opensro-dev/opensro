@@ -234,6 +234,27 @@ describe( "the test runner", { concurrency: true }, () => {
 				{ status: 0, reused: 0, ran: 1, failed: 0 },
 				"and the first tree, now different from the record, reruns too"
 			);
+
+			// Whether a location variable is set is a test input: code branches
+			// on it (assetPacks.mjs reads the pack baseline only when it is set).
+			const unsetSuite = { SRO_GENERATED_ROOT: first };
+			assert.deepEqual( await runSuite( suite, unsetSuite ), { status: 0, reused: 1, ran: 0, failed: 0 } );
+			assert.deepEqual(
+				await runSuite( suite, {
+					...unsetSuite,
+					SRO_ASSET_PACK_BASELINE: path.join( suite, "baseline-a.json" )
+				} ),
+				{ status: 0, reused: 0, ran: 1, failed: 0 },
+				"a pass with the baseline unset does not vouch for a run with it set"
+			);
+			assert.deepEqual(
+				await runSuite( suite, {
+					...unsetSuite,
+					SRO_ASSET_PACK_BASELINE: path.join( suite, "baseline-b.json" )
+				} ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"but another baseline path reuses the pass recorded with one set"
+			);
 		} finally {
 			fs.rmSync( suite, { recursive: true, force: true } );
 		}

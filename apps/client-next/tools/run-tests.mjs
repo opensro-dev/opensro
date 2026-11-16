@@ -53,6 +53,8 @@ import { logPathFor } from "./lib/test-input-recorder.mjs";
 // 3: ids relative to the built tree and the other location roots, whose
 // paths left the key (test-cache-ids.mjs).
 const CACHE_FORMAT = 3;
+// The key's value for a set location variable, whatever its path.
+const LOCATION_SET = "(set)";
 const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
 const repoRoot = path.resolve( clientRoot, "../.." );
 const SKIP_FLAG = "--skip=";
@@ -174,15 +176,18 @@ cacheKey
 function cacheKey() {
 	const env = Object.fromEntries(
 		// Runner switches and inherited lock ownership are not test inputs.
-		// A fresh lock token must not discard every unchanged test pass. A
-		// location variable is not one either: the files under it are
-		// recorded by content, relative to its tree.
+		// A fresh lock token must not discard every unchanged test pass.
 		Object.keys( process.env ).filter( key =>
 			key.startsWith( "SRO_" ) && key !== "SRO_CHECK_FORCE" && !key.startsWith( "SRO_TEST_" ) &&
-				!key.startsWith( "SRO_REBUILD_LOCK_" ) && !LOCATION_VARIABLES.has( key ) ||
+				!key.startsWith( "SRO_REBUILD_LOCK_" ) ||
 			ENV_KEYS.includes( key )
 		)
-			.sort().map( key => [ key, process.env[key] ] )
+			// A location variable's path is no test input: the files under it
+			// are recorded by content, relative to its tree. Whether it is set
+			// is one: code branches on it (assetPacks.mjs reads the pack
+			// baseline only when SRO_ASSET_PACK_BASELINE is set), so a pass
+			// with it unset never vouches for a run with it set.
+			.sort().map( key => [ key, LOCATION_VARIABLES.has( key ) ? LOCATION_SET : process.env[key] ] )
 	);
 	return JSON.stringify( {
 		format: CACHE_FORMAT,
