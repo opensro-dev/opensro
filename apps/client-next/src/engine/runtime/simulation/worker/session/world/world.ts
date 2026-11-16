@@ -35,7 +35,13 @@ import {
 	INCIDENT_MESSAGE_LENGTH,
 	type WireFrame
 } from "@/engine/contracts/network";
-import { GAME_READY_OPCODE, OBJECT_LIST_FINALIZE_OPCODE, RESET_CLIENT_OPCODE } from "@/engine/contracts/opcodes";
+import {
+	GAME_READY_OPCODE,
+	OBJECT_LIST_FINALIZE_OPCODE,
+	RESET_CLIENT_ACK_OPCODE,
+	RESET_CLIENT_OPCODE,
+	RESET_REGION_OPCODE
+} from "@/engine/contracts/opcodes";
 const ADMISSION_TIMEOUT_MS = 10000;
 // The wait for the EnterWorld answer once the entry is presented. The
 // answer is one multi-megabyte record: on the WebTransport path its
@@ -654,8 +660,10 @@ receive
 		// acknowledgement still gates world commands, but must not reconnect
 		// a healthy socket and enqueue another complete bootstrap.
 		if ( frame.opcode === OBJECT_LIST_FINALIZE_OPCODE && boundThisTransport ) deadline = 0;
-		if ( frame.opcode === RESET_CLIENT_OPCODE || frame.opcode === 0x366a ) {
-			if ( frame.opcode === RESET_CLIENT_OPCODE ) network.send( { opcode: 0x36dd, payload: new Uint8Array() } );
+		if ( frame.opcode === RESET_CLIENT_OPCODE || frame.opcode === RESET_REGION_OPCODE ) {
+			if ( frame.opcode === RESET_CLIENT_OPCODE ) {
+				network.send( { opcode: RESET_CLIENT_ACK_OPCODE, payload: new Uint8Array() } );
+			}
 			ready = false;
 			transition( "entering-world" );
 			armDeadline( ADMISSION_TIMEOUT_MS );
