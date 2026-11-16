@@ -5,6 +5,7 @@ nativeCharacterTextures.test.mjs - preservation of authored DDS mip blocks
 
 Fixture bytes distinguish authored levels from native-generated suffixes.
 Malformed chains must fail before an output can become a published cache.
+On Windows a portable cache entry is regenerated once D3DX is available.
 
 ===========================================================================
 */
@@ -12,9 +13,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
 	compressedSource,
+	pendingTextures,
 	preserveAuthoredMips,
 	validateCharacterTexture
 } from "../../build/shared/nativeCharacterTextures.mjs";
+import { D3DX, PORTABLE } from "../../build/shared/nativeMipGenerator.mjs";
 
 const DXT1 = 0x31545844;
 const DXT3 = 0x33545844;
@@ -80,4 +83,52 @@ test("native admission rejects changed formats, missing blocks and corrupt autho
 	const unsupported = Buffer.from( source );
 	unsupported.writeUInt32LE( 0x32545844, 104 );
 	assert.equal( compressedSource( unsupported ), null );
+});
+
+/*
+================
+selector
+
+A generator selection that records how often it ran.
+================
+*/
+function selector( kind ) {
+	const calls = { count: 0 };
+	return {
+		calls,
+		select: async () => {
+			calls.count++;
+			if ( kind instanceof Error ) throw kind;
+			return kind;
+		}
+	};
+}
+
+test("a Windows build regenerates a portable entry once D3DX is available", async () => {
+	const { select } = selector( D3DX );
+	const pending = await pendingTextures(
+		[ { item: "missing", cached: null }, { item: "portable", cached: PORTABLE } ],
+		"win32",
+		select
+	);
+	assert.deepEqual( pending, { kind: D3DX, items: [ "missing", "portable" ] } );
+});
+
+test("an opted-in Windows build without D3DX keeps its portable entries", async () => {
+	const { select } = selector( PORTABLE );
+	assert.equal( await pendingTextures( [ { item: "portable", cached: PORTABLE } ], "win32", select ), null );
+});
+
+test("a Windows build that cannot create the device and did not opt in fails", async () => {
+	const { select } = selector( Error( "[native-mips] D3DX unavailable (CreateDevice failed)" ) );
+	await assert.rejects(
+		pendingTextures( [ { item: "portable", cached: PORTABLE } ], "win32", select ),
+		/D3DX unavailable/
+	);
+});
+
+test("other systems keep portable entries without selecting a generator", async () => {
+	const { calls, select } = selector( PORTABLE );
+	assert.equal( await pendingTextures( [ { item: "portable", cached: PORTABLE } ], "linux", select ), null );
+	assert.equal( calls.count, 0 );
 });
