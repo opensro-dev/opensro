@@ -83,6 +83,57 @@ func TestFlagWarSignupWindow(t *testing.T) {
 
 /*
 ================
+TestFlagWarSignupAgreesWithTheCalendarAcrossMidnight
+
+A start in the first minutes after midnight UTC has its sign-up on the
+day before. The runtime used to look only at today's start, so at 23:55
+the sign-up for 00:05 stayed shut while the public calendar showed it
+open. Minute by minute over two days, for starts on both sides of
+midnight, the runtime's sign-up is exactly the calendar's (NextMatch).
+================
+*/
+func TestFlagWarSignupAgreesWithTheCalendarAcrossMidnight(t *testing.T) {
+	day := time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
+	for _, minuteOfDay := range []int{0, 5, 9, 10, 20 * 60, 23*60 + 59} {
+		settings := DefaultFlagWarSettings()
+		settings.StartMinuteOfDay = minuteOfDay
+		for at := day; at.Before(day.AddDate(0, 0, 2)); at = at.Add(time.Minute) {
+			signupAt, _ := settings.NextMatch(at)
+			if want := !at.Before(signupAt); settings.signupOpen(at) != want {
+				t.Fatalf("start %02d:%02d at %v: signupOpen = %v, the calendar says %v",
+					minuteOfDay/60, minuteOfDay%60, at, !want, want)
+			}
+		}
+	}
+}
+
+/*
+================
+TestFlagWarSchedulerStartsAMatchJustAfterMidnight
+
+A 00:05 start: the ten-minute notice fires at 23:55 the day before and
+the start fires at 00:05, each once.
+================
+*/
+func TestFlagWarSchedulerStartsAMatchJustAfterMidnight(t *testing.T) {
+	character := rebirthTestCharacter(20, 100)
+	rt, _ := newTestRuntime(character, testItems())
+	rt.characterAdmissions.Store(simulation.WorldKey(testDivision, character.Name),
+		populationAdmission{division: testDivision, name: character.Name})
+	rt.FlagWar = DefaultFlagWarSettings()
+	rt.FlagWar.StartMinuteOfDay = 5
+	start := time.Date(2026, 11, 17, 0, 5, 0, 0, time.UTC)
+	rt.advanceFlagWar(start.Add(-11 * time.Minute).UnixMilli())
+	if out := rt.advanceFlagWar(start.Add(-10 * time.Minute).UnixMilli()); len(out) == 0 {
+		t.Fatal("no ten-minute notice at 23:55 for a 00:05 start")
+	}
+	if out := rt.advanceFlagWar(start.Add(-10*time.Minute + time.Second).UnixMilli()); len(out) != 0 {
+		t.Fatalf("the notice fired twice: %+v", out)
+	}
+}
+
+/*
+================
 flagWarAnswerSubtype
 ================
 */
@@ -261,6 +312,49 @@ func TestFlagWarSchedulerCancelsAShortHouse(t *testing.T) {
 	if rt.flagWarRegistered(testDivision, first.Name) || rt.flagWarRegistered(testDivision, second.Name) {
 		t.Fatal("the queue survived the cancelled start")
 	}
+	// The public schedule reads the cancel (#3706): this start only.
+	if !rt.FlagWarCancelled(start) {
+		t.Fatal("the cancelled start is not recorded for the schedule")
+	}
+	if rt.FlagWarCancelled(start.AddDate(0, 0, 1)) || rt.FlagWarCancelled(start.AddDate(0, 0, -1)) {
+		t.Fatal("another day's start reads as cancelled")
+	}
+}
+
+/*
+================
+TestFlagWarSchedulerFiresALateStartAcrossAStalledMidnight
+
+A 23:59 UTC start whose tick stalls across midnight: the next tick is on
+the next UTC day, and only yesterday's start names the edge it owes
+(#3706). It fires once, late, and never again.
+================
+*/
+func TestFlagWarSchedulerFiresALateStartAcrossAStalledMidnight(t *testing.T) {
+	first := rebirthTestCharacter(20, 100)
+	rt, _ := newTestRuntime(first, testItems())
+	rt.FlagWar = FlagWarSettings{StartMinuteOfDay: 23*60 + 59, MinPlayers: 4}
+	start := time.Date(2026, 10, 24, 23, 59, 0, 0, time.UTC)
+
+	rt.advanceFlagWar(start.Add(-2 * time.Minute).UnixMilli())
+	rt.flagWarToggle(testDivision, first)
+	// The tick stalls from 23:57:30 to 00:00:30 on the next day.
+	rt.advanceFlagWar(start.Add(-90 * time.Second).UnixMilli())
+	out := rt.advanceFlagWar(start.Add(90 * time.Second).UnixMilli())
+	var cancels int
+	for _, batch := range out {
+		for _, frame := range batch.Frames {
+			if string(frame.Payload) == string(wire.EncodeFlagWarEventSubtype(wire.FlagWarGameCancel)) {
+				cancels++
+			}
+		}
+	}
+	if cancels != 1 || !rt.FlagWarCancelled(start) {
+		t.Fatalf("stalled midnight: %d cancel notices, cancelled=%v; want the 23:59 start resolved once", cancels, rt.FlagWarCancelled(start))
+	}
+	if again := rt.advanceFlagWar(start.Add(3 * time.Minute).UnixMilli()); len(again) != 0 {
+		t.Fatalf("the late start fired again: %+v", again)
+	}
 }
 
 /*
@@ -287,5 +381,8 @@ func TestFlagWarSchedulerHandsAFullHouseToTheMatchOwner(t *testing.T) {
 	rt.advanceFlagWar(start.UnixMilli())
 	if len(handed) != 2 || handed[0].Name != second.Name || handed[1].Name != first.Name {
 		t.Fatalf("match owner received %+v, want sign-up order [Second, %s]", handed, first.Name)
+	}
+	if rt.FlagWarCancelled(start) {
+		t.Fatal("a started match reads as cancelled")
 	}
 }

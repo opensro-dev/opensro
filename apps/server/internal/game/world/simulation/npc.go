@@ -25,6 +25,12 @@ type NpcDef struct {
 	// observing character or on roster position at runtime.
 	ObjectID uint32
 	RefObjID uint32
+	// Hidden keeps the row out of every viewer's scope: an NPC shown is
+	// despawned, and none is spawned. Port-only, not native: only the
+	// seasonal look changeover sets it (npc_looks.go), for the few
+	// seconds that let every viewer drop the old look before the new one
+	// spawns.
+	Hidden bool
 	// FortressID is the fortress whose tax this object charges and collects
 	// (the retail server binds the fortress from the reference row's
 	// column 55 codename at spawn); zero binds nothing. A gate also carries

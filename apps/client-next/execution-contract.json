@@ -37,6 +37,11 @@
 			"functions": ["compactWindowDrag", "compactCloseControl"]
 		},
 		{
+			"consumer": "src/engine/runtime/ui/frame/admission.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": ["fitWindowLabels"]
+		},
+		{
 			"consumer": "src/engine/runtime/ui/ui.ts",
 			"provider": "src/engine/runtime/ui/frame/admission.ts",
 			"functions": ["beginWindow", "endWindow", "unloadedImages"]
@@ -969,6 +974,7 @@
 				"updateMaterialColors",
 				"updateTextureTransform",
 				"updateEquipmentGlow",
+				"updateRowStates",
 				"presentParticles",
 				"updateTextureFactor",
 				"writeVertices",

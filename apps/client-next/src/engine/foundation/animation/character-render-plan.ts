@@ -16,11 +16,12 @@ import {
 	characterBatchBytes,
 	characterMeshBytes,
 	characterSharedMesh,
-	characterSharedPalette
+	characterRowGlow,
+	characterSharedPalette,
+	type CharacterPlanCaches
 } from "./character-budget";
 import { meshArrays } from "@/engine/foundation/rendering/geometry-vertices";
 import { createParticleGraphPlan } from "@/engine/foundation/animation/particle-graph-plan";
-import type { ClipTimelineCache } from "./animation-timelines";
 /*
 ================
 isCharacterAnimationExtension
@@ -42,10 +43,11 @@ createCharacterRenderPlan
 
 Immutable admitted model topology owns this plan. Frame clocks, visibility,
 event cursors and matrices never enter it. Replacement models get new plans;
-the timeline cache keeps a re-plan from hashing its clips' key times again.
+the plan caches keep a re-plan from hashing its clips' key times or its
+primitives' bindings again.
 ================
 */
-export function createCharacterRenderPlan( model: CharacterModel, timelines?: ClipTimelineCache ) {
+export function createCharacterRenderPlan( model: CharacterModel, caches?: CharacterPlanCaches ) {
 	const clips = new Map<string, CharacterClip>();
 	for ( const clip of model.clips ) if ( !clips.has( clip.name ) ) clips.set( clip.name, clip );
 	const emission = model.primitives.some( p => p.emission ),
@@ -59,12 +61,15 @@ export function createCharacterRenderPlan( model: CharacterModel, timelines?: Cl
 			p.geometry.material?.textureFactorPulse)
 	);
 	// Ordinary power-of-two batches have a fixed allocation plus a per-slot cost.
-	// Store two scalars instead of a model-by-actor table. Emitted slots scale
+	// Store three scalars instead of a model-by-actor table. Emitted slots scale
 	// with the padded actor capacity too. Ribbons retain their exact capacity.
+	// A one-row batch carries no row states (characterBatchBytes), so the
+	// per-slot cost is measured from two and four rows.
 	const one = exactCapacity ? 0 : characterBatchBytes( model, 1 ),
 		two = exactCapacity ? 0 : characterBatchBytes( model, 2 ),
-		base = one * 2 - two,
-		stride = two - one;
+		four = exactCapacity ? 0 : characterBatchBytes( model, 4 ),
+		stride = (four - two) / 2,
+		base = two - stride * 2;
 	return {
 		cloth: model.primitives.some( p => p.cloth ),
 		equipmentGlow: model.primitives.some( p => p.equipmentGlow ),
@@ -73,11 +78,21 @@ export function createCharacterRenderPlan( model: CharacterModel, timelines?: Cl
 			p.modifierSource?.modifiers.textureModifiers.some( m => m.kind === 1 )
 		),
 		materialClocked: dynamicMaterials.includes( true ),
+		// A clock the row states do not carry: anything but an equipment glow
+		// on a primitive whose instances are actor rows (characterRowGlow). Its
+		// values live in the material uniform, so its actors keep batches of
+		// their own (characters.ts batchKey).
+		drawClocked: model.primitives.some( p =>
+			p.modifierSource?.modifiers.materialModifiers.some( m => m.kind === 1 ) ||
+			p.modifierSource?.modifiers.textureModifiers.some( m => m.kind === 1 ) ||
+			p.geometry.material?.colorTimeline || p.geometry.material?.uvVelocity || p.geometry.material?.uvAtlas ||
+			p.geometry.material?.textureFactorPulse || p.equipmentGlow && !characterRowGlow( p )
+		),
 		dynamicMaterials,
 		clips,
 		emission,
 		exactCapacity,
-		poseBytes: characterPoseBytes( model, timelines ),
+		poseBytes: characterPoseBytes( model, caches ),
 		// The shared meshes this model draws, each with its one GPU copy's
 		// bytes; the frame plan charges each once, whatever batches draw it.
 		meshes: model.primitives.filter( characterSharedMesh ).map( p => ({
@@ -87,12 +102,15 @@ export function createCharacterRenderPlan( model: CharacterModel, timelines?: Cl
 		}) ),
 		clocked: model.primitives.some( p => p.emission || p.materialFrames ),
 		// An authored alpha-blended material: the group draws in the
-		// translucent tier, back to front, whatever its opacity.
+		// translucent tier, back to front, whatever its opacity, so merging
+		// its actors would reorder blended pixels (characters.ts batchKey).
 		blended: model.primitives.some( p => !!p.geometry.material?.blend ),
 		billboard: model.primitives.some( p => p.billboard || p.ribbon ),
 		continuousGraph: model.particleGraph?.some( e => e.loop || e.emission ) ?? false,
 		// The tables every tick of the model's particle graphs reads.
-		particleGraph: model.particleGraph ? createParticleGraphPlan( model.particleGraph ) : undefined,
+		particleGraph: model.particleGraph ?
+			createParticleGraphPlan( model.particleGraph, model.primitives ) :
+			undefined,
 		sharedPalette: characterSharedPalette( model ),
 		particleBytes: model.primitives.reduce(
 			( sum, p ) => sum + (p.emission?.capacity ?? p.emission?.births.length ?? 0) * 320,
@@ -114,6 +132,8 @@ export function createCharacterRenderPlan( model: CharacterModel, timelines?: Cl
 				0 :
 				exactCapacity ?
 				characterBatchBytes( model, count ) :
+				count === 1 ?
+				one :
 				base + stride * 2 ** Math.ceil( Math.log2( count ) );
 		}
 	};

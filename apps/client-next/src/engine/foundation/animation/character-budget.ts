@@ -10,12 +10,13 @@ budgets bound memory; the structural limits reject malformed sources.
 ===========================================================================
 */
 import { clothData, clothBytes } from "./cloth";
-import { clipTimelineBytes, type ClipTimelineCache } from "./animation-timelines";
+import { clipTimelineBytes, createClipTimelineCache, type ClipTimelineCache } from "./animation-timelines";
 import { paletteBindings } from "./palette-bindings";
 import type { CharacterModel } from "@/engine/contracts/character";
 import type { NativeTexture } from "@/engine/contracts/texture";
 import { validateNativeTexture } from "@/engine/foundation/assets/native-texture";
 import { DECODED_IMAGE_BYTES, imageBytes } from "@/engine/foundation/assets/image-budget";
+import { ROW_STATE_FLOATS } from "@/engine/foundation/rendering/geometry-instances";
 // Retail colored fireworks contain 100 parent particles with 50 children each.
 export const CHARACTER_PARTICLE_BIRTHS = 8192;
 export const CHARACTER_PRIMITIVES = 1024;
@@ -50,21 +51,54 @@ export const CHARACTER_RENDER_BYTES = 67108864;
 export const POSE_CLIP_ENTRY_BYTES = 96;
 /*
 ================
+CharacterPlanCaches
+
+What a render plan derives from a model's immutable parts, owned by the
+character renderer: per-clip timeline charges, and per-primitive-list
+palette bindings. Admitting a clip keeps a model's primitive list, so a
+re-plan of every assembly of the body computes neither again.
+================
+*/
+export type CharacterPlanCaches = {
+	readonly timelines: ClipTimelineCache;
+	readonly bindings: WeakMap<CharacterModel["primitives"], ReturnType<typeof paletteBindings>>;
+};
+/*
+================
+createCharacterPlanCaches
+================
+*/
+export function createCharacterPlanCaches(): CharacterPlanCaches {
+	return { timelines: createClipTimelineCache(), bindings: new WeakMap() };
+}
+/*
+================
 characterPoseBytes
 
 Charge pose evaluation storage separately from immutable source data. A
 clip costs a pose its entries and, once sampled, one cursor per timeline
 (animation-timelines.ts), not one per channel: a native clip keys all its
-channels at the same times. The renderer passes its timeline cache.
+channels at the same times. A pose keeps one palette per distinct binding
+(palette-bindings.ts), however many primitives draw from it: a body's
+parts on one skin share one. The renderer passes its plan caches.
 ================
 */
-export function characterPoseBytes( model: CharacterModel, timelines?: ClipTimelineCache ): number {
+export function characterPoseBytes( model: CharacterModel, caches?: CharacterPlanCaches ): number {
+	let bindings = caches?.bindings.get( model.primitives );
+	if ( !bindings ) {
+		bindings = paletteBindings( model );
+		caches?.bindings.set( model.primitives, bindings );
+	}
 	// Local/global and attachment bind matrices, mutable and retained rest TRS, blend scratch,
-	// weights, sample and one exact palette per primitive/pose revision.
+	// weights, sample and one exact palette per binding/pose revision.
 	return model.nodes.length * ((16 + 16 + 16 + 3 + 4 + 3 + 10 + 10 + 6) * 4 + 2) + 16 +
-		model.primitives.reduce( ( bytes, primitive ) => bytes + primitive.joints.length * 64, 0 ) +
+		model.primitives.reduce(
+			( bytes, primitive ) =>
+				bytes + ((bindings.get( primitive ) ?? primitive) === primitive ? primitive.joints.length * 64 : 0),
+			0
+		) +
 		model.clips.reduce(
-			( bytes, clip ) => bytes + POSE_CLIP_ENTRY_BYTES + clipTimelineBytes( clip, timelines ),
+			( bytes, clip ) => bytes + POSE_CLIP_ENTRY_BYTES + clipTimelineBytes( clip, caches?.timelines ),
 			0
 		) +
 		// The quaternion bracket scratch, sized by the largest clip.
@@ -105,6 +139,18 @@ their vertices each frame, so each batch keeps its own stream.
 */
 export function characterSharedMesh( primitive: CharacterModel["primitives"][number] ): boolean {
 	return !primitive.ribbon && !!primitive.geometry.joints && !!primitive.geometry.weights;
+}
+/*
+================
+characterRowGlow
+
+An equipment glow on a primitive whose instances are its batch's actor
+rows (not particle slots or ribbon strips): a batch of several rows keeps
+each row's glow colour and UV in a row-state table (characters.ts).
+================
+*/
+export function characterRowGlow( primitive: CharacterModel["primitives"][number] ): boolean {
+	return !!primitive.equipmentGlow && !primitive.emission && !primitive.ribbon;
 }
 /*
 ================
@@ -181,6 +227,8 @@ export function characterBatchBytes( model: CharacterModel, count: number ): num
 				160 :
 				0) +
 			palettes( primitive, instances ) + slots * 112 + instances * 96 +
+			// The row-state table (ROW_STATE_FLOATS a slot) exists from two rows on.
+			(count > 1 && characterRowGlow( primitive ) ? slots * ROW_STATE_FLOATS * 4 : 0) +
 			(characterSharedMesh( primitive ) ?
 				// A shared cloth piece keeps a skin table of its own: the skin
 				// entries, then its solver's stream (device/geometry.ts).

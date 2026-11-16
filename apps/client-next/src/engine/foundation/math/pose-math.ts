@@ -32,6 +32,34 @@ export function multiply( a: ArrayLike<number>, b: ArrayLike<number>, out: Float
 
 /*
 ================
+multiplyAt
+
+multiply of the float32 matrices at a[aAt] and b[bAt]: the products of
+matrices held in flat slot storage (particle-graph-slots.ts) without
+copying them out. The same sums as multiply; a function of its own
+because V8 keeps one record of the array kinds a function reads, and
+multiply's callers pass plain arrays too.
+================
+*/
+export function multiplyAt(
+	a: Float32Array,
+	aAt: number,
+	b: Float32Array,
+	bAt: number,
+	out: Float32Array,
+	offset: number
+) {
+	for ( let c = 0; c < 4; c++ ) {
+		for ( let r = 0; r < 4; r++ ) {
+			out[offset + c * 4 + r] = ((0 + a[aAt + r]! * b[bAt + c * 4]! + a[aAt + 4 + r]! * b[bAt + c * 4 + 1]!) +
+				a[aAt + 8 + r]! * b[bAt + c * 4 + 2]!) +
+				a[aAt + 12 + r]! * b[bAt + c * 4 + 3]!;
+		}
+	}
+}
+
+/*
+================
 multiplyDisjoint
 
 multiply for owned storage: a is read once into locals, so pose owners

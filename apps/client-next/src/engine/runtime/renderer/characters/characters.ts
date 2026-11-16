@@ -18,12 +18,14 @@ import { selectEquipmentGlow } from "@/engine/foundation/rendering/equipment-glo
 import { createPoseLod } from "@/engine/foundation/animation/pose-lod";
 import { createDeferredParticles, particleQueryPoint } from "@/engine/foundation/animation/deferred-particles";
 import { createModelMaterialClocks } from "@/engine/foundation/animation/model-material-clock";
+import { advanceParticleGraph } from "@/engine/foundation/animation/particle-graph";
 import {
 	createParticleGraph,
-	advanceParticleGraph,
-	particleElementMatrix,
+	particleSlot,
+	ribbonElementFrames,
+	SLOT_ALIVE,
 	type ParticleGraphState
-} from "@/engine/foundation/animation/particle-graph";
+} from "@/engine/foundation/animation/particle-graph-slots";
 import { particleGraphTime } from "@/engine/foundation/animation/particle-graph-clock";
 import { bindNativeClip, type NativeClip } from "@/engine/foundation/animation/native-clip";
 import { HOLDER_FOLLOW, holderFollow } from "@/engine/foundation/animation/particle-holder-link";
@@ -63,15 +65,17 @@ import {
 import { type PickBounds, type PickRay } from "@/engine/foundation/rendering/picking";
 import { faceEffectMesh } from "@/engine/foundation/rendering/effect-billboard";
 import { characterRadius, createCharacterBoundsCache } from "@/engine/foundation/animation/character-bounds";
-import { createClipTimelineCache } from "@/engine/foundation/animation/animation-timelines";
 import {
 	CHARACTER_ASSEMBLIES,
 	CHARACTER_MODELS,
 	characterBytes,
 	CHARACTER_ACTORS,
 	CHARACTER_RENDER_BYTES,
-	CHARACTER_RESIDENT_BYTES
+	CHARACTER_RESIDENT_BYTES,
+	characterRowGlow,
+	createCharacterPlanCaches
 } from "@/engine/foundation/animation/character-budget";
+import { ROW_STATE_FLOATS } from "@/engine/foundation/rendering/geometry-instances";
 import { multiply } from "@/engine/foundation/math/pose-math";
 import { createCharacterPose } from "./animation/animation";
 import {
@@ -126,6 +130,8 @@ copies its values synchronously before the next group can overwrite them.
 interface RowStreams {
 	rowScratch?: Float32Array;
 	lightScratch?: Float32Array;
+	// One primitive's row states (updateRowStates), ROW_STATE_FLOATS a row.
+	glowScratch?: Float32Array;
 }
 const POINT_LIGHT_FLOATS = 12;
 
@@ -314,9 +320,10 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	let blockLights: readonly (readonly DungeonBlockLight[])[] | undefined;
 	// Per-geometry radius work: an assembled character reuses its parts'.
 	const bounds = createCharacterBoundsCache();
-	// Per-clip pose charge: re-planning every assembly of a body when a clip
-	// is admitted reads each clip's key times once.
-	const timelines = createClipTimelineCache();
+	// Per-clip and per-primitive-list pose charges: re-planning every assembly
+	// of a body when a clip is admitted reads each clip's key times and each
+	// primitive list's bindings once.
+	const planCaches = createCharacterPlanCaches();
 	const models = new Map<string, {
 		model: CharacterModel;
 		plan: ReturnType<typeof createCharacterRenderPlan>;
@@ -331,7 +338,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		dependencies?: readonly string[];
 	}>();
 	const materialClocks = createModelMaterialClocks(), deferred = createDeferredParticles();
-	// Scratch for the ribbon element frames' rotation (particleElementMatrix).
+	// Scratch for the ribbon element frames' rotation (ribbonElementFrames).
 	const rotationWork = new Float64Array( ROTATION_WORK );
 	// Scratch basis for faceEffectMesh, which runs per billboard actor.
 	const billboardAxes = new Float64Array( 9 );
@@ -1449,14 +1456,7 @@ the next full prepare pass, so this may run between frames.
 				origin: frame.origin,
 				bytes: plan.particleBytes,
 				graph,
-				link: graph ?
-					{
-						root: graph.root,
-						follow: new Float32Array( HOLDER_FOLLOW ),
-						turned: new Float32Array( 16 ),
-						shift: [ 0, 0, 0 ]
-					} :
-					undefined,
+				follow: graph ? new Float32Array( HOLDER_FOLLOW ) : undefined,
 				programs: model.primitives.map( () => [] ),
 				matrices: model.primitives.map( p =>
 					p.emission ?
@@ -1497,10 +1497,10 @@ the next full prepare pass, so this may run between frames.
 		);
 		particleRandom.index = graph.index;
 		// B153A0 carries linked elements by the holder every draw: this
-		// frame's holder against the graph's last tick (particle-holder-link.ts).
-		if ( history.link ) {
-			holderFollow( graph.root.matrix, graph.root.state.position, transform, history.link.follow );
-		}
+		// frame's holder against the graph's last tick (particle-holder-link.ts),
+		// whose frame and position are the root slot's (0).
+		const follow = history.follow!;
+		holderFollow( graph.matrix, graph.position, transform, follow );
 		// Graph ribbons are strips through their elements' drawn
 		// frames; other graph primitives are drawn from their tick
 		// records by the GPU pass (particle-streams.ts).
@@ -1508,20 +1508,8 @@ the next full prepare pass, so this may run between frames.
 		for ( let p = 0; p < model.primitives.length; p++ ) {
 			const emitter = model.primitives[p]!.particleEmitter, matrices = history.matrices[p];
 			if ( emitter === undefined || !matrices || !model.primitives[p]!.ribbon ) continue;
-			const elements = graph.elements[emitter]!;
 			matrices.fill( NaN );
-			for ( let b = 0; b < elements.length; b++ ) {
-				const element = elements[b];
-				if ( !element?.alive ) continue;
-				particleElementMatrix(
-					element,
-					matrices,
-					b * 16,
-					fraction,
-					rotationWork,
-					history.link
-				);
-			}
+			ribbonElementFrames( graph, emitter, fraction, follow, matrices, rotationWork );
 		}
 	}
 	/*
@@ -1766,10 +1754,19 @@ the next full prepare pass, so this may run between frames.
 
 	The batch an actor joins: its model, plus a variant for every state that
 	needs its own draws (cloth, deferral, fade, tint, light, glow, modifiers).
+	An actor with material clocks keeps a batch of its own (its gid in the
+	modifier term) unless its only clocks are equipment glows on actor rows,
+	which the row states carry, and its batch draws in frame order (tier 0:
+	not fading, not an effect, no blended primitive). Merging tier 1 or 2
+	actors would reorder blended pixels where they overlap. The glow's
+	enabled bit stays in the key, so a batch's rows share it, its gain and
+	its binding-8 image.
 	================
 	*/
 	function batchKey( frame: PrepareFrame, actor: CharacterActor, plan: ModelResource["plan"] ) {
 		const opacity = frame.opacity;
+		const ownBatch = () =>
+			plan.drawClocked || plan.blended || opacity( actor ) < 1 || actor.model.includes( EFFECT_PROGRAMS );
 		const variant = (plan.cloth ?
 			"\0cloth:" + actor.gid :
 			"") +
@@ -1780,9 +1777,11 @@ the next full prepare pass, so this may run between frames.
 				"\0glow:" + ((actor.animationLod?.fraction ?? 0) <= .5 && opacity( actor ) === 1) :
 				"") +
 			(hasMaterialClocks && materialClocks.get( actor ) ?
-				"\0modifier:" + actor.gid + (plan.animationMaterial ?
-					":" + (actor.modelAnimation?.revision ?? 0) + ":" +
-					((actor.animationLod?.fraction ?? 0) > .5) :
+				"\0modifier" + (ownBatch() ?
+					":" + actor.gid + (plan.animationMaterial ?
+						":" + (actor.modelAnimation?.revision ?? 0) + ":" +
+						((actor.animationLod?.fraction ?? 0) > .5) :
+						"") :
 					"") :
 				"");
 		if ( !variant ) return actor.model;
@@ -2096,6 +2095,58 @@ the next full prepare pass, so this may run between frames.
 	// ============================================================================
 	/*
 	================
+	rowGlow
+
+	Whether primitive p's draw reads its glow colour and UV per row: a glow
+	on actor rows in a batch with room for more than one actor. A one-row
+	batch keeps them in its material uniform, as every batch did before.
+	characterBatchBytes charges the row states by the same rule.
+	================
+	*/
+	function rowGlow( group: GroupFrame, p: number ) {
+		return group.capacity > 1 && characterRowGlow( group.model.primitives[p]! );
+	}
+	/*
+	================
+	glowEnabled
+
+	The batch's glow draws (its key's glow bit): not fading, and the first
+	row within the level of detail that draws it (every row is, by the key).
+	================
+	*/
+	function glowEnabled( group: GroupFrame ) {
+		return !group.fading && (group.rows[0]!.animationLod?.fraction ?? 0) <= .5;
+	}
+	/*
+	================
+	writeRowGlows
+
+	Each row's own glow colour and UV (its material clock) into the draw's
+	row states. One scratch serves every draw; updateRowStates copies it.
+	================
+	*/
+	function writeRowGlows( geometry: GeometryCommands, group: GroupFrame, draw: GeometryDraw, p: number ) {
+		const { rows } = group, needed = rows.length * ROW_STATE_FLOATS;
+		if ( !rowStreams.glowScratch || rowStreams.glowScratch.length < needed ) {
+			rowStreams.glowScratch = new Float32Array( group.capacity * ROW_STATE_FLOATS );
+		}
+		const states = rowStreams.glowScratch;
+		for ( let i = 0; i < rows.length; i++ ) {
+			// The key's modifier term admits only actors with clocks.
+			const glow = materialClocks.get( rows[i]! )?.[p]?.glow, at = i * ROW_STATE_FLOATS;
+			if ( !glow ) throw Error( "Missing row glow clock" );
+			states[at] = glow.color[0]!;
+			states[at + 1] = glow.color[1]!;
+			states[at + 2] = glow.color[2]!;
+			states[at + 3] = 0;
+			states[at + 4] = glow.uv[0]!;
+			states[at + 5] = glow.uv[1]!;
+			states[at + 6] = states[at + 7] = 0;
+		}
+		geometry.updateRowStates( draw, states.subarray( 0, needed ) );
+	}
+	/*
+	================
 	updateModifiers
 
 	Apply the batch's material clocks (glow, colors, texture motion, pulse)
@@ -2113,14 +2164,17 @@ the next full prepare pass, so this may run between frames.
 		if ( !clock ) return;
 		const glow = group.model.primitives[index]!.equipmentGlow;
 		if ( glow && clock.glow ) {
-			geometry.updateEquipmentGlow(
-				draw,
-				clock.glow.color,
-				clock.glow.uv,
-				glow.gain,
-				glow.alphaTest,
-				!group.fading && (group.rows[0]!.animationLod?.fraction ?? 0) <= .5
-			);
+			if ( rowGlow( group, index ) ) writeRowGlows( geometry, group, draw, index );
+			else {
+				geometry.updateEquipmentGlow(
+					draw,
+					clock.glow.color,
+					clock.glow.uv,
+					glow.gain,
+					glow.alphaTest,
+					glowEnabled( group )
+				);
+			}
 		}
 		if ( clock.colors ) {
 			for ( const color of clock.colors ) {
@@ -2339,23 +2393,22 @@ the next full prepare pass, so this may run between frames.
 	================
 	orderRibbonElements
 
-	Newest first into ribbonOrder: live graph elements by birth (ties keep
-	slot order), or the emission's births in reverse. Returns the count.
+	Newest first into ribbonOrder: graph emitter n's live elements by birth
+	(ties keep slot order), or the emission's births in reverse. Returns the
+	count.
 	================
 	*/
-	function orderRibbonElements(
-		elements: readonly ({ alive: boolean; born: number; } | undefined)[] | undefined,
-		births: number
-	) {
+	function orderRibbonElements( graph: ParticleGraphState | undefined, n: number | undefined, births: number ) {
 		let count = 0;
-		const total = elements ? elements.length : births;
+		const elements = graph && n !== undefined, base = elements ? graph.plan.base[n]! : 0;
+		const total = elements ? graph.counts[n]! : births;
 		if ( ribbonOrder.length < total ) ribbonOrder = new Int32Array( total * 2 );
 		for ( let i = 0; i < total; i++ ) {
 			const b = elements ? i : total - 1 - i;
-			if ( elements && !elements[b]?.alive ) continue;
+			if ( elements && !(graph.flags[base + b]! & SLOT_ALIVE) ) continue;
 			let at = count++;
 			while (
-				elements && at > 0 && elements[ribbonOrder[at - 1]!]!.born < elements[b]!.born
+				elements && at > 0 && graph.birth[base + ribbonOrder[at - 1]!]! < graph.birth[base + b]!
 			) {
 				ribbonOrder[at] = ribbonOrder[at - 1]!;
 				at--;
@@ -2383,24 +2436,24 @@ the next full prepare pass, so this may run between frames.
 			matrices = history.matrices[p]!,
 			material = primitive.materialFrames!,
 			alpha = frame.opacity( actor );
-		const elements = primitive.particleEmitter === undefined ?
-			undefined :
-			history.graph?.elements[primitive.particleEmitter];
-		const count = orderRibbonElements( elements, emission.births.length );
+		const graph = primitive.particleEmitter === undefined ? undefined : history.graph;
+		const emitter = primitive.particleEmitter ?? 0;
+		const count = orderRibbonElements( graph, primitive.particleEmitter, emission.births.length );
 		// Graph elements are born on the graph's own clock.
 		const graphTime = history.graph ? particleGraphTime( history.graph, actor.time ) : actor.time;
 		groupChains.clear();
 		ribbonGroups.length = 0;
 		for ( let k = 0; k < count; k++ ) {
 			const b = ribbonOrder[k]!,
-				element = elements?.[b],
-				birth = element ? element.clockBirth / 20 : emission.births[b]!;
-			if ( !elements && actor.emissionEnd !== undefined && birth >= actor.emissionEnd ) {
+				s = graph ? particleSlot( graph, emitter, b ) : -1,
+				birth = graph ? graph.clockBirth[s]! / 20 : emission.births[b]!;
+			if ( !graph && actor.emissionEnd !== undefined && birth >= actor.emissionEnd ) {
 				continue;
 			}
 			// A group opens at its first element, drawn or not: the
-			// groups keep the order the elements first name them.
-			const key = element?.parent ?? 0;
+			// groups keep the order the elements first name them. A live
+			// element's parent holds it, so its slot names one parent.
+			const key = graph ? graph.parent[s]! : 0;
 			let points = groupChains.get( key );
 			if ( !points ) {
 				points = ribbonChains[ribbonGroups.length] ??= createRibbonChain();
@@ -2408,7 +2461,7 @@ the next full prepare pass, so this may run between frames.
 				groupChains.set( key, points );
 				ribbonGroups.push( points );
 			}
-			const elapsed = (element ? graphTime : actor.time) - birth,
+			const elapsed = (graph ? graphTime : actor.time) - birth,
 				age = emission.loop && elapsed >= 0 ? elapsed % emission.lifetime : elapsed;
 			if (
 				age < 0 || age >= emission.lifetime || !Number.isFinite( matrices[b * 16 + 15] )
@@ -2524,10 +2577,10 @@ the next full prepare pass, so this may run between frames.
 		paletteOffsets?: Uint32Array
 	) {
 		const { preview, view } = frame, { rows, fading, resource } = group;
-		const primitive = group.model.primitives[p]!;
+		const primitive = group.model.primitives[p]!, rowStates = rowGlow( group, p );
 		const authored = group.modifierClocks?.[p]?.material ?? primitive.geometry.material,
 			base = authored!;
-		return frame.geometry.upload(
+		const draw = frame.geometry.upload(
 			{
 				...primitive.geometry,
 				world: !preview,
@@ -2557,16 +2610,31 @@ the next full prepare pass, so this may run between frames.
 					{}),
 				transform: preview ? view! : identity(),
 				// updateModifiers rewrites a clocked primitive's material every frame.
-				...(group.plan.dynamicMaterials[p] ? { dynamicMaterial: true } : {})
+				...(group.plan.dynamicMaterials[p] ? { dynamicMaterial: true } : {}),
+				...(rowStates ? { rowStates: true } : {})
 			},
 			resource.textures[primitive.image],
 			paletteOffsets,
-			primitive.equipmentGlow && !fading && (rows[0]!.animationLod?.fraction ?? 0) <= .5 ?
+			primitive.equipmentGlow && glowEnabled( group ) ?
 				resource.textures[primitive.equipmentGlow.image] :
 				primitive.environmentImage === undefined ?
 				undefined :
 				resource.textures[primitive.environmentImage]
 		);
+		// A row-state draw's gain, alpha test and enabled bit are the batch's
+		// for its whole life (the key holds the bit): written once, here.
+		const glow = primitive.equipmentGlow, clock = group.modifierClocks?.[p]?.glow;
+		if ( rowStates && glow && clock ) {
+			frame.geometry.updateEquipmentGlow(
+				draw,
+				clock.color,
+				clock.uv,
+				glow.gain,
+				glow.alphaTest,
+				glowEnabled( group )
+			);
+		}
+		return draw;
 	}
 	/*
 	================
@@ -2585,7 +2653,6 @@ the next full prepare pass, so this may run between frames.
 			particleRow.history = particleBirths.get( actor.gid )!;
 			particleRow.pose = poses.get( actor.gid )!.pose;
 			particleRow.opacity = group.fading ? frame.opacity( actor ) : 1;
-			particleRow.origin = frame.origin;
 			writeParticleRow( particles, i, particleRow, particleRandom );
 		}
 		let draw = batch.draws[p];
@@ -2827,8 +2894,13 @@ the next full prepare pass, so this may run between frames.
 	function prepareGroup( frame: PrepareFrame, id: string, rows: CharacterActor[] ) {
 		const { output } = frame;
 		const outputStart = output.length;
-		rows.sort( ( a, b ) => a.gid - b.gid );
 		const resource = models.get( rows[0]!.model )!;
+		// Glow wearers drew a batch each, in frame order, before the row
+		// states merged them: their rows keep frame order, so actors stacked
+		// on one spot overlap as before. Every other batch keeps gid order.
+		if ( !(resource.plan.equipmentGlow && hasMaterialClocks && materialClocks.get( rows[0]! )) ) {
+			rows.sort( ( a, b ) => a.gid - b.gid );
+		}
 		residentTextures( resource, frame.images );
 		const { batch, capacity, membershipChanged } = admitBatch( frame, id, rows, resource );
 		const fading = frame.opacity( rows[0]! ) < 1;
@@ -3224,7 +3296,7 @@ the next full prepare pass, so this may run between frames.
 			if ( disposed || models.has( id ) ) throw Error( "Invalid borrowed character resource" );
 			models.set( id, {
 				model,
-				plan: createCharacterRenderPlan( model, timelines ),
+				plan: createCharacterRenderPlan( model, planCaches ),
 				effect: id.includes( EFFECT_PROGRAMS ),
 				images: [ ...images ],
 				textures: [],
@@ -3352,7 +3424,8 @@ the next full prepare pass, so this may run between frames.
 				actors: actors.length,
 				draws: [ ...batches.values() ].reduce( ( n, batch ) => n + batch.draws.length, 0 ),
 				renderBytes,
-				rowStreamBytes: (rowStreams.rowScratch?.byteLength ?? 0) + (rowStreams.lightScratch?.byteLength ?? 0),
+				rowStreamBytes: (rowStreams.rowScratch?.byteLength ?? 0) + (rowStreams.lightScratch?.byteLength ?? 0) +
+					(rowStreams.glowScratch?.byteLength ?? 0),
 				deferredActors,
 				deferredBodies,
 				poseRequests,
@@ -3413,7 +3486,7 @@ the next full prepare pass, so this may run between frames.
 			for ( const [key, row] of models ) {
 				if ( key === id || row.dependencies?.[0] === id ) {
 					row.model = { ...row.model, clips: model.clips };
-					row.plan = createCharacterRenderPlan( row.model, timelines );
+					row.plan = createCharacterRenderPlan( row.model, planCaches );
 					// Admission precedes visibility; include new root motion before
 					// any actor or outgoing layer can sample the appended catalog.
 					row.radius = Math.max( row.radius, characterRadius( row.model, bounds ) );
@@ -3441,7 +3514,7 @@ the next full prepare pass, so this may run between frames.
 			// Borrowed catalogs follow the same envelope lifetime as owned ones.
 			resource.radius = Math.max( resource.radius, characterRadius( model, bounds ) );
 			resource.model = model;
-			resource.plan = createCharacterRenderPlan( model, timelines );
+			resource.plan = createCharacterRenderPlan( model, planCaches );
 			framePoses?.delete( id );
 		},
 		/*
@@ -3471,7 +3544,7 @@ the next full prepare pass, so this may run between frames.
 				const admitted = structuredClone( model );
 				models.set( id, {
 					model: admitted,
-					plan: createCharacterRenderPlan( admitted, timelines ),
+					plan: createCharacterRenderPlan( admitted, planCaches ),
 					effect: id.includes( EFFECT_PROGRAMS ),
 					images: [ ...images ],
 					textures: [],
@@ -3568,7 +3641,7 @@ the next full prepare pass, so this may run between frames.
 			const assembled = { ...body.model, nodes: assembledNodes, primitives };
 			models.set( id, {
 				model: assembled,
-				plan: createCharacterRenderPlan( assembled, timelines ),
+				plan: createCharacterRenderPlan( assembled, planCaches ),
 				effect: id.includes( EFFECT_PROGRAMS ),
 				images: pixels,
 				textures: [],
@@ -3809,7 +3882,7 @@ the next full prepare pass, so this may run between frames.
 		================
 		*/
 		invalidate() {
-			rowStreams.rowScratch = rowStreams.lightScratch = undefined;
+			rowStreams.rowScratch = rowStreams.lightScratch = rowStreams.glowScratch = undefined;
 			batches.clear();
 			retiredDraws = [];
 			textures.clear();
@@ -3829,7 +3902,7 @@ the next full prepare pass, so this may run between frames.
 				return;
 			}
 			disposed = true;
-			rowStreams.rowScratch = rowStreams.lightScratch = undefined;
+			rowStreams.rowScratch = rowStreams.lightScratch = rowStreams.glowScratch = undefined;
 			framePoses = null;
 			residentBytes = 0;
 			ownedModels = 0;

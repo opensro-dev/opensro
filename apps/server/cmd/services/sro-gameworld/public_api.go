@@ -27,11 +27,12 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/market"
+	"opensro.online/server/internal/game/referral"
 	"opensro.online/server/internal/game/siege"
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/world/simulation"
@@ -97,40 +98,6 @@ func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *st
 	api.service = service
 	log.Infof("public api: serving on %s", service.Addr())
 	return api
-}
-
-// publicWindowEvents names the fortress lane's windows on the calendar.
-var publicWindowEvents = map[string]struct{ kind, title string }{
-	"AllowSiegeRequest": {publicstats.ScheduleKindFortressRegistration, "Fortress war registration"},
-	"SiegeProgressing":  {publicstats.ScheduleKindFortress, "Fortress war"},
-}
-
-/*
-================
-publicSchedule
-
-P8's events: the fortress registration and war windows from the lane that
-runs them, and a maintenance release while its gate file is present (the
-release tool writes it at the release's start and removes it at the end,
-so the start is the file's time and the end is open).
-================
-*/
-func publicSchedule(lane *siege.Lane, now time.Time) []publicstats.ScheduledEvent {
-	var events []publicstats.ScheduledEvent
-	if path := strings.TrimSpace(os.Getenv(agentapi.EnvMaintenanceGate)); path != "" {
-		if info, err := os.Stat(path); err == nil {
-			events = append(events, publicstats.ScheduledEvent{Kind: "maintenance", Title: "Maintenance", Start: info.ModTime(), Running: true})
-		}
-	}
-	for _, window := range lane.Windows(now.UnixMilli()) {
-		names, ok := publicWindowEvents[window.Name]
-		if !ok {
-			continue
-		}
-		events = append(events, publicstats.ScheduledEvent{Kind: names.kind, Title: names.title, Start: window.Start,
-			End: window.End, Running: window.Running})
-	}
-	return events
 }
 
 /*
@@ -484,6 +451,15 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			return setPrivacyFlag(authority, shard, account, name, "break-notice", on,
 				func(c *domain.Character) *bool { return &c.BreakNotice })
 		},
+		// The Contributor title's read and pick (port-only, not native; #135)
+		// reach the registry at call time (wiring_contributor.go): with
+		// SRO_CONTRIBUTOR_TITLES off there is none, and both answer not found.
+		ContributorTitleOf: func(account string) (bool, bool, bool) {
+			return contributorTitleOf(gameplay, account)
+		},
+		TakeContributorTitle: func(account string) error {
+			return takeContributorTitle(gameplay, account)
+		},
 		Trades: func(account, character string, before *domain.TradeCursor, limit int) (domain.TradePage, error) {
 			return publicTradePage(authority, shard, account, character, before, limit)
 		},
@@ -506,7 +482,9 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			}
 			return levels.ExpRequired(level)
 		},
-		Schedule:   func(now time.Time) []publicstats.ScheduledEvent { return publicSchedule(gameplay.siege, now) },
+		Schedule: func(now time.Time) []publicstats.ScheduledEvent {
+			return publicSchedule(scheduleSourcesOf(gameplay), now)
+		},
 		Fortresses: func() []publicstats.FortressEntry { return publicFortresses(gameplay.siege, authority, shard) },
 		// A muted author's lines are left out while the mute holds, on or
 		// off line: the by-character restriction record is read directly
@@ -521,9 +499,22 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 	}
 	// The weekly seal board (#1641): a nil counter leaves the route
 	// unserved (404), which is SRO_SEAL_BOARD off.
+	// Referrals (#3518, port-only, not native): with SRO_REFERRALS off the
+	// source stays nil and the routes answer 404.
+	if referral.FromEnv() {
+		sources.Referrals = authority
+		rewards := referral.Rewards()
+		sources.ReferralRules = publicstats.ReferralRules{Level: referral.QualifyingLevel,
+			ReferrerSilk: rewards.ReferrerSilk, RefereeSilk: rewards.RefereeSilk, RewardCap: rewards.RewardCap}
+	}
 	if sealBoard != nil {
 		sources.SealCounts = sealBoard.Counts
 		sources.SealCountingSince = sealBoard.CountingSince
+	}
+	// The job honor board (#3530): a nil ledger leaves it unserved.
+	if gameplay.jobHonor != nil {
+		sources.JobHonorCurrent = gameplay.jobHonor.Current
+		sources.JobHonorPrevious = gameplay.jobHonor.Previous
 	}
 	// The player census's public counts (console#9 part 4,
 	// opensro-web#78): a nil service - the connection journal off -
@@ -537,6 +528,9 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			}
 			return peopleNow, uniquePeople7d, true
 		}
+	}
+	if market.FromEnv() {
+		sources.Market = marketService(gameplay, authority, shard, sources.Online)
 	}
 	return sources
 }

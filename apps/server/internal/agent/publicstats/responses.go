@@ -99,6 +99,32 @@ type SealBoardResponse struct {
 	Rows          []SealBoardRow `json:"rows"`
 }
 
+// JobHonorRow is one job honor board row (#3530): the job alias, never
+// the character name; its job; its points over the window; the tier it
+// holds now and the tier the next change gives it ("tonight").
+type JobHonorRow struct {
+	Rank    int    `json:"rank"`
+	Alias   string `json:"alias"`
+	Job     string `json:"job"`
+	Points  int64  `json:"points"`
+	Tier    string `json:"tier"`
+	Tonight string `json:"tonight"`
+}
+
+// JobHonorResponse is GET /public/v1/leaderboards/job-honor. NextChange
+// is the next tier change (05:00 UTC); PeriodEnd, for the previous
+// period, is the change that snapshot was ranked at.
+type JobHonorResponse struct {
+	Job         string        `json:"job"`
+	Period      string        `json:"period"`
+	GeneratedAt string        `json:"generatedAt"`
+	NextChange  string        `json:"nextChange"`
+	PeriodEnd   string        `json:"periodEnd,omitempty"`
+	DailyCap    int           `json:"dailyCap"`
+	WindowDays  int           `json:"windowDays"`
+	Rows        []JobHonorRow `json:"rows"`
+}
+
 // LevelFirst is one P4 level milestone.
 type LevelFirst struct {
 	Level uint8  `json:"level"`
@@ -145,6 +171,16 @@ type OwnCharacter struct {
 // the account, hidden ones included, so /account can show each switch.
 type OwnCharactersResponse struct {
 	Characters []OwnCharacter `json:"characters"`
+}
+
+// ContributorTitleResponse is the website's authenticated
+// GET /v1/accounts/{id}/contributor-title (privacy.go): whether the
+// signed-in account carries its Contributor title and whether it hides
+// it. The member's other accounts are never listed. Port-only, not
+// native (#135).
+type ContributorTitleResponse struct {
+	Carries bool `json:"carries"`
+	Hidden  bool `json:"hidden"`
 }
 
 // OwnTradeItem is one item stack a trade moved: its reference and count.
@@ -310,9 +346,19 @@ type StatusResponse struct {
 	UniquePlayers7d *int `json:"uniquePlayers7d"`
 }
 
-// ScheduleEvent is one event the server runs. Kind is "fortress" (the
-// war), "fortress-registration" or "maintenance"; EndsAt is null for an
-// open-ended maintenance.
+// The schedule's event kinds (sro-gameworld's public_schedule.go publishes
+// them; opensro-web labels each one).
+const (
+	ScheduleKindMaintenance = "maintenance"
+	ScheduleKindFlagWar     = "capture-the-flag"
+	// ScheduleKindFlagWarSignup is the ten-minute sign-up before a match.
+	ScheduleKindFlagWarSignup = "capture-the-flag-registration"
+	ScheduleKindHalloween     = "halloween"
+)
+
+// ScheduleEvent is one event the server runs. Kind is one of the
+// ScheduleKind constants, or "fortress" (the war) or
+// "fortress-registration"; EndsAt is null for an open-ended maintenance.
 type ScheduleEvent struct {
 	Kind     string  `json:"kind"`
 	Title    string  `json:"title"`

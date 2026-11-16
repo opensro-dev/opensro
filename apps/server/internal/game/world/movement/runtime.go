@@ -48,6 +48,10 @@ independently; the shared WorldStore protects cross-lane reads.
 type Runtime struct {
 	deps   Dependencies
 	Worlds *simulation.WorldStore
+	// PositionStream is SRO_POSITION_STREAM (simulation/position_stream.go):
+	// port-only, not native. True adds the 0xB2F5 at a destination walk's
+	// arrival; false, the default, sends nothing there, as the original.
+	PositionStream bool
 	// Unions names a peer's guild union on its spawn row (nil: none).
 	Unions *union.Authority
 	// Stalls titles a peer's stall on its spawn row (nil: none).

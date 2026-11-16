@@ -120,6 +120,12 @@ var Settings = []Setting{
 	// them when the server data is built, and the GameWorld reads neither.
 	// Server only: the catalogue reads the built data, not its inputs.
 	{Env: "SRO_CAP110_ITEMS", NomadVar: "cap110_items", Default: "off"},
+	// Port-only, not native: the rest of the honor line the v1.150 client
+	// authored and never shipped (#3548): degree 10-11 honor weapons, the
+	// Chinese honor shields, the European tab and the degree 10-11 stones.
+	// Build time only: honor_items.py and honor_shops.py read it when the
+	// server data is built. Degrees 10-11 need SRO_CAP110_ITEMS too.
+	{Env: "SRO_HONOR_GOODS", NomadVar: "honor_goods", Default: "off"},
 	{Env: "SRO_CAP110_SKILLS", NomadVar: "cap110_skills", Default: "off"},
 	// Port-only, not native: the later client's mall avatars (outfits, hats,
 	// attachments). Cosmetic, so the owner approved it on by default
@@ -178,6 +184,14 @@ var Settings = []Setting{
 	// lands behind the same switch. Not a catalogue setting: the map
 	// adds no monsters or worlds. "off" is native.
 	{Env: "SRO_STYRIA_CLASH", NomadVar: "styria_clash", Default: "off"},
+	// Port-only, not native: AI caravan and thief agents on the Jangan -
+	// Donwhang - Hotan highway (#3650, epic #3704). Slice 1 sends no
+	// frames to a client and pays no reward. Its brain settings
+	// (SRO_AGENT_*) are deliberately not job variables: the LLM brain is
+	// off by owner decision and refuses any URL that is not loopback
+	// (caravanai.LoopbackURL). Not a catalogue setting: the catalogue
+	// publishes no agent state. "off" is native.
+	{Env: "SRO_AI_CARAVANS", NomadVar: "ai_caravans", Default: "off"},
 	// Port-only, not native: the Constantinople fortress area from the
 	// v1.696 client (enterworld/fortressdata.go, #3275). Build and
 	// server read the same switch; off leaves every imported row out of
@@ -199,6 +213,14 @@ var Settings = []Setting{
 	// decoration (progression/christmas.go). Off is native.
 	{Env: "SRO_CHRISTMAS_EVENT", NomadVar: "christmas_event", Default: "off"},
 	{Env: "SRO_CHRISTMAS_EVENT_WINDOW", NomadVar: "christmas_event_window", Default: ""},
+	// Port-only, not native: which Christmas event the switch runs,
+	// "winter" (#3603) or "so_ok_2006" (So-Ok's Christmas Gift,
+	// progression/christmas_mode.go), and the 2006 event's box chance in
+	// percent and gift weights (CODENAME=WEIGHT,...; empty keeps the
+	// owner's table).
+	{Env: "SRO_CHRISTMAS_EVENT_MODE", NomadVar: "christmas_event_mode", Default: "winter"},
+	{Env: "SRO_CHRISTMAS_SOOK_BOX_CHANCE", NomadVar: "christmas_sook_box_chance", Default: "1.5"},
+	{Env: "SRO_CHRISTMAS_SOOK_GIFTS", NomadVar: "christmas_sook_gifts", Default: ""},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_MALL_STARTER_SILK", NomadVar: "mall_starter_silk", Default: "700"},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
@@ -225,6 +247,11 @@ var Settings = []Setting{
 	// native: chat lines are text only. The limit is a tunable (game/tunables).
 	{Env: "SRO_CHAT_ITEM_LINKS", NomadVar: "chat_item_links", Default: "off"},
 	{Env: "SRO_CHAT_ITEM_LINKS_PER_MESSAGE", NomadVar: "chat_item_links_per_message", Default: "1"},
+	// Port-only, not native: the position stream a moving player's viewers
+	// get (simulation/position_stream.go, #3721): a live 0x30E3 every tick,
+	// 0x3122 with every path and 0xB2F5 at the goal. "off" is native: one
+	// 0xB738 per accepted move and nothing on arrival.
+	{Env: "SRO_POSITION_STREAM", NomadVar: "position_stream", Default: "off"},
 	// Owner, 2026-10-14: the Bandit Den scroll counts down half as long.
 	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},
 	// Port-only, off by default: a unique's attackers see its damage ranking.
@@ -273,6 +300,12 @@ var Settings = []Setting{
 	// band for the staff console (#1639, port-only, not native; "off"
 	// counts nothing and the economy route answers 404).
 	{Env: "SRO_KILL_STATS", NomadVar: "kill_stats", Default: "off"},
+	// The market escrow (opensro#3529, opensro-web#148; port-only, not
+	// native; "off" serves no market route and writes no market row).
+	{Env: "SRO_CONSIGNMENT", NomadVar: "consignment", Default: "off"},
+	// The referral system (#3518, port-only, not native; "off" serves no
+	// referral route and pays nothing, which is native).
+	{Env: "SRO_REFERRALS", NomadVar: "referrals", Default: "off"},
 	// The Devil's Spirit's fifth avatar socket (#3456, port-only, not
 	// native; "off" is native: avatar storage keeps four slots). The same
 	// switch imports the Spirit's item rows at build time.
@@ -330,6 +363,9 @@ var Settings = []Setting{
 	// Owner, 2026-10-25 (#1604 P9): the weekly seal board counts Star,
 	// Moon and Sun drops per job alias. Off is native: nothing counts.
 	{Env: "SRO_SEAL_BOARD", NomadVar: "seal_board", Default: "off"},
+	// Owner, 2026-11-15 (#3530 spec): job honor points, a shared account
+	// cap and daily tiers. Port-only; off is native: nothing scores.
+	{Env: "SRO_JOB_HONOR", NomadVar: "job_honor", Default: "off"},
 	// Owner, 2026-10-26 (#1604 P13, #1691): the staff seal census counts
 	// seal items on the shard by degree and tier, name-free, staff-only.
 	// Off is native: the route does not exist.
@@ -354,6 +390,9 @@ var Settings = []Setting{
 	{Env: "SRO_MOST_WANTED_NOTICES_PER_MINUTE", NomadVar: "most_wanted_notices_per_minute", Default: "6"},
 	{Env: "SRO_JOB_KILL_REPEAT_MINUTES", NomadVar: "job_kill_repeat_minutes", Default: "10"},
 	{Env: "SRO_SOX_NOTICE_MIN_DEGREE", NomadVar: "sox_notice_min_degree", Default: "6"},
+	// The stable quest's purify chance (#3714, port-only, not native;
+	// "50" is native).
+	{Env: "SRO_STABLE_PURIFY_CHANCE", NomadVar: "stable_purify_chance", Default: "50"},
 	// F10 uiTuning: the client values sent at world entry (game/tunables).
 	{Env: "SRO_SHORT_NOTICE_SHOW_MS", NomadVar: "short_notice_show_ms", Default: "5000"},
 	{Env: "SRO_SHORT_NOTICE_FADE_MS", NomadVar: "short_notice_fade_ms", Default: "1000"},

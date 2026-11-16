@@ -27,6 +27,7 @@ var endpointTypes = []struct {
 	{"/public/v1/uniques/kills", reflect.TypeOf(KillsResponse{})},
 	{"/public/v1/leaderboards/uniques", reflect.TypeOf(LeaderboardResponse{})},
 	{"/public/v1/leaderboards/seals", reflect.TypeOf(SealBoardResponse{})},
+	{"/public/v1/leaderboards/job-honor", reflect.TypeOf(JobHonorResponse{})},
 	{"/public/v1/firsts", reflect.TypeOf(FirstsResponse{})},
 	{"/public/v1/characters", reflect.TypeOf(CharactersResponse{})},
 	{"/public/v1/characters/{name}", reflect.TypeOf(Profile{})},
@@ -39,7 +40,14 @@ var endpointTypes = []struct {
 	{"/public/v1/chat", reflect.TypeOf(ChatResponse{})},
 	{"/public/v1/events", reflect.TypeOf(EventsResponse{})},
 	{"/v1/accounts/{id}/characters", reflect.TypeOf(OwnCharactersResponse{})},
+	{"/v1/market/categories", reflect.TypeOf(MarketCategoriesResponse{})},
+	{"/v1/market/listings", reflect.TypeOf(MarketListingsResponse{})},
+	{"/v1/accounts/{id}/market", reflect.TypeOf(OwnMarketResponse{})},
+	{"/v1/accounts/{id}/contributor-title", reflect.TypeOf(ContributorTitleResponse{})},
 	{"/v1/accounts/{id}/trades", reflect.TypeOf(OwnTradesResponse{})},
+	{"/v1/accounts/{id}/referrals", reflect.TypeOf(OwnReferralsResponse{})},
+	{"/v1/referral-codes/{code}", reflect.TypeOf(ReferralCodeResponse{})},
+	{"/v1/referrals/held", reflect.TypeOf(HeldReferralsResponse{})},
 }
 
 /*
