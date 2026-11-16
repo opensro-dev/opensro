@@ -20,7 +20,13 @@ import { fileURLToPath } from "node:url";
 import { retailTextdataRoot, clientV150ResinfoRoot } from "../world/paths.mjs";
 import { loadAvatarVisualOverrides } from "./avatarVisualOverrides.mjs";
 import { resolveRoster } from "./resolveCharRoster.mjs";
-import { buildItemSetGlb, createDonorPool, buildAuxiliaryAvatarSets, buildAuxiliarySet } from "./itemAttachments.mjs";
+import {
+	buildAuxiliaryAvatarSets,
+	buildAuxiliarySet,
+	buildItemSetGlb,
+	chooseDonor,
+	createDonorLoader
+} from "./itemAttachments.mjs";
 import { dataRoot, loadDataAsset } from "../shared/jmxAssetIO.mjs";
 import { runGraph } from "../graph/graph.mjs";
 import { noteRead, trackReads } from "../graph/reads.mjs";
@@ -52,9 +58,13 @@ const PLAIN_ITEM_SET_ROOT = buildStatePath( "equipment-plain" );
 itemSetAction
 
 One equipment item set (a body and its item BSRs) as a cached action
-(graph/action.mjs). Its reads are discovered as it runs; the donor
-body's reads come from donorWithReads, recorded once and replayed into
-every set that wears that donor, so a donor change misses them all. A
+(graph/action.mjs). Its reads are discovered as it runs. The donor body
+is chosen before the action (chooseDonor reads the roster's textdata,
+outside every root), so its BSR path is a parameter: a roster change
+that moves a body to another donor moves the key. The donor's own reads
+come from donorWithReads, recorded once per donor BSR and replayed into
+every set that wears it, so a change to the donor's files misses them
+all. A
 held set (a weapon or shield) writes its plain GLB under
 PLAIN_ITEM_SET_ROOT for the glow step instead of publishing it. The
 result is the catalog entry ({ glb, parts, covers, sources }).
@@ -67,12 +77,11 @@ export function itemSetAction( set, donorWithReads ) {
 		outputRoot: set.held ? PLAIN_ITEM_SET_ROOT : path.join( publicAssetsRoot, "char", "equipment" ),
 		outputs: [ fileName ],
 		code: [ MODULE_FILE ],
-		params: { key: set.key, race: set.race, sex: set.sex, paths: set.paths, held: set.held },
+		params: { key: set.key, donorBsr: set.donor.bsrPath, paths: set.paths, held: set.held },
 		discoverRoots: ITEM_SET_READ_ROOTS,
 		run: async ( { outputRoot } ) => {
-			const { donor: found, reads } = await donorWithReads( set.race, set.sex );
+			const { donor: found, reads } = await donorWithReads( set.donor );
 			for ( const file of reads ) noteRead( file );
-			if ( !found ) throw Error( `Missing donor ${set.body}` );
 			const entry = await buildItemSetGlb( {
 				tag: "equipment",
 				key: set.key,
@@ -215,19 +224,19 @@ name under PLAIN_ITEM_SET_ROOT (glowedSetAction). Returns how many were
 hits.
 ================
 */
-async function buildItemSets( sets, getDonor, hold, options ) {
-	const donors = new Map();
-	// The donor pool reads a donor's BSR and skeleton once; trackReads keeps
-	// those reads so every set that wears the donor records them too.
-	const donorWithReads = ( race, sex ) => {
-		const key = `${race}|${sex}`;
-		if ( !donors.has( key ) ) {
+async function buildItemSets( sets, hold, options ) {
+	const loadDonor = createDonorLoader(), donors = new Map();
+	// The loader reads a donor's BSR and skeleton once per donor BSR;
+	// trackReads keeps those reads, under the same key, so every set that
+	// wears the donor records them, whichever body chose it.
+	const donorWithReads = ( donor ) => {
+		if ( !donors.has( donor.bsrPath ) ) {
 			donors.set(
-				key,
-				trackReads( () => getDonor( race, sex ) ).then( ( { result, reads } ) => ({ donor: result, reads }) )
+				donor.bsrPath,
+				trackReads( () => loadDonor( donor ) ).then( ( { result, reads } ) => ({ donor: result, reads }) )
 			);
 		}
-		return donors.get( key );
+		return donors.get( donor.bsrPath );
 	};
 	const store = options.store ?? (await openStore());
 	let results;
@@ -261,7 +270,7 @@ default and fortress wear and the enhancement glow metadata.
 export async function buildEquipmentVisuals( dress, options = {} ) {
 	dress.defaultWearLanguage = defaultWearLanguage();
 	const rows = loadEquipmentRecords( retailTextdataRoot ),
-		getDonor = createDonorPool( resolveRoster( retailTextdataRoot ).resolved ),
+		roster = resolveRoster( retailTextdataRoot ).resolved,
 		cache = new Map(),
 		out = {};
 	// Separate native table: never inherit this from an item's linked model row.
@@ -322,13 +331,14 @@ export async function buildEquipmentVisuals( dress, options = {} ) {
 				if ( !entry ) {
 					// A placeholder every record of this set shares; the set's
 					// action fills it once the graph has run.
+					const donor = chooseDonor( roster, race, sex );
+					if ( !donor ) throw Error( `Missing donor ${body}` );
 					entry = {};
 					cache.set( key, entry );
 					sets.push( {
 						entry,
 						body,
-						race,
-						sex,
+						donor,
 						paths,
 						code: row.code,
 						key: body + "_" + createHash( "sha256" ).update( key ).digest( "hex" ).slice( 0, 20 ),
@@ -339,7 +349,7 @@ export async function buildEquipmentVisuals( dress, options = {} ) {
 			}
 		}
 	}
-	const stored = await buildItemSets( sets, getDonor, hold, options );
+	const stored = await buildItemSets( sets, hold, options );
 	console.log(
 		`[equipment] ${Object.keys( out ).length} native item mappings; ${sets.length} additional models ` +
 			`(${stored} from the action store)`
