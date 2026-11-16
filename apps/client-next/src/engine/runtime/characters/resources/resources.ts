@@ -441,8 +441,7 @@ export function createCharacterResources(
 			// recent end. The common call, every worn part of every actor.
 			if ( loaded.has( path ) ) {
 				if ( !plan( [ path ] ) ) return false;
-				loaded.delete( path );
-				loaded.add( path );
+				loaded.set( path, ++useStamp );
 				return true;
 			}
 			let built = proceduralCache.get( path );
