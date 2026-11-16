@@ -298,7 +298,9 @@ FROM trade_history WHERE division = ? AND account_id = ?`
 		if err != nil {
 			return domain.TradePage{}, err
 		}
-		if other := index.ids[entry.Record.OtherCharID]; other != nil && other.PublicHidden {
+		// A counterparty no longer on the roster (reaped) reads as hidden:
+		// its choice cannot be checked, and its name may be someone's now.
+		if other := index.ids[entry.Record.OtherCharID]; other == nil || other.PublicHidden {
 			entry.OtherHidden = true
 		}
 		entries = append(entries, entry)

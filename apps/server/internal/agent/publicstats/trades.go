@@ -15,7 +15,7 @@ character of the account. A character the account does not own answers 404,
 as an unknown one does. before is "<atMs>.<seq>", the next value of the page
 before (absent is the first page). limit defaults to tradePageDefault and is
 capped at tradePageMax. A counterparty whose character is hidden reads as
-tradeHiddenName, the privacy choice the community site applies everywhere
+HiddenName, the privacy choice the community site applies everywhere
 else.
 
 Port-only, not native: the original has no public read API.
@@ -40,8 +40,6 @@ const (
 	tradePageDefault = 20
 	// tradePageMax caps a page: a request for more gets this many.
 	tradePageMax = 50
-	// tradeHiddenName stands for a counterparty whose character is hidden.
-	tradeHiddenName = "a hunter"
 )
 
 /*
@@ -176,7 +174,7 @@ while its character is hidden.
 func ownTrade(entry domain.TradeEntry) OwnTrade {
 	other := entry.Record.OtherName
 	if entry.OtherHidden {
-		other = tradeHiddenName
+		other = HiddenName
 	}
 	return OwnTrade{
 		AtMs:          entry.Record.AtMs,

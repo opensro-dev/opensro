@@ -208,7 +208,7 @@ func TestOwnTradesMasksAHiddenCounterparty(t *testing.T) {
 		t.Fatalf("the row sequence reached the answer: %s", rec.Body.String())
 	}
 	page := tradesAnswer(t, rec)
-	if len(page.Trades) != 2 || page.Trades[0].OtherName != tradeHiddenName || page.Trades[1].OtherName != "Daylight" {
+	if len(page.Trades) != 2 || page.Trades[0].OtherName != HiddenName || page.Trades[1].OtherName != "Daylight" {
 		t.Fatalf("counterparties = %+v", page.Trades)
 	}
 	if page.Trades[0].GoldPaid != 5 || page.Trades[0].Character != "Mine" || page.Trades[0].Kind != domain.TradeKindExchange {

@@ -294,6 +294,26 @@ func TestTradeHistoryPagesNewestFirst(t *testing.T) {
 			t.Fatalf("row %d: OtherHidden = %v, want %v (other %q)", entry.Seq, entry.OtherHidden, hidden, entry.Record.OtherName)
 		}
 	}
+
+	// A reaped counterparty reads as hidden: its choice can no longer be
+	// checked and its name is free for someone else.
+	gone := seededCharacter()
+	gone.Name = "PageGone"
+	if err := s.CreateCharacter(testDivision, "gone", gone); err != nil {
+		t.Fatal(err)
+	}
+	trade(one, gone)
+	s.MutateCharacter(gone, "delete-reserve PageGone", func() {
+		gone.DeletePending = true
+		gone.DeleteReservedAt = clock.Now().Add(-8 * 24 * time.Hour).UTC().Format("2006-01-02T15:04:05.000Z")
+	})
+	if reaped := s.ReapMaturedDeletions(); len(reaped) != 1 {
+		t.Fatalf("reaped %v, want PageGone", reaped)
+	}
+	page, err = s.TradeHistory(testDivision, "pager", "PageOne", nil, 1)
+	if err != nil || len(page.Entries) != 1 || page.Entries[0].Record.OtherName != "PageGone" || !page.Entries[0].OtherHidden {
+		t.Fatalf("the reaped counterparty's row = %+v, %v; want it hidden", page.Entries, err)
+	}
 }
 
 /*
