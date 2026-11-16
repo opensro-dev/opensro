@@ -26,6 +26,7 @@ import (
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
+	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/moderation"
 	"opensro.online/server/internal/game/social/chatlog"
@@ -82,6 +83,10 @@ type gameWorldApplication struct {
 	economy *economy.Service
 	// sealBoard is the weekly seal-drop counter (port-only); nil off.
 	sealBoard *sealboard.Service
+	// caravans is the AI caravan and thief runtime (port-only,
+	// SRO_AI_CARAVANS); nil off. Run flushes its memories, Close writes
+	// the last ones before the authority store closes.
+	caravans *caravanai.Runtime
 	// census is the player census over the connection journal
 	// (port-only, #2717); nil while the journal is off.
 	census *census.Service
@@ -377,6 +382,7 @@ func newGameWorldApplication(
 	if err := installSealBoard(application, gameplay, ownedShard.ID); err != nil {
 		return nil, err
 	}
+	application.caravans = gameplay.caravanAgents
 	installSunDropCount(gameplay)
 	gameplay.installSessionLifecycle(ts.Hub, authority.store)
 	if gameplay.deps.MonsterState != nil {
@@ -659,6 +665,12 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 			return nil
 		})
 	}
+	if application.caravans != nil {
+		group.Go(func() error {
+			application.caravans.Run(groupContext)
+			return nil
+		})
+	}
 	if application.certificateWatch != nil {
 		group.Go(func() error {
 			ticker := time.NewTicker(transport.CertificateCheckInterval)
@@ -723,6 +735,11 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	// last flush lands before its store closes.
 	if application.sealBoard != nil {
 		drainErr = errors.Join(drainErr, application.sealBoard.Close())
+	}
+	// The tick and the flush loop have stopped: the caravans' last
+	// memories land before the authority store closes.
+	if application.caravans != nil {
+		drainErr = errors.Join(drainErr, application.caravans.Close())
 	}
 	application.releaseLease()
 	if application.authority != nil {
@@ -872,6 +889,10 @@ func (application *gameWorldApplication) rollback() {
 		if err := application.populationCache.Close(); err != nil {
 			log.Warnf("startup rollback population cache: %v", err)
 		}
+	}
+	// The caravans write through the authority store: close them first.
+	if application.caravans != nil {
+		_ = application.caravans.Close()
 	}
 	if application.authority != nil {
 		application.authority.Close()

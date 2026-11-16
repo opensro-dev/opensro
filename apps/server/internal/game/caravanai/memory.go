@@ -34,13 +34,30 @@ type MemoryStore interface {
 	SaveCaravanRouteHeat(row domain.CaravanRouteHeatRow) error
 }
 
-// MemoryBook caches agent->player memories and route danger heat per division
-// while writing updates through to the optional MemoryStore.
+// MemoryBook caches agent->player memories and route danger heat per division.
+// Changes are written behind: a mutation marks its row dirty, and Flush (the
+// runtime's flush loop, off the simulation tick) writes the dirty rows to the
+// optional MemoryStore. A store write takes the authority store's lock and a
+// transaction, which the tick must never wait on.
 type MemoryBook struct {
 	mu       sync.RWMutex
 	store    MemoryStore
 	memories map[string]map[string]map[string]domain.CaravanAgentMemoryRow
 	heat     map[string]map[uint16]domain.CaravanRouteHeatRow
+	// dirtyMemories and dirtyHeat hold the latest unwritten row per key.
+	dirtyMemories map[memoryKey]domain.CaravanAgentMemoryRow
+	dirtyHeat     map[heatKey]domain.CaravanRouteHeatRow
+}
+
+// memoryKey names one agent's memory of one player in a division.
+type memoryKey struct {
+	division, agent, player string
+}
+
+// heatKey names one region's route heat in a division.
+type heatKey struct {
+	division string
+	region   uint16
 }
 
 /*
@@ -53,10 +70,61 @@ in-memory operation).
 */
 func NewMemoryBook(store MemoryStore) *MemoryBook {
 	return &MemoryBook{
-		store:    store,
-		memories: make(map[string]map[string]map[string]domain.CaravanAgentMemoryRow),
-		heat:     make(map[string]map[uint16]domain.CaravanRouteHeatRow),
+		store:         store,
+		memories:      make(map[string]map[string]map[string]domain.CaravanAgentMemoryRow),
+		heat:          make(map[string]map[uint16]domain.CaravanRouteHeatRow),
+		dirtyMemories: make(map[memoryKey]domain.CaravanAgentMemoryRow),
+		dirtyHeat:     make(map[heatKey]domain.CaravanRouteHeatRow),
 	}
+}
+
+/*
+==================
+Flush
+
+Writes every dirty row to the MemoryStore, newest value per key. Called off
+the tick by the runtime's flush loop and once more by Close. A row whose
+write fails goes back to the dirty set unless a newer value for its key
+arrived meanwhile, so the next flush retries it; the first error is
+returned.
+==================
+*/
+func (b *MemoryBook) Flush() error {
+	if b == nil || b.store == nil {
+		return nil
+	}
+	b.mu.Lock()
+	memories, heat := b.dirtyMemories, b.dirtyHeat
+	b.dirtyMemories = make(map[memoryKey]domain.CaravanAgentMemoryRow)
+	b.dirtyHeat = make(map[heatKey]domain.CaravanRouteHeatRow)
+	b.mu.Unlock()
+
+	var first error
+	for key, row := range memories {
+		if err := b.store.SaveCaravanAgentMemory(row); err != nil {
+			if first == nil {
+				first = err
+			}
+			b.mu.Lock()
+			if _, newer := b.dirtyMemories[key]; !newer {
+				b.dirtyMemories[key] = row
+			}
+			b.mu.Unlock()
+		}
+	}
+	for key, row := range heat {
+		if err := b.store.SaveCaravanRouteHeat(row); err != nil {
+			if first == nil {
+				first = err
+			}
+			b.mu.Lock()
+			if _, newer := b.dirtyHeat[key]; !newer {
+				b.dirtyHeat[key] = row
+			}
+			b.mu.Unlock()
+		}
+	}
+	return first
 }
 
 /*
@@ -340,11 +408,10 @@ func (b *MemoryBook) AddRegionDanger(
 	if len(byRegion) > domain.MaxCaravanRouteHeatRegions {
 		evictOldestRegionHeat(byRegion)
 	}
-	b.mu.Unlock()
-
 	if b.store != nil && division != "" {
-		_ = b.store.SaveCaravanRouteHeat(cur)
+		b.dirtyHeat[heatKey{division, regionID}] = cur
 	}
+	b.mu.Unlock()
 	return cur
 }
 
@@ -376,11 +443,10 @@ func (b *MemoryBook) mutateMemory(
 	if len(byPlayer) > domain.MaxCaravanMemoriesPerAgent {
 		evictOldestAgentMemory(byPlayer)
 	}
-	b.mu.Unlock()
-
 	if b.store != nil && division != "" && agentName != "" && playerName != "" {
-		_ = b.store.SaveCaravanAgentMemory(cur)
+		b.dirtyMemories[memoryKey{division, agentName, playerName}] = cur
 	}
+	b.mu.Unlock()
 	return cur
 }
 

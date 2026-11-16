@@ -17,7 +17,9 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 )
 
@@ -70,6 +72,9 @@ type AgentUnit struct {
 	LastPotionAtMs int64
 	LastSpokeAtMs  int64
 	LastSpokenLine string
+	// nextRemoteAtMs is the earliest time the next remote decision may be
+	// asked for this agent.
+	nextRemoteAtMs int64
 }
 
 // WorldHooks is an optional consumer-owned callback port invoked when an AI
@@ -81,16 +86,46 @@ type WorldHooks struct {
 	OnContractReward  func(division, hunterPlayerName string, rewardGold int64, traderAgentName string)
 }
 
+const (
+	// remoteDecisionIntervalMs spaces one agent's remote decisions: at most
+	// one request in flight per agent, and the next one asked no sooner
+	// than this after the last (port-only pacing, not native).
+	remoteDecisionIntervalMs int64 = 3_000
+
+	// memoryFlushInterval is how often the flush loop writes dirty
+	// memories and route heat to the store, off the tick.
+	memoryFlushInterval = 5 * time.Second
+)
+
 // Runtime manages the division roster of AI Caravan & Thief agents.
+//
+// The tick never waits on a remote decision. Every step decides with the
+// local (hardcoded) brain; when a remote brain is configured it is asked
+// in the background, and its answer replaces the local one on a later
+// step only while the agent is still in the state it was asked about.
 type Runtime struct {
 	mu        sync.Mutex
 	cfg       Config
-	brain     Brain
+	local     *HardcodedBrain
+	remote    Brain
 	memories  *MemoryBook
 	parleys   *ParleyTracker
 	contracts *ContractBook
 	hooks     WorldHooks
 	agents    map[string][]*AgentUnit
+	// inflight holds each agent's outstanding remote decision.
+	inflight map[string]*remoteDecision
+	// remoteCtx ends every remote request at Close.
+	remoteCtx    context.Context
+	cancelRemote context.CancelFunc
+	remoteJobs   sync.WaitGroup
+}
+
+// remoteDecision is one remote brain request: its answer, and the agent
+// state it was asked about.
+type remoteDecision struct {
+	result chan Decision
+	state  AgentState
 }
 
 /*
@@ -98,19 +133,70 @@ type Runtime struct {
 NewRuntime
 
 NewRuntime constructs an AI Caravan & Thief Runtime with the provided Config,
-MemoryStore, and optional WorldHooks.
+MemoryStore, and optional WorldHooks. The owner runs Run on its own
+goroutine and calls Close at shutdown, before the store closes.
 ==================
 */
 func NewRuntime(cfg Config, store MemoryStore, hooks WorldHooks) *Runtime {
-	return &Runtime{
-		cfg:       cfg,
-		brain:     NewBrain(cfg),
-		memories:  NewMemoryBook(store),
-		parleys:   NewParleyTracker(),
-		contracts: NewContractBook(),
-		hooks:     hooks,
-		agents:    make(map[string][]*AgentUnit),
+	var remote Brain
+	if brain, isRemote := NewBrain(cfg).(*LLMBrain); isRemote {
+		remote = brain
 	}
+	remoteCtx, cancelRemote := context.WithCancel(context.Background())
+	return &Runtime{
+		cfg:          cfg,
+		local:        NewHardcodedBrain(),
+		remote:       remote,
+		memories:     NewMemoryBook(store),
+		parleys:      NewParleyTracker(),
+		contracts:    NewContractBook(),
+		hooks:        hooks,
+		agents:       make(map[string][]*AgentUnit),
+		inflight:     make(map[string]*remoteDecision),
+		remoteCtx:    remoteCtx,
+		cancelRemote: cancelRemote,
+	}
+}
+
+/*
+==================
+Run
+
+Writes dirty memories and route heat every memoryFlushInterval until ctx
+ends. A failed write is kept and retried on the next pass.
+==================
+*/
+func (r *Runtime) Run(ctx context.Context) {
+	ticker := time.NewTicker(memoryFlushInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := r.memories.Flush(); err != nil {
+				log.WithError(err).Warn("caravan-ai: memory flush failed; retrying next pass")
+			}
+		}
+	}
+}
+
+/*
+==================
+Close
+
+Ends every remote request, waits for their goroutines, and writes the last
+dirty rows. Called after the tick and Run have stopped and before the store
+closes.
+==================
+*/
+func (r *Runtime) Close() error {
+	if r == nil {
+		return nil
+	}
+	r.cancelRemote()
+	r.remoteJobs.Wait()
+	return r.memories.Flush()
 }
 
 /*
@@ -373,13 +459,16 @@ func (r *Runtime) StepAgent(
 	}
 	r.mu.Unlock()
 
-	decision := r.brain.Decide(ctx, sit)
+	decision := r.local.Decide(ctx, sit)
 
 	r.mu.Lock()
 	unit = r.findAgentLocked(division, agentName)
 	if unit == nil {
 		r.mu.Unlock()
 		return decision, nil, false
+	}
+	if remote, ok := r.remoteDecisionLocked(unit, sit, nowMs); ok {
+		decision = remote
 	}
 	r.applyDecisionLocked(unit, decision, nowMs)
 	snapshot := *unit
@@ -389,6 +478,94 @@ func (r *Runtime) StepAgent(
 		r.hooks.OnAgentChat(division, snapshot.Name, snapshot.RegionID, decision.Dialogue)
 	}
 	return decision, &snapshot, true
+}
+
+/*
+==================
+remoteDecisionLocked
+
+Takes the agent's remote answer when it has arrived, or asks for one in the
+background; never blocks. An answer applies only while the agent is still in
+the state it was asked about and its target is still nearby; otherwise it is
+dropped and the local decision stands. A new request goes out at most once
+per remoteDecisionIntervalMs per agent, and only when the brain mode wants
+this situation (hybrid asks only during encounters).
+==================
+*/
+func (r *Runtime) remoteDecisionLocked(unit *AgentUnit, sit Situation, nowMs int64) (Decision, bool) {
+	if r.remote == nil {
+		return Decision{}, false
+	}
+	key := agentKey(unit.Division, unit.Name)
+	if req, pending := r.inflight[key]; pending {
+		select {
+		case d := <-req.result:
+			delete(r.inflight, key)
+			if req.state == unit.State && targetNearby(d.TargetName, sit.Players) {
+				return d, true
+			}
+		default:
+		}
+		return Decision{}, false
+	}
+	if !wantsRemote(r.cfg.BrainMode, sit) || nowMs < unit.nextRemoteAtMs {
+		return Decision{}, false
+	}
+	unit.nextRemoteAtMs = nowMs + remoteDecisionIntervalMs
+	req := &remoteDecision{result: make(chan Decision, 1), state: unit.State}
+	r.inflight[key] = req
+	r.remoteJobs.Add(1)
+	go func() {
+		defer r.remoteJobs.Done()
+		// The channel holds one answer, so the send never blocks even
+		// when the agent is gone and nobody reads it.
+		req.result <- r.remote.Decide(r.remoteCtx, sit)
+	}()
+	return Decision{}, false
+}
+
+/*
+==================
+wantsRemote
+
+Whether the brain mode asks the remote brain about this situation: llm
+always, hybrid only during an encounter (players nearby or under attack).
+==================
+*/
+func wantsRemote(mode BrainMode, sit Situation) bool {
+	switch mode {
+	case BrainLLM:
+		return true
+	case BrainHybrid:
+		return len(sit.Players) > 0 || sit.UnderAttack
+	default:
+		return false
+	}
+}
+
+/*
+==================
+targetNearby
+
+Whether a remote decision's target (empty for none) is still among the
+players the agent sees now.
+==================
+*/
+func targetNearby(target string, players []ObservedPlayer) bool {
+	if target == "" {
+		return true
+	}
+	for _, p := range players {
+		if strings.EqualFold(p.Name, target) {
+			return true
+		}
+	}
+	return false
+}
+
+// agentKey names one agent in one division.
+func agentKey(division, agentName string) string {
+	return strings.TrimSpace(division) + "|" + strings.ToLower(strings.TrimSpace(agentName))
 }
 
 func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, nowMs int64) {
@@ -610,18 +787,33 @@ func isTownRegion(regionID uint16) bool {
 	return regionID == RegionJanganTown || regionID == RegionDonwhangTown || regionID == RegionHotanTown
 }
 
+// FullHPPercent is what a vital reads when its maximum is unknown.
+const FullHPPercent = 100
+
 func percentOf(cur, maxVal int) int {
-	if maxVal <= 0 {
-		return 100
+	return HPPercent(int64(cur), int64(maxVal))
+}
+
+/*
+==================
+HPPercent
+
+current as a whole percentage of maximum, clamped to [0, 100]; a maximum
+of zero or less reads as full.
+==================
+*/
+func HPPercent(current, maximum int64) int {
+	if maximum <= 0 {
+		return FullHPPercent
 	}
-	pct := (cur * 100) / maxVal
+	pct := (current * 100) / maximum
 	if pct < 0 {
 		return 0
 	}
-	if pct > 100 {
-		return 100
+	if pct > FullHPPercent {
+		return FullHPPercent
 	}
-	return pct
+	return int(pct)
 }
 
 func countFriendlyHunters(players []ObservedPlayer) int {

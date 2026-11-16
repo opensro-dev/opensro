@@ -19,6 +19,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/caravanai"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -85,13 +86,32 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 		byRegion[pose.RegionID] = append(byRegion[pose.RegionID], caravanai.ObservedPlayer{
 			Name:      c.Name,
 			JobType:   c.Job.Type,
-			HPPercent: 100,
+			HPPercent: game.playerHPPercent(c),
 		})
 	}
 	roster := game.caravanAgents.EnsureDivisionRoster(game.divisionID)
+	// The step never waits on a remote brain (caravanai.Runtime), so
+	// the tick's own background context is enough here.
 	ctx := context.Background()
 	for _, unit := range roster {
 		_, _, _ = game.caravanAgents.StepAgent(ctx, game.divisionID, unit.Name, byRegion[unit.RegionID], nowMs)
 	}
 	return nil
+}
+
+/*
+================
+playerHPPercent
+
+A player's live HP as a percentage of the effective maximum the gameplay
+uses (gear and statuses included, action.Runtime.GameplayVitals), so the
+agents' "cornered" and parley rules read what the player's own gauge shows.
+================
+*/
+func (game *gameplayPlane) playerHPPercent(c *enterworld.Character) int {
+	if game.items == nil {
+		return caravanai.FullHPPercent
+	}
+	current, maximum, _, _ := game.items.GameplayVitals(game.divisionID, c)
+	return caravanai.HPPercent(current, maximum)
 }
