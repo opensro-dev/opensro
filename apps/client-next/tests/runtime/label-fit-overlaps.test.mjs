@@ -26,9 +26,20 @@ const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/
 const { extendedRecipes } = await import( "../../tools/ui-gallery/extended.ts" );
 const { guildSnapshot } = await import( "../../tools/ui-gallery/scenarios.ts" );
 
-const CLIP = [ 0, 0, 1600, 900 ], WHITE = [ 1, 1, 1, 1 ];
+const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
+
+/**
+ * @typedef {[number, number, number, number]} Rect
+ */
+
+/** @type {Rect} */
+const CLIP = [ 0, 0, 1600, 900 ];
+/** @type {Rect} */
+const WHITE = [ 1, 1, 1, 1 ];
 // Glyphs on one baseline further apart than this are separate texts.
 const WORD_GAP = 6;
+// Glyphs of one line end within the font's descent of each other.
+const BASELINE_SLACK = 4;
 // Glyph cells may share an edge; an overlap deeper than this is ink on ink.
 const INK_SLACK = .5;
 
@@ -62,24 +73,27 @@ the font's descent) with no gap wider than WORD_GAP, in paint order, as
 ================
 */
 function lines( quads ) {
+	/** @type {{ text: string; rect: number[]; }[]} */
 	const out = [];
-	let line = null, last = null;
+	/** @type {readonly number[] | null} */
+	let previous = null;
 	for ( const glyph of expandTextRuns( quads ).filter( q => q.texture === fontAtlas.image ) ) {
-		const [x, y, w, h] = glyph.rect;
-		const apart = !line || Math.abs( y + h - (last.rect[1] + last.rect[3]) ) > 4 || x < last.rect[0] ||
-			x - (last.rect[0] + last.rect[2]) > WORD_GAP;
-		if ( apart ) {
-			line = { text: "", rect: [ x, y, x + w, y + h ] };
-			out.push( line );
+		const [x, y, w, h] = glyph.rect, line = out.at( -1 );
+		if (
+			!line || !previous || Math.abs( y + h - (previous[1] + previous[3]) ) > BASELINE_SLACK ||
+			x < previous[0] || x - (previous[0] + previous[2]) > WORD_GAP
+		) {
+			out.push( { text: character( glyph ), rect: [ x, y, x + w, y + h ] } );
+		} else {
+			line.text += character( glyph );
+			line.rect = [
+				Math.min( line.rect[0], x ),
+				Math.min( line.rect[1], y ),
+				Math.max( line.rect[2], x + w ),
+				Math.max( line.rect[3], y + h )
+			];
 		}
-		line.text += character( glyph );
-		line.rect = [
-			Math.min( line.rect[0], x ),
-			Math.min( line.rect[1], y ),
-			Math.max( line.rect[2], x + w ),
-			Math.max( line.rect[3], y + h )
-		];
-		last = glyph;
+		previous = glyph.rect;
 	}
 	return out;
 }
@@ -138,6 +152,7 @@ test("off, a colliding label is shortened as before", () => {
 });
 
 test("a label with a space wraps inside its box's columns", () => {
+	/** @type {Rect} */
 	const box = [ 34, 106, 64, 19 ];
 	const label = titleText( fontAtlas, "Retained number", box, CLIP, WHITE, { hAlign: 1, vAlign: 0 } );
 	const count = titleText( fontAtlas, "48", [ 105, 106, 41, 19 ], CLIP, WHITE, { overflow: "clip", vAlign: 0 } );
@@ -152,7 +167,10 @@ test("a label with a space wraps inside its box's columns", () => {
 test("a single word slides clear of its neighbour's box, at most its overflow", () => {
 	// ifguildwaragree.txt: the stake label (33, 51 wide) and the gold field
 	// at 108, laid at the window's origin.
-	const box = [ 33, 117, 51, 14 ], field = [ 108, 117, 71, 14 ];
+	/** @type {Rect} */
+	const box = [ 33, 117, 51, 14 ];
+	/** @type {Rect} */
+	const field = [ 108, 117, 71, 14 ];
 	const label = titleText( fontAtlas, "Compensation", box, CLIP, WHITE, { vAlign: 1, label: true } );
 	const gold = titleText( fontAtlas, "400", field, CLIP, WHITE, { hAlign: 2, vAlign: 1 } );
 	const painted = resolveTextOverlaps( [ ...label, ...gold ], true );
@@ -199,20 +217,23 @@ async function openRecipe( id, fit ) {
 	const f = uiFixture();
 	let now = 0, seen = null;
 	f.state.gameplay.social = guildSnapshot();
-	f.ui.event( { kind: "experimental-preferences", value: { fitWindowLabels: fit } } );
+	f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { fitWindowLabels: fit } ) } );
 	const step = async () => {
 		for ( let i = 0; i < 6; i++ ) seen = f.ui.step( f.state, now += 300 ) ?? seen;
 	};
 	await step();
-	await recipe.open( {
-		...f,
-		state: f.state,
-		step,
-		advance: milliseconds => {
-			now += milliseconds;
-		},
-		controls: () => seen?.controls ?? []
-	} );
+	// The gallery's recipe context, built on the test fixture (extended.ts RecipeContext).
+	await recipe.open(
+		/** @type {any} */ ({
+			...f,
+			state: f.state,
+			step,
+			advance: milliseconds => {
+				now += milliseconds;
+			},
+			controls: () => seen?.controls ?? []
+		})
+	);
 	await step();
 	await step();
 	const quads = f.scenes.at( -1 ).quads;
