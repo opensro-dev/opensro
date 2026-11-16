@@ -55,6 +55,15 @@ import { fileURLToPath } from "node:url";
 import { CLIENT_PUBLIC_ROOT, generatedPath } from "../../lib/generatedRoot.mjs";
 import { ENCODERS, encoderPath } from "./encoders.mjs";
 import {
+	astcBlocks,
+	NTX_ASTC_4X4,
+	NTX_BC7,
+	ntxContainer,
+	pickAlphaSection,
+	tgaImage,
+	tgaPixels
+} from "./textureContainers.mjs";
+import {
 	decodeNativeTexture,
 	decodeNativeTextureLevel
 } from "../../../apps/client-next/src/engine/foundation/assets/native-texture.ts";
@@ -63,17 +72,6 @@ import { compareText } from "../shared/textOrder.mjs";
 
 const run = promisify( execFile );
 
-const NTX_MAGIC = 0x3158544e;
-const NTX_HEADER_BYTES = 20;
-const NTX_BC7 = 0x55374342; // "BC7U", native-texture.ts
-const NTX_ASTC_4X4 = 0x34345341; // "AS44", native-texture.ts
-const NTX_PICK_ALPHA = 0x38414b50; // "PKA8", native-texture.ts
-const ASTC_HEADER_BYTES = 16;
-const ASTC_MAGIC = 0x5ca1ab13;
-const TGA_HEADER_BYTES = 18;
-// Uncompressed true colour, 32 bits, top-left origin with 8 alpha bits.
-const TGA_TRUE_COLOUR = 2;
-const TGA_DESCRIPTOR = 0x28;
 // A DDS with the DX10 extension: 128 bytes of header, then the format.
 const DDS_HEADER_BYTES = 148;
 const DXGI_FORMAT_BC7_UNORM = 98;
@@ -150,65 +148,6 @@ function worldObjectTextures( root, only ) {
 
 /*
 ================
-tga
-
-An RGBA level as a 32-bit top-left TGA (the encoders' simplest input).
-================
-*/
-function tga( rgba, width, height ) {
-	const out = Buffer.alloc( TGA_HEADER_BYTES + width * height * 4 );
-	out[2] = TGA_TRUE_COLOUR;
-	out.writeUInt16LE( width, 12 );
-	out.writeUInt16LE( height, 14 );
-	out[16] = 32;
-	out[17] = TGA_DESCRIPTOR;
-	for ( let i = 0; i < width * height; i++ ) {
-		const at = TGA_HEADER_BYTES + i * 4;
-		out[at] = rgba[i * 4 + 2];
-		out[at + 1] = rgba[i * 4 + 1];
-		out[at + 2] = rgba[i * 4];
-		out[at + 3] = rgba[i * 4 + 3];
-	}
-	return out;
-}
-
-/*
-================
-readTga
-
-The RGBA pixels of the uncompressed 32-bit TGAs texconv writes, rows
-top first whatever origin the header names.
-================
-*/
-function readTga( bytes ) {
-	if ( bytes.length < TGA_HEADER_BYTES || bytes[2] !== TGA_TRUE_COLOUR || bytes[1] !== 0 || bytes[16] !== 32 ) {
-		throw new Error( "Unexpected TGA layout" );
-	}
-	const width = bytes.readUInt16LE( 12 ), height = bytes.readUInt16LE( 14 );
-	// Pixels follow the header and its image ID; texconv appends a TGA 2.0
-	// footer after them, so the file runs longer than the pixel bytes.
-	const pixels = TGA_HEADER_BYTES + bytes[0];
-	if ( bytes.length < pixels + width * height * 4 ) {
-		throw new Error( `TGA size ${bytes.length} does not hold ${width}x${height}x4` );
-	}
-	const topOrigin = (bytes[17] & 0x20) !== 0, rightOrigin = (bytes[17] & 0x10) !== 0;
-	const rgba = Buffer.alloc( width * height * 4 );
-	for ( let y = 0; y < height; y++ ) {
-		const sourceY = topOrigin ? y : height - 1 - y;
-		for ( let x = 0; x < width; x++ ) {
-			const sourceX = rightOrigin ? width - 1 - x : x;
-			const from = pixels + (sourceY * width + sourceX) * 4, to = (y * width + x) * 4;
-			rgba[to] = bytes[from + 2];
-			rgba[to + 1] = bytes[from + 1];
-			rgba[to + 2] = bytes[from];
-			rgba[to + 3] = bytes[from + 3];
-		}
-	}
-	return { rgba, width, height };
-}
-
-/*
-================
 downscaleLevel
 
 One mip step: each texel the rounded mean of its 2x2 parents. The chain
@@ -234,43 +173,6 @@ function downscaleLevel( rgba, width, height ) {
 		}
 	}
 	return out;
-}
-
-/*
-================
-upscaledPickAlpha
-
-The upscaled level 0's alpha as a trailing NTX section, or an empty
-buffer when every texel is opaque (pickAlphaSection's rule, on the
-pixels the variant's GPU actually samples).
-================
-*/
-function upscaledPickAlpha( rgba, width, height ) {
-	const alpha = Buffer.alloc( width * height );
-	let opaque = true;
-	for ( let i = 0; i < alpha.length; i++ ) {
-		alpha[i] = rgba[i * 4 + 3];
-		if ( alpha[i] !== 255 ) opaque = false;
-	}
-	if ( opaque ) return Buffer.alloc( 0 );
-	const tag = Buffer.alloc( 4 );
-	tag.writeUInt32LE( NTX_PICK_ALPHA, 0 );
-	return Buffer.concat( [ tag, alpha ] );
-}
-
-/*
-================
-ntx
-================
-*/
-function ntx( width, height, code, levels ) {
-	const header = Buffer.alloc( NTX_HEADER_BYTES );
-	header.writeUInt32LE( NTX_MAGIC, 0 );
-	header.writeUInt32LE( width, 4 );
-	header.writeUInt32LE( height, 8 );
-	header.writeUInt32LE( code, 12 );
-	header.writeUInt32LE( levels.length, 16 );
-	return Buffer.concat( [ header, ...levels ] );
 }
 
 /*
@@ -338,8 +240,8 @@ async function encodeBatch( batch, tools, cacheRoot, outputRoot, jobs ) {
 				if ( level0[texel * 4 + 3] !== 255 ) item.opaque = false;
 			}
 			const colourFile = path.join( inDir, `${index}.tga` ), greyFile = path.join( inDir, `${index}-a.tga` );
-			writeFileSync( colourFile, tga( colour, item.texture.width, item.texture.height ) );
-			writeFileSync( greyFile, tga( grey, item.texture.width, item.texture.height ) );
+			writeFileSync( colourFile, tgaImage( colour, item.texture.width, item.texture.height ) );
+			writeFileSync( greyFile, tgaImage( grey, item.texture.width, item.texture.height ) );
 			inputs.push( colourFile, greyFile );
 		}
 		await run( tools.texconv, [ "-nogpu", "-ft", "png", "-o", pngDir, ...inputs, "-y" ], { maxBuffer: 64 << 20 } );
@@ -367,8 +269,8 @@ async function encodeBatch( batch, tools, cacheRoot, outputRoot, jobs ) {
 		// as batches over files that all exist.
 		const bc7Levels = [], astcLevels = [];
 		for ( const [index, item] of batch.entries() ) {
-			const up = readTga( readFileSync( path.join( upTgaDir, `${index}.tga` ) ) );
-			const grey = readTga( readFileSync( path.join( upTgaDir, `${index}-a.tga` ) ) );
+			const up = tgaPixels( readFileSync( path.join( upTgaDir, `${index}.tga` ) ) );
+			const grey = tgaPixels( readFileSync( path.join( upTgaDir, `${index}-a.tga` ) ) );
 			const rawWidth = item.texture.width * UPSCALE, rawHeight = item.texture.height * UPSCALE;
 			if (
 				up.width !== rawWidth || up.height !== rawHeight || grey.width !== rawWidth || grey.height !== rawHeight
@@ -394,7 +296,7 @@ async function encodeBatch( batch, tools, cacheRoot, outputRoot, jobs ) {
 			// opaque source carries none, whatever the network's ringing
 			// does to a flat field; a transparent one's mask values are
 			// the upscaled alpha.
-			item.mask = item.opaque ? Buffer.alloc( 0 ) : upscaledPickAlpha( colour, item.width, item.height );
+			item.mask = item.opaque ? Buffer.alloc( 0 ) : pickAlphaSection( colour, item.width, item.height );
 			const chain = [ colour ];
 			while ( chain.length < item.levelCount ) {
 				const level = chain.length;
@@ -411,7 +313,7 @@ async function encodeBatch( batch, tools, cacheRoot, outputRoot, jobs ) {
 			for ( let level = 0; level < item.levelCount; level++ ) {
 				const width = Math.max( 1, item.width >> level ), height = Math.max( 1, item.height >> level );
 				const file = path.join( levelDir, `${index}-${level}.tga` );
-				writeFileSync( file, tga( chain[level], width, height ) );
+				writeFileSync( file, tgaImage( chain[level], width, height ) );
 				if ( item.need.bc7 ) bc7Levels.push( { item, level, file, width, height } );
 				if ( item.need.astc ) astcLevels.push( { item, level, file, width, height } );
 			}
@@ -450,11 +352,7 @@ async function encodeBatch( batch, tools, cacheRoot, outputRoot, jobs ) {
 				await run( tools.astcenc, [ "-cl", entry.file, output, "4x4", PRESET, "-silent" ], {
 					maxBuffer: 64 << 20
 				} );
-				const file = readFileSync( output );
-				if ( file.readUInt32LE( 0 ) !== ASTC_MAGIC || file[4] !== BLOCK || file[5] !== BLOCK ) {
-					throw new Error( "Unexpected astcenc output" );
-				}
-				entry.item.astc[entry.level] = file.subarray( ASTC_HEADER_BYTES );
+				entry.item.astc[entry.level] = astcBlocks( readFileSync( output ), BLOCK );
 			}
 		}
 		await Promise.all( Array.from( { length: Math.min( jobs, Math.max( 1, astcLevels.length ) ) }, astcWorker ) );
@@ -463,7 +361,9 @@ async function encodeBatch( batch, tools, cacheRoot, outputRoot, jobs ) {
 			for ( const format of FORMATS ) {
 				if ( !item.need[format] ) continue;
 				const code = format === "bc7" ? NTX_BC7 : NTX_ASTC_4X4;
-				const variant = Buffer.concat( [ ntx( item.width, item.height, code, item[format] ), item.mask ] );
+				const variant = Buffer.concat( [
+					ntxContainer( item.width, item.height, code, item[format], [ item.mask ] )
+				] );
 				writeFileSync( path.join( cacheRoot, `${item.digest}.${format}.ntx` ), variant );
 				item.publish( format, variant );
 			}
