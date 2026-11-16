@@ -9,15 +9,19 @@ running GameWorld) and closes it afterwards. It rewrites the rows a swap
 function picks in every container the named characters reach: the bag and
 equipped sockets, worn avatars, every companion's container (active,
 dormant scroll records, mercenaries), the account's storage and the
-character's guild storage (items on the ground or in a stall are not
-covered). One transaction commits every change, so a
+character's guild storage. One transaction commits every change, so a
 failure leaves the store as it was. A row the swap refuses fails the whole
 run before anything is written.
 
 SwapItemsOfflineShard covers the whole shard instead: every character of
 the division (one pending deletion too, since it can be restored), every
-stored account warehouse (accounts without characters too) and every
-guild's storage.
+stored account warehouse (accounts without characters too), every
+guild's storage, and the division's ground plane: each ground item and a
+dropped pet's container (ground_items is restored at boot with its time
+to live, so an item left there would come back unswapped). A named run
+leaves the ground alone, since no character owns a ground item. A stall
+is never stored, and deleted_characters is a raw archive nothing
+restores, so neither is a container.
 
 It exists for owner decisions, not a native mechanic: the balance
 advisor's own characters trade their degree-9 Seal of Sun gear for the
@@ -32,6 +36,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"math"
 	"sort"
 
 	"opensro.online/server/internal/domain"
@@ -100,6 +105,8 @@ type swapScope struct {
 	characters []*domain.Character
 	accounts   []swapStorage
 	guilds     []swapStorage
+	// ground covers the division's ground plane (a shard run).
+	ground bool
 }
 
 type swapStorage struct {
@@ -175,6 +182,7 @@ func (s *Store) SwapItemsOfflineShard(division string, swap ItemSwapFunc, apply 
 		scope.guilds = append(scope.guilds, swapStorage{label: fmt.Sprintf("guild %d", id), guild: id})
 	}
 	sort.Slice(scope.guilds, func(i, j int) bool { return scope.guilds[i].guild < scope.guilds[j].guild })
+	scope.ground = true
 	return s.swapItemsOfflineLocked(division, scope, swap, apply)
 }
 
@@ -216,6 +224,102 @@ func cloneStorageRows(storage domain.AccountStorage) domain.AccountStorage {
 		storage.Rows[i].Summon = domain.CloneCOS(storage.Rows[i].Summon)
 	}
 	return storage
+}
+
+/*
+================
+groundRow
+
+A ground item as the inventory row a swap function reads. Its dropped
+pet is a clone, so a swap that walks it never touches the store's copy.
+================
+*/
+func groundRow(item domain.GroundItemRecord) domain.InventoryRow {
+	return domain.InventoryRow{
+		TradeOwner:   item.TradeOwner,
+		Summon:       domain.CloneCOS(item.Summon),
+		RecordID:     item.RecordID,
+		RefObjID:     item.RefObjID,
+		Codename:     item.Codename,
+		TypeFlags:    item.TypeFlags,
+		Plus:         int64(item.Plus),
+		VarianceBits: item.VarianceBits,
+		Durability:   int64(item.Durability),
+		StackCount:   int64(item.StackCount),
+		MagicOptions: item.MagicOptions,
+		Data:         item.Data,
+		ForgeBound:   item.ForgeBound,
+	}
+}
+
+/*
+================
+applyGroundRow
+
+Writes a swapped row back onto its ground item. The ground record keeps
+narrower fields than a row, so a value that does not fit refuses the
+run instead of being truncated.
+================
+*/
+func applyGroundRow(item *domain.GroundItemRecord, row domain.InventoryRow) error {
+	if row.Plus < 0 || row.Plus > math.MaxUint8 {
+		return fmt.Errorf("plus %d does not fit a ground item", row.Plus)
+	}
+	if row.Durability < 0 || row.Durability > math.MaxUint32 {
+		return fmt.Errorf("durability %d does not fit a ground item", row.Durability)
+	}
+	if row.StackCount < 0 || row.StackCount > math.MaxUint16 {
+		return fmt.Errorf("stack %d does not fit a ground item", row.StackCount)
+	}
+	item.TradeOwner = row.TradeOwner
+	item.Summon = row.Summon
+	item.RecordID = row.RecordID
+	item.RefObjID = row.RefObjID
+	item.Codename = row.Codename
+	item.TypeFlags = row.TypeFlags
+	item.Plus = uint8(row.Plus)
+	item.VarianceBits = row.VarianceBits
+	item.Durability = uint32(row.Durability)
+	item.StackCount = uint16(row.StackCount)
+	item.MagicOptions = row.MagicOptions
+	item.Data = row.Data
+	item.ForgeBound = row.ForgeBound
+	return nil
+}
+
+/*
+================
+swapGround
+
+Runs swap over division's ground plane: each item and its dropped pet's
+container. Returns the whole plane, every division, with division's
+rows rewritten, and whether any row changed; the store's plane is never
+touched.
+================
+*/
+func (s *Store) swapGround(division string, swap ItemSwapFunc, out *[]ItemSwap) (map[string][]domain.GroundItemRecord, bool, error) {
+	plane := make(map[string][]domain.GroundItemRecord, len(s.ground.loadedRecords))
+	for id, rows := range s.ground.loadedRecords {
+		plane[id] = rows
+	}
+	items := append([]domain.GroundItemRecord(nil), plane[division]...)
+	changed := false
+	for i := range items {
+		before := len(*out)
+		rows := []domain.InventoryRow{groundRow(items[i])}
+		if err := swapRows("ground", fmt.Sprintf("gid %d", items[i].Gid), rows, swap, out); err != nil {
+			return nil, false, err
+		}
+		if len(*out) == before {
+			continue
+		}
+		if err := applyGroundRow(&items[i], rows[0]); err != nil {
+			return nil, false, fmt.Errorf("ground gid %d (%s): %w", items[i].Gid, items[i].Codename, err)
+		}
+		changed = true
+	}
+	plane[division] = items
+	return plane, changed, nil
 }
 
 /*
@@ -294,6 +398,14 @@ func (s *Store) swapItemsOfflineLocked(division string, scope swapScope, swap It
 			guilds[owner.guild] = guild
 		}
 	}
+	var ground map[string][]domain.GroundItemRecord
+	groundChanged := false
+	if scope.ground {
+		var err error
+		if ground, groundChanged, err = s.swapGround(division, swap, &out); err != nil {
+			return nil, err
+		}
+	}
 	if !apply || len(out) == 0 {
 		return out, nil
 	}
@@ -323,11 +435,23 @@ func (s *Store) swapItemsOfflineLocked(division string, scope swapScope, swap It
 			return nil, err
 		}
 	}
+	if groundChanged {
+		if err := replaceGroundTx(tx.Tx, &s.encodeScratch, ground, s.residues.ground); err != nil {
+			return nil, err
+		}
+	}
 	if err := upsertMetaTx(tx.Tx, metaKeyUpdatedAtMs, fmt.Sprint(s.now().UnixMilli())); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
+	}
+	if groundChanged {
+		// As the offline rename: the plane was rewritten outside the
+		// registry's change stamps, so the next ground write diffs the
+		// whole plane against it (#2040).
+		s.ground.loadedRecords = ground
+		s.ground.revisionRecorded = false
 	}
 	for c, next := range characters {
 		c.MissionInventory = next.MissionInventory

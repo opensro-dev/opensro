@@ -13,9 +13,10 @@ Run it in the maintenance window, with the GameWorld stopped and the store
 backed up: store.Open takes the authority's writer lock, so a running
 GameWorld makes it refuse. It previews by default and writes only with
 -apply. The whole shard is covered (store.SwapItemsOfflineShard): every
-character's bag, avatars and companions, every account's warehouse and
-every guild's storage. Items on the ground or in a stall are not: a
-stopped shard keeps neither.
+character's bag, avatars and companions, every account's warehouse,
+every guild's storage, and the ground: each item and a dropped pet's
+container (a stopped shard keeps its ground_items and restores them at
+boot). A stall is never stored, so it holds nothing to swap.
 
 A row keeps its slot, stack, trade owner and record id; only its reference
 changes, to the B elixir of the same kind (codename _A -> _B, checked to

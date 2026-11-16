@@ -211,6 +211,104 @@ func TestSwapItemsOfflineShardCoversEveryone(t *testing.T) {
 
 /*
 ================
+seedGround
+
+Writes plane straight into ground_items, as a shard that stopped with
+those drops on the ground left it; the next open loads them.
+================
+*/
+func seedGround(t *testing.T, dir string, plane map[string][]domain.GroundItemRecord) {
+	t.Helper()
+	s := openTest(t, dir, newTestClock())
+	tx, err := s.syncDBLocked().Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := replaceGroundTx(tx, &s.encodeScratch, plane, s.residues.ground); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+}
+
+/*
+================
+TestSwapItemsOfflineShardCoversTheGround
+
+A plain row on the ground, and one in a dropped pet's container, come back
+at boot (ground_items keeps them with their time to live), so the shard run
+swaps both; a named run leaves the ground alone, a refused ground row
+writes nothing, and another division's drops are never touched.
+================
+*/
+func TestSwapItemsOfflineShardCoversTheGround(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	first := domain.GroundItemGIDBase + 1
+	dropped := domain.GroundItemRecord{Gid: first, RefObjID: 1, Codename: "SUN", TypeFlags: 1, StackCount: 4, Plus: 3,
+		VarianceBits: "77", Durability: 40, RegionID: 25000, DroppedBy: "Owner", DroppedAtMs: 1000}
+	pet := domain.GroundItemRecord{Gid: first + 1, RefObjID: 70, Codename: "SCROLL", TypeFlags: 1, StackCount: 1, RegionID: 25000,
+		Summon: &domain.CharacterCOS{RefObjID: 7, Container: &domain.COSContainer{Rows: []domain.InventoryRow{
+			{Slot: 0, RefObjID: 1, Codename: "SUN", StackCount: 2},
+		}}}}
+	elsewhere := dropped
+	seedGround(t, dir, map[string][]domain.GroundItemRecord{testDivision: {dropped, pet}, "other": {elsewhere}})
+
+	s := openTest(t, dir, newTestClock())
+	owner := &domain.Character{Name: "Owner"}
+	if err := s.CreateCharacter(testDivision, "acct-Owner", owner); err != nil {
+		t.Fatal(err)
+	}
+	if named, err := s.SwapItemsOffline(testDivision, []string{"Owner"}, sunToMoon, false); err != nil || len(named) != 0 {
+		t.Fatalf("a named run reached the ground: %v %+v", err, named)
+	}
+	preview, err := s.SwapItemsOfflineShard(testDivision, sunToMoon, false)
+	if err != nil || len(preview) != 2 {
+		t.Fatalf("preview %v %+v", err, preview)
+	}
+	if s.ground.loadedRecords[testDivision][1].Summon.Container.Rows[0].Codename != "SUN" {
+		t.Fatal("a preview changed the store's ground plane")
+	}
+	applied, err := s.SwapItemsOfflineShard(testDivision, sunToMoon, true)
+	if err != nil || len(applied) != 2 {
+		t.Fatalf("apply %v %+v", err, applied)
+	}
+	s.Close()
+
+	reopened := openTest(t, dir, newTestClock())
+	ground := reopened.ground.loadedRecords[testDivision]
+	if len(ground) != 2 {
+		t.Fatalf("ground %+v", ground)
+	}
+	got := ground[0]
+	if got.Codename != "MOON" || got.RefObjID != 2 || got.StackCount != 4 || got.Plus != 3 || got.VarianceBits != "77" ||
+		got.Durability != 40 || got.DroppedBy != "Owner" || got.DroppedAtMs != 1000 || got.Gid != first {
+		t.Fatalf("ground row %+v", got)
+	}
+	if rows := ground[1].Summon.Container.Rows; ground[1].Codename != "SCROLL" || rows[0].Codename != "MOON" || rows[0].StackCount != 2 {
+		t.Fatalf("dropped pet %+v", ground[1])
+	}
+	if other := reopened.ground.loadedRecords["other"]; len(other) != 1 || other[0].Codename != "SUN" {
+		t.Fatalf("another division's ground was swapped: %+v", other)
+	}
+	reopened.Close()
+
+	refused := domain.GroundItemRecord{Gid: first + 2, RefObjID: 3, Codename: "BAD", TypeFlags: 1, StackCount: 1, RegionID: 25000}
+	seedGround(t, dir, map[string][]domain.GroundItemRecord{testDivision: {dropped, refused}})
+	again := openTest(t, dir, newTestClock())
+	if _, err := again.SwapItemsOfflineShard(testDivision, sunToMoon, true); err == nil {
+		t.Fatal("an unmapped ground row was accepted")
+	}
+	if again.ground.loadedRecords[testDivision][0].Codename != "SUN" {
+		t.Fatal("a refused run changed the ground plane")
+	}
+}
+
+/*
+================
 TestSwapItemsOfflineCoversDormantCompanions
 
 An unsummoned pet's record lives in its summoner row; its container is
