@@ -7,17 +7,18 @@ createClothVertices skins every pin on the CPU each frame and rewrites the
 whole vertex stream. createClothStream leaves the skinning to the GPU and
 writes only what the solver owns, one entry a slot. Composed the vertex
 shader's way (a vertex's slot, then the stream where its flags say so, else
-the vertex skinned), with the CPU's own
-skinning arithmetic, every frame's positions and normals must equal the
-CPU stream's bit for bit, through option flips, restarts, frame debt,
-stalls, gusts and every pin kind, with the same random calls.
+the vertex skinned), with the CPU's own skinning arithmetic, every frame's
+positions and normals must equal the CPU stream's bit for bit, through
+option flips, off stretches and frames out of view, restarts (which anchor
+from the palette the last off frame kept), frame debt, stalls, gusts and
+every pin kind, with the same random calls.
 
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clothVertexCase, UNREAD_JOINT, withUnreadPins } from "../helpers/cloth-vertex-cases.mjs";
+import { clothVertexCase, UNREAD_JOINT, withOffStretches, withUnreadPins } from "../helpers/cloth-vertex-cases.mjs";
 const { createClothVertices } = await import( "../../src/engine/foundation/animation/cloth-vertices.ts" );
 const { createClothStream, solverPins, CLOTH_STREAM_WORDS, STREAM_POSITION, STREAM_NORMAL, CLOTH_NO_SLOT } =
 	await import(
@@ -63,18 +64,32 @@ function drawn( geometry, palette, stream, map, i ) {
 
 for ( const normals of [ false, true ] ) {
 	test(`the stream skinned the CPU's way draws every frame bit for bit (authored normals ${normals})`, () => {
-		const reference = clothVertexCase( true, normals ), mirror = clothVertexCase( true, normals );
+		const reference = withOffStretches( clothVertexCase( true, normals ) ),
+			mirror = withOffStretches( clothVertexCase( true, normals ) );
 		const cpu = createClothVertices( reference.primitive, reference.random );
 		const gpu = createClothStream( mirror.primitive, mirror.random );
 		const geometry = mirror.primitive.geometry, count = geometry.positions.length / 3;
 		const stream = new Uint32Array( gpu.slots.length * CLOTH_STREAM_WORDS ), map = slotMap( gpu, count );
-		let idle = 0, restarts = 0, wasEnabled = true;
+		let idle = 0, restarts = 0, rebuilds = 0, wasEnabled = true, kept;
 		for ( let frame = 0; frame < reference.frames; frame++ ) {
 			const a = reference.input( frame ), b = mirror.input( frame );
+			if ( b.absent ) continue;
 			const expected = cpu.update( a.palette, a.seconds, a.enabled, a.motion );
-			let asked = 0;
-			const write = gpu.update( () => (asked++, b.palette), b.seconds, b.enabled, b.motion );
-			assert.ok( asked <= 1, "one palette a frame at most" );
+			let asked = 0, rebuilt = 0;
+			const write = gpu.update(
+				{
+					current: () => (asked++, b.palette),
+					keep: () => (kept = b.palette, true),
+					kept: () => (rebuilt++, kept)
+				},
+				b.seconds,
+				b.enabled,
+				b.motion
+			);
+			assert.ok( asked <= 1 && rebuilt <= 1, "one palette of this frame and one kept a frame at most" );
+			if ( !b.enabled && !wasEnabled ) assert.equal( asked + rebuilt, 0, `frame ${frame}: a later off frame` );
+			if ( rebuilt ) assert.ok( b.enabled && !wasEnabled, `frame ${frame}: only a restart rebuilds` );
+			rebuilds += rebuilt;
 			if ( write ) stream.set( write.entries, write.first * CLOTH_STREAM_WORDS );
 			else if ( b.enabled ) {
 				idle++;
@@ -96,6 +111,7 @@ for ( const normals of [ false, true ] ) {
 		assert.equal( mirror.calls(), reference.calls(), "the same random calls" );
 		assert.ok( idle > 0, "frames without a due step write nothing" );
 		assert.ok( restarts > 0, "the case restarts the simulation" );
+		assert.ok( rebuilds > 0, "a restart rebuilds a kept palette" );
 	});
 }
 
@@ -114,7 +130,7 @@ test("a step re-anchors only the pins the solver reads, and the stream still dra
 	const gpu = createClothStream( mirror.primitive, mirror.random );
 	const geometry = mirror.primitive.geometry, count = geometry.positions.length / 3;
 	const stream = new Uint32Array( gpu.slots.length * CLOTH_STREAM_WORDS ), map = slotMap( gpu, count );
-	let readsUnread = 0;
+	let readsUnread = 0, kept;
 	for ( let frame = 0; frame < reference.frames; frame++ ) {
 		const a = reference.input( frame ), b = mirror.input( frame );
 		const expected = cpu.update( a.palette, a.seconds, a.enabled, a.motion );
@@ -127,7 +143,16 @@ test("a step re-anchors only the pins the solver reads, and the stream still dra
 				return typeof value === "function" ? value.bind( target ) : value;
 			}
 		} );
-		const write = gpu.update( () => watched, b.seconds, b.enabled, b.motion );
+		const write = gpu.update(
+			{
+				current: () => watched,
+				keep: () => (kept = watched, true),
+				kept: () => kept
+			},
+			b.seconds,
+			b.enabled,
+			b.motion
+		);
 		if ( write ) stream.set( write.entries, write.first * CLOTH_STREAM_WORDS );
 		for ( let i = 0; i < count; i++ ) {
 			const actual = drawn( geometry, b.palette, stream, map, i );
