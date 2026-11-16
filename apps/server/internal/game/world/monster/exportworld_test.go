@@ -107,7 +107,19 @@ func TestAppendExportWorldAdmitsOnlyTheIndex(t *testing.T) {
 
 	dir = writeExportWorld(t, manifest, exportWorldSource(t, "MOB_EXP_STRANGER", exportWorldRegion))
 	if _, err := AppendExportWorld(template, dir, true); err == nil {
-		t.Fatal("a nest of an unadmitted kind was appended")
+		t.Fatal("a nest of an unknown kind was appended")
+	}
+
+	// A kind the template knows, in an admitted region, but outside the
+	// area's kinds: only the index's kind half can refuse it (the unknown
+	// kind above stops at the reference lookup before admission runs).
+	known := TemplateFromParts(map[uint32]MonsterRef{
+		4321: {RefObjID: 4321, Codename: "MOB_EXP_ONE", Level: 100},
+		4322: {RefObjID: 4322, Codename: "MOB_EXP_TWO", Level: 100},
+	}, []NestRow{{MaxCount: 1}})
+	dir = writeExportWorld(t, manifest, exportWorldSource(t, "MOB_EXP_TWO", exportWorldRegion))
+	if _, err := AppendExportWorld(known, dir, true); err == nil {
+		t.Fatal("a known kind outside the area's kinds was appended")
 	}
 
 	dir = writeExportWorld(t, "{not json", nil)
