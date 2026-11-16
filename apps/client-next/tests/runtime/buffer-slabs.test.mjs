@@ -145,3 +145,16 @@ test("a staged set writes each dirty buffer once, never a destroyed one", () => 
 	assert.equal( a.binding.buffer.destroyed, 1 );
 	assert.equal( slabs.flush(), 0 );
 });
+
+test("a staged write inside a range lands at its offset and never past the range", () => {
+	const device = fakeDevice(), retirement = createRetirement();
+	const slabs = createStagedSlabs( device, "geometry-material-dynamic", 0, retirement.retire );
+	const a = slabs.allocate( 256 ), b = slabs.allocate( 256 ), row = Float32Array.of( 1, 2, 3, 4 );
+	slabs.write( b, row, 16, 192 );
+	slabs.write( b, row.subarray( 0, 3 ), 12, 128 );
+	assert.equal( slabs.flush(), 1 );
+	assert.deepEqual( device.writes.map( w => [ w.offset, w.size ] ), [ [ b.binding.offset + 128, 80 ] ] );
+	assert.throws( () => slabs.write( a, row, 16, 244 ), /Invalid staged slab write/ );
+	assert.throws( () => slabs.write( a, row, 16, 2 ), /Invalid staged slab write/ );
+	assert.equal( slabs.flush(), 0, "a refused write marks nothing" );
+});

@@ -377,6 +377,46 @@ when the claim is broken. Then run the gates listed in
 [AGENTS.md](../../AGENTS.md#verification) and the browser tests for what you
 touched.
 
+### Character presentation: replay two trees
+
+`apps/client-next/tools/perf/presentation/` proves that a change to the
+character presentation (`src/engine/runtime/characters`) leaves its outputs
+identical. It replays a scripted session through the presentation of a
+checkout, in `runtime.ts`'s frame order, and writes one line per frame with
+everything the presentation hands to the rest of the client: the actors and
+portraits given to the renderer (encoded at call time), assemblies, models,
+clips and the retained set, footprints, sounds played, asset requests and
+cancels, the effective-HP calls, and the runtime's reads after the step
+(error, degradations, camera target, damage texts and the others).
+
+From the repository root, with `TOOL=apps/client-next/tools/perf/presentation`:
+
+```
+node $TOOL/scenarios.mjs temp/presentation               # one session per scenario
+node $TOOL/replay.mjs . temp/presentation/standing.json.gz temp/presentation/base.ndjson.gz
+node $TOOL/replay.mjs ../other-tree temp/presentation/standing.json.gz temp/presentation/change.ndjson.gz
+node $TOOL/diff.mjs temp/presentation/base.ndjson.gz temp/presentation/change.ndjson.gz
+```
+
+`replay.mjs ROOT` loads every module from ROOT (sources, loader, the
+`tests/helpers/presentation-fixture.mjs` rig, the encoder), so one copy of
+the tool replays any tree that has the rig. `diff.mjs` exits 0 with the
+frame count when the two runs are equal, and 1 at the first difference,
+naming the frame, the gid, the JSON path and both values. The scenarios
+(`scenarios.mjs` without arguments lists them) are synthetic
+world-batch streams built from the published catalogs and a seed: a 200
+player standing crowd for 60 s, walkers, combat with hits, a knockdown and
+a death, sit and stand, a stall, a ride, equipment changes, freeze and slow,
+emotes, pickups, spawn churn, a camera path across LOD rescans and ground
+items. A replay takes one to seven seconds per scenario and about a minute
+for the standing crowd.
+
+What it proves: the two trees present the same session identically. What it
+does not: anything outside the presentation (the GPU, world scenery,
+terrain, the local mover, dungeon rooms are stubbed), or a session the
+scenarios do not script. Quote the diff line and each scenario's result in
+the pull request.
+
 ## 5. Record the result
 
 Report measured numbers, before and after, from back-to-back runs, with

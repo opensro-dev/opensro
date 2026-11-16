@@ -79,3 +79,57 @@ func TestLinkedLineSendsItsReferencesFirst(t *testing.T) {
 		t.Fatalf("history % X does not end with the linked line", history)
 	}
 }
+
+// slotLinkSource links any bag slot: slot i's body and reference payload
+// are {i}, so the order on the wire names the link.
+type slotLinkSource struct{}
+
+func (slotLinkSource) LinkedItem(_ string, _ *enterworld.Character, ref chat.LinkRef) (chat.LinkedItem, bool) {
+	if ref.Source != chat.LinkSourceInventory {
+		return chat.LinkedItem{}, false
+	}
+	slot := byte(ref.Slot)
+	return chat.LinkedItem{Body: []byte{slot}, Label: "<X>",
+		References: []wire.Frame{{Opcode: linkRefOpcode, Payload: []byte{slot}}}}, true
+}
+
+func (slotLinkSource) StorageLinks(string, *enterworld.Character, []chat.LinkRef) map[chat.LinkRef]chat.LinkedItem {
+	return nil
+}
+
+/*
+================
+TestSeveralLinksAtTheProductionLimit
+
+At the production limit (chat.MaxLinksOnWire) a line linking three items
+carries all three, in marker order, and every item's reference reaches
+the reader ahead of the line.
+================
+*/
+func TestSeveralLinksAtTheProductionLimit(t *testing.T) {
+	const division = "global-official"
+	server := startChatServer(t, filepath.Join(t.TempDir(), "authority"), division)
+	server.chat.ItemLinks = &chat.ItemLinks{Source: slotLinkSource{}, Limit: chat.MaxLinksOnWire}
+	a := dialWS(t, server.srv)
+	helloWS(t, a)
+	enterChatWorld(t, a, division, e2eChatNameA)
+	b := dialWS(t, server.srv)
+	helloWS(t, b)
+	enterChatWorld(t, b, division, e2eChatNameB)
+	gameReadyBarrier(t, b, "empty history")
+
+	slots := []uint16{21, 13, 40}
+	var refs []chat.LinkRef
+	var items []chat.LinkedItem
+	for _, slot := range slots {
+		refs = append(refs, chat.LinkRef{Source: chat.LinkSourceInventory, Slot: slot})
+		items = append(items, chat.LinkedItem{Body: []byte{byte(slot)}})
+	}
+	text := "wts \uFFFC \uFFFC \uFFFC"
+	sendFrame(t, a, chat.OpChatRequest, append(chatRequestFrame(chat.ChatTypeAll, "", text), chat.EncodeLinkRefs(refs)...))
+	line := chat.AppendLinkTail(namedBroadcast(chat.ChatTypeGlobal, e2eChatNameA, text), items)
+	for _, slot := range slots {
+		expectExact(t, b, linkRefOpcode, []byte{byte(slot)}, "the reader's references first, in order")
+	}
+	expectExact(t, b, chat.OpChatBroadcast, line, "the reader's line with three links")
+}

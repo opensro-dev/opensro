@@ -151,6 +151,15 @@ func newGameplayPlane(
 	if err := configureReverseReturnMap(items, devPaths.TextdataDir); err != nil {
 		return nil, err
 	}
+	// Port-only, not native (#3349): the Muhan change NPCs' pairing. Off
+	// reads nothing and installs nothing.
+	muhanTransforms, err := monster.LoadMuhanTransforms(devPaths.TextdataDir, monster.MuhanEnabled())
+	if err != nil {
+		return nil, err
+	}
+	if err := items.ConfigureMuhanTransforms(muhanTransforms); err != nil {
+		return nil, err
+	}
 	// One clock for the bootstrap and the tick sweep, read through the runtime
 	// so a swapped clock reaches both; world entry hands re-raised pet-skill
 	// windows to the same sweep that retires them.

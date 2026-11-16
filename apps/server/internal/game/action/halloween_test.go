@@ -61,10 +61,10 @@ func halloweenTestItems() staticItemSource {
 		NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 1, "canTrade": 1, "canSell": 1, "canBorrow": 255}),
 		CanDrop:      true, CanDropOnDeath: true,
 	}
-	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A"] = etc(3911, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", 50)
-	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A"] = etc(3912, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A", 50)
-	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A"] = etc(3913, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A", 50)
-	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A"] = etc(3914, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A", 50)
+	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B"] = etc(3911, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B", 50)
+	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_B"] = etc(3912, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_B", 50)
+	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_B"] = etc(3913, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_B", 50)
+	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_B"] = etc(3914, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_B", 50)
 	return items
 }
 
@@ -802,7 +802,7 @@ rows carry no sex filter — a female character buys one too (#2548).
 ================
 */
 func TestHalloweenElixirPrizeSale(t *testing.T) {
-	service := HalloweenPrizeServicePrefix + "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A"
+	service := HalloweenPrizeServicePrefix + "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B"
 	price := int64(progression.HalloweenElixirPrice)
 
 	// Short of the price: the no-box line, the banner names the price,
@@ -819,7 +819,7 @@ func TestHalloweenElixirPrizeSale(t *testing.T) {
 		t.Fatalf("short Elixir sale banner %q, want %q", frames[0].Payload, want)
 	}
 	if bagCount(c, progression.HalloweenBoxCodename) != int(price-1) ||
-		bagCount(c, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A") != 0 {
+		bagCount(c, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B") != 0 {
 		t.Fatal("short Elixir sale touched the bag", c.MissionInventory)
 	}
 
@@ -836,7 +836,7 @@ func TestHalloweenElixirPrizeSale(t *testing.T) {
 		t.Fatal("Elixir sale spent banner", frames)
 	}
 	if bagCount(c, progression.HalloweenBoxCodename) != 5 ||
-		bagCount(c, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A") != 1 {
+		bagCount(c, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B") != 1 {
 		t.Fatal("Elixir sale bag", c.MissionInventory)
 	}
 
@@ -859,7 +859,7 @@ func TestHalloweenElixirPrizeSale(t *testing.T) {
 		t.Fatal("full-bag Elixir sale", frames, err)
 	}
 	if bagCount(c, progression.HalloweenBoxCodename) != int(price) ||
-		bagCount(c, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A") != 0 {
+		bagCount(c, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B") != 0 {
 		t.Fatal("full-bag Elixir refusal touched the bag", c.MissionInventory)
 	}
 
@@ -884,7 +884,7 @@ func TestHalloweenElixirPrizeSale(t *testing.T) {
 	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
 		t.Fatal("female Elixir sale", frames, err)
 	}
-	if bagCount(c, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A") != 1 {
+	if bagCount(c, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B") != 1 {
 		t.Fatal("female Elixir sale bag", c.MissionInventory)
 	}
 }

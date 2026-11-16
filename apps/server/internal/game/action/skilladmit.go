@@ -563,6 +563,12 @@ The native msch gate. Body mode 1 (berserk) refuses every word with 0x3031, then
 
 Only a monster mask's indirect cast carries a RefObj; a pressed skill has
 none, so word 1 refuses it with 0x3006.
+
+Port-only, not native: word 7 (the Muhan change) gets word 1's check. The
+v1.188 gate checks word 1 alone and gives word 7 no body change; here it
+does change the body (transformWord), so the guards that keep that body
+change sound come with it (#3349, inference). Buff replacement stays
+native: only word 1 is exempt there.
 ==================
 */
 func (rt *Runtime) mschRefusal(division string, c *enterworld.Character, mode, transformRef uint32, now int64) uint16 {
@@ -570,7 +576,7 @@ func (rt *Runtime) mschRefusal(division string, c *enterworld.Character, mode, t
 		return 0x3031
 	}
 	switch mode {
-	case 1:
+	case 1, mschMuhanChange:
 		return rt.transformRefusal(division, c, transformRef, now)
 	case 2:
 		riding := c.ActiveCOS != nil && c.ActiveCOS.Mounted
