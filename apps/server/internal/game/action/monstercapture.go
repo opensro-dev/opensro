@@ -167,7 +167,7 @@ func (rt *Runtime) executeMonsterCapture(division string, c *enterworld.Characte
 		}
 		rt.startSkillCast(division, c, skill, now)
 		rt.commitOffensivePhaseCost(division, c, skill, cost, now, false)
-		row := inventory.Item{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), Quantity: 1, TransformRefObjID: target.Ref.RefObjID}
+		row := inventory.Item{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), Quantity: 1, Data: target.Ref.RefObjID}
 		planned := PlanItemDrop(row, 1, rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now), c.Name, time.UnixMilli(now))
 		planned.OwnerJID = casterGID
 		essence = rt.addCharacterGround(division, c, planned)

@@ -265,5 +265,26 @@ class LaterWorldReapTest(unittest.TestCase):
 			hunting2, "SRO_HUNTING2", hunting2.add_hunting2, 25002, (130, 86), "HUNT_FIELD", "HUNT_FIELD_EAST")
 
 
+
+# ================
+# ClientRootTest
+#
+# The one resolver of the v1.696 folder: an empty or unset value refuses
+# with the switch's own sentence, never "." (str(Path("")) is ".").
+# ================
+class ClientRootTest(unittest.TestCase):
+	def test_unset_and_empty_refuse(self):
+		for env in ({}, {"SRO_V1696_ROOT": ""}, {"SRO_V1696_ROOT": "  "}):
+			with self.assertRaisesRegex(SystemExit, "SRO_V1696_ROOT"):
+				later.client_root(None, "SRO_V1696_ROOT", env)
+		with self.assertRaisesRegex(SystemExit, "SRO_V1696_ROOT"):
+			later.client_root("", "SRO_V1696_ROOT", {})
+
+	def test_the_caller_wins_over_the_environment(self):
+		env = {"SRO_V1696_ROOT": "from-env"}
+		self.assertEqual(later.client_root("given", "SRO_V1696_ROOT", env), Path("given"))
+		self.assertEqual(later.client_root(None, "SRO_V1696_ROOT", env), Path("from-env"))
+
+
 if __name__ == "__main__":
 	unittest.main()

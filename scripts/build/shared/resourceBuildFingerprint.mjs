@@ -28,19 +28,24 @@ the old mtime, which no build tool here does.
 ===========================================================================
 */
 import { createHash } from "node:crypto";
-import { mkdir, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { buildStatePath } from "../../lib/generatedRoot.mjs";
 import { codeClosure } from "./codeStamp.mjs";
+import { janganTombTeleportEnabled } from "./janganTombTeleport.mjs";
 import { muhanEnabled } from "./muhan.mjs";
 import { qinshiTombEnabled } from "./qinshiTomb.mjs";
 import { readJsonOrUndefined } from "./jsonOut.mjs";
+import { writeStateFile } from "./stateFile.mjs";
 import { extractedRoot, gameRoot, generatedRoot, publicRoot, rebuildRoot } from "../world/paths.mjs";
 
 const serverSourceRoot = path.resolve(
 	process.env.SRO_SERVER_SOURCE_ROOT ??
 		path.join( rebuildRoot, "apps", "server" )
 );
-const statePath = path.join( rebuildRoot, ".state", "resource-build-fingerprint.json" );
+// Beside the generated tree it describes, so a fresh worktree that reads the
+// shared tree finds the last build's fingerprint (generatedRoot.mjs).
+const statePath = buildStatePath( "resource-build-fingerprint.json" );
 
 // v10: the effective tomb posture joined the knobs (#2024 follow-up).
 // v9: the pet design joined; it moved from scripts/build into the server (#1631).
@@ -58,6 +63,9 @@ export const ENV_KNOBS = [
 	// Port-only, not native: the server's Muhan teleport overlays join
 	// the teleport bake (shared/muhan.mjs, #3314).
 	"SRO_MUHAN",
+	// Port-only, not native: the Jangan gate's tomb floor links join the
+	// teleport bake (shared/janganTombTeleport.mjs).
+	"SRO_JANGAN_TOMB_TELEPORT",
 	"SRO_SOOK_SURVIVAL_ARENA",
 	"SRO_ALLOW_DEV_OUTDOOR_ROUTING",
 	"SRO_SKIP_TEXTURE_CONVERT",
@@ -89,6 +97,7 @@ export function buildKnobLines() {
 	const lines = ENV_KNOBS.map( ( name ) => `env ${name}=${process.env[name] ?? ""}` );
 	lines.push( `posture SRO_QINSHI_TOMB=${qinshiTombEnabled()}` );
 	lines.push( `posture SRO_MUHAN=${muhanEnabled()}` );
+	lines.push( `posture SRO_JANGAN_TOMB_TELEPORT=${janganTombTeleportEnabled()}` );
 	return lines;
 }
 
@@ -283,7 +292,6 @@ writeRecordedFingerprint
 ================
 */
 export async function writeRecordedFingerprint( fingerprint ) {
-	await mkdir( path.dirname( statePath ), { recursive: true } );
 	const payload = `${
 		JSON.stringify(
 			{
@@ -300,9 +308,7 @@ export async function writeRecordedFingerprint( fingerprint ) {
 			2
 		)
 	}\n`;
-	const temporaryPath = `${statePath}.tmp`;
-	await writeFile( temporaryPath, payload, "utf8" );
-	await rename( temporaryPath, statePath );
+	await writeStateFile( statePath, payload );
 }
 
 /*

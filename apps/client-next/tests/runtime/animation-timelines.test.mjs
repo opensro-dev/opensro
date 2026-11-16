@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-animation-timelines.test.mjs - tests for animation-timelines.ts
+animation-timelines.test.mjs - tests for animation-timelines.ts, character-render-plan.ts
 
 Loads the TypeScript sources directly through the shared native loader
 (tests/helpers/native-source-loader.mjs), so the tests exercise the same
@@ -19,6 +19,9 @@ const { createAnimationTimelines, TIMELINE_CURSOR_BYTES } = await import(
 );
 const { characterPoseBytes } = await import(
 	sourceFileUrl( "src/engine/foundation/animation/character-budget.ts" ).href
+);
+const { createCharacterRenderPlan } = await import(
+	sourceFileUrl( "src/engine/foundation/animation/character-render-plan.ts" ).href
 );
 /*
 ================
@@ -122,4 +125,75 @@ test("a pose is charged one cursor per timeline of a clip, not one per channel",
 	const shared = Float32Array.of( 0, 1 );
 	const native = body( () => shared ), apart = body( c => Float32Array.of( 0, 1 + c ) );
 	assert.equal( characterPoseBytes( apart ) - characterPoseBytes( native ), 89 * TIMELINE_CURSOR_BYTES );
+});
+
+/*
+================
+catalog
+
+A body's clip catalog as the decoder admits it: native clips key every
+channel at the same times, others key some channels apart, and two
+timelines differ only in the sign of a zero.
+================
+*/
+function catalog() {
+	const node = i => ({
+		name: "n" + i,
+		parent: i ? 0 : -1,
+		translation: [ 0, 0, 0 ],
+		rotation: [ 0, 0, 0, 1 ],
+		scale: [ 1, 1, 1 ]
+	});
+	const clip = ( name, channelTimes ) => ({
+		name,
+		duration: 2,
+		channels: Array.from( { length: 60 }, ( _, c ) => ({
+			node: c % 20,
+			path: [ "translation", "rotation", "scale" ][c % 3],
+			interpolation: "LINEAR",
+			times: channelTimes( c ),
+			values: new Float32Array( 8 )
+		}) )
+	});
+	const native = Float32Array.from( { length: 41 }, ( _, k ) => k / 20 );
+	return {
+		nodes: Array.from( { length: 20 }, ( _, i ) => node( i ) ),
+		primitives: [],
+		images: [],
+		clips: [
+			clip( "stand", () => native ),
+			clip( "run", c => c % 7 ? native : Float32Array.of( 0, 1 + c ) ),
+			clip( "sit", c => c % 2 ? Float32Array.of( 0, 1 ) : Float32Array.of( -0, 1 ) )
+		]
+	};
+}
+/*
+================
+countedTimelines
+
+A renderer's timeline cache, and how many clips it was asked to store:
+each store is one clip whose key times were hashed.
+================
+*/
+function countedTimelines() {
+	const timelines = new WeakMap(), store = timelines.set.bind( timelines );
+	let walks = 0;
+	timelines.set = ( clip, bytes ) => {
+		walks++;
+		return store( clip, bytes );
+	};
+	return { timelines, walks: () => walks };
+}
+
+test("re-planning a body hashes only the key times of the clip it newly admitted, for the same charge", () => {
+	const model = catalog(), { timelines, walks } = countedTimelines();
+	createCharacterRenderPlan( model, timelines );
+	assert.equal( walks(), 3 );
+	// The second plan reads every clip's charge from the cache.
+	assert.equal( createCharacterRenderPlan( model, timelines ).poseBytes, characterPoseBytes( model ) );
+	assert.equal( walks(), 3 );
+	// An admitted clip appends to the catalog every assembly of the body shares.
+	const [added] = catalog().clips, extended = { ...model, clips: [ ...model.clips, { ...added, name: "walk" } ] };
+	assert.equal( createCharacterRenderPlan( extended, timelines ).poseBytes, characterPoseBytes( extended ) );
+	assert.equal( walks(), 4 );
 });

@@ -207,3 +207,78 @@ test("fading characters draw back-to-front by view-space depth", () => {
 	);
 	characters.dispose( gpu, null );
 });
+
+test("groups draw opaque first, then fading, then blended and effect programs back to front, each tier from its own model", () => {
+	const FX = "/assets/effects/programs.json#fx";
+	const model = blend => ({
+		nodes: [ { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] } ],
+		clips: [],
+		images: [],
+		primitives: [ {
+			name: "mesh",
+			node: 0,
+			joints: [ 0 ],
+			inverseBind: identity(),
+			image: -1,
+			geometry: {
+				positions: new Float32Array( 9 ),
+				indices: new Uint32Array( [ 0, 1, 2 ] ),
+				transform: identity(),
+				material: { color: [ 1, 1, 1, 1 ], ambient: [ 1, 1, 1 ], alphaCutoff: 0, blend, doubleSided: true }
+			}
+		} ]
+	});
+	const characters = createCharacters();
+	for ( const id of [ "opaque", "fade", FX ] ) characters.model( id, model( false ), [] );
+	// Borrowed, so its catalog can be extended in place below.
+	const glass = model( true );
+	characters.borrowModel( "glass", glass, [] );
+	const gpu = {
+		upload( data ) {
+			return { z: data.instances[14] };
+		},
+		updateInstances( draw, instances ) {
+			draw.z = instances[14];
+			return draw;
+		},
+		updateBones() {},
+		release() {}
+	};
+	const images = {
+		upload() {
+			return {};
+		},
+		release() {}
+	};
+	const actor = ( gid, id, z, opacity = 1 ) => ({
+		gid,
+		model: id,
+		pose: { regionId: 1, x: 0, y: 0, z, yaw: 0 },
+		clip: "",
+		time: 0,
+		loop: true,
+		scale: 1,
+		opacity
+	});
+	// Listed against the expected order, so a tier read from the wrong
+	// model or lost moves a group.
+	const crowd = [ actor( 1, FX, 60 ), actor( 2, "glass", 20 ), actor( 3, "fade", 30, .5 ), actor( 4, "opaque", 10 ) ];
+	// clip = (x, y, 0, z): every actor in the frustum with w = z.
+	const vp = new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0 ] );
+	const order = rows => {
+		characters.actors( rows );
+		return characters.prepare( gpu, images, 1, vp ).map( d => d.z );
+	};
+	assert.deepEqual( order( crowd ), [ 10, 30, 60, 20 ] );
+	// A catalog extension builds a new plan; the tier stays blended.
+	characters.extendBorrowedAnimations( "glass", { ...glass, clips: [] } );
+	assert.deepEqual( order( crowd ), [ 10, 30, 60, 20 ] );
+	// Retired and admitted again under its id as an opaque model, the
+	// group draws with the opaque tier in list order.
+	characters.retain( [ "opaque", "fade", FX ] );
+	order( crowd.filter( row => row.model !== "glass" ) );
+	assert.equal( characters.hasModel( "glass" ), false );
+	characters.model( "glass", model( false ), [] );
+	assert.deepEqual( order( crowd ), [ 20, 10, 30, 60 ] );
+	characters.dispose( gpu, null );
+});

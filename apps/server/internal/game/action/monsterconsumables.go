@@ -15,6 +15,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/loot"
@@ -67,6 +68,14 @@ func (rt *Runtime) prepareSelectedDrop(chosen loot.DropItem, at simulation.Spawn
 	// materials piled up as junk on every hunting ground, so their pick
 	// drops nothing (progression/materialdrops.go).
 	if rt.MaterialDrops.Excludes(ref.TypeIDs) {
+		return grounditem.Item{}, false
+	}
+	// Port-only, not native (owner 2026-11-16, #general): while the area
+	// polls run, no degree-10 or degree-11 item enters the economy, unique
+	// kills included; the pick drops nothing and is never re-rolled, so
+	// every degree-9-and-below chance is unchanged
+	// (progression/abovedegree9drops.go).
+	if rt.AboveDegree9Drops.Excludes(ref.TypeIDs, enterworld.ItemDegree(ref)) {
 		return grounditem.Item{}, false
 	}
 	// Port-only, not native, beta balance (owner 2026-10-13): degree-9

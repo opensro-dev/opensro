@@ -214,6 +214,13 @@ func newGameplayPlane(
 	if items.MaterialDrops.Off() {
 		log.Infof("loot: alchemy material drops OFF (%s)", progression.EnvAlchemyMaterialDropsOff)
 	}
+	// SRO_ABOVE_DEGREE9_DROPS_OFF (port-only, not native; owner
+	// 2026-11-16): while the area polls run, no monster drops an item above
+	// degree 9.
+	items.AboveDegree9Drops = progression.AboveDegree9DropsFromEnv()
+	if items.AboveDegree9Drops.Off() {
+		log.Infof("loot: drops above degree %d OFF (%s)", progression.MaxDropDegree, progression.EnvAboveDegree9DropsOff)
+	}
 	// SRO_SUN_EVENT_ONLY (port-only, not native): degree-9 Seal of Sun gear
 	// leaves monster drops and NPC shops; it returns only as an event reward.
 	items.SunEventOnly = progression.SunEventOnlyFromEnv()

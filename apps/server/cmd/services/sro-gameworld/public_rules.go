@@ -101,6 +101,10 @@ var unlistedSettings = map[string]string{
 	// Cosmetic item rows the variant build imports; the GameWorld reads no
 	// such switch, the items simply exist in the built data.
 	"SRO_MALL_AVATARS": "mall avatar build input, consumed when the server data is built",
+	// The Styria Clash arena map (#3272 slice 1): the variant build merges
+	// its ground; nothing links to it and the GameWorld reads no switch
+	// until the Battle Arena engine (#3648) makes it a rule.
+	"SRO_STYRIA_CLASH": "Styria Clash arena map build input; players cannot reach it until #3648",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
 	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",
@@ -310,6 +314,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Monsters drop alchemy materials (claws, hides and other monster parts).",
 				Now:    "Alchemy materials no longer drop.",
 				Why:    "A community vote brought the parts back, so they drop as in the original; this only applies if the removal is switched back on."},
+			{Flag: progression.EnvAboveDegree9DropsOff, On: progression.AboveDegree9DropsFromEnv().Off(),
+				Native: "Monsters drop items of every degree their level allows, degree 10 and 11 included in the new areas.",
+				Now:    "No monster drops an item above degree 9: equipment, elixirs, Lucky Powder, stones, tablets or elements. Every degree-9-and-below drop keeps its chance, and items already owned are kept.",
+				Why:    "The level cap stays 90 while community polls decide what the new areas drop; this keeps new degree-10 gear out of the economy until they close."},
 			{Flag: nasrun.Env, On: nasrun.Enabled(os.Getenv(nasrun.Env)), Native: "Avatar storage holds four avatars: hat, dress, attachment and flag.", Now: "A fifth avatar socket holds a Devil's Spirit.", Why: "Optional port-only step toward the later Devil's Spirit (#3456)."},
 			{Flag: sookarena.Env, On: sookarena.Enabled(os.Getenv(sookarena.Env)), Native: "Event So-ok offers no solo survival arena.", Now: "Three private survival entries per account per UTC day, shared by its characters, five stages, fivefold EXP/SP and checkpoint reward chests.", Why: "Optional port-only survival event."},
 			{Flag: progression.EnvHalloweenEvent, On: progression.HalloweenEventFromEnv().ActiveAt(time.Now()),
@@ -633,6 +641,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Qin-Shi Emperor Tomb has its geometry and entrance in the v1.150 client, without monster spawns or walk-in gates; its door moves nobody.",
 				Now:    "Qin-Shi Emperor Tomb is open on all six floors: its door by Jangan admits players of level 70 and above, its gates move between floors, and its monsters are awake.",
 				Why:    "Opens the Jangan tomb dungeon shipped in the v1.150 client assets (GH #1013); the original returns with one setting."},
+			{Flag: action.EnvJanganTombTeleport, On: action.JanganTombTeleportEnabled(),
+				Native: "The Jangan teleporter does not lead into Qin-Shi Emperor Tomb; players walk in through its door.",
+				Now:    "The Jangan teleporter also offers Qin-Shi Emperor Tomb floors 1 to 3 and each corner of floor 4 for 40,000 gold, from level 70.",
+				Why:    "A quicker way to the tomb floors, on the same terms as the Alexandria rows of the same gate."},
 			{Flag: action.EnvFlagWarStartUTC, On: true,
 				Native: "Capture the Flag runs on the reference server's event schedule.",
 				Now: fmt.Sprintf("One Capture the Flag match a day at %02d:%02d UTC; sign-up opens ten minutes before the start at Event So-Ok (level 20 and up).",

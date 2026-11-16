@@ -15,6 +15,7 @@ package enterworld
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -98,5 +99,36 @@ func TestTextdataMagicOptionsRefusesAvatarV188IDCollision(t *testing.T) {
 	}
 	if _, ok := loader.MagicOptionByParamID(370); ok {
 		t.Fatal("overlay row 370 served after a collision")
+	}
+}
+
+/*
+================
+TestAvatarV188DressRowRefusesChangedRow
+
+A v1.150 dress row that is missing an option, or carries one the v1.188
+row does not, is refused instead of being reordered.
+================
+*/
+func TestAvatarV188DressRowRefusesChangedRow(t *testing.T) {
+	v150 := []string{
+		"MATTR_AVATAR_STR", "MATTR_AVATAR_INT", "MATTR_AVATAR_HR", "MATTR_AVATAR_HP",
+		"MATTR_AVATAR_DRUA", "MATTR_AVATAR_HPRG", "MATTR_AVATAR_MDIA",
+	}
+	row, err := AvatarV188DressRow(v150)
+	if err != nil {
+		t.Fatalf("AvatarV188DressRow: %v", err)
+	}
+	if len(row) != len(v150)+len(AvatarV188DressOptions()) {
+		t.Fatalf("row = %v", row)
+	}
+	for _, bad := range [][]string{
+		v150[:6],
+		append(slices.Clone(v150[:6]), "MATTR_AVATAR_ER"),
+		append(slices.Clone(v150), "MATTR_AVATAR_ER"),
+	} {
+		if _, err := AvatarV188DressRow(bad); err == nil {
+			t.Fatalf("row %v accepted", bad)
+		}
 	}
 }

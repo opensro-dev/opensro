@@ -30,6 +30,7 @@ import {
 import { patchAssetPackGroupFromLooseFiles } from "./build/sparseAssetPackGroupRefresh.mjs";
 import { publicRoot } from "./build/world/paths.mjs";
 import { withGeneratedAssetsLock } from "./rebuildLock.mjs";
+import { compareText } from "./build/shared/textOrder.mjs";
 
 // This sub-index is a real content-addressed build cache. It deliberately
 // survives refreshes and compact releases; unchanged packs may point either
@@ -143,7 +144,7 @@ async function seedOutdoorPackCache( previous ) {
 		assets: previous.assets
 			.filter( asset => asset.group === OUTDOOR_GROUP )
 			.map( asset => structuredClone( asset ) )
-			.sort( ( left, right ) => left.path.localeCompare( right.path ) )
+			.sort( ( left, right ) => compareText( left.path, right.path ) )
 	};
 	await mkdir( OUTDOOR_PACK_CACHE_ROOT, { recursive: true } );
 	await publishBytesAtomically( OUTDOOR_PACK_CACHE_INDEX, Buffer.from( JSON.stringify( seed ), "utf8" ), {

@@ -24,6 +24,17 @@ import { characterHeadingYaw } from "@/engine/foundation/math/angles";
 import type { EntityState } from "@/engine/contracts/world";
 import type { ActorAppearance, ActorFrame, ActorOwner, ActorPass, Auxiliary } from "./internal/presentation-contract";
 
+// How long a character that was never drawn waits, unseen, for its worn
+// parts before it shows its bare body after all. The original loads a
+// character's parts with the character (synchronously), so it never shows
+// one undressed; this port loads them one at a time, and a crowd seen for
+// the first time stood naked for seconds. A part that keeps failing, or a
+// residency budget that never admits it, must not hide the wearer for good.
+const OUTFIT_WAIT_SECONDS = 5;
+// Waits of characters that left before they were drawn are dropped once the
+// book holds this many, oldest first.
+const MAX_OUTFIT_WAITS = 512;
+
 /*
 ================
 createActorAppearance
@@ -33,6 +44,30 @@ export function createActorAppearance( owner: ActorOwner ) {
 	// The local wearer's suit-socket candidates' parts (suitSocketParts),
 	// rebuilt with its appearance and warmed every frame.
 	let socketWarm: readonly string[] = [];
+	// When each character still waiting for its first dressed frame began
+	// to wait (outfitWait), by gid.
+	const outfitWaits = new Map<number, number>();
+	/*
+	================
+	outfitWait
+
+	True while a character that has never been drawn should stay unseen
+	until its worn parts are in: none of them has failed, and it has waited
+	less than OUTFIT_WAIT_SECONDS.
+	================
+	*/
+	function outfitWait( gid: number, failing: boolean, seconds: number ) {
+		let since = outfitWaits.get( gid );
+		if ( since === undefined ) {
+			if ( outfitWaits.size >= MAX_OUTFIT_WAITS ) outfitWaits.delete( outfitWaits.keys().next().value! );
+			since = seconds;
+			outfitWaits.set( gid, since );
+		}
+		if ( seconds - since < OUTFIT_WAIT_SECONDS && !failing ) return true;
+		outfitWaits.delete( gid );
+		return false;
+	}
+
 	/*
 	================
 	wornSignature
@@ -384,6 +419,15 @@ export function createActorAppearance( owner: ActorOwner ) {
 						parts.map( part => part.model ),
 						entity.gid === gameplay?.localGid ? socketWarm : []
 					);
+					// A character never drawn before waits unseen for its parts
+					// instead of showing its bare body (outfitWait); one already
+					// drawn keeps its previous look (fallback).
+					let failing = false;
+					for ( const part of parts ) if ( !failing && resources.failed( part.model ) ) failing = true;
+					if ( !ready && !output.displayed.has( entity.gid ) && outfitWait( entity.gid, failing, seconds ) ) {
+						return null;
+					}
+					if ( ready ) outfitWaits.delete( entity.gid );
 					if ( !ready ) {
 						model = fallback();
 					} else {

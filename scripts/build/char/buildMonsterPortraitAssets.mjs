@@ -33,6 +33,7 @@ import { writeJsonIfChanged } from "../shared/jsonOut.mjs";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import { clientBuildDefinitions } from "../../../apps/client-next/tools/build-metadata.mjs";
 import { publishedAssets } from "../../../apps/client-next/tools/published-assets.mjs";
+import { compareText } from "../shared/textOrder.mjs";
 
 const PREFIX = "/assets/npc/hunting-portraits/";
 // Drawn stills wait here between builds, outside the public tree: only the
@@ -133,7 +134,7 @@ export async function monsterPortraitRendererFingerprint( manifest, readAsset = 
 	async function visit( directory ) {
 		for (
 			const entry of (await readdir( directory, { withFileTypes: true } )).sort( ( a, b ) =>
-				a.name.localeCompare( b.name )
+				compareText( a.name, b.name )
 			)
 		) {
 			const file = path.join( directory, entry.name );

@@ -142,7 +142,7 @@ test("a variant batch is reclaimed when residency drops its model", async () => 
 			pose: { regionId: 257, x: 0, y: 0, z: 100, yaw: radians( 0 ) },
 			opacity: .5
 		} ] );
-		return owner.prepare( commands, images, 257, undefined, false, time, false, true, true, true ).length;
+		return owner.prepare( commands, images, 257, undefined, false, time, true, true, true ).length;
 	};
 	try {
 		owner.retain( [ "body", "weapon" ] );
