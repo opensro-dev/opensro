@@ -709,7 +709,12 @@ func (rt *Runtime) settlePlayerDeathInDoor(division string, c *enterworld.Charac
 	// an open warehouse ends with its user's death.
 	rt.endStorageInteraction(division, c.Name)
 	// Natively the ridden vehicle is released with its rider's death.
-	released, owned := rt.releaseRiddenVehicleInDoor(division, c, now)
+	// A player killer's account marks the scattered goods lost to it (job honor).
+	lostTo := ""
+	if killer.player != nil {
+		lostTo = killer.player.AccountID
+	}
+	released, owned := rt.releaseRiddenVehicleInDoor(division, c, now, lostTo)
 	effects = append(effects, released...)
 	// Natively a pending return or reverse-return cast is cancelled.
 	effects = append(effects, rt.cancelReturnOnDeathInDoor(division, c)...)

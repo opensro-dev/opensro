@@ -8,13 +8,21 @@ The oracle for changes to the particle graph tick
 its results: every effect of /assets/effects/programs.json with a particle
 graph runs through three scenarios, and after every call a sha256 takes in
 the whole graph state (clock, random cursor, root, every slot below each
-emitter's row length with its links, group totals in group order) and the
-tick record writeGraphRecord makes of every live slot of a drawn emitter
-(a call that runs no tick and shifts nothing adds the clock and cursor
-only; scenarioDigest says why). Each (scenario, effect) keeps the first
-16 hex digits. Three mutations of the tick, each alone, change hundreds
-of effects' digests: one fround dropped in linkElement, the emission
-groups walked in reverse, one random draw not consumed in commands.
+emitter's slots in use with its links, group totals in group order, the
+tick pose of a drawn emitter's elements) and the tick record of every live
+slot of a drawn emitter: the one the tick wrote (particle-records.ts
+writeGraphRecord), which a particle stream draws (a call that runs no tick
+and shifts nothing adds the clock and cursor only; scenarioDigest says
+why). Each (scenario, effect) keeps the first 16 hex digits. Three
+mutations of the tick, each alone, change hundreds of effects' digests:
+one fround dropped in linkElement, the emission groups walked in reverse,
+one random draw not consumed in commands.
+
+What no reader has is left out: the program position of a graph record
+(the pass draws none for graph streams), and a released element's parent
+and group, which its slot stops naming once their slots are reused
+(marked RELEASED). The catalogue's graphs are all emission emitters but
+one without births; fixed-birth emitters are held by the runtime tests.
 
 	S1  a still holder, roots kept, a late start (1000.37 s), 60 Hz calls
 	    for 20 s
@@ -49,10 +57,13 @@ async function load( path ) {
 }
 
 const { createEffectPrograms } = await load( "runtime/assets/worker/effects/program/program.ts" );
-const { createParticleGraph, advanceParticleGraph } = await load( "foundation/animation/particle-graph.ts" );
+const { advanceParticleGraph } = await load( "foundation/animation/particle-graph.ts" );
+const { createParticleGraph, ROOT_SLOT, SLOT_ALIVE, SLOT_OCCUPIED, SLOT_RELEASED, SLOT_SNAPSHOT } = await load(
+	"foundation/animation/particle-graph-slots.ts"
+);
+const { createParticleGraphPlan } = await load( "foundation/animation/particle-graph-plan.ts" );
 const { particleRandomTable } = await load( "foundation/animation/particle-program.ts" );
 const { writeGraphRecord, PARTICLE_RECORD } = await load( "foundation/animation/particle-records.ts" );
-const { ROTATION_WORK } = await load( "foundation/animation/particle-presentation.ts" );
 
 export const DIGEST_PATH = new URL( "../fixtures/particle-tick-digest.json", import.meta.url );
 export const SCENARIOS = [ "S1", "S2", "S3" ];
@@ -62,9 +73,11 @@ const DIGEST_DIGITS = 16;
 // The holder's region shift in S2, and when it happens.
 const REGION_SHIFT = -1920;
 const SHIFT_SECONDS = 10;
-// Marks in the value stream: an empty slot, a missing value.
+// Marks in the value stream: an empty slot, a missing value, a released
+// element's parent and group.
 const EMPTY = -1e300;
 const NONE = -2e300;
+const RELEASED = -3e300;
 
 /*
 ================
@@ -205,41 +218,93 @@ function pushNarrow( values, list ) {
 ================
 pushElement
 
-Every field of one element; parents and groups by serial (the root is 0).
+Every field of slot s, an element of emitter n (the holder for n -1);
+parents and groups by serial (the holder is 0). A released element's
+parent and group are marked RELEASED: its slot no longer names them once
+their slots are reused. Only an element a primitive draws (drawn) has a
+tick pose.
 ================
 */
-function pushElement( values, element ) {
-	const state = element.state, previous = state.previous;
-	push( values, element.serial );
-	push( values, element.born );
-	push( values, element.clockBirth );
-	push( values, element.age );
-	push( values, element.alive ? 1 : 0 );
-	push( values, element.released ? 1 : 0 );
-	push( values, element.children );
-	push( values, element.rootLink );
-	push( values, element.parent.serial );
-	push( values, element.group ? element.group.parent.serial : NONE );
-	push( values, element.group ? element.group.total : NONE );
-	pushList( values, element.previousPosition );
-	pushList( values, element.origin );
-	pushNarrow( values, element.matrix );
-	pushNarrow( values, element.delta );
-	pushNarrow( values, element.local );
-	pushNarrow( values, element.shape );
-	push( values, state.frame );
-	pushList( values, state.position );
-	pushList( values, state.velocity );
-	pushList( values, state.scale );
-	pushNarrow( values, state.rotation );
-	pushNarrow( values, state.angularVelocity );
-	if ( !previous ) push( values, NONE );
-	else {
-		pushList( values, previous.position );
-		pushList( values, previous.scale );
-		pushNarrow( values, previous.rotation );
-		pushNarrow( values, previous.matrix );
+function pushElement( values, history, s, n, drawn ) {
+	const flags = history.flags[s], released = (flags & SLOT_RELEASED) !== 0, def = history.plan.graph[n];
+	const parent = history.parent[s];
+	push( values, history.serials[s] );
+	push( values, history.birth[s] );
+	push( values, history.clockBirth[s] );
+	push( values, history.age[s] );
+	push( values, flags & SLOT_ALIVE ? 1 : 0 );
+	push( values, released ? 1 : 0 );
+	push( values, history.children[s] );
+	push( values, history.link[s] );
+	push( values, released ? RELEASED : history.serials[parent] );
+	if ( !def?.emission ) {
+		push( values, NONE );
+		push( values, NONE );
+	} else if ( released ) {
+		push( values, RELEASED );
+		push( values, RELEASED );
+	} else {
+		push( values, history.serials[parent] );
+		push( values, history.groupTotals[groupEntry( history, n, parent )] );
 	}
+	pushList( values, history.previousPosition.subarray( s * 3, s * 3 + 3 ) );
+	pushList( values, history.origin.subarray( s * 3, s * 3 + 3 ) );
+	pushNarrow( values, history.matrix.subarray( s * 16, s * 16 + 16 ) );
+	pushNarrow( values, history.delta.subarray( s * 16, s * 16 + 16 ) );
+	pushNarrow( values, history.local.subarray( s * 16, s * 16 + 16 ) );
+	pushNarrow( values, history.shape.subarray( s * 16, s * 16 + 16 ) );
+	push( values, history.frames[s] );
+	pushList( values, history.position.subarray( s * 3, s * 3 + 3 ) );
+	pushList( values, history.velocity.subarray( s * 3, s * 3 + 3 ) );
+	pushList( values, history.scale.subarray( s * 3, s * 3 + 3 ) );
+	pushNarrow( values, history.rotation.subarray( s * 16, s * 16 + 16 ) );
+	// A graph element has no angular velocity.
+	pushNarrow( values, undefined );
+	if ( !drawn ) return;
+	if ( !(flags & SLOT_SNAPSHOT) ) {
+		push( values, NONE );
+		return;
+	}
+	const entry = history.plan.snapshots[n] + s - history.plan.base[n];
+	pushList( values, history.previousScale.subarray( entry * 3, entry * 3 + 3 ) );
+	pushNarrow( values, history.previousRotation.subarray( entry * 16, entry * 16 + 16 ) );
+	pushNarrow( values, history.previousMatrix.subarray( entry * 16, entry * 16 + 16 ) );
+}
+
+/*
+================
+groupEntry
+
+The groupTotals entry of emitter n's group that parent slot parent leads.
+================
+*/
+function groupEntry( history, n, parent ) {
+	const plan = history.plan, up = plan.graph[n].parent;
+	return plan.groups[n] + (up < 0 ? 0 : parent - plan.base[up]);
+}
+
+/*
+================
+pushRecord
+
+The tick record of live slot s, emitter n's slot b: the one the tick
+wrote, or for an emitter only a ribbon draws, the one writeGraphRecord
+makes of it.
+================
+*/
+function pushRecord( values, history, n, b, s, records ) {
+	const plan = history.plan, first = plan.records[n];
+	if ( first >= 0 ) {
+		pushNarrow(
+			values,
+			history.records.subarray( (first + b) * PARTICLE_RECORD, (first + b + 1) * PARTICLE_RECORD )
+		);
+		return;
+	}
+	const snapshot = history.flags[s] & SLOT_SNAPSHOT ? plan.snapshots[n] + b : -1;
+	records.fill( 0 );
+	writeGraphRecord( records, 0, history, s, snapshot, history.link[s] );
+	pushNarrow( values, records );
 }
 
 /*
@@ -250,33 +315,44 @@ The graph state after one call, and the tick record of every live slot of
 a drawn emitter.
 ================
 */
-function pushGraph( values, history, drawn, link, records, work ) {
+function pushGraph( values, history, records ) {
+	const plan = history.plan, graph = plan.graph;
 	push( values, history.frame );
 	push( values, history.startTick );
 	push( values, history.index );
 	push( values, history.serial );
-	pushElement( values, history.root );
-	for ( let n = 0; n < history.elements.length; n++ ) {
-		const rows = history.elements[n];
-		push( values, rows.length );
-		for ( let b = 0; b < rows.length; b++ ) {
-			const element = rows[b];
-			if ( !element ) push( values, EMPTY );
-			else pushElement( values, element );
-			if ( element?.alive && drawn[n] ) {
-				records.fill( 0 );
-				writeGraphRecord( records, 0, element, work, link );
-				pushNarrow( values, records );
-			}
+	pushElement( values, history, ROOT_SLOT, -1, false );
+	for ( let n = 0; n < graph.length; n++ ) {
+		const def = graph[n], base = plan.base[n], count = history.counts[n], drawn = plan.draws[n] !== 0;
+		push( values, count );
+		for ( let b = 0; b < count; b++ ) {
+			const s = base + b, flags = history.flags[s];
+			if ( !(flags & SLOT_OCCUPIED) ) push( values, EMPTY );
+			else pushElement( values, history, s, n, drawn );
+			if ( flags & SLOT_ALIVE && drawn ) pushRecord( values, history, n, b, s, records );
 		}
-		pushList( values, history.births[n] );
-		const parents = history.parents[n];
-		push( values, parents.length );
-		for ( let b = 0; b < parents.length; b++ ) push( values, parents[b] ? parents[b].serial : EMPTY );
-		push( values, history.groups[n].size );
-		for ( const group of history.groups[n].values() ) {
-			push( values, group.parent.serial );
-			push( values, group.total );
+		pushList( values, def.emission ? history.birth.subarray( base, base + count ) : def.births );
+		const parents = def.emission ? count : 0;
+		push( values, parents );
+		for ( let b = 0; b < parents; b++ ) {
+			const s = base + b;
+			push( values, history.flags[s] & SLOT_RELEASED ? RELEASED : history.serials[history.parent[s]] );
+		}
+		if ( !def.emission ) {
+			// A fixed-birth root emitter has the holder's group, which never emits.
+			push( values, def.parent < 0 ? 1 : 0 );
+			if ( def.parent < 0 ) {
+				push( values, 0 );
+				push( values, 0 );
+			}
+			continue;
+		}
+		const up = def.parent, groups = up < 0 ? 1 : history.orderCounts[up];
+		push( values, groups );
+		for ( let k = 0; k < groups; k++ ) {
+			const parent = up < 0 ? ROOT_SLOT : history.orders[plan.orders[up] + k];
+			push( values, history.serials[parent] );
+			push( values, history.groupTotals[groupEntry( history, n, parent )] );
 		}
 	}
 }
@@ -303,17 +379,9 @@ A state change such a call made would still reach the next tick's values.
 */
 function scenarioDigest( model, path, scenario, table, values ) {
 	const graph = model.particleGraph, hash = createHash( "sha256" );
-	const drawn = graph.map( ( _, n ) => model.primitives.some( p => p.particleEmitter === n ) );
-	const history = createParticleGraph( graph, pathCursor( path, table.length ) );
-	const link = {
-		root: history.root,
-		follow: new Float32Array( 20 ),
-		turned: new Float32Array( 16 ),
-		shift: [ 0, 0, 0 ]
-	};
-	const records = new Float32Array( PARTICLE_RECORD ),
-		work = new Float64Array( ROTATION_WORK ),
-		transform = new Float32Array( 16 );
+	const plan = createParticleGraphPlan( graph, model.primitives );
+	const history = createParticleGraph( graph, pathCursor( path, table.length ), plan );
+	const records = new Float32Array( PARTICLE_RECORD ), transform = new Float32Array( 16 );
 	for ( const call of scenario.calls ) {
 		const frame = history.frame;
 		values.wideLength = values.narrowLength = 0;
@@ -337,7 +405,7 @@ function scenarioDigest( model, path, scenario, table, values ) {
 			push( values, history.frame );
 			push( values, history.startTick );
 			push( values, history.index );
-		} else pushGraph( values, history, drawn, link, records, work );
+		} else pushGraph( values, history, records );
 		hash.update( laneBytes( values.wide, values.wideLength ) );
 		hash.update( laneBytes( values.narrow, values.narrowLength ) );
 	}
@@ -363,4 +431,23 @@ export function particleTickDigests() {
 		digests[path] = scenarios.map( scenario => scenarioDigest( model, path, scenario, table, values ) ).join( " " );
 	}
 	return digests;
+}
+
+/*
+================
+digestDifferences
+
+The effects whose digest differs from the fixture's (expected). The
+fixture is the native catalogue's: on a native build every effect of
+either side counts, so an added or lost effect fails as a changed one
+does. An expanded build (expanded-build.mjs) publishes effects the
+native catalogue lacks; there only the recorded effects count, and each
+must still be present with its digest (#3596's rule, as #3618 applies it
+to the census). The 1901fa53c release's build:beta failed on 87 such
+additions while all 1,043 recorded effects matched.
+================
+*/
+export function digestDifferences( expected, actual, expanded ) {
+	const paths = expanded ? Object.keys( expected ) : Object.keys( { ...expected, ...actual } );
+	return paths.filter( path => expected[path] !== actual[path] );
 }

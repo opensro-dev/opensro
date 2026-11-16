@@ -101,7 +101,25 @@ func (rt *Runtime) dropTransportCargo(o *cosAbnormalOwner) {
 		}).Info("trade: transport cargo kept with the record (fatal dealer on an opposing free-battle team)")
 		return
 	}
-	o.public = append(o.public, rt.scatterTransportCargo(o.division, o.c, o.pet, o.now, "death", o.winnerName)...)
+	loss := cargoLoss{cause: "death", winnerName: o.winnerName, lostTo: o.winnerAccount}
+	o.public = append(o.public, rt.scatterTransportCargo(o.division, o.c, o.pet, o.now, loss)...)
+}
+
+/*
+================
+cargoLoss
+
+Why a transport's cargo scatters: cause names the case on the log line
+("death", "rider-death", "disconnect"); winnerName is the fatal dealer
+for that line only; lostTo is the dealer's account, stamped on every
+bag (grounditem.Item.LostTo) so job honor can tell a real loss apart.
+Both are "" when no player dealt the death.
+================
+*/
+type cargoLoss struct {
+	cause      string
+	winnerName string
+	lostTo     string
 }
 
 /*
@@ -118,26 +136,27 @@ the only trace it leaves. The caller holds c's door; returns the
 drops' public frames.
 ================
 */
-func (rt *Runtime) scatterTransportCargo(division string, c *enterworld.Character, pet *enterworld.CharacterCOS, nowMs int64, cause, winnerName string) []wire.Frame {
+func (rt *Runtime) scatterTransportCargo(division string, c *enterworld.Character, pet *enterworld.CharacterCOS, nowMs int64, loss cargoLoss) []wire.Frame {
 	at := rt.companionLiveSpawn(division, c, pet, nowMs)
 	now := time.UnixMilli(nowMs)
 	var dropped []grounditem.Item
 	rows := invItemsFromRowsWithin(pet.Container.Rows, int64(pet.Container.Capacity))
 	for _, item := range rows {
 		planned := rt.scatterMonsterDrop(PlanItemDrop(item, item.Quantity, at, "", now), at, cosCargoRarity)
+		planned.LostTo = loss.lostTo
 		if added := rt.addCharacterGround(division, c, planned); added.Gid != 0 {
 			dropped = append(dropped, added)
 		}
 	}
 	killerKind := "none"
-	if winnerName != "" {
+	if loss.winnerName != "" {
 		killerKind = "player"
 	}
 	// rows counts what the container held, bags what the ground owner
 	// accepted: rows > 0 with bags == 0 means registration refused every
 	// row and the goods stayed lost with the vehicle.
 	log.WithFields(log.Fields{
-		"cause": cause, "killer": killerKind, "winner": winnerName,
+		"cause": loss.cause, "killer": killerKind, "winner": loss.winnerName,
 		"owner": c.Name, "rows": len(rows), "bags": len(dropped),
 	}).Info("trade: transport cargo scattered")
 	pet.Container.Rows = nil

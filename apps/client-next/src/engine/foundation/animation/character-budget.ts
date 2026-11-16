@@ -175,6 +175,20 @@ export function characterMeshBytes( geometry: CharacterModel["primitives"][numbe
 }
 /*
 ================
+characterSharedPalette
+
+Whether a model's batches keep their palettes as shared streams
+(palette-streams.ts): every primitive skinned, none an emitter, a ribbon
+or a billboard.
+================
+*/
+export function characterSharedPalette( model: CharacterModel ): boolean {
+	return !model.primitives.some( p =>
+		p.emission || p.ribbon || p.billboard || !p.geometry.joints || !p.geometry.weights
+	);
+}
+/*
+================
 characterBatchBytes
 
 Charge retained batch capacity rather than only this frame's visible
@@ -189,8 +203,28 @@ export function characterBatchBytes( model: CharacterModel, count: number, cache
 	// Mesh and particle batches retain capacity across membership changes.
 	// Reserve unused particle slots too; ribbons retain exact-sized strips.
 	if ( !model.primitives.some( p => p.ribbon ) ) count = 2 ** Math.ceil( Math.log2( count ) );
+	// A shared-palette batch keeps one palette stream per distinct binding
+	// (palette-streams.ts), its CPU data and its GPU copy, however many
+	// primitives draw from it: a body's parts share one. Every other batch
+	// keeps a palette per primitive.
+	const bindings = characterSharedPalette( model ) ? paletteBindings( model ) : undefined;
+	const streams = new Set<CharacterModel["primitives"][number]>();
+	/*
+	================
+	palettes
+
+	The palette bytes primitive adds: its stream's on the first primitive
+	of a shared binding, none on the others, its own otherwise.
+	================
+	*/
+	const palettes = ( primitive: CharacterModel["primitives"][number], instances: number ) => {
+		if ( !bindings ) return instances * primitive.joints.length * 64 * 2;
+		const stream = bindings.get( primitive ) ?? primitive;
+		if ( streams.has( stream ) ) return 0;
+		streams.add( stream );
+		return count * stream.joints.length * 64 * 2;
+	};
 	// Reserve bounded pose indices/revisions and per-binding offsets as well.
-	// Palette storage below deliberately charges the unshared worst case.
 	return count * (72 + 64) + model.primitives.reduce( ( bytes, primitive ) => {
 		const geometry = primitive.geometry,
 			instances = count * (primitive.emission?.capacity ?? primitive.emission?.births.length ?? 1),
@@ -202,7 +236,7 @@ export function characterBatchBytes( model: CharacterModel, count: number, cache
 				2 *
 				160 :
 				0) +
-			instances * primitive.joints.length * 64 * 2 + slots * 112 + instances * 96 +
+			palettes( primitive, instances ) + slots * 112 + instances * 96 +
 			(characterSharedMesh( primitive ) ?
 				// A shared cloth piece keeps a skin table of its own: the skin
 				// entries, a slot map of one entry a vertex, then its solver's

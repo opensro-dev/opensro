@@ -419,6 +419,12 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "Wing dresses fly without footstep sounds."
 					},
 					{
+						key: "christmasCarols",
+						id: "experimental-christmas-carols",
+						label: "Christmas carols",
+						description: "Play carols during the Christmas event's snow."
+					},
+					{
 						key: "webTransport",
 						id: "experimental-web-transport",
 						label: "WebTransport connection",

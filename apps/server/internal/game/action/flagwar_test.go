@@ -83,6 +83,57 @@ func TestFlagWarSignupWindow(t *testing.T) {
 
 /*
 ================
+TestFlagWarSignupAgreesWithTheCalendarAcrossMidnight
+
+A start in the first minutes after midnight UTC has its sign-up on the
+day before. The runtime used to look only at today's start, so at 23:55
+the sign-up for 00:05 stayed shut while the public calendar showed it
+open. Minute by minute over two days, for starts on both sides of
+midnight, the runtime's sign-up is exactly the calendar's (NextMatch).
+================
+*/
+func TestFlagWarSignupAgreesWithTheCalendarAcrossMidnight(t *testing.T) {
+	day := time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
+	for _, minuteOfDay := range []int{0, 5, 9, 10, 20 * 60, 23*60 + 59} {
+		settings := DefaultFlagWarSettings()
+		settings.StartMinuteOfDay = minuteOfDay
+		for at := day; at.Before(day.AddDate(0, 0, 2)); at = at.Add(time.Minute) {
+			signupAt, _ := settings.NextMatch(at)
+			if want := !at.Before(signupAt); settings.signupOpen(at) != want {
+				t.Fatalf("start %02d:%02d at %v: signupOpen = %v, the calendar says %v",
+					minuteOfDay/60, minuteOfDay%60, at, !want, want)
+			}
+		}
+	}
+}
+
+/*
+================
+TestFlagWarSchedulerStartsAMatchJustAfterMidnight
+
+A 00:05 start: the ten-minute notice fires at 23:55 the day before and
+the start fires at 00:05, each once.
+================
+*/
+func TestFlagWarSchedulerStartsAMatchJustAfterMidnight(t *testing.T) {
+	character := rebirthTestCharacter(20, 100)
+	rt, _ := newTestRuntime(character, testItems())
+	rt.characterAdmissions.Store(simulation.WorldKey(testDivision, character.Name),
+		populationAdmission{division: testDivision, name: character.Name})
+	rt.FlagWar = DefaultFlagWarSettings()
+	rt.FlagWar.StartMinuteOfDay = 5
+	start := time.Date(2026, 11, 17, 0, 5, 0, 0, time.UTC)
+	rt.advanceFlagWar(start.Add(-11 * time.Minute).UnixMilli())
+	if out := rt.advanceFlagWar(start.Add(-10 * time.Minute).UnixMilli()); len(out) == 0 {
+		t.Fatal("no ten-minute notice at 23:55 for a 00:05 start")
+	}
+	if out := rt.advanceFlagWar(start.Add(-10*time.Minute + time.Second).UnixMilli()); len(out) != 0 {
+		t.Fatalf("the notice fired twice: %+v", out)
+	}
+}
+
+/*
+================
 flagWarAnswerSubtype
 ================
 */

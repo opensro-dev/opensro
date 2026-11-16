@@ -90,6 +90,16 @@ test(
 			// between - so the very next press (a carry placement, say) lands.
 			assert.deepEqual( await hit( 218, 40 ), { tag: "BUTTON", uiId: "plain", touchAction: "manipulation" } );
 
+			// A cancelled touch drag (the browser took the gesture) lowers it on
+			// the cancel too: semantics are presented only when they change, so
+			// no later publication can be counted on to lower it.
+			await send( "touchStart", [ { x: 36, y: 36, id: 3 } ] );
+			await send( "touchMove", [ { x: 80, y: 36, id: 3 } ] );
+			assert.equal( (await hit( 218, 40 ))?.uiId, null, "the second drag is shielded" );
+			await send( "touchCancel", [] );
+			assert.ok( (await events()).some( e => e.kind === "drag-cancel" ), "the cancel ended the drag" );
+			assert.deepEqual( await hit( 218, 40 ), { tag: "BUTTON", uiId: "plain", touchAction: "manipulation" } );
+
 			// A mouse drag cannot pinch, so it is never shielded: the plain
 			// button stays the hit target and chords keep landing (the chord
 			// itself is pinned by ui-right-activation).

@@ -221,6 +221,7 @@ export function copyGeometry( data: Geometry, byteLimit = 64 << 20, instanceLimi
 		weights: data.weights?.slice(),
 		bones: data.bones?.slice(),
 		dynamicVertices: data.dynamicVertices,
+		dynamicMaterial: data.dynamicMaterial,
 		clothStream: data.clothStream?.slice(),
 		vertices: data.vertices?.slice()
 	} satisfies Record<keyof Geometry, unknown>;

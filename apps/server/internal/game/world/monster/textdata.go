@@ -33,6 +33,17 @@ import (
 	"unicode/utf16"
 )
 
+// oneDamageHitCodenames are the monsters every hit lands on for exactly 1.
+// The v1.188 server's winter event registers the Snow Slave
+// (MOB_EV_WINTER_SNOWMAN, the v1.696 row the Christmas import adds,
+// scripts/winter_event_import.py) as a special target whose fixed damage
+// is 1 (combat.OneDamageCap); its MaxHP 5 at level 1 makes five hits.
+// The row exists only in a game root the winter import ran on, so a
+// native root never meets it.
+var oneDamageHitCodenames = map[string]bool{
+	"MOB_EV_WINTER_SNOWMAN": true,
+}
+
 /*
 ==================
 MonsterRef
@@ -46,6 +57,9 @@ type MonsterRef struct {
 	RefObjID uint32
 	// TrainingDummy is a port-only GM target, never a native monster or reward source.
 	TrainingDummy bool
+	// OneDamageHits: every hit on the monster lands for exactly 1
+	// (oneDamageHitCodenames).
+	OneDamageHits bool
 	// TidWord is the packed RefObj TypeID word the client's GIDObject_SelectRuntimeClassAndSpawn
 	// cascade classifies on. ARBITER-CLOSED (RZ seq42 gate + seq234
 	// column ruling): the binary selects CLASS_CICMONSTER iff
@@ -447,6 +461,7 @@ func parseMonsterRefTables(textdataDir string, tables [][][]string) map[uint32]M
 				BuildMinutes:       buildMinutes,
 				TypeID4:            uint8(tid4),
 				Codename:           codename,
+				OneDamageHits:      oneDamageHitCodenames[codename],
 				OriginalCodename:   strings.TrimSpace(cols[4]),
 				NameStrID:          nameStrID,
 				Name:               displayName,
