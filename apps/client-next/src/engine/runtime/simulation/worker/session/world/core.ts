@@ -36,6 +36,21 @@ import { createEntities } from "./entities/entities";
 import { createGameplay } from "./gameplay/gameplay";
 import type { WireFrame } from "@/engine/contracts/network";
 import type { GameplayCommand } from "@/engine/contracts/gameplay";
+import {
+	CHAT_BROADCAST_OPCODE,
+	GUILD_UPDATE_PUSH_OPCODE,
+	GUILD_WAR_SEED_OPCODE,
+	ITEM_USE_RESPONSE_OPCODE,
+	MOVEMENT_SPEED_OPCODE,
+	OBJECT_SOURCE_CORRECTION_OPCODE,
+	OBJECT_SOURCE_MOVE_OPCODE,
+	OBJECT_STATE_REFRESH_OPCODE,
+	PARTY_INFO_OPCODE,
+	PARTY_UPDATE_OPCODE,
+	PICKUP_ANIM_OPCODE,
+	SERVER_CLOCK_GID_LATCH_OPCODE,
+	STALL_EDIT_RESULT_OPCODE
+} from "@/engine/contracts/opcodes";
 
 // PLAYER_ATTACK_LEVEL_NOTICE is 693F1A's ShowSystemNotification(4, 0x16).
 const PLAYER_ATTACK_LEVEL_NOTICE = 0x16;
@@ -331,18 +346,22 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 			return;
 		}
 		const localGid = gameplay.localIdentity(),
-			itemCooldown = frame.opcode === 0xb5bd ? gameplay.itemUseCooldown( frame.payload[1]! ) : undefined;
-		const chatSender =
-			frame.opcode === 0x3667 && frame.payload.length >= 5 && (frame.payload[0] === 1 || frame.payload[0] === 3) ?
-				entities.read(
-					new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength ).getUint32(
-						1,
-						true
-					)
-				) :
+			itemCooldown = frame.opcode === ITEM_USE_RESPONSE_OPCODE ?
+				gameplay.itemUseCooldown( frame.payload[1]! ) :
 				undefined;
+		const chatSender = frame.opcode === CHAT_BROADCAST_OPCODE && frame.payload.length >= 5 &&
+				(frame.payload[0] === 1 || frame.payload[0] === 3) ?
+			entities.read(
+				new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength ).getUint32(
+					1,
+					true
+				)
+			) :
+			undefined;
 		const oldNameContext = nameContext(), oldSocial = gameplay.nameInputs().social;
-		const stallReceipt: { title?: string; } | undefined = frame.opcode === 0xb1a8 ? {} : undefined;
+		const stallReceipt: { title?: string; } | undefined = frame.opcode === STALL_EDIT_RESULT_OPCODE ?
+			{} :
+			undefined;
 		// Port-only Bond carries both paid damage feedback and an entity animation cue.
 		if ( !gameplay.receive( frame, now, chatSender, stallReceipt ) || frame.opcode === 0x3fb4 ) {
 			entities.receive( frame, now );
@@ -351,8 +370,10 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 		// accepted request before the entity journal publishes it.
 		if ( stallReceipt?.title !== undefined ) entities.renameStall( localGid, stallReceipt.title );
 		const social = gameplay.nameInputs().social;
-		if ( frame.opcode === 0x35d6 ) entities.recolor( e => social.members.some( m => m.name === e.name ) );
-		if ( frame.opcode === 0x3e58 ) {
+		if ( frame.opcode === PARTY_INFO_OPCODE ) {
+			entities.recolor( e => social.members.some( m => m.name === e.name ) );
+		}
+		if ( frame.opcode === PARTY_UPDATE_OPCODE ) {
 			const type = frame.payload[0];
 			if ( type === 1 || type === 3 && social.leader === 0 ) {
 				entities.recolor( e => oldSocial.members.some( m => m.name === e.name ), true, oldNameContext );
@@ -367,16 +388,17 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 			}
 		}
 		if (
-			frame.opcode === 0x32bb ||
-			frame.opcode === 0x3b29 && (frame.payload[0] === 0x19 || frame.payload[0] === 0x1c)
+			frame.opcode === GUILD_WAR_SEED_OPCODE ||
+			frame.opcode === GUILD_UPDATE_PUSH_OPCODE && (frame.payload[0] === 0x19 || frame.payload[0] === 0x1c)
 		) entities.recolor( e => e.kind === "player" || e.kind === "local-player" );
-		if ( frame.opcode === 0x376f ) {
+		if ( frame.opcode === MOVEMENT_SPEED_OPCODE ) {
 			const local = entities.read( localGid ),
 				effective = local?.mountedOn ? entities.read( local.mountedOn ) : local;
 			if ( effective ) gameplay.speeds( effective, now );
 		}
 		if (
-			frame.opcode === 0x3122 && frame.payload.length === 6 && frame.payload[4] === 0 && frame.payload[5] === 2
+			frame.opcode === OBJECT_STATE_REFRESH_OPCODE && frame.payload.length === 6 && frame.payload[4] === 0 &&
+			frame.payload[5] === 2
 		) {
 			gameplay.die(
 				new DataView( frame.payload.buffer, frame.payload.byteOffset, 6 ).getUint32( 0, true ),
@@ -412,9 +434,10 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 		}
 		const selectedMode = travelMode( frame, localGid, itemCooldown );
 		if ( selectedMode !== null ) loadingMode = selectedMode;
-		if ( frame.opcode === 0x30e3 || frame.opcode === 0xb2f5 ) {
+		if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ) {
 			const v = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength );
-			const gid = v.getUint32( frame.opcode === 0x30e3 ? 16 : 0, true ), e = entities.read( gid );
+			const gid = v.getUint32( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ? 16 : 0, true ),
+				e = entities.read( gid );
 			// 775B50 halts the named object's active mover, so a correction
 			// naming the mount the local player rides (a stunned transport,
 			// cosabnormal StopMove) stops the rider as surely as one naming
@@ -443,13 +466,13 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 				);
 			}
 		}
-		if ( frame.opcode === 0x35c7 ) {
+		if ( frame.opcode === PICKUP_ANIM_OPCODE ) {
 			const entity = entities.read(
 				new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true )
 			);
 			if ( entity?.kind === "local-player" && !entity.mountedOn ) gameplay.heading( entity.heading );
 		}
-		if ( frame.opcode === 0x32a6 ) {
+		if ( frame.opcode === SERVER_CLOCK_GID_LATCH_OPCODE ) {
 			const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
 				.getUint32( 0, true );
 			const entity = entities.read( gid );
