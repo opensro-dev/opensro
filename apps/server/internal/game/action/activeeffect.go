@@ -294,6 +294,10 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 	if row.TimedEffect.Pinned && row.TimedEffect.Block.Present {
 		writes = append(writes, combat.BlockRateWrites(row.TimedEffect.Block.Mask, row.TimedEffect.Block.Value)...)
 	}
+	if row.TimedEffect.Pinned && row.TimedEffect.IgnoreDefense != 0 {
+		// msid: Monster Defence Ignore (the Devil's Spirit, SRO_NASRUN).
+		writes = append(writes, combat.IgnoreDefenseWrites(row.TimedEffect.IgnoreDefense)...)
+	}
 	if row.TimedEffect.Pinned && row.TimedEffect.Reat.Mask != 0 {
 		// A buff's reat, as a resistance passive's.
 		writes = append(writes, combat.StatusReductionWrites(row.TimedEffect.Reat)...)

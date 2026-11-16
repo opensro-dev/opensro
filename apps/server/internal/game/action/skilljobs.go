@@ -213,6 +213,7 @@ func (rt *Runtime) RestoreTimedSkillJobs(division, name string) {
 	unlock := rt.lockDivision(division)
 	defer unlock()
 	rt.restoreCharacterCOS(division, name)
+	rt.restoreSpirit(division, name)
 	rt.restoreSkillJobs(division, name)
 	rt.repairBagTradeGoods(division, name)
 }
@@ -231,6 +232,7 @@ func (rt *Runtime) AdmitCharacterSession(division, name string, session uint64) 
 		return err
 	}
 	rt.restoreCharacterCOS(division, name)
+	rt.restoreSpirit(division, name)
 	rt.restoreSkillJobs(division, name)
 	rt.restorePKRecord(division, name)
 	if character := rt.findCharacter(division, name); character != nil {

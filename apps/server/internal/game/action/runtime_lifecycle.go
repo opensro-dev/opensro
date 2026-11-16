@@ -177,6 +177,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		var openActionOwners map[string]bool
 		step("openSkillCastOwnerSnapshot", func() { openActionOwners = rt.openSkillCastOwnerSnapshot() })
 		frames("advanceBerserk", rt.advanceBerserk)
+		frames("advanceSpirits", rt.advanceSpirits)
 		frames("advancePlayerAggressions", rt.advancePlayerAggressions)
 		frames("advanceBattleStates", rt.advanceBattleStates)
 		frames("drainSkillFinalizes", rt.drainSkillFinalizes)
@@ -660,6 +661,7 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	rt.jobDresses.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.jobActivations.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.berserkActors.Delete(simulation.WorldKey(divisionID, characterName))
+	rt.spiritActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.battleActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.aggressionActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.gmSpeeds.Delete(simulation.WorldKey(divisionID, characterName))
