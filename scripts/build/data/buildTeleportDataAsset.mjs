@@ -16,6 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { exportDataAsset } from "../shared/dataAssetExport.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
+import { janganTombTeleportEnabled, loadJanganTombTeleportLinkRows } from "../shared/janganTombTeleport.mjs";
 import { loadMuhanTeleportDataRows, loadMuhanTeleportLinkRows, muhanEnabled } from "../shared/muhan.mjs";
 import { loadQinShiTombTeleportLinkRows, qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
 import { readTextDataLinesSync, splitTextDataRow } from "../shared/textDataIo.mjs";
@@ -102,6 +103,12 @@ export function buildTeleportDataAsset() {
 	// building-source filter applies.
 	if ( muhanEnabled() ) {
 		rawLinkRows.push( ...loadMuhanTeleportLinkRows().rows );
+	}
+	// Port-only, not native: when SRO_JANGAN_TOMB_TELEPORT (and the tomb)
+	// is on, include the Jangan gate's tomb floor links; every row
+	// they name already exists in v1.150 teleportdata.txt.
+	if ( janganTombTeleportEnabled() ) {
+		rawLinkRows.push( ...loadJanganTombTeleportLinkRows().rows );
 	}
 	const linkRows = rawLinkRows
 		.filter( ( columns ) => Number( columns[0] ) !== 0 )

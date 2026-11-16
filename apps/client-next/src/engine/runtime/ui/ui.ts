@@ -17146,7 +17146,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								hudData.portals,
 								target?.refObjId ?? 0,
 								key => hudData.zones[key] ?? copy( key ),
-								game.targetTaxRate ?? 0
+								{ taxRate: game.targetTaxRate ?? 0, group: npcPanel.destinationGroup() }
 							) :
 							null,
 						canTalk: !!(capabilities & 2),

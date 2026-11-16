@@ -188,5 +188,6 @@ var catalogueExempt = map[string]string{
 	"SRO_THIEF_CART_TOWN_AREAS":                "where a thief cart is stopped at runtime; npcs.json publishes the townspeople, not town protection",
 	"SRO_BETA_UNIQUE_RESPAWN":                  "unique respawn timing; monsters.json publishes nests, not timers",
 	"SRO_JANGAN_CAVE_RESPAWN":                  "monster respawn timing in the Ch'in Tomb caves; monsters.json publishes nests, not timers",
+	"SRO_JANGAN_TOMB_TELEPORT":                 "the Jangan gate's tomb floor links; the teleport menu comes from the asset bake's teleportData.json, not the catalogue",
 	"SRO_WEBTRANSPORT_PUBLIC":                  "how the shard's transport is served; no catalogue file carries it",
 }
