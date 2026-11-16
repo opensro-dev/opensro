@@ -47,20 +47,26 @@ import (
 // unlistedSettings are the shard settings the rules page leaves out, each
 // with the reason; every other setting is a rule (public_rules_test.go).
 var unlistedSettings = map[string]string{
-	progression.EnvHalloweenEventWindow: "the dates of the Halloween event rule, not a rule of its own",
-	progression.EnvChristmasEventWindow: "the dates of the Christmas event rule, not a rule of its own",
-	action.EnvGMSetSpeed:                "a GM command, not a rule players meet",
-	action.EnvGMItemForge:               "a GM command, not a rule players meet",
-	monster.EnvTrainingDummy:            "GM-only training targets",
-	simulation.EnvBetaUniqueRespawn:     "unique monster spawn timing is not published",
-	simulation.EnvJanganCaveRespawn:     "spawn timing is not published",
-	"SRO_MAINTENANCE_MESSAGE":           "the refusal code during a release window, not a rule players meet",
-	contributor.EnvContributorTitles:    "a title over Discord contributors' names, not a rule players meet",
-	companion.EnvPetInventoryPages:      "the older shared value the grab pet and transport bag rules fall back to",
+	progression.EnvHalloweenEventWindow:   "the dates of the Halloween event rule, not a rule of its own",
+	progression.EnvChristmasEventWindow:   "the dates of the Christmas event rule, not a rule of its own",
+	progression.EnvChristmasEventMode:     "which Christmas event the Christmas rule describes, not a rule of its own",
+	progression.EnvSoOkChristmasBoxChance: "a tuning of the Christmas event rule, not a rule of its own",
+	progression.EnvSoOkChristmasGifts:     "a tuning of the Christmas event rule, not a rule of its own",
+	action.EnvGMSetSpeed:                  "a GM command, not a rule players meet",
+	action.EnvGMItemForge:                 "a GM command, not a rule players meet",
+	monster.EnvTrainingDummy:              "GM-only training targets",
+	simulation.EnvBetaUniqueRespawn:       "unique monster spawn timing is not published",
+	simulation.EnvJanganCaveRespawn:       "spawn timing is not published",
+	"SRO_MAINTENANCE_MESSAGE":             "the refusal code during a release window, not a rule players meet",
+	contributor.EnvContributorTitles:      "a title over Discord contributors' names, not a rule players meet",
+	companion.EnvPetInventoryPages:        "the older shared value the grab pet and transport bag rules fall back to",
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
 	"SRO_CHAT_ITEM_LINKS_PER_MESSAGE": "the limit of the item-link rule",
+	// The movement packets a moving player's viewers get (#3721): a wire
+	// detail that changes no rule a player meets.
+	"SRO_POSITION_STREAM":             "which movement packets viewers get, not a rule players meet",
 	"SRO_MALL_STARTER_SILK":           "the starting silk of the beta silk rule",
 	"SRO_JOB_KILL_NOTICES_PER_MINUTE": "shown in the job-kill repeat rule",
 	"SRO_JOB_KILL_REPEAT_MINUTES":     "shown in the job-kill repeat rule",
@@ -98,6 +104,7 @@ var unlistedSettings = map[string]string{
 	// them when the server data is built; the GameWorld reads neither,
 	// so there is no running rule for the page to state.
 	"SRO_CAP110_ITEMS":  "degree-11 equipment build input, consumed when the server data is built",
+	"SRO_HONOR_GOODS":   "honor store goods build input, consumed when the server data is built",
 	"SRO_CAP110_SKILLS": "degree-11 skill build input, consumed when the server data is built",
 	// Cosmetic item rows the variant build imports; the GameWorld reads no
 	// such switch, the items simply exist in the built data.
@@ -107,6 +114,7 @@ var unlistedSettings = map[string]string{
 	// until the Battle Arena engine (#3648) makes it a rule.
 	"SRO_REFERRALS":    "the website's referral page shows its own numbers from the referral route",
 	"SRO_STYRIA_CLASH": "Styria Clash arena map build input; players cannot reach it until #3648",
+	"SRO_AI_CARAVANS":  "the AI caravans are not seen by players or paid yet; they become a rule with the escort and parley rewards (#3704)",
 	"SRO_CONSIGNMENT":  "the market pages state their own fee, duration and listing cap",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
@@ -327,10 +335,7 @@ func publicRules() publicstats.RulesResponse {
 				Native: "No Halloween event runs: monsters drop no jewelry boxes and So-ok offers no gift exchange.",
 				Now:    "During the event window, monsters drop jewelry boxes and So-ok exchanges each box for a random gift or sixty boxes for an event helmet; boxes left when the window ends are removed at the next world entry.",
 				Why:    "The original Halloween Day event, rebuilt for its seasonal window."},
-			{Flag: progression.EnvChristmasEvent, On: progression.ChristmasEventFromEnv().ActiveAt(time.Now()),
-				Native: "No Christmas event runs: the towns stay undecorated, no event snow falls and no winter monsters come.",
-				Now:    "While the event runs, the towns wear their Christmas decoration, and every two hours it snows for an hour: Snow Slaves fill every field during the snowfall and melt when it stops. Every hit on a Snow Slave lands for 1, so it falls in five hits. They drop Red Santa Socks; So-ok trades each pair for a present. A White Knight comes to three fields every hour at half past, and Princess Miyene at 13:00 and 21:00 UTC. When the event ends, the socks leave every bag.",
-				Why:    "The original Christmas event's snow, with the later client's town decoration, for its seasonal window."},
+			christmasRule(time.Now()),
 			{Flag: progression.EnvHalloweenHelmetSeal, On: progression.HalloweenHelmetSealFromEnv().Enabled(),
 				Native: "The event helmets trade like any other item.",
 				Now:    "The eight event helmets cannot be traded, stalled, stored, given to a pet or dropped: they stay with the character that earned them. A helmet may still be sold to an NPC merchant, which destroys it; the sale never puts it on the buyback bench, so no other player can take it.",
@@ -594,6 +599,10 @@ func publicRules() publicstats.RulesResponse {
 				Now: fmt.Sprintf("Everyone sees a seal drop notice for degree %d and above: a Star's stays in the Event chat lines, while a Moon's and a Sun's also show in the top-centre banner; a Sun's leads with SEAL OF SUN and its line is coloured, as the Star's and Moon's are by their tiers.",
 					settings.Int(tunables.SoxNoticeMinDegree)),
 				Why: "Requested for the beta; the original quiet drop returns with one setting."},
+			{Flag: "SRO_STABLE_PURIFY_CHANCE", On: settings.Int(tunables.StablePurifyChance) != tunables.StablePurifyChanceNative,
+				Native: fmt.Sprintf("Purifying the Sunset Witch's stable with holy water yields a Stable Filth on a roll of %d in 101.", tunables.StablePurifyChanceNative+1),
+				Now:    fmt.Sprintf("It yields a Stable Filth on a roll of %d in 101.", settings.Int(tunables.StablePurifyChance)+1),
+				Why:    "Owner-approved (#3714): the stable's native odds ask many holy waters for five Filths."},
 			{Flag: action.EnvSealBoard, On: action.SealBoardFromEnv(),
 				Native: "A seal drop is the looter's own business; nothing tallies them.",
 				Now:    "The site's seal board counts the week's Star, Moon and Sun drops for each job alias, resetting every Monday. Aliases only: no character names, and a player who hides from the public pages is not on it.",
@@ -719,4 +728,26 @@ func petInventoryPagesNow(kind string, pages uint8) string {
 	slots := int(pages) * int(companion.PetInventoryPageSlots)
 	return fmt.Sprintf("Every %s's bag holds at least %d pages of %d slots (%d in all). A bag that is smaller gains the slots when summoned; a lower setting never removes an item or shrinks a bag.",
 		kind, pages, companion.PetInventoryPageSlots, slots)
+}
+
+/*
+================
+christmasRule
+
+The Christmas switch's rule in the mode it runs (progression/christmas_mode.go):
+the winter event of #3603, or So-Ok's Christmas Gift.
+================
+*/
+func christmasRule(now time.Time) publicstats.Rule {
+	native := "No Christmas event runs: the towns stay undecorated, no event snow falls and no winter monsters come."
+	if progression.ChristmasModeFromEnv() == progression.ChristmasModeSoOk2006 {
+		return publicstats.Rule{Flag: progression.EnvChristmasEvent, On: progression.SoOkChristmasFromEnv().ActiveAt(now),
+			Native: native,
+			Now:    "So-Ok's Christmas Gift: while the event runs, the towns wear their Christmas decoration and play Christmas carols, and it snows for one hour every two hours (on the even UTC hours, none at 04:00), as in the winter event. Ordinary monsters sometimes drop a Jewel Box; Santa So-Ok trades each box for a random gift: a buff scroll or, rarely, a party Monster Summon Scroll or a Pandora's Box (strong monsters to hunt, level 30 and up, outside towns) or Rudolph. When the event ends, the boxes leave every bag.",
+			Why:    "The December 2006 event, rebuilt for its seasonal window."}
+	}
+	return publicstats.Rule{Flag: progression.EnvChristmasEvent, On: progression.ChristmasEventFromEnv().ActiveAt(now),
+		Native: native,
+		Now:    "While the event runs, the towns wear their Christmas decoration, and every two hours it snows for an hour: Snow Slaves fill every field during the snowfall and melt when it stops. Every hit on a Snow Slave lands for 1, so it falls in five hits. They drop Red Santa Socks; So-ok trades each pair for a present. A White Knight comes to three fields every hour at half past, and Princess Miyene at 13:00 and 21:00 UTC. When the event ends, the socks leave every bag.",
+		Why:    "The original Christmas event's snow, with the later client's town decoration, for its seasonal window."}
 }

@@ -43,7 +43,9 @@ type metricsSnapshot struct {
 	TickMeanMs   float64 `json:"tick_mean_ms"`
 	TickOverruns uint64  `json:"tick_overruns"`
 	LiveSessions int     `json:"live_sessions"`
-	TickMsHist   struct {
+	// AccountSessionEvictions is the #3321 churn counter (transport/metrics.go).
+	AccountSessionEvictions uint64 `json:"account_session_evictions"`
+	TickMsHist              struct {
 		BoundsMs []float64 `json:"bounds_ms"`
 		Counts   []uint64  `json:"counts"`
 	} `json:"tick_ms_histogram"`

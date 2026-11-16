@@ -15,6 +15,7 @@ already: the entered tail lists the active event groups and 0x3347
     (foundation/world/world-layers.ts). Inference, recorded because no
     later client executable is available to read: a layer's id is its
     event group.
+
   - Christmas runs groups 1 and 7. Group 1 is the v1.150 client's own
     Christmas event: its entry or 0x3347 prints UIIT_MSG_EVENT_START (the
     Japanese row names the stolen-socks event) and turns the snow on
@@ -25,6 +26,14 @@ already: the entered tail lists the active event groups and 0x3347
     stands the whole window; group 1 is on only during a snowfall
     (progression/christmas_snow.go), so its snow and its start and end
     lines come and go with each one, as the client was built for.
+
+  - So-Ok's Christmas Gift (the Christmas switch in mode so_ok_2006)
+    runs the same two: group 1 on the winter event's snowfall timetable
+    (one weather rule for every Christmas event), group 7 the whole
+    window. It adds a port-only group the client knows
+    only as the town carols' switch (ChristmasTownCarolsEventGroup): no
+    native table names it, so no client draws or plays anything for it
+    but the browser's carols in the towns (event-environment.ts).
 
 While a window is open an entry lists its groups (EntryEventGroups); an
 open or close while players are online goes to every open-world division
@@ -55,6 +64,12 @@ const ChristmasEventGroup uint32 = 1
 // event group.
 const ChristmasDecorationEventGroup uint32 = 7
 
+// ChristmasTownCarolsEventGroup is port-only, not native: the switch
+// the browser client plays the carols in the towns by, the whole window
+// of So-Ok's Christmas Gift. Far above every layerobjdef.txt row, so no
+// world layer ever answers to it.
+const ChristmasTownCarolsEventGroup uint32 = 2006
+
 // eventGroupStateOpcode is the event-group change (client 761430):
 // u32 group id, u8 state (1 on, 0 off).
 const eventGroupStateOpcode uint16 = 0x3347
@@ -81,14 +96,55 @@ type eventGroupWatch struct {
 seasonalGroups
 
 One seasonal event's groups that turn on and off together: whether the
-event is switched on at all, when they are on, and their watch.
+event is switched on at all, which of its spans turns them on, and their
+watch. Plain values only (the span is an enum, the groups a fixed
+array), so the per-tick pass allocates nothing for them.
 ================
 */
 type seasonalGroups struct {
 	enabled bool
-	active  func(time.Time) bool
-	groups  []uint32
+	span    seasonalSpan
+	groups  [2]uint32
+	count   int
 	watch   *eventGroupWatch
+}
+
+/*
+================
+seasonalSpan
+
+Which instants an event's groups are on.
+================
+*/
+type seasonalSpan uint8
+
+const (
+	halloweenWindow seasonalSpan = iota
+	christmasSnowfall
+	christmasWindow
+	sookChristmasSnowfall
+	sookChristmasWindow
+)
+
+/*
+================
+Runtime.seasonalSpanActive
+================
+*/
+func (rt *Runtime) seasonalSpanActive(span seasonalSpan, now time.Time) bool {
+	switch span {
+	case halloweenWindow:
+		return rt.Halloween.ActiveAt(now)
+	case christmasSnowfall:
+		return rt.Christmas.SnowingAt(now)
+	case christmasWindow:
+		return rt.Christmas.ActiveAt(now)
+	case sookChristmasSnowfall:
+		return rt.SoOkChristmas.SnowingAt(now)
+	case sookChristmasWindow:
+		return rt.SoOkChristmas.ActiveAt(now)
+	}
+	return false
 }
 
 /*
@@ -99,13 +155,18 @@ Every seasonal event that drives event groups, in the order their
 changes go out.
 ================
 */
-func (rt *Runtime) seasonalGroups() [3]seasonalGroups {
-	return [3]seasonalGroups{
-		{enabled: rt.Halloween.Enabled(), active: rt.Halloween.ActiveAt, groups: []uint32{HalloweenEventGroup}, watch: &rt.halloweenGroups},
+func (rt *Runtime) seasonalGroups() [5]seasonalGroups {
+	return [5]seasonalGroups{
+		{enabled: rt.Halloween.Enabled(), span: halloweenWindow, groups: [2]uint32{HalloweenEventGroup}, count: 1, watch: &rt.halloweenGroups},
 		// The native group falls only during a snowfall (its snow and its
 		// start and end lines); the decoration stands the whole window.
-		{enabled: rt.Christmas.Enabled(), active: rt.Christmas.SnowingAt, groups: []uint32{ChristmasEventGroup}, watch: &rt.christmasSnow},
-		{enabled: rt.Christmas.Enabled(), active: rt.Christmas.ActiveAt, groups: []uint32{ChristmasDecorationEventGroup}, watch: &rt.christmasGroups},
+		{enabled: rt.Christmas.Enabled(), span: christmasSnowfall, groups: [2]uint32{ChristmasEventGroup}, count: 1, watch: &rt.christmasSnow},
+		{enabled: rt.Christmas.Enabled(), span: christmasWindow, groups: [2]uint32{ChristmasDecorationEventGroup}, count: 1, watch: &rt.christmasGroups},
+		// So-Ok's Christmas Gift: the winter event's snowfalls; the
+		// decoration and the town carols the whole window. The two
+		// Christmas events never run together (progression/christmas_mode.go).
+		{enabled: rt.SoOkChristmas.Enabled(), span: sookChristmasSnowfall, groups: [2]uint32{ChristmasEventGroup}, count: 1, watch: &rt.sookChristmasSnow},
+		{enabled: rt.SoOkChristmas.Enabled(), span: sookChristmasWindow, groups: [2]uint32{ChristmasDecorationEventGroup, ChristmasTownCarolsEventGroup}, count: 2, watch: &rt.sookChristmasGroups},
 	}
 }
 
@@ -121,8 +182,8 @@ func (rt *Runtime) EntryEventGroups() []uint32 {
 	var out []uint32
 	now := rt.Now()
 	for _, seasonal := range rt.seasonalGroups() {
-		if seasonal.active(now) {
-			out = append(out, seasonal.groups...)
+		if rt.seasonalSpanActive(seasonal.span, now) {
+			out = append(out, seasonal.groups[:seasonal.count]...)
 		}
 	}
 	return out
@@ -160,7 +221,7 @@ func (rt *Runtime) advanceEventGroups(int64) []simulation.DivisionFrames {
 		if !seasonal.enabled {
 			continue
 		}
-		active := seasonal.active(rt.Now())
+		active := rt.seasonalSpanActive(seasonal.span, rt.Now())
 		known := seasonal.watch.known
 		if known && active == seasonal.watch.active {
 			continue
@@ -169,7 +230,7 @@ func (rt *Runtime) advanceEventGroups(int64) []simulation.DivisionFrames {
 		if !known {
 			continue
 		}
-		for _, group := range seasonal.groups {
+		for _, group := range seasonal.groups[:seasonal.count] {
 			frames = append(frames, simulation.Frame{Opcode: eventGroupStateOpcode, Payload: EventGroupStatePayload(group, active)})
 		}
 	}

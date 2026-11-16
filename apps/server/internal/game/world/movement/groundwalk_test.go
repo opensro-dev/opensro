@@ -16,6 +16,10 @@ import (
 /*
 ================
 TestGroundRuntimePublishesAcceptedArrivalAndCollision
+
+A blocked walk stops with one fenced 0xB2F5 in both settings. An arrival
+at the goal sends nothing natively (simulation/position_stream.go) and
+one 0xB2F5 with the port-only position stream.
 ================
 */
 func TestGroundRuntimePublishesAcceptedArrivalAndCollision(t *testing.T) {
@@ -23,10 +27,15 @@ func TestGroundRuntimePublishesAcceptedArrivalAndCollision(t *testing.T) {
 		name        string
 		destination int16
 		blocked     bool
-	}{{"open terrain", 60, false}, {"blocked terrain", 190, true}} {
+		stream      bool
+	}{
+		{"open terrain", 60, false, false}, {"blocked terrain", 190, true, false},
+		{"open terrain, position stream", 60, false, true}, {"blocked terrain, position stream", 190, true, true},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
 			character := clipTestCharacter()
 			rt := testRuntime(character)
+			rt.PositionStream = tc.stream
 			validator := NewWaterValidator(syntheticHeightRoot(t))
 			rt.PathGuard = &PathGuard{Mode: PathGuardEnforce, Validator: validator}
 			rt.ClientClip = &ClientClip{Mode: ClipApply, Validator: validator}
@@ -61,18 +70,23 @@ func TestGroundRuntimePublishesAcceptedArrivalAndCollision(t *testing.T) {
 				}
 				previous = pose.X
 				frames := rt.GroundTickHook()(testStartMs + tick*100)
-				if len(frames) > 0 {
+				if len(frames) > 0 || !directionWorld(rt, character).GroundActive() {
 					terminal = frames
 					break
-				}
-				if !state.GroundActive() {
-					t.Fatal("arrival lost terminal notification")
 				}
 				if *character.World.Spawn.X != 30 {
 					t.Fatal("per-step runtime progress dirtied persisted character")
 				}
 			}
 			state := directionWorld(rt, character)
+			if !tc.blocked && !tc.stream {
+				// Native arrival: the walk ends and nothing is sent.
+				if state.GroundActive() || len(terminal) != 0 || state.Spawn.X != float64(tc.destination) ||
+					*character.World.Spawn.X != state.Spawn.X {
+					t.Fatalf("native arrival state %+v frames=%+v, want the goal persisted and no frame", state, terminal)
+				}
+				return
+			}
 			if state.GroundActive() || len(terminal) != 1 || len(terminal[0].Frames) != 1 {
 				t.Fatalf("terminal state %+v frames=%+v", state, terminal)
 			}
