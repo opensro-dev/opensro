@@ -63,6 +63,7 @@ import {
 import { type PickBounds, type PickRay } from "@/engine/foundation/rendering/picking";
 import { faceEffectMesh } from "@/engine/foundation/rendering/effect-billboard";
 import { characterRadius, createCharacterBoundsCache } from "@/engine/foundation/animation/character-bounds";
+import { createClipTimelineCache } from "@/engine/foundation/animation/animation-timelines";
 import {
 	CHARACTER_ASSEMBLIES,
 	CHARACTER_MODELS,
@@ -264,6 +265,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	let blockLights: readonly (readonly DungeonBlockLight[])[] | undefined;
 	// Per-geometry radius work: an assembled character reuses its parts'.
 	const bounds = createCharacterBoundsCache();
+	// Per-clip pose charge: re-planning every assembly of a body when a clip
+	// is admitted reads each clip's key times once.
+	const timelines = createClipTimelineCache();
 	const models = new Map<string, {
 		model: CharacterModel;
 		plan: ReturnType<typeof createCharacterRenderPlan>;
@@ -3171,7 +3175,7 @@ the next full prepare pass, so this may run between frames.
 			if ( disposed || models.has( id ) ) throw Error( "Invalid borrowed character resource" );
 			models.set( id, {
 				model,
-				plan: createCharacterRenderPlan( model ),
+				plan: createCharacterRenderPlan( model, timelines ),
 				images: [ ...images ],
 				textures: [],
 				owned: false,
@@ -3359,7 +3363,7 @@ the next full prepare pass, so this may run between frames.
 			for ( const [key, row] of models ) {
 				if ( key === id || row.dependencies?.[0] === id ) {
 					row.model = { ...row.model, clips: model.clips };
-					row.plan = createCharacterRenderPlan( row.model );
+					row.plan = createCharacterRenderPlan( row.model, timelines );
 					// Admission precedes visibility; include new root motion before
 					// any actor or outgoing layer can sample the appended catalog.
 					row.radius = Math.max( row.radius, characterRadius( row.model, bounds ) );
@@ -3387,7 +3391,7 @@ the next full prepare pass, so this may run between frames.
 			// Borrowed catalogs follow the same envelope lifetime as owned ones.
 			resource.radius = Math.max( resource.radius, characterRadius( model, bounds ) );
 			resource.model = model;
-			resource.plan = createCharacterRenderPlan( model );
+			resource.plan = createCharacterRenderPlan( model, timelines );
 			framePoses?.delete( id );
 		},
 		/*
@@ -3417,7 +3421,7 @@ the next full prepare pass, so this may run between frames.
 				const admitted = structuredClone( model );
 				models.set( id, {
 					model: admitted,
-					plan: createCharacterRenderPlan( admitted ),
+					plan: createCharacterRenderPlan( admitted, timelines ),
 					images: [ ...images ],
 					textures: [],
 					owned: true,
@@ -3513,7 +3517,7 @@ the next full prepare pass, so this may run between frames.
 			const assembled = { ...body.model, nodes: assembledNodes, primitives };
 			models.set( id, {
 				model: assembled,
-				plan: createCharacterRenderPlan( assembled ),
+				plan: createCharacterRenderPlan( assembled, timelines ),
 				images: pixels,
 				textures: [],
 				owned: false,
