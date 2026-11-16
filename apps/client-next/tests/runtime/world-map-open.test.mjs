@@ -23,7 +23,7 @@ be art the shut window already asks for.
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readServedBytes, uiFixture } from "../helpers/ui-fixture.mjs";
+import { uiFixture } from "../helpers/ui-fixture.mjs";
 const { caveMapCatalog } = await import( "../../src/engine/foundation/ui/cave-map.ts" );
 const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 const { panelCloseId } = await import( "../../src/engine/foundation/ui/panels.ts" );
@@ -57,9 +57,28 @@ const GUIDE_GROUPS = 20;
 // serve would be known absent, and absent art never holds admission - a
 // dropped list entry would then pass unnoticed.
 const WINDOW_ART = [ ...MAP_CHROME_ART, ...GUIDE_TREE_ART ];
-// Any real PNG stands for that art; the fixture only reads its width and
-// height.
-const CHECKBUTTON = "/assets/images/Media_extracted/interface/ifcommon/com_checkbutton_on.png";
+// The fixture reads only a PNG's width and height (its IHDR words at bytes
+// 16 and 20), so a bare signature and header stand for that art. No retail
+// image is read: CI's source lane has no extracted client.
+const ART_SIZE = 16;
+
+/*
+================
+pngHeader
+
+The first 24 bytes of a PNG of size x size: signature, IHDR length and
+type, width, height.
+================
+*/
+function pngHeader( size ) {
+	const bytes = Buffer.alloc( 24 );
+	Buffer.from( [ 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a ] ).copy( bytes, 0 );
+	bytes.writeUInt32BE( 13, 8 );
+	bytes.write( "IHDR", 12, "ascii" );
+	bytes.writeUInt32BE( size, 16 );
+	bytes.writeUInt32BE( size, 20 );
+	return bytes;
+}
 
 const WORLD = { regionId: 97 * 256 + 160, x: 960, y: 0, z: 960, angle: 0 };
 const DUNGEON = { regionId: DONWHANG, x: 100, y: 0, z: 100, angle: 0 };
@@ -144,7 +163,7 @@ be read on its own.
 ================
 */
 function fixture() {
-	const served = readServedBytes( CHECKBUTTON );
+	const served = pngHeader( ART_SIZE );
 	const published = {
 		...Object.fromEntries( WINDOW_ART.map( path => [ path, served ] ) ),
 		[CAVE_CATALOG]: Buffer.from( JSON.stringify( caveCatalog() ) ),
