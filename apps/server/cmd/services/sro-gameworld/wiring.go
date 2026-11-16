@@ -649,6 +649,7 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	}
 	application.ledgers.run(group, groupContext)
 	application.goMarketExpiry(groupContext, group)
+	application.goReferralSweep(groupContext, group)
 	if application.mutes != nil {
 		group.Go(func() error {
 			runMuteReaper(groupContext, application.mutes)
