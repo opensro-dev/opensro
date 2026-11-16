@@ -5,8 +5,9 @@ cloth-stream.test.mjs - a GPU-skinned cloth draws what the CPU stream drew
 
 createClothVertices skins every pin on the CPU each frame and rewrites the
 whole vertex stream. createClothStream leaves the skinning to the GPU and
-writes only what the solver owns. Composed the vertex shader's way (the
-stream where its flags say so, else the vertex skinned), with the CPU's own
+writes only what the solver owns, one entry a slot. Composed the vertex
+shader's way (a vertex's slot, then the stream where its flags say so, else
+the vertex skinned), with the CPU's own
 skinning arithmetic, every frame's positions and normals must equal the
 CPU stream's bit for bit, through option flips, restarts, frame debt,
 stalls, gusts and every pin kind, with the same random calls.
@@ -16,22 +17,40 @@ stalls, gusts and every pin kind, with the same random calls.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clothVertexCase } from "../helpers/cloth-vertex-cases.mjs";
+import { clothVertexCase, UNREAD_JOINT, withUnreadPins } from "../helpers/cloth-vertex-cases.mjs";
 const { createClothVertices } = await import( "../../src/engine/foundation/animation/cloth-vertices.ts" );
-const { createClothStream, solverPins, CLOTH_STREAM_WORDS, STREAM_POSITION, STREAM_NORMAL } = await import(
-	"../../src/engine/foundation/animation/cloth-stream.ts"
-);
+const { createClothStream, solverPins, CLOTH_STREAM_WORDS, STREAM_POSITION, STREAM_NORMAL, CLOTH_NO_SLOT } =
+	await import(
+		"../../src/engine/foundation/animation/cloth-stream.ts"
+	);
 const { skinClothVertex } = await import( "../../src/engine/foundation/animation/cloth-skin.ts" );
+
+/*
+================
+slotMap
+
+Each vertex's stream slot, or CLOTH_NO_SLOT, as the device's slot map holds it.
+================
+*/
+function slotMap( stream, count ) {
+	const map = new Uint32Array( count ).fill( CLOTH_NO_SLOT );
+	stream.slots.forEach( ( vertex, slot ) => map[vertex] = slot );
+	return map;
+}
 
 /*
 ================
 drawn
 
-Vertex i's position and normal as the skinned vertex shader composes them.
+Vertex i's position and normal as the skinned vertex shader composes them:
+its slot from the map, then its stream entry.
 ================
 */
-function drawn( geometry, palette, stream, i ) {
-	const floats = new Float32Array( stream.buffer ), entry = i * CLOTH_STREAM_WORDS, flags = stream[entry + 3];
+function drawn( geometry, palette, stream, map, i ) {
+	const floats = new Float32Array( stream.buffer ),
+		slot = map[i],
+		entry = slot * CLOTH_STREAM_WORDS,
+		flags = slot === CLOTH_NO_SLOT ? 0 : stream[entry + 3];
 	const skin = new Float64Array( 6 );
 	skinClothVertex( geometry, palette, i, skin );
 	return Float32Array.from( { length: 6 }, ( _, k ) =>
@@ -48,7 +67,7 @@ for ( const normals of [ false, true ] ) {
 		const cpu = createClothVertices( reference.primitive, reference.random );
 		const gpu = createClothStream( mirror.primitive, mirror.random );
 		const geometry = mirror.primitive.geometry, count = geometry.positions.length / 3;
-		const stream = new Uint32Array( count * CLOTH_STREAM_WORDS );
+		const stream = new Uint32Array( gpu.slots.length * CLOTH_STREAM_WORDS ), map = slotMap( gpu, count );
 		let idle = 0, restarts = 0, wasEnabled = true;
 		for ( let frame = 0; frame < reference.frames; frame++ ) {
 			const a = reference.input( frame ), b = mirror.input( frame );
@@ -65,7 +84,7 @@ for ( const normals of [ false, true ] ) {
 			if ( b.enabled && !wasEnabled ) restarts++;
 			wasEnabled = b.enabled;
 			for ( let i = 0; i < count; i++ ) {
-				const actual = drawn( geometry, b.palette, stream, i );
+				const actual = drawn( geometry, b.palette, stream, map, i );
 				for ( let k = 0; k < 6; k++ ) {
 					assert.ok(
 						Object.is( actual[k], expected[i * 14 + k] ),
@@ -85,49 +104,6 @@ test("a cloth stream refuses a mesh the GPU cannot skin", () => {
 	assert.throws( () => createClothStream( unskinned.primitive, unskinned.random ), /skinned mesh/ );
 });
 
-// A joint only the unread pins of withUnreadPins hang from.
-const UNREAD_JOINT = 9;
-/*
-================
-withUnreadPins
-
-The case with every twelfth vertex (a pin 1) taken off every constraint and
-hung from UNREAD_JOINT alone, so no solver step reads it; the palette grows
-to that joint.
-================
-*/
-function withUnreadPins( base ) {
-	const { geometry, cloth } = base.primitive, count = geometry.positions.length / 3;
-	const unread = i => i % 12 === 0;
-	const kept = cloth.constraints.map( ( constraint, index ) => [ constraint, index ] ).filter( ( [constraint] ) =>
-		!unread( constraint[0] ) && !unread( constraint[1] )
-	);
-	const renumbered = new Map( kept.map( ( [, index], at ) => [ index, at ] ) );
-	const data = {
-		...cloth,
-		constraints: kept.map( ( [constraint] ) => constraint ),
-		order: cloth.order.filter( index => renumbered.has( index ) ).map( index => renumbered.get( index ) )
-	};
-	const joints = geometry.joints.slice(), weights = geometry.weights.slice();
-	for ( let i = 0; i < count; i++ ) {
-		if ( !unread( i ) ) continue;
-		joints.set( [ UNREAD_JOINT, 0, 0, 0 ], i * 4 );
-		weights.set( [ 1, 0, 0, 0 ], i * 4 );
-	}
-	return {
-		...base,
-		primitive: { geometry: { ...geometry, joints, weights }, cloth: data },
-		input( frame ) {
-			const source = base.input( frame );
-			const palette = Float32Array.from(
-				{ length: (UNREAD_JOINT + 1) * 16 },
-				( _, i ) => Math.sin( i * .17 + frame * .031 )
-			);
-			return { ...source, palette };
-		}
-	};
-}
-
 test("a step re-anchors only the pins the solver reads, and the stream still draws the CPU's way", () => {
 	const reference = withUnreadPins( clothVertexCase( true, true ) ),
 		mirror = withUnreadPins( clothVertexCase( true, true ) );
@@ -137,7 +113,7 @@ test("a step re-anchors only the pins the solver reads, and the stream still dra
 	const cpu = createClothVertices( reference.primitive, reference.random );
 	const gpu = createClothStream( mirror.primitive, mirror.random );
 	const geometry = mirror.primitive.geometry, count = geometry.positions.length / 3;
-	const stream = new Uint32Array( count * CLOTH_STREAM_WORDS );
+	const stream = new Uint32Array( gpu.slots.length * CLOTH_STREAM_WORDS ), map = slotMap( gpu, count );
 	let readsUnread = 0;
 	for ( let frame = 0; frame < reference.frames; frame++ ) {
 		const a = reference.input( frame ), b = mirror.input( frame );
@@ -154,7 +130,7 @@ test("a step re-anchors only the pins the solver reads, and the stream still dra
 		const write = gpu.update( () => watched, b.seconds, b.enabled, b.motion );
 		if ( write ) stream.set( write.entries, write.first * CLOTH_STREAM_WORDS );
 		for ( let i = 0; i < count; i++ ) {
-			const actual = drawn( geometry, b.palette, stream, i );
+			const actual = drawn( geometry, b.palette, stream, map, i );
 			for ( let k = 0; k < 6; k++ ) {
 				assert.ok( Object.is( actual[k], expected[i * 14 + k] ), `frame ${frame}, vertex ${i}, ${k}` );
 			}

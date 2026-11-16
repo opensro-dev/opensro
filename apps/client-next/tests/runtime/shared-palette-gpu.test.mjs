@@ -16,9 +16,10 @@ import assert from "node:assert/strict";
 async function load( path ) {
 	return import( sourceFileUrl( path ).href );
 }
-const { createCharacters, createGeometryResources } = {
+const { createCharacters, createGeometryResources, clothStreamSlots } = {
 	...(await load( "src/engine/runtime/renderer/characters/characters.ts" )),
-	...(await load( "src/engine/runtime/renderer/device/geometry.ts" ))
+	...(await load( "src/engine/runtime/renderer/device/geometry.ts" )),
+	...(await load( "src/engine/foundation/animation/cloth-stream.ts" ))
 };
 globalThis.GPUBufferUsage = { UNIFORM: 1, COPY_DST: 2, STORAGE: 4, VERTEX: 8, INDEX: 16 };
 globalThis.GPUTextureUsage = { TEXTURE_BINDING: 1, COPY_DST: 2 };
@@ -105,6 +106,20 @@ const geometry = () => ({
 	transform: I(),
 	joints: new Uint32Array( 12 ),
 	weights: Float32Array.of( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 )
+});
+// Cloth on that mesh: vertex 0 free, 1 a pin the constraint reads, 2 a pin
+// no step reads. Its stream has two slots.
+const cloth = () => ({
+	mobility: [ 1, 0, 0 ],
+	pins: [ 0, 1, 1 ],
+	constraints: [ [ 0, 1, 1 ] ],
+	order: [ 0 ],
+	force: null,
+	gravity: 1,
+	gravityMobility: 0,
+	windMobility: 0,
+	damping: .9,
+	windPeriod: 1
 });
 test("shared GPU palette has one upload per revision and one lifetime across draw handles", () => {
 	const f = fixture(), bones = new Float32Array( 64 ), g = { ...geometry(), bones }, c = f.resources.commands;
@@ -221,17 +236,22 @@ test("an immutable skinned mesh has one GPU copy across draws, counted by refere
 	assert.notEqual( dynamic.vertices, a.vertices );
 	// Two wearers of one dress draw its vertices and indices from the same
 	// copy, but each its own skin table: the owner writes the stream into it.
-	const cloth = [ 0, 1 ].map( () => c.upload( { ...mesh, clothStream: true, bones: new Float32Array( 16 ) } ) );
-	assert.deepEqual( streams( cloth[0] ).slice( 0, 2 ), streams( a ).slice( 0, 2 ) );
-	assert.deepEqual( streams( cloth[1] ).slice( 0, 2 ), streams( a ).slice( 0, 2 ) );
-	assert.notEqual( binding( cloth[0], 6 ), binding( a, 6 ) );
-	assert.notEqual( binding( cloth[0], 6 ), binding( cloth[1], 6 ) );
-	assert.equal( binding( cloth[0], 6 ).size, binding( a, 6 ).size * 2, "skin entries, then the stream" );
-	const ownTable = binding( cloth[0], 6 );
-	c.release( cloth[0] );
+	const slots = clothStreamSlots( cloth() ),
+		wearers = [ 0, 1 ].map( () => c.upload( { ...mesh, clothStream: slots, bones: new Float32Array( 16 ) } ) );
+	assert.deepEqual( streams( wearers[0] ).slice( 0, 2 ), streams( a ).slice( 0, 2 ) );
+	assert.deepEqual( streams( wearers[1] ).slice( 0, 2 ), streams( a ).slice( 0, 2 ) );
+	assert.notEqual( binding( wearers[0], 6 ), binding( a, 6 ) );
+	assert.notEqual( binding( wearers[0], 6 ), binding( wearers[1], 6 ) );
+	assert.equal(
+		binding( wearers[0], 6 ).size,
+		binding( a, 6 ).size * 2 + slots.length * 32,
+		"skin entries, the slot map, then a stream entry a slot"
+	);
+	const ownTable = binding( wearers[0], 6 );
+	c.release( wearers[0] );
 	assert.equal( ownTable.destroyed, 1, "a wearer's table retires with its draw" );
 	assert.equal( a.vertices.destroyed, 0, "the mesh stays for its other draws" );
-	c.release( cloth[1] );
+	c.release( wearers[1] );
 	assert.throws( () => c.updateIndices( a, Uint32Array.of( 0, 1, 2 ) ), /shared mesh/ );
 	const shared = streams( a );
 	c.release( a );
@@ -311,14 +331,14 @@ test("only immutable skinned primitives are charged as shared meshes", async () 
 	const skinned = { name: "body", node: 0, image: -1, joints: [ 0 ], inverseBind: I(), geometry: geometry() };
 	assert.equal( characterSharedMesh( skinned ), true );
 	// A skinned cloth piece's solver writes only its own skin table.
-	assert.equal( characterSharedMesh( { ...skinned, cloth: {} } ), true );
+	assert.equal( characterSharedMesh( { ...skinned, cloth: cloth() } ), true );
 	// Ribbons and unskinned cloth rewrite their streams, and an unskinned mesh
 	// lives in the slabs: each batch keeps its own copy, charged with the batch.
 	const unskinned = { ...geometry(), joints: undefined, weights: undefined };
 	for (
 		const own of [
 			{ ...skinned, ribbon: {} },
-			{ ...skinned, cloth: {}, geometry: unskinned },
+			{ ...skinned, cloth: cloth(), geometry: unskinned },
 			{ ...skinned, geometry: unskinned }
 		]
 	) {
@@ -334,12 +354,19 @@ test("only immutable skinned primitives are charged as shared meshes", async () 
 	);
 	assert.equal( characterMeshBytes( geometry() ), 3 * 56 + 3 * 4 + 3 * 32, "stream, indices and skin table once" );
 	// A shared cloth row keeps its solver state (92 bytes a vertex) and its
-	// own skin table with the stream (twice the 32-byte skin entries).
-	const cloth = { ...skinned, cloth: {} };
+	// own skin table: what the device allocates for its draw.
+	const f = fixture(),
+		draw = f.resources.commands.upload( {
+			...geometry(),
+			clothStream: clothStreamSlots( cloth() ),
+			bones: new Float32Array( 16 )
+		} );
+	assert.equal( binding( draw, 6 ).size, (3 + 3 + 2) * 32, "skin entries, slot map, two stream slots" );
 	assert.equal(
-		characterBatchBytes( model( cloth ), 1 ) - characterBatchBytes( model( skinned ), 1 ),
-		3 * 92 + 3 * 32 * 2
+		characterBatchBytes( model( { ...skinned, cloth: cloth() } ), 1 ) - characterBatchBytes( model( skinned ), 1 ),
+		3 * 92 + binding( draw, 6 ).size
 	);
+	f.resources.dispose();
 });
 
 test("glow wearers without cloth share one batch whose row states hold each actor's one-row glow", () => {
