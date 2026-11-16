@@ -62,8 +62,6 @@ export const OFF = Object.freeze( {
 	jobKillNotices: true,
 	// On by default (owner 2026-10-15): the shard's drop and plus notices show.
 	dropPlusNotices: true,
-	// On by default (owner 2026-10-19): the shard's +7 notices show.
-	plusSevenNotices: true,
 	// On by default: the shard's item break notices show (#1738).
 	breakNotices: true,
 	// On by default (owner ask 2026-11-06, #2727): shard event notices print red in the message log.
