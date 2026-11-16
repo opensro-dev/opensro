@@ -145,6 +145,24 @@ func TestAlchemyMaterialDropsOffJobVariable(t *testing.T) {
 
 /*
 ================
+TestAboveDegree9DropsOffJobVariable
+
+above_degree9_drops_off defaults to off, today's drops; "on" (owner
+2026-11-16, while the area polls run) and "off" pass through as written.
+================
+*/
+func TestAboveDegree9DropsOffJobVariable(t *testing.T) {
+	for env, want := range map[string]string{"": "off", "on": "on", "off": "off"} {
+		t.Setenv("SRO_ABOVE_DEGREE9_DROPS_OFF", env)
+		variables := (&deployment{PortOnly: portOnlySettingsFromEnv()}).gameVariables(shardDeployment{})
+		if variables["above_degree9_drops_off"] != want {
+			t.Fatalf("env %q: above_degree9_drops_off %v, want %s", env, variables["above_degree9_drops_off"], want)
+		}
+	}
+}
+
+/*
+================
 TestRaisedGoldCapsJobVariable
 
 raised_gold_caps defaults to off, the native stall and deposit caps;

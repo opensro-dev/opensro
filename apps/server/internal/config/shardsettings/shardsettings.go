@@ -470,6 +470,10 @@ var Settings = []Setting{
 	// deployment default is native ("off"); "on" restores the 2026-10-14
 	// beta removal.
 	{Env: "SRO_ALCHEMY_MATERIAL_DROPS_OFF", NomadVar: "alchemy_material_drops_off", Default: "off", Catalogue: true},
+	// Owner, 2026-11-16 (#general): no drops above degree 9 while the area
+	// polls run. The registry default keeps today's drops; the release
+	// controls switch it on.
+	{Env: "SRO_ABOVE_DEGREE9_DROPS_OFF", NomadVar: "above_degree9_drops_off", Default: "off", Catalogue: true},
 	{Env: "SRO_BETA_DROP_CAP", NomadVar: "beta_drop_cap", Default: "0", Catalogue: true, Validation: ValueBetaGrowth},
 	// Owner, 2026-10-19: gold falls at 100 times retail (was 250).
 	{Env: "SRO_BETA_GOLD_RATE", NomadVar: "beta_gold_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
