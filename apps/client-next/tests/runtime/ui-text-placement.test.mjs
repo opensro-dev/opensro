@@ -4,7 +4,8 @@
 ui-text-placement.test.mjs - exact retained placements across UI frames
 
 Compares the real UI step with an injected ungated text owner. Direct text
-frames also check cache reuse, input edits, eviction and overlap identities.
+frames also check cache reuse, input edits, eviction and overlap identities,
+and that each field of the memo keys selects its own entry.
 
 ===========================================================================
 */
@@ -208,5 +209,114 @@ test("real UI step publishes identical products and semantics across unchanged a
 	} finally {
 		a.dispose();
 		b.dispose();
+	}
+});
+
+/*
+================
+memo key cases
+
+Each case changes exactly one field of the layout memo's key from the base
+label, chosen so a shared entry would be visible: either the output differs
+from a fresh owner's miss, or the base label's retained placement is replaced.
+================
+*/
+const MEMO_BASE = {
+	value: "Inventory",
+	rect: [ 10.25, 20.5, 60, 22 ],
+	clip: [ 12.5, 21.25, 80, 200 ],
+	color: [ 1, .9, .8, 1 ],
+	style: { fontIndex: 0, fontStyle: 0, hAlign: 1, vAlign: 1, overflow: "avoid-overlap" }
+};
+const MEMO_CASES = {
+	value: { value: "Inventorz" },
+	"rect x": { rect: [ 10.75, 20.5, 60, 22 ] },
+	"rect y": { rect: [ 10.25, 20.25, 60, 22 ] },
+	"rect width": { rect: [ 10.25, 20.5, 70, 22 ] },
+	"rect height": { rect: [ 10.25, 20.5, 60, 30 ] },
+	"clip x": { clip: [ 12.75, 21.25, 80, 200 ] },
+	"clip y": { clip: [ 12.5, 21.5, 80, 200 ] },
+	"clip width": { clip: [ 12.5, 21.25, 81, 200 ] },
+	"clip height": { clip: [ 12.5, 21.25, 80, 201 ] },
+	red: { color: [ .5, .9, .8, 1 ] },
+	green: { color: [ 1, .5, .8, 1 ] },
+	blue: { color: [ 1, .9, .5, 1 ] },
+	alpha: { color: [ 1, .9, .8, .5 ] },
+	fontIndex: { style: { ...MEMO_BASE.style, fontIndex: 2 } },
+	fontStyle: { style: { ...MEMO_BASE.style, fontStyle: 2 } },
+	hAlign: { style: { ...MEMO_BASE.style, hAlign: 2 } },
+	vAlign: { style: { ...MEMO_BASE.style, vAlign: 2 } },
+	overflow: { style: { ...MEMO_BASE.style, overflow: "clip" } }
+};
+
+/*
+================
+layoutOf
+================
+*/
+function layoutOf( owner, input ) {
+	return owner.quads( input.value, [ ...input.rect ], [ ...input.clip ], [ ...input.color ], { ...input.style } );
+}
+
+test("text memo keys: one differing field never shares an entry, and a hit returns what a miss computes", () => {
+	const owner = textFixture( createUiText );
+	try {
+		for ( const [field, change] of Object.entries( MEMO_CASES ) ) {
+			const variant = { ...MEMO_BASE, ...change };
+			const first = layoutOf( owner, MEMO_BASE );
+			assert.equal( layoutOf( owner, MEMO_BASE )[0].rect, first[0].rect, field + ": the base label hits" );
+			const missed = layoutOf( owner, variant ), fresh = textFixture( createUiText );
+			try {
+				const computed = layoutOf( fresh, variant );
+				assert.notDeepStrictEqual( computed, layoutOf( fresh, MEMO_BASE ), field + ": the field shows" );
+				assert.deepStrictEqual( missed, computed, field + ": the variant misses" );
+				assert.deepStrictEqual( layoutOf( owner, variant ), computed, field + ": its hit equals the miss" );
+			} finally {
+				fresh.dispose();
+			}
+			const again = layoutOf( owner, MEMO_BASE );
+			assert.equal( again[0].rect, first[0].rect, field + ": the base entry kept its placement" );
+		}
+		// Widths: text, font slot and font style each select their own entry.
+		const fresh = textFixture( createUiText );
+		try {
+			for (
+				const [value, style, index] of [ [ "Jangan", 0, 0 ], [ "Jangam", 0, 0 ], [ "Jangan", 2, 0 ], [
+					"Jangan",
+					0,
+					2
+				] ]
+			) {
+				const width = owner.run( value, style, index ).width;
+				assert.equal( width, fresh.run( value, style, index ).width, `${value} ${style} ${index}` );
+				assert.equal( owner.run( value, style, index ).width, width );
+			}
+			assert.notEqual( fresh.run( "Jangan", 2, 0 ).width, fresh.run( "Jangan", 0, 0 ).width );
+			assert.notEqual( fresh.run( "Jangan", 0, 2 ).width, fresh.run( "Jangan", 0, 0 ).width );
+		} finally {
+			fresh.dispose();
+		}
+	} finally {
+		owner.dispose();
+	}
+});
+
+test("text layout memo holds MAX_LAYOUTS entries and evicts the least recently used", () => {
+	const owner = textFixture( createUiText );
+	const clip = [ 0, 0, 800, 600 ], color = [ 1, 1, 1, 1 ];
+	const label = () => owner.quads( "Inventory", [ 10, 20, 60, 22 ], clip, color )[0].rect;
+	const fill = ( count, prefix ) => {
+		for ( let i = 0; i < count; i++ ) owner.quads( prefix + i, [ 10, 20, 60, 22 ], clip, color );
+	};
+	try {
+		const first = label();
+		fill( MAX_LAYOUTS - 1, "a" );
+		assert.equal( label(), first, "a full memo still holds its oldest entry" );
+		fill( MAX_LAYOUTS - 1, "b" );
+		assert.equal( label(), first, "a hit keeps an entry from eviction" );
+		fill( MAX_LAYOUTS, "c" );
+		assert.notEqual( label(), first, "the least recently used entry is evicted" );
+	} finally {
+		owner.dispose();
 	}
 });
