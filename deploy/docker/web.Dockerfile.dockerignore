@@ -1,0 +1,3 @@
+# Build-context filter for web.Dockerfile.
+*
+!deploy/docker/nginx.conf

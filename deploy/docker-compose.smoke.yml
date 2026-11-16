@@ -1,0 +1,12 @@
+# docker-compose.smoke.yml - deploy/test/smoke.sh's override: no Traefik,
+# the web edge on a loopback port, a network of its own.
+services:
+  web:
+    networks: !override
+      default: {}
+    ports:
+      - "127.0.0.1:${SMOKE_PORT:-18080}:80"
+
+networks:
+  default:
+    name: silkroad_smoke

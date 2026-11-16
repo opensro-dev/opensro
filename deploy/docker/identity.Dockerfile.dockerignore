@@ -1,0 +1,8 @@
+# Build-context filter for identity.Dockerfile.
+*
+!apps/server/go.mod
+!apps/server/go.sum
+!apps/server/internal
+!deploy/identity
+**/testdata
+**/*_test.go
