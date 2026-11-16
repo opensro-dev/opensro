@@ -317,8 +317,9 @@ test("the GM console runs /hideme, /showme, /uioff and /uion", () => {
 		assert.deepEqual( sent[1], { kind: "debug-local-visible", visible: true } );
 		type( "/Debug" );
 		assert.ok( f.hasText( "DebugMsg On" ) );
-		const hudResult = f.ui.step( f.state, now() + 100 );
-		assert.ok( hudResult, "the HUD step produced nothing" );
+		f.ui.step( f.state, now() + 100 );
+		const hudResult = f.presented();
+		assert.ok( hudResult, "the HUD presented nothing" );
 		const hudQuads = f.scenes.at( -1 ).quads.length,
 			hudControls = hudResult.controls.map( c => c.id );
 		assert.ok(
@@ -328,8 +329,9 @@ test("the GM console runs /hideme, /showme, /uioff and /uion", () => {
 		type( "/uioff" );
 		assert.equal( sent.length, 2, "a UI row reached the worker" );
 		assert.ok( f.hasText( "DebugMsg On" ), "the console hid with the UI" );
-		const offResult = f.ui.step( f.state, now() + 100 );
-		assert.ok( offResult, "the /uioff step produced nothing" );
+		f.ui.step( f.state, now() + 100 );
+		const offResult = f.presented();
+		assert.ok( offResult, "the /uioff step presented nothing" );
 		assert.ok( f.scenes.at( -1 ).quads.length < hudQuads, "the HUD stayed up under /uioff" );
 		assert.ok(
 			offResult.controls.length > 0 && offResult.controls.every( c => c.id.startsWith( "gm-" ) ),

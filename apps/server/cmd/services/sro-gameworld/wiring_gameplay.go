@@ -53,6 +53,7 @@ import (
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
+	"opensro.online/server/internal/platform/jobhonor"
 	"opensro.online/server/internal/transport"
 )
 
@@ -69,9 +70,11 @@ type gameplayPlane struct {
 	hub        *transport.Hub
 	deps       *enterworld.Deps
 	items      *action.Runtime
-	movement   *movement.Runtime
-	water      *movement.WaterValidator
-	presence   *livepresence.Directory
+	// jobHonor is the job honor ledger the public board reads; nil off.
+	jobHonor *jobhonor.Service
+	movement *movement.Runtime
+	water    *movement.WaterValidator
+	presence *livepresence.Directory
 	// mutes is the chat mute book (moderation_wiring.go), set once the
 	// shard is known; the console's conduct actions reach it.
 	mutes         *moderation.Book
@@ -129,6 +132,7 @@ func newGameplayPlane(
 	items.PetPolicies = companion.PoliciesFromEnv()
 	items.AttackPetExpansion = companion.AttackPetExpansionEnabled()
 	items.NasrunSocket = nasrun.Enabled(os.Getenv(nasrun.Env))
+	items.NasrunTokens = items.NasrunSocket
 	items.Guilds = deps.Guilds
 	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
 	if err := items.ValidateLootReferences(); err != nil {
@@ -149,6 +153,15 @@ func newGameplayPlane(
 	}
 	// Port-only, not native: the reverse return scroll's map destinations.
 	if err := configureReverseReturnMap(items, devPaths.TextdataDir); err != nil {
+		return nil, err
+	}
+	// Port-only, not native (#3349): the Muhan change NPCs' pairing. Off
+	// reads nothing and installs nothing.
+	muhanTransforms, err := monster.LoadMuhanTransforms(devPaths.TextdataDir, monster.MuhanEnabled())
+	if err != nil {
+		return nil, err
+	}
+	if err := items.ConfigureMuhanTransforms(muhanTransforms); err != nil {
 		return nil, err
 	}
 	// One clock for the bootstrap and the tick sweep, read through the runtime

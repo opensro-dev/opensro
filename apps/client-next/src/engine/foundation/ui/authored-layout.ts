@@ -28,6 +28,10 @@ export interface AuthoredControl {
 	readonly hAlign: number;
 	readonly vAlign: number;
 	readonly creationSection?: number;
+	// A text control's free height above and below its rect: half the gap
+	// to the nearest control over or under its column (labelRoom). Absent
+	// for controls without text.
+	readonly room?: readonly [number, number];
 }
 /*
 ================
@@ -117,7 +121,40 @@ export function decodeAuthoredLayout( value: unknown, sections?: readonly string
 			...(sections ? { creationSection: creationSections.get( name )! } : {})
 		};
 	}
+	const controls = Object.values( out );
+	for ( const [name, control] of Object.entries( out ) ) {
+		if ( control.text !== "" ) out[name] = { ...control, room: labelRoom( control, controls ) };
+	}
 	return out;
+}
+
+/*
+================
+labelRoom
+
+How far a text control's lines may reach above and below its rect
+without entering a neighbour (frame.ts authoredText's wrap, the
+Experimental "Fit window labels"): half the gap to the nearest control
+over its column and half the gap to the nearest under it, so two
+neighbours that both wrap meet at the gap's middle and never cross.
+A control that encloses the label (its frame, the window) or stands
+beside it is no neighbour; a column with nothing over or under it has
+unbounded room that way. A right-aligned label's column reaches the
+window's left edge, as its wrap may.
+================
+*/
+function labelRoom( label: AuthoredControl, controls: readonly AuthoredControl[] ): readonly [number, number] {
+	const [x, y, width, height] = authoredRect( label, 0, 0 );
+	const left = label.hAlign === 2 ? 0 : x, right = x + width, bottom = y + height;
+	let above = Infinity, below = Infinity;
+	for ( const other of controls ) {
+		if ( other === label ) continue;
+		const [ox, oy, ow, oh] = authoredRect( other, 0, 0 );
+		if ( ow <= 0 || oh <= 0 || ox >= right || ox + ow <= left ) continue;
+		if ( oy + oh <= y ) above = Math.min( above, (y - (oy + oh)) / 2 );
+		else if ( oy >= bottom ) below = Math.min( below, (oy - bottom) / 2 );
+	}
+	return [ above, below ];
 }
 /*
 ================

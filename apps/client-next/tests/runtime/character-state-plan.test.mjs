@@ -35,6 +35,7 @@ test("admission plans preserve every capacity reservation including irregular pa
 				{ length: 3 },
 				( _, i ) => ({
 					joints: Array( i + 1 ).fill( 0 ),
+					inverseBind: new Float32Array( (i + 1) * 16 ),
 					emission,
 					geometry: {
 						positions: new Float32Array( 9 + i * 3 ),

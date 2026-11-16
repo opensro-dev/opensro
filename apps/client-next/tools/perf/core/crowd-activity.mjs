@@ -38,9 +38,11 @@ const MOVE_DESTINATION_MODE = 1, GROUND_CLICK_BYTES = 9;
 // Chat: the All channel (nearby players) and its acknowledgement (chat.ts).
 const CHAT_ALL_CHANNEL = 1, OP_CHAT_ACK = 0xb367, CHAT_ACK_OK = 1;
 // A walker clicks a point within WALK_RADIUS of its grid spot (15 units
-// apart, crowd.mjs crowdGridSpot) every 1.5 to 6 s: a player clicking
-// around while waiting, not a bot pinned to one rate.
-const WALK_RADIUS = 25, WALK_MIN_MS = 1500, WALK_MAX_MS = 6000;
+// apart, crowd.mjs crowdLayout, which keeps this reach inside the
+// observer's interest area) every 1.5 to 6 s: a player clicking around
+// while waiting, not a bot pinned to one rate.
+export const WALK_RADIUS = 25;
+const WALK_MIN_MS = 1500, WALK_MAX_MS = 6000;
 // A chatter speaks every 8 to 30 s.
 const CHAT_MIN_MS = 8000, CHAT_MAX_MS = 30000;
 const CHAT_LINES = Object.freeze( [

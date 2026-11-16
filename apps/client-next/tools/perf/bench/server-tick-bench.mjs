@@ -26,7 +26,7 @@ import path from "node:path";
 import { readFile, readdir, writeFile, mkdir } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseOptions } from "../core/report.mjs";
-import { createCrowd, crowdGridSpot } from "../core/crowd.mjs";
+import { createCrowd, crowdLayout } from "../core/crowd.mjs";
 import { groundClickBody } from "../core/crowd-activity.mjs";
 import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMovementFixture.mjs";
 import { serverGameDataRoot } from "../../../../../scripts/build/world/paths.mjs";
@@ -139,9 +139,10 @@ grid spot. Returns the stop function.
 ================
 */
 function startWandering( crowd, fixture, count, moveMs ) {
+	const spots = crowdLayout( fixture, count );
 	const timer = setInterval( () => {
 		for ( let index = 0; index < count; index++ ) {
-			const spot = crowdGridSpot( fixture, index );
+			const spot = spots[index];
 			crowd.send(
 				index,
 				MOVE_OPCODE,

@@ -15,7 +15,11 @@ not below the roll pays. The rows and weights are the owner's event table
 (#2131), port-only like the rest of the event. Above that rolled tier sits
 the flat-price prize list the 2008 notice's list cannot give: the exact
 row chosen at its stated price — the eight event helmets, and (owner,
-2026-11-04, #2548) the four Elixir A rows a capped character can use.
+2026-11-04, #2548) the four elixirs a capped character can use. The
+elixirs are the Intensifying (B) ones the alchemy shop sells and monsters
+drop (owner 2026-11-16, #general): while the shard's rate table is on
+(item/alchemy/rates.go) A and B roll the same chance, so one elixir per
+kind keeps every source handing out the same item.
 How many boxes one rolled gift costs is an inference
 (HalloweenBoxesPerGift): the notice and talk line B read as one box,
 neither states a count. The daily box cap, its 04:00 UTC reset and the
@@ -92,7 +96,7 @@ type HalloweenGift struct {
 
 // The owner's table (#2131), weights out of 100: buff and 500 scrolls
 // singly, grains in stacks of twenty, the buff scrolls in threes, and one
-// rare band of the four plain Elixirs at 4.5% in all. The band sits on
+// rare band of the four elixirs at 4.5% in all. The band sits on
 // the rows monsters already drop, and the daily box cap bounds it.
 var halloweenConsumableGifts = []HalloweenGift{
 	{Codename: "ITEM_ETC_E051123_EVATION_SCROLL", Count: 1, Weight: 8},
@@ -108,10 +112,10 @@ var halloweenConsumableGifts = []HalloweenGift{
 	{Codename: "ITEM_ETC_E051123_HIT_SCROLL", Count: 3, Weight: 3.875},
 	{Codename: "ITEM_ETC_E051123_SPEED_UP_SCROLL", Count: 3, Weight: 3.875},
 	{Codename: "ITEM_ETC_E051123_AGILITY_SCROLL", Count: 3, Weight: 3.875},
-	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", Count: 1, Weight: 1.125},
-	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A", Count: 1, Weight: 1.125},
-	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A", Count: 1, Weight: 1.125},
-	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A", Count: 1, Weight: 1.125},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B", Count: 1, Weight: 1.125},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_B", Count: 1, Weight: 1.125},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_B", Count: 1, Weight: 1.125},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_B", Count: 1, Weight: 1.125},
 }
 
 /*
@@ -179,9 +183,10 @@ HalloweenPrize
 One row of the flat-price tier So-ok sells above the rolled gifts: the
 exact item a player picks and its price in boxes. Helmet rows add the
 sex they are made for and sell only to it; every other row sells to
-anyone. The Elixir rows are the four A recipes the rolled table can
+anyone. The Elixir rows are the four elixirs the rolled table can
 already pay at 4.5% in all — sold, not rolled, at half a day of boxes
-(#2548). No B row: those already sit in the alchemy shop for gold.
+(#2548). They are the same B recipes the alchemy shop sells for gold, so
+the game hands out one elixir per kind everywhere (owner 2026-11-16).
 ================
 */
 type HalloweenPrize struct {
@@ -200,10 +205,10 @@ var halloweenPrizes = []HalloweenPrize{
 	{Codename: "ITEM_ETC_E071030_W_BLUE_EGHEAD", Price: HalloweenHelmetPrice, Female: true, Helmet: true},
 	{Codename: "ITEM_ETC_E071030_W_RED_EGHEAD", Price: HalloweenHelmetPrice, Female: true, Helmet: true},
 	{Codename: "ITEM_ETC_E071030_W_BLACK_EGHEAD", Price: HalloweenHelmetPrice, Female: true, Helmet: true},
-	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", Price: HalloweenElixirPrice},
-	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A", Price: HalloweenElixirPrice},
-	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A", Price: HalloweenElixirPrice},
-	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A", Price: HalloweenElixirPrice},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B", Price: HalloweenElixirPrice},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_B", Price: HalloweenElixirPrice},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_B", Price: HalloweenElixirPrice},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_B", Price: HalloweenElixirPrice},
 }
 
 /*

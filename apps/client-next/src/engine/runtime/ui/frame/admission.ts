@@ -134,7 +134,7 @@ export function endWindow(
 				...(source ? { sourceBounds: source } : {})
 			} );
 		}
-		const painted = resolveTextOverlaps( quads.slice( mark[0] ) );
+		const painted = resolveTextOverlaps( quads.slice( mark[0] ), frame.fitWindowLabels?.() ?? false );
 		quads.length = mark[0];
 		quads.push( ...painted );
 		admittedWindows.set( owner, {
