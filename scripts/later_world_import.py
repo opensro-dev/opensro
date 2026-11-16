@@ -37,7 +37,6 @@ through skytemple_import; they take no WorldImport spec.
 
 ===========================================================================
 """
-import hashlib
 import json
 import mmap
 import os
@@ -51,7 +50,9 @@ import cap110_monsters as cap110
 import cap110_skill_effects as effects
 import import_vsro_alexandria as tables
 import sro_pk2
-from prepare_client_resources import write_atomically
+from pin_file import read_pin_field
+from prepare_client_resources import file_digest, write_atomically
+from sro_paths import trees_overlap
 
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 PIN_FORMAT = "opensro-vsro-archive-pins-v1"
@@ -110,13 +111,22 @@ class WorldImport:
 # ================
 def archive_pins(spec):
 	"""The pinned v1.696 archive hashes (v1696_archive_pins.json beside this tool)."""
-	try:
-		pin = json.loads(spec.pin_file.read_text(encoding="utf-8"))
-	except (OSError, ValueError) as error:
-		raise SystemExit(f"{spec.pin_file} is unreadable: {error}")
-	if pin.get("format") != PIN_FORMAT or not isinstance(pin.get("archives"), dict):
-		raise SystemExit(f"{spec.pin_file} is not a {PIN_FORMAT} pin file")
-	return pin["archives"]
+	return read_pin_field(spec.pin_file, PIN_FORMAT, "archives")
+
+
+# ================
+# client_root
+#
+# The v1.696 client folder an import reads: the caller's, else the root
+# environment variable's. An empty or unset value refuses. Not
+# Path("") tested by str(): that is ".", the working directory, which
+# then fails the pin check with a misleading archive message.
+# ================
+def client_root(given, root_env, env=os.environ):
+	named = str(given or "").strip() or env.get(root_env, "").strip()
+	if not named:
+		raise SystemExit(f"Pass the v1.696 client folder or set {root_env}.")
+	return Path(named)
 
 
 # ================
@@ -139,11 +149,7 @@ def require_pin(spec, root, names, pins_for):
 			raise SystemExit(f"{spec.pin_file.name} pins no {name}.pk2; pin the archive before reading it")
 		if not path.is_file():
 			raise SystemExit(f"{path} not found; --v1696-root must be the pinned v1.696 client folder")
-		hasher = hashlib.sha256()
-		with open(path, "rb") as stream:
-			for chunk in iter(lambda: stream.read(1 << 20), b""):
-				hasher.update(chunk)
-		actual = hasher.hexdigest()
+		actual = file_digest(path)
 		if actual != expected:
 			raise SystemExit(
 				f"{path} does not match the pinned v1.696 archive: sha256 is {actual}, pinned is {expected}. "
@@ -312,7 +318,7 @@ def reap_monsters(spec, output, prior):
 # ================
 def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_enabled, pins_for):
 	native, output = Path(native).resolve(), Path(output).resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError(f"{spec.label} overlay must be separate from native extraction")
 	marker = output / spec.marker
 	prior = cap110.read_json(marker) if marker.exists() else {}
@@ -536,9 +542,7 @@ def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for)
 		raise ValueError(f"{spec.label} import drives its own monster pass; add_world does not serve it")
 	native, out = Path(native), Path(out)
 	require_pairing(spec)
-	v1696_root = Path(v1696_root or os.environ.get(spec.root_env, ""))
-	if not str(v1696_root):
-		raise SystemExit(f"Pass the v1.696 client folder or set {spec.root_env}.")
+	v1696_root = client_root(v1696_root, spec.root_env)
 	source_root = source_root or os.environ.get(spec.source_env, "")
 	if not source_root:
 		raise SystemExit(f"{spec.source_env} names no population export folder")
@@ -802,7 +806,7 @@ def reap_regions(spec, native, out, record):
 # ================
 def reap_world(spec, native, out):
 	native, out = Path(native).resolve(), Path(out).resolve()
-	if native == out or native in out.parents or out in native.parents:
+	if trees_overlap(native, out):
 		raise ValueError(f"{spec.label} overlay must be separate from native extraction")
 	marker = out / spec.marker
 	prior = cap110.read_json(marker) if marker.exists() else {}

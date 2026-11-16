@@ -163,3 +163,36 @@ test("moving skeletal pins publish on every substep while free vertices retain t
 	assert.equal( reset[14], 31 );
 	assert.equal( reset[28], 32 );
 });
+
+test("a paused cloth stream owes none of its hidden time", () => {
+	// The original adds a frame's time to the cloth accumulator only on a
+	// frame its compound is visible (A9EFB0 +0x194). A stream paused for 3 s
+	// must step afterwards exactly as one that never saw those 3 s. Frame
+	// times are binary fractions and the gap a whole number of seconds, so
+	// both streams measure the same millisecond deltas.
+	for ( const skinned of [ false, true ] ) {
+		for ( const { name, pins, mobility } of PIN_CASES ) {
+			const calls = [ 0, 0 ];
+			const never = createClothVertices( clothPrimitive( skinned, pins, mobility ), () => calls[0]++ );
+			const paused = createClothVertices( clothPrimitive( skinned, pins, mobility ), () => calls[1]++ );
+			const palette = identity(), motion = { direction: [ .3, 0, 1 ], speed: 0 };
+			palette[13] = 2;
+			for ( let frame = 0; frame < 160; frame++ ) {
+				if ( frame >= 40 && frame < 43 ) {
+					// Out of view for 3 s, a frame each second.
+					paused.pause( .5 + 39 / 64 + (frame - 39) );
+					continue;
+				}
+				const at = .5 + (frame >= 43 ? frame - 3 : frame) / 64;
+				const expected = never.update( palette, at, true, motion ).slice();
+				const shown = paused.update( palette, at + (frame >= 43 ? 3 : 0), true, motion );
+				assert.deepEqual(
+					new Uint8Array( shown.buffer ),
+					new Uint8Array( expected.buffer ),
+					`${skinned ? "skinned" : "unskinned"} ${name} frame ${frame}`
+				);
+				assert.equal( calls[1], calls[0], "the same random calls" );
+			}
+		}
+	}
+});

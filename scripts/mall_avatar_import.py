@@ -49,9 +49,10 @@ import avatar_archive
 import cap110_item_import as shared
 import cap110_items as items
 import import_vsro_alexandria as tables
+from pin_file import read_pin_field
 import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
-from sro_paths import EXTRACTED_ROOT, REPO_ROOT
+from sro_paths import EXTRACTED_ROOT, REPO_ROOT, trees_overlap
 
 FLAG = "SRO_MALL_AVATARS"
 FLAG_OFF = ("0", "off", "false", "no")
@@ -259,6 +260,16 @@ def select_avatars(native_rows, later_rows, reserved_ids=(), previous=None, miss
 
 
 # ================
+# in_packages
+#
+# Whether one mall table row belongs to these packages, by the table's
+# package-code column (MALL_TABLES).
+# ================
+def in_packages(fields, column, packages):
+	return len(fields) > column and fields[column] in packages
+
+
+# ================
 # strip_mall
 #
 # Drops the rows a previous run added to the four mall tables, by package
@@ -272,7 +283,7 @@ def strip_mall(output, packages):
 		if not path.exists():
 			continue
 		lines = tables.decode_table(path.read_bytes()).splitlines()
-		kept = [line for line in lines if not (len(line.split("\t")) > column and line.split("\t")[column] in packages)]
+		kept = [line for line in lines if not in_packages(line.split("\t"), column, packages)]
 		if len(kept) != len(lines):
 			write_atomically(path, b"\xff\xfe" + ("\r\n".join(kept) + "\r\n").encode("utf-16-le"))
 
@@ -287,6 +298,22 @@ def avatar_kind(code):
 
 
 # ================
+# without_packages
+#
+# The mall tables without the rows of these packages, by each table's
+# package-code column. A later source's rows from a previous build are
+# read through this before an earlier source allocates past them.
+# ================
+def without_packages(current, packages):
+	if not packages:
+		return current
+	return {
+		name: [row for row in current[name] if not in_packages(row, column, packages)]
+		for name, column in MALL_TABLES
+	}
+
+
+# ================
 # mall_rows
 #
 # The rows that list the imported avatars in the Item Mall, for the avatars
@@ -297,7 +324,7 @@ def avatar_kind(code):
 # tab's present slots. Avatars with no package, no sale or no price stay
 # unlisted and are reported.
 # ================
-def mall_rows(later, avatars, current, native_package_ids, list_all=False, ignore_packages=frozenset()):
+def mall_rows(later, avatars, current, native_package_ids, list_all=False):
 	scrap_of = {row[3]: row[2] for row in later["refscrapofpackageitem.txt"] if row[0] == SERVICE_ON and len(row) >= 20}
 	package_row = {row[3]: row for row in later["refpackageitem.txt"] if row[0] == SERVICE_ON and len(row) >= 9}
 	sale = {row[3]: (row[2], int(row[4])) for row in later["refshopgoods.txt"] if row[0] == SERVICE_ON and len(row) >= 5}
@@ -305,13 +332,12 @@ def mall_rows(later, avatars, current, native_package_ids, list_all=False, ignor
 	for row in later["refpricepolicyofitem.txt"]:
 		if row[0] == SERVICE_ON and len(row) > MALL_PRICE_AMOUNT:
 			prices[row[2]].append(row)
-	# Slots follow the present goods, but a later source's stale goods
-	# do not count: that source strips and re-lists them after this
-	# pass, so appending past them walks the tab upward a rebuild at a
-	# time until the one-byte slot overflows.
+	# Slots follow the present goods. The caller has already dropped a
+	# later source's stale goods (without_packages): counting them walked
+	# the tab upward a rebuild at a time until the one-byte slot overflowed.
 	next_slot = collections.Counter()
 	for row in current["refshopgoods.txt"]:
-		if len(row) >= 5 and row[2] in MALL_TAB_FOR.values() and row[3] not in ignore_packages:
+		if len(row) >= 5 and row[2] in MALL_TAB_FOR.values():
 			next_slot[row[2]] = max(next_slot[row[2]], int(row[4]) + 1)
 	rows = {name: [] for name, _ in MALL_TABLES}
 	packages, unlisted, authored = [], [], []
@@ -687,7 +713,7 @@ def vsro_text_row(row):
 # ================
 def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 	native, output = native.resolve(), output.resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("avatar output must be separate from the native extraction")
 	marker = output / source["report"]
 	prior = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}
@@ -790,15 +816,18 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 			}
 			later_mall = {name: later_table_rows(media, index, name) for name, _ in MALL_TABLES}
 			# Goods a later source listed in a previous build are stale:
-			# that source strips and re-lists them after this pass.
+			# that source strips and re-lists them after this pass. They
+			# leave the tables this pass reads, so neither the slots nor the
+			# authored identities walk upward a rebuild at a time.
 			stale_packages = set()
 			for later_source in SOURCES[source_index(source) + 1:]:
 				later_marker = output / later_source["report"]
 				if later_marker.exists():
 					stale_packages |= set(json.loads(later_marker.read_text(encoding="utf-8")).get("mall", {}).get("packages", []))
+			current = without_packages(current, stale_packages)
 			mall, mall_summary = mall_rows(
 				later_mall, avatars, current, {int(row[2]) for row in current["refpackageitem.txt"] if len(row) > 2},
-				enabled(flag=LIST_ALL_FLAG), stale_packages,
+				enabled(flag=LIST_ALL_FLAG),
 			)
 			for name, _ in MALL_TABLES:
 				raw = mall_files[name].read_bytes() if mall_files[name].exists() else read_native(name)
@@ -842,13 +871,7 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 def source_pins(source):
 	if source["pins"] is None:
 		return None
-	try:
-		pin = json.loads(Path(source["pins"]).read_text(encoding="utf-8"))
-	except (OSError, ValueError) as error:
-		raise SystemExit(f"{source['pins']} is unreadable: {error}")
-	if pin.get("format") != PIN_FORMAT or not isinstance(pin.get("archives"), dict):
-		raise SystemExit(f"{source['pins']} is not a {PIN_FORMAT} pin file")
-	return pin["archives"]
+	return read_pin_field(source["pins"], PIN_FORMAT, "archives")
 
 
 # ================

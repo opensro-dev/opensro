@@ -2090,6 +2090,14 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/animation/scenery-emission.ts",
+			"provider": "src/engine/runtime/renderer/world/world.ts",
+			"functions": [
+				"holderVisible"
+			],
+			"reason": "A scenery emitter's clock stops while its compound is out of view (A9EFB0); the world renderer answers from its last selection walk's frustum."
+		},
+		{
 			"consumer": "src/engine/runtime/characters/skill-objects.ts",
 			"provider": "src/engine/runtime/characters/resources/resources.ts",
 			"functions": [
@@ -2542,6 +2550,14 @@
 			"provider": "src/engine/runtime/renderer/characters/characters.ts",
 			"functions": [
 				"clothRandom"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/cloth-stream.ts",
+			"provider": "src/engine/runtime/renderer/characters/characters.ts",
+			"functions": [
+				"paletteOf",
+				"callback:paletteOf"
 			]
 		},
 		{
@@ -3732,6 +3748,13 @@
 			"reason": "The finalization phase forwards synchronous readiness from the parent character resource owner."
 		},
 		{
+			"file": "src/engine/foundation/animation/scenery-emission.ts",
+			"expression": "scene!.holderVisible",
+			"function": "step",
+			"kind": "callback",
+			"reason": "The world renderer's synchronous view test of a placement, read from its last selection walk while the finalization phase publishes scenery emitters."
+		},
+		{
 			"file": "src/engine/runtime/characters/presentation-actions.ts",
 			"expression": "feedback.pendingDeaths",
 			"function": "step",
@@ -3982,6 +4005,13 @@
 			"function": "resolve",
 			"kind": "callback",
 			"reason": "The per-actor phase declares the local player's worn sources to the resource owner, synchronously, so its single load slot serves a fresh equip ahead of unrelated character assets."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "resources.failed",
+			"function": "resolve",
+			"kind": "callback",
+			"reason": "Port-only: a character seen for the first time waits unseen for its worn parts; the resource owner's failure query, read synchronously, ends the wait for a part that keeps failing."
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-appearance.ts",

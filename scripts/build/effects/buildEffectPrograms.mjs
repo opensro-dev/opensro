@@ -37,6 +37,7 @@ import { isMainScript } from "../shared/fsUtils.mjs";
 
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
+import { compareText } from "../shared/textOrder.mjs";
 import { dataAssetPath } from "../shared/jmxAssetIO.mjs";
 import { parseCharacterBsr } from "../char/formats.mjs";
 import { parseCompound } from "../world/objects/compound.mjs";
@@ -134,7 +135,7 @@ function resolveEffectFiles( index, resourceName ) {
 	const suffix = `/${resourceName}`;
 	return [ ...index ]
 		.filter( ( [key] ) => key.endsWith( suffix ) )
-		.sort( ( [a], [b] ) => a.localeCompare( b ) );
+		.sort( ( [a], [b] ) => compareText( a, b ) );
 }
 
 /*
@@ -344,7 +345,7 @@ export function collectStructureEffectReferences(
 	for ( const [codename, target] of parseStructureEffects( text, known ) ) {
 		for ( const effects of Object.values( target.levels ) ) {
 			for ( const effect of effects ) {
-				references.set( codename + " " + effect.effectPath, { codename, effectPath: effect.effectPath } );
+				references.set( codename + "\0" + effect.effectPath, { codename, effectPath: effect.effectPath } );
 			}
 		}
 		for ( const modelPath of Object.values( target.stages ) ) {
@@ -354,13 +355,13 @@ export function collectStructureEffectReferences(
 					if ( !effectPath.endsWith( ".efp" ) ) {
 						throw Error( `Invalid structure stage particle: ${modelPath}` );
 					}
-					references.set( codename + " " + effectPath, { codename, modelPath, effectPath } );
+					references.set( codename + "\0" + effectPath, { codename, modelPath, effectPath } );
 				}
 			}
 		}
 	}
 	return [ ...references.values() ].sort( ( a, b ) =>
-		a.codename.localeCompare( b.codename ) || a.effectPath.localeCompare( b.effectPath )
+		compareText( a.codename, b.codename ) || compareText( a.effectPath, b.effectPath )
 	);
 }
 
@@ -407,7 +408,7 @@ export function collectSceneryParticleReferences(
 		}
 	}
 	return [ ...references.values() ].sort( ( a, b ) =>
-		a.modelPath.localeCompare( b.modelPath ) || a.effectPath.localeCompare( b.effectPath )
+		compareText( a.modelPath, b.modelPath ) || compareText( a.effectPath, b.effectPath )
 	);
 }
 
@@ -454,7 +455,7 @@ export function collectDungeonParticleReferences(
 		}
 	}
 	return [ ...references.values() ].sort( ( a, b ) =>
-		a.modelPath.localeCompare( b.modelPath ) || a.effectPath.localeCompare( b.effectPath )
+		compareText( a.modelPath, b.modelPath ) || compareText( a.effectPath, b.effectPath )
 	);
 }
 

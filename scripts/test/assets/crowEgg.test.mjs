@@ -5,7 +5,7 @@ crowEgg.test.mjs - owned egg geometry survives the normal runtime GLB contract.
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createCrowEgg } from "./crowEgg.mjs";
+import { createCrowEgg } from "../../build/char/crowEgg.mjs";
 
 /*
 ================

@@ -16,6 +16,7 @@ import constantinople_import as ct
 import import_vsro_alexandria as tables
 import skytemple_import as sky
 import sro_pk2
+from test_skytemple_import import region_navmesh
 
 
 # ================
@@ -281,7 +282,7 @@ def build_trees(base):
 		map_files[f"{y}/{x}.o"] = b"o"
 		map_files[f"{y}/{x}.o2"] = placement_o2(777 if (x, y) == (90, 59) else None)
 	(source / "Map.pk2").write_bytes(map_archive(map_files))
-	data_files = {f"navmesh/nv_{region_id(x, y):04x}.nvm": b"nvm" for x, y in sectors()}
+	data_files = {f"navmesh/nv_{region_id(x, y):04x}.nvm": region_navmesh() for x, y in sectors()}
 	data_files["navmesh/objectstring.ifo"] = ("\r\n".join(zone_lines()) + "\r\n").encode("latin1")
 	(source / "Data.pk2").write_bytes(map_archive(data_files))
 	(source / "Particles.pk2").write_bytes(map_archive({}))

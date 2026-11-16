@@ -428,6 +428,33 @@ class ImportTests(unittest.TestCase):
 				assets = importer.copy_asset_closure([row], root / "native", root / "out", {"Data": (None, {}), "Media": (None, {})})
 			self.assertEqual(len(assets), 2)
 	# ================
+	# test_tolerant_dependencies_isolates_bad_files_by_halving
+	#
+	# The result matches one audit run per request, at a fraction of the runs.
+	# ================
+	def test_tolerant_dependencies_isolates_bad_files_by_halving(self):
+		bad = {"res/bad_3.bsr", "res/bad_41.bsr"}
+		requests = [{"path": f"res/{'bad' if i in (3, 41) else 'ok'}_{i}.bsr"} for i in range(64)]
+		runs = []
+
+		def audit(batch):
+			runs.append(len(batch))
+			if any(request["path"] in bad for request in batch):
+				raise ValueError("Error: cannot parse")
+			return [[request["path"] + ".dep"] for request in batch]
+
+		with patch.object(importer, "resource_dependencies", side_effect=audit):
+			results = importer.tolerant_dependencies(requests)
+		for request, result in zip(requests, results):
+			if request["path"] in bad:
+				self.assertIsInstance(result, ValueError)
+			else:
+				self.assertEqual(result, [request["path"] + ".dep"])
+		self.assertEqual(len(results), len(requests))
+		# 2 bad files in 64: at most 1 + 2 * 2 * log2(64) = 25 runs, never 65.
+		self.assertLessEqual(len(runs), 25)
+
+	# ================
 	# test_split_weapons_and_both_harp_models_use_the_shared_resolver
 	# ================
 	def test_split_weapons_and_both_harp_models_use_the_shared_resolver(self):

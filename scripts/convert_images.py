@@ -45,6 +45,7 @@ from pathlib import Path
 
 from PIL import Image
 
+import state_document
 from build_parallelism import build_jobs
 from rebuild_lock import generated_assets_lock
 from sro_paths import EXTRACTED_ROOT, GAME_ROOT, GENERATED_ROOT
@@ -344,26 +345,13 @@ def classify_candidates(named: list[tuple[Path, Path]], persist: bool) -> list[t
 # file is an empty cache, so the worst case is a cold discovery.
 # ================
 def load_discovery_cache() -> dict[str, list]:
-    try:
-        document = json.loads(DISCOVERY_CACHE_PATH.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    if document.get("format") != DISCOVERY_CACHE_FORMAT or not isinstance(document.get("entries"), dict):
-        return {}
-    return document["entries"]
+    return state_document.read_document(DISCOVERY_CACHE_PATH, DISCOVERY_CACHE_FORMAT, "entries") or {}
 
 
 def write_discovery_cache(entries: dict[str, list]) -> None:
-    data = json.dumps({"format": DISCOVERY_CACHE_FORMAT, "entries": dict(sorted(entries.items()))},
-        separators=(",", ":")).encode("utf-8")
     # Written only when it changes, like the manifest, so a no-op run leaves
-    # the intermediate tree's stat fingerprints alone.
-    if DISCOVERY_CACHE_PATH.exists() and DISCOVERY_CACHE_PATH.read_bytes() == data:
-        return
-    DISCOVERY_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    temporary = DISCOVERY_CACHE_PATH.with_suffix(".json.tmp")
-    temporary.write_bytes(data)
-    os.replace(temporary, DISCOVERY_CACHE_PATH)
+    # the intermediate tree's stat fingerprints alone (state_document.py).
+    state_document.write_document(DISCOVERY_CACHE_PATH, DISCOVERY_CACHE_FORMAT, "entries", entries)
 
 
 # ================

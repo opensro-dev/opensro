@@ -63,6 +63,7 @@ const (
 	itemUseGuildRecall
 	itemUseSummonScroll
 	itemUseModelSwitcher
+	itemUseSpiritWake
 )
 
 /*
@@ -115,6 +116,12 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	// The monster capsule (TID 3/2/2): the monster mask.
 	if wire.IsMonsterCapsule(ref.TypeFlags()) {
 		return itemUseMonsterCapsule
+	}
+	// Port-only (SRO_NASRUN, #3456 step 2): using a Devil's Spirit wakes
+	// its clock, as the v1.188 server's use path does for its 3/1/14/1
+	// rows; the handler re-checks the switch (spiritwake.go).
+	if ref.TypeIDs == [4]int64{3, 1, 14, 1} {
+		return itemUseSpiritWake
 	}
 	if ref.TypeIDs[0] == 3 && ref.TypeIDs[1] == 3 && ref.TypeIDs[2] == 13 && ref.TypeIDs[3] >= 1 && ref.TypeIDs[3] <= 3 {
 		return itemUseSkill
