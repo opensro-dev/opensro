@@ -40,10 +40,10 @@ function member( id, name, grade ) {
 guildWindow
 
 The Guild window's member list for a player of grade selfGrade, with Other
-selected.
+selected, plus any extra members.
 ================
 */
-function guildWindow( t, selfGrade ) {
+function guildWindow( t, selfGrade, extra = [] ) {
 	const sent = [];
 	const f = uiFixture( message => {
 		if ( message.kind === "gameplay" ) sent.push( message.command );
@@ -61,7 +61,12 @@ function guildWindow( t, selfGrade ) {
 				subject: "",
 				contents: "",
 				crest: 0,
-				members: [ member( SELF, "Player", selfGrade ), member( 6, "Boss", 0 ), member( 7, "Other", 2 ) ]
+				members: [
+					member( SELF, "Player", selfGrade ),
+					member( 6, "Boss", 0 ),
+					member( 7, "Other", 2 ),
+					...extra
+				]
 			}
 		}
 	} );
@@ -166,4 +171,57 @@ test("Invite on a selected mounted pet invites its rider, and nothing for a mons
 	step();
 	f.ui.event( { kind: "activate", id: "guild-invite" } );
 	assert.equal( sent.length, 0, "a monster is not invited" );
+});
+
+/*
+================
+memberRows
+
+The member names the list draws, in order.
+================
+*/
+function memberRows( out ) {
+	return out.controls.filter( c => c.id.startsWith( "social-member:" ) ).map( c => c.label );
+}
+
+test("a member list longer than six rows scrolls one row at a time (ifguild id 82)", t => {
+	// Thirteen members, named to sort after Boss, Other and Player.
+	const extra = Array.from( { length: 10 }, ( _, i ) => member( 100 + i, "Z" + String( i ).padStart( 2, "0" ), 2 ) );
+	const { f, step } = guildWindow( t, 1, extra );
+	let out = step();
+	assert.deepEqual( memberRows( out ), [ "Boss", "Other", "Player", "Z00", "Z01", "Z02" ] );
+	for ( const id of [ "guild-member-up", "guild-member-down", "guild-member-thumb" ] ) {
+		assert.ok( out.controls.some( c => c.id === id ), id + " is drawn" );
+	}
+	f.ui.event( { kind: "activate", id: "guild-member-down" } );
+	out = step();
+	assert.deepEqual( memberRows( out ), [ "Other", "Player", "Z00", "Z01", "Z02", "Z03" ] );
+	const list = defined( out.controls.find( c => c.id === "guild-list" ) );
+	f.ui.event( { kind: "scroll", x: list.rect[0] + 5, y: list.rect[1] + 5, delta: 1 } );
+	out = step();
+	assert.equal( memberRows( out )[0], "Player", "the wheel moves one row" );
+	for ( let i = 0; i < 20; i++ ) f.ui.event( { kind: "activate", id: "guild-member-down" } );
+	out = step();
+	assert.deepEqual( memberRows( out ), [ "Z04", "Z05", "Z06", "Z07", "Z08", "Z09" ], "stops at the last row" );
+	f.ui.event( { kind: "activate", id: "guild-member-up" } );
+	out = step();
+	assert.equal( memberRows( out )[0], "Z03" );
+});
+
+test("a member list that fits keeps the scroll at the top", t => {
+	const { f, step } = guildWindow( t, 1 );
+	f.ui.event( { kind: "activate", id: "guild-member-down" } );
+	const out = step();
+	assert.deepEqual( memberRows( out ), [ "Boss", "Other", "Player" ] );
+	assert.ok( out.controls.some( c => c.id === "guild-member-thumb" ), "the scroll is always drawn" );
+});
+
+test("the union list draws its scroll even though eight guilds fit its nine rows (ifallianceguild id 62)", t => {
+	const { f, step } = guildWindow( t, 1 );
+	f.ui.event( { kind: "activate", id: "guild-tab:1" } );
+	const out = step();
+	const thumb = defined( out.controls.find( c => c.id === "union-scroll-thumb" ) );
+	const up = defined( out.controls.find( c => c.id === "union-scroll-up" ) );
+	assert.equal( thumb.rect[1], up.rect[1] + 16, "the thumb rests at the top" );
+	assert.ok( out.controls.some( c => c.id === "union-scroll-down" ) );
 });
