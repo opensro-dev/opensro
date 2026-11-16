@@ -179,6 +179,7 @@
 		"wolf-howl.test.mjs",
 		"world-compound.test.mjs",
 		"world-decoder.test.mjs",
+		"world-map-open.test.mjs",
 		"world-map-tools.test.mjs",
 		"world-music.test.mjs",
 		"world-surfaces.test.mjs"
