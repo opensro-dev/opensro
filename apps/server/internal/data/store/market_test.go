@@ -106,7 +106,7 @@ listSword
 */
 func listSword(t *testing.T, s *Store, currency string, price int64) domain.MarketListing {
 	t.Helper()
-	listing, err := s.MarketList(MarketListRequest{Division: testDivision, Account: marketSeller, Slot: 0,
+	listing, err := s.MarketList(domain.MarketListRequest{Division: testDivision, Account: marketSeller, Slot: 0,
 		Currency: currency, Price: price, Admit: admitAll, Rules: testMarketRules})
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +122,7 @@ TestMarketListTakesTheItemOutOfTheWarehouse
 func TestMarketListTakesTheItemOutOfTheWarehouse(t *testing.T) {
 	t.Parallel()
 	s, _, seller, buyer := marketFixture(t)
-	request := MarketListRequest{Division: testDivision, Account: marketSeller, Slot: 0, Currency: domain.MarketSilk,
+	request := domain.MarketListRequest{Division: testDivision, Account: marketSeller, Slot: 0, Currency: domain.MarketSilk,
 		Price: 500, Rules: testMarketRules}
 
 	request.Admit = func(domain.InventoryRow) error { return errors.New("bound") }
@@ -172,7 +172,7 @@ func TestMarketListFromTheBag(t *testing.T) {
 	if err := s.CreateCharacter(testDivision, marketSeller, seller); err != nil {
 		t.Fatal(err)
 	}
-	request := MarketListRequest{Division: testDivision, Account: marketSeller, Character: seller, Slot: 13,
+	request := domain.MarketListRequest{Division: testDivision, Account: marketSeller, Character: seller, Slot: 13,
 		Currency: domain.MarketGold, Price: 1000, Admit: admitAll, Rules: testMarketRules}
 	s.FailCommits(errors.New("disk failure"))
 	if _, err := s.MarketList(request); err == nil || len(seller.MissionInventory) != 1 {
@@ -204,7 +204,7 @@ func TestMarketListingCap(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, slot := range []int64{13, 14, 15} {
-		_, err := s.MarketList(MarketListRequest{Division: testDivision, Account: marketSeller, Character: seller, Slot: slot,
+		_, err := s.MarketList(domain.MarketListRequest{Division: testDivision, Account: marketSeller, Character: seller, Slot: slot,
 			Currency: domain.MarketSilk, Price: 10, Admit: admitAll, Rules: testMarketRules})
 		if i < testMarketRules.OpenCap && err != nil {
 			t.Fatalf("listing %d refused: %v", i, err)
@@ -224,7 +224,7 @@ func TestMarketBuyWithSilk(t *testing.T) {
 	t.Parallel()
 	s, _, seller, buyer := marketFixture(t)
 	listing := listSword(t, s, domain.MarketSilk, 500)
-	buy := MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}
+	buy := domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}
 
 	if _, err := s.MarketBuy(buy); !errors.Is(err, domain.ErrMarketFunds) {
 		t.Fatalf("a buyer with no Silk bought: %v", err)
@@ -288,7 +288,7 @@ func TestMarketBuyWithGold(t *testing.T) {
 	t.Parallel()
 	s, _, seller, buyer := marketFixture(t)
 	listing := listSword(t, s, domain.MarketGold, 1000)
-	buy := MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}
+	buy := domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}
 
 	if _, err := s.MarketBuy(buy); !errors.Is(err, domain.ErrMarketUnavailable) {
 		t.Fatalf("a gold buy with no paying character: %v", err)
@@ -327,7 +327,7 @@ func TestMarketBuyRefusesBeyondTheBuyersGold(t *testing.T) {
 	t.Parallel()
 	s, _, _, buyer := marketFixture(t)
 	listing := listSword(t, s, domain.MarketGold, 20000)
-	_, err := s.MarketBuy(MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer,
+	_, err := s.MarketBuy(domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer,
 		Payer: buyer, Rules: testMarketRules})
 	if !errors.Is(err, domain.ErrMarketFunds) || *buyer.Gold != 12345 {
 		t.Fatalf("buy past the purse = %v, gold %d", err, *buyer.Gold)
@@ -357,7 +357,7 @@ func TestMarketExpiryReturnsHoldsAndTakesBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	clock.Advance(25 * time.Hour)
-	if _, err := s.MarketBuy(MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}); !errors.Is(err, domain.ErrMarketChanged) {
+	if _, err := s.MarketBuy(domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}); !errors.Is(err, domain.ErrMarketChanged) {
 		t.Fatalf("an expired listing sold: %v", err)
 	}
 	if n, err := s.ExpireMarketListings(10); err != nil || n != 1 {
@@ -433,13 +433,13 @@ func TestMarketSearch(t *testing.T) {
 	t.Parallel()
 	s, _, _, _ := marketFixture(t)
 	listing := listSword(t, s, domain.MarketGold, 75)
-	all, err := s.MarketOpenListings(MarketQuery{Division: testDivision, Limit: 15})
+	all, err := s.MarketOpenListings(domain.MarketQuery{Division: testDivision, Limit: 15})
 	if err != nil || len(all) != 1 || all[0].ID != listing.ID {
 		t.Fatalf("search = %+v, %v", all, err)
 	}
-	none, _ := s.MarketOpenListings(MarketQuery{Division: testDivision, Currency: domain.MarketSilk, Limit: 15})
-	named, _ := s.MarketOpenListings(MarketQuery{Division: testDivision, Codenames: []string{marketSword}, Limit: 15})
-	other, _ := s.MarketOpenListings(MarketQuery{Division: testDivision, Codenames: []string{}, Limit: 15})
+	none, _ := s.MarketOpenListings(domain.MarketQuery{Division: testDivision, Currency: domain.MarketSilk, Limit: 15})
+	named, _ := s.MarketOpenListings(domain.MarketQuery{Division: testDivision, Codenames: []string{marketSword}, Limit: 15})
+	other, _ := s.MarketOpenListings(domain.MarketQuery{Division: testDivision, Codenames: []string{}, Limit: 15})
 	if len(none) != 0 || len(named) != 1 || len(other) != 0 {
 		t.Fatalf("filters: silk %d, named %d, empty %d", len(none), len(named), len(other))
 	}

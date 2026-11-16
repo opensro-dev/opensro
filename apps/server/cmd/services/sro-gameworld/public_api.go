@@ -32,6 +32,7 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/market"
 	"opensro.online/server/internal/game/siege"
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/world/simulation"
@@ -479,6 +480,9 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			}
 			return peopleNow, uniquePeople7d, true
 		}
+	}
+	if market.FromEnv() {
+		sources.Market = marketService(gameplay, authority, shard, sources.Online)
 	}
 	return sources
 }

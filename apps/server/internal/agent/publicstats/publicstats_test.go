@@ -384,6 +384,7 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 			FoundedAtMs: 1760000000000},
 			{ID: 2, Name: "Tea", Level: 1, Members: []GuildEntryMember{{CharID: 2}}, Union: []int64{1}}}
 	}
+	s.src.Market = &fakeMarket{}
 	var doc map[string]any
 	get(t, s, "/public/v1/schema", &doc)
 	endpoints, _ := doc["endpoints"].(map[string]any)
@@ -403,6 +404,9 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 		"/public/v1/chat":                 "/public/v1/chat",
 		"/public/v1/events":               "/public/v1/events",
 		"/public/v1/guilds":               "/public/v1/guilds?q=s",
+		"/v1/market/categories":           "/v1/market/categories",
+		"/v1/market/listings":             "/v1/market/listings",
+		"/v1/accounts/{id}/market":        "/v1/accounts/alpha/market",
 	}
 	if len(endpoints) != len(samples) {
 		t.Fatalf("schema lists %d endpoints, want %d", len(endpoints), len(samples))
