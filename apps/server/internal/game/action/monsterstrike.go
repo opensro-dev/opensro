@@ -323,6 +323,9 @@ type cosHit struct {
 	// death settlement for the cargo scatter's log line only - trade
 	// goods are never reserved to it (cosdeath.go).
 	winnerName string
+	// winnerAccount is that player's account ("" with winnerName): the
+	// cargo it scatters is stamped lost to it, for job honor (jobhonor.go).
+	winnerAccount string
 	// winnerCape is the fatal dealer's free-battle group (0 when the
 	// dealer is a monster, judged at plan time outside the doors): the
 	// death settlement reads it for the kill credit's relation gate on
@@ -405,6 +408,7 @@ func (rt *Runtime) applyCOSHitInDoor(divisionID string, hit *cosHit, nowMs int64
 		block.changed = block.block.ClearAll(block)
 		block.fatal = true
 		block.winnerName = hit.winnerName
+		block.winnerAccount = hit.winnerAccount
 		block.winnerCape = hit.winnerCape
 	} else {
 		if block.block.Mask != 0 {

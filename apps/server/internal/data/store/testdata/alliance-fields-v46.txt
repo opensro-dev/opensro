@@ -1,0 +1,3 @@
+allianceId
+crest
+guilds

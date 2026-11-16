@@ -18,12 +18,14 @@ import { selectEquipmentGlow } from "@/engine/foundation/rendering/equipment-glo
 import { createPoseLod } from "@/engine/foundation/animation/pose-lod";
 import { createDeferredParticles, particleQueryPoint } from "@/engine/foundation/animation/deferred-particles";
 import { createModelMaterialClocks } from "@/engine/foundation/animation/model-material-clock";
+import { advanceParticleGraph } from "@/engine/foundation/animation/particle-graph";
 import {
 	createParticleGraph,
-	advanceParticleGraph,
-	particleElementMatrix,
+	particleSlot,
+	ribbonElementFrames,
+	SLOT_ALIVE,
 	type ParticleGraphState
-} from "@/engine/foundation/animation/particle-graph";
+} from "@/engine/foundation/animation/particle-graph-slots";
 import { particleGraphTime } from "@/engine/foundation/animation/particle-graph-clock";
 import { bindNativeClip, type NativeClip } from "@/engine/foundation/animation/native-clip";
 import { HOLDER_FOLLOW, holderFollow } from "@/engine/foundation/animation/particle-holder-link";
@@ -63,7 +65,6 @@ import {
 import { type PickBounds, type PickRay } from "@/engine/foundation/rendering/picking";
 import { faceEffectMesh } from "@/engine/foundation/rendering/effect-billboard";
 import { characterRadius, createCharacterBoundsCache } from "@/engine/foundation/animation/character-bounds";
-import { createClipTimelineCache } from "@/engine/foundation/animation/animation-timelines";
 import {
 	CHARACTER_ASSEMBLIES,
 	CHARACTER_MODELS,
@@ -71,7 +72,8 @@ import {
 	CHARACTER_ACTORS,
 	CHARACTER_RENDER_BYTES,
 	CHARACTER_RESIDENT_BYTES,
-	characterRowGlow
+	characterRowGlow,
+	createCharacterPlanCaches
 } from "@/engine/foundation/animation/character-budget";
 import { ROW_STATE_FLOATS } from "@/engine/foundation/rendering/geometry-instances";
 import { multiply } from "@/engine/foundation/math/pose-math";
@@ -318,9 +320,10 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	let blockLights: readonly (readonly DungeonBlockLight[])[] | undefined;
 	// Per-geometry radius work: an assembled character reuses its parts'.
 	const bounds = createCharacterBoundsCache();
-	// Per-clip pose charge: re-planning every assembly of a body when a clip
-	// is admitted reads each clip's key times once.
-	const timelines = createClipTimelineCache();
+	// Per-clip and per-primitive-list pose charges: re-planning every assembly
+	// of a body when a clip is admitted reads each clip's key times and each
+	// primitive list's bindings once.
+	const planCaches = createCharacterPlanCaches();
 	const models = new Map<string, {
 		model: CharacterModel;
 		plan: ReturnType<typeof createCharacterRenderPlan>;
@@ -335,7 +338,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		dependencies?: readonly string[];
 	}>();
 	const materialClocks = createModelMaterialClocks(), deferred = createDeferredParticles();
-	// Scratch for the ribbon element frames' rotation (particleElementMatrix).
+	// Scratch for the ribbon element frames' rotation (ribbonElementFrames).
 	const rotationWork = new Float64Array( ROTATION_WORK );
 	// Scratch basis for faceEffectMesh, which runs per billboard actor.
 	const billboardAxes = new Float64Array( 9 );
@@ -1453,14 +1456,7 @@ the next full prepare pass, so this may run between frames.
 				origin: frame.origin,
 				bytes: plan.particleBytes,
 				graph,
-				link: graph ?
-					{
-						root: graph.root,
-						follow: new Float32Array( HOLDER_FOLLOW ),
-						turned: new Float32Array( 16 ),
-						shift: [ 0, 0, 0 ]
-					} :
-					undefined,
+				follow: graph ? new Float32Array( HOLDER_FOLLOW ) : undefined,
 				programs: model.primitives.map( () => [] ),
 				matrices: model.primitives.map( p =>
 					p.emission ?
@@ -1501,10 +1497,10 @@ the next full prepare pass, so this may run between frames.
 		);
 		particleRandom.index = graph.index;
 		// B153A0 carries linked elements by the holder every draw: this
-		// frame's holder against the graph's last tick (particle-holder-link.ts).
-		if ( history.link ) {
-			holderFollow( graph.root.matrix, graph.root.state.position, transform, history.link.follow );
-		}
+		// frame's holder against the graph's last tick (particle-holder-link.ts),
+		// whose frame and position are the root slot's (0).
+		const follow = history.follow!;
+		holderFollow( graph.matrix, graph.position, transform, follow );
 		// Graph ribbons are strips through their elements' drawn
 		// frames; other graph primitives are drawn from their tick
 		// records by the GPU pass (particle-streams.ts).
@@ -1512,20 +1508,8 @@ the next full prepare pass, so this may run between frames.
 		for ( let p = 0; p < model.primitives.length; p++ ) {
 			const emitter = model.primitives[p]!.particleEmitter, matrices = history.matrices[p];
 			if ( emitter === undefined || !matrices || !model.primitives[p]!.ribbon ) continue;
-			const elements = graph.elements[emitter]!;
 			matrices.fill( NaN );
-			for ( let b = 0; b < elements.length; b++ ) {
-				const element = elements[b];
-				if ( !element?.alive ) continue;
-				particleElementMatrix(
-					element,
-					matrices,
-					b * 16,
-					fraction,
-					rotationWork,
-					history.link
-				);
-			}
+			ribbonElementFrames( graph, emitter, fraction, follow, matrices, rotationWork );
 		}
 	}
 	/*
@@ -2409,23 +2393,22 @@ the next full prepare pass, so this may run between frames.
 	================
 	orderRibbonElements
 
-	Newest first into ribbonOrder: live graph elements by birth (ties keep
-	slot order), or the emission's births in reverse. Returns the count.
+	Newest first into ribbonOrder: graph emitter n's live elements by birth
+	(ties keep slot order), or the emission's births in reverse. Returns the
+	count.
 	================
 	*/
-	function orderRibbonElements(
-		elements: readonly ({ alive: boolean; born: number; } | undefined)[] | undefined,
-		births: number
-	) {
+	function orderRibbonElements( graph: ParticleGraphState | undefined, n: number | undefined, births: number ) {
 		let count = 0;
-		const total = elements ? elements.length : births;
+		const elements = graph && n !== undefined, base = elements ? graph.plan.base[n]! : 0;
+		const total = elements ? graph.counts[n]! : births;
 		if ( ribbonOrder.length < total ) ribbonOrder = new Int32Array( total * 2 );
 		for ( let i = 0; i < total; i++ ) {
 			const b = elements ? i : total - 1 - i;
-			if ( elements && !elements[b]?.alive ) continue;
+			if ( elements && !(graph.flags[base + b]! & SLOT_ALIVE) ) continue;
 			let at = count++;
 			while (
-				elements && at > 0 && elements[ribbonOrder[at - 1]!]!.born < elements[b]!.born
+				elements && at > 0 && graph.birth[base + ribbonOrder[at - 1]!]! < graph.birth[base + b]!
 			) {
 				ribbonOrder[at] = ribbonOrder[at - 1]!;
 				at--;
@@ -2453,24 +2436,24 @@ the next full prepare pass, so this may run between frames.
 			matrices = history.matrices[p]!,
 			material = primitive.materialFrames!,
 			alpha = frame.opacity( actor );
-		const elements = primitive.particleEmitter === undefined ?
-			undefined :
-			history.graph?.elements[primitive.particleEmitter];
-		const count = orderRibbonElements( elements, emission.births.length );
+		const graph = primitive.particleEmitter === undefined ? undefined : history.graph;
+		const emitter = primitive.particleEmitter ?? 0;
+		const count = orderRibbonElements( graph, primitive.particleEmitter, emission.births.length );
 		// Graph elements are born on the graph's own clock.
 		const graphTime = history.graph ? particleGraphTime( history.graph, actor.time ) : actor.time;
 		groupChains.clear();
 		ribbonGroups.length = 0;
 		for ( let k = 0; k < count; k++ ) {
 			const b = ribbonOrder[k]!,
-				element = elements?.[b],
-				birth = element ? element.clockBirth / 20 : emission.births[b]!;
-			if ( !elements && actor.emissionEnd !== undefined && birth >= actor.emissionEnd ) {
+				s = graph ? particleSlot( graph, emitter, b ) : -1,
+				birth = graph ? graph.clockBirth[s]! / 20 : emission.births[b]!;
+			if ( !graph && actor.emissionEnd !== undefined && birth >= actor.emissionEnd ) {
 				continue;
 			}
 			// A group opens at its first element, drawn or not: the
-			// groups keep the order the elements first name them.
-			const key = element?.parent ?? 0;
+			// groups keep the order the elements first name them. A live
+			// element's parent holds it, so its slot names one parent.
+			const key = graph ? graph.parent[s]! : 0;
 			let points = groupChains.get( key );
 			if ( !points ) {
 				points = ribbonChains[ribbonGroups.length] ??= createRibbonChain();
@@ -2478,7 +2461,7 @@ the next full prepare pass, so this may run between frames.
 				groupChains.set( key, points );
 				ribbonGroups.push( points );
 			}
-			const elapsed = (element ? graphTime : actor.time) - birth,
+			const elapsed = (graph ? graphTime : actor.time) - birth,
 				age = emission.loop && elapsed >= 0 ? elapsed % emission.lifetime : elapsed;
 			if (
 				age < 0 || age >= emission.lifetime || !Number.isFinite( matrices[b * 16 + 15] )
@@ -2670,7 +2653,6 @@ the next full prepare pass, so this may run between frames.
 			particleRow.history = particleBirths.get( actor.gid )!;
 			particleRow.pose = poses.get( actor.gid )!.pose;
 			particleRow.opacity = group.fading ? frame.opacity( actor ) : 1;
-			particleRow.origin = frame.origin;
 			writeParticleRow( particles, i, particleRow, particleRandom );
 		}
 		let draw = batch.draws[p];
@@ -3314,7 +3296,7 @@ the next full prepare pass, so this may run between frames.
 			if ( disposed || models.has( id ) ) throw Error( "Invalid borrowed character resource" );
 			models.set( id, {
 				model,
-				plan: createCharacterRenderPlan( model, timelines ),
+				plan: createCharacterRenderPlan( model, planCaches ),
 				effect: id.includes( EFFECT_PROGRAMS ),
 				images: [ ...images ],
 				textures: [],
@@ -3504,7 +3486,7 @@ the next full prepare pass, so this may run between frames.
 			for ( const [key, row] of models ) {
 				if ( key === id || row.dependencies?.[0] === id ) {
 					row.model = { ...row.model, clips: model.clips };
-					row.plan = createCharacterRenderPlan( row.model, timelines );
+					row.plan = createCharacterRenderPlan( row.model, planCaches );
 					// Admission precedes visibility; include new root motion before
 					// any actor or outgoing layer can sample the appended catalog.
 					row.radius = Math.max( row.radius, characterRadius( row.model, bounds ) );
@@ -3532,7 +3514,7 @@ the next full prepare pass, so this may run between frames.
 			// Borrowed catalogs follow the same envelope lifetime as owned ones.
 			resource.radius = Math.max( resource.radius, characterRadius( model, bounds ) );
 			resource.model = model;
-			resource.plan = createCharacterRenderPlan( model, timelines );
+			resource.plan = createCharacterRenderPlan( model, planCaches );
 			framePoses?.delete( id );
 		},
 		/*
@@ -3562,7 +3544,7 @@ the next full prepare pass, so this may run between frames.
 				const admitted = structuredClone( model );
 				models.set( id, {
 					model: admitted,
-					plan: createCharacterRenderPlan( admitted, timelines ),
+					plan: createCharacterRenderPlan( admitted, planCaches ),
 					effect: id.includes( EFFECT_PROGRAMS ),
 					images: [ ...images ],
 					textures: [],
@@ -3659,7 +3641,7 @@ the next full prepare pass, so this may run between frames.
 			const assembled = { ...body.model, nodes: assembledNodes, primitives };
 			models.set( id, {
 				model: assembled,
-				plan: createCharacterRenderPlan( assembled, timelines ),
+				plan: createCharacterRenderPlan( assembled, planCaches ),
 				effect: id.includes( EFFECT_PROGRAMS ),
 				images: pixels,
 				textures: [],
