@@ -283,6 +283,12 @@ type Deps struct {
 	// wiring with the authority store; nil keeps no item evidence,
 	// as a detached composition has no ledger to keep it in.
 	ItemSaleNote func(charID int64, item string, count int, gold int64) error
+	// TradeNote takes the two records of one committed exchange or stall
+	// sale (store NoteTrade, trade_history.go, port-only): both parties'
+	// rows, noted from inside the trade's commit door so they join its
+	// transaction. Installed by the server wiring with the authority store;
+	// nil keeps no trade history.
+	TradeNote func(records []domain.TradeRecord) error
 	// LockPublication orders bootstrap snapshots with action/tick inventory
 	// receipts. The returned release runs only after the full batch is queued.
 	// The label names this holder class for the gate-hold report.
@@ -385,6 +391,25 @@ func (d *Deps) NoteItemSale(charID int64, item string, count int, gold int64) {
 	}
 	if err := d.ItemSaleNote(charID, item, count, gold); err != nil {
 		log.Warnf("economy item sale note: %v", err)
+	}
+}
+
+/*
+================
+NoteTrade
+
+Notes one committed trade's two records (TradeNote, port-only). Called from
+inside the trade's commit door, so the rows join that transaction. A refused
+note is logged, never returned: the trade has already happened, and a history
+write must never undo it. Unwired keeps nothing.
+================
+*/
+func (d *Deps) NoteTrade(records []domain.TradeRecord) {
+	if d.TradeNote == nil {
+		return
+	}
+	if err := d.TradeNote(records); err != nil {
+		log.Warnf("trade history note: %v", err)
 	}
 }
 

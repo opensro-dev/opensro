@@ -16,11 +16,11 @@ import {
 	characterBatchBytes,
 	characterMeshBytes,
 	characterSharedMesh,
-	characterSharedPalette
+	characterSharedPalette,
+	type CharacterPlanCaches
 } from "./character-budget";
 import { meshArrays } from "@/engine/foundation/rendering/geometry-vertices";
 import { createParticleGraphPlan } from "@/engine/foundation/animation/particle-graph-plan";
-import type { ClipTimelineCache } from "./animation-timelines";
 /*
 ================
 isCharacterAnimationExtension
@@ -42,14 +42,23 @@ createCharacterRenderPlan
 
 Immutable admitted model topology owns this plan. Frame clocks, visibility,
 event cursors and matrices never enter it. Replacement models get new plans;
-the timeline cache keeps a re-plan from hashing its clips' key times again.
+the plan caches keep a re-plan from hashing its clips' key times or its
+primitives' bindings again.
 ================
 */
-export function createCharacterRenderPlan( model: CharacterModel, timelines?: ClipTimelineCache ) {
+export function createCharacterRenderPlan( model: CharacterModel, caches?: CharacterPlanCaches ) {
 	const clips = new Map<string, CharacterClip>();
 	for ( const clip of model.clips ) if ( !clips.has( clip.name ) ) clips.set( clip.name, clip );
 	const emission = model.primitives.some( p => p.emission ),
 		exactCapacity = model.primitives.some( p => p.ribbon );
+	// By primitive: a material clock (model-material-clock.ts) rewrites its
+	// material every frame, so its draw uploads a dynamic material.
+	const dynamicMaterials: readonly boolean[] = model.primitives.map( p =>
+		!!(p.equipmentGlow || p.modifierSource?.modifiers.materialModifiers.some( m => m.kind === 1 ) ||
+			p.modifierSource?.modifiers.textureModifiers.some( m => m.kind === 1 ) ||
+			p.geometry.material?.colorTimeline || p.geometry.material?.uvVelocity || p.geometry.material?.uvAtlas ||
+			p.geometry.material?.textureFactorPulse)
+	);
 	// Ordinary power-of-two batches have a fixed allocation plus a per-slot cost.
 	// Store two scalars instead of a model-by-actor table. Emitted slots scale
 	// with the padded actor capacity too. Ribbons retain their exact capacity.
@@ -64,16 +73,12 @@ export function createCharacterRenderPlan( model: CharacterModel, timelines?: Cl
 			p.modifierSource?.modifiers.materialModifiers.some( m => m.kind === 1 ) ||
 			p.modifierSource?.modifiers.textureModifiers.some( m => m.kind === 1 )
 		),
-		materialClocked: model.primitives.some( p =>
-			p.equipmentGlow || p.modifierSource?.modifiers.materialModifiers.some( m => m.kind === 1 ) ||
-			p.modifierSource?.modifiers.textureModifiers.some( m => m.kind === 1 ) ||
-			p.geometry.material?.colorTimeline || p.geometry.material?.uvVelocity || p.geometry.material?.uvAtlas ||
-			p.geometry.material?.textureFactorPulse
-		),
+		materialClocked: dynamicMaterials.includes( true ),
+		dynamicMaterials,
 		clips,
 		emission,
 		exactCapacity,
-		poseBytes: characterPoseBytes( model, timelines ),
+		poseBytes: characterPoseBytes( model, caches ),
 		// The shared meshes this model draws, each with its one GPU copy's
 		// bytes; the frame plan charges each once, whatever batches draw it.
 		meshes: model.primitives.filter( characterSharedMesh ).map( p => ({
@@ -88,7 +93,9 @@ export function createCharacterRenderPlan( model: CharacterModel, timelines?: Cl
 		billboard: model.primitives.some( p => p.billboard || p.ribbon ),
 		continuousGraph: model.particleGraph?.some( e => e.loop || e.emission ) ?? false,
 		// The tables every tick of the model's particle graphs reads.
-		particleGraph: model.particleGraph ? createParticleGraphPlan( model.particleGraph ) : undefined,
+		particleGraph: model.particleGraph ?
+			createParticleGraphPlan( model.particleGraph, model.primitives ) :
+			undefined,
 		sharedPalette: characterSharedPalette( model ),
 		particleBytes: model.primitives.reduce(
 			( sum, p ) => sum + (p.emission?.capacity ?? p.emission?.births.length ?? 0) * 320,

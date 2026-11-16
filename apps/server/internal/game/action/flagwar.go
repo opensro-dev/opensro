@@ -26,8 +26,8 @@ SRO_FLAGWAR_MIN_PLAYERS the house minimum (default 4); a start with
 fewer registrants cancels with the native game-cancel notice, whose
 text is exactly that the required number was not met. With enough
 registrants the match owner takes the queue in sign-up order through
-FlagWarMatchStart; until that lane lands, a full house cancels like
-an empty one.
+FlagWarMatchStart (flagwar_match.go), which builds the arena and runs
+the match.
 
 ===========================================================================
 */
@@ -162,14 +162,63 @@ func (s FlagWarSettings) startOn(now time.Time) time.Time {
 
 /*
 ================
+NextMatch
+
+The next daily match the scheduler runs, as the public schedule shows
+it: sign-up opens flagWarSignupMinutes before the start. Today's match
+until its start instant, tomorrow's from then on.
+================
+*/
+func (s FlagWarSettings) NextMatch(now time.Time) (signupAt, startsAt time.Time) {
+	s = s.normalized()
+	startsAt = s.startOn(now)
+	if !now.Before(startsAt) {
+		startsAt = startsAt.AddDate(0, 0, 1)
+	}
+	return startsAt.Add(-flagWarSignupMinutes * time.Minute), startsAt
+}
+
+/*
+================
+FlagWarMatchLength
+
+How long one match runs (flagWarMatchDurationMs), for the public calendar.
+================
+*/
+func FlagWarMatchLength() time.Duration {
+	return time.Duration(flagWarMatchDurationMs) * time.Millisecond
+}
+
+/*
+================
+nearStarts
+
+Today's start and tomorrow's. A start in the first minutes after
+midnight UTC has its sign-up and standby notices on the day before, so
+every check looks at both; the two are a day apart, so at most one of
+them is ever in reach.
+================
+*/
+func (s FlagWarSettings) nearStarts(now time.Time) [2]time.Time {
+	today := s.startOn(now)
+	return [2]time.Time{today, today.AddDate(0, 0, 1)}
+}
+
+/*
+================
 signupOpen
 
-Sign-up is open in the ten minutes before today's start.
+Sign-up is open in the ten minutes before a start, even when those
+minutes fall on the day before it (a start before 00:10 UTC).
 ================
 */
 func (s FlagWarSettings) signupOpen(now time.Time) bool {
-	start := s.startOn(now)
-	return !now.Before(start.Add(-flagWarSignupMinutes*time.Minute)) && now.Before(start)
+	for _, start := range s.nearStarts(now) {
+		if !now.Before(start.Add(-flagWarSignupMinutes*time.Minute)) && now.Before(start) {
+			return true
+		}
+	}
+	return false
 }
 
 /*
@@ -404,7 +453,6 @@ so a stalled tick announces late rather than never.
 */
 func (rt *Runtime) advanceFlagWar(nowMs int64) []simulation.DivisionFrames {
 	settings := rt.flagWarSettings()
-	start := settings.startOn(time.UnixMilli(nowMs))
 
 	event := &rt.flagWar
 	event.mu.Lock()
@@ -416,22 +464,26 @@ func (rt *Runtime) advanceFlagWar(nowMs int64) []simulation.DivisionFrames {
 	event.lastTickMs = nowMs
 	event.mu.Unlock()
 
-	edges := []struct {
-		at   time.Time
-		fire func() []simulation.DivisionFrames
-	}{
-		{start.Add(-flagWarSignupMinutes * time.Minute),
-			func() []simulation.DivisionFrames { return rt.flagWarBroadcast(wire.FlagWarStandby10) }},
-		{start.Add(-5 * time.Minute),
-			func() []simulation.DivisionFrames { return rt.flagWarBroadcast(wire.FlagWarStandby5) }},
-		{start.Add(-time.Minute),
-			func() []simulation.DivisionFrames { return rt.flagWarBroadcast(wire.FlagWarStandby1) }},
-		{start, func() []simulation.DivisionFrames { return rt.flagWarStart(settings) }},
-	}
+	// Both near starts: a start just after midnight UTC has its notices
+	// on the day before (nearStarts).
 	var out []simulation.DivisionFrames
-	for _, edge := range edges {
-		if previous < edge.at.UnixMilli() && edge.at.UnixMilli() <= nowMs {
-			out = append(out, edge.fire()...)
+	for _, start := range settings.nearStarts(time.UnixMilli(nowMs)) {
+		edges := []struct {
+			at   time.Time
+			fire func() []simulation.DivisionFrames
+		}{
+			{start.Add(-flagWarSignupMinutes * time.Minute),
+				func() []simulation.DivisionFrames { return rt.flagWarBroadcast(wire.FlagWarStandby10) }},
+			{start.Add(-5 * time.Minute),
+				func() []simulation.DivisionFrames { return rt.flagWarBroadcast(wire.FlagWarStandby5) }},
+			{start.Add(-time.Minute),
+				func() []simulation.DivisionFrames { return rt.flagWarBroadcast(wire.FlagWarStandby1) }},
+			{start, func() []simulation.DivisionFrames { return rt.flagWarStart(settings) }},
+		}
+		for _, edge := range edges {
+			if previous < edge.at.UnixMilli() && edge.at.UnixMilli() <= nowMs {
+				out = append(out, edge.fire()...)
+			}
 		}
 	}
 	return out
