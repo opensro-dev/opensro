@@ -412,9 +412,10 @@ TitleOf
 What the website's account page reads for accountID (port-only, not
 native; #135): whether accountID carries its member's title now, and
 whether it hides it. ok is false for an account that is no contributor.
-The member's other accounts are never named: a contributor's group holds
-every account its invite keys created, so a list would hand each invitee
-the others' login names.
+The member's other accounts are never named: a list would hand whoever
+signs in on one of them the others' login names. The group holds only the
+accounts the member linked by their own Discord sign-in (the operations
+sync drops invite-key links, opensro-ops#376).
 ================
 */
 func (r *Registry) TitleOf(accountID string) (carries bool, hidden bool, ok bool) {

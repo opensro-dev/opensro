@@ -22,9 +22,11 @@ one, so the write cannot be used to probe who owns what.
 The Contributor title (port-only, not native; #135) rides the same guards.
 The read says only whether the signed-in account carries it, and the write
 only moves it onto the signed-in account (contributor.Registry.TakeTitle,
-as "/contributor here" in game): a contributor's group holds every account
-its invite keys created, so no answer names another account. An account
-that is no contributor answers 404.
+as "/contributor here" in game). A contributor's group holds only the
+accounts the member linked by their own Discord sign-in (the operations
+sync drops invite-key links, opensro-ops#376), and still no answer names
+another account. An account that is no contributor, an invite-made one
+among them, answers 404.
 
 A successful write empties the answer cache and the shared snapshot: a
 player who hides is gone from every read at once, not after the cache
