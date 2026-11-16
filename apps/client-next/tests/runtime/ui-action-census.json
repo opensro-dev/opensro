@@ -15316,12 +15316,11 @@
 						"experimental-highlight-event-notices",
 						"experimental-job-kill-notices",
 						"experimental-notice-links",
-						"experimental-plus-seven-notices",
 						"experimental-short-notices"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "9246cd5ce2de5ac3",
+					"hash": "8e1f27b19abe1cb9",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
