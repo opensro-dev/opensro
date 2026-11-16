@@ -130,3 +130,27 @@ test("a package's price list is admitted only in payment order and matching its 
 		]
 	) assert.throws( () => shopCatalog( encode( { prices } ) ), Error, JSON.stringify( prices ) );
 });
+
+/*
+================
+Devil's Spirit token offers
+
+Port-only (SRO_NASRUN, #3456 step 3b): a shop may price an offer in the
+token (64) and send the buyer's balance; any other unknown payment is
+still refused.
+================
+*/
+test("a token offer and the shop's token balance are admitted, other payments are not", () => {
+	const base = { tab: 0, slot: 0, refObjId: 1, name: "Spirit", maxStack: 1, price: "60", currency: 64 };
+	const encode = ( offer, shop = {} ) =>
+		new TextEncoder().encode(
+			JSON.stringify( { version: 1, npc: 1, name: "shop", offers: [ { ...base, ...offer } ], ...shop } )
+		);
+	const shop = shopCatalog( encode( {}, { nasrunTokens: 130 } ) );
+	assert.equal( shop.offers[0].currency, 64 );
+	assert.equal( shop.nasrunTokens, 130 );
+	assert.throws( () => shopCatalog( encode( { currency: 128 } ) ), /Invalid shop currency/ );
+	for ( const nasrunTokens of [ -1, 1.5, "130" ] ) {
+		assert.throws( () => shopCatalog( encode( {}, { nasrunTokens } ) ), Error, String( nasrunTokens ) );
+	}
+});

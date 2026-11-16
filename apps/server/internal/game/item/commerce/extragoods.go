@@ -92,13 +92,16 @@ const maxShopSlot = math.MaxUint8
 ================
 ExtraGood
 
-One configured offer: the authored tab name, the item and its gold price.
+One configured offer: the authored tab name, the item and its price. The
+operator's setting prices in gold; Currency is set only by the token
+goods (nasrungoods.go), and zero means gold.
 ================
 */
 type ExtraGood struct {
 	Tab      string
 	Codename string
 	Price    uint64
+	Currency uint8
 }
 
 /*
@@ -154,7 +157,7 @@ func ExtraGoodsFromEnv() ([]ExtraGood, error) {
 	if active {
 		goods = regroupJanganAlchemy(goods)
 	}
-	return goods, nil
+	return append(goods, NasrunGoodsFromEnv()...), nil
 }
 
 /*
@@ -222,8 +225,12 @@ func (c *Catalog) AddExtraGoods(goods []ExtraGood, refs enterworld.ItemRefSource
 		if next[tab] > maxShopSlot {
 			return fmt.Errorf("%s: shop tab %s has no free slot for %s", EnvShopExtraGoods, good.Tab, good.Codename)
 		}
+		currency := good.Currency
+		if currency == 0 {
+			currency = PaymentGold
+		}
 		added[tab] = append(added[tab], Offer{Slot: uint8(next[tab]), Ref: content.Ref, Price: good.Price,
-			Currency: PaymentGold, Stack: content.Stack, Contents: []Content{content}})
+			Currency: currency, Stack: content.Stack, Contents: []Content{content}})
 		next[tab]++
 	}
 	for tab, offers := range added {

@@ -64,6 +64,10 @@ export interface CommercePreview {
 export const SHOP_CURRENCY_GOLD = 1;
 export const SHOP_CURRENCY_GUILD_POINT = 8;
 export const SHOP_CURRENCY_HONOR = 32;
+// Port-only, not native (SRO_NASRUN, #3456 step 3b): the Devil's Spirit
+// token goods. v1.150 has no such payment; the server prices only its own
+// token offers in it and sends the buyer's balance with the shop.
+export const SHOP_CURRENCY_NASRUN_TOKEN = 64;
 // The most price rows a package can carry: one per currency above.
 const SHOP_PRICE_ROWS_MAX = 3;
 
@@ -136,6 +140,9 @@ export interface ShopState {
 	readonly name: string;
 	readonly offers: readonly ShopOffer[];
 	readonly error?: string;
+	// The buyer's Devil's Spirit token balance, sent only by a shop that
+	// sells token goods (port-only, SRO_NASRUN).
+	readonly nasrunTokens?: number;
 }
 
 /*
@@ -247,7 +254,8 @@ export function shopCatalog( p: Uint8Array ): ShopState {
 			throw Error( "Invalid shop price" );
 		}
 		if (
-			row.currency !== undefined && row.currency !== SHOP_CURRENCY_GOLD && row.currency !== SHOP_CURRENCY_HONOR
+			row.currency !== undefined && row.currency !== SHOP_CURRENCY_GOLD && row.currency !== SHOP_CURRENCY_HONOR &&
+			row.currency !== SHOP_CURRENCY_NASRUN_TOKEN
 		) throw Error( "Invalid shop currency" );
 		if ( row.prices !== undefined ) shopPrices( row.prices, row.currency ?? SHOP_CURRENCY_GOLD, row.price );
 		if ( row.contents !== undefined ) {
@@ -285,6 +293,7 @@ export function shopCatalog( p: Uint8Array ): ShopState {
 		}
 	}
 	if ( r.cosGid !== undefined ) commerceInteger( r.cosGid, 0xffffffff, 1 );
+	if ( r.nasrunTokens !== undefined ) commerceInteger( r.nasrunTokens, Number.MAX_SAFE_INTEGER );
 	if ( r.buyback !== undefined && r.buyback !== null ) buybackEntries( r.buyback );
 	if ( r.saleQuotes !== undefined && r.saleQuotes !== null ) {
 		if ( !Array.isArray( r.saleQuotes ) || r.saleQuotes.length > 256 ) throw Error( "Invalid sale quotes" );

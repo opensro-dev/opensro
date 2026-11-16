@@ -109,7 +109,8 @@ type shopOffer struct {
 	Ref           uint32             `json:"refObjId"`
 	Name          string             `json:"name"`
 	Price         string             `json:"price"`
-	// Currency is the refpricepolicyofitem payment type: 1 gold, 32 honor.
+	// Currency is the refpricepolicyofitem payment type: 1 gold, 8 guild
+	// points, 32 honor; 64 is the port-only Devil's Spirit token.
 	Currency uint8          `json:"currency"`
 	Prices   []shopPriceRow `json:"prices,omitempty"`
 	Stack    uint16         `json:"maxStack"`
@@ -140,6 +141,10 @@ type shopProjection struct {
 	Offers     []shopOffer           `json:"offers"`
 	Buyback    []buybackOffer        `json:"buyback"`
 	Error      string                `json:"error,omitempty"`
+	// NasrunTokens is the buyer's Devil's Spirit token balance, sent
+	// only by a shop that sells token goods (port-only, SRO_NASRUN), so
+	// the client can show it and refuse a buy it cannot pay for.
+	NasrunTokens *int64 `json:"nasrunTokens,omitempty"`
 }
 
 /*
@@ -255,6 +260,10 @@ func (rt *Runtime) shopCatalog(division string, c *enterworld.Character, gid uin
 				}
 			}
 			p.Offers = append(p.Offers, shopOffer{PurchaseLimit: purchaseLimit, Previews: previews, Contents: contents, Tab: tab, Slot: o.Slot, Ref: o.Ref.RefObjID, Name: o.Ref.Name, Price: strconv.FormatUint(price, 10), Currency: o.Currency, Prices: prices, Stack: o.Stack})
+			if o.Currency == commerce.PaymentNasrunToken && p.NasrunTokens == nil {
+				balance := snapshot.NasrunTokens
+				p.NasrunTokens = &balance
+			}
 		})
 	}
 	b, _ := json.Marshal(p)
@@ -428,6 +437,10 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	var collected int64
 	var guildPointCost uint64
 	var honorCost uint64
+	// tokenCost is the Devil's Spirit tokens a token offer spends
+	// (port-only, SRO_NASRUN; commerce/nasrungoods.go). The balance is the
+	// buyer's own record, so it is spent inside the door, with the goods.
+	var tokenCost uint64
 	// The ordinary sale's item evidence (noteItemSale after the
 	// commit): the sold item, how many, the gold credited.
 	var soldItem string
@@ -482,6 +495,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 		collected = 0
 		guildPointCost = 0
 		honorCost = 0
+		tokenCost = 0
 		settledPool := *pool
 		buyback, nextID := c.Buyback, c.BuybackNext
 		switch q.MovementType {
@@ -523,6 +537,15 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 					return false
 				}
 				guildPointCost = cost
+				cost = 0
+			case commerce.PaymentNasrunToken:
+				// Port-only, not native: no v1.150 refusal names tokens, so
+				// a short balance is the native silent refusal. The browser
+				// client shows the balance and never sends such a buy.
+				if c.NasrunTokens < 0 || cost > uint64(c.NasrunTokens) {
+					return false
+				}
+				tokenCost = cost
 				cost = 0
 			default:
 				if cost > balance {
@@ -724,6 +747,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			c.MissionInventory = rowsFromInvItems(inv.Items())
 		}
 		setGold(c, balance)
+		c.NasrunTokens -= int64(tokenCost)
 		c.Buyback, c.BuybackNext = buyback, nextID
 		if q.MovementType == wire.MoveTypeShopSell {
 			frames = append(frames, rt.buybackFrame(c, q.NpcGID, npc.RefObjID, 0, nil, ""))
@@ -766,6 +790,13 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	if guildPointCost > 0 {
 		result = rt.spendGuildPoints(division, snapshot, uint32(guildPointCost), result)
 	}
+	if tokenCost > 0 {
+		// Port-only (SRO_NASRUN): the spend is told as 3a tells an award,
+		// and the shop is sent again so the client's balance follows.
+		after := rt.characterSnapshot(division, c)
+		result.Frames = append(result.Frames, sookBanner(fmt.Sprintf(nasrunTokenSpentNotice, tokenCost, after.NasrunTokens)),
+			rt.shopCatalog(division, c, q.NpcGID))
+	}
 	rt.collectFortressTax(division, npc, collected)
 	return result
 }
@@ -774,12 +805,12 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 ================
 offerUnitPrice
 
-Gold prices carry the town tax; guild-point and honor prices are the
-authored points.
+Gold prices carry the town tax; guild-point, honor and token prices are
+the authored points.
 ================
 */
 func offerUnitPrice(o commerce.Offer, tax commerce.Tax) (uint64, bool) {
-	if o.Currency == commerce.PaymentHonor || o.Currency == commerce.PaymentGuildPoint {
+	if o.Currency == commerce.PaymentHonor || o.Currency == commerce.PaymentGuildPoint || o.Currency == commerce.PaymentNasrunToken {
 		return o.Price, o.Price > 0
 	}
 	return commerce.AdjustPrice(o.Price, tax, true)

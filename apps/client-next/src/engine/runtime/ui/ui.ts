@@ -28121,7 +28121,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									honor: lookup( "UIIT_STT_TC_HONOR_POINT" ),
 									point: lookup( "UIIT_STT_SILKMALL_P_POINT" ),
 									guildPoint: lookup( "UIIT_STT_GUILD_POINT" ),
-									guildPointUnit: lookup( "UIIT_STT_GUILD_POINT_GP" )
+									guildPointUnit: lookup( "UIIT_STT_GUILD_POINT_GP" ),
+									// Port-only (SRO_NASRUN): no native string names the token.
+									nasrunToken: "Devil's Spirit tokens",
+									nasrunTokenHeld: "You hold"
 								} )
 							];
 						}
