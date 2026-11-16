@@ -320,6 +320,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	const models = new Map<string, {
 		model: CharacterModel;
 		plan: ReturnType<typeof createCharacterRenderPlan>;
+		// The id names an effect program: its group draws in the
+		// translucent tier. Fixed by the id, so set once at admission.
+		effect: boolean;
 		images: WorldTexture[];
 		textures: ImageDraw[];
 		owned: boolean;
@@ -470,7 +473,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	// deferredActors: visible actors the render budget kept from drawing;
 	// deferredBodies: those of them without emission.
 	let residentBytes = 0, ownedModels = 0, renderBytes = 0, deferredActors = 0, deferredBodies = 0;
-	let retained: Set<string> | null = null, retainedScratch = new Set<string>();
+	let retained: Set<string> | null = null;
 	// Residency depends on model membership, not interpolated poses or clocks.
 	// Snapshot the model ids: actor snapshots are mutated by the next publication.
 	let residencyDirty = true, residencyPasses = 0, hasMaterialClocks = false;
@@ -2552,7 +2555,9 @@ the next full prepare pass, so this may run between frames.
 						{ clothStream: true } :
 						{ joints: undefined, weights: undefined, bones: undefined, dynamicVertices: true } :
 					{}),
-				transform: preview ? view! : identity()
+				transform: preview ? view! : identity(),
+				// updateModifiers rewrites a clocked primitive's material every frame.
+				...(group.plan.dynamicMaterials[p] ? { dynamicMaterial: true } : {})
 			},
 			resource.textures[primitive.image],
 			paletteOffsets,
@@ -3220,6 +3225,7 @@ the next full prepare pass, so this may run between frames.
 			models.set( id, {
 				model,
 				plan: createCharacterRenderPlan( model, timelines ),
+				effect: id.includes( EFFECT_PROGRAMS ),
 				images: [ ...images ],
 				textures: [],
 				owned: false,
@@ -3372,12 +3378,12 @@ the next full prepare pass, so this may run between frames.
 		================
 		*/
 		retain( ids: readonly string[] ) {
-			retainedScratch.clear();
-			for ( const id of ids ) retainedScratch.add( id );
-			if ( !retained || retained.size !== retainedScratch.size || ids.some( id => !retained!.has( id ) ) ) {
-				const previous = retained;
-				retained = retainedScratch;
-				retainedScratch = previous ?? new Set();
+			// A new set each call, not a long-lived scratch cleared and refilled
+			// every frame: V8 allocates a long-lived set's next table in the old
+			// generation, where only a full collection frees it.
+			const next = new Set( ids );
+			if ( !retained || retained.size !== next.size || ids.some( id => !retained!.has( id ) ) ) {
+				retained = next;
 				residencyDirty = true;
 			}
 		},
@@ -3466,6 +3472,7 @@ the next full prepare pass, so this may run between frames.
 				models.set( id, {
 					model: admitted,
 					plan: createCharacterRenderPlan( admitted, timelines ),
+					effect: id.includes( EFFECT_PROGRAMS ),
 					images: [ ...images ],
 					textures: [],
 					owned: true,
@@ -3562,6 +3569,7 @@ the next full prepare pass, so this may run between frames.
 			models.set( id, {
 				model: assembled,
 				plan: createCharacterRenderPlan( assembled, timelines ),
+				effect: id.includes( EFFECT_PROGRAMS ),
 				images: pixels,
 				textures: [],
 				owned: false,
@@ -3765,9 +3773,8 @@ the next full prepare pass, so this may run between frames.
 				orderedGroups.forEach( ( [id, rows], index ) => {
 					const sample = rows[0]!;
 					const fading = frame.opacity( sample ) < 1;
-					const effect = sample.model.includes( EFFECT_PROGRAMS );
-					const blended = fading || effect ||
-						models.get( sample.model )!.model.primitives.some( p => !!p.geometry.material?.blend );
+					const resource = models.get( sample.model )!, effect = resource.effect;
+					const blended = fading || effect || resource.plan.blended;
 					let depth = -Infinity;
 					if ( blended ) {
 						for ( const row of rows ) depth = Math.max( depth, actorDepth( row ) );
@@ -3870,7 +3877,6 @@ the next full prepare pass, so this may run between frames.
 			portraits = [];
 			retained?.clear();
 			retained = null;
-			retainedScratch.clear();
 			actors = [];
 			requestedAssemblies.clear();
 		}

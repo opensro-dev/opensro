@@ -45,7 +45,7 @@ mastery rank of the caster's main-weapon default attack row, resolved by
 the caller (action/hawkMasteryRank) - the summon row itself never carries
 the MAAT parameter the rank read gates on.
 A lane whose base word is zero returns zero without rolling (both
-formulas test it first).
+formulas test it first). A OneDamageHits defender takes 1.
 ================
 */
 func HawkDamage(defender Stats, physical, magical uint32, rank uint8, roll Roll32767) (uint16, error) {
@@ -66,7 +66,9 @@ func HawkDamage(defender Stats, physical, magical uint32, rank uint8, roll Roll3
 	if sum == 0 {
 		sum = 1
 	}
-	return sum, nil
+	// The server's periodic-damage routine replaces the sum for a special
+	// target as its direct hit does (OneDamageCap).
+	return uint16(OneDamageCap(defender, uint32(sum))), nil
 }
 
 /*
