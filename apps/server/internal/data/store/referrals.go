@@ -456,10 +456,10 @@ WHERE referrer_account = ? AND referrer_silk > 0`, referrer).Scan(&paid); err !=
 WHERE referee_account = ?`, atMs, referrerSilk, rewards.RefereeSilk, referee); err != nil {
 		return false, err
 	}
-	if _, err := creditSilkTx(tx, referrer, referrerSilk, atMs); err != nil {
+	if err := creditGiftSilkTx(tx, referrer, referrerSilk, atMs); err != nil {
 		return false, err
 	}
-	if _, err := creditSilkTx(tx, referee, rewards.RefereeSilk, atMs); err != nil {
+	if err := creditGiftSilkTx(tx, referee, rewards.RefereeSilk, atMs); err != nil {
 		return false, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -470,35 +470,36 @@ WHERE referee_account = ?`, atMs, referrerSilk, rewards.RefereeSilk, referee); e
 
 /*
 ================
-creditSilkTx
+creditGiftSilkTx
 
-Adds amount to the account's silk inside tx, creating the wallet when it
-has none, and records the charge in silk_history. Zero moves nothing and
-writes nothing. A total past the wallet's uint32 is refused whole rather
-than clamped. GrantSilk and the referral rewards share it.
+Adds amount to the account's gift silk inside tx, creating the wallet
+when it has none, and records the charge in silk_history. Referral
+rewards are minted, not bought, so they land as gift silk: the Item Mall
+prices every offer in gift silk too (refpricepolicyofitem currency 4, as
+many rows as purchased silk), but the market never takes or pays it, so
+a levelled alt cannot turn its reward into gold (opensro#3686). Zero
+moves nothing and writes nothing; a total past the wallet's uint32 is
+refused whole rather than clamped.
 ================
 */
-func creditSilkTx(tx *sql.Tx, accountID string, amount uint32, atMs int64) (domain.MallBalance, error) {
+func creditGiftSilkTx(tx *sql.Tx, accountID string, amount uint32, atMs int64) error {
+	if amount == 0 {
+		return nil
+	}
 	var balance domain.MallBalance
 	err := tx.QueryRow("SELECT silk, gift_silk, points FROM mall_accounts WHERE account_id = ?", accountID).
 		Scan(&balance.Silk, &balance.GiftSilk, &balance.Points)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return domain.MallBalance{}, err
+		return err
 	}
-	if amount == 0 {
-		return balance, nil
+	if uint64(balance.GiftSilk)+uint64(amount) > math.MaxUint32 {
+		return fmt.Errorf("gift silk credit: wallet would overflow")
 	}
-	if uint64(balance.Silk)+uint64(amount) > math.MaxUint32 {
-		return domain.MallBalance{}, fmt.Errorf("silk credit: wallet would overflow")
-	}
-	balance.Silk += amount
+	balance.GiftSilk += amount
 	_, err = tx.Exec(`INSERT INTO mall_accounts (account_id, silk, gift_silk, points) VALUES (?, ?, ?, ?)
-ON CONFLICT(account_id) DO UPDATE SET silk = excluded.silk`, accountID, balance.Silk, balance.GiftSilk, balance.Points)
+ON CONFLICT(account_id) DO UPDATE SET gift_silk = excluded.gift_silk`, accountID, balance.Silk, balance.GiftSilk, balance.Points)
 	if err != nil {
-		return domain.MallBalance{}, err
+		return err
 	}
-	if err := insertSilkHistoryTx(tx, accountID, atMs, silkHistoryCharge, domain.MallBalance{Silk: amount}); err != nil {
-		return domain.MallBalance{}, err
-	}
-	return balance, nil
+	return insertSilkHistoryTx(tx, accountID, atMs, silkHistoryCharge, domain.MallBalance{GiftSilk: amount})
 }

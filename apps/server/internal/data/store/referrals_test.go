@@ -45,7 +45,12 @@ func silkOf(t *testing.T, s *Store, account string) uint32 {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return balance.Silk
+	// A reward is gift silk only: purchased silk, which the market takes
+	// and pays, never moves.
+	if balance.Silk != 0 {
+		t.Fatalf("%s holds %d purchased silk; referral rewards are gift silk", account, balance.Silk)
+	}
+	return balance.GiftSilk
 }
 
 /*

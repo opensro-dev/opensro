@@ -15,12 +15,15 @@ that is not hidden.
 | Rule                 | Value    | Constant          |
 | -------------------- | -------- | ----------------- |
 | Qualifying level     | 30       | `QualifyingLevel` |
-| Inviter reward       | 500 Silk | `ReferrerSilk`    |
-| Invited player gift  | 250 Silk | `RefereeSilk`     |
+| Inviter reward       | 500 gift Silk | `ReferrerSilk`    |
+| Invited player gift  | 250 gift Silk | `RefereeSilk`     |
 | Paid invitations cap | 10       | `RewardCap`       |
 
-These are proposals until the owner sets them (#3518). The website reads them from the referral route and writes no
-numbers of its own.
+The owner set these on 2026-11-16 (#3518). The website reads them from the referral route and writes no numbers of its
+own.
+
+Rewards are gift Silk. The Item Mall prices every offer in gift Silk too, but the market (opensro#3686) never takes or
+pays it, so a levelled alt cannot turn its reward into gold.
 
 ## How it works
 
