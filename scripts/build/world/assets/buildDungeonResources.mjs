@@ -10,13 +10,13 @@ files listed in dungeoninfo.txt.
 ===========================================================================
 */
 import { resolveDungeonWater } from "./dungeonWater.mjs";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { refreshPrecompressedSidecars } from "../../generatedManifestSidecars.mjs";
 import { sha256Hex } from "../../shared/hash.mjs";
 import { BinaryReader } from "../../shared/jmxBinaryReader.mjs";
 import { writeJsonIfChanged } from "../../shared/jsonOut.mjs";
-import { exists } from "../io.mjs";
+import { notedExists as exists, notedReadFile as readFile } from "../io.mjs";
 import { parseJmxBmsStaticMesh, parseJmxResourceBsr } from "../objects/formats.mjs";
 import { extractedRoot, normalizeAssetPath, publicRoot, toHex16 } from "../paths.mjs";
 import { readDungeonInfoRows } from "./dungeonInfo.mjs";
@@ -93,7 +93,10 @@ export async function buildDungeonResourceManifest( options = {} ) {
 
 	await mkdir( path.dirname( targetPath ), { recursive: true } );
 	await writeJsonIfChanged( targetPath, manifest );
-	await refreshPrecompressedSidecars( [ targetPath ], { onlyWhenStale: true } );
+	// A cached build (dungeonWorldsAction.mjs) leaves the sidecars to its caller.
+	if ( options.refreshSidecars !== false ) {
+		await refreshPrecompressedSidecars( [ targetPath ], { onlyWhenStale: true } );
+	}
 	return {
 		publicPath: DUNGEON_RESOURCE_PUBLIC_PATH,
 		dungeonCount: manifest.entries.length,

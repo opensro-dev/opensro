@@ -66,8 +66,9 @@ import { convertedImageFolder, publishConvertedImage } from "../shared/converted
 import { writeJsonIfChanged } from "../shared/jsonOut.mjs";
 import { pythonExecutable, runPython } from "../shared/pythonRun.mjs";
 import { buildTextResources, completeRestrictionText } from "../shared/textResources.mjs";
-import { buildDungeonResourceManifest, DUNGEON_RESOURCE_PUBLIC_PATH } from "../world/assets/buildDungeonResources.mjs";
-import { buildDungeonWorlds } from "../world/assets/buildDungeonWorlds.mjs";
+import { DUNGEON_RESOURCE_PUBLIC_PATH } from "../world/assets/buildDungeonResources.mjs";
+import { publishDungeonWorlds } from "../world/assets/dungeonWorldsAction.mjs";
+import { openStore } from "../graph/store.mjs";
 import { copyMissionMinimapTileImages } from "../world/assets/copyMissionMinimapTileImages.mjs";
 import { worldSkyFiles } from "../world/assets/worldSkyFiles.mjs";
 import {
@@ -701,11 +702,14 @@ export const LOOSE_FAMILIES = {
 			return group;
 		},
 		async produce() {
-			await buildDungeonResourceManifest();
-			const providerFile = publicFile( DUNGEON_RESOURCE_PUBLIC_PATH );
-			const provider = JSON.parse( await readFile( providerFile, "utf8" ) );
-			const result = await buildDungeonWorlds( provider );
-			const worlds = [ providerFile, ...result.files ];
+			const store = await openStore();
+			let result;
+			try {
+				result = await publishDungeonWorlds( store );
+			} finally {
+				await store.shutdown();
+			}
+			const worlds = [ result.manifestFile, ...result.files ];
 			await refreshPrecompressedSidecars( worlds, { onlyWhenStale: true, ...WORLD_SIDECAR_LEVELS } );
 			return {
 				files: [ ...worlds.map( toPublic ).flatMap( name => [ name, name + ".gz" ] ), ...result.textures ],

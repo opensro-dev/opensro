@@ -130,3 +130,52 @@ test("a package's price list is admitted only in payment order and matching its 
 		]
 	) assert.throws( () => shopCatalog( encode( { prices } ) ), Error, JSON.stringify( prices ) );
 });
+
+/*
+================
+Devil's Spirit token offers
+
+Port-only (SRO_NASRUN, #3456 step 3b): a shop may price an offer in the
+token (64) and send the buyer's balance; any other unknown payment is
+still refused.
+================
+*/
+test("a token offer and the shop's token balance are admitted, other payments are not", () => {
+	const base = { tab: 0, slot: 0, refObjId: 1, name: "Spirit", maxStack: 1, price: "60", currency: 64 };
+	const encode = ( offer, shop = {} ) =>
+		new TextEncoder().encode(
+			JSON.stringify( { version: 1, npc: 1, name: "shop", offers: [ { ...base, ...offer } ], ...shop } )
+		);
+	const shop = shopCatalog( encode( {}, { nasrunTokens: 130 } ) );
+	assert.equal( shop.offers[0].currency, 64 );
+	assert.equal( shop.nasrunTokens, 130 );
+	assert.throws( () => shopCatalog( encode( { currency: 128 } ) ), /Invalid shop currency/ );
+	for ( const nasrunTokens of [ -1, 1.5, "130" ] ) {
+		assert.throws( () => shopCatalog( encode( {}, { nasrunTokens } ) ), Error, String( nasrunTokens ) );
+	}
+});
+
+/*
+================
+Token offers travel apart from the native stock
+
+The server sends token goods in tokenOffers, which a client built before
+them never reads; this client checks them and joins them to the stock.
+A gold row there, or a token row that is not an object, is refused.
+================
+*/
+test("token offers arrive in tokenOffers and join the stock", () => {
+	const gold = { tab: 0, slot: 0, refObjId: 1, name: "Potion", maxStack: 50, price: "60", currency: 1 };
+	const token = { tab: 0, slot: 1, refObjId: 2, name: "Spirit", maxStack: 1, price: "60", currency: 64 };
+	const encode = ( tokenOffers ) =>
+		new TextEncoder().encode(
+			JSON.stringify( { version: 1, npc: 1, name: "shop", offers: [ gold ], tokenOffers, nasrunTokens: 7 } )
+		);
+	const shop = shopCatalog( encode( [ token ] ) );
+	assert.deepEqual( shop.offers.map( ( o ) => o.currency ), [ 1, 64 ] );
+	assert.equal( shop.tokenOffers, undefined );
+	assert.equal( shop.nasrunTokens, 7 );
+	for ( const bad of [ [ gold ], [ null ], "x" ] ) {
+		assert.throws( () => shopCatalog( encode( bad ) ), /Invalid token offer/, JSON.stringify( bad ) );
+	}
+});
