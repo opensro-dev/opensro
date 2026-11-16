@@ -7,34 +7,24 @@ Native (the default): a viewer gets one 0xB738 per accepted move of a
 player it shows (publishPeerPath), a 0xB2F5 when the server stops the
 walk early (sent by the owner that stops it), and nothing on arrival and
 nothing per tick. The client walks the peer along the 0xB738 path by
-itself. Read from the v1.188 SR_GameServer (sha256 bec2375e...5290):
+itself. This is how the original server behaves (the v1.188 server, read
+for this change and described in words, as #1701 asks):
 
-  - The 0x7021 move request (dispatch table entry 0x21 at 0xCCF218, set
-    in CGObjChar_InitPacketDispatchTable 0x4B0B70) jumps to vtable slot
-    0x5E4, EntityMovement_UpdateAndBroadcastB021 0x4B0EA0: state checks
-    only, no clock, then ONE 0xB021 built (0x4B0FF8) and broadcast once
-    (0x4B119E). v1.188 0xB021 is v1.150 0xB738 (id, movement record,
-    source). Its motion update after the send (vtable +0x55C,
-    0x4A9D00, next state 0xFF) schedules nothing and sends nothing.
-  - The run/walk state (v1.188 0x30BF channel 1, v1.150 0x3122) is
-    broadcast by CGObjChar_BroadcastStateChannel 0x4A8340, whose callers
-    are the run/walk toggle 0x4D2BF0, motion changes, life, body, battle
-    and PvP state: never by the move. The port's toggle sends it too
-    (movement/motionstate.go).
-  - Arrival: CGObjMoverByDest_Update 0x48C4E0 calls StopMove (vtable
-    +0x4B0, 0x4A9430) with broadcast 0 at 0x48C503; StopMove skips its
-    0xB023 (v1.150 0xB2F5) when that argument is 0 (0x4A9456-0x4A945B).
-    An explicit stop passes 1 and sends it (0x4A947B).
-  - The 0x3028 (v1.150 0x30E3) resync is the 5.0 (0xB45B28) timer
-    callback 0x4A8420, scheduled at 0x4A6DFE: a living character that
-    stands more than 10.0 (0xB45B44) from its last sent position or in
-    another region, or walks a direction walk (no destination, +0x154)
-    more than 100.0 (0xB45E10) from it (0x4A8C80), is sent one 0x3028
-    (0x4A8D20). The port does not run this timer: its unit is not read
-    (seconds by inference from its 4.0 and 0.3 siblings), and the drift
-    it repairs needs a standing player moved without a packet, which no
-    port owner is known to do (stops, teleports and spawns publish
-    their own). A shard that sees such drift turns the stream on.
+  - A move request is answered with one movement packet to the viewers
+    per accepted move: state checks only, no clock and no throttle.
+  - No move-state packet goes with a move. The state packet is sent on a
+    run/walk toggle and on motion, life, body, battle and PvP changes,
+    never by the move itself.
+  - Arrival sends nothing: the walk ends without a broadcast. An
+    explicit stop sends the stop packet.
+  - A resync position is sent from a timer of 5 when a living character
+    stands more than 10 from its last sent position or in another
+    region, or is on a direction walk more than 100 from it. The port
+    does not run this timer: its unit is not read (seconds by inference
+    from its siblings), and the drift it repairs needs a standing player
+    moved without a packet, which no port owner is known to do (stops,
+    teleports and spawns publish their own). A shard that sees such
+    drift turns the stream on.
 
 SRO_POSITION_STREAM=on (port-only, not native) restores the stream the
 port inherited from its Node fixture: every tick a live 0x30E3 sample of
