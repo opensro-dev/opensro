@@ -246,12 +246,6 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "Fit labels, captions and speech; open lists upward."
 					},
 					{
-						key: "correctTypos",
-						id: "experimental-correct-typos",
-						label: "Correct English typos",
-						description: 'Fix misspelled original text, such as "hopstile".'
-					},
-					{
 						key: "greyDisabledTabs",
 						id: "experimental-grey-disabled-tabs",
 						label: "Grey disabled tabs",

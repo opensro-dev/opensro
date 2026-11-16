@@ -184,11 +184,6 @@ export interface ExperimentalOptions {
 	// board at any glyph and draws the list below the box). On unless turned off (the owner's choice,
 	// 2026-10-15); off is the original look.
 	readonly fitWindowLabels: boolean;
-	// Port-only, not native: the few retail English strings with a typo read
-	// corrected (text-typos.ts: "<No hopstile Guild>" reads "<No hostile
-	// Guild>"). On unless turned off (the owner's choice, 2026-11-16: retail
-	// presentation defects are not copied); off is the original text.
-	readonly correctTypos: boolean;
 	// Port-only, not native: an item dropped on the other bag page's tab
 	// moves to that page's first free slot (bag-tab-drop.ts). On unless
 	// turned off (the owner's choice, 2026-10-15); off is the original,
@@ -482,7 +477,7 @@ experimentalOptions
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices, confirmGuildBan,
-correctTypos, petClickOpensWindow, smartPetPickup, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion, silentWingFlight, dungeonCharacterPvs and
+petClickOpensWindow, smartPetPickup, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion, silentWingFlight, dungeonCharacterPvs and
 christmasCarols (owner, 2026-11-15: on by default, off by the player's choice), which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
@@ -536,7 +531,6 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		vHidesCompanions: enabled( "vHidesCompanions" ),
 		dungeonCharacterPvs: record.dungeonCharacterPvs !== false,
 		fitWindowLabels: record.fitWindowLabels !== false,
-		correctTypos: record.correctTypos !== false,
 		dropOnBagTab: record.dropOnBagTab !== false,
 		exchangeClickShortcuts: record.exchangeClickShortcuts !== false,
 		noticeLinks: record.noticeLinks !== false,

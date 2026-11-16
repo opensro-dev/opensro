@@ -15218,7 +15218,6 @@
 				"experimental-tab:1": {
 					"added": [
 						"experimental-confirm-guild-ban",
-						"experimental-correct-typos",
 						"experimental-drop-on-bag-tab",
 						"experimental-exchange-click-shortcuts",
 						"experimental-fit-window-labels",
@@ -15231,7 +15230,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "ffda40ada48170d4",
+					"hash": "79b03fde81258636",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",

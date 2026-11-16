@@ -708,7 +708,6 @@ import {
 } from "@/engine/foundation/gameplay/transport-auto-potion";
 import { selectChatTab, composeChat, chatTabPrefix, chatFeedbackText } from "@/engine/foundation/ui/chat-presentation";
 import { textBoardLines, textBoxLines, textLines } from "@/engine/foundation/ui/text-lines";
-import { correctedText } from "@/engine/foundation/ui/text-typos";
 import { bagTabDropSlot } from "@/engine/foundation/ui/bag-tab-drop";
 import { PET_NAME_MAX, petNameError } from "@/engine/foundation/gameplay/pet-name";
 import { createSpeech } from "./hud/speech";
@@ -2175,7 +2174,7 @@ export function createUi( ports: UiPorts ) {
 		// The Contributor login prompt (port-only, contributor-titles.ts).
 		const contributorCopy = CONTRIBUTOR_PROMPT_COPY[key];
 		if ( contributorCopy ) return contributorCopy;
-		return correctedText( key, hud.data()?.strings[key] ?? "", experimental.state().saved.correctTypos );
+		return hud.data()?.strings[key] ?? "";
 	}
 	/*
 	================
