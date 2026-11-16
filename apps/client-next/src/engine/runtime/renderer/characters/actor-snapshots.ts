@@ -280,6 +280,22 @@ export function createActorSnapshots() {
 				copyVector( old.offset, source.effectAnchor.offset );
 			} else target.effectAnchor = { ...source.effectAnchor, offset: [ ...source.effectAnchor.offset ] };
 		} else target.effectAnchor = undefined;
+		// A spine aim (spine-aims.ts) arms, turns and releases long after the
+		// row's first publication; poseFor reads only this copy.
+		if ( source.boneRotation ) {
+			const value = source.boneRotation.rotation,
+				old = target.boneRotation as Mutable<NonNullable<CharacterActor["boneRotation"]>> | undefined;
+			if ( old ) {
+				const rotation = old.rotation as [number, number, number, number];
+				old.bone = source.boneRotation.bone;
+				for ( let i = 0; i < 4; i++ ) rotation[i] = value[i]!;
+			} else {
+				target.boneRotation = {
+					bone: source.boneRotation.bone,
+					rotation: [ value[0], value[1], value[2], value[3] ]
+				};
+			}
+		} else target.boneRotation = undefined;
 	}
 	/*
 	================
@@ -380,7 +396,8 @@ export function createActorSnapshots() {
 						pointLight: undefined,
 						bloodEffects: undefined,
 						materialTint: undefined,
-						effectAnchor: undefined
+						effectAnchor: undefined,
+						boneRotation: undefined
 					};
 					// A first clock that is already invalid holds at rest:
 					// copy keeps the row's value, so it must start valid.
