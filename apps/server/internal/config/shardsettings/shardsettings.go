@@ -172,6 +172,12 @@ var Settings = []Setting{
 	// (#3270). Build and server read the same switch; off leaves
 	// every imported row out of the build and the population unread.
 	{Env: "SRO_HUNTING2", NomadVar: "hunting2", Default: "off", Catalogue: true},
+	// Port-only, not native: the Styria Clash arena map (#3272): its four
+	// regions' terrain and navmesh from the v1.696 client. Build only for
+	// now: no server code reads it until the Battle Arena engine (#3648)
+	// lands behind the same switch. Not a catalogue setting: the map
+	// adds no monsters or worlds. "off" is native.
+	{Env: "SRO_STYRIA_CLASH", NomadVar: "styria_clash", Default: "off"},
 	// Port-only, not native: the Constantinople fortress area from the
 	// v1.696 client (enterworld/fortressdata.go, #3275). Build and
 	// server read the same switch; off leaves every imported row out of
@@ -519,6 +525,12 @@ var Settings = []Setting{
 	// before the Legend IV server tables); opened in the shard defaults
 	// 2026-10-21 (GH #1013). "off" is native.
 	{Env: "SRO_QINSHI_TOMB", NomadVar: "qinshi_tomb", Default: "on", Catalogue: true},
+	// Port-only, not native: the Jangan town gate also offers the Qin-Shi
+	// Emperor Tomb floors 1-4 (40000 gold, level 70+, the Alexandria
+	// rows' terms; floor 4 by corner), shown by the client as one
+	// "Ch'in Tomb" row opening the floor list. Needs SRO_QINSHI_TOMB.
+	// "off" is native.
+	{Env: "SRO_JANGAN_TOMB_TELEPORT", NomadVar: "jangan_tomb_teleport", Default: "off"},
 	// The Alexandria city of a build_alexandria_variant.py game root: its
 	// regions, gates and NPCs (port-only, not native; internal/game/world/
 	// alexandria). "off" is native and hides them from a variant's data;

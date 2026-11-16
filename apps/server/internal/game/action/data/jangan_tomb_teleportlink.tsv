@@ -1,0 +1,13 @@
+// Port-only, not native: the Jangan town gate (GATE_CH, teleport 1) to the Qin-Shi Emperor Tomb floors 1-4.
+// Each target is the native arrival row a walker reaches the floor through: 50 (cave door 49->50),
+// 53 (floor 1->2 passage 51->53), 120 (floor 2->3 passage 111->120), and the four floor 3->4 passages
+// in menu order northwest 129, northeast 126, southwest 128, southeast 127 (+x east, +z north, as the
+// floor 2 gates' clock suffixes _03/_12 show).
+// Fee and conditions follow the Alexandria rows of the same gate: 40000 gold, level 70-999, no transport.
+1	1	50	40000	1	0	1	70	999	2	0	0	0	0	0	0	0	0	0	0	0
+1	1	53	40000	1	0	1	70	999	2	0	0	0	0	0	0	0	0	0	0	0
+1	1	120	40000	1	0	1	70	999	2	0	0	0	0	0	0	0	0	0	0	0
+1	1	129	40000	1	0	1	70	999	2	0	0	0	0	0	0	0	0	0	0	0
+1	1	126	40000	1	0	1	70	999	2	0	0	0	0	0	0	0	0	0	0	0
+1	1	128	40000	1	0	1	70	999	2	0	0	0	0	0	0	0	0	0	0	0
+1	1	127	40000	1	0	1	70	999	2	0	0	0	0	0	0	0	0	0	0	0
