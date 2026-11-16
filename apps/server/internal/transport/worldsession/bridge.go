@@ -24,6 +24,11 @@ the entity gid as coalesce key. Mixed action batches use one reliable
 enqueue, preserving movement preludes and result/HP/life order.
 Neither path blocks on network I/O, which is the Pusher contract.
 
+The bridge is also the tick's write window (simulation.TickWindow): a
+session the tick pushes to is held until the tick's last push, so its
+writer carries the tick's output in one transport write
+(transport/session_write.go) with the same frames in the same order.
+
 ===========================================================================
 */
 package worldsession
@@ -33,6 +38,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"opensro.online/server/internal/game/world/instance"
@@ -114,6 +120,15 @@ type Bridge struct {
 	tickViews []simulation.SessionView
 	snapshots []simulation.SessionSnapshot
 	snapIDs   map[sceneIDKey]string
+	// The tick's write window (simulation.TickWindow): while it is open,
+	// the first push to a session holds its writer, and EndTick releases
+	// every session in held, so each one's tick output leaves in one
+	// transport write. windowOpen is read lock-free on every push; the
+	// hold itself is taken under windowMu, so no session is held after
+	// EndTick took the list.
+	windowOpen atomic.Bool
+	windowMu   sync.Mutex
+	held       []*transport.Session
 }
 
 // sceneIDKey identifies one scene admission: the transport session and
@@ -501,7 +516,64 @@ func (b *Bridge) PushToDivision(divisionID string, frames []simulation.Frame, ex
 	}
 }
 
+/*
+==================
+BeginTick
+
+Opens the tick's write window (simulation.TickWindow). Only the ticker's
+bridge sees it; the bridges the handler lanes build (New) never open
+one, so their pushes are written as soon as the writer gets to them.
+==================
+*/
+func (b *Bridge) BeginTick() {
+	b.windowMu.Lock()
+	b.windowOpen.Store(true)
+	b.windowMu.Unlock()
+}
+
+/*
+==================
+EndTick
+
+Closes the window and releases every session the tick held, so each
+writes its tick output in one transport write. Releasing is a lock and a
+wake-up per session, never I/O: a slow session's write runs on its own
+writer and delays nobody else's.
+==================
+*/
+func (b *Bridge) EndTick() {
+	b.windowMu.Lock()
+	defer b.windowMu.Unlock()
+	b.windowOpen.Store(false)
+	for i, s := range b.held {
+		s.ReleaseTickWrites()
+		b.held[i] = nil
+	}
+	b.held = b.held[:0]
+}
+
+/*
+==================
+holdForTick
+
+Holds s's writer for the rest of the open window, before the push that
+asks enqueues anything: the frames already queued stay writable, the
+push and everything behind it wait for EndTick.
+==================
+*/
+func (b *Bridge) holdForTick(s *transport.Session) {
+	if !b.windowOpen.Load() || s.TickWritesHeld() {
+		return
+	}
+	b.windowMu.Lock()
+	if b.windowOpen.Load() && s.HoldTickWrites() {
+		b.held = append(b.held, s)
+	}
+	b.windowMu.Unlock()
+}
+
 func (b *Bridge) deliver(s *transport.Session, frames []simulation.Frame, revision uint64) {
+	b.holdForTick(s)
 	var changes []transport.ObjectScopeChange
 	ordered := false
 	for _, f := range frames {

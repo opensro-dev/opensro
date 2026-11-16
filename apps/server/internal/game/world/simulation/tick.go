@@ -611,8 +611,7 @@ func (t *Ticker) RunTick(nowMs int64) {
 	// Deferred after observePhases so it closes first: every zone of
 	// the tick, the commit flush included, ends inside phase:total.
 	defer t.zone(ZoneKindPhase, "total").End()
-	t.beginCommit()
-	defer t.flushCommit()
+	defer t.beginTickOutput()()
 
 	prepare := t.zone(ZoneKindPhase, "prepare")
 	tick, work := t.prepareTick()
@@ -649,8 +648,7 @@ func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []ch
 	// Deferred after observePhases so it closes first: every zone of
 	// the tick, the commit flush included, ends inside phase:total.
 	defer t.zone(ZoneKindPhase, "total").End()
-	t.beginCommit()
-	defer t.flushCommit()
+	defer t.beginTickOutput()()
 
 	prepare := t.zone(ZoneKindPhase, "prepare")
 	tick, work := t.prepareTick()
