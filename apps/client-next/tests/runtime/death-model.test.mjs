@@ -18,6 +18,7 @@ import { pathToFileURL } from "node:url";
 const { createPresentationState } = await import(
 	pathToFileURL( "src/engine/runtime/characters/presentation-state.ts" ).href
 );
+const { clipFacts } = await import( pathToFileURL( "src/engine/runtime/characters/presentation-catalog.ts" ).href );
 
 const MASK_CAST = 1 << 2, MASK_BASE = 1 << 3, MASK_SEATED = 1 << 6, MASK_MOVE = 1 << 9;
 
@@ -31,11 +32,13 @@ death model, stepped through presentation-state like characters.ts does.
 */
 function harness( { deathLoop = false, deathModel = true, uncensored = false } = {} ) {
 	const state = createPresentationState();
+	const clips = [ "stand", "death", ...(deathLoop ? [ "deathLoop" ] : []) ];
 	const body = {
 		codename: "MOB_TEST",
 		refObjId: 1,
 		glb: "/assets/npc/test.glb",
-		clips: [ "stand", "death", ...(deathLoop ? [ "deathLoop" ] : []) ]
+		clips,
+		clipFacts: clipFacts( clips )
 	};
 	const published = {
 		catalog: new Map( [ [ 1, body ] ] ),

@@ -1,0 +1,289 @@
+/*
+===========================================================================
+
+actor-advance.ts - an actor's clocks, sounds and published actor
+
+The part of the per-actor pass that runs on what actor-motion.ts decided
+(MotionDecision): the dispatch advances each layer's installation by the
+frame's animation delta and writes the shared time back, the sound lanes
+advance over the dispatched ranges, the modifier layers and the model
+animation follow, and the actor is written into frame.next with its foot
+contacts and emission holders. Its statements are present's after
+decide's, in present's order.
+
+===========================================================================
+*/
+import { createModelAnimation } from "@/engine/foundation/animation/model-animation";
+import { type AnimationDispatch, createAnimationDispatch } from "@/engine/foundation/animation/animation-dispatch";
+import type { AnimationActivation } from "@/engine/foundation/animation/animation-activation";
+import { blindableCharacter, blindableCompanion } from "@/engine/foundation/ui/name-visibility";
+import { cosScale, monsterScale } from "@/engine/foundation/rendering/monster-scale";
+import { characterHeadingYaw } from "@/engine/foundation/math/angles";
+import type { EntityState } from "@/engine/contracts/world";
+import type {
+	ActorAppearance,
+	ActorFrame,
+	ActorOwner,
+	ActorPass,
+	MotionDecision
+} from "./internal/presentation-contract";
+import { worldAudioPosition } from "@/engine/foundation/world/world-space";
+import { flightSoundDefinition } from "@/engine/foundation/animation/wing-flight";
+
+const PROTECTED_ANIMATION_DISTANCE = 300;
+
+/*
+================
+createActorAdvance
+================
+*/
+export function createActorAdvance( owner: ActorOwner ) {
+	return {
+		/*
+		================
+		advance
+
+		Advances the decided layers' clocks and sounds and publishes the
+		actor into frame.next.
+		================
+		*/
+		advance(
+			entity: EntityState,
+			resolved: ActorAppearance,
+			decision: MotionDecision,
+			frame: ActorFrame,
+			pass: ActorPass
+		) {
+			const {
+				committedAuxiliary,
+				displayedDependencies,
+				effects,
+				entityLod,
+				footContact,
+				published,
+				renderer,
+				resources,
+				soundSurface,
+				sounds
+			} = owner;
+			const {
+				animationDeltaMs,
+				gameplay,
+				localMover,
+				next,
+				probe,
+				sampleActorDetails,
+				seconds,
+				soundContext
+			} = frame;
+			const { animationHolders, particleHolders } = pass;
+			const {
+				resource,
+				model,
+				dependencies,
+				auxiliaryCommit,
+				particleCommit,
+				defaultWearCommit
+			} = resolved;
+			const {
+				state,
+				nativePose,
+				renderPose,
+				layers,
+				activationKeys,
+				installations,
+				cast,
+				dead,
+				authorityDead,
+				seat,
+				clip,
+				looping,
+				posture,
+				armedIdle,
+				actionMask
+			} = decision;
+			if ( sampleActorDetails ) probe?.detailBegin( "actor-sounds" );
+			const metadata = resource.animationStates ?? published.animationStates.get( resource.codename );
+			// Retain the native idle metadata through its outgoing blend.
+			const motionMetadata = ( name: string ) =>
+				state.stallMotion?.motion?.clip === name ?
+					state.stallMotion.motion.definition :
+					state.combatIdle?.motion?.clip === name ?
+					state.combatIdle.motion.definition :
+					metadata?.[name] ?? published.animationStates.get( resource.codename )?.[name];
+			// Resolve equipment, surface and world position only when a cue
+			// is due. Cursor advancement remains independent of visibility.
+			const soundSource = () => {
+				const context = soundContext( entity, cast?.skill, state.hitCritical );
+				return {
+					profile: resource.soundProfileName ?? published.soundProfiles.get( resource.codename ) ??
+						resource.codename,
+					position: worldAudioPosition( nativePose ),
+					surface: context.player ? soundSurface( nativePose ) : undefined,
+					context
+				};
+			};
+			// ADD670 retains both outgoing and incoming installations. Clip
+			// names and weights cannot identify cursors across a reinstallation.
+			const retainedActivations = new Set<AnimationActivation>();
+			const silentWingFlight = renderer.silentWingFlight?.() === true;
+			const dispatch = (state.dispatch ??= createAnimationDispatch()).step(
+				layers,
+				animationDeltaMs,
+				name =>
+					motionMetadata( name )?.durationMs ??
+						Math.round( resources.duration( resource.glb, name ) * 1000 )
+			);
+			// Most actors have one installation. Keep that row directly; blends
+			// share one index for both pose and sound instead of copying two maps.
+			// Dispatch omits zero-duration rows, so even the single row must match
+			// by installation identity rather than by its position in the list.
+			const single = dispatch.length === 1 ? dispatch[0] : undefined;
+			const sampled = dispatch.length > 1 ? new Map<AnimationActivation, AnimationDispatch>() : undefined;
+			if ( sampled ) {
+				for ( const row of dispatch ) sampled.set( row.activation, row );
+			}
+			for ( let i = 0; i < layers.length; i++ ) {
+				const layer = layers[i]!;
+				const row = single?.activation === layer.activation ? single : sampled?.get( layer.activation! );
+				layers[i] = row?.layer ?? layer;
+			}
+			for ( const layer of layers ) {
+				if ( !layer.activation ) throw Error( "Missing animation installation" );
+				retainedActivations.add( layer.activation );
+				const row = single?.activation === layer.activation ? single : sampled?.get( layer.activation );
+				sounds.advance(
+					entity.gid,
+					layer.clip,
+					layer.activation.started,
+					(row?.elapsedMs ?? 0) / 1000,
+					layer.loop,
+					flightSoundDefinition( layer.clip, motionMetadata( layer.clip ), silentWingFlight ),
+					seconds,
+					soundSource,
+					layer.activation
+				);
+			}
+			sounds.retainActivations( entity.gid, retainedActivations );
+			for ( const key of installations.keys() ) {
+				if ( !activationKeys.has( key ) ) installations.delete( key );
+			}
+			if ( sampleActorDetails ) {
+				probe?.detailEnd( "actor-sounds" );
+				probe?.detailBegin( "actor-record" );
+			}
+			displayedDependencies.set( entity.gid, dependencies );
+			if ( auxiliaryCommit !== undefined ) committedAuxiliary.set( entity.gid, auxiliaryCommit );
+			const appearance = effects.appearance( entity.gid ),
+				baseScale = entity.kind === "monster" ?
+					monsterScale( entity.rarity ?? 0, entity.tidWord ?? 0, resource.scalePercent ) :
+					entity.kind === "cos" ?
+					cosScale( resource.scalePercent ) :
+					1;
+			state.modifierResource = resource;
+			state.modifierLayers = layers;
+			state.lastDrawnPose = { ...renderPose };
+			next.set( entity.gid, {
+				shadowSize: !entity.groundItem ? published.shadowSizes.get( entity.refObjId ) : undefined,
+				modelAnimation: resource.modifierBindings?.length ?
+					(state.modelAnimation ??= createModelAnimation()).step(
+						dispatch,
+						resource.modifierBindings,
+						resource.modifierSelectors ?? []
+					) :
+					undefined,
+				animationLod: {
+					fraction: entityLod.fraction( entity.gid ),
+					crowded: entityLod.crowded(),
+					// Dispatch and gameplay run above even when a distant skeleton
+					// reuses its last sample. Protect combat and the whole ride.
+					optional: !localMover( entity.gid ) && !entity.mountedOn && !cast && !dead &&
+						entity.gid !== gameplay?.target && entity.gid !== gameplay?.targetPending &&
+						entityLod.distance( entity.gid ) > PROTECTED_ANIMATION_DISTANCE &&
+						!gameplay?.casts.some( cast => cast.target === entity.gid )
+				},
+				blindable: blindableCharacter( entity, gameplay?.localGid ),
+				blindableCompanion: blindableCompanion( entity, gameplay?.localGid ),
+				groundItem: !!entity.groundItem,
+				dungeonBlock: entity.dungeonBlock,
+				previewClip: resource.clipFacts.names.has( armedIdle ) ? armedIdle : "stand",
+				materialTint: appearance.materialTint,
+				pointLight: appearance.pointLight,
+				...(appearance.boneRotation ? { boneRotation: appearance.boneRotation } : {}),
+				modifierId: state.modifierId,
+				bloodEffects: published.bloodEffects.get( resource.codename ),
+				effectBaseScale: baseScale,
+				heightFactor: published.heightFactors.get( resource.codename ),
+				effectAnchor: published.effectAnchors.get( resource.codename ),
+				pickable: !authorityDead || entity.gid === gameplay?.localGid,
+				// 692680: a filtered pick (SHIFT, or a dead local player) takes a
+				// dead player; dead monsters and companions stay out of it.
+				pickWhenFiltered: authorityDead && entity.kind === "player",
+				height: published.heights.has( resource.codename ) ?
+					published.heights.get( resource.codename )! *
+					(state.actionHeight ?
+						state.actionHeight.from +
+						(state.actionHeight.to - state.actionHeight.from) *
+							Math.min( 1, Math.max( 0, seconds - state.actionHeight.at ) ) :
+						1) :
+					undefined,
+				mountedOn: seat,
+				gid: entity.gid,
+				model,
+				pose: {
+					regionId: renderPose.regionId,
+					x: renderPose.x,
+					y: renderPose.y,
+					z: renderPose.z,
+					yaw: characterHeadingYaw( renderPose.angle )
+				},
+				clip,
+				// A single WAIT/SHOT layer can differ from the base clip. Only
+				// collapse a full-weight timed layer that the base fields reproduce.
+				// decide installs the locomotion blend before it returns.
+				layers: posture || layers.length !== 1 || layers[0]!.clip !== clip ||
+						layers[0]!.loop !== looping || layers[0]!.weight !== 1 || layers[0]!.lane === "event" ||
+						state.locomotion!.outgoing.length ?
+					layers :
+					undefined,
+				time: layers.length === 1 && layers[0]!.clip === clip ?
+					layers[0]!.time :
+					Math.max( 0, seconds - state.started ),
+				loop: looping,
+				scale: Math.fround(
+					baseScale * appearance.scale *
+						(1 +
+							((entity.petResolve?.untilMs ?? 0) > seconds * 1000 ? entity.petResolve!.stacks * .012 : 0))
+				)
+			} );
+			if ( sampleActorDetails ) probe?.detailEnd( "actor-record" );
+			if ( actionMask & 0x200 ) {
+				const actor = next.get( entity.gid )!;
+				for ( const row of dispatch ) {
+					for ( const [from, to] of row.ranges ) {
+						for ( const event of motionMetadata( row.layer.clip )?.trackEvents ?? [] ) {
+							if ( event.eventCode === 2 && event.cursorMs > from && event.cursorMs <= to ) {
+								footContact(
+									entity,
+									[ ...next.values() ],
+									actor,
+									nativePose,
+									event.param0 !== 0,
+									seconds
+								);
+							}
+						}
+					}
+				}
+			}
+			if ( resource.animationParticles?.length ) {
+				animationHolders.push( { actor: next.get( entity.gid )!, sets: resource.animationParticles } );
+			}
+			if ( defaultWearCommit !== undefined ) state.defaultWear = { resource, keys: defaultWearCommit };
+			if ( particleCommit !== undefined ) state.equipmentParticles = particleCommit;
+			if ( state.equipmentParticles?.length ) {
+				particleHolders.push( { actor: next.get( entity.gid )!, particles: state.equipmentParticles } );
+			}
+		}
+	};
+}
