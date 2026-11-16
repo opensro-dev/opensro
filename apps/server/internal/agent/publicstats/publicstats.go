@@ -137,6 +137,16 @@ type Sources struct {
 	// same way.
 	SetBreakNotice func(accountID, name string, on bool) error
 	WriteToken     string
+	// ContributorTitleOf reads the Contributor title an account sees
+	// (contributor.Registry.TitleOf, port-only, #135): whether this
+	// account carries it, whether it hides it, and ok false for an
+	// account that is no contributor. Nil leaves the read unserved.
+	ContributorTitleOf func(accountID string) (carries bool, hidden bool, ok bool)
+	// TakeContributorTitle moves the account's member's title onto the
+	// account itself, else returns ErrNotOwned for an account that is no
+	// contributor; a save the store refuses returns its own error. Nil
+	// leaves the write unserved.
+	TakeContributorTitle func(accountID string) error
 	// Sample reads the shard's online count and the hub's cumulative
 	// counters for P7 (status.go); nil leaves the status figures zero.
 	Sample func() (online int, metrics transport.Metrics)

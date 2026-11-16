@@ -173,6 +173,16 @@ type OwnCharactersResponse struct {
 	Characters []OwnCharacter `json:"characters"`
 }
 
+// ContributorTitleResponse is the website's authenticated
+// GET /v1/accounts/{id}/contributor-title (privacy.go): whether the
+// signed-in account carries its Contributor title and whether it hides
+// it. The member's other accounts are never listed. Port-only, not
+// native (#135).
+type ContributorTitleResponse struct {
+	Carries bool `json:"carries"`
+	Hidden  bool `json:"hidden"`
+}
+
 // OwnTradeItem is one item stack a trade moved: its reference and count.
 type OwnTradeItem struct {
 	RefObjID uint32 `json:"refObjId"`
@@ -336,9 +346,19 @@ type StatusResponse struct {
 	UniquePlayers7d *int `json:"uniquePlayers7d"`
 }
 
-// ScheduleEvent is one event the server runs. Kind is "fortress" (the
-// war), "fortress-registration" or "maintenance"; EndsAt is null for an
-// open-ended maintenance.
+// The schedule's event kinds (sro-gameworld's public_schedule.go publishes
+// them; opensro-web labels each one).
+const (
+	ScheduleKindMaintenance = "maintenance"
+	ScheduleKindFlagWar     = "capture-the-flag"
+	// ScheduleKindFlagWarSignup is the ten-minute sign-up before a match.
+	ScheduleKindFlagWarSignup = "capture-the-flag-registration"
+	ScheduleKindHalloween     = "halloween"
+)
+
+// ScheduleEvent is one event the server runs. Kind is one of the
+// ScheduleKind constants, or "fortress" (the war) or
+// "fortress-registration"; EndsAt is null for an open-ended maintenance.
 type ScheduleEvent struct {
 	Kind     string  `json:"kind"`
 	Title    string  `json:"title"`

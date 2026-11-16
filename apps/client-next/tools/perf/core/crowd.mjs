@@ -6,6 +6,8 @@ crowd.mjs - authenticated development peers for live crowd acceptance
 Peers use the production codec and real GameWorld sockets. Only accounts
 created by this invocation are changed; cleanup closes sockets and disables
 those accounts. No credentials or admission tickets enter result artifacts.
+A crowd held from saved sessions (crowd-accounts.mjs) reuses connectPeer,
+the login gate and the layout from here.
 
 ===========================================================================
 */
@@ -22,15 +24,40 @@ import {
 } from "../../../../../scripts/lib/probeSession.mjs";
 import { resetMissionMovementFixture } from "../../../../../scripts/lib/missionMovementFixture.mjs";
 import { assertCharacterAllowed } from "../../../../../scripts/lib/probeCharacter.mjs";
-import { parseActivity, startActivity } from "./crowd-activity.mjs";
+import { parseActivity, startActivity, WALK_RADIUS } from "./crowd-activity.mjs";
 
+// A crowd admitted here logs every peer in on every run, and the Agent
+// paces logins per client address (login_limiter.go: burst 10, then one per
+// 6 s), so a fresh crowd of 32 already waits (32 - 10) x 6 s. The cap keeps
+// fresh crowds inside the retry budget below. It is no server limit: a crowd
+// held from saved sessions (crowd-accounts.mjs) pays the logins once per
+// session lifetime and is bounded only by its accounts file and the layout.
 const MAX_PEERS = 32;
 // The --seed a living crowd uses when none is named.
 export const DEFAULT_ACTIVITY_SEED = 1;
 const ADMISSION_TIMEOUT_MS = 30000;
 // A full 32-peer refill is (32 - 10) x 6 s; retries beyond that are a fault.
 const MAX_LOGIN_RETRIES = 40;
-const DEFAULT_RETRY_AFTER_S = 6;
+export const DEFAULT_RETRY_AFTER_S = 6;
+// The layout (crowdLayout): peers stand PITCH apart in rows across the
+// fixture's x, the first row LEAD units ahead of the observer along z, at
+// least MIN_COLUMNS wide.
+const CROWD_PITCH = 15, CROWD_LEAD = 35, CROWD_MIN_COLUMNS = 4;
+// The native interest area (server world/interest.go): an object is visible
+// when its 320-unit message block is in the 3x3 blocks around the viewer's.
+// A point nearer than one block edge to the observer on both axes is in that
+// neighbourhood wherever the observer stands inside its own block.
+const INTEREST_BLOCK_SIZE = 320;
+// Rows that fit in front of the observer with a walker's reach beyond the
+// last one: LEAD + (rows - 1) x PITCH + WALK_RADIUS < INTEREST_BLOCK_SIZE.
+const CROWD_MAX_ROWS = Math.ceil( (INTEREST_BLOCK_SIZE - CROWD_LEAD - WALK_RADIUS) / CROWD_PITCH );
+// Columns that fit either side of the observer the same way:
+// (columns - 1) / 2 x PITCH + WALK_RADIUS < INTEREST_BLOCK_SIZE.
+const CROWD_MAX_COLUMNS = Math.ceil( 2 * (INTEREST_BLOCK_SIZE - WALK_RADIUS) / CROWD_PITCH );
+// An outdoor region's local x and z, as the fixture reset accepts them
+// (benchmark_fixture.go validBenchmarkFixtureReset); dungeon regions carry
+// their own wide frame and are not bounded here.
+const REGION_SIZE = 1920, DUNGEON_REGION_BIT = 0x8000;
 // The client's acknowledgement cadence and its large-frame bound
 // (network.ts STREAM_ACK_INTERVAL_MS, STREAM_ACK_LARGE_FRAME_BYTES).
 const STREAM_ACK_INTERVAL_MS = 1000, STREAM_ACK_LARGE_FRAME_BYTES = 1 << 20;
@@ -76,7 +103,7 @@ export function createStreamAck( send, now = () => performance.now() ) {
 connectPeer
 ================
 */
-async function connectPeer( session, character ) {
+export async function connectPeer( session, character ) {
 	const codec = createCodec();
 	const admission = await mintProbeTransportAdmissionToken( session );
 	const enter = await mintProbeEnterWorldToken( session, character );
@@ -166,9 +193,11 @@ The Agent refuses password logins past its per-address budget (burst 10,
 one token per 6 s) with 429 and Retry-After. Logins run one at a time and
 wait exactly as long as the server asks, so crowd setup spends the real
 budget instead of a fixed sleep per peer, and never bypasses the limit.
+maxRetries bounds the 429s one login may wait through; a pass that must
+wait out the budget however long it takes passes Infinity.
 ================
 */
-function createLoginGate() {
+export function createLoginGate( maxRetries = MAX_LOGIN_RETRIES ) {
 	let tail = Promise.resolve();
 	return ( loginId, loginPassword ) => {
 		const attempt = async () => {
@@ -176,7 +205,7 @@ function createLoginGate() {
 				try {
 					return await openProbeAgentSession( { loginId, loginPassword } );
 				} catch ( error ) {
-					if ( error?.status !== 429 || tries >= MAX_LOGIN_RETRIES ) throw error;
+					if ( error?.status !== 429 || tries >= maxRetries ) throw error;
 					await delay( 1000 * (error.retryAfter || DEFAULT_RETRY_AFTER_S) );
 				}
 			}
@@ -187,20 +216,81 @@ function createLoginGate() {
 	};
 }
 
+const LOOPBACK_HOSTS = [ "127.0.0.1", "localhost", "[::1]" ];
+
 /*
 ================
-crowdGridSpot
+openProvisioning
 
-Where peer index stands: a four-wide grid, 15 units apart, starting 35
-units past the fixture's start along z.
+The Agent's private account API (provisioning.go), loopback only, with the
+local authority token. Returns request( path, method, body ), which answers
+the parsed JSON body (null for none) and throws an error carrying the HTTP
+status and the API's error code.
 ================
 */
-export function crowdGridSpot( fixture, index ) {
-	return {
-		...fixture.start,
-		x: fixture.start.x + index % 4 * 15,
-		z: fixture.start.z + 35 + Math.floor( index / 4 ) * 15
+export async function openProvisioning( provisioningUrl, tokenPath ) {
+	const url = new URL( provisioningUrl );
+	assert.ok( url.protocol === "http:" && LOOPBACK_HOSTS.includes( url.hostname ), "Provisioning must be loopback" );
+	const token = (await readFile( tokenPath, "utf8" )).trim();
+	return async ( path, method, body ) => {
+		const response = await fetch( new URL( path, url ), {
+			method,
+			headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+			body: body === undefined ? undefined : JSON.stringify( body ),
+			signal: AbortSignal.timeout( ADMISSION_TIMEOUT_MS )
+		} );
+		const answer = await response.json().catch( () => null );
+		if ( !response.ok ) {
+			throw Object.assign( Error( `Crowd provisioning ${method} failed: HTTP ${response.status}` ), {
+				status: response.status,
+				code: answer?.code
+			} );
+		}
+		return answer;
 	};
+}
+
+/*
+================
+crowdLayout
+
+Where each of count peers stands: rows of columns PITCH apart, centred on
+the observer (the fixture's start) across x, the first row LEAD ahead
+along z. A crowd grows deeper up to CROWD_MAX_ROWS, then wider, so every
+spot and every walker's reach stays within one interest block edge of the
+observer: the server sends the observer every peer (18 x 40, 720 peers,
+is the most that fits). The layout depends on count alone, so a held
+crowd of N stands exactly where an admitted crowd of N would. Throws when
+the crowd cannot fit, or an outdoor spot would leave the fixture's region.
+================
+*/
+export function crowdLayout( fixture, count ) {
+	const start = fixture.start;
+	const columns = Math.max( CROWD_MIN_COLUMNS, Math.ceil( count / CROWD_MAX_ROWS ) );
+	if ( columns > CROWD_MAX_COLUMNS ) {
+		throw Error(
+			`a crowd of ${count} does not fit the observer's interest area (at most ${
+				CROWD_MAX_ROWS * CROWD_MAX_COLUMNS
+			})`
+		);
+	}
+	const half = (columns - 1) / 2 * CROWD_PITCH + WALK_RADIUS;
+	const spots = Array.from( { length: count }, ( _, index ) => ({
+		...start,
+		x: start.x + (index % columns - (columns - 1) / 2) * CROWD_PITCH,
+		z: start.z + CROWD_LEAD + Math.floor( index / columns ) * CROWD_PITCH
+	}) );
+	if ( !(start.regionId & DUNGEON_REGION_BIT) ) {
+		const far = start.z + CROWD_LEAD + Math.floor( (count - 1) / columns ) * CROWD_PITCH + WALK_RADIUS;
+		const near = start.z + CROWD_LEAD - WALK_RADIUS;
+		if ( start.x - half < 0 || start.x + half >= REGION_SIZE || near < 0 || far >= REGION_SIZE ) {
+			throw Error(
+				`a crowd of ${count} at ${fixture.id} leaves region ${start.regionId}: ` +
+					`x ${start.x - half}..${start.x + half}, z ${near}..${far}`
+			);
+		}
+	}
+	return spots;
 }
 
 /*
@@ -218,30 +308,19 @@ evidence, and close() stops it before the sockets close.
 export async function createCrowd(
 	{ count, fixture, provisioningUrl, tokenPath, journalPath, loadoutFor, act = "", seed = DEFAULT_ACTIVITY_SEED }
 ) {
-	assert.ok( Number.isInteger( count ) && count > 0 && count <= MAX_PEERS );
-	const url = new URL( provisioningUrl );
-	assert.ok( url.protocol === "http:" && [ "127.0.0.1", "localhost", "[::1]" ].includes( url.hostname ) );
-	const token = (await readFile( tokenPath, "utf8" )).trim();
+	assert.ok(
+		Number.isInteger( count ) && count > 0 && count <= MAX_PEERS,
+		`a fresh crowd has 1 to ${MAX_PEERS} peers; hold a larger one from an accounts file (crowd-provision.mjs)`
+	);
+	const provision = await openProvisioning( provisioningUrl, tokenPath );
 	const accounts = [], peers = [], characters = [], byIndex = new Map();
 	const prefix = randomBytes( 3 ).toString( "hex" );
 	const login = createLoginGate();
-	// Parsed before any account exists: a bad --act must not cost logins.
+	// Parsed before any account exists: a bad --act or a crowd that does not
+	// fit must not cost logins.
 	const activity = parseActivity( act );
+	const spots = crowdLayout( fixture, count );
 	let running = null;
-	/*
-	================
-	provision
-	================
-	*/
-	async function provision( path, method, body ) {
-		const response = await fetch( new URL( path, url ), {
-			method,
-			headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-			body: JSON.stringify( body ),
-			signal: AbortSignal.timeout( ADMISSION_TIMEOUT_MS )
-		} );
-		assert.ok( response.ok, `Crowd provisioning ${method} failed: HTTP ${response.status}` );
-	}
 	/*
 	================
 	close
@@ -331,7 +410,7 @@ export async function createCrowd(
 				...fixture,
 				// A load scenario gives each peer its own learned skills.
 				...(loadoutFor ? { loadout: loadoutFor( index ) } : {}),
-				start: crowdGridSpot( fixture, index )
+				start: spots[index]
 			}
 		} );
 		const peer = await connectPeer( session, character );
@@ -357,7 +436,7 @@ export async function createCrowd(
 			count,
 			activity,
 			seed,
-			spotFor: index => crowdGridSpot( fixture, index )
+			spotFor: index => spots[index]
 		} );
 		crowd.activity = running.evidence;
 		return crowd;
@@ -409,14 +488,15 @@ Uses a crowd the host already holds instead of admitting a new one. Returns
 null when no host answers or it holds another crowd. peers is refreshed
 from the host while attached, so a peer that drops during a window shows
 closed by the next check; close() detaches and leaves the crowd to the host.
-activity is the host's activity evidence, refreshed the same way.
+activity is the host's activity evidence, refreshed the same way; source
+says how the host came by the crowd (fresh admission or an accounts file).
 ================
 */
 export async function attachCrowd(
 	{ count, fixture, act = "", seed = DEFAULT_ACTIVITY_SEED, hostUrl = CROWD_HOST_URL }
 ) {
 	const url = new URL( "/crowd", hostUrl );
-	assert.ok( [ "127.0.0.1", "localhost", "[::1]" ].includes( url.hostname ), "Crowd host must be loopback" );
+	assert.ok( LOOPBACK_HOSTS.includes( url.hostname ), "Crowd host must be loopback" );
 	let held;
 	try {
 		const response = await fetch( url, { signal: AbortSignal.timeout( 2000 ) } );
@@ -452,6 +532,7 @@ export async function attachCrowd(
 	return {
 		peers,
 		activity,
+		source: held.source ?? null,
 		// The host owns these sessions: a bench must not wait for them to
 		// leave the server or disable their accounts.
 		held: true,

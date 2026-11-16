@@ -273,6 +273,9 @@ var Settings = []Setting{
 	// band for the staff console (#1639, port-only, not native; "off"
 	// counts nothing and the economy route answers 404).
 	{Env: "SRO_KILL_STATS", NomadVar: "kill_stats", Default: "off"},
+	// The market escrow (opensro#3529, opensro-web#148; port-only, not
+	// native; "off" serves no market route and writes no market row).
+	{Env: "SRO_CONSIGNMENT", NomadVar: "consignment", Default: "off"},
 	// The Devil's Spirit's fifth avatar socket (#3456, port-only, not
 	// native; "off" is native: avatar storage keeps four slots). The same
 	// switch imports the Spirit's item rows at build time.

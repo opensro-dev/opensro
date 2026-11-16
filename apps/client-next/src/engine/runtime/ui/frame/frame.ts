@@ -417,12 +417,15 @@ export function authoredText(
 	// use the room to the window's left margin; the wrap width splits
 	// the label near its middle (never under its longest word) so a
 	// label whose room is the rest of the window still breaks in two
-	// instead of ellipsizing.
-	if ( !clipToControl && frame.fitWindowLabels() && node.text !== "" && value.includes( " " ) ) {
+	// instead of ellipsizing. A label its caller keeps inside its box
+	// (clipToControl, the guild page's "Guild master" before the race
+	// mark) wraps too, its lines inside the box's columns, instead of
+	// being cut to "Guild ma..." (#3674).
+	if ( clipToControl !== "clip" && frame.fitWindowLabels() && node.text !== "" && value.includes( " " ) ) {
 		const measure = ( line: string ) => text.run( line, 0, node.fontIndex ).width;
 		const width = measure( value );
 		if ( width > box[2] ) {
-			const room = node.hAlign === 2 ?
+			const room = node.hAlign === 2 && !clipToControl ?
 					Math.max( box[2], box[0] + box[2] - (ox + WINDOW_LABEL_MARGIN) ) :
 					box[2],
 				balanced = Math.max(
@@ -463,6 +466,8 @@ export function authoredText(
 			fontStyle,
 			hAlign: node.hAlign,
 			vAlign: node.vAlign,
+			// A keyed static is a label; a value field's text keeps to its box.
+			label: node.text !== "",
 			...(clipToControl ?
 				{ overflow: clipToControl === "clip" ? "clip" as const : "ellipsis" as const } :
 				{})

@@ -414,6 +414,12 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 	rankFrames, rankOthers := rt.uniqueDamageRankFrames(actor, roster, impact)
 	out.actorFrames = append(out.actorFrames, rankFrames...)
 	out.others = append(out.others, rankOthers...)
+	// Port-only, not native (nasrun_tokens.go): the Devil's Spirit tokens,
+	// measured from where the unique died.
+	died := simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}
+	tokenFrames, tokenOthers := rt.payNasrunTokensInsideDoor(division, actor, roster, impact, died, arena != nil, now)
+	out.actorFrames = append(out.actorFrames, tokenFrames...)
+	out.others = append(out.others, tokenOthers...)
 	groups := monsterRewardGroups(impact.Contributions, roster.actors)
 	var winner uint32
 	var best uint32

@@ -23,7 +23,7 @@ const MAX_WIDTHS = 2048;
 const MAX_LAYOUTS = 4096;
 // Key fields of the two memos (TextMemo.probe slots).
 const WIDTH_FIELDS = 2;
-const LAYOUT_FIELDS = 17;
+const LAYOUT_FIELDS = 18;
 // Memo hashing: FNV-1a over 32-bit words. A number contributes its value
 // scaled to 1/65536 px and truncated, so values that compare equal (0 and
 // -0) hash equal; finer differences only collide, and collisions compare
@@ -223,6 +223,7 @@ export function createUiText( assets: Pick<AssetOwner, "available" | "request" |
 			key[14] = style.hAlign;
 			key[15] = style.vAlign;
 			key[16] = style.overflow;
+			key[17] = style.label ? 1 : 0;
 			const entry = findTextMemo( layouts, value );
 			let cached: UiQuad | null;
 			if ( entry ) {
@@ -480,7 +481,8 @@ again from the caller's own rectangle with layoutGlyphs' expression (a
 difference taken in local coordinates rounds its last bit differently):
 the caller's clip itself when the text avoids overlap, else its
 intersection with the box. The shortened variant is always clipped to the
-intersection. The layout box is the caller's own rectangle.
+intersection; the wrapped one keeps the caller's clip, as its lines stay
+inside the box's columns. The layout box is the caller's own rectangle.
 ================
 */
 function shiftRun(
@@ -507,12 +509,14 @@ function shiftRun(
 	});
 	const shifted = moved( run, overflow === "avoid-overlap" ? clip : bounded );
 	if ( !run.textLayout ) return Object.freeze( shifted );
-	const fitted = run.textLayout.fitted;
+	const { fitted, wrapped } = run.textLayout;
 	return Object.freeze( {
 		...shifted,
 		textLayout: {
 			box,
-			fitted: fitted ? Object.freeze( moved( fitted, bounded ) ) : fitted
+			fitted: fitted ? Object.freeze( moved( fitted, bounded ) ) : fitted,
+			...(wrapped ? { wrapped: Object.freeze( moved( wrapped, clip ) ) } : {}),
+			...(run.textLayout.label ? { label: true } : {})
 		}
 	} );
 }
@@ -553,7 +557,8 @@ function freezePlacement( quad: UiQuad ): UiQuad {
 		textLayout: Object.freeze( {
 			...layout,
 			box: Object.freeze( [ ...layout.box ] ) as UiRect,
-			fitted: layout.fitted ? freezePlacement( layout.fitted ) : layout.fitted
+			fitted: layout.fitted ? freezePlacement( layout.fitted ) : layout.fitted,
+			...(layout.wrapped ? { wrapped: freezePlacement( layout.wrapped ) } : {})
 		} )
 	} );
 }
