@@ -27,7 +27,10 @@ is known to do this.)
 
 The census is regenerated, never edited: `--write` rewrites the
 checked-in table, `--check` (the default) rebuilds it and fails on any
-difference. Scenes build in parallel worker processes (`--scene <name>`
+difference. On an expanded build (scripts/lib/expandedBuild.mjs: the
+Alexandria variant, Arabia's map guide rows) the published controls hold
+more than the native table, so the check there requires every committed
+scene, control and row to survive unchanged and lets added ones pass. Scenes build in parallel worker processes (`--scene <name>`
 runs one scene and prints its row), capped by censusWorkers.mjs so two
 checks on one PC cannot fan out into memory exhaustion (#2766); nothing
 in ui.ts moves under this tool.
@@ -43,6 +46,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { CLIENT_PUBLIC_ROOT } from "../../../scripts/lib/generatedRoot.mjs";
+import { EXPANDED_BUILD } from "../../../scripts/lib/expandedBuild.mjs";
+import { lostNativeRow } from "./census-expanded.mjs";
 import "../tests/helpers/native-source-loader.mjs";
 import { censusWorkerCount } from "./censusWorkers.mjs";
 import { root } from "./project.mjs";
@@ -678,6 +683,15 @@ async function main() {
 	if ( current === text ) {
 		console.log( `ui-action-census: up to date (${sceneCount} scenes, ${rowCount} control rows)` );
 		return;
+	}
+	if ( current && EXPANDED_BUILD ) {
+		const lost = lostNativeRow( JSON.parse( current ), table, canonical );
+		if ( lost === undefined ) {
+			console.log( `ui-action-census: every native row survives the expanded build (${rowCount} control rows)` );
+			return;
+		}
+		console.error( `ui-action-census: expanded build: ${lost}` );
+		process.exit( 1 );
 	}
 	console.error(
 		"ui-action-census: tests/runtime/ui-action-census.json is stale or differs; " +
