@@ -34,6 +34,7 @@ import (
 	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
+	"opensro.online/server/internal/game/world/climate"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/pharaohtemple"
@@ -336,6 +337,10 @@ func publicRules() publicstats.RulesResponse {
 				Now:    "During the event window, monsters drop jewelry boxes and So-ok exchanges each box for a random gift or sixty boxes for an event helmet; boxes left when the window ends are removed at the next world entry.",
 				Why:    "The original Halloween Day event, rebuilt for its seasonal window."},
 			christmasRule(time.Now()),
+			{Flag: climate.Env, On: climate.Enabled(os.Getenv(climate.Env)),
+				Native: "Every region follows its climate: spells of rain and, in the cold lands, snow come and go, and each change of weather fades in over about half a minute.",
+				Now:    "As native while on (the default). Off, the server sends no weather and the sky stays clear.",
+				Why:    "The original server's weather cycle, from its climate tables; the switch lets a shard turn it off."},
 			{Flag: progression.EnvHalloweenHelmetSeal, On: progression.HalloweenHelmetSealFromEnv().Enabled(),
 				Native: "The event helmets trade like any other item.",
 				Now:    "The eight event helmets cannot be traded, stalled, stored, given to a pet or dropped: they stay with the character that earned them. A helmet may still be sold to an NPC merchant, which destroys it; the sale never puts it on the buyback bench, so no other player can take it.",
