@@ -170,19 +170,36 @@ goodsVictim
 The decay key of goods owned by alias: the account of the division's
 character carrying that job alias. An alias no character carries any
 more (deleted, or renamed since the goods were bought) keys by itself,
-so it still decays.
+so it still decays. The walk reads live character records, so it runs
+inside the division's read door (the roster contract), and is called
+after the pickup's update door has closed.
 ================
 */
 func (rt *Runtime) goodsVictim(division, alias string) string {
 	if alias == "" {
 		return ""
 	}
-	for _, other := range rt.deps.CharactersForDivision(division) {
-		if other != nil && other.AccountID != "" && strings.EqualFold(other.Job.Alias, alias) {
-			return "account:" + other.AccountID
+	victim := "alias:" + strings.ToLower(alias)
+	rt.deps.Read(division, func() {
+		for _, other := range rt.deps.CharactersForDivision(division) {
+			if other != nil && other.AccountID != "" && strings.EqualFold(other.Job.Alias, alias) {
+				victim = honorAccountVictim(other.AccountID)
+				return
+			}
 		}
-	}
-	return "alias:" + strings.ToLower(alias)
+	})
+	return victim
+}
+
+/*
+================
+honorAccountVictim
+
+The decay key of an account's goods.
+================
+*/
+func honorAccountVictim(account string) string {
+	return "account:" + account
 }
 
 /*
@@ -216,6 +233,13 @@ func (rt *Runtime) openStealRun(c *enterworld.Character, victim string, at time.
 		if key.day != day {
 			delete(runs.steals, key)
 		}
+	}
+	// Goods of the thief's own account are no steal: with several
+	// characters online at once, one account could run a trader and a
+	// thief together. The run scores nothing and counts toward nothing.
+	if victim == honorAccountVictim(c.AccountID) {
+		runs.runs[c.ID] = &honorRun{victim: victim, decay: honorStealsScored}
+		return
 	}
 	key := honorSteal{account: c.AccountID, victim: victim, day: day}
 	runs.runs[c.ID] = &honorRun{victim: victim, decay: runs.steals[key]}

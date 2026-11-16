@@ -190,6 +190,12 @@ func TestStealsDecayByTheVictimsAccountNotItsAlias(t *testing.T) {
 			t.Fatalf("steal %d (%s) kept %d, want %d", i+1, step.alias, got, step.want)
 		}
 	}
+	// The thief's own account's trader is no victim at all.
+	own := honorCharacter(2, "alt-account")
+	rt.openStealRun(own, rt.goodsVictim(testDivision, "AltOne"), at.Add(48*time.Hour))
+	if got := rt.scoreTradeSale(own, domain.JobThief, full, at.Add(48*time.Hour)); got != 0 {
+		t.Fatalf("a steal from the thief's own account kept %d", got)
+	}
 	// Goods whose owner alias no character carries still decay by alias.
 	if steal("Gone") != honorRunPointCap || steal("Gone") != honorRunPointCap/2 {
 		t.Fatal("an unknown owner alias did not decay")
