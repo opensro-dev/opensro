@@ -62,6 +62,7 @@ import jupiter_import as jupiter
 import later_world_import
 import sro_pk2
 from prepare_client_resources import write_atomically
+from sro_paths import trees_overlap
 
 FLAG = "SRO_MUHAN"
 ROOT_ENV = "SRO_V1696_ROOT"
@@ -321,7 +322,7 @@ def require_v1696_pin(root, names):
 # ================
 def add_monsters(v1696_root, native, output, source_root=None):
 	native, output = Path(native).resolve(), Path(output).resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("muhan overlay must be separate from native extraction")
 	marker = output / MARKER
 	prior = cap110.read_json(marker) if marker.exists() else {}
