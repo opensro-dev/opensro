@@ -7,15 +7,14 @@
 // None of this pipeline's writers do that (converters/builders always rewrite outputs with
 // fresh mtimes). Set SRO_BUILD_HASH_CACHE=0 to bypass cache reads and force full re-hashing.
 
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { sha256Hex } from "./hash.mjs";
 import { readJsonOrUndefined } from "./jsonOut.mjs";
+import { writeStateJson } from "./stateFile.mjs";
+import { buildStatePath } from "../../lib/generatedRoot.mjs";
 
-const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
-const rebuildRoot = path.resolve( scriptDir, "..", "..", ".." );
-const defaultCachePath = path.join( rebuildRoot, ".state", "file-hash-cache.json" );
+const defaultCachePath = buildStatePath( "file-hash-cache.json" );
 
 const CACHE_FORMAT = "sro-file-hash-cache";
 const CACHE_VERSION = 1;
@@ -80,12 +79,7 @@ export async function openFileHashCache( cachePath = defaultCachePath ) {
 			// 3 entries, because a pack test builds a temp tree through the DEFAULT cache path.
 			if ( fileHashCacheDisabled() ) return;
 			if ( !dirty ) return;
-			await mkdir( path.dirname( cachePath ), { recursive: true } );
-			await writeFile(
-				cachePath,
-				JSON.stringify( { format: CACHE_FORMAT, version: CACHE_VERSION, entries } ),
-				"utf8"
-			);
+			await writeStateJson( cachePath, { format: CACHE_FORMAT, version: CACHE_VERSION, entries } );
 			dirty = false;
 		}
 	};

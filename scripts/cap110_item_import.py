@@ -27,7 +27,7 @@ import cap110_items as items
 import import_vsro_alexandria as tables
 import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
-from sro_paths import EXTRACTED_ROOT, REPO_ROOT
+from sro_paths import EXTRACTED_ROOT, REPO_ROOT, trees_overlap
 
 FLAG = "SRO_CAP110_ITEMS"
 REPORT_NAME = ".opensro-cap110-items.json"
@@ -196,7 +196,7 @@ def copy_resource_closure(pending, native, output, archives):
 # ================
 def add_items(vsro_root, native, output):
 	native, output = native.resolve(), output.resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("item output must be separate from the native extraction")
 	marker = output / REPORT_NAME
 	prior = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}

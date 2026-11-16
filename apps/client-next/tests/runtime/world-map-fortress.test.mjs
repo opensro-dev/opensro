@@ -53,17 +53,17 @@ const POSE = { regionId: 93 * 256 + 167, x: 230, y: 0, z: 1200, angle: 0 };
 ================
 mapHud
 
-A map window over the fixture icon; frame() presents one frame and returns
+A map window over the fixture icons; frame() presents one frame and returns
 its caption and controls.
 ================
 */
-function mapHud() {
+function mapHud( iconRows = [ FORT_ICON ] ) {
 	const hud = createWorldMapHud( {
 		assets: { available: () => 0, request: () => 0, take: () => null, cancel: () => {} },
 		base: "http://fixture.invalid",
 		experimental: { state: () => ({ saved: experimentalOptions() }), restore: () => {} }
 	} );
-	const mapIcons = decodeMapIcons( { rows: [ FORT_ICON ] } );
+	const mapIcons = decodeMapIcons( { rows: iconRows } );
 	const frame = () => {
 		let caption = "";
 		const controls = [];
@@ -132,4 +132,23 @@ test("the fortress page is drawable but never picked by position", () => {
 	assert.equal( worldMapPageAt( { regionId: 70 * 256 + 71, x: 900, y: 0, z: 900, angle: 0 } ), 0 );
 	// A town still picks itself.
 	assert.equal( worldMapPageAt( { regionId: 97 * 256 + 168, x: 960, y: 0, z: 960, angle: 0 } ), 1 );
+});
+
+test("the three fortress icons are three distinct controls that each open the fortress page", () => {
+	// localinfo 91006-91008 all open 1001; one identity per page made the
+	// UI refuse the frame ("Duplicate UI control identity: map-town:1001").
+	const rows = [ "91006", "91007", "91008" ].map( id => [ id, ...FORT_ICON.slice( 1 ) ] );
+	const { hud, frame } = mapHud( rows );
+	try {
+		const ids = frame().controls.map( row => row.id ).filter( id => id.startsWith( "map-town:" ) );
+		assert.equal( ids.length, 3 );
+		assert.equal( new Set( ids ).size, 3 );
+		for ( const id of ids ) {
+			hud.activate( "map-town:1", POSE );
+			hud.activate( id, POSE );
+			assert.equal( frame().caption, "Regional map - Jangan Fortress", id );
+		}
+	} finally {
+		hud.dispose();
+	}
 });

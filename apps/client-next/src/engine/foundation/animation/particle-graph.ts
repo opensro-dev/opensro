@@ -21,12 +21,7 @@ import {
 	type ParticleEmitter as EmissionParameters
 } from "@/engine/foundation/animation/particle-emission";
 import { identity } from "@/engine/foundation/rendering/world-math";
-import {
-	followMatrix,
-	LINK_MATRIX,
-	rootLinkFlags,
-	rootTickShift
-} from "@/engine/foundation/animation/particle-holder-link";
+import { followMatrix, LINK_MATRIX, rootTickShift } from "@/engine/foundation/animation/particle-holder-link";
 import { multiply } from "@/engine/foundation/math/pose-math";
 import {
 	initializeParticle,
@@ -45,6 +40,11 @@ import {
 } from "@/engine/foundation/animation/particle-presentation";
 import { hypot3 } from "@/engine/foundation/math/hypot";
 import { graphStartTick } from "@/engine/foundation/animation/particle-graph-clock";
+import {
+	createParticleGraphPlan,
+	onFrame,
+	type ParticleGraphPlan
+} from "@/engine/foundation/animation/particle-graph-plan";
 
 /*
 ================
@@ -129,7 +129,6 @@ no module holds mutable state.
 ================
 */
 interface ParticleGraphScratch {
-	readonly siblingEmitters: ReadonlySet<ParticleEmitter>;
 	readonly ordered: ParticleElement[];
 	readonly siblings: Map<ParticleElement, ParticleElement | undefined>;
 	readonly latest: Map<ParticleElement, ParticleElement>;
@@ -138,9 +137,6 @@ interface ParticleGraphScratch {
 	readonly previous: Float32Array;
 	readonly oldRoot: number[];
 	readonly vector: number[];
-	// The update program per emitter with spin and attraction removed; those
-	// run from the element's shape and the attraction frames instead.
-	readonly motion: Map<ParticleEmitter, ParticleProgram>;
 }
 
 /*
@@ -161,45 +157,12 @@ export interface ParticleGraphState {
 	readonly elements: (ParticleElement | undefined)[][];
 	readonly root: ParticleElement;
 	readonly scratch: ParticleGraphScratch;
+	// The model's plan (particle-graph-plan.ts): the tables every tick reads.
+	readonly plan: ParticleGraphPlan;
 }
 
 // A2E980: whole 50 ms effect ticks.
 const TICKS_PER_SECOND = 20;
-
-/*
-================
-programNeedsSibling
-
-Only sibling-relative commands consume the predecessor. Avoid building
-an index for ordinary independent particles; their random cursor and
-command execution remain unchanged.
-================
-*/
-function programNeedsSibling( program: ParticleProgram | undefined ): boolean {
-	if ( !program ) return false;
-	if ( program.coneFlags === 3 || program.coneForceFlags === 3 ) return true;
-	if ( program.sphere && program.sphereFlags === SPHERE_POS_SIBLING ) return true;
-	return program.vectors?.some( command =>
-		command.name === "SetPosition" ?
-			command.flags % 3 === 2 || command.flags >= 9 :
-			command.flags === 3
-	) ?? false;
-}
-
-/*
-================
-needsSibling
-================
-*/
-function needsSibling( def: ParticleEmitter ): boolean {
-	if ( !def.emission ) return false;
-	if ( programNeedsSibling( def.program ) ) return true;
-	return def.commands?.some( command => {
-		const flags = command.flags ?? 0;
-		return !!command.rotations && flags === 3 ||
-			!!command.positions && (flags % 3 === 2 || flags >= 9) || programNeedsSibling( command.program );
-	} ) ?? false;
-}
 
 // ============================================================================
 
@@ -316,21 +279,26 @@ function attract( element: ParticleElement, source: ParticleElement, strength: n
 /*
 ================
 commands
+
+The commands of emitter n that fire on age. A random-sample command
+samples the plan's program for it (particle-graph-plan.ts samples) and
+writes the sample into the element's own arrays.
 ================
 */
 function commands(
 	element: ParticleElement,
-	def: ParticleEmitter,
+	n: number,
 	age: number,
 	history: ParticleGraphState,
 	table: Float32Array,
 	sibling?: ParticleElement
 ): void {
-	const list = def.commands;
+	const list = history.plan.graph[n]!.commands;
 	if ( !list ) return;
+	const frames = history.plan.commandFrames[n]!, samples = history.plan.samples[n]!;
 	for ( let c = 0; c < list.length; c++ ) {
 		const command = list[c]!;
-		if ( !command.frames.includes( age ) ) continue;
+		if ( !onFrame( frames[c]!, age ) ) continue;
 		const flags = command.flags ?? 0;
 		const rotation = command.rotations?.[Math.min( age, command.rotations.length - 1 )];
 		if ( rotation ) {
@@ -355,7 +323,7 @@ function commands(
 		const program = command.program;
 		if ( program.vectors ) {
 			// A command's vectors all run on the frame the command fires.
-			vectors( element, program.vectors, age, history.scratch.vector, sibling, true );
+			vectors( element, program.vectors, age, history.scratch.vector, sibling );
 			continue;
 		}
 		if ( program.rVelocity ) {
@@ -380,38 +348,25 @@ function commands(
 		const sphereFlags = program.sphereFlags ?? SPHERE_POS_PARENT;
 		if ( program.sphere && sphereFlags === SPHERE_POS_SIBLING && !sibling ) continue;
 		const basis = coneFlags === 1 ? element.matrix : coneFlags === 3 ? sibling!.matrix : element.parent.matrix;
-		const sample = initializeParticle(
-			{
-				...program,
-				coneFlags: coneFlags ? 2 : 0,
-				coneForceFlags: coneFlags ? 2 : 0,
-				sphereFlags: SPHERE_POS_PARENT
-			},
-			table,
-			history.index,
-			basis
-		);
+		const sample = initializeParticle( samples[c]!, table, history.index, basis );
 		history.index = sample.index;
+		const state = element.state, at = state.position, velocity = state.velocity;
 		if ( program.sphere ) {
 			const base = sphereFlags === SPHERE_POS_SELF ?
-				element.state.position :
+				at :
 				sphereFlags === SPHERE_POS_SIBLING ?
 				sibling!.state.position :
 				element.parent.state.position;
-			element.state.position = sample.state.position.map( ( v, i ) => Math.fround( v + base[i]! ) );
+			for ( let i = 0; i < 3; i++ ) at[i] = Math.fround( sample.state.position[i]! + base[i]! );
 		}
 		if ( program.conePos ) {
-			element.state.position = sample.state.position.map( ( v, i ) =>
-				Math.fround( v + element.state.position[i]! )
-			);
+			for ( let i = 0; i < 3; i++ ) at[i] = Math.fround( sample.state.position[i]! + at[i]! );
 		}
-		if ( program.cone ) element.state.velocity = sample.state.velocity;
+		if ( program.cone ) copy3( sample.state.velocity, velocity );
 		if ( program.coneForce ) {
-			element.state.velocity = sample.state.velocity.map( ( v, i ) =>
-				Math.fround( v + element.state.velocity[i]! )
-			);
+			for ( let i = 0; i < 3; i++ ) velocity[i] = Math.fround( sample.state.velocity[i]! + velocity[i]! );
 		}
-		if ( program.scale ) element.state.scale = sample.state.scale;
+		if ( program.scale ) copy3( sample.state.scale, state.scale );
 	}
 }
 
@@ -447,8 +402,9 @@ function setPosition(
 ================
 vectors
 
-Apply SetPosition / SetVelocity / Force operations scheduled on frame,
-or every operation when everyFrame (a command firing). work is scratch.
+Apply SetPosition / SetVelocity / Force operations scheduled on frame by
+their frame tables (particle-graph-plan.ts vectorFrames), or every
+operation without tables (a command firing). work is scratch.
 ================
 */
 function vectors(
@@ -457,11 +413,11 @@ function vectors(
 	frame: number,
 	work: number[],
 	sibling: ParticleElement | undefined,
-	everyFrame = false
+	frames?: readonly Uint8Array[]
 ): void {
 	for ( let o = 0; o < ops.length; o++ ) {
 		const op = ops[o]!;
-		if ( !everyFrame && !op.frames.includes( frame ) ) continue;
+		if ( frames && !onFrame( frames[o]!, frame ) ) continue;
 		const flag = op.flags;
 		copy3( op.value, work );
 		if ( op.name === "SetPosition" ) {
@@ -483,49 +439,22 @@ function vectors(
 	}
 }
 
-/*
-================
-motionProgram
-
-The program advanceParticle runs for an element of def: its update
-program without spin and attraction. Built once per emitter.
-================
-*/
-function motionProgram( history: ParticleGraphState, def: ParticleEmitter ): ParticleProgram {
-	let program = history.scratch.motion.get( def );
-	if ( !program ) {
-		program = { ...(def.commands ? {} : def.program), spin: undefined, attraction: undefined };
-		history.scratch.motion.set( def, program );
-	}
-	return program;
-}
-
-/*
-================
-tickHorizon
-
-The last tick a graph can change: unbounded when any emitter loops or
-emits, else the latest birth plus its lifetime.
-================
-*/
-function tickHorizon( graph: readonly ParticleEmitter[] ): number {
-	let last = 0;
-	for ( let n = 0; n < graph.length; n++ ) {
-		const def = graph[n]!;
-		if ( def.loop || def.emission ) return Infinity;
-		for ( let b = 0; b < def.births.length; b++ ) last = Math.max( last, def.births[b]! + def.frames );
-	}
-	return last;
-}
-
 // ============================================================================
 
 /*
 ================
 createParticleGraph
+
+plan is graph's plan; a caller that ticks many graphs of one model passes
+the model's, built once (createParticleGraphPlan).
 ================
 */
-export function createParticleGraph( graph: readonly ParticleEmitter[], index: number ): ParticleGraphState {
+export function createParticleGraph(
+	graph: readonly ParticleEmitter[],
+	index: number,
+	plan = createParticleGraphPlan( graph )
+): ParticleGraphState {
+	if ( plan.graph !== graph ) throw Error( "Particle graph plan of another graph" );
 	const root = {
 		previousPosition: [ 0, 0, 0 ],
 		serial: 0,
@@ -555,7 +484,6 @@ export function createParticleGraph( graph: readonly ParticleEmitter[], index: n
 		groups: graph.map( d => d.parent < 0 ? new Map( [ [ root, { parent: root, total: 0 } ] ] ) : new Map() ),
 		root,
 		scratch: {
-			siblingEmitters: new Set( graph.filter( needsSibling ) ),
 			ordered: [],
 			siblings: new Map(),
 			latest: new Map(),
@@ -563,9 +491,9 @@ export function createParticleGraph( graph: readonly ParticleEmitter[], index: n
 			inverse: identity(),
 			previous: identity(),
 			oldRoot: [ 0, 0, 0 ],
-			vector: [ 0, 0, 0 ],
-			motion: new Map()
-		}
+			vector: [ 0, 0, 0 ]
+		},
+		plan
 	};
 }
 
@@ -618,6 +546,30 @@ function linkElement( element: ParticleElement, def: ParticleEmitter, scratch: P
 
 /*
 ================
+release
+
+AF2AC0: element, of emitter n, has died and holds no children, so its
+identity is released; a dead parent whose last child this was follows.
+The released set is the same in any order, and slot reuse depends only
+on that set. Only the emitters that emit from n hold groups of element.
+================
+*/
+function release( history: ParticleGraphState, element: ParticleElement, n: number ): void {
+	const plan = history.plan;
+	for ( ;; ) {
+		element.released = true;
+		const children = plan.emittingChildren[n]!;
+		for ( let c = 0; c < children.length; c++ ) history.groups[children[c]!]!.delete( element );
+		const parent = element.parent;
+		parent.children--;
+		n = plan.graph[n]!.parent;
+		if ( n < 0 || parent.alive || parent.children || parent.released ) return;
+		element = parent;
+	}
+}
+
+/*
+================
 advanceParticleGraph
 
 time and stop are actor seconds. A fresh history fixes its clock's start
@@ -639,8 +591,9 @@ export function advanceParticleGraph(
 	if ( history.frame < 0 && Number.isSafeInteger( actorTick ) ) {
 		history.startTick = graphStartTick( graph, actorTick, keepRoots );
 	}
-	const start = history.startTick;
-	const target = Math.min( actorTick - start, tickHorizon( graph ) );
+	const start = history.startTick, plan = history.plan;
+	if ( plan.graph !== graph ) throw Error( "Particle graph plan of another graph" );
+	const target = Math.min( actorTick - start, plan.horizon );
 	if ( target < history.frame || !Number.isSafeInteger( target ) ) throw Error( "Invalid particle graph time" );
 	const scratch = history.scratch, elements = history.elements;
 	// Only a region crossing shifts the origin. Every other call walked every
@@ -710,24 +663,18 @@ export function advanceParticleGraph(
 				}
 			}
 		}
-		let released = true;
-		while ( released ) {
-			released = false;
-			for ( let n = 0; n < elements.length; n++ ) {
-				const rows = elements[n]!;
-				for ( let b = 0; b < rows.length; b++ ) {
-					const element = rows[b];
-					if ( !element || element.alive || element.children || element.released ) continue;
-					element.released = true;
-					element.parent.children--;
-					for ( let g = 0; g < history.groups.length; g++ ) history.groups[g]!.delete( element );
-					released = true;
+		for ( let n = 0; n < elements.length; n++ ) {
+			const rows = elements[n]!;
+			for ( let b = 0; b < rows.length; b++ ) {
+				const element = rows[b];
+				if ( element && !element.alive && !element.children && !element.released ) {
+					release( history, element, n );
 				}
 			}
 		}
 		for ( let n = 0; n < graph.length; n++ ) {
 			const def = graph[n]!, rows = elements[n]!, births = history.births[n]!;
-			const indexedSiblings = scratch.siblingEmitters.has( def );
+			const indexedSiblings = plan.sibling[n] === 1;
 			if ( def.emission && (start + tick) / TICKS_PER_SECOND < stop ) {
 				for ( const group of history.groups[n]!.values() ) {
 					if ( !group.parent.alive ) continue;
@@ -822,10 +769,9 @@ export function advanceParticleGraph(
 					rows[b] = element;
 					if ( indexedSiblings ) scratch.latest.set( parent, element );
 					parent.children++;
-					for ( let child = 0; child < graph.length; child++ ) {
-						if ( graph[child]!.parent === n && graph[child]!.emission ) {
-							history.groups[child]!.set( element, { parent: element, total: 0 } );
-						}
+					const children = plan.emittingChildren[n]!;
+					for ( let c = 0; c < children.length; c++ ) {
+						history.groups[children[c]!]!.set( element, { parent: element, total: 0 } );
 					}
 					if ( def.matrixDepth < 0 ) {
 						const translation = element.matrix.slice( 12, 15 );
@@ -843,14 +789,14 @@ export function advanceParticleGraph(
 					}
 					element.state.angularVelocity = undefined;
 					if ( !def.commands && def.program?.vectors ) {
-						vectors( element, def.program.vectors, 0, scratch.vector, sibling );
+						vectors( element, def.program.vectors, 0, scratch.vector, sibling, plan.vectorFrames[n] );
 					}
 				} else if ( age < def.frames ) {
 					const state = element.state;
 					linkElement( element, def, scratch, true );
 					history.index = advanceParticle(
 						state,
-						motionProgram( history, def ),
+						plan.motion[n]!,
 						state.frame + 1,
 						table,
 						history.index
@@ -860,26 +806,21 @@ export function advanceParticleGraph(
 						state.rotation.set( scratch.matrix );
 					}
 					if ( !def.commands && def.program?.vectors ) {
-						vectors( element, def.program.vectors, age, scratch.vector, sibling );
+						vectors( element, def.program.vectors, age, scratch.vector, sibling, plan.vectorFrames[n] );
 					}
 				}
 				if ( age < def.frames ) {
-					// Parents tick first, so each sees its ancestors' links.
-					element.rootLink = rootLinkFlags(
-						ancestor( element, def.positionDepth ),
-						ancestor( element, def.followDepth ),
-						def.matrixDepth > 0 ? ancestor( element, def.matrixDepth ) : undefined,
-						root
-					);
-					commands( element, def, age, history, table, sibling );
+					// Fixed per emitter (particle-graph-plan.ts rootLink).
+					element.rootLink = plan.rootLink[n]!;
+					commands( element, n, age, history, table, sibling );
 					const program = def.commands ? undefined : def.program;
-					if ( program?.rVelocity && (program.rotationFrames ?? [ 0 ]).includes( age ) ) {
+					if ( program?.rVelocity && onFrame( plan.rotationFrames[n]!, age ) ) {
 						element.local.set( program.rVelocity );
 					}
-					if ( program?.spin && (program.spinFrames ?? [ 0 ]).includes( age ) ) {
+					if ( program?.spin && onFrame( plan.spinFrames[n]!, age ) ) {
 						element.shape.set( program.spin );
 					}
-					if ( program?.attraction !== undefined && (program.attractionFrames ?? [ 0 ]).includes( age ) ) {
+					if ( program?.attraction !== undefined && onFrame( plan.attractionFrames[n]!, age ) ) {
 						attract( element, parent, program.attraction );
 					}
 					const at = Math.min( age, def.scales.length - 1 );

@@ -16,8 +16,9 @@ the CPU every frame and rewrites the whole vertex stream:
 - with the simulation off, every vertex follows the skeleton.
 
 With the simulation on, the CPU runs only when a solver step falls due
-(cloth.ts pending, at most 20 Hz): re-anchoring the pins between steps
-changes nothing the solver keeps. With it off, the CPU skins only the
+(cloth.ts pending, at most 20 Hz), and re-anchors only the pins the step
+reads (solverPins): re-anchoring the pins between steps, or a pin no step
+reads, changes nothing the solver keeps. With it off, the CPU skins only the
 vertices the solver integrates (free ones and pin 2, not pin 1) every
 frame, because a restart takes their previous frame's anchors, positions
 and normals, as createClothVertices' last off frame leaves them. So the
@@ -55,6 +56,27 @@ export interface ClothStreamWrite {
 
 /*
 ================
+solverPins
+
+The pins a solver step reads (cloth.ts): a pin that integrates (pin 2),
+and every endpoint of a constraint. A pin 1 on no constraint is never moved
+and never read; re-anchoring it changes nothing the solver keeps, and the
+GPU skins it from the palette. The shipped character cloth reads 3,547 of
+its 74,430 pins.
+================
+*/
+export function solverPins( data: ClothData ): Int32Array {
+	const constrained = new Uint8Array( data.pins.length );
+	for ( const constraint of data.constraints ) constrained[constraint[0]] = constrained[constraint[1]] = 1;
+	const pins: number[] = [];
+	for ( let i = 0; i < data.pins.length; i++ ) {
+		if ( data.pins[i] !== 0 && (data.pins[i] !== 1 || constrained[i]) ) pins.push( i );
+	}
+	return Int32Array.from( pins );
+}
+
+/*
+================
 createClothStream
 
 One mesh instance's solver and stream; each actor keeps its own.
@@ -68,6 +90,14 @@ export function createClothStream(
 	if ( !mesh.joints || !mesh.weights ) throw Error( "A cloth stream needs a skinned mesh" );
 	const simulation = createCloth( data, mesh.positions );
 	const anchors = new Float32Array( mesh.positions.length );
+	const read = solverPins( data );
+	// The vertices whose solver position can differ from their anchor after
+	// an advance: the free ones and the pins a step reads, in index order. A
+	// pin no step reads is re-anchored to an anchor that never changes, so it
+	// never leaves it (cloth.ts advance).
+	const movable = Int32Array.from(
+		data.pins.flatMap( ( pin, i ) => pin === 0 ? [ i ] : [] ).concat( Array.from( read ) ).sort( ( a, b ) => a - b )
+	);
 	const words = new Uint32Array( count * CLOTH_STREAM_WORDS ), floats = new Float32Array( words.buffer );
 	// One skinned vertex, [x, y, z, nx, ny, nz] (cloth-skin.ts).
 	const skin = new Float64Array( 6 );
@@ -129,11 +159,14 @@ export function createClothStream(
 
 	The solver's positions after an advance. A free vertex always shows
 	them; a pin shows them only when the step moved it off its anchor.
-	started rewrites every pin's flags, for the frame the simulation starts.
+	started rewrites every pin's flags, for the frame the simulation starts,
+	so it visits every vertex; a step visits only the movable ones.
 	================
 	*/
 	function publish( positions: Float32Array, started: boolean ) {
-		for ( let i = 0; i < count; i++ ) {
+		const visited = started ? count : movable.length;
+		for ( let k = 0; k < visited; k++ ) {
+			const i = started ? k : movable[k]!;
 			const at = i * 3, entry = i * CLOTH_STREAM_WORDS;
 			let owned = data.pins[i] === 0;
 			if ( !owned ) {
@@ -159,13 +192,16 @@ export function createClothStream(
 		================
 		update
 
-		The frame's changes to the stream, for palette at seconds. enabled is
+		The frame's changes to the stream, for the pose at seconds. enabled is
 		the option and detail gate createClothVertices takes; motion feeds the
 		wind. Returns null on most frames: no step due, nothing to write.
+		paletteOf gives the pose's palette on the CPU; it is called only on a
+		frame that re-anchors vertices, so a skeleton the GPU samples is built
+		on the CPU only for the solver's steps.
 		================
 		*/
 		update(
-			palette: Float32Array,
+			paletteOf: () => Float32Array,
 			seconds: number,
 			enabled: boolean,
 			motion: { direction: readonly number[]; speed: number; }
@@ -179,7 +215,15 @@ export function createClothStream(
 			// Measured from the last update that advanced the solver: frames in
 			// between sum into one delta, as cloth-vertices.ts hold does.
 			const deltaMs = lastTime === undefined ? 0 : Math.trunc( seconds * 1000 ) - Math.trunc( lastTime * 1000 );
-			const input = { anchors, deltaMs, enabled, direction: motion.direction, speed: motion.speed, random };
+			const input = {
+				anchors,
+				deltaMs,
+				enabled,
+				direction: motion.direction,
+				speed: motion.speed,
+				random,
+				pins: read
+			};
 			if ( !enabled ) {
 				// Off: the GPU skins every vertex. The CPU keeps this frame's
 				// anchor and normal of each vertex the solver integrates: a
@@ -190,6 +234,7 @@ export function createClothStream(
 						touch( i );
 					}
 				}
+				const palette = paletteOf();
 				for ( let i = 0; i < count; i++ ) {
 					if ( data.pins[i] !== 1 ) anchor( i, palette );
 				}
@@ -199,21 +244,20 @@ export function createClothStream(
 			}
 			if ( lastTime === undefined ) {
 				// The first frame: every vertex's anchor and normal now.
+				const palette = paletteOf();
 				for ( let i = 0; i < count; i++ ) anchor( i, palette );
 				publish( simulation.advance( input ), true );
 			} else if ( !lastEnabled ) {
 				// The simulation starts again: the solver resets to the last off
 				// frame's anchors, then the pins re-anchor to this frame's.
 				simulation.advance( { ...input, deltaMs: 0, enabled: false } );
-				for ( let i = 0; i < count; i++ ) {
-					if ( data.pins[i] !== 0 ) anchor( i, palette );
-				}
+				const palette = paletteOf();
+				for ( const i of read ) anchor( i, palette );
 				publish( simulation.advance( input ), true );
 			} else if ( simulation.pending( deltaMs ) ) {
-				// A step falls due: re-anchor the pins to this frame's skeleton.
-				for ( let i = 0; i < count; i++ ) {
-					if ( data.pins[i] !== 0 ) anchor( i, palette );
-				}
+				// A step falls due: re-anchor the pins it reads to this frame's skeleton.
+				const palette = paletteOf();
+				for ( const i of read ) anchor( i, palette );
 				publish( simulation.advance( input ), false );
 			} else {
 				return written();

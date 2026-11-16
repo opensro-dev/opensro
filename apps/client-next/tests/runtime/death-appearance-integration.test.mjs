@@ -218,6 +218,7 @@ test("actor-motion drops outgoing live-body locomotion and active installations 
 		resources: {
 			duration: () => 1,
 			animation: () => false,
+			failed: () => false,
 			plan: () => true,
 			prioritize: () => {},
 			ready: () => true

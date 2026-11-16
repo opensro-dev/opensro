@@ -25,6 +25,7 @@ import hunting2_import
 import jupiter_import
 import muhan_import
 import skytemple_import
+import styria_import
 
 # (variant manifest key, layer entry point taking (native, out)), in
 # build order.
@@ -41,6 +42,9 @@ LATER_LAYERS = (
 	("god", god_import.add_god),
 	("muhan", muhan_import.add_muhan),
 	("hunting2", hunting2_import.add_hunting2),
+	# The Styria Clash arena map (#3272): its own switch, on the
+	# later-world engine; the match rules are #3648.
+	("styria", styria_import.add_styria),
 	# The Constantinople fortress: its own switch and source (the v1.696
 	# client), on the merge machinery the Sky Temple shares.
 	("constantinople", constantinople_import.add_constantinople),

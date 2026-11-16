@@ -5,7 +5,7 @@ fps-bench.mjs - frame rate of the real client in the scenarios that matter
 
 Usage:
   node tools/perf/bench/fps-bench.mjs [--seconds N] [--at a,b] [--only a,b]
-       [--counts] [--spans] [--cpu] [--heap] [--out DIR] [--trace] [--json FILE]
+       [--counts] [--spans] [--cpu] [--heap] [--out DIR] [--trace] [--gpu-process] [--json FILE]
        [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2]
 
 For each location (--at) resets the scratch character there, boots the dev
@@ -42,6 +42,13 @@ main thread's frame and world-preparation time per frame. Options add:
   --heap    a sampled allocation profile per scenario (.heapprofile) and
             the allocation rate in the row;
   --trace   a Chrome trace per location, OUT/<location>.json.
+  --gpu-process  CPU time in Chrome's GPU process per frame: after each
+            timed window, a second, traced window of the same scenario
+            (reduced as it arrives; no trace file); the row gains the
+            GPU main thread's CPU and wall ms per frame, every GPU-process
+            thread above 2% busy and the frames they divide by. Tracing
+            slows frames, so this never touches the timed numbers. The
+            cross and combat scenarios run once and get no traced window.
   --paced   retain display pacing; the default remains uncapped throughput.
   --cpu-rate N  apply Chrome CPU throttling after warm-up (for example 4).
   --frame-limit N  use the player's presentation limit; default 0 preserves
@@ -77,6 +84,7 @@ import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat, stri
 import { DEFAULT_ACTIVITY_SEED, obtainCrowd } from "../core/crowd.mjs";
 import { parseActivity } from "../core/crowd-activity.mjs";
 import { cleanupCombat, combatResidue } from "../core/combat-cleanup.mjs";
+import { processCosts } from "../core/trace.mjs";
 
 const REPO_ROOT = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "../../../../.." );
 const GOAL_FPS = 500;
@@ -151,9 +159,22 @@ const LOCATIONS = [ {
 	scenarios: [ "still", "drag" ]
 } ];
 const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [--spans] [--cpu] [--heap] [--out DIR] " +
-	"[--trace] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2] " +
+	"[--trace] [--gpu-process] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2] " +
 	"[--combat codename:count:CHAMP|GIANT|NORMAL] [--vulnerable] [--crowd N] [--act walk=SHARE,chat=SHARE] [--seed N] " +
 	"[--provisioning URL] [--token FILE]";
+// --gpu-process trace categories, the fewest that serve processCosts:
+// toplevel gives every thread's top-level tasks as complete events with
+// their thread time (tdur); blink.user_timing carries the window marks.
+// Process and thread names are metadata, recorded whatever the categories.
+const GPU_PROCESS_TRACE_CATEGORIES = [ "toplevel", "blink.user_timing" ];
+const GPU_WINDOW_START = "fps-bench gpu-process window start";
+const GPU_WINDOW_END = "fps-bench gpu-process window end";
+// A GPU-process thread busier than this share of the window is reported.
+const GPU_THREAD_BUSY_SHARE = 0.02;
+// Scenarios whose input can run a second window: cross ends at its
+// destination, and combat's monsters may be dead after the first.
+const REPEATABLE_SCENARIOS = [ "still", "drag", "move", "skill" ];
+
 // How long the client may take to publish every admitted peer.
 const CROWD_PUBLISH_MS = 30000;
 
@@ -355,7 +376,81 @@ function row( result ) {
 		result.p50.toFixed( 2 )
 	} p99 ${result.p99.toFixed( 2 )} max ${result.max.toFixed( 1 )} ms  main ${result.main.toFixed( 2 )} world ${
 		result.world.toFixed( 2 )
-	} ms/f${allocated}${counts ? "  | " + counts : ""}`;
+	} ms/f${allocated}${counts ? "  | " + counts : ""}${gpuRow( result.gpuProcess )}`;
+}
+
+/*
+================
+gpuRow
+================
+*/
+function gpuRow( gpu ) {
+	if ( !gpu ) return "";
+	const ms = value => value === null || value === undefined ? "?" : value.toFixed( 2 );
+	const threads = gpu.threads.map( t => `${t.name} ${(t.busy * 100).toFixed( 0 )}%` ).join( ", " );
+	return `\n${"".padEnd( 13 )} gpu process ${gpu.main?.name ?? "(no main thread)"} cpu ${
+		ms( gpu.main?.cpuMsPerFrame )
+	} wall ${ms( gpu.main?.wallMsPerFrame )} ms/f over ${gpu.frames} traced frames (${
+		gpu.fps.toFixed( 0 )
+	} fps)  | ${threads}`;
+}
+
+/*
+================
+markWindow
+
+The trace µs of the window marks gpuProcessPass placed.
+================
+*/
+function markWindow( events ) {
+	const at = name => events.find( e => e.name === name )?.ts;
+	const start = at( GPU_WINDOW_START ), end = at( GPU_WINDOW_END );
+	if ( !Number.isFinite( start ) || !Number.isFinite( end ) ) {
+		throw Error( "gpu-process: the trace lacks its window marks" );
+	}
+	return { start, end };
+}
+
+/*
+================
+recordProcessEvents
+
+Runs run() under a Chrome trace of GPU_PROCESS_TRACE_CATEGORIES and keeps
+only what processCosts and markWindow read, as the events arrive: an
+uncapped client's GPU process posts hundreds of thousands of tasks a
+second (700 MB of trace JSON in 3 s on an M-series Mac), more than one
+string or file read can hold. Returns run()'s result and the events.
+================
+*/
+async function recordProcessEvents( page, run ) {
+	const cdp = await page.context().newCDPSession( page );
+	const events = [];
+	cdp.on( "Tracing.dataCollected", ( { value } ) => {
+		for ( const e of value ) {
+			if ( e.ph === "M" ) events.push( { ph: e.ph, name: e.name, pid: e.pid, tid: e.tid, args: e.args } );
+			else if ( e.ph === "X" ) {
+				events.push( { ph: e.ph, pid: e.pid, tid: e.tid, ts: e.ts, dur: e.dur, tdur: e.tdur } );
+			} else if ( e.name === GPU_WINDOW_START || e.name === GPU_WINDOW_END ) {
+				events.push( { name: e.name, ts: e.ts } );
+			}
+		}
+	} );
+	const complete = new Promise( resolve => cdp.once( "Tracing.tracingComplete", resolve ) );
+	await cdp.send( "Tracing.start", {
+		transferMode: "ReportEvents",
+		traceConfig: {
+			recordMode: "recordAsMuchAsPossible",
+			includedCategories: GPU_PROCESS_TRACE_CATEGORIES,
+			excludedCategories: [ "*" ]
+		}
+	} );
+	try {
+		return { result: await run(), events };
+	} finally {
+		await cdp.send( "Tracing.end" );
+		await complete;
+		await cdp.detach().catch( () => {} );
+	}
 }
 
 /*
@@ -380,6 +475,50 @@ async function drive( page, name, location, seconds, scene ) {
 		return [ seconds, more => fight( page, more ) ];
 	}
 	return [ CROSS_LIMIT_MS, await cross( page, location.fixture ) ];
+}
+
+/*
+================
+gpuProcessPass
+
+A second window of the scenario under a minimal trace, kept apart from the
+timed window because tracing slows frames. The page marks the span its
+frame probe counted (performance.mark at those page times), so the trace
+window and the frame count come from the same source as the fps.
+================
+*/
+async function gpuProcessPass( page, name, location, options, scene ) {
+	if ( !REPEATABLE_SCENARIOS.includes( name ) ) {
+		console.log( `  gpu-process: ${location.name}/${name} runs once; no traced window` );
+		return null;
+	}
+	const [ms, input] = await drive( page, name, location, options.seconds * 1000, scene );
+	const { result: traced, events } = await recordProcessEvents( page, async () => {
+		const window = await measure( page, `${location.name}/${name} gpu-process`, ms, input );
+		await page.evaluate( ( [span, startName, endName] ) => {
+			performance.mark( startName, { startTime: span.start } );
+			performance.mark( endName, { startTime: span.end } );
+		}, [ window.windowMs, GPU_WINDOW_START, GPU_WINDOW_END ] );
+		return window;
+	} );
+	if ( traced.frames < 2 ) throw Error( `${location.name}/${name}: no frame samples in the traced window` );
+	const costs = processCosts( events, markWindow( events ), traced.frames );
+	const pick = row =>
+		row && {
+			name: row.name,
+			cpuMsPerFrame: row.cpuMsPerFrame,
+			wallMsPerFrame: row.wallMsPerFrame,
+			busy: row.busy
+		};
+	return {
+		categories: GPU_PROCESS_TRACE_CATEGORIES,
+		frames: traced.frames,
+		fps: traced.fps,
+		spanMs: costs.spanMs,
+		main: pick( costs.gpuMain ),
+		threads: costs.gpu.filter( row => row.busy > GPU_THREAD_BUSY_SHARE ).map( pick ),
+		renderer: pick( costs.renderer )
+	};
 }
 
 /*
@@ -514,6 +653,9 @@ async function session( options, location, results ) {
 				throw error;
 			}
 			result.allocatedMBs = allocated === null ? null : allocated / 1048576 / ((Date.now() - started) / 1000);
+			if ( options.gpuProcess ) {
+				result.gpuProcess = await gpuProcessPass( client.page, name, location, options, scene );
+			}
 			results.push( result );
 			if ( options.json ) await writeFile( options.json, JSON.stringify( results, null, 2 ) );
 			console.log( row( result ) );
@@ -630,6 +772,7 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	cpu: false,
 	heap: false,
 	trace: false,
+	gpuProcess: false,
 	combat: "MOB_CH_TIGER:10:GIANT",
 	vulnerable: false,
 	crowd: 32,
@@ -642,6 +785,10 @@ const options = parseOptions( process.argv.slice( 2 ), {
 }, USAGE );
 if ( !frameLimits().includes( options.frameLimit ) ) throw Error( `unsupported frame limit ${options.frameLimit}` );
 for ( const name of options.only ) if ( !SCENARIOS.includes( name ) ) throw Error( `unknown scenario ${name}` );
+// Chrome runs one trace at a time.
+if ( options.trace && options.gpuProcess ) {
+	throw Error( "choose --trace or --gpu-process per run; each records a trace" );
+}
 if ( ![ 0, 1, 2 ].includes( options.shadowDetail ) ) throw Error( `unsupported shadow detail ${options.shadowDetail}` );
 if ( !Number.isInteger( options.seed ) || options.seed < 0 ) throw Error( `--seed must be a whole number` );
 parseActivity( options.act );
