@@ -37,6 +37,10 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
+// maxChurnRate bounds -churn-rate: the ticker period is a second over the
+// rate, and a period that rounds to zero panics time.NewTicker.
+const maxChurnRate = 1000
+
 // churnOptions is one churn run's settings.
 type churnOptions struct {
 	rate        float64
@@ -81,8 +85,8 @@ plus the metrics snapshots and the CPU profile beside it.
 */
 func runChurn(cfg runConfig, opts churnOptions, acct botAccount, outDir string) (churnSummary, error) {
 	summary := churnSummary{Account: acct.ID, RatePerSecond: opts.rate, Stages: map[string]int{}}
-	if opts.rate <= 0 || opts.duration <= 0 {
-		return summary, fmt.Errorf("churn needs a positive rate and duration")
+	if opts.rate <= 0 || opts.rate > maxChurnRate || opts.duration <= 0 {
+		return summary, fmt.Errorf("churn needs a rate in (0, %d] a second and a positive duration", maxChurnRate)
 	}
 	dir := filepath.Join(outDir, "churn")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
