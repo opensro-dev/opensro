@@ -154,3 +154,26 @@ func LoadNpcLookRef(textdataDir, codename string) (NpcDef, bool) {
 	}
 	return NpcDef{}, false
 }
+
+/*
+================
+Ticker.sessionRoster
+
+The NPCs one session's scope pass spawns from at a tick instant: the
+static roster, or its seasonal look variant when RosterAt is set
+(port-only; nil means Roster), then the runtime objects standing in the
+session's world instance (WorldNpcs: a quest instance's exit gate).
+================
+*/
+func (t *Ticker) sessionRoster(world uint32, nowMs int64) []NpcDef {
+	roster := t.Roster
+	if t.RosterAt != nil {
+		roster = t.RosterAt(nowMs)
+	}
+	if t.WorldNpcs != nil {
+		if extra := t.WorldNpcs(world); len(extra) > 0 {
+			roster = append(append(make([]NpcDef, 0, len(roster)+len(extra)), roster...), extra...)
+		}
+	}
+	return roster
+}

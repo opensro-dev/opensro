@@ -7,19 +7,19 @@ Port-only, not native to v1.150: the item ships in the v1.150 data
 (ITEM_ETC_E060517_MON_GENERATION_BOX, "Pandora's Box", 3/3/15/1) and the
 survival arena drops it as a ground prop (sookarena_powerups.go), but no
 v1.150 server opens it from the bag. The rules are the v1.188 server's
-(CQEV_PANDORA_BOX_100LV, traced 2026-11-16):
+(its Pandora's Box quest event, traced 2026-11-16):
 
   - The refusals are the summon scroll's: a town region, a user below
-    level 30, the battle arena (shared base class CSummonScrollEvent);
+    level 30, the battle arena (the two items share one event base);
     none spends the box.
   - The box opens at the user's position and runs a job ticking every
     5 s for 240 ticks: at most 20 minutes.
   - Wave k (0..9) is four monsters of the strong table's kind at level
-    min(user level, 110) - 9 + k (0x8758F0), within about 50 units of
+    min(user level, 110) - 9 + k, within about 50 units of
     the box, at grade 7. The next wave lands only once every monster of
     the last is dead, checked on the job's tick.
   - A grade-7 monster leaves after 300 s; when one does, the event ends
-    (0x4C21E0 kills the box and drops the job). So does the tenth wave's
+    (the box dies with it and the job ends). So does the tenth wave's
     clearing, and the job's last tick.
   - No owner: anyone may fight the waves; their kills pay ordinary loot
     and experience (the special drop handler returns for this event).
@@ -31,7 +31,7 @@ opener in a notice instead (port-only). The kinds are the summon
 scroll's table (partysummonscroll.go); the box reads its keys from 21,
 and the rows below 30 are pandoraLowKinds. A level-30 opener's first
 waves read keys 21..29; below key 21 the native lookup pads with key 21.
-The waves' tactics are chosen with their grade 7 (0x5EBAAD), unlike the
+The waves' tactics are chosen with their grade 7, unlike the
 scroll's grade 0.
 
 Like the scroll, the box reaches players only through So-Ok's Christmas
@@ -73,7 +73,7 @@ const (
 )
 
 // pandoraLowKinds are the table's keys 21 to 29, below the summon
-// scroll's: the v1.188 map built at 0x872E20 (first insert per key; key
+// scroll's: the v1.188 server's level map (first insert per key; key
 // 28's second insert, MOB_EVE_STRONG_AM_SOLDIER, does not overwrite), as
 // the v1.150 MOB_<X> each MOB_EVE_STRONG_<X> copies.
 var pandoraLowKinds = [partySummonMinLevel - pandoraLowKey]string{

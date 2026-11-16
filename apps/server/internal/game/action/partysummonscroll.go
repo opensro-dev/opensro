@@ -7,8 +7,7 @@ to hunt, one per party member
 Port-only, not native to v1.150: the item ships in the v1.150 data
 (ITEM_ETC_E060526_SUMMON_PARTY_SCROLL_A, "Monster Summon Scroll (party
 use)", 3/3/15/2) but no v1.150 server serves it. The rules are the
-v1.188 server's (CQEV_GUILD_SUPPORT, use 0x933B90, spawn 0x933EE0,
-traced 2026-11-16):
+v1.188 server's (its summon-scroll quest event, traced 2026-11-16):
 
   - Refusals, in order, none spending the scroll: a town region
     ("Summon scrolls cannot be used in towns.", SN_TALK_QEV_CH_EVENT_0818_01),
@@ -19,16 +18,15 @@ traced 2026-11-16):
     the strong-monster table at min(user level, 110), the user's own
     level only. Each lands 20 + 0..80 units from the user, at grade 7,
     with no owner: anyone may hunt it. Its hostility is its default
-    tactics', chosen with grade 0 (0x57C1C0): most of the table's kinds
+    tactics', chosen with grade 0: most of the table's kinds
     attack on sight, a few (the Yeti) do not; a kind the port's tactics
     data does not cover attacks on sight (inference: the event monster is
     there to be fought).
   - Grade 7 is x30 HP, x30 EXP and SP, x1.8 skill damage
     (world/monster EffectiveMaxHP, reward.go, combat MonsterDamageScale).
-  - A grade-7 monster outside the arena leaves after 300 s
-    (0x4C1208..0x4C1252); a timeout gives nothing. Its kill pays its
-    ordinary loot and experience (the special drop handler returns at
-    once for this event, 0x9348F0).
+  - A grade-7 monster outside the arena leaves after 300 s; a timeout
+    gives nothing. Its kill pays its ordinary loot and experience (the
+    event's special kill drop is switched off for this event).
 
 The table names MOB_EVE_STRONG_<X>, a row that is MOB_<X> with grade 7
 and nothing else (level and HP equal on every row). v1.150 has no
@@ -83,7 +81,7 @@ const (
 	partySummonFailedLine = "No monster could be summoned here."
 )
 
-// partySummonKinds is the v1.188 table (0x933EE0) from level 30 to 110,
+// partySummonKinds is the v1.188 server's table from level 30 to 110,
 // as the v1.150 MOB_<X> each MOB_EVE_STRONG_<X> row copies.
 var partySummonKinds = [partySummonMaxLevel - partySummonMinLevel + 1]string{
 	"MOB_WC_HYEONGCHEON", "MOB_CA_PERYTON_CLON", "MOB_OA_SCORPION", "MOB_CA_ONG_CLON", "MOB_CA_ONG",
