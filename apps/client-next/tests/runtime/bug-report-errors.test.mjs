@@ -391,6 +391,27 @@ test("a plain object carrying a stack records no header count and ships no frame
 	assert.equal( shared.stack, undefined );
 });
 
+test("a message cut to a prefix of the written one records no header count", async t => {
+	const error = new Error( "hi\nPLAYER at x:1:2" );
+	// V8 wrote the whole constructed message; only its prefix remains now.
+	error.stack = "Error: hi\nPLAYER at x:1:2\n    at send (" + ORIGIN + "/src/chat.ts:4:2)";
+	error.message = "hi";
+	const { record, shared } = await sharedThrow( t, error, "hi" );
+	assert.equal( record?.headerLines, undefined, "the line after the header is not a frame" );
+	assert.equal( shared.stack, undefined );
+});
+
+test("a header-only stack and a header followed by a frame both record their count", async t => {
+	const bare = new RangeError( "Maximum call stack size exceeded" );
+	bare.stack = "RangeError: Maximum call stack size exceeded";
+	assert.equal( (await sharedThrow( t, bare, bare.message )).record?.headerLines, 1 );
+	const framed = new RangeError( "Maximum call stack size exceeded" );
+	framed.stack = "RangeError: Maximum call stack size exceeded\n    at walk (" + ORIGIN + "/src/walk.ts:1:2)";
+	const { record, shared } = await sharedThrow( t, framed, framed.message );
+	assert.equal( record?.headerLines, 1 );
+	assert.equal( shared.stack, "RangeError: Maximum call stack size exceeded\n    at walk (/src/walk.ts:1:2)" );
+});
+
 test("an error renamed with a newline counts its name's lines too", async t => {
 	const error = new TypeError( "boom" );
 	error.name = "TypeError\n    at PLAYER TEXT HERE:1:2";

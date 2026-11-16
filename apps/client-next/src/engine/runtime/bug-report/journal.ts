@@ -40,6 +40,9 @@ const MAX_SCRIPTS = 3;
 const FRAME_GROUP_MS = 1000;
 const MAX_ERROR_MESSAGE = 500;
 const MAX_ERROR_STACK = 1600;
+// A V8 frame ("    at fn (url:1:2)" or "    at url:1:2"): a stack with a
+// class header holds only these under the header's own lines.
+export const STACK_FRAME_V8 = /^\s+at\s.*:\d+:\d+\)?$/;
 // The distinct failures kept for the page's life, each its first throw plus
 // a repeat count. Past this many, new failures fall back to the ring.
 const MAX_KEPT_ERRORS = 8;
@@ -153,14 +156,19 @@ function errorEventFields(
 stackHeaderLines
 
 The lines of rawStack that hold its V8 header, "name: message" (or the bare
-name for an empty message), counted only when rawStack opens with exactly
-that header; undefined otherwise. Name and message are read whole, before
-any slicing, so newlines in either are counted.
+name for an empty message), counted only when the header ends exactly where
+rawStack's first frame begins: rawStack is the header alone, or the header,
+a newline and a V8 frame. A message cut short after construction is a
+prefix of the written one and fails that test. Name and message are read
+whole, before any slicing, so newlines in either are counted.
 ================
 */
 function stackHeaderLines( thrown: Error, rawStack: string ): number | undefined {
 	const header = thrown.name + (thrown.message ? ": " + thrown.message : "");
-	return rawStack.startsWith( header ) ? header.split( "\n" ).length : undefined;
+	const lines = header.split( "\n" ).length;
+	if ( rawStack === header ) return lines;
+	if ( !rawStack.startsWith( header + "\n" ) ) return undefined;
+	return STACK_FRAME_V8.test( rawStack.split( "\n" )[lines] ?? "" ) ? lines : undefined;
 }
 
 /*

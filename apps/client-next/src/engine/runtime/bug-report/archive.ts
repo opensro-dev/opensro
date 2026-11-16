@@ -15,7 +15,7 @@ media; saving a new report drops the oldest ones first.
 */
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { zipStore, type ZipFile } from "@/engine/foundation/archive/zip";
-import { MOVEMENT_ERROR_CODES, REFUSAL_OTHER, REFUSAL_REASONS, UI_CONTROL_PREFIX } from "./journal";
+import { MOVEMENT_ERROR_CODES, REFUSAL_OTHER, REFUSAL_REASONS, STACK_FRAME_V8, UI_CONTROL_PREFIX } from "./journal";
 import {
 	GPU_TOKEN_PATTERN,
 	reportedDegradedPipelines,
@@ -121,9 +121,6 @@ const ENGINE_ERROR_MESSAGES = [
 ];
 // A shared stack keeps this many frames under its header.
 const MAX_SHARED_STACK_FRAMES = 12;
-// A V8 frame ("    at fn (url:1:2)" or "    at url:1:2"): a stack with a
-// class header holds only these under the message's own lines.
-const STACK_FRAME_V8 = /^\s+at\s.*:\d+:\d+\)?$/;
 // A SpiderMonkey or JavaScriptCore frame ("fn@url:1:2", "@url:1:2"): such a
 // stack has no header and starts at its first frame.
 const STACK_FRAME_AT_SIGN = /^[^\s@]*@\S*:\d+:\d+$/;
