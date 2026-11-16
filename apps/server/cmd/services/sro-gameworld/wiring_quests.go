@@ -100,6 +100,9 @@ func (game *gameplayPlane) wireQuestDoors(quests *quest.Runtime) {
 			out = append(out, game.items.HalloweenTalkOptions(npcCodename, character)...)
 			// The Christmas rows (port-only), the same way.
 			out = append(out, game.items.ChristmasTalkOptions(npcCodename, character)...)
+			// So-Ok's Christmas Gift (port-only), the same way; it never
+			// runs beside the Christmas rows (progression/christmas_mode.go).
+			out = append(out, game.items.SoOkChristmasTalkOptions(npcCodename, character)...)
 			return out
 		},
 		Accept: func(character *enterworld.Character, codename string) ([]wire.Frame, error) {
@@ -116,6 +119,9 @@ func (game *gameplayPlane) wireQuestDoors(quests *quest.Runtime) {
 			}
 			if codename == action.ChristmasExchangeService {
 				return game.items.ExchangeChristmasSocks(character, npcCodename)
+			}
+			if codename == action.SoOkChristmasExchangeService {
+				return game.items.ExchangeSoOkChristmasBoxes(character, npcCodename)
 			}
 			if codename == quest.ResuscitationService {
 				result, err := quests.OpenResuscitation(character, npcCodename)

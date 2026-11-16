@@ -118,11 +118,11 @@ test( "movement cadence captures live click reversal and authoritative receipts"
 		// owner = predictedOwner;" is gone: the prediction rewrite removed that
 		// line, and nothing in this file asserts on receipts. Re-add it against
 		// the new receipt seam when the epic's budget part needs the stream.
-		await page.route( "**/runtime/characters/actor-motion.ts*", async route => {
+		await page.route( "**/runtime/characters/actor-advance.ts*", async route => {
 			const response = await route.fetch(),
 				body = await response.text(),
 				needle = "displayedDependencies.set(entity.gid, dependencies);";
-			assert.ok( body.includes( needle ), "actor-motion dependency seam drifted" );
+			assert.ok( body.includes( needle ), "actor-advance dependency seam drifted" );
 			await route.fulfill( {
 				response,
 				body: body.replace(

@@ -273,6 +273,9 @@ function bakeMeshVertices(mesh, bakeByLocal, meshPath) {
  *   or { bone, bake: {q,t} } (ride that row AND pre-transform the bone's vertices by
  *   bake - the attach-bone branch case). Return null to give up.
  * - skipUnboundMeshes: drop a mesh whose unknown bone stays unresolved (else throw).
+ * - attachedMotionRequests: the attached-motion requests (attachedMotionClips.mjs);
+ *   default defaultAttachedMotionRequests(). A cached step passes them in so the
+ *   table it came from is part of its key, not a read inside the step.
  */
 export async function assembleAvatar(bsrAssetPath, options = {}) {
   const bsrBuffer = await loadDataAsset(bsrAssetPath);
@@ -378,7 +381,7 @@ export async function assembleAvatar(bsrAssetPath, options = {}) {
     if (pickPath && pickPath !== walkPath) {
       clips.push({ role: "pick", path: pickPath, clip: parseBan(await loadDataAsset(pickPath), pickPath) });
     }
-    for (const motion of pickAttachedMotionClips(bsr)) clips.push({role:motion.role,path:motion.path,clip:parseBan(await loadDataAsset(motion.path),motion.path)});
+    for (const motion of pickAttachedMotionClips(bsr, options.attachedMotionRequests)) clips.push({role:motion.role,path:motion.path,clip:parseBan(await loadDataAsset(motion.path),motion.path)});
     for (const attackClip of pickAttackStateClips(bsr)) {
       clips.push({
         role: attackClip.role,
