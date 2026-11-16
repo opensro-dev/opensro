@@ -254,6 +254,12 @@ func (rt *Runtime) HandleItemUse(
 			result = itemUseFailure(code)
 			return false
 		}
+		if family == itemUseSpiritWake {
+			if len(tail) != 0 {
+				return false
+			}
+			return rt.wakeSpirit(character, ref, rowIndex, request, &result)
+		}
 		nowMs := rt.Now().UnixMilli()
 		if family == itemUseMercenary {
 			if len(tail) != 0 {
@@ -266,6 +272,18 @@ func (rt *Runtime) HandleItemUse(
 				return false
 			}
 			return rt.useSummonScroll(persistentSummonUse{division: divisionID, character: character, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, &result)
+		}
+		if family == itemUsePartySummonScroll {
+			if len(tail) != 0 {
+				return false
+			}
+			return rt.usePartySummonScroll(persistentSummonUse{division: divisionID, character: character, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, &result)
+		}
+		if family == itemUsePandoraBox {
+			if len(tail) != 0 {
+				return false
+			}
+			return rt.usePandoraBox(persistentSummonUse{division: divisionID, character: character, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, &result)
 		}
 		if family == itemUseStructureRepair {
 			return rt.useStructureRepair(character, skillItemUse{division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, tail, &result)

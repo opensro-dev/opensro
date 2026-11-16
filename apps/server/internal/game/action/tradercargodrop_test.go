@@ -242,3 +242,29 @@ func TestDisconnectCargoFollowsTheCloseCause(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestRiderDeathCargoIsLostToThePlayerKiller
+
+Job honor's real cost (jobhonor.go): goods a player's kill scatters carry
+that killer's account, and goods no player killed for carry none.
+================
+*/
+func TestRiderDeathCargoIsLostToThePlayerKiller(t *testing.T) {
+	_, field := regionsByCombat(t)
+	for _, killer := range []*enterworld.Character{nil, {ID: 77, Name: "Thief", AccountID: "thief-account"}} {
+		rt, character := newCargoTestRuntime(t, true, field, cosBandTransport, true)
+		zero := int64(0)
+		character.CurrentHP = &zero
+		rt.settlePlayerDeathInDoor(testDivision, character, deathKiller{player: killer}, rt.Now().UnixMilli())
+		want := ""
+		if killer != nil {
+			want = killer.AccountID
+		}
+		ground := rt.Ground.All(testDivision)
+		if len(ground) != 1 || ground[0].LostTo != want {
+			t.Fatalf("killer %v: ground %+v, want lost to %q", killer != nil, ground, want)
+		}
+	}
+}

@@ -36,7 +36,6 @@ codename), so this importer pairs the n-th line with the n-th row.
 ===========================================================================
 """
 import argparse
-import hashlib
 import json
 import mmap
 import os
@@ -49,6 +48,8 @@ import sro_pk2
 from convert_images import save_image_payload
 from import_vsro_alexandria import archive_index, table_rows
 from import_vsro_tomb_minimap import ddj_payload
+from pin_file import read_pin_field
+from prepare_client_resources import file_digest
 from sro_paths import PUBLIC_ROOT
 
 V1696_ENV = "SRO_V1696_ROOT"
@@ -59,7 +60,6 @@ CATALOG = PUBLIC_ROOT / "assets" / "data" / "worldmap-guide.json"
 IMAGES = PUBLIC_ROOT / "assets" / "images" / "Media_extracted" / "interface"
 MASK_DIR = "worldmap/guide-mask/"
 CATALOG_FORMAT = "opensro-worldmap-guide-v1"
-HASH_CHUNK = 1 << 20
 
 # The DDS header the tiles carry: 128 bytes after the magic's offset.
 DDS_HEADER_BYTES = 128
@@ -72,8 +72,9 @@ LEVEL_COLUMN = 57
 CODENAME_COLUMN = 2
 
 # The art the guide draws besides the tiles, by its path under interface/:
-# the hunting ground's icon and the guide scrollbar's arrows, thumb and
-# track in their faces. The reverse return button's three faces
+# the hunting ground's icon and the guide scrollbar's arrows and thumb in
+# their faces. The bar's track is v1.150's own quest line (qst_scroll_line,
+# 0xB48A86), so no track comes from here (#3515). The reverse return button's three faces
 # (worldmap/map/xy_returnicon*) are not here: the v1.188 buttons import
 # owns them, and a test keeps the two lists disjoint.
 ART = (
@@ -87,7 +88,6 @@ ART = (
 	"guide/gd_scroll_button",
 	"guide/gd_scroll_button_focus",
 	"guide/gd_scroll_button_press",
-	"guide/gd_scroll_line",
 	"guide/gd_contents_lamp",
 	"guide/gd_index_button_open",
 	"guide/gd_index_button_close",
@@ -105,21 +105,15 @@ ART = (
 # The v1.696 Media.pk2 against its pin, before a byte of it is read.
 # ================
 def verify_media(root):
-	try:
-		pin = json.loads(PIN_FILE.read_text(encoding="utf-8"))
-	except (OSError, ValueError) as error:
-		raise SystemExit(f"{PIN_FILE} is unreadable: {error}")
-	if pin.get("format") != PIN_FORMAT or "Media" not in pin.get("archives", {}):
+	archives = read_pin_field(PIN_FILE, PIN_FORMAT, "archives")
+	if "Media" not in archives:
 		raise SystemExit(f"{PIN_FILE} pins no Media.pk2")
 	path = Path(root) / "Media.pk2"
 	if not path.is_file():
 		raise SystemExit(f"{path} not found; {V1696_ENV} must be the pinned v1.696 client folder")
-	hasher = hashlib.sha256()
-	with open(path, "rb") as stream:
-		for chunk in iter(lambda: stream.read(HASH_CHUNK), b""):
-			hasher.update(chunk)
-	if hasher.hexdigest() != pin["archives"]["Media"]:
-		raise SystemExit(f"{path} does not match the pinned v1.696 Media.pk2 (sha256 {hasher.hexdigest()})")
+	actual = file_digest(path)
+	if actual != archives["Media"]:
+		raise SystemExit(f"{path} does not match the pinned v1.696 Media.pk2 (sha256 {actual})")
 	return path
 
 

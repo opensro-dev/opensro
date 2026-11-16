@@ -58,9 +58,13 @@ type InventoryRow struct {
 	// bump). Persisted as JSON numbers: real option magnitudes are u32, so
 	// every encoded value stays far below the 2^53 float boundary.
 	MagicOptions []uint64 `json:"magicOptions,omitempty"`
-	// TransformRefObjID is a monster capsule's Data (item record +0x38,
-	// the capsule's data word): the monster the mask turns its user into.
-	TransformRefObjID uint32 `json:"transformRefObjId,omitempty"`
+	// Data is the item record's data word (+0x38), whose meaning the
+	// item's type gives: a monster capsule's is the monster the mask turns
+	// its user into; a Devil's Spirit's (3/1/14, port-only behind
+	// SRO_NASRUN) is its awakening expiry in Unix seconds, 0 while
+	// dormant (nasrun/clock.go). No item is both. The JSON key keeps the
+	// capsule's original name so every saved record still decodes.
+	Data uint32 `json:"transformRefObjId,omitempty"`
 	// ForgeBound marks an item forged by the GM item-forge tool (port
 	// only, issue #1980): it refuses trade, NPC sale, stall offer and
 	// player drop. Absent on every native row.
@@ -411,6 +415,15 @@ type Character struct {
 	// from at first load, kept so schema 34/35 records still load.
 	HalloweenBoxDay   int64 `json:"halloweenBoxDay,omitempty"`
 	HalloweenBoxCount int64 `json:"halloweenBoxCount,omitempty"`
+	// NasrunTokens is the character's Devil's Spirit token balance, earned
+	// on unique kills and spent at the token shop; NasrunTokenDay is the
+	// token day (nasrun.TokenDay) NasrunTokenDayCount belongs to, the
+	// tokens earned that day under the daily cap (port-only, not native:
+	// SRO_NASRUN, game/nasrun/tokens.go; schema 46). Bound to the
+	// character: nothing moves a balance to another.
+	NasrunTokens        int64 `json:"nasrunTokens,omitempty"`
+	NasrunTokenDay      int64 `json:"nasrunTokenDay,omitempty"`
+	NasrunTokenDayCount int64 `json:"nasrunTokenDayCount,omitempty"`
 	// LevelReachedAt is when the character first reached each milestone level
 	// (PublicLevelMilestones), in Unix milliseconds, for the site's
 	// world-firsts (port-only, not native).

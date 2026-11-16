@@ -18,13 +18,20 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
 import { defined } from "../helpers/defined.mjs";
-const { MONSTER_LEVEL_FILTER_SPAN, decodeHuntingGuide, dungeonDirectory, filterHuntingGuide, monsterDirectory } =
-	await import( "../../src/engine/foundation/ui/hunting-guide.ts" );
+const {
+	MONSTER_LEVEL_FILTER_SPAN,
+	decodeHuntingGuide,
+	dungeonDirectory,
+	filterHuntingGuide,
+	levelBand,
+	monsterDirectory
+} = await import( "../../src/engine/foundation/ui/hunting-guide.ts" );
 const { caveDungeonFloors, caveMapCatalog, cavePageCenter } = await import(
 	"../../src/engine/foundation/ui/cave-map.ts"
 );
 const { createMapToolsHud } = await import( "../../src/engine/runtime/ui/hud/map-tools.ts" );
 const { worldMapDungeonPose } = await import( "../../src/engine/foundation/ui/world-map.ts" );
+const { WORLDMAP_GUIDE_CATALOG } = await import( "../../src/engine/foundation/ui/worldmap-guide.ts" );
 
 /*
 ================
@@ -35,7 +42,7 @@ function monster( refObjId, name, level ) {
 	return { refObjId, name, nameKey: "SN_FIXTURE_" + refObjId, level };
 }
 
-const TIGER = monster( 101, "Tiger", 5 ), BANDIT = monster( 102, "Bandit", 25 ), GIANT = monster( 103, "Giant", 45 );
+const TIGER = monster( 101, "Tiger", 21 ), BANDIT = monster( 102, "Bandit", 25 ), GIANT = monster( 103, "Giant", 45 );
 
 /*
 ================
@@ -82,23 +89,37 @@ test("the directory groups species by region at their first anchor, sorted by le
 	const regions = monsterDirectory( catalogue() );
 	assert.deepEqual( regions.map( row => row.region ), [ 50, 100, 200 ] );
 	assert.deepEqual( regions[0]?.monsters.map( row => row.monster.refObjId ), [ 101, 102 ] );
-	assert.equal( regions[0]?.minLevel, 5 );
+	assert.equal( regions[0]?.minLevel, 21 );
 	assert.equal( regions[0]?.maxLevel, 25 );
 	const home = defined( regions[1] );
 	assert.deepEqual( home.monsters.map( row => row.monster.refObjId ), [ 101, 102, 103 ] );
-	assert.equal( home.minLevel, 5 );
+	assert.equal( home.minLevel, 21 );
 	assert.equal( home.maxLevel, 45 );
 	// The Tiger's row in region 100 is its first anchor there, not the second.
 	assert.equal( home.monsters[0]?.x, 19250 );
 	assert.equal( home.monsters[0]?.z, 30 );
 });
 
-test("the level filter's cap hides species above it and the regions it empties", () => {
-	const capped = monsterDirectory( catalogue(), 30 );
-	assert.deepEqual( capped.map( row => row.region ), [ 50, 100 ] );
-	assert.deepEqual( defined( capped[1] ).monsters.map( row => row.monster.refObjId ), [ 101, 102 ] );
-	assert.equal( defined( capped[1] ).maxLevel, 25 );
-	assert.deepEqual( monsterDirectory( catalogue(), 4 ), [] );
+test("the level filter's band hides species outside it and the regions it empties", () => {
+	const banded = monsterDirectory( catalogue(), levelBand( 20 ) );
+	assert.deepEqual( banded.map( row => row.region ), [ 50, 100 ] );
+	assert.deepEqual( defined( banded[1] ).monsters.map( row => row.monster.refObjId ), [ 101, 102 ] );
+	assert.equal( defined( banded[1] ).maxLevel, 25 );
+	assert.deepEqual( monsterDirectory( catalogue(), levelBand( 4 ) ), [] );
+});
+
+test("the band hides species below the character too (the box once did nothing at high level)", () => {
+	// At 40 the band is 40..46: the Tiger (21) and the Bandit (25) are
+	// beneath it, so only the Giant's regions are left.
+	assert.deepEqual( levelBand( 40 ), { min: 40, max: 40 + MONSTER_LEVEL_FILTER_SPAN } );
+	const banded = monsterDirectory( catalogue(), levelBand( 40 ) );
+	assert.deepEqual( banded.map( row => row.region ), [ 100, 200 ] );
+	assert.deepEqual( defined( banded[0] ).monsters.map( row => row.monster.refObjId ), [ 103 ] );
+	assert.deepEqual( monsterDirectory( catalogue(), levelBand( 47 ) ), [] );
+	assert.deepEqual(
+		filterHuntingGuide( catalogue(), levelBand( 40 ) ).monsters.map( row => row.refObjId ),
+		[ 103 ]
+	);
 });
 
 test("every dungeon floor fills from the catalogue's dungeon anchors (issue #3239)", () => {
@@ -109,16 +130,17 @@ test("every dungeon floor fills from the catalogue's dungeon anchors (issue #323
 		const row = dungeonDirectory( cat, floor.regionId );
 		assert.ok( row && row.monsters.length > 0, "floor " + floor.floorLabel + " lists no species" );
 	}
-	// Sorted by level, at the first anchor, and capped like the world list.
+	// Sorted by level, at the first anchor, and banded like the world list.
 	assert.deepEqual(
 		dungeonDirectory( cat, 32769 )?.monsters.map( row => row.monster.refObjId ),
 		[ 101, 102 ]
 	);
 	assert.deepEqual(
-		dungeonDirectory( cat, 32769, 10 )?.monsters.map( row => row.monster.refObjId ),
+		dungeonDirectory( cat, 32769, levelBand( 15 ) )?.monsters.map( row => row.monster.refObjId ),
 		[ 101 ]
 	);
-	assert.equal( dungeonDirectory( cat, 32769, 4 ), undefined );
+	assert.equal( dungeonDirectory( cat, 32769, levelBand( 4 ) ), undefined );
+	assert.equal( dungeonDirectory( cat, 32769, levelBand( 26 ) ), undefined );
 	assert.equal( dungeonDirectory( cat, 12345 ), undefined );
 });
 
@@ -130,7 +152,7 @@ test("the decoded catalogue keeps dungeon anchors apart from the outdoor regions
 			refObjId: 101,
 			nameKey: "SN_FIXTURE_TIGER",
 			name: "Fixture Tiger",
-			level: 5,
+			level: 21,
 			points: [ { regionId: REGION_A, x: 500, z: 700 } ],
 			dungeonPoints: [ { regionId: 32769, x: 500, z: 700 } ]
 		} ]
@@ -157,7 +179,7 @@ test("the decoded catalogue keeps dungeon anchors apart from the outdoor regions
 });
 
 test("filterHuntingGuide drops the species, their anchors and their sections together", () => {
-	const filtered = filterHuntingGuide( catalogue(), 30 );
+	const filtered = filterHuntingGuide( catalogue(), levelBand( 20 ) );
 	assert.deepEqual( filtered.monsters.map( row => row.refObjId ), [ 101, 102 ] );
 	assert.deepEqual( [ ...filtered.regions.keys() ].sort( ( a, b ) => a - b ), [ 50, 100 ] );
 	assert.equal( defined( filtered.regions.get( 100 ) ).length, 3 );
@@ -284,14 +306,14 @@ function ids( view ) {
 	return view.controls.map( row => row.id );
 }
 
-test("the level filter starts on and its toggle lifts the cap", () => {
+test("the level filter starts on and its toggle lifts the band", () => {
 	const hud = tools();
-	assert.equal( hud.filterCap( 20 ), 20 + MONSTER_LEVEL_FILTER_SPAN );
-	assert.equal( hud.filterCap( undefined ), undefined );
+	assert.deepEqual( hud.filterBand( 20 ), { min: 20, max: 20 + MONSTER_LEVEL_FILTER_SPAN } );
+	assert.equal( hud.filterBand( undefined ), undefined );
 	assert.equal( hud.activate( "map-level-filter", catalogue(), 20 ), null );
-	assert.equal( hud.filterCap( 20 ), undefined );
+	assert.equal( hud.filterBand( 20 ), undefined );
 	assert.equal( hud.activate( "map-level-filter", catalogue(), 20 ), null );
-	assert.equal( hud.filterCap( 20 ), 20 + MONSTER_LEVEL_FILTER_SPAN );
+	assert.deepEqual( hud.filterBand( 20 ), { min: 20, max: 20 + MONSTER_LEVEL_FILTER_SPAN } );
 	assert.equal( hud.activate( "map-size", catalogue(), 20 ), undefined, "foreign ids are not the tools'" );
 	hud.dispose();
 });
@@ -306,7 +328,7 @@ test("the foot's checkbox is the one level filter switch, at its layout place", 
 	assert.deepEqual( switches[0].rect, [ 864, 704, 16, 16 ] );
 	assert.equal( switches[0].selected, true );
 	assert.equal( hud.activate( "map-level-filter", catalogue(), 20 ), null );
-	assert.equal( hud.filterCap( 20 ), undefined );
+	assert.equal( hud.filterBand( 20 ), undefined );
 	assert.equal( control( paint( hud ), "map-level-filter" )?.selected, false );
 	assert.ok( paint( hud ).quads.some( quad => quad.texture.endsWith( "com_checkbutton_off.png" ) ) );
 	hud.dispose();
@@ -331,7 +353,7 @@ test("the guide tree opens a group in place and a pick returns the anchor pose",
 	hud.activate( "map-side-tab", cat, 20 );
 	let view = paint( hud );
 	defined( control( view, "map-guide" ) );
-	// At level 20 the cap is 26: the Giant's region 200 is hidden whole.
+	// At level 20 the band is 20..26: the Giant's region 200 is hidden whole.
 	assert.deepEqual(
 		ids( view ).filter( id => id.startsWith( "map-region:" ) ),
 		[ "map-region:50", "map-region:100" ]
@@ -446,7 +468,7 @@ test("floor picks hold per dungeon and a viewed dungeon opens on its first floor
 	// centred on that page.
 	const outside = { regionId: 250, x: 0, y: 0, z: 0, angle: 0 };
 	assert.equal( hud.cavePage( CAVE, outside ), undefined );
-	hud.activate( "map-dungeon:2", undefined, undefined );
+	hud.activate( "map-dungeon-icon:2", undefined, undefined );
 	const view = defined( hud.cavePage( CAVE, outside ) );
 	assert.equal( view.page.regionId, 32775 );
 	assert.deepEqual( view.center, cavePageCenter( view.page ) );
@@ -466,7 +488,7 @@ test("the dungeon page wears the later client's chrome and its arrows walk the f
 	const floors = caveDungeonFloors( CAVE, 32769 );
 	const outside = { regionId: 250, x: 0, y: 0, z: 0, angle: 0 };
 	const shown = () => defined( hud.cavePage( CAVE, outside ) ).page;
-	hud.activate( "map-dungeon:1", undefined, undefined );
+	hud.activate( "map-dungeon-icon:1", undefined, undefined );
 	assert.equal( shown().floorIndex, 0, "viewing opens on the first floor" );
 	// The pin stands on the world too, without the globe.
 	let view = paint( hud );
@@ -499,7 +521,7 @@ test("the dungeon page wears the later client's chrome and its arrows walk the f
 	assert.equal( shown().floorIndex, 3, "the up end holds" );
 	hud.activate( "map-floor-down", undefined, undefined, false );
 	assert.equal( shown().floorIndex, 2 );
-	// The entrance's own icon opens its dungeon, as its label does.
+	// The entrance's own icon opens its dungeon.
 	hud.clearView();
 	hud.activate( "map-dungeon-icon:2", undefined, undefined );
 	assert.equal( defined( hud.cavePage( CAVE, outside ) ).page.regionId, 32775 );
@@ -592,7 +614,7 @@ test("the floor spinner and the foot note stand at their layout places", () => {
 	const filter = control( view, "map-level-filter" );
 	assert.equal( filter?.helpText, "Fixture note" );
 	hud.activate( "map-level-filter", undefined, undefined );
-	assert.equal( hud.filterCap( 20 ), undefined, "the foot's box lifts the filter" );
+	assert.equal( hud.filterBand( 20 ), undefined, "the foot's box lifts the filter" );
 	hud.dispose();
 });
 
@@ -610,8 +632,21 @@ test("a door is named by the client's text and its control is the icon drawn the
 	assert.deepEqual( defined( control( view, "map-dungeon-icon:1" ) ).rect, icon );
 	// A door the text does not name stays the plain icon.
 	view = paint( hud, { center, strings: { SN_ZONE_23001: "Fixture Tomb" } } );
-	assert.equal( control( view, "map-dungeon:1" ), undefined );
 	assert.equal( control( view, "map-dungeon-icon:1" ), undefined );
+	hud.dispose();
+});
+
+test("a door adds no label: the page's own label names the place once (#3516)", () => {
+	const hud = tools();
+	const written = [];
+	const text = {
+		...TEXT,
+		quads: ( value, rect, clip, color, style ) => (written.push( { value, rect, style } ), [])
+	};
+	const center = defined( worldMapDungeonPose( 0x8001 ) );
+	const view = paint( hud, { center, text } );
+	defined( control( view, "map-dungeon-icon:1" ), "the door is still offered" );
+	assert.deepEqual( written.filter( row => row.value === "Fixture Cave" ), [], "no second label" );
 	hud.dispose();
 });
 
@@ -625,7 +660,7 @@ const GUIDE_BYTES = new TextEncoder().encode( JSON.stringify( {
 			refObjId: 101,
 			nameKey: "SN_FIXTURE_TIGER",
 			name: "Fixture Tiger",
-			level: 5,
+			level: 21,
 			points: [
 				{ regionId: REGION_A, x: 500, z: 700 },
 				{ regionId: REGION_A, x: 900, z: 300 },
@@ -663,8 +698,11 @@ const SETTLE_STEPS = 12, STEP_MS = 100;
 ================
 fixture
 
-The production UI at level 20 (filter cap 30) with the fixture guide
-offered by the session; the pose can be moved between steps.
+The production UI at level 20 (filter band 20..26) with the fixture guide
+offered by the session; the pose can be moved between steps. The build's
+M map guide catalogue is absent here: with one published (a v1.696 build,
+#3387) the drawer shows that tree instead of the session's hunting guide,
+which is the directory these tests drive.
 ================
 */
 function fixture() {
@@ -677,7 +715,7 @@ function fixture() {
 		undefined,
 		undefined,
 		{},
-		{ [GUIDE_PATH]: GUIDE_BYTES }
+		{ [GUIDE_PATH]: GUIDE_BYTES, [WORLDMAP_GUIDE_CATALOG]: { absent: true } }
 	);
 	let state = {
 		...f.state,
@@ -738,11 +776,11 @@ test("the map opens with the filter and list on, and the drawer honours the filt
 		view = f.activate( "map-side-tab" );
 		defined( control( view, "map-region:" + REGION_A ) );
 		defined( control( view, "map-region:" + REGION_B ) );
-		assert.equal( control( view, "map-region:" + REGION_C ), undefined, "the Giant's region is over the cap" );
+		assert.equal( control( view, "map-region:" + REGION_C ), undefined, "the Giant's region is above the band" );
 		view = f.activate( "map-region:" + REGION_A );
 		defined( control( view, "map-monster:" + REGION_A + ":101" ) );
 		defined( control( view, "map-monster:" + REGION_A + ":102" ) );
-		assert.equal( control( view, "map-monster:" + REGION_A + ":103" ), undefined, "the Giant is over the cap" );
+		assert.equal( control( view, "map-monster:" + REGION_A + ":103" ), undefined, "the Giant is above the band" );
 		view = f.activate( "map-level-filter" );
 		assert.equal( defined( control( view, "map-level-filter" ) ).selected, false );
 		defined( control( view, "map-monster:" + REGION_A + ":103" ), "lifting the filter shows the Giant" );
@@ -778,18 +816,11 @@ test("dungeon entrances open their map and a dungeon starts on the player's floo
 		// Stand at the Donwhang cave mouth the world map itself names.
 		f.moveTo( defined( worldMapDungeonPose( 0x8001 ), "the cave mouth pose" ) );
 		let view = f.step();
-		defined( control( view, "map-dungeon:1" ), "the cave entrance is offered" );
-		// The entrance's own icon takes the click too (issue #3210):
-		// the control is the client's xy_dungeon icon drawn at the
-		// door, so hovering it shows the same popup as the label
-		// (issue #3238: the popup used to answer to the name alone).
-		const icon = defined( control( view, "map-dungeon-icon:1" ) );
+		// The entrance's own icon takes the click (issue #3210): the
+		// control is the client's xy_dungeon icon drawn at the door, so
+		// hovering it shows the popup (issue #3238).
+		const icon = defined( control( view, "map-dungeon-icon:1" ), "the cave entrance is offered" );
 		assert.equal( icon.helpText, "Open the Donwhang Stone Cave map", "the marker carries the popup text" );
-		assert.equal(
-			defined( control( view, "map-dungeon:1" ) ).helpText,
-			icon.helpText,
-			"marker and label name the same popup"
-		);
 		assert.equal(
 			f.scenes.at( -1 )?.quads.some( quad =>
 				quad.texture.endsWith( "xy_dungeon.png" ) &&

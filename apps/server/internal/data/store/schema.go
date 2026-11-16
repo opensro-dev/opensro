@@ -155,7 +155,18 @@ func isVersionMismatch(err error) bool {
 // record.
 // Version 44 adds the optional per-recipient Raven's Refuge recovery deadline.
 // The offline upgrade preserves all records; absent deadlines remain zero.
-const CurrentVersion = 44
+// Version 45 changes no record: layout 13 adds the trade_history table
+// (port-only, trade_history.go), the record of each committed exchange and
+// stall sale. The schema stamp is what makes a release run the offline
+// upgrade that adds it; the upgrade rewrites no record.
+// Version 46 adds the optional per-character Devil's Spirit token balance
+// and its daily count (port-only, SRO_NASRUN, game/nasrun/tokens.go). The
+// offline upgrade preserves all records; absent fields stay zero.
+// Version 47 changes no record: layout 14 adds the AI caravan memory and
+// route-heat tables (port-only, SRO_AI_CARAVANS, caravan_agents.go). The
+// schema stamp is what makes a release run the offline upgrade that adds
+// them; the upgrade rewrites no record.
+const CurrentVersion = 47
 
 /*
 ================
@@ -207,26 +218,33 @@ var storeSteps = map[int]storeStep{
 	22: {true, "optional community site fields; layout 9 adds unique_kills", 5, 9},
 	23: {true, "optional publicGearHidden", 5, 9},
 	24: {true, "optional mostWanted", 5, 9},
-	25: {true, "no record change; layout 10 adds economy_ledger", 5, 12},
-	26: {true, "optional guild foundedAtMs", 5, 12},
-	27: {true, "optional training-camp honor fields and campDisbandedAtMs", 5, 12},
-	28: {true, "optional companion training and treeVersion", 5, 12},
-	29: {true, "optional world.instanceReturn", 5, 12},
-	30: {true, "optional fortress structure madeAtMs", 10, 12},
-	31: {true, "optional pet cast capacity, charges and recharge period", 10, 12},
-	32: {true, "optional breakNotice", 10, 12},
-	33: {true, "optional name-change scroll state; layout 11 adds name_reservations", 11, 12},
-	34: {true, "optional per-character Halloween box count", 11, 12},
-	35: {true, "optional mostWanted.expiresAtMs", 11, 12},
-	36: {false, "the Halloween count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 11, 12},
-	37: {true, "optional time-online record", 11, 12},
-	38: {true, "optional Academy cumulated-buff fields on camp members", 11, 12},
-	39: {true, "no record change; layout 12 adds silk_history", 12, 12},
-	40: {true, "optional mostWanted.nextDecayAtMs and item forgeBound; expiresAtMs stays as an unread seed", 12, 12},
-	41: {true, "optional account gourdCount", 12, 12},
-	42: {true, "optional arena entry markers and reward chest", 12, 12},
-	43: {false, "the survival arena count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 12, 12},
-	44: {true, "optional top-level ravenRefugeReadyAtMs recovery deadline", 5, 12},
+	25: {true, "no record change; layout 10 adds economy_ledger", 5, 14},
+	26: {true, "optional guild foundedAtMs", 5, 14},
+	27: {true, "optional training-camp honor fields and campDisbandedAtMs", 5, 14},
+	28: {true, "optional companion training and treeVersion", 5, 14},
+	29: {true, "optional world.instanceReturn", 5, 14},
+	30: {true, "optional fortress structure madeAtMs", 10, 14},
+	31: {true, "optional pet cast capacity, charges and recharge period", 10, 14},
+	32: {true, "optional breakNotice", 10, 14},
+	33: {true, "optional name-change scroll state; layout 11 adds name_reservations", 11, 14},
+	34: {true, "optional per-character Halloween box count", 11, 14},
+	35: {true, "optional mostWanted.expiresAtMs", 11, 14},
+	36: {false, "the Halloween count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 11, 14},
+	37: {true, "optional time-online record", 11, 14},
+	38: {true, "optional Academy cumulated-buff fields on camp members", 11, 14},
+	39: {true, "no record change; layout 12 adds silk_history", 12, 14},
+	40: {true, "optional mostWanted.nextDecayAtMs and item forgeBound; expiresAtMs stays as an unread seed", 12, 14},
+	41: {true, "optional account gourdCount", 12, 14},
+	42: {true, "optional arena entry markers and reward chest", 12, 14},
+	43: {false, "the survival arena count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 12, 14},
+	// 44 to 46 are no longer the current schema: each low end is the
+	// layout it ran at, and its high end follows the current layout
+	// (layouts 25 and up always end at the current one). The current
+	// schema (47) takes the wide low end.
+	44: {true, "optional top-level ravenRefugeReadyAtMs recovery deadline", 12, 14},
+	45: {true, "no record change; layout 13 adds trade_history", 13, 14},
+	46: {true, "optional per-character Nasrun token balance and daily count", 13, 14},
+	47: {true, "no record change; layout 14 adds the AI caravan tables", 5, 14},
 }
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving

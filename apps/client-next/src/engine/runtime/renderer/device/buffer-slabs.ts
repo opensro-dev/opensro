@@ -15,6 +15,14 @@ A range is freed through the device's retirement queue like a buffer: its
 destroy() returns the bytes to the slab only once no recorded frame can
 name them. Large requests keep a buffer of their own.
 
+A staged set (createStagedSlabs) also keeps a CPU mirror of each buffer.
+Its owner writes ranges into the mirror, in any order during a frame, and
+flush sends each written buffer's dirty span in one queue.writeBuffer: a
+few small ranges a frame cost one write, not one write a range. Every
+byte of a staged buffer goes through write (the mirror is the buffer's
+whole truth, so a flushed span may cover neighbours unchanged), and the
+GPU never writes one.
+
 ===========================================================================
 */
 import type { Retire } from "./retirement";
@@ -59,6 +67,23 @@ type Slab = {
 
 /*
 ================
+Stage
+
+A staged buffer's mirror, as bytes and as the floats over the same
+memory, and the byte span written since the last flush (empty while
+low >= high).
+================
+*/
+type Stage = {
+	buffer: GPUBuffer;
+	bytes: Uint8Array<ArrayBuffer>;
+	floats: Float32Array<ArrayBuffer>;
+	low: number;
+	high: number;
+};
+
+/*
+================
 createBufferSlabs
 
 Ranges of usage-typed slabs for one device generation. dispose destroys
@@ -69,12 +94,78 @@ element, which draws address by baseVertex and firstIndex.
 ================
 */
 export function createBufferSlabs( device: GPUDevice, label: string, usage: number, retire: Retire, stride = 0 ) {
+	const { write: _write, flush: _flush, ...slabs } = slabSet( device, label, usage, retire, {
+		stride,
+		staged: false
+	} );
+	return slabs;
+}
+
+/*
+================
+createStagedSlabs
+
+A set of bound ranges written through write and uploaded by flush, which
+the owner calls before the submit whose commands read the ranges.
+================
+*/
+export function createStagedSlabs( device: GPUDevice, label: string, usage: number, retire: Retire ) {
+	return slabSet( device, label, usage, retire, { stride: 0, staged: true } );
+}
+
+/*
+================
+SlabLayout
+================
+*/
+type SlabLayout = { readonly stride: number; readonly staged: boolean; };
+
+/*
+================
+slabSet
+================
+*/
+function slabSet( device: GPUDevice, label: string, usage: number, retire: Retire, layout: SlabLayout ) {
+	const { stride, staged } = layout;
 	const alignment = stride || Math.max(
 		MIN_ALIGNMENT,
 		device.limits?.minUniformBufferOffsetAlignment ?? 0,
 		device.limits?.minStorageBufferOffsetAlignment ?? 0
 	);
 	const slabs: Slab[] = [], dedicated = new Set<GPUBuffer>();
+	// A staged set's mirrors by buffer, and those written since the last flush.
+	const stages = new Map<GPUBuffer, Stage>(), dirty = new Set<Stage>();
+	/*
+	================
+	mirror
+
+	A staged set mirrors a new buffer; an unstaged one allocates nothing.
+	================
+	*/
+	function mirror( buffer: GPUBuffer, size: number ) {
+		if ( !staged ) return;
+		const bytes = new Uint8Array( size );
+		stages.set( buffer, {
+			buffer,
+			bytes,
+			floats: new Float32Array( bytes.buffer, 0, size >> 2 ),
+			low: Infinity,
+			high: 0
+		} );
+	}
+	/*
+	================
+	unmirror
+
+	A destroyed buffer's mirror goes with it: a flush must not write it.
+	================
+	*/
+	function unmirror( buffer: GPUBuffer ) {
+		const stage = stages.get( buffer );
+		if ( !stage ) return;
+		stages.delete( buffer );
+		dirty.delete( stage );
+	}
 	/*
 	================
 	release
@@ -104,6 +195,7 @@ export function createBufferSlabs( device: GPUDevice, label: string, usage: numb
 		slab.used -= size;
 		if ( !slab.used && slabs.some( other => other !== slab && !other.used ) ) {
 			slabs.splice( slabs.indexOf( slab ), 1 );
+			unmirror( slab.buffer );
 			slab.buffer.destroy();
 		}
 	}
@@ -134,6 +226,7 @@ export function createBufferSlabs( device: GPUDevice, label: string, usage: numb
 			used: size
 		};
 		slabs.push( slab );
+		mirror( slab.buffer, SLAB_BYTES );
 		return [ slab, 0 ];
 	}
 	return {
@@ -150,10 +243,12 @@ export function createBufferSlabs( device: GPUDevice, label: string, usage: numb
 			if ( span > DEDICATED_BYTES ) {
 				const buffer = device.createBuffer( { label, size, usage } );
 				dedicated.add( buffer );
+				mirror( buffer, size );
 				return {
 					binding: Object.freeze( { buffer, offset: 0, size } ),
 					destroy() {
 						dedicated.delete( buffer );
+						unmirror( buffer );
 						buffer.destroy();
 					}
 				};
@@ -181,6 +276,49 @@ export function createBufferSlabs( device: GPUDevice, label: string, usage: numb
 		},
 		/*
 		================
+		write
+
+		Copies the first bytes of source into slice's mirror range, at byte
+		at within the range (staged sets only). The GPU sees them after the
+		next flush. A whole Float32Array copies without a temporary view: the
+		per-draw updates of a frame write hundreds of them.
+		================
+		*/
+		write( slice: BufferSlice, source: ArrayBufferView, bytes: number, at = 0 ) {
+			const { buffer, offset, size } = slice.binding, stage = stages.get( buffer );
+			if (
+				!stage || bytes % 4 || at % 4 || at < 0 || at + bytes > size || bytes > source.byteLength
+			) throw Error( "Invalid staged slab write" );
+			if ( !bytes ) return;
+			const start = offset + at;
+			// Same-type typed array copies keep every bit pattern (NaN payloads).
+			if ( source instanceof Float32Array && bytes === source.byteLength ) stage.floats.set( source, start / 4 );
+			else stage.bytes.set( new Uint8Array( source.buffer, source.byteOffset, bytes ), start );
+			stage.low = Math.min( stage.low, start );
+			stage.high = Math.max( stage.high, start + bytes );
+			dirty.add( stage );
+		},
+		/*
+		================
+		flush
+
+		One queue.writeBuffer a written buffer, covering its dirty span. The
+		writes precede every later submit on the queue. Returns the count.
+		================
+		*/
+		flush(): number {
+			const writes = dirty.size;
+			for ( const stage of dirty ) {
+				const { low, high } = stage;
+				device.queue.writeBuffer( stage.buffer, low, stage.bytes.buffer, low, high - low );
+				stage.low = Infinity;
+				stage.high = 0;
+			}
+			dirty.clear();
+			return writes;
+		},
+		/*
+		================
 		stats
 		================
 		*/
@@ -201,6 +339,8 @@ export function createBufferSlabs( device: GPUDevice, label: string, usage: numb
 			for ( const buffer of dedicated ) buffer.destroy();
 			slabs.length = 0;
 			dedicated.clear();
+			stages.clear();
+			dirty.clear();
 		}
 	};
 }

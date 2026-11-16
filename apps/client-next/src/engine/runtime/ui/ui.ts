@@ -33,6 +33,11 @@ const LETTER_CHILD_WIDTH = 439;
 const LETTER_CHILD_HEIGHT = 271;
 const FRIEND_ROW_STEP = 23;
 const FRIEND_SCROLL_TRACK = 224;
+// The Guild tab's member list (ifguild.txt GDR_GUILD_USERVIEW_SCROLLMGR,
+// id 82, 328 x 139): six 23-pixel gil_bar02 rows (5E8850) and the same
+// vertical scroll as the Friends list, 139 - 2 * 16 pixels of track.
+const GUILD_MEMBER_VISIBLE_ROWS = 6;
+const GUILD_MEMBER_SCROLL_TRACK = 107;
 // 695420 case 9 opens the own stall's title prompt, case 0xD toggles the
 // stall network window (CGInterface_ToggleStallNetworkWindow 69DB80).
 const ACTION_STALL = 1009;
@@ -154,6 +159,7 @@ import {
 	type EventInterfaceLayout
 } from "@/engine/foundation/ui/event-interface";
 import { jobContributionSelf, jobRankPage, jobRankPages } from "@/engine/foundation/gameplay/job-rank";
+import { columnHeadKey, columnHeadLayout } from "@/engine/foundation/ui/column-heads";
 import { createMapTeleport } from "./hud/map-teleport";
 import { createGmHelper, GM_HELPER_HEIGHT, GM_HELPER_ROWS, GM_HELPER_ROW_HEIGHT } from "./hud/gm-helper";
 import type { GmCatalog } from "@/engine/foundation/gameplay/gm-command";
@@ -578,7 +584,7 @@ import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
 import { skillTooltip } from "@/engine/foundation/ui/skill-tooltip";
 import { tooltipColor, type TooltipRow } from "@/engine/foundation/ui/tooltip-rows";
-import { sameUiQuads, sameUiSemantics } from "@/engine/foundation/ui/ui-equality";
+import { uiPublication } from "@/engine/foundation/ui/ui-equality";
 import { createRetainedLayout } from "@/engine/foundation/ui/retained-layout";
 import { targetPetBuffs, buffBoard, buffTimerRoot } from "@/engine/foundation/ui/buff-board";
 import { entityCrestFiles, guildCrestUrl } from "@/engine/foundation/ui/guild-crest";
@@ -985,6 +991,8 @@ const FRAME = ROOT + "interface/frame/mframe_wnd_";
 // msgbox2_window_ has no centre tile: the letter popups' own tiles and black
 // squares (ifletterread / ifletterwrite ids 1-6) fill them.
 const LETTER_CHILD_FRAME = ROOT + "interface/messagebox/msgbox2_window_";
+// ifapprenticeshiphonorranking's RankingListBtn column heads (ids 20-24).
+const ACADEMY_HONOR_HEADER_IDS = [ 20, 21, 22, 23, 24 ] as const;
 const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
 const PARTY_MATCH_VISIBLE_ROWS = 12;
 // The properties dialog (ifsetpartymode) lists Auto Share above Distribution
@@ -1840,6 +1848,11 @@ export function createUi( ports: UiPorts ) {
 		socialPage = 0,
 		confirmSocial = "",
 		partyOptions = 4;
+	// The Guild tab's member list scroll (ifguild.txt id 82): the first
+	// visible row, one row per wheel tick or arrow click.
+	// Whether the last frame drew the paged compact guild list instead of
+	// the native window, so the wheel moves the list that is on screen.
+	let guildMemberOffset = 0, compactGuildShown = false;
 	// The nickname box 0x17 asks about (5E35E0): the member and the nickname.
 	let grantAsk: { readonly id: number; readonly member: string; readonly name: string; } | null = null;
 	// The crest delete's confirm box (52F460 types 0x16/0x19, #2282):
@@ -2393,6 +2406,7 @@ export function createUi( ports: UiPorts ) {
 		grantPowerHud.close();
 		if ( next !== "Guild tools" ) socialMember = 0;
 		socialPage = 0;
+		guildMemberOffset = 0;
 		inventorySlot = -1;
 		goldDialog = false;
 		splitStack = null;
@@ -4155,6 +4169,8 @@ export function createUi( ports: UiPorts ) {
 		else if ( id === "friend-sort" ) friendOffset = 0;
 		else if ( id === "friend-up" ) friendOffset = Math.max( 0, friendOffset - 1 );
 		else if ( id === "friend-down" ) friendOffset++;
+		else if ( id === "guild-member-up" ) guildMemberOffset = Math.max( 0, guildMemberOffset - 1 );
+		else if ( id === "guild-member-down" ) guildMemberOffset++;
 		else if ( id === "friend-whisper" ) {
 			const row = view.gameplay?.friends?.rows.find( r => r.jid === friendSelected );
 			if ( row ) beginWhisper( row.name );
@@ -5972,6 +5988,7 @@ export function createUi( ports: UiPorts ) {
 				guildTab = tab;
 				socialMember = 0;
 				socialPage = 0;
+				guildMemberOffset = 0;
 			}
 		} // 5C50B0 / 81AFB0: only the local academy master opens mode 2.
 		else if ( id === "academy-notice" ) {
@@ -6031,6 +6048,7 @@ export function createUi( ports: UiPorts ) {
 			guildDescending = guildSort === sort ? !guildDescending : false;
 			guildSort = sort;
 			socialPage = 0;
+			guildMemberOffset = 0;
 		} else if ( id.startsWith( "alchemy-count:" ) ) {
 			alchemyQuantity = String( Math.max( 1, Number( alchemyQuantity ) + Number( id.slice( 14 ) ) ) );
 		} else if ( id === "alchemy-all" ) {
@@ -7170,16 +7188,23 @@ export function createUi( ports: UiPorts ) {
 					event.kind === "key" && event.code === "Enter" && !composing ||
 					event.kind === "activate" && event.id === "map-teleport-confirm"
 				) {
-					mapTeleport.clear();
-					dirty = true;
 					if ( teleportTarget.reversePoint !== undefined ) {
+						// A busy bag holds the reverse answer: the confirmation
+						// stays until the use is sent or the choice is really gone.
 						const command = reverseScrollHud.choosePoint( teleportTarget.reversePoint, view );
 						if ( command ) {
+							mapTeleport.clear();
+							dirty = true;
 							sendGameplay( command );
 							setPanel( "" );
+						} else if ( !reverseScrollHud.mapping() ) {
+							mapTeleport.clear();
+							dirty = true;
 						}
 						return;
 					}
+					mapTeleport.clear();
+					dirty = true;
 					if ( view?.session?.phase === "world" && view.gameplay?.eligibility?.gm ) {
 						sendGameplay( { kind: "gm-command", line: mapTeleport.command( teleportTarget ) } );
 					}
@@ -7370,7 +7395,8 @@ export function createUi( ports: UiPorts ) {
 						members ? social?.guild?.members.length ?? 0 : social?.wars?.length ?? 0,
 						members ? 3 : guildTab === 2 ? 6 : 9
 					);
-				} else socialPage = Math.max( 0, socialPage + Math.sign( event.delta ) );
+				} else if ( compactGuildShown ) socialPage = Math.max( 0, socialPage + Math.sign( event.delta ) );
+				else guildMemberOffset = Math.max( 0, guildMemberOffset + Math.sign( event.delta ) );
 				dirty = true;
 				return;
 			}
@@ -7401,6 +7427,10 @@ export function createUi( ports: UiPorts ) {
 			}
 			if ( event.kind === "scroll" && panel === "Experimental" ) {
 				experimental.scroll( Math.sign( event.delta ), experimentalRange( view?.session ) );
+				dirty = true;
+				return;
+			}
+			if ( event.kind === "scroll" && panel === "Map" && mapHud.scroll( event ) ) {
 				dirty = true;
 				return;
 			}
@@ -7553,6 +7583,16 @@ export function createUi( ports: UiPorts ) {
 					return;
 				}
 			}
+			if ( event.kind === "drag" && event.id === "guild-member-thumb" && panel === "Guild" ) {
+				const members = view?.gameplay?.social?.guild?.members.length ?? 0,
+					extra = Math.max( 0, members - GUILD_MEMBER_VISIBLE_ROWS );
+				guildMemberOffset = Math.max(
+					0,
+					Math.min( extra, guildMemberOffset + event.dy * extra / GUILD_MEMBER_SCROLL_TRACK )
+				);
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "drag" && event.id === "friend-thumb" && panel === "Guild" ) {
 				const extra = Math.max( 0, (view?.gameplay?.friends?.rows.length ?? 0) - FRIEND_VISIBLE_ROWS );
 				friendOffset = Math.max( 0, Math.min( extra, friendOffset + event.dy * extra / FRIEND_SCROLL_TRACK ) );
@@ -7585,6 +7625,36 @@ export function createUi( ports: UiPorts ) {
 					dirty = true;
 				}
 				return;
+			}
+			if (
+				panel === GRANT_PANEL && (event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end")
+			) {
+				// CIFGrantMagicAttributeWnd's list is a CIFScrollManager (6EB3E0).
+				// Its wheel slot (6F35A0) steps the scrollbar one row per wheel
+				// message, up for a positive delta. Inference: a browser deltaY > 0
+				// is a negative Win32 wheel delta, so it moves the list down. The
+				// thumb moves it like the arrows, as its CIFVerticalScroll does.
+				const grant = view?.gameplay?.magicOption,
+					item = view?.gameplay?.inventory.find( r => r.slot === grant?.item ),
+					part = item ? grantableAvatarPart( item.typeFlags ) : null,
+					count = grant?.parts.find( p => p.part === part )?.options.length ?? 0;
+				if ( event.kind === "scroll" ) {
+					const area = controls.find( c => c.id === "magic-option-list" );
+					if ( area && containsPoint( area.rect, event.x, event.y ) ) {
+						magicOptionHud.scroll( Math.sign( event.delta ), count );
+						dirty = true;
+						return;
+					}
+				} else if ( event.id === "magic-option-thumb" ) {
+					if ( event.kind === "drag-end" ) magicOptionHud.endDrag();
+					else {
+						const up = controls.find( c => c.id === "magic-option-up" ),
+							down = controls.find( c => c.id === "magic-option-down" );
+						if ( up && down ) magicOptionHud.drag( event.dy, down.rect[1] - up.rect[1] - 32, count );
+					}
+					dirty = true;
+					return;
+				}
 			}
 			if ( event.kind === "scroll" && panel === "Blocking" ) {
 				const area = controls.find( c => c.id === "blocking-list" );
@@ -10362,6 +10432,7 @@ export function createUi( ports: UiPorts ) {
 					socialAmount = "";
 					socialMember = 0;
 					socialPage = 0;
+					guildMemberOffset = 0;
 					confirmSocial = "";
 					selectedSkill = 0;
 					skillPage = 0;
@@ -15031,14 +15102,31 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 												label,
 												false
 											);
-											if ( label ) authoredText( child, sx, sy, label );
+											if ( label ) {
+												const shown = frameDraw.fittedCaption( drawFrame, {
+													node: child,
+													ox: sx,
+													oy: sy,
+													caption: label
+												} );
+												authoredText( shown.node, sx, sy, shown.value );
+											}
 										}
 										continue;
 									}
 									authoredChrome( child, sx, sy );
 									if ( child.id === 11 ) authoredText( child, sx, sy, member.name );
 									if ( child.id === 13 ) {
-										authoredText( child, sx, sy, member.entryLevel + "(" + member.level + ")" );
+										// Under "Fit window labels" the "80(80)" level runs
+										// past its 19-pixel field into the free room, as a
+										// label does, instead of reading "8...".
+										frameDraw.authoredText( drawFrame, {
+											node: child,
+											ox: sx,
+											oy: sy,
+											value: member.entryLevel + "(" + member.level + ")",
+											label: true
+										} );
 									}
 									if ( child.id === 14 && rank ) {
 										authoredText( child, sx, sy, hudCopy( rankKeys[rank]! ) );
@@ -15085,11 +15173,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										!academyIsLeader( camp ));
 							authoredButton( node, ox, oy, id, copy, disabled );
 							if ( copy ) {
+								// The caption fitted to its plate (fittedCaption).
+								const shown = frameDraw.fittedCaption( drawFrame, { node, ox, oy, caption: copy } );
 								authoredText(
-									disabled ? { ...node, color: tooltipColor( 0xff999999 ) } : node,
+									disabled ? { ...shown.node, color: tooltipColor( 0xff999999 ) } : shown.node,
 									ox,
 									oy,
-									copy
+									shown.value
 								);
 							}
 							continue;
@@ -15100,7 +15190,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								authoredText( { ...node, color: tooltipColor( 0xffffe194 ) }, ox, oy, leader.name );
 							}
 							if ( node.id === 44 ) {
-								authoredText( node, ox, oy, leader.entryLevel + "(" + leader.level + ")" );
+								// The leader's level, fitted as the members' (above).
+								frameDraw.authoredText( drawFrame, {
+									node,
+									ox,
+									oy,
+									value: leader.entryLevel + "(" + leader.level + ")",
+									label: true
+								} );
 							}
 							if ( node.id === 45 && academyRank( leader ) === 7 ) {
 								authoredText( node, ox, oy, hudCopy( "UIIT_STT_TC_GUARDIAN" ) );
@@ -15246,11 +15343,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								hasParty || !!game?.partyMatching?.own :
 								false;
 							authoredButton( node, ox, oy, id, copy, disabled );
+							const shown = frameDraw.fittedCaption( drawFrame, { node, ox, oy, caption: copy } );
 							authoredText(
-								disabled ? { ...node, color: tooltipColor( 0xff999999 ) } : node,
+								disabled ? { ...shown.node, color: tooltipColor( 0xff999999 ) } : shown.node,
 								ox,
 								oy,
-								copy
+								shown.value
 							);
 						}
 						if ( node.type === "CIFPartySlot" ) {
@@ -17117,7 +17215,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								hudData.portals,
 								target?.refObjId ?? 0,
 								key => hudData.zones[key] ?? copy( key ),
-								game.targetTaxRate ?? 0
+								{ taxRate: game.targetTaxRate ?? 0, group: npcPanel.destinationGroup() }
 							) :
 							null,
 						canTalk: !!(capabilities & 2),
@@ -18139,7 +18237,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						// 646FC0 relabels the title (20) and header (28) by job, and shows the
 						// own entry (10, 13-16) or the "no entry" line (60).
 						if ( contribution ) custom.push( 10, 13, 14, 15, 16, 20, 28, 60 );
-						nativePage( layout, px, py, custom );
+						nativePage( columnHeadLayout( layout ), px, py, custom );
 						const say = ( id: number, value: string ) => {
 							const node = byId( id );
 							if ( node ) authoredText( node, px, py, value );
@@ -18181,7 +18279,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							nativePage( slotLayout, sx, sy, [ 10, 11, 12, 13, 14 ] );
 							for ( const node of slotNodes ) {
 								const value = slot[node.id];
-								if ( value !== undefined ) authoredText( node, sx, sy, value );
+								if ( value === undefined ) continue;
+								// The title of level ("Apprentice Merchant" in 82 pixels)
+								// is fitted as a label under "Fit window labels" rather
+								// than cut to "Apprentice M...".
+								frameDraw.authoredText( drawFrame, {
+									node,
+									ox: sx,
+									oy: sy,
+									value,
+									label: node.name === "GDR_JOB_RANK_GRADENAME"
+								} );
 							}
 						}
 						const spin = byId( spinId );
@@ -18227,6 +18335,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						] );
 					nativeFrame( root, px, py, hudCopy( root.text ), "academy-honor-close" );
 					nativePage( layout, px, py, [ 3, 4, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 ] );
+					// 6E8C10 creates RankingListBtn and leaves it shown: the five column
+					// heads (Rank, Class, Guardian, Level, Graduation; CIFButton ids
+					// 20-24 on the gil_subj_button plates) beside the Guild bar (25).
+					// No handler of the window reads them, so they draw as plates
+					// with their captions and take no input.
+					for ( const id of ACADEMY_HONOR_HEADER_IDS ) {
+						const head = byId( id );
+						if ( !head ) continue;
+						authoredImage( head, px, py );
+						authoredText( head, px, py, hudCopy( head.text ) );
+					}
 					const confirm = byId( 3 );
 					if ( confirm ) {
 						authoredLabeledButton( confirm, px, py, "academy-honor-confirm", hudCopy( confirm.text ) );
@@ -18235,6 +18354,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						const holder = byId( 30 + index );
 						if ( !holder ) continue;
 						const [sx, sy] = authoredRect( holder, px, py );
+						// CIFApprenticeShipHonorSlot (6E91D0) derives from CIFBarWnd (its
+						// base 6F5990 sets the CIFBarWnd vtable), so every one of the ten
+						// slots 6E8C10 creates draws its com_bar01_ bar, filled or not.
+						const bar = barChrome( authoredRect( holder, px, py ), holder.texture, resources.size, full );
+						paths.push( ...bar.paths );
+						quads.push( ...bar.quads );
 						nativePage( slotLayout, sx, sy, [ 1, 2, 3, 4, 5, 6 ] );
 						if ( !slot ) continue;
 						for ( const node of slotNodes ) {
@@ -18307,6 +18432,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					const select = ROOT + "interface/guild/gil_bar02_select.png",
 						deselect = ROOT + "interface/guild/gil_bar02_deselect.png";
 					paths.push( select, deselect );
+					// The scroll manager's area (32) takes the wheel; pushed before the
+					// rows so a row stays the topmost control under the cursor.
+					const listArea = at( 32 );
+					if ( listArea ) {
+						controls.push( {
+							id: "magic-option-list",
+							label: "Magic option list",
+							rect: authoredRect( listArea, px, py ),
+							kind: "region"
+						} );
+					}
 					for ( let i = 0; i < MAGIC_OPTION_LIST_ROWS; i++ ) {
 						const bar = at( 0x28 + i ), option = options[choice.top + i];
 						if ( !bar ) continue;
@@ -20619,6 +20755,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						paths.push( ...bar.paths );
 						quads.push( ...bar.quads );
 					}
+					// The scroll manager draws its vertical scroll even when every row fits,
+					// as the sibling Hostility list (600120). A union holds at most
+					// ALLIANCE_MAX_GUILDS (8) guilds against nine rows, so it never moves.
+					const unionScroll = chatScrollbar(
+						"union-scroll",
+						[ gx + list.rect[0] + list.rect[2] - 16, gy + list.rect[1] + 16, 16, list.rect[3] - 32 ],
+						rows.length,
+						Math.floor( list.rect[3] / 23 ),
+						0,
+						resources.size,
+						full,
+						hover,
+						pressed
+					);
+					paths.push( ...unionScroll.paths );
+					quads.push( ...unionScroll.quads );
+					controls.push( ...unionScroll.controls );
 					rows.slice( 0, Math.floor( list.rect[3] / 23 ) ).forEach( ( row, i ) => {
 						const ox = gx + list.rect[0], oy = gy + list.rect[1] + i * 23;
 						authoredText( slotAt( 11 ), ox, oy, row.name );
@@ -21517,7 +21670,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						quads.push( ...memberScroll.quads );
 						controls.push( ...memberScroll.controls );
 					}
-					if ( compact && (w < 477 || h < 393) ) {
+					compactGuildShown = !!compact && (w < 477 || h < 393);
+					if ( compactGuildShown ) {
 						const admission = beginWindow();
 						appendCompactGuild();
 						endWindow( admission, "compact-guild" );
@@ -21658,7 +21812,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 												"UIIT_STT_TITLE",
 												"UIIT_STT_GUILD_POSITION"
 											][guildNameMode]! :
-											node.text
+											columnHeadKey( node.text )
 									);
 								authoredLabeledButton( node, gx, gy, "guild-sort:" + id, caption );
 							}
@@ -21713,7 +21867,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									),
 									s = at( 82 ),
 									slot = hudData.windows.ifguildmemberslot!;
-								socialPage = Math.min( socialPage, Math.max( 0, Math.ceil( rows.length / 6 ) - 1 ) );
+								guildMemberOffset = Math.max(
+									0,
+									Math.min(
+										Math.max( 0, rows.length - GUILD_MEMBER_VISIBLE_ROWS ),
+										guildMemberOffset
+									)
+								);
+								const first = Math.round( guildMemberOffset );
 								// Register the empty region first so member/authority controls win hits.
 								controls.push( {
 									id: "guild-list",
@@ -21735,7 +21896,29 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										gy + 138,
 										self?.grade === 0
 									);
-								} else {rows.slice( socialPage * 6, socialPage * 6 + 6 ).forEach( ( row, i ) => {
+								} else {
+									// The scroll manager's vertical scroll sits at its right edge,
+									// between 16-pixel arrows, as the Friends list's (iffriend id 30).
+									const scroll = chatScrollbar(
+										"guild-member",
+										[
+											gx + s.rect[0] + s.rect[2] - 16,
+											gy + s.rect[1] + 16,
+											16,
+											GUILD_MEMBER_SCROLL_TRACK
+										],
+										Math.max( GUILD_MEMBER_VISIBLE_ROWS, rows.length ),
+										GUILD_MEMBER_VISIBLE_ROWS,
+										Math.max( 0, rows.length - GUILD_MEMBER_VISIBLE_ROWS ) - guildMemberOffset,
+										resources.size,
+										full,
+										hover,
+										pressed
+									);
+									paths.push( ...scroll.paths );
+									quads.push( ...scroll.quads );
+									controls.push( ...scroll.controls );
+									rows.slice( first, first + GUILD_MEMBER_VISIBLE_ROWS ).forEach( ( row, i ) => {
 										const ox = gx + s.rect[0], oy = gy + s.rect[1] + i * 23;
 										if ( row.id === socialMember ) {
 											image(
@@ -21801,7 +21984,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 											kind: "button",
 											selected: row.id === socialMember
 										} );
-									} );}
+									} );
+								}
 								// 5E3090 mode 3 hides the command section beneath the panel.
 								if ( !grantPowerHud.isOpen() ) {
 									for (
@@ -22313,7 +22497,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							fontStyle: selected ? 2 : 0
 						} ).map( q => ({ ...q, characterAnchor: entity.gid }) )
 					);
-					const ownerEntity = next.entities.find( owner => owner.gid === entity.ownerGid );
+					// Only a companion's owner plate reads its owner; a scan of
+					// every row per player board was the HUD's largest cost.
+					const ownerEntity = entity.kind === "cos" ?
+						next.entities.find( owner => owner.gid === entity.ownerGid ) :
+						undefined;
 					// 854BB8: with no guild record the soldier's row keeps the
 					// owner's name colour, so the label colour is passed only
 					// when the owner actually has a guild (another player by
@@ -22471,20 +22659,22 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								av - bv :
 								String( av ).localeCompare( String( bv ) )) * (academyAscending ? 1 : -1);
 						} );
-					const projected = academyLayout(
-						guideData,
-						{ ...academy, rows },
-						academySelection,
-						ax,
-						ay,
-						full,
-						resources.size,
-						( s, r, c, color, style ) => text.quads( s, r, c, color, style ),
+					const projected = academyLayout( {
+						data: guideData,
+						state: { ...academy, rows },
+						selected: academySelection,
+						x: ax,
+						y: ay,
+						clip: full,
+						size: resources.size,
+						text: ( s, r, c, color, style ) => text.quads( s, r, c, color, style ),
+						measure: ( value, fontIndex ) => text.run( value, 0, fontIndex ).width,
 						hover,
 						pressed,
-						{ name: academyName, grade: academyGrade, kind: academyKind, open: academyCombo },
-						level
-					);
+						filter: { name: academyName, grade: academyGrade, kind: academyKind, open: academyCombo },
+						level,
+						fitLabels: experimental.state().saved.fitWindowLabels
+					} );
 					quads.push( ...projected.quads );
 					paths.push( ...projected.paths );
 					controls.push( ...projected.controls );
@@ -23082,7 +23272,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							"%s",
 							() => inviter?.guildName ?? ""
 						) :
-						copy( guild ? "UIIT_MSG_GUILD_JOIN_REQUEST" : "UIIT_STT_PARTY_SOMEUSER", "[%s]has" ).replace(
+						copy( guild ? "UIIT_MSG_GUILD_JOIN_REQUEST" : "UIIT_STT_PARTY_SOMEUSER", "[%s] has" ).replace(
 							"%s",
 							() => inviter?.name ?? ""
 						),
@@ -24540,51 +24730,70 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						] :
 						[ view?.session?.character ?? "", aliasWindow.checked ];
 				const filled = fillMarkup( message, args );
-				// Markup the guide layout cannot read falls back to plain text.
-				let markup: ReturnType<typeof guideTokens> | null = null;
-				if ( hasSml2Markup( filled ) ) {
-					try {
-						markup = guideTokens( filled );
-					} catch {
-						markup = null;
-					}
-				}
-				const layout = guildQuestionLayout(
-					w,
-					h,
-					markup ?
-						text.guide( markup, [ 0, 0, 300, 1000 ], [ 0, 0, 300, 1000 ], white, resources.size ).height :
-						12,
-					false
-				);
-				controls = drawFrame.controls = [];
-				blocks = drawFrame.blocks = [ full ];
-				paths.push( ...partyProposalAssets() );
-				quads.push(
-					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
-					...frameRing(
-						layout.frame,
-						MESSAGE_FRAME,
-						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
-						full
-					),
-					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
-						hAlign: 1,
-						vAlign: 0
-					} )
-				);
-				if ( markup ) {
-					const out = text.guide( markup, layout.name, full, white, resources.size );
-					quads.push( ...out.quads );
-					paths.push( ...out.paths );
-				} else quads.push( ...text.quads( filled, layout.name, full, white, { hAlign: 1, vAlign: 0 } ) );
 				const [yes, no] = academyAsk ?
 					[ "academy-confirm-yes", "academy-confirm-no" ] :
 					jobAsk ?
 					[ "job-confirm-yes", "job-confirm-no" ] :
 					[ "job-alias-yes", "job-alias-no" ];
-				button( yes, hudCopy( "UIIT_CTL_YES" ), ...layout.accept.slice( 0, 3 ) as [number, number, number] );
-				button( no, hudCopy( "UIIT_CTL_NO" ), ...layout.refuse.slice( 0, 3 ) as [number, number, number] );
+				if ( academyAsk || jobAsk ) {
+					// 5D26F0 types 4-6 and the camp confirms are CIFSimpleMessageBox
+					// type 1: 52DB20 sizes the box to its widest line (600 px wrap), each
+					// <br> starting a line, with Yes and No centred under them (#3550).
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
+					simpleMessageBox( {
+						title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+						lines: markupLines( filled ),
+						yes,
+						no
+					} );
+				} else {
+					// Markup the guide layout cannot read falls back to plain text.
+					let markup: ReturnType<typeof guideTokens> | null = null;
+					if ( hasSml2Markup( filled ) ) {
+						try {
+							markup = guideTokens( filled );
+						} catch {
+							markup = null;
+						}
+					}
+					const layout = guildQuestionLayout(
+						w,
+						h,
+						markup ?
+							text.guide( markup, [ 0, 0, 300, 1000 ], [ 0, 0, 300, 1000 ], white, resources.size )
+								.height :
+							12,
+						false
+					);
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+						...frameRing(
+							layout.frame,
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						),
+						...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+							hAlign: 1,
+							vAlign: 0
+						} )
+					);
+					if ( markup ) {
+						const out = text.guide( markup, layout.name, full, white, resources.size );
+						quads.push( ...out.quads );
+						paths.push( ...out.paths );
+					} else quads.push( ...text.quads( filled, layout.name, full, white, { hAlign: 1, vAlign: 0 } ) );
+					button(
+						yes,
+						hudCopy( "UIIT_CTL_YES" ),
+						...layout.accept.slice( 0, 3 ) as [number, number, number]
+					);
+					button( no, hudCopy( "UIIT_CTL_NO" ), ...layout.refuse.slice( 0, 3 ) as [number, number, number] );
+				}
 			}
 			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) guildManagerHud.reset();
 			else if ( game.social?.compensation !== undefined && !guildManagerHud.question() ) {
@@ -26713,7 +26922,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						quads.length = mallAdmission[0];
 						controls = drawFrame.controls = [];
 					} else {
-						const painted = resolveTextOverlaps( quads.slice( mallAdmission[0] ) );
+						const painted = resolveTextOverlaps(
+							quads.slice( mallAdmission[0] ),
+							experimental.state().saved.fitWindowLabels
+						);
 						quads.length = mallAdmission[0];
 						quads.push( ...painted );
 					}
@@ -27983,7 +28195,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									honor: lookup( "UIIT_STT_TC_HONOR_POINT" ),
 									point: lookup( "UIIT_STT_SILKMALL_P_POINT" ),
 									guildPoint: lookup( "UIIT_STT_GUILD_POINT" ),
-									guildPointUnit: lookup( "UIIT_STT_GUILD_POINT_GP" )
+									guildPointUnit: lookup( "UIIT_STT_GUILD_POINT_GP" ),
+									// Port-only (SRO_NASRUN): no native string names the token.
+									nasrunToken: "Devil's Spirit tokens",
+									nasrunTokenHeld: "You hold"
 								} )
 							];
 						}
@@ -28311,19 +28526,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			gauges.end();
 			// Text runs travel to the renderer whole: the GPU packer writes one record
 			// per glyph straight into its buffer (text-run.ts, device/ui.ts).
-			quads = drawFrame.quads = resolveTextOverlaps( quads );
+			quads = drawFrame.quads = resolveTextOverlaps( quads, experimental.state().saved.fitWindowLabels );
 			probe?.detailEnd( "ui-finalize" );
 			probe?.detailBegin( "ui-compare" );
-			const unchanged = lastProduct && lastProduct.width === w && lastProduct.height === h &&
-				lastProduct.damageText === worldVisible && sameUiQuads( lastProduct.quads, quads ) &&
-				sameUiSemantics( lastProduct.semantics, semantics );
+			// Semantics are returned only when they change (uiPublication): a
+			// walker's minimap dot republishes quads alone.
+			const product = { width: w, height: h, damageText: worldVisible, quads, semantics };
+			const publication = uiPublication( lastProduct, product );
 			probe?.detailEnd( "ui-compare" );
-			if ( unchanged ) return null;
+			if ( publication === "unchanged" ) return null;
 			probe?.detailBegin( "ui-publish" );
-			lastProduct = { width: w, height: h, damageText: worldVisible, quads, semantics };
+			// Keep the semantics last returned: the next comparison is against what was presented.
+			lastProduct = publication === "present" || !lastProduct ?
+				product :
+				{ ...product, semantics: lastProduct.semantics };
 			publish( { revision: ++revision, width: w, height: h, quads, damageText: worldVisible } );
 			probe?.detailEnd( "ui-publish" );
-			return semantics;
+			return publication === "present" ? semantics : null;
 		},
 		/*
 		================

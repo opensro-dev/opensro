@@ -262,6 +262,9 @@ type Runtime struct {
 	Monsters *simulation.MonsterState
 	// Port-only, not native: nil preserves every native admission/reward path.
 	sookArena *sookArenaRuntime
+	// muhanChanges is the Muhan change pairing by change NPC codename
+	// (muhan_change.go). Port-only, not native: empty unless SRO_MUHAN is on.
+	muhanChanges map[string]muhanChange
 
 	// NpcSpawn scopes the 0x745A liveness gate's NPC-gid domain to the
 	// same env gates that put the roster on the wire (select.go); tests
@@ -507,6 +510,11 @@ type Runtime struct {
 	// value is native.
 	MaterialDrops progression.MaterialDrops
 
+	// AboveDegree9Drops keeps every item above degree 9 out of monster
+	// drops while the area polls run (port-only, not native; owner
+	// 2026-11-16). The zero value drops every degree.
+	AboveDegree9Drops progression.AboveDegree9Drops
+
 	// FastDenReturn halves the Bandit Den scroll's countdown (denreturn.go;
 	// port-only, not native; owner 2026-10-14). False is native.
 	FastDenReturn bool
@@ -535,6 +543,12 @@ type Runtime struct {
 	// port-only, not native). Nil, the default, counts nothing; the
 	// composition root installs the counter only when EnvSealBoard is on.
 	SealDrops SealDropSink
+
+	// JobHonor scores job honor (jobhonor.go; port-only, not native,
+	// #3530). Nil, the default, scores nothing; the composition root
+	// installs platform/jobhonor only when EnvJobHonor is on.
+	JobHonor     JobHonorSink
+	jobHonorRuns honorRuns
 
 	// SunDrops counts Sun drops for the #2538 measurement cycle
 	// (sundrops.go; port-only, not native, count-only). Nil, the
@@ -633,9 +647,32 @@ type Runtime struct {
 	// halloweenWavesAsked is the last instant advanceHalloweenWaves asked
 	// the timetable about; the tick goroutine alone touches it.
 	halloweenWavesAsked time.Time
-	// halloweenLayerKnown and halloweenLayerActive are the window state
-	// advanceHalloweenLayer last saw (halloween_layer.go); tick goroutine only.
-	halloweenLayerKnown, halloweenLayerActive bool
+	// halloweenGroups and christmasGroups are the window states
+	// advanceEventGroups last saw (event_groups.go); tick goroutine only.
+	halloweenGroups, christmasGroups eventGroupWatch
+	// christmasSnow is the snowfall state of the Christmas native group
+	// (event group 1) advanceEventGroups last saw; tick goroutine only.
+	christmasSnow eventGroupWatch
+	// christmasWavesAsked is the last instant advanceChristmasWaves asked
+	// the timetable about; the tick goroutine alone touches it.
+	christmasWavesAsked time.Time
+	// christmasSlaves is the standing Snow Slave crowd's step state
+	// (christmas_snow_slaves.go); tick goroutine only.
+	christmasSlaves christmasSnowSlaves
+	// Christmas is the Christmas event (port-only, not native in this
+	// client build; progression/christmas.go): its event snow and the
+	// towns' decoration. The zero value is off.
+	Christmas progression.ChristmasEvent
+	// SoOkChristmas is So-Ok's Christmas Gift, the December 2006 event
+	// (port-only, not native; progression/sook_christmas.go). It shares
+	// the Christmas switch and window, in its own mode, so it never runs
+	// beside Christmas. The zero value is off.
+	SoOkChristmas progression.SoOkChristmas
+	// sookChristmasGroups and sookChristmasSnow are its window and
+	// snowfall states advanceEventGroups last saw; tick goroutine only.
+	sookChristmasGroups, sookChristmasSnow eventGroupWatch
+	// pandora is the open Pandora's Boxes (pandorabox.go; port-only).
+	pandora pandoraBoxes
 	// HalloweenHelmetSeal seals the event helmets at the transfer doors
 	// (port-only, not native; progression/halloween.go). The zero value
 	// is off: the helmets move like any item.
@@ -652,6 +689,10 @@ type Runtime struct {
 	// NasrunSocket opens the Devil's Spirit's fifth avatar socket
 	// (SRO_NASRUN; game/nasrun; port-only, not native). False is native.
 	NasrunSocket bool
+	// NasrunTokens pays Devil's Spirit tokens on unique kills
+	// (SRO_NASRUN; nasrun_tokens.go; port-only, not native). False is
+	// native: no kill pays a token.
+	NasrunTokens bool
 	// PetInventoryPages raises grab pet and transport bags to their
 	// configured pages, each kind on its own (companion inventorypages.go;
 	// port-only, not native; owner 2026-11-07). Zero is native.

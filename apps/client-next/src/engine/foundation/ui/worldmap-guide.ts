@@ -120,13 +120,14 @@ export interface GuideRow {
 GuideView
 
 What the trees are built for: the player's race (picks the order
-column), the player's level and the level filter's cap (undefined shows every row), and the open main row.
+column), the player's level (colours a monster row) and the open main
+row. The map's level filter does not reach the trees: native builds
+them from monster.txt alone (sub_e6cb90 reads no filter state).
 ================
 */
 export interface GuideView {
 	readonly race: number;
 	readonly playerLevel: number | undefined;
-	readonly filterCap: number | undefined;
 	readonly open: number | null;
 }
 
@@ -324,7 +325,10 @@ export function guideGroups(
 guideMonsterRows
 
 The Monster tab: every main row, and the open one's monsters as
-"Lv<level> <name>". The level filter hides monsters above its cap.
+"Lv<level> <name>", whatever the character's level. The map's level
+filter once banded this tree too (an inference); the v1.696 client
+lists every continent from Lv1 up for any character (owner's screenshot,
+2026-11-15), so the filter stays with the map's own species list.
 ================
 */
 export function guideMonsterRows( catalog: WorldMapGuideCatalog, view: GuideView ): GuideRow[] {
@@ -335,7 +339,6 @@ export function guideMonsterRows( catalog: WorldMapGuideCatalog, view: GuideView
 		if ( group.main !== view.open ) continue;
 		for ( const index of group.subs ) {
 			const monster = catalog.monsters[index]!;
-			if ( view.filterCap !== undefined && monster.level !== null && monster.level > view.filterCap ) continue;
 			out.push( {
 				index,
 				main: false,

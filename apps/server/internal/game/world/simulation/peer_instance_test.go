@@ -1,11 +1,33 @@
 package simulation
 
 import (
-	"opensro.online/server/internal/game/item/wire"
+	"slices"
 	"testing"
+
+	"opensro.online/server/internal/game/item/wire"
 )
 
+/*
+================
+TestPeerInstanceAndBlockTransitionsOwnMovementDelivery
+
+A peer that enters a viewer's instance mid-walk arrives as its spawn row,
+its move state and its path; the port-only position stream adds the
+live sample.
+================
+*/
 func TestPeerInstanceAndBlockTransitionsOwnMovementDelivery(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		peerInstanceAndBlockTransitions(t, stream)
+	}
+}
+
+/*
+================
+peerInstanceAndBlockTransitions
+================
+*/
+func peerInstanceAndBlockTransitions(t *testing.T, stream bool) {
 	const now = int64(1_784_000_000_000)
 	viewer := peerSession("viewer", "A", 1, "Viewer")
 	peer := peerSession("peer", "A", 2, "Peer")
@@ -14,6 +36,7 @@ func TestPeerInstanceAndBlockTransitionsOwnMovementDelivery(t *testing.T) {
 	source := &fakeSource{sessions: []SessionSnapshot{peer, viewer}}
 	push := &fakePusher{}
 	ticker := newTestTicker(source, push)
+	ticker.PositionStream = stream
 	ticker.RunTick(now)
 	if len(push.toSession) != 0 || len(push.toDivision) != 0 {
 		t.Fatal("cross-instance peer publication")
@@ -28,8 +51,12 @@ func TestPeerInstanceAndBlockTransitionsOwnMovementDelivery(t *testing.T) {
 			}
 		}
 	}
-	if len(opcodes) != 4 || opcodes[0] != wire.OpSingleObjectSpawn || opcodes[1] != wire.OpObjectStateRefresh || opcodes[2] != OpMovementAck || opcodes[3] != wire.OpObjectSourceMove {
-		t.Fatalf("spawn-before-movement: %x", opcodes)
+	want := []uint16{wire.OpSingleObjectSpawn, wire.OpObjectStateRefresh, OpMovementAck}
+	if stream {
+		want = append(want, wire.OpObjectSourceMove)
+	}
+	if !slices.Equal(opcodes, want) {
+		t.Fatalf("position stream %v: spawn-before-movement %x, want %x", stream, opcodes, want)
 	}
 	push.toSession = nil
 	source.sessions[1].World.Spawn.X += 1000

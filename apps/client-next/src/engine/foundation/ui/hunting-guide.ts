@@ -60,6 +60,58 @@ export const MONSTER_LEVEL_FILTER_SPAN = 6;
 
 /*
 ================
+LevelBand
+
+The level filter's band (issue #3167): the species it keeps, from
+min to max inclusive. The later label reads "6 lv.higher monsters
+from the current character's level", so the band starts at the
+character's level and ends span levels above it. Inferred, since no
+client binary shows the comparison (the key resolves through data):
+a cap with no floor, as the port first shipped, left a level-91
+character's list full of level-1 species and the box seemed to do
+nothing.
+================
+*/
+export interface LevelBand {
+	readonly min: number;
+	readonly max: number;
+}
+
+/*
+================
+inLevelBand
+
+Whether a species of this level passes the filter; no band passes all.
+================
+*/
+export function inLevelBand( level: number, band: LevelBand | undefined ): boolean {
+	return band === undefined || (level >= band.min && level <= band.max);
+}
+
+/*
+================
+sameLevelBand
+
+Whether two bands keep the same species (no band equals no band).
+================
+*/
+export function sameLevelBand( a: LevelBand | undefined, b: LevelBand | undefined ): boolean {
+	return a?.min === b?.min && a?.max === b?.max;
+}
+
+/*
+================
+levelBand
+
+The band for a character of this level.
+================
+*/
+export function levelBand( characterLevel: number ): LevelBand {
+	return { min: characterLevel, max: characterLevel + MONSTER_LEVEL_FILTER_SPAN };
+}
+
+/*
+================
 MonsterDirectoryMonster
 
 One species in one region of the directory, at the first of its
@@ -95,20 +147,67 @@ monsterDirectory
 The region and monster list (issue #3167), grouped from the
 catalogue's anchors: one row per species per region at its first
 anchor there, species sorted by level then name, regions sorted by
-their lowest level. maxLevel, when given, is the level filter's cap:
-species above it, and regions it empties, are hidden.
+their lowest level. band, when given, is the level filter: species
+outside it, and regions it empties, are hidden.
 ================
 */
 export function monsterDirectory(
 	catalogue: HuntingCatalogue,
-	maxLevel?: number
+	band?: LevelBand
 ): readonly MonsterDirectoryRegion[] {
 	const regions: MonsterDirectoryRegion[] = [];
 	for ( const [region, points] of catalogue.regions ) {
-		const row = directoryRegion( region, points, maxLevel );
+		const row = directoryRegion( region, points, band );
 		if ( row ) regions.push( row );
 	}
 	return regions.sort( ( a, b ) => a.minLevel - b.minLevel || a.region - b.region );
+}
+
+/*
+================
+directoryByName
+
+The drawer's groups (issue #3554): one per shown name, not one per
+region sector. A zone spans many sectors, and per-sector groups gave
+eight rows all reading "Grassland Lv.1~2". The later client's Monster
+tree (monster.txt, worldmap-guide.ts) has one main row per hunting
+area with its species under it, so sectors that share a name merge.
+v1.150 has no such list (the drawer is #3167's), so the area row is
+the model. names holds each sector's shown name (a sector it lacks
+stands alone under its own id). A merged group keeps its first sector's id (the lowest
+level, as the list sorts), lists each species once at the anchor of
+the first sector that holds it, and spans the sectors' levels.
+================
+*/
+export function directoryByName(
+	regions: readonly MonsterDirectoryRegion[],
+	names: ReadonlyMap<number, string>
+): readonly MonsterDirectoryRegion[] {
+	const groups = new Map<string, { region: number; monsters: Map<number, MonsterDirectoryMonster>; }>();
+	for ( const row of regions ) {
+		const name = names.get( row.region ) ?? "#" + row.region;
+		let group = groups.get( name );
+		if ( !group ) {
+			group = { region: row.region, monsters: new Map() };
+			groups.set( name, group );
+		}
+		for ( const entry of row.monsters ) {
+			if ( !group.monsters.has( entry.monster.refObjId ) ) group.monsters.set( entry.monster.refObjId, entry );
+		}
+	}
+	const merged: MonsterDirectoryRegion[] = [];
+	for ( const group of groups.values() ) {
+		const monsters = [ ...group.monsters.values() ].sort(
+			( a, b ) => a.monster.level - b.monster.level || a.monster.name.localeCompare( b.monster.name )
+		);
+		merged.push( {
+			region: group.region,
+			minLevel: monsters[0]!.monster.level,
+			maxLevel: monsters[monsters.length - 1]!.monster.level,
+			monsters
+		} );
+	}
+	return merged.sort( ( a, b ) => a.minLevel - b.minLevel || a.region - b.region );
 }
 
 /*
@@ -117,17 +216,17 @@ directoryRegion
 
 One region's directory row from its anchors: one row per species at
 its first anchor there, sorted by level then name; undefined when the
-level cap empties the region.
+level band empties the region.
 ================
 */
 function directoryRegion(
 	region: number,
 	points: readonly HuntingPoint[],
-	maxLevel?: number
+	band?: LevelBand
 ): MonsterDirectoryRegion | undefined {
 	const byId = new Map<number, MonsterDirectoryMonster>();
 	for ( const point of points ) {
-		if ( maxLevel !== undefined && point.monster.level > maxLevel ) continue;
+		if ( !inLevelBand( point.monster.level, band ) ) continue;
 		if ( !byId.has( point.monster.refObjId ) ) {
 			byId.set( point.monster.refObjId, { monster: point.monster, region, x: point.x, z: point.z } );
 		}
@@ -158,34 +257,34 @@ floors are regions of their own.
 export function dungeonDirectory(
 	catalogue: HuntingCatalogue,
 	regionId: number,
-	maxLevel?: number
+	band?: LevelBand
 ): MonsterDirectoryRegion | undefined {
 	const points = catalogue.dungeons.get( regionId );
-	return points ? directoryRegion( regionId, points, maxLevel ) : undefined;
+	return points ? directoryRegion( regionId, points, band ) : undefined;
 }
 
 /*
 ================
 filterHuntingGuide
 
-The catalogue as the level filter shows it: species above maxLevel
+The catalogue as the level filter shows it: species outside the band
 are out, and the sections are rebuilt from the surviving anchors so
 an emptied area leaves the map with its species.
 ================
 */
-export function filterHuntingGuide( catalogue: HuntingCatalogue, maxLevel: number ): HuntingCatalogue {
+export function filterHuntingGuide( catalogue: HuntingCatalogue, band: LevelBand ): HuntingCatalogue {
 	const regions = new Map<number, readonly HuntingPoint[]>();
 	for ( const [region, points] of catalogue.regions ) {
-		const kept = points.filter( point => point.monster.level <= maxLevel );
+		const kept = points.filter( point => inLevelBand( point.monster.level, band ) );
 		if ( kept.length > 0 ) regions.set( region, kept );
 	}
 	const dungeons = new Map<number, readonly HuntingPoint[]>();
 	for ( const [region, points] of catalogue.dungeons ) {
-		const kept = points.filter( point => point.monster.level <= maxLevel );
+		const kept = points.filter( point => inLevelBand( point.monster.level, band ) );
 		if ( kept.length > 0 ) dungeons.set( region, kept );
 	}
 	return {
-		monsters: catalogue.monsters.filter( monster => monster.level <= maxLevel ),
+		monsters: catalogue.monsters.filter( monster => inLevelBand( monster.level, band ) ),
 		regions,
 		dungeons,
 		sections: buildHuntingSections( regions )

@@ -15,6 +15,11 @@ import { NATIVE_TEXTURE_MIME } from "@/engine/foundation/assets/native-texture";
 import { validateEquipmentGlows } from "@/engine/foundation/rendering/equipment-glow";
 import { sceneryMaterial, type SceneryModifiers } from "@/engine/foundation/rendering/scenery-modifiers";
 import { NATIVE_CHARACTER_LIGHTING } from "@/engine/foundation/rendering/video-options";
+import {
+	ENVIRONMENT_ADD,
+	ENVIRONMENT_METAL,
+	type EnvironmentStages
+} from "@/engine/foundation/rendering/environment-stages";
 import { CHARACTER_MODEL_BYTES } from "@/engine/foundation/animation/character-budget";
 import type { ModelDocument } from "@/engine/contracts/model";
 import type {
@@ -319,7 +324,9 @@ channels retain strict finite-value validation before GPU allocation.
 					const reflection = mat?.extras?.sroEnvironment,
 						reflectionTexture = mat?.extras?.sroEnvironmentTexture;
 					if (
-						reflection && (reflection.mode !== 1 || ![ 0, 1 ].includes( reflection.textureId ))
+						reflection &&
+						(![ ENVIRONMENT_METAL, ENVIRONMENT_ADD ].includes( reflection.mode ) ||
+							![ 0, 1 ].includes( reflection.textureId ))
 					) throw Error( "Unsupported character environment reflection" );
 					const environmentImage = reflectionTexture === undefined ?
 						undefined :
@@ -369,7 +376,9 @@ channels retain strict finite-value validation before GPU allocation.
 							weights,
 							transform: identity(),
 							material: {
-								environmentReflection: !!reflection && reflection.textureId !== 0xffffffff,
+								environmentReflection: reflection && reflection.textureId !== 0xffffffff ?
+									reflection.mode as EnvironmentStages :
+									undefined,
 								stageFactor: 2,
 								objectLight: 1,
 								ambient: actorAmbient,

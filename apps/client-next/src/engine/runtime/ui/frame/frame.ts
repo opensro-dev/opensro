@@ -33,7 +33,7 @@ import { latticeCells } from "@/engine/foundation/ui/inventory-layout";
 import { normalTile } from "@/engine/foundation/ui/normal-tile";
 import { MESSAGE_FRAME, MESSAGE_TILE, partyProposalAssets } from "@/engine/foundation/ui/party-proposal";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
-import { captionWords, textLines } from "@/engine/foundation/ui/text-lines";
+import { captionWords, narrowFace, textLines } from "@/engine/foundation/ui/text-lines";
 import { messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 
 export { beginWindow, endWindow, unloadedImages } from "./admission";
@@ -303,6 +303,39 @@ export function comboBox(
 const WINDOW_LABEL_MARGIN = 6;
 // A fitted button caption keeps this far inside each side of its plate.
 const CAPTION_MARGIN = 4;
+// The blank between a wrapped label's two lines, below the first line's
+// descent: one label reads as one, apart from the rows beside it.
+const WRAP_LEADING = 1;
+
+/*
+================
+wrappedLabelBand
+
+Where a wrapped label's two lines go (the Experimental "Fit window
+labels"): the top of the first line's rect, laid at its top (vAlign 0),
+and the pitch to the second. A box sized for one line has no room for
+two at the font's full extent (two such lines ran 8 pixels into each
+neighbouring row, #3673), so the pair stacks at its ink height plus
+WRAP_LEADING, and tighter, down to the ink height where the first line's
+descent meets the second line's letters, when room ([above, below],
+layout labelRoom) needs it. The pair's ink is centred on the box, then
+moved inside the band; a pair taller than its band even at the tightest
+pitch stays centred on the band. Without room the band is unbounded.
+================
+*/
+function wrappedLabelBand( box: UiRect, room: readonly [number, number] | undefined, ink: {
+	top: number;
+	height: number;
+} ) {
+	const [above, below] = room ?? [ Infinity, Infinity ];
+	const bandTop = box[1] - above, bandBottom = box[1] + box[3] + below;
+	const pitch = Math.max( ink.height, Math.min( ink.height + WRAP_LEADING, bandBottom - bandTop - ink.height ) );
+	const block = pitch + ink.height;
+	let inkTop = box[1] + (box[3] - block) / 2;
+	if ( block <= bandBottom - bandTop ) inkTop = Math.min( Math.max( inkTop, bandTop ), bandBottom - block );
+	else inkTop = bandTop + (bandBottom - bandTop - block) / 2;
+	return { top: inkTop - ink.top, pitch };
+}
 // The lattice cell of CIFLattice art (36 x 36 inventory squares).
 const LATTICE_CELL = 36;
 // The Yes/No pair's buttons are this wide (52E720).
@@ -340,18 +373,21 @@ authoredText
 
 A static's text in its client rect. clipToControl keeps it inside
 that rect: true ends a long line with an ellipsis, "clip" cuts it
-at the edge.
+at the edge. A static that carries a text key is a label; label
+overrides that for a caption or a value its caller lets run past its
+box like one (the academy's "80(80)" level in its 19-pixel field).
 ================
 */
 export function authoredText(
 	frame: UiAuthoredFrame,
-	{ node, ox, oy, value, clipToControl = false, fontStyle = 0 }: {
+	{ node, ox, oy, value, clipToControl = false, fontStyle = 0, label = node.text !== "" }: {
 		node: AuthoredControl;
 		ox: number;
 		oy: number;
 		value: string;
 		clipToControl?: boolean | "clip";
 		fontStyle?: number;
+		label?: boolean;
 	}
 ) {
 	const quads = frame.quads, paths = frame.paths, text = frame.text, full = frame.full;
@@ -384,12 +420,15 @@ export function authoredText(
 	// use the room to the window's left margin; the wrap width splits
 	// the label near its middle (never under its longest word) so a
 	// label whose room is the rest of the window still breaks in two
-	// instead of ellipsizing.
-	if ( !clipToControl && frame.fitWindowLabels() && node.text !== "" && value.includes( " " ) ) {
+	// instead of ellipsizing. A label its caller keeps inside its box
+	// (clipToControl, the guild page's "Guild master" before the race
+	// mark) wraps too, its lines inside the box's columns, instead of
+	// being cut to "Guild ma..." (#3674).
+	if ( clipToControl !== "clip" && frame.fitWindowLabels() && label && value.includes( " " ) ) {
 		const measure = ( line: string ) => text.run( line, 0, node.fontIndex ).width;
 		const width = measure( value );
 		if ( width > box[2] ) {
-			const room = node.hAlign === 2 ?
+			const room = node.hAlign === 2 && !clipToControl ?
 					Math.max( box[2], box[0] + box[2] - (ox + WINDOW_LABEL_MARGIN) ) :
 					box[2],
 				balanced = Math.max(
@@ -403,19 +442,19 @@ export function authoredText(
 				const lines = textLines( value, wrapWidth, measure );
 				if ( lines.length !== 2 || !lines.every( line => measure( line ) <= room ) ) continue;
 				const lineHeight = text.extentHeight( node.fontIndex ?? 0 ),
-					top = box[1] + (box[3] - 2 * lineHeight) / 2;
+					{ top, pitch } = wrappedLabelBand( box, node.room, text.lineInk( node.fontIndex ?? 0 ) );
 				lines.forEach( ( line, index ) =>
 					quads.push(
 						...text.quads(
 							line,
-							[ box[0], top + index * lineHeight, box[2], lineHeight ],
+							[ box[0], top + index * pitch, box[2], lineHeight ],
 							full,
 							node.color,
 							{
 								fontIndex: node.fontIndex,
 								fontStyle,
 								hAlign: node.hAlign,
-								vAlign: 1
+								vAlign: 0
 							}
 						)
 					)
@@ -430,6 +469,8 @@ export function authoredText(
 			fontStyle,
 			hAlign: node.hAlign,
 			vAlign: node.vAlign,
+			// A label may run past its box; a value field's text keeps to it.
+			label,
 			...(clipToControl ?
 				{ overflow: clipToControl === "clip" ? "clip" as const : "ellipsis" as const } :
 				{})
@@ -494,6 +535,30 @@ export function authoredButton(
 
 /*
 ================
+fittedCaption
+
+Port-only, not native (Experimental "Fit window labels", off is the
+original): a button caption wider than its plate keeps the leading
+words that fit ("Delete message" -> "Delete", "Check for duplicate
+entries" -> "Check"); a single word still wider takes the narrow face
+("Dismiss" on the academy's 44-pixel plate). Returns the caption and
+the node to draw it with.
+================
+*/
+export function fittedCaption(
+	frame: UiAuthoredFrame,
+	{ node, ox, oy, caption }: { node: AuthoredControl; ox: number; oy: number; caption: string; }
+): { value: string; node: AuthoredControl; } {
+	if ( !frame.fitWindowLabels() ) return { value: caption, node };
+	const room = authoredRect( node, ox, oy )[2] - 2 * CAPTION_MARGIN,
+		measure = ( line: string, fontIndex: number ) => frame.text.run( line, 0, fontIndex ).width;
+	const value = captionWords( caption, room, line => measure( line, node.fontIndex ) ),
+		fontIndex = narrowFace( value, room, node.fontIndex, measure );
+	return { value, node: fontIndex === node.fontIndex ? node : { ...node, fontIndex } };
+}
+
+/*
+================
 authoredLabeledButton
 ================
 */
@@ -508,19 +573,9 @@ export function authoredLabeledButton(
 		disabled?: boolean;
 	}
 ) {
-	// Port-only, not native (Experimental "Fit window labels", off is
-	// the original): a button caption wider than its plate keeps the
-	// leading words that fit ("Delete message" -> "Delete", "Check
-	// for duplicate entries" -> "Check").
-	const shown = frame.fitWindowLabels() ?
-		captionWords(
-			caption,
-			authoredRect( node, ox, oy )[2] - 2 * CAPTION_MARGIN,
-			line => frame.text.run( line, 0, node.fontIndex ).width
-		) :
-		caption;
-	authoredButton( frame, { node, ox, oy, id, label: shown, disabled } );
-	authoredText( frame, { node, ox, oy, value: shown } );
+	const shown = fittedCaption( frame, { node, ox, oy, caption } );
+	authoredButton( frame, { node, ox, oy, id, label: shown.value, disabled } );
+	authoredText( frame, { node: shown.node, ox, oy, value: shown.value } );
 }
 
 /*

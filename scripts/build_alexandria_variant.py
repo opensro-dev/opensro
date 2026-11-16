@@ -36,6 +36,9 @@ into <variant root>/extracted/:
 No native file is ever overwritten or changed: a link is never written
 through, and a VSRO file is added only where no native file of that name
 exists, except source-authored overview tiles covering imported regions.
+A rerun with the same code, flags and sources over an untouched tree is
+skipped (variant_stamp.py); --force rebuilds anyway.
+
 Build the variant with its own generated tree:
 
 	SRO_GAME_ROOT=<variant root> SRO_GENERATED_ROOT=<variant root>/.generated pnpm assets build full
@@ -49,13 +52,12 @@ import os
 import re
 import shutil
 import struct
-import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import alexandria_npcs as npcs  # noqa: E402
+import area_music  # noqa: E402
 from alexandria_map_tables import (  # noqa: E402
 	MAP_ALEXANDRIA_ID, MAPINFO_COLUMNS, LOCALINFO_COLUMNS, MAP_PIN_IDS,
 	OVERVIEW_ID, OVERVIEW_KIND, OVERVIEW_BOX, OVERVIEW_TEXTURE, OVERVIEW_DRAW,
@@ -65,7 +67,9 @@ from alexandria_map_tables import (  # noqa: E402
 import import_vsro_alexandria as stage1  # noqa: E402
 import pharaoh_temple as temple  # noqa: E402
 import sro_pk2  # noqa: E402
-import prepare_client_resources as prepare  # noqa: E402
+import variant_settle  # noqa: E402
+import variant_stamp  # noqa: E402
+from build_parallelism import build_jobs  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT  # noqa: E402
 
@@ -114,8 +118,8 @@ LEVEL_CAP_FLAG = "SRO_LEVEL_CAP"
 # each store with the goods one official source had active; on, the
 # shop passes stock the port's own degree goods instead.
 PORT_STOCK_FLAG = "SRO_ALEXANDRIA_PORT_STOCK"
-PORT_STOCK_OFF_VALUES = ("", "0", "off", "false")
-PORT_STOCK_ON_VALUES = ("1", "on", "true")
+SWITCH_OFF_VALUES = ("", "0", "off", "false")
+SWITCH_ON_VALUES = ("1", "on", "true")
 EXPANSION_LEVEL_CAP = 110
 LEVEL_CAP_NATIVE_VALUES = ("", "0", "off", "false", "90")
 LEVEL_CAP_EXPANSION_VALUES = ("110",)
@@ -128,9 +132,6 @@ LINK_KINDS_EVALUATED = (1, 2, 7)
 TELEPORT_COLUMNS = 13
 BUILDING_COLUMNS = 58
 
-# Areas of regioninfo.txt / effectenvsnd.txt: the city and the field around it.
-MUSIC_AREAS = ("알렉산드리아", "델타지역")
-EFFECTENVSND_COLUMNS = 7
 
 # The VSRO characterdata files (characterdata.txt lists them).
 VSRO_CHARACTER_FILES = (5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000)
@@ -389,110 +390,6 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 
 
 #============================================================================
-# Music and ambience
-#============================================================================
-
-
-# ================
-# table_lines
-# ================
-def table_lines(raw):
-	"""The CP949 lines of regioninfo.txt / effectenvsnd.txt (neither has a BOM)."""
-	return raw.decode("cp949").split("\r\n")
-
-
-# ================
-# regioninfo_section
-# ================
-def regioninfo_section(lines, name):
-	"""
-	One area's block of regioninfo.txt: its #TOWN / #FIELD header line and the
-	region rows below it, up to the next header.
-	"""
-	for start, line in enumerate(lines):
-		cells = line.split("\t")
-		if line.startswith(("#TOWN", "#FIELD")) and len(cells) > 1 and cells[1] == name:
-			end = start + 1
-			while end < len(lines) and not lines[end].startswith("#"):
-				end += 1
-			return [row for row in lines[start:end] if row.strip("\t")]
-	raise SystemExit(f"regioninfo.txt has no area {name!r}")
-
-
-# ================
-# effectenvsnd_section
-# ================
-def effectenvsnd_section(lines, name):
-	"""
-	One area's block of effectenvsnd.txt: its "<1>" line and everything below
-	it up to the next "<1>", padded to the v1.150 file's seven columns.
-	"""
-	for start, line in enumerate(lines):
-		cells = line.split("\t")
-		if cells[0] == "<1>" and len(cells) > 1 and cells[1] == name:
-			end = start + 1
-			while end < len(lines) and not lines[end].startswith("<1>"):
-				end += 1
-			return [
-				row + "\t" * (EFFECTENVSND_COLUMNS - len(row.split("\t")))
-				for row in lines[start:end] if row.strip("\t")
-			]
-	raise SystemExit(f"effectenvsnd.txt has no area {name!r}")
-
-
-# ================
-# music_tracks
-# ================
-def music_tracks(section):
-	"""The music files (.ogg) an effectenvsnd section names."""
-	return sorted({
-		match.group(1) for row in section for match in [re.search(r'"([^"]+\.ogg)"', row)] if match
-	})
-
-
-# ================
-# append_cp949
-# ================
-def append_cp949(native_raw, rows):
-	"""The native CP949 table with rows appended (unchanged when there are none)."""
-	if not rows:
-		return native_raw
-	text = native_raw.decode("cp949")
-	if not text.endswith("\n"):
-		text += "\r\n"
-	return (text + "\r\n".join(rows) + "\r\n").encode("cp949")
-
-
-# ================
-# merge_music_tables
-# ================
-def merge_music_tables(native, vsro, areas=MUSIC_AREAS):
-	"""
-	The native regioninfo.txt and effectenvsnd.txt with the areas added (their
-	region lists and their music and ambience), and the music files they name.
-	Areas the native tables already have are left alone.
-	"""
-	region_lines = table_lines(native["regioninfo.txt"])
-	sound_lines = table_lines(native["effectenvsnd.txt"])
-	vsro_regions = table_lines(vsro["regioninfo.txt"])
-	vsro_sounds = table_lines(vsro["effectenvsnd.txt"])
-	known = {line.split("\t")[1] for line in region_lines if line.startswith(("#TOWN", "#FIELD")) and "\t" in line}
-	known_sounds = {line.split("\t")[1] for line in sound_lines if line.startswith("<1>") and "\t" in line}
-	tracks, region_rows, sound_rows = [], [], []
-	for name in areas:
-		sounds = effectenvsnd_section(vsro_sounds, name)
-		if name not in known:
-			region_rows += regioninfo_section(vsro_regions, name)
-		if name not in known_sounds:
-			sound_rows += sounds
-			tracks += music_tracks(sounds)
-	return {
-		"regioninfo.txt": append_cp949(native["regioninfo.txt"], region_rows),
-		"effectenvsnd.txt": append_cp949(native["effectenvsnd.txt"], sound_rows)
-	}, sorted(set(tracks))
-
-
-#============================================================================
 # Trees
 #============================================================================
 
@@ -547,16 +444,43 @@ def lower_paths(root):
 
 
 # ================
+# clear_content
+#
+# A build lays the variant's content down from nothing. The steps below
+# only add (link_tree skips a target that exists, add_missing_files fills
+# what the native tree lacks), so over last release's tree a re-extracted
+# native file would keep its old bytes and a file the sources dropped
+# would never leave (ops #368 review, 2026-11-16). Removing a hard link
+# leaves the native file it names alone. The build state beside the tree
+# (.state: the settle ledger, the asset caches) and the generated tree
+# stay: settle gives each file whose bytes come back the same its old time
+# (variant_settle.py), so the caches downstream still hit.
+# ================
+def clear_content(variant, native):
+	out = variant / "extracted"
+	if out.resolve() == Path(native).resolve() or Path(native).resolve() in out.resolve().parents:
+		raise SystemExit(f"{out} is inside the native extraction; refusing to clear it")
+	if out.exists():
+		shutil.rmtree(out)
+	for name in (VARIANT_MANIFEST,) + LINKED_FILES:
+		(variant / name).unlink(missing_ok=True)
+	return out
+
+
+# ================
 # build_variant
 # ================
 def build_variant(vsro_root, native, variant, imported_root=None):
 	"""Make the variant's extracted/ tree; returns its manifest."""
-	stage1.require_vsro_pin(vsro_root, stage1.ARCHIVE_NAMES)
 	imported = Path(imported_root) if imported_root else native / stage1.OUTPUT_FOLDER
+	# Stage 1 of this build hashed these archives minutes ago (#3590); an
+	# unchanged file with today's pinned digest is not hashed again.
+	stage1.admit_verified_archives(imported)
+	stage1.require_vsro_pin(vsro_root, stage1.ARCHIVE_NAMES)
 	stage_manifest = json.loads((imported / stage1.MANIFEST_NAME).read_text(encoding="utf-8"))
 	regions = [(r["sectorX"], r["sectorY"]) for r in stage_manifest["regions"]]
-	out = variant / "extracted"
-	out.mkdir(parents=True, exist_ok=True)
+	out = clear_content(variant, native)
+	out.mkdir(parents=True)
 
 	linked = {}
 	for folder in LINKED_FOLDERS + ("Map_extracted", "Data_extracted"):
@@ -617,7 +541,6 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	pharaoh_temple = temple.add_temple(vsro_root, native, out)
 	# The map step adds to textdataname.txt on top of the gates' texts.
 	city_map = add_map(vsro_root, native, out, regions, gate_tables["text"])
-	music = add_music(vsro_root, native, out)
 	city_npcs = add_npcs(vsro_root, native, out, regions)
 	# Imported equipment is independently optional; its off path also removes
 	# a shard from a previous on build so a reused variant cannot retain it.
@@ -661,8 +584,13 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# so their identities allocate above all of the layers' rows.
 	from roc_import import add_roc
 	roc = add_roc(vsro_root, native, out)
+	# The honor line the client authored and never shipped (SRO_HONOR_GOODS,
+	# #3548): after every other item import, whose identities it keeps
+	# clear of, and before the shops that sell it.
+	import honor_items
+	honor_goods = honor_items.add_honor_items(native, out)
 	from alexandria_npc_services import add_services
-	city_services = add_services(vsro_root, native, out, port_stock_enabled())
+	city_services = add_services(vsro_root, native, out, port_stock_enabled(), honor_goods["enabled"])
 	# The later client's seasonal town decoration (Halloween and the other
 	# event layers), into the object catalog and region files written above.
 	# Without the v1.696 archives a previous import is removed.
@@ -673,6 +601,9 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		log(f"world layers: {later} lacks the v1.696 archives; no seasonal layers")
 		later = None
 	world_layers = add_layers(later, native, out, source_pins(V1696_SOURCE) if later else None)
+	# Music last: its areas are those of every region the steps above left
+	# in the tree, stage 1's, the temple's and each later layer's (#3546).
+	music = area_music.add_music(vsro_root, native, out, later)
 
 	environment = read_vsro_file(vsro_root, "Map", "environment.ifo")
 	replace_file(out / "Map_extracted" / "environment.ifo", environment)
@@ -695,6 +626,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"music": music,
 		"npcs": city_npcs,
 		"npcServices": city_services,
+		"honorGoods": honor_goods,
 		"weapons": weapons,
 		"mallAvatars": mall_avatars,
 		"mallAvatarsV1696": later_avatars,
@@ -734,22 +666,31 @@ def gate_level_cap(environ=None):
 
 
 # ================
+# build_switch
+#
+# An on/off build flag: unset or an off value is False (native), an on
+# value True. Anything else is refused, as the server refuses a value it
+# does not know.
+# ================
+def build_switch(flag, environ=None):
+	value = (os.environ if environ is None else environ).get(flag, "").strip().lower()
+	if value in SWITCH_OFF_VALUES:
+		return False
+	if value in SWITCH_ON_VALUES:
+		return True
+	raise ValueError(f"{flag} must be off, on or unset, not {value!r}")
+
+
+# ================
 # port_stock_enabled
+#
+# The shops' stock choice (#2846), from SRO_ALEXANDRIA_PORT_STOCK: off -
+# the default, and the value every official build has - asks the shop
+# passes for each store's official stock; on asks for the port's own
+# degree goods.
 # ================
 def port_stock_enabled(environ=None):
-	"""
-	The shops' stock choice (#2846), from SRO_ALEXANDRIA_PORT_STOCK:
-	False - the default, and the value every official build has - asks
-	the shop passes for each store's official stock; on asks for the
-	port's own degree goods. Anything else is refused, as the server
-	refuses a value it does not know.
-	"""
-	value = (os.environ if environ is None else environ).get(PORT_STOCK_FLAG, "").strip().lower()
-	if value in PORT_STOCK_OFF_VALUES:
-		return False
-	if value in PORT_STOCK_ON_VALUES:
-		return True
-	raise ValueError(f"{PORT_STOCK_FLAG} must be off, on or unset, not {value!r}")
+	return build_switch(PORT_STOCK_FLAG, environ)
 
 
 # ================
@@ -856,52 +797,6 @@ def add_npcs(vsro_root, native, out, regions):
 
 
 # ================
-# add_music
-# ================
-def add_music(vsro_root, native, out):
-	"""
-	Add the areas' music and ambience tables and convert the music files they
-	name from the VSRO Music.pk2 to MP3, exactly as prepare_client_resources
-	does for the native tracks. Returns a summary.
-	"""
-	textdata = Path("Media_extracted") / TEXTDATA
-	names = ("regioninfo.txt", "effectenvsnd.txt")
-	tables = {name: (native / textdata / name).read_bytes() for name in names}
-	vsro = {name: read_vsro_file(vsro_root, "Media", TEXTDATA + name) for name in names}
-	merged, tracks = merge_music_tables(tables, vsro)
-	for name, content in merged.items():
-		replace_file(out / textdata / name, content)
-
-	converted, absent = [], []
-	ffmpeg = prepare.find_ffmpeg() if tracks else None
-	path, handle, data = stage1.open_archive(vsro_root, "Music")
-	try:
-		index = stage1.archive_index(data)
-		with tempfile.TemporaryDirectory(prefix="opensro-music-") as scratch:
-			for track in tracks:
-				entry = index.get(track.lower())
-				if entry is None:
-					absent.append(track)
-					continue
-				target = out / "Music_mp3" / (Path(track).stem + ".mp3")
-				if target.exists():
-					continue
-				source = Path(scratch) / Path(track).name
-				source.write_bytes(sro_pk2.payload(data, entry))
-				partial = Path(scratch) / target.name
-				subprocess.run(
-					[ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(source), *prepare.MUSIC_ENCODER_ARGS, str(partial)],
-					check=True
-				)
-				write_atomically(target, partial.read_bytes())
-				converted.append(target.name)
-	finally:
-		data.close()
-		handle.close()
-	return {"tracks": tracks, "converted": converted, "absent": absent}
-
-
-# ================
 # replace_file
 # ================
 def replace_file(target, content):
@@ -959,6 +854,7 @@ def main():
 	parser.add_argument("--vsro-root", default=os.environ.get(stage1.ROOT_ENV), help="VSRO client folder")
 	parser.add_argument("--variant-root", required=True, help="the new game root to create")
 	parser.add_argument("--imported-root", type=Path, help="isolated stage-1 import instead of the native extraction's import folder")
+	parser.add_argument("--force", action="store_true", help="rebuild even when the stamp says nothing changed")
 	args = parser.parse_args()
 	if not stage1.flag_enabled():
 		raise SystemExit(f"{stage1.FLAG_ENV} is not on. Alexandria is port-only, not native.")
@@ -967,7 +863,30 @@ def main():
 	variant = Path(args.variant_root).resolve()
 	if variant == EXTRACTED_ROOT.parent.resolve() or EXTRACTED_ROOT.resolve() in variant.parents:
 		raise SystemExit("The variant root must be a different folder from the native game root.")
-	manifest = build_variant(Path(args.vsro_root), EXTRACTED_ROOT, variant, args.imported_root)
+	vsro_root = Path(args.vsro_root)
+	imported = Path(args.imported_root) if args.imported_root else EXTRACTED_ROOT / stage1.OUTPUT_FOLDER
+	# Same code, flags and sources as the last successful build of this
+	# tree, and the tree untouched since: nothing to do (variant_stamp.py).
+	inputs = variant_stamp.read_inputs(EXTRACTED_ROOT, imported, vsro_root, variant)
+	stale = ["--force"] if args.force else variant_stamp.stale_parts(variant, inputs, (VARIANT_MANIFEST,) + LINKED_FILES)
+	if not stale:
+		log(f"unchanged since the last build of {variant}; skipped (pass --force to rebuild)")
+		return
+	log(f"rebuilding: {', '.join(stale[:8])}{' ...' if len(stale) > 8 else ''}")
+	variant_stamp.clear_stamp(variant)
+	manifest = build_variant(vsro_root, EXTRACTED_ROOT, variant, args.imported_root)
+	# Files the rebuild left byte-identical get their old mtime back, so the
+	# asset build's (size, mtime) caches still hit (variant_settle.py).
+	settled = variant_settle.settle(variant, build_jobs())
+	log(f"settle: {settled['files']} files, {settled['restored']} unchanged kept their time, "
+		f"{settled['changed']} changed, {settled['unread']} matched unread")
+	# Stamped with what the build read before it started; a source that
+	# moved under it leaves no stamp, so the next run rebuilds.
+	moved = variant_stamp.differences(inputs, variant_stamp.read_inputs(EXTRACTED_ROOT, imported, vsro_root, variant))
+	if moved:
+		log(f"not stamped: {', '.join(moved)} changed during the build")
+	else:
+		variant_stamp.write_stamp(variant, inputs)
 	log(f"tile remap {manifest['tileRemap']}, {manifest['mapFilesAdded']} map files, {manifest['dataFilesAdded']} data files")
 	log(f"Next: SRO_GAME_ROOT={variant} SRO_GENERATED_ROOT={variant / '.generated'} pnpm assets build full")
 

@@ -7,9 +7,9 @@ import {pickAttachedMotionClips} from './attachedMotionClips.mjs';
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  defaultMotionClipPaths,
   findDefaultAnimationSet,
-  pickAnimationSetStateClip,
-  pickDefaultSetStateClip
+  pickAnimationSetStateClip
 } from "./animationUtils.mjs";
 import { parseBan, parseBsk, parseCharacterBsr, parseSkinnedBms } from "./formats.mjs";
 import { parseJmxResourceBsr } from "../world/objects/formats.mjs";
@@ -273,6 +273,9 @@ function bakeMeshVertices(mesh, bakeByLocal, meshPath) {
  *   or { bone, bake: {q,t} } (ride that row AND pre-transform the bone's vertices by
  *   bake - the attach-bone branch case). Return null to give up.
  * - skipUnboundMeshes: drop a mesh whose unknown bone stays unresolved (else throw).
+ * - attachedMotionRequests: the attached-motion requests (attachedMotionClips.mjs);
+ *   default defaultAttachedMotionRequests(). A cached step passes them in so the
+ *   table it came from is part of its key, not a read inside the step.
  */
 export async function assembleAvatar(bsrAssetPath, options = {}) {
   const bsrBuffer = await loadDataAsset(bsrAssetPath);
@@ -342,8 +345,10 @@ export async function assembleAvatar(bsrAssetPath, options = {}) {
   // Default-set motion ids are the native authority: 0=stand, 1=walk, 7=run.
   // Filename matching was a reconstruction-era approximation and must never
   // choose a production clip now that the BSR animation-set table is decoded.
-  const walkPath = options.noClips ? null : options.clipPath ?? pickDefaultSetStateClip(bsr, 1);
-  const runPath = options.noClips ? null : pickDefaultSetStateClip(bsr, 7);
+  const motion = options.noClips ? { walk: null, run: null, stand: null } :
+    defaultMotionClipPaths(bsr, { clipPath: options.clipPath, standSharesWalk: options.standSharesWalk });
+  const walkPath = motion.walk;
+  const runPath = motion.run;
   const clip = walkPath ? parseBan(await loadDataAsset(walkPath), walkPath) : null;
 
   // Clips baked into the GLB so the runtime can pose per use: 'walk'/'run' for
@@ -356,11 +361,11 @@ export async function assembleAvatar(bsrAssetPath, options = {}) {
   const clips = [];
   if (clip) clips.push({ role: "walk", path: walkPath, clip });
   if (!options.noClips) {
-    if (runPath && runPath !== walkPath) {
+    if (runPath) {
       clips.push({ role: "run", path: runPath, clip: parseBan(await loadDataAsset(runPath), runPath) });
     }
-    const standPath = pickDefaultSetStateClip(bsr, 0);
-    if (standPath && standPath !== walkPath) {
+    const standPath = motion.stand;
+    if (standPath) {
       clips.push({ role: "stand", path: standPath, clip: parseBan(await loadDataAsset(standPath), standPath) });
     }
     // InitGlobalAnimationSetNameStrings 0xbbdb70 proves data_cccd30 == "cart";
@@ -376,7 +381,7 @@ export async function assembleAvatar(bsrAssetPath, options = {}) {
     if (pickPath && pickPath !== walkPath) {
       clips.push({ role: "pick", path: pickPath, clip: parseBan(await loadDataAsset(pickPath), pickPath) });
     }
-    for (const motion of pickAttachedMotionClips(bsr)) clips.push({role:motion.role,path:motion.path,clip:parseBan(await loadDataAsset(motion.path),motion.path)});
+    for (const motion of pickAttachedMotionClips(bsr, options.attachedMotionRequests)) clips.push({role:motion.role,path:motion.path,clip:parseBan(await loadDataAsset(motion.path),motion.path)});
     for (const attackClip of pickAttackStateClips(bsr)) {
       clips.push({
         role: attackClip.role,

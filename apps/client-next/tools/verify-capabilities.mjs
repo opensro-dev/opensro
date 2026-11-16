@@ -71,8 +71,6 @@ const shadows = runtime + "renderer/device/character-shadows.ts";
 const sunShadow = runtime + "renderer/device/sun-shadow.ts";
 const hdr = runtime + "renderer/device/hdr.ts";
 const ambientOcclusion = runtime + "renderer/device/ambient-occlusion.ts";
-// Port-only: the experimental refracted water stage (device/water-refraction.ts).
-const waterRefraction = runtime + "renderer/device/water-refraction.ts";
 // Port-only: the experimental 4x multisampled scene buffers (device/msaa.ts).
 const msaa = runtime + "renderer/device/msaa.ts";
 const animation = runtime + "renderer/device/animation.ts";
@@ -107,7 +105,6 @@ const deviceInternals = [
 	sunShadow,
 	hdr,
 	ambientOcclusion,
-	waterRefraction,
 	msaa
 ];
 export const rules = {
@@ -263,7 +260,8 @@ rules.createSampler.push( geometry );
 for ( const name of [ "createBuffer", "writeBuffer", "createCommandEncoder", "finish", "submit" ] ) {
 	rules[name].push( geometryUploads );
 }
-rules.createBuffer.push( bufferSlabs );
+// A staged set (createStagedSlabs) uploads its mirrors' dirty spans itself.
+for ( const name of [ "createBuffer", "writeBuffer" ] ) rules[name].push( bufferSlabs );
 for (
 	const name of [
 		"createShaderModule",
@@ -388,7 +386,7 @@ for (
 		"writeBuffer",
 		"beginRenderPass"
 	]
-) rules[name].push( ambientOcclusion, waterRefraction );
+) rules[name].push( ambientOcclusion );
 for (
 	const name of [
 		"createShaderModule",
@@ -513,7 +511,6 @@ export function verifyCapabilities( base = root ) {
 					shadows,
 					sunShadow,
 					waterReflection,
-					waterRefraction,
 					msaa,
 					finish,
 					device,

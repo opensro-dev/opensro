@@ -25,7 +25,8 @@ import {
 	HUNTING_PORTRAIT_FRAME,
 	HUNTING_PORTRAITS,
 	type HuntingCatalogue,
-	type HuntingProjection
+	type HuntingProjection,
+	type LevelBand
 } from "@/engine/foundation/ui/hunting-guide";
 import { worldMapFrame, type WorldMapLayout } from "@/engine/foundation/ui/world-map";
 import { featuresAt } from "@/engine/foundation/world/plane";
@@ -154,17 +155,17 @@ export function createHuntingGuideHud(
 			center: Pose,
 			hover: string | null = null,
 			layout?: WorldMapLayout,
-			maxLevel?: number
+			band?: LevelBand
 		) {
 			if ( page !== 0 || load.kind !== "ready" || !featuresAt( center.regionId ).worldMap ) {
 				invalidate();
 				return EMPTY;
 			}
 			const frame = worldMapFrame( page, clip, pan, center, layout ),
-				key = [ page, ...clip, frame.ox, frame.oy, hover ?? "", maxLevel ?? "" ].join( "|" );
+				key = [ page, ...clip, frame.ox, frame.oy, hover ?? "", band?.min ?? "", band?.max ?? "" ].join( "|" );
 			if ( key !== cacheKey ) {
 				projection = projectHuntingGuide(
-					maxLevel === undefined ? load.data : filterHuntingGuide( load.data, maxLevel ),
+					band === undefined ? load.data : filterHuntingGuide( load.data, band ),
 					frame,
 					clip,
 					hover

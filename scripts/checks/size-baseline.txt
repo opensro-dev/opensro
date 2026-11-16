@@ -10,7 +10,6 @@ apps/client-next/src/engine/runtime/characters/pose-presentation.ts # one sample
 apps/client-next/src/engine/runtime/characters/effects/effects.ts # formatted 2026-10-01; step() still owns cast stages, attached buffs, status, item and system effects and flights: split along those owners
 apps/client-next/src/engine/runtime/platform/platform.ts # platform composition root: the returned handle carries one row per platform owner (canvas, cursor, telemetry, display); rows join and leave with their owners and no responsibility boundary runs inside the table
 apps/client-next/src/engine/runtime/platform/ui/ui.ts # one DOM bridge owner: control lifetime, pointer/touch routing, focus and IME share each control's element and its per-frame publication; the drag shield and cursor are already separate owners
-apps/client-next/src/engine/runtime/renderer/device/device.ts # one device owner: adapter facts, the generation's sub-resource wiring and its lifecycle share the created device; every sub-resource it wires (UI, bloom, particles, geometry) is already its own owner
 apps/client-next/src/engine/runtime/renderer/device/geometry.ts # cohesive draw-resource and binding lifetime owner; upload snapshots have a separate owner
 apps/client-next/src/engine/runtime/renderer/characters/characters.ts # synchronous model, pose and draw-batch lifetime owner; shared admission and retirement must stay ordered
 apps/client-next/src/engine/runtime/renderer/world/world.ts # not yet analysed; split on its responsibility boundaries when formatted
@@ -24,6 +23,7 @@ apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/mov
 apps/client-next/src/engine/runtime/simulation/worker/network/network.ts # one link owner: WebSocket and WebTransport lifecycles, framing, acks and close facts share one connection state
 apps/client-next/src/engine/runtime/simulation/worker/session/session.ts # one session owner: login and character commands, the native refusal ingest and the world-entry handoff share one state machine; the blocked refusal's strings (#2271) ride the same publish as its status, and no responsibility boundary runs inside the login answer handling
 apps/client-next/src/engine/runtime/simulation/worker/session/world/world.ts # one world-session owner: entry, the retry ladder, reference loading and the bind share each attempt's deadline, epoch and failure state; the #2311 failure evidence is read at the same attempt boundary, so no responsibility boundary runs inside the file
+apps/client-next/src/engine/runtime/ui/hud/world-map.ts # one world map HUD owner: placement, page, follow mode and the guide panel share the map projection and its input routing; the guide tree, map tools and chrome are already separate owners, leaving the entry points that dispatch to them
 apps/client-next/src/engine/runtime/ui/ui.ts # frame primitives and admission live in runtime/ui/frame; the remaining closure holds state, input and per-window drawing, to split per window
 apps/client-next/tests/runtime/character-animation-audio.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/character-effects.test.mjs # test file; split by feature

@@ -515,59 +515,6 @@ class MapTests(unittest.TestCase):
 		self.assertNotIn("interface/worldmap/map/map_world_70x85.ddj", paths)
 
 
-def cp949(rows):
-	return ("\r\n".join(rows) + "\r\n").encode("cp949")
-
-
-class MusicTests(unittest.TestCase):
-	TOWN = "알렉"
-	FIELD = "델타"
-
-	def tables(self):
-		native = {
-			"regioninfo.txt": cp949(["#TOWN\t도적\t\t\t\t\t", "182\t96\tALL\t\t\t\t"]),
-			"effectenvsnd.txt": cp949(["<1>\t도적\t\t\t\t\t", '\t"EasternEurope_Field.ogg"\t\t\t\t\t'])
-		}
-		vsro = {
-			"regioninfo.txt": cp949([
-				"#TOWN\t" + self.TOWN + "\t\t\t\t\t", "48\t95\tALL\t\t\t\t", "\t\t\t\t\t\t", "\t\t\t\t\t\t",
-				"#FIELD\t" + self.FIELD + "\t\t\t\t\t", "50\t93\tALL\t\t\t\t", "#FIELD\tother\t\t\t\t\t", "1\t2\tALL\t\t\t\t"
-			]),
-			"effectenvsnd.txt": cp949([
-				"<1>\t" + self.TOWN + "\t\t\t\t", '\t"Egypt_Town_Alexandria1.ogg"\t\t\t', "\t<2>\t낮\t\t\t",
-				'\t\t\t<3>\t"night_wind.wav"\t0~0', "<1>\t" + self.FIELD + "\t\t\t\t", '\t"Egypt_Field_Delta.ogg"\t\t\t',
-				"<1>\tother\t\t\t\t", '\t"Other.ogg"\t\t\t'
-			])
-		}
-		return native, vsro
-
-	def test_the_areas_are_appended_in_the_native_layout_and_name_their_tracks(self):
-		native, vsro = self.tables()
-		merged, tracks = variant.merge_music_tables(native, vsro, areas=(self.TOWN, self.FIELD))
-		self.assertEqual(tracks, ["Egypt_Field_Delta.ogg", "Egypt_Town_Alexandria1.ogg"])
-		regions = merged["regioninfo.txt"].decode("cp949").split("\r\n")
-		self.assertEqual(regions[:2], ["#TOWN\t도적\t\t\t\t\t", "182\t96\tALL\t\t\t\t"])
-		self.assertIn("48\t95\tALL\t\t\t\t", regions)
-		self.assertIn("50\t93\tALL\t\t\t\t", regions)
-		self.assertNotIn("1\t2\tALL\t\t\t\t", regions)
-		sounds = merged["effectenvsnd.txt"].decode("cp949").split("\r\n")
-		self.assertTrue(all(len(row.split("\t")) == variant.EFFECTENVSND_COLUMNS for row in sounds if row))
-		self.assertIn('\t\t\t<3>\t"night_wind.wav"\t0~0\t', sounds)
-		self.assertNotIn("<1>\tother\t\t\t\t\t", sounds)
-
-	def test_an_area_the_native_tables_have_is_left_alone(self):
-		native, vsro = self.tables()
-		merged, _ = variant.merge_music_tables(native, vsro, areas=(self.TOWN,))
-		again, tracks = variant.merge_music_tables(merged, vsro, areas=(self.TOWN,))
-		self.assertEqual(tracks, [])
-		self.assertEqual(again, merged)
-
-	def test_a_missing_area_is_refused(self):
-		native, vsro = self.tables()
-		with self.assertRaises(SystemExit):
-			variant.merge_music_tables(native, vsro, areas=("nowhere",))
-
-
 class LinkTests(unittest.TestCase):
 	def test_replacing_a_linked_file_leaves_the_native_one_alone(self):
 		with tempfile.TemporaryDirectory() as scratch:
@@ -664,3 +611,54 @@ class AddGatesTests(unittest.TestCase):
 	def test_add_gates_keeps_the_authored_level_under_the_110_cap(self):
 		_, merged, _ = self.run_add_gates("110")
 		self.assertEqual(self.entry_level(merged), ["1", "95", "999"])
+
+
+# ================
+# ClearContentTests
+#
+# A rebuild over last release's variant starts from an empty extracted/
+# tree (ops #368 review): link_tree skips a target that exists, so a kept
+# tree would keep a re-extracted native file's old bytes and a dropped
+# file forever. The build state and the generated tree beside it stay,
+# and a native file a link named is untouched.
+# ================
+class ClearContentTests(unittest.TestCase):
+	def setUp(self):
+		self.root = tempfile.TemporaryDirectory()
+		self.addCleanup(self.root.cleanup)
+		base = Path(self.root.name)
+		self.native = base / "native" / "extracted"
+		(self.native / "Media_extracted").mkdir(parents=True)
+		self.native_file = self.native / "Media_extracted" / "a.txt"
+		self.native_file.write_bytes(b"new native bytes")
+		self.variant = base / "variant"
+
+	def test_a_rebuild_takes_the_new_native_bytes_and_drops_what_left(self):
+		kept = self.variant / "extracted" / "Media_extracted"
+		kept.mkdir(parents=True)
+		(kept / "a.txt").write_bytes(b"last release")
+		(kept / "dropped.txt").write_bytes(b"gone from the sources")
+		(self.variant / ".state").mkdir()
+		(self.variant / ".state" / "variant-content.json").write_text("{}", encoding="utf-8")
+		(self.variant / ".generated").mkdir()
+		(self.variant / variant.VARIANT_MANIFEST).write_text("{}", encoding="utf-8")
+		out = variant.clear_content(self.variant, self.native)
+		out.mkdir(parents=True)
+		variant.link_tree(self.native / "Media_extracted", out / "Media_extracted")
+		self.assertEqual((out / "Media_extracted" / "a.txt").read_bytes(), b"new native bytes")
+		self.assertFalse((out / "Media_extracted" / "dropped.txt").exists())
+		self.assertFalse((self.variant / variant.VARIANT_MANIFEST).exists())
+		self.assertTrue((self.variant / ".state" / "variant-content.json").is_file())
+		self.assertTrue((self.variant / ".generated").is_dir())
+
+	def test_clearing_a_linked_tree_leaves_the_native_file(self):
+		out = variant.clear_content(self.variant, self.native)
+		out.mkdir(parents=True)
+		variant.link_tree(self.native / "Media_extracted", out / "Media_extracted")
+		variant.clear_content(self.variant, self.native)
+		self.assertEqual(self.native_file.read_bytes(), b"new native bytes")
+
+	def test_the_native_extraction_is_never_cleared(self):
+		with self.assertRaises(SystemExit):
+			variant.clear_content(self.native.parent, self.native)
+		self.assertTrue(self.native_file.is_file())

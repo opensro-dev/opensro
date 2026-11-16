@@ -5,23 +5,21 @@ nativeLensResources.mjs - own lens mip generation and atomic publication
 
 Full and standalone world builds share this prerequisite. A process generates
 the eight resources once, in a private staging directory, before any sky copy.
-The build entry point owns the generated-asset lock. On Windows the 32-bit D3DX runtime
-reproduces the original native-lens-resources.cpp output byte for byte;
-elsewhere native_texture_mips.py generates equivalent mips.
+The build entry point owns the generated-asset lock. nativeMipGenerator.mjs
+picks the generator: the 32-bit D3DX runtime reproduces the original
+native-lens-resources.cpp output byte for byte where it can create its
+device; elsewhere native_texture_mips.py generates equivalent mips.
 
 ===========================================================================
 */
-import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
-import { extractedRoot, imageSourceRoot, rebuildRoot } from "../world/paths.mjs";
+import { extractedRoot, imageSourceRoot } from "../world/paths.mjs";
 import { publishFileFromTemp } from "./atomicPublish.mjs";
 import { isMainScript } from "./fsUtils.mjs";
 import { withGeneratedAssetsLock } from "../../rebuildLock.mjs";
-import { runPython } from "./pythonRun.mjs";
+import { runMipGenerator, selectMipGenerator } from "./nativeMipGenerator.mjs";
 
-const executeFile = promisify( execFile );
 const LENS_COUNT = 8;
 const NTX_MAGIC = 0x3158544e;
 const NTX_HEADER_BYTES = 20;
@@ -32,38 +30,13 @@ let buildPromise;
 /*
 ================
 compileLensResources
+
+The host's mip generator (nativeMipGenerator.mjs) over the eight lenses.
 ================
 */
 async function compileLensResources( sourceRoot, outputRoot ) {
-	if ( process.platform !== "win32" ) {
-		// No D3DX off Windows: the portable generator writes the same container.
-		await runPython( [
-			path.join( rebuildRoot, "scripts", "build", "native_texture_mips.py" ),
-			"-SourceRoot",
-			sourceRoot,
-			"-OutputRoot",
-			outputRoot
-		], { task: "native lens mip generation" } );
-		return;
-	}
-	const windowsRoot = process.env.SystemRoot ?? "C:\\Windows";
-	const powershell = path.join( windowsRoot, "SysWOW64", "WindowsPowerShell", "v1.0", "powershell.exe" );
-	try {
-		await executeFile( powershell, [
-			"-NoProfile",
-			"-NonInteractive",
-			"-ExecutionPolicy",
-			"Bypass",
-			"-File",
-			path.join( rebuildRoot, "scripts", "build", "native_lens_resources.ps1" ),
-			"-SourceRoot",
-			sourceRoot,
-			"-OutputRoot",
-			outputRoot
-		], { windowsHide: true } );
-	} catch ( error ) {
-		throw new Error( `Native lens generation failed: ${error.stderr || error.message}`, { cause: error } );
-	}
+	const kind = await selectMipGenerator();
+	await runMipGenerator( kind, { sourceRoot, outputRoot }, "native lens mip generation" );
 }
 
 /*

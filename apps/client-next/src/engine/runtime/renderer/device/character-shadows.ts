@@ -63,7 +63,10 @@ struct Skin {joints:vec4u,weights:vec4f};
 @vertex fn vs(@location(0) position:vec3f,@builtin(vertex_index) v:u32,@builtin(instance_index) i:u32)->@builtin(position) vec4f {
  var p=vec4f(position,1);let n=material[2].x;
  if(n!=0){let s=skin[v];let base=select(select(i*u32(abs(n)),0u,n<0),u32(instances[i].opacity.y),instances[i].opacity.z>0);
- p=(bones[base+s.joints.x]*p)*s.weights.x+(bones[base+s.joints.y]*p)*s.weights.y+(bones[base+s.joints.z]*p)*s.weights.z+(bones[base+s.joints.w]*p)*s.weights.w;}
+ p=(bones[base+s.joints.x]*p)*s.weights.x+(bones[base+s.joints.y]*p)*s.weights.y+(bones[base+s.joints.z]*p)*s.weights.z+(bones[base+s.joints.w]*p)*s.weights.w;
+ // A cloth draw's solver-owned vertices take their stream position: the slot
+ // map at V names the slot, the stream at 2V holds it (pipelines.ts vs).
+ let cloth=u32(instances[i].opacity.w);if(cloth>0u){let slot=skin[cloth+v].joints.x;if(slot!=0xffffffffu){let c=skin[2u*cloth+slot];if((c.joints.w&1u)!=0u){p=vec4f(bitcast<vec3f>(c.joints.xyz),1);}}}}
  return projection*instances[i].world*p;
 }
 @fragment fn fs()->@location(0) vec4f{return vec4f(0,0,0,1);}`

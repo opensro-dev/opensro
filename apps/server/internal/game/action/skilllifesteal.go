@@ -63,7 +63,7 @@ victim's area percent (byte +5 of its target entry; 100 for the primary).
 */
 func lifeStealResult(base int64, attacker, defender combat.Stats, targetHP, percent uint32) combat.Result {
 	damage := combat.LifeSteal(base, attacker.Level, defender.Level, targetHP, percent)
-	return combat.Result{Damage: min(damage, wire.MaxSkillActionDamage), ResultFlags: 1}
+	return combat.Result{Damage: combat.OneDamageCap(defender, min(damage, wire.MaxSkillActionDamage)), ResultFlags: 1}
 }
 
 /*

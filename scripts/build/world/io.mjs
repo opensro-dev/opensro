@@ -1,5 +1,6 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { noteRead } from "../graph/reads.mjs";
 import { pathExists } from "../shared/fsUtils.mjs";
 import { writeJsonIfChanged } from "../shared/jsonOut.mjs";
 import { claimPublicFile } from "../shared/publicationLedger.mjs";
@@ -22,3 +23,29 @@ export async function writePublicFile( publicPath, bytes ) {
 }
 
 export const exists = pathExists;
+
+/*
+================
+notedExists
+
+pathExists that tells a tracked step (graph/reads.mjs) it probed the
+file: a step that chose a source because another was missing depends on
+that absence. Outside a tracked step it is pathExists.
+================
+*/
+export async function notedExists( file ) {
+	noteRead( file );
+	return pathExists( file );
+}
+
+/*
+================
+notedReadFile
+
+readFile that tells a tracked step it read the file.
+================
+*/
+export async function notedReadFile( file, ...rest ) {
+	noteRead( file );
+	return readFile( file, ...rest );
+}

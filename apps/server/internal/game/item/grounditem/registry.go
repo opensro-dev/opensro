@@ -77,8 +77,8 @@ type Item struct {
 	// CSOItem body carries (wire.ItemBody.MagicOptions): server state
 	// so a pickup restores them onto the granted row - the ground spawn
 	// wire itself never carries them.
-	MagicOptions      []uint64
-	TransformRefObjID uint32 // monster capsule Data
+	MagicOptions []uint64
+	Data         uint32 // item record data word (+0x38): capsule monster, Spirit clock
 	// StackCount is the heap's count for a stackable ETC drop. It never
 	// reaches the CIItem spawn wire - the native ground label carries no
 	// count for non-gold items - but it is server state so a pickup can
@@ -95,6 +95,13 @@ type Item struct {
 	ForgeBound bool
 	// DroppedBy records the character that dropped or earned it.
 	DroppedBy string
+	// LostTo is the account whose player kill scattered these trade goods
+	// (a transport's death, or its rider's under SRO_TRADER_CARGO_DROP),
+	// "" for any other drop. Port-only, not native: job honor
+	// (game/action/jobhonor.go) scores a thief's haul only when the
+	// thief's own account dealt that kill. Memory only: a restart forgets
+	// it, as it forgets the honor runs, so restored goods score nothing.
+	LostTo string
 	// DroppedAt is when the drop hit the ground; the fixture-policy expiry
 	// sweep keys off it. The zero value means "never expires", matching the
 	// fixture, which skips entries without a timestamp.

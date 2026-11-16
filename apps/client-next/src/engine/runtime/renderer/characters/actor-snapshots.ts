@@ -9,6 +9,13 @@ updated in place, holding the model references that drive residency. Every
 optional field is copied explicitly, so a field a producer drops is dropped
 here too instead of surviving from an older frame.
 
+A producer that freezes its actor promises more: neither it nor anything it
+references changes after publication (the character presentation's actors,
+actor-advance.ts). When a frozen actor follows a frozen one for the same gid
+and differs from it only in its clocks (time, layers, model animation),
+only the clocks are validated and copied: every other field is the same
+value the row already holds.
+
 ===========================================================================
 */
 import type { CharacterActor, CharacterLayer } from "@/engine/contracts/character";
@@ -46,8 +53,18 @@ createActorSnapshots
 Renderer-owned snapshots. Producers may reuse/mutate their records after admission.
 ================
 */
-export function createActorSnapshots() {
-	const index = new Map<number, Actor>(), seen = new Set<number>(), rows: Actor[] = [];
+export function createActorSnapshots( reuse = true ) {
+	const index = new Map<number, Actor>(), rows: Actor[] = [];
+	// The gids of the publication being read. A new set for each pass, never
+	// one cleared and refilled: V8 keeps a long-lived set's next table in
+	// the old generation, so every frame's table became garbage only a full
+	// collection frees (the largest single source of it in a crowded town).
+	let seen = new Set<number>();
+	// The source each row was last brought up to, by gid: a frozen one is
+	// what the row still holds (reuse is a test seam: false copies every
+	// actor in full).
+	const sources = new Map<number, CharacterActor>();
+	let copies = 0, clockCopies = 0;
 	// Snapshot admission owns model references. Pose/order updates cannot change
 	// residency; only first/last references advance its invalidation revision.
 	const modelReferences = new Map<string, number>();
@@ -127,12 +144,12 @@ export function createActorSnapshots() {
 	}
 	/*
 	================
-	copy
+	copyModelAnimation
 
-	Bring one owned snapshot up to its source actor, reusing nested storage.
+	The row's own copy of the source's model animation frame.
 	================
 	*/
-	function copy( target: Actor, source: CharacterActor ) {
+	function copyModelAnimation( target: Actor, source: CharacterActor ) {
 		target.modelAnimation = source.modelAnimation ?
 			{
 				...source.modelAnimation,
@@ -144,41 +161,28 @@ export function createActorSnapshots() {
 				}) )
 			} :
 			undefined;
-		target.animationLod = source.animationLod ? { ...source.animationLod } : undefined;
-		target.deferredParticle = source.deferredParticle ? { ...source.deferredParticle } : undefined;
-		target.modifierId = source.modifierId;
-		target.groundItem = source.groundItem;
-		target.dungeonBlock = source.dungeonBlock;
-		target.previewClip = source.previewClip;
-		target.gid = source.gid;
-		target.model = source.model;
-		target.clip = source.clip;
-		// An invalid clock holds the row's last valid value (#2407): the
-		// row is the only clock poses, picking and particles ever read.
+	}
+	/*
+	================
+	copyTime
+
+	An invalid clock holds the row's last valid value (#2407): the row is
+	the only clock poses, picking and particles ever read.
+	================
+	*/
+	function copyTime( target: Actor, source: CharacterActor ) {
 		if ( validClock( source.time ) ) target.time = source.time;
 		else noteHeldTime( source, "time", "time", source.time, target.time );
-		target.loop = source.loop;
-		target.scale = source.scale;
-		target.shadowSize = source.shadowSize;
-		target.shadowAttachment = source.shadowAttachment;
-		target.blindable = source.blindable;
-		target.blindableCompanion = source.blindableCompanion;
-		target.drawGeometry = source.drawGeometry;
-		target.height = source.height;
-		target.pickable = source.pickable;
-		target.pickWhenFiltered = source.pickWhenFiltered;
-		target.pickOwner = source.pickOwner;
-		target.bodyVolume = source.bodyVolume ? { ...source.bodyVolume } : undefined;
-		target.opacity = source.opacity;
-		target.effectEntity = source.effectEntity;
-		target.mountedOn = source.mountedOn;
-		target.emissionEnd = source.emissionEnd;
-		const pose = target.pose as Mutable<CharacterActor["pose"]>;
-		pose.regionId = source.pose.regionId;
-		pose.x = source.pose.x;
-		pose.y = source.pose.y;
-		pose.z = source.pose.z;
-		pose.yaw = source.pose.yaw;
+	}
+	/*
+	================
+	copyLayers
+
+	The row's own layers, each slot updated in place; an invalid clock or
+	weight holds as copyTime does.
+	================
+	*/
+	function copyLayers( target: Actor, source: CharacterActor ) {
 		if ( source.layers ) {
 			const layers = (target.layers ?? []) as Mutable<CharacterLayer>[];
 			for ( let i = 0; i < source.layers.length; i++ ) {
@@ -212,6 +216,83 @@ export function createActorSnapshots() {
 			layers.length = source.layers.length;
 			target.layers = layers;
 		} else target.layers = undefined;
+	}
+	/*
+	================
+	clocksOnly
+
+	Whether a frozen source differs from the frozen one its row was last
+	brought up to only in what copyModelAnimation, copyTime and copyLayers
+	copy: every other field copy reads is the same value or the same
+	(frozen, never changed) object.
+	================
+	*/
+	function clocksOnly( source: CharacterActor, previous: CharacterActor | undefined ) {
+		return previous !== undefined && Object.isFrozen( source ) && Object.isFrozen( previous ) &&
+			source.animationLod === previous.animationLod && source.deferredParticle === previous.deferredParticle &&
+			source.holderVisible === previous.holderVisible && source.modifierId === previous.modifierId &&
+			source.groundItem === previous.groundItem && source.dungeonBlock === previous.dungeonBlock &&
+			source.previewClip === previous.previewClip && source.gid === previous.gid &&
+			source.model === previous.model && source.clip === previous.clip && source.loop === previous.loop &&
+			source.scale === previous.scale && source.shadowSize === previous.shadowSize &&
+			source.shadowAttachment === previous.shadowAttachment && source.blindable === previous.blindable &&
+			source.blindableCompanion === previous.blindableCompanion &&
+			source.drawGeometry === previous.drawGeometry && source.height === previous.height &&
+			source.pickable === previous.pickable && source.pickWhenFiltered === previous.pickWhenFiltered &&
+			source.pickOwner === previous.pickOwner && source.bodyVolume === previous.bodyVolume &&
+			source.opacity === previous.opacity && source.effectEntity === previous.effectEntity &&
+			source.mountedOn === previous.mountedOn && source.emissionEnd === previous.emissionEnd &&
+			source.pose === previous.pose && source.attachment === previous.attachment &&
+			source.effectBasis === previous.effectBasis && source.effectRotation === previous.effectRotation &&
+			source.pointLight === previous.pointLight && source.bloodEffects === previous.bloodEffects &&
+			source.materialTint === previous.materialTint && source.heightFactor === previous.heightFactor &&
+			source.effectBaseScale === previous.effectBaseScale &&
+			source.absoluteEffectScale === previous.absoluteEffectScale &&
+			source.effectAnchor === previous.effectAnchor;
+	}
+	/*
+	================
+	copy
+
+	Bring one owned snapshot up to its source actor, reusing nested storage.
+	================
+	*/
+	function copy( target: Actor, source: CharacterActor ) {
+		copyModelAnimation( target, source );
+		target.animationLod = source.animationLod ? { ...source.animationLod } : undefined;
+		target.deferredParticle = source.deferredParticle ? { ...source.deferredParticle } : undefined;
+		target.holderVisible = source.holderVisible;
+		target.modifierId = source.modifierId;
+		target.groundItem = source.groundItem;
+		target.dungeonBlock = source.dungeonBlock;
+		target.previewClip = source.previewClip;
+		target.gid = source.gid;
+		target.model = source.model;
+		target.clip = source.clip;
+		copyTime( target, source );
+		target.loop = source.loop;
+		target.scale = source.scale;
+		target.shadowSize = source.shadowSize;
+		target.shadowAttachment = source.shadowAttachment;
+		target.blindable = source.blindable;
+		target.blindableCompanion = source.blindableCompanion;
+		target.drawGeometry = source.drawGeometry;
+		target.height = source.height;
+		target.pickable = source.pickable;
+		target.pickWhenFiltered = source.pickWhenFiltered;
+		target.pickOwner = source.pickOwner;
+		target.bodyVolume = source.bodyVolume ? { ...source.bodyVolume } : undefined;
+		target.opacity = source.opacity;
+		target.effectEntity = source.effectEntity;
+		target.mountedOn = source.mountedOn;
+		target.emissionEnd = source.emissionEnd;
+		const pose = target.pose as Mutable<CharacterActor["pose"]>;
+		pose.regionId = source.pose.regionId;
+		pose.x = source.pose.x;
+		pose.y = source.pose.y;
+		pose.z = source.pose.z;
+		pose.yaw = source.pose.yaw;
+		copyLayers( target, source );
 		if ( source.attachment ) {
 			const old = target.attachment,
 				rotation = source.attachment.rotation ? (old?.rotation ?? new Float32Array( 16 )) : undefined,
@@ -279,6 +360,22 @@ export function createActorSnapshots() {
 				copyVector( old.offset, source.effectAnchor.offset );
 			} else target.effectAnchor = { ...source.effectAnchor, offset: [ ...source.effectAnchor.offset ] };
 		} else target.effectAnchor = undefined;
+		// A spine aim (spine-aims.ts) arms, turns and releases long after the
+		// row's first publication; poseFor reads only this copy.
+		if ( source.boneRotation ) {
+			const value = source.boneRotation.rotation,
+				old = target.boneRotation as Mutable<NonNullable<CharacterActor["boneRotation"]>> | undefined;
+			if ( old ) {
+				const rotation = old.rotation as [number, number, number, number];
+				old.bone = source.boneRotation.bone;
+				for ( let i = 0; i < 4; i++ ) rotation[i] = value[i]!;
+			} else {
+				target.boneRotation = {
+					bone: source.boneRotation.bone,
+					rotation: [ value[0], value[1], value[2], value[3] ]
+				};
+			}
+		} else target.boneRotation = undefined;
 	}
 	/*
 	================
@@ -312,9 +409,15 @@ export function createActorSnapshots() {
 		================
 		*/
 		update( value: readonly CharacterActor[] ) {
-			seen.clear();
+			seen = new Set();
 			// Validate the entire publication before changing any admitted snapshot.
-			for ( const actor of value ) {
+			// Which actors differ from their row's frozen source only in
+			// their clocks: the fields they share were validated with it.
+			const clocks: boolean[] = [];
+			for ( const actor of value ) clocks.push( reuse && clocksOnly( actor, sources.get( actor.gid ) ) );
+			for ( let i = 0; i < value.length; i++ ) {
+				const actor = value[i]!;
+				if ( clocks[i] ) continue;
 				if (
 					actor.deferredParticle &&
 					(!Number.isInteger( actor.deferredParticle.offset ) || actor.deferredParticle.offset < 0 ||
@@ -325,7 +428,13 @@ export function createActorSnapshots() {
 							typeof actor.deferredParticle.lodHidden !== "boolean")
 				) throw Error( "Invalid deferred particle descriptor" );
 			}
-			for ( const actor of value ) {
+			for ( let i = 0; i < value.length; i++ ) {
+				const actor = value[i]!;
+				if ( clocks[i] ) {
+					if ( seen.has( actor.gid ) ) throw Error( "Character identity violation" );
+					seen.add( actor.gid );
+					continue;
+				}
 				if (
 					actor.animationLod &&
 					(!Number.isFinite( actor.animationLod.fraction ) || actor.animationLod.fraction < 0 ||
@@ -364,7 +473,7 @@ export function createActorSnapshots() {
 				seen.add( actor.gid );
 			}
 			const count = Math.min( value.length, CHARACTER_ACTORS );
-			seen.clear();
+			seen = new Set();
 			for ( let i = 0; i < count; i++ ) {
 				const source = value[i]!;
 				let row = index.get( source.gid );
@@ -379,7 +488,8 @@ export function createActorSnapshots() {
 						pointLight: undefined,
 						bloodEffects: undefined,
 						materialTint: undefined,
-						effectAnchor: undefined
+						effectAnchor: undefined,
+						boneRotation: undefined
 					};
 					// A first clock that is already invalid holds at rest:
 					// copy keeps the row's value, so it must start valid.
@@ -391,7 +501,16 @@ export function createActorSnapshots() {
 					reference( row.model, -1 );
 					reference( source.model, 1 );
 				}
-				copy( row, source );
+				if ( clocks[i] ) {
+					copyModelAnimation( row, source );
+					copyTime( row, source );
+					copyLayers( row, source );
+					clockCopies++;
+				} else {
+					copy( row, source );
+					copies++;
+				}
+				sources.set( source.gid, source );
 				rows[i] = row;
 				seen.add( source.gid );
 			}
@@ -400,13 +519,15 @@ export function createActorSnapshots() {
 				if ( !seen.has( gid ) ) {
 					reference( index.get( gid )!.model, -1 );
 					index.delete( gid );
+					sources.delete( gid );
 					reportedHolds.delete( gid );
 				}
 			}
 			return rows;
 		},
 		modelRevision: () => modelRevision,
-		stats: () => ({ created, heldTimes: heldSubstitutions }),
+		// copies: actors copied in full; clockCopies: only their clocks.
+		stats: () => ({ created, heldTimes: heldSubstitutions, copies, clockCopies }),
 		/*
 		================
 		takeDegradations
@@ -430,6 +551,7 @@ export function createActorSnapshots() {
 			modelReferences.clear();
 			modelRevision++;
 			index.clear();
+			sources.clear();
 			seen.clear();
 			reportedHolds.clear();
 			rows.length = 0;

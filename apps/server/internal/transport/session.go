@@ -116,6 +116,14 @@ type Session struct {
 	resendBytes  int
 	drainClose   bool         // close the session once the queue flushes
 	closeReason  *CloseReason // retained even when teardown is triggered by a drain timeout
+	// writeHold is the tick's write window (session_write.go): while it
+	// is set the writer writes only the writeHoldAhead ordered frames
+	// that were queued before the hold began, and the rest of the tick's
+	// output leaves in one write at release. writeHeld mirrors writeHold
+	// for the pusher's lock-free check.
+	writeHold      bool
+	writeHoldAhead int
+	writeHeld      atomic.Bool
 
 	// The lossy lane: loss-tolerant frames coalesced per (opcode, key) so a
 	// WebSocket client under backlog gets the LATEST position instead of a
@@ -481,6 +489,10 @@ pushFront
 */
 func (s *Session) pushFront(f Frame) {
 	s.queue = append([]Frame{f}, s.queue...)
+	if s.writeHold {
+		// The WELCOME is ahead of everything the hold keeps back.
+		s.writeHoldAhead++
+	}
 	s.queueBytes += f.EncodedLen()
 	s.hub.observeQueueDepth(len(s.queue)+len(s.lossyKeys), s.queueBytes+s.lossyBytes)
 	s.cond.Broadcast()
@@ -704,6 +716,7 @@ func (s *Session) closeNow(cause error) (bool, error) {
 	s.lossy = nil
 	s.lossyKeys = nil
 	s.lossyBytes = 0
+	s.releaseWriteHoldLocked()
 	s.cond.Broadcast()
 	s.mu.Unlock()
 
@@ -749,6 +762,9 @@ func (s *Session) CloseWhenDrained(reason uint8) {
 	s.queueBytes += 3
 	s.hub.observeQueueDepth(len(s.queue)+len(s.lossyKeys), s.queueBytes+s.lossyBytes)
 	s.drainClose = true
+	// A draining session's BYE does not wait for the tick's window:
+	// what the hold kept back leaves now, in order, ahead of it.
+	s.releaseWriteHoldLocked()
 	if s.drainTimer != nil {
 		// A second CloseWhenDrained (eviction then shutdown, say) re-arms
 		// the cap; the superseded timer is stopped rather than left to
@@ -760,122 +776,6 @@ func (s *Session) CloseWhenDrained(reason uint8) {
 	})
 	s.cond.Broadcast()
 	s.mu.Unlock()
-}
-
-/*
-================
-writableLocked
-
-Whether the writer has a frame it may dequeue now. The ordered head
-waits while the ring gate holds (ringGateLocked, #2146); a pending
-lossy frame is never ringed and always writable, so movement keeps
-flowing past a gated ordered head. Caller holds s.mu.
-================
-*/
-func (s *Session) writableLocked() bool {
-	if len(s.lossyKeys) > 0 {
-		return true
-	}
-	if len(s.queue) == 0 {
-		return false
-	}
-	return !s.ringGateLocked()
-}
-
-// writeLoop is the session's single writer for its whole life. It drains
-// the ordered queue first, then the lossy coalesce slots, whenever a
-// connection is attached; re-queues an ordered frame at the front when a
-// write fails against the same attachment (lossy frames are simply lost);
-// and exits at final close.
-/*
-================
-writeLoop
-================
-*/
-func (s *Session) writeLoop() {
-	for {
-		s.mu.Lock()
-		for !s.closed && (!s.attached || !s.writableLocked()) {
-			s.cond.Wait()
-		}
-		if s.closed {
-			s.mu.Unlock()
-			return
-		}
-		var f Frame
-		ordered := len(s.queue) > 0 && (len(s.lossyKeys) == 0 || !s.ringGateLocked())
-		if ordered {
-			f = s.queue[0]
-			s.queue[0] = Frame{} // release payload references in the consumed backing array
-			s.queue = s.queue[1:]
-			s.queueBytes -= f.EncodedLen()
-			if s.resendFrames > 0 && CountsOnStream(f.Opcode) {
-				// The re-sent block leaves first and only it is
-				// counted: transport frames ahead of it (WELCOME)
-				// and the lossy lane never held a ring slot.
-				s.resendFrames--
-				s.resendBytes -= f.EncodedLen()
-			}
-		} else {
-			slot := s.lossyKeys[0]
-			s.lossyKeys = s.lossyKeys[1:]
-			f = s.lossy[slot]
-			delete(s.lossy, slot)
-			s.lossyBytes -= f.EncodedLen()
-		}
-		drainAndEmpty := s.drainClose && len(s.queue) == 0
-		conn := s.conn
-		gen := s.gen
-		pos := s.noteWrittenLocked(f, ordered)
-		s.mu.Unlock()
-
-		if f.Current != nil && !f.Current() {
-			s.mu.Lock()
-			s.unnoteLocked(pos, ordered)
-			s.mu.Unlock()
-			if ordered && drainAndEmpty {
-				s.hub.closeSession(s, nil)
-				return
-			}
-			continue
-		}
-		if err := conn.WriteFrame(f); err != nil {
-			s.hub.metrics.writeErrors.Add(1)
-			// No re-queue: a write can fail after the bytes reached the
-			// client (a deadline on a stalled link), and re-sending it then
-			// applied it twice (#1466). It already holds its position: the
-			// client's resume position says whether it arrived, and the ring
-			// re-sends it only if it did not.
-			s.detachGen(gen, err)
-			continue
-		}
-		s.mu.Lock()
-		s.lastSent = s.now()
-		s.mu.Unlock()
-		s.hub.recordFrameOut(f)
-		if f.Opcode == OpWelcome {
-			s.mu.Lock()
-			commit := s.admissionCommit
-			s.admissionCommit = nil
-			s.mu.Unlock()
-			if commit != nil {
-				if err := commit(); err != nil {
-					// The ticket this session was admitted with was
-					// consumed by a concurrent admission: this session
-					// must not outlive its WELCOME.
-					log.WithFields(log.Fields{
-						"session": s.ID, "error": err,
-					}).Warn("transport: admission consumption failed after WELCOME; closing session")
-					s.hub.closeSession(s, err)
-					return
-				}
-			}
-		}
-		if ordered && drainAndEmpty {
-			s.hub.closeSession(s, nil)
-			return
-		}
-	}
 }
 
 // readLoop pulls frames off one attachment. Transport-control frames are

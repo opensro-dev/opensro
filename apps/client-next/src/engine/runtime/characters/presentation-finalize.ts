@@ -394,7 +394,7 @@ Borrow only the mall mannequin operations this publication phase consumes.
 interface PortraitBindings {
 	readonly renderer: Pick<
 		Renderer,
-		"setCharacterAssembly" | "setCharacterActors" | "vHidesCompanions" | "enchantSparks"
+		"setCharacterAssembly" | "setCharacterActors" | "vHidesCompanions" | "enchantSparks" | "silentWingFlight"
 	>;
 	readonly resources: PortraitResources;
 	readonly portraitEmission: Pick<ReturnType<typeof createModelEmission>, "step">;
@@ -507,7 +507,8 @@ export function publishCharacters(
 			actor.gid === localHiddenGid
 		) hiddenGids.add( actor.gid );
 	}
-	let grew = true;
+	// Only a hidden holder hides what rides on it.
+	let grew = hiddenGids.size > 0;
 	while ( grew ) {
 		grew = false;
 		for ( const actor of next.values() ) {

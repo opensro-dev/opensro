@@ -32,7 +32,9 @@ const copy = {
 	honor: "Honor point",
 	point: " point(s)",
 	guildPoint: "Guild point (GP)",
-	guildPointUnit: "GP"
+	guildPointUnit: "GP",
+	nasrunToken: "Devil's Spirit tokens",
+	nasrunTokenHeld: "You hold"
 };
 
 /*
@@ -178,4 +180,16 @@ test("an authored bit prints at zero; points author no price row", () => {
 	);
 	assert.deepEqual( mallTooltipRows( mallOffer( { currencyMask: 16 } ), mallCopy ), [] );
 	assert.deepEqual( mallTooltipRows( mallOffer(), mallCopy ), [] );
+});
+
+test("a token offer prints its token price and the balance it is paid from", () => {
+	const game = fixture();
+	game.shop = { ...game.shop, nasrunTokens: 130, offers: [ { ...game.shop.offers[0], price: "60", currency: 64 } ] };
+	assert.deepEqual(
+		commerceTooltip( "shop-offer:0", game, copy ).filter( row => row.value.trim() ).map( row => row.value ),
+		[
+			"Devil's Spirit tokens : 60",
+			"You hold : 130"
+		]
+	);
 });

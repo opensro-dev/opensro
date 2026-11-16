@@ -11,14 +11,6 @@ mip generation, and the samplers they bind.
 import { NATIVE_CHARACTER_LIGHTING } from "@/engine/foundation/rendering/video-options";
 import { MSAA_SAMPLE_COUNT } from "./msaa";
 import {
-	WATER_BEHIND_WEIGHT,
-	WATER_REFLECTION_MIX,
-	WATER_REFRACTION_STRENGTH,
-	WATER_SHORE_BAND,
-	WATER_SHORE_FOAM,
-	WATER_SKIN_BLENDED
-} from "./water-refraction";
-import {
 	D3DBLEND_BLENDFACTOR,
 	D3DBLEND_BOTHINVSRCALPHA,
 	D3DBLEND_BOTHSRCALPHA,
@@ -372,15 +364,31 @@ fn skyNoise(p:vec2f)->f32{
 		}
 		return selected;
 	}
-	const geometryShader = created.createShaderModule( {
-		code: environmentStruct + `
+	/*
+	================
+	geometrySource
+
+	The geometry shader. With rowStates, the variant a draw with row states
+	(geometry.ts Geometry.rowStates) draws with: binding 16 holds each
+	instance row's glow colour (r, g, b, 0) and UV (u, v, 0, 0), which
+	replace the material's, the colour reaching the fragment stage as a flat
+	varying. Without, the text every other draw has always compiled: no
+	binding 16, so no other bind group carries one.
+	================
+	*/
+	const geometrySource = ( rowStates: boolean ) =>
+		environmentStruct + `
 const nativeCharacterLighting:bool=${NATIVE_CHARACTER_LIGHTING};
 @group(0) @binding(0) var<uniform> transform:mat4x4f;
 struct Instance {matrix:mat4x4f,opacity:vec4f,color:vec4f,window:vec4f,pointPosition:vec4f,pointAmbient:vec4f,pointDiffuse:vec4f}
 @group(0) @binding(1) var<storage,read> instances:array<Instance>;
 struct Material {color:vec4f,options:vec4f,skin:vec4f,window:vec4f,lighting:vec4f,policy:vec4f,localFog:vec4f,localFogSettings:vec4f,ambient:vec4f,uvU:vec4f,uvV:vec4f,reflection:vec4f,equipmentColor:vec4f,equipmentUV:vec4f,stage:vec4f,stagePolicy:vec4f,textureFactor:vec4f}
 @group(0) @binding(2) var<uniform> material:Material;
-// texture-stage.ts: D3D9 stage 0, every op it defines. CURRENT is the
+${
+			rowStates ?
+				"@group(0) @binding(16) var<storage,read> rowStates:array<vec4f>;\n" :
+				""
+		}// texture-stage.ts: D3D9 stage 0, every op it defines. CURRENT is the
 // diffuse colour at stage 0; TEMP starts at zero; SPECULAR is the vertex
 // specular, which the port's lighting does not produce (zero).
 struct StageInputs {texture:vec4f,diffuse:vec4f,specular:vec4f,factor:vec4f}
@@ -428,13 +436,6 @@ fn stageColor(stage:vec4f,i:StageInputs)->vec4f {
 // ambient-occlusion.ts after the scene. While the stage is off every
 // draw binds a 1x1 white view and the gated read below never samples
 // it, so the native frame is untouched.
-// Port-only water refraction (device/water-refraction.ts): the frame's
-// colour before the blended water drew, and the view-space depth behind
-// each pixel (r32float: a depth attachment cannot be sampled while
-// attached). While the row is off every draw binds the 1x1 white view
-// and the stage-gated branch below never samples either.
-@group(0) @binding(16) var sceneBehind:texture_2d<f32>;
-@group(0) @binding(17) var sceneBehindDepth:texture_2d<f32>;
 @group(0) @binding(15) var ambientOcclusionMap:texture_2d<f32>;
 fn ambientOcclusionFactor(fragCoord:vec2f)->f32{
  let size=vec2i(textureDimensions(ambientOcclusionMap));
@@ -489,10 +490,19 @@ fn waterBumpOffset(uv:vec2f)->vec2f{
  let dudv=(textureSampleLevel(sphereMap,waterBumpSampler,uv*vec2f(.25,-.25)+vec2f(0,1),0,0).rg*255.0-128.0)/127.0;
  return vec2f(dot(waterPass.bump.xy,dudv),dot(waterPass.bump.zw,dudv));
 }
-struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1) normal:vec3f,@location(2) color:vec4f,@location(3) maskUV:vec2f,@location(4) viewZ:f32,@location(5) objectLighting:vec3f,@location(6) @interpolate(flat) opacity:f32,@location(7) worldXZ:vec2f,@location(8) @interpolate(flat) materialTint:vec3f,@location(9) sphereUV:vec2f,@location(10) equipmentUV:vec2f}
+struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1) normal:vec3f,@location(2) color:vec4f,@location(3) maskUV:vec2f,@location(4) viewZ:f32,@location(5) objectLighting:vec3f,@location(6) @interpolate(flat) opacity:f32,@location(7) worldXZ:vec2f,@location(8) @interpolate(flat) materialTint:vec3f,@location(9) sphereUV:vec2f,@location(10) equipmentUV:vec2f${
+			rowStates ? ",@location(13) @interpolate(flat) equipmentColor:vec3f" : ""
+		}}
 @vertex fn vs(@location(0) position:vec3f,@location(1) normal:vec3f,@location(2) uv:vec2f,@location(3) color:vec4f,@location(4) maskUV:vec2f,@builtin(instance_index) i:u32,@builtin(vertex_index) vertex:u32)->Out {
  var o:Out;let instance=instances[i].matrix;o.opacity=instances[i].opacity.x;var p=vec4f(position,1);var n=vec4f(normal,0);
- if(material.skin.x!=0){let v=skinVertices[vertex];let base=select(select(i*u32(abs(material.skin.x)),0u,material.skin.x<0),u32(instances[i].opacity.y),instances[i].opacity.z>0);let skin=bones[base+v.joints.x]*v.weights.x+bones[base+v.joints.y]*v.weights.y+bones[base+v.joints.z]*v.weights.z+bones[base+v.joints.w]*v.weights.w;p=skin*p;n=skin*n;}
+ // A cloth draw marks its instances with its vertex count V (opacity.w,
+ // geometry.ts markCloth): a vertex's slot map entry (V + vertex) names its
+ // stream slot, whose entry (2V + slot, cloth-stream.ts) says whether the
+ // solver owns its position or normal; every other vertex is skinned. Cloth
+ // keeps vss0's unnormalized normal, as when the CPU skinned it.
+ let cloth=u32(instances[i].opacity.w);
+ if(material.skin.x!=0){let v=skinVertices[vertex];let base=select(select(i*u32(abs(material.skin.x)),0u,material.skin.x<0),u32(instances[i].opacity.y),instances[i].opacity.z>0);let skin=bones[base+v.joints.x]*v.weights.x+bones[base+v.joints.y]*v.weights.y+bones[base+v.joints.z]*v.weights.z+bones[base+v.joints.w]*v.weights.w;p=skin*p;n=skin*n;
+  if(cloth>0u){let slot=skinVertices[cloth+vertex].joints.x;if(slot!=0xffffffffu){let c=skinVertices[2u*cloth+slot];if((c.joints.w&1u)!=0u){p=vec4f(bitcast<vec3f>(c.joints.xyz),1);}if((c.joints.w&2u)!=0u){n=vec4f(c.weights.xyz,0);}}}}
  o.worldY=(instance*p).y;
  o.worldXZ=(instance*p).xz;o.position=transform*instance*p;o.normal=(instance*n).xyz;let movingUV=vec2f(dot(vec3f(uv,1),material.uvU.xyz),dot(vec3f(uv,1),material.uvV.xyz));o.uv=(movingUV*material.window.xy+material.window.zw)*instances[i].window.xy+instances[i].window.zw;o.materialTint=select(vec3f(1),instances[i].color.rgb,material.policy.w>0.5);o.color=color*select(instances[i].color,vec4f(1,1,1,instances[i].color.a),material.policy.w>0.5);o.maskUV=maskUV;o.viewZ=o.position.w;
  // Undo only projection scaling to recover the native camera-space position.
@@ -501,11 +511,14 @@ struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin
  // Native vs_1_1 oD0: light and saturate each vertex before interpolation.
  var lightingNormal=n.xyz;
  // Data.pk2 vss2.c normalizes the blended normal; vss0.c does not.
- if(material.skin.x!=0){lightingNormal=normalize(lightingNormal);}
+ if(material.skin.x!=0&&cloth==0u){lightingNormal=normalize(lightingNormal);}
  // A61887 + A5F103: transpose(world*view*diag(.8,.8,1));
  // native shader SPEC adds .5 after transforming, without renormalizing.
- o.equipmentUV=uv+material.equipmentUV.xy;
- o.sphereUV=vec2f(0);
+${
+			rowStates ?
+				" o.equipmentUV=uv+rowStates[2u*i+1u].xy;o.equipmentColor=rowStates[2u*i].rgb;\n" :
+				" o.equipmentUV=uv+material.equipmentUV.xy;\n"
+		} o.sphereUV=vec2f(0);
  if(material.reflection.x>0.5&&env.reflection.w>0.5){
   let reflectionNormal=(instance*vec4f(lightingNormal,0)).xyz;
   let cameraRight=normalize(vec3f(transform[0].x,transform[1].x,transform[2].x));
@@ -534,7 +547,7 @@ struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin
  // c = q = 0 and keep their authored 1/(k*d).
  if(any(light.pointAmbient.rgb!=vec3f(0))||any(light.pointDiffuse.rgb!=vec3f(0))){
   let localLight=transpose(cofactors)*(light.pointPosition.xyz-instance[3].xyz)/select(1.0,determinant,determinant!=0.0);
-  let delta=localLight-p.xyz;let distance=length(delta);let normalObject=select(n.xyz,normalize(n.xyz),material.skin.x!=0);
+  let delta=localLight-p.xyz;let distance=length(delta);let normalObject=select(n.xyz,normalize(n.xyz),material.skin.x!=0&&cloth==0u);
   let falloff=1.0/max(light.pointPosition.w+light.pointAmbient.w*distance+light.pointDiffuse.w*distance*distance,0.000001);
   let lambert=select(0.0,max(0.0,dot(normalObject,delta/max(distance,0.000001)))*falloff,distance>0.0);
   illumination+=light.pointAmbient.rgb+diffuseFactor*light.pointDiffuse.rgb*lambert;
@@ -555,7 +568,7 @@ struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin
  }
  return o;
 }
-fn shadeGeometry(input:Out)->vec4f {
+fn shadeGeometry(input:Out,frontFacing:bool)->vec4f {
  if(waterPass.plane.w>0.5&&material.skin.w==0&&(input.worldY-waterPass.plane.x)*waterPass.plane.y<0){discard;}
  var reflected=vec3f(0);var equipment=vec3f(0);
  if(material.equipmentColor.w>0.0){equipment=textureSample(sphereMap,textureSampler,input.equipmentUV,0).rgb;}
@@ -654,7 +667,12 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
   case 8u:{} default:{accepted=alphaByte>=reference;}
  }
  if(material.equipmentColor.w>0.0){accepted=material.equipmentUV.z<0.5||ceil(floor(clamp(tex.a,0.0,1.0)*4096.0)*(255.0/4096.0)-0.5)>=1.0;}
- if(!accepted){discard;}
+ // An ADD-table draw sets 0x10000000 past AEE6D0's quality and opacity
+ // gates, and A5E0E0 then skips RenderState_ApplyMaterialFlags: the
+ // material's cull-none never reaches the device. Its pipeline keeps the
+ // material's own culling for the ungated draw, so drop back faces here.
+ let environmentAdd=material.reflection.x>1.5&&env.reflection.w>0.5&&input.opacity==1.0;
+ if(!accepted||(environmentAdd&&!frontFacing)){discard;}
  // Native NOLIGHT writes oD0=1, bypassing the material diffuse tint too.
  let unlitColor=select(color.rgb,tex.rgb*input.color.rgb,material.lighting.y>0.5);
  // A native stage is the whole colour: its op already carries any 2X/4X.
@@ -663,9 +681,13 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
  // (oD0 = 1, no material tint), stage 0 MODULATE texture by that diffuse,
  // stage 1 MODULATE2X by the lightmap (CCompoundObj +0x260 = 5).
  if(material.stagePolicy.z>0.5){lit=clamp(select(clamp(tex.rgb,vec3f(0),vec3f(1)),color.rgb,material.stage.x>0.0)*objectLightmap*2.0,vec3f(0),vec3f(1));}
+ // AEE6D0 bit 0 clear, table entry AEE430 with D3DTOP_ADD: stage0 the
+ // sphere, stage1 base+current, alpha base; the restore (AEE950) leaves
+ // stage2 DISABLE, so neither vertex light nor 2X applies.
+ if(environmentAdd){lit=clamp(tex.rgb+reflected,vec3f(0),vec3f(1));}
  // AEE6D0: stage0 sphere*TFACTOR; stage1 base+base.a*current;
  // stage2 MODULATE2X with saturated vertex diffuse. Opacity gates RGB only.
- if(material.reflection.x>0.5&&env.reflection.w>0.5&&input.opacity==1.0){
+ else if(material.reflection.x>0.5&&env.reflection.w>0.5&&input.opacity==1.0){
   // 85A9E0 sets temporary renderer light1 (C39094+64 -> A5A7F0).
   // It does not set the model's +1E4 reflection override (A89560).
   // Neither ordinary hit lights nor SCT_MAT replace this factor.
@@ -675,7 +697,9 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
   lit=clamp(stage1*select(surfaceLight,vec3f(1),material.options.y>0.5)*input.color.rgb*2.0,vec3f(0),vec3f(1));
  }
  // AEF8E0: option texture * packed TFACTOR (MODULATE/2X), then ADD base.
- if(material.equipmentColor.w>0.0){lit=clamp(tex.rgb+clamp(equipment*material.equipmentColor.rgb*material.equipmentColor.w,vec3f(0),vec3f(1)),vec3f(0),vec3f(1));}
+ if(material.equipmentColor.w>0.0){lit=clamp(tex.rgb+clamp(equipment*${
+			rowStates ? "input.equipmentColor" : "material.equipmentColor.rgb"
+		}*material.equipmentColor.w,vec3f(0),vec3f(1)),vec3f(0),vec3f(1));}
  let animated=material.skin.z>0.5;
  let waterShading=clamp(env.water.rgb,vec3f(0),vec3f(1));
  let fogSource=select(env.fog,material.localFog,material.policy.y>0.5);
@@ -713,28 +737,9 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
   let litTerrain=clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1))*sunShade*occlusion;
   return vec4f(mix(litTerrain,terrainFogColor,fog),1);
  }
- if(animated&&waterPass.plane.w<0.5){
-  if(env.stages.z>0.5&&material.skin.z>${WATER_SKIN_BLENDED - 0.5}){
-   // Port-only refraction (stages.z, device/water-refraction.ts): the
-   // blended water draws after a copy of the opaque frame, so it bends
-   // what lies under the surface by its own bump offset and whitens
-   // where the depth behind it comes within the shore band of its own
-   // (input.viewZ, view-space metres like the copy). The planar
-   // reflection, or the water's own lit texture without a mirror, stays
-   // the surface term it natively is.
-   let screenUv=input.position.xy/vec2f(textureDimensions(sceneBehind));
-   let bent=clamp(screenUv+waterBumpOffset(input.uv)*${WATER_REFRACTION_STRENGTH},vec2f(0),vec2f(1));
-   let behind=textureSampleLevel(sceneBehind,waterMirrorSampler,bent,0).rgb;
-   let depthBehind=textureLoad(sceneBehindDepth,vec2i(input.position.xy),0).r;
-   let shore=clamp(1.0-abs(depthBehind-input.viewZ)/${WATER_SHORE_BAND},0.0,1.0);
-   let surface=select(lit,waterColor,waterPass.plane.z>0.5);
-   lit=mix(behind*${WATER_BEHIND_WEIGHT},surface,${WATER_REFLECTION_MIX})+vec3f(shore*${WATER_SHORE_FOAM});
-  }else if(waterPass.plane.z>0.5){
-   // Native: the planar reflection where a mirror exists, the water's lit
-   // texture untouched where one does not.
-   lit=waterColor;
-  }
- }
+ // 8AE2D0 / 8BA130: the planar reflection where a mirror exists, the
+ // water's lit texture untouched where one does not.
+ if(animated&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){lit=waterColor;}
  // An unblended draw's surviving pixel is opaque: the retail back buffer
  // (X8R8G8B8) keeps no alpha. Its texture alpha (an alpha test's, or a gloss
  // mask's) must not reach a transparent target such as the viewer's doll,
@@ -742,13 +747,15 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
  let surfaceAlpha=select(select(color.a,clamp(input.color.a,0,1),animated),select(select(1.0,color.a,material.ambient.w>0.5),fadeAlpha,fading),material.lighting.z>0.5);
  return vec4f(mix(lit*select(vec3f(1),waterShading,animated),select(fogColor,terrainFogColor,material.options.z>0.5),fog),select(surfaceAlpha,1.0,material.stagePolicy.y>0.5));
 }
-@fragment fn fs(input:Out)->@location(0) vec4f {return shadeGeometry(input);}
+@fragment fn fs(input:Out,@builtin(front_facing) frontFacing:bool)->@location(0) vec4f {return shadeGeometry(input,frontFacing);}
 // Port-only, not native: an accepted unblended/cutout fragment covers the
 // scratch target fully. Alpha tests still discard inside shadeGeometry.
-@fragment fn fsPreviewOpaque(input:Out)->@location(0) vec4f {
- let color=shadeGeometry(input);return vec4f(color.rgb,1.0);
-}`
-	} );
+@fragment fn fsPreviewOpaque(input:Out,@builtin(front_facing) frontFacing:bool)->@location(0) vec4f {
+ let color=shadeGeometry(input,frontFacing);return vec4f(color.rgb,1.0);
+}`;
+	const geometryShader = created.createShaderModule( { code: geometrySource( false ) } );
+	// The row-state variant, compiled when the first draw with row states asks.
+	let rowStateShader: GPUShaderModule | undefined;
 	/*
 	================
 	geometryDescriptor
@@ -760,7 +767,8 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
 	const geometryDescriptor = (
 		state: GeometryPipelineState,
 		target: GPUTextureFormat = format,
-		previewCoverage = false
+		previewCoverage = false,
+		module = geometryShader
 	): GPURenderPipelineDescriptor => {
 		const blend = state.blend ? blendState( state.blend ) : undefined;
 		const overwrite = blend?.color.srcFactor === "one" && blend.color.dstFactor === "zero";
@@ -779,7 +787,7 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
 		return {
 			layout: "auto",
 			vertex: {
-				module: geometryShader,
+				module,
 				entryPoint: "vs",
 				buffers: [ {
 					arrayStride: 56,
@@ -793,7 +801,7 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
 				} ]
 			},
 			fragment: {
-				module: geometryShader,
+				module,
 				entryPoint: previewCoverage && (!blend || overwrite) ? "fsPreviewOpaque" : "fs",
 				targets: [ { format: target, ...(blend ? { blend } : {}) } ]
 			},
@@ -893,22 +901,26 @@ geometry
 
 The geometry pipeline for state, compiled on first use. The HDR stage's
 rgba16float sibling and the MSAA stage's 4x sibling compile lazily under
-the same rule.
+the same rule, and so does each one's row-state variant (rowStates, for a
+draw uploaded with Geometry.rowStates).
 ================
 		*/
 		geometry(
 			state: GeometryPipelineState,
-			{ sceneFloat = false, fullscreenPreview = false, msaa = false }: SceneSurface = {}
+			{ sceneFloat = false, fullscreenPreview = false, msaa = false }: SceneSurface = {},
+			rowStates = false
 		) {
 			const previewCoverage = sceneFloat && fullscreenPreview;
 			const key = geometryPipelineKey( state ) + (sceneFloat ? "|hdr" : "") +
-				(previewCoverage ? "|preview" : "") + (msaa ? "|msaa" : "");
+				(previewCoverage ? "|preview" : "") + (msaa ? "|msaa" : "") + (rowStates ? "|rows" : "");
 			let selected = geometryPipelines.get( key );
 			if ( !selected ) {
+				if ( rowStates ) rowStateShader ??= created.createShaderModule( { code: geometrySource( true ) } );
 				const descriptor = geometryDescriptor(
 					state,
 					sceneFloat ? SCENE_FLOAT_FORMAT : format,
-					previewCoverage
+					previewCoverage,
+					rowStates ? rowStateShader : geometryShader
 				);
 				if ( msaa ) descriptor.multisample = { count: MSAA_SAMPLE_COUNT };
 				selected = created.createRenderPipeline( descriptor );

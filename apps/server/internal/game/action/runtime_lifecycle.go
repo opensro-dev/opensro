@@ -152,7 +152,10 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advanceFortressForges", func() { rt.Fortresses.AdvanceItemForges(nowMs) })
 		step("advanceGuildVotes", func() { rt.advanceGuildVotes(nowMs) })
 		step("advanceHalloweenWaves", rt.advanceHalloweenWaves)
-		frames("advanceHalloweenLayer", rt.advanceHalloweenLayer)
+		step("advanceChristmasWaves", rt.advanceChristmasWaves)
+		step("advanceChristmasSnowSlaves", rt.advanceChristmasSnowSlaves)
+		step("advancePandoraBoxes", rt.advancePandoraBoxes)
+		frames("advanceEventGroups", rt.advanceEventGroups)
 		// Retirement is presentation-only. Reward state was already committed
 		// by the fatal hit, while the zero-HP source remains resolvable through
 		// the authored death-animation completion.
@@ -240,6 +243,9 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		// After every step that can change a monster's HP or status, so
 		// the vitals a holder receives carry this tick's changes
 		// (monstervitals.go).
+		// A holder that a moving monster left beyond its range holds it no
+		// more, before this tick's vitals pick their holders.
+		step("retireDistantHolders", func() { rt.retireDistantHolders(nowMs) })
 		frames("publishMonsterVitals", rt.publishMonsterVitals)
 		// Last, so a notice any step above queued leaves this same tick.
 		frames("drainAnnouncements", rt.drainAnnouncements)

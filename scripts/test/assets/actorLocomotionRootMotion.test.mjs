@@ -202,6 +202,28 @@ test("Mission-owned locomotion keeps pose height but removes duplicate root trav
 	);
 });
 
+test("a non-finite bind translation exports finite in-place locomotion", () => {
+	const glb = avatarToGlb( {
+		name: "non-finite-bind-fixture",
+		skeleton: {
+			boneCount: 1,
+			bones: [ {
+				name: "Root",
+				parentIndex: -1,
+				local: { q: [ 0, 0, 0, 1 ], t: [ 5, 10, Number.NaN ] }
+			} ],
+			byName: new Map( [ [ "Root", 0 ] ] )
+		},
+		parts: [],
+		materials: new Map(),
+		clips: [ makeClip( "walk" ) ],
+		inPlaceHorizontalRootMotionRoles: [ "walk" ]
+	} );
+
+	assert.deepEqual( translationKeysForRole( glb, "walk" ), [ 5, 11, -0, 5, 12, -0 ] );
+	assert.deepEqual( readGlb( glb ).json.nodes[0].translation, [ 5, 10, 0 ] );
+});
+
 test("root-motion role policy rejects malformed ownership declarations", () => {
 	const base = {
 		name: "invalid-root-motion-policy",

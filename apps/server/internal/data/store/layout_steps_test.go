@@ -345,13 +345,13 @@ func TestBootRefusesANewTableThatHoldsRows(t *testing.T) {
 	dir, clock := t.TempDir(), newTestClock()
 	s := openTest(t, dir, clock)
 	s.Close()
-	execAuthority(t, dir, "INSERT INTO silk_history (account_id, at_ms, kind, silk, gift_silk, points) VALUES ('account-a', 1, 1, 10, 0, 0)")
+	execAuthority(t, dir, "INSERT INTO caravan_agent_memories (division, agent_name, player_name, trust_score, kills, deaths, gold_stolen, last_region, last_note, updated_at_ms) VALUES ('global-official', 'Trader', 'asd2fixture', 0, 0, 0, 0, 0, '', 1)")
 	rewriteDatabaseMeta(t, dir, metaKeyLayoutVersion, CurrentLayoutVersion-1)
-	if _, err := openWithHeadroom(t, dir, clock, 1); !isVersionMismatch(err) || !strings.Contains(err.Error(), "silk_history") {
-		t.Fatalf("open = %v, want an incompatible-schema refusal naming silk_history", err)
+	if _, err := openWithHeadroom(t, dir, clock, 1); !isVersionMismatch(err) || !strings.Contains(err.Error(), "caravan_agent_memories") {
+		t.Fatalf("open = %v, want an incompatible-schema refusal naming caravan_agent_memories", err)
 	}
-	if got := rowRecord(t, dir, "SELECT count(*) FROM silk_history"); got != "1" {
-		t.Fatalf("silk_history holds %s rows", got)
+	if got := rowRecord(t, dir, "SELECT count(*) FROM caravan_agent_memories"); got != "1" {
+		t.Fatalf("caravan_agent_memories holds %s rows", got)
 	}
 	if got := metaStamp(t, dir, metaKeyLayoutVersion); got != strconv.Itoa(CurrentLayoutVersion-1) {
 		t.Fatalf("layout stamp = %s", got)

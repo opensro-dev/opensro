@@ -1,6 +1,8 @@
 package enterworld
 
 import (
+	"time"
+
 	"reflect"
 	"testing"
 
@@ -130,5 +132,42 @@ func TestBuildObjectListRowsDivisionScoped(t *testing.T) {
 	}
 	if packets[7].NativeOpcode != OpcodeObjectListFinalize {
 		t.Errorf("finalize opcode = %#x", packets[7].NativeOpcode)
+	}
+}
+
+/*
+================
+TestNpcLookRefRidesTheSnapshot
+
+A seasonal look's reference (Santa So-Ok) rides the reference snapshot
+beside the placed NPCs, once, so a dressed spawn is never an unknown
+type; the entry spawns from the dressed roster inside the window and
+the base one outside it.
+================
+*/
+func TestNpcLookRefRidesTheSnapshot(t *testing.T) {
+	base := []simulation.NpcDef{{ObjectID: 200001, RefObjID: 3861, Codename: "NPC_CH_EVENT_KISAENG1", AuthoredSpawn: true}}
+	startsAt := time.Date(2026, 12, 26, 0, 0, 0, 0, time.UTC)
+	look := simulation.NpcLook{
+		Codename: "NPC_CH_EVENT_KISAENG1",
+		Look:     simulation.NpcDef{RefObjID: 3656, Codename: "NPC_CH_EVENT_SANTA_KISAENG1"},
+		StartsAt: startsAt, EndsAt: startsAt.Add(14 * 24 * time.Hour),
+	}
+	config := NpcSpawnConfig{Enabled: true, Roster: base, Looks: simulation.NewNpcLookRosters(base, look)}
+	seen := map[uint32]int{}
+	for _, row := range config.NpcRefObjSnapshot() {
+		seen[row.RefObjID]++
+	}
+	if seen[3861] != 1 || seen[3656] != 1 {
+		t.Fatalf("snapshot refs %v", seen)
+	}
+	if got := config.RosterAt(startsAt.Add(time.Hour))[0].RefObjID; got != 3656 {
+		t.Fatalf("inside the window the entry spawns ref %d", got)
+	}
+	if got := config.RosterAt(startsAt.Add(-time.Hour))[0].RefObjID; got != 3861 {
+		t.Fatalf("outside the window the entry spawns ref %d", got)
+	}
+	if plain := (NpcSpawnConfig{Enabled: true, Roster: base}); len(plain.NpcRefObjSnapshot()) != 1 || plain.RosterAt(startsAt)[0].RefObjID != 3861 {
+		t.Fatal("no look: the native snapshot and roster")
 	}
 }

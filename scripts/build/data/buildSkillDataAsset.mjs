@@ -98,7 +98,7 @@ import { readTextDataLinesSync, readTextDataRowsSync, splitTextDataRow } from ".
 import { readSkillEffectSourceText } from "../char/parseSkillEffect.mjs";
 import { loadQinShiTombSkillRows, qinshiTombCombatEnabled } from "../shared/qinshiTomb.mjs";
 
-import { gameRoot, publicRoot, retailTextdataRoot } from "../world/paths.mjs";
+import { gameRoot, publicRoot, retailTextdataRoot, serverSourceRoot } from "../world/paths.mjs";
 import { tooltipAppearanceReferences } from "../../../apps/client-next/src/engine/foundation/ui/skill-tooltip-catalog.ts";
 
 const textdataRoot = retailTextdataRoot;
@@ -309,9 +309,16 @@ export async function buildSkillDataAsset() {
 	const sourcePaths = [
 		manifestPath,
 		...shardPaths,
-		skillEffectPath,
-		...(tombSkillSourcePath ? [ tombSkillSourcePath ] : [])
+		skillEffectPath
 	].map( ( sourcePath ) => path.relative( gameRoot, sourcePath ).replaceAll( "\\", "/" ) );
+	// The tomb overlay is the server checkout's, not the game root's: named
+	// from the checkout, or a game root on another drive (a release staging)
+	// would publish this PC's absolute path, which build:beta refuses.
+	if ( tombSkillSourcePath ) {
+		sourcePaths.push(
+			"apps/server/" + path.relative( serverSourceRoot(), tombSkillSourcePath ).replaceAll( "\\", "/" )
+		);
+	}
 	const catalog = {
 		sourcePaths,
 		format: "sro-skilldata",

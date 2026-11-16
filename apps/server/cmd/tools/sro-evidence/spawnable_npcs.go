@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 
+	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -50,9 +51,24 @@ func runSpawnableNPCs(args []string) error {
 			Codename: npc.Codename,
 		})
 	}
+	// Port-only, not native: the seasonal looks a placed NPC may wear
+	// (simulation/npc_looks.go) spawn under their own reference, so their
+	// models are published with the placed ones. Not placed themselves,
+	// they come after every placed type.
+	for _, codename := range progression.SeasonalLookCodenames() {
+		look, ok := simulation.LoadNpcLookRef(dir, codename)
+		if !ok {
+			continue
+		}
+		if _, duplicate := seenRefObjIDs[look.RefObjID]; duplicate {
+			continue
+		}
+		seenRefObjIDs[look.RefObjID] = struct{}{}
+		refs = append(refs, npcRosterRef{RefObjID: look.RefObjID, Codename: look.Codename})
+	}
 	output := npcRosterOutput{
 		Format:      "sro-spawnable-npc-roster",
-		Source:      "simulation.LoadNpcWorldRoster: unique RefObj types from enabled npcpos.txt positions joined with the native NPC TID gate and characterdata",
+		Source:      "simulation.LoadNpcWorldRoster: unique RefObj types from enabled npcpos.txt positions joined with the native NPC TID gate and characterdata, then the seasonal look references (simulation.LoadNpcLookRef)",
 		TextdataDir: dir,
 		Count:       len(refs),
 		Refs:        refs,

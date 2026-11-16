@@ -188,13 +188,6 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-ambient-occlusion",
 						label: "Ambient occlusion",
 						description: "Shade corners and contact seams from depth."
-					},
-					{
-						// Port-only, not native (device/water-refraction.ts).
-						key: "waterRefraction",
-						id: "experimental-water-refraction",
-						label: "Water refraction",
-						description: "Water bends the ground below and foams at the shore."
 					}
 				]
 			},
@@ -418,6 +411,18 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-warp-arrival-sound",
 						label: "Portal arrival sound",
 						description: "Play the portal-out cue when you arrive."
+					},
+					{
+						key: "silentWingFlight",
+						id: "experimental-silent-wing-flight",
+						label: "Silent wing flight",
+						description: "Wing dresses fly without footstep sounds."
+					},
+					{
+						key: "christmasCarols",
+						id: "experimental-christmas-carols",
+						label: "Christmas carols",
+						description: "Carols in the snow and in towns at Christmas."
 					},
 					{
 						key: "webTransport",

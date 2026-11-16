@@ -12,6 +12,12 @@ per-item catalog (dress.equipment, see buildEquipmentVisuals.mjs) and no
 crowd-only tables. Every attachment records the native BSR it was converted
 from; the material oracle reads that provenance instead of re-deriving it.
 
+Each model is one cached action (graph/): its key is this module's code
+closure and the model's source path, and the files it read (the BSR and
+everything the BSR lists, the converted textures) are discovered while it
+runs and checked on reuse. An unchanged model lays its GLBs down from the
+action store and hands back the manifest fields it computed.
+
 Output mirrors the native res/ layout:
   res/char/<region>/<name>.bsr -> assets/char/<region>/<name>.glb
   res/cos/<name>.bsr           -> assets/cos/<name>.glb
@@ -22,6 +28,7 @@ plus assets/char/roster.json.
 import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
 	NATIVE_ATTACK_STATE_CLIPS,
 	NATIVE_CHARACTER_SELECT_STATE_IDS,
@@ -37,19 +44,26 @@ import {
 	primSlot
 } from "./buildAvatar.mjs";
 import { avatarToGlb } from "./exportGlb.mjs";
+import { defaultAttachedMotionRequests } from "./attachedMotionClips.mjs";
 import { buildEquipmentVisuals } from "./buildEquipmentVisuals.mjs";
 import { resolveRoster } from "./resolveCharRoster.mjs";
 import { parseAttachPartLink } from "./formats.mjs";
-import { loadDataAsset } from "../shared/jmxAssetIO.mjs";
+import { dataRoot, loadDataAsset } from "../shared/jmxAssetIO.mjs";
+import { runGraph } from "../graph/graph.mjs";
+import { openStore } from "../graph/store.mjs";
+import { claimPublicFile } from "../shared/publicationLedger.mjs";
 import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { convertTextureTrees } from "../shared/convertImagesRunner.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { quatMultiply, quatRotateVector } from "../shared/math3d.mjs";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
-import { gameRoot, publicAssetsRoot, retailTextdataRoot } from "../world/paths.mjs";
+import { gameRoot, imageSourceRoot, publicAssetsRoot, retailTextdataRoot } from "../world/paths.mjs";
 
+const MODULE_FILE = fileURLToPath( import.meta.url );
 const textdataDir = retailTextdataRoot;
 const publicAssets = publicAssetsRoot;
+// The trees a model's build reads: extracted game data and converted images.
+const MODEL_READ_ROOTS = { data: dataRoot, images: imageSourceRoot };
 // "pick" = the ground-item pickup scoop (motion 0x26 / ANI_PICK): the mission
 // local player renders from this GLB, and the 0x35C7 -> state-10 chain plays
 // the scoop once with a 200ms blend.
@@ -250,20 +264,150 @@ function retireUnpublishedRosterOutputs( roster ) {
 
 /*
 ================
+rosterActionName
+================
+*/
+function rosterActionName( model ) {
+	return `roster:${model.codename}`;
+}
+
+/*
+================
+rosterModelFiles
+
+The GLBs one model publishes: the runtime model and, for a character, the
+create-screen preview.
+================
+*/
+function rosterModelFiles( model ) {
+	return [ glbOutput( model ).diskPath, ...(model.isMount ? [] : [ previewGlbOutput( model ).diskPath ]) ];
+}
+
+/*
+================
+rosterModelAction
+
+One model as a cached action (graph/action.mjs). Only the source path,
+the mount flag and the attached-motion requests shape the GLBs; the
+speeds and ids go to the manifest outside the action. The requests come
+from skilleffect.txt under the shard's tomb posture, read once outside
+every action, so they are a parameter of the key.
+================
+*/
+export function rosterModelAction( model, attachedMotionRequests = defaultAttachedMotionRequests() ) {
+	return {
+		name: rosterActionName( model ),
+		outputRoot: publicAssets,
+		outputs: rosterModelFiles( model ).map( file =>
+			path.relative( publicAssets, file ).split( path.sep ).join( "/" )
+		),
+		code: [ MODULE_FILE ],
+		params: { codename: model.codename, bsrPath: model.bsrPath, isMount: model.isMount, attachedMotionRequests },
+		discoverRoots: MODEL_READ_ROOTS,
+		run: () => buildRosterModel( model, attachedMotionRequests )
+	};
+}
+
+/*
+================
+buildRosterModel
+
+Writes one model's GLBs and returns the manifest fields they carry (sizes,
+bones, clip roles, seat, covers): the action's result, kept in its record.
+================
+*/
+async function buildRosterModel( model, attachedMotionRequests ) {
+	try {
+		// Slot names are prim indices ("prim0".."prim8") - the same addressing the native
+		// part-link tables use, so the runtime can hide exactly the prims an item covers.
+		const avatar = await assembleAvatar( model.bsrPath, {
+			slotForMesh: ( _mp, i ) => primSlot( i ),
+			previewWeaponClips: !model.isMount,
+			characterSelectStateClips: !model.isMount,
+			attachedMotionRequests
+		} );
+		// Both the title crowd simulation and Mission PathCtl advance their
+		// actor holders. Their shared runtime GLB therefore owns pose only;
+		// authored horizontal walk/run travel would otherwise be applied once
+		// by the holder and a second time by the root bone.
+		const runtimeAvatar = {
+			...avatar,
+			clips: model.isMount ?
+				avatar.clips :
+				avatar.clips.filter( (
+					clip
+				) => (CROWD_CLIP_ROLES.has( clip.role ) || clip.role.startsWith( "attached-" )) ),
+			inPlaceHorizontalRootMotionRoles: [ "walk", "run" ]
+		};
+		const glb = avatarToGlb( runtimeAvatar );
+		writeIntoPublicTreeSync( glbOutput( model ).diskPath, glb );
+		const fields = {
+			bytes: glb.length,
+			bones: avatar.skeleton.boneCount,
+			hasClip: runtimeAvatar.clips.length > 0,
+			clips: runtimeAvatar.clips.map( ( c ) => c.role )
+		};
+		const requiredCrowdRoles = model.isMount ? [ "stand", "walk" ] : [ "stand", "walk", "ride" ];
+		for ( const role of requiredCrowdRoles ) {
+			if ( !fields.clips.includes( role ) ) {
+				throw new Error( `${model.codename} lacks required native crowd clip role ${role}` );
+			}
+		}
+		fields.materials = avatar.materials.size;
+		if ( model.isMount ) {
+			const seat = seatOffset( avatar.skeleton );
+			if ( !seat ) throw new Error( `mount ${model.codename} has no required ${SEAT_BONE} bone` );
+			fields.seat = seat;
+		}
+		if ( !model.isMount ) {
+			const previewOut = previewGlbOutput( model );
+			const previewClips = avatar.clips.filter( ( clip ) => CREATE_PREVIEW_CLIP_ROLES.has( clip.role ) );
+			if ( previewClips.length === 0 ) throw new Error( `${model.codename} has no required preview clips` );
+			const previewAvatar = { ...avatar, clips: previewClips };
+			const previewGlb = avatarToGlb( previewAvatar );
+			writeIntoPublicTreeSync( previewOut.diskPath, previewGlb );
+			fields.previewGlb = previewOut.publicPath;
+			fields.previewBytes = previewGlb.length;
+			fields.previewClips = (previewAvatar.clips ?? []).map( ( c ) => c.role );
+		}
+		// Native {coverKey -> prim index} map from the char BSR tail; worn items hide
+		// the prims whose keys they cover (CCompChar_ApplyItemCovers 0xA89BD0). Mounts have none.
+		if ( avatar.partLink && avatar.partLink.pairs.length > 0 ) {
+			fields.cover = Object.fromEntries( avatar.partLink.pairs.map( ( p ) => [ p.key, p.value ] ) );
+		}
+		return fields;
+	} catch ( error ) {
+		throw new Error( `[roster] FAIL ${model.codename}: ${error?.message ?? error}`, { cause: error } );
+	}
+}
+
+/*
+================
 buildRoster
 ================
 */
-export async function buildRoster( { skipTextures = false } = {} ) {
+export async function buildRoster( options = {} ) {
+	const { skipTextures = false } = options;
 	if ( !skipTextures ) await convertTextureTrees( "roster", [ "prim/mtrl" ] );
 
 	const manifestPath = path.join( publicAssets, "char", "roster.json" );
 	const { resolved, missing } = resolveRoster( textdataDir );
 	if ( missing.length ) throw new Error( `[roster] unresolved codenames: ${missing.join( ", " )}` );
 
+	const store = options.store ?? (await openStore());
+	let results;
+	try {
+		const motions = defaultAttachedMotionRequests();
+		results = await runGraph( resolved.map( model => rosterModelAction( model, motions ) ), { store } );
+	} finally {
+		if ( !options.store ) await store.shutdown();
+	}
 	const models = [];
-	let built = 0;
+	let stored = 0;
 	for ( const model of resolved ) {
-		const { publicPath, diskPath } = glbOutput( model );
+		const { publicPath } = glbOutput( model );
+		const outcome = results[rosterActionName( model )];
+		for ( const file of rosterModelFiles( model ) ) claimPublicFile( file );
 		const entry = {
 			codename: model.codename,
 			refObjId: model.refObjId,
@@ -273,76 +417,20 @@ export async function buildRoster( { skipTextures = false } = {} ) {
 			runSpeed: model.runSpeed,
 			glb: publicPath,
 			// The whole model is one native source; previewGlb shares it.
-			source: model.bsrPath
+			source: model.bsrPath,
+			...outcome.result
 		};
-		try {
-			// Slot names are prim indices ("prim0".."prim8") - the same addressing the native
-			// part-link tables use, so the runtime can hide exactly the prims an item covers.
-			const avatar = await assembleAvatar( model.bsrPath, {
-				slotForMesh: ( _mp, i ) => primSlot( i ),
-				previewWeaponClips: !model.isMount,
-				characterSelectStateClips: !model.isMount
-			} );
-			// Both the title crowd simulation and Mission PathCtl advance their
-			// actor holders. Their shared runtime GLB therefore owns pose only;
-			// authored horizontal walk/run travel would otherwise be applied once
-			// by the holder and a second time by the root bone.
-			const runtimeAvatar = {
-				...avatar,
-				clips: model.isMount ?
-					avatar.clips :
-					avatar.clips.filter( (
-						clip
-					) => (CROWD_CLIP_ROLES.has( clip.role ) || clip.role.startsWith( "attached-" )) ),
-				inPlaceHorizontalRootMotionRoles: [ "walk", "run" ]
-			};
-			const glb = avatarToGlb( runtimeAvatar );
-			writeIntoPublicTreeSync( diskPath, glb );
-			entry.bytes = glb.length;
-			entry.bones = avatar.skeleton.boneCount;
-			entry.hasClip = runtimeAvatar.clips.length > 0;
-			entry.clips = runtimeAvatar.clips.map( ( c ) => c.role );
-			const requiredCrowdRoles = model.isMount ? [ "stand", "walk" ] : [ "stand", "walk", "ride" ];
-			for ( const role of requiredCrowdRoles ) {
-				if ( !entry.clips.includes( role ) ) {
-					throw new Error( `${model.codename} lacks required native crowd clip role ${role}` );
-				}
-			}
-			entry.materials = avatar.materials.size;
-			if ( model.isMount ) {
-				const seat = seatOffset( avatar.skeleton );
-				if ( !seat ) throw new Error( `mount ${model.codename} has no required ${SEAT_BONE} bone` );
-				entry.seat = seat;
-			}
-			if ( !model.isMount ) {
-				const previewOut = previewGlbOutput( model );
-				const previewClips = avatar.clips.filter( ( clip ) => CREATE_PREVIEW_CLIP_ROLES.has( clip.role ) );
-				if ( previewClips.length === 0 ) throw new Error( `${model.codename} has no required preview clips` );
-				const previewAvatar = { ...avatar, clips: previewClips };
-				const previewGlb = avatarToGlb( previewAvatar );
-				writeIntoPublicTreeSync( previewOut.diskPath, previewGlb );
-				entry.previewGlb = previewOut.publicPath;
-				entry.previewBytes = previewGlb.length;
-				entry.previewClips = (previewAvatar.clips ?? []).map( ( c ) => c.role );
-			}
-			// Native {coverKey -> prim index} map from the char BSR tail; worn items hide
-			// the prims whose keys they cover (CCompChar_ApplyItemCovers 0xA89BD0). Mounts have none.
-			if ( avatar.partLink && avatar.partLink.pairs.length > 0 ) {
-				entry.cover = Object.fromEntries( avatar.partLink.pairs.map( ( p ) => [ p.key, p.value ] ) );
-			}
-			built += 1;
-			const seatNote = entry.seat ? ` seat=[${entry.seat}]` : "";
-			const previewNote = entry.previewGlb ? ` preview=[${entry.previewClips}]` : "";
-			console.log(
-				`[roster] OK   ${
-					model.codename.padEnd( 28 )
-				} -> ${publicPath} (${glb.length} B, clips=[${entry.clips}]${seatNote}${previewNote})`
-			);
-		} catch ( error ) {
-			throw new Error( `[roster] FAIL ${model.codename}: ${error?.message ?? error}`, { cause: error } );
-		}
+		if ( outcome.hit ) stored += 1;
+		const seatNote = entry.seat ? ` seat=[${entry.seat}]` : "";
+		const previewNote = entry.previewGlb ? ` preview=[${entry.previewClips}]` : "";
+		console.log(
+			`[roster] ${outcome.hit ? "HIT" : "OK "}  ${
+				model.codename.padEnd( 28 )
+			} -> ${publicPath} (${entry.bytes} B, clips=[${entry.clips}]${seatNote}${previewNote})`
+		);
 		models.push( entry );
 	}
+	const built = models.length;
 
 	const manifest = {
 		format: "sro-character-catalog",
@@ -366,9 +454,10 @@ export async function buildRoster( { skipTextures = false } = {} ) {
 	const removed = retireUnpublishedRosterOutputs( manifest );
 	if ( removed.length ) console.log( `[roster] retired ${removed.length} unpublished GLB output(s)` );
 	console.log(
-		`\n[roster] built ${built}/${models.length} GLBs; manifest -> ${path.relative( gameRoot, manifestPath )}`
+		`\n[roster] built ${built}/${models.length} GLBs (${stored} from the action store); ` +
+			`manifest -> ${path.relative( gameRoot, manifestPath )}`
 	);
-	return { built, modelCount: models.length, missing, manifestPath, removed: removed.length };
+	return { built, stored, modelCount: models.length, missing, manifestPath, removed: removed.length };
 }
 
 if ( isMainScript( import.meta.url ) ) {

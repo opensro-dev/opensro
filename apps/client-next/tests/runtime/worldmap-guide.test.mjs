@@ -119,7 +119,7 @@ function fixture() {
 	};
 }
 
-const VIEW = { race: 0, playerLevel: 10, filterCap: undefined, open: null };
+const VIEW = { race: 0, playerLevel: 10, open: null };
 
 test("the catalogue is refused whole when its format or a row is wrong", () => {
 	assert.throws( () => worldMapGuideCatalog( { ...fixture(), format: "other" } ), /format/ );
@@ -169,7 +169,7 @@ test("every group opens whatever its content tier: no row is shut", () => {
 	assert.deepEqual( rows.map( row => row.color ), [ "group", "group", "group", "far" ] );
 });
 
-test("the open group lists its monsters as Lv<level> <name>, the filter hiding those above it", () => {
+test("the open group lists its monsters as Lv<level> <name>, the filter hiding those outside its band", () => {
 	const catalog = worldMapGuideCatalog( fixture() );
 	const rows = guideMonsterRows( catalog, { ...VIEW, open: 0 } );
 	assert.deepEqual( rows.map( row => [ row.label, row.color ] ), [
@@ -179,9 +179,11 @@ test("the open group lists its monsters as Lv<level> <name>, the filter hiding t
 		[ "Europe", "group" ],
 		[ "Egypt", "group" ]
 	] );
+	// A level-30 character sees the same tree: only the colours follow
+	// the level, the rows do not (native lists every continent).
 	assert.deepEqual(
-		guideMonsterRows( catalog, { ...VIEW, open: 0, filterCap: 16 } ).map( row => row.label ),
-		[ "China", "Lv1 Mangyang", "Europe", "Egypt" ]
+		guideMonsterRows( catalog, { ...VIEW, open: 0, playerLevel: 30 } ).map( row => row.label ),
+		guideMonsterRows( catalog, { ...VIEW, open: 0 } ).map( row => row.label )
 	);
 });
 
@@ -261,7 +263,7 @@ loadedTools
 Map tools whose asset owner answers the guide request with the fixture.
 ================
 */
-function loadedTools( body = fixture() ) {
+function loadedTools( body = fixture(), levelFilter = false ) {
 	const bytes = new TextEncoder().encode( JSON.stringify( body ) );
 	const hud = createMapToolsHud( {
 		assets: {
@@ -273,6 +275,9 @@ function loadedTools( body = fixture() ) {
 		base: "https://fixture.invalid/"
 	} );
 	hud.activate( "map-side-tab", undefined, 10 );
+	// The filter starts on; these tests read the tree whole unless they
+	// ask for it (its band is pinned in world-map-tools.test.mjs).
+	if ( !levelFilter ) hud.activate( "map-level-filter", undefined, 10 );
 	hud.step( "Map" );
 	return hud;
 }
@@ -340,6 +345,23 @@ test("the tools load the guide and fill the Monster tab from it", () => {
 	hud.dispose();
 });
 
+test("the level filter does not reach the Monster tab", () => {
+	const hud = loadedTools( fixture(), true );
+	const mains = level =>
+		paint( hud, { characterLevel: level } ).controls.filter( row => row.id.startsWith( "map-guide-main:" ) )
+			.map( row => row.label );
+	// Level 1 and level 30 list the same continents, Egypt's Lv100 one too.
+	assert.deepEqual( mains( 1 ), [ "China", "Europe", "Egypt" ] );
+	assert.deepEqual( mains( 30 ), mains( 1 ) );
+	hud.activate( "map-guide-main:0", undefined, 30 );
+	const subs = paint( hud, { characterLevel: 30 } ).controls.filter( row =>
+		row.id.startsWith( "map-guide-monster:" )
+	)
+		.map( row => row.label );
+	assert.ok( subs.includes( "Lv1 Mangyang" ) && subs.includes( "Lv30 Weasel" ), subs.join() );
+	hud.dispose();
+});
+
 test("the Field tab fills from the guide and a dungeon row opens its floor's view", () => {
 	const hud = loadedTools();
 	hud.activate( "map-guide-tab:area", undefined, 10 );
@@ -347,6 +369,11 @@ test("the Field tab fills from the guide and a dungeon row opens its floor's vie
 	const view = paint( hud );
 	assert.equal( control( view, "map-guide-area:3" ).label, "Tomb B3" );
 	assert.equal( control( view, "map-guide-area:4" ).kind, "button", "the temple takes a click" );
+	// A picked place lights its lamp, as a picked monster does.
+	assert.equal( control( view, "map-guide-area:4" ).selected, false );
+	hud.activate( "map-guide-area:4", undefined, 10 );
+	assert.equal( control( paint( hud ), "map-guide-area:4" ).selected, true, "the picked place's lamp" );
+	assert.equal( control( paint( hud ), "map-guide-area:3" ).selected, false );
 	assert.equal( hud.activate( "map-guide-area:3", undefined, 10 ), null );
 	assert.equal( hud.viewingDungeon(), true );
 	hud.dispose();
@@ -378,21 +405,29 @@ test("a build without the guide keeps the shard's Monster tab and says so on the
 	hud.dispose();
 });
 
-test("the guide's own scrollbar: gd_scroll art, and the thumb drags the tree", () => {
+test("the guide's stock scrollbar: chat-window art, and the thumb drags the tree", () => {
 	const many = fixture();
-	for ( let i = 0; i < 20; i++ ) many.monsters.push( monster( "Extra" + i, [ 10110 + i, 10810 + i, 10110 + i ] ) );
+	for ( let i = 0; i < 19; i++ ) many.monsters.push( monster( "Extra" + i, [ 10110 + i, 10810 + i, 10110 + i ] ) );
 	const hud = loadedTools( many );
 	hud.activate( "map-guide-main:0", undefined, 10 );
 	let view = paint( hud );
-	for ( const art of [ "gd_scroll_line.png", "gd_scroll_up.png", "gd_scroll_down.png", "gd_scroll_button.png" ] ) {
-		assert.ok( view.quads.some( quad => quad.texture.endsWith( "/guide/" + art ) ), art );
+	for (
+		const art of [
+			"ifcommon/com_scroll_bar.png",
+			"chattingwnd/chat_arrow_up.png",
+			"chattingwnd/chat_arrow_down.png",
+			"ifcommon/com_scroll_button.png"
+		]
+	) {
+		assert.ok( view.quads.some( quad => quad.texture.endsWith( "/interface/" + art ) ), art );
 	}
+	assert.equal( view.quads.some( quad => quad.texture.includes( "gd_scroll" ) ), false, "no bone-knot art" );
 	const thumb = control( view, "map-guide-scroll-thumb" );
 	assert.equal( thumb.draggable, true );
 	const top = thumb.rect[1];
 	const first = () => paint( hud ).controls.find( row => row.id.startsWith( "map-guide-main:" ) )?.id;
 	assert.equal( first(), "map-guide-main:0" );
-	// 24 rows (the Lv30 Weasel is over the filter) over 8 shown: 16 rows
+	// 24 rows (five groups and species, 19 extras) over 8 shown: 16 rows
 	// of range on a 146 px travel, 9.125 px a row. A drag past the end
 	// stops there and owes nothing back.
 	assert.equal( hud.drag( "map-guide-scroll-thumb", 400 ), true );
@@ -405,6 +440,29 @@ test("the guide's own scrollbar: gd_scroll art, and the thumb drags the tree", (
 	hud.drag( "map-guide-scroll-thumb", -5 );
 	assert.equal( control( paint( hud ), "map-guide-scroll-thumb" ).rect[1], top + Math.round( 15 * 146 / 16 ) );
 	assert.equal( hud.drag( "map-pan", 10 ), false, "other drags are not the guide's" );
+	hud.dispose();
+});
+
+test("the wheel over the guide steps one row a notch, and leaves the map's wheel alone (#3515)", () => {
+	const many = fixture();
+	for ( let i = 0; i < 19; i++ ) many.monsters.push( monster( "Extra" + i, [ 10110 + i, 10810 + i, 10110 + i ] ) );
+	const hud = loadedTools( many );
+	hud.activate( "map-guide-main:0", undefined, 10 );
+	const thumb = () => control( paint( hud ), "map-guide-scroll-thumb" ).rect[1];
+	const top = thumb();
+	// The panel stands left of the window: [102, 100, 298, 296] here.
+	assert.equal( hud.scroll( 200, 200, 120 ), true );
+	assert.equal( thumb(), top + Math.round( 146 / 16 ), "one row, however large the delta" );
+	assert.equal( hud.scroll( 200, 200, -3 ), true );
+	assert.equal( thumb(), top, "and back" );
+	assert.equal( hud.scroll( 200, 200, -120 ), true );
+	assert.equal( thumb(), top, "held at the first row" );
+	for ( let i = 0; i < 30; i++ ) hud.scroll( 200, 200, 1 );
+	assert.equal( thumb(), top + 146, "held at the last row" );
+	assert.equal( hud.scroll( 700, 300, 1 ), false, "the map's own area is not the guide's" );
+	hud.activate( "map-side-tab", undefined, 10 );
+	paint( hud );
+	assert.equal( hud.scroll( 200, 200, 1 ), false, "a shut guide takes no wheel" );
 	hud.dispose();
 });
 

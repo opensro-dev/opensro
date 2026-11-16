@@ -39,6 +39,7 @@ import {
 	worldMapDungeonPose,
 	worldMapFrame,
 	worldMapPageAt,
+	worldMapPageCaption,
 	worldMapPages,
 	worldMapPresentation,
 	worldMapPointMarkers,
@@ -54,6 +55,9 @@ import { createUniqueNestsHud } from "./unique-nests";
 import { reverseMapButtons } from "./reverse-map-buttons";
 import { cavePageHits, cavePageImages, mapSignName } from "./map-cave-page";
 import {
+	GUIDE_MONSTER,
+	GUIDE_TREE_ART,
+	MAP_CHROME_ART,
 	MAP_WINDOW_EXTENT,
 	MAP_WINDOW_HEIGHT,
 	MAP_WINDOW_WIDTH,
@@ -338,7 +342,10 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapFollow = false;
 					mapPan = [ 0, 0 ];
 					mapCenter = { ...picked };
-					mapPage = worldMapPageAt( picked, mapLayout );
+					// A guide monster stays on the world page: its hunting
+					// ground is drawn there only (sub_e75d50), and the town
+					// page its point falls in would hide the yellow tiles.
+					mapPage = id.startsWith( GUIDE_MONSTER ) ? 0 : worldMapPageAt( picked, mapLayout );
 					mapTools.clearView();
 				}
 				return true;
@@ -347,7 +354,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			// selects Manual Movement State, preserving its existing behavior.
 			if ( id.startsWith( "map-town:" ) ) {
 				mapTools.clearView();
-				const page = Number( id.slice( 9 ) );
+				const page = Number.parseInt( id.slice( 9 ), 10 );
 				if ( worldMapPages( mapLayout ).some( p => p.id === page ) ) {
 					mapPage = page;
 					mapFollow = false;
@@ -421,6 +428,17 @@ export function createWorldMapHud( options: MapHudOptions ) {
 		},
 		/*
 		================
+		scroll
+
+		The wheel over the M window's guide panel; false when the panel
+		does not take it.
+		================
+		*/
+		scroll( event: Extract<UiEvent, { kind: "scroll"; }> ): boolean {
+			return mapTools.scroll( event.x, event.y, event.delta );
+		},
+		/*
+		================
 		step
 		================
 		*/
@@ -478,6 +496,12 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				authoredButton = input.authoredButton,
 				closeButton = input.closeButton,
 				image = input.image;
+			// A page's caption string: a town's UIIT_STT_ text, a fortress's
+			// SN_ object text (576949).
+			const pageName = ( page: { readonly name: string; readonly caption?: string; } ) => {
+				const key = worldMapPageCaption( page );
+				return key.startsWith( "SN_" ) ? hudData?.strings?.[key] ?? key : hudCopy( key );
+			};
 
 			let hover = input.hover;
 			lastLevel = game?.progression?.level;
@@ -683,7 +707,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapCenter ?? mapViewPose( pose ),
 					hover,
 					mapLayout,
-					mapTools.filterCap( game?.progression?.level )
+					mapTools.filterBand( game?.progression?.level )
 				) :
 				null;
 			// The monster picked in the guide (sub_e75d50, issue #3390):
@@ -764,12 +788,18 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				] :
 				[];
 			if ( caveMap ) mapHits.push( ...cavePageHits( caveMap ) );
+			// Several icons can open one page (the three fort_worldmap icons
+			// 91006-91008 all open 1001): each later one gets a "#n" suffix so
+			// control identities stay unique; the activation reads the page id.
+			const townHitCount = new Map<number, number>();
 			for ( const { icon, rect: r } of mapOpen ? mapProjection?.hits ?? [] : [] ) {
 				const page = worldMapPages( mapLayout ).find( p => p.id === icon.destination );
 				if ( page ) {
+					const seen = townHitCount.get( page.id ) ?? 0;
+					townHitCount.set( page.id, seen + 1 );
 					mapHits.push( {
-						id: "map-town:" + page.id,
-						label: hudCopy( "UIIT_STT_" + page.name ),
+						id: "map-town:" + page.id + (seen > 0 ? "#" + seen : ""),
+						label: pageName( page ),
 						rect: r,
 						kind: "button",
 						draggable: true
@@ -834,6 +864,12 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				if ( nestSigns ) paths.push( UNIQUE_NEST_SIGN );
 				paths.push( MAP_LOCAL_MARKER );
 			}
+			// Admission holds a window until its art is resident (admission.ts;
+			// native never waits, 53FF00/5405DF), and trim() releases what no
+			// frame demands. So all of the window's art, in every state, is
+			// demanded in the world, shut or open; demand is a set, so repeats
+			// are free. Chrome only: tiles stay out of the warm set (window-warm.ts).
+			if ( pose ) paths.push( ...MAP_CHROME_ART, ...GUIDE_TREE_ART );
 			if ( panel === "Map" && hudData ) {
 				// Map tiles and icons stream in as a pan reveals them (demanded above, and
 				// absent textures simply do not draw). Gating admission on them disabled
@@ -854,7 +890,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					// carries: "Underground Level 1 of Tomb of Qin-Shi".
 					caption = (cavePage && caveMap ? cavePage.caption : undefined) ||
 						(page ?
-							hudCopy( "UIIT_PAG_LOCALMAP" ) + " - " + hudCopy( "UIIT_STT_" + page.name ) :
+							hudCopy( "UIIT_PAG_LOCALMAP" ) + " - " + pageName( page ) :
 							hudCopy( "UIIT_PAG_WORLDMAP" )) ||
 						"World Map";
 				windowBox( caption, mx, my, mw, mh );

@@ -18,6 +18,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/calendar"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/clientdata"
@@ -94,6 +95,75 @@ func TestHolyWaterPurifiesTheStable(t *testing.T) {
 	holdItems(t, rt, c, stableFilth, stableFilthTarget-1)
 	if frames, admitted := rt.BeginItemUse(c, holyWater, stablePoint(), 0); admitted || !hasNotice(frames, "SN_TALK_QNO_EU_EASTEU_1_11") {
 		t.Fatal("holy water admitted with five Filths held", frames)
+	}
+}
+
+/*
+================
+purifyOnce
+
+One full purification at the stable on a roll of draw; the Filths held
+after it.
+================
+*/
+func purifyOnce(t *testing.T, rt *Runtime, c *enterworld.Character, draw uint32, startMs int64) int {
+	t.Helper()
+	rt.CaptureRoll = func() (uint32, error) { return draw, nil }
+	if _, admitted := rt.BeginItemUse(c, holyWater, stablePoint(), startMs); !admitted {
+		t.Fatal("holy water refused by the stable")
+	}
+	for second := int64(1); second <= stablePurifySeconds; second++ {
+		rt.AdvanceItemUse(c, startMs+second*questSecondMs)
+	}
+	return int(captureItemCount(c, stableFilth))
+}
+
+/*
+================
+TestStablePurifyChanceIsTunable
+
+SRO_STABLE_PURIFY_CHANCE (port-only, #3714) moves the roll the timer
+grants on: unset is the native 50, so 51 fails; at 80 a roll of 80 pays
+and 81 does not. The value is read when a purification starts.
+================
+*/
+func TestStablePurifyChanceIsTunable(t *testing.T) {
+	clientdata.RequireGameData(t)
+	for _, tc := range []struct {
+		env        string
+		draw       uint32
+		wantFilths int
+	}{
+		{"", 50, 1},
+		{"", 51, 0},
+		{"80", 80, 1},
+		{"80", 81, 0},
+		{"100", 100, 1},
+	} {
+		settings, err := tunables.Parse(func(name string) string {
+			if name == "SRO_STABLE_PURIFY_CHANCE" {
+				return tc.env
+			}
+			return ""
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		restore := tunables.Swap(settings)
+		rt, c, _, _ := stableFixture(t)
+		got := purifyOnce(t, rt, c, tc.draw, 0)
+		restore()
+		if got != tc.wantFilths {
+			t.Fatalf("chance %q, roll %d: %d Filths, want %d", tc.env, tc.draw, got, tc.wantFilths)
+		}
+	}
+	if _, err := tunables.Parse(func(name string) string {
+		if name == "SRO_STABLE_PURIFY_CHANCE" {
+			return "101"
+		}
+		return ""
+	}); err == nil {
+		t.Fatal("a chance above 100 was accepted")
 	}
 }
 
