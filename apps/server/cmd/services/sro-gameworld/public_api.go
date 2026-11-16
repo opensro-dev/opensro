@@ -450,6 +450,15 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			return setPrivacyFlag(authority, shard, account, name, "break-notice", on,
 				func(c *domain.Character) *bool { return &c.BreakNotice })
 		},
+		// The Contributor title's read and pick (port-only, not native; #135)
+		// reach the registry at call time (wiring_contributor.go): with
+		// SRO_CONTRIBUTOR_TITLES off there is none, and both answer not found.
+		ContributorTitleOf: func(account string) (bool, bool, bool) {
+			return contributorTitleOf(gameplay, account)
+		},
+		TakeContributorTitle: func(account string) error {
+			return takeContributorTitle(gameplay, account)
+		},
 		Trades: func(account, character string, before *domain.TradeCursor, limit int) (domain.TradePage, error) {
 			return publicTradePage(authority, shard, account, character, before, limit)
 		},

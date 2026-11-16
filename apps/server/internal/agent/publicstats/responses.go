@@ -147,6 +147,16 @@ type OwnCharactersResponse struct {
 	Characters []OwnCharacter `json:"characters"`
 }
 
+// ContributorTitleResponse is the website's authenticated
+// GET /v1/accounts/{id}/contributor-title (privacy.go): whether the
+// signed-in account carries its Contributor title and whether it hides
+// it. The member's other accounts are never listed. Port-only, not
+// native (#135).
+type ContributorTitleResponse struct {
+	Carries bool `json:"carries"`
+	Hidden  bool `json:"hidden"`
+}
+
 // OwnTradeItem is one item stack a trade moved: its reference and count.
 type OwnTradeItem struct {
 	RefObjID uint32 `json:"refObjId"`

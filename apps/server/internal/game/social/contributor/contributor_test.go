@@ -395,3 +395,139 @@ func TestHereSaveFailureKeepsTheTitleWhereItWas(t *testing.T) {
 		t.Fatalf("failed move = %q, a1 %v a2 %v", answer, r.Shown("a1"), r.Shown("a2"))
 	}
 }
+
+/*
+================
+TestTitleOfSaysOnlyWhetherThisAccountCarriesIt
+
+The account page's read: whether this account carries its member's title
+and whether it hides it. Nothing names another account (a group holds the
+invitees' accounts too), and an account outside every group is no
+contributor.
+================
+*/
+func TestTitleOfSaysOnlyWhetherThisAccountCarriesIt(t *testing.T) {
+	dir := t.TempDir()
+	writeMembers(t, dir, grouped, time.Unix(1_700_000_000, 0))
+	r, err := Open(dir, filepath.Join(dir, MembersFileName), writeFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if carries, hidden, ok := r.TitleOf("a1"); !ok || !carries || hidden {
+		t.Fatalf("a1 reads carries %v hidden %v ok %v, want the holder", carries, hidden, ok)
+	}
+	if carries, _, ok := r.TitleOf("a2"); !ok || carries {
+		t.Fatalf("a2 reads carries %v ok %v, want a contributor without it", carries, ok)
+	}
+	if _, _, ok := r.TitleOf("c1"); ok {
+		t.Fatal("an account outside every group read as a contributor")
+	}
+	r.Command("a1", "/contributor off")
+	if _, hidden, _ := r.TitleOf("a1"); !hidden {
+		t.Fatal("a1's hidden flag not read")
+	}
+	if _, hidden, _ := r.TitleOf("a2"); hidden {
+		t.Fatal("a2 read a1's hidden flag")
+	}
+}
+
+/*
+================
+TestTakeTitleMovesItHereAndForcesTheNextPush
+
+The website's "carry it here" moves the member's title onto the account
+exactly as "/contributor here" does: the other group keeps its title, and
+the next roster pass goes out at once instead of on its pace. Taking it
+again where it already is moves nothing and is no error.
+================
+*/
+func TestTakeTitleMovesItHereAndForcesTheNextPush(t *testing.T) {
+	dir := t.TempDir()
+	writeMembers(t, dir, grouped, time.Unix(1_700_000_000, 0))
+	r, err := Open(dir, filepath.Join(dir, MembersFileName), writeFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	online := []Online{
+		{SessionID: "s1", AccountID: "a1", Name: "First"},
+		{SessionID: "s2", AccountID: "a2", Name: "Second"},
+		{SessionID: "s3", AccountID: "b1", Name: "Bob"},
+	}
+	if payload, _, all := r.Push(online, 0); !all || !reflect.DeepEqual(decodeRoster(t, payload), []string{"Bob", "First"}) {
+		t.Fatalf("first push: all=%v roster=%v", all, decodeRoster(t, payload))
+	}
+	if err := r.TakeTitle("a2"); err != nil {
+		t.Fatalf("taking the title: %v", err)
+	}
+	if r.Shown("a1") || !r.Shown("a2") || !r.Shown("b1") {
+		t.Fatalf("after the take: a1 %v a2 %v b1 %v", r.Shown("a1"), r.Shown("a2"), r.Shown("b1"))
+	}
+	// The first pass set the next one 2 s on; the take makes it due now.
+	payload, _, all := r.Push(online, 1)
+	if !all || !reflect.DeepEqual(decodeRoster(t, payload), []string{"Bob", "Second"}) {
+		t.Fatalf("push after the take: all=%v roster=%v", all, decodeRoster(t, payload))
+	}
+	if err := r.TakeTitle("a2"); err != nil {
+		t.Fatalf("taking it where it is: %v", err)
+	}
+	if carries, _, _ := r.TitleOf("a2"); !carries {
+		t.Fatal("taking it where it is moved it away")
+	}
+}
+
+/*
+================
+TestTakeTitleRefusesANonContributorAndWritesNothing
+
+An account linked to no contributor is refused with ErrNotInGroup and
+nothing is written; an account the sync has since dropped is refused too.
+================
+*/
+func TestTakeTitleRefusesANonContributorAndWritesNothing(t *testing.T) {
+	dir := t.TempDir()
+	writeMembers(t, dir, grouped, time.Unix(1_700_000_000, 0))
+	writes := 0
+	r, err := Open(dir, filepath.Join(dir, MembersFileName), func(path string, body []byte) error {
+		writes++
+		return writeFile(path, body)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.TakeTitle("c1"); !errors.Is(err, ErrNotInGroup) {
+		t.Fatalf("TakeTitle(c1) = %v, want ErrNotInGroup", err)
+	}
+	if writes != 0 || !r.Shown("a1") || !r.Shown("b1") {
+		t.Fatalf("a refused take wrote %d times: a1 %v b1 %v", writes, r.Shown("a1"), r.Shown("b1"))
+	}
+	// The sync drops a2 from its group: taking the title there is refused from now on.
+	writeMembers(t, dir, `{"members":[{"member":"m1","accounts":["a1","a3"]}],"accounts":["a1"]}`, time.Unix(1_700_000_100, 0))
+	r.reloadLocked()
+	if err := r.TakeTitle("a2"); !errors.Is(err, ErrNotInGroup) {
+		t.Fatalf("take by a dropped account = %v, want ErrNotInGroup", err)
+	}
+}
+
+/*
+================
+TestTakeTitleSaveFailureKeepsTheOldChoice
+
+A take the store does not save returns that error rather than
+ErrNotInGroup, and the title stays where it was.
+================
+*/
+func TestTakeTitleSaveFailureKeepsTheOldChoice(t *testing.T) {
+	dir := t.TempDir()
+	writeMembers(t, dir, grouped, time.Unix(1_700_000_000, 0))
+	r, err := Open(dir, filepath.Join(dir, MembersFileName), func(string, []byte) error { return errors.New("disk full") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = r.TakeTitle("a3")
+	if err == nil || errors.Is(err, ErrNotInGroup) {
+		t.Fatalf("failed save = %v, want the save's own error", err)
+	}
+	if !r.Shown("a1") || r.Shown("a3") {
+		t.Fatalf("a failed save moved the title: a1 %v a3 %v", r.Shown("a1"), r.Shown("a3"))
+	}
+}
