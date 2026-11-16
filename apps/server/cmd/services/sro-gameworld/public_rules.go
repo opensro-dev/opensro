@@ -734,7 +734,7 @@ func christmasRule(now time.Time) publicstats.Rule {
 	if progression.ChristmasModeFromEnv() == progression.ChristmasModeSoOk2006 {
 		return publicstats.Rule{Flag: progression.EnvChristmasEvent, On: progression.SoOkChristmasFromEnv().ActiveAt(now),
 			Native: native,
-			Now:    "So-Ok's Christmas Gift: while the event runs, the towns wear their Christmas decoration and play Christmas carols, and it snows for the first quarter of every hour. Ordinary monsters sometimes drop a Jewel Box; Santa So-Ok trades each box for a random gift: a buff scroll or, rarely, a party Monster Summon Scroll or a Pandora's Box (strong monsters to hunt, level 30 and up, outside towns) or Rudolph. When the event ends, the boxes leave every bag.",
+			Now:    "So-Ok's Christmas Gift: while the event runs, the towns wear their Christmas decoration and play Christmas carols, and it snows for one hour every two hours (on the even UTC hours, none at 04:00), as in the winter event. Ordinary monsters sometimes drop a Jewel Box; Santa So-Ok trades each box for a random gift: a buff scroll or, rarely, a party Monster Summon Scroll or a Pandora's Box (strong monsters to hunt, level 30 and up, outside towns) or Rudolph. When the event ends, the boxes leave every bag.",
 			Why:    "The December 2006 event, rebuilt for its seasonal window."}
 	}
 	return publicstats.Rule{Flag: progression.EnvChristmasEvent, On: progression.ChristmasEventFromEnv().ActiveAt(now),

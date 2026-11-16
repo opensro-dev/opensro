@@ -298,8 +298,8 @@ func TestSoOkChristmasBoxesStayWhileEitherEventRuns(t *testing.T) {
 TestSoOkChristmasEventGroups
 
 Inside the window an entry lists the decoration and the town carols
-group, and the native snow group only during the first quarter of the
-hour; outside it, nothing. Each edge goes out once.
+group, and the native snow group only during a snowfall (the winter
+event's timetable: the even UTC hours); outside it, nothing. Each edge goes out once.
 ================
 */
 func TestSoOkChristmasEventGroups(t *testing.T) {
@@ -323,13 +323,13 @@ func TestSoOkChristmasEventGroups(t *testing.T) {
 	}
 	at(-time.Minute)
 	at(5*time.Minute, ChristmasEventGroup, ChristmasDecorationEventGroup, ChristmasTownCarolsEventGroup)
-	at(14*time.Minute+59*time.Second, ChristmasEventGroup, ChristmasDecorationEventGroup, ChristmasTownCarolsEventGroup)
-	at(15*time.Minute, ChristmasDecorationEventGroup, ChristmasTownCarolsEventGroup)
-	at(59*time.Minute, ChristmasDecorationEventGroup, ChristmasTownCarolsEventGroup)
+	at(59*time.Minute+59*time.Second, ChristmasEventGroup, ChristmasDecorationEventGroup, ChristmasTownCarolsEventGroup)
+	at(time.Hour, ChristmasDecorationEventGroup, ChristmasTownCarolsEventGroup)
+	at(4*time.Hour+30*time.Minute, ChristmasDecorationEventGroup, ChristmasTownCarolsEventGroup)
 	at(26*time.Hour+3*time.Minute, ChristmasEventGroup, ChristmasDecorationEventGroup, ChristmasTownCarolsEventGroup)
 	at(14 * 24 * time.Hour)
 
-	// The snow edges: one 0x3347 for group 1 at :15 and again at :00.
+	// The snow edges: one 0x3347 for group 1 at 01:00 and again at 02:00.
 	*clock = start.Add(10 * time.Minute)
 	rt.advanceEventGroups(0)
 	edge := func(at time.Time, on bool) {
@@ -343,8 +343,8 @@ func TestSoOkChristmasEventGroups(t *testing.T) {
 			t.Fatalf("at %v: the change went out twice", at)
 		}
 	}
-	edge(start.Add(15*time.Minute), false)
-	edge(start.Add(time.Hour), true)
+	edge(start.Add(time.Hour), false)
+	edge(start.Add(2*time.Hour), true)
 }
 
 /*

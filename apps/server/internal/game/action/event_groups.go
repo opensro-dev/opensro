@@ -28,8 +28,9 @@ already: the entered tail lists the active event groups and 0x3347
     lines come and go with each one, as the client was built for.
 
   - So-Ok's Christmas Gift (the Christmas switch in mode so_ok_2006)
-    runs the same two: group 1 for the first quarter of every UTC hour,
-    group 7 the whole window. It adds a port-only group the client knows
+    runs the same two: group 1 on the winter event's snowfall timetable
+    (one weather rule for every Christmas event), group 7 the whole
+    window. It adds a port-only group the client knows
     only as the town carols' switch (ChristmasTownCarolsEventGroup): no
     native table names it, so no client draws or plays anything for it
     but the browser's carols in the towns (event-environment.ts).
@@ -161,7 +162,7 @@ func (rt *Runtime) seasonalGroups() [5]seasonalGroups {
 		// start and end lines); the decoration stands the whole window.
 		{enabled: rt.Christmas.Enabled(), span: christmasSnowfall, groups: [2]uint32{ChristmasEventGroup}, count: 1, watch: &rt.christmasSnow},
 		{enabled: rt.Christmas.Enabled(), span: christmasWindow, groups: [2]uint32{ChristmasDecorationEventGroup}, count: 1, watch: &rt.christmasGroups},
-		// So-Ok's Christmas Gift: a quarter-hour snowfall every hour; the
+		// So-Ok's Christmas Gift: the winter event's snowfalls; the
 		// decoration and the town carols the whole window. The two
 		// Christmas events never run together (progression/christmas_mode.go).
 		{enabled: rt.SoOkChristmas.Enabled(), span: sookChristmasSnowfall, groups: [2]uint32{ChristmasEventGroup}, count: 1, watch: &rt.sookChristmasSnow},

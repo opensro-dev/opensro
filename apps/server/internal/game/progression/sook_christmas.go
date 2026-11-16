@@ -24,8 +24,10 @@ What the server did is not in the data, so these are the owner's rules
     per kill, outside the shard's drop rates.
   - So-Ok trades one box for one gift rolled on the table below
     (SRO_CHRISTMAS_SOOK_GIFTS overrides the weights).
-  - It snows for the first quarter of every UTC hour; the decoration
-    and the town carols stand the whole window.
+  - It snows on the winter event's timetable (christmas_snow.go: one
+    hour every two, on the even UTC hours, none at 04:00), so every
+    Christmas event snows alike; the decoration and the town carols
+    stand the whole window.
 
 ===========================================================================
 */
@@ -63,10 +65,6 @@ const (
 
 	// soOkChristmasDefaultBoxChance is the owner's 1.5 %.
 	soOkChristmasDefaultBoxChance = 1.5
-
-	// soOkChristmasSnowLasts is one snowfall: the first quarter of every
-	// UTC hour.
-	soOkChristmasSnowLasts = 15 * time.Minute
 )
 
 // soOkChristmasGifts is the owner's table (2026-11-16), weights in
@@ -228,14 +226,12 @@ func SoOkChristmasDefaultGifts() []HalloweenGift { return soOkChristmasGifts }
 ================
 SoOkChristmas.SnowingAt
 
-Inside the window, during the first quarter of every UTC hour.
+Inside the window, on the winter event's snowfall timetable
+(ChristmasEvent.SnowingAt): one weather rule for every Christmas event.
 ================
 */
 func (e SoOkChristmas) SnowingAt(now time.Time) bool {
-	if !e.ActiveAt(now) {
-		return false
-	}
-	return now.UTC().Sub(now.UTC().Truncate(time.Hour)) < soOkChristmasSnowLasts
+	return ChristmasEvent{e.SeasonalEvent}.SnowingAt(now)
 }
 
 /*

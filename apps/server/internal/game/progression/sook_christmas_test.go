@@ -78,31 +78,39 @@ func TestSoOkChristmasWindowEdges(t *testing.T) {
 
 /*
 ================
-TestSoOkChristmasSnowsAQuarterOfEveryHour
+TestSoOkChristmasSnowsOnTheWinterTimetable
 
-Exactly the first fifteen minutes of every UTC hour inside the window:
-the snow falls from :00:00 up to :14:59.999, and is dry from :15 on.
+Every Christmas event snows alike: inside the window So-Ok's snowfalls
+are the winter event's, second for second (one hour on each even UTC
+hour, none at 04:00); before the window, none.
 ================
 */
-func TestSoOkChristmasSnowsAQuarterOfEveryHour(t *testing.T) {
+func TestSoOkChristmasSnowsOnTheWinterTimetable(t *testing.T) {
 	t.Setenv(EnvChristmasEvent, "on")
 	t.Setenv(EnvChristmasEventMode, "so_ok_2006")
 	t.Setenv(EnvChristmasEventWindow, sookTestWindow)
 	e := SoOkChristmasFromEnv()
+	winter := ChristmasEvent{e.SeasonalEvent}
 	snowing := time.Duration(0)
-	for at := time.Date(2026, 12, 27, 0, 0, 0, 0, time.UTC); at.Before(time.Date(2026, 12, 28, 0, 0, 0, 0, time.UTC)); at = at.Add(time.Second) {
+	for at := time.Date(2026, 12, 27, 0, 0, 0, 0, time.UTC); at.Before(time.Date(2026, 12, 28, 0, 0, 0, 0, time.UTC)); at = at.Add(time.Minute) {
+		if e.SnowingAt(at) != winter.SnowingAt(at) {
+			t.Fatalf("at %v the two Christmas events disagree", at)
+		}
 		if e.SnowingAt(at) {
-			snowing += time.Second
+			snowing += time.Minute
 		}
 	}
-	if snowing != 24*15*time.Minute {
-		t.Fatalf("a day snowed %v, want 6h", snowing)
+	if snowing != 11*time.Hour {
+		t.Fatalf("a day snowed %v, want 11h", snowing)
 	}
-	hour := time.Date(2026, 12, 27, 13, 0, 0, 0, time.UTC)
-	if !e.SnowingAt(hour) || !e.SnowingAt(hour.Add(15*time.Minute-time.Millisecond)) || e.SnowingAt(hour.Add(15*time.Minute)) {
+	hour := time.Date(2026, 12, 27, 14, 0, 0, 0, time.UTC)
+	if !e.SnowingAt(hour) || !e.SnowingAt(hour.Add(time.Hour-time.Millisecond)) || e.SnowingAt(hour.Add(time.Hour)) {
 		t.Fatal("the snowfall's edges")
 	}
-	if e.SnowingAt(time.Date(2026, 12, 25, 23, 5, 0, 0, time.UTC)) {
+	if e.SnowingAt(time.Date(2026, 12, 27, 4, 30, 0, 0, time.UTC)) {
+		t.Fatal("snow in the quiet hours")
+	}
+	if e.SnowingAt(time.Date(2026, 12, 25, 22, 5, 0, 0, time.UTC)) {
 		t.Fatal("snow before the window")
 	}
 }

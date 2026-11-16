@@ -12,7 +12,7 @@ Christmas event" on; SRO_CHRISTMAS_EVENT_MODE picks which one:
     existed exactly as it was.
   - "so_ok_2006": So-Ok's Christmas Gift, the December 2006 event
     (sook_christmas.go): jewelry boxes from ordinary monsters, Santa
-    So-Ok's random gifts, a quarter-hour snowfall every hour.
+    So-Ok's random gifts, snowfalls on the winter event's timetable.
 
 Each event reads the one mode and runs only in its own, so the two can
 never run at once. An unknown mode runs neither; the composition root
