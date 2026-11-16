@@ -26,7 +26,8 @@ import path from "node:path";
 import { readFile, readdir, writeFile, mkdir } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseOptions } from "../core/report.mjs";
-import { createCrowd, crowdGridSpot } from "../core/crowd.mjs";
+import { createCrowd, crowdLayout } from "../core/crowd.mjs";
+import { groundClickBody } from "../core/crowd-activity.mjs";
 import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMovementFixture.mjs";
 import { serverGameDataRoot } from "../../../../../scripts/build/world/paths.mjs";
 
@@ -43,9 +44,8 @@ const LOADOUT_STRENGTH = 1500;
 const MAX_LOADOUT_SKILLS = 64;
 // skilldata rows: service, id, group id, codename (tab-separated, UTF-16).
 const SKILL_SERVICE = 0, SKILL_ID = 1, SKILL_GROUP = 2, SKILL_CODENAME = 3;
-// The 0x7738 ground click (moverequest.go DecodeClientMovementRequest):
-// mode 1, region, then the int16 region-local x, height and z.
-const MOVE_OPCODE = 0x7738, MOVE_DESTINATION_MODE = 1;
+// The native 0x7738 ground click (body: crowd-activity.mjs groundClickBody).
+const MOVE_OPCODE = 0x7738;
 // --scenario chase camps on an aggressive nest: MOB_CH_STONEGHOST, level 9,
 // btAggressType 0, sight 115, ten per nest (v1188_population_evidence.tsv,
 // region 24236 / 0x5EAC; npcpos.txt anchor 703.5, 194.6, 437.9). The
@@ -132,23 +132,6 @@ function planLoadouts( groups, count, perPeer ) {
 
 /*
 ================
-moveFrame
-
-A 0x7738 ground click to spot, in the client's integer region-local form.
-================
-*/
-function moveFrame( spot ) {
-	const payload = new Uint8Array( 9 ), view = new DataView( payload.buffer );
-	payload[0] = MOVE_DESTINATION_MODE;
-	view.setUint16( 1, spot.regionId, true );
-	view.setInt16( 3, Math.round( spot.x ), true );
-	view.setInt16( 5, Math.round( spot.y ), true );
-	view.setInt16( 7, Math.round( spot.z ), true );
-	return payload;
-}
-
-/*
-================
 startWandering
 
 Every moveMs, each peer clicks a random point within CHASE_WANDER of its
@@ -156,13 +139,14 @@ grid spot. Returns the stop function.
 ================
 */
 function startWandering( crowd, fixture, count, moveMs ) {
+	const spots = crowdLayout( fixture, count );
 	const timer = setInterval( () => {
 		for ( let index = 0; index < count; index++ ) {
-			const spot = crowdGridSpot( fixture, index );
+			const spot = spots[index];
 			crowd.send(
 				index,
 				MOVE_OPCODE,
-				moveFrame( {
+				groundClickBody( {
 					...spot,
 					x: spot.x + (Math.random() * 2 - 1) * CHASE_WANDER,
 					z: spot.z + (Math.random() * 2 - 1) * CHASE_WANDER

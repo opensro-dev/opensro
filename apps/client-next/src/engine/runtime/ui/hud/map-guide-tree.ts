@@ -43,6 +43,27 @@ const SCROLL_THUMB = INTERFACE + "ifcommon/com_scroll_button";
 // A button's faces: normal, hover, pressed.
 const FACES = [ ".png", "_focus.png", "_press.png" ] as const;
 
+/*
+================
+GUIDE_TREE_ART
+
+Every image the tree paints, in every face: the group and contents bars,
+the toggle's two states, the lamp, the scrollbar's track and the three
+buttons' normal, hover and pressed faces. The shut M window demands it
+(world-map.ts) so a guide drawer opens on the frame its tab or row is
+pressed.
+================
+*/
+export const GUIDE_TREE_ART: readonly string[] = [
+	GROUP_BAR,
+	LEAF_BAR,
+	TOGGLE_CLOSED,
+	TOGGLE_OPEN,
+	LAMP,
+	SCROLL_LINE,
+	...[ SCROLL_UP, SCROLL_DOWN, SCROLL_THUMB ].flatMap( art => FACES.map( face => art + face ) )
+];
+
 const ROW_LEFT = 14, ROW_TOP = 37, ROW_PITCH = 30;
 const ROW_WIDTH = 248, ROW_HEIGHT = 28;
 export const GUIDE_TREE_ROWS = 8;

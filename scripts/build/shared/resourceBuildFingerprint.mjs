@@ -9,7 +9,8 @@ writes, so a no-op rebuild can be skipped outright instead of re-verifying
 
 The fingerprint is (path, size, mtimeMs) over:
 - <game root>/extracted            every Media_extracted input the build parses
-- <rebuild>/.generated/intermediate converted images + manifests feeding the copy steps
+- <rebuild>/.generated/intermediate's image conversion (images/ and its
+  manifest, discovery and failure files) feeding the copy steps
 - <rebuild>/scripts/build (+entry) the pipeline code itself, plus every file
   outside it the entries can run (codeStamp.mjs codeClosure: the converter,
   sro_paths.py, scripts/lib), which a change there once skipped past
@@ -25,6 +26,14 @@ miss identifies the mutated ownership boundary instead of leaving one opaque
 silent stale skips are not - short of an actor rewriting bytes while faking
 the old mtime, which no build tool here does.
 
+A root marked source (the checkout's own files: scripts, server sources,
+survival art) is hashed by content, (path, size, sha256), not by mtime:
+a checkout's mtimes say when it was checked out, so every fresh release
+worktree moved them and reran every memoized lane on content that had not
+changed (release 67b727e6c: all seven, "data survival-art changed"). The
+hashes come from a file hash cache of their own, so a stat sweep vouches
+for an unchanged file.
+
 ===========================================================================
 */
 import { createHash } from "node:crypto";
@@ -32,6 +41,7 @@ import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { buildStatePath } from "../../lib/generatedRoot.mjs";
 import { codeClosure } from "./codeStamp.mjs";
+import { openFileHashCache } from "./fileHashCache.mjs";
 import { janganTombTeleportEnabled } from "./janganTombTeleport.mjs";
 import { muhanEnabled } from "./muhan.mjs";
 import { qinshiTombEnabled } from "./qinshiTomb.mjs";
@@ -47,12 +57,28 @@ const serverSourceRoot = path.resolve(
 // shared tree finds the last build's fingerprint (generatedRoot.mjs).
 const statePath = buildStatePath( "resource-build-fingerprint.json" );
 
+// v11: source roots hash by content; rebuild-assets is the image conversion only.
 // v10: the effective tomb posture joined the knobs (#2024 follow-up).
 // v9: the pet design joined; it moved from scripts/build into the server (#1631).
 // v8: the Qin-Shi tomb overlay knob and the enterworld roots joined.
 // v7: the code closure and the pack-layout baseline joined the roots.
-const FINGERPRINT_VERSION = 10;
+const FINGERPRINT_VERSION = 11;
 const DIRECTORY_CONCURRENCY = 32;
+// The content hashes of the source roots: their own cache, so the lanes
+// keying themselves at once never race the pack builder's.
+const SOURCE_HASH_CACHE_PATH = buildStatePath( "source-hash-cache.json" );
+// What the lanes read from .generated/intermediate: the image conversion
+// (convert_images.py's OUTPUT_ROOT, MANIFEST_PATH, DISCOVERY_CACHE_PATH and
+// failure list). The texture-variant, block-texture and terrain-tile
+// caches there belong to steps no lane memo covers, and each keys itself
+// by its own digests; counting them made a build that refilled one miss
+// every lane on the next.
+const IMAGE_CONVERSION_PARTS = [
+	"images",
+	"image-manifest.csv",
+	"image-discovery.json",
+	"image-conversion-failures.txt"
+];
 
 /** Env vars that alter the build's outputs; a change must invalidate the skip. */
 export const ENV_KNOBS = [
@@ -109,41 +135,62 @@ const CODE_ENTRIES = [
 ];
 
 const FINGERPRINT_ROOTS = [
-	{ label: "survival-art", absolutePath: path.join( rebuildRoot, "docs", "features", "assets", "survival" ) },
+	{
+		label: "survival-art",
+		absolutePath: path.join( rebuildRoot, "docs", "features", "assets", "survival" ),
+		source: true
+	},
 	{ label: "extracted", absolutePath: extractedRoot },
 	{ label: "client-executable", absolutePath: path.join( gameRoot, "SRO_Client.exe" ) },
 	// The effects builder checks the archive itself against its evidence.
 	{ label: "particle-archive", absolutePath: path.join( gameRoot, "Particles.pk2" ) },
-	{ label: "server-go-mod", absolutePath: path.join( serverSourceRoot, "go.mod" ) },
-	{ label: "server-go-sum", absolutePath: path.join( serverSourceRoot, "go.sum" ) },
+	{ label: "server-go-mod", absolutePath: path.join( serverSourceRoot, "go.mod" ), source: true },
+	{ label: "server-go-sum", absolutePath: path.join( serverSourceRoot, "go.sum" ), source: true },
 	{
 		label: "server-roster-exporter",
-		absolutePath: path.join( serverSourceRoot, "cmd", "tools", "sro-evidence" )
+		absolutePath: path.join( serverSourceRoot, "cmd", "tools", "sro-evidence" ),
+		source: true
 	},
 	{
 		label: "server-roster-policy",
-		absolutePath: path.join( serverSourceRoot, "internal", "game", "world" )
+		absolutePath: path.join( serverSourceRoot, "internal", "game", "world" ),
+		source: true
 	},
 	{
 		// The skill overlay TSV the skill bake reads with SRO_QINSHI_TOMB on.
 		label: "server-enterworld",
-		absolutePath: path.join( serverSourceRoot, "internal", "game", "enterworld" )
+		absolutePath: path.join( serverSourceRoot, "internal", "game", "enterworld" ),
+		source: true
 	},
 	{
 		// The teleportlink overlay TSV the teleport bake reads with SRO_QINSHI_TOMB on.
 		label: "server-action-data",
-		absolutePath: path.join( serverSourceRoot, "internal", "game", "action", "data" )
+		absolutePath: path.join( serverSourceRoot, "internal", "game", "action", "data" ),
+		source: true
 	},
 	{
 		// The pet design the pet gear rows read (portItemRows.mjs).
 		label: "server-pet-design",
-		absolutePath: path.join( serverSourceRoot, "internal", "game", "companion", "petdesign.json" )
+		absolutePath: path.join( serverSourceRoot, "internal", "game", "companion", "petdesign.json" ),
+		source: true
 	},
-	{ label: "rebuild-assets", absolutePath: path.join( generatedRoot, "intermediate" ) },
-	{ label: "build-scripts", absolutePath: path.join( rebuildRoot, "scripts", "build" ) },
-	{ label: "build-entry", absolutePath: path.join( rebuildRoot, "scripts", "build_sro_resources.mjs" ) },
-	{ label: "outdoor-entry", absolutePath: path.join( rebuildRoot, "scripts", "build_outdoor_world_resources.mjs" ) },
-	{ label: "lock-helper", absolutePath: path.join( rebuildRoot, "scripts", "rebuildLock.mjs" ) },
+	{
+		label: "rebuild-assets",
+		absolutePath: path.join( generatedRoot, "intermediate" ),
+		parts: IMAGE_CONVERSION_PARTS
+	},
+	{ label: "build-scripts", absolutePath: path.join( rebuildRoot, "scripts", "build" ), source: true },
+	{
+		label: "build-entry",
+		absolutePath: path.join( rebuildRoot, "scripts", "build_sro_resources.mjs" ),
+		source: true
+	},
+	{
+		label: "outdoor-entry",
+		absolutePath: path.join( rebuildRoot, "scripts", "build_outdoor_world_resources.mjs" ),
+		source: true
+	},
+	{ label: "lock-helper", absolutePath: path.join( rebuildRoot, "scripts", "rebuildLock.mjs" ), source: true },
 	{ label: "public", absolutePath: publicRoot }
 ];
 
@@ -162,17 +209,21 @@ const DATA_ROOT_LABELS = new Set( [
 ================
 hashRoots
 
-The stat hash (path, size, mtime) over the given roots, absent ones included.
+The hash over the given roots, absent ones included: (path, size, mtime)
+per file, or (path, size, sha256) for a source root. hashes is the
+source hash cache (tests pass their own); by default the build state's.
 ================
 */
-export async function hashRoots( roots ) {
+export async function hashRoots( roots, hashes = undefined ) {
 	const hash = createHash( "sha256" );
+	hashes ??= await sourceHashes();
 	for ( const root of roots ) {
 		const rootLines = [];
-		await collectRoot( root, rootLines );
+		await collectRoot( root, rootLines, hashes );
 		rootLines.sort();
 		hash.update( `${root.label}\n${hashFingerprintLines( rootLines )}\n` );
 	}
+	await hashes.save();
 	return hash.digest( "hex" );
 }
 
@@ -202,10 +253,10 @@ whole internal tree, since the roster joins enterworld, monster and more.
 */
 export function serverRosterRoots() {
 	return [
-		{ label: "server-go-mod", absolutePath: path.join( serverSourceRoot, "go.mod" ) },
-		{ label: "server-go-sum", absolutePath: path.join( serverSourceRoot, "go.sum" ) },
-		{ label: "server-cmd", absolutePath: path.join( serverSourceRoot, "cmd" ) },
-		{ label: "server-internal", absolutePath: path.join( serverSourceRoot, "internal" ) }
+		{ label: "server-go-mod", absolutePath: path.join( serverSourceRoot, "go.mod" ), source: true },
+		{ label: "server-go-sum", absolutePath: path.join( serverSourceRoot, "go.sum" ), source: true },
+		{ label: "server-cmd", absolutePath: path.join( serverSourceRoot, "cmd" ), source: true },
+		{ label: "server-internal", absolutePath: path.join( serverSourceRoot, "internal" ), source: true }
 	];
 }
 
@@ -218,10 +269,11 @@ export async function computeResourceBuildFingerprint() {
 	const startedAt = performance.now();
 	const lines = [];
 	const roots = [];
+	const hashes = await sourceHashes();
 
 	for ( const root of [ ...FINGERPRINT_ROOTS, ...(await dynamicRoots()) ] ) {
 		const rootLines = [];
-		await collectRoot( root, rootLines );
+		await collectRoot( root, rootLines, hashes );
 		rootLines.sort();
 		lines.push( ...rootLines );
 		roots.push( {
@@ -231,6 +283,7 @@ export async function computeResourceBuildFingerprint() {
 		} );
 	}
 
+	await hashes.save();
 	lines.sort();
 
 	const hash = createHash( "sha256" );
@@ -266,7 +319,8 @@ async function dynamicRoots() {
 	}
 	const roots = [ ...files ].sort().map( ( absolutePath ) => ({
 		label: `code:${path.relative( rebuildRoot, absolutePath ).split( path.sep ).join( "/" )}`,
-		absolutePath
+		absolutePath,
+		source: true
 	}) );
 	const baseline = process.env.SRO_ASSET_PACK_BASELINE?.trim();
 	if ( baseline ) roots.push( { label: "pack-baseline", absolutePath: path.resolve( baseline ) } );
@@ -327,10 +381,48 @@ function hashFingerprintLines( lines ) {
 
 /*
 ================
-collectRoot
+sourceHashes
+
+The source roots' hash cache, opened once per process and shared by every
+caller (the lanes key themselves concurrently; each save writes the whole
+in-memory set atomically).
 ================
 */
-async function collectRoot( root, lines ) {
+let sourceHashCache;
+function sourceHashes() {
+	sourceHashCache ??= openFileHashCache( SOURCE_HASH_CACHE_PATH );
+	return sourceHashCache;
+}
+
+/*
+================
+fileLine
+
+One file's line: its size and mtime, or its size and content hash for a
+source root.
+================
+*/
+async function fileLine( name, filePath, fileStat, source, hashes ) {
+	const stamp = source ? await hashes.hashFile( filePath, fileStat ) : fileStat.mtimeMs;
+	return `${name}|${fileStat.size}|${stamp}`;
+}
+
+/*
+================
+collectRoot
+
+A root's lines; a root with parts collects only those entries below it,
+each named under the root's label.
+================
+*/
+async function collectRoot( root, lines, hashes ) {
+	if ( root.parts ) {
+		for ( const part of root.parts ) {
+			const entry = { label: `${root.label}/${part}`, absolutePath: path.join( root.absolutePath, part ) };
+			await collectRoot( { ...entry, source: root.source }, lines, hashes );
+		}
+		return;
+	}
 	let rootStat;
 	try {
 		rootStat = await stat( root.absolutePath );
@@ -342,11 +434,11 @@ async function collectRoot( root, lines ) {
 	}
 
 	if ( rootStat.isFile() ) {
-		lines.push( `${root.label}|${rootStat.size}|${rootStat.mtimeMs}` );
+		lines.push( await fileLine( root.label, root.absolutePath, rootStat, root.source, hashes ) );
 		return;
 	}
 
-	await walkDirectory( root.label, root.absolutePath, root.absolutePath, lines );
+	await walkDirectory( root, lines, hashes );
 }
 
 /*
@@ -358,8 +450,9 @@ time and every file is stat()ed. On Windows each stat is a slow syscall, so the
 fan-out is what keeps ~120k files in the low seconds instead of half a minute.
 ================
 */
-async function walkDirectory( label, rootPath, startPath, lines ) {
-	const pending = [ startPath ];
+async function walkDirectory( root, lines, hashes ) {
+	const rootPath = root.absolutePath;
+	const pending = [ rootPath ];
 
 	while ( pending.length > 0 ) {
 		const batch = pending.splice( 0, DIRECTORY_CONCURRENCY );
@@ -384,7 +477,13 @@ async function walkDirectory( label, rootPath, startPath, lines ) {
 						try {
 							const fileStat = await stat( filePath );
 							const relativePath = path.relative( rootPath, filePath ).split( path.sep ).join( "/" );
-							return `${label}/${relativePath}|${fileStat.size}|${fileStat.mtimeMs}`;
+							return await fileLine(
+								`${root.label}/${relativePath}`,
+								filePath,
+								fileStat,
+								root.source,
+								hashes
+							);
 						} catch {
 							return null;
 						}

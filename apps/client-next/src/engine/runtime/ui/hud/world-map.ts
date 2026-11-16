@@ -56,6 +56,8 @@ import { reverseMapButtons } from "./reverse-map-buttons";
 import { cavePageHits, cavePageImages, mapSignName } from "./map-cave-page";
 import {
 	GUIDE_MONSTER,
+	GUIDE_TREE_ART,
+	MAP_CHROME_ART,
 	MAP_WINDOW_EXTENT,
 	MAP_WINDOW_HEIGHT,
 	MAP_WINDOW_WIDTH,
@@ -862,6 +864,12 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				if ( nestSigns ) paths.push( UNIQUE_NEST_SIGN );
 				paths.push( MAP_LOCAL_MARKER );
 			}
+			// Admission holds a window until its art is resident (admission.ts;
+			// native never waits, 53FF00/5405DF), and trim() releases what no
+			// frame demands. So all of the window's art, in every state, is
+			// demanded in the world, shut or open; demand is a set, so repeats
+			// are free. Chrome only: tiles stay out of the warm set (window-warm.ts).
+			if ( pose ) paths.push( ...MAP_CHROME_ART, ...GUIDE_TREE_ART );
 			if ( panel === "Map" && hudData ) {
 				// Map tiles and icons stream in as a pan reveals them (demanded above, and
 				// absent textures simply do not draw). Gating admission on them disabled

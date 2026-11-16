@@ -20,6 +20,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/platform/jobhonor"
 	"opensro.online/server/internal/platform/sealboard"
 	"opensro.online/server/internal/transport"
 )
@@ -384,25 +385,45 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 			FoundedAtMs: 1760000000000},
 			{ID: 2, Name: "Tea", Level: 1, Members: []GuildEntryMember{{CharID: 2}}, Union: []int64{1}}}
 	}
+	// A job honor standing for a visible character, so the board's rows meet the schema.
+	s.src.JobHonorCurrent = func() ([]jobhonor.Standing, error) {
+		return []jobhonor.Standing{{CharacterID: 1, Job: jobhonor.JobTrader, Points: 10, Rank: 1, Tier: jobhonor.TierKing}}, nil
+	}
+	s.src.JobHonorPrevious = func() ([]jobhonor.Standing, time.Time, error) { return nil, time.Time{}, nil }
+	// The Contributor title's read answers for a contributor, so its schema meets a real answer.
+	group := &titleGroup{accounts: []string{"alpha", "beta"}, holder: "alpha"}
+	s.src.ContributorTitleOf = group.title
+	s.src.TakeContributorTitle = group.take
+	// One trade with a network sale's commission and a further page, so the
+	// trades schema meets a filled list, a cursor and the item lists.
+	s.src.Trades = func(string, string, *domain.TradeCursor, int) (domain.TradePage, error) {
+		row := domain.TradeRecord{AtMs: 5000, CharName: "Kekw", Kind: domain.TradeKindStallNetworkSell, OtherName: "Other",
+			GoldReceived: 990, Commission: 10, ItemsGiven: []domain.TradeItem{{RefObjID: 3630, Quantity: 5}}}
+		return domain.TradePage{Entries: []domain.TradeEntry{{Seq: 9, Record: row}}, More: true}, nil
+	}
 	var doc map[string]any
 	get(t, s, "/public/v1/schema", &doc)
 	endpoints, _ := doc["endpoints"].(map[string]any)
 	samples := map[string]string{
-		"/public/v1/uniques":              "/public/v1/uniques",
-		"/public/v1/uniques/kills":        "/public/v1/uniques/kills",
-		"/public/v1/leaderboards/uniques": "/public/v1/leaderboards/uniques",
-		"/public/v1/leaderboards/seals":   "/public/v1/leaderboards/seals",
-		"/public/v1/firsts":               "/public/v1/firsts",
-		"/public/v1/characters":           "/public/v1/characters?q=k",
-		"/public/v1/characters/{name}":    "/public/v1/characters/Kekw",
-		"/public/v1/rules":                "/public/v1/rules",
-		"/v1/accounts/{id}/characters":    "/v1/accounts/alpha/characters",
-		"/public/v1/status":               "/public/v1/status",
-		"/public/v1/schedule":             "/public/v1/schedule",
-		"/public/v1/rankings":             "/public/v1/rankings?by=gear",
-		"/public/v1/chat":                 "/public/v1/chat",
-		"/public/v1/events":               "/public/v1/events",
-		"/public/v1/guilds":               "/public/v1/guilds?q=s",
+		"/public/v1/uniques":                  "/public/v1/uniques",
+		"/public/v1/uniques/kills":            "/public/v1/uniques/kills",
+		"/public/v1/leaderboards/uniques":     "/public/v1/leaderboards/uniques",
+		"/public/v1/leaderboards/seals":       "/public/v1/leaderboards/seals",
+		"/public/v1/leaderboards/job-honor":   "/public/v1/leaderboards/job-honor",
+		"/public/v1/firsts":                   "/public/v1/firsts",
+		"/public/v1/characters":               "/public/v1/characters?q=k",
+		"/public/v1/characters/{name}":        "/public/v1/characters/Kekw",
+		"/public/v1/rules":                    "/public/v1/rules",
+		"/v1/accounts/{id}/characters":        "/v1/accounts/alpha/characters",
+		"/v1/accounts/{id}/contributor-title": "/v1/accounts/alpha/contributor-title",
+		"/v1/accounts/{id}/trades":            "/v1/accounts/alpha/trades",
+		"/public/v1/status":                   "/public/v1/status",
+		"/public/v1/schedule":                 "/public/v1/schedule",
+		"/public/v1/fortresses":               "/public/v1/fortresses",
+		"/public/v1/rankings":                 "/public/v1/rankings?by=gear",
+		"/public/v1/chat":                     "/public/v1/chat",
+		"/public/v1/events":                   "/public/v1/events",
+		"/public/v1/guilds":                   "/public/v1/guilds?q=s",
 	}
 	if len(endpoints) != len(samples) {
 		t.Fatalf("schema lists %d endpoints, want %d", len(endpoints), len(samples))

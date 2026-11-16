@@ -179,8 +179,8 @@ func (rt *Runtime) planPlayerCOSHitAt(st offensiveStage, target combatTarget, ca
 		return cosHit{}, false
 	}
 	hit := cosHit{owner: owner, pet: pet, ref: ref, pose: target.at, block: block, displaceAt: -1,
-		winnerName: snapshot.Name,
-		context:    abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}}
+		winnerName: snapshot.Name, winnerAccount: snapshot.AccountID,
+		context: abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}}
 	_, hit.winnerCape = rt.playerRelationEquipment(snapshot)
 	remainingHP := pet.CurrentHP
 	actor := criticalActor{division: division, character: snapshot.Name}
