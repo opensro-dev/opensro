@@ -5,7 +5,8 @@ namedPathsLedger.test.mjs - the named-paths ledger reads only new bytes
 
 The ledger answers what a JSON file names from its content hash. These
 tests pin that a remembered file is answered without reading it, that a
-rewritten file is read again, that the answer survives a save, and that a
+rewritten file is read again, that the answer survives a save, that a
+save keeps entries it was not asked about until they age out, and that a
 ledger written under another path pattern is ignored.
 
 ===========================================================================
@@ -77,8 +78,26 @@ test("a ledger written under another path pattern is ignored", async ( t ) => {
 	const [digest] = Object.keys( saved.named );
 	await writeFile(
 		options.statePath,
-		JSON.stringify( { ...saved, pattern: "other", named: { [digest]: [ "/assets/stale" ] } } )
+		JSON.stringify( { ...saved, pattern: "other", named: { [digest]: { paths: [ "/assets/stale" ], unseen: 0 } } } )
 	);
 	const second = await openNamedPathsLedger( options );
 	assert.deepEqual( await second.namedPaths( file ), [ "/assets/a.png", "/assets/b.glb" ] );
+});
+
+test("a save keeps entries this process did not ask about, until they age out", async ( t ) => {
+	const { root, file, options } = await withLedgerFiles( t );
+	const first = await openNamedPathsLedger( options );
+	await first.namedPaths( file );
+	await first.save();
+	const other = path.join( root, "other.json" );
+	await writeFile( other, '{"a":"/assets/o.png"}' );
+	const ages = [];
+	for ( let save = 0; save < 10; save++ ) {
+		const ledger = await openNamedPathsLedger( options );
+		await ledger.namedPaths( other );
+		await ledger.save();
+		ages.push( Object.keys( JSON.parse( await readFile( options.statePath, "utf8" ) ).named ).length );
+	}
+	// index.json's entry survives eight saves that never asked for it, then goes.
+	assert.deepEqual( ages, [ 2, 2, 2, 2, 2, 2, 2, 2, 1, 1 ] );
 });

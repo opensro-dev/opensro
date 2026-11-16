@@ -12,10 +12,14 @@ What a file names belongs to its bytes, so it is kept by content hash, as
 worldSkyFiles.mjs keeps its sky verdicts: a hash cache of its own answers
 a file's sha256 from its size and mtime, and the ledger maps a sha256 to
 the paths those bytes name. A file is read only when its hash or its
-entry is unknown. The ledger is void when the path pattern changes, and is
-rewritten with the files this process asked about, so it holds the tree it
-last saw. Both are opened once per process and saved when the event loop
-drains; a process that exits early only loses that run's entries.
+entry is unknown. The ledger is void when the path pattern changes. A
+save keeps every entry, aging the ones this process did not ask about,
+and drops an entry unseen for MAX_UNSEEN_SAVES saves: a test that walks
+three files through the default state must not shrink the build's ledger
+to three entries (the fileHashCache.mjs save note), yet content that is
+gone must not pile up. Both files are opened once per process and saved
+when the event loop drains; a process that exits early only loses that
+run's entries.
 
 A content change that keeps a file's size and mtime is invisible here, as
 it is to every fileHashCache user. SRO_BUILD_HASH_CACHE=0 reads every
@@ -31,6 +35,8 @@ import { writeStateJson } from "./stateFile.mjs";
 
 const LEDGER_FORMAT = "sro-named-paths-ledger";
 const LEDGER_VERSION = 1;
+// Saves an entry may go unasked before it is dropped: a few full builds.
+const MAX_UNSEEN_SAVES = 8;
 
 // A JSON string value that is a public path; paths never contain a quote or backslash.
 const REFERENCED_PUBLIC_PATH = /"(\/assets\/[^"\\]+)"/g;
@@ -63,6 +69,7 @@ export async function openNamedPathsLedger( options = {} ) {
 	const hashCache = await openFileHashCache(
 		options.hashCachePath ?? buildStatePath( "named-paths-hash-cache.json" )
 	);
+	// sha256 -> { paths, unseen }: unseen counts saves since a process asked.
 	const known = Object.create( null );
 	const parsed = fileHashCacheDisabled() ? undefined : await readJsonOrUndefined( statePath );
 	if (
@@ -71,7 +78,7 @@ export async function openNamedPathsLedger( options = {} ) {
 	) {
 		Object.assign( known, parsed.named );
 	}
-	const seen = Object.create( null );
+	const seen = new Set();
 	return {
 		/*
 		The paths absolutePath names, or undefined when it does not exist.
@@ -86,24 +93,29 @@ export async function openNamedPathsLedger( options = {} ) {
 			}
 			const digest = hashCache.peekFileHash( absolutePath, fileStat );
 			if ( digest && known[digest] ) {
-				seen[digest] = known[digest];
-				return known[digest];
+				seen.add( digest );
+				return known[digest].paths;
 			}
 			const bytes = await readFile( absolutePath );
-			const named = namedPublicPaths( bytes.toString( "utf8" ) );
+			const paths = namedPublicPaths( bytes.toString( "utf8" ) );
 			const sha256 = hashCache.noteFileBytes( absolutePath, fileStat, bytes );
-			known[sha256] = named;
-			seen[sha256] = named;
-			return named;
+			known[sha256] = { paths, unseen: 0 };
+			seen.add( sha256 );
+			return paths;
 		},
 		async save() {
 			await hashCache.save();
 			if ( fileHashCacheDisabled() ) return;
+			const named = Object.create( null );
+			for ( const [digest, entry] of Object.entries( known ) ) {
+				const unseen = seen.has( digest ) ? 0 : entry.unseen + 1;
+				if ( unseen <= MAX_UNSEEN_SAVES ) named[digest] = { paths: entry.paths, unseen };
+			}
 			await writeStateJson( statePath, {
 				format: LEDGER_FORMAT,
 				version: LEDGER_VERSION,
 				pattern: REFERENCED_PUBLIC_PATH.source,
-				named: seen
+				named
 			} );
 		}
 	};
