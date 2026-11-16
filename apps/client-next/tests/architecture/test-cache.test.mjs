@@ -90,6 +90,20 @@ async function runSuite( suite, environment = {} ) {
 	};
 }
 
+/*
+================
+recordsFileOf
+
+The fixture cache's one records file (one per cache key).
+================
+*/
+function recordsFileOf( suite ) {
+	const dir = path.join( suite, ".cache" );
+	const names = fs.readdirSync( dir ).filter( name => /^index-[0-9a-f]{16}\.json$/.test( name ) );
+	assert.equal( names.length, 1, `one records file in ${dir}: ${names}` );
+	return path.join( dir, names[0] );
+}
+
 describe( "the test runner", { concurrency: true }, () => {
 	test("a pass is reused until an input it read changes; a failure is never reused", async () => {
 		const suite = path.join( root, "temp", `test-cache-fixture-${process.pid}` );
@@ -157,7 +171,7 @@ describe( "the test runner", { concurrency: true }, () => {
 					'import { value } from "./value.mjs";\ntest( "reads", () => assert.equal( value, 1 ) );\n'
 			);
 			assert.deepEqual( await runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 } );
-			const indexPath = path.join( suite, ".cache", "index.json" );
+			const indexPath = recordsFileOf( suite );
 			const index = JSON.parse( fs.readFileSync( indexPath, "utf8" ) );
 			const ids = Object.values( index.records ).flatMap( record => Object.keys( record.inputs ) );
 			const checkout = path.resolve( root, "../.." ).toLowerCase();
@@ -199,7 +213,7 @@ describe( "the test runner", { concurrency: true }, () => {
 			const inTree = tree => ({ SRO_GENERATED_ROOT: tree });
 
 			assert.deepEqual( await runSuite( suite, inTree( first ) ), { status: 0, reused: 0, ran: 1, failed: 0 } );
-			const index = JSON.parse( fs.readFileSync( path.join( suite, ".cache", "index.json" ), "utf8" ) );
+			const index = JSON.parse( fs.readFileSync( recordsFileOf( suite ), "utf8" ) );
 			const ids = Object.values( index.records ).flatMap( record => Object.keys( record.inputs ) );
 			assert.ok( ids.includes( "R\t@generated/data.txt" ), "the tree's file is named relative to the tree" );
 
@@ -219,6 +233,35 @@ describe( "the test runner", { concurrency: true }, () => {
 				await runSuite( suite, inTree( first ) ),
 				{ status: 0, reused: 0, ran: 1, failed: 0 },
 				"and the first tree, now different from the record, reruns too"
+			);
+		} finally {
+			fs.rmSync( suite, { recursive: true, force: true } );
+		}
+	});
+
+	test("a run under another key keeps this key's records", async () => {
+		// B4: the shared records held one key, so a release check (its feature
+		// flags make another key) replaced the hub's records, and the hub's
+		// next run replaced the release's: on 11-17 the hub file held 3.
+		const suite = path.join( root, "temp", `test-cache-keys-${process.pid}` );
+		fs.mkdirSync( suite, { recursive: true } );
+		try {
+			fs.writeFileSync(
+				path.join( suite, "alone.test.mjs" ),
+				'import { test } from "node:test";\ntest( "alone", () => {} );\n'
+			);
+			const release = { SRO_ARABIA: "on" };
+			assert.deepEqual( await runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+			assert.deepEqual( await runSuite( suite, release ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+			assert.deepEqual(
+				await runSuite( suite ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"the hub's key still reuses after a release run"
+			);
+			assert.deepEqual(
+				await runSuite( suite, release ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"and the release's key reuses after a hub run"
 			);
 		} finally {
 			fs.rmSync( suite, { recursive: true, force: true } );

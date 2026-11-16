@@ -45,7 +45,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolveMainCheckout } from "../../../scripts/lib/generatedRoot.mjs";
-import { recordsPath, statsPath as statsFilePath } from "./lib/test-cache-files.mjs";
+import { pruneRecordFiles, recordsPath, statsPath as statsFilePath } from "./lib/test-cache-files.mjs";
 import { LOCATION_VARIABLES, cacheRoots, decodeTarget, encodeTarget } from "./lib/test-cache-ids.mjs";
 import { logPathFor } from "./lib/test-input-recorder.mjs";
 
@@ -56,7 +56,6 @@ const CACHE_FORMAT = 3;
 const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
 const repoRoot = path.resolve( clientRoot, "../.." );
 const SKIP_FLAG = "--skip=";
-const indexPath = recordsPath( repoRoot );
 // The trees input ids are named against (test-cache-ids.mjs cacheRoots).
 const roots = cacheRoots( repoRoot );
 const statsPath = statsFilePath( repoRoot );
@@ -202,7 +201,9 @@ readIndex
 function readIndex( key ) {
 	const index = { key, stats: {}, records: {} };
 	if ( process.env.SRO_CHECK_FORCE === "1" ) return index;
-	index.records = readKeyed( indexPath, key, "records" );
+	// One records file per key (test-cache-files.mjs): a run under another
+	// key never replaces this key's records.
+	index.records = readKeyed( recordsPath( repoRoot, key ), key, "records" );
 	index.stats = readKeyed( statsPath, key, "stats" );
 	return index;
 }
@@ -500,6 +501,7 @@ async function main() {
 	// run read them, so only this run's own files change in the newest copy.
 	// Two runs finishing together can still lose one's records; that costs
 	// a rerun, never a wrong reuse, since every input is hashed on read.
+	const indexPath = recordsPath( repoRoot, index.key );
 	const records = readKeyed( indexPath, index.key, "records" );
 	for ( const [key, record] of changes ) {
 		if ( record ) records[key] = record;
@@ -507,6 +509,7 @@ async function main() {
 	}
 	writeKeyed( indexPath, { key: index.key, records } );
 	writeKeyed( statsPath, { key: index.key, stats: index.stats } );
+	pruneRecordFiles( repoRoot );
 	const seconds = ((performance.now() - started) / 1000).toFixed( 1 );
 	process.stdout.write(
 		`tests: ${files.length} files, ${reused} reused unchanged, ${pending.length} run, ${failed.size} failed in ${seconds}s\n`
