@@ -338,6 +338,9 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	if err := flushTradeHistoryTx(tx, trades); err != nil {
 		return err
 	}
+	if err := pruneTradeHistoryTx(tx, s.now()); err != nil {
+		return err
+	}
 	built := s.mu.now().Sub(begun) - phases[commitPhaseEncode]
 	if s.writer != nil {
 		// Asynchronous (commit_writer.go): the batch is the disk's next

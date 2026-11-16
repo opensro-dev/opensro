@@ -15,6 +15,13 @@ transaction (persistence.go), so a trade and its records are durable together
 or not at all. A failed commit keeps the rows pending, as economy_ledger.go
 keeps its rows, and the next commit that succeeds writes each row exactly once.
 
+Rows older than tradeHistoryRetention are dropped by the same commits that
+write new ones, a bounded batch at a time (pruneTradeHistoryTx), so the
+table cannot grow without end. INFERENCE: the original keeps no record at
+all, so the port chooses the window; half a year covers any dispute a
+player raises with staff. The owner asked for a retention (2026-11-16);
+the window is this constant.
+
 The read side answers from the table, never from the roster. A counterparty's
 current privacy choice is applied by the read side (publicstats): TradeHistory
 reports whether the other character is hidden now, and the name it returns is
@@ -31,6 +38,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"time"
 
 	"opensro.online/server/internal/domain"
 )
@@ -57,7 +65,17 @@ CREATE TABLE IF NOT EXISTS trade_history (
   items_received   TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS trade_history_account_at ON trade_history (account_id, at_ms);
+CREATE INDEX IF NOT EXISTS trade_history_at ON trade_history (at_ms);
 `
+
+const (
+	// tradeHistoryRetention is how long a trade row is kept.
+	tradeHistoryRetention = 180 * 24 * time.Hour
+	// tradeHistoryPruneBatch bounds the rows one commit deletes, so a large
+	// backlog (a retention change, a long-idle shard) drains over several
+	// commits instead of stalling one.
+	tradeHistoryPruneBatch = 500
+)
 
 // maxTradeGold is the largest gold amount a row stores: SQLite's INTEGER is
 // signed 64-bit, and a gold amount above it is refused, not wrapped.
@@ -227,6 +245,24 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			int64(record.GoldPaid), int64(record.GoldReceived), int64(record.Commission), given, received); err != nil {
 			return fmt.Errorf("trade history: %w", err)
 		}
+	}
+	return nil
+}
+
+/*
+================
+pruneTradeHistoryTx
+
+Deletes at most tradeHistoryPruneBatch rows older than the retention
+window, inside the commit's transaction. The at_ms index keeps it a range
+read, so a commit with nothing to drop pays one index probe.
+================
+*/
+func pruneTradeHistoryTx(tx sqlExecer, now time.Time) error {
+	cutoff := now.Add(-tradeHistoryRetention).UnixMilli()
+	if _, err := tx.Exec(`DELETE FROM trade_history WHERE seq IN (SELECT seq FROM trade_history WHERE at_ms < ? ORDER BY at_ms LIMIT ?)`,
+		cutoff, tradeHistoryPruneBatch); err != nil {
+		return fmt.Errorf("trade history prune: %w", err)
 	}
 	return nil
 }

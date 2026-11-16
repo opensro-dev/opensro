@@ -160,6 +160,64 @@ func TestTradeHistoryRidesTheCommit(t *testing.T) {
 
 /*
 ================
+TestTradeHistoryDropsRowsPastRetention
+
+A commit drops rows older than tradeHistoryRetention and keeps younger ones;
+one commit drops at most tradeHistoryPruneBatch, and the rest drain over the
+next commits.
+================
+*/
+func TestTradeHistoryDropsRowsPastRetention(t *testing.T) {
+	t.Parallel()
+
+	clock := newTestClock()
+	s := openTest(t, t.TempDir(), clock)
+	first, second := seededCharacter(), seededCharacter()
+	first.Name, second.Name = "KeepFirst", "KeepSecond"
+	if err := s.CreateCharacter(testDivision, "keep-account-a", first); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateCharacter(testDivision, "keep-account-b", second); err != nil {
+		t.Fatal(err)
+	}
+	records := tradeRecordsBetween(first, second, 100)
+	if _, err := noteTradeInDoor(s, first, second, records, "old-trade"); err != nil {
+		t.Fatal(err)
+	}
+	clock.Advance(tradeHistoryRetention - time.Hour)
+	if _, err := noteTradeInDoor(s, first, second, records, "young-trade"); err != nil {
+		t.Fatal(err)
+	}
+	if got := tradeRowCount(t, s); got != 4 {
+		t.Fatalf("inside the window the table holds %d rows, want 4", got)
+	}
+
+	clock.Advance(2 * time.Hour)
+	s.UpdateCharacter(first, "after-window", func() bool { return true })
+	if got := tradeRowCount(t, s); got != 2 {
+		t.Fatalf("past the old trade's window the table holds %d rows, want the young trade's 2", got)
+	}
+
+	// A backlog larger than one batch drains over several commits.
+	backlog := tradeHistoryPruneBatch + 10
+	for i := 0; i < backlog; i++ {
+		if _, err := s.syncDBLocked().Exec(`INSERT INTO trade_history (at_ms, division, account_id, char_id, char_name, other_account_id, other_char_id, other_name, kind, gold_paid, gold_received, commission, items_given, items_received)
+VALUES (0, ?, 'keep-account-a', 1, 'KeepFirst', 'keep-account-b', 2, 'KeepSecond', 'exchange', 0, 0, 0, '[]', '[]')`, testDivision); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.UpdateCharacter(first, "drain-one", func() bool { return true })
+	if got := tradeRowCount(t, s); got != 2+10 {
+		t.Fatalf("one commit left %d rows, want one batch dropped (12 left)", got)
+	}
+	s.UpdateCharacter(first, "drain-two", func() bool { return true })
+	if got := tradeRowCount(t, s); got != 2 {
+		t.Fatalf("the second commit left %d rows, want the young trade's 2", got)
+	}
+}
+
+/*
+================
 TestNoteTradeRefusesWholeOrNothing
 
 A note the store cannot hold refuses both rows together: an unknown kind, a
