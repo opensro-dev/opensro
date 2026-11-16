@@ -146,6 +146,7 @@ func TestSpiritWearsOnlyInTheFifthSocketWithTheSwitchOn(t *testing.T) {
 		t.Fatalf("switch off: worn: %+v", result)
 	}
 	c, rt = spiritCharacter(t, true)
+	c.MissionInventory[0].Data = spiritAwakeFor(rt, spiritTestDay)
 	// The hat's socket (its TID4) and every v1.150 slot refuse it.
 	for _, slot := range []byte{0, 1, 2, 3, 5} {
 		if result := rt.HandleItemMove(testDivision, c, []byte{0x24, 20, slot}); result.Frames[0].Payload[0] != 2 {
@@ -157,6 +158,53 @@ func TestSpiritWearsOnlyInTheFifthSocketWithTheSwitchOn(t *testing.T) {
 	}
 	if c.AvatarInventory == nil || c.AvatarInventory.Capacity != 5 || len(c.AvatarInventory.Rows) != 1 || c.AvatarInventory.Rows[0].Slot != 4 {
 		t.Fatalf("storage: %+v", c.AvatarInventory)
+	}
+}
+
+// spiritTestDay is a day of awakening, in seconds.
+const spiritTestDay = 86400
+
+/*
+================
+spiritAwakeFor
+
+A Spirit data word whose awakening ends seconds after the runtime's now
+(negative: that long ago).
+================
+*/
+func spiritAwakeFor(rt *Runtime, seconds int64) uint32 {
+	return uint32(rt.Now().Unix() + seconds)
+}
+
+/*
+================
+TestOnlyAnAwakeSpiritIsWorn
+
+Port-only (SRO_NASRUN, #3456 step 2): the v1.188 server wears a Spirit
+only while its awakening runs. A dormant Spirit (never used) and a lapsed
+one refuse with 0xF9; the same Spirit awake goes on.
+================
+*/
+func TestOnlyAnAwakeSpiritIsWorn(t *testing.T) {
+	for name, clock := range map[string]func(*Runtime) uint32{
+		"dormant": func(*Runtime) uint32 { return 0 },
+		"lapsed":  func(rt *Runtime) uint32 { return spiritAwakeFor(rt, -1) },
+	} {
+		c, rt := spiritCharacter(t, true)
+		c.MissionInventory[0].Data = clock(rt)
+		result := rt.HandleItemMove(testDivision, c, []byte{0x24, 20, 4})
+		if !reflect.DeepEqual(result.Frames[0].Payload, []byte{2, wire.ErrCodeSpiritAsleep}) || c.AvatarInventory != nil && len(c.AvatarInventory.Rows) != 0 {
+			t.Fatalf("%s Spirit: worn or refused with the wrong code: %+v / %+v", name, result, c.AvatarInventory)
+		}
+	}
+	c, rt := spiritCharacter(t, true)
+	c.MissionInventory[0].Data = spiritAwakeFor(rt, spiritTestDay)
+	if result := rt.HandleItemMove(testDivision, c, []byte{0x24, 20, 4}); result.Frames[0].Payload[0] != 1 {
+		t.Fatalf("an awake Spirit was refused: %+v", result)
+	}
+	// The clock moves with the Spirit into its socket.
+	if got := c.AvatarInventory.Rows[0].Data; got != spiritAwakeFor(rt, spiritTestDay) {
+		t.Fatalf("worn Spirit's clock = %d, want it carried", got)
 	}
 }
 

@@ -97,16 +97,18 @@ export function createDeferredParticles() {
 			) throw Error( "Invalid deferred particle queue" );
 			queued = ids;
 			eligible = ids.filter( id => enabled.has( id ) );
-			if ( !ids.length ) return false;
+			if ( !ids.length ) return;
 			queryRemainder += delta;
 			due = queryRemainder > 500;
 			if ( due ) queryRemainder %= 500;
-			// One query in flight at a time: the device owner refuses a
-			// second while one is pending, so the slot is spent and the
-			// next slot asks again. The answer lands through deliver(),
-			// between frames; the native fade (AEC0D0) ramps alpha at
-			// 1.5 per ms, so consuming it a frame late changes nothing
-			// visible - and no frame ever waits on the GPU for it (#2573).
+		},
+		// Whether this frame sends the planned query. One query in flight at
+		// a time: the device owner refuses a second while one is pending, so
+		// the slot is spent and the next slot asks again. The answer lands
+		// through deliver(), between frames; the native fade (AEC0D0) ramps
+		// alpha at 1.5 per ms, so consuming it a frame late changes nothing
+		// visible - and no frame ever waits on the GPU for it (#2573).
+		issue() {
 			if ( !due || !eligible.length || issued ) return false;
 			issued = new Map( eligible.map( id => [ id, rows.get( id )! ] ) );
 			return true;

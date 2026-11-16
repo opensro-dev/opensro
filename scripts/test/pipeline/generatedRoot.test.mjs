@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import {
 	GENERATED_ROOT_ENV,
 	MAIN_CHECKOUT_ROOT,
+	resolveBuildStateRoot,
 	resolveGeneratedRoot,
 	resolveMainCheckout,
 	worktreeCopies
@@ -54,6 +55,27 @@ test("a linked worktree resolves both built trees to the main checkout's", () =>
 	}
 });
 
+test("the build caches live beside the generated tree, so a fresh worktree finds them", () => {
+	const scratch = fs.mkdtempSync( path.join( os.tmpdir(), "sro-state-" ) );
+	try {
+		const main = path.join( scratch, "main" ), worktree = path.join( scratch, "wt" );
+		fs.mkdirSync( path.join( main, ".git", "worktrees", "wt" ), { recursive: true } );
+		fs.mkdirSync( worktree );
+		fs.writeFileSync( path.join( worktree, ".git" ), `gitdir: ${path.join( main, ".git", "worktrees", "wt" )}` );
+		const generated = resolveGeneratedRoot( {}, resolveMainCheckout( worktree ) );
+		assert.equal( resolveBuildStateRoot( generated ), path.join( main, ".state" ) );
+		const variant = path.resolve( scratch, "staging", "variant" );
+		assert.equal(
+			resolveBuildStateRoot(
+				resolveGeneratedRoot( { [GENERATED_ROOT_ENV]: path.join( variant, ".generated" ) } )
+			),
+			path.join( variant, ".state" )
+		);
+	} finally {
+		fs.rmSync( scratch, { recursive: true, force: true } );
+	}
+});
+
 test("an absolute override moves the whole tree", () => {
 	const shared = path.resolve( repository, "..", "shared-build", ".generated" );
 	assert.equal( resolveGeneratedRoot( { [GENERATED_ROOT_ENV]: shared } ), shared );
@@ -71,7 +93,9 @@ test("the gate finds every hand-built path to the tree and ignores prose and oth
 		'const publicRoot = path.join( rebuildRoot, ".generated", "client-public" );',
 		'root := filepath.Join("..", "..", ".generated", "client-public")',
 		'OUT_DIR = REPO_ROOT / ".generated" / "client-public" / "assets"',
-		'const catalog = ".generated/observatory/items.json";'
+		'const catalog = ".generated/observatory/items.json";',
+		'const MEMO_ROOT = path.join( rebuildRoot, ".state", "lane-memo" );',
+		'const cachePath = path.join( root, ".state", "file-hash-cache.json" );'
 	];
 	for ( const line of flagged ) {
 		assert.equal( findGeneratedPaths( line ).length, 1, line );

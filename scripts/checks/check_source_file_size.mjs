@@ -35,6 +35,7 @@ The ledger only shrinks:
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { compareText } from "../build/shared/textOrder.mjs";
 
 const MAX_SOURCE_LINES = 1000;
 const LEDGER_HEADER_LINES = 3;
@@ -242,7 +243,7 @@ function main() {
 	}
 
 	oversized.sort( ( left, right ) =>
-		right.lines - left.lines || left.relativePath.localeCompare( right.relativePath )
+		right.lines - left.lines || compareText( left.relativePath, right.relativePath )
 	);
 	if ( oversized.length > 0 ) {
 		for ( const file of oversized ) {

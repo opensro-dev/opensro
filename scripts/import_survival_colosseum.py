@@ -26,6 +26,7 @@ import build_alexandria_variant as variant
 import import_vsro_alexandria as source
 import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
+from sro_paths import trees_overlap
 
 PIN_FILE = Path(__file__).with_name("survival_archive_pins.json")
 MANIFEST = ".opensro-survival-colosseum.json"
@@ -191,7 +192,7 @@ def open_archives(stack, client, pins):
 # ================
 def build_variant(client, native_root, output):
 	client, native_root, output = client.resolve(), native_root.resolve(), output.resolve()
-	if output == native_root or native_root in output.parents or output in native_root.parents or output == client or client in output.parents or output in client.parents:
+	if trees_overlap(output, native_root) or trees_overlap(output, client):
 		raise ValueError("Variant must be separate from the native game and source archives")
 	if output.exists() and any(output.iterdir()) and not (output / MANIFEST).is_file():
 		raise ValueError("Refuse reusing a nonempty folder without a Colosseum import manifest")
