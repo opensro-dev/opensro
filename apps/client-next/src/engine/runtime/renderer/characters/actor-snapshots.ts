@@ -54,7 +54,12 @@ Renderer-owned snapshots. Producers may reuse/mutate their records after admissi
 ================
 */
 export function createActorSnapshots( reuse = true ) {
-	const index = new Map<number, Actor>(), seen = new Set<number>(), rows: Actor[] = [];
+	const index = new Map<number, Actor>(), rows: Actor[] = [];
+	// The gids of the publication being read. A new set for each pass, never
+	// one cleared and refilled: V8 keeps a long-lived set's next table in
+	// the old generation, so every frame's table became garbage only a full
+	// collection frees (the largest single source of it in a crowded town).
+	let seen = new Set<number>();
 	// The source each row was last brought up to, by gid: a frozen one is
 	// what the row still holds (reuse is a test seam: false copies every
 	// actor in full).
@@ -355,6 +360,22 @@ export function createActorSnapshots( reuse = true ) {
 				copyVector( old.offset, source.effectAnchor.offset );
 			} else target.effectAnchor = { ...source.effectAnchor, offset: [ ...source.effectAnchor.offset ] };
 		} else target.effectAnchor = undefined;
+		// A spine aim (spine-aims.ts) arms, turns and releases long after the
+		// row's first publication; poseFor reads only this copy.
+		if ( source.boneRotation ) {
+			const value = source.boneRotation.rotation,
+				old = target.boneRotation as Mutable<NonNullable<CharacterActor["boneRotation"]>> | undefined;
+			if ( old ) {
+				const rotation = old.rotation as [number, number, number, number];
+				old.bone = source.boneRotation.bone;
+				for ( let i = 0; i < 4; i++ ) rotation[i] = value[i]!;
+			} else {
+				target.boneRotation = {
+					bone: source.boneRotation.bone,
+					rotation: [ value[0], value[1], value[2], value[3] ]
+				};
+			}
+		} else target.boneRotation = undefined;
 	}
 	/*
 	================
@@ -388,7 +409,7 @@ export function createActorSnapshots( reuse = true ) {
 		================
 		*/
 		update( value: readonly CharacterActor[] ) {
-			seen.clear();
+			seen = new Set();
 			// Validate the entire publication before changing any admitted snapshot.
 			// Which actors differ from their row's frozen source only in
 			// their clocks: the fields they share were validated with it.
@@ -452,7 +473,7 @@ export function createActorSnapshots( reuse = true ) {
 				seen.add( actor.gid );
 			}
 			const count = Math.min( value.length, CHARACTER_ACTORS );
-			seen.clear();
+			seen = new Set();
 			for ( let i = 0; i < count; i++ ) {
 				const source = value[i]!;
 				let row = index.get( source.gid );
@@ -467,7 +488,8 @@ export function createActorSnapshots( reuse = true ) {
 						pointLight: undefined,
 						bloodEffects: undefined,
 						materialTint: undefined,
-						effectAnchor: undefined
+						effectAnchor: undefined,
+						boneRotation: undefined
 					};
 					// A first clock that is already invalid holds at rest:
 					// copy keeps the row's value, so it must start valid.

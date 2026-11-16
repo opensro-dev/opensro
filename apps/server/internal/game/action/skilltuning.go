@@ -45,7 +45,7 @@ func fixedDamageResult(fixed enterworld.SkillFixedDamage, attacker, defender com
 		power = attacker.SkillParameters[enterworld.ParameterFixedDamagePower]
 	}
 	damage := combat.FixedSkillDamage(fixed.Amount, power, attacker.Level, defender.Level)
-	return combat.Result{Damage: min(damage, wire.MaxSkillActionDamage), ResultFlags: 1}
+	return combat.Result{Damage: combat.OneDamageCap(defender, min(damage, wire.MaxSkillActionDamage)), ResultFlags: 1}
 }
 
 /*

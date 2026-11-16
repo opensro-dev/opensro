@@ -262,6 +262,9 @@ type Runtime struct {
 	Monsters *simulation.MonsterState
 	// Port-only, not native: nil preserves every native admission/reward path.
 	sookArena *sookArenaRuntime
+	// muhanChanges is the Muhan change pairing by change NPC codename
+	// (muhan_change.go). Port-only, not native: empty unless SRO_MUHAN is on.
+	muhanChanges map[string]muhanChange
 
 	// NpcSpawn scopes the 0x745A liveness gate's NPC-gid domain to the
 	// same env gates that put the roster on the wire (select.go); tests
@@ -638,9 +641,22 @@ type Runtime struct {
 	// halloweenWavesAsked is the last instant advanceHalloweenWaves asked
 	// the timetable about; the tick goroutine alone touches it.
 	halloweenWavesAsked time.Time
-	// halloweenLayerKnown and halloweenLayerActive are the window state
-	// advanceHalloweenLayer last saw (halloween_layer.go); tick goroutine only.
-	halloweenLayerKnown, halloweenLayerActive bool
+	// halloweenGroups and christmasGroups are the window states
+	// advanceEventGroups last saw (event_groups.go); tick goroutine only.
+	halloweenGroups, christmasGroups eventGroupWatch
+	// christmasSnow is the snowfall state of the Christmas native group
+	// (event group 1) advanceEventGroups last saw; tick goroutine only.
+	christmasSnow eventGroupWatch
+	// christmasWavesAsked is the last instant advanceChristmasWaves asked
+	// the timetable about; the tick goroutine alone touches it.
+	christmasWavesAsked time.Time
+	// christmasSlaves is the standing Snow Slave crowd's step state
+	// (christmas_snow_slaves.go); tick goroutine only.
+	christmasSlaves christmasSnowSlaves
+	// Christmas is the Christmas event (port-only, not native in this
+	// client build; progression/christmas.go): its event snow and the
+	// towns' decoration. The zero value is off.
+	Christmas progression.ChristmasEvent
 	// HalloweenHelmetSeal seals the event helmets at the transfer doors
 	// (port-only, not native; progression/halloween.go). The zero value
 	// is off: the helmets move like any item.

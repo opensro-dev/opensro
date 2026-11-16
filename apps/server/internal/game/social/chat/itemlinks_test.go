@@ -13,9 +13,11 @@ package chat
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -362,5 +364,65 @@ func TestResolveLinksDropsTheUnreadableLinksOwnMarker(t *testing.T) {
 	text, items := resolve(testLinks(2), "x \uFFFC and \uFFFC", []LinkRef{missing, refBlade})
 	if text != "x  and \uFFFC" || !reflect.DeepEqual(items, []LinkedItem{itemBlade}) {
 		t.Fatalf("ResolveLinks = %q %+v", text, items)
+	}
+}
+
+// manyLinks is a source holding bag slots 0-8, slot i's item labelled by i.
+func manyLinks(limit int, skip uint16) (*ItemLinks, []LinkRef, []LinkedItem) {
+	source := stubLinkSource{}
+	var refs []LinkRef
+	var items []LinkedItem
+	for slot := uint16(0); slot < MaxLinksOnWire+1; slot++ {
+		ref := LinkRef{Source: LinkSourceInventory, Slot: slot}
+		item := LinkedItem{Body: []byte{byte(slot)}, Label: fmt.Sprintf("<%d>", slot)}
+		refs = append(refs, ref)
+		if slot == skip {
+			continue
+		}
+		source[ref] = item
+		items = append(items, item)
+	}
+	return &ItemLinks{Source: source, Limit: limit}, refs, items
+}
+
+/*
+================
+TestResolveLinksKeepsEightInOrder
+
+The production limit (8, chat.MaxLinksOnWire): eight links keep their
+markers and items in order; a ninth marker is dropped with its link.
+================
+*/
+func TestResolveLinksKeepsEightInOrder(t *testing.T) {
+	links, refs, items := manyLinks(MaxLinksOnWire, MaxLinksOnWire+1)
+	message := strings.Repeat("￼ ", MaxLinksOnWire+1)
+	text, got := resolve(links, message, refs)
+	if want := strings.Repeat("￼ ", MaxLinksOnWire) + " "; text != want {
+		t.Fatalf("text = %q, want %q", text, want)
+	}
+	if !reflect.DeepEqual(got, items[:MaxLinksOnWire]) {
+		t.Fatalf("items = %+v, want the first %d in order", got, MaxLinksOnWire)
+	}
+}
+
+/*
+================
+TestResolveLinksAtEightDropsOnlyTheMissingMarker
+
+A missing link in the middle drops only its own marker; the ones after
+it keep their places, and it does not use up a place under the limit.
+================
+*/
+func TestResolveLinksAtEightDropsOnlyTheMissingMarker(t *testing.T) {
+	const missing = 3
+	links, refs, items := manyLinks(MaxLinksOnWire, missing)
+	message := strings.Repeat("￼ ", MaxLinksOnWire+1)
+	text, got := resolve(links, message, refs)
+	want := strings.Repeat("￼ ", missing) + " " + strings.Repeat("￼ ", MaxLinksOnWire-missing)
+	if text != want {
+		t.Fatalf("text = %q, want %q", text, want)
+	}
+	if !reflect.DeepEqual(got, items) {
+		t.Fatalf("items = %+v, want every readable one in order", got)
 	}
 }

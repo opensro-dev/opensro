@@ -15,15 +15,24 @@ and 0x3347 (event-environment.ts).
 Inference, recorded because no v1.696 client executable is available: a
 layer's id is the event group that switches it, so a layer is drawn while
 its group's bit 0 is set, the same bit the id-1 event weather reads.
+Group 1 is the exception: it is the v1.150 client's own event (the
+stolen-socks Christmas event, its notice and snow), so it never names a
+layer. Layer 1, the festival (summer event) decoration, is left unswitched
+rather than shown beside the Christmas towns.
 
 ===========================================================================
 */
+
+// NATIVE_EVENT_GROUP is the v1.150 client's own event group (77B220,
+// event-environment.ts): its weather, never a world layer.
+const NATIVE_EVENT_GROUP = 1;
 
 /*
 ================
 activeWorldLayers
 
-The layers to draw for the event groups: each group whose bit 0 is set.
+The layers to draw for the event groups: each group whose bit 0 is set,
+except the native event group.
 Stateless (a shared module holds no state, verify-ownership): the
 renderer compares the result by value (sameWorldLayers) and keeps its
 resident lists while the set is equal, so a fresh set each frame costs
@@ -33,7 +42,10 @@ one small allocation and changes nothing drawn.
 export function activeWorldLayers( groups: Readonly<Record<number, number>> | undefined ): ReadonlySet<number> {
 	const layers = new Set<number>();
 	if ( !groups ) return layers;
-	for ( const [id, state] of Object.entries( groups ) ) if ( (state & 1) !== 0 ) layers.add( Number( id ) );
+	for ( const [id, state] of Object.entries( groups ) ) {
+		const layer = Number( id );
+		if ( layer !== NATIVE_EVENT_GROUP && (state & 1) !== 0 ) layers.add( layer );
+	}
 	return layers;
 }
 

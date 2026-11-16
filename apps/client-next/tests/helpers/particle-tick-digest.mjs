@@ -364,3 +364,22 @@ export function particleTickDigests() {
 	}
 	return digests;
 }
+
+/*
+================
+digestDifferences
+
+The effects whose digest differs from the fixture's (expected). The
+fixture is the native catalogue's: on a native build every effect of
+either side counts, so an added or lost effect fails as a changed one
+does. An expanded build (expanded-build.mjs) publishes effects the
+native catalogue lacks; there only the recorded effects count, and each
+must still be present with its digest (#3596's rule, as #3618 applies it
+to the census). The 1901fa53c release's build:beta failed on 87 such
+additions while all 1,043 recorded effects matched.
+================
+*/
+export function digestDifferences( expected, actual, expanded ) {
+	const paths = expanded ? Object.keys( expected ) : Object.keys( { ...expected, ...actual } );
+	return paths.filter( path => expected[path] !== actual[path] );
+}

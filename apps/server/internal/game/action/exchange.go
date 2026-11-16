@@ -485,6 +485,9 @@ func (rt *Runtime) commitExchange(division string, c *enterworld.Character) {
 		partner.MissionInventory = rowsFromInvItems(theirs.Items())
 		setGold(c, goldOf(c)-own.Gold+partnerSide.Gold)
 		setGold(partner, goldOf(partner)-partnerSide.Gold+own.Gold)
+		// The committed branch only: the trade's two records join this
+		// door's transaction (tradehistory.go).
+		rt.noteTrades(exchangeTradeRecords(division, c, partner, own, partnerSide))
 		return true
 	})
 	if !committed {

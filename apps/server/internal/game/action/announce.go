@@ -165,6 +165,9 @@ const (
 	// announceHalloweenWave has its own bucket, so a run of drops never
 	// starves a wave's notice (port-only, halloween_waves.go).
 	announceHalloweenWave
+	// announceChristmasWave has its own bucket for the same reason
+	// (port-only, christmas_waves.go).
+	announceChristmasWave
 	announceKinds
 )
 
