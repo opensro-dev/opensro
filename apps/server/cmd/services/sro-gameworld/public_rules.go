@@ -105,6 +105,7 @@ var unlistedSettings = map[string]string{
 	// its ground; nothing links to it and the GameWorld reads no switch
 	// until the Battle Arena engine (#3648) makes it a rule.
 	"SRO_STYRIA_CLASH": "Styria Clash arena map build input; players cannot reach it until #3648",
+	"SRO_CONSIGNMENT":  "the market pages state their own fee, duration and listing cap",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
 	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",

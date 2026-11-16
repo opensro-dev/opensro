@@ -632,6 +632,11 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 		db.Close()
 		return nil, nil, err
 	}
+	// The market tables (port-only, SRO_CONSIGNMENT): additive too.
+	if err := ensureMarket(db); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
 	// The shrink runs here too, once the fold has emptied the old
 	// ledger rows into the file's freelist. It is housekeeping: a
 	// shrink that fails leaves a large, healthy file and must never
