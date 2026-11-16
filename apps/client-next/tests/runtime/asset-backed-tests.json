@@ -162,6 +162,7 @@
 		"ui-control-identities.test.mjs",
 		"ui-crowd-records.test.mjs",
 		"ui-edit-caret.test.mjs",
+		"ui-gallery-surfaces.test.mjs",
 		"ui-glyphs.test.mjs",
 		"ui-native-state.test.mjs",
 		"ui-panel-sweep.test.mjs",
