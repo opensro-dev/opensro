@@ -473,7 +473,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	// deferredActors: visible actors the render budget kept from drawing;
 	// deferredBodies: those of them without emission.
 	let residentBytes = 0, ownedModels = 0, renderBytes = 0, deferredActors = 0, deferredBodies = 0;
-	let retained: Set<string> | null = null, retainedScratch = new Set<string>();
+	let retained: Set<string> | null = null;
 	// Residency depends on model membership, not interpolated poses or clocks.
 	// Snapshot the model ids: actor snapshots are mutated by the next publication.
 	let residencyDirty = true, residencyPasses = 0, hasMaterialClocks = false;
@@ -2555,7 +2555,9 @@ the next full prepare pass, so this may run between frames.
 						{ clothStream: true } :
 						{ joints: undefined, weights: undefined, bones: undefined, dynamicVertices: true } :
 					{}),
-				transform: preview ? view! : identity()
+				transform: preview ? view! : identity(),
+				// updateModifiers rewrites a clocked primitive's material every frame.
+				...(group.plan.dynamicMaterials[p] ? { dynamicMaterial: true } : {})
 			},
 			resource.textures[primitive.image],
 			paletteOffsets,
@@ -3376,12 +3378,12 @@ the next full prepare pass, so this may run between frames.
 		================
 		*/
 		retain( ids: readonly string[] ) {
-			retainedScratch.clear();
-			for ( const id of ids ) retainedScratch.add( id );
-			if ( !retained || retained.size !== retainedScratch.size || ids.some( id => !retained!.has( id ) ) ) {
-				const previous = retained;
-				retained = retainedScratch;
-				retainedScratch = previous ?? new Set();
+			// A new set each call, not a long-lived scratch cleared and refilled
+			// every frame: V8 allocates a long-lived set's next table in the old
+			// generation, where only a full collection frees it.
+			const next = new Set( ids );
+			if ( !retained || retained.size !== next.size || ids.some( id => !retained!.has( id ) ) ) {
+				retained = next;
 				residencyDirty = true;
 			}
 		},
@@ -3875,7 +3877,6 @@ the next full prepare pass, so this may run between frames.
 			portraits = [];
 			retained?.clear();
 			retained = null;
-			retainedScratch.clear();
 			actors = [];
 			requestedAssemblies.clear();
 		}

@@ -326,3 +326,37 @@ func (l *Lane) Windows(nowMs int64) []Window {
 	}
 	return out
 }
+
+/*
+================
+Holding
+
+One fortress as the community site shows it: the authored codename, the
+occupying guild (0 for none) and the signed tax rate in percent.
+================
+*/
+type Holding struct {
+	CodeName string
+	GuildID  int64
+	TaxRate  int16
+}
+
+/*
+================
+Holdings
+
+Every fortress the lane serves, in catalog order, from the fortress
+authority's live table (the one the in-game fortress list reads).
+================
+*/
+func (l *Lane) Holdings() []Holding {
+	if l == nil {
+		return nil
+	}
+	records := l.config.Fortresses.Records(l.config.Division)
+	out := make([]Holding, 0, len(records))
+	for _, record := range records {
+		out = append(out, Holding{CodeName: record.CodeName, GuildID: record.GuildID, TaxRate: record.TaxRate})
+	}
+	return out
+}

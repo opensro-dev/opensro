@@ -2362,7 +2362,9 @@ test("displayed changes redraw without a dependency list and unchanged output st
 		for ( let i = 1; i <= 5; i++ ) f.ui.step( f.state, i * 20 );
 		assert.ok( f.hasText( "Lv 1" ) );
 		const mounted = { ...f.state, gameplay: { ...f.state.gameplay, progression: { level: 2, masteries: [] } } };
-		assert.ok( f.ui.step( mounted, 200 ) );
+		let published = f.scenes.length;
+		f.ui.step( mounted, 200 );
+		assert.ok( f.scenes.length > published );
 		assert.ok( f.hasText( "Lv 2" ) );
 		const selected = {
 			...mounted,
@@ -2374,7 +2376,9 @@ test("displayed changes redraw without a dependency list and unchanged output st
 			...selected,
 			entities: [ selected.entities[0], { ...selected.entities[1], name: "Renamed NPC" } ]
 		};
-		assert.ok( f.ui.step( renamed, 400 ) );
+		published = f.scenes.length;
+		f.ui.step( renamed, 400 );
+		assert.ok( f.scenes.length > published );
 		assert.ok( f.hasText( "Renamed NPC" ) );
 		const count = f.scenes.length, uploads = f.textures.length;
 		for ( let now = 500; now < 5000; now += 100 ) assert.equal( f.ui.step( renamed, now ), null );
@@ -3666,8 +3670,8 @@ test("Apply commits every tab, as OK does, and keeps the Options window open", (
 		assert.equal( saved[0].records[0][9], 0 );
 		// The input tab is committed with the rest.
 		assert.equal( bindings.length, 1 );
-		const result = f.ui.step( f.state, 1700 );
-		assert.ok( result.controls.some( c => c.id === "option-apply" ) );
+		f.ui.step( f.state, 1700 );
+		assert.ok( f.presented()?.controls.some( c => c.id === "option-apply" ) );
 		f.ui.event( { kind: "activate", id: "option-video-record:1" } );
 		f.ui.event( { kind: "activate", id: "option-video-choice:10:0" } );
 		f.ui.event( { kind: "activate", id: "option-cancel" } );
@@ -3706,8 +3710,8 @@ test("player and lower-bar retention invalidate independently for vitals, progre
 		assert.equal( resized.player.rebuilds, sp.player.rebuilds + 1 );
 		assert.equal( resized.bar.rebuilds, sp.bar.rebuilds + 1 );
 		f.ui.event( { kind: "activate", id: "ability-details" } );
-		const semantics = f.ui.step( { ...f.state }, 1004 );
-		assert.ok( semantics.controls.some( c => c.id === "ability-details" ) );
+		f.ui.step( { ...f.state }, 1004 );
+		assert.ok( f.presented()?.controls.some( c => c.id === "ability-details" ) );
 		assert.equal( f.ui.stats().layoutRetention.player.rebuilds, resized.player.rebuilds + 1 );
 	} finally {
 		f.dispose();

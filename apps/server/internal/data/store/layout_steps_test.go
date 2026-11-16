@@ -345,13 +345,13 @@ func TestBootRefusesANewTableThatHoldsRows(t *testing.T) {
 	dir, clock := t.TempDir(), newTestClock()
 	s := openTest(t, dir, clock)
 	s.Close()
-	execAuthority(t, dir, "INSERT INTO silk_history (account_id, at_ms, kind, silk, gift_silk, points) VALUES ('account-a', 1, 1, 10, 0, 0)")
+	execAuthority(t, dir, "INSERT INTO trade_history (at_ms, division, account_id, char_id, char_name, other_account_id, other_char_id, other_name, kind, gold_paid, gold_received, commission, items_given, items_received) VALUES (1, 'global-official', 'account-a', 1, 'asd2fixture', 'account-b', 2, 'peer', 'exchange', 10, 0, 0, '[]', '[]')")
 	rewriteDatabaseMeta(t, dir, metaKeyLayoutVersion, CurrentLayoutVersion-1)
-	if _, err := openWithHeadroom(t, dir, clock, 1); !isVersionMismatch(err) || !strings.Contains(err.Error(), "silk_history") {
-		t.Fatalf("open = %v, want an incompatible-schema refusal naming silk_history", err)
+	if _, err := openWithHeadroom(t, dir, clock, 1); !isVersionMismatch(err) || !strings.Contains(err.Error(), "trade_history") {
+		t.Fatalf("open = %v, want an incompatible-schema refusal naming trade_history", err)
 	}
-	if got := rowRecord(t, dir, "SELECT count(*) FROM silk_history"); got != "1" {
-		t.Fatalf("silk_history holds %s rows", got)
+	if got := rowRecord(t, dir, "SELECT count(*) FROM trade_history"); got != "1" {
+		t.Fatalf("trade_history holds %s rows", got)
 	}
 	if got := metaStamp(t, dir, metaKeyLayoutVersion); got != strconv.Itoa(CurrentLayoutVersion-1) {
 		t.Fatalf("layout stamp = %s", got)

@@ -126,6 +126,8 @@ var catalogueExempt = map[string]string{
 	"SRO_JOB_DRESS_TOWN_SPAWN":                 "where a finished dress reloads the wearer at runtime; no catalogue file carries it",
 	"SRO_JOB_BLOCK_RESURRECTION_SCROLL":        "an item-use refusal while suited; no catalogue file carries it",
 	"SRO_JOB_BLOCK_REVERSE_RETURN_SCROLL":      "an item-use refusal while suited; no catalogue file carries it",
+	"SRO_CHRISTMAS_EVENT":                      "the event groups an entry lists (snow and town decoration); no catalogue file carries it",
+	"SRO_CHRISTMAS_EVENT_WINDOW":               "the Christmas event's dates; no catalogue file carries it",
 	"SRO_MOONLIT_THIEF_SUIT":                   "a worn suit's look; the catalogue publishes no rendering",
 	"SRO_DEN_NO_TRANSPORT_SUMMON":              "a summon refusal during a countdown; no catalogue file carries it",
 	"SRO_GACHA_POOL_V2":                        "the Magic Pop prize pool; the catalogue publishes no Magic Pop pool",

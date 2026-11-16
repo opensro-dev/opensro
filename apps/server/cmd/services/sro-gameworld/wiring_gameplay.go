@@ -154,6 +154,15 @@ func newGameplayPlane(
 	if err := configureReverseReturnMap(items, devPaths.TextdataDir); err != nil {
 		return nil, err
 	}
+	// Port-only, not native (#3349): the Muhan change NPCs' pairing. Off
+	// reads nothing and installs nothing.
+	muhanTransforms, err := monster.LoadMuhanTransforms(devPaths.TextdataDir, monster.MuhanEnabled())
+	if err != nil {
+		return nil, err
+	}
+	if err := items.ConfigureMuhanTransforms(muhanTransforms); err != nil {
+		return nil, err
+	}
 	// One clock for the bootstrap and the tick sweep, read through the runtime
 	// so a swapped clock reaches both; world entry hands re-raised pet-skill
 	// windows to the same sweep that retires them.
@@ -232,6 +241,9 @@ func newGameplayPlane(
 	// SRO_HALLOWEEN_HELMET_SEAL (port-only, not native): the event
 	// helmets stay sealed at the transfer doors after the event.
 	items.HalloweenHelmetSeal = halloweenHelmetSealFromEnv()
+	// SRO_CHRISTMAS_EVENT (port-only, not native in this client build):
+	// the Christmas event's switch and UTC window (wiring_christmas.go).
+	items.Christmas = christmasEventFromEnv()
 	// SRO_UNIQUE_GAP_EXEMPT / SRO_UNIQUE_POP_TICKET / SRO_UNIQUE_MAX_LEVEL_LOOT
 	// / SRO_UNIQUE_SEAL_DROPS (port-only, not native): uniques ignore the
 	// level-gap admission, one Magic Pop ticket per kill, a top-band unique's
@@ -796,7 +808,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		})
 	}
 	game.deps.NormalizeEntryQuests = quests.NormalizeEntryRecords
-	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredHalloweenBoxes
+	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredEventItems
 	game.deps.EntryEventFrames = game.items.EntryEventFrames
 	game.deps.EntryEventGroups = game.items.EntryEventGroups
 	if err := game.validateQuestMarkerRoster(); err != nil {

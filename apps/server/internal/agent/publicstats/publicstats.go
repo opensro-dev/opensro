@@ -149,6 +149,9 @@ type Sources struct {
 	ExpRequired func(level int64) (int64, bool)
 	// Schedule lists the events this server runs at now (P8).
 	Schedule func(now time.Time) []ScheduledEvent
+	// Fortresses lists every fortress the shard serves with its owner
+	// and tax (P11, fortresses.go); nil serves an empty list.
+	Fortresses func() []FortressEntry
 	// Chat returns the shard's public chat transcript, oldest first, with
 	// muted authors already left out (chat.go); nil serves no lines.
 	Chat func() []chatfeed.Line
@@ -173,6 +176,12 @@ type Sources struct {
 	// journal is off (SRO_CONNECTION_JOURNAL). Nil and not-ok both
 	// answer null people fields (opensro-web#78).
 	CensusPeople func() (peopleNow int, uniquePeople7d int, ok bool)
+	// Trades reads one page of the account's trade history in the shard's
+	// division (store trade_history.go), newest first: every trade of the
+	// account, or only character's when it is set. A character the account
+	// does not own answers ErrNotOwned. Nil leaves the route unserved; the
+	// route also needs WriteToken (privacy.go's guard).
+	Trades func(accountID, character string, before *domain.TradeCursor, limit int) (domain.TradePage, error)
 }
 
 /*
@@ -283,6 +292,7 @@ func (s *Service) Handler() http.Handler {
 	mux.HandleFunc("GET /public/v1/schema", s.cached(rulesMaxAge, s.schema))
 	mux.HandleFunc("GET /public/v1/status", s.cached(uniquesMaxAge, s.serverStatus))
 	mux.HandleFunc("GET /public/v1/schedule", s.cached(boardsMaxAge, s.schedule))
+	mux.HandleFunc("GET /public/v1/fortresses", s.cached(boardsMaxAge, s.fortresses))
 	mux.HandleFunc("GET /public/v1/chat", s.cached(chatMaxAge, s.chat))
 	mux.HandleFunc("GET /public/v1/events", s.cached(chatMaxAge, s.events))
 	s.installPrivacy(mux)

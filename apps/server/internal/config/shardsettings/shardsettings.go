@@ -195,6 +195,10 @@ var Settings = []Setting{
 	{Env: "SRO_HALLOWEEN_EVENT", NomadVar: "halloween_event", Default: "off", Catalogue: true},
 	{Env: "SRO_HALLOWEEN_EVENT_WINDOW", NomadVar: "halloween_event_window", Default: "", Catalogue: true},
 	{Env: "SRO_HALLOWEEN_HELMET_SEAL", NomadVar: "halloween_helmet_seal", Default: "off"},
+	// Port-only, not native: the Christmas event's snow and town
+	// decoration (progression/christmas.go). Off is native.
+	{Env: "SRO_CHRISTMAS_EVENT", NomadVar: "christmas_event", Default: "off"},
+	{Env: "SRO_CHRISTMAS_EVENT_WINDOW", NomadVar: "christmas_event_window", Default: ""},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_MALL_STARTER_SILK", NomadVar: "mall_starter_silk", Default: "700"},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
