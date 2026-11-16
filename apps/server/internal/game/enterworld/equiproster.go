@@ -293,8 +293,8 @@ type WireItem struct {
 	// MagicOptions are the encoded magic-option u64 params the CSOItem body
 	// emits after its count byte (see InventoryRow.MagicOptions for the
 	// wire grammar and content authority).
-	MagicOptions      []uint64
-	TransformRefObjID uint32 // monster capsule Data
+	MagicOptions []uint64
+	Data         uint32 // item record data word (+0x38): capsule monster, Spirit clock
 	// ForgeBound mirrors InventoryRow.ForgeBound for the roster path
 	// (port only, issue #1980); never set for starter items.
 	ForgeBound bool
@@ -406,16 +406,16 @@ func EnsureMissionInventory(character *Character, equipRoster []WireItem) []Inve
 				stackCount = 0xffff
 			}
 			rows = append(rows, InventoryRow{
-				Slot:              slot,
-				RefObjID:          item.RefObjID,
-				Codename:          item.Codename,
-				TypeFlags:         item.TypeFlags,
-				Plus:              coercePlainInt(item.Plus, 0, 0xff),
-				VarianceBits:      strconv.FormatUint(item.VarianceBits, 10),
-				Durability:        coercePlainInt(item.Durability, 0, 0xffffffff),
-				StackCount:        stackCount,
-				MagicOptions:      copyMagicOptions(item.MagicOptions),
-				TransformRefObjID: item.TransformRefObjID, Summon: domain.CloneCOS(item.Summon),
+				Slot:         slot,
+				RefObjID:     item.RefObjID,
+				Codename:     item.Codename,
+				TypeFlags:    item.TypeFlags,
+				Plus:         coercePlainInt(item.Plus, 0, 0xff),
+				VarianceBits: strconv.FormatUint(item.VarianceBits, 10),
+				Durability:   coercePlainInt(item.Durability, 0, 0xffffffff),
+				StackCount:   stackCount,
+				MagicOptions: copyMagicOptions(item.MagicOptions),
+				Data:         item.Data, Summon: domain.CloneCOS(item.Summon),
 				ForgeBound: item.ForgeBound,
 			})
 		}
@@ -529,17 +529,17 @@ func InventoryWireItems(rows []InventoryRow) []WireItem {
 			variance = 0
 		}
 		out = append(out, WireItem{
-			TradeOwner:        row.TradeOwner,
-			Slot:              row.Slot,
-			RefObjID:          row.RefObjID,
-			TypeFlags:         row.TypeFlags,
-			Codename:          row.Codename,
-			Plus:              row.Plus,
-			VarianceBits:      variance,
-			Durability:        row.Durability,
-			StackCount:        row.StackCount,
-			MagicOptions:      copyMagicOptions(row.MagicOptions),
-			TransformRefObjID: row.TransformRefObjID, Summon: domain.CloneCOS(row.Summon),
+			TradeOwner:   row.TradeOwner,
+			Slot:         row.Slot,
+			RefObjID:     row.RefObjID,
+			TypeFlags:    row.TypeFlags,
+			Codename:     row.Codename,
+			Plus:         row.Plus,
+			VarianceBits: variance,
+			Durability:   row.Durability,
+			StackCount:   row.StackCount,
+			MagicOptions: copyMagicOptions(row.MagicOptions),
+			Data:         row.Data, Summon: domain.CloneCOS(row.Summon),
 			ForgeBound: row.ForgeBound,
 		})
 	}

@@ -77,8 +77,8 @@ type Item struct {
 	// CSOItem body carries (wire.ItemBody.MagicOptions): server state
 	// so a pickup restores them onto the granted row - the ground spawn
 	// wire itself never carries them.
-	MagicOptions      []uint64
-	TransformRefObjID uint32 // monster capsule Data
+	MagicOptions []uint64
+	Data         uint32 // item record data word (+0x38): capsule monster, Spirit clock
 	// StackCount is the heap's count for a stackable ETC drop. It never
 	// reaches the CIItem spawn wire - the native ground label carries no
 	// count for non-gold items - but it is server state so a pickup can
