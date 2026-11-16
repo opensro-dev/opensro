@@ -87,3 +87,14 @@ test("the production UI draws the gauge with the row on and closes it", t => {
 		assert.equal( closable(), false );
 	}
 });
+
+test("a new login forgets the close; the same session keeps it", () => {
+	const hud = createServerEventHud();
+	hud.reconcile( GAUGE, true );
+	hud.close();
+	hud.reconcile( GAUGE, true );
+	assert.equal( hud.shown(), null );
+	hud.reset();
+	hud.reconcile( GAUGE, true );
+	assert.deepEqual( hud.shown(), GAUGE );
+});

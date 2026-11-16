@@ -169,12 +169,7 @@ func (rt *Runtime) queueWinterGaugeCompletion(division string, id uint32) {
 			Exp:          float32(progression.WinterExpUpPercent) / 100,
 			Sp:           float32(progression.WinterExpUpPercent) / 100,
 		}))
-		w := &rt.winterMissions
-		w.mu.Lock()
-		if state := w.divisions[division]; state != nil && state.gaugeSynced != nil {
-			state.gaugeSynced[row.ID] = row.Count
-		}
-		w.mu.Unlock()
+		rt.markWinterGaugeCount(division, row)
 	}
 	rt.queueWinterGauge(division, frames...)
 }
@@ -197,13 +192,58 @@ func (rt *Runtime) winterWindowChanged(division string, active bool, nowMs int64
 	for _, row := range rows {
 		rt.announce(division, announceWinterMission, fmt.Sprintf(line, progression.WinterMissionName(row.ID)), wire.NoticeLink{}, 0, nowMs)
 	}
-	var frames []wire.Frame
+	var frames, held []wire.Frame
 	for _, row := range winterGaugeRows(rows) {
-		if active {
-			frames = append(frames, wire.ServerEventStartFrame(row))
-		} else {
+		if !active {
 			frames = append(frames, wire.ServerEventEndFrame(row.ID))
+			continue
 		}
+		frames = append(frames, wire.ServerEventStartFrame(row))
+		// The start sets every window to zero (client 0x00CFA790 type 5);
+		// a count the division already holds (a restart, an earlier
+		// window) follows at once and becomes the next sync's baseline.
+		if row.Count != 0 {
+			held = append(held, wire.ServerEventCountSyncFrame([]wire.ServerEventRow{row}))
+		}
+		rt.markWinterGaugeSynced(division, row, time.UnixMilli(nowMs))
 	}
-	rt.queueWinterGauge(division, frames...)
+	rt.queueWinterGauge(division, append(frames, held...)...)
+}
+
+/*
+================
+Runtime.markWinterGaugeCount
+
+Records a count the clients now hold without moving the sync's clock.
+================
+*/
+func (rt *Runtime) markWinterGaugeCount(division string, row wire.ServerEventRow) {
+	w := &rt.winterMissions
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if state := w.divisions[division]; state != nil && state.gaugeSynced != nil {
+		state.gaugeSynced[row.ID] = row.Count
+	}
+}
+
+/*
+================
+Runtime.markWinterGaugeSynced
+
+Records a row the clients now hold, so the next sync compares with it.
+================
+*/
+func (rt *Runtime) markWinterGaugeSynced(division string, row wire.ServerEventRow, now time.Time) {
+	w := &rt.winterMissions
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	state := w.divisions[division]
+	if state == nil {
+		return
+	}
+	if state.gaugeSynced == nil {
+		state.gaugeSynced = map[uint32]uint32{}
+	}
+	state.gaugeSynced[row.ID] = row.Count
+	state.gaugeSyncedAt = now
 }

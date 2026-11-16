@@ -183,3 +183,26 @@ func TestWinterGaugeStartEnd(t *testing.T) {
 	rt.winterWindowChanged(testDivision, true, nowMs)
 	expectGauge(t, "start", gaugeFrames(t, rt.drainWinterGauge(0)), wire.ServerEventStartFrame(snowFlakeRow(t, rt)))
 }
+
+/*
+================
+TestWinterGaugeStartCarriesTheHeldCount
+
+The start opens every client's window at zero; a count the division
+already holds follows at once, and the next sync does not repeat it.
+================
+*/
+func TestWinterGaugeStartCarriesTheHeldCount(t *testing.T) {
+	c := testCharacter()
+	rt := winterMissionRuntime(t, c, &memoryWinterStore{})
+	now := rt.Now()
+	rt.recordWinterMission(testDivision, progression.WinterTriggerExchange, 50, c.Name, now)
+	rt.syncWinterGauge(testDivision, now)
+	rt.drainWinterGauge(0)
+	rt.winterWindowChanged(testDivision, true, now.UnixMilli())
+	row := snowFlakeRow(t, rt)
+	expectGauge(t, "start", gaugeFrames(t, rt.drainWinterGauge(0)),
+		wire.ServerEventStartFrame(row), wire.ServerEventCountSyncFrame([]wire.ServerEventRow{row}))
+	rt.syncWinterGauge(testDivision, now.Add(winterGaugeSyncEvery))
+	expectGauge(t, "after start", gaugeFrames(t, rt.drainWinterGauge(0)))
+}

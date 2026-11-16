@@ -10383,6 +10383,7 @@ export function createUi( ports: UiPorts ) {
 				phase === "world" &&
 				uniqueRankHud.reconcile( next.gameplay, experimental.state().saved.uniqueDamageRank )
 			) dirty = true;
+			if ( phase === "signed-out" || phase === "character-select" ) serverEventHud.reset();
 			if ( phase === "world" ) {
 				const before = serverEventHud.shown();
 				serverEventHud.reconcile(

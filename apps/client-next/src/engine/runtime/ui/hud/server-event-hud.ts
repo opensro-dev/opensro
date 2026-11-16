@@ -14,7 +14,8 @@ interface/event/winter_count_* published by the later-client import.
 The close button hides the window (0x00E1EB00); the client creates it
 again only when it does not exist, so a hidden window stays hidden while
 the mission runs. Inference: it shows again once the mission is gone
-(the event's end, or a new session) and comes back.
+(the event's end) and comes back, or after a new login (the client builds
+its interface anew). A teleport is not a login: it keeps the close.
 
 ===========================================================================
 */
@@ -113,6 +114,18 @@ export function createServerEventHud() {
 		*/
 		close() {
 			closed = true;
+			shown = null;
+		},
+		/*
+		================
+		reset
+
+		Back at the login or character select: the next world entry
+		builds the window anew.
+		================
+		*/
+		reset() {
+			closed = false;
 			shown = null;
 		}
 	};
