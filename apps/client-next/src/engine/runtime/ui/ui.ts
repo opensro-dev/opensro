@@ -7422,6 +7422,10 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
+			if ( event.kind === "scroll" && panel === "Map" && mapHud.scroll( event ) ) {
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "scroll" && panel === "Party Matching" ) {
 				partyMatchOffset = Math.max( 0, partyMatchOffset + Math.sign( event.delta ) );
 				dirty = true;
@@ -8686,10 +8690,6 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
-			if ( event.kind === "scroll" && panel === "Map" && mapHud.pointer( event ) ) {
-				dirty = true;
-				return;
-			}
 			if ( event.kind === "scroll" && (panel === "Skills" || panel === "Quests") ) {
 				const prefix = panel === "Skills" ? "skill-scroll" : "quest-scroll",
 					up = controls.find( c => c.id === prefix + "-up" ),
@@ -8711,7 +8711,7 @@ export function createUi( ports: UiPorts ) {
 			}
 			if ( event.kind === "drag" ) {
 				if ( panel === "Map" ) {
-					mapHud.pointer( event );
+					mapHud.drag( event );
 					dirty = true;
 					return;
 				}
@@ -23221,7 +23221,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							"%s",
 							() => inviter?.guildName ?? ""
 						) :
-						copy( guild ? "UIIT_MSG_GUILD_JOIN_REQUEST" : "UIIT_STT_PARTY_SOMEUSER", "[%s]has" ).replace(
+						copy( guild ? "UIIT_MSG_GUILD_JOIN_REQUEST" : "UIIT_STT_PARTY_SOMEUSER", "[%s] has" ).replace(
 							"%s",
 							() => inviter?.name ?? ""
 						),
@@ -26852,7 +26852,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						quads.length = mallAdmission[0];
 						controls = drawFrame.controls = [];
 					} else {
-						const painted = resolveTextOverlaps( quads.slice( mallAdmission[0] ) );
+						const painted = resolveTextOverlaps(
+							quads.slice( mallAdmission[0] ),
+							experimental.state().saved.fitWindowLabels
+						);
 						quads.length = mallAdmission[0];
 						quads.push( ...painted );
 					}
@@ -28450,7 +28453,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			gauges.end();
 			// Text runs travel to the renderer whole: the GPU packer writes one record
 			// per glyph straight into its buffer (text-run.ts, device/ui.ts).
-			quads = drawFrame.quads = resolveTextOverlaps( quads );
+			quads = drawFrame.quads = resolveTextOverlaps( quads, experimental.state().saved.fitWindowLabels );
 			probe?.detailEnd( "ui-finalize" );
 			probe?.detailBegin( "ui-compare" );
 			// Semantics are returned only when they change (uiPublication): a

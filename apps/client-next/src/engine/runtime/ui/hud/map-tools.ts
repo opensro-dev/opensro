@@ -31,8 +31,8 @@ import {
 	type CaveMapPage
 } from "@/engine/foundation/ui/cave-map";
 import {
-	dungeonDirectory,
 	directoryByName,
+	dungeonDirectory,
 	levelBand,
 	monsterDirectory,
 	sameLevelBand,
@@ -62,7 +62,7 @@ import {
 } from "@/engine/foundation/ui/worldmap-guide";
 import { featuresAt } from "@/engine/foundation/world/plane";
 import { dungeonRegionId } from "@/engine/foundation/world/world-space";
-import { GUIDE_SCROLL_ID, GUIDE_MAIN, createGuideScroll, treeRow, type GuideTreeRow } from "./map-guide-tree";
+import { GUIDE_MAIN, createGuideScroll, paintGuideTree, treeRow, type GuideTreeRow } from "./map-guide-tree";
 import {
 	GUIDE_HEIGHT,
 	GUIDE_WIDTH,
@@ -240,6 +240,14 @@ export function createMapToolsHud( options: {
 	// showed: the floor selector's arrows step from what is on screen.
 	let shownFloors: readonly CaveMapPage[] = [];
 	let shownFloor: CaveMapPage | undefined;
+	// The drawer's groups by shown name (#3554), rebuilt when the
+	// directory, the zone text or the regioncode names change.
+	let groupsFor: {
+		regions: readonly MonsterDirectoryRegion[];
+		zones: MapToolsPaint["zones"];
+		names: RegionNamesLoad;
+		groups: readonly MonsterDirectoryRegion[];
+	} | null = null;
 	let regionLoad: RegionNamesLoad = { kind: "idle" };
 	let guideLoad: GuideLoad = { kind: "idle" };
 	// The guide trees' open main row (one per tab, as the tab switch
@@ -258,14 +266,6 @@ export function createMapToolsHud( options: {
 		catalogue: HuntingCatalogue;
 		band: LevelBand | undefined;
 		regions: readonly MonsterDirectoryRegion[];
-	} | null = null;
-	// The drawer's groups by shown name (#3554), rebuilt when the
-	// directory, the zone text or the regioncode names change.
-	let groupsFor: {
-		regions: readonly MonsterDirectoryRegion[];
-		zones: MapToolsPaint["zones"];
-		names: RegionNamesLoad;
-		groups: readonly MonsterDirectoryRegion[];
 	} | null = null;
 
 	/*
@@ -298,23 +298,6 @@ export function createMapToolsHud( options: {
 			directoryFor = { catalogue, band, regions: monsterDirectory( catalogue, band ) };
 		}
 		return directoryFor.regions;
-	}
-
-	/*
-	================
-	drawerGroups
-
-	The drawer's groups: the directory merged by shown name (#3554).
-	================
-	*/
-	function drawerGroups( input: MapToolsPaint ): readonly MonsterDirectoryRegion[] {
-		const regions = directory( input.catalogue, filterBand( input.characterLevel ) );
-		if ( groupsFor?.regions !== regions || groupsFor.zones !== input.zones || groupsFor.names !== regionLoad ) {
-			const names = new Map( regions.map( row => [ row.region, regionName( row.region, input.zones ) ] ) );
-			const groups = directoryByName( regions, names );
-			groupsFor = { regions, zones: input.zones, names: regionLoad, groups };
-		}
-		return groupsFor.groups;
 	}
 
 	/*
@@ -388,18 +371,36 @@ export function createMapToolsHud( options: {
 
 	/*
 	================
+	drawerGroups
+
+	The drawer's groups: the directory merged by shown name (#3554).
+	================
+	*/
+	function drawerGroups( input: MapToolsPaint ): readonly MonsterDirectoryRegion[] {
+		const regions = directory( input.catalogue, filterBand( input.characterLevel ) );
+		if ( groupsFor?.regions !== regions || groupsFor.zones !== input.zones || groupsFor.names !== regionLoad ) {
+			const names = new Map( regions.map( row => [ row.region, regionName( row.region, input.zones ) ] ) );
+			const groups = directoryByName( regions, names );
+			groupsFor = { regions, zones: input.zones, names: regionLoad, groups };
+		}
+		return groupsFor.groups;
+	}
+
+	/*
+	================
 	guideTree
 
-	Paints the rows on the open guide panel; the scroll clamps them.
+	Paints the rows on the open guide panel and keeps the clamped scroll.
 	================
 	*/
 	function guideTree( input: MapToolsPaint, paint: MapChromePaint, rows: GuideTreeRow[], empty?: string ) {
-		const left = guideLeft( input );
-		guideScroll.paint(
+		guideScroll.rows( rows.length );
+		paintGuideTree(
 			{
-				panel: [ left, input.window[1], GUIDE_WIDTH, 0 ],
+				panel: [ guideLeft( input ), input.window[1], GUIDE_WIDTH, 0 ],
 				full: input.full,
 				rows,
+				scroll: guideScroll.first(),
 				hover: input.hover,
 				pressed: null,
 				empty: empty ?? (
@@ -412,7 +413,6 @@ export function createMapToolsHud( options: {
 				text: input.text,
 				size: input.size
 			},
-			[ left, input.window[1], GUIDE_WIDTH, GUIDE_HEIGHT ],
 			paint
 		);
 	}
@@ -643,24 +643,25 @@ export function createMapToolsHud( options: {
 		},
 		/*
 		================
-		wheel
-
-		The wheel over the open guide panel scrolls its tree (#3554),
-		map-guide-tree.ts. False when the wheel is elsewhere.
-		================
-		*/
-		wheel( x: number, y: number, delta: number ): boolean {
-			return guideScroll.wheel( x, y, delta );
-		},
-		/*
-		================
 		drag
 
-		The guide's thumb (map-guide-tree.ts). False for other ids.
+		The guide's thumb (map-guide-tree.ts createGuideScroll). False
+		for other ids.
 		================
 		*/
 		drag( id: string, dy: number ): boolean {
 			return guideScroll.drag( id, dy );
+		},
+		/*
+		================
+		scroll
+
+		The wheel over the open guide panel (createGuideScroll, issue
+		#3515). False when the wheel is elsewhere, so the map keeps it.
+		================
+		*/
+		scroll( x: number, y: number, delta: number ): boolean {
+			return guideScroll.wheel( x, y, delta );
 		},
 		/*
 		================
@@ -783,10 +784,7 @@ export function createMapToolsHud( options: {
 			// The guide panel's and the foot's surfaces only keep clicks
 			// off the world.
 			if ( id === "map-guide" || id === "map-foot" ) return null;
-			if ( id === GUIDE_SCROLL_ID + "-up" || id === GUIDE_SCROLL_ID + "-down" ) {
-				guideScroll.step( id === GUIDE_SCROLL_ID + "-down" ? 1 : -1 );
-				return null;
-			}
+			if ( guideScroll.activate( id ) ) return null;
 			if ( id.startsWith( "map-region:" ) ) {
 				// A group's toggle opens it in place and shuts the one
 				// open before (map1 shows a single open group).
@@ -935,7 +933,7 @@ export function createMapToolsHud( options: {
 				spawns: input.offerUniqueSpawns ? uniqueSpawns : undefined
 			} );
 			sideTab( paint, drawerOpen );
-			guideScroll.hide();
+			guideScroll.place( drawerOpen ? [ guideLeft( input ), input.window[1], GUIDE_WIDTH, GUIDE_HEIGHT ] : null );
 			if ( drawerOpen ) {
 				guidePanel( paint, { tab: guideTab, size: input.size } );
 				const catalog = guideLoad.kind === "ready" ? guideLoad.catalog : undefined;

@@ -580,13 +580,13 @@ function treeArt( pressed ) {
 			panel: [ 0, 0, 298, 296 ],
 			full: [ 0, 0, 1200, 900 ],
 			rows: [ { id: "map-guide-main:0", label: "Fixture group", group: true, open: false, color: "group" } ],
+			scroll: 0,
 			empty: "-",
 			hover: null,
 			pressed,
 			text: { run: () => ({ width: 10 }), quads: () => [] },
 			size: () => [ 16, 16 ]
 		}),
-		0,
 		out
 	);
 	return out.paths;

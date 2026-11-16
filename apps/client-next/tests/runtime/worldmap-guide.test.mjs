@@ -443,6 +443,29 @@ test("the guide's stock scrollbar: chat-window art, and the thumb drags the tree
 	hud.dispose();
 });
 
+test("the wheel over the guide steps one row a notch, and leaves the map's wheel alone (#3515)", () => {
+	const many = fixture();
+	for ( let i = 0; i < 19; i++ ) many.monsters.push( monster( "Extra" + i, [ 10110 + i, 10810 + i, 10110 + i ] ) );
+	const hud = loadedTools( many );
+	hud.activate( "map-guide-main:0", undefined, 10 );
+	const thumb = () => control( paint( hud ), "map-guide-scroll-thumb" ).rect[1];
+	const top = thumb();
+	// The panel stands left of the window: [102, 100, 298, 296] here.
+	assert.equal( hud.scroll( 200, 200, 120 ), true );
+	assert.equal( thumb(), top + Math.round( 146 / 16 ), "one row, however large the delta" );
+	assert.equal( hud.scroll( 200, 200, -3 ), true );
+	assert.equal( thumb(), top, "and back" );
+	assert.equal( hud.scroll( 200, 200, -120 ), true );
+	assert.equal( thumb(), top, "held at the first row" );
+	for ( let i = 0; i < 30; i++ ) hud.scroll( 200, 200, 1 );
+	assert.equal( thumb(), top + 146, "held at the last row" );
+	assert.equal( hud.scroll( 700, 300, 1 ), false, "the map's own area is not the guide's" );
+	hud.activate( "map-side-tab", undefined, 10 );
+	paint( hud );
+	assert.equal( hud.scroll( 200, 200, 1 ), false, "a shut guide takes no wheel" );
+	hud.dispose();
+});
+
 test("reverse return points are xy_returnicon buttons, the old sign without that art", async () => {
 	const { reverseMapButtons } = await import( "../../src/engine/runtime/ui/hud/reverse-map-buttons.ts" );
 	const points = [ {

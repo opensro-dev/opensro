@@ -184,15 +184,15 @@ test("roster hover areas pan with the map and clip to its visible area", () => {
 	try {
 		hud.activate( "map-pin", input.pose );
 		const before = paint()[1];
-		hud.pointer( { kind: "drag", id: before.id, dx: 20, dy: 10 } );
+		hud.drag( { kind: "drag", id: before.id, dx: 20, dy: 10 } );
 		const after = paint()[1];
 		assert.deepEqual( after.rect, [ before.rect[0] + 20, before.rect[1] + 10, 12, 12 ] );
 		const clip = input.controls.find( ( /** @type {any} */ c ) => c.id === "map-pan" ).rect;
-		hud.pointer( { kind: "drag", id: after.id, dx: clip[0] + clip[2] - after.rect[0] - 8, dy: 0 } );
+		hud.drag( { kind: "drag", id: after.id, dx: clip[0] + clip[2] - after.rect[0] - 8, dy: 0 } );
 		const edge = paint().find( c => c.id === after.id );
 		assert.equal( edge.rect[0] + edge.rect[2], clip[0] + clip[2] );
 		assert.equal( edge.rect[2], 8 );
-		hud.pointer( { kind: "drag", id: edge.id, dx: 20, dy: 0 } );
+		hud.drag( { kind: "drag", id: edge.id, dx: 20, dy: 0 } );
 		assert.equal( paint().some( c => c.id === after.id ), false );
 	} finally {
 		hud.dispose();
