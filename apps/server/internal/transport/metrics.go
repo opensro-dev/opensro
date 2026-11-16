@@ -50,6 +50,7 @@ type hubMetrics struct {
 	bytesIn               atomic.Uint64
 	framesOut             atomic.Uint64
 	bytesOut              atomic.Uint64
+	writesOut             atomic.Uint64
 	datagramsOut          atomic.Uint64
 	datagramBytesOut      atomic.Uint64
 	datagramsDropped      atomic.Uint64
@@ -131,10 +132,14 @@ type Metrics struct {
 
 	// FramesIn counts every inbound frame accepted by a session read loop,
 	// including frames later dropped by rate limiting.
-	FramesIn         uint64 `json:"frames_in"`
-	BytesIn          uint64 `json:"bytes_in"`
-	FramesOut        uint64 `json:"frames_out"`
-	BytesOut         uint64 `json:"bytes_out"`
+	FramesIn  uint64 `json:"frames_in"`
+	BytesIn   uint64 `json:"bytes_in"`
+	FramesOut uint64 `json:"frames_out"`
+	BytesOut  uint64 `json:"bytes_out"`
+	// WritesOut counts the transport writes that carried FramesOut
+	// (session_write.go): frames_out / writes_out is the frames one
+	// write carries, about one tick's output per session in a crowd.
+	WritesOut        uint64 `json:"writes_out"`
 	DatagramsOut     uint64 `json:"datagrams_out"`
 	DatagramBytesOut uint64 `json:"datagram_bytes_out"`
 	// DatagramsDropped counts loss-tolerant frames dropped at a full
@@ -421,6 +426,7 @@ func (h *Hub) Metrics() Metrics {
 		BytesIn:                    h.metrics.bytesIn.Load(),
 		FramesOut:                  h.metrics.framesOut.Load(),
 		BytesOut:                   h.metrics.bytesOut.Load(),
+		WritesOut:                  h.metrics.writesOut.Load(),
 		DatagramsOut:               h.metrics.datagramsOut.Load(),
 		DatagramBytesOut:           h.metrics.datagramBytesOut.Load(),
 		DatagramsDropped:           h.metrics.datagramsDropped.Load(),

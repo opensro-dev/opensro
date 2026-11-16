@@ -22,8 +22,18 @@ written whole (a temp name, then a rename). WebGPU requires a
 block-compressed level 0 to be whole blocks, so a texture under 4x4 keeps
 its original.
 
-A cache hit is file reads and writes only, done asynchronously so the
-workers overlap them. Before, each hit decoded its level 0 on the one
+Each texture is also an action (graph/action.mjs, plan slice B2): keyed
+on its source bytes, this module's code closure, the encoder version and
+the preset, with its variant as the one output. A texture whose key has a
+record is laid down from the action store (or left alone when its variant
+already holds those bytes) without reading its source, its caches or
+writing its variant: release r193 read 1000 MB and rewrote 2007 MB for
+15463 unchanged textures (38.7 s). A miss runs the pass below and stores
+its variant. --roundtrip writes a second file per texture, so it keeps to
+the pass alone.
+
+A miss's cache hit is file reads and writes only, done asynchronously so
+the workers overlap them. Before, each hit decoded its level 0 on the one
 thread, and the 15200 hits of a seeded release build took 71 s.
 
 	node scripts/build/textures/buildTextureVariants.mjs
@@ -57,6 +67,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { defineAction, outputPath } from "../graph/action.mjs";
+import { keyOf, materialize, openStore, readRecord, storeOutputs } from "../graph/store.mjs";
 import { CLIENT_PUBLIC_ROOT, generatedPath } from "../../lib/generatedRoot.mjs";
 import { claimPublicFile, isPublicationOpen } from "../shared/publicationLedger.mjs";
 import { ENCODERS, encoderPath } from "./encoders.mjs";
@@ -94,6 +106,7 @@ const KTX_CHANNELS = { [GL_RED]: 1, [GL_RG]: 2, [GL_RGB]: 3, [GL_RGBA]: 4 };
 const PRESET = "-medium";
 const VARIANT = "astc";
 const DECODER_DIGEST_CHARS = 16;
+const MODULE_FILE = fileURLToPath( import.meta.url );
 
 /*
 ================
@@ -351,6 +364,31 @@ async function encodeTexture( astcenc, source, scratch, roundtrip ) {
 
 /*
 ================
+textureVariantAction
+
+One texture's variant as an action (see the file banner). roots.source is
+the tree the texture is published in, roots.output the tree its variant
+goes to (the published tree, or --out's private one). Nothing runs it
+alone: a miss goes through the pass's worker, which stores what it wrote.
+================
+*/
+export function textureVariantAction( publicPath, roots ) {
+	return defineAction( {
+		name: `texture-variant:${publicPath}`,
+		inputRoot: roots.source,
+		inputs: [ publicPath.slice( 1 ) ],
+		outputRoot: roots.output,
+		outputs: [ textureVariantPath( publicPath, VARIANT ).replace( /^\//, "" ) ],
+		code: [ MODULE_FILE ],
+		params: { encoder: ENCODERS.astcenc.version, preset: PRESET },
+		run: async () => {
+			throw new Error( `texture variant ${publicPath} is made by its pass, never alone` );
+		}
+	} );
+}
+
+/*
+================
 buildTextureVariants
 
 The pass, for the resource build (resourceBuild.mjs) and the CLI below.
@@ -367,6 +405,11 @@ export async function buildTextureVariants( flags = {} ) {
 		limit: Infinity,
 		out: null,
 		roundtrip: null,
+		// The tree the textures are published in (a fixture's, in tests).
+		publicRoot: CLIENT_PUBLIC_ROOT,
+		// An open action store to use and leave open (tests); else the
+		// shared one, opened and shut here.
+		store: null,
 		...flags
 	};
 	if ( process.platform !== "win32" ) {
@@ -378,11 +421,22 @@ export async function buildTextureVariants( flags = {} ) {
 	const cacheRoot = flags.out ?
 		path.join( flags.out, "intermediate", "texture-variants", cacheName ) :
 		generatedPath( "intermediate", "texture-variants", cacheName );
-	const outputRoot = flags.out ? path.join( flags.out, "client-public" ) : CLIENT_PUBLIC_ROOT;
+	const outputRoot = flags.out ? path.join( flags.out, "client-public" ) : flags.publicRoot;
 	const maskRoot = maskCacheRoot( cacheRoot, await maskCodeHash() );
 	mkdirSync( maskRoot, { recursive: true } );
-	const textures = nativeTextures( CLIENT_PUBLIC_ROOT, flags.only ).slice( 0, flags.limit );
-	let next = 0, encoded = 0, cached = 0, unaligned = 0, masked = 0, sourceBytes = 0, variantBytes = 0;
+	const textures = nativeTextures( flags.publicRoot, flags.only ).slice( 0, flags.limit );
+	const store = flags.roundtrip ? null : (flags.store ?? (await openStore()));
+	const roots = { source: flags.publicRoot, output: outputRoot };
+	// masked counts the variants this run produced; a stored one is not read.
+	let next = 0,
+		encoded = 0,
+		cached = 0,
+		stored = 0,
+		placed = 0,
+		unaligned = 0,
+		masked = 0,
+		sourceBytes = 0,
+		variantBytes = 0;
 	// One job per source digest in flight: textures of the same bytes await
 	// it instead of reading a cache file another worker is writing.
 	const inFlight = new Map();
@@ -419,6 +473,20 @@ export async function buildTextureVariants( flags = {} ) {
 		try {
 			while ( next < textures.length ) {
 				const [file, publicPath] = textures[next++];
+				const action = store ? textureVariantAction( publicPath, roots ) : null;
+				const key = store ? await keyOf( store, action, {} ) : null;
+				const record = store ? await readRecord( store, key ) : undefined;
+				if ( record ) {
+					// Await first, then add: `placed += await ...` reads placed before the
+					// await, and a worker resuming in between loses its count.
+					const laid = await materialize( store, action, record );
+					placed += laid;
+					const target = outputPath( action, action.outputs[0] );
+					if ( !flags.out && isPublicationOpen() ) claimPublicFile( target );
+					stored++;
+					variantBytes += record.outputs[0].size;
+					continue;
+				}
 				const source = await readFile( file ), digest = createHash( "sha256" ).update( source ).digest( "hex" );
 				const texture = decodeNativeTexture( new Uint8Array( source ) );
 				if ( texture.width % ASTC_BLOCK || texture.height % ASTC_BLOCK ) {
@@ -439,6 +507,7 @@ export async function buildTextureVariants( flags = {} ) {
 				mkdirSync( path.dirname( target ), { recursive: true } );
 				await writeFile( target, variant );
 				if ( !flags.out && isPublicationOpen() ) claimPublicFile( target );
+				if ( store ) await storeOutputs( store, action, key );
 				if ( back ) {
 					const mirror = path.join( flags.roundtrip, ...publicPath.split( "/" ) );
 					mkdirSync( path.dirname( mirror ), { recursive: true } );
@@ -447,22 +516,27 @@ export async function buildTextureVariants( flags = {} ) {
 				sourceBytes += source.length;
 				variantBytes += variant.length;
 				if ( (encoded + cached) % 500 === 0 ) {
-					console.log( `${encoded + cached}/${textures.length} textures` );
+					console.log( `${encoded + cached} of ${textures.length} textures produced` );
 				}
 			}
 		} finally {
 			rmSync( scratch, { recursive: true, force: true } );
 		}
 	}
-	await Promise.all( Array.from( { length: flags.jobs }, worker ) );
+	try {
+		await Promise.all( Array.from( { length: flags.jobs }, worker ) );
+	} finally {
+		if ( store && !flags.store ) await store.shutdown();
+	}
 	const mb = bytes => (bytes / 1048576).toFixed( 1 );
 	console.log(
-		`texture variants (astc 4x4 ${PRESET}): ${textures.length} textures, ${encoded} encoded, ${cached} cached, ` +
+		`texture variants (astc 4x4 ${PRESET}): ${textures.length} textures, ${stored} from the action store ` +
+			`(${placed} laid down), ${encoded} encoded, ${cached} from the encoder cache, ` +
 			`${unaligned} under one block kept their original, ${masked} carry a picking mask, ` +
 			`${mb( sourceBytes )} MB BC -> ${mb( variantBytes )} MB ASTC, ` +
 			`${((performance.now() - startedAt) / 1000).toFixed( 1 )} s`
 	);
-	return { textures: textures.length, encoded, cached, unaligned, masked, sourceBytes, variantBytes };
+	return { textures: textures.length, stored, placed, encoded, cached, unaligned, masked, sourceBytes, variantBytes };
 }
 
 if ( process.argv[1] && path.resolve( process.argv[1] ) === fileURLToPath( import.meta.url ) ) {

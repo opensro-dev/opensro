@@ -434,6 +434,16 @@ export function createCharacterResources(
 		*/
 		ready( path: string ) {
 			if ( disposed ) return false;
+			// A resident source decides the same below without the procedural
+			// build (charged when it was admitted: loaded and costs are set and
+			// retired together), the failure retry (loaded) and the request (it
+			// returns for a loaded source): it is planned, then moved to the
+			// recent end. The common call, every worn part of every actor.
+			if ( loaded.has( path ) ) {
+				if ( !plan( [ path ] ) ) return false;
+				loaded.set( path, ++useStamp );
+				return true;
+			}
 			let built = proceduralCache.get( path );
 			if ( !built ) {
 				built = createProceduralEffect( path ) ?? undefined;

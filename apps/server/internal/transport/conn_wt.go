@@ -293,6 +293,55 @@ func (w *wtConn) WriteFrame(f Frame) error {
 	if err != nil {
 		return err
 	}
+	return w.writeStream(buf)
+}
+
+/*
+================
+wtConn.WriteFrames
+
+Several frames as the same length-prefixed records WriteFrame sends,
+concatenated into one stream write (session_write.go). The stream is
+one byte sequence either way, so the client's record reader sees the
+same records in the same order.
+================
+*/
+func (w *wtConn) WriteFrames(frames []Frame) error {
+	select {
+	case <-w.strReady:
+	case <-w.closed:
+		return errWTConnClosed
+	case <-w.readDone:
+		return w.getReadErr()
+	}
+	size := 0
+	for _, f := range frames {
+		size += streamLenPrefixSize + f.EncodedLen()
+	}
+	buf := make([]byte, 0, size)
+	for _, f := range frames {
+		record, err := EncodeStreamFrame(f)
+		if err != nil {
+			// The records ahead of the refused one still go, as one
+			// WriteFrame each would have sent them.
+			if len(buf) > 0 {
+				_ = w.writeStream(buf)
+			}
+			return err
+		}
+		buf = append(buf, record...)
+	}
+	return w.writeStream(buf)
+}
+
+/*
+================
+wtConn.writeStream
+
+The control stream write with the stall deadline re-armed per piece.
+================
+*/
+func (w *wtConn) writeStream(buf []byte) error {
 	return writeAllWithinStall(w.str, buf, func() {
 		_ = w.str.SetWriteDeadline(time.Now().Add(wtWriteTimeout))
 	})

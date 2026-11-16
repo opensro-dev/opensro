@@ -22,7 +22,15 @@ import { groundVisualClock, advanceGroundVisual } from "@/engine/foundation/anim
 import { referenceAppearanceItems } from "@/engine/foundation/animation/reference-appearance";
 import { characterHeadingYaw } from "@/engine/foundation/math/angles";
 import type { EntityState } from "@/engine/contracts/world";
-import type { ActorAppearance, ActorFrame, ActorOwner, ActorPass, Auxiliary } from "./internal/presentation-contract";
+import type {
+	ActorAppearance,
+	ActorFrame,
+	ActorOwner,
+	ActorPass,
+	AppearanceRetained,
+	AppearanceStamp,
+	Auxiliary
+} from "./internal/presentation-contract";
 
 // How long a character that was never drawn waits, unseen, for its worn
 // parts before it shows its bare body after all. The original loads a
@@ -102,6 +110,78 @@ export function createActorAppearance( owner: ActorOwner ) {
 		}
 		return text;
 	}
+	/*
+	================
+	appearanceStamp
+
+	Every input a steady resolve reads but the residency it asks again
+	(AppearanceStamp), read as resolve reads it. Pure reads: resourceFor's
+	trade dress is drawn by presentation-state's earlier call each frame.
+	================
+	*/
+	function appearanceStamp( entity: EntityState, frame: ActorFrame, pass: ActorPass ): AppearanceStamp {
+		const {
+			activeSkin,
+			effects,
+			presentationState,
+			published,
+			referenceAppearances,
+			renderer,
+			resourceFor,
+			states
+		} = owner;
+		const { gameplay, nativeServerName, normalFortressClothes } = frame;
+		const state = states.get( entity.gid ), local = pass.localEntity;
+		return {
+			entity,
+			manifest: published.manifest,
+			resource: resourceFor( entity ),
+			disguise: referenceAppearances.get( entity.gid ),
+			skin: activeSkin( entity ),
+			local: entity.gid === gameplay?.localGid,
+			weaponHidden: effects.appearance( entity.gid ).weaponHidden,
+			emoteHidden: !!presentationState.idleStates.get( entity.gid )?.attachmentsHidden,
+			dead: !!state?.dead,
+			fortressIndex: state?.fortressIndex,
+			localTeam: local === undefined ? -1 : local.arenaTeam ?? 255,
+			normalFortressClothes,
+			fortress: gameplay?.fortress,
+			social: gameplay?.social,
+			serverName: nativeServerName,
+			enchantSparks: renderer.enchantSparks?.() === true,
+			jobSuitHidesArmor: gameplay?.jobSuitHidesArmor === true,
+			moonlitThiefSuit: gameplay?.moonlitThiefSuit === true
+		};
+	}
+	/*
+	================
+	replay
+
+	The resource owner's calls of a steady resolve, in its order: the body,
+	every particle program, the worn parts, then the assembly. False at the
+	first source that is not ready: the resolve then runs in full, and asks
+	the sources this replay asked again, which changes nothing (ready is
+	idempotent within a frame: a source planned and moved stays so).
+	================
+	*/
+	function replay( retained: AppearanceRetained, gid: number ): boolean {
+		const { renderer, resources } = owner, { resource, model } = retained.result;
+		if ( !resources.ready( resource.glb ) ) return false;
+		let particlesReady = true;
+		for ( const path of resource.animationParticlePaths ?? [] ) {
+			if ( !resources.ready( path ) ) particlesReady = false;
+		}
+		if ( !particlesReady ) return false;
+		if ( retained.parts ) {
+			if ( !readyThenWarm( resources, retained.parts, [] ) ) return false;
+			outfitWaits.delete( gid );
+		}
+		if ( retained.assembly ) renderer.setCharacterAssembly( model, resource.glb, retained.assembly );
+		return true;
+	}
+	// The presentation frame resolve last ran in, and its count: a retained
+	// resolve stands only on the frame after the one it was resolved at.
+	let presentedFrame: ActorFrame | undefined, frameIndex = 0;
 	return {
 		/*
 		================
@@ -132,6 +212,10 @@ export function createActorAppearance( owner: ActorOwner ) {
 			} = owner;
 			const { gameplay, nativeServerName, next, normalFortressClothes, seconds } = frame;
 			const { localEntity, particleHolders } = pass;
+			if ( frame !== presentedFrame ) {
+				presentedFrame = frame;
+				frameIndex++;
+			}
 			if ( entity.skillObject ) {
 				const visual = skillObjects.frame( entity, seconds, resources, {
 					localGid: gameplay?.localGid ?? 0,
@@ -218,6 +302,15 @@ export function createActorAppearance( owner: ActorOwner ) {
 			// A retried manifest can leave models resident first; do not
 			// publish incomplete bodies to next frame's effect owner.
 			if ( published.manifest < published.manifests.length ) return null;
+			// A steady resolve from the previous frame with the same inputs
+			// stands when its sources are still ready (presentation-due.ts).
+			const retained = states.get( entity.gid )?.appearance,
+				previous = retained?.frame === frameIndex - 1 ? retained : undefined,
+				stamp = previous && appearanceStamp( entity, frame, pass );
+			if ( !owner.due.appearance( previous, stamp ) && previous && replay( previous, entity.gid ) ) {
+				previous.frame = frameIndex;
+				return previous.result;
+			}
 			const resource = resourceFor( entity );
 			if ( !resource ) return null;
 			if ( !resources.ready( resource.glb ) ) {
@@ -236,6 +329,13 @@ export function createActorAppearance( owner: ActorOwner ) {
 				if ( !resources.ready( path ) ) particlesReady = false;
 			}
 			if ( !particlesReady ) return null;
+			// steady: this resolve took the ready path, changed no state it
+			// reads (the appearance record, the fortress clothes shown) and
+			// asked nothing a frame later could answer differently with the
+			// same stamp; the local player's dress also warms and prioritizes.
+			let steady = entity.gid !== gameplay?.localGid,
+				wornModels: readonly string[] | undefined,
+				wornAssembly: AppearanceRetained["assembly"];
 			let model = resource.glb;
 			let dependencies: readonly string[] = [ resource.glb ];
 			let auxiliaryCommit: readonly Auxiliary[] | undefined = [];
@@ -261,6 +361,7 @@ export function createActorAppearance( owner: ActorOwner ) {
 				if ( skin && !skin.player ) {
 					// 85C060: a monster skin is its own body; the wearer's items are set aside.
 				} else if ( disguise ) {
+					steady = false;
 					// CICharactor_EquipReferenceAppearance: the random look's items
 					// go through the ordinary slot visuals and compound refresh.
 					const parts = assembleEquipmentAppearance( {
@@ -325,6 +426,7 @@ export function createActorAppearance( owner: ActorOwner ) {
 						) :
 						-1;
 					const visualState = states.get( entity.gid );
+					if ( visualState?.fortressIndex !== fortressIndex ) steady = false;
 					if ( visualState ) visualState.fortressIndex = fortressIndex;
 					const enchantSparks = renderer.enchantSparks?.() === true;
 					// Port-only, not native: the server's SRO_JOB_SUIT_HIDES_ARMOR.
@@ -344,6 +446,7 @@ export function createActorAppearance( owner: ActorOwner ) {
 						appearance.dress !== published.dress ||
 						appearance.items !== published.items || appearance.signature !== signature
 					) {
+						steady = false;
 						const committedWear = states.get( entity.gid )?.defaultWear;
 						const assembly = assembleEquipmentAppearance( {
 							resource,
@@ -411,24 +514,26 @@ export function createActorAppearance( owner: ActorOwner ) {
 						// unrelated character assets.
 						if ( entity.gid === gameplay?.localGid ) resources.prioritize( appearance.dependencies );
 					}
-					const parts = appearance.parts;
+					const worn = appearance.parts;
+					wornModels = worn.map( part => part.model );
 					// The worn parts first: the wearer's suit-socket candidates are
 					// warmed only once its own outfit is ready (suit-socket.ts).
 					const ready = readyThenWarm(
 						resources,
-						parts.map( part => part.model ),
+						wornModels,
 						entity.gid === gameplay?.localGid ? socketWarm : []
 					);
 					// A character never drawn before waits unseen for its parts
 					// instead of showing its bare body (outfitWait); one already
 					// drawn keeps its previous look (fallback).
 					let failing = false;
-					for ( const part of parts ) if ( !failing && resources.failed( part.model ) ) failing = true;
+					for ( const part of worn ) if ( !failing && resources.failed( part.model ) ) failing = true;
 					if ( !ready && !output.displayed.has( entity.gid ) && outfitWait( entity.gid, failing, seconds ) ) {
 						return null;
 					}
 					if ( ready ) outfitWaits.delete( entity.gid );
 					if ( !ready ) {
+						steady = false;
 						model = fallback();
 					} else {
 						auxiliaryCommit = appearance.auxiliary;
@@ -436,18 +541,20 @@ export function createActorAppearance( owner: ActorOwner ) {
 						particleCommit = appearance.particles;
 						defaultWearCommit = appearance.defaultWear;
 					}
-					if ( ready && parts.length ) {
+					if ( ready && worn.length ) {
 						model = appearance.model;
-						renderer.setCharacterAssembly( model, resource.glb, parts );
+						renderer.setCharacterAssembly( model, resource.glb, worn );
+						wornAssembly = worn;
 						dependencies = appearance.dependencies;
 					}
 				}
 			} catch ( error ) {
+				steady = false;
 				output.failure = String( error );
 				output.failureCause = error;
 				model = fallback();
 			}
-			return {
+			const result = {
 				resource,
 				model,
 				dependencies,
@@ -456,6 +563,20 @@ export function createActorAppearance( owner: ActorOwner ) {
 				overrideCommit,
 				defaultWearCommit
 			};
+			// Retained only where decide keeps its own: on the entity's state.
+			const state = states.get( entity.gid );
+			if ( state ) {
+				state.appearance = steady ?
+					{
+						result,
+						stamp: stamp ?? appearanceStamp( entity, frame, pass ),
+						parts: wornModels,
+						assembly: wornAssembly,
+						frame: frameIndex
+					} :
+					undefined;
+			}
+			return result;
 		}
 	};
 }

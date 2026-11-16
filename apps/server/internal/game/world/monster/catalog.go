@@ -584,6 +584,10 @@ func (instance Instance) EffectiveMaxHP() uint32 {
 		multiplier = 100
 	case 6:
 		multiplier = 4
+	case 7:
+		// The v1.188 server's max-HP rule: grade 7, the strong event
+		// monster, takes x30 (x300 as a party monster).
+		multiplier = 30
 	}
 	if rarity>>4 == 1 {
 		multiplier *= 10

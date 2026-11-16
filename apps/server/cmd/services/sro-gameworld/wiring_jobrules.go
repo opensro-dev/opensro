@@ -81,5 +81,8 @@ func (game *gameplayPlane) wireJobRules() error {
 	if game.deps.MoonlitThiefSuit {
 		log.Infof("job: level-20 thief suits wear Moonlit Ash (%s)", action.EnvMoonlitThiefSuit)
 	}
+	// Port-only, not native: AI Caravan & Thief agents on the
+	// Jangan-Donwhang-Hotan highway (SRO_AI_CARAVANS, wiring_caravanai.go).
+	game.wireCaravanAgents()
 	return nil
 }

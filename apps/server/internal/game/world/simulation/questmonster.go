@@ -35,6 +35,14 @@ LifetimeMs, when set, is the quest's own removal timer (the Hidden
 Treasure script registers one of 300 s whose handler sends the monster
 to life state 3). TacticsFrom, when set, gives the monster that nest's own
 hostility and skills, for a monster with no summon tactics row.
+HasRarity overrides the reference's grade with Rarity (the v1.188
+summon scroll spawns its monsters at grade 7, action/partysummonscroll.go).
+TacticsGrade is the grade its default tactics are chosen by (the v1.188
+summon scroll asks with 0, the Pandora waves with their grade 7).
+Aggressive fills a gap of the port's tactics data: a monster whose
+tactics carry no controls attacks on sight (with eventAggressiveSight
+when no sight range is named) instead of standing passive; tactics that
+carry controls keep their own hostility, as natively.
 ================
 */
 type QuestMonsterSpawn struct {
@@ -48,7 +56,15 @@ type QuestMonsterSpawn struct {
 	RadiusSpan    float64
 	LifetimeMs    int64
 	TacticsFrom   *monster.NestRow
+	Rarity        uint8
+	HasRarity     bool
+	Aggressive    bool
+	TacticsGrade  uint8
 }
+
+// eventAggressiveSight is the sight an event monster forced aggressive
+// gets when its tactics name none: the temptation fallback's 100.
+const eventAggressiveSight = temptationFallbackSight
 
 /*
 ================
@@ -63,18 +79,31 @@ MOB_QT_02_PUNISHER_CLON leaves after its 300 s.
 ================
 */
 func (s *MonsterState) SpawnQuestMonster(request QuestMonsterSpawn) bool {
+	_, spawned := s.SpawnQuestMonsterGID(request)
+	return spawned
+}
+
+/*
+================
+SpawnQuestMonsterGID
+
+SpawnQuestMonster, answering the landed monster's gid for an owner that
+follows it (action/pandorabox.go's waves).
+================
+*/
+func (s *MonsterState) SpawnQuestMonsterGID(request QuestMonsterSpawn) (uint32, bool) {
 	if !FeaturesAt(request.Position.RegionID).QuestMonsterSpawns {
-		return false
+		return 0, false
 	}
 	ref, exists := s.ReferenceByCodename(request.Codename)
 	if !exists || ref.MaxHP == 0 {
-		return false
+		return 0, false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForLease(request.Division, request.Population)
 	if state == nil || s.counter >= domain.MaxMonsterGIDCounter {
-		return false
+		return 0, false
 	}
 	angleFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
 	angle := float64(float32(float64(angleFraction) * nativeCircleRadians))
@@ -87,15 +116,14 @@ func (s *MonsterState) SpawnQuestMonster(request QuestMonsterSpawn) bool {
 	})
 	spawn, valid := s.resolveSpawnGround(spawn, center.Y)
 	if !valid {
-		return false
+		return 0, false
 	}
 	s.counter++
 	actor := monster.Instance{
 		Gid: monster.GidBase + s.counter, Ref: ref, Spawn: spawn, NestDetached: true,
 		SpawnHeading: uint16(angle), Nest: monster.NestRow{SpawnPoint: spawn, PolicyPinned: true},
 	}
-	actor.CurrentHP = actor.EffectiveMaxHP()
-	if tactics, found := monster.ResolveSummonTactics(ref, 0, s.random); found {
+	if tactics, found := monster.ResolveSummonTactics(ref, request.TacticsGrade, s.random); found {
 		actor.Nest.NativeTacticsFlags = tactics.NativeFlags
 		actor.Nest.TargetPolicy = tactics.TargetPolicy
 		if tactics.HasControls {
@@ -111,6 +139,18 @@ func (s *MonsterState) SpawnQuestMonster(request QuestMonsterSpawn) bool {
 		actor.Nest.ConditionalSkills = from.ConditionalSkills
 		actor.Nest.SightRange, actor.Nest.Aggressive = from.SightRange, from.Aggressive
 	}
+	if request.HasRarity {
+		actor.Nest.RarityOverride, actor.Nest.HasRarityOverride = request.Rarity, true
+	}
+	// The grade decides the maximum (grade 7 is x30), so the monster is
+	// filled only once its grade is final: it spawns at full health.
+	actor.CurrentHP = actor.EffectiveMaxHP()
+	if request.Aggressive && !actor.Nest.HasControls {
+		actor.Nest.Aggressive = true
+		if actor.Nest.SightRange <= 0 {
+			actor.Nest.SightRange = eventAggressiveSight
+		}
+	}
 	mover := monster.NewSpawnMover(actor, request.NowMs)
 	mover.Activity = monster.NewActivityCadence(uint32(request.NowMs), s.randomWord())
 	if state.movers == nil {
@@ -122,7 +162,7 @@ func (s *MonsterState) SpawnQuestMonster(request QuestMonsterSpawn) bool {
 	state.listRegionGid(spawn.RegionID, actor.Gid)
 	armLifetimeLocked(state, actor, request.NowMs)
 	armQuestLifetimeLocked(state, actor.Gid, request.NowMs+request.LifetimeMs, request.LifetimeMs > 0)
-	return true
+	return actor.Gid, true
 }
 
 /*
@@ -144,4 +184,23 @@ func armQuestLifetimeLocked(state *divisionMonsterState, gid uint32, untilMs int
 		state.lifetimes = make(map[uint32]monsterLifetime)
 	}
 	state.lifetimes[gid] = monsterLifetime{untilMs: untilMs}
+}
+
+/*
+================
+QuestMonsterAlive
+
+Whether the monster gid names still stands, alive, in the division's
+populations: a kill, a timeout and a population's retirement all answer
+false.
+================
+*/
+func (s *MonsterState) QuestMonsterAlive(division string, gid uint32) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForObject(division, gid)
+	if state == nil || !state.instances.contains(gid) {
+		return false
+	}
+	return state.instances.get(gid).CurrentHP > 0
 }

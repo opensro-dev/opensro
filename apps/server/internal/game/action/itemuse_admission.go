@@ -64,6 +64,8 @@ const (
 	itemUseSummonScroll
 	itemUseModelSwitcher
 	itemUseSpiritWake
+	itemUsePartySummonScroll
+	itemUsePandoraBox
 )
 
 /*
@@ -106,6 +108,16 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	// grants nothing.
 	if SummonScrollCount(ref.Codename) != 0 {
 		return itemUseSummonScroll
+	}
+	// Port-only, not native to v1.150 (partysummonscroll.go): the
+	// v1.188 party Monster Summon Scroll, admitted by codename; its
+	// handler re-checks the switch that hands it out before any effect.
+	if ref.Codename == PartySummonScrollItem {
+		return itemUsePartySummonScroll
+	}
+	// Port-only, likewise: Pandora's Box opened from the bag (pandorabox.go).
+	if ref.Codename == PandoraBoxItem {
+		return itemUsePandoraBox
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 9, 0} {
 		return itemUseQuestTool

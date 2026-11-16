@@ -161,11 +161,11 @@ async function clickAcceptance( rowOn ) {
 				`const __recorded=${call}; if(globalThis.__entry?.game?.localGid===gid)globalThis.__entry.visual.push({at:now,pose:__recorded,moving:input.moving}); return __recorded;`;
 			await route.fulfill( { response, body: body.replace( sampled, record ).replace( ownWalk, record ) } );
 		} );
-		await page.route( "**/runtime/characters/actor-motion.ts*", async route => {
+		await page.route( "**/runtime/characters/actor-advance.ts*", async route => {
 			const response = await route.fetch(),
 				body = await response.text(),
 				needle = "displayedDependencies.set(entity.gid, dependencies);";
-			assert.ok( body.includes( needle ), "actor-motion dependency seam drifted" );
+			assert.ok( body.includes( needle ), "actor-advance dependency seam drifted" );
 			await route.fulfill( {
 				response,
 				body: body.replace(

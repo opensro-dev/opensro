@@ -147,6 +147,11 @@ type Sources struct {
 	// contributor; a save the store refuses returns its own error. Nil
 	// leaves the write unserved.
 	TakeContributorTitle func(accountID string) error
+	// Referrals serves the website's referral routes (referrals.go); nil
+	// is SRO_REFERRALS off, and the routes answer 404. ReferralRules are
+	// the constants those routes show.
+	Referrals     ReferralSource
+	ReferralRules ReferralRules
 	// Sample reads the shard's online count and the hub's cumulative
 	// counters for P7 (status.go); nil leaves the status figures zero.
 	Sample func() (online int, metrics transport.Metrics)
@@ -186,6 +191,9 @@ type Sources struct {
 	// journal is off (SRO_CONNECTION_JOURNAL). Nil and not-ok both
 	// answer null people fields (opensro-web#78).
 	CensusPeople func() (peopleNow int, uniquePeople7d int, ok bool)
+	// Market is the website market (market.go, port-only behind
+	// SRO_CONSIGNMENT); nil leaves every market route unserved (404).
+	Market MarketSource
 	// Trades reads one page of the account's trade history in the shard's
 	// division (store trade_history.go), newest first: every trade of the
 	// account, or only character's when it is set. A character the account

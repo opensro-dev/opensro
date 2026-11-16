@@ -31,6 +31,8 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/market"
+	"opensro.online/server/internal/game/referral"
 	"opensro.online/server/internal/game/siege"
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/world/simulation"
@@ -497,6 +499,14 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 	}
 	// The weekly seal board (#1641): a nil counter leaves the route
 	// unserved (404), which is SRO_SEAL_BOARD off.
+	// Referrals (#3518, port-only, not native): with SRO_REFERRALS off the
+	// source stays nil and the routes answer 404.
+	if referral.FromEnv() {
+		sources.Referrals = authority
+		rewards := referral.Rewards()
+		sources.ReferralRules = publicstats.ReferralRules{Level: referral.QualifyingLevel,
+			ReferrerSilk: rewards.ReferrerSilk, RefereeSilk: rewards.RefereeSilk, RewardCap: rewards.RewardCap}
+	}
 	if sealBoard != nil {
 		sources.SealCounts = sealBoard.Counts
 		sources.SealCountingSince = sealBoard.CountingSince
@@ -518,6 +528,9 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			}
 			return peopleNow, uniquePeople7d, true
 		}
+	}
+	if market.FromEnv() {
+		sources.Market = marketService(gameplay, authority, shard, sources.Online)
 	}
 	return sources
 }
