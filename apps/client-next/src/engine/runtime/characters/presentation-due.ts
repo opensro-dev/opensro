@@ -17,9 +17,11 @@ previous frame exists and every input it was taken from is the same
 import type {
 	AppearanceRetained,
 	AppearanceStamp,
+	KeptRecord,
 	MotionRetained,
 	MotionStamp,
-	PresentationDue
+	PresentationDue,
+	RecordStamp
 } from "./internal/presentation-contract";
 
 /*
@@ -82,5 +84,35 @@ export function appearanceDue(
 	return !retained || !stamp || !sameAppearanceStamp( retained.stamp, stamp );
 }
 
-// The production rules, one frozen pair for the presenter's lifetime.
-export const PRESENTATION_DUE: PresentationDue = Object.freeze( { appearance: appearanceDue, motion: motionDue } );
+/*
+================
+sameRecordStamp
+
+Every term compared by value or identity, none skipped.
+================
+*/
+export function sameRecordStamp( a: RecordStamp, b: RecordStamp ): boolean {
+	return a.resolved === b.resolved && a.manifest === b.manifest && a.localGid === b.localGid &&
+		a.shadowSize === b.shadowSize && a.bloodEffects === b.bloodEffects && a.appearance === b.appearance &&
+		a.fraction === b.fraction && a.crowded === b.crowded &&
+		a.optional === b.optional && a.regionId === b.regionId && a.x === b.x && a.y === b.y && a.z === b.z &&
+		a.yaw === b.yaw && a.height === b.height && a.petResolve === b.petResolve && a.modifierId === b.modifierId;
+}
+
+/*
+================
+recordDue
+
+The production rule for the published actor, as motionDue is for decide.
+================
+*/
+export function recordDue( kept: KeptRecord | undefined, stamp: RecordStamp | undefined ): boolean {
+	return !kept || !stamp || !sameRecordStamp( kept.stamp, stamp );
+}
+
+// The production rules, one frozen set for the presenter's lifetime.
+export const PRESENTATION_DUE: PresentationDue = Object.freeze( {
+	appearance: appearanceDue,
+	motion: motionDue,
+	record: recordDue
+} );

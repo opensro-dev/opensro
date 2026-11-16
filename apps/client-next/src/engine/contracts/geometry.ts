@@ -44,11 +44,13 @@ export interface Geometry {
 	// one draw while each keeps its own glow phase. Gain, alpha test and the
 	// enabled bit stay in the material uniform (updateEquipmentGlow).
 	readonly rowStates?: boolean;
-	// A skinned cloth mesh: its skin table carries a second block of one
-	// entry a vertex, the cloth stream (cloth-stream.ts), which the owner
-	// rewrites with writeClothStream. The GPU skins a vertex unless its
-	// stream entry says the solver owns its position or normal.
-	readonly clothStream?: boolean;
+	// A skinned cloth mesh's stream slots: the vertex each entry of its cloth
+	// stream holds, in index order (cloth-stream.ts clothStreamSlots). Its
+	// skin table carries a slot map of one entry a vertex and the stream,
+	// which the owner rewrites with writeClothStream. The GPU skins a vertex
+	// unless it has a slot whose entry says the solver owns its position or
+	// normal.
+	readonly clothStream?: Int32Array;
 	// The packed vertex stream (14 floats a vertex, packGeometryVertices) of a
 	// dynamicVertices mesh, already built by the asset worker. The renderer
 	// uploads it and keeps it as the mirror instead of packing on its thread.

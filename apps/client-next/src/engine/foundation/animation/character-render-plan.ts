@@ -65,9 +65,9 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 	// with the padded actor capacity too. Ribbons retain their exact capacity.
 	// A one-row batch carries no row states (characterBatchBytes), so the
 	// per-slot cost is measured from two and four rows.
-	const one = exactCapacity ? 0 : characterBatchBytes( model, 1 ),
-		two = exactCapacity ? 0 : characterBatchBytes( model, 2 ),
-		four = exactCapacity ? 0 : characterBatchBytes( model, 4 ),
+	const one = exactCapacity ? 0 : characterBatchBytes( model, 1, caches ),
+		two = exactCapacity ? 0 : characterBatchBytes( model, 2, caches ),
+		four = exactCapacity ? 0 : characterBatchBytes( model, 4, caches ),
 		stride = (four - two) / 2,
 		base = two - stride * 2;
 	return {
@@ -131,7 +131,7 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 			return count === 0 ?
 				0 :
 				exactCapacity ?
-				characterBatchBytes( model, count ) :
+				characterBatchBytes( model, count, caches ) :
 				count === 1 ?
 				one :
 				base + stride * 2 ** Math.ceil( Math.log2( count ) );

@@ -15,6 +15,8 @@ An action is a build step that says what it reads and what it writes:
 	params      plain JSON values that change its output
 	deps        names of the actions whose outputs it reads
 	link        materialize outputs as hard links (see store.mjs)
+	discoverRoots  { name: folder }: the trees a step that finds its own
+	            inputs while it runs may read (reads.mjs); see below
 	run         async ( context ) => writes every declared output
 
 The key is the sha256 over the input bytes (by relative name), the code
@@ -29,6 +31,14 @@ What the key cannot see is the caller's to declare: a file the step reads
 but does not list, a variable it reads but does not name. An undeclared
 read is the stale-reuse bug this exists to prevent, as codeStamp.mjs's
 closure rule says for code.
+
+A step whose inputs are only known once it runs (a model that reads the
+files its BSR lists) declares discoverRoots instead of listing them. Its
+key covers what it does declare; the files it read are recorded beside
+its outputs, named by root and relative path, and the record is reused
+only while each still holds the recorded bytes (store.mjs readRecord).
+A discovered read outside every root fails the step: a path the record
+cannot name in another worktree could not be checked there.
 
 ===========================================================================
 */
@@ -70,8 +80,48 @@ export function defineAction( spec ) {
 		params: spec.params ?? null,
 		deps: [ ...new Set( spec.deps ?? [] ) ],
 		link: spec.link === true,
+		discoverRoots: discoverRoots( spec.name, spec.discoverRoots ),
 		run: spec.run
 	};
+}
+
+/*
+================
+discoverRoots
+
+The named trees a step may discover reads in, as absolute folders; null
+when the step declares none.
+================
+*/
+function discoverRoots( name, roots ) {
+	if ( roots === undefined || roots === null ) return null;
+	const entries = Object.entries( roots );
+	if ( entries.length === 0 ) throw new Error( `action ${name}: discoverRoots names no root` );
+	return Object.freeze( Object.fromEntries( entries.map( ( [root, folder] ) => {
+		if ( typeof folder !== "string" || !folder ) {
+			throw new Error( `action ${name}: discover root ${root} has no folder` );
+		}
+		return [ root, path.resolve( folder ) ];
+	} ) ) );
+}
+
+/*
+================
+discoveredName
+
+A discovered read as [root, relative name], or null when it lies outside
+every root of the action.
+================
+*/
+export function discoveredName( action, file ) {
+	const absolute = path.resolve( file );
+	for ( const [root, folder] of Object.entries( action.discoverRoots ?? {} ) ) {
+		const relative = path.relative( folder, absolute );
+		if ( relative && !relative.startsWith( ".." ) && !path.isAbsolute( relative ) ) {
+			return [ root, relative.split( path.sep ).join( "/" ) ];
+		}
+	}
+	return null;
 }
 
 /*

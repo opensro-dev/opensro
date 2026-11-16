@@ -11,7 +11,7 @@ price quote, including honor-priced packages.
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { ShopState, ShopOffer, BuybackOffer } from "@/engine/foundation/gameplay/commerce";
-import { SHOP_CURRENCY_HONOR } from "@/engine/foundation/gameplay/commerce";
+import { SHOP_CURRENCY_HONOR, SHOP_CURRENCY_NASRUN_TOKEN } from "@/engine/foundation/gameplay/commerce";
 import type { AuthoredLayout } from "./authored-layout";
 
 /*
@@ -187,8 +187,15 @@ export function merchantQuote(
 	// Honor is not a balance this client holds; the server answers a short
 	// honor balance with the native UIIT_MSG_TC_LACK_HONOR_POINT refusal.
 	const honor = "currency" in item && item.currency === SHOP_CURRENCY_HONOR;
+	// Port-only (SRO_NASRUN): a token offer is paid from the balance the
+	// shop sent, never from gold; the server refuses a short one silently.
+	const token = "currency" in item && item.currency === SHOP_CURRENCY_NASRUN_TOKEN;
+	const tokens = shop?.nasrunTokens;
+	const affordable = token ?
+		tokens !== undefined && total !== null && total <= BigInt( tokens ) :
+		honor || gold !== undefined && total !== null && total <= BigInt( gold );
 	const valid = quantity >= 1 && quantity <= maximum && total !== null && total <= 0x7fffffffffffffffn &&
-		(selection.kind === "sell" || honor || gold !== undefined && total <= BigInt( gold ));
+		(selection.kind === "sell" || affordable);
 	return { item, quantity, maximum, total, valid, quantityMode: merchantQuantityMode( selection.kind, item ) };
 }
 
