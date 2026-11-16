@@ -1425,21 +1425,26 @@ the next full prepare pass, so this may run between frames.
 	emission cycle moves backwards or changes.
 	================
 	*/
-	function particleHistory( frame: PrepareFrame, actor: CharacterActor, model: CharacterModel, storage: number ) {
+	function particleHistory(
+		frame: PrepareFrame,
+		actor: CharacterActor,
+		model: CharacterModel,
+		plan: ModelResource["plan"]
+	) {
 		let history = particleBirths.get( actor.gid );
 		if (
 			!history || history.model !== actor.model || actor.time < history.time ||
 			history.cycle !== (frame.cycles.get( actor.gid ) ?? 0)
 		) {
 			const graph = model.particleGraph ?
-				createParticleGraph( model.particleGraph, particleRandom.index ) :
+				createParticleGraph( model.particleGraph, particleRandom.index, plan.particleGraph ) :
 				undefined;
 			history = {
 				model: actor.model,
 				time: actor.time,
 				cycle: frame.cycles.get( actor.gid ) ?? 0,
 				origin: frame.origin,
-				bytes: storage,
+				bytes: plan.particleBytes,
 				graph,
 				link: graph ?
 					{
@@ -1648,7 +1653,7 @@ the next full prepare pass, so this may run between frames.
 	*/
 	function advanceEmitter( frame: PrepareFrame, actor: CharacterActor, resource: ModelResource ) {
 		const { byGid, origin } = frame, model = resource.model;
-		const history = particleHistory( frame, actor, model, resource.plan.particleBytes );
+		const history = particleHistory( frame, actor, model, resource.plan );
 		const transform = transformFor( actor, byGid, origin, frame.transforms );
 		if ( !transform ) return;
 		const shift = regionOffsetXZ( origin, history.origin );
