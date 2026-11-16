@@ -31,6 +31,7 @@ import {
 	type CaveMapPage
 } from "@/engine/foundation/ui/cave-map";
 import {
+	directoryByName,
 	dungeonDirectory,
 	levelBand,
 	monsterDirectory,
@@ -239,6 +240,14 @@ export function createMapToolsHud( options: {
 	// showed: the floor selector's arrows step from what is on screen.
 	let shownFloors: readonly CaveMapPage[] = [];
 	let shownFloor: CaveMapPage | undefined;
+	// The drawer's groups by shown name (#3554), rebuilt when the
+	// directory, the zone text or the regioncode names change.
+	let groupsFor: {
+		regions: readonly MonsterDirectoryRegion[];
+		zones: MapToolsPaint["zones"];
+		names: RegionNamesLoad;
+		groups: readonly MonsterDirectoryRegion[];
+	} | null = null;
 	let regionLoad: RegionNamesLoad = { kind: "idle" };
 	let guideLoad: GuideLoad = { kind: "idle" };
 	// The guide trees' open main row (one per tab, as the tab switch
@@ -358,6 +367,23 @@ export function createMapToolsHud( options: {
 			lamp: mark?.refObjId === entry.monster.refObjId && mark?.regionId === entry.region,
 			color: characterLevel !== undefined && entry.monster.level > characterLevel ? "high" : "leaf"
 		};
+	}
+
+	/*
+	================
+	drawerGroups
+
+	The drawer's groups: the directory merged by shown name (#3554).
+	================
+	*/
+	function drawerGroups( input: MapToolsPaint ): readonly MonsterDirectoryRegion[] {
+		const regions = directory( input.catalogue, filterBand( input.characterLevel ) );
+		if ( groupsFor?.regions !== regions || groupsFor.zones !== input.zones || groupsFor.names !== regionLoad ) {
+			const names = new Map( regions.map( row => [ row.region, regionName( row.region, input.zones ) ] ) );
+			const groups = directoryByName( regions, names );
+			groupsFor = { regions, zones: input.zones, names: regionLoad, groups };
+		}
+		return groupsFor.groups;
 	}
 
 	/*
@@ -775,6 +801,8 @@ export function createMapToolsHud( options: {
 					regionId === undefined || refObjId === undefined ||
 					!Number.isInteger( regionId ) || !Number.isInteger( refObjId )
 				) return null;
+				// The sector rows, not the drawer's merged groups: the id
+				// names the species' own sector (#3554).
 				const regions = directory( catalogue, filterBand( characterLevel ) );
 				for ( const region of regions ) {
 					if ( region.region !== regionId ) continue;
@@ -923,7 +951,7 @@ export function createMapToolsHud( options: {
 					);
 				} else {
 					const rows: GuideTreeRow[] = [];
-					for ( const region of directory( input.catalogue, filterBand( input.characterLevel ) ) ) {
+					for ( const region of drawerGroups( input ) ) {
 						const open = region.region === drawerRegion;
 						rows.push( {
 							id: "map-region:" + region.region,
