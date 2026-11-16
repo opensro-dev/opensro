@@ -75,6 +75,34 @@ export interface PresentationOutput {
 
 /*
 ================
+ClipFacts
+
+What presentation reads of a body's clip list for every actor every
+frame, derived once when the catalogue admits the row (presentation-
+catalog.ts clipFacts): the names as a set, and the clip each role takes
+among the names a body may hold. A row's clip list is never edited after
+admission; a manifest admitted later makes new rows with new facts.
+================
+*/
+export interface ClipFacts {
+	readonly names: ReadonlySet<string>;
+	// The base clip when the body lacks its role: stand, else its first clip.
+	readonly fallback: string;
+	// 8E64F0's death from the down state 4: deathquick, else downdie, else death.
+	readonly quickDeath: string;
+	// The death base loop: deathLoop, else deathloop, else death.
+	readonly deathLoop: string;
+	// Whether the body holds either death loop (presentation-state enterDeath).
+	readonly loopsDeath: boolean;
+	readonly sitting: string;
+	readonly sitDown: string;
+	readonly standUp: string;
+	// The hit reaction: hit1, else hit, else none ("").
+	readonly hit: string;
+}
+
+/*
+================
 Resource
 ================
 */
@@ -103,6 +131,8 @@ export interface Resource {
 	refObjId: number;
 	glb: string;
 	clips: readonly string[];
+	// Derived from clips at admission; a row built from another keeps both.
+	clipFacts: ClipFacts;
 	previewGlb?: string;
 	previewClips?: readonly string[];
 }
@@ -131,6 +161,8 @@ appearance overlays and child booth actors share this resource shape.
 export interface SecondaryModel {
 	readonly glb: string;
 	readonly clips: readonly string[];
+	// A death model's facts replace the body's with its clips (resourceFor).
+	readonly clipFacts: ClipFacts;
 	readonly animationStates?: Record<string, AnimationMetadata>;
 	readonly ambientParticles?: readonly ModelParticle[];
 	readonly animationParticles?: readonly AnimationParticleSet[];

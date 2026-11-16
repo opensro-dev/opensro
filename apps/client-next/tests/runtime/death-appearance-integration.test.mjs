@@ -10,7 +10,9 @@ character's identity, scale or sound profile, then restore after revival.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-const { createPresentationCatalog } = await import( "../../src/engine/runtime/characters/presentation-catalog.ts" );
+const { createPresentationCatalog, clipFacts } = await import(
+	"../../src/engine/runtime/characters/presentation-catalog.ts"
+);
 const { createPresentationState } = await import( "../../src/engine/runtime/characters/presentation-state.ts" );
 const { createAppearanceLookup } = await import( "../../src/engine/runtime/characters/appearance-lookup.ts" );
 const { createActorMotion } = await import( "../../src/engine/runtime/characters/actor-motion.ts" );
@@ -146,17 +148,21 @@ test("admitted death resources replace body appearance and revival restores its 
 });
 
 test("actor-motion drops outgoing live-body locomotion and active installations on model swap and clamps future hit timestamps", () => {
+	const liveClips = [ "stand", "walk", "run", "hit1", "idle_twist", "death" ];
 	const liveResource = {
 		codename: "MOB_FIXTURE",
 		refObjId: 1,
 		glb: BODY,
-		clips: [ "stand", "walk", "run", "hit1", "idle_twist", "death" ]
+		clips: liveClips,
+		clipFacts: clipFacts( liveClips )
 	};
+	const corpseClips = [ "stand", "death", "deathLoop" ];
 	const corpseResource = {
 		codename: "MOB_FIXTURE",
 		refObjId: 1,
 		glb: CORPSE,
-		clips: [ "stand", "death", "deathLoop" ]
+		clips: corpseClips,
+		clipFacts: clipFacts( corpseClips )
 	};
 	const states = new Map();
 	const idleStates = new Map();
@@ -377,12 +383,20 @@ owned egg admission
 ================
 */
 test("Stormbrood egg appearance requires both its reserved identity and server name", () => {
-	const crow = { refObjId: 1, codename: "COS_P_RAVEN", glb: "/assets/npc/crow.glb", clips: [ "stand" ] };
+	const crowClips = [ "stand" ];
+	const crow = {
+		refObjId: 1,
+		codename: "COS_P_RAVEN",
+		glb: "/assets/npc/crow.glb",
+		clips: crowClips,
+		clipFacts: clipFacts( crowClips )
+	};
 	const egg = {
 		refObjId: 5000001,
 		codename: "PORT_STORMBROOD_EGG",
 		glb: "/assets/npc/port/stormbrood/egg.glb",
-		clips: []
+		clips: [],
+		clipFacts: clipFacts( [] )
 	};
 	const lookup = createAppearanceLookup( {
 		published: {
