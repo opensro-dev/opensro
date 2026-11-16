@@ -98,6 +98,7 @@ var unlistedSettings = map[string]string{
 	// them when the server data is built; the GameWorld reads neither,
 	// so there is no running rule for the page to state.
 	"SRO_CAP110_ITEMS":  "degree-11 equipment build input, consumed when the server data is built",
+	"SRO_HONOR_GOODS":   "honor store goods build input, consumed when the server data is built",
 	"SRO_CAP110_SKILLS": "degree-11 skill build input, consumed when the server data is built",
 	// Cosmetic item rows the variant build imports; the GameWorld reads no
 	// such switch, the items simply exist in the built data.
