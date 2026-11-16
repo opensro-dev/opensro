@@ -584,6 +584,10 @@ func (instance Instance) EffectiveMaxHP() uint32 {
 		multiplier = 100
 	case 6:
 		multiplier = 4
+	case 7:
+		// The v1.188 max-HP switch (0x4C19F0, table 0x4C1ADC): grade 7,
+		// the strong event monster, takes x30 (constant 0xB45E58).
+		multiplier = 30
 	}
 	if rarity>>4 == 1 {
 		multiplier *= 10

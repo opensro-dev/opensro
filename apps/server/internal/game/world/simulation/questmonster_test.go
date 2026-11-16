@@ -103,3 +103,43 @@ func TestQuestMonstersLeaveOnTheirTimers(t *testing.T) {
 		t.Fatal("a timed quest monster stayed in the world")
 	}
 }
+
+/*
+================
+TestQuestMonsterRarityOverride
+
+A spawn naming a grade lands at that grade (the party summon scroll's
+grade 7), at the full health that grade gives; without one the
+reference's own grade stands.
+================
+*/
+func TestQuestMonsterRarityOverride(t *testing.T) {
+	const code = "MOB_KK_YETI"
+	state := NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{
+		1: {RefObjID: 1, Codename: code, TidWord: 0xc6, MaxHP: 7059, WalkSpeed: 8, RunSpeed: 20},
+	}, nil))
+	state.SetRandomSource(func() float64 { return 0 })
+	state.StartDivision("quest")
+	lease, _ := state.PopulationLease("quest", instance.Pack(1, 1))
+	request := QuestMonsterSpawn{Division: "quest", Population: lease, Codename: code,
+		Position: Spawn{RegionID: 0x655e, X: 253, Y: 85, Z: 449}, NowMs: 1000, RadiusMin: 20, RadiusSpan: 80, LifetimeMs: 300000}
+	if !state.SpawnQuestMonster(request) {
+		t.Fatal("plain spawn refused")
+	}
+	request.Rarity, request.HasRarity = 7, true
+	if !state.SpawnQuestMonster(request) {
+		t.Fatal("graded spawn refused")
+	}
+	grades := map[uint8]int{}
+	for _, actor := range state.MaterializedInstances("quest") {
+		grades[actor.Rarity()]++
+	}
+	if grades[0] != 1 || grades[7] != 1 {
+		t.Fatalf("grades %v, want one plain and one grade 7", grades)
+	}
+	for _, actor := range state.MaterializedInstances("quest") {
+		if actor.CurrentHP != actor.EffectiveMaxHP() || (actor.Rarity() == 7 && actor.CurrentHP != 7059*30) {
+			t.Fatalf("grade %d spawned at %d of %d HP, want full", actor.Rarity(), actor.CurrentHP, actor.EffectiveMaxHP())
+		}
+	}
+}
