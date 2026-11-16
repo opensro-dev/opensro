@@ -24,6 +24,12 @@ groups walked in reverse, one random draw not consumed in commands.
 	S3  a still holder, roots kept, the emission stopped at 5 s, 60 Hz
 	    calls for 12 s
 
+What no reader has is left out: the program position of a graph record
+(the pass draws none for graph streams), the previous tick pose's
+position, the previous tick pose of an emitter no primitive draws and of
+the root, and a released element's parent and group (marked RELEASED),
+which are an old object's and name nothing live.
+
 An effect whose tick throws keeps the error message in its digest and
 ends that scenario there.
 
@@ -65,6 +71,7 @@ const SHIFT_SECONDS = 10;
 // Marks in the value stream: an empty slot, a missing value.
 const EMPTY = -1e300;
 const NONE = -2e300;
+const RELEASED = -3e300;
 
 /*
 ================
@@ -208,7 +215,7 @@ pushElement
 Every field of one element; parents and groups by serial (the root is 0).
 ================
 */
-function pushElement( values, element ) {
+function pushElement( values, element, drawn ) {
 	const state = element.state, previous = state.previous;
 	push( values, element.serial );
 	push( values, element.born );
@@ -218,9 +225,9 @@ function pushElement( values, element ) {
 	push( values, element.released ? 1 : 0 );
 	push( values, element.children );
 	push( values, element.rootLink );
-	push( values, element.parent.serial );
-	push( values, element.group ? element.group.parent.serial : NONE );
-	push( values, element.group ? element.group.total : NONE );
+	push( values, element.released ? RELEASED : element.parent.serial );
+	push( values, element.group ? (element.released ? RELEASED : element.group.parent.serial) : NONE );
+	push( values, element.group ? (element.released ? RELEASED : element.group.total) : NONE );
 	pushList( values, element.previousPosition );
 	pushList( values, element.origin );
 	pushNarrow( values, element.matrix );
@@ -233,9 +240,9 @@ function pushElement( values, element ) {
 	pushList( values, state.scale );
 	pushNarrow( values, state.rotation );
 	pushNarrow( values, state.angularVelocity );
+	if ( !drawn ) return;
 	if ( !previous ) push( values, NONE );
 	else {
-		pushList( values, previous.position );
 		pushList( values, previous.scale );
 		pushNarrow( values, previous.rotation );
 		pushNarrow( values, previous.matrix );
@@ -255,24 +262,29 @@ function pushGraph( values, history, drawn, link, records, work ) {
 	push( values, history.startTick );
 	push( values, history.index );
 	push( values, history.serial );
-	pushElement( values, history.root );
+	pushElement( values, history.root, false );
 	for ( let n = 0; n < history.elements.length; n++ ) {
 		const rows = history.elements[n];
 		push( values, rows.length );
 		for ( let b = 0; b < rows.length; b++ ) {
 			const element = rows[b];
 			if ( !element ) push( values, EMPTY );
-			else pushElement( values, element );
+			else pushElement( values, element, drawn[n] );
 			if ( element?.alive && drawn[n] ) {
 				records.fill( 0 );
 				writeGraphRecord( records, 0, element, work, link );
+				// Graph streams draw no program position.
+				records.fill( 0, 24, 27 );
+				records.fill( 0, 28, 31 );
 				pushNarrow( values, records );
 			}
 		}
 		pushList( values, history.births[n] );
 		const parents = history.parents[n];
 		push( values, parents.length );
-		for ( let b = 0; b < parents.length; b++ ) push( values, parents[b] ? parents[b].serial : EMPTY );
+		for ( let b = 0; b < parents.length; b++ ) {
+			push( values, rows[b]?.released ? RELEASED : parents[b] ? parents[b].serial : EMPTY );
+		}
 		push( values, history.groups[n].size );
 		for ( const group of history.groups[n].values() ) {
 			push( values, group.parent.serial );
