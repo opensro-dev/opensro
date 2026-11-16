@@ -20,6 +20,7 @@ import { publishBytesAtomically } from "./shared/atomicPublish.mjs";
 import { validateAssetPackIndex } from "./assetPackIndexValidation.mjs";
 import { assertPackIndexFits, decodeStoredMember, readPackPrefix, storedMemberBytes } from "./shared/packFormat.mjs";
 import { collectPackGarbage } from "./assetPackGarbage.mjs";
+import { compareText } from "./shared/textOrder.mjs";
 
 const hash = bytes => createHash( "sha256" ).update( bytes ).digest( "hex" );
 
@@ -159,7 +160,7 @@ The published order: groups by name, assets by path.
 function sortedIndex( index ) {
 	return {
 		...index,
-		groups: [ ...index.groups ].sort( ( a, b ) => a.name.localeCompare( b.name ) ),
-		assets: [ ...index.assets ].sort( ( a, b ) => a.path.localeCompare( b.path ) )
+		groups: [ ...index.groups ].sort( ( a, b ) => compareText( a.name, b.name ) ),
+		assets: [ ...index.assets ].sort( ( a, b ) => compareText( a.path, b.path ) )
 	};
 }

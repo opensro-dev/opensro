@@ -39,7 +39,7 @@ import { mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { GENERATED_ROOT } from "./lib/generatedRoot.mjs";
+import { GENERATED_ROOT, resolveBuildStateRoot } from "./lib/generatedRoot.mjs";
 import { runCommandUnderLock } from "./rebuildLockCli.mjs";
 
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
@@ -846,7 +846,7 @@ export async function rebuildLockDirectory( name ) {
 		} catch ( error ) {
 			if ( error?.code !== "ENOENT" ) throw error;
 		}
-		root = path.join( path.dirname( generated ), ".state", "locks" );
+		root = path.join( resolveBuildStateRoot( generated ), "locks" );
 	}
 	return path.join( root, `${name}.lock` );
 }

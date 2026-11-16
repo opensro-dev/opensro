@@ -17,7 +17,10 @@ magicoptionassign.txt (dress row TID3 13, TID4 2).
 
 package enterworld
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 const (
 	// AvatarV188OptionIDFirst and AvatarV188OptionIDLast bound the v1.188
@@ -51,6 +54,8 @@ var avatarV188Specs = [...]avatarV188Spec{
 	{paramID: 376, optionName: "MATTR_AVATAR_LUCK_4", tag: avatarV188TagLUCK},
 }
 
+// avatarV188DressOptions are the dress codenames this port adds to the v1.150
+// dress row (TID3 13, TID4 2).
 var avatarV188DressOptions = [...]string{
 	"MATTR_AVATAR_LUCK",
 	"MATTR_AVATAR_LUCK_2",
@@ -59,6 +64,28 @@ var avatarV188DressOptions = [...]string{
 	"MATTR_AVATAR_MDIA_2",
 	"MATTR_AVATAR_MDIA_3",
 	"MATTR_AVATAR_MDIA_4",
+}
+
+// avatarV188DressRow is the v1.188 magicoptionassign.txt dress row in its file
+// order, which is the order the client lists the options in: the v1.150
+// client's 0x78C720 walks the row slot by slot. The v1.188 row also carries
+// MATTR_AVATAR_STR_2..4 and MATTR_AVATAR_INT_2..4 after STR and INT; this
+// port does not ship those, so they are left out.
+var avatarV188DressRow = [...]string{
+	"MATTR_AVATAR_STR",
+	"MATTR_AVATAR_INT",
+	"MATTR_AVATAR_LUCK",
+	"MATTR_AVATAR_LUCK_2",
+	"MATTR_AVATAR_LUCK_3",
+	"MATTR_AVATAR_LUCK_4",
+	"MATTR_AVATAR_MDIA",
+	"MATTR_AVATAR_MDIA_2",
+	"MATTR_AVATAR_MDIA_3",
+	"MATTR_AVATAR_MDIA_4",
+	"MATTR_AVATAR_HR",
+	"MATTR_AVATAR_HP",
+	"MATTR_AVATAR_DRUA",
+	"MATTR_AVATAR_HPRG",
 }
 
 /*
@@ -100,12 +127,52 @@ func AvatarV188MagicOptions() []MagicOptionRow {
 ================
 AvatarV188DressOptions
 
-Returns the seven v1.188 avatar dress option codenames appended to the
-v1.150 magicoptionassign.txt dress row (TID3 13, TID4 2).
+Returns the seven v1.188 avatar dress option codenames this port adds to
+the v1.150 magicoptionassign.txt dress row (TID3 13, TID4 2).
 ================
 */
 func AvatarV188DressOptions() []string {
 	out := make([]string, len(avatarV188DressOptions))
 	copy(out, avatarV188DressOptions[:])
 	return out
+}
+
+/*
+================
+AvatarV188DressRow
+
+Returns the dress row in v1.188 order (avatarV188DressRow). The loaded
+v1.150 row must be the same row without the seven added options; any other
+row is refused, so a changed data file cannot silently lose or reorder an
+option.
+================
+*/
+func AvatarV188DressRow(v150 []string) ([]string, error) {
+	want := make([]string, 0, len(avatarV188DressRow))
+	for _, name := range avatarV188DressRow {
+		if !slices.Contains(avatarV188DressOptions[:], name) {
+			want = append(want, name)
+		}
+	}
+	if !sameSet(v150, want) {
+		return nil, fmt.Errorf("magicoptionassign: v1.150 dress row %v does not match the v1.188 row without its added options %v", v150, want)
+	}
+	return slices.Clone(avatarV188DressRow[:]), nil
+}
+
+/*
+================
+sameSet
+================
+*/
+func sameSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for _, name := range a {
+		if !slices.Contains(b, name) {
+			return false
+		}
+	}
+	return true
 }

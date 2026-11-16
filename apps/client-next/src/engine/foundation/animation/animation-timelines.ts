@@ -85,14 +85,40 @@ export function clipTimelines( clip: TimedClip ): ClipTimelines {
 
 /*
 ================
+ClipTimelineCache
+
+Per-clip results of clipTimelineBytes, owned by the character renderer:
+an admitted clip's key times never change, and every plan of every body
+that shares the clip reads the same number, so its key times are hashed
+once, not on each plan.
+================
+*/
+export type ClipTimelineCache = WeakMap<TimedClip, number>;
+
+/*
+================
+createClipTimelineCache
+================
+*/
+export function createClipTimelineCache(): ClipTimelineCache {
+	return new WeakMap();
+}
+
+/*
+================
 clipTimelineBytes
 
 What one pose retains once it has sampled the clip.
 ================
 */
-export function clipTimelineBytes( clip: TimedClip ): number {
-	return TIMELINE_CLIP_BYTES + clip.channels.length * TIMELINE_INDEX_BYTES +
-		clipTimelines( clip ).times.length * TIMELINE_CURSOR_BYTES;
+export function clipTimelineBytes( clip: TimedClip, cache?: ClipTimelineCache ): number {
+	let bytes = cache?.get( clip );
+	if ( bytes === undefined ) {
+		bytes = TIMELINE_CLIP_BYTES + clip.channels.length * TIMELINE_INDEX_BYTES +
+			clipTimelines( clip ).times.length * TIMELINE_CURSOR_BYTES;
+		cache?.set( clip, bytes );
+	}
+	return bytes;
 }
 
 /*

@@ -10,7 +10,7 @@ budgets bound memory; the structural limits reject malformed sources.
 ===========================================================================
 */
 import { clothData, clothBytes } from "./cloth";
-import { clipTimelineBytes } from "./animation-timelines";
+import { clipTimelineBytes, type ClipTimelineCache } from "./animation-timelines";
 import type { CharacterModel } from "@/engine/contracts/character";
 import type { NativeTexture } from "@/engine/contracts/texture";
 import { validateNativeTexture } from "@/engine/foundation/assets/native-texture";
@@ -55,15 +55,18 @@ characterPoseBytes
 Charge pose evaluation storage separately from immutable source data. A
 clip costs a pose its entries and, once sampled, one cursor per timeline
 (animation-timelines.ts), not one per channel: a native clip keys all its
-channels at the same times.
+channels at the same times. The renderer passes its timeline cache.
 ================
 */
-export function characterPoseBytes( model: CharacterModel ): number {
+export function characterPoseBytes( model: CharacterModel, timelines?: ClipTimelineCache ): number {
 	// Local/global and attachment bind matrices, mutable and retained rest TRS, blend scratch,
 	// weights, sample and one exact palette per primitive/pose revision.
 	return model.nodes.length * ((16 + 16 + 16 + 3 + 4 + 3 + 10 + 10 + 6) * 4 + 2) + 16 +
 		model.primitives.reduce( ( bytes, primitive ) => bytes + primitive.joints.length * 64, 0 ) +
-		model.clips.reduce( ( bytes, clip ) => bytes + POSE_CLIP_ENTRY_BYTES + clipTimelineBytes( clip ), 0 ) +
+		model.clips.reduce(
+			( bytes, clip ) => bytes + POSE_CLIP_ENTRY_BYTES + clipTimelineBytes( clip, timelines ),
+			0
+		) +
 		// The quaternion bracket scratch, sized by the largest clip.
 		model.clips.reduce( ( max, clip ) => Math.max( max, clip.channels.length ), 0 ) * 32;
 }
