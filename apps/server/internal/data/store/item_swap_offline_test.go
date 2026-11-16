@@ -130,3 +130,81 @@ func TestSwapItemsOfflineCoversEveryContainer(t *testing.T) {
 		t.Fatal("another character was swapped")
 	}
 }
+
+/*
+================
+TestSwapItemsOfflineShardCoversEveryone
+
+The shard run names nobody and still reaches every container: a character
+pending deletion (it can be restored) and its account's warehouse, another
+character's bag and its guild's storage. A refused row anywhere writes
+nothing.
+================
+*/
+func TestSwapItemsOfflineShardCoversEveryone(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	sun := domain.InventoryRow{Slot: 13, RefObjID: 1, Codename: "SUN", StackCount: 3}
+	stay := &domain.Character{Name: "Stay", MissionInventory: []domain.InventoryRow{sun}}
+	leaving := &domain.Character{Name: "Leaving", MissionInventory: []domain.InventoryRow{sun}}
+	for _, c := range []*domain.Character{stay, leaving} {
+		if err := s.CreateCharacter(testDivision, "acct-"+c.Name, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.TransactStorage(leaving, func(_ *domain.Character, storage *domain.AccountStorage) error {
+		row := sun
+		row.Slot = 0
+		storage.Rows = append(storage.Rows, row)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	guildRow := sun
+	guildRow.Slot = 0
+	if _, err := s.Guilds().CreateGuild(testDivision, domain.GuildRecord{Name: "Elsewhere", Level: 2,
+		Storage: &domain.AccountStorage{Capacity: 30, Rows: []domain.InventoryRow{guildRow}}},
+		domain.GuildMemberRecord{CharID: stay.ID, JID: uint32(stay.ID), Name: stay.Name}, stay); err != nil {
+		t.Fatal(err)
+	}
+
+	s.Mutate("shard-swap-fixture", func() { leaving.DeletePending = true })
+	s.Mutate("shard-swap-refusal", func() {
+		stay.MissionInventory = append(stay.MissionInventory, domain.InventoryRow{Slot: 14, RefObjID: 3, Codename: "BAD", StackCount: 1})
+	})
+	if _, err := s.SwapItemsOfflineShard(testDivision, sunToMoon, true); err == nil {
+		t.Fatal("an unmapped row was accepted")
+	}
+	if leaving.MissionInventory[0].Codename != "SUN" {
+		t.Fatal("a refused run changed memory")
+	}
+	s.Mutate("shard-swap-refusal-undo", func() { stay.MissionInventory = stay.MissionInventory[:1] })
+
+	preview, err := s.SwapItemsOfflineShard(testDivision, sunToMoon, false)
+	if err != nil || len(preview) != 4 {
+		t.Fatalf("preview %v %+v", err, preview)
+	}
+	applied, err := s.SwapItemsOfflineShard(testDivision, sunToMoon, true)
+	if err != nil || len(applied) != 4 {
+		t.Fatalf("apply %v %+v", err, applied)
+	}
+	s.Close()
+
+	reopened := openTest(t, dir, newTestClock())
+	for _, c := range reopened.Characters().CharactersForDivision(testDivision) {
+		if got := c.MissionInventory[0]; got.Codename != "MOON" || got.StackCount != 3 {
+			t.Fatalf("%s bag row %+v", c.Name, got)
+		}
+	}
+	storage, err := readAccountStorage(reopened.syncDBLocked(), "acct-Leaving")
+	if err != nil || len(storage.Rows) != 1 || storage.Rows[0].Codename != "MOON" {
+		t.Fatalf("storage %v %+v", err, storage.Rows)
+	}
+	for _, guild := range reopened.guilds[testDivision] {
+		if guild.Storage == nil || guild.Storage.Rows[0].Codename != "MOON" {
+			t.Fatalf("guild storage %+v", guild.Storage)
+		}
+	}
+}

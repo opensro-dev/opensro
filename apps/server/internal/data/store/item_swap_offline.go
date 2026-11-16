@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-item_swap_offline.go - an operator's offline item swap for named characters
+item_swap_offline.go - an operator's offline item swap, named characters or a whole shard
 
 An operator-only maintenance door, like RenameCharacterOffline: the caller
 opens the stopped authority exclusively (store.Open's writer lock refuses a
@@ -14,16 +14,25 @@ covered). One transaction commits every change, so a
 failure leaves the store as it was. A row the swap refuses fails the whole
 run before anything is written.
 
-It exists for one owner decision (2026-10-14): the balance advisor's own
-characters trade their degree-9 Seal of Sun gear for the matching Moon
-(cmd/operations/sro-swap-sun). It is not a native mechanic.
+SwapItemsOfflineShard covers the whole shard instead: every character of
+the division (one pending deletion too, since it can be restored), every
+stored account warehouse (accounts without characters too) and every
+guild's storage.
+
+It exists for owner decisions, not a native mechanic: the balance
+advisor's own characters trade their degree-9 Seal of Sun gear for the
+matching Moon (2026-10-14, cmd/operations/sro-swap-sun), and every plain
+elixir becomes the Intensifying one the game now hands out (2026-11-16,
+cmd/operations/sro-swap-elixir).
 
 ===========================================================================
 */
 package store
 
 import (
+	"database/sql"
 	"fmt"
+	"sort"
 
 	"opensro.online/server/internal/domain"
 )
@@ -80,22 +89,40 @@ func swapRows(character, container string, rows []domain.InventoryRow, swap Item
 
 /*
 ================
+swapScope
+
+The containers one run covers. Each storage carries the label its rows are
+reported under: a named run reports them under the character that reaches
+them, a shard run under the account or guild.
+================
+*/
+type swapScope struct {
+	characters []*domain.Character
+	accounts   []swapStorage
+	guilds     []swapStorage
+}
+
+type swapStorage struct {
+	label   string
+	account string
+	guild   int64
+}
+
+/*
+================
 SwapItemsOffline
 
 Previews (apply false) or commits the swap over the named characters of
-division. The result lists every changed row in container order.
+division, their account storage and their guild's storage. The result
+lists every changed row in container order.
 ================
 */
 func (s *Store) SwapItemsOffline(division string, names []string, swap ItemSwapFunc, apply bool) ([]ItemSwap, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.ground.source != nil || !s.changes.empty() || s.db == nil {
-		return nil, fmt.Errorf("item swap requires a clean offline authority")
-	}
-	var out []ItemSwap
-	characters := map[*domain.Character]*domain.Character{}
-	storages := map[string]domain.AccountStorage{}
-	guilds := map[int64]domain.GuildRecord{}
+	var scope swapScope
+	accounts := map[string]bool{}
+	guilds := map[int64]bool{}
 	for _, name := range names {
 		var selected *domain.Character
 		for _, c := range s.characters[division] {
@@ -106,6 +133,110 @@ func (s *Store) SwapItemsOffline(division string, names []string, swap ItemSwapF
 		if selected == nil {
 			return nil, fmt.Errorf("active character %q not found in %s", name, division)
 		}
+		scope.characters = append(scope.characters, selected)
+		if selected.AccountID != "" && !accounts[selected.AccountID] {
+			accounts[selected.AccountID] = true
+			scope.accounts = append(scope.accounts, swapStorage{label: name, account: selected.AccountID})
+		}
+		if selected.GuildID != nil && !guilds[*selected.GuildID] {
+			guilds[*selected.GuildID] = true
+			scope.guilds = append(scope.guilds, swapStorage{label: name, guild: *selected.GuildID})
+		}
+	}
+	return s.swapItemsOfflineLocked(division, scope, swap, apply)
+}
+
+/*
+================
+SwapItemsOfflineShard
+
+The same swap over the whole shard: every character of division in name
+order, every stored account warehouse in account order, and every guild's
+storage in guild order.
+================
+*/
+func (s *Store) SwapItemsOfflineShard(division string, swap ItemSwapFunc, apply bool) ([]ItemSwap, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return nil, fmt.Errorf("item swap requires a clean offline authority")
+	}
+	var scope swapScope
+	scope.characters = append(scope.characters, s.characters[division]...)
+	sort.SliceStable(scope.characters, func(i, j int) bool { return scope.characters[i].Name < scope.characters[j].Name })
+	accounts, err := storedAccounts(s.syncDBLocked())
+	if err != nil {
+		return nil, err
+	}
+	for _, account := range accounts {
+		scope.accounts = append(scope.accounts, swapStorage{label: "account " + account, account: account})
+	}
+	for id := range s.guilds[division] {
+		scope.guilds = append(scope.guilds, swapStorage{label: fmt.Sprintf("guild %d", id), guild: id})
+	}
+	sort.Slice(scope.guilds, func(i, j int) bool { return scope.guilds[i].guild < scope.guilds[j].guild })
+	return s.swapItemsOfflineLocked(division, scope, swap, apply)
+}
+
+/*
+================
+storedAccounts
+
+Every account that has a warehouse row, in account order.
+================
+*/
+func storedAccounts(db *sql.DB) ([]string, error) {
+	rows, err := db.Query("SELECT account_id FROM account_storage ORDER BY account_id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var accounts []string
+	for rows.Next() {
+		var account string
+		if err := rows.Scan(&account); err != nil {
+			return nil, err
+		}
+		accounts = append(accounts, account)
+	}
+	return accounts, rows.Err()
+}
+
+/*
+================
+cloneStorageRows
+
+A storage whose rows (and their companions) can change without touching
+the store's copy.
+================
+*/
+func cloneStorageRows(storage domain.AccountStorage) domain.AccountStorage {
+	storage.Rows = append([]domain.InventoryRow(nil), storage.Rows...)
+	for i := range storage.Rows {
+		storage.Rows[i].Summon = domain.CloneCOS(storage.Rows[i].Summon)
+	}
+	return storage
+}
+
+/*
+================
+swapItemsOfflineLocked
+
+Runs swap over scope, then, with apply, commits every changed character,
+storage and guild in one transaction. A refused row fails the run before
+anything is written.
+================
+*/
+func (s *Store) swapItemsOfflineLocked(division string, scope swapScope, swap ItemSwapFunc, apply bool) ([]ItemSwap, error) {
+	if s.ground.source != nil || !s.changes.empty() || s.db == nil {
+		return nil, fmt.Errorf("item swap requires a clean offline authority")
+	}
+	var out []ItemSwap
+	characters := map[*domain.Character]*domain.Character{}
+	storages := map[string]domain.AccountStorage{}
+	guilds := map[int64]domain.GuildRecord{}
+	for _, selected := range scope.characters {
+		name := selected.Name
 		next := selected.Snapshot()
 		before := len(out)
 		// Equipped sockets and the bag share one row list (slot 0-12 worn).
@@ -128,41 +259,35 @@ func (s *Store) SwapItemsOffline(division string, names []string, swap ItemSwapF
 		if len(out) > before {
 			characters[selected] = next
 		}
-		if _, seen := storages[selected.AccountID]; !seen && selected.AccountID != "" {
-			storage, err := readAccountStorage(s.syncDBLocked(), selected.AccountID)
-			if err != nil {
-				return nil, err
-			}
-			storage.Rows = append([]domain.InventoryRow(nil), storage.Rows...)
-			for i := range storage.Rows {
-				storage.Rows[i].Summon = domain.CloneCOS(storage.Rows[i].Summon)
-			}
-			if err := swapRows(name, "storage", storage.Rows, swap, &out); err != nil {
-				return nil, err
-			}
-			storages[selected.AccountID] = storage
+	}
+	for _, owner := range scope.accounts {
+		stored, err := readAccountStorage(s.syncDBLocked(), owner.account)
+		if err != nil {
+			return nil, err
 		}
-		if selected.GuildID == nil {
-			continue
+		storage := cloneStorageRows(stored)
+		before := len(out)
+		if err := swapRows(owner.label, "storage", storage.Rows, swap, &out); err != nil {
+			return nil, err
 		}
-		id := *selected.GuildID
-		if _, seen := guilds[id]; seen {
-			continue
+		if len(out) > before {
+			storages[owner.account] = storage
 		}
-		guild, exists := s.guilds[division][id]
+	}
+	for _, owner := range scope.guilds {
+		guild, exists := s.guilds[division][owner.guild]
 		if !exists || guild.Storage == nil {
 			continue
 		}
-		storage := *guild.Storage
-		storage.Rows = append([]domain.InventoryRow(nil), storage.Rows...)
-		for i := range storage.Rows {
-			storage.Rows[i].Summon = domain.CloneCOS(storage.Rows[i].Summon)
-		}
-		if err := swapRows(name, fmt.Sprintf("guild %d storage", id), storage.Rows, swap, &out); err != nil {
+		storage := cloneStorageRows(*guild.Storage)
+		before := len(out)
+		if err := swapRows(owner.label, fmt.Sprintf("guild %d storage", owner.guild), storage.Rows, swap, &out); err != nil {
 			return nil, err
 		}
-		guild.Storage = &storage
-		guilds[id] = guild
+		if len(out) > before {
+			guild.Storage = &storage
+			guilds[owner.guild] = guild
+		}
 	}
 	if !apply || len(out) == 0 {
 		return out, nil
