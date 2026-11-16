@@ -13,9 +13,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
 import { publicRoot } from "../../../../scripts/build/world/paths.mjs";
-const { createParticleGraph, advanceParticleGraph } = await import(
-	"../../src/engine/foundation/animation/particle-graph.ts"
-);
+const { advanceParticleGraph } = await import( "../../src/engine/foundation/animation/particle-graph.ts" );
+const { createParticleGraph } = await import( "../../src/engine/foundation/animation/particle-graph-slots.ts" );
+const { particleElements } = await import( "../helpers/particle-slots.mjs" );
 const { createEffectPrograms } = await import( "../../src/engine/runtime/assets/worker/effects/program/program.ts" );
 const { identity } = await import( "../../src/engine/foundation/rendering/world-math.ts" );
 
@@ -63,7 +63,7 @@ function run( commands, frame = 0 ) {
 	const graph = [ emitter( commands ) ];
 	const state = createParticleGraph( graph, 0 );
 	advanceParticleGraph( state, graph, frame / 20, Float32Array.from( turn() ), new Float32Array( [ .5 ] ) );
-	const element = state.elements[0][0];
+	const element = particleElements( state, 0 )[0];
 	assert.ok( element );
 	return element;
 }
@@ -79,10 +79,10 @@ test("BAN position mode 4 uses the preceding rotation while mode 7 uses its pare
 	const rotation = { name: "SetBANRot", flags: 2, frames: [ 0 ], rotations: [ turn() ], program: {} };
 	for ( const [flags, expected] of [ [ 4, [ -2, 0, 0 ] ], [ 7, [ 0, 2, 0 ] ] ] ) {
 		const position = { name: "SetBANPos", flags, frames: [ 0 ], positions: [ [ 2, 0, 0 ] ], program: {} };
-		assert.deepEqual( run( [ rotation, position ] ).state.position, expected );
+		assert.deepEqual( run( [ rotation, position ] ).position, expected );
 	}
 	const position = { name: "SetBANPos", flags: 4, frames: [ 0 ], positions: [ [ 2, 0, 0 ] ], program: {} };
-	assert.deepEqual( run( [ position, rotation ] ).state.position, [ 0, 2, 0 ] );
+	assert.deepEqual( run( [ position, rotation ] ).position, [ 0, 2, 0 ] );
 });
 
 test("scheduled rotation does not run before its authored frame", () => {

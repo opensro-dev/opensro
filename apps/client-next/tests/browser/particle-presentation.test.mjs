@@ -36,6 +36,34 @@ for ( const storageBudget of [ undefined, 65536 ] ) {
 					"/src/engine/runtime/renderer/device/particles.ts"
 				);
 				const { presentSlot } = await import( "/tests/helpers/particle-reference.mjs" );
+				const { createParticleGraph } = await import(
+					"/src/engine/foundation/animation/particle-graph-slots.ts"
+				);
+				const { createParticleGraphPlan } = await import(
+					"/src/engine/foundation/animation/particle-graph-plan.ts"
+				);
+				// One graph slot a graph record is written from, filled by hand.
+				const slotGraph = [ {
+					parent: -1,
+					parents: [ 0 ],
+					births: [ 0 ],
+					frames: 1,
+					keepMatrix: false,
+					keepOrigin: false,
+					positionDepth: 0,
+					matrixDepth: 0,
+					velocityDepth: 0,
+					followDepth: 0,
+					scales: [],
+					positions: [],
+					rotations: []
+				} ];
+				const holder = createParticleGraph(
+					slotGraph,
+					0,
+					createParticleGraphPlan( slotGraph, [ { particleEmitter: 0 } ] )
+				);
+				const holderSlot = holder.plan.base[0];
 				const errors = [];
 				const adapter = await navigator.gpu.requestAdapter();
 				if ( !adapter ) throw Error( "No WebGPU adapter" );
@@ -185,15 +213,21 @@ for ( const storageBudget of [ undefined, 65536 ] ) {
 						const birth = time - (random() < .85 ? random() * 1.4 : random() < .5 ? -.5 : 2 + random());
 						const state = programState();
 						if ( c.graph ) {
-							const matrix = rotation( random() * 6, .5 + random() );
-							const element = {
-								matrix,
-								previousPosition: state.position.map( v => v - spread( 1 ) ),
-								state,
-								clockBirth: birth * 20
-							};
-							if ( state.previous ) state.previous.matrix.set( ticked( matrix, -spread( .8 ) ) );
-							records.writeGraphRecord( particles.records, slot, element, work );
+							const matrix = rotation( random() * 6, .5 + random() ), s = holderSlot;
+							holder.matrix.set( matrix, s * 16 );
+							holder.previousPosition.set( state.position.map( v => v - spread( 1 ) ), s * 3 );
+							holder.position.set( state.position, s * 3 );
+							holder.velocity.set( state.velocity, s * 3 );
+							holder.scale.set( state.scale, s * 3 );
+							holder.rotation.set( state.rotation, s * 16 );
+							holder.frames[s] = state.frame;
+							holder.clockBirth[s] = birth * 20;
+							if ( state.previous ) {
+								holder.previousScale.set( state.previous.scale, 0 );
+								holder.previousRotation.set( state.previous.rotation, 0 );
+								holder.previousMatrix.set( ticked( matrix, -spread( .8 ) ), 0 );
+							}
+							records.writeGraphRecord( particles.records, slot, holder, s, state.previous ? 0 : -1, 0 );
 							// Any mix of holder links (LINK_TRANSLATE 4, LINK_TURN 8, LINK_MATRIX 16).
 							particles.records[slot * records.PARTICLE_RECORD + records.RECORD_FLAGS] +=
 								Math.floor( random() * 8 ) * 4;

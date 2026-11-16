@@ -93,7 +93,9 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 		billboard: model.primitives.some( p => p.billboard || p.ribbon ),
 		continuousGraph: model.particleGraph?.some( e => e.loop || e.emission ) ?? false,
 		// The tables every tick of the model's particle graphs reads.
-		particleGraph: model.particleGraph ? createParticleGraphPlan( model.particleGraph ) : undefined,
+		particleGraph: model.particleGraph ?
+			createParticleGraphPlan( model.particleGraph, model.primitives ) :
+			undefined,
 		sharedPalette: characterSharedPalette( model ),
 		particleBytes: model.primitives.reduce(
 			( sum, p ) => sum + (p.emission?.capacity ?? p.emission?.births.length ?? 0) * 320,
