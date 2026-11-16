@@ -207,5 +207,22 @@ export const socialRecipes: readonly ExtendedRecipe[] = [
 			await context.step();
 			await press( context, "npc-job-" + action + ":1" );
 		}
-	}) )
+	}) ),
+	{
+		id: "breadth:academy-open",
+		title: "Academy - establishment question",
+		family: "Services",
+		source: "runtime/ui/ui.ts npc-academy-open and the 5D26F0 type 6 question",
+		resources: [ "ifmessagebox" ],
+		controls: [ "job-confirm-yes", "job-confirm-no" ],
+		async open( context ) {
+			// The storage NPC (capability 4) offers the row to a campless
+			// player of level 60 or more (5D9100).
+			npc( context, 4, "Storage keeper" );
+			const progression = context.state.gameplay.progression;
+			if ( progression ) context.state.gameplay.progression = { ...progression, level: 60 };
+			await context.step();
+			await press( context, "npc-academy-open" );
+		}
+	}
 ];
