@@ -168,7 +168,7 @@ func (rt *Runtime) grantTradeGoodsPickup(g pickupGrant) OpResult {
 		// the victim's decay. A trader's run opens only with a purchase,
 		// so dropping and picking up one's own goods never resets the cap.
 		if enterworld.DressedJob(c) == domain.JobThief {
-			rt.openStealRun(c, item.TradeOwner, rt.Now())
+			rt.openStealRun(c, rt.goodsVictim(division, item.TradeOwner), rt.Now())
 		}
 	}
 	return result

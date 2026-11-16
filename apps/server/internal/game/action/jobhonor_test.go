@@ -158,3 +158,40 @@ func TestAThiefsSaleWithNoStealScoresNothing(t *testing.T) {
 		t.Fatalf("a sale with no haul kept %d", got)
 	}
 }
+
+func TestStealsDecayByTheVictimsAccountNotItsAlias(t *testing.T) {
+	at := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	trader := func(id int64, account, alias string) *enterworld.Character {
+		c := honorCharacter(id, account)
+		c.Job.Alias = alias
+		return c
+	}
+	rt := cosOwnerIndexRuntime(map[string][]*enterworld.Character{testDivision: {
+		trader(11, "alt-account", "AltOne"), trader(12, "alt-account", "AltTwo"), trader(13, "real-account", "Honest"),
+	}})
+	ledger, err := jobhonor.Open(t.TempDir(), func() time.Time { return at })
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ledger.Close() })
+	rt.JobHonor = ledger
+	thief := honorCharacter(1, "thief-account")
+	full := int64(honorRunPointCap) * honorThiefGoldPerPoint
+	steal := func(alias string) int {
+		rt.openStealRun(thief, rt.goodsVictim(testDivision, alias), at)
+		return rt.scoreTradeSale(thief, domain.JobThief, full, at)
+	}
+	// Two trader characters of one alt account are one victim.
+	for i, step := range []struct {
+		alias string
+		want  int
+	}{{"AltOne", honorRunPointCap}, {"AltTwo", honorRunPointCap / 2}, {"altone", 0}, {"Honest", honorRunPointCap}} {
+		if got := steal(step.alias); got != step.want {
+			t.Fatalf("steal %d (%s) kept %d, want %d", i+1, step.alias, got, step.want)
+		}
+	}
+	// Goods whose owner alias no character carries still decay by alias.
+	if steal("Gone") != honorRunPointCap || steal("Gone") != honorRunPointCap/2 {
+		t.Fatal("an unknown owner alias did not decay")
+	}
+}

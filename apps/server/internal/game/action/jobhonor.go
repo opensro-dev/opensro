@@ -23,8 +23,10 @@ an honor day, at half the second, and not at all after. A thieves'
 merchant pays for the goods' whole value, so without the decay a
 player's own trader alt on another account could buy a dear stack, have
 the player's thief take it and score a fresh run four times a day at no
-risk. The victim is the goods' trade owner (the native owner alias);
-several stacks of one load picked up into one unsold run are one steal.
+risk. The victim is the account behind the goods' trade owner (the native
+owner alias), not the alias: one account holds four characters, and
+four trader aliases would be four victims. Several stacks of one load
+picked up into one unsold run are one steal.
 The steal counts are memory only: a restart forgets them, as it forgets
 the open runs. INFERENCE: worth a restart's reset, which the operator
 alone can cause.
@@ -116,8 +118,8 @@ type honorRun struct {
 	decay  int
 }
 
-// honorSteal keys the per-victim decay: the thief's account, the victim
-// owner alias, the honor day.
+// honorSteal keys the per-victim decay: the thief's account, the
+// victim's account (goodsVictim), the honor day.
 type honorSteal struct {
 	account string
 	victim  string
@@ -163,9 +165,31 @@ func (rt *Runtime) openHonorRun(c *enterworld.Character) {
 
 /*
 ================
+goodsVictim
+
+The decay key of goods owned by alias: the account of the division's
+character carrying that job alias. An alias no character carries any
+more (deleted, or renamed since the goods were bought) keys by itself,
+so it still decays.
+================
+*/
+func (rt *Runtime) goodsVictim(division, alias string) string {
+	if alias == "" {
+		return ""
+	}
+	for _, other := range rt.deps.CharactersForDivision(division) {
+		if other != nil && other.AccountID != "" && strings.EqualFold(other.Job.Alias, alias) {
+			return "account:" + other.AccountID
+		}
+	}
+	return "alias:" + strings.ToLower(alias)
+}
+
+/*
+================
 openStealRun
 
-A thief's haul of victim's goods. More of the same victim's goods into
+A thief's haul of victim's goods (goodsVictim's key). More of the same victim's goods into
 a run that has not sold yet are the same steal; otherwise a new run
 opens and the steal counts toward the victim's decay for the day.
 ================
