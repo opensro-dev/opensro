@@ -761,6 +761,13 @@ func (rt *Runtime) planMonsterKillLoot(
 		box.OwnerJID = ownerJID
 		admitted = append(admitted, rt.scatterMonsterDrop(box, at, monster.Rarity()))
 	}
+	// Port-only, not native: while So-Ok's Christmas Gift runs, an
+	// ordinary kill can leave one Jewel Box (sook_christmas.go), after
+	// admission and the drop cap like the Halloween box above.
+	if box, ok := rt.sookChristmasBoxDrop(snapshot, monster, at, now); ok {
+		box.OwnerJID = ownerJID
+		admitted = append(admitted, rt.scatterMonsterDrop(box, at, monster.Rarity()))
+	}
 	// Port-only, not native: with SRO_CHRISTMAS_EVENT a winter unique
 	// leaves its Red Santa Socks (christmas_loot.go), after admission and
 	// the drop cap like the box above.

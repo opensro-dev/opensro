@@ -404,7 +404,7 @@ func NewServer(cfg Config) (*Server, error) {
 	// peer that never offers it is served exactly as before.
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:    4096,
-		WriteBufferSize:   4096,
+		WriteBufferSize:   wsWriteBufferSize,
 		CheckOrigin:       checkOrigin,
 		EnableCompression: true,
 	}

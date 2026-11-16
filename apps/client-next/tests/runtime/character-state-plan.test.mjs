@@ -23,7 +23,8 @@ const { createCharacterRenderPlan, characterBatchBytes, characterPoseBytes, crea
 	...(await load( "src/engine/runtime/characters/state-index.ts" ))
 };
 test("admission plans preserve every capacity reservation including irregular particle batches", () => {
-	for ( const emission of [ undefined, { capacity: 17, births: [ 0 ], lifetime: 1 } ] ) {
+	// A row glow's states exist from two rows on (characterBatchBytes).
+	for ( const extra of [ {}, { emission: { capacity: 17, births: [ 0 ], lifetime: 1 } }, { equipmentGlow: {} } ] ) {
 		const model = {
 			nodes: [ {} ],
 			clips: [ {
@@ -36,7 +37,7 @@ test("admission plans preserve every capacity reservation including irregular pa
 				( _, i ) => ({
 					joints: Array( i + 1 ).fill( 0 ),
 					inverseBind: new Float32Array( (i + 1) * 16 ),
-					emission,
+					...extra,
 					geometry: {
 						positions: new Float32Array( 9 + i * 3 ),
 						indices: new Uint32Array( 3 ),

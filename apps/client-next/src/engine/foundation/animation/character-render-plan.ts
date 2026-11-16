@@ -16,6 +16,7 @@ import {
 	characterBatchBytes,
 	characterMeshBytes,
 	characterSharedMesh,
+	characterRowGlow,
 	characterSharedPalette,
 	type CharacterPlanCaches
 } from "./character-budget";
@@ -60,12 +61,15 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 			p.geometry.material?.textureFactorPulse)
 	);
 	// Ordinary power-of-two batches have a fixed allocation plus a per-slot cost.
-	// Store two scalars instead of a model-by-actor table. Emitted slots scale
+	// Store three scalars instead of a model-by-actor table. Emitted slots scale
 	// with the padded actor capacity too. Ribbons retain their exact capacity.
+	// A one-row batch carries no row states (characterBatchBytes), so the
+	// per-slot cost is measured from two and four rows.
 	const one = exactCapacity ? 0 : characterBatchBytes( model, 1, caches ),
 		two = exactCapacity ? 0 : characterBatchBytes( model, 2, caches ),
-		base = one * 2 - two,
-		stride = two - one;
+		four = exactCapacity ? 0 : characterBatchBytes( model, 4, caches ),
+		stride = (four - two) / 2,
+		base = two - stride * 2;
 	return {
 		cloth: model.primitives.some( p => p.cloth ),
 		equipmentGlow: model.primitives.some( p => p.equipmentGlow ),
@@ -74,6 +78,16 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 			p.modifierSource?.modifiers.textureModifiers.some( m => m.kind === 1 )
 		),
 		materialClocked: dynamicMaterials.includes( true ),
+		// A clock the row states do not carry: anything but an equipment glow
+		// on a primitive whose instances are actor rows (characterRowGlow). Its
+		// values live in the material uniform, so its actors keep batches of
+		// their own (characters.ts batchKey).
+		drawClocked: model.primitives.some( p =>
+			p.modifierSource?.modifiers.materialModifiers.some( m => m.kind === 1 ) ||
+			p.modifierSource?.modifiers.textureModifiers.some( m => m.kind === 1 ) ||
+			p.geometry.material?.colorTimeline || p.geometry.material?.uvVelocity || p.geometry.material?.uvAtlas ||
+			p.geometry.material?.textureFactorPulse || p.equipmentGlow && !characterRowGlow( p )
+		),
 		dynamicMaterials,
 		clips,
 		emission,
@@ -88,7 +102,8 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 		}) ),
 		clocked: model.primitives.some( p => p.emission || p.materialFrames ),
 		// An authored alpha-blended material: the group draws in the
-		// translucent tier, back to front, whatever its opacity.
+		// translucent tier, back to front, whatever its opacity, so merging
+		// its actors would reorder blended pixels (characters.ts batchKey).
 		blended: model.primitives.some( p => !!p.geometry.material?.blend ),
 		billboard: model.primitives.some( p => p.billboard || p.ribbon ),
 		continuousGraph: model.particleGraph?.some( e => e.loop || e.emission ) ?? false,
@@ -117,6 +132,8 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 				0 :
 				exactCapacity ?
 				characterBatchBytes( model, count, caches ) :
+				count === 1 ?
+				one :
 				base + stride * 2 ** Math.ceil( Math.log2( count ) );
 		}
 	};

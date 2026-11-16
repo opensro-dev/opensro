@@ -99,8 +99,12 @@ export async function convertSourceImages( spawn, options = {} ) {
 		await mapWithConcurrency( actions, KEY_CONCURRENCY, async ( action, index ) => {
 			// SRO_FORCE_IMAGE_CONVERT=1 (options.force) reconverts everything.
 			const record = options.force ? undefined : await readRecord( store, keys[index] );
-			if ( record ) placed += await materialize( store, action, record );
-			else misses.push( index );
+			// Await first, then add: `placed += await ...` reads placed before the
+			// await, so concurrent hits lost counts from the summary.
+			if ( record ) {
+				const laid = await materialize( store, action, record );
+				placed += laid;
+			} else misses.push( index );
 		} );
 		misses.sort( ( a, b ) => a - b );
 		const listFile = path.join( scratch, "convert.json" );

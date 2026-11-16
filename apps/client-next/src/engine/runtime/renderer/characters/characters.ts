@@ -73,8 +73,10 @@ import {
 	CHARACTER_RENDER_BYTES,
 	CHARACTER_RESIDENT_BYTES,
 	characterClothSlots,
+	characterRowGlow,
 	createCharacterPlanCaches
 } from "@/engine/foundation/animation/character-budget";
+import { ROW_STATE_FLOATS } from "@/engine/foundation/rendering/geometry-instances";
 import { multiply } from "@/engine/foundation/math/pose-math";
 import { createCharacterPose } from "./animation/animation";
 import {
@@ -129,6 +131,8 @@ copies its values synchronously before the next group can overwrite them.
 interface RowStreams {
 	rowScratch?: Float32Array;
 	lightScratch?: Float32Array;
+	// One primitive's row states (updateRowStates), ROW_STATE_FLOATS a row.
+	glowScratch?: Float32Array;
 }
 const POINT_LIGHT_FLOATS = 12;
 
@@ -1751,10 +1755,19 @@ the next full prepare pass, so this may run between frames.
 
 	The batch an actor joins: its model, plus a variant for every state that
 	needs its own draws (cloth, deferral, fade, tint, light, glow, modifiers).
+	An actor with material clocks keeps a batch of its own (its gid in the
+	modifier term) unless its only clocks are equipment glows on actor rows,
+	which the row states carry, and its batch draws in frame order (tier 0:
+	not fading, not an effect, no blended primitive). Merging tier 1 or 2
+	actors would reorder blended pixels where they overlap. The glow's
+	enabled bit stays in the key, so a batch's rows share it, its gain and
+	its binding-8 image.
 	================
 	*/
 	function batchKey( frame: PrepareFrame, actor: CharacterActor, plan: ModelResource["plan"] ) {
 		const opacity = frame.opacity;
+		const ownBatch = () =>
+			plan.drawClocked || plan.blended || opacity( actor ) < 1 || actor.model.includes( EFFECT_PROGRAMS );
 		const variant = (plan.cloth ?
 			"\0cloth:" + actor.gid :
 			"") +
@@ -1765,9 +1778,11 @@ the next full prepare pass, so this may run between frames.
 				"\0glow:" + ((actor.animationLod?.fraction ?? 0) <= .5 && opacity( actor ) === 1) :
 				"") +
 			(hasMaterialClocks && materialClocks.get( actor ) ?
-				"\0modifier:" + actor.gid + (plan.animationMaterial ?
-					":" + (actor.modelAnimation?.revision ?? 0) + ":" +
-					((actor.animationLod?.fraction ?? 0) > .5) :
+				"\0modifier" + (ownBatch() ?
+					":" + actor.gid + (plan.animationMaterial ?
+						":" + (actor.modelAnimation?.revision ?? 0) + ":" +
+						((actor.animationLod?.fraction ?? 0) > .5) :
+						"") :
 					"") :
 				"");
 		if ( !variant ) return actor.model;
@@ -2081,6 +2096,58 @@ the next full prepare pass, so this may run between frames.
 	// ============================================================================
 	/*
 	================
+	rowGlow
+
+	Whether primitive p's draw reads its glow colour and UV per row: a glow
+	on actor rows in a batch with room for more than one actor. A one-row
+	batch keeps them in its material uniform, as every batch did before.
+	characterBatchBytes charges the row states by the same rule.
+	================
+	*/
+	function rowGlow( group: GroupFrame, p: number ) {
+		return group.capacity > 1 && characterRowGlow( group.model.primitives[p]! );
+	}
+	/*
+	================
+	glowEnabled
+
+	The batch's glow draws (its key's glow bit): not fading, and the first
+	row within the level of detail that draws it (every row is, by the key).
+	================
+	*/
+	function glowEnabled( group: GroupFrame ) {
+		return !group.fading && (group.rows[0]!.animationLod?.fraction ?? 0) <= .5;
+	}
+	/*
+	================
+	writeRowGlows
+
+	Each row's own glow colour and UV (its material clock) into the draw's
+	row states. One scratch serves every draw; updateRowStates copies it.
+	================
+	*/
+	function writeRowGlows( geometry: GeometryCommands, group: GroupFrame, draw: GeometryDraw, p: number ) {
+		const { rows } = group, needed = rows.length * ROW_STATE_FLOATS;
+		if ( !rowStreams.glowScratch || rowStreams.glowScratch.length < needed ) {
+			rowStreams.glowScratch = new Float32Array( group.capacity * ROW_STATE_FLOATS );
+		}
+		const states = rowStreams.glowScratch;
+		for ( let i = 0; i < rows.length; i++ ) {
+			// The key's modifier term admits only actors with clocks.
+			const glow = materialClocks.get( rows[i]! )?.[p]?.glow, at = i * ROW_STATE_FLOATS;
+			if ( !glow ) throw Error( "Missing row glow clock" );
+			states[at] = glow.color[0]!;
+			states[at + 1] = glow.color[1]!;
+			states[at + 2] = glow.color[2]!;
+			states[at + 3] = 0;
+			states[at + 4] = glow.uv[0]!;
+			states[at + 5] = glow.uv[1]!;
+			states[at + 6] = states[at + 7] = 0;
+		}
+		geometry.updateRowStates( draw, states.subarray( 0, needed ) );
+	}
+	/*
+	================
 	updateModifiers
 
 	Apply the batch's material clocks (glow, colors, texture motion, pulse)
@@ -2098,14 +2165,17 @@ the next full prepare pass, so this may run between frames.
 		if ( !clock ) return;
 		const glow = group.model.primitives[index]!.equipmentGlow;
 		if ( glow && clock.glow ) {
-			geometry.updateEquipmentGlow(
-				draw,
-				clock.glow.color,
-				clock.glow.uv,
-				glow.gain,
-				glow.alphaTest,
-				!group.fading && (group.rows[0]!.animationLod?.fraction ?? 0) <= .5
-			);
+			if ( rowGlow( group, index ) ) writeRowGlows( geometry, group, draw, index );
+			else {
+				geometry.updateEquipmentGlow(
+					draw,
+					clock.glow.color,
+					clock.glow.uv,
+					glow.gain,
+					glow.alphaTest,
+					glowEnabled( group )
+				);
+			}
 		}
 		if ( clock.colors ) {
 			for ( const color of clock.colors ) {
@@ -2508,13 +2578,13 @@ the next full prepare pass, so this may run between frames.
 		paletteOffsets?: Uint32Array
 	) {
 		const { preview, view } = frame, { rows, fading, resource } = group;
-		const primitive = group.model.primitives[p]!;
+		const primitive = group.model.primitives[p]!, rowStates = rowGlow( group, p );
 		const authored = group.modifierClocks?.[p]?.material ?? primitive.geometry.material,
 			base = authored!;
 		// A skinned cloth draw's slot map follows its stream's slots: drawCloth
 		// makes the stream first.
 		const clothSlots = group.batch.clothStreams?.get( p )?.slots;
-		return frame.geometry.upload(
+		const draw = frame.geometry.upload(
 			{
 				...primitive.geometry,
 				world: !preview,
@@ -2544,16 +2614,31 @@ the next full prepare pass, so this may run between frames.
 					{}),
 				transform: preview ? view! : identity(),
 				// updateModifiers rewrites a clocked primitive's material every frame.
-				...(group.plan.dynamicMaterials[p] ? { dynamicMaterial: true } : {})
+				...(group.plan.dynamicMaterials[p] ? { dynamicMaterial: true } : {}),
+				...(rowStates ? { rowStates: true } : {})
 			},
 			resource.textures[primitive.image],
 			paletteOffsets,
-			primitive.equipmentGlow && !fading && (rows[0]!.animationLod?.fraction ?? 0) <= .5 ?
+			primitive.equipmentGlow && glowEnabled( group ) ?
 				resource.textures[primitive.equipmentGlow.image] :
 				primitive.environmentImage === undefined ?
 				undefined :
 				resource.textures[primitive.environmentImage]
 		);
+		// A row-state draw's gain, alpha test and enabled bit are the batch's
+		// for its whole life (the key holds the bit): written once, here.
+		const glow = primitive.equipmentGlow, clock = group.modifierClocks?.[p]?.glow;
+		if ( rowStates && glow && clock ) {
+			frame.geometry.updateEquipmentGlow(
+				draw,
+				clock.color,
+				clock.uv,
+				glow.gain,
+				glow.alphaTest,
+				glowEnabled( group )
+			);
+		}
+		return draw;
 	}
 	/*
 	================
@@ -2813,8 +2898,13 @@ the next full prepare pass, so this may run between frames.
 	function prepareGroup( frame: PrepareFrame, id: string, rows: CharacterActor[] ) {
 		const { output } = frame;
 		const outputStart = output.length;
-		rows.sort( ( a, b ) => a.gid - b.gid );
 		const resource = models.get( rows[0]!.model )!;
+		// Glow wearers drew a batch each, in frame order, before the row
+		// states merged them: their rows keep frame order, so actors stacked
+		// on one spot overlap as before. Every other batch keeps gid order.
+		if ( !(resource.plan.equipmentGlow && hasMaterialClocks && materialClocks.get( rows[0]! )) ) {
+			rows.sort( ( a, b ) => a.gid - b.gid );
+		}
 		residentTextures( resource, frame.images );
 		const { batch, capacity, membershipChanged } = admitBatch( frame, id, rows, resource );
 		const fading = frame.opacity( rows[0]! ) < 1;
@@ -3338,7 +3428,8 @@ the next full prepare pass, so this may run between frames.
 				actors: actors.length,
 				draws: [ ...batches.values() ].reduce( ( n, batch ) => n + batch.draws.length, 0 ),
 				renderBytes,
-				rowStreamBytes: (rowStreams.rowScratch?.byteLength ?? 0) + (rowStreams.lightScratch?.byteLength ?? 0),
+				rowStreamBytes: (rowStreams.rowScratch?.byteLength ?? 0) + (rowStreams.lightScratch?.byteLength ?? 0) +
+					(rowStreams.glowScratch?.byteLength ?? 0),
 				deferredActors,
 				deferredBodies,
 				poseRequests,
@@ -3795,7 +3886,7 @@ the next full prepare pass, so this may run between frames.
 		================
 		*/
 		invalidate() {
-			rowStreams.rowScratch = rowStreams.lightScratch = undefined;
+			rowStreams.rowScratch = rowStreams.lightScratch = rowStreams.glowScratch = undefined;
 			batches.clear();
 			retiredDraws = [];
 			textures.clear();
@@ -3815,7 +3906,7 @@ the next full prepare pass, so this may run between frames.
 				return;
 			}
 			disposed = true;
-			rowStreams.rowScratch = rowStreams.lightScratch = undefined;
+			rowStreams.rowScratch = rowStreams.lightScratch = rowStreams.glowScratch = undefined;
 			framePoses = null;
 			residentBytes = 0;
 			ownedModels = 0;

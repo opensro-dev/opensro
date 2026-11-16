@@ -154,6 +154,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advanceHalloweenWaves", rt.advanceHalloweenWaves)
 		step("advanceChristmasWaves", rt.advanceChristmasWaves)
 		step("advanceChristmasSnowSlaves", rt.advanceChristmasSnowSlaves)
+		step("advancePandoraBoxes", rt.advancePandoraBoxes)
 		frames("advanceEventGroups", rt.advanceEventGroups)
 		// Retirement is presentation-only. Reward state was already committed
 		// by the fatal hit, while the zero-HP source remains resolvable through

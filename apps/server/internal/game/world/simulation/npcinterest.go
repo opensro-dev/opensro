@@ -11,6 +11,9 @@ import (
 // world objects. RegionScopeRing is a data-loading boundary, not visibility.
 // The explicit non-authored development roster retains its anchored contract.
 func NpcVisibleAt(npc NpcDef, viewer Spawn) bool {
+	if npc.Hidden {
+		return false
+	}
 	return !npc.AuthoredSpawn || worldgeom.InterestVisible(
 		worldgeom.RegionXZ{RegionID: viewer.RegionID, X: viewer.X, Z: viewer.Z},
 		worldgeom.RegionXZ{RegionID: npc.Spawn.RegionID, X: npc.Spawn.X, Z: npc.Spawn.Z},
