@@ -33,7 +33,8 @@ import type {
 	ActorPass,
 	MotionDecision,
 	MotionRetained,
-	MotionStamp
+	MotionStamp,
+	StampScratch
 } from "./internal/presentation-contract";
 import { createActorAdvance } from "./actor-advance";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
@@ -856,12 +857,16 @@ export function createActorMotion( owner: ActorOwner ) {
 			reused: false
 		};
 	}
+	// The stamp present fills each frame; a due entity's is copied before
+	// decide, and only a steady decide retains the copy.
+	const scratch = {} as StampScratch<MotionStamp>;
 	/*
 	================
 	motionStamp
 
 	Every input a steady decide reads, read as decide reads it
-	(MotionStamp). Pure reads: decide's own calls stay where they are.
+	(MotionStamp), into the owner's one scratch stamp. Pure reads: decide's
+	own calls stay where they are.
 	================
 	*/
 	function motionStamp( entity: EntityState, resolved: ActorAppearance, frame: ActorFrame ): MotionStamp {
@@ -884,36 +889,36 @@ export function createActorMotion( owner: ActorOwner ) {
 			entry = presentationState.idleStates.get( gid );
 		const disguise = referenceAppearances.get( gid ),
 			weapon = wornEquipment( entity, gameplay ).find( item => item.slot === 6 );
-		return {
-			entity,
-			glb: resource.glb,
-			codename: resource.codename,
-			clips: resource.clips,
-			clipFacts: resource.clipFacts,
-			animationStates: resource.animationStates,
-			commit: overrideCommit?.length === 0 ? EMPTY_COMMIT : overrideCommit,
-			manifest: published.manifest,
-			hpZero: vital?.hp === 0,
-			abnormal: vital?.abnormal ?? 0,
-			healthDead: !!health?.dead( gid ),
-			pendingDeath: pendingDeaths.has( gid ),
-			hitToken: hit && hit.damage > 0 ? hit.token : undefined,
-			cast: castByActor.get( gid ),
-			waiting: waitingActors.has( gid ),
-			actionLayers: actionLayersByActor.get( gid )?.length ?? 0,
-			hostMotions: effects.hostMotions( gid ).length,
-			stance: (presentationState.combatStanceEnds.get( gid ) ?? -Infinity) > seconds,
-			posture: entry?.posture,
-			idle: !!entry?.idle.clip && resource.clipFacts.names.has( entry.idle.clip ),
-			poseMoving: posePresentation.moving( gid ),
-			weaponSet: disguise ?
-				weaponAnimationSet( disguise.weapon << 11 ) :
-				weapon ?
-				weaponAnimationSet( weapon.typeFlags ) :
-				undefined,
-			armed: !!(disguise || weapon),
-			local: localMover( gid ) || gid === gameplay?.localGid
-		};
+		const stamp = scratch;
+		stamp.entity = entity;
+		stamp.glb = resource.glb;
+		stamp.codename = resource.codename;
+		stamp.clips = resource.clips;
+		stamp.clipFacts = resource.clipFacts;
+		stamp.animationStates = resource.animationStates;
+		stamp.commit = overrideCommit?.length === 0 ? EMPTY_COMMIT : overrideCommit;
+		stamp.manifest = published.manifest;
+		stamp.hpZero = vital?.hp === 0;
+		stamp.abnormal = vital?.abnormal ?? 0;
+		stamp.healthDead = !!health?.dead( gid );
+		stamp.pendingDeath = pendingDeaths.has( gid );
+		stamp.hitToken = hit && hit.damage > 0 ? hit.token : undefined;
+		stamp.cast = castByActor.get( gid );
+		stamp.waiting = waitingActors.has( gid );
+		stamp.actionLayers = actionLayersByActor.get( gid )?.length ?? 0;
+		stamp.hostMotions = effects.hostMotions( gid ).length;
+		stamp.stance = (presentationState.combatStanceEnds.get( gid ) ?? -Infinity) > seconds;
+		stamp.posture = entry?.posture;
+		stamp.idle = !!entry?.idle.clip && resource.clipFacts.names.has( entry.idle.clip );
+		stamp.poseMoving = posePresentation.moving( gid );
+		stamp.weaponSet = disguise ?
+			weaponAnimationSet( disguise.weapon << 11 ) :
+			weapon ?
+			weaponAnimationSet( weapon.typeFlags ) :
+			undefined;
+		stamp.armed = !!(disguise || weapon);
+		stamp.local = localMover( gid ) || gid === gameplay?.localGid;
+		return stamp;
 	}
 	/*
 	================
@@ -961,10 +966,13 @@ export function createActorMotion( owner: ActorOwner ) {
 			// The rule sees every presented entity; one with nothing retained
 			// is always due.
 			const reused = !owner.due.motion( previous, stamp ) && !!previous;
-			const decision = reused ? reuse( previous!, entity, frame ) : decide( entity, resolved, frame, pass );
-			// A steady decide read what the stamp reads and changed none of
+			// A steady decide reads what the stamp reads and changes none of
 			// it, so the stamp taken before it stands for it.
-			const retain = !reused && decision.steady ? stamp ?? motionStamp( entity, resolved, frame ) : undefined;
+			const taken = !reused && stamp ? { ...stamp } : undefined;
+			const decision = reused ? reuse( previous!, entity, frame ) : decide( entity, resolved, frame, pass );
+			const retain = !reused && decision.steady ?
+				taken ?? { ...motionStamp( entity, resolved, frame ) } :
+				undefined;
 			// The actor the retained decision published last frame, when this
 			// frame reuses that decision: advance may publish it again.
 			const kept = reused && decision.state.record?.retained === previous ? decision.state.record : undefined;

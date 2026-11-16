@@ -65,7 +65,11 @@ createModelEmission
 
 The presentation owner supplies admitted holders. Each emitter identity
 lives with that holder/resource, independently of its changing animation
-clip.
+clip. Each emitter's actor is frozen, and its attachment and deferred
+descriptor are kept frozen on the row: while its holder's pose object,
+dungeon block and level-of-detail test stay the same, its actor differs
+from the frame before only in its clock, which is all the renderer then
+copies (actor-snapshots.ts).
 ================
 */
 export function createModelEmission( allocate: () => number ) {
@@ -80,6 +84,12 @@ export function createModelEmission( allocate: () => number ) {
 			programs: string[];
 			ids: number[];
 			started: (number | null)[];
+			// Each particle's attachment to its holder, frozen, and the holder
+			// it was made for (transfer hands a row to a fading copy).
+			holder: number;
+			attachments: NonNullable<CharacterActor["attachment"]>[];
+			// Each particle's deferred descriptor last published, frozen.
+			deferred: (NonNullable<CharacterActor["deferredParticle"]> | undefined)[];
 		}
 	>();
 	return {
@@ -121,23 +131,35 @@ export function createModelEmission( allocate: () => number ) {
 							"/assets/effects/programs.json#" + encodeURIComponent( particle.effectPath )
 						),
 						ids: particles.map( () => allocate() ),
-						started: particles.map( () => null )
+						started: particles.map( () => null ),
+						holder: -1,
+						attachments: [],
+						deferred: []
 					};
 					rows.set( actor.gid, row );
+				}
+				if ( row.holder !== actor.gid ) {
+					const scale = row.scale;
+					row.holder = actor.gid;
+					row.attachments = particles.map( particle =>
+						Object.freeze( modelParticleAttachment( actor.gid, particle, particle.scale ?? scale ) )
+					);
 				}
 				for ( let i = 0; i < particles.length; i++ ) {
 					const particle = particles[i]!,
 						model = row.programs[i]!;
 					if ( out.length >= capacity || !ready( model ) ) continue;
 					if ( row.started[i] === null || seconds < row.started[i]! ) row.started[i] = seconds;
-					out.push( {
+					const lodHidden = particle.source !== "equipment" && !!actor.modelAnimation?.selected?.override ||
+						lod( actor.gid ) > Math.fround( .9 );
+					let deferred = row.deferred[i];
+					if ( deferred?.lodHidden !== lodHidden ) {
+						deferred = row.deferred[i] = Object.freeze( { offset: particle.deferred ?? 0, lodHidden } );
+					}
+					out.push( Object.freeze( {
 						gid: row.ids[i]!,
 						dungeonBlock: actor.dungeonBlock,
-						deferredParticle: {
-							offset: particle.deferred ?? 0,
-							lodHidden: particle.source !== "equipment" && !!actor.modelAnimation?.selected?.override ||
-								lod( actor.gid ) > Math.fround( .9 )
-						},
+						deferredParticle: deferred,
 						model,
 						pose: actor.pose,
 						clip: "effect",
@@ -145,8 +167,8 @@ export function createModelEmission( allocate: () => number ) {
 						loop: particle.loop ?? true,
 						scale: 1,
 						pickable: false,
-						attachment: modelParticleAttachment( actor.gid, particle, particle.scale ?? row.scale )
-					} );
+						attachment: row.attachments[i]!
+					} ) );
 				}
 			}
 			for ( const id of rows.keys() ) if ( !keep.has( id ) ) rows.delete( id );

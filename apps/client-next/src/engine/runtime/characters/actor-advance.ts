@@ -28,7 +28,8 @@ import type {
 	ActorPass,
 	KeptRecord,
 	MotionDecision,
-	RecordStamp
+	RecordStamp,
+	StampScratch
 } from "./internal/presentation-contract";
 import { worldAudioPosition } from "@/engine/foundation/world/world-space";
 import { flightSoundDefinition } from "@/engine/foundation/animation/wing-flight";
@@ -41,13 +42,15 @@ createActorAdvance
 ================
 */
 export function createActorAdvance( owner: ActorOwner ) {
+	// The stamp advance fills each frame; an actor built again keeps a copy.
+	const scratch = {} as StampScratch<RecordStamp>;
 	/*
 	================
 	recordStamp
 
 	The inputs of a steady decision's published actor beyond the decision
 	and the resolved appearance (RecordStamp), read as the actor's own
-	fields read them. Pure reads.
+	fields read them, into the owner's one scratch stamp. Pure reads.
 	================
 	*/
 	function recordStamp(
@@ -58,40 +61,35 @@ export function createActorAdvance( owner: ActorOwner ) {
 	): RecordStamp {
 		const { effects, entityLod, published } = owner;
 		const { gameplay, localMover, seconds } = frame;
-		const { resource } = resolved, { state, renderPose, cast, dead } = decision;
-		const appearance = effects.appearance( entity.gid );
-		return {
-			resolved,
-			manifest: published.manifest,
-			localGid: gameplay?.localGid,
-			shadowSize: !entity.groundItem ? published.shadowSizes.get( entity.refObjId ) : undefined,
-			bloodEffects: published.bloodEffects.get( resource.codename ),
-			materialTint: appearance.materialTint,
-			pointLight: appearance.pointLight,
-			boneRotation: appearance.boneRotation,
-			appearanceScale: appearance.scale,
-			fraction: entityLod.fraction( entity.gid ),
-			crowded: entityLod.crowded(),
-			optional: !localMover( entity.gid ) && !entity.mountedOn && !cast && !dead &&
-				entity.gid !== gameplay?.target && entity.gid !== gameplay?.targetPending &&
-				entityLod.distance( entity.gid ) > PROTECTED_ANIMATION_DISTANCE &&
-				!gameplay?.casts.some( cast => cast.target === entity.gid ),
-			regionId: renderPose.regionId,
-			x: renderPose.x,
-			y: renderPose.y,
-			z: renderPose.z,
-			yaw: characterHeadingYaw( renderPose.angle ),
-			height: published.heights.has( resource.codename ) ?
-				published.heights.get( resource.codename )! *
-				(state.actionHeight ?
-					state.actionHeight.from +
-					(state.actionHeight.to - state.actionHeight.from) *
-						Math.min( 1, Math.max( 0, seconds - state.actionHeight.at ) ) :
-					1) :
-				undefined,
-			petResolve: (entity.petResolve?.untilMs ?? 0) > seconds * 1000,
-			modifierId: state.modifierId
-		};
+		const { resource } = resolved, { state, renderPose, cast, dead } = decision, stamp = scratch;
+		stamp.resolved = resolved;
+		stamp.manifest = published.manifest;
+		stamp.localGid = gameplay?.localGid;
+		stamp.shadowSize = !entity.groundItem ? published.shadowSizes.get( entity.refObjId ) : undefined;
+		stamp.bloodEffects = published.bloodEffects.get( resource.codename );
+		stamp.appearance = effects.appearance( entity.gid );
+		stamp.fraction = entityLod.fraction( entity.gid );
+		stamp.crowded = entityLod.crowded();
+		stamp.optional = !localMover( entity.gid ) && !entity.mountedOn && !cast && !dead &&
+			entity.gid !== gameplay?.target && entity.gid !== gameplay?.targetPending &&
+			entityLod.distance( entity.gid ) > PROTECTED_ANIMATION_DISTANCE &&
+			!gameplay?.casts.some( cast => cast.target === entity.gid );
+		stamp.regionId = renderPose.regionId;
+		stamp.x = renderPose.x;
+		stamp.y = renderPose.y;
+		stamp.z = renderPose.z;
+		stamp.yaw = characterHeadingYaw( renderPose.angle );
+		stamp.height = published.heights.has( resource.codename ) ?
+			published.heights.get( resource.codename )! *
+			(state.actionHeight ?
+				state.actionHeight.from +
+				(state.actionHeight.to - state.actionHeight.from) *
+					Math.min( 1, Math.max( 0, seconds - state.actionHeight.at ) ) :
+				1) :
+			undefined;
+		stamp.petResolve = (entity.petResolve?.untilMs ?? 0) > seconds * 1000;
+		stamp.modifierId = state.modifierId;
+		return stamp;
 	}
 	return {
 		/*
@@ -353,7 +351,7 @@ export function createActorAdvance( owner: ActorOwner ) {
 					} )
 				);
 				if ( sampleActorDetails ) probe?.detailEnd( "actor-record" );
-				record = stamp && { actor: next.get( entity.gid )!, stamp };
+				record = stamp && { actor: next.get( entity.gid )!, stamp: { ...stamp } };
 			}
 			// The record's tail, the same after either record above: foot
 			// contacts over the dispatched ranges, the emission holders, the

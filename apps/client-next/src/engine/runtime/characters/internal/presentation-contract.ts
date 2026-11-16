@@ -329,6 +329,16 @@ export interface CharacterPresentationState {
 
 /*
 ================
+StampScratch
+
+A stamp an owner fills in place each frame, one object for every entity:
+what a stage retains is a copy of it.
+================
+*/
+export type StampScratch<T> = { -readonly [K in keyof T]: T[K]; };
+
+/*
+================
 MotionStamp
 
 What a steady decide (actor-motion.ts) read, as values and identities: a
@@ -487,7 +497,8 @@ What the published actor of a steady decision (actor-advance.ts) reads
 beyond the decision and the resolved appearance, as values and
 identities: the catalogue's epoch and the two lookups a rejected manifest
 can leave written without one (shadow size, blood effects), the local
-player, the effects owner's tint, light, bone rotation and scale, the
+player, the effects owner's appearance (one object while its tint,
+light, bone rotation and scale hold), the
 level of detail and its optional test, the drawn pose, the action height,
 the pet resolve's stack window and the modifier owner.
 ================
@@ -498,10 +509,7 @@ export interface RecordStamp {
 	readonly localGid: number | undefined;
 	readonly shadowSize: number | undefined;
 	readonly bloodEffects: readonly [string | null, string | null] | undefined;
-	readonly materialTint: readonly [number, number, number] | undefined;
-	readonly pointLight: CharacterPointLight | undefined;
-	readonly boneRotation: CharacterActor["boneRotation"];
-	readonly appearanceScale: number;
+	readonly appearance: ReturnType<ActorOwner["effects"]["appearance"]>;
 	readonly fraction: number;
 	readonly crowded: boolean;
 	readonly optional: boolean;
@@ -630,16 +638,19 @@ export interface ActorOwner {
 	readonly concealmentSkills: ( catalog: readonly SkillMetadata[] | undefined ) => SkillLookup;
 	readonly displayedDependencies: Map<number, readonly string[]>;
 	readonly effects: {
-		appearance( gid: number ): {
+		// The same object while every field holds (effects.ts).
+		appearance( gid: number ): Readonly<{
 			weaponHidden: boolean;
 			materialTint: readonly [number, number, number] | undefined;
 			scale: number;
 			pointLight?: CharacterPointLight;
 			boneRotation?: CharacterActor["boneRotation"];
-		};
+		}>;
 		hostMotions(
 			gid: number
-		): { key: string; started: number; stoppedAt: number | undefined; set: string; id: number; }[];
+		): readonly Readonly<
+			{ key: string; started: number; stoppedAt: number | undefined; set: string; id: number; }
+		>[];
 	};
 	readonly entityLod: {
 		crowded(): boolean;

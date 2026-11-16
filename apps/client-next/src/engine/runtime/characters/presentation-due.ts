@@ -93,9 +93,8 @@ Every term compared by value or identity, none skipped.
 */
 export function sameRecordStamp( a: RecordStamp, b: RecordStamp ): boolean {
 	return a.resolved === b.resolved && a.manifest === b.manifest && a.localGid === b.localGid &&
-		a.shadowSize === b.shadowSize && a.bloodEffects === b.bloodEffects && a.materialTint === b.materialTint &&
-		a.pointLight === b.pointLight && a.boneRotation === b.boneRotation &&
-		a.appearanceScale === b.appearanceScale && a.fraction === b.fraction && a.crowded === b.crowded &&
+		a.shadowSize === b.shadowSize && a.bloodEffects === b.bloodEffects && a.appearance === b.appearance &&
+		a.fraction === b.fraction && a.crowded === b.crowded &&
 		a.optional === b.optional && a.regionId === b.regionId && a.x === b.x && a.y === b.y && a.z === b.z &&
 		a.yaw === b.yaw && a.height === b.height && a.petResolve === b.petResolve && a.modifierId === b.modifierId;
 }

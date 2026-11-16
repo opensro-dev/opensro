@@ -32,10 +32,19 @@ const { encodeCrowdValue } = await import( "../../tools/perf/core/crowd-capture.
 // production rule must skip: its crowd stands still most of the run.
 const SEED = 1;
 const SKIPPED_SHARE = .5;
-// The share of renderer copies that must copy only clocks: the session's
-// equipment particle actors and fading copies are not frozen, and are
-// copied in full on every frame.
-const CLOCK_COPY_SHARE = .4;
+// The share of renderer copies that must copy only clocks: fading copies
+// and actors whose opacity is set after publication are not frozen, and
+// are copied in full on every frame.
+const CLOCK_COPY_SHARE = .6;
+// An own key holding undefined reads as an absent one (no renderer reader
+// enumerates a row's keys): the one difference the two owners' attachment
+// paths may leave, an in-place copy writing every optional field.
+const UNDEFINED = JSON.stringify( encodeCrowdValue( undefined ) );
+const rowText = rows =>
+	JSON.stringify(
+		encodeCrowdValue( rows ),
+		( key, value ) => key && JSON.stringify( value ) === UNDEFINED ? undefined : value
+	);
 
 /*
 ================
@@ -70,7 +79,7 @@ Every frame's outputs of one run of the session, encoded, and how often
 each rule was asked and answered not due. The published actors also enter
 two of the renderer's snapshot owners, one that copies only the clocks of
 a frozen actor whose other fields did not change and one that copies every
-actor in full: every frame's rows must be the same.
+actor in full: every frame's rows must be the same (rowText).
 ================
 */
 async function replay( session, rules ) {
@@ -87,8 +96,7 @@ async function replay( session, rules ) {
 		due: { appearance: counted( "appearance" ), motion: counted( "motion" ), record: counted( "record" ) },
 		actors: actors => {
 			for ( const actor of actors ) freezeDeep( actor );
-			const a = JSON.stringify( encodeCrowdValue( reused.update( actors ) ) ),
-				b = JSON.stringify( encodeCrowdValue( full.update( actors ) ) );
+			const a = rowText( reused.update( actors ) ), b = rowText( full.update( actors ) );
 			if ( a !== b && rowsDiffer < 0 ) rowsDiffer = frame;
 		}
 	} );

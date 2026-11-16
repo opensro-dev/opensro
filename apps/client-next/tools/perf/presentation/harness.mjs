@@ -61,7 +61,10 @@ const RENDERER_SINKS = {
 		images.length
 	],
 	setCharacterAnimation: ( body, name, source ) => [ body, name, source.duration ],
-	retainCharacterModels: ids => [ ids ],
+	// The renderer reads the list as a set and ignores a set equal to the
+	// one it holds (retainedSet): recorded is the set it then holds, in
+	// its order, on the calls that change it.
+	retainCharacterModels: ids => [ [ ...new Set( ids ) ] ],
 	setFootprints: rows => [ rows ],
 	setSunDropMarkers: rows => [ rows ]
 };
@@ -356,6 +359,22 @@ export async function createPresentationHarness( root, session, options = {} ) {
 			return world.finishedCasts();
 		}
 	};
+	// The model set the renderer was last handed to retain.
+	let retained = null;
+	/*
+	================
+	retainedSet
+
+	Whether a retainCharacterModels list changes the renderer's set (as
+	characters.ts retain decides), taking it when it does.
+	================
+	*/
+	function retainedSet( ids ) {
+		const set = new Set( ids );
+		if ( retained && retained.size === set.size && [ ...set ].every( id => retained.has( id ) ) ) return false;
+		retained = set;
+		return true;
+	}
 	const rig = presentationRig( {
 		assets,
 		random,
@@ -393,7 +412,7 @@ export async function createPresentationHarness( root, session, options = {} ) {
 					const sink = RENDERER_SINKS[key];
 					if ( !sink || typeof value !== "function" ) return value;
 					return ( ...args ) => {
-						record( key, sink( ...args ) );
+						if ( key !== "retainCharacterModels" || retainedSet( args[0] ) ) record( key, sink( ...args ) );
 						if ( key === "setCharacterActors" ) options.actors?.( ...args );
 						return value.apply( target, args );
 					};

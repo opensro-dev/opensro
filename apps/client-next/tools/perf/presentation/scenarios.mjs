@@ -42,6 +42,7 @@ import {
 	loadCatalogs,
 	wear,
 	gearFor,
+	sunGearFor,
 	heading,
 	pose,
 	createSession,
@@ -549,7 +550,10 @@ function settle( seed ) {
 	};
 	const attached = next();
 	attach( attached, "motion", { gid: players[10], skill: 20507, token: 900, phase: 1 } );
+	// A second row on the same host, with a motion of its own.
+	attach( attached + 60, "second motion", { gid: players[10], skill: 20507, token: 903, phase: 1 } );
 	attach( attached + 180, "motion" );
+	attach( attached + 240, "second motion" );
 	// Skill 9452 is a type 3 reference appearance (characterActionData.json).
 	const disguised = next();
 	attach( disguised, "disguise", { gid: players[12], skill: 9452, token: 901, phase: 1 } );
@@ -563,6 +567,13 @@ function settle( seed ) {
 	cast( next(), players[1], brute, { type: 4, damage: 30, fatal: false } );
 	setVital( next(), bare, { hp: 0 } );
 	setVital( next(), tower, { hp: towerHp / 5 } );
+	// Berserk (body state 1): the effects owner holds the body's scale at 1.1
+	// and eases it back when berserk ends, while the body stands (no cast,
+	// so no combat stance, holds the decision).
+	const berserk = next();
+	session.state( berserk, players[5], { appearanceState: [ ALIVE, 0, 1, 0, 0, 0, 0 ] } );
+	session.state( berserk + 120, players[5], { appearanceState: [ ALIVE, 0, 0, 0, 0, 0, 0 ] } );
+	at = berserk + 160;
 	// Skill 93 hides the caster's weapon while it casts (effectRecords hideWeapon).
 	cast( next(), players[5], brute, { type: 0, damage: 10, fatal: false }, 93 );
 	const rules = next();
@@ -631,6 +642,38 @@ function evict( seed ) {
 	return session.finish( 24 * FRAME_HZ );
 }
 
+/*
+================
+glow
+
+120 players in degree 9 Sun sets standing for 20 s (armor +9, weapon and
+shield +12): the crowd the bench draws, where every body carries its
+equipment glow programs, three and more particle actors a body. Over the
+last 10 s the camera pulls back past the distance that hides a glow
+particle (entity-lod.ts): the far bodies' particles hide while the
+bodies stand.
+================
+*/
+function glow( seed ) {
+	const catalogs = loadCatalogs(), rng = seeded( seed ), session = createSession( "glow", seed );
+	localStart( session, catalogs, rng );
+	for ( let i = 0; i < 120; i++ ) {
+		const codename = CROWD_BODIES[i % CROWD_BODIES.length];
+		session.spawn(
+			0,
+			playerRow( catalogs, FIRST_PEER_GID + i, codename, grid( rng, i ), {
+				equipment: sunGearFor( catalogs, rng, codename )
+			} )
+		);
+	}
+	const end = 20 * FRAME_HZ;
+	for ( let at = end / 2; at < end; at++ ) {
+		const back = 20 + 1000 * (2 * at / end - 1);
+		session.view( at, { x: CENTER, y: 20 + back * .4, z: CENTER - back }, -0.35 );
+	}
+	return session.finish( end );
+}
+
 export const SCENARIOS = {
 	standing,
 	walkers,
@@ -646,7 +689,8 @@ export const SCENARIOS = {
 	camera,
 	"ground-items": groundItems,
 	settle,
-	evict
+	evict,
+	glow
 };
 
 /*
