@@ -17,7 +17,7 @@ import {
 import { uiTextureResidency } from "@/engine/foundation/rendering/ui-texture-residency";
 import { cameraBasis } from "@/engine/foundation/rendering/world-math";
 import { createPortrait } from "./characters/portrait";
-import { projectCharacterLabels } from "@/engine/foundation/ui/character-labels";
+import { createLabelProjection } from "@/engine/foundation/ui/character-labels";
 import { damageTextAssets, damageTextQuads } from "@/engine/foundation/ui/damage-text";
 import { pickDestination } from "@/engine/foundation/rendering/pick-destination";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
@@ -104,6 +104,8 @@ export function createRenderer(
 		return bounds ? viewerCamera( dollBounds( bounds ), DOLL_FRONT, aspect ) : undefined;
 	}
 	const uiPreparation = createUiPreparation();
+	// Last frame's placed labels: a still label keeps its packed GPU records.
+	const labelProjection = createLabelProjection();
 	let uiProduct: ReturnType<typeof prepareUi> | null = null;
 	const uiTextures = new Map<string, UiTexture>(), dirtyUi = new Set<string>();
 	let residentUi = new Set<string>(), residentUiProduct: ReturnType<typeof prepareUi> | null = null;
@@ -744,19 +746,22 @@ export function createRenderer(
 					forward: basis.forward,
 					up: basis.up
 				};
-				const characterDraws = characters.prepare(
+				const characterFrame = characters.prepare(
 					device.geometry()!,
 					device.images()!,
 					preview ? 0 : scene.originRegion,
 					preview ? viewProjection( preview, viewport.width / Math.max( 1, viewport.height ) ) : scene.matrix,
 					!!preview,
 					timeSeconds,
-					false,
 					video.records[video.active][7] === 1,
 					world.night(),
 					video.records[video.active][12] === 1,
 					scene.reflectionMatrix
 				);
+				// The light effects behind a query draw after the world, in the
+				// deferred pass; the rest with the characters.
+				const characterDraws = characterFrame.filter( draw => !draw.deferredParticle ),
+					deferredCharacterDraws = characterFrame.filter( draw => draw.deferredParticle );
 				const shadowDraws = world.characterShadows(
 					preview ?
 						[] :
@@ -779,7 +784,7 @@ export function createRenderer(
 				// annotations beside them. Runtime supplies logical UI extents;
 				// using that same extent keeps actor and label projections together.
 				const projectedUi = uiScene && (anchored?.size || uiProduct?.worldAnchors || damage.length) ?
-					projectCharacterLabels(
+					labelProjection.project(
 						uiScene,
 						preview || !anchored?.size ?
 							new Map() :
@@ -889,12 +894,7 @@ export function createRenderer(
 				probe?.renderMark( "labels-portraits" );
 				const deferredPlan = preview ?
 						null :
-						characters.deferredPlan(
-							scene.originRegion,
-							scene.camera.eye,
-							video.records[video.active][7] === 1,
-							world.night()
-						),
+						characters.deferredPlan( scene.camera.eye ),
 					targetSurface = surface;
 				// Port-only, not native. Experimental owns the opt-in; 100 keeps
 				// the native surface and pass order. UI keeps its full resolution.
@@ -913,20 +913,10 @@ export function createRenderer(
 					);
 				const finishDeferred = () => {
 					if ( disposed ) throw Error( "Renderer disposed during particle query" );
-					characters.completeDeferred();
-					// The continuation's draws reach the second submit: same rule.
-					return device.geometry()!.singleSampled( staleDraws.live(
-						"deferred-particles",
-						characters.prepare(
-							device.geometry()!,
-							device.images()!,
-							scene.originRegion,
-							scene.matrix,
-							false,
-							timeSeconds,
-							true
-						).filter( draw => draw.deferredParticle )
-					) );
+					// The deferred pass's draws reach the second submit: same rule.
+					return device.geometry()!.singleSampled(
+						staleDraws.live( "deferred-particles", deferredCharacterDraws )
+					);
 				};
 				const deferredPass = deferredPlan ?
 					{

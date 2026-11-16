@@ -118,6 +118,19 @@ export function createUiBridge(
 		touchHold.timer = null;
 		touchHold.press = null;
 	}
+	/*
+	================
+	syncDragShield
+
+	The shield follows the drag's lifetime: every change of the drag or of
+	the touch pointers calls this. Semantics are presented only when they
+	change, so a drag that ended between presentations must not leave the
+	shield up until the next one.
+	================
+	*/
+	function syncDragShield() {
+		dragShield.set( drag !== null && touchHold.pointers.has( drag.pointer ) );
+	}
 	window.addEventListener( "pointerdown", event => {
 		if ( event.pointerType !== "touch" ) return;
 		touchHold.clicks.delete( event.pointerId );
@@ -143,12 +156,14 @@ export function createUiBridge(
 	for ( const name of [ "pointerup", "pointercancel" ] as const ) {
 		window.addEventListener( name, event => {
 			touchHold.pointers.delete( event.pointerId );
+			syncDragShield();
 			if ( name === "pointercancel" && touchHold.press?.event.pointerId === event.pointerId ) cancelTouchHold();
 		}, { capture: true, signal: lifetime.signal } );
 	}
 	window.addEventListener( "blur", () => {
 		cancelTouchHold();
 		touchHold.pointers.clear();
+		syncDragShield();
 	}, { signal: lifetime.signal } );
 	window.addEventListener( "pointermove", event => {
 		if ( !drag || event.pointerId !== drag.pointer ) return;
@@ -159,6 +174,7 @@ export function createUiBridge(
 		if ( !current?.draggable || current.disabled ) {
 			emit( { kind: "drag-cancel", id: drag.id } );
 			drag = null;
+			syncDragShield();
 			emit( { kind: "press", id: null } );
 			return;
 		}
@@ -181,12 +197,14 @@ export function createUiBridge(
 	window.addEventListener( "pointercancel", () => {
 		if ( drag ) emit( { kind: "drag-cancel", id: drag.id } );
 		drag = null;
+		syncDragShield();
 		suppressClick = null;
 		emit( { kind: "press", id: null } );
 	}, { signal: lifetime.signal } );
 	window.addEventListener( "blur", () => {
 		if ( drag ) emit( { kind: "drag-cancel", id: drag.id } );
 		drag = null;
+		syncDragShield();
 		cancelCarry();
 	}, { signal: lifetime.signal } );
 	/*
@@ -212,8 +230,17 @@ export function createUiBridge(
 		const el = event.target as HTMLElement;
 		emit( { kind: "focus", id: el.dataset.uiId ?? null } );
 	}, { signal: lifetime.signal } );
-	root.addEventListener( "focusout", () => {
+	root.addEventListener( "focusout", event => {
+		// present leaves an editor's value alone while composing. A composition
+		// that ends with the focus (its compositionend lost) takes the published
+		// value here: semantics are presented again only when they change.
+		const slot = composing ? current( event.target ) : undefined;
 		composing = false;
+		if (
+			slot && slot.value.kind !== "button" &&
+			(slot.element instanceof HTMLInputElement || slot.element instanceof HTMLTextAreaElement) &&
+			slot.element.value !== slot.value.value
+		) slot.element.value = slot.value.value ?? "";
 		emit( { kind: "focus", id: null } );
 	}, { signal: lifetime.signal } );
 	const layoutKeys = createLayoutKeys();
@@ -444,6 +471,7 @@ export function createUiBridge(
 				suppressClick = drag.id;
 				emit( { kind: "drag-cancel", id: drag.id } );
 				drag = null;
+				syncDragShield();
 				emit( { kind: "press", id: null } );
 			}
 		}
@@ -735,7 +763,7 @@ export function createUiBridge(
 			slot.element.setPointerCapture( event.pointerId );
 			const [x, y] = uiPoint( event );
 			drag = { id: slot.value.id, pointer: event.pointerId, x, y };
-			dragShield.set( drag !== null && touchHold.pointers.has( drag.pointer ) );
+			syncDragShield();
 		}
 		if ( event.pointerType === "touch" && touchHold.pointers.size === 1 && slot.value.kind === "button" ) {
 			cancelTouchHold();
@@ -748,7 +776,7 @@ export function createUiBridge(
 				// A committed secondary action consumes the gesture, including later
 				// movement before release. It cannot also become an inventory drag.
 				if ( drag?.pointer === press.event.pointerId ) drag = null;
-				dragShield.set( drag !== null && touchHold.pointers.has( drag.pointer ) );
+				syncDragShield();
 				// Consume the eventual primary click even on a non-draggable icon.
 				suppressClick = slot.value.id;
 				activateSecondary( press.element, press.event );
@@ -773,6 +801,7 @@ export function createUiBridge(
 			if ( slot.element.hasPointerCapture( drag.pointer ) ) slot.element.releasePointerCapture( drag.pointer );
 			emit( { kind: "drag-cancel", id } );
 			drag = null;
+			syncDragShield();
 			emit( { kind: "press", id: null } );
 		}
 		if ( document.activeElement === slot.element ) slot.element.blur();
@@ -790,7 +819,6 @@ export function createUiBridge(
 		*/
 		present( state: UiSemantics ) {
 			if ( lifetime.signal.aborted ) return;
-			dragShield.set( drag !== null && touchHold.pointers.has( drag.pointer ) );
 			// Identity belongs to the control instance, not its action. Two native
 			// controls may invoke the same close handler but must keep separate hits.
 			// Validate the whole publication before touching the previous semantic tree.

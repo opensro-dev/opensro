@@ -20,6 +20,7 @@ const { createActorSnapshots } = await import(
 	sourceFileUrl( "src/engine/runtime/renderer/characters/actor-snapshots.ts" ).href
 );
 const { animationActivation } = await import( "../../src/engine/foundation/animation/animation-activation.ts" );
+const { createCharacters } = await import( "../../src/engine/runtime/renderer/characters/characters.ts" );
 const json = value => JSON.parse( JSON.stringify( value ) );
 const actor = ( gid, n ) => ({
 	gid,
@@ -287,4 +288,127 @@ test("valid clocks are admitted verbatim and a held clock reports again after th
 	owner.update( [] );
 	owner.update( [ { ...stale, time: NaN } ] );
 	assert.equal( owner.takeDegradations().length, 1, "a returned gid reports its first hold again" );
+});
+
+/*
+================
+spineRig
+
+A root, a Spine_Base one unit up and a tip one unit above it: each joint's
+palette matrix is its model-space matrix (identity inverse binds).
+================
+*/
+/** @returns {import("../../src/engine/contracts/character.ts").CharacterModel} */
+function spineRig() {
+	const identity = Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
+	const node = ( name, parent, y ) => ({
+		name,
+		parent,
+		translation: [ 0, y, 0 ],
+		rotation: [ 0, 0, 0, 1 ],
+		scale: [ 1, 1, 1 ]
+	});
+	return {
+		nodes: [ node( "root", -1, 0 ), node( "Spine_Base", 0, 1 ), node( "tip", 1, 1 ) ],
+		images: [],
+		clips: [ {
+			name: "stand",
+			duration: 1,
+			channels: [ {
+				node: 0,
+				path: "translation",
+				interpolation: "LINEAR",
+				times: Float32Array.of( 0, 1 ),
+				values: Float32Array.of( 0, 0, 0, 0, 0, 0 )
+			} ]
+		} ],
+		primitives: [ {
+			name: "body",
+			node: 0,
+			joints: [ 0, 1, 2 ],
+			inverseBind: new Float32Array( 48 ).map( ( _, i ) => identity[i % 16] ),
+			image: -1,
+			geometry: {
+				positions: Float32Array.of( -.25, -.25, 0, .25, -.25, 0, 0, .25, 0 ),
+				joints: new Uint32Array( 12 ),
+				weights: Float32Array.of( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 ),
+				indices: Uint32Array.of( 0, 1, 2 ),
+				transform: identity
+			}
+		} ]
+	};
+}
+
+test("a bone rotation published after a row's first admission follows the source until it is dropped", () => {
+	const owner = createActorSnapshots(), base = actor( 5, 0 );
+	const quarter = { bone: "Spine_Base", rotation: [ 0, 0, Math.SQRT1_2, Math.SQRT1_2 ] };
+	const row = owner.update( [ base ] )[0];
+	assert.equal( row.boneRotation, undefined );
+	owner.update( [ { ...base, boneRotation: quarter } ] );
+	assert.deepEqual( json( row.boneRotation ), quarter, "an aim armed after first admission reaches the row" );
+	const owned = row.boneRotation;
+	quarter.rotation[0] = 99;
+	assert.equal( owned.rotation[0], 0, "the row owns its rotation" );
+	const turned = { bone: "Spine_Base", rotation: [ 0, 0, .5, Math.sqrt( .75 ) ] };
+	owner.update( [ { ...base, boneRotation: turned } ] );
+	assert.deepEqual( json( row.boneRotation ), turned, "a turning aim updates the row" );
+	assert.equal( row.boneRotation, owned, "and reuses its storage" );
+	owner.update( [ base ] );
+	assert.equal( row.boneRotation, undefined, "a released aim leaves the row" );
+	const fresh = owner.update( [ { ...actor( 6, 0 ), boneRotation: turned } ] )[0];
+	turned.rotation[3] = 99;
+	assert.notEqual( fresh.boneRotation.rotation[3], 99, "a first admission does not alias the producer's rotation" );
+});
+
+test("the drawn palette follows a spine aim armed, turned and released after the actor's first frame", () => {
+	const c = createCharacters();
+	c.model( "body", spineRig(), [] );
+	/** @type {Float32Array | null} */
+	let bones = null;
+	/** @type {any} */
+	const gpu = {
+		upload( data ) {
+			bones = data.bones.slice();
+			return {};
+		},
+		updateInstances: draw => draw,
+		updateBones( _draw, value ) {
+			bones = value.slice();
+			return 0;
+		},
+		release() {}
+	};
+	const base = {
+		gid: 1,
+		model: "body",
+		pose: { regionId: 257, x: 0, y: 0, z: .5, yaw: 0 },
+		scale: 1,
+		clip: "stand",
+		time: 0,
+		loop: true
+	};
+	const view = Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
+	// The tip joint's model-space position in the palette the frame drew.
+	const tip = ( actor, time ) => {
+		bones = null;
+		c.actors( [ actor ] );
+		c.prepare( gpu, gpu, 257, view, false, time );
+		assert.ok( bones, "the frame drew the actor's palette" );
+		return [ bones[32 + 12], bones[32 + 13] ].map( v => Math.round( v * 1e4 ) / 1e4 );
+	};
+	assert.deepEqual( tip( base, 0 ), [ 0, 2 ], "an unaimed spine stands straight" );
+	const quarter = { bone: "Spine_Base", rotation: [ 0, 0, Math.SQRT1_2, Math.SQRT1_2 ] };
+	assert.deepEqual(
+		tip( { ...base, time: .1, boneRotation: quarter }, .1 ),
+		[ -1, 1 ],
+		"an aim armed later is drawn"
+	);
+	const sixth = { bone: "Spine_Base", rotation: [ 0, 0, .5, Math.sqrt( .75 ) ] };
+	assert.deepEqual(
+		tip( { ...base, time: .2, boneRotation: sixth }, .2 ),
+		[ -.866, 1.5 ],
+		"a turned aim is drawn"
+	);
+	assert.deepEqual( tip( { ...base, time: .3 }, .3 ), [ 0, 2 ], "a released aim straightens the spine" );
+	c.dispose( gpu, null );
 });

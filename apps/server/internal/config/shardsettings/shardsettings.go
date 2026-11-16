@@ -172,6 +172,12 @@ var Settings = []Setting{
 	// (#3270). Build and server read the same switch; off leaves
 	// every imported row out of the build and the population unread.
 	{Env: "SRO_HUNTING2", NomadVar: "hunting2", Default: "off", Catalogue: true},
+	// Port-only, not native: the Styria Clash arena map (#3272): its four
+	// regions' terrain and navmesh from the v1.696 client. Build only for
+	// now: no server code reads it until the Battle Arena engine (#3648)
+	// lands behind the same switch. Not a catalogue setting: the map
+	// adds no monsters or worlds. "off" is native.
+	{Env: "SRO_STYRIA_CLASH", NomadVar: "styria_clash", Default: "off"},
 	// Port-only, not native: the Constantinople fortress area from the
 	// v1.696 client (enterworld/fortressdata.go, #3275). Build and
 	// server read the same switch; off leaves every imported row out of
@@ -189,6 +195,10 @@ var Settings = []Setting{
 	{Env: "SRO_HALLOWEEN_EVENT", NomadVar: "halloween_event", Default: "off", Catalogue: true},
 	{Env: "SRO_HALLOWEEN_EVENT_WINDOW", NomadVar: "halloween_event_window", Default: "", Catalogue: true},
 	{Env: "SRO_HALLOWEEN_HELMET_SEAL", NomadVar: "halloween_helmet_seal", Default: "off"},
+	// Port-only, not native: the Christmas event's snow and town
+	// decoration (progression/christmas.go). Off is native.
+	{Env: "SRO_CHRISTMAS_EVENT", NomadVar: "christmas_event", Default: "off"},
+	{Env: "SRO_CHRISTMAS_EVENT_WINDOW", NomadVar: "christmas_event_window", Default: ""},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_MALL_STARTER_SILK", NomadVar: "mall_starter_silk", Default: "700"},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
@@ -263,6 +273,12 @@ var Settings = []Setting{
 	// band for the staff console (#1639, port-only, not native; "off"
 	// counts nothing and the economy route answers 404).
 	{Env: "SRO_KILL_STATS", NomadVar: "kill_stats", Default: "off"},
+	// The market escrow (opensro#3529, opensro-web#148; port-only, not
+	// native; "off" serves no market route and writes no market row).
+	{Env: "SRO_CONSIGNMENT", NomadVar: "consignment", Default: "off"},
+	// The referral system (#3518, port-only, not native; "off" serves no
+	// referral route and pays nothing, which is native).
+	{Env: "SRO_REFERRALS", NomadVar: "referrals", Default: "off"},
 	// The Devil's Spirit's fifth avatar socket (#3456, port-only, not
 	// native; "off" is native: avatar storage keeps four slots). The same
 	// switch imports the Spirit's item rows at build time.
@@ -320,6 +336,9 @@ var Settings = []Setting{
 	// Owner, 2026-10-25 (#1604 P9): the weekly seal board counts Star,
 	// Moon and Sun drops per job alias. Off is native: nothing counts.
 	{Env: "SRO_SEAL_BOARD", NomadVar: "seal_board", Default: "off"},
+	// Owner, 2026-11-15 (#3530 spec): job honor points, a shared account
+	// cap and daily tiers. Port-only; off is native: nothing scores.
+	{Env: "SRO_JOB_HONOR", NomadVar: "job_honor", Default: "off"},
 	// Owner, 2026-10-26 (#1604 P13, #1691): the staff seal census counts
 	// seal items on the shard by degree and tier, name-free, staff-only.
 	// Off is native: the route does not exist.
@@ -470,6 +489,10 @@ var Settings = []Setting{
 	// deployment default is native ("off"); "on" restores the 2026-10-14
 	// beta removal.
 	{Env: "SRO_ALCHEMY_MATERIAL_DROPS_OFF", NomadVar: "alchemy_material_drops_off", Default: "off", Catalogue: true},
+	// Owner, 2026-11-16 (#general): no drops above degree 9 while the area
+	// polls run. The registry default keeps today's drops; the release
+	// controls switch it on.
+	{Env: "SRO_ABOVE_DEGREE9_DROPS_OFF", NomadVar: "above_degree9_drops_off", Default: "off", Catalogue: true},
 	{Env: "SRO_BETA_DROP_CAP", NomadVar: "beta_drop_cap", Default: "0", Catalogue: true, Validation: ValueBetaGrowth},
 	// Owner, 2026-10-19: gold falls at 100 times retail (was 250).
 	{Env: "SRO_BETA_GOLD_RATE", NomadVar: "beta_gold_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
@@ -519,6 +542,12 @@ var Settings = []Setting{
 	// before the Legend IV server tables); opened in the shard defaults
 	// 2026-10-21 (GH #1013). "off" is native.
 	{Env: "SRO_QINSHI_TOMB", NomadVar: "qinshi_tomb", Default: "on", Catalogue: true},
+	// Port-only, not native: the Jangan town gate also offers the Qin-Shi
+	// Emperor Tomb floors 1-4 (40000 gold, level 70+, the Alexandria
+	// rows' terms; floor 4 by corner), shown by the client as one
+	// "Ch'in Tomb" row opening the floor list. Needs SRO_QINSHI_TOMB.
+	// "off" is native.
+	{Env: "SRO_JANGAN_TOMB_TELEPORT", NomadVar: "jangan_tomb_teleport", Default: "off"},
 	// The Alexandria city of a build_alexandria_variant.py game root: its
 	// regions, gates and NPCs (port-only, not native; internal/game/world/
 	// alexandria). "off" is native and hides them from a variant's data;

@@ -24,10 +24,12 @@ import hunting2_import as hunting2  # noqa: E402
 import jupiter_import as jupiter  # noqa: E402
 import muhan_import as muhan  # noqa: E402
 import skytemple_import as skytemple  # noqa: E402
+import styria_import as styria  # noqa: E402
+import winter_event_import as winter  # noqa: E402
 
 # Every module that stages its own character (and skill) shard.
-SHARD_OWNERS = (arabia, cap110, constantinople, god, hunting2, jupiter, muhan, skytemple)
-LAYER_FLAGS = (arabia.FLAG, muhan.FLAG)
+SHARD_OWNERS = (arabia, cap110, constantinople, god, hunting2, jupiter, muhan, skytemple, styria, winter)
+LAYER_FLAGS = (arabia.FLAG, muhan.FLAG, winter.FLAG)
 
 
 # ================
@@ -67,6 +69,26 @@ class TestShardBands(unittest.TestCase):
 			self.assertEqual((text_root / arabia.SKILL_SHARD).read_bytes(), b"arabia skills")
 			manifest = {row[0] for row in arabia.tables.table_rows((text_root / "skilldata.txt").read_bytes()) if row}
 			self.assertIn(arabia.SKILL_SHARD, manifest)
+
+	def test_winter_off_leaves_the_muhan_shards(self):
+		# The winter layer runs after Muhan in variant_later_layers, so
+		# with the Christmas event off its reap must not touch what Muhan
+		# just staged.
+		with tempfile.TemporaryDirectory() as temp:
+			native, out = Path(temp) / "native", Path(temp) / "out"
+			native.mkdir()
+			text_root = out / winter.later_world_import.TEXT_ROOT
+			text_root.mkdir(parents=True)
+			(text_root / muhan.CHARACTER_SHARD).write_bytes(b"muhan kinds")
+			(text_root / muhan.SKILL_SHARD).write_bytes(b"muhan skills")
+			(text_root / "skilldata.txt").write_bytes(cap110.encode_rows([["skilldata_5000.txt"], [muhan.SKILL_SHARD]]))
+			env = {key: value for key, value in os.environ.items() if key not in LAYER_FLAGS}
+			with mock.patch.dict(os.environ, env, clear=True):
+				self.assertFalse(winter.add_winter_monsters(native, out)["enabled"])
+			self.assertEqual((text_root / muhan.CHARACTER_SHARD).read_bytes(), b"muhan kinds")
+			self.assertEqual((text_root / muhan.SKILL_SHARD).read_bytes(), b"muhan skills")
+			manifest = {row[0] for row in cap110.tables.table_rows((text_root / "skilldata.txt").read_bytes()) if row}
+			self.assertIn(muhan.SKILL_SHARD, manifest)
 
 
 if __name__ == "__main__":

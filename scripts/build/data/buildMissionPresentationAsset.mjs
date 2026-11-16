@@ -20,6 +20,7 @@ import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { listTextDataShardNamesSync, readTextDataRowsSync } from "../shared/textDataIo.mjs";
 import { PORT_ITEM_TEMPLATE, portItemColumns } from "../shared/portItemRows.mjs";
 import { publicRoot, retailTextdataRoot } from "../world/paths.mjs";
+import { compareText } from "../shared/textOrder.mjs";
 
 const npcManifestPath = path.join( publicRoot, "assets", "npc", "manifest.json" );
 const outputPath = path.join( publicRoot, "assets", "data", "missionPresentation.json" );
@@ -80,7 +81,7 @@ export function buildMissionPresentationAsset( options = {} ) {
 	const charactersByCodename = {};
 	for (
 		const [codename, model] of Object.entries( npcManifest.models ?? {} ).sort( ( [left], [right] ) =>
-			left.localeCompare( right )
+			compareText( left, right )
 		)
 	) {
 		const modelPath = normalizeGamePath( model?.bsr );
@@ -111,7 +112,7 @@ export function buildMissionPresentationAsset( options = {} ) {
 		}
 	}
 	const shardNames = listTextDataShardNamesSync( textdataRoot, /^itemdata.*\.txt$/i ).sort( ( left, right ) =>
-		left.localeCompare( right )
+		compareText( left, right )
 	);
 	for ( const shardName of shardNames ) {
 		// The port-only rows (portItemRows.mjs) follow their template, as the

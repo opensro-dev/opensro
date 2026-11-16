@@ -43,6 +43,7 @@ import { buildJmxWorldRegionBundle } from "./maploader/buildMapLoaderRegionBundl
 import { WORLD_LAYER_TABLE } from "./maploader/worldLayers.mjs";
 import { buildTitleSectorObjectResources } from "./objects/buildTitleSectorObjectResources.mjs";
 import { extractedRoot, gameRoot, generatedRoot, normalizeRegionId, publicRoot, toHex16 } from "./paths.mjs";
+import { compareText } from "../shared/textOrder.mjs";
 
 export const OUTDOOR_WORLD_AREA = "outdoor";
 export const OUTDOOR_WORLD_SOURCE_NAME = "mission-outdoor-global";
@@ -108,7 +109,7 @@ writeTerrainTileLedger
 */
 async function writeTerrainTileLedger( tilesByRegion, referencesByRegion ) {
 	await mkdir( path.dirname( TERRAIN_TILE_LEDGER_PATH ), { recursive: true } );
-	const sorted = ( map ) => Object.fromEntries( [ ...map ].sort( ( [a], [b] ) => a.localeCompare( b ) ) );
+	const sorted = ( map ) => Object.fromEntries( [ ...map ].sort( ( [a], [b] ) => compareText( a, b ) ) );
 	await writeFile(
 		TERRAIN_TILE_LEDGER_PATH,
 		JSON.stringify( {

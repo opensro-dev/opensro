@@ -30,7 +30,7 @@ An asset owner whose fetches finish only when the test says so, plus
 the renderer surface the resource owner talks to.
 ================
 */
-function fakeWorld() {
+function fakeWorld( slots = 4 ) {
 	let nextId = 1;
 	/** @type {string[]} */
 	const started = [];
@@ -42,7 +42,7 @@ function fakeWorld() {
 	/** @type {Map<number, string>} */
 	const byId = new Map();
 	const assets = {
-		available: () => 4,
+		available: () => slots,
 		progress: () => null,
 		health: () => ({ phase: "running" }),
 		request( url ) {
@@ -109,8 +109,21 @@ test("without a declared part the slot stays first-come", () => {
 	assert.ok( world.started[0].endsWith( FOREIGN ) );
 });
 
-test("priority waits for the load in flight, then takes the next slot", () => {
+test("priority takes a free slot beside the load in flight and never cancels it", () => {
 	const world = fakeWorld(), resources = world.resources;
+	resources.begin( 1 );
+	assert.equal( resources.ready( FOREIGN ), false );
+	assert.equal( world.started.length, 1 );
+	resources.begin( 2 );
+	resources.prioritize( [ WEAPON ] );
+	assert.equal( resources.ready( WEAPON ), false );
+	assert.equal( world.started.length, 2 );
+	assert.ok( world.started[1].endsWith( WEAPON ) );
+	assert.deepEqual( world.cancelled, [] );
+});
+
+test("with one free asset slot, priority waits for the load in flight, then takes the next slot", () => {
+	const world = fakeWorld( 1 ), resources = world.resources;
 	resources.begin( 1 );
 	assert.equal( resources.ready( FOREIGN ), false );
 	assert.equal( world.started.length, 1 );

@@ -53,6 +53,7 @@ import (
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
+	"opensro.online/server/internal/platform/jobhonor"
 	"opensro.online/server/internal/transport"
 )
 
@@ -69,9 +70,11 @@ type gameplayPlane struct {
 	hub        *transport.Hub
 	deps       *enterworld.Deps
 	items      *action.Runtime
-	movement   *movement.Runtime
-	water      *movement.WaterValidator
-	presence   *livepresence.Directory
+	// jobHonor is the job honor ledger the public board reads; nil off.
+	jobHonor *jobhonor.Service
+	movement *movement.Runtime
+	water    *movement.WaterValidator
+	presence *livepresence.Directory
 	// mutes is the chat mute book (moderation_wiring.go), set once the
 	// shard is known; the console's conduct actions reach it.
 	mutes         *moderation.Book
@@ -129,6 +132,7 @@ func newGameplayPlane(
 	items.PetPolicies = companion.PoliciesFromEnv()
 	items.AttackPetExpansion = companion.AttackPetExpansionEnabled()
 	items.NasrunSocket = nasrun.Enabled(os.Getenv(nasrun.Env))
+	items.NasrunTokens = items.NasrunSocket
 	items.Guilds = deps.Guilds
 	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
 	if err := items.ValidateLootReferences(); err != nil {
@@ -149,6 +153,15 @@ func newGameplayPlane(
 	}
 	// Port-only, not native: the reverse return scroll's map destinations.
 	if err := configureReverseReturnMap(items, devPaths.TextdataDir); err != nil {
+		return nil, err
+	}
+	// Port-only, not native (#3349): the Muhan change NPCs' pairing. Off
+	// reads nothing and installs nothing.
+	muhanTransforms, err := monster.LoadMuhanTransforms(devPaths.TextdataDir, monster.MuhanEnabled())
+	if err != nil {
+		return nil, err
+	}
+	if err := items.ConfigureMuhanTransforms(muhanTransforms); err != nil {
 		return nil, err
 	}
 	// One clock for the bootstrap and the tick sweep, read through the runtime
@@ -210,6 +223,13 @@ func newGameplayPlane(
 	if items.MaterialDrops.Off() {
 		log.Infof("loot: alchemy material drops OFF (%s)", progression.EnvAlchemyMaterialDropsOff)
 	}
+	// SRO_ABOVE_DEGREE9_DROPS_OFF (port-only, not native; owner
+	// 2026-11-16): while the area polls run, no monster drops an item above
+	// degree 9.
+	items.AboveDegree9Drops = progression.AboveDegree9DropsFromEnv()
+	if items.AboveDegree9Drops.Off() {
+		log.Infof("loot: drops above degree %d OFF (%s)", progression.MaxDropDegree, progression.EnvAboveDegree9DropsOff)
+	}
 	// SRO_SUN_EVENT_ONLY (port-only, not native): degree-9 Seal of Sun gear
 	// leaves monster drops and NPC shops; it returns only as an event reward.
 	items.SunEventOnly = progression.SunEventOnlyFromEnv()
@@ -222,6 +242,9 @@ func newGameplayPlane(
 	// SRO_HALLOWEEN_HELMET_SEAL (port-only, not native): the event
 	// helmets stay sealed at the transfer doors after the event.
 	items.HalloweenHelmetSeal = halloweenHelmetSealFromEnv()
+	// SRO_CHRISTMAS_EVENT (port-only, not native in this client build):
+	// the Christmas event's switch and UTC window (wiring_christmas.go).
+	items.Christmas = christmasEventFromEnv()
 	// SRO_UNIQUE_GAP_EXEMPT / SRO_UNIQUE_POP_TICKET / SRO_UNIQUE_MAX_LEVEL_LOOT
 	// / SRO_UNIQUE_SEAL_DROPS (port-only, not native): uniques ignore the
 	// level-gap admission, one Magic Pop ticket per kill, a top-band unique's
@@ -786,7 +809,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		})
 	}
 	game.deps.NormalizeEntryQuests = quests.NormalizeEntryRecords
-	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredHalloweenBoxes
+	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredEventItems
 	game.deps.EntryEventFrames = game.items.EntryEventFrames
 	game.deps.EntryEventGroups = game.items.EntryEventGroups
 	if err := game.validateQuestMarkerRoster(); err != nil {

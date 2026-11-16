@@ -142,13 +142,13 @@ carries the dismount, the speed refresh and the despawn; private the
 owner's item state.
 ================
 */
-func (rt *Runtime) releaseRiddenVehicleInDoor(division string, c *enterworld.Character, now int64) (public, private []wire.Frame) {
+func (rt *Runtime) releaseRiddenVehicleInDoor(division string, c *enterworld.Character, now int64, lostTo string) (public, private []wire.Frame) {
 	ride := c.ActiveCOS
 	if ride == nil || !ride.Summoned || !ride.Mounted {
 		return nil, nil
 	}
 	// Port-only, not native: a loaded transport's goods stay in the world.
-	public = rt.dropRiddenCargoInDoor(division, c, now)
+	public = rt.dropRiddenCargoInDoor(division, c, now, lostTo)
 	gid := ride.GID
 	rt.unmountCompanion(division, c, ride, now)
 	ride.Summoned = false

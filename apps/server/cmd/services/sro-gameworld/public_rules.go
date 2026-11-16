@@ -48,6 +48,7 @@ import (
 // with the reason; every other setting is a rule (public_rules_test.go).
 var unlistedSettings = map[string]string{
 	progression.EnvHalloweenEventWindow: "the dates of the Halloween event rule, not a rule of its own",
+	progression.EnvChristmasEventWindow: "the dates of the Christmas event rule, not a rule of its own",
 	action.EnvGMSetSpeed:                "a GM command, not a rule players meet",
 	action.EnvGMItemForge:               "a GM command, not a rule players meet",
 	monster.EnvTrainingDummy:            "GM-only training targets",
@@ -101,6 +102,12 @@ var unlistedSettings = map[string]string{
 	// Cosmetic item rows the variant build imports; the GameWorld reads no
 	// such switch, the items simply exist in the built data.
 	"SRO_MALL_AVATARS": "mall avatar build input, consumed when the server data is built",
+	// The Styria Clash arena map (#3272 slice 1): the variant build merges
+	// its ground; nothing links to it and the GameWorld reads no switch
+	// until the Battle Arena engine (#3648) makes it a rule.
+	"SRO_REFERRALS":    "the website's referral page shows its own numbers from the referral route",
+	"SRO_STYRIA_CLASH": "Styria Clash arena map build input; players cannot reach it until #3648",
+	"SRO_CONSIGNMENT":  "the market pages state their own fee, duration and listing cap",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
 	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",
@@ -310,12 +317,20 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Monsters drop alchemy materials (claws, hides and other monster parts).",
 				Now:    "Alchemy materials no longer drop.",
 				Why:    "A community vote brought the parts back, so they drop as in the original; this only applies if the removal is switched back on."},
+			{Flag: progression.EnvAboveDegree9DropsOff, On: progression.AboveDegree9DropsFromEnv().Off(),
+				Native: "Monsters drop items of every degree their level allows, degree 10 and 11 included in the new areas.",
+				Now:    "No monster drops an item above degree 9: equipment, elixirs, Lucky Powder, stones, tablets or elements. Every degree-9-and-below drop keeps its chance, and items already owned are kept.",
+				Why:    "The level cap stays 90 while community polls decide what the new areas drop; this keeps new degree-10 gear out of the economy until they close."},
 			{Flag: nasrun.Env, On: nasrun.Enabled(os.Getenv(nasrun.Env)), Native: "Avatar storage holds four avatars: hat, dress, attachment and flag.", Now: "A fifth avatar socket holds a Devil's Spirit.", Why: "Optional port-only step toward the later Devil's Spirit (#3456)."},
 			{Flag: sookarena.Env, On: sookarena.Enabled(os.Getenv(sookarena.Env)), Native: "Event So-ok offers no solo survival arena.", Now: "Three private survival entries per account per UTC day, shared by its characters, five stages, fivefold EXP/SP and checkpoint reward chests.", Why: "Optional port-only survival event."},
 			{Flag: progression.EnvHalloweenEvent, On: progression.HalloweenEventFromEnv().ActiveAt(time.Now()),
 				Native: "No Halloween event runs: monsters drop no jewelry boxes and So-ok offers no gift exchange.",
 				Now:    "During the event window, monsters drop jewelry boxes and So-ok exchanges each box for a random gift or sixty boxes for an event helmet; boxes left when the window ends are removed at the next world entry.",
 				Why:    "The original Halloween Day event, rebuilt for its seasonal window."},
+			{Flag: progression.EnvChristmasEvent, On: progression.ChristmasEventFromEnv().ActiveAt(time.Now()),
+				Native: "No Christmas event runs: the towns stay undecorated, no event snow falls and no winter monsters come.",
+				Now:    "While the event runs, the towns wear their Christmas decoration, and every two hours it snows for an hour: Snow Slaves fill every field during the snowfall and melt when it stops. Every hit on a Snow Slave lands for 1, so it falls in five hits. They drop Red Santa Socks; So-ok trades each pair for a present. A White Knight comes to three fields every hour at half past, and Princess Miyene at 13:00 and 21:00 UTC. When the event ends, the socks leave every bag.",
+				Why:    "The original Christmas event's snow, with the later client's town decoration, for its seasonal window."},
 			{Flag: progression.EnvHalloweenHelmetSeal, On: progression.HalloweenHelmetSealFromEnv().Enabled(),
 				Native: "The event helmets trade like any other item.",
 				Now:    "The eight event helmets cannot be traded, stalled, stored, given to a pet or dropped: they stay with the character that earned them. A helmet may still be sold to an NPC merchant, which destroys it; the sale never puts it on the buyback bench, so no other player can take it.",
@@ -583,6 +598,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A seal drop is the looter's own business; nothing tallies them.",
 				Now:    "The site's seal board counts the week's Star, Moon and Sun drops for each job alias, resetting every Monday. Aliases only: no character names, and a player who hides from the public pages is not on it.",
 				Why:    "Owner-approved vote (#1604 P9), so the week's seal luck is visible without naming anyone's characters."},
+			{Flag: action.EnvJobHonor, On: action.JobHonorFromEnv(),
+				Native: "Jobs have only their native ranking; nothing scores honor.",
+				Now:    "A trader's sale scores honor points from its profit and a thief's sale at the thieves' merchant scores more, up to 250 a run and 1000 a day per account, shared by all its characters. Every day at 05:00 server time the last 7 days are ranked per job: #1 is King, the top 10% Gold and the top 30% Silver.",
+				Why:    "Owner-approved spec (#3530), so job play has a standing of its own that alts and bots cannot buy."},
 			{Flag: action.EnvAnnouncePlus, On: action.AnnouncementsFromEnv().Plus,
 				Native: "Reinforcement results are private.",
 				Now:    "Everyone sees \"<player> advanced <item> (<seal>) to +N\" for +7 and above.",
@@ -633,6 +652,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Qin-Shi Emperor Tomb has its geometry and entrance in the v1.150 client, without monster spawns or walk-in gates; its door moves nobody.",
 				Now:    "Qin-Shi Emperor Tomb is open on all six floors: its door by Jangan admits players of level 70 and above, its gates move between floors, and its monsters are awake.",
 				Why:    "Opens the Jangan tomb dungeon shipped in the v1.150 client assets (GH #1013); the original returns with one setting."},
+			{Flag: action.EnvJanganTombTeleport, On: action.JanganTombTeleportEnabled(),
+				Native: "The Jangan teleporter does not lead into Qin-Shi Emperor Tomb; players walk in through its door.",
+				Now:    "The Jangan teleporter also offers Qin-Shi Emperor Tomb floors 1 to 3 and each corner of floor 4 for 40,000 gold, from level 70.",
+				Why:    "A quicker way to the tomb floors, on the same terms as the Alexandria rows of the same gate."},
 			{Flag: action.EnvFlagWarStartUTC, On: true,
 				Native: "Capture the Flag runs on the reference server's event schedule.",
 				Now: fmt.Sprintf("One Capture the Flag match a day at %02d:%02d UTC; sign-up opens ten minutes before the start at Event So-Ok (level 20 and up).",

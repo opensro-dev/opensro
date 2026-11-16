@@ -479,6 +479,9 @@ export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 			bones: g.bones ? mutable( g.bones ) : undefined,
 			// Terrain stitches its seams by rewriting positions (world.ts).
 			dynamicVertices: group.ranges !== undefined,
+			// World materials stay static: world.ts's material updates (its
+			// timelines, pulses and texture motions) go straight to the queue.
+			dynamicMaterial: undefined,
 			// World cloth keeps its CPU vertex stream (renderer/world/world.ts).
 			clothStream: undefined,
 			vertices: undefined as Float32Array | undefined
