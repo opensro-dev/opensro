@@ -1,0 +1,187 @@
+# docker-compose.prod.yml - the OpenSRO stack on the Docker host (~/silkroad)
+#
+# Replaces the upstream's Nomad jobs (deploy/docs/2026-11-16-docker-deploy-design.md):
+# compose supervises, `identity` plays Nomad's workload identity, and the
+# secrets Nomad kept in Variables live in the `cluster` volume. Only `web`
+# joins the external `traefik` network; nothing publishes a host port.
+#
+# Images come from IMAGE_REPO at IMAGE_TAG (release.env, written by
+# rollout.sh); settings from .env.prod. rollout.sh runs the one-shot jobs
+# (provision, derive-public, upgrade) before `up`.
+
+name: silkroad
+
+x-server-image: &server-image ${IMAGE_REPO:?set IMAGE_REPO}:server-${IMAGE_TAG:?set IMAGE_TAG}
+x-identity-image: &identity-image ${IMAGE_REPO:?set IMAGE_REPO}:identity-${IMAGE_TAG:?set IMAGE_TAG}
+
+x-catalog: &catalog ./config/shards.prod.json:/app/deploy-config/shards.prod.json:ro
+
+services:
+  # --- one-shot jobs ------------------------------------------------------------------------------
+
+  # Creates what is missing and never replaces what exists: the Agent session key ring, the
+  # provisioning and public API tokens, and the shard authority on a first boot.
+  provision:
+    image: *server-image
+    command: ["provision"]
+    environment:
+      SRO_SHARD_ID: global-official
+      SRO_SHARD_CATALOG_PATH: /app/deploy-config/shards.prod.json
+    volumes:
+      - *catalog
+      - cluster:/cluster
+      - shard-global-official:/data/shard
+    network_mode: none
+    restart: "no"
+    profiles: [jobs]
+
+  # The GameWorld's copy of the session keys: the public half only.
+  derive-public:
+    image: *identity-image
+    command: ["-derive-public", "/cluster/agent-session-keys.json", "-out", "/cluster/agent-session-public-keys.json"]
+    volumes:
+      - cluster:/cluster
+    network_mode: none
+    restart: "no"
+    profiles: [jobs]
+
+  # Validates the shard authority and commits the current schema when it is older.
+  upgrade:
+    image: *server-image
+    command: ["upgrade"]
+    volumes:
+      - shard-global-official:/data/shard
+    network_mode: none
+    restart: "no"
+    profiles: [jobs]
+
+  # --- services -----------------------------------------------------------------------------------
+
+  agent:
+    image: *server-image
+    command: ["agent"]
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SRO_SHARD_CATALOG_PATH: /app/deploy-config/shards.prod.json
+      SRO_AGENT_PRIVATE_NETWORK: "1"
+      SRO_AGENT_API_ADDR: 0.0.0.0:8787
+      SRO_AGENT_ALLOWED_ORIGINS: https://${SRO_DOMAIN:?set SRO_DOMAIN in .env.prod}
+      SRO_AGENT_ACCOUNTS_PATH: /cluster/accounts.json
+      SRO_AGENT_ACCOUNTS_DB_PATH: /data/agent/accounts.db
+      SRO_AGENT_DIRECTORY_STATE_PATH: /data/agent/shard-leases.json
+      SRO_AGENT_PROVISIONING_TOKEN_PATH: /cluster/agent-provisioning-token
+      SRO_AGENT_SESSION_KEYRING_PATH: /cluster/agent-session-keys.json
+      # The identity service shares this container's network namespace, so the JWKS is on
+      # loopback: the Agent's verifier accepts plain HTTP only there.
+      SRO_NOMAD_IDENTITY_ISSUER: http://127.0.0.1:8080
+      SRO_NOMAD_JWKS_URL: http://127.0.0.1:8080/jwks.json
+      SRO_NOMAD_NAMESPACE: silkroad
+    volumes:
+      - *catalog
+      - cluster:/cluster
+      - agent:/data/agent
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8787/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 20s
+    restart: unless-stopped
+
+  identity:
+    image: *identity-image
+    command: ["-key", "/identity/key.json", "-out-dir", "/out", "-shards", "global-official", "-namespace", "silkroad"]
+    network_mode: service:agent
+    volumes:
+      - identity:/identity
+      - identity-out:/out
+    depends_on:
+      agent:
+        condition: service_started
+    restart: unless-stopped
+
+  gameworld-global-official:
+    image: *server-image
+    command: ["gameworld"]
+    env_file:
+      - path: ./shard.env
+        required: false
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SRO_SHARD_CATALOG_PATH: /app/deploy-config/shards.prod.json
+      SRO_SHARD_ID: global-official
+      SRO_AGENT_URL: http://agent:8787
+      SRO_AGENT_URL_REQUIRE: "1"
+      SRO_AGENT_IDENTITY_FILE: /identity/gameworld-global-official.jwt
+      SRO_AGENT_SESSION_PUBLIC_KEYS_PATH: /cluster/agent-session-public-keys.json
+      SRO_GAMEWORLD_PRIVATE_NETWORK: "1"
+      SRO_GAMEWORLD_CONTROL_ADDR: 0.0.0.0:8791
+      TRANSPORT_WS_ADDR: 0.0.0.0:8788
+      # WebTransport is out of scope (the client defaults to WebSocket, and Traefik cannot carry
+      # it): a non-loopback WT listener would require a production certificate, so it stays on
+      # loopback, unreachable.
+      TRANSPORT_WT_ADDR: 127.0.0.1:8788
+      TRANSPORT_ALLOWED_ORIGINS: https://${SRO_DOMAIN:?set SRO_DOMAIN in .env.prod}
+      TRANSPORT_CERT_DIR: /data/shard/certs
+      SRO_AUTHORITY_REQUIRE: "1"
+      SRO_AUTHORITY_STATE_DIR: /data/shard/authority
+    volumes:
+      - *catalog
+      - cluster:/cluster:ro
+      - identity-out:/identity:ro
+      - shard-global-official:/data/shard
+      - gamedata-cache:/cache/game-data
+    depends_on:
+      agent:
+        condition: service_healthy
+      identity:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8788/transport/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    # The GameWorld drains sessions and commits within its 30 s shutdown budget.
+    stop_grace_period: 45s
+    restart: unless-stopped
+
+  web:
+    image: ${IMAGE_REPO:?set IMAGE_REPO}:web-${IMAGE_TAG:?set IMAGE_TAG}
+    volumes:
+      - ${ASSETS_DIR:-./assets/current}:/srv/game:ro
+    depends_on:
+      agent:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+    networks:
+      default: {}
+      traefik: {}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.silkroad.rule=Host(`${SRO_DOMAIN}`)"
+      - "traefik.http.routers.silkroad.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.silkroad.tls=true"
+      - "traefik.http.routers.silkroad.tls.certresolver=${TRAEFIK_CERTRESOLVER:-mytlschallenge}"
+      - "traefik.http.services.silkroad.loadbalancer.server.port=80"
+
+networks:
+  default:
+    name: silkroad_internal
+  traefik:
+    external: true
+
+volumes:
+  cluster:
+  agent:
+  identity:
+  identity-out:
+  shard-global-official:
+  gamedata-cache:

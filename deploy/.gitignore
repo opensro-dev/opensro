@@ -1,0 +1,8 @@
+# Server-side and per-machine files: never versioned.
+.env.prod
+.env.prod.bak*
+shard.env
+release.env
+local.env
+backups/
+assets/

@@ -17,8 +17,16 @@ COPY apps/server/internal apps/server/internal
 COPY deploy/identity deploy/identity
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     cd deploy/identity && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -o /out/identity .
+    go build -trimpath -o /rootfs/identity . \
+ && mkdir -p /rootfs/identity-state /rootfs/out
 
-FROM gcr.io/distroless/static-debian12:nonroot
-COPY --from=build /out/identity /identity
-ENTRYPOINT ["/identity"]
+# Every stack image runs as 10001, the owner of the shared volumes
+# (cluster is written by the server image and read here). The mount
+# points exist in the image so new named volumes inherit that owner.
+FROM gcr.io/distroless/static-debian12
+COPY --from=build --chown=10001:10001 /rootfs/identity /identity-bin
+COPY --from=build --chown=10001:10001 /rootfs/identity-state /identity
+COPY --from=build --chown=10001:10001 /rootfs/out /out
+COPY --from=build --chown=10001:10001 /rootfs/out /cluster
+USER 10001:10001
+ENTRYPOINT ["/identity-bin"]
