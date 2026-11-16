@@ -31,6 +31,8 @@ import (
 const (
 	nasrunTokenNotice    = "Devil's Spirit tokens +%d (balance %d, today %d/%d)."
 	nasrunTokenCapNotice = "You have earned today's %d Devil's Spirit tokens; the count restarts at 04:00 UTC."
+	// nasrunTokenSpentNotice tells a token shop purchase (step 3b).
+	nasrunTokenSpentNotice = "Devil's Spirit tokens -%d (balance %d)."
 )
 
 /*

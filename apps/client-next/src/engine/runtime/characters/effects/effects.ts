@@ -147,6 +147,20 @@ const CAPTURED_MONSTER_TYPE = 6 << 11;
 // (trimToEffectBudget); only a cast arriving with every slot taken by
 // other casts skips its visuals.
 const EFFECT_ACTOR_BUDGET = 2048;
+// What effects change on a character's own model (appearance), and one
+// motion an attached effect imposes on its host (hostMotions).
+type EffectAppearance = Readonly<{
+	pointLight?: NonNullable<CharacterActor["pointLight"]>;
+	weaponHidden: boolean;
+	boneRotation?: CharacterActor["boneRotation"];
+	materialTint: readonly [number, number, number] | undefined;
+	scale: number;
+}>;
+type HostMotion = Readonly<{ set: string; id: number; key: string; started: number; stoppedAt: number | undefined; }>;
+// What effects change on a character with none of them: the appearance and
+// the host motions every such character is handed, shared and frozen.
+const PLAIN_APPEARANCE: EffectAppearance = Object.freeze( { weaponHidden: false, materialTint: undefined, scale: 1 } );
+const NO_HOST_MOTIONS: readonly HostMotion[] = Object.freeze( [] );
 const CROW_EFFECT_LIMIT = 64;
 // A one-shot whose model is still not resident this long after its spawn is dropped.
 const UNREADY_ONE_SHOT_SECONDS = 15;
@@ -488,6 +502,13 @@ export function createCharacterEffects(
 		string,
 		{ effect: Attachment; visuals: AttachedVisual[]; stopped: boolean; started: number; stoppedAt?: number; }
 	>();
+	// The attached keys on each host, in attached's order: hostMotions reads
+	// its host's rows only.
+	const attachedByHost = new Map<number, Set<string>>();
+	// The appearance each character was last handed while any effect changes
+	// it, kept while every field holds: one identity per change, which the
+	// presentation stamps compare.
+	const appearances = new Map<number, EffectAppearance>();
 	const materials = new Map<
 			number,
 			{
@@ -620,6 +641,17 @@ export function createCharacterEffects(
 		return `${effect.recordName ?? "skill"}:${effect.gid}:${effect.token}:${effect.skill}:${effect.phase}:${
 			effect.receivedAtMs ?? "entry"
 		}`;
+	}
+	/*
+	================
+	dropAttached
+	Removes one attached effect and its host's index entry.
+	================
+	*/
+	function dropAttached( key: string, gid: number ) {
+		attached.delete( key );
+		const keys = attachedByHost.get( gid );
+		if ( keys?.delete( key ) && !keys.size ) attachedByHost.delete( gid );
 	}
 	const persistent = new Map<string, { started: number; actors: CharacterActor[]; }>();
 	/*
@@ -1459,6 +1491,7 @@ export function createCharacterEffects(
 					row.previous = now;
 				}
 				for ( const gid of hwan.keys() ) if ( !byGid.has( gid ) ) hwan.delete( gid );
+				for ( const gid of appearances.keys() ) if ( !byGid.has( gid ) ) appearances.delete( gid );
 				for ( const gid of statuses.keys() ) {
 					if ( !byGid.has( gid ) ) {
 						statuses.delete( gid );
@@ -2995,6 +3028,9 @@ export function createCharacterEffects(
 								started: now,
 								...(stopped ? { stoppedAt: now } : {})
 							} );
+							const keys = attachedByHost.get( effect.gid );
+							if ( keys ) keys.add( key );
+							else attachedByHost.set( effect.gid, new Set( [ key ] ) );
 							if ( !effect.recordName ) {
 								activations.push( { gid: effect.gid, skill: effect.skill, at: now } );
 							}
@@ -3008,7 +3044,7 @@ export function createCharacterEffects(
 						const owner = presentation.get( row.effect.gid );
 						if ( !byGid.has( row.effect.gid ) ) {
 							releaseMaterial( key );
-							attached.delete( key );
+							dropAttached( key, row.effect.gid );
 							continue;
 						}
 						if ( !row.stopped && !wanted.has( key ) ) {
@@ -3235,7 +3271,9 @@ export function createCharacterEffects(
 						}
 						if ( row.stopped && !row.visuals.length ) {
 							releaseMaterial( key );
-							if ( !wanted.has( key ) && now - (row.stoppedAt ?? now) >= .2 ) attached.delete( key );
+							if ( !wanted.has( key ) && now - (row.stoppedAt ?? now) >= .2 ) {
+								dropAttached( key, row.effect.gid );
+							}
 						}
 					}
 					// Past the budget the farthest attached effects give way; the
@@ -4086,20 +4124,44 @@ export function createCharacterEffects(
 		================
 		appearance
 		What effects change on a character's own model: hit light, hidden
-		weapon, material tint and status decoration.
+		weapon, material tint and status decoration. The same frozen object
+		while every field holds; an aimed character's is new each call, as
+		its spine aim's rotation is read new.
 		================
 		*/
-		appearance( gid: number ) {
+		appearance( gid: number ): EffectAppearance {
 			const spineRotation = spineAims.rotation( gid );
 			const roar = roarAppearances.get( gid );
-			const pointLight = roar?.pointLight ?? hitLights.get( gid );
-			return {
+			const pointLight = roar?.pointLight ?? hitLights.get( gid ),
+				weaponHidden = hiddenWeapons.has( gid ),
+				materialTint = roar?.materialTint ?? materials.get( gid )?.color,
+				scale = (hwan.get( gid )?.value ?? 1) * (roar?.scale ?? 1);
+			if ( spineRotation ) {
+				return Object.freeze( {
+					...(pointLight ? { pointLight } : {}),
+					weaponHidden,
+					boneRotation: { bone: SPINE_AIM_BONE, rotation: spineRotation },
+					materialTint,
+					scale
+				} );
+			}
+			if ( !pointLight && !weaponHidden && !materialTint && scale === 1 ) {
+				appearances.delete( gid );
+				return PLAIN_APPEARANCE;
+			}
+			const kept = appearances.get( gid );
+			if (
+				kept && kept.pointLight === pointLight && kept.weaponHidden === weaponHidden &&
+				kept.materialTint === materialTint && kept.scale === scale
+			) return kept;
+			const appearance = Object.freeze( {
 				...(pointLight ? { pointLight } : {}),
-				weaponHidden: hiddenWeapons.has( gid ),
-				...(spineRotation ? { boneRotation: { bone: SPINE_AIM_BONE, rotation: spineRotation } } : {}),
-				materialTint: roar?.materialTint ?? materials.get( gid )?.color,
-				scale: (hwan.get( gid )?.value ?? 1) * (roar?.scale ?? 1)
-			};
+				weaponHidden,
+				materialTint,
+				scale
+			} );
+			appearances.set( gid, appearance );
+			return appearance;
 		},
 		/*
 		================
@@ -4167,18 +4229,26 @@ export function createCharacterEffects(
 		/*
 		================
 		hostMotions
-		The motions attached effects impose on their host character.
+		The motions attached effects impose on their host character, in
+		attached's order; the shared empty list when there are none.
 		================
 		*/
-		hostMotions( gid: number ) {
-			return [ ...attached.values() ].filter( row =>
-				row.effect.gid === gid && (row.effect.phase === 1 || catalog?.[String( row.effect.skill )]?.overlap)
-			).flatMap( row => {
-				const motion = catalog?.[String( row.effect.skill )]?.attachedMotion;
-				return motion ?
-					[ { ...motion, key: attachedKey( row.effect ), started: row.started, stoppedAt: row.stoppedAt } ] :
-					[];
-			} );
+		hostMotions( gid: number ): readonly HostMotion[] {
+			let motions: HostMotion[] | undefined;
+			for ( const key of attachedByHost.get( gid ) ?? [] ) {
+				const row = attached.get( key )!, record = catalog?.[String( row.effect.skill )];
+				if ( row.effect.phase !== 1 && !record?.overlap ) continue;
+				const motion = record?.attachedMotion;
+				if ( motion ) {
+					(motions ??= []).push( {
+						...motion,
+						key: attachedKey( row.effect ),
+						started: row.started,
+						stoppedAt: row.stoppedAt
+					} );
+				}
+			}
+			return motions ?? NO_HOST_MOTIONS;
 		},
 		/*
 		================
@@ -4294,6 +4364,8 @@ export function createCharacterEffects(
 			visualStarts.clear();
 			active.clear();
 			attached.clear();
+			attachedByHost.clear();
+			appearances.clear();
 			persistent.clear();
 			unsupported.clear();
 			failure = null;
@@ -4334,6 +4406,8 @@ export function createCharacterEffects(
 			visualStarts.clear();
 			active.clear();
 			attached.clear();
+			attachedByHost.clear();
+			appearances.clear();
 			persistent.clear();
 			impactIndexes.clear();
 			catalog = null;

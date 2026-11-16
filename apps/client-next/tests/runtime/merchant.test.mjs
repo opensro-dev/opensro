@@ -214,3 +214,21 @@ test("a package priced in gold and honor or guild points checks only its gold ro
 	assert.equal( quote.valid, true, "a million guild points are not the client's to check" );
 	assert.equal( merchantQuote( selection, shop, inventory, "2", "199" ).valid, false, "gold short" );
 });
+
+/*
+================
+token offers
+
+Port-only (SRO_NASRUN, #3456 step 3b): a token offer is checked against the
+token balance the shop sent, never against gold, and is refused while the
+balance is unknown.
+================
+*/
+test("a token offer checks the shop's token balance, not gold", () => {
+	const shop = fixture();
+	shop.offers[0] = { ...shop.offers[0], price: "60", currency: 64 };
+	const selection = merchantSelection( "buy", 0, shop, inventory );
+	assert.equal( merchantQuote( selection, { ...shop, nasrunTokens: 60 }, inventory, "1", "0" ).valid, true );
+	assert.equal( merchantQuote( selection, { ...shop, nasrunTokens: 59 }, inventory, "1", "0" ).valid, false );
+	assert.equal( merchantQuote( selection, shop, inventory, "1", "1000000" ).valid, false, "no balance sent" );
+});

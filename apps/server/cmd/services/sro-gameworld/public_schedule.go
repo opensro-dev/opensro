@@ -56,6 +56,10 @@ type scheduleSources struct {
 	halloween progression.HalloweenEvent
 	// flagWarOff leaves Capture the Flag out (no action runtime wired).
 	flagWarOff bool
+	// flagWarCancelled answers whether the match starting at an instant
+	// was cancelled at its start (action.Runtime.FlagWarCancelled); nil
+	// treats every past start as a match.
+	flagWarCancelled func(start time.Time) bool
 }
 
 /*
@@ -69,7 +73,8 @@ func scheduleSourcesOf(game *gameplayPlane) scheduleSources {
 	if game == nil || game.items == nil {
 		return scheduleSources{flagWarOff: true}
 	}
-	return scheduleSources{siege: game.siege, flagWar: game.items.FlagWar, halloween: game.items.Halloween}
+	return scheduleSources{siege: game.siege, flagWar: game.items.FlagWar, halloween: game.items.Halloween,
+		flagWarCancelled: game.items.FlagWarCancelled}
 }
 
 /*
@@ -94,7 +99,7 @@ func publicSchedule(src scheduleSources, now time.Time) []publicstats.ScheduledE
 			End: window.End, Running: window.Running})
 	}
 	if !src.flagWarOff {
-		events = append(events, flagWarEvents(src.flagWar, now)...)
+		events = append(events, flagWarEvents(src.flagWar, src.flagWarCancelled, now)...)
 	}
 	if start, end, valid := src.halloween.Window(); src.halloween.Enabled() && valid && now.Before(end) {
 		events = append(events, publicstats.ScheduledEvent{Kind: publicstats.ScheduleKindHalloween, Title: "Halloween Day",
@@ -108,14 +113,18 @@ func publicSchedule(src scheduleSources, now time.Time) []publicstats.ScheduledE
 flagWarEvents
 
 The sign-up window and the match. A match still running is listed until
-it ends; the next sign-up is listed beside it.
+it ends; the next sign-up is listed beside it. A start that the
+scheduler cancelled (too few registrants) is not a running match, so it
+drops off at its start instant rather than showing as running for a
+whole match length (#3706).
 ================
 */
-func flagWarEvents(settings action.FlagWarSettings, now time.Time) []publicstats.ScheduledEvent {
+func flagWarEvents(settings action.FlagWarSettings, cancelled func(time.Time) bool, now time.Time) []publicstats.ScheduledEvent {
 	var events []publicstats.ScheduledEvent
 	length := action.FlagWarMatchLength()
 	signupAt, startsAt := settings.NextMatch(now)
-	if previous := startsAt.AddDate(0, 0, -1); now.Before(previous.Add(length)) {
+	previous := startsAt.AddDate(0, 0, -1)
+	if now.Before(previous.Add(length)) && (cancelled == nil || !cancelled(previous)) {
 		events = append(events, publicstats.ScheduledEvent{Kind: publicstats.ScheduleKindFlagWar, Title: "Capture the Flag",
 			Start: previous, End: previous.Add(length), Running: true})
 	}

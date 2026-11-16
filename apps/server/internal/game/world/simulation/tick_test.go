@@ -125,6 +125,7 @@ func TestTickerBroadcastsLiveMoverPositionNotGoal(t *testing.T) {
 	}}
 	push := &fakePusher{}
 	ticker := newTestTicker(source, push)
+	ticker.PositionStream = true // the port-only stream (position_stream.go)
 
 	probeMs := startMs + 1000 // mid-flight (200u at 50 u/s = 4000ms)
 	ticker.RunTick(probeMs)
@@ -174,6 +175,7 @@ func TestTickerSettleCorrectionExactlyOnce(t *testing.T) {
 	}}
 	push := &fakePusher{}
 	ticker := newTestTicker(source, push)
+	ticker.PositionStream = true // the port-only stream (position_stream.go)
 
 	ticker.RunTick(arrival + 10)  // matured: one 0xB2F5 settle
 	ticker.RunTick(arrival + 260) // still matured: quiet
@@ -207,6 +209,7 @@ func TestTickerResteerReleasesSettleLatch(t *testing.T) {
 	}}
 	push := &fakePusher{}
 	ticker := newTestTicker(source, push)
+	ticker.PositionStream = true // the port-only stream (position_stream.go)
 
 	ticker.RunTick(arrival + 10) // settle #1
 
@@ -240,6 +243,7 @@ func TestTickerCleansDepartedSessions(t *testing.T) {
 	}}
 	push := &fakePusher{}
 	ticker := newTestTicker(source, push)
+	ticker.PositionStream = true // the port-only stream (position_stream.go)
 
 	ticker.RunTick(arrival + 10)
 	if got := len(ticker.states["DIV_A"].settled); got != 1 {

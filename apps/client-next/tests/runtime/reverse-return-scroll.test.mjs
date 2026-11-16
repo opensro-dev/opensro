@@ -202,7 +202,7 @@ test("a choice cannot survive leaving the world and reopening the same inventory
 	}
 });
 
-for ( const change of [ "replacement", "travel", "character", "pending" ] ) {
+for ( const change of [ "replacement", "travel", "character" ] ) {
 	test(`the pending choice is discarded on ${change}`, () => {
 		const sent = [], f = open( sent );
 		try {
@@ -224,7 +224,6 @@ for ( const change of [ "replacement", "travel", "character", "pending" ] ) {
 			if ( change === "character" ) {
 				state = { ...state, gameplay: { ...game, localGid: (game.localGid ?? 0) + 1 } };
 			}
-			if ( change === "pending" ) state = { ...state, gameplay: { ...game, inventoryPending: true } };
 			if ( change === "travel" ) state = { ...state, travel: { mode: 1, region: 257 } };
 			const cleared = f.ui.step( state, 1400 );
 			state = { ...state, travel: null, gameplay: game };
@@ -236,6 +235,53 @@ for ( const change of [ "replacement", "travel", "character", "pending" ] ) {
 		}
 	});
 }
+
+// ============================================================================
+// A busy bag is one round trip, not a reason to drop the choice
+// ============================================================================
+
+test("the box survives a busy inventory", () => {
+	const sent = [], f = open( sent );
+	try {
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		const before = f.ui.step( f.state, 1300 );
+		assert.equal( boxIds( defined( before ) ).length, 3, "the box is up before the bag is busy" );
+		/** @type {any} */ (f.state.gameplay).inventoryPending = true;
+		const busy = f.ui.step( f.state, 1400 );
+		/** @type {any} */ (f.state.gameplay).inventoryPending = false;
+		// A frame that changed nothing repaints nothing: the last scene stands.
+		const shown = defined( f.ui.step( f.state, 1500 ) ?? busy ?? before );
+		assert.deepEqual( boxIds( shown ), [ "reverse-scroll:2", "reverse-scroll:3", "reverse-scroll-cancel" ] );
+		f.ui.event( { kind: "activate", id: "reverse-scroll:3" } );
+		assert.deepEqual( sent.filter( row => row.kind === "gameplay" ), [
+			{ kind: "gameplay", command: { kind: "item-use", slot: 13, reverseChoice: 3 } }
+		] );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("an answer during a busy inventory is held, not lost", () => {
+	const sent = [], f = open( sent );
+	try {
+		f.ui.event( { kind: "right-activate", id: "slot:13" } );
+		const before = f.ui.step( f.state, 1300 );
+		/** @type {any} */ (f.state.gameplay).inventoryPending = true;
+		f.ui.step( f.state, 1400 );
+		f.ui.event( { kind: "activate", id: "reverse-scroll:3" } );
+		const held = f.ui.step( f.state, 1500 ) ?? before;
+		assert.equal( sent.filter( row => row.kind === "gameplay" ).length, 0, "the answer waited for the bag" );
+		assert.equal( boxIds( defined( held ) ).length, 3, "the box stayed up" );
+		/** @type {any} */ (f.state.gameplay).inventoryPending = false;
+		f.ui.step( f.state, 1600 );
+		f.ui.event( { kind: "activate", id: "reverse-scroll:3" } );
+		assert.deepEqual( sent.filter( row => row.kind === "gameplay" ), [
+			{ kind: "gameplay", command: { kind: "item-use", slot: 13, reverseChoice: 3 } }
+		] );
+	} finally {
+		f.dispose();
+	}
+});
 
 // ============================================================================
 // Port-only, not native: the map choice (reverse-return-map.ts)
@@ -309,6 +355,78 @@ test("with a published table, the map row picks a point and sends choice 7 with 
 			kind: "gameplay",
 			command: { kind: "item-use", slot: 13, reverseChoice: 7, reverseMapPoint: 1 }
 		} );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the map choice survives a busy inventory", () => {
+	const sent = [], f = withMapTable( open( sent ) );
+	try {
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		f.ui.step( f.state, 1300 );
+		f.ui.event( { kind: "activate", id: "reverse-scroll-map" } );
+		let scene = f.ui.step( f.state, 1400 );
+		for (
+			let time = 1500;
+			time < 3000 && !scene?.controls.some( c => c.id === "reverse-map-point:1" );
+			time += 100
+		) {
+			scene = f.ui.step( f.state, time ) ?? scene;
+		}
+		assert.ok( scene?.controls.some( c => c.id === "reverse-map-point:1" ) );
+		/** @type {any} */ (f.state.gameplay).inventoryPending = true;
+		const busy = f.ui.step( f.state, 3100 );
+		/** @type {any} */ (f.state.gameplay).inventoryPending = false;
+		const after = defined( f.ui.step( f.state, 3200 ) ?? busy ?? scene );
+		assert.ok(
+			after.controls.some( c => c.id === "reverse-map-point:1" ),
+			"the map still draws the reverse point after the bag went busy"
+		);
+		f.ui.event( { kind: "activate", id: "reverse-map-point:1" } );
+		f.ui.step( f.state, 3300 );
+		f.ui.event( { kind: "activate", id: "map-teleport-confirm" } );
+		assert.deepEqual( sent.filter( row => row.kind === "gameplay" ), [
+			{ kind: "gameplay", command: { kind: "item-use", slot: 13, reverseChoice: 7, reverseMapPoint: 1 } }
+		] );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("a reverse confirm waits for a busy inventory", () => {
+	const sent = [], f = withMapTable( open( sent ) );
+	try {
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		f.ui.step( f.state, 1300 );
+		f.ui.event( { kind: "activate", id: "reverse-scroll-map" } );
+		let scene = f.ui.step( f.state, 1400 );
+		for (
+			let time = 1500;
+			time < 3000 && !scene?.controls.some( c => c.id === "reverse-map-point:1" );
+			time += 100
+		) {
+			scene = f.ui.step( f.state, time ) ?? scene;
+		}
+		f.ui.event( { kind: "activate", id: "reverse-map-point:1" } );
+		const asked = defined( f.ui.step( f.state, 3100 ) ?? scene );
+		assert.ok( asked.controls.some( c => c.id === "map-teleport-confirm" ), "the confirm is up" );
+		/** @type {any} */ (f.state.gameplay).inventoryPending = true;
+		const busy = f.ui.step( f.state, 3200 );
+		f.ui.event( { kind: "activate", id: "map-teleport-confirm" } );
+		// The confirmation owns the control list while it is up, so the answer
+		// must keep it, not throw the point away. The held confirm is proven by
+		// the second answer below sending the reverse item-use, not a warp.
+		const held = defined( f.ui.step( f.state, 3300 ) ?? busy ?? asked );
+		assert.equal( sent.filter( row => row.kind === "gameplay" ).length, 0, "the confirm waited for the bag" );
+		assert.ok( held.controls.some( c => c.id === "map-teleport-confirm" ), "the confirm stayed up" );
+		assert.ok( f.hasText( "Move here?" ), "the reverse confirm is still the one asked" );
+		/** @type {any} */ (f.state.gameplay).inventoryPending = false;
+		f.ui.step( f.state, 3400 );
+		f.ui.event( { kind: "activate", id: "map-teleport-confirm" } );
+		assert.deepEqual( sent.filter( row => row.kind === "gameplay" ), [
+			{ kind: "gameplay", command: { kind: "item-use", slot: 13, reverseChoice: 7, reverseMapPoint: 1 } }
+		] );
 	} finally {
 		f.dispose();
 	}

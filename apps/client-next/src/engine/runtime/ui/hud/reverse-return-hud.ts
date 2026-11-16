@@ -5,7 +5,8 @@ reverse-return-hud.ts - the bag scroll's pending destination choice
 
 Owns the slot and character bound to message box 0x1E. Reconcile before
 input and painting so a delayed answer cannot use a replacement item or
-survive a world transition.
+survive a world transition. A busy bag is one item round trip, not an
+invalidation: the box keeps the choice and the answer waits for it.
 
 Port-only, not native: when the server publishes a map table
 (SRO_REVERSE_RETURN_MAP), the box has a third row. It hands the same
@@ -32,6 +33,13 @@ export function createReverseReturnHud() {
 	/*
 	================
 	reconcile
+
+	The choice stands while the same character holds the same reverse scroll
+	in the same slot, in the world and not travelling. A busy bag is only a
+	round trip in flight, so it never drops the choice.
+
+	INFERENCE: nothing in the native box's flow (6971B0 case 0x1E) ties it
+	to an unrelated item's answer, so a busy bag does not close it either.
 	================
 	*/
 	function reconcile( view: UiView | null ): boolean {
@@ -40,7 +48,7 @@ export function createReverseReturnHud() {
 		const row = game?.inventory.find( row => row.slot === pending?.slot );
 		if (
 			view?.session?.phase === "world" && !view.travel && game?.localGid === pending.gid &&
-			!game.inventoryPending && !game.reverseReturnChoice && row?.refObjId === pending.refObjId &&
+			!game.reverseReturnChoice && row?.refObjId === pending.refObjId &&
 			isReverseReturnScroll( row.typeFlags ) && row.quantity > 0
 		) return false;
 		pending = null;
@@ -103,6 +111,10 @@ export function createReverseReturnHud() {
 			if ( !pending || !mapping || !view?.gameplay?.reverseMapPoints?.some( point => point.id === id ) ) {
 				return null;
 			}
+			// A busy bag is a round trip in flight (the worker refuses item
+			// commands while one is pending); hold the choice so the answer
+			// cannot race it, and let the player click again when it clears.
+			if ( view.gameplay.inventoryPending ) return null;
 			const slot = pending.slot;
 			pending = null;
 			mapping = false;
@@ -127,6 +139,10 @@ export function createReverseReturnHud() {
 			if ( !pending || choice !== REVERSE_RETURN_LAST_RECALL && choice !== REVERSE_RETURN_LAST_DEATH ) {
 				return null;
 			}
+			// A busy bag is a round trip in flight (the worker refuses item
+			// commands while one is pending); hold the choice so the answer
+			// cannot race it, and let the player click again when it clears.
+			if ( view?.gameplay?.inventoryPending ) return null;
 			const slot = pending.slot;
 			pending = null;
 			mapping = false;

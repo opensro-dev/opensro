@@ -142,6 +142,11 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			return game.contributorRosterTick(ticker, nowMs)
 		}})
 	}
+	if game.caravanAgents != nil {
+		hooks = append(hooks, simulation.NamedTickHook{Name: "caravan-ai", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			return game.caravanAgentsTick(ticker, nowMs)
+		}})
+	}
 	ticker = worldsession.NewTicker(game.hub, game.items.NpcRoster, hooks...)
 	// Port-only (killstats.go): online time accrues to the entered
 	// characters only - the session views at each accrual instant,
@@ -154,6 +159,14 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	ticker.Source.(*worldsession.Bridge).PopulationLease = game.items.CharacterPopulationLease
 	// A quest instance's exit gate joins its world's NPC scope pass.
 	ticker.WorldNpcs = game.items.QuestGateNpcs
+	// A seasonal look (Santa So-Ok, port-only) changes which reference
+	// the static roster spawns under for its window.
+	if look, ok := game.deps.NpcSpawns.Looks.Look(); ok && look.RefObjID != 0 {
+		spawns := game.deps.NpcSpawns
+		ticker.RosterAt = func(nowMs int64) []simulation.NpcDef {
+			return spawns.RosterAt(time.UnixMilli(nowMs))
+		}
+	}
 	ticker.BeforeHooks = []simulation.NamedTickHook{{Name: "monster-actions", Hook: game.items.MonsterActionTickHook()}}
 	// A peer's spawn row is preceded by the item references it names (#340).
 	ticker.ItemReferences = peerReferences.Frames

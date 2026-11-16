@@ -9,13 +9,15 @@ budgets bound memory; the structural limits reject malformed sources.
 
 ===========================================================================
 */
-import { clothData, clothBytes } from "./cloth";
+import { clothData, clothBytes, type ClothData } from "./cloth";
 import { clipTimelineBytes, createClipTimelineCache, type ClipTimelineCache } from "./animation-timelines";
 import { paletteBindings } from "./palette-bindings";
+import { CLOTH_STREAM_WORDS, clothStreamSlots } from "./cloth-stream";
 import type { CharacterModel } from "@/engine/contracts/character";
 import type { NativeTexture } from "@/engine/contracts/texture";
 import { validateNativeTexture } from "@/engine/foundation/assets/native-texture";
 import { DECODED_IMAGE_BYTES, imageBytes } from "@/engine/foundation/assets/image-budget";
+import { ROW_STATE_FLOATS } from "@/engine/foundation/rendering/geometry-instances";
 // Retail colored fireworks contain 100 parent particles with 50 children each.
 export const CHARACTER_PARTICLE_BIRTHS = 8192;
 export const CHARACTER_PRIMITIVES = 1024;
@@ -53,14 +55,18 @@ export const POSE_CLIP_ENTRY_BYTES = 96;
 CharacterPlanCaches
 
 What a render plan derives from a model's immutable parts, owned by the
-character renderer: per-clip timeline charges, and per-primitive-list
-palette bindings. Admitting a clip keeps a model's primitive list, so a
-re-plan of every assembly of the body computes neither again.
+character renderer: per-clip timeline charges, per-primitive-list palette
+bindings, and per-cloth-piece stream slots. Admitting a clip keeps a
+model's primitive list, and with it each primitive's cloth data, which an
+assembly shares with every other wearer of the part (characters.ts
+assembly spreads the part's primitive), so a re-plan of every assembly of
+the body computes none of them again.
 ================
 */
 export type CharacterPlanCaches = {
 	readonly timelines: ClipTimelineCache;
 	readonly bindings: WeakMap<CharacterModel["primitives"], ReturnType<typeof paletteBindings>>;
+	readonly clothSlots: WeakMap<ClothData, Int32Array>;
 };
 /*
 ================
@@ -68,7 +74,24 @@ createCharacterPlanCaches
 ================
 */
 export function createCharacterPlanCaches(): CharacterPlanCaches {
-	return { timelines: createClipTimelineCache(), bindings: new WeakMap() };
+	return { timelines: createClipTimelineCache(), bindings: new WeakMap(), clothSlots: new WeakMap() };
+}
+/*
+================
+characterClothSlots
+
+A cloth piece's stream slots (cloth-stream.ts clothStreamSlots), computed
+once per cloth data when the plan caches are given. Every wearer's stream
+and its draw's slot map take the same list; nobody writes it.
+================
+*/
+export function characterClothSlots( cloth: ClothData, caches?: CharacterPlanCaches ): Int32Array {
+	let slots = caches?.clothSlots.get( cloth );
+	if ( !slots ) {
+		slots = clothStreamSlots( cloth );
+		caches?.clothSlots.set( cloth, slots );
+	}
+	return slots;
 }
 /*
 ================
@@ -141,6 +164,18 @@ export function characterSharedMesh( primitive: CharacterModel["primitives"][num
 }
 /*
 ================
+characterRowGlow
+
+An equipment glow on a primitive whose instances are its batch's actor
+rows (not particle slots or ribbon strips): a batch of several rows keeps
+each row's glow colour and UV in a row-state table (characters.ts).
+================
+*/
+export function characterRowGlow( primitive: CharacterModel["primitives"][number] ): boolean {
+	return !!primitive.equipmentGlow && !primitive.emission && !primitive.ribbon;
+}
+/*
+================
 characterMeshBytes
 
 The one GPU copy of a shared mesh: its packed vertex stream (14 floats a
@@ -172,10 +207,11 @@ characterBatchBytes
 Charge retained batch capacity rather than only this frame's visible
 population. A shared mesh is charged once per frame plan, not here
 (characterMeshBytes); a batch's own streams (ribbons, unskinned cloth and
-meshes) keep a GPU copy and a CPU mirror each.
+meshes) keep a GPU copy and a CPU mirror each. The renderer passes its
+plan caches.
 ================
 */
-export function characterBatchBytes( model: CharacterModel, count: number ): number {
+export function characterBatchBytes( model: CharacterModel, count: number, caches?: CharacterPlanCaches ): number {
 	if ( !count ) return 0;
 	// Mesh and particle batches retain capacity across membership changes.
 	// Reserve unused particle slots too; ribbons retain exact-sized strips.
@@ -214,10 +250,16 @@ export function characterBatchBytes( model: CharacterModel, count: number ): num
 				160 :
 				0) +
 			palettes( primitive, instances ) + slots * 112 + instances * 96 +
+			// The row-state table (ROW_STATE_FLOATS a slot) exists from two rows on.
+			(count > 1 && characterRowGlow( primitive ) ? slots * ROW_STATE_FLOATS * 4 : 0) +
 			(characterSharedMesh( primitive ) ?
 				// A shared cloth piece keeps a skin table of its own: the skin
-				// entries, then its solver's stream (device/geometry.ts).
-				primitive.cloth ? (geometry.joints?.length ?? 0) * 8 * 2 : 0 :
+				// entries, a slot map of one entry a vertex, then its solver's
+				// stream of one entry a slot (device/geometry.ts).
+				primitive.cloth ?
+					(geometry.joints?.length ?? 0) * 8 * 2 +
+					characterClothSlots( primitive.cloth, caches ).length * CLOTH_STREAM_WORDS * 4 :
+					0 :
 				geometry.positions.length / 3 * 14 * 4 * 2 + geometry.indices.byteLength +
 				(geometry.joints?.length ?? 0) * 8 * 2) +
 			64 + 96 + 20;

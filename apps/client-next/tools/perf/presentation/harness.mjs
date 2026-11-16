@@ -7,10 +7,11 @@ createPresentationHarness( root, session ) builds the character
 presentation of the checkout at ROOT the way runtime.ts builds it: the
 world projection (runtime/presentation), the shared presentation RNG, the
 real CPU side of the characters renderer, and an asset owner that serves
-the shared published tree. Each step( index ) applies the session frame's
-world batch and calls the presentation in runtime.ts's frame order, then
-returns everything the presentation handed to the rest of the client that
-frame, encoded at call time.
+the shared published tree (or a scene's own sources, options.source).
+Each step( index ) applies the session frame's world batch and calls the
+presentation in runtime.ts's frame order, then returns everything the
+presentation handed to the rest of the client that frame, encoded at
+call time.
 
 Every module comes from ROOT (its loader, its presentation-fixture rig,
 its crowd-capture encoder, its sources, its generated-root resolver), so
@@ -22,7 +23,7 @@ What is not the client: the GPU (no-op commands), world scenery (none),
 terrain (one session-wide sound surface), the local mover (always idle)
 and dungeon room culling (outdoors). Asset results land on the frame
 after their request, in request order, from the loose published files
-decoded by ROOT's own worker decoders.
+(or the scene's bytes) decoded by ROOT's own worker decoders.
 
 ===========================================================================
 */
@@ -61,7 +62,10 @@ const RENDERER_SINKS = {
 		images.length
 	],
 	setCharacterAnimation: ( body, name, source ) => [ body, name, source.duration ],
-	retainCharacterModels: ids => [ ids ],
+	// The renderer reads the list as a set and ignores a set equal to the
+	// one it holds (retainedSet): recorded is the set it then holds, in
+	// its order, on the calls that change it.
+	retainCharacterModels: ids => [ [ ...new Set( ids ) ] ],
 	setFootprints: rows => [ rows ],
 	setSunDropMarkers: rows => [ rows ]
 };
@@ -148,16 +152,32 @@ function imageStandIn( image, decodeNativeTexture ) {
 
 /*
 ================
-createPublishedAssets
+publishedFiles
 
-The AssetOwner over the published tree. A request takes one of the four
-slots and completes on the next frame (take answers null until then); a
-cancel of a pending load holds its slot until the next frame, as the
-worker's acknowledgement does. Bytes are read once per path; models and
-catalogs are decoded on every delivery, as the worker decodes them.
+The default source: a published path's bytes from the loose files under
+publicRoot, null when no file is there.
 ================
 */
-function createPublishedAssets( publicRoot, decoders, record ) {
+function publishedFiles( publicRoot ) {
+	return pathname => {
+		const file = path.join( publicRoot, pathname );
+		return existsSync( file ) && statSync( file ).isFile() ? new Uint8Array( readFileSync( file ) ) : null;
+	};
+}
+
+/*
+================
+createPublishedAssets
+
+The AssetOwner over a source of published bytes (pathname -> bytes or
+null). A request takes one of the four slots and completes on the next
+frame (take answers null until then); a cancel of a pending load holds
+its slot until the next frame, as the worker's acknowledgement does.
+Bytes are read once per path; models and catalogs are decoded on every
+delivery, as the worker decodes them.
+================
+*/
+function createPublishedAssets( source, decoders, record ) {
 	const jobs = new Map(), files = new Map();
 	let nextId = 0, frame = 0, programsParsed = false;
 	/*
@@ -168,8 +188,7 @@ function createPublishedAssets( publicRoot, decoders, record ) {
 	function read( pathname ) {
 		let bytes = files.get( pathname );
 		if ( bytes === undefined ) {
-			const file = path.join( publicRoot, pathname );
-			bytes = existsSync( file ) && statSync( file ).isFile() ? new Uint8Array( readFileSync( file ) ) : null;
+			bytes = source( pathname ) ?? null;
 			files.set( pathname, bytes );
 		}
 		return bytes;
@@ -294,10 +313,17 @@ function createPublishedAssets( publicRoot, decoders, record ) {
 createPresentationHarness
 
 ROOT is a repository checkout; session is a parsed session object
-(scenarios.mjs). The harness owns Math.random until dispose.
+(scenarios.mjs). options.due, when given, replaces the presentation's
+appearance and motion rules (presentation-due.ts), so a run can present
+every entity in full or count the rules' answers; options.actors, when
+given, sees every published actor list as the renderer receives it.
+options.source, when given, serves the published bytes in place of the
+built tree (pathname, as "/assets/...", to a Uint8Array or null for an
+absent file): a scene of its own needs no built assets. The harness owns
+Math.random until dispose.
 ================
 */
-export async function createPresentationHarness( root, session ) {
+export async function createPresentationHarness( root, session, options = {} ) {
 	if ( session?.format !== "sro-presentation-session" || session.version !== 1 ) {
 		throw Error( "Not a presentation session" );
 	}
@@ -330,7 +356,7 @@ export async function createPresentationHarness( root, session ) {
 	const random = createPresentationRandom( session.seed >>> 0 );
 	const world = createPresentation();
 	const decoders = { models: createModelDecoder(), effects: createEffectDecoder(), decodeNativeTexture };
-	const assets = createPublishedAssets( CLIENT_PUBLIC_ROOT, decoders, record );
+	const assets = createPublishedAssets( options.source ?? publishedFiles( CLIENT_PUBLIC_ROOT ), decoders, record );
 	// What the renderer's last frame left for the presentation to read.
 	const view = { camera: null, listener: null };
 	const missing = new Set();
@@ -352,6 +378,22 @@ export async function createPresentationHarness( root, session ) {
 			return world.finishedCasts();
 		}
 	};
+	// The model set the renderer was last handed to retain.
+	let retained = null;
+	/*
+	================
+	retainedSet
+
+	Whether a retainCharacterModels list changes the renderer's set (as
+	characters.ts retain decides), taking it when it does.
+	================
+	*/
+	function retainedSet( ids ) {
+		const set = new Set( ids );
+		if ( retained && retained.size === set.size && [ ...set ].every( id => retained.has( id ) ) ) return false;
+		retained = set;
+		return true;
+	}
 	const rig = presentationRig( {
 		assets,
 		random,
@@ -360,6 +402,7 @@ export async function createPresentationHarness( root, session ) {
 		surface: () => settings.surface ?? undefined,
 		health,
 		soundEnabled: () => true,
+		due: options.due,
 		// renderer.ts's port, member for member, over the CPU module.
 		port: characters => ({
 			characterLocalMatrix: characters.localMatrix,
@@ -388,7 +431,8 @@ export async function createPresentationHarness( root, session ) {
 					const sink = RENDERER_SINKS[key];
 					if ( !sink || typeof value !== "function" ) return value;
 					return ( ...args ) => {
-						record( key, sink( ...args ) );
+						if ( key !== "retainCharacterModels" || retainedSet( args[0] ) ) record( key, sink( ...args ) );
+						if ( key === "setCharacterActors" ) options.actors?.( ...args );
 						return value.apply( target, args );
 					};
 				}

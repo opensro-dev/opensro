@@ -16,7 +16,6 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/instance"
 )
 
@@ -316,13 +315,11 @@ never had and the reason for the migration. Each tick it
  1. pushes one 0x30E3 patrol move per roster NPC to each NPC-enabled
     session (the exact bytes the reference npc-tick pull seam served, now
     server-driven with a server-clock tick index);
- 2. broadcasts each in-flight mover's LIVE interpolated position (bug D
-    plane, LiveSpawnAt) to division peers as 0x30E3 with the player gid -
-    never the move goal;
- 3. on the tick a segment completes, broadcasts one 0xB2F5 settle
-    correction at the goal (the lenient PathCtl hard-stop + reposition),
-    then goes quiet for that mover;
- 4. pushes the player character-appearance rows (the once-open GO-4 lane,
+ 2. sends each viewer of a moving player its new path once, as the
+    native 0xB738 (peer_motion.go); the port-only position stream
+    (SRO_POSITION_STREAM, position_stream.go) adds the per-tick 0x30E3
+    sample and the 0xB2F5 at arrival;
+ 3. pushes the player character-appearance rows (the once-open GO-4 lane,
     closed by runPeerVisibility): one 0x30D7 CICUser spawn row per
     (viewer, peer) pair when a same-division peer first becomes visible,
     and one 0x36AB despawn when its session leaves. This is what resolves
@@ -341,7 +338,9 @@ type Ticker struct {
 	// static roster in that world's sessions' NPC scope pass only. Nil
 	// means none.
 	WorldNpcs func(world uint32) []NpcDef
-	Interval  time.Duration
+	// RosterAt: Roster or its seasonal look variant (npc_looks.go).
+	RosterAt func(nowMs int64) []NpcDef
+	Interval time.Duration
 	// ShardCount is the fixed worker count. Values <= 0 use
 	// DefaultTickShards. Division IDs are assigned by a stable hash.
 	ShardCount int
@@ -359,6 +358,9 @@ type Ticker struct {
 	Monsters *MonsterMoverOps
 	// PlayerMap enables the beta world map roster leg (playermap.go).
 	PlayerMap bool
+	// PositionStream is SRO_POSITION_STREAM (position_stream.go):
+	// port-only, not native. False, the default, is the native fan-out.
+	PositionStream bool
 	// ItemReferences returns the item reference deltas a viewer receives
 	// before a peer's spawn row names those items (peervis.go); nil sends
 	// none.
@@ -611,8 +613,7 @@ func (t *Ticker) RunTick(nowMs int64) {
 	// Deferred after observePhases so it closes first: every zone of
 	// the tick, the commit flush included, ends inside phase:total.
 	defer t.zone(ZoneKindPhase, "total").End()
-	t.beginCommit()
-	defer t.flushCommit()
+	defer t.beginTickOutput()()
 
 	prepare := t.zone(ZoneKindPhase, "prepare")
 	tick, work := t.prepareTick()
@@ -649,8 +650,7 @@ func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []ch
 	// Deferred after observePhases so it closes first: every zone of
 	// the tick, the commit flush included, ends inside phase:total.
 	defer t.zone(ZoneKindPhase, "total").End()
-	t.beginCommit()
-	defer t.flushCommit()
+	defer t.beginTickOutput()()
 
 	prepare := t.zone(ZoneKindPhase, "prepare")
 	tick, work := t.prepareTick()
@@ -915,12 +915,7 @@ func (t *Ticker) runSessionLegs(state *divisionTickState, session SessionSnapsho
 
 	// All authored NPCs (including ferry managers and city gates) must enter
 	// and leave with the viewer throughout travel, not only during login.
-	roster := t.Roster
-	if t.WorldNpcs != nil {
-		if extra := t.WorldNpcs(session.WorldInstance); len(extra) > 0 {
-			roster = append(append(make([]NpcDef, 0, len(t.Roster)+len(extra)), t.Roster...), extra...)
-		}
-	}
+	roster := t.sessionRoster(session.WorldInstance, nowMs)
 	// The legs of one division run in order on one worker, so the
 	// division's scope scratch is free to carry from session to session;
 	// the push below copies the frames before it returns.
@@ -936,56 +931,8 @@ func (t *Ticker) runSessionLegs(state *divisionTickState, session SessionSnapsho
 		}
 	}
 
-	// Legs 2+3: the other-player movement broadcast.
-	segment := session.World.MoveSegment
-	if !segment.Valid() {
-		delete(state.settled, session.SessionID)
-		return
-	}
-	gid := PlayerObjectID(session.CharacterID)
-	if !session.World.GroundActive() && nowMs >= segment.ArrivesAtMs {
-		// Segment matured: one settle correction at the goal, then quiet.
-		if state.settled[session.SessionID] == segment.ArrivesAtMs {
-			return
-		}
-		state.settled[session.SessionID] = segment.ArrivesAtMs
-		goal := session.World.Spawn
-		correction := wire.ObjectSourceCorrection{
-			Gid: gid,
-			Position: wire.Position{
-				RegionID: goal.RegionID,
-				X:        float32(goal.X),
-				Y:        float32(goal.Y),
-				Z:        float32(goal.Z),
-				Heading:  goal.Angle,
-			},
-		}
-		t.pushPeerMovement(state, gid, []Frame{
-			{Opcode: wire.OpObjectSourceCorrection, Payload: correction.Encode(), Current: session.MovementCurrent},
-		})
-		return
-	}
-
-	// Destination admission precedes the source sample: retail 30E3 only
-	// reseeds the path; it cannot start one for an already visible peer.
-	t.publishPeerPath(state, session, nowMs)
-
-	// In flight: the LIVE interpolated position, never the goal (bug D).
-	delete(state.settled, session.SessionID)
-	liveSpawn := session.World.LiveSpawnAt(nowMs)
-	move := wire.ObjectSourceMove{
-		Position: wire.Position{
-			RegionID: liveSpawn.RegionID,
-			X:        float32(liveSpawn.X),
-			Y:        float32(liveSpawn.Y),
-			Z:        float32(liveSpawn.Z),
-			Heading:  liveSpawn.Angle,
-		},
-		Gid: gid,
-	}
-	t.pushPeerMovement(state, gid, []Frame{
-		{Opcode: wire.OpObjectSourceMove, Payload: move.Encode(), Current: session.MovementCurrent},
-	})
+	// Legs 2+3: the other-player movement broadcast (peer_motion.go).
+	t.runPeerMovement(state, session, nowMs)
 }
 
 /*

@@ -62,7 +62,7 @@ export function createActorPresentation( owner: ActorOwner ) {
 			} = owner;
 			const {
 				active,
-				entities,
+				entitiesByGid,
 				gameplay,
 				pendingDeaths
 			} = frame;
@@ -71,9 +71,9 @@ export function createActorPresentation( owner: ActorOwner ) {
 			for ( const gid of appearances.keys() ) if ( !appearanceActive.has( gid ) ) appearances.delete( gid );
 			const animationHolders: { actor: CharacterActor; sets: readonly AnimationParticleSet[]; }[] = [];
 			const particleHolders: { actor: CharacterActor; particles: readonly ModelParticle[]; }[] = [];
-			// Fortress clothing compares every player with the local one; find it
-			// once per frame, not once per actor (a linear scan each, so O(n^2).
-			const localEntity = entities.find( e => e.gid === gameplay?.localGid );
+			// Fortress clothing compares every player with the local one; look
+			// it up once per frame (the index holds every row by its gid).
+			const localEntity = gameplay ? entitiesByGid.get( gameplay.localGid ) : undefined;
 			const pass: ActorPass = { animationHolders, particleHolders, localEntity };
 			for ( const entity of selected ) {
 				active.add( entity.gid );

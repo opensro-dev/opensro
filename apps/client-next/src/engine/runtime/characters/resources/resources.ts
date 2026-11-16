@@ -74,6 +74,12 @@ export function createCharacterResources(
 	// speculation cannot displace an actor that is already decoded. This
 	// frame's reservations, by path; a new set each frame (begin).
 	let reservations = new Set<string>();
+	// The model set retainWanted last handed the renderer (undefined before
+	// the first), and the scratch it builds the next in. This owner is the
+	// only caller of retainCharacterModels, which reads its list as a set
+	// and holds the last one until dispose: an equal set is not handed
+	// again.
+	let handed: Set<string> | undefined, handing = new Set<string>();
 
 	/*
 	================
@@ -434,6 +440,17 @@ export function createCharacterResources(
 		*/
 		ready( path: string ) {
 			if ( disposed ) return false;
+			// A resident source decides the same below without the procedural
+			// build (charged when it was admitted: loaded and costs are set and
+			// retired together), the failure retry (loaded) and the request (it
+			// returns for a loaded source): it is planned, then moved to the
+			// recent end. The common call, every worn part of every actor.
+			if ( loaded.has( path ) ) {
+				// A path planned this frame plans again to true, changing nothing.
+				if ( !planned.has( path ) && !plan( [ path ] ) ) return false;
+				loaded.set( path, ++useStamp );
+				return true;
+			}
 			let built = proceduralCache.get( path );
 			if ( !built ) {
 				built = createProceduralEffect( path ) ?? undefined;
@@ -470,7 +487,8 @@ export function createCharacterResources(
 		================
 		retainWanted
 
-		Preserve wanted sources first, then retain inactive sources within the remaining budget.
+		Preserve wanted sources first, then retain inactive sources within the
+		remaining budget; hand the renderer the model set when it changed.
 		================
 		*/
 		retainWanted( assemblies: readonly string[] ) {
@@ -522,7 +540,21 @@ export function createCharacterResources(
 					failures.delete( path );
 				}
 			}
-			renderer.retainCharacterModels( [ ...wanted, ...loaded.keys(), ...assemblies ] );
+			handing.clear();
+			for ( const path of wanted ) handing.add( path );
+			for ( const path of loaded.keys() ) handing.add( path );
+			for ( const path of assemblies ) handing.add( path );
+			let same = handed?.size === handing.size;
+			for ( const path of handing ) {
+				if ( !same ) break;
+				same = handed!.has( path );
+			}
+			if ( !same ) {
+				renderer.retainCharacterModels( [ ...handing ] );
+				const previous = handed;
+				handed = handing;
+				handing = previous ?? new Set();
+			}
 		},
 
 		/*
@@ -581,6 +613,7 @@ export function createCharacterResources(
 			reservations = new Set();
 			priority.clear();
 			renderer.retainCharacterModels( [] );
+			handed = new Set();
 		},
 
 		/*
