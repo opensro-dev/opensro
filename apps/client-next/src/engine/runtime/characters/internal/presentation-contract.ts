@@ -319,6 +319,9 @@ export interface CharacterPresentationState {
 	// The last steady decision and the inputs it was taken from
 	// (MotionRetained); undefined after any frame that was not steady.
 	motion?: MotionRetained;
+	// The last steady resolve (actor-appearance.ts) and its inputs
+	// (AppearanceRetained); undefined after any resolve that was not steady.
+	appearance?: AppearanceRetained;
 }
 
 /*
@@ -390,6 +393,87 @@ an always-due rule to present every entity in full.
 ================
 */
 export type MotionDue = ( retained: MotionRetained | undefined, stamp: MotionStamp | undefined ) => boolean;
+
+/*
+================
+AppearanceStamp
+
+What a steady resolve (actor-appearance.ts) read besides the residency it
+asks again every frame: the entity row (every row field it reads), the
+published catalogue's epoch (catalog, dress, items and item ids), the
+resource resourceFor answers (its skin, disguise, death model, stage and
+variant), and the reads of the equipment dress: the active skin, the
+hidden weapon, the emptied hands, the fortress clothes' inputs and the
+server's dress rules.
+================
+*/
+export interface AppearanceStamp {
+	readonly entity: EntityState;
+	readonly manifest: number;
+	readonly resource: Resource | undefined;
+	readonly disguise: AppearanceChoice | undefined;
+	readonly skin: TransformSkin | undefined;
+	readonly local: boolean;
+	readonly weaponHidden: boolean;
+	readonly emoteHidden: boolean;
+	readonly dead: boolean;
+	// The fortress clothes last shown (fortressAppearance's own input).
+	readonly fortressIndex: number | undefined;
+	// The local player's arena team, -1 without a local player.
+	readonly localTeam: number;
+	readonly normalFortressClothes: boolean;
+	readonly fortress: GameplayState["fortress"];
+	readonly social: GameplayState["social"];
+	readonly serverName: string | undefined;
+	readonly enchantSparks: boolean;
+	readonly jobSuitHidesArmor: boolean;
+	readonly moonlitThiefSuit: boolean;
+}
+
+/*
+================
+AppearanceRetained
+
+A steady resolve's result and what it asked the resource owner, in its
+order: the body, its particle programs, then the worn parts (parts) and
+the assembly it set (assembly). A skipped resolve asks the same again, so
+the cache order, the wanted and planned sets and every retry stay as a
+resolve leaves them; it stands only on the next frame, like
+MotionRetained.
+================
+*/
+export interface AppearanceRetained {
+	readonly result: ActorAppearance;
+	readonly stamp: AppearanceStamp;
+	readonly parts: readonly string[] | undefined;
+	readonly assembly: readonly CharacterAttachment[] | undefined;
+	frame: number;
+}
+
+/*
+================
+AppearanceDue
+
+Whether resolve must run for an entity this frame, given as MotionDue is.
+================
+*/
+export type AppearanceDue = (
+	retained: AppearanceRetained | undefined,
+	stamp: AppearanceStamp | undefined
+) => boolean;
+
+/*
+================
+PresentationDue
+
+The rules that decide when an entity's appearance is resolved and its
+motion decided again (presentation-due.ts); a test passes always-due ones.
+================
+*/
+export interface PresentationDue {
+	readonly appearance: AppearanceDue;
+	readonly motion: MotionDue;
+}
 
 /*
 ================
@@ -596,7 +680,7 @@ export interface ActorOwner {
 		readonly idleStates: ReadonlyMap<number, PresentationIdleState>;
 		readonly combatStanceEnds: ReadonlyMap<number, number>;
 	};
-	readonly motionDue: MotionDue;
+	readonly due: PresentationDue;
 }
 
 /*

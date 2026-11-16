@@ -958,7 +958,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				stamp = previous && motionStamp( entity, resolved, frame );
 			// The rule sees every presented entity; one with nothing retained
 			// is always due.
-			const reused = !owner.motionDue( previous, stamp ) && !!previous;
+			const reused = !owner.due.motion( previous, stamp ) && !!previous;
 			const decision = reused ? reuse( previous!, entity, frame ) : decide( entity, resolved, frame, pass );
 			// A steady decide read what the stamp reads and changed none of
 			// it, so the stamp taken before it stands for it.

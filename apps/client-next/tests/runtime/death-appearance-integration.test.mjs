@@ -16,7 +16,7 @@ const { createPresentationCatalog, clipFacts } = await import(
 const { createPresentationState } = await import( "../../src/engine/runtime/characters/presentation-state.ts" );
 const { createAppearanceLookup } = await import( "../../src/engine/runtime/characters/appearance-lookup.ts" );
 const { createActorMotion } = await import( "../../src/engine/runtime/characters/actor-motion.ts" );
-const { motionDue } = await import( "../../src/engine/runtime/characters/presentation-due.ts" );
+const { PRESENTATION_DUE } = await import( "../../src/engine/runtime/characters/presentation-due.ts" );
 const { createCharacterPose } = await import( "../../src/engine/foundation/animation/animation-pose.ts" );
 
 const MANIFEST = "/assets/npc/manifest.json";
@@ -237,7 +237,7 @@ test("actor-motion drops outgoing live-body locomotion and active installations 
 		statusOwner: { view: () => ({ mask: 0, names: [], poseLocked: false, rate: 1 }) },
 		wornEquipment: () => [],
 		presentationState: { idleStates, combatStanceEnds: new Map() },
-		motionDue
+		due: PRESENTATION_DUE
 	} );
 	const makePose = ( /** @type {readonly string[]} */ clips ) =>
 		createCharacterPose( {

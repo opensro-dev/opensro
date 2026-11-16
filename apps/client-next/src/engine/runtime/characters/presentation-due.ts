@@ -6,13 +6,21 @@ presentation-due.ts - when an entity's motion must be decided again
 actor-motion.ts decides an actor's layers from its inputs every frame. A
 standing entity whose inputs did not change decides the same thing every
 frame: its last steady decision (MotionRetained) holds, and only advance
-(the clocks, sounds and published actor) runs. This module is the rule:
-decide again unless a steady decision from the previous frame exists and
-every input it was taken from is the same (MotionStamp). It holds no state.
+(the clocks, sounds and published actor) runs. actor-appearance.ts
+resolves its resource and dress the same way (AppearanceRetained). This
+module is the rule for both: work again unless a steady result from the
+previous frame exists and every input it was taken from is the same
+(MotionStamp, AppearanceStamp). It holds no state.
 
 ===========================================================================
 */
-import type { MotionRetained, MotionStamp } from "./internal/presentation-contract";
+import type {
+	AppearanceRetained,
+	AppearanceStamp,
+	MotionRetained,
+	MotionStamp,
+	PresentationDue
+} from "./internal/presentation-contract";
 
 /*
 ================
@@ -42,3 +50,37 @@ decision exists and was taken from the same inputs.
 export function motionDue( retained: MotionRetained | undefined, stamp: MotionStamp | undefined ): boolean {
 	return !retained || !stamp || !sameMotionStamp( retained.stamp, stamp );
 }
+
+/*
+================
+sameAppearanceStamp
+
+Every term compared by value or identity, none skipped.
+================
+*/
+export function sameAppearanceStamp( a: AppearanceStamp, b: AppearanceStamp ): boolean {
+	return a.entity === b.entity && a.manifest === b.manifest && a.resource === b.resource &&
+		a.disguise === b.disguise && a.skin === b.skin && a.local === b.local && a.weaponHidden === b.weaponHidden &&
+		a.emoteHidden === b.emoteHidden && a.dead === b.dead && a.fortressIndex === b.fortressIndex &&
+		a.localTeam === b.localTeam && a.normalFortressClothes === b.normalFortressClothes &&
+		a.fortress === b.fortress && a.social === b.social && a.serverName === b.serverName &&
+		a.enchantSparks === b.enchantSparks && a.jobSuitHidesArmor === b.jobSuitHidesArmor &&
+		a.moonlitThiefSuit === b.moonlitThiefSuit;
+}
+
+/*
+================
+appearanceDue
+
+The production rule for resolve, as motionDue is for decide.
+================
+*/
+export function appearanceDue(
+	retained: AppearanceRetained | undefined,
+	stamp: AppearanceStamp | undefined
+): boolean {
+	return !retained || !stamp || !sameAppearanceStamp( retained.stamp, stamp );
+}
+
+// The production rules, one frozen pair for the presenter's lifetime.
+export const PRESENTATION_DUE: PresentationDue = Object.freeze( { appearance: appearanceDue, motion: motionDue } );

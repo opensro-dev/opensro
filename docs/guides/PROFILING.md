@@ -311,7 +311,9 @@ emotes, pickups, spawn churn, a camera path across LOD rescans, ground
 items, and `settle`: a still crowd that then meets each kind of input a
 skipped decide must notice (presentation-due.ts; the runtime test
 `presentation-due.test.mjs` replays it with the production rule and with
-an always-due one). A replay takes one to seven seconds per scenario and about a minute
+an always-due one), and `evict`: a standing crowd while waves of new bodies
+outgrow the residency budget, so the cache retires sources in its recorded
+order. A replay takes one to seven seconds per scenario and about a minute
 for the standing crowd.
 
 What it proves: the two trees present the same session identically. What it

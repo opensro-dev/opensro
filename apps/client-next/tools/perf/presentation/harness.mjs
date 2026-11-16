@@ -294,9 +294,9 @@ function createPublishedAssets( publicRoot, decoders, record ) {
 createPresentationHarness
 
 ROOT is a repository checkout; session is a parsed session object
-(scenarios.mjs). options.motionDue, when given, replaces the presentation's
-motion rule (presentation-due.ts), so a run can present every entity in
-full or count the rule's answers. The harness owns Math.random until
+(scenarios.mjs). options.due, when given, replaces the presentation's
+appearance and motion rules (presentation-due.ts), so a run can present
+every entity in full or count the rules' answers. The harness owns Math.random until
 dispose.
 ================
 */
@@ -363,7 +363,7 @@ export async function createPresentationHarness( root, session, options = {} ) {
 		surface: () => settings.surface ?? undefined,
 		health,
 		soundEnabled: () => true,
-		motionDue: options.motionDue,
+		due: options.due,
 		// renderer.ts's port, member for member, over the CPU module.
 		port: characters => ({
 			characterLocalMatrix: characters.localMatrix,

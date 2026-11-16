@@ -2619,6 +2619,14 @@
 			"reason": "characters.ts lends the motion rule to the per-actor phase through its owner; a test passes its own rule at construction."
 		},
 		{
+			"consumer": "src/engine/runtime/characters/actor-appearance.ts",
+			"provider": "src/engine/runtime/characters/presentation-due.ts",
+			"functions": [
+				"appearanceDue"
+			],
+			"reason": "characters.ts lends the appearance rule to the per-actor phase through its owner; a test passes its own rule at construction."
+		},
+		{
 			"consumer": "src/engine/foundation/animation/model-emission.ts",
 			"provider": "src/engine/runtime/characters/presentation-finalize.ts",
 			"functions": [
@@ -4044,8 +4052,22 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "resourceFor",
+			"function": "appearanceStamp",
+			"kind": "callback",
+			"reason": "Characters owner lends this synchronous helper (resourceFor) to the per-actor phase; the original loop called it directly."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
 			"expression": "resources.ready",
 			"function": "resolve",
+			"kind": "callback",
+			"reason": "Characters owner lends its synchronous resource admission and clip lookup to the per-actor phase; the original loop made the same calls."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "resources.ready",
+			"function": "replay",
 			"kind": "callback",
 			"reason": "Characters owner lends its synchronous resource admission and clip lookup to the per-actor phase; the original loop made the same calls."
 		},
@@ -4065,8 +4087,22 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "referenceAppearances.get",
+			"function": "appearanceStamp",
+			"kind": "callback",
+			"reason": "Characters reference-appearance owner lends its synchronous lookup to the per-actor phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
 			"expression": "activeSkin",
 			"function": "resolve",
+			"kind": "callback",
+			"reason": "Characters owner lends this synchronous helper (activeSkin) to the per-actor phase; the original loop called it directly."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "activeSkin",
+			"function": "appearanceStamp",
 			"kind": "callback",
 			"reason": "Characters owner lends this synchronous helper (activeSkin) to the per-actor phase; the original loop called it directly."
 		},
@@ -4079,8 +4115,22 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "renderer.setCharacterAssembly",
+			"function": "replay",
+			"kind": "callback",
+			"reason": "The parent lends renderer assembly publication to the synchronous per-actor phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
 			"expression": "renderer.enchantSparks",
 			"function": "resolve",
+			"kind": "callback",
+			"reason": "Port-only, not native: the per-actor phase reads the renderer's Experimental enchant-sparks setting when it assembles an appearance."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "renderer.enchantSparks",
+			"function": "appearanceStamp",
 			"kind": "callback",
 			"reason": "Port-only, not native: the per-actor phase reads the renderer's Experimental enchant-sparks setting when it assembles an appearance."
 		},
@@ -4095,6 +4145,13 @@
 			"file": "src/engine/runtime/characters/actor-appearance.ts",
 			"expression": "effects.appearance",
 			"function": "resolve",
+			"kind": "callback",
+			"reason": "Characters effect owner lends its synchronous appearance and host-motion reads to the per-actor phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "effects.appearance",
+			"function": "appearanceStamp",
 			"kind": "callback",
 			"reason": "Characters effect owner lends its synchronous appearance and host-motion reads to the per-actor phase."
 		},
