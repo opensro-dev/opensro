@@ -124,3 +124,38 @@ func TestParseMuhanWavesRefusesMalformedTables(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestMuhanTransformsContract
+
+Off never reads the pairing; on, a missing file, a wrong version, an
+empty table, a non-Muhan codename or an NPC paired twice fails before
+startup, and a sound row loads as written.
+================
+*/
+func TestMuhanTransformsContract(t *testing.T) {
+	if rows, err := LoadMuhanTransforms(t.TempDir(), false); err != nil || rows != nil {
+		t.Fatalf("off read the pairing: %v %v", rows, err)
+	}
+	if _, err := LoadMuhanTransforms(t.TempDir(), true); err == nil {
+		t.Fatal("on without the pairing file loaded")
+	}
+	good := `{"NpcCodename":"NPC_MUHAN_CHANGE_SOLO_75_A","SkillCodename":"SKILL_MUHAN_A_75_BUFF01","MonsterCodename":"MOB_MUHAN_CHANGE_SOLO_75_A"}`
+	rows, err := ParseMuhanTransforms([]byte(`{"Version":2,"Rows":[` + good + `]}`))
+	if err != nil || len(rows) != 1 || rows[0].MonsterCodename != "MOB_MUHAN_CHANGE_SOLO_75_A" {
+		t.Fatalf("sound pairing: %v %v", rows, err)
+	}
+	for name, body := range map[string]string{
+		"version":   `{"Version":1,"Rows":[` + good + `]}`,
+		"empty":     `{"Version":2,"Rows":[]}`,
+		"form":      `{"Version":2,"Rows":[{"NpcCodename":"NPC_MUHAN_CHANGE_SOLO_75_A","SkillCodename":"SKILL_MUHAN_A_75_BUFF01","MonsterCodename":"MOB_MUHAN_L75"}]}`,
+		"npc":       `{"Version":2,"Rows":[{"NpcCodename":"NPC_MUHAN_SOLO_75_MANAGER","SkillCodename":"SKILL_MUHAN_A_75_BUFF01","MonsterCodename":"MOB_MUHAN_CHANGE_SOLO_75_A"}]}`,
+		"twice":     `{"Version":2,"Rows":[` + good + `,` + good + `]}`,
+		"malformed": `{"Version":2,"Rows":`,
+	} {
+		if _, err := ParseMuhanTransforms([]byte(body)); err == nil {
+			t.Errorf("%s: loaded", name)
+		}
+	}
+}

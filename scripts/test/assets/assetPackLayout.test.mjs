@@ -7,8 +7,11 @@ The 2026-10-05 data release added 43 guild models (17 MiB): path-ordered
 chunking moved 569 unchanged models into new packs and re-shipped 366 MiB.
 These cases pin the stable layout: an insert, a change and a removal each
 rebuild only the packs they touch, kept packs keep their slot and folder
-(their URL), and drift past the slack repacks the group whole. The last
-case builds real packs in a temp tree and compares bytes and URLs.
+(their URL), and drift past the slack repacks the group whole. Two cases
+build real packs in a temp tree and compare bytes and URLs: an insert keeps
+the untouched packs, and a cold build of the same files packs to the same
+bytes whatever order the group lists them in (staging sends only payloads
+whose bytes changed, so a churning pack is a resend).
 
 ===========================================================================
 */
@@ -218,6 +221,33 @@ test("a real rebuild after an insert keeps every unchanged pack's bytes and URL"
 	assert.equal( second.keptPackCount, 2 );
 	assert.equal( second.freshPackCount, 1 );
 	assert.equal( second.builtPackCount, 1, "only the new asset's pack is built" );
+});
+
+test("a cold build of the same files packs to the same bytes, whatever the listing order", async ( t ) => {
+	const tempRoot = await mkdtemp( path.join( os.tmpdir(), "sro-pack-determinism-" ) );
+	t.after( () => rm( tempRoot, { recursive: true, force: true } ) );
+	const publicRoot = path.join( tempRoot, "public" );
+	const paths = [];
+	for ( const name of [ "b.json", "c.glb", "d.json", "e.glb", "f.json" ] ) {
+		const target = path.join( publicRoot, "assets", "models", name );
+		await mkdir( path.dirname( target ), { recursive: true } );
+		// Repetitive text compresses, so the gzip member path is covered too.
+		await writeFile( target, name.repeat( 200 ) );
+		paths.push( `/assets/models/${name}` );
+	}
+	const build = ( slot, files ) =>
+		buildAssetPacks( {
+			publicRoot,
+			outputRoot: path.join( publicRoot, "assets", "packs", slot ),
+			hashCachePath: path.join( tempRoot, `${slot}-hash-cache.json` ),
+			targetBytes: 2500,
+			groups: [ { name: "game-models", load: "lazy", files } ]
+		} );
+	const first = await build( "one", paths );
+	const second = await build( "two", [ ...paths ].reverse() );
+	const digests = ( result ) => result.groups[0].packs.map( ( pack ) => pack.sha256 );
+	assert.ok( first.groups[0].packs.length > 1 );
+	assert.deepEqual( digests( second ), digests( first ) );
 });
 
 test("a baseline path no owner retired is a loss, a retired one is not", () => {

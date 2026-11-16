@@ -25,17 +25,15 @@ test("moving cloth uploads current placements through membership, fade, lights, 
 test("an unrelated lazy clip cannot reset standing peers' cloth state or random sequence", () => {
 	const actual = captureClothPalettes( true, true );
 	assert.deepEqual( actual.frames.map( frame => frame.digest ), baseline.frames );
-	assert.equal( actual.gpuCalls, 0 );
+	assert.ok( actual.gpuCalls > 0, "cloth palettes are offered to the GPU" );
 });
 
 for ( const gpuAvailable of [ false, true ] ) {
 	test(`cloth and static palettes retain exact renderer output with GPU callback ${gpuAvailable}`, () => {
 		const actual = captureClothPalettes( gpuAvailable );
-		assert.equal(
-			actual.gpuCalls,
-			0,
-			"cloth consumers require CPU-valid palette data even when GPU evaluation is available"
-		);
+		// Cloth batches offer their palettes to the GPU as the body's are; this
+		// device declines, so the CPU builds them and the output is unchanged.
+		assert.equal( actual.gpuCalls > 0, gpuAvailable, "cloth palettes are offered to the GPU" );
 		assert.equal( actual.frames.length, baseline.frames.length );
 		assert.ok(
 			actual.frames.some( frame => frame.draws > 0 && frame.clothPlacementWrites === 0 ),
@@ -45,7 +43,7 @@ for ( const gpuAvailable of [ false, true ] ) {
 		for ( const frame of actual.frames ) {
 			assert.equal( frame.poseEligibility.sharedPaletteSamples, frame.poseEligibility.gpuSamples );
 			assert.equal( frame.poseEligibility.clothSamples, frame.poseEligibility.gpuSamples );
-			assert.equal( frame.poseEligibility.gpuPaletteSamples, 0 );
+			assert.equal( frame.poseEligibility.gpuPaletteSamples, frame.poseEligibility.gpuSamples );
 		}
 		assert.ok(
 			actual.boneWriteBytes < baseline.boneWriteBytes,
@@ -68,3 +66,23 @@ for ( const gpuAvailable of [ false, true ] ) {
 		assert.ok( actual.frames.some( frame => frame.randomCalls > 0 ), "the oracle must exercise cloth RNG" );
 	});
 }
+
+test("with the GPU sampling cloth batches' palettes, the output is the baseline's and the CPU builds fewer skeletons", () => {
+	const declined = captureClothPalettes( true ), sampled = captureClothPalettes( true, false, { gpuTakes: true } );
+	assert.ok( sampled.gpuCalls > 0 );
+	for ( let frame = 0; frame < sampled.frames.length; frame++ ) {
+		for ( const [name, digest] of Object.entries( sampled.frames[frame].primitives ) ) {
+			assert.equal(
+				digest,
+				baseline.primitives[name][frame],
+				`frame ${frame}, primitive ${name}: palettes or cloth vertices differ`
+			);
+		}
+		assert.equal( sampled.frames[frame].digest, baseline.frames[frame], `frame ${frame}: draws or RNG differ` );
+	}
+	// The cloth solver asks for its skeleton only on the frames it re-anchors.
+	assert.ok(
+		sampled.cpuEvaluations < declined.cpuEvaluations,
+		`${sampled.cpuEvaluations} CPU skeletons with the GPU, ${declined.cpuEvaluations} without`
+	);
+});

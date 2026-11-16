@@ -13,6 +13,11 @@ geometry: an assembled character (body plus equipment, a new model every
 assembly) reuses its parts' passes. Measuring them again was 8 ms on the
 main thread when a character came into view.
 
+A clip channel's largest key value is kept per values array for the same
+reason: every assembly of a body shares the body's clip objects, and each
+admitted clip re-measures every assembly of its body. Scanning every key of
+every clip again was 2.4 ms a frame in a 200-player town (2026-10-21).
+
 ===========================================================================
 */
 import type { CharacterModel, CharacterPrimitive } from "@/engine/contracts/character";
@@ -23,12 +28,15 @@ CharacterBoundsCache
 
 Per-geometry results of characterRadius, owned by the character renderer:
 bind-space joint distances of a skinned geometry (valid for one
-inverse-bind array) and the longest vertex of an unskinned one.
+inverse-bind array), the longest vertex of an unskinned one, and the
+largest absolute key value of a clip channel. Clip values are written once
+when the clip is bound (native-clip.ts) and never changed afterwards.
 ================
 */
 export interface CharacterBoundsCache {
 	readonly skin: WeakMap<object, { inverseBind: Float32Array; distances: Float64Array; }>;
 	readonly vertices: WeakMap<Float32Array, number>;
+	readonly values: WeakMap<Float32Array, number>;
 }
 
 /*
@@ -37,7 +45,7 @@ createCharacterBoundsCache
 ================
 */
 export function createCharacterBoundsCache(): CharacterBoundsCache {
-	return { skin: new WeakMap(), vertices: new WeakMap() };
+	return { skin: new WeakMap(), vertices: new WeakMap(), values: new WeakMap() };
 }
 
 /*
@@ -122,6 +130,23 @@ function vertexLength( positions: Float32Array, cache: CharacterBoundsCache | un
 
 /*
 ================
+valueMaximum
+
+The largest absolute value of a clip channel, measured once per array.
+================
+*/
+function valueMaximum( values: Float32Array, cache: CharacterBoundsCache | undefined ): number {
+	let maximum = cache?.values.get( values );
+	if ( maximum === undefined ) {
+		maximum = 0;
+		for ( const value of values ) maximum = Math.max( maximum, Math.abs( value ) );
+		cache?.values.set( values, maximum );
+	}
+	return maximum;
+}
+
+/*
+================
 characterRadius
 
 Conservative envelope over every admitted clip, including cubic tangent
@@ -134,8 +159,7 @@ export function characterRadius( model: CharacterModel, cache?: CharacterBoundsC
 	for ( const clip of model.clips ) {
 		for ( const channel of clip.channels ) {
 			if ( channel.path === "rotation" ) continue;
-			let maximum = 0;
-			for ( const value of channel.values ) maximum = Math.max( maximum, Math.abs( value ) );
+			let maximum = valueMaximum( channel.values, cache );
 			if ( channel.interpolation === "CUBICSPLINE" ) maximum *= 4 + 2 * clip.duration;
 			if ( channel.path === "translation" ) {
 				local[channel.node] = Math.max( local[channel.node]!, maximum * Math.sqrt( 3 ) );

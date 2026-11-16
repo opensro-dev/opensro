@@ -125,6 +125,11 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 	if mask == simulation.NpcTalkFlagStorage && rt.storageAuthority != nil && rt.remoteStorageOpen(divisionID, character, gid) {
 		return []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: wire.EncodeNpcInteractionAck(mask)}}, ""
 	}
+	// Port-only, not native (#3349): a Muhan change NPC is a nest entity,
+	// not a roster NPC, and its Talk is the change (muhan_change.go).
+	if change, instance, isChange := rt.muhanChangeAt(divisionID, character, gid); isChange {
+		return rt.handleMuhanChangeTalk(divisionID, character, change, instance, mask)
+	}
 	npc, ok := rt.npcForCurrentViewer(divisionID, character, gid)
 	if !ok {
 		return npcFunctionRefusal(selectObjectNotFound), fmt.Sprintf("gid %d is not a live in-scope NPC", gid)

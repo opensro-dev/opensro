@@ -52,6 +52,7 @@ import import_vsro_alexandria as tables
 import skilldata_enc as skill_tables
 import sro_pk2
 from prepare_client_resources import write_atomically
+from sro_paths import trees_overlap
 
 FLAG = "SRO_CAP110_MONSTERS"
 SOURCE_ENV = "SRO_CAP110_MONSTER_DATABASE"
@@ -609,7 +610,7 @@ def later_characterinfo_rows(effect_text):
 # ================
 def add_monsters(vsro_root, native, output, source_root=None):
 	native, output = Path(native).resolve(), Path(output).resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("monster overlay must be separate from native extraction")
 	marker = output / MARKER
 	prior = read_json(marker) if marker.exists() else {}
@@ -810,7 +811,10 @@ def add_monsters(vsro_root, native, output, source_root=None):
 			if has_assignments(source_root):
 				snapshot.append(ASSIGNMENTS_NAME + ".json")
 			summary["snapshotHashes"] = {name: sro_pk2.digest((source_root / name).read_bytes()) for name in snapshot}
-		write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())
+		# Sorted keys: the claims (and so refs) follow set order, which moves
+		# with each process's hash seed, so an unsorted marker changed bytes
+		# on every rebuild of an unchanged variant (the identities do not).
+		write_atomically(marker, (json.dumps(summary, indent=2, sort_keys=True) + "\n").encode())
 		return summary
 
 

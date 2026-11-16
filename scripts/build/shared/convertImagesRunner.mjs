@@ -15,10 +15,16 @@ null when the process could not be spawned or died from a signal, and it
 never rejects. A successful unfiltered pass covers every filtered tree, so
 filtered passes after it are skipped.
 
-The converter keeps a PNG newer than its source, which says nothing about
-the code that wrote it. Its code stamp (codeStamp.mjs, over convert_images.py
-and the modules beside it that it imports) forces every pass to reconvert
-until an unfiltered pass under the current code succeeds.
+The unfiltered pass decides by content (images/imageActions.mjs, plan
+slice B2): each image is keyed on its source bytes, the converter's code
+and the toolchain, so a source rewritten with a fresh time is not
+reconverted. SRO_FORCE_IMAGE_CONVERT=1 still reconverts everything.
+
+A filtered pass (a model builder's own subtree) still keeps a PNG newer
+than its source, which says nothing about the code that wrote it. The
+converter's code stamp (codeStamp.mjs, over convert_images.py and the
+modules beside it that it imports) forces those passes to reconvert until
+an unfiltered pass under the current code succeeds.
 
 ===========================================================================
 */
@@ -26,6 +32,7 @@ until an unfiltered pass under the current code succeeds.
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { convertSourceImages } from "../images/imageActions.mjs";
 import { codeHash, invalidateStamp, stampIsCurrent, writeStamp } from "./codeStamp.mjs";
 import { pythonAttempts } from "./pythonRun.mjs";
 
@@ -37,11 +44,13 @@ const CONVERTER_CODE_STAMP = "image-conversion";
 ================
 spawnConvertImages
 
-One convert_images.py process with the given CLI filters, forced to
-reconvert while the converter's code stamp is stale.
+The unfiltered pass through the image actions; a filtered one as one
+convert_images.py process, forced to reconvert while the converter's code
+stamp is stale.
 ================
 */
 async function spawnConvertImages( args ) {
+	if ( args.length === 0 ) return convertAllImages();
 	const converterHash = await codeHash( CONVERT_IMAGES_SCRIPT );
 	const codeCurrent = await stampIsCurrent( CONVERTER_CODE_STAMP, converterHash );
 	const env = codeCurrent ? process.env : { ...process.env, SRO_FORCE_IMAGE_CONVERT: "1" };
@@ -50,11 +59,24 @@ async function spawnConvertImages( args ) {
 		// This pass writes with other code: the old stamp must not survive it.
 		await invalidateStamp( CONVERTER_CODE_STAMP );
 	}
-	const result = await spawnPython( args, env );
-	if ( !codeCurrent && args.length === 0 && result.status === 0 ) {
-		await writeStamp( CONVERTER_CODE_STAMP, converterHash );
-	}
-	return result;
+	return spawnPython( args, env );
+}
+
+/*
+================
+convertAllImages
+
+Every image, by content. A success leaves the whole tree converted by the
+current code, so the code stamp the filtered passes read is written.
+================
+*/
+async function convertAllImages() {
+	const converterHash = await codeHash( CONVERT_IMAGES_SCRIPT );
+	await invalidateStamp( CONVERTER_CODE_STAMP );
+	const force = process.env.SRO_FORCE_IMAGE_CONVERT === "1";
+	const result = await convertSourceImages( args => spawnPython( args, process.env ), { force } );
+	if ( result.status === 0 ) await writeStamp( CONVERTER_CODE_STAMP, converterHash );
+	return { status: result.status };
 }
 
 /*

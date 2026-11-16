@@ -148,6 +148,9 @@ type Sources struct {
 	ExpRequired func(level int64) (int64, bool)
 	// Schedule lists the events this server runs at now (P8).
 	Schedule func(now time.Time) []ScheduledEvent
+	// Fortresses lists every fortress the shard serves with its owner
+	// and tax (P11, fortresses.go); nil serves an empty list.
+	Fortresses func() []FortressEntry
 	// Chat returns the shard's public chat transcript, oldest first, with
 	// muted authors already left out (chat.go); nil serves no lines.
 	Chat func() []chatfeed.Line
@@ -279,6 +282,7 @@ func (s *Service) Handler() http.Handler {
 	mux.HandleFunc("GET /public/v1/schema", s.cached(rulesMaxAge, s.schema))
 	mux.HandleFunc("GET /public/v1/status", s.cached(uniquesMaxAge, s.serverStatus))
 	mux.HandleFunc("GET /public/v1/schedule", s.cached(boardsMaxAge, s.schedule))
+	mux.HandleFunc("GET /public/v1/fortresses", s.cached(boardsMaxAge, s.fortresses))
 	mux.HandleFunc("GET /public/v1/chat", s.cached(chatMaxAge, s.chat))
 	mux.HandleFunc("GET /public/v1/events", s.cached(chatMaxAge, s.events))
 	s.installPrivacy(mux)

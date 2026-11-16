@@ -2,8 +2,10 @@
 ===========================================================================
 ui-entry-recipes.mjs - shared synthetic admission recipes for production UI
 
-Used by the runtime panel sweep and local browser QA. No rendering, permission
-logic or service transport lives here. Async steps allow real assets to settle.
+Used by the UI gallery's surface and service entries, and checked by
+tests/runtime/ui-gallery-surfaces.test.mjs: every registered panel these
+recipes open must draw a window. No rendering, permission logic or service
+transport lives here. Async steps allow real assets to settle.
 ===========================================================================
 */
 const { emptyStall, stallRequest } = await import( "../../src/engine/foundation/gameplay/stall.ts" );
@@ -244,6 +246,35 @@ export const OPENERS = {
 			serviceSequence: 1,
 			service: { action: 0, result: 1, fortress: 1, taxRate: 10, gold: "1234" }
 		};
+	},
+	async "Fortress map"( f, step ) {
+		// The aide's structure row sends the 0x71E1 list; its 0xB1E1 answer
+		// (action 0x18) opens CIFFortressMap (5D8930 action 0x32 row 2,
+		// 754A40 0x18 -> 5D22B0). The window id alone opens nothing: with no
+		// aide the map has no NPC, and the HUD closes it the frame it opens.
+		talkTo( f );
+		Object.assign( f.state.gameplay, {
+			fortress: {
+				...f.state.gameplay.fortress,
+				worldId: 7,
+				worlds: [ { id: 7, code: "FORTRESS_JANGAN" } ],
+				fortresses: [ { id: 1, code: "FORTRESS_JANGAN", nameStrId: "FORTRESS_NAME", taxTargets: 63 } ],
+				wars: [],
+				registered: [],
+				serviceSequence: 0
+			}
+		} );
+		await step();
+		f.ui.event( { kind: "activate", id: "npc-fortress-structure" } );
+		const fortress = f.state.gameplay.fortress;
+		if ( !fortress ) throw Error( "Fortress map recipe requires its fortress publication" );
+		// Action 0x18, result 1, fortress 1, no structure rows.
+		const answer = fortressPacket( fortress, {
+			opcode: 0xb1e1,
+			payload: Uint8Array.from( [ 0x18, 1, 1, 0, 0, 0, 0 ] )
+		} );
+		if ( !answer ) throw Error( "Fortress map recipe answer was not handled" );
+		f.state.gameplay.fortress = answer;
 	},
 	async "Fortress production"( f, step ) {
 		// The trainer's row queries; the answer opens the window (754A40 0x11).

@@ -20,7 +20,9 @@ import { defined } from "../helpers/defined.mjs";
 const { titleText, titleTextBox, titleColoredText, resolveTextOverlaps } = await import(
 	sourceFileUrl( "src/engine/foundation/rendering/ui-glyphs.ts" ).href
 );
-const { expandTextRuns } = await import( sourceFileUrl( "src/engine/foundation/rendering/text-run.ts" ).href );
+const { expandTextRuns, textRunGlyphRect } = await import(
+	sourceFileUrl( "src/engine/foundation/rendering/text-run.ts" ).href
+);
 /*
 ================
 glyphQuads
@@ -237,4 +239,111 @@ test("shared projection fits actual neighboring-column collisions, preserving na
 		() => resolveTextOverlaps( expandTextRuns( native ) ),
 		/text layout without a text run/
 	);
+});
+
+/*
+================
+referenceResolveTextOverlaps
+
+resolveTextOverlaps as it was before quads without a layout stopped being
+copied (#3563): the oracle the shipped pass must match value for value.
+================
+*/
+function referenceResolveTextOverlaps( quads ) {
+	const inkEnters = ( r, c, o ) =>
+		Math.max( r[0], c[0], o[0] ) < Math.min( r[0] + r[2], c[0] + c[2], o[0] + o[2] ) &&
+		Math.max( r[1], c[1], o[1] ) < Math.min( r[1] + r[3], c[1] + c[3], o[1] + o[3] );
+	const runInkEnters = ( quad, other ) =>
+		quad.run.glyphs.some( glyph => inkEnters( textRunGlyphRect( quad, glyph ), quad.clip, other ) );
+	const boxes = [];
+	for ( const q of quads ) {
+		if ( !q.textLayout ) continue;
+		if ( !q.run ) throw Error( "UI text layout without a text run" );
+		if ( !q.characterAnchor && !q.worldAnchor ) boxes.push( q );
+	}
+	const fitted = new Set();
+	for ( const q of boxes ) {
+		const layout = q.textLayout;
+		if ( layout.fitted === undefined || fitted.has( layout ) ) continue;
+		const box = layout.box;
+		for ( const neighbor of boxes ) {
+			if ( neighbor.textLayout === layout ) continue;
+			const other = neighbor.textLayout.box;
+			if ( !(box[0] + box[2] <= other[0] || other[0] + other[2] <= box[0]) ) continue;
+			if ( runInkEnters( q, other ) ) {
+				fitted.add( layout );
+				break;
+			}
+		}
+	}
+	const emitted = new Set(), result = [];
+	for ( const q of quads ) {
+		const { textLayout, ...paint } = q;
+		if ( !textLayout || !fitted.has( textLayout ) ) {
+			result.push( textLayout ? paint : q );
+			continue;
+		}
+		if ( emitted.has( textLayout ) ) continue;
+		emitted.add( textLayout );
+		if ( textLayout.fitted ) result.push( { ...paint, ...textLayout.fitted, color: paint.color } );
+	}
+	return result;
+}
+
+/*
+================
+labelSet
+
+A seeded UI projection: text labels in rows (dense rows put narrow boxes
+side by side, sparse rows leave each label room), some anchored to a
+character, some emitted twice with one layout, between plain sprite quads.
+================
+*/
+function labelSet( seed, dense ) {
+	let state = seed;
+	const random = () => {
+		state = (state + 0x6D2B79F5) | 0;
+		let t = Math.imul( state ^ (state >>> 15), 1 | state );
+		t = (t + Math.imul( t ^ (t >>> 7), 61 | t )) ^ t;
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
+	const pick = list => list[Math.floor( random() * list.length )];
+	const words = [ "Inventory", "48", "Retained number", "Gold", "Quantity", "Jangan", "Lv.12", "" ];
+	const quads = [];
+	for ( let i = 0; i < 24; i++ ) {
+		const row = Math.floor( random() * 3 ) * 20;
+		const x = dense ? random() * 300 : i * 400 + random() * 4;
+		const width = dense ? 8 + random() * 60 : 300;
+		const style = {
+			hAlign: pick( [ 0, 1, 2 ] ),
+			vAlign: 0,
+			...(random() < .75 ? { overflow: pick( [ "avoid-overlap", "clip", "ellipsis" ] ) } : {})
+		};
+		const label = titleText( atlas, pick( words ), [ x, row, width, 19 ], clip, color, style );
+		for ( const q of label ) quads.push( random() < .15 ? { ...q, characterAnchor: 1 } : q );
+		if ( label.length && random() < .1 ) quads.push( label[0] );
+		if ( random() < .5 ) {
+			quads.push( { rect: [ x, row, 16, 16 ], uv: [ 0, 0, 1, 1 ], color, texture: "sprite.ddj", clip } );
+		}
+	}
+	return quads;
+}
+
+test("the overlap pass equals its reference over seeded label sets and passes unlaid quads on as themselves", () => {
+	let overlapping = 0;
+	for ( let seed = 1; seed <= 200; seed++ ) {
+		const dense = seed % 2 === 0, input = labelSet( seed, dense );
+		const expected = referenceResolveTextOverlaps( input ), actual = resolveTextOverlaps( input );
+		assert.deepStrictEqual( actual, expected, "seed " + seed );
+		const given = new Set( input );
+		actual.forEach( ( q, i ) => {
+			assert.equal( given.has( q ), given.has( expected[i] ), "seed " + seed + " quad " + i );
+			if ( given.has( q ) ) assert.equal( q, expected[i] );
+		} );
+		const fittedRuns = new Set( input.map( q => q.textLayout?.fitted?.run ).filter( Boolean ) );
+		const fitted = expected.some( q => fittedRuns.has( q.run ) );
+		if ( !dense ) assert.equal( fitted, false, "sparse seed " + seed + " fits nothing" );
+		if ( fitted ) overlapping++;
+	}
+	assert.ok( overlapping > 20, "dense sets fit runs: " + overlapping );
 });

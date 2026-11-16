@@ -106,7 +106,7 @@ from skytemple_import import (  # noqa: E402
 	source_root,
 	verify_archives,
 )
-from sro_paths import MAIN_CHECKOUT_ROOT  # noqa: E402
+from sro_paths import MAIN_CHECKOUT_ROOT, trees_overlap  # noqa: E402
 
 FLAG = "SRO_ARABIA"
 SOURCE_ENV = "SRO_V1696_ROOT"
@@ -485,7 +485,7 @@ def arabia_resource_closure(seeds, archives, native, output):
 # ================
 def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_closure):
 	native, output = Path(native).resolve(), Path(output).resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("arabia output must be separate from the native extraction")
 	marker = output / MARKER
 	prior = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}

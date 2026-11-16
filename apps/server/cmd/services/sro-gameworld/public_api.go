@@ -101,8 +101,8 @@ func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *st
 
 // publicWindowEvents names the fortress lane's windows on the calendar.
 var publicWindowEvents = map[string]struct{ kind, title string }{
-	"AllowSiegeRequest": {"fortress-registration", "Fortress war registration"},
-	"SiegeProgressing":  {"fortress", "Fortress war"},
+	"AllowSiegeRequest": {publicstats.ScheduleKindFortressRegistration, "Fortress war registration"},
+	"SiegeProgressing":  {publicstats.ScheduleKindFortress, "Fortress war"},
 }
 
 /*
@@ -131,6 +131,43 @@ func publicSchedule(lane *siege.Lane, now time.Time) []publicstats.ScheduledEven
 			End: window.End, Running: window.Running})
 	}
 	return events
+}
+
+/*
+================
+publicFortressTown
+
+A fortress codename's town in lower case (FORTRESS_JANGAN -> "jangan"),
+the one name the guild list and the fortress list share.
+================
+*/
+func publicFortressTown(codeName string) string {
+	return strings.ToLower(strings.TrimPrefix(codeName, "FORTRESS_"))
+}
+
+/*
+================
+publicFortresses
+
+P11's rows: every fortress the siege lane serves, named by its codename's
+town as the guild list names it, with the occupying guild's name. A guild
+the store no longer has reads as unclaimed rather than as a bare id.
+================
+*/
+func publicFortresses(lane *siege.Lane, authority *store.Store, shard string) []publicstats.FortressEntry {
+	holdings := lane.Holdings()
+	out := make([]publicstats.FortressEntry, 0, len(holdings))
+	for _, holding := range holdings {
+		entry := publicstats.FortressEntry{Town: publicFortressTown(holding.CodeName),
+			TaxRate: int(holding.TaxRate)}
+		if holding.GuildID != 0 {
+			if guild, _, ok := authority.Guilds().Guild(shard, holding.GuildID); ok {
+				entry.Owner = guild.Name
+			}
+		}
+		out = append(out, entry)
+	}
+	return out
 }
 
 /*
@@ -327,7 +364,7 @@ func publicGuildEntries(authority *store.Store, shard string) []publicstats.Guil
 	if records, _, err := authority.Fortresses().FortressState(shard); err == nil {
 		towns := map[uint32]string{}
 		for _, row := range enterworld.DefaultSiegeFortressDataRows() {
-			towns[row.FortressID] = strings.ToLower(strings.TrimPrefix(row.CodeName, "FORTRESS_"))
+			towns[row.FortressID] = publicFortressTown(row.CodeName)
 		}
 		for _, record := range records {
 			if record.GuildID != 0 {
@@ -469,7 +506,8 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			}
 			return levels.ExpRequired(level)
 		},
-		Schedule: func(now time.Time) []publicstats.ScheduledEvent { return publicSchedule(gameplay.siege, now) },
+		Schedule:   func(now time.Time) []publicstats.ScheduledEvent { return publicSchedule(gameplay.siege, now) },
+		Fortresses: func() []publicstats.FortressEntry { return publicFortresses(gameplay.siege, authority, shard) },
 		// A muted author's lines are left out while the mute holds, on or
 		// off line: the by-character restriction record is read directly
 		// (Hub.CharacterRestricted). restriction.Report would also send
