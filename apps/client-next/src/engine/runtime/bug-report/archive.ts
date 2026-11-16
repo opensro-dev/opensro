@@ -15,7 +15,7 @@ media; saving a new report drops the oldest ones first.
 */
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { zipStore, type ZipFile } from "@/engine/foundation/archive/zip";
-import { MAX_ERROR_MESSAGE, MOVEMENT_ERROR_CODES, REFUSAL_OTHER, REFUSAL_REASONS, UI_CONTROL_PREFIX } from "./journal";
+import { MOVEMENT_ERROR_CODES, REFUSAL_OTHER, REFUSAL_REASONS, UI_CONTROL_PREFIX } from "./journal";
 import {
 	GPU_TOKEN_PATTERN,
 	reportedDegradedPipelines,
@@ -537,19 +537,16 @@ function sharedValue( value: unknown, field = "" ): unknown {
 
 /*
 ================
-stackHeaderLines
+certifiedHeaderLines
 
-How many of a V8 stack's lines hold its class and message: the journal's
-own count when it recorded one, else the stored message's lines. A stored
-message at the journal's cap may have been cut short, so its true count is
-unknown and every line is treated as message.
+The journal's count of a V8 stack's header lines, when it recorded a
+whole one.
 ================
 */
-function stackHeaderLines( headerLines: unknown, message: unknown, total: number ): number {
-	if ( typeof headerLines === "number" && Number.isInteger( headerLines ) && headerLines >= 1 ) return headerLines;
-	if ( typeof message !== "string" ) return 1;
-	if ( message.length >= MAX_ERROR_MESSAGE ) return total;
-	return message.split( "\n" ).length;
+function certifiedHeaderLines( headerLines: unknown ): number | undefined {
+	return typeof headerLines === "number" && Number.isInteger( headerLines ) && headerLines >= 1 ?
+		headerLines :
+		undefined;
 }
 
 /*
@@ -561,9 +558,9 @@ stack's header; the header is rebuilt from that class and an engine
 message, so the thrown message's free text never rides along on line 1.
 A V8 stack opens with the class and the whole message, which can span
 lines shaped like frames: those lines are skipped by count, never by
-shape (the journal's headerLines, else the stored message's lines; a
-message at the journal's cap may have been cut, so its stack ships no
-frames). Of the rest only lines of a real frame's shape are kept: V8's
+shape. Only the journal's headerLines is trusted for that count (it
+records one only when the stack opens with the error's current header);
+a class-header stack without it ships no frames. Of the rest only lines of a real frame's shape are kept: V8's
 under a class header, "fn@url:line:col" in a headerless stack. Each
 frame keeps its path, line and column with the URL's scheme, host and
 query cut (a local file keeps only its name), and the first
@@ -580,7 +577,7 @@ function sharedErrorEvent( event: Record<string, unknown> ): Record<string, unkn
 		undefined;
 	const frameShape = errorClass ? STACK_FRAME_V8 : STACK_FRAME_AT_SIGN;
 	const frames = lines
-		.slice( errorClass ? stackHeaderLines( headerLines, message, lines.length ) : 0 )
+		.slice( errorClass ? certifiedHeaderLines( headerLines ) ?? lines.length : 0 )
 		.filter( line => frameShape.test( line ) )
 		.slice( 0, MAX_SHARED_STACK_FRAMES )
 		.map( line =>

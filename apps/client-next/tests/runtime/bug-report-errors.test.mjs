@@ -201,6 +201,8 @@ test("the shared report keeps a kept failure's count and last time", async () =>
 		"timeline.json": JSON.stringify( {
 			events: [ {
 				kind: "error",
+				// The journal's count: the stack opens with this error's 1-line header.
+				headerLines: 1,
 				t: -180,
 				stack: "RangeError: Maximum call stack size exceeded\n    at loop (/src/loop.ts:1:1)",
 				count: 31,
@@ -233,6 +235,8 @@ async function sharedErrors( events ) {
 test("the shared report keeps a stack's frames but never the thrown free text", async () => {
 	const [event] = await sharedErrors( [ {
 		kind: "error",
+		// The journal's count: the stack opens with this error's 1-line header.
+		headerLines: 1,
 		t: 1,
 		message: "private wording",
 		stack: "RangeError: private wording\n    at stallBuy (/src/stall.ts:10:5)"
@@ -246,6 +250,8 @@ test("the shared report keeps a stack's frames but never the thrown free text", 
 test("a stack carrying an origin keeps its frames without scheme, host or query", async () => {
 	const [event] = await sharedErrors( [ {
 		kind: "error",
+		// The journal's count: the stack opens with this error's 1-line header.
+		headerLines: 1,
 		t: 2,
 		message: "Maximum call stack size exceeded",
 		stack: "RangeError: Maximum call stack size exceeded\n" +
@@ -269,6 +275,8 @@ test("a deep stack keeps its first twelve frames", async () => {
 	const frames = Array.from( { length: 40 }, ( _, i ) => `    at f${i} (/src/f.ts:${i}:1)` );
 	const [event] = await sharedErrors( [ {
 		kind: "error",
+		// The journal's count: the stack opens with this error's 1-line header.
+		headerLines: 1,
 		t: 3,
 		stack: [ "RangeError: Maximum call stack size exceeded", ...frames ].join( "\n" )
 	} ] );
@@ -281,6 +289,8 @@ test("a deep stack keeps its first twelve frames", async () => {
 test("a multi-line message never ships a line as a frame, even one with an @", async () => {
 	const [event] = await sharedErrors( [ {
 		kind: "error",
+		// The journal's count: the stack opens with this error's 2-line header.
+		headerLines: 2,
 		t: 5,
 		message: "chat said hi\nmeet me at a@b.c",
 		stack: "TypeError: chat said hi\nmeet me at a@b.c\nfoo@bar.baz\n    at send (/src/chat.ts:4:2)"
@@ -306,6 +316,8 @@ test("a headerless Firefox stack keeps its frames, and only its frames", async (
 test("a local file frame keeps only the file's name", async () => {
 	const [event] = await sharedErrors( [ {
 		kind: "error",
+		// The journal's count: the stack opens with this error's 1-line header.
+		headerLines: 1,
 		t: 7,
 		stack: "RangeError: Maximum call stack size exceeded\n    at walk (file:///C:/Users/someone/game/index.js:1:2)"
 	} ] );
@@ -316,6 +328,8 @@ test("a local file frame keeps only the file's name", async () => {
 test("review probe: a message line shaped like a V8 frame never ships", async () => {
 	const [event] = await sharedErrors( [ {
 		kind: "error",
+		// The journal's count: the stack opens with this error's 2-line header.
+		headerLines: 2,
 		t: 6,
 		message: "parse failed\n    at PLAYER TEXT HERE:1:2",
 		stack: "TypeError: parse failed\n    at PLAYER TEXT HERE:1:2\n    at send (/src/chat.ts:4:2)"
@@ -338,6 +352,52 @@ test("the journal's header count skips a long message's every line, even past it
 	const [shared] = await sharedErrors( [ { ...record, t: 1 } ] );
 	assert.equal( shared.stack, "TypeError\n    at send (/src/chat.ts:4:2)" );
 	assert.equal( shared.headerLines, undefined, "the count itself is never shared" );
+});
+
+/*
+================
+sharedThrow
+
+Throws value on a fake page and returns the journal's record and its
+shared copy.
+================
+*/
+async function sharedThrow( t, value, message ) {
+	const page = installPage( t );
+	const event = new Event( "error" );
+	Object.assign( event, { error: value, message } );
+	page.window.dispatchEvent( event );
+	const [record] = page.errors();
+	const [shared] = await sharedErrors( [ { ...record, t: 1 } ] );
+	return { record, shared };
+}
+
+test("a message changed after construction records no header count and ships no frames", async t => {
+	const error = new TypeError( "parse failed\n    at PLAYER TEXT HERE:1:2" );
+	// V8 wrote the header from the message at construction.
+	error.stack = "TypeError: parse failed\n    at PLAYER TEXT HERE:1:2\n    at send (" + ORIGIN + "/src/chat.ts:4:2)";
+	error.message = "short";
+	const { record, shared } = await sharedThrow( t, error, "short" );
+	assert.equal( record?.headerLines, undefined, "the stack no longer opens with the error's header" );
+	assert.equal( shared.stack, undefined );
+	assert.equal( shared.errorClass, "TypeError" );
+});
+
+test("a plain object carrying a stack records no header count and ships no frames", async t => {
+	const value = { stack: "Error: x\n    at PLAYER TEXT HERE:1:2\n    at send (" + ORIGIN + "/src/chat.ts:4:2)" };
+	const { record, shared } = await sharedThrow( t, value, "x" );
+	assert.match( String( record?.stack ), /PLAYER TEXT/, "the local journal keeps it whole" );
+	assert.equal( record?.headerLines, undefined );
+	assert.equal( shared.stack, undefined );
+});
+
+test("an error renamed with a newline counts its name's lines too", async t => {
+	const error = new TypeError( "boom" );
+	error.name = "TypeError\n    at PLAYER TEXT HERE:1:2";
+	error.stack = error.name + ": boom\n    at send (" + ORIGIN + "/src/chat.ts:4:2)";
+	const { record, shared } = await sharedThrow( t, error, "boom" );
+	assert.equal( record?.headerLines, 2 );
+	assert.ok( !/PLAYER TEXT/.test( shared.stack ?? "" ), shared.stack );
 });
 
 test("a message at the journal's cap with no header count ships no frames", async () => {
