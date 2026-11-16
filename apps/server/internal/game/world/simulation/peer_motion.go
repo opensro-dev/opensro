@@ -62,6 +62,10 @@ publishPeerPath
 
 The client's 0x775CB0 only reseeds the source. The native 0xB738 destination is
 required to keep the navigation and locomotion owners active between ticks.
+It is the one packet the original sends a viewer per accepted move
+(position_stream.go); the 0x3122 move state rides with it only in the
+port-only stream, since the original sends that state on a run/walk
+toggle, which the movement lane publishes itself.
 ================
 */
 func (t *Ticker) publishPeerPath(state *divisionTickState, session SessionSnapshot, nowMs int64) {
@@ -75,9 +79,13 @@ func (t *Ticker) publishPeerPath(state *divisionTickState, session SessionSnapsh
 		if frames == nil {
 			source := MovementSourceFromSpawn(session.World.LiveSpawnAt(nowMs))
 			goal := session.World.Spawn
-			frames = []Frame{
-				{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: gid, StateType: wire.StateChannelMove, Value: session.World.MovementMode}).Encode(), Current: session.MovementCurrent},
-				{Opcode: OpMovementAck, Payload: BuildMovementAckPayload(gid, MovementRequest{Mode: MovementAckDestinationMode, RegionID: goal.RegionID, X: goal.X, Y: goal.Y, Z: goal.Z}, &source), Current: session.MovementCurrent},
+			ack := Frame{Opcode: OpMovementAck, Payload: BuildMovementAckPayload(gid, MovementRequest{Mode: MovementAckDestinationMode, RegionID: goal.RegionID, X: goal.X, Y: goal.Y, Z: goal.Z}, &source), Current: session.MovementCurrent}
+			frames = []Frame{ack}
+			if t.PositionStream {
+				frames = []Frame{
+					{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: gid, StateType: wire.StateChannelMove, Value: session.World.MovementMode}).Encode(), Current: session.MovementCurrent},
+					ack,
+				}
 			}
 		}
 		t.Push.PushToSession(viewer, frames)

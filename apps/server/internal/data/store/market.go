@@ -99,31 +99,10 @@ func ensureMarket(db *sql.DB) error {
 
 /*
 ================
-MarketListRequest
-
-One listing: from the warehouse (Character nil, the website) or from a
-character's bag (the game, on the action lane). Admit is the trade rule
-(the exchange's: RefObjCommon CanTrade, not forge-bound, not a summoned
-pet); the store knows no item references, so the caller supplies it.
-================
-*/
-type MarketListRequest struct {
-	Division  string
-	Account   string
-	Character *domain.Character
-	Slot      int64
-	Currency  string
-	Price     int64
-	Admit     func(domain.InventoryRow) error
-	Rules     domain.MarketRules
-}
-
-/*
-================
 MarketList
 ================
 */
-func (s *Store) MarketList(req MarketListRequest) (domain.MarketListing, error) {
+func (s *Store) MarketList(req domain.MarketListRequest) (domain.MarketListing, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil || req.Account == "" || req.Admit == nil {
@@ -155,7 +134,7 @@ func (s *Store) MarketList(req MarketListRequest) (domain.MarketListing, error) 
 listFromStorageLocked
 ================
 */
-func (s *Store) listFromStorageLocked(req MarketListRequest, listing domain.MarketListing) (domain.MarketListing, error) {
+func (s *Store) listFromStorageLocked(req domain.MarketListRequest, listing domain.MarketListing) (domain.MarketListing, error) {
 	storage, err := readAccountStorage(s.syncDBLocked(), req.Account)
 	if err != nil {
 		return domain.MarketListing{}, err
@@ -194,7 +173,7 @@ The item leaves the character's bag and the character row is written in
 the listing's transaction; the live record changes only after commit.
 ================
 */
-func (s *Store) listFromBagLocked(req MarketListRequest, listing domain.MarketListing) (domain.MarketListing, error) {
+func (s *Store) listFromBagLocked(req domain.MarketListRequest, listing domain.MarketListing) (domain.MarketListing, error) {
 	character := req.Character
 	division, known := s.charDivision[character]
 	if !known || character.AccountID != req.Account || character.DeletePending {
@@ -232,24 +211,6 @@ func (s *Store) listFromBagLocked(req MarketListRequest, listing domain.MarketLi
 
 /*
 ================
-MarketBuyRequest
-
-A buy names the listing and the version the buyer saw. A gold listing is
-paid from Payer, one of the buyer's characters; a Silk listing from the
-buyer's purchased Silk. The caller makes sure a website buy's Payer is
-offline (game/market), since its record is then the store's alone.
-================
-*/
-type MarketBuyRequest struct {
-	ListingID    int64
-	Version      int64
-	BuyerAccount string
-	Payer        *domain.Character
-	Rules        domain.MarketRules
-}
-
-/*
-================
 MarketBuy
 
 The whole sale is one transaction: the buyer pays, the seller is paid
@@ -257,7 +218,7 @@ less the fee, the item lands in the buyer's warehouse, the listing turns
 sold and the sale row is written. Any refusal changes nothing.
 ================
 */
-func (s *Store) MarketBuy(req MarketBuyRequest) (domain.MarketSale, error) {
+func (s *Store) MarketBuy(req domain.MarketBuyRequest) (domain.MarketSale, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil || req.BuyerAccount == "" {
@@ -310,6 +271,11 @@ func (s *Store) MarketBuy(req MarketBuyRequest) (domain.MarketSale, error) {
 			return domain.MarketSale{}, domain.ErrMarketUnavailable
 		}
 		payerDivision = division
+		// The live record, never the row on disk: a deferred write
+		// (MutateCharacterDeferred, queued before the logout) has already run
+		// on it and only waits for the tick batch, which beginTxLocked flushes
+		// before this transaction opens. The buy then neither spends gold the
+		// record no longer holds nor writes back a balance that loses it.
 		paidGold = ledgerGold(payer) - listing.Price
 		if paidGold < 0 {
 			return domain.MarketSale{}, domain.ErrMarketFunds
@@ -499,6 +465,39 @@ func (s *Store) returnListingLocked(listing domain.MarketListing, fallBackToHeld
 
 /*
 ================
+MarketWarehouse
+
+The account's warehouse, for the website's list picker: the site lists
+only from it.
+================
+*/
+func (s *Store) MarketWarehouse(account string) (domain.AccountStorage, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil || account == "" {
+		return domain.AccountStorage{}, domain.ErrMarketUnavailable
+	}
+	return readAccountStorage(s.syncDBLocked(), account)
+}
+
+/*
+================
+MarketWallet
+
+The account's Silk wallet, for the website's buy page.
+================
+*/
+func (s *Store) MarketWallet(account string) (domain.MallBalance, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil || account == "" {
+		return domain.MallBalance{}, domain.ErrMarketUnavailable
+	}
+	return readMallBalance(s.syncDBLocked(), account)
+}
+
+/*
+================
 MarketListingByID
 ================
 */
@@ -513,29 +512,12 @@ func (s *Store) MarketListingByID(id int64) (domain.MarketListing, error) {
 
 /*
 ================
-MarketQuery
-
-Which open listings a search wants. Codenames, when given, narrows the
-search to those items (the caller resolves a category or a name to
-codenames from the item references).
-================
-*/
-type MarketQuery struct {
-	Division  string
-	Currency  string
-	Codenames []string
-	Limit     int
-	Offset    int
-}
-
-/*
-================
 MarketOpenListings
 
 Open, unexpired listings, newest first.
 ================
 */
-func (s *Store) MarketOpenListings(q MarketQuery) ([]domain.MarketListing, error) {
+func (s *Store) MarketOpenListings(q domain.MarketQuery) ([]domain.MarketListing, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {

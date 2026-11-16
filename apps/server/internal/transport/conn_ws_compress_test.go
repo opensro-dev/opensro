@@ -155,7 +155,9 @@ compressOffer says whether the client offers permessage-deflate.
 */
 func dialRecordedWS(t *testing.T, compressOffer bool) (*wsConn, *websocket.Conn, *wireRecorder) {
 	t.Helper()
-	upgrader := websocket.Upgrader{EnableCompression: true}
+	// The production write buffer (server.go): left at zero, gorilla
+	// borrows the HTTP server's smaller one and fragments sooner.
+	upgrader := websocket.Upgrader{EnableCompression: true, WriteBufferSize: wsWriteBufferSize}
 	serverSide := make(chan *websocket.Conn, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(rw, r, nil)
