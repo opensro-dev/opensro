@@ -11,7 +11,7 @@ serializing whole scenes.
 */
 
 import type { WorldCamera } from "@/engine/contracts/scene";
-import type { UiQuad, UiSemantics } from "@/engine/contracts/ui";
+import type { UiControl, UiHelpSource, UiQuad, UiSemantics } from "@/engine/contracts/ui";
 import { sameTextRun } from "@/engine/foundation/rendering/text-run";
 
 /*
@@ -95,7 +95,57 @@ export function sameUiQuad( x: UiQuad, y: UiQuad ): boolean {
 }
 /*
 ================
+samePolygon
+================
+*/
+function samePolygon(
+	a: readonly (readonly [number, number])[] | undefined,
+	b: readonly (readonly [number, number])[] | undefined
+): boolean {
+	if ( a === b ) return true;
+	if ( !a || !b || a.length !== b.length ) return false;
+	for ( let i = 0; i < a.length; i++ ) if ( !tuple( a[i], b[i] ) ) return false;
+	return true;
+}
+/*
+================
+sameHelpSource
+================
+*/
+function sameHelpSource( a: UiHelpSource | undefined, b: UiHelpSource | undefined ): boolean {
+	if ( a === b ) return true;
+	if ( !a || !b || a.kind !== b.kind || a.gid !== b.gid || a.viewer !== b.viewer ) return false;
+	if ( a.kind === "effect" ) {
+		return b.kind === "effect" && a.token === b.token && a.skill === b.skill && a.suppressed === b.suppressed;
+	}
+	return b.kind === "abnormal" && a.bit === b.bit && a.unlevelled === b.unlevelled;
+}
+/*
+================
+sameUiControl
+
+Every field of the contract: the bridge keeps the last presented control
+and its input handlers read it (rightActivate, carry, inspect, helpText,
+keepFocusOnAltPress), so a field left out here would leave them stale.
+================
+*/
+function sameUiControl( x: UiControl, y: UiControl ): boolean {
+	return x === y || x.id === y.id && x.label === y.label && x.kind === y.kind && x.value === y.value &&
+			x.valueText === y.valueText && x.disabled === y.disabled && x.selected === y.selected &&
+			x.multiline === y.multiline && x.whisperTarget === y.whisperTarget && x.textAlign === y.textAlign &&
+			x.rightActivate === y.rightActivate && x.helpText === y.helpText && x.captureKeys === y.captureKeys &&
+			x.draggable === y.draggable && x.carry === y.carry && x.inspect === y.inspect &&
+			x.keepFocusOnAltPress === y.keepFocusOnAltPress && x.min === y.min && x.max === y.max &&
+			x.maxLength === y.maxLength && tuple( x.rect, y.rect ) && tuple( x.textInsets, y.textInsets ) &&
+			samePolygon( x.hitPolygon, y.hitPolygon ) && sameHelpSource( x.helpSource, y.helpSource );
+}
+/*
+================
 sameUiSemantics
+
+Every field of the contract, by value. The UI owner presents semantics
+only when this is false, so it must never call two different semantics
+equal.
 ================
 */
 export function sameUiSemantics( a: UiSemantics, b: UiSemantics ): boolean {
@@ -104,23 +154,52 @@ export function sameUiSemantics( a: UiSemantics, b: UiSemantics ): boolean {
 		a.title !== b.title || a.message !== b.message || a.loading !== b.loading ||
 		a.loadingVisible !== b.loadingVisible || a.loadingStatus !== b.loadingStatus ||
 		a.loadingProgress !== b.loadingProgress || a.loadingError !== b.loadingError ||
-		!tuple( a.hudCorner, b.hudCorner ) || a.hudToolsTop !== b.hudToolsTop ||
+		a.titleCredit !== b.titleCredit || !tuple( a.hudCorner, b.hudCorner ) || a.hudToolsTop !== b.hudToolsTop ||
 		a.controls.length !== b.controls.length
 	) return false;
 	if (
 		a.focusRequest !== b.focusRequest &&
 		(!a.focusRequest || !b.focusRequest || a.focusRequest.id !== b.focusRequest.id ||
-			a.focusRequest.revision !== b.focusRequest.revision || a.focusRequest.caret !== b.focusRequest.caret)
+			a.focusRequest.revision !== b.focusRequest.revision || a.focusRequest.caret !== b.focusRequest.caret ||
+			a.focusRequest.anchor !== b.focusRequest.anchor)
 	) return false;
-	for ( let i = 0; i < a.controls.length; i++ ) {
-		const x = a.controls[i]!, y = b.controls[i]!;
-		if ( x.multiline !== y.multiline ) return false;
-		if (
-			x.id !== y.id || x.label !== y.label || x.kind !== y.kind || x.value !== y.value ||
-			x.disabled !== y.disabled || x.selected !== y.selected || x.captureKeys !== y.captureKeys ||
-			x.draggable !== y.draggable || x.carry !== y.carry || x.min !== y.min || x.max !== y.max ||
-			x.maxLength !== y.maxLength || !tuple( x.rect, y.rect )
-		) return false;
-	}
+	for ( let i = 0; i < a.controls.length; i++ ) if ( !sameUiControl( a.controls[i]!, b.controls[i]! ) ) return false;
 	return true;
+}
+/*
+================
+UiProduct
+
+One UI step's output: the frame it was laid out for, its quads and the
+semantics beside them.
+================
+*/
+export interface UiProduct {
+	readonly width: number;
+	readonly height: number;
+	readonly damageText: boolean;
+	readonly quads: readonly UiQuad[];
+	readonly semantics: UiSemantics;
+}
+/*
+================
+uiPublication
+
+What a step does with its product, against the last one it published
+(whose semantics are the last presented): nothing when frame, quads and
+semantics are equal; otherwise it publishes the quads, and presents the
+semantics too when they or the frame changed (the bridge reads canvas
+geometry), or on the first product.
+
+A loading state presents every publication: the platform refreshes its
+loading detail (clock and transfer) on each presentation
+(platform.ts refreshLoadingDetail), which semantics alone do not carry.
+================
+*/
+export function uiPublication( last: UiProduct | null, next: UiProduct ): "unchanged" | "quads" | "present" {
+	const sameSemantics = last !== null && last.width === next.width && last.height === next.height &&
+		last.damageText === next.damageText && sameUiSemantics( last.semantics, next.semantics );
+	if ( sameSemantics && sameUiQuads( last.quads, next.quads ) ) return "unchanged";
+	const loading = next.semantics.loading || next.semantics.loadingVisible || !!next.semantics.loadingError;
+	return sameSemantics && !loading ? "quads" : "present";
 }

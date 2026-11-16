@@ -583,7 +583,7 @@ import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
 import { skillTooltip } from "@/engine/foundation/ui/skill-tooltip";
 import { tooltipColor, type TooltipRow } from "@/engine/foundation/ui/tooltip-rows";
-import { sameUiQuads, sameUiSemantics } from "@/engine/foundation/ui/ui-equality";
+import { uiPublication } from "@/engine/foundation/ui/ui-equality";
 import { createRetainedLayout } from "@/engine/foundation/ui/retained-layout";
 import { targetPetBuffs, buffBoard, buffTimerRoot } from "@/engine/foundation/ui/buff-board";
 import { entityCrestFiles, guildCrestUrl } from "@/engine/foundation/ui/guild-crest";
@@ -28408,16 +28408,20 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			quads = drawFrame.quads = resolveTextOverlaps( quads );
 			probe?.detailEnd( "ui-finalize" );
 			probe?.detailBegin( "ui-compare" );
-			const unchanged = lastProduct && lastProduct.width === w && lastProduct.height === h &&
-				lastProduct.damageText === worldVisible && sameUiQuads( lastProduct.quads, quads ) &&
-				sameUiSemantics( lastProduct.semantics, semantics );
+			// Semantics are returned only when they change (uiPublication): a
+			// walker's minimap dot republishes quads alone.
+			const product = { width: w, height: h, damageText: worldVisible, quads, semantics };
+			const publication = uiPublication( lastProduct, product );
 			probe?.detailEnd( "ui-compare" );
-			if ( unchanged ) return null;
+			if ( publication === "unchanged" ) return null;
 			probe?.detailBegin( "ui-publish" );
-			lastProduct = { width: w, height: h, damageText: worldVisible, quads, semantics };
+			// Keep the semantics last returned: the next comparison is against what was presented.
+			lastProduct = publication === "present" || !lastProduct ?
+				product :
+				{ ...product, semantics: lastProduct.semantics };
 			publish( { revision: ++revision, width: w, height: h, quads, damageText: worldVisible } );
 			probe?.detailEnd( "ui-publish" );
-			return semantics;
+			return publication === "present" ? semantics : null;
 		},
 		/*
 		================
