@@ -22,7 +22,7 @@ keep=0
 export IMAGE_REPO="${SMOKE_IMAGE_REPO:-silkroad-local}"
 export IMAGE_TAG="${SMOKE_IMAGE_TAG:-test}"
 export SMOKE_PORT="${SMOKE_PORT:-18080}"
-ASSETS_DIR="$(generated_dir client-public)"
+ASSETS_DIR="${SMOKE_ASSETS_DIR:-$(generated_dir client-public)}"
 export ASSETS_DIR
 PROJECT=silkroad-smoke
 base="http://127.0.0.1:$SMOKE_PORT"

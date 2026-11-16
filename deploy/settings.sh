@@ -61,3 +61,41 @@ check_deploy_path() {
         *\'*|*\"*|*[[:space:]]*) echo "DEPLOY_PATH cannot contain quotes or spaces" >&2; return 1 ;;
     esac
 }
+
+#
+# The game assets the browser fetches: the packs, their manifest, the web
+# manifest and the delivery lists. Everything else under client-public is
+# the build's loose tree, which the packs already carry
+# (docs/architecture/ASSET_DELIVERY.md, "The short version").
+#
+ASSET_FILTER=(
+    --include=/assets/
+    --include=/assets/packs/***
+    --include=/assets/delivery/***
+    --include=/assets/manifest.json
+    --include=/assets/manifest.json.gz
+    --exclude=*
+)
+
+#
+# asset_release_id <client-public>
+#
+# The release's name: the first 16 hex of the packs manifest's sha256, so
+# one data build is one release however often it is deployed.
+#
+asset_release_id() {
+    shasum -a 256 "$1/assets/packs/manifest.json" | cut -c1-16
+}
+
+#
+# sync_asset_release <client-public> <destination> <link-dest|"">
+#
+# rsync the release; files equal to the ones in link-dest (the release that
+# is up) become hard links there instead of crossing the wire again. The
+# destination is local or host:path.
+#
+sync_asset_release() {
+    local source="$1" destination="$2" link=()
+    [ -n "$3" ] && link=(--link-dest="$3")
+    rsync -a --delete "${link[@]}" "${ASSET_FILTER[@]}" "$source/" "$destination/"
+}
