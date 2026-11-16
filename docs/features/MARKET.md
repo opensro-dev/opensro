@@ -34,10 +34,32 @@ No make-an-offer and no minimum price in the first version.
   nothing.
 - Gold proceeds go to the seller's account warehouse, never onto a character, because an online character's record
   belongs to its action lane.
-- A gold buy from the website must name an offline character; the caller refuses an online one.
+- A gold buy from the website must name an offline character. The buy runs under the gate world entry admits under
+  (`action.Runtime.WhileOffline`), so an entry either comes first and the buy answers `online`, or follows and reads the
+  paid gold. The published session list is display only: it can lag an entry.
 - Gift Silk never pays and never receives, so gift Silk cannot become gold.
 - Every sale is a `market_sales` row naming both accounts, and a gold sale is an economy ledger row (`market_sale`,
   a transfer).
+
+## Website routes (token-guarded, publicstats/market.go and game/market/service.go)
+
+| Route                                              | Does                                                                   |
+| -------------------------------------------------- | ---------------------------------------------------------------------- |
+| `GET /v1/market/categories`                        | the category picker (`slug`, `name`)                                   |
+| `GET /v1/market/listings`                          | search: `q`, `category`, `degree` 1-11, `currency`, `sort`, `page` (15 a page, 1-100) |
+| `GET /v1/accounts/{id}/market`                     | own listings, purchases, warehouse, characters, Silk, rules            |
+| `POST /v1/accounts/{id}/market/list`               | `{slot, currency, price}` from the warehouse -> 201                    |
+| `POST /v1/accounts/{id}/market/buy`                | `{listing, version, character}` -> 201                                 |
+| `POST /v1/accounts/{id}/market/{listing}/cancel`   | -> 204                                                                 |
+| `POST /v1/accounts/{id}/market/{listing}/take-back`| -> 204                                                                 |
+
+- An unknown search value is 400, never an empty page.
+- A refusal answers `{"error": code}`: `not-found`, `no-item`, `no-character`, `changed`, `online`, `warehouse-full`,
+  `not-held`, `cap`, `own-listing`, `not-tradeable`, `funds`, `price` or `unavailable`. None charges anything.
+- The website lists only from the warehouse and pays gold only from an offline character (`online` otherwise).
+- A listing never names its seller.
+- Categories come from the item TypeIDs (`market.Category`); the item name, degree and trade rule from the item
+  references and `action.Runtime.Tradeable`, the exchange's own rule.
 
 ## Tables
 
