@@ -156,9 +156,6 @@ listFromStorageLocked
 ================
 */
 func (s *Store) listFromStorageLocked(req MarketListRequest, listing domain.MarketListing) (domain.MarketListing, error) {
-	if s.commitFail != nil {
-		return domain.MarketListing{}, s.commitFail
-	}
 	storage, err := readAccountStorage(s.syncDBLocked(), req.Account)
 	if err != nil {
 		return domain.MarketListing{}, err
@@ -183,7 +180,10 @@ func (s *Store) listFromStorageLocked(req MarketListRequest, listing domain.Mark
 	if listing.ID, err = insertListingTx(tx, listing); err != nil {
 		return domain.MarketListing{}, err
 	}
-	return listing, tx.Commit()
+	if err := s.commitMarketTxLocked(tx, "market-list"); err != nil {
+		return domain.MarketListing{}, err
+	}
+	return listing, nil
 }
 
 /*
@@ -199,9 +199,6 @@ func (s *Store) listFromBagLocked(req MarketListRequest, listing domain.MarketLi
 	division, known := s.charDivision[character]
 	if !known || character.AccountID != req.Account || character.DeletePending {
 		return domain.MarketListing{}, domain.ErrMarketUnavailable
-	}
-	if s.commitFail != nil {
-		return domain.MarketListing{}, s.commitFail
 	}
 	row, rest, found := takeRow(character.MissionInventory, req.Slot)
 	if !found {
@@ -226,8 +223,7 @@ func (s *Store) listFromBagLocked(req MarketListRequest, listing domain.MarketLi
 	if listing.ID, err = insertListingTx(tx.Tx, listing); err != nil {
 		return domain.MarketListing{}, err
 	}
-	if err := tx.Commit(); err != nil {
-		s.recordWriteFailureLocked("market-list", err)
+	if err := s.commitMarketTxLocked(tx, "market-list"); err != nil {
 		return domain.MarketListing{}, err
 	}
 	character.MissionInventory = rest
@@ -320,9 +316,6 @@ func (s *Store) MarketBuy(req MarketBuyRequest) (domain.MarketSale, error) {
 		}
 		sale.BuyerChar = payer.ID
 	}
-	if s.commitFail != nil {
-		return domain.MarketSale{}, s.commitFail
-	}
 	tx, err := s.beginCharacterTxLocked()
 	if err != nil {
 		return domain.MarketSale{}, err
@@ -359,8 +352,7 @@ func (s *Store) MarketBuy(req MarketBuyRequest) (domain.MarketSale, error) {
 VALUES (?, ?, ?, ?, ?, ?, ?)`, sale.ListingID, sale.BuyerAccount, sale.BuyerChar, sale.Currency, sale.Price, sale.Fee, sale.AtMs); err != nil {
 		return domain.MarketSale{}, err
 	}
-	if err := tx.Commit(); err != nil {
-		s.recordWriteFailureLocked("market-buy", err)
+	if err := s.commitMarketTxLocked(tx, "market-buy"); err != nil {
 		return domain.MarketSale{}, err
 	}
 	if payer != nil {
@@ -471,9 +463,6 @@ listings. A held item is never dropped.
 ================
 */
 func (s *Store) returnListingLocked(listing domain.MarketListing, fallBackToHeld bool) (domain.MarketListing, error) {
-	if s.commitFail != nil {
-		return domain.MarketListing{}, s.commitFail
-	}
 	storage, err := readAccountStorage(s.syncDBLocked(), listing.SellerAccount)
 	if err != nil {
 		return domain.MarketListing{}, err
@@ -500,7 +489,7 @@ func (s *Store) returnListingLocked(listing domain.MarketListing, fallBackToHeld
 	if err := setListingStateTx(tx, listing, state); err != nil {
 		return domain.MarketListing{}, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitMarketTxLocked(tx, "market-return"); err != nil {
 		return domain.MarketListing{}, err
 	}
 	listing.State = state
@@ -634,6 +623,29 @@ FROM market_sales WHERE buyer_account = ? ORDER BY at_ms DESC, listing_id DESC L
 }
 
 //============================================================================
+
+/*
+================
+commitMarketTxLocked
+
+Commits one door's transaction, or fails it with the store's forced
+commit failure (FailCommits) after every write in it was made, so the
+tests prove the rollback rather than an early refusal. A failure counts
+in the store's write health either way. The caller's deferred Rollback
+undoes the writes, and no door touches a live record before this returns
+nil.
+================
+*/
+func (s *Store) commitMarketTxLocked(tx interface{ Commit() error }, label string) error {
+	err := s.commitFail
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
+		s.recordWriteFailureLocked(label, err)
+	}
+	return err
+}
 
 /*
 ================

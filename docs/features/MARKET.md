@@ -28,7 +28,8 @@ No make-an-offer and no minimum price in the first version.
 | Take back | held listing -> seller's warehouse                        | none                                                                  |
 
 - Every door is one store transaction: the item leaves its source and reaches its destination together with the money,
-  or nothing changes. A forced commit failure in the tests leaves the item in exactly one place.
+  or nothing changes. `market_commitfail_test.go` fails every door at its commit, after all of its writes, and checks
+  that every table a door writes and every live record is unchanged.
 - A buy names the listing's version. A listing that changed, sold or expired meanwhile refuses the buy and charges
   nothing.
 - Gold proceeds go to the seller's account warehouse, never onto a character, because an online character's record
@@ -42,3 +43,6 @@ No make-an-offer and no minimum price in the first version.
 
 `market_listings` and `market_sales` are created when the store opens (additive, no schema stamp), like the economy
 buckets. A listing keeps its item after it is sold or returned, as the record of what moved.
+
+An open or held listing is a container: an offline item tool that rewrites stored items across the shard (such as
+`sro-swap-elixir`) has to cover `market_listings` too once the market is on.
