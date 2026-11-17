@@ -155,6 +155,11 @@ var Settings = []Setting{
 	// v1.696 client (monster/skytemple.go). The fields ride the Alexandria
 	// variant build; the switch admits their kinds here. "off" is native.
 	{Env: "SRO_SKYTEMPLE", NomadVar: "skytemple", Default: "off", Catalogue: true},
+	// Port-only switch, native content: the Roc chain from the later
+	// clients (#3399). The Alexandria variant build stages its kinds,
+	// gates and quests (scripts/roc_import.py); the switch admits the
+	// quest kinds' nests here (monster/roc.go). "off" is native.
+	{Env: "SRO_ROC", NomadVar: "roc", Default: "off", Catalogue: true},
 	// Port-only, not native: the Arabia continent population and its
 	// dungeon world from the v1.696 client (monster/arabia.go). The
 	// continent rides the Alexandria variant build; the switch admits
