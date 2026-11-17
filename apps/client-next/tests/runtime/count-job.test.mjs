@@ -255,7 +255,8 @@ test("gameplay sends a count-job use to the server, from the window button and t
 		"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 	);
 	const sent = [], g = createGameplay( frame => sent.push( frame ) );
-	const local = {
+	// Only what the use reads; the full entity record is not needed.
+	const local = /** @type {import("../../src/engine/contracts/world").EntityState} */ (/** @type {unknown} */ ({
 		gid: 1,
 		countryByte9c: 1,
 		regionId: 257,
@@ -264,7 +265,7 @@ test("gameplay sends a count-job use to the server, from the window button and t
 		z: 0,
 		heading: 0,
 		appearanceState: [ 1, 0, 0 ]
-	};
+	}));
 	g.bootstrap( {
 		inventorySlotCount: 45,
 		equipmentSlotCount: 13,

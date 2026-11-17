@@ -691,7 +691,7 @@ startAuthoredCooldown
 
 A limited use that ran without a bag item (a premium package's count job, the
 Energy of Life buff's charge) starts the cooldown its item's row authors, as an
-item-use answer starts a bag item's (755F02): the lane shows on every item that
+item-use answer starts a bag item's: the lane shows on every item that
 shares the group, in the bag and on the quick slots. Port-only for the Blue
 Berserk; nothing for an item without an authored cooldown.
 ================

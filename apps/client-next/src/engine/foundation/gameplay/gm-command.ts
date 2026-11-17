@@ -440,7 +440,7 @@ function sizedNameFrame( subcommand: number, text: string ): WireFrame {
 	return { opcode: OP_GM_COMMAND, payload };
 }
 
-// The port's /HWANARENA <ch|eu> (GM test tooling, not native): the same warp /warp sends (retail 50B303,
+// The port's /HWANARENA <ch|eu> (GM test tooling, not native): the same warp /warp sends (GM
 // subcommand 16) to where the Army / Military Test trial's player lands, so a GM can check that the new
 // arena is reachable and walkable. The points mirror the server's arena table (quest/hwan_arena.go, the
 // trials' entry); the server still validates the destination against the terrain and the GM privilege.
@@ -453,7 +453,7 @@ const HWAN_ARENA_WARPS: Readonly<Record<string, readonly [number, number, number
 ================
 warpFrame
 
-The coordinate warp (retail 50B303): u8 16, u16 region, float32 XYZ, u16 heading; null for a
+The coordinate warp /warp sends: u8 16, u16 region, float32 XYZ, u16 heading; null for a
 value the wire cannot carry.
 ================
 */
