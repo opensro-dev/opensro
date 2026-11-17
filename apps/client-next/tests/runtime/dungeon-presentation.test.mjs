@@ -19,7 +19,7 @@ import { dataExtractedRoot } from "../../../../scripts/build/world/paths.mjs";
 import { readDofPresentation } from "../../../../scripts/build/world/assets/buildDungeonResources.mjs";
 import { dungeonWaterVertices, resolveDungeonWater } from "../../../../scripts/build/world/assets/dungeonWater.mjs";
 import { parseJmxResourceBsr, parseJmxBmsStaticMesh } from "../../../../scripts/build/world/objects/formats.mjs";
-import { NATIVE_ONLY } from "../helpers/expanded-build.mjs";
+import { EXPANDED_BUILD, NATIVE_ONLY } from "../helpers/expanded-build.mjs";
 
 test("dungeon water fan follows shared-face order and the provider keeps the last tint", async () => {
 	const mesh = { positions: [ 0, 0, 0, 10, 0, 0, 10, 0, 20, 0, 0, 20 ], indices: [ 0, 1, 2, 0, 2, 3 ] };
@@ -466,7 +466,9 @@ test(
 		// Verify every dungeon room BSR particle reference resolves and compiles in program.ts.
 		const dungeonRefs = collectDungeonParticleReferences( manifest );
 		const uniqueEfps = [ ...new Set( dungeonRefs.map( r => r.effectPath ) ) ].sort();
-		assert.equal( uniqueEfps.length, 70 );
+		// 70 is the native census; an expanded build's added dungeons bring
+		// their own effects, and each one still has to resolve and compile below.
+		if ( !EXPANDED_BUILD ) assert.equal( uniqueEfps.length, 70 );
 		assert.ok( uniqueEfps.includes( "system/system_dungeonpotal_02.efp" ) );
 		// Objects placed in rooms (blockObjects) carry their own programs: the
 		// Donwhang torches and sunbeams reported missing in game.
