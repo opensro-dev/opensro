@@ -2234,6 +2234,16 @@ localIdentity
 		},
 		/*
 ================
+localPose
+
+The local player's live pose (its own mover's), or null before entry.
+================
+		*/
+		localPose() {
+			return movement.state().pose ?? null;
+		},
+		/*
+================
 pickupNearest
 
 The pickup shortcut's item among candidates (pickup-nearest.ts): from the
