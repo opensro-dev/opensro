@@ -551,6 +551,7 @@ func stagedAvatarInventory(source, previous *AvatarInventory) *AvatarInventory {
 	return &AvatarInventory{
 		Capacity: source.Capacity,
 		Rows:     stagedInventoryRows(source.Rows, previousRows),
+		Spirit:   source.Spirit,
 	}
 }
 

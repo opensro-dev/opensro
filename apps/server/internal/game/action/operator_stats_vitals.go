@@ -140,6 +140,7 @@ func (rt *Runtime) operatorJobWrites(row enterworld.SkillRow, before combat.Stat
 		if effect.Block.Present {
 			writes = append(writes, combat.BlockRateWrites(effect.Block.Mask, effect.Block.Value)...)
 		}
+		writes = append(writes, combat.IgnoreDefenseWrites(effect.IgnoreDefense)...)
 		if effect.Reat.Mask != 0 {
 			writes = append(writes, combat.StatusReductionWrites(effect.Reat)...)
 		}

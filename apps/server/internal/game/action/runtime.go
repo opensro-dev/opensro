@@ -61,6 +61,7 @@ barrier.
 */
 type Runtime struct {
 	berserkActors     sync.Map // derived expiry index; character store owns state
+	spiritActors      sync.Map // attached Devil's Spirit lapse index (spiritability.go)
 	battleActors      sync.Map // battle-state expiry index (battlestate.go)
 	cosRefusalLog     sync.Map // cosground.go: cosRefusalKey -> *cosRefusalWindow (refusal log rollup)
 	cosRefusalTotals  sync.Map // cosground.go: cause string -> *atomic.Uint64 (refusal metric)
@@ -262,6 +263,8 @@ type Runtime struct {
 	Monsters *simulation.MonsterState
 	// Port-only, not native: nil preserves every native admission/reward path.
 	sookArena *sookArenaRuntime
+	// roc runs the Roc worlds (roc.go); nil with SRO_ROC off.
+	roc *rocRuntime
 	// muhanChanges is the Muhan change pairing by change NPC codename
 	// (muhan_change.go). Port-only, not native: empty unless SRO_MUHAN is on.
 	muhanChanges map[string]muhanChange
@@ -653,6 +656,9 @@ type Runtime struct {
 	// christmasSnow is the snowfall state of the Christmas native group
 	// (event group 1) advanceEventGroups last saw; tick goroutine only.
 	christmasSnow eventGroupWatch
+	// weather is the climate cycle and its pending deliveries
+	// (weather.go); a nil cycle is SRO_WEATHER off.
+	weather weatherState
 	// christmasWavesAsked is the last instant advanceChristmasWaves asked
 	// the timetable about; the tick goroutine alone touches it.
 	christmasWavesAsked time.Time

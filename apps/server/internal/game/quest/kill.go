@@ -37,11 +37,13 @@ func (rt *Runtime) KillUpdater() func(*enterworld.Character, string, uint8) ([]w
 				continue
 			}
 			updated, changed := refreshMissions(character, def, record, codename, rarity)
-			if !changed {
-				continue
+			if changed {
+				character.ActiveQuests[i] = updated
+				frames = append(frames, missionProgressFrames(def, record, updated)...)
 			}
-			character.ActiveQuests[i] = updated
-			frames = append(frames, missionProgressFrames(def, record, updated)...)
+			// The exchange runs on every kill event, matching or not: the
+			// server's handler tests the mask after its mission loop.
+			frames = append(frames, rt.applyKillExchange(character, def, i)...)
 		}
 		return frames, len(frames) > 0
 	}

@@ -5,7 +5,7 @@ window-fit.test.mjs - the F9 visual gate's four fits
 
 The letter read and write windows are centred msgbox2 popups (607830 /
 607A10), not a translucent sheet over the letter page; their long button
-captions fit the 76-pixel plate under "Fit window labels"; every
+captions fit, whole, inside the 76-pixel plate under "Fit window labels"; every
 Experimental description fits its 304-pixel line; and a tooltip never
 leaves a narrow screen.
 
@@ -125,7 +125,9 @@ for ( const fit of [ true, false ] ) {
 			const { fixture, output } = openLetter( { fit, write } );
 			try {
 				const button = defined( output.controls.find( c => c.id === id ) );
-				assert.equal( button.label, fit ? full.split( " " )[0] : full );
+				// Both ways the caption is whole: the fit shrinks or wraps it
+				// inside the plate (#3675) rather than dropping its last word.
+				assert.equal( button.label, full );
 				const ink = glyphsBeside( fixture, button.rect );
 				assert.ok( ink.length > 0, id );
 				const inside = ink.every( q =>

@@ -15,7 +15,7 @@ func TestIdenticalMissionCaptionsKeepNativeTagsAcrossReload(t *testing.T) {
 		{ContentsSymbol: "SAME", Objective: ObjectiveKill, KillMonsterCodenames: []string{"A"}, KillCount: 1},
 		{ContentsSymbol: "SAME", Objective: ObjectiveKill, KillMonsterCodenames: []string{"B"}, KillCount: 2},
 	}}, RefID: 900}
-	if err := loadMissions(d, []string{"SAME"}, nil); err != nil {
+	if err := loadMissions(d, []string{"SAME"}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	c := questCharacter()

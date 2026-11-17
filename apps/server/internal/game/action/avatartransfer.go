@@ -145,6 +145,9 @@ func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Characte
 			capacity = nasrun.StorageSlots
 		}
 		nextAvatars := &domain.AvatarInventory{Capacity: capacity, Rows: rowsFromInvItems(avatars.Items())}
+		// The Spirit's abilities ride the same snapshot (spiritability.go).
+		nextAvatars.Spirit = rt.deriveSpirit(nextAvatars, rt.Now().Unix())
+		detached := c.AvatarInventory != nil && c.AvatarInventory.Spirit != nil && nextAvatars.Spirit == nil
 		// The reference server installs or removes the avatar's contributions
 		// and the actor's stats refresh, as for equipment: the
 		// blessed options count only while the avatar is worn. Derived on
@@ -159,6 +162,7 @@ func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Characte
 		statFrame := wire.Frame{Opcode: wire.OpBaseStats, Payload: enterworld.BuildLoginStatBlock(next, display)}
 		c.MissionInventory = nextBag
 		c.AvatarInventory = nextAvatars
+		rt.indexSpirit(divisionID, c)
 		visual := wire.UnequipVisualFrame(wire.UnequipVisual{Gid: enterworld.ObjectIDForCharacter(c), Slot: q.SourceSlot, RefObjID: item.RefObjID})
 		if equip {
 			visual = wire.EquipVisualFrame(wire.EquipVisual{Gid: enterworld.ObjectIDForCharacter(c), RefObjID: item.RefObjID, TypeFlags: item.TypeFlags, OptLevel: item.Plus})
@@ -191,6 +195,11 @@ func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Characte
 		hp, mp := rt.clampStoredGaugeToKeeper(divisionID, c)
 		result.Frames = append(result.Frames, statFrame)
 		result.Frames = append(result.Frames, rt.gaugeDropFrames(divisionID, c, hp, mp, false)...)
+		if detached {
+			public, actor := rt.spiritDetachFrames(divisionID, c, rt.Now().UnixMilli())
+			result.Frames = append(append(result.Frames, public...), actor...)
+			result.Broadcast = append(result.Broadcast, public...)
+		}
 		return true
 	})
 	return result

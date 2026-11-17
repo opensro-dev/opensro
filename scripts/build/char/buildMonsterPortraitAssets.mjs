@@ -34,6 +34,7 @@ import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import { clientBuildDefinitions } from "../../../apps/client-next/tools/build-metadata.mjs";
 import { publishedAssets } from "../../../apps/client-next/tools/published-assets.mjs";
 import { compareText } from "../shared/textOrder.mjs";
+import { sha256Hex } from "../shared/hash.mjs";
 
 const PREFIX = "/assets/npc/hunting-portraits/";
 // Drawn stills wait here between builds, outside the public tree: only the
@@ -100,7 +101,7 @@ out byte-identical keeps the name its players already hold (#3104).
 ================
 */
 export function monsterPortraitPublishedPath( bytes ) {
-	return PREFIX + createHash( "sha256" ).update( bytes ).digest( "hex" ) + ".png";
+	return PREFIX + sha256Hex( bytes ) + ".png";
 }
 
 /*

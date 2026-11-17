@@ -7,6 +7,7 @@ HP stays owned by vitals updates. Bond is a port-only pet extension.
 ===========================================================================
 */
 import type { EnvironmentalDamage } from "@/engine/contracts/combat-feedback";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 /*
 ================
@@ -21,7 +22,7 @@ export function damageFeedback(
 ): Pick<EnvironmentalDamage, "gid" | "damage" | "linked"> | undefined {
 	if ( op === 0x3128 ) {
 		if ( p.length !== 8 ) throw Error( "Invalid periodic damage notification" );
-		const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+		const v = viewOf( p );
 		return { gid: v.getUint32( 0, true ), damage: v.getUint32( 4, true ) };
 	}
 	if ( op !== 0x3fb4 ) throw Error( "Invalid damage feedback opcode" );
@@ -44,7 +45,7 @@ export function decodePetBondPulse(
 	p: Uint8Array
 ): { gid: number; bear: number; kind: 1 | 2; damage?: number; } {
 	if ( p.length !== 9 && p.length !== 13 ) throw Error( "Invalid pet bond pulse length" );
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	const gid = v.getUint32( 0, true ), bear = v.getUint32( 4, true ), kind = p[8]!;
 	if ( !gid || !bear || (kind !== 1 && kind !== 2) || (p.length === 13 && kind !== 1) ) {
 		throw Error( "Invalid pet bond pulse" );

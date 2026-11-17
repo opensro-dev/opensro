@@ -344,7 +344,6 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		webTransport: true,
 		jobKillNotices: true,
 		dropPlusNotices: true,
-		plusSevenNotices: true,
 		breakNotices: true,
 		highlightEventNotices: true,
 		homingProjectiles: false,
@@ -364,7 +363,6 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		webTransport: true,
 		jobKillNotices: true,
 		dropPlusNotices: true,
-		plusSevenNotices: true,
 		breakNotices: true,
 		highlightEventNotices: true,
 		homingProjectiles: false,
@@ -526,16 +524,13 @@ test("drop and plus notices are on unless explicitly false and reach the worker'
 	assert.equal( "dropPlusNotices" in experimentalVideo( experimentalOptions( {} ) ), false );
 });
 
-test("plus seven notices are on unless explicitly false, stay out of the video slice, and never widen the drop/plus row", () => {
-	for ( const value of [ undefined, null, {}, { plusSevenNotices: 1 }, { plusSevenNotices: "false" } ] ) {
-		assert.equal( experimentalOptions( value ).plusSevenNotices, true );
-	}
-	const off = experimentalOptions( { plusSevenNotices: false } );
-	assert.equal( off.plusSevenNotices, false );
-	assert.equal( off.dropPlusNotices, true );
-	assert.equal( experimentalGameplay( off ).plusSevenNotices, false );
-	assert.equal( experimentalGameplay( experimentalOptions( { dropPlusNotices: false } ) ).plusSevenNotices, true );
-	assert.equal( "plusSevenNotices" in experimentalVideo( experimentalOptions( {} ) ), false );
+test("the retired plus seven row is never read, and a profile that saved it keeps every other row (#3681)", () => {
+	const saved = experimentalOptions( { plusSevenNotices: false, dropPlusNotices: false, breakNotices: false } );
+	assert.equal( "plusSevenNotices" in saved, false );
+	assert.equal( "plusSevenNotices" in experimentalGameplay( saved ), false );
+	assert.equal( saved.dropPlusNotices, false );
+	assert.equal( saved.breakNotices, false );
+	assert.equal( saved.jobKillNotices, true );
 });
 
 test("item break notices are on unless explicitly false, stay out of the video slice, and never widen another notice row", () => {
@@ -546,7 +541,6 @@ test("item break notices are on unless explicitly false, stay out of the video s
 	assert.equal( off.breakNotices, false );
 	assert.equal( off.jobKillNotices, true );
 	assert.equal( off.dropPlusNotices, true );
-	assert.equal( off.plusSevenNotices, true );
 	assert.equal( experimentalGameplay( off ).breakNotices, false );
 	assert.equal( experimentalGameplay( experimentalOptions( { dropPlusNotices: false } ) ).breakNotices, true );
 	assert.equal( "breakNotices" in experimentalVideo( experimentalOptions( {} ) ), false );

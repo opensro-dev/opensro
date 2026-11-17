@@ -21,6 +21,10 @@ import cap110_item_import as importer  # noqa: E402
 from test_client_preparation import ArchiveBuilder  # noqa: E402
 
 
+# The Roc's set armour, admitted only with SRO_ROC (#3399 step 5c).
+ROC_PIECE = "ITEM_ROC_CH_M_CLOTHES_AA_SET"
+
+
 # ================
 # weapon
 # ================
@@ -129,6 +133,35 @@ class WeaponTests(unittest.TestCase):
 		self.assertEqual(fresh["idMap"], expanded["idMap"])
 		with self.assertRaises(ValueError):
 			items.merge_equipment([], [armor, sword], [101], previous["idMap"])
+
+	# ================
+	# test_roc_set_armour_joins_only_with_the_roc_and_keeps_its_identity
+	#
+	# #3399 step 5c: the Roc's set armour joins only when asked, after every
+	# other piece (the rest keep their numbers), and a build that leaves it
+	# out retires its identities instead of handing them on.
+	# ================
+	def test_roc_set_armour_joins_only_with_the_roc_and_keeps_its_identity(self):
+		sword = weapon(identity=100)
+		roc = weapon("ITEM_ROC_CH_M_CLOTHES_AA_SET", 60, item_class=30)
+		roc[items.TYPE_THIRD], roc[items.TYPE_FOURTH] = "1", "5"
+		armor = weapon("ITEM_CH_M_HEAVY_10_BA_A", 50)
+		armor[items.TYPE_THIRD] = "3"
+		_, off = items.merge_equipment([], [roc, armor, sword])
+		self.assertNotIn(roc[2], off["idMap"])
+		_, on = items.merge_equipment([], [roc, armor, sword], roc=True)
+		self.assertEqual({code: on["idMap"][code] for code in off["idMap"]}, off["idMap"])
+		self.assertGreater(on["idMap"][roc[2]]["target"], max(entry["target"] for entry in off["idMap"].values()))
+		_, back = items.merge_equipment([], [roc, armor, sword], previous_ids=on["idMap"])
+		self.assertEqual(back["retiredIds"], {roc[2]: on["idMap"][roc[2]]})
+		newcomer = weapon("ITEM_CH_M_LIGHT_10_BA_A", 70)
+		newcomer[items.TYPE_THIRD] = "2"
+		_, later = items.merge_equipment([], [roc, armor, sword, newcomer],
+			previous_ids={**back["retiredIds"], **back["idMap"]})
+		self.assertNotEqual(later["idMap"][newcomer[2]]["target"], on["idMap"][roc[2]]["target"])
+		_, again = items.merge_equipment([], [roc, armor, sword, newcomer],
+			previous_ids={**later["retiredIds"], **later["idMap"]}, roc=True)
+		self.assertEqual(again["idMap"][roc[2]], on["idMap"][roc[2]])
 
 	# ================
 	# test_armor_links_require_complete_opposite_sex_rows
@@ -497,9 +530,12 @@ class ImportTests(unittest.TestCase):
 			with patch.dict(os.environ, {importer.FLAG: "off"}):
 				self.assertFalse(importer.add_items(later, native, output)["enabled"])
 			new = weapon("ITEM_EU_SWORD_11_A", 11, "1", 31)
+			roc = weapon(ROC_PIECE, 12, "0", 30)
+			roc[items.TYPE_THIRD], roc[items.TYPE_FOURTH] = "1", "5"
 			files = {
-				"itemdata.txt": original_manifest, "itemdata_5000.txt": utf16([new]),
-				"textdata_equip&skill.txt": utf16([["1", new[5], "ko", "", "tw", "cn", "de", "ja", "Sword", "vi"]]),
+				"itemdata.txt": original_manifest, "itemdata_5000.txt": utf16([new, roc]),
+				"textdata_equip&skill.txt": utf16([["1", new[5], "ko", "", "tw", "cn", "de", "ja", "Sword", "vi"],
+					["1", roc[5], "ko", "", "tw", "cn", "de", "ja", "Red Lightning", "vi"]]),
 				"textdata_object.txt": utf16([]), "textdata_new.txt": utf16([]),
 				"refscrapofpackageitem.txt": utf16([]), "refshopgoods.txt": utf16([]),
 				"refpricepolicyofitem.txt": utf16([]),
@@ -532,6 +568,23 @@ class ImportTests(unittest.TestCase):
 				"PARAM_REINFORCE": "enhancement", "PARAM_REINFORCE_ITEM_SET": "Set enforcement",
 				"PARAM_RARE_FIRST2": "Seal of Nova"})
 			self.assertEqual(first["idMap"], second["idMap"])
+			# #3399 step 5c: the Roc's set armour joins only with SRO_ROC on, and
+			# a later build without it keeps its identity reserved.
+			self.assertNotIn(ROC_PIECE, first["idMap"])
+			# An importer that ran after the equipment in the earlier build took
+			# the next identity. The Roc's armour, new to this build, numbers
+			# above it instead of taking it.
+			published = max(entry["target"] for entry in first["idMap"].values()) + 1
+			(target / "itemdata_110001.txt").write_bytes(utf16([weapon("ITEM_ETC_LATER_IMPORT", published)]))
+			with patch.dict(os.environ, {importer.FLAG: "on", "SRO_ROC": "on"}), 				patch.object(importer, "copy_asset_closure", return_value=[]):
+				with_roc = importer.add_items(later, native, output)
+			self.assertEqual(with_roc["idMap"][ROC_PIECE]["target"], published + 1)
+			with patch.dict(os.environ, {importer.FLAG: "on", "SRO_ROC": ""}), 				patch.object(importer, "copy_asset_closure", return_value=[]):
+				without = importer.add_items(later, native, output)
+				still = importer.add_items(later, native, output)
+			self.assertEqual(without["retiredIds"], {ROC_PIECE: with_roc["idMap"][ROC_PIECE]})
+			self.assertEqual(still["retiredIds"], without["retiredIds"])
+			self.assertEqual(without["idMap"], first["idMap"])
 			self.assertEqual(first["setCatalogue"], {"groups": 1, "magicGroups": 3, "optionIds": [389], "setItems": 0})
 			self.assertEqual(importer.tables.table_rows((target / items.SET_GROUP_TABLE).read_bytes()), [set_group(13)])
 			self.assertEqual((base / "itemdata.txt").read_bytes(), original_manifest)

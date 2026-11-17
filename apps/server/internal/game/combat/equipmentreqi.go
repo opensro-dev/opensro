@@ -38,6 +38,9 @@ const (
 	reqiShieldTID3 = 4
 )
 
+// reqiAvatarSocketValue is the one value the avatar-socket case admits.
+const reqiAvatarSocketValue = 1
+
 // reqiArmourSlots is the server's armour-index table: index 1..6 to slot.
 var reqiArmourSlots = [7]int64{-1, 0, 2, 1, 4, 3, 5}
 
@@ -145,8 +148,14 @@ func (e ReqiEquipment) testPair(pair enterworld.SkillReqiPair, code uint16) (boo
 	case reqiPrimary:
 		return e.testWeapon(6, pair.Value, code)
 	case reqiAvatarSocket:
-		// The server reads avatar socket 4, but the v1.150 client has avatar
-		// sockets 0..3 only, so socket 4 is always empty.
+		// Avatar socket 4 is the Devil's Spirit's (port-only, SRO_NASRUN;
+		// without it the socket is always empty). The server admits value 1
+		// when the socket holds an item that has not expired, and keeps
+		// the code it had: the case
+		// never clears it. The awake, worn Spirit is AvatarInventory.Spirit.
+		if pair.Value == reqiAvatarSocketValue && e.C != nil && e.C.AvatarInventory != nil && e.C.AvatarInventory.Spirit != nil {
+			return true, code
+		}
 		return false, code
 	}
 	return false, code

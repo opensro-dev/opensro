@@ -336,3 +336,37 @@ test("Every Berserk animation frame is admitted by the renderer", () => {
 		);
 	}
 });
+test("a burst past the orb ceiling drops the overflow instead of failing the runtime", () => {
+	// Nine kills of 255 orbs each (a GM /ZOE of hundreds of monsters) is past the
+	// 2048 orbs in flight; the overflow is never launched.
+	const sources = Array.from(
+		{ length: 9 },
+		( _, n ) => ({ gid: 10 + n, kind: "monster", regionId: 0, x: 100 + n, y: 0, z: 0 })
+	);
+	const world = [ ...sources, defined( entities[1] ) ];
+	const o = createOrbs( () => {}, createPresentationRandom( 1 ) ), args = [ () => null, () => true, () => 0.1 ];
+	o.receive( sources.map( s => ({ kind: "orb-feedback", source: s.gid, target: 2, color: 0, count: 255 }) ), world );
+	const flying = o.step( world, 0, new Set( sources.map( s => s.gid ) ), ...args );
+	assert.equal( flying.length, 2048 );
+});
+test("a violet orb dropped at the ceiling still advances the gauge", () => {
+	const sources = Array.from(
+		{ length: 9 },
+		( _, n ) => ({ gid: 10 + n, kind: "monster", regionId: 0, x: 100 + n, y: 0, z: 0 })
+	);
+	const world = [ ...sources, defined( entities[1] ) ];
+	const settled = new Set( sources.map( s => s.gid ) ), args = [ () => null, () => true, () => 0.1 ];
+	const o = createOrbs( () => {}, createPresentationRandom( 1 ) );
+	o.receive(
+		sources.slice( 0, 8 ).map( s => ({ kind: "orb-feedback", source: s.gid, target: 2, color: 0, count: 255 }) ),
+		world
+	);
+	o.receive( [ { kind: "orb-feedback", source: 18, target: 2, color: 0, count: 8 } ], world );
+	o.step( world, 0, settled, ...args );
+	o.receive(
+		[ { kind: "orb-gauge", value: 2 }, { kind: "orb-feedback", source: 10, target: 2, color: 2, count: 2 } ],
+		world
+	);
+	o.step( world, 0.1, settled, ...args );
+	assert.deepEqual( o.gauge(), { authoritative: 2, displayed: 2, pending: 0 } );
+});

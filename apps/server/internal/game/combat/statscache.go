@@ -152,6 +152,34 @@ type statsAvatarRow struct {
 
 /*
 ================
+statsSpirit
+
+The worn Spirit's contribution as the projection reads it
+(spiritOptionWrites): absent, or its socket and three numbers. Its
+skills are not here; they feed no stat.
+================
+*/
+type statsSpirit struct {
+	present       bool
+	slot          int64
+	hp, mp, block uint32
+}
+
+/*
+================
+statsSpiritKey
+================
+*/
+func statsSpiritKey(avatar *domain.AvatarInventory) statsSpirit {
+	if avatar == nil || avatar.Spirit == nil {
+		return statsSpirit{}
+	}
+	s := avatar.Spirit
+	return statsSpirit{present: true, slot: s.Slot, hp: s.HPPercent, mp: s.MPPercent, block: s.Block}
+}
+
+/*
+================
 statsEntry
 
 One character's memoised stats: the content they were computed from,
@@ -165,6 +193,7 @@ type statsEntry struct {
 	masteries []domain.CharacterMastery
 	equipment []statsEquipRow
 	avatar    []statsAvatarRow
+	spirit    statsSpirit
 	modifiers []paramkeeper.Write
 	hasBlock  bool
 	block     [abnormal.MaxModifiers]abnormal.Modifier
@@ -263,6 +292,7 @@ func (entry *statsEntry) matches(
 		slices.Equal(entry.masteries, character.Masteries) &&
 		statsEquipmentEqual(entry.equipment, character.MissionInventory) &&
 		statsAvatarEqual(entry.avatar, character.AvatarInventory) &&
+		entry.spirit == statsSpiritKey(character.AvatarInventory) &&
 		slices.Equal(entry.modifiers, modifiers) &&
 		entry.hasBlock == (block != nil) &&
 		(block == nil || entry.block == block.Modifiers)
@@ -296,6 +326,7 @@ func (cache *statsCache) insert(
 		masteries: slices.Clone(character.Masteries),
 		equipment: statsEquipmentKey(character.MissionInventory),
 		avatar:    statsAvatarKey(character.AvatarInventory),
+		spirit:    statsSpiritKey(character.AvatarInventory),
 		modifiers: slices.Clone(modifiers),
 		hasBlock:  block != nil,
 		stats:     stats,

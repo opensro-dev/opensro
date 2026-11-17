@@ -22,6 +22,7 @@ caller's summoned pet) and 5 (a bad length, or a pet already named).
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import { checkedNameError, type NameRules } from "@/engine/foundation/ui/character-create";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const PET_NAME_REQUEST = 0x7571;
 export const PET_NAME_REFUSAL = 0xb571;
@@ -119,7 +120,7 @@ export function petNameUpdate( frame: WireFrame ): { gid: number; name: string; 
 	const p = frame.payload;
 	if ( frame.opcode !== COS_STATE_UPDATE || p[4] !== COS_STATE_NAME ) return null;
 	if ( p.length < 7 ) throw Error( "Truncated pet name update" );
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength ), n = v.getUint16( 5, true );
+	const v = viewOf( p ), n = v.getUint16( 5, true );
 	if ( p.length !== 7 + n || n > PET_NAME_MAX ) throw Error( "Invalid pet name update" );
 	const gid = v.getUint32( 0, true );
 	if ( !gid ) throw Error( "Invalid pet name update" );

@@ -49,10 +49,13 @@ import {
 	OBJECT_STATE_REFRESH_OPCODE,
 	PARTY_INFO_OPCODE,
 	PARTY_UPDATE_OPCODE,
+	PET_BOND_OPCODE,
 	PICKUP_ANIM_OPCODE,
 	SERVER_CLOCK_GID_LATCH_OPCODE,
-	STALL_EDIT_RESULT_OPCODE
+	STALL_EDIT_RESULT_OPCODE,
+	TARGET_ACTION_STATE_OPCODE
 } from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // PLAYER_ATTACK_LEVEL_NOTICE is 693F1A's ShowSystemNotification(4, 0x16).
 const PLAYER_ATTACK_LEVEL_NOTICE = 0x16;
@@ -366,7 +369,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 		const chatSender = frame.opcode === CHAT_BROADCAST_OPCODE && frame.payload.length >= 5 &&
 				(frame.payload[0] === 1 || frame.payload[0] === 3) ?
 			entities.read(
-				new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength ).getUint32(
+				viewOf( frame.payload ).getUint32(
 					1,
 					true
 				)
@@ -377,7 +380,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 			{} :
 			undefined;
 		// Port-only Bond carries both paid damage feedback and an entity animation cue.
-		if ( !gameplay.receive( frame, now, chatSender, stallReceipt ) || frame.opcode === 0x3fb4 ) {
+		if ( !gameplay.receive( frame, now, chatSender, stallReceipt ) || frame.opcode === PET_BOND_OPCODE ) {
 			entities.receive( frame, now );
 		}
 		// The owner's edit receipt carries no title; gameplay resolves the
@@ -437,7 +440,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 				now
 			);
 		}
-		if ( frame.opcode === 0x314d ) {
+		if ( frame.opcode === TARGET_ACTION_STATE_OPCODE ) {
 			// CPSMission_OnTargetActionState0x314D (7786E0): quest id, then the
 			// capture result (1 caught, 2 failed; v1.188 sends it as 0x30DC).
 			if ( frame.payload.length !== 5 ) throw Error( "Invalid capture result" );
@@ -467,7 +470,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 		const selectedMode = travelMode( frame, localGid, itemCooldown );
 		if ( selectedMode !== null ) loadingMode = selectedMode;
 		if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ) {
-			const v = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength );
+			const v = viewOf( frame.payload );
 			const gid = v.getUint32( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ? 16 : 0, true ),
 				e = entities.read( gid );
 			// 775B50 halts the named object's active mover, so a correction
@@ -505,7 +508,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 			if ( entity?.kind === "local-player" && !entity.mountedOn ) gameplay.heading( entity.heading );
 		}
 		if ( frame.opcode === SERVER_CLOCK_GID_LATCH_OPCODE ) {
-			const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+			const gid = viewOf( frame.payload )
 				.getUint32( 0, true );
 			const entity = entities.read( gid );
 			if ( entity ) {

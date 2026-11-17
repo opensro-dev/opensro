@@ -256,6 +256,15 @@ func TestPlayerStatsMemoFollowsEveryContentWriter(t *testing.T) {
 	}
 	c.AvatarInventory.Rows[0].Slot = 1
 
+	// The Devil's Spirit's share (port-only, SRO_NASRUN): attached,
+	// reinforced and lapsed are three contents.
+	c.AvatarInventory.Spirit = &domain.SpiritEffect{Slot: 4, Plus: 3, HPPercent: 18, MPPercent: 18, Block: 1}
+	assertStatsFresh(t, "spirit attached", c, withDress, writes, block)
+	c.AvatarInventory.Spirit = &domain.SpiritEffect{Slot: 4, Plus: 6, HPPercent: 21, MPPercent: 21, Block: 2}
+	assertStatsFresh(t, "spirit reinforced", c, withDress, writes, block)
+	c.AvatarInventory.Spirit = nil
+	assertStatsFresh(t, "spirit lapsed", c, withDress, writes, block)
+
 	c.NativeBodyStatus = 1
 	assertStatsFresh(t, "berserk body", c, withDress, writes, block)
 }

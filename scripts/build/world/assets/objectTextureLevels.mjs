@@ -11,8 +11,9 @@ cache, its keys and every texture not listed stay exactly as encoded.
 ===========================================================================
 */
 
+import { NTX_HEADER_BYTES } from "../../textures/textureContainers.mjs";
+
 const DXT1_BLOCK_BYTES = 8;
-const NTX_HEADER_BYTES = 20;
 const BLOCK_SIDE = 4;
 const DXT1_FOURCC = 0x31545844;
 

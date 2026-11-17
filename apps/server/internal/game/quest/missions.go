@@ -75,7 +75,7 @@ type MissionSpec struct {
 loadMissions
 ================
 */
-func loadMissions(def *Definition, symbols []string, items enterworld.ItemRefSource) error {
+func loadMissions(def *Definition, symbols []string, shipped func(string) bool, items enterworld.ItemRefSource) error {
 	if def.Objective != ObjectiveParallel {
 		if len(def.Objectives) != 0 {
 			return fmt.Errorf("quest %s missions on a scalar objective", def.Codename)
@@ -93,7 +93,9 @@ func loadMissions(def *Definition, symbols []string, items enterworld.ItemRefSou
 	collected := map[string]bool{}
 	for i := range def.Objectives {
 		m := &def.Objectives[i]
-		if !slices.Contains(symbols, m.ContentsSymbol) {
+		// The quest's contents row, or a caption the client ships as text
+		// (Catalog.ContentsTextShipped): never a symbol the client lacks.
+		if !slices.Contains(symbols, m.ContentsSymbol) && (shipped == nil || !shipped(m.ContentsSymbol)) {
 			return fmt.Errorf("quest %s mission %d missing contents", def.Codename, i)
 		}
 		switch m.Objective {
