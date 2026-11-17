@@ -148,6 +148,9 @@ func loadAuthorityTextdata(devPaths enterworld.DevPaths) (authorityTextdata, err
 	if err := loot.InitCap110(textdataDir, monster.Cap110Enabled()); err != nil {
 		return authorityTextdata{}, err
 	}
+	if err := loot.InitRoc(textdataDir, monster.RocEnabled()); err != nil {
+		return authorityTextdata{}, err
+	}
 	textdata.Items.ApplyAttackPetExpansion()
 	// Port-only, not native: raise configured stack caps before any owner
 	// reads a reference row. Unset keeps every itemdata cap.

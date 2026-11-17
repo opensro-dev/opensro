@@ -364,6 +364,9 @@ func run(out, release, textdata string) error {
 	if err := loot.InitCap110(dir, cap110); err != nil {
 		return fmt.Errorf("catalogue loot: %w", err)
 	}
+	if err := loot.InitRoc(dir, monster.RocEnabled()); err != nil {
+		return fmt.Errorf("catalogue loot: %w", err)
+	}
 	refItems, err := shardItems(dir)
 	if err != nil {
 		return err
