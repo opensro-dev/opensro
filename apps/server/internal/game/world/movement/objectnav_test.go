@@ -290,7 +290,7 @@ func TestDecodeObjectNavPayloadRejectsHostileCountsAndCoordinates(t *testing.T) 
 }
 
 // TestDecodeObjectNavPayloadIgnoresUnknownFlags pins the native reading of
-// the flags word: CRTNavMeshObj_Load (4265B0) tests bits 1, 2 and 4 only,
+// the flags word: the client's CRTNavMeshObj_Load (4265B0) tests 1, 2, 4 only,
 // so the later client's flag 8 (its Arabia meshes) changes nothing.
 func TestDecodeObjectNavPayloadIgnoresUnknownFlags(t *testing.T) {
 	plain, err := decodeObjectNavPayload(deckPayload(false), 0)
