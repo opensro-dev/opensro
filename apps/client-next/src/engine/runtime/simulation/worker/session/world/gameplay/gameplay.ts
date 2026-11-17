@@ -149,6 +149,7 @@ import {
 	FORTRESS_WAR_WITHDRAW,
 	fortressTaxNotice,
 	fortressDismissNotice,
+	fortressBuildNotice,
 	type FortressApplication
 } from "@/engine/foundation/gameplay/fortress";
 import { fortressServiceRequest } from "@/engine/foundation/gameplay/fortress-services";
@@ -1124,6 +1125,9 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	// The fortress the last tax query answered for: 665730 names it in the
 	// rate change message.
 	let taxFortress: number | null = null;
+	// The build the map window last staged: its answer's completion line
+	// names the structure it leaves standing (fortressBuildNotice).
+	let fortressBuild: { zone: number; name: string | null; construction: boolean; } | undefined;
 	// CIFActionTabPanel +0x390: when the fortress portal may be used again.
 	let fortressPortalUntilMs = 0;
 	let social = emptySocial();
@@ -1531,6 +1535,7 @@ selected entities, cooldowns or world-entry state.
 		fortress = fortressBootstrap( {} );
 		fortressApplication = null;
 		taxFortress = null;
+		fortressBuild = undefined;
 		fortressPortalUntilMs = 0;
 		musicMode = 0;
 		bindings = skillBindings( {} );
@@ -2243,6 +2248,13 @@ state here before a command can claim a native wire conversation.
 						command.action
 					)
 				) throw Error( "Select the fortress battle aide" );
+				if ( command.action !== FORTRESS_STRUCTURE_LIST && command.zone !== undefined ) {
+					fortressBuild = {
+						zone: command.zone,
+						name: command.structureName ?? null,
+						construction: command.construction ?? false
+					};
+				}
 				return sendFrame(
 					fortressServiceRequest( {
 						target: command.gid,
@@ -4091,6 +4103,12 @@ Packet handling must not depend on which HUD panel is currently open.
 				}
 				const fortressNext = fortressPacket( fortress, frame, now );
 				if ( fortressNext ) {
+					// A build answer spends the staged build record, whatever
+					// its result; only the matching zone's may name a line.
+					const buildAction = fortressNext.service &&
+						[ 0x0a, 0x0b, 0x0c ].includes( fortressNext.service.action );
+					const build = buildAction ? fortressBuild : undefined;
+					if ( buildAction ) fortressBuild = undefined;
 					if ( fortressNext.service?.result === 2 && frame.opcode === 0xb1e1 ) {
 						const notice = constantNativeNotice(
 							FORTRESS_NOTICE_CATEGORY,
@@ -4100,7 +4118,11 @@ Packet handling must not depend on which HUD panel is currently open.
 					} else if ( frame.opcode === 0xb1e1 ) {
 						const taxed = fortressTaxNotice( fortressNext, taxFortress );
 						taxFortress = taxed.fortress;
-						const done = taxed.notice ?? fortressDismissNotice( fortressNext );
+						const done = taxed.notice ?? fortressDismissNotice( fortressNext ) ??
+							fortressBuildNotice(
+								fortressNext,
+								build && build.zone === fortressNext.service?.reference ? build : null
+							);
 						if ( done ) notices = [ ...notices.slice( -99 ), { ...done, sequence: ++noticeSequence } ];
 					}
 					if ( frame.opcode === 0x3887 ) {

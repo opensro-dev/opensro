@@ -390,7 +390,11 @@ test("a zone marker selects it; construction asks, then sends 0x0B type 0", t =>
 		fortress: JANGAN,
 		action: 0x0b,
 		zone: 91,
-		type: 0
+		type: 0,
+		// The completion line's facts ride along (fortressBuildNotice):
+		// building on this rank-0 structure is a construction.
+		structureName: "SN_D_01",
+		construction: true
 	} );
 });
 
@@ -416,6 +420,11 @@ test("a rank-1 guard tower asks its type first and sends the chosen one", t => {
 		fortress: JANGAN,
 		action: 0x0b,
 		zone: 85,
-		type: 2
+		type: 2,
+		// The fixture catalog has no row for the tower's upgrade variant,
+		// so the send carries no completion name and stays silent; a
+		// standing rank-1 structure is an upgrade, not a construction.
+		structureName: undefined,
+		construction: false
 	} );
 });

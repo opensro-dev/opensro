@@ -267,6 +267,12 @@ export type GameplayCommand =
 		readonly action: number;
 		readonly zone?: number;
 		readonly type?: number;
+		// What the answer's completion line names (754A40 prints the
+		// structure the action leaves standing) and whether the zone
+		// stood at a rank-0 structure, which makes an upgrade answer a
+		// construction (fortressBuildNotice).
+		readonly structureName?: string;
+		readonly construction?: boolean;
 	}
 	// 0x71E1 actions 0 (query), 1 (rate) and 2 (collect) from the tax window.
 	| { readonly kind: "fortress-tax"; readonly gid: number; readonly fortress: number; }

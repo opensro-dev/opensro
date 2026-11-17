@@ -302,7 +302,8 @@ import {
 	fortressMarker,
 	fortressNeedsTowerType,
 	fortressRepairPrice,
-	fortressTowerTypes
+	fortressTowerTypes,
+	fortressUpgradeTarget
 } from "@/engine/foundation/gameplay/fortress-map";
 import { createFortressProductionHud, FORTRESS_PRODUCTION_ROWS } from "./hud/fortress-production-hud";
 import {
@@ -369,11 +370,13 @@ import {
 	guildMemberCountText
 } from "@/engine/foundation/ui/alliance-guild";
 import {
+	fortressWarApplyHeadKey,
 	fortressWarDates,
 	fortressWarFormat,
 	fortressWarQuestionKey,
 	fortressWarRequest,
 	fortressWarSlots,
+	FORTRESS_WAR_APPLY_INFO_KEY,
 	FORTRESS_WAR_APPLY_ROWS,
 	FORTRESS_WAR_APPLY_SLOT_HEIGHT,
 	FORTRESS_WAR_APPLY_SLOT_WIDTH
@@ -6324,13 +6327,28 @@ export function createUi(
 					dirty = true;
 					if ( !asked || gid === null || view?.session?.phase !== "world" ) return;
 					if ( view.gameplay?.target !== gid ) return;
+					// The completion line names the structure the action leaves
+					// standing (the upgrade target, or the repaired structure),
+					// and building on a rank-0 structure is a construction
+					// (fortressBuildNotice).
+					const selection = fortressMapSelection(),
+						standing = selection?.record ?
+							selection.catalog.structures.get( selection.record.ref ) :
+							undefined,
+						leaves = asked.kind === "repair" || !selection?.record ?
+							standing :
+							selection.catalog.structures.get(
+								fortressUpgradeTarget( selection.catalog, selection.record.ref )
+							);
 					sendGameplay( {
 						kind: "fortress-structure",
 						gid,
 						fortress: fortressMapHud.fortress(),
 						action: asked.kind === "repair" ? FORTRESS_STRUCTURE_REPAIR : FORTRESS_STRUCTURE_UPGRADE,
 						zone: asked.zone,
-						type: asked.kind === "repair" ? undefined : asked.type
+						type: asked.kind === "repair" ? undefined : asked.type,
+						structureName: leaves?.name,
+						construction: standing?.level === 0
 					} );
 					return;
 				}
@@ -17360,6 +17378,10 @@ export function createUi(
 					nativeFrame( root, px, py, hudCopy( root.text ), "fortress-war-close" );
 					// The dates, the headers and the list are drawn below.
 					nativePage( layout, px, py, [ 504, 505, 511, 512, 513, 514, 515 ] );
+					// 660930 sets the info frame's (502) text at creation; the
+					// date lines below paint after it.
+					const info = byId( 502 );
+					if ( info ) authoredText( info, px, py, hudCopy( FORTRESS_WAR_APPLY_INFO_KEY ) );
 					const start = fortressWarView()?.application?.warStart;
 					if ( start ) {
 						const dates = fortressWarDates( start ), warLine = byId( 505 ), applyLine = byId( 504 );
@@ -17385,12 +17407,14 @@ export function createUi(
 					for ( const id of [ 511, 512, 513 ] ) {
 						const head = byId( id );
 						if ( head ) {
+							// 660930 replaces the authored caption with the
+							// column's explanation paragraph at creation.
 							authoredLabeledButton(
 								head,
 								px,
 								py,
 								"fortress-war-head:" + id,
-								hudCopy( head.text ),
+								hudCopy( fortressWarApplyHeadKey( id ) ?? head.text ),
 								true
 							);
 						}

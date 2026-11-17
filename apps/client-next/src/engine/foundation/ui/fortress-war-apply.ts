@@ -96,6 +96,31 @@ export function fortressWarSlots(
 
 /*
 ================
+fortressWarApplyHeadKey
+
+660930 replaces the three column heads' authored captions when the
+window is created: each head's text becomes the paragraph that
+explains its column, and the info frame (control 502) takes
+FORTRESS_WAR_APPLY_INFO_KEY. Null for any other control, which keeps
+its authored caption.
+================
+*/
+export function fortressWarApplyHeadKey( controlId: number ): string | null {
+	return controlId === 511 ?
+		"UIIT_MSG_TP_FORT_WARAPPLY_FORTRESS" :
+		controlId === 512 ?
+		"UIIT_MSG_TP_FORT_WARAPPLY_GUILD" :
+		controlId === 513 ?
+		"UIIT_MSG_TP_FORT_WARAPPLY_APPLICATION" :
+		null;
+}
+
+// The text 660930 sets on the window's info frame (control 502): the
+// two date lines above the list are what it explains.
+export const FORTRESS_WAR_APPLY_INFO_KEY = "UIIT_MSG_TP_FORT_WARAPPLY_INFO";
+
+/*
+================
 fortressWarQuestionKey
 ================
 */

@@ -114,3 +114,13 @@ test("the window's dates come from the war start (660C70)", () => {
 		"10 month 7 day 20 hour ~ 22 hour"
 	);
 });
+
+test("the window's heads and info frame take the TP_ paragraphs (660930)", () => {
+	assert.equal( apply.fortressWarApplyHeadKey( 511 ), "UIIT_MSG_TP_FORT_WARAPPLY_FORTRESS" );
+	assert.equal( apply.fortressWarApplyHeadKey( 512 ), "UIIT_MSG_TP_FORT_WARAPPLY_GUILD" );
+	assert.equal( apply.fortressWarApplyHeadKey( 513 ), "UIIT_MSG_TP_FORT_WARAPPLY_APPLICATION" );
+	// Any other control keeps its authored caption.
+	assert.equal( apply.fortressWarApplyHeadKey( 502 ), null );
+	assert.equal( apply.fortressWarApplyHeadKey( 0 ), null );
+	assert.equal( apply.FORTRESS_WAR_APPLY_INFO_KEY, "UIIT_MSG_TP_FORT_WARAPPLY_INFO" );
+});

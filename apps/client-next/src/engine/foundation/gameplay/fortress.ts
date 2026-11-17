@@ -543,6 +543,49 @@ export function fortressDismissNotice( state: FortressState ): SystemNotice | nu
 
 /*
 ================
+fortressBuildNotice
+
+754A40's success arms for the battle aide's build actions, each naming
+the structure in the system line and the banner: a construction answer
+(0x0A) always reports construction; an upgrade answer (0x0B) reports
+construction when the structure's type is the headquarters (1,2,5,5),
+or a defensive position (1,2,5,4) whose state byte is still 0, and
+upgrade otherwise; a repair answer (0x0C) reports the repair. On the
+flows the map window can stage, the type rule is exactly "the zone
+stood at a rank-0 structure" - the only rank-0 structures an upgrade
+answer can complete - so the window reports that as `construction`
+with the name of the structure the action leaves standing. Without a
+name there is nothing to print, as when the native structure object
+does not resolve.
+================
+*/
+export function fortressBuildNotice(
+	state: FortressState,
+	completion: { readonly name: string | null; readonly construction: boolean; } | null
+): SystemNotice | null {
+	const service = state.service;
+	if ( !service || service.result !== 1 || !completion?.name ) return null;
+	const notice = ( key: string ): SystemNotice => ({
+		key,
+		value: 0,
+		arguments: [ "" ],
+		localizedArguments: [ completion.name ],
+		banner: true
+	});
+	if ( service.action === 0x0a ) return notice( "UIIT_MSG_FORT_BATTLEAIDE_CONSTRUCTION_COMPLETE" );
+	if ( service.action === 0x0b ) {
+		return notice(
+			completion.construction ?
+				"UIIT_MSG_FORT_BATTLEAIDE_CONSTRUCTION_COMPLETE" :
+				"UIIT_MSG_FORT_BATTLEAIDE_UPGRADE_COMPLETE"
+		);
+	}
+	if ( service.action === 0x0c ) return notice( "UIIT_MSG_FORT_BATTLEAIDE_REPAIR_COMPLETE" );
+	return null;
+}
+
+/*
+================
 fortressMusicActive
 ================
 */
