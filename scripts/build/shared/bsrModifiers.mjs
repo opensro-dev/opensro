@@ -69,10 +69,24 @@ function skipModPayload( buf, p, typeId, modifiers, setMeta ) {
 			matrix38: Array.from( { length: 16 }, ( _, i ) => buf.readFloatLE( p + 20 + i * 4 ) )
 		} );
 		p += 84;
-	} else if ( hi === 1 && (lo === 1 || lo === 2) ) { // ModDataMultiTex(Rev)
+	} else if ( hi === 1 && (lo === 1 || lo === 2) ) {
+		// ModDataMultiTex (lo 1, load 0xACA4D0) and ModDataMultiTexRev (lo 2,
+		// 0xACA550) share one body: u32 stage mode (data+0x24), the extra
+		// texture's path (+0x28) and a D3DRS_TEXTUREFACTOR ARGB (+0x44).
+		const mode = buf.readUInt32LE( p );
 		p += 4;
+		const texturePath = readStr( buf, p ).value;
 		p = skipCountedString( buf, p );
+		const textureFactor = buf.readUInt32LE( p );
 		p += 4;
+		modifiers.multiTextureModifiers.push( {
+			...setMeta,
+			...base(),
+			reversed: lo === 2,
+			mode,
+			texturePath,
+			textureFactor
+		} );
 	} else if ( hi === 3 && lo === 0 ) { // ModDataParticle (CModDataParticle_Load_ACD4D0)
 		const n = buf.readUInt32LE( p );
 		p += 4;
@@ -202,6 +216,24 @@ function skipModDataSet( buf, p, modifiers ) {
 	return p;
 }
 
+/*
+================
+materialBsrModifiers
+
+The modifier lists a GLB material carries in extras.sroBsrModifiers, the
+ones the client's sceneryMaterial draws: ModDataMtrl, ModDataTexAni and
+ModDataMultiTex(Rev). modifiers is a parseModDataSection or
+parseCharacterBsr result, or undefined.
+================
+*/
+export function materialBsrModifiers( modifiers ) {
+	return {
+		materialModifiers: modifiers?.materialModifiers ?? [],
+		textureModifiers: modifiers?.textureModifiers ?? [],
+		multiTextureModifiers: modifiers?.multiTextureModifiers ?? []
+	};
+}
+
 // CModDataSetList_Load (CResObject_LoadFromArchive_Then_CJArchiveFm_RefillBuffer): u32 countA entries, u32 countB entries,
 // both lists use the same CModDataSet_Load record shape.
 export function parseModDataSection( buf, off ) {
@@ -212,6 +244,7 @@ export function parseModDataSection( buf, off ) {
 		particleModifiers: [],
 		materialModifiers: [],
 		textureModifiers: [],
+		multiTextureModifiers: [],
 		environmentModifiers: []
 	};
 	const countA = buf.readUInt32LE( p );

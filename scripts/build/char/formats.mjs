@@ -46,6 +46,7 @@ export function parseCharacterBsr( buf, where = "<bsr>" ) {
 			particleModifiers: [],
 			materialModifiers: [],
 			textureModifiers: [],
+			multiTextureModifiers: [],
 			environmentModifiers: []
 		};
 
@@ -101,6 +102,8 @@ export function parseCharacterBsr( buf, where = "<bsr>" ) {
 		particleModifiers: modData.particleModifiers,
 		materialModifiers: modData.materialModifiers,
 		textureModifiers: modData.textureModifiers,
+		// ModDataMultiTex(Rev): the extra texture a texture animation's stage 1 draws.
+		multiTextureModifiers: modData.multiTextureModifiers,
 		// ModDataEnvMap is separate from texture animation and particle payloads.
 		environmentModifiers: modData.environmentModifiers ?? [],
 		// {coverKey -> prim index}: which naked-skin prim each cover key hides.
