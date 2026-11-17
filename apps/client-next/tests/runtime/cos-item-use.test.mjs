@@ -685,3 +685,24 @@ test("the reverse return scroll carries its chosen point as one byte (6971B0 cas
 		Uint8Array.of( 7, 2, 1, 0, 0 )
 	);
 });
+
+test("the Devil's Spirit extension gear arms the target cursor and carries the bag slot it lands on", () => {
+	const gear = flags( 13, 16 );
+	assert.equal( armsItemTargetCursor( gear ), true );
+	const source = {
+		slot: 21,
+		refObjId: 90020,
+		typeFlags: gear,
+		quantity: 2,
+		plus: 0,
+		durability: 0,
+		variance: "0",
+		magic: []
+	};
+	const spirit = { ...source, slot: 20, refObjId: 90010, typeFlags: 0x7064, quantity: 1 };
+	assert.deepEqual( companionItemTargetCommand( source, spirit ), { kind: "item-use", slot: 21, targetSlot: 20 } );
+	// A worn slot is no target: the reference server reads the bag alone.
+	assert.equal( companionItemTargetCommand( source, { ...spirit, slot: 4 } ), null );
+	assert.deepEqual( [ ...cosItemUseTail( gear, [], { records: [], targetSlot: 20 } ) ], [ 20 ] );
+	assert.throws( () => cosItemUseTail( gear, [] ), /Drop the gear/ );
+});
