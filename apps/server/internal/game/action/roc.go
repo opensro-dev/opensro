@@ -6,29 +6,29 @@ roc.go - the Roc's summit (INS_ROC_TOP) and Tahomet's room (INS_ROC_FRONT)
 Port-only, not native to v1.150 (SRO_ROC, #3399 step 4): the v1.150
 client carries both worlds, but the server rules that run them are the
 v1.188 reference server's, read from its Binary Ninja database
-(research/investigations/roc-arena/NOTES.md has the addresses):
+(research/investigations/roc-arena/NOTES.md has the evidence):
 
-	open      the SCHEDULE_DEF_MEET_ROC job's start (0x649E90) opens
+	open      the SCHEDULE_DEF_MEET_ROC job's start opens
 	          INS_ROC_TOP and tells the shard UIIT_MSG_QUEST_ROC_APPEAR
-	stones    the layer start (0x5FE7D0) places the eight seal stones
-	break     all stones dead (0x5FE610): UIIT_MSG_QUEST_ROC_BREAK_STONE
+	stones    the layer start places the eight seal stones
+	break     all stones dead: UIIT_MSG_QUEST_ROC_BREAK_STONE
 	          to the layer, the next step 10 minutes later
-	entrance  step 1 (0x5FEE10): entry closes, UIIT_MSG_QUEST_ROC_DISAPPEAR
+	entrance  step 1: entry closes, UIIT_MSG_QUEST_ROC_DISAPPEAR
 	          to the shard, the Roc 42 seconds later
 	roc       step 2: MOB_RM_ROC at region 26045 (1028.9, -7.29, 1769.52)
-	kill      the Roc's death (0x5FE000): an INS_QUEST_TELEPORT gate where
+	kill      the Roc's death: an INS_QUEST_TELEPORT gate where
 	          it fell, leading to GATE_RC_MOUNTAIN_GATE's spawn; the layer
 	          closes 30 minutes later
 	limit     an hour after the open, once the schedule window is over,
 	          the layer closes whatever its step
-	end       the job's end (0x649FD0) closes entry and tells the shard
+	end       the job's end closes entry and tells the shard
 	          UIIT_MSG_QUEST_ROC_DISAPPEAR
 
 The Front (Tahomet's room, world 41) follows its own handlers: Tahomet at
-region 25789 (1002.03, -12.72, 943.97) on the layer start (0x5FC420);
-his death (0x5FBE10) raises a gate to GATE_RC_ROC_FRONT_GATE's spawn and,
-60 seconds later, the tick (0x5FCA00) sends whoever stayed there; entry
-(0x5FC3B0) refuses once he has fallen.
+region 25789 (1002.03, -12.72, 943.97) on the layer start;
+his death raises a gate to GATE_RC_ROC_FRONT_GATE's spawn and,
+60 seconds later, the tick sends whoever stayed there; entry
+refuses once he has fallen.
 
 Inferences, as no binary shows them:
 - The Front's opener was not found. The port opens it beside the summit,
@@ -40,8 +40,8 @@ Inferences, as no binary shows them:
   v1.150 client has no 0x300C string notice (unique-notices.ts), and its
   0x36BF handler banners any text key.
 - The Roc's berserk and departure countdowns (UIIT_MSG_QUEST_ROC_BERSERKER
-  and _BYEBYE carry a minute count, 0x5FEE10 step 3 and 0x5FD0B0) and
-  its timed skills (0x5FFA50) are not ported: no v1.150 frame carries the
+  and _BYEBYE carry a minute count: the summit tick's step 3 and the
+  escape shouts) and its timed skills are not ported: no v1.150 frame carries the
   count. The Roc stays until killed or until the layer closes.
 - A missing kind or gate row (the variant build did not stage the Roc)
   spawns nothing; the window still opens and closes the worlds.
@@ -85,16 +85,16 @@ const (
 	rocMountainGateCode = "GATE_RC_MOUNTAIN_GATE"
 	rocFrontGateCode    = "GATE_RC_ROC_FRONT_GATE"
 
-	// The summit tick's timings (0x5FE610, 0x5FEE10, 0x5FE000).
+	// The summit tick's timings: the stones, the entrance, the kill.
 	rocBreakStoneMs = 600_000
 	rocEntranceMs   = 42_000
 	rocAfterKillMs  = 1_800_000
 	rocTopLimitMs   = 3_600_000
-	// The Front's send-out after Tahomet falls (0x5FBE10).
+	// The Front's send-out after Tahomet falls.
 	rocFrontSendOutMs = 60_000
 
 	// portalRocEntry is 0x1C30's low byte: the summit entry check
-	// (0x6004E0) refuses a character in job mode or with a vehicle.
+	// refuses a character in job mode or with a vehicle.
 	portalRocEntry byte = 0x30
 
 	// rocNoticeOpcode is the talk notice (quest/capture.go's 0x36BF).
@@ -105,7 +105,7 @@ const (
 	rocSymBreakStone = "UIIT_MSG_QUEST_ROC_BREAK_STONE"
 )
 
-// rocSealStones are the eight stones 0x5FE7D0 places: its table reads
+// rocSealStones are the eight stones the layer start places: its table reads
 // a region then x, y, z per stone, the codenames in the same order.
 var rocSealStones = []struct {
 	codename string
@@ -132,7 +132,7 @@ var (
 ================
 rocStep
 
-The summit's steps, numbered as 0x5FEE10 numbers them.
+The summit's steps, numbered as the summit tick numbers them.
 ================
 */
 type rocStep uint8
@@ -271,10 +271,10 @@ func (rt *Runtime) noteRocKill(codename string, gid uint32, pose monster.Pose) {
 rocEntry
 
 The Roc worlds' half of a gate's admission (portalWorldAdmission). The
-summit refuses job mode or a vehicle (0x6004E0: the character's job byte
+summit refuses job mode or a vehicle (the entry check: the character's job byte
 +0x746 and its active vehicle; the port reads the job suit and the
 summoned transport) and, once entry closed, every traveller; the Front
-refuses once Tahomet fell (0x5FC3B0). The caller holds the division lock.
+refuses once Tahomet fell (its entry check). The caller holds the division lock.
 ================
 */
 func (rt *Runtime) rocEntry(division string, c *enterworld.Character, world instance.DefinitionID) byte {
@@ -409,14 +409,14 @@ func (rt *Runtime) spawnRocMonster(division string, lease instance.Lease, codena
 ================
 advanceRocTop
 
-One summit layer's step (0x5FEE10 and its death and stone handlers).
+One summit layer's step (the summit tick and its death and stone handlers).
 Answers the shard notices it raised. The caller holds the division lock.
 ================
 */
 func (rt *Runtime) advanceRocTop(division string, top *rocSummit, in bool, nowMs int64) []string {
 	var notices []string
 	if !in && !top.entryClosed {
-		// The job's end (0x649FD0) closes entry and says so.
+		// The job's end closes entry and says so.
 		top.entryClosed = true
 		notices = append(notices, rocSymDisappear)
 	}
@@ -473,7 +473,7 @@ func (rt *Runtime) advanceRocTop(division string, top *rocSummit, in bool, nowMs
 ================
 advanceRocFront
 
-One Front layer's step (0x5FBE10, 0x5FCA00). It closes with the summit
+One Front layer's step (its death handler and tick). It closes with the summit
 (topGone). The caller holds the division lock.
 ================
 */
