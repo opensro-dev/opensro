@@ -111,6 +111,9 @@ export async function merchant( context: RecipeContext ) {
 		shop: {
 			npc: 99,
 			name: "Merchant",
+			// A real shop's tab carries its refshoptab label (SN_TAB_*); without
+			// one the gallery drew the merchant's tab blank (#3728).
+			tabs: [ { index: 0, labelSymbol: "SN_TAB_POTION" } ],
 			offers: [ {
 				tab: 0,
 				slot: 0,

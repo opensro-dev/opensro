@@ -28,6 +28,7 @@ player-written text inside is decoded leniently.
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const LETTER_LIST_OPCODE = 0xb3cd;
 export const LETTER_EVENT_OPCODE = 0x3f9a;
@@ -140,7 +141,7 @@ letterReader
 ================
 */
 function letterReader( bytes: Uint8Array, what: string ): LetterReader {
-	const view = new DataView( bytes.buffer, bytes.byteOffset, bytes.byteLength );
+	const view = viewOf( bytes );
 	let at = 0;
 	const need = ( n: number ) => {
 		if ( at + n > bytes.length ) throw Error( `Truncated ${what}` );

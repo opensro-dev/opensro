@@ -40,6 +40,9 @@ OUTPUT = QUEST_PACKAGE / ".generated"
 MISSION_GATHER = 1
 MISSION_KILL = 2
 MISSION_DELIVER = 3
+# CMission kind 4 (QNO_RM_MEETROC_6's last mission, 90C370): items (+0x45)
+# held for an NPC (+0x15). Projected only as a class's kill exchange.
+MISSION_HOLD = 4
 MISSION_DIALOG = 6
 MISSION_CHANGE_ITEM = 10
 
@@ -106,9 +109,15 @@ CONDITION_MIN_LEVEL, CONDITION_PREREQUISITES = 0x1, 0x2
 CONDITION_HELD_ITEMS, CONDITION_COUNTRY = 0x4, 0x100
 CONDITION_JOB = 0x1000
 CONDITIONS_PORTED = CONDITION_MIN_LEVEL | CONDITION_PREREQUISITES | CONDITION_HELD_ITEMS | CONDITION_COUNTRY | CONDITION_JOB
-# A condition the port does not check yet, on a quest already live, keyed
-# (quest, flag). Empty: every live quest's conditions are ported.
-CONDITION_GAPS = set()
+# A condition the port does not check, keyed (quest, flag), each with why.
+CONDITION_GAPS = {
+	# Bit 0x10000: no server code reads it. CBasicQuest_MeetsPrerequisites
+	# (9262A0) and the base talk (920110) test only 1, 2, 4, 0x100,
+	# 0x1000 and 0x100000, and a scan of SR_GameServer's quest code for
+	# a test of 0x10000 against table 0xC2 found none. INFERENCE: it is a
+	# designer flag the server never acted on, so skipping it is native.
+	("QNO_RM_MEETROC_6", 0x10000),
+}
 # The held-item vectors in the condition table (flag 4).
 HELD_ALL, HELD_ANY = "0x28", "0x38"
 
@@ -129,6 +138,12 @@ ITEM_USE_HANDLERS = {
 	"QNO_WC_WAREHOUSE_W_2": 0x895BC0, "QNO_WC_WAREHOUSE_W_3": 0x8970F0,
 }
 REQUIRED_MISSIONS = "vf17c"
+
+# Gathers with no drop (+0x14D = 0) whose class talk counts the held item
+# instead: the MEETROC_ECT talks (90D9B0, 90E1C0, 90E9C0) count the ECT
+# token in the bag (player +0x224), refuse below 7, 10 or 15 and remove
+# that many (+0x230). Their tokens come from QNO_RM_MEETROC_6's reward.
+HELD_COUNT_GATHERS = {"QNO_RM_MEETROC_ECT_1", "QNO_RM_MEETROC_ECT_2", "QNO_RM_MEETROC_ECT_3"}
 
 # Classes whose v1.188 mission captions v1.150 never shipped as contents:
 # v1.150's questcontentsdata names one caption per quest, which every
@@ -280,6 +295,49 @@ CLASS_BEHAVIOUR = {
 	},
 	("QNO_KT_ACCESSORY_2", "0x58"): KT_SHARED_TALK,
 	("QNO_KT_ACCESSORY_3", "0x58"): KT_SHARED_TALK,
+	# The Roc chain (#3399, chain_reset.go). CQNO_RM_MEETROC_2's give-up
+	# (90C1C0): the base abort, then QNO_RM_MEETROC_1's record is zeroed
+	# and its count set to 0, so MEETROC_2 waits on MEETROC_1 again.
+	("QNO_RM_MEETROC_2", "0x74"): {"GiveUpForgetsQuests": ["QNO_RM_MEETROC_1"]},
+	# CQNO_RM_MEETROC_6. Its kill handler (90C9D0) swaps the Soul Crystal
+	# for a Soul Fragment once all seven kills are set; that swap writes
+	# the achieved key, and the kind-4 mission it names is the exchange
+	# (MISSION_HOLD). The give-up (90CE00) deletes every fragment and
+	# crystal and reopens MEETROC_2. So does the pay (90D4C0), which then
+	# runs the abort (slot 0xFC): state 6, and no completion is counted
+	# while the condition table's +0x1F is clear (923930), as here. The
+	# chief therefore offers MEETROC_6 again after each MEETROC_2, and
+	# each run pays one of every ECT token. The port's Repeatable keeps
+	# that, though it still records the turn-in in the completed list.
+	("QNO_RM_MEETROC_6", "0x60"): {
+		"KillExchange": {"TakeItem": "ITEM_QNO_RM_MEETROC_6_03", "GrantItem": "ITEM_QNO_RM_MEETROC_6_02"},
+	},
+	("QNO_RM_MEETROC_6", "0x74"): {
+		"GiveUpForgetsQuests": ["QNO_RM_MEETROC_2"],
+		"QuestItemCleanup": ["ITEM_QNO_RM_MEETROC_6_02", "ITEM_QNO_RM_MEETROC_6_03"],
+	},
+	("QNO_RM_MEETROC_6", "0x10c"): {
+		"CompleteForgetsQuests": ["QNO_RM_MEETROC_2"],
+		"Repeatable": True,
+	},
+	# Display only: the 0x1E timer the record carries (vfE8 90D090 attaches
+	# it; 90D140 republishes each kill node on it), the nodes republished
+	# at acceptance (90CEF0, after QuestBase_InitializeAcceptedQuest) and on
+	# refresh (90D2D0, which sends the achieved-now line once the key is
+	# set). The port publishes the nodes on every change.
+	("QNO_RM_MEETROC_6", "0xa8"): {},
+	("QNO_RM_MEETROC_6", "0xe8"): {},
+	("QNO_RM_MEETROC_6", "0xf4"): {},
+	("QNO_RM_MEETROC_6", "0x114"): {},
+	# CQNO_RM_MEETROC_ECT_n. The talks (90D9B0, 90E1C0, 90E9C0) are the base
+	# talk over the held token count (HELD_COUNT_GATHERS). The abort
+	# (9108B0) is the base one without the gather missions' item deletion:
+	# a give-up keeps the tokens.
+	**{(code, "0x58"): {} for code in sorted(HELD_COUNT_GATHERS)},
+	**{(code, "0xfc"): {"GiveUpKeepsCollected": True} for code in sorted(HELD_COUNT_GATHERS)},
+	# ECT_3's item-change handler (90EE60) republishes ECT_1's and ECT_2's
+	# nodes with ECT_3's token count: a display slip, not ported.
+	("QNO_RM_MEETROC_ECT_3", "0x70"): {},
 }
 
 
@@ -469,18 +527,29 @@ def exchange_items(fields):
 #
 # One gather or kill mission as a MissionSpec-shaped row.
 # ================
-def project_mission(text, mission):
+def project_mission(text, mission, held=False, exchange=None):
 	fields = mission["fields"]
 	kind = fields.get("0x9")
 	row = {"ContentsSymbol": fields.get("0xd")}
 	if kind == MISSION_GATHER:
 		item = fields.get("0x241")
 		chance = fields.get("0x14d")
-		if not isinstance(item, str) or not isinstance(chance, (int, float)) or chance <= 0:
+		if not isinstance(item, str) or not isinstance(chance, (int, float)):
 			raise Unsupported("gather mission without an item or drop chance")
 		row.update({"Objective": OBJECTIVE_COLLECT, "CollectItemCodename": item,
-			"CollectCount": objective_count(text, mission, "0x23d"),
-			"MonsterDrop": {"MonsterCodenames": mission_monsters(fields, 0x1d, "0x19"), "ChancePercent": float(chance)}})
+			"CollectCount": objective_count(text, mission, "0x23d")})
+		if held and chance == 0:
+			return row
+		if chance <= 0:
+			raise Unsupported("gather mission without an item or drop chance")
+		row["MonsterDrop"] = {"MonsterCodenames": mission_monsters(fields, 0x1d, "0x19"), "ChancePercent": float(chance)}
+		return row
+	# The kill exchange's crystal mission: the port's achieved key is
+	# holding the item the exchange grants (chain_reset.go).
+	if kind == MISSION_HOLD:
+		if not exchange or fields.get("0x45") != exchange["TakeItem"] or fields.get("0x19") != 1:
+			raise Unsupported("hold mission outside a kill exchange")
+		row.update({"Objective": OBJECTIVE_COLLECT, "CollectItemCodename": exchange["GrantItem"], "CollectCount": 1})
 		return row
 	if kind == MISSION_KILL:
 		row.update({"Objective": OBJECTIVE_KILL, "KillMonsterCodenames": mission_monsters(fields, 0x19, "0x15"),
@@ -624,7 +693,9 @@ def project(code, quest, text, sql):
 		raise Unsupported("start NPC unavailable")
 	spec = {
 		"Codename": code,
-		"MaxCompletions": quest["words"].get("+0x2d", 1),
+		# CQuestBase_ConstructNamedQuest (871AE0) leaves +0x2D at 0, no
+		# limit; only the MEETROC_ECT initializers never write it.
+		**({"MaxCompletions": quest["words"]["+0x2d"]} if "+0x2d" in quest["words"] else {"Repeatable": True}),
 		**offer_conditions,
 		"KindByte": 1,
 		"StartNpcCodename": start,
@@ -702,8 +773,9 @@ def project(code, quest, text, sql):
 					spec["ExchangeItems"] = exchange
 				if isinstance(fields.get("0xc8"), str):
 					spec["ExchangeFullSymbol"] = fields["0xc8"]
-	elif kinds <= {MISSION_GATHER, MISSION_KILL, MISSION_CHANGE_ITEM}:
-		rows = [project_mission(text, m) for m in missions]
+	elif kinds <= {MISSION_GATHER, MISSION_KILL, MISSION_CHANGE_ITEM, MISSION_HOLD}:
+		held, exchange = code in HELD_COUNT_GATHERS, behaviour.get("KillExchange")
+		rows = [project_mission(text, m, held, exchange) for m in missions]
 		if len(rows) == 1:
 			row = rows[0]
 			row.pop("ContentsSymbol")
@@ -739,6 +811,10 @@ def project(code, quest, text, sql):
 		if not rows or len(rows) != len(missions):
 			raise Unsupported("required missions on a scalar objective")
 		for row, mission in zip(rows[required:], missions[required:]):
+			# vf17C leaves the crystal mission out of the key, which the
+			# kill exchange itself writes; holding its grant is the key.
+			if mission["fields"].get("0x9") == MISSION_HOLD:
+				continue
 			row["Optional"] = True
 			# The v1.150 line counts the required mission (WC_WAREHOUSE_W_2's
 			# two missions share one caption); an optional gather keeps its

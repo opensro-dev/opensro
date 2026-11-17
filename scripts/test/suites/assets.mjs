@@ -63,6 +63,7 @@ export default {
 		"scripts/test/assets/effectRemapGuard.test.mjs",
 		"scripts/test/assets/characterModelAssetContracts.test.mjs",
 		"scripts/test/assets/qinshiTombOverlay.test.mjs",
+		"scripts/test/assets/shardSwitchPosture.test.mjs",
 		"scripts/test/assets/muhanOverlay.test.mjs",
 		"scripts/test/assets/janganTombTeleport.test.mjs",
 		"scripts/test/assets/actorLocomotionRootMotion.test.mjs",
@@ -95,6 +96,7 @@ export default {
 		"scripts/test/assets/terrainBlockTextures.test.mjs",
 		"scripts/test/assets/objectTextureLevels.test.mjs",
 		"scripts/test/assets/hdTextureVariants.test.mjs",
+		"scripts/test/assets/textureContainers.test.mjs",
 		"scripts/test/assets/textureVariantMasks.test.mjs",
 		"scripts/test/assets/textureVariantActions.test.mjs"
 	]

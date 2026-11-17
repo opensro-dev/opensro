@@ -138,14 +138,16 @@ func (rt *Runtime) AdvanceMinute(c *enterworld.Character) []wire.Frame {
 planQuestCleanup
 
 The server's abort-and-cleanup removes all stacks of each mission item. Display progress is capped
-at the objective count; cleanup uses inventory truth, including surplus.
+at the objective count; cleanup uses inventory truth, including surplus. A class abort that keeps
+the gathered items (QuestSpec.GiveUpKeepsCollected) skips them; the quest's cleanup items
+(QuestSpec.QuestItemCleanup) always go.
 ================
 */
 func (rt *Runtime) planQuestCleanup(c *enterworld.Character, def *Definition) ([]enterworld.InventoryRow, []wire.Frame, error) {
 	codes := make(map[uint32]string)
 	for i := 0; i < missionCount(def); i++ {
 		m := missionDefinition(def, i)
-		if m.Objective == ObjectiveCollect {
+		if m.Objective == ObjectiveCollect && !def.GiveUpKeepsCollected {
 			codes[m.CollectItemRefID] = m.CollectItemCodename
 		}
 	}
@@ -168,6 +170,7 @@ func (rt *Runtime) planQuestCleanup(c *enterworld.Character, def *Definition) ([
 	consume = append(consume, deliveryCleanup(c, def)...)
 	consume = append(consume, captureSupplyCleanup(c, def)...)
 	consume = append(consume, questToolCleanup(c, def)...)
+	consume = append(consume, questItemCleanup(c, def, consume)...)
 	if len(consume) == 0 {
 		return c.MissionInventory, nil, nil
 	}

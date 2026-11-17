@@ -28,6 +28,10 @@ export interface WorldMaterial {
 	readonly depthWrite?: boolean;
 	/** Native CRTModTexAni mode 1: rates for m00,m01,m10,m11,m20,m21. */
 	readonly uvVelocity?: readonly [number, number, number, number, number, number];
+	/** The texture animation's words24[0]: the stage its matrix was authored for (multi-texture.ts). */
+	readonly textureAnimationStage?: 0 | 1;
+	/** A ModDataMultiTex(Rev) second stage; the draw's second image is its texture (multi-texture.ts). */
+	readonly multiTexture?: import("@/engine/foundation/rendering/multi-texture").MultiTexture;
 	/** D3D SRCBLEND/DESTBLEND when blend is set (blend-state.ts); default SRCALPHA/INVSRCALPHA. */
 	readonly blendPair?: import("@/engine/foundation/rendering/blend-state").BlendPair;
 	/** D3DRS_TEXTUREFACTOR rgba in [0, 1] for a stage's TFACTOR argument; default white. */

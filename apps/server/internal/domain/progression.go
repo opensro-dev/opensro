@@ -67,7 +67,10 @@ func TopMasteries(masteries []CharacterMastery) (primary, secondary uint32) {
 	return first.ID, second.ID
 }
 
-// SkillLearned reports whether the exact skill is learned.
+// SkillLearned reports whether the exact skill is learned, or is lent by
+// the worn, awake Devil's Spirit (SpiritEffect; port-only, SRO_NASRUN),
+// which the reference server's item-plus abilities hand their wearer
+// without a learn.
 func SkillLearned(character *Character, skillID uint32) bool {
 	if character == nil {
 		return false
@@ -75,6 +78,13 @@ func SkillLearned(character *Character, skillID uint32) bool {
 	for _, id := range character.Skills {
 		if id == skillID {
 			return true
+		}
+	}
+	if character.AvatarInventory != nil && character.AvatarInventory.Spirit != nil {
+		for _, id := range character.AvatarInventory.Spirit.Skills {
+			if id == skillID {
+				return true
+			}
 		}
 	}
 	return false

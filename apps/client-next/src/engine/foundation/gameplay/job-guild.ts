@@ -30,6 +30,7 @@ import type { WireFrame } from "@/engine/contracts/network";
 import { checkedNameError, type NameRules } from "@/engine/foundation/ui/character-create";
 import { constantNativeNotice } from "./native-notice";
 import type { SystemNotice } from "./system-notices";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // NO_JOB_CLASS is the active job class of a character outside job mode
 // (856920, CICharactor +0x4F5): 1..3 are the trader, thief and hunter suits.
@@ -294,7 +295,7 @@ export function jobRankAnswer(
 		return { list: null, notice: constantNativeNotice( JOB_NOTICE_CATEGORY, p[1]! ) };
 	}
 	if ( p[0] !== 1 || p.length < 4 ) throw Error( "Invalid job rank list" );
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength ), rows: JobRankRow[] = [];
+	const v = viewOf( p ), rows: JobRankRow[] = [];
 	let at = 4;
 	for ( let i = 0; i < p[3]!; i++ ) {
 		if ( at >= p.length ) throw Error( "Truncated job rank list" );
@@ -368,7 +369,7 @@ export function jobOutcomeAnswer(
 		return { outcome, notice: constantNativeNotice( JOB_NOTICE_CATEGORY, p[1]! ) };
 	}
 	if ( p[0] !== 1 || p.length !== 6 || p[1]! > JOB_OUTCOME_COLLECT ) throw Error( "Invalid job outcome" );
-	const reward = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true );
+	const reward = viewOf( p ).getUint32( 2, true );
 	const sequence = (outcome?.sequence ?? 0) + 1, collected = outcome?.collected ?? 0;
 	if ( p[1] === JOB_OUTCOME_QUERY ) return { outcome: { npc, reward, sequence, collected }, notice: null };
 	return {
@@ -438,7 +439,7 @@ export function jobGuildAnswer(
 			return { job: noJob(), notice: { key: "UIIT_MSG_JOBGUILD_WITHD_COMPELET", value: 0 } };
 		}
 		if ( p.length !== 7 || p[0] !== 1 ) throw Error( "Invalid job join" );
-		const exp = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 3, true );
+		const exp = viewOf( p ).getUint32( 3, true );
 		return {
 			job: { type: p[1]!, grade: p[2]!, exp, alias: "", contribution: 0 },
 			notice: { key: "UIIT_MSG_JOBGUILD_JOIN_COMPELET", value: 0 }
@@ -484,7 +485,7 @@ export function jobExpUpdate(
 	const p = frame.payload;
 	if ( frame.opcode !== OP_JOB_EXP_UPDATE ) return null;
 	if ( p.length !== 6 ) throw Error( "Invalid job experience update" );
-	const grade = p[1]!, exp = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true );
+	const grade = p[1]!, exp = viewOf( p ).getUint32( 2, true );
 	const next = { ...job, grade, exp };
 	const name = [ "", "MERCHANT", "THIEF", "HUNTER" ][job.type];
 	if ( !name ) return { job: next, notices: [] };

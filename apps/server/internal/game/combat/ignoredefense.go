@@ -11,8 +11,10 @@ player attacker, and only against a non-player target (monster or COS).
 
 package combat
 
+import "opensro.online/server/internal/game/paramkeeper"
+
 // ignoreDefenseParameter is ParamKeeper parameter 0xBC (188), populated flat
-// from equipped avatar MATTR_AVATAR_MDIA magic options.
+// from equipped avatar MATTR_AVATAR_MDIA magic options and a buff's msid.
 const ignoreDefenseParameter uint16 = 0xbc
 
 /*
@@ -33,4 +35,20 @@ func IgnoreDefenseChance(attacker, defender Stats) float64 {
 		return 0
 	}
 	return float64(chance)
+}
+
+/*
+================
+IgnoreDefenseWrites
+
+A buff's msid {percent}: the v1.188 server's buff installer adds it
+flat to parameter 0xBC, the chance IgnoreDefenseChance reads. Port-only behind
+SRO_NASRUN: no v1.150 row carries msid.
+================
+*/
+func IgnoreDefenseWrites(percent uint32) []paramkeeper.Write {
+	if percent == 0 {
+		return nil
+	}
+	return []paramkeeper.Write{{Parameter: ignoreDefenseParameter, Channel: paramkeeper.Flat, Value: float32(percent)}}
 }

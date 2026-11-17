@@ -182,6 +182,8 @@ func loadEndedQuests(def *Definition, defs *Definitions) error {
 		{def.RequiredEndedQuests, &def.RequiredEndedQuestIDs},
 		{def.AcceptEndsQuests, &def.AcceptEndsQuestIDs},
 		{def.RefuseEndsQuests, &def.RefuseEndsQuestIDs},
+		{def.GiveUpForgetsQuests, &def.giveUpForgetsIDs},
+		{def.CompleteForgetsQuests, &def.completeForgetsIDs},
 	}
 	// Do not resolve into the shared spec table's branch slice.
 	def.OfferBranches = append([]OfferBranch(nil), def.OfferBranches...)

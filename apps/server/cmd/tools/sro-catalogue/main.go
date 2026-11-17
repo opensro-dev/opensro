@@ -302,6 +302,10 @@ func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
 	if err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue skytemple population: %w", err)
 	}
+	template, err = monster.AppendRoc(template, dir, monster.RocEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue roc population: %w", err)
+	}
 	template, err = monster.AppendArabia(template, dir, monster.ArabiaEnabled())
 	if err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue arabia population: %w", err)
@@ -334,6 +338,10 @@ func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
 	if err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue export world population: %w", err)
 	}
+	template, err = monster.AppendPharaohTemple(template, dir, monster.PharaohTempleEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue pharaoh temple population: %w", err)
+	}
 	return template, nil
 }
 
@@ -354,6 +362,9 @@ func run(out, release, textdata string) error {
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339)}
 	cap110 := monster.Cap110Enabled()
 	if err := loot.InitCap110(dir, cap110); err != nil {
+		return fmt.Errorf("catalogue loot: %w", err)
+	}
+	if err := loot.InitRoc(dir, monster.RocEnabled()); err != nil {
 		return fmt.Errorf("catalogue loot: %w", err)
 	}
 	refItems, err := shardItems(dir)

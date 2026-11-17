@@ -236,6 +236,10 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
+		template, err = monster.AppendRoc(template, textdataDir, monster.RocEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
 		if monster.ArabiaEnabled() {
 			// Port-only (#3268): the Baghdad dungeon world joins the
 			// catalogue only while its switch is on, before any
@@ -299,6 +303,12 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		// only while its switch is on, gated by the packed areas'
 		// admission index; no file yet is the native population.
 		template, err = monster.AppendExportWorld(template, textdataDir, monster.ExportWorldEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
+		// Port-only: the Pharaoh Temple's kinds and nests join its seven
+		// dungeons while the temple's switch is on.
+		template, err = monster.AppendPharaohTemple(template, textdataDir, monster.PharaohTempleEnabled())
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}

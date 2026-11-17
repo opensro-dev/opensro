@@ -86,6 +86,9 @@ type Catalog struct {
 	// NoAssimilation removes stone assimilation (noassimilation.go);
 	// false is native.
 	NoAssimilation bool
+	// Nasrun admits the Devil's Spirit as a reinforce target for
+	// Sabakun's jewel (nasrun.go); false is native.
+	Nasrun bool
 }
 
 /*

@@ -8,6 +8,7 @@ installations capture its reciprocal at +4DC; movement has separate rates.
 
 ===========================================================================
 */
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 const NORMAL_ACTION_SPEED = 100;
 const ACTION_SPEED_BYTES = 8;
 
@@ -34,6 +35,6 @@ decodeAnimationSpeed
 */
 export function decodeAnimationSpeed( payload: Uint8Array ) {
 	if ( payload.length !== ACTION_SPEED_BYTES ) throw new Error( "Invalid animation speed packet" );
-	const view = new DataView( payload.buffer, payload.byteOffset, payload.byteLength );
+	const view = viewOf( payload );
 	return { gid: view.getUint32( 0, true ), rate: animationRate( view.getFloat32( 4, true ) ) };
 }

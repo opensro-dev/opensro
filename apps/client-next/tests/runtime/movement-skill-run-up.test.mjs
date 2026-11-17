@@ -200,7 +200,6 @@ function gameplayPress( predicted = true ) {
 		webTransport: false,
 		jobKillNotices: true,
 		dropPlusNotices: true,
-		plusSevenNotices: true,
 		breakNotices: true
 	} );
 	const navigation = product();
@@ -312,7 +311,6 @@ function gameplayPressSpaced( rarity = 0, distance = 84, rangeBonus = false ) {
 		predictedRunUp: true,
 		jobKillNotices: true,
 		dropPlusNotices: true,
-		plusSevenNotices: true,
 		breakNotices: true,
 		webTransport: false
 	} );

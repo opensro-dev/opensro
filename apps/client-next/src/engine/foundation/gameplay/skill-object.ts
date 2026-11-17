@@ -9,6 +9,7 @@ ordinary object header; interpreting it as a catalog reference loses the row.
 ===========================================================================
 */
 import type { EntityState } from "@/engine/contracts/world";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const DYNAMIC_OBJECT_REFERENCE = 0xffffffff;
 export const SKILL_OBJECT_TYPE = 0x54;
@@ -26,7 +27,7 @@ export function decodeSkillObject( payload: Uint8Array, single: boolean ): Entit
 	if ( payload.length !== SKILL_OBJECT_ROW_BYTES + (single ? 1 : 0) ) {
 		throw Error( "Invalid skill object row length" );
 	}
-	const view = new DataView( payload.buffer, payload.byteOffset, payload.byteLength );
+	const view = viewOf( payload );
 	if ( view.getUint32( 0, true ) !== DYNAMIC_OBJECT_REFERENCE || view.getUint16( 4, true ) !== SKILL_OBJECT_TYPE ) {
 		throw Error( "Invalid skill object discriminator" );
 	}

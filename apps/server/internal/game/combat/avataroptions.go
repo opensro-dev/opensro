@@ -35,6 +35,11 @@ const (
 	avatarTypeID1 = 3
 	avatarTypeID2 = 1
 	avatarTypeID3 = 13
+
+	// The keeper nodes the Spirit's hpna, mpna and brna land on.
+	spiritHPParameter    uint16 = 0x34
+	spiritMPParameter    uint16 = 0x35
+	spiritBlockParameter uint16 = 0x0a
 )
 
 /*
@@ -72,5 +77,41 @@ func avatarOptionWrites(character *domain.Character, items enterworld.ItemRefSou
 		}
 		writes = append(writes, optionWrites...)
 	}
-	return writes, nil
+	return append(writes, spiritOptionWrites(character.AvatarInventory.Spirit)...), nil
+}
+
+/*
+================
+spiritOptionWrites
+
+The worn, awake Devil's Spirit's options (port-only, not native; behind
+SRO_NASRUN): the v1.188 server's item option pass writes hpna
+to parameter 0x34 and mpna to 0x35 in its percent-sum mode, and brna flat
+to the block rate 0x0A, keyed by the item. 0x34 and 0x35 are the gauge
+chains' STR and INT nodes, so the percents grow the HP and MP those
+stats give. brna adds the item's own block value (+0x1A4, unless the
+item is broken) to the option; an avatar has no block stat, so a
+Spirit's value alone lands.
+================
+*/
+func spiritOptionWrites(spirit *domain.SpiritEffect) []paramkeeper.Write {
+	if spirit == nil {
+		return nil
+	}
+	source := uint32(avatarSourceBase + spirit.Slot)
+	var writes []paramkeeper.Write
+	for _, w := range [...]struct {
+		param   uint16
+		channel paramkeeper.Channel
+		value   uint32
+	}{
+		{spiritHPParameter, paramkeeper.PercentSum, spirit.HPPercent},
+		{spiritMPParameter, paramkeeper.PercentSum, spirit.MPPercent},
+		{spiritBlockParameter, paramkeeper.Flat, spirit.Block},
+	} {
+		if w.value != 0 {
+			writes = append(writes, paramkeeper.Write{Parameter: w.param, Channel: w.channel, Source: source, Value: float32(w.value)})
+		}
+	}
+	return writes
 }
