@@ -25,6 +25,22 @@ import (
 
 /*
 ================
+wireQuestRoster
+
+The quest runtime's seats that read the NPC roster: the Blue Berserk level
+(wiring_hwan.go), then the check that every quest marker's NPC has an authored
+placement. Kept here so wiring_gameplay.go stays at the source-size limit.
+================
+*/
+func (game *gameplayPlane) wireQuestRoster(quests *quest.Runtime) error {
+	if err := game.wireHwanLevel(quests); err != nil {
+		return err
+	}
+	return game.validateQuestMarkerRoster()
+}
+
+/*
+================
 wireQuestDoors
 
 The quest runtime's own doors and the item lane's quest hooks: the
