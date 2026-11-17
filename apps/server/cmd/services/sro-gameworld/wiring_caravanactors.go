@@ -28,7 +28,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-const caravanActorIDBase int64 = 10_000_000
+const caravanActorIDBase int64 = 90_000
 const caravanRoadNodesPerTick = 64
 
 /*
@@ -120,7 +120,11 @@ func (game *gameplayPlane) initCaravanActors() error {
 		region, x, y, z := int64(unit.RegionID), float64(unit.X), float64(unit.Y), float64(unit.Z)
 		c.World = &domain.CharacterWorld{Spawn: &domain.WorldSpawn{RegionID: &region, X: &x, Y: &y, Z: &z}, SpawnSet: true}
 		if unit.Role == caravanai.RoleTrader {
-			c.RuntimeTransportGID = uint32(20_000_000 + i)
+			var valid bool
+			c.RuntimeTransportGID, valid = enterworld.CosObjectIDForCharacter(c)
+			if !valid {
+				return fmt.Errorf("caravan owner cannot own a transport: %s", c.Name)
+			}
 			c.ActiveCOS, err = game.items.NewServerActorTransport(c.RuntimeTransportGID)
 			if err != nil {
 				return err

@@ -93,6 +93,12 @@ func TestCaravanShippedActors(t *testing.T) {
 		if *c.Level != 90 || *c.MaxLevel != 90 || len(c.MissionInventory) < 12 || len(game.caravanSkills[c.Name]) != 3 {
 			t.Fatalf("incomplete max-level build: %s level=%d gear=%d skills=%v", c.Name, *c.Level, len(c.MissionInventory), game.caravanSkills[c.Name])
 		}
+		if enterworld.ObjectIDForCharacter(c) >= domain.NPCGIDBase {
+			t.Fatal("actor occupied a foreign object identity range")
+		}
+		if c.ActiveCOS != nil && (c.ActiveCOS.GID < domain.COSGIDBase || c.ActiveCOS.GID > domain.COSGIDLimit || c.ActiveCOS.Codename != "COS_T_DHORSE1") {
+			t.Fatal("transport identity or shipped reference invalid")
+		}
 		if !c.RuntimeOnly || c.AccountID != "" || enterworld.DressedJob(c) == 0 || deps.CharacterByID(game.divisionID, c.ID) != c {
 			t.Fatalf("invalid combat actor %s", c.Name)
 		}
@@ -101,6 +107,23 @@ func TestCaravanShippedActors(t *testing.T) {
 			t.Fatalf("%s has HP %d/%d", c.Name, hp, maxHP)
 		}
 	}
+	for _, actor := range game.caravanActors {
+		if actor.ActiveCOS == nil {
+			continue
+		}
+		before := simulation.SeedWorldState(actor).Spawn
+		game.items.SyncServerActor(game.divisionID, actor, before, false, 10, false)
+		result := game.items.ServerActorRide(game.divisionID, actor.Name, true)
+		if !actor.ActiveCOS.Mounted {
+			t.Fatalf("shipped actor mount refused: %s %+v", actor.Name, result)
+		}
+		synced := game.items.SyncServerActor(game.divisionID, actor, before, false, 10, false)
+		if !synced.ActiveCOS.Mounted {
+			t.Fatal("mounted actor snapshot lost its ride state")
+		}
+		game.items.ServerActorRide(game.divisionID, actor.Name, false)
+	}
+
 	gold := int64(100)
 	hunter := &enterworld.Character{Name: "escorthunter", Gold: &gold}
 	for _, c := range game.caravanActors {

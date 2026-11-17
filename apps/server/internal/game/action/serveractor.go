@@ -26,12 +26,16 @@ NewServerActorTransport
 ================
 */
 func (rt *Runtime) NewServerActorTransport(gid uint32) (*enterworld.CharacterCOS, error) {
+	if gid < domain.COSGIDBase || gid > domain.COSGIDLimit {
+		return nil, fmt.Errorf("caravan transport gid outside COS identity range")
+	}
 	items := rt.deps.ItemReferences()
 	refs, ok := items.(enterworld.CharacterRefSource)
 	if !ok {
 		return nil, fmt.Errorf("caravan transport references unavailable")
 	}
-	summon, ok := items.ItemRefByCodename("ITEM_COS_T_HORSE3")
+	// Higher armored tiers name BSRs absent from the v1.150 client extraction.
+	summon, ok := items.ItemRefByCodename("ITEM_COS_T_DHORSE1")
 	if !ok {
 		return nil, fmt.Errorf("caravan transport summoner unavailable")
 	}
@@ -39,7 +43,7 @@ func (rt *Runtime) NewServerActorTransport(gid uint32) (*enterworld.CharacterCOS
 	if !ok {
 		return nil, fmt.Errorf("caravan transport %s unavailable", summon.AssociatedCharacterCodename)
 	}
-	return &enterworld.CharacterCOS{GID: gid, RefObjID: ref.RefObjID, Codename: ref.Codename, Summoned: true, CurrentHP: ref.MaxHP, CurrentMP: ref.MaxMP, Name: "Caravan horse", Container: &domain.COSContainer{Capacity: 30}}, nil
+	return &enterworld.CharacterCOS{GID: gid, RefObjID: ref.RefObjID, Codename: ref.Codename, Summoned: true, CurrentHP: ref.MaxHP, CurrentMP: ref.MaxMP, Name: "Caravan horse", Container: &domain.COSContainer{Capacity: uint8(ref.InventoryCapacity)}}, nil
 }
 
 /*
