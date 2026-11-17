@@ -9,8 +9,8 @@
       "default": true,
       "test": false,
       "enabled": true,
-      "controlUrl": "http://127.0.0.1:8791",
-      "transportUrl": "http://127.0.0.1:8788",
+      "controlUrl": "http://127.0.0.1:8891",
+      "transportUrl": "http://127.0.0.1:8888",
       "publicTransportUrl": "/shards/global-official"
     },
     {
@@ -22,8 +22,8 @@
       "default": false,
       "test": true,
       "enabled": false,
-      "controlUrl": "http://127.0.0.1:8792",
-      "transportUrl": "http://127.0.0.1:8793",
+      "controlUrl": "http://127.0.0.1:8892",
+      "transportUrl": "http://127.0.0.1:8893",
       "publicTransportUrl": "/shards/test"
     }
   ]

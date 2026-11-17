@@ -78,7 +78,7 @@ const localEnvPath = path.join( configDir, "local.env" );
 const devAccountPath = path.join( configDir, "dev-account.env" );
 const exeSuffix = process.platform === "win32" ? ".exe" : "";
 
-const vitePort = 5180;
+const vitePort = 5190;
 const readyTimeoutMs = 300_000;
 const readyPollMs = 400;
 const stopTimeoutMs = 30_000;
