@@ -302,6 +302,12 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
+		// Port-only: the Pharaoh Temple's kinds and nests join its seven
+		// dungeons while the temple's switch is on.
+		template, err = monster.AppendPharaohTemple(template, textdataDir, monster.PharaohTempleEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
 		if rate, _ := monster.PharaohGearRateFromEnv(); rate > 1 && monster.PharaohTombEnabled() {
 			log.Infof("bootstrap: Pharaoh Tomb elites and uniques roll equipment x%d (%s, port-only)", rate, monster.EnvPharaohGearRate)
 		}

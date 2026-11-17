@@ -173,6 +173,47 @@ whose rows must name the field world and join the default world.
 ================
 */
 func appendNests(template Template, data []byte, label string, admit func(MonsterRef, string) bool, skip func(MonsterRef, string) bool, worldOf func(cap110Nest) (string, error)) (Template, error) {
+	return appendNestRows(template, data, nestRules{Label: label, Admit: admit, Skip: skip, WorldOf: worldOf})
+}
+
+/*
+================
+nestRules
+
+What one optional population may hold (appendNests' arguments, see its
+banner). Region is the one rule appendNests does not take: nil admits
+outdoor regions only (every field and band population); a population
+whose nests stand in dungeon regions names the regions it owns.
+================
+*/
+type nestRules struct {
+	Label   string
+	Admit   func(MonsterRef, string) bool
+	Skip    func(MonsterRef, string) bool
+	WorldOf func(cap110Nest) (string, error)
+	Region  func(uint16) bool
+}
+
+/*
+================
+admitsRegion
+================
+*/
+func (rules nestRules) admitsRegion(region uint16) bool {
+	if rules.Region == nil {
+		return region&0x8000 == 0
+	}
+	return rules.Region(region)
+}
+
+/*
+================
+appendNestRows
+
+appendNests over one rules value; see appendNests.
+================
+*/
+func appendNestRows(template Template, data []byte, rules nestRules) (Template, error) {
 	var source struct {
 		Version int
 		Rows    []cap110Nest
@@ -180,13 +221,13 @@ func appendNests(template Template, data []byte, label string, admit func(Monste
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&source); err != nil {
-		return Template{}, fmt.Errorf("%s: %w", label, err)
+		return Template{}, fmt.Errorf("%s: %w", rules.Label, err)
 	}
 	if err := decoder.Decode(new(any)); err != io.EOF {
-		return Template{}, fmt.Errorf("%s has trailing data", label)
+		return Template{}, fmt.Errorf("%s has trailing data", rules.Label)
 	}
 	if source.Version != cap110PopulationVersion || len(source.Rows) == 0 {
-		return Template{}, fmt.Errorf("%s has invalid version or no nests", label)
+		return Template{}, fmt.Errorf("%s has invalid version or no nests", rules.Label)
 	}
 	refs := make(map[string]MonsterRef, len(template.Refs))
 	for _, ref := range template.Refs {
@@ -197,38 +238,38 @@ func appendNests(template Template, data []byte, label string, admit func(Monste
 	skipped := 0
 	for _, row := range source.Rows {
 		ref, ok := refs[row.Codename]
-		if !ok || !admit(ref, row.Codename) {
-			return Template{}, fmt.Errorf("%s has invalid field reference %q", label, row.Codename)
+		if !ok || !rules.Admit(ref, row.Codename) {
+			return Template{}, fmt.Errorf("%s has invalid field reference %q", rules.Label, row.Codename)
 		}
-		if row.NestID == 0 || seen[row.NestID] || row.RegionID&0x8000 != 0 || row.MaxCount < 0 || row.MaxCount > math.MaxUint16 ||
+		if row.NestID == 0 || seen[row.NestID] || !rules.admitsRegion(row.RegionID) || row.MaxCount < 0 || row.MaxCount > math.MaxUint16 ||
 			row.RespawnDelayMinSec < 0 || row.RespawnDelayMaxSec < row.RespawnDelayMinSec ||
 			row.ChampionGenPercentage < 0 || row.ChampionGenPercentage > 100 || row.Controls.ChangeTarget > 2 {
-			return Template{}, fmt.Errorf("%s has invalid nest %d", label, row.NestID)
+			return Template{}, fmt.Errorf("%s has invalid nest %d", rules.Label, row.NestID)
 		}
 		for _, value := range []float64{row.X, row.Y, row.Z, row.Radius, row.GenerateRadius} {
 			if math.IsNaN(value) || math.IsInf(value, 0) {
-				return Template{}, fmt.Errorf("%s has nonfinite nest %d", label, row.NestID)
+				return Template{}, fmt.Errorf("%s has nonfinite nest %d", rules.Label, row.NestID)
 			}
 		}
 		if row.Radius < 0 || row.GenerateRadius < 0 || row.Controls.SightRange < 0 ||
 			(row.Champion != nil) != (row.Controls.ChampionID != 0) {
-			return Template{}, fmt.Errorf("%s has inconsistent tactics %d", label, row.NestID)
+			return Template{}, fmt.Errorf("%s has inconsistent tactics %d", rules.Label, row.NestID)
 		}
 		if row.HiveMaxCount < 0 || (row.HiveKey == "") != (row.HiveMaxCount == 0) {
-			return Template{}, fmt.Errorf("%s has inconsistent hive %d", label, row.NestID)
+			return Template{}, fmt.Errorf("%s has inconsistent hive %d", rules.Label, row.NestID)
 		}
 		seen[row.NestID] = true
-		if skip != nil && skip(ref, row.Codename) {
+		if rules.Skip != nil && rules.Skip(ref, row.Codename) {
 			skipped++
 			continue
 		}
 		worldCode := "INS_DEFAULT"
-		if worldOf == nil {
+		if rules.WorldOf == nil {
 			if row.WorldID != cap110FieldWorldID {
-				return Template{}, fmt.Errorf("%s has nest %d in another world %d", label, row.NestID, row.WorldID)
+				return Template{}, fmt.Errorf("%s has nest %d in another world %d", rules.Label, row.NestID, row.WorldID)
 			}
 		} else {
-			code, err := worldOf(row)
+			code, err := rules.WorldOf(row)
 			if err != nil {
 				return Template{}, err
 			}
@@ -254,7 +295,7 @@ func appendNests(template Template, data []byte, label string, admit func(Monste
 		nests = append(nests, nest)
 	}
 	if skipped > 0 {
-		log.Printf("%s: %d authored nest(s) held back by their admission flag (port-only)", label, skipped)
+		log.Printf("%s: %d authored nest(s) held back by their admission flag (port-only)", rules.Label, skipped)
 	}
 	result := TemplateFromParts(template.Refs, nests)
 	result.SummonRefs = append([]uint32(nil), template.SummonRefs...)
