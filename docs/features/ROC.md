@@ -106,7 +106,22 @@ The server half follows the v1.188 reference server (addresses in `action/roc.go
   - the Roc's berserk and departure countdowns and its timed skills are not ported, because no v1.150 frame
     carries their minute count.
 
+### The Roc's set armour (step 5c)
+
+- **What joins:** the 72 Roc set pieces (`ITEM_ROC_*_SET`: class 30, level 98, set groups 1-12). They are the
+  Red Lightning, Red Thunder and Red Storm sets, for CH and EU, male and female. They join the degree-10/11
+  equipment import (`SRO_CAP110_ITEMS`), but only when `SRO_ROC` is on too, because they drop only from the
+  Roc.
+- **What comes with them:** their own worn models (212 files), the later client's names (the client spells one
+  "Red Lightening Set") and their set groups, which the import already writes.
+- **Identities:**
+  - the pieces number after every other imported piece, so a fresh build numbers the rest the same either way;
+  - a build with `SRO_ROC` off keeps their identities reserved (`retiredIds` in the import marker), so no later
+    item takes an id a player's Roc piece holds.
+- **Off:** with `SRO_ROC` off they aren't imported, and the rest of the import is unchanged.
+
 ## What is not here yet
 
 - **Content still to come**, each its own step of #3399:
-  - drops and the unique notice (step 5).
+  - the unique notice (step 5a) and the drop rules (step 5b);
+  - the E051123 scrolls as items.

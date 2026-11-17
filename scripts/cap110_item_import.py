@@ -255,7 +255,13 @@ def add_items(vsro_root, native, output):
 			int(row[1]) for path in (output / TEXT_ROOT).glob("characterdata_*.txt")
 			for row in tables.table_rows(path.read_bytes()) if len(row) > 1
 		}
-		equipment, summary = items.merge_equipment(native_rows, later_rows, reserved, prior.get("idMap"))
+		# The Roc's set armour joins when the Roc range is built too (#3399
+		# step 5c): its pieces drop only from the Roc. Retired identities stay
+		# reserved across builds (merge_equipment).
+		import roc_import
+		previous = {**prior.get("retiredIds", {}), **prior.get("idMap", {})}
+		equipment, summary = items.merge_equipment(native_rows, later_rows, reserved, previous,
+			roc=roc_import.flag_enabled())
 		summary["fullSetModelsDropped"] = items.plain_worn_models(equipment)
 		set_groups, set_magic, catalogue = items.set_catalogue(
 			tables.table_rows(read_later(items.SET_GROUP_TABLE)),
