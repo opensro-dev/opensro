@@ -248,13 +248,13 @@ test("every bake switch reads its posture from the fixture's copy of the registr
 	const fingerprint = await computeResourceBuildFingerprint();
 	assert.equal( typeof fingerprint.hash, "string" );
 	const knobs = buildKnobLines();
-	const listed = new Set( BAKE_SWITCH_POSTURES.map( ( { env } ) => env ) );
-	const postures = knobs
-		.filter( line => line.startsWith( "posture " ) )
-		.map( line => /^posture (\S+)=/.exec( line )?.[1] );
-	// buildKnobLines reads its postures only from the list, one line each.
-	assert.deepEqual( new Set( postures ), listed );
-	assert.equal( postures.length, listed.size );
+	// Each listed switch joins the lane knobs once, read from its registry
+	// row. Other posture lines may join beside them (a stamped later
+	// client, #3823), so this checks the listed ones only.
+	for ( const { env } of BAKE_SWITCH_POSTURES ) {
+		const lines = knobs.filter( line => line.startsWith( `posture ${env}=` ) );
+		assert.equal( lines.length, 1, `${env} has one posture line` );
+	}
 });
 
 test("tomb overlay rows are collision-free", () => {
