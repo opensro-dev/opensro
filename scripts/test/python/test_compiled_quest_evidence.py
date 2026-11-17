@@ -6,17 +6,21 @@ test_compiled_quest_evidence.py - byte and word fields of a compiled quest
 Synthetic HLIL lines exercise the production importer, and synthetic
 snapshot rows the generator's field check: a prerequisite's completion
 count is projected, never dropped, and a field it cannot carry is refused.
-No licensed input or generated output is read or written.
+Synthetic dump pairs exercise the importer's merge of several dumps. No
+licensed input or generated output is read or written.
 
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 
+import hashlib
+import json
 import pathlib
 import sys
+import tempfile
 import unittest
 
-from import_compiled_quest_evidence import parse_initializer
+from import_compiled_quest_evidence import parse_initializer, snapshot
 from generate_compiled_quests import Unsupported, check_fields, conditions, project
 
 
@@ -45,6 +49,8 @@ class CompiledQuestFieldTests(unittest.TestCase):
 		check_fields({"words": {}})
 		# A completion count is projected as RequiredQuestCompletions.
 		check_fields({"words": {"0x106.b": 3}})
+		# QNO_RM_MEETROC_1 rewrites the byte the constructor clears.
+		check_fields({"words": {"0x125.b": 0}})
 
 	# ================
 	# test_changed_fields_are_refused
@@ -54,6 +60,7 @@ class CompiledQuestFieldTests(unittest.TestCase):
 			({"0x106.b": None}, "quest field 0x106.b = None"),
 			({"0x15b.b": 1, "0x15c.w": None}, "instance world quest"),
 			({"0x1a0.b": 2}, "quest field 0x1a0.b = 2"),
+			({"0x125.b": 1}, "quest field 0x125.b = 1"),
 		)
 		for words, reason in cases:
 			with self.subTest(words=words):
@@ -272,6 +279,59 @@ class CompiledQuestFieldTests(unittest.TestCase):
 		text["symbols"] = ["SN_CON_QNO_WC_WAREHOUSE_W_3"]
 		rows = project("QNO_WC_WAREHOUSE_W_3", quest, text, {})["Objectives"]
 		self.assertEqual({r["ContentsSymbol"] for r in rows}, {"SN_CON_QNO_WC_WAREHOUSE_W_3"})
+
+# ================
+# CompiledQuestDumpTests
+#
+# Several (HLIL, methods) pairs fold into one snapshot; neither may
+# replace the other's classes.
+# ================
+class CompiledQuestDumpTests(unittest.TestCase):
+	def setUp(self):
+		self.folder = tempfile.TemporaryDirectory()
+		self.addCleanup(self.folder.cleanup)
+
+	# ================
+	# pair
+	# ================
+	def pair(self, name, classes, methods):
+		root = pathlib.Path(self.folder.name)
+		hlil, slots = root / (name + "_hlil.json"), root / (name + "_methods.json")
+		hlil.write_text(json.dumps({code: {"init": 'arg3[0x130] = "SN_TALK_%s_01"\n' % code} for code in classes}),
+			encoding="utf-8")
+		slots.write_text(json.dumps({key: "" for key in methods}), encoding="utf-8")
+		return hlil, slots
+
+	# ================
+	# test_pairs_merge_in_order
+	# ================
+	def test_pairs_merge_in_order(self):
+		first = self.pair("first", ["QNO_B"], ["QNO_B@0x50", "QNO_B@0x58"])
+		second = self.pair("second", ["QNO_A"], ["QNO_A@0xdc", "QNO_A@0x74"])
+		result = snapshot([first, second])
+		self.assertEqual(list(result["quests"]), ["QNO_A", "QNO_B"])
+		self.assertEqual(result["quests"]["QNO_A"]["overrides"], ["0x74"])
+		self.assertEqual(result["quests"]["QNO_B"]["overrides"], ["0x58"])
+		self.assertEqual(result["dumpSHA256"], [hashlib.sha256(first[0].read_bytes()).hexdigest(),
+			hashlib.sha256(second[0].read_bytes()).hexdigest()])
+
+	# ================
+	# test_a_class_in_two_dumps_is_refused
+	# ================
+	def test_a_class_in_two_dumps_is_refused(self):
+		with self.assertRaisesRegex(ValueError, "QNO_A: in two dumps"):
+			snapshot([self.pair("first", ["QNO_A"], []), self.pair("second", ["QNO_A"], [])])
+
+	# ================
+	# test_a_method_without_its_class_is_refused
+	#
+	# A methods dump paired with the wrong HLIL dump would attach no
+	# behaviour to the class and let the generator project it plain.
+	# ================
+	def test_a_method_without_its_class_is_refused(self):
+		with self.assertRaisesRegex(ValueError, "QNO_B@0x74: a method of a class its HLIL dump lacks"):
+			snapshot([self.pair("first", ["QNO_A"], ["QNO_B@0x74"])])
+
 
 if __name__ == "__main__":
 	unittest.main()

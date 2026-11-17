@@ -22,6 +22,18 @@ generated-assets lock already lives (rebuildLock.mjs). A fresh release
 worktree then finds the caches the last build left instead of starting
 cold (owner 2026-11-16: "why we always build from beginning?").
 
+A fresh generated root still starts cold: a release stages each freeze
+in its own variant root (build_alexandria_variant.py), whose .state is
+empty, so r194 regenerated every character mip r193 had made (774 s).
+The caches whose entries are named by their content (the action store,
+the character mips, the pack member gzips, the texture variants) are
+right for any tree, so SRO_SHARED_CACHE_ROOT, an absolute directory,
+moves them to one folder every tree that sets it shares
+(sharedCachePath). Unset, they stay in the tree's own .state or
+intermediate folder. Caches keyed by a path and its mtime (the file hash
+caches, the ledgers' hash caches, the lane memo) describe one tree and
+stay beside it.
+
 The server's game-data projection is a separate, module-local tree with
 its own override (SRO_SERVER_GAME_DATA_ROOT, apps/server/AGENTS.md).
 
@@ -147,6 +159,43 @@ export function resolveBuildStateRoot( generatedRoot = GENERATED_ROOT ) {
 }
 
 export const BUILD_STATE_ROOT = resolveBuildStateRoot();
+
+export const SHARED_CACHE_ROOT_ENV = "SRO_SHARED_CACHE_ROOT";
+
+/*
+================
+resolveSharedCacheRoot
+
+The folder the content-named caches share across trees, or null when
+SRO_SHARED_CACHE_ROOT is unset. Like the generated root, it must be
+absolute.
+================
+*/
+export function resolveSharedCacheRoot( env = process.env ) {
+	const override = env[SHARED_CACHE_ROOT_ENV];
+	if ( !override ) return null;
+	if ( !path.isAbsolute( override ) ) {
+		throw Error( SHARED_CACHE_ROOT_ENV + " must be an absolute path, not " + JSON.stringify( override ) );
+	}
+	return path.resolve( override );
+}
+
+export const SHARED_CACHE_ROOT = resolveSharedCacheRoot();
+
+/*
+================
+sharedCachePath
+
+Where a content-named cache lives: name under the shared cache root when
+one is set, else treeLocal, the cache's place beside this tree. Only a
+cache whose entries are named by the content they hold (a digest of every
+input) may come here: two trees then read the same answer for the same
+key.
+================
+*/
+export function sharedCachePath( name, treeLocal, sharedRoot = SHARED_CACHE_ROOT ) {
+	return sharedRoot ? path.join( sharedRoot, name ) : treeLocal;
+}
 
 /*
 ================

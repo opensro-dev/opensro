@@ -744,7 +744,10 @@ import { createQuestInfo } from "./hud/quest-info";
 import {
 	QUEST_INFO_ICON_X_INSET,
 	QUEST_INFO_ICON_Y,
+	QUEST_INFO_DIVIDER_TEXTURE,
 	QUEST_INFO_WINDOW_WIDTH,
+	questInfoDividers,
+	questInfoRows,
 	questInfoWindowHeight
 } from "@/engine/foundation/ui/quest-info";
 import { automaticGuide } from "@/engine/foundation/gameplay/guide";
@@ -16440,7 +16443,25 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						px = Math.floor( (w - QUEST_INFO_WINDOW_WIDTH) / 2 ),
 						py = Math.floor( (h - infoHeight) / 2 ),
 						infoAdmission = beginWindow();
-					blocks.push( [ px, py, QUEST_INFO_WINDOW_WIDTH, infoHeight ] );
+					// CIFQuestInfo (ginterface GDR_QUESTINFO, 315x142) is a main
+					// frame on mframe_wnd_: its ring and plate are the window's
+					// edges and background, with the close button (its authored
+					// text is empty: no caption).
+					// ifquestinfo.txt authors only the scroll manager, so drawing
+					// that page alone left the slot plates floating over the
+					// world. 62D260 resizes the frame per row count; the ring
+					// follows.
+					const infoFrame = hudData.root.GDR_QUESTINFO!;
+					nativeFrame(
+						{
+							...infoFrame,
+							rect: [ infoFrame.rect[0], infoFrame.rect[1], QUEST_INFO_WINDOW_WIDTH, infoHeight ]
+						},
+						px,
+						py,
+						"",
+						"quest-info-close"
+					);
 					controls.push( {
 						id: "quest-info-drag",
 						label: "Move quest info",
@@ -16449,14 +16470,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						rect: [ px, py, QUEST_INFO_WINDOW_WIDTH, infoHeight ]
 					} );
 					for ( const node of authoredPaintOrder( infoPage ) ) authoredChrome( node, px, py );
-					const slotHeight = infoSlot.GDR_QUESTINFO_SLOT!.rect[3],
-						visibleSlots = Math.max(
-							1,
-							Math.floor( (infoHeight - infoPage.GDR_QUESTINFO_SCROLLMGR!.rect[1]) / slotHeight )
-						);
-					for ( const [index, entry] of infoEntries.slice( 0, visibleSlots ).entries() ) {
+					// 62D260: up to three rows at the native pitch, a tiled
+					// divider under each shown row but the last.
+					const rows = questInfoRows( infoEntries.length );
+					for ( const [index, entry] of infoEntries.slice( 0, rows.visible ).entries() ) {
 						const ox = px + infoPage.GDR_QUESTINFO_SCROLLMGR!.rect[0],
-							oy = py + infoPage.GDR_QUESTINFO_SCROLLMGR!.rect[1] + index * slotHeight;
+							oy = py + infoPage.GDR_QUESTINFO_SCROLLMGR!.rect[1] + index * rows.pitch;
 						if ( infoSlot.GDR_QUESTINFO_SLOT!.texture ) {
 							authoredImage( infoSlot.GDR_QUESTINFO_SLOT!, ox, oy );
 						}
@@ -16479,9 +16498,27 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							oy,
 							hudCopy( infoSlot.GDR_QUESTINFO_SLOT_CONDITION_STATIC!.text )
 						);
-						authoredText( infoSlot.GDR_QUESTINFO_SLOT_CONDITION!, ox, oy, entry.condition, "clip" );
+						// Under "Fit window labels" a condition wider than its
+						// 200-pixel field ("Available Once. Link (2nd betting
+						// (Mamoje))") wraps onto two lines inside the field's
+						// columns, in the plate's free band below it; off keeps
+						// the cut above.
+						frameDraw.authoredText( drawFrame, {
+							node: infoSlot.GDR_QUESTINFO_SLOT_CONDITION!,
+							ox,
+							oy,
+							value: entry.condition,
+							clipToControl: experimental.state().saved.fitWindowLabels ? true : "clip",
+							label: true
+						} );
 					}
-					closeButton( px + QUEST_INFO_WINDOW_WIDTH - 22, py + 6, "quest-info-close" );
+					const divider = ROOT + QUEST_INFO_DIVIDER_TEXTURE;
+					for ( const [dx, dy, dw, dh] of questInfoDividers( infoEntries.length ) ) {
+						paths.push( divider );
+						quads.push(
+							...normalTile( [ px + dx, py + dy, dw, dh ], divider, resources.size( divider ), full )
+						);
+					}
 					endWindow( infoAdmission, "quest-info" );
 				}
 				if ( practice && panel === "Skills" && hudData ) {

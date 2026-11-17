@@ -31,9 +31,10 @@ import (
 )
 
 const (
-	opFortressInteraction       uint16 = 0x71e1
-	opFortressInteractionResult uint16 = 0xb1e1
-	opFortressWarState          uint16 = 0x3887
+	// The siege package owns these opcodes; the short names stay local.
+	opFortressInteraction       = siege.OpInteractionRequest
+	opFortressInteractionResult = siege.OpInteractionResponse
+	opFortressWarState          = siege.OpFortressWarState
 
 	fortressWarStatus uint8 = 6
 	fortressApply     uint8 = 7

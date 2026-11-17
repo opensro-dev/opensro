@@ -14,9 +14,19 @@ Safari drew no .cur at all (BUG-068). CCursorManager_SetVisible (A15A70)
 owns whether any cursor stands at all - SetCursor(handle) or SetCursor(NULL);
 the /ms console command (690C40 case 0x1E) is its only caller.
 
+Retail loads every cursor resource when the cursor manager starts, so a
+glyph change is immediate. A CSS cursor URL is fetched only the first time
+a rule names it, and until it arrives the browser draws the fallback
+system arrow: hovering a teleport gate showed the arrow, then the gate
+cursor. So every world cursor is fetched and decoded at creation, the
+decoded images are held for the page's life (keeping them in the
+browser's memory cache), and a rule never names a cursor whose image is
+not ready: the glyph already shown stays until it is.
+
 ===========================================================================
 */
 import { cursorAssetUrl } from "@/engine/foundation/assets/native-assets";
+import { cursorPreloadUrls, presentableCursor } from "@/engine/foundation/ui/cursor-preload";
 import type { WorldCursor } from "@/engine/foundation/ui/world-cursor";
 
 const DEFAULT_CURSOR: WorldCursor = 0x95;
@@ -65,6 +75,10 @@ function cursorRule( value: WorldCursor ): string {
 		`html[data-sro-cursor-mode="editing"],html[data-sro-cursor-mode="editing"] *{cursor:none!important}`;
 }
 
+// The decoded cursor images, held for the page's life: a held image
+// keeps its resource in the memory cache the CSS cursor rule reads.
+const heldCursorImages: HTMLImageElement[] = [];
+
 /*
 ================
 editable
@@ -94,6 +108,8 @@ export function createCursor() {
 		"position:fixed;left:0;top:0;pointer-events:none;z-index:2147483647;image-rendering:pixelated;will-change:transform";
 	let point: readonly [number, number] | null = null;
 	let worldCursor: WorldCursor = DEFAULT_CURSOR, shownCursor: WorldCursor = DEFAULT_CURSOR, mouseButtons = 0;
+	// The world cursors whose images are decoded (preloadCursors).
+	const ready = new Set<WorldCursor>();
 	// The cursor manager's +0x20 byte, standing from construction.
 	let visible = true;
 
@@ -103,7 +119,8 @@ export function createCursor() {
 	================
 	*/
 	function world() {
-		const value = worldCursor === 0x99 && (mouseButtons & 1) ? 0x9a : worldCursor;
+		const wanted = worldCursor === 0x99 && (mouseButtons & 1) ? 0x9a : worldCursor;
+		const value = presentableCursor( wanted, shownCursor, ready );
 		if ( value === shownCursor ) return;
 		shownCursor = value;
 		document.documentElement.dataset.sroWorldCursor = value.toString( 16 );
@@ -191,6 +208,23 @@ export function createCursor() {
 	document.head.append( style );
 	document.body.append( typing );
 	typing.src = cursorAssetUrl( DEFAULT_CURSOR );
+	// The default glyph's rule stands from the start (the browser fetches
+	// it with the page); the others wait for their images.
+	ready.add( DEFAULT_CURSOR );
+	for ( const [value, url] of cursorPreloadUrls() ) {
+		const image = new Image();
+		heldCursorImages.push( image );
+		image.src = url;
+		// A cursor whose image failed still has to stand when asked for:
+		// the rule names it, the browser retries and draws its fallback
+		// meanwhile, as before this preload.
+		const admit = () => {
+			if ( lifetime.signal.aborted ) return;
+			ready.add( value );
+			world();
+		};
+		image.decode().then( admit, admit );
+	}
 	return {
 		world( value: WorldCursor ) {
 			worldCursor = value;

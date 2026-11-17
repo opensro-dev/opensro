@@ -17,6 +17,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/wire"
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
@@ -37,10 +38,10 @@ const (
 	cosSummonFreeBattle uint8 = 0xb9
 	// The reference server answers 0x1869 to an owner in teleport mode 1; the
 	// v1.150 client consumes the byte silently, as at the transport summon.
-	cosSummonTeleporting uint8  = 0x69
-	cosItemStateOpcode   uint16 = 0x3645
-	cosItemStateMask     uint8  = 0x40
-	cosItemLeaseMask     uint8  = 0x80
+	cosSummonTeleporting uint8 = 0x69
+	cosItemStateOpcode         = gacha.OpItemStateDelta // the 0x3645 item-state delta
+	cosItemStateMask     uint8 = 0x40
+	cosItemLeaseMask     uint8 = 0x80
 	// Spawn sub-state 1: the pet was just called out (client 854CD0 plays
 	// SYSTEM_PET_APPEAR and the summon sound for it).
 	cosSpawnFresh uint8 = 1
