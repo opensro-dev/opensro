@@ -110,17 +110,15 @@ export const ENV_KNOBS = [
 BAKE_SWITCH_POSTURES
 
 The bake switches whose deployed posture joins the knob lines: each
-switch's env name, its enabled reader, and its real registry default
-(apps/server/internal/config/shardsettings/shardsettings.go). A switch
-joins the fingerprint only through this list, so a test fixture can
-build its registry rows from the same list and a new bake switch cannot
-break it again (#3779). Keep each default in step with the registry.
+switch's env name and its enabled reader. A switch joins the fingerprint
+only through this list. Its default stays in the shard settings registry
+(shardsettings.go, the one owner), never copied here (#3779).
 ================
 */
 export const BAKE_SWITCH_POSTURES = [
-	{ env: "SRO_QINSHI_TOMB", enabled: qinshiTombEnabled, default: "on" },
-	{ env: "SRO_MUHAN", enabled: muhanEnabled, default: "off" },
-	{ env: "SRO_JANGAN_TOMB_TELEPORT", enabled: janganTombTeleportEnabled, default: "off" }
+	{ env: "SRO_QINSHI_TOMB", enabled: qinshiTombEnabled },
+	{ env: "SRO_MUHAN", enabled: muhanEnabled },
+	{ env: "SRO_JANGAN_TOMB_TELEPORT", enabled: janganTombTeleportEnabled }
 ];
 
 /*
