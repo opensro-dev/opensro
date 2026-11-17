@@ -319,13 +319,19 @@ def stage(vsro_root, output):
 		def read(name):
 			return tables.table_text(media, index, name)
 
+		# ================
+		# has
+		# ================
+		def has(name):
+			return tables.TEXTDATA + name.lower() in index
+
 		# Gates first: the merge rewrites textdataname.txt, and the name
 		# step below appends onto what it leaves.
 		gates = add_gates(read, text_root)
 		native_codes = {row[2] for path in text_root.glob("characterdata_*.txt") if path.name != CHARACTER_SHARD
 			for row in tables.table_rows(path.read_bytes()) if len(row) > 2}
 		refs = select_kinds(later_world_import.later_characters(read), native_codes)
-		staged = later_world_import.stage_kinds("Roc", read, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
+		staged = later_world_import.stage_kinds("Roc", read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
 			lambda code: code in refs)
 	finally:
 		media.close()
