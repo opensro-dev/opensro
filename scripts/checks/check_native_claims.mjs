@@ -171,11 +171,14 @@ Plain data in, plain verdict out: `files` maps a path to its source at the
 head and `baseFiles` to its source at the merge base ("" for a new file), so
 a test needs no git and no pull request.
 
-A citation is new only when no touched file cited that address at the base.
-Reformatting a file or moving a comment re-adds every line it touches, and
-#3794 (six ledger files formatted, no claim changed) failed on twelve
-citations the files already held. A citation moved between two touched
-files is old too; one the change adds anywhere is new.
+A citation is new unless a touched file held the same comment at the base:
+the same address on a line with the same words (citationKey). Reformatting a
+file or moving a comment re-adds every line it touches, and #3794 (six
+ledger files formatted, no claim changed) failed on twelve citations the
+files already held. A citation moved between two touched files is old too.
+But a comment that keeps its address and changes what it says is a new
+claim (review2 on #3798: "clamps at 255" rewritten to "wraps past 255"),
+and so is every address on a line the change rewords.
 ================
 */
 export function evaluateClaims( { diff, body, files, baseFiles = () => "" } ) {
@@ -183,19 +186,33 @@ export function evaluateClaims( { diff, body, files, baseFiles = () => "" } ) {
 	const known = new Set();
 	for ( const [file] of touched ) {
 		for ( const text of commentTextByLine( baseFiles( file ) ).values() ) {
-			for ( const address of citedAddresses( text ) ) known.add( address );
+			for ( const address of citedAddresses( text ) ) known.add( citationKey( address, text ) );
 		}
 	}
 	const citations = [];
 	for ( const [file, added] of touched ) {
 		const comments = commentTextByLine( files( file ) );
 		for ( const line of added ) {
-			for ( const address of citedAddresses( comments.get( line ) ?? "" ) ) {
-				if ( !known.has( address ) ) citations.push( `${file}:${line} ${address}` );
+			const text = comments.get( line ) ?? "";
+			for ( const address of citedAddresses( text ) ) {
+				if ( !known.has( citationKey( address, text ) ) ) citations.push( `${file}:${line} ${address}` );
 			}
 		}
 	}
 	return { citations, rows: claimRowCount( body ), ok: citations.length === 0 || claimRowCount( body ) > 0 };
+}
+
+/*
+================
+citationKey
+
+One citation's identity: its address and the words of its comment line,
+whitespace collapsed, so a formatter's re-indent keeps it and an edit to the
+claim does not.
+================
+*/
+function citationKey( address, text ) {
+	return `${address} ${text.replace( /\s+/g, " " ).trim()}`;
 }
 
 /*

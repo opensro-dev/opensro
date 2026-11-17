@@ -111,14 +111,40 @@ test("a citation the file already held is not new when formatting moves it", () 
 });
 
 test("a new address beside a held one still asks for a row", () => {
+	// The line now says something new, so both of its addresses are claims.
 	const verdict = evaluateClaims( {
 		diff: diffFor( "apps/client-next/src/a.ts", 1 ),
 		body: EMPTY_TABLE,
 		files: () => "// 861580 then 862C60\n",
 		baseFiles: () => "// 861580\n"
 	} );
+	assert.deepEqual( verdict.citations, [
+		"apps/client-next/src/a.ts:1 861580",
+		"apps/client-next/src/a.ts:1 862C60"
+	] );
+	assert.equal( verdict.ok, false );
+});
+
+test("a held address whose comment now says something else is a new claim", () => {
+	// review2 on #3798: keeping the address must not wave a rewritten rule through.
+	const verdict = evaluateClaims( {
+		diff: diffFor( "apps/client-next/src/a.ts", 1 ),
+		body: EMPTY_TABLE,
+		files: () => "// 862C60 wraps the amount past 255.\n",
+		baseFiles: () => "// 862C60 clamps the amount at 255.\n"
+	} );
 	assert.deepEqual( verdict.citations, [ "apps/client-next/src/a.ts:1 862C60" ] );
 	assert.equal( verdict.ok, false );
+});
+
+test("a re-indented citation keeps its identity", () => {
+	const verdict = evaluateClaims( {
+		diff: diffFor( "apps/client-next/src/a.ts", 1 ),
+		body: EMPTY_TABLE,
+		files: () => "\t\t// 862C60   clamps the amount at 255.\n",
+		baseFiles: () => "// 862C60 clamps the amount at 255.\n"
+	} );
+	assert.equal( verdict.ok, true );
 });
 
 test("a citation moved between two touched files is not new", () => {
