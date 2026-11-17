@@ -87,6 +87,7 @@ What the browser knows when a socket goes away (GH #1428).
 ================
 */
 export interface CloseFacts {
+	readonly transport: string;
 	readonly code: number;
 	readonly reason: string;
 	readonly wasClean: boolean;
@@ -100,18 +101,20 @@ export interface CloseFacts {
 ================
 closeDetail
 
-One line for the incident report: the WebSocket close code and reason,
+One line for the incident report: the link's close code and reason,
 whether the close was clean, whether an error event preceded it, how long
-since the last inbound frame and how long the socket was open, and the
+since the last inbound frame and how long the link was open, and the
 browser's online flag. 1006 with a long silence reads as a network drop;
-a clean server code with a reason reads as a server close.
+a clean server code with a reason reads as a server close. A WebTransport
+session that errored arrives as code -1, its "error event" the rejection
+itself (GH #2148).
 ================
 */
 export function closeDetail( facts: CloseFacts ): string {
 	const seconds = ( ms: number ) => (ms / 1000).toFixed( 1 ) + " s";
 	const reason = facts.reason.replace( /[^\x20-\x7e]/g, "?" ).slice( 0, CLOSE_REASON_LENGTH );
 	return [
-		"WebSocket " + facts.code + (reason ? ' "' + reason + '"' : ""),
+		facts.transport + " " + facts.code + (reason ? ' "' + reason + '"' : ""),
 		facts.wasClean ? "clean" : "not clean",
 		...(facts.errored ? [ "after an error event" ] : []),
 		facts.sinceLastFrameMs === null ?
@@ -211,7 +214,7 @@ export function createNetwork(
 	const recent = new Float64Array( INCIDENT_JOURNAL_ROWS * NET_JOURNAL_FIELDS );
 	let recentNext = 0, recentCount = 0;
 	let ended: string | null = null;
-	// The current socket's open and last-inbound times (performance.now());
+	// The current link's open and last-inbound times (performance.now());
 	// receivedAt is the one last-inbound stamp (receivedAt(), #1474).
 	let openedAt = -Infinity, receivedAt = -Infinity;
 	/*
@@ -504,6 +507,7 @@ export function createNetwork(
 			if ( !active() ) return;
 			const now = performance.now();
 			const detail = closeDetail( {
+				transport: "WebSocket",
 				code: event.code,
 				reason: event.reason,
 				wasClean: event.wasClean,
@@ -650,11 +654,14 @@ export function createNetwork(
 	before it leaves the ticket presentable. The fallback runs once: if
 	the socket also dies before the WELCOME (a ticket the server did
 	consume under a WELCOME the client never saw is refused), the
-	socket's own failure paths report it and the session's retry mints a
-	fresh admission; the ticket is never presented a third time.
-	================
+socket's own failure paths report it and the session's retry mints a
+fresh admission; the ticket is never presented a third time. After the
+WELCOME the end reports with the socket's one fact line (closeDetail):
+the WT close was the one incident class that named no cause, so a silent
+drop and a server close filed alike (GH #2148).
+================
 	*/
-	function wtClosed( generation: number, mine: Link, closeCode?: number ) {
+	function wtClosed( generation: number, mine: Link, closeCode?: number, closeReason?: string ) {
 		if ( disposed || generation !== epoch || link !== mine ) return;
 		if ( welcomed ) {
 			// Only the session's closed settlement knows how the link
@@ -666,11 +673,21 @@ export function createNetwork(
 			// -1 and stays unknown, as does any other code.
 			if ( closeCode === undefined ) return;
 			const goodbye = closeCode === WT_CLEAN_CLOSE_CODE;
+			const now = performance.now();
 			end( "Transport connection closed", {
 				category: goodbye ? "expected" : "unknown",
 				code: "connection_closed",
 				message: goodbye ? "Your session ended." : "Connection lost. The cause is unknown.",
-				detail: `WebTransport close ${closeCode}${goodbye ? ", clean" : ""}`
+				detail: closeDetail( {
+					transport: "WebTransport",
+					code: closeCode,
+					reason: closeReason ?? "",
+					wasClean: goodbye,
+					errored: closeCode === -1,
+					sinceLastFrameMs: Number.isFinite( receivedAt ) ? now - receivedAt : null,
+					openForMs: Number.isFinite( openedAt ) ? now - openedAt : null,
+					online: globalThis.navigator?.onLine ?? true
+				} )
 			} );
 			return;
 		}
@@ -811,8 +828,21 @@ export function createNetwork(
 				}
 			};
 			link = mine;
+			// The one open stamp (see openedAt): the socket resets it per
+			// attempt, and a WT close guards on this link being current,
+			// so a stale stamp is never read (GH #2148).
+			openedAt = performance.now();
 			session.closed.then(
-				info => wtClosed( generation, mine, info.closeCode ),
+				// The close reason: the spec and browsers name it
+				// closeReason, the pinned DOM types name it reason -
+				// take either (GH #2148).
+				info =>
+					wtClosed(
+						generation,
+						mine,
+						info.closeCode,
+						(info as { closeReason?: string; }).closeReason ?? info.reason
+					),
 				() => wtClosed( generation, mine, -1 )
 			);
 			void wtPump( reader, generation, mine );
