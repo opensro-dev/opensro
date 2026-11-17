@@ -22,6 +22,12 @@ import { createPresentationIds } from "@/engine/foundation/animation/presentatio
 import { radians } from "@/engine/foundation/math/angles";
 import { worldAudioPosition } from "@/engine/foundation/world/world-space";
 
+// The most orbs in flight at once. Ordinary play never comes close; a burst
+// of hundreds of kills in one moment (a GM /ZOE) can. Port-only presentation
+// bound: the overflow is not launched, and a violet one is consumed at once,
+// as a missing target is, so the gauge still reaches the authority.
+const MAX_ACTIVE_ORBS = 2048;
+
 /*
 ================
 createOrbs
@@ -156,7 +162,10 @@ export function createOrbs(
 							continue;
 						}
 						for ( let i = 0; i < row.count; i++ ) {
-							if ( active.size >= 2048 ) throw Error( "Orb presentation capacity exceeded" );
+							if ( active.size >= MAX_ACTIVE_ORBS ) {
+								if ( color === 2 ) consume( row.count - i );
+								break;
+							}
 							const mover = random.orb( start, target );
 							active.set( allocate(), {
 								color,
