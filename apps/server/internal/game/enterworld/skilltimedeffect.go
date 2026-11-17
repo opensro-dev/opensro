@@ -62,6 +62,8 @@ const (
 	tagTimedElementResistance  = 0x62677261 // bgra
 	tagTimedRecovery           = 0x69726763 // irgc
 	tagTimedShieldAttack       = 0x73706461 // spda
+	tagTimedIgnoreDefense      = 0x6d736964 // msid
+	maxIgnoreDefensePercent    = 100
 	efrKindArea                = 1
 	efrKindField               = 3
 	efrShapeCircle             = 1
@@ -164,6 +166,12 @@ type SkillTimedEffect struct {
 	// PulseArea is the Warlock's Soul Chaos: the instance strikes the
 	// enemies around its owner every period (skillpulsearea.go).
 	PulseArea SkillPulseArea
+	// IgnoreDefense is msid's one word (+0x4C4): the percent chance an
+	// attack ignores a monster's defence, which the v1.188 server's buff
+	// installer writes flat to parameter 0xBC.
+	// No v1.150 row carries msid; the Devil's Spirit's Monster Defence
+	// Ignore rows do (port-only, behind SRO_NASRUN).
+	IgnoreDefense uint32
 }
 
 /*
@@ -421,7 +429,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		row.TimedEffect = SkillTimedEffect{PulseArea: pulse, Pinned: true}
 		return
 	}
-	if len(fields) != 118 || fields[0] != "1" || fields[8] != "2" || fields[68] != "3" ||
+	if len(fields) != 118 || fields[0] != "1" || fields[8] != "2" && !instantIgnoreDefense(fields) || fields[68] != "3" ||
 		row.ChainNext != 0 || !row.Consumption.Pinned || !row.ActionCastingTimePinned ||
 		!row.ActionDurationPinned || !row.TimingPinned || !row.ReplacementPinned ||
 		row.Consumption.HP != 0 || row.Consumption.HPPercent != 0 {
@@ -756,6 +764,14 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			}
 		case tagNbuf, tagBbuf: // cancellation policy and secondary board, already projected
 		case tagReqi, tagTimedRequireNot: // the equipment gate admits, its re-check runs on equipment change
+		case tagTimedIgnoreDefense:
+			// msid {percent} on the caster alone: the installer's one flat
+			// write needs no recipient rule.
+			if result.IgnoreDefense != 0 || op.Count != 1 || op.Arguments[0] == 0 ||
+				op.Arguments[0] > maxIgnoreDefensePercent || targeted || result.Area.Present {
+				return
+			}
+			result.IgnoreDefense = op.Arguments[0]
 		case tagEfr: // read above
 		case tagGetv:
 			switch op.Arguments[0] {
@@ -859,14 +875,24 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		return
 	}
 	partySelection := result.Area.Select == SelectParty || result.Area.Select == SelectParty|SelectCaster
-	if movement && (targeted || result.Field.Present || !result.Area.Present || !partySelection || result.Persistent || result.Link.Present || row.EffectDurationMs == 0) ||
+	// selfMovement is a lane on the caster alone (the Devil's Spirit's
+	// Devil skills: dura, dru, hst3, reqi). The installer writes the lane
+	// to the cast's one instance as it does to each party recipient's, and
+	// writes dru beside it from the row's BuffModifiers. dru is the one
+	// attribute the shape takes. No v1.150 row has it, so the party rule
+	// below still owns every native row.
+	selfMovement := movement && !targeted && !result.Area.Present && !result.Field.Present && !result.Persistent &&
+		!result.Link.Present && row.EffectDurationMs != 0 && !defense && !result.Block.Present &&
+		!result.Strength.Present && !result.Intellect.Present &&
+		(len(attributeTags) == 0 || len(attributeTags) == 1 && attributeTags[tagTimedDamageRate])
+	if movement && !selfMovement && (targeted || result.Field.Present || !result.Area.Present || !partySelection || result.Persistent || result.Link.Present || row.EffectDurationMs == 0) ||
 		musicParameters && !movement && !result.Preemptive.Present && !result.Link.Mana {
 		return
 	}
 	result.Defense = defense
 	attributes := result.Attributes.MaxHP || result.Attributes.Attack || result.Attributes.DamagePenalty ||
 		result.Attributes.DamageRate || result.Attributes.MaxHPPenalty || result.Attributes.DefensePenalty
-	if len(attributeTags) != 0 && (!attributes || result.Persistent || result.Link.Present || movement || defense ||
+	if len(attributeTags) != 0 && (!attributes || result.Persistent || result.Link.Present || movement && !selfMovement || defense ||
 		result.Block.Present || result.Strength.Present || result.Intellect.Present || row.EffectDurationMs == 0) {
 		return
 	}
@@ -876,12 +902,45 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		result.Preemptive.Present || result.Disguise ||
 		result.DamageReturn.Present ||
 		result.DamageToMP || result.Reat.Mask != 0 || result.Real.Mask != 0 || result.Bgra.Mask != 0 || result.Recovery.Present ||
-		result.ShieldAttack.Present)
+		result.ShieldAttack.Present || result.IgnoreDefense != 0)
 	result.Targeted = targeted
 	row.TimedEffect = result
 	if result.Pinned && movement {
 		row.MovementModifier.Supported = true
 	}
+}
+
+/*
+================
+instantIgnoreDefense
+
+Whether an instant row (activity 1, column 8) is a Monster Defence Ignore
+program: dura, msid and reqi and nothing else. The buff compiler takes
+activity 2 alone; this one instant shape joins it, because its effect is a
+self buff like any other and the instant activity only skips the cast
+animation. Every other instant row keeps its own producer (imbues,
+coatings, item programs).
+================
+*/
+func instantIgnoreDefense(fields []string) bool {
+	if fields[8] != "1" {
+		return false
+	}
+	program, err := CompileSkillProgram(fields)
+	if err != nil {
+		return false
+	}
+	ignore := false
+	for i := 0; i < program.Len(); i++ {
+		switch program.Instruction(i).Tag {
+		case tagTimedIgnoreDefense:
+			ignore = true
+		case tagDura, tagReqi:
+		default:
+			return false
+		}
+	}
+	return ignore
 }
 
 /*

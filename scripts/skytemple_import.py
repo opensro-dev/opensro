@@ -64,8 +64,9 @@ import build_alexandria_variant as variant  # noqa: E402
 import cap110_monsters as monsters  # noqa: E402
 import cap110_skill_effects as effects  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
+import skilldata_enc as skill_tables  # noqa: E402
 import sro_pk2  # noqa: E402
-from alexandria_map_tables import native_text_row  # noqa: E402
+from alexandria_map_tables import later_zone_rows, native_text_row  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
 from skytemple_gates import FIELD_WORLD, d_arrival, prepare_gates  # noqa: E402
 from sro_paths import MAIN_CHECKOUT_ROOT, trees_overlap  # noqa: E402
@@ -706,8 +707,11 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 		native_skills = [r for p in text_root.glob("skilldata_*.txt") if p.name != SKILL_SHARD
 			for r in tables.table_rows(p.read_bytes()) if len(r) == 118]
 		needed = {int(s) for r in refs.values() for s in r[89:99] if int(s)}
-		source_skills = [r for shard in tables.table_rows(read("skilldata.txt"))
-			for r in tables.table_rows(read(shard[0].lower())) if len(r) > 3 and r[1].isdigit()]
+		# The client's skills as the client reads them: its encrypted
+		# skilldataenc set when it ships one, else the plain manifest
+		# (skilldata_enc.py, #3374).
+		source_skills = [r for r in skill_tables.client_skill_rows(read, lambda name: tables.TEXTDATA + name.lower() in media_index)
+			if len(r) > 3 and r[1].isdigit()]
 
 		# ================
 		# load_client_skills
@@ -802,7 +806,7 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 		zone_path = text_root / "textzonename.txt"
 		zone_keys = {row[1] for row in tables.table_rows(zone_path.read_bytes()) if len(row) > 1}
 		zone_prefixes = tuple(sorted({REGION_PREFIX + letter + "_" for letter in "ABCD"}))
-		zone_rows = [native_text_row(row) for row in tables.table_rows(read("textzonename.txt"))
+		zone_rows = [native_text_row(row) for row in later_zone_rows(read)
 			if len(row) >= 10 and (row[1] in {str(region) for region in fields} or row[1].startswith(zone_prefixes))
 			and row[1] not in zone_keys]
 		write_atomically(zone_path, characters.append_rows(zone_path.read_bytes(), zone_rows))

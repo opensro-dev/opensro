@@ -55,6 +55,7 @@ import {
 	guideAreaTarget,
 	guideMonsterRows,
 	guideMonsterTarget,
+	levelFilterOverlay,
 	worldMapGuideCatalog,
 	type GuideTarget,
 	type GuideView,
@@ -62,6 +63,7 @@ import {
 } from "@/engine/foundation/ui/worldmap-guide";
 import { featuresAt } from "@/engine/foundation/world/plane";
 import { dungeonRegionId } from "@/engine/foundation/world/world-space";
+import { createLevelFilter } from "./map-level-filter";
 import { GUIDE_MAIN, createGuideScroll, paintGuideTree, treeRow, type GuideTreeRow } from "./map-guide-tree";
 import {
 	GUIDE_HEIGHT,
@@ -217,7 +219,8 @@ export function createMapToolsHud( options: {
 	base: string;
 } ) {
 	const assets = options.assets;
-	let levelFilter = true;
+	// The foot's level filter (map-level-filter.ts), unchecked at first.
+	const levelFilter = createLevelFilter();
 	// Port-only, not native: the foot's unique spawns switch, off until
 	// the player ticks it, kept for the session as the level filter is.
 	let uniqueSpawns = false;
@@ -267,19 +270,6 @@ export function createMapToolsHud( options: {
 		band: LevelBand | undefined;
 		regions: readonly MonsterDirectoryRegion[];
 	} | null = null;
-
-	/*
-	================
-	filterBand
-
-	The level filter's band for this character; undefined (every species
-	shows) when the filter is off or the level unknown.
-	================
-	*/
-	function filterBand( characterLevel: number | undefined ): LevelBand | undefined {
-		if ( !levelFilter || characterLevel === undefined ) return undefined;
-		return levelBand( characterLevel );
-	}
 
 	/*
 	================
@@ -333,7 +323,7 @@ export function createMapToolsHud( options: {
 		const floor = input.floor;
 		if ( !floor ) return;
 		const region = input.catalogue ?
-			dungeonDirectory( input.catalogue, floor.regionId, filterBand( input.characterLevel ) ) :
+			dungeonDirectory( input.catalogue, floor.regionId, levelFilter.band( input.characterLevel ) ) :
 			undefined;
 		guideTree(
 			input,
@@ -377,7 +367,7 @@ export function createMapToolsHud( options: {
 	================
 	*/
 	function drawerGroups( input: MapToolsPaint ): readonly MonsterDirectoryRegion[] {
-		const regions = directory( input.catalogue, filterBand( input.characterLevel ) );
+		const regions = directory( input.catalogue, levelFilter.band( input.characterLevel ) );
 		if ( groupsFor?.regions !== regions || groupsFor.zones !== input.zones || groupsFor.names !== regionLoad ) {
 			const names = new Map( regions.map( row => [ row.region, regionName( row.region, input.zones ) ] ) );
 			const groups = directoryByName( regions, names );
@@ -530,7 +520,10 @@ export function createMapToolsHud( options: {
 		step( panel: string ): boolean {
 			if ( regionLoad.kind === "disposed" ) return false;
 			let changed = false;
-			if ( panel === "Map" && drawerOpen && guideLoad.kind === "idle" && assets.available() > 0 ) {
+			if (
+				panel === "Map" && (drawerOpen || levelFilter.checked()) && guideLoad.kind === "idle" &&
+				assets.available() > 0
+			) {
 				guideLoad = {
 					kind: "loading",
 					id: assets.request( new URL( WORLDMAP_GUIDE_CATALOG, options.base ).href, GUIDE_BYTE_LIMIT )
@@ -593,7 +586,7 @@ export function createMapToolsHud( options: {
 		filterBand
 		================
 		*/
-		filterBand,
+		filterBand: levelFilter.band,
 		/*
 		================
 		uniqueSpawns
@@ -641,6 +634,25 @@ export function createMapToolsHud( options: {
 			if ( guideLoad.kind !== "ready" || guidePicked === null ) return null;
 			return { catalog: guideLoad.catalog, index: guidePicked };
 		},
+		/*
+		================
+		levelGround / takeLevelSnap
+
+		The level filter's tinted grounds and its one snap
+		(map-level-filter.ts), read against the guide catalogue's load.
+		================
+		*/
+		levelGround(
+			characterLevel: number | undefined,
+			frame: Parameters<typeof levelFilterOverlay>[2],
+			clip: Parameters<typeof levelFilterOverlay>[3]
+		) {
+			return levelFilter.ground( guideLoad, characterLevel, frame, clip );
+		},
+		takeLevelSnap( characterLevel: number | undefined ): Pose | null {
+			return levelFilter.takeSnap( guideLoad, characterLevel );
+		},
+
 		/*
 		================
 		drag
@@ -757,7 +769,7 @@ export function createMapToolsHud( options: {
 			indoors: boolean = false
 		): Pose | null | undefined {
 			if ( id === "map-level-filter" ) {
-				levelFilter = !levelFilter;
+				levelFilter.toggle();
 				guideScroll.reset();
 				return null;
 			}
@@ -803,7 +815,7 @@ export function createMapToolsHud( options: {
 				) return null;
 				// The sector rows, not the drawer's merged groups: the id
 				// names the species' own sector (#3554).
-				const regions = directory( catalogue, filterBand( characterLevel ) );
+				const regions = directory( catalogue, levelFilter.band( characterLevel ) );
 				for ( const region of regions ) {
 					if ( region.region !== regionId ) continue;
 					const entry = region.monsters.find( row => row.monster.refObjId === refObjId );
@@ -832,7 +844,7 @@ export function createMapToolsHud( options: {
 					regionId === undefined || refObjId === undefined ||
 					!Number.isInteger( regionId ) || !Number.isInteger( refObjId ) || !catalogue
 				) return null;
-				const entry = dungeonDirectory( catalogue, regionId, filterBand( characterLevel ) )
+				const entry = dungeonDirectory( catalogue, regionId, levelFilter.band( characterLevel ) )
 					?.monsters.find( row => row.monster.refObjId === refObjId );
 				if ( entry ) mark = { regionId, x: entry.x, z: entry.z, refObjId };
 				return null;
@@ -929,7 +941,7 @@ export function createMapToolsHud( options: {
 			}
 			mapFoot( paint, text, {
 				note: input.levelNote ?? input.strings?.[LEVEL_FILTER_NOTE_KEY],
-				checked: levelFilter,
+				checked: levelFilter.checked(),
 				spawns: input.offerUniqueSpawns ? uniqueSpawns : undefined
 			} );
 			sideTab( paint, drawerOpen );

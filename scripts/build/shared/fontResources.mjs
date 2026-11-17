@@ -1,7 +1,25 @@
-// Split verbatim from resourcePipeline.mjs (2026-07-28): font cluster -
-// packaged TTF repair, JMX glyph metrics and the native UI font atlas.
+/*
+===========================================================================
+
+fontResources.mjs - packaged TTF repair, JMX glyph metrics, native UI atlas
+
+The fonts lane. Each packaged TTF is repaired by fontTools as a
+content-addressed action (graph/action.mjs), keyed on the source font's
+bytes, this module's code closure (the repair script lives here) and the
+Python and fontTools versions that run it, so a warm build lays the three
+repaired fonts down from the store instead of starting fontTools three
+times (5.8 s of the lane's 9). The GDI atlas still renders every build:
+its pixels follow the machine's own Arial and rasterizer, which no key here
+can name, and it costs about a second.
+
+===========================================================================
+*/
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { defineAction, outputPath } from "../graph/action.mjs";
+import { pythonToolchain, runPublicActions } from "./publicActions.mjs";
 
 import {
 	assertExists,
@@ -16,7 +34,11 @@ import {
 } from "./resourceIo.mjs";
 import { runPython } from "./pythonRun.mjs";
 
-const fontsToCopy = [
+// This module: the font repair actions' code closure (the repair script
+// below is part of it).
+const FONT_RESOURCES_MODULE = fileURLToPath( import.meta.url );
+
+export const PACKAGED_FONTS = Object.freeze( [
 	{
 		fontIndex: 0,
 		role: "default",
@@ -38,7 +60,7 @@ const fontsToCopy = [
 		sourceFile: "\uC601\uBB38\uC11C\uCCB4.ttf",
 		publicFile: "sro-english.ttf"
 	}
-];
+] );
 const nativeUiFontsByIndex = [
 	{ fontIndex: 0, role: "ui-default", family: "Arial", nativeHeight: 9 },
 	{ fontIndex: 1, role: "ui-small", family: "Arial", nativeHeight: 8 },
@@ -98,12 +120,10 @@ async function buildFontAssets() {
 	const defaultLineHeight = Math.max( ...Object.values( glyphMetrics ).map( ( metric ) => metric.height ) );
 	const packagedFonts = {};
 
-	for ( const font of fontsToCopy ) {
+	for ( const font of PACKAGED_FONTS ) await assertExists( path.join( fontSourceRoot, font.sourceFile ) );
+	await repairPackagedFonts( { source: fontSourceRoot, public: fontPublicRoot } );
+	for ( const font of PACKAGED_FONTS ) {
 		const source = path.join( fontSourceRoot, font.sourceFile );
-		const target = path.join( fontPublicRoot, font.publicFile );
-		await assertExists( source );
-		await repairFontForBrowser( source, target );
-
 		packagedFonts[font.role] = {
 			sourcePath: toGameRelative( source ),
 			publicPath: `/assets/fonts/${font.publicFile}`,
@@ -167,6 +187,47 @@ async function buildNativeUiFontAtlas() {
 	} );
 	await publishFileFromTemp( temporaryJsonPath, atlasJsonPath );
 	await publishFileFromTemp( temporaryImagePath, atlasImagePath );
+}
+
+/*
+================
+fontRepairAction
+
+One packaged font's repair as an action: the source TTF in, the served
+TTF out. toolchain names the Python and fontTools that write it; repair
+( source, target ) writes it (fontTools by default).
+================
+*/
+export function fontRepairAction( font, toolchain, roots, repair = repairFontForBrowser ) {
+	return defineAction( {
+		name: `font:${font.publicFile}`,
+		inputRoot: roots.source,
+		inputs: [ font.sourceFile ],
+		outputRoot: roots.public,
+		outputs: [ font.publicFile ],
+		code: [ FONT_RESOURCES_MODULE ],
+		params: { toolchain },
+		run: async ( { action } ) => {
+			await repair( path.join( roots.source, font.sourceFile ), outputPath( action, font.publicFile ) );
+		}
+	} );
+}
+
+/*
+================
+repairPackagedFonts
+
+Every packaged font from the action store, repairing the misses. Each
+served font is claimed in the open publication whether it was repaired or
+laid down: materialize does not claim. options: store (an open store),
+toolchain (skips the version probe), repair (fontRepairAction's).
+Returns the graph's results.
+================
+*/
+export async function repairPackagedFonts( roots, options = {} ) {
+	const toolchain = options.toolchain ?? (await pythonToolchain( [ "fontTools" ] ));
+	const actions = PACKAGED_FONTS.map( font => fontRepairAction( font, toolchain, roots, options.repair ) );
+	return runPublicActions( "font", actions, { store: options.store } );
 }
 
 async function readJmxGlyphMetric( fileName ) {

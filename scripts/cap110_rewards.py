@@ -179,13 +179,7 @@ def convert_rows(selected, occupied, previous):
 # table of the output and of the later client is reserved, except our shard.
 # ================
 def occupied_identities(text_root, later_rows):
-	occupied = {int(row[items.IDENTITY]) for row in later_rows}
-	for path in text_root.iterdir():
-		name = path.name.lower()
-		if name == OUTPUT_SHARD or not name.startswith(("itemdata_", "characterdata_", "teleportbuilding")):
-			continue
-		occupied.update(int(row[1]) for row in tables.table_rows(path.read_bytes()) if len(row) > 1 and row[1].isdigit())
-	return occupied
+	return {int(row[items.IDENTITY]) for row in later_rows} | item_import.output_identities(text_root, OUTPUT_SHARD)
 
 
 # ================

@@ -14,6 +14,7 @@ the caller instead of being approximated.
 import type { WorldMaterial } from "@/engine/contracts/scene";
 import { validTextureStage, type TextureStage } from "@/engine/foundation/rendering/texture-stage";
 import { validBlend } from "@/engine/foundation/rendering/blend-state";
+import { multiTextureStage } from "@/engine/foundation/rendering/multi-texture";
 export interface Modifier {
 	readonly kind: number;
 	readonly stateId: number;
@@ -34,10 +35,17 @@ export interface TextureModifier extends Modifier {
 	readonly words24: readonly number[];
 	readonly matrix38: readonly number[];
 }
+export interface MultiTextureModifier extends Modifier {
+	readonly reversed: boolean;
+	readonly mode: number;
+	readonly texturePath: string;
+	readonly textureFactor: number;
+}
 export interface SceneryModifiers {
 	readonly particleModifiers?: unknown;
 	readonly materialModifiers: readonly MaterialModifier[];
 	readonly textureModifiers: readonly TextureModifier[];
+	readonly multiTextureModifiers?: readonly MultiTextureModifier[];
 }
 // AED240 applies target -1 before the material traversal; indexed overrides are
 // applied only to their material. Never merge BSRs solely by their mesh paths.
@@ -124,7 +132,15 @@ export function sceneryMaterial(
 	for ( const m of modifiers.textureModifiers ) {
 		if ( !active( m ) ) continue;
 		const v = m.matrix38;
-		if ( m.words24[0] === 0 && m.words24[1] === 0 ) {
+		// words24[0] names the stage the matrix is for (0xAED9B0: 0x8000000 at
+		// 0, 0x400000 at 1); multi-texture.ts routes it at draw time. words24[1]
+		// picks the tick (0xAED8D0): 0 the atlas step, 1 the velocity update.
+		const stage = m.words24[0];
+		if ( stage !== 0 && stage !== 1 ) {
+			warn( "Unimplemented scenery texture animation" );
+			continue;
+		}
+		if ( m.words24[1] === 0 ) {
 			const [start, end, flags] = m.baseBytes ?? [],
 				fps = m.words24[2],
 				rows = m.words24[3],
@@ -139,18 +155,57 @@ export function sceneryMaterial(
 			material = {
 				...material,
 				uvVelocity: undefined,
-				uvAtlas: { start: start!, end: end!, flags: flags!, fps, rows, columns }
+				uvAtlas: { start: start!, end: end!, flags: flags!, fps, rows, columns },
+				textureAnimationStage: stage
 			};
 			continue;
 		}
-		if (
-			m.words24.length !== 5 || m.words24[0] !== 0 || m.words24[1] !== 1 || v.length !== 16 ||
-			!v.every( Number.isFinite )
-		) {
+		if ( m.words24.length !== 5 || m.words24[1] !== 1 || v.length !== 16 || !v.every( Number.isFinite ) ) {
 			warn( "Unimplemented scenery texture animation" );
 			continue;
 		}
-		material = { ...material, uvAtlas: undefined, uvVelocity: [ v[0]!, v[1]!, v[4]!, v[5]!, v[8]!, v[9]! ] };
+		material = {
+			...material,
+			uvAtlas: undefined,
+			uvVelocity: [ v[0]!, v[1]!, v[4]!, v[5]!, v[8]!, v[9]! ],
+			textureAnimationStage: stage
+		};
+	}
+	let stages = 0;
+	for ( const m of modifiers.multiTextureModifiers ?? [] ) {
+		if ( !active( m ) ) continue;
+		const stage = multiTextureStage( m.texturePath, m.reversed, m.mode, m.textureFactor );
+		// A second active MultiTex takes the stage after the first (++0xF114D8),
+		// and a second Rev rebinds stage 0 over the first's texture: one draw
+		// carries one extra texture, so a stack is reported, not approximated.
+		if ( !stage || ++stages > 1 ) {
+			warn( stage ? "Unimplemented stacked scenery multi-texture" : "Invalid scenery multi-texture" );
+			continue;
+		}
+		material = { ...material, multiTexture: stage };
 	}
 	return material;
+}
+
+/*
+================
+unboundSceneryMaterial
+
+sceneryMaterial without its MultiTex stage, for a scene whose publisher
+embeds no MultiTex texture (the world objects; only the character GLBs
+carry one, characterMultiTexture.mjs). The stage is reported to warn
+instead of drawing half of it.
+================
+*/
+export function unboundSceneryMaterial(
+	material: WorldMaterial,
+	modifiers: SceneryModifiers | undefined,
+	index: number,
+	warn: ( message: string ) => void
+): WorldMaterial {
+	const bound = sceneryMaterial( material, modifiers, index, warn );
+	if ( !bound.multiTexture ) return bound;
+	warn( "Unimplemented scenery multi-texture" );
+	const { multiTexture: _unbound, ...drawn } = bound;
+	return drawn;
 }

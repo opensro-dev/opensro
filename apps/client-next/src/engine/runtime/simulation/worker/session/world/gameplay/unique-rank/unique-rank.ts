@@ -16,6 +16,7 @@ u16 selfRank, u32 selfDamage, u8 selfPartyRank.
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import type { UniqueDamageRank, UniqueDamageRow } from "@/engine/contracts/unique-rank";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const OP_UNIQUE_DAMAGE_RANK = 0x3fbc;
 const MAX_ROWS = 12;
@@ -45,7 +46,7 @@ protocol error, never a partial list.
 		*/
 		receive( frame: WireFrame, refs: ReadonlyMap<number, { readonly name: string; }> ): boolean {
 			if ( frame.opcode !== OP_UNIQUE_DAMAGE_RANK ) return false;
-			const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const p = frame.payload, v = viewOf( p );
 			if ( p.length < HEADER_BYTES + SELF_BYTES ) throw new Error( "Truncated unique damage rank" );
 			const refObjId = v.getUint32( 0, true ), total = Number( v.getBigUint64( 4, true ) ), count = p[12]!;
 			if ( count > MAX_ROWS ) throw new Error( "Invalid unique damage rank count" );

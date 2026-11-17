@@ -37,6 +37,7 @@ import {
 import { CLOTH_NO_SLOT, CLOTH_STREAM_WORDS, validClothStreamSlots } from "@/engine/foundation/animation/cloth-stream";
 import { createWaterReflection } from "./water-reflection";
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
+import { packMultiTexture } from "@/engine/foundation/rendering/multi-texture";
 import { dungeonHeightFog } from "@/engine/foundation/rendering/dungeon-fog";
 import { createCharacterShadows } from "./character-shadows";
 import { createSunShadow } from "./sun-shadow";
@@ -1394,6 +1395,12 @@ export function createGeometryResources(
 				if ( mat?.objectLightmap && (!environmentImage || !data.maskUVs && !data.vertices) ) {
 					throw Error( "Lightmapped material requires its lightmap texture and UVs" );
 				}
+				// The second image is the draw's one extra texture: a MultiTex
+				// stage cannot share it with a reflection, a lightmap or water.
+				if (
+					mat?.multiTexture &&
+					(!environmentImage || mat.environmentReflection || mat.objectLightmap || mat.water)
+				) throw Error( "Multi-texture material requires its own second texture" );
 				const materialData = new Float32Array( [
 						...(mat?.color ?? [ 0.75, 0.78, 0.82, 1 ]),
 						mat?.alphaCutoff ?? 0,
@@ -1465,7 +1472,13 @@ export function createGeometryResources(
 						mat?.objectLightmap ? 1 : 0,
 						mat?.fog ? dungeonHeightFog( mat.fog )[2] : 0,
 						// D3DRS_TEXTUREFACTOR, read by a stage's TFACTOR argument.
-						...(mat?.textureFactor ?? [ 1, 1, 1, 1 ])
+						...(mat?.textureFactor ?? [ 1, 1, 1, 1 ]),
+						// The ModDataMultiTex stage and which texture the moved uv reaches.
+						...packMultiTexture( {
+							multiTexture: mat?.multiTexture,
+							animated: !!(mat?.uvVelocity || mat?.uvAtlas),
+							textureAnimationStage: mat?.textureAnimationStage
+						} )
 					] ),
 					material = data.dynamicMaterial ?
 						dynamicSlice( dynamicMaterialSlabs.allocate( materialData.byteLength ), materialData ) :
@@ -1546,7 +1559,8 @@ export function createGeometryResources(
 					palette,
 					jointMaximum,
 					clampedSampling,
-					textureFactorOffset: materialData.byteLength - 16,
+					// textureFactor is the row before multiTex, the last.
+					textureFactorOffset: materialData.byteLength - 32,
 					dynamicMaterial: !!data.dynamicMaterial,
 					selection: draw
 				} );

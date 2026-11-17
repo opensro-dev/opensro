@@ -20,6 +20,7 @@ age the row early.
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import type { MostWantedState } from "@/engine/contracts/most-wanted";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const OP_MOST_WANTED_STATE = 0x3fba;
 // Mirrors the server's mostWantedMaxLevel (action/mostwanted.go).
@@ -47,7 +48,7 @@ malformed state is a protocol error, never a partial one.
 			if ( frame.opcode !== OP_MOST_WANTED_STATE ) return false;
 			const p = frame.payload;
 			if ( p.length !== STATE_BYTES ) throw Error( "Invalid most wanted state length" );
-			const view = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const view = viewOf( p );
 			const level = p[0]!, kills = p[1]!, job = p[2]!, perLevel = p[3]!;
 			if ( level > MAX_LEVEL || job > 3 || perLevel < 1 || kills > perLevel ) {
 				throw Error( "Invalid most wanted state" );

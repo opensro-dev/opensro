@@ -30,6 +30,7 @@ the line are one feature, tracked as its own issue (#2426).
 ===========================================================================
 */
 import type { SystemNotice } from "./system-notices";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // The reference server's register handler refuses below level 20; the talk row
 // hides the same way (0x5d3630 reads player+0x820 >= 0x14).
@@ -78,7 +79,7 @@ A trailing name field: u16 count, then that many single-byte characters.
 */
 function flagWarName( p: Uint8Array, offset: number ): string {
 	if ( p.length < offset + 2 ) throw Error( "Truncated flag-war name" );
-	const n = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( offset, true );
+	const n = viewOf( p ).getUint16( offset, true );
 	if ( p.length !== offset + 2 + n ) throw Error( "Invalid flag-war name length" );
 	let name = "";
 	for ( let i = 0; i < n; i++ ) name += String.fromCharCode( p[offset + 2 + i]! );
@@ -98,7 +99,7 @@ export function decodeFlagWarEvent( p: Uint8Array ): FlagWarEvent | null {
 	if ( !p.length ) throw Error( "Empty flag-war event" );
 	const tag = p[0]!;
 	if ( tag !== 0xff ) {
-		const view = new DataView( p.buffer, p.byteOffset, p.byteLength );
+		const view = viewOf( p );
 		switch ( tag ) {
 			case 0x02:
 				if ( p.length !== 1 ) throw Error( "Invalid flag-war standby length" );
@@ -150,7 +151,7 @@ export function decodeFlagWarEvent( p: Uint8Array ): FlagWarEvent | null {
 			return { type: "pickupTheirs" };
 		case 0x0b: {
 			if ( p.length < 8 ) throw Error( "Truncated flag-war master key" );
-			const view = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const view = viewOf( p );
 			return {
 				type: "masterKey",
 				gid: view.getUint32( 2, true ),
@@ -165,7 +166,7 @@ export function decodeFlagWarEvent( p: Uint8Array ): FlagWarEvent | null {
 			if ( p.length !== 6 ) throw Error( "Invalid flag-war elapsed length" );
 			return {
 				type: "elapsed",
-				ms: new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true )
+				ms: viewOf( p ).getUint32( 2, true )
 			};
 		case 0x0f:
 			if ( p.length !== 2 ) throw Error( "Invalid flag-war flag drop length" );

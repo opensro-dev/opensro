@@ -18,16 +18,17 @@ too, so incompressible media is never tried twice.
 ===========================================================================
 */
 
-import { createHash } from "node:crypto";
 import { readdir, readFile, stat, unlink, utimes } from "node:fs/promises";
 import path from "node:path";
 import zlib from "node:zlib";
 import { promisify } from "node:util";
 import { MEMBER_ENCODING_GZIP } from "./packFormat.mjs";
-import { buildStatePath } from "../../lib/generatedRoot.mjs";
+import { buildStatePath, sharedCachePath } from "../../lib/generatedRoot.mjs";
 import { writeStateFile } from "./stateFile.mjs";
+import { sha256Hex } from "./hash.mjs";
 
-const DEFAULT_CACHE_ROOT = buildStatePath( "pack-member-gzip" );
+// Named by the member's SHA-256, so trees may share it (sharedCachePath).
+const DEFAULT_CACHE_ROOT = sharedCachePath( "pack-member-gzip", buildStatePath( "pack-member-gzip" ) );
 
 export const MEMBER_GZIP_LEVEL = 9;
 // Keep compression only when the stored bytes are at most 90 % of the raw.
@@ -71,17 +72,6 @@ export function encodeStoredMemberSync( bytes ) {
 	return encoded.length <= bytes.length * MEMBER_MAX_RATIO ?
 		{ stored: encoded, encoding: MEMBER_ENCODING_GZIP } :
 		{ stored: bytes, encoding: null };
-}
-
-/*
-================
-sha256
-
-Hex digest of bytes.
-================
-*/
-function sha256( bytes ) {
-	return createHash( "sha256" ).update( bytes ).digest( "hex" );
 }
 
 /*
@@ -138,7 +128,7 @@ export function openMemberCompression( { cacheRoot = DEFAULT_CACHE_ROOT } = {} )
 			// A damaged or foreign entry is ignored and rebuilt, never served.
 			const decoded = await decompress( encoded, { maxOutputLength: bytes.length } ).catch( () => null );
 			if (
-				decoded && decoded.length === bytes.length && sha256( decoded ) === digest &&
+				decoded && decoded.length === bytes.length && sha256Hex( decoded ) === digest &&
 				encoded[GZIP_OS_BYTE] === GZIP_OS_UNKNOWN
 			) {
 				await touch( paths.encoded );

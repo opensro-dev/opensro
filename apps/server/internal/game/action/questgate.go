@@ -131,6 +131,9 @@ type questGate struct {
 	world instance.ID
 	spawn simulation.Spawn
 	rows  []uint8
+	// to is a fixed destination (the Roc worlds' gates, roc.go); nil
+	// sends the row's last recall point.
+	to *travelPoint
 }
 
 /*
@@ -160,6 +163,18 @@ False when the data lacks the gate or the gid band is full.
 ================
 */
 func (rt *Runtime) SpawnQuestExitGate(world instance.ID, fell simulation.Spawn) (uint32, bool) {
+	return rt.spawnExitGate(world, fell, nil)
+}
+
+/*
+================
+spawnExitGate
+
+SpawnQuestExitGate with an optional fixed destination: nil keeps the
+quest gates' last recall point.
+================
+*/
+func (rt *Runtime) spawnExitGate(world instance.ID, fell simulation.Spawn, to *travelPoint) (uint32, bool) {
 	if rt.portals == nil || rt.portals.questGate == nil {
 		return 0, false
 	}
@@ -188,7 +203,7 @@ func (rt *Runtime) SpawnQuestExitGate(world instance.ID, fell simulation.Spawn) 
 	spawn.X += roll()*questGateOffsetSpan + questGateOffsetMin
 	spawn.Z += roll()*questGateOffsetSpan + questGateOffsetMin
 	spawn.Angle = uint16(roll() * 65536)
-	book.byGID[gid] = questGate{gid: gid, world: world, spawn: spawn, rows: []uint8{questGateRecallPoint}}
+	book.byGID[gid] = questGate{gid: gid, world: world, spawn: spawn, rows: []uint8{questGateRecallPoint}, to: to}
 	return gid, true
 }
 
@@ -350,6 +365,12 @@ func (rt *Runtime) handleQuestGate(division string, c *enterworld.Character, gid
 	}
 	if int(choice) >= len(gate.rows) {
 		return portalFailure(2)
+	}
+	if gate.to != nil {
+		if !rt.leaveRocLayer(division, c, *gate.to, "roc-gate", rt.handlerDoors()) {
+			return portalFailure(errCodeGateMoveFailed)
+		}
+		return OpResult{Frames: rt.questTeleportFrames(c, gateInstanceTravel, gid)}
 	}
 	// Row kind 0 is the last recall point; the v1.150 quest gates carry
 	// no other kind.

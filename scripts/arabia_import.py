@@ -83,8 +83,9 @@ import build_alexandria_variant as variant  # noqa: E402
 import cap110_monsters as monsters  # noqa: E402
 import cap110_skill_effects as effects  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
+import skilldata_enc as skill_tables  # noqa: E402
 import sro_pk2  # noqa: E402
-from alexandria_map_tables import native_text_row, overview_box  # noqa: E402
+from alexandria_map_tables import later_zone_rows, native_text_row, overview_box  # noqa: E402
 from arabia_map_tiles import (  # noqa: E402
 	import_map_labels,
 	import_map_tiles,
@@ -563,8 +564,11 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		native_skills = [r for p in text_root.glob("skilldata_*.txt") if p.name != SKILL_SHARD
 			for r in tables.table_rows(p.read_bytes()) if len(r) == 118]
 		needed = {int(s) for r in all_refs.values() for s in r[89:99] if int(s)}
-		source_skills = [r for shard in tables.table_rows(read("skilldata.txt"))
-			for r in tables.table_rows(read(shard[0].lower())) if len(r) > 3 and r[1].isdigit()]
+		# The client's skills as the client reads them: its encrypted
+		# skilldataenc set when it ships one, else the plain manifest
+		# (skilldata_enc.py, #3374).
+		source_skills = [r for r in skill_tables.client_skill_rows(read, lambda name: tables.TEXTDATA + name.lower() in media_index)
+			if len(r) > 3 and r[1].isdigit()]
 
 		# ================
 		# load_client_skills
@@ -754,7 +758,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		write_atomically(region_path, monsters.encode_rows(kept + code_rows))
 		zone_path = text_root / "textzonename.txt"
 		zone_keys = {row[1] for row in tables.table_rows(zone_path.read_bytes()) if len(row) > 1}
-		zone_rows = [native_text_row(row) for row in tables.table_rows(read("textzonename.txt"))
+		zone_rows = [native_text_row(row) for row in later_zone_rows(read)
 			if len(row) >= 10 and (row[1] in {str(region) for region in regions}
 				or row[1].startswith(REGION_PREFIX)) and row[1] not in zone_keys]
 		write_atomically(zone_path, characters.append_rows(zone_path.read_bytes(), zone_rows))

@@ -116,10 +116,20 @@ func TestAlexandriaPortalCatalogKind7(t *testing.T) {
 	if got := portalAdmission(c, source, link, portalTraveller{}); got != 0 {
 		t.Fatalf("thief on foot refused: %#x", got)
 	}
-	for _, kind := range []uint32{3, 4, 5, 6} {
-		alexandriatest.SetLinkCondition(t, variant.Dir, variant.LinkedTeleport, target, kind, 1, 0)
+	// Kinds 4, 5 and 6 load with the operands the native check reads
+	// (portal_conditions.go); kind 3 and malformed operands still refuse
+	// the whole catalogue.
+	for _, condition := range []portalCondition{{kind: 4, minimum: 1}, {kind: 5, minimum: 1}, {kind: 6}} {
+		alexandriatest.SetLinkCondition(t, variant.Dir, variant.LinkedTeleport, target, condition.kind, condition.minimum, condition.maximum)
+		loaded := mustPortalCatalog(t, variant.Dir).links[arrival]
+		if len(loaded.conditions) == 0 || loaded.conditions[0] != condition {
+			t.Fatalf("kind %d arrival link: %+v", condition.kind, loaded)
+		}
+	}
+	for _, refused := range []portalCondition{{kind: 3, minimum: 1}, {kind: 4}, {kind: 5, minimum: 1, maximum: 1}, {kind: 6, minimum: 1}} {
+		alexandriatest.SetLinkCondition(t, variant.Dir, variant.LinkedTeleport, target, refused.kind, refused.minimum, refused.maximum)
 		if _, err := loadPortalCatalog(variant.Dir); err == nil {
-			t.Fatalf("kind %d loaded", kind)
+			t.Fatalf("condition %+v loaded", refused)
 		}
 	}
 }

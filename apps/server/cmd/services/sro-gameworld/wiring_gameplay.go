@@ -127,6 +127,8 @@ func newGameplayPlane(
 	}
 	items := action.NewRuntime(deps, deps.MonsterState)
 	items.ConfigureSookArena(os.Getenv(sookarena.Env))
+	// SRO_ROC (port-only, not native): the Roc worlds' schedule and steps.
+	items.ConfigureRoc(monster.RocEnabled())
 	if err := loadPetGearPolicy(items, authorityStore); err != nil {
 		return nil, err
 	}
@@ -259,6 +261,8 @@ func newGameplayPlane(
 	// metadata (wiring_christmas.go).
 	items.WinterMissionStore = authorityStore
 	items.WinterMissionGoals = winterMissionGoalsFromEnv()
+	// SRO_WEATHER: the native climate cycle, on by default (wiring_weather.go).
+	startWeatherFromEnv(items)
 	// SRO_UNIQUE_GAP_EXEMPT / SRO_UNIQUE_POP_TICKET / SRO_UNIQUE_MAX_LEVEL_LOOT
 	// / SRO_UNIQUE_SEAL_DROPS (port-only, not native): uniques ignore the
 	// level-gap admission, one Magic Pop ticket per kill, a top-band unique's
@@ -833,6 +837,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredEventItems
 	game.deps.EntryEventFrames = game.items.EntryEventFrames
 	game.deps.EntryEventGroups = game.items.EntryEventGroups
+	game.deps.SceneWeatherFrames = game.items.SceneWeatherFrames
 	if err := game.validateQuestMarkerRoster(); err != nil {
 		return err
 	}

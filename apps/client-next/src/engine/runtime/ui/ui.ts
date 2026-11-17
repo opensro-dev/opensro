@@ -1126,6 +1126,15 @@ const ITEM_CARRY_PANELS: readonly string[] = [ ...INVENTORY_POPUP_PANELS, "Magic
 const SKIN_SLIDER_TRAVEL = 85;
 // CIFStall_OnCreate (5A2D60): the "Sell goods" tab's rect in the window.
 const STALL_TAB_X = 0x1c, STALL_TAB_Y = 0x56, STALL_TAB_W = 0x50, STALL_TAB_H = 0x18;
+// The buyback strip's art (com_redeem_window) starts this far left of its
+// first slot; a fitted "Repurchase" ends this far before the art.
+const BUYBACK_STRIP_INSET = 4, BUYBACK_LABEL_GAP = 2;
+// Port-only, not native ("Fit window labels"): the merchant's buyback
+// label where no face fits "Repurchase" beside the strip (#3728).
+const BUYBACK_SHORT_LABEL = "Buy back";
+// A fitted Item Mall bag count starts this far right of its bag icon and
+// ends inside mall_bar02's bevel, this many pixels from its right edge.
+const MALL_SPACES_GAP = 2, MALL_BAR_BEVEL = 3;
 // Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
 const BUTTON_FOCUS = BUTTON.replace( ".png", "_focus.png" ),
 	BUTTON_PRESS = BUTTON.replace( ".png", "_press.png" ),
@@ -11155,6 +11164,14 @@ export function createUi( ports: UiPorts ) {
 			) {
 				return frameDraw.authoredLabeledButton( drawFrame, { node, ox, oy, id, caption, disabled } );
 			}
+			/*
+			================
+			authoredCaption
+			================
+			*/
+			function authoredCaption( node: AuthoredControl, ox: number, oy: number, caption: string ) {
+				return frameDraw.authoredCaption( drawFrame, { node, ox, oy, caption } );
+			}
 			// Resource sections are reverse-insertion lists (9BD240), so native child
 			// paint order is the reverse of controlsByName, not numeric control ID.
 			/*
@@ -15210,15 +15227,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 												label,
 												false
 											);
-											if ( label ) {
-												const shown = frameDraw.fittedCaption( drawFrame, {
-													node: child,
-													ox: sx,
-													oy: sy,
-													caption: label
-												} );
-												authoredText( shown.node, sx, sy, shown.value );
-											}
+											if ( label ) authoredCaption( child, sx, sy, label );
 										}
 										continue;
 									}
@@ -15281,13 +15290,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										!academyIsLeader( camp ));
 							authoredButton( node, ox, oy, id, copy, disabled );
 							if ( copy ) {
-								// The caption fitted to its plate (fittedCaption).
-								const shown = frameDraw.fittedCaption( drawFrame, { node, ox, oy, caption: copy } );
-								authoredText(
-									disabled ? { ...shown.node, color: tooltipColor( 0xff999999 ) } : shown.node,
+								authoredCaption(
+									disabled ? { ...node, color: tooltipColor( 0xff999999 ) } : node,
 									ox,
 									oy,
-									shown.value
+									copy
 								);
 							}
 							continue;
@@ -15452,12 +15459,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								hasParty || !!game?.partyMatching?.own :
 								false;
 							authoredButton( node, ox, oy, id, copy, disabled );
-							const shown = frameDraw.fittedCaption( drawFrame, { node, ox, oy, caption: copy } );
-							authoredText(
-								disabled ? { ...shown.node, color: tooltipColor( 0xff999999 ) } : shown.node,
+							authoredCaption(
+								disabled ? { ...node, color: tooltipColor( 0xff999999 ) } : node,
 								ox,
 								oy,
-								shown.value
+								copy
 							);
 						}
 						if ( node.type === "CIFPartySlot" ) {
@@ -16951,13 +16957,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								family[disabled ? 3 : pressed === id && hover === id ? 2 : hover === id ? 1 : 0]!
 							);
 						}
-						authoredText(
+						const label = authoredCaption(
 							{ ...node, color: buttonTextColor( node.color, buttonAccess( false, disabled ) ) },
 							ox,
 							oy,
 							hudCopy( node.text )
 						);
-						controls.push( { id, label: hudCopy( node.text ), rect: r, kind: "button", disabled } );
+						controls.push( { id, label, rect: r, kind: "button", disabled } );
 					}
 					if ( blockTab === 0 && game?.chat?.blockError ) {
 						quads.push(
@@ -17473,7 +17479,29 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						valid = !!shop && shop.npc === game?.target && !shop.error,
 						busy = !!game?.inventoryPending;
 					nativeFrame( root, px, py, shop?.name ?? "", panelCloseId( "Shop" ) );
-					nativePage( page, px, py );
+					// GDR_STORE_CHARGY_STATIC (60) right-aligns "Repurchase" (68
+					// pixels) in a 43-pixel box at x = 7, so it ran past the window's
+					// left edge. Port-only, not native (Experimental "Fit window
+					// labels"): it is laid in the room between the item frame's left
+					// edge and the buyback strip's art, centred on the strip; no
+					// face fits the word there, so it reads "Buy" over "back".
+					// The lines go after the page: its opaque background tile
+					// would cover them.
+					const repurchase = page.GDR_STORE_CHARGY_STATIC!,
+						strip = page.GDR_STORE_ICON_SLOT_01!,
+						repurchaseLeft = px + page.GDR_STORE_FRAME!.rect[0],
+						repurchaseFit = frameDraw.labelFit( drawFrame, {
+							node: repurchase,
+							room: [
+								repurchaseLeft,
+								py + strip.rect[1],
+								px + strip.rect[0] - BUYBACK_STRIP_INSET - BUYBACK_LABEL_GAP - repurchaseLeft,
+								strip.rect[3]
+							],
+							values: [ hudCopy( repurchase.text ), BUYBACK_SHORT_LABEL ]
+						} );
+					nativePage( page, px, py, repurchaseFit ? [ repurchase.id ] : [] );
+					if ( repurchaseFit ) frameDraw.drawLabelFit( drawFrame, repurchaseFit );
 					if ( compact ) {
 						controls.push( {
 							id: "shop-scroll-area",
@@ -27276,14 +27304,26 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							ex,
 							ey
 						);
-						authoredText(
-							mallControl( expansion, 3 ),
-							ex,
-							ey,
-							count > 0 ?
+						const spaces = mallControl( expansion, 3 ),
+							icon = mallControl( expansion, 2 ),
+							spacesText = count > 0 ?
 								hudCopy( "UIIT_STT_SILKMALL_REMAIN_INVENTORY" ).replace( "%d", String( count ) ) :
-								hudCopy( "UIIT_STT_NONE" )
-						);
+								hudCopy( "UIIT_STT_NONE" ),
+							bar = mallControl( expansion, 1 ),
+							spacesLeft = ex + icon.rect[0] + icon.rect[2] + MALL_SPACES_GAP,
+							spacesRight = ex + bar.rect[0] + bar.rect[2] - MALL_BAR_BEVEL;
+						// GDR_ITEM_MALL_TRUNK_EXP_NUM right-aligns "32 spaces" (58
+						// pixels) in 31, over the bag icon on its left. Port-only, not
+						// native (Experimental "Fit window labels"): the count is laid
+						// between the icon and the bar art's bevel, on the icon's
+						// height ("32" over "spaces" in the narrow face).
+						if (
+							!frameDraw.fittedLabel( drawFrame, {
+								node: spaces,
+								room: [ spacesLeft, ey + icon.rect[1], spacesRight - spacesLeft, icon.rect[3] ],
+								values: [ spacesText ]
+							} )
+						) authoredText( spaces, ex, ey, spacesText );
 					}
 					const spin = data.windows.ifspincontrol!;
 					const spinX = tx + selector.rect[0], spinY = ty + selector.rect[1];

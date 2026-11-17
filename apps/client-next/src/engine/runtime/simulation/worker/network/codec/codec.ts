@@ -9,6 +9,8 @@ sends and receives. The server's envelope.go is the wire authority.
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
+// Value imports here stay relative: perf tools and script tests load
+// this file in Node, which does not resolve the "@/" alias (so no viewOf).
 // Wire authority: apps/server/internal/transport/envelope.go (protocol v2).
 const SERVER_LIMIT = 16 << 20, CLIENT_LIMIT = 64 << 10;
 // The session-internal range (envelope.go maxReservedOpcode): HELLO,

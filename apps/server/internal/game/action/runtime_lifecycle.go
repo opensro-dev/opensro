@@ -155,6 +155,8 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advanceWinterMissions", rt.advanceWinterMissions)
 		step("advancePandoraBoxes", rt.advancePandoraBoxes)
 		frames("advanceEventGroups", rt.advanceEventGroups)
+		frames("advanceWeather", rt.advanceWeather)
+		frames("advanceRoc", rt.advanceRoc)
 		// Retirement is presentation-only. Reward state was already committed
 		// by the fatal hit, while the zero-HP source remains resolvable through
 		// the authored death-animation completion.
@@ -176,6 +178,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		var openActionOwners map[string]bool
 		step("openSkillCastOwnerSnapshot", func() { openActionOwners = rt.openSkillCastOwnerSnapshot() })
 		frames("advanceBerserk", rt.advanceBerserk)
+		frames("advanceSpirits", rt.advanceSpirits)
 		frames("advancePlayerAggressions", rt.advancePlayerAggressions)
 		frames("advanceBattleStates", rt.advanceBattleStates)
 		frames("drainSkillFinalizes", rt.drainSkillFinalizes)
@@ -659,6 +662,7 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	rt.jobDresses.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.jobActivations.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.berserkActors.Delete(simulation.WorldKey(divisionID, characterName))
+	rt.spiritActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.battleActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.aggressionActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.gmSpeeds.Delete(simulation.WorldKey(divisionID, characterName))

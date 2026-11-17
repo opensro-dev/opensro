@@ -13,10 +13,10 @@ object nav part of it.
 
 ===========================================================================
 */
-import { createHash } from "node:crypto";
 import path from "node:path";
 import { compareText } from "../shared/textOrder.mjs";
 import { readJson, worldAuthorityPath, writeJson } from "./projectionFiles.mjs";
+import { sha256Hex } from "../shared/hash.mjs";
 
 /*
 ================
@@ -228,7 +228,7 @@ digestText
 ================
 */
 function digestText( value ) {
-	return createHash( "sha256" ).update( value ).digest( "hex" );
+	return sha256Hex( value );
 }
 
 /*

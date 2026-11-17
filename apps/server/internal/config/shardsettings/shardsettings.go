@@ -137,11 +137,13 @@ var Settings = []Setting{
 	// SRO_CAP110_MONSTERS (its equipment drops).
 	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},
 	// Port-only, not native: the Pharaoh Temple (the job temple) in the
-	// Storm and Cloud Desert: seven dungeons behind two desert gates. Needs
+	// Storm and Cloud Desert: seven dungeons behind two desert gates, and
+	// their 24 kinds and nests (the five sanctum keepers among them). Needs
 	// a variant built with the same flag (build_alexandria_variant.py stages
-	// the dungeons and gates). Server only: the catalogue does not list the
-	// temple's dungeons or gates. "off" is native.
-	{Env: "SRO_PHARAOH_TEMPLE", NomadVar: "pharaoh_temple", Default: "off"},
+	// the dungeons and gates, pharaoh_temple_import.py the population). The
+	// catalogue lists the population, not the dungeons or gates. "off" is
+	// native.
+	{Env: "SRO_PHARAOH_TEMPLE", NomadVar: "pharaoh_temple", Default: "off", Catalogue: true},
 	// Port-only, not native: the Qin-Shi tomb upper-floor population
 	// (#1800). Needs SRO_CAP110_MONSTERS (its drops ride the shared
 	// cap-110 loot catalogue).
@@ -155,6 +157,11 @@ var Settings = []Setting{
 	// v1.696 client (monster/skytemple.go). The fields ride the Alexandria
 	// variant build; the switch admits their kinds here. "off" is native.
 	{Env: "SRO_SKYTEMPLE", NomadVar: "skytemple", Default: "off", Catalogue: true},
+	// Port-only switch, native content: the Roc chain from the later
+	// clients (#3399). The Alexandria variant build stages its kinds,
+	// gates and quests (scripts/roc_import.py); the switch admits the
+	// quest kinds' nests here (monster/roc.go). "off" is native.
+	{Env: "SRO_ROC", NomadVar: "roc", Default: "off", Catalogue: true},
 	// Port-only, not native: the Arabia continent population and its
 	// dungeon world from the v1.696 client (monster/arabia.go). The
 	// continent rides the Alexandria variant build; the switch admits
@@ -226,6 +233,10 @@ var Settings = []Setting{
 	{Env: "SRO_CHRISTMAS_EVENT_MODE", NomadVar: "christmas_event_mode", Default: "winter"},
 	{Env: "SRO_CHRISTMAS_SOOK_BOX_CHANCE", NomadVar: "christmas_sook_box_chance", Default: "1.5"},
 	{Env: "SRO_CHRISTMAS_SOOK_GIFTS", NomadVar: "christmas_sook_gifts", Default: ""},
+	// The reference shard's climate weather (world/climate): every
+	// region's rain, snow and clear cycle. On by default, as natively; off
+	// sends no weather and every client stays clear.
+	{Env: "SRO_WEATHER", NomadVar: "weather", Default: "on"},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_MALL_STARTER_SILK", NomadVar: "mall_starter_silk", Default: "700"},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},

@@ -45,6 +45,12 @@ const PICKED_TINT = 0x80e9c624;
 // sub_e6cb90's sub row colours by L = monster level, P = player level.
 const LEVEL_FAR_ABOVE = 6;
 const LEVEL_ABOVE = 3;
+// The foot's level filter (v1.696 E72300): entries 0..6 levels above the
+// player, the 4..6 band tinted red and the 0..3 band grey.
+const FILTER_SPAN = 6;
+const FILTER_NEAR_SPAN = 3;
+const FILTER_HIGH_TINT = 0x80b63143;
+const FILTER_NEAR_TINT = 0x80d9d2c6;
 
 export interface GuidePage {
 	readonly origin: readonly [number, number];
@@ -515,7 +521,8 @@ export function guideOverlay(
 	catalog: WorldMapGuideCatalog,
 	index: number,
 	frame: GuideFrame,
-	clip: UiRect
+	clip: UiRect,
+	argb: number = PICKED_TINT
 ): { quads: UiQuad[]; icon: UiRect | null; paths: string[]; } {
 	const quads: UiQuad[] = [];
 	const paths = () => quads.map( quad => quad.texture );
@@ -523,7 +530,7 @@ export function guideOverlay(
 	if ( !monster || monster.main || monster.page !== FIELD_PAGE || !page ) return { quads, icon: null, paths: [] };
 	const sx = frame.width / (frame.right - frame.left), sy = frame.height / (frame.top - frame.bottom);
 	const screen = ( x: number, z: number ) => [ frame.ox + (x - frame.left) * sx, frame.oy + (frame.top - z) * sy ];
-	const color = tint( PICKED_TINT );
+	const color = tint( argb );
 	for ( const [tx, ty, path] of monster.tiles ) {
 		const at = tileWorld( page, tx, ty );
 		const [x, y] = screen( at.x, at.z );
@@ -558,4 +565,71 @@ export function guideOverlay(
 		clip
 	} );
 	return { quads, icon, paths: paths() };
+}
+
+// ============================================================================
+// Level filter
+// ============================================================================
+
+/*
+================
+levelFilterEntries
+
+The world-page entries the foot's level filter keeps, in catalogue
+order: E72300 walks the guide entries and keeps those whose level
+(entry +0x18) is 0..6 above the player's (+0x9BC). The port's catalogue
+draws the world page only, as guideOverlay does.
+================
+*/
+export function levelFilterEntries( catalog: WorldMapGuideCatalog, player: number ): number[] {
+	const kept: number[] = [];
+	catalog.monsters.forEach( ( monster, index ) => {
+		if ( monster.main || monster.page !== FIELD_PAGE || monster.level === null ) return;
+		const above = monster.level - player;
+		if ( above >= 0 && above <= FILTER_SPAN ) kept.push( index );
+	} );
+	return kept;
+}
+
+/*
+================
+levelFilterTarget
+
+Where the map snaps when the filter is checked. E724F0 moves the view
+onto every kept entry in turn (F409B0 / F40950 + F45F10), so the last
+one with a point on the page is where it rests.
+================
+*/
+export function levelFilterTarget( catalog: WorldMapGuideCatalog, player: number ): Pose | null {
+	const page = catalog.pages[FIELD_PAGE];
+	if ( !page ) return null;
+	let pose: Pose | null = null;
+	for ( const index of levelFilterEntries( catalog, player ) ) {
+		const monster = catalog.monsters[index]!;
+		if ( monster.sector[0] !== PAGE_POINT ) pose = pointPose( page, monster.sector, monster.point );
+	}
+	return pose;
+}
+
+/*
+================
+levelFilterOverlay
+
+Every kept entry drawn as a picked one (E724F0: its hunting tiles and
+wmap_monster_icon), tinted by how far above the player it is.
+================
+*/
+export function levelFilterOverlay(
+	catalog: WorldMapGuideCatalog,
+	player: number,
+	frame: GuideFrame,
+	clip: UiRect
+): { quads: UiQuad[]; paths: string[]; } {
+	const quads: UiQuad[] = [];
+	for ( const index of levelFilterEntries( catalog, player ) ) {
+		const above = catalog.monsters[index]!.level! - player;
+		const argb = above > FILTER_NEAR_SPAN ? FILTER_HIGH_TINT : FILTER_NEAR_TINT;
+		quads.push( ...guideOverlay( catalog, index, frame, clip, argb ).quads );
+	}
+	return { quads, paths: quads.map( quad => quad.texture ) };
 }

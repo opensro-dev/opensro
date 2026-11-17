@@ -61,6 +61,7 @@ barrier.
 */
 type Runtime struct {
 	berserkActors     sync.Map // derived expiry index; character store owns state
+	spiritActors      sync.Map // attached Devil's Spirit lapse index (spiritability.go)
 	battleActors      sync.Map // battle-state expiry index (battlestate.go)
 	cosRefusalLog     sync.Map // cosground.go: cosRefusalKey -> *cosRefusalWindow (refusal log rollup)
 	cosRefusalTotals  sync.Map // cosground.go: cause string -> *atomic.Uint64 (refusal metric)
@@ -262,6 +263,8 @@ type Runtime struct {
 	Monsters *simulation.MonsterState
 	// Port-only, not native: nil preserves every native admission/reward path.
 	sookArena *sookArenaRuntime
+	// roc runs the Roc worlds (roc.go); nil with SRO_ROC off.
+	roc *rocRuntime
 	// muhanChanges is the Muhan change pairing by change NPC codename
 	// (muhan_change.go). Port-only, not native: empty unless SRO_MUHAN is on.
 	muhanChanges map[string]muhanChange
@@ -662,6 +665,15 @@ type Runtime struct {
 	// WinterMissionGoals are the port-only fixed test goals
 	// (SRO_WINTER_MISSION_GOALS); nil is native.
 	WinterMissionGoals progression.WinterMissionGoals
+	// weather is the climate cycle and its pending deliveries
+	// (weather.go); a nil cycle is SRO_WEATHER off.
+	weather weatherState
+	// christmasWavesAsked is the last instant advanceChristmasWaves asked
+	// the timetable about; the tick goroutine alone touches it.
+	christmasWavesAsked time.Time
+	// christmasSlaves is the standing Snow Slave crowd's step state
+	// (christmas_snow_slaves.go); tick goroutine only.
+	christmasSlaves christmasSnowSlaves
 	// Christmas is the Christmas event (port-only, not native in this
 	// client build; progression/christmas.go): its event snow and the
 	// towns' decoration. The zero value is off.
