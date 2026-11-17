@@ -171,3 +171,83 @@ func TestCaravanRecoversExhaustedManaForItsSkillRotation(t *testing.T) {
 		t.Fatal("exhausted actor kept trying to cast")
 	}
 }
+
+/*
+================
+TestTraderWaitsForItsFightingOrDistantEscort
+================
+*/
+func TestTraderWaitsForItsFightingOrDistantEscort(t *testing.T) {
+	moves, crossings := 0, 0
+	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+		Move: func(_ string, from, _ Waypoint, _ float32) (Waypoint, bool) {
+			moves++
+			from.X += 10
+			return from, false
+		},
+		Ferry: func(_, _ string, _, _ uint32) (Waypoint, bool) {
+			crossings++
+			return Waypoint{RegionID: 0x62aa, X: 800, Z: 100}, true
+		},
+	})
+	t.Cleanup(func() { _ = rt.Close() })
+	rt.EnsureDivisionRoster("division")
+	leader := rt.findAgentLocked("division", "[AI]Trader_Mei")
+	guard := rt.findAgentLocked("division", "[AI]Hunter_Wei")
+	leader.RegionID, leader.X, leader.Z = 0x62aa, 100, 100
+	leader.State = StateTraveling
+	leader.Route = []Waypoint{{RegionID: 0x62aa, X: 200, Z: 100}, {RegionID: 0x62aa, X: 800, Z: 100, FerrySourceRef: 1, FerryTargetID: 2}}
+	leader.WaypointIndex = 0
+	guard.RegionID, guard.X, guard.Z = leader.RegionID, 110, 100
+	guard.State = StateInCombat
+	rt.StepAgent(context.Background(), "division", leader.Name, nil, 1000)
+	if moves != 0 {
+		t.Fatal("trader abandoned its fighting escort")
+	}
+	guard.State = StateTraveling
+	guard.X = 500
+	rt.StepAgent(context.Background(), "division", leader.Name, nil, 1100)
+	if moves != 0 {
+		t.Fatal("trader increased the gap to its distant escort")
+	}
+	guard.X = 110
+	rt.StepAgent(context.Background(), "division", leader.Name, nil, 1200)
+	if moves != 1 {
+		t.Fatal("trader did not resume once its escort caught up")
+	}
+	leader.WaypointIndex = 1
+	guard.X = 500
+	rt.StepAgent(context.Background(), "division", leader.Name, nil, 1300)
+	if crossings != 0 {
+		t.Fatal("trader crossed the ferry without its escort")
+	}
+	guard.X = leader.X
+	rt.StepAgent(context.Background(), "division", leader.Name, nil, 1400)
+	if crossings != 1 {
+		t.Fatal("convoy could not resume its ferry crossing")
+	}
+}
+
+/*
+================
+TestNativeManaRefusalRequestsRecoveryAboveThePercentageThreshold
+================
+*/
+func TestNativeManaRefusalRequestsRecoveryAboveThePercentageThreshold(t *testing.T) {
+	healed := 0
+	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{Heal: func(_, _ string, _ int64) int64 { healed++; return 14500 }})
+	t.Cleanup(func() { _ = rt.Close() })
+	rt.EnsureDivisionRoster("division")
+	guard := rt.findAgentLocked("division", "[AI]Hunter_Wei")
+	rt.RequestManaRecovery("division", guard.Name)
+	rt.ObserveVitals("division", guard.Name, int64(guard.MaxHP), int64(guard.MaxMP/4), false, 1000)
+	decision, _, _ := rt.StepAgent(context.Background(), "division", guard.Name, nil, 2000)
+	if decision.Action != ActionUsePotion || healed != 1 {
+		t.Fatal("native mana refusal did not recover above the 20% threshold")
+	}
+	rt.ObserveVitals("division", guard.Name, int64(guard.MaxHP), int64(guard.MaxMP), false, 2100)
+	rt.StepAgent(context.Background(), "division", guard.Name, nil, 4000)
+	if healed != 1 {
+		t.Fatal("mana recovery request did not clear after healing")
+	}
+}

@@ -81,8 +81,9 @@ type AgentUnit struct {
 	ReinforcingTrader string
 	// nextRemoteAtMs is the earliest time the next remote decision may be
 	// asked for this agent.
-	nextRemoteAtMs int64
-	lastMoveAtMs   int64
+	nextRemoteAtMs    int64
+	needsManaRecovery bool
+	lastMoveAtMs      int64
 }
 
 // WorldHooks is an optional consumer-owned callback port invoked when an AI
@@ -418,7 +419,7 @@ func (r *Runtime) StepAgent(
 	if unit.Role == RoleTrader && !unit.UnderAttack && r.parleys.TruceActive(division, unit.Name, nowMs) {
 		decision = Decision{Action: ActionContinueRoute, Source: BrainHardcoded}
 	}
-	if unit.MaxMP > 0 && unit.MP <= unit.MaxMP/5 {
+	if unit.needsManaRecovery || unit.MaxMP > 0 && unit.MP <= unit.MaxMP/5 {
 		decision = Decision{Action: ActionUsePotion, Source: BrainHardcoded}
 	}
 	decision.Dialogue = SafeDialogue(decision.Dialogue)
@@ -431,7 +432,7 @@ func (r *Runtime) StepAgent(
 	}
 	snapshot := *unit
 	var ferry *Waypoint
-	if snapshot.State == StateTraveling && snapshot.WaypointIndex < len(snapshot.Route) && snapshot.Route[snapshot.WaypointIndex].FerryTargetID != 0 {
+	if snapshot.State == StateTraveling && !r.waitForEscortLocked(unit) && snapshot.WaypointIndex < len(snapshot.Route) && snapshot.Route[snapshot.WaypointIndex].FerryTargetID != 0 {
 		point := snapshot.Route[snapshot.WaypointIndex]
 		ferry = &point
 	}
@@ -448,6 +449,7 @@ func (r *Runtime) StepAgent(
 		r.mu.Lock()
 		if live := r.findAgentLocked(division, agentName); live != nil && !live.RespawnPending {
 			live.HP = int(hp)
+			live.needsManaRecovery = false
 			snapshot = *live
 		}
 		r.mu.Unlock()
@@ -653,6 +655,10 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, nowMs int64) 
 }
 
 func (r *Runtime) advanceAlongRouteLocked(unit *AgentUnit, nowMs int64) *EscortContract {
+	if r.waitForEscortLocked(unit) {
+		unit.lastMoveAtMs = nowMs
+		return nil
+	}
 	var completed *EscortContract
 	if len(unit.Route) == 0 {
 		unit.Route = r.route(unit)

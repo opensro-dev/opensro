@@ -179,3 +179,58 @@ present in this checkout; this tracked document is the implementation and handof
   Scratch account `tester`, character `test`; Flora warp `/warp 25000 1675 11 260`.
 - Browser automation was recovered through the supported Node browser runtime. Fresh-session
   native riding is verified. All test warps and provisions used the scratch world.
+
+
+## Live convoy and ferry verification completed (2026-11-17)
+
+**No PR or push.** This checkpoint supersedes the earlier pending live checks. Testing used
+an isolated scratch world, the real GameWorld tick, shipped geometry/teleports, real combat actors,
+and natural **uncapped** caravan thief spawning. The observer never attacked the test NPCs.
+Temporary diagnostics/staging code was removed after testing.
+
+### Defects fixed
+
+1. Traders kept traveling while their escort fought, opening a gap of several thousand units.
+   A trader now waits while its assigned hunter fights or is more than 64 units away, including
+   before ferry departure. It resumes after the guard catches up. A failing-then-passing regression
+   covers fighting, distance, resumed movement and ferry admission waiting.
+2. Advanced skills could exhaust affordable MP above the old 20% recovery threshold. Native
+   B245 insufficient-MP refusals (`02 04`, native error 0x3004) now request the existing paced
+   recovery action. The request survives the next normal vital observation and clears after healing.
+   A regression covers this case; native skill cost, damage, cooldown and potion pacing are preserved.
+
+### Live evidence
+
+| Check | Observed result |
+| --- | --- |
+| Unstaged initial convoy | Mei and Wei left Donwhang together; Mei remained mounted and Wei followed. |
+| Natural thief protection | Wei intercepted thief GID 463712 / ref 3105, took its aggro, reduced HP from 19,300 to zero and resumed escort. Mei's transport stayed at 35,500 HP. |
+| Native ferry | Both crossed source ref 3824 to destination 16, arriving in region 23436 at X904 Y-23 Z1412. Each paid 500 gold (1,000,000 to 999,500). Cargo and mounting survived. |
+| Pacing fix | On the Hotan bank, Mei waited while Wei fought, then both resumed together instead of separating. |
+| Final combat with both fixes | Thief GID 462637 / ref 3090 fell from sampled HP 18,159 to zero. The pair stayed 5–15 units apart during combat and returned to a zero sampled gap afterward. |
+| Real skills and recovery | Native cooldown groups **709, 712 and 720** confirm all three advanced skills executed: 19095 `SKILL_CH_SPEAR_FRONTAREA_D_08`, 19134 `SKILL_CH_SPEAR_STUN_D_06`, and 19297 `SKILL_CH_SPEAR_SHOOT_C_08`. MP recovered from 1,566 to 3,788, allowing casting to continue. |
+| Cargo survival | The final defended transport retained all **12** cargo rows and **35,500 HP**, with the trader still mounted. |
+
+The ferry test staged the existing convoy at the real source ferry to isolate the crossing rather
+than waiting through the full desert approach. The native ferry admission, fee, destination,
+follow logic, subsequent travel and naturally timed ambushes were not replaced or forced.
+This is **not** a claim that a complete uninterrupted town-to-town journey was observed live.
+The existing shipped-data route checks separately exercise all six directed and six alternate routes.
+
+Scratch evidence retained locally:
+
+- `.state/caravan-live-natural.stdout.log`: unstaged departure and the first natural thief kill.
+- `.state/caravan-live-ferry-before.stdout.log`: crossing and the original escort separation.
+- `.state/caravan-live-pacing.stdout.log`: crossing/combat with convoy waiting fixed.
+- `.state/caravan-live-final.stdout.log`: final crossing, all three executed skill groups,
+  mana recovery, NPC death, intact cargo and resumed close escort.
+- `.state/caravan-live-travel.jpg` and `.state/caravan-live-ferry-arrival.jpg`: live visual evidence.
+  The latter shows the mounted trader, hunter and native thief on the Hotan bank.
+- `.state/caravan-live-final-combat.jpg` missed the moving convoy and is **not** combat proof.
+
+### Final checks and runtime restoration
+
+Final checks after removing diagnostic code and original-world restoration are in progress.
+Do not leave fixture control or the scratch state root enabled in the owner's running world.
+Remaining limits: no uninterrupted full-length live route soak or Windows race run; native
+uncapped waves can still defeat a caravan. No additional native-default rules were changed.

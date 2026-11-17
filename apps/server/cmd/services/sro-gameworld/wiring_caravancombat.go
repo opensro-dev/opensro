@@ -42,6 +42,13 @@ func (game *gameplayPlane) caravanCast(c *enterworld.Character, target uint32, n
 		}
 	}
 	result := game.items.HandleTargetInteract(game.divisionID, c, (wire.SkillAction{ActionId: skill, HasTarget: true, TargetGid: target}).Encode())
+
+	// Native B245 insufficient-MP refusal 0x3004 carries only its low error byte.
+	if game.caravanAgents != nil && slices.ContainsFunc(result.Frames, func(frame wire.Frame) bool {
+		return frame.Opcode == wire.OpSkillCastResult && len(frame.Payload) == 2 && frame.Payload[0] == 2 && frame.Payload[1] == 4
+	}) {
+		game.caravanAgents.RequestManaRecovery(game.divisionID, c.Name)
+	}
 	return result
 }
 

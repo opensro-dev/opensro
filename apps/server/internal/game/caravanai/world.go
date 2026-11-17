@@ -240,3 +240,40 @@ func (r *Runtime) ApproachWorldThreat(division, name string, target Waypoint) *A
 	snapshot := *unit
 	return &snapshot
 }
+
+/*
+================
+waitForEscortLocked
+
+A convoy stays within the guard's acquisition range while it fights or catches up.
+================
+*/
+func (r *Runtime) waitForEscortLocked(trader *AgentUnit) bool {
+	if trader.Role != RoleTrader {
+		return false
+	}
+	for _, guard := range r.agents[trader.Division] {
+		if guard.Role != RoleHunter || guard.EscortingTrader != trader.Name || guard.RespawnPending || guard.HP <= 0 {
+			continue
+		}
+		if guard.State == StateInCombat || WaypointDistance(Waypoint{RegionID: trader.RegionID, X: trader.X, Z: trader.Z}, Waypoint{RegionID: guard.RegionID, X: guard.X, Z: guard.Z}) > 64 {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
+RequestManaRecovery
+
+A native skill refusal can exhaust an expensive build above the percentage threshold.
+================
+*/
+func (r *Runtime) RequestManaRecovery(division, name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if unit := r.findAgentLocked(division, name); unit != nil {
+		unit.needsManaRecovery = true
+	}
+}
