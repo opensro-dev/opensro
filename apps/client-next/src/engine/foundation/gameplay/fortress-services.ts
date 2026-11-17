@@ -10,7 +10,8 @@ This module owns wire validation, not guild permissions or durable state.
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
-import { viewOf } from "@/engine/foundation/binary/byte-view";
+// Value imports here stay relative: Node tools reach this file through
+// relative imports, and Node does not resolve the "@/" alias (so no viewOf).
 
 export const FORTRESS_SERVICE_REQUEST = 0x71e1;
 export const FORTRESS_SERVICE_REPLY = 0xb1e1;
@@ -160,7 +161,7 @@ refusal, unlike the v1.188 server's two-byte 0x28xx code.
 */
 export function fortressServiceReply( frame: WireFrame ): FortressServiceReply | null {
 	if ( frame.opcode !== FORTRESS_SERVICE_REPLY ) return null;
-	const payload = frame.payload, view = viewOf( payload );
+	const payload = frame.payload, view = new DataView( payload.buffer, payload.byteOffset, payload.byteLength );
 	let offset = 0;
 	/*
 	================
