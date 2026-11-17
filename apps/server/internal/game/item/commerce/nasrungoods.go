@@ -14,11 +14,14 @@ in PaymentNasrunToken on the second tab of every town's honor shop
 (STORE_*_HONOR_TAB2), the tab whose authored stock is a single package
 (inferred placement; recorded on #3456).
 
-The owner's prices (2026-11-16, #3456): the Spirit 60 tokens. Only goods
-whose use is built are listed: Sabakun's jewel joins with Nasrun alchemy
-(step 3c) and the extension gear with its use (step 4), so the shop never
-sells an item that does nothing. The A grade Spirits are the plain, yellow
-and blue rows; the _UNIQUE pair is the S grade and is not sold.
+The owner's prices (2026-11-16, #3456): the Spirit 60 tokens, Sabakun's
+jewel 20, and the extension gear at the awakening upkeep, "10 tokens or
+5,000,000 gold for 7 days": the gear is listed twice, once in each. Only
+goods whose use is built are listed: the jewel since Nasrun alchemy (step
+3c, item/alchemy/nasrun.go), the gear since its use (slice 4,
+action/spiritextend.go), so the shop never sells an item that does
+nothing. The A grade Spirits are the plain, yellow and blue rows; the
+_UNIQUE pair is the S grade and is not sold.
 
 ===========================================================================
 */
@@ -30,8 +33,21 @@ import (
 	"opensro.online/server/internal/game/nasrun"
 )
 
-// nasrunSpiritTokenPrice is the owner's Spirit price in tokens.
-const nasrunSpiritTokenPrice = 60
+// The owner's prices in tokens: a Spirit and Sabakun's jewel.
+const (
+	nasrunSpiritTokenPrice = 60
+	nasrunJewelTokenPrice  = 20
+
+	// The awakening upkeep for seven days, the extension gear's price.
+	nasrunGearTokenPrice = 10
+	nasrunGearGoldPrice  = 5_000_000
+)
+
+// nasrunGear is the extension gear (scripts/nasrun_import.py).
+const nasrunGear = "ITEM_MALL_NASRUN_EXTENSION"
+
+// nasrunJewel is Sabakun's jewel (scripts/nasrun_import.py).
+const nasrunJewel = "ITEM_ETC_NASRUN_ARCHEMY_UPGRADE_STONE"
 
 // nasrunShopTabs are the honor shops' second tabs, one per town.
 var nasrunShopTabs = []string{
@@ -56,8 +72,9 @@ var nasrunSpirits = []string{
 ================
 NasrunGoods
 
-The token goods: every A grade Spirit on every honor shop's second tab,
-priced in tokens.
+The token goods: every A grade Spirit, Sabakun's jewel and the extension
+gear on every honor shop's second tab, priced in tokens, and the gear
+again for gold.
 ================
 */
 func NasrunGoods() []ExtraGood {
@@ -66,6 +83,9 @@ func NasrunGoods() []ExtraGood {
 		for _, spirit := range nasrunSpirits {
 			goods = append(goods, ExtraGood{Tab: tab, Codename: spirit, Price: nasrunSpiritTokenPrice, Currency: PaymentNasrunToken})
 		}
+		goods = append(goods, ExtraGood{Tab: tab, Codename: nasrunJewel, Price: nasrunJewelTokenPrice, Currency: PaymentNasrunToken},
+			ExtraGood{Tab: tab, Codename: nasrunGear, Price: nasrunGearTokenPrice, Currency: PaymentNasrunToken},
+			ExtraGood{Tab: tab, Codename: nasrunGear, Price: nasrunGearGoldPrice, Currency: PaymentGold})
 	}
 	return goods
 }

@@ -13,6 +13,7 @@ import (
 	"errors"
 	log "github.com/sirupsen/logrus"
 	"math/big"
+	"os"
 	"reflect"
 	"sort"
 
@@ -20,6 +21,7 @@ import (
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/transport"
 )
 
@@ -46,6 +48,8 @@ func (rt *Runtime) ConfigureAlchemy(dir string) error {
 	if c.NoAssimilation, err = alchemy.NoAssimilationFromEnv(); err != nil {
 		return err
 	}
+	// Port-only, not native (#3456 step 3c): Sabakun's jewel on a Spirit.
+	c.Nasrun = nasrun.Enabled(os.Getenv(nasrun.Env))
 	rt.Alchemy = c
 	return nil
 }

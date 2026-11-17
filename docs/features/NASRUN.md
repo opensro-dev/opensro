@@ -49,5 +49,40 @@ These are inferences and port choices, not native evidence:
 - **Left out.** The event copies (`ITEM_EVENT_*`) belong to events this port does not have. The Umdu magic
   stone (`ITEM_MALL_NASRUN_ARCHEMY_MAGICSTONE_UMDU`) names `MATTR_NASRUN_UMDU`, which has no row in the
   v1.150 magicoption table.
-- **Still open (#3348).** The socket, the awakening clock (2,419,200 seconds on the wearable and the extension
-  gear), the Nasrun alchemy outcome and the mall listing.
+- **Built since (#3456).** The socket (#3477), the awakening clock (#3622), the unique-kill tokens (#3710), the
+  token shop (#3741) and Nasrun alchemy (below).
+- **Still open (#3456).** The extension gear's use, the lucky drops, and the awakening skill whose tiers read the
+  Spirit's plus (the +3 and +6 damage steps); until that skill is ported a Spirit's plus changes nothing.
+
+## Nasrun alchemy (#3456 step 3c)
+
+With `SRO_NASRUN` on, Sabakun's jewel reinforces a Spirit in the bag through the native alchemy window, one plus
+at a time up to +6 (`internal/game/item/alchemy/nasrun.go`):
+
+| Attempt | +0→+1 | +1→+2 | +2→+3 | +3→+4 | +4→+5 | +5→+6 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Chance | 70 % | 60 % | 50 % | 40 % | 30 % | 20 % |
+
+- A failure spends the jewel and keeps the plus: no break, no curse, no reset (the owner's rule, 2026-11-16).
+- The chance is the table alone: Lucky options, avatar luck and the shard's rate table do not change it.
+- Refusals use the native codes: a lucky powder staged with the jewel (0x0a), a Spirit at +6 (0x0f), a native
+  elixir on a Spirit or the jewel on native gear (0x09). Off, a Spirit is no target (0x10).
+- The token shop sells the jewel for 20 tokens beside the Spirits.
+
+## The extension gear (#3456 slice 4)
+
+With `SRO_NASRUN` on, the extension gear (`ITEM_MALL_NASRUN_EXTENSION`, 3/3/13/16) lengthens a woken Spirit's
+awakening (`internal/game/action/spiritextend.go`, `internal/game/nasrun/extension.go`):
+
+- The player drops the gear on a Spirit in the bag, as with v1.150's gender tool. The use carries that bag slot, the
+  v1.188 server's use shape. A worn Spirit is no target: the reference server reads the bag alone.
+- Each gear adds 7 days: from the expiry while the Spirit is awake, from now once it has lapsed. A clock never runs
+  more than 28 days ahead; a gear that would pass that is refused and kept. That is the owner's upkeep rule
+  (2026-11-16). The VSRO row's own Param1 is four weeks with no ceiling, and it is not used.
+- Refusals use the v1.188 codes: a slot outside the bag (0x1882), no Spirit there (3), a Spirit never woken
+  (0x18F8). The ceiling has no native code and answers the generic refusal.
+- Every honor shop's second tab sells the gear twice: for 10 tokens and for 5,000,000 gold, the owner's upkeep price.
+- The Spirits and the gear are staged bound, as v1.150's own honor goods: no trade, merchant sale, warehouse or drop
+  (CanTrade, CanSell, CanBorrow, CanDrop all 0).
+- The v1.188 server also sends 0x3078 {2, slot, seconds left}, which the v1.150 client has no handler for, so the
+  port sends the use answer alone.
