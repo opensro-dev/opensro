@@ -34,6 +34,8 @@ import {
 import type { CastState } from "@/engine/contracts/gameplay";
 import { castPhase, damageTicks, skillPulse } from "@/engine/foundation/gameplay/combat-result";
 import { MAX_OPEN_CASTS, openCastOverflow } from "@/engine/foundation/gameplay/open-casts";
+import { TARGET_INTERACT_OPCODE } from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 /*
 ================
 createCombat
@@ -51,7 +53,10 @@ export function createCombat(
 	) => void = () => {},
 	// One delivery, server to client (skill-queue.ts): a cast-start answer
 	// started its cooldown that long ago.
-	oneWayMs: () => number = () => 0
+	oneWayMs: () => number = () => 0,
+	// Port-only diagnostics (#3508): the local player's effects as they
+	// arrive and retire (speed-journal.ts).
+	noteEffect: ( row: import("@/engine/foundation/gameplay/speed-journal").EffectRow ) => void = () => {}
 ) {
 	let huntingPoints: readonly HuntingPoint[] = [];
 	let attackedName: string | undefined, attackedNameUntil = 0;
@@ -397,7 +402,7 @@ export function createCombat(
 		attack( gid: number ) {
 			const p = Uint8Array.of( 1, 1, 1, 0, 0, 0, 0 );
 			new DataView( p.buffer ).setUint32( 3, gid, true );
-			return { opcode: 0x72cd, payload: p };
+			return { opcode: TARGET_INTERACT_OPCODE, payload: p };
 		},
 		/*
 		================
@@ -459,7 +464,7 @@ export function createCombat(
 			if ( gid ) {
 				v.setUint32( 7, gid, true );
 			}
-			return { opcode: 0x72cd, payload: p };
+			return { opcode: TARGET_INTERACT_OPCODE, payload: p };
 		},
 		/*
 		================
@@ -524,7 +529,7 @@ export function createCombat(
 			if ( op === 0x3122 && p.length === 6 && p[4] === 0 && p[5] === 1 ) {
 				publishHp( {
 					kind: "hp-revive",
-					gid: new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 0, true )
+					gid: viewOf( p ).getUint32( 0, true )
 				} );
 			}
 			// Cosmetic feedback never debits HP; 33A6 owns the committed vitals.
@@ -622,6 +627,9 @@ export function createCombat(
 					);
 				attachedEffects = [ ...kept, effect ];
 				admitBuff( effect );
+				if ( effect.gid === localGid ) {
+					noteEffect( { atMs: now, opcode: op, gid: effect.gid, skill: effect.skill, token: effect.token } );
+				}
 				return true;
 			}
 			// CPSMission_OnEffectTeardownTokens0xB6A0 (0x7759B0) removes only retired tokens.
@@ -636,6 +644,7 @@ export function createCombat(
 					if ( effect ) {
 						attachedEffects = attachedEffects.filter( row => row !== effect );
 						if ( effect.gid === localGid ) {
+							noteEffect( { atMs: now, opcode: op, gid: effect.gid, skill: effect.skill, token } );
 							retireBuff( effect.skill, token, now );
 							const first = huntingPoints.find( row => row.token === token );
 							if ( first ) huntingPoints = huntingPoints.filter( row => row !== first );
@@ -647,7 +656,10 @@ export function createCombat(
 						if ( cast ) requestCancellation( cast, now );
 					} else if ( cast ) {
 						requestCancellation( cast, now );
-						if ( cast.caster === localGid ) retireBuff( cast.skill, token, now );
+						if ( cast.caster === localGid ) {
+							noteEffect( { atMs: now, opcode: op, gid: localGid, skill: cast.skill, token } );
+							retireBuff( cast.skill, token, now );
+						}
 					}
 				}
 				return true;
@@ -655,7 +667,7 @@ export function createCombat(
 			if ( [ 0xb45a, 0x33a6, 0xb505, 0xb245 ].includes( op ) ) {
 				publishedCasts = publishedVitals = null;
 			}
-			const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const v = viewOf( p );
 			if ( op === 0xb45a && p.length === 14 && p[0] === 1 && p[5] === 1 ) {
 				const gid = v.getUint32( 1, true );
 				vitals.set( gid, { ...vitals.get( gid ), gid, hp: v.getUint32( 6, true ) } );

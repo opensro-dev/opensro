@@ -24,6 +24,7 @@ frame rather than guessing.
 */
 import { type TargetEntity, targetPlayer } from "./target-player";
 import type { WireFrame } from "@/engine/contracts/network";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const FRIEND_ROSTER_OPCODE = 0x3769;
 export const FRIEND_EVENT_OPCODE = 0x3f9a;
@@ -151,7 +152,7 @@ friendReader
 ================
 */
 function friendReader( bytes: Uint8Array, what: string ): FriendReader {
-	const view = new DataView( bytes.buffer, bytes.byteOffset, bytes.byteLength );
+	const view = viewOf( bytes );
 	let at = 0;
 	const need = ( n: number ) => {
 		if ( at + n > bytes.length ) throw Error( `Truncated ${what}` );

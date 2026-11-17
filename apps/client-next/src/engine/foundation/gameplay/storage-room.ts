@@ -36,6 +36,7 @@ import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { WireFrame } from "@/engine/contracts/network";
 import { planContainerMove, planWholeTransfer } from "./container-transfer";
 import { decodeInventoryItem } from "./inventory-item";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const OP_STORAGE_LIST_REQUEST = 0x72c3;
 export const OP_STORAGE_GOLD = 0x3126;
@@ -287,7 +288,7 @@ B338 [1][u32 4] for the storage function.
 export function storageOpened( frame: WireFrame ): boolean {
 	const p = frame.payload;
 	return frame.opcode === OP_NPC_INTERACTION && p.length === 5 && p[0] === 1 &&
-		new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true ) === STORAGE_FUNCTION;
+		viewOf( p ).getUint32( 1, true ) === STORAGE_FUNCTION;
 }
 
 /*
@@ -380,7 +381,7 @@ True when the frame belonged to the warehouse.
 		): boolean {
 			const p = frame.payload;
 			if ( room?.guild ) {
-				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const v = viewOf( p );
 				// B338 lock 0x4000 sends the claim itself (75AE50).
 				if (
 					frame.opcode === OP_NPC_INTERACTION && p.length === 5 && p[0] === 1 &&

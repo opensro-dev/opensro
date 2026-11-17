@@ -13,6 +13,13 @@ import { readPartyMember, type PartyMember } from "./party-member";
 import type { SystemNotice } from "./system-notices";
 import { NO_JOB_CLASS } from "./job-guild";
 import { NATIVE_LEVEL_CAP } from "./level-cap";
+import {
+	PARTY_JOIN_ACK_OPCODE,
+	PARTY_JOIN_ANSWER_OPCODE,
+	PARTY_MODIFY_ACK_OPCODE,
+	PARTY_REGISTER_ACK_OPCODE
+} from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 const PARTY_JOIN_TIMEOUT_MS = 10000;
 const PARTY_JOIN_NO_REPLY = 2;
 
@@ -151,7 +158,10 @@ export function partyMatchRequest(
 		u( command.a, 4 );
 		u( command.b, 4 );
 		u( answer, 1 );
-		return { state: { ...state, request: null }, frame: { opcode: 0x30fa, payload: Uint8Array.from( bytes ) } };
+		return {
+			state: { ...state, request: null },
+			frame: { opcode: PARTY_JOIN_ANSWER_OPCODE, payload: Uint8Array.from( bytes ) }
+		};
 	}
 	if ( state.pending ) throw Error( "Party matching request pending" );
 	let opcode: number, pending: PartyMatching["pending"];
@@ -221,7 +231,7 @@ export function partyMatchPacket(
 ): PartyMatching | null {
 	const op = frame.opcode;
 	if ( ![ 0xb588, 0xb5bf, 0xb6ff, 0xb3dc, 0xb535, 0x75bf ].includes( op ) ) return null;
-	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const p = frame.payload, v = viewOf( p );
 	let at = 0;
 	const u = ( n: number ) => {
 		if ( at + n > p.length ) throw Error( "Truncated party matching packet" );
@@ -367,7 +377,7 @@ opcodes raise nothing here.
 ================
 */
 export function partyMatchAckNotice( opcode: number, detail: number | undefined ): SystemNotice | null {
-	if ( opcode !== 0xb5bf ) return null;
+	if ( opcode !== PARTY_JOIN_ACK_OPCODE ) return null;
 	if ( detail === 1 ) {
 		return { key: "UIIT_MSG_PARTYMATCH_JOIN_COMPLETE_MASTER", value: 0, banner: true, bannerOnly: true };
 	}
@@ -437,7 +447,7 @@ partyMatchDeleteNotice - its wording depends on the party's past.
 ================
 */
 export function partyMatchCompletionNotice( opcode: number ): SystemNotice | null {
-	if ( opcode === 0xb6ff ) {
+	if ( opcode === PARTY_REGISTER_ACK_OPCODE ) {
 		return {
 			key: "UIIT_MSG_PARTYMATCH_RECORD_COMPLETE",
 			value: 0,
@@ -445,7 +455,7 @@ export function partyMatchCompletionNotice( opcode: number ): SystemNotice | nul
 			bannerOnly: true
 		};
 	}
-	if ( opcode === 0xb3dc ) {
+	if ( opcode === PARTY_MODIFY_ACK_OPCODE ) {
 		return {
 			key: "UIIT_MSG_PARTYMATCH_MODIFY_COMPLETE",
 			value: 0,

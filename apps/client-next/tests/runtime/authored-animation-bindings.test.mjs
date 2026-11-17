@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { authoredAnimationBindings } from "../../../../scripts/build/char/authoredAnimationBindings.mjs";
+import {
+	authoredAnimationBindings,
+	UNSELECTABLE_STATE_ID
+} from "../../../../scripts/build/char/authoredAnimationBindings.mjs";
 import { parseCharacterBsr } from "../../../../scripts/build/char/formats.mjs";
 import { loadDataAsset } from "../../../../scripts/build/shared/jmxAssetIO.mjs";
 import { loadOptionalDataAsset } from "../../../../scripts/build/shared/optionalDataAsset.mjs";
@@ -69,4 +72,24 @@ test("absent and malformed optional BAN resources remain per-state failures and 
 		"no-authored-animation"
 	] );
 	assert.ok( result.every( r => r.clip === null ) );
+});
+
+test("a state no action can select never reaches the manifest", async () => {
+	// The later client's jupiter.bsr shape: one attack state keyed
+	// 0xFFFFFFFF beside ordinary ones. The manifest refuses any state id
+	// outside 0..65535, so one such row failed every monster portrait.
+	const ban = "prim\\ani\\mob\\jupiter\\jupiter_attack10.ban",
+		bsr = {
+			animationSets: [ {
+				name: "default",
+				states: [ { stateId: 2, animationPath: null }, { stateId: UNSELECTABLE_STATE_ID, animationPath: ban } ]
+			} ]
+		},
+		reads = [];
+	const result = await authoredAnimationBindings( bsr, [], async path => {
+		reads.push( path );
+		return null;
+	} );
+	assert.deepEqual( result.map( row => row.stateId ), [ 2 ] );
+	assert.deepEqual( reads, [], "the unselectable state's clip is not even read" );
 });

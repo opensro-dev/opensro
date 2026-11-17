@@ -35,6 +35,13 @@ import { CHAT_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-cont
 import { NO_JOB_CLASS } from "@/engine/foundation/gameplay/job-guild";
 import { partyActiveJob } from "@/engine/foundation/gameplay/party-matching";
 import { CHAT_ACK_TIMEOUT_MS, uiTuningFrom } from "@/engine/foundation/ui/ui-tuning";
+import {
+	CHAT_ACK_OPCODE,
+	CHAT_BROADCAST_OPCODE,
+	CHAT_REQUEST_OPCODE,
+	WHISPER_BLOCK_ACK_OPCODE
+} from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 const CHAT_LINE_LIMIT = 128;
 const CHAT_FEEDBACK_LIMIT = 100;
 const CHAT_TEXT_LIMIT = 100;
@@ -97,7 +104,7 @@ function decodeChatBroadcast(
 	links?: NoticeLinks;
 	bodies?: Uint8Array[];
 } | null {
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	let o = 0;
 	/*
 	================
@@ -164,7 +171,7 @@ export function decodeChatHistory(
 ): { channel: number; sender: string; text: string; sentAt: number; bodies?: Uint8Array[]; }[] {
 	if ( p.length >= 1 && p[0] !== CHAT_HISTORY_VERSION ) return [];
 	if ( p.length < 2 || p[1]! > CHAT_HISTORY_LIMIT ) throw new Error( "Invalid chat history" );
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength ), lines = [];
+	const v = viewOf( p ), lines = [];
 	let o = 2;
 	for ( let i = 0; i < p[1]!; i++ ) {
 		if ( o + 10 > p.length ) throw new Error( "Truncated chat history" );
@@ -452,7 +459,7 @@ request
 				payload.set( p );
 				payload.set( block, p.length );
 			}
-			send( { opcode: 0x7367, payload } );
+			send( { opcode: CHAT_REQUEST_OPCODE, payload } );
 			pending = { channel, text, target, deadline: now + ackTimeoutMs, echoed: false, items: resolved.items };
 			error = null;
 		},
@@ -462,8 +469,8 @@ receive
 ================
 		*/
 		receive( frame: WireFrame, localGid: number, senderName = "" ) {
-			const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
-			if ( frame.opcode === 0xb367 ) {
+			const p = frame.payload, v = viewOf( p );
+			if ( frame.opcode === CHAT_ACK_OPCODE ) {
 				const ok = p[0] === 1;
 				if ( (ok ? p.length !== 3 : p[0] !== 2 || p.length !== 4) ) {
 					throw new Error( "Invalid chat acknowledgement" );
@@ -496,7 +503,7 @@ receive
 				pending = null;
 				return true;
 			}
-			if ( frame.opcode === 0xb66f ) {
+			if ( frame.opcode === WHISPER_BLOCK_ACK_OPCODE ) {
 				const r = whisperBlockResult( p );
 				if ( r.name !== undefined ) {
 					blocked = r.mode === 1 ?
@@ -536,7 +543,7 @@ receive
 				}
 				return true;
 			}
-			if ( frame.opcode !== 0x3667 ) return false;
+			if ( frame.opcode !== CHAT_BROADCAST_OPCODE ) return false;
 			const line = decodeChatBroadcast( p );
 			if ( !line ) return false;
 			const { channel, sender, gid, text, event, links, bodies } = line;

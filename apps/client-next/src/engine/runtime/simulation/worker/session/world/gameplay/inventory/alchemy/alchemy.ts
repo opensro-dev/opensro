@@ -12,6 +12,7 @@ import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { AlchemyMode, AlchemyOutcome, AlchemyState } from "@/engine/contracts/item-process";
 import { isAlchemyEquipment } from "@/engine/foundation/ui/alchemy-selection";
 import type { UiSoundHandle } from "@/engine/foundation/ui/sound-catalog";
+import { COMPOUND_REQUEST_OPCODE } from "@/engine/contracts/opcodes";
 
 /*
 ================
@@ -188,7 +189,7 @@ export function createAlchemy() {
 		cancel() {
 			if ( !state.pending || ![ "compound", "advanced", "dissolve" ].includes( state.mode ) ) return null;
 			state = { ...state, pending: false, cancelled: true, remaining: 0 };
-			return { opcode: 0x716f, payload: Uint8Array.of( 1 ) };
+			return { opcode: COMPOUND_REQUEST_OPCODE, payload: Uint8Array.of( 1 ) };
 		},
 		/*
 		================

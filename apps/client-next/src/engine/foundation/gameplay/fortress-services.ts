@@ -10,6 +10,8 @@ This module owns wire validation, not guild permissions or durable state.
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
+// Value imports here stay relative: Node tools reach this file through
+// relative imports, and Node does not resolve the "@/" alias (so no viewOf).
 
 export const FORTRESS_SERVICE_REQUEST = 0x71e1;
 export const FORTRESS_SERVICE_REPLY = 0xb1e1;

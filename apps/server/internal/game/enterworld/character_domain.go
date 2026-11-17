@@ -182,19 +182,6 @@ func coerceOptionalInt(value *int64, min, max int64) (int64, bool) {
 	return v, true
 }
 
-func clampFloat(value, min, max float64) float64 {
-	if value != value {
-		return min
-	}
-	if value < min {
-		return min
-	}
-	if value > max {
-		return max
-	}
-	return value
-}
-
 func derivedVitalMax(level, stat int64) int64 {
 	return charactervitals.DerivedVitalMax(level, stat)
 }

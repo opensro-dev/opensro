@@ -654,6 +654,9 @@ type Runtime struct {
 	// christmasSnow is the snowfall state of the Christmas native group
 	// (event group 1) advanceEventGroups last saw; tick goroutine only.
 	christmasSnow eventGroupWatch
+	// weather is the climate cycle and its pending deliveries
+	// (weather.go); a nil cycle is SRO_WEATHER off.
+	weather weatherState
 	// christmasWavesAsked is the last instant advanceChristmasWaves asked
 	// the timetable about; the tick goroutine alone touches it.
 	christmasWavesAsked time.Time

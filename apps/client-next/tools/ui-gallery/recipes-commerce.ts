@@ -54,7 +54,8 @@ async function restoration( context: RecipeContext, npcMode: boolean, confirmati
 		refObjId: npcMode ? 3673 : 3828,
 		typeFlags: 0x6ec,
 		quantity: 5,
-		name: npcMode ? "Curst Heart restoration potion" : "Skill Restoration Potion"
+		// 3673's published name (SN_ITEM_QSP_ALL_POTION_1_01).
+		name: npcMode ? "Resuscitation potion" : "Skill Restoration Potion"
 	} ];
 	if ( npcMode ) game.restorationRevision = 1;
 	else {

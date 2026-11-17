@@ -15,6 +15,15 @@ import type { WireFrame } from "@/engine/contracts/network";
 import type { AcademyState } from "./academy";
 import { constantNativeNotice } from "./native-notice";
 import type { SystemNotice } from "./system-notices";
+import {
+	MENTOR_JOIN_ACK_OPCODE,
+	TC_BUFF_LIST_OPCODE,
+	TC_BUFF_STATE_OPCODE,
+	TC_DISBAND_ANSWER_OPCODE,
+	TC_NOTICE_EDIT_ACK_OPCODE,
+	TC_STATUS_OPCODE
+} from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // 76FC90 reads one extra u32 when 0xB7C5 fails with error 0x1D.
 const ACADEMY_DISBAND_WAIT_CODE = 0x1d;
@@ -31,12 +40,12 @@ export function academyAcknowledgment( frame: WireFrame ): { readonly notice: Sy
 	if ( ![ 0xb4d4, 0xb785, 0xb10a, 0xb36d, 0xb220, 0xb7c5 ].includes( frame.opcode ) ) return null;
 	const p = frame.payload;
 	const expected = p[0] === 2 ?
-		(frame.opcode === 0xb7c5 && p[1] === ACADEMY_DISBAND_WAIT_CODE ? 6 : 2) :
+		(frame.opcode === TC_DISBAND_ANSWER_OPCODE && p[1] === ACADEMY_DISBAND_WAIT_CODE ? 6 : 2) :
 		1;
 	if ( !p.length || p.length !== expected ) throw Error( "Invalid academy acknowledgment" );
 	if ( p[0] === 2 ) return { notice: constantNativeNotice( 0x1d, p[1]! ) };
 	// 76FE9B -> 67D030 -> child 23: seven-second notice window, no guide.
-	if ( frame.opcode === 0xb220 && p[0] === 1 ) {
+	if ( frame.opcode === TC_NOTICE_EDIT_ACK_OPCODE && p[0] === 1 ) {
 		return {
 			notice: {
 				key: "UIIT_MSG_TC_COMMON_KNOW_REMIND_UPDATE",
@@ -67,14 +76,14 @@ export function academyStatusNotice(
 	// alone, so no arguments); detail 0 prints the cancel line and
 	// detail 2 the no-reply line, both system chat type 4 (67A600).
 	// An outer-2 refusal goes through category 0x1D in gameplay.
-	if ( frame.opcode === 0xb592 ) {
+	if ( frame.opcode === MENTOR_JOIN_ACK_OPCODE ) {
 		if ( p[0] !== 1 || p.length !== 2 ) return null;
 		if ( p[1] === 1 ) return { key: "UIIT_STT_TC_MACHING_COMPLETE", value: 0, banner: true, bannerOnly: true };
 		if ( p[1] === 0 ) return { key: "UIIT_MSG_TC_JOIN_CANCEL", value: 0, nativeType: 4 };
 		if ( p[1] === 2 ) return { key: "UIIT_MSG_TC_JOIN_NOREPLY", value: 0, nativeType: 4 };
 		return null;
 	}
-	if ( frame.opcode !== 0x3ac5 ) return null;
+	if ( frame.opcode !== TC_STATUS_OPCODE ) return null;
 	// 773FA5: dissolution shows the child-23 notice banner.
 	if ( p[0] === 1 ) {
 		return {
@@ -91,7 +100,7 @@ export function academyStatusNotice(
 	}
 	// 7740F9: subtype 3 is voluntary leave (1), expulsion (2) or silent (3).
 	if ( p[0] === 3 ) {
-		const id = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true );
+		const id = viewOf( p ).getUint32( 1, true );
 		const flag = p[5]!;
 		const member = state.members?.find( m => m.id === id );
 		if ( flag === 1 ) {
@@ -122,7 +131,7 @@ export function academyStatusNotice(
 	}
 	// 774622: subtype 4 is voluntary (0) or compulsory (1) graduation.
 	if ( p[0] === 4 ) {
-		const id = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true );
+		const id = viewOf( p ).getUint32( 1, true );
 		const flag = p[5]!;
 		if ( flag !== 0 && flag !== 1 ) return null;
 		const member = state.members?.find( m => m.id === id );
@@ -150,7 +159,7 @@ export function academyStatusNotice(
 	// flag 1 from the mentor lane's world-bound / session-closed
 	// hooks.
 	if ( p[0] === 5 && p[5] === 1 ) {
-		const id = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true );
+		const id = viewOf( p ).getUint32( 1, true );
 		const member = state.members?.find( m => m.id === id );
 		const after = next.members?.find( m => m.id === id );
 		if ( !member || !after ) return null;
@@ -192,15 +201,15 @@ export function academyBuffNotices(
 	frame: WireFrame
 ): readonly SystemNotice[] {
 	const p = frame.payload;
-	if ( frame.opcode === 0x3cc1 ) {
+	if ( frame.opcode === TC_BUFF_STATE_OPCODE ) {
 		return p[0] === 7 ? [ { key: "UIIT_CTL_TC_SAVE_BUFF_TIME_OVER", value: 0, nativeType: 0 } ] : [];
 	}
-	if ( frame.opcode !== 0xb00c || p.length < 1 ) return [];
+	if ( frame.opcode !== TC_BUFF_LIST_OPCODE || p.length < 1 ) return [];
 	if ( p[0] === 2 ) return [ { key: "UIIT_MSG_TC_PASS_ERROR", value: 0, nativeType: 0 } ];
 	if ( p[0] !== 0 || p.length < 2 ) return [];
 	const count = p[1]! << 24 >> 24;
 	if ( count <= 0 || 2 + count * 12 > p.length ) return [];
-	const view = new DataView( p.buffer, p.byteOffset, p.byteLength ), notices: SystemNotice[] = [];
+	const view = viewOf( p ), notices: SystemNotice[] = [];
 	for ( let i = 0; i < count; i++ ) {
 		const donor = state.members?.find( m => m.id === view.getUint32( 2 + i * 12 + 4, true ) );
 		if ( donor && donor.kind !== 0 ) {

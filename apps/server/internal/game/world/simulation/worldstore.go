@@ -11,6 +11,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
@@ -32,8 +33,12 @@ but cannot establish a competing live-position plane.
 ================
 */
 type WorldStore struct {
-	mu            sync.Mutex
-	states        map[string]*WorldState
+	mu     sync.Mutex
+	states map[string]*WorldState
+	// clocks is each kept actor's movement revision (MovementWatch):
+	// bumped under mu whenever a field MovementCurrent compares changes,
+	// and once more when the actor is forgotten. Read without mu.
+	clocks        map[string]*atomic.Uint64
 	groundConfig  GroundWalkConfig
 	groundUpdates map[string]GroundUpdate
 	tethers       map[string]Tether
@@ -47,7 +52,7 @@ NewWorldStore returns an empty WorldStore.
 ================
 */
 func NewWorldStore() *WorldStore {
-	return &WorldStore{states: make(map[string]*WorldState)}
+	return &WorldStore{states: make(map[string]*WorldState), clocks: make(map[string]*atomic.Uint64)}
 }
 
 /*
@@ -84,7 +89,107 @@ func (st *WorldStore) state(key string, seed func() WorldState) *WorldState {
 		return &seeded
 	}
 	st.states[key] = &seeded
+	st.clocks[key] = new(atomic.Uint64)
 	return &seeded
+}
+
+//============================================================================
+// The movement revision (C3: an O(1) movement-current check)
+//============================================================================
+
+/*
+================
+movementFields
+
+The fields MovementCurrent compares, the segment by value.
+================
+*/
+type movementFields struct {
+	lifeRevision uint64
+	spawn        Spawn
+	movementMode uint8
+	hasSegment   bool
+	segment      MoveSegment
+}
+
+/*
+================
+movementFieldsOf
+================
+*/
+func movementFieldsOf(w *WorldState) movementFields {
+	fields := movementFields{lifeRevision: w.LifeRevision, spawn: w.Spawn, movementMode: w.MovementMode}
+	if w.MoveSegment != nil {
+		fields.hasSegment, fields.segment = true, *w.MoveSegment
+	}
+	return fields
+}
+
+/*
+================
+noteMovementLocked
+
+Bumps the actor's movement revision when a change under the lock moved
+any field MovementCurrent compares. Every method that changes a kept
+state calls it, so an unchanged revision proves those fields unchanged.
+Caller holds st.mu.
+================
+*/
+func (st *WorldStore) noteMovementLocked(key string, before movementFields, w *WorldState) {
+	if movementFieldsOf(w) == before {
+		return
+	}
+	if clock := st.clocks[key]; clock != nil {
+		clock.Add(1)
+	}
+}
+
+/*
+================
+MovementWatch
+
+A movement revision taken with a snapshot. Unchanged answers, with one
+atomic load and no lock, that none of the fields MovementCurrent compares
+has changed since, and that the actor is still kept. A false answer only
+means "look": the caller then asks MovementCurrent, whose answer stands.
+The zero watch (an actor that was not kept) is never unchanged.
+================
+*/
+type MovementWatch struct {
+	clock    *atomic.Uint64
+	revision uint64
+}
+
+/*
+================
+MovementWatch.Unchanged
+================
+*/
+func (w MovementWatch) Unchanged() bool {
+	return w.clock != nil && w.clock.Load() == w.revision
+}
+
+/*
+==================
+WorldStore.SnapshotIntoWatched
+
+SnapshotInto that also returns the actor's movement revision, taken under
+the same lock as the copy, for the snapshot's MovementCurrent predicate
+(movement/sessionworld.go).
+==================
+*/
+func (st *WorldStore) SnapshotIntoWatched(key string, dst *WorldState, seed func() WorldState) MovementWatch {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+
+	state := st.state(key, seed)
+	st.advanceGroundWalk(key, state)
+	CloneWorldStateInto(*state, dst)
+	clock := st.clocks[key]
+	if clock == nil || st.states[key] != state {
+		return MovementWatch{}
+	}
+	return MovementWatch{clock: clock, revision: clock.Load()}
 }
 
 /*
@@ -314,6 +419,7 @@ func (st *WorldStore) Update(key string, seed func() WorldState, fn func(*WorldS
 	if state.groundActive() {
 		owner = state.Ground.owner
 	}
+	before := movementFieldsOf(state)
 	fn(state)
 	if previous == state.MoveSegment && (previousLife != state.LifeRevision || previousSpawn != state.Spawn) {
 		state.groundRevision++
@@ -321,6 +427,7 @@ func (st *WorldStore) Update(key string, seed func() WorldState, fn func(*WorldS
 		delete(st.groundUpdates, key)
 	}
 	st.bindGroundWalk(key, state, previous, owner)
+	st.noteMovementLocked(key, before, state)
 	return CloneWorldState(*state)
 }
 
@@ -341,6 +448,12 @@ func (st *WorldStore) Forget(key string) {
 
 	delete(st.states, key)
 	delete(st.groundUpdates, key)
+	if clock := st.clocks[key]; clock != nil {
+		// A watch taken before the Forget must not outlive it: the
+		// re-seeded actor gets a fresh clock.
+		clock.Add(1)
+		delete(st.clocks, key)
+	}
 }
 
 /*

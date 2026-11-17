@@ -36,7 +36,20 @@ u64, so a 10,000,000,000 price fits. Absent, the fields stay native u32.
 import type { WireFrame } from "@/engine/contracts/network";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import { groupedNumber } from "@/engine/foundation/ui/guide-content";
+import {
+	STALL_BUY_RESULT_OPCODE,
+	STALL_CLOSED_OPCODE,
+	STALL_CLOSE_RESULT_OPCODE,
+	STALL_CREATE_RESULT_OPCODE,
+	STALL_EDIT_RESULT_OPCODE,
+	STALL_EVENT_OPCODE,
+	STALL_LEAVE_RESULT_OPCODE,
+	STALL_NETWORK_BOUGHT_OPCODE,
+	STALL_NETWORK_RESULT_OPCODE,
+	STALL_VISIT_RESULT_OPCODE
+} from "@/engine/contracts/opcodes";
 import { decodeInventoryItem } from "./inventory-item";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const STALL_SLOTS = 10;
 // 0x7367/0x3667 type 9: the stall window's own chat box (CIFChatModule
@@ -263,7 +276,7 @@ Folds one frame; null for frames the stall does not own.
 ================
 */
 export function stallFrame( state: StallState, frame: WireFrame, ctx: StallContext ): StallOutcome | null {
-	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const p = frame.payload, v = viewOf( p );
 	let o = 0;
 	const take = ( n: number ) => {
 		if ( o + n > p.length ) throw Error( "Truncated stall frame" );
@@ -307,7 +320,7 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 		return { state, notice: { category, code: p[1]! } };
 	};
 	switch ( frame.opcode ) {
-		case 0xb049:
+		case STALL_CREATE_RESULT_OPCODE:
 			if ( p[0] !== 1 ) return refusal();
 			o = 1;
 			return done( {
@@ -320,8 +333,8 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 					title: state.title
 				}
 			} );
-		case 0xb42c:
-		case 0xb6e7:
+		case STALL_CLOSE_RESULT_OPCODE:
+		case STALL_LEAVE_RESULT_OPCODE:
 			if ( p[0] !== 1 ) return refusal();
 			o = 1;
 			return done( {
@@ -331,7 +344,7 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 					savedGreeting: state.savedGreeting
 				}
 			} );
-		case 0xb61f: {
+		case STALL_VISIT_RESULT_OPCODE: {
 			if ( p[0] !== 1 ) return refusal();
 			o = 1;
 			const owner = u32(), greeting = wstr(), open = u8() === 1, mode = u8(), rows = offers();
@@ -351,7 +364,7 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 				}
 			} );
 		}
-		case 0xb3f9: {
+		case STALL_BUY_RESULT_OPCODE: {
 			if ( p[0] !== 1 ) return refusal();
 			o = 1;
 			// The slot's offer may already sit in soldPending: the sold
@@ -368,7 +381,7 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 				...(offer ? { receive: [ offer.item ] } : {})
 			} );
 		}
-		case 0xb1a8: {
+		case STALL_EDIT_RESULT_OPCODE: {
 			if ( p[0] !== 1 ) return refusal();
 			o = 1;
 			const kind = u8();
@@ -408,7 +421,7 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 			} else if ( kind === EDIT_GREETING ) next = { ...state, greeting: wstr() };
 			return done( { state: next, ...(notice ? { notice } : {}), ...(messages ? { messages } : {}) } );
 		}
-		case 0x3260: {
+		case STALL_EVENT_OPCODE: {
 			if ( state.phase === "none" ) return null;
 			const kind = u8();
 			if ( kind === EVENT_LEFT || kind === EVENT_CAME ) {
@@ -457,7 +470,7 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 				...(messages ? { messages } : {})
 			} );
 		}
-		case 0x33d1: {
+		case STALL_CLOSED_OPCODE: {
 			const gid = u32();
 			u8();
 			if ( state.phase === "visitor" && state.owner === gid ) {
@@ -471,7 +484,7 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 			}
 			return null;
 		}
-		case 0xb6f9: {
+		case STALL_NETWORK_RESULT_OPCODE: {
 			if ( p[0] !== 1 ) {
 				if ( p.length !== 2 ) throw Error( "Invalid stall network refusal" );
 				return {
@@ -489,7 +502,7 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 			}
 			return done( { state: { ...state, network: { ...state.network, rows, pages } } } );
 		}
-		case 0xb2ca: {
+		case STALL_NETWORK_BOUGHT_OPCODE: {
 			const buying = state.network.buying;
 			const network = { ...state.network, buying: null };
 			if ( p[0] !== 1 ) {
