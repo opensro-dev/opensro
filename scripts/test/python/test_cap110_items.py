@@ -571,9 +571,14 @@ class ImportTests(unittest.TestCase):
 			# #3399 step 5c: the Roc's set armour joins only with SRO_ROC on, and
 			# a later build without it keeps its identity reserved.
 			self.assertNotIn(ROC_PIECE, first["idMap"])
+			# An importer that ran after the equipment in the earlier build took
+			# the next identity. The Roc's armour, new to this build, numbers
+			# above it instead of taking it.
+			published = max(entry["target"] for entry in first["idMap"].values()) + 1
+			(target / "itemdata_110001.txt").write_bytes(utf16([weapon("ITEM_ETC_LATER_IMPORT", published)]))
 			with patch.dict(os.environ, {importer.FLAG: "on", "SRO_ROC": "on"}), 				patch.object(importer, "copy_asset_closure", return_value=[]):
 				with_roc = importer.add_items(later, native, output)
-			self.assertIn(ROC_PIECE, with_roc["idMap"])
+			self.assertEqual(with_roc["idMap"][ROC_PIECE]["target"], published + 1)
 			with patch.dict(os.environ, {importer.FLAG: "on", "SRO_ROC": ""}), 				patch.object(importer, "copy_asset_closure", return_value=[]):
 				without = importer.add_items(later, native, output)
 				still = importer.add_items(later, native, output)

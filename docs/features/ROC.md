@@ -118,6 +118,8 @@ The server half follows the v1.188 reference server (addresses in `action/roc.go
   - the pieces number after every other imported piece, so a fresh build numbers the rest the same either way;
   - a build with `SRO_ROC` off keeps their identities reserved (`retiredIds` in the import marker), so no later
     item takes an id a player's Roc piece holds.
+  - turned on over a variant built without them, they number above everything the other importers (rewards,
+    honor, Nasrun, pets, mall) already published there, so no published identity moves.
 - **Off:** with `SRO_ROC` off they aren't imported, and the rest of the import is unchanged.
 
 ## What is not here yet
