@@ -70,16 +70,3 @@ native flakes were rental items that lapsed with their event
 func (e ChristmasEvent) SnowflakesExpireAt(now time.Time) bool {
 	return !e.ActiveAt(now)
 }
-
-/*
-================
-SocksExpireAt
-
-The Red Santa Socks leave at every world entry: the winter event handed
-them out before it moved to the native snow flakes, and no event hands
-them out now.
-================
-*/
-func SocksExpireAt() bool {
-	return true
-}

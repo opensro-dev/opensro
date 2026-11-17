@@ -392,8 +392,8 @@ func ownersCharacter(actors map[uint32]rewardActor, gid uint32) *enterworld.Char
 Runtime.RemoveExpiredEventItems
 
 The entry cleanup the enterworld door calls: a finished Halloween
-window's boxes, the winter event's snow flakes whenever it does not run,
-and the Red Santa Socks it once handed out. True only when a row actually
+window's boxes and the winter event's snow flakes whenever it does not
+run. The Red Santa Socks are a native item and stay. True only when a row actually
 left, so the door writes nothing for anyone else.
 ================
 */
@@ -403,9 +403,6 @@ func (rt *Runtime) RemoveExpiredEventItems(character *enterworld.Character) bool
 		return removed
 	}
 	if rt.Christmas.SnowflakesExpireAt(rt.Now()) && removeEventItems(character, progression.ChristmasSnowflakeCodename) {
-		removed = true
-	}
-	if progression.SocksExpireAt() && removeEventItems(character, progression.ChristmasSockCodename) {
 		removed = true
 	}
 	return removed

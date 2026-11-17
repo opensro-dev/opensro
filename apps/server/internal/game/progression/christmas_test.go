@@ -17,8 +17,7 @@ import (
 TestChristmasSnowflakesExpireWheneverTheEventDoesNotRun
 
 Inside its window the event runs and the flakes stay; before or after it,
-on without a valid window, or off, it does not and the flakes leave. The
-Red Santa Socks leave always: no event hands them out.
+on without a valid window, or off, it does not and the flakes leave.
 ================
 */
 func TestChristmasSnowflakesExpireWheneverTheEventDoesNotRun(t *testing.T) {
@@ -26,7 +25,7 @@ func TestChristmasSnowflakesExpireWheneverTheEventDoesNotRun(t *testing.T) {
 	t.Setenv(EnvChristmasEvent, "on")
 	t.Setenv(EnvChristmasEventWindow, "2026-12-20T00:00:00Z/2027-01-03T00:00:00Z")
 	on := ChristmasEventFromEnv()
-	if !on.ActiveAt(inside) || on.SnowflakesExpireAt(inside) || !SocksExpireAt() {
+	if !on.ActiveAt(inside) || on.SnowflakesExpireAt(inside) {
 		t.Fatal("inside the window: the event runs and keeps its flakes")
 	}
 	for _, at := range []time.Time{time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC), time.Date(2027, 1, 3, 0, 0, 0, 0, time.UTC)} {

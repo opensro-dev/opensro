@@ -45,10 +45,6 @@ const (
 
 	// ChristmasSnowSlaveCodename is the hunted Snow Slave.
 	ChristmasSnowSlaveCodename = "MOB_EV_WINTER_SNOWMAN"
-
-	// ChristmasSockCodename is the 2007 event's Red Santa Socks, which
-	// the winter event handed out before it moved to the native flakes.
-	ChristmasSockCodename = "ITEM_ETC_E071225_SANTASOCKS"
 )
 
 // christmasGifts is the native table's v1.150 half, at the native

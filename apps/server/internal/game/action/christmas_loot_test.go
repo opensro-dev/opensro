@@ -24,6 +24,10 @@ import (
 // testSnowflakeRef is the fixture's snow flake reference.
 const testSnowflakeRef = 28244
 
+// testSockCodename is the 2007 event's Red Santa Socks, a native item
+// a bag may hold.
+const testSockCodename = "ITEM_ETC_E071225_SANTASOCKS"
+
 /*
 ================
 christmasLootRuntime
@@ -42,7 +46,7 @@ func christmasLootRuntime(t *testing.T, c *enterworld.Character, on bool) *Runti
 		}
 	}
 	items[progression.ChristmasSnowflakeCodename] = etc(testSnowflakeRef, progression.ChristmasSnowflakeCodename, [4]int64{3, 3, 9, 0}, 250)
-	items[progression.ChristmasSockCodename] = etc(23463, progression.ChristmasSockCodename, [4]int64{3, 3, 9, 0}, 50)
+	items[testSockCodename] = etc(23463, testSockCodename, [4]int64{3, 3, 9, 0}, 50)
 	items["ITEM_MALL_DAMAGE_ABS_20P_SCROLL"] = etc(5001, "ITEM_MALL_DAMAGE_ABS_20P_SCROLL", [4]int64{3, 3, 13, 1}, 50)
 	items["ITEM_COS_C_RUDOLPH"] = etc(5002, "ITEM_COS_C_RUDOLPH", [4]int64{3, 3, 1, 2}, 1)
 	rt, _ := newTestRuntime(c, items)
@@ -170,8 +174,8 @@ func TestEveryChristmasGiftIsInShippedData(t *testing.T) {
 TestChristmasTokensLeaveAtEntry
 
 A world entry outside the event takes every flake from the bag and from
-a pet's bag; inside it the flakes stay. The Red Santa Socks leave at
-every entry. Every other row stays.
+a pet's bag; inside it the flakes stay. The Red Santa Socks, a native
+item, stay either way, as does every other row.
 ================
 */
 func TestChristmasTokensLeaveAtEntry(t *testing.T) {
@@ -180,21 +184,24 @@ func TestChristmasTokensLeaveAtEntry(t *testing.T) {
 		c.MissionInventory = []enterworld.InventoryRow{
 			flakeRow(20, 7),
 			{Slot: 21, Codename: "ITEM_ETC_HP_POTION_01", StackCount: 5},
-			{Slot: 22, RefObjID: 23463, Codename: progression.ChristmasSockCodename, TypeFlags: wire.PackTypeFlags(3, 3, 9, 0), StackCount: 2},
+			{Slot: 22, RefObjID: 23463, Codename: testSockCodename, TypeFlags: wire.PackTypeFlags(3, 3, 9, 0), StackCount: 2},
 		}
 		c.ActiveCOS = &enterworld.CharacterCOS{Container: &domain.COSContainer{Rows: []enterworld.InventoryRow{flakeRow(0, 3)}}}
 		return c
 	}
 	on := character()
-	if !christmasLootRuntime(t, on, true).RemoveExpiredEventItems(on) || bagCount(on, progression.ChristmasSnowflakeCodename) != 7 ||
-		bagCount(on, progression.ChristmasSockCodename) != 0 {
-		t.Fatal("event on: flakes must stay, socks leave", on.MissionInventory)
+	if christmasLootRuntime(t, on, true).RemoveExpiredEventItems(on) || bagCount(on, progression.ChristmasSnowflakeCodename) != 7 ||
+		bagCount(on, testSockCodename) != 2 {
+		t.Fatal("event on: flakes and socks stay", on.MissionInventory)
 	}
 	off := character()
 	if !christmasLootRuntime(t, off, false).RemoveExpiredEventItems(off) {
 		t.Fatal("event off: no removal reported")
 	}
-	if bagCount(off, progression.ChristmasSnowflakeCodename) != 0 || len(off.ActiveCOS.Container.Rows) != 0 || bagCount(off, "ITEM_ETC_HP_POTION_01") != 5 {
+	// The Red Santa Socks are a native item no rule removes: they stay
+	// with the event on or off (review2-claude on #3791).
+	if bagCount(off, progression.ChristmasSnowflakeCodename) != 0 || len(off.ActiveCOS.Container.Rows) != 0 || bagCount(off, "ITEM_ETC_HP_POTION_01") != 5 ||
+		bagCount(off, testSockCodename) != 2 {
 		t.Fatal("event off: bag", off.MissionInventory, off.ActiveCOS.Container.Rows)
 	}
 	if christmasLootRuntime(t, off, false).RemoveExpiredEventItems(off) {
