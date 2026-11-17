@@ -81,6 +81,23 @@ check "agent through /api" "$base/api/readyz"
 check "gameworld through /shards" "$base/shards/global-official/transport/readyz"
 check "client page" "$base/play"
 check "packs manifest" "$base/assets/packs/manifest.json"
+check "boot screen image" "$base/assets/images/Media_extracted/interface/outer/logo-big.png"
+
+# Text is compressed on the wire; packs never are (a Range over an encoded
+# body would cut the compressed bytes; ASSET_DELIVERY.md "Sizes, measured").
+encoding() { curl -fsS -o /dev/null -D - -H 'Accept-Encoding: gzip' "$@" | tr -d '\r' | sed -nE 's/^[Cc]ontent-[Ee]ncoding: *//p'; }
+# Matched in bash, not in a pipe: under pipefail, `head` closing the pipe
+# would fail the command before it.
+page="$(curl -fsS "$base/play")"
+[[ "$page" =~ (/assets/[A-Za-z0-9_-]+\.js) ]] || { echo "smoke: no bundle in /play" >&2; exit 1; }
+bundle="${BASH_REMATCH[1]}"
+[ "$(encoding "$base$bundle")" = gzip ] || { echo "smoke: $bundle is not gzip-encoded" >&2; exit 1; }
+echo "ok    client bundle gzip"
+packs="$(curl -fsS "$base/assets/packs/manifest.json")"
+[[ "$packs" =~ (/assets/packs/[A-Za-z0-9_-]+\.bin) ]] || { echo "smoke: no pack in the manifest" >&2; exit 1; }
+pack="${BASH_REMATCH[1]}"
+[ -z "$(encoding -H 'Range: bytes=0-1023' "$base$pack")" ] || { echo "smoke: $pack came back content-encoded" >&2; exit 1; }
+echo "ok    packs not re-encoded"
 
 # A real title login through the edge: the seeded account and the session key ring.
 protocol="$(sed -nE 's/^export const RELEASE_PROTOCOL = ([0-9]+);/\1/p' \
