@@ -66,7 +66,7 @@ import cap110_skill_effects as effects  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
 import skilldata_enc as skill_tables  # noqa: E402
 import sro_pk2  # noqa: E402
-from alexandria_map_tables import native_text_row  # noqa: E402
+from alexandria_map_tables import later_zone_rows, native_text_row  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
 from skytemple_gates import FIELD_WORLD, d_arrival, prepare_gates  # noqa: E402
 from sro_paths import MAIN_CHECKOUT_ROOT, trees_overlap  # noqa: E402
@@ -806,7 +806,7 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 		zone_path = text_root / "textzonename.txt"
 		zone_keys = {row[1] for row in tables.table_rows(zone_path.read_bytes()) if len(row) > 1}
 		zone_prefixes = tuple(sorted({REGION_PREFIX + letter + "_" for letter in "ABCD"}))
-		zone_rows = [native_text_row(row) for row in tables.table_rows(read("textzonename.txt"))
+		zone_rows = [native_text_row(row) for row in later_zone_rows(read)
 			if len(row) >= 10 and (row[1] in {str(region) for region in fields} or row[1].startswith(zone_prefixes))
 			and row[1] not in zone_keys]
 		write_atomically(zone_path, characters.append_rows(zone_path.read_bytes(), zone_rows))

@@ -325,7 +325,13 @@ def build_trees(base):
 		"npcchat.txt": utf16([["1", "NPC_AR_TEST", "SN_NPC_AR_TEST_CHAT", "SN_NPC_AR_TEST_PS"],
 			["1", "NPC_NATIVE_NAMED", "SN_NATIVE_CHAT", "0"]]),
 		"regioncode.txt": utf16([["1", str(region), f"RN_ARABIA_{family}", ""] for region, family in REGIONS]),
-		"textzonename.txt": utf16([["1", "RN_ARABIA_TOWN", "x", "", "", "Baghdad", "", "", "", "", ""]]),
+		# v1.696 shape: an index of shards, rows with a text id after the service cell.
+		"textzonename.txt": utf16([["TextZoneName_3000.txt"]]),
+		"textzonename_3000.txt": utf16([
+			object_row("RN_ARABIA_TOWN_01", "Baghdad"),
+			["1", "3025", str(TOWN_REGION), "Korean", "0", "0", "0", "0", "0", "Baghdad Town",
+				"0", "0", "0", "Baghdad Town", "Baghdad Town", "Baghdad Town", "Baghdad Town"],
+		]),
 		"textdata_object.txt": utf16([["TextData_Object_1000.txt"]]),
 		"textdata_object_1000.txt": utf16([
 			object_row("SN_MOB_AR_TEST", "Test Beast"),
@@ -438,6 +444,11 @@ class ArabiaImportTest(unittest.TestCase):
 			self.assertEqual(gates["GATE_ARABIA_DUNGEON_START"][12], "112")
 			regions = read_rows(text / "regioncode.txt")
 			self.assertEqual(sum(1 for row in regions if row[2].startswith("RN_ARABIA")), 7)
+			# The minimap title reads the zone row of the region id; the
+			# banner the code's _01 row (both from the sharded v1.696 table).
+			zones = {row[1]: row[8] for row in read_rows(text / "textzonename.txt") if len(row) > 8}
+			self.assertEqual(zones[str(TOWN_REGION)], "Baghdad Town")
+			self.assertEqual(zones["RN_ARABIA_TOWN_01"], "Baghdad")
 			# The unbuilt garden sector imports no terrain; its
 			# region code row above still imports.
 			self.assertFalse((output / "Map_extracted" / "123" / "246.m").exists())

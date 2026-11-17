@@ -61,7 +61,7 @@ import cap110_monsters as monsters  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
 import skytemple_import as sky  # noqa: E402
 import sro_pk2  # noqa: E402
-from alexandria_map_tables import native_text_row  # noqa: E402
+from alexandria_map_tables import later_zone_rows, native_text_row  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
 from sro_paths import trees_overlap  # noqa: E402
 
@@ -299,7 +299,7 @@ def add_constantinople(native, output, source=None, closure=sky.copy_resource_cl
 		write_atomically(region_path, monsters.encode_rows(kept + code_rows))
 		zone_name_path = text_root / "textzonename.txt"
 		zone_keys = {row[1] for row in tables.table_rows(zone_name_path.read_bytes()) if len(row) > 1}
-		zone_rows = [native_text_row(row) for row in tables.table_rows(read("textzonename.txt"))
+		zone_rows = [native_text_row(row) for row in later_zone_rows(read)
 			if len(row) >= 10 and row[1] in {str(region) for region in regions}
 			and row[1] not in zone_keys]
 		write_atomically(zone_name_path, characters.append_rows(zone_name_path.read_bytes(), zone_rows))
