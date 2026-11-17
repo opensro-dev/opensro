@@ -12,7 +12,11 @@ on the Ferry crossing spikes.
 */
 package caravanai
 
-import "math"
+import (
+	"math"
+
+	"opensro.online/server/internal/game/world"
+)
 
 /*
 ================================================================================
@@ -61,14 +65,16 @@ const (
 
 // Waypoint is a single navigation anchor along the Silkroad trade highway.
 type Waypoint struct {
-	Name          string
-	Town          TownID
-	SpecialtyShop string
-	RegionID      uint16
-	X             float32
-	Y             float32
-	Z             float32
-	Chokepoint    bool
+	FerrySourceRef uint32
+	FerryTargetID  uint32
+	Name           string
+	Town           TownID
+	SpecialtyShop  string
+	RegionID       uint16
+	X              float32
+	Y              float32
+	Z              float32
+	Chokepoint     bool
 }
 
 /*
@@ -83,78 +89,78 @@ var (
 		Town:          TownJangan,
 		SpecialtyShop: "NPC_CH_SPECIAL",
 		RegionID:      RegionJanganTown,
-		X:             6432,
-		Y:             0,
-		Z:             1092,
+		X:             1760.32,
+		Y:             11.0,
+		Z:             480.22,
 	}
 	waypointJanganWestGate = Waypoint{
 		Name:     "Jangan West Gate",
 		RegionID: RegionJanganWestGate,
-		X:        6120,
+		X:        120.0,
 		Y:        0,
-		Z:        1080,
+		Z:        1080.0,
 	}
 	waypointJanganFerry = Waypoint{
 		Name:       "Jangan Ferry Crossing",
 		RegionID:   RegionJanganFerryEast,
-		X:          5120,
-		Y:          0,
-		Z:          1140,
+		X:          405.0,
+		Y:          -53.15,
+		Z:          545.0,
 		Chokepoint: true,
 	}
 	waypointJanganNorthDetour = Waypoint{
 		Name:     "Northern Mountain Detour",
 		RegionID: RegionJanganNorthDetour,
-		X:        4980,
+		X:        980.0,
 		Y:        0,
-		Z:        1620,
+		Z:        1620.0,
 	}
 	waypointDonwhangEastRoad = Waypoint{
 		Name:     "Donwhang East Approach",
 		RegionID: RegionDonwhangEastRoad,
-		X:        4100,
+		X:        1420.0,
 		Y:        0,
-		Z:        1880,
+		Z:        1280.0,
 	}
 	waypointDonwhangSpecialty = Waypoint{
 		Name:          "Donwhang Specialty Shop",
 		Town:          TownDonwhang,
 		SpecialtyShop: "NPC_WC_SPECIAL",
 		RegionID:      RegionDonwhangTown,
-		X:             3550,
-		Y:             0,
-		Z:             2070,
+		X:             393.06,
+		Y:             -106.62,
+		Z:             1560.31,
 	}
 	waypointDonwhangWestGate = Waypoint{
 		Name:     "Donwhang West Gate",
 		RegionID: RegionDonwhangWestGate,
-		X:        3280,
-		Y:        0,
-		Z:        2050,
+		X:        280.0,
+		Y:        -106.0,
+		Z:        1050.0,
 	}
 	waypointKarakoramPass = Waypoint{
 		Name:       "Karakoram Pass",
 		RegionID:   RegionKarakoramPass,
-		X:          2180,
+		X:          1180.0,
 		Y:          0,
-		Z:          1420,
+		Z:          1420.0,
 		Chokepoint: true,
 	}
 	waypointTaklamakanOasis = Waypoint{
 		Name:     "Taklamakan Oasis",
 		RegionID: RegionTaklamakanOasis,
-		X:        1120,
+		X:        1120.0,
 		Y:        0,
-		Z:        680,
+		Z:        680.0,
 	}
 	waypointHotanSpecialty = Waypoint{
 		Name:          "Hotan Specialty Shop",
 		Town:          TownHotan,
 		SpecialtyShop: "NPC_KT_SPECIAL",
 		RegionID:      RegionHotanTown,
-		X:             114,
-		Y:             0,
-		Z:             47,
+		X:             1515.55,
+		Y:             243.99,
+		Z:             904.55,
 	}
 )
 
@@ -290,4 +296,38 @@ func StepPosition(
 	}
 	ratio := float64(maxStep) / dist
 	return curX + float32(dx*ratio), curZ + float32(dz*ratio), false
+}
+
+/*
+==================
+StepWaypoint
+
+Advances (curRegion, curX, curZ) across the continuous outdoor sector grid
+toward target by at most maxStep world units, folding the resulting position
+into its canonical (RegionID, localX, localZ) frame via world.NormalizeOutdoor.
+==================
+*/
+func StepWaypoint(
+	curRegion uint16,
+	curX, curZ float32,
+	target Waypoint,
+	maxStep float32,
+) (nextRegion uint16, nextX, nextZ float32, arrived bool) {
+	if maxStep <= 0 {
+		return curRegion, curX, curZ, false
+	}
+	from := world.RegionXZ{RegionID: curRegion, X: float64(curX), Z: float64(curZ)}
+	to := world.RegionXZ{RegionID: target.RegionID, X: float64(target.X), Z: float64(target.Z)}
+	dx, dz := world.Delta(from, to)
+	dist := math.Hypot(dx, dz)
+	if dist <= float64(maxStep) {
+		return target.RegionID, target.X, target.Z, true
+	}
+	ratio := float64(maxStep) / dist
+	folded := world.NormalizeOutdoor(world.RegionXZ{
+		RegionID: curRegion,
+		X:        from.X + dx*ratio,
+		Z:        from.Z + dz*ratio,
+	})
+	return folded.RegionID, float32(folded.X), float32(folded.Z), false
 }

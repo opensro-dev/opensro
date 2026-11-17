@@ -40,6 +40,8 @@ type economyDoorReason struct {
 // its reasons. Several gameplay paths share a door (an NPC shop's buy and
 // sell are both "shop-transaction"), so the direction picks the reason.
 var economyDoorReasons = map[string]economyDoorReason{
+	"caravan-escort":   {gain: "caravan_escort_reward"},
+	"caravan-hire":     {loss: "caravan_hunter_fee"},
 	"shop-transaction": {gain: "npc_sale", loss: "shop_buy"},
 	// A new character's starting gold, at creation or (for a record made
 	// before the creation seed existed) at its first world entry.
@@ -217,6 +219,8 @@ const (
 // comes back through pickup-gold as monster_gold. trade_payout is no longer
 // produced (economyMemberReasons split it); rows written before keep a kind.
 var economyReasonKinds = map[string]string{
+	"caravan_escort_reward":  EconomyKindMint,
+	"caravan_hunter_fee":     EconomyKindBurn,
 	"npc_sale":               EconomyKindMint,
 	"monster_gold":           EconomyKindMint,
 	"quest_reward":           EconomyKindMint,

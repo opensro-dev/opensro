@@ -96,6 +96,25 @@ type Runtime struct {
 	// port-only, not native, #3358): the answer line and true when the
 	// line was the command; nil leaves "/contributor" ordinary text.
 	Contributor func(accountID, message string) (answer string, handled bool)
+	// CaravanCommand handles port-only AI caravan commands (!caravans,
+	// !memory, !accept, !hire, !attack) when SRO_AI_CARAVANS is on.
+	CaravanCommand func(divisionID, playerName string, playerJob uint8, message string) (answer string, handled bool)
+}
+
+/*
+================
+PublishAgentChat
+
+Publishes a named public chat line from a server-owned AI caravan agent
+into the division's chat channel and transcript.
+================
+*/
+func (rt *Runtime) PublishAgentChat(division, agentName, text string) {
+	if rt == nil || division == "" || agentName == "" || text == "" {
+		return
+	}
+	payload := EncodeChatBroadcastNamed(ChatTypeGlobal, agentName, text)
+	rt.publish(division, agentName, text, publicLine{payload: payload})
 }
 
 /*

@@ -231,6 +231,12 @@ Pointers distinguish absent legacy values from meaningful zero values.
 ================
 */
 type Character struct {
+	// RuntimeOnly marks server-owned actors (port-only AI caravans); never serialized.
+	RuntimeOnly         bool   `json:"-"`
+	RuntimeTransportGID uint32 `json:"-"`
+	CaravanCommandAtMs  int64  `json:"-"`
+	CaravanRewardDay    int64  `json:"caravanRewardDay,omitempty"`
+	CaravanRewardCount  uint8  `json:"caravanRewardCount,omitempty"`
 	// Actor-only teleport state. Character-store snapshots carry it; reconnect
 	// never resurrects a timer belonging to the previous native actor lifetime.
 	NativeTeleportMode uint8     `json:"-"`

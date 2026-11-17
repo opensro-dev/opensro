@@ -60,6 +60,8 @@ barrier.
 ==================
 */
 type Runtime struct {
+	// Port-only server actors report committed player hits outside the authority door.
+	ServerActorHit    func(division, victim, attacker string, damage int, nowMs int64)
 	berserkActors     sync.Map // derived expiry index; character store owns state
 	battleActors      sync.Map // battle-state expiry index (battlestate.go)
 	cosRefusalLog     sync.Map // cosground.go: cosRefusalKey -> *cosRefusalWindow (refusal log rollup)

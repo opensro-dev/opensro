@@ -233,6 +233,9 @@ func (rt *Runtime) commitPlayerHitInDoor(division string, caster *enterworld.Cha
 		return out
 	}
 	if h.struck.fatal {
+		if victim.RuntimeOnly && victim.ActiveCOS != nil && victim.ActiveCOS.Container != nil {
+			out.public = append(out.public, rt.scatterTransportCargo(division, victim, victim.ActiveCOS, now, cargoLoss{cause: "caravan-defeat", winnerName: caster.Name})...)
+		}
 		actor, public, after := rt.payPlayerKillInDoor(division, caster, victim, h.kill, now)
 		out.actor = append(out.actor, actor...)
 		out.public = append(out.public, public...)
@@ -256,6 +259,15 @@ victim's private frames to the victim alone.
 func (rt *Runtime) publishPlayerHit(division string, h playerHit, now int64) (public []wire.Frame, victim RecipientFrames) {
 	if len(h.struck.impacts) == 0 {
 		return nil, RecipientFrames{}
+	}
+	if h.target.player.RuntimeOnly && rt.ServerActorHit != nil && h.strike.killer.player != nil {
+		damage := uint32(0)
+		for _, hit := range struckDamageResults(h.struck) {
+			damage += hit.Applied
+		}
+		if damage > 0 {
+			rt.ServerActorHit(division, h.target.player.Name, h.strike.killer.player.Name, int(damage), now)
+		}
 	}
 	if h.struck.fatal {
 		rt.bindResidentRegion(simulation.WorldKey(division, h.target.player.Name), now)

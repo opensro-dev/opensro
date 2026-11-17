@@ -38,18 +38,21 @@ const (
 
 // EscortContract represents an active mercenary escort agreement.
 type EscortContract struct {
-	Division    string
-	TraderName  string
-	TraderIsAI  bool
-	HunterName  string
-	HunterIsAI  bool
-	FromTown    TownID
-	ToTown      TownID
-	CargoStars  uint8
-	RewardGold  int64
-	UpfrontFee  int64
-	StartedAtMs int64
-	Active      bool
+	Division     string
+	TraderName   string
+	TraderIsAI   bool
+	HunterName   string
+	HunterIsAI   bool
+	FromTown     TownID
+	ToTown       TownID
+	CargoStars   uint8
+	RewardGold   int64
+	UpfrontFee   int64
+	StartedAtMs  int64
+	Active       bool
+	LastSampleMs int64
+	NearMs       int64
+	Invalid      bool
 }
 
 // ContractBook tracks active escort contracts per division.
@@ -82,6 +85,9 @@ real Hunter player for escorting a cargoStars (1..5) trade run.
 func ComputeAITraderEscortReward(cargoStars uint8, from, to TownID) int64 {
 	if cargoStars == 0 {
 		cargoStars = 1
+	}
+	if cargoStars > 5 {
+		cargoStars = 5
 	}
 	hops := int64(1)
 	if (from == TownJangan && to == TownHotan) || (from == TownHotan && to == TownJangan) {
@@ -119,6 +125,13 @@ func (c *ContractBook) BindAITraderEscort(
 		Active:      true,
 	}
 	c.mu.Lock()
+	for _, existing := range c.contracts {
+		if existing.Division == contract.Division && existing.Active && (strings.EqualFold(existing.HunterName, hunterName) || strings.EqualFold(existing.TraderName, aiTraderName)) {
+			c.mu.Unlock()
+			return EscortContract{}
+		}
+	}
+	contract.LastSampleMs = nowMs
 	c.contracts[contractKey(division, aiTraderName)] = contract
 	c.mu.Unlock()
 	return contract
@@ -180,6 +193,10 @@ func (c *ContractBook) CompleteAITraderRun(
 	contract.Active = false
 	delete(c.contracts, key)
 	c.mu.Unlock()
+	elapsed := nowMs - contract.StartedAtMs
+	if contract.Invalid || elapsed < 30_000 || contract.NearMs*100 < elapsed*90 || nowMs-contract.LastSampleMs > 5000 {
+		return EscortContract{}, false
+	}
 
 	if memories != nil && !contract.HunterIsAI && contract.HunterName != "" {
 		memories.RecordEscortSuccess(
@@ -234,4 +251,57 @@ func FormatContractReply(contract EscortContract) string {
 
 func contractKey(division, agentName string) string {
 	return strings.TrimSpace(division) + "|" + strings.TrimSpace(agentName)
+}
+
+/*
+================
+SampleEscort
+
+Missing/offline/dead/wrong-job escorts and observation gaps invalidate a run.
+================
+*/
+func (c *ContractBook) SampleEscort(division, agent string, near bool, nowMs int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	key := contractKey(division, agent)
+	contract, ok := c.contracts[key]
+	if !ok || !contract.Active || !contract.TraderIsAI {
+		return
+	}
+	delta := nowMs - contract.LastSampleMs
+	if delta < 0 || delta > 5000 {
+		contract.Invalid = true
+	}
+	if near && delta > 0 {
+		contract.NearMs += min(delta, 5000)
+	}
+	contract.LastSampleMs = nowMs
+	c.contracts[key] = contract
+}
+
+/*
+================
+Cancel
+================
+*/
+func (c *ContractBook) Cancel(division, agent string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.contracts, contractKey(division, agent))
+}
+
+/*
+================
+HasHiredHunter
+================
+*/
+func (c *ContractBook) HasHiredHunter(division, player string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, contract := range c.contracts {
+		if contract.Division == division && contract.Active && contract.HunterIsAI && strings.EqualFold(contract.TraderName, player) {
+			return true
+		}
+	}
+	return false
 }

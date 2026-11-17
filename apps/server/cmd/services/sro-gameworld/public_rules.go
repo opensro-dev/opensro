@@ -23,6 +23,7 @@ import (
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravan"
+	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
@@ -107,7 +108,6 @@ var unlistedSettings = map[string]string{
 	// until the Battle Arena engine (#3648) makes it a rule.
 	"SRO_REFERRALS":    "the website's referral page shows its own numbers from the referral route",
 	"SRO_STYRIA_CLASH": "Styria Clash arena map build input; players cannot reach it until #3648",
-	"SRO_AI_CARAVANS":  "the AI caravans are not seen by players or paid yet; they become a rule with the escort and parley rewards (#3704)",
 	"SRO_CONSIGNMENT":  "the market pages state their own fee, duration and listing cap",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
@@ -158,6 +158,10 @@ func publicRules() publicstats.RulesResponse {
 	testKills := settings.Int(tunables.MostWantedTestKills)
 	return publicstats.RulesResponse{
 		Rules: []publicstats.Rule{
+			{Flag: caravanai.EnvAICaravans, On: caravanai.ConfigFromEnv().Enabled,
+				Native: "These autonomous player-like caravan agents are a port-only addition.",
+				Now:    "AI traders, hunters and thieves use the three-town highway. Nearby Hunters can escort recruiting Traders for gold, with continuous proximity required and at most three paid deliveries per character per UTC day; hiring an AI Hunter costs 15000 gold.",
+				Why:    "Populates the trade roads with optional job encounters."},
 			{Flag: progression.EnvLevelCap, On: levelCap == progression.ExpansionLevelCap,
 				Native: "The character level cap is 90.",
 				Now:    "The character level cap is 110, using the installed v1.150 experience curve.",

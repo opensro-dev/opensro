@@ -50,6 +50,7 @@ const (
 	ActionRetreatToTown ActionKind = "RETREAT_TO_TOWN"
 	ActionRecruitEscort ActionKind = "RECRUIT_ESCORT"
 	ActionAssistAlly    ActionKind = "ASSIST_ALLY"
+	ActionReinforceAlly ActionKind = "REINFORCE_ALLY"
 )
 
 // ObservedPlayer summarizes a nearby player and the agent's remembered
@@ -81,6 +82,7 @@ type Situation struct {
 	UnderAttack  bool
 	ParleyReady  bool
 	NearbyAllies int
+	Distress     *DistressCall
 	Players      []ObservedPlayer
 }
 
@@ -209,7 +211,26 @@ func (h *HardcodedBrain) Decide(_ context.Context, sit Situation) Decision {
 		}
 	}
 
-	// 6. Trusted ally greeting / support.
+	// 6. Mutual aid: respond to an active caravan distress call when a
+	// fellow Trader is ambushed on the highway.
+	if sit.Distress != nil && (sit.Role == RoleHunter || sit.Role == RoleTrader) {
+		attacker := sit.Distress.AttackerName
+		if attacker == "" {
+			attacker = "bandits"
+		}
+		return Decision{
+			Action:     ActionReinforceAlly,
+			TargetName: sit.Distress.AttackerName,
+			Dialogue: fmt.Sprintf(
+				"Hold on %s! %s is rushing to region %d to help defend your caravan against %s!",
+				sit.Distress.TraderName, sit.AgentName, sit.Distress.RegionID, attacker,
+			),
+			MemoryNote: fmt.Sprintf("Rushed to reinforce %s in region %d", sit.Distress.TraderName, sit.Distress.RegionID),
+			Source:     BrainHardcoded,
+		}
+	}
+
+	// 7. Trusted ally greeting / support.
 	if ally := findTrustedAlly(sit.Players); ally != nil {
 		return Decision{
 			Action:     ActionAssistAlly,
@@ -285,7 +306,7 @@ func formatParleyDialogue(p Personality, thiefName string) string {
 	case PersonalityGreedy:
 		return fmt.Sprintf("Hold your blade, %s! Take 30%% of my silk stacks on the ground and let my bull pass!", who)
 	case PersonalityCautious:
-		return fmt.Sprintf("Truce, %s! I am dropping half my cargo right here—take the tribute and spare my caravan!", who)
+		return fmt.Sprintf("Truce, %s! I am dropping half my cargo right here - take the tribute and spare my caravan!", who)
 	default:
 		return fmt.Sprintf("Parley, %s! I've dropped part of my load on the road. Take the goods and give me 15 seconds to ride on!", who)
 	}
@@ -293,13 +314,13 @@ func formatParleyDialogue(p Personality, thiefName string) string {
 
 func formatVendettaCallout(p Personality, rival ObservedPlayer) string {
 	if rival.LastNote != "" && strings.Contains(strings.ToLower(rival.LastNote), "betrayed parley") {
-		return fmt.Sprintf("%s! You broke our parley truce last time—no mercy today!", rival.Name)
+		return fmt.Sprintf("%s! You broke our parley truce last time - no mercy today!", rival.Name)
 	}
 	if rival.GoldStolen > 0 {
-		return fmt.Sprintf("%s! I still remember the %d gold you stole from me—time to settle the blood debt!", rival.Name, rival.GoldStolen)
+		return fmt.Sprintf("%s! I still remember the %d gold you stole from me - time to settle the blood debt!", rival.Name, rival.GoldStolen)
 	}
 	if rival.Deaths > 0 {
-		return fmt.Sprintf("There's %s! You've ambushed me %d time(s) before—not this run!", rival.Name, rival.Deaths)
+		return fmt.Sprintf("There's %s! You've ambushed me %d time(s) before - not this run!", rival.Name, rival.Deaths)
 	}
 	return fmt.Sprintf("Our blood feud ends here, %s!", rival.Name)
 }
@@ -534,6 +555,8 @@ func validateActionKind(raw string) (ActionKind, bool) {
 		return ActionRecruitEscort, true
 	case ActionAssistAlly:
 		return ActionAssistAlly, true
+	case ActionReinforceAlly:
+		return ActionReinforceAlly, true
 	default:
 		return "", false
 	}

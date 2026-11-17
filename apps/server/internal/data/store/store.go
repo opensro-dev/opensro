@@ -322,6 +322,8 @@ type Store struct {
 	nameReservations map[string]map[string]NameReservation
 
 	charDivision map[*domain.Character]string
+	// Port-only actors share the authority doors but never enter persisted rosters.
+	runtimeCharacters map[string][]*domain.Character
 	// committedDigests is the last committed record digest per
 	// character (division, id): a dirty character whose encoded bytes
 	// still hash to it is not rewritten (persistence.go). Entries are

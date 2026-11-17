@@ -302,6 +302,9 @@ func (s *Store) markCharacterLocked(c *domain.Character) {
 		return
 	}
 	s.bumpCharacterRevisionLocked(c)
+	if c.RuntimeOnly {
+		return
+	}
 	s.changes.characters[c] = true
 }
 

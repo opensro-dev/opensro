@@ -1,3 +1,12 @@
+/*
+===========================================================================
+
+character_lookup.go - immutable division character lookup indexes
+
+Runtime actors join targeting indexes without joining durable rosters.
+
+===========================================================================
+*/
 package store
 
 import (
@@ -65,7 +74,7 @@ writing. First row wins, as the former linear lookup did.
 */
 func (s *Store) rebuildCharacterLookupLocked(division string) {
 	index := &characterLookupIndex{names: make(map[string]*domain.Character), ids: make(map[int64]*domain.Character)}
-	roster := s.characters[division]
+	roster := append(append([]*domain.Character(nil), s.characters[division]...), s.runtimeCharacters[division]...)
 	list := make([]*domain.Character, len(roster))
 	copy(list, roster)
 	index.list = list

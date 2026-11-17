@@ -27,7 +27,7 @@ import (
 ==================
 TestHighwayRouteDetoursWhenFerryHeatIsHigh
 
-Verifies that a Cautious or 4★-5★ caravan between Jangan and Donwhang uses the
+Verifies that a Cautious or 4Ã¢Ëœâ€¦-5Ã¢Ëœâ€¦ caravan between Jangan and Donwhang uses the
 Jangan Ferry crossing under normal conditions, and switches to the Northern
 Mountain Detour once ambush heat at the Ferry reaches DetourHeatThreshold.
 ==================
@@ -214,6 +214,10 @@ func TestRuntimeParleyHonorBetrayalAndContracts(t *testing.T) {
 		Config{Enabled: true, BrainMode: BrainHardcoded},
 		nil,
 		WorldHooks{
+			Player: func(_ string, name string) (PlayerPosition, bool) {
+				return PlayerPosition{ObservedPlayer: ObservedPlayer{Name: name, HPPercent: 100}, At: TownWaypoint(TownJangan)}, true
+			},
+			OnHireFee: func(_, _ string, _ int64) bool { return true },
 			OnParleyCargoDrop: func(_ string, _ string, _ uint16, _, _, _ float32, stacks int, _ int64) {
 				droppedStacks = stacks
 			},
@@ -227,7 +231,10 @@ func TestRuntimeParleyHonorBetrayalAndContracts(t *testing.T) {
 	const div = "Shard_Silkroad"
 	rt.EnsureDivisionRoster(div)
 
-	// 1. Hunter player accepts escort contract with [AI]Trader_Jin via chat command.
+	// A recruiting trader is accepted in town; active road runs are not contractable.
+	rt.mu.Lock()
+	rt.findAgentLocked(div, "[AI]Trader_Jin").State = StateRecruiting
+	rt.mu.Unlock()
 	reply, ok := rt.HandlePlayerCommand(div, "IronGuard", domain.JobHunter, "!accept [AI]Trader_Jin", 1_000)
 	if !ok || !strings.Contains(reply, "IronGuard") {
 		t.Fatalf("expected contract acceptance reply for IronGuard, got ok=%v reply=%q", ok, reply)
@@ -264,7 +271,10 @@ func TestRuntimeParleyHonorBetrayalAndContracts(t *testing.T) {
 	}
 
 	// 6. Complete [AI]Trader_Jin's contract delivery and verify payout + Hunter trust.
-	contract, completed := rt.Contracts().CompleteAITraderRun(div, "[AI]Trader_Jin", RegionDonwhangTown, 20_000, rt.Memories())
+	for now := int64(3100); now <= 40100; now += 1000 {
+		rt.Contracts().SampleEscort(div, "[AI]Trader_Jin", true, now)
+	}
+	contract, completed := rt.Contracts().CompleteAITraderRun(div, "[AI]Trader_Jin", RegionDonwhangTown, 40_100, rt.Memories())
 	if !completed || contract.RewardGold <= 0 {
 		t.Fatalf("expected escort contract to complete with positive reward, got %+v", contract)
 	}
@@ -361,5 +371,73 @@ func TestLLMBrainFollowsNoRedirect(t *testing.T) {
 	}
 	if dec.Source != BrainHardcoded {
 		t.Fatalf("a redirect answered the decision: %+v", dec)
+	}
+}
+
+/*
+================
+TestSchedulerMinActiveTradesHireableHuntersAndDistressAid
+
+Verifies:
+ 1. The roster starts with 2 active trade runs, 2 town-staged Traders, and
+    2 town-staged Hunters available for hire.
+ 2. When an active Trader is defeated and returns to town, the scheduler
+    automatically dispatches a town-staged Trader so at least 2 trade runs
+    remain active.
+ 3. When an active Trader is ambushed, standby Hunters and fellow Traders
+    respond to the DistressCall with ActionReinforceAlly.
+
+================
+*/
+func TestSchedulerMinActiveTradesHireableHuntersAndDistressAid(t *testing.T) {
+	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, WorldHooks{})
+	const div = "Shard_Scheduler"
+	roster := rt.EnsureDivisionRoster(div)
+
+	activeTraders := 0
+	townTraders := 0
+	hireableHunters := 0
+	for _, u := range roster {
+		if u.Role == RoleTrader {
+			if isActiveTradeRunState(u.State) {
+				activeTraders++
+			} else {
+				townTraders++
+			}
+		} else if u.Role == RoleHunter && u.AvailableForHire {
+			hireableHunters++
+		}
+	}
+	if activeTraders < MinActiveTradeRuns || townTraders < 2 || hireableHunters < 2 {
+		t.Fatalf(
+			"expected >=2 active traders, >=2 town traders, >=2 hireable hunters; got active=%d town=%d hireable=%d",
+			activeTraders, townTraders, hireableHunters,
+		)
+	}
+
+	// Defeat [AI]Trader_Jin -> scheduler immediately dispatches a town Trader so active runs stay >= 2.
+	_, defeated, _ := rt.RecordPlayerAttack(div, "[AI]Trader_Jin", "BanditKing", 20000, 1_000)
+	if !defeated {
+		t.Fatal("expected [AI]Trader_Jin to be defeated by 20000 damage")
+	}
+	afterDefeat := rt.EnsureDivisionRoster(div)
+	activeAfter := 0
+	for _, u := range afterDefeat {
+		if u.Role == RoleTrader && isActiveTradeRunState(u.State) {
+			activeAfter++
+		}
+	}
+	if activeAfter < MinActiveTradeRuns {
+		t.Fatalf("expected scheduler to maintain >= %d active trade runs after defeat, got %d", MinActiveTradeRuns, activeAfter)
+	}
+
+	// Ambush [AI]Trader_Mei (non-lethal) -> raises DistressCall; [AI]Hunter_Sora rushes to reinforce!
+	rt.RecordPlayerAttack(div, "[AI]Trader_Mei", "BanditKing", 3000, 2_000)
+	dec, sora, ok := rt.StepAgent(context.Background(), div, "[AI]Hunter_Sora", nil, 2_100)
+	if !ok || (dec.Action != ActionReinforceAlly && dec.Action != ActionAttackTarget) || (sora.State != StateReinforcing && sora.State != StateInCombat) {
+		t.Fatalf("expected [AI]Hunter_Sora to reinforce ambushed [AI]Trader_Mei, got dec=%+v unit=%+v", dec, sora)
+	}
+	if sora.ReinforcingTrader != "[AI]Trader_Mei" {
+		t.Fatalf("expected ReinforcingTrader=[AI]Trader_Mei, got %q", sora.ReinforcingTrader)
 	}
 }

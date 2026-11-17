@@ -97,7 +97,11 @@ type gameplayPlane struct {
 	contributors *contributor.Registry
 	// caravanAgents is the AI Caravan & Thief runtime (nil when
 	// SRO_AI_CARAVANS is off; wiring_caravanai.go).
-	caravanAgents *caravanai.Runtime
+	caravanAgents     *caravanai.Runtime
+	caravanNextStepMs int64
+	caravanActors     []*enterworld.Character
+	caravanMapAtMs    int64
+	caravanRoads      map[string]*caravanRoad
 }
 
 /*
@@ -942,6 +946,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if err := wireContributorTitles(game); err != nil {
 		return err
 	}
+	game.wireCaravanChat()
 	game.chat.Unions = game.unions
 	game.chat.Stalls = game.items.Stalls
 	if game.deps.ChatItemLinks > 0 {

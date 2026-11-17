@@ -79,6 +79,19 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 				}
 			}
 		}
+		if rt.CaravanCommand != nil {
+			if request, err := DecodeChatRequestWithLinks(payload); err == nil {
+				if answer, handled := rt.CaravanCommand(divisionID, character.Name, character.Job.Type, request.Message); handled {
+					_ = s.Send(OpChatAck, EncodeChatAckSuccess(request.ChatType, request.Second))
+					for _, line := range strings.Split(answer, "\n") {
+						if trimmed := strings.TrimSpace(line); trimmed != "" {
+							_ = s.Send(OpChatBroadcast, EncodeChatNotice(trimmed))
+						}
+					}
+					return
+				}
+			}
+		}
 		// Port-only, not native (#2959): a /report line is consumed
 		// whole - the reporter gets the ack and one notice line, and
 		// nothing reaches the room, the transcript or the feed. With
