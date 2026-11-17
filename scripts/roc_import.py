@@ -59,6 +59,24 @@ Identities allocate above every published row and the marker keeps
 them across rebuilds. Their models are among the VSRO Data files the
 Alexandria stage already copies (every file the native tree lacks).
 
+Step 3c stages the quest chain the Roc's key item comes from. The
+VSRO client's questdata ships exactly six MEETROC quests
+(QNO_RM_MEETROC_1, _2, _6 and _ECT_1 to _ECT_3); v1.150's has none,
+while its textquest, questcontentsdata and items already carry them.
+Their rows join questdata.txt under the source ids (91, 92, 96 and
+374-376, all free in v1.150), so the compiled specs #3796 snapshots
+admit (quest catalogSpecs needs the catalog row). QNO_RM_MEETROC_1
+gathers from two quest kinds v1.150 lacks, staged with the arena's:
+
+	MOB_QT_RM_FEATHERMASK_01  the feather mask the first drop rides
+	MOB_QT_RM_ROCKY_CLON_01   the rock golem clone of the second
+
+Their six nests are the v1.188 shard's (hive 545 on the Roc mountain,
+import_roc_quest_nests.py commits them to scripts/data/roc), written
+as roc-monsters.txt for the server's Roc population (monster/roc.go).
+Off, the rows leave questdata.txt by the codenames the marker
+enrolled and the population file is unlinked.
+
 Port-only staging of native-client content: the kinds are native to
 the later client, the switch is the port's until the chain is whole.
 
@@ -88,6 +106,15 @@ WAIT_REGION = 25792
 # The archives the region merge reads, all pinned: the family's one list.
 MERGE_ARCHIVES = later_world_import.MERGE_ARCHIVES
 TELEPORT_TABLES = ("teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt")
+QUEST_TABLE = "questdata.txt"
+QUEST_CODES = (
+	"QNO_RM_MEETROC_1", "QNO_RM_MEETROC_2", "QNO_RM_MEETROC_6",
+	"QNO_RM_MEETROC_ECT_1", "QNO_RM_MEETROC_ECT_2", "QNO_RM_MEETROC_ECT_3",
+)
+QUEST_COLUMNS = 11
+POPULATION_FILE = "roc-monsters.txt"
+QUEST_NESTS = Path(__file__).resolve().parent / "data" / "roc" / "quest-nests.json"
+QUEST_NESTS_FORMAT = "opensro-roc-quest-nests-v1"
 
 LEVEL_COLUMN = 57
 GRADE_COLUMN = 15
@@ -105,10 +132,12 @@ KINDS = {
 	"MOB_RM_SPIRITS_CLON3": (8, 100),
 	"MOB_RM_WINGTRIBEKNIGHT": (8, 100),
 	"MOB_RM_WINGTRIBEDUKE": (0, 100),
+	"MOB_QT_RM_FEATHERMASK_01": (0, 90),
+	"MOB_QT_RM_ROCKY_CLON_01": (0, 90),
 }
 
 # The engine's reap reads the shard, marker and population names from
-# a spec; the Roc import writes no population file.
+# a spec; the one population is the quest kinds' nests.
 SPEC = later_world_import.WorldImport(
 	label="roc",
 	flag=FLAG,
@@ -119,7 +148,7 @@ SPEC = later_world_import.WorldImport(
 	pin_file=tables.PIN_FILE,
 	pin_sentence="The Roc range is built from the one pinned VSRO client; its archives are never committed.",
 	region_label="roc",
-	population_files=(),
+	population_files=(("quest", POPULATION_FILE),),
 )
 
 
@@ -276,6 +305,64 @@ def select_kinds(later, native_codes):
 
 
 # ================
+# without_quests
+#
+# questdata.txt without the rows of the given codenames.
+# ================
+def without_quests(text_root, codes):
+	path = text_root / QUEST_TABLE
+	rows = tables.table_rows(path.read_bytes())
+	return [row for row in rows if len(row) < 3 or row[2] not in codes]
+
+
+# ================
+# add_quests
+#
+# The six MEETROC rows of the client's questdata, appended to the
+# variant's after any previous build's own rows leave it. A row
+# missing from the client, laid out otherwise, or whose id or codename
+# the native table already holds refuses by name.
+# ================
+def add_quests(read, text_root, prior):
+	native = without_quests(text_root, set(prior.get("quests", [])))
+	source = {row[2]: row for row in tables.table_rows(read(QUEST_TABLE)) if len(row) > 2}
+	taken_ids = {row[1] for row in native if len(row) > 1}
+	taken_codes = {row[2] for row in native if len(row) > 2}
+	added = []
+	for code in QUEST_CODES:
+		row = source.get(code)
+		if row is None:
+			raise ValueError(f"the VSRO client has no Roc quest {code}")
+		if len(row) != QUEST_COLUMNS:
+			raise ValueError(f"Roc quest {code} has {len(row)} columns, want {QUEST_COLUMNS}")
+		if row[1] in taken_ids or code in taken_codes:
+			raise ValueError(f"Roc quest {code} (id {row[1]}) already stands in {QUEST_TABLE}")
+		added.append(row)
+	write_atomically(text_root / QUEST_TABLE, cap110.encode_rows(native + added))
+	return [row[2] for row in added]
+
+
+# ================
+# add_population
+#
+# The quest kinds' nests from the committed evidence. A nest naming a
+# kind this import did not stage refuses: the server would refuse it
+# at startup.
+# ================
+def add_population(text_root, refs):
+	document = cap110.read_json(QUEST_NESTS)
+	if document.get("format") != QUEST_NESTS_FORMAT:
+		raise ValueError(f"{QUEST_NESTS} is not {QUEST_NESTS_FORMAT}")
+	population = document["population"]
+	strays = sorted({row["Codename"] for row in population["Rows"]} - set(refs))
+	if strays:
+		raise ValueError(f"Roc quest nests name unstaged kinds: {strays}")
+	write_atomically(text_root / POPULATION_FILE, (json.dumps(population) + "\n").encode())
+	return {"nests": len(population["Rows"]), "regions": sorted({row["RegionID"] for row in population["Rows"]}),
+		"sourceSHA256": document["sourceSHA256"]}
+
+
+# ================
 # add_roc
 #
 # The Alexandria builder's Roc pass, after every later layer (its
@@ -289,6 +376,11 @@ def add_roc(vsro_root, native, output):
 	if native == output or native in output.parents or output in native.parents:
 		raise ValueError("Roc output must be separate from the native extraction")
 	if not flag_enabled():
+		marker = output / MARKER
+		prior = cap110.read_json(marker) if marker.exists() else {}
+		if prior.get("quests"):
+			text_root = output / TEXT_ROOT
+			write_atomically(text_root / QUEST_TABLE, cap110.encode_rows(without_quests(text_root, set(prior["quests"]))))
 		later_world_import.reap_world(SPEC, native, output)
 		return {"enabled": False}
 	if not vsro_root:
@@ -333,20 +425,23 @@ def stage(vsro_root, output):
 		refs = select_kinds(later_world_import.later_characters(read), native_codes)
 		staged = later_world_import.stage_kinds("Roc", read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
 			lambda code: code in refs)
+		quests = add_quests(read, text_root, prior)
 	finally:
 		media.close()
 		handle.close()
+	population = add_population(text_root, refs)
 	limits = [
-		"Inert: no nest places these kinds; the server spawns them when the arena opens (#3399 step 4).",
+		"The arena kinds stand in no nest; the server spawns them when the arena opens (#3399 step 4).",
+		"QNO_RM_MEETROC_2, _6 and _ECT_1 to _3 stay pending until their custom slots are decoded (#3399 step 3b).",
 		"No drops yet (#3399 step 5).",
 	]
 	if "omittedLinks" in gates:
 		limits.append("The summit link is out: the variant carries no key item its conditions name.")
 	summary = {
-		"enabled": True, "format": "opensro-roc-v2", "source": "vsro",
+		"enabled": True, "format": "opensro-roc-v3", "source": "vsro",
 		"characters": staged["characters"], "skills": staged["skills"],
 		"animationBases": staged["animationBases"], "characterInfo": staged["characterInfo"],
-		"nameSymbols": staged["nameSymbols"], "gates": gates,
+		"nameSymbols": staged["nameSymbols"], "gates": gates, "quests": quests, "population": population,
 		**({"regionMerge": prior["regionMerge"]} if "regionMerge" in prior else {}),
 		"limits": limits,
 	}

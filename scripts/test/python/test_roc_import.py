@@ -1,8 +1,8 @@
 """
 ===========================================================================
-test_roc_import.py - the Roc range import's contract (#3399 step 1).
+test_roc_import.py - the Roc range import's contract (#3399 steps 1 and 3c).
 
-On, the nine admitted kinds stage in the import's own shard with their
+On, the eleven admitted kinds stage in the import's own shard with their
 skills and names; a kind the pinned client authors differently, or one
 the native tree already carries, refuses by name. Off, exactly what the
 marker enrolled is reaped - and a native name a later kind reuses
@@ -14,10 +14,16 @@ the variant lacks the item - and the wait room is the one region handed
 to the region merge. merge_world itself has its own tests over real
 archives (test_later_world_import); here it is stubbed to run the
 staging step it is given.
+
+Step 3c: the six MEETROC questdata rows join under their source ids and
+leave by codename when off, restoring the native table byte for byte;
+the quest kinds' committed nests (scripts/data/roc/quest-nests.json)
+become roc-monsters.txt, and a nest naming an unstaged kind refuses.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import hashlib
+import json
 import os
 import tempfile
 import unittest
@@ -36,6 +42,23 @@ KEY_ITEM = "ITEM_QNO_RM_MEETROC_6_01"
 SOURCE_KEY_ID = "23973"
 VARIANT_KEY_ID = "50100"
 MOUNTAIN_BUILDING = "24296"
+NATIVE_QUEST = ["1", "1", "QTUTORIAL_CH", "1", "x", "SN_QTUTORIAL_CH", "SN_PAY", "xxx", "SN_PAYCON", "SN_NN", "SN_NC"]
+SOURCE_QUEST_IDS = {"QNO_RM_MEETROC_1": "91", "QNO_RM_MEETROC_2": "92", "QNO_RM_MEETROC_6": "96",
+	"QNO_RM_MEETROC_ECT_1": "374", "QNO_RM_MEETROC_ECT_2": "375", "QNO_RM_MEETROC_ECT_3": "376"}
+
+
+# ================
+# quest_row
+#
+# One questdata row in the 11-column layout v1.150 and the VSRO client share.
+# ================
+def quest_row(identity, code):
+	return ["1", identity, code, "90", "x", "SN_" + code, "SN_PAY_" + code, "xxx", "SN_PAYCON_" + code,
+		"SN_NN_" + code, "SN_NC_" + code]
+
+
+SOURCE_QUESTS = [quest_row(identity, code) for code, identity in SOURCE_QUEST_IDS.items()] + [
+	quest_row("90", "QNO_RM_VILLAGECHIEF_1")]
 
 
 # ================
@@ -93,11 +116,13 @@ class RocImportTest(unittest.TestCase):
 	# fixture
 	#
 	# A scratch world: a fake VSRO root (one Media.pk2) carrying the
-	# nine kinds (Roc with one skill), a native root, and an output
-	# textdata with one native kind whose name the arena's Tahomet
-	# reuses. overrides replaces kind rows by codename.
+	# eleven kinds (Roc with one skill) and the client's questdata, a
+	# native root, and an output textdata with one native kind whose
+	# name the arena's Tahomet reuses and one native quest. overrides
+	# replaces kind rows by codename; quests replaces the client's
+	# questdata rows.
 	# ================
-	def fixture(self, base, overrides=None):
+	def fixture(self, base, overrides=None, quests=None):
 		vsro, native, output = base / "vsro", base / "native", base / "output"
 		text_root = output / roc.TEXT_ROOT
 		text_root.mkdir(parents=True)
@@ -116,6 +141,7 @@ class RocImportTest(unittest.TestCase):
 		(text_root / "teleportlink.txt").write_bytes(utf16([]))
 		(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
 		(text_root / "itemdata_5000.txt").write_bytes(utf16([["1", "7", "ITEM_ETC_NATIVE"]]))
+		(text_root / roc.QUEST_TABLE).write_bytes(utf16([NATIVE_QUEST]))
 		rows = []
 		for at, (code, (grade, level)) in enumerate(roc.KINDS.items()):
 			rows.append(later_row(code, symbol_of(code), level, grade=grade, identity=9000 + at))
@@ -136,6 +162,7 @@ class RocImportTest(unittest.TestCase):
 			"teleportlink.txt": utf16(SOURCE_LINKS),
 			"itemdata.txt": utf16([["itemdata_20000.txt"]]),
 			"itemdata_20000.txt": utf16([["1", SOURCE_KEY_ID, KEY_ITEM]]),
+			"questdata.txt": utf16(SOURCE_QUESTS if quests is None else quests),
 			"skilleffect.txt": utf16([["#section", "characterinfo"]]
 				+ [[code] + ["0"] * 12 for code in roc.KINDS] + [["#section", "skillaniset"]]),
 		}
@@ -240,9 +267,9 @@ class RocImportTest(unittest.TestCase):
 				self.run_import(vsro, native, output, pins, "on")
 
 	# ================
-	# test_on_stages_the_nine_kinds
+	# test_on_stages_the_eleven_kinds
 	# ================
-	def test_on_stages_the_nine_kinds(self):
+	def test_on_stages_the_eleven_kinds(self):
 		with tempfile.TemporaryDirectory() as root:
 			vsro, native, output, text_root, pins = self.fixture(Path(root))
 			summary = self.run_import(vsro, native, output, pins, "on")
@@ -277,6 +304,7 @@ class RocImportTest(unittest.TestCase):
 			codes = [row[2] for row in tables.table_rows((text_root / "teleportdata.txt").read_bytes()) if len(row) > 2]
 			self.assertEqual(codes, ["GATE_CH"] + list(roc.GATE_CODES))
 			self.assertEqual(len(self.links(text_root)), 1)
+			self.assertEqual(self.quest_codes(text_root), ["QTUTORIAL_CH"] + list(roc.QUEST_CODES))
 
 	# ================
 	# test_off_reaps_and_keeps_the_native_name
@@ -293,6 +321,88 @@ class RocImportTest(unittest.TestCase):
 			self.assertNotIn("SN_MOB_RM_ROC", names)
 			manifest = [row[0] for row in tables.table_rows((text_root / "skilldata.txt").read_bytes()) if row]
 			self.assertNotIn(roc.SKILL_SHARD, manifest)
+
+	# ================
+	# quest_codes
+	# ================
+	def quest_codes(self, text_root):
+		return [row[2] for row in tables.table_rows((text_root / roc.QUEST_TABLE).read_bytes()) if len(row) > 2]
+
+	# ================
+	# test_on_stages_the_six_quests_under_their_source_ids
+	# ================
+	def test_on_stages_the_six_quests_under_their_source_ids(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, text_root, pins = self.fixture(Path(root))
+			summary = self.run_import(vsro, native, output, pins, "on")
+			self.assertEqual(summary["quests"], list(roc.QUEST_CODES))
+			rows = tables.table_rows((text_root / roc.QUEST_TABLE).read_bytes())
+			self.assertEqual(rows[0], NATIVE_QUEST)
+			self.assertEqual({row[2]: row[1] for row in rows[1:]}, SOURCE_QUEST_IDS)
+			# The client's other quests are not the chain's.
+			self.assertNotIn("QNO_RM_VILLAGECHIEF_1", self.quest_codes(text_root))
+
+	# ================
+	# test_on_writes_the_quest_kinds_nests
+	# ================
+	def test_on_writes_the_quest_kinds_nests(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, text_root, pins = self.fixture(Path(root))
+			summary = self.run_import(vsro, native, output, pins, "on")
+			population = json.loads((text_root / roc.POPULATION_FILE).read_text(encoding="utf-8"))
+			committed = json.loads(roc.QUEST_NESTS.read_text(encoding="utf-8"))["population"]
+			self.assertEqual(population, committed)
+			self.assertEqual({row["Codename"] for row in population["Rows"]},
+				{"MOB_QT_RM_FEATHERMASK_01", "MOB_QT_RM_ROCKY_CLON_01"})
+			self.assertEqual(summary["population"]["nests"], len(committed["Rows"]))
+
+	# ================
+	# test_nests_naming_an_unstaged_kind_refuse
+	# ================
+	def test_nests_naming_an_unstaged_kind_refuse(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, text_root, pins = self.fixture(Path(root))
+			document = json.loads(roc.QUEST_NESTS.read_text(encoding="utf-8"))
+			document["population"]["Rows"][0]["Codename"] = "MOB_RM_STRAY"
+			stray = Path(root) / "quest-nests.json"
+			stray.write_text(json.dumps(document), encoding="utf-8")
+			with mock.patch.object(roc, "QUEST_NESTS", stray), self.assertRaisesRegex(ValueError, "MOB_RM_STRAY"):
+				self.run_import(vsro, native, output, pins, "on")
+
+	# ================
+	# test_a_quest_id_the_native_table_holds_refuses
+	# ================
+	def test_a_quest_id_the_native_table_holds_refuses(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, text_root, pins = self.fixture(Path(root))
+			(text_root / roc.QUEST_TABLE).write_bytes(utf16([NATIVE_QUEST, quest_row("92", "QNO_NATIVE_92")]))
+			with self.assertRaisesRegex(ValueError, "QNO_RM_MEETROC_2 \\(id 92\\) already stands"):
+				self.run_import(vsro, native, output, pins, "on")
+
+	# ================
+	# test_a_quest_the_client_lacks_refuses
+	# ================
+	def test_a_quest_the_client_lacks_refuses(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, text_root, pins = self.fixture(Path(root), quests=SOURCE_QUESTS[:5])
+			with self.assertRaisesRegex(ValueError, "no Roc quest QNO_RM_MEETROC_ECT_3"):
+				self.run_import(vsro, native, output, pins, "on")
+
+	# ================
+	# test_off_restores_the_native_questdata
+	#
+	# On, then off: the quest rows leave by the codenames the marker
+	# enrolled, the table is the native bytes again, and the nests'
+	# file is gone.
+	# ================
+	def test_off_restores_the_native_questdata(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, text_root, pins = self.fixture(Path(root))
+			before = (text_root / roc.QUEST_TABLE).read_bytes()
+			self.run_import(vsro, native, output, pins, "on")
+			self.run_import(vsro, native, output, pins, "")
+			self.assertEqual((text_root / roc.QUEST_TABLE).read_bytes(), before)
+			self.assertFalse((text_root / roc.POPULATION_FILE).exists())
 
 	# ================
 	# test_off_reads_no_archive

@@ -236,6 +236,10 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
+		template, err = monster.AppendRoc(template, textdataDir, monster.RocEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
 		if monster.ArabiaEnabled() {
 			// Port-only (#3268): the Baghdad dungeon world joins the
 			// catalogue only while its switch is on, before any

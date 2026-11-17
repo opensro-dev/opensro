@@ -29,6 +29,7 @@ var catalogueReaders = map[string]string{
 	"SRO_CAP110_QINSHI":                      "shardPopulation reads it (monster.QinshiEnabled) to append the tomb's upper floors",
 	"SRO_CAP110_TEMPLE":                      "shardPopulation reads it (monster.TempleEnabled) to append the temple population",
 	"SRO_SKYTEMPLE":                          "shardPopulation reads it (monster.SkytempleEnabled) to append the skytemple population",
+	"SRO_ROC":                                "shardPopulation reads it (monster.RocEnabled) to append the roc population",
 	"SRO_ARABIA":                             "shardPopulation reads it (monster.ArabiaEnabled) to append the arabia population",
 	"SRO_JUPITER":                            "shardPopulation reads it (monster.JupiterEnabled) to append the Jupiter field population",
 	"SRO_JUPITER_TEMPLE":                     "shardPopulation reads it (monster.JupiterTempleEnabled) to append the Jupiter temple population",

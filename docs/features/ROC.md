@@ -9,7 +9,7 @@ are built as one native chain (#3399). The switch below stays off until the whol
 
 | Switch | Where | Effect |
 | --- | --- | --- |
-| `SRO_ROC` | Build | Stages the Roc range's nine kinds with their skills, names, skill effects and characterinfo, the four gates with their links, and the wait room |
+| `SRO_ROC` | Build and server | Build: stages the Roc range's eleven kinds with their skills, names, skill effects and characterinfo, the four gates with their links, the wait room, the six MEETROC quests and the quest kinds' nests (`roc-monsters.txt`). Server: admits those nests (`monster/roc.go`). Build and server must agree |
 
 The build reads the VSRO client (`SRO_VSRO_ROOT`, the variant build's own source).
 
@@ -25,6 +25,8 @@ The build reads the VSRO client (`SRO_VSRO_ROOT`, the variant build's own source
 | `MOB_RM_SPIRITS` and its three clones | 8 | 100 |
 | `MOB_RM_WINGTRIBEKNIGHT` | 8 | 100 |
 | `MOB_RM_WINGTRIBEDUKE` | 0 | 100 |
+| `MOB_QT_RM_FEATHERMASK_01`, a quest kind | 0 | 90 |
+| `MOB_QT_RM_ROCKY_CLON_01`, a quest kind | 0 | 90 |
 
 - **Where the rows go:** `characterdata_260000.txt` / `skilldata_260000.txt`.
 - **Identities:** fresh, above every published row. `.opensro-roc.json` records them, so a rebuild never
@@ -53,12 +55,27 @@ The build reads the VSRO client (`SRO_VSRO_ROOT`, the variant build's own source
 - **The wait room:** region 25792 (`RN_RM_ROCAPEX_WAIT`). v1.150 ships its zone names, but not its region
   row, sector 100/192 or navmesh. Those are merged the way the other later worlds are (`later_world_import`).
 
+### The quest chain (step 3c)
+
+- **The quests:** the VSRO client's questdata ships exactly six MEETROC quests: `QNO_RM_MEETROC_1`, `_2`, `_6` and
+  `_ECT_1` to `_ECT_3`. Their rows join `questdata.txt` under the source ids 91, 92, 96 and 374-376, which are free
+  in v1.150. A row the client lacks, or an id or codename the table already holds, stops the build. v1.150 already
+  ships their text and their items. The compiled classes are #3796: `QNO_RM_MEETROC_1` projects, and the other
+  five wait for their custom slots (step 3b).
+- **The quest kinds' nests:** six v1.188 nests in one hive (545) on the Roc mountain, regions 24690, 24691, 24693,
+  24947 and 24948, sharing a cap of 20. `scripts/build/import_roc_quest_nests.py` reads them once from the
+  v1.188 shard backup the population evidence pins, and commits them to `scripts/data/roc/quest-nests.json`.
+  The build writes them as `roc-monsters.txt`. ISRO-R holds the same six nests at the same anchors with other
+  tuning; the v1.188 rows win, as for every nest.
+- **Switching off:** the six rows leave `questdata.txt` by codename (it is the native table again, byte for
+  byte) and `roc-monsters.txt` is removed.
+
 ## What is not here yet
 
-- **Spawning and the instances.** The kinds are inert. No nest places them, because the reference data has no
+- **Spawning and the instances.** The arena kinds stand in no nest, because the reference data has no
   population in the arena regions: the server spawns Roc and the Tahomet bosses when the arena opens. The
   gates arrive in worlds 40 and 41, whose admission and spawns are step 4.
 - **Content still to come**, each its own step of #3399:
-  - the `QNO_RM_MEETROC` quest chain (step 3; its items are already native);
+  - the custom slots of `QNO_RM_MEETROC_2`, `_6` and `_ECT_1` to `_ECT_3` (step 3b);
   - worlds 40 and 41 (step 4);
   - drops and the unique notice (step 5).
