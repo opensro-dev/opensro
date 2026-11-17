@@ -13,6 +13,8 @@ bone already held the cast callback; the landing bone refused the stage
 into the fatal unsupported set. These tests pin the symmetric hold, and
 the refusal contract: skipped and logged, never an error. A spin range
 wider than int32 plays with the native rotation instead (issue 2576).
+A zero batch count authors no instances and skips silently, and a
+non-moving AT_SOURCE stage plays on the cast's target (issue 2471).
 
 ===========================================================================
 */
@@ -211,9 +213,10 @@ function trapFixture( count ) {
 	return { effects, sounds, step };
 }
 
-test("an attached stage with an unusable batch count is skipped and logged, never an error", () => {
-	// The Qin-Shi tomb trap buffs author a batch count of 0. That used
-	// to throw out of the attached lane into the session-fatal failure.
+test("an attached stage with a zero batch count creates nothing and stays silent", () => {
+	// Issue 2471: the Qin-Shi tomb trap buffs author a batch count of 0.
+	// The native create loop bounded by that count runs zero times: no
+	// instances, and no refusal either. (This used to throw, then to log.)
 	const f = trapFixture( 0 );
 	const warnings = [], original = console.warn;
 	console.warn = ( ...args ) => warnings.push( args.join( " " ) );
@@ -224,8 +227,8 @@ test("an attached stage with an unusable batch count is skipped and logged, neve
 		console.warn = original;
 	}
 	assert.equal( f.effects.error(), null );
-	assert.equal( warnings.length, 1 );
-	assert.match( warnings[0], /buff_critical_up\.efp/ );
+	assert.equal( warnings.length, 0 );
+	assert.deepEqual( f.effects.unsupported(), [] );
 	// The same stage with a usable count still renders its visual.
 	const rendered = trapFixture( 1 );
 	const actors = rendered.step( 0.2 );
@@ -338,4 +341,190 @@ test("a mover whose cast ends while a bone is cold is skipped and logged, never 
 	assert.match( warnings[0], /warlock_blood_touch_a\.efp/ );
 	assert.equal( f.effects.unsupported().length, 1 );
 	assert.match( f.effects.unsupported()[0], /target-socket:1\/Bip01/ );
+});
+
+function zeroBatchFixture( count ) {
+	let id = 0;
+	const jobs = new Map(), sounds = [];
+	const encode = value => new TextEncoder().encode( JSON.stringify( value ) );
+	// MSKILL_TQ_QINSHITRAP1_ATTACK03's SHOT stage, as decoded: a static
+	// follow effect whose authored batch count is the variable under test.
+	const stage = {
+		resource: "monster/eu/skill/skill_recall_china.efp",
+		phase: "SHOT",
+		damageEvent: false,
+		startEvent: 1,
+		action: "AT_ONE_FOLLOW",
+		move: "MOV_NONE",
+		bone: null,
+		offset: [ 0, 0, 0 ],
+		targetOffset: [ 0, 0, 0 ],
+		count,
+		scripts: [],
+		sound: null,
+		soundEnd: null,
+		movement: { delayMs: 0, startSpeed: 0, endSpeed: 0 }
+	};
+	const effects = createCharacterEffects(
+		{
+			available: () => 4,
+			progress: () => null,
+			health: () => ({ phase: "running" }),
+			textureFeatures() {},
+			install() {},
+			dispose() {},
+			request( url, limit, decode ) {
+				jobs.set(
+					++id,
+					decode === "effects" ?
+						{ kind: "effects", catalog: { "25049": { clips: [ "cast" ], stages: [ stage ] } } } :
+						{ kind: "bytes", buffer: encode( { format: "sro-skill-stage-models", models: {} } ).buffer }
+				);
+				return id;
+			},
+			take( jobId ) {
+				const r = jobs.get( jobId );
+				jobs.delete( jobId );
+				return r;
+			},
+			cancel( jobId ) {
+				jobs.delete( jobId );
+			}
+		},
+		"http://localhost",
+		event => sounds.push( event ),
+		createPresentationRandom( 1 )
+	);
+	const entities = [
+		{ gid: 1, refObjId: 1, kind: "player", name: "caster", regionId: 257, x: 0, y: 0, z: 0, heading: 0 },
+		{ gid: 2, refObjId: 1, kind: "monster", name: "victim", regionId: 258, x: 100, y: 0, z: 0, heading: 0 }
+	];
+	const socket = gid => {
+		const entity = defined( entities.find( row => row.gid === gid ), "socket entity" );
+		return { regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, yaw: radians( 0 ) };
+	};
+	const cast = { token: 1, caster: 1, target: 2, skill: 25049 }, castRows = [];
+	const gameplay = { casts: castRows, localGid: 9, pose: null, vitals: [], inventory: [] };
+	const step = ( time, triggers = [] ) =>
+		effects.step( entities, gameplay, time, () => true, () => 0.1, triggers, socket );
+	step( 0 );
+	step( 0.01 );
+	step( 0.02 );
+	castRows.push( cast );
+	return { effects, step, trigger: { cast, phase: "SHOT", event: 1, at: 1 } };
+}
+
+test("a cast stage with a zero batch count creates nothing and stays silent", () => {
+	// Issue 2471, class 1 on the cast lane: the batch count bounds the
+	// native create loop, so zero authors no instances and no refusal.
+	const f = zeroBatchFixture( 0 );
+	const warnings = [], original = console.warn;
+	console.warn = ( ...args ) => warnings.push( args.join( " " ) );
+	let actors;
+	try {
+		actors = f.step( 1, [ f.trigger ] );
+	} finally {
+		console.warn = original;
+	}
+	assert.equal( f.effects.error(), null );
+	assert.deepEqual( actors, [] );
+	assert.equal( warnings.length, 0 );
+	assert.deepEqual( f.effects.unsupported(), [] );
+	// The same stage with a usable count still renders its visual.
+	const rendered = zeroBatchFixture( 1 );
+	const played = rendered.step( 1, [ rendered.trigger ] );
+	assert.equal( rendered.effects.error(), null );
+	assert.equal( played.length, 1 );
+	assert.ok( played[0].model.includes( "skill_recall_china" ) );
+});
+
+function trapReturnFixture() {
+	let id = 0;
+	const jobs = new Map(), sounds = [];
+	const encode = value => new TextEncoder().encode( JSON.stringify( value ) );
+	// SKILL_EU_WIZARD_FIREA_TRAP_A's S_RETURN stage, as decoded.
+	const stage = {
+		resource: "skill/europe/wizard_fire_trap_hit.efp",
+		phase: "S_RETURN",
+		damageEvent: false,
+		startEvent: 0,
+		action: "AT_SOURCE",
+		move: "MOV_NONE",
+		bone: null,
+		offset: [ 0, 0, 0 ],
+		targetOffset: [ 0, 0, 0 ],
+		count: 1,
+		scripts: [],
+		sound: null,
+		soundEnd: null,
+		movement: { delayMs: 0, startSpeed: 0, endSpeed: 0 }
+	};
+	const effects = createCharacterEffects(
+		{
+			available: () => 4,
+			progress: () => null,
+			health: () => ({ phase: "running" }),
+			textureFeatures() {},
+			install() {},
+			dispose() {},
+			request( url, limit, decode ) {
+				jobs.set(
+					++id,
+					decode === "effects" ?
+						{ kind: "effects", catalog: { "8793": { clips: [ "cast" ], stages: [ stage ] } } } :
+						{ kind: "bytes", buffer: encode( { format: "sro-skill-stage-models", models: {} } ).buffer }
+				);
+				return id;
+			},
+			take( jobId ) {
+				const r = jobs.get( jobId );
+				jobs.delete( jobId );
+				return r;
+			},
+			cancel( jobId ) {
+				jobs.delete( jobId );
+			}
+		},
+		"http://localhost",
+		event => sounds.push( event ),
+		createPresentationRandom( 1 )
+	);
+	const entities = [
+		{ gid: 1, refObjId: 1, kind: "player", name: "caster", regionId: 257, x: 0, y: 0, z: 0, heading: 0 },
+		{ gid: 2, refObjId: 1, kind: "monster", name: "victim", regionId: 258, x: 100, y: 0, z: 0, heading: 0 }
+	];
+	const socket = gid => {
+		const entity = defined( entities.find( row => row.gid === gid ), "socket entity" );
+		return { regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, yaw: radians( 0 ) };
+	};
+	const cast = { token: 1, caster: 1, target: 2, skill: 8793 }, castRows = [];
+	const gameplay = { casts: castRows, localGid: 9, pose: null, vitals: [], inventory: [] };
+	const step = ( time, triggers = [] ) =>
+		effects.step( entities, gameplay, time, () => true, () => 0.1, triggers, socket );
+	step( 0 );
+	step( 0.01 );
+	step( 0.02 );
+	castRows.push( cast );
+	return { effects, step, trigger: { cast, phase: "S_RETURN", event: 0, at: 1 } };
+}
+
+test("a non-moving AT_SOURCE stage plays on the cast's target, not the caster", () => {
+	// Issue 2471, class 2: native initializes this stage on the skill's
+	// target at its target binding; on the caster it would be invisible
+	// in the wrong place and the refusal log would fire instead.
+	const f = trapReturnFixture();
+	const warnings = [], original = console.warn;
+	console.warn = ( ...args ) => warnings.push( args.join( " " ) );
+	let actors;
+	try {
+		actors = f.step( 1, [ f.trigger ] );
+	} finally {
+		console.warn = original;
+	}
+	assert.equal( f.effects.error(), null );
+	assert.equal( warnings.length, 0 );
+	assert.deepEqual( f.effects.unsupported(), [] );
+	assert.equal( actors.length, 1 );
+	assert.equal( actors[0].pose.regionId, 258 );
+	assert.equal( actors[0].pose.x, 100 );
 });

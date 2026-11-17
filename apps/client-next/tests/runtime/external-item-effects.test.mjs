@@ -280,3 +280,17 @@ test("real Return Scroll admits its authored particles after cold loading and re
 	assert.deepEqual( h.step( 100 ), [] );
 	h.owner.dispose();
 });
+
+test("real ITEM_FORT_SHOCK_BOMB is admitted by the item route and authors nothing", () => {
+	// Issue 2471, class 3: its only ACT_S stage is AT_STOP/MOV_NONE with
+	// no resource. Admission must not throw or refuse; the stage simply
+	// has nothing to show beyond the item's own drop host.
+	const h = harness( 19233, 4972 );
+	const presented = [];
+	for ( let i = 0; i < 5; i++ ) presented.push( ...h.step( i * .01 ) );
+	assert.ok( presented.length > 0 );
+	assert.ok( presented.every( a => a.model.endsWith( "drop_ch_bag.glb" ) ) );
+	assert.equal( h.owner.error(), null );
+	assert.deepEqual( h.owner.unsupported(), [] );
+	h.owner.dispose();
+});

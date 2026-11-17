@@ -916,6 +916,9 @@ export function createCharacterEffects(
 				} );
 			}
 			if ( !stage.resource ) continue;
+			// +0x09 bounds the create loop below; zero authors no instances
+			// and is skipped silently, never refused (#2471).
+			if ( stage.count === 0 ) continue;
 			const model = modelFor( stage.resource );
 			if ( !model ) {
 				refuse( stage.resource );
@@ -923,9 +926,9 @@ export function createCharacterEffects(
 			}
 			const binding = stageBinding( stage, stage.action === "AT_TARGET" || stage.action === "AT_TARGET_F" ),
 				offset = binding.offset;
-			// A shipped stage can carry a batch count the port cannot
-			// instance (the Qin-Shi tomb trap buffs author 0). Skip and
-			// log it; one stage never ends the session (#2440).
+			// Zero was skipped silently above (#2471); what remains is a
+			// count the port cannot instance at all. Refuse and log it;
+			// one stage never ends the session (#2440).
 			if ( !Number.isInteger( stage.count ) || stage.count < 1 || stage.count > 128 ) {
 				refuse(
 					`attached:${effect.skill}/${stage.phase}/${stage.startEvent}: invalid count ${stage.count} (${stage.resource})`
@@ -1609,6 +1612,9 @@ export function createCharacterEffects(
 							const flying = distributed || radial || returning ||
 								!targetFollow && targetLocal && (stage.movement?.startSpeed ?? 0) !== 0;
 							const staticTarget = targetLocal && !targetFollow && !flying;
+							// 8DE824: an AT_SOURCE stage that does not move is created on the
+							// cast's target (its aux entity), never on the caster; placed below.
+							const sourceStatic = stage.action === "AT_SOURCE" && !flying;
 							const resultStage = impactIndex( cast.skill, trigger.phase, trigger.event );
 							const resultTargets = cast.results?.filter( row =>
 								resultStage < 0 || castResultAt( row.impacts, resultStage )
@@ -1625,7 +1631,7 @@ export function createCharacterEffects(
 							for ( const dispatch of targets ) {
 								const targetGid = dispatch.target;
 								const entity = byGid.get(
-									returning || targetLocal ?
+									returning || targetLocal || sourceStatic ?
 										targetGid :
 										flying || !stage.damageEvent ?
 										cast.caster :
@@ -1726,6 +1732,9 @@ export function createCharacterEffects(
 									motion && (curved || motion.startSpeed >= 0 && motion.endSpeed >= 0) &&
 									projectileSpace( pose.regionId, target.regionId ) &&
 									(!radial || stage.move === "MOV_STRAIGHT" && stage.native?.actionOptions.enabled);
+								// 8DE622/8DE94B: the batch count (+0x09) bounds the create loop;
+								// zero authors no instances and is not a refusal. Skip silently.
+								if ( stage.count === 0 ) continue;
 								if (
 									!model ||
 									(!supportedFlight &&
@@ -1733,6 +1742,7 @@ export function createCharacterEffects(
 											"AT_DMG_POS",
 											"AT_ONE_FOLLOW",
 											"AT_LOOP",
+											"AT_SOURCE",
 											"AT_STOP",
 											"AT_TARGET",
 											"AT_TARGET_F"
@@ -1816,11 +1826,27 @@ export function createCharacterEffects(
 										}
 										source = anchor;
 									}
+									if ( sourceStatic ) {
+										// 8DE9B0..8DE9F1: the stage is initialized on the target at its
+										// target binding (+0x54) with the target's own fYaw (+0x88) - not
+										// the caster's, which AT_TARGET statics take above.
+										const anchor = stageAnchor(
+											entity,
+											stageBinding( stage, true ),
+											trigger,
+											nativeHeadingYaw( pose.angle )
+										);
+										if ( !anchor ) {
+											refuse( `anchor-height:${entity.refObjId}` );
+											continue;
+										}
+										source = anchor;
+									}
 									// The renderer attachment's holder; a '*' binding needs its height.
 									const holder = { gid: entity.gid, height: presentation.get( entity.gid )?.height };
 									if (
 										holder.height === undefined &&
-										(targetFollow ? stage.targetAddHeight : stage.addHeight)
+										(targetFollow || sourceStatic ? stage.targetAddHeight : stage.addHeight)
 									) {
 										refuse( `anchor-height:${entity.refObjId}` );
 										continue;
