@@ -33,6 +33,28 @@ import {
 
 /*
 ================
+compoundNavMeshPath
+
+The mesh a compound's navigation comes from. The v1.696 map loader
+(f89d00 dispatches .cpd to f8dff0) reads the compound's name string
+(header offset 0x0c) and loads it as a BSR through the .bsr navigation
+loader f8d380, so the compound walks on that resource's offset-7 mesh.
+v1.150's loader returns no mesh for a .cpd (441700); its own compounds
+(the waterfall particles, x_mas_boxset01) carry an empty name and no
+branch with a mesh, so the later rule leaves every v1.150 region as it
+was. Every navigable compound in the v1.696 data names one of its own
+branches; a name that is no branch is inferred to give no mesh, as
+f8d380 then finds no resource to load.
+================
+*/
+export function compoundNavMeshPath( compound, branches ) {
+	const named = String( compound.name ?? "" ).replaceAll( "\\", "/" ).toLowerCase();
+	const branch = branches.find( row => String( row.sourcePath ).replaceAll( "\\", "/" ).toLowerCase() === named );
+	return branch?.primaryMeshPath ?? null;
+}
+
+/*
+================
 buildTitleSectorObjectResources
 ================
 */
@@ -117,6 +139,7 @@ export async function buildTitleSectorObjectResources( options ) {
 				sourcePath,
 				placementCount: placementCounts.get( definition.objectId ) ?? 0,
 				sourceGamePath: toGameRelative( absolutePath, sourceGameRoot ),
+				primaryMeshPath: compoundNavMeshPath( compound, branches ),
 				branches,
 				materialPaths: [ ...new Set( branches.flatMap( branch => branch.materialPaths ) ) ],
 				meshPaths: [ ...new Set( branches.flatMap( branch => branch.meshPaths ) ) ]
