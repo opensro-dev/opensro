@@ -82,8 +82,18 @@ class RocRewardsTest(unittest.TestCase):
 	# ================
 	def test_installed_scrolls_and_sets_join(self):
 		installed = {SET_PIECE: item_row(1, SET_PIECE), SCROLL: item_row(2, SCROLL, ("3", "3", "13", "1"))}
-		rules, _ = rewards.project_rewards(evidence(), installed)
+		rules, waiting = rewards.project_rewards(evidence(), installed)
 		self.assertEqual([(rule["Item"], rule["Min"], rule["Max"]) for rule in rules["Fixed"]], [(SCROLL, 5, 6)])
+		# Group 1 draws three distinct pieces: with one installed the server's
+		# draw would run out, so the rule waits until three are.
+		self.assertEqual(rules["Random"], [])
+		self.assertIn("MOB_RM_ROC/group 1", waiting)
+		for identity, family in enumerate(("HEAVY", "LIGHT"), 3):
+			code = SET_PIECE.replace("CLOTHES", family)
+			installed[code] = item_row(identity, code)
+		rules, waiting = rewards.project_rewards(evidence(), installed)
+		self.assertNotIn("MOB_RM_ROC/group 1", waiting)
+		self.assertEqual(len(rules["Groups"][str(rewards.GROUP_BASE + 1)]), 3)
 		self.assertEqual(rules["Random"], [{"Monster": "MOB_RM_ROC", "Group": rewards.GROUP_BASE + 1,
 			"Distinct": True, "Min": 3, "Max": 3, "Probability": 1.0}])
 

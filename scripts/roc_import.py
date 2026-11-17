@@ -492,6 +492,8 @@ def stage(vsro_root, output):
 		"The arena kinds stand in no nest; the server spawns them when the arena opens (#3399 step 4).",
 		"QNO_RM_MEETROC_6's Soul Crystal has no source: the quests that fuse it (MEETROC_3 to _5) never shipped.",
 	]
+	limits.append("The trophies ISRO-R's fixed table drops (ITEM_QNO_RM_ARCHEMY_1 to _8) wait for their exchange "
+		"quests, QNO_RM_ARCHEMY_1 to _8 (#3399 step 5d).")
 	if rewards["waiting"]:
 		limits.append("Database rewards wait for items the variant lacks: " + ", ".join(rewards["waiting"]) + ".")
 	if "omittedLinks" in gates:

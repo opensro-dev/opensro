@@ -21,9 +21,14 @@ weights; a rule whose group keeps none, or whose fixed item the variant
 lacks, is left out and listed in the summary. The four scrolls are
 native v1.150 items (itemdata_5000), so their rules join on every Roc
 build; the degree-11 pieces come from SRO_CAP110_ITEMS, and the Roc sets
-wait for their import. The rares are in no client the port reads. With
-nothing kept, no file is written and the Roc kinds drop only what the
-native passes roll.
+from the same import when SRO_ROC is on too (step 5c). The rares are in no
+client the port reads. With nothing kept, no file is written and the Roc
+kinds drop only what the native passes roll.
+
+The backup is not the whole of it: ISRO-R's fixed table also gives the Roc
+kinds the eight ITEM_QNO_RM_ARCHEMY trophies. They are native v1.150
+items, but the exchange quests that take them are not staged, so they are
+not joined here; roc_import.py lists them as waiting (#3399 step 5d).
 
 ===========================================================================
 """
@@ -80,6 +85,9 @@ def checked_rule(low, high, chance, what):
 # The rules the installed items can serve, and what waits. A rule the
 # server cannot represent (a rent code, random parameters, options on
 # anything but an ETC item) refuses rather than ship another reward.
+# A distinct rule draws each member once (loot.assigned), so it waits
+# until the variant installs as many members as it draws: with fewer the
+# server's draw runs out and the kill's assigned drops are lost.
 # ================
 def project_rewards(source, installed):
 	if source.get("format") != SOURCE_FORMAT or source.get("sha256") != SOURCE_SHA256:
@@ -106,7 +114,7 @@ def project_rewards(source, installed):
 			raise ValueError(f"Roc reward carries random parameters: {what}")
 		members = [{"Codename": member["codename"], "Probability": member["probability"]}
 			for member in source["groups"].get(str(row["group"]), []) if member["codename"] in installed]
-		if not members:
+		if not members or (row["distinct"] and len(members) < row["max"]):
 			waiting.append(what)
 			continue
 		group = GROUP_BASE + row["group"]
