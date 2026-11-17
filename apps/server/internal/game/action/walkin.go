@@ -415,6 +415,10 @@ func (rt *Runtime) enterWalkIn(division string, c *enterworld.Character, link po
 		if failure := portalAdmission(c, source, link, traveller); failure != 0 {
 			return 0, portalFailure(failure), false
 		}
+		// The same link check as a gate's: a kind 5 item is spent here too.
+		if failure := portalSpendItems(c, link); failure != 0 {
+			return 0, portalFailure(failure), false
+		}
 		return 0, OpResult{}, true
 	})
 	return out, moved
