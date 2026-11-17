@@ -1523,7 +1523,6 @@ export function createCharacterEffects(
 				}
 				for ( const gid of hwan.keys() ) if ( !byGid.has( gid ) ) hwan.delete( gid );
 				for ( const gid of appearances.keys() ) if ( !byGid.has( gid ) ) appearances.delete( gid );
-				for ( const gid of calm ) if ( !byGid.has( gid ) ) calm.delete( gid );
 				for ( const gid of firstSeen.keys() ) if ( !byGid.has( gid ) ) firstSeen.delete( gid );
 				for ( const gid of statuses.keys() ) {
 					if ( !byGid.has( gid ) ) {
