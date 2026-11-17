@@ -4,25 +4,25 @@
 chain_reset.go - quests that reopen earlier quests, and the kill exchange
 
 The Roc chain (#3399) is a loop, not a line. QNO_RM_MEETROC_6 is offered
-once QNO_RM_MEETROC_2 is done, and paying it (90D4C0) or giving it up
-(90CE00) zeroes MEETROC_2's record and sets its completion count to 0
-(player vtable +0x1B4, 571590), so the village chief offers MEETROC_2
-again. Giving MEETROC_2 up (90C1C0) does the same to MEETROC_1. Each
-MEETROC_6 run pays one of each ECT token, which the MEETROC_ECT quests
-take 7, 10 and 15 of.
+once QNO_RM_MEETROC_2 is done, and paying it or giving it up zeroes
+MEETROC_2's record and sets its completion count to 0, so the village
+chief offers MEETROC_2 again. Giving MEETROC_2 up does the same to
+MEETROC_1. Each MEETROC_6 run pays one of each ECT token, which the
+MEETROC_ECT quests take 7, 10 and 15 of. (The native handlers' addresses
+are in the PR's native-claims table, #3399 step 3b.)
 
 The port forgets the named quests' history the way /INITQ does
 (forgetQuestHistory): the completed list, the count, ended state and
 capture supplies go. Like /INITQ it sends no frame for them. The client
 reads completions only at login, and the NPC's offer is the server's.
 
-MEETROC_6's kill handler (90C9D0) is the other rule here. Each kill sets
+MEETROC_6's native kill handler is the other rule here. Each kill sets
 its mission's bit. Once all seven are set, and the character holds no
 Soul Fragment (_6_02) but holds a Soul Crystal (_6_03), every crystal
 leaves, one fragment is granted, the record's achieved key (+3) takes
-the kill mask and the achieved-now line is sent. CBasicQuest_vfEC
-(922CF0) pays on that key alone, so without a crystal the seven kills
-never complete the quest. The port's key is holding the fragment: the
+the kill mask and the achieved-now line is sent. The native pay check
+reads that key alone, so without a crystal the seven kills never
+complete the quest. The port's key is holding the fragment: the
 generator projects it as the quest's last, required collect row.
 
 ===========================================================================
