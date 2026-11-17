@@ -377,6 +377,42 @@ func TestArenaEntryIgnoresAnAnchorLeftByAReturnScroll(t *testing.T) {
 	}
 }
 
+func TestLeavingAnArenaEarlyIsAFailureAndFinishingItIsNot(t *testing.T) {
+	// A trial left by a return scroll shows the quest's failed line (the quest stays active).
+	w := newHwanWorld(t)
+	c := w.player(t, "Leaver", 95, "QNO_CH_HWAN_1_1")
+	w.enter(t, c, "QNO_CH_HWAN_1_1", "NPC_CH_GENARAL")
+	w.advance(15_000)
+	w.event(InstanceEventLeave, c.Name)
+	if !notifiedAny(w.pushed[c.Name], "SN_TALK_QNO_CH_HWAN_1_1_08") {
+		t.Fatal("leaving the trial early did not show its failed notice")
+	}
+	if activeQuestIndex(c, mustDef(t, w.rt, "QNO_CH_HWAN_1_1").RefID) < 0 {
+		t.Fatal("the quest did not stay active for another try")
+	}
+	// A ritual left early shows its failed-to-obtain notice.
+	r := newHwanWorld(t)
+	p := r.player(t, "Ritualist", 95, "QNO_CH_HWAN_1_5", "QNO_CH_HWAN_1_1", "QNO_CH_HWAN_1_2", "QNO_CH_HWAN_1_3", "QNO_CH_HWAN_1_3_1", "QNO_CH_HWAN_1_4", "QNO_CH_HWAN_1_4_1")
+	r.enter(t, p, "QNO_CH_HWAN_1_5", "NPC_CH_SHAMAN")
+	r.advance(10_000)
+	r.event(InstanceEventLeave, p.Name)
+	if !notifiedAny(r.pushed[p.Name], "SN_TALK_QNO_CH_HWAN_1_5_09") {
+		t.Fatal("leaving the ritual early did not show its failed notice")
+	}
+	// A trial passed by the commander's death and then left is not a failure.
+	d := newHwanWorld(t)
+	q := d.player(t, "Winner", 95, "QNO_CH_HWAN_1_1")
+	d.enter(t, q, "QNO_CH_HWAN_1_1", "NPC_CH_GENARAL")
+	d.advance(15_000)
+	q.World = insideLayer(d)
+	d.rt.KillUpdater()(q, "MOB_QT_CH_SOLDIER_01_1", 0)
+	d.advance(1_000)
+	d.event(InstanceEventLeave, q.Name)
+	if notifiedAny(d.pushed[q.Name], "SN_TALK_QNO_CH_HWAN_1_1_08") {
+		t.Fatal("a passed trial was reported as failed when its player left")
+	}
+}
+
 func TestHwanTrialRegionsAreTheTwoIsolatedArenas(t *testing.T) {
 	got := HwanTrialRegions()
 	if len(got) != 2 || got[0] != 22966 || got[1] != 22454 {

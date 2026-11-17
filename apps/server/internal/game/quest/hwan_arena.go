@@ -272,11 +272,37 @@ func (rt *Runtime) hwanLeave(event InstanceEvent) {
 		lease = rt.hwan.leases[event.World]
 	}
 	layer.ended = true
+	// Port-only, not native: a resident who leaves before the arena ends (a return scroll, a teleport) has failed
+	// it, as one who dies does; the quest stays active for another try.
+	left := !layer.failed && !layer.killed && layer.step < hwanEndingStep(layer.arena)
 	rt.hwan.mu.Unlock()
+	if left {
+		rt.hwanNotice(layer, hwanFailSymbol(layer.arena))
+	}
 	rt.hwanForget(event.World)
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}
+}
+
+// hwanEndingStep is the layer step from which the arena is over (the pass or the fail is decided): 3 for a
+// trial, 4 for a ritual.
+func hwanEndingStep(arena *hwanArena) int {
+	if arena.kind == hwanTrial {
+		return 3
+	}
+	return 4
+}
+
+// hwanFailSymbol is the quest's "failed" line: the trial's, or the ritual's failed-to-obtain notice.
+func hwanFailSymbol(arena *hwanArena) string {
+	switch {
+	case arena.kind == hwanRitual:
+		return "09"
+	case arena.chain == 2:
+		return "11"
+	}
+	return "08"
 }
 
 func (rt *Runtime) hwanCharacter(division, name string) *enterworld.Character {
@@ -425,9 +451,9 @@ func (rt *Runtime) hwanResidentGone(event InstanceEvent, layer *hwanLayer) bool 
 
 func (rt *Runtime) hwanTrialUpdate(event InstanceEvent, layer *hwanLayer, age int64) {
 	arena := layer.arena
-	passSymbol, failSymbol, halfSymbol := "09", "08", "11"
+	passSymbol, failSymbol, halfSymbol := "09", hwanFailSymbol(arena), "11"
 	if arena.chain == 2 {
-		passSymbol, failSymbol, halfSymbol = "12", "11", "14"
+		passSymbol, halfSymbol = "12", "14"
 	}
 	rt.hwan.mu.Lock()
 	killed := layer.killed
