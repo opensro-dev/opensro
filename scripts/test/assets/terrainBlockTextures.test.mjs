@@ -201,8 +201,8 @@ test("terrain containers ship the authored levels only, verbatim", async () => {
 test("a persisted tile ledger without recorded references is discarded, not trusted", async () => {
 	// The ledger-hit path the review named: a ledger whose tiles do not
 	// record the bundle's reference cannot be checked against the probe.
-	// Version 4 records it, version 5 adds each region's named paths; older
-	// ledgers are refused and re-read.
+	// Version 4 records it, version 5 adds each region's named paths, version
+	// 6 each region's input digest; older ledgers are refused and re-read.
 	const { readTerrainTileLedger } = await import( "../../build/world/buildOutdoorWorldRegionResources.mjs" );
 	const ledgerDir = path.join( generatedRoot, "intermediate" );
 	await mkdir( ledgerDir, { recursive: true } );
@@ -228,8 +228,62 @@ test("a persisted tile ledger without recorded references is discarded, not trus
 			references: { "27024": [ "/z.png" ] }
 		} )
 	);
+	assert.equal( (await readTerrainTileLedger()).size, 0, "a v5 ledger without input digests is ignored" );
+	await writeFile(
+		path.join( ledgerDir, "outdoor-terrain-tiles.json" ),
+		JSON.stringify( {
+			version: 6,
+			regions: { "27024": [ { ddjFileName: "x.ddj", sourcePath: "y", imagePublicPath: "/z.png" } ] },
+			references: { "27024": [ "/z.png" ] },
+			inputs: { "27024": "digest" }
+		} )
+	);
 	const fresh = await readTerrainTileLedger();
-	assert.equal( fresh.size, 1, "a v5 ledger is read" );
+	assert.equal( fresh.size, 1, "a v6 ledger is read" );
+});
+
+test("a region whose inputs changed since its build is stale; one whose inputs match is not", async () => {
+	// 11-17: an import renumbered Baghdad's objects (.o2 and navmesh) after its
+	// bundle was built; reuse kept the old bundle and the client failed with
+	// "Missing navigation BSR 2631". The recorded input digest must notice.
+	const { findStaleOutdoorRegions, outdoorRegionInputDigest, outdoorSharedInputDigest } = await import(
+		"../../build/world/buildOutdoorWorldRegionResources.mjs"
+	);
+	const extracted = await mkdtemp( path.join( os.tmpdir(), "sro-outdoor-inputs-" ) );
+	try {
+		const mapRoot = path.join( extracted, "Map_extracted" );
+		await mkdir( path.join( mapRoot, "87" ), { recursive: true } );
+		await mkdir( path.join( extracted, "Data_extracted", "navmesh" ), { recursive: true } );
+		await writeFile( path.join( mapRoot, "object.ifo" ), "catalog v1" );
+		await writeFile( path.join( mapRoot, "tile2d.ifo" ), "tiles" );
+		const sector = {
+			id: "0x575a",
+			mapBasePath: path.join( mapRoot, "87", "90" ),
+			navmeshPath: path.join( extracted, "Data_extracted", "navmesh", "nv_575a.nvm" )
+		};
+		for ( const ext of [ ".m", ".t", ".o2" ] ) await writeFile( sector.mapBasePath + ext, "sector " + ext );
+		await writeFile( sector.navmeshPath, "navmesh ids 2600" );
+
+		const shared = await outdoorSharedInputDigest( extracted );
+		const built = await outdoorRegionInputDigest( sector, shared );
+		await mkdir( path.join( generatedRoot, "intermediate" ), { recursive: true } );
+		await writeFile(
+			path.join( generatedRoot, "intermediate", "outdoor-terrain-tiles.json" ),
+			JSON.stringify( { version: 6, regions: {}, references: {}, inputs: { [sector.id]: built } } )
+		);
+		const check = () => findStaleOutdoorRegions( { extractedRoot: extracted, sectors: [ sector ], jobs: 1 } );
+		assert.deepEqual( await check(), [], "unchanged inputs are current" );
+
+		await writeFile( sector.navmeshPath, "navmesh ids 2631" );
+		assert.deepEqual( await check(), [ sector.id ], "a renumbered navmesh makes the region stale" );
+		await writeFile( sector.navmeshPath, "navmesh ids 2600" );
+
+		await writeFile( path.join( mapRoot, "object.ifo" ), "catalog v2" );
+		assert.deepEqual( await check(), [ sector.id ], "a changed object catalog makes every region stale" );
+		assert.notEqual( await outdoorSharedInputDigest( extracted ), shared );
+	} finally {
+		await rm( extracted, { recursive: true, force: true } );
+	}
 });
 
 test("the lightmap publisher retains the raw sibling for existing bundles", async () => {

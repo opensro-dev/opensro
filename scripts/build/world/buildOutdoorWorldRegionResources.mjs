@@ -12,6 +12,12 @@ ledger, so reuse never leaves a bundle naming images that are gone.
 Reuse trusts only bundles this builder's current code wrote: the code stamp
 (shared/codeStamp.mjs) covers this module and everything it imports, and a
 stamp that does not match forces every region and shared index to rebuild.
+Code is not the whole of it: a region is reused only while the digest of its
+inputs (its sector's .m/.t/.o2 and navmesh, plus the shared catalogues its
+object ids resolve through) matches the one recorded when it was built. An
+import that renumbers a sector's objects (Baghdad's, 11-16) rebuilds that
+sector; without the digest the old bundle named ids the new index lacked
+("Missing navigation BSR 2631"). The resource build refuses stale bundles.
 
 ===========================================================================
 */
@@ -66,7 +72,9 @@ const TERRAIN_TILE_LEDGER_PATH = path.join( generatedRoot, "intermediate", "outd
 // matches the probe; an older ledger cannot tell and is discarded.
 // v5: each region also records the public paths its bundle names, so a
 // reused region claims them without re-reading the bundle (2.4 GB in all).
-const TERRAIN_TILE_LEDGER_VERSION = 5;
+// v6: each region also records the digest of the inputs it was built from
+// (outdoorRegionInputDigest); a v5 ledger cannot vouch for any bundle.
+const TERRAIN_TILE_LEDGER_VERSION = 6;
 // Names the code stamp of every outdoor reuse cache (regions, shared indexes).
 const OUTDOOR_CODE_STAMP = "outdoor-world";
 
@@ -83,23 +91,27 @@ export async function readTerrainTileLedger() {
 ================
 readRegionLedger
 
-The ledger's two maps by region id: the terrain tiles each bundle names and
-every public path it names (claimKeptOutput's input on reuse).
+The ledger's three maps by region id: the terrain tiles each bundle names,
+every public path it names (claimKeptOutput's input on reuse), and the
+digest of the inputs it was built from.
 ================
 */
 async function readRegionLedger() {
 	try {
 		const ledger = JSON.parse( await readFile( TERRAIN_TILE_LEDGER_PATH, "utf8" ) );
-		if ( ledger.version === TERRAIN_TILE_LEDGER_VERSION && ledger.regions && ledger.references ) {
+		if (
+			ledger.version === TERRAIN_TILE_LEDGER_VERSION && ledger.regions && ledger.references && ledger.inputs
+		) {
 			return {
 				tiles: new Map( Object.entries( ledger.regions ) ),
-				references: new Map( Object.entries( ledger.references ) )
+				references: new Map( Object.entries( ledger.references ) ),
+				inputs: new Map( Object.entries( ledger.inputs ) )
 			};
 		}
 	} catch ( error ) {
 		if ( error.code !== "ENOENT" ) throw error;
 	}
-	return { tiles: new Map(), references: new Map() };
+	return { tiles: new Map(), references: new Map(), inputs: new Map() };
 }
 
 /*
@@ -107,7 +119,7 @@ async function readRegionLedger() {
 writeTerrainTileLedger
 ================
 */
-async function writeTerrainTileLedger( tilesByRegion, referencesByRegion ) {
+async function writeTerrainTileLedger( tilesByRegion, referencesByRegion, inputsByRegion ) {
 	await mkdir( path.dirname( TERRAIN_TILE_LEDGER_PATH ), { recursive: true } );
 	const sorted = ( map ) => Object.fromEntries( [ ...map ].sort( ( [a], [b] ) => compareText( a, b ) ) );
 	await writeFile(
@@ -115,9 +127,97 @@ async function writeTerrainTileLedger( tilesByRegion, referencesByRegion ) {
 		JSON.stringify( {
 			version: TERRAIN_TILE_LEDGER_VERSION,
 			regions: sorted( tilesByRegion ),
-			references: sorted( referencesByRegion )
+			references: sorted( referencesByRegion ),
+			inputs: sorted( inputsByRegion )
 		} )
 	);
+}
+
+/*
+================
+outdoorSharedInputDigest
+
+The digest of what every region bundle resolves through: the map object and
+tile catalogues, the seasonal layer table, and the shared object and render
+stores as published. Any change rebuilds every region, because a bundle
+embeds object ids and collision rows from them.
+================
+*/
+export async function outdoorSharedInputDigest( extractedRootPath, publicRootPath = publicRoot ) {
+	const mapRoot = path.join( extractedRootPath, "Map_extracted" );
+	const files = [
+		path.join( mapRoot, "object.ifo" ),
+		path.join( mapRoot, "tile2d.ifo" ),
+		path.join( mapRoot, WORLD_LAYER_TABLE ),
+		publicPathToFile( OUTDOOR_WORLD_OBJECT_INDEX_PUBLIC_PATH, publicRootPath ),
+		publicPathToFile( OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH, publicRootPath )
+	];
+	return sha256Hex( (await Promise.all( files.map( fileDigestOrAbsent ) )).join( ":" ) );
+}
+
+/*
+================
+outdoorRegionInputDigest
+
+The digest of one sector's own source files (outdoorRegionInputPaths) under
+the shared digest. Equal digests mean the builder would read the same bytes.
+================
+*/
+export async function outdoorRegionInputDigest( sector, sharedDigest ) {
+	const parts = await Promise.all( outdoorRegionInputPaths( sector ).map( fileDigestOrAbsent ) );
+	return sha256Hex( `${sharedDigest}:${parts.join( ":" )}` );
+}
+
+/*
+================
+outdoorRegionInputPaths
+
+The files one sector's bundle is built from: discovery requires all four.
+================
+*/
+function outdoorRegionInputPaths( sector ) {
+	return [ `${sector.mapBasePath}.m`, `${sector.mapBasePath}.t`, `${sector.mapBasePath}.o2`, sector.navmeshPath ];
+}
+
+/*
+================
+fileDigestOrAbsent
+
+A file's SHA-256, or a fixed marker when it does not exist (the layer table
+is optional), so adding or removing it changes the digest.
+================
+*/
+async function fileDigestOrAbsent( file ) {
+	try {
+		return sha256Hex( await readFile( file ) );
+	} catch ( error ) {
+		if ( error.code === "ENOENT" ) return "absent";
+		throw error;
+	}
+}
+
+/*
+================
+findStaleOutdoorRegions
+
+The sectors whose recorded input digest differs from their inputs now, or
+that the ledger does not vouch for at all. The resource build refuses them:
+a stale bundle loads, but names objects the published index may not hold.
+================
+*/
+export async function findStaleOutdoorRegions( options = {} ) {
+	const sourceExtractedRoot = options.extractedRoot ?? extractedRoot;
+	const sectors = options.sectors ?? (await discoverOutdoorWorldSectors( { extractedRoot: sourceExtractedRoot } ));
+	const { inputs } = await readRegionLedger();
+	const sharedDigest = await outdoorSharedInputDigest( sourceExtractedRoot, options.publicRoot );
+	const stale = [];
+	await mapWithConcurrency( sectors, normalizeJobs( options.jobs ), async ( sector ) => {
+		const recorded = inputs.get( String( sector.id ) );
+		if ( !recorded || recorded !== (await outdoorRegionInputDigest( sector, sharedDigest )) ) {
+			stale.push( sector.id );
+		}
+	} );
+	return stale.sort( compareText );
 }
 
 /*
@@ -305,6 +405,16 @@ export async function loadOutdoorWorldRegionResourceGroup( options = {} ) {
 				`before a production resource build; Vite's dev-on-demand routing index is not a production artifact.`
 		);
 	}
+	if ( !options.allowDevOnDemand && !options.skipInputCheck ) {
+		const stale = await findStaleOutdoorRegions( { jobs: options.jobs, publicRoot: options.publicRoot } );
+		if ( stale.length > 0 ) {
+			throw new Error(
+				`${stale.length} outdoor region bundle(s) were built from other inputs than the variant holds ` +
+					`(first: ${stale.slice( 0, 5 ).join( ", " )}). Run "pnpm assets build world-outdoor" ` +
+					`(or "pnpm assets build full") before a production resource build.`
+			);
+		}
+	}
 	return {
 		regionIndexDescriptor: descriptor,
 		worldRegionsPublicPath: OUTDOOR_WORLD_INDEX_PUBLIC_PATH,
@@ -434,11 +544,14 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 
 	let built = 0;
 	let reused = 0;
-	const { tiles: tilesByRegion, references: referencesByRegion } = await readRegionLedger();
+	const { tiles: tilesByRegion, references: referencesByRegion, inputs: inputsByRegion } = await readRegionLedger();
+	// After the shared stores above: their published bytes join every digest.
+	const sharedDigest = await outdoorSharedInputDigest( sourceExtractedRoot, publicRoot );
 	await mapWithConcurrency( selectedSectors, jobs, async ( sector, index ) => {
 		const publicPath = outdoorRegionBundlePublicPath( sector.id );
 		const outputPath = publicPathToFile( publicPath, publicRoot );
-		if ( !force && (await exists( outputPath )) ) {
+		const inputDigest = await outdoorRegionInputDigest( sector, sharedDigest );
+		if ( !force && inputsByRegion.get( String( sector.id ) ) === inputDigest && (await exists( outputPath )) ) {
 			// Reuse keeps the bundle, not a promise that its images still exist.
 			let tiles = tilesByRegion.get( String( sector.id ) );
 			// A ledger hit names the references the bundle held when it was
@@ -493,6 +606,7 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 		const text = await writeCompactJson( outputPath, bundle );
 		tilesByRegion.set( String( sector.id ), bundleTerrainTiles( bundle ) );
 		referencesByRegion.set( String( sector.id ), namedPublicPaths( text ) );
+		inputsByRegion.set( String( sector.id ), inputDigest );
 		built += 1;
 		reportProgress( options, {
 			phase: "regions",
@@ -503,7 +617,7 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 		} );
 	} );
 
-	await writeTerrainTileLedger( tilesByRegion, referencesByRegion );
+	await writeTerrainTileLedger( tilesByRegion, referencesByRegion, inputsByRegion );
 	const missingBundlePaths = await findMissingBundlePaths( descriptor.regions, jobs );
 	let published = false;
 	let catalog;
