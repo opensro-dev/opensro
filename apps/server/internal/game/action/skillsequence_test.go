@@ -7,6 +7,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 func installSwordCombo(t *testing.T, rt *Runtime, c *enterworld.Character) enterworld.SkillRow {
@@ -55,9 +56,11 @@ func TestComboCommitsSeparateTimedStagesWithOneRootCost(t *testing.T) {
 	}
 	// Native step waits: each stage boundary waits the previous stage's
 	// full authored action time (casting + duration): stage 7 after the
-	// root's 428 ms, stage 8 after 612 ms, the resumed basic attack
-	// after stage 8's 993 ms.
-	if ticks[0] != 5 || ticks[1] != 12 || ticks[2] != 23 {
+	// root's 428 ms, stage 8 after 612 ms (1040 ms, tick 11: counted
+	// from stage 7's mark, not from the tick that ran it), the resumed
+	// basic attack after stage 8's 993 ms once the chain bracket, which
+	// closes 993 ms after the tick that ran stage 8, has closed.
+	if ticks[0] != 5 || ticks[1] != 11 || ticks[2] != 22 {
 		t.Fatalf("continuation ticks %v", ticks)
 	}
 	after, _ := rt.Monsters.Get(testDivision, target.Gid)
@@ -133,12 +136,14 @@ func TestHeavenChainStrikesLandInsideTheCastWindow(t *testing.T) {
 	if len(strikeIDs) < 5 || strikeIDs[0] != 22 || strikeIDs[1] != 23 || strikeIDs[2] != 24 || strikeIDs[3] != 25 || strikeIDs[4] != 26 {
 		t.Fatalf("strike skills %v at ticks %v", strikeIDs, strikeTicks)
 	}
-	// Native strike marks in 100 ms ticks, each allowed one tick of
-	// simulation rounding past the authored mark.
+	// Native strike marks in 100 ms ticks: each stage runs on the first
+	// tick past its authored mark. The rounding never carries into the
+	// next stage, which counts from its predecessor's mark, not from the
+	// tick that ran it (chainStageMark).
 	marks := []int{13, 15, 22, 27, 30}
 	for i, mark := range marks {
-		if strikeTicks[i] < mark || strikeTicks[i] > mark+2 {
-			t.Fatalf("strike %d tick %d, want %d..%d (all %v)", i+1, strikeTicks[i], mark, mark+2, strikeTicks)
+		if strikeTicks[i] != mark {
+			t.Fatalf("strike %d tick %d, want %d (all %v)", i+1, strikeTicks[i], mark, strikeTicks)
 		}
 	}
 	if closeTick < 46 {
@@ -218,5 +223,37 @@ func TestCombatIntentSnapshotCannotResurrectCancelledOrReplacedCombo(t *testing.
 	rt.setCombatIntent(replacement)
 	if rt.combatIntentIsCurrent(old) {
 		t.Fatal("superseded stage remains executable")
+	}
+}
+
+/*
+================
+TestChainStageMarkAbsorbsOnlyTickRounding
+
+A stage run on the first tick past its mark counts the next stage from
+that mark; a root, an unscheduled intent and a stage held past one tick
+count from now, so the schedule neither drifts nor compresses.
+================
+*/
+func TestChainStageMarkAbsorbsOnlyTickRounding(t *testing.T) {
+	tick := simulation.DefaultTickInterval.Milliseconds()
+	cases := []struct {
+		name   string
+		intent basicAttackIntent
+		now    int64
+		want   int64
+	}{
+		{"root", basicAttackIntent{NextActionMs: 0}, 1000, 1000},
+		{"root with cooldown mark", basicAttackIntent{NextActionMs: 950}, 1000, 1000},
+		{"stage on time", basicAttackIntent{ComboRootID: 21, NextActionMs: 1000}, 1000, 1000},
+		{"stage rounded to the tick", basicAttackIntent{ComboRootID: 21, NextActionMs: 1428}, 1500, 1428},
+		{"stage one full tick late", basicAttackIntent{ComboRootID: 21, NextActionMs: 1400}, 1400 + tick, 1400},
+		{"stage held", basicAttackIntent{ComboRootID: 21, NextActionMs: 1400}, 1401 + tick, 1401 + tick},
+		{"stage early", basicAttackIntent{ComboRootID: 21, NextActionMs: 1600}, 1500, 1500},
+	}
+	for _, c := range cases {
+		if got := chainStageMark(c.intent, c.now); got != c.want {
+			t.Errorf("%s: mark %d, want %d", c.name, got, c.want)
+		}
 	}
 }
