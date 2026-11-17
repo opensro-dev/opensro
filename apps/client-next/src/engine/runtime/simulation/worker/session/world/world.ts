@@ -42,6 +42,7 @@ import {
 	RESET_CLIENT_OPCODE,
 	RESET_REGION_OPCODE
 } from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 const ADMISSION_TIMEOUT_MS = 10000;
 // The wait for the EnterWorld answer once the entry is presented. The
 // answer is one multi-megabyte record: on the WebTransport path its
@@ -542,7 +543,7 @@ receive
 			if ( p.length < 9 ) {
 				throw new Error( "Truncated EnterWorld result" );
 			}
-			const view = new DataView( p.buffer, p.byteOffset, p.byteLength ), length = view.getUint32( 5, true );
+			const view = viewOf( p ), length = view.getUint32( 5, true );
 			if ( p[0] !== 1 ) {
 				// A refused entry is the server's designed answer, not a
 				// packet the client failed to apply: its native error code

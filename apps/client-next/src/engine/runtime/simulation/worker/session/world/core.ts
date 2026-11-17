@@ -55,6 +55,7 @@ import {
 	STALL_EDIT_RESULT_OPCODE,
 	TARGET_ACTION_STATE_OPCODE
 } from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // PLAYER_ATTACK_LEVEL_NOTICE is 693F1A's ShowSystemNotification(4, 0x16).
 const PLAYER_ATTACK_LEVEL_NOTICE = 0x16;
@@ -368,7 +369,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 		const chatSender = frame.opcode === CHAT_BROADCAST_OPCODE && frame.payload.length >= 5 &&
 				(frame.payload[0] === 1 || frame.payload[0] === 3) ?
 			entities.read(
-				new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength ).getUint32(
+				viewOf( frame.payload ).getUint32(
 					1,
 					true
 				)
@@ -469,7 +470,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 		const selectedMode = travelMode( frame, localGid, itemCooldown );
 		if ( selectedMode !== null ) loadingMode = selectedMode;
 		if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ) {
-			const v = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength );
+			const v = viewOf( frame.payload );
 			const gid = v.getUint32( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ? 16 : 0, true ),
 				e = entities.read( gid );
 			// 775B50 halts the named object's active mover, so a correction
@@ -507,7 +508,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 			if ( entity?.kind === "local-player" && !entity.mountedOn ) gameplay.heading( entity.heading );
 		}
 		if ( frame.opcode === SERVER_CLOCK_GID_LATCH_OPCODE ) {
-			const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+			const gid = viewOf( frame.payload )
 				.getUint32( 0, true );
 			const entity = entities.read( gid );
 			if ( entity ) {

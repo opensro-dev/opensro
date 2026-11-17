@@ -7,6 +7,7 @@ ground-item.ts - native ground-item widths, labels and pickup selection
 */
 import type { EntityState } from "@/engine/contracts/world";
 import { worldDelta } from "@/engine/foundation/world/world-space";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 /*
 ================
@@ -92,7 +93,7 @@ export function pickupItemKind( typeFlags: number ): number {
 }
 // CIItem_ParseSpawnPacket 0x86e4e0; server item/wire/grounditemrow.go.
 export function decodeGroundItem( p: Uint8Array, typeFlags: number, appear: boolean, name: string ): EntityState {
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	let o = 0;
 	function take( n: number ) {
 		if ( o + n > p.length ) throw new Error( "Truncated ground item" );

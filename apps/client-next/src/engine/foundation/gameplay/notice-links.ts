@@ -15,6 +15,7 @@ line stays plain text; it never fails the session.
 
 ===========================================================================
 */
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // The character-name budget (domain.CharacterNameMaxBytes).
 const NOTICE_NAME_MAX = 12;
@@ -44,7 +45,7 @@ malformed. Never throws.
 */
 export function decodeNoticeLinks( p: Uint8Array, offset: number ): NoticeLinks | null {
 	if ( offset >= p.length ) return null;
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	let o = offset;
 	if ( o + 2 > p.length ) return null;
 	const nameLength = v.getUint16( o, true );

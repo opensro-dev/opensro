@@ -19,6 +19,7 @@ import {
 	sectorY,
 	worldDelta
 } from "@/engine/foundation/world/world-space";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // World units per region side; region-local x/z span [0, REGION_SIZE).
 export { REGION_SIZE };
@@ -72,7 +73,7 @@ destination and not a movement acknowledgement.
 */
 export function decodeMovementSpeeds( p: Uint8Array ) {
 	if ( p.length !== 12 ) throw Error( "Invalid movement speed channels" );
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength ),
+	const v = viewOf( p ),
 		gid = v.getUint32( 0, true ),
 		walkSpeed = v.getFloat32( 4, true ),
 		runSpeed = v.getFloat32( 8, true );
@@ -138,7 +139,7 @@ the length check below and is refused at the door instead.
 ================
 */
 export function decodeNativeMovement( p: Uint8Array, current: Pose ): NativeMovement {
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	if ( p.length < 9 || p[4]! > DESTINATION_MODE ) throw new Error( "Invalid movement broadcast" );
 	const angular = p[4] === ANGULAR_MODE, offset = angular ? 8 : 13;
 	if ( p.length <= offset || p[offset]! > 1 || p.length !== offset + 1 + (p[offset] ? SOURCE_WORD_BYTES : 0) ) {
