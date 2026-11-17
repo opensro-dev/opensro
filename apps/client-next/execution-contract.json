@@ -2729,6 +2729,25 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/ui/hud/map-tools.ts",
+			"provider": "src/engine/runtime/ui/hud/map-level-filter.ts",
+			"functions": [
+				"band",
+				"checked",
+				"createLevelFilter",
+				"ground",
+				"takeSnap",
+				"toggle"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/hud/map-level-filter.ts",
+			"functions": [
+				"band"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/ui/hud/map-guide-tree.ts",
 			"provider": "src/engine/runtime/ui/hud/world-map.ts",
 			"functions": [

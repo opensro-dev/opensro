@@ -85,7 +85,7 @@ import cap110_skill_effects as effects  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
 import skilldata_enc as skill_tables  # noqa: E402
 import sro_pk2  # noqa: E402
-from alexandria_map_tables import native_text_row, overview_box  # noqa: E402
+from alexandria_map_tables import later_zone_rows, native_text_row, overview_box  # noqa: E402
 from arabia_map_tiles import (  # noqa: E402
 	import_map_labels,
 	import_map_tiles,
@@ -758,7 +758,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		write_atomically(region_path, monsters.encode_rows(kept + code_rows))
 		zone_path = text_root / "textzonename.txt"
 		zone_keys = {row[1] for row in tables.table_rows(zone_path.read_bytes()) if len(row) > 1}
-		zone_rows = [native_text_row(row) for row in tables.table_rows(read("textzonename.txt"))
+		zone_rows = [native_text_row(row) for row in later_zone_rows(read)
 			if len(row) >= 10 and (row[1] in {str(region) for region in regions}
 				or row[1].startswith(REGION_PREFIX)) and row[1] not in zone_keys]
 		write_atomically(zone_path, characters.append_rows(zone_path.read_bytes(), zone_rows))

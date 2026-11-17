@@ -215,6 +215,7 @@
   "internals": {
     "src/engine/runtime/ui/hud/map-chrome.ts": "src/engine/runtime/ui/hud/map-tools.ts",
     "src/engine/runtime/ui/hud/map-guide-tree.ts": "src/engine/runtime/ui/hud/map-tools.ts",
+    "src/engine/runtime/ui/hud/map-level-filter.ts": "src/engine/runtime/ui/hud/map-tools.ts",
     "src/engine/runtime/characters/resources/procedural-effects.ts": "src/engine/runtime/characters/resources/resources.ts",
     "src/engine/runtime/platform/telemetry.ts": "src/engine/runtime/platform/platform.ts",
     "src/engine/runtime/platform/keep-awake.ts": "src/engine/runtime/platform/platform.ts",
@@ -241,6 +242,7 @@
     "src/engine/runtime/ui/frame/admission.ts": "src/engine/runtime/ui/frame/frame.ts",
     "src/engine/runtime/ui/frame/draw.ts": "src/engine/runtime/ui/frame/frame.ts",
     "src/engine/runtime/ui/frame/item-slot.ts": "src/engine/runtime/ui/frame/frame.ts",
+    "src/engine/runtime/ui/frame/label-fit.ts": "src/engine/runtime/ui/frame/frame.ts",
     "src/engine/runtime/ui/hud/region-banner.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/progression-bars.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/renderer/device/character-shadows.ts": "src/engine/runtime/renderer/device/device.ts",

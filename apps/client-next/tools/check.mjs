@@ -35,13 +35,18 @@ const SOURCE_FLAG = "--source";
 // its per-file budget failures (printTimingLines, #2929).
 const TIMING_PREFIXES = [ "tests:", "tests slowest:", "tests budget:" ];
 const ASSET_ARCHITECTURE_TESTS = new Set( [ "audio-parity-audit.test.mjs" ] );
+// verify:ownership and verify:capabilities read only the source tree. Outside
+// this list a split file with no manifest row reached main unseen (#3740's
+// label-fit.ts): ownership.test.mjs checks fixtures, not the real manifest.
 const SOURCE_GATE_NAMES = new Set( [
 	"verify:test-types",
 	"typecheck",
 	"typecheck:gallery",
 	"verify:layout",
 	"verify:dependencies",
-	"verify:ui-census"
+	"verify:ui-census",
+	"verify:ownership",
+	"verify:capabilities"
 ] );
 
 // Longest first, so the critical path starts immediately.

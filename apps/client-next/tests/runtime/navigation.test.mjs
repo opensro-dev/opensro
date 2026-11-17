@@ -15,6 +15,7 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mesh, product, pose } from "../helpers/navigation-fixture.mjs";
+import { EXPANDED_BUILD } from "../helpers/expanded-build.mjs";
 import {
 	readPublishedAssetBytesSync as assetBytes,
 	readPublishedAssetJsonSync as assetJson
@@ -648,7 +649,11 @@ test("every published dungeon portal crosses its linked seam through the movemen
 	const fs = await import( "node:fs" );
 	fs.mkdirSync( "temp/artifacts", { recursive: true } );
 	fs.writeFileSync( "temp/artifacts/topology-corpus-failures.json", JSON.stringify( failures ) );
-	assert.equal( total, entries.length === 8 ? 2798 : 308 );
+	// The link count is the native census (2798 over the 8 retail dungeons);
+	// an expanded build adds dungeons (the Roc range, the Pharaoh Temple) and
+	// their links, so it skips the count and keeps the crossing check below.
+	if ( !EXPANDED_BUILD ) assert.equal( total, entries.length === 8 ? 2798 : 308 );
+	assert.ok( total > 0, "no dungeon portal links were read" );
 	assert.deepEqual( failures, [] );
 });
 
