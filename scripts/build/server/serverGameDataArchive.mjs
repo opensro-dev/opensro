@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
@@ -6,6 +5,7 @@ import { once } from "node:events";
 import { finished } from "node:stream/promises";
 import { constants, createGzip, gunzipSync } from "node:zlib";
 import { compareText } from "../shared/textOrder.mjs";
+import { sha256Hex } from "../shared/hash.mjs";
 
 const ARCHIVE_MAGIC = Buffer.from( "SROGDB1\n", "ascii" );
 const MAX_ARCHIVE_FILES = 100_000;
@@ -108,7 +108,7 @@ export async function validateServerGameDataArchive( archivePath ) {
 		if ( !record || record.relativePath !== descriptor.path || record.contents.length !== descriptor.size ) {
 			fail( `archive descriptor mismatch for ${descriptor.path}` );
 		}
-		const digest = `sha256:${createHash( "sha256" ).update( record.contents ).digest( "hex" )}`;
+		const digest = `sha256:${sha256Hex( record.contents )}`;
 		if ( digest !== descriptor.digest ) {
 			fail( `archive digest mismatch for ${descriptor.path}` );
 		}

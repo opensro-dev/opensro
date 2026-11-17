@@ -371,6 +371,7 @@ func TestModelledSettingsMoveTheOutput(t *testing.T) {
 		{"SRO_JUPITER_TEMPLE", "on", nil, "monsters", "SRO_JUPITER_TEMPLE requires"},
 		{"SRO_MUHAN", "on", nil, "monsters", "muhan-waves.txt"},
 		{"SRO_HUNTING2", "on", nil, "monsters", "hunting2-field.txt"},
+		{"SRO_PHARAOH_TEMPLE", "on", nil, "monsters", "pharaoh-temple.txt"},
 		{"SRO_JUPITER_TEMPLE", "on", nil, "monsters", "SRO_JUPITER_TEMPLE requires"},
 		{"SRO_QINSHI_TOMB", "off", nil, "monsters", ""},
 		{"SRO_ALEXANDRIA", "on", nil, "npcs-alexandria", ""},

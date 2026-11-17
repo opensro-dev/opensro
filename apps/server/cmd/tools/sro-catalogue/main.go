@@ -338,6 +338,10 @@ func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
 	if err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue export world population: %w", err)
 	}
+	template, err = monster.AppendPharaohTemple(template, dir, monster.PharaohTempleEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue pharaoh temple population: %w", err)
+	}
 	return template, nil
 }
 
