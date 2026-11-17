@@ -12,6 +12,8 @@ The format rules also serve CPU residency accounting and input validation.
 */
 import type { NativeTexture } from "@/engine/contracts/texture";
 import type { TextureFeature } from "./texture-variants";
+// Value imports here stay relative: the asset pipeline and script tests load
+// this file in Node, which does not resolve the "@/" alias (so no viewOf).
 
 const NTX_MAGIC = 0x3158544e;
 const HEADER_BYTES = 20;

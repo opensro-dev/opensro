@@ -9,6 +9,7 @@ reference and lease when an actor is dismissed, dies or is revived.
 ===========================================================================
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 // 7654B0: selected fields are read in bit order. Commit only after the full body.
 /*
 ================
@@ -21,7 +22,7 @@ export function itemStateDelta(
 	refs: ReadonlyMap<number, number>,
 	names: ReadonlyMap<number, string>
 ) {
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	let offset = 0;
 	/*
 ================

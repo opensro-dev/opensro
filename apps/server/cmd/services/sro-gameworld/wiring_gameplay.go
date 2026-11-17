@@ -255,6 +255,8 @@ func newGameplayPlane(
 	// SRO_CHRISTMAS_EVENT_MODE=so_ok_2006 (port-only, not native): So-Ok's
 	// Christmas Gift on the same switch and window (wiring_christmas.go).
 	items.SoOkChristmas = sookChristmasFromEnv(deps.ItemReferences())
+	// SRO_WEATHER: the native climate cycle, on by default (wiring_weather.go).
+	startWeatherFromEnv(items)
 	// SRO_UNIQUE_GAP_EXEMPT / SRO_UNIQUE_POP_TICKET / SRO_UNIQUE_MAX_LEVEL_LOOT
 	// / SRO_UNIQUE_SEAL_DROPS (port-only, not native): uniques ignore the
 	// level-gap admission, one Magic Pop ticket per kill, a top-band unique's
@@ -828,6 +830,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredEventItems
 	game.deps.EntryEventFrames = game.items.EntryEventFrames
 	game.deps.EntryEventGroups = game.items.EntryEventGroups
+	game.deps.SceneWeatherFrames = game.items.SceneWeatherFrames
 	if err := game.validateQuestMarkerRoster(); err != nil {
 		return err
 	}

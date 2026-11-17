@@ -68,7 +68,7 @@ behavior whitelist. One BAN can be reached by more than one native state
 unique exported GLB clip instead of becoming duplicate AnimationGroups.
 ================
 */
-export function buildRetailAnimationCatalog( bsr, clips ) {
+function buildRetailAnimationCatalog( bsr, clips ) {
 	const defaultSet = bsr.animationSets
 		?.find( ( set ) => set.name.toLowerCase() === "default" );
 	const defaultStates = defaultSet?.states ?? [];

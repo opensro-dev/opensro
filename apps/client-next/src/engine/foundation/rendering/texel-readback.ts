@@ -10,6 +10,8 @@ the HDR stage is on (clamped to 0..1, alpha kept). Pure.
 
 ===========================================================================
 */
+// Value imports here stay relative: the asset pipeline and script tests load
+// this file in Node, which does not resolve the "@/" alias (so no viewOf).
 
 // COPY_ROW_ALIGNMENT is WebGPU's bytesPerRow alignment for a buffer copy.
 export const COPY_ROW_ALIGNMENT = 256;

@@ -355,6 +355,23 @@ test("the merchant, stall and Item Mall labels stay inside their art (#3728)", a
 	for ( const text of [ "Buy", "back" ] ) {
 		const line = lineNamed( merchant, text );
 		assert.ok( line.rect[0] > frame[0] && line.rect[2] <= strip[0], `${text} at ${line.rect}` );
+		// The UI pass draws in push order, and the page's background tiles
+		// are opaque: none under the line may come after its glyphs.
+		const run = merchant.findIndex( q =>
+			expandTextRuns( [ q ] ).some( g =>
+				g.texture === fontAtlas.image && g.rect[0] >= line.rect[0] && g.rect[0] < line.rect[2] &&
+				g.rect[1] < line.rect[3] && g.rect[1] + g.rect[3] > line.rect[1]
+			)
+		);
+		const coverIndex = merchant.findLastIndex( q =>
+			/com_bg_tile_\w+\.png$/.test( String( q.texture?.src ?? q.texture ) ) &&
+			q.rect[0] < line.rect[2] && q.rect[0] + q.rect[2] > line.rect[0] &&
+			q.rect[1] < line.rect[3] && q.rect[1] + q.rect[3] > line.rect[1]
+		);
+		assert.ok(
+			run >= 0 && coverIndex < run,
+			`${text}: glyphs at ${run}, a background tile over them at ${coverIndex}`
+		);
 	}
 	// The gallery's shop names its tab, as a real shop's refshoptab does:
 	// "Potion", selected and so bold (glyphs this file's map does not name).

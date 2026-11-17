@@ -11164,6 +11164,14 @@ export function createUi( ports: UiPorts ) {
 			) {
 				return frameDraw.authoredLabeledButton( drawFrame, { node, ox, oy, id, caption, disabled } );
 			}
+			/*
+			================
+			authoredCaption
+			================
+			*/
+			function authoredCaption( node: AuthoredControl, ox: number, oy: number, caption: string ) {
+				return frameDraw.authoredCaption( drawFrame, { node, ox, oy, caption } );
+			}
 			// Resource sections are reverse-insertion lists (9BD240), so native child
 			// paint order is the reverse of controlsByName, not numeric control ID.
 			/*
@@ -15219,15 +15227,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 												label,
 												false
 											);
-											if ( label ) {
-												const shown = frameDraw.fittedCaption( drawFrame, {
-													node: child,
-													ox: sx,
-													oy: sy,
-													caption: label
-												} );
-												authoredText( shown.node, sx, sy, shown.value );
-											}
+											if ( label ) authoredCaption( child, sx, sy, label );
 										}
 										continue;
 									}
@@ -15290,13 +15290,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										!academyIsLeader( camp ));
 							authoredButton( node, ox, oy, id, copy, disabled );
 							if ( copy ) {
-								// The caption fitted to its plate (fittedCaption).
-								const shown = frameDraw.fittedCaption( drawFrame, { node, ox, oy, caption: copy } );
-								authoredText(
-									disabled ? { ...shown.node, color: tooltipColor( 0xff999999 ) } : shown.node,
+								authoredCaption(
+									disabled ? { ...node, color: tooltipColor( 0xff999999 ) } : node,
 									ox,
 									oy,
-									shown.value
+									copy
 								);
 							}
 							continue;
@@ -15461,12 +15459,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								hasParty || !!game?.partyMatching?.own :
 								false;
 							authoredButton( node, ox, oy, id, copy, disabled );
-							const shown = frameDraw.fittedCaption( drawFrame, { node, ox, oy, caption: copy } );
-							authoredText(
-								disabled ? { ...shown.node, color: tooltipColor( 0xff999999 ) } : shown.node,
+							authoredCaption(
+								disabled ? { ...node, color: tooltipColor( 0xff999999 ) } : node,
 								ox,
 								oy,
-								shown.value
+								copy
 							);
 						}
 						if ( node.type === "CIFPartySlot" ) {
@@ -16960,13 +16957,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								family[disabled ? 3 : pressed === id && hover === id ? 2 : hover === id ? 1 : 0]!
 							);
 						}
-						authoredText(
+						const label = authoredCaption(
 							{ ...node, color: buttonTextColor( node.color, buttonAccess( false, disabled ) ) },
 							ox,
 							oy,
 							hudCopy( node.text )
 						);
-						controls.push( { id, label: hudCopy( node.text ), rect: r, kind: "button", disabled } );
+						controls.push( { id, label, rect: r, kind: "button", disabled } );
 					}
 					if ( blockTab === 0 && game?.chat?.blockError ) {
 						quads.push(
@@ -17488,10 +17485,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// labels"): it is laid in the room between the item frame's left
 					// edge and the buyback strip's art, centred on the strip; no
 					// face fits the word there, so it reads "Buy" over "back".
+					// The lines go after the page: its opaque background tile
+					// would cover them.
 					const repurchase = page.GDR_STORE_CHARGY_STATIC!,
 						strip = page.GDR_STORE_ICON_SLOT_01!,
 						repurchaseLeft = px + page.GDR_STORE_FRAME!.rect[0],
-						repurchaseFitted = frameDraw.fittedLabel( drawFrame, {
+						repurchaseFit = frameDraw.labelFit( drawFrame, {
 							node: repurchase,
 							room: [
 								repurchaseLeft,
@@ -17501,7 +17500,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							],
 							values: [ hudCopy( repurchase.text ), BUYBACK_SHORT_LABEL ]
 						} );
-					nativePage( page, px, py, repurchaseFitted ? [ repurchase.id ] : [] );
+					nativePage( page, px, py, repurchaseFit ? [ repurchase.id ] : [] );
+					if ( repurchaseFit ) frameDraw.drawLabelFit( drawFrame, repurchaseFit );
 					if ( compact ) {
 						controls.push( {
 							id: "shop-scroll-area",

@@ -14,6 +14,7 @@ import { sameCoordinateSpace } from "@/engine/foundation/world/world-space";
 import { isNameColorGuard } from "./name-color";
 import { decodeSpawnSkills, type SpawnSkillReference } from "./spawn-skills";
 import type { EntityState } from "@/engine/contracts/world";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 const STRUCTURE_HEADQUARTERS_BAND = 5;
 
@@ -29,7 +30,7 @@ export function decodeCharacterSpawn(
 	appear: boolean,
 	skillRefs: ReadonlyMap<number, SpawnSkillReference> = new Map()
 ): EntityState {
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	let o = 0;
 	function take( n: number ) {
 		if ( o + n > p.length ) throw new Error( "Truncated character spawn" );

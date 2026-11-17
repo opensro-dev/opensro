@@ -16,8 +16,8 @@ reader is apps/client-next/.../packs/index/index.ts.
 ===========================================================================
 */
 
-import { createHash } from "node:crypto";
 import zlib from "node:zlib";
+import { sha256Hex } from "./hash.mjs";
 
 export const ASSET_PACK_MAGIC = "SROPACK2";
 export const ASSET_PACK_VERSION = 2;
@@ -149,7 +149,7 @@ export function decodeStoredMember( stored, row ) {
 		stored;
 	if (
 		bytes.length !== row.length ||
-		createHash( "sha256" ).update( bytes ).digest( "hex" ) !== row.sha256.toLowerCase()
+		sha256Hex( bytes ) !== row.sha256.toLowerCase()
 	) {
 		throw new Error( `Pack member integrity mismatch: ${row.path}` );
 	}
