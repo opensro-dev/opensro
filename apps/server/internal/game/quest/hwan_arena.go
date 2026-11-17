@@ -390,15 +390,29 @@ func (rt *Runtime) hwanEnd(event InstanceEvent, layer *hwanLayer) bool {
 	return true
 }
 
+// hwanRitualPoints are the exact spots a ritual's ghost appears at, by region, in place of the ring around the
+// arena's centre. The Exorcist's ritual stands among her house and its trees, where a ghost on the ring could land
+// inside an object and not be hit; this spot is the owner's choice (map X 5781, Y 1217: region 25253, x 210, z 650).
+var hwanRitualPoints = map[uint16]simulation.Spawn{
+	25253: sp(25253, 210, 225.27, 650),
+}
+
 // hwanSpawn places one arena monster on the ring around a centre of the layer.
 func (rt *Runtime) hwanSpawn(event InstanceEvent, layer *hwanLayer, code string, centre simulation.Spawn) {
+	rt.hwanSpawnOn(event, layer, code, centre, hwanRingMin, hwanRingSpan)
+}
+
+// hwanSpawnOn places one arena monster radiusMin plus up to radiusSpan from a point of the layer (both 0: on it).
+func (rt *Runtime) hwanSpawnOn(event InstanceEvent, layer *hwanLayer, code string, centre simulation.Spawn, radiusMin, radiusSpan float64) {
 	character := rt.hwanCharacter(event.Division, layer.name)
 	if character == nil || rt.SpawnQuestMonster == nil {
 		return
 	}
 	request := simulation.QuestMonsterSpawn{
 		Division: event.Division, Population: layer.lease, Codename: code, Position: centre, FixedPosition: true,
-		RadiusMin: hwanRingMin, RadiusSpan: hwanRingSpan, LifetimeMs: hwanMonsterLifeMs, NowMs: rt.hwanNow(),
+		RadiusMin: radiusMin, RadiusSpan: radiusSpan, LifetimeMs: hwanMonsterLifeMs, NowMs: rt.hwanNow(),
+		// A monster inside a tree or rock cannot be hit, and the rituals stand among the Exorcist's trees.
+		AvoidClosedObjects: true,
 	}
 	rt.deps.Update(character, "hwan-arena-spawn", func() bool { return rt.SpawnQuestMonster(character, request) })
 }
@@ -508,7 +522,11 @@ func (rt *Runtime) hwanRitualUpdate(event InstanceEvent, layer *hwanLayer, age i
 	switch layer.step {
 	case 0:
 		if age >= hwanGraceMs {
-			rt.hwanSpawn(event, layer, arena.commander(), arena.centre)
+			if at, exact := hwanRitualPoints[arena.centre.RegionID]; exact {
+				rt.hwanSpawnOn(event, layer, arena.commander(), at, 0, 0)
+			} else {
+				rt.hwanSpawn(event, layer, arena.commander(), arena.centre)
+			}
 			layer.eventMs, layer.step = age+hwanHalfMs, 1
 		}
 	case 1:

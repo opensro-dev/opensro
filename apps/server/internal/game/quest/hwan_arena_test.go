@@ -281,6 +281,11 @@ func TestRitualPaysFragmentsOnlyForABerserkKill(t *testing.T) {
 		if got := w.spawnedCodes(); len(got) != 1 || got[0] != "MOB_QT_CH_CHARGHOST_01" {
 			t.Fatalf("spawned %v, want the Old Ghost", got)
 		}
+		// The Exorcist's ritual puts the ghost exactly at the owner's chosen spot (map X 5781, Y 1217), not on the ring.
+		if at := w.spawned[0]; at.Position.RegionID != 25253 || at.Position.X != 210 || at.Position.Z != 650 ||
+			at.RadiusMin != 0 || at.RadiusSpan != 0 {
+			t.Fatalf("the ghost's spawn request is %+v, want region 25253 x 210 z 650 with no ring", at)
+		}
 		c.World = insideLayer(w)
 		if berserk {
 			c.NativeBodyStatus = 1

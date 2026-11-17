@@ -21,6 +21,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/world/monster"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 /*
@@ -122,6 +123,12 @@ func (game *gameplayPlane) wireHwanLevel(quests *quest.Runtime) error {
 	// must not be rescued away (water.ExemptStrandedRescue).
 	if _, hwan := quests.Defs.ByCodename("QNO_CH_HWAN_1_1"); hwan {
 		game.water.ExemptStrandedRescue(quest.HwanTrialRegions())
+	}
+	if game.deps.MonsterState != nil {
+		game.deps.MonsterState.SetSpawnClosedObjectCheck(func(at simulation.Spawn) bool {
+			_, inside := game.water.InsideClosedObject(at)
+			return inside
+		})
 	}
 	game.items.HwanLevel = quests.HwanLevel
 	game.items.SetHwanLevel = quests.SetGMHwanLevel

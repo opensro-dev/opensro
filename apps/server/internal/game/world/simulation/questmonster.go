@@ -60,7 +60,14 @@ type QuestMonsterSpawn struct {
 	HasRarity     bool
 	Aggressive    bool
 	TacticsGrade  uint8
+	// AvoidClosedObjects redraws the landing point (up to questSpawnAttempts times) while it is
+	// inside a closed object, so the monster can be hit (port-only, not native: the retail
+	// scripts take their first draw). Ignored until SetSpawnClosedObjectCheck is wired.
+	AvoidClosedObjects bool
 }
+
+// questSpawnAttempts bounds the redraws of an AvoidClosedObjects spawn; the last draw stands.
+const questSpawnAttempts = 24
 
 // eventAggressiveSight is the sight an event monster forced aggressive
 // gets when its tactics name none: the temptation fallback's 100.
@@ -105,18 +112,29 @@ func (s *MonsterState) SpawnQuestMonsterGID(request QuestMonsterSpawn) (uint32, 
 	if state == nil || s.counter >= domain.MaxMonsterGIDCounter {
 		return 0, false
 	}
-	angleFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
-	angle := float64(float32(float64(angleFraction) * nativeCircleRadians))
-	radiusFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
-	radius := float64(float32(float64(radiusFraction)*request.RadiusSpan + request.RadiusMin))
 	center := request.Position
-	spawn := normalizeGeneratedMonsterSpawn(monster.SpawnPoint{
-		RefObjID: ref.RefObjID, RegionID: center.RegionID,
-		X: center.X + math.Cos(angle)*radius, Y: center.Y, Z: center.Z + math.Sin(angle)*radius,
-	})
-	spawn, valid := s.resolveSpawnGround(spawn, center.Y)
-	if !valid {
-		return 0, false
+	var (
+		angle float64
+		spawn monster.SpawnPoint
+	)
+	for attempt := 1; ; attempt++ {
+		angleFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
+		angle = float64(float32(float64(angleFraction) * nativeCircleRadians))
+		radiusFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
+		radius := float64(float32(float64(radiusFraction)*request.RadiusSpan + request.RadiusMin))
+		spawn = normalizeGeneratedMonsterSpawn(monster.SpawnPoint{
+			RefObjID: ref.RefObjID, RegionID: center.RegionID,
+			X: center.X + math.Cos(angle)*radius, Y: center.Y, Z: center.Z + math.Sin(angle)*radius,
+		})
+		grounded, valid := s.resolveSpawnGround(spawn, center.Y)
+		if !valid {
+			return 0, false
+		}
+		spawn = grounded
+		if !request.AvoidClosedObjects || s.closedObject == nil || attempt >= questSpawnAttempts ||
+			!s.closedObject(Spawn{RegionID: spawn.RegionID, X: spawn.X, Y: spawn.Y, Z: spawn.Z}) {
+			break
+		}
 	}
 	s.counter++
 	actor := monster.Instance{
