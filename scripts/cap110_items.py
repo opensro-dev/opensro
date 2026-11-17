@@ -48,6 +48,9 @@ RACES = ("0", "1")
 ARMOR_TYPES = ("1", "2", "3", "9", "10", "11")
 ACCESSORY_TYPES = ("5", "12")
 EQUIPMENT_TYPES = ARMOR_TYPES + ACCESSORY_TYPES + ("4", "6")
+# The Roc range's set armour (ITEM_ROC_*_SET, class 30, set groups 1-12):
+# admitted only when the Roc range is built too (#3399 step 5c).
+ROC_PREFIX = "ITEM_ROC_"
 LINKED_CODE = 4
 OUTPUT_SHARD = "itemdata_110000.txt"
 SET_GROUP_TABLE = "refsetitemgroup.txt"
@@ -102,14 +105,16 @@ def index_items(rows):
 # equipment_degree
 #
 # Existing enterworld.EquipmentDegree owns the same three-classes rule.
-# Selection uses typed cells; the codename prefix only excludes event items.
+# Selection uses typed cells; the codename prefix only excludes event items,
+# and the Roc's set armour unless roc asks for it.
 # ================
-def equipment_degree(row):
+def equipment_degree(row, roc=False):
 	if row[SERVICE] != "1" or row[TYPE_FIRST:TYPE_SECOND + 1] != ["3", "1"]:
 		return 0
 	if row[TYPE_THIRD] not in EQUIPMENT_TYPES:
 		return 0
-	if row[RACE] not in RACES or not row[CODENAME].startswith(("ITEM_CH_", "ITEM_EU_")):
+	prefixes = ("ITEM_CH_", "ITEM_EU_", ROC_PREFIX) if roc else ("ITEM_CH_", "ITEM_EU_")
+	if row[RACE] not in RACES or not row[CODENAME].startswith(prefixes):
 		return 0
 	item_class = int(row[CLASS])
 	return (item_class - 1) // CLASSES_PER_DEGREE + 1 if item_class > 0 else 0
@@ -125,8 +130,8 @@ def equipment_degree(row):
 # Set rows convert with the rest; their Set cell survives untouched as
 # dormant data, bound to its group catalogue by set_catalogue below.
 # ================
-def convert_equipment(row, identity, later):
-	if equipment_degree(row) not in DEGREES:
+def convert_equipment(row, identity, later, roc=False):
+	if equipment_degree(row, roc) not in DEGREES:
 		raise ValueError(f"unsupported equipment family: {row[CODENAME]}")
 	if not 0 < identity <= MAX_ID:
 		raise ValueError("imported item ID exceeds the wire width")
@@ -179,8 +184,12 @@ def plain_worn_models(equipment):
 
 # ================
 # merge_equipment
+#
+# roc admits the Roc's set armour too. Its pieces are armour and ITEM_ROC_
+# sorts after every ITEM_CH_ and ITEM_EU_ code, so they number after every
+# other piece and a fresh overlay numbers the rest the same either way.
 # ================
-def merge_equipment(native_rows, later_rows, reserved_ids=(), previous_ids=None):
+def merge_equipment(native_rows, later_rows, reserved_ids=(), previous_ids=None, roc=False):
 	native, later = index_items(native_rows), index_items(later_rows)
 	occupied = {int(row[IDENTITY]) for row in native_rows + later_rows} | set(reserved_ids)
 	previous_ids = previous_ids or {}
@@ -197,13 +206,13 @@ def merge_equipment(native_rows, later_rows, reserved_ids=(), previous_ids=None)
 	# Weapons precede the new families, preserving v1 import IDs even in a
 	# fresh overlay. A prior marker additionally preserves every published ID.
 	for code, row in sorted(later.items(), key=lambda entry: (entry[1][TYPE_THIRD] != "6", entry[0])):
-		if equipment_degree(row) not in DEGREES:
+		if equipment_degree(row, roc) not in DEGREES:
 			continue
 		if code in native:
 			existing.append(code)
 			continue
 		identity = int(previous_ids[code]["target"]) if code in previous_ids else next_id
-		converted, removed = convert_equipment(row, identity, later)
+		converted, removed = convert_equipment(row, identity, later, roc)
 		added.append(converted)
 		trimmed.extend(removed)
 		if code not in previous_ids:
@@ -216,10 +225,15 @@ def merge_equipment(native_rows, later_rows, reserved_ids=(), previous_ids=None)
 		"added": len(added), "existingNative": existing,
 		"sets": [{"code": row[CODENAME], "setId": int(row[SET])} for row in added if int(row[SET]) != 0],
 		"families": dict(sorted(Counter(
-			f"race={row[RACE]},degree={equipment_degree(row)},type={row[TYPE_THIRD]},kind={row[TYPE_FOURTH]}" for row in added
+			f"race={row[RACE]},degree={equipment_degree(row, roc)},type={row[TYPE_THIRD]},kind={row[TYPE_FOURTH]}"
+			for row in added
 		).items())),
 		"categories": dict(sorted(Counter(equipment_category(row) for row in added).items())),
 		"idMap": {row[CODENAME]: {"source": int(later[row[CODENAME]][IDENTITY]), "target": int(row[IDENTITY])} for row in added},
+		# A published identity this build no longer adds (the Roc's armour
+		# with the Roc off) stays reserved, so no later item takes it.
+		"retiredIds": {code: entry for code, entry in sorted(previous_ids.items())
+			if code not in {row[CODENAME] for row in added}},
 		"preservedNativeRows": len(native_rows),
 		"trimmedOutOfScopeItemLinks": trimmed,
 	}
