@@ -3,12 +3,28 @@
 
 nasrun.go - Nasrun alchemy: Sabakun's jewel on a Devil's Spirit
 
-Port-only, not native (#3456 step 3c), on with SRO_NASRUN; off, a Spirit
-is no reinforce target and the jewel is refused as before (0x10, then 0x09
-for any other item). v1.150 has no Spirit and no jewel rule. The owner's
-rule (2026-11-16, #3456): the jewel raises a Spirit one plus at a time up
-to +6, at 70/60/50/40/30/20 %; a failure spends the jewel and keeps the
-plus (no break, no curse, no reset, since the Spirit is bound).
+Port-only, not native to v1.150 (#3456 step 3c), on with SRO_NASRUN; off,
+a Spirit is no reinforce target and the jewel is refused as before (0x10,
+then 0x09 for any other item). v1.150 has no Spirit and no jewel rule.
+
+The later official sources do have one, and this file departs from it on
+the owner's pick. What ISRO-R records (textdata_object, textuisystem):
+the jewel "can be used on Devil's Spirit to upgrade"; an upgrade can fail
+(UIIT_MSG_NASRUN_UPGRADE_FAILED); a Spirit never breaks
+(UIIT_STT_NASRUN_NOT_BREAK, as here); and an event Spirit cannot be
+upgraded (UIIT_STT_NASRUN_EVENTNASRUN_NOT_UPGRADE). The timed grade change
+in the same table (UIIT_MSG_NASRUN_UPGRADE_SUCCESS, "for the next %d
+minute(s)") sits under the awakening-enhancement scroll's section, so it
+is Sabakun's scroll's effect, which is not ported. The jewel's native
+chances and ceiling appear in no table read. The owner's rule (2026-11-16,
+#3456) stands in for them: the jewel raises a Spirit one plus at a time,
+permanently, up to +6, at 70/60/50/40/30/20 %, and a failure spends the
+jewel and keeps the plus.
+
+Event Spirits: nasrun.IsSpirit matches any 3/1/14, and ISRO-R has ten
+ITEM_EVENT_AVATAR_*_NASRUN* rows of that type. They are out of reach only
+because scripts/nasrun_import.py does not import them; an import that adds
+them must also refuse them here, as the native rule does.
 
 The client already sends the pair: its alchemy window admits a 3/1/14
 target as equipment (CItemData_IsEquipment, alchemy-selection.ts) and the
@@ -21,7 +37,9 @@ Inferred, recorded here: the chance is the owner's table alone. A lucky
 powder has no Spirit degree, so staging one is refused with the powder
 code (0x0a); the Lucky option, avatar luck and the shard's rate table do
 not touch it; the native ceiling code (0x0f) answers at +6. The window
-takes bag items only, as natively, so a worn Spirit is taken off first.
+takes bag items only, as natively: the v1.150 client sends bag slots
+alone, and the v1.188 server's reinforce handler refuses any target slot
+outside the bag (0x5414). So a worn Spirit is taken off first.
 
 ===========================================================================
 */
