@@ -836,6 +836,7 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 			consume = append(consume, questToolCleanup(character, def)...)
 			consume = append(consume, ivy3CompletionCleanup(character, def)...)
 			consume = append(consume, optionalMissionCleanup(character, def)...)
+			consume = append(consume, questItemCleanup(character, def, consume)...)
 			if force {
 				consume = clampToHeld(character, consume)
 			}
@@ -892,6 +893,7 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 			character.CompletedQuestIds = completed
 			// Finishing a superseded chain completes the quest that replaced it.
 			creditPredecessorCompletions(character, rt.Defs)
+			forgetQuests(character, def.completeForgetsIDs)
 		}
 		objectiveFrames, _ = rt.applyInventoryChange(character)
 		if def.RewardGold > 0 || turnInGold > 0 {

@@ -112,6 +112,12 @@ QUEST_CODES = (
 	"QNO_RM_MEETROC_ECT_1", "QNO_RM_MEETROC_ECT_2", "QNO_RM_MEETROC_ECT_3",
 )
 QUEST_COLUMNS = 11
+# v1.150 ships questcontentsdata rows for MEETROC_1, _2 and _6 but none
+# for the three ECT quests; those come from the client, cut to v1.150's
+# thirteen columns (the VSRO rows append four later ones the v1.150
+# parser never reads: the server's catalog.go questcontentsColumns).
+CONTENTS_TABLE = "questcontentsdata.txt"
+CONTENTS_COLUMNS = 13
 POPULATION_FILE = "roc-monsters.txt"
 QUEST_NESTS = Path(__file__).resolve().parent / "data" / "roc" / "quest-nests.json"
 QUEST_NESTS_FORMAT = "opensro-roc-quest-nests-v1"
@@ -353,18 +359,51 @@ def add_quests(read, text_root, prior):
 
 
 # ================
+# without_contents
+#
+# questcontentsdata.txt without the rows of the given codenames.
+# ================
+def without_contents(text_root, codes):
+	rows = tables.table_rows((text_root / CONTENTS_TABLE).read_bytes())
+	return [row for row in rows if not row or row[0] not in codes]
+
+
+# ================
+# add_contents
+#
+# The client's contents rows of the Roc quests v1.150 ships none for,
+# after any previous build's own rows leave. A v1.150 row stays native.
+# ================
+def add_contents(read, text_root, prior):
+	native = without_contents(text_root, set(prior.get("contents", [])))
+	have = {row[0] for row in native if row}
+	source = {row[0]: row for row in tables.table_rows(read(CONTENTS_TABLE)) if row}
+	added = []
+	for code in QUEST_CODES:
+		if code in have:
+			continue
+		row = source.get(code)
+		if row is None or len(row) < CONTENTS_COLUMNS:
+			raise ValueError(f"the VSRO client has no {CONTENTS_TABLE} row for Roc quest {code}")
+		added.append(row[:CONTENTS_COLUMNS])
+	write_atomically(text_root / CONTENTS_TABLE, cap110.encode_rows(native + added))
+	return [row[0] for row in added]
+
+
+# ================
 # add_population
 #
 # The quest kinds' nests from the committed evidence. A nest naming a
-# kind this import did not stage refuses: the server would refuse it
-# at startup.
+# kind neither this import staged nor the native tables ship refuses:
+# the server would refuse it at startup. MEETROC_6's seven guardians
+# are native (v1.150 characterdata 5872-5878); only their nests are new.
 # ================
-def add_population(text_root, refs):
+def add_population(text_root, refs, native_codes):
 	document = cap110.read_json(QUEST_NESTS)
 	if document.get("format") != QUEST_NESTS_FORMAT:
 		raise ValueError(f"{QUEST_NESTS} is not {QUEST_NESTS_FORMAT}")
 	population = document["population"]
-	strays = sorted({row["Codename"] for row in population["Rows"]} - set(refs))
+	strays = sorted({row["Codename"] for row in population["Rows"]} - set(refs) - native_codes)
 	if strays:
 		raise ValueError(f"Roc quest nests name unstaged kinds: {strays}")
 	write_atomically(text_root / POPULATION_FILE, (json.dumps(population) + "\n").encode())
@@ -388,9 +427,11 @@ def add_roc(vsro_root, native, output):
 	if not flag_enabled():
 		marker = output / MARKER
 		prior = cap110.read_json(marker) if marker.exists() else {}
+		text_root = output / TEXT_ROOT
 		if prior.get("quests"):
-			text_root = output / TEXT_ROOT
 			write_atomically(text_root / QUEST_TABLE, cap110.encode_rows(without_quests(text_root, set(prior["quests"]))))
+		if prior.get("contents"):
+			write_atomically(text_root / CONTENTS_TABLE, cap110.encode_rows(without_contents(text_root, set(prior["contents"]))))
 		later_world_import.reap_world(SPEC, native, output)
 		return {"enabled": False}
 	if not vsro_root:
@@ -436,13 +477,14 @@ def stage(vsro_root, output):
 		staged = later_world_import.stage_kinds("Roc", read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
 			lambda code: code in refs)
 		quests = add_quests(read, text_root, prior)
+		contents = add_contents(read, text_root, prior)
 	finally:
 		media.close()
 		handle.close()
-	population = add_population(text_root, refs)
+	population = add_population(text_root, refs, native_codes)
 	limits = [
 		"The arena kinds stand in no nest; the server spawns them when the arena opens (#3399 step 4).",
-		"QNO_RM_MEETROC_2, _6 and _ECT_1 to _3 stay pending until their custom slots are decoded (#3399 step 3b).",
+		"QNO_RM_MEETROC_6's Soul Crystal has no source: the quests that fuse it (MEETROC_3 to _5) never shipped.",
 		"No drops yet (#3399 step 5).",
 	]
 	if "omittedLinks" in gates:
@@ -451,7 +493,8 @@ def stage(vsro_root, output):
 		"enabled": True, "format": "opensro-roc-v3", "source": "vsro",
 		"characters": staged["characters"], "skills": staged["skills"],
 		"animationBases": staged["animationBases"], "characterInfo": staged["characterInfo"],
-		"nameSymbols": staged["nameSymbols"], "gates": gates, "quests": quests, "population": population,
+		"nameSymbols": staged["nameSymbols"], "gates": gates, "quests": quests, "contents": contents,
+		"population": population,
 		**({"regionMerge": prior["regionMerge"]} if "regionMerge" in prior else {}),
 		"limits": limits,
 	}

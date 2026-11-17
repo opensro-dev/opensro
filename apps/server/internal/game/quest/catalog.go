@@ -45,6 +45,9 @@ const questcontentsColumns = 13
 // textdataNone is the media's "no value" cell sentinel.
 const textdataNone = "xxx"
 
+// contentsSymbolPrefix names textquest's contents-line rows.
+const contentsSymbolPrefix = "SN_CON_"
+
 // CatalogRow is one shipped questdata.txt row's server-consumed fields.
 type CatalogRow struct {
 	// ID is the v1.150-native quest ref id (col 1) - the wire id every
@@ -89,6 +92,9 @@ type Catalog struct {
 	rowsByID   map[uint32]string
 	contents   map[string]ContentsRow
 	loadedRows int
+
+	textOnce     sync.Once
+	contentsText map[string]bool
 }
 
 // NewCatalog returns a lazy loader over the verified projection's textdata directory.
@@ -117,6 +123,32 @@ func (c *Catalog) ContentsByCodename(codename string) (ContentsRow, bool) {
 	c.once.Do(c.load)
 	row, ok := c.contents[codename]
 	return row, ok
+}
+
+/*
+================
+ContentsTextShipped
+
+Whether the shipped textquest.txt carries an SN_CON_* row of this name.
+The client keeps a contents node's description as the wire sends it
+(SQuestContents_Deserialize reads the string into node +8) and
+never matches it against questcontentsdata, so a native mission caption
+the client ships as text but omits from the quest's contents row is still
+the original's line, not an invented one. QNO_RM_MEETROC_6's seven
+guardians (SN_CON_QNO_RM_MEETROC_6_02.._07) are such captions: v1.150's
+contents row lists only _01. Loaded on first use.
+================
+*/
+func (c *Catalog) ContentsTextShipped(symbol string) bool {
+	c.textOnce.Do(func() {
+		c.contentsText = map[string]bool{}
+		for _, fields := range enterworld.ReadTextdataFile(filepath.Join(c.dir, "textquest.txt")) {
+			if len(fields) > 1 && strings.HasPrefix(strings.TrimSpace(fields[1]), contentsSymbolPrefix) {
+				c.contentsText[strings.TrimSpace(fields[1])] = true
+			}
+		}
+	})
+	return c.contentsText[symbol]
 }
 
 // Len reports how many questdata rows loaded (0 = textdata absent).

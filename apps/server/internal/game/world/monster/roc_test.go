@@ -13,6 +13,7 @@ package monster
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,13 +26,18 @@ var rocEvidencePath = filepath.Join("..", "..", "..", "..", "..", "..", "scripts
 ================
 rocTemplate
 
-A template holding the two quest kinds at the given level.
+A template holding the nine quest kinds at the given level, the seven
+guardians under their v1.150 characterdata ids.
 ================
 */
 func rocTemplate(level uint8) Template {
 	refs := map[uint32]MonsterRef{
 		24010: {RefObjID: 24010, Codename: "MOB_QT_RM_FEATHERMASK_01", Level: level},
 		24011: {RefObjID: 24011, Codename: "MOB_QT_RM_ROCKY_CLON_01", Level: level},
+	}
+	for n := uint32(1); n <= 7; n++ {
+		id := 5871 + n
+		refs[id] = MonsterRef{RefObjID: id, Codename: fmt.Sprintf("MOB_QT_%02d_ROCKY_CLON2", n), Level: level}
 	}
 	return TemplateFromParts(refs, []NestRow{{MaxCount: 1}})
 }
@@ -62,8 +68,9 @@ func rocPopulation(t *testing.T) []byte {
 ================
 TestRocAdmitsTheCommittedQuestNests
 
-The six v1.188 nests join the default world with their shared hive cap:
-one key and a limit of 20 across all six.
+The thirteen v1.188 nests join the default world. MEETROC_1's six share
+one hive cap of 20; each of the seven guardian Rockies has its own nest
+of one, outside any hive.
 ================
 */
 func TestRocAdmitsTheCommittedQuestNests(t *testing.T) {
@@ -73,13 +80,28 @@ func TestRocAdmitsTheCommittedQuestNests(t *testing.T) {
 		t.Fatalf("committed population refused: %v", err)
 	}
 	added := got.Nests[len(template.Nests):]
-	if len(added) != 6 {
-		t.Fatalf("appended %d nests, want 6", len(added))
+	if len(added) != 13 {
+		t.Fatalf("appended %d nests, want 13", len(added))
 	}
+	hive, guardians := "", map[uint32]bool{}
 	for _, nest := range added {
-		if nest.HiveKey != added[0].HiveKey || nest.HiveKey == "" || nest.HiveMaxCount != 20 {
-			t.Fatalf("nest in region %d hive %q/%d, want one shared key capped at 20", nest.RegionID, nest.HiveKey, nest.HiveMaxCount)
+		code := template.Refs[nest.RefObjID].Codename
+		if code == "MOB_QT_RM_FEATHERMASK_01" || code == "MOB_QT_RM_ROCKY_CLON_01" {
+			if hive == "" {
+				hive = nest.HiveKey
+			}
+			if nest.HiveKey != hive || nest.HiveKey == "" || nest.HiveMaxCount != 20 {
+				t.Fatalf("nest in region %d hive %q/%d, want one shared key capped at 20", nest.RegionID, nest.HiveKey, nest.HiveMaxCount)
+			}
+			continue
 		}
+		if nest.HiveKey != "" || nest.MaxCount != 1 || guardians[nest.RefObjID] {
+			t.Fatalf("guardian %s nest hive %q max %d, want one unshared nest of one", code, nest.HiveKey, nest.MaxCount)
+		}
+		guardians[nest.RefObjID] = true
+	}
+	if len(guardians) != 7 {
+		t.Fatalf("%d guardians placed, want 7", len(guardians))
 	}
 }
 
@@ -121,7 +143,7 @@ func TestRocOffAndOn(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, rocPopulationFile), rocPopulation(t), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := AppendRoc(template, dir, true); err != nil || len(got.Nests) != 7 {
+	if got, err := AppendRoc(template, dir, true); err != nil || len(got.Nests) != 14 {
 		t.Fatalf("installed population refused: %v", err)
 	}
 }

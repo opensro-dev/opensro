@@ -62,6 +62,23 @@ SOURCE_QUESTS = [quest_row(identity, code) for code, identity in SOURCE_QUEST_ID
 
 
 # ================
+# contents_row
+#
+# A questcontentsdata row in the client's seventeen-column layout.
+# ================
+def contents_row(code, columns=17):
+	row = [code, "x", "3", "xxx", "1", "SN_CON_" + code] + ["xxx"] * 7 + ["0", "80", "xxx", "0"]
+	return row[:columns]
+
+
+# v1.150 ships the contents rows of MEETROC_1, _2 and _6; the client
+# ships all six.
+NATIVE_CONTENTS = [contents_row(code, 13) for code in ("QTUTORIAL_CH", "QNO_RM_MEETROC_1", "QNO_RM_MEETROC_2", "QNO_RM_MEETROC_6")]
+SOURCE_CONTENTS = [contents_row(code) for code in SOURCE_QUEST_IDS]
+GUARDIANS = {"MOB_QT_%02d_ROCKY_CLON2" % n for n in range(1, 8)}
+
+
+# ================
 # gate_row / building_row / link_row
 #
 # The source client's Roc rows, in its own column layout (13, 58, 21).
@@ -122,7 +139,7 @@ class RocImportTest(unittest.TestCase):
 	# replaces kind rows by codename; quests replaces the client's
 	# questdata rows.
 	# ================
-	def fixture(self, base, overrides=None, quests=None):
+	def fixture(self, base, overrides=None, quests=None, contents=None):
 		vsro, native, output = base / "vsro", base / "native", base / "output"
 		text_root = output / roc.TEXT_ROOT
 		text_root.mkdir(parents=True)
@@ -130,7 +147,12 @@ class RocImportTest(unittest.TestCase):
 		native.mkdir()
 		native_char = ["0"] * 104
 		native_char[1], native_char[2], native_char[5] = "100", "MOB_RM_TAHOMET", NATIVE_TAHOMET_SYMBOL
-		(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char]))
+		guardians = []
+		for n in range(1, 8):
+			row = ["0"] * 104
+			row[1], row[2] = str(5871 + n), "MOB_QT_%02d_ROCKY_CLON2" % n
+			guardians.append(row)
+		(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char] + guardians))
 		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
 		(text_root / "skilldata_5000.txt").write_bytes(utf16([]))
 		(text_root / "textdataname.txt").write_bytes(utf16([["1", NATIVE_TAHOMET_SYMBOL, "Tahomet"]]))
@@ -142,6 +164,7 @@ class RocImportTest(unittest.TestCase):
 		(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
 		(text_root / "itemdata_5000.txt").write_bytes(utf16([["1", "7", "ITEM_ETC_NATIVE"]]))
 		(text_root / roc.QUEST_TABLE).write_bytes(utf16([NATIVE_QUEST]))
+		(text_root / roc.CONTENTS_TABLE).write_bytes(utf16(NATIVE_CONTENTS))
 		rows = []
 		for at, (code, (grade, level)) in enumerate(roc.KINDS.items()):
 			rows.append(later_row(code, symbol_of(code), level, grade=grade, identity=9000 + at))
@@ -163,6 +186,7 @@ class RocImportTest(unittest.TestCase):
 			"itemdata.txt": utf16([["itemdata_20000.txt"]]),
 			"itemdata_20000.txt": utf16([["1", SOURCE_KEY_ID, KEY_ITEM]]),
 			"questdata.txt": utf16(SOURCE_QUESTS if quests is None else quests),
+			"questcontentsdata.txt": utf16(SOURCE_CONTENTS if contents is None else contents),
 			"skilleffect.txt": utf16([["#section", "characterinfo"]]
 				+ [[code] + ["0"] * 12 for code in roc.KINDS] + [["#section", "skillaniset"]]),
 		}
@@ -353,7 +377,7 @@ class RocImportTest(unittest.TestCase):
 			committed = json.loads(roc.QUEST_NESTS.read_text(encoding="utf-8"))["population"]
 			self.assertEqual(population, committed)
 			self.assertEqual({row["Codename"] for row in population["Rows"]},
-				{"MOB_QT_RM_FEATHERMASK_01", "MOB_QT_RM_ROCKY_CLON_01"})
+				{"MOB_QT_RM_FEATHERMASK_01", "MOB_QT_RM_ROCKY_CLON_01"} | GUARDIANS)
 			self.assertEqual(summary["population"]["nests"], len(committed["Rows"]))
 
 	# ================
@@ -399,10 +423,38 @@ class RocImportTest(unittest.TestCase):
 		with tempfile.TemporaryDirectory() as root:
 			vsro, native, output, text_root, pins = self.fixture(Path(root))
 			before = (text_root / roc.QUEST_TABLE).read_bytes()
+			contents = (text_root / roc.CONTENTS_TABLE).read_bytes()
 			self.run_import(vsro, native, output, pins, "on")
 			self.run_import(vsro, native, output, pins, "")
 			self.assertEqual((text_root / roc.QUEST_TABLE).read_bytes(), before)
+			self.assertEqual((text_root / roc.CONTENTS_TABLE).read_bytes(), contents)
 			self.assertFalse((text_root / roc.POPULATION_FILE).exists())
+
+	# ================
+	# test_on_stages_only_the_contents_rows_v1150_lacks
+	#
+	# The three ECT rows come from the client, cut to v1.150's thirteen
+	# columns; the native MEETROC_1 row stays as v1.150 ships it.
+	# ================
+	def test_on_stages_only_the_contents_rows_v1150_lacks(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, text_root, pins = self.fixture(Path(root))
+			summary = self.run_import(vsro, native, output, pins, "on")
+			ect = ["QNO_RM_MEETROC_ECT_1", "QNO_RM_MEETROC_ECT_2", "QNO_RM_MEETROC_ECT_3"]
+			self.assertEqual(summary["contents"], ect)
+			rows = tables.table_rows((text_root / roc.CONTENTS_TABLE).read_bytes())
+			self.assertEqual(rows[:len(NATIVE_CONTENTS)], NATIVE_CONTENTS)
+			self.assertEqual([row[0] for row in rows[len(NATIVE_CONTENTS):]], ect)
+			self.assertTrue(all(len(row) == roc.CONTENTS_COLUMNS for row in rows))
+
+	# ================
+	# test_a_contents_row_the_client_lacks_refuses
+	# ================
+	def test_a_contents_row_the_client_lacks_refuses(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, text_root, pins = self.fixture(Path(root), contents=SOURCE_CONTENTS[:-1])
+			with self.assertRaisesRegex(ValueError, "row for Roc quest QNO_RM_MEETROC_ECT_3"):
+				self.run_import(vsro, native, output, pins, "on")
 
 	# ================
 	# test_off_reads_no_archive
