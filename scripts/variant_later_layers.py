@@ -19,11 +19,13 @@ catalogue merges come first, and every later layer merges after them.
 """
 import arabia_import
 import constantinople_import
+import export_world_import
 import gears_stone_import
 import god_import
 import hunting2_import
 import jupiter_import
 import muhan_import
+import pharaoh_temple_import
 import skytemple_import
 import styria_import
 import winter_event_import
@@ -49,6 +51,16 @@ LATER_LAYERS = (
 	# The Constantinople fortress: its own switch and source (the v1.696
 	# client), on the merge machinery the Sky Temple shares.
 	("constantinople", constantinople_import.add_constantinople),
+	# The export-world areas ride SRO_EXPORT_WORLD on the pinned
+	# content archive (#3329): last of the world layers, so their
+	# reserved identity band (250000) allocates after every other
+	# later population's.
+	("exportWorld", export_world_import.add_export_world),
+	# The Pharaoh Temple's monsters ride the temple's own switch
+	# (SRO_PHARAOH_TEMPLE), in its dungeons build_alexandria_variant
+	# stages: no region merge, its own identity band (270000). The
+	# dungeons' own summary is the manifest's "pharaohTemple".
+	("pharaohTempleMonsters", pharaoh_temple_import.add_pharaoh_temple_monsters),
 	# The gears magic stones ride the mall's own switch
 	# (SRO_MALL_CATEGORIES): on stages their item shard beside the mall
 	# layout that lists them.

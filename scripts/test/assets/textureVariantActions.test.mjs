@@ -105,6 +105,10 @@ test("a second build lays every texture variant down from the action store", asy
 		assert.equal( second.stored, 2 );
 		assert.equal( second.placed, 2 );
 		assert.equal( second.encoded + second.cached, 0 );
+		// A run served by the store reports the same totals as the one that
+		// encoded: its sources are counted though never read.
+		assert.equal( second.sourceBytes, first.sourceBytes );
+		assert.equal( second.variantBytes, first.variantBytes );
 		assert.deepEqual( TEXTURES.map( publicPath => variantBytes( out, publicPath ) ), before );
 
 		// A touched source keeps its key; a changed byte misses.

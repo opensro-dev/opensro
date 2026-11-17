@@ -38,10 +38,10 @@ import {
 	storedLength,
 	validStoredForm
 } from "../build/shared/packFormat.mjs";
-import { createHash } from "node:crypto";
 import { open, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileHashCacheDisabled, openFileHashCache } from "../build/shared/fileHashCache.mjs";
+import { sha256Hex } from "../build/shared/hash.mjs";
 
 const defaultPublicRoot = CLIENT_PUBLIC_ROOT;
 const manifestPath = path.resolve(
@@ -363,10 +363,6 @@ function sha256Digest( value, label ) {
 		fail( `${label} must be a SHA-256 hex digest` );
 	}
 	return digest;
-}
-
-function sha256Hex( bytes ) {
-	return createHash( "sha256" ).update( bytes ).digest( "hex" );
 }
 
 function assertEqual( actual, expected, label ) {

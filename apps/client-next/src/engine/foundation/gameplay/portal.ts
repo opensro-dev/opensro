@@ -11,6 +11,7 @@ Walking into a gate's reach belongs to interaction-approach.ts.
 */
 import { constantNativeNotice } from "./native-notice";
 import type { SystemNotice } from "./system-notices";
+import { PORTAL_RESULT_OPCODE } from "@/engine/contracts/opcodes";
 export type PortalId = number & { readonly __portalId: unique symbol; };
 export interface PortalCatalog {
 	readonly destinations: readonly { id: PortalId; ref: number; name: string; code: string; }[];
@@ -158,7 +159,7 @@ authored refusals through the shared guide/banner owner.
 ================
 */
 export function portalNotice( opcode: number, p: Uint8Array ): SystemNotice | null {
-	if ( opcode !== 0xb495 ) return null;
+	if ( opcode !== PORTAL_RESULT_OPCODE ) return null;
 	if ( p[0] === 1 ) {
 		if ( p.length !== 1 ) throw Error( "Invalid portal success" );
 		return null;

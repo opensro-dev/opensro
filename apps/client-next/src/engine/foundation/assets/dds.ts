@@ -9,6 +9,7 @@ native-texture owns the shared BC palette and block decoding rules.
 ===========================================================================
 */
 import { decodeNativeSurface, nativeTextureLevelBytes } from "./native-texture";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 const DDS_HEADER_BYTES = 128;
 const DDS_MAGIC = 0x20534444;
@@ -31,7 +32,7 @@ its GPU mip chain after bitmap upload.
 */
 export function decodeDxt1( bytes: Uint8Array, limit = MAX_IMAGE_BYTES ) {
 	if ( bytes.byteLength < DDS_HEADER_BYTES ) throw Error( "Truncated DDS header" );
-	const view = new DataView( bytes.buffer, bytes.byteOffset, bytes.byteLength );
+	const view = viewOf( bytes );
 	if (
 		view.getUint32( 0, true ) !== DDS_MAGIC ||
 		view.getUint32( 4, true ) !== DDS_STRUCTURE_BYTES ||

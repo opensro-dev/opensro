@@ -11,6 +11,7 @@ the surrender question. The score selector indexes the native table.
 import type { WireFrame } from "@/engine/contracts/network";
 import type { SocialState } from "./social";
 import { guildSelf } from "./social-roster";
+import { GUILD_WAR_DECLARE_OPCODE, GUILD_WAR_SURRENDER_OPCODE } from "@/engine/contracts/opcodes";
 
 export const GUILD_WAR_PROPOSAL = 10;
 export const WAR_UNLIMITED = 0x7fffffff;
@@ -112,7 +113,7 @@ export function guildWarRequest( state: SocialState, command: GuildWarCommand ):
 		if ( !state.wars?.some( war => war.id === command.id && !war.ending ) ) throw Error( "Guild war unavailable" );
 		const payload = new Uint8Array( 4 );
 		new DataView( payload.buffer ).setUint32( 0, command.id, true );
-		return { opcode: 0x7465, payload };
+		return { opcode: GUILD_WAR_SURRENDER_OPCODE, payload };
 	}
 	const terms = command.terms, name = new TextEncoder().encode( terms.name );
 	if ( name.length < 2 || name.length > 12 || terms.name.includes( "\0" ) || terms.name === state.guild.name ) {
@@ -132,7 +133,7 @@ export function guildWarRequest( state: SocialState, command: GuildWarCommand ):
 	at += 4;
 	view.setUint8( at++, terms.scoreIndex );
 	view.setUint32( at, terms.stake, true );
-	return { opcode: 0x771b, payload };
+	return { opcode: GUILD_WAR_DECLARE_OPCODE, payload };
 }
 
 /*

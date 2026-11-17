@@ -14,7 +14,11 @@ the server reads the dump or the binary.
 The dumps are JSON objects: --hlil maps each codename to {"init": <HLIL
 text>}, and --methods each "CODE@slot" to one overriding vtable method,
 both produced from the registrations in research
-investigations/quest/quest-implementation-batches.json.
+investigations/quest/quest-implementation-batches.json. Both options
+repeat, paired in order: the first pair is the 91 v1.150 classes, a later
+one adds a family dumped since (the Roc chain's six, #3399). A codename in
+two dumps is refused. The snapshot records each HLIL dump's sha256 in
+order (dumpSHA256).
 
 Two HLIL shapes need care before the line parser sees them:
 	- a mission loop (do ... while (i s< arg3[0x121])) whose body switches
@@ -294,32 +298,50 @@ def parse_initializer(text):
 # ================
 def main():
 	parser = argparse.ArgumentParser(description=__doc__.splitlines()[3])
-	parser.add_argument("--hlil", required=True, help="Binary Ninja HLIL dump of the compiled initializers")
-	parser.add_argument("--methods", required=True, help="dump of each class's overriding vtable methods, keyed CODE@slot")
+	parser.add_argument("--hlil", required=True, action="append", help="Binary Ninja HLIL dump of the compiled initializers (repeatable)")
+	parser.add_argument("--methods", required=True, action="append",
+		help="dump of each class's overriding vtable methods, keyed CODE@slot (repeatable, paired with --hlil)")
 	parser.add_argument("--output", default=str(OUTPUT))
 	args = parser.parse_args()
-	raw = Path(args.hlil).read_bytes()
-	dump = json.loads(raw)
-	overrides = {}
-	for key in json.loads(Path(args.methods).read_bytes()):
-		code, slot = key.split("@")
-		# +0x50 is the deleting destructor and +0xDC the initializer itself.
-		if slot not in ("0x50", "0xdc"):
-			overrides.setdefault(code, []).append(slot)
-	quests = {}
-	for code in sorted(dump):
-		entry = dump[code]
-		if not entry.get("init"):
-			raise ValueError(code + ": no initializer text")
-		quest = parse_initializer(entry["init"])
-		# The vtable slots this class overrides beyond its destructor and
-		# initializer: each is custom behaviour the generator must not drop.
-		quest["overrides"] = sorted(overrides.get(code, []), key=lambda slot: int(slot, 16))
-		quests[code] = quest
-	snapshot = {"format": FORMAT, "dumpSHA256": hashlib.sha256(raw).hexdigest(), "quests": quests}
+	if len(args.hlil) != len(args.methods):
+		raise SystemExit("each --hlil dump needs its --methods dump")
 	Path(args.output).parent.mkdir(parents=True, exist_ok=True)
-	Path(args.output).write_text(json.dumps(snapshot, indent="\t", ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+	Path(args.output).write_text(json.dumps(snapshot(zip(args.hlil, args.methods)), indent="\t", ensure_ascii=False) + "\n",
+		encoding="utf-8", newline="\n")
 
+
+# ================
+# snapshot
+#
+# Every (HLIL, methods) dump pair decoded into one snapshot. A class in
+# two dumps would let the later silently replace the earlier: refused.
+# ================
+def snapshot(pairs):
+	quests, hashes = {}, []
+	for hlil, methods in pairs:
+		raw = Path(hlil).read_bytes()
+		hashes.append(hashlib.sha256(raw).hexdigest())
+		dump = json.loads(raw)
+		overrides = {}
+		for key in json.loads(Path(methods).read_bytes()):
+			code, slot = key.split("@")
+			if code not in dump:
+				raise ValueError(key + ": a method of a class its HLIL dump lacks")
+			# +0x50 is the deleting destructor and +0xDC the initializer itself.
+			if slot not in ("0x50", "0xdc"):
+				overrides.setdefault(code, []).append(slot)
+		for code in sorted(dump):
+			if code in quests:
+				raise ValueError(code + ": in two dumps")
+			entry = dump[code]
+			if not entry.get("init"):
+				raise ValueError(code + ": no initializer text")
+			quest = parse_initializer(entry["init"])
+			# The vtable slots this class overrides beyond its destructor and
+			# initializer: each is custom behaviour the generator must not drop.
+			quest["overrides"] = sorted(overrides.get(code, []), key=lambda slot: int(slot, 16))
+			quests[code] = quest
+	return {"format": FORMAT, "dumpSHA256": hashes, "quests": dict(sorted(quests.items()))}
 
 if __name__ == "__main__":
 	main()

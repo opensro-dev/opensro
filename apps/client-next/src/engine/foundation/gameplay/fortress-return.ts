@@ -16,6 +16,7 @@ arrives as 0x3792 [u8 2][u8 5][u32 seconds]
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import type { FortressState } from "./fortress";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const ACTION_FORTRESS_RETURN = 1015;
 export const OP_FORTRESS_RETURN = 0x7025;
@@ -64,7 +65,7 @@ export function fortressPortalCooldown( frame: WireFrame ): number | null {
 		return null;
 	}
 	if ( p.length !== 6 ) throw Error( "Invalid fortress portal cooldown" );
-	return Math.max( 0, new DataView( p.buffer, p.byteOffset, p.byteLength ).getInt32( 2, true ) );
+	return Math.max( 0, viewOf( p ).getInt32( 2, true ) );
 }
 
 /*

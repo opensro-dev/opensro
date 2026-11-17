@@ -30,6 +30,7 @@ that gate instead.
 */
 import type { EntityState } from "@/engine/contracts/world";
 import { castPhase } from "./combat-result";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // The cast broadcast's result byte for an opened cast.
 const CAST_OPENED = 1;
@@ -82,7 +83,7 @@ null for any other broadcast (a refusal, a peer's or a monster's cast).
 */
 export function ownCastTarget( payload: Uint8Array, localGid: number ): { skill: number; target: number; } | null {
 	if ( payload[0] !== CAST_OPENED || payload.length < CAST_HEADER_BYTES || !localGid ) return null;
-	const v = new DataView( payload.buffer, payload.byteOffset, payload.byteLength );
+	const v = viewOf( payload );
 	if ( v.getUint32( CAST_CASTER_OFFSET, true ) !== localGid ) return null;
 	const target = castPhase( payload, CAST_PHASE_OFFSET )?.target ?? 0;
 	return { skill: v.getUint32( CAST_SKILL_OFFSET, true ), target };
@@ -172,7 +173,7 @@ export function castPetAssistCountdowns(
 		payload.length < CAST_CASTER_OFFSET + 4 || payload[0] !== CAST_OPENED ||
 		(payload[CAST_KIND_OFFSET] !== CAST_KIND_NORMAL && payload[CAST_KIND_OFFSET] !== CAST_KIND_CONTINUOUS)
 	) return countdowns;
-	const caster = new DataView( payload.buffer, payload.byteOffset, payload.byteLength )
+	const caster = viewOf( payload )
 		.getUint32( CAST_CASTER_OFFSET, true );
 	if ( !countdowns.has( caster ) ) return countdowns;
 	const next = new Map( countdowns );

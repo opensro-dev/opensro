@@ -30,8 +30,8 @@ call starts the pool, and later assignments are ignored.
 */
 import { availableParallelism, freemem } from "node:os";
 
-export const BUILD_JOBS_ENV = "SRO_BUILD_JOBS";
-export const BUILD_MEMORY_ENV = "SRO_BUILD_MEMORY_MB";
+const BUILD_JOBS_ENV = "SRO_BUILD_JOBS";
+const BUILD_MEMORY_ENV = "SRO_BUILD_MEMORY_MB";
 // What one job may hold at its peak. Profiled 2026-11-14 on the full build
 // with 15 jobs: the outdoor pass grew the build process by about 720 MB
 // (about 50 MB a region builder) and the process reached 2 GB across the

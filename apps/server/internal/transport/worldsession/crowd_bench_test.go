@@ -28,6 +28,7 @@ package worldsession
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"slices"
 	"sync/atomic"
 	"syscall"
@@ -52,6 +53,24 @@ func processCPUSeconds() float64 {
 	var usage syscall.Rusage
 	_ = syscall.Getrusage(syscall.RUSAGE_SELF, &usage)
 	return float64(usage.Utime.Sec+usage.Stime.Sec) + float64(usage.Utime.Usec+usage.Stime.Usec)/1e6
+}
+
+// crowdReportedZones are the tick zones the benchmark reports per tick.
+var crowdReportedZones = []string{"phase:prepare", "sub:peerVisibility", "sub:sessionLegs", "sub:monsterLeg", "phase:hooks"}
+
+/*
+================
+crowd.zoneTotals
+
+The ticker's zone ledger, keyed "<kind>:<name>".
+================
+*/
+func (c *crowd) zoneTotals() map[string]time.Duration {
+	out := map[string]time.Duration{}
+	for _, row := range c.ticker.Zones.Snapshot() {
+		out[row.Kind+":"+row.Name] = row.Total
+	}
+	return out
 }
 
 /*
@@ -84,6 +103,7 @@ over the run's wall time.
 */
 func (c *crowd) measure(b *testing.B) {
 	before := c.hub.Metrics()
+	zonesBefore := c.zoneTotals()
 	cpu := processCPUSeconds()
 	started := time.Now()
 	b.ResetTimer()
@@ -92,6 +112,7 @@ func (c *crowd) measure(b *testing.B) {
 	seconds := time.Since(started).Seconds()
 	cpu = processCPUSeconds() - cpu
 	after := c.hub.Metrics()
+	zonesAfter := c.zoneTotals()
 
 	frames := float64(after.FramesOut - before.FramesOut)
 	bytes := float64(after.BytesOut - before.BytesOut)
@@ -118,6 +139,11 @@ func (c *crowd) measure(b *testing.B) {
 	b.ReportMetric(float64(after.WriteErrors-before.WriteErrors), "write-errors")
 	b.ReportMetric(float64(after.Detaches-before.Detaches), "detaches")
 	b.ReportMetric(float64(after.SessionsClosedSlowConsumer-before.SessionsClosedSlowConsumer), "closures")
+	// The tick's own breakdown, as /transport/metrics tick_zones shows it.
+	for _, zone := range crowdReportedZones {
+		spent := zonesAfter[zone] - zonesBefore[zone]
+		b.ReportMetric(float64(spent)/float64(time.Millisecond)/float64(len(durations)), zone+"-ms")
+	}
 	var gap int64
 	for _, reader := range c.readers {
 		gap = max(gap, reader.maxGapNs.Swap(0))
@@ -134,6 +160,9 @@ BenchmarkCrowd
 */
 func BenchmarkCrowd(b *testing.B) {
 	for _, cfg := range []crowdConfig{
+		// The live shape first: the scratch stack's Hotan plaza with NPCs.
+		{hotan: true, players: 1000, walkers: 500},
+		{hotan: true, players: 1000, walkers: 1000},
 		{players: 600, walkers: 300},
 		{players: 1000, walkers: 500},
 		{players: 1000, walkers: 1000},
@@ -150,6 +179,9 @@ func BenchmarkCrowd(b *testing.B) {
 		// after the case.
 		var c *crowd
 		var cancel context.CancelFunc
+		if cfg.hotan {
+			mode += "-hotan"
+		}
 		b.Run(fmt.Sprintf("mode=%s/players=%d/walkers=%d", mode, cfg.players, cfg.walkers), func(b *testing.B) {
 			if c == nil {
 				c = newCrowd(b, cfg)
@@ -164,6 +196,52 @@ func BenchmarkCrowd(b *testing.B) {
 		if c != nil {
 			cancel()
 			c.close()
+		}
+	}
+}
+
+//============================================================================
+// The walkers' clicks: benchmark-only, so they build where the benchmark does
+//============================================================================
+
+const (
+	// crowdBotStride and the click pause bound the live bot crowd's walk
+	// (client-next tools/perf/core/crowd-activity.mjs): a click within
+	// 25 units of home every 1.5-6 s.
+	crowdBotStride     = 25.0
+	crowdClickPauseMs  = 1500
+	crowdClickSpreadMs = 4500
+)
+
+/*
+================
+crowd.walkBots
+
+The walkers' clicks beside the tick, as the session read loops make
+them: every 25 ms, each walker whose pause is over clicks a point near
+its home. Returns when ctx ends; clicks counts the moves. Each walker's
+next click time lives here, the only reader.
+================
+*/
+func (c *crowd) walkBots(ctx context.Context, clicks *atomic.Int64) {
+	rng := rand.New(rand.NewSource(11))
+	clock := time.NewTicker(25 * time.Millisecond)
+	defer clock.Stop()
+	nextMs := make(map[*crowdActor]int64, len(c.actors))
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-clock.C:
+			nowMs := now.UnixMilli()
+			for _, a := range c.actors {
+				if !a.walker || nowMs < nextMs[a] {
+					continue
+				}
+				c.click(a, pointInDisc(rng, a.start, crowdBotStride), nowMs)
+				clicks.Add(1)
+				nextMs[a] = nowMs + crowdClickPauseMs + rng.Int63n(crowdClickSpreadMs)
+			}
 		}
 	}
 }

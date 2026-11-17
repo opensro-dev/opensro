@@ -34,6 +34,7 @@ import (
 	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
+	"opensro.online/server/internal/game/world/climate"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/pharaohtemple"
@@ -225,6 +226,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "There is no second hunting ground set.",
 				Now:    "The second hunting grounds stand open: a shared area of level 49-140 monsters.",
 				Why:    "More hunting ground from a later client, imported as optional content."},
+			{Flag: monster.EnvExportWorld, On: monster.ExportWorldEnabled(),
+				Native: "The world is the v1.150 map and the lands the port has imported.",
+				Now:    "Lands from the pinned content archive join the world, one imported area at a time.",
+				Why:    "Areas from a later client, imported as optional content."},
 			{Flag: monster.EnvPharaohGearRate, On: pharaohGear > 1,
 				Native: "A Pharaoh Tomb elite or unique rolls its equipment at the original rate.",
 				Now:    fmt.Sprintf("A Pharaoh Tomb elite or unique rolls its equipment %d times as often.", pharaohGear),
@@ -336,6 +341,10 @@ func publicRules() publicstats.RulesResponse {
 				Now:    "During the event window, monsters drop jewelry boxes and So-ok exchanges each box for a random gift or sixty boxes for an event helmet; boxes left when the window ends are removed at the next world entry.",
 				Why:    "The original Halloween Day event, rebuilt for its seasonal window."},
 			christmasRule(time.Now()),
+			{Flag: climate.Env, On: climate.Enabled(os.Getenv(climate.Env)),
+				Native: "Every region follows its climate: spells of rain and, in the cold lands, snow come and go, and each change of weather fades in over about half a minute.",
+				Now:    "As native while on (the default). Off, the server sends no weather and the sky stays clear.",
+				Why:    "The original server's weather cycle, from its climate tables; the switch lets a shard turn it off."},
 			{Flag: progression.EnvHalloweenHelmetSeal, On: progression.HalloweenHelmetSealFromEnv().Enabled(),
 				Native: "The event helmets trade like any other item.",
 				Now:    "The eight event helmets cannot be traded, stalled, stored, given to a pet or dropped: they stay with the character that earned them. A helmet may still be sold to an NPC merchant, which destroys it; the sale never puts it on the buyback bench, so no other player can take it.",

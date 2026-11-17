@@ -39,6 +39,7 @@ import { readLocalizedTextDataRowsSync } from "../shared/textDataIo.mjs";
 import { compareText } from "../shared/textOrder.mjs";
 import { buildObjectNavProjection, hasObjectNavPayload } from "./objectNavProjection.mjs";
 import { readJson, worldAuthorityPath, writeJson } from "./projectionFiles.mjs";
+import { sha256Hex } from "../shared/hash.mjs";
 
 const MANIFEST_FORMAT = "sro-game-data-bundle";
 const SCHEMA_VERSION = 1;
@@ -578,7 +579,7 @@ digestBytes
 ================
 */
 function digestBytes( bytes ) {
-	return `sha256:${createHash( "sha256" ).update( bytes ).digest( "hex" )}`;
+	return `sha256:${sha256Hex( bytes )}`;
 }
 
 /*
