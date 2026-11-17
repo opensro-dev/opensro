@@ -130,6 +130,7 @@ func (game *gameplayPlane) wireHwanLevel(quests *quest.Runtime) error {
 			return inside
 		})
 	}
+	game.movement.WalkAllowed = quests.HwanWalkAllowed
 	game.items.HwanLevel = quests.HwanLevel
 	game.items.SetHwanLevel = quests.SetGMHwanLevel
 	quests.HwanLevelFrames = game.items.HwanLevelFrames

@@ -40,6 +40,7 @@ package quest
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 
@@ -370,6 +371,14 @@ func (rt *Runtime) hwanUpdate(event InstanceEvent) {
 	if ended || layer.name == "" {
 		return
 	}
+	// Port-only, not native: a resident who left the arena by a return scroll or a teleport sends no leave event
+	// (the ordinary relocation reports none), so the layer notices on its tick, fails the fight if it was undecided
+	// and closes, which also lets the player enter again.
+	if character := rt.hwanCharacter(event.Division, layer.name); character != nil && layer.lease.ID != 0 &&
+		instance.ID(domain.CharacterWorldInstance(character)) != layer.lease.ID {
+		rt.hwanLeave(event)
+		return
+	}
 	age := rt.hwanNow() - layer.openedMs
 	if layer.arena.kind == hwanTrial {
 		rt.hwanTrialUpdate(event, layer, age)
@@ -421,6 +430,29 @@ func (rt *Runtime) hwanEnd(event InstanceEvent, layer *hwanLayer) bool {
 // inside an object and not be hit; this spot is the owner's choice (map X 5781, Y 1217: region 25253, x 210, z 650).
 var hwanRitualPoints = map[uint16]simulation.Spawn{
 	25253: sp(25253, 210, 225.27, 650),
+}
+
+// hwanLeashRadius is how far a ritual's player may walk from the spot the ghost appears at (60 map units), the
+// arena having no walls in its open region (port-only, not native in this form: the original keeps the player at the
+// fight, and this is the port's reading of that).
+const hwanLeashRadius = 600
+
+// HwanWalkAllowed is the movement leash of the rituals: false for a pose farther than hwanLeashRadius from the
+// ghost's spot, for a character inside a ritual arena. Trials (walled rooms) and everyone else are never held.
+func (rt *Runtime) HwanWalkAllowed(c *enterworld.Character, at simulation.Spawn) bool {
+	if c == nil || c.World == nil || c.World.InstanceReturn == nil {
+		return true
+	}
+	arena := hwanArenaFor(instance.ID(domain.CharacterWorldInstance(c)).Definition())
+	if arena == nil || arena.kind != hwanRitual {
+		return true
+	}
+	centre := arena.centre
+	if point, exact := hwanRitualPoints[centre.RegionID]; exact {
+		centre = point
+	}
+	distance := simulation.WorldDistance2D(at, centre)
+	return math.IsNaN(distance) || distance <= hwanLeashRadius
 }
 
 // hwanSpawn places one arena monster on the ring around a centre of the layer.

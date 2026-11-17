@@ -99,6 +99,8 @@ func (w *hwanWorld) enter(t *testing.T, c *enterworld.Character, quest, npc stri
 		t.Fatal(err)
 	}
 	w.event(InstanceEventSetup, "")
+	// The resident is in the arena's world from here on.
+	c.World = insideLayer(w)
 	w.event(InstanceEventEnter, c.Name)
 }
 
@@ -410,6 +412,55 @@ func TestLeavingAnArenaEarlyIsAFailureAndFinishingItIsNot(t *testing.T) {
 	d.event(InstanceEventLeave, q.Name)
 	if notifiedAny(d.pushed[q.Name], "SN_TALK_QNO_CH_HWAN_1_1_08") {
 		t.Fatal("a passed trial was reported as failed when its player left")
+	}
+}
+
+func TestARitualPlayerCannotWalkFarFromTheFight(t *testing.T) {
+	w := newHwanWorld(t)
+	c := w.player(t, "Leashed", 95, "QNO_CH_HWAN_1_5", "QNO_CH_HWAN_1_1", "QNO_CH_HWAN_1_2", "QNO_CH_HWAN_1_3", "QNO_CH_HWAN_1_3_1", "QNO_CH_HWAN_1_4", "QNO_CH_HWAN_1_4_1")
+	spot := hwanRitualPoints[25253]
+	near := simulation.Spawn{RegionID: 25253, X: spot.X + 300, Y: spot.Y, Z: spot.Z}
+	far := simulation.Spawn{RegionID: 25253, X: spot.X + 900, Y: spot.Y, Z: spot.Z}
+	if !w.rt.HwanWalkAllowed(c, far) {
+		t.Fatal("a player outside every arena was held")
+	}
+	c.World = insideLayer(w)
+	w.lease = instance.Lease{ID: instance.Pack(32, 7), Generation: 1}
+	c.World = insideLayer(w)
+	if !w.rt.HwanWalkAllowed(c, near) {
+		t.Fatal("the ritual's player was held close to the fight")
+	}
+	if w.rt.HwanWalkAllowed(c, far) {
+		t.Fatal("the ritual's player walked far from the fight")
+	}
+	// A trial is a walled room and is not leashed.
+	w.lease = instance.Lease{ID: instance.Pack(36, 7), Generation: 1}
+	c.World = insideLayer(w)
+	if !w.rt.HwanWalkAllowed(c, simulation.Spawn{RegionID: 22966, X: 100, Z: 100}) {
+		t.Fatal("a trial player was held")
+	}
+}
+
+func TestAResidentWhoScrollsOutFailsTheFightAndCanEnterAgain(t *testing.T) {
+	w := newHwanWorld(t)
+	c := w.player(t, "Scroller", 95, "QNO_CH_HWAN_1_5", "QNO_CH_HWAN_1_1", "QNO_CH_HWAN_1_2", "QNO_CH_HWAN_1_3", "QNO_CH_HWAN_1_3_1", "QNO_CH_HWAN_1_4", "QNO_CH_HWAN_1_4_1")
+	w.enter(t, c, "QNO_CH_HWAN_1_5", "NPC_CH_SHAMAN")
+	w.advance(10_000)
+	w.advance(1_000)
+	if len(w.closed) != 0 {
+		t.Fatal("the arena closed while its resident stood in it")
+	}
+	// A return scroll: the ordinary relocation puts the character in the default world and sends no leave event.
+	c.World = &enterworld.CharacterWorld{}
+	w.advance(1_000)
+	if !notifiedAny(w.pushed[c.Name], "SN_TALK_QNO_CH_HWAN_1_5_09") {
+		t.Fatal("leaving the ritual by scroll did not show the failed notice")
+	}
+	if len(w.closed) != 1 {
+		t.Fatalf("the arena stayed open after its resident left: closed %d", len(w.closed))
+	}
+	if _, err := w.rt.AdvanceNpcQuest(c, hwanEntryPrefix+"QNO_CH_HWAN_1_5", "NPC_CH_SHAMAN"); err != nil || len(w.invites) != 2 {
+		t.Fatalf("the player could not enter again: err=%v invites=%d", err, len(w.invites))
 	}
 }
 
