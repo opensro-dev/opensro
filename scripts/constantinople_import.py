@@ -264,7 +264,7 @@ def add_constantinople(native, output, source=None, closure=sky.copy_resource_cl
 		refs = {code: characters.convert_character(later[code])
 			for code in needed if code not in shipped_codes}
 		occupied = {int(r[1]) for r in shipped_chars if len(r) > 1 and r[1].isdigit()}
-		allocated = monsters.allocate_identities(occupied, sorted(refs), prior.get("characters", {}))
+		allocated = monsters.allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 		for code, row in refs.items():
 			row[1] = str(allocated[code])
 		if refs:
