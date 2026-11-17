@@ -55,7 +55,7 @@ const ROOT_VARIABLE_OWNERS = new Set( [
 	"apps/server/internal/gamedata/resolve.go",
 	"scripts/checks/check_generated_root.mjs"
 ] );
-const ROOT_VARIABLE = "SRO_(?:GENERATED_ROOT|SERVER_GAME_DATA_ROOT|GAME_ROOT)";
+const ROOT_VARIABLE = "SRO_(?:GENERATED_ROOT|SERVER_GAME_DATA_ROOT|GAME_ROOT|SHARED_CACHE_ROOT)";
 const ROOT_VARIABLE_READS = [
 	// process.env.SRO_GENERATED_ROOT, env[ "SRO_GAME_ROOT" ], process.env?.SRO_...
 	new RegExp( "\\benv\\??\\.?\\s*(?:\\.\\s*|\\[\\s*[\"'`])" + ROOT_VARIABLE + "\\b" ),

@@ -16,7 +16,9 @@ import (
 	"opensro.online/server/internal/domain"
 )
 
-// StatWordMax is the storage/display ceiling of the native STR/INT words.
+// StatWordMax is the storage/display ceiling of the native STR/INT words:
+// the client holds them as u16 at CICPlayer+0x834/+0x836, so the server
+// clamps on the way out rather than truncating silently.
 const StatWordMax int64 = 0xffff
 
 // This file makes the character's absolute MaxHP/MaxMP DERIVED values:
@@ -77,7 +79,7 @@ const StatWordMax int64 = 0xffff
 // own 0x30D2 walk reads) and, per level gained, performs exactly the
 // 3-step contract this comment used to hold open:
 //
-//  1. raise Strength AND Intellect by 1 (through clampStatWord);
+//  1. raise Strength AND Intellect by 1 (through ClampStatWord);
 //  2. grant +3 StatPoints (progression.StatPointsPerLevel);
 //  3. re-emit BuildLoginStatBlock (0x343C) - the maxima then move
 //     automatically because they are derived, and current HP/MP stays
@@ -138,12 +140,12 @@ value produced the maximum.
 ==================
 */
 func DerivedMaxHP(c *domain.Character) int64 {
-	return DerivedVitalMax(derivationLevel(c), clampStatWord(domain.CharacterStrength(c)))
+	return DerivedVitalMax(derivationLevel(c), ClampStatWord(domain.CharacterStrength(c)))
 }
 
 // DerivedMaxMP is the character's authoritative maximum MP (INT curve).
 func DerivedMaxMP(c *domain.Character) int64 {
-	return DerivedVitalMax(derivationLevel(c), clampStatWord(domain.CharacterIntellect(c)))
+	return DerivedVitalMax(derivationLevel(c), ClampStatWord(domain.CharacterIntellect(c)))
 }
 
 /*
@@ -210,7 +212,15 @@ func coerceInt(value *int64, min, max, fallback int64) int64 {
 	return *value
 }
 
-func clampStatWord(value int64) int64 {
+/*
+================
+ClampStatWord
+
+Holds STR or INT inside the native u16 word. The one owner of the rule:
+the login stat block, derived vitals and level-up stat raises all clamp here.
+================
+*/
+func ClampStatWord(value int64) int64 {
 	if value < 0 {
 		return 0
 	}

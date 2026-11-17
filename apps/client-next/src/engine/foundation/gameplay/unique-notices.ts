@@ -15,6 +15,7 @@ enter a town with its transport).
 */
 import { constantNativeNotice } from "./native-notice";
 import type { SystemNotice } from "./system-notices";
+import { EVENT_NOTICE_OPCODE } from "@/engine/contracts/opcodes";
 
 // 7508C0's kinds: the unique announcements, the badge event, and the
 // category its other kinds' notices come from.
@@ -125,7 +126,7 @@ alone decides; 7508C0 reads nothing after it for this kind.
 ================
 */
 export function isSpecialtySellEnd( opcode: number, p: Uint8Array ): boolean {
-	return opcode === 0x3058 && p[0] === KIND_LAST_SPECIAL;
+	return opcode === EVENT_NOTICE_OPCODE && p[0] === KIND_LAST_SPECIAL;
 }
 
 /*
@@ -161,7 +162,7 @@ export function uniqueNotice(
 	p: Uint8Array,
 	refs: ReadonlyMap<number, UniqueReference>
 ): SystemNotice | null {
-	if ( opcode !== 0x3058 ) return null;
+	if ( opcode !== EVENT_NOTICE_OPCODE ) return null;
 	if ( p.length === 0 ) throw Error( "Missing announcement subtype" );
 	const kind = p[0]!;
 	if ( kind === KIND_BADGE_EVENT ) return badgeNotice( p );

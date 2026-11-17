@@ -20,7 +20,7 @@ import (
 
 const (
 	levelRecoverySource      uint16 = 0x80
-	vitalsUpdateOpcode       uint16 = 0x33a6
+	vitalsUpdateOpcode              = enterworld.OpcodeVitalsUpdate
 	healthAndManaMask        uint8  = 3
 	healthAndManaPacketBytes        = 15
 )

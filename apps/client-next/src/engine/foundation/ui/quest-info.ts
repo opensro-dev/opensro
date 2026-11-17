@@ -8,8 +8,8 @@ in SRO_Client.exe assembly): on a level gain the 0x30D2 handler calls
 CIFQuestInfo_Str_QuestInfoGuide (69CCA0) with 1, which walks the quest
 table (0x7e5fa0) collecting the quests the new level opened. This file
 owns the walk's filter, the icon's placement and blink, and the window's
-size rule; the HUD owner (runtime/ui/hud/quest-info.ts) owns the state,
-and ui.ts only draws what this model decides.
+size, row and divider rules; the HUD owner (runtime/ui/hud/quest-info.ts)
+owns the state, and ui.ts only draws what this model decides.
 
 ===========================================================================
 */
@@ -46,11 +46,29 @@ export const QUEST_INFO_ICON_X_INSET = 0x57;
 export const QUEST_INFO_ICON_Y = 0xB3;
 // qstinfoic_1/_2 animated sprite interval (62E090): 0x1F4 ms per frame.
 export const QUEST_INFO_BLINK_MS = 0x1f4;
-// 62D260 sizes the window SetSize(0x13B, 0x8E) for one row and
-// SetSize(0x13B, 0x154) for the list; the width never changes.
+// 62D260 sizes the window by row count: SetSize(0x13B, 0x8E) for one
+// row, (0x13B, 0xF1) for two and (0x13B, 0x154) for three or more; the
+// width never changes.
 export const QUEST_INFO_WINDOW_WIDTH = 0x13b;
 export const QUEST_INFO_WINDOW_HEIGHT_ONE = 0x8e;
+export const QUEST_INFO_WINDOW_HEIGHT_TWO = 0xf1;
 export const QUEST_INFO_WINDOW_HEIGHT_LIST = 0x154;
+// The scroll manager shows at most three rows (6F35F0 is passed 1, 2
+// or 3); more scroll.
+export const QUEST_INFO_VISIBLE_ROWS_MAX = 3;
+// Row pitch (6F36C0): 0x60 for the single row, 0x63 once there are
+// two or more, the 96-pixel slot plus a 3-pixel divider.
+export const QUEST_INFO_ROW_PITCH_ONE = 0x60;
+export const QUEST_INFO_ROW_PITCH = 0x63;
+// The dividers 62D260 creates between rows: one tile control (runtime
+// class 0xCE92B0) per row after the first, rect (0x28, 0x85 + i * 0x63,
+// 0xEB, 3) in the window, its texture set to
+// interface/ifcommon/bg_tile/com_bg_tile_a.ddj.
+export const QUEST_INFO_DIVIDER_X = 0x28;
+export const QUEST_INFO_DIVIDER_Y = 0x85;
+export const QUEST_INFO_DIVIDER_WIDTH = 0xeb;
+export const QUEST_INFO_DIVIDER_HEIGHT = 3;
+export const QUEST_INFO_DIVIDER_TEXTURE = "interface/ifcommon/bg_tile/com_bg_tile_a.png";
 
 /*
 ================
@@ -87,12 +105,46 @@ export function questInfoEntries(
 ================
 questInfoWindowHeight
 
-One row takes the short window; two or more take the list window. Zero
-rows never opens a window (the icon section is destroyed instead).
+62D260's three sizes: one row, two rows, and three or more (the list,
+which scrolls). Zero rows never opens a window (the icon section is
+destroyed instead).
 ================
 */
 export function questInfoWindowHeight( count: number ): number {
-	return count <= 1 ? QUEST_INFO_WINDOW_HEIGHT_ONE : QUEST_INFO_WINDOW_HEIGHT_LIST;
+	if ( count <= 1 ) return QUEST_INFO_WINDOW_HEIGHT_ONE;
+	return count === 2 ? QUEST_INFO_WINDOW_HEIGHT_TWO : QUEST_INFO_WINDOW_HEIGHT_LIST;
+}
+
+/*
+================
+questInfoRows
+
+The rows the window shows and their pitch: up to three, 0x60 apart
+for one row and 0x63 (slot plus divider) for more.
+================
+*/
+export function questInfoRows( count: number ): { visible: number; pitch: number; } {
+	const visible = Math.min( Math.max( count, 1 ), QUEST_INFO_VISIBLE_ROWS_MAX );
+	return { visible, pitch: visible === 1 ? QUEST_INFO_ROW_PITCH_ONE : QUEST_INFO_ROW_PITCH };
+}
+
+/*
+================
+questInfoDividers
+
+The divider rects, relative to the window: one under each shown row
+but the last (62D260 creates one for two rows, two for the list).
+================
+*/
+export function questInfoDividers( count: number ): readonly (readonly [number, number, number, number])[] {
+	const { visible } = questInfoRows( count );
+	return Array.from( { length: visible - 1 }, ( _, i ) =>
+		[
+			QUEST_INFO_DIVIDER_X,
+			QUEST_INFO_DIVIDER_Y + i * QUEST_INFO_ROW_PITCH,
+			QUEST_INFO_DIVIDER_WIDTH,
+			QUEST_INFO_DIVIDER_HEIGHT
+		] as const );
 }
 
 /*
