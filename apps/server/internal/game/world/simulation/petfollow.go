@@ -42,6 +42,13 @@ type PetFollower struct {
 	progress    monster.MovementProgress
 	stopCounted bool
 	stuck       bool
+	// trail is where the owner walked, oldest first, a point every
+	// petTrailSpacing, kept only while ownerTrail is on (SetOwnerTrail);
+	// following is set while Advance steps, so the detour may take the
+	// trail (trailRoute).
+	trail      []Spawn
+	ownerTrail bool
+	following  bool
 }
 
 // PetRoutePlanner plans a pet's way around what its straight path cannot
@@ -60,6 +67,9 @@ type petDetour struct {
 	points  []Spawn
 	goal    Spawn
 	retryAt int64
+	// trail marks a route taken from the owner's trail (trailRoute):
+	// its later points may come into straight reach (skipAhead).
+	trail bool
 }
 
 /*
@@ -82,6 +92,10 @@ const (
 	petDetourArrived = 1.0
 	// petDetourRetryMs paces a failed plan, as monsterNavigationRetryMs does.
 	petDetourRetryMs = 1000
+	// petTrailSpacing is how far the owner walks between two trail points,
+	// and petTrailMax how many the follower keeps (about a minute's run).
+	petTrailSpacing = 20.0
+	petTrailMax     = 96
 )
 
 /*
@@ -170,7 +184,58 @@ Advance
 ================
 */
 func (p *PetFollower) Advance(owner Spawn, speed float64, nowMs int64, constrain func(Spawn, Spawn) (Spawn, *MoveError)) []Frame {
+	if p.ownerTrail {
+		p.noteOwner(owner)
+	}
+	p.following = true
+	defer func() { p.following = false }()
 	return p.Approach(owner, speed, nowMs, PetFollowDistance, constrain)
+}
+
+/*
+================
+SetOwnerTrail
+
+Port-only, not native: a following trade transport (SRO_TRANSPORT_FOLLOW,
+action transportfollow.go) walks its owner's trail past a wall
+(trailRoute). Natively a transport does not follow at all, and a walled-in
+pet raises the stuck event (action petstuck.go), which these followers
+keep: off, the default, records and takes no trail.
+================
+*/
+func (p *PetFollower) SetOwnerTrail(on bool) {
+	p.ownerTrail = on
+	if !on {
+		p.trail = nil
+	}
+}
+
+/*
+================
+noteOwner
+
+Adds the owner's live pose to the trail once it has walked petTrailSpacing
+from the last point; the oldest point goes past petTrailMax. A pose on
+another plane starts the trail again.
+================
+*/
+func (p *PetFollower) noteOwner(owner Spawn) {
+	if !finitePetSpawn(owner) {
+		return
+	}
+	if n := len(p.trail); n > 0 {
+		last := p.trail[n-1]
+		if petSamePlane(last.RegionID, owner.RegionID) && WorldDistance2D(last, owner) < petTrailSpacing {
+			return
+		}
+		if !petSamePlane(last.RegionID, owner.RegionID) {
+			p.trail = p.trail[:0]
+		}
+	}
+	p.trail = append(p.trail, owner)
+	if len(p.trail) > petTrailMax {
+		p.trail = append(p.trail[:0], p.trail[len(p.trail)-petTrailMax:]...)
+	}
 }
 
 // Approach shares collision and motion ownership with following.
@@ -221,7 +286,7 @@ func (p *PetFollower) moveTo(goal Spawn, speed float64, nowMs int64, constrain f
 	from := p.Position(nowMs)
 	target := goal
 	goal, fault := constrain(from, target)
-	waypoint, detouring := p.detourWaypoint(from, target, petClip{reached: goal, fault: fault}, nowMs)
+	waypoint, detouring := p.detourWaypoint(from, target, petClip{reached: goal, fault: fault}, nowMs, constrain)
 	if detouring {
 		goal, fault = constrain(from, waypoint)
 	}
@@ -293,8 +358,8 @@ asks the planner, at most once per petDetourRetryMs: after a plan, a failed
 plan, or a refused leg (moveTo).
 ================
 */
-func (p *PetFollower) detourWaypoint(from, goal Spawn, straight petClip, nowMs int64) (Spawn, bool) {
-	if p.planRoute == nil {
+func (p *PetFollower) detourWaypoint(from, goal Spawn, straight petClip, nowMs int64, constrain func(Spawn, Spawn) (Spawn, *MoveError)) (Spawn, bool) {
+	if p.planRoute == nil && !(p.following && p.ownerTrail) {
 		return Spawn{}, false
 	}
 	route := &p.detour
@@ -308,8 +373,13 @@ func (p *PetFollower) detourWaypoint(from, goal Spawn, straight petClip, nowMs i
 	// window after it was planned however far the goal runs: a fleeing goal
 	// re-plans at most once per petDetourRetryMs.
 	if len(route.points) > 0 && (WorldDistance2D(route.goal, goal) <= petDetourGoalSlack || nowMs < route.retryAt) {
+		reached := false
 		for len(route.points) > 1 && WorldDistance2D(from, route.points[0]) < petDetourArrived {
 			route.points = route.points[1:]
+			reached = true
+		}
+		if reached && route.trail {
+			route.points = p.skipAhead(from, route.points, constrain)
 		}
 		if WorldDistance2D(from, route.points[0]) >= petDetourArrived {
 			return route.points[0], true
@@ -319,6 +389,15 @@ func (p *PetFollower) detourWaypoint(from, goal Spawn, straight petClip, nowMs i
 	if nowMs < route.retryAt {
 		return Spawn{}, false
 	}
+	if points := p.trailRoute(from, goal, constrain); len(points) > 0 {
+		route.points, route.goal, route.retryAt, route.trail = points, goal, nowMs+petDetourRetryMs, true
+		return points[0], true
+	}
+	if p.planRoute == nil {
+		route.retryAt = nowMs + petDetourRetryMs
+		return Spawn{}, false
+	}
+	route.trail = false
 	points := p.planRoute(from, goal)
 	if len(points) < 2 {
 		route.retryAt = nowMs + petDetourRetryMs
@@ -326,6 +405,67 @@ func (p *PetFollower) detourWaypoint(from, goal Spawn, straight petClip, nowMs i
 	}
 	route.points, route.goal, route.retryAt = points, goal, nowMs+petDetourRetryMs
 	return points[0], true
+}
+
+/*
+================
+trailRoute
+
+While following, a blocked follower walks the owner's own trail: from the
+newest trail point one straight clip reaches whole, every later point,
+then the goal. The owner walked each step between two points, so the way
+on is a walk the owner took (a transport left at a town wall where two
+regions meet while its trader went out by the gate; the monster detour
+searches only a few cells round it, so it stood). Port-only, with the
+following transport itself (SetOwnerTrail): the owner's path is a route
+through the gap it used. The older points stay: a follower stopped in
+follow reach through a wall needs the one it passed before. Nil when
+none is in straight reach.
+================
+*/
+func (p *PetFollower) trailRoute(from, goal Spawn, constrain func(Spawn, Spawn) (Spawn, *MoveError)) []Spawn {
+	if !p.following || !p.ownerTrail || constrain == nil {
+		return nil
+	}
+	for i := len(p.trail) - 1; i >= 0; i-- {
+		point := p.trail[i]
+		if !petSamePlane(from.RegionID, point.RegionID) || WorldDistance2D(from, point) < petDetourArrived {
+			continue
+		}
+		reached, fault := constrain(from, point)
+		if fault != nil || WorldDistance2D(reached, point) >= petDetourArrived {
+			continue
+		}
+		return append(append(make([]Spawn, 0, len(p.trail)-i+1), p.trail[i:]...), goal)
+	}
+	return nil
+}
+
+/*
+================
+skipAhead
+
+On a trail route, at each waypoint reached: the newest later trail point
+one straight clip reaches whole, so a follower does not walk a loop the
+owner walked when a later point is already in sight. The goal (the last
+point) is left to the straight segment, which ends the route at once.
+================
+*/
+func (p *PetFollower) skipAhead(from Spawn, points []Spawn, constrain func(Spawn, Spawn) (Spawn, *MoveError)) []Spawn {
+	if constrain == nil {
+		return points
+	}
+	for i := len(points) - 2; i > 0; i-- {
+		point := points[i]
+		if !petSamePlane(from.RegionID, point.RegionID) {
+			continue
+		}
+		reached, fault := constrain(from, point)
+		if fault == nil && WorldDistance2D(reached, point) < petDetourArrived {
+			return points[i:]
+		}
+	}
+	return points
 }
 
 /*
