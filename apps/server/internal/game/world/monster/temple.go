@@ -95,10 +95,18 @@ func AppendTemple(template Template, textdataDir string, enabled bool) (Template
 /*
 ================
 appendTempleData
+
+The temple's nests stand outdoors and in the one Flame Mountain
+interior; temple.IsRegion owns which regions those are.
 ================
 */
 func appendTempleData(template Template, data []byte) (Template, error) {
-	return appendNests(template, data, "temple population", admitTemple, nil, templeWorldCode)
+	return appendNestRows(template, data, nestRules{
+		Label:   "temple population",
+		Admit:   admitTemple,
+		WorldOf: templeWorldCode,
+		Region:  temple.IsRegion,
+	})
 }
 
 /*

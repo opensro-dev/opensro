@@ -140,7 +140,12 @@ appendJupiterTempleData
 ================
 */
 func appendJupiterTempleData(template Template, data []byte) (Template, error) {
-	return appendNests(template, data, "jupiter temple population", admitJupiter, nil, jupiterWorldCode)
+	return appendNestRows(template, data, nestRules{
+		Label:   "jupiter temple population",
+		Admit:   admitJupiter,
+		WorldOf: jupiterWorldCode,
+		Region:  jupiter.IsTempleRegion,
+	})
 }
 
 // The one guest the source places in the field beside the family: an
