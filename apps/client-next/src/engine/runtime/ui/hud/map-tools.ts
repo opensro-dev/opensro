@@ -55,6 +55,8 @@ import {
 	guideAreaTarget,
 	guideMonsterRows,
 	guideMonsterTarget,
+	levelFilterOverlay,
+	levelFilterTarget,
 	worldMapGuideCatalog,
 	type GuideTarget,
 	type GuideView,
@@ -217,7 +219,11 @@ export function createMapToolsHud( options: {
 	base: string;
 } ) {
 	const assets = options.assets;
-	let levelFilter = true;
+	// The foot's level filter starts unchecked (v1.696 E72F30 clears
+	// control 31 when the window is built). Checking it snaps the map once
+	// (levelSnap), when the guide catalogue is in.
+	let levelFilter = false;
+	let levelSnap = false;
 	// Port-only, not native: the foot's unique spawns switch, off until
 	// the player ticks it, kept for the session as the level filter is.
 	let uniqueSpawns = false;
@@ -530,7 +536,9 @@ export function createMapToolsHud( options: {
 		step( panel: string ): boolean {
 			if ( regionLoad.kind === "disposed" ) return false;
 			let changed = false;
-			if ( panel === "Map" && drawerOpen && guideLoad.kind === "idle" && assets.available() > 0 ) {
+			if (
+				panel === "Map" && (drawerOpen || levelFilter) && guideLoad.kind === "idle" && assets.available() > 0
+			) {
 				guideLoad = {
 					kind: "loading",
 					id: assets.request( new URL( WORLDMAP_GUIDE_CATALOG, options.base ).href, GUIDE_BYTE_LIMIT )
@@ -640,6 +648,39 @@ export function createMapToolsHud( options: {
 		guidePick(): { catalog: WorldMapGuideCatalog; index: number; } | null {
 			if ( guideLoad.kind !== "ready" || guidePicked === null ) return null;
 			return { catalog: guideLoad.catalog, index: guidePicked };
+		},
+		/*
+		================
+		levelGround
+
+		The level filter's tinted hunting grounds on the world page
+		(worldmap-guide.ts levelFilterOverlay); null while the filter is
+		off, the level unknown or the catalogue not in.
+		================
+		*/
+		levelGround(
+			characterLevel: number | undefined,
+			frame: Parameters<typeof levelFilterOverlay>[2],
+			clip: Parameters<typeof levelFilterOverlay>[3]
+		): ReturnType<typeof levelFilterOverlay> | null {
+			if ( !levelFilter || characterLevel === undefined || guideLoad.kind !== "ready" ) return null;
+			return levelFilterOverlay( guideLoad.catalog, characterLevel, frame, clip );
+		},
+		/*
+		================
+		takeLevelSnap
+
+		The pose the map moves to once after the filter is checked (v1.696
+		E724F0), when the catalogue is in; null otherwise. A catalogue that
+		failed to load drops the snap.
+		================
+		*/
+		takeLevelSnap( characterLevel: number | undefined ): Pose | null {
+			if ( !levelSnap || characterLevel === undefined ) return null;
+			if ( guideLoad.kind === "absent" ) levelSnap = false;
+			if ( guideLoad.kind !== "ready" ) return null;
+			levelSnap = false;
+			return levelFilterTarget( guideLoad.catalog, characterLevel );
 		},
 		/*
 		================
@@ -758,6 +799,7 @@ export function createMapToolsHud( options: {
 		): Pose | null | undefined {
 			if ( id === "map-level-filter" ) {
 				levelFilter = !levelFilter;
+				levelSnap = levelFilter;
 				guideScroll.reset();
 				return null;
 			}
