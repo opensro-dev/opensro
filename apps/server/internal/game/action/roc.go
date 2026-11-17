@@ -271,10 +271,11 @@ func (rt *Runtime) noteRocKill(codename string, gid uint32, pose monster.Pose) {
 rocEntry
 
 The Roc worlds' half of a gate's admission (portalWorldAdmission). The
-summit refuses job mode or a vehicle (the entry check: the character's job byte
-+0x746 and its active vehicle; the port reads the job suit and the
-summoned transport) and, once entry closed, every traveller; the Front
-refuses once Tahomet fell (its entry check). The caller holds the division lock.
+summit refuses a rider or a summoned vehicle (the entry check reads the
+character's riding dword at byte +0x1D18, which walk-in ports as
+mountedOnCOS, then its active vehicle) and, once entry closed, every
+traveller; job mode is no refusal there. The Front refuses once Tahomet
+fell (its entry check). The caller holds the division lock.
 ================
 */
 func (rt *Runtime) rocEntry(division string, c *enterworld.Character, world instance.DefinitionID) byte {
@@ -284,7 +285,7 @@ func (rt *Runtime) rocEntry(division string, c *enterworld.Character, world inst
 	}
 	top, front := r.layers(division)
 	if world == rocTopWorld {
-		if rt.jobDressed(c) || rt.hasSummonedTransportCOS(c) {
+		if mountedOnCOS(c) || rt.hasSummonedTransportCOS(c) {
 			return portalRocEntry
 		}
 		if top != nil && top.entryClosed {

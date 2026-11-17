@@ -122,18 +122,27 @@ func rocLayerOpen(rt *Runtime, world instance.DefinitionID) bool {
 ================
 TestRocOffOpensNothing
 
-SRO_ROC off: the window passes and nothing opens or refuses.
+SRO_ROC off: the window passes and nothing opens or refuses, even for
+a rider. The same tick with the row on and the pinned zone opens the
+summit, so the clock stands inside the window rather than outside it.
 ================
 */
 func TestRocOffOpensNothing(t *testing.T) {
 	rt, clock, _, c := rocFixture(t)
 	rt.ConfigureRoc(false)
 	clock.now = rocTestOpen
+	c.ActiveCOS = &enterworld.CharacterCOS{GID: 7100, Mounted: true}
 	if got := rocTick(rt, clock); len(got) != 0 || rocLayerOpen(rt, rocTopWorld) {
 		t.Fatalf("off: notices %v, summit open %v", got, rocLayerOpen(rt, rocTopWorld))
 	}
 	if refusal := rt.rocEntry(testDivision, c, rocTopWorld); refusal != 0 {
 		t.Fatalf("off: entry refused %#x", refusal)
+	}
+	rt.ConfigureRoc(true)
+	rt.roc.loc = rocTestZone
+	rt.roc.spawn = (&rocTestMonsters{spawned: map[uint32]simulation.QuestMonsterSpawn{}, alive: map[uint32]bool{}}).spawn
+	if got := rocTick(rt, clock); len(got) != 1 || !rocLayerOpen(rt, rocTopWorld) {
+		t.Fatalf("control, on at the same instant: notices %v, summit open %v", got, rocLayerOpen(rt, rocTopWorld))
 	}
 }
 
@@ -368,8 +377,9 @@ func TestRocGateTravelsToItsDestination(t *testing.T) {
 ================
 TestRocSummitGateAdmission
 
-The gate admission runs the summit's rule: a closed summit refuses the
-traveller before the transfer check.
+The gate admission runs the summit's rule: a rider and a summoned
+vehicle are refused with the Roc's entry code, job mode is admitted, and
+a closed summit refuses the traveller before the transfer check.
 ================
 */
 func TestRocSummitGateAdmission(t *testing.T) {
@@ -379,6 +389,24 @@ func TestRocSummitGateAdmission(t *testing.T) {
 	arrival := portalDestination{code: "GATE_RC_ROC_GATE", world: rocTopWorld, spawn: rocSpawn}
 	if _, refusal := rt.portalWorldAdmission(testDivision, c, arrival); refusal != 0 {
 		t.Fatalf("an open summit refused %#x", refusal)
+	}
+	// Riding, not summoned: only the riding test can refuse it.
+	c.ActiveCOS = &enterworld.CharacterCOS{GID: 7100, Mounted: true}
+	if refusal := rt.rocEntry(testDivision, c, rocTopWorld); refusal != portalRocEntry {
+		t.Fatalf("a rider answered %#x, want %#x", refusal, portalRocEntry)
+	}
+	// Summoned, not ridden: only the vehicle test can refuse it.
+	c.ActiveCOS = &enterworld.CharacterCOS{GID: 7101, Codename: "COS_T_HORSE", Summoned: true}
+	if refusal := rt.rocEntry(testDivision, c, rocTopWorld); refusal != portalRocEntry {
+		t.Fatalf("a summoned vehicle answered %#x, want %#x", refusal, portalRocEntry)
+	}
+	c.ActiveCOS = nil
+	dressJobSuit(t, rt, c, domain.JobTrader)
+	if !rt.jobDressed(c) {
+		t.Fatal("the trader suit did not dress the character")
+	}
+	if refusal := rt.rocEntry(testDivision, c, rocTopWorld); refusal != 0 {
+		t.Fatalf("job mode answered %#x, want admitted", refusal)
 	}
 	top, _ := rt.roc.layers(testDivision)
 	top.entryClosed = true
