@@ -205,7 +205,9 @@ test("376F updates local entity channels and live movement through the productio
 	core.command( { kind: "navigation", regionId: pose.regionId, bundle: bundle() }, 0 );
 	core.receive( { opcode: 0xb738, payload: move }, 0 );
 	core.step( 500 );
-	drain();
+	// The bug report's mount journal (#3508): on foot from the frame that
+	// seeded the local player. Gameplay events carry changed fields only.
+	assert.deepEqual( drain().findLast( e => e.kind === "gameplay" )?.state.mountJournal, [ 0, 0 ] );
 	const speed = Buffer.from( "07000000000020420000c842", "hex" ); // GID 7, walk 40, run 100
 	core.receive( { opcode: 0x376f, payload: speed }, 1000 );
 	core.step( 2000 );
@@ -215,6 +217,14 @@ test("376F updates local entity channels and live movement through the productio
 	assert.equal( state.entity.walkSpeed, 40 );
 	assert.equal( state.entity.runSpeed, 100 );
 	assert.equal( game.state.pose.x, 210 );
+	// The bug report's speed journal (#3508): the frame, routed to the local
+	// player on foot.
+	assert.deepEqual( game.state.speedJournal, [ 1000, 7, 7, 7, 40, 100 ] );
+	// A peer's speed frame is not the local player's business: the journal
+	// does not change, so no event carries it.
+	core.receive( { opcode: 0x376f, payload: Buffer.from( "08000000000020420000c842", "hex" ) }, 1500 );
+	core.step( 2100 );
+	assert.deepEqual( drain().findLast( e => e.kind === "gameplay" )?.state.speedJournal, undefined );
 	for ( const bad of [ speed.subarray( 0, 11 ), Buffer.concat( [ speed, Buffer.of( 0 ) ] ) ] ) {
 		assert.throws( () => core.receive( { opcode: 0x376f, payload: bad }, 2001 ), /speed channels/ );
 	}

@@ -380,6 +380,12 @@ def add_monsters(v1696_root, native, output, source_root=None):
 		def read(name):
 			return tables.table_text(media, index, name.lower())
 
+		# ================
+		# has
+		# ================
+		def has(name):
+			return tables.TEXTDATA + name.lower() in index
+
 		later = later_world_import.later_characters(read)
 		refs = {}
 		by_level = {}
@@ -411,7 +417,7 @@ def add_monsters(v1696_root, native, output, source_root=None):
 			if form not in later:
 				raise ValueError(f"muhan transform form {form} is absent from the later client")
 			refs[form] = characters.convert_character(later[form])
-		staged = later_world_import.stage_kinds("muhan", read, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
+		staged = later_world_import.stage_kinds("muhan", read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
 			lambda code: code in refs, sorted({row["SkillCodename"] for row in transforms["Rows"]}))
 		write_atomically(text_root / WAVES_FILE, (json.dumps(waves) + "\n").encode())
 		write_atomically(text_root / NPCS_FILE, (json.dumps(npcs) + "\n").encode())

@@ -28,6 +28,7 @@ package worldsession
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"slices"
 	"sync/atomic"
 	"syscall"
@@ -195,6 +196,52 @@ func BenchmarkCrowd(b *testing.B) {
 		if c != nil {
 			cancel()
 			c.close()
+		}
+	}
+}
+
+//============================================================================
+// The walkers' clicks: benchmark-only, so they build where the benchmark does
+//============================================================================
+
+const (
+	// crowdBotStride and the click pause bound the live bot crowd's walk
+	// (client-next tools/perf/core/crowd-activity.mjs): a click within
+	// 25 units of home every 1.5-6 s.
+	crowdBotStride     = 25.0
+	crowdClickPauseMs  = 1500
+	crowdClickSpreadMs = 4500
+)
+
+/*
+================
+crowd.walkBots
+
+The walkers' clicks beside the tick, as the session read loops make
+them: every 25 ms, each walker whose pause is over clicks a point near
+its home. Returns when ctx ends; clicks counts the moves. Each walker's
+next click time lives here, the only reader.
+================
+*/
+func (c *crowd) walkBots(ctx context.Context, clicks *atomic.Int64) {
+	rng := rand.New(rand.NewSource(11))
+	clock := time.NewTicker(25 * time.Millisecond)
+	defer clock.Stop()
+	nextMs := make(map[*crowdActor]int64, len(c.actors))
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-clock.C:
+			nowMs := now.UnixMilli()
+			for _, a := range c.actors {
+				if !a.walker || nowMs < nextMs[a] {
+					continue
+				}
+				c.click(a, pointInDisc(rng, a.start, crowdBotStride), nowMs)
+				clicks.Add(1)
+				nextMs[a] = nowMs + crowdClickPauseMs + rng.Int63n(crowdClickSpreadMs)
+			}
 		}
 	}
 }

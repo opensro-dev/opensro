@@ -104,7 +104,7 @@ func (rt *Runtime) planInventoryGrant(
 		if ref.TypeIDs[1] == 1 {
 			item.Durability = 100
 			if ref.VarianceIntMin1c0 != nil {
-				item.Durability = uint32(clampInt64(*ref.VarianceIntMin1c0, 1, 0xffffffff))
+				item.Durability = uint32(min(max(*ref.VarianceIntMin1c0, 1), 0xffffffff))
 			}
 		}
 		items = append(items, item)
