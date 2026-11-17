@@ -16,6 +16,7 @@ import { parseJmxResourceBsr } from "../world/objects/formats.mjs";
 import { loadDataAsset, loadMaterialTextures } from "../shared/jmxAssetIO.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { quatRotateComponents } from "../shared/math3d.mjs";
+import { materialBsrModifiers } from "../shared/bsrModifiers.mjs";
 
 export const NATIVE_CREATE_PREVIEW_ANIMATION_SET_NAMES = [
   // InitGlobalAnimationSetNameStrings + ItemTypeWord_ToAnimationSetName.
@@ -339,7 +340,7 @@ export async function assembleAvatar(bsrAssetPath, options = {}) {
     if (!mesh.rigid && bakeByLocal.size > 0) bakeMeshVertices(mesh, bakeByLocal, meshPath);
     const slot = options.slotForMesh ? options.slotForMesh(meshPath, primIndex) : null;
     const environmentModifiers=options.environmentModifiersForMesh?options.environmentModifiersForMesh(meshPath):bsrResource.modifiers?.environmentModifiers??[];
-    parts.push({ meshPath, mesh, localToGlobal, slot, environmentModifiers, bsrModifiers:options.bsrModifiersForMesh?options.bsrModifiersForMesh(meshPath):options.meshPaths?undefined:{materialModifiers:bsrResource.modifiers?.materialModifiers??[],textureModifiers:bsrResource.modifiers?.textureModifiers??[]} });
+    parts.push({ meshPath, mesh, localToGlobal, slot, environmentModifiers, bsrModifiers:options.bsrModifiersForMesh?options.bsrModifiersForMesh(meshPath):options.meshPaths?undefined:materialBsrModifiers(bsrResource.modifiers) });
   }
 
   // Default-set motion ids are the native authority: 0=stand, 1=walk, 7=run.

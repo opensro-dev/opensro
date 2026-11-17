@@ -1,6 +1,7 @@
 import {loadMaterialTextures} from '../shared/jmxAssetIO.mjs';
 import {parseJmxResourceBsr} from '../world/objects/formats.mjs';
 import {characterMaterialVariants} from './materialVariants.mjs';
+import {materialBsrModifiers} from '../shared/bsrModifiers.mjs';
 
 // Replace only the JSON chunk; geometry, BAN/VAT accessors and embedded images
 // retain their original binary bytes and offsets.
@@ -14,7 +15,10 @@ export async function entityMaterialMetadata(bytes,source,bsrPath,slot){
  for(const material of document.materials??[]){
   const native=materials.get(material.name)??[...materials].find(([name])=>name.toLowerCase()===material.name.toLowerCase())?.[1];
   if(!native)throw Error('Unbound entity material '+bsrPath+':'+material.name);
-  material.extras={...material.extras,sroMaterialIndex:native.materialIndex,sroMaterialSet:native.materialSetPath,sroBsrModifiers:{materialModifiers:bsr.modifiers.materialModifiers,textureModifiers:bsr.modifiers.textureModifiers}};
+  material.extras={...material.extras,sroMaterialIndex:native.materialIndex,sroMaterialSet:native.materialSetPath,sroBsrModifiers:materialBsrModifiers(bsr.modifiers)};
+  // The images are the full builder's (exportGlb, characterMultiTexture.mjs); this
+  // JSON-only refresh cannot add them, so a GLB without them is stale.
+  if(material.extras.sroBsrModifiers.multiTextureModifiers.length!==(material.extras.sroMultiTextures?.length??0))throw Error('Entity GLB lacks its multi-texture images '+bsrPath+':'+material.name);
  }
  const json=Buffer.from(JSON.stringify(document)),padded=Buffer.alloc((json.length+3)&~3,0x20);json.copy(padded);
  const header=Buffer.from(bytes.subarray(0,20));header.writeUInt32LE(20+padded.length+bytes.length-end,8);header.writeUInt32LE(padded.length,12);

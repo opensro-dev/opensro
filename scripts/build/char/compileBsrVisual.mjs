@@ -10,6 +10,7 @@ import { avatarToGlb } from "./exportGlb.mjs";
 import { parseBan, parseCharacterBsr } from "./formats.mjs";
 import { loadDataAsset, loadMaterialTextures } from "../shared/jmxAssetIO.mjs";
 import { parseJmxBmsStaticMesh, parseJmxResourceBsr } from "../world/objects/formats.mjs";
+import { materialBsrModifiers } from "../shared/bsrModifiers.mjs";
 
 /**
  * Assemble a static BSR with a one-joint stand-in rig so the normal avatar GLB
@@ -34,7 +35,7 @@ export async function assembleStaticBsrModel(bsrAssetPath) {
     }
     parts.push({
       slot: primSlot(index),
-      bsrModifiers:{materialModifiers:bsr.modifiers?.materialModifiers??[],textureModifiers:bsr.modifiers?.textureModifiers??[]},
+      bsrModifiers:materialBsrModifiers(bsr.modifiers),
       localToGlobal: [0],
       mesh: {
         meshName: mesh.metadata.meshName,
