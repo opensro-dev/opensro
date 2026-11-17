@@ -735,6 +735,9 @@ type Runtime struct {
 	HwanLevel func(*enterworld.Character) uint8
 	// SetHwanLevel is the quest owner's /SETBERSERK seat (hwan.go); nil refuses.
 	SetHwanLevel func(*enterworld.Character, uint8) bool
+	// WalkAllowed is the quest arena's leash for position skills (the same hook movement holds a walk with,
+	// quest/hwan_arena.go): false for a pose the character may not move to; nil allows every pose.
+	WalkAllowed func(*enterworld.Character, simulation.Spawn) bool
 	// CapturedFollowerDied tells a capture-escort quest its captured monster
 	// died (a captured COS); called inside the owner's character door.
 	CapturedFollowerDied        func(*enterworld.Character) []wire.Frame
