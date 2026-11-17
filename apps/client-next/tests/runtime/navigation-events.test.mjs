@@ -124,7 +124,15 @@ test("with no registered response an event edge neither stops nor rejects (the n
 	assert.equal( point.z, 75 );
 	nav.clear();
 });
-test("BMS decoding preserves cell words, both event columns and registry strings", () => {
+/*
+================
+gateMesh
+
+The one-cell BMS fixture with all three known flag bits set, decoded with
+header word 11 = flags.
+================
+*/
+function gateMesh( flags ) {
 	const parts = [];
 	const u8 = x => parts.push( Buffer.from( [ x ] ) ),
 		u16 = x => {
@@ -167,8 +175,8 @@ test("BMS decoding preserves cell words, both event columns and registry strings
 	u16( 0 );
 	const raw = Buffer.concat( parts ), offsets = Array( 12 ).fill( 0 );
 	offsets[7] = 64;
-	offsets[11] = 7;
-	const [mesh] = objectNavigation( {
+	offsets[11] = flags;
+	return objectNavigation( {
 		sourcePath: "fixture",
 		byteLength: 64 + raw.length,
 		headerOffsets: offsets,
@@ -179,11 +187,18 @@ test("BMS decoding preserves cell words, both event columns and registry strings
 			rawBase64: raw.toString( "base64" )
 		} ]
 	} );
+}
+test("BMS decoding preserves cell words, both event columns and registry strings", () => {
+	const [mesh] = gateMesh( 7 );
 	assert.deepEqual( [ ...mesh.vertexDirections ], [ 0, 64, 128 ] );
 	assert.deepEqual( [ ...mesh.cellWords ], [ 73 ] );
 	assert.deepEqual( [ ...mesh.cellEvents ], [ 192 ] );
 	assert.deepEqual( [ ...mesh.edgeEvents ], [ 128 ] );
 	assert.deepEqual( mesh.eventNames, [ "gate" ] );
+});
+test("BMS flags outside the three known bits are ignored, as CRTNavMeshObj_Load does", () => {
+	const plain = gateMesh( 7 );
+	for ( const flags of [ 7 | 8, 7 | 0x80 ] ) assert.deepEqual( gateMesh( flags ), plain, "flags " + flags );
 });
 test("preferred owner survives coincident triangles and rejects invalid indices", () => {
 	const objects = [ room(), room() ];

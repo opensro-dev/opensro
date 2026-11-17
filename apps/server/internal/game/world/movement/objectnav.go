@@ -331,13 +331,20 @@ func decodeObjectNavEdgeGroup(c *objectNavCursor, label string, stride, vertexCo
 /*
 ================
 decodeObjectNavPayload
+
+Only the three known bits gate bytes. CRTNavMeshObj_Load (4265B0) tests
+flags 2, 1 and 4 (0x426709, 0x4269CB, 0x426DFB) and no other bit, so a
+mesh with more set loads natively: the later client's Arabia meshes carry
+8 (bagh_masin_center01.bms, arabianf_tree03_01.bms). Refusing them left
+those buildings and trees without collision here.
 ================
 */
 func decodeObjectNavPayload(raw []byte, navFlags int) (*objectNavMesh, error) {
 	c := &objectNavCursor{raw: raw}
-	if navFlags < 0 || navFlags&^objectNavKnownFlags != 0 {
-		return nil, fmt.Errorf("object nav flags 0x%x contain unsupported bits", navFlags)
+	if navFlags < 0 {
+		return nil, fmt.Errorf("object nav flags 0x%x are negative", navFlags)
 	}
+	navFlags &= objectNavKnownFlags
 
 	// 1. Vertices: { f32 x,y,z; u8 boundaryDirection }.
 	vertexCount, err := c.u32("vertex count")

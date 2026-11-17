@@ -17,16 +17,22 @@ import type { NavPassage } from "./topology";
 import type { NavMesh, NavPlacement, ObjectNavWire } from "@/engine/contracts/navigation";
 import { base64Bytes } from "@/engine/foundation/assets/base64";
 // Native BMS offset 7: CRTNavMeshObj_Load, CRTNavMeshObj_ReadEdges. Header word 11 is flags, not an offset.
+// CRTNavMeshObj_Load (4265B0) tests bits 2, 1 and 4 only (0x426709, 0x4269CB, 0x426DFB).
+const NAV_KNOWN_FLAGS = 7;
 /*
 ================
 objectNavigation
+
+Header word 11 gates the optional bytes through its three known bits; any
+other bit is ignored, as natively. The later client's Arabia meshes carry
+8 (bagh_masin_center01.bms, arabianf_tree03_01.bms), and refusing them
+failed every Arabia region's navigation.
 ================
 */
 export function objectNavigation( row: ObjectNavWire ): NavMesh[] {
 	const offsets = row.headerOffsets as number[];
 	if ( !Array.isArray( offsets ) || !offsets[7] ) return [];
-	const flags = offsets[11] ?? 0;
-	if ( flags & ~7 ) throw new Error( "Unsupported object navigation flags" );
+	const flags = (offsets[11] ?? 0) & NAV_KNOWN_FLAGS;
 	const payload = row.nativePayloads?.find( p =>
 		p.kind === "bms-offset7-post-payload-tail" && p.byteOffset === offsets[7]
 	);
