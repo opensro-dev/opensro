@@ -57,8 +57,9 @@ export interface ServerEventLayout {
 const BOX_LEFT = SNOW[0], BOX_TOP = FRAME[1], BOX_WIDTH = CLOSE[0] + CLOSE[2] - SNOW[0];
 // Port-only placement (the owner's ask, 2026-11-17): the native spot
 // covers this HUD's pet portrait, so the widget sits this far under the
-// minimap, centred on it.
-export const SERVER_EVENT_MINIMAP_GAP = 8;
+// minimap, centred on it and moved this far from the screen's right edge.
+export const SERVER_EVENT_MINIMAP_GAP = 2;
+export const SERVER_EVENT_EDGE_INSET = 8;
 
 /*
 ================
@@ -71,7 +72,7 @@ rects, kept at their distance from the right edge.
 export function serverEventLayout( width: number, minimap?: UiRect ): ServerEventLayout {
 	let dx = width - NATIVE_WIDTH, dy = 0;
 	if ( minimap ) {
-		dx = Math.floor( minimap[0] + (minimap[2] - BOX_WIDTH) / 2 ) - BOX_LEFT;
+		dx = Math.floor( minimap[0] + (minimap[2] - BOX_WIDTH) / 2 ) - SERVER_EVENT_EDGE_INSET - BOX_LEFT;
 		dy = minimap[1] + minimap[3] + SERVER_EVENT_MINIMAP_GAP - BOX_TOP;
 	}
 	const at = ( r: UiRect ): UiRect => [ r[0] + dx, r[1] + dy, r[2], r[3] ];

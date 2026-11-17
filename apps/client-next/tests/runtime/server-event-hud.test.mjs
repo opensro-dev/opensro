@@ -36,16 +36,17 @@ test("the widget sits at the native rects, 244 px from the right edge", () => {
 	assert.deepEqual( serverEventLayout( 1280 ).frame, [ 1036, 56, 120, 24 ] );
 });
 
-test("with the minimap drawn, the widget sits 8 px under it, centred on it", () => {
+test("with the minimap drawn, the widget sits just under it, clear of the screen edge", () => {
 	// The owner's placement (2026-11-17): the native spot covers the pet's
 	// portrait on this HUD. The widget spans the snow icon to the close
-	// button, 122 px.
+	// button, 122 px; centred under the minimap, then 8 px further from the
+	// right edge, 2 px under the minimap.
 	assert.deepEqual( serverEventLayout( 1024, [ 895, 0, 129, 129 ] ), {
-		frame: [ 899, 137, 120, 24 ],
-		gauge: [ 922, 140, 80, 4 ],
-		text: [ 921, 148, 80, 13 ],
-		snow: [ 898, 137, 24, 24 ],
-		close: [ 1004, 142, 16, 16 ]
+		frame: [ 891, 131, 120, 24 ],
+		gauge: [ 914, 134, 80, 4 ],
+		text: [ 913, 142, 80, 13 ],
+		snow: [ 890, 131, 24, 24 ],
+		close: [ 996, 136, 16, 16 ]
 	} );
 });
 
