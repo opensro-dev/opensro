@@ -134,7 +134,9 @@ the specialty class (Etc tid 3/8) and 830410 compares the active record's
 class (+0x14) against 1, so a trade good may enter only a transport COS's
 bag. 567290 and 570120 test both facts outright; 59B1D0 and 6A8740 print
 the same line through the COS interaction state. A refused move prints
-UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY and sends nothing.
+UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY on system type 0 alone
+(push 0 -> 67A600 at every site, no 67D030 in any of the four handlers;
+post-cut/2290-asm.md) and sends nothing.
 ================
 */
 export function cosSpecialtyMoveRefused( typeFlags: number, band: number ): boolean {
@@ -151,7 +153,11 @@ The merchant refusal for a COS bag at a shop: CIFMerchant_ValidateSlotAction
 trade function (interaction lock 0x800) is closed, and 5B6CA0 repeats the
 same line under that lock when the active record's class (+0x14) is not 1.
 Only a transport COS may trade at a shop; every other class is refused
-before anything is sent. In this port a COS shop command is only composed
+before anything is sent. The print is dual: system type 0 plus the
+centre banner (67A600 @5B2772 + 67D030 @5B278D, the pair repeated at
+5B6CA0 @5B6F62/@5B6F7D and @5B6FCF/@5B6FEA; post-cut/2290-asm.md), so
+the refusal notice carries both legs. In this port a COS shop command
+is only composed
 for the shop's own COS (the special-trade container the server published),
 so the class arm is the reachable one here.
 ================

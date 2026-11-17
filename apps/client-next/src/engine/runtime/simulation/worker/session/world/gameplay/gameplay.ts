@@ -2704,7 +2704,9 @@ state here before a command can claim a native wire conversation.
 				}
 				// 570120: a specialty good bought into a non-transport COS
 				// prints the line and sends nothing; the package slot is
-				// judged by its first item, as there.
+				// judged by its first item, as there. The print is a
+				// system-type-0 line alone (push 0 -> 67A600 @570222; no
+				// 67D030 anywhere in the handler, post-cut/2290-asm.md).
 				if ( command.kind === "cos-shop-buy" ) {
 					const tab = command.tab, slot = command.slot;
 					const offer = inventory.state().shop?.offers.find(
@@ -2715,6 +2717,7 @@ state here before a command can claim a native wire conversation.
 						notices = [ ...notices.slice( -99 ), {
 							key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
 							value: 0,
+							nativeType: 0,
 							sequence: ++noticeSequence
 						} ];
 						dirty = true;
@@ -2723,11 +2726,16 @@ state here before a command can claim a native wire conversation.
 				}
 				// 5B2630/5B6CA0: a COS bag that is not the transport's cannot
 				// trade at a shop at all and sends nothing; a trade good
-				// bought into one keeps the specialty line above.
+				// bought into one keeps the specialty line above. The print
+				// is dual: system type 0 and the centre banner (67A600
+				// @5B2772 + 67D030 @5B278D, the pair repeated at 5B6CA0
+				// @5B6F62/@5B6F7D; post-cut/2290-asm.md).
 				if ( cosShopTradeRefused( record.band ) ) {
 					notices = [ ...notices.slice( -99 ), {
 						key: "UIIT_MSG_COSPETERR_CANT_TRADE_SHOP",
 						value: 0,
+						nativeType: 0,
+						notificationBanner: true,
 						sequence: ++noticeSequence
 					} ];
 					dirty = true;
@@ -2749,7 +2757,9 @@ state here before a command can claim a native wire conversation.
 					entity.refObjId !== record.refObjId
 				) throw Error( "No owned COS container authority" );
 				// 567290/59B1D0: a specialty good moved into a non-transport
-				// COS prints the line and sends nothing.
+				// COS prints the line on system type 0 alone (push 0 ->
+				// 67A600 @56762F/@59B39B; no banner, post-cut/2290-asm.md)
+				// and sends nothing.
 				if ( command.toCos ) {
 					const source = command.source;
 					const item = inventory.state().inventory.find( row => row.slot === source );
@@ -2757,6 +2767,7 @@ state here before a command can claim a native wire conversation.
 						notices = [ ...notices.slice( -99 ), {
 							key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
 							value: 0,
+							nativeType: 0,
 							sequence: ++noticeSequence
 						} ];
 						dirty = true;
@@ -2794,13 +2805,15 @@ state here before a command can claim a native wire conversation.
 					entity.refObjId !== record.refObjId
 				) throw Error( "No owned COS container authority" );
 				// 6A8740: rearranging a specialty good inside a non-transport
-				// COS prints the line and sends nothing.
+				// COS prints the same system-type-0 line alone (push 0 ->
+				// 67A600 @6A87D2) and sends nothing.
 				const source = command.source;
 				const item = record.inventory?.find( row => row.slot === source );
 				if ( item && cosSpecialtyMoveRefused( item.typeFlags, record.band ) ) {
 					notices = [ ...notices.slice( -99 ), {
 						key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
 						value: 0,
+						nativeType: 0,
 						sequence: ++noticeSequence
 					} ];
 					dirty = true;

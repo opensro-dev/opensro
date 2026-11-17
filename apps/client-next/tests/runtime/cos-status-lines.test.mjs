@@ -7,7 +7,10 @@ cos-status-lines.test.mjs - the COS status lines' worker behaviour
 refusal for a non-transport COS bag, the HGP 30%-fall line on both
 satiety packets, and the free-battle cape warning on the equip move.
 Each refusal prints its key into the notice queue and sends nothing;
-the warning prints and the equip still sends.
+the warning prints and the equip still sends. Print channels are
+asserted on the raw notices (post-cut/2290-asm.md): the specialty
+refusal is a system-type-0 line alone, the merchant refusal adds the
+centre banner.
 
 ===========================================================================
 */
@@ -123,6 +126,7 @@ function world( { companions = [], bagItems = [] } = {} ) {
 const pet = ( band, extra = {} ) => ({ gid: 7, refObjId: 102, band, status: 4, ...extra });
 const cosEntity = { gid: 7, refObjId: 102, kind: "cos", ownerGid: 1 };
 const noticeKeys = game => (game.take()?.notices ?? []).map( notice => notice.key );
+const rawNotices = game => game.take()?.notices ?? [];
 
 test("a specialty good moved into a pickup pet prints the line and sends nothing", () => {
 	const { game, sent } = world( {
@@ -134,7 +138,12 @@ test("a specialty good moved into a pickup pet prints the line and sends nothing
 	} );
 	assert.equal( game.command( { kind: "cos-transfer", gid: 7, toCos: true, source: 20 }, 1, cosEntity ), null );
 	assert.equal( sent.length, 0 );
-	assert.deepEqual( noticeKeys( game ), [ SPECIALTY ] );
+	// ASM (post-cut/2290-asm.md): a system-type-0 line only (push 0 ->
+	// 67A600 @56762F); no 67D030 banner follows it in any handler.
+	const refused = rawNotices( game );
+	assert.deepEqual( refused.map( notice => notice.key ), [ SPECIALTY ] );
+	assert.equal( refused[ 0 ].nativeType, 0 );
+	assert.equal( refused[ 0 ].notificationBanner, undefined );
 	// An ordinary item crosses into the same pet without a word.
 	const frame = game.command( { kind: "cos-transfer", gid: 7, toCos: true, source: 21 }, 2, cosEntity );
 	assert.equal( frame.opcode, 0x706d );
@@ -163,7 +172,10 @@ test("rearranging a specialty good inside a non-transport bag is refused the sam
 		null
 	);
 	assert.equal( pickup.sent.length, 0 );
-	assert.deepEqual( noticeKeys( pickup.game ), [ SPECIALTY ] );
+	const refused = rawNotices( pickup.game );
+	assert.deepEqual( refused.map( notice => notice.key ), [ SPECIALTY ] );
+	assert.equal( refused[ 0 ].nativeType, 0 );
+	assert.equal( refused[ 0 ].notificationBanner, undefined );
 	const transport = world( { companions: [ pet( 2, { items: goods } ) ] } );
 	const frame = transport.game.command(
 		{ kind: "cos-inventory-move", gid: 7, source: 0, destination: 1, quantity: 5 },
@@ -233,7 +245,10 @@ test("buying a specialty good into a pickup pet prints the line and sends nothin
 	const before = sent.length;
 	assert.equal( game.command( { kind: "cos-shop-buy", gid: 7, tab: 0, slot: 0, quantity: 1 }, 5, cosEntity ), null );
 	assert.equal( sent.length, before );
-	assert.deepEqual( noticeKeys( game ), [ SPECIALTY ] );
+	const refused = rawNotices( game );
+	assert.deepEqual( refused.map( notice => notice.key ), [ SPECIALTY ] );
+	assert.equal( refused[ 0 ].nativeType, 0 );
+	assert.equal( refused[ 0 ].notificationBanner, undefined );
 });
 
 test("buying the same good into a transport sends the purchase", () => {
@@ -249,7 +264,13 @@ test("selling from a pickup pet at a shop prints the trade-shop line and sends n
 	const before = sent.length;
 	assert.equal( game.command( { kind: "cos-shop-sell", gid: 7, slot: 0, quantity: 1 }, 5, cosEntity ), null );
 	assert.equal( sent.length, before );
-	assert.deepEqual( noticeKeys( game ), [ TRADE_SHOP ] );
+	// ASM (post-cut/2290-asm.md): the merchant refusal prints twice over -
+	// system type 0 (push 0 -> 67A600 @5B2772) and the centre banner
+	// (67D030 @5B278D); 5B6CA0 repeats the pair for the transfer.
+	const refused = rawNotices( game );
+	assert.deepEqual( refused.map( notice => notice.key ), [ TRADE_SHOP ] );
+	assert.equal( refused[ 0 ].nativeType, 0 );
+	assert.equal( refused[ 0 ].notificationBanner, true );
 	// An ordinary purchase into the same pet is refused the same way;
 	// only the specialty good above keeps its own line.
 	assert.equal( game.command( { kind: "cos-shop-buy", gid: 7, tab: 0, slot: 1, quantity: 1 }, 6, cosEntity ), null );
