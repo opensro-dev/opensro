@@ -1,0 +1,4 @@
+# Build-context filter for admin.Dockerfile.
+*
+!deploy/admin
+**/*_test.go

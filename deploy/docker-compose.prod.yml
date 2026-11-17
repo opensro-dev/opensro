@@ -3,7 +3,9 @@
 # Replaces the upstream's Nomad jobs (deploy/docs/2026-11-16-docker-deploy-design.md):
 # compose supervises, `identity` plays Nomad's workload identity, and the
 # secrets Nomad kept in Variables live in the `cluster` volume. Only `web`
-# joins the external `traefik` network; nothing publishes a host port.
+# joins the external `traefik` network. The one host port is the admin
+# panel's, on the host's loopback only: staff reach it through an SSH tunnel
+# (deploy/docs/2026-11-17-admin-panel-design.md).
 #
 # Images come from IMAGE_REPO at IMAGE_TAG (release.env, written by
 # rollout.sh); settings from .env.prod. rollout.sh runs the one-shot jobs
@@ -13,6 +15,7 @@ name: silkroad
 
 x-server-image: &server-image ${IMAGE_REPO:?set IMAGE_REPO}:server-${IMAGE_TAG:?set IMAGE_TAG}
 x-identity-image: &identity-image ${IMAGE_REPO:?set IMAGE_REPO}:identity-${IMAGE_TAG:?set IMAGE_TAG}
+x-admin-image: &admin-image ${IMAGE_REPO:?set IMAGE_REPO}:admin-${IMAGE_TAG:?set IMAGE_TAG}
 
 x-catalog: &catalog ./config/shards.prod.json:/app/deploy-config/shards.prod.json:ro
 
@@ -20,7 +23,8 @@ services:
   # --- one-shot jobs ------------------------------------------------------------------------------
 
   # Creates what is missing and never replaces what exists: the Agent session key ring, the
-  # provisioning and public API tokens, and the shard authority on a first boot.
+  # provisioning and public API tokens, the shard authority on a first boot and its operator
+  # token. Copies the two tokens the admin panel uses into admin-secrets.
   provision:
     image: *server-image
     command: ["provision"]
@@ -31,6 +35,7 @@ services:
       - *catalog
       - cluster:/cluster
       - shard-global-official:/data/shard
+      - admin-secrets:/admin
     network_mode: none
     restart: "no"
     profiles: [jobs]
@@ -150,8 +155,42 @@ services:
       timeout: 5s
       retries: 30
       start_period: 60s
+    # The admin panel shares this namespace, so its port is published here: on the host's
+    # loopback only, never on the internet.
+    ports:
+      - "127.0.0.1:${ADMIN_PORT:-9090}:9090"
     # The GameWorld drains sessions and commits within its 30 s shutdown budget.
     stop_grace_period: 45s
+    restart: unless-stopped
+
+  # The admin panel (deploy/admin). In the GameWorld's network namespace: the player operations
+  # answer only a loopback peer. rollout.sh recreates it after every GameWorld start, since a
+  # recreated GameWorld leaves it in the old, empty namespace.
+  admin:
+    image: *admin-image
+    command: ["serve"]
+    environment:
+      ADMIN_OPERATOR_NAME: ${ADMIN_OPERATOR_NAME:-admin}
+      ADMIN_ACCOUNTS_URL: http://agent:9789
+    network_mode: service:gameworld-global-official
+    volumes:
+      - admin-secrets:/admin:ro
+    depends_on:
+      gameworld-global-official:
+        condition: service_healthy
+      admin-relay:
+        condition: service_started
+    restart: unless-stopped
+
+  # Forwards the panel's account routes to the Agent's loopback-only provisioning API, from the
+  # Agent's namespace (identity owns it); the provisioning token still rides every request.
+  admin-relay:
+    image: *admin-image
+    command: ["relay"]
+    network_mode: service:identity
+    depends_on:
+      identity:
+        condition: service_started
     restart: unless-stopped
 
   web:
@@ -192,3 +231,4 @@ volumes:
   identity-out:
   shard-global-official:
   gamedata-cache:
+  admin-secrets:

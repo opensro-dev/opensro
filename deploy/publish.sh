@@ -4,7 +4,7 @@
 #   deploy/publish.sh                  prints the pushed tag on stdout; everything else on stderr
 #
 # Settings (environment, then deploy/deploy.env):
-#   IMAGE_REPO   one repository for every image: <repo>:server-<tag>, identity-<tag>, web-<tag>.
+#   IMAGE_REPO   one repository for every image: <repo>:server-<tag>, identity-<tag>, web-<tag>, admin-<tag>.
 #                Must be private: the images carry data derived from the retail client.
 #                ghcr.io creates a new package private on its first push.
 #   PLATFORM     default linux/amd64,linux/arm64.
@@ -31,7 +31,7 @@ PLATFORM="${PLATFORM:-linux/amd64,linux/arm64}"
 # What the images build from: a change there makes a dirty tag.
 SOURCES=(
     apps/server/cmd apps/server/internal apps/server/config apps/server/go.mod apps/server/go.sum
-    apps/client-next pnpm-lock.yaml deploy/docker deploy/identity
+    apps/client-next pnpm-lock.yaml deploy/docker deploy/identity deploy/admin
 )
 if [ -z "${IMAGE_TAG:-}" ]; then
     IMAGE_TAG="$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD)"

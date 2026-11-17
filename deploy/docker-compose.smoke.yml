@@ -1,6 +1,11 @@
 # docker-compose.smoke.yml - deploy/test/smoke.sh's override: no Traefik,
-# the web edge on a loopback port, a network of its own.
+# the web edge and the admin panel on loopback ports of their own, a network
+# of its own.
 services:
+  gameworld-global-official:
+    ports: !override
+      - "127.0.0.1:${SMOKE_ADMIN_PORT:-19090}:9090"
+
   web:
     networks: !override
       default: {}

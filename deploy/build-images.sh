@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-images.sh - build the stack's three images: server, identity, web.
+# build-images.sh - build the stack's images: server, identity, web, admin.
 #
 #   deploy/build-images.sh                      load <repo>:<role>-<tag> into the local Docker
 #   deploy/build-images.sh --push               push them for PLATFORM (publish.sh)
@@ -31,7 +31,7 @@ fi
 echo "==> client build" >&2
 (cd "$REPO_ROOT" && pnpm --filter @sro/client-next build) >&2
 
-for role in server identity web; do
+for role in server identity web admin; do
     echo "==> $IMAGE_REPO:$role-$IMAGE_TAG" >&2
     contexts=()
     case "$role" in
