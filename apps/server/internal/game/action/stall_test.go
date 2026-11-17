@@ -471,18 +471,19 @@ func TestStallCreateStopsAWalkingHost(t *testing.T) {
 
 /*
 ================
-TestStallFullRefusalNamesTheMarketFullRow
+TestStallFullRefusalKeepsTheNativeSilentWord
 
-#2357: an offer added to a stall whose slots are all taken is refused
-with the client's market-full notice row (byte 0x18). The byte the port
-used before (0x30) names no row of the client's stall notice category,
-so the refusal printed nothing.
+#2415, reopening #2357: the native add handler counts the occupied
+slots and returns its full word when none is free. That word's low byte
+names no row of the client's stall notice category, so the refusal is
+natively silent; a row-bearing substitute would print a line the
+original never shows.
 ================
 */
-func TestStallFullRefusalNamesTheMarketFullRow(t *testing.T) {
+func TestStallFullRefusalKeepsTheNativeSilentWord(t *testing.T) {
 	rt, owner, _, _ := stallFixture(t)
-	if wire.StallErrStallFull != 0x18 {
-		t.Fatalf("stall-full refusal byte %#x, want 0x18 (the client's market-full row)", wire.StallErrStallFull)
+	if wire.StallErrStallFull != 0x30 {
+		t.Fatalf("stall-full refusal byte %#x, want 0x30 (the native word, for which the client prints nothing)", wire.StallErrStallFull)
 	}
 	rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
 	// Eleven offerable stacks: the fixture's slot 13 plus slots 21..30
@@ -510,8 +511,8 @@ func TestStallFullRefusalNamesTheMarketFullRow(t *testing.T) {
 	}
 	out := rt.HandleStallEdit(testDivision, owner, stallAddOfferAt(0, 30, 5, false))
 	p := out.Frames[0].Payload
-	if len(p) != 2 || p[0] != 2 || p[1] != 0x18 {
-		t.Fatalf("eleventh offer answered % X, want the market-full refusal [2 0x18]", p)
+	if len(p) != 2 || p[0] != 2 || p[1] != 0x30 {
+		t.Fatalf("eleventh offer answered % X, want the native silent stall-full refusal [2 0x30]", p)
 	}
 }
 

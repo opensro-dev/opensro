@@ -113,17 +113,15 @@ const (
 	StallErrBusy          uint8 = 0x16
 	StallErrClosedByHost  uint8 = 0x17
 	StallErrHostState     uint8 = 0x2B
-	// #2357: the refusal byte must name a row of the client's stall
-	// notice category; 0x18 is its market-full row. The byte used
-	// before (0x30) names no row, so the refusal printed nothing.
-	// The v1.188 server binary's exact word for this refusal was not
-	// proven, so the byte is the recorded inference: the only row
-	// whose line means the stall is full.
-	StallErrStallFull    uint8 = 0x18
+	// The native add handler counts the occupied slots and returns
+	// this word when none is free. It names no row of the client's
+	// stall notice category, so the refusal prints nothing: the
+	// silence is native, and a row-bearing byte would add a chat
+	// line the original never shows (#2415, reopening #2357).
+	StallErrStallFull    uint8 = 0x30
 	StallErrRideState    uint8 = 0x34
 	StallErrMurderer     uint8 = 0x39
 	StallErrJob          uint8 = 0x3B
-	StallErrNoCategory   uint8 = 0x42
 	StallErrNetworkTown  uint8 = 0x49
 	StallErrRegisterTown uint8 = 0x4A
 	StallErrNetworkStale uint8 = 0x4F
