@@ -11,7 +11,7 @@ level does, from the 1.188-era game data (hwanleveldata, _RefHWANLevel):
 	      doubling in movementeffect.go already is it
 	DABR  while Berserk, 10 + 5 x (level - 1) percent of all incoming damage is
 	      absorbed (the four incoming-damage keepers 0xAE..0xB1)
-	0x3FC0 the level, told to its owner (below)
+	0x3FCB the level, told to its owner (below)
 
 and what the Energy of Life scrolls (ITEM_ETC_SECOND_HWAN_SCROLL_01..04) do:
 
@@ -27,7 +27,7 @@ and what the Energy of Life scrolls (ITEM_ETC_SECOND_HWAN_SCROLL_01..04) do:
     one's rows are on the bar, because the client keeps a single extension value
   - a Berserk that starts adds the thp seconds to its 60
 
-0x3FC0 is a port-only opcode: no v1.150 client or v1.188 server uses it. Body,
+0x3FCB is a port-only opcode: no v1.150 client or v1.188 server uses it. Body,
 little-endian: u32 object id, u8 level. The server tells the owner at world
 entry and whenever the level rises.
 
@@ -45,7 +45,7 @@ import (
 
 const (
 	// OpHwanLevel is the port-only S->C Blue Berserk level (above).
-	OpHwanLevel uint16 = 0x3FC0
+	OpHwanLevel uint16 = 0x3FCB
 	// hwanRequirementType is the itemdata requirement type that names the Blue
 	// Berserk level (columns 34 and 35 of a scroll's row).
 	hwanRequirementType = 769
@@ -347,7 +347,7 @@ const hwanRosterPushIntervalMs = 2000
 ================
 HwanRosterFrames
 
-Port-only, not native: every online character's Blue Berserk level as 0x3FC0
+Port-only, not native: every online character's Blue Berserk level as 0x3FCB
 frames for the whole division, so other players see the blue body and the
 title, not only the owner. Recomputed at the push pace; a level that fell back
 to 0 is sent once as 0 so the clients drop it. Nil off the pace, and nil when

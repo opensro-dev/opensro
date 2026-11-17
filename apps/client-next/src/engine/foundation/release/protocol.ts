@@ -18,7 +18,7 @@ checks) reads the same numbers the client ships.
 ===========================================================================
 */
 
-// Protocol 18 adds the port-only 0x3FC0 Blue Berserk level (cap-110 content,
+// Protocol 18 adds the port-only 0x3FCB Blue Berserk level (cap-110 content,
 // hwan-level.ts), which 17 would drop as an unknown frame.
 // Protocol 17 filters the seasonal decoration by its world layer (a region
 // bundle placement's `layer`, world-layers.ts), which 16 ignored and drew

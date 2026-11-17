@@ -72,7 +72,7 @@ func TestHwanLevelOpcodeIsNotAnotherPortFrames(t *testing.T) {
 
 func TestHwanLevelFrameCarriesTheObjectAndTheLevel(t *testing.T) {
 	frame := HwanLevelFrame(0x01020304, 4)
-	if frame.Opcode != 0x3FC0 || string(frame.Payload) != string([]byte{4, 3, 2, 1, 4}) {
+	if frame.Opcode != 0x3FCB || string(frame.Payload) != string([]byte{4, 3, 2, 1, 4}) {
 		t.Fatalf("frame = %#x % X", frame.Opcode, frame.Payload)
 	}
 	c := testCharacter()
@@ -81,7 +81,7 @@ func TestHwanLevelFrameCarriesTheObjectAndTheLevel(t *testing.T) {
 		t.Fatal("level 0 sent frames")
 	}
 	rt.HwanLevel = func(*enterworld.Character) uint8 { return 2 }
-	if got := rt.HwanEntryFrames(c); len(got) != 1 || got[0].Opcode != 0x3FC0 {
+	if got := rt.HwanEntryFrames(c); len(got) != 1 || got[0].Opcode != 0x3FCB {
 		t.Fatalf("entry frames %+v", got)
 	}
 	notice := HwanTitleNotice(c, 2)

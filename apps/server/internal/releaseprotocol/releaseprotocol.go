@@ -55,7 +55,7 @@ type Contracts struct {
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	// Protocol 18 adds the port-only 0x3FC0 Blue Berserk level (cap-110), so a
+	// Protocol 18 adds the port-only 0x3FCB Blue Berserk level (cap-110), so a
 	// client that reads it is the one served. Protocol 17 adds survival checkpoint rewards and tags the seasonal
 	// decoration's placements with their world layer (see WorldContract
 	// 1). Protocol 16 grows a pet chat link to name its pet (see

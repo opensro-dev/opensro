@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-hwan-level.test.mjs - the Blue Berserk level frame (port-only 0x3FC0)
+hwan-level.test.mjs - the Blue Berserk level frame (port-only 0x3FCB)
 
 The worker decodes the frame whole or not at all, keeps the latest level per
 object, and drops an object told level 0.
@@ -22,8 +22,8 @@ function levelFrame( gid, level ) {
 	return { opcode: OP_HWAN_LEVEL, payload };
 }
 
-test("the level frame is 0x3FC0, five bytes: object id then level", () => {
-	assert.equal( OP_HWAN_LEVEL, 0x3fc0 );
+test("the level frame is 0x3FCB, five bytes: object id then level", () => {
+	assert.equal( OP_HWAN_LEVEL, 0x3fcb );
 	const owner = createHwanLevel();
 	assert.equal( owner.receive( { opcode: 0x3fba, payload: new Uint8Array( 5 ) } ), false );
 	assert.equal( owner.receive( levelFrame( 0x01020304, 3 ) ), true );

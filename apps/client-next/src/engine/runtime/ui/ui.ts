@@ -22692,7 +22692,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						}
 					}
 					// Port-only Blue Berserk title (not native): bold gold, just before the
-					// character's name, for every player the server's level roster named (0x3FC0).
+					// character's name, for every player the server's level roster named (0x3FCB).
 					const titleText = entity.kind === "local-player" || entity.kind === "player" ?
 						hudCopy( hwanTitleKey( game?.hwanLevels?.[entity.gid], entity.countryByte9c ) ) :
 						"";

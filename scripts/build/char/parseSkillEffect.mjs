@@ -275,7 +275,7 @@ export function parseSkillAniSet( skillEffectPath ) {
 			// skillaniset2 rows with Service == 0 while their skilleffectset rows
 			// are already present. Admit them only when SRO_QINSHI_TOMB is on.
 			// Port-only, not native: the 2nd Hwan body record (hit_4_hwan2mode.efp) also has
-			// Service == 0. Only a Blue Berserk owner (level frame 0x3FC0, cap-110 server)
+			// Service == 0. Only a Blue Berserk owner (level frame 0x3FCB, cap-110 server)
 			// selects it, so shipping the record changes nothing for a native shard.
 			if (
 				baseName !== HWAN2_MODE_EFFECT &&
