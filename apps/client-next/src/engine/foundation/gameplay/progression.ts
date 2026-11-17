@@ -12,6 +12,13 @@ it. Experience deltas (0x30D2) belong to the level owner, not here.
 */
 import { playerStats, type PlayerStats } from "./player-stats";
 import type { SystemNotice } from "./system-notices";
+import {
+	ALLOC_INT_RESPONSE_OPCODE,
+	ALLOC_STR_RESPONSE_OPCODE,
+	BASE_STATS_OPCODE,
+	MASTERY_LEVEL_UP_RESPONSE_OPCODE,
+	POINTS_UPDATE_OPCODE
+} from "@/engine/contracts/opcodes";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 /*
@@ -40,10 +47,10 @@ The next plane for a progression frame, or null when the frame is not one.
 ================
 */
 export function progressionPacket( state: Progression, opcode: number, p: Uint8Array ): Progression | null {
-	if ( opcode === 0x343c ) return { ...state, stats: playerStats( p ) };
+	if ( opcode === BASE_STATS_OPCODE ) return { ...state, stats: playerStats( p ) };
 	// 75BA00/75BA50: only the success acknowledgement spends the point;
 	// the subsequent 343C owns derived stats and leaves current HP/MP alone.
-	if ( opcode === 0xb27a || opcode === 0xb552 ) {
+	if ( opcode === ALLOC_STR_RESPONSE_OPCODE || opcode === ALLOC_INT_RESPONSE_OPCODE ) {
 		if ( p[0] === 1 && p.length === 1 ) {
 			if ( state.statPoints === undefined || state.statPoints === 0 ) {
 				throw Error( "Stat acknowledgement without available point" );
@@ -54,7 +61,7 @@ export function progressionPacket( state: Progression, opcode: number, p: Uint8A
 		throw Error( "Invalid stat allocation acknowledgement" );
 	}
 	const v = viewOf( p );
-	if ( opcode === 0x30b3 ) {
+	if ( opcode === POINTS_UPDATE_OPCODE ) {
 		// Type 1: [u8 1][u64 balance][u8 notify]; the notice is the caller's.
 		if ( p[0] === 1 ) {
 			if ( p.length !== 10 ) throw new Error( "Invalid gold update" );
@@ -70,7 +77,7 @@ export function progressionPacket( state: Progression, opcode: number, p: Uint8A
 		}
 		return null;
 	}
-	if ( opcode === 0xb165 ) {
+	if ( opcode === MASTERY_LEVEL_UP_RESPONSE_OPCODE ) {
 		if ( p[0] === 2 && p.length === 2 ) return { ...state, error: undefined };
 		if ( p[0] !== 1 || p.length !== 6 ) throw new Error( "Invalid mastery response" );
 		const id = v.getUint32( 1, true );

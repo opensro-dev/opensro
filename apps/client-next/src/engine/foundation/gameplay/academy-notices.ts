@@ -15,6 +15,7 @@ import type { WireFrame } from "@/engine/contracts/network";
 import type { AcademyState } from "./academy";
 import { constantNativeNotice } from "./native-notice";
 import type { SystemNotice } from "./system-notices";
+import { MENTOR_JOIN_ACK_OPCODE, TC_DISBAND_ANSWER_OPCODE } from "@/engine/contracts/opcodes";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // 76FC90 reads one extra u32 when 0xB7C5 fails with error 0x1D.
@@ -32,7 +33,7 @@ export function academyAcknowledgment( frame: WireFrame ): { readonly notice: Sy
 	if ( ![ 0xb4d4, 0xb785, 0xb10a, 0xb36d, 0xb220, 0xb7c5 ].includes( frame.opcode ) ) return null;
 	const p = frame.payload;
 	const expected = p[0] === 2 ?
-		(frame.opcode === 0xb7c5 && p[1] === ACADEMY_DISBAND_WAIT_CODE ? 6 : 2) :
+		(frame.opcode === TC_DISBAND_ANSWER_OPCODE && p[1] === ACADEMY_DISBAND_WAIT_CODE ? 6 : 2) :
 		1;
 	if ( !p.length || p.length !== expected ) throw Error( "Invalid academy acknowledgment" );
 	if ( p[0] === 2 ) return { notice: constantNativeNotice( 0x1d, p[1]! ) };
@@ -68,7 +69,7 @@ export function academyStatusNotice(
 	// alone, so no arguments); detail 0 prints the cancel line and
 	// detail 2 the no-reply line, both system chat type 4 (67A600).
 	// An outer-2 refusal goes through category 0x1D in gameplay.
-	if ( frame.opcode === 0xb592 ) {
+	if ( frame.opcode === MENTOR_JOIN_ACK_OPCODE ) {
 		if ( p[0] !== 1 || p.length !== 2 ) return null;
 		if ( p[1] === 1 ) return { key: "UIIT_STT_TC_MACHING_COMPLETE", value: 0, banner: true, bannerOnly: true };
 		if ( p[1] === 0 ) return { key: "UIIT_MSG_TC_JOIN_CANCEL", value: 0, nativeType: 4 };

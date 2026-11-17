@@ -16,6 +16,17 @@ board's slots 7 and 8, and the slot-7 pass confirm sends 0x700C.
 */
 import { encodeWindows1252 } from "./windows1252";
 import type { WireFrame } from "@/engine/contracts/network";
+import {
+	MENTOR_JOIN_ACK_OPCODE,
+	MENTOR_LISTING_PAGE_OPCODE,
+	TC_COMPULSORY_GRADUATE_REQUEST_OPCODE,
+	TC_DISBAND_REQUEST_OPCODE,
+	TC_GRADUATE_REQUEST_OPCODE,
+	TC_HONOR_RANK_ANSWER_OPCODE,
+	TC_HONOR_RANK_REQUEST_OPCODE,
+	TC_KICK_REQUEST_OPCODE,
+	TC_LEAVE_REQUEST_OPCODE
+} from "@/engine/contracts/opcodes";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // ACADEMY_OPEN_FEE is the gold an opening costs: UIIT_MSG_TC_TRAININGCAMP_OPEN
@@ -400,7 +411,7 @@ export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 
 		if ( members.length > 8 ) throw Error( "Academy roster exceeds native capacity" );
 		return { ...state, members };
 	}
-	if ( frame.opcode === 0xb701 ) {
+	if ( frame.opcode === MENTOR_LISTING_PAGE_OPCODE ) {
 		const flag = u( 1 );
 		if ( flag !== 1 ) {
 			const result = u( 1 );
@@ -437,13 +448,13 @@ export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 
 			result: null
 		};
 	}
-	if ( frame.opcode === 0xb592 ) {
+	if ( frame.opcode === MENTOR_JOIN_ACK_OPCODE ) {
 		const flag = u( 1 ), result = u( 1 );
 		if ( (flag !== 1 && flag !== 2) || at !== p.length ) throw Error( "Invalid academy join result" );
 		return { ...state, request: state.request?.kind === "join" ? null : state.request, result };
 	}
 	// 771750: [1] and up to 50 honor-rank rows; [2] and one category-0x1D error byte.
-	if ( frame.opcode === 0xb2d0 ) {
+	if ( frame.opcode === TC_HONOR_RANK_ANSWER_OPCODE ) {
 		const result = u( 1 );
 		if ( result === 2 ) {
 			u( 1 );
@@ -596,7 +607,7 @@ academyHonorRankRequest
 export function academyHonorRankRequest( gid: number ): WireFrame {
 	const payload = new Uint8Array( 4 );
 	new DataView( payload.buffer ).setUint32( 0, gid >>> 0, true );
-	return { opcode: 0x72d0, payload };
+	return { opcode: TC_HONOR_RANK_REQUEST_OPCODE, payload };
 }
 
 /*
@@ -607,7 +618,7 @@ academyDisbandRequest
 ================
 */
 export function academyDisbandRequest(): WireFrame {
-	return { opcode: 0x77c5, payload: new Uint8Array( 0 ) };
+	return { opcode: TC_DISBAND_REQUEST_OPCODE, payload: new Uint8Array( 0 ) };
 }
 
 /*
@@ -618,7 +629,7 @@ academyLeaveRequest
 ================
 */
 export function academyLeaveRequest(): WireFrame {
-	return { opcode: 0x7785, payload: new Uint8Array( 0 ) };
+	return { opcode: TC_LEAVE_REQUEST_OPCODE, payload: new Uint8Array( 0 ) };
 }
 
 /*
@@ -632,7 +643,7 @@ export function academyGraduateRequest( satisfaction: number ): WireFrame {
 	if ( !Number.isInteger( satisfaction ) || satisfaction < 0 || satisfaction > 4 ) {
 		throw Error( "Invalid academy graduate satisfaction" );
 	}
-	return { opcode: 0x710a, payload: Uint8Array.of( satisfaction ) };
+	return { opcode: TC_GRADUATE_REQUEST_OPCODE, payload: Uint8Array.of( satisfaction ) };
 }
 
 /*
@@ -661,7 +672,7 @@ academyKickRequest
 ================
 */
 export function academyKickRequest( name: string ): WireFrame {
-	return { opcode: 0x74d4, payload: encodeAcademyMemberName( name ) };
+	return { opcode: TC_KICK_REQUEST_OPCODE, payload: encodeAcademyMemberName( name ) };
 }
 
 /*
@@ -672,7 +683,7 @@ academyCompulsoryGraduateRequest
 ================
 */
 export function academyCompulsoryGraduateRequest( name: string ): WireFrame {
-	return { opcode: 0x736d, payload: encodeAcademyMemberName( name ) };
+	return { opcode: TC_COMPULSORY_GRADUATE_REQUEST_OPCODE, payload: encodeAcademyMemberName( name ) };
 }
 
 /*

@@ -42,6 +42,31 @@ import type { Degradation, WireFrame } from "@/engine/contracts/network";
 import { SYSTEM_PET_APPEAR } from "@/engine/contracts/orb";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 import { JOB_SUIT_SLOT, partyActiveJob } from "@/engine/foundation/gameplay/party-matching";
+import {
+	COS_INFO_UPDATE_OPCODE,
+	COS_RIDE_STATE_OPCODE,
+	GROUND_OWNERSHIP_EXPIRED_OPCODE,
+	JOB_DRESS_BAR_OPCODE,
+	JOB_DRESS_CANCEL_OPCODE,
+	MOVEMENT_ACK_OPCODE,
+	MOVEMENT_SPEED_OPCODE,
+	OBJECT_DESPAWN_OPCODE,
+	OBJECT_LIST_CHUNK_OPCODE,
+	OBJECT_LIST_FINALIZE_OPCODE,
+	OBJECT_LIST_START_OPCODE,
+	OBJECT_SOURCE_CORRECTION_OPCODE,
+	OBJECT_SOURCE_MOVE_OPCODE,
+	OBJECT_STATE_REFRESH_OPCODE,
+	OBJECT_STEER_OPCODE,
+	PICKUP_ANIM_OPCODE,
+	RESET_CLIENT_OPCODE,
+	SERVER_CLOCK_GID_LATCH_OPCODE,
+	SINGLE_OBJECT_SPAWN_OPCODE,
+	STALL_CLOSED_OPCODE,
+	STALL_OPENED_OPCODE,
+	STALL_RENAMED_OPCODE,
+	VISUAL_FLAGS_UPDATE_OPCODE
+} from "@/engine/contracts/opcodes";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
 // The kinds whose spawn builds a CICharactor (players, NPCs, monsters, COS,
 // fortress structures); ground items and skill objects are not characters.
@@ -634,7 +659,7 @@ export function createEntities(
 		if ( refObjId === DYNAMIC_OBJECT_REFERENCE ) {
 			if ( p.length < 6 ) throw Error( "Truncated dynamic object discriminator" );
 			if ( v.getUint16( 4, true ) !== SKILL_OBJECT_TYPE ) return raw( frame );
-			return { kind: "spawn", entity: decodeSkillObject( p, frame.opcode === 0x30d7 ) };
+			return { kind: "spawn", entity: decodeSkillObject( p, frame.opcode === SINGLE_OBJECT_SPAWN_OPCODE ) };
 		}
 		if ( ref?.kind === "teleport" ) {
 			if ( p.length !== 24 || !ref.teleport ) throw Error( "Invalid teleport gate spawn" );
@@ -646,13 +671,24 @@ export function createEntities(
 		if ( itemType !== undefined && !(itemType & 2) && (itemType & 0x1c) === 0xc ) {
 			return {
 				kind: "spawn",
-				entity: decodeGroundItem( p, itemType, frame.opcode === 0x30d7, itemNames.get( refObjId ) ?? "" )
+				entity: decodeGroundItem(
+					p,
+					itemType,
+					frame.opcode === SINGLE_OBJECT_SPAWN_OPCODE,
+					itemNames.get( refObjId ) ?? ""
+				)
 			};
 		}
 		// Other native families stay in the reliable journal until their exact
 		// variable spawn schemas are implemented. Never guess offsets.
 		if ( ref?.kind === "player" ) {
-			const appearance = decodePeerAppearance( p, itemRefs, frame.opcode === 0x30d7, refs, skillRefs );
+			const appearance = decodePeerAppearance(
+				p,
+				itemRefs,
+				frame.opcode === SINGLE_OBJECT_SPAWN_OPCODE,
+				refs,
+				skillRefs
+			);
 			// 86AFB0 classifies the spawn's slot-8 suit (868D00); a later 0x3314
 			// leaves the class until the next spawn row, as natively.
 			return {
@@ -663,7 +699,13 @@ export function createEntities(
 		if ( !ref || ![ "npc", "monster", "cos", "structure" ].includes( ref.kind ) ) {
 			return raw( frame );
 		}
-		const entity = decodeCharacterSpawn( p, ref.kind, ref.tidWord, frame.opcode === 0x30d7, skillRefs );
+		const entity = decodeCharacterSpawn(
+			p,
+			ref.kind,
+			ref.tidWord,
+			frame.opcode === SINGLE_OBJECT_SPAWN_OPCODE,
+			skillRefs
+		);
 		return { kind: "spawn", entity: { ...ref, ...entity, name: entity.name || ref.name || "" } };
 	}
 	/*
@@ -1171,7 +1213,10 @@ export function createEntities(
 				}
 				return;
 			}
-			if ( frame.opcode === 0x30df || frame.opcode === 0x34b7 || frame.opcode === 0x33d1 ) {
+			if (
+				frame.opcode === STALL_OPENED_OPCODE || frame.opcode === STALL_RENAMED_OPCODE ||
+				frame.opcode === STALL_CLOSED_OPCODE
+			) {
 				// 751430 opens a stall (title mode 4, its title and decoration),
 				// 751520 renames it, 74F8F0 takes it down (CICharactor_SetStallState).
 				const entity = entities.get( v.getUint32( 0, true ) );
@@ -1179,7 +1224,7 @@ export function createEntities(
 				// The local latch has no peer appearance row (localAppearanceRow),
 				// so the owner's booth reaches presentation too.
 				const appearanceState = [ ...(entity.appearanceState ?? localAppearanceRow( entity.pvpState ?? 0 )) ];
-				if ( frame.opcode === 0x33d1 ) {
+				if ( frame.opcode === STALL_CLOSED_OPCODE ) {
 					appearanceState[STALL_TITLE_SLOT] = 0;
 					apply( {
 						kind: "state",
@@ -1195,7 +1240,7 @@ export function createEntities(
 				const n = v.getUint16( 4, true );
 				if ( 6 + n * 2 > p.length ) throw Error( "Invalid stall title" );
 				const titleText = new TextDecoder( "utf-16le" ).decode( p.subarray( 6, 6 + n * 2 ) );
-				const titleId = frame.opcode === 0x30df ? v.getUint32( 6 + n * 2, true ) : entity.titleId;
+				const titleId = frame.opcode === STALL_OPENED_OPCODE ? v.getUint32( 6 + n * 2, true ) : entity.titleId;
 				appearanceState[STALL_TITLE_SLOT] = STALL_TITLE_MODE;
 				apply( {
 					kind: "state",
@@ -1203,7 +1248,7 @@ export function createEntities(
 				} );
 				return;
 			}
-			if ( frame.opcode === 0x31e2 ) {
+			if ( frame.opcode === GROUND_OWNERSHIP_EXPIRED_OPCODE ) {
 				// 777af0 clears CIItem owner flag/JID, preserving the item itself.
 				if ( p.length !== 4 ) throw new Error( "Invalid ground ownership expiry" );
 				const entity = entities.get( v.getUint32( 0, true ) );
@@ -1222,7 +1267,7 @@ export function createEntities(
 				if ( entity ) apply( { kind: "state", entity: { ...entity, name: named.name } } );
 				return;
 			}
-			if ( frame.opcode === 0x3508 && p[4] === 7 ) {
+			if ( frame.opcode === COS_INFO_UPDATE_OPCODE && p[4] === 7 ) {
 				// 77A570 case 7 calls the entity's reference setter: the pet's
 				// next form replaces its model for every viewer.
 				if ( p.length !== 9 ) throw Error( "Invalid COS reference change" );
@@ -1246,11 +1291,11 @@ export function createEntities(
 				if ( entity ) apply( { kind: "state", entity: { ...entity, transformSkin: skin } } );
 				return;
 			}
-			if ( frame.opcode === 0x3434 || frame.opcode === 0x3514 ) {
+			if ( frame.opcode === JOB_DRESS_BAR_OPCODE || frame.opcode === JOB_DRESS_CANCEL_OPCODE ) {
 				// 75D130 starts a kind-2 action bar ([u32 gid][2][1|2][u8 seconds]);
 				// 75D1E0 clears it ([u32 gid], the strip cancel).
 				const entity = entities.get( v.getUint32( 0, true ) );
-				if ( frame.opcode === 0x3434 ) {
+				if ( frame.opcode === JOB_DRESS_BAR_OPCODE ) {
 					if ( p.length !== 7 || p[4] !== 2 ) return;
 					if ( entity ) {
 						apply( {
@@ -1280,12 +1325,13 @@ export function createEntities(
 				}
 				return;
 			}
-			if ( frame.opcode === 0xb683 || frame.opcode === 0x35c7 ) {
+			if ( frame.opcode === VISUAL_FLAGS_UPDATE_OPCODE || frame.opcode === PICKUP_ANIM_OPCODE ) {
 				if ( p.length !== 5 ) throw new Error( "Invalid visual/motion packet" );
 				const entity = entities.get( v.getUint32( 0, true ) );
 				if ( !entity ) return;
-				if ( frame.opcode === 0xb683 ) apply( { kind: "state", entity: { ...entity, visualFlags: p[4]! } } );
-				else if ( !entity.mountedOn ) {
+				if ( frame.opcode === VISUAL_FLAGS_UPDATE_OPCODE ) {
+					apply( { kind: "state", entity: { ...entity, visualFlags: p[4]! } } );
+				} else if ( !entity.mountedOn ) {
 					apply( {
 						kind: "state",
 						entity: { ...entity, heading: p[4]! * 257, pickupRevision: (entity.pickupRevision ?? 0) + 1 }
@@ -1331,7 +1377,7 @@ export function createEntities(
 				} );
 				return;
 			}
-			if ( frame.opcode === 0xb4b5 ) {
+			if ( frame.opcode === COS_RIDE_STATE_OPCODE ) {
 				// 777F60 routes refusals to notification category 14 without
 				// changing either actor. Gameplay owns that notification.
 				if ( p.length === 2 && p[0] === 2 ) return;
@@ -1351,7 +1397,7 @@ export function createEntities(
 				apply( { kind: "state", entity: { ...rider, mountedOn: p[5] === 1 ? mount : undefined } } );
 				return;
 			}
-			if ( frame.opcode === 0x3369 || frame.opcode === 0x366a ) {
+			if ( frame.opcode === RESET_CLIENT_OPCODE || frame.opcode === 0x366a ) {
 				if ( p.length !== 2 ) throw Error( "Invalid reset region packet" );
 				entities.clear();
 				motion.clear();
@@ -1362,7 +1408,7 @@ export function createEntities(
 				append( { kind: "reset", epoch: ++epoch } );
 				return;
 			}
-			if ( frame.opcode === 0x32a6 ) {
+			if ( frame.opcode === SERVER_CLOCK_GID_LATCH_OPCODE ) {
 				if ( p.length !== 8 || !local || v.getUint32( 0, true ) === 0 ) {
 					throw new Error( "Invalid local entity latch" );
 				}
@@ -1407,7 +1453,7 @@ export function createEntities(
 				} );
 				return;
 			}
-			if ( frame.opcode === 0x30cb ) {
+			if ( frame.opcode === OBJECT_LIST_START_OPCODE ) {
 				if ( staged || p.length !== 3 || (p[0] !== 1 && p[0] !== 2) ) {
 					throw new Error( "Invalid object-list start" );
 				}
@@ -1421,7 +1467,7 @@ export function createEntities(
 				removalTail = new Uint8Array( 0 );
 				return;
 			}
-			if ( frame.opcode === 0x3417 ) {
+			if ( frame.opcode === OBJECT_LIST_CHUNK_OPCODE ) {
 				// Native 0x777370 mode 2 consumes count calls to 0x777310:
 				// four-byte identities, buffered across arbitrary chunks.
 				// The server emits this bracket when a region ring is evicted.
@@ -1492,7 +1538,7 @@ export function createEntities(
 				remaining--;
 				return;
 			}
-			if ( frame.opcode === 0x330a ) {
+			if ( frame.opcode === OBJECT_LIST_FINALIZE_OPCODE ) {
 				if ( !staged || remaining || p.length ) {
 					throw new Error( "Incomplete object list" );
 				}
@@ -1522,7 +1568,7 @@ export function createEntities(
 				append( { kind: "synchronized", epoch } );
 				return;
 			}
-			if ( frame.opcode === 0x30d7 ) {
+			if ( frame.opcode === SINGLE_OBJECT_SPAWN_OPCODE ) {
 				let event = spawn( frame );
 				if ( event.kind === "spawn" && event.entity.groundItem && followsDeath ) {
 					event = {
@@ -1556,7 +1602,7 @@ export function createEntities(
 				}
 				return;
 			}
-			if ( frame.opcode === 0x36ab ) {
+			if ( frame.opcode === OBJECT_DESPAWN_OPCODE ) {
 				if ( p.length !== 4 ) {
 					throw new Error( "Invalid despawn" );
 				}
@@ -1580,7 +1626,7 @@ export function createEntities(
 				apply( { kind: "state", entity: next } );
 				return;
 			}
-			if ( frame.opcode === 0x3122 ) {
+			if ( frame.opcode === OBJECT_STATE_REFRESH_OPCODE ) {
 				if ( p.length !== 6 ) {
 					throw new Error( "Invalid entity state channel" );
 				}
@@ -1654,7 +1700,7 @@ export function createEntities(
 				}
 				return;
 			}
-			if ( frame.opcode === 0x376f ) {
+			if ( frame.opcode === MOVEMENT_SPEED_OPCODE ) {
 				const channels = decodeMovementSpeeds( p ), source = entities.get( channels.gid );
 				// CPSMission_OnEntitySpeedUpdate0x376F (0x775E40) consumes server speeds;
 				// CCharactor_GetActiveMoverEntity (0x85E000) resolves the riding actor.
@@ -1668,7 +1714,7 @@ export function createEntities(
 				}
 				return;
 			}
-			if ( frame.opcode === 0xb738 ) {
+			if ( frame.opcode === MOVEMENT_ACK_OPCODE ) {
 				if ( p.length < 4 ) {
 					throw new Error( "Truncated movement broadcast" );
 				}
@@ -1691,7 +1737,7 @@ export function createEntities(
 			}
 			// 0xB2CF [u32 gid][u16 heading] (0x775A90): another mover's steer.
 			// The client ignores its own gid; its walk already turned.
-			if ( frame.opcode === 0xb2cf ) {
+			if ( frame.opcode === OBJECT_STEER_OPCODE ) {
 				if ( p.length !== 6 ) throw new Error( "Invalid entity steer" );
 				const source = entities.get( v.getUint32( 0, true ) );
 				if ( !source || source.kind === "local-player" || source.appearanceState?.[0] === 2 ) return;
@@ -1711,26 +1757,27 @@ export function createEntities(
 				}
 				return;
 			}
-			if ( frame.opcode === 0x30e3 || frame.opcode === 0xb2f5 ) {
+			if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ) {
 				if ( p.length !== 20 ) {
 					throw new Error( "Invalid entity position" );
 				}
-				const gid = v.getUint32( frame.opcode === 0x30e3 ? 16 : 0, true ), source = entities.get( gid );
+				const gid = v.getUint32( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ? 16 : 0, true ),
+					source = entities.get( gid );
 				// A rider's position belongs to its active mover, the mount (0x85E000).
 				const entity = source?.mountedOn ? entities.get( source.mountedOn ) ?? source : source;
 				// Source movement is advisory travel; LIFE-dead retires it.
-				if ( frame.opcode === 0x30e3 && entity?.appearanceState?.[0] === 2 ) return;
+				if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE && entity?.appearanceState?.[0] === 2 ) return;
 				// 775B50 (0x775C1A): once the mover is resolved (85E000), a
 				// monster or COS mover whose life state (+0x263) is 2 (dead)
 				// ignores its B2F5 - no halt, no reseed. Players are not
 				// checked: a dead player's B2F5 remains admissible, as
 				// present rebirth corrects before LIFE-alive.
 				if (
-					frame.opcode === 0xb2f5 && entity?.appearanceState?.[0] === 2 &&
+					frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE && entity?.appearanceState?.[0] === 2 &&
 					(entity.kind === "monster" || entity.kind === "cos")
 				) return;
 				if ( entity ) {
-					const corrected = position( v, frame.opcode === 0x30e3 ? 0 : 4 );
+					const corrected = position( v, frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ? 0 : 4 );
 					// The local mover has one navigation owner in gameplay. Its
 					// entity row does not follow B738 or prediction; projecting a
 					// correction from that stale row can replace the arena floor
@@ -1742,9 +1789,11 @@ export function createEntities(
 					// exempt above: its entity-motion arbitration never walked
 					// the rider's surface, so it re-seats the wire height at the
 					// terrain below a deck the rider stands on (#2574).
-					const localMount = frame.opcode === 0xb2f5 && !localMover &&
+					const localMount = frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE && !localMover &&
 						entities.get( ownGid )?.mountedOn === entity.gid;
-					if ( (localMover || localMount) && frame.opcode === 0xb2f5 ) motion.remove( entity.gid );
+					if ( (localMover || localMount) && frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ) {
+						motion.remove( entity.gid );
+					}
 					apply( {
 						kind: "state",
 						entity: Object.freeze( {
@@ -1753,9 +1802,11 @@ export function createEntities(
 							...((localMover || localMount) ?
 								{
 									...corrected,
-									...(frame.opcode === 0xb2f5 ? { moving: false, movementPath: undefined } : {})
+									...(frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ?
+										{ moving: false, movementPath: undefined } :
+										{})
 								} :
-								frame.opcode === 0x30e3 ?
+								frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ?
 								motion.source( entity, { ...corrected, angle: corrected.heading }, now ) :
 								motion.correct( entity, { ...corrected, angle: corrected.heading } ))
 						} )

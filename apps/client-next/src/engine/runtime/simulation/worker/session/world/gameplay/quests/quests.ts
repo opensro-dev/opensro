@@ -19,6 +19,11 @@ import {
 } from "@/engine/foundation/gameplay/quest";
 import type { QuestRecord, QuestMarker, QuestProgressEvent, QuestGathering } from "@/engine/contracts/gameplay";
 import type { WireFrame } from "@/engine/contracts/network";
+import {
+	QUEST_GATHER_CANCEL_OPCODE,
+	QUEST_GATHER_CANCEL_REPLY_OPCODE,
+	QUEST_GATHER_START_OPCODE
+} from "@/engine/contracts/opcodes";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 const MAX_QUESTS = 256;
@@ -122,7 +127,7 @@ export function createQuests( send: ( frame: WireFrame ) => void ) {
 			if ( !gathering ) return;
 			const payload = new Uint8Array( 4 );
 			new DataView( payload.buffer ).setUint32( 0, gathering.refId, true );
-			send( { opcode: 0x775d, payload } );
+			send( { opcode: QUEST_GATHER_CANCEL_OPCODE, payload } );
 		},
 		/*
 		================
@@ -159,14 +164,14 @@ export function createQuests( send: ( frame: WireFrame ) => void ) {
 		*/
 		receive( frame: WireFrame, now = 0 ) {
 			const p = frame.payload;
-			if ( frame.opcode === 0x36bd ) {
+			if ( frame.opcode === QUEST_GATHER_START_OPCODE ) {
 				if ( p.length !== 5 ) throw Error( "Invalid gathering start" );
 				const refId = viewOf( p ).getUint32( 0, true );
 				if ( !refId || !Number.isFinite( now ) ) throw Error( "Invalid gathering identity or clock" );
 				gathering = { refId, startedAtMs: now, durationMs: p[4]! * SECOND_MS };
 				return true;
 			}
-			if ( frame.opcode === 0xb75d ) {
+			if ( frame.opcode === QUEST_GATHER_CANCEL_REPLY_OPCODE ) {
 				if ( p[0] === 2 && p.length === 2 ) return true;
 				if ( p[0] !== 1 || p.length !== 5 ) throw Error( "Invalid gathering cancellation" );
 				const refId = viewOf( p ).getUint32( 1, true );

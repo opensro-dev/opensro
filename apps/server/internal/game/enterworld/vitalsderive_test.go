@@ -3,6 +3,8 @@ package enterworld
 import (
 	"encoding/json"
 	"testing"
+
+	"opensro.online/server/internal/domain/charactervitals"
 )
 
 // The published retail worked examples are the ground truth for the
@@ -117,7 +119,7 @@ func TestDerivedVitalsBoundaries(t *testing.T) {
 	over := &Character{
 		Name:     "over",
 		Level:    i64(9000),
-		Strength: i64(StatWordMax + 500),
+		Strength: i64(charactervitals.StatWordMax + 500),
 	}
 	// Level clamps to 140, stat to 0xffff: 1.02^139 * 655350 = 10277729.
 	if got := DerivedMaxHP(over); got != 10277729 {

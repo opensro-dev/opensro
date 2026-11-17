@@ -34,7 +34,7 @@ trusted: the record is dropped and the action runs again.
 import { constants } from "node:fs";
 import { copyFile, link, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { buildStatePath } from "../../lib/generatedRoot.mjs";
+import { buildStatePath, sharedCachePath } from "../../lib/generatedRoot.mjs";
 import { codeHash } from "../shared/codeStamp.mjs";
 import { openFileHashCache } from "../shared/fileHashCache.mjs";
 import { sha256File } from "../shared/hash.mjs";
@@ -44,7 +44,9 @@ import { actionKey, discoveredName, MISSING_DIGEST, outputPath } from "./action.
 
 export const RECORD_FORMAT = "sro-action-record";
 export const RECORD_VERSION = 1;
-export const DEFAULT_STORE_ROOT = buildStatePath( "actions" );
+// Records are named by key and objects by content, so trees may share them
+// (generatedRoot.mjs sharedCachePath).
+export const DEFAULT_STORE_ROOT = sharedCachePath( "actions", buildStatePath( "actions" ) );
 const FAN_OUT_CHARS = 2;
 const HASH_CACHE_NAME = "file-hash-cache.json";
 

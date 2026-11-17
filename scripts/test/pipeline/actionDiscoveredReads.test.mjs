@@ -14,7 +14,7 @@ hands back the small result the storing run returned.
 ===========================================================================
 */
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -156,4 +156,23 @@ test("a hit hands back the result the run that stored it returned", async ( t ) 
 	assert.equal( second.model.hit, true );
 	assert.deepEqual( second.model.result, { clips: [ "stand", "walk" ], bytes: 17 } );
 	assert.deepEqual( second.model.result, first.model.result );
+});
+
+test("another tree with the same bytes hits the shared store, one with other bytes runs", async ( t ) => {
+	// A release variant root has its own copy of the extracted data and its
+	// own output tree; the store records reads by root name and relative
+	// path, so the same bytes elsewhere are the same key (sharedCachePath).
+	const f = await fixture( t ), runs = [];
+	await build( f, [ model( f, runs ) ] );
+	const variant = { ...f, data: path.join( f.root, "variant", "data" ), out: path.join( f.root, "variant", "out" ) };
+	await cp( f.data, variant.data, { recursive: true } );
+	const result = await build( variant, [ model( variant, runs ) ] );
+	assert.deepEqual( [ result.model.hit, runs ], [ true, [ "model" ] ] );
+	assert.equal( await readFile( path.join( variant.out, "model.glb" ), "utf8" ), "glb(vertices-1)" );
+	const changed = { ...f, data: path.join( f.root, "changed", "data" ), out: path.join( f.root, "changed", "out" ) };
+	await cp( f.data, changed.data, { recursive: true } );
+	await writeFile( path.join( changed.data, "mesh.bms" ), "vertices-variant" );
+	await build( changed, [ model( changed, runs ) ] );
+	assert.deepEqual( runs, [ "model", "model" ] );
+	assert.equal( await readFile( path.join( changed.out, "model.glb" ), "utf8" ), "glb(vertices-variant)" );
 });
