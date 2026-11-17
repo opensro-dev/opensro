@@ -69,6 +69,9 @@ export function textLines(
 	return lines;
 }
 
+// A fitted button caption keeps this far inside each side of its plate.
+export const CAPTION_MARGIN = 4;
+
 /*
 ================
 narrowFace

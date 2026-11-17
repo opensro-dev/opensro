@@ -10,6 +10,7 @@ base, and the audit reports exactly the swept files nobody claimed.
 ===========================================================================
 */
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -421,4 +422,43 @@ test("an index that lost a claimed asset is refused, loose families aside", asyn
 		[],
 		"the loose .ttf files and the pack tail's own files are not pack members and never count as missing"
 	);
+});
+
+/*
+================
+retainedAfterPaths
+
+Megabytes still on the heap after a child keeps namedPublicPaths' answer
+for a large text and drops the text: a kept path that is a view into the
+text keeps all of it (#3422).
+================
+*/
+function retainedAfterPaths() {
+	const ledgerUrl = new URL( "../../build/shared/publicationLedger.mjs", import.meta.url ).href;
+	const program = `
+		const { namedPublicPaths } = await import( ${JSON.stringify( ledgerUrl )} );
+		const filler = "x".repeat( 64 * 1024 );
+		const kept = [];
+		global.gc();
+		const before = process.memoryUsage().heapUsed;
+		for ( let region = 0; region < 64; region++ ) {
+			let text = "{";
+			for ( let i = 0; i < 16; i++ ) text += '"a' + i + '":"' + filler + '","p' + i + '":"/assets/world/region-' + region + '-' + i + '.json",';
+			text += '"z":0}';
+			kept.push( namedPublicPaths( text ) );
+		}
+		global.gc();
+		console.log( ( process.memoryUsage().heapUsed - before ) / 1048576, kept.length );
+	`;
+	const run = spawnSync( process.execPath, [ "--expose-gc", "--input-type=module", "-e", program ], {
+		encoding: "utf8"
+	} );
+	assert.equal( run.status, 0, run.stderr );
+	return Number.parseFloat( run.stdout );
+}
+
+test("kept public paths do not keep the text they were read from", () => {
+	// 64 texts of 1 MB each; their 1,024 paths alone are a few tens of kilobytes.
+	const retained = retainedAfterPaths();
+	assert.ok( retained < 8, `${retained.toFixed( 1 )} MB stayed reachable after the texts were dropped` );
 });

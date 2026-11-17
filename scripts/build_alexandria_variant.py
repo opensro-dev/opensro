@@ -580,6 +580,10 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# (variant_later_layers.py owns the order and the manifest keys).
 	from variant_later_layers import add_later_layers
 	later_layers = add_later_layers(native, out)
+	# The Roc range's kinds (SRO_ROC, #3399): after every later layer,
+	# so their identities allocate above all of the layers' rows.
+	from roc_import import add_roc
+	roc = add_roc(vsro_root, native, out)
 	# The honor line the client authored and never shipped (SRO_HONOR_GOODS,
 	# #3548): after every other item import, whose identities it keeps
 	# clear of, and before the shops that sell it.
@@ -628,6 +632,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"mallAvatarsV1696": later_avatars,
 		"mallAvatarsArchive": archive_avatars,
 		"nasrun": nasrun,
+		"roc": roc,
 		"pets": pets["pets"],
 		"petsV1696": pets["petsV1696"],
 		"petsArchive": pets["petsArchive"],

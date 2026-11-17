@@ -115,20 +115,5 @@ clamped to [0, 0x7fffffff] the way coerceInteger does.
 ================
 */
 func PlayerObjectID(characterID int64) uint32 {
-	return uint32(PlayerObjectIDBase + clampInt64(characterID, 0, 0x7fffffff))
-}
-
-/*
-================
-clampInt64
-================
-*/
-func clampInt64(v, min, max int64) int64 {
-	if v < min {
-		return min
-	}
-	if v > max {
-		return max
-	}
-	return v
+	return uint32(PlayerObjectIDBase + min(max(characterID, 0), 0x7fffffff))
 }

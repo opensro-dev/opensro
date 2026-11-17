@@ -423,6 +423,14 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 				continue
 			case portalConditionThiefSuitTransport:
 				// The native check never reads the operands.
+			case portalConditionHeldItem, portalConditionSpentItem:
+				if !portalItemConditionValid(a, b) {
+					return nil, fmt.Errorf("teleportlink row %d unsupported condition %d", i+1, k)
+				}
+			case portalConditionNoJob:
+				if !portalNoJobConditionValid(a, b) {
+					return nil, fmt.Errorf("teleportlink row %d unsupported condition %d", i+1, k)
+				}
 			default:
 				return nil, fmt.Errorf("teleportlink row %d unsupported condition %d", i+1, k)
 			}
@@ -653,6 +661,9 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		if c.NativeTeleportMode != 0 || rt.hasOpenSkillCast(division, c.Name) {
 			return 0, portalFailure(0x14), false
 		}
+		if failure := portalSpendItems(c, link); failure != 0 {
+			return 0, portalFailure(failure), false
+		}
 		return link.fee, OpResult{}, true
 	})
 }
@@ -698,6 +709,7 @@ func (rt *Runtime) commitGateTravel(travel gateTravel, admit func() (int64, OpRe
 	rt.bindResidentRegion(simulation.WorldKey(division, c.Name), rt.Now().UnixMilli())
 	previousWorld := c.World
 	previousGold := c.Gold
+	previousInventory := c.MissionInventory
 	refusal := portalFailure(2)
 	key := simulation.WorldKey(division, c.Name)
 	if !rt.deps.Update(c, reason, func() bool {
@@ -737,6 +749,7 @@ func (rt *Runtime) commitGateTravel(travel gateTravel, admit func() (int64, OpRe
 				rt.Worlds.Update(key, func() simulation.WorldState { return previous }, func(w *simulation.WorldState) { *w = previous })
 				c.World = previousWorld
 				c.Gold = previousGold
+				c.MissionInventory = previousInventory
 				return true
 			})
 			return portalFailure(portalTransferError(status))
@@ -756,6 +769,7 @@ func (rt *Runtime) commitGateTravel(travel gateTravel, admit func() (int64, OpRe
 			rt.Worlds.Update(key, func() simulation.WorldState { return previous }, func(w *simulation.WorldState) { *w = previous })
 			c.World = previousWorld
 			c.Gold = previousGold
+			c.MissionInventory = previousInventory
 			return true
 		})
 		return portalFailure(2)
@@ -920,6 +934,10 @@ func portalAdmission(c *enterworld.Character, source portalDestination, link por
 		case portalConditionThiefSuitTransport:
 			if traveller.transportCOS && enterworld.DressedJob(c) == uint8(domain.JobThief) {
 				return 0x10
+			}
+		case portalConditionHeldItem, portalConditionSpentItem, portalConditionNoJob:
+			if failure := portalItemCondition(c, condition); failure != 0 {
+				return failure
 			}
 		}
 	}
