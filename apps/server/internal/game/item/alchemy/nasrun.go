@@ -9,15 +9,17 @@ then 0x09 for any other item). v1.150 has no Spirit and no jewel rule.
 
 The later official sources do have one, and this file departs from it on
 the owner's pick. What ISRO-R records (textdata_object, textuisystem):
-the jewel "can be used on Devil's Spirit to upgrade"; an upgrade can fail
-(UIIT_MSG_NASRUN_UPGRADE_FAILED); a Spirit never breaks
-(UIIT_STT_NASRUN_NOT_BREAK, as here); and an event Spirit cannot be
-upgraded (UIIT_STT_NASRUN_EVENTNASRUN_NOT_UPGRADE). The timed grade change
-in the same table (UIIT_MSG_NASRUN_UPGRADE_SUCCESS, "for the next %d
-minute(s)") sits under the awakening-enhancement scroll's section, so it
-is Sabakun's scroll's effect, which is not ported. The jewel's native
-chances and ceiling appear in no table read. The owner's rule (2026-11-16,
-#3456) stands in for them: the jewel raises a Spirit one plus at a time,
+the jewel "can be used on Devil's Spirit to upgrade"; a Spirit never
+breaks (UIIT_STT_NASRUN_NOT_BREAK, as here); and an event Spirit cannot
+be upgraded (UIIT_STT_NASRUN_EVENTNASRUN_NOT_UPGRADE). The v1.696
+client's ability rows author every Spirit from +0 to +10. The UPGRADE_
+SUCCESS/FAILED/TIME messages (a grade change "for the next %d
+minute(s)") sit under the awakening-enhancement scroll's section: they
+belong to that separate later item, not to the jewel, and that item is
+not ported. Sabakun's scroll (ITEM_ETC_NASRUN_ARCHEMY_RECIPE) is the
+jewel's recipe, also not ported. No table read gives the jewel's chances,
+whether it can fail, or its ceiling. The owner's rule (2026-11-16, #3456)
+stands in for all three: the jewel raises a Spirit one plus at a time,
 permanently, up to +6, at 70/60/50/40/30/20 %, and a failure spends the
 jewel and keeps the plus.
 
