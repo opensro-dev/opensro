@@ -764,7 +764,11 @@ func (t *TextdataSkills) parse(shards []string) {
 			if coolTime, ok := textdataInt(fields[skilldataColCoolTimeMs]); ok &&
 				coolTime >= 0 && coolTime <= 0xffffffff {
 				row.CoolTimeMs = uint32(coolTime)
-				row.CoolTimeGroup = uint8(textdataU32(fields[18]) >> 24)
+				// Column 18 is a DWORD the shard writes as signed text: a
+				// group in the top bit's range (the Monster Defence Ignore
+				// ranks' 0xCC000000, -872415232) arrives negative.
+				coolTimeWord, _ := textdataDword(fields[18])
+				row.CoolTimeGroup = uint8(coolTimeWord >> 24)
 				row.TimingPinned = true
 			}
 			if actionRange, ok := textdataInt(fields[skilldataColActionRange]); ok &&

@@ -34,6 +34,7 @@ import (
 	"errors"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/exchange"
 	"opensro.online/server/internal/game/item/inventory"
@@ -83,12 +84,9 @@ func (rt *Runtime) HandleExchangeRequest(division string, c *enterworld.Characte
 	}
 	rt.Exchanges.Propose(division, c.Name, target.Name, nowMs)
 	prompt := wire.NewWriter(5).U8(exchangePromptKind).U32(enterworld.ObjectIDForCharacter(c)).Payload()
-	rt.PushCharacterFrames(division, target.Name, []wire.Frame{{Opcode: opInvitationPrompt, Payload: prompt}})
+	rt.PushCharacterFrames(division, target.Name, []wire.Frame{{Opcode: opInvitationProposal, Payload: prompt}})
 	return OpResult{}
 }
-
-// opInvitationPrompt is the shared 0x3393 proposal opcode.
-const opInvitationPrompt uint16 = 0x3393
 
 /*
 ================
@@ -261,27 +259,45 @@ func (rt *Runtime) exchangeOfferable(c *enterworld.Character, slot uint8) (inven
 	if !ok {
 		return inventory.Item{}, wire.ErrCodeInvalidRequest
 	}
-	// Port-only (forge.go, issue #1980): a bound forged item never
-	// reaches the table, however tradeable its row is.
-	if item.ForgeBound {
-		return inventory.Item{}, wire.ExchangeErrCannotTrade
-	}
-	if item.Summon != nil && item.Summon.Summoned {
-		return inventory.Item{}, wire.ExchangeErrCannotTrade
-	}
-	ref, ok := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
-	if !ok || ref == nil {
-		return inventory.Item{}, wire.ExchangeErrCannotTrade
-	}
-	if value, present := ref.NativeFields.Lookup("canTrade"); !present || value < 1 {
-		return inventory.Item{}, wire.ExchangeErrCannotTrade
-	}
-	// Port-only, not native (halloween.go): a sealed event helmet never
-	// reaches the table either, however tradeable its row is.
-	if rt.HalloweenHelmetSeal.Sealed(item.Codename) {
+	if !rt.Tradeable(item.Codename, item.ForgeBound, item.Summon) {
 		return inventory.Item{}, wire.ExchangeErrCannotTrade
 	}
 	return item, 0
+}
+
+/*
+================
+Tradeable
+
+Whether an item may pass to another player: the exchange's rule, which
+the market (game/market) applies to a listing too. RefObjCommon CanTrade
+(token 16) must be set, a summoned pet stays with its owner, and two
+port-only seals refuse whatever the reference says.
+================
+*/
+func (rt *Runtime) Tradeable(codename string, forgeBound bool, summon *domain.CharacterCOS) bool {
+	// Port-only (forge.go, issue #1980): a bound forged item never
+	// reaches the table, however tradeable its row is.
+	if forgeBound {
+		return false
+	}
+	if summon != nil && summon.Summoned {
+		return false
+	}
+	items := rt.deps.ItemReferences()
+	if items == nil {
+		return false
+	}
+	ref, ok := items.ItemRefByCodename(codename)
+	if !ok || ref == nil {
+		return false
+	}
+	if value, present := ref.NativeFields.Lookup("canTrade"); !present || value < 1 {
+		return false
+	}
+	// Port-only, not native (halloween.go): a sealed event helmet never
+	// reaches the table either, however tradeable its row is.
+	return !rt.HalloweenHelmetSeal.Sealed(codename)
 }
 
 /*

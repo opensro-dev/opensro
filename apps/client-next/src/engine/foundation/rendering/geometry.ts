@@ -9,6 +9,7 @@ the renderer owns, handling every Geometry field explicitly.
 ===========================================================================
 */
 import { clothData, clothBytes } from "@/engine/foundation/animation/cloth";
+import { validClothStreamSlots } from "@/engine/foundation/animation/cloth-stream";
 import { validTextureStage } from "./texture-stage";
 import { validBlend } from "./blend-state";
 import { validateMaterialTimeline } from "./material-timeline";
@@ -16,6 +17,7 @@ import { validateTextureAtlas } from "./texture-atlas";
 import type { Geometry } from "@/engine/contracts/geometry";
 import type { WorldMaterial } from "@/engine/contracts/scene";
 import { finiteGeometryValues, geometryIndicesInRange } from "./geometry-validation";
+import { validMultiTexture } from "./multi-texture";
 
 /*
 ================
@@ -35,7 +37,10 @@ export function copyMaterial( material: WorldMaterial ): WorldMaterial {
 	if (
 		material.surfaceAlpha !== undefined && typeof material.surfaceAlpha !== "boolean" ||
 		material.depthWrite !== undefined && typeof material.depthWrite !== "boolean" ||
-		material.uvVelocity && (material.uvVelocity.length !== 6 || !material.uvVelocity.every( Number.isFinite ))
+		material.uvVelocity && (material.uvVelocity.length !== 6 || !material.uvVelocity.every( Number.isFinite )) ||
+		material.textureAnimationStage !== undefined && material.textureAnimationStage !== 0 &&
+			material.textureAnimationStage !== 1 ||
+		material.multiTexture !== undefined && !validMultiTexture( material.multiTexture )
 	) throw new Error( "Invalid material modifier" );
 	if (
 		material.color.length !== 4 || !material.color.every( Number.isFinite ) ||
@@ -107,6 +112,7 @@ export function copyMaterial( material: WorldMaterial ): WorldMaterial {
 		...(material.blendPair ? { blendPair: { ...material.blendPair } } : {}),
 		...(material.textureFactorPulse ? { textureFactorPulse: { ...material.textureFactorPulse } } : {}),
 		...(material.textureStage ? { textureStage: { ...material.textureStage } } : {}),
+		...(material.multiTexture ? { multiTexture: { ...material.multiTexture } } : {}),
 		...(material.textureFactor ?
 			{ textureFactor: [ ...material.textureFactor ] as [number, number, number, number] } :
 			{}),
@@ -137,8 +143,8 @@ export function validateGeometry(
 		data.world !== undefined && typeof data.world !== "boolean" ||
 		// A cloth stream rides a skinned mesh's own skin table, never a dynamic one.
 		data.clothStream !== undefined &&
-			(typeof data.clothStream !== "boolean" ||
-				data.clothStream && (!data.joints || !data.weights || data.dynamicVertices)) ||
+			(!validClothStreamSlots( data.clothStream, vertices ) || !data.joints || !data.weights ||
+				data.dynamicVertices) ||
 		// A worker-packed stream belongs to a dynamic mesh and covers every vertex.
 		data.vertices !== undefined &&
 			(!(data.vertices instanceof Float32Array) || data.vertices.length !== vertices * 14 ||
@@ -221,7 +227,8 @@ export function copyGeometry( data: Geometry, byteLimit = 64 << 20, instanceLimi
 		bones: data.bones?.slice(),
 		dynamicVertices: data.dynamicVertices,
 		dynamicMaterial: data.dynamicMaterial,
-		clothStream: data.clothStream,
+		rowStates: data.rowStates,
+		clothStream: data.clothStream?.slice(),
 		vertices: data.vertices?.slice()
 	} satisfies Record<keyof Geometry, unknown>;
 	return owned;

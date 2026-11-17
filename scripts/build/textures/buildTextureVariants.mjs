@@ -22,8 +22,18 @@ written whole (a temp name, then a rename). WebGPU requires a
 block-compressed level 0 to be whole blocks, so a texture under 4x4 keeps
 its original.
 
-A cache hit is file reads and writes only, done asynchronously so the
-workers overlap them. Before, each hit decoded its level 0 on the one
+Each texture is also an action (graph/action.mjs, plan slice B2): keyed
+on its source bytes, this module's code closure, the encoder version and
+the preset, with its variant as the one output. A texture whose key has a
+record is laid down from the action store (or left alone when its variant
+already holds those bytes) without reading its source, its caches or
+writing its variant: release r193 read 1000 MB and rewrote 2007 MB for
+15463 unchanged textures (38.7 s). A miss runs the pass below and stores
+its variant. --roundtrip writes a second file per texture, so it keeps to
+the pass alone.
+
+A miss's cache hit is file reads and writes only, done asynchronously so
+the workers overlap them. Before, each hit decoded its level 0 on the one
 thread, and the 15200 hits of a seeded release build took 71 s.
 
 	node scripts/build/textures/buildTextureVariants.mjs
@@ -39,7 +49,6 @@ the variant reads, for side-by-side frames on a machine without ASTC.
 
 ===========================================================================
 */
-import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { buildJobs } from "../shared/buildParallelism.mjs";
 import { codeHash } from "../shared/codeStamp.mjs";
@@ -53,34 +62,34 @@ import {
 	rmSync,
 	writeFileSync
 } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import { CLIENT_PUBLIC_ROOT, generatedPath } from "../../lib/generatedRoot.mjs";
+import { defineAction, outputPath } from "../graph/action.mjs";
+import { keyOf, materialize, openStore, readRecord, storeOutputs } from "../graph/store.mjs";
+import { CLIENT_PUBLIC_ROOT, generatedPath, sharedCachePath } from "../../lib/generatedRoot.mjs";
 import { claimPublicFile, isPublicationOpen } from "../shared/publicationLedger.mjs";
 import { ENCODERS, encoderPath } from "./encoders.mjs";
+import {
+	astcBlocks,
+	NTX_ASTC_4X4,
+	ntxContainer,
+	pickAlphaSection as alphaSection,
+	tgaImage
+} from "./textureContainers.mjs";
 import {
 	decodeNativeTexture,
 	decodeNativeTextureLevel
 } from "../../../apps/client-next/src/engine/foundation/assets/native-texture.ts";
 import { textureVariantPath } from "../../../apps/client-next/src/engine/foundation/assets/texture-variants.ts";
 import { compareText } from "../shared/textOrder.mjs";
+import { sha256Hex } from "../shared/hash.mjs";
 
 const run = promisify( execFile );
 
-const NTX_MAGIC = 0x3158544e;
-const NTX_HEADER_BYTES = 20;
-const NTX_ASTC_4X4 = 0x34345341; // "AS44", native-texture.ts
-const NTX_PICK_ALPHA = 0x38414b50; // "PKA8", native-texture.ts
 const ASTC_BLOCK = 4;
 const D3DFMT_A8R8G8B8 = 21;
-const ASTC_HEADER_BYTES = 16;
-const ASTC_MAGIC = 0x5ca1ab13;
-const TGA_HEADER_BYTES = 18;
-// Uncompressed true colour, 32 bits, top-left origin with 8 alpha bits.
-const TGA_TRUE_COLOUR = 2;
-const TGA_DESCRIPTOR = 0x28;
 const KTX_HEADER_BYTES = 64;
 const GL_UNSIGNED_BYTE = 0x1401;
 const GL_RGB = 0x1907;
@@ -94,6 +103,7 @@ const KTX_CHANNELS = { [GL_RED]: 1, [GL_RG]: 2, [GL_RGB]: 3, [GL_RGBA]: 4 };
 const PRESET = "-medium";
 const VARIANT = "astc";
 const DECODER_DIGEST_CHARS = 16;
+const MODULE_FILE = fileURLToPath( import.meta.url );
 
 /*
 ================
@@ -150,30 +160,6 @@ function nativeTextures( root, only ) {
 
 /*
 ================
-tga
-
-An RGBA level as a 32-bit top-left TGA (astcenc's simplest input).
-================
-*/
-function tga( rgba, width, height ) {
-	const out = Buffer.alloc( TGA_HEADER_BYTES + width * height * 4 );
-	out[2] = TGA_TRUE_COLOUR;
-	out.writeUInt16LE( width, 12 );
-	out.writeUInt16LE( height, 14 );
-	out[16] = 32;
-	out[17] = TGA_DESCRIPTOR;
-	for ( let i = 0; i < width * height; i++ ) {
-		const at = TGA_HEADER_BYTES + i * 4;
-		out[at] = rgba[i * 4 + 2];
-		out[at + 1] = rgba[i * 4 + 1];
-		out[at + 2] = rgba[i * 4];
-		out[at + 3] = rgba[i * 4 + 3];
-	}
-	return out;
-}
-
-/*
-================
 ktxPixels
 
 The BGRA pixels of the uncompressed KTX astcenc decodes to: RGBA8, RGB8,
@@ -220,21 +206,6 @@ function ktxPixels( bytes, width, height ) {
 
 /*
 ================
-ntx
-================
-*/
-function ntx( width, height, code, levels ) {
-	const header = Buffer.alloc( NTX_HEADER_BYTES );
-	header.writeUInt32LE( NTX_MAGIC, 0 );
-	header.writeUInt32LE( width, 4 );
-	header.writeUInt32LE( height, 8 );
-	header.writeUInt32LE( code, 12 );
-	header.writeUInt32LE( levels.length, 16 );
-	return Buffer.concat( [ header, ...levels ] );
-}
-
-/*
-================
 pickAlphaSection
 
 The source's level-0 alpha as a trailing NTX section, or an empty buffer
@@ -242,16 +213,7 @@ when every texel is opaque.
 ================
 */
 export function pickAlphaSection( texture ) {
-	const rgba = decodeNativeTextureLevel( texture, 0 ), alpha = Buffer.alloc( texture.width * texture.height );
-	let opaque = true;
-	for ( let i = 0; i < alpha.length; i++ ) {
-		alpha[i] = rgba[i * 4 + 3];
-		if ( alpha[i] !== 255 ) opaque = false;
-	}
-	if ( opaque ) return Buffer.alloc( 0 );
-	const tag = Buffer.alloc( 4 );
-	tag.writeUInt32LE( NTX_PICK_ALPHA, 0 );
-	return Buffer.concat( [ tag, alpha ] );
+	return alphaSection( decodeNativeTextureLevel( texture, 0 ), texture.width, texture.height );
 }
 
 /*
@@ -330,13 +292,9 @@ async function encodeTexture( astcenc, source, scratch, roundtrip ) {
 	for ( let level = 0; level < texture.levels.length; level++ ) {
 		const width = Math.max( 1, texture.width >> level ), height = Math.max( 1, texture.height >> level );
 		const input = path.join( scratch, `${level}.tga` ), output = path.join( scratch, `${level}.astc` );
-		writeFileSync( input, tga( decodeNativeTextureLevel( texture, level ), width, height ) );
+		writeFileSync( input, tgaImage( decodeNativeTextureLevel( texture, level ), width, height ) );
 		await run( astcenc, [ "-cl", input, output, "4x4", PRESET, "-silent" ] );
-		const file = readFileSync( output );
-		if ( file.readUInt32LE( 0 ) !== ASTC_MAGIC || file[4] !== 4 || file[5] !== 4 ) {
-			throw new Error( "Unexpected astcenc output" );
-		}
-		astc.push( file.subarray( ASTC_HEADER_BYTES ) );
+		astc.push( astcBlocks( readFileSync( output ), ASTC_BLOCK ) );
 		if ( roundtrip ) {
 			const back = path.join( scratch, `${level}.back.ktx` );
 			await run( astcenc, [ "-dl", output, back, "-silent" ] );
@@ -344,9 +302,34 @@ async function encodeTexture( astcenc, source, scratch, roundtrip ) {
 		}
 	}
 	return {
-		variant: ntx( texture.width, texture.height, NTX_ASTC_4X4, astc ),
-		roundtrip: roundtrip ? ntx( texture.width, texture.height, D3DFMT_A8R8G8B8, decoded ) : null
+		variant: ntxContainer( texture.width, texture.height, NTX_ASTC_4X4, astc ),
+		roundtrip: roundtrip ? ntxContainer( texture.width, texture.height, D3DFMT_A8R8G8B8, decoded ) : null
 	};
+}
+
+/*
+================
+textureVariantAction
+
+One texture's variant as an action (see the file banner). roots.source is
+the tree the texture is published in, roots.output the tree its variant
+goes to (the published tree, or --out's private one). Nothing runs it
+alone: a miss goes through the pass's worker, which stores what it wrote.
+================
+*/
+function textureVariantAction( publicPath, roots ) {
+	return defineAction( {
+		name: `texture-variant:${publicPath}`,
+		inputRoot: roots.source,
+		inputs: [ publicPath.slice( 1 ) ],
+		outputRoot: roots.output,
+		outputs: [ textureVariantPath( publicPath, VARIANT ).replace( /^\//, "" ) ],
+		code: [ MODULE_FILE ],
+		params: { encoder: ENCODERS.astcenc.version, preset: PRESET },
+		run: async () => {
+			throw new Error( `texture variant ${publicPath} is made by its pass, never alone` );
+		}
+	} );
 }
 
 /*
@@ -367,6 +350,11 @@ export async function buildTextureVariants( flags = {} ) {
 		limit: Infinity,
 		out: null,
 		roundtrip: null,
+		// The tree the textures are published in (a fixture's, in tests).
+		publicRoot: CLIENT_PUBLIC_ROOT,
+		// An open action store to use and leave open (tests); else the
+		// shared one, opened and shut here.
+		store: null,
 		...flags
 	};
 	if ( process.platform !== "win32" ) {
@@ -377,12 +365,28 @@ export async function buildTextureVariants( flags = {} ) {
 	const cacheName = `astc-4x4-${ENCODERS.astcenc.version}${PRESET}`;
 	const cacheRoot = flags.out ?
 		path.join( flags.out, "intermediate", "texture-variants", cacheName ) :
-		generatedPath( "intermediate", "texture-variants", cacheName );
-	const outputRoot = flags.out ? path.join( flags.out, "client-public" ) : CLIENT_PUBLIC_ROOT;
+		// Named by the source's SHA-256 under an encoder-and-preset folder, so
+		// trees may share it (generatedRoot.mjs sharedCachePath).
+		sharedCachePath(
+			path.join( "texture-variants", cacheName ),
+			generatedPath( "intermediate", "texture-variants", cacheName )
+		);
+	const outputRoot = flags.out ? path.join( flags.out, "client-public" ) : flags.publicRoot;
 	const maskRoot = maskCacheRoot( cacheRoot, await maskCodeHash() );
 	mkdirSync( maskRoot, { recursive: true } );
-	const textures = nativeTextures( CLIENT_PUBLIC_ROOT, flags.only ).slice( 0, flags.limit );
-	let next = 0, encoded = 0, cached = 0, unaligned = 0, masked = 0, sourceBytes = 0, variantBytes = 0;
+	const textures = nativeTextures( flags.publicRoot, flags.only ).slice( 0, flags.limit );
+	const store = flags.roundtrip ? null : (flags.store ?? (await openStore()));
+	const roots = { source: flags.publicRoot, output: outputRoot };
+	// masked counts the variants this run produced; a stored one is not read.
+	let next = 0,
+		encoded = 0,
+		cached = 0,
+		stored = 0,
+		placed = 0,
+		unaligned = 0,
+		masked = 0,
+		sourceBytes = 0,
+		variantBytes = 0;
 	// One job per source digest in flight: textures of the same bytes await
 	// it instead of reading a cache file another worker is writing.
 	const inFlight = new Map();
@@ -419,7 +423,26 @@ export async function buildTextureVariants( flags = {} ) {
 		try {
 			while ( next < textures.length ) {
 				const [file, publicPath] = textures[next++];
-				const source = await readFile( file ), digest = createHash( "sha256" ).update( source ).digest( "hex" );
+				const action = store ? textureVariantAction( publicPath, roots ) : null;
+				const key = store ? await keyOf( store, action, {} ) : null;
+				const record = store ? await readRecord( store, key ) : undefined;
+				if ( record ) {
+					// Await first, then add: `placed += await ...` reads placed before the
+					// await, and a worker resuming in between loses its count.
+					const laid = await materialize( store, action, record );
+					placed += laid;
+					const target = outputPath( action, action.outputs[0] );
+					if ( !flags.out && isPublicationOpen() ) claimPublicFile( target );
+					stored++;
+					// The summary's BC side counts every texture, as the ASTC
+					// side does: a stored variant's source is sized, never read.
+					// Await first, then add (as placed above).
+					const { size } = await stat( file );
+					sourceBytes += size;
+					variantBytes += record.outputs[0].size;
+					continue;
+				}
+				const source = await readFile( file ), digest = sha256Hex( source );
 				const texture = decodeNativeTexture( new Uint8Array( source ) );
 				if ( texture.width % ASTC_BLOCK || texture.height % ASTC_BLOCK ) {
 					unaligned++;
@@ -439,6 +462,7 @@ export async function buildTextureVariants( flags = {} ) {
 				mkdirSync( path.dirname( target ), { recursive: true } );
 				await writeFile( target, variant );
 				if ( !flags.out && isPublicationOpen() ) claimPublicFile( target );
+				if ( store ) await storeOutputs( store, action, key );
 				if ( back ) {
 					const mirror = path.join( flags.roundtrip, ...publicPath.split( "/" ) );
 					mkdirSync( path.dirname( mirror ), { recursive: true } );
@@ -447,22 +471,27 @@ export async function buildTextureVariants( flags = {} ) {
 				sourceBytes += source.length;
 				variantBytes += variant.length;
 				if ( (encoded + cached) % 500 === 0 ) {
-					console.log( `${encoded + cached}/${textures.length} textures` );
+					console.log( `${encoded + cached} of ${textures.length} textures produced` );
 				}
 			}
 		} finally {
 			rmSync( scratch, { recursive: true, force: true } );
 		}
 	}
-	await Promise.all( Array.from( { length: flags.jobs }, worker ) );
+	try {
+		await Promise.all( Array.from( { length: flags.jobs }, worker ) );
+	} finally {
+		if ( store && !flags.store ) await store.shutdown();
+	}
 	const mb = bytes => (bytes / 1048576).toFixed( 1 );
 	console.log(
-		`texture variants (astc 4x4 ${PRESET}): ${textures.length} textures, ${encoded} encoded, ${cached} cached, ` +
+		`texture variants (astc 4x4 ${PRESET}): ${textures.length} textures, ${stored} from the action store ` +
+			`(${placed} laid down), ${encoded} encoded, ${cached} from the encoder cache, ` +
 			`${unaligned} under one block kept their original, ${masked} carry a picking mask, ` +
 			`${mb( sourceBytes )} MB BC -> ${mb( variantBytes )} MB ASTC, ` +
 			`${((performance.now() - startedAt) / 1000).toFixed( 1 )} s`
 	);
-	return { textures: textures.length, encoded, cached, unaligned, masked, sourceBytes, variantBytes };
+	return { textures: textures.length, stored, placed, encoded, cached, unaligned, masked, sourceBytes, variantBytes };
 }
 
 if ( process.argv[1] && path.resolve( process.argv[1] ) === fileURLToPath( import.meta.url ) ) {

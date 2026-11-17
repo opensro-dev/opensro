@@ -118,17 +118,22 @@ LEVEL_CAP_FLAG = "SRO_LEVEL_CAP"
 # each store with the goods one official source had active; on, the
 # shop passes stock the port's own degree goods instead.
 PORT_STOCK_FLAG = "SRO_ALEXANDRIA_PORT_STOCK"
-PORT_STOCK_OFF_VALUES = ("", "0", "off", "false")
-PORT_STOCK_ON_VALUES = ("1", "on", "true")
+SWITCH_OFF_VALUES = ("", "0", "off", "false")
+SWITCH_ON_VALUES = ("1", "on", "true")
 EXPANSION_LEVEL_CAP = 110
 LEVEL_CAP_NATIVE_VALUES = ("", "0", "off", "false", "90")
 LEVEL_CAP_EXPANSION_VALUES = ("110",)
 LINK_COLUMNS = 21
 LINK_KIND_LEVEL = 1
 # The condition kinds the v1.150 server's portal catalogue evaluates
-# (portalAdmission): 1 level, 2 transport, 7 thief suit with a transport
-# (#1749 PR-C(ii)). Any other kind is dropped and reported, below.
-LINK_KINDS_EVALUATED = (1, 2, 7)
+# (portalAdmission): 1 level, 2 transport, 4 and 5 an item held (5 spends
+# one), 6 outside job mode (portal_conditions.go, #3399), 7 thief suit
+# with a transport (#1749 PR-C(ii)). Any other kind is dropped and
+# reported, below.
+LINK_KINDS_EVALUATED = (1, 2, 4, 5, 6, 7)
+# The item kinds: Data_1 is an item identity of the source client, which
+# the variant's item tables number differently.
+LINK_KINDS_ITEM = (4, 5)
 TELEPORT_COLUMNS = 13
 BUILDING_COLUMNS = 58
 
@@ -289,15 +294,20 @@ def by_column(raw, column, width=0):
 # ================
 # translate_link
 # ================
-def translate_link(row, ids, level_cap, dropped=None):
+def translate_link(row, ids, level_cap, dropped=None, items=None):
 	"""
 	One VSRO teleportlink row for the native table: its two ends renumbered by
 	teleport code, the scheduling word set to the one v1.150 server accepts
-	(1), a level condition clamped to the build's cap and conditions of a
-	kind the server does not evaluate dropped. Every drop is appended to
-	dropped (when given) as {"from", "to", "kind", "operands"} with the
-	renumbered ends, so the loss is reported, never silent (#1749 PR-C(i);
-	kinds 3-6 still have no port evaluator, PR-C(ii)).
+	(1), a level condition clamped to the build's cap, an item condition's
+	item renumbered through items ({source item id: variant item id}) and
+	conditions of a kind the server does not evaluate dropped. Every drop is
+	appended to dropped (when given) as {"from", "to", "kind", "operands"}
+	with the renumbered ends, so the loss is reported, never silent (#1749
+	PR-C(i); kind 3 still has no port evaluator).
+
+	Returns None when an item condition names an item items does not map:
+	dropping that condition would open a keyed gate to everyone, so the
+	whole link stays out (merge_gate_tables reports it).
 	"""
 	columns = list(row[:LINK_COLUMNS])
 	columns[1], columns[2] = ids[row[1]], ids[row[2]]
@@ -305,6 +315,12 @@ def translate_link(row, ids, level_cap, dropped=None):
 	for at in range(6, LINK_COLUMNS, 3):
 		if columns[at] == str(LINK_KIND_LEVEL) and int(columns[at + 1]) > level_cap:
 			columns[at + 1] = str(level_cap)
+		if int(columns[at]) in LINK_KINDS_ITEM:
+			item = (items or {}).get(columns[at + 1])
+			if item is None:
+				return None
+			columns[at + 1] = item
+			continue
 		# A condition kind the v1.150 server does not evaluate is dropped;
 		# the server refuses the whole catalogue otherwise.
 		if int(columns[at]) != 0 and int(columns[at]) not in LINK_KINDS_EVALUATED:
@@ -320,7 +336,7 @@ def translate_link(row, ids, level_cap, dropped=None):
 # ================
 # merge_gate_tables
 # ================
-def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP, flatten=()):
+def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP, flatten=(), items=None):
 	"""
 	The native tables with the gates in codes added. native and vsro map
 	"teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt" and
@@ -328,8 +344,11 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 	between the clients, so links are renumbered by code; the new gates take
 	their VSRO ids, which the native table does not use. A gate named in
 	flatten has its destination world set to the persistent world (the
-	temple's source world 60 does not exist in the port). Returns {name: bytes}
-	for the changed files, and the list of gates added.
+	temple's source world 60 does not exist in the port). items maps the
+	source client's item ids to the variant's for item conditions
+	(translate_link); a link whose item does not map is left out and
+	listed under omittedLinks. Returns {name: bytes} for the changed files,
+	and the list of gates added.
 	"""
 	native_gates = by_column(native["teleportdata.txt"], 2, TELEPORT_COLUMNS)
 	vsro_gates = by_column(vsro["teleportdata.txt"], 2, TELEPORT_COLUMNS)
@@ -353,14 +372,21 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 		row for row in stage1.table_rows(vsro["teleportbuilding.txt"])
 		if len(row) >= BUILDING_COLUMNS and row[1] in building_ids
 	]
-	links, dropped_conditions = [], []
+	links, dropped_conditions, omitted_links = [], [], []
 	for row in stage1.table_rows(vsro["teleportlink.txt"]):
 		if len(row) != LINK_COLUMNS or row[0] != "1" or not ({row[1], row[2]} & new_ids):
 			continue
 		other = row[2] if row[1] in new_ids else row[1]
 		if other not in new_ids and (other not in vsro_codes or vsro_codes[other] not in native_ids):
 			continue
-		links.append(translate_link(row, ids, level_cap, dropped_conditions))
+		translated = translate_link(row, ids, level_cap, dropped_conditions, items)
+		if translated is None:
+			omitted_links.append({
+				"from": ids[row[1]], "to": ids[row[2]],
+				"items": sorted({row[at + 1] for at in range(6, LINK_COLUMNS, 3) if int(row[at]) in LINK_KINDS_ITEM})
+			})
+			continue
+		links.append(translated)
 
 	text_keys = {row[4] for row in data_rows} | {row[5] for row in buildings}
 	native_keys = {row[1] for row in stage1.table_rows(native["text"]) if len(row) > 1}
@@ -380,6 +406,8 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 		# Link conditions the native catalogue cannot evaluate yet, reported
 		# so the loss is visible in the build output and manifest (#1749).
 		**({"droppedConditions": dropped_conditions} if dropped_conditions else {}),
+		# Keyed links whose item the variant does not carry (translate_link).
+		**({"omittedLinks": omitted_links} if omitted_links else {}),
 		**({"worldsFlattened": [code for code in codes if code in flatten]} if set(codes) & set(flatten) else {})
 	}
 
@@ -571,6 +599,11 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	skill_tier = add_skills(vsro_root, native, out)
 	from cap110_skill_import import add_skill_effects
 	skill_animation = add_skill_effects(vsro_root, native, out)
+	# The skills a worn Devil's Spirit lends (SRO_NASRUN, #3456): after
+	# the skill tier, which rewrites the skill manifest from the native
+	# one, and before the monsters, whose skill ids keep clear of them.
+	from nasrun_import import add_nasrun_skills
+	nasrun_skills = add_nasrun_skills(vsro_root, native, out)
 	from cap110_monsters import add_monsters
 	field_monsters = add_monsters(vsro_root, native, out)
 	# The monsters' own database rewards follow the population they describe.
@@ -580,8 +613,17 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# (variant_later_layers.py owns the order and the manifest keys).
 	from variant_later_layers import add_later_layers
 	later_layers = add_later_layers(native, out)
+	# The Roc range's kinds (SRO_ROC, #3399): after every later layer,
+	# so their identities allocate above all of the layers' rows.
+	from roc_import import add_roc
+	roc = add_roc(vsro_root, native, out)
+	# The honor line the client authored and never shipped (SRO_HONOR_GOODS,
+	# #3548): after every other item import, whose identities it keeps
+	# clear of, and before the shops that sell it.
+	import honor_items
+	honor_goods = honor_items.add_honor_items(native, out)
 	from alexandria_npc_services import add_services
-	city_services = add_services(vsro_root, native, out, port_stock_enabled())
+	city_services = add_services(vsro_root, native, out, port_stock_enabled(), honor_goods["enabled"])
 	# The later client's seasonal town decoration (Halloween and the other
 	# event layers), into the object catalog and region files written above.
 	# Without the v1.696 archives a previous import is removed.
@@ -617,11 +659,14 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"music": music,
 		"npcs": city_npcs,
 		"npcServices": city_services,
+		"honorGoods": honor_goods,
 		"weapons": weapons,
 		"mallAvatars": mall_avatars,
 		"mallAvatarsV1696": later_avatars,
 		"mallAvatarsArchive": archive_avatars,
 		"nasrun": nasrun,
+		"nasrunSkills": nasrun_skills,
+		"roc": roc,
 		"pets": pets["pets"],
 		"petsV1696": pets["petsV1696"],
 		"petsArchive": pets["petsArchive"],
@@ -655,22 +700,31 @@ def gate_level_cap(environ=None):
 
 
 # ================
+# build_switch
+#
+# An on/off build flag: unset or an off value is False (native), an on
+# value True. Anything else is refused, as the server refuses a value it
+# does not know.
+# ================
+def build_switch(flag, environ=None):
+	value = (os.environ if environ is None else environ).get(flag, "").strip().lower()
+	if value in SWITCH_OFF_VALUES:
+		return False
+	if value in SWITCH_ON_VALUES:
+		return True
+	raise ValueError(f"{flag} must be off, on or unset, not {value!r}")
+
+
+# ================
 # port_stock_enabled
+#
+# The shops' stock choice (#2846), from SRO_ALEXANDRIA_PORT_STOCK: off -
+# the default, and the value every official build has - asks the shop
+# passes for each store's official stock; on asks for the port's own
+# degree goods.
 # ================
 def port_stock_enabled(environ=None):
-	"""
-	The shops' stock choice (#2846), from SRO_ALEXANDRIA_PORT_STOCK:
-	False - the default, and the value every official build has - asks
-	the shop passes for each store's official stock; on asks for the
-	port's own degree goods. Anything else is refused, as the server
-	refuses a value it does not know.
-	"""
-	value = (os.environ if environ is None else environ).get(PORT_STOCK_FLAG, "").strip().lower()
-	if value in PORT_STOCK_OFF_VALUES:
-		return False
-	if value in PORT_STOCK_ON_VALUES:
-		return True
-	raise ValueError(f"{PORT_STOCK_FLAG} must be off, on or unset, not {value!r}")
+	return build_switch(PORT_STOCK_FLAG, environ)
 
 
 # ================
@@ -695,9 +749,22 @@ def add_gates(vsro_root, native, out):
 	for dropped in summary.get("droppedConditions", []):
 		log(f"gates: link {dropped['from']} -> {dropped['to']}: condition kind {dropped['kind']} "
 			f"({', '.join(dropped['operands'])}) dropped; the v1.150 server has no evaluator for it")
+	log_omitted_links("gates", summary)
 	for name, content in merged.items():
 		replace_file(out / textdata / ("textdataname.txt" if name == "text" else name), content)
 	return summary, merged
+
+
+# ================
+# log_omitted_links
+#
+# One line per keyed link merge_gate_tables left out: the gate it would
+# have joined stays shut rather than open without its key.
+# ================
+def log_omitted_links(label, summary):
+	for omitted in summary.get("omittedLinks", []):
+		log(f"{label}: link {omitted['from']} -> {omitted['to']} left out; the variant carries no item "
+			f"{', '.join(omitted['items'])} its condition names")
 
 
 # ================

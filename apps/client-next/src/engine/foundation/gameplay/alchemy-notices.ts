@@ -18,6 +18,13 @@ but never showed left the Fuse button looking dead (BR-261022-1735-82BB).
 */
 import { constantNativeNotice } from "./native-notice";
 import type { SystemNotice } from "./system-notices";
+import {
+	ALCHEMY_STEP_RESULT_OPCODE,
+	ALCHEMY_STONE_RESULT_OPCODE,
+	COMPOUND_RESULT_OPCODE,
+	DISSOLVE_RESULT_OPCODE,
+	REINFORCE_RESULT_OPCODE
+} from "@/engine/contracts/opcodes";
 
 const ALCHEMY_NOTICE_CATEGORY = 0x12;
 const COMPOUND_NOTICE_CATEGORY = 0x17;
@@ -35,13 +42,15 @@ The answer's own length is checked by its inventory owner.
 */
 export function alchemyNotice( opcode: number, payload: Uint8Array ): SystemNotice | null {
 	// 0x3359 (a timed batch step's answer) shares 0xB16F's handler 74FF50.
-	if ( opcode === 0xb16f || opcode === 0x3359 || opcode === 0xb549 ) {
+	if (
+		opcode === COMPOUND_RESULT_OPCODE || opcode === ALCHEMY_STEP_RESULT_OPCODE || opcode === DISSOLVE_RESULT_OPCODE
+	) {
 		if ( payload.length !== 2 || payload[0] !== ALCHEMY_REFUSED ) return null;
 		return constantNativeNotice( COMPOUND_NOTICE_CATEGORY, payload[1]! );
 	}
-	if ( opcode !== 0xb373 && opcode !== 0xb651 ) return null;
+	if ( opcode !== REINFORCE_RESULT_OPCODE && opcode !== ALCHEMY_STONE_RESULT_OPCODE ) return null;
 	if ( payload.length !== 2 || payload[0] !== ALCHEMY_REFUSED ) return null;
 	const code = payload[1]!;
-	if ( opcode === 0xb651 && code === MAGIC_STONE_FAILED_ROLL ) return null;
+	if ( opcode === ALCHEMY_STONE_RESULT_OPCODE && code === MAGIC_STONE_FAILED_ROLL ) return null;
 	return constantNativeNotice( ALCHEMY_NOTICE_CATEGORY, code );
 }

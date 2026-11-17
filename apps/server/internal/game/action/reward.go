@@ -320,6 +320,7 @@ func (rt *Runtime) creditQuestKillInsideDoor(
 	if killer == nil || killer.DeletePending {
 		return nil, nil
 	}
+	rt.noteRocKill(target.Ref.Codename, target.Gid, pose)
 	if rt.UpdateQuestKill != nil && rt.Monsters != nil {
 		if live, ok := rt.Monsters.Get(divisionID, target.Gid); ok && live.CurrentHP == 0 {
 			if rt.NoteQuestKillSite != nil {

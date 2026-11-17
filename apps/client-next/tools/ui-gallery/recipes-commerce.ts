@@ -54,7 +54,8 @@ async function restoration( context: RecipeContext, npcMode: boolean, confirmati
 		refObjId: npcMode ? 3673 : 3828,
 		typeFlags: 0x6ec,
 		quantity: 5,
-		name: npcMode ? "Curst Heart restoration potion" : "Skill Restoration Potion"
+		// 3673's published name (SN_ITEM_QSP_ALL_POTION_1_01).
+		name: npcMode ? "Resuscitation potion" : "Skill Restoration Potion"
 	} ];
 	if ( npcMode ) game.restorationRevision = 1;
 	else {
@@ -110,6 +111,9 @@ export async function merchant( context: RecipeContext ) {
 		shop: {
 			npc: 99,
 			name: "Merchant",
+			// A real shop's tab carries its refshoptab label (SN_TAB_*); without
+			// one the gallery drew the merchant's tab blank (#3728).
+			tabs: [ { index: 0, labelSymbol: "SN_TAB_POTION" } ],
 			offers: [ {
 				tab: 0,
 				slot: 0,

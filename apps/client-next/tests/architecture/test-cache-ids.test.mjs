@@ -42,3 +42,28 @@ test( "on Windows the checkout is matched without regard to case", { skip: proce
 	const id = encodeTarget( WORKTREE, WORKTREE.toUpperCase() + "\\src\\a.ts" );
 	assert.equal( id, CHECKOUT_PREFIX + "src/a.ts" );
 } );
+
+test("the most specific root wins: the hub's .generated is named as the built tree", () => {
+	const roots = [ [ "@generated/", path.join( HUB, ".generated" ) ], [ CHECKOUT_PREFIX, HUB ] ];
+	assert.equal( encodeTarget( roots, SHARED ), "@generated/client-public/assets/a.bin" );
+	const release = [ [ "@generated/", path.resolve( "/staging/r195/variant/.generated" ) ], [
+		CHECKOUT_PREFIX,
+		WORKTREE
+	] ];
+	assert.equal(
+		decodeTarget( release, "@generated/client-public/assets/a.bin" ),
+		path.resolve( "/staging/r195/variant/.generated/client-public/assets/a.bin" ),
+		"the id resolves inside the validating run's tree"
+	);
+});
+
+test("a file root is named by its prefix alone", () => {
+	const baseline = path.resolve( "/staging/live-manifest.json" );
+	const roots = [ [ "@pack-baseline/", baseline ] ];
+	assert.equal( encodeTarget( roots, baseline ), "@pack-baseline/" );
+	assert.equal( decodeTarget( roots, "@pack-baseline/" ), baseline );
+});
+
+test("an id whose tree this run does not set resolves to null", () => {
+	assert.equal( decodeTarget( [ [ CHECKOUT_PREFIX, WORKTREE ] ], "@v1696/Media/a.ddj" ), null );
+});

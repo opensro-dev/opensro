@@ -159,6 +159,14 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	ticker.Source.(*worldsession.Bridge).PopulationLease = game.items.CharacterPopulationLease
 	// A quest instance's exit gate (and optional AI caravan NPCs) join its world's NPC scope pass.
 	ticker.WorldNpcs = game.worldNpcsForInstance
+	// A seasonal look (Santa So-Ok, port-only) changes which reference
+	// the static roster spawns under for its window.
+	if look, ok := game.deps.NpcSpawns.Looks.Look(); ok && look.RefObjID != 0 {
+		spawns := game.deps.NpcSpawns
+		ticker.RosterAt = func(nowMs int64) []simulation.NpcDef {
+			return spawns.RosterAt(time.UnixMilli(nowMs))
+		}
+	}
 	ticker.BeforeHooks = []simulation.NamedTickHook{{Name: "monster-actions", Hook: game.items.MonsterActionTickHook()}}
 	// A peer's spawn row is preceded by the item references it names (#340).
 	ticker.ItemReferences = peerReferences.Frames

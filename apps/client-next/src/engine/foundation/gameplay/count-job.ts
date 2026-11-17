@@ -34,6 +34,7 @@ whole command.
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const OP_COUNT_JOB_START = 0x3021;
 export const OP_COUNT_JOB_END = 0x36fc;
@@ -88,7 +89,7 @@ countJobPacket
 export function countJobPacket( frame: WireFrame, nowMs: number ): CountJobUpdate | null {
 	const op = frame.opcode, p = frame.payload;
 	if ( op !== OP_COUNT_JOB_START && op !== OP_COUNT_JOB_END && op !== OP_COUNT_JOB_ANSWER ) return null;
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	if ( op === OP_COUNT_JOB_START ) {
 		if ( p.length !== 13 ) throw Error( "Invalid count job row" );
 		return {

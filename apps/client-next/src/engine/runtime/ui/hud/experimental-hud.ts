@@ -243,7 +243,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "fitWindowLabels",
 						id: "experimental-fit-window-labels",
 						label: "Fit window labels",
-						description: "Fit long labels and captions; open lists upward."
+						description: "Fit labels, captions and speech; open lists upward."
 					},
 					{
 						key: "greyDisabledTabs",
@@ -422,7 +422,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "christmasCarols",
 						id: "experimental-christmas-carols",
 						label: "Christmas carols",
-						description: "Play carols during the Christmas event's snow."
+						description: "Carols in the snow and in towns at Christmas."
 					},
 					{
 						key: "webTransport",
@@ -497,12 +497,6 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-drop-plus-notices",
 						label: "Drop & plus notices",
 						description: "Show the shard's seal drop and +8-or-higher notices."
-					},
-					{
-						key: "plusSevenNotices",
-						id: "experimental-plus-seven-notices",
-						label: "Plus +7 notices",
-						description: "Show the shard's +7 alchemy announcements."
 					},
 					{
 						key: "breakNotices",

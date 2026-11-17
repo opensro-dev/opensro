@@ -9,7 +9,8 @@ of an if*.txt layout, and the simple message box) draw through the wider
 UiAuthoredFrame.
 The coordinator retains input and window lifetime; these functions append
 draw commands and controls. A complete window is admitted as one unit by
-admission.ts, re-exported here so the coordinator reaches one module.
+admission.ts, and label fitting lives in label-fit.ts; both are re-exported
+here so the coordinator reaches one module.
 
 ===========================================================================
 */
@@ -33,11 +34,12 @@ import { latticeCells } from "@/engine/foundation/ui/inventory-layout";
 import { normalTile } from "@/engine/foundation/ui/normal-tile";
 import { MESSAGE_FRAME, MESSAGE_TILE, partyProposalAssets } from "@/engine/foundation/ui/party-proposal";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
-import { captionWords, textLines } from "@/engine/foundation/ui/text-lines";
+import { narrowFace, textLines } from "@/engine/foundation/ui/text-lines";
 import { messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 
 export { beginWindow, endWindow, unloadedImages } from "./admission";
 import { image, rect } from "./draw";
+import { buttonCaptionFit, type CaptionFit, wrappedLabelBand } from "./label-fit";
 
 export { image, rect } from "./draw";
 export {
@@ -48,6 +50,7 @@ export {
 	nativeItem,
 	type ItemSlotContext
 } from "./item-slot";
+export { drawLabelFit, fittedLabel, labelFit, type LabelFit } from "./label-fit";
 
 /*
 ================
@@ -301,41 +304,13 @@ export function comboBox(
 // A label closer than this to its window's left edge has left its window
 // (the frame's border is about this wide; the Experimental "Fit window labels").
 const WINDOW_LABEL_MARGIN = 6;
-// A fitted button caption keeps this far inside each side of its plate.
-const CAPTION_MARGIN = 4;
-// The blank between a wrapped label's two lines, below the first line's
-// descent: one label reads as one, apart from the rows beside it.
-const WRAP_LEADING = 1;
-
-/*
-================
-wrappedLabelBand
-
-Where a wrapped label's two lines go (the Experimental "Fit window
-labels"): the top of the first line's rect, laid at its top (vAlign 0),
-and the pitch to the second. A box sized for one line has no room for
-two at the font's full extent (two such lines ran 8 pixels into each
-neighbouring row, #3673), so the pair stacks at its ink height plus
-WRAP_LEADING, and tighter, down to the ink height where the first line's
-descent meets the second line's letters, when room ([above, below],
-layout labelRoom) needs it. The pair's ink is centred on the box, then
-moved inside the band; a pair taller than its band even at the tightest
-pitch stays centred on the band. Without room the band is unbounded.
-================
-*/
-function wrappedLabelBand( box: UiRect, room: readonly [number, number] | undefined, ink: {
-	top: number;
-	height: number;
-} ) {
-	const [above, below] = room ?? [ Infinity, Infinity ];
-	const bandTop = box[1] - above, bandBottom = box[1] + box[3] + below;
-	const pitch = Math.max( ink.height, Math.min( ink.height + WRAP_LEADING, bandBottom - bandTop - ink.height ) );
-	const block = pitch + ink.height;
-	let inkTop = box[1] + (box[3] - block) / 2;
-	if ( block <= bandBottom - bandTop ) inkTop = Math.min( Math.max( inkTop, bandTop ), bandBottom - block );
-	else inkTop = bandTop + (bandBottom - bandTop - block) / 2;
-	return { top: inkTop - ink.top, pitch };
-}
+// A bold caption's run is this much wider than its ink at most (the last
+// glyph's advance past its ink and the first glyph's origin): "Set game"
+// runs 61 with 58 of ink, "Items to sell" 80 with 77.
+const TAB_RUN_OVERHANG = 3;
+// A fitted tab caption keeps this far inside each side of its plate: the
+// tab centres on its content insets, not the plate.
+const TAB_FIT_MARGIN = 2;
 // The lattice cell of CIFLattice art (36 x 36 inventory squares).
 const LATTICE_CELL = 36;
 // The Yes/No pair's buttons are this wide (52E720).
@@ -373,18 +348,21 @@ authoredText
 
 A static's text in its client rect. clipToControl keeps it inside
 that rect: true ends a long line with an ellipsis, "clip" cuts it
-at the edge.
+at the edge. A static that carries a text key is a label; label
+overrides that for a caption or a value its caller lets run past its
+box like one (the academy's "80(80)" level in its 19-pixel field).
 ================
 */
 export function authoredText(
 	frame: UiAuthoredFrame,
-	{ node, ox, oy, value, clipToControl = false, fontStyle = 0 }: {
+	{ node, ox, oy, value, clipToControl = false, fontStyle = 0, label = node.text !== "" }: {
 		node: AuthoredControl;
 		ox: number;
 		oy: number;
 		value: string;
 		clipToControl?: boolean | "clip";
 		fontStyle?: number;
+		label?: boolean;
 	}
 ) {
 	const quads = frame.quads, paths = frame.paths, text = frame.text, full = frame.full;
@@ -421,7 +399,7 @@ export function authoredText(
 	// (clipToControl, the guild page's "Guild master" before the race
 	// mark) wraps too, its lines inside the box's columns, instead of
 	// being cut to "Guild ma..." (#3674).
-	if ( clipToControl !== "clip" && frame.fitWindowLabels() && node.text !== "" && value.includes( " " ) ) {
+	if ( clipToControl !== "clip" && frame.fitWindowLabels() && label && value.includes( " " ) ) {
 		const measure = ( line: string ) => text.run( line, 0, node.fontIndex ).width;
 		const width = measure( value );
 		if ( width > box[2] ) {
@@ -466,8 +444,8 @@ export function authoredText(
 			fontStyle,
 			hAlign: node.hAlign,
 			vAlign: node.vAlign,
-			// A keyed static is a label; a value field's text keeps to its box.
-			label: node.text !== "",
+			// A label may run past its box; a value field's text keeps to it.
+			label,
 			...(clipToControl ?
 				{ overflow: clipToControl === "clip" ? "clip" as const : "ellipsis" as const } :
 				{})
@@ -546,19 +524,57 @@ export function authoredLabeledButton(
 		disabled?: boolean;
 	}
 ) {
-	// Port-only, not native (Experimental "Fit window labels", off is
-	// the original): a button caption wider than its plate keeps the
-	// leading words that fit ("Delete message" -> "Delete", "Check
-	// for duplicate entries" -> "Check").
-	const shown = frame.fitWindowLabels() ?
-		captionWords(
-			caption,
-			authoredRect( node, ox, oy )[2] - 2 * CAPTION_MARGIN,
-			line => frame.text.run( line, 0, node.fontIndex ).width
-		) :
-		caption;
-	authoredButton( frame, { node, ox, oy, id, label: shown, disabled } );
-	authoredText( frame, { node, ox, oy, value: shown } );
+	const fit = buttonCaptionFit( frame, { node, ox, oy, caption } );
+	authoredButton( frame, { node, ox, oy, id, label: fit.label, disabled } );
+	drawCaption( frame, { node, ox, oy, fit } );
+}
+
+/*
+================
+authoredCaption
+
+A button's caption, fitted inside its plate (buttonCaptionFit). Windows
+that draw their own plate (the party and blocking windows) draw their
+caption here too, so every button caption takes the same fit. Returns
+the caption shown, the button's accessible label.
+================
+*/
+export function authoredCaption(
+	frame: UiAuthoredFrame,
+	{ node, ox, oy, caption }: { node: AuthoredControl; ox: number; oy: number; caption: string; }
+): string {
+	const fit = buttonCaptionFit( frame, { node, ox, oy, caption } );
+	drawCaption( frame, { node, ox, oy, fit } );
+	return fit.label;
+}
+
+/*
+================
+drawCaption
+================
+*/
+function drawCaption(
+	frame: UiAuthoredFrame,
+	{ node, ox, oy, fit }: { node: AuthoredControl; ox: number; oy: number; fit: CaptionFit; }
+) {
+	if ( fit.lines.length === 1 ) {
+		authoredText( frame, { node: { ...node, fontIndex: fit.fontIndex }, ox, oy, value: fit.lines[0]! } );
+		return;
+	}
+	// Two lines: their ink centred on the plate (wrappedLabelBand with
+	// no room outside it), each line aligned as the caption is.
+	const box = authoredClientRect( node, ox, oy ), plate = authoredRect( node, ox, oy ), text = frame.text;
+	const font = fit.fontIndex, lineHeight = text.extentHeight( font );
+	const { top, pitch } = wrappedLabelBand( plate, [ 0, 0 ], text.lineInk( font ) );
+	fit.lines.forEach( ( line, index ) =>
+		frame.quads.push(
+			...text.quads( line, [ box[0], top + index * pitch, box[2], lineHeight ], frame.full, node.color, {
+				fontIndex: font,
+				hAlign: node.hAlign,
+				vAlign: 0
+			} )
+		)
+	);
 }
 
 /*
@@ -684,6 +700,9 @@ export interface MessageBox {
 	readonly no: string;
 	readonly yesDisabled?: boolean;
 	readonly single?: "confirm" | "cancel";
+	// Per drawn line; white where absent. 52E720's SetTextAndResize takes
+	// each appended line's own colour (5D3EB0's gold name line).
+	readonly colors?: readonly UiQuad["color"][];
 }
 
 /*
@@ -715,7 +734,7 @@ export function simpleMessageBox( frame: UiAuthoredFrame, box: MessageBox ) {
 		...text.quads( box.title, layout.title, full, white, { hAlign: 1, vAlign: 0 } )
 	);
 	for ( const [i, line] of lines.entries() ) {
-		quads.push( ...text.quads( line, layout.lines[i]!, full, white, { vAlign: 0 } ) );
+		quads.push( ...text.quads( line, layout.lines[i]!, full, box.colors?.[i] ?? white, { vAlign: 0 } ) );
 	}
 	if ( box.single === "confirm" ) {
 		button( frame, {
@@ -840,9 +859,33 @@ export function nativeTab(
 		...frame.text.quads( caption, content, frame.full, grey ? GREY_TAB_LABEL : frame.white, {
 			hAlign: 1,
 			vAlign: 1,
-			fontStyle: selected ? 2 : 0
+			...tabCaptionFace( frame, caption, r[2], selected ? 2 : 0 )
 		} )
 	);
+}
+
+/*
+================
+tabCaptionFace
+
+The face and weight a tab draws its caption in. A selected tab's caption
+is bold (fontStyle 2). Port-only, not native (Experimental "Fit window
+labels"): a caption whose ink is wider than its plate (Magic Pang's
+"Equipment", 69 bold on a 60-pixel tab) drops to the regular weight,
+then to the narrow face; the atlas has no bold narrow face. The measure
+is the plate, not the content insets: the guild's "Guild info" (62 bold,
+content 60) is centred past its insets but inside its 72-pixel plate,
+and a caption that only nears its plate's edge ("Set game" on 60, the
+stall's "Items to sell" on 80) keeps the native face, as all do off.
+================
+*/
+function tabCaptionFace( frame: UiAuthoredFrame, caption: string, room: number, fontStyle: number ) {
+	const native = { fontIndex: 0, fontStyle };
+	if ( !frame.fitWindowLabels() || frame.text.run( caption, fontStyle, 0 ).width - TAB_RUN_OVERHANG <= room ) {
+		return native;
+	}
+	const measure = ( line: string, face: number ) => frame.text.run( line, 0, face ).width;
+	return { fontIndex: narrowFace( caption, room - 2 * TAB_FIT_MARGIN, 0, measure ), fontStyle: 0 };
 }
 
 /*

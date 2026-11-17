@@ -17,6 +17,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { publishBytesAtomically } from "../../build/shared/atomicPublish.mjs";
+import { openFileHashCache } from "../../build/shared/fileHashCache.mjs";
 import { copyIntoPublicTree, writeIntoPublicTree, writeIntoPublicTreeSync } from "../../build/shared/publicWrite.mjs";
 
 const OLD_SECONDS = 1_000_000_000;
@@ -56,7 +57,8 @@ const WRITERS = {
 	copyIntoPublicTree: async ( target, bytes ) => {
 		const source = `${target}.source`;
 		await writeFile( source, bytes );
-		await copyIntoPublicTree( source, target );
+		const hashCache = await openFileHashCache( path.join( path.dirname( target ), "hash-cache.json" ) );
+		await copyIntoPublicTree( source, target, { hashCache } );
 	}
 };
 
@@ -83,5 +85,55 @@ test("publishBytesAtomically still forces a write on request", async () => {
 		assert.equal( await publishBytesAtomically( target, Buffer.from( "abc" ) ), false );
 		assert.equal( await publishBytesAtomically( target, Buffer.from( "abc" ), { skipIfUnchanged: false } ), true );
 		assert.notEqual( await mtimeSeconds( target ), OLD_SECONDS );
+	} );
+});
+
+/*
+================
+withCopyPair
+
+A temp source and target holding "abc", both backdated, and a hash cache
+of their own.
+================
+*/
+async function withCopyPair( run ) {
+	await withTarget( async ( root, target ) => {
+		const source = path.join( root, "source.bin" );
+		await writeFile( source, "abc" );
+		await utimes( source, OLD_SECONDS, OLD_SECONDS );
+		const hashCache = await openFileHashCache( path.join( root, "hash-cache.json" ) );
+		await run( { root, source, target, hashCache } );
+	} );
+}
+
+test("copyIntoPublicTree remembers an identical pair and then answers it by stat", async () => {
+	await withCopyPair( async ( { source, target, hashCache } ) => {
+		await copyIntoPublicTree( source, target, { hashCache } );
+		const sourceStat = await stat( source ), targetStat = await stat( target );
+		assert.ok( hashCache.peekFileHash( source, sourceStat ), "the compared source was not remembered" );
+		assert.equal( hashCache.peekFileHash( target, targetStat ), hashCache.peekFileHash( source, sourceStat ) );
+		// Change the target's bytes behind the cache's back, keeping its size and
+		// time: a remembered pair is trusted without reading either file.
+		await writeFile( target, "xyz" );
+		await utimes( target, OLD_SECONDS, OLD_SECONDS );
+		await copyIntoPublicTree( source, target, { hashCache } );
+		assert.equal( await readFile( target, "utf8" ), "xyz" );
+	} );
+});
+
+test("copyIntoPublicTree copies when the source changed since the pair was remembered", async () => {
+	await withCopyPair( async ( { source, target, hashCache } ) => {
+		await copyIntoPublicTree( source, target, { hashCache } );
+		await writeFile( source, "abd" );
+		await copyIntoPublicTree( source, target, { hashCache } );
+		assert.equal( await readFile( target, "utf8" ), "abd" );
+	} );
+});
+
+test("copyIntoPublicTree still refuses a missing source", async () => {
+	await withCopyPair( async ( { root, target, hashCache } ) => {
+		await assert.rejects( copyIntoPublicTree( path.join( root, "absent.bin" ), target, { hashCache } ), {
+			code: "ENOENT"
+		} );
 	} );
 });

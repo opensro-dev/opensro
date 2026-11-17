@@ -10,7 +10,9 @@ tests pin the band rule the importers' headers state.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import importlib
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,16 +21,41 @@ from unittest import mock
 import arabia_import as arabia  # noqa: E402
 import cap110_monsters as cap110  # noqa: E402
 import constantinople_import as constantinople  # noqa: E402
+import export_world_import as export_world  # noqa: E402
 import god_import as god  # noqa: E402
 import hunting2_import as hunting2  # noqa: E402
 import jupiter_import as jupiter  # noqa: E402
 import muhan_import as muhan  # noqa: E402
+import pharaoh_temple_import as pharaoh_temple  # noqa: E402
+import roc_import as roc  # noqa: E402
 import skytemple_import as skytemple  # noqa: E402
 import styria_import as styria  # noqa: E402
 import winter_event_import as winter  # noqa: E402
 
-# Every module that stages its own character (and skill) shard.
-SHARD_OWNERS = (arabia, cap110, constantinople, god, hunting2, jupiter, muhan, skytemple, styria, winter)
+SCRIPTS = Path(__file__).resolve().parents[2]
+# A module-level shard assignment, the shape every importer's header uses.
+SHARD_ASSIGNMENT = re.compile(r"^(CHARACTER|SKILL)_SHARD = ", re.MULTILINE)
+
+
+# ================
+# shard_owners
+#
+# Every scripts/ module that stages its own character (or skill) shard,
+# found by its module-level assignment and confirmed by importing it, so
+# a new importer joins the band rule without anyone listing it (a hand
+# list let a missing entry pass, opensro-web's #3762 reading).
+# ================
+def shard_owners():
+	owners = []
+	for path in sorted(SCRIPTS.glob("*.py")):
+		if not SHARD_ASSIGNMENT.search(path.read_text(encoding="utf-8")):
+			continue
+		module = importlib.import_module(path.stem)
+		if shard_names(module):
+			owners.append(module)
+	return tuple(owners)
+
+
 LAYER_FLAGS = (arabia.FLAG, muhan.FLAG, winter.FLAG)
 
 
@@ -39,10 +66,19 @@ def shard_names(module):
 	return [getattr(module, name) for name in ("CHARACTER_SHARD", "SKILL_SHARD") if hasattr(module, name)]
 
 
+SHARD_OWNERS = shard_owners()
+
+
 # ================
 # TestShardBands
 # ================
 class TestShardBands(unittest.TestCase):
+	def test_the_owners_include_every_known_importer(self):
+		# The discovery itself: the importers the band rule was written for.
+		for module in (arabia, cap110, constantinople, export_world, god, hunting2, jupiter, muhan, pharaoh_temple,
+			roc, skytemple, styria, winter):
+			self.assertIn(module, SHARD_OWNERS)
+
 	def test_every_shard_has_one_owner(self):
 		owners = {}
 		for module in SHARD_OWNERS:

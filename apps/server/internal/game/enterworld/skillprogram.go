@@ -35,7 +35,7 @@ func CompileSkillProgram(fields []string) (SkillProgram, error) {
 			col++
 			continue
 		}
-		arity, known := spawnParamSpec(uint32(n))
+		arity, known := programParamSpec(uint32(n))
 		if !known {
 			return SkillProgram{}, fmt.Errorf("skill program: unknown instruction %x at %d", n, col)
 		}
@@ -57,4 +57,22 @@ func CompileSkillProgram(fields []string) (SkillProgram, error) {
 		col += 1 + arity
 	}
 	return p, nil
+}
+
+/*
+================
+programParamSpec
+
+The server's parameter strides: the v1.150 client's table
+(spawnParamSpec, pinned against the client) plus the one later tag a
+port-only row carries. msid (one word) has no v1.150 row; the Devil's
+Spirit's Monster Defence Ignore rows author it (SRO_NASRUN), and the
+v1.188 server's parameter index keeps its one word at +0x4C4.
+================
+*/
+func programParamSpec(tag uint32) (int, bool) {
+	if tag == tagTimedIgnoreDefense {
+		return 1, true
+	}
+	return spawnParamSpec(tag)
 }

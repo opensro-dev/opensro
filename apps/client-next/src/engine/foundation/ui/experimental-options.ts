@@ -138,11 +138,6 @@ export interface ExperimentalOptions {
 	// wire.DropPlusNoticeChannel). On unless turned off (the owner's
 	// choice, 2026-10-15); off hides them from the banner and the chat log.
 	readonly dropPlusNotices: boolean;
-	// Port-only, not native: the shard's +7 announcements, their own bucket
-	// and 0x3667 channel apart from the drop/plus channel, so this row never
-	// widens that one. On unless turned off (the owner's choice,
-	// 2026-10-19); off hides them from the banner and the chat log.
-	readonly plusSevenNotices: boolean;
 	// Port-only, not native: the shard's item-break announcements for
 	// characters who opted in on the account page (their own 0x3667
 	// channel, server wire.BreakNoticeChannel; SRO_ALCHEMY_BREAK_NOTICE,
@@ -177,9 +172,11 @@ export interface ExperimentalOptions {
 	// frustum-only draw and pick.
 	readonly dungeonCharacterPvs: boolean;
 	// Port-only, not native: an authored label wider than its box wraps onto
-	// two lines inside it, and an open list that would leave its window opens
-	// upward (the original runs the text past the window's edge and draws the
-	// list below the box). On unless turned off (the owner's choice,
+	// two lines inside it, a button caption wider than its plate keeps its
+	// leading words (in game and on the creation screen), a speech board
+	// breaks between words, and an open list that would leave its window opens
+	// upward (the original runs the text past the window's edge, breaks a
+	// board at any glyph and draws the list below the box). On unless turned off (the owner's choice,
 	// 2026-10-15); off is the original look.
 	readonly fitWindowLabels: boolean;
 	// Port-only, not native: an item dropped on the other bag page's tab
@@ -474,7 +471,7 @@ experimentalOptions
 
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
-plusSevenNotices, breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices, confirmGuildBan,
+breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices, confirmGuildBan,
 petClickOpensWindow, smartPetPickup, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion, silentWingFlight, dungeonCharacterPvs and
 christmasCarols (owner, 2026-11-15: on by default, off by the player's choice), which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
@@ -482,8 +479,9 @@ explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
 invalid UI sizes the native 100; legacy Video
 settings cannot enable scaling. Keys of retired rows (terrainRelief and texturedHorizon, removed at the owner's
-request on 2026-10-11) are never read, so a saved preference holding them
-loads cleanly.
+request on 2026-10-11; plusSevenNotices, retired with the +7 notices in #3681)
+are never read, so a saved preference holding them loads cleanly and every
+other row keeps its saved choice.
 ================
 */
 export function experimentalOptions( value: unknown = null ): ExperimentalOptions {
@@ -522,7 +520,6 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		greyDisabledTabs: record.greyDisabledTabs !== false,
 		jobKillNotices: record.jobKillNotices !== false,
 		dropPlusNotices: record.dropPlusNotices !== false,
-		plusSevenNotices: record.plusSevenNotices !== false,
 		breakNotices: record.breakNotices !== false,
 		highlightEventNotices: record.highlightEventNotices !== false,
 		uniqueDamageRank: enabled( "uniqueDamageRank" ),
@@ -678,7 +675,6 @@ export interface ExperimentalGameplay {
 	readonly predictedRunUp: boolean;
 	readonly jobKillNotices: boolean;
 	readonly dropPlusNotices: boolean;
-	readonly plusSevenNotices: boolean;
 	readonly breakNotices: boolean;
 	readonly highlightEventNotices?: boolean;
 	readonly webTransport: boolean;
@@ -703,7 +699,6 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		webTransport: options.webTransport,
 		jobKillNotices: options.jobKillNotices,
 		dropPlusNotices: options.dropPlusNotices,
-		plusSevenNotices: options.plusSevenNotices,
 		breakNotices: options.breakNotices,
 		highlightEventNotices: options.highlightEventNotices,
 		homingProjectiles: options.homingProjectiles,

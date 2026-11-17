@@ -10,7 +10,12 @@ the shard's job-kill and drop/plus notices (0x3667), and the command restriction
 ===========================================================================
 */
 import { sealTier } from "./item-seal";
-import { decodeNoticeLinks } from "./notice-links";
+import {
+	CHAT_BROADCAST_OPCODE,
+	FORTRESS_WAR_STATE_OPCODE,
+	GM_RESTRICTION_NOTICE_OPCODE
+} from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 /*
 ================
@@ -58,7 +63,6 @@ export interface SystemNotice {
 	readonly bannerOnly?: true;
 	readonly jobKill?: true;
 	readonly dropPlus?: true;
-	readonly plusSeven?: true;
 	readonly itemBreak?: true;
 	readonly sunDrop?: true;
 	readonly shardEvent?: true;
@@ -72,7 +76,9 @@ only their subtype byte; their minutes are constants in the client.
 ================
 */
 export function fortressNotice( opcode: number, p: Uint8Array ): SystemNotice | null {
-	if ( opcode !== 0x3887 || p[0] === undefined || p[0] < 1 || (p[0] > 6 && p[0] !== 9) ) return null;
+	if ( opcode !== FORTRESS_WAR_STATE_OPCODE || p[0] === undefined || p[0] < 1 || (p[0] > 6 && p[0] !== 9) ) {
+		return null;
+	}
 	if ( p.length !== 1 ) throw Error( "Trailing fortress announcement bytes" );
 	const subtype = p[0];
 	return {
@@ -96,9 +102,9 @@ export const JOB_KILL_NOTICE_CHANNEL = 0x80;
 
 // Port-only, not native: the shard's seal-drop and plus announcement
 // channel (server wire.DropPlusNoticeChannel), shown as channel 7 unless
-// one of the notice rows is off. The +7 announcements (owner decision
-// 2026-10-19) share this channel as their own bucket; announcedPlusSeven
-// picks which Experimental row gates a frame.
+// its Experimental row is off. Reinforcement notices start at +8 (server
+// announcePlusMin, #3493), so the channel carries no +7 bucket and the
+// "Plus +7 notices" row is retired (#3681).
 export const DROP_PLUS_NOTICE_CHANNEL = 0x81;
 
 // Port-only, not native: the shard's item-break announcement channel
@@ -116,12 +122,6 @@ export const BREAK_NOTICE_CHANNEL = 0x82;
 // as channel 7 with no Experimental row: it is the feature's own
 // feedback, not a broadcast a player opts out of.
 export const RENAME_NOTICE_CHANNEL = 0x83;
-
-// The announced item's plus rides its encoded body at a fixed byte (the
-// server's ItemBody.Encode header, ItemBodySize 18). A shorter or absent
-// body names no plus.
-const ITEM_BODY_HEADER_BYTES = 18;
-const ITEM_BODY_PLUS_BYTE = 4;
 
 /*
 ================
@@ -229,18 +229,18 @@ serverNotification
 
 753A6F -> 752ABD -> 67A140/6B3180: the native type-7 server notification,
 and the port-only job-kill, drop/plus and item-break channels laid out the same way
-(flagged jobKill, dropPlus, plusSeven or itemBreak, so the gameplay owner can hide them). The chat owner separately retains the
+(flagged jobKill, dropPlus or itemBreak, so the gameplay owner can hide them). The chat owner separately retains the
 (Notify): line in the main log.
 ================
 */
 export function serverNotification( opcode: number, p: Uint8Array ): SystemNotice | null {
-	if ( opcode !== 0x3667 ) return null;
+	if ( opcode !== CHAT_BROADCAST_OPCODE ) return null;
 	// Port-only trainer receipts belong to the system log, never player chat.
 	const trainer = p[0] === 2 && p.length >= 14 && p[1] === 11 && p[2] === 0 &&
 		new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( 3, 14 ) ) === "Pet trainer";
 	if ( trainer ) {
 		if ( p.length < 16 ) throw Error( "Truncated pet trainer receipt" );
-		const length = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 14, true );
+		const length = viewOf( p ).getUint16( 14, true );
 		if ( length > 100 || p.length !== 16 + length * 2 ) throw Error( "Invalid pet trainer receipt length" );
 		return {
 			key: "",
@@ -251,7 +251,7 @@ export function serverNotification( opcode: number, p: Uint8Array ): SystemNotic
 	}
 	if ( !isServerNoticeChannel( p[0] ) ) return null;
 	if ( p.length < 3 ) throw Error( "Truncated server notification" );
-	const n = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 1, true );
+	const n = viewOf( p ).getUint16( 1, true );
 	// Port-only: a drop/plus notice may carry its links after the text
 	// (notice-links.ts), and so may a failed-reinforcement notice on the
 	// break channel (#3260); the banner shows the text alone either way.
@@ -264,9 +264,6 @@ export function serverNotification( opcode: number, p: Uint8Array ): SystemNotic
 	if ( p[0] === JOB_KILL_NOTICE_CHANNEL ) return { ...notice, notificationBanner: true, jobKill: true };
 	if ( p[0] === BREAK_NOTICE_CHANNEL ) return { ...notice, notificationBanner: true, itemBreak: true };
 	if ( p[0] === DROP_PLUS_NOTICE_CHANNEL ) {
-		if ( links && announcedPlusSeven( p, 3 + 2 * n ) ) {
-			return { ...notice, notificationBanner: true, plusSeven: true };
-		}
 		// Port-only, not native (owner 2026-11-05): a shard event notice
 		// (the Halloween waves) also prints in the bottom-right message log,
 		// under its game tab as a native type-7 line would sort, because a
@@ -293,22 +290,6 @@ export function serverNotification( opcode: number, p: Uint8Array ): SystemNotic
 		return { ...notice, ...banner, dropPlus: true, ...sun };
 	}
 	return { ...notice, notificationBanner: true };
-}
-
-/*
-================
-announcedPlusSeven
-
-Whether a drop/plus frame announces an item at exactly +7, read off the
-linked item body's plus byte: the +7 bucket shares the drop/plus
-channel (no new wire channel, so every client keeps rendering it), and
-this byte alone picks its row. Seal drops (+0), plus of +8 and above,
-and frames without a readable body stay with dropPlus.
-================
-*/
-function announcedPlusSeven( p: Uint8Array, linksOffset: number ): boolean {
-	const body = decodeNoticeLinks( p, linksOffset )?.body;
-	return body !== undefined && body.length >= ITEM_BODY_HEADER_BYTES && body[ITEM_BODY_PLUS_BYTE] === 7;
 }
 
 /*
@@ -340,11 +321,11 @@ zero/overflow calendar values remain numbers; noon is still Forenoon.
 ================
 */
 export function restrictionNotice( opcode: number, p: Uint8Array ): SystemNotice | null {
-	if ( opcode !== 0x36ea ) return null;
+	if ( opcode !== GM_RESTRICTION_NOTICE_OPCODE ) return null;
 	if ( p.length !== 5 ) throw Error( "Invalid command restriction notice" );
 	const kind = p[0]!;
 	if ( kind !== 0 && kind !== 1 ) return null;
-	const date = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true );
+	const date = viewOf( p ).getUint32( 1, true );
 	const hour = (date >>> 15) & 31, afternoon = hour > 12;
 	return {
 		key: kind === 0 ? "UIIT_MSG_GM_PUNISHMENT_CHAT_BLOCK" : "UIIT_MSG_GM_PUNISHMENT_TRADE_BLOCK",

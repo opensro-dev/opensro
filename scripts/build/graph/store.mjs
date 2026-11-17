@@ -32,19 +32,21 @@ trusted: the record is dropped and the action runs again.
 ===========================================================================
 */
 import { constants } from "node:fs";
-import { copyFile, link, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
+import { copyFile, link, mkdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { buildStatePath } from "../../lib/generatedRoot.mjs";
+import { buildStatePath, sharedCachePath } from "../../lib/generatedRoot.mjs";
 import { codeHash } from "../shared/codeStamp.mjs";
 import { openFileHashCache } from "../shared/fileHashCache.mjs";
 import { sha256File } from "../shared/hash.mjs";
 import { readJsonOrUndefined } from "../shared/jsonOut.mjs";
 import { writeStateJson } from "../shared/stateFile.mjs";
-import { actionKey, outputPath } from "./action.mjs";
+import { actionKey, discoveredName, MISSING_DIGEST, outputPath } from "./action.mjs";
 
 export const RECORD_FORMAT = "sro-action-record";
 export const RECORD_VERSION = 1;
-export const DEFAULT_STORE_ROOT = buildStatePath( "actions" );
+// Records are named by key and objects by content, so trees may share them
+// (generatedRoot.mjs sharedCachePath).
+export const DEFAULT_STORE_ROOT = sharedCachePath( "actions", buildStatePath( "actions" ) );
 const FAN_OUT_CHARS = 2;
 const HASH_CACHE_NAME = "file-hash-cache.json";
 
@@ -104,7 +106,7 @@ export function keyOf( store, action, env = process.env ) {
 recordPath / objectPath
 ================
 */
-export function recordPath( store, key ) {
+function recordPath( store, key ) {
 	return path.join( store.root, "records", key.slice( 0, FAN_OUT_CHARS ), `${key}.json` );
 }
 
@@ -118,9 +120,15 @@ readRecord
 
 The record for a key, or undefined when there is none, it is malformed,
 or one of its objects is missing or moved since it was stored.
+
+A record that carries discovered reads (reads.mjs) holds only while each
+of them still has its recorded digest under action's discoverRoots: a
+changed, deleted or newly present file is a miss. Without the action
+such a record cannot be checked, and is not used. The digests come from
+the file hash cache, so an unchanged tree costs a stat per read.
 ================
 */
-export async function readRecord( store, key ) {
+export async function readRecord( store, key, action ) {
 	const record = await readJsonOrUndefined( recordPath( store, key ) );
 	if ( record?.format !== RECORD_FORMAT || record.version !== RECORD_VERSION || record.key !== key ) return undefined;
 	if ( !Array.isArray( record.outputs ) ) return undefined;
@@ -128,7 +136,29 @@ export async function readRecord( store, key ) {
 		const info = await statOrUndefined( objectPath( store, output.sha256 ) );
 		if ( !info || info.size !== output.size || info.mtimeMs !== output.objectMtimeMs ) return undefined;
 	}
+	if ( record.discovered !== undefined && !(await discoveredReadsHold( store, action, record.discovered )) ) {
+		return undefined;
+	}
 	return record;
+}
+
+/*
+================
+discoveredReadsHold
+
+True when every [root, name, digest] still names a file with that digest
+(or a missing one for MISSING_DIGEST) under the action's roots.
+================
+*/
+async function discoveredReadsHold( store, action, discovered ) {
+	const roots = action?.discoverRoots;
+	if ( !roots || !Array.isArray( discovered ) ) return false;
+	for ( const [root, name, digest] of discovered ) {
+		if ( !roots[root] ) return false;
+		const file = path.join( roots[root], ...name.split( "/" ) );
+		if ( ((await store.hashFile( file )) ?? MISSING_DIGEST) !== digest ) return false;
+	}
+	return true;
 }
 
 /*
@@ -147,9 +177,21 @@ storeOutputs
 After a successful run: every declared output into the object store,
 then the record. A declared output the run did not write fails the
 action; nothing is recorded for it.
+
+options:
+	outputRoot  where the outputs were written (default the action's)
+	reads       the files the run discovered (reads.mjs trackReads), for an
+	            action that declares discoverRoots: each is recorded by
+	            root, name and digest. A read outside every root fails the
+	            action, as does a discovered read from an action without roots.
+	result      a small JSON value the run returned (a model's clip list and
+	            byte counts), kept in the record and handed back on a hit, so
+	            a caller that builds a manifest from it need not rerun
 ================
 */
-export async function storeOutputs( store, action, key, outputRoot = action.outputRoot ) {
+export async function storeOutputs( store, action, key, options = {} ) {
+	const { outputRoot = action.outputRoot, reads, result } = options;
+	const discovered = await discoveredDigests( store, action, reads );
 	const outputs = [];
 	for ( const name of action.outputs ) {
 		const file = outputPath( action, name, outputRoot );
@@ -159,9 +201,48 @@ export async function storeOutputs( store, action, key, outputRoot = action.outp
 		const object = await putObject( store, file, sha256, action.link );
 		outputs.push( { name, sha256, size: object.size, objectMtimeMs: object.mtimeMs } );
 	}
-	const record = { format: RECORD_FORMAT, version: RECORD_VERSION, name: action.name, key, outputs };
+	const record = {
+		format: RECORD_FORMAT,
+		version: RECORD_VERSION,
+		name: action.name,
+		key,
+		outputs,
+		...(discovered ? { discovered } : {}),
+		...(result === undefined ? {} : { result })
+	};
 	await writeStateJson( recordPath( store, key ), record );
 	return record;
+}
+
+/*
+================
+discoveredDigests
+
+The record's discovered reads, sorted by root and name; undefined for an
+action that declares no roots.
+================
+*/
+async function discoveredDigests( store, action, reads ) {
+	if ( !action.discoverRoots ) {
+		if ( reads && reads.size > 0 ) {
+			throw new Error( `action ${action.name}: discovered reads without discoverRoots` );
+		}
+		return undefined;
+	}
+	const named = [];
+	for ( const file of reads ?? [] ) {
+		const at = discoveredName( action, file );
+		if ( !at ) throw new Error( `action ${action.name}: read ${file} lies outside its discoverRoots` );
+		named.push( at );
+	}
+	// Root, then name, in code-unit order: the record is the same bytes on every host.
+	named.sort( ( a, b ) => a[0] !== b[0] ? (a[0] < b[0] ? -1 : 1) : a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0 );
+	const discovered = [];
+	for ( const [root, name] of named ) {
+		const file = path.join( action.discoverRoots[root], ...name.split( "/" ) );
+		discovered.push( [ root, name, (await store.hashFile( file )) ?? MISSING_DIGEST ] );
+	}
+	return discovered;
 }
 
 /*
@@ -270,26 +351,6 @@ async function placeObject( object, target, wantLink ) {
 		}
 	}
 	await copyFile( object, target, constants.COPYFILE_FICLONE );
-}
-
-/*
-================
-storeSize
-
-The object and record counts, for the build's summary line.
-================
-*/
-export async function storeSize( store ) {
-	const count = async ( folder ) => {
-		try {
-			return (await readdir( path.join( store.root, folder ), { recursive: true, withFileTypes: true } ))
-				.filter( entry => entry.isFile() ).length;
-		} catch ( error ) {
-			if ( error?.code === "ENOENT" ) return 0;
-			throw error;
-		}
-	};
-	return { objects: await count( "objects" ), records: await count( "records" ) };
 }
 
 /*

@@ -943,6 +943,27 @@ type AvatarInventory struct {
 	Capacity int64 `json:"capacity"`
 	// Rows are the worn avatar items, one per avatar socket (slot 0..3).
 	Rows []InventoryRow `json:"rows,omitempty"`
+	// Spirit is what the worn Devil's Spirit gives while it is awake, nil
+	// otherwise. Runtime only, never saved: the action owner derives it from
+	// the Spirit's row and clock (action/spiritability.go) and replaces it
+	// whole, never in place, so a staged copy may share it.
+	Spirit *SpiritEffect `json:"-"`
+}
+
+/*
+==================
+SpiritEffect
+
+A worn, awake Devil's Spirit's contribution (port-only, not native;
+behind SRO_NASRUN, nasrun/ability.go): the skills its wearer may cast
+while it lasts, its HP/MP percents, and its flat block rate. Slot and Plus
+name the row it was derived from.
+==================
+*/
+type SpiritEffect struct {
+	Slot, Plus                  int64
+	Skills                      []uint32
+	HPPercent, MPPercent, Block uint32
 }
 
 /*

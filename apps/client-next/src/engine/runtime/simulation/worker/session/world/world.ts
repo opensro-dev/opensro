@@ -35,6 +35,14 @@ import {
 	INCIDENT_MESSAGE_LENGTH,
 	type WireFrame
 } from "@/engine/contracts/network";
+import {
+	GAME_READY_OPCODE,
+	OBJECT_LIST_FINALIZE_OPCODE,
+	RESET_CLIENT_ACK_OPCODE,
+	RESET_CLIENT_OPCODE,
+	RESET_REGION_OPCODE
+} from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 const ADMISSION_TIMEOUT_MS = 10000;
 // The wait for the EnterWorld answer once the entry is presented. The
 // answer is one multi-megabyte record: on the WebTransport path its
@@ -535,7 +543,7 @@ receive
 			if ( p.length < 9 ) {
 				throw new Error( "Truncated EnterWorld result" );
 			}
-			const view = new DataView( p.buffer, p.byteOffset, p.byteLength ), length = view.getUint32( 5, true );
+			const view = viewOf( p ), length = view.getUint32( 5, true );
 			if ( p[0] !== 1 ) {
 				// A refused entry is the server's designed answer, not a
 				// packet the client failed to apply: its native error code
@@ -652,9 +660,11 @@ receive
 		// can take longer (cold assets, a background tab, or a slow GPU). Its
 		// acknowledgement still gates world commands, but must not reconnect
 		// a healthy socket and enqueue another complete bootstrap.
-		if ( frame.opcode === 0x330a && boundThisTransport ) deadline = 0;
-		if ( frame.opcode === 0x3369 || frame.opcode === 0x366a ) {
-			if ( frame.opcode === 0x3369 ) network.send( { opcode: 0x36dd, payload: new Uint8Array() } );
+		if ( frame.opcode === OBJECT_LIST_FINALIZE_OPCODE && boundThisTransport ) deadline = 0;
+		if ( frame.opcode === RESET_CLIENT_OPCODE || frame.opcode === RESET_REGION_OPCODE ) {
+			if ( frame.opcode === RESET_CLIENT_OPCODE ) {
+				network.send( { opcode: RESET_CLIENT_ACK_OPCODE, payload: new Uint8Array() } );
+			}
 			ready = false;
 			transition( "entering-world" );
 			armDeadline( ADMISSION_TIMEOUT_MS );
@@ -760,7 +770,7 @@ ready
 				throw new Error( "World is not bound" );
 			}
 			if ( !ready ) {
-				network.send( { opcode: 0x3012, payload: new Uint8Array() } );
+				network.send( { opcode: GAME_READY_OPCODE, payload: new Uint8Array() } );
 				ready = true;
 				core.travelReady();
 			}

@@ -17,6 +17,7 @@ Body, little-endian: u16 count, then count x { u16 len, ascii name }.
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import type { SystemNotice } from "@/engine/foundation/gameplay/system-notices";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const OP_CONTRIBUTOR_TITLES = 0x3fc1;
 // The login prompt (port-only 0x3FC2, owner 2026-11-14): one byte, its
@@ -72,7 +73,7 @@ error, never a partial list.
 				return true;
 			}
 			if ( frame.opcode !== OP_CONTRIBUTOR_TITLES ) return false;
-			const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const p = frame.payload, v = viewOf( p );
 			if ( p.length < 2 ) throw new Error( "Invalid contributor titles" );
 			const count = v.getUint16( 0, true );
 			if ( count > MAX_CONTRIBUTORS ) throw new Error( "Invalid contributor title count" );

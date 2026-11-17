@@ -29,10 +29,12 @@ import { fileURLToPath } from "node:url";
 import { publishFileFromTemp } from "../../shared/atomicPublish.mjs";
 import { claimPublicFile } from "../../shared/publicationLedger.mjs";
 import { exists } from "../io.mjs";
+import { noteRead } from "../../graph/reads.mjs";
 import { generatedRoot } from "../paths.mjs";
 import { sha256Hex } from "../../shared/hash.mjs";
 import { runPython } from "../../shared/pythonRun.mjs";
 import { applyObjectTextureLevels } from "./objectTextureLevels.mjs";
+import { NTX_HEADER_BYTES, NTX_MAGIC, ntxContainer } from "../../textures/textureContainers.mjs";
 
 const DDJ_HEADER_SIZE = 20;
 const DDS_HEADER_BYTES = 148;
@@ -55,8 +57,6 @@ const BLOCK_FOURCCS = new Map( [
 	[ 0x33545844, "dxt3" ],
 	[ 0x35545844, "dxt5" ]
 ] );
-const NTX_MAGIC = 0x3158544e;
-const NTX_HEADER_BYTES = 20;
 const MAX_TEXTURE_DIMENSION = 8192;
 const ENCODER_PATH = fileURLToPath( new URL( "../../native_texture_mips.py", import.meta.url ) );
 const BLOCK_TEXTURE_CACHE_DIR = path.join( generatedRoot, "intermediate", "block-texture-cache" );
@@ -102,6 +102,8 @@ format, or null. Missing files return null (the caller owns that error).
 ================
 */
 export async function probeBlockTextureFile( absolutePath ) {
+	// Noted before the cache: a later tracked step probing it must see it too.
+	noteRead( absolutePath );
 	const cached = probedFiles.get( absolutePath );
 	if ( cached !== undefined ) return cached;
 	let format = null;
@@ -172,12 +174,6 @@ export function authoredBlockContainer( bytes, origin ) {
 	const width = dds.readUInt32LE( DDS_WIDTH_OFFSET ), height = dds.readUInt32LE( DDS_HEIGHT_OFFSET );
 	const blockBytes = nativeTextureBlockBytesOf( dds.readUInt32LE( FOURCC_CODE_OFFSET ) );
 	const count = authoredLevelCount( dds, width, height );
-	const out = Buffer.alloc( NTX_HEADER_BYTES );
-	out.writeUInt32LE( NTX_MAGIC, 0 );
-	out.writeUInt32LE( width, 4 );
-	out.writeUInt32LE( height, 8 );
-	out.writeUInt32LE( dds.readUInt32LE( FOURCC_CODE_OFFSET ), 12 );
-	out.writeUInt32LE( count, 16 );
 	const levels = [];
 	let offset = DDS_PAYLOAD_OFFSET, levelWidth = width, levelHeight = height;
 	for ( let level = 0; level < count; level++ ) {
@@ -188,7 +184,7 @@ export function authoredBlockContainer( bytes, origin ) {
 		levelWidth = Math.max( 1, levelWidth >> 1 );
 		levelHeight = Math.max( 1, levelHeight >> 1 );
 	}
-	return Buffer.concat( [ out, ...levels ] );
+	return ntxContainer( width, height, dds.readUInt32LE( FOURCC_CODE_OFFSET ), levels );
 }
 
 /*

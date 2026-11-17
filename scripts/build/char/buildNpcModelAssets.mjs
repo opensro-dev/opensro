@@ -42,31 +42,12 @@ Textures: .ddj under prim/mtrl are converted by scripts/convert_images.py
 */
 
 import { publishCrowEgg } from "./crowEgg.mjs";
-import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import { loadBoothModelRoster } from "./boothModelRoster.mjs";
 import { bakeNpcSecondaryResources } from "./npcSecondaryResources.mjs";
 import { preserveFreshNpcVatReferences } from "./buildNpcVatAssets.mjs";
-import { authoredAnimationBindings } from "./authoredAnimationBindings.mjs";
-import { attachedMotionMetadata, pickAttachedMotionClips } from "./attachedMotionClips.mjs";
-
 import fs from "node:fs";
-import { characterMaterialVariants } from "./materialVariants.mjs";
 import { parseWeatherEvents } from "./weatherEvents.mjs";
 import path from "node:path";
-import {
-	findAnimationSet,
-	findDefaultAnimationSet,
-	findDefaultAnimationState,
-	pickAnimationSetSoundEvents,
-	pickAnimationStateTableMetadata,
-	pickDefaultSetSoundEvents,
-	pickDefaultSetStateTableMetadata
-} from "./animationUtils.mjs";
-import { assembleAvatar, primSlot, NATIVE_IDLE_STATE_CLIPS, NATIVE_EMOTE_STATE_CLIPS } from "./buildAvatar.mjs";
-import { assembleStaticBsrModel } from "./compileBsrVisual.mjs";
-import { avatarToGlb } from "./exportGlb.mjs";
-import { assembleCompoundCharacter } from "./itemAttachments.mjs";
-import { parseSkillAniSet } from "./parseSkillEffect.mjs";
 import { loadCharacterDataRows } from "./resolveCharRoster.mjs";
 import {
 	enabledCosReferences,
@@ -75,15 +56,11 @@ import {
 	loadSpawnableNpcRoster
 } from "./npcModelRoster.mjs";
 import { parseStructureEffects } from "./structureEffects.mjs";
-import { parseBan, parseCharacterBsr } from "./formats.mjs";
-import { SKILL_EFFECT_ANIMATION_ID_BY_NAME } from "./native/skillEffectAnimationRegistry.ts";
-import { loadDataAsset, loadMaterialTextures } from "../shared/jmxAssetIO.mjs";
-import { normalizeAssetPath } from "../shared/assetPaths.mjs";
+import { openStore } from "../graph/store.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { convertTextureTrees } from "../shared/convertImagesRunner.mjs";
 import { readJsonOrNullSync, writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { loadOptionalDataAsset } from "../shared/optionalDataAsset.mjs";
-import { qinshiTombCombatEnabled } from "../shared/qinshiTomb.mjs";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import {
 	claimResourceOutput,
@@ -93,50 +70,18 @@ import {
 } from "./resourceGlbOutput.mjs";
 import { gameRoot, publicAssetsRoot, publicRoot, retailTextdataRoot } from "../world/paths.mjs";
 import { NPC_MANIFEST_FORMAT, NPC_MANIFEST_VERSION, splitNpcManifestModels } from "../shared/npcManifest.mjs";
-
-const textdataDir = retailTextdataRoot;
-const publicAssets = publicAssetsRoot;
-
 import {
 	characterInfoResolver,
 	expandCharacterInfoCodenames,
 	loadCharacterInfo,
 	normalizeCharacterInfoBsrPath
 } from "../shared/characterInfo.mjs";
+import { BODY_REQUIRED_STATES, bakeTables, cachedBake, DEATH_REQUIRED_STATES } from "./npcResourceBake.mjs";
+
+const textdataDir = retailTextdataRoot;
+const publicAssets = publicAssetsRoot;
+
 export { expandCharacterInfoCodenames };
-
-/*
-================
-buildRetailAnimationCatalog
-
-Publish the complete retail animation surface separately from the runtime
-behavior whitelist. One BAN can be reached by more than one native state
-(Mangyang stand01: 0/79, stand02: 8/122), so aliases remain attached to the
-unique exported GLB clip instead of becoming duplicate AnimationGroups.
-================
-*/
-export function buildRetailAnimationCatalog( bsr, clips ) {
-	const defaultSet = bsr.animationSets
-		?.find( ( set ) => set.name.toLowerCase() === "default" );
-	const defaultStates = defaultSet?.states ?? [];
-	const normalizePath = normalizeAssetPath;
-
-	return clips.map( ( { role, path: clipPath, clip } ) => {
-		const normalizedClipPath = normalizePath( clipPath );
-		const setMatch = /^native:([^:]+):\d+$/.exec( role );
-		const setStates = setMatch ?
-			(findAnimationSet( bsr, setMatch[1] )?.states ?? defaultStates) :
-			defaultStates;
-		return {
-			role,
-			durationMs: clip.durationMs,
-			looping: clip.field2 === 1,
-			stateIds: setStates
-				.filter( ( state ) => normalizePath( state.animationPath ) === normalizedClipPath )
-				.map( ( state ) => state.stateId )
-		};
-	} );
-}
 
 /*
 ================
@@ -198,343 +143,6 @@ export function resolveNpcModel( codename, rows ) {
 	};
 }
 
-// The default-set motions bakeCharacterResource requires of a monster resource.
-const BODY_REQUIRED_STATES = [ 0 ];
-const DEATH_REQUIRED_STATES = [ 4, 36 ];
-const nonDefaultSkillStatesByTomb = new Map();
-
-/*
-================
-nonDefaultMonsterSkillStates
-
-0x008e83f0 (CCObjCharacter_ResolveWeaponAnimationPrefix) keeps a monster or
-COS compound's active weapon prefix at "default" (equipped item count +0x74 is
-0), while CSkillEffectMgr / 8E7150 (skill-motion-resolve.ts) dispatches
-skillaniset2's AniGroup (SWORD or SPEAR on Tomb .cpd skills) by (set, stateId).
-Collect the exact (set -> Set<stateId>) pairs referenced by MSKILL_* rows so a
-.cpd compound bakes only its reachable weapon-skill states rather than all 12
-player weapon sets (~580 clips).
-================
-*/
-function nonDefaultMonsterSkillStates() {
-	const tombKey = qinshiTombCombatEnabled();
-	let cached = nonDefaultSkillStatesByTomb.get( tombKey );
-	if ( cached ) return cached;
-	cached = new Map();
-	const aniMap = parseSkillAniSet( path.join( textdataDir, "skilleffect.txt" ) );
-	for ( const [name, row] of aniMap ) {
-		if ( !/^MSKILL_/i.test( name ) ) continue;
-		const set = String( row.aniGroup ?? "default" ).toLowerCase();
-		if ( set === "default" ) continue;
-		for ( const animName of [ ...row.readyAnims, ...row.waitAnims, ...row.shotAnims, ...row.actionWaitAnims ] ) {
-			const id = SKILL_EFFECT_ANIMATION_ID_BY_NAME.get( animName );
-			if ( id === undefined ) continue;
-			let ids = cached.get( set );
-			if ( !ids ) {
-				ids = new Set();
-				cached.set( set, ids );
-			}
-			ids.add( id );
-		}
-	}
-	nonDefaultSkillStatesByTomb.set( tombKey, cached );
-	return cached;
-}
-
-/*
-================
-bakeCharacterResource
-
-Bake one character BSR resource. Primary RefObj models and secondary
-CICRide models use the same native resource loader, so they must share one
-compiler path as well; only the manifest identity differs. requiredStates
-are the default-set motions a monster resource cannot lack: stand (0) for a
-body, death and deathLoop (4, 36) for a characterInfo death model, which
-8E64F0 only ever plays those two motions on.
-================
-*/
-export async function bakeCharacterResource( bsrPath, output, isMob, requiredStates = BODY_REQUIRED_STATES ) {
-	const { publicPath, diskPath } = output;
-	const isCpd = /\.cpd$/i.test( bsrPath );
-	const source = await loadDataAsset( bsrPath );
-	let bsr;
-	let materialSets;
-	let avatar;
-	if ( isCpd ) {
-		const assembled = await assembleCompoundCharacter( bsrPath, source );
-		const skillStatesBySet = nonDefaultMonsterSkillStates();
-		const scopedSets = [];
-		for ( const set of assembled.bsr.animationSets ?? [] ) {
-			const setKey = set.name.toLowerCase();
-			if ( setKey === "default" ) {
-				scopedSets.push( set );
-				continue;
-			}
-			const wantedIds = skillStatesBySet.get( setKey );
-			if ( !wantedIds ) continue;
-			const states = set.states.filter( ( state ) => wantedIds.has( state.stateId ) );
-			if ( states.length > 0 ) {
-				scopedSets.push( { ...set, states } );
-			}
-		}
-		bsr = { ...assembled.bsr, animationSets: scopedSets };
-		materialSets = assembled.materialSets;
-		avatar = assembled.avatar;
-	} else {
-		bsr = parseCharacterBsr( source, bsrPath );
-		materialSets = characterMaterialVariants( source, bsrPath );
-		avatar = bsr.skeletonPath ?
-			await assembleAvatar( bsrPath, {
-				noClips: true,
-				materialSetPaths: materialSets.has( 0 ) ? [ materialSets.get( 0 ) ] : [],
-				rigidUnboundMeshes: true,
-				slotForMesh: ( _mp, i ) => primSlot( i )
-			} ) :
-			await assembleStaticBsrModel( bsrPath );
-	}
-	const clips = [];
-	const movementRules = isMob ?
-		[
-			[ "stand", 0 ],
-			[ "walk", 1 ],
-			[ "attack1", 2 ],
-			[ "hit1", 3 ],
-			[ "death", 4 ],
-			[ "attack2", 5 ],
-			[ "run", 7 ],
-			[ "stand02", 8 ],
-			[ "hit2", 9 ],
-			[ "attack3", 16 ],
-			[ "attack4", 17 ],
-			[ "deathLoop", 36 ],
-			[ "down", 62 ],
-			[ "downwait", 63 ],
-			[ "downdamage", 64 ],
-			[ "wakeup", 65 ],
-			[ "downdie", 66 ]
-		] :
-		[ [ "stand", 0 ] ];
-	const animationStates = {};
-	const missingOptionalAnimationPaths = [];
-	for (
-		const [role, stateId] of [
-			...movementRules,
-			...NATIVE_IDLE_STATE_CLIPS.map( ( { role, stateId } ) => [ role, stateId ] ),
-			...NATIVE_EMOTE_STATE_CLIPS.filter( row => row.stateId === 50 ).map( (
-				{ role, stateId }
-			) => [ role, stateId ] )
-		]
-	) {
-		const state = findDefaultAnimationState( bsr, stateId );
-		if ( !state?.animationPath ) {
-			if ( isMob && requiredStates.includes( stateId ) ) {
-				throw new Error( `${bsrPath} has no authored default animation state ${stateId} (${role})` );
-			}
-			continue;
-		}
-		let clip;
-		if ( !isMob && stateId === 0 ) {
-			// Native CPrimAnimation opens BAN resources lazily. A town NPC's BSR
-			// and mesh remain valid when its optional idle archive is absent or
-			// malformed; only that animation lane is unavailable. The previous
-			// build collapsed this leaf failure into a missing world object.
-			const animationBytes = await loadOptionalDataAsset( state.animationPath );
-			try {
-				clip = animationBytes === null ?
-					null :
-					parseBan( animationBytes, state.animationPath );
-			} catch ( error ) {
-				console.warn(
-					`[npc] optional NPC stand animation unreadable: ${state.animationPath} ` +
-						`(model ${bsrPath} remains valid): ${error instanceof Error ? error.message : String( error )}`
-				);
-				clip = null;
-			}
-			if ( clip === null ) {
-				missingOptionalAnimationPaths.push( state.animationPath );
-				continue;
-			}
-		} else {
-			clip = parseBan( await loadDataAsset( state.animationPath ), state.animationPath );
-		}
-		clips.push( { role, path: state.animationPath, clip } );
-		animationStates[role] = {
-			stateId,
-			durationMs: clip.durationMs,
-			soundEvents: pickDefaultSetSoundEvents( bsr, stateId ),
-			...pickDefaultSetStateTableMetadata( bsr, stateId )
-		};
-	}
-	for ( const motion of pickAttachedMotionClips( bsr ) ) {
-		const clip = parseBan( await loadDataAsset( motion.path ), motion.path );
-		clips.push( { role: motion.role, path: motion.path, clip } );
-		animationStates[motion.role] = {
-			stateId: motion.id,
-			durationMs: clip.durationMs,
-			loop: clip.field2 !== 0,
-			...attachedMotionMetadata( bsr, motion )
-		};
-	}
-	if ( isMob ) {
-		// A monster skill names its motion by ANI_* state (skilleffect.txt animation
-		// rows, data_ccd620): ANI_ATTACK5..9 are 183..190, beyond the movement table
-		// above. CICharactor_PlayAnimationByMotionId (85ED80) plays any state the
-		// BSR's default set authors, so publish each one a skill can name under its
-		// native role; the client resolves native:default:<id> directly
-		// (skill-motion-resolve.ts). Captain Ivy's ATTACK05..08 had no timeline.
-		const published = new Set( Object.values( animationStates ).map( state => state.stateId ) );
-		const reachable = new Set( SKILL_EFFECT_ANIMATION_ID_BY_NAME.values() );
-		for ( const state of findDefaultAnimationSet( bsr )?.states ?? [] ) {
-			if ( !state.animationPath || published.has( state.stateId ) || !reachable.has( state.stateId ) ) continue;
-			published.add( state.stateId );
-			const role = `native:default:${state.stateId}`;
-			// A state that reuses another state's BAN gets its own clip: the runtime
-			// keys a state's metadata by clip name.
-			const shared = clips.find( clip => clip.path === state.animationPath );
-			const clip = shared?.clip ?? parseBan( await loadDataAsset( state.animationPath ), state.animationPath );
-			clips.push( { role, path: state.animationPath, clip } );
-			animationStates[role] = {
-				stateId: state.stateId,
-				durationMs: clip.durationMs,
-				soundEvents: pickDefaultSetSoundEvents( bsr, state.stateId ),
-				...pickDefaultSetStateTableMetadata( bsr, state.stateId )
-			};
-		}
-		for ( const set of bsr.animationSets ?? [] ) {
-			const setKey = set.name.toLowerCase();
-			if ( setKey === "default" ) continue;
-			const wantedIds = nonDefaultMonsterSkillStates().get( setKey );
-			if ( !wantedIds ) continue;
-			for ( const state of set.states ) {
-				if ( !state.animationPath || !wantedIds.has( state.stateId ) ) continue;
-				const role = `native:${setKey}:${state.stateId}`;
-				if ( animationStates[role] ) continue;
-				const shared = clips.find( ( clip ) => clip.path === state.animationPath );
-				const clip = shared?.clip ??
-					parseBan( await loadDataAsset( state.animationPath ), state.animationPath );
-				clips.push( { role, path: state.animationPath, clip } );
-				animationStates[role] = {
-					stateId: state.stateId,
-					durationMs: clip.durationMs,
-					soundEvents: pickAnimationSetSoundEvents( bsr, setKey, state.stateId ),
-					...pickAnimationStateTableMetadata( state )
-				};
-			}
-		}
-	}
-	const allowedClips = Object.keys( animationStates );
-
-	if ( isMob && !isCpd ) {
-		// Ship the authored family once. Runtime selection remains constrained to
-		// the state-id-derived allowedClips above; filenames never confer behavior.
-		const usedPaths = new Set( clips.map( ( clip ) => clip.path ) );
-		for ( const animPath of avatar.animationPaths ) {
-			if ( usedPaths.has( animPath ) ) continue;
-			usedPaths.add( animPath );
-			const base = path.basename( animPath, ".ban" ).toLowerCase();
-			const role = base.startsWith( `${path.basename( bsrPath, ".bsr" )}_` ) ?
-				base.slice( path.basename( bsrPath, ".bsr" ).length + 1 ) :
-				base;
-			const roleOwner = clips.find( ( clip ) => clip.role === role );
-			if ( roleOwner ) {
-				throw new Error(
-					`${bsrPath} maps animation role "${role}" to both ${roleOwner.path} and ${animPath}`
-				);
-			}
-			// Native CPrimAnimation stores every BSR-authored path but opens each
-			// BAN lazily (CResChar_ForEachLinkedItem_Helper -> CResAnimationClip_LoadBan). An archive miss returns 0 for
-			// that clip; it does not invalidate the model or its other states. Keep
-			// the required stand/walk/run lane strict above, while preserving that
-			// per-optional-clip failure boundary here. This matters for shipped data
-			// such as bluetiger state 79's authored "stnad01" typo.
-			const animationBytes = await loadOptionalDataAsset( animPath );
-			if ( animationBytes === null ) {
-				missingOptionalAnimationPaths.push( animPath );
-				console.warn(
-					`[npc] optional animation absent in archive: ${animPath} (model ${bsrPath} remains valid)`
-				);
-				continue;
-			}
-			try {
-				clips.push( { role, path: animPath, clip: parseBan( animationBytes, animPath ) } );
-			} catch ( error ) {
-				missingOptionalAnimationPaths.push( animPath );
-				console.warn(
-					`[npc] optional animation unreadable: ${animPath} (model ${bsrPath} remains valid): ` +
-						`${error instanceof Error ? error.message : String( error )}`
-				);
-			}
-		}
-	}
-
-	const animationBindings = await authoredAnimationBindings( bsr, clips, loadOptionalDataAsset );
-	for ( const binding of animationBindings ) {
-		if ( binding.clip === null && binding.path && !missingOptionalAnimationPaths.includes( binding.path ) ) {
-			missingOptionalAnimationPaths.push( binding.path );
-		}
-	}
-
-	// Mission PathCtl owns NPC world displacement. Export locomotion as an
-	// in-place pose so the skeleton cannot apply the same travel a second time.
-	// Attack, hit, death, and other authored root motion remain untouched.
-	const glb = avatarToGlb( {
-		...avatar,
-		clips,
-		inPlaceHorizontalRootMotionRoles: [ "walk", "run" ]
-	} );
-	writeIntoPublicTreeSync( diskPath, glb );
-	const materialVariants = {};
-	if ( isMob ) {
-		for ( const [slot, materialPath] of materialSets ) {
-			if ( slot === 0 ) continue;
-			// A variant slot whose BMT the archive does not hold publishes no
-			// variant (v1.696's mujigi_koold.bsr names a _clon set it never
-			// shipped). INFERENCE: the native loader opens a material set
-			// only when a model asks for that slot and draws its default set
-			// when the file is absent, as it does for a missing BAN; the
-			// client already falls back to the body's GLB for a slot with
-			// no variant (appearance-lookup.ts resourceFor).
-			if ( (await loadOptionalDataAsset( materialPath )) === null ) {
-				console.warn( `[npc] optional material set absent in archive: ${materialPath} (model ${bsrPath})` );
-				missingOptionalAnimationPaths.push( materialPath );
-				continue;
-			}
-			const materials = await loadMaterialTextures( [ materialPath ], {
-				onWarning: message => {
-					throw Error( message );
-				}
-			} );
-			const variant = avatarToGlb( {
-				...avatar,
-				materials,
-				clips,
-				inPlaceHorizontalRootMotionRoles: [ "walk", "run" ]
-			} );
-			const suffix = `.material-${slot}.glb`;
-			writeIntoPublicTreeSync( diskPath.replace( /\.glb$/, suffix ), variant );
-			materialVariants[slot] = publicPath.replace( /\.glb$/, suffix );
-		}
-	}
-	return {
-		glb: publicPath,
-		bytes: glb.length,
-		bones: avatar.skeleton.boneCount,
-		clips: clips.map( ( clip ) => clip.role ),
-		materials: avatar.materials.size,
-		allowedClips,
-		animationStates,
-		animationBindings,
-		modifierSets: bsr.modifierSets,
-		particleModifiers: bsr.particleModifiers,
-		materialModifiers: bsr.materialModifiers,
-		textureModifiers: bsr.textureModifiers,
-		...(Object.keys( materialVariants ).length ? { materialVariants } : {}),
-		...(!isMob && allowedClips.length === 0 ? { staticPose: true } : {}),
-		retailAnimationCatalog: buildRetailAnimationCatalog( bsr, clips ),
-		...(missingOptionalAnimationPaths.length > 0 ? { missingOptionalAnimationPaths } : {})
-	};
-}
-
 /*
 ================
 monsterPolicyBsrs
@@ -567,9 +175,28 @@ buildNpcModelAssets
 ================
 */
 export async function buildNpcModelAssets( options = {} ) {
+	const store = options.store ?? (await openStore());
+	try {
+		return await publishNpcModels( options, store );
+	} finally {
+		if ( !options.store ) await store.shutdown();
+	}
+}
+
+/*
+================
+publishNpcModels
+
+The bakes and the manifests. Every resource bake goes through the action
+store (cachedBake); the manifests are rebuilt from the bakes' results on
+every run.
+================
+*/
+async function publishNpcModels( options, store ) {
 	// A scratch output root lets a branch verify its bake without rewriting
 	// the shared tree's manifest; the default is the published tree.
 	const publicAssets = options.publicAssetsRoot ?? publicAssetsRoot;
+	const stats = { stored: 0 };
 	const eventRain = parseWeatherEvents( fs.readFileSync( path.join( textdataDir, "skilleffect.txt" ), "utf16le" ) );
 	const skipTextures = options.skipTextures ?? false;
 	if ( !skipTextures ) await convertTextureTrees( "npc", [ "prim/mtrl" ] );
@@ -623,6 +250,7 @@ export async function buildNpcModelAssets( options = {} ) {
 	const rideResources = new Map();
 	/** characterInfo death BSR -> the codenames whose record names it. */
 	const deathResources = new Map();
+	const bake = cachedBake( { store, publicAssetsRoot: publicAssets, tables: bakeTables(), stats } );
 	const monsterBsrs = monsterPolicyBsrs( roster, {
 		resolveModel: codename => resolveNpcModel( codename, rows ),
 		isMonster: codename => mobRosterByCodename.has( codename ) || cosNames.has( codename ),
@@ -741,7 +369,7 @@ export async function buildNpcModelAssets( options = {} ) {
 			continue;
 		}
 		try {
-			const baked = await bakeCharacterResource( model.bsrPath, output, bakeAsMob );
+			const baked = await bake( model.bsrPath, output, bakeAsMob );
 			const { retailAnimationCatalog, ...missionBaked } = baked;
 			Object.assign( entry, missionBaked );
 			bakedByBsr.set( model.bsrPath, { isMob: bakeAsMob, baked: missionBaked } );
@@ -795,7 +423,7 @@ export async function buildNpcModelAssets( options = {} ) {
 		outputOwners,
 		retailAnimationModels,
 		retailAnimationResources,
-		bake: bakeCharacterResource
+		bake
 	}, secondaryResources );
 	builtResources += secondary.built;
 	coveredModels += secondary.covered;
@@ -819,11 +447,7 @@ export async function buildNpcModelAssets( options = {} ) {
 			const output = resourceGlbOutput( bsrPath, { namespace: "npc", publicAssetsRoot: publicAssets } );
 			claimResourceOutput( outputOwners, bsrPath, output.publicPath );
 			try {
-				const { retailAnimationCatalog: _catalog, ...baked } = await bakeCharacterResource(
-					bsrPath,
-					output,
-					false
-				);
+				const { retailAnimationCatalog: _catalog, ...baked } = await bake( bsrPath, output, false );
 				bakedByBsr.set( bsrPath, { isMob: false, baked } );
 				stages[stage] = { glb: baked.glb, particleModifiers: baked.particleModifiers };
 				builtResources += 1;
@@ -871,7 +495,8 @@ export async function buildNpcModelAssets( options = {} ) {
 	writeJsonIfChangedSync( manifestPath, manifest );
 	console.log(
 		`[npc] covered ${coveredModels}/${models.length} entries from ${builtResources} unique GLBs ` +
-			`(${reusedModels} shared); manifest -> ${path.relative( gameRoot, manifestPath )}`
+			`(${reusedModels} shared, ${stats.stored} from the action store); ` +
+			`manifest -> ${path.relative( gameRoot, manifestPath )}`
 	);
 	if ( preservedVat.preserved > 0 || preservedVat.stale > 0 ) {
 		console.log(
@@ -911,6 +536,7 @@ export async function buildNpcModelAssets( options = {} ) {
 		built: builtResources,
 		covered: coveredModels,
 		reused: reusedModels,
+		stored: stats.stored,
 		modelCount: models.length,
 		manifestPath,
 		animationCatalogPath

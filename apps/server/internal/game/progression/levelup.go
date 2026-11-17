@@ -31,6 +31,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/domain/charactervitals"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/pk"
@@ -547,9 +548,9 @@ func (rt *Runtime) commitExperience(
 			next.CurrentMP = &full
 		}
 
-		raisedStr := clampStatWord(enterworld.CharacterStrength(next) + autoStatPerLevel*newMaxLevels)
+		raisedStr := charactervitals.ClampStatWord(enterworld.CharacterStrength(next) + autoStatPerLevel*newMaxLevels)
 		next.Strength = &raisedStr
-		raisedInt := clampStatWord(enterworld.CharacterIntellect(next) + autoStatPerLevel*newMaxLevels)
+		raisedInt := charactervitals.ClampStatWord(enterworld.CharacterIntellect(next) + autoStatPerLevel*newMaxLevels)
 		next.Intellect = &raisedInt
 		statPoints += StatPointsPerLevel * newMaxLevels
 		if statPoints > statPointWordMax {

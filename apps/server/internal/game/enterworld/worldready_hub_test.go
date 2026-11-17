@@ -35,6 +35,13 @@ func TestWorldBoundWaitsForGameReady(t *testing.T) {
 		SceneReferenceFrames: func() []wire.Frame {
 			return []wire.Frame{{Opcode: 14, Payload: []byte(`{"version":1,"items":[]}`)}}
 		},
+		// The region weather rides every finished scene too (action/weather.go).
+		SceneWeatherFrames: func(_ string, c *enterworld.Character) []wire.Frame {
+			if c == nil || c.Name != character.Name {
+				return nil
+			}
+			return []wire.Frame{{Opcode: 0x3bde, Payload: []byte{2, 77}}}
+		},
 	}
 	srv, err := transport.NewServer(transport.Config{CertDir: t.TempDir(), GracePeriod: 100 * time.Millisecond})
 	if err != nil {
@@ -104,7 +111,17 @@ func TestWorldBoundWaitsForGameReady(t *testing.T) {
 		}
 		return n
 	}
+	weatherCount := func() int {
+		n := 0
+		for _, f := range conn.frames() {
+			if f.Opcode == 0x3bde && len(f.Payload) == 2 && f.Payload[0] == 2 && f.Payload[1] == 77 {
+				n++
+			}
+		}
+		return n
+	}
 	waitFor(t, "initial scene references", func() bool { return seedCount() == 1 })
+	waitFor(t, "initial scene weather", func() bool { return weatherCount() == 1 })
 	if err := session.SendSceneReset([]transport.Frame{{Opcode: enterworld.OpcodeResetClient, Payload: []byte{1, 2}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -114,6 +131,7 @@ func TestWorldBoundWaitsForGameReady(t *testing.T) {
 	conn.inbound <- transport.Frame{Opcode: enterworld.OpcodeGameReady}
 	waitFor(t, "reentry ready", func() bool { _, active := session.SceneRevision(); return active })
 	waitFor(t, "reentry scene references", func() bool { return seedCount() == 2 })
+	waitFor(t, "reentry scene weather", func() bool { return weatherCount() == 2 })
 	select {
 	case <-bound:
 		t.Fatal("scene reentry repeated session lifetime hooks")
@@ -133,8 +151,8 @@ func TestWorldBoundWaitsForGameReady(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("duplicate-ready barrier")
 	}
-	if seedCount() != 3 {
-		t.Fatal("duplicate readiness replayed scene references")
+	if seedCount() != 3 || weatherCount() != 3 {
+		t.Fatal("duplicate readiness replayed scene references or weather")
 	}
 	select {
 	case <-bound:
@@ -155,5 +173,6 @@ func TestWorldBoundWaitsForGameReady(t *testing.T) {
 		t.Fatal("replacement admission did not reinstall world provider")
 	}
 	waitFor(t, "replacement scene references", func() bool { return seedCount() == 4 })
+	waitFor(t, "replacement scene weather", func() bool { return weatherCount() == 4 })
 
 }

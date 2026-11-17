@@ -15,8 +15,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { loadDataAsset } from "../../../../scripts/build/shared/jmxAssetIO.mjs";
 import { parseJmxResourceBsr } from "../../../../scripts/build/world/objects/formats.mjs";
+import { parseCharacterBsr } from "../../../../scripts/build/char/formats.mjs";
+import { materialBsrModifiers } from "../../../../scripts/build/shared/bsrModifiers.mjs";
 import { defined } from "../helpers/defined.mjs";
-const { sceneryMaterial } = await import( "../../src/engine/foundation/rendering/scenery-modifiers.ts" );
+const { sceneryMaterial, unboundSceneryMaterial } = await import(
+	"../../src/engine/foundation/rendering/scenery-modifiers.ts"
+);
 const { createTextureMotion } = await import( "../../src/engine/foundation/rendering/texture-motion.ts" );
 const { copyMaterial } = await import( "../../src/engine/foundation/rendering/geometry.ts" );
 const base = {
@@ -228,4 +232,140 @@ test("undefined native states are refused, never approximated", () => {
 	const warnings = [];
 	sceneryMaterial( base, syntheticModifiers( [ 0, 1, 0 ], STATE_BYTES ), 0, m => warnings.push( m ) );
 	assert.deepEqual( warnings, [ "Malformed scenery material state" ] );
+});
+
+const {
+	packMultiTexture,
+	BASE_UV_MOVING,
+	EXTRA_UV_ANIMATED,
+	EXTRA_UV_ORIGIN,
+	EXTRA_UV_SPHERE,
+	MULTI_TEXTURE_OFF,
+	MULTI_TEXTURE_REVERSED,
+	MULTI_TEXTURE_STAGE1
+} = await import( "../../src/engine/foundation/rendering/multi-texture.ts" );
+const route = m =>
+	packMultiTexture( {
+		multiTexture: m.multiTexture,
+		animated: !!(m.uvVelocity || m.uvAtlas),
+		textureAnimationStage: m.textureAnimationStage
+	} );
+
+test("a Rev multi-texture takes stage 0 and the moved uv, the ghost's own texture stage 1", async () => {
+	const { modifiers } = parseJmxResourceBsr( await loadDataAsset( "res/mob/oasis/redeyeghost.bsr" ) );
+	const warnings = [];
+	// Material 1 carries the ghost's [0,1] texture animation: TEXANI1R.
+	const animated = sceneryMaterial( base, modifiers, 1, m => warnings.push( m ) );
+	assert.deepEqual( animated.multiTexture, {
+		texturePath: "prim\\mtrl\\etc\\redeyeghost_lava.ddj",
+		reversed: true,
+		colorOp: 13,
+		factorAlpha: 124 / 255
+	} );
+	assert.equal( animated.textureAnimationStage, 0 );
+	assert.deepEqual( route( animated ), [ MULTI_TEXTURE_REVERSED, 13, 124 / 255, EXTRA_UV_ANIMATED ] );
+	// Materials 0 and 2 have the Rev stage and no animation: SPEC's sphere uv.
+	const still = sceneryMaterial( base, modifiers, 0, m => warnings.push( m ) );
+	assert.equal( still.uvVelocity, undefined );
+	assert.deepEqual( route( still ), [ MULTI_TEXTURE_REVERSED, 13, 124 / 255, EXTRA_UV_SPHERE ] );
+	assert.deepEqual( warnings, [] );
+});
+
+test("a multi-texture under a stage-0 animation leaves the moved uv on the material's texture", async () => {
+	const { modifiers } = parseJmxResourceBsr( await loadDataAsset( "res/mob/oasis/redeyeghost_champ.bsr" ) );
+	const warnings = [];
+	const material = sceneryMaterial( base, modifiers, 1, m => warnings.push( m ) );
+	assert.deepEqual( warnings, [] );
+	assert.equal( material.multiTexture?.reversed, false );
+	// TEXANI0 writes oT0 only: stage 1 samples the unwritten (0,0).
+	assert.deepEqual( route( material ), [ MULTI_TEXTURE_STAGE1, 13, 99 / 255, EXTRA_UV_ORIGIN | BASE_UV_MOVING ] );
+	// The champion's other materials have neither record.
+	assert.deepEqual( route( sceneryMaterial( base, modifiers, 0, m => warnings.push( m ) ) ), [
+		MULTI_TEXTURE_OFF,
+		0,
+		0,
+		BASE_UV_MOVING
+	] );
+});
+
+test("a stage-1 animation moves the multi-texture, or nothing when no stage 1 exists", () => {
+	const meta = { kind: 2, stateId: -1, animationSetName: "ambient", baseWords: [ 0, 2, 272, 0xffffffff, 0, 0 ] };
+	// flame_captain: words24 [1,1], matrix row 2 scrolling u at -0.32 per second.
+	const animation = {
+		...meta,
+		words24: [ 1, 1, 1, 1, 1 ],
+		matrix38: Array.from( { length: 16 }, ( _, i ) => i === 8 ? -.32 : 0 )
+	};
+	const stage1 = {
+		...meta,
+		reversed: false,
+		mode: 0,
+		texturePath: "prim\\mtrl\\etc\\robe_line.ddj",
+		textureFactor: 0x7c000000
+	};
+	const warnings = [], warn = m => warnings.push( m );
+	const drawn = sceneryMaterial(
+		base,
+		{ materialModifiers: [], textureModifiers: [ animation ], multiTextureModifiers: [ stage1 ] },
+		0,
+		warn
+	);
+	assert.deepEqual( route( drawn ), [ MULTI_TEXTURE_STAGE1, 14, 124 / 255, EXTRA_UV_ANIMATED ] );
+	assert.deepEqual( drawn.uvVelocity, [ 0, 0, 0, 0, -.32, 0 ] );
+	// No MultiTex: stage 1 stays DISABLE, so the material samples its plain uv.
+	const alone = sceneryMaterial( base, { materialModifiers: [], textureModifiers: [ animation ] }, 0, warn );
+	assert.deepEqual( route( alone ), [ MULTI_TEXTURE_OFF, 0, 0, 0 ] );
+	// Rev with a stage-1 animation is SPEC: 0x200000 outranks 0x400000.
+	const reversed = sceneryMaterial(
+		base,
+		{
+			materialModifiers: [],
+			textureModifiers: [ animation ],
+			multiTextureModifiers: [ { ...stage1, reversed: true } ]
+		},
+		0,
+		warn
+	);
+	assert.equal( route( reversed )[3], EXTRA_UV_SPHERE );
+	assert.deepEqual( warnings, [] );
+});
+
+test("a stacked or unknown multi-texture stage is reported, never approximated", () => {
+	const meta = { kind: 2, stateId: -1, animationSetName: "ambient", baseWords: [ 0, 2, 272, 0xffffffff, 0, 0 ] };
+	const stage = {
+		...meta,
+		reversed: true,
+		mode: 1,
+		texturePath: "prim\\mtrl\\etc\\robe_line_03.ddj",
+		textureFactor: 0
+	};
+	const warnings = [];
+	const material = sceneryMaterial(
+		base,
+		{ materialModifiers: [], textureModifiers: [], multiTextureModifiers: [ stage, { ...stage, mode: 2 }, stage ] },
+		0,
+		m => warnings.push( m )
+	);
+	assert.deepEqual( warnings, [ "Invalid scenery multi-texture", "Unimplemented stacked scenery multi-texture" ] );
+	assert.equal( material.multiTexture?.texturePath, stage.texturePath );
+	assert.deepEqual( copyMaterial( material ).multiTexture, material.multiTexture );
+});
+
+test("a scene that cannot bind the MultiTex texture reports the stage and draws the rest", async () => {
+	const { modifiers } = parseJmxResourceBsr( await loadDataAsset( "res/mob/oasis/redeyeghost.bsr" ) );
+	const warnings = [], warn = m => warnings.push( m );
+	const drawn = unboundSceneryMaterial( base, modifiers, 1, warn );
+	assert.equal( drawn.multiTexture, undefined );
+	assert.equal( drawn.textureAnimationStage, 0 );
+	assert.deepEqual( warnings, [ "Unimplemented scenery multi-texture" ] );
+	assert.deepEqual( unboundSceneryMaterial( base, undefined, 0, warn ), sceneryMaterial( base, undefined, 0, warn ) );
+});
+
+test("the character reader keeps a Rev multi-texture payload for the GLB", async () => {
+	const bsr = parseCharacterBsr( await loadDataAsset( "res/mob/oasis/redeyeghost.bsr" ) );
+	assert.deepEqual(
+		bsr.multiTextureModifiers.map( m => [ m.reversed, m.mode, m.texturePath, m.textureFactor ] ),
+		[ [ true, 1, "prim\\mtrl\\etc\\redeyeghost_lava.ddj", 0x7c000000 ] ]
+	);
+	assert.deepEqual( materialBsrModifiers( bsr ).multiTextureModifiers, bsr.multiTextureModifiers );
 });

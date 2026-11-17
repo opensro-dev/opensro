@@ -15,6 +15,7 @@ Body, little-endian: u16 count, then count x { u32 gid }.
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const OP_CARAVAN_STARS = 0x3fbf;
 const MAX_CARAVANS = 1024;
@@ -37,7 +38,7 @@ is a protocol error, never a partial list.
 		*/
 		receive( frame: WireFrame ): boolean {
 			if ( frame.opcode !== OP_CARAVAN_STARS ) return false;
-			const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const p = frame.payload, v = viewOf( p );
 			if ( p.length < 2 ) throw new Error( "Invalid caravan stars" );
 			const count = v.getUint16( 0, true );
 			if ( count > MAX_CARAVANS || p.length !== 2 + count * 4 ) {

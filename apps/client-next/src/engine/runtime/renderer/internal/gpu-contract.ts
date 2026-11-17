@@ -460,6 +460,10 @@ export interface GeometryCommands {
 		alphaTest: boolean,
 		enabled: boolean
 	): void;
+	// A rowStates draw's per-row equipment glow, ROW_STATE_FLOATS a row from
+	// row 0: (r, g, b, 0), (u, v, 0, 0). The shader reads them in place of
+	// the uniform's colour and UV; gain, alpha test and enabled stay there.
+	updateRowStates( draw: GeometryDraw, states: Float32Array ): void;
 	updateTextureTransform( draw: GeometryDraw, matrix: Float32Array ): void;
 	updateBones( draw: GeometryDraw, bones: Float32Array, revision?: number ): number;
 	// The draw's instances and palettes come from the particle pass this
@@ -480,7 +484,7 @@ export interface GeometryCommands {
 	// Writes a packed vertex stream (14 floats a vertex) at vertex base of a
 	// dynamicVertices draw: a terrain layer member taking its slot.
 	writeVertices( draw: GeometryDraw, base: number, vertices: Float32Array ): void;
-	// Writes cloth stream entries (cloth-stream.ts) from vertex first on, into
+	// Writes cloth stream entries (cloth-stream.ts) from slot first on, into
 	// a draw uploaded with clothStream.
 	writeClothStream( draw: GeometryDraw, first: number, entries: Uint32Array ): void;
 	// Writes a packed vertex stream at vertex base of any draw, keeping no CPU

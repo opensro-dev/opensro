@@ -21,8 +21,10 @@ exportGlb.mjs - character model container and authored texture publication
 import { clientPublicPath } from "../../lib/generatedRoot.mjs";
 import fs from "node:fs";
 import { readCharacterTexture } from "../shared/nativeCharacterTextures.mjs";
+import { noteRead } from "../graph/reads.mjs";
 import { applyCharacterMaterialState } from "../shared/characterMaterialState.mjs";
 import { embedCharacterEnvironment } from "../shared/characterEnvironment.mjs";
+import { embedCharacterMultiTextures } from "../shared/characterMultiTexture.mjs";
 import path from "node:path";
 import { assembleAvatar } from "./buildAvatar.mjs";
 import { compileBanTimeline } from "./compileBanTimeline.mjs";
@@ -562,6 +564,8 @@ export function avatarToGlb( avatar ) {
 			metallicFactor: 0,
 			roughnessFactor: 1
 		};
+		// The check is a read: a cached step reruns if the file goes (graph/reads.mjs).
+		if ( texInfo.pngPath ) noteRead( texInfo.pngPath );
 		if ( texInfo.pngPath && !fs.existsSync( texInfo.pngPath ) ) {
 			throw new Error( `${avatar.name}:${matName}: converted texture is missing at ${texInfo.pngPath}` );
 		}
@@ -615,6 +619,7 @@ export function avatarToGlb( avatar ) {
 		const flags = texInfo.flags ?? 0;
 		applyCharacterMaterialState( material, flags, grp.environmentModifiers, texInfo.materialIndex );
 		embedCharacterEnvironment( g.json, material, bytes => g.addView( bytes ), new Map() );
+		embedCharacterMultiTextures( g.json, material, bytes => g.addView( bytes ) );
 		g.json.materials.push( material );
 		meshGroups.push( {
 			name: grp.name,

@@ -63,6 +63,7 @@ type Runtime struct {
 	// Port-only server actors report committed player hits outside the authority door.
 	ServerActorHit    func(division, victim, attacker string, damage int, nowMs int64)
 	berserkActors     sync.Map // derived expiry index; character store owns state
+	spiritActors      sync.Map // attached Devil's Spirit lapse index (spiritability.go)
 	battleActors      sync.Map // battle-state expiry index (battlestate.go)
 	cosRefusalLog     sync.Map // cosground.go: cosRefusalKey -> *cosRefusalWindow (refusal log rollup)
 	cosRefusalTotals  sync.Map // cosground.go: cause string -> *atomic.Uint64 (refusal metric)
@@ -264,6 +265,8 @@ type Runtime struct {
 	Monsters *simulation.MonsterState
 	// Port-only, not native: nil preserves every native admission/reward path.
 	sookArena *sookArenaRuntime
+	// roc runs the Roc worlds (roc.go); nil with SRO_ROC off.
+	roc *rocRuntime
 	// muhanChanges is the Muhan change pairing by change NPC codename
 	// (muhan_change.go). Port-only, not native: empty unless SRO_MUHAN is on.
 	muhanChanges map[string]muhanChange
@@ -655,6 +658,9 @@ type Runtime struct {
 	// christmasSnow is the snowfall state of the Christmas native group
 	// (event group 1) advanceEventGroups last saw; tick goroutine only.
 	christmasSnow eventGroupWatch
+	// weather is the climate cycle and its pending deliveries
+	// (weather.go); a nil cycle is SRO_WEATHER off.
+	weather weatherState
 	// christmasWavesAsked is the last instant advanceChristmasWaves asked
 	// the timetable about; the tick goroutine alone touches it.
 	christmasWavesAsked time.Time
@@ -665,6 +671,16 @@ type Runtime struct {
 	// client build; progression/christmas.go): its event snow and the
 	// towns' decoration. The zero value is off.
 	Christmas progression.ChristmasEvent
+	// SoOkChristmas is So-Ok's Christmas Gift, the December 2006 event
+	// (port-only, not native; progression/sook_christmas.go). It shares
+	// the Christmas switch and window, in its own mode, so it never runs
+	// beside Christmas. The zero value is off.
+	SoOkChristmas progression.SoOkChristmas
+	// sookChristmasGroups and sookChristmasSnow are its window and
+	// snowfall states advanceEventGroups last saw; tick goroutine only.
+	sookChristmasGroups, sookChristmasSnow eventGroupWatch
+	// pandora is the open Pandora's Boxes (pandorabox.go; port-only).
+	pandora pandoraBoxes
 	// HalloweenHelmetSeal seals the event helmets at the transfer doors
 	// (port-only, not native; progression/halloween.go). The zero value
 	// is off: the helmets move like any item.

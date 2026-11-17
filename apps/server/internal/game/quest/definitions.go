@@ -180,7 +180,26 @@ type QuestSpec struct {
 	// (the server's KT_SMITH_2 talk handler). See ended.go.
 	AcceptEndsQuests []string
 	RefuseEndsQuests []string
-	Repeatable       bool
+	// GiveUpForgetsQuests lose their record and completion count when this
+	// quest is given up, and CompleteForgetsQuests when it is paid, so the
+	// NPC offers them again: the native QNO_RM_MEETROC_2 give-up zeroes
+	// QNO_RM_MEETROC_1's record and sets its count to 0, and
+	// QNO_RM_MEETROC_6 does the same to QNO_RM_MEETROC_2 at its give-up
+	// and its pay. See chain_reset.go.
+	GiveUpForgetsQuests   []string
+	CompleteForgetsQuests []string
+	// QuestItemCleanup are items whose every bag stack leaves at the
+	// give-up and at the turn-in (the same MEETROC_6 handlers delete every
+	// matching stack), on top of the missions' own cleanup.
+	QuestItemCleanup []string
+	// GiveUpKeepsCollected leaves the collect items in the bag at the
+	// give-up: the MEETROC_ECT classes replace the native abort with one
+	// that skips the gather missions' item deletion.
+	GiveUpKeepsCollected bool
+	// KillExchange swaps an item once every kill mission stands complete
+	// (QNO_RM_MEETROC_6's native kill handler). See chain_reset.go.
+	KillExchange *KillExchange
+	Repeatable   bool
 	// KindByte is the wire u10 the CIFQuestReward content button
 	// switches on (CIFQuestReward_OnContentButton): 1/7/8 open the
 	// give-up window, 2 opens the REWARD window (its action button
@@ -450,6 +469,8 @@ type Definition struct {
 	RequiredEndedQuestIDs  []uint32
 	AcceptEndsQuestIDs     []uint32
 	RefuseEndsQuestIDs     []uint32
+	giveUpForgetsIDs       []uint32
+	completeForgetsIDs     []uint32
 }
 
 /*
@@ -598,13 +619,16 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 				return nil, fmt.Errorf("quest %s has an unresolved tool drop", spec.Codename)
 			}
 		}
-		if err := loadMissions(def, contents.ContentsSymbols, items); err != nil {
+		if err := loadMissions(def, contents.ContentsSymbols, catalog.ContentsTextShipped, items); err != nil {
 			return nil, err
 		}
 		if err := loadDelivery(def, items); err != nil {
 			return nil, err
 		}
 		if err := validateDeliveryExtras(spec, items); err != nil {
+			return nil, err
+		}
+		if err := validateChainItems(spec, items); err != nil {
 			return nil, err
 		}
 		if err := loadStages(def, items); err != nil {

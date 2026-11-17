@@ -408,10 +408,22 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 				// The claim remains provisional until the complete bootstrap can
 				// be published. The deferred owner-specific teardown covers a
 				// close before binding as well as projection/delivery failure.
+				// A session already bound to this character is getting a
+				// replacement bootstrap (socket resume): its membership, world
+				// and effects belong to the live scene, which this entry only
+				// re-presents. A failure here must leave them alone; retiring
+				// them reseeded the world at base speed while the client kept
+				// the speed its last 0x376F gave it (#3540).
+				bound := false
+				if d, n, ok := s.CharacterBinding(); ok && d == division && n == name {
+					bound = true
+				}
 				if err := deps.AdmitCharacterSession(division, name, s.ID); err != nil {
 					return err
 				}
-				claimedDivision, claimedName = division, name
+				if !bound {
+					claimedDivision, claimedName = division, name
+				}
 				return nil
 			}
 		}
@@ -639,6 +651,13 @@ func RegisterGameReady(hub *transport.Hub, deps *Deps) {
 		}
 		if deps.SceneReferenceFrames != nil {
 			for _, frame := range deps.SceneReferenceFrames() {
+				if err := s.Send(frame.Opcode, frame.Payload); err != nil {
+					return
+				}
+			}
+		}
+		if deps.SceneWeatherFrames != nil {
+			for _, frame := range deps.SceneWeatherFrames(divisionID, snapshot) {
 				if err := s.Send(frame.Opcode, frame.Payload); err != nil {
 					return
 				}

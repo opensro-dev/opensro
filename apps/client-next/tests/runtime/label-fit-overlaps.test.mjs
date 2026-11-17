@@ -24,7 +24,8 @@ import { fontAtlas, uiFixture } from "../helpers/ui-fixture.mjs";
 const { titleText, resolveTextOverlaps } = await import( "../../src/engine/foundation/rendering/ui-glyphs.ts" );
 const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 const { extendedRecipes } = await import( "../../tools/ui-gallery/extended.ts" );
-const { guildSnapshot } = await import( "../../tools/ui-gallery/scenarios.ts" );
+const { OPENERS } = await import( "../../tools/ui-gallery/entry-recipes.mjs" );
+const { guildSnapshot, seedJourney } = await import( "../../tools/ui-gallery/scenarios.ts" );
 
 const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 
@@ -225,18 +226,23 @@ openRecipe
 
 The scene a gallery recipe settles into, with "Fit window labels" on or
 off. "open-window:<panel>" opens a registry panel the way its sidebar
-button does.
+button does; "opener:<name>" runs the gallery's opener of that name;
+"seeded" opens nothing, for a window seed's state shows by itself. seed
+edits the fixture's state before anything opens.
 ================
 */
-async function openRecipe( id, fit ) {
-	const recipe = id.startsWith( "open-window:" ) ?
+async function openRecipe( id, fit, seed = state => state ) {
+	const recipe = id === "seeded" ? { open: () => {} } : id.startsWith( "open-window:" ) ?
 		{ open: context => context.ui.event( { kind: "activate", id } ) } :
+		id.startsWith( "opener:" ) ?
+		{ open: context => OPENERS[id.slice( "opener:".length )]( context, context.step ) } :
 		extendedRecipes.find( r => r.id === id );
 	assert.ok( recipe, id );
 	const f = uiFixture();
 	let now = 0, seen = null;
 	f.state.gameplay.social = guildSnapshot();
 	f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { fitWindowLabels: fit } ) } );
+	seed( f.state );
 	const step = async () => {
 		for ( let i = 0; i < 6; i++ ) seen = f.ui.step( f.state, now += 300 ) ?? seen;
 	};
@@ -267,7 +273,12 @@ const WINDOWS = [
 	{ id: "open-window:Guild", on: [ "Guild", "master" ], off: "Guild ma..." },
 	{ id: "reach:guild-war-agreement", on: [ "Compensation" ], off: "Compe..." },
 	{ id: "inspect:guild-war-declaration", on: [ "Compensation" ], off: "Compe..." },
-	{ id: "inspect:inventory-split", on: [ "Retained", "number", "Distributed", "number" ], off: "Retained ..." }
+	{ id: "inspect:inventory-split", on: [ "Retained", "number", "Distributed", "number" ], off: "Retained ..." },
+	// #3712: the academy's level value, the matching search labels and
+	// the job ranking's title of level.
+	{ id: "breadth:academy-master", on: [ "Lv80(80)" ], off: "Lv8..." },
+	{ id: "inspect:academy-matching", on: [ "Recruitment", "Condition", "Honor", "Grade" ], off: "Recr..." },
+	{ id: "opener:Job ranking", on: [ "Apprentice", "Merchant" ], off: "Apprentice M..." }
 ];
 
 for ( const { id, on, off } of WINDOWS ) {
@@ -280,3 +291,127 @@ for ( const { id, on, off } of WINDOWS ) {
 		assert.ok( lines( await openRecipe( id, false ) ).some( l => l.text === off ), `off draws ${off}` );
 	});
 }
+
+// The academy's dismiss plate (party/pt_button.ddj) is 44 pixels wide.
+const DISMISS_PLATE = 44;
+
+/*
+================
+lineNamed
+================
+*/
+function lineNamed( quads, text ) {
+	const line = lines( quads ).find( l => l.text === text );
+	assert.ok( line, `${text} in ${JSON.stringify( lines( quads ).map( l => l.text ) )}` );
+	return line;
+}
+
+test("a caption wider than its plate takes the narrow face (#3712)", async () => {
+	for ( const fit of [ true, false ] ) {
+		const matching = await openRecipe( "inspect:academy-matching", fit );
+		const graduates = lineNamed( matching, "Graduates" ), member = lineNamed( matching, "Member" );
+		// On, the heads keep a gap; off, "Graduates" runs into "Member" as before.
+		assert.equal( graduates.rect[2] < member.rect[0], fit, `fit ${fit}: ${graduates.rect} | ${member.rect}` );
+		const dismiss = lineNamed( await openRecipe( "breadth:academy-master", fit ), "Dismiss" );
+		assert.equal( dismiss.rect[2] - dismiss.rect[0] < DISMISS_PLATE - 4, fit, `fit ${fit}: ${dismiss.rect}` );
+	}
+});
+
+test("a grade column is headed Grade, not level, with the row on or off (#3712)", async () => {
+	for ( const fit of [ true, false ] ) {
+		for ( const id of [ "open-window:Guild", "opener:Job ranking" ] ) {
+			const drawn = lines( await openRecipe( id, fit ) ).map( l => l.text );
+			assert.ok( drawn.some( text => text.startsWith( "Grade" ) ), `${id}: ${JSON.stringify( drawn )}` );
+			assert.ok( !drawn.some( text => /^level|Level ?level/.test( text ) ), `${id}: ${JSON.stringify( drawn )}` );
+		}
+	}
+});
+
+/*
+================
+artRect
+
+The rect of a quad drawn from a texture whose path ends with name: the
+first, or the nearest left of x (the window's own frame, not another
+window's).
+================
+*/
+function artRect( quads, name, x = Infinity ) {
+	const rects = quads.filter( q => String( q.texture?.src ?? q.texture ).endsWith( name ) ).map( q => q.rect );
+	const rect = x === Infinity ? rects[0] : rects.filter( r => r[0] < x ).sort( ( a, b ) => b[0] - a[0] )[0];
+	assert.ok( rect, name );
+	return rect;
+}
+
+// A full bag of 32 and one of 30 behind the 13 equipment slots.
+const MALL_BAG = { inventorySlotCount: 13 + 32 + 30, equipmentSlotCount: 13 };
+
+test("the merchant, stall and Item Mall labels stay inside their art (#3728)", async () => {
+	// Merchant: off, "Repurchase" runs left out of the window; on, "Buy"
+	// over "back" sits between the window frame and the buyback strip.
+	const merchant = await openRecipe( "breadth:merchant", true );
+	const strip = artRect( merchant, "com_redeem_window.png" ),
+		frame = artRect( merchant, "mframe_wnd_left_side.png", strip[0] );
+	for ( const text of [ "Buy", "back" ] ) {
+		const line = lineNamed( merchant, text );
+		assert.ok( line.rect[0] > frame[0] && line.rect[2] <= strip[0], `${text} at ${line.rect}` );
+		// The UI pass draws in push order, and the page's background tiles
+		// are opaque: none under the line may come after its glyphs.
+		const run = merchant.findIndex( q =>
+			expandTextRuns( [ q ] ).some( g =>
+				g.texture === fontAtlas.image && g.rect[0] >= line.rect[0] && g.rect[0] < line.rect[2] &&
+				g.rect[1] < line.rect[3] && g.rect[1] + g.rect[3] > line.rect[1]
+			)
+		);
+		const coverIndex = merchant.findLastIndex( q =>
+			/com_bg_tile_\w+\.png$/.test( String( q.texture?.src ?? q.texture ) ) &&
+			q.rect[0] < line.rect[2] && q.rect[0] + q.rect[2] > line.rect[0] &&
+			q.rect[1] < line.rect[3] && q.rect[1] + q.rect[3] > line.rect[1]
+		);
+		assert.ok(
+			run >= 0 && coverIndex < run,
+			`${text}: glyphs at ${run}, a background tile over them at ${coverIndex}`
+		);
+	}
+	// The gallery's shop names its tab, as a real shop's refshoptab does:
+	// "Potion", selected and so bold (glyphs this file's map does not name).
+	const shopTab = artRect( merchant, "com_short_tab_on.png" );
+	assert.ok(
+		lines( merchant ).some( l =>
+			l.text.length === "Potion".length && l.rect[0] > shopTab[0] && l.rect[2] < shopTab[0] + shopTab[2] &&
+			l.rect[1] > shopTab[1] && l.rect[3] < shopTab[1] + shopTab[3]
+		),
+		"a caption on the shop tab"
+	);
+	assert.ok( lineNamed( await openRecipe( "breadth:merchant", false ), "Repurchase" ).rect[0] < frame[0] );
+
+	// Tabs: Magic Pang's selected "Equipment" (69 pixels bold) ran past
+	// both edges of its 60-pixel tab; on, it reads in the narrow face
+	// inside it. The stall's "Items to sell" only nears its 80-pixel tab's
+	// edges and keeps the native bold, on and off.
+	const pang = await openRecipe( "opener:Magic Pang", true ), equipment = lineNamed( pang, "Equipment" );
+	const pangTab = pang.find( q =>
+		String( q.texture?.src ?? q.texture ).endsWith( "com_tab_on.png" ) &&
+		q.rect[0] < equipment.rect[2] && q.rect[0] + q.rect[2] > equipment.rect[0] &&
+		q.rect[1] < equipment.rect[3] && q.rect[1] + q.rect[3] > equipment.rect[1]
+	).rect;
+	assert.ok(
+		equipment.rect[0] >= pangTab[0] && equipment.rect[2] <= pangTab[0] + pangTab[2],
+		`${equipment.rect} on ${pangTab}`
+	);
+	// Off keeps the bold face (glyphs this file's map does not name).
+	assert.ok( !lines( await openRecipe( "opener:Magic Pang", false ) ).some( l => l.text === "Equipment" ) );
+	for ( const fit of [ true, false ] ) {
+		const stall = await openRecipe( "seeded", fit, state => {
+			state.gameplay.stall = seedJourney( "stall-owner" ).gameplay.stall;
+		} );
+		assert.ok( !lines( stall ).some( l => l.text === "Items to sell" ), `fit ${fit}: the stall tab stays bold` );
+	}
+
+	// Item Mall: off, "32 spaces" is drawn on its bag icon; on, "32" over
+	// "spaces" starts right of it.
+	const mall = fit => openRecipe( "dialog:item-mall", fit, state => Object.assign( state.gameplay, MALL_BAG ) );
+	const onMall = await mall( true ), icon = artRect( onMall, "mall_inven_icon.png" );
+	for ( const text of [ "32", "spaces" ] ) assert.ok( lineNamed( onMall, text ).rect[0] > icon[0] + icon[2] );
+	assert.ok( lineNamed( await mall( false ), "32 spaces" ).rect[0] < icon[0] + icon[2] );
+});

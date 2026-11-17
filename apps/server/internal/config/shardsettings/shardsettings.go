@@ -120,6 +120,12 @@ var Settings = []Setting{
 	// them when the server data is built, and the GameWorld reads neither.
 	// Server only: the catalogue reads the built data, not its inputs.
 	{Env: "SRO_CAP110_ITEMS", NomadVar: "cap110_items", Default: "off"},
+	// Port-only, not native: the rest of the honor line the v1.150 client
+	// authored and never shipped (#3548): degree 10-11 honor weapons, the
+	// Chinese honor shields, the European tab and the degree 10-11 stones.
+	// Build time only: honor_items.py and honor_shops.py read it when the
+	// server data is built. Degrees 10-11 need SRO_CAP110_ITEMS too.
+	{Env: "SRO_HONOR_GOODS", NomadVar: "honor_goods", Default: "off"},
 	{Env: "SRO_CAP110_SKILLS", NomadVar: "cap110_skills", Default: "off"},
 	// Port-only, not native: the later client's mall avatars (outfits, hats,
 	// attachments). Cosmetic, so the owner approved it on by default
@@ -131,11 +137,13 @@ var Settings = []Setting{
 	// SRO_CAP110_MONSTERS (its equipment drops).
 	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},
 	// Port-only, not native: the Pharaoh Temple (the job temple) in the
-	// Storm and Cloud Desert: seven dungeons behind two desert gates. Needs
+	// Storm and Cloud Desert: seven dungeons behind two desert gates, and
+	// their 24 kinds and nests (the five sanctum keepers among them). Needs
 	// a variant built with the same flag (build_alexandria_variant.py stages
-	// the dungeons and gates). Server only: the catalogue does not list the
-	// temple's dungeons or gates. "off" is native.
-	{Env: "SRO_PHARAOH_TEMPLE", NomadVar: "pharaoh_temple", Default: "off"},
+	// the dungeons and gates, pharaoh_temple_import.py the population). The
+	// catalogue lists the population, not the dungeons or gates. "off" is
+	// native.
+	{Env: "SRO_PHARAOH_TEMPLE", NomadVar: "pharaoh_temple", Default: "off", Catalogue: true},
 	// Port-only, not native: the Qin-Shi tomb upper-floor population
 	// (#1800). Needs SRO_CAP110_MONSTERS (its drops ride the shared
 	// cap-110 loot catalogue).
@@ -149,6 +157,11 @@ var Settings = []Setting{
 	// v1.696 client (monster/skytemple.go). The fields ride the Alexandria
 	// variant build; the switch admits their kinds here. "off" is native.
 	{Env: "SRO_SKYTEMPLE", NomadVar: "skytemple", Default: "off", Catalogue: true},
+	// Port-only switch, native content: the Roc chain from the later
+	// clients (#3399). The Alexandria variant build stages its kinds,
+	// gates and quests (scripts/roc_import.py); the switch admits the
+	// quest kinds' nests here (monster/roc.go). "off" is native.
+	{Env: "SRO_ROC", NomadVar: "roc", Default: "off", Catalogue: true},
 	// Port-only, not native: the Arabia continent population and its
 	// dungeon world from the v1.696 client (monster/arabia.go). The
 	// continent rides the Alexandria variant build; the switch admits
@@ -192,6 +205,11 @@ var Settings = []Setting{
 	// the build and the fortress unregistered. Not a catalogue setting:
 	// the catalogue publishes no fortress state.
 	{Env: "SRO_FORT_CONSTANTINOPLE", NomadVar: "fort_constantinople", Default: "off"},
+	// Port-only, not native: the export-world areas from the pinned
+	// content archive (#3329). Build and server read the same switch;
+	// off leaves every imported row out of the build and the areas'
+	// admission index and population unread.
+	{Env: "SRO_EXPORT_WORLD", NomadVar: "export_world", Default: "off", Catalogue: true},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
 	// many times as often (1 is native; 2 to 20). The catalogue models it
 	// on the tomb monsters' drop counts, so it is a catalogue setting.
@@ -207,6 +225,18 @@ var Settings = []Setting{
 	// decoration (progression/christmas.go). Off is native.
 	{Env: "SRO_CHRISTMAS_EVENT", NomadVar: "christmas_event", Default: "off"},
 	{Env: "SRO_CHRISTMAS_EVENT_WINDOW", NomadVar: "christmas_event_window", Default: ""},
+	// Port-only, not native: which Christmas event the switch runs,
+	// "winter" (#3603) or "so_ok_2006" (So-Ok's Christmas Gift,
+	// progression/christmas_mode.go), and the 2006 event's box chance in
+	// percent and gift weights (CODENAME=WEIGHT,...; empty keeps the
+	// owner's table).
+	{Env: "SRO_CHRISTMAS_EVENT_MODE", NomadVar: "christmas_event_mode", Default: "winter"},
+	{Env: "SRO_CHRISTMAS_SOOK_BOX_CHANCE", NomadVar: "christmas_sook_box_chance", Default: "1.5"},
+	{Env: "SRO_CHRISTMAS_SOOK_GIFTS", NomadVar: "christmas_sook_gifts", Default: ""},
+	// The reference shard's climate weather (world/climate): every
+	// region's rain, snow and clear cycle. On by default, as natively; off
+	// sends no weather and every client stays clear.
+	{Env: "SRO_WEATHER", NomadVar: "weather", Default: "on"},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_MALL_STARTER_SILK", NomadVar: "mall_starter_silk", Default: "700"},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
@@ -233,6 +263,11 @@ var Settings = []Setting{
 	// native: chat lines are text only. The limit is a tunable (game/tunables).
 	{Env: "SRO_CHAT_ITEM_LINKS", NomadVar: "chat_item_links", Default: "off"},
 	{Env: "SRO_CHAT_ITEM_LINKS_PER_MESSAGE", NomadVar: "chat_item_links_per_message", Default: "1"},
+	// Port-only, not native: the position stream a moving player's viewers
+	// get (simulation/position_stream.go, #3721): a live 0x30E3 every tick,
+	// 0x3122 with every path and 0xB2F5 at the goal. "off" is native: one
+	// 0xB738 per accepted move and nothing on arrival.
+	{Env: "SRO_POSITION_STREAM", NomadVar: "position_stream", Default: "off"},
 	// Owner, 2026-10-14: the Bandit Den scroll counts down half as long.
 	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},
 	// Port-only, off by default: a unique's attackers see its damage ranking.
@@ -371,6 +406,9 @@ var Settings = []Setting{
 	{Env: "SRO_MOST_WANTED_NOTICES_PER_MINUTE", NomadVar: "most_wanted_notices_per_minute", Default: "6"},
 	{Env: "SRO_JOB_KILL_REPEAT_MINUTES", NomadVar: "job_kill_repeat_minutes", Default: "10"},
 	{Env: "SRO_SOX_NOTICE_MIN_DEGREE", NomadVar: "sox_notice_min_degree", Default: "6"},
+	// The stable quest's purify chance (#3714, port-only, not native;
+	// "50" is native).
+	{Env: "SRO_STABLE_PURIFY_CHANCE", NomadVar: "stable_purify_chance", Default: "50"},
 	// F10 uiTuning: the client values sent at world entry (game/tunables).
 	{Env: "SRO_SHORT_NOTICE_SHOW_MS", NomadVar: "short_notice_show_ms", Default: "5000"},
 	{Env: "SRO_SHORT_NOTICE_FADE_MS", NomadVar: "short_notice_fade_ms", Default: "1000"},

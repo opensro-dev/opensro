@@ -132,7 +132,8 @@ test("create asks the name, then the cost, then sends 0x7663", t => {
 	assert.equal( sent.length, 0 );
 	f.ui.event( { kind: "activate", id: "guild-manager-yes" } );
 	step();
-	assert.ok( f.hasText( "If you pay 0.5 million gold, [Holders]guild will be created" ), "box 0x12" );
+	// The question is wider than the box, so it wraps inside it (52BCF0).
+	assert.ok( f.hasText( "If you pay 0.5 million gold," ) && f.hasText( "created" ), "box 0x12" );
 	assert.equal( sent.length, 0 );
 	f.ui.event( { kind: "activate", id: "guild-manager-yes" } );
 	step();

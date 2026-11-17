@@ -64,6 +64,9 @@ const (
 	itemUseSummonScroll
 	itemUseModelSwitcher
 	itemUseSpiritWake
+	itemUseSpiritExtension
+	itemUsePartySummonScroll
+	itemUsePandoraBox
 )
 
 /*
@@ -107,6 +110,16 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	if SummonScrollCount(ref.Codename) != 0 {
 		return itemUseSummonScroll
 	}
+	// Port-only, not native to v1.150 (partysummonscroll.go): the
+	// v1.188 party Monster Summon Scroll, admitted by codename; its
+	// handler re-checks the switch that hands it out before any effect.
+	if ref.Codename == PartySummonScrollItem {
+		return itemUsePartySummonScroll
+	}
+	// Port-only, likewise: Pandora's Box opened from the bag (pandorabox.go).
+	if ref.Codename == PandoraBoxItem {
+		return itemUsePandoraBox
+	}
 	if ref.TypeIDs == [4]int64{3, 3, 9, 0} {
 		return itemUseQuestTool
 	}
@@ -122,6 +135,12 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	// rows; the handler re-checks the switch (spiritwake.go).
 	if ref.TypeIDs == [4]int64{3, 1, 14, 1} {
 		return itemUseSpiritWake
+	}
+	// Port-only (SRO_NASRUN, #3456 slice 4): the extension gear, the
+	// v1.188 server's 3/3/13/16 case (spiritextend.go). v1.150 has no
+	// row of this type.
+	if ref.TypeIDs == [4]int64{3, 3, 13, 16} {
+		return itemUseSpiritExtension
 	}
 	if ref.TypeIDs[0] == 3 && ref.TypeIDs[1] == 3 && ref.TypeIDs[2] == 13 && ref.TypeIDs[3] >= 1 && ref.TypeIDs[3] <= 3 {
 		return itemUseSkill

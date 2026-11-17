@@ -12,6 +12,7 @@ from collections import defaultdict
 import alexandria_npcs as npcs
 import alexandria_shop_d10 as d10
 import alexandria_shop_d11 as d11
+import honor_shops
 import alexandria_shop_supplies as supplies
 import import_vsro_alexandria as tables
 
@@ -125,8 +126,12 @@ def merge_shops(native, later, item_codes, npc_codes):
 # SRO_ALEXANDRIA_PORT_STOCK) asks the three shop passes for the port's
 # own degree stock; without it they stock each store with the goods
 # one official source had active.
+#
+# Every town's honor store then takes the official layout (#3548);
+# honor_goods (SRO_HONOR_GOODS, port-only) adds the rest of the line
+# honor_items.py derived.
 # ================
-def add_services(vsro_root, native, output, port_stock=False):
+def add_services(vsro_root, native, output, port_stock=False, honor_goods=False):
 	from build_alexandria_variant import TEXTDATA, read_vsro_file, replace_file
 	root = output / "Media_extracted" / TEXTDATA
 	native_root = native / "Media_extracted" / TEXTDATA
@@ -155,4 +160,10 @@ def add_services(vsro_root, native, output, port_stock=False):
 		replace_file(root / name, raw)
 	summary["degree11"] = gear_summary
 	summary["portStock"] = port_stock
+	# The honor stores (#3548), on the final shop tables.
+	honored, summary["honorGoods"] = honor_shops.merge_honor_goods(
+		{name: (root / name).read_bytes() for name in d10.NAMES}, item_rows, honor_goods
+	)
+	for name, raw in honored.items():
+		replace_file(root / name, raw)
 	return summary

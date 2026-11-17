@@ -15,6 +15,14 @@ caller, not by 6FEF10, see #1878).
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import type { WorldTravel } from "@/engine/contracts/world";
+import {
+	ITEM_USE_RESPONSE_OPCODE,
+	OBJECT_STATE_REFRESH_OPCODE,
+	PORTAL_REQUEST_OPCODE,
+	RESET_CLIENT_OPCODE,
+	RESET_REGION_OPCODE
+} from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 /*
 ================
@@ -52,12 +60,12 @@ travelMode
 ================
 */
 export function travelMode( frame: WireFrame, localGid: number, itemCooldownMs = 0 ): WorldTravel["mode"] | null {
-	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
-	if ( frame.opcode === 0x3122 ) {
+	const p = frame.payload, v = viewOf( p );
+	if ( frame.opcode === OBJECT_STATE_REFRESH_OPCODE ) {
 		if ( p.length !== 6 ) throw Error( "Invalid travel character state" );
 		return localGid !== 0 && v.getUint32( 0, true ) === localGid && p[4] === 0 && p[5] === 2 ? 1 : null;
 	}
-	if ( frame.opcode === 0xb5bd && p[0] === 1 ) {
+	if ( frame.opcode === ITEM_USE_RESPONSE_OPCODE && p[0] === 1 ) {
 		if ( p.length !== 6 ) throw Error( "Invalid travel item reply" );
 		const word = v.getUint16( 4, true );
 		if ( isReturnScroll( word ) ) return 2;
@@ -75,7 +83,7 @@ resetTravelRegion
 ================
 */
 export function resetTravelRegion( frame: WireFrame ): number | null {
-	if ( frame.opcode !== 0x3369 && frame.opcode !== 0x366a ) return null;
+	if ( frame.opcode !== RESET_CLIENT_OPCODE && frame.opcode !== RESET_REGION_OPCODE ) return null;
 	if ( frame.payload.length !== 2 ) throw Error( "Invalid reset region packet" );
 	return new DataView( frame.payload.buffer, frame.payload.byteOffset, 2 ).getUint16( 0, true );
 }
@@ -110,5 +118,5 @@ export function gateRequest( command: GateCommand ): WireFrame {
 	payload[4] = type;
 	if ( type === 2 ) v.setUint32( 5, command.target, true );
 	else if ( type !== 1 ) payload[5] = command.target;
-	return { opcode: 0x7495, payload };
+	return { opcode: PORTAL_REQUEST_OPCODE, payload };
 }

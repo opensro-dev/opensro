@@ -16,397 +16,43 @@ the same seed writes the same bytes.
 The rows are synthetic, not the worker's: they carry the fields the
 presentation reads, in the shapes the worker publishes them (contracts/
 world.ts), without the packet history that produced them.
+session-builder.mjs writes them; this file says which sessions exist.
 
 ===========================================================================
 */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 import { pathToFileURL } from "node:url";
-import { CLIENT_PUBLIC_ROOT } from "../../../../../scripts/lib/generatedRoot.mjs";
 
-const FRAME_HZ = 60;
-const FRAME_MS = 1000 / FRAME_HZ;
-// Main-clock milliseconds of simulation time zero (simulationOrigin).
-const ORIGIN_MS = 1000;
-// A region in the middle of the world map; poses are region-relative.
-const REGION = 0x61a8;
-const CENTER = 960;
-const LOCAL_GID = 1;
-const FIRST_PEER_GID = 0x1000;
-// contracts/world.ts MOVEMENT_MODE_SEATED; 3 is the worker's default gait (run).
-const MOVEMENT_SEATED = 4;
-const MOVEMENT_RUN = 3;
-const MOVEMENT_WALK = 2;
-// appearanceState[0]: 1 alive, 2 dead; [6] 4 is the stall title mode.
-const ALIVE = 1;
-const DEAD = 2;
-const STALL_TITLE = 4;
-// The #3600 crowd's bodies: the three player bodies the design names.
-const CROWD_BODIES = [ "CHAR_CH_MAN_ADVENTURER", "CHAR_CH_WOMAN_ADVENTURER", "CHAR_EU_MAN_NOBLE" ];
-const ARMOR_FAMILIES = [ "HEAVY", "LIGHT", "CLOTHES" ];
-
-/*
-================
-seeded
-
-mulberry32: every scenario choice is drawn from it.
-================
-*/
-function seeded( seed ) {
-	let state = seed >>> 0;
-	const next = () => {
-		state = (state + 0x6d2b79f5) >>> 0;
-		let t = state;
-		t = Math.imul( t ^ (t >>> 15), t | 1 );
-		t ^= t + Math.imul( t ^ (t >>> 7), t | 61 );
-		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-	};
-	return { next, int: n => Math.floor( next() * n ), pick: list => list[Math.floor( next() * list.length )] };
-}
-
-/*
-================
-loadCatalogs
-
-The published catalogs the scenarios draw bodies, gear and NPCs from.
-================
-*/
-function loadCatalogs() {
-	const json = relative => JSON.parse( readFileSync( path.join( CLIENT_PUBLIC_ROOT, relative ), "utf8" ) );
-	const roster = json( "assets/char/roster.json" );
-	const items = json( "assets/data/missionPresentation.json" ).itemsByRefObjId;
-	const npcs = json( "assets/npc/manifest.json" ).models;
-	const byCode = new Map( Object.entries( items ).map( ( [id, row] ) => [ row.codename, Number( id ) ] ) );
-	const bodies = new Map( roster.models.map( model => [ model.codename, model ] ) );
-	return { roster, items, npcs, byCode, bodies };
-}
-
-/*
-================
-bodyKey
-
-The dress key of a player body: CHAR_CH_MAN_* wears CH_M.
-================
-*/
-function bodyKey( codename ) {
-	const [, race, sex] = /^CHAR_(CH|EU)_(MAN|WOMAN)_/.exec( codename ) ?? [];
-	if ( !race ) throw Error( `Not a player body: ${codename}` );
-	return { race, sex: sex === "MAN" ? "M" : "W", key: `${race}_${sex === "MAN" ? "M" : "W"}` };
-}
-
-/*
-================
-wear
-
-One worn item as the worker publishes it (EntityEquipment), or null when
-the catalog has no dress entry for this body.
-================
-*/
-function wear( catalogs, codename, key, plus = 0 ) {
-	const id = catalogs.byCode.get( codename ), dress = id && catalogs.roster.dress.equipment[id];
-	if ( !dress?.bodies?.[key] || typeof dress.slot !== "number" ) return null;
-	return { slot: dress.slot, refObjId: id, typeFlags: catalogs.items[id].typeFlags ?? 0, plus };
-}
-
-/*
-================
-gearFor
-
-A full set for a body: armor of one family and degree, a weapon the
-catalog dresses on the body, and a shield when the race has one.
-================
-*/
-function gearFor( catalogs, rng, codename ) {
-	const { race, sex, key } = bodyKey( codename );
-	const family = rng.pick( ARMOR_FAMILIES ), degree = String( 1 + rng.int( 8 ) ).padStart( 2, "0" );
-	const parts = [ rng.pick( [ "HA", "CA" ] ), "BA", "SA", "AA", "LA", "FA" ];
-	const worn = parts.map( part => wear( catalogs, `ITEM_${race}_${sex}_${family}_${degree}_${part}_A`, key ) );
-	const weapons = race === "CH" ?
-		[ "SWORD", "BLADE", "SPEAR", "TBLADE", "BOW" ] :
-		[ "SWORD", "STAFF", "CROSSBOW", "DAGGER", "AXE" ];
-	const weapon = rng.pick( weapons );
-	worn.push( wear( catalogs, `ITEM_${race}_${weapon}_${degree}_A`, key, rng.int( 8 ) ) );
-	if ( weapon === "SWORD" ) worn.push( wear( catalogs, `ITEM_${race}_SHIELD_${degree}_A`, key ) );
-	return worn.filter( item => item );
-}
-
-/*
-================
-heading
-
-The native angle word for a step from one point to another (0..65535).
-================
-*/
-function heading( fromX, fromZ, toX, toZ ) {
-	const turn = Math.atan2( toX - fromX, toZ - fromZ ) / (Math.PI * 2);
-	return Math.round( (turn + 1) * 65536 ) % 65536;
-}
-
-/*
-================
-pose
-================
-*/
-function pose( x, z, angle = 0, y = 0 ) {
-	return { regionId: REGION, x, y, z, angle };
-}
-
-/*
-================
-createSession
-
-A session under construction. It keeps the rows it published, so state
-and gameplay changes are written as the worker writes them: the whole new
-row, or a gameplay delta. Frames are created on demand; each holds the
-clocks and, when anything happened, the batch's ordered events.
-================
-*/
-function createSession( name, seed, settings = {} ) {
-	const frames = [], rows = new Map();
-	/*
-	================
-	frame
-	================
-	*/
-	function frame( index ) {
-		while ( frames.length <= index ) {
-			const i = frames.length;
-			frames.push( { nowMs: ORIGIN_MS + i * FRAME_MS, simulationMs: i * FRAME_MS } );
-		}
-		return frames[index];
-	}
-	/*
-	================
-	event
-	================
-	*/
-	function event( index, value ) {
-		(frame( index ).batch ??= { events: [] }).events.push( value );
-	}
-	frame( 0 ).originMs = ORIGIN_MS;
-	return {
-		event,
-		row: gid => rows.get( gid ),
-		simulationMs: index => frame( index ).simulationMs,
-		/*
-		================
-		spawn
-		================
-		*/
-		spawn( index, row ) {
-			rows.set( row.gid, row );
-			event( index, { kind: "spawn", entity: row } );
-		},
-		/*
-		================
-		state
-
-		The row again with changes; undefined removes a field.
-		================
-		*/
-		state( index, gid, changes ) {
-			const next = { ...rows.get( gid ), ...changes };
-			for ( const key of Object.keys( next ) ) if ( next[key] === undefined ) delete next[key];
-			rows.set( gid, next );
-			event( index, { kind: "state", entity: next } );
-		},
-		/*
-		================
-		despawn
-		================
-		*/
-		despawn( index, gid ) {
-			rows.delete( gid );
-			event( index, { kind: "despawn", gid } );
-		},
-		/*
-		================
-		gameplay
-		================
-		*/
-		gameplay( index, changes ) {
-			event( index, { kind: "gameplay", state: changes, delta: true } );
-		},
-		/*
-		================
-		view
-
-		The camera from this frame on: its eye, looking at the local
-		player, and its pitch.
-		================
-		*/
-		view( index, camera, pitch ) {
-			const target = frame( index );
-			target.camera = { regionId: REGION, ...camera, target: [ CENTER, 10, CENTER ] };
-			target.pitch = pitch;
-		},
-		/*
-		================
-		finish
-		================
-		*/
-		finish( count ) {
-			frame( count - 1 );
-			return { format: "sro-presentation-session", version: 1, name, seed, settings, frames };
-		}
-	};
-}
-
-/*
-================
-playerRow
-
-A remote player row: alive, standing, at its region pose.
-================
-*/
-function playerRow( catalogs, gid, codename, at, extra = {} ) {
-	const body = catalogs.bodies.get( codename );
-	if ( !body ) throw Error( `Unknown body ${codename}` );
-	return {
-		gid,
-		refObjId: body.refObjId,
-		kind: "player",
-		name: `peer${gid}`,
-		regionId: at.regionId,
-		x: at.x,
-		y: at.y,
-		z: at.z,
-		heading: at.angle,
-		appearanceState: [ ALIVE, 0, 0, 0, 0, 0, 0 ],
-		countryByte9c: bodyKey( codename ).race === "CH" ? 0 : 1,
-		level: 80,
-		movementMode: MOVEMENT_RUN,
-		walkSpeed: body.walkSpeed,
-		runSpeed: body.runSpeed,
-		moving: false,
-		movementRevision: 0,
-		equipment: [],
-		avatars: [],
-		...extra
-	};
-}
-
-/*
-================
-npcRow
-
-A monster, NPC or COS row from the published NPC manifest.
-================
-*/
-function npcRow( catalogs, gid, codename, at, extra = {} ) {
-	const model = catalogs.npcs[codename];
-	if ( !model ) throw Error( `Unknown NPC ${codename}` );
-	return {
-		gid,
-		refObjId: model.refObjId,
-		kind: model.kind,
-		name: codename,
-		regionId: at.regionId,
-		x: at.x,
-		y: at.y,
-		z: at.z,
-		heading: at.angle,
-		appearanceState: [ ALIVE, 0, 0 ],
-		level: 20,
-		movementMode: MOVEMENT_RUN,
-		walkSpeed: 16,
-		runSpeed: 50,
-		moving: false,
-		movementRevision: 0,
-		...extra
-	};
-}
-
-/*
-================
-peer
-
-One geared crowd player of a body, spawned at a pose.
-================
-*/
-function peer( session, catalogs, rng, index, gid, at, extra = {} ) {
-	const codename = CROWD_BODIES[index % CROWD_BODIES.length];
-	const row = playerRow( catalogs, gid, codename, at, { equipment: gearFor( catalogs, rng, codename ), ...extra } );
-	session.spawn( 0, row );
-	return row;
-}
-
-/*
-================
-grid
-
-The pose of crowd slot i: rows of 15 in front of the local player,
-12 units apart.
-================
-*/
-function grid( rng, i, spacing = 12 ) {
-	return pose( CENTER - 84 + (i % 15) * spacing, CENTER + 12 + Math.floor( i / 15 ) * spacing, rng.int( 65536 ) );
-}
-
-/*
-================
-localStart
-
-The world reset that opens the session, the local player and its first
-gameplay snapshot (frame 0), the camera behind it.
-================
-*/
-function localStart( session, catalogs, rng, vitals = [] ) {
-	const at = pose( CENTER, CENTER );
-	const codename = "CHAR_CH_MAN_ADVENTURER", equipment = gearFor( catalogs, rng, codename );
-	session.event( 0, { kind: "reset", epoch: 1 } );
-	session.spawn(
-		0,
-		playerRow( catalogs, LOCAL_GID, codename, at, { kind: "local-player", name: "local", equipment } )
-	);
-	session.event( 0, {
-		kind: "gameplay",
-		state: {
-			localGid: LOCAL_GID,
-			pose: at,
-			moving: false,
-			movementRevision: 0,
-			inventory: equipment,
-			vitals: [ { gid: LOCAL_GID, hp: 1000, maxHp: 1000, abnormal: 0 }, ...vitals ],
-			casts: [],
-			attachedEffects: []
-		}
-	} );
-	session.view( 0, { x: CENTER, y: 60, z: CENTER - 120 }, -0.35 );
-}
-
-/*
-================
-walk
-
-One leg of a remote walk: the worker's row on every tick from start to
-arrival (a new movement revision and path, the sampled pose, moving),
-then the stop. Returns the arrival frame.
-================
-*/
-function walk( session, gid, start, to, mode = MOVEMENT_RUN ) {
-	const row = session.row( gid ), speed = mode === MOVEMENT_WALK ? row.walkSpeed : row.runSpeed;
-	const angle = heading( row.x, row.z, to.x, to.z );
-	const from = pose( row.x, row.z, angle, row.y ), target = pose( to.x, to.z, angle, row.y );
-	const distance = Math.hypot( to.x - row.x, to.z - row.z );
-	const frames = Math.max( 1, Math.ceil( distance / speed * FRAME_HZ ) );
-	const revision = row.movementRevision + 1;
-	for ( let i = 0; i <= frames; i++ ) {
-		const t = i / frames, at = start + i;
-		session.state( at, gid, {
-			x: from.x + (target.x - from.x) * t,
-			z: from.z + (target.z - from.z) * t,
-			heading: angle,
-			movementMode: mode,
-			moving: i < frames,
-			movementRevision: revision,
-			movementPath: i < frames ? { from, to: target } : undefined,
-			poseAtMs: session.simulationMs( at )
-		} );
-	}
-	return start + frames;
-}
+import {
+	FRAME_HZ,
+	REGION,
+	CENTER,
+	LOCAL_GID,
+	FIRST_PEER_GID,
+	MOVEMENT_SEATED,
+	MOVEMENT_RUN,
+	MOVEMENT_WALK,
+	ALIVE,
+	DEAD,
+	STALL_TITLE,
+	CROWD_BODIES,
+	seeded,
+	loadCatalogs,
+	wear,
+	gearFor,
+	sunGearFor,
+	heading,
+	pose,
+	createSession,
+	playerRow,
+	npcRow,
+	peer,
+	grid,
+	localStart,
+	walk
+} from "./session-builder.mjs";
 
 /*
 ================
@@ -766,6 +412,268 @@ function groundItems( seed ) {
 	return session.finish( 12 * FRAME_HZ );
 }
 
+/*
+================
+settle
+
+Fifteen players and four NPCs stand until their motion is settled (a
+steady decision, presentation-due.ts); then each meets one kind of input,
+one every 40 frames, that must unsettle it on the frame it lands: a hit
+and the caster's cast (action layers, the WAIT state, the combat stance),
+a death, an emote, sitting and standing, an equipment change, a mount and
+a dismount, a stall, a teleport to another region and back, a pickup, an
+attached effect's host motion, a disguise (an attached msch 3 reference
+appearance: the body changes with no new row), a slow; a monster is knocked down, one
+with no appearance state dies by its vitals alone, and a guard tower's
+damage changes its stage model on its own timer, with no new row. Then
+the dress inputs no row of the wearer carries: a cast whose skill hides
+the weapon, the server's job-suit and Moonlit Ash rules over a thief suit,
+and the local player joining an arena team, which dresses a peer of the
+other team in fortress clothes. The target changes, to a near player and
+to one beyond the protected animation distance, a pet resolve's stack
+window ends, and the camera pulls back across a LOD rescan: inputs only
+the published actor reads. 20 s of standing lets the idle fidget timers
+fire.
+================
+*/
+function settle( seed ) {
+	const catalogs = loadCatalogs(), rng = seeded( seed ), session = createSession( "settle", seed );
+	const players = Array.from( { length: 13 }, ( _, i ) => FIRST_PEER_GID + i );
+	const brute = FIRST_PEER_GID + 20, bare = FIRST_PEER_GID + 21, horse = FIRST_PEER_GID + 22;
+	const tower = FIRST_PEER_GID + 23, towerHp = 10000, thief = FIRST_PEER_GID + 24;
+	const far = FIRST_PEER_GID + 25, resolute = FIRST_PEER_GID + 26;
+	// The gameplay vitals list is replaced whole: keep every row's current one.
+	const vitals = new Map( [ LOCAL_GID, ...players, brute, bare, tower ].map( gid => {
+		const hp = gid === LOCAL_GID ? 1000 : gid === tower ? towerHp : 500;
+		return [ gid, { gid, hp, maxHp: hp, abnormal: 0 } ];
+	} ) );
+	const setVital = ( at, gid, changes ) => {
+		vitals.set( gid, { ...vitals.get( gid ), ...changes } );
+		session.gameplay( at, { vitals: [ ...vitals.values() ] } );
+	};
+	localStart( session, catalogs, rng, [ ...vitals.values() ].filter( row => row.gid !== LOCAL_GID ) );
+	players.forEach( ( gid, i ) => peer( session, catalogs, rng, i, gid, grid( rng, i ) ) );
+	// A player beyond the protected animation distance (300) from the local
+	// player, whose animation becoming the target protects (animationLod),
+	// and one under a pet resolve whose stack window ends with no new row.
+	session.spawn(
+		0,
+		playerRow( catalogs, far, "CHAR_EU_MAN_NOBLE", pose( CENTER, CENTER + 420 ), {
+			equipment: gearFor( catalogs, rng, "CHAR_EU_MAN_NOBLE" )
+		} )
+	);
+	session.spawn(
+		0,
+		playerRow( catalogs, resolute, "CHAR_CH_WOMAN_ADVENTURER", grid( rng, 16 ), {
+			petResolve: { untilMs: session.simulationMs( 700 ), stacks: 3 }
+		} )
+	);
+	// A Chinese man in a thief suit (job slot), of arena team 1.
+	session.spawn(
+		0,
+		playerRow( catalogs, thief, "CHAR_CH_MAN_ADVENTURER", grid( rng, 14 ), {
+			equipment: [
+				...gearFor( catalogs, rng, "CHAR_CH_MAN_ADVENTURER" ),
+				wear( catalogs, "ITEM_CH_M_TRADE_THIEF_02", "CH_M" )
+			],
+			arenaTeam: 1
+		} )
+	);
+	session.spawn( 0, npcRow( catalogs, brute, "MOB_CH_TIGER", grid( rng, 20 ) ) );
+	const { appearanceState: _state, ...bareRow } = npcRow( catalogs, bare, "MOB_CH_MANGNYANG", grid( rng, 22 ) );
+	session.spawn( 0, bareRow );
+	session.spawn( 0, npcRow( catalogs, horse, "COS_C_HORSE1", grid( rng, 24 ), { ownerGid: players[6] } ) );
+	session.spawn(
+		0,
+		npcRow( catalogs, tower, "STRUCTURE_GUARD_TOWER_01", grid( rng, 27 ), { maxHp: towerHp, structureState: 0 } )
+	);
+	// Only the brute's hp is seeded: a seeded hp stands over the vitals'
+	// (presentation.ts), and the bare monster dies by its vitals.
+	session.event( 0, { kind: "hp-seed", gid: brute, hp: 500 } );
+	let at = 300, token = 0;
+	const next = () => at += 40;
+	/*
+	================
+	cast
+
+	One cast's life as combat() writes it: received, shot with its impact
+	30 frames later, finished 50 frames after that.
+	================
+	*/
+	const cast = ( when, caster, target, impact, skill = 2 ) => {
+		const base = { token: ++token, caster, target, skill, damage: impact.damage, fatal: impact.fatal };
+		const received = { ...base, receivedAtMs: session.simulationMs( when ) };
+		session.gameplay( when, { casts: [ received ] } );
+		session.event( when + 30, {
+			kind: "hp-result",
+			gid: target,
+			key: `${token}:${target}:0`,
+			fatal: impact.fatal
+		} );
+		session.gameplay( when + 30, {
+			casts: [ {
+				...received,
+				shotAtMs: session.simulationMs( when + 30 ),
+				results: [ { target, impacts: [ { flags: 0, secondaryAmount: 0, ...impact } ] } ]
+			} ]
+		} );
+		session.gameplay( when + 80, { casts: [] } );
+	};
+	cast( next(), players[1], players[0], { type: 0, damage: 50, fatal: false } );
+	const death = next();
+	session.state( death, players[2], { appearanceState: [ DEAD, 0, 0, 0, 0, 0, 0 ] } );
+	setVital( death, players[2], { hp: 0 } );
+	const emoted = next();
+	session.state( emoted, players[3], { emote: { action: 1, revision: 1, atMs: session.simulationMs( emoted ) } } );
+	const sat = next();
+	session.state( sat, players[4], { movementMode: MOVEMENT_SEATED } );
+	session.state( sat + 240, players[4], { movementMode: MOVEMENT_RUN } );
+	session.state( next(), players[5], { equipment: gearFor( catalogs, rng, CROWD_BODIES[5 % CROWD_BODIES.length] ) } );
+	const mounted = next();
+	session.state( mounted, players[6], { mountedOn: horse } );
+	session.state( mounted + 120, players[6], { mountedOn: undefined } );
+	const stalled = next();
+	session.state( stalled, players[7], { appearanceState: [ ALIVE, 0, 0, 0, 0, 0, STALL_TITLE ] } );
+	session.state( stalled + 240, players[7], { appearanceState: [ ALIVE, 0, 0, 0, 0, 0, 0 ] } );
+	const home = session.row( players[8] ), away = next();
+	session.state( away, players[8], { regionId: REGION + 1, x: 400, z: 400 } );
+	session.state( away + 120, players[8], { regionId: home.regionId, x: home.x, z: home.z } );
+	session.state( next(), players[9], { pickupRevision: 1 } );
+	// Skill 20507 attaches motion default 188 to its host (the adventurer
+	// bodies hold attached-default-188).
+	// The attached effects list is replaced whole too.
+	const effects = new Map();
+	const attach = ( when, key, effect ) => {
+		if ( effect ) effects.set( key, effect );
+		else effects.delete( key );
+		session.gameplay( when, { attachedEffects: [ ...effects.values() ] } );
+	};
+	const attached = next();
+	attach( attached, "motion", { gid: players[10], skill: 20507, token: 900, phase: 1 } );
+	// A second row on the same host, with a motion of its own.
+	attach( attached + 60, "second motion", { gid: players[10], skill: 20507, token: 903, phase: 1 } );
+	attach( attached + 180, "motion" );
+	attach( attached + 240, "second motion" );
+	// Skill 9452 is a type 3 reference appearance (characterActionData.json).
+	const disguised = next();
+	attach( disguised, "disguise", { gid: players[12], skill: 9452, token: 901, phase: 1 } );
+	attach( disguised + 240, "disguise" );
+	// A slow changes nothing a single timed layer shows: the pickup while it
+	// holds is the multi-layer frame that reads the slowed clock.
+	const slowed = next();
+	setVital( slowed, players[11], { abnormal: 0x2 } );
+	session.state( slowed + 60, players[11], { pickupRevision: 1 } );
+	setVital( slowed + 180, players[11], { abnormal: 0 } );
+	cast( next(), players[1], brute, { type: 4, damage: 30, fatal: false } );
+	setVital( next(), bare, { hp: 0 } );
+	setVital( next(), tower, { hp: towerHp / 5 } );
+	// Berserk (body state 1): the effects owner holds the body's scale at 1.1
+	// and eases it back when berserk ends, while the body stands (no cast,
+	// so no combat stance, holds the decision).
+	const berserk = next();
+	session.state( berserk, players[5], { appearanceState: [ ALIVE, 0, 1, 0, 0, 0, 0 ] } );
+	session.state( berserk + 120, players[5], { appearanceState: [ ALIVE, 0, 0, 0, 0, 0, 0 ] } );
+	at = berserk + 160;
+	// Skill 93 hides the caster's weapon while it casts (effectRecords hideWeapon).
+	cast( next(), players[5], brute, { type: 0, damage: 10, fatal: false }, 93 );
+	const rules = next();
+	session.gameplay( rules, { jobSuitHidesArmor: true } );
+	session.gameplay( rules + 40, { moonlitThiefSuit: true } );
+	session.gameplay( rules + 160, { jobSuitHidesArmor: false, moonlitThiefSuit: false } );
+	const arena = next() + 160;
+	session.state( arena, LOCAL_GID, { arenaTeam: 0 } );
+	session.state( arena + 120, LOCAL_GID, { arenaTeam: 255 } );
+	session.gameplay( next(), { target: players[3] } );
+	session.gameplay( next(), { target: far } );
+	const pulled = next();
+	for ( let i = 0; i < 240; i++ ) {
+		const back = 120 + 300 * Math.min( 1, i / 120 );
+		session.view( pulled + i, { x: CENTER, y: 60 + back * .3, z: CENTER - back }, -0.35 );
+	}
+	return session.finish( 20 * FRAME_HZ );
+}
+
+/*
+================
+evict
+
+Eight geared players stand the whole run while waves of monsters, one
+distinct body each, and of freshly geared players arrive and leave twice a
+second: the resident sources outgrow the residency budget and the cache
+retires the oldest inactive ones (resources.ts retainWanted) while the
+standing players' resolves are skipped. Their sources must keep the same
+place in the cache order a resolve gives them.
+================
+*/
+function evict( seed ) {
+	const catalogs = loadCatalogs(), rng = seeded( seed ), session = createSession( "evict", seed );
+	localStart( session, catalogs, rng );
+	for ( let i = 0; i < 8; i++ ) peer( session, catalogs, rng, i, FIRST_PEER_GID + i, grid( rng, i ) );
+	const bodies = new Map();
+	for ( const [codename, model] of Object.entries( catalogs.npcs ) ) {
+		if ( model.kind === "monster" && !bodies.has( model.bsr ?? codename ) ) {
+			bodies.set( model.bsr ?? codename, codename );
+		}
+	}
+	const monsters = [ ...bodies.values() ];
+	let next = FIRST_PEER_GID + 100, wave = [];
+	for ( let at = 60, n = 0; at < 24 * FRAME_HZ; at += 30, n++ ) {
+		for ( const gid of wave ) session.despawn( at, gid );
+		wave = [];
+		for ( let i = 0; i < 5; i++ ) {
+			const gid = next++;
+			session.spawn(
+				at,
+				npcRow( catalogs, gid, monsters[(n * 5 + i) % monsters.length], grid( rng, 30 + i * 2 ) )
+			);
+			wave.push( gid );
+		}
+		for ( let i = 0; i < 5; i++ ) {
+			const codename = rng.pick( CROWD_BODIES ), gid = next++;
+			session.spawn(
+				at,
+				playerRow( catalogs, gid, codename, grid( rng, 31 + i * 2 ), {
+					equipment: gearFor( catalogs, rng, codename )
+				} )
+			);
+			wave.push( gid );
+		}
+	}
+	return session.finish( 24 * FRAME_HZ );
+}
+
+/*
+================
+glow
+
+120 players in degree 9 Sun sets standing for 20 s (armor +9, weapon and
+shield +12): the crowd the bench draws, where every body carries its
+equipment glow programs, three and more particle actors a body. Over the
+last 10 s the camera pulls back past the distance that hides a glow
+particle (entity-lod.ts): the far bodies' particles hide while the
+bodies stand.
+================
+*/
+function glow( seed ) {
+	const catalogs = loadCatalogs(), rng = seeded( seed ), session = createSession( "glow", seed );
+	localStart( session, catalogs, rng );
+	for ( let i = 0; i < 120; i++ ) {
+		const codename = CROWD_BODIES[i % CROWD_BODIES.length];
+		session.spawn(
+			0,
+			playerRow( catalogs, FIRST_PEER_GID + i, codename, grid( rng, i ), {
+				equipment: sunGearFor( catalogs, rng, codename )
+			} )
+		);
+	}
+	const end = 20 * FRAME_HZ;
+	for ( let at = end / 2; at < end; at++ ) {
+		const back = 20 + 1000 * (2 * at / end - 1);
+		session.view( at, { x: CENTER, y: 20 + back * .4, z: CENTER - back }, -0.35 );
+	}
+	return session.finish( end );
+}
+
 export const SCENARIOS = {
 	standing,
 	walkers,
@@ -779,7 +687,10 @@ export const SCENARIOS = {
 	pickup,
 	churn,
 	camera,
-	"ground-items": groundItems
+	"ground-items": groundItems,
+	settle,
+	evict,
+	glow
 };
 
 /*

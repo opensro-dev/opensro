@@ -22,6 +22,8 @@ const COS_INFO_NAME_BUTTON = 26;
 // The Friends list (iffriend.txt id 30, 328 x 256): eleven 23-pixel
 // gil_bar02 rows and a scrollbar between its 16-pixel arrows.
 const FRIEND_VISIBLE_ROWS = 11;
+// The speech board's wrap width over a speaker.
+const SPEECH_BOARD_WIDTH = 200;
 // The letter list shares the Friends list's scroll manager (ifletter.txt id
 // 30, 328 x 256): eleven 23-pixel rows. The write window's contents edit is
 // the one multiline letter control.
@@ -159,6 +161,7 @@ import {
 	type EventInterfaceLayout
 } from "@/engine/foundation/ui/event-interface";
 import { jobContributionSelf, jobRankPage, jobRankPages } from "@/engine/foundation/gameplay/job-rank";
+import { columnHeadKey, columnHeadLayout } from "@/engine/foundation/ui/column-heads";
 import { createMapTeleport } from "./hud/map-teleport";
 import { createGmHelper, GM_HELPER_HEIGHT, GM_HELPER_ROWS, GM_HELPER_ROW_HEIGHT } from "./hud/gm-helper";
 import type { GmCatalog } from "@/engine/foundation/gameplay/gm-command";
@@ -437,7 +440,7 @@ import {
 	FORTRESS_WAR_APPLY_SLOT_HEIGHT,
 	FORTRESS_WAR_APPLY_SLOT_WIDTH
 } from "@/engine/foundation/ui/fortress-war-apply";
-import { createGuildManagerHud } from "./hud/guild-manager-hud";
+import { createGuildManagerHud, GUILD_FIELD_MAX_LENGTH } from "./hud/guild-manager-hud";
 import { createGuildNoticeHud } from "./hud/guild-notice-hud";
 import { createMagicOptionHud, MAGIC_OPTION_LIST_ROWS } from "./hud/magic-option-hud";
 import {
@@ -741,7 +744,10 @@ import { createQuestInfo } from "./hud/quest-info";
 import {
 	QUEST_INFO_ICON_X_INSET,
 	QUEST_INFO_ICON_Y,
+	QUEST_INFO_DIVIDER_TEXTURE,
 	QUEST_INFO_WINDOW_WIDTH,
+	questInfoDividers,
+	questInfoRows,
 	questInfoWindowHeight
 } from "@/engine/foundation/ui/quest-info";
 import { automaticGuide } from "@/engine/foundation/gameplay/guide";
@@ -800,6 +806,8 @@ import {
 	partyProposalLayout,
 	guildProposalLayout,
 	guildQuestionLayout,
+	GUILD_MESSAGE_LINE,
+	GUILD_MESSAGE_SECOND_TOP,
 	reverseReturnLayout,
 	proposalLayout,
 	reverseReturnButton,
@@ -883,6 +891,7 @@ import {
 	debugClockStep,
 	type DebugClock
 } from "@/engine/foundation/gameplay/debug-clock";
+import { INSERT_MESSAGE_GEOMETRY, type InsertMessageMode } from "@/engine/foundation/ui/insert-message-box";
 import { messageBox } from "@/engine/foundation/ui/message-box";
 import { resourceErrorLines } from "@/engine/foundation/ui/resource-error";
 import { disconnectDialog } from "@/engine/foundation/ui/disconnect-dialog";
@@ -1117,6 +1126,15 @@ const ITEM_CARRY_PANELS: readonly string[] = [ ...INVENTORY_POPUP_PANELS, "Magic
 const SKIN_SLIDER_TRAVEL = 85;
 // CIFStall_OnCreate (5A2D60): the "Sell goods" tab's rect in the window.
 const STALL_TAB_X = 0x1c, STALL_TAB_Y = 0x56, STALL_TAB_W = 0x50, STALL_TAB_H = 0x18;
+// The buyback strip's art (com_redeem_window) starts this far left of its
+// first slot; a fitted "Repurchase" ends this far before the art.
+const BUYBACK_STRIP_INSET = 4, BUYBACK_LABEL_GAP = 2;
+// Port-only, not native ("Fit window labels"): the merchant's buyback
+// label where no face fits "Repurchase" beside the strip (#3728).
+const BUYBACK_SHORT_LABEL = "Buy back";
+// A fitted Item Mall bag count starts this far right of its bag icon and
+// ends inside mall_bar02's bevel, this many pixels from its right edge.
+const MALL_SPACES_GAP = 2, MALL_BAR_BEVEL = 3;
 // Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
 const BUTTON_FOCUS = BUTTON.replace( ".png", "_focus.png" ),
 	BUTTON_PRESS = BUTTON.replace( ".png", "_press.png" ),
@@ -1229,6 +1247,30 @@ export function defaultUiPorts(): Required<
 		saveQuickslots: () => {},
 		extensions: {}
 	};
+}
+
+// The discs a CIFStaticWithPictureClip takes its alpha from (its +0x380,
+// set by each window's OnCreate): pmi_face for the player (6B48B2) and
+// the Item Mall (6BDB0B), pmi_pet_face for a pet (6B3828), qpt_face for a
+// quick party slot (5BA64B), pt_face (popupArt.portrait) for the party
+// windows (5B8E6B, CIFPartySlot_vf24).
+const PICTURE_CLIP_PLAYER = ROOT + "interface/playerminiinfo/pmi_face.png";
+const PICTURE_CLIP_PET = ROOT + "interface/playerminiinfo/pmi_pet_face.png";
+const PICTURE_CLIP_QUICK_PARTY = ROOT + "interface/quickparty/qpt_face.png";
+
+/*
+================
+pictureClip
+
+The mask of a CIFStaticWithPictureClip picture. Its draw (538600) samples
+the picture on texture stage 0 and the face disc on stage 1, taking alpha
+from the disc alone (stage 1 ALPHAOP SELECTARG1, ALPHAARG1 TEXTURE) over
+the control's whole rect: a portrait or pet icon shows as a round face,
+never as its square.
+================
+*/
+function pictureClip( face: string, rect: UiRect ): NonNullable<UiQuad["mask"]> {
+	return { texture: face, rect };
 }
 
 /*
@@ -1646,7 +1688,7 @@ export function createUi( ports: UiPorts ) {
 	// keeps it when the current room has none (865690 returns null).
 	let minimapRoomName = "";
 	let abilityDetails = false, mapWorldLoading = false;
-	const title = createTitleUi( assets, base );
+	const title = createTitleUi( assets, base, () => experimental.state().saved.fitWindowLabels );
 	let serverList = false,
 		serverDraft = "",
 		serverOffset = 0,
@@ -7187,16 +7229,23 @@ export function createUi( ports: UiPorts ) {
 					event.kind === "key" && event.code === "Enter" && !composing ||
 					event.kind === "activate" && event.id === "map-teleport-confirm"
 				) {
-					mapTeleport.clear();
-					dirty = true;
 					if ( teleportTarget.reversePoint !== undefined ) {
+						// A busy bag holds the reverse answer: the confirmation
+						// stays until the use is sent or the choice is really gone.
 						const command = reverseScrollHud.choosePoint( teleportTarget.reversePoint, view );
 						if ( command ) {
+							mapTeleport.clear();
+							dirty = true;
 							sendGameplay( command );
 							setPanel( "" );
+						} else if ( !reverseScrollHud.mapping() ) {
+							mapTeleport.clear();
+							dirty = true;
 						}
 						return;
 					}
+					mapTeleport.clear();
+					dirty = true;
 					if ( view?.session?.phase === "world" && view.gameplay?.eligibility?.gm ) {
 						sendGameplay( { kind: "gm-command", line: mapTeleport.command( teleportTarget ) } );
 					}
@@ -7419,6 +7468,10 @@ export function createUi( ports: UiPorts ) {
 			}
 			if ( event.kind === "scroll" && panel === "Experimental" ) {
 				experimental.scroll( Math.sign( event.delta ), experimentalRange( view?.session ) );
+				dirty = true;
+				return;
+			}
+			if ( event.kind === "scroll" && panel === "Map" && mapHud.scroll( event ) ) {
 				dirty = true;
 				return;
 			}
@@ -11111,6 +11164,14 @@ export function createUi( ports: UiPorts ) {
 			) {
 				return frameDraw.authoredLabeledButton( drawFrame, { node, ox, oy, id, caption, disabled } );
 			}
+			/*
+			================
+			authoredCaption
+			================
+			*/
+			function authoredCaption( node: AuthoredControl, ox: number, oy: number, caption: string ) {
+				return frameDraw.authoredCaption( drawFrame, { node, ox, oy, caption } );
+			}
 			// Resource sections are reverse-insertion lists (9BD240), so native child
 			// paint order is the reverse of controlsByName, not numeric control ID.
 			/*
@@ -11294,6 +11355,65 @@ export function createUi( ports: UiPorts ) {
 			*/
 			function nativePage( layout: AuthoredLayout, px: number, py: number, exclude: readonly number[] = [] ) {
 				return frameDraw.nativePage( drawFrame, { layout, px, py, exclude } );
+			}
+			/*
+			================
+			insertMessagePage
+
+			MsgBoxInsertMsg's authored controls moved where 52C870 puts them for
+			one mode (insert-message-box.ts); null until the layout loads.
+			================
+			*/
+			function insertMessagePage( mode: InsertMessageMode ) {
+				const authored = hud.data()?.stallTextPage;
+				if ( !authored ) return null;
+				const rects: Readonly<Record<number, UiRect>> = INSERT_MESSAGE_GEOMETRY[mode].rects,
+					page: AuthoredLayout = Object.fromEntries(
+						Object.entries( authored ).map( (
+							[name, node]
+						) => [ name, { ...node, rect: rects[node.id] ?? node.rect } ] )
+					);
+				return { page, at: ( id: number ) => Object.values( page ).find( node => node.id === id )! };
+			}
+			/*
+			================
+			insertMessageChrome
+
+			The edit's frame children (11, 12) and the rest of the box's authored
+			chrome, without the prompt, edit or buttons a caller draws itself.
+			================
+			*/
+			function insertMessageChrome( mode: InsertMessageMode, x: number, y: number ) {
+				const layout = insertMessagePage( mode );
+				if ( layout ) nativePage( layout.page, x, y, [ 10, 15, 205, 206 ] );
+			}
+			/*
+			================
+			insertMessageBody
+
+			MsgBoxInsertMsg's body (52E4F0 kind 4) as 52C870 places it for one
+			mode: the chrome, the prompt, the edit and the authored Confirm /
+			Cancel buttons. The caller draws the frame and caption and owns
+			blocks and controls.
+			================
+			*/
+			function insertMessageBody( box: {
+				readonly mode: InsertMessageMode;
+				readonly origin: readonly [number, number];
+				readonly prompt: string;
+				readonly edit: { readonly id: string; readonly value: string; readonly limit: number; };
+				readonly buttons: readonly [string, string];
+			} ) {
+				const layout = insertMessagePage( box.mode );
+				if ( !layout ) return;
+				const [x, y] = box.origin, at = layout.at;
+				nativePage( layout.page, x, y, [ 10, 15, 205, 206 ] );
+				authoredText( at( 10 ), x, y, box.prompt );
+				// The prompt names the edit for assistive tech; the authored node name is internal.
+				partyEdit( { ...at( 15 ), name: box.prompt }, x, y, box.edit.id, box.edit.value, box.edit.limit, true );
+				// The authored captions: UIIT_CTL_CONFIRM and UIIT_CTL_CANCEL.
+				authoredLabeledButton( at( 205 ), x, y, box.buttons[0], hudCopy( at( 205 ).text ) );
+				authoredLabeledButton( at( 206 ), x, y, box.buttons[1], hudCopy( at( 206 ).text ) );
 			}
 			/*
 			================
@@ -11851,15 +11971,17 @@ export function createUi( ports: UiPorts ) {
 								] );
 							}
 						}
-						authoredImage( p.GDR_PMI_PICTURE!, px, py, ROOT + "interface/playerminiinfo/pmi_face.png" );
+						authoredImage( p.GDR_PMI_PICTURE!, px, py, PICTURE_CLIP_PLAYER );
 						if ( game?.localGid ) {
+							const picture = authoredRect( p.GDR_PMI_PICTURE!, px, py );
 							quads.push( {
 								portraitGid: game.localGid,
 								texture: "__portrait",
-								rect: authoredRect( p.GDR_PMI_PICTURE!, px, py ),
+								rect: picture,
 								uv: [ 0, 0, 1, 1 ],
 								color: white,
-								clip: full
+								clip: full,
+								mask: pictureClip( PICTURE_CLIP_PLAYER, picture )
 							} );
 						}
 						const country = game?.guide?.country;
@@ -12034,7 +12156,7 @@ export function createUi( ports: UiPorts ) {
 					const [px, py] = hudData.root.GDR_PLAYER_MINI_INFO!.rect,
 						hpPath = ROOT + "interface/playerminiinfo/pmi_pet_hp.png",
 						hgpPath = ROOT + "interface/playerminiinfo/pmi_pet_hgp.png",
-						facePath = ROOT + "interface/playerminiinfo/pmi_pet_face.png",
+						facePath = PICTURE_CLIP_PET,
 						icon = iconPath( pet.icon ),
 						protection = shieldGauge(
 							next.entities.find( e => e.gid === pet.gid ),
@@ -12072,7 +12194,15 @@ export function createUi( ports: UiPorts ) {
 						if ( icon ) {
 							paths.push( icon );
 							if ( resources.has( icon ) ) {
-								rect( authoredRect( petLayout.GDR_PET_MINI_PICTURE!, qx, qy ), white, icon );
+								const picture = authoredRect( petLayout.GDR_PET_MINI_PICTURE!, qx, qy );
+								quads.push( {
+									rect: picture,
+									texture: icon,
+									uv: [ 0, 0, 1, 1 ],
+									color: white,
+									clip: full,
+									mask: pictureClip( facePath, picture )
+								} );
 							}
 						}
 						authoredText(
@@ -12383,13 +12513,16 @@ export function createUi( ports: UiPorts ) {
 							);
 						}
 						if ( row.leader ) authoredImage( slot.GDR_QPS_PARTY_LEADER!, x, y );
+						const picture = authoredRect( slot.GDR_QPS_PICTURE!, x, y );
+						paths.push( PICTURE_CLIP_QUICK_PARTY );
 						quads.push( {
 							portraitGid: partyPortraitGid( row.member.id ),
 							texture: "__portrait",
-							rect: authoredRect( slot.GDR_QPS_PICTURE!, x, y ),
+							rect: picture,
 							uv: [ 0, 0, 1, 1 ],
 							color: white,
-							clip: full
+							clip: full,
+							mask: pictureClip( PICTURE_CLIP_QUICK_PARTY, picture )
 						} );
 						// 5BD0A0: a visible member is measured at its live pose, one
 						// out of view at its roster record.
@@ -13648,9 +13781,11 @@ export function createUi( ports: UiPorts ) {
 						layout = { ...hudData.windows.ifautopotion! },
 						slot = { ...hudData.windows.ifautopotionslot! };
 					if ( companionEnabled ) {
+						// Only x moves: the box keeps its authored y of 8 so the value static
+						// (authored y 11) puts its ink 6px under the box's top edge, as retail does.
 						slot.GDR_AUTOPOTION_SLOT_DATA_BOX = {
 							...slot.GDR_AUTOPOTION_SLOT_DATA_BOX!,
-							rect: [ 85, 6, 0, 0 ]
+							rect: [ 85, slot.GDR_AUTOPOTION_SLOT_DATA_BOX!.rect[1], 0, 0 ]
 						};
 					}
 					if ( companionEnabled ) {
@@ -13716,7 +13851,8 @@ export function createUi( ports: UiPorts ) {
 							layout[name] = { ...layout[name]!, rect };
 						}
 					}
-					windowBox( hudCopy( "UIIT_STT_MACROPOTION" ) || "Auto Potion", px, py, dialogWidth, dialogHeight );
+					// GDR_AUTO_POTION's authored caption (ginterface).
+					windowBox( hudCopy( "UIIT_PAG_MACROPOTION_TITLE" ), px, py, dialogWidth, dialogHeight );
 					closeButton( px + dialogWidth - 25, py + 10, panelCloseId( "Auto Potion" ) );
 					if ( companionEnabled ) {
 						for (
@@ -14044,7 +14180,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							quads.push( ...text.quads( label, [ sx + 30, sy + 10, 230, 16 ], full, white ) );
 							authoredImage( slot.GDR_AUTOPOTION_SLOT_DATA_BOX!, px + 241, sy );
 							quads.push(
-								...text.quads( String( entry.percent ), [ px + 331, sy + 10, 25, 12 ], full, white, {
+								// The value keeps GDR_AUTOPOTION_SLOT_DATA's authored y (11) under the box.
+								...text.quads( String( entry.percent ), [ px + 331, sy + 11, 25, 12 ], full, white, {
 									hAlign: 2
 								} )
 							);
@@ -15090,14 +15227,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 												label,
 												false
 											);
-											if ( label ) authoredText( child, sx, sy, label );
+											if ( label ) authoredCaption( child, sx, sy, label );
 										}
 										continue;
 									}
 									authoredChrome( child, sx, sy );
 									if ( child.id === 11 ) authoredText( child, sx, sy, member.name );
 									if ( child.id === 13 ) {
-										authoredText( child, sx, sy, member.entryLevel + "(" + member.level + ")" );
+										// Under "Fit window labels" the "80(80)" level runs
+										// past its 19-pixel field into the free room, as a
+										// label does, instead of reading "8...".
+										frameDraw.authoredText( drawFrame, {
+											node: child,
+											ox: sx,
+											oy: sy,
+											value: member.entryLevel + "(" + member.level + ")",
+											label: true
+										} );
 									}
 									if ( child.id === 14 && rank ) {
 										authoredText( child, sx, sy, hudCopy( rankKeys[rank]! ) );
@@ -15144,7 +15290,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										!academyIsLeader( camp ));
 							authoredButton( node, ox, oy, id, copy, disabled );
 							if ( copy ) {
-								authoredText(
+								authoredCaption(
 									disabled ? { ...node, color: tooltipColor( 0xff999999 ) } : node,
 									ox,
 									oy,
@@ -15159,7 +15305,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								authoredText( { ...node, color: tooltipColor( 0xffffe194 ) }, ox, oy, leader.name );
 							}
 							if ( node.id === 44 ) {
-								authoredText( node, ox, oy, leader.entryLevel + "(" + leader.level + ")" );
+								// The leader's level, fitted as the members' (above).
+								frameDraw.authoredText( drawFrame, {
+									node,
+									ox,
+									oy,
+									value: leader.entryLevel + "(" + leader.level + ")",
+									label: true
+								} );
 							}
 							if ( node.id === 45 && academyRank( leader ) === 7 ) {
 								authoredText( node, ox, oy, hudCopy( "UIIT_STT_TC_GUARDIAN" ) );
@@ -15202,7 +15355,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							rect,
 							uv: [ 0, 0, 1, 1 ],
 							color: white,
-							clip: full
+							clip: full,
+							mask: pictureClip( hudData.popupArt.portrait, rect )
 						} );
 					};
 					for ( const node of authoredPaintOrder( layout ) ) {
@@ -15305,7 +15459,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								hasParty || !!game?.partyMatching?.own :
 								false;
 							authoredButton( node, ox, oy, id, copy, disabled );
-							authoredText(
+							authoredCaption(
 								disabled ? { ...node, color: tooltipColor( 0xff999999 ) } : node,
 								ox,
 								oy,
@@ -16295,7 +16449,25 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						px = Math.floor( (w - QUEST_INFO_WINDOW_WIDTH) / 2 ),
 						py = Math.floor( (h - infoHeight) / 2 ),
 						infoAdmission = beginWindow();
-					blocks.push( [ px, py, QUEST_INFO_WINDOW_WIDTH, infoHeight ] );
+					// CIFQuestInfo (ginterface GDR_QUESTINFO, 315x142) is a main
+					// frame on mframe_wnd_: its ring and plate are the window's
+					// edges and background, with the close button (its authored
+					// text is empty: no caption).
+					// ifquestinfo.txt authors only the scroll manager, so drawing
+					// that page alone left the slot plates floating over the
+					// world. 62D260 resizes the frame per row count; the ring
+					// follows.
+					const infoFrame = hudData.root.GDR_QUESTINFO!;
+					nativeFrame(
+						{
+							...infoFrame,
+							rect: [ infoFrame.rect[0], infoFrame.rect[1], QUEST_INFO_WINDOW_WIDTH, infoHeight ]
+						},
+						px,
+						py,
+						"",
+						"quest-info-close"
+					);
 					controls.push( {
 						id: "quest-info-drag",
 						label: "Move quest info",
@@ -16304,14 +16476,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						rect: [ px, py, QUEST_INFO_WINDOW_WIDTH, infoHeight ]
 					} );
 					for ( const node of authoredPaintOrder( infoPage ) ) authoredChrome( node, px, py );
-					const slotHeight = infoSlot.GDR_QUESTINFO_SLOT!.rect[3],
-						visibleSlots = Math.max(
-							1,
-							Math.floor( (infoHeight - infoPage.GDR_QUESTINFO_SCROLLMGR!.rect[1]) / slotHeight )
-						);
-					for ( const [index, entry] of infoEntries.slice( 0, visibleSlots ).entries() ) {
+					// 62D260: up to three rows at the native pitch, a tiled
+					// divider under each shown row but the last.
+					const rows = questInfoRows( infoEntries.length );
+					for ( const [index, entry] of infoEntries.slice( 0, rows.visible ).entries() ) {
 						const ox = px + infoPage.GDR_QUESTINFO_SCROLLMGR!.rect[0],
-							oy = py + infoPage.GDR_QUESTINFO_SCROLLMGR!.rect[1] + index * slotHeight;
+							oy = py + infoPage.GDR_QUESTINFO_SCROLLMGR!.rect[1] + index * rows.pitch;
 						if ( infoSlot.GDR_QUESTINFO_SLOT!.texture ) {
 							authoredImage( infoSlot.GDR_QUESTINFO_SLOT!, ox, oy );
 						}
@@ -16334,9 +16504,27 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							oy,
 							hudCopy( infoSlot.GDR_QUESTINFO_SLOT_CONDITION_STATIC!.text )
 						);
-						authoredText( infoSlot.GDR_QUESTINFO_SLOT_CONDITION!, ox, oy, entry.condition, "clip" );
+						// Under "Fit window labels" a condition wider than its
+						// 200-pixel field ("Available Once. Link (2nd betting
+						// (Mamoje))") wraps onto two lines inside the field's
+						// columns, in the plate's free band below it; off keeps
+						// the cut above.
+						frameDraw.authoredText( drawFrame, {
+							node: infoSlot.GDR_QUESTINFO_SLOT_CONDITION!,
+							ox,
+							oy,
+							value: entry.condition,
+							clipToControl: experimental.state().saved.fitWindowLabels ? true : "clip",
+							label: true
+						} );
 					}
-					closeButton( px + QUEST_INFO_WINDOW_WIDTH - 22, py + 6, "quest-info-close" );
+					const divider = ROOT + QUEST_INFO_DIVIDER_TEXTURE;
+					for ( const [dx, dy, dw, dh] of questInfoDividers( infoEntries.length ) ) {
+						paths.push( divider );
+						quads.push(
+							...normalTile( [ px + dx, py + dy, dw, dh ], divider, resources.size( divider ), full )
+						);
+					}
 					endWindow( infoAdmission, "quest-info" );
 				}
 				if ( practice && panel === "Skills" && hudData ) {
@@ -16769,13 +16957,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								family[disabled ? 3 : pressed === id && hover === id ? 2 : hover === id ? 1 : 0]!
 							);
 						}
-						authoredText(
+						const label = authoredCaption(
 							{ ...node, color: buttonTextColor( node.color, buttonAccess( false, disabled ) ) },
 							ox,
 							oy,
 							hudCopy( node.text )
 						);
-						controls.push( { id, label: hudCopy( node.text ), rect: r, kind: "button", disabled } );
+						controls.push( { id, label, rect: r, kind: "button", disabled } );
 					}
 					if ( blockTab === 0 && game?.chat?.blockError ) {
 						quads.push(
@@ -16868,9 +17056,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								full
 							)
 						);
+						// 61B040 / 61DB90 open MsgBoxInsertMsg in mode 7; 52C870 captions
+						// it UIIT_STT_INPUT_BOX and neither opener renames it.
 						quads.push(
 							...text.quads(
-								hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+								hudCopy( "UIIT_STT_INPUT_BOX" ),
 								[ dx + 10, dy + 11, 285, 12 ],
 								full,
 								white,
@@ -16891,7 +17081,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						);
 						if ( blockDialog === "add" ) {
 							const r: UiRect = [ dx + 19, dy + 73, 266, 20 ];
-							rect( [ dx + 12, dy + 71, 281, 25 ], [ 0, 0, 0, 1 ] );
+							insertMessageChrome( 7, dx, dy );
 							controls.push( {
 								id: "blocking-name",
 								label: copy,
@@ -16926,8 +17116,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								);
 							}
 						}
-						button( "blocking-ok", hudCopy( "UIIT_STT_OK" ) || "OK", dx + 72, dy + 114, 76 );
-						button( "blocking-cancel", hudCopy( "UIIT_STT_CANCEL" ) || "Cancel", dx + 160, dy + 114, 76 );
+						button( "blocking-ok", hudCopy( "UIIT_CTL_CONFIRM" ), dx + 72, dy + 114, 76 );
+						button( "blocking-cancel", hudCopy( "UIIT_CTL_CANCEL" ), dx + 160, dy + 114, 76 );
 						endWindow( [ mark[0], 0, mark[2], mark[3] ], "modal:" + panel );
 						blocks.push( full );
 					}
@@ -17289,7 +17479,29 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						valid = !!shop && shop.npc === game?.target && !shop.error,
 						busy = !!game?.inventoryPending;
 					nativeFrame( root, px, py, shop?.name ?? "", panelCloseId( "Shop" ) );
-					nativePage( page, px, py );
+					// GDR_STORE_CHARGY_STATIC (60) right-aligns "Repurchase" (68
+					// pixels) in a 43-pixel box at x = 7, so it ran past the window's
+					// left edge. Port-only, not native (Experimental "Fit window
+					// labels"): it is laid in the room between the item frame's left
+					// edge and the buyback strip's art, centred on the strip; no
+					// face fits the word there, so it reads "Buy" over "back".
+					// The lines go after the page: its opaque background tile
+					// would cover them.
+					const repurchase = page.GDR_STORE_CHARGY_STATIC!,
+						strip = page.GDR_STORE_ICON_SLOT_01!,
+						repurchaseLeft = px + page.GDR_STORE_FRAME!.rect[0],
+						repurchaseFit = frameDraw.labelFit( drawFrame, {
+							node: repurchase,
+							room: [
+								repurchaseLeft,
+								py + strip.rect[1],
+								px + strip.rect[0] - BUYBACK_STRIP_INSET - BUYBACK_LABEL_GAP - repurchaseLeft,
+								strip.rect[3]
+							],
+							values: [ hudCopy( repurchase.text ), BUYBACK_SHORT_LABEL ]
+						} );
+					nativePage( page, px, py, repurchaseFit ? [ repurchase.id ] : [] );
+					if ( repurchaseFit ) frameDraw.drawLabelFit( drawFrame, repurchaseFit );
 					if ( compact ) {
 						controls.push( {
 							id: "shop-scroll-area",
@@ -18198,7 +18410,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						// 646FC0 relabels the title (20) and header (28) by job, and shows the
 						// own entry (10, 13-16) or the "no entry" line (60).
 						if ( contribution ) custom.push( 10, 13, 14, 15, 16, 20, 28, 60 );
-						nativePage( layout, px, py, custom );
+						nativePage( columnHeadLayout( layout ), px, py, custom );
 						const say = ( id: number, value: string ) => {
 							const node = byId( id );
 							if ( node ) authoredText( node, px, py, value );
@@ -18240,7 +18452,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							nativePage( slotLayout, sx, sy, [ 10, 11, 12, 13, 14 ] );
 							for ( const node of slotNodes ) {
 								const value = slot[node.id];
-								if ( value !== undefined ) authoredText( node, sx, sy, value );
+								if ( value === undefined ) continue;
+								// The title of level ("Apprentice Merchant" in 82 pixels)
+								// is fitted as a label under "Fit window labels" rather
+								// than cut to "Apprentice M...".
+								frameDraw.authoredText( drawFrame, {
+									node,
+									ox: sx,
+									oy: sy,
+									value,
+									label: node.name === "GDR_JOB_RANK_GRADENAME"
+								} );
 							}
 						}
 						const spin = byId( spinId );
@@ -19424,10 +19646,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						);
 						const copy = hudCopy( "UIIT_STT_COSPET_MAKENAME" );
 						quads.push(
-							...text.quads( copy, [ dx + 1, dy + 49, 305, 12 ], full, gold, { hAlign: 1, vAlign: 0 } )
+							...text.quads( copy, [ dx + 16, dy + 49, 275, 11 ], full, gold, { hAlign: 1, vAlign: 0 } )
 						);
-						const r: UiRect = [ dx + 19, dy + 73, 266, 20 ];
-						rect( [ dx + 12, dy + 71, 281, 25 ], [ 0, 0, 0, 1 ] );
+						// 52C870 mode 6 moves the prompt to (0x10, 0x31, 0x113 x 0xB) and
+						// the edit to (0x18, 0x4E, 0xF5 x 0x10), unlike modes 4 and 7.
+						const r: UiRect = [ dx + 24, dy + 78, 245, 16 ];
+						insertMessageChrome( 6, dx, dy );
 						controls.push( {
 							id: "pet-name",
 							label: copy,
@@ -19453,8 +19677,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						if ( focus === "pet-name" && caretVisible ) {
 							rect( [ r[0] + through, r[1], 1, text.height() + 2 ], white, "", [ 0, 0, 1, 1 ], r );
 						}
-						button( "pet-name-ok", hudCopy( "UIIT_STT_OK" ) || "OK", dx + 72, dy + 114, 76 );
-						button( "pet-name-cancel", hudCopy( "UIIT_STT_CANCEL" ) || "Cancel", dx + 160, dy + 114, 76 );
+						button( "pet-name-ok", hudCopy( "UIIT_CTL_CONFIRM" ), dx + 72, dy + 114, 76 );
+						button( "pet-name-cancel", hudCopy( "UIIT_CTL_CANCEL" ), dx + 160, dy + 114, 76 );
 						endWindow( [ mark[0], 0, mark[2], mark[3] ], "modal:pet-name" );
 						blocks.push( full );
 					}
@@ -20344,7 +20568,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						...text.quads( copy, [ dx + 1, dy + 49, 305, 12 ], full, gold, { hAlign: 1, vAlign: 0 } )
 					);
 					const r: UiRect = [ dx + 19, dy + 73, 266, 20 ];
-					rect( [ dx + 12, dy + 71, 281, 25 ], [ 0, 0, 0, 1 ] );
+					insertMessageChrome( 4, dx, dy );
 					controls.push( {
 						id: "friend-name",
 						label: copy,
@@ -20370,8 +20594,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					if ( focus === "friend-name" && caretVisible ) {
 						rect( [ r[0] + through, r[1], 1, text.height() + 2 ], white, "", [ 0, 0, 1, 1 ], r );
 					}
-					button( "friend-ok", hudCopy( "UIIT_STT_OK" ) || "OK", dx + 72, dy + 114, 76 );
-					button( "friend-cancel", hudCopy( "UIIT_STT_CANCEL" ) || "Cancel", dx + 160, dy + 114, 76 );
+					// MsgBoxInsertMsg's authored buttons read UIIT_CTL_CONFIRM / UIIT_CTL_CANCEL.
+					button( "friend-ok", hudCopy( "UIIT_CTL_CONFIRM" ), dx + 72, dy + 114, 76 );
+					button( "friend-cancel", hudCopy( "UIIT_CTL_CANCEL" ), dx + 160, dy + 114, 76 );
 					endWindow( [ mark[0], 0, mark[2], mark[3] ], "modal:friend" );
 					blocks.push( full );
 				}
@@ -21763,7 +21988,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 												"UIIT_STT_TITLE",
 												"UIIT_STT_GUILD_POSITION"
 											][guildNameMode]! :
-											node.text
+											columnHeadKey( node.text )
 									);
 								authoredLabeledButton( node, gx, gy, "guild-sort:" + id, caption );
 							}
@@ -22448,7 +22673,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							fontStyle: selected ? 2 : 0
 						} ).map( q => ({ ...q, characterAnchor: entity.gid }) )
 					);
-					const ownerEntity = next.entities.find( owner => owner.gid === entity.ownerGid );
+					// Only a companion's owner plate reads its owner; a scan of
+					// every row per player board was the HUD's largest cost.
+					const ownerEntity = entity.kind === "cos" ?
+						next.entities.find( owner => owner.gid === entity.ownerGid ) :
+						undefined;
 					// 854BB8: with no guild record the soldier's row keeps the
 					// owner's name colour, so the label colour is passed only
 					// when the owner actually has a guild (another player by
@@ -22502,7 +22731,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				const speakers = next.entities.filter( e => e.kind === "local-player" || e.kind === "player" );
 				bugReport?.chat( game?.chat?.lines ?? [] );
 				for ( const [gid, row] of speech.step( game?.chat?.lines ?? [], speakers, now, chatLinksOn() ) ) {
-					const lines = textBoardLines( row.text, 200, value => text.run( value ).width ),
+					// Port-only, not native (Experimental "Fit window labels", off is
+					// the original): the board breaks between words. Retail breaks at
+					// whichever glyph passes the width (CGFontTexture_UpdateExtent
+					// 7824F0), splitting words ("human r" / "eview").
+					const measure = ( value: string ) => text.run( value ).width,
+						lines = experimental.state().saved.fitWindowLabels ?
+							textLines( row.text, SPEECH_BOARD_WIDTH, measure ) :
+							textBoardLines( row.text, SPEECH_BOARD_WIDTH, measure ),
 						lineHeight = text.boardHeight(),
 						height = lines.length * lineHeight,
 						width = Math.max( 0, ...lines.map( value => text.run( value ).width ) ),
@@ -22606,20 +22842,22 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								av - bv :
 								String( av ).localeCompare( String( bv ) )) * (academyAscending ? 1 : -1);
 						} );
-					const projected = academyLayout(
-						guideData,
-						{ ...academy, rows },
-						academySelection,
-						ax,
-						ay,
-						full,
-						resources.size,
-						( s, r, c, color, style ) => text.quads( s, r, c, color, style ),
+					const projected = academyLayout( {
+						data: guideData,
+						state: { ...academy, rows },
+						selected: academySelection,
+						x: ax,
+						y: ay,
+						clip: full,
+						size: resources.size,
+						text: ( s, r, c, color, style ) => text.quads( s, r, c, color, style ),
+						measure: ( value, fontIndex ) => text.run( value, 0, fontIndex ).width,
 						hover,
 						pressed,
-						{ name: academyName, grade: academyGrade, kind: academyKind, open: academyCombo },
-						level
-					);
+						filter: { name: academyName, grade: academyGrade, kind: academyKind, open: academyCombo },
+						level,
+						fitLabels: experimental.state().saved.fitWindowLabels
+					} );
 					quads.push( ...projected.quads );
 					paths.push( ...projected.paths );
 					controls.push( ...projected.controls );
@@ -23483,10 +23721,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								items = key === "purpose" ?
 									partyPurposes.slice( 0, 4 ) :
 									key === "race" ?
+									// 63AD00 labels the race radio CH, EU, ANYTHING ("Open").
 									[
 										"UIIT_CTL_PARTYMATCH_AUTOMATCH_RACE_CH",
 										"UIIT_CTL_PARTYMATCH_AUTOMATCH_RACE_EU",
-										"UIIT_CTL_PARTYMATCH_AUTOMATCH_RACE_ALL"
+										"UIIT_CTL_PARTYMATCH_AUTOMATCH_RACE_ANYTHING"
 									] :
 									[
 										"UIIT_STT_PARTY_" + (key === "exp" ? "EXP" : "ITEM") + "_SHARE",
@@ -24675,51 +24914,70 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						] :
 						[ view?.session?.character ?? "", aliasWindow.checked ];
 				const filled = fillMarkup( message, args );
-				// Markup the guide layout cannot read falls back to plain text.
-				let markup: ReturnType<typeof guideTokens> | null = null;
-				if ( hasSml2Markup( filled ) ) {
-					try {
-						markup = guideTokens( filled );
-					} catch {
-						markup = null;
-					}
-				}
-				const layout = guildQuestionLayout(
-					w,
-					h,
-					markup ?
-						text.guide( markup, [ 0, 0, 300, 1000 ], [ 0, 0, 300, 1000 ], white, resources.size ).height :
-						12,
-					false
-				);
-				controls = drawFrame.controls = [];
-				blocks = drawFrame.blocks = [ full ];
-				paths.push( ...partyProposalAssets() );
-				quads.push(
-					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
-					...frameRing(
-						layout.frame,
-						MESSAGE_FRAME,
-						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
-						full
-					),
-					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
-						hAlign: 1,
-						vAlign: 0
-					} )
-				);
-				if ( markup ) {
-					const out = text.guide( markup, layout.name, full, white, resources.size );
-					quads.push( ...out.quads );
-					paths.push( ...out.paths );
-				} else quads.push( ...text.quads( filled, layout.name, full, white, { hAlign: 1, vAlign: 0 } ) );
 				const [yes, no] = academyAsk ?
 					[ "academy-confirm-yes", "academy-confirm-no" ] :
 					jobAsk ?
 					[ "job-confirm-yes", "job-confirm-no" ] :
 					[ "job-alias-yes", "job-alias-no" ];
-				button( yes, hudCopy( "UIIT_CTL_YES" ), ...layout.accept.slice( 0, 3 ) as [number, number, number] );
-				button( no, hudCopy( "UIIT_CTL_NO" ), ...layout.refuse.slice( 0, 3 ) as [number, number, number] );
+				if ( academyAsk || jobAsk ) {
+					// 5D26F0 types 4-6 and the camp confirms are CIFSimpleMessageBox
+					// type 1: 52DB20 sizes the box to its widest line (600 px wrap), each
+					// <br> starting a line, with Yes and No centred under them (#3550).
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
+					simpleMessageBox( {
+						title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+						lines: markupLines( filled ),
+						yes,
+						no
+					} );
+				} else {
+					// Markup the guide layout cannot read falls back to plain text.
+					let markup: ReturnType<typeof guideTokens> | null = null;
+					if ( hasSml2Markup( filled ) ) {
+						try {
+							markup = guideTokens( filled );
+						} catch {
+							markup = null;
+						}
+					}
+					const layout = guildQuestionLayout(
+						w,
+						h,
+						markup ?
+							text.guide( markup, [ 0, 0, 300, 1000 ], [ 0, 0, 300, 1000 ], white, resources.size )
+								.height :
+							12,
+						false
+					);
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+						...frameRing(
+							layout.frame,
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						),
+						...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+							hAlign: 1,
+							vAlign: 0
+						} )
+					);
+					if ( markup ) {
+						const out = text.guide( markup, layout.name, full, white, resources.size );
+						quads.push( ...out.quads );
+						paths.push( ...out.paths );
+					} else quads.push( ...text.quads( filled, layout.name, full, white, { hAlign: 1, vAlign: 0 } ) );
+					button(
+						yes,
+						hudCopy( "UIIT_CTL_YES" ),
+						...layout.accept.slice( 0, 3 ) as [number, number, number]
+					);
+					button( no, hudCopy( "UIIT_CTL_NO" ), ...layout.refuse.slice( 0, 3 ) as [number, number, number] );
+				}
 			}
 			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) guildManagerHud.reset();
 			else if ( game.social?.compensation !== undefined && !guildManagerHud.question() ) {
@@ -24727,7 +24985,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			}
 			const guildAsk = guildManagerHud.question(),
 				guildField = guildManagerHud.field(),
-				guildVote = guildManagerHud.vote();
+				guildVote = guildManagerHud.vote(),
+				insertPage = hud.data()?.stallTextPage;
 			if ( worldVisible && (guildAsk || guildField || guildVote) ) {
 				const levelPage = hud.data()?.windows.ifguildlevelup;
 				const levelRoot = hud.data()?.root.GDR_GUILD_LEVEL_UP;
@@ -24968,15 +25227,56 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					}
 					authoredLabeledButton( at( 2 ), x, y, "guild-manager-yes", hudCopy( at( 2 ).text ) );
 					authoredLabeledButton( at( 3 ), x, y, "guild-manager-no", hudCopy( at( 3 ).text ) );
+				} else if ( guildField?.kind === "create" && !guildAsk && insertPage ) {
+					// CIFNPCTalk_ShowGuildCreateInput 5D2540: a 280x144 MsgBoxInsertMsg
+					// (52E4F0 kind 4) in input mode 2. 52C870 captions it
+					// UIIT_STT_INPUT_BOX and nothing after it renames the box.
+					const [boxWidth, boxHeight] = INSERT_MESSAGE_GEOMETRY[2].size,
+						layout = messageBox( w, h, boxWidth, boxHeight );
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+						...frameRing(
+							layout.frame,
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						),
+						...text.quads( hudCopy( "UIIT_STT_INPUT_BOX" ), layout.title, full, white, {
+							hAlign: 1,
+							vAlign: 0
+						} )
+					);
+					insertMessageBody( {
+						mode: 2,
+						origin: [ layout.frame[0], layout.frame[1] ],
+						prompt: hudCopy( "UIIT_MSG_GUILD_NAME_INPUT" ),
+						edit: { id: "guild-manager-text", value: guildField.text, limit: GUILD_FIELD_MAX_LENGTH },
+						buttons: [ "guild-manager-yes", "guild-manager-no" ]
+					} );
+				} else if ( guildField?.kind === "master-leave" && guildField.confirmed && !guildAsk ) {
+					// CIFNpcTalk_AskMasterTransfer 5D3EB0: ShowJobGuildMsgBox(1)
+					// (5D3880) opens the text-sized MsgBoxSimple captioned
+					// UIIT_STT_CONFIRM_BOX, then appends "[name]" in 0xFFEFDAA4 and
+					// UIIT_MSG_MLEAVE_CONFIRM in white.
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
+					simpleMessageBox( {
+						title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+						lines: [ "[" + guildField.text + "]", hudCopy( "UIIT_MSG_MLEAVE_CONFIRM" ) ],
+						colors: [ gold ],
+						yes: "guild-manager-yes",
+						no: "guild-manager-no"
+					} );
 				} else {
 					// The guild manager's boxes (guild-manager-hud.ts) in the job box's frame.
-					const layout = guildProposalLayout( w, h );
+					let layout = guildProposalLayout( w, h );
 					const say = ( key: string, ...args: string[] ) =>
 						noticeText( hudCopy, { key, value: 0, arguments: args } );
 					const price = guildAsk?.kind === "level-up" ? guildLevelUpPrice( guildAsk.value ) : undefined;
-					const title = guildField?.kind === "create" ?
-						"UIIT_CTL_GUILD_CREATE" :
-						guildField ?
+					const title = guildField ?
 						"UIIT_STT_MLEAVE_WINDOWS" :
 						guildVote ?
 						"UIIT_STT_MRELEASE_VOTESTATE" :
@@ -24999,6 +25299,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							say( "UIIT_CTL_GUILDWAR_COMPENSATION_01", String( guildAsk?.value ?? 0 ) ),
 							hudCopy( "UIIT_CTL_GUILDWAR_COMPENSATION_02" )
 						],
+						// Reached only without the transfer pages (asset fallback).
 						"master-leave": [ "[" + (guildField?.text ?? "") + "]", hudCopy( "UIIT_MSG_MLEAVE_CONFIRM" ) ],
 						// 52F460 cases 0x10 and 0x11 (box types 0x11 and 0x12).
 						"create-name": [ say( "UIIT_MSG_GUILD_QUESTION_NAME_CONFIRM", guildAsk?.text ?? "" ), "" ],
@@ -25006,13 +25307,33 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							say( "UIIT_MSG_GUILD_QUESTION_CREATE", guildAsk?.text ?? "" ),
 							hudCopy( "UIIT_MSG_GUILD_QUESTION_CREATE_CONFIRM" )
 						],
-						"create": [ "", "" ],
 						"vote": [
 							Math.ceil( (guildVote?.remainingMs ?? 0) / 60000 ) + " " + hudCopy( "PARAM_MINUTE" ),
 							""
 						]
 					};
 					const [first, second] = lines[guildAsk?.kind ?? guildField?.kind ?? "vote"]!;
+					// The first line wraps inside the frame too (UIIT_MSG_MRELEASE_CONFIRM
+					// is one 85-character line); when it does, the box grows as
+					// CIFSimpleMessageBox_ResizeToText (52BCF0) grows it and the second
+					// line and the buttons move down under it.
+					const firstLines = textLines(
+						first,
+						// The width of the line's own rect, so a line that fits stays one.
+						layout.name[2],
+						value => text.run( value ).width
+					);
+					if ( firstLines.length > 1 ) {
+						const below = (firstLines.length - 1) * GUILD_MESSAGE_LINE;
+						layout = guildQuestionLayout(
+							w,
+							h,
+							second ?
+								GUILD_MESSAGE_SECOND_TOP + below + 2 * GUILD_MESSAGE_LINE :
+								below + GUILD_MESSAGE_LINE,
+							false
+						);
+					}
 					controls = drawFrame.controls = [];
 					blocks = drawFrame.blocks = [ full ];
 					paths.push( ...partyProposalAssets() );
@@ -25025,54 +25346,40 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							full
 						),
 						...text.quads( hudCopy( title ), layout.title, full, white, { hAlign: 1, vAlign: 0 } ),
-						...text.quads( first, layout.name, full, white, { hAlign: 1, vAlign: 0 } )
-					);
-					if ( guildField?.kind === "create" ) {
-						const field: UiRect = [ layout.question[0], layout.question[1], layout.question[2], 16 ];
-						controls.push( {
-							id: "guild-manager-text",
-							label: hudCopy( title ),
-							kind: "text",
-							value: guildField.text,
-							rect: field,
-							maxLength: 12
-						} );
-						rect( field, [ 0, 0, 0, .6 ], "", [ 0, 0, 1, 1 ], full );
-						quads.push(
-							...text.quads( guildField.text, field, field, white, {
-								hAlign: 1,
-								vAlign: 1,
-								overflow: "clip"
-							} )
-						);
-						if ( focus === "guild-manager-text" && caretVisible ) {
-							const width = text.run( guildField.text ).width;
-							rect(
-								[ field[0] + (field[2] + width) / 2, field[1] + 1, 2, 14 ],
+						...firstLines.flatMap( ( line, index ) =>
+							text.quads(
+								line,
+								[ layout.name[0], layout.name[1] + index * GUILD_MESSAGE_LINE, layout.name[2], 12 ],
+								full,
 								white,
-								"",
-								[ 0, 0, 1, 1 ],
-								field
-							);
-						}
-					} else {
-						// Inference: wrap manager explanations inside their message frame.
-						// The generic proposal's single text line let long English strings
-						// escape both sides of the dialog and cover the NPC menu behind it.
-						const body: UiRect = [ layout.frame[0] + 12, layout.question[1], layout.frame[2] - 24, 28 ];
-						textLines( second, body[2], value => text.run( value ).width ).slice( 0, 2 ).forEach(
-							( line, index ) =>
-								quads.push(
-									...text.quads( line, [ body[0], body[1] + index * 14, body[2], 14 ], body, white, {
-										hAlign: 1,
-										vAlign: 0
-									} )
-								)
-						);
-					}
+								{ hAlign: 1, vAlign: 0 }
+							)
+						)
+					);
+					// Inference: wrap manager explanations inside their message frame.
+					// The generic proposal's single text line let long English strings
+					// escape both sides of the dialog and cover the NPC menu behind it.
+					const body: UiRect = [
+						layout.frame[0] + 12,
+						layout.name[1] + GUILD_MESSAGE_SECOND_TOP + (firstLines.length - 1) * GUILD_MESSAGE_LINE,
+						layout.frame[2] - 24,
+						2 * GUILD_MESSAGE_LINE
+					];
+					textLines( second, body[2], value => text.run( value ).width ).slice( 0, 2 ).forEach(
+						( line, index ) =>
+							quads.push(
+								...text.quads( line, [ body[0], body[1] + index * 14, body[2], 14 ], body, white, {
+									hAlign: 1,
+									vAlign: 0
+								} )
+							)
+					);
 					button(
 						"guild-manager-yes",
-						hudCopy( guildAsk ? "UIIT_CTL_YES" : "UIIT_CTL_OK" ),
+						// Without an ask this is an asset fallback (the vote state or the
+						// unconfirmed transfer). The text tables have no UIIT_CTL_OK;
+						// inference: the button confirms, as the single box's does.
+						hudCopy( guildAsk ? "UIIT_CTL_YES" : "UIIT_CTL_CONFIRM" ),
 						...layout.accept.slice( 0, 3 ) as [number, number, number]
 					);
 					if ( !guildVote ) {
@@ -25443,22 +25750,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			}
 			if ( worldVisible && buffDismiss ) {
 				// Kind 0x20, opened at 6E2C45 when the skill record demands a
-				// confirm before its cancel: the same fixed 308x148 frame as the
-				// COS box above; its two CANCLE lines wrap inside it.
-				const layout = guildProposalLayout( w, h ),
-					message = text.guide(
-						guideTokens(
-							"<center>" +
-								hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_1" ) +
-								"<br>" +
-								hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_2" ) +
-								"</center>"
-						),
-						[ layout.frame[0] + 4, layout.frame[1] + 48, 300, 49 ],
-						full,
-						white,
-						resources.size
-					);
+				// confirm before its cancel. The second CANCLE line wraps to two, so
+				// the box grows to its three lines as CIFSimpleMessageBox_ResizeToText
+				// (52BCF0) grows it, and the buttons move down under them.
+				const markup = guideTokens(
+						"<center>" +
+							hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_1" ) +
+							"<br>" +
+							hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_2" ) +
+							"</center>"
+					),
+					layout = guildQuestionLayout(
+						w,
+						h,
+						text.guide( markup, [ 0, 0, 300, 1000 ], [ 0, 0, 300, 1000 ], white, resources.size ).height,
+						false
+					),
+					message = text.guide( markup, layout.name, full, white, resources.size );
 				controls = drawFrame.controls = [];
 				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets(), ...message.paths );
@@ -25860,7 +26168,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				);
 				quads.push(
 					...text.quads(
-						hudCopy( stallBox.kind === "price" ? "UIIT_STT_INPUT_BOX" : "UIIT_STT_CONFIRM_BOX" ),
+						// Title and greeting: 52C870 captions MsgBoxInsertMsg
+						// UIIT_STT_INPUT_BOX and 5A1DF0 does not rename it after.
+						hudCopy( "UIIT_STT_INPUT_BOX" ),
 						layout.title,
 						full,
 						white,
@@ -25870,48 +26180,18 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				const stall = game.stall;
 				if ( stallBox.kind === "title" || stallBox.kind === "greeting" ) {
 					// 52C870 submodes 0/1 resize MsgBoxInsertMsg for the two fields.
-					const title = stallBox.kind === "title",
-						rects: Readonly<Record<number, UiRect>> = title ?
-							{
-								10: [ 27, 47, 225, 14 ],
-								11: [ 11, 68, 257, 25 ],
-								12: [ 15, 72, 249, 17 ],
-								15: [ 18, 70, 243, 20 ],
-								205: [ 55, 104, 76, 24 ],
-								206: [ 143, 104, 76, 24 ]
-							} :
-							{
-								10: [ 0, 48, 420, 12 ],
-								11: [ 9, 66, 400, 28 ],
-								12: [ 13, 70, 392, 20 ],
-								15: [ 16, 68, 386, 20 ],
-								205: [ 128, 104, 76, 24 ],
-								206: [ 216, 104, 76, 24 ]
-							},
-						page = Object.fromEntries(
-							Object.entries( stallPages.stallTextPage ).map( (
-								[name, node]
-							) => [ name, { ...node, rect: rects[node.id] ?? node.rect } ] )
-						),
-						at = ( id: number ) => Object.values( page ).find( node => node.id === id )!;
-					nativePage( page, x, y, [ 10, 15, 205, 206 ] );
-					authoredText(
-						at( 10 ),
-						x,
-						y,
-						hudCopy( title ? "UIIT_STT_INSERT_STALL_NAME" : "UIIT_STT_INSERT_OWNER_MESSAGE" )
-					);
-					partyEdit(
-						at( 15 ),
-						x,
-						y,
-						STALL_PROMPT_TEXT,
-						stallBox.text,
-						title ? STALL_TITLE_LIMIT : STALL_TEXT_LIMIT,
-						true
-					);
-					authoredLabeledButton( at( 205 ), x, y, "stall-prompt-ok", hudCopy( "UIIT_CTL_CONFIRM" ) );
-					authoredLabeledButton( at( 206 ), x, y, "stall-prompt-cancel", hudCopy( "UIIT_CTL_CANCEL" ) );
+					const title = stallBox.kind === "title";
+					insertMessageBody( {
+						mode: title ? 0 : 1,
+						origin: [ x, y ],
+						prompt: hudCopy( title ? "UIIT_STT_INSERT_STALL_NAME" : "UIIT_STT_INSERT_OWNER_MESSAGE" ),
+						edit: {
+							id: STALL_PROMPT_TEXT,
+							value: stallBox.text,
+							limit: title ? STALL_TITLE_LIMIT : STALL_TEXT_LIMIT
+						},
+						buttons: [ "stall-prompt-ok", "stall-prompt-cancel" ]
+					} );
 				} else if ( stallBox.kind === "price" ) {
 					// 5A1A40 creates kind 3 (528670), the authored MsgBoxStoreMoney.
 					const page = stallPages.stallPricePage,
@@ -26934,13 +27214,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						);
 					}
 					if ( game.localGid ) {
+						const picture = authoredRect( mallControl( info, 4 ), ox + infoOrigin[0], oy + infoOrigin[1] );
+						paths.push( PICTURE_CLIP_PLAYER );
 						quads.push( {
 							portraitGid: game.localGid,
 							texture: "__portrait",
-							rect: authoredRect( mallControl( info, 4 ), ox + infoOrigin[0], oy + infoOrigin[1] ),
+							rect: picture,
 							uv: [ 0, 0, 1, 1 ],
 							color: white,
-							clip: full
+							clip: full,
+							mask: pictureClip( PICTURE_CLIP_PLAYER, picture )
 						}, {
 							doll: { gid: state.previewGid ?? game.localGid, yaw: 0 },
 							texture: "__doll",
@@ -27021,14 +27304,26 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							ex,
 							ey
 						);
-						authoredText(
-							mallControl( expansion, 3 ),
-							ex,
-							ey,
-							count > 0 ?
+						const spaces = mallControl( expansion, 3 ),
+							icon = mallControl( expansion, 2 ),
+							spacesText = count > 0 ?
 								hudCopy( "UIIT_STT_SILKMALL_REMAIN_INVENTORY" ).replace( "%d", String( count ) ) :
-								hudCopy( "UIIT_STT_NONE" )
-						);
+								hudCopy( "UIIT_STT_NONE" ),
+							bar = mallControl( expansion, 1 ),
+							spacesLeft = ex + icon.rect[0] + icon.rect[2] + MALL_SPACES_GAP,
+							spacesRight = ex + bar.rect[0] + bar.rect[2] - MALL_BAR_BEVEL;
+						// GDR_ITEM_MALL_TRUNK_EXP_NUM right-aligns "32 spaces" (58
+						// pixels) in 31, over the bag icon on its left. Port-only, not
+						// native (Experimental "Fit window labels"): the count is laid
+						// between the icon and the bar art's bevel, on the icon's
+						// height ("32" over "spaces" in the narrow face).
+						if (
+							!frameDraw.fittedLabel( drawFrame, {
+								node: spaces,
+								room: [ spacesLeft, ey + icon.rect[1], spacesRight - spacesLeft, icon.rect[3] ],
+								values: [ spacesText ]
+							} )
+						) authoredText( spaces, ex, ey, spacesText );
 					}
 					const spin = data.windows.ifspincontrol!;
 					const spinX = tx + selector.rect[0], spinY = ty + selector.rect[1];
@@ -28121,7 +28416,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									honor: lookup( "UIIT_STT_TC_HONOR_POINT" ),
 									point: lookup( "UIIT_STT_SILKMALL_P_POINT" ),
 									guildPoint: lookup( "UIIT_STT_GUILD_POINT" ),
-									guildPointUnit: lookup( "UIIT_STT_GUILD_POINT_GP" )
+									guildPointUnit: lookup( "UIIT_STT_GUILD_POINT_GP" ),
+									// Port-only (SRO_NASRUN): no native string names the token.
+									nasrunToken: "Devil's Spirit tokens",
+									nasrunTokenHeld: "You hold"
 								} )
 							];
 						}

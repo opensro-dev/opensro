@@ -198,6 +198,8 @@ func shardShops(dir string, items enterworld.ItemRefSource) (*commerce.Catalog, 
 		return nil, err
 	}
 	extra = append(extra, xl...)
+	// The GameWorld appends the same Devil's Spirit token goods (SRO_NASRUN).
+	extra = append(extra, commerce.NasrunGoodsFromEnv()...)
 	shops, err := commerce.LoadWithExtraGoods(dir, items, extra)
 	if err != nil {
 		return nil, err
@@ -300,6 +302,10 @@ func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
 	if err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue skytemple population: %w", err)
 	}
+	template, err = monster.AppendRoc(template, dir, monster.RocEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue roc population: %w", err)
+	}
 	template, err = monster.AppendArabia(template, dir, monster.ArabiaEnabled())
 	if err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue arabia population: %w", err)
@@ -327,6 +333,14 @@ func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
 	template, err = monster.AppendHunting2(template, dir, monster.Hunting2Enabled())
 	if err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue hunting2 population: %w", err)
+	}
+	template, err = monster.AppendExportWorld(template, dir, monster.ExportWorldEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue export world population: %w", err)
+	}
+	template, err = monster.AppendPharaohTemple(template, dir, monster.PharaohTempleEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue pharaoh temple population: %w", err)
 	}
 	return template, nil
 }

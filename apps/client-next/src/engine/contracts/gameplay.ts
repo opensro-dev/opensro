@@ -1042,6 +1042,13 @@ export interface GameplayState extends MoverPublication {
 	// Port-only diagnostics: the bag slots each inventory answer changed,
 	// flattened rows (foundation/gameplay/inventory-journal.ts).
 	readonly inventoryJournal?: readonly number[];
+	// Port-only diagnostics (#3508): the speed frames, effects and mount the
+	// client applied and the buff board, flattened rows
+	// (foundation/gameplay/speed-journal.ts).
+	readonly speedJournal?: readonly number[];
+	readonly effectJournal?: readonly number[];
+	readonly mountJournal?: readonly number[];
+	readonly buffJournal?: readonly number[];
 	// Slot flashes raised by the 0x3645 item-state and 0x31E8 durability updates
 	// (item-slot-effects.ts).
 	readonly itemFlashes?: readonly {
