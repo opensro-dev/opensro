@@ -106,7 +106,17 @@ The server half follows the v1.188 reference server (addresses in `action/roc.go
   - the Roc's berserk and departure countdowns and its timed skills are not ported, because no v1.150 frame
     carries their minute count.
 
+### The Roc's notices (step 5a)
+
+- **Appearance:** when the Roc spawns on the summit, the whole shard is told (0x3058 kind 5, the client's unique
+  notice), as the v1.188 reference server's in-layer spawner announces a unique.
+- **Kill:** when it falls, the shard is told who killed it (kind 6).
+- **Which layers speak:** only worlds 40 and 41 send their layers' unique notices, because both Roc world classes
+  leave the notices uncontrolled. Every other instance world keeps today's behaviour: natively they are
+  data-driven worlds with a per-world switch the port does not read.
+- **Off:** with `SRO_ROC` off no world is registered, and nothing changes.
+
 ## What is not here yet
 
 - **Content still to come**, each its own step of #3399:
-  - drops and the unique notice (step 5).
+  - the drops (step 5b).

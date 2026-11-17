@@ -46,6 +46,13 @@ Inferences, as no binary shows them:
 - A missing kind or gate row (the variant build did not stage the Roc)
   spawns nothing; the window still opens and closes the worlds.
 
+The Roc tells the whole division when it appears and when it falls
+(0x3058 kinds 5 and 6, the v1.150 form of the reference server's
+0x300C 0x0C05 and 0x0C06): the reference in-layer spawner asks the
+monster factory to announce a unique, and both Roc world classes leave
+the notices uncontrolled. So the Roc's spawn asks for the notice and
+the two worlds are registered as announcing (AnnounceUniqueWorld).
+
 Gate travellers enter without an instance return anchor, so a close and
 the Roc gates move residents to the named gate's spawn themselves
 (leaveRocLayer) instead of to an anchor.
@@ -205,6 +212,12 @@ opens, no entry rule runs, and every hook returns at once.
 ================
 */
 func (rt *Runtime) ConfigureRoc(enabled bool) {
+	if rt.Monsters != nil {
+		// The two Roc world classes answer no control over the unique
+		// notices, so their layers tell the division of the Roc.
+		rt.Monsters.AnnounceUniqueWorld(rocTopWorld, enabled)
+		rt.Monsters.AnnounceUniqueWorld(rocFrontWorld, enabled)
+	}
 	if !enabled || rt.Monsters == nil {
 		rt.roc = nil
 		return
@@ -399,7 +412,7 @@ stage spawns nothing.
 */
 func (rt *Runtime) spawnRocMonster(division string, lease instance.Lease, codename string, at simulation.Spawn, nowMs int64) (uint32, bool) {
 	gid, ok := rt.roc.spawn(simulation.QuestMonsterSpawn{Division: division, Population: lease, Codename: codename,
-		Position: at, FixedPosition: true, NowMs: nowMs})
+		Position: at, FixedPosition: true, NowMs: nowMs, AnnounceUnique: true})
 	if !ok {
 		log.Printf("roc: division %s: %s did not spawn", division, codename)
 	}

@@ -414,3 +414,70 @@ func TestRocSummitGateAdmission(t *testing.T) {
 		t.Fatalf("a closed summit answered %#x", refusal)
 	}
 }
+
+/*
+================
+rocNoticeRuntime
+
+A runtime whose monster state knows the Roc as a rarity-3 kind, with the
+Roc row as configured and the summit's layer open.
+================
+*/
+func rocNoticeRuntime(t *testing.T, enabled bool) (*Runtime, instance.Lease) {
+	t.Helper()
+	c := instanceWorldTestCharacter(41, "Climber")
+	rt, _ := newInstanceWorldRuntime(t, c)
+	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{
+		rocNoticeRef: {RefObjID: rocNoticeRef, Codename: rocCodename, TidWord: 0xc6, MaxHP: 100, MonsterType: 3},
+	}, nil))
+	rt.Monsters.SetRandomSource(func() float64 { return 0 })
+	rt.Monsters.StartDivision(testDivision)
+	rt.ConfigureRoc(enabled)
+	lease, ok := rt.Monsters.OpenInstanceLayer(testDivision, rocTopWorld)
+	if !ok {
+		t.Fatal("the summit's world did not open")
+	}
+	return rt, lease
+}
+
+// rocNoticeRef is the Roc's reference in rocNoticeRuntime.
+const rocNoticeRef = 77
+
+/*
+================
+TestRocTellsTheShardOfTheRoc
+
+SRO_ROC on: the Roc's spawn on the summit tells the division it appeared
+(0x3058 kind 5) and its kill names the killer (kind 6), as the reference
+server's in-layer spawner and the Roc worlds' notice control do. Off, the
+same spawn on the same world tells no one.
+================
+*/
+func TestRocTellsTheShardOfTheRoc(t *testing.T) {
+	rt, lease := rocNoticeRuntime(t, true)
+	gid, ok := rt.spawnRocMonster(testDivision, lease, rocCodename, rocSpawn, 1000)
+	if !ok {
+		t.Fatal("the Roc did not spawn")
+	}
+	if got := rt.Monsters.DrainUniqueNotices(testDivision); len(got) != 1 ||
+		!bytes.Equal(got[0].Payload, []byte{5, rocNoticeRef, 0, 0, 0}) {
+		t.Fatalf("the Roc's appearance: %+v", got)
+	}
+	if hit, ok := rt.Monsters.ApplyDamage(testDivision, gid, 100); !ok || !hit.Fatal {
+		t.Fatal("the Roc did not fall")
+	}
+	rt.Monsters.RecordUniqueKiller(testDivision, gid, "Climber")
+	want := append([]byte{6, rocNoticeRef, 0, 0, 0, 7, 0}, "Climber"...)
+	if got := rt.Monsters.DrainUniqueNotices(testDivision); len(got) != 1 || !bytes.Equal(got[0].Payload, want) {
+		t.Fatalf("the Roc's kill: %+v", got)
+	}
+
+	off, offLease := rocNoticeRuntime(t, false)
+	if _, ok := off.Monsters.SpawnQuestMonsterGID(simulation.QuestMonsterSpawn{Division: testDivision, Population: offLease,
+		Codename: rocCodename, Position: rocSpawn, FixedPosition: true, NowMs: 1000, AnnounceUnique: true}); !ok {
+		t.Fatal("the Roc did not spawn with the row off")
+	}
+	if got := off.Monsters.DrainUniqueNotices(testDivision); len(got) != 0 {
+		t.Fatalf("off: the summit spoke %+v", got)
+	}
+}
