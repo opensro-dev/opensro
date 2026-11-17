@@ -14,15 +14,13 @@ merge rule focused publishers use to replace their groups.
 import { ASSET_SCHEMA } from "./assetSchema.mjs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { createHash } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import { publishBytesAtomically } from "./shared/atomicPublish.mjs";
 import { validateAssetPackIndex } from "./assetPackIndexValidation.mjs";
 import { assertPackIndexFits, decodeStoredMember, readPackPrefix, storedMemberBytes } from "./shared/packFormat.mjs";
 import { collectPackGarbage } from "./assetPackGarbage.mjs";
 import { compareText } from "./shared/textOrder.mjs";
-
-const hash = bytes => createHash( "sha256" ).update( bytes ).digest( "hex" );
+import { sha256Hex } from "./shared/hash.mjs";
 
 // One publication boundary for complete pack indexes. A valid hash for each
 // file does NOT prove a valid atlas: coordinates and pixels must be a pair.
@@ -46,7 +44,7 @@ export async function validatePackedFontAtlases( index, publicRoot, { partial = 
 			const pack = packs.get( entry.packPath );
 			if ( !pack ) throw Error( "Missing font pack: " + entry.packPath );
 			bytes = await readFile( resolve( pack.path ) );
-			if ( bytes.length !== pack.bytes || hash( bytes ) !== pack.sha256 ) {
+			if ( bytes.length !== pack.bytes || sha256Hex( bytes ) !== pack.sha256 ) {
 				throw Error( "Font pack integrity mismatch: " + pack.path );
 			}
 			cache.set( entry.packPath, bytes );

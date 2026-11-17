@@ -49,7 +49,6 @@ the variant reads, for side-by-side frames on a machine without ASTC.
 
 ===========================================================================
 */
-import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { buildJobs } from "../shared/buildParallelism.mjs";
 import { codeHash } from "../shared/codeStamp.mjs";
@@ -73,26 +72,24 @@ import { CLIENT_PUBLIC_ROOT, generatedPath, sharedCachePath } from "../../lib/ge
 import { claimPublicFile, isPublicationOpen } from "../shared/publicationLedger.mjs";
 import { ENCODERS, encoderPath } from "./encoders.mjs";
 import {
+	astcBlocks,
+	NTX_ASTC_4X4,
+	ntxContainer,
+	pickAlphaSection as alphaSection,
+	tgaImage
+} from "./textureContainers.mjs";
+import {
 	decodeNativeTexture,
 	decodeNativeTextureLevel
 } from "../../../apps/client-next/src/engine/foundation/assets/native-texture.ts";
 import { textureVariantPath } from "../../../apps/client-next/src/engine/foundation/assets/texture-variants.ts";
 import { compareText } from "../shared/textOrder.mjs";
+import { sha256Hex } from "../shared/hash.mjs";
 
 const run = promisify( execFile );
 
-const NTX_MAGIC = 0x3158544e;
-const NTX_HEADER_BYTES = 20;
-const NTX_ASTC_4X4 = 0x34345341; // "AS44", native-texture.ts
-const NTX_PICK_ALPHA = 0x38414b50; // "PKA8", native-texture.ts
 const ASTC_BLOCK = 4;
 const D3DFMT_A8R8G8B8 = 21;
-const ASTC_HEADER_BYTES = 16;
-const ASTC_MAGIC = 0x5ca1ab13;
-const TGA_HEADER_BYTES = 18;
-// Uncompressed true colour, 32 bits, top-left origin with 8 alpha bits.
-const TGA_TRUE_COLOUR = 2;
-const TGA_DESCRIPTOR = 0x28;
 const KTX_HEADER_BYTES = 64;
 const GL_UNSIGNED_BYTE = 0x1401;
 const GL_RGB = 0x1907;
@@ -163,30 +160,6 @@ function nativeTextures( root, only ) {
 
 /*
 ================
-tga
-
-An RGBA level as a 32-bit top-left TGA (astcenc's simplest input).
-================
-*/
-function tga( rgba, width, height ) {
-	const out = Buffer.alloc( TGA_HEADER_BYTES + width * height * 4 );
-	out[2] = TGA_TRUE_COLOUR;
-	out.writeUInt16LE( width, 12 );
-	out.writeUInt16LE( height, 14 );
-	out[16] = 32;
-	out[17] = TGA_DESCRIPTOR;
-	for ( let i = 0; i < width * height; i++ ) {
-		const at = TGA_HEADER_BYTES + i * 4;
-		out[at] = rgba[i * 4 + 2];
-		out[at + 1] = rgba[i * 4 + 1];
-		out[at + 2] = rgba[i * 4];
-		out[at + 3] = rgba[i * 4 + 3];
-	}
-	return out;
-}
-
-/*
-================
 ktxPixels
 
 The BGRA pixels of the uncompressed KTX astcenc decodes to: RGBA8, RGB8,
@@ -233,21 +206,6 @@ function ktxPixels( bytes, width, height ) {
 
 /*
 ================
-ntx
-================
-*/
-function ntx( width, height, code, levels ) {
-	const header = Buffer.alloc( NTX_HEADER_BYTES );
-	header.writeUInt32LE( NTX_MAGIC, 0 );
-	header.writeUInt32LE( width, 4 );
-	header.writeUInt32LE( height, 8 );
-	header.writeUInt32LE( code, 12 );
-	header.writeUInt32LE( levels.length, 16 );
-	return Buffer.concat( [ header, ...levels ] );
-}
-
-/*
-================
 pickAlphaSection
 
 The source's level-0 alpha as a trailing NTX section, or an empty buffer
@@ -255,16 +213,7 @@ when every texel is opaque.
 ================
 */
 export function pickAlphaSection( texture ) {
-	const rgba = decodeNativeTextureLevel( texture, 0 ), alpha = Buffer.alloc( texture.width * texture.height );
-	let opaque = true;
-	for ( let i = 0; i < alpha.length; i++ ) {
-		alpha[i] = rgba[i * 4 + 3];
-		if ( alpha[i] !== 255 ) opaque = false;
-	}
-	if ( opaque ) return Buffer.alloc( 0 );
-	const tag = Buffer.alloc( 4 );
-	tag.writeUInt32LE( NTX_PICK_ALPHA, 0 );
-	return Buffer.concat( [ tag, alpha ] );
+	return alphaSection( decodeNativeTextureLevel( texture, 0 ), texture.width, texture.height );
 }
 
 /*
@@ -343,13 +292,9 @@ async function encodeTexture( astcenc, source, scratch, roundtrip ) {
 	for ( let level = 0; level < texture.levels.length; level++ ) {
 		const width = Math.max( 1, texture.width >> level ), height = Math.max( 1, texture.height >> level );
 		const input = path.join( scratch, `${level}.tga` ), output = path.join( scratch, `${level}.astc` );
-		writeFileSync( input, tga( decodeNativeTextureLevel( texture, level ), width, height ) );
+		writeFileSync( input, tgaImage( decodeNativeTextureLevel( texture, level ), width, height ) );
 		await run( astcenc, [ "-cl", input, output, "4x4", PRESET, "-silent" ] );
-		const file = readFileSync( output );
-		if ( file.readUInt32LE( 0 ) !== ASTC_MAGIC || file[4] !== 4 || file[5] !== 4 ) {
-			throw new Error( "Unexpected astcenc output" );
-		}
-		astc.push( file.subarray( ASTC_HEADER_BYTES ) );
+		astc.push( astcBlocks( readFileSync( output ), ASTC_BLOCK ) );
 		if ( roundtrip ) {
 			const back = path.join( scratch, `${level}.back.ktx` );
 			await run( astcenc, [ "-dl", output, back, "-silent" ] );
@@ -357,8 +302,8 @@ async function encodeTexture( astcenc, source, scratch, roundtrip ) {
 		}
 	}
 	return {
-		variant: ntx( texture.width, texture.height, NTX_ASTC_4X4, astc ),
-		roundtrip: roundtrip ? ntx( texture.width, texture.height, D3DFMT_A8R8G8B8, decoded ) : null
+		variant: ntxContainer( texture.width, texture.height, NTX_ASTC_4X4, astc ),
+		roundtrip: roundtrip ? ntxContainer( texture.width, texture.height, D3DFMT_A8R8G8B8, decoded ) : null
 	};
 }
 
@@ -372,7 +317,7 @@ goes to (the published tree, or --out's private one). Nothing runs it
 alone: a miss goes through the pass's worker, which stores what it wrote.
 ================
 */
-export function textureVariantAction( publicPath, roots ) {
+function textureVariantAction( publicPath, roots ) {
 	return defineAction( {
 		name: `texture-variant:${publicPath}`,
 		inputRoot: roots.source,
@@ -497,7 +442,7 @@ export async function buildTextureVariants( flags = {} ) {
 					variantBytes += record.outputs[0].size;
 					continue;
 				}
-				const source = await readFile( file ), digest = createHash( "sha256" ).update( source ).digest( "hex" );
+				const source = await readFile( file ), digest = sha256Hex( source );
 				const texture = decodeNativeTexture( new Uint8Array( source ) );
 				if ( texture.width % ASTC_BLOCK || texture.height % ASTC_BLOCK ) {
 					unaligned++;
