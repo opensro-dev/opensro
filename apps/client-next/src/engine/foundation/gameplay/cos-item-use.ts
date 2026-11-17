@@ -120,6 +120,13 @@ export function cosItemUseTail(
 		if ( context?.targetSlot === undefined ) throw Error( "Drop the tool on the armour to change" );
 		return Uint8Array.of( context.targetSlot );
 	}
+	// Port-only, not native (SRO_NASRUN, #3456 slice 4): the Devil's
+	// Spirit extension gear, 3/3/13/16, carries its target the same way
+	// (the v1.188 server's use case 0xF). v1.150 has no row of this type.
+	if ( isSpiritExtensionGear( flags ) ) {
+		if ( context?.targetSlot === undefined ) throw Error( "Drop the gear on the Devil's Spirit to extend" );
+		return Uint8Array.of( context.targetSlot );
+	}
 	if ( isReverseReturnScroll( flags ) ) {
 		// 6971B0 case 0x1E: the choice box's row is the one byte after the type.
 		const choice = context?.reverseChoice;
@@ -238,7 +245,20 @@ The next inventory click names the item they act on.
 */
 export function armsItemTargetCursor( flags: number ): boolean {
 	return isRevivalGrass( flags ) || isCompanionLeaseItem( flags ) || isPetSkillItem( flags ) ||
+		isSpiritExtensionGear( flags ) ||
 		(flags & 0x7c) === 0x6c && (flags >>> 7 & 15) === 13 && (flags >>> 11 & 31) === 8;
+}
+
+/*
+================
+isSpiritExtensionGear
+
+The Devil's Spirit extension gear, 3/3/13/16 (port-only, SRO_NASRUN,
+#3456 slice 4). It arms the item target cursor as the gender tool does.
+================
+*/
+export function isSpiritExtensionGear( flags: number ): boolean {
+	return (flags & 0x7c) === 0x6c && (flags >>> 7 & 15) === 13 && (flags >>> 11 & 31) === 16;
 }
 
 /*
@@ -255,7 +275,7 @@ export function companionItemTargetCommand(
 	if ( (flags & 0x7c) !== 0x6c ) return null;
 	const group = flags >>> 7 & 15, subtype = flags >>> 11 & 31;
 	// The gender change tool dropped on a bag item uses itself on it.
-	if ( group === 13 && subtype === 8 && target.slot >= 13 ) {
+	if ( (group === 13 && subtype === 8 || isSpiritExtensionGear( flags )) && target.slot >= 13 ) {
 		return { kind: "item-use", slot: source.slot, targetSlot: target.slot };
 	}
 	// A wrong occupied target is still item use: the worker owns its notice.

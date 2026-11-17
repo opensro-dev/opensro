@@ -96,3 +96,21 @@ smaller percents; it is a private-server set, so the official shard wins.
   fresh ids, with their names and icons. Off, the skill tables are byte-identical.
 - Not yet: the client shows the lent skills nowhere (v1.150 has no avatar skill window), so a player casts them
   from a skill bar slot once the client step lands.
+
+## The extension gear (#3456 slice 4)
+
+With `SRO_NASRUN` on, the extension gear (`ITEM_MALL_NASRUN_EXTENSION`, 3/3/13/16) lengthens a woken Spirit's
+awakening (`internal/game/action/spiritextend.go`, `internal/game/nasrun/extension.go`):
+
+- The player drops the gear on a Spirit in the bag, as with v1.150's gender tool. The use carries that bag slot, the
+  v1.188 server's use shape. A worn Spirit is no target: the reference server reads the bag alone.
+- Each gear adds 7 days: from the expiry while the Spirit is awake, from now once it has lapsed. A clock never runs
+  more than 28 days ahead; a gear that would pass that is refused and kept. That is the owner's upkeep rule
+  (2026-11-16). The VSRO row's own Param1 is four weeks with no ceiling, and it is not used.
+- Refusals use the v1.188 codes: a slot outside the bag (0x1882), no Spirit there (3), a Spirit never woken
+  (0x18F8). The ceiling has no native code and answers the generic refusal.
+- Every honor shop's second tab sells the gear twice: for 10 tokens and for 5,000,000 gold, the owner's upkeep price.
+- The Spirits and the gear are staged bound, as v1.150's own honor goods: no trade, merchant sale, warehouse or drop
+  (CanTrade, CanSell, CanBorrow, CanDrop all 0).
+- The v1.188 server also sends 0x3078 {2, slot, seconds left}, which the v1.150 client has no handler for, so the
+  port sends the use answer alone.

@@ -291,12 +291,9 @@ apps/client-next/tools/verify-deferred-alpha.mjs
 apps/client-next/tools/verify-layout.mjs
 apps/client-next/tools/verify-modifier-keys.mjs
 scripts/build/char/avatarVisualOverrides.mjs
-scripts/build/char/buildAvatar.mjs
 scripts/build/char/buildSkillEffectRecords.mjs
 scripts/build/char/compileBanTimeline.mjs
-scripts/build/char/compileBsrVisual.mjs
 scripts/build/char/defaultWearPolicy.mjs
-scripts/build/char/entityMaterialMetadata.mjs
 scripts/build/char/equipmentVisualRecords.mjs
 scripts/build/char/materialVariants.mjs
 scripts/build/char/native/animationSetNames.ts

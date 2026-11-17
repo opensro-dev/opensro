@@ -67,6 +67,9 @@ def item_row(code, identity, kind):
 	row[items.MODEL] = items.UNUSED
 	row[items.DROP_MODEL] = "item\\etc\\drop_ch_eventbox.bsr"
 	row[items.ICON] = "item\\etc\\" + code.lower() + ".ddj"
+	# The VSRO rows trade, sell, store and drop (row 24415's cells).
+	for column in (nasrun.CAN_TRADE, nasrun.CAN_SELL, nasrun.CAN_BORROW, nasrun.CAN_DROP):
+		row[column] = "1"
 	if kind is nasrun.JEWEL_TYPE:
 		row[nasrun.ELIXIR_CLASS_PARAMS[0]] = SPIRIT_CLASS_PARAM
 	return row
@@ -176,6 +179,12 @@ class NasrunImportTest(unittest.TestCase):
 			names = (text_root / nasrun.NAME_TABLE).read_bytes().decode("utf-16")
 			self.assertIn("SN_ITEM_MALL_NASRUN_EXTENSION\t", names)
 			self.assertEqual(len(summary["texts"]), 2 * len(nasrun.ROWS))
+			# The Spirits and the gear are staged bound; the jewel keeps its cells.
+			cells = (nasrun.CAN_TRADE, nasrun.CAN_SELL, nasrun.CAN_BORROW, nasrun.CAN_DROP)
+			for line in shard.splitlines():
+				row = line.split("\t")
+				bound = row[items.TYPE_FIRST:items.TYPE_FOURTH + 1] in nasrun.BOUND_TYPES
+				self.assertEqual([row[c] for c in cells], ["0" if bound else "1"] * 4, row[items.CODENAME])
 			marker = json.loads((output / nasrun.MARKER).read_text(encoding="utf-8"))
 			self.assertEqual(marker["items"], summary["items"])
 			# A rebuild keeps the published identities and adds no text twice.

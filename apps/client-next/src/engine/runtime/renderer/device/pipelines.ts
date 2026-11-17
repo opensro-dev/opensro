@@ -382,7 +382,7 @@ const nativeCharacterLighting:bool=${NATIVE_CHARACTER_LIGHTING};
 @group(0) @binding(0) var<uniform> transform:mat4x4f;
 struct Instance {matrix:mat4x4f,opacity:vec4f,color:vec4f,window:vec4f,pointPosition:vec4f,pointAmbient:vec4f,pointDiffuse:vec4f}
 @group(0) @binding(1) var<storage,read> instances:array<Instance>;
-struct Material {color:vec4f,options:vec4f,skin:vec4f,window:vec4f,lighting:vec4f,policy:vec4f,localFog:vec4f,localFogSettings:vec4f,ambient:vec4f,uvU:vec4f,uvV:vec4f,reflection:vec4f,equipmentColor:vec4f,equipmentUV:vec4f,stage:vec4f,stagePolicy:vec4f,textureFactor:vec4f}
+struct Material {color:vec4f,options:vec4f,skin:vec4f,window:vec4f,lighting:vec4f,policy:vec4f,localFog:vec4f,localFogSettings:vec4f,ambient:vec4f,uvU:vec4f,uvV:vec4f,reflection:vec4f,equipmentColor:vec4f,equipmentUV:vec4f,stage:vec4f,stagePolicy:vec4f,textureFactor:vec4f,multiTex:vec4f}
 @group(0) @binding(2) var<uniform> material:Material;
 ${
 			rowStates ?
@@ -490,7 +490,7 @@ fn waterBumpOffset(uv:vec2f)->vec2f{
  let dudv=(textureSampleLevel(sphereMap,waterBumpSampler,uv*vec2f(.25,-.25)+vec2f(0,1),0,0).rg*255.0-128.0)/127.0;
  return vec2f(dot(waterPass.bump.xy,dudv),dot(waterPass.bump.zw,dudv));
 }
-struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1) normal:vec3f,@location(2) color:vec4f,@location(3) maskUV:vec2f,@location(4) viewZ:f32,@location(5) objectLighting:vec3f,@location(6) @interpolate(flat) opacity:f32,@location(7) worldXZ:vec2f,@location(8) @interpolate(flat) materialTint:vec3f,@location(9) sphereUV:vec2f,@location(10) equipmentUV:vec2f${
+struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1) normal:vec3f,@location(2) color:vec4f,@location(3) maskUV:vec2f,@location(4) viewZ:f32,@location(5) objectLighting:vec3f,@location(6) @interpolate(flat) opacity:f32,@location(7) worldXZ:vec2f,@location(8) @interpolate(flat) materialTint:vec3f,@location(9) sphereUV:vec2f,@location(10) equipmentUV:vec2f,@location(14) multiUV:vec2f${
 			rowStates ? ",@location(13) @interpolate(flat) equipmentColor:vec3f" : ""
 		}}
 @vertex fn vs(@location(0) position:vec3f,@location(1) normal:vec3f,@location(2) uv:vec2f,@location(3) color:vec4f,@location(4) maskUV:vec2f,@builtin(instance_index) i:u32,@builtin(vertex_index) vertex:u32)->Out {
@@ -504,7 +504,7 @@ struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin
  if(material.skin.x!=0){let v=skinVertices[vertex];let base=select(select(i*u32(abs(material.skin.x)),0u,material.skin.x<0),u32(instances[i].opacity.y),instances[i].opacity.z>0);let skin=bones[base+v.joints.x]*v.weights.x+bones[base+v.joints.y]*v.weights.y+bones[base+v.joints.z]*v.weights.z+bones[base+v.joints.w]*v.weights.w;p=skin*p;n=skin*n;
   if(cloth>0u){let slot=skinVertices[cloth+vertex].joints.x;if(slot!=0xffffffffu){let c=skinVertices[2u*cloth+slot];if((c.joints.w&1u)!=0u){p=vec4f(bitcast<vec3f>(c.joints.xyz),1);}if((c.joints.w&2u)!=0u){n=vec4f(c.weights.xyz,0);}}}}
  o.worldY=(instance*p).y;
- o.worldXZ=(instance*p).xz;o.position=transform*instance*p;o.normal=(instance*n).xyz;let movingUV=vec2f(dot(vec3f(uv,1),material.uvU.xyz),dot(vec3f(uv,1),material.uvV.xyz));o.uv=(movingUV*material.window.xy+material.window.zw)*instances[i].window.xy+instances[i].window.zw;o.materialTint=select(vec3f(1),instances[i].color.rgb,material.policy.w>0.5);o.color=color*select(instances[i].color,vec4f(1,1,1,instances[i].color.a),material.policy.w>0.5);o.maskUV=maskUV;o.viewZ=o.position.w;
+ o.worldXZ=(instance*p).xz;o.position=transform*instance*p;o.normal=(instance*n).xyz;let movingUV=vec2f(dot(vec3f(uv,1),material.uvU.xyz),dot(vec3f(uv,1),material.uvV.xyz));let movedUV=(movingUV*material.window.xy+material.window.zw)*instances[i].window.xy+instances[i].window.zw;let uvRoute=u32(material.multiTex.w);o.uv=select((uv*material.window.xy+material.window.zw)*instances[i].window.xy+instances[i].window.zw,movedUV,(uvRoute&4u)!=0u);o.multiUV=select(vec2f(0),movedUV,(uvRoute&3u)==1u);o.materialTint=select(vec3f(1),instances[i].color.rgb,material.policy.w>0.5);o.color=color*select(instances[i].color,vec4f(1,1,1,instances[i].color.a),material.policy.w>0.5);o.maskUV=maskUV;o.viewZ=o.position.w;
  // Undo only projection scaling to recover the native camera-space position.
  let projectionScale=vec2f(length(vec3f(transform[0].x,transform[1].x,transform[2].x)),length(vec3f(transform[0].y,transform[1].y,transform[2].y)));
  o.mirrorPosition=vec4f(o.position.xy/projectionScale,0,o.position.w);
@@ -519,12 +519,14 @@ ${
 				" o.equipmentUV=uv+rowStates[2u*i+1u].xy;o.equipmentColor=rowStates[2u*i].rgb;\n" :
 				" o.equipmentUV=uv+material.equipmentUV.xy;\n"
 		} o.sphereUV=vec2f(0);
- if(material.reflection.x>0.5&&env.reflection.w>0.5){
+ // multi-texture.ts: a Rev stage's SPEC variant samples stage 0 at this uv.
+ if((material.reflection.x>0.5&&env.reflection.w>0.5)||(uvRoute&3u)==2u){
   let reflectionNormal=(instance*vec4f(lightingNormal,0)).xyz;
   let cameraRight=normalize(vec3f(transform[0].x,transform[1].x,transform[2].x));
   let cameraUp=normalize(vec3f(transform[0].y,transform[1].y,transform[2].y));
   o.sphereUV=vec2f(dot(reflectionNormal,cameraRight),dot(reflectionNormal,cameraUp))*0.8+vec2f(0.5);
  }
+ if((uvRoute&3u)==2u){o.multiUV=o.sphereUV;}
  // A5D450 uploads inverse(world)*light to c9. Its dual here is
  // inverse-transpose(world)*normal; do not normalize again after scale.
  let a=instance[0].xyz;let b=instance[1].xyz;let c=instance[2].xyz;
@@ -580,7 +582,12 @@ fn shadeGeometry(input:Out,frontFacing:bool)->vec4f {
  var waterColor=vec3f(0);
  if(material.skin.z>0.5&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){let projected=input.mirrorPosition.xy/input.mirrorPosition.w;let offset=waterBumpOffset(input.uv);
  waterColor=textureSampleLevel(waterMirror,waterMirrorSampler,projected*waterPass.projection.xy+waterPass.projection.zw+offset,0).rgb;}
- let layer=select(u32(env.settings.z),u32(env.lunar.x),material.skin.w==4.0);let tex=textureSample(albedo,textureSampler,input.uv,i32(layer%textureNumLayers(albedo)));
+ let layer=select(u32(env.settings.z),u32(env.lunar.x),material.skin.w==4.0);let baseTex=textureSample(albedo,textureSampler,input.uv,i32(layer%textureNumLayers(albedo)));
+ // multi-texture.ts: the ModDataMultiTex texture is the draw's second image;
+ // Rev draws it at stage 0 in the material's place.
+ var extraTex=vec4f(0);
+ if(material.multiTex.x>0.5){extraTex=textureSample(sphereMap,textureSampler,input.multiUV,0);}
+ let tex=select(baseTex,extraTex,material.multiTex.x>1.5);
  if(material.skin.w>0){let k=material.skin.w;
   if(k==1||k==2){return input.color;}
   if(k==3){
@@ -681,6 +688,14 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
  // (oD0 = 1, no material tint), stage 0 MODULATE texture by that diffuse,
  // stage 1 MODULATE2X by the lightmap (CCompoundObj +0x260 = 5).
  if(material.stagePolicy.z>0.5){lit=clamp(select(clamp(tex.rgb,vec3f(0),vec3f(1)),color.rgb,material.stage.x>0.0)*objectLightmap*2.0,vec3f(0),vec3f(1));}
+ // The MultiTex stage after stage 0 (0xAEDEB0 BLENDFACTORALPHA, 0xAEDB00
+ // BLENDTEXTUREALPHA; ARG1 TEXTURE, ARG2 CURRENT): the stage's texture
+ // blends over the lit result unlit, and its ALPHAOP keeps stage 0's alpha.
+ if(material.multiTex.x>0.5){
+  let second=select(extraTex,baseTex,material.multiTex.x>1.5);
+  let weight=select(second.a,material.multiTex.z,u32(material.multiTex.y)==14u);
+  lit=second.rgb*weight+lit*(1.0-weight);
+ }
  // AEE6D0 bit 0 clear, table entry AEE430 with D3DTOP_ADD: stage0 the
  // sphere, stage1 base+current, alpha base; the restore (AEE950) leaves
  // stage2 DISABLE, so neither vertex light nor 2X applies.

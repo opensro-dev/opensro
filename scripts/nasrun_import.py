@@ -99,6 +99,15 @@ ROWS = (
 # is the Spirit's; a jewel naming any other class could reinforce a
 # v1.150 item and would no longer be inert.
 SPIRIT_CLASS = 14
+
+# Bound rows (port-only, the owner's pick on #3456: the Spirit is earned
+# and bound, and the extension gear is sold bound). v1.150's own bound
+# goods, the honor shop's rows, clear CanTrade, CanBorrow and CanDrop
+# (honor_items.py); these also clear CanSell, so a token bought row never
+# turns into gold. The server reads each cell (exchange, stall, market,
+# warehouse, drop, merchant sale).
+BOUND_TYPES = (WEARABLE_TYPE, EXTENSION_TYPE)
+CAN_TRADE, CAN_SELL, CAN_BORROW, CAN_DROP = 16, 17, 19, 20
 ELIXIR_CLASS_PARAMS = (items.PARAM_FIRST, items.PARAM_FIRST + 4 * items.PARAM_STRIDE)
 
 
@@ -246,6 +255,9 @@ def add_nasrun(vsro_root, native, output):
 			converted = list(row)
 			converted[items.IDENTITY] = str(allocated[row[items.CODENAME]])
 			converted[items.PLACEHOLDER_NAME] = items.UNUSED
+			if converted[items.TYPE_FIRST:items.TYPE_FOURTH + 1] in BOUND_TYPES:
+				for column in (CAN_TRADE, CAN_SELL, CAN_BORROW, CAN_DROP):
+					converted[column] = "0"
 			staged.append(converted)
 		later_texts = [row for name in LATER_TEXT_TABLES for row in avatars.later_text_rows(media, index, name)]
 		name_path = safe_target(text_root, NAME_TABLE)

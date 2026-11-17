@@ -90,6 +90,7 @@ interface Document {
 			sroUnlit?: boolean;
 			sroEnvironment?: { textureId: number; mode: number; };
 			sroEnvironmentTexture?: number;
+			sroMultiTextures?: number[];
 		};
 		name?: string;
 		doubleSided?: boolean;
@@ -415,24 +416,32 @@ channels retain strict finite-value validation before GPU allocation.
 								"Missing native BMT material index"
 							);
 						}
+						const material = sceneryMaterial(
+							primitive.geometry.material!,
+							mat.extras.sroBsrModifiers,
+							index!,
+							message => {
+								throw Error( message );
+							}
+						);
 						primitives[primitiveIndex - 1] = {
 							...primitive,
+							...(material.multiTexture ?
+								{
+									environmentImage: multiTextureImage(
+										j,
+										mat,
+										material.multiTexture.texturePath,
+										primitive
+									)
+								} :
+								{}),
 							modifierSource: {
 								material: primitive.geometry.material!,
 								index: index!,
 								modifiers: mat.extras.sroBsrModifiers
 							},
-							geometry: {
-								...primitive.geometry,
-								material: sceneryMaterial(
-									primitive.geometry.material!,
-									mat.extras.sroBsrModifiers,
-									index!,
-									message => {
-										throw Error( message );
-									}
-								)
-							}
+							geometry: { ...primitive.geometry, material }
 						};
 					}
 				}
@@ -533,4 +542,32 @@ function aggregateBox( box: readonly number[] | undefined ): PickBounds | undefi
 	if ( box === undefined ) return undefined;
 	if ( box.length !== 6 || !box.every( Number.isFinite ) ) throw new Error( "Character aggregate box is malformed" );
 	return [ -box[3]!, box[1]!, box[2]!, -box[0]!, box[4]!, box[5]! ];
+}
+
+/*
+================
+multiTextureImage
+
+The GLB image of the MultiTex texture a primitive's material draws: the
+exporter embeds each one and lists their texture indices in
+extras.sroMultiTextures, in multiTextureModifiers order
+(scripts/build/shared/characterMultiTexture.mjs). The second image slot
+is the draw's only one, so a primitive that also reflects is refused.
+================
+*/
+function multiTextureImage(
+	j: Document,
+	mat: NonNullable<Document["materials"]>[number],
+	texturePath: string,
+	primitive: { readonly environmentImage?: number; }
+): number {
+	if ( primitive.environmentImage !== undefined ) {
+		throw Error( "Character multi-texture shares the environment texture" );
+	}
+	const modifiers = mat.extras?.sroBsrModifiers?.multiTextureModifiers ?? [],
+		at = modifiers.findIndex( m => m.texturePath === texturePath ),
+		texture = at < 0 ? undefined : mat.extras?.sroMultiTextures?.[at],
+		image = texture === undefined ? undefined : j.textures?.[texture]?.source;
+	if ( image === undefined || !j.images?.[image] ) throw Error( "Missing character multi-texture" );
+	return image;
 }

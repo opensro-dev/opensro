@@ -17,6 +17,7 @@ import { validateTextureAtlas } from "./texture-atlas";
 import type { Geometry } from "@/engine/contracts/geometry";
 import type { WorldMaterial } from "@/engine/contracts/scene";
 import { finiteGeometryValues, geometryIndicesInRange } from "./geometry-validation";
+import { validMultiTexture } from "./multi-texture";
 
 /*
 ================
@@ -36,7 +37,10 @@ export function copyMaterial( material: WorldMaterial ): WorldMaterial {
 	if (
 		material.surfaceAlpha !== undefined && typeof material.surfaceAlpha !== "boolean" ||
 		material.depthWrite !== undefined && typeof material.depthWrite !== "boolean" ||
-		material.uvVelocity && (material.uvVelocity.length !== 6 || !material.uvVelocity.every( Number.isFinite ))
+		material.uvVelocity && (material.uvVelocity.length !== 6 || !material.uvVelocity.every( Number.isFinite )) ||
+		material.textureAnimationStage !== undefined && material.textureAnimationStage !== 0 &&
+			material.textureAnimationStage !== 1 ||
+		material.multiTexture !== undefined && !validMultiTexture( material.multiTexture )
 	) throw new Error( "Invalid material modifier" );
 	if (
 		material.color.length !== 4 || !material.color.every( Number.isFinite ) ||
@@ -108,6 +112,7 @@ export function copyMaterial( material: WorldMaterial ): WorldMaterial {
 		...(material.blendPair ? { blendPair: { ...material.blendPair } } : {}),
 		...(material.textureFactorPulse ? { textureFactorPulse: { ...material.textureFactorPulse } } : {}),
 		...(material.textureStage ? { textureStage: { ...material.textureStage } } : {}),
+		...(material.multiTexture ? { multiTexture: { ...material.multiTexture } } : {}),
 		...(material.textureFactor ?
 			{ textureFactor: [ ...material.textureFactor ] as [number, number, number, number] } :
 			{}),
