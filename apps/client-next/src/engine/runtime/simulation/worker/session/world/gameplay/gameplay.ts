@@ -1981,7 +1981,9 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			gmReplies = [];
 			tradeStars = 0;
 			tradeProgress.clear();
-			serverEvent.clear();
+			// The server sends the gauge's rows at login only; a teleport's
+			// continued bootstrap keeps them, as the native window stays up.
+			if ( !continued ) serverEvent.clear();
 			notices = entryEvents.notices.map( key => ({ key, value: 0, sequence: ++noticeSequence }) );
 			feedback.bootstrap( value );
 			const b = value as {

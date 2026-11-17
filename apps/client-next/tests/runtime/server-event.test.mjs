@@ -14,6 +14,9 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+const { createGameplay } = await import(
+	sourceFileUrl( "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts" ).href
+);
 const { createServerEvent, OP_SERVER_EVENT } = await import(
 	sourceFileUrl(
 		"src/engine/runtime/simulation/worker/session/world/gameplay/server-event/server-event.ts"
@@ -148,4 +151,19 @@ test("clear drops the gauge until the next rows", () => {
 	event.receive( fullSync( [ 30001, 7, 118 ] ) );
 	event.clear();
 	assert.equal( event.state(), null );
+});
+
+test("a teleport keeps the gauge; a new login drops it", () => {
+	// The server sends the rows at login only (EntryEventFrames); a travel
+	// bootstrap (continued) must not wipe what the window shows.
+	const game = createGameplay( () => {} );
+	game.bootstrap( {} );
+	game.receive( fullSync( [ 30001, 7, 118 ] ), 0 );
+	assert.deepEqual( game.take()?.serverEventGauge, { id: 30001, count: 7, goal: 118 } );
+	game.resetWorld();
+	game.bootstrap( {}, true );
+	assert.deepEqual( game.take()?.serverEventGauge, { id: 30001, count: 7, goal: 118 } );
+	game.bootstrap( {}, false );
+	assert.equal( game.take()?.serverEventGauge, undefined );
+	game.dispose();
 });
