@@ -270,6 +270,13 @@ var Settings = []Setting{
 	// player's destroyed reinforcement item is announced by job alias.
 	// Off is native, in code and in the deployed default alike.
 	{Env: "SRO_ALCHEMY_BREAK_NOTICE", NomadVar: "alchemy_break_notice", Default: "off"},
+	// Owner, 2026-11-08 (#2852): a Magic Pang win and a failed reinforcement
+	// at +9 or above name the character on the Event tab. Port-only; off is
+	// native (the original shows the win only as the notice window and
+	// announces no failure), in code and in the deployed default alike.
+	{Env: "SRO_ANNOUNCE_GACHA_WIN", NomadVar: "announce_gacha_win", Default: "off"},
+	{Env: "SRO_ANNOUNCE_PLUS_FAIL", NomadVar: "announce_plus_fail", Default: "off"},
+	{Env: "SRO_ANNOUNCE_PLUS_FAIL_MIN", NomadVar: "announce_plus_fail_min", Default: "9"},
 	// Owner, 2026-10-14: +10% party EXP and gold per thief (cap 50%).
 	{Env: "SRO_THIEF_PARTY_BONUS", NomadVar: "thief_party_bonus", Default: "on"},
 	// F10 trade group (game/tunables): the per-thief percent and its cap.
