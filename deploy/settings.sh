@@ -63,19 +63,43 @@ check_deploy_path() {
 }
 
 #
-# The game assets the browser fetches: the packs, their manifest, the web
-# manifest and the delivery lists. Everything else under client-public is
-# the build's loose tree, which the packs already carry
-# (docs/architecture/ASSET_DELIVERY.md, "The short version").
+# native_asset_urls
 #
-ASSET_FILTER=(
-    --include=/assets/
-    --include=/assets/packs/***
-    --include=/assets/delivery/***
-    --include=/assets/manifest.json
-    --include=/assets/manifest.json.gz
-    --exclude=*
-)
+# The files the browser loads by URL instead of through the packs: the boot
+# screen and the CSS cursors. The upstream owns the list
+# (apps/client-next/src/engine/foundation/assets/native-assets.ts); Node
+# reads it with its built-in type stripping, so the deploy never copies it.
+#
+native_asset_urls() {
+    (cd "$REPO_ROOT" && node --input-type=module -e \
+        'import { nativeAssetUrls } from "./apps/client-next/src/engine/foundation/assets/native-assets.ts";
+         for (const url of nativeAssetUrls()) console.log(url);')
+}
+
+#
+# asset_filter
+#
+# rsync filter rules for the game assets the browser fetches: the packs,
+# their manifest, the web manifest, the delivery lists and the native
+# files. Everything else under client-public is the build's loose tree,
+# which the packs already carry (docs/architecture/ASSET_DELIVERY.md).
+#
+asset_filter() {
+    local url dir
+    local -A seen=()
+    printf '%s\n' --include=/assets/ --include=/assets/packs/*** --include=/assets/delivery/*** \
+        --include=/assets/manifest.json --include=/assets/manifest.json.gz
+    while read -r url; do
+        # rsync descends only into included directories: name every parent.
+        dir="${url%/*}"
+        while [ "$dir" != "/assets" ] && [ -n "$dir" ]; do
+            if [ -z "${seen[$dir]:-}" ]; then seen[$dir]=1; printf '%s\n' "--include=$dir/"; fi
+            dir="${dir%/*}"
+        done
+        printf '%s\n' "--include=$url"
+    done < <(native_asset_urls)
+    printf '%s\n' --exclude=*
+}
 
 #
 # asset_release_id <client-public>
@@ -97,5 +121,8 @@ asset_release_id() {
 sync_asset_release() {
     local source="$1" destination="$2" link=()
     [ -n "$3" ] && link=(--link-dest="$3")
-    rsync -a --delete "${link[@]}" "${ASSET_FILTER[@]}" "$source/" "$destination/"
+    local filter=()
+    mapfile -t filter < <(asset_filter)
+    [ "${#filter[@]}" -gt 6 ] || { echo "asset_filter: native-assets.ts gave no URL" >&2; return 1; }
+    rsync -a --delete "${link[@]}" "${filter[@]}" "$source/" "$destination/"
 }

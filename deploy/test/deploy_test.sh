@@ -5,7 +5,9 @@
 #
 #   a. DEPLOY_PATH values that could reach something else are refused
 #   b. the asset release holds every pack the packs manifest names, the
-#      manifests and delivery/, and nothing of the build tree beside them
+#      manifests, delivery/ and the files the browser loads by URL
+#      (native-assets.ts: boot screen, cursors), and nothing else of the
+#      build tree
 #   c. the smoke test passes with the web edge serving that release
 set -euo pipefail
 
@@ -45,7 +47,13 @@ set -- $missing
 [ "$1" -gt 0 ] || fail "b: the packs manifest names no pack"
 [ "$2" = 0 ] || fail "b: packs missing from the release: ${*:3}"
 [ ! -e "$release/assets/world" ] || fail "b: the build tree (assets/world) came along"
-echo "ok    b ($1 packs)"
+native=0
+while read -r url; do
+    [ -f "$release$url" ] || fail "b: $url (loaded by URL, native-assets.ts) is missing from the release"
+    native=$((native + 1))
+done < <(native_asset_urls)
+[ "$native" -gt 0 ] || fail "b: native-assets.ts listed no URL"
+echo "ok    b ($1 packs, $native native files)"
 
 echo "==> c. smoke over the release"
 SMOKE_ASSETS_DIR="$release" "$TEST_DIR/smoke.sh" >/dev/null || fail "c: smoke failed over the release"
