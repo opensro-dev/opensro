@@ -119,12 +119,18 @@ def add_winter_monsters(native, out, env=os.environ):
 		def read(name):
 			return tables.table_text(media, index, name.lower())
 
+		# ================
+		# has
+		# ================
+		def has(name):
+			return tables.TEXTDATA + name.lower() in index
+
 		later = {row[CHAR_CODE]: row for shard in tables.table_rows(read("characterdata.txt"))
 			for row in tables.table_rows(read(shard[0]))}
 		refs = {code: characters.convert_character(row) for code, row in sorted(later.items()) if admits(row)}
 		if not refs:
 			raise ValueError(f"the v1.696 client carries no {PREFIX}* character rows")
-		kinds = later_world_import.stage_kinds(SPEC.label, read, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
+		kinds = later_world_import.stage_kinds(SPEC.label, read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
 			lambda code: code in refs)
 	summary = {"enabled": True, **kinds, "levels": {code: int(later[code][CHAR_LEVEL]) for code in refs}}
 	write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())

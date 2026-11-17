@@ -92,6 +92,13 @@ import { equipDurabilityWarning } from "@/engine/foundation/audio/item-sounds";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import { MALL_BALANCE_CONTROL, MALL_SILK_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 import { MAX_INVENTORY_SLOT_COUNT } from "@/engine/foundation/gameplay/quickslots";
+import {
+	ITEM_MOVE_REQUEST_OPCODE,
+	ITEM_MOVE_RESPONSE_OPCODE,
+	ITEM_USE_REQUEST_OPCODE,
+	ITEM_USE_RESPONSE_OPCODE,
+	NPC_ACTION_REQUEST_OPCODE
+} from "@/engine/contracts/opcodes";
 
 const NPC_SHOP_CAPABILITY = 0x1;
 // Capacity announce 0x3092 [kind][capacity]; kind 1 is the bag. The server
@@ -1132,10 +1139,10 @@ cosTrade
 			} else payload[5] = slot;
 			v.setUint16( buy ? 7 : 6, quantity, true );
 			v.setUint32( buy ? 9 : 8, shop.npc, true );
-			const frame = { opcode: 0x706d, payload };
+			const frame = { opcode: ITEM_MOVE_REQUEST_OPCODE, payload };
 			send( frame );
 			pending = {
-				opcode: 0xb06d,
+				opcode: ITEM_MOVE_RESPONSE_OPCODE,
 				cosGid: record.gid,
 				source: slot,
 				npc: shop.npc,
@@ -1226,7 +1233,7 @@ so an impossible request never leaves the client.
 				move.type !== STORAGE_MOVE_ROOM && !bagMove && move.gold < 1
 			) throw Error( "Invalid storage move" );
 			storageMoveResult(
-				{ opcode: 0xb06d, payload: Uint8Array.of( 1, move.type ) },
+				{ opcode: ITEM_MOVE_RESPONSE_OPCODE, payload: Uint8Array.of( 1, move.type ) },
 				room,
 				[ ...slots.values() ],
 				move,
@@ -1235,7 +1242,7 @@ so an impossible request never leaves the client.
 			const frame = storageMoveRequest( room.npc, move, room.guild );
 			send( frame );
 			pending = {
-				opcode: 0xb06d,
+				opcode: ITEM_MOVE_RESPONSE_OPCODE,
 				movementType: move.type,
 				source: move.source,
 				destination: move.destination,
@@ -1275,7 +1282,13 @@ frame is not that echo (a rejection takes the generic receive path).
 				quantity: pending.quantity ?? 0,
 				gold: pending.amount ?? 0
 			};
-			const next = storageMoveResult( { opcode: 0xb06d, payload: p }, room, [ ...slots.values() ], move, caps )!;
+			const next = storageMoveResult(
+				{ opcode: ITEM_MOVE_RESPONSE_OPCODE, payload: p },
+				room,
+				[ ...slots.values() ],
+				move,
+				caps
+			)!;
 			slots = new Map( next.bag.map( row => [ row.slot, row ] ) );
 			published = null;
 			pending = null;
@@ -1316,7 +1329,7 @@ stack limits are known. No slot to fill sends nothing.
 			const frame = cosTransferRequest( record.gid, toCos, source, destination );
 			send( frame );
 			pending = {
-				opcode: 0xb06d,
+				opcode: ITEM_MOVE_RESPONSE_OPCODE,
 				cosGid: record.gid,
 				source,
 				destination,
@@ -1342,7 +1355,7 @@ cosTransferred
 				throw Error( "Invalid COS transfer result" );
 			}
 			const gid = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true );
-			const matched = pending && pending.opcode === 0xb06d && pending.movementType === p[1] &&
+			const matched = pending && pending.opcode === ITEM_MOVE_RESPONSE_OPCODE && pending.movementType === p[1] &&
 				pending.cosGid === gid && record.gid === gid && pending.source === p[6] &&
 				pending.destination === p[7];
 			if ( !matched ) {
@@ -1385,12 +1398,15 @@ cosGround
 		cosGround( frame: import("@/engine/contracts/network").WireFrame, now: number ) {
 			if ( busy() ) throw Error( "Inventory command unavailable" );
 			const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
-			if ( frame.opcode !== 0x706d || !(p[0] === 0x11 && p.length === 9 || p[0] === 0x12 && p.length === 6) ) {
+			if (
+				frame.opcode !== ITEM_MOVE_REQUEST_OPCODE ||
+				!(p[0] === 0x11 && p.length === 9 || p[0] === 0x12 && p.length === 6)
+			) {
 				throw Error( "Invalid COS ground request" );
 			}
 			send( frame );
 			pending = {
-				opcode: 0xb06d,
+				opcode: ITEM_MOVE_RESPONSE_OPCODE,
 				cosGid: v.getUint32( 1, true ),
 				source: p[0] === 0x12 ? p[5]! : 0,
 				movementType: p[0],
@@ -1411,7 +1427,9 @@ burst, so a scoop that finds the request still pending ends it.
 ================
 		*/
 		cosPickupShown( gid: number ) {
-			if ( pending?.opcode === 0xb06d && pending.movementType === 0x11 && pending.cosGid === gid ) {
+			if (
+				pending?.opcode === ITEM_MOVE_RESPONSE_OPCODE && pending.movementType === 0x11 && pending.cosGid === gid
+			) {
 				pending = null;
 				error = null;
 			}
@@ -1441,12 +1459,12 @@ cosMove
 		cosMove( frame: import("@/engine/contracts/network").WireFrame, now: number ) {
 			if ( busy() ) throw Error( "Inventory command unavailable" );
 			const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
-			if ( frame.opcode !== 0x706d || p.length !== 9 || p[0] !== 0x10 ) {
+			if ( frame.opcode !== ITEM_MOVE_REQUEST_OPCODE || p.length !== 9 || p[0] !== 0x10 ) {
 				throw Error( "Invalid COS inventory command" );
 			}
 			send( frame );
 			pending = {
-				opcode: 0xb06d,
+				opcode: ITEM_MOVE_RESPONSE_OPCODE,
 				cosGid: v.getUint32( 1, true ),
 				source: p[5]!,
 				destination: p[6]!,
@@ -1489,9 +1507,12 @@ avatarMove
 						destination >= (inventorySlotCount ?? 0)))
 			) throw Error( "Invalid avatar transfer" );
 			const movementType = equip ? 0x24 : 0x23,
-				frame = { opcode: 0x706d, payload: Uint8Array.of( movementType, source, destination ) };
+				frame = {
+					opcode: ITEM_MOVE_REQUEST_OPCODE,
+					payload: Uint8Array.of( movementType, source, destination )
+				};
 			send( frame );
-			pending = { opcode: 0xb06d, source, destination, movementType, deadline: now + 10000 };
+			pending = { opcode: ITEM_MOVE_RESPONSE_OPCODE, source, destination, movementType, deadline: now + 10000 };
 			error = null;
 			return frame;
 		},
@@ -1517,9 +1538,15 @@ move
 			p[1] = source;
 			p[2] = destination;
 			new DataView( p.buffer ).setUint16( 3, quantity, true );
-			const frame = { opcode: 0x706d, payload: p };
+			const frame = { opcode: ITEM_MOVE_REQUEST_OPCODE, payload: p };
 			send( frame );
-			pending = { opcode: 0xb06d, source, destination, movementType: 0, deadline: now + 10000 };
+			pending = {
+				opcode: ITEM_MOVE_RESPONSE_OPCODE,
+				source,
+				destination,
+				movementType: 0,
+				deadline: now + 10000
+			};
 			error = null;
 			return frame;
 		},
@@ -1532,9 +1559,9 @@ drop
 			if ( timedOut ) throw Error( timeoutMessage() );
 			const item = slots.get( slot( n ) );
 			if ( busy() || !item || n < (equipmentSlotCount ?? 13) ) throw Error( "Item drop unavailable" );
-			const frame = { opcode: 0x706d, payload: Uint8Array.of( 7, n ) };
+			const frame = { opcode: ITEM_MOVE_REQUEST_OPCODE, payload: Uint8Array.of( 7, n ) };
 			send( frame );
-			pending = { opcode: 0xb06d, source: n, movementType: 7, deadline: now + 10000 };
+			pending = { opcode: ITEM_MOVE_RESPONSE_OPCODE, source: n, movementType: 7, deadline: now + 10000 };
 			error = null;
 			return frame;
 		},
@@ -1551,9 +1578,9 @@ dropGold
 			const payload = new Uint8Array( 5 );
 			payload[0] = 10;
 			new DataView( payload.buffer ).setUint32( 1, amount, true );
-			const frame = { opcode: 0x706d, payload };
+			const frame = { opcode: ITEM_MOVE_REQUEST_OPCODE, payload };
 			send( frame );
-			pending = { opcode: 0xb06d, source: 0, movementType: 10, amount, deadline: now + 10000 };
+			pending = { opcode: ITEM_MOVE_RESPONSE_OPCODE, source: 0, movementType: 10, amount, deadline: now + 10000 };
 			error = null;
 			return frame;
 		},
@@ -1572,7 +1599,7 @@ openShop
 				NPC_SPECIAL_TRADE_CAPABILITY :
 				NPC_SHOP_CAPABILITY;
 			v.setUint32( 4, mask, true );
-			const frame = { opcode: 0x7338, payload };
+			const frame = { opcode: NPC_ACTION_REQUEST_OPCODE, payload };
 			send( frame );
 			if ( shop?.npc !== gid ) shop = undefined;
 			pending = { opcode: 11, source: 0, npc: gid, deadline: now + 10000 };
@@ -1618,10 +1645,10 @@ trade
 			} else payload[1] = n;
 			v.setUint16( buy ? 3 : 2, quantity, true );
 			v.setUint32( buy ? 5 : 4, shop.npc, true );
-			const frame = { opcode: 0x706d, payload };
+			const frame = { opcode: ITEM_MOVE_REQUEST_OPCODE, payload };
 			send( frame );
 			pending = {
-				opcode: 0xb06d,
+				opcode: ITEM_MOVE_RESPONSE_OPCODE,
 				source: n,
 				movementType: buy ? 8 : 9,
 				npc: shop.npc,
@@ -1685,7 +1712,9 @@ A job dress bar (0x3434) holds the suit move's answer for its seconds.
 ================
 		*/
 		holdForDress( until: number ) {
-			if ( pending?.opcode === 0xb06d ) pending = { ...pending, deadline: Math.max( pending.deadline, until ) };
+			if ( pending?.opcode === ITEM_MOVE_RESPONSE_OPCODE ) {
+				pending = { ...pending, deadline: Math.max( pending.deadline, until ) };
+			}
 		},
 		/*
 ================
@@ -1737,9 +1766,9 @@ use
 			p.set( tail, 3 );
 			p[0] = n;
 			new DataView( p.buffer ).setUint16( 1, item.typeFlags, true );
-			const frame = { opcode: 0x75bd, payload: p };
+			const frame = { opcode: ITEM_USE_REQUEST_OPCODE, payload: p };
 			send( frame );
-			pending = { opcode: 0xb5bd, source: n, deadline: now + 10000 };
+			pending = { opcode: ITEM_USE_RESPONSE_OPCODE, source: n, deadline: now + 10000 };
 			error = null;
 			return frame;
 		},

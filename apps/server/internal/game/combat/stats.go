@@ -295,9 +295,9 @@ func playerStatsWithModifiers(
 		// Option 389: the active tier's value joins this piece's own plus
 		// as one total opt level before derivation, so the piece's
 		// derived ranges scale with it (setbonus.go).
-		plus := uint8(clampInt64(row.Plus, 0, math.MaxUint8))
+		plus := uint8(min(max(row.Plus, 0), math.MaxUint8))
 		if effect, worn := setByID[ref.SetID]; worn && effect.reinforce > 0 {
-			plus = uint8(clampInt64(row.Plus+int64(effect.reinforce), 0, math.MaxUint8))
+			plus = uint8(min(max(row.Plus+int64(effect.reinforce), 0), math.MaxUint8))
 		}
 		contribution, weapon, deriveErr := deriveItemStats(
 			ref,
@@ -553,21 +553,4 @@ func requiredStat(name string, value *int64) (float64, error) {
 		return 0, fmt.Errorf("combat: %s is absent or outside 0..65535", name)
 	}
 	return float64(*value), nil
-}
-
-/*
-================
-clampInt64
-
-Clamp wide persisted values before the item derivation narrows their type.
-================
-*/
-func clampInt64(value, minimum, maximum int64) int64 {
-	if value < minimum {
-		return minimum
-	}
-	if value > maximum {
-		return maximum
-	}
-	return value
 }

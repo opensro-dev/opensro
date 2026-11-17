@@ -1,6 +1,7 @@
 import type { CosRecord } from "@/engine/contracts/gameplay";
 import { decodeInventoryItem } from "./inventory-item";
 import { planContainerMove } from "./container-transfer";
+import { ITEM_MOVE_REQUEST_OPCODE } from "@/engine/contracts/opcodes";
 
 export function cosGroundRequest( record: CosRecord, kind: "pickup" | "drop", target: number ) {
 	if ( record.dead || !record.hp || !record.inventory ) throw Error( "COS container unavailable" );
@@ -14,7 +15,7 @@ export function cosGroundRequest( record: CosRecord, kind: "pickup" | "drop", ta
 	v.setUint32( 1, record.gid, true );
 	if ( drop ) payload[5] = target;
 	else v.setUint32( 5, target, true );
-	return { opcode: 0x706d, payload };
+	return { opcode: ITEM_MOVE_REQUEST_OPCODE, payload };
 }
 
 // A server grant into the pet bag (0xB06D type 0x15): the same record
@@ -103,7 +104,7 @@ export function cosContainerRequest( record: CosRecord, source: number, destinat
 	payload[5] = source;
 	payload[6] = destination;
 	v.setUint16( 7, quantity, true );
-	return { opcode: 0x706d, payload };
+	return { opcode: ITEM_MOVE_REQUEST_OPCODE, payload };
 }
 
 export function cosContainerResult( record: CosRecord, p: Uint8Array, caps: ReadonlyMap<number, number> ): CosRecord {

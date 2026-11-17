@@ -20,6 +20,7 @@ import type { WireFrame } from "@/engine/contracts/network";
 import type { EntityState, WorldEvent } from "@/engine/contracts/world";
 import { groundItemDistance } from "@/engine/foundation/gameplay/ground-item";
 import { sameCoordinateSpace } from "@/engine/foundation/world/world-space";
+import { COS_COMMAND_REQUEST_OPCODE } from "@/engine/contracts/opcodes";
 
 const PICKUP_ENABLED = 0x80;
 const PICKUP_PUBLIC = 0x40;
@@ -94,7 +95,7 @@ export function cosPickupRequest( gid: number, target: number ): WireFrame {
 	view.setUint32( 0, gid, true );
 	payload[4] = 8;
 	view.setUint32( 5, target, true );
-	return { opcode: 0x769e, payload };
+	return { opcode: COS_COMMAND_REQUEST_OPCODE, payload };
 }
 
 /*

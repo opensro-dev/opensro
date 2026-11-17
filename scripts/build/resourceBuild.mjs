@@ -162,12 +162,13 @@ async function buildHdTexturePacksStep() {
 
 // The modules that hold each memoized lane's steps: laneMemo.mjs keys a lane
 // by their code closures. The world lane is not memoized; it reads the
-// outdoor build's public output, which no lane key covers.
+// outdoor build's public output, which no lane key covers. Nor are fonts
+// and audio (plan B5): the fonts lane's repairs are actions
+// (fontResources.mjs), and warm, the lane costs about 1.8 s, mostly the GDI
+// atlas; audio's copies confirm unchanged files by digest, about 1.9 s warm.
 const LANE_MODULES = {
 	interfaceImages: [ "./cif.mjs", "./launcher.mjs", "./world/assets/copyMissionMinimapTileImages.mjs" ],
 	text: [ "./text.mjs", "./launcher.mjs", "./config.mjs" ],
-	fonts: [ "./fonts.mjs" ],
-	audio: [ "./audio.mjs" ],
 	cursors: [ "../extract_client_cursors.py" ],
 	titleCharacters: [
 		"./char/buildRoster.mjs",
@@ -484,8 +485,8 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	] = await runResourceTasks( [
 		lane( "interface-images", { modules: laneModules( "interfaceImages" ) }, interfaceImagesLane ),
 		lane( "text", { modules: laneModules( "text" ) }, textLane ),
-		lane( "fonts", { modules: laneModules( "fonts" ) }, fontsLane ),
-		lane( "audio", { modules: laneModules( "audio" ) }, audioLane ),
+		fontsLane,
+		audioLane,
 		lane( "cursors", { modules: laneModules( "cursors" ) }, cursorAssetsLane ),
 		lane( "title-characters", { modules: laneModules( "titleCharacters" ) }, titleCharacterAssetsLane ),
 		lane( "npc", { modules: laneModules( "npc" ), roots: serverRosterRoots() }, npcAssetsLane ),

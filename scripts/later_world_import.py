@@ -51,6 +51,7 @@ from alexandria_map_tables import append_rows, native_text_row, table_text
 import cap110_monsters as cap110
 import cap110_skill_effects as effects
 import import_vsro_alexandria as tables
+import skilldata_enc as skill_tables
 import sro_pk2
 from pin_file import read_pin_field
 from prepare_client_resources import file_digest, write_atomically
@@ -361,6 +362,12 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 		def read(name):
 			return tables.table_text(media, index, name.lower())
 
+		# ================
+		# has
+		# ================
+		def has(name):
+			return tables.TEXTDATA + name.lower() in index
+
 		later = later_characters(read)
 		claims = {}
 		for family, codes in claimed.items():
@@ -376,7 +383,7 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 			missing = sorted(codes - set(refs))
 			if missing:
 				raise ValueError(f"{spec.label} {family} nests name unadmitted monsters: {missing}")
-		staged = stage_kinds(spec.label, read, refs, text_root, prior, spec.character_shard, spec.skill_shard,
+		staged = stage_kinds(spec.label, read, has, refs, text_root, prior, spec.character_shard, spec.skill_shard,
 			lambda code: code.startswith(spec.info_prefixes))
 		populations = spec.build_populations(rows, sub_enabled)
 		for group, filename in spec.population_files:
@@ -420,10 +427,13 @@ def later_characters(read):
 # and characterinfo rows. refs maps codename to its converted row and
 # is renumbered in place; info_owned picks the characterinfo rows the
 # import claims; extra_skills names skills to stage that no kind's
-# skill columns reach. Returns the summary keys every later-world marker
+# skill columns reach. has(name) says whether the later archive holds a
+# textdata file: the client's skills are read the way the client reads
+# them (skilldata_enc.client_skill_rows), its encrypted set when it ships
+# one, else the plain manifest. Returns the summary keys every later-world marker
 # records, so the reap finds exactly what this build owned.
 # ================
-def stage_kinds(label, read, refs, text_root, prior, character_shard, skill_shard, info_owned, extra_skills=()):
+def stage_kinds(label, read, has, refs, text_root, prior, character_shard, skill_shard, info_owned, extra_skills=()):
 	native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != character_shard for r in tables.table_rows(p.read_bytes())]
 	occupied = {int(r[1]) for r in native_chars}
 	allocated = cap110.allocate_identities(occupied, sorted(refs), prior.get("characters", {}))
@@ -431,8 +441,7 @@ def stage_kinds(label, read, refs, text_root, prior, character_shard, skill_shar
 		row[1] = str(allocated[code])
 	native_skills = [r for p in text_root.glob("skilldata_*.txt") if p.name != skill_shard for r in tables.table_rows(p.read_bytes()) if len(r) == 118]
 	needed = {int(s) for r in refs.values() for s in r[89:99] if int(s)}
-	client_skills = [r for shard in tables.table_rows(read("skilldata.txt"))
-		for r in tables.table_rows(read(shard[0])) if len(r) > 3 and r[1].isdigit()]
+	client_skills = [r for r in skill_tables.client_skill_rows(read, has) if len(r) > 3 and r[1].isdigit()]
 	# Skills no staged kind names in its skill columns (a Muhan change
 	# form's BUFF01, cast by its NPC) are staged by codename.
 	extra = {r[3]: int(r[1]) for r in client_skills if r[3] in set(extra_skills)}
@@ -485,8 +494,12 @@ def stage_kinds(label, read, refs, text_root, prior, character_shard, skill_shar
 		"characters": {c: int(r[1]) for c, r in refs.items()}, "skills": {r[3]: int(r[1]) for r in added},
 		"animationBases": sorted(set(prior.get("animationBases", [])) | {base for rows in selected.values() for base, _ in rows}),
 		"characterInfo": sorted(owned_info | {r[0] for r in info}),
-		"nameSymbols": sorted(({r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
-			| {r[1] for r in texts}) & {r[5] for r in refs.values()}),
+		# Owned names are the rows this build added plus the ones a
+		# previous build added, never a row the table already held: a
+		# later kind may reuse a native symbol (MOB_RM_TAHOMET_ROC names
+		# itself SN_MOB_RM_TAHOMET), and the off reap drops every owned
+		# symbol, so claiming the native row would strip the native name.
+		"nameSymbols": sorted(({r[1] for r in texts} | set(prior.get("nameSymbols", []))) & {r[5] for r in refs.values()}),
 	}
 
 
