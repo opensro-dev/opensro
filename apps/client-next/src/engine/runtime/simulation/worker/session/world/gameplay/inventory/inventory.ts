@@ -93,6 +93,7 @@ import type { InventoryItem } from "@/engine/contracts/gameplay";
 import { MALL_BALANCE_CONTROL, MALL_SILK_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 import { MAX_INVENTORY_SLOT_COUNT } from "@/engine/foundation/gameplay/quickslots";
 import {
+	BUYBACK_REQUEST_OPCODE,
 	ITEM_MOVE_REQUEST_OPCODE,
 	ITEM_MOVE_RESPONSE_OPCODE,
 	ITEM_USE_REQUEST_OPCODE,
@@ -1673,7 +1674,7 @@ buyback
 			const payload = new Uint8Array( 5 ), v = new DataView( payload.buffer );
 			v.setUint32( 0, shop.npc, true );
 			payload[4] = entry.index;
-			const frame = { opcode: 0x77e7, payload };
+			const frame = { opcode: BUYBACK_REQUEST_OPCODE, payload };
 			send( frame );
 			pending = {
 				opcode: 13,

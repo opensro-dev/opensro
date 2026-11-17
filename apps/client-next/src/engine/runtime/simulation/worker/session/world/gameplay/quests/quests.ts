@@ -20,9 +20,14 @@ import {
 import type { QuestRecord, QuestMarker, QuestProgressEvent, QuestGathering } from "@/engine/contracts/gameplay";
 import type { WireFrame } from "@/engine/contracts/network";
 import {
+	QUEST_ABORT_RESPONSE_OPCODE,
+	QUEST_ACCEPT_RESPONSE_OPCODE,
 	QUEST_GATHER_CANCEL_OPCODE,
 	QUEST_GATHER_CANCEL_REPLY_OPCODE,
-	QUEST_GATHER_START_OPCODE
+	QUEST_GATHER_START_OPCODE,
+	QUEST_MARKER_OPCODE,
+	QUEST_MARKER_REMOVE_OPCODE,
+	QUEST_UPDATE_OPCODE
 } from "@/engine/contracts/opcodes";
 
 const MAX_QUESTS = 256;
@@ -177,7 +182,7 @@ export function createQuests( send: ( frame: WireFrame ) => void ) {
 				if ( gathering?.refId === refId ) gathering = undefined;
 				return true;
 			}
-			if ( frame.opcode === 0x3498 ) {
+			if ( frame.opcode === QUEST_MARKER_OPCODE ) {
 				const row = decodeQuestMarker( p );
 				if ( markers.length >= MAX_MARKERS && !markers.some( marker => marker.refId === row.refId ) ) {
 					throw Error( "Quest marker residency budget" );
@@ -185,14 +190,14 @@ export function createQuests( send: ( frame: WireFrame ) => void ) {
 				markers = [ ...markers.filter( marker => marker.refId !== row.refId ), row ];
 				return true;
 			}
-			if ( frame.opcode === 0x30ea ) {
+			if ( frame.opcode === QUEST_MARKER_REMOVE_OPCODE ) {
 				if ( p.length !== 4 ) throw Error( "Invalid quest marker removal" );
 				const id = new DataView( p.buffer, p.byteOffset, 4 ).getUint32( 0, true );
 				if ( !id ) throw Error( "Invalid quest marker reference" );
 				markers = markers.filter( marker => marker.refId !== id );
 				return true;
 			}
-			if ( frame.opcode === 0xb29a || frame.opcode === 0xb1eb ) {
+			if ( frame.opcode === QUEST_ACCEPT_RESPONSE_OPCODE || frame.opcode === QUEST_ABORT_RESPONSE_OPCODE ) {
 				const result = decodeQuestAcknowledgement( p );
 				if ( result === 2 && pending && pendingAck === frame.opcode ) {
 					pending = 0;
@@ -200,7 +205,7 @@ export function createQuests( send: ( frame: WireFrame ) => void ) {
 				}
 				return true;
 			}
-			if ( frame.opcode !== 0x31ed ) return false;
+			if ( frame.opcode !== QUEST_UPDATE_OPCODE ) return false;
 			const delta = decodeQuest( p ), previous = records.find( row => row.refId === delta.refId );
 			if ( delta.op === 2 && !previous ) throw Error( "Quest update without insertion" );
 			if ( delta.op === 1 && previous ) throw Error( "Duplicate quest insertion" );
