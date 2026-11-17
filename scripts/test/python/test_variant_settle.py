@@ -81,6 +81,19 @@ class Settle(unittest.TestCase):
 		variant_settle.settle(self.root, 2)
 		self.assertEqual(variant_settle.load_ledger(variant_settle.ledger_path(self.root)), {})
 
+	def test_asset_build_folders_are_not_variant_content(self):
+		folder = self.root / "extracted" / next(iter(variant_settle.ASSET_BUILD_FOLDERS))
+		folder.mkdir()
+		(folder / "table.json").write_bytes(b"{}")
+		self.assertEqual(variant_settle.settle(self.root, 2)["files"], 1)
+		self.assertIsNone(variant_settle.ledger_difference(self.root))
+
+	def test_a_difference_names_the_file(self):
+		self.rewrite(b"imported")
+		self.assertEqual(variant_settle.ledger_difference(self.root), "extracted/Media_extracted/a.txt changed")
+		self.data.unlink()
+		self.assertEqual(variant_settle.ledger_difference(self.root), "extracted/Media_extracted/a.txt is gone")
+
 	def test_foreign_ledger_is_a_cold_start(self):
 		variant_settle.ledger_path(self.root).write_text('{"format":"other"}', encoding="utf-8")
 		self.assertEqual(variant_settle.settle(self.root, 2)["hashed"], 1)
