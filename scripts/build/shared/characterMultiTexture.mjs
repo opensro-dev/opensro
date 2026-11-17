@@ -32,10 +32,11 @@ embedCharacterMultiTextures
 
 Embed every multi-texture the material's sroBsrModifiers names, once per
 GLB, and record their texture indices in extras.sroMultiTextures, in the
-order of multiTextureModifiers (the client pairs them by position).
+order of multiTextureModifiers (the client pairs them by position). read
+loads one game texture as { bytes, mime }.
 ================
 */
-export function embedCharacterMultiTextures( json, material, appendView ) {
+export function embedCharacterMultiTextures( json, material, appendView, read = readCharacterTexture ) {
 	const modifiers = material.extras?.sroBsrModifiers?.multiTextureModifiers ?? [];
 	delete material.extras?.sroMultiTextures;
 	if ( !modifiers.length ) return;
@@ -46,7 +47,7 @@ export function embedCharacterMultiTextures( json, material, appendView ) {
 		const gamePath = multiTexturePath( modifier.texturePath ), name = "sro-multitexture:" + gamePath;
 		let source = json.images.findIndex( image => image.name === name );
 		if ( source < 0 ) {
-			const texture = readCharacterTexture( gamePath );
+			const texture = read( gamePath );
 			source = json.images.length;
 			json.images.push( { name, bufferView: appendView( texture.bytes ), mimeType: texture.mime } );
 		}
