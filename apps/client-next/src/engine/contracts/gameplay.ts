@@ -838,8 +838,12 @@ export interface GameplayState extends MoverPublication {
 	readonly targetCapabilities?: number;
 	// The selected NPC's flag-war row mode (1 sign-up, 2 cancel).
 	readonly targetFlagWarMode?: number;
-	// The flag-war timer and carrier, owned by the gameplay worker.
-	readonly flagWar?: { readonly timerEndsAt: number; readonly carrierGid: number; };
+	// The flag-war timer, carrier and match participation, owned by the
+	// gameplay worker. inEvent is the native state byte's model
+	// (0xce8830+0x0C, not 0xFF while the match lasts): the worker knows
+	// the player's team from the mission start and forgets it at the
+	// game start's reset, so participation is "team known".
+	readonly flagWar?: { readonly timerEndsAt: number; readonly carrierGid: number; readonly inEvent: boolean; };
 	readonly targetTaxRate?: number;
 	// targetGateRows is a quest exit gate's rows (talk bit 0x8000000):
 	// each a row of action 0x2A whose click sends 0x7495 type 3.

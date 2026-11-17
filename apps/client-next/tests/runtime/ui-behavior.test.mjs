@@ -1503,6 +1503,30 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 		f.state = { ...f.state, gameplay: { ...f.state.gameplay, rebirthMode: 4 } };
 		step( 8320 );
 		assert.equal( labelOf( "rebirth-point" ), pointLabel );
+		// #2279 (52F460): inside a flag-war match the first button offers
+		// the camp, ahead of the mode reading; the second keeps its text.
+		const alternateLabel = labelOf( "rebirth-alternate" );
+		f.state = {
+			...f.state,
+			gameplay: {
+				...f.state.gameplay,
+				rebirthMode: 2,
+				flagWar: { timerEndsAt: 0, carrierGid: 0, inEvent: true }
+			}
+		};
+		step( 8330 );
+		assert.equal( labelOf( "rebirth-point" ), "Resurrect at your camp.", "a match death offers the camp" );
+		assert.equal( labelOf( "rebirth-alternate" ), alternateLabel, "the second button is unaffected" );
+		f.state = {
+			...f.state,
+			gameplay: {
+				...f.state.gameplay,
+				rebirthMode: 2,
+				flagWar: { timerEndsAt: 0, carrierGid: 0, inEvent: false }
+			}
+		};
+		step( 8340 );
+		assert.equal( labelOf( "rebirth-point" ), standingLabel, "leaving the match restores the mode reading" );
 		f.ui.event( { kind: "activate", id: "rebirth-alternate" } );
 		scene = step( 8400 );
 		assert.equal( sent.length, 2, "high-level alternate waits for rescue without sending choice 2" );

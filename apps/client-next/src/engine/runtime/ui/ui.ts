@@ -24796,11 +24796,18 @@ export function createUi(
 				// 52FF33: a team death (mode 2, the 0x37CE notice) revives where it
 				// fell, so the first button reads "standing"; the server's
 				// rebirth (50FEE0) revives it there whatever the choice.
+				// 52F460 tests the flag-war state byte first, though: inside
+				// a match the first button offers the camp instead
+				// (UIIT_MSG_FLAGWAR_GO_TO_REVIVAL, #2279), team death or not.
 				const team = game?.rebirthMode === TEAM_DEATH_MODE;
 				for (
 					const [id, key, r] of [ [
 						"rebirth-point",
-						team ? "UIIT_MSG_MSGBOX_REBIRTH_STANDING_BUTTON" : "UIIT_MSG_MSGBOX_REBIRTH_POINT_BUTTON",
+						game?.flagWar?.inEvent ?
+							"UIIT_MSG_FLAGWAR_GO_TO_REVIVAL" :
+							team ?
+							"UIIT_MSG_MSGBOX_REBIRTH_STANDING_BUTTON" :
+							"UIIT_MSG_MSGBOX_REBIRTH_POINT_BUTTON",
 						layout.point
 					], [
 						"rebirth-alternate",

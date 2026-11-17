@@ -184,3 +184,52 @@ test("a grant that matches no shape still refuses", () => {
 	grant[0] = 1;
 	assert.throws( () => targeting.receive( 0xb45a, grant ), /Unsupported target grant/ );
 });
+
+test("participation spans the match, and the camp accept shows the warp line (#2279)", async () => {
+	const { createGameplay } = await load( "runtime/simulation/worker/session/world/gameplay/gameplay" );
+	const sent = [];
+	const game = createGameplay( frame => sent.push( frame ) );
+	const local = {
+		regionId: 0x6b4f,
+		x: 60,
+		y: 10,
+		z: 100,
+		angle: 0,
+		gid: 7,
+		heading: 0,
+		appearanceState: [ 2, 0, 0 ]
+	};
+	let latest = null;
+	const warpLines = () => {
+		latest = game.take() ?? latest;
+		return (latest?.notices ?? []).filter( n => n.key === "UIIT_MSG_FLAGWAR_GO_TO_ZONE" );
+	};
+	game.bootstrap( { character: { level: 10 } } );
+	game.seed( local );
+	assert.equal( game.take().flagWar?.inEvent, false );
+	// 0x08 assigns the receiving player's team (u16): the match begins.
+	game.receive( { opcode: 0x30a9, payload: new Uint8Array( [ 0x08, 1, 0 ] ) }, 1000 );
+	assert.equal( game.take().flagWar?.inEvent, true );
+	// 0x05 stops only the timer control; participation survives it and
+	// ends with the reset the 0x04 game start runs.
+	game.receive( { opcode: 0x30a9, payload: new Uint8Array( [ 0x05 ] ) }, 1001 );
+	assert.equal( game.take().flagWar?.inEvent, true, "the timer stop leaves participation standing" );
+	// The camp choice keeps its ordinary request (the native accept
+	// sends none; the port's camp revival rides it) and the warp line
+	// rides the timed banner.
+	game.command( { kind: "rebirth", choice: 1 }, 1002, undefined, local );
+	assert.deepEqual( sent.map( f => [ f.opcode, ...f.payload ] ), [ [ 0x32dc, 1 ] ] );
+	assert.equal( warpLines().length, 1 );
+	assert.deepEqual(
+		[ warpLines()[0]?.notificationBanner, warpLines()[0]?.bannerOnly ],
+		[ true, true ]
+	);
+	// The second choice never raises the line.
+	game.command( { kind: "rebirth", choice: 2 }, 1003, undefined, local );
+	assert.equal( warpLines().length, 1 );
+	game.receive( { opcode: 0x30a9, payload: new Uint8Array( [ 0x04 ] ) }, 1004 );
+	assert.equal( game.take().flagWar?.inEvent, false );
+	game.command( { kind: "rebirth", choice: 1 }, 1005, undefined, local );
+	assert.equal( warpLines().length, 1, "out of the match the camp choice stays silent" );
+	game.dispose();
+});

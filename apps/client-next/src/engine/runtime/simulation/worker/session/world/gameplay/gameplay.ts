@@ -1110,6 +1110,13 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	// those codes and must stay exact for every other use, so the
 	// translation lives here, keyed on the flight, not in the mapper.
 	let renameUseInFlight = false;
+	// The local player's flag-war team, the model of the native team
+	// byte (player +0x7E1). The mission start assigns it; the game
+	// start (whose native reset also restores the 0xce8830+0x0C state
+	// byte to 0xFF) and resetWorld forget it. The timer stop does NOT
+	// clear it: natively 0x05/0x09 only stop the timer control
+	// (4B2530 lookup[3]/[7]), so participation outlives the clock and
+	// ends with the match. The snapshot's flagWar.inEvent reads it.
 	let flagWarTeam: number | null = null;
 	let progression: Progression = { masteries: [] };
 	const skillGroups = new Map<number, { group: number; level: number; }>();
@@ -2459,6 +2466,26 @@ state here before a command can claim a native wire conversation.
 				// The server serializes revival and rejects already-living actors.
 				const frame = { opcode: 0x32dc, payload: Uint8Array.of( command.choice ) };
 				send( frame );
+				// #2279, port presentation choice: natively this accept
+				// sends no packet and, when the local team byte is set,
+				// opens a CIFTimedNotice (0x7530, kind 0x11) showing
+				// UIIT_MSG_FLAGWAR_GO_TO_ZONE (526020). The port's
+				// server instead revives at the camp off this very
+				// request (flagwar_rebirth.go, a recorded port choice),
+				// so the client keeps the send and presents the same
+				// line on the banner, the port's timed-notice surface.
+				// The camp button is the box's first choice; the second
+				// choice never raises it.
+				if ( command.choice === 1 && flagWarTeam !== null ) {
+					notices = [ ...notices.slice( -99 ), {
+						key: "UIIT_MSG_FLAGWAR_GO_TO_ZONE",
+						value: 0,
+						notificationBanner: true,
+						bannerOnly: true,
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+				}
 				return frame;
 			}
 			if (
@@ -5533,7 +5560,11 @@ The published plane when something changed since the last take, else null.
 				inventoryJournal,
 				...c,
 				...targeting.state(),
-				flagWar: { timerEndsAt: flagWarTimerEndsAt, carrierGid: flagWarCarrierGid },
+				flagWar: {
+					timerEndsAt: flagWarTimerEndsAt,
+					carrierGid: flagWarCarrierGid,
+					inEvent: flagWarTeam !== null
+				},
 				...skillPress.state(),
 				betaPlayers: betaMap.players(),
 				uniqueDamageRank: uniqueRank.current(),
