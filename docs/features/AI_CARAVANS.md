@@ -104,7 +104,7 @@ and regression fixtures provide the mount/ambush contracts used here. No new nat
 
 ## Active implementation checkpoint (2026-11-17)
 
-Status: **implemented and checked for this batch; longer live validation remains; do not open a PR or push**. This section supersedes earlier verification claims. The original implementation-plan file is not
+Status: **requested live combat/ferry checks passed; no PR or push**. The final live checkpoint below supersedes the earlier test limits. This section supersedes earlier verification claims. The original implementation-plan file is not
 present in this checkout; this tracked document is the implementation and handoff record.
 
 ### Completed
@@ -162,7 +162,7 @@ present in this checkout; this tracked document is the implementation and handof
 ### Running test environment and recovery
 
 - Scratch launcher `85448` and its children were stopped. Active original-world launcher at
-  checkpoint: `46440`, hidden `node scripts/local/run.mjs`. Confirm process identity before
+  checkpoint: `85688`, hidden `node scripts/local/run.mjs`. Confirm process identity before
   stopping; child executables lock build output.
 - Scratch state: `E:/CodeProjects/opensro-ai-caravans/.state/caravan-e2e-world`.
   Active original state: `E:/CodeProjects/opensro-issue-hub/apps/server/.state`.
@@ -230,7 +230,20 @@ Scratch evidence retained locally:
 
 ### Final checks and runtime restoration
 
-Final checks after removing diagnostic code and original-world restoration are in progress.
-Do not leave fixture control or the scratch state root enabled in the owner's running world.
+Final code commit: `26309f7e`. All four affected Go packages pass after diagnostic removal
+(GameWorld, caravan AI, action, simulation); changed-scope vet/lint pass with zero issues. All
+18 source-portable checks pass (45.2 s), including TypeScript and 686 Python preparation tests.
+
+Scratch launcher 83940 was stopped. Original world restored from
+`E:/CodeProjects/opensro-issue-hub/apps/server/.state`, active launcher PID **85688** at this
+checkpoint. AI caravans are on, brain is hardcoded, and both fixture control and the scratch
+bandit-cap override are absent. `/transport/readyz` returned **ready**; launcher confirms the
+original world and one character. Test observer closed; all test warps affected the scratch copy.
+No PR or push was made.
 Remaining limits: no uninterrupted full-length live route soak or Windows race run; native
 uncapped waves can still defeat a caravan. No additional native-default rules were changed.
+
+Evidence SHA-256 (local logs retained, not shipped as fixtures):
+
+- `caravan-live-natural.stdout.log`: `2b5fa6defead1ab4e461b9149accf7781828de4b222c69a82bad8da1db8a763b`
+- `caravan-live-final.stdout.log`: `209b11d81b39a3474128f4594eec40b2ae84c3c9622e9262ad99f59856a93936`
