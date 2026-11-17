@@ -104,6 +104,37 @@ class Cap110MonstersTest(unittest.TestCase):
 			monsters.allocate_identities({100}, ["MOB_SD_NEW"], {"old": monsters.MAX_ID})
 
 	# ================
+	# test_published_character_ids_survive_an_earlier_addition
+	#
+	# r201: a code sorting before published ones (a new COS_P_* pet) must
+	# not take their ids, though the staging's own previous build moved them.
+	# ================
+	def test_published_character_ids_survive_an_earlier_addition(self):
+		pinned = {"MOB_SD_ACHNISH": 101, "MOB_SD_AKER": 102, "MOB_NATIVE": 100, "MOB_JUPITER_OTHER": 103}
+		stale = {"MOB_SD_ACHNISH": 105, "MOB_SD_AKER": 106, "COS_P_FOX": 101}
+		got = monsters.allocate_characters({100}, ["COS_P_FOX", "MOB_SD_ACHNISH", "MOB_SD_AKER"], stale, pinned)
+		self.assertEqual(got["MOB_SD_ACHNISH"], 101)
+		self.assertEqual(got["MOB_SD_AKER"], 102)
+		# The pet's stale id is a pinned one: it moves after every reserved
+		# id, past the other import's published 103 too.
+		self.assertEqual(got["COS_P_FOX"], 104)
+		# Without the pin the staging's previous ids win, as before.
+		self.assertEqual(monsters.allocate_characters({100}, ["COS_P_FOX", "MOB_SD_ACHNISH"], stale, {}),
+			{"COS_P_FOX": 101, "MOB_SD_ACHNISH": 105})
+
+	# ================
+	# test_a_published_id_another_shard_holds_is_not_reserved_twice
+	# ================
+	def test_a_published_id_another_shard_holds_is_not_reserved_twice(self):
+		# 103 is pinned to a code this import does not stage, and another
+		# shard already holds it: it stays that shard's, no collision.
+		got = monsters.allocate_characters({100, 103}, ["MOB_NEW"], {}, {"MOB_OTHER": 103})
+		self.assertEqual(got, {"MOB_NEW": 104})
+		# A staged code whose published id another row holds is a real clash.
+		with self.assertRaises(ValueError):
+			monsters.allocate_characters({100, 103}, ["MOB_OTHER"], {}, {"MOB_OTHER": 103})
+
+	# ================
 	# test_originals_join_by_codename_and_published_ids_survive
 	# ================
 	def test_originals_join_by_codename_and_published_ids_survive(self):

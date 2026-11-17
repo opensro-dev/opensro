@@ -417,7 +417,7 @@ def later_characters(read):
 def stage_kinds(label, read, has, refs, text_root, prior, character_shard, skill_shard, info_owned, extra_skills=()):
 	native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != character_shard for r in tables.table_rows(p.read_bytes())]
 	occupied = {int(r[1]) for r in native_chars}
-	allocated = cap110.allocate_identities(occupied, sorted(refs), prior.get("characters", {}))
+	allocated = cap110.allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 	for code, row in refs.items():
 		row[1] = str(allocated[code])
 	native_skills = [r for p in text_root.glob("skilldata_*.txt") if p.name != skill_shard for r in tables.table_rows(p.read_bytes()) if len(r) == 118]

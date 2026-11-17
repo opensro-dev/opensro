@@ -475,6 +475,47 @@ def allocate_identities(occupied, codes, previous):
 	return identities
 
 
+# The character ids live publishes (pin_published_characters.py).
+PUBLISHED_CHARACTERS = Path(__file__).resolve().parent / "data" / "published-characters.json"
+
+
+# ================
+# published_characters
+#
+# codename -> id from the pin; empty when no pin exists, as in a fixture.
+# ================
+def published_characters(path=PUBLISHED_CHARACTERS):
+	if not Path(path).is_file():
+		return {}
+	return json.loads(Path(path).read_text(encoding="utf-8"))["characters"]
+
+
+# ================
+# allocate_characters
+#
+# allocate_identities for character rows, with the ids live publishes laid
+# over the staging's own previous ones. A staging remembers only its own
+# last build; when live was built in another staging, a code added since
+# (the v1.696 pets of #3572, sorting before MOB_SD_*) took published ids
+# and moved 39 Arabia monsters up by 18, which the host's catalogue gate
+# refused (r201). A pinned id stays with its code. A pinned id whose code
+# this import does not stage stays reserved, unless another shard already
+# holds it. A previous id that a pin or another shard now owns is dropped,
+# so its code is allocated anew after every reserved id.
+# ================
+def allocate_characters(occupied, codes, previous, pinned=None):
+	pinned = published_characters() if pinned is None else pinned
+	occupied, staged = set(occupied), set(codes)
+	merged = {code: identity for code, identity in pinned.items() if code in staged or identity not in occupied}
+	taken = set(merged.values())
+	for code, identity in previous.items():
+		if code in merged or identity in taken or identity in occupied:
+			continue
+		merged[code] = identity
+		taken.add(identity)
+	return allocate_identities(occupied, codes, merged)
+
+
 # ================
 # add_native_client_skills
 #
@@ -681,7 +722,7 @@ def add_monsters(vsro_root, native, output, source_root=None):
 			raise ValueError("no ordinary level 100-110 Alexandria field monsters")
 		native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != CHARACTER_SHARD for r in tables.table_rows(p.read_bytes())]
 		occupied = {int(r[1]) for r in native_chars}
-		allocated = allocate_identities(occupied, sorted(refs), prior.get("characters", {}))
+		allocated = allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 		for code, row in sorted(refs.items()):
 			row[1] = str(allocated[code])
 		native_skills = [r for p in text_root.glob("skilldata_*.txt") if p.name != SKILL_SHARD for r in tables.table_rows(p.read_bytes()) if len(r) == 118]
