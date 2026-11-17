@@ -356,6 +356,27 @@ The rescue exemption covers the two trial regions only; the rituals' native regi
 under the ordinary stranded-spawn rescue.
 ================
 */
+func TestArenaEntryIgnoresAnAnchorLeftByAReturnScroll(t *testing.T) {
+	w := newHwanWorld(t)
+	c := w.player(t, "Scrolled", 95, "QNO_CH_HWAN_1_5", "QNO_CH_HWAN_1_1", "QNO_CH_HWAN_1_2", "QNO_CH_HWAN_1_3", "QNO_CH_HWAN_1_3_1", "QNO_CH_HWAN_1_4", "QNO_CH_HWAN_1_4_1")
+	// Out in the default world, with the anchor the instance left behind.
+	c.World = &enterworld.CharacterWorld{InstanceReturn: &domain.InstanceReturnAnchor{PackedInstance: domain.DefaultWorldInstance}}
+	if _, err := w.rt.AdvanceNpcQuest(c, hwanEntryPrefix+"QNO_CH_HWAN_1_5", "NPC_CH_SHAMAN"); err != nil || len(w.invites) != 1 {
+		t.Fatalf("a stale anchor refused the entry: err=%v invites=%d", err, len(w.invites))
+	}
+	if c.World.InstanceReturn != nil {
+		t.Fatal("the stale anchor was kept")
+	}
+	// A character really inside an instance is still refused.
+	w2 := newHwanWorld(t)
+	c2 := w2.player(t, "Inside", 95, "QNO_CH_HWAN_1_5", "QNO_CH_HWAN_1_1", "QNO_CH_HWAN_1_2", "QNO_CH_HWAN_1_3", "QNO_CH_HWAN_1_3_1", "QNO_CH_HWAN_1_4", "QNO_CH_HWAN_1_4_1")
+	w2.lease = instance.Lease{ID: instance.Pack(32, 7), Generation: 1}
+	c2.World = insideLayer(w2)
+	if _, err := w2.rt.AdvanceNpcQuest(c2, hwanEntryPrefix+"QNO_CH_HWAN_1_5", "NPC_CH_SHAMAN"); err == nil || len(w2.invites) != 0 {
+		t.Fatalf("an entry from inside an arena was admitted: err=%v invites=%d", err, len(w2.invites))
+	}
+}
+
 func TestHwanTrialRegionsAreTheTwoIsolatedArenas(t *testing.T) {
 	got := HwanTrialRegions()
 	if len(got) != 2 || got[0] != 22966 || got[1] != 22454 {

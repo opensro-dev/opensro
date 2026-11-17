@@ -631,7 +631,16 @@ func (rt *Runtime) advanceHwanEntry(c *enterworld.Character, token, npc string) 
 		return OpResult{}, fmt.Errorf("quest %s: instance doors unavailable", code)
 	}
 	if c.World != nil && c.World.InstanceReturn != nil {
-		return OpResult{}, fmt.Errorf("quest %s: already inside an instance", code)
+		if instance.ID(domain.CharacterWorldInstance(c)) != instance.ID(domain.DefaultWorldInstance) {
+			return OpResult{}, fmt.Errorf("quest %s: already inside an instance", code)
+		}
+		// Port-only, not native: a return scroll used inside an arena moves the player out through the ordinary
+		// relocation, which leaves the instance's return anchor behind. A character standing in the default world with
+		// an anchor is not inside anything, and the anchor would refuse every later entry (here and in the invite).
+		rt.deps.Update(c, "hwan-arena-stale-anchor", func() bool {
+			c.World.InstanceReturn = nil
+			return true
+		})
 	}
 	talk := hwanTalk(def.Codename)
 	facts := rt.InstancePartyFacts(c)
