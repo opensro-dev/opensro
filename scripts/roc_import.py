@@ -77,6 +77,9 @@ as roc-monsters.txt for the server's Roc population (monster/roc.go).
 Off, the rows leave questdata.txt by the codenames the marker
 enrolled and the population file is unlinked.
 
+Step 5b joins the kinds' database rewards (roc_rewards.py) to the
+items the variant installs, as roc-rewards.txt; off, the file goes.
+
 Port-only staging of native-client content: the kinds are native to
 the later client, the switch is the port's until the chain is whole.
 
@@ -91,6 +94,7 @@ import build_alexandria_variant as variant
 import cap110_monsters as cap110
 import import_vsro_alexandria as tables
 import later_world_import
+import roc_rewards
 from prepare_client_resources import write_atomically
 
 FLAG = "SRO_ROC"
@@ -432,6 +436,7 @@ def add_roc(vsro_root, native, output):
 			write_atomically(text_root / QUEST_TABLE, cap110.encode_rows(without_quests(text_root, set(prior["quests"]))))
 		if prior.get("contents"):
 			write_atomically(text_root / CONTENTS_TABLE, cap110.encode_rows(without_contents(text_root, set(prior["contents"]))))
+		roc_rewards.remove_rewards(text_root)
 		later_world_import.reap_world(SPEC, native, output)
 		return {"enabled": False}
 	if not vsro_root:
@@ -482,19 +487,24 @@ def stage(vsro_root, output):
 		media.close()
 		handle.close()
 	population = add_population(text_root, refs, native_codes)
+	rewards = roc_rewards.add_rewards(text_root)
 	limits = [
 		"The arena kinds stand in no nest; the server spawns them when the arena opens (#3399 step 4).",
 		"QNO_RM_MEETROC_6's Soul Crystal has no source: the quests that fuse it (MEETROC_3 to _5) never shipped.",
-		"No drops yet (#3399 step 5).",
 	]
+	limits.append("The trophies ISRO-R's fixed table drops (ITEM_QNO_RM_ARCHEMY_1 to _8) wait for their exchange "
+		"quests, QNO_RM_ARCHEMY_1 to _8 (#3399 step 5d).")
+	if rewards["waiting"]:
+		limits.append("Database rewards wait for items the variant lacks: " + ", ".join(rewards["waiting"]) + ".")
 	if "omittedLinks" in gates:
 		limits.append("The summit link is out: the variant carries no key item its conditions name.")
 	summary = {
-		"enabled": True, "format": "opensro-roc-v3", "source": "vsro",
+		"enabled": True, "format": "opensro-roc-v4", "source": "vsro",
 		"characters": staged["characters"], "skills": staged["skills"],
 		"animationBases": staged["animationBases"], "characterInfo": staged["characterInfo"],
 		"nameSymbols": staged["nameSymbols"], "gates": gates, "quests": quests, "contents": contents,
 		"population": population,
+		"rewards": rewards,
 		**({"regionMerge": prior["regionMerge"]} if "regionMerge" in prior else {}),
 		"limits": limits,
 	}

@@ -106,6 +106,41 @@ The server half follows the v1.188 reference server (addresses in `action/roc.go
   - the Roc's berserk and departure countdowns and its timed skills are not ported, because no v1.150 frame
     carries their minute count.
 
+### The Roc's drops (step 5b)
+
+- **Source:** every enabled reward rule the pinned vSRO backup authors for the Roc kinds, committed as
+  `scripts/data/roc/rewards-source.json` (`scripts/build/import_roc_rewards.py`). The v1.150 client has none.
+- **What ISRO-R adds:** its random rows for the Roc are disabled (service 0), but its fixed table, which has no
+  service column, gives the Roc kinds eight trophies at every kill:
+  - the Roc: `ITEM_QNO_RM_ARCHEMY_1`, `_2` and `_3`, one or two each;
+  - the Demon God Shaitan: `_4`, one or two;
+  - the four spirits: `_5` to `_8`, none or one.
+
+  The trophies are native v1.150 items (`itemdata_25000`). The quests that take them, `QNO_RM_ARCHEMY_1` to
+  `_8`, are not: v1.150 ships only their text. So the trophies wait for those quests (step 5d) rather than drop
+  with nothing to spend them on, and the build summary says so.
+- **What the Roc drops there:**
+  - three distinct Roc set pieces (group 1);
+  - two or three degree-11 pieces (group 12);
+  - a 1-in-100,000 degree-11 rare (group 13);
+  - five or six of each of the four E051123 scrolls.
+- **The bosses, spirits and wing knight:** one or two degree-11 pieces (group 12), plus the same rare chance.
+- **Joined to the variant:** `scripts/roc_rewards.py` keeps each group's members that the variant installs, at
+  their authored weights, and writes `roc-rewards.txt`. The server joins it after the cap110 overlay
+  (`loot/roc.go`).
+  - **The scrolls:** the four E051123 scrolls are native v1.150 items (`itemdata_5000`), so the Roc drops
+    them on every Roc build.
+  - **Group 12:** the degree-11 pieces come from `SRO_CAP110_ITEMS`.
+  - **Group 1:** the Roc sets join the equipment import when `SRO_ROC` and `SRO_CAP110_ITEMS` are both on (step
+    5c, below). Without them the rule waits and the build summary lists it. A rule that draws distinct pieces
+    also waits while the variant installs fewer pieces than it draws.
+  - **Not installed:** the rares are in no client the port reads.
+  - **Nothing installed:** no file is written, and the Roc kinds roll only the native passes.
+- **The scrolls' option bytes:** all 26 rows of the backup that carry option bytes (these four, plus the God
+  pillars' teleport holes) carry the same block, and all of them drop ETC items, which have no magic options.
+  The importer reads that block as an insert artefact (an inference) and refuses any other.
+- **Off:** with `SRO_ROC` off the file is removed and nothing joins.
+
 ### The Roc's set armour (step 5c)
 
 - **What joins:** the 72 Roc set pieces (`ITEM_ROC_*_SET`: class 30, level 98, set groups 1-12). They are the
@@ -125,5 +160,5 @@ The server half follows the v1.188 reference server (addresses in `action/roc.go
 ## What is not here yet
 
 - **Content still to come**, each its own step of #3399:
-  - the unique notice (step 5a) and the drop rules (step 5b);
-  - the E051123 scrolls as items.
+  - the unique notice (step 5a);
+  - the trophies (`ITEM_QNO_RM_ARCHEMY_1` to `_8`) and their exchange quests (step 5d).
