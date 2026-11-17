@@ -202,9 +202,10 @@ test("six tabs group every preference once, in the spec's sections", () => {
 	// flight (#3547) joined Sound and connection; 65: Water refraction left
 	// at the owner's request (2026-11-15); 66: the Christmas carols row
 	// joined Sound and connection; 65: Plus +7 notices left once success
-	// notices began at +8 (#3681). Retail typos are fixed in the reviewed
-	// English table (englishCorrections.json), not by a row.
-	assert.equal( keys.length, 65 );
+	// notices began at +8 (#3681); 66: the Server Mission gauge (#3803)
+	// joined Windows. Retail typos are fixed in the reviewed English table
+	// (englishCorrections.json), not by a row.
+	assert.equal( keys.length, 66 );
 	assert.deepEqual( [ ...keys ].sort(), Object.keys( OFF ).sort() );
 	const kinds = EXPERIMENTAL_TABS.flatMap( experimentalRows ).filter( row => row.parent );
 	assert.deepEqual(

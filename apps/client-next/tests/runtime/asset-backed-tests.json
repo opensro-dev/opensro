@@ -148,6 +148,7 @@
 		"scenery-modifiers.test.mjs",
 		"scenery-particles.test.mjs",
 		"scenery-uv.test.mjs",
+		"server-event-hud-ui.test.mjs",
 		"skill-notices.test.mjs",
 		"skill-presentation.test.mjs",
 		"skill-sound-admission.test.mjs",

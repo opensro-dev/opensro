@@ -6,19 +6,15 @@ server-event-hud.test.mjs - the Server Mission gauge widget (port-only)
 The later client's CNIFServerEvent at its nifserverevent.2dt rects,
 anchored to the right edge; its gauge fill and "count/goal" text; shown
 only with the Experimental row on, hidden by its close button until the
-mission goes away; drawn by the production UI only when the v1.696 art
-was published.
+mission goes away. The production UI's draw is server-event-hud-ui.test.mjs
+(asset-backed).
 
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
 import { test } from "node:test";
-import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
-import { uiFixture } from "../helpers/ui-fixture.mjs";
-import { defined } from "../helpers/defined.mjs";
-const { serverEventLayout, gaugeRatio, gaugeText, createServerEventHud, SERVER_EVENT_ART } = await import(
+const { serverEventLayout, gaugeRatio, gaugeText, createServerEventHud } = await import(
 	"../../src/engine/runtime/ui/hud/server-event-hud.ts"
 );
 const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
@@ -76,30 +72,6 @@ test("the row decides; close hides it until the mission goes away", () => {
 test("the option is off unless stored on", () => {
 	assert.equal( experimentalOptions( {} ).serverEventGauge, false );
 	assert.equal( experimentalOptions( { serverEventGauge: true } ).serverEventGauge, true );
-});
-
-test("the production UI draws the gauge with the row on and closes it", t => {
-	const published = existsSync( CLIENT_PUBLIC_ROOT + SERVER_EVENT_ART + "wind.png" );
-	for ( const enabled of [ false, true ] ) {
-		const f = uiFixture();
-		t.after( () => f.dispose() );
-		f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { serverEventGauge: enabled } ) } );
-		let now = 0, view;
-		const settle = steps => {
-			for ( let i = 0; i < steps; i++ ) view = f.ui.step( f.state, now += 100 ) ?? view;
-		};
-		settle( 12 );
-		Object.assign( f.state.gameplay, { serverEventGauge: GAUGE } );
-		settle( 4 );
-		const closable = () => defined( view ).controls.some( control => control.id === "server-event-close" );
-		// Without the published v1.696 art the widget draws nothing.
-		assert.equal( closable(), enabled && published );
-		if ( !enabled || !published ) continue;
-		assert.ok( f.hasText( "59/118" ) );
-		f.ui.event( { kind: "activate", id: "server-event-close" } );
-		settle( 2 );
-		assert.equal( closable(), false );
-	}
 });
 
 test("a new login forgets the close; the same session keeps it", () => {
