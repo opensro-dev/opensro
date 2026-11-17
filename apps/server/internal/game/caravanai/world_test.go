@@ -87,6 +87,9 @@ func TestDeathCancelsEscortAndChatCannotDealDamage(t *testing.T) {
 		t.Fatal("chat dealt damage")
 	}
 	rt.RecordPlayerAttack("division", trader.Name, "attacker", trader.HP+1, 2000)
+	if !rt.EnsureDivisionRoster("division")[0].RespawnPending {
+		t.Fatal("defeat did not request a live actor/transport respawn")
+	}
 	if _, ok := rt.contracts.ActiveContractFor("division", trader.Name); ok {
 		t.Fatal("dead trader retained escort")
 	}
@@ -149,5 +152,22 @@ func TestConvoyStartsTogetherAndFollowsAdmittedFerry(t *testing.T) {
 	_, unit, _ := rt.StepAgent(context.Background(), "division", "[AI]Hunter_Wei", nil, 1000)
 	if !crossed || unit.RegionID != arrival.RegionID || unit.X != arrival.X {
 		t.Fatal("escort did not follow the ferry")
+	}
+}
+
+/*
+================
+TestCaravanRecoversExhaustedManaForItsSkillRotation
+================
+*/
+func TestCaravanRecoversExhaustedManaForItsSkillRotation(t *testing.T) {
+	healed := false
+	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{Heal: func(_, _ string, amount int64) int64 { healed = true; return 1000 }})
+	t.Cleanup(func() { _ = rt.Close() })
+	rt.EnsureDivisionRoster("division")
+	rt.ObserveVitals("division", "[AI]Hunter_Wei", 1000, 0, false, 1000)
+	decision, _, _ := rt.StepAgent(context.Background(), "division", "[AI]Hunter_Wei", nil, 2000)
+	if decision.Action != ActionUsePotion || !healed {
+		t.Fatal("exhausted actor kept trying to cast")
 	}
 }

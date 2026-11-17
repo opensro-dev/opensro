@@ -13,6 +13,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"opensro.online/server/internal/domain"
@@ -20,6 +21,7 @@ import (
 	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/progression"
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
@@ -79,6 +81,10 @@ func (game *gameplayPlane) initCaravanActors() error {
 	if !ok {
 		return fmt.Errorf("character authority cannot register caravan actors")
 	}
+	cap, err := progression.LevelCapFromEnv()
+	if err != nil {
+		return err
+	}
 	seed := enterworld.DefaultSkillSeeder(game.deps.Skills)
 	for i, unit := range game.caravanAgents.EnsureDivisionRoster(game.divisionID) {
 		gender := int64(0)
@@ -90,7 +96,7 @@ func (game *gameplayPlane) initCaravanActors() error {
 		if model == nil {
 			return fmt.Errorf("caravan model %s unavailable", modelCode)
 		}
-		modelRef, level, strength, intellect := int64(model.RefObjID), int64(70), int64(225), int64(155)
+		modelRef, level, strength, intellect := int64(model.RefObjID), cap, int64(20+4*(cap-1)), int64(20+cap-1)
 		c := &enterworld.Character{RuntimeOnly: true, ID: caravanActorIDBase + int64(i), Name: unit.Name,
 			ModelCodename: modelCode, ModelRef: &modelRef, Gender: &gender, Level: &level, MaxLevel: &level, Strength: &strength, Intellect: &intellect,
 			Job: domain.CharacterJob{Type: caravanJob(unit.Role), Grade: 3, Alias: unit.Name}}
@@ -99,16 +105,13 @@ func (game *gameplayPlane) initCaravanActors() error {
 		if err != nil {
 			return err
 		}
-		for _, equip := range []struct {
-			slot int64
-			code string
-		}{{6, unit.WeaponCode}, {int64(enterworld.JobSuitSlot), unit.JobSuitCode}} {
-			ref, found := game.deps.Items.ItemRefByCodename(equip.code)
-			if !found {
-				return fmt.Errorf("caravan equipment %s unavailable", equip.code)
-			}
-			c.MissionInventory = append(c.MissionInventory, domain.InventoryRow{Slot: equip.slot, RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), VarianceBits: "0", Durability: 5000, StackCount: 1})
+		if err := game.equipCaravanActor(c, unit, i%2 == 1); err != nil {
+			return err
 		}
+		if err := game.trainCaravanActor(c); err != nil {
+			return err
+		}
+
 		if strings.Contains(unit.WeaponCode, "_BOW_") {
 			if ref, found := game.deps.Items.ItemRefByCodename("ITEM_ETC_AMMO_ARROW_01"); found {
 				c.MissionInventory = append(c.MissionInventory, domain.InventoryRow{Slot: 7, RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), StackCount: 10000})
@@ -133,6 +136,11 @@ func (game *gameplayPlane) initCaravanActors() error {
 		game.caravanAgents.ConfigureVitals(game.divisionID, c.Name, hp, mp, game.caravanAttackSkill(c), game.caravanRunSpeed(c))
 		game.deps.Mutate(c, "caravan actor init", func() { c.CurrentHP, c.CurrentMP = &hp, &mp })
 		game.items.BindPetSession(game.divisionID, c, uint64(c.ID))
+		if game.items.Monsters != nil {
+			if err := game.items.AdmitServerActor(game.divisionID, c.Name); err != nil {
+				return err
+			}
+		}
 	}
 	game.items.ServerActorHit = func(division, victim, attacker string, damage int, nowMs int64) {
 		game.caravanAgents.RecordPlayerAttack(division, victim, attacker, damage, nowMs)
@@ -275,6 +283,10 @@ func (game *gameplayPlane) publishCaravanActor(ticker *simulation.Ticker, views 
 		}
 	}
 	gid := enterworld.ObjectIDForCharacter(c)
+	moveGID := gid
+	if c.ActiveCOS != nil && c.ActiveCOS.Mounted {
+		moveGID = c.ActiveCOS.GID
+	}
 	for _, view := range views {
 		if view.DivisionID != game.divisionID {
 			continue
@@ -289,15 +301,19 @@ func (game *gameplayPlane) publishCaravanActor(ticker *simulation.Ticker, views 
 		viewer := view.World.LiveSpawnAt(nowMs)
 		visible := view.WorldInstance == domain.DefaultWorldInstance && worldgeom.InterestVisible(worldgeom.RegionXZ{RegionID: at.RegionID, X: at.X, Z: at.Z}, worldgeom.RegionXZ{RegionID: viewer.RegionID, X: viewer.X, Z: viewer.Z})
 		var frames []simulation.Frame
+		if unit.RespawnPending && shown {
+			frames = append(frames, simulation.Frame{Opcode: wire.OpObjectDespawn, Payload: (wire.ObjectDespawn{Gid: gid}).Encode(), ScopeGID: gid})
+			shown = false
+		}
 		if visible && !shown {
 			frames = append(frames, game.items.PeerItemReferences(appearance.ItemIDs())...)
 			frames = append(frames, simulation.Frame{Opcode: wire.OpSingleObjectSpawn, Payload: simulation.BuildPeerSpawnRow(appearance, gid, at), ScopeGID: gid, ScopeVisible: true})
 		} else if !visible && shown {
 			frames = append(frames, simulation.Frame{Opcode: wire.OpObjectDespawn, Payload: (wire.ObjectDespawn{Gid: gid}).Encode(), ScopeGID: gid})
 		}
-		if visible && shown && (previous.RegionID != unit.RegionID || previous.X != unit.X || previous.Z != unit.Z) {
+		if visible && shown && (moveGID == gid || slices.Contains(view.PublishedObjects, moveGID)) && (previous.RegionID != unit.RegionID || previous.X != unit.X || previous.Z != unit.Z) {
 			from := simulation.MovementSourceFromSpawn(simulation.Spawn{RegionID: previous.RegionID, X: float64(previous.X), Y: float64(previous.Y), Z: float64(previous.Z)})
-			frames = append(frames, simulation.Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: gid, StateType: wire.StateChannelMove, Value: simulation.RunMode}).Encode()}, simulation.Frame{Opcode: simulation.OpMovementAck, Payload: simulation.BuildMovementAckPayload(gid, simulation.MovementRequest{Mode: simulation.MovementAckDestinationMode, RegionID: at.RegionID, X: at.X, Y: at.Y, Z: at.Z}, &from)})
+			frames = append(frames, simulation.Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: moveGID, StateType: wire.StateChannelMove, Value: simulation.RunMode}).Encode()}, simulation.Frame{Opcode: simulation.OpMovementAck, Payload: simulation.BuildMovementAckPayload(moveGID, simulation.MovementRequest{Mode: simulation.MovementAckDestinationMode, RegionID: at.RegionID, X: at.X, Y: at.Y, Z: at.Z}, &from)})
 		}
 		if c.ActiveCOS != nil {
 			pet := c.ActiveCOS
@@ -308,13 +324,20 @@ func (game *gameplayPlane) publishCaravanActor(ticker *simulation.Ticker, views 
 					break
 				}
 			}
+			if unit.RespawnPending && petShown {
+				frames = append(frames, simulation.Frame{Opcode: wire.OpObjectDespawn, Payload: (wire.ObjectDespawn{Gid: pet.GID}).Encode(), ScopeGID: pet.GID})
+				petShown = false
+			}
 			if visible && !petShown {
-				row := wire.CosSpawnBand2{Band: 2, RefObjID: pet.RefObjID, Gid: pet.GID, Position: wire.Position{RegionID: at.RegionID, X: unit.X - 10, Y: unit.Y, Z: unit.Z}, Walk: 20, Run: 50, Scale: 100, Name: pet.Name, OwnerName: c.Name, OwnerGid: gid}
+				row := wire.CosSpawnBand2{Band: 2, RefObjID: pet.RefObjID, Gid: pet.GID, Position: wire.Position{RegionID: at.RegionID, X: unit.X, Y: unit.Y, Z: unit.Z}, Walk: 20, Run: unit.RunSpeed, Scale: 100, Name: pet.Name, OwnerName: c.Name, OwnerGid: gid}
 				frames = append(frames, simulation.Frame{Opcode: wire.OpSingleObjectSpawn, Payload: wire.EncodeCosSpawnBand2(row), ScopeGID: pet.GID, ScopeVisible: true})
 			} else if !visible && petShown {
 				frames = append(frames, simulation.Frame{Opcode: wire.OpObjectDespawn, Payload: (wire.ObjectDespawn{Gid: pet.GID}).Encode(), ScopeGID: pet.GID})
-			} else if visible && petShown {
-				frames = append(frames, simulation.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: (wire.ObjectSourceCorrection{Gid: pet.GID, Position: wire.Position{RegionID: at.RegionID, X: unit.X - 10, Y: unit.Y, Z: unit.Z}}).Encode()})
+			} else if visible && petShown && !pet.Mounted {
+				frames = append(frames, simulation.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: (wire.ObjectSourceCorrection{Gid: pet.GID, Position: wire.Position{RegionID: at.RegionID, X: unit.X, Y: unit.Y, Z: unit.Z}}).Encode()})
+			}
+			if visible && pet.Mounted && (!petShown || !shown) {
+				frames = append(frames, simulation.Frame{Opcode: wire.OpCosRideState, Payload: wire.EncodeCosRideState(gid, true, pet.GID)})
 			}
 		}
 		if len(frames) > 0 {

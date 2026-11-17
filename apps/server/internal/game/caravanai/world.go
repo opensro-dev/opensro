@@ -218,3 +218,25 @@ func (r *Runtime) ActorSynchronized(division, name string) {
 		unit.RespawnPending = false
 	}
 }
+
+/*
+================
+ApproachWorldThreat
+
+Native NPC enemies use their authoritative pose, outside the player-memory list.
+================
+*/
+func (r *Runtime) ApproachWorldThreat(division, name string, target Waypoint) *AgentUnit {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	unit := r.findAgentLocked(division, name)
+	if unit == nil || unit.RespawnPending {
+		return nil
+	}
+	unit.State = StateInCombat
+	if WaypointDistance(Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}, target) > 12 {
+		r.moveLocked(unit, target, unit.RunSpeed/10)
+	}
+	snapshot := *unit
+	return &snapshot
+}

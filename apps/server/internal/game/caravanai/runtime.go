@@ -418,6 +418,9 @@ func (r *Runtime) StepAgent(
 	if unit.Role == RoleTrader && !unit.UnderAttack && r.parleys.TruceActive(division, unit.Name, nowMs) {
 		decision = Decision{Action: ActionContinueRoute, Source: BrainHardcoded}
 	}
+	if unit.MaxMP > 0 && unit.MP <= unit.MaxMP/5 {
+		decision = Decision{Action: ActionUsePotion, Source: BrainHardcoded}
+	}
 	decision.Dialogue = SafeDialogue(decision.Dialogue)
 	decision.MemoryNote = SafeDialogue(decision.MemoryNote)
 	prevSpokeAtMs := unit.LastSpokeAtMs
@@ -689,7 +692,6 @@ func (r *Runtime) advanceAlongRouteLocked(unit *AgentUnit, nowMs int64) *EscortC
 		unit.TownDepartAtMs = nowMs + TownRestDurationMs
 	} else if unit.Role == RoleHunter && unit.EscortingTrader == "" {
 		unit.State = StateIdleInTown
-		unit.RespawnPending = true
 		unit.AvailableForHire = true
 	}
 	unit.OriginTown, unit.DestTown = unit.DestTown, unit.OriginTown
@@ -738,6 +740,7 @@ func (r *Runtime) RecordPlayerAttack(
 	regionID := unit.RegionID
 	if unit.HP <= 0 {
 		defeated = true
+		unit.RespawnPending = true
 		stolenGold = int64(unit.CargoStacks) * unit.StackValueGold
 		unit.CargoStacks = 0
 		r.contracts.Cancel(division, unit.Name)

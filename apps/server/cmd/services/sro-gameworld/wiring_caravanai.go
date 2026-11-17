@@ -29,6 +29,23 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+caravanRuntimeState
+
+Port-only caravan state belongs with its feature wiring.
+================
+*/
+type caravanRuntimeState struct {
+	caravanSkills     map[string][]uint32
+	caravanAttackAt   map[string]int64
+	caravanAgents     *caravanai.Runtime
+	caravanNextStepMs int64
+	caravanActors     []*enterworld.Character
+	caravanMapAtMs    int64
+	caravanRoads      map[string]*caravanRoad
+}
+
 const (
 	caravanStepIntervalMs int64 = 100
 )
@@ -257,12 +274,23 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 		if !ok || updated == nil {
 			updated = unit
 		}
+		npcGID, npcAt := game.caravanNPCThreat(updated, nowMs)
+		if npcGID != 0 {
+			if engaged := game.caravanAgents.ApproachWorldThreat(game.divisionID, updated.Name, npcAt); engaged != nil {
+				updated = engaged
+			}
+		}
 		if i < len(game.caravanActors) {
 			c := game.caravanActors[i]
+			if updated.Role == caravanai.RoleTrader {
+				game.publishCaravanAction(c, game.items.ServerActorRide(game.divisionID, c.Name, updated.State != caravanai.StateInCombat && updated.State != caravanai.StateParleying))
+			}
 			game.publishCaravanActor(ticker, views, unit, updated, c, nowMs)
-			if decision.Action == caravanai.ActionAttackTarget {
+			if npcGID != 0 {
+				game.publishCaravanAction(c, game.caravanCast(c, npcGID, nowMs))
+			} else if decision.Action == caravanai.ActionAttackTarget {
 				if target := game.deps.CharacterByName(game.divisionID, decision.TargetName); target != nil {
-					result := game.items.HandleTargetInteract(game.divisionID, c, (wire.SkillAction{ActionId: unit.PrimarySkillID, HasTarget: true, TargetGid: enterworld.ObjectIDForCharacter(target)}).Encode())
+					result := game.caravanCast(c, enterworld.ObjectIDForCharacter(target), nowMs)
 					game.publishCaravanAction(c, result)
 				}
 			}

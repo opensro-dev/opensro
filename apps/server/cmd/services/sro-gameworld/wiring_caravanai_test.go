@@ -9,6 +9,7 @@ package main
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"context"
@@ -23,6 +24,7 @@ import (
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/gamedatatest"
+	"time"
 )
 
 /*
@@ -88,6 +90,9 @@ func TestCaravanShippedActors(t *testing.T) {
 		t.Fatalf("got %d actors", len(game.caravanActors))
 	}
 	for _, c := range game.caravanActors {
+		if *c.Level != 90 || *c.MaxLevel != 90 || len(c.MissionInventory) < 12 || len(game.caravanSkills[c.Name]) != 3 {
+			t.Fatalf("incomplete max-level build: %s level=%d gear=%d skills=%v", c.Name, *c.Level, len(c.MissionInventory), game.caravanSkills[c.Name])
+		}
 		if !c.RuntimeOnly || c.AccountID != "" || enterworld.DressedJob(c) == 0 || deps.CharacterByID(game.divisionID, c.ID) != c {
 			t.Fatalf("invalid combat actor %s", c.Name)
 		}
@@ -181,6 +186,20 @@ func TestCaravanShippedActors(t *testing.T) {
 		t.Fatalf("real actor skill dealt no damage: %s frames=%+v", out.DiagnosticRefusal, out.Frames)
 	}
 
+	now := game.items.Now()
+	game.items.Now = func() time.Time { return now }
+	tick := game.items.TickHook()
+	before, _, _, _ = game.items.GameplayVitals(game.divisionID, trader)
+	for frame := 0; frame < 200; frame++ {
+		now = now.Add(100 * time.Millisecond)
+		game.caravanCast(thief, enterworld.ObjectIDForCharacter(trader), now.UnixMilli())
+		tick(now.UnixMilli())
+	}
+	after, _, _, _ = game.items.GameplayVitals(game.divisionID, trader)
+	if after >= before {
+		t.Fatal("advanced skill rotation did not damage its opponent")
+	}
+
 	rows := len(trader.ActiveCOS.Container.Rows)
 	frames := game.items.DropServerActorCargo(game.divisionID, trader.Name, 3)
 	if len(frames) == 0 || len(trader.ActiveCOS.Container.Rows) != rows-3 {
@@ -190,6 +209,60 @@ func TestCaravanShippedActors(t *testing.T) {
 		if row.Slot != int64(i) {
 			t.Fatal("remaining cargo slots collided")
 		}
+	}
+
+	template := monster.LoadTemplate(paths.TextdataDir)
+	var bandit monster.MonsterRef
+	for _, ref := range template.Refs {
+		if ref.TypeID4 == 2 && ref.Level == 90 && strings.HasPrefix(ref.Codename, "MOB_THIEF_") {
+			bandit = ref
+			break
+		}
+	}
+	if bandit.RefObjID == 0 {
+		t.Fatal("shipped max-level thief reference unavailable")
+	}
+	game.items.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{bandit.RefObjID: bandit}, []monster.NestRow{{SpawnPoint: monster.SpawnPoint{RefObjID: bandit.RefObjID, RegionID: at.RegionID, X: at.X + 3, Y: at.Y, Z: at.Z}, MaxCount: 1, RetailEvidence: true}}))
+	game.items.Monsters.StartDivision(game.divisionID)
+	game.items.Monsters.AdvancePopulation(game.items.Monsters.CurrentTimeMillis())
+	guard := game.caravanActors[4]
+	game.items.SyncServerActor(game.divisionID, guard, at, false, 0, false)
+	if err := game.items.AdmitServerActor(game.divisionID, guard.Name); err != nil {
+		t.Fatal(err)
+	}
+	unit := game.caravanAgents.EnsureDivisionRoster(game.divisionID)[4]
+	unit.RegionID, unit.X, unit.Y, unit.Z = at.RegionID, float32(at.X), float32(at.Y), float32(at.Z)
+	enemy, _ := game.caravanNPCThreat(unit, now.UnixMilli())
+	if enemy == 0 {
+		t.Fatal("hunter ignored native NPC thief")
+	}
+	original, _ := game.items.Monsters.Get(game.divisionID, enemy)
+	for frame := 0; frame < 150; frame++ {
+		now = now.Add(100 * time.Millisecond)
+		game.caravanCast(guard, enemy, now.UnixMilli())
+		tick(now.UnixMilli())
+	}
+	damaged, _ := game.items.Monsters.Get(game.divisionID, enemy)
+	if damaged.CurrentHP >= original.CurrentHP {
+		t.Fatal("hunter's advanced skills did not damage the native NPC thief")
+	}
+
+	advanced := false
+	for _, id := range game.caravanSkills[guard.Name] {
+		skill, _ := deps.Skills.SkillByID(id)
+		if guard.OffensiveSkillCooldowns[skill.Group] > 0 || skill.CoolTimeGroup != 0 && guard.SharedSkillCooldowns[skill.CoolTimeGroup] > 0 {
+			advanced = true
+		}
+	}
+	if !advanced {
+		t.Fatal("hunter used only base attacks")
+	}
+	oldGID := trader.RuntimeTransportGID
+	trader.ActiveCOS = nil
+	trader.CurrentHP = new(int64)
+	revived := game.items.SyncServerActor(game.divisionID, trader, at, true, 10, false)
+	if revived.ActiveCOS == nil || revived.ActiveCOS.GID != oldGID || len(revived.ActiveCOS.Container.Rows) != 10 || !enterworld.CharacterAlive(revived) {
+		t.Fatal("defeated caravan did not recover its actor and loaded transport")
 	}
 
 }

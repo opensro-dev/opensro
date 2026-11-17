@@ -240,6 +240,9 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			// The server's target picker: a candidate player's companions are weighed with it.
 			Companions: game.items.CompanionTargets,
 		}
+		if game.caravanAgents != nil {
+			ticker.Monsters.ServerCombatants = game.caravanCombatants
+		}
 		// Port-only, not native: the monster leg's worker pool
 		// (#2205). Unset keeps the serial leg; the pool only changes
 		// which goroutine plans, never what commits.

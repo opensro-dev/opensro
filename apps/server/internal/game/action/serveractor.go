@@ -11,6 +11,7 @@ companion positions, actual goods on the ground and player gold settlement.
 package action
 
 import (
+	"encoding/binary"
 	"fmt"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -111,6 +112,7 @@ func (rt *Runtime) SyncServerActor(division string, c *enterworld.Character, at 
 		}
 	}
 	rt.petMu.Unlock()
+	rt.registerCaravan(division, c)
 	return rt.characterSnapshot(division, c)
 }
 
@@ -132,6 +134,8 @@ func (rt *Runtime) HealServerActor(division, name string, amount int64) int64 {
 		}
 		current = min(current+amount, enterworld.DerivedMaxHP(c))
 		c.CurrentHP = &current
+		mp := min(enterworld.CurrentMP(c)+enterworld.DerivedMaxMP(c)*35/100, enterworld.DerivedMaxMP(c))
+		c.CurrentMP = &mp
 	})
 	return current
 }
@@ -166,4 +170,40 @@ func (rt *Runtime) DropServerActorCargo(division, name string, stacks int) []wir
 		}
 	})
 	return frames
+}
+
+/*
+================
+ServerActorRide
+
+AI uses the ordinary mount admission and state transition.
+================
+*/
+func (rt *Runtime) ServerActorRide(division, name string, mounted bool) OpResult {
+	c := rt.findCharacter(division, name)
+	snapshot := rt.characterSnapshot(division, c)
+	if snapshot == nil || !snapshot.RuntimeOnly || snapshot.ActiveCOS == nil || snapshot.ActiveCOS.Mounted == mounted {
+		return OpResult{}
+	}
+	payload := make([]byte, 5)
+	if mounted {
+		payload[0] = 1
+	}
+	binary.LittleEndian.PutUint32(payload[1:], snapshot.ActiveCOS.GID)
+	return rt.HandleCosRide(division, c, payload)
+}
+
+/*
+================
+AdmitServerActor
+================
+*/
+func (rt *Runtime) AdmitServerActor(division, name string) error {
+	c := rt.findCharacter(division, name)
+	if c == nil || !c.RuntimeOnly {
+		return fmt.Errorf("not a server actor")
+	}
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	return rt.admitPopulationSession(division, name, uint64(c.ID))
 }

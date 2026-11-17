@@ -8,6 +8,16 @@ The nine agents are transient server-owned characters with shipped job suits, we
 transport COS. They share normal player targeting, skill damage, region protection and transport
 cargo scattering. They never become account-owned or persisted player characters.
 
+Agents use the configured level cap (native 90, or 110 with the matching expansion data), full
+level-appropriate armour/accessories, and alternating ordinary and Seal of Sun sets. Three supported
+weapon skills are trained at their highest eligible ranks; casts honor native reuse/cost rules and
+fall back to a base attack while those skills cool down. Low mana triggers the paced AI potion lane.
+Traders mount through normal ride admission and publish the mount after its spawn for late viewers.
+They dismount to fight; hunters acquire and attack opposing native job NPCs as well as player thieves.
+Loaded AI transports register with the normal caravan ambush timer. Native thieves spawn only in
+battlefield regions, after the ordinary randomized timer; they can kill a transport and scatter cargo.
+AI characters enter the population and monster target census without becoming socket viewers.
+
 Routes load specialty traders, gate guards and ferry links from shipped data. Each walking leg uses
 the authoritative navigation geometry; bounded incremental road searches find detours around blocked
 terrain. Ferries require source proximity, admission and the native fare. Convoy hunters follow their
@@ -65,3 +75,28 @@ The code also has an LLM brain (`SRO_AGENT_BRAIN=llm` or `hybrid`, with `SRO_AGE
 nearby players' character names and stats, so by owner decision it stays off, and these settings are not job
 variables: no deployment sets them. On a developer machine the GameWorld still refuses any `SRO_AGENT_LLM_URL`
 that is not a loopback address (`localhost`, `127.0.0.0/8`, `::1`), logs the refusal and uses the hardcoded brain.
+
+## Follow-up checkpoint: mounted caravans and native NPCs
+
+Latest main was merged at `945340ea` (main `cb43b671`); no PR was opened. The native mount,
+ambush registration and damage owners are reused rather than duplicating their protocol/formulas.
+Regression checks cover AI-only monster acquisition without viewers, actual ambush NPC creation,
+mount/dismount admission, all highway legs, maximum-level builds and advanced hunter skill damage
+against a shipped level-90 thief reference. Hands-off browser testing confirms attached riders and
+visible equipped armour; test-world logs also record native NPC transport kills and real cargo drops. Defeat now marks the actor for a fresh loaded transport and resets observer
+appearance before respawning; this is covered by a transport-recovery regression.
+
+Public implementation references consulted:
+
+- [JadeRunner](https://github.com/B1Q/JadeRunner): compatible learned skill rotations, reuse-aware
+  retries and server-owned approach/cast outcomes; client automation, not a server AI replacement.
+- [phBot xCaravan](https://github.com/Vette1123/phbot-plugins#xcaravan): explicit role routes, job
+  equipment, ferry travel and settlement states; its later job system is not copied into v1.150.
+- [iSRO AI-player developer report](https://www.reddit.com/r/silkroadonline/comments/1xrm1x2/i_spent_months_rebuilding_a_silkroad_online/):
+  full characters, trader/hunter/thief roles and mounted travel; implementation is not public, so its
+  claims are treated as a comparison rather than code or performance evidence.
+
+Fresh native investigation attempted the released revtool seed. Its checksum is valid, but this
+host's client executable hashes to `f6580bf65213c0c074efe312514c55c73040667e7a9ad1aae9b8595d48ccd3a2`,
+not the seed's `375e8682...`; the mismatched labels were not applied. Existing verified native owners
+and regression fixtures provide the mount/ambush contracts used here. No new native-default rule changes.
