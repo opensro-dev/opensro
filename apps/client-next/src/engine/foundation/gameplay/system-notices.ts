@@ -10,7 +10,6 @@ the shard's job-kill and drop/plus notices (0x3667), and the command restriction
 ===========================================================================
 */
 import { sealTier } from "./item-seal";
-import { decodeNoticeLinks } from "./notice-links";
 import {
 	CHAT_BROADCAST_OPCODE,
 	FORTRESS_WAR_STATE_OPCODE,
