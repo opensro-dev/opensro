@@ -180,6 +180,26 @@ type QuestSpec struct {
 	// (the server's KT_SMITH_2 talk handler). See ended.go.
 	AcceptEndsQuests []string
 	RefuseEndsQuests []string
+	// GiveUpForgetsQuests lose their record and completion count when this
+	// quest is given up, and CompleteForgetsQuests when it is paid, so the
+	// NPC offers them again: the server's QNO_RM_MEETROC_2 give-up (slot
+	// 0x74, 90C1C0) zeroes QNO_RM_MEETROC_1's record and sets its count to
+	// 0 (player vtable +0x1B4), and QNO_RM_MEETROC_6 does the same to
+	// QNO_RM_MEETROC_2 at its give-up (90CE00) and its pay (90D4C0).
+	// See chain_reset.go.
+	GiveUpForgetsQuests   []string
+	CompleteForgetsQuests []string
+	// QuestItemCleanup are items whose every bag stack leaves at the
+	// give-up and at the turn-in (QuestInventory_DeleteAllMatchingItems in
+	// the same MEETROC_6 handlers), on top of the missions' own cleanup.
+	QuestItemCleanup []string
+	// GiveUpKeepsCollected leaves the collect items in the bag at the
+	// give-up: the MEETROC_ECT classes override the abort (slot 0xFC,
+	// 9108B0) with one that skips the gather missions' item deletion.
+	GiveUpKeepsCollected bool
+	// KillExchange swaps an item once every kill mission stands complete
+	// (QNO_RM_MEETROC_6's kill handler, 90C9D0). See chain_reset.go.
+	KillExchange *KillExchange
 	Repeatable       bool
 	// KindByte is the wire u10 the CIFQuestReward content button
 	// switches on (CIFQuestReward_OnContentButton): 1/7/8 open the
@@ -450,6 +470,8 @@ type Definition struct {
 	RequiredEndedQuestIDs  []uint32
 	AcceptEndsQuestIDs     []uint32
 	RefuseEndsQuestIDs     []uint32
+	giveUpForgetsIDs       []uint32
+	completeForgetsIDs     []uint32
 }
 
 /*
@@ -605,6 +627,9 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 			return nil, err
 		}
 		if err := validateDeliveryExtras(spec, items); err != nil {
+			return nil, err
+		}
+		if err := validateChainItems(spec, items); err != nil {
 			return nil, err
 		}
 		if err := loadStages(def, items); err != nil {

@@ -7,7 +7,9 @@ QNO_RM_MEETROC_1 asks for drops from two quest kinds v1.150 lacks,
 MOB_QT_RM_FEATHERMASK_01 and MOB_QT_RM_ROCKY_CLON_01 (roc_import
 stages their rows from the VSRO client). The v1.188 shard places them
 in six Tab_RefNest rows of one hive (545) on the Roc mountain, regions
-v1.150 ships. This reads those rows from the shard backup the
+v1.150 ships. QNO_RM_MEETROC_6 hunts seven guardian Rockies,
+MOB_QT_01..07_ROCKY_CLON2, which v1.150 ships but never places; the
+shard gives each one nest. This reads those rows from the shard backup the
 population evidence already pins (v1188_population_evidence.tsv,
 import_caravan_evidence.py) and writes them as one Version-2 population
 (cap110.go's row schema) for the Roc build to stage.
@@ -41,7 +43,11 @@ SOURCE_SHA256 = "9b9179e598f303f3293df1771ed7a9339a5e9c9de0dd2401884db2817d5dd9a
 FORMAT = "opensro-roc-quest-nests-v1"
 OUTPUT = pathlib.Path(__file__).resolve().parents[1] / "data" / "roc" / "quest-nests.json"
 
-QUEST_KINDS = ("MOB_QT_RM_FEATHERMASK_01", "MOB_QT_RM_ROCKY_CLON_01")
+# QNO_RM_MEETROC_1's two drop kinds, then the seven guardian Rockies
+# QNO_RM_MEETROC_6 hunts (its kill missions, 90C370). v1.150 ships the
+# seven (characterdata 5872-5878, level 90) but places none of them.
+QUEST_KINDS = ("MOB_QT_RM_FEATHERMASK_01", "MOB_QT_RM_ROCKY_CLON_01") + tuple(
+	"MOB_QT_%02d_ROCKY_CLON2" % n for n in range(1, 8))
 FIELD_WORLD = 1
 POPULATION_VERSION = 2
 

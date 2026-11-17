@@ -1447,6 +1447,276 @@
 		]
 	},
 	{
+		"Codename": "QNO_RM_MEETROC_2",
+		"MaxCompletions": 1,
+		"MinLevel": 80,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_RM_VILLAGECHIEF",
+		"EndNpcCodename": "NPC_RM_VILLAGECHIEF",
+		"OfferPromptSymbol": "SN_TALK_QNO_RM_MEETROC_2_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_RM_MEETROC_2_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_RM_MEETROC_2_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_RM_MEETROC_2_05",
+		"RequiredQuests": [],
+		"RequiredAnyQuests": [
+			"QNO_RM_MEETROC_1"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_RM_MEETROC_2_04",
+		"AchievedNowSymbol": "SN_TALK_QNO_RM_MEETROC_2_06",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [],
+		"Objective": 3,
+		"Objectives": [
+			{
+				"ContentsSymbol": "SN_CON_QNO_RM_MEETROC_2_01",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_RM_MEETROC_2_01",
+				"CollectCount": 5,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_RM_WINGTRIBE_CLON",
+						"MOB_RM_WINGTRIBE"
+					],
+					"ChancePercent": 20.0
+				}
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_RM_MEETROC_2_02",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_RM_MEETROC_2_02",
+				"CollectCount": 7,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_RM_WINGTRIBESPEAR_CLON",
+						"MOB_RM_WINGTRIBESPEAR"
+					],
+					"ChancePercent": 15.0
+				}
+			}
+		],
+		"GiveUpForgetsQuests": [
+			"QNO_RM_MEETROC_1"
+		]
+	},
+	{
+		"Codename": "QNO_RM_MEETROC_6",
+		"MaxCompletions": 1,
+		"MinLevel": 80,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_RM_VILLAGECHIEF",
+		"EndNpcCodename": "NPC_RM_VILLAGECHIEF",
+		"OfferPromptSymbol": "SN_TALK_QNO_RM_MEETROC_6_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_RM_MEETROC_6_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_RM_MEETROC_6_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_RM_MEETROC_6_05",
+		"RequiredQuests": [],
+		"RequiredAnyQuests": [
+			"QNO_RM_MEETROC_2"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_RM_MEETROC_6_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_RM_MEETROC_6_07",
+		"AchievedNowSymbol": "SN_TALK_QNO_RM_MEETROC_6_06",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_QNO_RM_MEETROC_6_01",
+				"Count": 1
+			},
+			{
+				"ItemCodename": "ITEM_QNO_RM_MEETROC_ECT_01",
+				"Count": 1
+			},
+			{
+				"ItemCodename": "ITEM_QNO_RM_MEETROC_ECT_02",
+				"Count": 1
+			},
+			{
+				"ItemCodename": "ITEM_QNO_RM_MEETROC_ECT_03",
+				"Count": 1
+			}
+		],
+		"Objective": 3,
+		"Objectives": [
+			{
+				"ContentsSymbol": "SN_CON_QNO_RM_MEETROC_6_01",
+				"Objective": 2,
+				"KillMonsterCodenames": [
+					"MOB_QT_01_ROCKY_CLON2"
+				],
+				"KillCount": 1
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_RM_MEETROC_6_02",
+				"Objective": 2,
+				"KillMonsterCodenames": [
+					"MOB_QT_02_ROCKY_CLON2"
+				],
+				"KillCount": 1
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_RM_MEETROC_6_03",
+				"Objective": 2,
+				"KillMonsterCodenames": [
+					"MOB_QT_03_ROCKY_CLON2"
+				],
+				"KillCount": 1
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_RM_MEETROC_6_04",
+				"Objective": 2,
+				"KillMonsterCodenames": [
+					"MOB_QT_04_ROCKY_CLON2"
+				],
+				"KillCount": 1
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_RM_MEETROC_6_05",
+				"Objective": 2,
+				"KillMonsterCodenames": [
+					"MOB_QT_05_ROCKY_CLON2"
+				],
+				"KillCount": 1
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_RM_MEETROC_6_06",
+				"Objective": 2,
+				"KillMonsterCodenames": [
+					"MOB_QT_06_ROCKY_CLON2"
+				],
+				"KillCount": 1
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_RM_MEETROC_6_07",
+				"Objective": 2,
+				"KillMonsterCodenames": [
+					"MOB_QT_07_ROCKY_CLON2"
+				],
+				"KillCount": 1
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_RM_MEETROC_6_07",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_RM_MEETROC_6_02",
+				"CollectCount": 1
+			}
+		],
+		"KillExchange": {
+			"TakeItem": "ITEM_QNO_RM_MEETROC_6_03",
+			"GrantItem": "ITEM_QNO_RM_MEETROC_6_02"
+		},
+		"GiveUpForgetsQuests": [
+			"QNO_RM_MEETROC_2"
+		],
+		"QuestItemCleanup": [
+			"ITEM_QNO_RM_MEETROC_6_02",
+			"ITEM_QNO_RM_MEETROC_6_03"
+		],
+		"CompleteForgetsQuests": [
+			"QNO_RM_MEETROC_2"
+		],
+		"Repeatable": true
+	},
+	{
+		"Codename": "QNO_RM_MEETROC_ECT_1",
+		"Repeatable": true,
+		"RequiredAnyHeldItems": [
+			"ITEM_QNO_RM_MEETROC_ECT_01"
+		],
+		"MinLevel": 80,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_RM_YOUNGWOMAN1",
+		"EndNpcCodename": "NPC_RM_YOUNGWOMAN1",
+		"OfferPromptSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_1_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_1_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_1_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_1_06",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_1_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_1_05",
+		"AchievedNowSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_1_07",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_QNO_RM_MEETROC_ECT_1_01",
+				"Count": 5
+			}
+		],
+		"Objective": 1,
+		"CollectItemCodename": "ITEM_QNO_RM_MEETROC_ECT_01",
+		"CollectCount": 7,
+		"GiveUpKeepsCollected": true
+	},
+	{
+		"Codename": "QNO_RM_MEETROC_ECT_2",
+		"Repeatable": true,
+		"RequiredAnyHeldItems": [
+			"ITEM_QNO_RM_MEETROC_ECT_02"
+		],
+		"MinLevel": 80,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_RM_YOUNGWOMAN2",
+		"EndNpcCodename": "NPC_RM_YOUNGWOMAN2",
+		"OfferPromptSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_2_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_2_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_2_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_2_06",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_2_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_2_05",
+		"AchievedNowSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_2_07",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_QNO_RM_MEETROC_ECT_2_01",
+				"Count": 3
+			}
+		],
+		"Objective": 1,
+		"CollectItemCodename": "ITEM_QNO_RM_MEETROC_ECT_02",
+		"CollectCount": 10,
+		"GiveUpKeepsCollected": true
+	},
+	{
+		"Codename": "QNO_RM_MEETROC_ECT_3",
+		"Repeatable": true,
+		"RequiredAnyHeldItems": [
+			"ITEM_QNO_RM_MEETROC_ECT_03"
+		],
+		"MinLevel": 80,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_RM_VILLAGECHIEF",
+		"EndNpcCodename": "NPC_RM_VILLAGECHIEF",
+		"OfferPromptSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_3_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_3_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_3_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_3_06",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_3_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_3_05",
+		"AchievedNowSymbol": "SN_TALK_QNO_RM_MEETROC_ECT_3_07",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_QNO_RM_MEETROC_ECT_3_01",
+				"Count": 1
+			}
+		],
+		"Objective": 1,
+		"CollectItemCodename": "ITEM_QNO_RM_MEETROC_ECT_03",
+		"CollectCount": 15,
+		"GiveUpKeepsCollected": true
+	},
+	{
 		"Codename": "QNO_RM_OLDWOMAN_7",
 		"MaxCompletions": 1,
 		"MinLevel": 79,

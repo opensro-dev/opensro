@@ -5,9 +5,11 @@ roc.go - the optional Roc chain's quest monster nests (port-only switch).
 
 SRO_ROC is off by default. The Roc chain is native to the later clients
 (#3399); v1.150 ships its regions, items and quest text but not the
-quest kinds QNO_RM_MEETROC_1 gathers from. The Roc import
-(scripts/roc_import.py) stages those kinds and writes their six v1.188
-nests (one shared-cap hive on the Roc mountain, committed by
+quest kinds QNO_RM_MEETROC_1 gathers from, and it never places the
+guardian Rockies QNO_RM_MEETROC_6 hunts. The Roc import
+(scripts/roc_import.py) stages the two missing kinds and writes their
+six v1.188 nests (one shared-cap hive on the Roc mountain) and the
+guardians' seven (committed by
 scripts/build/import_roc_quest_nests.py) as roc-monsters.txt in the
 field population's row schema (cap110.go). This is the consumer side.
 
@@ -31,13 +33,22 @@ import (
 const EnvRoc = "SRO_ROC"
 const rocPopulationFile = "roc-monsters.txt"
 
-// The quest kinds the Roc population may place, at the level the VSRO
-// client authors for both (the importer's KINDS refuses another).
+// The quest kinds the Roc population may place, all at level 90: the
+// two QNO_RM_MEETROC_1 drops from, as the VSRO client authors them (the
+// importer's KINDS refuses another level), and the seven guardian
+// Rockies QNO_RM_MEETROC_6 hunts, as v1.150's characterdata ships them.
 const rocQuestKindLevel = 90
 
 var rocQuestKinds = map[string]bool{
 	"MOB_QT_RM_FEATHERMASK_01": true,
 	"MOB_QT_RM_ROCKY_CLON_01":  true,
+	"MOB_QT_01_ROCKY_CLON2":    true,
+	"MOB_QT_02_ROCKY_CLON2":    true,
+	"MOB_QT_03_ROCKY_CLON2":    true,
+	"MOB_QT_04_ROCKY_CLON2":    true,
+	"MOB_QT_05_ROCKY_CLON2":    true,
+	"MOB_QT_06_ROCKY_CLON2":    true,
+	"MOB_QT_07_ROCKY_CLON2":    true,
 }
 
 /*
