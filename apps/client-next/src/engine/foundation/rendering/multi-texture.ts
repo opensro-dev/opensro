@@ -16,7 +16,7 @@ Native, SRO_Client v1.150:
   0x200000 | 0x80000000; CAnimInstance_RenderTrack 0xA5E419 then binds the
   material's own texture at stage 1.
 - Mode 0 (0xAEDEB0 / 0xAEE340): COLOROP BLENDFACTORALPHA, TEXTUREFACTOR =
-  the payload's ARGB. Mode 1 (0xAEDB00): ARG1 TEXTURE, ARG2 CURRENT,
+  the payload's ARGB. Mode 1 (0xAEDB00 / 0xAEDF80): ARG1 TEXTURE, ARG2 CURRENT,
   COLOROP BLENDTEXTUREALPHA, ALPHAOP DISABLE. Neither enables the stage's
   alpha, so a pixel's alpha is stage 0's.
 - ModDataTexAni words24[0] ORs 0x400000 (1) or 0x8000000 (0) (0xAED9B0),
