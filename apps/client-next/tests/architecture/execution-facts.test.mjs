@@ -23,6 +23,10 @@ const TSCONFIG = {
 	compilerOptions: {
 		strict: true,
 		target: "ES2022",
+		// No DOM: every program the tests build would parse lib.dom.d.ts again,
+		// most of this file's time on the two-core CI runner.
+		lib: [ "ES2022" ],
+		types: [],
 		module: "ESNext",
 		moduleResolution: "Bundler",
 		noEmit: true
