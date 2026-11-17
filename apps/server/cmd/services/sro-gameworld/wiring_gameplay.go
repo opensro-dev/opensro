@@ -127,6 +127,8 @@ func newGameplayPlane(
 	}
 	items := action.NewRuntime(deps, deps.MonsterState)
 	items.ConfigureSookArena(os.Getenv(sookarena.Env))
+	// SRO_ROC (port-only, not native): the Roc worlds' schedule and steps.
+	items.ConfigureRoc(monster.RocEnabled())
 	if err := loadPetGearPolicy(items, authorityStore); err != nil {
 		return nil, err
 	}

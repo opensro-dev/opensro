@@ -263,6 +263,8 @@ type Runtime struct {
 	Monsters *simulation.MonsterState
 	// Port-only, not native: nil preserves every native admission/reward path.
 	sookArena *sookArenaRuntime
+	// roc runs the Roc worlds (roc.go); nil with SRO_ROC off.
+	roc *rocRuntime
 	// muhanChanges is the Muhan change pairing by change NPC codename
 	// (muhan_change.go). Port-only, not native: empty unless SRO_MUHAN is on.
 	muhanChanges map[string]muhanChange
