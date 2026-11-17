@@ -17670,9 +17670,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					const deco = page.GDR_AB_REINFORCE_PROCESS_DECO,
 						cell = alchemyEffect && alchemyEffectCell( alchemyClock - alchemyEffect.startedAt ),
 						preparing = game?.alchemy?.preparing,
-						prepareCell = preparing !== undefined && alchemyEffectCell( alchemyClock - preparing );
+						prepareCell = preparing !== undefined &&
+							alchemyEffectCell( (view?.simulationTimeMs ?? alchemyClock) - preparing );
 					// 62AFA0 shows alcm_effect_prepare additively (51EDB0 with 1)
-					// until the held request is sent.
+					// until the held request is sent. The worker stamps the start
+					// on the simulation clock, so the cell is read on it too.
 					if ( !processing && deco && prepareCell ) {
 						additiveImage( authoredRect( deco, px, py + 150 ), PREPARE_SHEET, prepareCell );
 					} else if ( !processing && deco && alchemyEffect && cell ) {

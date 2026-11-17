@@ -20,6 +20,7 @@ const SWORD = { slot: 13, refObjId: 3633, typeFlags: 0x132c, quantity: 1, name: 
 const ELIXIR = { slot: 14, refObjId: 3680, typeFlags: 0xd6c, quantity: 5, name: "Elixir" };
 const PREPARE = "/interface/alchemy/alcm_effect_prepare.png";
 const STEP_MS = 50;
+const SIMULATION_MS = 40;
 
 /*
 ================
@@ -67,16 +68,18 @@ function fuseFixture( t ) {
 		f.ui.event( { kind: "activate", id: "alchemy-start" } );
 		step();
 	};
-	return { f, sent, step, press, now: () => now };
+	return { f, sent, step, press };
 }
 
 test("Fuse is ignored from the press until the result effect has played", t => {
-	const { f, sent, step, press, now } = fuseFixture( t );
+	const { f, sent, step, press } = fuseFixture( t );
 	press();
 	assert.deepEqual( sent.map( c => c.slots ), [ [ 13, 14 ] ] );
-	// The worker holds the request through the prepare effect (62AFA0).
+	// The worker holds the request through the prepare effect (62AFA0),
+	// stamped on the simulation clock, whose origin is not the frame clock's.
 	f.state.gameplay.inventoryPending = true;
-	f.state.gameplay.alchemy = { ...f.state.gameplay.alchemy, pending: true, preparing: now() };
+	f.state.gameplay.alchemy = { ...f.state.gameplay.alchemy, pending: true, preparing: SIMULATION_MS };
+	f.state.simulationTimeMs = SIMULATION_MS + STEP_MS;
 	step();
 	assert.ok(
 		defined( f.scenes.at( -1 ) ).quads.some( q => q.texture.endsWith( PREPARE ) ),
