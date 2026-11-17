@@ -14,13 +14,19 @@ none and imported only because a sibling, run earlier in the full
 discovery, had done it for them; run alone they failed at import. Now
 every test module starts with `import script_paths` and this file is the
 one list. No module name repeats across these folders, so their order
-does not change what imports.
+does not change what imports. It also clears the published character pin
+for the test process (see below).
 
 ===========================================================================
 """
 
+import os
 import sys
 from pathlib import Path
+
+# The published character pin (cap110_monsters.published_characters): a
+# fixture names its own, so the real one never reserves ids in a test tree.
+os.environ["SRO_PUBLISHED_CHARACTERS"] = ""
 
 SCRIPTS = Path(__file__).resolve().parents[2]
 FOLDERS = (SCRIPTS, SCRIPTS / "build", SCRIPTS / "build" / "catalogue", SCRIPTS / "analysis")

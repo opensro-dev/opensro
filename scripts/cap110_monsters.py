@@ -477,15 +477,21 @@ def allocate_identities(occupied, codes, previous):
 
 # The character ids live publishes (pin_published_characters.py).
 PUBLISHED_CHARACTERS = Path(__file__).resolve().parent / "data" / "published-characters.json"
+# Names another pin file; empty names none. The Python tests set it empty
+# (test/python/script_paths.py): a fixture tree holds none of the published
+# rows, so the real pin would reserve all of them and move every fixture id.
+PUBLISHED_CHARACTERS_VARIABLE = "SRO_PUBLISHED_CHARACTERS"
 
 
 # ================
 # published_characters
 #
-# codename -> id from the pin; empty when no pin exists, as in a fixture.
+# codename -> id from the pin, or the file the variable names.
 # ================
-def published_characters(path=PUBLISHED_CHARACTERS):
-	if not Path(path).is_file():
+def published_characters():
+	named = os.environ.get(PUBLISHED_CHARACTERS_VARIABLE)
+	path = PUBLISHED_CHARACTERS if named is None else Path(named) if named else None
+	if path is None:
 		return {}
 	return json.loads(Path(path).read_text(encoding="utf-8"))["characters"]
 

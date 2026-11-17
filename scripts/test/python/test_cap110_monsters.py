@@ -118,6 +118,17 @@ class Cap110MonstersTest(unittest.TestCase):
 		# The pet's stale id is a pinned one: it moves after every reserved
 		# id, past the other import's published 103 too.
 		self.assertEqual(got["COS_P_FOX"], 104)
+		# The pin file itself is read unless the variable names another.
+		self.assertEqual(monsters.published_characters(), {})
+		with tempfile.TemporaryDirectory() as folder:
+			pin = Path(folder) / "pin.json"
+			pin.write_text(json.dumps({"characters": pinned}), encoding="utf-8")
+			saved = monsters.os.environ[monsters.PUBLISHED_CHARACTERS_VARIABLE]
+			monsters.os.environ[monsters.PUBLISHED_CHARACTERS_VARIABLE] = str(pin)
+			try:
+				self.assertEqual(monsters.allocate_characters({100}, ["MOB_SD_ACHNISH"], stale)["MOB_SD_ACHNISH"], 101)
+			finally:
+				monsters.os.environ[monsters.PUBLISHED_CHARACTERS_VARIABLE] = saved
 		# Without the pin the staging's previous ids win, as before.
 		self.assertEqual(monsters.allocate_characters({100}, ["COS_P_FOX", "MOB_SD_ACHNISH"], stale, {}),
 			{"COS_P_FOX": 101, "MOB_SD_ACHNISH": 105})
