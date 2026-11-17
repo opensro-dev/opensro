@@ -281,6 +281,37 @@ test("a region whose inputs changed since its build is stale; one whose inputs m
 		await writeFile( path.join( mapRoot, "object.ifo" ), "catalog v2" );
 		assert.deepEqual( await check(), [ sector.id ], "a changed object catalog makes every region stale" );
 		assert.notEqual( await outdoorSharedInputDigest( extracted ), shared );
+
+		// The production resource build loads the outdoor group through the
+		// same check: a stale region refuses the load, a current one passes.
+		const { loadOutdoorWorldRegionResourceGroup, OUTDOOR_WORLD_AREA } = await import(
+			"../../build/world/buildOutdoorWorldRegionResources.mjs"
+		);
+		const indexPath = path.join( extracted, "world-regions.json" );
+		await writeFile(
+			indexPath,
+			JSON.stringify( {
+				format: "sro-world-region-index",
+				version: 2,
+				area: OUTDOOR_WORLD_AREA,
+				bundleLayout: "one-region-per-bundle",
+				deliveryMode: "prebuilt",
+				regions: []
+			} )
+		);
+		const load = () =>
+			loadOutdoorWorldRegionResourceGroup( {
+				indexPath,
+				jobs: 1,
+				extractedRoot: extracted,
+				sectors: [ sector ]
+			} );
+		await assert.rejects(
+			load(),
+			/built from other inputs than the variant holds.*pnpm assets build world-outdoor/s
+		);
+		await writeFile( path.join( mapRoot, "object.ifo" ), "catalog v1" );
+		assert.equal( (await load())?.incompleteBundleCount, 0, "a current region loads" );
 	} finally {
 		await rm( extracted, { recursive: true, force: true } );
 	}

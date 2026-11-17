@@ -266,9 +266,14 @@ export async function loadOutdoorWorldRegionResourceGroup( options = {} ) {
 				`before a production resource build; Vite's dev-on-demand routing index is not a production artifact.`
 		);
 	}
-	if ( !options.allowDevOnDemand && !options.skipInputCheck ) {
+	if ( !options.allowDevOnDemand ) {
+		// extractedRoot and sectors default to the variant's; a test hands in
+		// its own fixture tree, as findStaleOutdoorRegions takes them.
+		const sectors = options.sectors ??
+			(await discoverOutdoorWorldSectors( { extractedRoot: options.extractedRoot } ));
 		const stale = await findStaleOutdoorRegions( {
-			sectors: await discoverOutdoorWorldSectors(),
+			extractedRoot: options.extractedRoot,
+			sectors,
 			jobs: normalizeJobs( options.jobs ),
 			publicRoot: options.publicRoot
 		} );
