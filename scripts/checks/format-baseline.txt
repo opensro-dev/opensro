@@ -315,7 +315,6 @@ scripts/build/world/buildCharacterSelectInterfaceModels.mjs
 scripts/build/world/buildCharacterSelectWorldRegionResources.mjs
 scripts/build/world/buildTitleWorldRegionResources.mjs
 scripts/build/world/buildWorldRegionResources.mjs
-scripts/build/world/constants.mjs
 scripts/build/world/index.mjs
 scripts/build/world/jmx/JMXV2DTI1001.mjs
 scripts/build/world/jmx/JMXVMAPM1000.mjs
