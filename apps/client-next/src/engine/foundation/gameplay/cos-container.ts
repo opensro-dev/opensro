@@ -2,6 +2,7 @@ import type { CosRecord } from "@/engine/contracts/gameplay";
 import { decodeInventoryItem } from "./inventory-item";
 import { planContainerMove } from "./container-transfer";
 import { ITEM_MOVE_REQUEST_OPCODE } from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export function cosGroundRequest( record: CosRecord, kind: "pickup" | "drop", target: number ) {
 	if ( record.dead || !record.hp || !record.inventory ) throw Error( "COS container unavailable" );
@@ -23,7 +24,7 @@ export function cosGroundRequest( record: CosRecord, kind: "pickup" | "drop", ta
 export function cosGrantResult( record: CosRecord, p: Uint8Array, refs: ReadonlyMap<number, number> ): CosRecord {
 	if (
 		p.length < 7 || p[0] !== 1 || p[1] !== 0x15 ||
-		new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true ) !== record.gid || !record.inventory
+		viewOf( p ).getUint32( 2, true ) !== record.gid || !record.inventory
 	) throw Error( "Invalid COS grant result" );
 	const slot = p[6]!;
 	if ( slot === 254 ) {
@@ -48,7 +49,7 @@ export function cosGrantResult( record: CosRecord, p: Uint8Array, refs: Readonly
 export function cosRemovalResult( record: CosRecord, p: Uint8Array ): CosRecord {
 	if (
 		p.length !== 7 || p[0] !== 1 || p[1] !== 0x16 ||
-		new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true ) !== record.gid || !record.inventory
+		viewOf( p ).getUint32( 2, true ) !== record.gid || !record.inventory
 	) throw Error( "Invalid COS removal result" );
 	const slot = p[6]!;
 	if ( !record.inventory.some( row => row.slot === slot ) ) throw Error( "Invalid COS removal source" );
@@ -58,7 +59,7 @@ export function cosRemovalResult( record: CosRecord, p: Uint8Array ): CosRecord 
 export function cosGroundResult( record: CosRecord, p: Uint8Array, refs: ReadonlyMap<number, number> ): CosRecord {
 	if (
 		p.length < 7 || p[0] !== 1 || ![ 0x11, 0x12 ].includes( p[1]! ) ||
-		new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true ) !== record.gid || !record.inventory
+		viewOf( p ).getUint32( 2, true ) !== record.gid || !record.inventory
 	) throw Error( "Invalid COS ground result" );
 	const slot = p[6]!;
 	if ( p[1] === 0x12 ) {
@@ -109,7 +110,7 @@ export function cosContainerRequest( record: CosRecord, source: number, destinat
 
 export function cosContainerResult( record: CosRecord, p: Uint8Array, caps: ReadonlyMap<number, number> ): CosRecord {
 	if ( p.length !== 10 || p[0] !== 1 || p[1] !== 0x10 ) throw Error( "Invalid COS container result" );
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	if ( v.getUint32( 2, true ) !== record.gid ) throw Error( "COS container identity mismatch" );
 	const source = p[6]!, destination = p[7]!, quantity = v.getUint16( 8, true );
 	slots( record, source, destination, quantity );

@@ -22,6 +22,7 @@ import {
 	RESET_CLIENT_OPCODE,
 	RESET_REGION_OPCODE
 } from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 /*
 ================
@@ -59,7 +60,7 @@ travelMode
 ================
 */
 export function travelMode( frame: WireFrame, localGid: number, itemCooldownMs = 0 ): WorldTravel["mode"] | null {
-	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const p = frame.payload, v = viewOf( p );
 	if ( frame.opcode === OBJECT_STATE_REFRESH_OPCODE ) {
 		if ( p.length !== 6 ) throw Error( "Invalid travel character state" );
 		return localGid !== 0 && v.getUint32( 0, true ) === localGid && p[4] === 0 && p[5] === 2 ? 1 : null;

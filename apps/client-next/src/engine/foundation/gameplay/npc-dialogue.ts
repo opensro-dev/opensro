@@ -1,3 +1,5 @@
+// Value imports here stay relative: Node tools reach this file through
+// relative imports, and Node does not resolve the "@/" alias (so no viewOf).
 export type NpcGid = number & { readonly __npcGid: unique symbol; };
 // B338 -> 75AE50 -> 67ABE0. The selected NPC contributes only these two
 // capability bits; the acknowledged service owns the remaining lock mask.

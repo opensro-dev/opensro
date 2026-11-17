@@ -16,6 +16,7 @@ Body, little-endian: u8 stars, u32 gold missing from the next star.
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const OP_TRADE_PROGRESS = 0x3fc0;
 
@@ -54,7 +55,7 @@ body is a protocol error, never a partial answer.
 			if ( p.length !== 5 ) throw new Error( "Invalid trade progress" );
 			progress = {
 				stars: p[0]!,
-				gap: new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true )
+				gap: viewOf( p ).getUint32( 1, true )
 			};
 			return true;
 		},

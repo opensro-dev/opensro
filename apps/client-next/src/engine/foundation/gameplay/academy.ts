@@ -34,6 +34,7 @@ import {
 	TC_PASS_BUFF_REQUEST_OPCODE,
 	TC_STATUS_OPCODE
 } from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // ACADEMY_OPEN_FEE is the gold an opening costs: UIIT_MSG_TC_TRAININGCAMP_OPEN
 // names it and 5D26F0 case 6 compares the balance with 0x186A0 before 702BD0
@@ -232,7 +233,7 @@ academyPacket
 ================
 */
 export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 ): AcademyState | null {
-	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const p = frame.payload, v = viewOf( p );
 	let at = 0;
 	const u = ( size: number ) => {
 		if ( at + size > p.length ) throw Error( "Truncated academy packet" );

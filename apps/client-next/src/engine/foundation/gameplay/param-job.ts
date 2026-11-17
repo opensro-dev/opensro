@@ -18,6 +18,7 @@ item's duration, one bar.
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import { remainedPeriodLine } from "./count-job";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const OP_PARAM_JOB_START = 0x3602;
 export const OP_PARAM_JOB_RESUME = 0x32af;
@@ -144,7 +145,7 @@ paramJobPacket
 export function paramJobPacket( frame: WireFrame, nowMs: number ): ParamJobUpdate | null {
 	const op = frame.opcode, p = frame.payload;
 	if ( op !== OP_PARAM_JOB_START && op !== OP_PARAM_JOB_RESUME && op !== OP_PARAM_JOB_END ) return null;
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	if ( op === OP_PARAM_JOB_END ) {
 		if ( p.length !== 8 ) throw Error( "Invalid param job end" );
 		const itemRefObjId = v.getUint32( 4, true );

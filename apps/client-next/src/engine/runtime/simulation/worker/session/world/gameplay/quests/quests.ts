@@ -29,6 +29,7 @@ import {
 	QUEST_MARKER_REMOVE_OPCODE,
 	QUEST_UPDATE_OPCODE
 } from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 const MAX_QUESTS = 256;
 const MAX_COMPLETED = 65535;
@@ -170,7 +171,7 @@ export function createQuests( send: ( frame: WireFrame ) => void ) {
 			const p = frame.payload;
 			if ( frame.opcode === QUEST_GATHER_START_OPCODE ) {
 				if ( p.length !== 5 ) throw Error( "Invalid gathering start" );
-				const refId = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 0, true );
+				const refId = viewOf( p ).getUint32( 0, true );
 				if ( !refId || !Number.isFinite( now ) ) throw Error( "Invalid gathering identity or clock" );
 				gathering = { refId, startedAtMs: now, durationMs: p[4]! * SECOND_MS };
 				return true;
@@ -178,7 +179,7 @@ export function createQuests( send: ( frame: WireFrame ) => void ) {
 			if ( frame.opcode === QUEST_GATHER_CANCEL_REPLY_OPCODE ) {
 				if ( p[0] === 2 && p.length === 2 ) return true;
 				if ( p[0] !== 1 || p.length !== 5 ) throw Error( "Invalid gathering cancellation" );
-				const refId = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true );
+				const refId = viewOf( p ).getUint32( 1, true );
 				if ( gathering?.refId === refId ) gathering = undefined;
 				return true;
 			}

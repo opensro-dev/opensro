@@ -9,6 +9,8 @@ from the packet length. Server instance tokens own retirement.
 
 ===========================================================================
 */
+// Value imports here stay relative: the asset pipeline and script tests load
+// this file in Node, which does not resolve the "@/" alias (so no viewOf).
 
 const MAX_EFFECT_REFERENCES = 65536;
 const MAX_WIRE_U32 = 0xffffffff;

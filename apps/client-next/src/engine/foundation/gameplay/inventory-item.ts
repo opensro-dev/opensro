@@ -11,6 +11,8 @@ the summoner item's subtype, the way the writer laid the record out.
 ===========================================================================
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+// Value imports here stay relative: the asset pipeline and script tests load
+// this file in Node, which does not resolve the "@/" alias (so no viewOf).
 
 // The port-only pet gear rows (scripts/build/shared/portItemRows.mjs); the
 // server's item/wire PetGearRefFirst..PetGearRefLast.
