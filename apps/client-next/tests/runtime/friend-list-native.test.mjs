@@ -89,6 +89,7 @@ test("Whisper and Delete stay enabled, as the original never disables them", t =
 
 test("the compact page lists friends in the same order", t => {
 	const { f, step } = friendWindow( t );
+	f.state.coarsePointer = true;
 	f.state.width = 390;
 	f.state.height = 844;
 	const order = out => out.controls.filter( c => c.id.startsWith( "friend-row:" ) ).map( c => c.label );

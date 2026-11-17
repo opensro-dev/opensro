@@ -159,6 +159,10 @@ Dimensions shared by surface allocation, projection and input mapping.
 export interface Viewport {
 	width: number;
 	height: number;
+	// The primary pointer's class, (pointer: coarse) on the platform that
+	// observed it. Only the UI viewport carries it; geometry-only readers
+	// ignore it. Layout keys its touch arrangement on it (#2406).
+	coarsePointer?: boolean;
 }
 /** One published sample of the frame owner's own timing, for the FPS chip. */
 export interface FrameTelemetry {

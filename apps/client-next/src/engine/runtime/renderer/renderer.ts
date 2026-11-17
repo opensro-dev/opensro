@@ -8,6 +8,7 @@ renderer.ts - GPU resource lifetime and ordered scene, character and UI passes
 import { pickVolumeDepth } from "@/engine/foundation/rendering/pick-volume";
 import { defaultVideoOptions, videoOptions, backgroundDrawDistance } from "@/engine/foundation/rendering/video-options";
 import {
+	coarsePointer,
 	experimentalOptions,
 	experimentalVideo,
 	phoneDisplay,
@@ -65,7 +66,7 @@ export function createRenderer(
 	// #1806: a phone gets the Phone resolution cap. Read once: the display
 	// class does not change while the page lives.
 	const phone = phoneDisplay( {
-		coarsePointer: globalThis.matchMedia?.( "(pointer: coarse)" ).matches ?? false,
+		coarsePointer: coarsePointer(),
 		shortSide: Math.min( globalThis.screen?.width ?? 0, globalThis.screen?.height ?? 0 )
 	} );
 	const portrait = createPortrait( createCharacters() );

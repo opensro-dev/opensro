@@ -141,6 +141,30 @@ test("party wraps with the native bottom reserve and option-specific row pitch",
 	] );
 	assert.deepEqual( partyOverlay( state, [], 600, 4, 137, false )[1].position, [ 17, 193 ] );
 });
+test("the small band packs party rows above the scaled bar instead of wrapping per member (#2406)", () => {
+	const state = {
+		...game,
+		social: {
+			...game.social,
+			members: [
+				game.social.members[0],
+				...Array.from( { length: 7 }, ( _, i ) => ({ id: i + 20, name: "P" + i, status: 0xaa }) )
+			]
+		}
+	};
+	// A 640x480 fine-pointer viewport: the caller passes the band reserve
+	// round(52 * 0.8) - 9 = 33, so five rows fill the first column before
+	// the wrap, and no row's bottom passes the scaled bar's top.
+	assert.deepEqual( partyOverlay( state, [], 480, 4, 137, false, 33 ).map( r => r.position ), [
+		[ 17, 137 ],
+		[ 17, 193 ],
+		[ 17, 249 ],
+		[ 17, 305 ],
+		[ 17, 361 ],
+		[ 150, 137 ],
+		[ 150, 193 ]
+	] );
+});
 test("party rows list the member's trained masteries left of the buff row", () => {
 	const member = ( id, primaryMastery, secondaryMastery ) => ({
 		id,

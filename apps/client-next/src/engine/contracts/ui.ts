@@ -284,5 +284,9 @@ export interface UiView {
 	readonly entities: readonly EntityState[];
 	readonly width: number;
 	readonly height: number;
+	// The primary pointer's class (platform's (pointer: coarse) fact, read
+	// once per page). Absent means a fine pointer: small viewports then keep
+	// the native HUD instead of the touch layout (compact-hud.ts, #2406).
+	readonly coarsePointer?: boolean;
 	readonly worldReady: boolean;
 }

@@ -202,7 +202,15 @@ import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
 import { createMallUseHud } from "./hud/mall-use-hud";
 import { isMallUseConfirmItem } from "@/engine/foundation/gameplay/mall-use";
-import { createCompactHud, compactHudLayout, compactWindowDrag, compactCloseControl } from "./hud/compact-hud";
+import {
+	createCompactHud,
+	compactHudLayout,
+	compactWindowDrag,
+	compactCloseControl,
+	smallHudLayout,
+	UNDERBAR_HEIGHT,
+	UNDERBAR_WIDTH
+} from "./hud/compact-hud";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalTabs, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
 import {
@@ -7741,7 +7749,7 @@ export function createUi(
 			if ( event.kind === "drag" && event.id === "ext-drag" && view && !extPositionLock ) {
 				const extended = hud.data()?.extended[Number( extVertical ) * 2 + Number( extDouble )],
 					header = extended ? Object.values( extended ).find( node => node.id === 10 ) : undefined,
-					compactLayout = compactHudLayout( view.width, view.height ),
+					compactLayout = compactHudLayout( view.width, view.height, view.coarsePointer ?? false ),
 					origin = compactLayout && header ?
 						extendedCompactOrigin( view.width, view.height, header.rect[2], header.rect[3] ) :
 						extPosition ?? [ Math.max( 0, view.width - 106 ), 181 ],
@@ -9762,6 +9770,7 @@ export function createUi(
 				view.frontend.selectedCharacter === next.frontend.selectedCharacter &&
 				view.session === next.session && view.gameplay === next.gameplay && view.entities === next.entities &&
 				view.hoveredEntity === next.hoveredEntity &&
+				view.coarsePointer === next.coarsePointer &&
 				view.berserkGauge?.displayed === next.berserkGauge?.displayed && view.width === next.width &&
 				view.height === next.height;
 			if ( stableWorld && !dirty ) return null;
@@ -9771,6 +9780,7 @@ export function createUi(
 				view?.worldReady === next.worldReady &&
 				view?.travel === next.travel && view?.worldTransitionRegion === next.worldTransitionRegion &&
 				view?.session === next.session &&
+				view?.coarsePointer === next.coarsePointer &&
 				view?.berserkGauge?.displayed === next.berserkGauge?.displayed && view?.gameplay === next.gameplay &&
 				view?.entities === next.entities && view?.width === next.width && view?.height === next.height
 			) return null;
@@ -10183,7 +10193,10 @@ export function createUi(
 			const fontPath = text.path();
 			if ( fontPath ) paths.push( fontPath );
 			const w = next.width, h = next.height, full: UiRect = [ 0, 0, w, h ];
-			const compact = compactHud.layout( w, h );
+			const compact = compactHud.layout( w, h, next.coarsePointer ?? false );
+			// #2406: below the smallest mode a fine pointer keeps the native
+			// HUD, degraded (smallHudLayout); a coarse one gets compact above.
+			const small = smallHudLayout( w, h, next.coarsePointer ?? false );
 			let targetBottom = 0, compactTelemetryTop = 4;
 			if ( berserkActor ) {
 				const alpha = berserkEntryFlash( now - berserkStarted );
@@ -10381,6 +10394,16 @@ export function createUi(
 						for ( let i = mark[1]; i < controls.length; i++ ) {
 							controls[i] = compactCloseControl( controls[i]!, windowBounds );
 						}
+					} else if ( small ) {
+						// #2406: a window that cannot hold the viewport scales
+						// into it. Drags stay live, unlike compact: the fit
+						// re-derives from the window's own extent each frame,
+						// so a shrunk window still tracks the pointer 1:1.
+						fitUiGroup( quads, controls, mark[0], mark[1], full, full, {
+							blocks,
+							firstBlock: mark[2],
+							...(source ? { sourceBounds: source } : {})
+						} );
 					}
 					const painted = resolveTextOverlaps( quads.slice( mark[0] ) );
 					quads.length = mark[0];
@@ -12368,10 +12391,21 @@ export function createUi(
 					const origin = authoredRect( hudData.root.GDR_QUICKPARTYBOARD!, 0, 0 ),
 						slot = hudData.windows.ifquickpartyslot!,
 						localPose = partyLocalPose( game, next.entities );
+					// #2406: the small band drops the buff rows and packs the rows
+					// it keeps above the scaled bar, instead of wrapping at the
+					// native 230px reserve (one column per member down there).
+					const showPartyBuffs = small ? false : options.partyBuffs,
+						partyRows = partyOverlay(
+							game,
+							next.entities,
+							h,
+							origin[0],
+							origin[1],
+							showPartyBuffs,
+							small ? Math.max( 0, Math.round( UNDERBAR_HEIGHT * small.scale ) - 9 ) : undefined
+						);
 					for ( const shadeImage of partyShadeImages() ) paths.push( ROOT + shadeImage );
-					for (
-						const row of partyOverlay( game, next.entities, h, origin[0], origin[1], options.partyBuffs )
-					) {
+					for ( const row of partyRows ) {
 						const [x, y] = row.position;
 						authoredImage(
 							{ ...hudData.windows.ifquickpartywnd!.GDR_QPB_SLOT_0!, rect: [ 0, 0, 122, 40 ] },
@@ -12465,7 +12499,7 @@ export function createUi(
 						// 5BA840 passes no character, so party abnormal cells carry no grade.
 						const buff = authoredRect( slot.GDR_QPS_PARTY_BUFF!, x, y ),
 							state = partyBuffStates.get( row.member.id );
-						if ( options.partyBuffs && row.entity && state ) {
+						if ( showPartyBuffs && row.entity && state ) {
 							buffViewer(
 								"party-buff:" + row.member.id + ":",
 								buffViewerIcons(
@@ -12530,7 +12564,10 @@ export function createUi(
 									undefined,
 								layout: hudData.chat,
 								width: w,
-								height: h,
+								// #2406: in the small arrangement the chat keeps its
+								// native line, lifted so its input sits on the
+								// scaled underbar instead of under the native 52px.
+								height: small ? h - UNDERBAR_HEIGHT * small.scale + UNDERBAR_HEIGHT : h,
 								rows: chatRows,
 								tab: chatTab,
 								input: chatText,
@@ -12773,6 +12810,7 @@ export function createUi(
 				}
 				const barX = compact ? 0 : Math.trunc( (w - 800) / 2 ), barY = compact ? compact.top : h - 52;
 				if ( hudData && !compact ) {
+					const barMark = [ quads.length, controls.length, blocks.length ] as const;
 					retainedHud( barLayoutCache, [
 						hudData,
 						layoutResourcesRevision,
@@ -12791,7 +12829,7 @@ export function createUi(
 					], () => {
 						const bar = hudData.bar, root = hudData.root.GDR_UNDERBAR!;
 						authoredImage( root, barX - root.rect[0], barY - root.rect[1] );
-						blocks.push( [ barX, barY, 800, 52 ] );
+						blocks.push( [ barX, barY, UNDERBAR_WIDTH, UNDERBAR_HEIGHT ] );
 						for ( const name of [ "GDR_DECORATE_1", "GDR_DECORATE_2", "GDR_DECORATE_3" ] ) {
 							authoredImage( bar[name]!, barX, barY );
 						}
@@ -12850,6 +12888,24 @@ export function createUi(
 							authoredSkillPoints( bar.GDR_STATIC_SP!, barX, barY, game.progression.skillPoints );
 						}
 					} );
+					if ( small ) {
+						// #2406: the native 800x52 underbar scaled to the window
+						// and pinned to its bottom edge; the quickslots follow
+						// in their own slice with the same transform.
+						fitUiGroup(
+							quads,
+							controls,
+							barMark[0],
+							barMark[1],
+							[ 0, h - UNDERBAR_HEIGHT * small.scale, w, UNDERBAR_HEIGHT * small.scale ],
+							full,
+							{
+								blocks,
+								firstBlock: barMark[2],
+								sourceBounds: [ barX, barY, UNDERBAR_WIDTH, UNDERBAR_HEIGHT ]
+							}
+						);
+					}
 				} else if ( hudData && compact && compact.exp ) {
 					const expW = compact.exp[2];
 					retainedHud( barLayoutCache, [
@@ -12936,9 +12992,26 @@ export function createUi(
 								disableDrag: compactWindowDrag
 							}
 						);
+					} else if ( small ) {
+						// #2406: the companion bars anchor on the native bar's
+						// centred origin, off-screen left below 800px; contain
+						// them above the scaled underbar instead.
+						fitUiGroup(
+							quads,
+							controls,
+							mark[0],
+							mark[1],
+							[ 0, 0, w, Math.max( 1, h - UNDERBAR_HEIGHT * small.scale ) ],
+							full,
+							{
+								blocks,
+								firstBlock: mark[2]
+							}
+						);
 					}
 				}
 				if ( hudData && whispersOpen && (!compact || compact.overlay === "chat") ) {
+					const whisperMark = [ quads.length, controls.length, blocks.length ] as const;
 					const wx = 0,
 						wy = compact ?
 							Math.max( 80, compact.top - 200 ) :
@@ -12964,8 +13037,26 @@ export function createUi(
 						quads.push( ...text.quads( name, row, r, white ) );
 						controls.push( { id: "whisper-name:" + name, label: name, rect: row, kind: "button" } );
 					} );
+					if ( small ) {
+						// #2406: the whisper list stands on the underbar; it
+						// follows the bar's transform like the slots do.
+						fitUiGroup(
+							quads,
+							controls,
+							whisperMark[0],
+							whisperMark[1],
+							[ 0, h - UNDERBAR_HEIGHT * small.scale, w, UNDERBAR_HEIGHT * small.scale ],
+							full,
+							{
+								blocks,
+								firstBlock: whisperMark[2],
+								sourceBounds: [ barX, barY, UNDERBAR_WIDTH, UNDERBAR_HEIGHT ]
+							}
+						);
+					}
 				}
 				if ( hudData && statusFilterOpen && (!compact || compact.overlay === "status") ) {
+					const statusMark = [ quads.length, controls.length, blocks.length ] as const;
 					const sx = w - 357,
 						sy = compact ? Math.max( 80, compact.top - 200 ) : h - 90 - (statusRows * 42 + 33),
 						node = hudData.status.GDR_SYETEM_MESSAGE_OPTBOARD!,
@@ -13006,6 +13097,22 @@ export function createUi(
 							selected: statusFilters.has( category )
 						} );
 					} );
+					if ( small ) {
+						// #2406: the filter board stands on the underbar too.
+						fitUiGroup(
+							quads,
+							controls,
+							statusMark[0],
+							statusMark[1],
+							[ 0, h - UNDERBAR_HEIGHT * small.scale, w, UNDERBAR_HEIGHT * small.scale ],
+							full,
+							{
+								blocks,
+								firstBlock: statusMark[2],
+								sourceBounds: [ barX, barY, UNDERBAR_WIDTH, UNDERBAR_HEIGHT ]
+							}
+						);
+					}
 				}
 				/*
 				================
@@ -13164,6 +13271,7 @@ export function createUi(
 						blocks.push( r );
 					} );
 				}
+				const slotMark = [ quads.length, controls.length, blocks.length ] as const;
 				for ( let n = 0; n <= 10; n++ ) {
 					const node = hudData?.bar["GDR_TMPQS_" + n];
 					if ( !node ) continue;
@@ -13209,6 +13317,24 @@ export function createUi(
 						if ( resources.has( icon ) ) rect( chip.icon, [ 1, 1, 1, chip.alpha ], icon );
 						quads.push( ...chip.over );
 					}
+				}
+				if ( small ) {
+					// #2406: the quickslots share the underbar's transform, so
+					// icons, counts, cooldowns and hit targets land on the
+					// scaled bar (sourceBounds pins the shared registration).
+					fitUiGroup(
+						quads,
+						controls,
+						slotMark[0],
+						slotMark[1],
+						[ 0, h - UNDERBAR_HEIGHT * small.scale, w, UNDERBAR_HEIGHT * small.scale ],
+						full,
+						{
+							blocks,
+							firstBlock: slotMark[2],
+							sourceBounds: [ barX, barY, UNDERBAR_WIDTH, UNDERBAR_HEIGHT ]
+						}
+					);
 				}
 				if ( hudData && (!compact || compact.overlay === "extra") ) {
 					const compactMark = beginWindow();
@@ -13329,14 +13455,26 @@ export function createUi(
 							full,
 							{ blocks, firstBlock: compactMark[2], disableDrag: compactWindowDrag }
 						);
+					} else if ( small ) {
+						// #2406: a remembered spot can strand the bar outside a
+						// small viewport; fit it back inside, drag intact.
+						fitUiGroup(
+							quads,
+							controls,
+							compactMark[0],
+							compactMark[1],
+							full,
+							full,
+							{ blocks, firstBlock: compactMark[2] }
+						);
 					}
 				}
 				if ( clearHotbar ) {
 					button(
 						"hotbar-clear",
 						clearHotbar ? "Done" : "Clear slot",
-						compact ? w - 84 : barX + 652,
-						barY - 40,
+						compact ? w - 84 : small ? 652 * small.scale : barX + 652,
+						small ? h - (UNDERBAR_HEIGHT + 40) * small.scale : barY - 40,
 						80,
 						false,
 						clearHotbar

@@ -34,6 +34,7 @@ import { createTouchCamera, type TouchCameraOutput } from "@/engine/foundation/r
 import {
 	EXPERIMENTAL_STORAGE_KEY,
 	PREVIOUS_EXPERIMENTAL_STORAGE_KEY,
+	coarsePointer,
 	experimentalOptions,
 	storedExperimentalOptions,
 	uiScaleFactor,
@@ -47,7 +48,7 @@ import { createKeepAwake } from "./keep-awake";
 import { createCursor } from "./ui/cursor";
 import type { UiEvent, UiSemantics } from "@/engine/contracts/ui";
 import type { RawInput, WorldClickInput } from "@/engine/contracts/input";
-import type { Platform } from "@/engine/contracts/runtime";
+import type { Platform, Viewport } from "@/engine/contracts/runtime";
 import type { AssetProgress } from "@/engine/contracts/assets";
 import { loadingDetailText } from "@/engine/foundation/ui/loading-detail";
 
@@ -641,7 +642,7 @@ export function createPlatform(
 		if ( blocksUi( ...uiPoint( event ) ) ) return;
 		onInput( { kind: "wheel", delta: cameraWheelDelta( event ), timeMs: timeMs() } );
 	}, { signal: lifetime.signal, passive: false } );
-	const viewport = { width: 1, height: 1 }, uiViewport = { width: 1, height: 1 };
+	const viewport = { width: 1, height: 1 }, uiViewport: Viewport = { width: 1, height: 1, coarsePointer: false };
 	/*
 	================
 	readViewport
@@ -922,6 +923,7 @@ export function createPlatform(
 			const physical = readViewport(), scale = uiPixelScale() * uiScaleFactor( experimental );
 			uiViewport.width = physical.width / scale;
 			uiViewport.height = physical.height / scale;
+			uiViewport.coarsePointer = coarsePointer();
 			return uiViewport;
 		},
 		readViewport,

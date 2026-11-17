@@ -12,7 +12,9 @@ import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 const { fitUiGroup } = await import( "../../src/engine/foundation/ui/layout.ts" );
-const { compactHudLayout, compactWindowDrag } = await import( "../../src/engine/runtime/ui/hud/compact-hud.ts" );
+const { compactHudLayout, compactWindowDrag, smallHudLayout } = await import(
+	"../../src/engine/runtime/ui/hud/compact-hud.ts"
+);
 const { textRunQuad, expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 const { resolveTextOverlaps } = await import( "../../src/engine/foundation/rendering/ui-glyphs.ts" );
 
@@ -291,7 +293,7 @@ test("fitting keeps every run's sampling: shrunk bitmap runs stay nearest for th
 });
 
 test("compactHudLayout reserves a progression strip between quickslots and tools while keeping window bounds above slots", () => {
-	assert.equal( compactHudLayout( 800, 600 ), null );
+	assert.equal( compactHudLayout( 800, 600, true ), null );
 	for (
 		const [width, height, expectedExpWidth] of [
 			[ 375, 667, 256 ],
@@ -300,7 +302,7 @@ test("compactHudLayout reserves a progression strip between quickslots and tools
 			[ 320, 568, 256 ]
 		]
 	) {
-		const layout = compactHudLayout( width, height );
+		const layout = compactHudLayout( width, height, true );
 		assert.ok( layout && layout.exp, `${width}x${height}: compact layout with exp strip` );
 		assert.deepEqual( layout.bounds, [ 0, 0, width, layout.top ] );
 		assert.equal( layout.exp[2], expectedExpWidth );
@@ -312,7 +314,25 @@ test("compactHudLayout reserves a progression strip between quickslots and tools
 		assert.equal( layout.exp[1], maxSlotBottom, `${width}x${height}: exp strip sits directly below hotbar` );
 		assert.ok( layout.exp[1] + layout.exp[3] <= minToolTop, `${width}x${height}: exp strip stays above tools` );
 	}
-	const tiny = compactHudLayout( 200, 200 );
+	const tiny = compactHudLayout( 200, 200, true );
 	assert.ok( tiny );
 	assert.equal( tiny.exp, null );
+});
+
+test("the pointer class picks the small-screen arrangement, not the size alone (#2406)", () => {
+	// A coarse pointer below the smallest mode gets the touch layout...
+	assert.ok( compactHudLayout( 375, 667, true ) );
+	assert.equal( smallHudLayout( 375, 667, true ), null );
+	// ...a fine pointer at the same size keeps the native HUD, degraded.
+	assert.equal( compactHudLayout( 375, 667, false ), null );
+	assert.equal( compactHudLayout( 640, 480, false ), null );
+	assert.deepEqual( smallHudLayout( 640, 480, false ), { scale: 0.8 } );
+	assert.deepEqual( smallHudLayout( 400, 900, false ), { scale: 0.5 } );
+	// A viewport wider than the native bar but shorter than 600 degrades
+	// without shrinking the bar.
+	assert.deepEqual( smallHudLayout( 1280, 500, false ), { scale: 1 } );
+	// At and above the original's smallest mode both arrangements stand down.
+	assert.equal( compactHudLayout( 800, 600, true ), null );
+	assert.equal( smallHudLayout( 800, 600, false ), null );
+	assert.equal( smallHudLayout( 1600, 900, false ), null );
 });

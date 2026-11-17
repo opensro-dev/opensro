@@ -1368,6 +1368,7 @@ export function startRuntime(
 						// Layout and picking share logical UI pixels; the world retains its full backing resolution.
 						width: platform.readUiViewport().width,
 						height: platform.readUiViewport().height,
+						coarsePointer: platform.readUiViewport().coarsePointer ?? false,
 						worldReady: readySent || worldReady
 					},
 					now,

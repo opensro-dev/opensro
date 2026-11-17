@@ -105,6 +105,7 @@ function contained( output, width, height ) {
 for ( const [width, height] of [ [ 375, 667 ], [ 667, 375 ] ] ) {
 	test(`populated Guild pages keep native text and controls at ${width}x${height}`, () => {
 		const sent = [], fixture = uiFixture( command => sent.push( command ) );
+		fixture.state.coarsePointer = true;
 		let time = 0, published;
 		/*
 		================
@@ -306,6 +307,7 @@ for ( const [width, height] of [ [ 375, 667 ], [ 667, 375 ] ] ) {
 
 test("a guild master outside any party can donate and open the authority panel without an error", () => {
 	const fixture = uiFixture();
+	fixture.state.coarsePointer = true;
 	let time = 0, published;
 	/*
 	================
@@ -362,6 +364,7 @@ function friendRows() {
 for ( const [width, height] of [ [ 1600, 900 ], [ 375, 667 ] ] ) {
 	test(`the Friends tab lists the roster and drives add, delete, whisper and the request prompt at ${width}x${height}`, () => {
 		const sent = [], fixture = uiFixture( command => sent.push( command ) );
+		fixture.state.coarsePointer = true;
 		let time = 0, published;
 		/*
 		================
@@ -452,6 +455,7 @@ for ( const [width, height] of [ [ 1600, 900 ], [ 375, 667 ] ] ) {
 
 test("compact HUD draws EXP/SP progression and keeps quickslots 0..10 uncovered and droppable while windows are open", () => {
 	const sent = [], fixture = uiFixture( command => sent.push( command ) );
+	fixture.state.coarsePointer = true;
 	let time = 0, published;
 	/*
 	================

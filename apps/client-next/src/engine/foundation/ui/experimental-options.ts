@@ -308,6 +308,19 @@ export interface DisplayClass {
 
 /*
 ================
+coarsePointer
+
+The one reading of the primary pointer's class (#2406): coarse is a
+finger. A host without matchMedia reads as fine, so layout keeps the
+desktop rule and tests choose touch by stubbing matchMedia.
+================
+*/
+export function coarsePointer(): boolean {
+	return globalThis.matchMedia?.( "(pointer: coarse)" ).matches ?? false;
+}
+
+/*
+================
 phoneDisplay
 
 A phone is a coarse pointer on a small screen. A touch laptop has a fine

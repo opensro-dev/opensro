@@ -29,6 +29,11 @@ const PARTY_MASTERY_Y = 39;
 const PARTY_MASTERY_CELL = 12;
 // Only the position matters to the distance shade; entities carry no heading.
 type PartyShadePosition = Pick<Pose, "regionId" | "x" | "y" | "z">;
+// The native wrap keeps this much canvas below the last row (5BCBB0),
+// independent of the buff preference. The small-viewport band passes a
+// smaller reserve so its rows pack the band instead of wrapping at once
+// (compact-hud.ts, #2406).
+const PARTY_BOTTOM_RESERVE = 230;
 // 5BCBB0: exclude self by name, preserve roster order, wrap before placing
 // each row. In job mode 8675F0 (8679C4..867A03) overwrites g_pLocalPlayer+0x108
 // with the job alias (+0x1898), so a suited player's roster entry carries
@@ -58,11 +63,12 @@ export function partyOverlay(
 	height: number,
 	x: number,
 	y: number,
-	buffs: boolean
+	buffs: boolean,
+	reserve: number = PARTY_BOTTOM_RESERVE
 ) {
 	let column = 0, rowY = 0;
 	return partyMembers( game ).map( member => {
-		if ( height - y - rowY - 73 < 230 ) {
+		if ( height - y - rowY - 73 < reserve ) {
 			column += 133;
 			rowY = 0;
 		}

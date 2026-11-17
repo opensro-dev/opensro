@@ -33,6 +33,7 @@ function draw( f, last, t ) {
 
 test("the extended bar follows its drag on compact and stays on screen", () => {
 	const f = uiFixture( () => undefined );
+	f.state.coarsePointer = true;
 	try {
 		f.state.width = 609;
 		f.state.height = 327;
