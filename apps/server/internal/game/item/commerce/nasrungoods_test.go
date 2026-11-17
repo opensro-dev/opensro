@@ -20,19 +20,26 @@ TestNasrunGoodsAreTokenPricedSpiritsOnEveryHonorShop
 */
 func TestNasrunGoodsAreTokenPricedSpiritsOnEveryHonorShop(t *testing.T) {
 	goods := NasrunGoods()
-	want := len(nasrunShopTabs) * (len(nasrunSpirits) + 1)
+	want := len(nasrunShopTabs) * (len(nasrunSpirits) + 3)
 	if len(goods) != want {
 		t.Fatalf("%d goods, want %d", len(goods), want)
 	}
-	jewels := map[string]bool{}
+	jewels, gears := map[string]bool{}, map[string]int{}
 	for _, good := range goods {
-		price := uint64(nasrunSpiritTokenPrice)
-		if good.Codename == nasrunJewel {
+		price, currency := uint64(nasrunSpiritTokenPrice), PaymentNasrunToken
+		switch {
+		case good.Codename == nasrunJewel:
 			price = nasrunJewelTokenPrice
 			jewels[good.Tab] = true
+		case good.Codename == nasrunGear && good.Currency == PaymentGold:
+			price, currency = nasrunGearGoldPrice, PaymentGold
+			gears[good.Tab]++
+		case good.Codename == nasrunGear:
+			price = nasrunGearTokenPrice
+			gears[good.Tab]++
 		}
-		if good.Currency != PaymentNasrunToken || good.Price != price {
-			t.Fatalf("%+v is not a %d-token offer", good, price)
+		if good.Currency != currency || good.Price != price {
+			t.Fatalf("%+v is not a %d offer in currency %d", good, price, currency)
 		}
 		if good.Codename == "ITEM_MALL_AVATAR_M_NASRUN_UNIQUE" || good.Codename == "ITEM_MALL_AVATAR_W_NASRUN_UNIQUE" {
 			t.Fatalf("the S grade Spirit %s is sold", good.Codename)
@@ -41,6 +48,12 @@ func TestNasrunGoodsAreTokenPricedSpiritsOnEveryHonorShop(t *testing.T) {
 	// Sabakun's jewel (step 3c) is on every token tab.
 	if len(jewels) != len(nasrunShopTabs) {
 		t.Fatalf("the jewel is on %d tabs, want %d", len(jewels), len(nasrunShopTabs))
+	}
+	// The gear (slice 4) is on every token tab, for tokens and for gold.
+	for _, tab := range nasrunShopTabs {
+		if gears[tab] != 2 {
+			t.Fatalf("tab %s lists the gear %d times, want 2", tab, gears[tab])
+		}
 	}
 }
 
