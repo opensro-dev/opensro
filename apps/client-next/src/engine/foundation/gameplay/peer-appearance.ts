@@ -13,6 +13,7 @@ import { sameCoordinateSpace } from "@/engine/foundation/world/world-space";
 import { equipmentHoldType } from "./name-color";
 import { decodeSpawnSkills, type SpawnSkillReference } from "./spawn-skills";
 import type { EntityEquipment, EntityState } from "@/engine/contracts/world";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 // Native ItemRecord_GetEquipSlotIndex slot table; wire authority: server/item/wire/playerspawnrow.go.
 /*
 ================
@@ -53,7 +54,7 @@ export function transformSkinTail(
 	itemRefs: ReadonlyMap<number, number>,
 	revision: number
 ): { skin: NonNullable<EntityState["transformSkin"]>; next: number; } {
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	let o = offset;
 	function take( n: number ) {
 		if ( o + n > p.length ) throw new Error( "Truncated transform skin" );
@@ -87,7 +88,7 @@ export function decodePeerAppearance(
 	objRefs: ReadonlyMap<number, { tidWord: number; }> = new Map(),
 	skillRefs: ReadonlyMap<number, SpawnSkillReference> = new Map()
 ): EntityState {
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	let o = 0;
 	function take( n: number ) {
 		if ( o + n > p.length ) throw new Error( "Truncated peer appearance" );

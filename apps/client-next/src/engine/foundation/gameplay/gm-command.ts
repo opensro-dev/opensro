@@ -15,6 +15,7 @@ resolve.
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 const OP_GM_COMMAND = 0x75b6;
 const MAX_REFERENCE_ROWS = 65536;
@@ -329,7 +330,7 @@ export function gmReply( p: Uint8Array ): GmReply | null {
 	const code = p[1]!;
 	const string = ( failure = false ) => {
 		if ( p.length < 4 ) throw Error( "Truncated GM reply string" );
-		const size = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 2, true );
+		const size = viewOf( p ).getUint16( 2, true );
 		if ( p.length !== 4 + size + Number( failure ) ) throw Error( "Invalid GM reply string length" );
 		return new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( 4, 4 + size ) );
 	};
@@ -346,7 +347,7 @@ export function gmReply( p: Uint8Array ): GmReply | null {
 			return { console: true, text: "Failed. -> silk grant refused" };
 		}
 		if ( p.length !== 6 ) throw Error( "Invalid GM silk reply" );
-		const balance = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true );
+		const balance = viewOf( p ).getUint32( 2, true );
 		return { console: true, text: "-> silk granted, balance " + balance };
 	}
 	if ( code === GM_SET_SPEED ) {
@@ -356,7 +357,7 @@ export function gmReply( p: Uint8Array ): GmReply | null {
 			return { console: true, text: "Failed. -> speed change refused" };
 		}
 		if ( p.length !== 4 ) throw Error( "Invalid GM speed reply" );
-		const percent = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 2, true );
+		const percent = viewOf( p ).getUint16( 2, true );
 		return { console: true, text: "-> speed set to " + percent + "%" };
 	}
 	if ( code === GM_FORGE ) {
@@ -370,7 +371,7 @@ export function gmReply( p: Uint8Array ): GmReply | null {
 	}
 	if ( result === 1 && code === 4 ) {
 		if ( p.length !== 14 ) throw Error( "Invalid GM world status" );
-		const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+		const v = viewOf( p );
 		return {
 			console: false,
 			text: `Player:${v.getInt32( 2, true )}, NPC_Mob:${v.getInt32( 6, true )}, DroppedItem:${

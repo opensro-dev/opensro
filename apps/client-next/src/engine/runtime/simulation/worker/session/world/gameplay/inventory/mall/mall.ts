@@ -13,6 +13,7 @@ import { INVENTORY_TRANSACTION_TIMEOUT } from "@/engine/contracts/network";
 import { MALL_CATALOG_CONTROL, MALL_SILK_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 import { mallProjection } from "@/engine/foundation/gameplay/item-mall-catalog";
 import { mallPurchasePayload, type MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 const ITEM_MOVE_REQUEST = 0x706d;
 const REQUEST_TIMEOUT_MS = 10000;
@@ -190,7 +191,7 @@ export function createMall() {
 				!request || request === "catalog" || !staged || expired || payload.length < 11 || payload[0] !== 1 ||
 				payload[1] !== 0x18 || payload.length !== 10 + payload[7]!
 			) throw Error( "Unmatched mall receipt" );
-			const view = new DataView( payload.buffer, payload.byteOffset, payload.byteLength );
+			const view = viewOf( payload );
 			if (
 				view.getUint16( 2, true ) !== request.group || payload[4] !== request.shop ||
 				payload[5] !== request.tab || payload[6] !== request.slot ||

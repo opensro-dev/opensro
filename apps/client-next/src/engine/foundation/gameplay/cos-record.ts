@@ -1,5 +1,6 @@
 import { decodeInventoryItem } from "./inventory-item";
 import type { CosRecord } from "@/engine/contracts/gameplay";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 // 830ec0: reference-selected record, with helper gates 5500f0/5500b0/582160
 // and trailing-field gates 82d310/82d350/82d370.
 export function decodeCosRecord(
@@ -7,7 +8,7 @@ export function decodeCosRecord(
 	refs: ReadonlyMap<number, number>,
 	itemRefs: ReadonlyMap<number, number> = new Map()
 ): CosRecord | null {
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	let o = 0;
 	function take( n: number ) {
 		if ( o + n > p.length ) throw new Error( "Truncated COS record" );

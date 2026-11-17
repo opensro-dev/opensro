@@ -1,5 +1,6 @@
 import { decodeWeather, type WeatherOptions } from "./weather";
 import { EVENT_GROUP_STATE_OPCODE, WEATHER_OPCODE } from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 export interface EventEnvironment {
 	readonly groups: Readonly<Record<number, number>>;
 	readonly server: WeatherOptions;
@@ -45,7 +46,7 @@ export function environmentPacket(
 	}
 	if ( opcode !== EVENT_GROUP_STATE_OPCODE ) return null;
 	if ( p.length !== 5 ) throw Error( "Invalid event state packet" );
-	const id = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 0, true ), active = p[4]!;
+	const id = viewOf( p ).getUint32( 0, true ), active = p[4]!;
 	const next = { ...state, groups: { ...state.groups, [id]: active } };
 	// Only exact 0/1 changes weather immediately. Subsequent 3BDE checks bit 0.
 	if ( id !== 1 || (active !== 0 && active !== 1) ) return { state: next };

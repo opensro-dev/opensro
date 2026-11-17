@@ -11,6 +11,7 @@ and mode 1 carries deferred damage ticks.
 */
 
 import type { CastImpact, CastTargetResult, Pose } from "@/engine/contracts/gameplay";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 const MAX_RESULT_RECORDS = 16384;
 const RESULT_TARGETS = 1;
@@ -29,7 +30,7 @@ result grammar, as native 8E0190 does.
 ================
 */
 function resultReader( payload: Uint8Array, offset: number ) {
-	const view = new DataView( payload.buffer, payload.byteOffset, payload.byteLength );
+	const view = viewOf( payload );
 	let cursor = offset;
 	/*
 	================
