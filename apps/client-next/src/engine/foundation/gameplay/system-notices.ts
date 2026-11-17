@@ -11,6 +11,11 @@ the shard's job-kill and drop/plus notices (0x3667), and the command restriction
 */
 import { sealTier } from "./item-seal";
 import { decodeNoticeLinks } from "./notice-links";
+import {
+	CHAT_BROADCAST_OPCODE,
+	FORTRESS_WAR_STATE_OPCODE,
+	GM_RESTRICTION_NOTICE_OPCODE
+} from "@/engine/contracts/opcodes";
 
 /*
 ================
@@ -72,7 +77,9 @@ only their subtype byte; their minutes are constants in the client.
 ================
 */
 export function fortressNotice( opcode: number, p: Uint8Array ): SystemNotice | null {
-	if ( opcode !== 0x3887 || p[0] === undefined || p[0] < 1 || (p[0] > 6 && p[0] !== 9) ) return null;
+	if ( opcode !== FORTRESS_WAR_STATE_OPCODE || p[0] === undefined || p[0] < 1 || (p[0] > 6 && p[0] !== 9) ) {
+		return null;
+	}
 	if ( p.length !== 1 ) throw Error( "Trailing fortress announcement bytes" );
 	const subtype = p[0];
 	return {
@@ -234,7 +241,7 @@ and the port-only job-kill, drop/plus and item-break channels laid out the same 
 ================
 */
 export function serverNotification( opcode: number, p: Uint8Array ): SystemNotice | null {
-	if ( opcode !== 0x3667 ) return null;
+	if ( opcode !== CHAT_BROADCAST_OPCODE ) return null;
 	// Port-only trainer receipts belong to the system log, never player chat.
 	const trainer = p[0] === 2 && p.length >= 14 && p[1] === 11 && p[2] === 0 &&
 		new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( 3, 14 ) ) === "Pet trainer";
@@ -340,7 +347,7 @@ zero/overflow calendar values remain numbers; noon is still Forenoon.
 ================
 */
 export function restrictionNotice( opcode: number, p: Uint8Array ): SystemNotice | null {
-	if ( opcode !== 0x36ea ) return null;
+	if ( opcode !== GM_RESTRICTION_NOTICE_OPCODE ) return null;
 	if ( p.length !== 5 ) throw Error( "Invalid command restriction notice" );
 	const kind = p[0]!;
 	if ( kind !== 0 && kind !== 1 ) return null;

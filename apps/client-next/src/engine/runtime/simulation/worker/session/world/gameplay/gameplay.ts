@@ -17,6 +17,7 @@ import { EVENT_EXCHANGE_FUNCTION } from "@/engine/foundation/ui/npc-talk";
 import { guildBanRefused, guildSoldierRefusal } from "@/engine/foundation/gameplay/guild-manager";
 import { advanceGuildWarClock } from "@/engine/foundation/gameplay/guild-war";
 import { planarDistance, sameCoordinateSpace } from "@/engine/foundation/world/world-space";
+import { createSpeedJournal, type SpeedFrameRow } from "@/engine/foundation/gameplay/speed-journal";
 import {
 	ACTION_FORTRESS_RETURN,
 	FORTRESS_PORTAL_NOTICE_CATEGORY,
@@ -30,7 +31,7 @@ import {
 	createCosSelection,
 	isRideStateRefusedItem
 } from "@/engine/foundation/gameplay/cos-item-use";
-import { ARENA_CHEST_OPCODE } from "@/engine/foundation/gameplay/arena-chest";
+import { ARENA_CHEST_OPCODE, ARENA_DECISION_OPCODE } from "@/engine/foundation/gameplay/arena-chest";
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
 import { createCountJobs, countJobUseRequest } from "@/engine/foundation/gameplay/count-job";
 import { createStorageRoom, isWarehouseTicket } from "@/engine/foundation/gameplay/storage-room";
@@ -374,6 +375,74 @@ import {
 	journalInventoryFrame
 } from "@/engine/foundation/gameplay/inventory-journal";
 import type { Degradation, WireFrame } from "@/engine/contracts/network";
+import {
+	ABNORMAL_SNAPSHOT_OPCODE,
+	ACTION_EMOTE_OPCODE,
+	ACTION_STATE_OPCODE,
+	BASE_STATS_OPCODE,
+	BERSERK_REQUEST_OPCODE,
+	BERSERK_RESPONSE_OPCODE,
+	CHAT_BROADCAST_OPCODE,
+	COS_BEHAVIOR_RESULT_OPCODE,
+	COS_CANCEL_REQUEST_OPCODE,
+	COS_CANCEL_RESPONSE_OPCODE,
+	COS_COMMAND_REQUEST_OPCODE,
+	COS_COMMAND_RESULT_OPCODE,
+	COS_INFO_UPDATE_OPCODE,
+	COS_RECORD_CREATE_OPCODE,
+	COS_RIDE_REQUEST_OPCODE,
+	COS_RIDE_STATE_OPCODE,
+	COS_TERMINATE_REQUEST_OPCODE,
+	COS_TERMINATE_RESPONSE_OPCODE,
+	ENDED_EFFECT_INSTANCES_OPCODE,
+	FLAG_WAR_EVENT_OPCODE,
+	FLAG_WAR_REGISTER_REQUEST_OPCODE,
+	FORTRESS_WAR_STATE_OPCODE,
+	GACHA_WIN_ANNOUNCE_OPCODE,
+	GAME_TIME_OPCODE,
+	GM_COMMAND_ACK_OPCODE,
+	INTERACTION_RESPONSE_OPCODE,
+	ITEM_MOVE_RESPONSE_OPCODE,
+	ITEM_USE_RESPONSE_OPCODE,
+	LEVEL_UP_EFFECT_OPCODE,
+	LOCAL_REBIRTH_REQUEST_OPCODE,
+	MASTERY_LEVEL_UP_RESPONSE_OPCODE,
+	MENTOR_JOIN_ACK_OPCODE,
+	MENTOR_LISTING_PAGE_OPCODE,
+	MERCENARY_DISMISS_OPCODE,
+	MOTION_STATE_REQUEST_OPCODE,
+	MOVEMENT_ACK_OPCODE,
+	NPC_INTERACTION_ACK_OPCODE,
+	OBJECT_DESPAWN_OPCODE,
+	OBJECT_SELECT_RESULT_OPCODE,
+	OBJECT_SOURCE_CORRECTION_OPCODE,
+	OBJECT_SOURCE_MOVE_OPCODE,
+	OBJECT_STATE_REFRESH_OPCODE,
+	PARTY_DELETE_ACK_OPCODE,
+	PARTY_JOIN_ACK_OPCODE,
+	PARTY_LOOT_NOTICE_OPCODE,
+	PICKUP_ANIM_OPCODE,
+	POINTS_UPDATE_OPCODE,
+	PORTAL_RESULT_OPCODE,
+	QUEST_ABORT_RESPONSE_OPCODE,
+	QUEST_ACCEPT_RESPONSE_OPCODE,
+	QUEST_GATHER_CANCEL_REPLY_OPCODE,
+	QUEST_NOTIFICATION_OPCODE,
+	REBIRTH_POINT_APPOINT_RESULT_OPCODE,
+	RETURN_CANCEL_REQUEST_OPCODE,
+	RETURN_CANCEL_RESULT_OPCODE,
+	SERVER_CLOCK_GID_LATCH_OPCODE,
+	SKILL_CAST_RESULT_OPCODE,
+	SKILL_LEARN_RESPONSE_OPCODE,
+	SKIN_CHANGE_OPCODE,
+	STALL_CLOSED_OPCODE,
+	STALL_EDIT_RESULT_OPCODE,
+	TARGET_INTERACT_OPCODE,
+	TC_HONOR_RANK_ANSWER_OPCODE,
+	TC_OPEN_ANSWER_OPCODE,
+	VISUAL_FLAGS_REQUEST_OPCODE,
+	VITALS_UPDATE_OPCODE
+} from "@/engine/contracts/opcodes";
 /*
 ================
 unlimitedItemIds
@@ -482,11 +551,11 @@ by them made it short.
 */
 function skillPressAnswer( frame: WireFrame, localGid: number ): "answered" | "queued" | null {
 	const p = frame.payload;
-	if ( frame.opcode === 0xb2cd ) {
+	if ( frame.opcode === ACTION_STATE_OPCODE ) {
 		if ( p[0] !== ACTION_STATE_ARM ) return null;
 		return p[1] === QUEUED_COMMANDS ? "queued" : "answered";
 	}
-	if ( frame.opcode !== 0xb245 || !localGid ) return null;
+	if ( frame.opcode !== SKILL_CAST_RESULT_OPCODE || !localGid ) return null;
 	if ( p[0] !== 1 ) return "answered";
 	if ( p.length < 10 ) return null;
 	return ((p[6]! | p[7]! << 8 | p[8]! << 16 | p[9]! << 24) >>> 0) === localGid ? "answered" : null;
@@ -596,6 +665,9 @@ export function createGameplay(
 	// pickupPredictableNow() held at the last step (published, #1567).
 	let pickupPredictable = false;
 	const feedback = createFeedback();
+	// Port-only diagnostics (#3508): the speed frames, effects and mount the
+	// client applied, for a bug report (speed-journal.ts).
+	const speedJournal = createSpeedJournal();
 	const pickup = createPickup();
 	const actionSession = createActionSession();
 	const cosPickup = createCosPickup();
@@ -605,7 +677,12 @@ export function createGameplay(
 	const skillPress = createSkillPressQueue<GameplayCommand & { kind: "skill"; }>();
 	const movement = createMovement( send, publishFeedback ),
 		inventory = createInventory( send, handle => play( handle, soundClock ), cue => playItem( cue, soundClock ) ),
-		combat = createCombat( readEntity, publishFeedback, () => skillPress.oneWayMs() ),
+		combat = createCombat(
+			readEntity,
+			publishFeedback,
+			() => skillPress.oneWayMs(),
+			row => speedJournal.effect( row )
+		),
 		targeting = createTargeting( send, readEntity ),
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
@@ -670,7 +747,7 @@ sendFrame
 	function sendFrame( frame: WireFrame ): WireFrame {
 		send( frame );
 		pickup.sent( frame );
-		if ( frame.opcode === 0x72cd && frame.payload[0] === 1 ) {
+		if ( frame.opcode === TARGET_INTERACT_OPCODE && frame.payload[0] === 1 ) {
 			moveReservation.clear();
 			// sendSkillPress names the skill right after.
 			skillPress.commandSent();
@@ -2075,6 +2152,29 @@ speeds
 		},
 		/*
 ================
+noteSpeedFrame
+
+Port-only diagnostics (#3508): one 0x376F about the local player or its
+mount, as the world routed it (speed-journal.ts).
+================
+		*/
+		noteSpeedFrame( row: SpeedFrameRow ) {
+			speedJournal.speed( row );
+			dirty = true;
+		},
+		/*
+================
+noteMount
+
+Port-only diagnostics (#3508): the local player's mountedOn (0 on foot),
+journaled when it changes.
+================
+		*/
+		noteMount( mountedOn: number, now: number ) {
+			if ( speedJournal.mount( now, mountedOn ) ) dirty = true;
+		},
+		/*
+================
 seed
 
 Bind the admitted local actor and initialize its authoritative movement.
@@ -2271,7 +2371,10 @@ state here before a command can claim a native wire conversation.
 				}
 				const id = new TextEncoder().encode( command.id );
 				if ( id.length > 128 ) throw Error( "Invalid arena identity" );
-				return sendFrame( { opcode: 0x7fca, payload: Uint8Array.of( command.operation, ...id ) } );
+				return sendFrame( {
+					opcode: ARENA_DECISION_OPCODE,
+					payload: Uint8Array.of( command.operation, ...id )
+				} );
 			}
 			if ( command.kind === "arena-dismiss" ) {
 				inventory.dismissArena();
@@ -2285,7 +2388,7 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "berserk" ) {
 				return localGid && feedback.gauge() === 5 ?
-					sendFrame( { opcode: 0x7341, payload: Uint8Array.of( 1 ) } ) :
+					sendFrame( { opcode: BERSERK_REQUEST_OPCODE, payload: Uint8Array.of( 1 ) } ) :
 					null;
 			}
 			if ( command.kind === "effect-cancel" ) {
@@ -2306,7 +2409,7 @@ state here before a command can claim a native wire conversation.
 				payload[1] = 5;
 				v.setUint32( 2, skillId, true );
 				if ( token ) v.setUint32( 6, token, true );
-				return sendFrame( { opcode: 0x72cd, payload } );
+				return sendFrame( { opcode: TARGET_INTERACT_OPCODE, payload } );
 			}
 			if ( command.kind === "minimap-floors" ) {
 				movement.minimapFloors( command.poses );
@@ -2321,10 +2424,10 @@ state here before a command can claim a native wire conversation.
 					payload[1] = 5;
 					const view = new DataView( payload.buffer );
 					view.setUint32( 2, returnScroll.skillId, true );
-					return sendFrame( { opcode: 0x72cd, payload } );
+					return sendFrame( { opcode: TARGET_INTERACT_OPCODE, payload } );
 				}
 				return localGid && returnScroll ?
-					sendFrame( { opcode: 0x72dd, payload: new Uint8Array( 0 ) } ) :
+					sendFrame( { opcode: RETURN_CANCEL_REQUEST_OPCODE, payload: new Uint8Array( 0 ) } ) :
 					null;
 			}
 			if ( command.kind === "gathering-cancel" ) {
@@ -2724,7 +2827,7 @@ state here before a command can claim a native wire conversation.
 				// Native 697215 sends 32DC without an opcode-group lock: CC9054 only
 				// registers 7338/B338. Silent refusals must leave later clicks usable.
 				// The server serializes revival and rejects already-living actors.
-				const frame = { opcode: 0x32dc, payload: Uint8Array.of( command.choice ) };
+				const frame = { opcode: LOCAL_REBIRTH_REQUEST_OPCODE, payload: Uint8Array.of( command.choice ) };
 				send( frame );
 				// 5260DE: accepting the kind-3 box while the local
 				// flag-war team byte is set (a live match, in port
@@ -2777,7 +2880,7 @@ state here before a command can claim a native wire conversation.
 				local?.movementMode === MOVEMENT_SEATED &&
 				[ "move", "ground-move", "select", "attack", "pickup" ].includes( command.kind )
 			) {
-				return sendFrame( { opcode: 0x7017, payload: Uint8Array.of( 4 ) } );
+				return sendFrame( { opcode: MOTION_STATE_REQUEST_OPCODE, payload: Uint8Array.of( 4 ) } );
 			}
 
 			// A committed search (637CF0 @637FC3) answers once: the
@@ -2932,7 +3035,7 @@ state here before a command can claim a native wire conversation.
 				}
 				if ( (progression.maxLevel ?? progression.level ?? 255) > 19 && command.enabled ) return null;
 				return sendFrame( {
-					opcode: 0x7683,
+					opcode: VISUAL_FLAGS_REQUEST_OPCODE,
 					payload: Uint8Array.of( ((local.visualFlags ?? 0) & 2) | (command.enabled ? 1 : 0) )
 				} );
 			}
@@ -2940,7 +3043,10 @@ state here before a command can claim a native wire conversation.
 				// CGInterface_ExecuteActionCommand (695420) action 1011: toggle the
 				// helper bit of the local +0x779 flags and send the whole byte.
 				if ( !local || !localGid ) throw Error( "Missing helper mark authority" );
-				return sendFrame( { opcode: 0x7683, payload: Uint8Array.of( ((local.visualFlags ?? 0) & 3) ^ 2 ) } );
+				return sendFrame( {
+					opcode: VISUAL_FLAGS_REQUEST_OPCODE,
+					payload: Uint8Array.of( ((local.visualFlags ?? 0) & 3) ^ 2 )
+				} );
 			}
 			if ( command.kind === "auto-potion-save" ) {
 				const next = autoPotionSettings( command.settings );
@@ -3108,7 +3214,7 @@ state here before a command can claim a native wire conversation.
 				// The clicked row's mode says whether this toggle signs up
 				// (mode 1) or cancels (mode 2); the join answer reads it.
 				flagWarJoinExpected = targeting.state().targetFlagWarMode !== 2;
-				return sendFrame( { opcode: 0x7753, payload: new Uint8Array( 0 ) } );
+				return sendFrame( { opcode: FLAG_WAR_REGISTER_REQUEST_OPCODE, payload: new Uint8Array( 0 ) } );
 			}
 			if ( command.kind === "cos-shop-buy" || command.kind === "cos-shop-sell" ) {
 				const record = cosRecords.get( command.gid );
@@ -3242,7 +3348,7 @@ state here before a command can claim a native wire conversation.
 				const payload = new Uint8Array( 5 );
 				payload[0] = Number( command.mounted );
 				new DataView( payload.buffer ).setUint32( 1, record.gid, true );
-				return sendFrame( { opcode: 0x74b5, payload } );
+				return sendFrame( { opcode: COS_RIDE_REQUEST_OPCODE, payload } );
 			}
 			if ( command.kind === "cos-training" ) {
 				// Port-only, not native: the seven-byte F0 command (op, arg). The
@@ -3261,7 +3367,7 @@ state here before a command can claim a native wire conversation.
 				payload[5] = command.operation;
 				payload[6] = command.arg;
 				if ( command.operation === 2 ) new DataView( payload.buffer ).setUint32( 7, command.target ?? 0, true );
-				return sendFrame( { opcode: 0x769e, payload } );
+				return sendFrame( { opcode: COS_COMMAND_REQUEST_OPCODE, payload } );
 			}
 			if ( command.kind === "cos-follow" || command.kind === "cos-cancel" ) {
 				const record = cosRecords.get( command.gid );
@@ -3276,7 +3382,7 @@ state here before a command can claim a native wire conversation.
 					// remove the actor: the ordinary despawn owns that transition.
 					const payload = new Uint8Array( 4 );
 					new DataView( payload.buffer ).setUint32( 0, record.gid, true );
-					return sendFrame( { opcode: 0x756c, payload } );
+					return sendFrame( { opcode: COS_CANCEL_REQUEST_OPCODE, payload } );
 				}
 				// CosEntryPanel_SyncActiveState 6A2777 sends no target after tag 9.
 				const payload = new Uint8Array( 5 );
@@ -3288,7 +3394,7 @@ state here before a command can claim a native wire conversation.
 					next.delete( record.gid );
 					petAssists = next;
 				}
-				return sendFrame( { opcode: 0x769e, payload } );
+				return sendFrame( { opcode: COS_COMMAND_REQUEST_OPCODE, payload } );
 			}
 			if ( command.kind === "cos-pet-attack" ) {
 				// 6A2350 case 2: an attack pet (class 3) attacks the player's target
@@ -3309,7 +3415,7 @@ state here before a command can claim a native wire conversation.
 				payload[4] = 2;
 				v.setUint32( 5, entity.gid, true );
 				petAssists = new Map( petAssists ).set( record.gid, entity.gid );
-				return sendFrame( { opcode: 0x769e, payload } );
+				return sendFrame( { opcode: COS_COMMAND_REQUEST_OPCODE, payload } );
 			}
 			if ( command.kind === "cos-clean" ) {
 				// CICCos_ExecuteActionCommand (6A2350) case 5: a riding mount or a
@@ -3322,7 +3428,7 @@ state here before a command can claim a native wire conversation.
 				if (
 					cosSelection.statusRecords( cosRecords ).some( row => row.gid === cleanedGid && row.band === 5 )
 				) {
-					return sendFrame( { opcode: 0x7458, payload: new Uint8Array( 0 ) } );
+					return sendFrame( { opcode: MERCENARY_DISMISS_OPCODE, payload: new Uint8Array( 0 ) } );
 				}
 				// A riding mount spawns without an owner GID (as cos-ride allows);
 				// the owner's own record set proves it is ours.
@@ -3333,7 +3439,7 @@ state here before a command can claim a native wire conversation.
 				) throw Error( "No owned COS to clean" );
 				const payload = new Uint8Array( 4 );
 				new DataView( payload.buffer ).setUint32( 0, record.gid, true );
-				return sendFrame( { opcode: 0x7618, payload } );
+				return sendFrame( { opcode: COS_TERMINATE_REQUEST_OPCODE, payload } );
 			}
 			if ( command.kind === "cos-behavior" ) {
 				// 6A9910 / 6A1B10 / 6A2350 case 6 look up only CCosDataManager_FindCharData
@@ -3578,12 +3684,15 @@ state here before a command can claim a native wire conversation.
 					// 695420 action 1003 is Trace, never the basic-attack family.
 					const payload = Uint8Array.of( 1, 3, 1, 0, 0, 0, 0 );
 					new DataView( payload.buffer ).setUint32( 3, target.gid, true );
-					const frame = sendFrame( { opcode: 0x72cd, payload } );
+					const frame = sendFrame( { opcode: TARGET_INTERACT_OPCODE, payload } );
 					approach = interactionApproachTransition( approach, { kind: "cancel" } );
 					return frame;
 				}
 				if ( command.id === 1001 ) {
-					return sendFrame( { opcode: 0x7017, payload: Uint8Array.of( local?.movementMode === 2 ? 3 : 2 ) } );
+					return sendFrame( {
+						opcode: MOTION_STATE_REQUEST_OPCODE,
+						payload: Uint8Array.of( local?.movementMode === 2 ? 3 : 2 )
+					} );
 				}
 				if ( command.id === 5000 ) {
 					const pet = [ ...cosRecords.values() ].find( c => c.band === 4 && !c.dead && c.hp > 0 );
@@ -3591,18 +3700,18 @@ state here before a command can claim a native wire conversation.
 					const payload = new Uint8Array( 5 );
 					new DataView( payload.buffer ).setUint32( 0, pet.gid, true );
 					payload[4] = 11;
-					return sendFrame( { opcode: 0x769e, payload } );
+					return sendFrame( { opcode: COS_COMMAND_REQUEST_OPCODE, payload } );
 				}
 				if ( command.id === 1000 ) {
 					if (
 						local?.mountedOn || local?.appearanceState?.[0] === 2 ||
 						combat.state().casts.some( c => c.caster === localGid && c.cancelledAtMs === undefined )
 					) return null;
-					return sendFrame( { opcode: 0x7017, payload: Uint8Array.of( 4 ) } );
+					return sendFrame( { opcode: MOTION_STATE_REQUEST_OPCODE, payload: Uint8Array.of( 4 ) } );
 				}
 				const emote = actionEmote( command.id );
 				if ( emote === null ) throw Error( "Action is unavailable" );
-				return sendFrame( { opcode: 0x324b, payload: Uint8Array.of( emote ) } );
+				return sendFrame( { opcode: ACTION_EMOTE_OPCODE, payload: Uint8Array.of( emote ) } );
 			}
 			if ( command.kind === "arrow-key" ) {
 				// 0x680A30: a press walks only where a click would (the same
@@ -4001,7 +4110,7 @@ state here before a command can claim a native wire conversation.
 				const payload = new Uint8Array( 5 );
 				new DataView( payload.buffer ).setUint32( 0, entity.gid, true );
 				payload[4] = 0x0b;
-				return sendFrame( { opcode: 0x769e, payload } );
+				return sendFrame( { opcode: COS_COMMAND_REQUEST_OPCODE, payload } );
 			}
 			if ( command.kind === "cos-attack" ) {
 				// 692CB0: a ride attacks a monster or another player's pet alike.
@@ -4015,7 +4124,7 @@ state here before a command can claim a native wire conversation.
 				v.setUint32( 0, activeCos.gid, true );
 				payload[4] = 2;
 				v.setUint32( 5, entity.gid, true );
-				return sendFrame( { opcode: 0x769e, payload } );
+				return sendFrame( { opcode: COS_COMMAND_REQUEST_OPCODE, payload } );
 			}
 			if ( command.kind === "pickup" ) {
 				if ( entity.kind !== "ground-item" ) throw new Error( "Target is not a ground item" );
@@ -4174,8 +4283,8 @@ Packet handling must not depend on which HUD panel is currently open.
 			const answer = skillPressAnswer( frame, localGid );
 			if ( answer ) skillPress.answered( now );
 			// A local cast opened or a press was refused: no run-up waits.
-			if ( answer && frame.opcode === 0xb245 && skillPress.approachEnded() ) dirty = true;
-			if ( frame.opcode === 0xb2cd && frame.payload.length >= 2 ) {
+			if ( answer && frame.opcode === SKILL_CAST_RESULT_OPCODE && skillPress.approachEnded() ) dirty = true;
+			if ( frame.opcode === ACTION_STATE_OPCODE && frame.payload.length >= 2 ) {
 				if ( skillPress.commandCount( frame.payload[0]!, frame.payload[1]!, now ) ) dirty = true;
 			}
 			if ( answer === "queued" ) {
@@ -4191,7 +4300,7 @@ Packet handling must not depend on which HUD panel is currently open.
 			try {
 				// The pet's scoop ends a manual pet pickup the party handed to
 				// another member (cosPickupShown); entities still animate it.
-				if ( frame.opcode === 0x35c7 && frame.payload.length >= 4 ) {
+				if ( frame.opcode === PICKUP_ANIM_OPCODE && frame.payload.length >= 4 ) {
 					inventory.cosPickupShown(
 						new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true )
 					);
@@ -4270,7 +4379,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0x317d ) {
+				if ( frame.opcode === PARTY_LOOT_NOTICE_OPCODE ) {
 					const notice = partyLootNotice( frame.payload, {
 						item: worldReferences.item,
 						memberName: gid => social.members.find( member => member.id === gid )?.name,
@@ -4280,11 +4389,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( storage.receive( frame, cosItemRefs, inventory.objectRefs() ) && frame.opcode !== 0xb338 ) {
+				if (
+					storage.receive( frame, cosItemRefs, inventory.objectRefs() ) &&
+					frame.opcode !== NPC_INTERACTION_ACK_OPCODE
+				) {
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0xb338 ) {
+				if ( frame.opcode === NPC_INTERACTION_ACK_OPCODE ) {
 					npcConversation.interaction( frame.payload, targeting.state().targetCapabilities ?? 0 );
 					// 75AE50 kind 2 -> 689420 category 13: a refused NPC function shows
 					// its reason (code 4, UIIT_MSG_INTERACTION_FAIL_TOO_FAR).
@@ -4307,7 +4419,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0xb5b6 ) {
+				if ( frame.opcode === GM_COMMAND_ACK_OPCODE ) {
 					const reply = gmReply( frame.payload );
 					if ( reply ) {
 						gmReplies = [ ...gmReplies.slice( -99 ), { ...reply, sequence: ++gmSequence } ];
@@ -4316,13 +4428,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				soundClock = now;
-				if ( frame.opcode === 0x343c ) {
+				if ( frame.opcode === BASE_STATS_OPCODE ) {
 					const stats = playerStats( frame.payload );
 					potionFacts = { ...potionFacts, maxHp: stats.maxHp, maxMp: stats.maxMp };
 					if ( localGid ) combat.seed( localGid, { maxHp: stats.maxHp, maxMp: stats.maxMp } );
 				}
 				if (
-					frame.opcode === 0x3122 && frame.payload.length === 6 && frame.payload[4] === 0 &&
+					frame.opcode === OBJECT_STATE_REFRESH_OPCODE && frame.payload.length === 6 &&
+					frame.payload[4] === 0 &&
 					frame.payload[5] === 1 &&
 					new DataView( frame.payload.buffer, frame.payload.byteOffset, 6 ).getUint32( 0, true ) === localGid
 				) {
@@ -4350,7 +4463,7 @@ Packet handling must not depend on which HUD panel is currently open.
 							if ( completion ) {
 								notices = [ ...notices.slice( -99 ), { ...completion, sequence: ++noticeSequence } ];
 							}
-							if ( frame.opcode === 0xb535 ) {
+							if ( frame.opcode === PARTY_DELETE_ACK_OPCODE ) {
 								const closed = partyMatchDeleteNotice( partyMatchFullLatch );
 								partyMatchFullLatch = false;
 								notices = [ ...notices.slice( -99 ), { ...closed, sequence: ++noticeSequence } ];
@@ -4361,7 +4474,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					// every non-acceptance join answer after the mapped
 					// line (75ED27 then the AUTO line); the exhausted
 					// chain closes the session (634E00).
-					if ( frame.opcode === 0xb5bf ) {
+					if ( frame.opcode === PARTY_JOIN_ACK_OPCODE ) {
 						const accepted = flag === 1 && detail === 1;
 						const autoLine = partyMatchAutoNotice( {
 							sessionOpen: partyMatchAutoSession,
@@ -4373,7 +4486,7 @@ Packet handling must not depend on which HUD panel is currently open.
 							if ( !matched.auto.length ) partyMatchAutoSession = false;
 						} else if ( accepted ) partyMatchAutoSession = false;
 					}
-					if ( frame.opcode === 0xb5bf && !matched.pending && matched.auto.length ) {
+					if ( frame.opcode === PARTY_JOIN_ACK_OPCODE && !matched.pending && matched.auto.length ) {
 						const [id, ...auto] = matched.auto;
 						const continuation = partyMatchRequest(
 							{ ...matched, auto },
@@ -4410,7 +4523,8 @@ Packet handling must not depend on which HUD panel is currently open.
 						}
 						// 769C6B / 769DA3 / 771750: matching and honor-ranking failures use academy category 1D.
 						if (
-							(frame.opcode === 0xb701 || frame.opcode === 0xb592 || frame.opcode === 0xb2d0) &&
+							(frame.opcode === MENTOR_LISTING_PAGE_OPCODE || frame.opcode === MENTOR_JOIN_ACK_OPCODE ||
+								frame.opcode === TC_HONOR_RANK_ANSWER_OPCODE) &&
 							frame.payload[0] === 2
 						) {
 							const notice = constantNativeNotice( 0x1d, frame.payload[1]! );
@@ -4420,7 +4534,7 @@ Packet handling must not depend on which HUD panel is currently open.
 						}
 						// 76FBA0: an opening prints OPEN_SUCCESS to chat; a refusal
 						// goes through the category-0x1D dispatcher.
-						if ( frame.opcode === 0xb2ec ) {
+						if ( frame.opcode === TC_OPEN_ANSWER_OPCODE ) {
 							const notice = frame.payload[0] === 1 ?
 								{ key: "UIIT_MSG_TC_OPEN_SUCCESS", value: 0 } :
 								constantNativeNotice( 0x1d, frame.payload[1]! );
@@ -4433,7 +4547,7 @@ Packet handling must not depend on which HUD panel is currently open.
 						return true;
 					}
 				}
-				if ( frame.opcode === 0x36c7 ) {
+				if ( frame.opcode === ABNORMAL_SNAPSHOT_OPCODE ) {
 					const nextRecords = parseAbnormalSnapshot( frame.payload, now );
 					for ( const notice of abnormalSnapshotNotices( abnormalMask, nextRecords ) ) {
 						notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
@@ -4502,13 +4616,13 @@ Packet handling must not depend on which HUD panel is currently open.
 				}
 				const fortressNext = fortressPacket( fortress, frame, now );
 				if ( fortressNext ) {
-					if ( fortressNext.service?.result === 2 && frame.opcode === 0xb1e1 ) {
+					if ( fortressNext.service?.result === 2 && frame.opcode === INTERACTION_RESPONSE_OPCODE ) {
 						const notice = constantNativeNotice(
 							FORTRESS_NOTICE_CATEGORY,
 							fortressNext.service.error ?? 0
 						);
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
-					} else if ( frame.opcode === 0xb1e1 ) {
+					} else if ( frame.opcode === INTERACTION_RESPONSE_OPCODE ) {
 						const taxed = fortressTaxNotice( fortressNext, taxFortress );
 						taxFortress = taxed.fortress;
 						const structure = fortressNext.zones?.find( row =>
@@ -4521,18 +4635,18 @@ Packet handling must not depend on which HUD panel is currently open.
 							);
 						if ( done ) notices = [ ...notices.slice( -99 ), { ...done, sequence: ++noticeSequence } ];
 					}
-					if ( frame.opcode === 0x3887 ) {
+					if ( frame.opcode === FORTRESS_WAR_STATE_OPCODE ) {
 						musicMode = fortressMusicMode( musicMode, fortress, fortressNext, frame.payload[0]! );
 					}
 					fortress = fortressNext;
-					if ( social.guild && frame.opcode === 0x3887 && frame.payload[0] === 0 ) {
+					if ( social.guild && frame.opcode === FORTRESS_WAR_STATE_OPCODE && frame.payload[0] === 0 ) {
 						for ( const notice of fortressCountdownNotices( fortress ) ) {
 							notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 						}
 					}
 					dirty = true;
 				}
-				if ( frame.opcode === 0x30c0 ) {
+				if ( frame.opcode === GACHA_WIN_ANNOUNCE_OPCODE ) {
 					// 768530: the Magic Pang win banner. It reads {u32 prize
 					// reference, u16 quantity}, names the prize through the
 					// catalogue and banners UIIT_MSG_GACHA_ANNOUNCE (67D030)
@@ -4584,14 +4698,14 @@ Packet handling must not depend on which HUD panel is currently open.
 							{ colorArgb: EVENT_NOTICE_COLOR_ARGB } :
 							{})
 					} ];
-					if ( frame.opcode === 0x3667 && isServerNoticeChannel( frame.payload[0] ) ) {
+					if ( frame.opcode === CHAT_BROADCAST_OPCODE && isServerNoticeChannel( frame.payload[0] ) ) {
 						chat.receive( frame, localGid );
 					}
 					dirty = true;
 					return false;
 				}
 				if ( fortressNext ) return true;
-				if ( frame.opcode === 0x3508 && frame.payload[4] === 7 ) {
+				if ( frame.opcode === COS_INFO_UPDATE_OPCODE && frame.payload[4] === 7 ) {
 					// 77A570 case 7: a growing pet becomes its next form (server
 					// 4EFD10). The owner's record takes the reference and the full
 					// satiety; the entity lane then swaps every viewer's model.
@@ -4636,7 +4750,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					return false;
 				}
-				if ( frame.opcode === 0x3508 && frame.payload[4] === 4 ) {
+				if ( frame.opcode === COS_INFO_UPDATE_OPCODE && frame.payload[4] === 4 ) {
 					const p = frame.payload;
 					if ( p.length !== 7 ) throw Error( "Invalid COS satiety update" );
 					const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
@@ -4663,7 +4777,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					frame.opcode,
 					frame.payload,
 					localGid,
-					frame.opcode === 0x3508 && frame.payload.length >= 4 ?
+					frame.opcode === COS_INFO_UPDATE_OPCODE && frame.payload.length >= 4 ?
 						cosRecords.get(
 							new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
 								.getUint32( 0, true )
@@ -4698,9 +4812,9 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					for ( const event of feedbackResult.events ) publishFeedback( event );
 					dirty = true;
-					return frame.opcode === 0x30b3;
+					return frame.opcode === POINTS_UPDATE_OPCODE;
 				}
-				if ( frame.opcode === 0xb75d ) {
+				if ( frame.opcode === QUEST_GATHER_CANCEL_REPLY_OPCODE ) {
 					const gathering = quests.state().questGathering;
 					quests.receive( frame, now );
 					// 766950 reports failure only when the cancelled identity owns the row.
@@ -4715,12 +4829,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0xb29a || frame.opcode === 0xb1eb ) {
+				if ( frame.opcode === QUEST_ACCEPT_RESPONSE_OPCODE || frame.opcode === QUEST_ABORT_RESPONSE_OPCODE ) {
 					quests.receive( frame ); // Decode and settle the transaction before presentation.
 					const p = frame.payload;
-					if ( frame.opcode === 0xb29a && p[0] === 1 ) play( "SND_QUEST", now );
+					if ( frame.opcode === QUEST_ACCEPT_RESPONSE_OPCODE && p[0] === 1 ) play( "SND_QUEST", now );
 					// Native 75c3d0 displays only refusal 4; all other refusal codes are silent.
-					if ( frame.opcode === 0xb1eb && p[0] === 2 && p[1] === 4 ) {
+					if ( frame.opcode === QUEST_ABORT_RESPONSE_OPCODE && p[0] === 2 && p[1] === 4 ) {
 						notices = [ ...notices.slice( -99 ), {
 							key: "UIIT_MSG_SR_ABORT_QUEST_ERROR_NOT_ALLOWED",
 							value: 0,
@@ -4731,7 +4845,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				// Audio is consumed here; retain the packet for notice/VFX consumers.
-				if ( frame.opcode === 0x36bf ) {
+				if ( frame.opcode === QUEST_NOTIFICATION_OPCODE ) {
 					const p = frame.payload;
 					if ( p.length < 2 ) throw Error( "Invalid talk notice" );
 					const length = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 0, true );
@@ -4752,7 +4866,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0x36b0 ) {
+				if ( frame.opcode === LEVEL_UP_EFFECT_OPCODE ) {
 					const p = frame.payload;
 					if ( p.length !== 4 ) throw Error( "Invalid level-up effect" );
 					const gid = new DataView( p.buffer, p.byteOffset, 4 ).getUint32( 0, true );
@@ -4770,7 +4884,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					// the request. Only its successful owner receipt updates the actor.
 					const titleEdit = 7;
 					if (
-						stallReceipt && frame.opcode === 0xb1a8 && frame.payload[0] === 1 &&
+						stallReceipt && frame.opcode === STALL_EDIT_RESULT_OPCODE && frame.payload[0] === 1 &&
 						frame.payload[1] === titleEdit && stallOutcome.state.phase === "owner"
 					) stallReceipt.title = stallOutcome.state.title;
 					dirty = true;
@@ -4781,7 +4895,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					// The stall's state, sale, registration and commission lines
 					// (751A60, 755960) ride in the stall state's log and print in
 					// the stall window's chat module, not the HUD system messages.
-					if ( frame.opcode !== 0x33d1 ) return true;
+					if ( frame.opcode !== STALL_CLOSED_OPCODE ) return true;
 				}
 				// The exchange window (inventory owner) folds its frames first; its
 				// confirm, approve and cancel refusals stay the social lane's notices.
@@ -4903,7 +5017,8 @@ Packet handling must not depend on which HUD panel is currently open.
 				// 30B3 type 1 with its notify byte set prints the gain before it
 				// stores the balance (CPSMission_OnPointUpdate30B3 case 0).
 				if (
-					nextProgression && frame.opcode === 0x30b3 && frame.payload[0] === 1 && frame.payload[9] !== 0 &&
+					nextProgression && frame.opcode === POINTS_UPDATE_OPCODE && frame.payload[0] === 1 &&
+					frame.payload[9] !== 0 &&
 					progression.gold !== undefined && nextProgression.gold !== undefined
 				) {
 					const gain = BigInt( nextProgression.gold ) - BigInt( progression.gold );
@@ -4916,16 +5031,16 @@ Packet handling must not depend on which HUD panel is currently open.
 						} ];
 					}
 				}
-				if ( nextProgression && frame.opcode === 0x30b3 ) {
+				if ( nextProgression && frame.opcode === POINTS_UPDATE_OPCODE ) {
 					const lost = skillPointNotice( progression.skillPoints, frame.payload );
 					if ( lost ) notices = [ ...notices.slice( -99 ), { ...lost, sequence: ++noticeSequence } ];
 				}
 				if ( nextProgression ) {
-					if ( frame.opcode === 0xb165 && frame.payload[0] === 2 ) {
+					if ( frame.opcode === MASTERY_LEVEL_UP_RESPONSE_OPCODE && frame.payload[0] === 2 ) {
 						const notice = constantNativeNotice( 7, frame.payload[1]! );
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					}
-					if ( frame.opcode === 0xb165 ) {
+					if ( frame.opcode === MASTERY_LEVEL_UP_RESPONSE_OPCODE ) {
 						training.receipt(
 							frame.opcode,
 							frame.payload[0] === 1 ?
@@ -4938,7 +5053,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0xb2cb ) {
+				if ( frame.opcode === SKILL_LEARN_RESPONSE_OPCODE ) {
 					const p = frame.payload;
 					if ( p[0] === 2 && p.length === 2 ) {
 						training.receipt( frame.opcode );
@@ -4987,10 +5102,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0x31ad || frame.opcode === 0x32a6 ) {
-					worldClock = decodeWorldClock( frame.payload, frame.opcode === 0x32a6 ? 4 : 0, now );
+				if ( frame.opcode === GAME_TIME_OPCODE || frame.opcode === SERVER_CLOCK_GID_LATCH_OPCODE ) {
+					worldClock = decodeWorldClock(
+						frame.payload,
+						frame.opcode === SERVER_CLOCK_GID_LATCH_OPCODE ? 4 : 0,
+						now
+					);
 					dirty = true;
-					if ( frame.opcode === 0x31ad ) return true;
+					if ( frame.opcode === GAME_TIME_OPCODE ) return true;
 				}
 				if (
 					npcConversation.receive( frame ) || quests.receive( frame, now ) ||
@@ -4999,7 +5118,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0x3158 ) {
+				if ( frame.opcode === COS_RECORD_CREATE_OPCODE ) {
 					const record = decodeCosRecord( frame.payload, cosRefs, cosItemRefs );
 					if ( !record ) return false;
 					if ( !cosRecords.has( record.gid ) && cosRecords.size >= 64 ) {
@@ -5012,7 +5131,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0xb4b5 ) {
+				if ( frame.opcode === COS_RIDE_STATE_OPCODE ) {
 					const payload = frame.payload;
 					if ( payload[0] === 1 ) {
 						if ( payload.length !== 10 || payload[5]! > 1 ) throw Error( "Invalid COS ride result" );
@@ -5024,7 +5143,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0xb56c ) {
+				if ( frame.opcode === COS_CANCEL_RESPONSE_OPCODE ) {
 					const payload = frame.payload;
 					if (
 						(payload[0] !== 1 && payload[0] !== 2) ||
@@ -5037,7 +5156,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0xb618 ) {
+				if ( frame.opcode === COS_TERMINATE_RESPONSE_OPCODE ) {
 					// CPSMission_OnCosCleanupResponseB618 (7782A0): 1 is success, and
 					// the despawn retires the actor; otherwise one notice byte in
 					// category 12.
@@ -5053,7 +5172,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0xb05b ) {
+				if ( frame.opcode === COS_BEHAVIOR_RESULT_OPCODE ) {
 					const result = cosBehaviorResult( frame.payload );
 					if ( result.kind === "rejected" ) {
 						const notice = constantNativeNotice( 12, result.code );
@@ -5072,7 +5191,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					return true;
 				}
-				if ( frame.opcode === 0xb69e ) {
+				if ( frame.opcode === COS_COMMAND_RESULT_OPCODE ) {
 					const p = frame.payload;
 					if ( p.length < 2 ) throw new Error( "Truncated COS result" );
 					const at = p[0] === 2 ? 3 : 2;
@@ -5120,7 +5239,8 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if (
-					frame.opcode === 0x3122 && frame.payload.length === 6 && frame.payload[4] === 0 &&
+					frame.opcode === OBJECT_STATE_REFRESH_OPCODE && frame.payload.length === 6 &&
+					frame.payload[4] === 0 &&
 					(frame.payload[5] === 1 || frame.payload[5] === 2) &&
 					new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true ) === localGid
 				) {
@@ -5129,14 +5249,15 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 				}
 				if (
-					frame.opcode === 0x3122 && frame.payload.length === 6 && frame.payload[4] === 1 &&
+					frame.opcode === OBJECT_STATE_REFRESH_OPCODE && frame.payload.length === 6 &&
+					frame.payload[4] === 1 &&
 					new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true ) === localGid
 				) {
 					movement.mode( frame.payload[5]!, now );
 					dirty = true;
 				}
 				if (
-					frame.opcode === 0xb738 && frame.payload.length >= 4 &&
+					frame.opcode === MOVEMENT_ACK_OPCODE && frame.payload.length >= 4 &&
 					new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true ) === localGid
 				) {
 					movement.native( frame.payload, now, localGid );
@@ -5154,7 +5275,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				// and COS death) is the only thing that drops an owned companion:
 				// CIFCOSManager_RemoveCompanion (6F2900) takes its status icon, its
 				// command panel and its record, and its open bag window closes.
-				if ( frame.opcode === 0x3508 && frame.payload[4] === 1 ) {
+				if ( frame.opcode === COS_INFO_UPDATE_OPCODE && frame.payload[4] === 1 ) {
 					if ( frame.payload.length !== 5 ) throw Error( "Invalid COS removal" );
 					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true );
 					if ( cosRecords.has( gid ) ) {
@@ -5176,7 +5297,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				// record and status icon, as native: only the 0x3508 removal above
 				// drops it. Kind-3 windows likewise stay: retail erases one only on
 				// the 0x3691 zero pair or the 0x3369/0x366A reset sweep (6E6270).
-				if ( frame.opcode === 0x36ab && frame.payload.length === 4 ) {
+				if ( frame.opcode === OBJECT_DESPAWN_OPCODE && frame.payload.length === 4 ) {
 					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true );
 					if ( selectionDecal?.kind === "target" && selectionDecal.gid === gid ) selectionDecal = null;
 					targeting.remove( gid );
@@ -5187,7 +5308,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					return false;
 				}
 				if (
-					frame.opcode === 0xb06d && frame.payload[0] === 1 &&
+					frame.opcode === ITEM_MOVE_RESPONSE_OPCODE && frame.payload[0] === 1 &&
 					(frame.payload[1] === 0x1a || frame.payload[1] === 0x1b)
 				) {
 					if ( frame.payload.length !== 8 ) throw Error( "Invalid COS transfer result" );
@@ -5205,7 +5326,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if (
-					frame.opcode === 0xb06d && frame.payload[0] === 1 &&
+					frame.opcode === ITEM_MOVE_RESPONSE_OPCODE && frame.payload[0] === 1 &&
 					(frame.payload[1] === 0x11 || frame.payload[1] === 0x12)
 				) {
 					if ( frame.payload.length < 7 ) throw Error( "Invalid COS ground result" );
@@ -5235,7 +5356,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if (
-					frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 0x15
+					frame.opcode === ITEM_MOVE_RESPONSE_OPCODE && frame.payload[0] === 1 && frame.payload[1] === 0x15
 				) {
 					if ( frame.payload.length < 7 ) throw Error( "Invalid COS grant result" );
 					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
@@ -5264,7 +5385,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if (
-					frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 0x16
+					frame.opcode === ITEM_MOVE_RESPONSE_OPCODE && frame.payload[0] === 1 && frame.payload[1] === 0x16
 				) {
 					if ( frame.payload.length !== 7 ) throw Error( "Invalid COS removal result" );
 					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
@@ -5277,7 +5398,9 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 0x10 ) {
+				if (
+					frame.opcode === ITEM_MOVE_RESPONSE_OPCODE && frame.payload[0] === 1 && frame.payload[1] === 0x10
+				) {
 					if ( frame.payload.length !== 10 ) throw Error( "Invalid COS container result" );
 					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, 10 ).getUint32( 2, true ),
 						record = cosRecords.get( gid );
@@ -5319,7 +5442,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 19 ) {
+				if ( frame.opcode === ITEM_MOVE_RESPONSE_OPCODE && frame.payload[0] === 1 && frame.payload[1] === 19 ) {
 					inventory.cosPurchase( frame.payload );
 					dirty = true;
 					return true;
@@ -5338,7 +5461,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				// 7641D0 tells the local player its skin changed (chat kind 5); the
 				// entity owner applies the skin itself.
 				if (
-					frame.opcode === 0x323a && frame.payload.length >= 8 &&
+					frame.opcode === SKIN_CHANGE_OPCODE && frame.payload.length >= 8 &&
 					new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true ) === localGid
 				) {
 					notices = [ ...notices.slice( -99 ), {
@@ -5348,7 +5471,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ];
 					dirty = true;
 				}
-				if ( frame.opcode === 0xb2dd ) {
+				if ( frame.opcode === RETURN_CANCEL_RESULT_OPCODE ) {
 					const p = frame.payload;
 					if ( p[0] === 1 && p.length === 1 ) {
 						notices = [ ...notices.slice( -99 ), {
@@ -5365,11 +5488,12 @@ Packet handling must not depend on which HUD panel is currently open.
 				const previousTarget = targeting.state();
 				// The used item is the slot's only while it is the answer's type
 				// (inventory.ts applies nothing otherwise).
-				const used = frame.opcode === 0xb5bd && frame.payload[0] === 1 && frame.payload.length === 6 ?
-					inventory.state().inventory.find( i =>
-						i.slot === frame.payload[1] && i.typeFlags === (frame.payload[4]! | frame.payload[5]! << 8)
-					) :
-					undefined;
+				const used =
+					frame.opcode === ITEM_USE_RESPONSE_OPCODE && frame.payload[0] === 1 && frame.payload.length === 6 ?
+						inventory.state().inventory.find( i =>
+							i.slot === frame.payload[1] && i.typeFlags === (frame.payload[4]! | frame.payload[5]! << 8)
+						) :
+						undefined;
 				const cast = used ? returnScrollCast( used, now, fastDenReturn ) : undefined;
 				// 755E40's codename chain: a crest delete's success raises
 				// the completion box (confirm variant, UIIT_STT_CONFIRM_BOX
@@ -5420,19 +5544,21 @@ Packet handling must not depend on which HUD panel is currently open.
 				}
 				// 756CF0 compares the bag slot before and after a 0xB06D pickup
 				// (types 6 and 0x1C) or server grant (type 0xE).
-				const pickupGrant = frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 14;
-				const pickupSlot = (pickupGrant || frame.opcode === 0xb06d && frame.payload[0] === 1 &&
-							(frame.payload[1] === 6 || frame.payload[1] === 0x1c)) &&
+				const pickupGrant = frame.opcode === ITEM_MOVE_RESPONSE_OPCODE && frame.payload[0] === 1 &&
+					frame.payload[1] === 14;
+				const pickupSlot =
+					(pickupGrant || frame.opcode === ITEM_MOVE_RESPONSE_OPCODE && frame.payload[0] === 1 &&
+								(frame.payload[1] === 6 || frame.payload[1] === 0x1c)) &&
 						frame.payload.length > 3 && frame.payload[2] !== 254 ?
-					frame.payload[2] :
-					undefined;
+						frame.payload[2] :
+						undefined;
 				const pickupBefore = pickupSlot === undefined ?
 					undefined :
 					inventory.state().inventory.find( i => i.slot === pickupSlot );
 				const mallRequest = inventory.state().itemMall?.pending === true;
 				// A warehouse move answered after its window closed still settles.
 				const room = storage.settling();
-				if ( frame.opcode === 0xb06d && room ) {
+				if ( frame.opcode === ITEM_MOVE_RESPONSE_OPCODE && room ) {
 					const next = inventory.storageSettle( room, frame.payload, cosItemCaps );
 					if ( next ) {
 						storage.apply( next );
@@ -5450,7 +5576,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				let satietyDrop:
 					| { readonly gid: number; readonly before: number | undefined; readonly next: number; }
 					| undefined;
-				if ( frame.opcode === 0x33a6 ) {
+				if ( frame.opcode === VITALS_UPDATE_OPCODE ) {
 					const update = vitalsUpdate( frame.payload ), gid = update.gid;
 					// CPSMission_OnVitalsUpdate0x33A6 (0x0077a080): resolves gid via
 					// GidObjectRegistry_FindEntityByGid (0x0077a0d7) or the local
@@ -5498,7 +5624,7 @@ Packet handling must not depend on which HUD panel is currently open.
 						dirty = true;
 					}
 				}
-				if ( frame.opcode === 0xb2f5 && frame.payload.length >= 4 ) {
+				if ( frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE && frame.payload.length >= 4 ) {
 					// 775B50 (0x775BDE): a halt naming an owned pet that holds
 					// an assist target starts its countdown (+0xAB30).
 					petAssistCountdowns = haltedPetAssistCountdowns(
@@ -5509,7 +5635,7 @@ Packet handling must not depend on which HUD panel is currently open.
 						now
 					);
 				}
-				if ( fight && frame.opcode === 0xb245 ) {
+				if ( fight && frame.opcode === SKILL_CAST_RESULT_OPCODE ) {
 					// 776830: the local player's own cast of a skill that assists,
 					// at a target in the world, sends its attack pets in.
 					const cast = ownCastTarget( frame.payload, localGid );
@@ -5524,7 +5650,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 				}
 				if (
-					fight && frame.opcode === 0x33a6 &&
+					fight && frame.opcode === VITALS_UPDATE_OPCODE &&
 					new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength ).getUint32(
 							0,
 							true
@@ -5550,11 +5676,11 @@ Packet handling must not depend on which HUD panel is currently open.
 
 				// B245 [2, code]: the server refused the targeted command at the
 				// press, before touching movement (an empty MP pool is 0x3004).
-				if ( frame.opcode === 0xb245 && frame.payload[0] === 2 ) {
+				if ( frame.opcode === SKILL_CAST_RESULT_OPCODE && frame.payload[0] === 2 ) {
 					groundSkillMoveSuppressUntil = 0;
 					movement.castRefused( now );
 				}
-				if ( frame.opcode === 0xb245 ) {
+				if ( frame.opcode === SKILL_CAST_RESULT_OPCODE ) {
 					// 776830 (0x7769D8): an opened cast by an owned pet cancels
 					// its halt countdown (+0xAB30 = -1); the pet keeps its
 					// target. The entry gates live in castPetAssistCountdowns.
@@ -5566,7 +5692,9 @@ Packet handling must not depend on which HUD panel is currently open.
 						row.gid === localGid && row.skill === returnScroll?.skillId && row.subject
 					);
 					if ( effect ) returnScroll = { ...returnScroll, token: effect.token };
-					if ( frame.opcode === 0xb6a0 && returnScroll.token && !effect ) returnScroll = undefined;
+					if ( frame.opcode === ENDED_EFFECT_INSTANCES_OPCODE && returnScroll.token && !effect ) {
+						returnScroll = undefined;
+					}
 				}
 				// A spent warehouse ticket opens the room on the player's own gid.
 				if ( item && used && localGid && isWarehouseTicket( used.typeFlags ) ) {
@@ -5590,7 +5718,8 @@ Packet handling must not depend on which HUD panel is currently open.
 				// CPSMission_ApplyInventoryOperation reads the u32 and prints
 				// UIIT_MSG_STATE_GAIN_GOLD (7571E1). The balance itself rides 0x30B3.
 				if (
-					item && frame.opcode === 0xb06d && frame.payload.length === 7 && frame.payload[0] === 1 &&
+					item && frame.opcode === ITEM_MOVE_RESPONSE_OPCODE && frame.payload.length === 7 &&
+					frame.payload[0] === 1 &&
 					(frame.payload[1] === 6 || frame.payload[1] === 0x1c || frame.payload[1] === 14) &&
 					frame.payload[2] === 254
 				) {
@@ -5602,7 +5731,8 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ];
 				}
 				if (
-					frame.opcode === 0x3122 && frame.payload.length === 6 && frame.payload[4] === 11 &&
+					frame.opcode === OBJECT_STATE_REFRESH_OPCODE && frame.payload.length === 6 &&
+					frame.payload[4] === 11 &&
 					new DataView( frame.payload.buffer, frame.payload.byteOffset, 6 ).getUint32( 0, true ) === localGid
 				) {
 					teleportMode = frame.payload[5]!;
@@ -5669,7 +5799,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				// The suit move's answer waits for the dress bar (jobdress.go).
 				const dress = jobDressSeconds( frame, localGid );
 				if ( dress !== null ) inventory.holdForDress( now + dress * 1000 + JOB_DRESS_ANSWER_GRACE_MS );
-				if ( frame.opcode === 0xb341 ) {
+				if ( frame.opcode === BERSERK_RESPONSE_OPCODE ) {
 					const p = frame.payload;
 					if ( !p.length || p.length !== (p[0] === 1 ? 1 : 2) ) throw Error( "Invalid Berserk response" );
 					const notice = p[0] === 1 ? null : constantNativeNotice( 26, p[1]! );
@@ -5681,7 +5811,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				// timer and carrier the snapshot publishes. The own team
 				// arrives with the match work; null keeps scored-mission
 				// notices silent until then.
-				if ( frame.opcode === 0x30a9 ) {
+				if ( frame.opcode === FLAG_WAR_EVENT_OPCODE ) {
 					const event = decodeFlagWarEvent( frame.payload );
 					if ( event ) {
 						if ( event.type === "missionStart" ) {
@@ -5709,11 +5839,12 @@ Packet handling must not depend on which HUD panel is currently open.
 				// refusal bytes read as the scroll's own lines; any 0xB5BD
 				// answer retires the flight. All other refusals stay on
 				// the native mapper, byte-exact.
-				const renameLine = renameUseInFlight && frame.opcode === 0xb5bd && frame.payload[0] === 2 &&
+				const renameLine =
+					renameUseInFlight && frame.opcode === ITEM_USE_RESPONSE_OPCODE && frame.payload[0] === 2 &&
 						frame.payload[1] !== undefined ?
-					nameChangeFailureText( frame.payload[1]! ) :
-					undefined;
-				if ( frame.opcode === 0xb5bd ) renameUseInFlight = false;
+						nameChangeFailureText( frame.payload[1]! ) :
+						undefined;
+				if ( frame.opcode === ITEM_USE_RESPONSE_OPCODE ) renameUseInFlight = false;
 				const refusal = (renameLine ?
 					{ key: "", value: 0, text: renameLine, nativeType: 5 as const } :
 					undefined) ??
@@ -5729,7 +5860,8 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( target ) {
 					const selection = targeting.state();
 					if (
-						frame.opcode === 0xb45a && frame.payload[0] === 1 && previousTarget.targetPending &&
+						frame.opcode === OBJECT_SELECT_RESULT_OPCODE && frame.payload[0] === 1 &&
+						previousTarget.targetPending &&
 						!selection.targetPending && targeting.opensTalkPane()
 					) npcConversation.select( selection.target );
 					else if ( !selection.target ) npcConversation.clear();
@@ -5748,8 +5880,11 @@ Packet handling must not depend on which HUD panel is currently open.
 						)
 					);
 				}
-				if ( frame.opcode === 0x30e3 ) dirty = true;
-				if ( item || target || fight || frame.opcode === 0xb495 || frame.opcode === 0xb20d ) {
+				if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ) dirty = true;
+				if (
+					item || target || fight || frame.opcode === PORTAL_RESULT_OPCODE ||
+					frame.opcode === REBIRTH_POINT_APPOINT_RESULT_OPCODE
+				) {
 					dirty = true;
 					return true;
 				}
@@ -5769,7 +5904,7 @@ Packet handling must not depend on which HUD panel is currently open.
 							maxHp: potionFacts.maxHp,
 							maxMp: potionFacts.maxMp
 						},
-						frame.opcode === 0xb5bd && frame.payload[0] === 1
+						frame.opcode === ITEM_USE_RESPONSE_OPCODE && frame.payload[0] === 1
 					);
 					for ( let i = 0; i < next.length; i++ ) {
 						if ( next[i] !== bindings.quickSlots[i] ) {
@@ -6253,6 +6388,7 @@ The published plane when something changed since the last take, else null.
 				...(i.shop ? { shop: liveShop( i.shop ) } : {}),
 				inventoryJournal,
 				...c,
+				...speedJournal.state( c.buffSlots ),
 				...targeting.state(),
 				flagWar: { timerEndsAt: flagWarTimerEndsAt, carrierGid: flagWarCarrierGid },
 				...skillPress.state(),

@@ -74,8 +74,10 @@ KNOWN_LISTS = {LIST_COMPLETION_NPCS, LIST_QUEST_NPCS, LIST_REQUIRED_DONE, LIST_R
 #	0xc3.b:  the initializers only rewrite its default
 #	0x15b.b: the quest belongs to an instance world, whose id 0x15c.w
 #	         holds (looked up by its INS_ codename)
+#	0x125.b: the constructor clears it (91E200: [this+0x125].b = 0);
+#	         QNO_RM_MEETROC_1 only rewrites that default
 # Any other value changes the quest and is not projected yet.
-FIELD_DEFAULTS = {"0x106.b": 1, "0xc3.b": 0, "0x15b.b": 0, "0x15c.w": 1}
+FIELD_DEFAULTS = {"0x106.b": 1, "0xc3.b": 0, "0x125.b": 0, "0x15b.b": 0, "0x15c.w": 1}
 FIELD_PROJECTED = {"0x106.b"}
 FIELD_MEANINGS = {
 	"0x15b.b": "instance world quest",
