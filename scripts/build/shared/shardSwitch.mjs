@@ -26,6 +26,26 @@ import { serverSourceRoot } from "../world/paths.mjs";
 const SHARD_PROFILE = path.join( "config", "shard-settings.json" );
 const SHARD_REGISTRY = path.join( "internal", "config", "shardsettings", "shardsettings.go" );
 
+// "<server root>|<env>" -> { signature, posture }: each switch's posture
+// as last derived from the profile and the registry.
+const postures = new Map();
+
+/*
+================
+sourceSignature
+
+The profile's and the registry's size and mtime, one string: a posture
+derived under the same signature is still the files' answer. A missing
+profile or registry throws here, as the read would.
+================
+*/
+function sourceSignature( serverRoot ) {
+	return [ SHARD_PROFILE, SHARD_REGISTRY ].map( relative => {
+		const stat = fs.statSync( path.join( serverRoot, relative ) );
+		return `${stat.size}:${stat.mtimeMs}`;
+	} ).join( "|" );
+}
+
 /*
 ================
 shardSwitchPosture
@@ -34,10 +54,30 @@ The switch's value as the deployment sets it when the build env does
 not: the release profile's entry, else the registry Default. A registry
 row this cannot read throws - a posture the bake cannot see must stop
 the build, never read as off.
+
+The bake asks once per skill row and once per model
+(qinshiTombCombatEnabled); reading, parsing and scanning both files each
+time cost the npc lane about 1.8 s of a warm build. So a posture is kept
+until either file's size or mtime moves; a throw is never kept.
 ================
 */
 export function shardSwitchPosture( env ) {
 	const serverRoot = serverSourceRoot();
+	const key = `${serverRoot}|${env}`;
+	const signature = sourceSignature( serverRoot );
+	const known = postures.get( key );
+	if ( known && known.signature === signature ) return known.posture;
+	const posture = derivePosture( serverRoot, env );
+	postures.set( key, { signature, posture } );
+	return posture;
+}
+
+/*
+================
+derivePosture
+================
+*/
+function derivePosture( serverRoot, env ) {
 	const profile = JSON.parse( fs.readFileSync( path.join( serverRoot, SHARD_PROFILE ), "utf8" ) );
 	if ( typeof profile[env] === "string" ) {
 		return profile[env];
