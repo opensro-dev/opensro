@@ -30,7 +30,7 @@ func expectServerEvent(t *testing.T, name string, f Frame, want []byte) {
 ================
 TestServerEventFullSync
 
-Type 2, sub 3: every row with its count and goal (GS 0x66F4B0).
+Type 2, sub 3: every row with its count and goal (world entry).
 ================
 */
 func TestServerEventFullSync(t *testing.T) {
@@ -46,7 +46,7 @@ func TestServerEventFullSync(t *testing.T) {
 ================
 TestServerEventCountSync
 
-Type 2, sub 1: the count alone (GS 0x670940).
+Type 2, sub 1: the count alone (the five-minute sync).
 ================
 */
 func TestServerEventCountSync(t *testing.T) {

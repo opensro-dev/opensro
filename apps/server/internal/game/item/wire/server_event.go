@@ -4,16 +4,17 @@
 server_event.go - the 0x34F2 server event messages (Server Mission gauge)
 
 The v1.188 game server relays the shard manager's server event state to
-its clients as 0x34F2 (dispatcher GS 0x66F3D0); the later v1.696 client
-reads it in 0x00CFA790 and draws CNIFServerEvent from it. The v1.150
+its clients as 0x34F2, the same id as the shard manager's message; the
+later v1.696 client reads it (client 0x00CFA790) and draws
+CNIFServerEvent from it. The v1.150
 client has no reader, so only the port's opt-in gauge consumes these.
 Byte 0 is the message type; the bodies here are the ones the winter
 missions need:
 
-  2/3 enter game   u32 N, N x {u32 ID, u32 Count, u32 Goal}   (GS 0x66F4B0)
-  2/1 sync         u32 N, N x {u32 ID, u32 Count}             (GS 0x670940)
+  2/3 enter game   u32 N, N x {u32 ID, u32 Count, u32 Goal}
+  2/1 sync         u32 N, N x {u32 ID, u32 Count}             (every 300 s)
   1   completion   u32 ID, u8 target, u8 data, u32 Count, u32 Goal,
-                   u32 RewardID, u8 class, ExpUP body          (GS 0x66FF00)
+                   u32 RewardID, u8 class, ExpUP body
   5   start        u32 ID, u8 flag, u32 Goal
   6   end          u32 ID
 
@@ -36,8 +37,8 @@ const (
 	serverEventSyncCount uint8 = 1 // ID, Count
 	serverEventSyncFull  uint8 = 3 // ID, Count, Goal
 
-	// GS 0x670001 accepts targets 1 (every player) and 2 (a named
-	// winner); any other value is logged as not supported.
+	// The reference server accepts targets 1 (every player) and 2 (a
+	// named winner); it logs any other value as not supported.
 	serverEventTargetAll uint8 = 1
 	// DataType 3: the completion carries the carried-over count and
 	// the next goal (client FUN_0080F4E0).

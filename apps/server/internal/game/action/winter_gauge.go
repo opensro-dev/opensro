@@ -4,9 +4,9 @@
 winter_gauge.go - the winter missions' 0x34F2 gauge messages
 
 The v1.188 game server tells its clients how the shard's gauge missions
-stand (wire.OpServerEvent): the rows at world entry (GS 0x66F4B0), the
-moved counts every five minutes (GS 0x670940), each completion with its
-reward (GS 0x66FF00) and the event's start and end. Only missions whose
+stand (wire.OpServerEvent): the rows at world entry, the moved counts
+every five minutes, each completion with its reward, and the event's
+start and end. Only missions whose
 _RefServerEvent row sets the gauge flag are sent (30001, the Snow Flake
 Event): the later client's CNIFServerEvent holds one mission and every
 row it is given replaces the last (client 0x0080F4E0), so a row without a
@@ -30,8 +30,8 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// winterGaugeSyncEvery is the native count broadcast's period (GS
-// 0x670940 runs every 300 s for the gauge events whose data moved).
+// winterGaugeSyncEvery is the native count broadcast's period: the
+// reference server sends the gauge events whose data moved every 300 s.
 const winterGaugeSyncEvery = 300 * time.Second
 
 // winterExpUpRewardID is the Snow Flake Event's reward row
