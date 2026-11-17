@@ -22811,7 +22811,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				const frameArt = SERVER_EVENT_ART + "wind.png";
 				paths.push( frameArt );
 				if ( resources.has( frameArt ) ) {
-					const at = serverEventLayout( w ), ratio = gaugeRatio( serverEvent.count, serverEvent.goal );
+					const at = serverEventLayout( w, hudCorner ),
+						ratio = gaugeRatio( serverEvent.count, serverEvent.goal );
 					image( at.frame, frameArt );
 					image( at.snow, SERVER_EVENT_ART + "snow.png" );
 					if ( ratio > 0 ) {

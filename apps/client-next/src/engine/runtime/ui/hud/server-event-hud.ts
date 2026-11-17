@@ -7,7 +7,8 @@ The later v1.696 client's CNIFServerEvent (res_ui\nifserverevent.2dt):
 a 120x24 frame with a snow icon, an 80x4 gauge filled count/goal and the
 "%d/%d" text (0x00E1E940), and a close button. The client moves it 244 px
 left of the screen's right edge (0x0080F4E0: x = right - 0xF4), at the
-2dt's y. v1.150 has no such window, so it shows only with the
+2dt's y. Here it sits under the minimap instead (port-only, the owner's
+ask: the native spot covers the pet portrait). v1.150 has no such window, so it shows only with the
 Experimental "Server Mission gauge" row on; its art is the v1.696
 interface/event/winter_count_* published by the later-client import.
 
@@ -51,16 +52,29 @@ export interface ServerEventLayout {
 	readonly close: UiRect;
 }
 
+// The widget's bounds in the 2dt: the snow icon's left to the close
+// button's right, the frame's height.
+const BOX_LEFT = SNOW[0], BOX_TOP = FRAME[1], BOX_WIDTH = CLOSE[0] + CLOSE[2] - SNOW[0];
+// Port-only placement (the owner's ask, 2026-11-17): the native spot
+// covers this HUD's pet portrait, so the widget sits this far under the
+// minimap, centred on it.
+export const SERVER_EVENT_MINIMAP_GAP = 8;
+
 /*
 ================
 serverEventLayout
 
-The 2dt rects, kept at their distance from the right edge.
+Under the minimap when it is drawn (minimap is its rect); else the 2dt
+rects, kept at their distance from the right edge.
 ================
 */
-export function serverEventLayout( width: number ): ServerEventLayout {
-	const shift = width - NATIVE_WIDTH;
-	const at = ( r: UiRect ): UiRect => [ r[0] + shift, r[1], r[2], r[3] ];
+export function serverEventLayout( width: number, minimap?: UiRect ): ServerEventLayout {
+	let dx = width - NATIVE_WIDTH, dy = 0;
+	if ( minimap ) {
+		dx = Math.floor( minimap[0] + (minimap[2] - BOX_WIDTH) / 2 ) - BOX_LEFT;
+		dy = minimap[1] + minimap[3] + SERVER_EVENT_MINIMAP_GAP - BOX_TOP;
+	}
+	const at = ( r: UiRect ): UiRect => [ r[0] + dx, r[1] + dy, r[2], r[3] ];
 	return { frame: at( FRAME ), gauge: at( GAUGE ), text: at( TEXT ), snow: at( SNOW ), close: at( CLOSE ) };
 }
 
