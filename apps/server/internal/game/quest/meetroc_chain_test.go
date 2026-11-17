@@ -134,7 +134,8 @@ func meetrocDef(t *testing.T, rt *Runtime, code string) *Definition {
 ================
 TestMeetroc2GiveUpReopensMeetroc1
 
-Giving MEETROC_2 up (90C1C0) zeroes MEETROC_1, so the chief offers it again.
+Giving MEETROC_2 up (its native give-up handler) zeroes MEETROC_1, so
+the chief offers it again.
 ================
 */
 func TestMeetroc2GiveUpReopensMeetroc1(t *testing.T) {
@@ -159,7 +160,8 @@ func TestMeetroc2GiveUpReopensMeetroc1(t *testing.T) {
 TestMeetroc6NeedsTheCrystal
 
 Seven kills without a Soul Crystal never complete the quest: the achieved
-key is the exchange's (90C9D0), so the chief refuses the turn-in.
+key is written only by the native kill exchange, so the chief refuses
+the turn-in.
 ================
 */
 func TestMeetroc6NeedsTheCrystal(t *testing.T) {
@@ -184,8 +186,8 @@ func TestMeetroc6NeedsTheCrystal(t *testing.T) {
 TestMeetroc6ExchangeTurnInAndLoop
 
 The crystal is exchanged only on the seventh kill. Paying MEETROC_6 takes
-the fragment, pays one of each token and zeroes MEETROC_2 (90D4C0), so
-MEETROC_6 waits for MEETROC_2 again.
+the fragment, pays one of each token and zeroes MEETROC_2 (its native
+pay), so MEETROC_6 waits for MEETROC_2 again.
 ================
 */
 func TestMeetroc6ExchangeTurnInAndLoop(t *testing.T) {
@@ -236,8 +238,8 @@ func TestMeetroc6ExchangeTurnInAndLoop(t *testing.T) {
 ================
 TestMeetroc6GiveUpCleansAndReopens
 
-Giving MEETROC_6 up (90CE00) takes every fragment and crystal and zeroes
-MEETROC_2.
+Giving MEETROC_6 up (its native give-up handler) takes every fragment
+and crystal and zeroes MEETROC_2.
 ================
 */
 func TestMeetroc6GiveUpCleansAndReopens(t *testing.T) {
