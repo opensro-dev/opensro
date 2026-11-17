@@ -263,5 +263,145 @@ class NasrunImportTest(unittest.TestCase):
 		self.assertTrue(nasrun.flag_enabled({"SRO_NASRUN": " ON "}))
 
 
+# ================
+# skill_row
+#
+# One 118-column later skill row as the VSRO client authors a lent
+# Nasrun skill: an icon and its names, no chain and no prerequisite.
+# ================
+def skill_row(code, identity):
+	row = ["0"] * nasrun.SKILL_COLUMNS
+	row[nasrun.SKILL_SERVICE], row[nasrun.SKILL_ID], row[nasrun.SKILL_CODENAME] = "1", str(identity), code
+	# The colours and ranks share one name, as in the VSRO client.
+	stem = code[:-len("_01")].replace("_YELLOW", "").replace("_BLUE", "")
+	row[nasrun.SKILL_ICON] = "skill\\etc\\" + code.lower() + ".ddj"
+	row[nasrun.SKILL_NAME_KEY], row[nasrun.SKILL_DESCRIPTION_KEY] = "SN_" + stem, "SN_" + stem + "_TT_DESC"
+	# The VSRO cells: every rank at basic level 1, no cooldown group.
+	row[nasrun.SKILL_BASIC_LEVEL], row[nasrun.SKILL_COOLDOWN_GROUP] = "1", "0"
+	return row
+
+
+# ================
+# NasrunSkillImportTest
+#
+# The lent skills' pass: eleven rows in their own skill shard under
+# marker-kept ids above every skill the tree holds, the manifest line
+# last, their names; off gives back the tables byte for byte.
+# ================
+class NasrunSkillImportTest(unittest.TestCase):
+	NATIVE_SKILL = 31200
+	LATER_SKILL = 31142
+
+	# ================
+	# fixture
+	# ================
+	def fixture(self, base, drop=None, mutate=None):
+		vsro, native, output = base / "vsro", base / "native", base / "output"
+		text_root = output / nasrun.TEXT_ROOT
+		text_root.mkdir(parents=True)
+		(native / nasrun.TEXT_ROOT).mkdir(parents=True)
+		vsro.mkdir()
+		rows, texts = [], set()
+		for offset, code in enumerate(nasrun.SKILL_CODES):
+			if code == drop:
+				continue
+			row = skill_row(code, self.LATER_SKILL + offset)
+			if mutate:
+				mutate(row)
+			rows.append(row)
+			texts |= {row[nasrun.SKILL_NAME_KEY], row[nasrun.SKILL_DESCRIPTION_KEY]}
+		decoy = skill_row("SKILL_EVENT_NASRUN_ECCENTRICDEMON_01", 31141)
+		self.media = archive_bytes({
+			"skilldata.txt": utf16([["skilldata_35000.txt"]]),
+			"skilldata_35000.txt": utf16([decoy] + rows),
+			"textdata_equip&skill.txt": utf16([text_row(key) for key in sorted(texts)]),
+		})
+		native_skill = ["0"] * nasrun.SKILL_COLUMNS
+		native_skill[0], native_skill[1], native_skill[3] = "1", str(self.NATIVE_SKILL), "SKILL_NATIVE_THING"
+		(native / nasrun.TEXT_ROOT / "skilldata_5000.txt").write_bytes(utf16([native_skill]))
+		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"], ["skilldata_110000.txt"]]))
+		(text_root / nasrun.NAME_TABLE).write_bytes(utf16([["1", "SN_NATIVE_A", "", "", "", "", "", "", "Native A"]]))
+		return vsro, native, output, text_root
+
+	# ================
+	# run_import
+	# ================
+	def run_import(self, vsro, native, output, flag="on"):
+		data = self.media
+		index = {shared.normalized_path(entry.path): entry for entry in sro_pk2.read_directory(data)}
+		self.icons = set()
+
+		def open_archives(stack, root, source):
+			return {"Media": (data, index)}, {"Media": "fixture"}
+
+		def copy_resource_closure(pending, native_root, output_root, archives):
+			self.icons = set(pending)
+			return []
+
+		with mock.patch.dict(os.environ, {"SRO_NASRUN": flag}), 				mock.patch.object(avatars, "source_present", return_value=True), 				mock.patch.object(avatars, "open_archives", open_archives), 				mock.patch.object(shared, "copy_resource_closure", copy_resource_closure):
+			return nasrun.add_nasrun_skills(vsro, native, output)
+
+	# ================
+	# test_import_stages_the_eleven_skills
+	# ================
+	def test_import_stages_the_eleven_skills(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, text_root = self.fixture(Path(root))
+			summary = self.run_import(vsro, native, output)
+			self.assertEqual(sorted(summary["skills"]), sorted(nasrun.SKILL_CODES))
+			ids = sorted(summary["skills"].values())
+			# Above the native table, never the later client's own ids.
+			self.assertGreater(ids[0], self.NATIVE_SKILL)
+			self.assertEqual(len(set(ids)), len(nasrun.SKILL_CODES))
+			shard = (text_root / nasrun.SKILL_SHARD).read_bytes().decode("utf-16")
+			self.assertNotIn("SKILL_EVENT_NASRUN", shard)
+			# The Ignore ranks carry the later official level and shared
+			# cooldown group, whatever the VSRO cells hold (#3797 review).
+			staged = {row[nasrun.SKILL_CODENAME]: row for row in (line.split("\t") for line in shard.splitlines())}
+			for code, level in (("SKILL_MALL_NASRUN_MOBDEFENCEIGNORE_01", "1"), ("SKILL_MALL_NASRUN_MOBDEFENCEIGNORE_02", "2")):
+				self.assertEqual(staged[code][nasrun.SKILL_BASIC_LEVEL], level, code)
+				self.assertEqual(staged[code][nasrun.SKILL_COOLDOWN_GROUP], "-872415232", code)
+			self.assertEqual(staged["SKILL_MALL_NASRUN_ECCENTRICDEMON_01"][nasrun.SKILL_BASIC_LEVEL], "1")
+			self.assertNotIn("	" + str(self.LATER_SKILL) + "	", shard)
+			manifest = [line for line in (text_root / "skilldata.txt").read_bytes().decode("utf-16").splitlines() if line]
+			self.assertEqual(manifest, ["skilldata_5000.txt", "skilldata_110000.txt", nasrun.SKILL_SHARD])
+			names = (text_root / nasrun.NAME_TABLE).read_bytes().decode("utf-16")
+			self.assertIn("SN_SKILL_MALL_NASRUN_MOBDEFENCEIGNORE	", names)
+			self.assertEqual(len(self.icons), len(nasrun.SKILL_CODES))
+			self.assertTrue(all(archive == "Media" and path.startswith("icon/skill/etc/") for archive, path in self.icons))
+			again = self.run_import(vsro, native, output)
+			self.assertEqual(again["skills"], summary["skills"])
+			self.assertEqual((text_root / nasrun.NAME_TABLE).read_bytes().decode("utf-16"), names)
+
+	# ================
+	# test_off_gives_back_the_tables
+	# ================
+	def test_off_gives_back_the_tables(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, text_root = self.fixture(Path(root))
+			before = {path.name: path.read_bytes() for path in text_root.iterdir()}
+			self.run_import(vsro, native, output)
+			self.assertEqual(self.run_import(vsro, native, output, flag=""), {"enabled": False})
+			self.assertFalse((output / nasrun.SKILL_MARKER).exists())
+			self.assertEqual({path.name: path.read_bytes() for path in text_root.iterdir()}, before)
+
+	# ================
+	# test_missing_or_chained_skill_refuses
+	# ================
+	def test_missing_or_chained_skill_refuses(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, _ = self.fixture(Path(root), drop="SKILL_MALL_NASRUN_MOBDEFENCEIGNORE_02")
+			with self.assertRaisesRegex(ValueError, "no Nasrun skill"):
+				self.run_import(vsro, native, output)
+
+		def chain(row):
+			row[nasrun.SKILL_CHAIN_NEXT] = "31143"
+
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, _ = self.fixture(Path(root), mutate=chain)
+			with self.assertRaisesRegex(ValueError, "chains to or requires"):
+				self.run_import(vsro, native, output)
+
+
 if __name__ == "__main__":
 	unittest.main()

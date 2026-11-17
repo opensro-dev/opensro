@@ -61,6 +61,7 @@ barrier.
 */
 type Runtime struct {
 	berserkActors     sync.Map // derived expiry index; character store owns state
+	spiritActors      sync.Map // attached Devil's Spirit lapse index (spiritability.go)
 	battleActors      sync.Map // battle-state expiry index (battlestate.go)
 	cosRefusalLog     sync.Map // cosground.go: cosRefusalKey -> *cosRefusalWindow (refusal log rollup)
 	cosRefusalTotals  sync.Map // cosground.go: cause string -> *atomic.Uint64 (refusal metric)
