@@ -267,6 +267,8 @@ def skill_row(code, identity):
 	stem = code[:-len("_01")].replace("_YELLOW", "").replace("_BLUE", "")
 	row[nasrun.SKILL_ICON] = "skill\\etc\\" + code.lower() + ".ddj"
 	row[nasrun.SKILL_NAME_KEY], row[nasrun.SKILL_DESCRIPTION_KEY] = "SN_" + stem, "SN_" + stem + "_TT_DESC"
+	# The VSRO cells: every rank at basic level 1, no cooldown group.
+	row[nasrun.SKILL_BASIC_LEVEL], row[nasrun.SKILL_COOLDOWN_GROUP] = "1", "0"
 	return row
 
 
@@ -344,6 +346,13 @@ class NasrunSkillImportTest(unittest.TestCase):
 			self.assertEqual(len(set(ids)), len(nasrun.SKILL_CODES))
 			shard = (text_root / nasrun.SKILL_SHARD).read_bytes().decode("utf-16")
 			self.assertNotIn("SKILL_EVENT_NASRUN", shard)
+			# The Ignore ranks carry the later official level and shared
+			# cooldown group, whatever the VSRO cells hold (#3797 review).
+			staged = {row[nasrun.SKILL_CODENAME]: row for row in (line.split("\t") for line in shard.splitlines())}
+			for code, level in (("SKILL_MALL_NASRUN_MOBDEFENCEIGNORE_01", "1"), ("SKILL_MALL_NASRUN_MOBDEFENCEIGNORE_02", "2")):
+				self.assertEqual(staged[code][nasrun.SKILL_BASIC_LEVEL], level, code)
+				self.assertEqual(staged[code][nasrun.SKILL_COOLDOWN_GROUP], "-872415232", code)
+			self.assertEqual(staged["SKILL_MALL_NASRUN_ECCENTRICDEMON_01"][nasrun.SKILL_BASIC_LEVEL], "1")
 			self.assertNotIn("	" + str(self.LATER_SKILL) + "	", shard)
 			manifest = [line for line in (text_root / "skilldata.txt").read_bytes().decode("utf-16").splitlines() if line]
 			self.assertEqual(manifest, ["skilldata_5000.txt", "skilldata_110000.txt", nasrun.SKILL_SHARD])

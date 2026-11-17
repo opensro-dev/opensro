@@ -289,6 +289,18 @@ SKILL_CHAIN_NEXT = 9
 SKILL_PREREQ_IDS = (40, 41, 42)
 SKILL_ICON, SKILL_NAME_KEY, SKILL_DESCRIPTION_KEY = 61, 62, 64
 SKILL_UNUSED = ("", "0", "xxx")
+SKILL_BASIC_LEVEL, SKILL_COOLDOWN_GROUP = 7, 18
+
+# The two Monster Defence Ignore ranks, as the later official tables
+# author them: the iSRO-R server's skilldata_35000 and the v1.696 client
+# agree that rank 2 is basic level 2 and that both ranks share cooldown
+# group 0xCC000000 (stored signed). The VSRO client stages both ranks at
+# level 1 with no group, so rank 2 would read as rank 1 by group and
+# level, and the ranks would not share a cooldown (#3797 review).
+SKILL_OVERRIDES = {
+	"SKILL_MALL_NASRUN_MOBDEFENCEIGNORE_01": {SKILL_BASIC_LEVEL: "1", SKILL_COOLDOWN_GROUP: "-872415232"},
+	"SKILL_MALL_NASRUN_MOBDEFENCEIGNORE_02": {SKILL_BASIC_LEVEL: "2", SKILL_COOLDOWN_GROUP: "-872415232"},
+}
 
 # What nasrun.AbilitySkills names (apps/server/internal/game/nasrun/
 # ability.go): the three Devil skills of each colour, the red line first,
@@ -401,6 +413,8 @@ def add_nasrun_skills(vsro_root, native, output):
 		for row in rows:
 			converted = list(row)
 			converted[SKILL_ID] = str(allocated[row[SKILL_CODENAME]])
+			for column, value in SKILL_OVERRIDES.get(row[SKILL_CODENAME], {}).items():
+				converted[column] = value
 			staged.append(converted)
 		symbols = {row[column] for row in staged for column in (SKILL_NAME_KEY, SKILL_DESCRIPTION_KEY)} - set(SKILL_UNUSED)
 		later_texts = [row for name in LATER_TEXT_TABLES for row in avatars.later_text_rows(media, index, name)]
