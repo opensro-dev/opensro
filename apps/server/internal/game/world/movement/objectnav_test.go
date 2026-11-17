@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"reflect"
 	"testing"
 
 	worldgeom "opensro.online/server/internal/game/world"
@@ -266,11 +267,6 @@ func TestDecodeObjectNavPayloadRejectsHostileCountsAndCoordinates(t *testing.T) 
 				u32s(0, 0, math.MaxUint32, 0, 0)...,
 			),
 		},
-		{
-			name:  "unsupported nav flag",
-			raw:   deckPayload(false),
-			flags: 1 << 7,
-		},
 	}
 
 	nonFinite := deckPayload(false)
@@ -290,6 +286,25 @@ func TestDecodeObjectNavPayloadRejectsHostileCountsAndCoordinates(t *testing.T) 
 				t.Fatal("hostile payload must fail to decode")
 			}
 		})
+	}
+}
+
+// TestDecodeObjectNavPayloadIgnoresUnknownFlags pins the native reading of
+// the flags word: the client's CRTNavMeshObj_Load (4265B0) tests 1, 2, 4 only,
+// so the later client's flag 8 (its Arabia meshes) changes nothing.
+func TestDecodeObjectNavPayloadIgnoresUnknownFlags(t *testing.T) {
+	plain, err := decodeObjectNavPayload(deckPayload(false), 0)
+	if err != nil {
+		t.Fatalf("decode without flags: %v", err)
+	}
+	for _, flags := range []int{8, 1 << 7, 8 | 1<<7} {
+		mesh, err := decodeObjectNavPayload(deckPayload(false), flags)
+		if err != nil {
+			t.Fatalf("flags 0x%x: %v", flags, err)
+		}
+		if !reflect.DeepEqual(mesh, plain) {
+			t.Fatalf("flags 0x%x decoded differently from no flags", flags)
+		}
 	}
 }
 
