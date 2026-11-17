@@ -703,6 +703,6 @@ test("the Devil's Spirit extension gear arms the target cursor and carries the b
 	assert.deepEqual( companionItemTargetCommand( source, spirit ), { kind: "item-use", slot: 21, targetSlot: 20 } );
 	// A worn slot is no target: the reference server reads the bag alone.
 	assert.equal( companionItemTargetCommand( source, { ...spirit, slot: 4 } ), null );
-	assert.deepEqual( [ ...cosItemUseTail( gear, [], { targetSlot: 20 } ) ], [ 20 ] );
+	assert.deepEqual( [ ...cosItemUseTail( gear, [], { records: [], targetSlot: 20 } ) ], [ 20 ] );
 	assert.throws( () => cosItemUseTail( gear, [] ), /Drop the gear/ );
 });
