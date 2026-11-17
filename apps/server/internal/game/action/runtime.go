@@ -668,12 +668,6 @@ type Runtime struct {
 	// weather is the climate cycle and its pending deliveries
 	// (weather.go); a nil cycle is SRO_WEATHER off.
 	weather weatherState
-	// christmasWavesAsked is the last instant advanceChristmasWaves asked
-	// the timetable about; the tick goroutine alone touches it.
-	christmasWavesAsked time.Time
-	// christmasSlaves is the standing Snow Slave crowd's step state
-	// (christmas_snow_slaves.go); tick goroutine only.
-	christmasSlaves christmasSnowSlaves
 	// Christmas is the Christmas event (port-only, not native in this
 	// client build; progression/christmas.go): its event snow and the
 	// towns' decoration. The zero value is off.

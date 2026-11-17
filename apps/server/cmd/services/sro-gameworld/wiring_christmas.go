@@ -24,6 +24,23 @@ import (
 
 /*
 ================
+wireChristmasEvent
+
+The Christmas events' share of the gameplay plane: SRO_CHRISTMAS_EVENT's
+switch and UTC window, So-Ok's Christmas Gift on the same switch
+(SRO_CHRISTMAS_EVENT_MODE=so_ok_2006), and the winter Server Missions,
+whose rows the authority's metadata keeps across a restart.
+================
+*/
+func wireChristmasEvent(items *action.Runtime, refs enterworld.ItemRefSource, missions action.WinterMissionStore) {
+	items.Christmas = christmasEventFromEnv()
+	items.SoOkChristmas = sookChristmasFromEnv(refs)
+	items.WinterMissionStore = missions
+	items.WinterMissionGoals = winterMissionGoalsFromEnv()
+}
+
+/*
+================
 christmasEventFromEnv
 
 The composition read of SRO_CHRISTMAS_EVENT and its window, with the
