@@ -399,3 +399,28 @@ func TestEverySymbolTheHwanQuestsSpeakHasText(t *testing.T) {
 	check("tool refusal", cannotUseQuestTool)
 	check("no target", noSelectedTarget)
 }
+
+func TestTrapQuestTakesEveryNormalSpiritHeld(t *testing.T) {
+	rt, defs := shippedHwanRuntime(t)
+	c := hwanChainCharacter(t, defs, 95, "QNO_CH_HWAN_1_1", "QNO_CH_HWAN_1_2", "QNO_CH_HWAN_1_3", "QNO_CH_HWAN_1_3_1", "QNO_CH_HWAN_1_4")
+	if _, err := rt.StartQuest(c, "QNO_CH_HWAN_1_4_1"); err != nil {
+		t.Fatal(err)
+	}
+	rows, _, err := rt.PlanInventory(c, nil, itemLeads(hwanNormalSpirit, 3, hwanFlutterSpirit, 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.MissionInventory = rows
+	rt.applyInventoryChange(c)
+	gold := int64(1000)
+	c.Gold = &gold
+	if _, err := rt.AdvanceNpcQuest(c, "QNO_CH_HWAN_1_4_1", "NPC_CH_SHAMAN"); err != nil {
+		t.Fatal(err)
+	}
+	if *c.Gold != 1000+2*hwanFlutterGold {
+		t.Fatalf("gold %d, want %d: the extra Normal Spirits paid or the Flutter Spirits did not", *c.Gold, 1000+2*hwanFlutterGold)
+	}
+	if got := hwanItemCount(c, hwanNormalSpirit); got != 0 {
+		t.Fatalf("%d Normal Spirits stayed in the bag after the turn-in", got)
+	}
+}

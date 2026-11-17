@@ -191,6 +191,9 @@ func hwanChainSpecs() []QuestSpec {
 		trap.InventoryFullSymbol = hwanTalk(charmName) + "04"
 		trap.HeldItemGold = []HeldItemGold{{ItemCodename: hwanFlutterSpirit, GoldEach: hwanFlutterGold, GoldCap: hwanFlutterGoldCap}}
 		trap.ClearOnEnd = []string{hwanFlutterSpirit}
+		// Port-only, not native (owner, 2026-11-17): traps can catch more Normal Spirits than the one the turn-in
+		// takes; every other copy leaves with the quest.
+		trap.QuestItemCleanup = []string{hwanNormalSpirit}
 		specs = append(specs, trap)
 
 		fragment := hwanDelivery(hwanBase(race, 1, "6", race.guide, race.general, hwanQuest(race, 1, "5")), hwanSoulFragment, 1)
