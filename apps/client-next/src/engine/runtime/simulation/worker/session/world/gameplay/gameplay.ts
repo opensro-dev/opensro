@@ -17,6 +17,7 @@ import { EVENT_EXCHANGE_FUNCTION } from "@/engine/foundation/ui/npc-talk";
 import { guildBanRefused, guildSoldierRefusal } from "@/engine/foundation/gameplay/guild-manager";
 import { advanceGuildWarClock } from "@/engine/foundation/gameplay/guild-war";
 import { planarDistance, sameCoordinateSpace } from "@/engine/foundation/world/world-space";
+import { createSpeedJournal, type SpeedFrameRow } from "@/engine/foundation/gameplay/speed-journal";
 import {
 	ACTION_FORTRESS_RETURN,
 	FORTRESS_PORTAL_NOTICE_CATEGORY,
@@ -664,6 +665,9 @@ export function createGameplay(
 	// pickupPredictableNow() held at the last step (published, #1567).
 	let pickupPredictable = false;
 	const feedback = createFeedback();
+	// Port-only diagnostics (#3508): the speed frames, effects and mount the
+	// client applied, for a bug report (speed-journal.ts).
+	const speedJournal = createSpeedJournal();
 	const pickup = createPickup();
 	const actionSession = createActionSession();
 	const cosPickup = createCosPickup();
@@ -673,7 +677,12 @@ export function createGameplay(
 	const skillPress = createSkillPressQueue<GameplayCommand & { kind: "skill"; }>();
 	const movement = createMovement( send, publishFeedback ),
 		inventory = createInventory( send, handle => play( handle, soundClock ), cue => playItem( cue, soundClock ) ),
-		combat = createCombat( readEntity, publishFeedback, () => skillPress.oneWayMs() ),
+		combat = createCombat(
+			readEntity,
+			publishFeedback,
+			() => skillPress.oneWayMs(),
+			row => speedJournal.effect( row )
+		),
 		targeting = createTargeting( send, readEntity ),
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
@@ -2140,6 +2149,29 @@ speeds
 				movement.speeds( entity.walkSpeed, entity.runSpeed, now );
 				dirty = true;
 			}
+		},
+		/*
+================
+noteSpeedFrame
+
+Port-only diagnostics (#3508): one 0x376F about the local player or its
+mount, as the world routed it (speed-journal.ts).
+================
+		*/
+		noteSpeedFrame( row: SpeedFrameRow ) {
+			speedJournal.speed( row );
+			dirty = true;
+		},
+		/*
+================
+noteMount
+
+Port-only diagnostics (#3508): the local player's mountedOn (0 on foot),
+journaled when it changes.
+================
+		*/
+		noteMount( mountedOn: number, now: number ) {
+			if ( speedJournal.mount( now, mountedOn ) ) dirty = true;
 		},
 		/*
 ================
@@ -6356,6 +6388,7 @@ The published plane when something changed since the last take, else null.
 				...(i.shop ? { shop: liveShop( i.shop ) } : {}),
 				inventoryJournal,
 				...c,
+				...speedJournal.state( c.buffSlots ),
 				...targeting.state(),
 				flagWar: { timerEndsAt: flagWarTimerEndsAt, carrierGid: flagWarCarrierGid },
 				...skillPress.state(),

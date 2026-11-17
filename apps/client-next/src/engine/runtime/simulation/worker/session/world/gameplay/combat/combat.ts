@@ -52,7 +52,10 @@ export function createCombat(
 	) => void = () => {},
 	// One delivery, server to client (skill-queue.ts): a cast-start answer
 	// started its cooldown that long ago.
-	oneWayMs: () => number = () => 0
+	oneWayMs: () => number = () => 0,
+	// Port-only diagnostics (#3508): the local player's effects as they
+	// arrive and retire (speed-journal.ts).
+	noteEffect: ( row: import("@/engine/foundation/gameplay/speed-journal").EffectRow ) => void = () => {}
 ) {
 	let huntingPoints: readonly HuntingPoint[] = [];
 	let attackedName: string | undefined, attackedNameUntil = 0;
@@ -623,6 +626,9 @@ export function createCombat(
 					);
 				attachedEffects = [ ...kept, effect ];
 				admitBuff( effect );
+				if ( effect.gid === localGid ) {
+					noteEffect( { atMs: now, opcode: op, gid: effect.gid, skill: effect.skill, token: effect.token } );
+				}
 				return true;
 			}
 			// CPSMission_OnEffectTeardownTokens0xB6A0 (0x7759B0) removes only retired tokens.
@@ -637,6 +643,7 @@ export function createCombat(
 					if ( effect ) {
 						attachedEffects = attachedEffects.filter( row => row !== effect );
 						if ( effect.gid === localGid ) {
+							noteEffect( { atMs: now, opcode: op, gid: effect.gid, skill: effect.skill, token } );
 							retireBuff( effect.skill, token, now );
 							const first = huntingPoints.find( row => row.token === token );
 							if ( first ) huntingPoints = huntingPoints.filter( row => row !== first );
@@ -648,7 +655,10 @@ export function createCombat(
 						if ( cast ) requestCancellation( cast, now );
 					} else if ( cast ) {
 						requestCancellation( cast, now );
-						if ( cast.caster === localGid ) retireBuff( cast.skill, token, now );
+						if ( cast.caster === localGid ) {
+							noteEffect( { atMs: now, opcode: op, gid: localGid, skill: cast.skill, token } );
+							retireBuff( cast.skill, token, now );
+						}
 					}
 				}
 				return true;
