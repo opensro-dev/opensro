@@ -9,7 +9,7 @@ suppressed slots left out.
 
 ===========================================================================
 */
-import { countJobFraction } from "@/engine/foundation/gameplay/count-job";
+import { countJobFraction, countJobRemainingMs } from "@/engine/foundation/gameplay/count-job";
 import { buffDepartureFrame } from "@/engine/foundation/gameplay/buff-slots";
 import { abnormalBarFraction } from "@/engine/foundation/gameplay/abnormal-snapshot";
 import type { GameplayState, PetTraining } from "@/engine/contracts/gameplay";
@@ -132,7 +132,13 @@ export function buffBoard(
 		const reference = rows[0]!.reference, path = iconPath( reference.icon );
 		if ( path ) {
 			primary.push( {
-				helpText: [ reference.name ?? "", ...rows.map( r => (r.itemName ?? "") + " x" + r.uses ) ].join( "\n" ),
+				// The help needs the text catalogue; ui.ts composes it
+				// (countJobHelpLines) from these facts.
+				countJobHelp: {
+					name: reference.name ?? "",
+					rows,
+					remainingMs: countJobRemainingMs( rows[0]!, timeMs )
+				},
 				id: "count-job:" + packageRefObjId,
 				path,
 				label: reference.name ?? "",
@@ -220,6 +226,11 @@ interface Entry {
 	departure?: { frame: number; alpha: number; };
 	helpText?: string;
 	helpSource?: import("@/engine/contracts/ui").UiHelpSource;
+	countJobHelp?: {
+		name: string;
+		rows: readonly { readonly uses: number; readonly itemName?: string; }[];
+		remainingMs: number;
+	};
 	id: string;
 	path: string;
 	uv?: UiRect;

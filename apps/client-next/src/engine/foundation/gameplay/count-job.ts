@@ -290,8 +290,64 @@ The kind-5 bar: the row's remaining time against the package's period.
 */
 export function countJobFraction( row: CountJobRow, periodSec: number, nowMs: number ): number {
 	if ( periodSec <= 0 ) return 0;
-	const left = row.remainingSec * 1000 - Math.max( 0, nowMs - row.receivedAtMs );
-	return Math.min( 1, Math.max( 0, left / (periodSec * 1000) ) );
+	return Math.min( 1, Math.max( 0, countJobRemainingMs( row, nowMs ) / (periodSec * 1000) ) );
+}
+
+/*
+================
+countJobRemainingMs
+
+The package's period left: the 0x3021 remaining seconds counted down from
+the row's arrival. Negative once it has run out, as native's 64-bit
+limit - stored (6E427C) is.
+================
+*/
+export function countJobRemainingMs( row: CountJobRow, nowMs: number ): number {
+	return row.remainingSec * 1000 - Math.max( 0, nowMs - row.receivedAtMs );
+}
+
+const MS_PER_DAY = 86400000;
+const MS_PER_HOUR = 3600000;
+const MS_PER_MINUTE = 60000;
+const MS_PER_SECOND = 1000;
+// Native help lines are wide strings; the spacer is the one-space string
+// at 0xBD63EC (g_wszSingleSpace).
+const HELP_SPACER = " ";
+
+/*
+================
+countJobHelpLines
+
+The premium package slot's hover help, line for line as the board's help
+builder (CIFMagicStateBoard_ShowSlotHelpBubble 6E2C90, kind-5 arm at
+6E4270) composes it:
+
+1. the package name ("%s", 6E42F3);
+2. a one-space spacer (6E4366);
+3. PARAM_REMAINED_PERIOD with "%s: %d%s %d%s %d%s" days, hours, minutes,
+   or, under 60000 ms (negative included), "%s: %d%s" with seconds
+   (6E436B..6E44A2);
+4. one "%s: " + "%d%s" line per row of this package, item name, uses and
+   UIIT_STT_UNIT, in arrival order (6E4540..6E4648).
+
+No rows: lines 1 to 3. Every line is drawn in one colour.
+================
+*/
+export function countJobHelpLines(
+	name: string,
+	rows: readonly { readonly uses: number; readonly itemName?: string; }[],
+	remainingMs: number,
+	text: ( key: string ) => string
+): string[] {
+	const label = text( "PARAM_REMAINED_PERIOD" );
+	// __alldvrm and __alldiv truncate toward zero.
+	const period = remainingMs >= MS_PER_MINUTE ?
+		`${label}: ${Math.trunc( remainingMs / MS_PER_DAY )}${text( "PARAM_DAY" )} ` +
+			`${Math.trunc( (remainingMs % MS_PER_DAY) / MS_PER_HOUR )}${text( "PARAM_HOUR" )} ` +
+			`${Math.trunc( (remainingMs % MS_PER_HOUR) / MS_PER_MINUTE )}${text( "PARAM_MINUTE" )}` :
+		`${label}: ${Math.trunc( remainingMs / MS_PER_SECOND )}${text( "PARAM_SECOND" )}`;
+	const unit = text( "UIIT_STT_UNIT" );
+	return [ name, HELP_SPACER, period, ...rows.map( row => `${row.itemName ?? ""}: ${row.uses}${unit}` ) ];
 }
 
 /*

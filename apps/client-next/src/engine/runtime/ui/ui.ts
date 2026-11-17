@@ -382,6 +382,7 @@ import { createGuildManagerHud } from "./hud/guild-manager-hud";
 import { createGuildNoticeHud } from "./hud/guild-notice-hud";
 import { createMagicOptionHud, MAGIC_OPTION_LIST_ROWS } from "./hud/magic-option-hud";
 import {
+	countJobHelpLines,
 	premiumCommand,
 	REVERSE_RETURN_LAST_DEATH,
 	REVERSE_RETURN_LAST_RECALL
@@ -11994,7 +11995,14 @@ export function createUi(
 						controls.push( {
 							id: icon.id,
 							label: icon.label,
-							helpText: icon.helpText,
+							helpText: icon.countJobHelp ?
+								countJobHelpLines(
+									icon.countJobHelp.name,
+									icon.countJobHelp.rows,
+									icon.countJobHelp.remainingMs,
+									hudCopy
+								).join( "\n" ) :
+								icon.helpText,
 							helpSource: icon.helpSource,
 							// A package slot is clicked open (6E2840, the board's
 							// vtable +0x70 left-button handler); the rest only hover.
