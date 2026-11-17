@@ -9,6 +9,7 @@ The ordinary item-use lane owns pending requests and category cooldowns.
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
+import { QUICK_SLOT_BINDING_OPCODE } from "@/engine/contracts/opcodes";
 /*
 ================
 AutoPotionSettings
@@ -122,7 +123,7 @@ export function autoPotionSave( value: unknown ): WireFrame {
 	v.setUint16( 3, s.mp, true );
 	v.setUint16( 5, s.cure, true );
 	payload[7] = s.timing;
-	return { opcode: 0x7541, payload };
+	return { opcode: QUICK_SLOT_BINDING_OPCODE, payload };
 }
 /*
 ================

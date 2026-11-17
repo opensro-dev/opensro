@@ -13,7 +13,6 @@ creation, and codenames from the reference appearance and the title crowd
 */
 import { buildDefaultWear } from "./buildDefaultWear.mjs";
 import { defaultWearLanguage } from "./defaultWearPolicy.mjs";
-import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,6 +40,7 @@ import { imageSourceRoot, publicAssetsRoot, publicRoot } from "../world/paths.mj
 import { readPublishedAssetBytesSync } from "../../lib/publishedAsset.mjs";
 import { publishBytesAtomically } from "../shared/atomicPublish.mjs";
 import { MOONLIT_MESHES, moonlitGlb, moonlitModelPath } from "./moonlitThiefSuit.mjs";
+import { sha256Hex } from "../shared/hash.mjs";
 
 // The equipment slots equipmentGlowModelIds reads glows for.
 const GLOW_SLOT_WEAPON = 6;
@@ -165,7 +165,7 @@ async function animatedEquipmentEntry( row, paths, cache ) {
 	const bsr = parseCharacterBsr( await loadDataAsset( source ), source );
 	let entry = null;
 	if ( bsr.skeletonPath && bsr.skeletonAttachBone && bsr.animationPaths.length ) {
-		const name = createHash( "sha256" ).update( source ).digest( "hex" ).slice( 0, 20 ),
+		const name = sha256Hex( source ).slice( 0, 20 ),
 			auxiliary = await buildAuxiliarySet( source, `/assets/char/equipment/equipment_aux_${name}.glb`, "EQ0" );
 		// The body draws nothing of its own; the auxiliary handle is the item.
 		entry = { glb: auxiliary.glb, parts: [], covers: {}, sources: auxiliary.sources, auxiliary };
@@ -341,7 +341,7 @@ export async function buildEquipmentVisuals( dress, options = {} ) {
 						donor,
 						paths,
 						code: row.code,
-						key: body + "_" + createHash( "sha256" ).update( key ).digest( "hex" ).slice( 0, 20 ),
+						key: body + "_" + sha256Hex( key ).slice( 0, 20 ),
 						held: row.slot === GLOW_SLOT_WEAPON || row.slot === GLOW_SLOT_SHIELD
 					} );
 				}

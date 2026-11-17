@@ -11,7 +11,11 @@ the shard's job-kill and drop/plus notices (0x3667), and the command restriction
 */
 import { sealTier } from "./item-seal";
 import { decodeNoticeLinks } from "./notice-links";
-import { CHAT_BROADCAST_OPCODE, FORTRESS_WAR_STATE_OPCODE } from "@/engine/contracts/opcodes";
+import {
+	CHAT_BROADCAST_OPCODE,
+	FORTRESS_WAR_STATE_OPCODE,
+	GM_RESTRICTION_NOTICE_OPCODE
+} from "@/engine/contracts/opcodes";
 
 /*
 ================
@@ -343,7 +347,7 @@ zero/overflow calendar values remain numbers; noon is still Forenoon.
 ================
 */
 export function restrictionNotice( opcode: number, p: Uint8Array ): SystemNotice | null {
-	if ( opcode !== 0x36ea ) return null;
+	if ( opcode !== GM_RESTRICTION_NOTICE_OPCODE ) return null;
 	if ( p.length !== 5 ) throw Error( "Invalid command restriction notice" );
 	const kind = p[0]!;
 	if ( kind !== 0 && kind !== 1 ) return null;
