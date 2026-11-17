@@ -88,18 +88,19 @@ func TestCorePackageBoundaries(t *testing.T) {
 	// The export-world admission index (port-only): the same leaf shape again.
 	checkPackageImports(t, root, modulePath, "internal/game/world/exportworld", nil, false)
 	checkPackageImports(t, root, modulePath, "internal/game/world/monster", map[string]bool{
-		modulePath + "/internal/domain":                 true,
-		modulePath + "/internal/game/world":             true,
-		modulePath + "/internal/game/world/alexandria":  true,
-		modulePath + "/internal/game/world/pharaohtomb": true,
-		modulePath + "/internal/game/world/temple":      true,
-		modulePath + "/internal/game/world/arabia":      true,
-		modulePath + "/internal/game/world/jupiter":     true,
-		modulePath + "/internal/game/world/exportworld": true,
-		modulePath + "/internal/game/world/muhan":       true,
-		modulePath + "/internal/data/texttable":         true,
-		modulePath + "/internal/game/abnormal":          true,
-		modulePath + "/internal/game/paramkeeper":       true,
+		modulePath + "/internal/domain":                   true,
+		modulePath + "/internal/game/world":               true,
+		modulePath + "/internal/game/world/alexandria":    true,
+		modulePath + "/internal/game/world/pharaohtomb":   true,
+		modulePath + "/internal/game/world/pharaohtemple": true,
+		modulePath + "/internal/game/world/temple":        true,
+		modulePath + "/internal/game/world/arabia":        true,
+		modulePath + "/internal/game/world/jupiter":       true,
+		modulePath + "/internal/game/world/exportworld":   true,
+		modulePath + "/internal/game/world/muhan":         true,
+		modulePath + "/internal/data/texttable":           true,
+		modulePath + "/internal/game/abnormal":            true,
+		modulePath + "/internal/game/paramkeeper":         true,
 	}, false)
 	checkPackageImports(t, root, modulePath, "internal/game/item/wire", map[string]bool{
 		modulePath + "/internal/domain": true,

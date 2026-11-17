@@ -29,11 +29,11 @@ worktree, never shipped to players) and used only at build time.
 
 ===========================================================================
 */
-import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { MAIN_CHECKOUT_ROOT } from "../../lib/generatedRoot.mjs";
+import { sha256Hex } from "../shared/hash.mjs";
 
 /*
 ================
@@ -94,7 +94,7 @@ export async function encoderPath( name, root = toolsRoot() ) {
 	const response = await fetch( pin.url );
 	if ( !response.ok ) throw new Error( `${name}: download failed (${response.status})` );
 	const download = Buffer.from( await response.arrayBuffer() );
-	const digest = createHash( "sha256" ).update( download ).digest( "hex" );
+	const digest = sha256Hex( download );
 	if ( digest !== pin.sha256 ) throw new Error( `${name}: SHA-256 ${digest} is not the pinned ${pin.sha256}` );
 	// Unpack beside the final folder and rename it into place, so a broken
 	// unpack never leaves a half-installed tool behind. A pin whose release

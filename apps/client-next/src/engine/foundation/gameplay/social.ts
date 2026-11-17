@@ -20,6 +20,7 @@ import { NO_JOB_CLASS } from "./job-guild";
 import type { SocialState, PartyMember } from "./social-roster";
 import { assertUniqueRosterRows } from "./social-roster";
 import { socialGuildUnionPacket } from "./social-guild-union";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 export type { SocialState, PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
 import { readPartyMember, unknownPartyMember } from "./party-member";
 // The 0x3393 type a resurrection skill proposes to a dead player.
@@ -137,7 +138,7 @@ export function socialPacket(
 	) {
 		return null;
 	}
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	let o = 0;
 	/*
 	================

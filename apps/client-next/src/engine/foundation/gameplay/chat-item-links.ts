@@ -18,6 +18,7 @@ no links and a plain line; it never fails the session.
 
 ===========================================================================
 */
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // U+FFFC, the object replacement character: one UTF-16 unit in the text.
 export const CHAT_LINK_MARKER = "\uFFFC";
@@ -86,7 +87,7 @@ follows the text, null when the tail is malformed. Never throws.
 */
 export function decodeChatLinkTail( p: Uint8Array, offset: number ): Uint8Array[] | null {
 	if ( offset >= p.length ) return [];
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	const count = p[offset]!;
 	if ( count === 0 || count > CHAT_LINKS_ON_WIRE_MAX ) return null;
 	const bodies: Uint8Array[] = [];

@@ -1,14 +1,15 @@
 # The Roc range
 
 The Roc summit is native to v1.150: its arena regions (`RN_RM_ROCAPEX`) and the entry (`RN_RM_ROCAPEXENTER`)
-are in the shipped region table. The kinds that fight there are not. They come from the v1.188 client and
+are in the shipped region table, and so are the `ITEM_QNO_RM_MEETROC_*` items. The kinds that fight there, the
+gates and the wait room (25792) are not. They come from the v1.188 client and
 are built as one native chain (#3399). The switch below stays off until the whole chain has landed.
 
 ## Switch
 
 | Switch | Where | Effect |
 | --- | --- | --- |
-| `SRO_ROC` | Build | Stages the Roc range's nine kinds with their skills, names, skill effects and characterinfo |
+| `SRO_ROC` | Build | Stages the Roc range's nine kinds with their skills, names, skill effects and characterinfo, the four gates with their links, and the wait room |
 
 The build reads the VSRO client (`SRO_VSRO_ROOT`, the variant build's own source).
 
@@ -31,15 +32,33 @@ The build reads the VSRO client (`SRO_VSRO_ROOT`, the variant build's own source
 - **Names:** the arena's Tahomet reuses the native `SN_MOB_RM_TAHOMET` name. The import records only the names
   it adds, so an off build leaves that native name in place.
 - **Switching off:** an off build removes the shards, the skill manifest line, the added names, the skill
-  effects and characterinfo rows, and the marker.
+  effects and characterinfo rows, the wait room's files and region rows, and the marker.
+
+### The gates (step 1b)
+
+| Gate | Teleport | Building | Arrives in |
+| --- | --- | --- | --- |
+| `GATE_RC_MOUNTAIN_GATE` | 160 | `STORE_RC_TAHOMET_GATE` (24296) | world 1, region 23406 |
+| `GATE_RC_TAHOMET_GATE` | 161 | none | world 41 (`INS_ROC_FRONT`), region 25789 |
+| `GATE_RC_ROC_GATE` | 162 | none | world 40 (`INS_ROC_TOP`), region 26045 |
+| `GATE_RC_ROC_FRONT_GATE` | 163 | `STORE_ROC_FRONT_GATE` (24297) | world 1, region 25792 |
+
+- **Links:** the summit link, 160 to 162, carries the native conditions: the key item
+  `ITEM_QNO_RM_MEETROC_6_01` held (kind 4) and spent (kind 5), level 80 and up (kind 1), and no job (kind 6).
+  The server evaluates all four (#3765). The key item is renumbered by codename to the variant's id (24164 in
+  v1.150). If a variant lacks it, the link stays out rather than opening without its key. 162 back to 160 is
+  unconditioned.
+- **Ids:** the gates and buildings keep the client's ids. A building id that the variant already uses for
+  another object stops the build.
+- **The wait room:** region 25792 (`RN_RM_ROCAPEX_WAIT`). v1.150 ships its zone names, but not its region
+  row, sector 100/192 or navmesh. Those are merged the way the other later worlds are (`later_world_import`).
 
 ## What is not here yet
 
-- **Spawning.** The kinds are inert. No nest places them, because the reference data has no population in the
-  arena regions: the server spawns Roc and the Tahomet bosses when the arena opens. That is worlds 40 and 41,
-  a later step.
+- **Spawning and the instances.** The kinds are inert. No nest places them, because the reference data has no
+  population in the arena regions: the server spawns Roc and the Tahomet bosses when the arena opens. The
+  gates arrive in worlds 40 and 41, whose admission and spawns are step 4.
 - **Content still to come**, each its own step of #3399:
-  - the summit gate (teleportdata 162 and 163, building 24297, the waiting room 25792);
-  - the gate's link conditions;
-  - the `QNO_RM_MEETROC` quest chain and its `ITEM_QNO_RM_MEETROC_*` items;
-  - drops and the unique notice.
+  - the `QNO_RM_MEETROC` quest chain (step 3; its items are already native);
+  - worlds 40 and 41 (step 4);
+  - drops and the unique notice (step 5).

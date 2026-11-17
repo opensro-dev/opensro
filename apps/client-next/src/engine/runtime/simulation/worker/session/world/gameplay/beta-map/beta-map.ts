@@ -15,6 +15,7 @@ f32 x, f32 z, u8 nameLength, name bytes }.
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import type { BetaMapPlayer } from "@/engine/contracts/gameplay";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const OP_BETA_PLAYER_MAP = 0x3fb0;
 const MAX_PLAYERS = 1024;
@@ -38,7 +39,7 @@ is a protocol error, never a partial list.
 		*/
 		receive( frame: WireFrame ): boolean {
 			if ( frame.opcode !== OP_BETA_PLAYER_MAP ) return false;
-			const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const p = frame.payload, v = viewOf( p );
 			if ( p.length < 2 ) throw new Error( "Invalid beta player map" );
 			const count = v.getUint16( 0, true );
 			if ( count > MAX_PLAYERS ) throw new Error( "Invalid beta player map count" );

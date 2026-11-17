@@ -11,6 +11,7 @@ guesses where a row ends and the following bytes stay put.
 ===========================================================================
 */
 import type { PartyMember } from "./social-roster";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 export type { PartyMember } from "./social-roster";
 
 /*
@@ -33,7 +34,7 @@ Shared 75DB30 member record: roster and matching approval use the same wire owne
 ================
 */
 export function readPartyMember( p: Uint8Array, start = 0, old?: PartyMember ): { member: PartyMember; end: number; } {
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const v = viewOf( p );
 	let at = start;
 	/*
 	================

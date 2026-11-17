@@ -43,9 +43,16 @@ import { SYSTEM_PET_APPEAR } from "@/engine/contracts/orb";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 import { JOB_SUIT_SLOT, partyActiveJob } from "@/engine/foundation/gameplay/party-matching";
 import {
+	ACTION_EMOTE_OPCODE,
+	ACTION_SPEED_OPCODE,
+	BROOD_WIND_OPCODE,
 	COS_INFO_UPDATE_OPCODE,
 	COS_RIDE_STATE_OPCODE,
+	CROW_VISUAL_OPCODE,
+	EQUIP_VISUAL_OPCODE,
 	GROUND_OWNERSHIP_EXPIRED_OPCODE,
+	HOLD_PVP_STATE_OPCODE,
+	ITEM_USE_VISUAL_OPCODE,
 	JOB_DRESS_BAR_OPCODE,
 	JOB_DRESS_CANCEL_OPCODE,
 	MOVEMENT_ACK_OPCODE,
@@ -58,15 +65,23 @@ import {
 	OBJECT_SOURCE_MOVE_OPCODE,
 	OBJECT_STATE_REFRESH_OPCODE,
 	OBJECT_STEER_OPCODE,
+	PET_BOND_OPCODE,
+	PET_COUNTER_PULSE_OPCODE,
+	PET_SHIELD_OPCODE,
+	PET_SPIRIT_OPCODE,
 	PICKUP_ANIM_OPCODE,
 	RESET_CLIENT_OPCODE,
+	RESET_REGION_OPCODE,
 	SERVER_CLOCK_GID_LATCH_OPCODE,
 	SINGLE_OBJECT_SPAWN_OPCODE,
+	SKIN_CHANGE_OPCODE,
 	STALL_CLOSED_OPCODE,
 	STALL_OPENED_OPCODE,
 	STALL_RENAMED_OPCODE,
+	UNEQUIP_VISUAL_OPCODE,
 	VISUAL_FLAGS_UPDATE_OPCODE
 } from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 // The kinds whose spawn builds a CICharactor (players, NPCs, monsters, COS,
 // fortress structures); ground items and skill objects are not characters.
 const CHARACTER_KINDS = new Set( [ "player", "local-player", "npc", "monster", "cos", "structure" ] );
@@ -652,7 +667,7 @@ export function createEntities(
 		if ( p.length < 4 ) {
 			throw new Error( "Truncated spawn" );
 		}
-		const v = new DataView( p.buffer, p.byteOffset, p.byteLength ),
+		const v = viewOf( p ),
 			refObjId = v.getUint32( 0, true ),
 			ref = refs.get( refObjId );
 		if ( refObjId === DYNAMIC_OBJECT_REFERENCE ) {
@@ -1073,10 +1088,10 @@ export function createEntities(
 		receive( frame: WireFrame, now = 0 ) {
 			journalNow = now;
 			// Port-only position feedback is journaled independently of the retiring clone.
-			if ( frame.opcode === 0x3fbe ) {
+			if ( frame.opcode === BROOD_WIND_OPCODE ) {
 				const p = frame.payload;
 				if ( p.length !== 18 ) throw Error( "Invalid brood wind length" );
-				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const v = viewOf( p );
 				const gid = v.getUint32( 0, true ), regionId = v.getUint16( 4, true );
 				const x = v.getFloat32( 6, true ), y = v.getFloat32( 10, true ), z = v.getFloat32( 14, true );
 				if ( gid < 0x08000000 || gid >= 0x0a800000 || !regionId || ![ x, y, z ].every( Number.isFinite ) ) {
@@ -1085,10 +1100,10 @@ export function createEntities(
 				append( { kind: "pet-crow-effect", source: { regionId, x, y, z } } );
 				return;
 			}
-			if ( frame.opcode === 0x3fbb ) {
+			if ( frame.opcode === CROW_VISUAL_OPCODE ) {
 				const p = frame.payload;
 				if ( p.length !== 20 ) throw Error( "Invalid crow effect length" );
-				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const v = viewOf( p );
 				const gid = v.getUint32( 0, true ), cue = p[4]!, book = p[5]!, regionId = v.getUint16( 6, true );
 				const x = v.getFloat32( 8, true ), y = v.getFloat32( 12, true ), z = v.getFloat32( 16, true );
 				if (
@@ -1101,10 +1116,10 @@ export function createEntities(
 				return;
 			}
 			// Port-only Resolve state; exact, bounded packet independent of native animations.
-			if ( frame.opcode === 0x3fb5 ) {
+			if ( frame.opcode === PET_SPIRIT_OPCODE ) {
 				const p = frame.payload;
 				if ( p.length !== 10 ) throw Error( "Invalid pet Resolve length" );
-				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const v = viewOf( p );
 				const gid = v.getUint32( 0, true ),
 					stacks = v.getUint8( 4 ),
 					tier = v.getUint8( 5 ),
@@ -1119,7 +1134,7 @@ export function createEntities(
 				return;
 			}
 			// Port-only Guardian's Bond cue; independent of emotes and native casts.
-			if ( frame.opcode === 0x3fb4 ) {
+			if ( frame.opcode === PET_BOND_OPCODE ) {
 				const { gid, bear, kind } = decodePetBondPulse( frame.payload );
 				const entity = entities.get( gid );
 				if ( entity ) {
@@ -1136,10 +1151,10 @@ export function createEntities(
 				return;
 			}
 			// Port-only retaliation cue; separate from emotes so it cannot interrupt a cast.
-			if ( frame.opcode === 0x3fb3 ) {
+			if ( frame.opcode === PET_COUNTER_PULSE_OPCODE ) {
 				const p = frame.payload;
 				if ( p.length !== 4 ) throw Error( "Invalid pet counter pulse length" );
-				const gid = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 0, true );
+				const gid = viewOf( p ).getUint32( 0, true );
 				if ( !gid ) throw Error( "Invalid pet counter pulse recipient" );
 				const entity = entities.get( gid );
 				if ( entity ) {
@@ -1151,10 +1166,10 @@ export function createEntities(
 				return;
 			}
 			// Port-only absorption is separate from native health and max-health packets.
-			if ( frame.opcode === 0x3fb2 ) {
+			if ( frame.opcode === PET_SHIELD_OPCODE ) {
 				const p = frame.payload;
 				if ( p.length !== 21 ) throw Error( "Invalid shield state length" );
-				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const v = viewOf( p );
 				const gid = v.getUint32( 0, true ),
 					amount = v.getUint32( 4, true ),
 					maxHp = v.getUint32( 8, true ),
@@ -1183,8 +1198,8 @@ export function createEntities(
 			// Any frame but the dead monster's own drops ends its publication.
 			const followsDeath = dropSource;
 			dropSource = 0;
-			const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
-			if ( frame.opcode === 0x3449 ) {
+			const p = frame.payload, v = viewOf( p );
+			if ( frame.opcode === ITEM_USE_VISUAL_OPCODE ) {
 				if ( p.length !== 8 ) throw Error( "Invalid external item effect" );
 				const source = entities.get( v.getUint32( 0, true ) ), item = v.getUint32( 4, true );
 				if ( item === 0 || !source || source.groundItem ) return;
@@ -1276,7 +1291,7 @@ export function createEntities(
 				if ( entity ) apply( { kind: "state", entity: { ...entity, refObjId, tidWord: tid } } );
 				return;
 			}
-			if ( frame.opcode === 0x323a ) {
+			if ( frame.opcode === SKIN_CHANGE_OPCODE ) {
 				// CPSMission_OnCharacterSkinChangeSuccess0x323A (7641D0): u32 gid, u32 skin.
 				if ( p.length < 8 ) throw Error( "Invalid skin change" );
 				const entity = entities.get( v.getUint32( 0, true ) ), refObjId = v.getUint32( 4, true );
@@ -1310,7 +1325,7 @@ export function createEntities(
 				}
 				return;
 			}
-			if ( frame.opcode === 0x324b ) {
+			if ( frame.opcode === ACTION_EMOTE_OPCODE ) {
 				if ( p.length !== 5 ) throw Error( "Invalid emote broadcast" );
 				const entity = entities.get( v.getUint32( 0, true ) );
 				if ( entity ) {
@@ -1338,12 +1353,12 @@ export function createEntities(
 				}
 				return;
 			}
-			if ( frame.opcode === 0x3314 || frame.opcode === 0x377c ) {
+			if ( frame.opcode === EQUIP_VISUAL_OPCODE || frame.opcode === UNEQUIP_VISUAL_OPCODE ) {
 				if ( p.length < 9 ) throw new Error( "Truncated equipment visual" );
 				const gid = v.getUint32( 0, true ),
 					refObjId = v.getUint32( 5, true ),
 					typeFlags = itemRefs.get( refObjId );
-				const equip = frame.opcode === 0x3314;
+				const equip = frame.opcode === EQUIP_VISUAL_OPCODE;
 				if ( equip && typeFlags === undefined ) throw new Error( "Unknown peer equipment reference" );
 				// 777980: a missing reference is the ordinary clear-by-slot arm.
 				// Avatar removal alone is addressed by an existing item reference.
@@ -1396,7 +1411,7 @@ export function createEntities(
 				apply( { kind: "state", entity: { ...rider, mountedOn: p[5] === 1 ? mount : undefined } } );
 				return;
 			}
-			if ( frame.opcode === RESET_CLIENT_OPCODE || frame.opcode === 0x366a ) {
+			if ( frame.opcode === RESET_CLIENT_OPCODE || frame.opcode === RESET_REGION_OPCODE ) {
 				if ( p.length !== 2 ) throw Error( "Invalid reset region packet" );
 				entities.clear();
 				motion.clear();
@@ -1608,7 +1623,7 @@ export function createEntities(
 				apply( { kind: "despawn", gid: v.getUint32( 0, true ) } );
 				return;
 			}
-			if ( frame.opcode === 0x3204 ) {
+			if ( frame.opcode === HOLD_PVP_STATE_OPCODE ) {
 				if ( p.length < 5 ) throw Error( "Truncated hold/PvP state" );
 				const flags = p[4]!, expected = 5 + (flags & 1 ? 1 : 0) + (flags & 2 ? 1 : 0);
 				if ( p.length !== expected ) throw Error( "Invalid hold/PvP state length" );
@@ -1689,7 +1704,7 @@ export function createEntities(
 					return;
 				}
 			}
-			if ( frame.opcode === 0x3453 ) {
+			if ( frame.opcode === ACTION_SPEED_OPCODE ) {
 				const update = decodeAnimationSpeed( p ), source = entities.get( update.gid );
 				// 775EB0 resolves the riding actor before setting +4DC. Existing
 				// installations keep their captured rate (8DF527, ADF030).

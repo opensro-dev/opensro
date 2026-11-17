@@ -45,9 +45,9 @@ cannot name in another worktree could not be checked there.
 import path from "node:path";
 import { sha256Hex } from "../shared/hash.mjs";
 
-export const ACTION_KEY_FORMAT = "sro-action-key";
+const ACTION_KEY_FORMAT = "sro-action-key";
 // v1: inputs by relative name, code closures, env values, params.
-export const ACTION_KEY_VERSION = 1;
+const ACTION_KEY_VERSION = 1;
 // A missing input is keyed as this digest, so its later appearance misses.
 export const MISSING_DIGEST = "missing";
 

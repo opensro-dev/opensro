@@ -32,7 +32,7 @@ trusted: the record is dropped and the action runs again.
 ===========================================================================
 */
 import { constants } from "node:fs";
-import { copyFile, link, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
+import { copyFile, link, mkdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { buildStatePath, sharedCachePath } from "../../lib/generatedRoot.mjs";
 import { codeHash } from "../shared/codeStamp.mjs";
@@ -106,7 +106,7 @@ export function keyOf( store, action, env = process.env ) {
 recordPath / objectPath
 ================
 */
-export function recordPath( store, key ) {
+function recordPath( store, key ) {
 	return path.join( store.root, "records", key.slice( 0, FAN_OUT_CHARS ), `${key}.json` );
 }
 
@@ -351,26 +351,6 @@ async function placeObject( object, target, wantLink ) {
 		}
 	}
 	await copyFile( object, target, constants.COPYFILE_FICLONE );
-}
-
-/*
-================
-storeSize
-
-The object and record counts, for the build's summary line.
-================
-*/
-export async function storeSize( store ) {
-	const count = async ( folder ) => {
-		try {
-			return (await readdir( path.join( store.root, folder ), { recursive: true, withFileTypes: true } ))
-				.filter( entry => entry.isFile() ).length;
-		} catch ( error ) {
-			if ( error?.code === "ENOENT" ) return 0;
-			throw error;
-		}
-	};
-	return { objects: await count( "objects" ), records: await count( "records" ) };
 }
 
 /*

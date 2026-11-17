@@ -12,6 +12,7 @@ distributed to [%s]"; an item prints "item [%s %d pieces]is distributed to
 */
 import { isGoldGroupType, isGoldHeapType } from "./ground-item";
 import type { SystemNotice } from "./system-notices";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // 7511C0's type tests on the item reference's flag word.
 const NON_ITEM_BIT = 2;
@@ -47,7 +48,7 @@ the item: u32 for gold, u16 for an expendable stack, else one byte.
 */
 export function partyLootNotice( p: Uint8Array, context: PartyLootContext ): SystemNotice {
 	if ( p.length < 9 ) throw Error( "Truncated party loot notice" );
-	const view = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const view = viewOf( p );
 	const recipient = view.getUint32( 0, true ), refObjId = view.getUint32( 4, true );
 	const item = context.item( refObjId );
 	if ( !item ) throw Error( "Party loot notice for an unknown item reference" );

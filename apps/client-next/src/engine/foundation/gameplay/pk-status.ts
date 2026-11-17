@@ -19,6 +19,7 @@ UIIT_TOOLTIP_PK_PENALTY_TIME (penalty, total).
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // The daily limit 6B5150 prints as the second argument of the first line.
 export const PK_DAILY_LIMIT = 15;
@@ -66,7 +67,7 @@ frame is not one of them.
 ================
 */
 export function pkStatusPacket( status: PkStatus, frame: WireFrame ): PkStatus | null {
-	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const p = frame.payload, v = viewOf( p );
 	switch ( frame.opcode ) {
 		case OP_PK_DAILY:
 			if ( p.length !== 1 ) throw Error( "Invalid PK daily count" );

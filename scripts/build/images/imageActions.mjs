@@ -46,7 +46,7 @@ One image as an action. Nothing runs it alone: its misses convert
 together (convertSourceImages).
 ================
 */
-export function imageAction( asset, toolchain, roots ) {
+function imageAction( asset, toolchain, roots ) {
 	return defineAction( {
 		name: `image:${asset.output}`,
 		inputRoot: roots.extracted,
