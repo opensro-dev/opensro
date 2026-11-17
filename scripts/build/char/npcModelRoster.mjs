@@ -21,6 +21,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { sharedCacheEnvironment } from "../../lib/goEnvironment.mjs";
+import { buildStatePath } from "../../lib/generatedRoot.mjs";
 import { dataExtractedRoot, rebuildRoot as repositoryRoot, retailTextdataRoot } from "../world/paths.mjs";
 import { qinshiTombCombatEnabled } from "../shared/qinshiTomb.mjs";
 import { TITLE_CROWD_ROSTER } from "./resolveCharRoster.mjs";
@@ -40,6 +41,79 @@ const CHARACTERDATA_TYPE_ID2 = 10;
 const CHARACTERDATA_TYPE_ID3 = 11;
 const CHARACTERDATA_TYPE_ID4 = 12;
 const ROSTER_EXPORT_MAX_BYTES = 16 * 1024 * 1024;
+
+// serverRoot -> the sro-evidence executable built from it this process.
+const evidenceTools = new Map();
+const EVIDENCE_TOOL_ROOT = buildStatePath( "sro-evidence" );
+const EVIDENCE_TOOL_STALE_MS = 60 * 60 * 1000;
+
+/*
+================
+evidenceTool
+
+sro-evidence built once per process and server tree, into the build
+state folder (not the system temp, where Defender has quarantined Go
+binaries and a sweep chases them), removed when the process exits. The
+npc bake asks it for three rosters; three `go run`s linked the tool three
+times (about 1.3 s each, against 0.6 s for one build and 0.6 s per run
+of the binary). A run that died before its exit hook leaves its binary
+behind; the next build prunes those (pruneEvidenceTools).
+================
+*/
+function evidenceTool( serverRoot ) {
+	const known = evidenceTools.get( serverRoot );
+	if ( known ) return known;
+	if ( evidenceTools.size === 0 ) pruneEvidenceTools();
+	const extension = process.platform === "win32" ? ".exe" : "";
+	fs.mkdirSync( EVIDENCE_TOOL_ROOT, { recursive: true } );
+	const tool = path.join( EVIDENCE_TOOL_ROOT, `sro-evidence-${process.pid}-${evidenceTools.size}${extension}` );
+	const build = spawnSync( "go", [ "build", "-o", tool, "./cmd/tools/sro-evidence" ], {
+		cwd: serverRoot,
+		// Compiled once for every checkout (goEnvironment.mjs).
+		env: sharedCacheEnvironment( process.env ),
+		encoding: "utf8"
+	} );
+	if ( build.error || build.status !== 0 ) {
+		throw new Error(
+			`[npc] go build ./cmd/tools/sro-evidence failed in ${serverRoot}: ${build.error ?? ""} ${
+				build.stderr ?? ""
+			}`
+				.trim()
+		);
+	}
+	process.once( "exit", () => fs.rmSync( tool, { force: true } ) );
+	evidenceTools.set( serverRoot, tool );
+	return tool;
+}
+
+/*
+================
+pruneEvidenceTools
+
+Removes binaries other runs left behind. A build running alongside
+holds a binary for its own few seconds of exports, so only one older
+than EVIDENCE_TOOL_STALE_MS is taken: an hour is far past any run's use.
+================
+*/
+function pruneEvidenceTools() {
+	let names;
+	try {
+		names = fs.readdirSync( EVIDENCE_TOOL_ROOT );
+	} catch ( error ) {
+		if ( error?.code === "ENOENT" ) return;
+		throw error;
+	}
+	const cutoff = Date.now() - EVIDENCE_TOOL_STALE_MS;
+	for ( const name of names ) {
+		if ( !name.startsWith( "sro-evidence-" ) ) continue;
+		const file = path.join( EVIDENCE_TOOL_ROOT, name );
+		try {
+			if ( fs.statSync( file ).mtimeMs < cutoff ) fs.rmSync( file, { force: true } );
+		} catch {
+			// Another run removed it, or Windows still holds it open: the next build tries again.
+		}
+	}
+}
 
 /*
 ================
@@ -71,16 +145,15 @@ function loadServerRoster( subcommand, expectedFormat, label, env = process.env 
 	const serverRoot = path.resolve(
 		process.env.SRO_SERVER_SOURCE_ROOT ?? path.join( repositoryRoot, "apps", "server" )
 	);
-	const result = spawnSync( "go", [ "run", "./cmd/tools/sro-evidence", subcommand, "-textdata-dir", textdataDir ], {
+	const result = spawnSync( evidenceTool( serverRoot ), [ subcommand, "-textdata-dir", textdataDir ], {
 		cwd: serverRoot,
-		// Compiled once for every checkout (goEnvironment.mjs).
-		env: sharedCacheEnvironment( env ),
+		env,
 		encoding: "utf8",
 		maxBuffer: ROSTER_EXPORT_MAX_BYTES
 	} );
 	if ( result.error || result.status !== 0 ) {
 		throw new Error(
-			`[npc] ${label} roster export failed (go run ./cmd/tools/sro-evidence ${subcommand} in ${serverRoot}): ` +
+			`[npc] ${label} roster export failed (sro-evidence ${subcommand} in ${serverRoot}): ` +
 				`${result.error ?? ""} ${result.stderr ?? ""}`.trim()
 		);
 	}

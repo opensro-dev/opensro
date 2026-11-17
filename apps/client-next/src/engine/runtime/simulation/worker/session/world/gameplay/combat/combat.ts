@@ -35,6 +35,7 @@ import type { CastState } from "@/engine/contracts/gameplay";
 import { castPhase, damageTicks, skillPulse } from "@/engine/foundation/gameplay/combat-result";
 import { MAX_OPEN_CASTS, openCastOverflow } from "@/engine/foundation/gameplay/open-casts";
 import { TARGET_INTERACT_OPCODE } from "@/engine/contracts/opcodes";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 /*
 ================
 createCombat
@@ -528,7 +529,7 @@ export function createCombat(
 			if ( op === 0x3122 && p.length === 6 && p[4] === 0 && p[5] === 1 ) {
 				publishHp( {
 					kind: "hp-revive",
-					gid: new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 0, true )
+					gid: viewOf( p ).getUint32( 0, true )
 				} );
 			}
 			// Cosmetic feedback never debits HP; 33A6 owns the committed vitals.
@@ -666,7 +667,7 @@ export function createCombat(
 			if ( [ 0xb45a, 0x33a6, 0xb505, 0xb245 ].includes( op ) ) {
 				publishedCasts = publishedVitals = null;
 			}
-			const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const v = viewOf( p );
 			if ( op === 0xb45a && p.length === 14 && p[0] === 1 && p[5] === 1 ) {
 				const gid = v.getUint32( 1, true );
 				vitals.set( gid, { ...vitals.get( gid ), gid, hp: v.getUint32( 6, true ) } );

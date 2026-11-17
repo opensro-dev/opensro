@@ -21,6 +21,7 @@ import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { SystemNotice } from "./system-notices";
 import type { ExchangeOffer, ExchangeState } from "@/engine/contracts/item-process";
 import { decodeInventoryItem } from "./inventory-item";
+import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const EXCHANGE_SLOTS = 12;
 export const OP_EXCHANGE_REQUEST = 0x7237;
@@ -96,7 +97,7 @@ export function exchangeFrame(
 	refs: ReadonlyMap<number, number>,
 	objRefs: ReadonlyMap<number, number> = new Map()
 ): ExchangeOutcome | null {
-	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const p = frame.payload, v = viewOf( p );
 	const result = () => {
 		if ( p[0] === 1 ) return 0;
 		if ( p[0] !== 2 || p.length !== 2 ) throw Error( "Invalid exchange result" );

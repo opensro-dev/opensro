@@ -19,9 +19,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { defineAction, outputPath } from "../graph/action.mjs";
-import { runGraph } from "../graph/graph.mjs";
-import { openStore } from "../graph/store.mjs";
-import { claimPublicFile } from "./publicationLedger.mjs";
+import { pythonToolchain, runPublicActions } from "./publicActions.mjs";
 
 import {
 	assertExists,
@@ -39,8 +37,6 @@ import { runPython } from "./pythonRun.mjs";
 // This module: the font repair actions' code closure (the repair script
 // below is part of it).
 const FONT_RESOURCES_MODULE = fileURLToPath( import.meta.url );
-const FONT_TOOLCHAIN_SCRIPT =
-	"import sys, fontTools; print('python', sys.version.split()[0], 'fontTools', fontTools.version)";
 
 export const PACKAGED_FONTS = Object.freeze( [
 	{
@@ -229,36 +225,9 @@ Returns the graph's results.
 ================
 */
 export async function repairPackagedFonts( roots, options = {} ) {
-	const toolchain = options.toolchain ?? (await fontToolchain());
-	const store = options.store ?? (await openStore());
-	try {
-		const actions = PACKAGED_FONTS.map( font => fontRepairAction( font, toolchain, roots, options.repair ) );
-		const results = await runGraph( actions, { store, env: {} } );
-		for ( const font of PACKAGED_FONTS ) claimPublicFile( path.join( roots.public, font.publicFile ) );
-		const hits = Object.values( results ).filter( result => result.hit ).length;
-		console.log(
-			`[font-actions] ${actions.length} fonts: ${hits} from the store, ${actions.length - hits} repaired`
-		);
-		return results;
-	} finally {
-		if ( !options.store ) await store.shutdown();
-	}
-}
-
-/*
-================
-fontToolchain
-
-The Python and fontTools versions that repair the fonts, as one string:
-a new fontTools may write other bytes, so it misses every key.
-================
-*/
-async function fontToolchain() {
-	const { stdout } = await runPython( [ "-c", FONT_TOOLCHAIN_SCRIPT ], {
-		task: "Read the fontTools version for the font repair keys",
-		cwd: gameRoot
-	} );
-	return stdout.trim();
+	const toolchain = options.toolchain ?? (await pythonToolchain( [ "fontTools" ] ));
+	const actions = PACKAGED_FONTS.map( font => fontRepairAction( font, toolchain, roots, options.repair ) );
+	return runPublicActions( "font", actions, { store: options.store } );
 }
 
 async function readJmxGlyphMetric( fileName ) {

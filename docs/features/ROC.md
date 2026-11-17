@@ -85,8 +85,8 @@ The server half follows the v1.188 reference server (addresses in `action/roc.go
   3. 42 seconds later, the Roc appears at region 26045.
   4. When the Roc falls, an exit gate rises where it fell and leads to `GATE_RC_MOUNTAIN_GATE`'s spawn.
   5. Thirty minutes after the kill, the layer closes.
-- **Entry:** the summit refuses a character in a job suit or with a transport (0x1C30), and anyone once entry has
-  closed.
+- **Entry:** the summit refuses a character riding or with a summoned transport (0x1C30), and anyone once entry
+  has closed. Job mode is admitted.
 - **End:** the window's end closes entry. The layer closes once an hour has passed since it opened, sending
   everyone inside to the mountain gate.
 - **Tahomet's room (world 41):** opens with the summit, also on layer 1, with Tahomet at region 25789. When
