@@ -49,6 +49,9 @@ export interface AlchemyState {
 	readonly total?: number;
 	readonly lockUntil?: number;
 	readonly cancelled?: boolean;
+	// When the held reinforcement's prepare effect started (62AFA0); absent
+	// once the request is sent.
+	readonly preparing?: number;
 	readonly visible: boolean;
 	readonly pending: boolean;
 	readonly mode: AlchemyMode;

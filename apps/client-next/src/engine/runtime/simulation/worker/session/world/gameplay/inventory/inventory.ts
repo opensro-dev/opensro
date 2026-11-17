@@ -1079,7 +1079,8 @@ exchangeCommand
 			const frame = command.kind === "gacha-open" ?
 				gacha.open( command.gid ) :
 				alchemy.start( command.mode, command.slots, slots, now, command.quantity, designated );
-			send( frame );
+			// A reinforcement is held until its prepare effect has played (step).
+			if ( frame ) send( frame );
 			return frame;
 		},
 		/*
@@ -2476,7 +2477,11 @@ step
 			const active = itemCooldowns.filter( row => now < row.startedAtMs + row.durationMs ),
 				expired = active.length !== itemCooldowns.length;
 			if ( expired ) itemCooldowns = active;
-			const unlocked = alchemy.step( now );
+			const unlocked = alchemy.step( now ), prepared = alchemy.prepare( now );
+			if ( prepared ) {
+				send( prepared );
+				return true;
+			}
 			const phase = gacha.state().phase, roll = gacha.step( now, slots.get( gacha.state().slot ?? -1 ) );
 			if ( roll ) {
 				send( roll );
