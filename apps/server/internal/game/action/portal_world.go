@@ -160,6 +160,9 @@ func (rt *Runtime) portalWorldAdmission(division string, c *enterworld.Character
 			return 0, 2
 		}
 	}
+	if refusal := rt.rocEntry(division, c, arrival.world); refusal != 0 {
+		return 0, refusal
+	}
 	destination := portalWorld(arrival)
 	if rt.Monsters == nil {
 		if uint32(destination) != domain.DefaultWorldInstance {

@@ -132,6 +132,16 @@ KINDS = {
 	"MOB_RM_SPIRITS_CLON3": (8, 100),
 	"MOB_RM_WINGTRIBEKNIGHT": (8, 100),
 	"MOB_RM_WINGTRIBEDUKE": (0, 100),
+	# The summit's eight seal stones: the v1.188 server's top-layer start
+	# (0x5FE7D0) places them before the Roc can come (#3399 step 4).
+	"MOB_RM_SEALSTONE": (0, 100),
+	"MOB_RM_SEALSTONE_2": (0, 100),
+	"MOB_RM_SEALSTONE_3": (0, 100),
+	"MOB_RM_SEALSTONE_4": (0, 100),
+	"MOB_RM_SEALSTONE_5": (0, 100),
+	"MOB_RM_SEALSTONE_6": (0, 100),
+	"MOB_RM_SEALSTONE_7": (0, 100),
+	"MOB_RM_SEALSTONE_8": (0, 100),
 	"MOB_QT_RM_FEATHERMASK_01": (0, 90),
 	"MOB_QT_RM_ROCKY_CLON_01": (0, 90),
 }

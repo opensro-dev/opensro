@@ -9,7 +9,7 @@ are built as one native chain (#3399). The switch below stays off until the whol
 
 | Switch | Where | Effect |
 | --- | --- | --- |
-| `SRO_ROC` | Build and server | Build: stages the Roc range's eleven kinds with their skills, names, skill effects and characterinfo, the four gates with their links, the wait room, the six MEETROC quests and the quest kinds' nests (`roc-monsters.txt`). Server: admits those nests (`monster/roc.go`). Build and server must agree |
+| `SRO_ROC` | Build and server | Build: stages the Roc range's nineteen kinds with their skills, names, skill effects and characterinfo, the four gates with their links, the wait room, the six MEETROC quests and the quest kinds' nests (`roc-monsters.txt`). Server: admits those nests (`monster/roc.go`) and runs worlds 40 and 41 (`action/roc.go`). Build and server must agree |
 
 The build reads the VSRO client (`SRO_VSRO_ROOT`, the variant build's own source).
 
@@ -25,6 +25,7 @@ The build reads the VSRO client (`SRO_VSRO_ROOT`, the variant build's own source
 | `MOB_RM_SPIRITS` and its three clones | 8 | 100 |
 | `MOB_RM_WINGTRIBEKNIGHT` | 8 | 100 |
 | `MOB_RM_WINGTRIBEDUKE` | 0 | 100 |
+| `MOB_RM_SEALSTONE` and `_2` to `_8`, the summit's seal stones | 0 | 100 |
 | `MOB_QT_RM_FEATHERMASK_01`, a quest kind | 0 | 90 |
 | `MOB_QT_RM_ROCKY_CLON_01`, a quest kind | 0 | 90 |
 
@@ -70,12 +71,35 @@ The build reads the VSRO client (`SRO_VSRO_ROOT`, the variant build's own source
 - **Switching off:** the six rows leave `questdata.txt` by codename (it is the native table again, byte for
   byte) and `roc-monsters.txt` is removed.
 
+### The summit and Tahomet's room (step 4)
+
+The server half follows the v1.188 reference server (addresses in `action/roc.go`).
+
+- **When:** the iSRO-R shard's `SCHEDULE_DEF_MEET_ROC` row, every Saturday 22:00 for four hours, shard local time
+  (`world/roc/schedule.go`).
+- **Open:** at the start, world 40 (`INS_ROC_TOP`) opens on layer 1, where `GATE_RC_ROC_GATE` arrives. The shard is
+  told `UIIT_MSG_QUEST_ROC_APPEAR`, and the eight seal stones stand.
+- **The summit's steps:**
+  1. When every stone has fallen, the layer hears `UIIT_MSG_QUEST_ROC_BREAK_STONE`.
+  2. Ten minutes later, entry closes and the shard is told `UIIT_MSG_QUEST_ROC_DISAPPEAR`.
+  3. 42 seconds later, the Roc appears at region 26045.
+  4. When the Roc falls, an exit gate rises where it fell and leads to `GATE_RC_MOUNTAIN_GATE`'s spawn.
+  5. Thirty minutes after the kill, the layer closes.
+- **Entry:** the summit refuses a character in a job suit or with a transport (0x1C30), and anyone once entry has
+  closed.
+- **End:** the window's end closes entry. The layer closes once an hour has passed since it opened, sending
+  everyone inside to the mountain gate.
+- **Tahomet's room (world 41):** opens with the summit, also on layer 1, with Tahomet at region 25789. When
+  Tahomet falls, a gate rises to `GATE_RC_ROC_FRONT_GATE`'s spawn, the room refuses new entries, and whoever
+  stays is sent there after sixty seconds. The room closes with the summit.
+- **Inferences** (recorded in `action/roc.go`):
+  - the Front opens beside the summit, since its native opener was not found;
+  - the notices use the 0x36BF text-key notice;
+  - the Roc's berserk and departure countdowns and its timed skills are not ported, because no v1.150 frame
+    carries their minute count.
+
 ## What is not here yet
 
-- **Spawning and the instances.** The arena kinds stand in no nest, because the reference data has no
-  population in the arena regions: the server spawns Roc and the Tahomet bosses when the arena opens. The
-  gates arrive in worlds 40 and 41, whose admission and spawns are step 4.
 - **Content still to come**, each its own step of #3399:
   - the custom slots of `QNO_RM_MEETROC_2`, `_6` and `_ECT_1` to `_ECT_3` (step 3b);
-  - worlds 40 and 41 (step 4);
   - drops and the unique notice (step 5).
