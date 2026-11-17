@@ -328,11 +328,12 @@ test("a world transfer keeps the skill cooldowns; ending the session drops them"
 ================
 knockback decoration
 
-CIDecoDamageEffect_Initialize (8D5440) attaches SYSTEM_KNOCKBACK only for a
-type-5 knockback; a type-4 knockdown walks its waypoint undecorated.
+CIDecoDamageEffect_Initialize (8D5440) attaches SYSTEM_KNOCKBACK when the
+hit lands, so the result packet only queues the travel; the decoration is
+the hit presenter's (knockback-at-impact.test.mjs).
 ================
 */
-test("a type-5 knockback decorates its target with SYSTEM_KNOCKBACK", () => {
+test("a knockback result queues its travel and leaves the decoration to the hit", () => {
 	for ( const type of [ 4, 5 ] ) {
 		const events = [], c = createCombat( undefined, e => events.push( e ) );
 		hp( c, 3, 99 );
@@ -343,8 +344,7 @@ test("a type-5 knockback decorates its target with SYSTEM_KNOCKBACK", () => {
 			)
 				.u16( 200 ).bytes()
 		);
-		const marks = events.filter( e => e.kind === "system-effect" );
-		assert.deepEqual( marks, type === 5 ? [ { kind: "system-effect", gid: 3, effect: 0x8000001d } ] : [] );
+		assert.deepEqual( events.filter( e => e.kind === "system-effect" ), [] );
 		assert.equal( c.takeDisplacements()[0].kind, type );
 	}
 });

@@ -9,7 +9,8 @@ once, including 8DCF40's cancellation flush of the remaining result rows.
 ===========================================================================
 */
 import { castResultAt, castResultIndex, castResultStageCount } from "@/engine/foundation/gameplay/cast-results";
-import type { CastState } from "@/engine/contracts/gameplay";
+import type { CastImpact, CastState } from "@/engine/contracts/gameplay";
+import { isKnockback } from "@/engine/foundation/gameplay/cast-knockback";
 import type { EffectTrigger, EffectImpactEvent, ImpactFeedback } from "@/engine/contracts/effects";
 export type { ImpactFeedback } from "@/engine/contracts/effects";
 /*
@@ -21,6 +22,43 @@ export function createDamageFeedback( release: ( key: string, at: number ) => vo
 	const consumed = new Map<number, Set<string>>();
 	const passed = new Map<number, Set<number>>();
 	const flights = new Map<number, ImpactFeedback[]>();
+	/*
+	================
+	pendingTargets
+
+	The targets holding a result the predicate picks that is neither
+	consumed nor retired, in a cast or in a held flight.
+	================
+	*/
+	function pendingTargets(
+		casts: readonly CastState[],
+		currentResult: (( gid: number, key: string ) => boolean) | undefined,
+		picks: ( hit: CastImpact ) => boolean
+	): ReadonlySet<number> {
+		const pending = new Set<number>();
+		for ( const cast of casts ) {
+			for ( const row of cast.results ?? [ { target: cast.target, impacts: cast.impacts ?? [] } ] ) {
+				for ( const [i, hit] of row.impacts.entries() ) {
+					const stage = castResultIndex( hit, i );
+					if (
+						!cast.discardPendingResults && picks( hit ) &&
+						!consumed.get( cast.token )?.has( `${row.target}:${stage}` ) &&
+						(!currentResult || currentResult( row.target, `${cast.token}:${row.target}:${stage}` ))
+					) {
+						pending.add( row.target );
+					}
+				}
+			}
+		}
+		for ( const held of flights.values() ) {
+			for ( const hit of held ) {
+				if ( picks( hit.impact ) && (!currentResult || currentResult( hit.target, hit.key )) ) {
+					pending.add( hit.target );
+				}
+			}
+		}
+		return pending;
+	}
 	return {
 		/*
   ================
@@ -169,29 +207,22 @@ export function createDamageFeedback( release: ( key: string, at: number ) => vo
 			casts: readonly CastState[],
 			currentResult?: ( gid: number, key: string ) => boolean
 		): ReadonlySet<number> {
-			const pending = new Set<number>();
-			for ( const cast of casts ) {
-				for ( const row of cast.results ?? [ { target: cast.target, impacts: cast.impacts ?? [] } ] ) {
-					for ( const [i, hit] of row.impacts.entries() ) {
-						const stage = castResultIndex( hit, i );
-						if (
-							!cast.discardPendingResults && hit.fatal &&
-							!consumed.get( cast.token )?.has( `${row.target}:${stage}` ) &&
-							(!currentResult || currentResult( row.target, `${cast.token}:${row.target}:${stage}` ))
-						) {
-							pending.add( row.target );
-						}
-					}
-				}
-			}
-			for ( const held of flights.values() ) {
-				for ( const hit of held ) {
-					if ( hit.impact.fatal && (!currentResult || currentResult( hit.target, hit.key )) ) {
-						pending.add( hit.target );
-					}
-				}
-			}
-			return pending;
+			return pendingTargets( casts, currentResult, hit => !!hit.fatal );
+		},
+		/*
+  ================
+  pendingKnockbacks
+
+  The targets whose knockback or knockdown hit (a result impact carrying
+  a displacement) has not been presented yet: 8D5440 starts their travel
+  only when that hit lands.
+  ================
+  */
+		pendingKnockbacks(
+			casts: readonly CastState[],
+			currentResult?: ( gid: number, key: string ) => boolean
+		): ReadonlySet<number> {
+			return pendingTargets( casts, currentResult, isKnockback );
 		},
 		/*
   ================
