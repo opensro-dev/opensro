@@ -137,6 +137,7 @@ var catalogueExempt = map[string]string{
 	"SRO_CHRISTMAS_EVENT_MODE":                 "which Christmas event the switch runs; no catalogue file carries it",
 	"SRO_CHRISTMAS_SOOK_BOX_CHANCE":            "So-Ok's Christmas Gift box chance; no catalogue file carries it",
 	"SRO_CHRISTMAS_SOOK_GIFTS":                 "So-Ok's Christmas Gift table; no catalogue file carries it",
+	"SRO_WEATHER":                              "the region weather sent at runtime; no catalogue file carries it",
 	"SRO_MOONLIT_THIEF_SUIT":                   "a worn suit's look; the catalogue publishes no rendering",
 	"SRO_DEN_NO_TRANSPORT_SUMMON":              "a summon refusal during a countdown; no catalogue file carries it",
 	"SRO_GACHA_POOL_V2":                        "the Magic Pop prize pool; the catalogue publishes no Magic Pop pool",

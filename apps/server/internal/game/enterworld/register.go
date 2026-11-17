@@ -656,6 +656,13 @@ func RegisterGameReady(hub *transport.Hub, deps *Deps) {
 				}
 			}
 		}
+		if deps.SceneWeatherFrames != nil {
+			for _, frame := range deps.SceneWeatherFrames(divisionID, snapshot) {
+				if err := s.Send(frame.Opcode, frame.Payload); err != nil {
+					return
+				}
+			}
+		}
 		// Every game-ready that ends a loading scene (first entry, travel,
 		// a resumed transport's replacement bootstrap) settles the objects
 		// the bootstrap published against the live world.
