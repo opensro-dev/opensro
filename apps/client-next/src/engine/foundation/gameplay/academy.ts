@@ -19,13 +19,20 @@ import type { WireFrame } from "@/engine/contracts/network";
 import {
 	MENTOR_JOIN_ACK_OPCODE,
 	MENTOR_LISTING_PAGE_OPCODE,
+	TC_BUFF_LIST_OPCODE,
+	TC_BUFF_STATE_OPCODE,
 	TC_COMPULSORY_GRADUATE_REQUEST_OPCODE,
 	TC_DISBAND_REQUEST_OPCODE,
 	TC_GRADUATE_REQUEST_OPCODE,
 	TC_HONOR_RANK_ANSWER_OPCODE,
 	TC_HONOR_RANK_REQUEST_OPCODE,
 	TC_KICK_REQUEST_OPCODE,
-	TC_LEAVE_REQUEST_OPCODE
+	TC_LEAVE_REQUEST_OPCODE,
+	TC_NOTICE_EDIT_REQUEST_OPCODE,
+	TC_OPEN_ANSWER_OPCODE,
+	TC_OPEN_REQUEST_OPCODE,
+	TC_PASS_BUFF_REQUEST_OPCODE,
+	TC_STATUS_OPCODE
 } from "@/engine/contracts/opcodes";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
 
@@ -281,13 +288,13 @@ export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 
 		};
 	};
 	// 774B5F (case 6 => wire subtype 7) updates only the two notice fields.
-	if ( frame.opcode === 0x3ac5 && p[0] === 7 ) {
+	if ( frame.opcode === TC_STATUS_OPCODE && p[0] === 7 ) {
 		u( 1 );
 		const subject = str( false ), contents = str( false );
 		if ( at !== p.length ) throw Error( "Trailing academy notice bytes" );
 		return { ...state, subject, contents };
 	}
-	if ( frame.opcode === 0x3ac5 && p[0] === 1 ) {
+	if ( frame.opcode === TC_STATUS_OPCODE && p[0] === 1 ) {
 		if ( p.length !== 1 ) throw Error( "Trailing academy dissolution bytes" );
 		return {
 			...state,
@@ -299,7 +306,7 @@ export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 
 			contents: undefined
 		};
 	}
-	if ( frame.opcode === 0x3ac5 && (p[0] === 3 || p[0] === 4) ) {
+	if ( frame.opcode === TC_STATUS_OPCODE && (p[0] === 3 || p[0] === 4) ) {
 		const status = u( 1 ), id = u( 4 ), flag = u( 1 );
 		if ( at !== p.length ) throw Error( "Trailing academy removal bytes" );
 		if ( status === 3 ? ![ 1, 2, 3 ].includes( flag ) : ![ 0, 1 ].includes( flag ) ) return state;
@@ -316,13 +323,13 @@ export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 
 		return { ...state, members: state.members?.filter( m => m.id !== id ) };
 	}
 	// 774D78 (case 0xB => wire subtype 12) updates the camp evaluation tier (+0x34).
-	if ( frame.opcode === 0x3ac5 && p[0] === 12 ) {
+	if ( frame.opcode === TC_STATUS_OPCODE && p[0] === 12 ) {
 		u( 1 );
 		const evaluation = u( 1 );
 		if ( at !== p.length ) throw Error( "Trailing academy evaluation bytes" );
 		return { ...state, evaluation };
 	}
-	if ( frame.opcode === 0x3ac5 && p[0] === 13 ) {
+	if ( frame.opcode === TC_STATUS_OPCODE && p[0] === 13 ) {
 		u( 1 );
 		const id = u( 4 ),
 			location = str( false ),
@@ -337,7 +344,7 @@ export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 
 			members: state.members?.map( m => m.id === id ? { ...m, location, war, regionId, x, y, z } : m )
 		};
 	}
-	if ( frame.opcode === 0x3ac5 && p[0] === 5 ) {
+	if ( frame.opcode === TC_STATUS_OPCODE && p[0] === 5 ) {
 		u( 1 );
 		const id = u( 4 ), flag = u( 1 );
 		let patch: Partial<AcademyMember> = {};
@@ -355,7 +362,7 @@ export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 
 	}
 	// 773C60 switches on subtype minus one; case 9 is wire subtype 10.
 	// 774D4B..774D6E: result 2 reads one error byte, without replacing the roster.
-	if ( frame.opcode === 0x3ac5 && p[0] === 10 && p[1] === 2 ) {
+	if ( frame.opcode === TC_STATUS_OPCODE && p[0] === 10 && p[1] === 2 ) {
 		u( 1 );
 		u( 1 );
 		u( 1 );
@@ -388,14 +395,14 @@ export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 
 			members
 		};
 	};
-	if ( frame.opcode === 0x3ac5 && p[0] === 10 && p[1] === 1 ) {
+	if ( frame.opcode === TC_STATUS_OPCODE && p[0] === 10 && p[1] === 1 ) {
 		u( 1 );
 		u( 1 );
 		return campRecord();
 	}
 	// 76FBA0: [1] and the new camp; [2] and a category-0x1D code, followed by
 	// a u32 only for 0x1C (the reopen wait). A refusal changes no state.
-	if ( frame.opcode === 0xb2ec ) {
+	if ( frame.opcode === TC_OPEN_ANSWER_OPCODE ) {
 		const result = u( 1 );
 		if ( result === 1 ) return { ...campRecord(), opened: (state.opened ?? 0) + 1 };
 		if ( result !== 2 ) throw Error( "Invalid academy opening answer" );
@@ -403,7 +410,7 @@ export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 
 		if ( at !== p.length ) throw Error( "Trailing academy opening bytes" );
 		return state;
 	}
-	if ( frame.opcode === 0x3ac5 && p[0] === 2 ) {
+	if ( frame.opcode === TC_STATUS_OPCODE && p[0] === 2 ) {
 		u( 1 );
 		const row = memberRow();
 		if ( at !== p.length ) throw Error( "Trailing academy member bytes" );
@@ -485,7 +492,7 @@ export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 
 	// [u32 minutes][u32 value] and light slot 7 for minutes*60000+1 ms;
 	// the clears (5/8/9) are the state byte alone and empty the slot;
 	// states 2/3/4/6 are read and ignored.
-	if ( frame.opcode === 0x3cc1 ) {
+	if ( frame.opcode === TC_BUFF_STATE_OPCODE ) {
 		const buffState = u( 1 );
 		if ( buffState === 0 || buffState === 1 || buffState === 7 ) {
 			const minutes = u( 4 ), value = u( 4 );
@@ -502,7 +509,7 @@ export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 
 	// carry ([u32 minutes][u32 member id][u32 value] under a signed
 	// count), modes 5/8/9 remove the rows they carry, and mode 2 is
 	// the byte-only pass refusal (its print is academyBuffNotices').
-	if ( frame.opcode === 0xb00c ) {
+	if ( frame.opcode === TC_BUFF_LIST_OPCODE ) {
 		const mode = u( 1 );
 		if ( mode === 2 ) {
 			if ( at !== p.length ) throw Error( "Trailing academy buff list bytes" );
@@ -581,7 +588,7 @@ export function academyNoticeRequest( subject: string, contents: string ): WireF
 		payload.set( bytes, at );
 		at += bytes.length;
 	}
-	return { opcode: 0x7220, payload };
+	return { opcode: TC_NOTICE_EDIT_REQUEST_OPCODE, payload };
 }
 
 /*
@@ -594,7 +601,7 @@ sends zero.
 ================
 */
 export function academyOpenRequest(): WireFrame {
-	return { opcode: 0x72ec, payload: new Uint8Array( 4 ) };
+	return { opcode: TC_OPEN_REQUEST_OPCODE, payload: new Uint8Array( 4 ) };
 }
 
 /*
@@ -696,5 +703,5 @@ Guardian as a received row.
 ================
 */
 export function academyPassBuffRequest(): WireFrame {
-	return { opcode: 0x700c, payload: new Uint8Array( 0 ) };
+	return { opcode: TC_PASS_BUFF_REQUEST_OPCODE, payload: new Uint8Array( 0 ) };
 }

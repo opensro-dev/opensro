@@ -15,7 +15,14 @@ import type { WireFrame } from "@/engine/contracts/network";
 import type { AcademyState } from "./academy";
 import { constantNativeNotice } from "./native-notice";
 import type { SystemNotice } from "./system-notices";
-import { MENTOR_JOIN_ACK_OPCODE, TC_DISBAND_ANSWER_OPCODE } from "@/engine/contracts/opcodes";
+import {
+	MENTOR_JOIN_ACK_OPCODE,
+	TC_BUFF_LIST_OPCODE,
+	TC_BUFF_STATE_OPCODE,
+	TC_DISBAND_ANSWER_OPCODE,
+	TC_NOTICE_EDIT_ACK_OPCODE,
+	TC_STATUS_OPCODE
+} from "@/engine/contracts/opcodes";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 // 76FC90 reads one extra u32 when 0xB7C5 fails with error 0x1D.
@@ -38,7 +45,7 @@ export function academyAcknowledgment( frame: WireFrame ): { readonly notice: Sy
 	if ( !p.length || p.length !== expected ) throw Error( "Invalid academy acknowledgment" );
 	if ( p[0] === 2 ) return { notice: constantNativeNotice( 0x1d, p[1]! ) };
 	// 76FE9B -> 67D030 -> child 23: seven-second notice window, no guide.
-	if ( frame.opcode === 0xb220 && p[0] === 1 ) {
+	if ( frame.opcode === TC_NOTICE_EDIT_ACK_OPCODE && p[0] === 1 ) {
 		return {
 			notice: {
 				key: "UIIT_MSG_TC_COMMON_KNOW_REMIND_UPDATE",
@@ -76,7 +83,7 @@ export function academyStatusNotice(
 		if ( p[1] === 2 ) return { key: "UIIT_MSG_TC_JOIN_NOREPLY", value: 0, nativeType: 4 };
 		return null;
 	}
-	if ( frame.opcode !== 0x3ac5 ) return null;
+	if ( frame.opcode !== TC_STATUS_OPCODE ) return null;
 	// 773FA5: dissolution shows the child-23 notice banner.
 	if ( p[0] === 1 ) {
 		return {
@@ -194,10 +201,10 @@ export function academyBuffNotices(
 	frame: WireFrame
 ): readonly SystemNotice[] {
 	const p = frame.payload;
-	if ( frame.opcode === 0x3cc1 ) {
+	if ( frame.opcode === TC_BUFF_STATE_OPCODE ) {
 		return p[0] === 7 ? [ { key: "UIIT_CTL_TC_SAVE_BUFF_TIME_OVER", value: 0, nativeType: 0 } ] : [];
 	}
-	if ( frame.opcode !== 0xb00c || p.length < 1 ) return [];
+	if ( frame.opcode !== TC_BUFF_LIST_OPCODE || p.length < 1 ) return [];
 	if ( p[0] === 2 ) return [ { key: "UIIT_MSG_TC_PASS_ERROR", value: 0, nativeType: 0 } ];
 	if ( p[0] !== 0 || p.length < 2 ) return [];
 	const count = p[1]! << 24 >> 24;

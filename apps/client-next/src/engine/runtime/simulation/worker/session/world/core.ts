@@ -49,9 +49,11 @@ import {
 	OBJECT_STATE_REFRESH_OPCODE,
 	PARTY_INFO_OPCODE,
 	PARTY_UPDATE_OPCODE,
+	PET_BOND_OPCODE,
 	PICKUP_ANIM_OPCODE,
 	SERVER_CLOCK_GID_LATCH_OPCODE,
-	STALL_EDIT_RESULT_OPCODE
+	STALL_EDIT_RESULT_OPCODE,
+	TARGET_ACTION_STATE_OPCODE
 } from "@/engine/contracts/opcodes";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
 
@@ -378,7 +380,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 			{} :
 			undefined;
 		// Port-only Bond carries both paid damage feedback and an entity animation cue.
-		if ( !gameplay.receive( frame, now, chatSender, stallReceipt ) || frame.opcode === 0x3fb4 ) {
+		if ( !gameplay.receive( frame, now, chatSender, stallReceipt ) || frame.opcode === PET_BOND_OPCODE ) {
 			entities.receive( frame, now );
 		}
 		// The owner's edit receipt carries no title; gameplay resolves the
@@ -438,7 +440,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 				now
 			);
 		}
-		if ( frame.opcode === 0x314d ) {
+		if ( frame.opcode === TARGET_ACTION_STATE_OPCODE ) {
 			// CPSMission_OnTargetActionState0x314D (7786E0): quest id, then the
 			// capture result (1 caught, 2 failed; v1.188 sends it as 0x30DC).
 			if ( frame.payload.length !== 5 ) throw Error( "Invalid capture result" );

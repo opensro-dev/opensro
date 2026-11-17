@@ -42,7 +42,7 @@ import { CLIENT_PUBLIC_ROOT, generatedPath } from "../../lib/generatedRoot.mjs";
 import { PUBLISH_FAMILIES, REFRESH_FAMILIES } from "../../tasks/assets.mjs";
 import { archiveGeneratedArtifact } from "../artifacts/generatedArtifactArchive.mjs";
 import { listFiles } from "./fsUtils.mjs";
-import { namedPublicPaths, processNamedPathsLedger } from "./namedPathsLedger.mjs";
+import { detachedString, namedPublicPaths, processNamedPathsLedger } from "./namedPathsLedger.mjs";
 import { compareText } from "./textOrder.mjs";
 
 const LEDGER_FORMAT = "sro-publication-ledger";
@@ -210,8 +210,8 @@ export async function claimKeptOutput( absolutePath, named ) {
 	claimPublicPaths( (await referencedFiles( start, current.walked )).values() );
 }
 
-// namedPublicPaths lives with the ledger that remembers its answers.
-export { namedPublicPaths };
+// namedPublicPaths and detachedString live with the ledger that remembers its answers.
+export { detachedString, namedPublicPaths };
 
 /*
 ================

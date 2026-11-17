@@ -1,4 +1,5 @@
 import { decodeWeather, type WeatherOptions } from "./weather";
+import { EVENT_GROUP_STATE_OPCODE, WEATHER_OPCODE } from "@/engine/contracts/opcodes";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
 export interface EventEnvironment {
 	readonly groups: Readonly<Record<number, number>>;
@@ -38,12 +39,12 @@ export function environmentPacket(
 ): { state: EventEnvironment; notice?: string; } | null {
 	// 7775A0 opens with the console's hold byte: while a console rain or snow
 	// stands, the packet is discarded whole and neither slot moves.
-	if ( opcode === 0x3bde ) {
+	if ( opcode === WEATHER_OPCODE ) {
 		if ( state.debug ) return { state };
 		const server = decodeWeather( p );
 		return { state: { ...state, server, effective: derivedEffective( state.groups, server, null ) } };
 	}
-	if ( opcode !== 0x3347 ) return null;
+	if ( opcode !== EVENT_GROUP_STATE_OPCODE ) return null;
 	if ( p.length !== 5 ) throw Error( "Invalid event state packet" );
 	const id = viewOf( p ).getUint32( 0, true ), active = p[4]!;
 	const next = { ...state, groups: { ...state.groups, [id]: active } };

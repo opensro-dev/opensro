@@ -26,6 +26,7 @@ import type {
 	PetTrainingRow,
 	PetTrainingSkill
 } from "@/engine/contracts/gameplay";
+import { GUIDING_FEATHERS_OPCODE, HUNTING_HOWL_OPCODE, TAILWIND_OPCODE } from "@/engine/contracts/opcodes";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
 
 export const OP_PET_TRAINING_STATE = 0x3fb1;
@@ -78,7 +79,7 @@ a protocol error, never a partial one.
 ================
 		*/
 		receive( frame: WireFrame, now: number, localGid?: number ): boolean {
-			if ( frame.opcode === 0x3fbd ) {
+			if ( frame.opcode === HUNTING_HOWL_OPCODE ) {
 				const p = frame.payload;
 				if ( p.length !== 11 ) throw Error( "Invalid Hunting Howl state length" );
 				const v = viewOf( p );
@@ -104,7 +105,7 @@ a protocol error, never a partial one.
 				}
 				return true;
 			}
-			if ( frame.opcode === 0x3fb9 ) {
+			if ( frame.opcode === GUIDING_FEATHERS_OPCODE ) {
 				const p = frame.payload;
 				if ( p.length !== 8 ) throw Error( "Invalid Guiding Feathers length" );
 				const v = viewOf( p );
@@ -124,7 +125,7 @@ a protocol error, never a partial one.
 				}
 				return true;
 			}
-			if ( frame.opcode === 0x3fb7 ) {
+			if ( frame.opcode === TAILWIND_OPCODE ) {
 				const p = frame.payload;
 				if ( p.length !== 8 ) throw Error( "Invalid Tailwind state length" );
 				const v = viewOf( p );

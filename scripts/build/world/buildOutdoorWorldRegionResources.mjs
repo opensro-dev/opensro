@@ -19,7 +19,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildJobs } from "../shared/buildParallelism.mjs";
 import { codeHash, invalidateStamp, stampIsCurrent, writeStamp } from "../shared/codeStamp.mjs";
-import { claimKeptOutput, claimPublicFile, namedPublicPaths } from "../shared/publicationLedger.mjs";
+import { claimKeptOutput, claimPublicFile, detachedString, namedPublicPaths } from "../shared/publicationLedger.mjs";
 import { OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH, REGION_SIZE, WATER_NORMAL_FRAME_DURATION_MS } from "./constants.mjs";
 import { copyReferencedSkyImages, resolveSkyTextures } from "./assets/copySkyImages.mjs";
 
@@ -125,14 +125,16 @@ async function writeTerrainTileLedger( tilesByRegion, referencesByRegion ) {
 bundleTerrainTiles
 
 The terrain tiles a region bundle references, reduced to what
-copyReferencedTerrainTileImages reads: the ledger stays small.
+copyReferencedTerrainTileImages reads: the ledger stays small. The kept
+strings are detached from a parsed bundle's text (detachedString).
 ================
 */
 function bundleTerrainTiles( bundle ) {
+	const kept = value => typeof value === "string" ? detachedString( value ) : value;
 	return (bundle.terrainTextures?.tileCatalog?.referencedTiles ?? []).map( ( tile ) => ({
-		ddjFileName: tile.ddjFileName,
-		sourcePath: tile.sourcePath,
-		imagePublicPath: tile.imagePublicPath
+		ddjFileName: kept( tile.ddjFileName ),
+		sourcePath: kept( tile.sourcePath ),
+		imagePublicPath: kept( tile.imagePublicPath )
 	}) );
 }
 
