@@ -47,8 +47,8 @@ from prepare_client_resources import write_atomically
 
 FLAG = "SRO_CAP110_QUESTS"
 MARKER = ".opensro-cap110-quest-monsters.json"
-CHARACTER_SHARD = "characterdata_130000.txt"
-SKILL_SHARD = "skilldata_130000.txt"
+CHARACTER_SHARD = "characterdata_280000.txt"
+SKILL_SHARD = "skilldata_280000.txt"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 FORMAT = "opensro-cap110-quest-monsters-v1"
 SKILL_COLUMNS = 118
