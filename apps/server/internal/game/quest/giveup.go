@@ -65,6 +65,9 @@ func (rt *Runtime) HandleGiveUp(character *enterworld.Character, payload []byte)
 			return false
 		}
 		inventoryFrames = frames
+		// The class's give-up handler (slot 0x74) runs on the player's
+		// give-up only; the GM tools abandon without it.
+		forgetQuests(character, def.giveUpForgetsIDs)
 		return true
 	})
 	if refusal != nil {
