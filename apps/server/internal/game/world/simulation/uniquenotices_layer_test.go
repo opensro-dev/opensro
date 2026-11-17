@@ -26,13 +26,15 @@ const (
 ================
 noticeTestState
 
-A state with one rarity-3 kind and an open layer in each test world.
+A state with one rarity-3 kind and one ordinary kind, and an open layer in
+each test world.
 ================
 */
 func noticeTestState(t *testing.T) (*MonsterState, instance.Lease, instance.Lease) {
 	t.Helper()
 	s := NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{
 		1: {RefObjID: 1, Codename: "MOB_RM_ROC", TidWord: 0xc6, MaxHP: 100, MonsterType: 3},
+		2: {RefObjID: 2, Codename: "MOB_RM_WINGTRIBE", TidWord: 0xc6, MaxHP: 100},
 	}, nil))
 	s.SetRandomSource(func() float64 { return 0 })
 	s.StartDivision("a")
@@ -77,9 +79,10 @@ func noticeTestKill(t *testing.T, s *MonsterState, gid uint32, killer string) {
 ================
 TestLayerUniqueNoticesSpeakOnlyForAnnouncingWorlds
 
-An announcing world's layer tells the division of an announced spawn and
-of the kill; a spawn that does not ask, a world that does not announce,
-and a world switched back off stay silent.
+An announcing world's layer tells its own division of an announced spawn
+and of the kill, whichever division's tick drains first. A spawn that does
+not ask, an ordinary kind that asks, a world that does not announce, and a
+world switched back off stay silent.
 ================
 */
 func TestLayerUniqueNoticesSpeakOnlyForAnnouncingWorlds(t *testing.T) {
@@ -87,8 +90,23 @@ func TestLayerUniqueNoticesSpeakOnlyForAnnouncingWorlds(t *testing.T) {
 	s.AnnounceUniqueWorld(noticeTestAnnouncing, true)
 
 	roc := noticeTestSpawn(t, s, announcing, true)
+	// Another division's tick comes first: it takes nothing, and the notice
+	// is still queued for the division the layer belongs to.
+	if got := s.DrainUniqueNotices("b"); len(got) != 0 {
+		t.Fatalf("another division drained this division's layer: %+v", got)
+	}
 	if got := s.DrainUniqueNotices("a"); len(got) != 1 || !bytes.Equal(got[0].Payload, []byte{5, 1, 0, 0, 0}) {
 		t.Fatalf("announced spawn in an announcing world: %+v", got)
+	}
+	// The Roc's stages ask for the notice on every kind they spawn; only a
+	// rarity-3 kind is a unique that appears.
+	if _, ok := s.SpawnQuestMonsterGID(QuestMonsterSpawn{Division: "a", Population: announcing,
+		Codename: "MOB_RM_WINGTRIBE", Position: Spawn{RegionID: 0x655e, X: 253, Y: 85, Z: 449}, FixedPosition: true,
+		NowMs: 1000, AnnounceUnique: true}); !ok {
+		t.Fatal("the ordinary kind did not spawn")
+	}
+	if got := s.DrainUniqueNotices("a"); len(got) != 0 {
+		t.Fatalf("an ordinary kind announced itself: %+v", got)
 	}
 	noticeTestSpawn(t, s, announcing, false)
 	noticeTestSpawn(t, s, silent, true)
