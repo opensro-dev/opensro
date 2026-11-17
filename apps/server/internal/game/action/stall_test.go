@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/stall"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -182,6 +183,42 @@ The little-endian u64 at at.
 func stallU64(p []byte, at int) uint64 {
 	return uint64(p[at]) | uint64(p[at+1])<<8 | uint64(p[at+2])<<16 | uint64(p[at+3])<<24 |
 		uint64(p[at+4])<<32 | uint64(p[at+5])<<40 | uint64(p[at+6])<<48 | uint64(p[at+7])<<56
+}
+
+/*
+================
+TestStallEditIntoAFullStallAnswersMarketFull
+
+All ten slots taken, one more offer: the edit answer carries the
+client's stall-full code 0x18 (UIIT_MSG_FLEAMARKET_ERR_MARKET_FULL),
+the only category-0x0A row that names a full stall. The byte this
+refusal used to send (0x30) is absent from the client's notice
+dispatch and printed nothing (issue #2357).
+================
+*/
+func TestStallEditIntoAFullStallAnswersMarketFull(t *testing.T) {
+	rt, owner, _, _ := stallFixture(t)
+	title := wire.NewWriter(16).WStr("Potions").Payload()
+	if out := rt.HandleStallCreate(testDivision, owner, title); !bytes.Equal(out.Frames[0].Payload, []byte{1}) {
+		t.Fatalf("create %+v", out.Frames)
+	}
+	// Fill all ten slots directly in the registry (the fixture's bag
+	// spans fewer slots than the stall does); the seeded offers'
+	// contents do not matter, only that no slot is free, and their
+	// bag slots stay clear of the real offer's slot 13.
+	if _, err := rt.Stalls.Edit(testDivision, owner.Name, func(s *stall.Stall) error {
+		for i := range s.Slots {
+			s.Slots[i] = &stall.Slot{BagSlot: uint8(40 + i), Quantity: 1, Price: 300}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("filling the stall: %v", err)
+	}
+	add := stallEdit(wire.StallEditAdd, 0, 13, 5, 0, 0x2c, 1, 0, 0, 0, 0, 0, 0, 0)
+	out := rt.HandleStallEdit(testDivision, owner, add)
+	if len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, []byte{2, 0x18}) {
+		t.Fatalf("full-stall edit answer = %+v, want one [02 18] frame", out.Frames)
+	}
 }
 
 /*

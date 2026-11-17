@@ -3,7 +3,8 @@ package community
 // Letter-lane table tests: the packed receive time against a mirror of
 // the client's CIFLetterSlot_SetRecord bit decode, the 0x7261 strict decode, the
 // pinned answer encoders byte for byte, and the three handlers over a
-// fake letter door (refusal arms silent, mutation arms copy-then-swap).
+// fake letter door (send refusal arms answered or silent by class,
+// mutation arms copy-then-swap).
 
 import (
 	"bytes"
@@ -68,6 +69,9 @@ func TestDecodeLetterSendRequest(t *testing.T) {
 func TestLetterAnswerEncoders(t *testing.T) {
 	if got := EncodeLetterSendAckB261(); !bytes.Equal(got, []byte{0x01}) {
 		t.Errorf("0xB261 ack = % X", got)
+	}
+	if got := EncodeLetterSendRefusalB261(LetterErrMailboxFull); !bytes.Equal(got, []byte{0x02, 0x14}) {
+		t.Errorf("0xB261 refusal = % X", got)
 	}
 	if got := EncodeLetterDeleteAckB0CC(3); !bytes.Equal(got, []byte{0x01, 0x03}) {
 		t.Errorf("0xB0CC ack = % X", got)
@@ -229,14 +233,13 @@ func TestHandleLetterSendRefusals(t *testing.T) {
 		{"job alias", letterSendPayload("*Trader", "hello")},
 		{"receiver over cap", letterSendPayload(receiverAtCap, "hello")},
 		{"body over cap", letterSendPayload("Berk", bodyAtCap)},
-		{"unknown receiver", letterSendPayload("Cale", "hello")},
 	}
 	for _, tc := range cases {
 		letters := newFakeLetterStore()
 		sender := letterTestSender()
 		deps := letterTestDeps(letters, sender, letterTestReceiver())
 		outcome := HandleLetterSend(deps, letterTestDivision, sender, tc.payload, time.Now())
-		if outcome.Refusal == "" || outcome.AckPayload != nil || outcome.RecipientPushPayload != nil {
+		if outcome.Refusal == "" || outcome.AckPayload != nil || outcome.RecipientPushPayload != nil || outcome.RefusalPayload != nil {
 			t.Errorf("%s: outcome = %+v, want a silent refusal", tc.name, outcome)
 		}
 		if got := letters.Mailbox(letterTestDivision, 2); len(got) != 0 {
@@ -260,9 +263,70 @@ func TestHandleLetterSendMailboxCap(t *testing.T) {
 	if outcome.Refusal == "" || outcome.AckPayload != nil {
 		t.Fatalf("outcome = %+v, want the mailbox-full refusal", outcome)
 	}
+	if want := EncodeLetterSendRefusalB261(LetterErrMailboxFull); !bytes.Equal(outcome.RefusalPayload, want) {
+		t.Fatalf("refusal payload = % X, want % X (0x14 mailbox full)", outcome.RefusalPayload, want)
+	}
 	if got := letters.Mailbox(letterTestDivision, receiver.ID); len(got) != LetterMailboxMaxCount {
 		t.Fatalf("mailbox = %d letter(s), want the cap %d", len(got), LetterMailboxMaxCount)
 	}
+}
+
+// doorRefusingLetterStore fails every delivery inside the door: the
+// live-state refusal a not-full mailbox can still meet.
+type doorRefusingLetterStore struct {
+	*fakeLetterStore
+}
+
+func (doorRefusingLetterStore) DeliverLetter(string, int64, int64, int, enterworld.LetterRecord) bool {
+	return false
+}
+
+func TestHandleLetterSendAnsweredRefusals(t *testing.T) {
+	// The server-side truths answer 0xB261 result 2 with the client's
+	// category-0x14 codes; nothing is delivered (issue #2356).
+	t.Run("unknown receiver answers 0x0d", func(t *testing.T) {
+		letters := newFakeLetterStore()
+		sender := letterTestSender()
+		deps := letterTestDeps(letters, sender, letterTestReceiver())
+		outcome := HandleLetterSend(deps, letterTestDivision, sender, letterSendPayload("Cale", "hello"), time.Now())
+		if want := EncodeLetterSendRefusalB261(LetterErrUnknownReceiver); outcome.Refusal == "" || outcome.AckPayload != nil || !bytes.Equal(outcome.RefusalPayload, want) {
+			t.Fatalf("outcome = %+v, want the answered 0x0d refusal", outcome)
+		}
+	})
+	t.Run("delete-pending receiver answers 0x0d", func(t *testing.T) {
+		letters := newFakeLetterStore()
+		sender := letterTestSender()
+		receiver := letterTestReceiver()
+		receiver.DeletePending = true
+		deps := letterTestDeps(letters, sender, receiver)
+		outcome := HandleLetterSend(deps, letterTestDivision, sender, letterSendPayload("Berk", "hello"), time.Now())
+		if want := EncodeLetterSendRefusalB261(LetterErrUnknownReceiver); outcome.Refusal == "" || outcome.AckPayload != nil || !bytes.Equal(outcome.RefusalPayload, want) {
+			t.Fatalf("outcome = %+v, want the answered 0x0d refusal", outcome)
+		}
+		if got := letters.Mailbox(letterTestDivision, receiver.ID); len(got) != 0 {
+			t.Fatalf("mailbox = %d letter(s), want none", len(got))
+		}
+	})
+	t.Run("delete-pending sender answers 0x10", func(t *testing.T) {
+		letters := newFakeLetterStore()
+		sender := letterTestSender()
+		sender.DeletePending = true
+		deps := letterTestDeps(letters, sender, letterTestReceiver())
+		outcome := HandleLetterSend(deps, letterTestDivision, sender, letterSendPayload("Berk", "hello"), time.Now())
+		if want := EncodeLetterSendRefusalB261(LetterErrSendFailure); outcome.Refusal == "" || outcome.AckPayload != nil || !bytes.Equal(outcome.RefusalPayload, want) {
+			t.Fatalf("outcome = %+v, want the answered 0x10 refusal", outcome)
+		}
+	})
+	t.Run("door refusal with room answers 0x10", func(t *testing.T) {
+		letters := doorRefusingLetterStore{newFakeLetterStore()}
+		sender := letterTestSender()
+		receiver := letterTestReceiver()
+		deps := letterTestDeps(letters, sender, receiver)
+		outcome := HandleLetterSend(deps, letterTestDivision, sender, letterSendPayload("Berk", "hello"), time.Now())
+		if want := EncodeLetterSendRefusalB261(LetterErrSendFailure); outcome.Refusal == "" || outcome.AckPayload != nil || !bytes.Equal(outcome.RefusalPayload, want) {
+			t.Fatalf("outcome = %+v, want the answered 0x10 refusal", outcome)
+		}
+	})
 }
 
 func TestHandleLetterSendNilStore(t *testing.T) {

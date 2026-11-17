@@ -264,6 +264,21 @@ const (
 	LetterMailboxMaxCount = domain.LetterMailboxMaxCount
 )
 
+// The 0xB261 result-2 refusal codes (notice category 0x14): the values
+// the client's letter error rows print. Send refusals that are
+// server-side truths answer with these; the refusals the client's own
+// composer already reports never reach the wire (issue #2356).
+const (
+	// LetterErrUnknownReceiver prints UIIT_MSG_LETTERERR_UNKNOWNUSER.
+	LetterErrUnknownReceiver = 0x0d
+	// LetterErrSendFailure prints UIIT_MSG_LETTERERR_SENDERR, the
+	// generic send-failure arm.
+	LetterErrSendFailure = 0x10
+	// LetterErrMailboxFull prints UIIT_MSG_LETTERERR_FULLLETTERBOX.
+	// A notice code, not the LetterMailboxMaxCount cap it equals.
+	LetterErrMailboxFull = 0x14
+)
+
 // LetterSendRequest is one decoded 0x7261 frame.
 type LetterSendRequest struct {
 	Receiver string
@@ -310,10 +325,18 @@ func DecodeLetterIndexRequest(payload []byte) (uint8, error) {
 // EncodeLetterSendAckB261 renders the 0xB261 result-1 body: the single
 // byte [0x01] - client CPSMission_OnLetterSendResponse0xB261 reads no
 // further and raises the
-// UIIT_MSG_LETTER_SENDOK banner. (Result 2's error codes are unpinned;
-// refusals stay silent instead.)
+// UIIT_MSG_LETTER_SENDOK banner. (Result 2 carries the refusal codes
+// EncodeLetterSendRefusalB261 composes.)
 func EncodeLetterSendAckB261() []byte {
 	return []byte{0x01}
+}
+
+// EncodeLetterSendRefusalB261 renders the 0xB261 result-2 body
+// [0x02, code]: client CPSMission_OnLetterSendResponse0xB261 resolves
+// code under notice category 0x14 and prints the matching letter error
+// row (issue #2356).
+func EncodeLetterSendRefusalB261(code byte) []byte {
+	return []byte{0x02, code}
 }
 
 // EncodeLetterReadBodyB3F2 renders the 0xB3F2 result-1 body: u8 result =

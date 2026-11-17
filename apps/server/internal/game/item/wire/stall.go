@@ -113,16 +113,24 @@ const (
 	StallErrBusy          uint8 = 0x16
 	StallErrClosedByHost  uint8 = 0x17
 	StallErrHostState     uint8 = 0x2B
-	StallErrStallFull     uint8 = 0x30
-	StallErrRideState     uint8 = 0x34
-	StallErrMurderer      uint8 = 0x39
-	StallErrJob           uint8 = 0x3B
-	StallErrNoCategory    uint8 = 0x42
-	StallErrNetworkTown   uint8 = 0x49
-	StallErrRegisterTown  uint8 = 0x4A
-	StallErrNetworkStale  uint8 = 0x4F
-	StallErrNetworkGold   uint8 = 0x52
-	StallErrNetworkBag    uint8 = 0x53
+	// StallErrStallFull is the client's stall-full row
+	// UIIT_MSG_FLEAMARKET_ERR_MARKET_FULL (category 0x0A code 0x18).
+	// Inference, recorded for #2357: this refusal once sent 0x30,
+	// which the v1.150 client's notice dispatch does not contain, so
+	// it printed nothing; 0x18 is the client's only stall-full row
+	// and the 0xB1A8 edit answer is a live route for it. A native
+	// find that the text is client-local, or that the server sent
+	// 0x3C30 here, reopens the byte.
+	StallErrStallFull    uint8 = 0x18
+	StallErrRideState    uint8 = 0x34
+	StallErrMurderer     uint8 = 0x39
+	StallErrJob          uint8 = 0x3B
+	StallErrNoCategory   uint8 = 0x42
+	StallErrNetworkTown  uint8 = 0x49
+	StallErrRegisterTown uint8 = 0x4A
+	StallErrNetworkStale uint8 = 0x4F
+	StallErrNetworkGold  uint8 = 0x52
+	StallErrNetworkBag   uint8 = 0x53
 )
 
 /*

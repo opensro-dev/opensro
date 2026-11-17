@@ -228,10 +228,14 @@ func TestLetterLaneEndToEndOverWire(t *testing.T) {
 	}
 	packedTime := mailbox[0].PackedReceiveTime
 
-	// Refusal arms stay silent and the mailbox untouched: a body past
-	// the 0x100 edit cap, then an unknown receiver.
+	// The client-gated refusal stays silent (a body past the 0x100 edit
+	// cap); the unknown receiver answers 0xB261 [02 0D] (issue #2356).
+	// The mailbox stays untouched either way.
 	sendFrame(t, connAsh, community.OpLetterSendRequest, letterSendRequest(letterE2EReceiver, strings.Repeat("x", community.LetterBodyMaxBytes+1)))
 	sendFrame(t, connAsh, community.OpLetterSendRequest, letterSendRequest("Nobody", "hello?"))
+	if got := expectFrame(t, connAsh, community.OpLetterSendAckAnswer, "unknown-receiver refusal"); !bytes.Equal(got, []byte{0x02, 0x0d}) {
+		t.Fatalf("0xB261 refusal payload = % X, want [02 0D]", got)
+	}
 	gameReadyBarrier(t, connAsh, "post-refusals")
 	if got := first.authority.Letters().Mailbox(e2eDivision, beeID); len(got) != 1 {
 		t.Fatalf("mailbox after refusals = %d letter(s), want 1", len(got))
