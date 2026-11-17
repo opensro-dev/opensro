@@ -23,11 +23,12 @@ import path from "node:path";
 import zlib from "node:zlib";
 import { promisify } from "node:util";
 import { MEMBER_ENCODING_GZIP } from "./packFormat.mjs";
-import { buildStatePath } from "../../lib/generatedRoot.mjs";
+import { buildStatePath, sharedCachePath } from "../../lib/generatedRoot.mjs";
 import { writeStateFile } from "./stateFile.mjs";
 import { sha256Hex } from "./hash.mjs";
 
-const DEFAULT_CACHE_ROOT = buildStatePath( "pack-member-gzip" );
+// Named by the member's SHA-256, so trees may share it (sharedCachePath).
+const DEFAULT_CACHE_ROOT = sharedCachePath( "pack-member-gzip", buildStatePath( "pack-member-gzip" ) );
 
 export const MEMBER_GZIP_LEVEL = 9;
 // Keep compression only when the stored bytes are at most 90 % of the raw.

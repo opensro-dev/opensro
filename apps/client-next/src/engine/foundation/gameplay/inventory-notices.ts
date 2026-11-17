@@ -9,6 +9,12 @@ inventory-notices.ts - inventory and item-use refusals as notices
 */
 import { resolveNativeNotice } from "./native-notice";
 import type { SystemNotice } from "./system-notices";
+import {
+	EXCHANGE_RESULT_OPCODE,
+	GACHA_RESULT_OPCODE,
+	ITEM_MOVE_RESPONSE_OPCODE,
+	ITEM_USE_RESPONSE_OPCODE
+} from "@/engine/contracts/opcodes";
 
 /*
 ================
@@ -35,7 +41,7 @@ export function inventoryNotice(
 	// 2 shows the fixed category-1 notice 2, whatever its second byte
 	// holds; any other exchange answer is silent here.
 	// Ordinary inventory/item-use acknowledgements recognize result 2 only.
-	if ( opcode === 0xb053 ) {
+	if ( opcode === GACHA_RESULT_OPCODE ) {
 		if ( payload[0] === 1 ) {
 			if ( payload.length !== 2 ) throw Error( "Invalid Magic Pang result" );
 			return null;
@@ -44,13 +50,15 @@ export function inventoryNotice(
 		const refused = resolveNativeNotice( 1, payload[1]!, { country, itemMallOpen } );
 		return refused.kind === "notice" ? refused.notice : null;
 	}
-	if ( opcode === 0xb1be ) {
+	if ( opcode === EXCHANGE_RESULT_OPCODE ) {
 		if ( payload.length !== 2 ) throw Error( "Invalid Magic Pang exchange result" );
 		if ( payload[0] !== 2 ) return null;
 		const refused = resolveNativeNotice( 1, 2, { country, itemMallOpen } );
 		return refused.kind === "notice" ? refused.notice : null;
 	}
-	if ( (opcode !== 0xb06d && opcode !== 0xb5bd) || payload[0] !== 2 ) return null;
+	if ( (opcode !== ITEM_MOVE_RESPONSE_OPCODE && opcode !== ITEM_USE_RESPONSE_OPCODE) || payload[0] !== 2 ) {
+		return null;
+	}
 	if ( payload.length !== 2 ) throw Error( "Invalid inventory rejection" );
 	// 75AA1D: a result-2 answer reads its code byte and prints through
 	// the category-1 printer (push 1, code -> 689420) with no mall

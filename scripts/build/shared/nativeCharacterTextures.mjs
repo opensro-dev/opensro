@@ -8,13 +8,30 @@ sources use the existing D3DX generator, while other authored image formats
 keep the PNG route. Every authored compressed mip is checked byte-for-byte;
 only the absent suffix may be generated. The outer build owns the asset lock.
 
+A warm build generates nothing, but confirming that read every DDJ under
+the data root and every cached entry it maps to, and validated each pair
+again. The verdict belongs to the bytes, so it is kept by content hash, as
+worldSkyFiles.mjs keeps its sky verdicts: a hash cache of its own gives a
+file's sha256 from a stat, and the ledger maps a DDJ's sha256 to "not a
+compressed source" or "validated against the entry with this sha256". A
+DDJ is read only when its hash or verdict is unknown or its entry moved.
+The ledger is void when the generators or this module's code change, and
+a portable entry on Windows is always read, since D3DX may replace it.
+SRO_BUILD_HASH_CACHE=0 reads everything, as before.
+
 ===========================================================================
 */
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import { buildStatePath } from "../../lib/generatedRoot.mjs";
+import { fileHashCacheDisabled, openFileHashCache } from "./fileHashCache.mjs";
+import { readJsonOrUndefined } from "./jsonOut.mjs";
+import { writeStateJson } from "./stateFile.mjs";
 import { dataAssetPath, convertedTexturePath, dataRoot } from "./jmxAssetIO.mjs";
 import { noteRead } from "../graph/reads.mjs";
+import { sharedCachePath } from "../../lib/generatedRoot.mjs";
 import { imageSourceRoot } from "../world/paths.mjs";
 import { listFiles, isMainScript } from "./fsUtils.mjs";
 import { publishFileFromTemp } from "./atomicPublish.mjs";
@@ -27,7 +44,6 @@ import {
 	runMipGenerator,
 	selectMipGenerator
 } from "./nativeMipGenerator.mjs";
-import { sha256Hex } from "./hash.mjs";
 
 const DDJ_HEADER = 20;
 const DDS_HEADER = 128;
@@ -38,11 +54,21 @@ const DXT5 = 0x35545844;
 const NTX_MAGIC = 0x3158544e;
 const MAX_DIMENSION = 8192;
 const NATIVE_MIME = "application/x-sro-texture";
-const cacheRoot = path.join( imageSourceRoot, "native-character" );
+// Entries are named by the generator's hash and the source bytes, so trees
+// may share them (generatedRoot.mjs sharedCachePath).
+const cacheRoot = sharedCachePath( "native-character", path.join( imageSourceRoot, "native-character" ) );
 // Source bytes and generator code both govern generated mip cache identity.
 // D3DX and the portable native_texture_mips.py never share entries
 // (nativeMipGenerator.mjs); a reader takes the first candidate it finds.
 const GENERATOR_HASHES = Object.fromEntries( [ D3DX, PORTABLE ].map( kind => [ kind, generatorHash( kind ) ] ) );
+const LEDGER_FORMAT = "sro-native-character-texture-ledger";
+const LEDGER_VERSION = 1;
+const LEDGER_PATH = buildStatePath( "native-character-texture-ledger.json" );
+const HASH_CACHE_PATH = buildStatePath( "native-character-texture-hash-cache.json" );
+// The validation rules live in this file, so its bytes void the ledger.
+const MODULE_DIGEST = createHash( "sha256" ).update( fs.readFileSync( fileURLToPath( import.meta.url ) ) ).digest(
+	"hex"
+);
 
 /*
 ================
@@ -253,6 +279,70 @@ export async function pendingTextures( entries, platform, select ) {
 
 /*
 ================
+openTextureLedger
+
+The sha256 -> verdict map of the last sweep; empty when absent, of another
+format, written under other generators or code, or when the hash cache is
+bypassed.
+================
+*/
+export async function openTextureLedger( ledgerPath ) {
+	if ( fileHashCacheDisabled() ) return Object.create( null );
+	const parsed = await readJsonOrUndefined( ledgerPath );
+	if (
+		parsed?.format !== LEDGER_FORMAT || parsed?.version !== LEDGER_VERSION || !parsed.verdicts ||
+		parsed.module !== MODULE_DIGEST || JSON.stringify( parsed.generators ) !== JSON.stringify( GENERATOR_HASHES )
+	) return Object.create( null );
+	return Object.assign( Object.create( null ), parsed.verdicts );
+}
+
+/*
+================
+verdictHolds
+
+Whether a recorded verdict still stands without reading: a non-compressed
+source always does; a validated one while its entry still holds the
+recorded bytes (by stat, through the hash cache), unless it is a portable
+entry on Windows, which buildNativeCharacterTextures may regenerate.
+root names another cache folder (tests).
+================
+*/
+export async function verdictHolds( verdict, hashCache, root = cacheRoot ) {
+	if ( verdict.plain ) return true;
+	if ( verdict.kind === PORTABLE && process.platform === "win32" ) return false;
+	const target = path.join( root, verdict.target );
+	let targetStat;
+	try {
+		targetStat = await fs.promises.stat( target );
+	} catch {
+		return false;
+	}
+	return hashCache.peekFileHash( target, targetStat ) === verdict.targetSha256;
+}
+
+/*
+================
+saveSweep
+
+The hash cache and the verdicts this sweep saw, which replace the ledger:
+it holds exactly the tree it last confirmed. Entries generated after the
+sweep are confirmed by the next one.
+================
+*/
+export async function saveSweep( { hashCache, ledgerPath, verdicts } ) {
+	await hashCache.save();
+	if ( fileHashCacheDisabled() ) return;
+	await writeStateJson( ledgerPath, {
+		format: LEDGER_FORMAT,
+		version: LEDGER_VERSION,
+		module: MODULE_DIGEST,
+		generators: GENERATOR_HASHES,
+		verdicts
+	} );
+}
+
+/*
+================
 buildNativeCharacterTextures
 
 Generate missing content-addressed entries in one generator session (D3DX
@@ -260,30 +350,57 @@ or the portable generator, nativeMipGenerator.mjs), probed only when an
 entry is missing. Private staging prevents a failed process from leaving an
 admissible cache. On Windows a portable entry (an opted-in build's) is kept
 only while D3DX stays unavailable: once the probe finds D3DX it is
-regenerated, and readers prefer the D3DX entry.
+regenerated, and readers prefer the D3DX entry. options name other hash
+cache and ledger files (tests and proofs).
 ================
 */
-export async function buildNativeCharacterTextures() {
+export async function buildNativeCharacterTextures( options = {} ) {
+	const hashCache = await openFileHashCache( options.hashCachePath ?? HASH_CACHE_PATH );
+	const ledgerPath = options.ledgerPath ?? LEDGER_PATH;
+	const known = await openTextureLedger( ledgerPath );
+	const verdicts = Object.create( null );
 	await fs.promises.mkdir( cacheRoot, { recursive: true } );
 	const staging = await fs.promises.mkdtemp( path.join( cacheRoot, ".build-" ) );
 	try {
 		const entries = [], seen = new Set();
 		for ( const source of await listFiles( dataRoot, { extensions: [ ".ddj" ] } ) ) {
 			if ( !source.toLowerCase().endsWith( ".ddj" ) ) continue;
+			const sourceStat = await fs.promises.stat( source );
+			const knownDigest = hashCache.peekFileHash( source, sourceStat );
+			const verdict = knownDigest && known[knownDigest];
+			if ( verdict && (await verdictHolds( verdict, hashCache )) ) {
+				verdicts[knownDigest] = verdict;
+				seen.add( knownDigest );
+				continue;
+			}
 			const bytes = await fs.promises.readFile( source );
-			if ( !compressedSource( bytes ) ) continue;
-			const digest = sha256Hex( bytes );
+			const digest = hashCache.noteFileBytes( source, sourceStat, bytes );
+			if ( !compressedSource( bytes ) ) {
+				verdicts[digest] = { plain: true };
+				continue;
+			}
 			if ( seen.has( digest ) ) continue;
 			seen.add( digest );
 			const cached = cachedEntry( bytes );
 			if ( cached ) {
-				validateCharacterTexture( bytes, await fs.promises.readFile( cached.target ) );
+				const entry = await fs.promises.readFile( cached.target );
+				validateCharacterTexture( bytes, entry );
+				verdicts[digest] = {
+					kind: cached.kind,
+					target: path.basename( cached.target ),
+					targetSha256: hashCache.noteFileBytes(
+						cached.target,
+						await fs.promises.stat( cached.target ),
+						entry
+					)
+				};
 				// Only an entry that may be regenerated keeps its bytes in memory.
 				if ( cached.kind === D3DX || process.platform !== "win32" ) continue;
 			}
 			entries.push( { item: { source, bytes }, cached: cached?.kind ?? null } );
 		}
 		const pending = await pendingTextures( entries, process.platform, selectMipGenerator );
+		await saveSweep( { hashCache, ledgerPath, verdicts } );
 		if ( !pending ) return;
 		const kind = pending.kind;
 		const jobs = pending.items.map( ( { source, bytes } ) => {

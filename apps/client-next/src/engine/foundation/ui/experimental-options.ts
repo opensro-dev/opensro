@@ -177,9 +177,11 @@ export interface ExperimentalOptions {
 	// frustum-only draw and pick.
 	readonly dungeonCharacterPvs: boolean;
 	// Port-only, not native: an authored label wider than its box wraps onto
-	// two lines inside it, and an open list that would leave its window opens
-	// upward (the original runs the text past the window's edge and draws the
-	// list below the box). On unless turned off (the owner's choice,
+	// two lines inside it, a button caption wider than its plate keeps its
+	// leading words (in game and on the creation screen), a speech board
+	// breaks between words, and an open list that would leave its window opens
+	// upward (the original runs the text past the window's edge, breaks a
+	// board at any glyph and draws the list below the box). On unless turned off (the owner's choice,
 	// 2026-10-15); off is the original look.
 	readonly fitWindowLabels: boolean;
 	// Port-only, not native: an item dropped on the other bag page's tab

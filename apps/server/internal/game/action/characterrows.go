@@ -81,9 +81,9 @@ func invItemsFromRowsWithin(rows []enterworld.InventoryRow, slotEnd int64) []inv
 			RefObjID:     row.RefObjID,
 			Codename:     row.Codename,
 			TypeFlags:    row.TypeFlags,
-			Plus:         uint8(clampInt64(row.Plus, 0, 0xFF)),
+			Plus:         uint8(min(max(row.Plus, 0), 0xFF)),
 			VarianceBits: variance,
-			Durability:   uint32(clampInt64(row.Durability, 0, 0xFFFFFFFF)),
+			Durability:   uint32(min(max(row.Durability, 0), 0xFFFFFFFF)),
 			Quantity:     uint16(quantity),
 			MagicOptions: append([]uint64(nil), row.MagicOptions...),
 			Data:         row.Data, Summon: domain.CloneCOS(row.Summon),
@@ -132,23 +132,6 @@ func rowsFromInvItems(items []inventory.Item) []enterworld.InventoryRow {
 
 /*
 ==================
-clampInt64
-==================
-*/
-func clampInt64(value, min, max int64) int64 {
-	if value < min {
-		return min
-	}
-
-	if value > max {
-		return max
-	}
-
-	return value
-}
-
-/*
-==================
 maxStackFor
 
 maxStackFor ports missionItemMaxStack: the itemdata MaxStack column, gated
@@ -176,7 +159,7 @@ func (rt *Runtime) maxStackFor(typeFlags uint16, codename string) uint16 {
 		return 1
 	}
 
-	return uint16(clampInt64(int64(maxStack), 1, 0xFFFF))
+	return uint16(min(max(int64(maxStack), 1), 0xFFFF))
 }
 
 /*

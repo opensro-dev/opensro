@@ -84,12 +84,9 @@ func (rt *Runtime) HandleExchangeRequest(division string, c *enterworld.Characte
 	}
 	rt.Exchanges.Propose(division, c.Name, target.Name, nowMs)
 	prompt := wire.NewWriter(5).U8(exchangePromptKind).U32(enterworld.ObjectIDForCharacter(c)).Payload()
-	rt.PushCharacterFrames(division, target.Name, []wire.Frame{{Opcode: opInvitationPrompt, Payload: prompt}})
+	rt.PushCharacterFrames(division, target.Name, []wire.Frame{{Opcode: opInvitationProposal, Payload: prompt}})
 	return OpResult{}
 }
-
-// opInvitationPrompt is the shared 0x3393 proposal opcode.
-const opInvitationPrompt uint16 = 0x3393
 
 /*
 ================

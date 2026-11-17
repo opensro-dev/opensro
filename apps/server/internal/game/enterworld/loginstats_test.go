@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"opensro.online/server/internal/domain/charactervitals"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -76,12 +77,12 @@ func TestBuildLoginStatBlockFallbacks(t *testing.T) {
 func TestBuildLoginStatBlockClampsToTheWord(t *testing.T) {
 	payload := BuildLoginStatBlock(&Character{
 		Name:      "overflow",
-		Strength:  i64(StatWordMax + 500),
+		Strength:  i64(charactervitals.StatWordMax + 500),
 		Intellect: i64(-5),
 	}, wire.BaseStats{})
 
-	if got := binary.LittleEndian.Uint16(payload[0x20:]); got != uint16(StatWordMax) {
-		t.Fatalf("STR = %d, want it clamped at %d", got, StatWordMax)
+	if got := binary.LittleEndian.Uint16(payload[0x20:]); got != uint16(charactervitals.StatWordMax) {
+		t.Fatalf("STR = %d, want it clamped at %d", got, charactervitals.StatWordMax)
 	}
 	// A negative persisted stat reads as the creation base via the shared
 	// reader, so it never encodes as a wrapped word.

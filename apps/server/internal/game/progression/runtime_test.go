@@ -4,6 +4,7 @@ import (
 	"sync"
 	"testing"
 
+	"opensro.online/server/internal/domain/charactervitals"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 )
@@ -300,7 +301,7 @@ func TestAllocMaterializesAbsentCurrentAtThePreRaiseMax(t *testing.T) {
 // a value it cannot hold.
 func TestAllocClampsAtTheNativeWordCeiling(t *testing.T) {
 	character := testCharacter()
-	character.Strength = int64Ptr(enterworld.StatWordMax)
+	character.Strength = int64Ptr(charactervitals.StatWordMax)
 	rt := newTestRuntime(character)
 
 	result := rt.HandleAllocStr(testDivision, character, nil)
@@ -308,8 +309,8 @@ func TestAllocClampsAtTheNativeWordCeiling(t *testing.T) {
 	if result.Frames[0].Payload[0] != wire.ResultSuccess {
 		t.Fatalf("allocation at the ceiling refused: %v", result.Frames[0].Payload)
 	}
-	if got := *character.Strength; got != enterworld.StatWordMax {
-		t.Fatalf("strength = %d, want it clamped at %d", got, enterworld.StatWordMax)
+	if got := *character.Strength; got != charactervitals.StatWordMax {
+		t.Fatalf("strength = %d, want it clamped at %d", got, charactervitals.StatWordMax)
 	}
 }
 

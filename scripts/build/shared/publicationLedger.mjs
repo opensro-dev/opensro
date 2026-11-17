@@ -42,6 +42,7 @@ import { CLIENT_PUBLIC_ROOT, generatedPath } from "../../lib/generatedRoot.mjs";
 import { PUBLISH_FAMILIES, REFRESH_FAMILIES } from "../../tasks/assets.mjs";
 import { archiveGeneratedArtifact } from "../artifacts/generatedArtifactArchive.mjs";
 import { listFiles } from "./fsUtils.mjs";
+import { namedPublicPaths, processNamedPathsLedger } from "./namedPathsLedger.mjs";
 import { compareText } from "./textOrder.mjs";
 
 const LEDGER_FORMAT = "sro-publication-ledger";
@@ -209,20 +210,8 @@ export async function claimKeptOutput( absolutePath, named ) {
 	claimPublicPaths( (await referencedFiles( start, current.walked )).values() );
 }
 
-/*
-================
-namedPublicPaths
-
-The /assets/... paths a JSON text names, in the spelling it wrote: what
-claimKeptOutput follows, recorded by a builder when it writes the text.
-================
-*/
-export function namedPublicPaths( text ) {
-	return [ ...new Set( Array.from( text.matchAll( REFERENCED_PUBLIC_PATH ), ( [, reference] ) => reference ) ) ];
-}
-
-// A JSON string value that is a public path; paths never contain a quote or backslash.
-const REFERENCED_PUBLIC_PATH = /"(\/assets\/[^"\\]+)"/g;
+// namedPublicPaths lives with the ledger that remembers its answers.
+export { namedPublicPaths };
 
 /*
 ================
@@ -407,23 +396,21 @@ client loads exactly what its manifests and catalogs reference. spellings
 maps each claimed lower-cased path to its spelling on disk; returns the
 referenced paths that are not themselves claimed, lower-cased path to the
 spelling the manifest wrote. seen (default: the claimed paths) holds what is
-already walked; a caller sharing it across calls walks each file once.
+already walked; a caller sharing it across calls walks each file once. What
+each file names comes from the named-paths ledger, which reads a file only
+when its bytes are new to it.
 ================
 */
 async function referencedFiles( spellings, seen = new Set( spellings.keys() ) ) {
 	const referenced = new Map();
+	const ledger = await processNamedPathsLedger();
 	const pending = [ ...spellings.values() ];
 	while ( pending.length > 0 ) {
 		const publicPath = pending.pop();
 		if ( !publicPath.toLowerCase().endsWith( ".json" ) ) continue;
-		let text;
-		try {
-			text = await readFile( path.join( CLIENT_PUBLIC_ROOT, publicPath.slice( 1 ) ), "utf8" );
-		} catch ( error ) {
-			if ( error.code === "ENOENT" ) continue;
-			throw error;
-		}
-		for ( const reference of namedPublicPaths( text ) ) {
+		const named = await ledger.namedPaths( path.join( CLIENT_PUBLIC_ROOT, publicPath.slice( 1 ) ) );
+		if ( !named ) continue;
+		for ( const reference of named ) {
 			const key = reference.toLowerCase();
 			if ( seen.has( key ) ) continue;
 			seen.add( key );

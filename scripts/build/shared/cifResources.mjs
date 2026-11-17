@@ -11,7 +11,7 @@ Split verbatim from resourcePipeline.mjs (2026-07-28).
 */
 // Split verbatim from resourcePipeline.mjs (2026-07-28): CIF/UI cluster -
 // resinfo layout bundles, runtime image allowlists and the image copy pass.
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, open } from "node:fs/promises";
 import { copyIntoPublicTree } from "./publicWrite.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,6 +54,9 @@ const ICON_COPY_CONCURRENCY = 32;
 // the native guide images (gd_control: the controls article's closing
 // line, guide-catalog.ts). Sources live in ./art/guide.
 const PORT_GUIDE_IMAGES = [ "gd_control.png" ];
+
+// The PNG signature (8) plus the IHDR length, type, width and height (16).
+const PNG_HEADER_BYTES = 24;
 
 /*
 ================
@@ -629,6 +632,26 @@ function expandAuthoredDdjPaths( node ) {
 
 /*
 ================
+readPngHeader
+
+The first PNG_HEADER_BYTES of a file: the signature and the IHDR width and
+height, all describeSpriteResource reads. A sprite catalog names thousands
+of images, so it reads their headers, not their pixels.
+================
+*/
+async function readPngHeader( file ) {
+	const handle = await open( file, "r" );
+	try {
+		const header = Buffer.alloc( PNG_HEADER_BYTES );
+		const { bytesRead } = await handle.read( header, 0, PNG_HEADER_BYTES, 0 );
+		return header.subarray( 0, bytesRead );
+	} finally {
+		await handle.close();
+	}
+}
+
+/*
+================
 describeSpriteResource
 ================
 */
@@ -640,7 +663,7 @@ async function describeSpriteResource( ddjPath ) {
 	if ( !(await exists( source )) ) {
 		return null;
 	}
-	const bytes = await readFile( source );
+	const bytes = await readPngHeader( source );
 	if (
 		bytes.length < 24 ||
 		bytes[0] !== 0x89 ||

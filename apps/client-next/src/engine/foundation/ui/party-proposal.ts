@@ -97,6 +97,10 @@ const QUESTION_MESSAGE_ROOM = 43;
 const QUESTION_MESSAGE_ROOM_ABOVE_FIELD = 18;
 // The message's left inset within the 308-pixel box.
 const QUESTION_MESSAGE_INSET = 4;
+// A wrapped message line's pitch, and the second message's top under the
+// first line in guildProposalLayout (question 70 - name 52).
+export const GUILD_MESSAGE_LINE = 14;
+export const GUILD_MESSAGE_SECOND_TOP = 18;
 
 /*
 ================

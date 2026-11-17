@@ -265,6 +265,211 @@ class LaterWorldReapTest(unittest.TestCase):
 			hunting2, "SRO_HUNTING2", hunting2.add_hunting2, 25002, (130, 86), "HUNT_FIELD", "HUNT_FIELD_EAST")
 
 
+# ================
+# pk2
+#
+# A test archive holding files at nested paths ({"a/b.txt": bytes}).
+# ================
+def pk2(files):
+	from test_client_preparation import ArchiveBuilder
+	builder = ArchiveBuilder()
+	tree = {}
+	for path, raw in files.items():
+		node = tree
+		*folders, name = path.split("/")
+		for folder in folders:
+			node = node.setdefault(folder, {})
+		node[name] = raw
+
+	def emit(node):
+		offset = builder.folder([])
+		entries = []
+		for name, child in node.items():
+			if isinstance(child, dict):
+				entries.append((1, name.encode("ascii"), emit(child), 0))
+			else:
+				entries.append((2, name.encode("ascii"), *builder.add_payload(child)))
+		builder.blocks[offset] = entries
+		return offset
+
+	emit(tree)
+	return builder.build()
+
+
+# ================
+# MergeWorldParticleTest
+#
+# merge_world itself runs the particle walk: a model its Data pass
+# copies seeds the walk, the walk's file lands in the overlay, and the
+# region record enrols it beside the model. Only the resource walk is
+# stood in for; the archives, the seeds and the enrolment are real.
+# ================
+class MergeWorldParticleTest(unittest.TestCase):
+	MODEL = "res/mob/jupiter/babilion.bsr"
+	EFFECT = "monster/jupiter/skill_jupiter_babilion_at11_body.efp"
+
+	def test_a_merged_model_carries_its_effect_program_into_the_record(self):
+		import skytemple_import
+		textdata = "server_dep/silkroad/textdata/"
+		# One native row each: the merges number new rows past the highest.
+		catalog = b'JMXV2DTI1001\r\n1\r\n00000 0x00000000 "ok" "native.ddj"\r\n'
+		with tempfile.TemporaryDirectory() as temp:
+			base = Path(temp)
+			v1696, native, out = base / "v1696", base / "native", (base / "out").resolve()
+			v1696.mkdir()
+			(v1696 / "Map.pk2").write_bytes(pk2({"tile2d.ifo": catalog, "object.ifo": catalog}))
+			(v1696 / "Data.pk2").write_bytes(pk2({self.MODEL: b"JMXVBSR 0109"}))
+			(v1696 / "Media.pk2").write_bytes(pk2({textdata + "regioncode.txt": utf16([]),
+				textdata + "textzonename.txt": utf16([])}))
+			(v1696 / "Particles.pk2").write_bytes(pk2({self.EFFECT: b"JMXVEFF"}))
+			for folder in ("Data_extracted", "Media_extracted", "Particles_extracted"):
+				(native / folder).mkdir(parents=True)
+			for name in ("tile2d.ifo", "object.ifo"):
+				target = out / "Map_extracted" / name
+				target.parent.mkdir(parents=True, exist_ok=True)
+				target.write_bytes(catalog)
+			mapinfo = out / "Data_extracted" / "navmesh" / "mapinfo.mfo"
+			mapinfo.parent.mkdir(parents=True)
+			mapinfo.write_bytes(b"JMXVMFO 1000" + bytes(12) + bytes(8192))
+			text_root = out / jupiter.TEXT_ROOT
+			text_root.mkdir(parents=True)
+			for name in ("regioncode.txt", "textzonename.txt"):
+				(text_root / name).write_bytes(utf16([]))
+			walks = []
+
+			def walk(seeds, archives, walk_native, output, tolerate_gaps=False):
+				# The real walk parses the model and finds this program in
+				# the Particles archive; the archive read stays real.
+				data, index = archives["Particles"]
+				walks.append((seeds, sorted(archives), tolerate_gaps))
+				target = Path(output) / "Particles_extracted" / self.EFFECT
+				target.parent.mkdir(parents=True, exist_ok=True)
+				target.write_bytes(later.sro_pk2.payload(data, index[self.EFFECT]))
+				return {"files": ["Particles_extracted/" + self.EFFECT], "missingEffects": [],
+					"missingFiles": [], "unparsedFiles": []}
+
+			def monsters():
+				(out / jupiter.MARKER).write_text("{}", encoding="utf-8")
+				return {"enabled": True}
+
+			with mock.patch.object(skytemple_import, "copy_resource_closure", walk):
+				result = later.merge_world(jupiter.SPEC, native, out, v1696, [], monsters)
+			self.assertEqual(walks, [([self.MODEL], ["Data", "Particles"], True)])
+			self.assertEqual((out / "Particles_extracted" / self.EFFECT).read_bytes(), b"JMXVEFF")
+			self.assertEqual(result["particleFilesAdded"], 1)
+			record = json.loads((out / jupiter.MARKER).read_text(encoding="utf-8"))["regionMerge"]
+			self.assertIn("data_extracted/" + self.MODEL, record["files"])
+			self.assertIn("particles_extracted/" + self.EFFECT, record["files"])
+
+
+# ================
+# ParticleClosureTest
+#
+# The region merge copies the v1.696 models the native tree lacks; their
+# particle sets name effect programs the client's effect build refuses to
+# miss (r196: ten .efp files of merged Jupiter, Arabia and event models).
+# The merge walks every enrolled model and compound object through the
+# shared closure, over the Data and Particles archives, and enrols what
+# the walk writes so the switch-off reap removes it.
+# ================
+class ParticleClosureTest(unittest.TestCase):
+	ENROLLED = {
+		"data_extracted/res/mob/jupiter/babilion.bsr",
+		"data_extracted/res/cos/p_ghost.bsr",
+		"data_extracted/res/dun/jupiter/hide/hide01_boss.cpd",
+		"data_extracted/prim/mesh/mob/jupiter/babilion.bms",
+		"map_extracted/1/2.m",
+		"media_extracted/minimap/1x2.ddj",
+	}
+
+	# ================
+	# fake_archives
+	#
+	# Stands in for the v1.696 archive pair and records that it was
+	# opened and closed.
+	# ================
+	def fake_archives(self, log):
+		import contextlib
+
+		@contextlib.contextmanager
+		def opened(root):
+			log.append(("open", root))
+			try:
+				yield {"Data": ("data", {}), "Particles": ("particles", {})}
+			finally:
+				log.append(("close", root))
+		return opened
+
+	# ================
+	# test_every_enrolled_model_seeds_the_walk_over_both_archives
+	# ================
+	def test_every_enrolled_model_seeds_the_walk_over_both_archives(self):
+		calls, log = [], []
+
+		def closure(seeds, archives, native, output, tolerate_gaps=False):
+			calls.append((seeds, sorted(archives), native, output, tolerate_gaps))
+			return {"files": ["Particles_extracted/monster/jupiter/skill_jupiter_babilion_at11_body.efp",
+				"Particles_extracted/system/event_summer_ghost_pick.efp"],
+				"missingEffects": ["monster/system_appear.efp"], "missingFiles": [], "unparsedFiles": []}
+
+		result = later.particle_closure("native", "out", "v1696", self.ENROLLED, closure, self.fake_archives(log))
+		self.assertEqual(calls, [(["res/cos/p_ghost.bsr", "res/dun/jupiter/hide/hide01_boss.cpd",
+			"res/mob/jupiter/babilion.bsr"], ["Data", "Particles"], "native", "out", True)])
+		self.assertEqual(log, [("open", "v1696"), ("close", "v1696")])
+		# The record's form: lower-case and overlay-relative, so
+		# reap_regions unlinks them with the Data files on a switch off.
+		self.assertEqual(result["added"], [
+			"particles_extracted/monster/jupiter/skill_jupiter_babilion_at11_body.efp",
+			"particles_extracted/system/event_summer_ghost_pick.efp"])
+		self.assertEqual(result["gaps"], {"missingEffects": ["monster/system_appear.efp"]})
+
+	# ================
+	# test_a_merge_without_models_opens_no_archive
+	# ================
+	def test_a_merge_without_models_opens_no_archive(self):
+		log = []
+
+		def closure(*_args, **_kwargs):
+			raise AssertionError("no seed, no walk")
+
+		result = later.particle_closure("native", "out", "v1696", {"map_extracted/1/2.m"}, closure,
+			self.fake_archives(log))
+		self.assertEqual(result, {"added": [], "gaps": {}})
+		self.assertEqual(log, [])
+
+	# ================
+	# test_the_reap_removes_the_enrolled_particle_files
+	# ================
+	def test_the_reap_removes_the_enrolled_particle_files(self):
+		with tempfile.TemporaryDirectory() as temp:
+			base = Path(temp)
+			native, out = base / "native", (base / "out").resolve()
+			native.mkdir()
+			effect = out / "Particles_extracted" / "system" / "event_summer_ghost_pick.efp"
+			effect.parent.mkdir(parents=True)
+			effect.write_bytes(b"JMXVEFF")
+			later.reap_regions(jupiter.SPEC, native, out,
+				{"files": ["particles_extracted/system/event_summer_ghost_pick.efp"]})
+			self.assertFalse(effect.exists())
+
+	# ================
+	# test_the_self_driven_merges_pin_the_particles_archive
+	#
+	# The walk reads Particles.pk2, so the set each caller verifies
+	# before merge_world runs must name it.
+	# ================
+	def test_the_self_driven_merges_pin_the_particles_archive(self):
+		self.assertIn("Particles", later.MERGE_ARCHIVES)
+		cases = ((hunting2, "SRO_HUNTING2", lambda: hunting2.add_hunting2("native", "out", "v1696")),
+			(muhan, "SRO_MUHAN", lambda: muhan.add_muhan("native", "out", "v1696", "exports")))
+		for module, flag, run in cases:
+			with self.subTest(flag=flag), mock.patch.dict(os.environ, {flag: "on"}), \
+					mock.patch.object(module, "require_v1696_pin", side_effect=SystemExit("pinned")) as pin:
+				with self.assertRaisesRegex(SystemExit, "pinned"):
+					run()
+				self.assertEqual(pin.call_args.args[1], later.MERGE_ARCHIVES)
+
+
 
 # ================
 # ClientRootTest

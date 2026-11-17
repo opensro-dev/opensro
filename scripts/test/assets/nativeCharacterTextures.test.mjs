@@ -6,16 +6,24 @@ nativeCharacterTextures.test.mjs - preservation of authored DDS mip blocks
 Fixture bytes distinguish authored levels from native-generated suffixes.
 Malformed chains must fail before an output can become a published cache.
 On Windows a portable cache entry is regenerated once D3DX is available.
+The warm-build ledger trusts a verdict only while its entry's bytes stand.
 
 ===========================================================================
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { openFileHashCache } from "../../build/shared/fileHashCache.mjs";
 import {
 	compressedSource,
+	openTextureLedger,
 	pendingTextures,
 	preserveAuthoredMips,
-	validateCharacterTexture
+	saveSweep,
+	validateCharacterTexture,
+	verdictHolds
 } from "../../build/shared/nativeCharacterTextures.mjs";
 import { D3DX, PORTABLE } from "../../build/shared/nativeMipGenerator.mjs";
 
@@ -131,4 +139,51 @@ test("other systems keep portable entries without selecting a generator", async 
 	const { calls, select } = selector( PORTABLE );
 	assert.equal( await pendingTextures( [ { item: "portable", cached: PORTABLE } ], "linux", select ), null );
 	assert.equal( calls.count, 0 );
+});
+
+/*
+================
+withLedgerRoot
+
+A temp folder holding one cache entry, entry.texture, and a hash cache
+that has seen it.
+================
+*/
+async function withLedgerRoot( t ) {
+	const root = await mkdtemp( path.join( os.tmpdir(), "sro-texture-ledger-" ) );
+	t.after( () => rm( root, { recursive: true, force: true } ) );
+	const entry = path.join( root, "entry.texture" );
+	await writeFile( entry, "entry-bytes" );
+	const hashCache = await openFileHashCache( path.join( root, "hash-cache.json" ) );
+	const targetSha256 = hashCache.noteFileBytes( entry, await stat( entry ), await readFile( entry ) );
+	return { root, entry, hashCache, verdict: { kind: D3DX, target: "entry.texture", targetSha256 } };
+}
+
+test("a validated verdict holds while its entry keeps its bytes", async ( t ) => {
+	const { root, entry, hashCache, verdict } = await withLedgerRoot( t );
+	assert.equal( await verdictHolds( verdict, hashCache, root ), true );
+	assert.equal( await verdictHolds( { plain: true }, hashCache, root ), true );
+	await writeFile( entry, "other-bytes" );
+	assert.equal( await verdictHolds( verdict, hashCache, root ), false, "a rewritten entry was trusted" );
+	await rm( entry );
+	assert.equal( await verdictHolds( verdict, hashCache, root ), false, "a missing entry was trusted" );
+});
+
+test("a portable verdict on Windows is never trusted, since D3DX may replace it", async ( t ) => {
+	const { root, hashCache, verdict } = await withLedgerRoot( t );
+	const portable = { ...verdict, kind: PORTABLE };
+	assert.equal( await verdictHolds( portable, hashCache, root ), process.platform !== "win32" );
+});
+
+test("the ledger round-trips and is void under other code or generators", async ( t ) => {
+	const { root, hashCache, verdict } = await withLedgerRoot( t );
+	const ledgerPath = path.join( root, "ledger.json" );
+	await saveSweep( { hashCache, ledgerPath, verdicts: { abc: verdict } } );
+	assert.deepEqual( { ...(await openTextureLedger( ledgerPath )) }, { abc: verdict } );
+	const saved = JSON.parse( await readFile( ledgerPath, "utf8" ) );
+	await writeFile( ledgerPath, JSON.stringify( { ...saved, module: "other" } ) );
+	assert.deepEqual( { ...(await openTextureLedger( ledgerPath )) }, {} );
+	await writeFile( ledgerPath, JSON.stringify( { ...saved, generators: { ...saved.generators, d3dx: "other" } } ) );
+	assert.deepEqual( { ...(await openTextureLedger( ledgerPath )) }, {} );
+	assert.deepEqual( { ...(await openTextureLedger( path.join( root, "absent.json" ) )) }, {} );
 });

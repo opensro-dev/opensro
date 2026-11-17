@@ -40,6 +40,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/wait"
 	"opensro.online/server/internal/transport"
 )
@@ -50,18 +51,25 @@ const (
 	// crowdRadius is the plaza's radius: everyone stays inside one
 	// 3x3 block neighbourhood of crowdCenter, so everyone sees everyone.
 	crowdRadius = 120.0
-	// crowdBotStride and the click pause bound the live bot crowd's walk
-	// (client-next tools/perf/core/crowd-activity.mjs): a click within
-	// 25 units of home every 1.5-6 s.
-	crowdBotStride     = 25.0
-	crowdClickPauseMs  = 1500
-	crowdClickSpreadMs = 4500
 	// crowdAckInterval is the browser's stream-ack cadence (network.ts).
 	crowdAckInterval = time.Second
 )
 
 // crowdCenter is the plaza's centre, inside one 320-unit block.
 var crowdCenter = simulation.Spawn{RegionID: 0x6B4F, X: 1120, Y: 80, Z: 480}
+
+// The live crowd's plaza (the scratch stack's held bots): Hotan, region
+// 23687, centre (1040, 690). It straddles the block corner at (960, 640),
+// so walkers near a border keep crossing it, while every member stays in
+// every other member's 3x3. 312 spots fill the inner disc and the rest a
+// ring out to 190, as the hold's spot file does.
+var hotanCenter = simulation.Spawn{RegionID: 23687, X: 1040, Y: 243.9, Z: 690}
+
+const (
+	hotanInnerSpots  = 312
+	hotanInnerRadius = 100.0
+	hotanOuterRadius = 190.0
+)
 
 //============================================================================
 // The crowd's world provider
@@ -82,7 +90,8 @@ type crowdActor struct {
 	appearance *simulation.PeerAppearance
 	start      simulation.Spawn
 	walker     bool
-	nextMs     int64
+	// npcs enables the NPC roster for this member (NpcsEnabled).
+	npcs bool
 }
 
 /*
@@ -113,7 +122,7 @@ movement fields with the store's.
 ================
 */
 func (a *crowdActor) WorldSnapshotInto(dst *simulation.SessionSnapshot) {
-	a.worlds.SnapshotInto(a.key, &dst.World, a.seed)
+	watch := a.worlds.SnapshotIntoWatched(a.key, &dst.World, a.seed)
 	worlds, key := a.worlds, a.key
 	lifeRevision, spawn, movementMode := dst.World.LifeRevision, dst.World.Spawn, dst.World.MovementMode
 	var segment simulation.MoveSegment
@@ -127,6 +136,9 @@ func (a *crowdActor) WorldSnapshotInto(dst *simulation.SessionSnapshot) {
 	dst.CombatEligible = true
 	dst.NativeBodyStatus = 0
 	dst.MovementCurrent = func() bool {
+		if watch.Unchanged() {
+			return true
+		}
 		expected := simulation.WorldState{LifeRevision: lifeRevision, Spawn: spawn, MovementMode: movementMode}
 		if hasSegment {
 			expected.MoveSegment = &segment
@@ -136,6 +148,8 @@ func (a *crowdActor) WorldSnapshotInto(dst *simulation.SessionSnapshot) {
 	dst.Appearance = a.appearance
 	dst.COS = nil
 	dst.Companions = nil
+	dst.NpcsEnabled = a.npcs
+	dst.NpcAnchor = a.start
 }
 
 //============================================================================
@@ -398,6 +412,10 @@ type crowdConfig struct {
 	ws      bool
 	players int
 	walkers int
+	// hotan stands the crowd on the live plaza (hotanCenter) with the
+	// shipped NPC roster, NPCs enabled for every member, as the scratch
+	// stack's holds run it; false is the one-block plaza without NPCs.
+	hotan bool
 }
 
 /*
@@ -507,6 +525,9 @@ func newCrowd(tb testing.TB, cfg crowdConfig) *crowd {
 		s.FinishSceneReentry()
 		name := fmt.Sprintf("crowd%04d", i)
 		start := pointInDisc(c.rng, crowdCenter, crowdRadius)
+		if cfg.hotan {
+			start = hotanSpot(c.rng, i)
+		}
 		actor := &crowdActor{
 			worlds:     c.worlds,
 			key:        simulation.WorldKey(crowdDivision, name),
@@ -515,14 +536,62 @@ func newCrowd(tb testing.TB, cfg crowdConfig) *crowd {
 			appearance: &simulation.PeerAppearance{Name: name, ActionSpeed: 100, RefObjID: 1907},
 			start:      start,
 			walker:     i < cfg.walkers,
+			npcs:       cfg.hotan,
 		}
 		c.worlds.Update(actor.key, actor.seed, func(*simulation.WorldState) {})
 		s.SetWorldSnapshot(crowdDivision, actor)
 		c.actors = append(c.actors, actor)
 		c.sessions = append(c.sessions, s)
 	}
-	c.ticker = NewTicker(c.hub, nil)
+	var roster []simulation.NpcDef
+	if cfg.hotan {
+		roster = crowdNpcRoster(tb)
+	}
+	c.ticker = NewTicker(c.hub, roster)
 	return c
+}
+
+/*
+================
+hotanSpot
+
+The i-th member's spot on the live plaza: the inner disc first, then
+the ring (area-uniform in both), heights left to the plaza's.
+================
+*/
+func hotanSpot(rng *rand.Rand, i int) simulation.Spawn {
+	if i < hotanInnerSpots {
+		return pointInDisc(rng, hotanCenter, hotanInnerRadius)
+	}
+	angle := rng.Float64() * 2 * math.Pi
+	inner, outer := hotanInnerRadius*hotanInnerRadius, hotanOuterRadius*hotanOuterRadius
+	distance := math.Sqrt(inner + rng.Float64()*(outer-inner))
+	p := hotanCenter
+	p.X += math.Cos(angle) * distance
+	p.Z += math.Sin(angle) * distance
+	return p
+}
+
+/*
+================
+crowdNpcRoster
+
+The shipped NPC roster and teleport gates, as the GameWorld boots them
+(enterworld/devdeps.go). A tree without the game-data projection runs
+the crowd without NPCs and says so.
+================
+*/
+func crowdNpcRoster(tb testing.TB) []simulation.NpcDef {
+	dir := gamedatatest.TextdataDirOrEmpty()
+	if dir == "" {
+		tb.Log("crowd: no game data, the plaza has no NPCs")
+		return nil
+	}
+	roster, err := simulation.AppendTeleportGates(dir, simulation.LoadNpcWorldRoster(dir))
+	if err != nil {
+		tb.Fatalf("crowd: NPC roster: %v", err)
+	}
+	return roster
 }
 
 /*
@@ -547,37 +616,6 @@ func (c *crowd) click(a *crowdActor, goal simulation.Spawn, nowMs int64) int64 {
 		return 0
 	}
 	return result.Segment.ArrivesAtMs
-}
-
-/*
-================
-crowd.walkBots
-
-The walkers' clicks beside the tick, as the session read loops make
-them: every 25 ms, each walker whose pause is over clicks a point near
-its home. Returns when ctx ends; clicks counts the moves.
-================
-*/
-func (c *crowd) walkBots(ctx context.Context, clicks *atomic.Int64) {
-	rng := rand.New(rand.NewSource(11))
-	clock := time.NewTicker(25 * time.Millisecond)
-	defer clock.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case now := <-clock.C:
-			nowMs := now.UnixMilli()
-			for _, a := range c.actors {
-				if !a.walker || nowMs < a.nextMs {
-					continue
-				}
-				c.click(a, pointInDisc(rng, a.start, crowdBotStride), nowMs)
-				clicks.Add(1)
-				a.nextMs = nowMs + crowdClickPauseMs + rng.Int63n(crowdClickSpreadMs)
-			}
-		}
-	}
 }
 
 /*
