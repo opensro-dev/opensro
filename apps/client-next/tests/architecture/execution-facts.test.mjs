@@ -101,3 +101,28 @@ test("a key changes with its type closure and only with it", ( t ) => {
 	assert.notEqual( keyOf( "main.ts" ), main, "main imports b: its facts are re-extracted" );
 	assert.equal( keyOf( "other.ts" ), other, "other imports nothing: its facts are kept" );
 });
+
+test("a global augmentation changes the key of a file that never imports it", ( t ) => {
+	// telemetry.ts's declare global adds window.sroDebug for every file; a
+	// reader outside the augmenting module's import closure must not keep
+	// facts extracted against the old declaration.
+	const dir = project( t );
+	fs.writeFileSync(
+		path.join( dir, "src/augment.ts" ),
+		"export {};\ndeclare global {\n\tvar sroFixture: number | undefined;\n}\n"
+	);
+	fs.writeFileSync(
+		path.join( dir, "src/reader.ts" ),
+		"export function read() {\n\treturn globalThis.sroFixture;\n}\n"
+	);
+	const keyOf = name => {
+		const project_ = readProject( dir );
+		return factKeys( dir, project_ ).get( project_.sources.find( file => file.endsWith( `/${name}` ) ) );
+	};
+	const reader = keyOf( "reader.ts" );
+	fs.writeFileSync(
+		path.join( dir, "src/augment.ts" ),
+		"export {};\ndeclare global {\n\tvar sroFixture: string | undefined;\n}\n"
+	);
+	assert.notEqual( keyOf( "reader.ts" ), reader, "the augmentation's change reaches the reader's key" );
+});

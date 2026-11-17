@@ -53,6 +53,8 @@ const MAX_WORKERS = 6;
 const CHILD_FLAG = "--execution-facts-child";
 // Store entries no run has used for this long are pruned.
 const STALE_DAYS = 7;
+// A module that augments a global or another module (factKeys).
+const AUGMENTATION = /^\s*declare\s+(global\b|module\s+["'])/m;
 
 /*
 ================
@@ -331,8 +333,13 @@ factKeys
 { source file -> key }. A file's key hashes, in order: what every file
 shares (this tool, the TypeScript version, the tsconfig, the lockfile
 that pins the declaration packages, every .d.ts and global script the
-program includes), then each file in its import closure with its bytes.
-A file outside every closure that changed leaves the key as it was.
+program includes, and every module that augments a global or another
+module), then each file in its import closure with its bytes. A file
+outside every closure that changed leaves the key as it was.
+
+An augmentation (declare global, declare module "x") changes the types of
+files that never import it: telemetry.ts adds window.sroDebug for every
+file. Its bytes are therefore shared, as a global script's are.
 ================
 */
 export function factKeys( base, project ) {
@@ -348,10 +355,10 @@ export function factKeys( base, project ) {
 	const lockfile = path.resolve( base, "..", "..", "pnpm-lock.yaml" );
 	if ( fs.existsSync( lockfile ) ) shared.push( fs.readFileSync( lockfile ) );
 	for ( const file of [ ...parsed.fileNames ].sort() ) {
-		const text = read( file );
-		if ( file.endsWith( ".d.ts" ) || !/^\s*(import|export)\b/m.test( text.toString( "utf8" ) ) ) {
-			shared.push( relative( file ), text );
-		}
+		const text = read( file ), source = text.toString( "utf8" );
+		const globalScript = !/^\s*(import|export)\b/m.test( source );
+		const augments = AUGMENTATION.test( source );
+		if ( file.endsWith( ".d.ts" ) || globalScript || augments ) shared.push( relative( file ), text );
 	}
 	const sharedKey = sha256( ...shared );
 
