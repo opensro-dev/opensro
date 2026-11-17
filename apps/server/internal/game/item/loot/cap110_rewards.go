@@ -42,24 +42,34 @@ type cap110Rewards struct {
 /*
 ================
 compileCap110Rewards
-
-Joins the optional rules onto a copy of the native assigned-drop tables. A
-rule that names a monster or a group the native tables already own refuses:
-the overlay adds rewards for new monsters, it does not change native ones.
 ================
 */
 func compileCap110Rewards(base consumableCatalog, data []byte) (consumableCatalog, error) {
+	return joinRewardOverlay("cap110 rewards", base, data)
+}
+
+/*
+================
+joinRewardOverlay
+
+Joins an optional rules file (cap110-rewards.txt, roc-rewards.txt; both in
+the cap110Rewards shape) onto a copy of base. A rule that names a monster
+or a group base already owns refuses: an overlay adds rewards for new
+monsters, it never changes the ones base holds.
+================
+*/
+func joinRewardOverlay(label string, base consumableCatalog, data []byte) (consumableCatalog, error) {
 	var source cap110Rewards
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&source); err != nil {
-		return consumableCatalog{}, fmt.Errorf("cap110 rewards: %w", err)
+		return consumableCatalog{}, fmt.Errorf("%s: %w", label, err)
 	}
 	if err := decoder.Decode(new(any)); err != io.EOF || source.Version != cap110RewardsVersion {
-		return consumableCatalog{}, fmt.Errorf("cap110 rewards have invalid version or trailing data")
+		return consumableCatalog{}, fmt.Errorf("%s have invalid version or trailing data", label)
 	}
 	if len(source.Fixed) == 0 && len(source.Random) == 0 {
-		return consumableCatalog{}, fmt.Errorf("cap110 rewards carry no rules")
+		return consumableCatalog{}, fmt.Errorf("%s carry no rules", label)
 	}
 	next := consumableCatalog{families: base.families,
 		fixed:  make(map[string][]assignedDrop, len(base.fixed)+len(source.Fixed)),
@@ -76,14 +86,14 @@ func compileCap110Rewards(base consumableCatalog, data []byte) (consumableCatalo
 	}
 	for group, members := range source.Groups {
 		if _, owned := base.groups[group]; owned {
-			return consumableCatalog{}, fmt.Errorf("cap110 rewards reuse native group %d", group)
+			return consumableCatalog{}, fmt.Errorf("%s reuse native group %d", label, group)
 		}
 		if len(members) == 0 {
-			return consumableCatalog{}, fmt.Errorf("cap110 rewards group %d is empty", group)
+			return consumableCatalog{}, fmt.Errorf("%s group %d is empty", label, group)
 		}
 		for _, member := range members {
 			if !strings.HasPrefix(member.Codename, "ITEM_") || !chanceValid(member.Probability) {
-				return consumableCatalog{}, fmt.Errorf("cap110 rewards group %d has an invalid member", group)
+				return consumableCatalog{}, fmt.Errorf("%s group %d has an invalid member", label, group)
 			}
 		}
 		next.groups[group] = members
@@ -93,23 +103,23 @@ func compileCap110Rewards(base consumableCatalog, data []byte) (consumableCatalo
 		key := [2]string{rule.Monster, rule.Item}
 		if !strings.HasPrefix(rule.Monster, "MOB_") || !strings.HasPrefix(rule.Item, "ITEM_") || seen[key] ||
 			!chanceValid(rule.Probability) || rule.Min > rule.Max {
-			return consumableCatalog{}, fmt.Errorf("cap110 rewards have an invalid fixed rule %s/%s", rule.Monster, rule.Item)
+			return consumableCatalog{}, fmt.Errorf("%s have an invalid fixed rule %s/%s", label, rule.Monster, rule.Item)
 		}
 		if len(base.fixed[rule.Monster]) != 0 || len(base.random[rule.Monster]) != 0 {
-			return consumableCatalog{}, fmt.Errorf("cap110 rewards redefine native monster %s", rule.Monster)
+			return consumableCatalog{}, fmt.Errorf("%s redefine native monster %s", label, rule.Monster)
 		}
 		seen[key] = true
 		next.fixed[rule.Monster] = append(next.fixed[rule.Monster], rule)
 	}
 	for _, rule := range source.Random {
 		if !strings.HasPrefix(rule.Monster, "MOB_") || !chanceValid(rule.Probability) || rule.Min > rule.Max {
-			return consumableCatalog{}, fmt.Errorf("cap110 rewards have an invalid random rule %s/%d", rule.Monster, rule.Group)
+			return consumableCatalog{}, fmt.Errorf("%s have an invalid random rule %s/%d", label, rule.Monster, rule.Group)
 		}
 		if _, ok := source.Groups[rule.Group]; !ok {
-			return consumableCatalog{}, fmt.Errorf("cap110 rewards name an undefined group %d", rule.Group)
+			return consumableCatalog{}, fmt.Errorf("%s name an undefined group %d", label, rule.Group)
 		}
 		if len(base.fixed[rule.Monster]) != 0 || len(base.random[rule.Monster]) != 0 {
-			return consumableCatalog{}, fmt.Errorf("cap110 rewards redefine native monster %s", rule.Monster)
+			return consumableCatalog{}, fmt.Errorf("%s redefine native monster %s", label, rule.Monster)
 		}
 		next.random[rule.Monster] = append(next.random[rule.Monster], rule)
 	}
