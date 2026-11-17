@@ -31,7 +31,7 @@ import {
 	createCosSelection,
 	isRideStateRefusedItem
 } from "@/engine/foundation/gameplay/cos-item-use";
-import { ARENA_CHEST_OPCODE } from "@/engine/foundation/gameplay/arena-chest";
+import { ARENA_CHEST_OPCODE, ARENA_DECISION_OPCODE } from "@/engine/foundation/gameplay/arena-chest";
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
 import { createCountJobs, countJobUseRequest } from "@/engine/foundation/gameplay/count-job";
 import { createStorageRoom, isWarehouseTicket } from "@/engine/foundation/gameplay/storage-room";
@@ -377,8 +377,13 @@ import {
 import type { Degradation, WireFrame } from "@/engine/contracts/network";
 import {
 	ABNORMAL_SNAPSHOT_OPCODE,
+	ACTION_EMOTE_OPCODE,
+	ACTION_STATE_OPCODE,
 	BASE_STATS_OPCODE,
+	BERSERK_REQUEST_OPCODE,
+	BERSERK_RESPONSE_OPCODE,
 	CHAT_BROADCAST_OPCODE,
+	COS_BEHAVIOR_RESULT_OPCODE,
 	COS_CANCEL_REQUEST_OPCODE,
 	COS_CANCEL_RESPONSE_OPCODE,
 	COS_COMMAND_REQUEST_OPCODE,
@@ -389,6 +394,7 @@ import {
 	COS_RIDE_STATE_OPCODE,
 	COS_TERMINATE_REQUEST_OPCODE,
 	COS_TERMINATE_RESPONSE_OPCODE,
+	ENDED_EFFECT_INSTANCES_OPCODE,
 	FLAG_WAR_EVENT_OPCODE,
 	FLAG_WAR_REGISTER_REQUEST_OPCODE,
 	FORTRESS_WAR_STATE_OPCODE,
@@ -414,18 +420,26 @@ import {
 	OBJECT_STATE_REFRESH_OPCODE,
 	PARTY_DELETE_ACK_OPCODE,
 	PARTY_JOIN_ACK_OPCODE,
+	PARTY_LOOT_NOTICE_OPCODE,
 	PICKUP_ANIM_OPCODE,
 	POINTS_UPDATE_OPCODE,
+	PORTAL_RESULT_OPCODE,
+	QUEST_ABORT_RESPONSE_OPCODE,
+	QUEST_ACCEPT_RESPONSE_OPCODE,
 	QUEST_GATHER_CANCEL_REPLY_OPCODE,
 	QUEST_NOTIFICATION_OPCODE,
 	REBIRTH_POINT_APPOINT_RESULT_OPCODE,
+	RETURN_CANCEL_REQUEST_OPCODE,
+	RETURN_CANCEL_RESULT_OPCODE,
 	SERVER_CLOCK_GID_LATCH_OPCODE,
 	SKILL_CAST_RESULT_OPCODE,
 	SKILL_LEARN_RESPONSE_OPCODE,
+	SKIN_CHANGE_OPCODE,
 	STALL_CLOSED_OPCODE,
 	STALL_EDIT_RESULT_OPCODE,
 	TARGET_INTERACT_OPCODE,
 	TC_HONOR_RANK_ANSWER_OPCODE,
+	TC_OPEN_ANSWER_OPCODE,
 	VISUAL_FLAGS_REQUEST_OPCODE,
 	VITALS_UPDATE_OPCODE
 } from "@/engine/contracts/opcodes";
@@ -537,7 +551,7 @@ by them made it short.
 */
 function skillPressAnswer( frame: WireFrame, localGid: number ): "answered" | "queued" | null {
 	const p = frame.payload;
-	if ( frame.opcode === 0xb2cd ) {
+	if ( frame.opcode === ACTION_STATE_OPCODE ) {
 		if ( p[0] !== ACTION_STATE_ARM ) return null;
 		return p[1] === QUEUED_COMMANDS ? "queued" : "answered";
 	}
@@ -2357,7 +2371,10 @@ state here before a command can claim a native wire conversation.
 				}
 				const id = new TextEncoder().encode( command.id );
 				if ( id.length > 128 ) throw Error( "Invalid arena identity" );
-				return sendFrame( { opcode: 0x7fca, payload: Uint8Array.of( command.operation, ...id ) } );
+				return sendFrame( {
+					opcode: ARENA_DECISION_OPCODE,
+					payload: Uint8Array.of( command.operation, ...id )
+				} );
 			}
 			if ( command.kind === "arena-dismiss" ) {
 				inventory.dismissArena();
@@ -2371,7 +2388,7 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "berserk" ) {
 				return localGid && feedback.gauge() === 5 ?
-					sendFrame( { opcode: 0x7341, payload: Uint8Array.of( 1 ) } ) :
+					sendFrame( { opcode: BERSERK_REQUEST_OPCODE, payload: Uint8Array.of( 1 ) } ) :
 					null;
 			}
 			if ( command.kind === "effect-cancel" ) {
@@ -2410,7 +2427,7 @@ state here before a command can claim a native wire conversation.
 					return sendFrame( { opcode: TARGET_INTERACT_OPCODE, payload } );
 				}
 				return localGid && returnScroll ?
-					sendFrame( { opcode: 0x72dd, payload: new Uint8Array( 0 ) } ) :
+					sendFrame( { opcode: RETURN_CANCEL_REQUEST_OPCODE, payload: new Uint8Array( 0 ) } ) :
 					null;
 			}
 			if ( command.kind === "gathering-cancel" ) {
@@ -3694,7 +3711,7 @@ state here before a command can claim a native wire conversation.
 				}
 				const emote = actionEmote( command.id );
 				if ( emote === null ) throw Error( "Action is unavailable" );
-				return sendFrame( { opcode: 0x324b, payload: Uint8Array.of( emote ) } );
+				return sendFrame( { opcode: ACTION_EMOTE_OPCODE, payload: Uint8Array.of( emote ) } );
 			}
 			if ( command.kind === "arrow-key" ) {
 				// 0x680A30: a press walks only where a click would (the same
@@ -4267,7 +4284,7 @@ Packet handling must not depend on which HUD panel is currently open.
 			if ( answer ) skillPress.answered( now );
 			// A local cast opened or a press was refused: no run-up waits.
 			if ( answer && frame.opcode === SKILL_CAST_RESULT_OPCODE && skillPress.approachEnded() ) dirty = true;
-			if ( frame.opcode === 0xb2cd && frame.payload.length >= 2 ) {
+			if ( frame.opcode === ACTION_STATE_OPCODE && frame.payload.length >= 2 ) {
 				if ( skillPress.commandCount( frame.payload[0]!, frame.payload[1]!, now ) ) dirty = true;
 			}
 			if ( answer === "queued" ) {
@@ -4362,7 +4379,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0x317d ) {
+				if ( frame.opcode === PARTY_LOOT_NOTICE_OPCODE ) {
 					const notice = partyLootNotice( frame.payload, {
 						item: worldReferences.item,
 						memberName: gid => social.members.find( member => member.id === gid )?.name,
@@ -4517,7 +4534,7 @@ Packet handling must not depend on which HUD panel is currently open.
 						}
 						// 76FBA0: an opening prints OPEN_SUCCESS to chat; a refusal
 						// goes through the category-0x1D dispatcher.
-						if ( frame.opcode === 0xb2ec ) {
+						if ( frame.opcode === TC_OPEN_ANSWER_OPCODE ) {
 							const notice = frame.payload[0] === 1 ?
 								{ key: "UIIT_MSG_TC_OPEN_SUCCESS", value: 0 } :
 								constantNativeNotice( 0x1d, frame.payload[1]! );
@@ -4812,12 +4829,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0xb29a || frame.opcode === 0xb1eb ) {
+				if ( frame.opcode === QUEST_ACCEPT_RESPONSE_OPCODE || frame.opcode === QUEST_ABORT_RESPONSE_OPCODE ) {
 					quests.receive( frame ); // Decode and settle the transaction before presentation.
 					const p = frame.payload;
-					if ( frame.opcode === 0xb29a && p[0] === 1 ) play( "SND_QUEST", now );
+					if ( frame.opcode === QUEST_ACCEPT_RESPONSE_OPCODE && p[0] === 1 ) play( "SND_QUEST", now );
 					// Native 75c3d0 displays only refusal 4; all other refusal codes are silent.
-					if ( frame.opcode === 0xb1eb && p[0] === 2 && p[1] === 4 ) {
+					if ( frame.opcode === QUEST_ABORT_RESPONSE_OPCODE && p[0] === 2 && p[1] === 4 ) {
 						notices = [ ...notices.slice( -99 ), {
 							key: "UIIT_MSG_SR_ABORT_QUEST_ERROR_NOT_ALLOWED",
 							value: 0,
@@ -5155,7 +5172,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( frame.opcode === 0xb05b ) {
+				if ( frame.opcode === COS_BEHAVIOR_RESULT_OPCODE ) {
 					const result = cosBehaviorResult( frame.payload );
 					if ( result.kind === "rejected" ) {
 						const notice = constantNativeNotice( 12, result.code );
@@ -5444,7 +5461,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				// 7641D0 tells the local player its skin changed (chat kind 5); the
 				// entity owner applies the skin itself.
 				if (
-					frame.opcode === 0x323a && frame.payload.length >= 8 &&
+					frame.opcode === SKIN_CHANGE_OPCODE && frame.payload.length >= 8 &&
 					new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true ) === localGid
 				) {
 					notices = [ ...notices.slice( -99 ), {
@@ -5454,7 +5471,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ];
 					dirty = true;
 				}
-				if ( frame.opcode === 0xb2dd ) {
+				if ( frame.opcode === RETURN_CANCEL_RESULT_OPCODE ) {
 					const p = frame.payload;
 					if ( p[0] === 1 && p.length === 1 ) {
 						notices = [ ...notices.slice( -99 ), {
@@ -5675,7 +5692,9 @@ Packet handling must not depend on which HUD panel is currently open.
 						row.gid === localGid && row.skill === returnScroll?.skillId && row.subject
 					);
 					if ( effect ) returnScroll = { ...returnScroll, token: effect.token };
-					if ( frame.opcode === 0xb6a0 && returnScroll.token && !effect ) returnScroll = undefined;
+					if ( frame.opcode === ENDED_EFFECT_INSTANCES_OPCODE && returnScroll.token && !effect ) {
+						returnScroll = undefined;
+					}
 				}
 				// A spent warehouse ticket opens the room on the player's own gid.
 				if ( item && used && localGid && isWarehouseTicket( used.typeFlags ) ) {
@@ -5780,7 +5799,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				// The suit move's answer waits for the dress bar (jobdress.go).
 				const dress = jobDressSeconds( frame, localGid );
 				if ( dress !== null ) inventory.holdForDress( now + dress * 1000 + JOB_DRESS_ANSWER_GRACE_MS );
-				if ( frame.opcode === 0xb341 ) {
+				if ( frame.opcode === BERSERK_RESPONSE_OPCODE ) {
 					const p = frame.payload;
 					if ( !p.length || p.length !== (p[0] === 1 ? 1 : 2) ) throw Error( "Invalid Berserk response" );
 					const notice = p[0] === 1 ? null : constantNativeNotice( 26, p[1]! );
@@ -5863,7 +5882,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				}
 				if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ) dirty = true;
 				if (
-					item || target || fight || frame.opcode === 0xb495 ||
+					item || target || fight || frame.opcode === PORTAL_RESULT_OPCODE ||
 					frame.opcode === REBIRTH_POINT_APPOINT_RESULT_OPCODE
 				) {
 					dirty = true;

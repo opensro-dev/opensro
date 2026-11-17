@@ -95,6 +95,7 @@ export default {
 		"scripts/test/assets/terrainBlockTextures.test.mjs",
 		"scripts/test/assets/objectTextureLevels.test.mjs",
 		"scripts/test/assets/hdTextureVariants.test.mjs",
+		"scripts/test/assets/textureContainers.test.mjs",
 		"scripts/test/assets/textureVariantMasks.test.mjs",
 		"scripts/test/assets/textureVariantActions.test.mjs"
 	]

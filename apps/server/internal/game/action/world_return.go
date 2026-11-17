@@ -161,6 +161,13 @@ func (rt *Runtime) bindResidentRegionVia(key string, nowMs int64, door func(*ent
 			return
 		}
 	}
+	// A crossing (not the first bind of an entry or a world transfer,
+	// whose game-ready answer carries the weather) tells the player its
+	// new region's weather (weather.go).
+	crossed := owner.regionBound
 	owner.region, owner.regionBound = pose.RegionID, true
 	rt.characterAdmissions.Store(key, owner)
+	if crossed {
+		rt.noteWeatherCrossing(owner.division, owner.name, pose.RegionID)
+	}
 }

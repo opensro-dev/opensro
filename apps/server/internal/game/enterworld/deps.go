@@ -315,6 +315,10 @@ type Deps struct {
 	// Immutable references consumed by scene-local client owners must be
 	// republished after every bootstrap, including same-session travel.
 	SceneReferenceFrames func() []wire.Frame
+	// SceneWeatherFrames is the weather a finished loading scene starts
+	// with (action/weather.go): the client drops it at every world reset.
+	// Nil or empty sends nothing.
+	SceneWeatherFrames func(divisionID string, character *Character) []wire.Frame
 	// ReconcileSceneObjects runs once a loading scene goes live. Removals
 	// committed while it loaded reached no viewer (scope routing skips a
 	// loading scene), so the owner retires bootstrap objects that are gone,

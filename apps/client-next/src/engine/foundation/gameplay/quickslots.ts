@@ -9,6 +9,7 @@ current state; dragging references never moves items or grants skills.
 ===========================================================================
 */
 import { itemActivation } from "./item-activation";
+import { QUICK_SLOT_BINDING_OPCODE } from "@/engine/contracts/opcodes";
 
 export const TRACE_ACTION_ID = 1003;
 // actionwnddata 1011 "Helper status" (UIIT_STT_HELPER, icon_cha_helper).
@@ -196,7 +197,7 @@ quickSlotPacket
 export function quickSlotPacket( value: QuickSlot ) {
 	const row = quickSlot( value ), payload = Uint8Array.of( 1, row.slot, row.kind, 0, 0, 0, 0 );
 	new DataView( payload.buffer ).setUint32( 3, row.payload, true );
-	return { opcode: 0x7541, payload };
+	return { opcode: QUICK_SLOT_BINDING_OPCODE, payload };
 }
 /*
 ================
