@@ -69,6 +69,34 @@ at a time up to +6 (`internal/game/item/alchemy/nasrun.go`):
   elixir on a Spirit or the jewel on native gear (0x09). Off, a Spirit is no target (0x10).
 - The token shop sells the jewel for 20 tokens beside the Spirits.
 
+## What a worn Spirit gives (#3456, 3c follow-up)
+
+With `SRO_NASRUN` on, a Spirit worn in avatar slot 4 gives its abilities while its clock is awake
+(`internal/game/nasrun/ability.go`, `internal/game/action/spiritability.go`). The rule is the iSRO-R shard's
+`_RefAbilityByItemOptLevel` (2025-07), read by codename:
+
+| Plus | Skills lent | HP and MP | Block |
+| --- | --- | --- | --- |
+| +0 to +2 | the colour's Eccentric Demon | +15 % + plus | 0 |
+| +3 to +5 | the colour's Devil's Confusion, Monster Defence Ignore 1 | +15 % + plus | 1 |
+| +6 | the colour's Destroy the Devil, Monster Defence Ignore 2 | +15 % + plus | 2 |
+
+The Unique lends the red skills, with +20 % + plus and one more block. The v1.188 export puts the top tier at +5 with
+smaller percents; it is a private-server set, so the official shard wins.
+
+- The HP/MP percents land on the STR and INT gauge nodes (0x34, 0x35) and the block on 0x0A, as the v1.188
+  server's option pass writes hpna, mpna and brna (498690).
+- The lent skills are cast like learned ones, only while the Spirit is attached: each carries reqi 14 1, the
+  avatar-socket-4 check (58D480 case 3). Devil skills are 10-minute self buffs of damage (dru) and speed (hst3);
+  Monster Defence Ignore is an instant 5-minute buff whose msid adds its percent to the ignore-defence chance (0xBC).
+- Taking the Spirit off or its clock running out removes its share at once and ends the running buffs that lean on
+  it. The v1.188 server also sends 0x3078 {3, slot}, which the v1.150 client has no handler for; the port sends
+  the stats refresh alone.
+- The build stages the eleven skill rows from the VSRO client (`add_nasrun_skills`, `skilldata_130000.txt`) under
+  fresh ids, with their names and icons. Off, the skill tables are byte-identical.
+- Not yet: the client shows the lent skills nowhere (v1.150 has no avatar skill window), so a player casts them
+  from a skill bar slot once the client step lands.
+
 ## The extension gear (#3456 slice 4)
 
 With `SRO_NASRUN` on, the extension gear (`ITEM_MALL_NASRUN_EXTENSION`, 3/3/13/16) lengthens a woken Spirit's

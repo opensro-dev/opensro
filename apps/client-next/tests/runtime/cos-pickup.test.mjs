@@ -63,7 +63,6 @@ test("gameplay frame loop sends automatic pickup and consumes native completion"
 		webTransport: false,
 		jobKillNotices: true,
 		dropPlusNotices: true,
-		plusSevenNotices: true,
 		breakNotices: true,
 		homingProjectiles: false,
 		smartPetPickup: false
@@ -461,7 +460,6 @@ test("the item filter reaches the pickup loop through the experimental slice", (
 		webTransport: false,
 		jobKillNotices: true,
 		dropPlusNotices: true,
-		plusSevenNotices: true,
 		breakNotices: true,
 		petPickupKinds: PICKUP_KIND_GOLD
 	} );
@@ -472,7 +470,6 @@ test("the item filter reaches the pickup loop through the experimental slice", (
 		webTransport: false,
 		jobKillNotices: true,
 		dropPlusNotices: true,
-		plusSevenNotices: true,
 		breakNotices: true,
 		petPickupKinds: undefined
 	} );

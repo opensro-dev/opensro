@@ -599,6 +599,11 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	skill_tier = add_skills(vsro_root, native, out)
 	from cap110_skill_import import add_skill_effects
 	skill_animation = add_skill_effects(vsro_root, native, out)
+	# The skills a worn Devil's Spirit lends (SRO_NASRUN, #3456): after
+	# the skill tier, which rewrites the skill manifest from the native
+	# one, and before the monsters, whose skill ids keep clear of them.
+	from nasrun_import import add_nasrun_skills
+	nasrun_skills = add_nasrun_skills(vsro_root, native, out)
 	from cap110_monsters import add_monsters
 	field_monsters = add_monsters(vsro_root, native, out)
 	# The monsters' own database rewards follow the population they describe.
@@ -660,6 +665,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"mallAvatarsV1696": later_avatars,
 		"mallAvatarsArchive": archive_avatars,
 		"nasrun": nasrun,
+		"nasrunSkills": nasrun_skills,
 		"roc": roc,
 		"pets": pets["pets"],
 		"petsV1696": pets["petsV1696"],

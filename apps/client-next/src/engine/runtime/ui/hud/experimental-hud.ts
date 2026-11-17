@@ -499,12 +499,6 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "Show the shard's seal drop and +8-or-higher notices."
 					},
 					{
-						key: "plusSevenNotices",
-						id: "experimental-plus-seven-notices",
-						label: "Plus +7 notices",
-						description: "Show the shard's +7 alchemy announcements."
-					},
-					{
 						key: "breakNotices",
 						id: "experimental-break-notices",
 						label: "Item break notices",
