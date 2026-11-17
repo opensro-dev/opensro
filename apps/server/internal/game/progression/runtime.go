@@ -27,6 +27,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/domain/charactervitals"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -388,14 +389,14 @@ func (rt *Runtime) allocate(character *enterworld.Character, payload []byte, kin
 				full := keeperOrDerived(rt, next, true)
 				next.CurrentHP = &full
 			}
-			raised := clampStatWord(enterworld.CharacterStrength(next) + 1)
+			raised := charactervitals.ClampStatWord(enterworld.CharacterStrength(next) + 1)
 			next.Strength = &raised
 		case statIntellect:
 			if next.CurrentMP == nil {
 				full := keeperOrDerived(rt, next, false)
 				next.CurrentMP = &full
 			}
-			raised := clampStatWord(enterworld.CharacterIntellect(next) + 1)
+			raised := charactervitals.ClampStatWord(enterworld.CharacterIntellect(next) + 1)
 			next.Intellect = &raised
 		}
 		clampedHP, clampedMP = clampGaugeToProjection(rt, next)
@@ -880,23 +881,6 @@ func characterLevel(c *enterworld.Character) int64 {
 		return 1
 	}
 	return *c.Level
-}
-
-/*
-================
-clampStatWord
-
-STR and INT must fit the client's unsigned words at player+834/+836.
-================
-*/
-func clampStatWord(value int64) int64 {
-	if value < 0 {
-		return 0
-	}
-	if value > enterworld.StatWordMax {
-		return enterworld.StatWordMax
-	}
-	return value
 }
 
 /*

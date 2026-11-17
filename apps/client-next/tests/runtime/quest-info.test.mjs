@@ -20,7 +20,14 @@ import path from "node:path";
 import { root } from "../../tools/project.mjs";
 
 const load = relative => import( sourceFileUrl( path.join( root, relative ) ).href );
-const { questInfoEntries, questInfoWindowHeight, questInfoIconFrame, QUEST_INFO_MAX_ENTRIES } = await load(
+const {
+	questInfoEntries,
+	questInfoWindowHeight,
+	questInfoRows,
+	questInfoDividers,
+	questInfoIconFrame,
+	QUEST_INFO_MAX_ENTRIES
+} = await load(
 	"src/engine/foundation/ui/quest-info.ts"
 );
 const { decodeQuestPresentation } = await load( "src/engine/foundation/ui/quest-presentation.ts" );
@@ -81,10 +88,24 @@ test("the walk stops at the native out-list capacity", () => {
 	assert.equal( questInfoEntries( wide, 7, 0, new Set() ).length, QUEST_INFO_MAX_ENTRIES );
 });
 
-test("the window takes the short height for one row and the list height above it", () => {
+test("the window takes 62D260's three heights: one row, two rows, the list", () => {
 	assert.equal( questInfoWindowHeight( 1 ), 0x8e );
-	assert.equal( questInfoWindowHeight( 2 ), 0x154 );
+	assert.equal( questInfoWindowHeight( 2 ), 0xf1 );
+	assert.equal( questInfoWindowHeight( 3 ), 0x154 );
 	assert.equal( questInfoWindowHeight( 9 ), 0x154 );
+});
+
+test("up to three rows show, 0x63 apart once there are two, with a divider between each", () => {
+	assert.deepEqual( questInfoRows( 1 ), { visible: 1, pitch: 0x60 } );
+	assert.deepEqual( questInfoRows( 2 ), { visible: 2, pitch: 0x63 } );
+	assert.deepEqual( questInfoRows( 7 ), { visible: 3, pitch: 0x63 } );
+	assert.deepEqual( questInfoDividers( 1 ), [] );
+	assert.deepEqual( questInfoDividers( 2 ), [ [ 0x28, 0x85, 0xeb, 3 ] ] );
+	assert.deepEqual( questInfoDividers( 9 ), [ [ 0x28, 0x85, 0xeb, 3 ], [ 0x28, 0xe8, 0xeb, 3 ] ] );
+	// Every divider fits inside its window, under the scroll manager's rows.
+	for ( const count of [ 2, 3 ] ) {
+		for ( const [, y, , h] of questInfoDividers( count ) ) assert.ok( y + h <= questInfoWindowHeight( count ) );
+	}
 });
 
 test("the icon swaps frames every 500 ms", () => {
@@ -288,6 +309,100 @@ test("a long quest-chain title, NPC and condition stay inside the window (#2806)
 				inkRight <= left + width,
 				`text ink reaches x=${inkRight}, past the window edge ${left + width}`
 			);
+		}
+	} finally {
+		f.dispose();
+	}
+});
+
+/*
+================
+quest info frame
+
+CIFQuestInfo is a main frame on mframe_wnd_ (ginterface GDR_QUESTINFO):
+its ring is the window's edges and its plate the background. The port
+drew only ifquestinfo.txt, whose one node is the scroll manager, so the
+slot plates floated over the world with no edge or background. The open
+window now draws the mframe_wnd_ ring around its whole rect, and a
+divider tile under each shown row but the last.
+================
+*/
+test("the open quest info window draws its main frame and the row dividers", () => {
+	const { f, step, scene } = armedQuestFixture();
+	try {
+		assert.ok( scene, "the level gain never armed the quest icon" );
+		f.ui.event( { kind: "activate", id: "quest-info-icon" } );
+		let product, drawn;
+		for ( let i = 0; i < 4; i++ ) {
+			product = step( 11, 20000 + i * 100 ) ?? product;
+			drawn = f.scenes.at( -1 );
+		}
+		const [left, top, width, height] = defined(
+			product?.controls.find( c => c.id === "quest-info-drag" ),
+			"quest info window"
+		).rect;
+		const ring = defined( drawn ).quads.filter( q => q.texture?.includes( "/frame/mframe_wnd_" ) );
+		assert.ok( ring.length > 0, "the open window drew no main frame" );
+		const ringLeft = Math.min( ...ring.map( q => q.rect[0] ) ),
+			ringTop = Math.min( ...ring.map( q => q.rect[1] ) ),
+			ringRight = Math.max( ...ring.map( q => q.rect[0] + q.rect[2] ) ),
+			ringBottom = Math.max( ...ring.map( q => q.rect[1] + q.rect[3] ) );
+		assert.deepEqual( [ ringLeft, ringTop, ringRight, ringBottom ], [ left, top, left + width, top + height ] );
+		const rows = Math.round( (height - 0x8e) / 0x63 ) + 1,
+			dividers = drawn.quads.filter( q => q.texture?.endsWith( "/bg_tile/com_bg_tile_a.png" ) );
+		assert.equal( new Set( dividers.map( q => q.rect[1] ) ).size, rows - 1 );
+	} finally {
+		f.dispose();
+	}
+});
+
+/*
+================
+quest condition wrap
+
+Port-only (Experimental "Fit window labels", on by default): a link
+condition wider than the 200-pixel condition field (x 66 in the 280
+plate) read "Available Once. Link (2nd bett" cut at the field's edge.
+It now wraps onto two lines inside the field's columns, so every word
+shows and no ink passes the field's right edge.
+================
+*/
+test("a long link condition wraps onto two lines inside its field", () => {
+	const condition = "Available Once. Link (2nd betting (Mamoje))";
+	const { f, step, scene } = armedQuestFixture( { SN_NC999: condition, SN_Q999: "Q", SN_NN999: "N" } );
+	try {
+		assert.ok( scene, "the level gain never armed the quest icon" );
+		f.ui.event( { kind: "activate", id: "quest-info-icon" } );
+		let product, drawn;
+		for ( let i = 0; i < 4; i++ ) {
+			product = step( 11, 20000 + i * 100 ) ?? product;
+			drawn = f.scenes.at( -1 );
+		}
+		const [left, top] = defined( product?.controls.find( c => c.id === "quest-info-drag" ), "quest info window" )
+			.rect;
+		// The fixture's player is country 0, so the walk shows quest 56 and
+		// the fixture row (country 3, both): the fixture is the second and
+		// last slot. Its condition field: scroll manager x 9 + field x 66,
+		// 200 wide, in the slot's lower band.
+		const fieldLeft = left + 9 + 66, fieldRight = fieldLeft + 200;
+		const inField = defined( drawn ).quads.filter( q =>
+			q.texture === fontAtlas.image && q.rect[0] >= fieldLeft && q.rect[0] < fieldRight && q.rect[1] > top
+		);
+		const lastY = Math.max( ...inField.map( q => q.rect[1] ) ),
+			shown = inField.filter( q => q.rect[1] > lastY - 20 );
+		// Every character is drawn but the one space the break consumes, the
+		// text stands taller than one 13-pixel line, and no ink passes the
+		// field's right edge (the old cut drew one clipped line).
+		assert.equal( shown.length, condition.length - 1 );
+		const span = Math.max( ...shown.map( q => q.rect[1] + q.rect[3] ) ) -
+			Math.min( ...shown.map( q => q.rect[1] ) );
+		assert.ok( span > 13, `the condition stands ${span} pixels tall: one line` );
+		for ( const q of shown ) {
+			assert.ok(
+				Math.min( q.rect[0] + q.rect[2], q.clip[0] + q.clip[2] ) <= fieldRight,
+				"condition ink past its field"
+			);
+			assert.ok( q.rect[0] + q.rect[2] <= q.clip[0] + q.clip[2], "a condition glyph is cut" );
 		}
 	} finally {
 		f.dispose();

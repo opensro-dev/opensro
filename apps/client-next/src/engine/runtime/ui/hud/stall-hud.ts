@@ -17,6 +17,7 @@ and an open stall closes for modification without asking.
 
 ===========================================================================
 */
+import { INSERT_MESSAGE_GEOMETRY } from "@/engine/foundation/ui/insert-message-box";
 import type { StallCommand, StallLine, StallListing, StallState } from "@/engine/foundation/gameplay/stall";
 import type { ChatLine } from "@/engine/contracts/gameplay";
 
@@ -75,8 +76,8 @@ export const STALL_CELL_PITCH_X = 206;
 export const STALL_CELL_PITCH_Y = 41;
 // 5A1DF0 / 5A1A40: authored edit sizes. Questions use textMessageBoxLayout.
 export const STALL_PROMPT_SIZE = {
-	title: [ 280, 144 ],
-	greeting: [ 420, 144 ],
+	title: INSERT_MESSAGE_GEOMETRY[0].size,
+	greeting: INSERT_MESSAGE_GEOMETRY[1].size,
 	price: [ 308, 148 ]
 } as const;
 // 5A1A40: the quantity edit takes five digits.
