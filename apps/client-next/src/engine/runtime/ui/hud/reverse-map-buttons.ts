@@ -22,6 +22,11 @@ const RETURN_ICON_STRIP: UiRect = [ 0, 0, .5, 1 ];
 const FULL_UV: UiRect = [ 0, 0, 1, 1 ];
 const WHITE = [ 1, 1, 1, 1 ] as const;
 const REVERSE_MAP_POINT = "reverse-map-point:";
+// Port-only: the Qin-Shi Tomb entrance point (the server's qinShiReverseMapPoint) sits 22 map units south of the world
+// map's own "open Ch'in Tomb" button, and its icon covered that button. The icon is drawn this many pixels lower (owner: 40); the
+// target, and so the click's destination, do not move.
+const QIN_SHI_POINT = { regionId: 26284, x: 960, z: 1600 } as const;
+const QIN_SHI_ICON_DROP = 40;
 
 /*
 ================
@@ -32,7 +37,10 @@ and whether an image is loaded.
 ================
 */
 export interface ReverseMapButtons {
-	points: readonly { point: { id: number; name: string; }; rect: UiRect; }[];
+	points: readonly {
+		point: { id: number; name: string; regionId?: number; x?: number; z?: number; };
+		rect: UiRect;
+	}[];
 	clip: UiRect;
 	hover: string | null;
 	has( path: string ): boolean;
@@ -55,7 +63,12 @@ export function reverseMapButtons( input: ReverseMapButtons ): {
 	const images: UiQuad[] = [], hits: UiControl[] = [];
 	const paths = [ RETURN_ICON + ".png", RETURN_ICON + "_focus.png" ];
 	const art = input.has( RETURN_ICON + ".png" );
-	for ( const { point, rect: at } of input.points ) {
+	for ( const { point, rect: placed } of input.points ) {
+		const drop =
+			point.regionId === QIN_SHI_POINT.regionId && point.x === QIN_SHI_POINT.x && point.z === QIN_SHI_POINT.z ?
+				QIN_SHI_ICON_DROP :
+				0;
+		const at: UiRect = [ placed[0], placed[1] + drop, placed[2], placed[3] ];
 		const id = REVERSE_MAP_POINT + point.id;
 		if ( !art ) {
 			images.push( { rect: at, texture: REVERSE_MAP_MARKER, uv: FULL_UV, color: WHITE, clip: input.clip } );
