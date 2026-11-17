@@ -5,17 +5,20 @@ laterClientImports.mjs - the later client's imported assets
 
 The M window's dungeon pages and their chrome exist in the later
 client only (issues #2661, #3210), so the build imports them from the
-pinned VSRO archive when SRO_VSRO_ROOT names it and never commits the
-art: the Python importers verify the archive against its pin (#2956),
-publish into the loose public tree, and these steps claim what they
-published for the publication ledger. Without the archive each step
-prints its one skip line and the build ships the plain world map.
+pinned VSRO archive and never commits the art: the Python importers
+verify the archive against its pin (#2956), publish into the loose public
+tree, and these steps claim what they published for the publication
+ledger. Which archive is shared/laterClientRoot.mjs's call: the shell's
+SRO_VSRO_ROOT, else the one the game tree's variant was built from. Only
+a tree with neither prints the one skip line per step and ships the plain
+world map; a named root without its archive fails the build.
 
 ===========================================================================
 */
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
+import { resolveVsroRoot, stampedVsroRoot } from "./shared/laterClientRoot.mjs";
 import { runPython } from "./shared/pythonRun.mjs";
 import { claimPublicPaths } from "./shared/publicationLedger.mjs";
 import { publicRoot, rebuildRoot } from "./world/paths.mjs";
@@ -26,28 +29,71 @@ const LATER_DUNGEON_MAP_CATALOG = "/assets/data/later-dungeon-map.json";
 
 /*
 ================
-laterDungeonMapImportPlan
+vsroImportPlan
 
-What the dungeon-map step does with one environment: run the importer
-against SRO_VSRO_ROOT's folder (the later-client importers' own
-convention), or skip with the one line the build prints. archiveThere
-says the folder holds a Media.pk2; the importer verifies the archive
-against its pin before reading a byte, so a wrong archive fails the
-build rather than slipping in (#2956).
+The plan every VSRO step makes for one environment: run its importer
+against the resolved later client, or skip with its one line when
+neither the shell nor the variant stamp names one. archiveThere says
+the folder holds a Media.pk2. A named folder without it throws: the tree
+was built to carry the later art, and the quiet skip shipped a release
+variant without it (11-17).
 ================
 */
-export function laterDungeonMapImportPlan( env = process.env, archiveThere = false ) {
-	const root = (env.SRO_VSRO_ROOT ?? "").trim();
+function vsroImportPlan( step, env, archiveThere, stamped ) {
+	const { root, source } = resolveVsroRoot( env, stamped );
 	if ( !root ) {
 		return {
 			run: false,
-			line: "Later dungeon maps: skipped (SRO_VSRO_ROOT is not set; the M window keeps the plain world map)"
+			line: `${step.label}: skipped (SRO_VSRO_ROOT is not set and no variant stamp names a later client; ` +
+				`${step.without})`
 		};
 	}
 	if ( !archiveThere ) {
-		return { run: false, line: `Later dungeon maps: skipped (no Media.pk2 under SRO_VSRO_ROOT ${root})` };
+		throw Error(
+			`${step.label}: ${source} names the later client ${root}, but it holds no Media.pk2. Restore that ` +
+				`folder or set SRO_VSRO_ROOT to the pinned VSRO client; without it ${step.without}.`
+		);
 	}
-	return { run: true, root, args: [ "scripts/import_vsro_dungeon_maps.py", "--vsro-root", root ] };
+	return { run: true, root, args: [ step.script, "--vsro-root", root ] };
+}
+
+/*
+================
+vsroStepPlan
+
+A step's plan against the real environment: resolves the root once,
+looks for its archive, then asks plan.
+================
+*/
+async function vsroStepPlan( plan, stamped ) {
+	const { root } = resolveVsroRoot( process.env, stamped );
+	const archiveThere = root !== "" &&
+		await stat( path.join( root, "Media.pk2" ) ).then( ( entry ) => entry.isFile(), () => false );
+	return plan( process.env, archiveThere, stamped );
+}
+
+/*
+================
+laterDungeonMapImportPlan
+
+What the dungeon-map step does with one environment (vsroImportPlan):
+run the importer against the resolved later client, or skip with the one
+line the build prints. The importer verifies the archive against its pin
+before reading a byte, so a wrong archive fails the build rather than
+slipping in (#2956).
+================
+*/
+export function laterDungeonMapImportPlan( env = process.env, archiveThere = false, stamped = stampedVsroRoot() ) {
+	return vsroImportPlan(
+		{
+			label: "Later dungeon maps",
+			without: "the M window keeps the plain world map",
+			script: "scripts/import_vsro_dungeon_maps.py"
+		},
+		env,
+		archiveThere,
+		stamped
+	);
 }
 
 /*
@@ -85,11 +131,8 @@ them for the publication ledger. Without the archive the build says so
 in one line and ships the plain world map.
 ================
 */
-export async function importLaterDungeonMapsStep() {
-	const root = (process.env.SRO_VSRO_ROOT ?? "").trim();
-	const archiveThere = root !== "" &&
-		await stat( path.join( root, "Media.pk2" ) ).then( ( entry ) => entry.isFile(), () => false );
-	const plan = laterDungeonMapImportPlan( process.env, archiveThere );
+export async function importLaterDungeonMapsStep( stamped = stampedVsroRoot() ) {
+	const plan = await vsroStepPlan( laterDungeonMapImportPlan, stamped );
 	if ( !plan.run ) {
 		console.log( plan.line );
 		return { skipped: true };
@@ -127,18 +170,17 @@ contract as the dungeon maps beside it (SRO_VSRO_ROOT folder, else the
 one skip line), because one archive carries both.
 ================
 */
-export function laterWorldMapButtonsImportPlan( env = process.env, archiveThere = false ) {
-	const root = (env.SRO_VSRO_ROOT ?? "").trim();
-	if ( !root ) {
-		return {
-			run: false,
-			line: "Later world map buttons: skipped (SRO_VSRO_ROOT is not set; the dungeon pages keep the plain strip)"
-		};
-	}
-	if ( !archiveThere ) {
-		return { run: false, line: `Later world map buttons: skipped (no Media.pk2 under SRO_VSRO_ROOT ${root})` };
-	}
-	return { run: true, root, args: [ "scripts/import_vsro_worldmap_buttons.py", "--vsro-root", root ] };
+export function laterWorldMapButtonsImportPlan( env = process.env, archiveThere = false, stamped = stampedVsroRoot() ) {
+	return vsroImportPlan(
+		{
+			label: "Later world map buttons",
+			without: "the dungeon pages keep the plain strip",
+			script: "scripts/import_vsro_worldmap_buttons.py"
+		},
+		env,
+		archiveThere,
+		stamped
+	);
 }
 
 /*
@@ -190,11 +232,8 @@ worldmap images after the preload sweep, claimed for the publication
 ledger, and skipped with one line without the archive.
 ================
 */
-export async function importLaterWorldMapButtonsStep() {
-	const root = (process.env.SRO_VSRO_ROOT ?? "").trim();
-	const archiveThere = root !== "" &&
-		await stat( path.join( root, "Media.pk2" ) ).then( ( entry ) => entry.isFile(), () => false );
-	const plan = laterWorldMapButtonsImportPlan( process.env, archiveThere );
+export async function importLaterWorldMapButtonsStep( stamped = stampedVsroRoot() ) {
+	const plan = await vsroStepPlan( laterWorldMapButtonsImportPlan, stamped );
 	if ( !plan.run ) {
 		console.log( plan.line );
 		return { skipped: true };
@@ -323,18 +362,21 @@ line), because one archive carries both. The importer verifies the
 archive against its pin before reading a byte.
 ================
 */
-export function laterOptionalTeleportImportPlan( env = process.env, archiveThere = false ) {
-	const root = (env.SRO_VSRO_ROOT ?? "").trim();
-	if ( !root ) {
-		return {
-			run: false,
-			line: "Later reverse return table: skipped (SRO_VSRO_ROOT is not set; the server infers its map points)"
-		};
-	}
-	if ( !archiveThere ) {
-		return { run: false, line: `Later reverse return table: skipped (no Media.pk2 under SRO_VSRO_ROOT ${root})` };
-	}
-	return { run: true, root, args: [ "scripts/import_vsro_optional_teleport.py", "--vsro-root", root ] };
+export function laterOptionalTeleportImportPlan(
+	env = process.env,
+	archiveThere = false,
+	stamped = stampedVsroRoot()
+) {
+	return vsroImportPlan(
+		{
+			label: "Later reverse return table",
+			without: "the server infers its map points",
+			script: "scripts/import_vsro_optional_teleport.py"
+		},
+		env,
+		archiveThere,
+		stamped
+	);
 }
 
 /*
@@ -346,11 +388,8 @@ receives the points from the server's world references, so nothing is
 published or claimed here. Skipped with one line without the archive.
 ================
 */
-export async function importLaterOptionalTeleportStep() {
-	const root = (process.env.SRO_VSRO_ROOT ?? "").trim();
-	const archiveThere = root !== "" &&
-		await stat( path.join( root, "Media.pk2" ) ).then( ( entry ) => entry.isFile(), () => false );
-	const plan = laterOptionalTeleportImportPlan( process.env, archiveThere );
+export async function importLaterOptionalTeleportStep( stamped = stampedVsroRoot() ) {
+	const plan = await vsroStepPlan( laterOptionalTeleportImportPlan, stamped );
 	if ( !plan.run ) {
 		console.log( plan.line );
 		return { skipped: true };
@@ -385,18 +424,17 @@ because one archive carries both. The importer verifies the archive
 against its pin before reading a byte.
 ================
 */
-export function laterTombMinimapImportPlan( env = process.env, archiveThere = false ) {
-	const root = (env.SRO_VSRO_ROOT ?? "").trim();
-	if ( !root ) {
-		return {
-			run: false,
-			line: "Later tomb minimap: skipped (SRO_VSRO_ROOT is not set; the tomb's floors keep an empty minimap)"
-		};
-	}
-	if ( !archiveThere ) {
-		return { run: false, line: `Later tomb minimap: skipped (no Media.pk2 under SRO_VSRO_ROOT ${root})` };
-	}
-	return { run: true, root, args: [ "scripts/import_vsro_tomb_minimap.py", "--vsro-root", root ] };
+export function laterTombMinimapImportPlan( env = process.env, archiveThere = false, stamped = stampedVsroRoot() ) {
+	return vsroImportPlan(
+		{
+			label: "Later tomb minimap",
+			without: "the tomb's floors keep an empty minimap",
+			script: "scripts/import_vsro_tomb_minimap.py"
+		},
+		env,
+		archiveThere,
+		stamped
+	);
 }
 
 /*
@@ -427,11 +465,8 @@ in time for the final pack tail, and the step claims them. Without the
 archive the build says so in one line.
 ================
 */
-export async function importLaterTombMinimapStep() {
-	const root = (process.env.SRO_VSRO_ROOT ?? "").trim();
-	const archiveThere = root !== "" &&
-		await stat( path.join( root, "Media.pk2" ) ).then( ( entry ) => entry.isFile(), () => false );
-	const plan = laterTombMinimapImportPlan( process.env, archiveThere );
+export async function importLaterTombMinimapStep( stamped = stampedVsroRoot() ) {
+	const plan = await vsroStepPlan( laterTombMinimapImportPlan, stamped );
 	if ( !plan.run ) {
 		console.log( plan.line );
 		return { skipped: true };

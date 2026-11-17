@@ -43,6 +43,7 @@ import { buildStatePath } from "../../lib/generatedRoot.mjs";
 import { codeClosure } from "./codeStamp.mjs";
 import { openFileHashCache } from "./fileHashCache.mjs";
 import { janganTombTeleportEnabled } from "./janganTombTeleport.mjs";
+import { resolveVsroRoot, VSRO_ROOT_ENV } from "./laterClientRoot.mjs";
 import { muhanEnabled } from "./muhan.mjs";
 import { qinshiTombEnabled } from "./qinshiTomb.mjs";
 import { readJsonOrUndefined } from "./jsonOut.mjs";
@@ -124,6 +125,12 @@ export function buildKnobLines() {
 	lines.push( `posture SRO_QINSHI_TOMB=${qinshiTombEnabled()}` );
 	lines.push( `posture SRO_MUHAN=${muhanEnabled()}` );
 	lines.push( `posture SRO_JANGAN_TOMB_TELEPORT=${janganTombTeleportEnabled()}` );
+	// The later client the variant stamp names stands in for an unset
+	// SRO_VSRO_ROOT (laterClientRoot.mjs): finding one must not skip. A
+	// shell that names the root is hashed above already; the line joins
+	// only then, so trees that set it keep their memos.
+	const later = resolveVsroRoot();
+	if ( later.source !== VSRO_ROOT_ENV && later.root ) lines.push( `posture SRO_VSRO_ROOT=${later.root}` );
 	return lines;
 }
 
