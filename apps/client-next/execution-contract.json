@@ -34,7 +34,7 @@
 		{
 			"consumer": "src/engine/runtime/ui/frame/admission.ts",
 			"provider": "src/engine/runtime/ui/hud/compact-hud.ts",
-			"functions": ["compactWindowDrag", "compactCloseControl"]
+			"functions": ["compactCloseControl"]
 		},
 		{
 			"consumer": "src/engine/runtime/ui/frame/admission.ts",
@@ -408,21 +408,6 @@
 			]
 		},
 		{
-			"consumer": "src/engine/runtime/characters/mall-preview.ts",
-			"provider": "src/engine/runtime/characters/resources/resources.ts",
-			"functions": [
-				"ready",
-				"plan"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/characters/mall-preview.ts",
-			"provider": "src/engine/runtime/renderer/characters/characters.ts",
-			"functions": [
-				"assembly"
-			]
-		},
-		{
 			"consumer": "src/engine/runtime/renderer/world/world.ts",
 			"provider": "src/engine/runtime/renderer/device/geometry.ts",
 			"functions": [
@@ -436,8 +421,7 @@
 			"functions": [
 				"reset",
 				"step",
-				"value",
-				"alpha"
+				"value"
 			]
 		},
 		{
@@ -579,13 +563,6 @@
 			]
 		},
 		{
-			"consumer": "src/engine/runtime/characters/sounds/sounds.ts",
-			"provider": "src/engine/runtime/characters/characters.ts",
-			"functions": [
-				"soundSource"
-			]
-		},
-		{
 			"consumer": "src/engine/foundation/ui/chat-scrollbar.ts",
 			"provider": "src/engine/runtime/ui/resources/resources.ts",
 			"functions": [
@@ -604,20 +581,6 @@
 			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
 			"functions": [
-				"takeFatalities"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
-			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts",
-			"functions": [
-				"constrainDisplacement"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
-			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
-			"functions": [
 				"takeCancellations"
 			]
 		},
@@ -626,13 +589,6 @@
 			"provider": "src/engine/runtime/characters/presentation-state.ts",
 			"functions": [
 				"callback:advanceRandomIdle:5"
-			]
-		},
-		{
-			"consumer": "src/engine/foundation/animation/random-idle.ts",
-			"provider": "src/engine/runtime/random/random.ts",
-			"functions": [
-				"range"
 			]
 		},
 		{
@@ -696,13 +652,6 @@
 				"request",
 				"take",
 				"cancel"
-			]
-		},
-		{
-			"consumer": "src/engine/foundation/navigation/region-move.ts",
-			"provider": "src/engine/foundation/navigation/clipper.ts",
-			"functions": [
-				"callback:continueRegionMove:2"
 			]
 		},
 		{
@@ -824,13 +773,6 @@
 			]
 		},
 		{
-			"consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
-			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
-			"functions": [
-				"experimental"
-			]
-		},
-		{
 			"consumer": "src/engine/runtime/simulation/worker/session/http/http.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/world.ts",
 			"functions": [
@@ -917,13 +859,6 @@
 			],
 			"provider": "src/engine/runtime/renderer/device/images.ts",
 			"consumer": "src/engine/runtime/renderer/world/world.ts"
-		},
-		{
-			"functions": [
-				"consumeInput"
-			],
-			"provider": "src/engine/runtime/simulation/worker/simulation.ts",
-			"consumer": "src/engine/runtime/simulation/worker/input/input.ts"
 		},
 		{
 			"consumer": "src/engine/runtime/assets/worker/world/resources/resources.ts",
@@ -1047,12 +982,7 @@
 			"provider": "src/engine/runtime/renderer/characters/characters.ts",
 			"functions": [
 				"actors",
-				"assembly",
-				"socket",
-				"matrix",
-				"localMatrix",
-				"particleSnapshot",
-				"particleTime"
+				"socket"
 			]
 		},
 		{
@@ -1070,14 +1000,6 @@
 			"provider": "src/engine/runtime/audio/audio.ts",
 			"functions": [
 				"unlock"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/characters/characters.ts",
-			"provider": "src/engine/runtime/audio/audio.ts",
-			"functions": [
-				"enqueue",
-				"effectsEnabled"
 			]
 		},
 		{
@@ -1115,14 +1037,6 @@
 			]
 		},
 		{
-			"consumer": "src/engine/runtime/characters/effects/effects.ts",
-			"provider": "src/engine/runtime/characters/resources/resources.ts",
-			"functions": [
-				"ready",
-				"duration"
-			]
-		},
-		{
 			"consumer": "src/engine/runtime/assets/worker/loader.ts",
 			"provider": "src/engine/runtime/assets/worker/effects/program/program.ts",
 			"functions": [
@@ -1135,23 +1049,14 @@
 			"provider": "src/engine/runtime/renderer/characters/characters.ts",
 			"functions": [
 				"currentActors",
-				"stats",
-				"frameWork"
+				"stats"
 			]
 		},
 		{
 			"consumer": "src/engine/runtime/platform/platform.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
-				"blocks",
-				"event"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/platform/ui/ui.ts",
-			"provider": "src/engine/runtime/ui/ui.ts",
-			"functions": [
-				"event"
+				"blocks"
 			]
 		},
 		{
@@ -1161,13 +1066,6 @@
 				"callback",
 				"callback:createUiBridge:2",
 				"callback:createUiBridge:3"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/runtime.ts",
-			"provider": "src/engine/runtime/platform/ui/ui.ts",
-			"functions": [
-				"present"
 			]
 		},
 		{
@@ -1191,7 +1089,6 @@
 			"consumer": "src/engine/runtime/ui/ui.ts",
 			"provider": "src/engine/runtime/renderer/renderer.ts",
 			"functions": [
-				"setUiTexture",
 				"setUi"
 			]
 		},
@@ -1200,20 +1097,6 @@
 			"provider": "src/engine/runtime/assets/assets.ts",
 			"functions": [
 				"hdAvailable"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/ui/ui.ts",
-			"provider": "src/engine/runtime/simulation/host.ts",
-			"functions": [
-				"session"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/runtime.ts",
-			"provider": "src/engine/runtime/ui/resources/resources.ts",
-			"functions": [
-				"stats"
 			]
 		},
 		{
@@ -1248,17 +1131,9 @@
 			]
 		},
 		{
-			"consumer": "src/engine/runtime/platform/platform.ts",
-			"provider": "src/engine/runtime/frontend/frontend.ts",
-			"functions": [
-				"pointer"
-			]
-		},
-		{
 			"consumer": "src/engine/runtime/frontend/stage/stage.ts",
 			"provider": "src/engine/runtime/renderer/renderer.ts",
 			"functions": [
-				"setWorld",
 				"setWorldTexture",
 				"cancelWorldUpdate",
 				"neededWorldTextures",
@@ -1295,20 +1170,9 @@
 				"saveQuickslots",
 				"saveSight",
 				"saveVideo",
-				"playSoundByName",
-				"saveCameraWaypoints",
 				"saveExperimental",
 				"saveWindowPositions",
-				"setCameraCollision",
-				"setCameraPlaying",
-				"setCameraWaypoints",
-				"setCameraZoomRail",
-				"setCursorVisible",
-				"setDamageNumbers",
-				"setFreeCamera",
-				"setFreeCameraSpeed",
-				"setRenderMode",
-				"setWorldFieldOfView"
+				"setCameraWaypoints"
 			]
 		},
 		{
@@ -1411,13 +1275,6 @@
 			]
 		},
 		{
-			"consumer": "src/engine/runtime/renderer/characters/characters.ts",
-			"provider": "src/engine/runtime/renderer/readback/readback.ts",
-			"functions": [
-				"readPickAlpha"
-			]
-		},
-		{
 			"consumer": "src/engine/runtime/renderer/world/world.ts",
 			"provider": "src/engine/runtime/renderer/readback/readback.ts",
 			"functions": [
@@ -1429,13 +1286,6 @@
 			"provider": "src/engine/runtime/simulation/worker/network/network.ts",
 			"functions": [
 				"send"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/characters/effects/effects.ts",
-			"provider": "src/engine/runtime/characters/presentation-events.ts",
-			"functions": [
-				"callback:step:6"
 			]
 		},
 		{
@@ -1538,8 +1388,7 @@
 			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
 			"functions": [
-				"callback:createChat:1",
-				"callback:createChat:2"
+				"callback:createChat:1"
 			]
 		},
 		{
@@ -1650,13 +1499,6 @@
 			"provider": "src/engine/runtime/frontend/flow/flow.ts",
 			"functions": [
 				"snapshot"
-			]
-		},
-		{
-			"consumer": "src/engine/foundation/ui/frame-ring.ts",
-			"provider": "src/engine/runtime/ui/resources/resources.ts",
-			"functions": [
-				"size"
 			]
 		},
 		{
@@ -1834,17 +1676,14 @@
 			"consumer": "src/engine/foundation/gameplay/job-rank.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
-				"hudCopy",
-				"callback:jobRankPage:4",
-				"callback:jobContributionSelf:3"
+				"hudCopy"
 			]
 		},
 		{
 			"consumer": "src/engine/foundation/gameplay/player-info-job.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
-				"hudCopy",
-				"callback:playerInfoJob:3"
+				"hudCopy"
 			]
 		},
 		{
@@ -1873,8 +1712,6 @@
 			"consumer": "src/engine/runtime/ui/hud/messages.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
-				"hudCopy",
-				"callback",
 				"chooseTip"
 			]
 		},
@@ -1889,12 +1726,8 @@
 			"consumer": "src/engine/foundation/ui/text-lines.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
-				"callback:sideBubble:3",
-				"callback:tooltipBubble:3",
 				"callback:textLines:2",
-				"callback:captionWords:2",
 				"callback:textBoxLines:2",
-				"callback:textBoardLines:2",
 				"callback:textBoxLines:2",
 				"callback:messageBoxLines:1",
 				"measure",
@@ -1915,8 +1748,7 @@
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
 			"functions": [
 				"options",
-				"chatBlocks",
-				"experimental"
+				"chatBlocks"
 			]
 		},
 		{
@@ -1924,20 +1756,6 @@
 			"provider": "src/engine/runtime/characters/effects/effects.ts",
 			"functions": [
 				"callback:impactSource:3"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/characters/damage-feedback.ts",
-			"provider": "src/engine/runtime/characters/effects/effects.ts",
-			"functions": [
-				"impactIndex"
-			]
-		},
-		{
-			"consumer": "src/engine/foundation/assets/read-bytes.ts",
-			"provider": "src/engine/runtime/assets/worker/loader.ts",
-			"functions": [
-				"callback"
 			]
 		},
 		{
@@ -1992,13 +1810,6 @@
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
 				"hudCopy"
-			]
-		},
-		{
-			"consumer": "src/engine/foundation/gameplay/transport-auto-potion.ts",
-			"provider": "src/engine/runtime/ui/ui.ts",
-			"functions": [
-				"maxHp"
 			]
 		},
 		{
@@ -2133,40 +1944,10 @@
 			]
 		},
 		{
-			"consumer": "src/engine/foundation/animation/scenery-emission.ts",
-			"provider": "src/engine/runtime/characters/resources/resources.ts",
-			"functions": [
-				"ready"
-			]
-		},
-		{
-			"consumer": "src/engine/foundation/animation/scenery-emission.ts",
-			"provider": "src/engine/runtime/renderer/world/world.ts",
-			"functions": [
-				"holderVisible"
-			],
-			"reason": "A scenery emitter's clock stops while its compound is out of view (A9EFB0); the world renderer answers from its last selection walk's frustum."
-		},
-		{
-			"consumer": "src/engine/runtime/characters/skill-objects.ts",
-			"provider": "src/engine/runtime/characters/resources/resources.ts",
-			"functions": [
-				"ready",
-				"plan"
-			]
-		},
-		{
 			"consumer": "src/engine/foundation/rendering/scenery-particles.ts",
 			"provider": "src/engine/runtime/assets/worker/world/world.ts",
 			"functions": [
 				"callback:sceneryParticles:5"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/characters/characters.ts",
-			"provider": "src/engine/runtime/renderer/world/world.ts",
-			"functions": [
-				"scenery"
 			]
 		},
 		{
@@ -2216,15 +1997,7 @@
 			"provider": "src/engine/runtime/presentation/effective-hp.ts",
 			"functions": [
 				"dead",
-				"impact",
 				"release"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/characters/characters.ts",
-			"provider": "src/engine/runtime/presentation/presentation.ts",
-			"functions": [
-				"finishedCasts"
 			]
 		},
 		{
@@ -2288,13 +2061,6 @@
 			]
 		},
 		{
-			"consumer": "src/engine/foundation/animation/model-emission.ts",
-			"provider": "src/engine/runtime/characters/resources/resources.ts",
-			"functions": [
-				"ready"
-			]
-		},
-		{
 			"consumer": "src/engine/foundation/animation/model-material-clock.ts",
 			"provider": "src/engine/runtime/renderer/characters/characters.ts",
 			"functions": [
@@ -2312,8 +2078,7 @@
 			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
 			"provider": "src/engine/runtime/renderer/renderer.ts",
 			"functions": [
-				"prepare",
-				"finishDeferred"
+				"prepare"
 			]
 		},
 		{
@@ -2337,8 +2102,7 @@
 			"functions": [
 				"audioListener",
 				"dungeonCharacterPvs",
-				"presentationCamera",
-				"presentationNight"
+				"presentationCamera"
 			]
 		},
 		{
@@ -2362,14 +2126,6 @@
 				"retain",
 				"take"
 			]
-		},
-		{
-			"consumer": "src/engine/foundation/animation/animation-emission.ts",
-			"provider": "src/engine/runtime/characters/resources/resources.ts",
-			"functions": [
-				"ready"
-			],
-			"reason": "Synchronous animation modifier admission and last-rendered particle snapshot; no new scheduler or asset owner."
 		},
 		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
@@ -2398,15 +2154,7 @@
 			"consumer": "src/engine/runtime/assets/worker/install.ts",
 			"provider": "src/engine/runtime/assets/worker/packs/packs.ts",
 			"functions": [
-				"read",
 				"install"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/assets/worker/install.ts",
-			"provider": "src/engine/runtime/assets/worker/loader.ts",
-			"functions": [
-				"callback:createBackgroundInstaller:1"
 			]
 		},
 		{
@@ -2435,13 +2183,6 @@
 				"request",
 				"take",
 				"cancel"
-			]
-		},
-		{
-			"consumer": "src/engine/foundation/assets/read-bytes.ts",
-			"provider": "src/engine/runtime/assets/worker/loader.ts",
-			"functions": [
-				"callback:readBytes:2"
 			]
 		},
 		{
@@ -2500,7 +2241,6 @@
 			"consumer": "src/engine/runtime/ui/ui.ts",
 			"provider": "src/engine/runtime/bug-report/bug-report.ts",
 			"functions": [
-				"reportsEnabled",
 				"open",
 				"recordingFrame",
 				"chat"
@@ -2531,13 +2271,6 @@
 			"functions": [
 				"callback:createStaleDrawGuard:0",
 				"callback:createStaleDrawGuard:1"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/characters/characters.ts",
-			"provider": "src/engine/runtime/frame-work.ts",
-			"functions": [
-				"level"
 			]
 		},
 		{
@@ -2640,13 +2373,6 @@
 			]
 		},
 		{
-			"consumer": "src/engine/runtime/characters/presentation-state.ts",
-			"provider": "src/engine/runtime/presentation/effective-hp.ts",
-			"functions": [
-				"dead"
-			]
-		},
-		{
 			"consumer": "src/engine/foundation/animation/animation-dispatch.ts",
 			"provider": "src/engine/runtime/characters/presentation-finalize.ts",
 			"functions": [
@@ -2704,33 +2430,12 @@
 			"reason": "Existing synchronous presentation callbacks moved from characters.ts into its finalization phase; frame ordering is unchanged."
 		},
 		{
-			"consumer": "src/engine/runtime/characters/presentation-actions.ts",
-			"provider": "src/engine/runtime/random/random.ts",
-			"functions": [
-				"range"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/characters/presentation-actions.ts",
-			"provider": "src/engine/runtime/presentation/effective-hp.ts",
-			"functions": [
-				"dead"
-			]
-		},
-		{
 			"consumer": "src/engine/foundation/animation/animation-dispatch.ts",
 			"provider": "src/engine/runtime/characters/presentation-auxiliary.ts",
 			"functions": [
 				"callback:step:2"
 			],
 			"reason": "The stage animation duration callback moves intact to the auxiliary presentation owner."
-		},
-		{
-			"consumer": "src/engine/runtime/characters/sounds/sounds.ts",
-			"provider": "src/engine/runtime/characters/presentation-events.ts",
-			"functions": [
-				"callback:flush:1"
-			]
 		},
 		{
 			"consumer": "src/engine/runtime/characters/footprints.ts",
@@ -2922,8 +2627,7 @@
 				"image",
 				"authoredButton",
 				"closeButton",
-				"endWindow",
-				"rect"
+				"endWindow"
 			]
 		},
 		{
@@ -2976,14 +2680,6 @@
 				"cancel",
 				"request",
 				"take"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/ui/hud/map-tools.ts",
-			"provider": "src/engine/runtime/ui/text/text.ts",
-			"functions": [
-				"quads",
-				"run"
 			]
 		},
 		{
@@ -3053,13 +2749,6 @@
 			"functions": [
 				"mapLeftReach",
 				"mapPanel"
-			]
-		},
-		{
-			"consumer": "src/engine/foundation/ui/chat-scrollbar.ts",
-			"provider": "src/engine/runtime/ui/hud/world-map.ts",
-			"functions": [
-				"size"
 			]
 		},
 		{
