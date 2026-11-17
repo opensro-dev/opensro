@@ -1404,8 +1404,6 @@ fails; retry persistence without restoring stale slot occupancy.
 	let jobKillNotices = true;
 	// The Experimental "Drop & plus notices" row, on the same terms.
 	let dropPlusNotices = true;
-	// The Experimental "Plus +7 notices" row, on the same terms.
-	let plusSevenNotices = true;
 	// The Experimental "Item break notices" row, on the same terms.
 	let breakNotices = true;
 	// Port-only (Experimental "Christmas carols"): carols while the
@@ -1889,7 +1887,6 @@ The Experimental window's gameplay rows (experimentalGameplay).
 			predictedRunUp = value.predictedRunUp === true;
 			jobKillNotices = value.jobKillNotices !== false;
 			dropPlusNotices = value.dropPlusNotices !== false;
-			plusSevenNotices = value.plusSevenNotices !== false;
 			breakNotices = value.breakNotices !== false;
 			christmasCarols = value.christmasCarols === true;
 			highlightEventNotices = value.highlightEventNotices !== false;
@@ -4685,7 +4682,6 @@ Packet handling must not depend on which HUD panel is currently open.
 					serverNotification( frame.opcode, frame.payload );
 				if ( notice?.jobKill && !jobKillNotices ) return false;
 				if ( notice?.dropPlus && !dropPlusNotices ) return false;
-				if ( notice?.plusSeven && !plusSevenNotices ) return false;
 				if ( notice?.itemBreak && !breakNotices ) return false;
 				if ( notice ) {
 					// Port-only, not native (#2727): while the "Highlight
