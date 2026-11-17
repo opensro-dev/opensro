@@ -106,7 +106,31 @@ The server half follows the v1.188 reference server (addresses in `action/roc.go
   - the Roc's berserk and departure countdowns and its timed skills are not ported, because no v1.150 frame
     carries their minute count.
 
+### The Roc's drops (step 5b)
+
+- **Source:** every enabled reward rule the pinned vSRO backup authors for the Roc kinds, committed as
+  `scripts/data/roc/rewards-source.json` (`scripts/build/import_roc_rewards.py`). The ISRO-R backup's Roc rows are
+  disabled, and the v1.150 client has none.
+- **What the Roc drops there:**
+  - three distinct Roc set pieces (group 1);
+  - two or three degree-11 pieces (group 12);
+  - a 1-in-100,000 degree-11 rare (group 13);
+  - five or six of each of the four E051123 scrolls.
+- **The bosses, spirits and wing knight:** one or two degree-11 pieces (group 12), plus the same rare chance.
+- **Joined to the variant:** `scripts/roc_rewards.py` keeps each group's members that the variant installs, at
+  their authored weights, and writes `roc-rewards.txt`. The server joins it after the cap110 overlay
+  (`loot/roc.go`).
+  - **Group 12 today:** the degree-11 pieces come from `SRO_CAP110_ITEMS`.
+  - **Not installed yet:** no variant installs the Roc sets or the scrolls, so those rules wait and the build
+    summary lists them. The rares are in no client the port reads.
+  - **Nothing installed:** no file is written, and the Roc kinds roll only the native passes.
+- **The scrolls' option bytes:** all 26 rows of the backup that carry option bytes (these four, plus the God
+  pillars' teleport holes) carry the same block, and all of them drop ETC items, which have no magic options.
+  The importer reads that block as an insert artefact (an inference) and refuses any other.
+- **Off:** with `SRO_ROC` off the file is removed and nothing joins.
+
 ## What is not here yet
 
 - **Content still to come**, each its own step of #3399:
-  - drops and the unique notice (step 5).
+  - the unique notice (step 5a);
+  - the Roc set pieces and the E051123 scrolls as items (so their rules join).

@@ -347,6 +347,26 @@ class RocImportTest(unittest.TestCase):
 			self.assertNotIn(roc.SKILL_SHARD, manifest)
 
 	# ================
+	# test_rewards_join_installed_items_and_leave_off
+	#
+	# Step 5b: with a degree-11 piece of the Roc's group 12 installed,
+	# on writes roc-rewards.txt; off removes it with the rest.
+	# ================
+	def test_rewards_join_installed_items_and_leave_off(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, text_root, pins = self.fixture(Path(root))
+			piece = ["0"] * 13
+			piece[0], piece[1], piece[2], piece[9:13] = "1", "8", "ITEM_CH_BLADE_11_A", ["3", "1", "6", "2"]
+			(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"], ["itemdata_110000.txt"]]))
+			(text_root / "itemdata_110000.txt").write_bytes(utf16([piece]))
+			summary = self.run_import(vsro, native, output, pins, "on")
+			self.assertEqual(summary["rewards"]["random"], 8)
+			written = json.loads((text_root / roc.roc_rewards.REWARDS_FILE).read_text(encoding="utf-8"))
+			self.assertEqual({rule["Monster"] for rule in written["Random"]} - set(roc.KINDS), set())
+			self.run_import(vsro, native, output, pins, "")
+			self.assertFalse((text_root / roc.roc_rewards.REWARDS_FILE).exists())
+
+	# ================
 	# quest_codes
 	# ================
 	def quest_codes(self, text_root):
