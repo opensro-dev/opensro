@@ -6,8 +6,8 @@ verify-execution.mjs - the resolved execution graph obeys execution-contract.jso
 Checks the graph execution-flow.mjs resolves from the sources against the
 reviewed contract: sealed native frame barriers, unresolved execution,
 external capabilities used outside their owner, cross-module calls without
-a grant, the declared call order of each sequence, and async functions
-reachable from the frame.
+a grant, grants no resolved call takes, the declared call order of each
+sequence, and async functions reachable from the frame.
 
 The graph is indexed once (calls by caller, boundaries by call site, grants
 by consumer, provider and function), so each check is a lookup rather than
@@ -70,6 +70,11 @@ function sameOwner( manifest, from, to ) {
 /*
 ================
 verifyCalls
+
+Every cross-module call needs a grant, and every grant needs a call: a
+grant nothing takes (left by a split or a rename) widens what its consumer
+may call without anyone reading it (#3808). A grant counts as taken when
+any resolved call matches it, even one its owners would allow anyway.
 ================
 */
 function verifyCalls( graph, defs, manifest, contract, issues ) {
@@ -80,7 +85,7 @@ function verifyCalls( graph, defs, manifest, contract, issues ) {
 		// The first matching boundary wins, as a linear find would.
 		if ( !boundaries.has( key ) ) boundaries.set( key, b );
 	}
-	const grants = new Set();
+	const grants = new Set(), taken = new Set();
 	for ( const g of contract.capabilities ) {
 		for ( const fn of g.functions ) grants.add( `${g.consumer}\0${g.provider}\0${fn}` );
 	}
@@ -97,12 +102,18 @@ function verifyCalls( graph, defs, manifest, contract, issues ) {
 			issues.push( `${call.file}:${call.line}: resolved external ${externalName} escapes its owner` );
 		}
 		for ( const target of [ ...call.targets, ...(call.external ? call.callbacks.map( c => c.target ) : []) ] ) {
-			const to = defs.get( target );
+			const to = defs.get( target ), key = `${call.file}\0${to.file}\0${to.name}`;
+			if ( grants.has( key ) ) taken.add( key );
 			if ( sameOwner( manifest, call.file, to.file ) ) continue;
-			if ( !grants.has( `${call.file}\0${to.file}\0${to.name}` ) ) {
+			if ( !grants.has( key ) ) {
 				issues.push( `${call.file}:${call.line}: undeclared capability to ${to.file}#${to.name}` );
 			}
 		}
+	}
+	for ( const key of grants ) {
+		if ( taken.has( key ) ) continue;
+		const [consumer, provider, fn] = key.split( "\0" );
+		issues.push( `unused grant ${consumer} -> ${provider}#${fn}` );
 	}
 }
 
