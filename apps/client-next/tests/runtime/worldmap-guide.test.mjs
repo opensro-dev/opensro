@@ -24,6 +24,9 @@ const {
 	guideMonsterTarget,
 	guideOverlay,
 	guideRace,
+	levelFilterEntries,
+	levelFilterOverlay,
+	levelFilterTarget,
 	worldMapGuideCatalog
 } = await import( "../../src/engine/foundation/ui/worldmap-guide.ts" );
 const { createMapToolsHud } = await import( "../../src/engine/runtime/ui/hud/map-tools.ts" );
@@ -252,6 +255,78 @@ test("the picked hunting ground: its tiles tinted 0x80e9c624, the icon's corner 
 	assert.deepEqual( guideOverlay( catalog, 7, frame, clip ).quads, [], "a dungeon page is not the world's" );
 });
 
+/*
+================
+worldPose
+
+The world pose a monster row's target names; fails the test for a page,
+dungeon or missing target.
+================
+*/
+function worldPose( catalog, index ) {
+	const target = guideMonsterTarget( catalog, index );
+	assert.equal( target?.kind, "world" );
+	return /** @type {{ kind: "world"; pose: import("../../src/engine/contracts/gameplay").Pose }} */ (target).pose;
+}
+
+test("the foot's level filter keeps world entries 0..6 above, snaps to the last and tints by the gap (v1.696 E72300)", () => {
+	const body = fixture();
+	// The Wolf stands apart from the Mangyang, so the snap names which.
+	body.monsters[4].point = [ 40, 10 ];
+	const catalog = worldMapGuideCatalog( body );
+	assert.notDeepEqual( worldPose( catalog, 4 ), worldPose( catalog, 2 ) );
+	// Level 1: Mangyang (1, gap 0) and Wolf (5, gap 4); the Weasel is 29
+	// above, the main rows have no level and the Cave Bat is a dungeon's.
+	assert.deepEqual( levelFilterEntries( catalog, 1 ), [ 2, 4 ] );
+	assert.deepEqual( levelFilterEntries( catalog, 30 ), [ 3 ] );
+	assert.deepEqual( levelFilterEntries( catalog, 2 ), [ 4 ], "a species below the player is not kept" );
+	// E724F0 moves the view onto each kept entry: the last one is where it rests.
+	assert.deepEqual( levelFilterTarget( catalog, 1 ), worldPose( catalog, 4 ) );
+	assert.equal( levelFilterTarget( catalog, 200 ), null, "nothing kept, no snap" );
+	const frame = { left: 0, right: 64000, top: 64000, bottom: 0, width: 640, height: 640, ox: 0, oy: 0 };
+	const clip = /** @type {import("../../src/engine/contracts/ui").UiRect} */ ([ 0, 0, 640, 640 ]);
+	const tinted = levelFilterOverlay( catalog, 1, frame, clip );
+	const masks = tinted.quads.filter( quad => quad.texture.includes( "guide-mask" ) );
+	assert.equal( masks.length, 2, "Mangyang's two tiles" );
+	assert.deepEqual( masks[0].color, [ 0xd9 / 255, 0xd2 / 255, 0xc6 / 255, 0x80 / 255 ], "gap 0..3 is grey" );
+	assert.equal( tinted.quads.filter( quad => quad.texture.endsWith( "wmap_monster_icon.png" ) ).length, 2 );
+	const red = levelFilterOverlay( catalog, -3, frame, clip ).quads.find( quad =>
+		quad.texture.includes( "guide-mask" )
+	);
+	assert.deepEqual( red?.color, [ 0xb6 / 255, 0x31 / 255, 0x43 / 255, 0x80 / 255 ], "gap 4..6 is red" );
+	assert.deepEqual( tinted.paths, tinted.quads.map( quad => quad.texture ) );
+});
+
+test("checking the foot's filter snaps the map once the guide is in, and the map starts unfiltered", () => {
+	const bytes = new TextEncoder().encode( JSON.stringify( fixture() ) );
+	let asked = 0;
+	const hud = createMapToolsHud( {
+		assets: {
+			available: () => 1,
+			request: url => (url.endsWith( "worldmap-guide.json" ) ? (asked += 1, 7) : 8),
+			take: id => id === 7 ? { kind: /** @type {const} */ ("bytes"), id, buffer: bytes.buffer } : null,
+			cancel: () => {}
+		},
+		base: "https://fixture.invalid/"
+	} );
+	try {
+		hud.step( "Map" );
+		assert.equal( asked, 0, "nothing loads while the filter is off and the drawer shut" );
+		assert.equal( hud.takeLevelSnap( 1 ), null );
+		hud.activate( "map-level-filter", undefined, 1 );
+		hud.step( "Map" );
+		assert.equal( asked, 1, "checking the filter loads the guide" );
+		const catalog = worldMapGuideCatalog( fixture() );
+		assert.deepEqual( hud.takeLevelSnap( 1 ), worldPose( catalog, 4 ) );
+		assert.equal( hud.takeLevelSnap( 1 ), null, "the snap happens once per check" );
+		hud.activate( "map-level-filter", undefined, 1 );
+		hud.activate( "map-level-filter", undefined, 1 );
+		assert.notEqual( hud.takeLevelSnap( 1 ), null, "checking it again snaps again" );
+	} finally {
+		hud.dispose();
+	}
+});
+
 // ============================================================================
 // The map tools end to end
 // ============================================================================
@@ -275,9 +350,9 @@ function loadedTools( body = fixture(), levelFilter = false ) {
 		base: "https://fixture.invalid/"
 	} );
 	hud.activate( "map-side-tab", undefined, 10 );
-	// The filter starts on; these tests read the tree whole unless they
-	// ask for it (its band is pinned in world-map-tools.test.mjs).
-	if ( !levelFilter ) hud.activate( "map-level-filter", undefined, 10 );
+	// The filter starts off (E72F30); these tests read the tree whole
+	// unless they ask for it (its band is pinned in world-map-tools.test.mjs).
+	if ( levelFilter ) hud.activate( "map-level-filter", undefined, 10 );
 	hud.step( "Map" );
 	return hud;
 }

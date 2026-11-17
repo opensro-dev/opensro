@@ -464,7 +464,18 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			const nestsChanged = uniqueNests.step(
 				panel === "Map" && experimental.state().saved.uniqueSpawnPoints && mapTools.uniqueSpawns()
 			);
-			return mapTools.step( panel ) || guideChanged || nestsChanged;
+			const toolsChanged = mapTools.step( panel );
+			// Checking the foot's level filter moves the map onto the kept
+			// hunting grounds (v1.696 E724F0), once the catalogue is in.
+			const snap = panel === "Map" ? mapTools.takeLevelSnap( lastLevel ) : null;
+			if ( snap ) {
+				mapFollow = false;
+				mapPan = [ 0, 0 ];
+				mapCenter = { ...snap };
+				mapPage = 0;
+				mapTools.clearView();
+			}
+			return toolsChanged || !!snap || guideChanged || nestsChanged;
 		},
 		/*
 		================
@@ -713,6 +724,15 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			// The monster picked in the guide (sub_e75d50, issue #3390):
 			// its hunting ground tinted on the world page, under the labels.
 			const guidePick = mapProjection && mapPage === 0 && pose ? mapTools.guidePick() : null;
+			// The level filter's kept grounds (v1.696 E72300), on the world
+			// page as the pick's are, under them.
+			const levelGround = mapProjection && mapPage === 0 && pose ?
+				mapTools.levelGround(
+					lastLevel,
+					worldMapFrame( mapPage, mapClip, mapPan, mapCenter ?? mapViewPose( pose ), mapLayout ),
+					mapClip
+				) :
+				null;
 			const guideGround = guidePick && pose ?
 				guideOverlay(
 					guidePick.catalog,
@@ -769,6 +789,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					),
 					// A mask drawn before its image loads would tint the
 					// whole tile square: each waits for its own texture.
+					...(levelGround?.quads ?? []).filter( q => resources.has( q.texture ) ),
 					...(guideGround?.quads ?? []).filter( q => resources.has( q.texture ) ),
 					...mapProjection.overlay,
 					...(mapOpen ? mapProjection.labels : []).flatMap( ( { label: entry, x, y, clip } ) => {
@@ -844,6 +865,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			if ( mapOpen ) {
 				paths.push(
 					...(mapGuide?.paths ?? []),
+					...(levelGround?.paths ?? []),
 					...(guideGround?.paths ?? []),
 					...mapImages.map( q => q.texture ).filter( Boolean )
 				);

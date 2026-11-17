@@ -14,6 +14,8 @@ package monster
 import (
 	"encoding/json"
 	"testing"
+
+	"opensro.online/server/internal/game/world/temple"
 )
 
 /*
@@ -26,10 +28,25 @@ writes it; spawnType is the database's second spawn kind when nonzero.
 */
 func templeSource(t *testing.T, codename string, world, spawnType int) []byte {
 	t.Helper()
+	return templeSourceIn(t, codename, world, spawnType, templeTestRegion)
+}
+
+// templeTestRegion is the outdoor region templeSource's nest stands in.
+const templeTestRegion = 21000
+
+/*
+================
+templeSourceIn
+
+templeSource's row standing in the given region.
+================
+*/
+func templeSourceIn(t *testing.T, codename string, world, spawnType int, region uint16) []byte {
+	t.Helper()
 	source := struct {
 		Version int
 		Rows    []cap110Nest
-	}{cap110PopulationVersion, []cap110Nest{{Codename: codename, NestID: 31001, WorldID: world, RegionID: 21000,
+	}{cap110PopulationVersion, []cap110Nest{{Codename: codename, NestID: 31001, WorldID: world, RegionID: region,
 		X: 100, Y: 0, Z: 200, Radius: 400, GenerateRadius: 300, MaxCount: 10,
 		Respawn: true, RespawnDelayMinSec: 6, RespawnDelayMaxSec: 8, SpawnType: spawnType,
 		Controls: TacticsControls{ChangeTarget: 2, SightRange: 130}}}}
@@ -144,5 +161,29 @@ func TestTempleCarriesTheSecondSpawnKind(t *testing.T) {
 	}
 	if got.Nests[1].SpawnType != 0 {
 		t.Fatalf("spawn kind = %d, want 0", got.Nests[1].SpawnType)
+	}
+}
+
+/*
+================
+TestTempleAdmitsFlameMountainInteriorOnly
+
+The source places 552 Flame Mountain nests in the temple's one interior
+region (temple.FlameMountainRegion). They load, so a shard with
+SRO_CAP110_TEMPLE on boots; a temple row in any other dungeon region is a
+bad export and still refuses the whole population.
+================
+*/
+func TestTempleAdmitsFlameMountainInteriorOnly(t *testing.T) {
+	template := tombTemplate("MOB_GOD_SOLDIER", 70, 0)
+	got, err := appendTempleData(template, templeSourceIn(t, "MOB_GOD_SOLDIER", 70, 0, temple.FlameMountainRegion))
+	if err != nil {
+		t.Fatalf("Flame Mountain interior nest refused: %v", err)
+	}
+	if nest := got.Nests[len(got.Nests)-1]; nest.RegionID != temple.FlameMountainRegion {
+		t.Fatalf("interior nest joined region %#x", nest.RegionID)
+	}
+	if _, err := appendTempleData(template, templeSourceIn(t, "MOB_GOD_SOLDIER", 70, 0, temple.FlameMountainRegion+1)); err == nil {
+		t.Fatal("a temple nest in another dungeon region was admitted")
 	}
 }

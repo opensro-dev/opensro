@@ -225,7 +225,6 @@ test("the drawer shows one group per zone name, and a pick centres on the specie
 	const cat = catalogue();
 	try {
 		hud.activate( "map-side-tab", cat, 20 );
-		hud.activate( "map-level-filter", cat, 20 );
 		hud.activate( "map-region:50", cat, 20 );
 		const view = paint( hud );
 		const groups = view.controls.filter( row => row.id.startsWith( "map-region:" ) );
