@@ -153,6 +153,19 @@ test("both steering coordinates preserve native order and replace pending input 
 	assert.equal( displacementSegment( from, d[0], 0, 50 ).duration, 200 );
 	assert.equal( displacementSegment( from, d[1], 0, 50 ).duration, 0 );
 });
+test("a knockback or knockdown keeps the struck entity's facing; only a dash faces its travel", () => {
+	// 8D56F6 -> 8DDBD0 (stepped by 8DD550) moves a knocked-back entity
+	// without aiming it: a monster facing its attacker recoils backwards.
+	const facing = 16384,
+		from = { regionId: 0x5c87, x: 100, y: 0, z: 200, angle: facing },
+		behind = { regionId: 0x5c87, x: 100, y: 0, z: 150 };
+	const knockback = displacementSegment( from, { kind: 5, destination: behind }, 0 );
+	assert.equal( knockback.to.angle, facing );
+	assert.equal( knockback.duration, 50 / 250 * 1000 );
+	assert.equal( displacementSegment( from, { kind: 4, destination: behind }, 0 ).to.angle, facing );
+	const dash = displacementSegment( from, { kind: 8, destination: behind }, 0 );
+	assert.notEqual( dash.to.angle, facing, "a dash turns to where it travels" );
+});
 test("idle waits 15 seconds, rolls motion before delay, falls back, and resets on activity", () => {
 	const s = { remaining: 15, previous: 0, started: 0 },
 		calls = [],
