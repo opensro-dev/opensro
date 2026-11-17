@@ -356,3 +356,40 @@ func TestTextdataSkillsMatchesShippedRows(t *testing.T) {
 		t.Fatalf("shipped row 4 STR/INT = %d/%d, want 0/0 (all shipped rows carry 0)", smashB.ReqStr, smashB.ReqInt)
 	}
 }
+
+/*
+================
+TestTextdataSkillsReadsANegativeCoolTimeGroup
+
+Column 18 is a DWORD the shard writes signed: the Monster Defence Ignore
+ranks' 0xCC000000 arrives as -872415232 and must load as group 0xCC, so
+the two ranks share one cooldown (#3456).
+================
+*/
+func TestTextdataSkillsReadsANegativeCoolTimeGroup(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "skilldata.txt"), []byte("shard_a.txt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	shard := syntheticSkillRow(map[int]string{
+		1: "31149", 2: "887", 3: "SKILL_MALL_NASRUN_MOBDEFENCEIGNORE_01", 7: "1", 14: "1200000", 18: "-872415232",
+	}) + "\n" + syntheticSkillRow(map[int]string{
+		1: "31150", 2: "888", 3: "SKILL_MALL_NASRUN_MOBDEFENCEIGNORE_02", 7: "2", 14: "1200000", 18: "-872415232",
+	}) + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "shard_a.txt"), []byte(shard), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	skills := NewTextdataSkillsWithTomb(dir, false)
+	if err := skills.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, id := range []uint32{31149, 31150} {
+		row, ok := skills.SkillByID(id)
+		if !ok {
+			t.Fatalf("row %d did not load", id)
+		}
+		if row.CoolTimeGroup != 0xCC {
+			t.Fatalf("row %d cool-time group = %#x, want 0xCC (0xCC000000's high byte)", id, row.CoolTimeGroup)
+		}
+	}
+}
