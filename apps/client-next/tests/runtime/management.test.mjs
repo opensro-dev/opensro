@@ -228,6 +228,28 @@ test("guild baseline and deltas commit only after complete validated frames", ()
 	state = socialPacket( state, frame( 0x3b29, [ 3, ...u32( 1 ), 2 ] ) );
 	assert.equal( defined( state ).guild, null );
 });
+test("a guild block with an open vote raises the election guide (#2275)", () => {
+	// 75FC30: a block whose vote list is non-empty (82D030
+	// HasActiveVote) raises the Event Guide window - title
+	// UIIT_STT_EVENTGUIDE, the notice as its line - on every arrival,
+	// not once per login. The dialog shape is native-notice.ts:22's.
+	const electionGuide = {
+		key: "",
+		value: 0,
+		bannerOnly: true,
+		dialog: { title: "UIIT_STT_EVENTGUIDE", lines: [ "UIIT_CTL_MASTERRELEASE_NOTICE" ] }
+	};
+	const votedGuildBody = [ ...guildBody.slice( 0, -1 ), 1, ...u32( 77 ), 1, ...u32( 60_000 ) ];
+	const voted = socialPacket( emptySocial( "Me" ), frame( 0x32c4, votedGuildBody ) );
+	assert.deepEqual( defined( voted ).notice, electionGuide );
+	assert.equal( defined( defined( voted ).guild ).votes?.length, 1 );
+	const plain = socialPacket( emptySocial( "Me" ), frame( 0x32c4, guildBody ) );
+	assert.equal( defined( plain ).notice, undefined, "no vote, no notice" );
+	// The latch is cleared before the re-send, so this leg fails if
+	// the arm prints only once.
+	const again = socialPacket( { ...defined( voted ), notice: undefined }, frame( 0x32c4, votedGuildBody ) );
+	assert.deepEqual( defined( again ).notice, electionGuide, "a re-sent block raises the guide again" );
+});
 test("a guild update before the guild record is consumed, as native, not a disconnect", () => {
 	// A prod incident (packet_application_failed, 0x3B29 "Guild update without
 	// baseline"): a delta reached a character before its 0x32C4 record. 762040

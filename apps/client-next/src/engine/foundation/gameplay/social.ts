@@ -516,7 +516,27 @@ export function socialPacket(
 			throw Error( "Unsupported party update" );
 		}
 	} else if ( op === 0x32c4 ) {
-		next = { ...next, guild: guildBlock() };
+		const guild = guildBlock();
+		// 75FC30: a block carrying an open vote (82D030 HasActiveVote,
+		// @75FDC3) raises the Event Guide window with the election
+		// notice as its line - title UIIT_STT_EVENTGUIDE (built
+		// @75FDF1), line resolved @75FE08, window shown by 6888C0
+		// @75FE5D; no chat or banner print. Every arrival, no login
+		// latch (#2275). The dialog shape is native-notice.ts:22's.
+		next = {
+			...next,
+			guild,
+			...(guild.votes ?
+				{
+					notice: {
+						key: "",
+						value: 0,
+						bannerOnly: true,
+						dialog: { title: "UIIT_STT_EVENTGUIDE", lines: [ "UIIT_CTL_MASTERRELEASE_NOTICE" ] }
+					}
+				} :
+				{})
+		};
 	} else if ( op === 0x3a6c ) {
 		// 7603D0: 1 opens a vote, 3 closes it (1 elected, 2 broken), 4 moves
 		// a ballot, 5 restates the time; 2 is an assert in v1.150.
