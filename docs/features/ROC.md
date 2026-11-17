@@ -120,9 +120,11 @@ The server half follows the v1.188 reference server (addresses in `action/roc.go
 - **Joined to the variant:** `scripts/roc_rewards.py` keeps each group's members that the variant installs, at
   their authored weights, and writes `roc-rewards.txt`. The server joins it after the cap110 overlay
   (`loot/roc.go`).
-  - **Group 12 today:** the degree-11 pieces come from `SRO_CAP110_ITEMS`.
-  - **Not installed yet:** no variant installs the Roc sets or the scrolls, so those rules wait and the build
-    summary lists them. The rares are in no client the port reads.
+  - **The scrolls:** the four E051123 scrolls are native v1.150 items (`itemdata_5000`), so the Roc drops
+    them on every Roc build.
+  - **Group 12:** the degree-11 pieces come from `SRO_CAP110_ITEMS`.
+  - **Not installed yet:** no variant installs the Roc sets, so that rule waits and the build summary lists it.
+    The rares are in no client the port reads.
   - **Nothing installed:** no file is written, and the Roc kinds roll only the native passes.
 - **The scrolls' option bytes:** all 26 rows of the backup that carry option bytes (these four, plus the God
   pillars' teleport holes) carry the same block, and all of them drop ETC items, which have no magic options.
@@ -133,4 +135,4 @@ The server half follows the v1.188 reference server (addresses in `action/roc.go
 
 - **Content still to come**, each its own step of #3399:
   - the unique notice (step 5a);
-  - the Roc set pieces and the E051123 scrolls as items (so their rules join).
+  - the Roc set pieces as items (so their rule joins).

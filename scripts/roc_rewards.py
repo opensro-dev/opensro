@@ -18,11 +18,12 @@ in the shape of cap110-rewards.txt, which the server joins at startup
 
 A group keeps the members the variant installs, at their authored
 weights; a rule whose group keeps none, or whose fixed item the variant
-lacks, is left out and listed in the summary. Today the degree-11 pieces
-come from SRO_CAP110_ITEMS; the Roc sets, the scrolls and the rares are in
-no variant yet, so those rules wait (the rares are in no client the port
-reads). With nothing kept, no file is written and the Roc kinds drop only
-what the native passes roll.
+lacks, is left out and listed in the summary. The four scrolls are
+native v1.150 items (itemdata_5000), so their rules join on every Roc
+build; the degree-11 pieces come from SRO_CAP110_ITEMS, and the Roc sets
+wait for their import. The rares are in no client the port reads. With
+nothing kept, no file is written and the Roc kinds drop only what the
+native passes roll.
 
 ===========================================================================
 """
