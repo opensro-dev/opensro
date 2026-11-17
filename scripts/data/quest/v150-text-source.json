@@ -2574,6 +2574,257 @@
 				"SN_TALK_QNO_RM_FLYSHIP2_2_08"
 			]
 		},
+		"QNO_RM_MEETROC_1": {
+			"objectives": {
+				"SN_CON_QNO_RM_MEETROC_1_01": {
+					"count": null
+				},
+				"SN_CON_QNO_RM_MEETROC_1_02": {
+					"count": null
+				},
+				"SN_CON_QNO_RM_MEETROC_1_03": {
+					"count": null
+				}
+			},
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 0
+			},
+			"symbols": [
+				"SN_CON_QNO_RM_MEETROC_10_01",
+				"SN_CON_QNO_RM_MEETROC_11_01",
+				"SN_CON_QNO_RM_MEETROC_11_02",
+				"SN_CON_QNO_RM_MEETROC_11_03",
+				"SN_CON_QNO_RM_MEETROC_11_04",
+				"SN_CON_QNO_RM_MEETROC_11_05",
+				"SN_CON_QNO_RM_MEETROC_11_06",
+				"SN_CON_QNO_RM_MEETROC_11_07",
+				"SN_CON_QNO_RM_MEETROC_12_01",
+				"SN_CON_QNO_RM_MEETROC_12_02",
+				"SN_CON_QNO_RM_MEETROC_1_01",
+				"SN_CON_QNO_RM_MEETROC_1_02",
+				"SN_CON_QNO_RM_MEETROC_1_03",
+				"SN_NC_QNO_RM_MEETROC_1",
+				"SN_NN_QNO_RM_MEETROC_1",
+				"SN_PAYCON_QNO_RM_MEETROC_1",
+				"SN_PAYCON_QNO_RM_MEETROC_10",
+				"SN_PAYCON_QNO_RM_MEETROC_11",
+				"SN_PAYCON_QNO_RM_MEETROC_12",
+				"SN_PAY_QNO_RM_MEETROC_1",
+				"SN_PAY_QNO_RM_MEETROC_10",
+				"SN_PAY_QNO_RM_MEETROC_11",
+				"SN_PAY_QNO_RM_MEETROC_12",
+				"SN_QNO_RM_MEETROC_1",
+				"SN_QNO_RM_MEETROC_10",
+				"SN_QNO_RM_MEETROC_11",
+				"SN_QNO_RM_MEETROC_12",
+				"SN_TALK_QNO_RM_MEETROC_10_01",
+				"SN_TALK_QNO_RM_MEETROC_10_02",
+				"SN_TALK_QNO_RM_MEETROC_10_03",
+				"SN_TALK_QNO_RM_MEETROC_10_04",
+				"SN_TALK_QNO_RM_MEETROC_10_05",
+				"SN_TALK_QNO_RM_MEETROC_10_06",
+				"SN_TALK_QNO_RM_MEETROC_10_07",
+				"SN_TALK_QNO_RM_MEETROC_11_01",
+				"SN_TALK_QNO_RM_MEETROC_11_02",
+				"SN_TALK_QNO_RM_MEETROC_11_03",
+				"SN_TALK_QNO_RM_MEETROC_11_04",
+				"SN_TALK_QNO_RM_MEETROC_11_05",
+				"SN_TALK_QNO_RM_MEETROC_11_06",
+				"SN_TALK_QNO_RM_MEETROC_12_01",
+				"SN_TALK_QNO_RM_MEETROC_12_02",
+				"SN_TALK_QNO_RM_MEETROC_12_03",
+				"SN_TALK_QNO_RM_MEETROC_12_04",
+				"SN_TALK_QNO_RM_MEETROC_12_05",
+				"SN_TALK_QNO_RM_MEETROC_12_06",
+				"SN_TALK_QNO_RM_MEETROC_12_07",
+				"SN_TALK_QNO_RM_MEETROC_12_08",
+				"SN_TALK_QNO_RM_MEETROC_1_01",
+				"SN_TALK_QNO_RM_MEETROC_1_02",
+				"SN_TALK_QNO_RM_MEETROC_1_03",
+				"SN_TALK_QNO_RM_MEETROC_1_04",
+				"SN_TALK_QNO_RM_MEETROC_1_05",
+				"SN_TALK_QNO_RM_MEETROC_1_06",
+				"SN_TALK_QNO_RM_MEETROC_1_07",
+				"SN_TALK_QNO_RM_MEETROC_1_08",
+				"SN_TALK_QNO_RM_MEETROC_1_09"
+			]
+		},
+		"QNO_RM_MEETROC_2": {
+			"objectives": {
+				"SN_CON_QNO_RM_MEETROC_2_01": {
+					"count": 5
+				},
+				"SN_CON_QNO_RM_MEETROC_2_02": {
+					"count": 7
+				}
+			},
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 0
+			},
+			"symbols": [
+				"SN_CON_QNO_RM_MEETROC_2_01",
+				"SN_CON_QNO_RM_MEETROC_2_02",
+				"SN_NC_QNO_RM_MEETROC_2",
+				"SN_NN_QNO_RM_MEETROC_2",
+				"SN_PAYCON_QNO_RM_MEETROC_2",
+				"SN_PAY_QNO_RM_MEETROC_2",
+				"SN_QNO_RM_MEETROC_2",
+				"SN_TALK_QNO_RM_MEETROC_2_01",
+				"SN_TALK_QNO_RM_MEETROC_2_02",
+				"SN_TALK_QNO_RM_MEETROC_2_03",
+				"SN_TALK_QNO_RM_MEETROC_2_04",
+				"SN_TALK_QNO_RM_MEETROC_2_05",
+				"SN_TALK_QNO_RM_MEETROC_2_06"
+			]
+		},
+		"QNO_RM_MEETROC_6": {
+			"objectives": {
+				"SN_CON_QNO_RM_MEETROC_6_01": {
+					"count": null
+				},
+				"SN_CON_QNO_RM_MEETROC_6_02": {
+					"count": null
+				},
+				"SN_CON_QNO_RM_MEETROC_6_03": {
+					"count": null
+				},
+				"SN_CON_QNO_RM_MEETROC_6_04": {
+					"count": null
+				},
+				"SN_CON_QNO_RM_MEETROC_6_05": {
+					"count": null
+				},
+				"SN_CON_QNO_RM_MEETROC_6_06": {
+					"count": null
+				},
+				"SN_CON_QNO_RM_MEETROC_6_07": {
+					"count": null
+				}
+			},
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 0
+			},
+			"symbols": [
+				"SN_CON_QNO_RM_MEETROC_6_01",
+				"SN_CON_QNO_RM_MEETROC_6_02",
+				"SN_CON_QNO_RM_MEETROC_6_03",
+				"SN_CON_QNO_RM_MEETROC_6_04",
+				"SN_CON_QNO_RM_MEETROC_6_05",
+				"SN_CON_QNO_RM_MEETROC_6_06",
+				"SN_CON_QNO_RM_MEETROC_6_07",
+				"SN_NC_QNO_RM_MEETROC_6",
+				"SN_NN_QNO_RM_MEETROC_6",
+				"SN_PAYCON_QNO_RM_MEETROC_6",
+				"SN_PAY_QNO_RM_MEETROC_6",
+				"SN_QNO_RM_MEETROC_6",
+				"SN_TALK_QNO_RM_MEETROC_6_01",
+				"SN_TALK_QNO_RM_MEETROC_6_02",
+				"SN_TALK_QNO_RM_MEETROC_6_03",
+				"SN_TALK_QNO_RM_MEETROC_6_04",
+				"SN_TALK_QNO_RM_MEETROC_6_05",
+				"SN_TALK_QNO_RM_MEETROC_6_06",
+				"SN_TALK_QNO_RM_MEETROC_6_07"
+			]
+		},
+		"QNO_RM_MEETROC_ECT_1": {
+			"objectives": {
+				"SN_CON_QNO_RM_MEETROC_ECT_1": {
+					"count": 7
+				}
+			},
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 0
+			},
+			"symbols": [
+				"SN_CON_QNO_RM_MEETROC_ECT_1",
+				"SN_NC_QNO_RM_MEETROC_ECT_1",
+				"SN_NN_QNO_RM_MEETROC_ECT_1",
+				"SN_PAYCON_QNO_RM_MEETROC_ECT_1",
+				"SN_PAY_QNO_RM_MEETROC_ECT_1",
+				"SN_QNO_RM_MEETROC_ECT_1",
+				"SN_TALK_QNO_RM_MEETROC_ECT_1_01",
+				"SN_TALK_QNO_RM_MEETROC_ECT_1_02",
+				"SN_TALK_QNO_RM_MEETROC_ECT_1_03",
+				"SN_TALK_QNO_RM_MEETROC_ECT_1_04",
+				"SN_TALK_QNO_RM_MEETROC_ECT_1_05",
+				"SN_TALK_QNO_RM_MEETROC_ECT_1_06",
+				"SN_TALK_QNO_RM_MEETROC_ECT_1_07"
+			]
+		},
+		"QNO_RM_MEETROC_ECT_2": {
+			"objectives": {
+				"SN_CON_QNO_RM_MEETROC_ECT_2": {
+					"count": 10
+				}
+			},
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 0
+			},
+			"symbols": [
+				"SN_CON_QNO_RM_MEETROC_ECT_2",
+				"SN_NC_QNO_RM_MEETROC_ECT_2",
+				"SN_NN_QNO_RM_MEETROC_ECT_2",
+				"SN_PAYCON_QNO_RM_MEETROC_ECT_2",
+				"SN_PAY_QNO_RM_MEETROC_ECT_2",
+				"SN_QNO_RM_MEETROC_ECT_2",
+				"SN_TALK_QNO_RM_MEETROC_ECT_2_01",
+				"SN_TALK_QNO_RM_MEETROC_ECT_2_02",
+				"SN_TALK_QNO_RM_MEETROC_ECT_2_03",
+				"SN_TALK_QNO_RM_MEETROC_ECT_2_04",
+				"SN_TALK_QNO_RM_MEETROC_ECT_2_05",
+				"SN_TALK_QNO_RM_MEETROC_ECT_2_06",
+				"SN_TALK_QNO_RM_MEETROC_ECT_2_07"
+			]
+		},
+		"QNO_RM_MEETROC_ECT_3": {
+			"objectives": {
+				"SN_CON_QNO_RM_MEETROC_ECT_3": {
+					"count": 15
+				}
+			},
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 0
+			},
+			"symbols": [
+				"SN_CON_QNO_RM_MEETROC_ECT_3",
+				"SN_NC_QNO_RM_MEETROC_ECT_3",
+				"SN_NN_QNO_RM_MEETROC_ECT_3",
+				"SN_PAYCON_QNO_RM_MEETROC_ECT_3",
+				"SN_PAY_QNO_RM_MEETROC_ECT_3",
+				"SN_QNO_RM_MEETROC_ECT_3",
+				"SN_TALK_QNO_RM_MEETROC_ECT_3_01",
+				"SN_TALK_QNO_RM_MEETROC_ECT_3_02",
+				"SN_TALK_QNO_RM_MEETROC_ECT_3_03",
+				"SN_TALK_QNO_RM_MEETROC_ECT_3_04",
+				"SN_TALK_QNO_RM_MEETROC_ECT_3_05",
+				"SN_TALK_QNO_RM_MEETROC_ECT_3_06",
+				"SN_TALK_QNO_RM_MEETROC_ECT_3_07"
+			]
+		},
 		"QNO_RM_OLDWOMAN_2": {
 			"objectives": {
 				"SN_CON_QNO_RM_OLDWOMAN_2_01": {

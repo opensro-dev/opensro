@@ -1,6 +1,9 @@
 {
 	"format": "sro-compiled-quest-evidence-v1",
-	"dumpSHA256": "1a23832efa2cc136d9edaebcec4119a7f7427070eb777ac4e59dfe8ec85de6d6",
+	"dumpSHA256": [
+		"1a23832efa2cc136d9edaebcec4119a7f7427070eb777ac4e59dfe8ec85de6d6",
+		"8ff172d3afa1f69f72c92cd6348ad5a07a35d1d8d35afe87da1eac5768bfba9d"
+	],
 	"quests": {
 		"QNO_CA_GORIA_2": {
 			"words": {
@@ -4366,6 +4369,558 @@
 			],
 			"overrides": [
 				"0x60"
+			]
+		},
+		"QNO_RM_MEETROC_1": {
+			"words": {
+				"+0x2d": 1,
+				"0x121": 3,
+				"0x125.b": 0,
+				"0x126": "SN_NPC_RM_VILLAGECHIEF_QS",
+				"0x127": "SN_NPC_RM_SLAVE1_QS",
+				"0x130": "SN_TALK_QNO_RM_MEETROC_1_01",
+				"0x131": "SN_TALK_QNO_RM_MEETROC_1_02",
+				"0x132": "SN_TALK_QNO_RM_MEETROC_1_03",
+				"0x133": "SN_TALK_QNO_RM_MEETROC_1_04",
+				"0x134": "SN_TALK_QNO_RM_MEETROC_1_08",
+				"0x139": "SN_TALK_QNO_RM_MEETROC_1_09",
+				"vf17c": 0
+			},
+			"tables": {
+				"0xc2": {
+					"flags": 3,
+					"0x4": 80
+				},
+				"0xc4": {
+					"flags": 1,
+					"0x4": 2,
+					"0x8": "NPC_RM_VILLAGECHIEF",
+					"0xc": "NPC_RM_SLAVE1"
+				}
+			},
+			"lists": {
+				"0xf3": [
+					"NPC_RM_SLAVE1"
+				],
+				"0xf7": [
+					"NPC_RM_VILLAGECHIEF"
+				]
+			},
+			"missions": [
+				{
+					"size": 602,
+					"fields": {
+						"0x4": 0,
+						"0x8": 0,
+						"0x11": 1,
+						"0x19": 1,
+						"0x10d": 0,
+						"0x245": 1,
+						"0x249": 1,
+						"0x24d": 0,
+						"0x24e": 0,
+						"0x252": 0,
+						"0x256": 0,
+						"0x14d": 50.0,
+						"0x9": 1,
+						"0x15": "NPC_RM_VILLAGECHIEF",
+						"0xd": "SN_CON_QNO_RM_MEETROC_1_01",
+						"0x1d": "MOB_QT_RM_FEATHERMASK_01",
+						"0x23d": 1,
+						"0x241": "ITEM_QNO_RM_MEETROC_1_01"
+					}
+				},
+				{
+					"size": 602,
+					"fields": {
+						"0x4": 0,
+						"0x8": 1,
+						"0x11": 1,
+						"0x19": 1,
+						"0x10d": 0,
+						"0x245": 1,
+						"0x249": 1,
+						"0x24d": 0,
+						"0x24e": 0,
+						"0x252": 0,
+						"0x256": 0,
+						"0x14d": 100.0,
+						"0x9": 1,
+						"0x15": "NPC_RM_VILLAGECHIEF",
+						"0xd": "SN_CON_QNO_RM_MEETROC_1_02",
+						"0x1d": "MOB_QT_RM_ROCKY_CLON_01",
+						"0x23d": 1,
+						"0x241": "ITEM_QNO_RM_MEETROC_1_02"
+					}
+				},
+				{
+					"size": 289,
+					"fields": {
+						"0x8": 2,
+						"0x9": 3,
+						"0x15": "NPC_RM_SLAVE1",
+						"0xd": "SN_CON_QNO_RM_MEETROC_1_03",
+						"0x6a": 1,
+						"0x6b": 1,
+						"0x93": "ITEM_QNO_RM_MEETROC_1_03",
+						"0xc0": "SN_TALK_QNO_RM_MEETROC_1_05",
+						"0xc4": "SN_TALK_QNO_RM_MEETROC_1_06",
+						"0xc8": "SN_TALK_QNO_RM_MEETROC_1_07"
+					}
+				}
+			],
+			"overrides": []
+		},
+		"QNO_RM_MEETROC_2": {
+			"words": {
+				"+0x2d": 1,
+				"0x121": 2,
+				"0x138": "SN_NPC_RM_VILLAGECHIEF_QS",
+				"0x130": "SN_TALK_QNO_RM_MEETROC_2_01",
+				"0x131": "SN_TALK_QNO_RM_MEETROC_2_02",
+				"0x132": "SN_TALK_QNO_RM_MEETROC_2_03",
+				"0x133": "SN_TALK_QNO_RM_MEETROC_2_04",
+				"0x134": "SN_TALK_QNO_RM_MEETROC_2_05",
+				"0x139": "SN_TALK_QNO_RM_MEETROC_2_06",
+				"vf17c": 0
+			},
+			"tables": {
+				"0xc2": {
+					"flags": 3,
+					"0x23": 100,
+					"0x4": 80
+				},
+				"0xc4": {
+					"flags": 1,
+					"0x4": 1,
+					"0x8": "NPC_RM_VILLAGECHIEF"
+				}
+			},
+			"lists": {
+				"0x114": [
+					"QNO_RM_MEETROC_1"
+				],
+				"0xf7": [
+					"NPC_RM_VILLAGECHIEF"
+				]
+			},
+			"missions": [
+				{
+					"size": 602,
+					"fields": {
+						"0x4": 0,
+						"0x8": 0,
+						"0x11": 1,
+						"0x19": 2,
+						"0x10d": 0,
+						"0x245": 1,
+						"0x249": 1,
+						"0x24d": 0,
+						"0x24e": 0,
+						"0x252": 0,
+						"0x256": 0,
+						"0x14d": 20.0,
+						"0x151": 20.0,
+						"0x9": 1,
+						"0x15": "NPC_RM_VILLAGECHIEF",
+						"0xd": "SN_CON_QNO_RM_MEETROC_2_01",
+						"0x1d": "MOB_RM_WINGTRIBE_CLON",
+						"0x21": "MOB_RM_WINGTRIBE",
+						"0x23d": 5,
+						"0x241": "ITEM_QNO_RM_MEETROC_2_01"
+					}
+				},
+				{
+					"size": 602,
+					"fields": {
+						"0x4": 0,
+						"0x8": 1,
+						"0x11": 1,
+						"0x19": 2,
+						"0x10d": 0,
+						"0x245": 1,
+						"0x249": 1,
+						"0x24d": 0,
+						"0x24e": 0,
+						"0x252": 0,
+						"0x256": 0,
+						"0x14d": 15.0,
+						"0x151": 15.0,
+						"0x9": 1,
+						"0x15": "NPC_RM_VILLAGECHIEF",
+						"0xd": "SN_CON_QNO_RM_MEETROC_2_02",
+						"0x1d": "MOB_RM_WINGTRIBESPEAR_CLON",
+						"0x21": "MOB_RM_WINGTRIBESPEAR",
+						"0x23d": 7,
+						"0x241": "ITEM_QNO_RM_MEETROC_2_02"
+					}
+				}
+			],
+			"overrides": [
+				"0x74"
+			]
+		},
+		"QNO_RM_MEETROC_6": {
+			"words": {
+				"+0x2d": 1,
+				"+0x2e": 4,
+				"0x121": 8,
+				"0x138": "SN_NPC_RM_VILLAGECHIEF_QS",
+				"0x130": "SN_TALK_QNO_RM_MEETROC_6_01",
+				"0x131": "SN_TALK_QNO_RM_MEETROC_6_02",
+				"0x132": "SN_TALK_QNO_RM_MEETROC_6_03",
+				"0x133": "SN_TALK_QNO_RM_MEETROC_6_04",
+				"0x134": "SN_TALK_QNO_RM_MEETROC_6_05",
+				"0x136": "SN_TALK_QNO_RM_MEETROC_6_07",
+				"0x139": "SN_TALK_QNO_RM_MEETROC_6_06",
+				"vf17c": 7
+			},
+			"tables": {
+				"0xc2": {
+					"flags": 65539,
+					"0x4": 80
+				},
+				"0xc4": {
+					"flags": 1,
+					"0x4": 1,
+					"0x8": "NPC_RM_VILLAGECHIEF"
+				}
+			},
+			"lists": {
+				"0x114": [
+					"QNO_RM_MEETROC_2"
+				],
+				"0xf7": [
+					"NPC_RM_VILLAGECHIEF"
+				]
+			},
+			"missions": [
+				{
+					"size": 338,
+					"fields": {
+						"0x4": 0,
+						"0x8": 0,
+						"0x11": 1,
+						"0x15": 1,
+						"0x109": 0,
+						"0x14d": 0,
+						"0x14e": 1,
+						"0x9": 2,
+						"0xd": "SN_CON_QNO_RM_MEETROC_6_01",
+						"0x19": "MOB_QT_01_ROCKY_CLON2",
+						"0x149": 1
+					}
+				},
+				{
+					"size": 338,
+					"fields": {
+						"0x4": 0,
+						"0x8": 1,
+						"0x11": 1,
+						"0x15": 1,
+						"0x109": 0,
+						"0x14d": 0,
+						"0x14e": 1,
+						"0x9": 2,
+						"0xd": "SN_CON_QNO_RM_MEETROC_6_02",
+						"0x19": "MOB_QT_02_ROCKY_CLON2",
+						"0x149": 1
+					}
+				},
+				{
+					"size": 338,
+					"fields": {
+						"0x4": 0,
+						"0x8": 2,
+						"0x11": 1,
+						"0x15": 1,
+						"0x109": 0,
+						"0x14d": 0,
+						"0x14e": 1,
+						"0x9": 2,
+						"0xd": "SN_CON_QNO_RM_MEETROC_6_03",
+						"0x19": "MOB_QT_03_ROCKY_CLON2",
+						"0x149": 1
+					}
+				},
+				{
+					"size": 338,
+					"fields": {
+						"0x4": 0,
+						"0x8": 3,
+						"0x11": 1,
+						"0x15": 1,
+						"0x109": 0,
+						"0x14d": 0,
+						"0x14e": 1,
+						"0x9": 2,
+						"0xd": "SN_CON_QNO_RM_MEETROC_6_04",
+						"0x19": "MOB_QT_04_ROCKY_CLON2",
+						"0x149": 1
+					}
+				},
+				{
+					"size": 338,
+					"fields": {
+						"0x4": 0,
+						"0x8": 4,
+						"0x11": 1,
+						"0x15": 1,
+						"0x109": 0,
+						"0x14d": 0,
+						"0x14e": 1,
+						"0x9": 2,
+						"0xd": "SN_CON_QNO_RM_MEETROC_6_05",
+						"0x19": "MOB_QT_05_ROCKY_CLON2",
+						"0x149": 1
+					}
+				},
+				{
+					"size": 338,
+					"fields": {
+						"0x4": 0,
+						"0x8": 5,
+						"0x11": 1,
+						"0x15": 1,
+						"0x109": 0,
+						"0x14d": 0,
+						"0x14e": 1,
+						"0x9": 2,
+						"0xd": "SN_CON_QNO_RM_MEETROC_6_06",
+						"0x19": "MOB_QT_06_ROCKY_CLON2",
+						"0x149": 1
+					}
+				},
+				{
+					"size": 338,
+					"fields": {
+						"0x4": 0,
+						"0x8": 6,
+						"0x11": 1,
+						"0x15": 1,
+						"0x109": 0,
+						"0x14d": 0,
+						"0x14e": 1,
+						"0x9": 2,
+						"0xd": "SN_CON_QNO_RM_MEETROC_6_07",
+						"0x19": "MOB_QT_07_ROCKY_CLON2",
+						"0x149": 1
+					}
+				},
+				{
+					"size": 113,
+					"fields": {
+						"0x4": 0,
+						"0x8": 7,
+						"0x11": 1,
+						"0x6d": 0,
+						"0x9": 4,
+						"0xd": "SN_CON_QNO_RM_MEETROC_6_07",
+						"0x19": 1,
+						"0x15": "NPC_RM_VILLAGECHIEF",
+						"0x45": "ITEM_QNO_RM_MEETROC_6_03",
+						"0x1d": 1
+					}
+				}
+			],
+			"overrides": [
+				"0x60",
+				"0x74",
+				"0xa8",
+				"0xe8",
+				"0xf4",
+				"0x10c",
+				"0x114"
+			]
+		},
+		"QNO_RM_MEETROC_ECT_1": {
+			"words": {
+				"0x121": 1,
+				"0x138": "SN_NPC_RM_YOUNGWOMAN1_QS",
+				"0x130": "SN_TALK_QNO_RM_MEETROC_ECT_1_01",
+				"0x131": "SN_TALK_QNO_RM_MEETROC_ECT_1_02",
+				"0x132": "SN_TALK_QNO_RM_MEETROC_ECT_1_03",
+				"0x136": "SN_TALK_QNO_RM_MEETROC_ECT_1_05",
+				"0x134": "SN_TALK_QNO_RM_MEETROC_ECT_1_06",
+				"0x133": "SN_TALK_QNO_RM_MEETROC_ECT_1_04",
+				"0x139": "SN_TALK_QNO_RM_MEETROC_ECT_1_07",
+				"vf17c": 0
+			},
+			"tables": {
+				"0xc2": {
+					"flags": 7,
+					"0x23": 100,
+					"0x4": 80,
+					"0x38": [
+						"ITEM_QNO_RM_MEETROC_ECT_01"
+					]
+				},
+				"0xc4": {
+					"flags": 1,
+					"0x4": 1,
+					"0x8": "NPC_RM_YOUNGWOMAN1"
+				}
+			},
+			"lists": {
+				"0xf7": [
+					"NPC_RM_YOUNGWOMAN1"
+				]
+			},
+			"missions": [
+				{
+					"size": 602,
+					"fields": {
+						"0x4": 0,
+						"0x8": 0,
+						"0x11": 1,
+						"0x19": 1,
+						"0x10d": 0,
+						"0x245": 1,
+						"0x249": 1,
+						"0x24d": 1,
+						"0x24e": 0,
+						"0x252": 0,
+						"0x256": 0,
+						"0x14d": 0.0,
+						"0x9": 1,
+						"0x15": "NPC_RM_YOUNGWOMAN1",
+						"0xd": "SN_CON_QNO_RM_MEETROC_ECT_1",
+						"0x1d": "MOB_RM_ROC",
+						"0x23d": 7,
+						"0x241": "ITEM_QNO_RM_MEETROC_ECT_01"
+					}
+				}
+			],
+			"overrides": [
+				"0x58",
+				"0xfc"
+			]
+		},
+		"QNO_RM_MEETROC_ECT_2": {
+			"words": {
+				"0x121": 1,
+				"0x138": "SN_NPC_RM_YOUNGWOMAN2_QS",
+				"0x130": "SN_TALK_QNO_RM_MEETROC_ECT_2_01",
+				"0x131": "SN_TALK_QNO_RM_MEETROC_ECT_2_02",
+				"0x132": "SN_TALK_QNO_RM_MEETROC_ECT_2_03",
+				"0x136": "SN_TALK_QNO_RM_MEETROC_ECT_2_05",
+				"0x134": "SN_TALK_QNO_RM_MEETROC_ECT_2_06",
+				"0x133": "SN_TALK_QNO_RM_MEETROC_ECT_2_04",
+				"0x139": "SN_TALK_QNO_RM_MEETROC_ECT_2_07",
+				"vf17c": 0
+			},
+			"tables": {
+				"0xc2": {
+					"flags": 7,
+					"0x23": 100,
+					"0x4": 80,
+					"0x38": [
+						"ITEM_QNO_RM_MEETROC_ECT_02"
+					]
+				},
+				"0xc4": {
+					"flags": 1,
+					"0x4": 1,
+					"0x8": "NPC_RM_YOUNGWOMAN2"
+				}
+			},
+			"lists": {
+				"0xf7": [
+					"NPC_RM_YOUNGWOMAN2"
+				]
+			},
+			"missions": [
+				{
+					"size": 602,
+					"fields": {
+						"0x4": 0,
+						"0x8": 0,
+						"0x11": 1,
+						"0x19": 1,
+						"0x10d": 0,
+						"0x245": 1,
+						"0x249": 1,
+						"0x24d": 1,
+						"0x24e": 0,
+						"0x252": 0,
+						"0x256": 0,
+						"0x14d": 0.0,
+						"0x9": 1,
+						"0x15": "NPC_RM_YOUNGWOMAN2",
+						"0xd": "SN_CON_QNO_RM_MEETROC_ECT_2",
+						"0x1d": "MOB_RM_ROC",
+						"0x23d": 10,
+						"0x241": "ITEM_QNO_RM_MEETROC_ECT_02"
+					}
+				}
+			],
+			"overrides": [
+				"0x58",
+				"0xfc"
+			]
+		},
+		"QNO_RM_MEETROC_ECT_3": {
+			"words": {
+				"0x121": 1,
+				"0x138": "SN_NPC_RM_VILLAGECHIEF_QS",
+				"0x130": "SN_TALK_QNO_RM_MEETROC_ECT_3_01",
+				"0x131": "SN_TALK_QNO_RM_MEETROC_ECT_3_02",
+				"0x132": "SN_TALK_QNO_RM_MEETROC_ECT_3_03",
+				"0x136": "SN_TALK_QNO_RM_MEETROC_ECT_3_05",
+				"0x134": "SN_TALK_QNO_RM_MEETROC_ECT_3_06",
+				"0x133": "SN_TALK_QNO_RM_MEETROC_ECT_3_04",
+				"0x139": "SN_TALK_QNO_RM_MEETROC_ECT_3_07",
+				"vf17c": 0
+			},
+			"tables": {
+				"0xc2": {
+					"flags": 7,
+					"0x23": 100,
+					"0x4": 80,
+					"0x38": [
+						"ITEM_QNO_RM_MEETROC_ECT_03"
+					]
+				},
+				"0xc4": {
+					"flags": 1,
+					"0x4": 1,
+					"0x8": "NPC_RM_VILLAGECHIEF"
+				}
+			},
+			"lists": {
+				"0xf7": [
+					"NPC_RM_VILLAGECHIEF"
+				]
+			},
+			"missions": [
+				{
+					"size": 602,
+					"fields": {
+						"0x4": 0,
+						"0x8": 0,
+						"0x11": 1,
+						"0x19": 1,
+						"0x10d": 0,
+						"0x245": 1,
+						"0x249": 1,
+						"0x24d": 1,
+						"0x24e": 0,
+						"0x252": 0,
+						"0x256": 0,
+						"0x14d": 0.0,
+						"0x9": 1,
+						"0x15": "NPC_RM_VILLAGECHIEF",
+						"0xd": "SN_CON_QNO_RM_MEETROC_ECT_3",
+						"0x1d": "MOB_RM_ROC",
+						"0x23d": 15,
+						"0x241": "ITEM_QNO_RM_MEETROC_ECT_03"
+					}
+				}
+			],
+			"overrides": [
+				"0x58",
+				"0x70",
+				"0xfc"
 			]
 		},
 		"QNO_RM_OLDWOMAN_2": {

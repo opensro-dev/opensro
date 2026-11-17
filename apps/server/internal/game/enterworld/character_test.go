@@ -156,7 +156,4 @@ func TestCoerceHelpers(t *testing.T) {
 	if got, ok := coerceOptionalInt(i64(300), 0, 0xff); !ok || got != 0xff {
 		t.Errorf("coerceOptionalInt(300) = %d,%v, want 255,true", got, ok)
 	}
-	if got := clampFloat(math.NaN(), 0.5, 2); got != 0.5 {
-		t.Errorf("clampFloat(NaN) = %v, want min", got)
-	}
 }

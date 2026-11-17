@@ -442,6 +442,63 @@
 				}
 			]
 		},
+		"QNO_RM_MEETROC_1": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
+			"items": []
+		},
+		"QNO_RM_MEETROC_2": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
+			"items": []
+		},
+		"QNO_RM_MEETROC_6": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_RM_MEETROC_6_01",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_RM_MEETROC_ECT_01",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_RM_MEETROC_ECT_02",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_RM_MEETROC_ECT_03",
+					"count": 1
+				}
+			]
+		},
 		"QNO_WC_WAREHOUSE_W_3": {
 			"gold": 0,
 			"exp": 813400,
@@ -1536,6 +1593,60 @@
 			"selectionCount": 0,
 			"checkCountry": false,
 			"items": []
+		},
+		"QNO_RM_MEETROC_ECT_1": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_RM_MEETROC_ECT_1_01",
+					"count": 5
+				}
+			]
+		},
+		"QNO_RM_MEETROC_ECT_2": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_RM_MEETROC_ECT_2_01",
+					"count": 3
+				}
+			]
+		},
+		"QNO_RM_MEETROC_ECT_3": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_RM_MEETROC_ECT_3_01",
+					"count": 1
+				}
+			]
 		}
 	}
 }

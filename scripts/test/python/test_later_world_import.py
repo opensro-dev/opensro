@@ -266,6 +266,103 @@ class LaterWorldReapTest(unittest.TestCase):
 
 
 # ================
+# pk2
+#
+# A test archive holding files at nested paths ({"a/b.txt": bytes}).
+# ================
+def pk2(files):
+	from test_client_preparation import ArchiveBuilder
+	builder = ArchiveBuilder()
+	tree = {}
+	for path, raw in files.items():
+		node = tree
+		*folders, name = path.split("/")
+		for folder in folders:
+			node = node.setdefault(folder, {})
+		node[name] = raw
+
+	def emit(node):
+		offset = builder.folder([])
+		entries = []
+		for name, child in node.items():
+			if isinstance(child, dict):
+				entries.append((1, name.encode("ascii"), emit(child), 0))
+			else:
+				entries.append((2, name.encode("ascii"), *builder.add_payload(child)))
+		builder.blocks[offset] = entries
+		return offset
+
+	emit(tree)
+	return builder.build()
+
+
+# ================
+# MergeWorldParticleTest
+#
+# merge_world itself runs the particle walk: a model its Data pass
+# copies seeds the walk, the walk's file lands in the overlay, and the
+# region record enrols it beside the model. Only the resource walk is
+# stood in for; the archives, the seeds and the enrolment are real.
+# ================
+class MergeWorldParticleTest(unittest.TestCase):
+	MODEL = "res/mob/jupiter/babilion.bsr"
+	EFFECT = "monster/jupiter/skill_jupiter_babilion_at11_body.efp"
+
+	def test_a_merged_model_carries_its_effect_program_into_the_record(self):
+		import skytemple_import
+		textdata = "server_dep/silkroad/textdata/"
+		# One native row each: the merges number new rows past the highest.
+		catalog = b'JMXV2DTI1001\r\n1\r\n00000 0x00000000 "ok" "native.ddj"\r\n'
+		with tempfile.TemporaryDirectory() as temp:
+			base = Path(temp)
+			v1696, native, out = base / "v1696", base / "native", (base / "out").resolve()
+			v1696.mkdir()
+			(v1696 / "Map.pk2").write_bytes(pk2({"tile2d.ifo": catalog, "object.ifo": catalog}))
+			(v1696 / "Data.pk2").write_bytes(pk2({self.MODEL: b"JMXVBSR 0109"}))
+			(v1696 / "Media.pk2").write_bytes(pk2({textdata + "regioncode.txt": utf16([]),
+				textdata + "textzonename.txt": utf16([])}))
+			(v1696 / "Particles.pk2").write_bytes(pk2({self.EFFECT: b"JMXVEFF"}))
+			for folder in ("Data_extracted", "Media_extracted", "Particles_extracted"):
+				(native / folder).mkdir(parents=True)
+			for name in ("tile2d.ifo", "object.ifo"):
+				target = out / "Map_extracted" / name
+				target.parent.mkdir(parents=True, exist_ok=True)
+				target.write_bytes(catalog)
+			mapinfo = out / "Data_extracted" / "navmesh" / "mapinfo.mfo"
+			mapinfo.parent.mkdir(parents=True)
+			mapinfo.write_bytes(b"JMXVMFO 1000" + bytes(12) + bytes(8192))
+			text_root = out / jupiter.TEXT_ROOT
+			text_root.mkdir(parents=True)
+			for name in ("regioncode.txt", "textzonename.txt"):
+				(text_root / name).write_bytes(utf16([]))
+			walks = []
+
+			def walk(seeds, archives, walk_native, output, tolerate_gaps=False):
+				# The real walk parses the model and finds this program in
+				# the Particles archive; the archive read stays real.
+				data, index = archives["Particles"]
+				walks.append((seeds, sorted(archives), tolerate_gaps))
+				target = Path(output) / "Particles_extracted" / self.EFFECT
+				target.parent.mkdir(parents=True, exist_ok=True)
+				target.write_bytes(later.sro_pk2.payload(data, index[self.EFFECT]))
+				return {"files": ["Particles_extracted/" + self.EFFECT], "missingEffects": [],
+					"missingFiles": [], "unparsedFiles": []}
+
+			def monsters():
+				(out / jupiter.MARKER).write_text("{}", encoding="utf-8")
+				return {"enabled": True}
+
+			with mock.patch.object(skytemple_import, "copy_resource_closure", walk):
+				result = later.merge_world(jupiter.SPEC, native, out, v1696, [], monsters)
+			self.assertEqual(walks, [([self.MODEL], ["Data", "Particles"], True)])
+			self.assertEqual((out / "Particles_extracted" / self.EFFECT).read_bytes(), b"JMXVEFF")
+			self.assertEqual(result["particleFilesAdded"], 1)
+			record = json.loads((out / jupiter.MARKER).read_text(encoding="utf-8"))["regionMerge"]
+			self.assertIn("data_extracted/" + self.MODEL, record["files"])
+			self.assertIn("particles_extracted/" + self.EFFECT, record["files"])
+
+
+# ================
 # ParticleClosureTest
 #
 # The region merge copies the v1.696 models the native tree lacks; their
