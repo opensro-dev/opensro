@@ -9,13 +9,9 @@ loginstats.go - the login stat block
 package enterworld
 
 import (
+	"opensro.online/server/internal/domain/charactervitals"
 	"opensro.online/server/internal/game/item/wire"
 )
-
-// StatWordMax is the display/storage ceiling of the native STR/INT words:
-// the client holds them as u16 at CICPlayer+0x834/+0x836, so the server
-// clamps on the way out rather than truncating silently.
-const StatWordMax int64 = 0xffff
 
 /*
 ==================
@@ -78,19 +74,8 @@ func BuildLoginStatBlock(c *Character, stats wire.BaseStats) []byte {
 	// buff's STR/INT from every level-up, equip or recall refresh. Only a
 	// caller without a keeper gets the stored attributes.
 	if stats.StrWord == 0 && stats.IntWord == 0 {
-		stats.StrWord = uint16(clampStatWord(CharacterStrength(c)))
-		stats.IntWord = uint16(clampStatWord(CharacterIntellect(c)))
+		stats.StrWord = uint16(charactervitals.ClampStatWord(CharacterStrength(c)))
+		stats.IntWord = uint16(charactervitals.ClampStatWord(CharacterIntellect(c)))
 	}
 	return stats.Encode()
-}
-
-// clampStatWord holds a stat inside the native u16 word.
-func clampStatWord(value int64) int64 {
-	if value < 0 {
-		return 0
-	}
-	if value > StatWordMax {
-		return StatWordMax
-	}
-	return value
 }
