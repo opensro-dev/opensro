@@ -20,13 +20,16 @@ que o deploy usa, ele para na sua máquina e não no servidor.
 | `agent` | Login, contas e leases dos shards. Roda na rede do `identity` e aparece como `agent:8787`. |
 | `gameworld-global-official` | O shard. WebSocket em `:8788`; o WebTransport fica desligado. |
 | `web` | nginx com o cliente: `/api/` vai para o Agent, `/shards/global-official/transport/` vai para o GameWorld. É o único container na rede `traefik`. |
+| `admin` | O painel de administração (`deploy/admin`). Roda na rede do GameWorld e escuta só no loopback do host (`127.0.0.1:9090`). |
+| `admin-relay` | Repassa ao Agent só as rotas de conta que o painel usa. Roda na rede do `identity`. |
 
-Jobs de uma vez, que o `rollout.sh` roda: `provision` (cria chaves, tokens e o authority do shard que faltarem,
-sem nunca trocar nada que já existe), `derive-public` (as chaves públicas de sessão que o GameWorld lê) e
+Jobs de uma vez, que o `rollout.sh` roda: `provision` (cria chaves, tokens, o authority do shard e o token de
+operador que faltarem, sem nunca trocar nada que já existe, e copia os dois tokens do painel para `admin-secrets`), `derive-public` (as chaves públicas de sessão que o GameWorld lê) e
 `upgrade` (atualiza o schema do authority quando ele é antigo).
 
 Volumes: `cluster` (chaves e tokens do Agent, `accounts.json`), `agent` (`accounts.db`), `identity` (a chave do
-token), `shard-global-official` (o SQLite do shard), `identity-out` e `gamedata-cache` (descartáveis).
+token), `shard-global-official` (o SQLite do shard e o `operator-token`), `admin-secrets` (as cópias dos tokens que
+o painel lê, refeitas a cada `provision`), `identity-out` e `gamedata-cache` (descartáveis).
 
 ## Pré-requisitos
 
@@ -62,12 +65,25 @@ token), `shard-global-official` (o SQLite do shard), `identity-out` e `gamedata-
 | Subir uma tag já publicada | `IMAGE_TAG=<tag> SKIP_PUBLISH=1 deploy/deploy.sh` |
 | Só rodar o rollout no servidor | `cd ~/silkroad && ./rollout.sh` (repete o que está em `release.env`) |
 | Voltar para a versão anterior | no servidor: `cd ~/silkroad && ./rollout.sh --rollback` (imagem e assets juntos). Ele recusa quando a versão no ar atualizou o schema do shard: aí é restaurar o backup que ele indica e depois subir a versão anterior |
-| Criar uma conta | `deploy/accounts.sh <id>` |
+| Criar uma conta | `deploy/accounts.sh <id>` ou pelo painel |
+| Abrir o painel admin | `ssh -N -L 9090:127.0.0.1:9090 <DEPLOY_HOST>` e depois `http://localhost:9090` |
 | Ver os logs | no servidor: `cd ~/silkroad && docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f gameworld-global-official` |
 
 Os assets vão por rsync para `~/silkroad/assets/releases/<id>`, onde `<id>` vem do hash do manifesto dos packs.
 Só o que mudou atravessa a rede, e uma release que já está no servidor não é reenviada. Ficam as duas mais
 recentes.
+
+## Painel admin
+
+O painel não fica na internet e não tem login próprio: quem tem SSH no servidor abre o túnel acima e usa. Na
+página de personagens dá para buscar pelo nome exato e definir level e SP, dar silk, gold e itens, resetar
+STR/INT, limpar PK, mutar, kickar, resgatar para uma cidade e remover emblema. Na de contas dá para criar conta,
+trocar senha, desativar e consultar.
+
+Toda alteração de personagem desconecta o jogador antes de gravar, e ele volta com o valor novo. Cada uma vai
+para `operator-audit.jsonl` no volume do shard, com o operador (`ADMIN_OPERATOR_NAME` no `.env.prod`, padrão
+`admin`) e o motivo digitado. Para usar outra porta no host, ponha `ADMIN_PORT` no `.env.prod`. O desenho está em
+[`docs/2026-11-17-admin-panel-design.md`](docs/2026-11-17-admin-panel-design.md).
 
 ## Backups
 
@@ -96,7 +112,8 @@ Rodam na sua máquina, com as imagens locais (`deploy/build-images.sh`):
 | Teste | O que prova |
 |---|---|
 | `cd deploy/identity && go test ./...` | o token passa no verificador real do Agent do upstream |
-| `deploy/test/smoke.sh` | a stack sobe, `/api` e `/shards` respondem, o login funciona, `accounts.sh` cria conta, `provision` não troca chaves |
+| `cd deploy/admin && go test ./...` | o relay só repassa as rotas de conta do painel, o painel recusa Host estranho e POST de outro site, e cada formulário vira a chamada certa |
+| `deploy/test/smoke.sh` | a stack sobe, `/api` e `/shards` respondem, o login funciona, `accounts.sh` e o painel criam conta, o painel alcança a API de operador, `provision` não troca chaves |
 | `deploy/test/rollout_test.sh` | primeira subida sem conta, rollout, troca de assets, backup só do dono, `--rollback`, release ausente, Agent ou `identity` reiniciados sozinhos, falha no backup com volta automática, rollback recusado depois de upgrade de schema |
 | `deploy/test/publish_test.sh` | tag e recusa sem `IMAGE_REPO` |
 | `deploy/test/deploy_test.sh` | proteção do `DEPLOY_PATH`, release de assets completa, smoke servindo dela |

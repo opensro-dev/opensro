@@ -78,7 +78,8 @@ func (rt *Runtime) OperatorCharacter(division, name string) (map[string]any, err
 		"movementSpeeds": OperatorSpeeds{Walk: walk, Run: run}, "effects": rt.operatorEffects(division, c.Name),
 		"bodyStatus": c.NativeBodyStatus, "companions": c.Companions(), "inventory": c.MissionInventory,
 		"pk": c.PK, "pvpState": c.PVPState(), "aggressions": c.Aggressions,
-		"strength": domain.CharacterStrength(c), "intellect": domain.CharacterIntellect(c), "statPoints": c.StatPoints}, nil
+		"strength": domain.CharacterStrength(c), "intellect": domain.CharacterIntellect(c), "statPoints": c.StatPoints,
+		"skillPoints": c.SkillPoints, "experience": c.Experience, "maxLevel": c.MaxLevel}, nil
 }
 
 /*
