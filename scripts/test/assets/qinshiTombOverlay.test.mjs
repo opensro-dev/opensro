@@ -20,7 +20,12 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { loadCharacterDataRows } from "../../build/char/resolveCharRoster.mjs";
-import { buildKnobLines, computeResourceBuildFingerprint } from "../../build/shared/resourceBuildFingerprint.mjs";
+import {
+	BAKE_SWITCH_POSTURES,
+	buildKnobLines,
+	computeResourceBuildFingerprint
+} from "../../build/shared/resourceBuildFingerprint.mjs";
+import { shardSwitchEnabled } from "../../build/shared/shardSwitch.mjs";
 import {
 	loadQinShiTombCharacterRows,
 	loadQinShiTombSkillRows,
@@ -102,11 +107,21 @@ function fixtureServerRoot( t, profileValue, registryDefault ) {
 	const profile = profileValue === undefined ? {} : { SRO_QINSHI_TOMB: profileValue };
 	fs.writeFileSync( path.join( root, "config", "shard-settings.json" ), JSON.stringify( profile ) );
 	// The fingerprint reads every bake switch's posture (buildKnobLines),
-	// so the registry carries SRO_MUHAN too, at its native "off".
+	// so the registry carries a row for each switch in
+	// BAKE_SWITCH_POSTURES, the same list the fingerprint reads: the
+	// tomb's row takes the default under test, every other switch its
+	// real default. A new bake switch joins the list and the rows follow,
+	// so it cannot break this fixture again (#3779). The NomadVar follows
+	// the registry's naming (the env without its SRO_ prefix, lowercased);
+	// the bake reads only Env and Default from a row.
+	const registryRows = BAKE_SWITCH_POSTURES.map( ( { env, default: realDefault } ) => {
+		const value = env === "SRO_QINSHI_TOMB" ? registryDefault : realDefault;
+		const nomadVar = env.toLowerCase().replace( /^sro_/, "" );
+		return `\t{Env: "${env}", NomadVar: "${nomadVar}", Default: "${value}"},\n`;
+	} ).join( "" );
 	fs.writeFileSync(
 		path.join( root, "internal", "config", "shardsettings", "shardsettings.go" ),
-		`var Settings = []Setting{\n\t{Env: "SRO_QINSHI_TOMB", NomadVar: "qinshi_tomb", Default: "${registryDefault}", Catalogue: true},\n` +
-			`\t{Env: "SRO_MUHAN", NomadVar: "muhan", Default: "off"},\n}\n`
+		`var Settings = []Setting{\n${registryRows}}\n`
 	);
 	process.env.SRO_SERVER_SOURCE_ROOT = root;
 }
@@ -210,6 +225,71 @@ test("a profile or registry flip with the env unset changes the fingerprint and 
 	const registryOff = await read();
 	assert.notEqual( registryOff.fingerprint, registryOn.fingerprint, "a registry flip kept the fingerprint" );
 	assert.notEqual( registryOff.knobs, registryOn.knobs, "a registry flip kept the lane knobs" );
+});
+
+test("a bake switch added to the knob list needs no fixture change (#3779)", async ( t ) => {
+	// The fixture builds its registry rows from BAKE_SWITCH_POSTURES, the
+	// same list buildKnobLines reads: a switch added there must keep this
+	// test passing with the fixture untouched. Prove it with a stand-in
+	// switch that reads its posture from the fixture registry like the
+	// real ones do, then take it back out so no other test sees it.
+	withTombFlag( t, undefined );
+	const standIn = {
+		env: "SRO_STAND_IN_SWITCH",
+		enabled: () => shardSwitchEnabled( "SRO_STAND_IN_SWITCH", [ "1", "on", "true", "yes" ] ),
+		default: "off"
+	};
+	BAKE_SWITCH_POSTURES.push( standIn );
+	t.after( () => {
+		const index = BAKE_SWITCH_POSTURES.indexOf( standIn );
+		if ( index !== -1 ) BAKE_SWITCH_POSTURES.splice( index, 1 );
+	} );
+	fixtureServerRoot( t, "off", "on" );
+	// This is the call #3779 failed in: the fingerprint reads every
+	// listed posture from the fixture registry, and the stand-in's row
+	// is there because the fixture derived it from the list.
+	const fingerprint = await computeResourceBuildFingerprint();
+	assert.equal( typeof fingerprint.hash, "string" );
+	const knobs = buildKnobLines();
+	assert.ok( knobs.includes( "posture SRO_STAND_IN_SWITCH=false" ), "the stand-in switch joined the lane knobs" );
+	// buildKnobLines reads its postures only from the list: every
+	// posture line names a listed switch, so a switch added to the list
+	// is the only way a new posture line appears.
+	const listed = new Set( BAKE_SWITCH_POSTURES.map( ( { env } ) => env ) );
+	for ( const line of knobs ) {
+		const match = /^posture (\S+)=/.exec( line );
+		if ( match ) {
+			assert.ok(
+				listed.has( match[1] ),
+				`${match[1]} is a posture buildKnobLines reads outside BAKE_SWITCH_POSTURES`
+			);
+		}
+	}
+});
+
+test("the fixture gives every other switch its real registry default (#3779)", ( t ) => {
+	// The defaults in BAKE_SWITCH_POSTURES are data the fix relies on,
+	// so measure them through the real code path instead of trusting the
+	// list: with the profile silent and every switch env unset, each
+	// posture must read its registry row. A registry default that moves
+	// must move the list too, or this test fails on the stale entry.
+	withTombFlag( t, undefined );
+	for ( const name of [ "SRO_MUHAN", "SRO_JANGAN_TOMB_TELEPORT" ] ) {
+		const saved = process.env[name];
+		t.after( () => {
+			if ( saved === undefined ) delete process.env[name];
+			else process.env[name] = saved;
+		} );
+		delete process.env[name];
+	}
+	fixtureServerRoot( t, undefined, "on" );
+	const knobs = buildKnobLines();
+	assert.ok( knobs.includes( "posture SRO_QINSHI_TOMB=true" ), "the tomb registry default is on" );
+	assert.ok( knobs.includes( "posture SRO_MUHAN=false" ), "the muhan registry default is off" );
+	assert.ok(
+		knobs.includes( "posture SRO_JANGAN_TOMB_TELEPORT=false" ),
+		"the jangan tomb teleport registry default is off"
+	);
 });
 
 test("tomb overlay rows are collision-free", () => {
