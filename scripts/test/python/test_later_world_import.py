@@ -537,5 +537,42 @@ class ClientRootTest(unittest.TestCase):
 		self.assertEqual(later.client_root(None, "SRO_V1696_ROOT", env), Path("from-env"))
 
 
+# ================
+# MissingExportTest
+#
+# A later world switched on without its population export refuses by
+# the switch and the variable, before any archive or pin is read, and
+# says how to build without it: a contributor's clone has no export.
+# ================
+class MissingExportTest(unittest.TestCase):
+	def assert_names_the_way_out(self, refusal, flag, env):
+		message = str(refusal.exception)
+		self.assertIn(f"{flag} is on, but {env} is not set", message)
+		self.assertIn("not in the repository or a public clone", message)
+		self.assertIn(f"turn {flag} off in apps/server/config/shard-settings.json", message)
+
+	def test_a_nest_driven_world_refuses_before_its_pins(self):
+		spec = jupiter.SPEC
+		env = {key: value for key, value in os.environ.items() if key != spec.source_env}
+		env[spec.flag] = "1"
+		if spec.requires:
+			env[spec.requires] = "1"
+		pins = mock.Mock()
+		with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, env, clear=True):
+			with self.assertRaises(SystemExit) as refusal:
+				later.add_world(spec, Path(tmp) / "native", Path(tmp) / "out", "v1696", None, False, pins)
+		self.assert_names_the_way_out(refusal, spec.flag, spec.source_env)
+		pins.assert_not_called()
+
+	def test_muhan_refuses_before_its_pins(self):
+		env = {key: value for key, value in os.environ.items() if key != muhan.SOURCE_ENV}
+		env[muhan.FLAG] = "1"
+		with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, env, clear=True), 				mock.patch.object(muhan, "require_v1696_pin") as pin:
+			with self.assertRaises(SystemExit) as refusal:
+				muhan.add_muhan(Path(tmp) / "native", Path(tmp) / "out", "v1696")
+		self.assert_names_the_way_out(refusal, muhan.FLAG, muhan.SOURCE_ENV)
+		pin.assert_not_called()
+
+
 if __name__ == "__main__":
 	unittest.main()

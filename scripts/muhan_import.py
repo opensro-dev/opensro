@@ -477,7 +477,7 @@ def add_muhan(native, out, v1696_root=None, source_root=None):
 	v1696_root = later_world_import.client_root(v1696_root, ROOT_ENV)
 	source_root = source_root or os.environ.get(SOURCE_ENV, "")
 	if not source_root:
-		raise SystemExit(f"{SOURCE_ENV} names no population export folder")
+		raise later_world_import.missing_export(FLAG, SOURCE_ENV, "its wave export folder")
 	require_v1696_pin(v1696_root, later_world_import.MERGE_ARCHIVES)
 	export = read_population(source_root)
 	regions = population_regions(export)

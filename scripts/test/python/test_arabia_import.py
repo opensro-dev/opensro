@@ -593,6 +593,28 @@ class ArabiaImportTest(unittest.TestCase):
 				self.assertEqual(arabia.add_arabia(native, output, source, nests, FakeClosure()), {"enabled": False})
 			self.assertFalse((output / arabia.POPULATION_FILE).exists())
 
+	# ================
+	# test_on_without_nests_refuses_before_any_archive
+	#
+	# A contributor's clone has no nest extraction. The import names
+	# SRO_ARABIA_NESTS and the switch before it opens an archive (the
+	# source root here does not exist), never a FileNotFoundError on a
+	# ../research path deep in the build.
+	# ================
+	def test_on_without_nests_refuses_before_any_archive(self):
+		with tempfile.TemporaryDirectory() as tmp:
+			native, output, _source, _nests = build_trees(Path(tmp))
+			env = {key: value for key, value in os.environ.items() if key != arabia.NESTS_ENV}
+			env[arabia.FLAG] = "on"
+			with mock.patch.dict(os.environ, env, clear=True), 					mock.patch.object(arabia, "verify_archives") as archives:
+				with self.assertRaises(SystemExit) as refusal:
+					arabia.add_arabia(native, output, Path(tmp) / "absent", None, FakeClosure())
+			archives.assert_not_called()
+			message = str(refusal.exception)
+			self.assertIn("SRO_ARABIA is on, but SRO_ARABIA_NESTS is not set", message)
+			self.assertIn("turn SRO_ARABIA off", message)
+			self.assertFalse((output / arabia.POPULATION_FILE).exists())
+
 
 if __name__ == "__main__":
 	unittest.main()
