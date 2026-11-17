@@ -22,6 +22,7 @@ import (
 	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/transport"
 )
 
@@ -115,6 +116,12 @@ func installPlayerOperations(api *agentapi.API, game *gameplayPlane, hub *transp
 			"towns": game.items.OperatorTowns(), "storage": authority.Health()}, nil
 	}
 	control := playerOperationControl{hub: hub, authority: authority, shard: shard}
+	// The set-level ceiling is the shard's own configured cap, read once here
+	// at composition time (progression/levelcap.go).
+	levelCap, err := progression.LevelCapFromEnv()
+	if err != nil {
+		return err
+	}
 	var muteChat, unmuteChat, kick func(agentapi.PlayerOperation) (any, error)
 	if game.mutes != nil {
 		muteChat, unmuteChat, kick = conductOperations(game, game.mutes, shard, read)
@@ -133,6 +140,22 @@ func installPlayerOperations(api *agentapi.API, game *gameplayPlane, hub *transp
 		ResetStats: func(request agentapi.PlayerOperation) (any, error) {
 			if err := control.run(request.Character, "stat reset", func() error {
 				return game.items.OperatorResetStats(shard, request.Character)
+			}); err != nil {
+				return nil, err
+			}
+			return read(request.Character)
+		},
+		SetLevel: func(request agentapi.PlayerOperation) (any, error) {
+			if err := control.run(request.Character, "level correction", func() error {
+				return game.items.OperatorSetLevel(shard, request.Character, int64(request.Level), levelCap)
+			}); err != nil {
+				return nil, err
+			}
+			return read(request.Character)
+		},
+		SetSkillPoints: func(request agentapi.PlayerOperation) (any, error) {
+			if err := control.run(request.Character, "SP correction", func() error {
+				return game.items.OperatorSetSkillPoints(shard, request.Character, int64(*request.SkillPoints))
 			}); err != nil {
 				return nil, err
 			}
