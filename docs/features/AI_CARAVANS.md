@@ -104,7 +104,7 @@ and regression fixtures provide the mount/ambush contracts used here. No new nat
 
 ## Active implementation checkpoint (2026-11-17)
 
-Status: **implementation complete for this batch; final runtime restoration in progress; do not open a PR or push**. This section supersedes earlier verification claims. The original implementation-plan file is not
+Status: **implemented and checked for this batch; longer live validation remains; do not open a PR or push**. This section supersedes earlier verification claims. The original implementation-plan file is not
 present in this checkout; this tracked document is the implementation and handoff record.
 
 ### Completed
@@ -150,20 +150,25 @@ present in this checkout; this tracked document is the implementation and handof
   pass automated shipped-data tests. Six directed and six alternate highway/ferry routes are covered.
 - Live scratch-world cargo destruction was observed again on the final transport build. Hunter
   escort duty is visible in `!caravans`; moving rider/guard combat was not captured as a video.
-- Remaining: commit final fixes locally, restore the owner's original world with no scratch bandit
-  cap, and verify transport readiness. No push/PR until the owner considers the feature ready.
+- Final fixes committed locally as `1a248d1f` (before this documentation-only checkpoint).
+  Restored the owner's original state root with the feature on and **no scratch bandit cap**.
+  `/transport/readyz` returned `ready`; launcher confirms the original world and one character.
+  No push or PR was made. No remaining implementation blocker is known; the live soak below
+  remains necessary before describing this feature as fully release-ready.
 - Follow-up validation: longer gameplay/balance soak (including complete live convoy/ferry combat)
   and Windows race checking. Native maximum cargo can overwhelm a transport; the implementation
   preserves native damage/spawn behavior. This host has no compatible cgo compiler for `-race`.
 
 ### Running test environment and recovery
 
-- Scratch launcher PID at checkpoint: `85448`, hidden `node scripts/local/run.mjs`.
-  Confirm process identity/children before stopping; child executables lock build output.
+- Scratch launcher `85448` and its children were stopped. Active original-world launcher at
+  checkpoint: `46440`, hidden `node scripts/local/run.mjs`. Confirm process identity before
+  stopping; child executables lock build output.
 - Scratch state: `E:/CodeProjects/opensro-ai-caravans/.state/caravan-e2e-world`.
-  Original state to restore: `E:/CodeProjects/opensro-issue-hub/apps/server/.state`.
+  Active original state: `E:/CodeProjects/opensro-issue-hub/apps/server/.state`.
 - Enabled: `SRO_AI_CARAVANS=on`, `SRO_AGENT_BRAIN=hardcoded`,
-  `SRO_GM_CHARACTERS=global-official:test`. **Scratch only:** `SRO_CARAVAN_BANDIT_CAP=1`.
+  `SRO_GM_CHARACTERS=global-official:test`. Scratch used `SRO_CARAVAN_BANDIT_CAP=1`;
+  that override is absent from the active original-world launcher.
 - Game root: `E:/CodeProjects/SRO/AssetImports/OpenSRO-v150`.
   Generated root: `E:/CodeProjects/opensro-arena-main-sync/.state/arena-pinned-clean-20261111/generated`.
   Server data root: `E:/CodeProjects/opensro-issue-hub/apps/server/.generated/game-data/1.150/server`.
