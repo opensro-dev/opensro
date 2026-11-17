@@ -485,7 +485,8 @@ export function createAssets(): AssetOwner {
 						"completed" as const :
 						"loading" as const,
 					result: job.result?.kind ?? null
-				}) )
+				}) ),
+				store: progress?.store ?? null
 			};
 		},
 		progress: () => progress,

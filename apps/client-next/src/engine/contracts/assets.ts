@@ -14,6 +14,31 @@ import type { WorldTexture } from "@/engine/contracts/texture";
 import type { ModelDocument } from "./model";
 /*
 ================
+AssetStoreStats
+
+The persistent asset store's counters since the asset worker started
+(packs/persistent.ts, packs/blocks.ts). They decide whether a revisited
+area downloads again, so bug reports carry them. Diagnostics only.
+================
+*/
+export interface AssetStoreStats {
+	// Reads served from the store, and lookups that found no entry.
+	readonly hits: number;
+	readonly misses: number;
+	readonly writes: number;
+	// Verified bytes not stored: backlog full, store suspended, over budget.
+	readonly skipped: number;
+	readonly errors: number;
+	readonly evictions: number;
+	// The origin's quota refused a write with nothing left to evict.
+	readonly writesStopped: boolean;
+	readonly budget: number;
+	// Bytes ranged pack reads fetched, and the members' share of them.
+	readonly rangeBytes: number;
+	readonly demandedBytes: number;
+}
+/*
+================
 AssetProgress
 
 Observable installation progress; it never owns a foreground request slot.
@@ -29,6 +54,7 @@ export interface AssetProgress {
 	readonly filesActive: number;
 	readonly cacheHits: number;
 	readonly currentFile: string;
+	readonly store: AssetStoreStats;
 }
 /*
 ================
@@ -185,6 +211,8 @@ export interface AssetJobSnapshot {
 		readonly state: "loading" | "completed" | "cancelling";
 		readonly result: AssetResult["kind"] | null;
 	}[];
+	// The store's counters from the worker's latest progress, null before one.
+	readonly store: AssetStoreStats | null;
 }
 /*
 ================

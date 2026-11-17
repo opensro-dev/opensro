@@ -209,6 +209,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		lastReceived = received;
 		lastProgress = now;
 		if ( !disposed ) {
+			const stats = packs.stats();
 			send( {
 				kind: "progress",
 				progress: {
@@ -217,8 +218,20 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					bytesPerSecond: speed,
 					filesReady: readyFiles.size,
 					filesActive: files.size,
-					cacheHits: packs.stats().hits,
-					currentFile: [ ...files.keys() ].at( -1 ) ?? ""
+					cacheHits: stats.hits,
+					currentFile: [ ...files.keys() ].at( -1 ) ?? "",
+					store: {
+						hits: stats.hits,
+						misses: stats.misses,
+						writes: stats.writes,
+						skipped: stats.skipped,
+						errors: stats.errors,
+						evictions: stats.evictions,
+						writesStopped: stats.writesStopped,
+						budget: stats.budget,
+						rangeBytes: stats.rangeBytes,
+						demandedBytes: stats.demandedBytes
+					}
 				}
 			}, [] );
 			// The watchdog's per-job notes ride the same coalesced beat, one
