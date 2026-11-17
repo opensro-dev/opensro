@@ -18,7 +18,7 @@ import { parseJmxResourceBsr } from "../../../../scripts/build/world/objects/for
 import { parseCharacterBsr } from "../../../../scripts/build/char/formats.mjs";
 import { materialBsrModifiers } from "../../../../scripts/build/shared/bsrModifiers.mjs";
 import { defined } from "../helpers/defined.mjs";
-const { sceneryMaterial, unboundMultiTexture } = await import(
+const { sceneryMaterial, unboundSceneryMaterial } = await import(
 	"../../src/engine/foundation/rendering/scenery-modifiers.ts"
 );
 const { createTextureMotion } = await import( "../../src/engine/foundation/rendering/texture-motion.ts" );
@@ -354,11 +354,11 @@ test("a stacked or unknown multi-texture stage is reported, never approximated",
 test("a scene that cannot bind the MultiTex texture reports the stage and draws the rest", async () => {
 	const { modifiers } = parseJmxResourceBsr( await loadDataAsset( "res/mob/oasis/redeyeghost.bsr" ) );
 	const warnings = [], warn = m => warnings.push( m );
-	const drawn = unboundMultiTexture( sceneryMaterial( base, modifiers, 1, warn ), warn );
+	const drawn = unboundSceneryMaterial( base, modifiers, 1, warn );
 	assert.equal( drawn.multiTexture, undefined );
 	assert.equal( drawn.textureAnimationStage, 0 );
 	assert.deepEqual( warnings, [ "Unimplemented scenery multi-texture" ] );
-	assert.equal( unboundMultiTexture( base, warn ), base );
+	assert.deepEqual( unboundSceneryMaterial( base, undefined, 0, warn ), sceneryMaterial( base, undefined, 0, warn ) );
 });
 
 test("the character reader keeps a Rev multi-texture payload for the GLB", async () => {

@@ -189,17 +189,23 @@ export function sceneryMaterial(
 
 /*
 ================
-unboundMultiTexture
+unboundSceneryMaterial
 
-material without its MultiTex stage, for a scene whose publisher embeds
-no MultiTex texture (the world objects; only the character GLBs carry
-one, characterMultiTexture.mjs). The stage is reported to warn instead
-of drawing half of it.
+sceneryMaterial without its MultiTex stage, for a scene whose publisher
+embeds no MultiTex texture (the world objects; only the character GLBs
+carry one, characterMultiTexture.mjs). The stage is reported to warn
+instead of drawing half of it.
 ================
 */
-export function unboundMultiTexture( material: WorldMaterial, warn: ( message: string ) => void ): WorldMaterial {
-	if ( !material.multiTexture ) return material;
+export function unboundSceneryMaterial(
+	material: WorldMaterial,
+	modifiers: SceneryModifiers | undefined,
+	index: number,
+	warn: ( message: string ) => void
+): WorldMaterial {
+	const bound = sceneryMaterial( material, modifiers, index, warn );
+	if ( !bound.multiTexture ) return bound;
 	warn( "Unimplemented scenery multi-texture" );
-	const { multiTexture: _unbound, ...drawn } = material;
+	const { multiTexture: _unbound, ...drawn } = bound;
 	return drawn;
 }

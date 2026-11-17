@@ -1945,7 +1945,7 @@
 			"consumer": "src/engine/foundation/rendering/scenery-modifiers.ts",
 			"provider": "src/engine/runtime/assets/worker/world/world.ts",
 			"functions": [
-				"callback:sceneryMaterial:3"
+				"callback:unboundSceneryMaterial:3"
 			]
 		},
 		{

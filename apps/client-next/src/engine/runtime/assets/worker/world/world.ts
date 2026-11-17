@@ -61,7 +61,7 @@ import type { WorldScene, WorldGroup, WorldMaterial, TerrainRange } from "@/engi
 import { dungeonObjectMatrix, identity, mapPlacement } from "@/engine/foundation/rendering/world-math";
 import type { Bundle, Material, Mesh, ObjectBranch } from "./internal/resource-contract";
 import { validDungeonBlocks } from "./internal/dungeon-block-publication";
-import { sceneryMaterial, unboundMultiTexture } from "@/engine/foundation/rendering/scenery-modifiers";
+import { unboundSceneryMaterial } from "@/engine/foundation/rendering/scenery-modifiers";
 import { holderSphere, placeSceneryEmitters, sceneryParticles } from "@/engine/foundation/rendering/scenery-particles";
 import { worldObjectMaterial } from "@/engine/foundation/rendering/world-material";
 import { finiteNumbers } from "@/engine/foundation/rendering/geometry-validation";
@@ -288,11 +288,12 @@ materialFor
 ================
 			*/
 			const materialFor = ( ref: ObjectBranch, material: Material, index: number ): WorldMaterial => {
-				const warn = ( message: string ) => warnings.push( `${ref.sourcePath}: ${message}` );
-				// The world publisher embeds no MultiTex texture (unboundMultiTexture).
-				return unboundMultiTexture(
-					sceneryMaterial( worldObjectMaterial( material ), ref.modifiers, index, warn ),
-					warn
+				// The world publisher embeds no MultiTex texture (unboundSceneryMaterial).
+				return unboundSceneryMaterial(
+					worldObjectMaterial( material ),
+					ref.modifiers,
+					index,
+					message => warnings.push( `${ref.sourcePath}: ${message}` )
 				);
 			};
 			// Every instance used to build its material only to drop it when the group
@@ -565,7 +566,7 @@ noteMaterial
 					const bones = new Float32Array( p.joints.length * 16 );
 					pose.palette( p, bones );
 					const material = {
-						...sceneryMaterial(
+						...unboundSceneryMaterial(
 							worldObjectMaterial( mat ),
 							ref.modifiers,
 							materials.indexOf( mat ),
