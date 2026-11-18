@@ -583,7 +583,7 @@ test("manifest-driven batching serves hundreds of new filenames without per-asse
 	packs.dispose();
 });
 
-test("cancelled demand does not cancel a shared block or publish its member", async t => {
+test("cancelled demand does not cancel a shared block and still persists the member it paid for", async t => {
 	const d = disk( t ), f = fixture(), padded = new Uint8Array( 8 << 20 );
 	padded.set( f.bytes );
 	f.pack.bytes = padded.length;
@@ -608,7 +608,9 @@ test("cancelled demand does not cancel a shared block or publish its member", as
 	const result = await Promise.allSettled( [ a, b ] );
 	assert.equal( result[0].status, "rejected" );
 	assert.equal( result[1].status, "fulfilled" );
-	assert.equal( d.rows.size, 1 );
+	await packs.flush();
+	// Both members came in the one block: the cancelled one is not downloaded again.
+	assert.equal( d.rows.size, 2 );
 	packs.dispose();
 });
 

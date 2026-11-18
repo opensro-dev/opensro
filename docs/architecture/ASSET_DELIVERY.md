@@ -432,7 +432,10 @@ All reads happen in the asset worker
 4. **A loose file**, for development trees that are not packed.
 
 Every result is checked against the manifest's length and SHA-256 before
-any caller sees it, then queued for Cache Storage. Ranged responses are
+any caller sees it, then queued for Cache Storage. A large pack's member is
+checked and queued even when the read that asked for it is cancelled once its
+range block has been requested: the bytes are already on their way, and a
+dropped member would be downloaded again on the next visit. Ranged responses are
 fetched with `cache: "no-store"`, because different ranges share one URL;
 Cache Storage, keyed by content digest, is the durable cache.
 
@@ -450,7 +453,8 @@ an origin far more than the game needs:
 | Safari (browser app) | about 60% of the disk |
 
 So on most machines the whole game stays local and a player who explores
-never downloads an area twice. Beyond the budget, files leave least
+never downloads an area twice. Beyond the budget, files no admitted
+manifest names (an older release's) leave first, then the rest least
 recently used first, except the files of the startup groups (`native-ui`,
 `game-images`, `game-data`, whose packs the manifest marks `load: startup`):
 those are never evicted, so the next start never waits for them. Which
@@ -460,6 +464,14 @@ manifest names is protected at once, and one only an older release named
 becomes ordinary LRU data. A write that still cannot fit after eviction is
 skipped, so the store never exceeds its budget. The budget used and the
 startup count are in the store's `stats()`.
+
+Each worker lifetime rebuilds the store's inventory (every stored key and
+its size) before its first write, and writes wait behind it. The sizes come
+from the admitted manifests (`addSizes`, the HD set's index included); only
+keys none of them names are read for their size, eight at a time. Reading
+every entry used to take long enough on an explored store that the
+publication backlog (64 writes, 32 MiB) filled and world-entry bursts were
+skipped instead of stored.
 
 When the device runs low on disk, browsers evict whole origins, least
 recently used first, and never evict an origin marked persistent
