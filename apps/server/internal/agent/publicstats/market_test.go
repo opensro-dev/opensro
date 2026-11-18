@@ -50,8 +50,11 @@ func (f *fakeMarket) Search(q MarketSearch) (MarketListingsResponse, error) {
 
 func (f *fakeMarket) Account(string) (OwnMarketResponse, error) {
 	return OwnMarketResponse{
-		Listings:   []MarketListingView{sampleListing()},
-		Purchases:  []MarketSaleView{{ListingID: 6, Currency: domain.MarketSilk, Price: 50, AtMs: 3}},
+		Listings: []MarketListingView{sampleListing()},
+		OffersIn: []MarketOfferView{{ID: 3, ListingID: 7, Item: sampleListing().Item, Currency: domain.MarketGold, Asked: 1000,
+			Price: 900, Buyer: "Lulu", To: domain.MarketToBag, State: domain.MarketOfferOpen, AtMs: 4}},
+		OffersOut:  []MarketOfferView{},
+		Purchases:  []MarketSaleView{{ListingID: 6, Currency: domain.MarketSilk, Price: 50, AtMs: 3, To: domain.MarketToWarehouse}},
 		Warehouse:  []MarketWarehouseItem{{Slot: 0, Item: sampleListing().Item, Tradeable: true}},
 		Characters: []MarketCharacter{{Name: "Kekw", Gold: 5, Online: true}},
 		Silk:       10,
