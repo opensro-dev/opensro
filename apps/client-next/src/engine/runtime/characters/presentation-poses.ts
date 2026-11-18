@@ -17,6 +17,7 @@ already overrides the angle of a held pose.
 
 ===========================================================================
 */
+import { castAnimating } from "@/engine/foundation/animation/auxiliary-motion";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 import type { CastState, GameplayState, MovementPath, Pose, VitalState } from "@/engine/contracts/gameplay";
 import type { CharacterLayer } from "@/engine/contracts/character";
@@ -128,8 +129,7 @@ export function resolveDrawnPoses( frame: DrawnPosesFrame ): Map<number, Pose> {
 			} else if ( state.navigationHold.revision !== movementRevision ) {
 				const cast = castByActor.get( entity.gid );
 				const waiting = !dead && waitingActors.has( entity.gid );
-				const activeCast = !!cast && cast.cancelledAtMs === undefined &&
-					(actionLayersByActor.get( entity.gid )?.length ?? 0) > 0;
+				const activeCast = castAnimating( cast, actionLayersByActor.get( entity.gid )?.length ?? 0 );
 				let requestedMoving = (local ? gameplay?.moving : entity.moving) ?? false;
 				const statusMask = vitalsByGid.get( entity.gid )?.abnormal ?? 0;
 				const poseFrozen = statusOwner.view(
