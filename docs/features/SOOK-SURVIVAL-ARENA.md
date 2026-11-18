@@ -20,8 +20,11 @@ The release coordinator must:
    and cannot retain writes made after migration.
 2. Deploy matched Agent, GameWorld and client plus matching asset/server-data
    bundles. Keep the arena off until this deployment is healthy.
-3. For a shard opting in, build assets with `SRO_SOOK_SURVIVAL_ARENA=on` and
-   the pinned Colosseum import described below, then enable the GameWorld's
+3. For a shard opting in, build assets with `SRO_SOOK_SURVIVAL_ARENA=on`. The
+   variant build then merges the Colosseum (region 25580) from the pinned
+   v1.696 client (`SRO_V1696_ROOT`) as a later layer
+   (`scripts/survival_colosseum_import.py`); without it every entry refuses
+   with "the public arena navigation is unavailable". Then enable the GameWorld's
    `SRO_SOOK_SURVIVAL_ARENA` (ops Nomad var `sook_survival_arena`). Production
    activation is an ops change, not something this PR enables automatically.
 

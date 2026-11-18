@@ -1,5 +1,11 @@
 # Optional Colosseum asset import
 
+**Release builds:** the Alexandria variant build merges the Colosseum
+itself whenever `SRO_SOOK_SURVIVAL_ARENA` is on, as a later layer
+(`scripts/survival_colosseum_import.py`, after the Styria Clash map) from
+the build's pinned v1.696 client (`SRO_V1696_ROOT`, `v1696_archive_pins.json`).
+The standalone importer below remains for a variant root outside that build.
+
 The experimental So-ok event uses a private PvE instance of the Colosseum,
 region25580 (0x63ec), centred on local X960/Z960. The official Survival Arena
 is PvP; this optional event deliberately has different, owner-requested rules.
