@@ -18,6 +18,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -69,7 +70,7 @@ func (rt *Runtime) advanceBasicAttackIntents(nowMs int64, openActionOwners map[s
 		// A chain stage waits only on the casting instance; its root bracket
 		// is deliberately still open (see chainStageBlocked).
 		casting, ownsOpenAction := openActionOwners[simulation.WorldKey(intent.DivisionID, intent.CharacterName)]
-		if ownsOpenAction && (casting || intent.ComboRootID == 0 || intent.ResumeBasic) {
+		if ownsOpenAction && !queuedSkillPress(intent) && (casting || intent.ComboRootID == 0 || intent.ResumeBasic) {
 			continue
 		}
 		if served > 0 && time.Since(started) >= basicAttackSpreadBudget {
@@ -153,4 +154,26 @@ func (rt *Runtime) advanceBasicAttackIntentInDivision(intent basicAttackIntent, 
 	}
 	character := rt.findCharacter(intent.DivisionID, intent.CharacterName)
 	return character, rt.advanceBasicAttackIntent(character, intent, nowMs, rt.tickDoors()), true
+}
+
+/*
+================
+queuedSkillPress
+
+A skill press the player queued behind the action that just closed. The
+open-owner exclusion keeps a retained engage (a repeating attack) from
+reopening B245 in the turn that closed its bracket, so a staged click move
+can supersede it first. A queued skill press is the player's explicit next
+command: the native client sends it the moment the previous motion ends
+and the reference server executes it on arrival, while the queue release
+(advanceQueuedActionSession) only hands it over once the bracket is
+closed. Held one more tick, every queued skill started up to 100 ms after
+its predecessor's close plus the tick rounding, which was enough for a
+blade's second down attack to miss the knockdown it was pressed for.
+Every frame of the turn keeps its order: B505, the B2CD release, then the
+press's own answer.
+================
+*/
+func queuedSkillPress(intent basicAttackIntent) bool {
+	return intent.Deferred != nil && wire.ClassifyTargetActionLane(intent.Deferred.payload) == wire.TargetActionSkill
 }
