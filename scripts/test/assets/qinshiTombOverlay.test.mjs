@@ -221,7 +221,9 @@ test("a profile or registry flip with the env unset changes the fingerprint and 
 	const registryOn = await read();
 	fs.writeFileSync(
 		registryPath,
-		fs.readFileSync( registryPath, "utf8" ).replace( 'Default: "on"', 'Default: "off"' )
+		// The tomb's own row: the fixture registry is the checkout's whole
+		// registry (#3814), and its first Default "on" is another switch.
+		fs.readFileSync( registryPath, "utf8" ).replace( TOMB_DEFAULT, "$1off$2" )
 	);
 	const registryOff = await read();
 	assert.notEqual( registryOff.fingerprint, registryOn.fingerprint, "a registry flip kept the fingerprint" );
