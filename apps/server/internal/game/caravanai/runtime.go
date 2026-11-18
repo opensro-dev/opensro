@@ -80,6 +80,16 @@ type AgentUnit struct {
 	ReinforcingTrader  string
 	DedicatedEscortFor string
 	PotionCharges      int
+	// RunKind says why the agent is on the road (convoy.go).
+	RunKind RunKind
+	// HiredBy names the player who hired the agent for one trade run.
+	HiredBy   string
+	HiredAtMs int64
+	HireTown  TownID
+	// GoodsCostGold is what the hirer paid for a hired Trader's goods.
+	GoodsCostGold int64
+	// CooldownUntilMs holds a robbed Trader's next own run.
+	CooldownUntilMs int64
 	// nextRemoteAtMs is the earliest time the next remote decision may be
 	// asked for this agent.
 	nextRemoteAtMs     int64
@@ -87,17 +97,18 @@ type AgentUnit struct {
 	lastMoveAtMs       int64
 	transportHPPercent int
 	combatProgressAtMs int64
+	hireLeftTown       bool
+	leftTownAtMs       int64
+	leaderMissingAtMs  int64
+	catchingUp         bool
+	roamDX, roamDZ     float64
+	roamAtMs           int64
+	progressFrom       Waypoint
+	progressAtMs       int64
+	pendingTeleport    *Waypoint
 }
 
-const (
-	combatStallTimeoutMs int64 = 5000
-	// HiredEscortTeleportDistance (500u ~= 100m in client coordinates) teleports
-	// a contracted escort directly back to its hiring player if left behind.
-	HiredEscortTeleportDistance float64 = 500
-	// HiredEscortRejoinDistance disengages a contracted escort from combat so
-	// it catches up to its hiring player before falling out of range.
-	HiredEscortRejoinDistance float64 = 250
-)
+const combatStallTimeoutMs int64 = 5000
 
 // WorldHooks is an optional consumer-owned callback port invoked when an AI
 // agent speaks in local chat, drops parley cargo stacks, or pays out an escort
@@ -113,7 +124,12 @@ type WorldHooks struct {
 	OnContractFormed  func(division, playerName, agentName string)
 	OnContractReward  func(division, hunterPlayerName string, rewardGold int64, traderAgentName string)
 	OnHireFee         func(division, playerName string, fee int64) bool
-	Heal              func(division, name string, amount int64) int64
+	// OnHirePayout credits a hirer: a hired Trader's sale or returned goods
+	// cost, or a refused hire's fee.
+	OnHirePayout func(division, playerName string, gold int64) bool
+	// OnHireEnded reports a released hire (gold is what OnHirePayout got).
+	OnHireEnded func(division, playerName, agentName string, end HireEnd, gold int64)
+	Heal        func(division, name string, amount int64) int64
 }
 
 const (
@@ -146,6 +162,15 @@ type Runtime struct {
 	distress  map[string]DistressCall
 	// inflight holds each agent's outstanding remote decision.
 	inflight map[string]*remoteDecision
+	// leads marks hirers who typed !leed; partyOrder is each hirer's party
+	// member order (convoy.go).
+	leads         map[string]bool
+	partyOrder    map[string][]string
+	grand         map[string]*grandCaravan
+	scheduledAtMs map[string]int64
+	outbox        []outboxItem
+	// manualRuns stops the standing-run scheduler (tests drive runs by hand).
+	manualRuns bool
 	// remoteCtx ends every remote request at Close.
 	remoteCtx    context.Context
 	cancelRemote context.CancelFunc
@@ -175,18 +200,22 @@ func NewRuntime(cfg Config, store MemoryStore, hooks WorldHooks) *Runtime {
 	}
 	remoteCtx, cancelRemote := context.WithCancel(context.Background())
 	return &Runtime{
-		cfg:          cfg,
-		local:        NewHardcodedBrain(),
-		remote:       remote,
-		memories:     NewMemoryBook(store),
-		parleys:      NewParleyTracker(),
-		contracts:    NewContractBook(),
-		hooks:        hooks,
-		agents:       make(map[string][]*AgentUnit),
-		distress:     make(map[string]DistressCall),
-		inflight:     make(map[string]*remoteDecision),
-		remoteCtx:    remoteCtx,
-		cancelRemote: cancelRemote,
+		cfg:           cfg,
+		local:         NewHardcodedBrain(),
+		remote:        remote,
+		memories:      NewMemoryBook(store),
+		parleys:       NewParleyTracker(),
+		contracts:     NewContractBook(),
+		hooks:         hooks,
+		agents:        make(map[string][]*AgentUnit),
+		distress:      make(map[string]DistressCall),
+		inflight:      make(map[string]*remoteDecision),
+		leads:         make(map[string]bool),
+		partyOrder:    make(map[string][]string),
+		grand:         make(map[string]*grandCaravan),
+		scheduledAtMs: make(map[string]int64),
+		remoteCtx:     remoteCtx,
+		cancelRemote:  cancelRemote,
 	}
 }
 
@@ -339,7 +368,7 @@ func (r *Runtime) EnsureDivisionRoster(division string) []*AgentUnit {
 			unit.DedicatedEscortFor = unit.EscortingTrader
 		}
 		unit.Route = r.route(unit)
-		if unit.Role == RoleThief && len(r.cfg.Highway) > 0 && len(unit.Route) > 1 {
+		if unit.Role == RoleThief && unit.State == StateTraveling && len(r.cfg.Highway) > 0 && len(unit.Route) > 1 {
 			point := unit.Route[1]
 			unit.RegionID, unit.X, unit.Y, unit.Z = point.RegionID, point.X, point.Y, point.Z
 			unit.WaypointIndex = 1
@@ -396,8 +425,9 @@ func (r *Runtime) StepAgentWithWorldThreat(
 	r.EnsureDivisionRoster(division)
 	r.parleys.ResolveExpired(nowMs, r.memories)
 
+	defer r.flushOutbox(strings.TrimSpace(division))
 	r.mu.Lock()
-	r.ensureMinActiveTradesLocked(division, nowMs)
+	r.scheduleRunsLocked(strings.TrimSpace(division), nowMs)
 	unit := r.findAgentLocked(division, agentName)
 	if unit == nil {
 		r.mu.Unlock()
@@ -466,7 +496,7 @@ func (r *Runtime) StepAgentWithWorldThreat(
 	} else if unit.Role == RoleThief && unit.PotionCharges <= 0 {
 		unit.needsManaRecovery = false
 	}
-	if r.escortMustRejoinLocked(unit) {
+	if r.escortMustRejoinLocked(unit) || (unit.HiredBy != "" && decision.Action == ActionRecruitEscort) {
 		decision = Decision{Action: ActionContinueRoute, Source: BrainHardcoded}
 	}
 	decision.Dialogue = SafeDialogue(decision.Dialogue)
@@ -634,6 +664,19 @@ func agentKey(division, agentName string) string {
 
 func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, worldThreatActive bool, nowMs int64) agentEffects {
 	effects := agentEffects{}
+	defer func() { unit.AvailableForHire = hireable(unit) }()
+	if tp := unit.pendingTeleport; tp != nil {
+		unit.pendingTeleport = nil
+		unit.place(*tp, nowMs)
+		unit.catchingUp, unit.roamAtMs = false, 0
+	}
+	if unit.HiredBy != "" {
+		r.refreshHireLeaderLocked(unit)
+		if r.superviseHireLocked(unit, nowMs) && unit.HiredBy != "" {
+			// The hirer is away: hold position until it returns or the hire ends.
+			return effects
+		}
+	}
 	if d.Action != ActionAttackTarget && !worldThreatActive {
 		unit.combatProgressAtMs = 0
 	}
@@ -697,7 +740,7 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, worldThreatAc
 				} else if nowMs-unit.combatProgressAtMs >= combatStallTimeoutMs {
 					unit.combatProgressAtMs = 0
 					unit.State = StateTraveling
-					if unit.Role != RoleHunter || unit.EscortingTrader == "" {
+					if unit.EscortingTrader == "" && unit.HiredBy == "" {
 						effects.reward = r.advanceAlongRouteLocked(unit, nowMs)
 					}
 				}
@@ -708,54 +751,22 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, worldThreatAc
 			r.stepReinforcementLocked(unit, call)
 		}
 	case ActionContinueRoute, ActionAssistAlly, ActionRecruitEscort:
-		if unit.State == StateIdleInTown || unit.State == StateRecruiting {
-			if unit.Role == RoleHunter && unit.EscortingTrader != "" {
-				if leader := r.findAgentLocked(unit.Division, unit.EscortingTrader); leader != nil && isActiveTradeRunState(leader.State) {
-					unit.State = StateTraveling
-				} else if r.hooks.Player != nil {
-					if leader, ok := r.hooks.Player(unit.Division, unit.EscortingTrader); ok && leader.HPPercent > 0 && leader.JobType == domain.JobTrader {
-						unit.State = StateTraveling
-					} else {
-						break
-					}
-				} else {
-					break
-				}
-			} else {
-				// Town-staged agents stay in town until dispatched, hired, or called to reinforce.
-				break
-			}
+		switch {
+		case unit.EscortingTrader != "":
+			// Escorts, grand-caravan members and hired agents follow their leader.
+			unit.State = StateTraveling
+			effects.follow = r.stepFollowLocked(unit, nowMs)
+		case unit.HiredBy != "":
+			// The leading hired Trader drives its hirer's run.
+			unit.State = StateTraveling
+			r.stepHiredLeadLocked(unit, nowMs)
+		case unit.State == StateIdleInTown || unit.State == StateRecruiting:
+			// Town agents stroll around town until dispatched, hired or called to reinforce.
+			r.wanderInTownLocked(unit, nowMs)
+		default:
+			unit.State = StateTraveling
+			effects.reward = r.advanceAlongRouteLocked(unit, nowMs)
 		}
-		unit.State = StateTraveling
-		if unit.Role == RoleHunter && unit.EscortingTrader != "" {
-			if leader := r.findAgentLocked(unit.Division, unit.EscortingTrader); leader != nil {
-				effects.follow = r.stepEscortFollowLocked(unit, leader)
-				break
-			}
-			if r.hooks.Player != nil {
-				if leader, ok := r.hooks.Player(unit.Division, unit.EscortingTrader); ok && leader.HPPercent > 0 && leader.JobType == domain.JobTrader {
-					dist := WaypointDistance(leader.At, Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z})
-					if dist > HiredEscortTeleportDistance {
-						tp := leader.At
-						effects.teleport = &tp
-						unit.RegionID, unit.X, unit.Y, unit.Z = leader.At.RegionID, leader.At.X, leader.At.Y, leader.At.Z
-						unit.lastMoveAtMs = nowMs
-						break
-					}
-					if dist > 320 {
-						effects.follow = &leader.At
-					}
-					if dist > 12 {
-						r.moveLocked(unit, leader.At, stepDistanceFor(unit))
-					}
-					break
-				}
-			}
-			unit.EscortingTrader, unit.State, unit.AvailableForHire = "", StateIdleInTown, true
-			r.contracts.Cancel(unit.Division, unit.Name)
-			break
-		}
-		effects.reward = r.advanceAlongRouteLocked(unit, nowMs)
 	}
 	if d.Dialogue != "" {
 		unit.LastSpokenLine = d.Dialogue
@@ -766,7 +777,7 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, worldThreatAc
 
 func (r *Runtime) advanceAlongRouteLocked(unit *AgentUnit, nowMs int64) *EscortContract {
 	if r.waitForEscortLocked(unit) {
-		unit.lastMoveAtMs = nowMs
+		unit.lastMoveAtMs, unit.progressAtMs = nowMs, 0
 		return nil
 	}
 	var completed *EscortContract
@@ -790,30 +801,51 @@ func (r *Runtime) advanceAlongRouteLocked(unit *AgentUnit, nowMs int64) *EscortC
 	distance := float32(elapsed) * speed / 1000
 	arrived := r.moveLocked(unit, target, distance)
 	if !arrived {
-		return nil
+		if target.FerryTargetID != 0 {
+			unit.progressAtMs = 0
+			return nil
+		}
+		// A stuck run skips an off-road bend, and in the end is set onto
+		// the waypoint it cannot reach rather than standing forever.
+		stalled := unit.noteProgress(nowMs)
+		switch {
+		case target.Scenic && stalled >= stuckSkipMs:
+			unit.WaypointIndex++
+			unit.progressAtMs = 0
+			return nil
+		case stalled >= stuckTeleportMs:
+			unit.place(target, nowMs)
+		default:
+			return nil
+		}
 	}
+	unit.progressAtMs = 0
 	unit.WaypointIndex++
 	if unit.WaypointIndex < len(unit.Route) {
 		return nil
 	}
 
 	// Arrived at destination terminal: complete delivery & rotate route.
+	if unit.HiredBy != "" {
+		r.endHireLocked(r.hiresOfLocked(unit.Division, unit.HiredBy), HireCompleted, nowMs)
+		return nil
+	}
 	unit.State = StateDelivering
 	if unit.Role == RoleTrader {
 		if contract, ok := r.contracts.CompleteAITraderRun(unit.Division, unit.Name, unit.RegionID, nowMs, r.memories); ok {
 			completed = &contract
 		}
+		r.finishRunLocked(unit, nowMs)
 		unit.CargoStacks = 10
-		unit.State = StateRecruiting
+		unit.State = StateIdleInTown
 		unit.TownDepartAtMs = nowMs + TownRestDurationMs
 	} else if unit.Role == RoleHunter && unit.EscortingTrader == "" {
 		unit.State = StateIdleInTown
-		unit.AvailableForHire = true
+		unit.RunKind = RunNone
 	}
 	unit.OriginTown, unit.DestTown = unit.DestTown, unit.OriginTown
 	unit.Route = r.route(unit)
 	unit.WaypointIndex = 0
-	r.ensureMinActiveTradesLocked(unit.Division, nowMs)
 	return completed
 }
 
@@ -896,18 +928,23 @@ func (r *Runtime) RecordPlayerAttack(
 		}
 		unit.Route, unit.WaypointIndex = nil, 0
 		unit.TownDepartAtMs = nowMs + TownRestDurationMs
-		if unit.Role == RoleHunter {
-			if dedicatedLeader != nil {
-				unit.AvailableForHire = false
-				unit.EscortingTrader = dedicatedLeader.Name
-				unit.ReinforcingTrader = ""
-			} else {
-				unit.AvailableForHire = true
-				unit.EscortingTrader = ""
-				unit.ReinforcingTrader = ""
-			}
+		unit.ReinforcingTrader = ""
+		unit.catchingUp, unit.roamAtMs, unit.progressAtMs = false, 0, 0
+		switch {
+		case unit.HiredBy != "":
+			// A hire outlives a death: the follow step teleports it back to
+			// its hirer (no player lookup here: combat calls in holding locks).
+			unit.State = StateTraveling
+		case unit.Role == RoleTrader:
+			// Robbed: the run is over and the Trader rests before its next own run.
+			r.disbandRunLocked(unit, nowMs)
+			unit.CooldownUntilMs = nowMs + RobbedCooldownMs
+		case dedicatedLeader != nil:
+			unit.EscortingTrader = dedicatedLeader.Name
+		default:
+			unit.EscortingTrader, unit.DedicatedEscortFor, unit.RunKind = "", "", RunNone
 		}
-		r.ensureMinActiveTradesLocked(division, nowMs)
+		unit.AvailableForHire = hireable(unit)
 	}
 	r.mu.Unlock()
 

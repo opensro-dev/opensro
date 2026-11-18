@@ -90,7 +90,7 @@ func TestCaravanShippedActors(t *testing.T) {
 	if err := game.initCaravanActors(); err != nil {
 		t.Fatal(err)
 	}
-	if len(game.caravanActors) != 9 {
+	if len(game.caravanActors) != caravanai.RosterHunters+caravanai.RosterTraders+caravanai.RosterThieves {
 		t.Fatalf("got %d actors", len(game.caravanActors))
 	}
 	for _, c := range game.caravanActors {

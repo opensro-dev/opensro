@@ -372,6 +372,48 @@ func (r *Runtime) InvitePlayerFromRuntimeActor(divisionID, actorName, playerName
 	return true
 }
 
+/*
+==================
+MemberNames
+
+The names in playerName's party, in member order (nil outside a party).
+==================
+*/
+func (r *Runtime) MemberNames(divisionID, playerName string) []string {
+	if r == nil {
+		return nil
+	}
+	snapshot, ok := r.registry.PartyOf(divisionID, playerName)
+	if !ok {
+		return nil
+	}
+	names := make([]string, 0, len(snapshot.Members))
+	for _, member := range snapshot.Members {
+		names = append(names, member.Name)
+	}
+	return names
+}
+
+/*
+==================
+RemoveRuntimeActor
+
+A hired runtime actor whose hire ended leaves its party.
+==================
+*/
+func (r *Runtime) RemoveRuntimeActor(divisionID, actorName string) {
+	if r == nil {
+		return
+	}
+	actor := findCharacterByName(r.deps, divisionID, actorName)
+	if actor == nil || !actor.RuntimeOnly {
+		return
+	}
+	if _, inParty := r.registry.PartyOf(divisionID, actorName); inParty {
+		r.dropMember(divisionID, actorName, PartyLeaveReasonSecede, nil)
+	}
+}
+
 func (r *Runtime) partyHasHumanMember(divisionID string, members []Member) bool {
 	for _, member := range members {
 		c := findCharacterByName(r.deps, divisionID, member.Name)

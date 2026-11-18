@@ -230,6 +230,7 @@ func TestRuntimeParleyHonorBetrayalAndContracts(t *testing.T) {
 
 	const div = "Shard_Silkroad"
 	rt.EnsureDivisionRoster(div)
+	rt.manualRuns = true
 
 	// A recruiting trader is accepted in town; active road runs are not contractable.
 	rt.mu.Lock()
@@ -242,7 +243,7 @@ func TestRuntimeParleyHonorBetrayalAndContracts(t *testing.T) {
 
 	// 2. Trader player hires [AI]Hunter_Kwan via chat command.
 	hireReply, ok := rt.HandlePlayerCommand(div, "MerchantLin", domain.JobTrader, "!hire [AI]Hunter_Kwan", 1_000)
-	if !ok || !strings.Contains(hireReply, "MerchantLin") {
+	if !ok || !strings.Contains(hireReply, "[AI]Hunter_Kwan joins you") {
 		t.Fatalf("expected hunter hire reply for MerchantLin, got ok=%v reply=%q", ok, hireReply)
 	}
 
@@ -391,53 +392,95 @@ Verifies:
 */
 func TestSchedulerMinActiveTradesHireableHuntersAndDistressAid(t *testing.T) {
 	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, WorldHooks{})
+	t.Cleanup(func() { _ = rt.Close() })
 	const div = "Shard_Scheduler"
 	roster := rt.EnsureDivisionRoster(div)
-
-	activeTraders := 0
-	townTraders := 0
-	hireableHunters := 0
+	counts := map[AgentRole]int{}
 	for _, u := range roster {
-		if u.Role == RoleTrader {
-			if isActiveTradeRunState(u.State) {
-				activeTraders++
-			} else {
-				townTraders++
+		counts[u.Role]++
+	}
+	if counts[RoleHunter] != 20 || counts[RoleTrader] != 10 || counts[RoleThief] != 10 {
+		t.Fatalf("roster is %v, want 20 Hunters, 10 Traders, 10 Thieves", counts)
+	}
+
+	// The first step sends out two solo runs and two runs with three Hunters each.
+	rt.StepAgent(context.Background(), div, "[AI]Thief_Wisp", nil, 1_000)
+	runs := func() (solo, escorted, guards, hireableHunters int) {
+		for _, u := range rt.EnsureDivisionRoster(div) {
+			switch {
+			case u.Role == RoleTrader && u.RunKind == RunSolo:
+				solo++
+			case u.Role == RoleTrader && u.RunKind == RunEscorted:
+				escorted++
+			case u.Role == RoleHunter && u.RunKind == RunEscorted:
+				guards++
+			case u.Role == RoleHunter && u.AvailableForHire:
+				hireableHunters++
 			}
-		} else if u.Role == RoleHunter && u.AvailableForHire {
-			hireableHunters++
 		}
+		return
 	}
-	if activeTraders < MinActiveTradeRuns || townTraders < 2 || hireableHunters < 2 {
-		t.Fatalf(
-			"expected >=2 active traders, >=2 town traders, >=2 hireable hunters; got active=%d town=%d hireable=%d",
-			activeTraders, townTraders, hireableHunters,
-		)
+	if solo, escorted, guards, free := runs(); solo != 2 || escorted != 2 || guards != 6 || free != 14 {
+		t.Fatalf("want 2 solo, 2 escorted, 6 guards, 14 free Hunters; got %d %d %d %d", solo, escorted, guards, free)
 	}
 
-	// Defeat [AI]Trader_Jin -> scheduler immediately dispatches a town Trader so active runs stay >= 2.
-	_, defeated, _ := rt.RecordPlayerAttack(div, "[AI]Trader_Jin", "BanditKing", 20000, 1_000)
-	if !defeated {
-		t.Fatal("expected [AI]Trader_Jin to be defeated by 20000 damage")
-	}
-	afterDefeat := rt.EnsureDivisionRoster(div)
-	activeAfter := 0
-	for _, u := range afterDefeat {
-		if u.Role == RoleTrader && isActiveTradeRunState(u.State) {
-			activeAfter++
+	// A robbed escorted Trader rests 30 minutes; its guards go home and a
+	// rested town Trader takes its place.
+	rt.mu.Lock()
+	var robbed string
+	for _, u := range rt.agents[div] {
+		if u.Role == RoleTrader && u.RunKind == RunEscorted {
+			robbed = u.Name
+			break
 		}
 	}
-	if activeAfter < MinActiveTradeRuns {
-		t.Fatalf("expected scheduler to maintain >= %d active trade runs after defeat, got %d", MinActiveTradeRuns, activeAfter)
+	rt.mu.Unlock()
+	if _, defeated, _ := rt.RecordPlayerAttack(div, robbed, "BanditKing", 50_000, 2_000); !defeated {
+		t.Fatal("expected the escorted Trader to be robbed")
+	}
+	rt.mu.Lock()
+	victim := rt.findAgentLocked(div, robbed)
+	if victim.CooldownUntilMs != 2_000+RobbedCooldownMs || victim.RunKind != RunNone {
+		t.Fatalf("robbed Trader not on its 30 minute cooldown: %+v", victim)
+	}
+	for _, u := range rt.agents[div] {
+		if u.DedicatedEscortFor == robbed {
+			t.Fatalf("%s still guards the robbed Trader", u.Name)
+		}
+	}
+	rt.mu.Unlock()
+	rt.ActorSynchronized(div, robbed)
+	rt.StepAgent(context.Background(), div, "[AI]Thief_Wisp", nil, 3_000)
+	if solo, escorted, guards, _ := runs(); solo != 2 || escorted != 2 || guards != 6 {
+		t.Fatalf("runs not refilled after the robbery: %d solo, %d escorted, %d guards", solo, escorted, guards)
+	}
+	rt.mu.Lock()
+	if victim.RunKind != RunNone || !hireable(victim) {
+		t.Fatal("the robbed Trader should sit out its cooldown but stay hireable")
 	}
 
-	// Ambush [AI]Trader_Mei (non-lethal) -> raises DistressCall; [AI]Hunter_Sora rushes to reinforce!
-	rt.RecordPlayerAttack(div, "[AI]Trader_Mei", "BanditKing", 3000, 2_000)
-	dec, sora, ok := rt.StepAgent(context.Background(), div, "[AI]Hunter_Sora", nil, 2_100)
-	if !ok || (dec.Action != ActionReinforceAlly && dec.Action != ActionAttackTarget) || (sora.State != StateReinforcing && sora.State != StateInCombat) {
-		t.Fatalf("expected [AI]Hunter_Sora to reinforce ambushed [AI]Trader_Mei, got dec=%+v unit=%+v", dec, sora)
+	// A distress call reaches a free Hunter on the road nearby, never a town one.
+	var mei, roadHunter, townHunter *AgentUnit
+	for _, u := range rt.agents[div] {
+		switch {
+		case mei == nil && u.Role == RoleTrader && u.RunKind == RunSolo:
+			mei = u
+		case u.Role == RoleHunter && hireable(u) && roadHunter == nil:
+			roadHunter = u
+		case u.Role == RoleHunter && hireable(u) && townHunter == nil:
+			townHunter = u
+		}
 	}
-	if sora.ReinforcingTrader != "[AI]Trader_Mei" {
-		t.Fatalf("expected ReinforcingTrader=[AI]Trader_Mei, got %q", sora.ReinforcingTrader)
+	mei.RegionID, mei.X, mei.Z = 25239, 1000, 500
+	roadHunter.RegionID, roadHunter.X, roadHunter.Z, roadHunter.State = 25239, 1300, 500, StateTraveling
+	roadHunter.Route = []Waypoint{{RegionID: 25239, X: 1900, Z: 500}}
+	rt.mu.Unlock()
+	rt.RecordPlayerAttack(div, mei.Name, "BanditKing", 3000, 4_000)
+	dec, helper, ok := rt.StepAgent(context.Background(), div, roadHunter.Name, nil, 4_100)
+	if !ok || dec.Action != ActionReinforceAlly || helper.ReinforcingTrader != mei.Name {
+		t.Fatalf("expected the road Hunter to reinforce %s, got dec=%+v unit=%+v", mei.Name, dec, helper)
+	}
+	if dec, _, _ := rt.StepAgent(context.Background(), div, townHunter.Name, nil, 4_200); dec.Action == ActionReinforceAlly {
+		t.Fatal("a town Hunter left its town to answer a distress call")
 	}
 }

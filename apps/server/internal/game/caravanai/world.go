@@ -11,6 +11,7 @@ can keep the grid-only movement path without loading retail assets.
 package caravanai
 
 import (
+	"math/rand/v2"
 	"strings"
 	"unicode"
 
@@ -95,6 +96,10 @@ func (r *Runtime) route(unit *AgentUnit) []Waypoint {
 			}
 		}
 	}
+	if unit.RunKind == RunSolo {
+		// Solo Traders pick either crossing at random and bend off the road.
+		detour = rand.IntN(2) == 0
+	}
 	if detour {
 		if route, ok := r.cfg.Detours[key]; ok {
 			points = append([]Waypoint(nil), route...)
@@ -104,6 +109,9 @@ func (r *Runtime) route(unit *AgentUnit) []Waypoint {
 		if terminal, ok := r.cfg.Terminals[point.Town]; ok {
 			points[i] = terminal
 		}
+	}
+	if unit.RunKind == RunSolo {
+		points = scenicRoute(points)
 	}
 	return points
 }
@@ -312,7 +320,8 @@ func (r *Runtime) ApproachWorldThreatAt(division, name string, target Waypoint, 
 ================
 waitForEscortLocked
 
-A convoy stays within the guard's acquisition range while it fights or catches up.
+A convoy holds while a follower within 120m fights, or while one between 120m
+and 200m catches up (past 200m it is teleported instead).
 ================
 */
 func (r *Runtime) waitForEscortLocked(trader *AgentUnit) bool {
@@ -320,17 +329,17 @@ func (r *Runtime) waitForEscortLocked(trader *AgentUnit) bool {
 		return false
 	}
 	for _, guard := range r.agents[trader.Division] {
-		if guard.Role != RoleHunter || guard.EscortingTrader != trader.Name || guard.RespawnPending || guard.HP <= 0 {
+		if guard == trader || guard.Role == RoleThief || !strings.EqualFold(guard.EscortingTrader, trader.Name) || guard.RespawnPending || guard.HP <= 0 {
 			continue
 		}
 		if guard.State == StateIdleInTown || isTownRegion(guard.RegionID) {
 			continue
 		}
-		dist := WaypointDistance(Waypoint{RegionID: trader.RegionID, X: trader.X, Z: trader.Z}, Waypoint{RegionID: guard.RegionID, X: guard.X, Z: guard.Z})
-		if dist > 600 {
+		dist := WaypointDistance(position(trader), position(guard))
+		if dist > EscortTeleportDistance {
 			continue
 		}
-		if guard.State == StateInCombat || dist > 64 {
+		if (guard.State == StateInCombat && dist <= EscortFollowDistance) || dist > EscortFollowDistance {
 			return true
 		}
 	}
@@ -488,36 +497,26 @@ func (r *Runtime) hasLiveEscortLocked(unit *AgentUnit) bool {
 	return false
 }
 
+/*
+================
+escortMustRejoinLocked
+
+A follower more than 120m from its leader (or left outside while the
+leader is in town) stops fighting and runs after it.
+================
+*/
 func (r *Runtime) escortMustRejoinLocked(unit *AgentUnit) bool {
-	if unit == nil || unit.Role != RoleHunter || unit.EscortingTrader == "" {
+	if unit == nil || unit.EscortingTrader == "" {
 		return false
 	}
-	if leader := r.findAgentLocked(unit.Division, unit.EscortingTrader); leader != nil {
-		if leader.RespawnPending || leader.HP <= 0 {
-			return false
-		}
-		if isTownRegion(leader.RegionID) && !isTownRegion(unit.RegionID) {
-			return true
-		}
-		dist := WaypointDistance(
-			Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z},
-			Waypoint{RegionID: leader.RegionID, X: leader.X, Z: leader.Z},
-		)
-		return dist > 280
+	at, leader, ok := r.leaderPositionLocked(unit)
+	if !ok || (leader != nil && (leader.RespawnPending || leader.HP <= 0)) {
+		return false
 	}
-	if r.hooks.Player != nil {
-		if leader, ok := r.hooks.Player(unit.Division, unit.EscortingTrader); ok && leader.HPPercent > 0 && leader.JobType == domain.JobTrader {
-			if isTownRegion(leader.At.RegionID) && !isTownRegion(unit.RegionID) {
-				return true
-			}
-			dist := WaypointDistance(
-				Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z},
-				leader.At,
-			)
-			return dist > HiredEscortRejoinDistance
-		}
+	if isTownRegion(at.RegionID) && !isTownRegion(unit.RegionID) {
+		return true
 	}
-	return false
+	return WaypointDistance(position(unit), at) > EscortFollowDistance
 }
 
 /*
@@ -540,7 +539,7 @@ func (r *Runtime) IsContractPartner(division, playerName, agentName string) bool
 			return true
 		}
 	}
-	if unit := r.findAgentLocked(division, agentName); unit != nil && unit.Role == RoleHunter && strings.EqualFold(unit.EscortingTrader, playerName) {
+	if unit := r.findAgentLocked(division, agentName); unit != nil && unit.HiredBy != "" && strings.EqualFold(unit.HiredBy, playerName) {
 		return true
 	}
 	return false

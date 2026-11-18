@@ -75,6 +75,8 @@ type Waypoint struct {
 	Y              float32
 	Z              float32
 	Chokepoint     bool
+	// Scenic marks a solo Trader's off-road bend; a run stuck on it skips it.
+	Scenic bool
 }
 
 /*

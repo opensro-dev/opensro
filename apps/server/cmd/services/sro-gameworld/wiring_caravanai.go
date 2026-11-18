@@ -22,9 +22,11 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/social/chat"
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -82,11 +84,21 @@ func (game *gameplayPlane) wireCaravanAgents() {
 		Move: game.caravanMove, Player: game.caravanPlayer, Heal: game.items.HealServerActor,
 		Casting: game.items.ServerActorCasting,
 		Ferry:   game.caravanFerry, FollowFerry: game.caravanFollowFerry,
-		OnHireFee: game.caravanHireFee,
+		OnHireFee: game.caravanHireFee, OnHirePayout: game.caravanHirePayout,
 		OnContractFormed: func(division, playerName, agentName string) {
 			if game.parties != nil {
 				game.parties.InvitePlayerFromRuntimeActor(division, agentName, playerName)
 			}
+		},
+		OnHireEnded: func(division, playerName, agentName string, end caravanai.HireEnd, gold int64) {
+			if game.parties != nil {
+				game.parties.RemoveRuntimeActor(division, agentName)
+			}
+			text := fmt.Sprintf("%s's hire has %s.", agentName, end)
+			if gold > 0 {
+				text = fmt.Sprintf("%s's hire has %s: %d gold paid to you for the goods.", agentName, end, gold)
+			}
+			game.caravanNotice(division, playerName, text)
 		},
 		OnContractReward: game.caravanEscortReward,
 		OnParleyCargoDrop: func(division, name string, _ uint16, _, _, _ float32, stacks int, _ int64) {
@@ -107,12 +119,6 @@ func (game *gameplayPlane) wireCaravanAgents() {
 		},
 	})
 	rt.EnsureDivisionRoster(game.divisionID)
-	for _, npc := range game.items.NpcRoster {
-		if npc.Codename == "NPC_CH_EUROPE" {
-			rt.StageRecruiters(game.divisionID, caravanai.TownJangan, caravanai.Waypoint{RegionID: npc.Spawn.RegionID, X: float32(npc.Spawn.X), Y: float32(npc.Spawn.Y), Z: float32(npc.Spawn.Z)})
-			break
-		}
-	}
 	game.caravanAgents = rt
 	if err := game.initCaravanActors(); err != nil {
 		log.WithError(err).Error("caravan actors disabled: invalid roster")
@@ -149,7 +155,7 @@ func (game *gameplayPlane) wireCaravanChat() {
 			return "", false
 		}
 		switch strings.ToLower(fields[0]) {
-		case "!caravans", "!caravan", "!accept", "!hire", "!memory", "!attack":
+		case "!caravans", "!caravan", "!accept", "!hire", "!memory", "!attack", "!leed", "!lead", "!dismiss":
 		default:
 			return "", false
 		}
@@ -244,6 +250,13 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 		})
 	}
 
+	// Party order decides which hired Trader leads; read here, outside the
+	// AI lock, because the party runtime calls back into the AI runtime.
+	if game.parties != nil {
+		for _, hirer := range game.caravanAgents.Hirers(game.divisionID) {
+			game.caravanAgents.SetPartyOrder(game.divisionID, hirer, game.parties.MemberNames(game.divisionID, hirer))
+		}
+	}
 	roster := game.caravanAgents.EnsureDivisionRoster(game.divisionID)
 	ctx := context.Background()
 	for i, unit := range roster {
@@ -356,6 +369,12 @@ func formatCaravanTownName(town caravanai.TownID) string {
 }
 
 func formatCaravanMapLabel(u *caravanai.AgentUnit) string {
+	if u.HiredBy != "" {
+		return fmt.Sprintf("%s (Hired by %s)", u.Name, u.HiredBy)
+	}
+	if u.RunKind == caravanai.RunGrand {
+		return fmt.Sprintf("%s (Grand caravan %s -> %s)", u.Name, formatCaravanTownName(u.OriginTown), formatCaravanTownName(u.DestTown))
+	}
 	switch u.Role {
 	case caravanai.RoleTrader:
 		if u.State == caravanai.StateIdleInTown || u.State == caravanai.StateRecruiting {
@@ -374,8 +393,76 @@ func formatCaravanMapLabel(u *caravanai.AgentUnit) string {
 		}
 		return fmt.Sprintf("%s (Patrol)", u.Name)
 	default:
+		if u.AvailableForHire {
+			return fmt.Sprintf("%s (Hireable - %s)", u.Name, formatCaravanTownName(u.OriginTown))
+		}
 		return fmt.Sprintf("%s (Thief - %s)", u.Name, formatCaravanTownName(u.OriginTown))
 	}
+}
+
+/*
+================
+caravanNotice
+================
+*/
+func (game *gameplayPlane) caravanNotice(division, player, text string) {
+	if game.presence == nil {
+		return
+	}
+	if session, ok := game.presence.SessionByName(division, player); ok && session.WorldReady() {
+		_ = session.Send(chat.OpChatBroadcast, chat.EncodeChatNotice(text))
+	}
+}
+
+/*
+================
+caravanHireOptions / caravanHireService
+
+The specialty shops' talk menu lists every agent the player may hire now
+(port-only rows; the client shows "[AI]" symbols as written).
+================
+*/
+const caravanHireServicePrefix = "caravan-hire:"
+
+func (game *gameplayPlane) caravanHireOptions(divisionID string, character *enterworld.Character, npcCodename string) []action.NpcQuestOption {
+	if game.caravanAgents == nil || !game.caravanAgents.Enabled() {
+		return nil
+	}
+	switch npcCodename {
+	case "NPC_CH_SPECIAL", "NPC_WC_SPECIAL", "NPC_KT_SPECIAL":
+	default:
+		return nil
+	}
+	var job uint8
+	game.deps.Read(divisionID, func() { job = enterworld.DressedJob(character) })
+	var out []action.NpcQuestOption
+	for _, offer := range game.caravanAgents.HireOffers(divisionID, job) {
+		label := fmt.Sprintf("%s - %s in %s - %d gold", offer.Name, offer.Role.Title(), formatCaravanTownName(offer.Town), offer.Fee)
+		if offer.Goods > 0 {
+			label = fmt.Sprintf("%s - %s in %s - %d gold + %d goods", offer.Name, offer.Role.Title(), formatCaravanTownName(offer.Town), offer.Fee, offer.Goods)
+		}
+		out = append(out, action.NpcQuestOption{Codename: caravanHireServicePrefix + offer.Name, TitleSymbol: label, PromptSymbol: label, Immediate: true})
+	}
+	return out
+}
+
+func (game *gameplayPlane) caravanHireService(character *enterworld.Character, codename string) ([]wire.Frame, bool) {
+	agent, ok := strings.CutPrefix(codename, caravanHireServicePrefix)
+	if !ok || game.caravanAgents == nil {
+		return nil, false
+	}
+	var job uint8
+	var name string
+	game.deps.Read(game.divisionID, func() { job, name = enterworld.DressedJob(character), character.Name })
+	reply := game.caravanAgents.HireAgent(game.divisionID, name, job, agent, time.Now().UnixMilli())
+	answer := reply
+	if !strings.HasPrefix(answer, "[AI]") {
+		answer = "[AI] " + answer
+	}
+	return []wire.Frame{
+		{Opcode: chat.OpChatBroadcast, Payload: chat.EncodeChatNotice(reply)},
+		{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(answer)},
+	}, true
 }
 
 /*

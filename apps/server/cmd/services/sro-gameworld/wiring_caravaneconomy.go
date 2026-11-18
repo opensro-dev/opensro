@@ -13,6 +13,7 @@ package main
 import (
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -23,6 +24,8 @@ const caravanDailyRewardLimit = 3
 /*
 ================
 caravanHireFee
+
+The job rules are the AI runtime's (caravanai.CanHire); this only takes gold.
 ================
 */
 func (game *gameplayPlane) caravanHireFee(division, player string, fee int64) bool {
@@ -31,11 +34,43 @@ func (game *gameplayPlane) caravanHireFee(division, player string, fee int64) bo
 		return false
 	}
 	paid := game.deps.Update(c, "caravan-hire", func() bool {
-		if c.RuntimeOnly || enterworld.DressedJob(c) != domain.JobTrader || c.Gold == nil || *c.Gold < fee {
+		if c.RuntimeOnly || enterworld.DressedJob(c) == domain.JobNone || c.Gold == nil || *c.Gold < fee {
 			return false
 		}
 		gold := *c.Gold - fee
 		c.Gold = &gold
+		return true
+	})
+	if paid {
+		game.publishCaravanGold(division, c)
+	}
+	return paid
+}
+
+/*
+================
+caravanHirePayout
+
+A hired Trader's sale or returned goods cost, or a refused hire's fee. No
+daily cap: it is the player's own gold coming back.
+================
+*/
+func (game *gameplayPlane) caravanHirePayout(division, player string, gold int64) bool {
+	c := game.deps.CharacterByName(division, player)
+	if c == nil || gold <= 0 {
+		log.WithFields(log.Fields{"player": player, "gold": gold}).Warn("caravan hire payout has no loaded character")
+		return false
+	}
+	paid := game.deps.Update(c, "caravan-hire-payout", func() bool {
+		if c.RuntimeOnly {
+			return false
+		}
+		balance := int64(0)
+		if c.Gold != nil {
+			balance = *c.Gold
+		}
+		balance = min(balance+gold, int64(wire.MaxGold))
+		c.Gold = &balance
 		return true
 	})
 	if paid {

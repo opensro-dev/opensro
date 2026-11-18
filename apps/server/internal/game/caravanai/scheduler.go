@@ -121,58 +121,18 @@ func (r *Runtime) activeDistressForLocked(
 	if unit.EscortingTrader != "" && !strings.EqualFold(unit.EscortingTrader, call.TraderName) {
 		return nil
 	}
+	// Town agents stay hireable, hired agents stay with their hirer, and only
+	// agents within reach answer.
+	if (unit.EscortingTrader == "" && (unit.HiredBy != "" || unit.State == StateIdleInTown || unit.State == StateRecruiting)) ||
+		WaypointDistance(position(unit), Waypoint{RegionID: call.RegionID, X: call.X, Z: call.Z}) > distressAnswerRadius {
+		return nil
+	}
 	// Cornered or parleying traders cannot abandon their own survival to reinforce.
 	if unit.Role == RoleTrader && (unit.UnderAttack || unit.State == StateParleying || percentOf(unit.HP, unit.MaxHP) < 60) {
 		return nil
 	}
 	cp := call
 	return &cp
-}
-
-/*
-==================
-ensureMinActiveTradesLocked
-
-Guarantees that at least MinActiveTradeRuns (2) AI Traders in division are
-out on an active trade run, and dispatches any town-staged AI Trader whose
-rest/recruitment window (TownDepartAtMs) has elapsed. Caller holds r.mu.
-==================
-*/
-func (r *Runtime) ensureMinActiveTradesLocked(division string, nowMs int64) {
-	div := strings.TrimSpace(division)
-	roster := r.agents[div]
-	if len(roster) == 0 {
-		return
-	}
-
-	activeRuns := 0
-	for _, u := range roster {
-		if u.Role == RoleTrader && isActiveTradeRunState(u.State) {
-			activeRuns++
-		}
-	}
-
-	// First, dispatch any town-staged trader whose TownDepartAtMs timer elapsed.
-	for _, u := range roster {
-		if u.Role != RoleTrader || isActiveTradeRunState(u.State) {
-			continue
-		}
-		if u.TownDepartAtMs > 0 && nowMs >= u.TownDepartAtMs {
-			r.dispatchTraderLocked(u, nowMs)
-			activeRuns++
-		}
-	}
-
-	// Second, enforce the invariant that at least MinActiveTradeRuns traders
-	// are actively running cargo on the highway.
-	for activeRuns < MinActiveTradeRuns {
-		candidate := pickNextTownTraderLocked(roster)
-		if candidate == nil {
-			break
-		}
-		r.dispatchTraderLocked(candidate, nowMs)
-		activeRuns++
-	}
 }
 
 func isActiveTradeRunState(state AgentState) bool {
@@ -184,23 +144,20 @@ func isActiveTradeRunState(state AgentState) bool {
 	}
 }
 
-func pickNextTownTraderLocked(roster []*AgentUnit) *AgentUnit {
-	var best *AgentUnit
-	for _, u := range roster {
-		if u.Role != RoleTrader || isActiveTradeRunState(u.State) {
-			continue
-		}
-		if best == nil || u.TownDepartAtMs < best.TownDepartAtMs {
-			best = u
-		}
-	}
-	return best
-}
+/*
+==================
+dispatchTraderLocked
 
-func (r *Runtime) dispatchTraderLocked(unit *AgentUnit, nowMs int64) {
+Sends a town Trader out as a run of the given kind with its escorts.
+Caller holds r.mu.
+==================
+*/
+func (r *Runtime) dispatchTraderLocked(unit *AgentUnit, kind RunKind, guards []*AgentUnit, nowMs int64) {
 	if unit.CargoStacks <= 0 {
 		unit.CargoStacks = 10
 	}
+	unit.RunKind = kind
+	unit.AvailableForHire = false
 	unit.HP = unit.MaxHP
 	unit.MP = unit.MaxMP
 	unit.PotionCharges = defaultPotionCharges(unit.Role)
@@ -211,6 +168,9 @@ func (r *Runtime) dispatchTraderLocked(unit *AgentUnit, nowMs int64) {
 	unit.TownDepartAtMs = 0
 	unit.Route = r.route(unit)
 	unit.WaypointIndex = 0
+	for _, guard := range guards {
+		r.assignEscortLocked(guard, unit, kind)
+	}
 	for _, other := range r.agents[unit.Division] {
 		if other.Role != RoleHunter || !strings.EqualFold(other.DedicatedEscortFor, unit.Name) {
 			continue
@@ -276,7 +236,9 @@ HandlePlayerCommand parses interactive player chat commands directed at AI
 caravan agents:
   - "!caravans"                 (Lists active trade runs, town-staged traders, and hireable/reinforcing hunters)
   - "!accept [TraderAgentName]" (Hunter player accepts an AI Trader escort run)
-  - "!hire [HunterAgentName]"   (Trader player hires an available AI Hunter in town)
+  - "!hire [AgentName]"         (Hires an idle agent for one trade run; without a name lists them)
+  - "!leed"                     (The hirer leads its hired Traders instead of the first one in the party)
+  - "!dismiss"                  (Ends every hire of the player now)
   - "!attack <AgentName> [dmg]" (Simulates an ambush strike, triggering distress aid or parley)
   - "!memory [AgentName]"       (Inspects how an AI agent remembers the player)
 
@@ -293,12 +255,24 @@ func (r *Runtime) HandlePlayerCommand(
 		return "", false
 	}
 	cmd := strings.ToLower(fields[0])
+	division = strings.TrimSpace(division)
 	r.EnsureDivisionRoster(division)
+	defer r.flushOutbox(division)
 
 	switch cmd {
+	case "!leed", "!lead":
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		return r.toggleLeadLocked(division, playerName), true
+
+	case "!dismiss":
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		return r.dismissLocked(division, playerName, nowMs), true
+
 	case "!caravans", "!caravan":
 		r.mu.Lock()
-		r.ensureMinActiveTradesLocked(division, nowMs)
+		r.scheduleRunsLocked(division, nowMs)
 		roster := cloneUnits(r.agents[strings.TrimSpace(division)])
 		r.mu.Unlock()
 		var lines []string
@@ -321,7 +295,7 @@ func (r *Runtime) HandlePlayerCommand(
 			r.mu.Unlock()
 			return fmt.Sprintf("No AI Trader named %s is recruiting here.", targetAgent), true
 		}
-		if !r.commandNearLocked(unit, division, playerName) || (unit.State != StateRecruiting && unit.State != StateIdleInTown) {
+		if !r.commandNearLocked(unit, division, playerName) || !hireable(unit) {
 			r.mu.Unlock()
 			return "Meet a recruiting Trader in town to accept an escort.", true
 		}
@@ -330,9 +304,7 @@ func (r *Runtime) HandlePlayerCommand(
 			r.mu.Unlock()
 			return "You or that Trader already have a contract.", true
 		}
-		if unit.State == StateRecruiting || unit.State == StateIdleInTown {
-			r.dispatchTraderLocked(unit, nowMs)
-		}
+		r.dispatchTraderLocked(unit, RunEscorted, nil, nowMs)
 		agentName := unit.Name
 		r.mu.Unlock()
 		if r.hooks.OnContractFormed != nil {
@@ -341,37 +313,17 @@ func (r *Runtime) HandlePlayerCommand(
 		return FormatContractReply(contract), true
 
 	case "!hire":
-		targetAgent := "[AI]Hunter_Kwan"
-		if len(fields) >= 2 {
-			targetAgent = fields[1]
+		if len(fields) < 2 {
+			var names []string
+			for _, offer := range r.HireOffers(division, playerJob) {
+				names = append(names, offer.Name)
+			}
+			if len(names) == 0 {
+				return "Nobody you can hire is free right now. Talk to a specialty shop to hire caravan help.", true
+			}
+			return "Hire with !hire <name>: " + strings.Join(names, ", "), true
 		}
-		if playerJob != domain.JobTrader {
-			return "Only Traders can hire an AI Hunter mercenary escort.", true
-		}
-		r.mu.Lock()
-		unit := r.findAgentLocked(division, targetAgent)
-		if unit == nil || unit.Role != RoleHunter {
-			r.mu.Unlock()
-			return fmt.Sprintf("No AI Hunter named %s is available for hire.", targetAgent), true
-		}
-		if !unit.AvailableForHire || r.contracts.HasHiredHunter(division, playerName) || !r.commandNearLocked(unit, division, playerName) {
-			r.mu.Unlock()
-			return "Meet an available Hunter in town to hire an escort.", true
-		}
-		if r.hooks.OnHireFee == nil || !r.hooks.OnHireFee(division, playerName, BaseHunterHireFeeGold) {
-			r.mu.Unlock()
-			return "Hiring requires 15000 gold and an active Trader job.", true
-		}
-		unit.AvailableForHire = false
-		unit.EscortingTrader = playerName
-		unit.State = StateTraveling
-		contract := r.contracts.HireAIHunter(division, playerName, unit.Name, unit.OriginTown, unit.DestTown, nowMs)
-		agentName := unit.Name
-		r.mu.Unlock()
-		if r.hooks.OnContractFormed != nil {
-			r.hooks.OnContractFormed(division, playerName, agentName)
-		}
-		return FormatContractReply(contract), true
+		return r.HireAgent(division, playerName, playerJob, fields[1], nowMs), true
 
 	case "!memory":
 		targetAgent := "[AI]Trader_Jin"
@@ -407,6 +359,11 @@ func formatAgentRosterStatus(u *AgentUnit) string {
 		}
 	} else if u.Role == RoleTrader && u.State == StateReinforcing && u.ReinforcingTrader != "" {
 		duty = fmt.Sprintf("REINFORCING(%s)", u.ReinforcingTrader)
+	}
+	if u.HiredBy != "" {
+		duty = fmt.Sprintf("HIRED(%s)", u.HiredBy)
+	} else if u.RunKind != RunNone {
+		duty = fmt.Sprintf("%s/%s", duty, strings.ToUpper(string(u.RunKind)))
 	}
 	if u.Role == RoleTrader {
 		return fmt.Sprintf(

@@ -103,6 +103,8 @@ func (game *gameplayPlane) wireQuestDoors(quests *quest.Runtime) {
 			// So-Ok's Christmas Gift (port-only), the same way; it never
 			// runs beside the Christmas rows (progression/christmas_mode.go).
 			out = append(out, game.items.SoOkChristmasTalkOptions(npcCodename, character)...)
+			// The specialty shops' caravan hire rows (port-only), last.
+			out = append(out, game.caravanHireOptions(divisionID, character, npcCodename)...)
 			return out
 		},
 		Accept: func(character *enterworld.Character, codename string) ([]wire.Frame, error) {
@@ -110,6 +112,9 @@ func (game *gameplayPlane) wireQuestDoors(quests *quest.Runtime) {
 			return result.Frames, err
 		},
 		Finish: func(character *enterworld.Character, codename, npcCodename string) ([]wire.Frame, error) {
+			if frames, hire := game.caravanHireService(character, codename); hire {
+				return frames, nil
+			}
 			if codename == action.HalloweenExchangeService {
 				return game.items.ExchangeHalloweenBox(character, npcCodename)
 			}

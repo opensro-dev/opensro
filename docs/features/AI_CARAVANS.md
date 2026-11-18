@@ -333,3 +333,53 @@ Follow-up fixes addressing owner playtest findings on skills, hired escort catch
 - **Party (`pt`) auto-invite & hirer-only auto-accept:** `!hire` and `!accept` trigger `WorldHooks.OnContractFormed` -> `party.Runtime.InvitePlayerFromRuntimeActor` (sending `0x3393` proposal to solo players or joining existing parties); direct `0x70D5`/`0x751A` invites to runtime-only actors resolve via `domain.CharacterLookup`, auto-accept immediately only when `IsContractPartner` holds, refuse non-hirers (`0x0c` / `0x17`), stream `MemberUpdates` via `livePose`, and dissolve bot-only parties when no human member remains.
 - **World Map (`M`) polish:** `foundation/ui/world-map.ts` adds optional per-marker `size` (keeping `MAP_MARKER_SIZE = 16` default); `hud/world-map.ts` deduplicates party members from `betaPlayers`, renders AI Traders/Hunters/Thieves and players at crisp sizes (`12`/`8`), and adds `betaRoster` to hoverable `allRoster`; `wiring_caravanai.go` admits `BetaPlayerMapEnabled()` sessions with Title Case town/state labels and disables competing `ticker.PlayerMap` overwrites in `wiring_runtime.go`.
 - **Local provisioning & config:** Updated `apps/server/config/local.env` (`SRO_BETA_PLAYER_MAP`, `SRO_STARTING_SILK`, rate/pet/alchemy settings, `SRO_AI_CARAVANS=on`, `SRO_GM_CHARACTERS=global-official:test`) and credited Silk, GM privilege, gold, and Level-90 transport scrolls in both local/scratch `state.db` files.
+
+## Hiring at the specialty shops, roaming escorts, standing runs and the grand caravan (2026-11-18)
+
+Owner request: realistic escorts, hiring any idle agent for one trade run, a bigger roster, standing
+runs plus a periodic all-hands caravan, robbed-trader cooldown, and harder-to-find solo routes.
+Code: `internal/game/caravanai/convoy.go` (new), `roster.go`, `runtime.go`, `scheduler.go`, `world.go`;
+wiring in `wiring_caravanai.go`, `wiring_caravaneconomy.go`, `wiring_quests.go`; party helpers
+`MemberNames` / `RemoveRuntimeActor` in `social/party/consent.go`; client label passthrough in `ui.ts`.
+Distances use 10 world units per in-game metre (skill ranges: 180 units = 18m); the old
+"500u ~= 100m" note above was wrong.
+
+- **Roster:** 20 Hunters, 10 Traders, 10 Thieves spread over Jangan, Donwhang and Hotan. Four Thieves
+  patrol the highway (killed ones are replaced by rested town Thieves); everyone else starts idle.
+- **Idle agents** stroll within 30m of their town's specialty shop and are the only hireable ones.
+  Anyone on a run, mustering, escorting or hired is not offered.
+- **Followers** (escorts, grand-caravan members, hired agents) roam 15-50m around their leader,
+  run straight after it past 120m (and stop fighting to do so), and are teleported beside it past 200m
+  or when a catch-up makes no progress for 10s. A Trader waits while a follower within 120m fights or
+  one 120-200m back catches up.
+- **Hiring:** talk to `NPC_CH_SPECIAL` / `NPC_WC_SPECIAL` / `NPC_KT_SPECIAL`; one talk row per agent
+  the player may hire (`[AI]Name - Role in Town - fee [+ goods]`). Hunters and Traders hire Hunters and
+  Traders; Thieves hire Thieves; the player must be dressed and in town. Flat fee 15000 gold; a Trader
+  also costs its goods (10 stacks x stack value). At most 7 hires at once. The hired agent teleports to
+  the hirer and is invited to the party. `!hire <name>` does the same from chat; `!hire` lists names.
+- **Leading:** hired Hunters/Thieves follow the hirer. Hired Traders follow the first hired Trader in
+  party order (hire order when not in the party), which drives the run itself and waits while the hirer
+  is more than 120m away. `!leed` (or `!lead`) toggles the hirer leading all of them.
+- **Hire end:** one trade run, at most 1 hour. The run is done when the hirer, after leaving town,
+  enters another town (or the same town after 10 minutes out), or when the leading hired Trader reaches
+  its destination shop. Then hired Traders pay the goods' sale (cost + 15% per cargo star); after the
+  hour, a lost job, `!dismiss`, or the hirer being offline/out of the main world for 2 minutes they pay
+  the goods' cost back; robbed goods pay nothing. A hired agent that dies respawns beside its hirer.
+  Released agents leave the party and go home (teleport if outside town).
+- **Standing runs:** 2 solo Traders and 2 Traders with 3 Hunters each are kept on the road. Escorts are
+  released in the arrival town. Solo Traders pick either ferry crossing at random and bend every open leg
+  of 150m+ through a point 60-150m off the road.
+- **Grand caravan:** 30 minutes after boot and then every 3 hours, every idle Trader and Hunter musters
+  at the shop of the town most of them are in (announced in chat) and leaves 2 minutes later: the first
+  Trader leads, other Traders follow it, Hunters are shared out between the Traders. Arrival releases
+  everyone; a robbed leader disbands the caravan home.
+- **Robbed Trader:** 30-minute cooldown before its next own run (still hireable); its escorts give up
+  the run and return to town.
+- **Stuck recovery:** an off-road bend that makes no progress for 20s is skipped; any route waypoint
+  unreachable for 60s is reached by teleport; a town stroll blocked for 6s picks another spot.
+- **Distress calls** are answered only by agents on the road within 300m, never by town or hired agents.
+
+Checks: `go build ./...`, `go vet` on `sro-gameworld`, `caravanai`, `party`; `go test` for those
+packages (new `convoy_test.go`; scheduler/escort tests updated to the new ranges and roster); client
+`npm run typecheck`. `TestCaravanShippedActors` (now 40 actors) and `TestCaravanPartyAndMovementPolish`
+skip on this workstation (no extracted client media). Not yet verified in a live run. **No PR or push.**
