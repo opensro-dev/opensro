@@ -287,6 +287,13 @@ export function marketRequestPayload( request: MarketRequest ): Uint8Array {
 			if ( !Number.isInteger( page ) || page < 1 || page > MARKET_MAX_PAGE ) throw Error( "Invalid market page" );
 			if ( q ) body.q = q;
 			if ( request.category ) body.category = request.category;
+			if ( request.degree !== undefined ) {
+				const degree = request.degree;
+				if ( !Number.isInteger( degree ) || degree < 0 || degree > MARKET_MAX_DEGREE ) {
+					throw Error( "Invalid market degree" );
+				}
+				if ( degree ) body.degree = degree;
+			}
 			if ( request.currency ) body.currency = request.currency;
 			if ( request.sort ) body.sort = request.sort;
 			body.page = page;

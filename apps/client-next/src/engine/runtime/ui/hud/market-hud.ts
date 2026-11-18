@@ -3,8 +3,8 @@
 
 market-hud.ts - the consignment market window's drafts and its requests
 
-Port-only, not native (SRO_CONSIGNMENT on the server, the Experimental
-"Consignment market" row): v1.150 has no consignment. The window opens
+Port-only, not native (SRO_CONSIGNMENT on the server, published to the
+client at world entry): v1.150 has no consignment. The window opens
 from a storage keeper's menu and has four tabs - Browse, Sell, My
 listings, Offers - and one dialog at a time for a buy or an offer, each
 of which asks where the item goes (the inventory or the warehouse).
@@ -27,16 +27,19 @@ import type {
 	MarketState
 } from "@/engine/contracts/market";
 import {
+	MARKET_MAX_DEGREE,
 	MARKET_MAX_PAGE,
 	MARKET_QUERY_LIMIT,
 	marketNoticeText,
 	marketPriceDraft
 } from "@/engine/foundation/gameplay/market";
 
-export type MarketTab = "browse" | "sell" | "mine" | "offers";
+// The right column's pages: the account's listings, its history, its
+// offers, and the bag the seller picks an item from.
+export type MarketTab = "mine" | "history" | "offers" | "sell";
 
-// The tabs in the order the window shows them.
-export const MARKET_TABS: readonly MarketTab[] = [ "browse", "sell", "mine", "offers" ];
+// The pages a tab click may show (the bag opens from Pick from bag).
+export const MARKET_TABS: readonly MarketTab[] = [ "mine", "history", "offers", "sell" ];
 // The search orders in the order the sort button steps through them.
 export const MARKET_SORT_ORDER: readonly MarketSort[] = [ "newest", "ending", "price-asc", "price-desc" ];
 // The currency filter's steps: any, then each currency.
@@ -44,9 +47,14 @@ export const MARKET_CURRENCY_FILTERS: readonly (MarketCurrency | "")[] = [ "", "
 // A refusal or a success stays on the window's status line this long.
 export const MARKET_STATUS_MS = 8000;
 // The rows one page of the account's own lists shows.
-export const MARKET_MINE_ROWS = 14;
-// The rows each offer list shows.
-export const MARKET_OFFER_ROWS = 6;
+export const MARKET_MINE_ROWS = 8;
+// The rows one page of an offer list shows.
+export const MARKET_OFFER_ROWS = 7;
+// The bag picker's cells: seven columns, six rows a page.
+export const MARKET_BAG_COLUMNS = 7;
+export const MARKET_BAG_ROWS = 6;
+// The first bag slot an item can be listed from (0-12 are worn).
+export const MARKET_BAG_FIRST_SLOT = 13;
 // The writes: their answers refresh the account page and the search.
 const MARKET_WRITES: readonly MarketOp[] = [
 	"list",
@@ -87,10 +95,13 @@ export interface MarketHudState {
 	readonly category: string;
 	readonly currency: MarketCurrency | "";
 	readonly sort: MarketSort;
+	readonly degree: number;
 	readonly page: number;
 	readonly selected: number;
-	// Sell: the bag slot, its price, currency and the anonymous choice.
+	// Sell: the bag slot, its price, currency and the anonymous choice, and
+	// the bag picker's page.
 	readonly sellSlot: number;
+	readonly bagPage: number;
 	readonly sellCurrency: MarketCurrency;
 	readonly sellPrice: string;
 	readonly anonymous: boolean;
@@ -98,7 +109,9 @@ export interface MarketHudState {
 	readonly mineSelected: number;
 	readonly minePage: number;
 	readonly returnTo: MarketDestination;
-	// Offers: the picked offer, "in:<id>" or "out:<id>", and each list's page.
+	// Offers: the list shown (received or made), the picked offer, "in:<id>"
+	// or "out:<id>", and each list's page.
+	readonly offerSide: "in" | "out";
 	readonly offerSelected: string;
 	readonly offerPages: { readonly in: number; readonly out: number; };
 	readonly dialog: MarketDialog | null;
@@ -136,20 +149,23 @@ export interface MarketContext {
 
 const CLOSED: MarketHudState = {
 	open: false,
-	tab: "browse",
+	tab: "mine",
 	query: "",
 	category: "",
 	currency: "",
 	sort: "newest",
+	degree: 0,
 	page: 1,
 	selected: 0,
 	sellSlot: -1,
+	bagPage: 0,
 	sellCurrency: "gold",
 	sellPrice: "",
 	anonymous: false,
 	mineSelected: 0,
 	minePage: 0,
 	returnTo: "bag",
+	offerSide: "in",
 	offerSelected: "",
 	offerPages: { in: 0, out: 0 },
 	dialog: null,
@@ -248,6 +264,7 @@ export function createMarketHud() {
 		op: "search",
 		q: s.query.trim().slice( 0, MARKET_QUERY_LIMIT ),
 		...(s.category ? { category: s.category } : {}),
+		...(s.degree ? { degree: s.degree } : {}),
 		...(s.currency ? { currency: s.currency } : {}),
 		sort: s.sort,
 		page
@@ -406,9 +423,14 @@ export function createMarketHud() {
 				s = { ...s, currency: steps[(steps.indexOf( s.currency ) + 1) % steps.length]!, page: 1, selected: 0 };
 				return { requests: [ search( 1 ) ] };
 			}
-			if ( id === "market-category" ) {
-				const slugs = [ "", ...(market?.categories ?? []).map( category => category.slug ) ];
-				s = { ...s, category: slugs[(slugs.indexOf( s.category ) + 1) % slugs.length]!, page: 1, selected: 0 };
+			if ( id.startsWith( "market-category:" ) ) {
+				const slug = id.slice( 16 );
+				if ( slug && !market?.categories.some( category => category.slug === slug ) ) return none;
+				s = { ...s, category: slug, page: 1, selected: 0 };
+				return { requests: [ search( 1 ) ] };
+			}
+			if ( id === "market-degree" ) {
+				s = { ...s, degree: (s.degree + 1) % (MARKET_MAX_DEGREE + 1), page: 1, selected: 0 };
 				return { requests: [ search( 1 ) ] };
 			}
 			if ( id === "market-prev" || id === "market-next" ) {
@@ -422,6 +444,13 @@ export function createMarketHud() {
 				const listing = Number( id.slice( id.lastIndexOf( ":" ) + 1 ) );
 				if ( browse?.rows.some( row => row.id === listing ) ) s = { ...s, selected: listing };
 				return none;
+			}
+			const rowAction = /^market-row-(buy|offer|whisper):(\d+)$/.exec( id );
+			if ( rowAction ) {
+				const listing = Number( rowAction[2] );
+				if ( !browse?.rows.some( row => row.id === listing ) ) return none;
+				s = { ...s, selected: listing };
+				id = "market-" + rowAction[1];
 			}
 			if ( id === "market-buy" || id === "market-offer" ) {
 				const row = browse?.rows.find( r => r.id === s.selected );
@@ -440,9 +469,21 @@ export function createMarketHud() {
 					{ requests: [], whisper: row.seller } :
 					none;
 			}
-			// Sell.
+			// Sell: picking an item closes the bag picker.
 			if ( id.startsWith( "market-sell-slot:" ) ) {
-				s = { ...s, sellSlot: Number( id.slice( 17 ) ) };
+				s = { ...s, sellSlot: Number( id.slice( 17 ) ), tab: s.tab === "sell" ? "mine" : s.tab };
+				return none;
+			}
+			if ( id === "market-sell-pick" ) {
+				s = { ...s, tab: "sell", dialog: null };
+				return none;
+			}
+			if ( id === "market-sell-clear" ) {
+				s = { ...s, sellSlot: -1 };
+				return none;
+			}
+			if ( id === "market-bag-prev" || id === "market-bag-next" ) {
+				s = { ...s, bagPage: Math.max( 0, s.bagPage + (id === "market-bag-next" ? 1 : -1) ) };
 				return none;
 			}
 			if ( id === "market-sell-currency:gold" || id === "market-sell-currency:silk" ) {
@@ -497,12 +538,18 @@ export function createMarketHud() {
 				s = { ...s, offerPages: { ...s.offerPages, [side]: page } };
 				return none;
 			}
+			if ( id === "market-offer-side:in" || id === "market-offer-side:out" ) {
+				s = { ...s, offerSide: id.slice( 18 ) as "in" | "out", offerSelected: "" };
+				return none;
+			}
 			if ( id.startsWith( "market-offer-in:" ) || id.startsWith( "market-offer-out:" ) ) {
-				s = { ...s, offerSelected: id.slice( 13 ) };
+				const selection = id.slice( 13 );
+				s = { ...s, offerSelected: selection, offerSide: selection.startsWith( "in:" ) ? "in" : "out" };
 				return none;
 			}
 			if ( id.startsWith( "market-item:in:" ) || id.startsWith( "market-item:out:" ) ) {
-				s = { ...s, offerSelected: id.slice( 12 ) };
+				const selection = id.slice( 12 );
+				s = { ...s, offerSelected: selection, offerSide: selection.startsWith( "in:" ) ? "in" : "out" };
 				return none;
 			}
 			const offer = marketOfferAt( market, s.offerSelected );

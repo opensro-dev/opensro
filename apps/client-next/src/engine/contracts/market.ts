@@ -3,8 +3,8 @@
 
 market.ts - the consignment market's publication (opensro#3529)
 
-Port-only, not native (SRO_CONSIGNMENT on the server, the Experimental
-"Consignment market" row on the client): v1.150 has no consignment. The
+Port-only, not native (SRO_CONSIGNMENT on the server, published to the
+client at world entry): v1.150 has no consignment. The
 worker decodes the server's market control answers (foundation/gameplay
 market.ts) and publishes what the window shows; the window's drafts
 (search text, price, tab, the open dialog) are the HUD's own
@@ -235,6 +235,7 @@ export type MarketRequest =
 		readonly op: "search";
 		readonly q?: string;
 		readonly category?: string;
+		readonly degree?: number;
 		readonly currency?: MarketCurrency;
 		readonly sort?: MarketSort;
 		readonly page?: number;

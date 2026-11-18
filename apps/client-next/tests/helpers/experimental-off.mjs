@@ -68,7 +68,6 @@ export const OFF = Object.freeze( {
 	highlightEventNotices: true,
 	// Off by default: each player opts in to the unique damage ranking.
 	uniqueDamageRank: false,
-	consignmentMarket: false,
 	// Off by default: V hides only monsters and players, as the original does.
 	vHidesCompanions: false,
 	// On by default (port-only, not native): hides characters in dungeon blocks the active block does not draw.

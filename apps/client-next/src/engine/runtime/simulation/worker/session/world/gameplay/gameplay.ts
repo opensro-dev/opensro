@@ -618,6 +618,8 @@ export function createGameplay(
 	let fastDenReturn = false;
 	// The server's port-only trade-scale rule (tradeTiers).
 	let tradeTiers = false;
+	// The server's port-only consignment market (consignment).
+	let consignment = false;
 	// The server's port-only job-suit armour rule (jobSuitHidesArmor).
 	let jobSuitHidesArmor = false;
 	// The server's port-only Moonlit Ash thief suit rule (moonlitThiefSuit).
@@ -1938,6 +1940,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			uiTuning = uiTuningFrom( value );
 			fastDenReturn = (value as { fastDenReturn?: unknown; } | null)?.fastDenReturn === true;
 			tradeTiers = (value as { tradeTiers?: unknown; } | null)?.tradeTiers === true;
+			consignment = (value as { consignment?: unknown; } | null)?.consignment === true;
 			jobSuitHidesArmor = (value as { jobSuitHidesArmor?: unknown; } | null)?.jobSuitHidesArmor === true;
 			moonlitThiefSuit = (value as { moonlitThiefSuit?: unknown; } | null)?.moonlitThiefSuit === true;
 			alexandria = (value as { alexandria?: unknown; } | null)?.alexandria === true;
@@ -6342,6 +6345,7 @@ The published plane when something changed since the last take, else null.
 				...(chatItemLinks ? { chatItemLinks } : {}),
 				uiTuning,
 				...(tradeTiers ? { tradeTiers } : {}),
+				...(consignment ? { consignment } : {}),
 				...(jobSuitHidesArmor ? { jobSuitHidesArmor } : {}),
 				...(moonlitThiefSuit ? { moonlitThiefSuit } : {}),
 				...(alexandria ? { alexandria } : {}),

@@ -2,8 +2,8 @@
 ===========================================================================
 
 market-window.test.mjs - the consignment market window (port-only,
-SRO_CONSIGNMENT): the storage keeper's row only with the Experimental row
-on, named and anonymous sellers, the buy and offer boxes that ask where
+SRO_CONSIGNMENT): the storage keeper's row only while the server runs the
+market, named and anonymous sellers, the buy and offer boxes that ask where
 the item goes, the Sell terms, and the requests each click sends.
 
 ===========================================================================
@@ -12,7 +12,6 @@ import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
-const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 const { createMarketHud } = await import( "../../src/engine/runtime/ui/hud/market-hud.ts" );
 
 const item = ( name, extra = {} ) => ({ slot: 0, refObjId: 3117, typeFlags: 1, name, quantity: 1, plus: 0, ...extra });
@@ -74,13 +73,12 @@ const market = ( extra = {} ) => ({
 ================
 storageKeeper
 
-The production UI talking to a storage keeper (capability 4), with the
-Experimental market row as given.
+The production UI talking to a storage keeper (capability 4), on a shard
+that runs the market or not (the world-entry consignment rule).
 ================
 */
 function storageKeeper( enabled ) {
 	const commands = [], f = uiFixture( command => commands.push( command ) );
-	f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { consignmentMarket: enabled } ) } );
 	let now = 1000, seen = null;
 	const step = () => {
 		for ( let i = 0; i < 20; i++ ) seen = f.ui.step( f.state, now += 50 ) ?? seen;
@@ -91,6 +89,7 @@ function storageKeeper( enabled ) {
 		npcConversation: { gid: 77, phase: "menu" },
 		target: 77,
 		targetCapabilities: 4,
+		...(enabled ? { consignment: true } : {}),
 		market: market(),
 		social: { ...(f.state.gameplay.social ?? {}), localName: "Me" }
 	};
@@ -98,13 +97,13 @@ function storageKeeper( enabled ) {
 	return { f, step, sent };
 }
 
-test("the storage keeper offers the market only with the Experimental row on", () => {
+test("the storage keeper offers the market only while the server runs it", () => {
 	for ( const enabled of [ false, true ] ) {
 		const { f, step } = storageKeeper( enabled );
 		try {
 			const controls = step();
 			assert.ok( controls.has( "storage-open" ), "the storage row" );
-			assert.equal( controls.has( "market-open" ), enabled, `Experimental row ${enabled}` );
+			assert.equal( controls.has( "market-open" ), enabled, `server market ${enabled}` );
 		} finally {
 			f.dispose();
 		}
@@ -123,16 +122,21 @@ test("the window names sellers, hides anonymous ones and never sells a player it
 		assert.ok( f.hasText( "1,000 Gold" ) && f.hasText( "50 Silk" ) );
 		assert.ok( f.hasText( "Offers (1)" ), "the open offer on the tab" );
 
-		f.ui.event( { kind: "activate", id: "market-pick:9" } );
+		// Every row carries its own Buy, PM and Offer.
+		assert.equal( controls.get( "market-row-buy:9" )?.disabled, true, "its own listing" );
+		assert.equal( controls.get( "market-row-offer:9" )?.disabled, true, "no offer on its own listing" );
+		assert.equal( controls.get( "market-row-buy:8" )?.disabled, false );
+		assert.equal( controls.get( "market-row-whisper:8" )?.disabled, true, "an anonymous seller takes no whisper" );
+		assert.equal( controls.get( "market-row-whisper:7" )?.disabled, false );
+		// The right column: List an item and the account's pages.
+		assert.ok(
+			f.hasText( "List an item" ) && controls.has( "market-tab:mine" ) && controls.has( "market-tab:history" )
+		);
+		f.ui.event( { kind: "activate", id: "market-row-whisper:7" } );
+		step();
+		f.ui.event( { kind: "activate", id: "market-row-buy:7" } );
 		controls = step();
-		assert.equal( controls.get( "market-buy" )?.disabled, true, "its own listing" );
-		f.ui.event( { kind: "activate", id: "market-pick:8" } );
-		controls = step();
-		assert.equal( controls.get( "market-buy" )?.disabled, false );
-		assert.equal( controls.get( "market-whisper" )?.disabled, true, "an anonymous seller takes no whisper" );
-		f.ui.event( { kind: "activate", id: "market-pick:7" } );
-		controls = step();
-		assert.equal( controls.get( "market-whisper" )?.disabled, false );
+		assert.ok( f.hasText( "Where should the item go?" ), "a row's Buy opens the box for that row" );
 	} finally {
 		f.dispose();
 	}
@@ -196,13 +200,13 @@ test("Escape closes the box, then the window", () => {
 	}
 });
 
-test("turning the Experimental row off closes the window", () => {
+test("a shard without the market closes the window", () => {
 	const { f, step } = storageKeeper( true );
 	try {
 		step();
 		f.ui.event( { kind: "activate", id: "market-open" } );
 		assert.ok( step().has( "market-close" ) );
-		f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { consignmentMarket: false } ) } );
+		f.state.gameplay = { ...f.state.gameplay, consignment: undefined };
 		assert.ok( !step().has( "market-close" ) );
 	} finally {
 		f.dispose();
@@ -267,10 +271,10 @@ test("a read in flight holds the writes, but only a write says it is waiting", (
 		f.ui.event( { kind: "activate", id: "market-open" } );
 		step();
 		f.ui.event( { kind: "activate", id: "market-pick:7" } );
-		assert.equal( step().get( "market-buy" )?.disabled, false, "nothing in flight" );
+		assert.equal( step().get( "market-row-buy:7" )?.disabled, false, "nothing in flight" );
 		f.state.gameplay = { ...f.state.gameplay, market: market( { pending: "search" } ) };
 		const controls = step();
-		assert.equal( controls.get( "market-buy" )?.disabled, true, "the worker would drop a write sent now" );
+		assert.equal( controls.get( "market-row-buy:7" )?.disabled, true, "the worker would drop a write sent now" );
 		assert.ok( !f.hasText( "Waiting for the market..." ), "a read is silent" );
 	} finally {
 		f.dispose();
@@ -298,4 +302,23 @@ test("each offer list pages past its rows", () => {
 	hud.activate( "market-offers-in-next", context );
 	assert.equal( hud.state().offerPages.in, 1, "8 offers fill two pages of 6" );
 	assert.equal( hud.state().offerPages.out, 0, "the other list keeps its page" );
+});
+
+test("the chips, the degree step and a pick from the bag", () => {
+	const context = { market: market(), localName: "Me", now: 0 };
+	const hud = createMarketHud();
+	hud.open();
+	assert.deepEqual( hud.activate( "market-category:weapon", context ).requests.map( r => r.category ), [ "weapon" ] );
+	assert.deepEqual( hud.activate( "market-category:nope", context ).requests, [], "an unknown category" );
+	assert.equal( hud.activate( "market-degree", context ).requests[0].degree, 1 );
+	assert.equal( hud.activate( "market-category:", context ).requests[0].category, undefined, "All" );
+	hud.activate( "market-sell-pick", context );
+	assert.equal( hud.state().tab, "sell", "the + opens the bag" );
+	hud.activate( "market-sell-slot:20", context );
+	assert.equal( hud.state().sellSlot, 20 );
+	assert.equal( hud.state().tab, "mine", "a pick closes the bag" );
+	hud.activate( "market-sell-clear", context );
+	assert.equal( hud.state().sellSlot, -1 );
+	hud.activate( "market-offer-out:4", context );
+	assert.equal( hud.state().offerSide, "out" );
 });

@@ -10426,9 +10426,9 @@ export function createUi( ports: UiPorts ) {
 				phase === "world" &&
 				uniqueRankHud.reconcile( next.gameplay, experimental.state().saved.uniqueDamageRank )
 			) dirty = true;
-			// Port-only (#3529): the market closes with its Experimental row or
-			// the world; a write's answer refreshes what it changed.
-			if ( marketHud.isOpen() && (phase !== "world" || !experimental.state().saved.consignmentMarket) ) {
+			// Port-only (#3529): the market closes with the world, or when the
+			// shard does not run it; a write's answer refreshes what it changed.
+			if ( marketHud.isOpen() && (phase !== "world" || next.gameplay?.consignment !== true) ) {
 				marketHud.close();
 				dirty = true;
 			} else if ( phase === "world" ) {
@@ -17485,8 +17485,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						canReverseReturn: !!(capabilities & 0x20000000),
 						gateRows: capabilities & 0x8000000 ? game.targetGateRows : undefined,
 						canStorage: !!(capabilities & 4),
-						// Port-only (#3529): the storage keeper also opens the market.
-						canMarket: !!(capabilities & 4) && experimental.state().saved.consignmentMarket,
+						// Port-only (#3529): the storage keeper also opens the market
+						// while the shard runs it (server SRO_CONSIGNMENT).
+						canMarket: !!(capabilities & 4) && game.consignment === true,
 						// 5D9100: the TC manager's +0x20 (set by any camp record)
 						// is clear and the player is level 60 or more.
 						canAcademyOpen: !!(capabilities & 4) && !game.academy?.member &&

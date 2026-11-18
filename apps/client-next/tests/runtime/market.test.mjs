@@ -7,6 +7,9 @@ answers, named and anonymous sellers, offers, destinations and events.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+const { createGameplay } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
+);
 const {
 	createMarket,
 	marketEventText,
@@ -213,4 +216,26 @@ test("a refusal names its reason and the offer events read as chat lines", () =>
 		marketEventText( { kind: "offer-rejected", item: "Sword", currency: "gold", price: 5, paid: 0, who: "" } ),
 		/declined/
 	);
+});
+
+test("the server's SRO_CONSIGNMENT rule reaches the HUD snapshot and clears on a shard without it", () => {
+	const game = createGameplay( () => {} );
+	const pose = {
+		gid: 7,
+		refObjId: 1907,
+		kind: "player",
+		name: "Tester",
+		regionId: 0x6b4f,
+		x: 60,
+		y: 10,
+		z: 100,
+		heading: 0
+	};
+	game.bootstrap( { simulationProtocolVersion: 1, consignment: true } );
+	game.seed( pose );
+	assert.equal( game.take()?.consignment, true );
+	game.bootstrap( { simulationProtocolVersion: 1 } );
+	game.seed( pose );
+	assert.equal( game.take()?.consignment, undefined );
+	game.dispose();
 });

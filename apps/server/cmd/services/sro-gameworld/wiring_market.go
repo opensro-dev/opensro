@@ -63,4 +63,6 @@ func wireGameMarket(gameplay *gameplayPlane, hub *transport.Hub, authority *stor
 		return false
 	}
 	gameplay.items.Market = marketService(gameplay, authority, shard, online)
+	// The client learns at world entry that the storage keeper offers it.
+	gameplay.deps.Consignment = true
 }

@@ -890,6 +890,9 @@ export interface GameplayState extends MoverPublication {
 	// The server's port-only SRO_TRADE_TIERS rule, published at world entry:
 	// the trade-scale combo rates a purchase by gold (specialty-deal.ts).
 	readonly tradeTiers?: boolean;
+	// The server's port-only SRO_CONSIGNMENT market, published at world entry:
+	// the storage keeper's menu offers it (market-window.ts); absent is off.
+	readonly consignment?: boolean;
 	// The server's port-only SRO_JOB_SUIT_HIDES_ARMOR rule, published at world
 	// entry: trader and hunter suits hide worn armour (equipment-visuals.ts).
 	readonly jobSuitHidesArmor?: boolean;
