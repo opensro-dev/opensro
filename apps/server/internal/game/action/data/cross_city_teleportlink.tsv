@@ -1,0 +1,18 @@
+// Port-only, not native: direct links between the five Silk Road town gates the v1.150 chain
+// Jangan 1 - Donwhang 2 - Hotan 11 - Samarkand 34 - Constantinople 25 does not join directly.
+// The later reference databases link every pair of these gates (portaltransport_generated.go);
+// their fees are not in the client, so each link costs what the native chain charges: 5000 per hop.
+// The shape copies the native town rows: no level condition; the transport refusal comes from the
+// server databases, as for the native town links.
+1	1	11	10000	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+1	1	34	15000	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+1	1	25	20000	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+1	2	34	10000	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+1	2	25	15000	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+1	11	1	10000	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+1	11	25	10000	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+1	34	1	15000	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+1	34	2	10000	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+1	25	1	20000	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+1	25	2	15000	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+1	25	11	10000	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
