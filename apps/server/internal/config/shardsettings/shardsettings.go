@@ -99,6 +99,10 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_MULTI_CHARACTER", NomadVar: "beta_multi_character", Default: "off", Validation: ValueSwitch},
 	{Env: "SRO_BETA_MASTERY", NomadVar: "beta_mastery", Default: "off", Catalogue: true, Source: Built,
 		Validation: ValueSwitch},
+	// Port-only, not native (owner, 2026-11-18, #3551): characters created
+	// before the native totals went live keep the beta's 5,000 budget; new
+	// characters train under the native totals. "off" is native for all.
+	{Env: "SRO_BETA_MASTERY_EARLY", NomadVar: "beta_mastery_early", Default: "off", Validation: ValueSwitch},
 	// Port-only, not native: the 110 cap. Owner, 2026-10-27: the default is
 	// the native 90 (the non-native rule: the off value is native); the
 	// cap-110 expansion names 110 when it ships (#1751).

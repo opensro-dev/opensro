@@ -83,6 +83,7 @@ var catalogueExempt = map[string]string{
 	"SRO_SOOK_CHEST_CAPACITY":                  "the arena's checkpoint chest capacity at runtime; the catalogue publishes no chest contents",
 	"SRO_BETA_STARTER_KIT":                     "a character-creation grant; the catalogue publishes the granted items, not the grant",
 	"SRO_BETA_PLAYER_MAP":                      "shows other players on the world map at runtime; the catalogue publishes no live positions",
+	"SRO_BETA_MASTERY_EARLY":                   "a per-character allowance read from each character's creation time at runtime; levels.json keeps the native and shard-wide budgets",
 	"SRO_BETA_MULTI_CHARACTER":                 "how many characters of one account the transport admits to the world; no catalogue file carries sessions",
 	"SRO_CAP110_SET_BONUSES":                   "wearing a set changes derived character stats; the catalogue publishes the set items and no set-bonus table",
 	"SRO_CAP110_ITEMS":                         "a build input consumed when the server data is built; the catalogue publishes the built data",
