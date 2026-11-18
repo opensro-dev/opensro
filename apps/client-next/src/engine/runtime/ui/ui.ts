@@ -19925,17 +19925,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						hudCopy( "UIIT_STT_GOLD" ),
 						state.ownLocked
 					);
-					// 6B21B0: once the own offer locks, the server-driven confirm
-					// mode relabels this button UIIT_CTL_ACKNOWLEDGMENT ("Approve").
+					// 6B21B0 (CIFExchange_SetConfirmMode): 0xB095 [1] accepting the
+					// own lock (75B450) turns confirm mode on, which relabels this
+					// button UIIT_CTL_ACKNOWLEDGMENT ("Approve") at 6B21F6. It stays
+					// disabled until the partner locks too (6B1F40 / 540740), and
+					// 0xB34A [1] (75B4B0) only disables it again (6B1F30).
 					authoredLabeledButton(
 						at( 11 ),
 						px,
 						py,
 						"exchange-confirm",
-						// 6B21F6: once this side has confirmed, the button reads
-						// UIIT_CTL_ACKNOWLEDGMENT ("Approve"); the authored
-						// Confirm caption stays until then.
-						state.approved ?
+						state.ownLocked ?
 							hudCopy( "UIIT_CTL_ACKNOWLEDGMENT" ) || hudCopy( at( 11 ).text ) :
 							hudCopy( at( 11 ).text ),
 						state.approved || state.ownLocked && !state.theirLocked
