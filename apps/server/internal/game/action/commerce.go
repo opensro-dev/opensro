@@ -685,7 +685,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			// (enterworld.FreeGrantItem owns the list). The sale still
 			// succeeds and clears the bag, and the buyback restore
 			// price is untouched.
-			if enterworld.FreeGrantItem(item.Codename) {
+			if enterworld.FreeGrantItem(item.Codename) || rt.PvpServer {
 				price = 0
 			}
 			credit := price * uint64(q.Quantity)

@@ -32,6 +32,7 @@ import (
 	"opensro.online/server/internal/game/moderation"
 	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/pvpserver"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/restriction"
 	"opensro.online/server/internal/game/siege"
@@ -144,6 +145,8 @@ func newGameplayPlane(
 	items.NasrunTokens = items.NasrunSocket
 	items.Guilds = deps.Guilds
 	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
+	// Port-only, not native: the PVP shard's merchants pay nothing.
+	items.PvpServer = pvpserver.EnabledFromEnv()
 	if err := items.ValidateLootReferences(); err != nil {
 		return nil, fmt.Errorf("loot catalogue: %w", err)
 	}
