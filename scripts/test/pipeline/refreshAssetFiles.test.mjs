@@ -58,8 +58,12 @@ test("a name outside the packs' reach is refused", async ( t ) => {
 	await assert.rejects( publicFiles( [ "assets/data/absent.json" ], new Set(), root ), /not written/ );
 });
 
-test("a new image takes its image group; any other new file has no owner here", () => {
+test("a new image takes its image group, a new model its dedicated group or game-models; others no owner", () => {
 	assert.equal( newFileGroup( "/assets/images/Media_extracted/interface/quickparty/qpt_face.png" ), "game-images" );
+	assert.equal( newFileGroup( "/assets/npc/quest/ins_quest_teleport.glb" ), "game-models" );
+	const dedicated = new Map( [ [ "/assets/npc/cos/p_fox.glb", "mission-cos-models" ] ] );
+	assert.equal( newFileGroup( "/assets/npc/cos/P_Fox.glb", dedicated ), "mission-cos-models" );
+	assert.equal( newFileGroup( "/assets/npc/cos/p_fox.vat.bin" ), "game-models" );
 	assert.equal( newFileGroup( "/assets/data/new.json" ), undefined );
 });
 

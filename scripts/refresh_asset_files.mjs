@@ -15,8 +15,9 @@ superseded packs soft-archived, web manifest), in seconds.
 
 Each file must already be written loose in the public tree: this packs, it
 never produces. A file keeps the group that already holds it; a new image
-takes imagePackGroup's group, and any other new file is refused, since
-only its builder knows where it belongs. Nothing is claimed in the
+takes imagePackGroup's group, a new model the dedicated group its document
+names or else game-models (the full build's sweep), and any other new file
+is refused, since only its builder knows where it belongs. Nothing is claimed in the
 publication ledger: the files stay owned by the builders that wrote them,
 and the ones no builder claims are named, as the next full build archives
 them unless their builder publishes them by then.
@@ -25,7 +26,7 @@ them unless their builder publishes them by then.
 */
 import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { imagePackGroup, isImageAsset } from "./build/assetPackOwnership.mjs";
+import { collectDedicatedModelGroups, imagePackGroup, isImageAsset } from "./build/assetPackOwnership.mjs";
 import { normalizePublicAssetPath } from "./build/shared/assetPaths.mjs";
 import { minifyJsonBytes } from "./build/jsonAssetCompression.mjs";
 import { compressGzipSync, DEFAULT_GZIP_LEVEL } from "./build/shared/compressionUtils.mjs";
@@ -41,6 +42,11 @@ const PUBLISHER = "files";
 
 // The compressed twin the packs carry for a JSON (jsonCompression).
 const COMPRESSED_TWIN = ".gz";
+
+// The full build's sweep for every model no dedicated group claims
+// (assetPackGroups.mjs).
+const GENERIC_MODEL_GROUP = "game-models";
+const MODEL_PATTERN = /\.(?:glb|vat\.bin)$/i;
 
 // The pack tail's own outputs: never pack members.
 const PACK_TAIL = [ "/assets/packs/", "/assets/manifest.json" ];
@@ -105,11 +111,31 @@ export async function refreshCompressedTwin( twinPath ) {
 newFileGroup
 
 The group a file no pack holds yet joins: an image goes where
-imagePackGroup puts it; anything else has no owner here.
+imagePackGroup puts it; a model where its document's dedicated group
+(dedicated, lower-cased path -> group) puts it, else game-models, as the
+full build sweeps it; anything else has no owner here.
 ================
 */
-export function newFileGroup( file ) {
-	return isImageAsset( file ) ? imagePackGroup( file ) : undefined;
+export function newFileGroup( file, dedicated = new Map() ) {
+	if ( isImageAsset( file ) ) return imagePackGroup( file );
+	if ( MODEL_PATTERN.test( file ) ) return dedicated.get( file.toLowerCase() ) ?? GENERIC_MODEL_GROUP;
+	return undefined;
+}
+
+/*
+================
+dedicatedOwners
+
+lower-cased path -> dedicated model group for the named files, from the
+documents the full build reads (collectDedicatedModelGroups).
+================
+*/
+async function dedicatedOwners( files ) {
+	const { groups } = await collectDedicatedModelGroups(
+		CLIENT_PUBLIC_ROOT,
+		new Set( files.map( file => file.toLowerCase() ) )
+	);
+	return new Map( groups.flatMap( group => group.files.map( file => [ file.toLowerCase(), group.name ] ) ) );
 }
 
 /*
@@ -121,6 +147,7 @@ async function main() {
 	const index = JSON.parse( await readFile( PACK_INDEX_PATH, "utf8" ) );
 	const members = new Set( index.assets.map( row => row.path.toLowerCase() ) );
 	const files = await publicFiles( process.argv.slice( 2 ), members );
+	const dedicated = await dedicatedOwners( files );
 	for ( const file of files.filter( file => file.toLowerCase().endsWith( ".json" + COMPRESSED_TWIN ) ) ) {
 		if ( await refreshCompressedTwin( path.join( CLIENT_PUBLIC_ROOT, file.slice( 1 ) ) ) ) {
 			console.log( `${file}: derived again from its JSON` );
@@ -130,7 +157,7 @@ async function main() {
 		const { updates } = await refreshOwnedPackFiles( {
 			name: PUBLISHER,
 			files,
-			defaultGroup: newFileGroup,
+			defaultGroup: file => newFileGroup( file, dedicated ),
 			manifestSidecars: {}
 		} );
 		const built = updates.reduce( ( count, update ) => count + (update.builtPackCount ?? 0), 0 );
