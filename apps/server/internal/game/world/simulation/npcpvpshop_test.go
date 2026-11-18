@@ -63,3 +63,20 @@ func TestApplyPvpShopAddsTheTabsOnce(t *testing.T) {
 		t.Fatalf("the PVP tab appears %d times", count)
 	}
 }
+
+func TestMovePvpTraderStandsTheMerchantAtItsSpot(t *testing.T) {
+	smith := NpcDef{Codename: "NPC_CA_SMITH", Spawn: Spawn{RegionID: 27499, X: 1762, Y: 180, Z: 809}}
+	keeper := NpcDef{Codename: "NPC_CA_WAREHOUSE", Spawn: Spawn{RegionID: 27244, X: 563, Y: 180, Z: 1131}}
+	before := keeper.Spawn
+
+	movePvpTrader(&smith)
+	movePvpTrader(&keeper)
+
+	region, x, y, z, angle, _ := pvpserver.TraderSpot("NPC_CA_SMITH")
+	if smith.Spawn != (Spawn{RegionID: region, X: x, Y: y, Z: z, Angle: angle}) {
+		t.Fatalf("smith stands at %+v", smith.Spawn)
+	}
+	if keeper.Spawn != before {
+		t.Fatalf("the warehouse keeper moved to %+v", keeper.Spawn)
+	}
+}

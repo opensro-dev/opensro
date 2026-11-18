@@ -61,6 +61,25 @@ const (
 	samarkandAngle    int64   = 0
 )
 
+// traderLineX is where the PVP merchants stand: a line across the plaza
+// 90 units east of the arrival point, the way a character arriving faces.
+// Every spot was checked walkable on the variant's navmesh
+// (movement.WalkableSpawnHeightAt) on 2026-11-18.
+const traderLineX float64 = 360
+
+// traderAngle faces the merchants west, toward the arrival point (the
+// gacha operator east of them faces the same way).
+const traderAngle uint16 = 32768
+
+// traderLineZ is each merchant's place on the line; the arrival's own
+// Z (1421) stays free, so the walk straight ahead is not crowded.
+var traderLineZ = map[string]float64{
+	"NPC_CA_SMITH":     1341,
+	"NPC_CA_ARMOR":     1381,
+	"NPC_CA_ACCESSORY": 1461,
+	"NPC_CA_POTION":    1501,
+}
+
 var warnOtherShard sync.Once
 
 /*
@@ -100,6 +119,23 @@ GameWorld's wiring has already refused it at startup through Enabled.
 func EnabledFromEnv() bool {
 	on, err := Enabled(os.Getenv(envShardID), os.Getenv)
 	return on && err == nil
+}
+
+/*
+================
+TraderSpot
+
+Where a PVP merchant stands instead of its authored place: Samarkand's
+arrival region, on the line in front of the arrival point. False for
+every other NPC.
+================
+*/
+func TraderSpot(codename string) (regionID uint16, x, y, z float64, angle uint16, ok bool) {
+	z, ok = traderLineZ[codename]
+	if !ok {
+		return 0, 0, 0, 0, 0, false
+	}
+	return uint16(samarkandRegionID), traderLineX, samarkandY, z, traderAngle, true
 }
 
 /*

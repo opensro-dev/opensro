@@ -109,4 +109,7 @@ cp shard-pvp.env.example ~/silkroad/shard-pvp.env   # SRO_PVP_SERVER=on, SRO_LEV
 `SRO_PVP_SERVER` só age no shard cujo id é `pvp`; em outro shard é ignorado com um aviso. Com ele ligado:
 personagem criado no nível do cap, com todas as masteries e skills, 100.000.000 de ouro, em Samarkand;
 o ferreiro, o armadureiro e o vendedor de acessórios de Samarkand vendem D11 raro +12 e as pedras de grau
-11 a 1 de ouro; vender para NPC paga 0.
+11 a 1 de ouro; vender para NPC paga 0. A vendedora de poções (Nun Martel) vende a 1 de ouro as poções e
+pílulas de grau máximo (aba Potion) e os buffs temporários mais fortes que o servidor aplica (aba Special:
+dano e absorção +20%, HP e MP +4100, acerto, esquiva, agilidade, velocidade). Os quatro vendedores ficam
+em fila na frente do ponto de chegada (`pvpserver.TraderSpot`), em vez dos lugares nativos.

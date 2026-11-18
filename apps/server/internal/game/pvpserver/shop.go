@@ -7,7 +7,9 @@ Port-only, not native. On the PVP shard three Samarkand merchants carry
 one more store group each: the smith the degree-11 rare weapons and
 shields, the armorer the degree-11 rare armour, the accessory merchant
 the degree-11 rare accessories and the degree-11 attribute and magic
-stones. Gear is sold +12; stones as they are.
+stones. Gear is sold +12; stones as they are. The potion merchant adds
+two: the top grade of every recovery potion and cure pill, and the
+timed item buffs the server installs (skillitemuse.go admits each one).
 
 Both owners of a shop tab read the layout from here: the NPC roster
 (simulation, the conversation's tab rows) and the shop catalog
@@ -117,6 +119,29 @@ func gear(kinds ...int) func(ShopItem) bool {
 	}
 }
 
+// potionGoods are the top grade of each recovery family: HP, MP and
+// vigor potions with their special grades, and both cure pills.
+var potionGoods = []string{
+	"ITEM_ETC_HP_POTION_05", "ITEM_ETC_MP_POTION_05", "ITEM_ETC_ALL_POTION_05",
+	"ITEM_ETC_HP_SPOTION_01", "ITEM_ETC_MP_SPOTION_01", "ITEM_ETC_ALL_SPOTION_01",
+	"ITEM_ETC_CURE_ALL_04", "ITEM_ETC_CURE_RANDOM_04",
+}
+
+// buffGoods are the strongest timed buff of each kind among the shipped
+// items whose skill the server's item use installs: damage, absorption,
+// max HP and MP, hit, parry, agility and movement speed. The weaker
+// grades (HP/MP +500) and the two-minute arena power-ups are left out.
+var buffGoods = []string{
+	"ITEM_MALL_DAMAGE_INC_20P_SCROLL", "ITEM_MALL_DAMAGE_ABS_20P_SCROLL",
+	"ITEM_MALL_HP_INC_4100_POTION", "ITEM_MALL_MP_INC_4100_POTION",
+	"ITEM_ETC_E051123_HIT_SCROLL", "ITEM_ETC_E051123_EVATION_SCROLL",
+	"ITEM_ETC_E051123_AGILITY_SCROLL", "ITEM_MALL_MOVE_SPEED_UP_100",
+}
+
+func named(codenames []string) func(ShopItem) bool {
+	return func(item ShopItem) bool { return slices.Contains(codenames, item.Codename) }
+}
+
 func stones(prefix string) func(ShopItem) bool {
 	suffix := fmt.Sprintf("_%d", StoneDegree)
 	return func(item ShopItem) bool {
@@ -136,6 +161,8 @@ var shopCategories = []shopCategory{
 		stones("ITEM_ETC_ARCHEMY_ATTRSTONE_")},
 	{"NPC_CA_ACCESSORY", "UIIT_STT_ITEM_TYPE_ALCHEMY_MAGICSTONE", 0,
 		stones("ITEM_ETC_ARCHEMY_MAGICSTONE_")},
+	{"NPC_CA_POTION", "SN_TAB_POTION", 0, named(potionGoods)},
+	{"NPC_CA_POTION", "SN_TAB_SPECIAL", 0, named(buffGoods)},
 }
 
 /*

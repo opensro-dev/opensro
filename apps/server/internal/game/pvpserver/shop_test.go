@@ -165,3 +165,62 @@ func TestLayoutKeepsEveryGroupWithinFourTabs(t *testing.T) {
 		t.Fatalf("%d tabs in %d groups, want 7 in 3 (heavy 4+2, light 1)", len(tabs), len(perGroup))
 	}
 }
+
+/*
+================
+TestLayoutGivesThePotionMerchantPotionsAndBuffs
+
+The potion merchant sells exactly the named goods, unplussed, on its own
+two tabs; a lower grade of a named family stays off the shelf.
+================
+*/
+func TestLayoutGivesThePotionMerchantPotionsAndBuffs(t *testing.T) {
+	etc := func(code string, kind int) ShopItem {
+		return ShopItem{Codename: code, TypeID1: 3, TypeID2: 3, TypeID3: kind}
+	}
+	var items []ShopItem
+	for _, code := range potionGoods {
+		items = append(items, etc(code, 1))
+	}
+	for _, code := range buffGoods {
+		items = append(items, etc(code, 13))
+	}
+	items = append(items, etc("ITEM_ETC_HP_POTION_04", 1), etc("ITEM_ETC_E051123_HP500_SCROLL", 13))
+
+	byLabel := map[string]ShopTab{}
+	for _, tab := range Layout(items, 100, 50) {
+		if tab.Npc != "NPC_CA_POTION" {
+			t.Fatalf("%s sells %v", tab.Npc, tab.Codenames)
+		}
+		byLabel[tab.Label] = tab
+	}
+	potions, buffs := byLabel["SN_TAB_POTION"], byLabel["SN_TAB_SPECIAL"]
+	if len(potions.Codenames) != len(potionGoods) || len(buffs.Codenames) != len(buffGoods) {
+		t.Fatalf("potions %v, buffs %v", potions.Codenames, buffs.Codenames)
+	}
+	if potions.Plus != 0 || buffs.Plus != 0 || potions.GroupID == buffs.GroupID {
+		t.Fatalf("potions %+v, buffs %+v", potions, buffs)
+	}
+}
+
+/*
+================
+TestTraderSpotMovesOnlyTheShopMerchants
+
+The four merchants stand in Samarkand's arrival region, apart from one
+another and off the arrival point itself; any other NPC keeps its place.
+================
+*/
+func TestTraderSpotMovesOnlyTheShopMerchants(t *testing.T) {
+	seen := map[float64]bool{}
+	for _, npc := range []string{"NPC_CA_SMITH", "NPC_CA_ARMOR", "NPC_CA_ACCESSORY", "NPC_CA_POTION"} {
+		region, x, _, z, _, ok := TraderSpot(npc)
+		if !ok || int64(region) != samarkandRegionID || seen[z] || (x == samarkandX && z == samarkandZ) {
+			t.Fatalf("%s at region %d (%v, %v), ok %v", npc, region, x, z, ok)
+		}
+		seen[z] = true
+	}
+	if _, _, _, _, _, ok := TraderSpot("NPC_CA_WAREHOUSE"); ok {
+		t.Fatal("the warehouse keeper was moved")
+	}
+}

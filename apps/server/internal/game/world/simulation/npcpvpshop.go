@@ -3,10 +3,11 @@
 
 npcpvpshop.go - Samarkand's merchants on the PVP shard
 
-Port-only, not native. On the PVP shard the smith, the armorer and the
-accessory merchant of Samarkand carry the tabs pvpserver.ShopLayout lays
-out, after their own; the catalogue (commerce/pvpshop.go) holds the
-offers behind the same ids. Off, the roster is exactly as authored.
+Port-only, not native. On the PVP shard the smith, the armorer, the
+accessory merchant and the potion merchant of Samarkand carry the tabs
+pvpserver.ShopLayout lays out, after their own, and stand beside the
+arrival point; the catalogue (commerce/pvpshop.go) holds the offers
+behind the same ids. Off, the roster is exactly as authored.
 
 ===========================================================================
 */
@@ -64,5 +65,24 @@ func applyPvpShops(roster []NpcDef, textdataDir string) {
 	}
 	for i := range roster {
 		applyPvpShop(&roster[i], tabs)
+		movePvpTrader(&roster[i])
 	}
+}
+
+/*
+================
+movePvpTrader
+
+Stands a PVP merchant beside the arrival point (pvpserver.TraderSpot),
+so a character created in Samarkand finds every shop in front of it.
+The roster is built before any interest index reads a position, and the
+client places an NPC where its spawn says, so this one move is enough.
+================
+*/
+func movePvpTrader(npc *NpcDef) {
+	region, x, y, z, angle, ok := pvpserver.TraderSpot(npc.Codename)
+	if !ok {
+		return
+	}
+	npc.Spawn = Spawn{RegionID: region, X: x, Y: y, Z: z, Angle: angle}
 }
