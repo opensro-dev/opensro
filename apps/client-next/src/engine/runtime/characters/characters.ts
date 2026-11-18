@@ -648,8 +648,7 @@ export function createCharacterPresentation(
 				vitalsByGid.get( gid )?.hp === 0) ||
 				!!health?.dead( gid );
 			const cast = castByActor.get( gid );
-			const activeCast = !!cast && cast.cancelledAtMs === undefined &&
-				(actionLayersByActor.get( gid )?.length ?? 0) > 0;
+			const activeCast = castAnimating( cast, actionLayersByActor.get( gid )?.length ?? 0 );
 			const waiting = !dead && waitingActors.has( gid );
 			const moving = local ? gameplay?.moving : entity?.moving;
 			if ( state?.navigationHold ) {
