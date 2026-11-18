@@ -22,19 +22,36 @@ import {
 	RESOURCE_BUILD_STEPS
 } from "../../build/resourceBuild.mjs";
 import { buildKnobLines, ENV_KNOBS } from "../../build/shared/resourceBuildFingerprint.mjs";
+import { stampedVsroRoot } from "../../build/shared/laterClientRoot.mjs";
 
 test("no archive configured: the plan is the one skip line", () => {
 	for ( const env of [ {}, { SRO_VSRO_ROOT: "" }, { SRO_VSRO_ROOT: "  " } ] ) {
-		const plan = laterDungeonMapImportPlan( env, true );
+		const plan = laterDungeonMapImportPlan( env, true, "" );
 		assert.equal( plan.run, false );
 		assert.match( plan.line, /^Later dungeon maps: skipped \(SRO_VSRO_ROOT is not set/ );
 	}
 });
 
-test("a configured folder without the archive: the plan names it and skips", () => {
-	const plan = laterDungeonMapImportPlan( { SRO_VSRO_ROOT: "D:/later-client" }, false );
-	assert.equal( plan.run, false );
-	assert.match( plan.line, /no Media\.pk2 under SRO_VSRO_ROOT D:\/later-client/ );
+test("a configured folder without the archive fails the build, naming it", () => {
+	assert.throws(
+		() => laterDungeonMapImportPlan( { SRO_VSRO_ROOT: "D:/later-client" }, false, "" ),
+		/^Error: Later dungeon maps: SRO_VSRO_ROOT names the later client D:\/later-client, but it holds no Media\.pk2/
+	);
+});
+
+test("the variant stamp's later client stands in for an unset SRO_VSRO_ROOT", () => {
+	const plan = laterDungeonMapImportPlan( {}, true, "E:/stamped-client" );
+	assert.equal( plan.run, true );
+	assert.equal( plan.root, "E:/stamped-client" );
+	assert.throws(
+		() => laterDungeonMapImportPlan( {}, false, "E:/stamped-client" ),
+		/the variant stamp names the later client/
+	);
+	// The shell's root wins over the stamp's.
+	assert.equal(
+		laterDungeonMapImportPlan( { SRO_VSRO_ROOT: "D:/later-client" }, true, "E:/stamped-client" ).root,
+		"D:/later-client"
+	);
 });
 
 test("a configured archive: the plan runs the importer against its folder", () => {
@@ -44,7 +61,7 @@ test("a configured archive: the plan runs the importer against its folder", () =
 	assert.deepEqual( plan.args, [ "scripts/import_vsro_dungeon_maps.py", "--vsro-root", "D:/later-client" ] );
 });
 
-test("the step skips without the archive and stays one printed line", async ( t ) => {
+test("the step fails on a named folder without the archive, and skips in one line with none", async ( t ) => {
 	const empty = fs.mkdtempSync( path.join( os.tmpdir(), "sro-dungeon-step-" ) );
 	const saved = process.env.SRO_VSRO_ROOT;
 	const printed = [];
@@ -57,13 +74,29 @@ test("the step skips without the archive and stays one printed line", async ( t 
 	} );
 	console.log = ( ...args ) => printed.push( args.join( " " ) );
 	process.env.SRO_VSRO_ROOT = empty;
-	assert.deepEqual( await RESOURCE_BUILD_STEPS.importLaterDungeonMaps(), { skipped: true } );
-	assert.equal( printed.length, 1 );
-	assert.match( printed[0], /no Media\.pk2 under SRO_VSRO_ROOT/ );
+	await assert.rejects( RESOURCE_BUILD_STEPS.importLaterDungeonMaps( "" ), /holds no Media\.pk2/ );
+	assert.equal( printed.length, 0 );
 	delete process.env.SRO_VSRO_ROOT;
-	assert.deepEqual( await RESOURCE_BUILD_STEPS.importLaterDungeonMaps(), { skipped: true } );
-	assert.equal( printed.length, 2 );
-	assert.match( printed[1], /SRO_VSRO_ROOT is not set/ );
+	assert.deepEqual( await RESOURCE_BUILD_STEPS.importLaterDungeonMaps( "" ), { skipped: true } );
+	assert.equal( printed.length, 1 );
+	assert.match( printed[0], /SRO_VSRO_ROOT is not set and no variant stamp names a later client/ );
+});
+
+test("the variant stamp names the later client the variant was built from", ( t ) => {
+	const tree = fs.mkdtempSync( path.join( os.tmpdir(), "sro-variant-stamp-" ) );
+	t.after( () => fs.rmSync( tree, { recursive: true, force: true } ) );
+	// No stamp: a plain tree names nothing.
+	assert.equal( stampedVsroRoot( tree ), "" );
+	fs.mkdirSync( path.join( tree, ".state" ) );
+	const stamp = path.join( tree, ".state", "variant-stamp.json" );
+	const write = ( value ) => fs.writeFileSync( stamp, JSON.stringify( value ) );
+	write( { format: "sro-variant-stamp", version: 1, inputs: { arguments: { vsro: " E:/later " } } } );
+	assert.equal( stampedVsroRoot( tree ), "E:/later" );
+	write( { format: "sro-variant-stamp", version: 1, inputs: { arguments: {} } } );
+	assert.equal( stampedVsroRoot( tree ), "" );
+	// Something else at the stamp's path is refused, never read as "none".
+	write( { format: "other" } );
+	assert.throws( () => stampedVsroRoot( tree ), /is not a variant stamp/ );
 });
 
 test("one catalogue publishes exactly its pages and its sign icon", () => {
