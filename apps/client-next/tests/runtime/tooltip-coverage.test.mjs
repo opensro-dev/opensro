@@ -124,7 +124,7 @@ test("every admitted item-container route resolves its instance, including dupli
 			[ "shop-offer:0", offer ],
 			[ "shop-buyback:0", sold ],
 			[ "stall-slot:3", stallOffer ],
-			[ "stall-net-row:0", networkOffer ],
+			[ "stall-net-item:0", networkOffer ],
 			[ "exchange-my:3", exchangeMine ],
 			[ "exchange-their:5", exchangeTheirs ],
 			[ "gacha-bag:13", bag ],
@@ -140,7 +140,9 @@ test("every admitted item-container route resolves its instance, including dupli
 	assert.deepEqual( tooltipItems( "cos-slot:13", game, 43 ), [] );
 	assert.deepEqual( tooltipItems( "shop-buyback:1", game, 42 ), [] );
 	assert.deepEqual( tooltipItems( "stall-slot:0", game, 42 ), [] );
-	assert.deepEqual( tooltipItems( "stall-net-row:1", game, 42 ), [] );
+	assert.deepEqual( tooltipItems( "stall-net-item:1", game, 42 ), [] );
+	// The result row itself carries no help: only its item slot does.
+	assert.deepEqual( tooltipItems( "stall-net-row:0", game, 42 ), [] );
 	// BUG-084: the bound-item windows above resolved to nothing before.
 	assert.deepEqual( tooltipItems( "exchange-my:0", game, 42 ), [] );
 	assert.deepEqual( tooltipItems( "exchange-their:3", game, 42 ), [] );

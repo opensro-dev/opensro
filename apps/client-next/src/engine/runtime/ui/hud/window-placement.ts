@@ -145,6 +145,14 @@ export function createWindowPlacement() {
 		/*
 		================
 		frame
+
+		The window's origin for this frame, in whole UI units: the retail
+		windows sit at integer screen coordinates (CGWndBase rects are ints),
+		so a centred window ((w - width) / 2 on an odd remainder) or a drag
+		by a fractional scale's step must not leave the art on a half unit,
+		where nearest sampling lands on texel edges and a one-pixel border
+		(the stall network's gold box) breaks. The stored origin keeps its
+		fraction so a slow drag still accumulates.
 		================
 		*/
 		frame(
@@ -168,7 +176,7 @@ export function createWindowPlacement() {
 				rect = clamp( rect, w, h );
 			}
 			frames.set( id, { rect, viewport: [ w, h ] } );
-			return rect;
+			return [ Math.floor( rect[0] ), Math.floor( rect[1] ), rect[2], rect[3] ];
 		},
 		/*
 		================

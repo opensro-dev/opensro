@@ -79,8 +79,10 @@ export function tooltipItems(
 	else if ( id.startsWith( "shop-buyback:" ) ) item = game.shop?.buyback?.[Number( id.slice( 13 ) )]?.item;
 	else if ( id.startsWith( "stall-slot:" ) ) {
 		item = game.stall?.offers.find( row => row.slot === Number( id.slice( "stall-slot:".length ) ) )?.item;
-	} else if ( id.startsWith( "stall-net-row:" ) ) {
-		item = game.stall?.network.rows[Number( id.slice( "stall-net-row:".length ) )]?.item;
+	} else if ( id.startsWith( "stall-net-item:" ) ) {
+		// The result row's CIFSlotWithHelp (ifstallnetworkslot 12) owns the
+		// help, so the tooltip sits beside the icon, not past the whole row.
+		item = game.stall?.network.rows[Number( id.slice( "stall-net-item:".length ) )]?.item;
 	} else if ( id.startsWith( "notice-item:" ) ) {
 		// Port-only: the item a chat-log notice names (notice-links.ts).
 		const sequence = parseInt( id.slice( "notice-item:".length ), 10 );

@@ -43002,8 +43002,6 @@
 				"stall-net-combo:41",
 				"stall-net-combo:42",
 				"stall-net-combo:43",
-				"stall-net-next",
-				"stall-net-prev",
 				"stall-net-search",
 				"stall-net-sort:level",
 				"stall-net-sort:name",
@@ -43017,13 +43015,13 @@
 				"window-drag:Stall network"
 			],
 			"focus": null,
-			"hash": "c53a4400d1d041bb",
+			"hash": "4abc887f2b2d83c1",
 			"keys": {
 				"Enter": {
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "c53a4400d1d041bb",
+					"hash": "4abc887f2b2d83c1",
 					"panel": "Stall network",
 					"removed": []
 				},
@@ -43039,7 +43037,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "c53a4400d1d041bb",
+					"hash": "4abc887f2b2d83c1",
 					"panel": "Stall network",
 					"removed": []
 				},
@@ -43059,7 +43057,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "7ad76e65c14bcf2f",
+					"hash": "fd7523e13c736eb9",
 					"panel": "Stall network",
 					"removed": [
 						"hotbar:1",
@@ -43089,7 +43087,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "509d82676c46794f",
+					"hash": "097791e391527637",
 					"panel": "Stall network",
 					"removed": [
 						"hotbar:1",
@@ -43119,7 +43117,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "9eef5f584b750c5f",
+					"hash": "114d2471f11d34a3",
 					"panel": "Stall network",
 					"removed": [
 						"hotbar:1",
@@ -43143,7 +43141,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "af54114c89046f2a",
+					"hash": "f33e40115c5ed788",
 					"panel": "Stall network",
 					"removed": [
 						"chat-line:0",
@@ -43173,7 +43171,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "c53a4400d1d041bb",
+					"hash": "4abc887f2b2d83c1",
 					"panel": "Stall network",
 					"removed": []
 				},
@@ -43181,7 +43179,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "396bbf129b5ab1a4",
+					"hash": "894775275d447348",
 					"panel": "Stall network",
 					"removed": [
 						"chat-line:0",
@@ -43196,7 +43194,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "396bbf129b5ab1a4",
+					"hash": "894775275d447348",
 					"panel": "Stall network",
 					"removed": [
 						"chat-line:0",
@@ -43211,7 +43209,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "396bbf129b5ab1a4",
+					"hash": "894775275d447348",
 					"panel": "Stall network",
 					"removed": [
 						"chat-line:0",
@@ -43226,7 +43224,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "396bbf129b5ab1a4",
+					"hash": "894775275d447348",
 					"panel": "Stall network",
 					"removed": [
 						"chat-line:0",
@@ -43245,7 +43243,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "8a79b63723d43501",
+					"hash": "a85f2d377c2ec979",
 					"panel": "Stall network",
 					"removed": [
 						"hotbar:41",
@@ -43272,7 +43270,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "582ca29794554af7",
+					"hash": "8c11fe646a78bae5",
 					"panel": "Stall network",
 					"removed": []
 				},
@@ -43292,7 +43290,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "7ad76e65c14bcf2f",
+					"hash": "fd7523e13c736eb9",
 					"panel": "Stall network",
 					"removed": [
 						"hotbar:1",
@@ -43322,7 +43320,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "9eef5f584b750c5f",
+					"hash": "114d2471f11d34a3",
 					"panel": "Stall network",
 					"removed": [
 						"hotbar:1",
@@ -43374,7 +43372,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "3a2f4501f66acd39",
+					"hash": "3ce5b270b1dce715",
 					"panel": "Character",
 					"removed": []
 				},
@@ -43479,8 +43477,6 @@
 						"stall-net-combo:41",
 						"stall-net-combo:42",
 						"stall-net-combo:43",
-						"stall-net-next",
-						"stall-net-prev",
 						"stall-net-search",
 						"stall-net-sort:level",
 						"stall-net-sort:name",
@@ -43498,7 +43494,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "3c31f24bb5acc74e",
+					"hash": "a0399dd10a7748ec",
 					"panel": "Stall network",
 					"removed": [
 						"mall-notice-close",
@@ -43606,8 +43602,6 @@
 						"stall-net-combo:41",
 						"stall-net-combo:42",
 						"stall-net-combo:43",
-						"stall-net-next",
-						"stall-net-prev",
 						"stall-net-search",
 						"stall-net-sort:level",
 						"stall-net-sort:name",
@@ -43635,7 +43629,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "c53a4400d1d041bb",
+					"hash": "4abc887f2b2d83c1",
 					"panel": "Stall network",
 					"removed": []
 				},
@@ -43652,7 +43646,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "c53a4400d1d041bb",
+					"hash": "4abc887f2b2d83c1",
 					"panel": "Stall network",
 					"removed": []
 				},
@@ -43662,8 +43656,6 @@
 						"stall-net-choice:1",
 						"stall-net-choice:10",
 						"stall-net-choice:11",
-						"stall-net-choice:12",
-						"stall-net-choice:13",
 						"stall-net-choice:2",
 						"stall-net-choice:3",
 						"stall-net-choice:4",
@@ -43671,18 +43663,19 @@
 						"stall-net-choice:6",
 						"stall-net-choice:7",
 						"stall-net-choice:8",
-						"stall-net-choice:9"
+						"stall-net-choice:9",
+						"stall-net-combo-scroll-down",
+						"stall-net-combo-scroll-thumb",
+						"stall-net-combo-scroll-up"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "1cbceec39c70cee9",
+					"hash": "95c751ef11ac10e2",
 					"panel": "Stall network",
 					"removed": []
 				},
 				"stall-net-combo:42": null,
 				"stall-net-combo:43": null,
-				"stall-net-next": null,
-				"stall-net-prev": null,
 				"stall-net-search": null,
 				"stall-net-sort:level": null,
 				"stall-net-sort:name": null,
@@ -43708,7 +43701,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "f0e4598f9846c6c1",
+					"hash": "3f55218cb0a351bb",
 					"panel": "Guild",
 					"removed": []
 				},
@@ -43726,7 +43719,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "33a610c9053dfea5",
+					"hash": "e13dabdee244be82",
 					"panel": "Map",
 					"removed": []
 				},
@@ -43742,7 +43735,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "6111fc9ef0a20d9b",
+					"hash": "dcbe814678d8cde5",
 					"panel": "System",
 					"removed": []
 				},
@@ -43750,7 +43743,7 @@
 			},
 			"wheel": {
 				"changed": {},
-				"noop": 72
+				"noop": 70
 			}
 		},
 		"Storage": {
