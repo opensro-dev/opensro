@@ -69,6 +69,8 @@ const MENU_CURRENT: UiQuad["color"] = [ .2, .25, .3, 1 ];
 const MENU_HOVER: UiQuad["color"] = [ .12, .14, .17, 1 ];
 // The native interface art the window draws, and its sizes.
 const IFCOMMON = "/assets/images/Media_extracted/interface/ifcommon/";
+// The body's tile: the textured fill native windows and message boxes use.
+const WINDOW_TILE = IFCOMMON + "bg_tile/com_bg_tile_b.png";
 const ARROW_SIZE = 16;
 const ARROW_INSET = 6;
 const CHECK_SIZE = 16;
@@ -178,7 +180,7 @@ export interface MarketPaint {
 	): UiRect;
 	windowBox(
 		frame: UiAuthoredFrame,
-		spec: { title: string; x: number; y: number; width: number; height: number; }
+		spec: { title: string; x: number; y: number; width: number; height: number; tile?: string; }
 	): void;
 	closeButton( frame: UiAuthoredFrame, x: number, y: number, id: "market-close" ): void;
 	button(
@@ -239,7 +241,14 @@ export function drawMarketWindow( frame: UiAuthoredFrame, frameDraw: MarketPaint
 		initial: [ Math.max( 0, (frame.w - WIDTH) / 2 ), Math.max( 0, (frame.h - HEIGHT) / 3 ), WIDTH, HEIGHT ],
 		id: "window-drag:ConsignmentMarket"
 	} );
-	frameDraw.windowBox( frame, { title: "Consignment Market", x: px, y: py, width: WIDTH, height: HEIGHT } );
+	frameDraw.windowBox( frame, {
+		title: "Consignment Market",
+		x: px,
+		y: py,
+		width: WIDTH,
+		height: HEIGHT,
+		tile: WINDOW_TILE
+	} );
 	frameDraw.closeButton( frame, px + WIDTH - 26, py + 10, "market-close" );
 	const pen = penOf( frame, frameDraw, view, px, py );
 	pen.text(
@@ -1183,7 +1192,8 @@ function dialogBox( pen: Pen ) {
 		x,
 		y,
 		width: DIALOG_WIDTH,
-		height: DIALOG_HEIGHT
+		height: DIALOG_HEIGHT,
+		tile: WINDOW_TILE
 	} );
 	const listing = dialog.listing;
 	pen.item( "market-item:dialog:" + listing.id, listing.item, [ x + 16, y + 38, 32, 32 ] );

@@ -162,7 +162,17 @@ windowBox
 */
 export function windowBox(
 	frame: UiFrame,
-	{ title, x, y, width, height }: { title: string; x: number; y: number; width: number; height: number; }
+	{ title, x, y, width, height, tile }: {
+		title: string;
+		x: number;
+		y: number;
+		width: number;
+		height: number;
+		// A native CIFNormalTile texture for the body (com_bg_tile_*), as
+		// native windows fill theirs; without one the body is a flat fill,
+		// which leaves a seam where the ring's textured edge art meets it.
+		tile?: string;
+	}
 ) {
 	const blocks = frame.blocks,
 		quads = frame.quads,
@@ -173,7 +183,11 @@ export function windowBox(
 	const FRAME = frame.chrome.frame, PARTS = frame.chrome.parts;
 	const r: UiRect = [ x, y, width, height ];
 	blocks.push( r );
-	rect( frame, { r: r, color: [ .06, .075, .065, .96 ] } );
+	if ( tile ) {
+		frame.paths.push( tile );
+		quads.push( ...normalTile( r, tile, resources.size( tile ), full ) );
+	}
+	if ( !tile || !resources.has( tile ) ) rect( frame, { r: r, color: [ .06, .075, .065, .96 ] } );
 	quads.push(
 		...frameRing( r, FRAME, PARTS.map( part => resources.size( FRAME + part + ".png" ) ), full )
 	);
