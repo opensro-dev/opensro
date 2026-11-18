@@ -70,7 +70,7 @@ import {
 	CHARACTER_ASSEMBLIES,
 	CHARACTER_MODELS,
 	characterBytes,
-	CHARACTER_ACTORS,
+	RENDERED_ACTORS,
 	CHARACTER_RENDER_BYTES,
 	CHARACTER_RESIDENT_BYTES,
 	characterClothJoints,
@@ -152,7 +152,7 @@ export function fillRowOpacities(
 	rows: readonly CharacterActor[],
 	opacity: ( actor: CharacterActor ) => number
 ): Float32Array {
-	if ( rows.length > CHARACTER_ACTORS ) throw Error( "Character row scratch exceeds actor limit" );
+	if ( rows.length > RENDERED_ACTORS ) throw Error( "Character row scratch exceeds actor limit" );
 	if ( !streams.rowScratch || streams.rowScratch.length < rows.length ) {
 		streams.rowScratch = new Float32Array( rows.length );
 	}
@@ -179,7 +179,7 @@ export function fillRowPointLights(
 	origin: number,
 	blocks?: readonly (readonly DungeonBlockLight[])[]
 ): Float32Array {
-	if ( rows.length > CHARACTER_ACTORS ) throw Error( "Character row scratch exceeds actor limit" );
+	if ( rows.length > RENDERED_ACTORS ) throw Error( "Character row scratch exceeds actor limit" );
 	const needed = rows.length * POINT_LIGHT_FLOATS;
 	if ( !streams.lightScratch || streams.lightScratch.length < needed ) {
 		streams.lightScratch = new Float32Array( needed );
@@ -237,8 +237,8 @@ array is reused by the next call.
 ================
 */
 export function createPoseOrder() {
-	let optional = new Uint8Array( CHARACTER_ACTORS );
-	let sampled = new Float64Array( CHARACTER_ACTORS );
+	let optional = new Uint8Array( RENDERED_ACTORS );
+	let sampled = new Float64Array( RENDERED_ACTORS );
 	const needed: CharacterActor[] = [];
 	const indices: number[] = [];
 	const ordered: CharacterActor[] = [];

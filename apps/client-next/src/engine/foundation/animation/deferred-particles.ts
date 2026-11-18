@@ -11,7 +11,7 @@ visibility gates actual 50 ms EFP ticks, not just fragment opacity.
 */
 
 import { createModifierDelta } from "@/engine/foundation/rendering/modifier-delta";
-import { CHARACTER_ACTORS } from "./character-budget";
+import { RENDERED_ACTORS } from "./character-budget";
 import type { CharacterActor } from "@/engine/contracts/character";
 /*
 ================
@@ -85,7 +85,7 @@ export function createDeferredParticles() {
 				// still tick even if a previous query left instance alpha at zero.
 				if ( row.draw ) row.time += ticks / 20;
 			}
-			if ( keep.size > CHARACTER_ACTORS ) throw Error( "Deferred particle capacity exceeded" );
+			if ( keep.size > RENDERED_ACTORS ) throw Error( "Deferred particle capacity exceeded" );
 			for ( const gid of rows.keys() ) if ( !keep.has( gid ) ) rows.delete( gid );
 			queued = [];
 			eligible = [];
@@ -93,7 +93,7 @@ export function createDeferredParticles() {
 		},
 		plan( ids: readonly number[], enabled: ReadonlySet<number> ) {
 			if (
-				ids.length > CHARACTER_ACTORS || new Set( ids ).size !== ids.length || ids.some( id => !rows.has( id ) )
+				ids.length > RENDERED_ACTORS || new Set( ids ).size !== ids.length || ids.some( id => !rows.has( id ) )
 			) throw Error( "Invalid deferred particle queue" );
 			queued = ids;
 			eligible = ids.filter( id => enabled.has( id ) );

@@ -104,7 +104,7 @@ function fixture( { blindHeld, vHidesCompanions = false } ) {
 			}
 		}
 	};
-	const frame = { local: undefined, gameplay: null, next, seconds: 0, blindHeld };
+	const frame = { local: undefined, gameplay: null, next, seconds: 0, blindHeld, modelParticles: 0 };
 	publishCharacters( frame, { displayed: next }, { catalog: new Map(), dress: {}, manifest: 0 }, bindings );
 	return new Map( presented.map( entry => [ entry.gid, entry ] ) );
 }

@@ -25,7 +25,7 @@ import {
 } from "@/engine/foundation/gameplay/concealment";
 import { partyMembers, partyPortraitGid } from "@/engine/foundation/ui/party-overlay";
 import { radians } from "@/engine/foundation/math/angles";
-import { CHARACTER_ACTORS } from "@/engine/foundation/animation/character-budget";
+import { CHARACTER_ACTORS, MODEL_PARTICLE_ACTORS } from "@/engine/foundation/animation/character-budget";
 import { disappearActor } from "@/engine/foundation/animation/disappear";
 import { hiddenSilkCos } from "@/engine/foundation/ui/name-visibility";
 import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
@@ -296,9 +296,16 @@ interface EmissionBindings {
 presentEmission
 
 Opacity and holder replacement precede particle publication, as in the parent.
+The model particles (a Seal item's glow, a garment's ambient set) take their
+own room, MODEL_PARTICLE_ACTORS, in holder order: the local player first,
+then nearest first (character-selection.ts). A crowd and its loot fill the
+scene's CHARACTER_ACTORS and used to leave them no slot at all. What follows
+them shares the scene's room without counting them. Returns how many model
+particles it published (publishCharacters leaves them out of the scene's
+room too).
 ================
 */
-export function presentEmission( frame: EmissionFrame, bindings: EmissionBindings ) {
+export function presentEmission( frame: EmissionFrame, bindings: EmissionBindings ): number {
 	const { entities, next, seconds, hideSilkCos, particleHolders, animationHolders, frameWork } = frame;
 	const { resources, renderer, modelEmission, animationEmission, scenery, entityLod, applySpawnFades } = bindings;
 	for ( const entity of entities ) {
@@ -309,22 +316,26 @@ export function presentEmission( frame: EmissionFrame, bindings: EmissionBinding
 	}
 	applySpawnFades( entities, next, seconds );
 	for ( const holder of particleHolders ) holder.actor = next.get( holder.actor.gid )!;
+	let modelParticles = 0;
 	for (
 		const actor of modelEmission.step(
 			particleHolders,
 			seconds,
 			resources.ready,
-			CHARACTER_ACTORS - next.size,
+			MODEL_PARTICLE_ACTORS,
 			gid => frameWork?.level() && next.get( gid )?.animationLod?.optional ? 1 : entityLod.fraction( gid )
 		)
-	) next.set( actor.gid, actor );
+	) {
+		next.set( actor.gid, actor );
+		modelParticles++;
+	}
 	for ( const holder of animationHolders ) holder.actor = next.get( holder.actor.gid )!;
 	for (
 		const actor of animationEmission.step(
 			animationHolders,
 			seconds,
 			resources.ready,
-			CHARACTER_ACTORS - next.size,
+			CHARACTER_ACTORS - (next.size - modelParticles),
 			renderer.presentationNight?.() ?? true,
 			( gid, actor ) => {
 				if ( !actor ) return renderer.characterParticleSnapshot( gid );
@@ -344,9 +355,10 @@ export function presentEmission( frame: EmissionFrame, bindings: EmissionBinding
 			renderer.scenery?.() ?? null,
 			seconds,
 			resources.ready,
-			CHARACTER_ACTORS - next.size
+			CHARACTER_ACTORS - (next.size - modelParticles)
 		)
 	) next.set( actor.gid, actor );
+	return modelParticles;
 }
 
 /*
@@ -360,6 +372,9 @@ interface PortraitFrame {
 	readonly next: Map<number, CharacterActor>;
 	readonly seconds: number;
 	readonly blindHeld: boolean;
+	// The model particles presentEmission published into next: outside
+	// the scene's room.
+	readonly modelParticles: number;
 }
 
 /*
@@ -430,7 +445,7 @@ export function publishCharacters(
 	published: PortraitCatalog,
 	bindings: PortraitBindings
 ) {
-	const { local, gameplay, next, seconds, blindHeld } = frame;
+	const { local, gameplay, next, seconds, blindHeld, modelParticles } = frame;
 	const { catalog, dress, manifest } = published;
 	const { renderer, resources, mallPreview, portraitEmission } = bindings;
 	// 5BAF70 -> 5B9DF0 builds a slot-owned preview from the roster model.
@@ -469,7 +484,7 @@ export function publishCharacters(
 				glow ? [ glow ] : [],
 				seconds,
 				resources.ready,
-				CHARACTER_ACTORS - next.size - portraits.length
+				CHARACTER_ACTORS - (next.size - modelParticles) - portraits.length
 			)
 		);
 	}
