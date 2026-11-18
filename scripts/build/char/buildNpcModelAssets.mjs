@@ -297,12 +297,15 @@ async function publishNpcModels( options, store ) {
 		} );
 		claimResourceOutput( outputOwners, model.bsrPath, output.publicPath );
 		const publicPath = output.publicPath;
-		const info = resolveCharacterInfo( codename );
+		// A gate's model is a CCObjAnimation (8762E0), not a CICharactor: it
+		// takes no characterInfo, not even the default record.
+		const isTeleport = teleportNames.has( codename );
+		const info = isTeleport ? undefined : resolveCharacterInfo( codename );
 		const soundProfileName = info?.soundProfileName;
 		if ( !soundProfileName && isMob ) {
 			throw new Error( `[npc] ${codename}: no skilleffect characterInfo ResourceTypeName` );
 		}
-		if ( !soundProfileName ) {
+		if ( !soundProfileName && !isTeleport ) {
 			console.warn(
 				`[npc] ${codename}: no skilleffect characterInfo row; ` +
 					"publishing the visual without an invented sound/action profile"
@@ -344,7 +347,7 @@ async function publishNpcModels( options, store ) {
 			"monster" :
 			structureNames.has( codename ) ?
 			"structure" :
-			teleportNames.has( codename ) ?
+			isTeleport ?
 			"teleport" :
 			"npc";
 		const entry = {
