@@ -31,6 +31,50 @@ type fakeServiceStore struct {
 	// session list was read: the list says offline, the admission gate
 	// says online.
 	enteredDuringBuy map[int64]bool
+	reclaimed        []domain.MarketReclaimRequest
+	offered          []domain.MarketOfferRequest
+	accepted         []domain.MarketAcceptRequest
+	offers           map[int64]domain.MarketOffer
+}
+
+func (f *fakeServiceStore) MarketReclaim(req domain.MarketReclaimRequest) (domain.MarketListing, error) {
+	f.reclaimed = append(f.reclaimed, req)
+	return domain.MarketListing{}, nil
+}
+
+func (f *fakeServiceStore) MarketMakeOffer(req domain.MarketOfferRequest) (domain.MarketOffer, error) {
+	f.offered = append(f.offered, req)
+	return domain.MarketOffer{ID: 9, ListingID: req.ListingID, Price: req.Price, To: req.To, BuyerName: req.Buyer.Name}, nil
+}
+
+func (f *fakeServiceStore) MarketAcceptOffer(req domain.MarketAcceptRequest) (domain.MarketSale, domain.MarketOffer, error) {
+	f.accepted = append(f.accepted, req)
+	return domain.MarketSale{ListingID: 1}, domain.MarketOffer{}, nil
+}
+
+func (f *fakeServiceStore) MarketRejectOffer(string, int64) (domain.MarketOffer, error) {
+	return domain.MarketOffer{ListingID: 1}, nil
+}
+
+func (f *fakeServiceStore) MarketWithdrawOffer(string, int64) (domain.MarketOffer, error) {
+	return domain.MarketOffer{ListingID: 1}, nil
+}
+
+func (f *fakeServiceStore) MarketOffers(string, int) ([]domain.MarketOffer, []domain.MarketOffer, error) {
+	return nil, nil, nil
+}
+
+func (f *fakeServiceStore) MarketOfferByID(id int64) (domain.MarketOffer, error) {
+	if offer, ok := f.offers[id]; ok {
+		return offer, nil
+	}
+	return domain.MarketOffer{}, domain.ErrMarketOfferGone
+}
+
+func (f *fakeServiceStore) MarketOwedCharacters() (map[int64]bool, error) { return nil, nil }
+
+func (f *fakeServiceStore) MarketClaimProceeds(*domain.Character) ([]domain.MarketSale, error) {
+	return nil, nil
 }
 
 func (f *fakeServiceStore) MarketList(req domain.MarketListRequest) (domain.MarketListing, error) {
@@ -293,26 +337,103 @@ func TestGameDoorsActForTheOnlineCharacter(t *testing.T) {
 	s := testService(store)
 	kekw := &domain.Character{ID: 1, AccountID: "alpha", Name: "Kekw"}
 
-	if _, err := s.GameList(kekw, 13, domain.MarketGold, 500); err != nil {
+	if _, err := s.GameList(kekw, 13, domain.MarketGold, 500, true); err != nil {
 		t.Fatal(err)
 	}
-	if req := store.listed[0]; req.Character != kekw || req.Account != "alpha" || req.Slot != 13 || req.Price != 500 {
+	if req := store.listed[0]; req.Character != kekw || req.Account != "alpha" || req.Slot != 13 || req.Price != 500 ||
+		!req.Anonymous {
 		t.Fatalf("a game listing = %+v", req)
 	}
-	if _, err := s.GameList(kekw, 14, domain.MarketGold, 500); !errors.Is(err, domain.ErrMarketNotTradeable) {
+	if _, err := s.GameList(kekw, 14, domain.MarketGold, 500, false); !errors.Is(err, domain.ErrMarketNotTradeable) {
 		t.Fatalf("a forge-bound listing: %v", err)
 	}
 
-	if _, err := s.GameBuy(kekw, 1, 4); err != nil {
+	if _, err := s.GameBuy(kekw, 1, 4, domain.MarketToBag, 20); err != nil {
 		t.Fatal(err)
 	}
-	if req := store.bought[0]; req.Payer != kekw || req.BuyerAccount != "alpha" || req.Version != 4 {
+	if req := store.bought[0]; req.Payer != kekw || req.BuyerAccount != "alpha" || req.Version != 4 ||
+		req.To != domain.MarketToBag || req.Receiver != kekw || req.BagSlot != 20 {
 		t.Fatalf("a game gold buy = %+v", req)
 	}
-	if _, err := s.GameBuy(kekw, 2, 1); err != nil || store.bought[1].Payer != nil {
-		t.Fatalf("a game Silk buy = %v, payer %+v", err, store.bought[1].Payer)
+	if _, err := s.GameBuy(kekw, 2, 1, domain.MarketToWarehouse, -1); err != nil || store.bought[1].Payer != nil ||
+		store.bought[1].Receiver != nil {
+		t.Fatalf("a game Silk buy = %v, %+v", err, store.bought[1])
 	}
-	if _, err := s.GameBuy(kekw, 3, 1); !errors.Is(err, domain.ErrMarketNotFound) || len(store.bought) != 2 {
+	if _, err := s.GameBuy(kekw, 3, 1, domain.MarketToWarehouse, -1); !errors.Is(err, domain.ErrMarketNotFound) || len(store.bought) != 2 {
 		t.Fatalf("another shard's listing: %v", err)
+	}
+}
+
+/*
+================
+TestSellerIsNamedUnlessAnonymous
+
+Every viewer sees a named seller's name and no anonymous one's; the
+seller's own page shows its name with the choice.
+================
+*/
+func TestSellerIsNamedUnlessAnonymous(t *testing.T) {
+	store := &fakeServiceStore{open: []domain.MarketListing{
+		{ID: 1, Division: "global-official", Currency: domain.MarketGold, SellerName: "Kekw",
+			Item: domain.InventoryRow{Codename: "ITEM_CH_SWORD_01_A"}},
+		{ID: 2, Division: "global-official", Currency: domain.MarketGold, SellerName: "Lulu", Anonymous: true,
+			Item: domain.InventoryRow{Codename: "ITEM_CH_SWORD_01_A"}},
+	}}
+	s := testService(store)
+	page, err := s.Search(publicstats.MarketSearch{Page: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sellers := map[int64]string{}
+	for _, view := range page.Listings {
+		sellers[view.ID] = view.Seller
+		if view.Anonymous {
+			t.Fatalf("a search shows the anonymous choice: %+v", view)
+		}
+	}
+	if sellers[1] != "Kekw" || sellers[2] != "" {
+		t.Fatalf("sellers = %v", sellers)
+	}
+	name, anonymous := s.ownSeller(store.open[1])
+	if name != "Lulu" || !anonymous {
+		t.Fatalf("own seller = %q %v", name, anonymous)
+	}
+}
+
+/*
+================
+TestWebsiteOffersNeedAnOfflineCharacter
+
+A website offer and a website accept write a character's record only
+through the offline gate: an online offering character refuses both,
+and an offline one is judged with its free bag slot.
+================
+*/
+func TestWebsiteOffersNeedAnOfflineCharacter(t *testing.T) {
+	store := &fakeServiceStore{byID: map[int64]domain.MarketListing{
+		1: {ID: 1, Division: "global-official", Currency: domain.MarketGold, Price: 900},
+	}, offers: map[int64]domain.MarketOffer{
+		5: {ID: 5, ListingID: 1, BuyerAccount: "alpha", BuyerChar: 1},
+		6: {ID: 6, ListingID: 1, BuyerAccount: "alpha", BuyerChar: 2},
+	}}
+	s := testService(store)
+	s.FreeBagSlot = func(c *domain.Character) int64 { return 40 + c.ID }
+
+	if _, err := s.MakeOffer("alpha", publicstats.MarketOfferBody{Listing: 1, Price: 500, Character: "Kekw"}); !errors.Is(err, publicstats.ErrMarketOnline) {
+		t.Fatalf("an online character's website offer: %v", err)
+	}
+	if _, err := s.MakeOffer("alpha", publicstats.MarketOfferBody{Listing: 1, Price: 500, Character: "Nobody"}); !errors.Is(err, publicstats.ErrNotOwned) {
+		t.Fatalf("an offer for another account's character: %v", err)
+	}
+	if _, err := s.MakeOffer("alpha", publicstats.MarketOfferBody{Listing: 1, Price: 500, Character: "Lulu"}); err != nil ||
+		len(store.offered) != 1 || store.offered[0].To != domain.MarketToWarehouse || store.offered[0].Buyer.Name != "Lulu" {
+		t.Fatalf("an offline offer = %v, %+v", err, store.offered)
+	}
+	if _, err := s.AcceptOffer("beta", 5); !errors.Is(err, publicstats.ErrMarketOnline) || len(store.accepted) != 0 {
+		t.Fatalf("accepting an online buyer's offer from the website: %v", err)
+	}
+	if _, err := s.AcceptOffer("beta", 6); err != nil || len(store.accepted) != 1 || store.accepted[0].BagSlot != 42 ||
+		store.accepted[0].Buyer.Name != "Lulu" || store.accepted[0].SellerAccount != "beta" {
+		t.Fatalf("an offline buyer's accept = %v, %+v", err, store.accepted)
 	}
 }

@@ -12,16 +12,22 @@ Every door is one store transaction that takes the item (and any money)
 out of its source and writes it to its destination, or changes nothing:
 
 	list      bag or account warehouse -> listing (open)
-	buy       listing -> buyer's warehouse; buyer's Silk or a character's
-	          gold -> seller's Silk or warehouse gold, less the fee
-	return    listing -> seller's warehouse (cancel or expiry), or held in
-	          the listing while that warehouse is full
-	take back held listing -> seller's warehouse
+	buy       listing -> the buyer's bag or warehouse (the buyer picks);
+	          buyer's Silk or a character's gold -> seller's Silk, or gold
+	          owed to the listing character, less the fee
+	offer     a price below the listing's; accept runs the buy at it
+	          (market_offers.go)
+	return    listing -> seller's bag or warehouse (cancel or expiry), or
+	          held in the listing while that warehouse is full
+	take back held listing -> seller's bag or warehouse
+	proceeds  owed gold -> the listing character (market_proceeds.go)
 
-Gold proceeds land in the seller's account warehouse, never on a
-character: a character may be online, and its record belongs to the
-action lane then. The warehouse is the account's and is only written
-under the store lock, so a sale can never race a player's own move.
+A gold sale of a bag listing pays the character that listed it (owner,
+2026-11-19), but never by writing that record here: the character may be
+online, and its record then belongs to its action lane. The sale stays
+owed (market_sales.unpaid) until the lane claims it under its division
+lock. A website listing has no character, so its gold goes to the
+account warehouse, which is only written under the store lock.
 
 Every door holds the store lock for its whole read-check-write, the lock
 TransactStorage holds, so a warehouse move in the game and a market door
@@ -56,7 +62,9 @@ CREATE TABLE IF NOT EXISTS market_listings (
   listed_ms      INTEGER NOT NULL,
   expires_ms     INTEGER NOT NULL,
   state          TEXT    NOT NULL CHECK (state IN ('open', 'sold', 'returned', 'held')),
-  version        INTEGER NOT NULL
+  version        INTEGER NOT NULL,
+  seller_name    TEXT    NOT NULL DEFAULT '',
+  anonymous      INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS market_listings_expiry ON market_listings (state, expires_ms);
 CREATE INDEX IF NOT EXISTS market_listings_seller ON market_listings (seller_account, state);
@@ -68,9 +76,46 @@ CREATE TABLE IF NOT EXISTS market_sales (
   currency      TEXT    NOT NULL,
   price         INTEGER NOT NULL,
   fee           INTEGER NOT NULL,
-  at_ms         INTEGER NOT NULL
+  at_ms         INTEGER NOT NULL,
+  seller_char   INTEGER NOT NULL DEFAULT 0,
+  unpaid        INTEGER NOT NULL DEFAULT 0,
+  codename      TEXT    NOT NULL DEFAULT '',
+  dest          TEXT    NOT NULL DEFAULT 'warehouse',
+  slot          INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS market_sales_buyer ON market_sales (buyer_account, at_ms);
+CREATE TABLE IF NOT EXISTS market_offers (
+  id            INTEGER PRIMARY KEY,
+  listing_id    INTEGER NOT NULL,
+  division      TEXT    NOT NULL,
+  buyer_account TEXT    NOT NULL,
+  buyer_char    INTEGER NOT NULL,
+  buyer_name    TEXT    NOT NULL,
+  price         INTEGER NOT NULL CHECK (price > 0),
+  dest          TEXT    NOT NULL CHECK (dest IN ('bag', 'warehouse')),
+  state         TEXT    NOT NULL CHECK (state IN ('open', 'accepted', 'rejected', 'withdrawn', 'closed')),
+  at_ms         INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS market_offers_listing ON market_offers (listing_id, state);
+CREATE INDEX IF NOT EXISTS market_offers_buyer ON market_offers (buyer_account, state);
+`
+
+// marketColumns are the columns later than the first market tables, by
+// table, with their definitions: ensureMarket adds each one a file lacks.
+var marketColumns = []struct{ table, column, definition string }{
+	{"market_listings", "seller_name", "TEXT NOT NULL DEFAULT ''"},
+	{"market_listings", "anonymous", "INTEGER NOT NULL DEFAULT 0"},
+	{"market_sales", "seller_char", "INTEGER NOT NULL DEFAULT 0"},
+	{"market_sales", "unpaid", "INTEGER NOT NULL DEFAULT 0"},
+	{"market_sales", "codename", "TEXT NOT NULL DEFAULT ''"},
+	{"market_sales", "dest", "TEXT NOT NULL DEFAULT 'warehouse'"},
+	{"market_sales", "slot", "INTEGER NOT NULL DEFAULT 0"},
+}
+
+// marketLateIndexes index the later columns, so they are created only
+// once ensureMarket has added them (dbSchema may meet an older file).
+const marketLateIndexes = `
+CREATE INDEX IF NOT EXISTS market_sales_owed ON market_sales (seller_char) WHERE unpaid = 1;
 `
 
 // marketMaxGoldPrice keeps price * fee percent inside int64; no real
@@ -80,21 +125,66 @@ const marketMaxGoldPrice = math.MaxInt64 / 100
 // marketListingColumns is every column a listing read selects, in
 // scanListing's order.
 const marketListingColumns = `id, division, seller_account, seller_char, item, currency, price,
-listed_ms, expires_ms, state, version`
+listed_ms, expires_ms, state, version, seller_name, anonymous`
+
+// marketSaleColumns is every column a sale read selects, in scanSales'
+// order.
+const marketSaleColumns = `listing_id, buyer_account, buyer_char, currency, price, fee, at_ms, seller_char,
+unpaid, codename, dest, slot`
 
 /*
 ================
 ensureMarket
 
-Creates the market tables when the store opens: additive, so no stamp
-moves and an older binary on the same file never notices them.
+Creates the market tables when the store opens, and adds the later
+columns a file lacks: additive, so no stamp moves and an older binary on
+the same file never notices them (its inserts name their columns, and
+every later column has a default).
 ================
 */
 func ensureMarket(db *sql.DB) error {
 	if _, err := db.Exec(marketSchema); err != nil {
 		return fmt.Errorf("market: %w", err)
 	}
+	for _, c := range marketColumns {
+		present, err := tableHasColumn(db, c.table, c.column)
+		if err != nil {
+			return fmt.Errorf("market: %w", err)
+		}
+		if present {
+			continue
+		}
+		if _, err := db.Exec("ALTER TABLE " + c.table + " ADD COLUMN " + c.column + " " + c.definition); err != nil {
+			return fmt.Errorf("market: add %s.%s: %w", c.table, c.column, err)
+		}
+	}
+	if _, err := db.Exec(marketLateIndexes); err != nil {
+		return fmt.Errorf("market: %w", err)
+	}
 	return nil
+}
+
+/*
+================
+tableHasColumn
+================
+*/
+func tableHasColumn(db *sql.DB, table, column string) (bool, error) {
+	rows, err := db.Query("SELECT name FROM pragma_table_info(?)", table)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }
 
 /*
@@ -122,6 +212,7 @@ func (s *Store) MarketList(req domain.MarketListRequest) (domain.MarketListing, 
 	listing := domain.MarketListing{
 		Division: req.Division, SellerAccount: req.Account, Currency: req.Currency, Price: req.Price,
 		ListedMs: now, ExpiresMs: now + req.Rules.DurationMs, State: domain.MarketOpen, Version: 1,
+		Anonymous: req.Anonymous,
 	}
 	if req.Character == nil {
 		return s.listFromStorageLocked(req, listing)
@@ -175,8 +266,8 @@ the listing's transaction; the live record changes only after commit.
 */
 func (s *Store) listFromBagLocked(req domain.MarketListRequest, listing domain.MarketListing) (domain.MarketListing, error) {
 	character := req.Character
-	division, known := s.charDivision[character]
-	if !known || character.AccountID != req.Account || character.DeletePending {
+	division, owned := s.ownCharacterLocked(character, req.Account)
+	if !owned {
 		return domain.MarketListing{}, domain.ErrMarketUnavailable
 	}
 	row, rest, found := takeRow(character.MissionInventory, req.Slot)
@@ -188,6 +279,7 @@ func (s *Store) listFromBagLocked(req domain.MarketListRequest, listing domain.M
 	}
 	listing.Division = division
 	listing.SellerChar = character.ID
+	listing.SellerName = character.Name
 	listing.Item = row
 	committed := *character
 	committed.MissionInventory = rest
@@ -213,9 +305,8 @@ func (s *Store) listFromBagLocked(req domain.MarketListRequest, listing domain.M
 ================
 MarketBuy
 
-The whole sale is one transaction: the buyer pays, the seller is paid
-less the fee, the item lands in the buyer's warehouse, the listing turns
-sold and the sale row is written. Any refusal changes nothing.
+A buy at the listing's price, against the version the buyer saw
+(settleSaleLocked makes the sale).
 ================
 */
 func (s *Store) MarketBuy(req domain.MarketBuyRequest) (domain.MarketSale, error) {
@@ -224,50 +315,113 @@ func (s *Store) MarketBuy(req domain.MarketBuyRequest) (domain.MarketSale, error
 	if s.db == nil || req.BuyerAccount == "" {
 		return domain.MarketSale{}, domain.ErrMarketUnavailable
 	}
-	db := s.syncDBLocked()
-	listing, err := readListing(db, req.ListingID)
+	listing, err := readListing(s.syncDBLocked(), req.ListingID)
 	if err != nil {
 		return domain.MarketSale{}, err
 	}
-	now := s.now().UnixMilli()
-	if listing.State != domain.MarketOpen || listing.Version != req.Version || listing.ExpiresMs <= now {
+	if listing.Version != req.Version {
 		return domain.MarketSale{}, domain.ErrMarketChanged
 	}
-	if listing.SellerAccount == req.BuyerAccount {
+	return s.settleSaleLocked(saleTerms{listing: listing, buyer: req.BuyerAccount, payer: req.Payer, price: listing.Price,
+		to: req.To, receiver: req.Receiver, bagSlot: req.BagSlot, rules: req.Rules})
+}
+
+/*
+================
+saleTerms
+
+One sale settleSaleLocked makes: a buy at the listing's price, or an
+accepted offer at its own. within runs inside the sale's transaction
+(the offer's state change), nil for a buy.
+================
+*/
+type saleTerms struct {
+	listing  domain.MarketListing
+	buyer    string
+	payer    *domain.Character
+	price    int64
+	to       string
+	receiver *domain.Character
+	bagSlot  int64
+	rules    domain.MarketRules
+	within   func(tx *sql.Tx) error
+}
+
+/*
+================
+settleSaleLocked
+
+The whole sale is one transaction: the buyer pays, the seller is paid
+less the fee, the item lands in the picked bag slot or the first free
+warehouse slot, the listing turns sold, its open offers close and the
+sale row is written. Any refusal changes nothing.
+
+The seller is paid by currency and listing: Silk to the account's
+wallet; gold of a bag listing is owed to the listing character (claimed
+by its lane, market_proceeds.go); gold of a website listing to the
+account warehouse.
+================
+*/
+func (s *Store) settleSaleLocked(t saleTerms) (domain.MarketSale, error) {
+	db := s.syncDBLocked()
+	listing := t.listing
+	now := s.now().UnixMilli()
+	if listing.State != domain.MarketOpen || listing.ExpiresMs <= now {
+		return domain.MarketSale{}, domain.ErrMarketChanged
+	}
+	if listing.SellerAccount == t.buyer {
 		return domain.MarketSale{}, domain.ErrMarketOwnListing
 	}
-	buyerStorage, err := readAccountStorage(db, req.BuyerAccount)
-	if err != nil {
-		return domain.MarketSale{}, err
+	if t.price < 1 || t.price > listing.Price {
+		return domain.MarketSale{}, domain.ErrMarketPrice
 	}
-	slot, free := freeStorageSlot(buyerStorage)
-	if !free {
-		return domain.MarketSale{}, domain.ErrMarketWarehouseFull
-	}
+	fee := t.rules.MarketFee(t.price)
+	sale := domain.MarketSale{ListingID: listing.ID, BuyerAccount: t.buyer, Currency: listing.Currency,
+		Price: t.price, Fee: fee, AtMs: now, Codename: listing.Item.Codename, To: t.to}
 	item := listing.Item
-	item.Slot = slot
-	buyerStorage.Rows = append(buyerStorage.Rows, item)
-	fee := req.Rules.MarketFee(listing.Price)
-	sale := domain.MarketSale{ListingID: listing.ID, BuyerAccount: req.BuyerAccount, Currency: listing.Currency,
-		Price: listing.Price, Fee: fee, AtMs: now}
 
-	var payer *domain.Character
+	var buyerStorage domain.AccountStorage
+	var receiverDivision string
+	switch t.to {
+	case domain.MarketToWarehouse, "":
+		// The warehouse unless the bag is named: the website has no bag.
+		sale.To = domain.MarketToWarehouse
+		var err error
+		if buyerStorage, err = readAccountStorage(db, t.buyer); err != nil {
+			return domain.MarketSale{}, err
+		}
+		slot, free := freeStorageSlot(buyerStorage)
+		if !free {
+			return domain.MarketSale{}, domain.ErrMarketWarehouseFull
+		}
+		item.Slot = slot
+		buyerStorage.Rows = append(buyerStorage.Rows, item)
+	case domain.MarketToBag:
+		division, owned := s.ownCharacterLocked(t.receiver, t.buyer)
+		if !owned || division != listing.Division {
+			return domain.MarketSale{}, domain.ErrMarketUnavailable
+		}
+		// The lane chose the slot inside the bag; the store only refuses
+		// one a row already holds.
+		if t.bagSlot < 0 || slotTaken(t.receiver.MissionInventory, t.bagSlot) {
+			return domain.MarketSale{}, domain.ErrMarketBagFull
+		}
+		item.Slot = t.bagSlot
+		receiverDivision = division
+		sale.BuyerChar = t.receiver.ID
+	default:
+		return domain.MarketSale{}, domain.ErrMarketUnavailable
+	}
+	sale.Slot = item.Slot
+
+	gold := listing.Currency == domain.MarketGold
 	var payerDivision string
 	var paidGold int64
 	var sellerStorage domain.AccountStorage
-	if listing.Currency == domain.MarketGold {
-		// Read before the transaction: the store has one connection, so a
-		// read outside an open transaction would wait on it forever.
-		if sellerStorage, err = readAccountStorage(db, listing.SellerAccount); err != nil {
-			return domain.MarketSale{}, err
-		}
-		if sellerStorage.Gold > math.MaxInt64-(listing.Price-fee) {
-			return domain.MarketSale{}, fmt.Errorf("market: warehouse gold would overflow")
-		}
-		sellerStorage.Gold += listing.Price - fee
-		payer = req.Payer
-		division, known := s.charDivision[payer]
-		if payer == nil || !known || payer.AccountID != req.BuyerAccount || payer.DeletePending || division != listing.Division {
+	creditWarehouse := false
+	if gold {
+		division, owned := s.ownCharacterLocked(t.payer, t.buyer)
+		if !owned || division != listing.Division {
 			return domain.MarketSale{}, domain.ErrMarketUnavailable
 		}
 		payerDivision = division
@@ -276,53 +430,97 @@ func (s *Store) MarketBuy(req domain.MarketBuyRequest) (domain.MarketSale, error
 		// on it and only waits for the tick batch, which beginTxLocked flushes
 		// before this transaction opens. The buy then neither spends gold the
 		// record no longer holds nor writes back a balance that loses it.
-		paidGold = ledgerGold(payer) - listing.Price
+		paidGold = ledgerGold(t.payer) - t.price
 		if paidGold < 0 {
 			return domain.MarketSale{}, domain.ErrMarketFunds
 		}
-		sale.BuyerChar = payer.ID
+		sale.BuyerChar = t.payer.ID
+		if listing.SellerChar != 0 {
+			sale.SellerChar = listing.SellerChar
+			sale.Unpaid = true
+		} else {
+			// Read before the transaction: the store has one connection, so a
+			// read outside an open transaction would wait on it forever.
+			var err error
+			if sellerStorage, err = readAccountStorage(db, listing.SellerAccount); err != nil {
+				return domain.MarketSale{}, err
+			}
+			if sellerStorage.Gold > math.MaxInt64-(t.price-fee) {
+				return domain.MarketSale{}, fmt.Errorf("market: warehouse gold would overflow")
+			}
+			sellerStorage.Gold += t.price - fee
+			creditWarehouse = true
+		}
 	}
+	toBag := sale.To == domain.MarketToBag
+	// One character row when the payer's bag receives the item.
+	sameRecord := gold && toBag && t.receiver == t.payer
+
 	tx, err := s.beginCharacterTxLocked()
 	if err != nil {
 		return domain.MarketSale{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := writeAccountStorageTx(tx.Tx, req.BuyerAccount, buyerStorage); err != nil {
-		return domain.MarketSale{}, err
+	if !toBag {
+		if err := writeAccountStorageTx(tx.Tx, t.buyer, buyerStorage); err != nil {
+			return domain.MarketSale{}, err
+		}
 	}
 	settle := func() {}
-	if listing.Currency == domain.MarketSilk {
-		if _, err := debitSilkTx(tx.Tx, req.BuyerAccount, uint32(listing.Price), now); err != nil {
-			return domain.MarketSale{}, err
-		}
-		if _, err := creditSilkTx(tx.Tx, listing.SellerAccount, uint32(listing.Price-fee), now); err != nil {
-			return domain.MarketSale{}, err
-		}
-	} else {
-		committed := *payer
+	if gold {
+		committed := *t.payer
 		committed.Gold = &paidGold
+		if sameRecord {
+			committed.MissionInventory = withRow(t.payer.MissionInventory, item)
+		}
 		if err := tx.upsertCharacter(payerDivision, &committed); err != nil {
 			return domain.MarketSale{}, err
 		}
-		if settle, err = s.ledgerOwnTxLocked(tx.Tx, "market-buy", payerDivision, payer, paidGold); err != nil {
+		if settle, err = s.ledgerOwnTxLocked(tx.Tx, "market-buy", payerDivision, t.payer, paidGold); err != nil {
 			return domain.MarketSale{}, err
 		}
-		if err := writeAccountStorageTx(tx.Tx, listing.SellerAccount, sellerStorage); err != nil {
+		if creditWarehouse {
+			if err := writeAccountStorageTx(tx.Tx, listing.SellerAccount, sellerStorage); err != nil {
+				return domain.MarketSale{}, err
+			}
+		}
+	} else {
+		if _, err := debitSilkTx(tx.Tx, t.buyer, uint32(t.price), now); err != nil {
+			return domain.MarketSale{}, err
+		}
+		if _, err := creditSilkTx(tx.Tx, listing.SellerAccount, uint32(t.price-fee), now); err != nil {
+			return domain.MarketSale{}, err
+		}
+	}
+	if toBag && !sameRecord {
+		committed := *t.receiver
+		committed.MissionInventory = withRow(t.receiver.MissionInventory, item)
+		if err := tx.upsertCharacter(receiverDivision, &committed); err != nil {
 			return domain.MarketSale{}, err
 		}
 	}
 	if err := setListingStateTx(tx.Tx, listing, domain.MarketSold); err != nil {
 		return domain.MarketSale{}, err
 	}
-	if _, err := tx.Exec(`INSERT INTO market_sales (listing_id, buyer_account, buyer_char, currency, price, fee, at_ms)
-VALUES (?, ?, ?, ?, ?, ?, ?)`, sale.ListingID, sale.BuyerAccount, sale.BuyerChar, sale.Currency, sale.Price, sale.Fee, sale.AtMs); err != nil {
+	if t.within != nil {
+		if err := t.within(tx.Tx); err != nil {
+			return domain.MarketSale{}, err
+		}
+	}
+	if err := closeOffersTx(tx.Tx, listing.ID); err != nil {
+		return domain.MarketSale{}, err
+	}
+	if err := insertSaleTx(tx.Tx, sale); err != nil {
 		return domain.MarketSale{}, err
 	}
 	if err := s.commitMarketTxLocked(tx, "market-buy"); err != nil {
 		return domain.MarketSale{}, err
 	}
-	if payer != nil {
-		payer.Gold = &paidGold
+	if gold {
+		t.payer.Gold = &paidGold
+	}
+	if toBag {
+		t.receiver.MissionInventory = withRow(t.receiver.MissionInventory, item)
 	}
 	settle()
 	return sale, nil
@@ -382,6 +580,73 @@ func (s *Store) MarketTakeBack(account string, id int64) (domain.MarketListing, 
 		return listing, domain.ErrMarketWarehouseFull
 	}
 	return returned, err
+}
+
+/*
+================
+MarketReclaim
+
+The game window's cancel and take-back: an open listing or a held item
+goes back to the bag slot the lane chose, or to the warehouse as on the
+website. A held item whose warehouse is still full can always come back
+this way into a free bag slot.
+================
+*/
+func (s *Store) MarketReclaim(req domain.MarketReclaimRequest) (domain.MarketListing, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return domain.MarketListing{}, domain.ErrMarketUnavailable
+	}
+	listing, err := readListing(s.syncDBLocked(), req.ListingID)
+	if err != nil {
+		return domain.MarketListing{}, err
+	}
+	if listing.SellerAccount != req.Account {
+		return domain.MarketListing{}, domain.ErrMarketNotFound
+	}
+	if listing.State != domain.MarketOpen && listing.State != domain.MarketHeld {
+		return domain.MarketListing{}, domain.ErrMarketNotHeld
+	}
+	if req.To != domain.MarketToBag {
+		returned, err := s.returnListingLocked(listing, listing.State == domain.MarketOpen)
+		if err == nil && returned.State != domain.MarketReturned {
+			return listing, domain.ErrMarketWarehouseFull
+		}
+		return returned, err
+	}
+	division, owned := s.ownCharacterLocked(req.Receiver, req.Account)
+	if !owned || division != listing.Division {
+		return domain.MarketListing{}, domain.ErrMarketUnavailable
+	}
+	if req.BagSlot < 0 || slotTaken(req.Receiver.MissionInventory, req.BagSlot) {
+		return domain.MarketListing{}, domain.ErrMarketBagFull
+	}
+	item := listing.Item
+	item.Slot = req.BagSlot
+	tx, err := s.beginCharacterTxLocked()
+	if err != nil {
+		return domain.MarketListing{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	committed := *req.Receiver
+	committed.MissionInventory = withRow(req.Receiver.MissionInventory, item)
+	if err := tx.upsertCharacter(division, &committed); err != nil {
+		return domain.MarketListing{}, err
+	}
+	if err := setListingStateTx(tx.Tx, listing, domain.MarketReturned); err != nil {
+		return domain.MarketListing{}, err
+	}
+	if err := closeOffersTx(tx.Tx, listing.ID); err != nil {
+		return domain.MarketListing{}, err
+	}
+	if err := s.commitMarketTxLocked(tx, "market-return"); err != nil {
+		return domain.MarketListing{}, err
+	}
+	req.Receiver.MissionInventory = withRow(req.Receiver.MissionInventory, item)
+	listing.State = domain.MarketReturned
+	listing.Version++
+	return listing, nil
 }
 
 /*
@@ -453,6 +718,9 @@ func (s *Store) returnListingLocked(listing domain.MarketListing, fallBackToHeld
 		state = domain.MarketReturned
 	}
 	if err := setListingStateTx(tx, listing, state); err != nil {
+		return domain.MarketListing{}, err
+	}
+	if err := closeOffersTx(tx, listing.ID); err != nil {
 		return domain.MarketListing{}, err
 	}
 	if err := s.commitMarketTxLocked(tx, "market-return"); err != nil {
@@ -587,21 +855,45 @@ func (s *Store) MarketPurchases(account string, limit int) ([]domain.MarketSale,
 	if s.db == nil {
 		return nil, domain.ErrMarketUnavailable
 	}
-	rows, err := s.syncDBLocked().Query(`SELECT listing_id, buyer_account, buyer_char, currency, price, fee, at_ms
+	rows, err := s.syncDBLocked().Query(`SELECT `+marketSaleColumns+`
 FROM market_sales WHERE buyer_account = ? ORDER BY at_ms DESC, listing_id DESC LIMIT ?`, account, limit)
 	if err != nil {
 		return nil, err
 	}
+	return scanSales(rows)
+}
+
+/*
+================
+scanSales
+
+Every row of a sale query; closes rows.
+================
+*/
+func scanSales(rows *sql.Rows) ([]domain.MarketSale, error) {
 	defer rows.Close()
 	out := []domain.MarketSale{}
 	for rows.Next() {
 		var sale domain.MarketSale
-		if err := rows.Scan(&sale.ListingID, &sale.BuyerAccount, &sale.BuyerChar, &sale.Currency, &sale.Price, &sale.Fee, &sale.AtMs); err != nil {
+		if err := rows.Scan(&sale.ListingID, &sale.BuyerAccount, &sale.BuyerChar, &sale.Currency, &sale.Price, &sale.Fee,
+			&sale.AtMs, &sale.SellerChar, &sale.Unpaid, &sale.Codename, &sale.To, &sale.Slot); err != nil {
 			return nil, err
 		}
 		out = append(out, sale)
 	}
 	return out, rows.Err()
+}
+
+/*
+================
+insertSaleTx
+================
+*/
+func insertSaleTx(tx *sql.Tx, sale domain.MarketSale) error {
+	_, err := tx.Exec(`INSERT INTO market_sales (`+marketSaleColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		sale.ListingID, sale.BuyerAccount, sale.BuyerChar, sale.Currency, sale.Price, sale.Fee, sale.AtMs, sale.SellerChar,
+		sale.Unpaid, sale.Codename, sale.To, sale.Slot)
+	return err
 }
 
 //============================================================================
@@ -673,6 +965,64 @@ func takeRow(rows []domain.InventoryRow, slot int64) (domain.InventoryRow, []dom
 
 /*
 ================
+withRow
+
+A copy of rows with row appended: the record a door commits, and the
+live record it assigns after the commit, never share a backing array.
+================
+*/
+func withRow(rows []domain.InventoryRow, row domain.InventoryRow) []domain.InventoryRow {
+	out := make([]domain.InventoryRow, 0, len(rows)+1)
+	return append(append(out, rows...), row)
+}
+
+/*
+================
+slotTaken
+================
+*/
+func slotTaken(rows []domain.InventoryRow, slot int64) bool {
+	for _, row := range rows {
+		if row.Slot == slot {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
+ownCharacterLocked
+
+The division of c when the store owns its record and it is the
+account's and not being deleted.
+================
+*/
+func (s *Store) ownCharacterLocked(c *domain.Character, account string) (string, bool) {
+	if c == nil {
+		return "", false
+	}
+	division, known := s.charDivision[c]
+	if !known || c.AccountID != account || c.DeletePending {
+		return "", false
+	}
+	return division, true
+}
+
+/*
+================
+closeOffersTx
+
+Closes every open offer on a listing that leaves the open state.
+================
+*/
+func closeOffersTx(tx *sql.Tx, listingID int64) error {
+	_, err := tx.Exec("UPDATE market_offers SET state = 'closed' WHERE listing_id = ? AND state = 'open'", listingID)
+	return err
+}
+
+/*
+================
 freeStorageSlot
 
 The lowest warehouse slot no row holds.
@@ -713,9 +1063,10 @@ func insertListingTx(tx *sql.Tx, listing domain.MarketListing) (int64, error) {
 		return 0, err
 	}
 	result, err := tx.Exec(`INSERT INTO market_listings (division, seller_account, seller_char, item, codename, currency,
-price, listed_ms, expires_ms, state, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+price, listed_ms, expires_ms, state, version, seller_name, anonymous) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		listing.Division, listing.SellerAccount, listing.SellerChar, string(item), listing.Item.Codename,
-		listing.Currency, listing.Price, listing.ListedMs, listing.ExpiresMs, listing.State, listing.Version)
+		listing.Currency, listing.Price, listing.ListedMs, listing.ExpiresMs, listing.State, listing.Version,
+		listing.SellerName, listing.Anonymous)
 	if err != nil {
 		return 0, err
 	}
@@ -780,7 +1131,8 @@ func scanListings(rows *sql.Rows) ([]domain.MarketListing, error) {
 		var listing domain.MarketListing
 		var item string
 		if err := rows.Scan(&listing.ID, &listing.Division, &listing.SellerAccount, &listing.SellerChar, &item,
-			&listing.Currency, &listing.Price, &listing.ListedMs, &listing.ExpiresMs, &listing.State, &listing.Version); err != nil {
+			&listing.Currency, &listing.Price, &listing.ListedMs, &listing.ExpiresMs, &listing.State, &listing.Version,
+			&listing.SellerName, &listing.Anonymous); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(item), &listing.Item); err != nil {

@@ -77,6 +77,8 @@ type Runtime struct {
 	// jobWeeks holds, per division, the last week JobWeekTick handed to the
 	// store (jobrank.go).
 	jobWeeks sync.Map
+	// marketProceedsAt is the last MarketProceedsTick pass (market.go).
+	marketProceedsAt atomic.Int64
 	// gmSpeeds holds each GM's /SETSPEED percent (gmspeed.go), session only.
 	gmSpeeds sync.Map
 	// GMSetSpeed admits /SETSPEED (port-only, SRO_GM_SETSPEED; off is native).

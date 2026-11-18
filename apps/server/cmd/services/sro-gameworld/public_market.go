@@ -57,5 +57,6 @@ func marketService(gameplay *gameplayPlane, authority *store.Store, shard string
 		WhileOffline: func(c *domain.Character, write func() error) (bool, error) {
 			return gameplay.items.WhileOffline(shard, c.Name, write)
 		},
+		FreeBagSlot: gameplay.items.MarketFreeBagSlot,
 	}
 }
