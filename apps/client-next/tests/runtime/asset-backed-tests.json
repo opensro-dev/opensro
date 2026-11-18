@@ -57,6 +57,7 @@
 		"equipment-particles.test.mjs",
 		"exchange-approve.test.mjs",
 		"exchange-click-shortcuts.test.mjs",
+		"exchange-lock-wash.test.mjs",
 		"exchange-tooltip.test.mjs",
 		"experimental-ui.test.mjs",
 		"extended-bar-compact.test.mjs",
