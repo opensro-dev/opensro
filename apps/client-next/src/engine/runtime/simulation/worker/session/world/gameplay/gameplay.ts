@@ -715,9 +715,7 @@ sendFrame
 	*/
 	function arrowGate( now: number, local: EntityState | undefined ): ArrowGate {
 		const refusal = groundWalkRefusal( now, local );
-		// A dropped walk is still sent (movementDropped); it is only not
-		// predicted.
-		if ( refusal === null || refusal === "dropped" ) return "open";
+		if ( refusal === null ) return "open";
 		return refusal === "cast" ? "cast" : "closed";
 	}
 	/*
@@ -1121,10 +1119,14 @@ scroll's kind-0 row does not.
 
 	Port-only, not native: sleep, root, petrify and stun leave navigation
 	open on the native client (only freeze's action state 9 closes it), so
-	the click is still sent, but the server's move handler drops it (action
+	it sends the click, and the server's move handler drops it (action
 	PlayerMovementBlocked). The native client walks only on the server's
-	answer and shows nothing; this client must not predict the walk either
-	(movement.holdPrediction), or the player walks off and snaps back.
+	answer and shows nothing. This client predicts walks and its server
+	answers every command, refusals included: a predicted walk snapped
+	back, and a refused one still started the walking gait. A ground or
+	arrow walk is therefore not sent at all, as while frozen (the outcome
+	is the server's), and any other walk (an NPC approach, a run-up) is
+	sent unpredicted (movement.holdPrediction).
 	================
 	*/
 	function movementDropped(): boolean {
@@ -2902,7 +2904,7 @@ state here before a command can claim a native wire conversation.
 				cancelActionForMovement();
 				if ( command.kind === "ground-move" && command.departing ) sendFrame( logoutCancelRequest() );
 			}
-			if ( frozen() && [ "move", "ground-move" ].includes( command.kind ) ) return null;
+			if ( (frozen() || movementDropped()) && [ "move", "ground-move" ].includes( command.kind ) ) return null;
 			// 693392..6933bd ground click / 692d07..692d1e entity click:
 			// seated interaction requests stand and RETURNS before any
 			// goal is stored, so the click is dropped, not walked later;

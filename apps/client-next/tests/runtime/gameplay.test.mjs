@@ -1573,7 +1573,7 @@ test("a ground click during a logout countdown cancels it before walking the ray
 	assert.deepEqual( sent.map( f => f.opcode ), [ 9 ] );
 	game.dispose();
 });
-test("freeze blocks navigation and a cleared 0x36C7 snapshot releases it; sleep does not", async () => {
+test("freeze blocks navigation and a cleared 0x36C7 snapshot releases it; sleep drops the click too", async () => {
 	const { createGameplay } = await load( "gameplay" ),
 		sent = [],
 		game = createGameplay( f => sent.push( f ) ),
@@ -1594,10 +1594,10 @@ test("freeze blocks navigation and a cleared 0x36C7 snapshot releases it; sleep 
 	sent.length = 0;
 	game.receive( snap( 0x40 ), 14 );
 	game.command( { kind: "move", destination: { ...pose, x: 90 } }, 15, undefined, local );
-	assert.equal( sent.length, 1 );
+	assert.equal( sent.length, 0 );
 	game.dispose();
 });
-test("a stunned, asleep, rooted or petrified click is sent but walks only on the server's answer", async () => {
+test("a stunned, asleep, rooted or petrified click is not sent and walks nothing", async () => {
 	const { createGameplay } = await load( "gameplay" );
 	const snap = mask => {
 		const payload = new Uint8Array( mask ? 9 : 4 );
@@ -1605,8 +1605,8 @@ test("a stunned, asleep, rooted or petrified click is sent but walks only on the
 		return { opcode: 0x36c7, payload };
 	};
 	// Sleep, root, petrify and stun: the server's move handler drops the
-	// command (action PlayerMovementBlocked), so a predicted walk would
-	// start and then snap back to where the player stands.
+	// command (action PlayerMovementBlocked). A predicted walk snapped back,
+	// and a sent one came back refused after starting the walking gait.
 	for ( const mask of [ 0x40, 0x80, 0x1000, 0x4000 ] ) {
 		const sent = [],
 			game = createGameplay( f => sent.push( f ) ),
@@ -1616,7 +1616,7 @@ test("a stunned, asleep, rooted or petrified click is sent but walks only on the
 		game.command( { kind: "navigation", regionId: pose.regionId, bundle: bundle() }, 1 );
 		game.receive( snap( mask ), 10 );
 		game.command( { kind: "move", destination: { ...pose, x: 140 } }, 11, undefined, local );
-		assert.deepEqual( sent.map( f => f.opcode ), [ 9 ], `mask ${mask}: the click is still sent` );
+		assert.deepEqual( sent.map( f => f.opcode ), [], `mask ${mask}: the dropped click was sent` );
 		game.step( 500, local );
 		const held = game.take();
 		assert.equal( held?.moving, false, `mask ${mask}: the worker predicted a walk` );
