@@ -133,11 +133,13 @@ def code_hash() -> str:
 # output, not a source).
 # ================
 def source_roots(native: Path, imported: Path, vsro_root: Path, variant: Path, environ) -> list[Path]:
-	# Imported here, not at load: both import build_alexandria_variant, which
+	# Imported here, not at load: it imports build_alexandria_variant, which
 	# imports this module.
-	import arabia_import
 	import skytemple_import
-	candidates = [native, imported, vsro_root, skytemple_import.source_root(environ), arabia_import.nests_path(environ)]
+	# The Arabia nest extraction has no default (arabia_import.nests_path
+	# refuses an unset SRO_ARABIA_NESTS); when set, the source-variable
+	# walk below takes it, so a build without it still stamps.
+	candidates = [native, imported, vsro_root, skytemple_import.source_root(environ)]
 	for key, value in environ.items():
 		value = value.strip()
 		if SOURCE_VARIABLE.fullmatch(key) and key not in OUTPUT_ROOTS and value and Path(value).is_absolute():
