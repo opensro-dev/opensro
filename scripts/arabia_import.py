@@ -623,7 +623,6 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			(native_text_root / "textdataname.txt").read_bytes()) if len(row) > 1}
 		gate_tables, gate_codes = prepare_gates(
 			later_gate_tables,
-			tables.table_rows((native_text_root / "teleportbuilding.txt").read_bytes()),
 			tables.table_rows((native_text_root / "teleportdata.txt").read_bytes()),
 			{row[1] for row in tables.table_rows(current["teleportdata.txt"]) if len(row) > 1},
 			{row[1] for row in tables.table_rows(current["teleportbuilding.txt"]) if len(row) > 1},
