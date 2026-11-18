@@ -1,0 +1,46 @@
+# live-release.yml - the commit live on opensro.online, as the Latest release
+#
+# Contributors asked (2026-11-18) which commit on main is in production.
+# Every 15 minutes this reads the release host's public journal
+# (https://opensro.online/releases/production.json) and makes the
+# repository's Latest release the live commit: it creates
+# release-<date>-<commit> when the live commit has none, and marks the
+# live one Latest again after a revert (scripts/github/liveRelease.mjs).
+# The release publisher tags a confirmed pair itself; this is the net
+# under it.
+#
+# Trust: schedule and workflow_dispatch run from the default branch, so
+# the script checked out here is the reviewed copy on main. The journal
+# is read as data; only exact-shape commits and times are used. The
+# token may only write the repository's contents (tags and releases).
+name: live-release
+
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: live-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  live-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the default branch's script
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/github
+          persist-credentials: false
+
+      - name: Make the live commit the Latest release
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { run } = await import( `${ process.env.GITHUB_WORKSPACE }/scripts/github/liveRelease.mjs` );
+            await run( { github, context, core } );
