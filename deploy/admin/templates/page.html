@@ -1,7 +1,7 @@
 <!doctype html>
 <!--
-page.html - the panel's one page: the character sheet with its operations,
-or the account forms. Rendered by panel.go (pageData).
+page.html - the panel's one page: the character sheet with its operations
+on the chosen shard, or the account forms. Rendered by panel.go (pageData).
 -->
 <html lang="pt-BR">
 <head>
@@ -53,6 +53,7 @@ or the account forms. Rendered by panel.go (pageData).
 {{if eq .Page "character"}}
 	<div class="card">
 		<form method="get" action="/character" class="op">
+			<label>Shard <select name="shard">{{range .Shards}}<option value="{{.ID}}" {{if eq .ID $.Shard}}selected{{end}}>{{.ID}}</option>{{end}}</select></label>
 			<label>Nome exato do personagem <input name="name" value="{{.Name}}" required autofocus></label>
 			<button>Buscar</button>
 		</form>
@@ -61,7 +62,7 @@ or the account forms. Rendered by panel.go (pageData).
 	{{with .Character}}
 	{{$c := .}}
 	<div class="card">
-		<h2>{{field $c "name"}}</h2>
+		<h2>{{field $c "name"}} <span class="muted">· shard {{$.Shard}}</span></h2>
 		<div class="stats">
 			<div><span>Level</span>{{field $c "level"}}</div>
 			<div><span>Level máximo</span>{{field $c "maxLevel"}}</div>
@@ -79,7 +80,7 @@ or the account forms. Rendered by panel.go (pageData).
 	<div class="grid">
 		<div class="card"><form method="post" action="/character" class="op">
 			<h3>Definir level</h3>
-			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="action" value="set-level">
+			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="shard" value="{{$.Shard}}"><input type="hidden" name="action" value="set-level">
 			<label>Level <input name="level" type="number" min="1" max="140" required></label>
 			<input class="reason" name="reason" placeholder="Motivo (mín. 5 letras)" minlength="5" required>
 			<button>Aplicar</button>
@@ -87,7 +88,7 @@ or the account forms. Rendered by panel.go (pageData).
 
 		<div class="card"><form method="post" action="/character" class="op">
 			<h3>Definir SP</h3>
-			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="action" value="set-sp">
+			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="shard" value="{{$.Shard}}"><input type="hidden" name="action" value="set-sp">
 			<label>SP <input name="skillPoints" type="number" min="0" required></label>
 			<input class="reason" name="reason" placeholder="Motivo" minlength="5" required>
 			<button>Aplicar</button>
@@ -95,7 +96,7 @@ or the account forms. Rendered by panel.go (pageData).
 
 		<div class="card"><form method="post" action="/character" class="op">
 			<h3>Dar silk</h3>
-			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="action" value="grant-silk">
+			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="shard" value="{{$.Shard}}"><input type="hidden" name="action" value="grant-silk">
 			<label>Silk <input name="silk" type="number" min="1" required></label>
 			<input class="reason" name="reason" placeholder="Motivo" minlength="5" required>
 			<button>Aplicar</button>
@@ -103,7 +104,7 @@ or the account forms. Rendered by panel.go (pageData).
 
 		<div class="card"><form method="post" action="/character" class="op">
 			<h3>Ajustar gold (negativo tira)</h3>
-			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="action" value="adjust-gold">
+			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="shard" value="{{$.Shard}}"><input type="hidden" name="action" value="adjust-gold">
 			<label>Gold <input name="gold" type="number" required></label>
 			<input class="reason" name="reason" placeholder="Motivo" minlength="5" required>
 			<button>Aplicar</button>
@@ -111,7 +112,7 @@ or the account forms. Rendered by panel.go (pageData).
 
 		<div class="card"><form method="post" action="/character" class="op">
 			<h3>Dar item</h3>
-			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="action" value="grant-items">
+			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="shard" value="{{$.Shard}}"><input type="hidden" name="action" value="grant-items">
 			<label>Codename <input name="codename" placeholder="ITEM_ETC_..." required></label>
 			<label>Qtd <input name="count" type="number" min="1" value="1" required></label>
 			<input class="reason" name="reason" placeholder="Motivo" minlength="5" required>
@@ -120,7 +121,7 @@ or the account forms. Rendered by panel.go (pageData).
 
 		<div class="card"><form method="post" action="/character" class="op">
 			<h3>Resgatar para cidade</h3>
-			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="action" value="rescue">
+			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="shard" value="{{$.Shard}}"><input type="hidden" name="action" value="rescue">
 			<label>Cidade <select name="town">{{range $.Towns}}<option value="{{field . "id"}}">{{field . "code"}}</option>{{end}}</select></label>
 			<input class="reason" name="reason" placeholder="Motivo" minlength="5" required>
 			<button>Aplicar</button>
@@ -128,7 +129,7 @@ or the account forms. Rendered by panel.go (pageData).
 
 		<div class="card"><form method="post" action="/character" class="op">
 			<h3>Resetar status / limpar PK</h3>
-			<input type="hidden" name="name" value="{{$.Name}}">
+			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="shard" value="{{$.Shard}}">
 			<label>Ação <select name="action"><option value="reset-stats">Resetar STR/INT</option><option value="clear-pk">Limpar PK</option></select></label>
 			<input class="reason" name="reason" placeholder="Motivo" minlength="5" required>
 			<button>Aplicar</button>
@@ -136,7 +137,7 @@ or the account forms. Rendered by panel.go (pageData).
 
 		<div class="card"><form method="post" action="/character" class="op">
 			<h3>Conduta</h3>
-			<input type="hidden" name="name" value="{{$.Name}}">
+			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="shard" value="{{$.Shard}}">
 			<label>Ação <select name="action"><option value="mute-chat">Mutar chat</option><option value="unmute-chat">Desmutar</option><option value="kick">Kickar</option></select></label>
 			<label>Minutos (mute) <input name="minutes" type="number" min="1" value="60"></label>
 			<label>Regra <input name="clause" placeholder="C2" required></label>
@@ -146,7 +147,7 @@ or the account forms. Rendered by panel.go (pageData).
 
 		<div class="card"><form method="post" action="/character" class="op">
 			<h3>Remover emblema</h3>
-			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="action" value="remove-crest">
+			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="shard" value="{{$.Shard}}"><input type="hidden" name="action" value="remove-crest">
 			<label>De <select name="crest"><option value="guild">Guild</option><option value="union">União</option></select></label>
 			<input class="reason" name="reason" placeholder="Motivo" minlength="5" required>
 			<button class="danger">Aplicar</button>

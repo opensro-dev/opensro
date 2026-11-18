@@ -72,6 +72,10 @@ Para o acesso:
   (`network_mode: service:gameworld-global-official`). `admin relay` roda na rede do `identity` e repassa ao Agent
   só `POST /v1/accounts`, `GET /v1/accounts/{id}`, `PUT .../password` e `PUT .../disabled`. O token de
   provisionamento continua indo em toda chamada.
+- **Vários shards:** a página de personagem tem um seletor de shard (`ADMIN_SHARDS`, `id=url`). O shard
+  principal responde no loopback do próprio painel. O PVP responde pelo `admin-relay-pvp`, um relay em modo
+  `operator` na rede do `gameworld-pvp`, que só repassa `GET/POST /internal/operations/player`. Cada shard
+  tem o seu token (`admin-secrets/operator-token-<shard>`), copiado pelo `provision` daquele shard.
 - **Proteções do painel:** só responde com Host de loopback (contra DNS rebinding) e recusa POST de outro site.
   Cada formulário gera um id de requisição novo.
 - **Segredos:** o job `provision` cria o `operator-token` no authority do shard e copia ele e o token de

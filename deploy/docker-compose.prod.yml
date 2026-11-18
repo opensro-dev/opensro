@@ -51,6 +51,7 @@ services:
       - *catalog
       - cluster:/cluster
       - shard-pvp:/data/shard
+      - admin-secrets:/admin
     network_mode: none
     restart: "no"
     profiles: [jobs]
@@ -244,6 +245,8 @@ services:
     environment:
       ADMIN_OPERATOR_NAME: ${ADMIN_OPERATOR_NAME:-admin}
       ADMIN_ACCOUNTS_URL: http://agent:9789
+      # The first shard answers on this namespace's loopback; the PVP shard through its relay.
+      ADMIN_SHARDS: global-official=http://127.0.0.1:8791,pvp=http://gameworld-pvp:9791
     network_mode: service:gameworld-global-official
     volumes:
       - admin-secrets:/admin:ro
@@ -251,6 +254,8 @@ services:
       gameworld-global-official:
         condition: service_healthy
       admin-relay:
+        condition: service_started
+      admin-relay-pvp:
         condition: service_started
     restart: unless-stopped
 
@@ -263,6 +268,21 @@ services:
     depends_on:
       identity:
         condition: service_started
+    restart: unless-stopped
+
+  # Forwards the panel's player operations to the PVP GameWorld's loopback-only control port, from
+  # that GameWorld's namespace; the PVP shard's own operator token rides every request.
+  admin-relay-pvp:
+    image: *admin-image
+    command: ["relay"]
+    environment:
+      RELAY_ROUTES: operator
+      RELAY_TARGET: http://127.0.0.1:8791
+      RELAY_LISTEN: 0.0.0.0:9791
+    network_mode: service:gameworld-pvp
+    depends_on:
+      gameworld-pvp:
+        condition: service_healthy
     restart: unless-stopped
 
   web:

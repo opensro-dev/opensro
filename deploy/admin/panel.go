@@ -3,9 +3,11 @@
 
 panel.go - the panel's pages and the calls behind them
 
-Characters go to the GameWorld's player operations
+Characters go to the chosen shard's player operations
 (/internal/operations/player): a GET reads one character, a POST runs one
-audited operation. The GameWorld validates every field and writes the
+audited operation. The panel's own shard answers on loopback; another
+shard answers through its operator relay (relay.go), each with its own
+token. The GameWorld validates every field and writes the
 audit; the panel only turns a form into the operation's JSON, gives it a
 fresh request id and names the operator. Accounts go through the relay
 to the Agent's provisioning API.
@@ -32,6 +34,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -48,11 +51,66 @@ panelConfig
 ================
 */
 type panelConfig struct {
-	OperatorURL           string
-	OperatorTokenFile     string
+	Shards                []shardConfig
 	AccountsURL           string
 	ProvisioningTokenFile string
 	OperatorName          string
+}
+
+/*
+================
+shardConfig
+
+One shard the panel operates: its id, where its player operations answer
+and the file holding its operator token.
+================
+*/
+type shardConfig struct {
+	ID        string
+	URL       string
+	TokenFile string
+}
+
+/*
+================
+parseShards
+
+ADMIN_SHARDS is "id=url,id=url"; the first is the default. Each shard's
+token is <tokenDir>/operator-token-<id>, the copy its provision job writes.
+================
+*/
+func parseShards(spec, tokenDir string) ([]shardConfig, error) {
+	var shards []shardConfig
+	for _, entry := range strings.Split(spec, ",") {
+		id, address, found := strings.Cut(strings.TrimSpace(entry), "=")
+		if !found || id == "" || strings.ContainsAny(id, "/.") {
+			return nil, fmt.Errorf("ADMIN_SHARDS entry %q must be id=url", entry)
+		}
+		if parsed, err := url.Parse(address); err != nil || parsed.Scheme != "http" || parsed.Host == "" {
+			return nil, fmt.Errorf("ADMIN_SHARDS %s: %q must be an http URL", id, address)
+		}
+		shards = append(shards, shardConfig{ID: id, URL: address, TokenFile: filepath.Join(tokenDir, "operator-token-"+id)})
+	}
+	return shards, nil
+}
+
+/*
+================
+shard
+
+The configured shard named id, or the first one for an empty id.
+================
+*/
+func (p *panel) shard(id string) (shardConfig, error) {
+	if id == "" {
+		return p.config.Shards[0], nil
+	}
+	for _, shard := range p.config.Shards {
+		if shard.ID == id {
+			return shard, nil
+		}
+	}
+	return shardConfig{}, fmt.Errorf("unknown shard %q", id)
 }
 
 /*
@@ -76,6 +134,8 @@ and the page's own data.
 */
 type pageData struct {
 	Page      string
+	Shards    []shardConfig
+	Shard     string
 	OK        string
 	Error     string
 	Name      string
@@ -91,6 +151,9 @@ newPanel
 ================
 */
 func newPanel(config panelConfig) (*panel, error) {
+	if len(config.Shards) == 0 {
+		return nil, fmt.Errorf("the panel needs at least one shard")
+	}
 	pages, err := template.New("").Funcs(template.FuncMap{"field": field}).ParseFS(templateFiles, "templates/*.html")
 	if err != nil {
 		return nil, err
@@ -154,10 +217,14 @@ showCharacter
 ================
 */
 func (p *panel) showCharacter(w http.ResponseWriter, r *http.Request) {
-	data := pageData{Page: "character", Name: strings.TrimSpace(r.URL.Query().Get("name")),
+	data := pageData{Page: "character", Name: strings.TrimSpace(r.URL.Query().Get("name")), Shards: p.config.Shards,
 		OK: r.URL.Query().Get("ok"), Error: r.URL.Query().Get("err")}
-	if data.Name != "" {
-		body, err := p.operator(http.MethodGet, "?character="+url.QueryEscape(data.Name), nil)
+	shard, err := p.shard(r.URL.Query().Get("shard"))
+	data.Shard = shard.ID
+	if err != nil {
+		data.Error = err.Error()
+	} else if data.Name != "" {
+		body, err := p.operator(shard, http.MethodGet, "?character="+url.QueryEscape(data.Name), nil)
 		if err != nil {
 			data.Error = err.Error()
 		} else {
@@ -184,15 +251,19 @@ PlayerOperation; the GameWorld refuses a field an action does not take.
 */
 func (p *panel) runOperation(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("name"))
-	operation, err := buildOperation(r, name, p.config.OperatorName)
+	shard, err := p.shard(r.FormValue("shard"))
+	var operation map[string]any
+	if err == nil {
+		operation, err = buildOperation(r, name, p.config.OperatorName)
+	}
 	if err == nil {
 		var body []byte
 		body, err = json.Marshal(operation)
 		if err == nil {
-			_, err = p.operator(http.MethodPost, "", body)
+			_, err = p.operator(shard, http.MethodPost, "", body)
 		}
 	}
-	back := url.Values{"name": {name}}
+	back := url.Values{"name": {name}, "shard": {shard.ID}}
 	if err != nil {
 		back.Set("err", err.Error())
 	} else {
@@ -260,17 +331,17 @@ func buildOperation(r *http.Request, name, operator string) (map[string]any, err
 ================
 operator
 
-One call to the player operations, answered body or the GameWorld's
-refusal as the error.
+One call to a shard's player operations, answered body or the
+GameWorld's refusal as the error.
 ================
 */
-func (p *panel) operator(method, query string, body []byte) ([]byte, error) {
-	token, err := readToken(p.config.OperatorTokenFile)
+func (p *panel) operator(shard shardConfig, method, query string, body []byte) ([]byte, error) {
+	token, err := readToken(shard.TokenFile)
 	if err != nil {
 		return nil, err
 	}
 	request, err := http.NewRequestWithContext(context.Background(), method,
-		strings.TrimSuffix(p.config.OperatorURL, "/")+"/internal/operations/player"+query, bytes.NewReader(body))
+		strings.TrimSuffix(shard.URL, "/")+"/internal/operations/player"+query, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
