@@ -122,7 +122,7 @@ where WarStart says; during the war it is running.
 */
 func TestWindowsFollowTheWarSchedule(t *testing.T) {
 	lane, _, loc := laneFixture(t)
-	morning := time.Date(2026, 10, 7, 9, 0, 0, 0, loc).UnixMilli()
+	morning := time.Date(2026, 10, 6, 9, 0, 0, 0, loc).UnixMilli()
 	byName := func(nowMs int64) map[string]Window {
 		out := map[string]Window{}
 		for _, window := range lane.Windows(nowMs) {
