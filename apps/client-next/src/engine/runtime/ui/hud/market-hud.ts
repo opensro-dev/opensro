@@ -5,9 +5,11 @@ market-hud.ts - the consignment market window's drafts and its requests
 
 Port-only, not native (SRO_CONSIGNMENT on the server, published to the
 client at world entry): v1.150 has no consignment. The window opens
-from a storage keeper's menu and has four tabs - Browse, Sell, My
-listings, Offers - and one dialog at a time for a buy or an offer, each
-of which asks where the item goes (the inventory or the warehouse).
+anywhere in the world from its button beside FPS (or a storage keeper's
+menu): the listings on the left, List an item and the account's pages
+(My listings, History, Offers, the bag picker) on the right, and one
+dialog at a time for a buy or an offer, each of which asks where the
+item goes (the inventory or the warehouse).
 
 This module owns what the player is typing and choosing; the worker owns
 what the server said (foundation/gameplay market.ts) and drops a request

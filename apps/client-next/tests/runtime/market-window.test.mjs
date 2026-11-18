@@ -2,8 +2,8 @@
 ===========================================================================
 
 market-window.test.mjs - the consignment market window (port-only,
-SRO_CONSIGNMENT): the storage keeper's row only while the server runs the
-market, named and anonymous sellers, the buy and offer boxes that ask where
+SRO_CONSIGNMENT): the HUD button and the storage keeper's row only while
+the server runs the market, named and anonymous sellers, the buy and offer boxes that ask where
 the item goes, the Sell terms, and the requests each click sends.
 
 ===========================================================================
@@ -104,6 +104,14 @@ test("the storage keeper offers the market only while the server runs it", () =>
 			const controls = step();
 			assert.ok( controls.has( "storage-open" ), "the storage row" );
 			assert.equal( controls.has( "market-open" ), enabled, `server market ${enabled}` );
+			// The button beside FPS toggles the window anywhere, but only on a
+			// shard that runs the market.
+			f.ui.event( { kind: "activate", id: "market-toggle" } );
+			step();
+			assert.equal( f.hasText( "Consignment Market" ), enabled, `the button opens it: ${enabled}` );
+			f.ui.event( { kind: "activate", id: "market-toggle" } );
+			step();
+			assert.equal( f.hasText( "Consignment Market" ), false, "a second click closes it" );
 		} finally {
 			f.dispose();
 		}

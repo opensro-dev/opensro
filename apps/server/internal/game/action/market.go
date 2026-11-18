@@ -526,11 +526,8 @@ func (rt *Runtime) HandleMarket(division string, character *enterworld.Character
 	if c == nil || c.DeletePending || c.AccountID == "" {
 		return marketRefusal(request.Op, marketRefusedUnavailable)
 	}
-	// The reads are what the website shows anyone; they also remember the
-	// keeper the window opened at. A write needs that keeper in reach.
-	if !rt.marketAtKeeper(division, c) && marketWrites(request.Op) {
-		return marketRefusal(request.Op, marketRefusedKeeper)
-	}
+	// No NPC is needed: the window opens from the HUD anywhere in the world
+	// (the owner's rule, 2026-11-19), as the website serves the same market.
 	switch request.Op {
 	case marketOpSearch:
 		q, ok := rt.marketSearch(request)

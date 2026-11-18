@@ -2893,7 +2893,11 @@ export function createUi( ports: UiPorts ) {
 	================
 	*/
 	function activateMarket( id: string ): boolean {
-		if ( id === "market-open" ) {
+		// The HUD button beside FPS (platform.ts) toggles the window from
+		// anywhere in the world; the storage keeper's row opens it too.
+		if ( id === "market-toggle" && marketHud.isOpen() ) id = "market-close";
+		if ( id === "market-open" || id === "market-toggle" ) {
+			if ( view?.session?.phase !== "world" || view.gameplay?.consignment !== true ) return true;
 			npcPanel.hide();
 			sendMarket( marketHud.open() );
 			dirty = true;
@@ -28744,6 +28748,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			const semantics = {
 				loadingVisible: !!loading && !assetFailure,
 				titleCredit: next.frontend?.phase === "login" && !loading,
+				marketButton: next.session?.phase === "world" && next.gameplay?.consignment === true && !loading,
+				marketOpen: marketHud.isOpen(),
 				// The DOM tools keep their own row beside the map, below combat chrome.
 				hudCorner: compact ?
 					[ w, itemMall.isOpen() ? 52 : compactTelemetryTop, 0, 0 ] as UiRect :

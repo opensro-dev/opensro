@@ -207,6 +207,13 @@ export interface UiSemantics {
 	readonly loadingVisible?: boolean;
 	/** The login screen is up: the page shell shows its project credit in the lower letterbox band. */
 	readonly titleCredit?: boolean;
+	/**
+	 * Port-only, not native (SRO_CONSIGNMENT): the world is up on a shard that runs
+	 * the consignment market, so the page shell shows its button beside FPS.
+	 */
+	readonly marketButton?: boolean;
+	/** The consignment market window is open (its button reads pressed). */
+	readonly marketOpen?: boolean;
 	readonly hudCorner?: UiRect;
 	/** Top of the port-only tool row, clear of native player, target and companion chrome. */
 	readonly hudToolsTop?: number;

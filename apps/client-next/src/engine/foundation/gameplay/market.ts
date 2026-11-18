@@ -112,7 +112,6 @@ const MARKET_REFUSALS = {
 	"bag-full": "Your inventory is full. Make room or send it to the warehouse.",
 	"not-held": "That item is not waiting to be taken back.",
 	"cap": "You already have the most listings allowed. Items waiting in My listings count too.",
-	"keeper": "Talk to a storage keeper to use the market.",
 	"own-listing": "That is your own listing.",
 	"not-tradeable": "That item cannot be traded.",
 	"funds": "You do not have enough to pay for it.",

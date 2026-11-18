@@ -631,3 +631,28 @@ Tall portrait phones and the desktop are untouched.
 	overflow-wrap: anywhere;
 	user-select: text;
 }
+
+/*
+The consignment market's button (port-only, SRO_CONSIGNMENT): first in the
+FPS chip, gilded and fully opaque so it reads as a game button, not a
+developer tool.
+*/
+.sro-market-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: calc(var(--hud-tools-height) + 8px);
+	border-color: rgba(252, 210, 100, 0.85);
+	background: linear-gradient(#5a4316, #2a1d07);
+	color: #fcd264;
+	opacity: 1;
+	box-shadow: 0 0 6px rgba(252, 210, 100, 0.35);
+}
+.sro-market-toggle:hover,
+.sro-market-toggle[aria-pressed="true"] {
+	background: linear-gradient(#7a5a1c, #3c2a0a);
+	color: #fff2c4;
+}
+.sro-market-toggle[hidden] {
+	display: none;
+}

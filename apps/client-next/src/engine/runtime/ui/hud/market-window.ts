@@ -881,7 +881,7 @@ function rulesPanel( pen: Pen ) {
 		"Gold goes to the character that listed the item,",
 		"Silk to your account. Unsold items come back.",
 		`The seller pays a ${rules?.feePercent ?? 0}% fee on each sale.`,
-		"Buy and sell at any storage keeper."
+		"Open the market anywhere with its button."
 	];
 	lines.forEach( ( line, i ) => pen.text( line, [ left + 8, top + 4 + i * 16, RIGHT_WIDTH - 16, 16 ], DIM ) );
 }

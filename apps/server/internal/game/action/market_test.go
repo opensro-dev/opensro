@@ -187,28 +187,7 @@ func marketFixture() (*Runtime, *enterworld.Character, *fakeMarketDesk) {
 	rt, _ := newTestRuntime(c, testItems())
 	desk := &fakeMarketDesk{owed: map[int64]int64{}}
 	rt.Market = desk
-	standAtKeeper(rt, c)
 	return rt, c, desk
-}
-
-// marketTestKeeper is the storage keeper's gid in the market fixtures.
-const marketTestKeeper = 17
-
-/*
-================
-standAtKeeper
-
-A storage keeper at the characters' spawn, selected by each of them: the
-window's writes need one in reach (market_keeper.go).
-================
-*/
-func standAtKeeper(rt *Runtime, characters ...*enterworld.Character) {
-	rt.NpcSpawn.Enabled = true
-	rt.NpcRoster = []simulation.NpcDef{{ObjectID: marketTestKeeper, RefObjID: 100,
-		TalkFlags: simulation.NpcTalkFlagStorage, AuthoredSpawn: true, Spawn: simulation.SeedWorldState(characters[0]).Spawn}}
-	for _, c := range characters {
-		rt.Selected.Set(testDivision, c.Name, marketTestKeeper)
-	}
 }
 
 /*
@@ -237,7 +216,6 @@ func marketPair() (*Runtime, *enterworld.Character, *enterworld.Character, *fake
 		rt.characterAdmissions.Store(simulation.WorldKey(testDivision, admitted.Name),
 			populationAdmission{division: testDivision, name: admitted.Name})
 	}
-	standAtKeeper(rt, c, other)
 	return rt, c, other, desk
 }
 
@@ -643,44 +621,21 @@ func TestMarketSearchMineAndAdmission(t *testing.T) {
 
 /*
 ================
-TestMarketWritesNeedAStorageKeeper
+TestMarketWritesNeedNoKeeper
 
-The window's menu row is the client's: the server takes a write only
-with a storage keeper in reach. The reads stay open (the website shows
-the same), the keeper the window opened at is remembered when the
-selection moves, and walking out of reach closes the writes.
+The market opens from the HUD anywhere in the world: a listing goes
+through with no NPC selected or near.
 ================
 */
-func TestMarketWritesNeedAStorageKeeper(t *testing.T) {
+func TestMarketWritesNeedNoKeeper(t *testing.T) {
 	rt, c, desk := marketFixture()
-	list := []byte(`{"op":"list","slot":13,"currency":"gold","price":10}`)
 	rt.Selected.Clear(testDivision, c.Name)
-	if got := marketAnswerFirst(t, rt.HandleMarket(testDivision, c, list)); got.Error != marketRefusedKeeper {
-		t.Fatalf("a listing with no keeper = %+v", got)
+	list := []byte(`{"op":"list","slot":13,"currency":"gold","price":10}`)
+	if got := marketAnswerFirst(t, rt.HandleMarket(testDivision, c, list)); !got.OK {
+		t.Fatalf("a listing with no NPC = %+v", got)
 	}
-	if got := marketAnswerFirst(t, rt.HandleMarket(testDivision, c, []byte(`{"op":"search"}`))); !got.OK {
-		t.Fatalf("a search with no keeper = %+v", got)
-	}
-	// Selected, then the selection moves: the remembered keeper still serves.
-	rt.Selected.Set(testDivision, c.Name, marketTestKeeper)
-	marketAnswerFirst(t, rt.HandleMarket(testDivision, c, []byte(`{"op":"mine"}`)))
-	rt.Selected.Set(testDivision, c.Name, 999)
-	if !rt.marketAtKeeper(testDivision, c) {
-		t.Fatal("the keeper the window opened at was forgotten")
-	}
-	// Out of reach, remembered or not, nothing writes.
-	rt.NpcRoster[0].Spawn.X += 5000
-	if got := marketAnswerFirst(t, rt.HandleMarket(testDivision, c, list)); got.Error != marketRefusedKeeper {
-		t.Fatalf("a listing out of reach = %+v", got)
-	}
-	// A keeper that is no storage keeper is none.
-	rt.NpcRoster[0].Spawn.X -= 5000
-	rt.NpcRoster[0].TalkFlags = 0
-	if rt.marketAtKeeper(testDivision, c) {
-		t.Fatal("a non-storage NPC served as the keeper")
-	}
-	if len(desk.listed) != 0 {
-		t.Fatalf("a refused write reached the market: %+v", desk.listed)
+	if len(desk.listed) != 1 {
+		t.Fatalf("the listing did not reach the market: %+v", desk.listed)
 	}
 }
 
