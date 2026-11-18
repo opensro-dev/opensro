@@ -15,8 +15,12 @@ seller, matching the stall network's commission; listings open for 24
 hours; 20 open listings per account; no minimum price. On 2026-11-19 the
 owner added offers, a named seller with an anonymous choice, the buyer's
 pick of bag or warehouse, and gold paid to the listing character.
-OpenOfferCap is this port's proposal, mirroring the listing cap, until
-the owner sets one.
+The owner left two numbers to this port (2026-11-19). OpenOfferCap
+mirrors the listing cap: 20 offers lets a player haggle across the
+market, and the cap bounds lowball spam, because an offer holds no gold
+(an accept checks the buyer can still pay). The fee rounds down: a sale
+under 100 pays none. A floor of 1 would take 20% of a 5 Silk sale, and
+the fee is a sink on large sales, not a tax on small trades.
 
 ===========================================================================
 */
@@ -36,7 +40,8 @@ import (
 const EnvConsignment = "SRO_CONSIGNMENT"
 
 const (
-	// FeePercent is the seller's fee on a sale.
+	// FeePercent is the seller's fee on a sale, rounded down (a sale
+	// under 100 pays none).
 	FeePercent = 1
 	// ListingDuration is how long a listing stays open.
 	ListingDuration = 24 * time.Hour
