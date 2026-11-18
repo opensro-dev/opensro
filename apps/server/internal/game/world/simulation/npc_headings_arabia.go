@@ -19,7 +19,8 @@ neighbours, seasonal layer members excluded), reviewed in game:
 	watch  a field post with no solid model within 30 m faces away from
 	       the town's guards' centroid, as a lookout.
 	owner  a placement the owner corrected in game (the cardinal heading,
-	       or the compass bearing named in review, clockwise from north:
+	       the compass bearing named in review, clockwise from north, or
+	       the direction toward a map X/Y named in review:
 	       east 0, north 16384, west 32768, south 49151).
 
 The heading word is the native yaw convention (atan2(dz, dx) over the full
@@ -66,7 +67,7 @@ var arabiaNPCHeadings = map[npcHeadingKey]uint16{
 	{"NPC_AR_MUHAMMAD", 22354, 6678, 2999, 397}:                   61181, // open
 	{"NPC_AR_NAJIMA", 22361, 9259, -4321, 2651}:                   18206, // shop
 	{"NPC_AR_POTION", 22361, 4342, -4319, 16705}:                  53792, // shop
-	{"NPC_AR_SHARIAL", 22618, 13179, -2366, 2749}:                 43690, // owner: north + 210 deg clockwise
+	{"NPC_AR_SHARIAL", 22618, 13179, -2366, 2749}:                 34109, // owner: toward X -8512 Y -741
 	{"NPC_AR_SHEHERAZADE", 22618, 13666, -2366, 1297}:             7983,  // open
 	{"NPC_AR_SMITH", 22874, 15943, -4308, 12906}:                  38903, // shop
 	{"NPC_AR_SOLDIER_1", 22617, 2445, -4323, 5430}:                11268, // open
