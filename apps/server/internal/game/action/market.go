@@ -123,7 +123,7 @@ they are given, under the division lock.
 type MarketDesk interface {
 	Categories() []publicstats.MarketCategory
 	Search(q publicstats.MarketSearch) (publicstats.MarketListingsResponse, error)
-	Account(account string) (publicstats.OwnMarketResponse, error)
+	GameAccount(c *domain.Character) (publicstats.OwnMarketResponse, error)
 	GameList(c *domain.Character, slot int64, currency string, price int64, anonymous bool) (publicstats.MarketListingView, error)
 	GameBuy(c *domain.Character, listing, version int64, to string, bagSlot int64) (publicstats.MarketSaleView, error)
 	GameReclaim(c *domain.Character, listing int64, to string, bagSlot int64) error
@@ -550,7 +550,7 @@ func (rt *Runtime) HandleMarket(division string, character *enterworld.Character
 			Categories: rt.Market.Categories(),
 			Search:     &marketPage{Rows: rows, Page: page.Page, Pages: page.Pages, Total: page.Total}})}}
 	case marketOpMine:
-		account, err := rt.Market.Account(c.AccountID)
+		account, err := rt.Market.GameAccount(c)
 		if err != nil {
 			return marketRefusal(request.Op, publicstats.MarketErrorCode(err))
 		}

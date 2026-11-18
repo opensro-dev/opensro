@@ -179,6 +179,9 @@ type MarketListingView struct {
 	// Row is the listed item itself, for the in-game window's item
 	// preview (game/action market.go); the site never receives it.
 	Row domain.InventoryRow `json:"-"`
+	// SellerChar is the listing character, 0 for a warehouse listing: the
+	// game shows a character only its own (game/market GameAccount).
+	SellerChar int64 `json:"-"`
 }
 
 // MarketListingsResponse is one search page.
@@ -203,6 +206,8 @@ type MarketSaleView struct {
 	// game's seller notice, and never leaves the server.
 	Item       string `json:"item,omitempty"`
 	SellerChar int64  `json:"-"`
+	// BuyerChar is the buying character, 0 for a website buy.
+	BuyerChar int64 `json:"-"`
 }
 
 // MarketOfferView is one offer, with the listing's item and asked price.

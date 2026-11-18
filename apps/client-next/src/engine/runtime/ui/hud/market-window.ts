@@ -59,10 +59,24 @@ const MARGIN = 14;
 // The left column: the listings.
 const LEFT_WIDTH = 680;
 // The search line: the name field, the dropdowns and the Search button.
-const QUERY_WIDTH = 150;
-const SEARCH_WIDTH = 60;
+const QUERY_WIDTH = 130;
+const SEARCH_WIDTH = 56;
 const MENU_GAP = 4;
-const MENU_ROW = 22;
+const MENU_ROW = 20;
+// The open list's lit rows: the current choice (the option window's) and
+// the one under the pointer.
+const MENU_CURRENT: UiQuad["color"] = [ .2, .25, .3, 1 ];
+const MENU_HOVER: UiQuad["color"] = [ .12, .14, .17, 1 ];
+// The native interface art the window draws, and its sizes.
+const IFCOMMON = "/assets/images/Media_extracted/interface/ifcommon/";
+const ARROW_SIZE = 16;
+const ARROW_INSET = 6;
+const CHECK_SIZE = 16;
+// The Price header's sort mark: two triangles of four pixel rows in a
+// 10-pixel box, set this far right of the caption.
+const SORT_TRIANGLE_ROWS = 4;
+const SORT_MARK_HEIGHT = 10;
+const SORT_MARK_GAP = 6;
 const CHIP_TOP = 38;
 const FILTER_TOP = 68;
 const TABLE_TOP = 100;
@@ -180,6 +194,14 @@ export interface MarketPaint {
 		}
 	): void;
 	rect( frame: UiAuthoredFrame, spec: { r: UiRect; color: UiQuad["color"]; } ): void;
+	// A native interface image (ifcommon art) at its own size.
+	image( frame: UiAuthoredFrame, spec: { r: UiRect; path: string; } ): void;
+	// The option window's combo box: the black field and the native drop
+	// arrow (com_qst_downarrow_button), with its focus and press art.
+	comboBox(
+		frame: UiAuthoredFrame,
+		spec: { r: UiRect; id: string; label: string; value: string; }
+	): void;
 	nativeItem(
 		frame: UiAuthoredFrame,
 		spec: { id: string; item: InventoryItem | undefined; r: UiRect; selected?: boolean; }
@@ -390,21 +412,66 @@ function itemColor( pen: Pen, item: InventoryItem ): UiQuad["color"] {
 ================
 pager
 
-The "< Previous  n / m  Next >" pair every list shares (the game font
-has no guillemets).
+The Previous / n of m / Next pair every list shares. The arrows are the
+game's own (com_left_arrow, com_right_arrow, with their disabled art);
+the compact pair is the arrows alone.
 ================
 */
 function pager( pen: Pen, prefix: string, page: number, pages: number, right: number, y: number, compact = false ) {
 	const step = compact ? 30 : 74, middle = compact ? 46 : 56;
 	const left = right - (2 * step + middle + 8);
-	pen.button( prefix + "prev", compact ? "<" : "< Previous", left, y, step, page <= 0 );
+	pagerButton( pen, prefix + "prev", compact ? "" : "Previous", left, y, step, page <= 0, "left" );
 	pen.text(
 		`${page + 1} / ${Math.max( 1, pages )}`,
 		[ left + step + 4, y, middle, BUTTON_HEIGHT ],
 		pen.frame.white,
 		1
 	);
-	pen.button( prefix + "next", compact ? ">" : "Next >", left + step + middle + 8, y, step, page + 1 >= pages );
+	pagerButton(
+		pen,
+		prefix + "next",
+		compact ? "" : "Next",
+		left + step + middle + 8,
+		y,
+		step,
+		page + 1 >= pages,
+		"right"
+	);
+}
+
+/*
+================
+pagerButton
+
+A pager button with the native arrow on its outer side (centred when it
+has no caption); the caption fills the rest.
+================
+*/
+function pagerButton(
+	pen: Pen,
+	id: string,
+	caption: string,
+	x: number,
+	y: number,
+	width: number,
+	disabled: boolean,
+	side: "left" | "right"
+) {
+	pen.button( id, "", x, y, width, disabled );
+	const arrowX = !caption ?
+		x + (width - ARROW_SIZE) / 2 :
+		side === "left" ?
+		x + ARROW_INSET :
+		x + width - ARROW_INSET - ARROW_SIZE;
+	pen.frameDraw.image( pen.frame, {
+		r: [ arrowX, y + (BUTTON_HEIGHT - ARROW_SIZE) / 2, ARROW_SIZE, ARROW_SIZE ],
+		path: IFCOMMON + `com_${side}_arrow${disabled ? "_disable" : ""}.png`
+	} );
+	if ( !caption ) return;
+	// The caption centres in what the arrow leaves.
+	const room = width - ARROW_INSET - ARROW_SIZE;
+	const textX = side === "left" ? x + ARROW_INSET + ARROW_SIZE : x;
+	pen.text( caption, [ textX, y, room, BUTTON_HEIGHT ], disabled ? DIM : pen.frame.white, 1 );
 }
 
 // ============================================================================
@@ -440,15 +507,12 @@ function browseColumn( pen: Pen ) {
 	const y = py + FILTER_TOP;
 	pen.field( "market-query", hud.query, [ left, y, QUERY_WIDTH, BUTTON_HEIGHT ], "Search items...", 64 );
 	for ( const menu of filterMenus( hud ) ) {
-		pen.button(
-			"market-menu:" + menu.name,
-			menu.caption + " v",
-			left + menu.x,
-			y,
-			menu.width,
-			false,
-			hud.menu === menu.name
-		);
+		pen.frameDraw.comboBox( pen.frame, {
+			r: [ left + menu.x, y, menu.width, BUTTON_HEIGHT ],
+			id: "market-menu:" + menu.name,
+			label: menu.label,
+			value: menu.caption
+		} );
 	}
 	pen.button( "market-search", "Search", left + LEFT_WIDTH - SEARCH_WIDTH, y, SEARCH_WIDTH );
 	// The listings.
@@ -458,12 +522,11 @@ function browseColumn( pen: Pen ) {
 		r: [ table[0] + 1, table[1] + 1, table[2] - 2, HEADER_HEIGHT - 1 ],
 		color: HEADER
 	} );
-	const priceCaption = hud.sort === "price-asc" ? "Price ^" : hud.sort === "price-desc" ? "Price v" : "Price ^v";
 	const headers: readonly (readonly [string, Column])[] = [
 		[ "Item", COLUMN.item ],
 		[ "Degree", COLUMN.degree ],
 		[ "Qty", COLUMN.qty ],
-		[ priceCaption, COLUMN.price ],
+		[ "Price", COLUMN.price ],
 		[ "Seller", COLUMN.seller ],
 		[ "Left", COLUMN.left ]
 	];
@@ -471,6 +534,12 @@ function browseColumn( pen: Pen ) {
 		pen.text( caption, [ left + column.x, table[1], column.width, HEADER_HEIGHT ], GOLD, column.align );
 	}
 	// The Price header sorts: cheapest first, then dearest first.
+	sortMark(
+		pen,
+		left + COLUMN.price.x + pen.frame.text.run( "Price" ).width + SORT_MARK_GAP,
+		table[1] + (HEADER_HEIGHT - SORT_MARK_HEIGHT) / 2,
+		hud.sort
+	);
 	pen.frame.controls.push( {
 		id: "market-sort-price",
 		label: "Sort by price",
@@ -542,6 +611,39 @@ function browseColumn( pen: Pen ) {
 
 /*
 ================
+sortMark
+
+The sort triangles beside a header: a dim pair while the column does
+not sort, a gold one pointing the way it does. Drawn as rows of pixels:
+the game font has no arrow glyphs and ifcommon has no up arrow.
+================
+*/
+function sortMark( pen: Pen, x: number, y: number, sort: MarketHudState["sort"] ) {
+	const up = sort === "price-asc", down = sort === "price-desc";
+	const centre = Math.floor( (SORT_MARK_HEIGHT - SORT_TRIANGLE_ROWS) / 2 );
+	if ( !down ) sortTriangle( pen, x, y + (up ? centre : 0), true, up ? GOLD : DIM );
+	if ( !up ) {
+		sortTriangle( pen, x, y + (down ? centre : SORT_MARK_HEIGHT - SORT_TRIANGLE_ROWS), false, down ? GOLD : DIM );
+	}
+}
+
+/*
+================
+sortTriangle
+================
+*/
+function sortTriangle( pen: Pen, x: number, y: number, up: boolean, color: UiQuad["color"] ) {
+	for ( let row = 0; row < SORT_TRIANGLE_ROWS; row++ ) {
+		const width = 2 * (up ? row : SORT_TRIANGLE_ROWS - 1 - row) + 1;
+		pen.frameDraw.rect( pen.frame, {
+			r: [ x + SORT_TRIANGLE_ROWS - 1 - (width - 1) / 2, y + row, width, 1 ],
+			color
+		} );
+	}
+}
+
+/*
+================
 filterMenus
 
 The search line's dropdowns: each one's caption for the current choice,
@@ -553,29 +655,39 @@ function filterMenus( hud: MarketHudState ) {
 	for ( let degree = 1; degree <= MARKET_MAX_DEGREE; degree++ ) {
 		degrees.push( [ String( degree ), `Degree ${degree}` ] );
 	}
-	const menus: { name: MarketMenu; width: number; current: string; choices: readonly [string, string][]; }[] = [
-		{ name: "degree", width: 86, current: String( hud.degree ), choices: degrees },
+	const menus: {
+		name: MarketMenu;
+		label: string;
+		width: number;
+		current: string;
+		choices: readonly [string, string][];
+	}[] = [
+		{ name: "degree", label: "Degree", width: 88, current: String( hud.degree ), choices: degrees },
 		{
 			name: "race",
-			width: 80,
+			label: "Race",
+			width: 88,
 			current: hud.race,
-			choices: [ [ "", "Race: all" ], [ "ch", "Chinese" ], [ "eu", "European" ] ]
+			choices: [ [ "", "All races" ], [ "ch", "Chinese" ], [ "eu", "European" ] ]
 		},
 		{
 			name: "rarity",
-			width: 86,
+			label: "Rarity",
+			width: 88,
 			current: hud.rarity,
-			choices: [ [ "", "Rarity: all" ], [ "sealed", "Sealed" ], [ "normal", "Normal" ] ]
+			choices: [ [ "", "All rarities" ], [ "sealed", "Sealed" ], [ "normal", "Normal" ] ]
 		},
 		{
 			name: "currency",
+			label: "Currency",
 			width: 96,
 			current: hud.currency,
-			choices: [ [ "", "Currency: all" ], [ "gold", "Gold" ], [ "silk", "Silk" ] ]
+			choices: [ [ "", "Gold + Silk" ], [ "gold", "Gold" ], [ "silk", "Silk" ] ]
 		},
 		{
 			name: "sort",
-			width: 96,
+			label: "Sort",
+			width: 104,
 			current: hud.sort,
 			choices: MARKET_SORT_ORDER.map( sort => [ sort, SORT_CAPTIONS[sort] ] as [string, string] )
 		}
@@ -603,19 +715,24 @@ function filterMenu( pen: Pen ) {
 	const { px, py, view } = pen;
 	const menu = filterMenus( view.hud ).find( row => row.name === view.hud.menu );
 	if ( !menu ) return;
-	const width = Math.max( menu.width, 110 );
-	const x = px + MARGIN + menu.x, y = py + FILTER_TOP + BUTTON_HEIGHT + 2;
-	pen.panel( [ x - 2, y - 2, width + 4, menu.choices.length * MENU_ROW + 4 ], GOLD );
+	// The option window's open combo (ui.ts video combos): a black list
+	// under the box, the current choice lit, the hovered one lit softer.
+	const list: UiRect = [
+		px + MARGIN + menu.x,
+		py + FILTER_TOP + BUTTON_HEIGHT,
+		menu.width,
+		menu.choices.length * MENU_ROW
+	];
+	pen.frameDraw.rect( pen.frame, { r: list, color: [ 0, 0, 0, 1 ] } );
+	pen.frame.blocks.push( list );
 	menu.choices.forEach( ( [value, caption], i ) => {
-		pen.button(
-			`market-choose:${menu.name}:${value}`,
-			caption,
-			x,
-			y + i * MENU_ROW,
-			width,
-			false,
-			value === menu.current
-		);
+		const id = `market-choose:${menu.name}:${value}`;
+		const cell: UiRect = [ list[0], list[1] + i * MENU_ROW, list[2], MENU_ROW ];
+		const current = value === menu.current;
+		if ( current ) pen.frameDraw.rect( pen.frame, { r: cell, color: MENU_CURRENT } );
+		else if ( pen.frame.hover === id ) pen.frameDraw.rect( pen.frame, { r: cell, color: MENU_HOVER } );
+		pen.text( caption, [ cell[0] + 5, cell[1], cell[2] - 10, MENU_ROW ], current ? GOLD : pen.frame.white );
+		pen.frame.controls.push( { id, label: caption, rect: cell, kind: "button", selected: current } );
 	} );
 }
 
@@ -685,15 +802,25 @@ function sellPanel( pen: Pen ) {
 		price ? priceColor( hud.sellCurrency ) : DIM
 	);
 	const bottom = top + SELL_HEIGHT - BUTTON_HEIGHT - 8;
-	pen.button(
-		"market-anonymous",
-		(hud.anonymous ? "[x] " : "[  ] ") + "Anonymous",
-		left + 10,
-		bottom,
-		92,
-		false,
-		hud.anonymous
+	// The anonymous choice: the game's check box (com_checkbutton) and its
+	// caption, the whole line one control.
+	const anonymous: UiRect = [ left + 10, bottom, 92, BUTTON_HEIGHT ];
+	pen.frameDraw.image( pen.frame, {
+		r: [ anonymous[0], bottom + (BUTTON_HEIGHT - CHECK_SIZE) / 2, CHECK_SIZE, CHECK_SIZE ],
+		path: IFCOMMON + `com_checkbutton_${hud.anonymous ? "on" : "off"}.png`
+	} );
+	pen.text(
+		"Anonymous",
+		[ anonymous[0] + CHECK_SIZE + 5, bottom, anonymous[2] - CHECK_SIZE - 5, BUTTON_HEIGHT ],
+		pen.frame.white
 	);
+	pen.frame.controls.push( {
+		id: "market-anonymous",
+		label: "Anonymous",
+		kind: "button",
+		rect: anonymous,
+		selected: hud.anonymous
+	} );
 	pen.button( "market-tab:sell", "Pick from bag", left + 106, bottom, 84, false, hud.tab === "sell" );
 	pen.button( "market-list", "List it", left + 194, bottom, width - 204, !item || price < 1 || pen.busy );
 }
@@ -995,7 +1122,6 @@ function bagPage( pen: Pen, area: UiRect ) {
 	}
 	const bottom = area[1] + area[3] - BUTTON_HEIGHT;
 	pager( pen, "market-bag-", page, pages, area[0] + area[2], bottom, true );
-	pen.button( "market-tab:mine", "Done", area[0], bottom, 64 );
 }
 
 /*

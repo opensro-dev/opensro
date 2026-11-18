@@ -10,6 +10,7 @@ package market
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -36,6 +37,12 @@ type fakeServiceStore struct {
 	offered          []domain.MarketOfferRequest
 	accepted         []domain.MarketAcceptRequest
 	offers           map[int64]domain.MarketOffer
+	// The account page's lists (MarketAccountListings, MarketPurchases,
+	// MarketOffers).
+	accountListings     []domain.MarketListing
+	purchases           []domain.MarketSale
+	offersIn, offersOut []domain.MarketOffer
+	answered            int
 }
 
 func (f *fakeServiceStore) MarketReclaim(req domain.MarketReclaimRequest) (domain.MarketListing, error) {
@@ -54,15 +61,17 @@ func (f *fakeServiceStore) MarketAcceptOffer(req domain.MarketAcceptRequest) (do
 }
 
 func (f *fakeServiceStore) MarketRejectOffer(string, int64) (domain.MarketOffer, error) {
+	f.answered++
 	return domain.MarketOffer{ListingID: 1}, nil
 }
 
 func (f *fakeServiceStore) MarketWithdrawOffer(string, int64) (domain.MarketOffer, error) {
+	f.answered++
 	return domain.MarketOffer{ListingID: 1}, nil
 }
 
 func (f *fakeServiceStore) MarketOffers(string, int) ([]domain.MarketOffer, []domain.MarketOffer, error) {
-	return nil, nil, nil
+	return f.offersIn, f.offersOut, nil
 }
 
 func (f *fakeServiceStore) MarketOfferByID(id int64) (domain.MarketOffer, error) {
@@ -122,10 +131,12 @@ func (f *fakeServiceStore) MarketOpenListings(q domain.MarketQuery) ([]domain.Ma
 }
 
 func (f *fakeServiceStore) MarketAccountListings(string, int) ([]domain.MarketListing, error) {
-	return nil, nil
+	return f.accountListings, nil
 }
 
-func (f *fakeServiceStore) MarketPurchases(string, int) ([]domain.MarketSale, error) { return nil, nil }
+func (f *fakeServiceStore) MarketPurchases(string, int) ([]domain.MarketSale, error) {
+	return f.purchases, nil
+}
 
 func (f *fakeServiceStore) MarketWarehouse(string) (domain.AccountStorage, error) {
 	return f.storage, nil
@@ -422,6 +433,97 @@ func TestGameDoorsActForTheOnlineCharacter(t *testing.T) {
 	}
 	if _, err := s.GameBuy(kekw, 3, 1, domain.MarketToWarehouse, -1); !errors.Is(err, domain.ErrMarketNotFound) || len(store.bought) != 2 {
 		t.Fatalf("another shard's listing: %v", err)
+	}
+}
+
+/*
+================
+TestGamePageIsTheCharacters
+
+Two characters of one account: each sees in the game only its own
+listings, the offers on them and its own offers and buys, plus what the
+account shares (warehouse listings and website buys, character 0), and
+neither can take back, accept, reject or withdraw the other's. The
+website page keeps the whole account.
+================
+*/
+func TestGamePageIsTheCharacters(t *testing.T) {
+	const division = "global-official"
+	listing := func(id, char int64) domain.MarketListing {
+		return domain.MarketListing{ID: id, Division: division, SellerAccount: "alpha", SellerChar: char,
+			Currency: domain.MarketGold, State: domain.MarketHeld}
+	}
+	store := &fakeServiceStore{
+		byID:            map[int64]domain.MarketListing{1: listing(1, 1), 2: listing(2, 2), 3: listing(3, 0)},
+		accountListings: []domain.MarketListing{listing(1, 1), listing(2, 2), listing(3, 0)},
+		purchases:       []domain.MarketSale{{ListingID: 7, BuyerChar: 1}, {ListingID: 8, BuyerChar: 2}, {ListingID: 9}},
+		offersIn: []domain.MarketOffer{{ID: 10, ListingID: 1, BuyerChar: 5}, {ID: 11, ListingID: 2, BuyerChar: 5},
+			{ID: 12, ListingID: 3, BuyerChar: 5}},
+		offersOut: []domain.MarketOffer{{ID: 20, ListingID: 30, BuyerChar: 1}, {ID: 21, ListingID: 30, BuyerChar: 2}},
+	}
+	store.byID[30] = domain.MarketListing{ID: 30, Division: division, SellerAccount: "beta", SellerChar: 5}
+	store.offers = map[int64]domain.MarketOffer{}
+	for _, offer := range append(append([]domain.MarketOffer{}, store.offersIn...), store.offersOut...) {
+		store.offers[offer.ID] = offer
+	}
+	s := testService(store)
+	first := &domain.Character{ID: 1, AccountID: "alpha", Name: "First"}
+	second := &domain.Character{ID: 2, AccountID: "alpha", Name: "Second"}
+
+	page, err := s.GameAccount(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := func(n int, id func(int) int64) []int64 {
+		out := []int64{}
+		for i := 0; i < n; i++ {
+			out = append(out, id(i))
+		}
+		return out
+	}
+	if got := ids(len(page.Listings), func(i int) int64 { return page.Listings[i].ID }); fmt.Sprint(got) != "[1 3]" {
+		t.Fatalf("first's listings = %v, want its own and the warehouse one", got)
+	}
+	if got := ids(len(page.Purchases), func(i int) int64 { return page.Purchases[i].ListingID }); fmt.Sprint(got) != "[7 9]" {
+		t.Fatalf("first's buys = %v", got)
+	}
+	if got := ids(len(page.OffersIn), func(i int) int64 { return page.OffersIn[i].ID }); fmt.Sprint(got) != "[10 12]" {
+		t.Fatalf("offers on first's listings = %v", got)
+	}
+	if got := ids(len(page.OffersOut), func(i int) int64 { return page.OffersOut[i].ID }); fmt.Sprint(got) != "[20]" {
+		t.Fatalf("first's offers = %v", got)
+	}
+	whole, err := s.Account("alpha")
+	if err != nil || len(whole.Listings) != 3 || len(whole.OffersOut) != 2 {
+		t.Fatalf("the website page = %d listings, %d offers, %v", len(whole.Listings), len(whole.OffersOut), err)
+	}
+
+	if err := s.GameReclaim(second, 1, domain.MarketToBag, 20); !errors.Is(err, domain.ErrMarketNotFound) {
+		t.Fatalf("second takes back first's listing: %v", err)
+	}
+	if err := s.GameReclaim(second, 3, domain.MarketToWarehouse, -1); err != nil {
+		t.Fatalf("second takes back the warehouse listing: %v", err)
+	}
+	if len(store.reclaimed) != 1 || store.reclaimed[0].ListingID != 3 {
+		t.Fatalf("reclaims = %+v", store.reclaimed)
+	}
+	if _, err := s.GameAccept(second, 10, first, 20); !errors.Is(err, domain.ErrMarketOfferGone) || len(store.accepted) != 0 {
+		t.Fatalf("second accepts an offer on first's listing: %v", err)
+	}
+	if _, err := s.GameReject(second, 10); !errors.Is(err, domain.ErrMarketOfferGone) {
+		t.Fatalf("second rejects an offer on first's listing: %v", err)
+	}
+	if _, err := s.GameWithdraw(second, 20); !errors.Is(err, domain.ErrMarketOfferGone) {
+		t.Fatalf("second withdraws first's offer: %v", err)
+	}
+	if store.answered != 0 {
+		t.Fatalf("%d refused answers reached the store", store.answered)
+	}
+	if _, err := s.GameReject(first, 10); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GameWithdraw(first, 20); err != nil {
+		t.Fatal(err)
 	}
 }
 

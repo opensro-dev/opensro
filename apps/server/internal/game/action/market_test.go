@@ -61,7 +61,7 @@ func (f *fakeMarketDesk) Search(q publicstats.MarketSearch) (publicstats.MarketL
 	return publicstats.MarketListingsResponse{Listings: []publicstats.MarketListingView{view}, Page: q.Page, Pages: 1, Total: 1}, nil
 }
 
-func (f *fakeMarketDesk) Account(string) (publicstats.OwnMarketResponse, error) {
+func (f *fakeMarketDesk) GameAccount(*domain.Character) (publicstats.OwnMarketResponse, error) {
 	row := testCharacter().MissionInventory[0]
 	return publicstats.OwnMarketResponse{Silk: 9,
 		Listings:  []publicstats.MarketListingView{{ID: 1, Row: row, Seller: "asd2", Anonymous: true}},

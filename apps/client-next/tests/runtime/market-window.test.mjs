@@ -380,3 +380,33 @@ test("K toggles the market and Ctrl+click lists a bag item", () => {
 		f.dispose();
 	}
 });
+
+test("every page of the window draws with unique controls", () => {
+	// The frame refuses a duplicate control id and stops the runtime; step()
+	// would throw on any page that draws one.
+	const { f, step } = storageKeeper( true );
+	try {
+		step();
+		f.ui.event( { kind: "activate", id: "market-open" } );
+		step();
+		assert.ok( f.hasText( "Consignment Market" ) );
+		for (
+			const id of [
+				"market-tab:history",
+				"market-tab:offers",
+				"market-offer-side:out",
+				"market-sell-pick",
+				"market-menu:degree",
+				"market-menu:race",
+				"market-tab:mine"
+			]
+		) {
+			f.ui.event( { kind: "activate", id } );
+			const controls = step();
+			if ( id === "market-sell-pick" ) assert.ok( f.hasText( "Pick the item to sell" ), "the bag page drew" );
+			if ( id === "market-menu:race" ) assert.ok( controls.has( "market-choose:race:eu" ), "the race list drew" );
+		}
+	} finally {
+		f.dispose();
+	}
+});

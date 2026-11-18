@@ -16841,6 +16841,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						closeButton: ( frame, x, y, id ) => frameDraw.closeButton( frame, x, y, id ),
 						button: ( frame, spec ) => frameDraw.button( frame, spec ),
 						rect: ( frame, spec ) => frameDraw.rect( frame, spec ),
+						comboBox: ( frame, spec ) => frameDraw.comboBox( frame, spec ),
+						image: ( frame, spec ) => frameDraw.image( frame, spec ),
 						nativeItem: ( frame, spec ) => frameDraw.nativeItem( frame, itemSlots, spec )
 					};
 					drawMarketWindow( drawFrame, marketPaint, {

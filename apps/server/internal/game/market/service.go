@@ -286,6 +286,106 @@ func (s *Service) Account(account string) (publicstats.OwnMarketResponse, error)
 
 /*
 ================
+Service::GameAccount
+
+The account page as one character sees it in the game: its own
+listings, the offers on them and the offers and buys it made. A
+character's bag listing, its gold and its offers are that character's
+(the gold of a sale goes to the listing character), so a second
+character of the account neither sees nor works them. What the account
+shares stays shared: warehouse listings and website buys (character 0),
+the Silk balance and the rules. The website page (Account) keeps the
+whole account.
+================
+*/
+func (s *Service) GameAccount(c *domain.Character) (publicstats.OwnMarketResponse, error) {
+	out, err := s.Account(c.AccountID)
+	if err != nil {
+		return out, err
+	}
+	out.Listings = kept(out.Listings, func(v publicstats.MarketListingView) bool { return heldBy(v.SellerChar, c) })
+	out.Purchases = kept(out.Purchases, func(v publicstats.MarketSaleView) bool { return heldBy(v.BuyerChar, c) })
+	out.OffersIn = kept(out.OffersIn, func(v publicstats.MarketOfferView) bool { return heldBy(v.SellerChar, c) })
+	out.OffersOut = kept(out.OffersOut, func(v publicstats.MarketOfferView) bool { return heldBy(v.BuyerChar, c) })
+	return out, nil
+}
+
+/*
+================
+heldBy
+
+Whether a record of character id is c's to see and work in the game:
+its own, or the account's shared one (0, made on the website).
+================
+*/
+func heldBy(id int64, c *domain.Character) bool {
+	return id == 0 || id == c.ID
+}
+
+/*
+================
+kept
+
+The rows keep accepts, in order.
+================
+*/
+func kept[T any](rows []T, keep func(T) bool) []T {
+	out := rows[:0]
+	for _, row := range rows {
+		if keep(row) {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+/*
+================
+Service::characterListing
+
+A game write on listing id by c: another character's listing is no
+such listing, as the page never showed it.
+================
+*/
+func (s *Service) characterListing(c *domain.Character, id int64) error {
+	listing, err := s.Store.MarketListingByID(id)
+	if err != nil {
+		return err
+	}
+	if !heldBy(listing.SellerChar, c) {
+		return domain.ErrMarketNotFound
+	}
+	return nil
+}
+
+/*
+================
+Service::characterOffer
+
+A game answer on offer id by c: the seller's side (seller true) is the
+listing character's, the withdraw side the offering character's.
+Another character's offer is gone, as the page never showed it.
+================
+*/
+func (s *Service) characterOffer(c *domain.Character, id int64, seller bool) error {
+	offer, err := s.Store.MarketOfferByID(id)
+	if err != nil {
+		return err
+	}
+	if !seller {
+		if offer.BuyerChar != c.ID {
+			return domain.ErrMarketOfferGone
+		}
+		return nil
+	}
+	if err := s.characterListing(c, offer.ListingID); err != nil {
+		return domain.ErrMarketOfferGone
+	}
+	return nil
+}
+
+/*
+================
 Service::List
 
 A website listing, from the account warehouse.
@@ -428,6 +528,9 @@ its bag or the warehouse.
 ================
 */
 func (s *Service) GameReclaim(c *domain.Character, listing int64, to string, bagSlot int64) error {
+	if err := s.characterListing(c, listing); err != nil {
+		return err
+	}
 	_, err := s.Store.MarketReclaim(domain.MarketReclaimRequest{Account: c.AccountID, ListingID: listing, To: to,
 		Receiver: c, BagSlot: bagSlot})
 	return err
@@ -474,6 +577,9 @@ bagSlot a free slot of its bag.
 ================
 */
 func (s *Service) GameAccept(c *domain.Character, offer int64, buyer *domain.Character, bagSlot int64) (publicstats.MarketSaleView, error) {
+	if err := s.characterOffer(c, offer, true); err != nil {
+		return publicstats.MarketSaleView{}, err
+	}
 	sale, _, err := s.Store.MarketAcceptOffer(domain.MarketAcceptRequest{OfferID: offer, SellerAccount: c.AccountID,
 		Buyer: buyer, BagSlot: bagSlot, Rules: Rules()})
 	if err != nil {
@@ -530,6 +636,9 @@ Service::GameReject
 ================
 */
 func (s *Service) GameReject(c *domain.Character, offer int64) (publicstats.MarketOfferView, error) {
+	if err := s.characterOffer(c, offer, true); err != nil {
+		return publicstats.MarketOfferView{}, err
+	}
 	answered, err := s.Store.MarketRejectOffer(c.AccountID, offer)
 	return s.answeredView(answered, err)
 }
@@ -540,6 +649,9 @@ Service::GameWithdraw
 ================
 */
 func (s *Service) GameWithdraw(c *domain.Character, offer int64) (publicstats.MarketOfferView, error) {
+	if err := s.characterOffer(c, offer, false); err != nil {
+		return publicstats.MarketOfferView{}, err
+	}
 	answered, err := s.Store.MarketWithdrawOffer(c.AccountID, offer)
 	return s.answeredView(answered, err)
 }
@@ -699,7 +811,7 @@ saleView
 */
 func (s *Service) saleView(sale domain.MarketSale) publicstats.MarketSaleView {
 	return publicstats.MarketSaleView{ListingID: sale.ListingID, Currency: sale.Currency, Price: sale.Price, Fee: sale.Fee,
-		AtMs: sale.AtMs, To: sale.To, Slot: sale.Slot, SellerChar: sale.SellerChar,
+		AtMs: sale.AtMs, To: sale.To, Slot: sale.Slot, SellerChar: sale.SellerChar, BuyerChar: sale.BuyerChar,
 		Item: s.itemView(domain.InventoryRow{Codename: sale.Codename}).Name}
 }
 
@@ -713,7 +825,7 @@ the anonymous choice beside it.
 */
 func (s *Service) ownListingView(listing domain.MarketListing) publicstats.MarketListingView {
 	view := s.listingView(listing)
-	view.Seller, view.Anonymous = listing.SellerName, listing.Anonymous
+	view.Seller, view.Anonymous, view.SellerChar = listing.SellerName, listing.Anonymous, listing.SellerChar
 	return view
 }
 
