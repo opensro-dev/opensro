@@ -60,6 +60,10 @@ type QuestMonsterSpawn struct {
 	HasRarity     bool
 	Aggressive    bool
 	TacticsGrade  uint8
+	// AnnounceUnique is the v1.188 in-layer spawner's announce argument
+	// (it passes 1 to the monster factory): a rarity-3 kind tells the
+	// division it appeared.
+	AnnounceUnique bool
 }
 
 // eventAggressiveSight is the sight an event monster forced aggressive
@@ -162,6 +166,10 @@ func (s *MonsterState) SpawnQuestMonsterGID(request QuestMonsterSpawn) (uint32, 
 	state.listRegionGid(spawn.RegionID, actor.Gid)
 	armLifetimeLocked(state, actor, request.NowMs)
 	armQuestLifetimeLocked(state, actor.Gid, request.NowMs+request.LifetimeMs, request.LifetimeMs > 0)
+	if request.AnnounceUnique && actor.Rarity()&15 == 3 {
+		state.uniqueNotices = append(state.uniqueNotices, uniqueNotice(uniqueNoticeAppear, ref.RefObjID, ""))
+		state.markUniqueSpawn(ref.RefObjID, spawn.RegionID, request.NowMs)
+	}
 	return actor.Gid, true
 }
 

@@ -128,6 +128,9 @@ type MonsterState struct {
 	divs             map[string]*divisionMonsterState
 	worldAllocators  map[string]*instance.Registry
 	worldPopulations map[populationKey]*divisionMonsterState
+	// uniqueNoticeWorlds are the instance worlds whose layers tell the
+	// division of their uniques (AnnounceUniqueWorld). Guarded by mu.
+	uniqueNoticeWorlds map[instance.DefinitionID]bool
 	// popHint is the population key and population the last
 	// populationForObject scan answered with. populationForObject
 	// verifies it against the registry and the population's own rows
