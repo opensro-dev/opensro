@@ -32,11 +32,12 @@ What the source authors, and what this import does with it:
 	          respawn 1-3 s, sight 100.
 	gates     the source chain stands in a Jupiter field this port does
 	          not import, and its C links name gates whose buildings the
-	          later client itself never shipped. Authored at import: the
-	          source entry building (43802) is re-homed beside Jangan's
-	          STORE_CH_GATE, the entry offers A and B on the source links
-	          and C and D on authored links, and D gets an authored return
-	          building in the source's own shape. The rows name world 1:
+	          later client itself never shipped. Authored at import:
+	          Jangan's own gate (GATE_CH) lists the four fields, A and B
+	          on the source entry's links and C and D on authored links,
+	          each field leads back to it, and D gets an authored return
+	          building in the source's own shape. No second gate stands in
+	          Jangan (skytemple_gates.py). The rows name world 1:
 	          the later per-field world ids (132-134) are not worlds of
 	          this port, whose portal catalogue refuses unknown worlds.
 	          Link level conditions clamp to the build's cap as every
@@ -740,7 +741,6 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 		pre_gate_keys = {row[1] for row in tables.table_rows(current["text"]) if len(row) > 1}
 		gate_tables, gate_codes = prepare_gates(
 			later_gate_tables,
-			tables.table_rows((native_text_root / "teleportbuilding.txt").read_bytes()),
 			tables.table_rows((native_text_root / "teleportdata.txt").read_bytes()),
 			{row[1] for row in tables.table_rows(current["teleportdata.txt"]) if len(row) > 1},
 			{row[1] for row in tables.table_rows(current["teleportbuilding.txt"]) if len(row) > 1},

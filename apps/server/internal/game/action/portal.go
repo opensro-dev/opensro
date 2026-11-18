@@ -77,6 +77,33 @@ func JanganTombTeleportEnabled() bool {
 	return false
 }
 
+// Port-only, not native: direct links between the five Silk Road town
+// gates, appended only while SRO_CROSS_CITY_TELEPORT is on.
+//
+//go:embed data/cross_city_teleportlink.tsv
+var crossCityTeleportLinkTSV string
+
+// EnvCrossCityTeleport turns the direct town-to-town gate links on.
+const EnvCrossCityTeleport = "SRO_CROSS_CITY_TELEPORT"
+
+/*
+================
+CrossCityTeleportEnabled
+
+Port-only, not native: every Silk Road town gate (Jangan, Donwhang,
+Hotan, Samarkand, Constantinople) also leads straight to the other four,
+for the gold the native chain of gates would cost. Mirrored by
+scripts/build/shared/crossCityTeleport.mjs.
+================
+*/
+func CrossCityTeleportEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvCrossCityTeleport))) {
+	case "1", "on", "true", "yes":
+		return true
+	}
+	return false
+}
+
 /*
 ================
 portalDestination
@@ -196,6 +223,9 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 	}
 	if JanganTombTeleportEnabled() {
 		key += "+jangan_tomb_teleport"
+	}
+	if CrossCityTeleportEnabled() {
+		key += "+cross_city_teleport"
 	}
 	parsed := portalCatalogParses.Get(key, func() *portalCatalogParse {
 		catalog, err := parsePortalCatalog(dir)
@@ -370,6 +400,10 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 	if JanganTombTeleportEnabled() {
 		// Port-only, not native: the Jangan gate's tomb floor links.
 		rows = append(rows, monster.SplitTabbedText(janganTombTeleportLinkTSV)...)
+	}
+	if CrossCityTeleportEnabled() {
+		// Port-only, not native: the direct town-to-town gate links.
+		rows = append(rows, monster.SplitTabbedText(crossCityTeleportLinkTSV)...)
 	}
 	for i, r := range rows {
 		if r[0] != "1" {

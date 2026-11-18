@@ -71,6 +71,26 @@ MERGE_ARCHIVES = ("Map", "Media", "Data", "Particles")
 # compound objects, the files whose particle sets name effect programs.
 PARTICLE_SEED_EXTENSIONS = (".bsr", ".cpd")
 DATA_PREFIX = "data_extracted/"
+# Where the population exports come from, for the refusal below.
+EXPORT_ORIGIN = ("the maintainers' extraction from an ISRO-R shard backup "
+	"(research/investigations/later-sources-3247); it is not in the repository "
+	"or a public clone")
+
+
+# ================
+# missing_export
+#
+# The one refusal for a later-world import switched on without its
+# population export. The exports are operator data, never committed and
+# never defaulted, so a contributor's build stops here, before any
+# archive is read, with the variable to set and the switch that builds
+# without it - not deep in the import on a path that does not exist.
+# ================
+def missing_export(flag, env, what):
+	return SystemExit(
+		f"{flag} is on, but {env} is not set. {flag} needs {what}, {EXPORT_ORIGIN}. "
+		f"Set {env} to it, or turn {flag} off in apps/server/config/shard-settings.json "
+		f"to build the variant without it.")
 
 
 # ================
@@ -325,7 +345,7 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 		raise SystemExit(f"Pass the v1.696 client folder or set {spec.root_env}.")
 	require_pin(spec, v1696_root, ("Media",), pins_for)
 	if not source_root and not os.environ.get(spec.source_env):
-		raise SystemExit(f"{spec.source_env} names no population export folder")
+		raise missing_export(spec.flag, spec.source_env, "its population export folder")
 	source_root = Path(source_root or os.environ[spec.source_env])
 	export = read_population(spec, source_root)
 	# The export's nests also place the worlds' NPCs (believers, commerce
@@ -556,7 +576,7 @@ def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for)
 	v1696_root = client_root(v1696_root, spec.root_env)
 	source_root = source_root or os.environ.get(spec.source_env, "")
 	if not source_root:
-		raise SystemExit(f"{spec.source_env} names no population export folder")
+		raise missing_export(spec.flag, spec.source_env, "its population export folder")
 	require_pin(spec, v1696_root, MERGE_ARCHIVES, pins_for)
 	export = read_population(spec, source_root)
 	regions = spec.regions_of(export, sub_enabled)

@@ -610,11 +610,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if err != nil {
 		return fmt.Errorf("quest definitions: %w", err)
 	}
-	masteryOverride, err := progression.BetaMasteryFromEnv()
-	if err != nil {
+	// SRO_BETA_MASTERY and SRO_BETA_MASTERY_EARLY (port-only, not native):
+	// wiring_mastery.go.
+	if err = readMasteryAllowance(game.deps); err != nil {
 		return err
 	}
-	game.deps.MasteryTotalOverride = masteryOverride
 	// Port-only, not native (owner, 2026-11-07, #2769): world entry raises
 	// a character to the 2.5-page inventory base, never lowers one.
 	game.deps.InventoryPages = enterworld.InventoryPagesFromEnv()
@@ -754,10 +754,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	// the native blob byte-identical with the expansion off).
 	game.matches.LevelLimit = stats.LevelLimit
 	game.deps.LevelCap = publishedLevelCap(stats.LevelLimit)
-	stats.MasteryTotalOverride = masteryOverride
-	if masteryOverride != 0 {
-		log.Infof("progression: beta total mastery allowance %d for both races (%s)", masteryOverride, progression.EnvBetaMastery)
-	}
+	applyMasteryAllowance(stats, game.deps)
 	stats.Growth = progression.BetaGrowthFromEnv()
 	game.items.PetInventoryPages, err = companion.PetInventoryPagesFromEnv()
 	if err != nil {

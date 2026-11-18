@@ -23,10 +23,13 @@ them between a checkout's temp/cache and one shared store,
   so the next fresh worktree starts warm.
 
 The .tsbuildinfo store sits under a key hashing the TypeScript version,
-both tsconfigs and every file under src/, tests/ and tools/, so an entry
-is only seeded into a checkout whose inputs hash identically - and tsc
-revalidates regardless, so a stale cache could cost speed, never a wrong
-verdict. The store is a cache, never an input: every failure here warns on
+the tsconfigs and every file under src/, tests/ and tools/. A checkout
+whose inputs hash identically gets that entry; any other gets the newest
+entry the store holds. tsc revalidates every input hash in a buildinfo
+and re-checks only what changed, so the nearest state is the whole point
+of an incremental cache: an exact-key-only seed made every one-line change
+a cold run (r201, 2026-11-18: test-types 130 s, the gallery 101 s, against
+7 s for the warm typecheck). A stale cache costs speed, never a verdict. The store is a cache, never an input: every failure here warns on
 stderr and lets the check run cold. Deleting .state/client-warm-cache
 costs one cold run per checkout, nothing else.
 
@@ -41,7 +44,11 @@ import path from "node:path";
 import { resolveMainCheckout } from "../../../scripts/lib/generatedRoot.mjs";
 import { root, ts } from "./project.mjs";
 
-const BUILDINFOS = [ "client", "tests" ];
+// The tsc programs with a buildinfo under temp/cache/tsc: tsconfig.json,
+// tsconfig.tests.json and tools/ui-gallery/tsconfig.json.
+const BUILDINFOS = [ "client", "tests", "ui-gallery" ];
+// How many keys the store keeps per program; older ones are pruned on publish.
+const KEPT_KEYS = 8;
 const KEY_INPUT_DIRS = [ "src", "tests", "tools" ];
 const KEY_INPUT_FILES = [ "tsconfig.json", "tsconfig.tests.json" ];
 
@@ -125,6 +132,54 @@ function isNewer( from, to ) {
 
 /*
 ================
+storedBuildinfos
+
+The store's entries for one program, newest first: [{ key, file, mtimeMs }].
+================
+*/
+function storedBuildinfos( store, name ) {
+	const tsc = path.join( store, "tsc" );
+	if ( !fs.existsSync( tsc ) ) return [];
+	const found = [];
+	for ( const key of fs.readdirSync( tsc ) ) {
+		const file = path.join( tsc, key, `${name}.tsbuildinfo` );
+		if ( fs.existsSync( file ) ) found.push( { key, file, mtimeMs: fs.statSync( file ).mtimeMs } );
+	}
+	return found.sort( ( a, b ) => b.mtimeMs - a.mtimeMs );
+}
+
+/*
+================
+nearestBuildinfo
+
+The store's entry for this exact key, else its newest one (see the banner:
+tsc revalidates, so the newest state re-checks only what changed since).
+================
+*/
+function nearestBuildinfo( store, name, key ) {
+	const exact = path.join( store, "tsc", key, `${name}.tsbuildinfo` );
+	if ( fs.existsSync( exact ) ) return exact;
+	return storedBuildinfos( store, name )[0]?.file ?? null;
+}
+
+/*
+================
+pruneBuildinfos
+
+Keeps the newest KEPT_KEYS entries of one program, so the store stays
+bounded now that every key is worth keeping only as a recent state.
+================
+*/
+function pruneBuildinfos( store, name ) {
+	for ( const { file } of storedBuildinfos( store, name ).slice( KEPT_KEYS ) ) {
+		fs.rmSync( file, { force: true } );
+		const directory = path.dirname( file );
+		if ( fs.readdirSync( directory ).length === 0 ) fs.rmdirSync( directory );
+	}
+}
+
+/*
+================
 seedWarmCaches
 
 Shared store -> this checkout's temp/cache, only what it lacks. Returns
@@ -136,9 +191,9 @@ export function seedWarmCaches( base = root, store = sharedWarmCacheRoot() ) {
 	try {
 		const key = warmCacheKey( base );
 		for ( const name of BUILDINFOS ) {
-			const from = path.join( store, "tsc", key, `${name}.tsbuildinfo` );
+			const from = nearestBuildinfo( store, name, key );
 			const to = path.join( base, "temp", "cache", "tsc", `${name}.tsbuildinfo` );
-			if ( fs.existsSync( from ) && !fs.existsSync( to ) ) {
+			if ( from && !fs.existsSync( to ) ) {
 				copyAtomically( from, to );
 				seeded++;
 			}
@@ -201,6 +256,7 @@ export function publishWarmCaches( base = root, store = sharedWarmCacheRoot() ) 
 			if ( fs.existsSync( from ) && isNewer( from, to ) ) {
 				copyAtomically( from, to );
 				published++;
+				pruneBuildinfos( store, name );
 			}
 		}
 		const localGraphs = path.join( base, "temp", "cache", "execution-flow" );
