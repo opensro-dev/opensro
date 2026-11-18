@@ -68,7 +68,7 @@ var arabiaNPCHeadings = map[npcHeadingKey]uint16{
 	{"NPC_AR_NAJIMA", 22361, 9259, -4321, 2651}:                   18206, // shop
 	{"NPC_AR_POTION", 22361, 4342, -4319, 16705}:                  53792, // shop
 	{"NPC_AR_SHARIAL", 22618, 13179, -2366, 2749}:                 34109, // owner: toward X -8512 Y -741
-	{"NPC_AR_SHEHERAZADE", 22618, 13666, -2366, 1297}:             7983,  // open
+	{"NPC_AR_SHEHERAZADE", 22618, 13666, -2366, 1297}:             37918, // owner: toward X -8507 Y -757
 	{"NPC_AR_SMITH", 22874, 15943, -4308, 12906}:                  38903, // shop
 	{"NPC_AR_SOLDIER_1", 22617, 2445, -4323, 5430}:                11268, // open
 	{"NPC_AR_SOLDIER_2", 22617, 2437, -4320, 3166}:                60144, // open
