@@ -610,14 +610,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if err != nil {
 		return fmt.Errorf("quest definitions: %w", err)
 	}
-	masteryOverride, err := progression.BetaMasteryFromEnv()
-	if err != nil {
-		return err
-	}
-	game.deps.MasteryTotalOverride = masteryOverride
-	// Port-only, not native (owner, 2026-11-18, #3551): characters from
-	// before the native totals keep the beta budget.
-	if game.deps.BetaMasteryEarly, err = enterworld.BetaMasteryEarlyFromEnv(); err != nil {
+	// SRO_BETA_MASTERY and SRO_BETA_MASTERY_EARLY (port-only, not native):
+	// wiring_mastery.go.
+	if err = readMasteryAllowance(game.deps); err != nil {
 		return err
 	}
 	// Port-only, not native (owner, 2026-11-07, #2769): world entry raises
@@ -759,14 +754,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	// the native blob byte-identical with the expansion off).
 	game.matches.LevelLimit = stats.LevelLimit
 	game.deps.LevelCap = publishedLevelCap(stats.LevelLimit)
-	stats.MasteryTotalOverride = masteryOverride
-	stats.BetaMasteryEarly = game.deps.BetaMasteryEarly
-	if masteryOverride != 0 {
-		log.Infof("progression: beta total mastery allowance %d for both races (%s)", masteryOverride, progression.EnvBetaMastery)
-	} else if stats.BetaMasteryEarly {
-		log.Infof("progression: characters created before %s keep the beta mastery allowance %d (%s)",
-			enterworld.EarlyBetaCutoff.Format(time.RFC3339), enterworld.EarlyBetaMasteryCap, enterworld.EnvBetaMasteryEarly)
-	}
+	applyMasteryAllowance(stats, game.deps)
 	stats.Growth = progression.BetaGrowthFromEnv()
 	game.items.PetInventoryPages, err = companion.PetInventoryPagesFromEnv()
 	if err != nil {
