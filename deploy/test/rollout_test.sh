@@ -53,6 +53,7 @@ fi
 cp "$DEPLOY_DIR/docker-compose.prod.yml" "$DEPLOY_DIR/rollout.sh" "$stack/"
 cp -R "$DEPLOY_DIR/config" "$stack/config"
 printf 'SRO_DOMAIN=localhost\nLOG_LEVEL=info\n' > "$stack/.env.prod"
+cp "$DEPLOY_DIR/shard-pvp.env.example" "$stack/shard-pvp.env"
 for release in r1 r2; do
     mkdir -p "$stack/assets/releases/$release/assets/packs"
     echo "{\"release\":\"$release\"}" > "$stack/assets/releases/$release/assets/packs/manifest.json"

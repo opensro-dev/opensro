@@ -48,6 +48,8 @@ if grep -q '=change-me' .env.prod; then
     fail "$PWD/.env.prod still has change-me values"
 fi
 grep -Eq '^SRO_DOMAIN=.+' .env.prod || fail "$PWD/.env.prod has no SRO_DOMAIN"
+# The PVP shard must not come up native (port-only, pvpserver).
+[ -f shard-pvp.env ] || fail "missing $PWD/shard-pvp.env: cp shard-pvp.env.example shard-pvp.env"
 
 release_value() { sed -nE "s/^$1=(.*)$/\1/p" release.env 2>/dev/null; }
 
@@ -132,7 +134,7 @@ recover() {
             compose() { docker compose -p "$0" -f docker-compose.prod.yml --env-file .env.prod "$@"; }
             compose up -d identity &&
             compose up -d --wait --force-recreate --no-deps agent &&
-            compose up -d --wait gameworld-global-official gameworld-pvp web' "$PROJECT" >&2 \
+            compose up -d --wait gameworld-global-official web' "$PROJECT" >&2 \
             || echo "rollout: the previous release did not come back; the stack is DOWN" >&2
     else
         echo "rollout: the stack is DOWN (stage: $stage). The backup taken before the upgrade is ${backup:-none}; see README \"Backups\"" >&2

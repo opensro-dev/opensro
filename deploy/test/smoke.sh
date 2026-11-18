@@ -60,6 +60,9 @@ check() { # name, url
 
 compose down -v --remove-orphans >/dev/null 2>&1 || true
 
+# The PVP GameWorld requires its env file; the example turns the shard on.
+[ -f "$DEPLOY_DIR/shard-pvp.env" ] || cp "$DEPLOY_DIR/shard-pvp.env.example" "$DEPLOY_DIR/shard-pvp.env"
+
 echo "==> provision"
 compose run --rm provision
 compose run --rm provision-pvp

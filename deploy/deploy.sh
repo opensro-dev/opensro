@@ -8,7 +8,7 @@
 # 2. The game assets go by rsync to <DEPLOY_PATH>/assets/releases/<id>; files
 #    the release that is up already has become hard links, so only what
 #    changed crosses the wire. A release already on the host is not resent.
-# 3. The stack files (compose, rollout.sh, config/, .env.prod.example) are
+# 3. The stack files (compose, rollout.sh, config/, the .example env files) are
 #    swapped in whole; .env.prod, shard.env, shard-pvp.env, release.env, pending.env,
 #    backups/ and assets/ stay.
 # 4. rollout.sh runs on the host with the tag and the release.
@@ -82,9 +82,9 @@ echo "==> stack files to $DEPLOY_HOST:$DEPLOY_PATH"
 flags=()
 if tar --version 2>/dev/null | grep -q bsdtar; then flags+=(--no-mac-metadata --no-xattrs); fi
 COPYFILE_DISABLE=1 tar -C "$DEPLOY_DIR" -czf - ${flags[@]+"${flags[@]}"} \
-    docker-compose.prod.yml rollout.sh config .env.prod.example \
+    docker-compose.prod.yml rollout.sh config .env.prod.example shard-pvp.env.example \
     | ssh "$DEPLOY_HOST" "cd '$DEPLOY_PATH' && rm -rf .incoming && mkdir .incoming && tar -xzf - -C .incoming \
-        && rm -rf docker-compose.prod.yml rollout.sh config .env.prod.example \
+        && rm -rf docker-compose.prod.yml rollout.sh config .env.prod.example shard-pvp.env.example \
         && mv .incoming/* .incoming/.env.prod.example . && rmdir .incoming"
 
 echo "==> roll out $IMAGE_TAG with assets $ASSETS_RELEASE"

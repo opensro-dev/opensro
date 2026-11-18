@@ -44,3 +44,22 @@ func TestApplyPvpShopLeavesOtherMerchantsAlone(t *testing.T) {
 		t.Fatalf("tabs %+v", potion.NpcTalkStoreGroups[0].Tabs)
 	}
 }
+
+func TestApplyPvpShopAddsTheTabsOnce(t *testing.T) {
+	armorer := NpcDef{Codename: "NPC_CA_ARMOR", NpcTalkStoreGroups: []NpcTalkStoreGroup{
+		{StoreGroupID: 7531, Tabs: []NpcTalkStoreTab{{TabID: 2040}}},
+		{StoreGroupID: 7531, Tabs: []NpcTalkStoreTab{{TabID: 2043}}},
+	}}
+	applyPvpShop(&armorer, []pvpserver.ShopTab{{Npc: "NPC_CA_ARMOR", TabID: 6146, GroupID: 2715}})
+	count := 0
+	for _, group := range armorer.NpcTalkStoreGroups {
+		for _, tab := range group.Tabs {
+			if tab.TabID == 6146 {
+				count++
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("the PVP tab appears %d times", count)
+	}
+}

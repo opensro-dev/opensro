@@ -137,3 +137,31 @@ func TestShopLayoutReadsTheTables(t *testing.T) {
 		t.Fatalf("an unserviced row was sold: %v", tabs[0].Codenames)
 	}
 }
+
+func TestLayoutKeepsEveryGroupWithinFourTabs(t *testing.T) {
+	var items []ShopItem
+	for i := 0; i < 6*TabCapacity; i++ {
+		items = append(items, armor(fmt.Sprintf("ITEM_EU_M_HEAVY%03d_11_HA_A_RARE", i), 11))
+	}
+	items = append(items, armor("ITEM_EU_M_LIGHT_11_HA_A_RARE", 10))
+
+	tabs := Layout(items, 100, 50)
+
+	perGroup := map[int32]int{}
+	labels := map[int32]string{}
+	for _, tab := range tabs {
+		perGroup[tab.GroupID]++
+		if labels[tab.GroupID] != "" && labels[tab.GroupID] != tab.GroupLabel {
+			t.Fatalf("group %d mixes labels %s and %s", tab.GroupID, labels[tab.GroupID], tab.GroupLabel)
+		}
+		labels[tab.GroupID] = tab.GroupLabel
+	}
+	for group, count := range perGroup {
+		if count > MaxGroupTabs {
+			t.Fatalf("group %d holds %d tabs, the client takes %d", group, count, MaxGroupTabs)
+		}
+	}
+	if len(tabs) != 7 || len(perGroup) != 3 {
+		t.Fatalf("%d tabs in %d groups, want 7 in 3 (heavy 4+2, light 1)", len(tabs), len(perGroup))
+	}
+}

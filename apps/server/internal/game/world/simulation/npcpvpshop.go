@@ -23,7 +23,7 @@ import (
 ================
 applyPvpShop
 
-Appends to every store group of npc the layout's tabs that name it.
+Appends the layout's tabs that name npc to its last store group.
 ================
 */
 func applyPvpShop(npc *NpcDef, tabs []pvpserver.ShopTab) {
@@ -35,12 +35,13 @@ func applyPvpShop(npc *NpcDef, tabs []pvpserver.ShopTab) {
 		own = append(own, NpcTalkStoreTab{TabID: tab.TabID, LabelSymbol: tab.Label,
 			GroupID: tab.GroupID, GroupLabelSymbol: tab.GroupLabel})
 	}
-	if len(own) == 0 {
+	if len(own) == 0 || len(npc.NpcTalkStoreGroups) == 0 {
 		return
 	}
-	for gi := range npc.NpcTalkStoreGroups {
-		npc.NpcTalkStoreGroups[gi].Tabs = append(npc.NpcTalkStoreGroups[gi].Tabs, own...)
-	}
+	// Once, after every native tab: the client numbers tabs across all of
+	// the merchant's store groups, so a copy per group would list them twice.
+	last := len(npc.NpcTalkStoreGroups) - 1
+	npc.NpcTalkStoreGroups[last].Tabs = append(npc.NpcTalkStoreGroups[last].Tabs, own...)
 }
 
 /*

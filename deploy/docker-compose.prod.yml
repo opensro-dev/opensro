@@ -185,8 +185,9 @@ services:
     env_file:
       - path: ./shard.env
         required: false
+      # Required: without it the shard would come up listed but native.
       - path: ./shard-pvp.env
-        required: false
+        required: true
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SRO_SHARD_CATALOG_PATH: /app/deploy-config/shards.prod.json

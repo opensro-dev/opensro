@@ -35,6 +35,10 @@ import (
 	"opensro.online/server/internal/data/texttable"
 )
 
+// MaxGroupTabs is the most tabs one store group may hold: the client
+// refuses a fifth (client-next merchant-branches.ts).
+const MaxGroupTabs = 4
+
 // The ids Jangan's alchemy shop takes above the authored maximum.
 const (
 	janganReservedTabs   int32 = 3
@@ -96,14 +100,14 @@ type ShopTab struct {
 ================
 shopCategory
 
-A merchant's tab kind: the merchant, its group label, the tab label, the
-plus and which items it takes. The order here is the tab order.
+A merchant's tab kind: the merchant, the tab label (its groups carry the
+same), the plus and which items it takes. The order here is the tab order.
 ================
 */
 type shopCategory struct {
-	npc, groupLabel, label string
-	plus                   uint8
-	takes                  func(item ShopItem) bool
+	npc, label string
+	plus       uint8
+	takes      func(item ShopItem) bool
 }
 
 func gear(kinds ...int) func(ShopItem) bool {
@@ -122,15 +126,15 @@ func stones(prefix string) func(ShopItem) bool {
 }
 
 var shopCategories = []shopCategory{
-	{"NPC_CA_SMITH", "SN_STORE_SMITH_EU_GROUP1", "SN_TAB_WEAPON", ShopPlus, gear(6)},
-	{"NPC_CA_SMITH", "SN_STORE_SMITH_EU_GROUP1", "SN_TAB_SHIELD", ShopPlus, gear(4)},
-	{"NPC_CA_ARMOR", "SN_STORE_ARMOR_EU_GROUP1", "SN_TAB_HEAVYARMOR_EU", ShopPlus, gear(3, 11)},
-	{"NPC_CA_ARMOR", "SN_STORE_ARMOR_EU_GROUP1", "SN_TAB_LIGHTARMOR_EU", ShopPlus, gear(2, 10)},
-	{"NPC_CA_ARMOR", "SN_STORE_ARMOR_EU_GROUP1", "SN_TAB_CLOTHES_EU", ShopPlus, gear(1, 9)},
-	{"NPC_CA_ACCESSORY", "SN_STORE_ACCESSORY_EU_GROUP1", "SN_TAB_ACCESSORY", ShopPlus, gear(5, 12)},
-	{"NPC_CA_ACCESSORY", "SN_STORE_ACCESSORY_EU_GROUP1", "UIIT_STT_ITEM_TYPE_ALCHEMY_ATTRSTONE", 0,
+	{"NPC_CA_SMITH", "SN_TAB_WEAPON", ShopPlus, gear(6)},
+	{"NPC_CA_SMITH", "SN_TAB_SHIELD", ShopPlus, gear(4)},
+	{"NPC_CA_ARMOR", "SN_TAB_HEAVYARMOR_EU", ShopPlus, gear(3, 11)},
+	{"NPC_CA_ARMOR", "SN_TAB_LIGHTARMOR_EU", ShopPlus, gear(2, 10)},
+	{"NPC_CA_ARMOR", "SN_TAB_CLOTHES_EU", ShopPlus, gear(1, 9)},
+	{"NPC_CA_ACCESSORY", "SN_TAB_ACCESSORY", ShopPlus, gear(5, 12)},
+	{"NPC_CA_ACCESSORY", "UIIT_STT_ITEM_TYPE_ALCHEMY_ATTRSTONE", 0,
 		stones("ITEM_ETC_ARCHEMY_ATTRSTONE_")},
-	{"NPC_CA_ACCESSORY", "SN_STORE_ACCESSORY_EU_GROUP1", "UIIT_STT_ITEM_TYPE_ALCHEMY_MAGICSTONE", 0,
+	{"NPC_CA_ACCESSORY", "UIIT_STT_ITEM_TYPE_ALCHEMY_MAGICSTONE", 0,
 		stones("ITEM_ETC_ARCHEMY_MAGICSTONE_")},
 }
 
@@ -153,13 +157,14 @@ func pvpGrade(codename string) bool {
 Layout
 
 The tabs, in category order, each category's goods sorted and split into
-tabs of TabCapacity. Every merchant gets one new group.
+tabs of TabCapacity. Each category opens a store group of its own, labelled
+like its tabs, and a further group every MaxGroupTabs tabs, so no group
+ever holds more tabs than the client takes.
 ================
 */
 func Layout(items []ShopItem, maxTabID, maxGroupID int32) []ShopTab {
 	nextTab := maxTabID + janganReservedTabs + 1
 	nextGroup := maxGroupID + janganReservedGroups + 1
-	groups := map[string]int32{}
 	var tabs []ShopTab
 	for _, category := range shopCategories {
 		var goods []string
@@ -172,19 +177,20 @@ func Layout(items []ShopItem, maxTabID, maxGroupID int32) []ShopTab {
 			continue
 		}
 		slices.Sort(goods)
-		group, ok := groups[category.npc]
-		if !ok {
-			group = nextGroup
-			groups[category.npc] = group
-			nextGroup++
-		}
+		var group int32
+		inGroup := MaxGroupTabs
 		for chunk := range slices.Chunk(goods, TabCapacity) {
+			if inGroup == MaxGroupTabs {
+				group, inGroup = nextGroup, 0
+				nextGroup++
+			}
 			tabs = append(tabs, ShopTab{
 				Npc: category.npc, TabID: nextTab, GroupID: group,
-				Label: category.label, GroupLabel: category.groupLabel,
+				Label: category.label, GroupLabel: category.label,
 				Codenames: chunk, Plus: category.plus,
 			})
 			nextTab++
+			inGroup++
 		}
 	}
 	return tabs
