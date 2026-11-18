@@ -55,6 +55,7 @@ import re
 
 import alexandria_npcs as characters
 import avatar_archive
+import cap110_monsters
 import cap110_item_import as shared
 import cap110_items as items
 import import_vsro_alexandria as tables
@@ -321,11 +322,15 @@ def later_tables_from_pk2(root):
 # own shards: earlier pet sources wrote theirs there, and so did every
 # other importer sharing the build. This source's own shard is left out
 # because the pass rewrites it whole and the marker retains its rows.
+# The character ids live publishes are taken too, whether or not their
+# importer has written its shard yet: run before the Arabia import, a
+# fresh pet took 18 of Arabia's published ids (r201's refused catalogue).
 # ================
-def output_reserved_ids(output, source):
+def output_reserved_ids(output, source, published=None):
 	text_root = Path(output) / TEXT_ROOT
 	own = {source["char_shard"].lower(), source["item_shard"].lower()}
-	reserved = set()
+	published = cap110_monsters.published_characters() if published is None else published
+	reserved = set(published.values())
 	for pattern, column in (("characterdata_*.txt", CHAR_ID), ("itemdata_*.txt", items.IDENTITY)):
 		for path in text_root.glob(pattern):
 			if path.name.lower() in own:

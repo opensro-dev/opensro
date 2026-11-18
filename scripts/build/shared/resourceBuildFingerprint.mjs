@@ -108,6 +108,22 @@ export const ENV_KNOBS = [
 
 /*
 ================
+BAKE_SWITCH_POSTURES
+
+The bake switches whose deployed posture joins the knob lines: each
+switch's env name and its enabled reader. A switch joins the fingerprint
+only through this list. Its default stays in the shard settings registry
+(shardsettings.go, the one owner), never copied here (#3779).
+================
+*/
+export const BAKE_SWITCH_POSTURES = [
+	{ env: "SRO_QINSHI_TOMB", enabled: qinshiTombEnabled },
+	{ env: "SRO_MUHAN", enabled: muhanEnabled },
+	{ env: "SRO_JANGAN_TOMB_TELEPORT", enabled: janganTombTeleportEnabled }
+];
+
+/*
+================
 buildKnobLines
 
 The knob lines both the whole-build fingerprint and every lane memo
@@ -122,9 +138,9 @@ registry flip skip the bake and ship the other posture's assets, the
 */
 export function buildKnobLines() {
 	const lines = ENV_KNOBS.map( ( name ) => `env ${name}=${process.env[name] ?? ""}` );
-	lines.push( `posture SRO_QINSHI_TOMB=${qinshiTombEnabled()}` );
-	lines.push( `posture SRO_MUHAN=${muhanEnabled()}` );
-	lines.push( `posture SRO_JANGAN_TOMB_TELEPORT=${janganTombTeleportEnabled()}` );
+	for ( const { env, enabled } of BAKE_SWITCH_POSTURES ) {
+		lines.push( `posture ${env}=${enabled()}` );
+	}
 	// The later client the variant stamp names stands in for an unset
 	// SRO_VSRO_ROOT (laterClientRoot.mjs): finding one must not skip. A
 	// shell that names the root is hashed above already; the line joins

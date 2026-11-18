@@ -10,6 +10,7 @@ gameplay snapshot before effect and hit feedback consume its events.
 ===========================================================================
 */
 import { requestCastCancellation } from "@/engine/foundation/gameplay/cast-results";
+import { releaseHeldEvents } from "@/engine/foundation/gameplay/cast-prediction";
 import {
 	advanceAction,
 	actionLayers,
@@ -452,7 +453,7 @@ export function createPresentationActions() {
 					undefined;
 				clock.animationRate = entity.animationRate ?? 1;
 				const events = [
-					...adopted.map( event => ({ ...event, adopted: true }) ),
+					...releaseHeldEvents( adopted, seconds ),
 					...advanceAction( clock, seconds, shotAt, cancelledAt ).events
 				];
 				const attackKind = clock.phases[2]?.clip.startsWith( "native:" ) ?

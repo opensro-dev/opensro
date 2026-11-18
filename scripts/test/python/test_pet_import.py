@@ -310,6 +310,16 @@ class ArchiveTests(unittest.TestCase):
 			marker = json.loads((output / importer.ARCHIVE_SOURCE["report"]).read_text(encoding="utf-8"))
 			self.assertNotEqual(marker["idMap"]["COS_P_DOG"]["target"], 9001)
 
+	def test_published_character_ids_are_reserved_before_their_import_runs(self):
+		# r201: the pet import ran before the Arabia import wrote its shard,
+		# and a fresh pet took a published Arabia id.
+		with tempfile.TemporaryDirectory() as folder:
+			text_root = Path(folder) / importer.TEXT_ROOT
+			text_root.mkdir(parents=True)
+			reserved = importer.output_reserved_ids(folder, importer.ARCHIVE_SOURCE, {"MOB_SD_ACHNISH": 50147})
+			self.assertIn(50147, reserved)
+			self.assertNotIn(50147, importer.output_reserved_ids(folder, importer.ARCHIVE_SOURCE, {}))
+
 	def test_scroll_name_text_is_merged_with_the_kind_name(self):
 		with tempfile.TemporaryDirectory() as folder:
 			base = Path(folder)

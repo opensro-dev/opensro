@@ -105,3 +105,34 @@ func CodeName(worldID int) (string, bool) {
 	}
 	return "", false
 }
+
+// The temple's four interiors, bit 15 set, each bound by the id its DOF
+// header embeds (docs/features/JUPITER.md, "Interiors"): piety_boss_di,
+// piety_boss_uno, piety_boss_upi and hide. The source database places
+// 1,048 of the 1,526 temple nests in them.
+const (
+	FirstInteriorRegion uint16 = 0x8013
+	LastInteriorRegion  uint16 = 0x8016
+)
+
+// dungeonRegionBit marks a dungeon (interior) region id.
+const dungeonRegionBit uint16 = 0x8000
+
+/*
+================
+IsTempleRegion
+
+Whether a Jupiter temple nest may stand in region: any outdoor region,
+or one of the temple's four interiors. The monster catalogue's
+population loader asks it; without it the loader admitted outdoor
+regions only and refused every interior nest, so a shard with
+SRO_JUPITER_TEMPLE on could not boot. Any other dungeon region stays
+refused: a temple row there is a bad export.
+================
+*/
+func IsTempleRegion(region uint16) bool {
+	if region&dungeonRegionBit == 0 {
+		return true
+	}
+	return region >= FirstInteriorRegion && region <= LastInteriorRegion
+}

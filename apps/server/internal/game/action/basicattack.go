@@ -641,6 +641,8 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 			// action (casting + duration) ends, not at its casting point.
 			rt.extendChainBracket(intent.DivisionID, intent.CharacterName, nowMs+int64(lifecycle))
 		}
+		// Judged before a root names itself the combo root.
+		mark := chainStageMark(intent, nowMs)
 		if skill.ChainNext != 0 && alive {
 			if intent.ComboRootID == 0 {
 				intent.ComboRootID = skill.ID
@@ -654,8 +656,10 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 			// The native 500 ms figure (the record's chain-latency
 			// fields) only tolerates a late client stage command; with
 			// no client command to tolerate it must not compress the
-			// schedule (#3152).
-			intent.NextActionMs = nowMs + int64(lifecycle)
+			// schedule (#3152). Nor may it stretch it: the next stage
+			// counts from this stage's scheduled mark, not from the tick
+			// that ran it (chainStageMark).
+			intent.NextActionMs = mark + int64(lifecycle)
 			rt.setCombatIntent(intent)
 			return prependOpResult(combatTransition, result)
 		}
@@ -663,7 +667,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 			intent.ResumeBasic = true
 			// An authored basic-attack continuation waits the stage's
 			// full action time, like every other stage boundary.
-			intent.NextActionMs = nowMs + int64(lifecycle)
+			intent.NextActionMs = mark + int64(lifecycle)
 			rt.setCombatIntent(intent)
 		} else {
 			rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
@@ -674,6 +678,32 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	intent.NextActionMs = nowMs + intent.CooldownMs
 	rt.setCombatIntent(intent)
 	return prependOpResult(combatTransition, result)
+}
+
+/*
+==================
+chainStageMark
+
+The time a chain's next stage counts its action from. The client plays
+the root deco's one authored clip from the press, so stage n's hit
+callbacks sit at the sum of the earlier stages' actions. A stage the
+simulation ran on the first tick past its scheduled mark started at that
+mark, as a native client command sent at the motion's end would have:
+counting from the tick instead added up to one tick per stage, and a
+five-stage chain's last results reached the client up to 400 ms behind
+the hits its animation had already played. A stage held longer than one
+tick (a casting instance still open, a slow tick) was really late, so it
+counts from now and the schedule never compresses (#3152).
+==================
+*/
+func chainStageMark(intent basicAttackIntent, nowMs int64) int64 {
+	if intent.ComboRootID == 0 || intent.NextActionMs == 0 || intent.NextActionMs > nowMs {
+		return nowMs
+	}
+	if nowMs-intent.NextActionMs > simulation.DefaultTickInterval.Milliseconds() {
+		return nowMs
+	}
+	return intent.NextActionMs
 }
 
 /*
