@@ -56,6 +56,7 @@ import {
 	loadSpawnableNpcRoster
 } from "./npcModelRoster.mjs";
 import { parseStructureEffects } from "./structureEffects.mjs";
+import { loadTeleportModelRows } from "./teleportModelRoster.mjs";
 import { openStore } from "../graph/store.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { convertTextureTrees } from "../shared/convertImagesRunner.mjs";
@@ -225,7 +226,19 @@ async function publishNpcModels( options, store ) {
 		fs.readFileSync( path.join( textdataDir, "atstructeffect.txt" ), "utf16le" ),
 		codename => structureNames.has( codename )
 	);
-	const roster = [ ...npcRoster, ...mobRoster, ...cosRoster, ...structureRoster ];
+	// Teleport buildings that name their own model (8762E0): their rows
+	// resolve like characterdata's, from the same RefObjCommon columns.
+	const teleportRows = loadTeleportModelRows( textdataDir );
+	const modelRows = new Map( rows );
+	for ( const cols of teleportRows ) {
+		if ( modelRows.has( cols[2] ) ) {
+			throw new Error( `[npc] ${cols[2]}: a teleport building shares a characterdata codename` );
+		}
+		modelRows.set( cols[2], cols );
+	}
+	const teleportRoster = teleportRows.map( ( cols ) => ({ codename: cols[2], refObjId: Number( cols[1] ) }) );
+	const teleportNames = new Set( teleportRoster.map( row => row.codename ) );
+	const roster = [ ...npcRoster, ...mobRoster, ...cosRoster, ...structureRoster, ...teleportRoster ];
 	if ( new Set( roster.map( ( ref ) => ref.codename ) ).size !== roster.length ) {
 		throw new Error( "[npc] server NPC and monster rosters contain an overlapping codename" );
 	}
@@ -252,14 +265,14 @@ async function publishNpcModels( options, store ) {
 	const deathResources = new Map();
 	const bake = cachedBake( { store, publicAssetsRoot: publicAssets, tables: bakeTables(), stats } );
 	const monsterBsrs = monsterPolicyBsrs( roster, {
-		resolveModel: codename => resolveNpcModel( codename, rows ),
+		resolveModel: codename => resolveNpcModel( codename, modelRows ),
 		isMonster: codename => mobRosterByCodename.has( codename ) || cosNames.has( codename ),
 		// The media ride path; the loop below refuses one that drifts from the server's.
 		rideModelPath: codename => resolveCharacterInfo( codename )?.rideModelPath ?? null
 	} );
 	for ( const rosterRef of roster ) {
 		const { codename } = rosterRef;
-		const model = resolveNpcModel( codename, rows );
+		const model = resolveNpcModel( codename, modelRows );
 		if ( !model ) {
 			console.warn( `[npc] ${codename}: no characterdata row / bsr path` );
 			models.push( { codename, error: "unresolved" } );
@@ -321,7 +334,15 @@ async function publishNpcModels( options, store ) {
 			priorDeath.requiredBy.push( codename );
 			deathResources.set( deathModelPath, priorDeath );
 		}
-		const kind = isCos ? "cos" : isMob ? "monster" : structureNames.has( codename ) ? "structure" : "npc";
+		const kind = isCos ?
+			"cos" :
+			isMob ?
+			"monster" :
+			structureNames.has( codename ) ?
+			"structure" :
+			teleportNames.has( codename ) ?
+			"teleport" :
+			"npc";
 		const entry = {
 			codename,
 			refObjId: model.refObjId,
