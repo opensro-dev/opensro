@@ -353,8 +353,20 @@ Distances use 10 world units per in-game metre (skill ranges: 180 units = 18m); 
   past 200m or when a catch-up makes no progress for 10s. A Trader waits while a follower within 120m
   fights or one 120-200m back catches up.
 - **Following Traders** keep their own spot 5m from the leader (the angle comes from the name, so two
-  never share one), do not stroll, and never teleport: they run until they are back in the spot. A
-  stuck hired Trader on a route skips the waypoint after 20s instead of being teleported onto it.
+  never share one), do not stroll, and never teleport: they run until they are back in the spot. They
+  walk the leader's footsteps (one every 3m, the last 400), so they go around the railings and walls
+  the leader went around instead of pushing into them. A stuck hired Trader on a route skips the
+  waypoint after 20s instead of being teleported onto it. Hunters run at 75 (port-only), the speed
+  the 50% speed potion gives everyone else on foot.
+- **Loot:** once a second each agent on the move is shown the nearest item within 30m it may take,
+  by the native pickup rules, and walks over and picks it up (`action.ServerActorPickup`): a Trader its
+  own dropped goods back into its transport, but not during a parley truce it paid for or with a Thief
+  in sight; a Thief other caravans' goods (an AI Thief has no cart, so it carries them off), gold and
+  items. A walk that does not get there in 15s is dropped.
+- **Hunters call for help:** a Hunter under attack below half HP says "Hunters, to me!" and raises a
+  call only Hunters answer (an escort answers a fellow guard of its own caravan); it never replaces a
+  Trader's own call. A Hunter killed by a Thief respawns in town, rallies up to 3 idle Hunters there
+  and leads them back after that Thief, as a killed Thief does after a Trader.
 - **Hiring window** (port-only `0x3FC3` S->C JSON, `0x7FC3` C->S `u8 op, u8 stars, name`): the
   specialty shops' talk menu has one row, "Hire Hunters and Traders" (the Thief Den's Stolen Goods
   Dealer: "Hire Thieves"), which opens the window. It lists every agent of the kinds hired there,

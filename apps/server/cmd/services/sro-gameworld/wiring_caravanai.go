@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/social/chat"
 	worldgeom "opensro.online/server/internal/game/world"
@@ -52,6 +54,11 @@ type caravanRuntimeState struct {
 	caravanSpeedAtMs      map[string]int64
 	caravanSpeedRefused   map[string]bool
 	caravanSpeedSeen      bool
+	caravanLootAtMs       map[string]int64
+	caravanLootSeen       map[string]uint32
+	caravanLootLogAtMs    int64
+	caravanGround         []grounditem.Item
+	caravanGroundAtMs     int64
 	caravanRoads          map[string]*caravanRoad
 	caravanIgnoredThreats map[string]map[uint32]int64
 }
@@ -92,6 +99,7 @@ func (game *gameplayPlane) wireCaravanAgents() {
 		Ferry:   game.caravanFerry, FollowFerry: game.caravanFollowFerry,
 		OnHireFee: game.caravanHireFee, OnHirePayout: game.caravanHirePayout,
 		UseItem: game.caravanUseItem,
+		PickUp:  game.caravanPickUp,
 		OnContractFormed: func(division, playerName, agentName string) {
 			if game.parties != nil {
 				game.parties.InvitePlayerFromRuntimeActor(division, agentName, playerName)
@@ -317,6 +325,7 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 		if i < len(game.caravanActors) {
 			c := game.caravanActors[i]
 			game.keepCaravanSpeed(c, unit, nowMs)
+			game.showCaravanLoot(c, unit, nearby, nowMs)
 			hp, _, mp, _ := game.items.GameplayVitals(game.divisionID, c)
 			cosHP, cosMaxHP, lost := game.items.ServerActorTransportVitals(game.divisionID, c.Name)
 			game.caravanAgents.ObserveVitals(game.divisionID, c.Name, hp, mp, lost, nowMs)
@@ -487,11 +496,86 @@ func (game *gameplayPlane) keepCaravanSpeed(c *enterworld.Character, unit *carav
 	}
 	run, factor := game.caravanRunSpeed(c), float32(1)
 	if buffed && (c.ActiveCOS == nil || !c.ActiveCOS.Mounted) {
-		run, factor = run*caravanai.SpeedPotionFactor, caravanai.SpeedPotionFactor
+		// The potion's speed (the client's committed speed); a Hunter's
+		// own 75 is already that fast.
+		run, factor = max(run, simulation.RunSpeed*caravanai.SpeedPotionFactor), caravanai.SpeedPotionFactor
 	}
 	if run != unit.RunSpeed {
 		game.caravanAgents.SetRunSpeed(game.divisionID, c.Name, run, factor)
 	}
+}
+
+/*
+================
+showCaravanLoot / caravanPickUp
+
+Once a second each agent that looks for loot (caravanai.LootSought) is
+shown the nearest item it may take within 30m: a Trader its own dropped
+goods, while no Thief is in sight; a Thief other caravans' goods, gold
+and items. It walks there and picks it up through the native grant.
+================
+*/
+func (game *gameplayPlane) showCaravanLoot(c *enterworld.Character, unit *caravanai.AgentUnit, nearby []caravanai.ObservedPlayer, nowMs int64) {
+	if nowMs < game.caravanLootAtMs[c.Name] {
+		return
+	}
+	if game.caravanLootAtMs == nil {
+		game.caravanLootAtMs = make(map[string]int64)
+	}
+	game.caravanLootAtMs[c.Name] = nowMs + 1000
+	trader := unit.Role == caravanai.RoleTrader
+	if !game.caravanAgents.LootSought(game.divisionID, c.Name, nowMs) || (trader && thiefInSight(nearby)) {
+		game.caravanAgents.NoteLoot(game.divisionID, c.Name, 0, caravanai.Waypoint{}, nowMs)
+		return
+	}
+	here := caravanai.Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}
+	if nowMs >= game.caravanGroundAtMs {
+		// One read of the ground a second serves every agent.
+		game.caravanGround, game.caravanGroundAtMs = game.items.GroundItems(game.divisionID), nowMs+1000
+	}
+	var best caravanai.Waypoint
+	var bestGID uint32
+	bestDist := caravanai.LootReach
+	nearest := math.MaxFloat64
+	seen := game.items.ServerActorLootNear(game.divisionID, c.Name, trader, game.caravanGround, func(p grounditem.Point) bool {
+		return caravanai.WaypointDistance(here, caravanai.Waypoint{RegionID: p.RegionID, X: p.X, Z: p.Z}) <= caravanai.LootReach
+	})
+	for _, loot := range seen {
+		at := caravanai.Waypoint{RegionID: loot.RegionID, X: loot.X, Y: loot.Y, Z: loot.Z}
+		d := caravanai.WaypointDistance(here, at)
+		nearest = min(nearest, d)
+		if d <= bestDist {
+			best, bestGID, bestDist = at, loot.Gid, d
+		}
+	}
+	if unit.HiredBy != "" && len(seen) > 0 && bestGID == 0 && nowMs >= game.caravanLootLogAtMs {
+		game.caravanLootLogAtMs = nowMs + 30_000
+		log.Debugf("caravan-ai: %s sees %d loot, nearest %.0f units (reach %.0f)", c.Name, len(seen), nearest, caravanai.LootReach)
+	}
+	if bestGID != 0 && game.caravanLootSeen[c.Name] != bestGID {
+		if game.caravanLootSeen == nil {
+			game.caravanLootSeen = make(map[string]uint32)
+		}
+		game.caravanLootSeen[c.Name] = bestGID
+		log.Debugf("caravan-ai: %s goes for ground item %d (%.0f units away)", c.Name, bestGID, bestDist)
+	}
+	game.caravanAgents.NoteLoot(game.divisionID, c.Name, bestGID, best, nowMs)
+}
+
+func (game *gameplayPlane) caravanPickUp(division, name string, itemGID uint32) bool {
+	c := game.deps.CharacterByName(division, name)
+	if c == nil {
+		return false
+	}
+	result := game.items.ServerActorPickup(division, name, itemGID)
+	game.publishCaravanAction(c, result)
+	picked := len(result.Broadcast) > 0
+	if picked {
+		log.Debugf("caravan-ai: %s picked up ground item %d", name, itemGID)
+	} else {
+		log.WithField("refusal", result.DiagnosticRefusal).Warnf("caravan-ai: %s could not pick up ground item %d", name, itemGID)
+	}
+	return picked
 }
 
 /*

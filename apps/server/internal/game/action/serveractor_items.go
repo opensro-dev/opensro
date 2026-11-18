@@ -18,8 +18,11 @@ import (
 	"slices"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 // serverActorSupplyStack is the stack an actor is restocked with.
@@ -96,6 +99,116 @@ func ItemUsed(result OpResult) bool {
 		}
 	}
 	return false
+}
+
+// ServerActorLoot is one ground item an AI actor may pick up, and where.
+type ServerActorLoot struct {
+	Gid      uint32
+	RegionID uint16
+	X, Y, Z  float32
+	Goods    bool
+}
+
+/*
+================
+ServerActorLootNear
+
+The ground items the actor may pick up, by the native rules: a Trader
+only its own trade goods, into its transport; a Thief anyone else's goods
+(an AI Thief has no cart: serverActorTakeGoods), gold and items. A drop
+reserved for someone else, a forged drop or an arena power-up is not loot.
+goodsOnly leaves out everything but trade goods. items is the division's
+ground (GroundItems, read once for every actor), near the caller's reach
+test, asked before anything else.
+================
+*/
+func (rt *Runtime) ServerActorLootNear(division, name string, goodsOnly bool, items []grounditem.Item, near func(grounditem.Point) bool) []ServerActorLoot {
+	var candidates []grounditem.Item
+	for _, item := range items {
+		if near(item.Position) && item.ArenaPowerup == 0 && !item.ForgeBound {
+			candidates = append(candidates, item)
+		}
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	c := rt.findCharacter(division, name)
+	snapshot := rt.characterSnapshot(division, c)
+	if snapshot == nil || !snapshot.RuntimeOnly {
+		return nil
+	}
+	gid := enterworld.ObjectIDForCharacter(snapshot)
+	thief := enterworld.DressedJob(snapshot) == domain.JobThief
+	var out []ServerActorLoot
+	for _, item := range candidates {
+		if item.OwnerJID != 0 && item.OwnerJID != gid {
+			continue
+		}
+		goods := isPickupTradeGoods(item.TypeFlags)
+		switch {
+		case goods && tradePickupRefusal(snapshot, item.TradeOwner) != 0:
+			continue
+		case !goods && (goodsOnly || !thief):
+			continue
+		}
+		out = append(out, ServerActorLoot{Gid: item.Gid, RegionID: item.Position.RegionID, X: item.Position.X, Y: item.Y, Z: item.Position.Z, Goods: goods})
+	}
+	return out
+}
+
+// GroundItems is the division's ground, for ServerActorLootNear.
+func (rt *Runtime) GroundItems(division string) []grounditem.Item {
+	if rt.Ground == nil {
+		return nil
+	}
+	return rt.Ground.All(division)
+}
+
+/*
+================
+ServerActorPickup
+
+The actor, standing at the item, picks it up through the native grant:
+gold to its purse, an item to its bag (or the party's share), its own
+goods back into its transport. An AI Thief without a cart carries other
+caravans' goods off by hand (serverActorTakeGoods).
+================
+*/
+func (rt *Runtime) ServerActorPickup(division, name string, itemGid uint32) OpResult {
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	c := rt.findCharacter(division, name)
+	snapshot := rt.characterSnapshot(division, c)
+	if snapshot == nil || !snapshot.RuntimeOnly || rt.Ground == nil {
+		return OpResult{}
+	}
+	item, ok := rt.Ground.Get(division, itemGid)
+	if !ok {
+		return OpResult{}
+	}
+	if isPickupTradeGoods(item.TypeFlags) && enterworld.DressedJob(snapshot) == domain.JobThief && snapshot.ActiveCOS == nil {
+		return rt.serverActorTakeGoods(division, snapshot, item)
+	}
+	return rt.grantPickup(division, simulation.WorldKey(division, c.Name), c, snapshot, item, rt.tickDoors())
+}
+
+/*
+================
+serverActorTakeGoods
+
+Port-only: an AI Thief has no transport, so the goods it robs leave the
+ground into its own hands; observers see the native scoop and despawn.
+================
+*/
+func (rt *Runtime) serverActorTakeGoods(division string, thief *enterworld.Character, item grounditem.Item) OpResult {
+	if tradePickupRefusal(thief, item.TradeOwner) != 0 {
+		return OpResult{}
+	}
+	if _, removed := rt.Ground.Remove(division, item.Gid); !removed {
+		return OpResult{}
+	}
+	anim := wire.PickupAnim{Gid: enterworld.ObjectIDForCharacter(thief)}
+	return OpResult{Broadcast: wire.PickupBroadcastFrames(anim, item.Gid, 0)}
 }
 
 /*

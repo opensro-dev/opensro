@@ -28112,7 +28112,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			if ( worldVisible && game?.caravanHire ) {
 				// Port-only caravan hire window (caravan-hire.ts): available agents in
 				// green, the others in red with the reason; a Trader asks for its stars.
-				const hire = game.caravanHire, width = 540, height = 470, rowH = 22, perPage = 13;
+				const hire = game.caravanHire, width = 540, height = 470, rowH = 22, perPage = 12;
 				const green: UiQuad["color"] = [ 0.47, 0.92, 0.47, 1 ], red: UiQuad["color"] = [ 0.95, 0.42, 0.38, 1 ];
 				const muted: UiQuad["color"] = [ 0.82, 0.77, 0.66, 1 ], gold: UiQuad["color"] = [ 1, 0.84, 0.5, 1 ];
 				const rows = caravanOnlyAvailable ? hire.rows.filter( r => r.available ) : hire.rows;

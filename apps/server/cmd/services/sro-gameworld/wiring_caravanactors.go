@@ -30,6 +30,9 @@ import (
 )
 
 const caravanActorIDBase int64 = 90_000
+
+// caravanHunterRunSpeed is an AI Hunter's run speed (port-only).
+const caravanHunterRunSpeed float32 = 75
 const caravanRoadNodesPerTick = 64
 
 /*
@@ -45,8 +48,12 @@ func (game *gameplayPlane) caravanRunSpeed(c *enterworld.Character) float32 {
 			}
 		}
 	}
-	// On foot every agent runs at the native speed; the 50% speed potion
-	// (keepCaravanSpeed) speeds it up the way it does a player.
+	// Hunters run at 75 (port-only, they must catch caravans); everyone
+	// else at the native speed, which the 50% speed potion raises to the
+	// same 75 (keepCaravanSpeed).
+	if c.Job.Type == domain.JobHunter {
+		return caravanHunterRunSpeed
+	}
 	return simulation.RunSpeed
 }
 

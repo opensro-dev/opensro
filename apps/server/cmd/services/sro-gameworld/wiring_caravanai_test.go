@@ -21,6 +21,7 @@ import (
 	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
 	livepresence "opensro.online/server/internal/game/social"
 	"opensro.online/server/internal/game/social/party"
@@ -236,6 +237,31 @@ func TestCaravanShippedActors(t *testing.T) {
 		if row.Slot != int64(i) {
 			t.Fatal("remaining cargo slots collided")
 		}
+	}
+	// The Trader picks its own dropped goods back up into its transport.
+	everywhere := func(grounditem.Point) bool { return true }
+	goods := game.items.ServerActorLootNear(game.divisionID, trader.Name, true, game.items.GroundItems(game.divisionID), everywhere)
+	if len(goods) != 3 {
+		t.Fatalf("the Trader sees %d of its 3 dropped goods", len(goods))
+	}
+	if picked := game.items.ServerActorPickup(game.divisionID, trader.Name, goods[0].Gid); len(picked.Broadcast) == 0 || len(trader.ActiveCOS.Container.Rows) != rows-2 {
+		t.Fatalf("the Trader did not recover its goods: %q rows=%d", picked.DiagnosticRefusal, len(trader.ActiveCOS.Container.Rows))
+	}
+	// A Thief takes another caravan's goods and loose items.
+	if len(game.items.ServerActorLootNear(game.divisionID, thief.Name, true, game.items.GroundItems(game.divisionID), everywhere)) != 2 {
+		t.Fatal("the Thief does not see the Trader's goods")
+	}
+	if took := game.items.ServerActorPickup(game.divisionID, thief.Name, goods[1].Gid); len(took.Broadcast) == 0 {
+		t.Fatal("the Thief did not take the goods")
+	}
+	potion, _ := deps.Items.ItemRefByCodename("ITEM_ETC_HP_POTION_05")
+	dropped := game.items.Ground.Add(game.divisionID, grounditem.Item{RefObjID: potion.RefObjID, Codename: potion.Codename, TypeFlags: potion.TypeFlags(), StackCount: 5,
+		Position: grounditem.Point{RegionID: at.RegionID, X: float32(at.X), Z: float32(at.Z)}})
+	if took := game.items.ServerActorPickup(game.divisionID, thief.Name, dropped.Gid); len(took.Broadcast) == 0 {
+		t.Fatalf("the Thief did not pick up a potion stack: %q", took.DiagnosticRefusal)
+	}
+	if _, left := game.items.Ground.Get(game.divisionID, dropped.Gid); left {
+		t.Fatal("the picked-up potions stayed on the ground")
 	}
 
 	template := monster.LoadTemplate(paths.TextdataDir)

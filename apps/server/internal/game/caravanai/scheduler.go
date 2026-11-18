@@ -55,6 +55,47 @@ type DistressCall struct {
 	Z            float32
 	StartedAtMs  int64
 	ExpiresAtMs  int64
+	// Hunter marks a Hunter's own call for help: only Hunters answer it;
+	// Escorting is the Trader that Hunter guards.
+	Hunter    bool
+	Escorting string
+}
+
+// hunterHelpPercent is the HP below which a Hunter under attack calls the
+// other Hunters around for help.
+const hunterHelpPercent = 50
+
+/*
+==================
+callHuntersLocked
+
+A Hunter under attack and below half HP calls the Hunters within reach,
+as a Thief rallies its gang: one chat line, and a distress call only
+Hunters answer. A Trader's own call is never replaced.
+==================
+*/
+func (r *Runtime) callHuntersLocked(division string, hunter *AgentUnit, attackerName string, nowMs int64) {
+	if hunter.Role != RoleHunter || hunter.HiredBy != "" || hunter.HP <= 0 || percentOf(hunter.HP, hunter.MaxHP) >= hunterHelpPercent {
+		return
+	}
+	div := strings.TrimSpace(division)
+	if call, ok := r.distress[div]; ok && nowMs < call.ExpiresAtMs && (!call.Hunter || strings.EqualFold(call.TraderName, hunter.Name)) {
+		return
+	}
+	if r.distress == nil {
+		r.distress = make(map[string]DistressCall)
+	}
+	r.distress[div] = DistressCall{
+		Division: div, TraderName: hunter.Name, AttackerName: strings.TrimSpace(attackerName),
+		RegionID: hunter.RegionID, X: hunter.X, Z: hunter.Z,
+		StartedAtMs: nowMs, ExpiresAtMs: nowMs + DistressWindowMs, Hunter: true, Escorting: hunter.EscortingTrader,
+	}
+	who := DisplayName(attackerName)
+	if who == "" {
+		who = "a thief"
+	}
+	r.outbox = append(r.outbox, outboxItem{chat: true, agent: hunter.Name, regionID: hunter.RegionID,
+		text: fmt.Sprintf("Hunters, to me! %s has me cornered!", who)})
 }
 
 /*
@@ -118,7 +159,16 @@ func (r *Runtime) activeDistressForLocked(
 	if strings.EqualFold(call.TraderName, unit.Name) {
 		return nil
 	}
-	if unit.EscortingTrader != "" && !strings.EqualFold(unit.EscortingTrader, call.TraderName) {
+	if call.Hunter && unit.Role != RoleHunter {
+		return nil
+	}
+	// An escort answers its own Trader's call, or a fellow guard's of the
+	// same caravan.
+	callFor := call.TraderName
+	if call.Hunter {
+		callFor = call.Escorting
+	}
+	if unit.EscortingTrader != "" && !strings.EqualFold(unit.EscortingTrader, callFor) {
 		return nil
 	}
 	// Town agents stay hireable, hired agents stay with their hirer, and only

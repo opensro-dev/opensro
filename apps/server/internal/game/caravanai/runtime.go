@@ -115,6 +115,12 @@ type AgentUnit struct {
 	vengeanceAt        Waypoint
 	vengeanceUntilMs   int64
 	walkFactor         float32
+	// trail is the leader's footsteps a following Trader walks (convoy.go).
+	trail []Waypoint
+	// loot is the ground item the agent goes to pick up (loot.go).
+	lootGID     uint32
+	lootAt      Waypoint
+	lootUntilMs int64
 }
 
 const combatStallTimeoutMs int64 = 5000
@@ -142,6 +148,8 @@ type WorldHooks struct {
 	// UseItem has the actor drink one item from its bag (an HP, MP or
 	// transport potion); true when it was used. When set it replaces Heal.
 	UseItem func(division, name, codename string) bool
+	// PickUp has the actor, standing at it, pick up a ground item.
+	PickUp func(division, name string, itemGID uint32) bool
 }
 
 // The potions agents drink: the largest HP and MP potions and the
@@ -528,7 +536,11 @@ func (r *Runtime) StepAgentWithWorldThreat(
 	if unit.Role == RoleTrader && !unit.UnderAttack && r.parleys.TruceActive(division, unit.Name, nowMs) {
 		decision = Decision{Action: ActionContinueRoute, Source: BrainHardcoded}
 	}
-	if (unit.Role != RoleThief || unit.PotionCharges > 0) && (unit.needsManaRecovery || unit.MaxMP > 0 && unit.MP <= unit.MaxMP/5) {
+	lowMana := unit.needsManaRecovery || unit.MaxMP > 0 && unit.MP <= unit.MaxMP/5
+	// A real MP potion (UseItem) refills over a few seconds: the agent
+	// drinks once per cooldown and goes on meanwhile, not standing still.
+	drinkMana := lowMana && (r.hooks.UseItem == nil || nowMs-unit.LastPotionAtMs >= 1500)
+	if (unit.Role != RoleThief || unit.PotionCharges > 0) && drinkMana {
 		decision = Decision{Action: ActionUsePotion, Source: BrainHardcoded}
 	} else if unit.Role == RoleThief && unit.PotionCharges <= 0 {
 		unit.needsManaRecovery = false
@@ -557,6 +569,9 @@ func (r *Runtime) StepAgentWithWorldThreat(
 	if effects.reward != nil && r.hooks.OnContractReward != nil {
 		contract := effects.reward
 		r.hooks.OnContractReward(division, contract.HunterName, contract.RewardGold, snapshot.Name)
+	}
+	if effects.pickup != 0 && r.hooks.PickUp != nil {
+		r.hooks.PickUp(division, snapshot.Name, effects.pickup)
 	}
 	if effects.potion != "" && r.hooks.UseItem(division, snapshot.Name, effects.potion) && effects.potion == MPPotionItem {
 		r.mu.Lock()
@@ -810,6 +825,15 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, worldThreatAc
 		}
 	case ActionContinueRoute, ActionAssistAlly, ActionRecruitEscort:
 		switch {
+		case unit.lootGID != 0 && nowMs < unit.lootUntilMs:
+			// Loot in reach first: a Trader's own dropped goods, a Thief's haul.
+			if WaypointDistance(position(unit), unit.lootAt) <= lootPickupReach {
+				effects.pickup = unit.lootGID
+				unit.lootGID = 0
+			} else {
+				unit.Walking = false
+				r.moveLocked(unit, unit.lootAt, stepDistanceFor(unit))
+			}
 		case unit.EscortingTrader != "":
 			// Escorts, grand-caravan members and hired agents follow their leader.
 			unit.State = StateTraveling
@@ -947,6 +971,7 @@ func (r *Runtime) RecordPlayerAttack(
 	if unit.Role == RoleTrader && unit.HP > 0 {
 		r.raiseDistressLocked(division, unit, attackerPlayerName, nowMs)
 	}
+	r.callHuntersLocked(division, unit, attackerPlayerName, nowMs)
 	var stolenGold int64
 	regionID := unit.RegionID
 	if unit.HP <= 0 {
@@ -1012,7 +1037,7 @@ func (r *Runtime) RecordPlayerAttack(
 		default:
 			unit.EscortingTrader, unit.DedicatedEscortFor, unit.RunKind = "", "", RunNone
 		}
-		if unit.Role == RoleThief {
+		if unit.Role == RoleThief || unit.Role == RoleHunter {
 			if wasHunting {
 				unit.RunKind = RunVengeance
 			}

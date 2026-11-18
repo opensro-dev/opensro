@@ -39,7 +39,9 @@ Call world owners after releasing the AI lock: combat callbacks reenter AI.
 type agentEffects struct {
 	drop, heal int
 	// potion is the item the agent drinks after the lock (WorldHooks.UseItem).
-	potion   string
+	potion string
+	// pickup is the ground item the agent picks up after the lock.
+	pickup   uint32
 	reward   *EscortContract
 	follow   *Waypoint
 	teleport *Waypoint

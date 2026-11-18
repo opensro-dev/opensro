@@ -410,7 +410,14 @@ func (r *Runtime) stepFollowLocked(unit *AgentUnit, nowMs int64) *Waypoint {
 }
 
 // traderSlotRadius is how far a following Trader keeps from its leader.
-const traderSlotRadius float64 = 5 * UnitsPerMeter
+// A following Trader walks the leader's trail: a footstep every trailStep,
+// at most trailMax of them, each passed once it is within trailReached.
+const (
+	traderSlotRadius float64 = 5 * UnitsPerMeter
+	trailStep        float64 = 3 * UnitsPerMeter
+	trailReached     float64 = 2 * UnitsPerMeter
+	trailMax                 = 400
+)
 
 /*
 ================
@@ -429,9 +436,25 @@ func (r *Runtime) stepTraderFollowLocked(unit *AgentUnit, leader Waypoint, leade
 	angle := float64(h%360) * math.Pi / 180
 	slot := offsetPoint(leader, traderSlotRadius*math.Cos(angle), traderSlotRadius*math.Sin(angle))
 	unit.roamAtMs, unit.Walking = 0, false
-	dist := WaypointDistance(position(unit), slot)
+	// The leader's footsteps: a way the leader really walked, around the
+	// railings and walls a straight line to the slot would run into.
+	if n := len(unit.trail); n == 0 || WaypointDistance(unit.trail[n-1], leader) >= trailStep {
+		unit.trail = append(unit.trail, leader)
+		if len(unit.trail) > trailMax {
+			unit.trail = unit.trail[len(unit.trail)-trailMax:]
+		}
+	}
+	here := position(unit)
+	for i := len(unit.trail) - 1; i >= 0; i-- {
+		if WaypointDistance(here, unit.trail[i]) <= trailReached {
+			// Already at (or past) this footstep: go on from the next one.
+			unit.trail = unit.trail[i+1:]
+			break
+		}
+	}
+	dist := WaypointDistance(here, slot)
 	if dist <= 15 {
-		unit.catchingUp, unit.progressAtMs = false, 0
+		unit.catchingUp, unit.progressAtMs, unit.trail = false, 0, nil
 		return nil
 	}
 	unit.catchingUp = true
@@ -445,7 +468,11 @@ func (r *Runtime) stepTraderFollowLocked(unit *AgentUnit, leader Waypoint, leade
 	if WaypointDistance(position(unit), leader) > 320 {
 		follow = &leader
 	}
-	r.moveLocked(unit, slot, stepDistanceFor(unit))
+	target := slot
+	if len(unit.trail) > 0 {
+		target = unit.trail[0]
+	}
+	r.moveLocked(unit, target, stepDistanceFor(unit))
 	unit.noteProgress(nowMs)
 	return follow
 }

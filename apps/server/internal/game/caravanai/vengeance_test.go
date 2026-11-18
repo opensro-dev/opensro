@@ -63,6 +63,62 @@ func TestHiredTraderKeepsCloseAndNeverTeleports(t *testing.T) {
 
 /*
 ================
+TestHiredTraderWalksAroundWhatTheHirerWalkedAround
+
+A wall stands between the Trader and its hirer's new spot; the hirer walks
+around it, and the Trader, never teleported, follows the hirer's footsteps
+around it instead of pushing into the wall.
+================
+*/
+func TestHiredTraderWalksAroundWhatTheHirerWalkedAround(t *testing.T) {
+	base := Waypoint{RegionID: 25239, X: 1000, Z: 1000}
+	players := map[string]*hirePlayer{"Boss": {at: TownWaypoint(TownJangan), job: domain.JobTrader, online: true}}
+	paid := map[string]int64{}
+	rt := hireRuntime(t, players, &paid)
+	if reply := rt.HireAgent("division", "Boss", domain.JobTrader, "[AI]Trader_Jin", 1000); !strings.Contains(reply, "joins you") {
+		t.Fatalf("hire refused: %s", reply)
+	}
+	rt.HandlePlayerCommand("division", "Boss", domain.JobTrader, "!leed", 1000)
+	// The wall: x 1040..1060 for z below 1100.
+	wall := func(p Waypoint) bool { return p.RegionID == base.RegionID && p.X > 1040 && p.X < 1060 && p.Z < 1100 }
+	rt.hooks.Move = func(_ string, from, to Waypoint, distance float32) (Waypoint, bool) {
+		region, x, z, arrived := StepWaypoint(from.RegionID, from.X, from.Z, to, distance)
+		next := Waypoint{RegionID: region, X: x, Z: z}
+		if wall(next) {
+			return from, false
+		}
+		return next, arrived
+	}
+	rt.mu.Lock()
+	rt.findAgentLocked("division", "[AI]Trader_Jin").place(base, 0)
+	rt.mu.Unlock()
+	path := []Waypoint{base, offsetPoint(base, 0, 150), offsetPoint(base, 200, 150), offsetPoint(base, 200, 0)}
+	now := int64(2000)
+	step := func() *AgentUnit {
+		_, unit, _ := rt.StepAgent(context.Background(), "division", "[AI]Trader_Jin", nil, now)
+		now += 100
+		return unit
+	}
+	for leg := 1; leg < len(path); leg++ {
+		// The hirer outpaces the Trader: a straight line from where the
+		// Trader lags to the hirer's end runs through the wall.
+		for f := float32(0); f <= 1; f += 0.25 {
+			a, b := path[leg-1], path[leg]
+			players["Boss"].at = Waypoint{RegionID: a.RegionID, X: a.X + (b.X-a.X)*f, Z: a.Z + (b.Z-a.Z)*f}
+			step()
+		}
+	}
+	var jin *AgentUnit
+	for i := 0; i < 300; i++ {
+		jin = step()
+	}
+	if d := WaypointDistance(position(jin), players["Boss"].at); d > 65 {
+		t.Fatalf("the Trader stalled at the wall: %.0f units from its hirer at %+v", d, position(jin))
+	}
+}
+
+/*
+================
 TestKilledThiefLeadsItsGangBackAfterTheTrader
 ================
 */
