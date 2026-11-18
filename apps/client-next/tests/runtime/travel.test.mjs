@@ -482,6 +482,41 @@ test("the Jangan gate folds the Qin-Shi tomb floors under one row, floor 4 by co
 	] );
 });
 
+test("the Jangan gate folds the Sky Temple fields under one Shambhala row (port-only)", () => {
+	const row = ( id, codeName, npcRefObjId, nameSymbol ) => ({ id, codeName, npcRefObjId, nameSymbol, regionId: 0 });
+	const link = ( sourceId, destinationId, fee ) => ({ sourceId, destinationId, fee });
+	const catalog = decodePortalCatalog( {
+		format: "sro-teleportdata",
+		version: 1,
+		teleportRows: [
+			row( 1, "GATE_CH", 2094, "SN_ZONE_22001" ),
+			row( 2, "GATE_WC", 2095, "SN_ZONE_22002" ),
+			row( 349, "GATE_OTHER_SKYTEMPLE_A", 43803, "RN_OTHER_SKYTEMPLE_A_01" ),
+			row( 352, "GATE_OTHER_SKYTEMPLE_D", 43806, "RN_OTHER_SKYTEMPLE_D_01" )
+		],
+		linkRows: [
+			link( 1, 2, 5000 ),
+			link( 1, 349, 0 ),
+			link( 1, 352, 0 ),
+			link( 349, 1, 0 )
+		]
+	} );
+	const copy = key =>
+		key === "UIIT_CTL_TELEPORT_RESULT" ? "%s %d" : key === "UIIT_CTL_TELEPORT_FREE_RESULT" ? "%s" : key;
+	assert.deepEqual( portalMenu( catalog, 2094, copy ), [
+		{ id: "npc-portal:2", label: "SN_ZONE_22002 5000" },
+		{ id: "npc-portal-group:sky-temple", label: "Shambhala" }
+	] );
+	assert.deepEqual( portalMenu( catalog, 2094, copy, { group: "sky-temple" } ), [
+		{ id: "npc-portal:349", label: "RN_OTHER_SKYTEMPLE_A_01" },
+		{ id: "npc-portal:352", label: "RN_OTHER_SKYTEMPLE_D_01" }
+	] );
+	// A field's own gate keeps the flat menu back to Jangan.
+	assert.deepEqual( portalMenu( catalog, 43803, copy ), [
+		{ id: "npc-portal:1", label: "SN_ZONE_22001" }
+	] );
+});
+
 test("an interaction approach retires on cancellation, arrival or matching despawn, never another entity", () => {
 	const idle = { phase: "idle" }, target = { gid: 252094 };
 	const moving = interactionApproachTransition( idle, { kind: "begin", target } );
