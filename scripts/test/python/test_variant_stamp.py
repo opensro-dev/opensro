@@ -105,6 +105,17 @@ class Stamp(unittest.TestCase):
 		self.assertIn(str(Path(self.env["SRO_V1696_ROOT"]).resolve()), sources)
 		self.assertNotIn(str(Path(self.env["SRO_HOME"]).resolve()), sources)
 
+	# A build with no Arabia nest extraction named (SRO_ARABIA off, or a
+	# contributor's tree) still stamps: the extraction has no default, so
+	# only a set SRO_ARABIA_NESTS joins the sources.
+	def test_an_unset_nest_extraction_is_no_source(self):
+		environ = {key: value for key, value in self.env.items() if key != arabia_import.NESTS_ENV}
+		sources = variant_stamp.source_roots(self.native, self.imported, self.vsro, self.variant, environ)
+		self.assertIn(self.native.resolve(), sources)
+		nests = Path(self.env[arabia_import.NESTS_ENV]).resolve()
+		self.assertIn(nests, variant_stamp.source_roots(self.native, self.imported, self.vsro, self.variant, self.env))
+		self.assertNotIn(nests, sources)
+
 	def test_an_edited_or_extra_variant_file_rebuilds(self):
 		self.write(self.variant / "extracted" / "Media_extracted" / "b.txt", b"stray")
 		self.assertEqual(self.stale(), ["the variant tree changed since it was built"])
