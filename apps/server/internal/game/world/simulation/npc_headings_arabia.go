@@ -43,9 +43,9 @@ var arabiaNPCHeadings = map[npcHeadingKey]uint16{
 	{"NPC_AR_ABSHAD", 22363, 11759, -3939, 1038}:                  13238, // open
 	{"NPC_AR_ACCESSORY", 22617, 10275, -4313, 9505}:               33831, // shop
 	{"NPC_AR_CASTLESOLDIER_1", 22618, 10727, -2366, 3911}:         59160, // open
-	{"NPC_AR_CASTLESOLDIER_2", 22362, 13170, -2366, 18543}:        32768, // owner: west
+	{"NPC_AR_CASTLESOLDIER_2", 22362, 13170, -2366, 18543}:        27548, // owner: toward X -8513 Y -772
 	{"NPC_AR_CHOUKRI", 22361, 7214, -4321, 4498}:                  4782,  // shop
-	{"NPC_AR_COMMERCE1", 22874, 8469, -4307, 8729}:                59749, // open
+	{"NPC_AR_COMMERCE1", 22874, 8469, -4307, 8729}:                46099, // owner: toward X -8556 Y -491
 	{"NPC_AR_COMMERCE2", 22363, 8458, -3200, 9996}:                46294, // open
 	{"NPC_AR_ESHARK", 22107, 1269, -4333, 14737}:                  16660, // open
 	{"NPC_AR_FARMER1", 22357, 19149, -2, 12865}:                   9641,  // open
@@ -56,12 +56,12 @@ var arabiaNPCHeadings = map[npcHeadingKey]uint16{
 	{"NPC_AR_HORSE", 22874, 2894, -4307, 8152}:                    52998, // open
 	{"NPC_AR_HUNTER", 22874, 8420, -4307, 5657}:                   14718, // open
 	{"NPC_AR_KAREM", 22106, 3495, -4321, 15092}:                   7374,  // open
-	{"NPC_AR_KHALED", 22361, 4548, -4323, 12426}:                  15130, // shop
+	{"NPC_AR_KHALED", 22361, 4548, -4323, 12426}:                  63768, // owner: toward X -8785 Y -836
 	{"NPC_AR_MACHINE_1", 22864, 3025, -39, 4562}:                  15244, // open
 	{"NPC_AR_MACHINE_2", 22607, 6932, -23, 1736}:                  13296, // open
 	{"NPC_AR_MACHINE_3", 22094, 17459, 741, 15314}:                206,   // open
 	{"NPC_AR_MACHINE_4", 21838, 975, -739, 14293}:                 63545, // open
-	{"NPC_AR_MAHMUD", 22363, 16116, -4127, 5326}:                  53828, // watch
+	{"NPC_AR_MAHMUD", 22363, 16116, -4127, 5326}:                  36725, // owner: toward X -8290 Y -908
 	{"NPC_AR_MALAK", 22361, 7222, -4320, 14643}:                   39941, // shop
 	{"NPC_AR_MERCHANT", 22617, 15259, -4324, 799}:                 33044, // open
 	{"NPC_AR_MUHAMMAD", 22354, 6678, 2999, 397}:                   61181, // open
@@ -69,11 +69,11 @@ var arabiaNPCHeadings = map[npcHeadingKey]uint16{
 	{"NPC_AR_POTION", 22361, 4342, -4319, 16705}:                  53792, // shop
 	{"NPC_AR_SHARIAL", 22618, 13179, -2366, 2749}:                 34109, // owner: toward X -8512 Y -741
 	{"NPC_AR_SHEHERAZADE", 22618, 13666, -2366, 1297}:             37918, // owner: toward X -8507 Y -757
-	{"NPC_AR_SMITH", 22874, 15943, -4308, 12906}:                  38903, // shop
-	{"NPC_AR_SOLDIER_1", 22617, 2445, -4323, 5430}:                11268, // open
-	{"NPC_AR_SOLDIER_2", 22617, 2437, -4320, 3166}:                60144, // open
+	{"NPC_AR_SMITH", 22874, 15943, -4308, 12906}:                  47695, // owner: toward X -8481 Y -450
+	{"NPC_AR_SOLDIER_1", 22617, 2445, -4323, 5430}:                64656, // owner: toward X -8804 Y -714
+	{"NPC_AR_SOLDIER_2", 22617, 2437, -4320, 3166}:                64058, // owner: toward X -8803 Y -737
 	{"NPC_AR_SOLDIER_3", 22106, 15092, -4324, 5596}:               22456, // open
-	{"NPC_AR_SOLDIER_4", 22106, 16887, -4324, 5554}:               9424,  // open
+	{"NPC_AR_SOLDIER_4", 22106, 16887, -4324, 5554}:               19929, // owner: toward X -8472 Y -1094
 	{"NPC_AR_SPECIAL", 22617, 5370, -4326, 12850}:                 14802, // shop
 	{"NPC_AR_SPECIAL_INVESTIGATION_1", 20050, 2809, -7308, 14894}: 32370, // open
 	{"NPC_AR_SPECIAL_INVESTIGATION_2", 20828, 8433, -1955, 15131}: 21695, // open
@@ -93,24 +93,24 @@ var arabiaNPCHeadings = map[npcHeadingKey]uint16{
 	{"NPC_AR_SPECIAL_SOLDIER_8", 20050, 4440, -7032, 17639}:       13981, // open
 	{"NPC_AR_SPECIAL_SOLDIER_9", 19279, 6460, -8529, 15905}:       41119, // watch
 	{"NPC_AR_SSADATUNE", 22107, 9692, -4333, 15370}:               22855, // open
-	{"NPC_AR_THIEF", 22363, 9031, -3199, 13832}:                   746,   // open
+	{"NPC_AR_THIEF", 22363, 9031, -3199, 13832}:                   29781, // owner: toward X -8360 Y -821
 	{"NPC_AR_TOWNSOLDIER_1", 22617, 18071, -4325, 3399}:           31017, // open
-	{"NPC_AR_TOWNSOLDIER_10", 22620, 2805, -4305, 6183}:           41143, // open
-	{"NPC_AR_TOWNSOLDIER_11", 22364, 4492, -4305, 14224}:          303,   // open
-	{"NPC_AR_TOWNSOLDIER_12", 22364, 4472, -4305, 12371}:          9901,  // open
-	{"NPC_AR_TOWNSOLDIER_13", 22619, 17053, -4305, 4997}:          2831,  // open
+	{"NPC_AR_TOWNSOLDIER_10", 22620, 2805, -4305, 6183}:           35539, // owner: toward X -8231 Y -707
+	{"NPC_AR_TOWNSOLDIER_11", 22364, 4492, -4305, 14224}:          33623, // owner: toward X -8214 Y -818
+	{"NPC_AR_TOWNSOLDIER_12", 22364, 4472, -4305, 12371}:          35431, // owner: toward X -8214 Y -837
+	{"NPC_AR_TOWNSOLDIER_13", 22619, 17053, -4305, 4997}:          59451, // owner: toward X -8276 Y -719
 	{"NPC_AR_TOWNSOLDIER_14", 22619, 17046, -4305, 3919}:          61469, // open
 	{"NPC_AR_TOWNSOLDIER_2", 22617, 18095, -4326, 2417}:           32455, // open
 	{"NPC_AR_TOWNSOLDIER_3", 22874, 13379, -4307, 498}:            14444, // open
-	{"NPC_AR_TOWNSOLDIER_4", 22874, 15056, -4306, 508}:            35268, // open
+	{"NPC_AR_TOWNSOLDIER_4", 22874, 15056, -4306, 508}:            19344, // owner: toward X -8490 Y -569
 	{"NPC_AR_TOWNSOLDIER_5", 22362, 15518, -4333, 3754}:           49282, // open
 	{"NPC_AR_TOWNSOLDIER_6", 22362, 16740, -4333, 3736}:           53161, // open
-	{"NPC_AR_TOWNSOLDIER_7", 22875, 16091, -4305, 1320}:           52936, // open
-	{"NPC_AR_TOWNSOLDIER_8", 22875, 16421, -4305, 131}:            24675, // open
-	{"NPC_AR_TOWNSOLDIER_9", 22620, 2538, -4305, 7410}:            28887, // open
+	{"NPC_AR_TOWNSOLDIER_7", 22875, 16091, -4305, 1320}:           36847, // owner: toward X -8290 Y -564
+	{"NPC_AR_TOWNSOLDIER_8", 22875, 16421, -4305, 131}:            36809, // owner: toward X -8287 Y -576
+	{"NPC_AR_TOWNSOLDIER_9", 22620, 2538, -4305, 7410}:            36049, // owner: toward X -8234 Y -695
 	{"NPC_AR_WAREHOUSE", 22106, 14886, -4333, 16828}:              61570, // shop
 	{"NPC_AR_YAMAIN", 22106, 12857, -4321, 7692}:                  214,   // open
-	{"NPC_AR_ZBAYDA", 22107, 4571, -4333, 16486}:                  42638, // open
+	{"NPC_AR_ZBAYDA", 22107, 4571, -4333, 16486}:                  35973, // owner: toward X -8405 Y -988
 	{"NPC_BOSS_DUNGEON_PRIEST", 22106, 16913, -4333, 16288}:       32850, // open
 	{"NPC_CH_EVENT_CLOWN_BALLOON", 22106, 13895, -4203, 14884}:    49171, // open
 	{"NPC_CH_EVENT_KISAENG1", 22106, 14995, -4324, 14256}:         20308, // open
