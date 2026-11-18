@@ -21,10 +21,26 @@ case "$role" in
     provision)
         # Creates what is missing and never replaces what exists.
         sro-provision-identity -state-dir /cluster
-        if [ -d /data/shard/authority ]; then
-            exit 0
+        if [ ! -d /data/shard/authority ]; then
+            # Not exec'd: the operator token below needs the directory. The pid it
+            # leaves in the lock is harmless: the lock keeps its write instant, and a
+            # process born after it is never taken for the owner (store/lockfile.go).
+            sro-init -shard "${SRO_SHARD_ID:?SRO_SHARD_ID is required}" -authority-dir /data/shard/authority
         fi
-        exec sro-init -shard "${SRO_SHARD_ID:?SRO_SHARD_ID is required}" -authority-dir /data/shard/authority
+        # The GameWorld turns its operator API on only when this file exists
+        # (player_operations.go); the admin panel holds the same token.
+        umask 077
+        token=/data/shard/authority/operator-token
+        if [ ! -s "$token" ]; then
+            head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$token.tmp"
+            mv "$token.tmp" "$token"
+        fi
+        # The panel's copies: it mounts this volume alone, never the cluster
+        # secrets (the session key ring) or the shard's database.
+        if [ -d /admin ]; then
+            cp "$token" /admin/operator-token
+            cp /cluster/agent-provisioning-token /admin/agent-provisioning-token
+        fi
         ;;
     upgrade)
         # Commits the current schema when the authority is older and is a no-op when it is

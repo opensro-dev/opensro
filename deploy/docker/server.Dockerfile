@@ -31,8 +31,8 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd -g 10001 sro && useradd -u 10001 -g sro -d /app -s /usr/sbin/nologin sro \
- && mkdir -p /cluster /data/agent /data/shard /cache/game-data \
- && chown sro:sro /cluster /data/agent /data/shard /cache/game-data
+ && mkdir -p /cluster /data/agent /data/shard /cache/game-data /admin \
+ && chown sro:sro /cluster /data/agent /data/shard /cache/game-data /admin
 WORKDIR /app
 COPY --from=build /out/bin/ /app/bin/
 # The binaries read config/ relative to the working directory

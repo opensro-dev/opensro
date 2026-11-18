@@ -1,0 +1,197 @@
+<!doctype html>
+<!--
+page.html - the panel's one page: the character sheet with its operations,
+or the account forms. Rendered by panel.go (pageData).
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenSRO Admin</title>
+<style>
+	:root { --bg: #f6f6f4; --card: #fff; --text: #1d1d1b; --muted: #6b6b66; --line: #ddddd8; --accent: #2d5a8a; --ok: #2e7d4f; --bad: #b3261e; }
+	@media (prefers-color-scheme: dark) {
+		:root { --bg: #161615; --card: #20201f; --text: #ececea; --muted: #9a9a94; --line: #34342f; --accent: #7aa7d6; --ok: #6cc28f; --bad: #f08a80; }
+	}
+	* { box-sizing: border-box; }
+	body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, sans-serif; }
+	header { display: flex; gap: 20px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--card); }
+	header strong { margin-right: 12px; }
+	header a { color: var(--muted); text-decoration: none; }
+	header a.on { color: var(--accent); font-weight: 600; }
+	main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
+	.flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; border: 1px solid; }
+	.flash.ok { color: var(--ok); border-color: var(--ok); }
+	.flash.bad { color: var(--bad); border-color: var(--bad); }
+	.card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+	.card h2 { margin: 0 0 12px; font-size: 16px; }
+	.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+	.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+	.stats div { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+	.stats span { display: block; color: var(--muted); font-size: 12px; }
+	form.op { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+	form.op h3 { flex-basis: 100%; margin: 0; font-size: 14px; }
+	label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 2px; }
+	input, select, button { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--text); }
+	input.reason { flex: 1 1 200px; }
+	button { background: var(--accent); color: #fff; border-color: var(--accent); cursor: pointer; }
+	button.danger { background: var(--bad); border-color: var(--bad); }
+	pre { overflow: auto; max-height: 480px; font-size: 12px; }
+	.muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+	<strong>OpenSRO Admin</strong>
+	<a href="/character" {{if eq .Page "character"}}class="on"{{end}}>Personagens</a>
+	<a href="/accounts" {{if eq .Page "accounts"}}class="on"{{end}}>Contas</a>
+</header>
+<main>
+{{if .OK}}<div class="flash ok">{{.OK}}</div>{{end}}
+{{if .Error}}<div class="flash bad">{{.Error}}</div>{{end}}
+
+{{if eq .Page "character"}}
+	<div class="card">
+		<form method="get" action="/character" class="op">
+			<label>Nome exato do personagem <input name="name" value="{{.Name}}" required autofocus></label>
+			<button>Buscar</button>
+		</form>
+	</div>
+
+	{{with .Character}}
+	{{$c := .}}
+	<div class="card">
+		<h2>{{field $c "name"}}</h2>
+		<div class="stats">
+			<div><span>Level</span>{{field $c "level"}}</div>
+			<div><span>Level máximo</span>{{field $c "maxLevel"}}</div>
+			<div><span>EXP no level</span>{{field $c "experience"}}</div>
+			<div><span>SP</span>{{field $c "skillPoints"}}</div>
+			<div><span>Pontos de status</span>{{field $c "statPoints"}}</div>
+			<div><span>STR / INT</span>{{field $c "strength"}} / {{field $c "intellect"}}</div>
+			<div><span>Gold</span>{{field $c "gold"}}</div>
+			<div><span>HP / MP</span>{{field $c "hp"}} / {{field $c "mp"}}</div>
+			<div><span>Online</span>{{field $c "bound"}}</div>
+		</div>
+		<p class="muted">Toda alteração desconecta o jogador antes de gravar; ele reconecta já com o valor novo. O motivo vai para o log de auditoria do shard.</p>
+	</div>
+
+	<div class="grid">
+		<div class="card"><form method="post" action="/character" class="op">
+			<h3>Definir level</h3>
+			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="action" value="set-level">
+			<label>Level <input name="level" type="number" min="1" max="140" required></label>
+			<input class="reason" name="reason" placeholder="Motivo (mín. 5 letras)" minlength="5" required>
+			<button>Aplicar</button>
+		</form></div>
+
+		<div class="card"><form method="post" action="/character" class="op">
+			<h3>Definir SP</h3>
+			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="action" value="set-sp">
+			<label>SP <input name="skillPoints" type="number" min="0" required></label>
+			<input class="reason" name="reason" placeholder="Motivo" minlength="5" required>
+			<button>Aplicar</button>
+		</form></div>
+
+		<div class="card"><form method="post" action="/character" class="op">
+			<h3>Dar silk</h3>
+			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="action" value="grant-silk">
+			<label>Silk <input name="silk" type="number" min="1" required></label>
+			<input class="reason" name="reason" placeholder="Motivo" minlength="5" required>
+			<button>Aplicar</button>
+		</form></div>
+
+		<div class="card"><form method="post" action="/character" class="op">
+			<h3>Ajustar gold (negativo tira)</h3>
+			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="action" value="adjust-gold">
+			<label>Gold <input name="gold" type="number" required></label>
+			<input class="reason" name="reason" placeholder="Motivo" minlength="5" required>
+			<button>Aplicar</button>
+		</form></div>
+
+		<div class="card"><form method="post" action="/character" class="op">
+			<h3>Dar item</h3>
+			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="action" value="grant-items">
+			<label>Codename <input name="codename" placeholder="ITEM_ETC_..." required></label>
+			<label>Qtd <input name="count" type="number" min="1" value="1" required></label>
+			<input class="reason" name="reason" placeholder="Motivo" minlength="5" required>
+			<button>Aplicar</button>
+		</form></div>
+
+		<div class="card"><form method="post" action="/character" class="op">
+			<h3>Resgatar para cidade</h3>
+			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="action" value="rescue">
+			<label>Cidade <select name="town">{{range $.Towns}}<option value="{{field . "id"}}">{{field . "code"}}</option>{{end}}</select></label>
+			<input class="reason" name="reason" placeholder="Motivo" minlength="5" required>
+			<button>Aplicar</button>
+		</form></div>
+
+		<div class="card"><form method="post" action="/character" class="op">
+			<h3>Resetar status / limpar PK</h3>
+			<input type="hidden" name="name" value="{{$.Name}}">
+			<label>Ação <select name="action"><option value="reset-stats">Resetar STR/INT</option><option value="clear-pk">Limpar PK</option></select></label>
+			<input class="reason" name="reason" placeholder="Motivo" minlength="5" required>
+			<button>Aplicar</button>
+		</form></div>
+
+		<div class="card"><form method="post" action="/character" class="op">
+			<h3>Conduta</h3>
+			<input type="hidden" name="name" value="{{$.Name}}">
+			<label>Ação <select name="action"><option value="mute-chat">Mutar chat</option><option value="unmute-chat">Desmutar</option><option value="kick">Kickar</option></select></label>
+			<label>Minutos (mute) <input name="minutes" type="number" min="1" value="60"></label>
+			<label>Regra <input name="clause" placeholder="C2" required></label>
+			<input class="reason" name="reason" placeholder="Motivo" minlength="5" required>
+			<button class="danger">Aplicar</button>
+		</form></div>
+
+		<div class="card"><form method="post" action="/character" class="op">
+			<h3>Remover emblema</h3>
+			<input type="hidden" name="name" value="{{$.Name}}"><input type="hidden" name="action" value="remove-crest">
+			<label>De <select name="crest"><option value="guild">Guild</option><option value="union">União</option></select></label>
+			<input class="reason" name="reason" placeholder="Motivo" minlength="5" required>
+			<button class="danger">Aplicar</button>
+		</form></div>
+	</div>
+
+	<details class="card"><summary>Dados completos</summary><pre>{{$.Raw}}</pre></details>
+	{{end}}
+{{end}}
+
+{{if eq .Page "accounts"}}
+	<div class="grid">
+		<div class="card"><form method="post" action="/accounts" class="op" autocomplete="off">
+			<h3>Criar conta</h3>
+			<input type="hidden" name="action" value="create">
+			<label>Login <input name="id" maxlength="64" required></label>
+			<label>Senha <input name="password" type="password" required></label>
+			<label>Confirmar <input name="confirm" type="password" required></label>
+			<button>Criar</button>
+		</form></div>
+
+		<div class="card"><form method="post" action="/accounts" class="op" autocomplete="off">
+			<h3>Trocar senha</h3>
+			<input type="hidden" name="action" value="password">
+			<label>Login <input name="id" value="{{.Account}}" required></label>
+			<label>Nova senha <input name="password" type="password" required></label>
+			<label>Confirmar <input name="confirm" type="password" required></label>
+			<button>Trocar</button>
+		</form></div>
+
+		<div class="card"><form method="post" action="/accounts" class="op">
+			<h3>Desativar / reativar</h3>
+			<label>Login <input name="id" value="{{.Account}}" required></label>
+			<label>Ação <select name="action"><option value="disable">Desativar</option><option value="enable">Reativar</option></select></label>
+			<button class="danger">Aplicar</button>
+		</form></div>
+
+		<div class="card"><form method="get" action="/accounts" class="op">
+			<h3>Consultar conta</h3>
+			<label>Login <input name="id" value="{{.Account}}" required></label>
+			<button>Consultar</button>
+		</form></div>
+	</div>
+	{{if .Raw}}<div class="card"><h2>{{.Account}}</h2><pre>{{.Raw}}</pre></div>{{end}}
+{{end}}
+</main>
+</body>
+</html>

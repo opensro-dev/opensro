@@ -89,7 +89,7 @@ if ! err="$(docker network inspect traefik 2>&1 >/dev/null)"; then fail "docker 
 
 if [ "${ROLLOUT_SKIP_PULL:-}" != 1 ]; then
     echo "==> pull $IMAGE_REPO:<role>-$IMAGE_TAG"
-    compose --profile jobs pull provision derive-public agent identity web \
+    compose --profile jobs pull provision derive-public agent identity web admin admin-relay \
         || fail "pull failed: is $IMAGE_TAG published, and did $(whoami) run 'docker login ${IMAGE_REPO%%/*}'?"
     # Pulled now, not at the backup: nothing may fetch from the network once the game is down.
     docker pull -q "$BACKUP_IMAGE" >/dev/null || fail "cannot pull $BACKUP_IMAGE for the backup"
@@ -98,7 +98,7 @@ fi
 # An image of another architecture only fails at its first exec: check before anything stops.
 host_arch="$(docker info --format '{{.Architecture}}')"
 case "$host_arch" in x86_64) host_arch=amd64 ;; aarch64) host_arch=arm64 ;; esac
-for role in server identity web; do
+for role in server identity web admin; do
     image_arch="$(docker image inspect --format '{{.Architecture}}' "$IMAGE_REPO:$role-$IMAGE_TAG")" \
         || fail "$IMAGE_REPO:$role-$IMAGE_TAG is not on this host"
     [ "$image_arch" = "$host_arch" ] || fail "$IMAGE_REPO:$role-$IMAGE_TAG is $image_arch, this host is $host_arch"
@@ -131,7 +131,8 @@ recover() {
             compose() { docker compose -p "$0" -f docker-compose.prod.yml --env-file .env.prod "$@"; }
             compose up -d identity &&
             compose up -d --wait --force-recreate --no-deps agent &&
-            compose up -d --wait gameworld-global-official web' "$PROJECT" >&2 \
+            compose up -d --wait gameworld-global-official web &&
+            { compose up -d --force-recreate --no-deps admin-relay admin || true; }' "$PROJECT" >&2 \
             || echo "rollout: the previous release did not come back; the stack is DOWN" >&2
     else
         echo "rollout: the stack is DOWN (stage: $stage). The backup taken before the upgrade is ${backup:-none}; see README \"Backups\"" >&2
@@ -176,6 +177,9 @@ echo "==> start"
 compose up -d identity
 compose up -d --wait --force-recreate --no-deps agent
 compose up -d --wait gameworld-global-official web
+# The panel and its relay live in the GameWorld's and identity's namespaces:
+# recreated after them, never left in a namespace that is gone.
+compose up -d --force-recreate --no-deps admin-relay admin
 compose ps
 stage=up
 
@@ -199,7 +203,7 @@ keep_release="$(sed -nE 's/^PREVIOUS_ASSETS_RELEASE=(.*)$/\1/p' release.env)"
 
 # This stack's images only: the tag that is up and the previous one stay.
 docker image ls "$IMAGE_REPO" --format '{{.Tag}}' | while read -r tag; do
-    case "$tag" in server-*|identity-*|web-*) ;; *) continue ;; esac
+    case "$tag" in server-*|identity-*|web-*|admin-*) ;; *) continue ;; esac
     case "${tag#*-}" in "$IMAGE_TAG"|"$keep_tag") continue ;; esac
     docker image rm "$IMAGE_REPO:$tag" >/dev/null 2>&1 || true
 done
