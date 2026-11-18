@@ -16,6 +16,7 @@ import { defaultUiTuning, type UiTuning, uiTuningFrom } from "@/engine/foundatio
 import { EVENT_EXCHANGE_FUNCTION } from "@/engine/foundation/ui/npc-talk";
 import { guildBanRefused, guildSoldierRefusal } from "@/engine/foundation/gameplay/guild-manager";
 import { advanceGuildWarClock } from "@/engine/foundation/gameplay/guild-war";
+import { exchangeOpenWarning } from "@/engine/foundation/gameplay/exchange";
 import { planarDistance, sameCoordinateSpace } from "@/engine/foundation/world/world-space";
 import { createSpeedJournal, type SpeedFrameRow } from "@/engine/foundation/gameplay/speed-journal";
 import {
@@ -3658,9 +3659,13 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind.startsWith( "exchange-" ) ) {
 				if ( !localGid ) throw Error( "Local player is not initialized" );
-				return inventory.exchangeCommand(
+				const frame = inventory.exchangeCommand(
 					command as import("@/engine/foundation/gameplay/exchange").ExchangeCommand
 				);
+				// The first Confirm's reaffirm line (exchangeConfirmWarning).
+				const warning = inventory.takeExchangeNotice();
+				if ( warning ) api.notice( warning );
+				return frame;
 			}
 			if ( command.kind === "action-command" ) {
 				// 695420 case 1006: the selected player is asked to trade (0x7237).
@@ -4906,9 +4911,24 @@ Packet handling must not depend on which HUD panel is currently open.
 				}
 				// The exchange window (inventory owner) folds its frames first; its
 				// confirm, approve and cancel refusals stay the social lane's notices.
+				const exchangeWasOpen = inventory.exchangeState().open;
 				const exchangeNotice = inventory.exchangeReceive( frame );
 				if ( exchangeNotice !== null ) {
 					dirty = true;
+					const opened = inventory.exchangeState();
+					if ( !exchangeWasOpen && opened.open ) {
+						const partner = readEntity( opened.partner );
+						const warning = exchangeOpenWarning( {
+							partnerName: partner?.name ?? "",
+							partnerGuild: partner?.guildName ?? "",
+							friends: friends.state().rows.map( row => row.name ),
+							guildMembers: social.guild?.members.map( member => member.name ) ?? [],
+							unionGuilds: social.alliances?.map( guild => guild.name ) ?? []
+						} );
+						if ( warning ) {
+							notices = [ ...notices.slice( -99 ), { ...warning, sequence: ++noticeSequence } ];
+						}
+					}
 					if ( exchangeNotice ) {
 						const notice = inventoryNotice( 0xb06d, Uint8Array.of( 2, exchangeNotice ), localCountry );
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
