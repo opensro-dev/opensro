@@ -187,6 +187,7 @@
 		"weather-publication.test.mjs",
 		"window-fit.test.mjs",
 		"window-position-lifecycle.test.mjs",
+		"wing-retained-cast.test.mjs",
 		"wolf-effects.test.mjs",
 		"wolf-howl.test.mjs",
 		"world-compound.test.mjs",
