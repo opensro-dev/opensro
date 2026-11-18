@@ -54,6 +54,7 @@ fi
 cp "$DEPLOY_DIR/docker-compose.prod.yml" "$DEPLOY_DIR/rollout.sh" "$stack/"
 cp -R "$DEPLOY_DIR/config" "$stack/config"
 printf 'SRO_DOMAIN=localhost\nLOG_LEVEL=info\n' > "$stack/.env.prod"
+cp "$DEPLOY_DIR/shard-pvp.env.example" "$stack/shard-pvp.env"
 for release in r1 r2; do
     mkdir -p "$stack/assets/releases/$release/assets/packs"
     echo "{\"release\":\"$release\"}" > "$stack/assets/releases/$release/assets/packs/manifest.json"
@@ -135,6 +136,7 @@ while [ $SECONDS -lt $until_at ]; do
     fi
     compose exec -T agent curl -fsS -o /dev/null http://127.0.0.1:8080/jwks.json || fail "g: the JWKS is gone after the Agent restarted"
     [ "$(compose ps --format '{{.Health}}' gameworld-global-official)" = healthy ] || fail "g: the GameWorld is not healthy"
+    [ "$(compose ps --format '{{.Health}}' gameworld-pvp)" = healthy ] || fail "g: the PVP GameWorld is not healthy"
     sleep 5
 done
 echo "ok    g"

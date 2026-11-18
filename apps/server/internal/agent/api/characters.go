@@ -89,6 +89,16 @@ type CharacterCreationValidator func(*domain.Character) bool
 
 /*
 ================
+CharacterPreparer
+
+Finishes a validated new character before it is stored (port-only, not
+native: the PVP shard). An error refuses the creation.
+================
+*/
+type CharacterPreparer func(*domain.Character) error
+
+/*
+================
 CharacterNameValidator
 ================
 */
@@ -266,6 +276,15 @@ func (api *API) handleCharacterCreate(w http.ResponseWriter, r *http.Request) {
 	if !api.characterCreationValid(character) {
 		refuse(errCodeInvalidChargen)
 		return
+	}
+	// Port-only, not native: the PVP shard finishes the record here, before
+	// the store's creation seeds, which fill only what is still empty.
+	if api.prepareCharacter != nil {
+		if err := api.prepareCharacter(character); err != nil {
+			log.WithError(err).Warn("character create: prepare refused")
+			refuse(errCodeInvalidChargen)
+			return
+		}
 	}
 	if err := api.store.CreateCharacter(division, requestAccountID(r), character); err != nil {
 		// The store's own validation is the authority; map its refusal

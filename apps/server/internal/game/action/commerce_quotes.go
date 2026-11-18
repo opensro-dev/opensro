@@ -75,7 +75,7 @@ func (rt *Runtime) shopSaleQuotes(division string, c *enterworld.Character, npc 
 				continue
 			}
 			price, _, valid := commerce.SalePrices(ref, item.MagicOptions, rt.Commerce.Magic, rt.commerceTax(division, npc, c))
-			if enterworld.FreeGrantItem(item.Codename) {
+			if enterworld.FreeGrantItem(item.Codename) || rt.PvpServer {
 				// The quote shows the 0 the sale will pay (#3308).
 				price = 0
 			}

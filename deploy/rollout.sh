@@ -36,7 +36,7 @@ if [ "${1:-}" = "--rollback" ]; then rollback=1; fi
 PROJECT="${COMPOSE_PROJECT_NAME:-silkroad}"
 KEEP_BACKUPS=5
 KEEP_RELEASES=2
-STATE_VOLUMES=(cluster agent identity shard-global-official)
+STATE_VOLUMES=(cluster agent identity shard-global-official shard-pvp)
 BACKUP_IMAGE="${ROLLOUT_BACKUP_IMAGE:-alpine:3.20}"
 
 fail() { echo "rollout: $*" >&2; exit 1; }
@@ -48,6 +48,8 @@ if grep -q '=change-me' .env.prod; then
     fail "$PWD/.env.prod still has change-me values"
 fi
 grep -Eq '^SRO_DOMAIN=.+' .env.prod || fail "$PWD/.env.prod has no SRO_DOMAIN"
+# The PVP shard must not come up native (port-only, pvpserver).
+[ -f shard-pvp.env ] || fail "missing $PWD/shard-pvp.env: cp shard-pvp.env.example shard-pvp.env"
 
 release_value() { sed -nE "s/^$1=(.*)$/\1/p" release.env 2>/dev/null; }
 
@@ -106,6 +108,7 @@ done
 
 echo "==> provision"
 compose run --rm provision
+compose run --rm provision-pvp
 compose run --rm derive-public
 
 if ! compose run --rm -T --no-deps --entrypoint test provision -e /cluster/accounts.json; then
@@ -141,8 +144,8 @@ recover() {
 }
 trap recover EXIT
 
-echo "==> stop the GameWorld, then the Agent"
-compose stop gameworld-global-official
+echo "==> stop the GameWorlds, then the Agent"
+compose stop gameworld-global-official gameworld-pvp
 compose stop agent
 
 mkdir -p backups
@@ -158,12 +161,16 @@ ls -1 backups/silkroad-*.tar.gz | sort -r | tail -n +$((KEEP_BACKUPS + 1)) | xar
 echo "==> upgrade"
 stage=upgrade
 upgrade_report="$(compose run --rm upgrade 2>&1)"
+upgrade_report_pvp="$(compose run --rm upgrade-pvp 2>&1)"
 echo "$upgrade_report"
+echo "$upgrade_report_pvp"
 upgraded=0
-case "$upgrade_report" in
-    *"already in the current format"*|*"no authority yet"*) ;;
-    *) upgraded=1 ;;
-esac
+for report in "$upgrade_report" "$upgrade_report_pvp"; do
+    case "$report" in
+        *"already in the current format"*|*"no authority yet"*) ;;
+        *) upgraded=1 ;;
+    esac
+done
 stage=starting
 
 echo "==> assets $ASSETS_RELEASE"
@@ -176,7 +183,7 @@ echo "==> start"
 # is always recreated after it.
 compose up -d identity
 compose up -d --wait --force-recreate --no-deps agent
-compose up -d --wait gameworld-global-official web
+compose up -d --wait gameworld-global-official gameworld-pvp web
 # The panel and its relay live in the GameWorld's and identity's namespaces:
 # recreated after them, never left in a namespace that is gone.
 compose up -d --force-recreate --no-deps admin-relay admin

@@ -38,7 +38,7 @@ cleanup() {
     status=$?
     if [ "$status" -ne 0 ]; then
         echo "smoke: FAILED; last log lines:" >&2
-        compose logs --tail 40 agent gameworld-global-official web >&2 2>/dev/null || true
+        compose logs --tail 40 agent gameworld-global-official gameworld-pvp web >&2 2>/dev/null || true
     fi
     if [ "$keep" = 0 ]; then compose down -v --remove-orphans >/dev/null 2>&1 || true; fi
     exit "$status"
@@ -61,8 +61,12 @@ check() { # name, url
 
 compose down -v --remove-orphans >/dev/null 2>&1 || true
 
+# The PVP GameWorld requires its env file; the example turns the shard on.
+[ -f "$DEPLOY_DIR/shard-pvp.env" ] || cp "$DEPLOY_DIR/shard-pvp.env.example" "$DEPLOY_DIR/shard-pvp.env"
+
 echo "==> provision"
 compose run --rm provision
+compose run --rm provision-pvp
 compose run --rm derive-public
 
 echo "==> seed account"
@@ -74,12 +78,14 @@ printf '[{"id":"smoke","passwordHash":"%s"}]\n' "$hash" \
 
 echo "==> upgrade"
 compose run --rm upgrade
+compose run --rm upgrade-pvp
 
 echo "==> up"
-compose up -d --wait agent identity gameworld-global-official web
+compose up -d --wait agent identity gameworld-global-official gameworld-pvp web
 
 check "agent through /api" "$base/api/readyz"
 check "gameworld through /shards" "$base/shards/global-official/transport/readyz"
+check "pvp gameworld through /shards" "$base/shards/pvp/transport/readyz"
 check "client page" "$base/play"
 check "packs manifest" "$base/assets/packs/manifest.json"
 check "boot screen image" "$base/assets/images/Media_extracted/interface/outer/logo-big.png"

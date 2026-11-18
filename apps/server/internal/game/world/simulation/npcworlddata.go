@@ -127,6 +127,8 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 			}
 		}
 	}
+	// Port-only, not native: Samarkand's PVP tabs, on the PVP shard only.
+	applyPvpShops(roster, textdataDir)
 	return appendMagicPopMachines(roster, refs, lookups)
 }
 

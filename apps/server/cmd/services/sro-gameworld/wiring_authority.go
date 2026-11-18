@@ -25,6 +25,8 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/pvpserver"
+	"opensro.online/server/internal/game/pvpserver/pvpcharacter"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/social/crest"
 	"opensro.online/server/internal/game/world/monster"
@@ -363,6 +365,25 @@ func openAuthorityPlane(
 			row, ok := textdata.Skills.SkillByID(id)
 			return row.Group, ok
 		},
+	}
+	// Port-only, not native: the PVP shard creates every character finished
+	// (pvpserver). An unreadable switch refuses startup.
+	pvp, err := pvpserver.Enabled(ownedShard.ID, os.Getenv)
+	if err != nil {
+		authorityStore.Close()
+		return authorityPlane{}, err
+	}
+	if pvp {
+		seedSkills := enterworld.DefaultSkillSeeder(textdata.Skills)
+		config.PrepareCharacter = func(character *domain.Character) error {
+			base, err := seedSkills(domain.ResolveCharacterRaceKey(character), nil)
+			if err != nil {
+				return err
+			}
+			pvpcharacter.Prepare(character, base, textdata.Skills, levelCap)
+			return nil
+		}
+		log.Infof("pvp shard: characters are created at level %d in Samarkand", levelCap)
 	}
 	config.CharacterInPlay = func(divisionID, characterName string) bool {
 		key := divisionID + ":" + strings.ToLower(characterName)

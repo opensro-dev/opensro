@@ -94,3 +94,19 @@ IMAGE_TAG=<commit>-vsro188-v1696 SKIP_PUBLISH=1 deploy/deploy.sh
 Os `shard.env` anteriores ficam em `~/silkroad/backups/shard.env.before-*` no host. Tags publicadas:
 `bab11e986a77-vsro188-v1696` (atual), `bab11e986a77-vsro188` (só 1.188), `dc3147229962` (v1.150).
 Voltar o cap não desfaz níveis acima de 90 já ganhos.
+
+## Shard PVP
+
+Port-only, não nativo (`docs/superpowers/specs/2026-11-17-pvp-shard-design.md`). A stack roda um segundo
+gameworld, `gameworld-pvp`, com volume `shard-pvp`, rota `/shards/pvp/transport/` e o shard `pvp` no
+catálogo (`config/shards.prod.json`). Ele lê o `shard.env` (as flags de conteúdo) e depois o
+`shard-pvp.env`, que vence. No host, antes do primeiro rollout com o PVP:
+
+```sh
+cp shard-pvp.env.example ~/silkroad/shard-pvp.env   # SRO_PVP_SERVER=on, SRO_LEVEL_CAP=110, SRO_BETA_MASTERY=on
+```
+
+`SRO_PVP_SERVER` só age no shard cujo id é `pvp`; em outro shard é ignorado com um aviso. Com ele ligado:
+personagem criado no nível do cap, com todas as masteries e skills, 100.000.000 de ouro, em Samarkand;
+o ferreiro, o armadureiro e o vendedor de acessórios de Samarkand vendem D11 raro +12 e as pedras de grau
+11 a 1 de ouro; vender para NPC paga 0.

@@ -410,6 +410,11 @@ type Runtime struct {
 	// operator's beta starter kit, SRO_BETA_STARTER_KIT). Set once at wiring.
 	UnlimitedItems map[string]bool
 
+	// PvpServer marks the PVP shard (port-only, not native: pvpserver):
+	// every merchant sale pays 0, since the shard sells its gear at one
+	// gold. Set once at wiring.
+	PvpServer bool
+
 	// combatCopy, when set, replaces the combat roots' narrow copy
 	// (characterSnapshotCombat); only the combat-copy differential test
 	// sets it, to the full copy. Nil is the narrow copy.

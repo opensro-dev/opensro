@@ -169,6 +169,11 @@ type Config struct {
 	// CharacterCreationValid is the gameplay-owned validator for authored
 	// model, weapon and protector combinations. The API only decodes requests.
 	CharacterCreationValid CharacterCreationValidator
+	// PrepareCharacter, when set, finishes a validated new character before
+	// the store saves it (port-only, not native: the PVP shard,
+	// pvpserver/pvpcharacter). nil creates it exactly as the native rules do;
+	// an error refuses the creation.
+	PrepareCharacter CharacterPreparer
 	// CharacterNameAllowed applies the gameplay-owned immutable name filter.
 	// Creation and its pre-check require the same rule before admission.
 	CharacterNameAllowed CharacterNameValidator
@@ -251,6 +256,7 @@ type API struct {
 	store                   *store.Store
 	characterPresentation   CharacterPresentationProjector
 	characterCreationValid  CharacterCreationValidator
+	prepareCharacter        CharacterPreparer
 	characterNameAllowed    CharacterNameValidator
 	authoredAreas           *worldarea.Catalog
 	marksDir                string // "" = no crest art hosted
@@ -328,6 +334,7 @@ func New(config Config) (*API, error) {
 		store:                   config.Store,
 		characterPresentation:   config.CharacterPresentation,
 		characterCreationValid:  config.CharacterCreationValid,
+		prepareCharacter:        config.PrepareCharacter,
 		characterNameAllowed:    config.CharacterNameAllowed,
 		authoredAreas:           config.AuthoredAreas,
 		marksDir:                config.MarksDir,

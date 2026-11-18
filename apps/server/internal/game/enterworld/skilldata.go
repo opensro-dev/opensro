@@ -589,6 +589,21 @@ func (t *TextdataSkills) SkillByID(id uint32) (SkillRow, bool) {
 
 /*
 ================
+EachSkill
+
+Visits every loaded row. The PVP shard reads the whole table to learn a
+new character every skill of its masteries (pvpserver/pvpcharacter).
+================
+*/
+func (t *TextdataSkills) EachSkill(visit func(row SkillRow)) {
+	t.once.Do(t.load)
+	for _, row := range t.rows.values() {
+		visit(row)
+	}
+}
+
+/*
+================
 SkillGroupRank
 
 The same row's group and level as SkillByID answers, without building the
