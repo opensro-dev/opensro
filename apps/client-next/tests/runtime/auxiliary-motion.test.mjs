@@ -18,19 +18,23 @@ const { castAnimating, auxiliaryLocomotion } = await import(
 	"../../src/engine/foundation/animation/auxiliary-motion.ts"
 );
 
+/** @type {import("../../src/engine/foundation/animation/auxiliary-motion.ts").AuxiliaryMotionInput} */
 const RUNNING = { mounted: false, dead: false, casting: false, moving: true, gait: "run" };
+// A cast row as gameplay.casts holds it; castAnimating reads only cancelledAtMs.
+const CAST = { token: 7, cancelledAtMs: undefined };
+const CANCELLED = { token: 7, cancelledAtMs: 1200 };
 
 test("a retained cast with no playing action layers no longer counts as casting", () => {
 	// The self buff's cast after its animation: still in gameplay.casts,
 	// uncancelled, no action layers.
-	assert.equal( castAnimating( { token: 7 }, 0 ), false );
-	assert.equal( castAnimating( { token: 7 }, 1 ), true );
-	assert.equal( castAnimating( { token: 7, cancelledAtMs: 1200 }, 1 ), false );
+	assert.equal( castAnimating( CAST, 0 ), false );
+	assert.equal( castAnimating( CAST, 1 ), true );
+	assert.equal( castAnimating( CANCELLED, 1 ), false );
 	assert.equal( castAnimating( undefined, 1 ), false );
 });
 
 test("the wings run with a running owner whose buff cast is only retained", () => {
-	const retained = castAnimating( { token: 7 }, 0 );
+	const retained = castAnimating( CAST, 0 );
 	assert.equal( auxiliaryLocomotion( { ...RUNNING, casting: retained } ), "run" );
 });
 
