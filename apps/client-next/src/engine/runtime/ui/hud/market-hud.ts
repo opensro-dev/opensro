@@ -59,10 +59,12 @@ export const MARKET_MENUS: readonly MarketMenu[] = [ "degree", "race", "rarity",
 export const MARKET_HOTKEY_VK = 0x4b;
 // A refusal or a success stays on the window's status line this long.
 export const MARKET_STATUS_MS = 8000;
-// The rows one page of the account's own lists shows.
-export const MARKET_MINE_ROWS = 8;
-// The rows one page of an offer list shows.
-export const MARKET_OFFER_ROWS = 7;
+// The rows one page of each of the account's lists shows: as many as fit
+// above the page's footer (the pages, the destination and the answers),
+// so a full page never runs under its buttons (market-window.ts).
+export const MARKET_MINE_ROWS = 7;
+export const MARKET_OFFER_ROWS = 6;
+export const MARKET_HISTORY_ROWS = 6;
 // The bag picker's cells: seven columns, six rows a page.
 export const MARKET_BAG_COLUMNS = 7;
 export const MARKET_BAG_ROWS = 6;
@@ -125,6 +127,8 @@ export interface MarketHudState {
 	// My listings: the picked listing, the page and where a returned item goes.
 	readonly mineSelected: number;
 	readonly minePage: number;
+	// History: its page.
+	readonly historyPage: number;
 	readonly returnTo: MarketDestination;
 	// Offers: the list shown (received or made), the picked offer, "in:<id>"
 	// or "out:<id>", and each list's page.
@@ -184,6 +188,7 @@ const CLOSED: MarketHudState = {
 	anonymous: false,
 	mineSelected: 0,
 	minePage: 0,
+	historyPage: 0,
 	returnTo: "bag",
 	offerSide: "in",
 	offerSelected: "",
@@ -192,6 +197,54 @@ const CLOSED: MarketHudState = {
 	status: null,
 	noticeSeen: 0
 };
+
+/*
+================
+marketHistoryCount
+
+The History page's entries: what the account bought and its listings
+that sold.
+================
+*/
+export function marketHistoryCount( mine: MarketState["mine"] | undefined ): number {
+	return (mine?.purchases.length ?? 0) + (mine?.listings.filter( row => row.state === "sold" ).length ?? 0);
+}
+
+/*
+================
+marketActiveListings
+
+The account's listings that count toward the cap: open and held (the
+store's countActiveListings).
+================
+*/
+export function marketActiveListings( mine: MarketState["mine"] | undefined ): number {
+	return mine?.listings.filter( row => row.state === "open" || row.state === "held" ).length ?? 0;
+}
+
+/*
+================
+marketListingsFull
+
+Whether the account is at its listing cap: the server refuses another
+(store MarketList, ErrMarketCap), so the window says so before the click.
+================
+*/
+export function marketListingsFull( mine: MarketState["mine"] | undefined ): boolean {
+	return !!mine && marketActiveListings( mine ) >= mine.rules.openCap;
+}
+
+/*
+================
+marketSearchNarrowed
+
+Whether the search line narrows the listings at all: a name, a category,
+a degree or a filter. The empty result offers to clear only then.
+================
+*/
+export function marketSearchNarrowed( s: MarketHudState ): boolean {
+	return !!(s.query.trim() || s.category || s.degree || s.race || s.rarity || s.currency);
+}
 
 /*
 ================
@@ -465,6 +518,21 @@ export function createMarketHud() {
 				s = { ...s, page: 1, selected: 0 };
 				return { requests: [ search( 1 ) ] };
 			}
+			// The empty result's way out: every narrowing back to its default.
+			if ( id === "market-clear-search" ) {
+				s = {
+					...s,
+					query: "",
+					category: "",
+					degree: 0,
+					race: "",
+					rarity: "",
+					currency: "",
+					page: 1,
+					selected: 0
+				};
+				return { requests: [ search( 1 ) ] };
+			}
 			// The dropdowns: a button opens its list, a choice applies and
 			// searches, and any other click closes the list.
 			if ( id.startsWith( "market-menu:" ) ) {
@@ -554,7 +622,7 @@ export function createMarketHud() {
 			}
 			if ( id === "market-list" ) {
 				const price = marketPriceValue( s.sellPrice );
-				if ( s.sellSlot < 0 || price < 1 ) return none;
+				if ( s.sellSlot < 0 || price < 1 || marketListingsFull( mine ) ) return none;
 				return write( market, {
 					op: "list",
 					slot: s.sellSlot,
@@ -574,6 +642,17 @@ export function createMarketHud() {
 				s = {
 					...s,
 					minePage: Math.min( pages - 1, Math.max( 0, s.minePage + (id === "market-mine-next" ? 1 : -1) ) )
+				};
+				return none;
+			}
+			if ( id === "market-history-prev" || id === "market-history-next" ) {
+				const pages = Math.max( 1, Math.ceil( marketHistoryCount( mine ) / MARKET_HISTORY_ROWS ) );
+				s = {
+					...s,
+					historyPage: Math.min(
+						pages - 1,
+						Math.max( 0, s.historyPage + (id === "market-history-next" ? 1 : -1) )
+					)
 				};
 				return none;
 			}

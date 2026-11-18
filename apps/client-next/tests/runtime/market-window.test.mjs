@@ -410,3 +410,140 @@ test("every page of the window draws with unique controls", () => {
 		f.dispose();
 	}
 });
+
+/*
+================
+intersects
+================
+*/
+function intersects( a, b ) {
+	return a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
+}
+
+test("full account pages page their rows and never run under their buttons", () => {
+	const { f, step } = storageKeeper( true );
+	const many = 20,
+		offer = ( id ) => ({
+			id,
+			listingId: 9,
+			currency: "gold",
+			asked: 1000,
+			price: 800,
+			buyer: "Lulu",
+			to: "bag",
+			state: "open",
+			atMs: id,
+			item: item( "Iron Sword" )
+		});
+	const base = market();
+	f.state.gameplay = {
+		...f.state.gameplay,
+		market: {
+			...base,
+			mine: {
+				...base.mine,
+				listings: Array.from(
+					{ length: many },
+					( _, i ) => row( 100 + i, { state: i % 2 ? "sold" : "open" } )
+				),
+				offersIn: Array.from( { length: many }, ( _, i ) => offer( 200 + i ) ),
+				offersOut: Array.from( { length: many }, ( _, i ) => offer( 300 + i ) ),
+				purchases: Array.from( { length: many }, ( _, i ) => ({
+					listingId: 400 + i,
+					currency: "gold",
+					price: 10,
+					fee: 0,
+					atMs: i,
+					to: "bag",
+					item: "Bow"
+				}) )
+			}
+		}
+	};
+	const rows = /^market-(mine|history|offer-in|offer-out):/;
+	try {
+		step();
+		f.ui.event( { kind: "activate", id: "market-open" } );
+		for (
+			const [tabs, pager] of [
+				[ [ "market-tab:mine" ], "market-mine-next" ],
+				[ [ "market-tab:history" ], "market-history-next" ],
+				[ [ "market-tab:offers", "market-offer-side:in" ], "market-offers-in-next" ],
+				[ [ "market-tab:offers", "market-offer-side:out" ], "market-offers-out-next" ]
+			]
+		) {
+			for ( const id of tabs ) {
+				f.ui.event( { kind: "activate", id } );
+				step();
+			}
+			const controls = [ ...step().values() ];
+			const listed = controls.filter( c => rows.test( c.id ) );
+			assert.ok( listed.length > 1, `${tabs.at( -1 )} rows` );
+			assert.equal( controls.find( c => c.id === pager )?.disabled, false, `${pager} pages the rest` );
+			const footer = controls.filter( c =>
+				c.kind === "button" && c.id.startsWith( "market-" ) && !rows.test( c.id ) &&
+				!c.id.startsWith( "market-item:" ) && !c.id.startsWith( "market-tab:" ) &&
+				!c.id.startsWith( "market-offer-side:" ) && c.rect[1] > listed[0].rect[1]
+			);
+			for ( const r of listed ) {
+				for ( const b of footer.filter( b => b.rect[0] >= listed[0].rect[0] - 1 ) ) {
+					assert.ok( !intersects( r.rect, b.rect ), `${r.id} runs under ${b.id}` );
+				}
+			}
+		}
+	} finally {
+		f.dispose();
+	}
+});
+
+test("an empty search offers to clear it, and clearing searches everything", () => {
+	const { f, step, sent } = storageKeeper( true );
+	try {
+		step();
+		f.ui.event( { kind: "activate", id: "market-open" } );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			market: { ...market(), browse: { rows: [], page: 1, pages: 1, total: 0 } }
+		};
+		let controls = step();
+		assert.ok( f.hasText( "Nothing is on sale yet" ), "an unnarrowed empty market" );
+		assert.equal( controls.has( "market-clear-search" ), false );
+		f.ui.event( { kind: "activate", id: "market-menu:race" } );
+		step();
+		f.ui.event( { kind: "activate", id: "market-choose:race:eu" } );
+		controls = step();
+		assert.ok( f.hasText( "No listings match" ) );
+		assert.equal( controls.get( "market-clear-search" )?.disabled, false );
+		f.ui.event( { kind: "activate", id: "market-clear-search" } );
+		step();
+		const last = sent().at( -1 );
+		assert.equal( last.op, "search" );
+		assert.equal( last.race, undefined, "the filter is gone" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("at the listing cap nothing more is listed, and one gone frees a place", () => {
+	const hud = createMarketHud();
+	const base = market();
+	const at = ( count ) => ({
+		market: {
+			...base,
+			mine: {
+				...base.mine,
+				listings: Array.from( { length: count }, ( _, i ) => row( 100 + i ) ).concat( [
+					row( 99, { state: "returned" } )
+				] )
+			}
+		},
+		localName: "Me",
+		now: 0
+	});
+	hud.open();
+	hud.activate( "market-tab:sell", at( 20 ) );
+	hud.activate( "market-sell-slot:20", at( 20 ) );
+	hud.edit( "market-price", "50" );
+	assert.deepEqual( hud.activate( "market-list", at( 20 ) ).requests, [], "20 / 20 listed" );
+	assert.equal( hud.activate( "market-list", at( 19 ) ).requests[0]?.op, "list", "a returned one does not count" );
+});

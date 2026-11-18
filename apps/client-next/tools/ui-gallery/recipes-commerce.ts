@@ -181,7 +181,10 @@ The consignment market over a storage keeper, on a shard that runs it
 Every listing, seller and price is synthetic; nothing is sent.
 ================
 */
-async function consignment( context: RecipeContext, page: "mine" | "few" | "offers" | "sell" | "buy" ) {
+async function consignment(
+	context: RecipeContext,
+	page: "mine" | "few" | "empty" | "many" | "offers" | "sell" | "buy"
+) {
 	const sword = {
 		...herb,
 		slot: 13,
@@ -240,12 +243,23 @@ async function consignment( context: RecipeContext, page: "mine" | "few" | "offe
 		market: {
 			categories: [ "Weapons", "Armor", "Accessories", "Avatars", "Pets", "Alchemy", "Consumables", "Other" ]
 				.map( name => ({ slug: name.toLowerCase(), name }) ),
-			// "few": one listing on one page, the short-table case.
+			// "few": one listing on one page, the short-table case; "empty": a
+			// filtered search that found nothing.
 			browse: page === "few" ?
 				{ rows: rows.slice( 0, 1 ), page: 1, pages: 1, total: 1 } :
+				page === "empty" ?
+				{ rows: [], page: 1, pages: 1, total: 0 } :
 				{ rows, page: 1, pages: 23, total: 347 },
 			mine: {
-				listings: [ rows[7]!, { ...rows[3]!, id: 300, state: "held" as const, seller: "Tester" } ],
+				// "many": the cap's 20 listed and three returned, over pages.
+				listings: page === "many" ?
+					Array.from( { length: 23 }, ( _, i ) => ({
+						...rows[i % 15]!,
+						id: 500 + i,
+						seller: "Tester",
+						state: i < 20 ? "open" as const : "returned" as const
+					}) ) :
+					[ rows[7]!, { ...rows[3]!, id: 300, state: "held" as const, seller: "Tester" } ],
 				offersIn: [ offer( 1, "open" ), offer( 2, "rejected" ) ],
 				offersOut: [],
 				purchases: [ {
@@ -268,6 +282,10 @@ async function consignment( context: RecipeContext, page: "mine" | "few" | "offe
 	} );
 	await press( context, "market-open" );
 	if ( page === "offers" ) await press( context, "market-tab:offers" );
+	if ( page === "empty" ) {
+		await press( context, "market-menu:race" );
+		await press( context, "market-choose:race:eu" );
+	}
 	if ( page === "sell" ) await press( context, "market-sell-pick" );
 	if ( page === "buy" ) await press( context, "market-row-buy:101" );
 }
@@ -278,15 +296,27 @@ commerceRecipes
 ================
 */
 export const commerceRecipes: readonly ExtendedRecipe[] = [
-	...([ [ "browse", "mine", "market-row-buy:101" ], [ "one-listing", "few", "market-row-buy:100" ], [
-		"offers",
-		"offers",
-		"market-accept"
-	], [
-		"sell",
-		"sell",
-		"market-sell-slot:13"
-	], [ "buy", "buy", "market-dialog-confirm" ] ] as const).map( ( [name, page, witness] ) => ({
+	...([
+		[ "browse", "mine", "market-row-buy:101" ],
+		[ "one-listing", "few", "market-row-buy:100" ],
+		[
+			"empty-search",
+			"empty",
+			"market-clear-search"
+		],
+		[ "many-listings", "many", "market-mine-next" ],
+		[
+			"offers",
+			"offers",
+			"market-accept"
+		],
+		[
+			"sell",
+			"sell",
+			"market-sell-slot:13"
+		],
+		[ "buy", "buy", "market-dialog-confirm" ]
+	] as const).map( ( [name, page, witness] ) => ({
 		id: "breadth:consignment-" + name,
 		title: "Consignment market - " + name,
 		family: "Services" as const,

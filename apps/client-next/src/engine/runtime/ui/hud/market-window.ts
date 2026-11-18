@@ -39,6 +39,7 @@ import {
 	MARKET_BAG_COLUMNS,
 	MARKET_BAG_FIRST_SLOT,
 	MARKET_BAG_ROWS,
+	MARKET_HISTORY_ROWS,
 	MARKET_MINE_ROWS,
 	MARKET_OFFER_ROWS,
 	MARKET_SORT_ORDER,
@@ -46,7 +47,10 @@ import {
 	marketOfferAt,
 	marketOfferPages,
 	marketOwnRow,
+	marketActiveListings,
+	marketListingsFull,
 	marketPriceValue,
+	marketSearchNarrowed,
 	marketWriting,
 	type MarketMenu,
 	type MarketHudState
@@ -104,6 +108,10 @@ const BAG_CELL = 34;
 const BAG_ICON = 30;
 // The native button's height, for rows that hold one.
 const BUTTON_HEIGHT = 25;
+// The empty result's card, centred in the table's rows.
+const EMPTY_CARD_WIDTH = 380;
+const EMPTY_CARD_HEIGHT = 116;
+const CLEAR_SEARCH_WIDTH = 110;
 // The buy and offer box.
 const DIALOG_WIDTH = 330;
 const DIALOG_HEIGHT = 170;
@@ -610,16 +618,15 @@ function browseColumn( pen: Pen ) {
 		}
 	} );
 	// The empty slots keep the table's stripes and rules, so a short page
-	// reads as a table and not as a hole.
-	for ( let i = Math.min( rows.length, BROWSE_ROWS ); i < BROWSE_ROWS; i++ ) {
+	// reads as a table and not as a hole; an empty result is one card on a
+	// clean ground instead.
+	for ( let i = Math.min( rows.length, BROWSE_ROWS ); i < BROWSE_ROWS && rows.length; i++ ) {
 		const slot: UiRect = [ left + 1, table[1] + HEADER_HEIGHT + i * ROW_PITCH, LEFT_WIDTH - 2, ROW_PITCH ];
 		if ( i % 2 ) pen.frameDraw.rect( pen.frame, { r: slot, color: STRIPE } );
 		pen.frameDraw.rect( pen.frame, { r: [ slot[0], slot[1] + slot[3] - 1, slot[2], 1 ], color: LINE } );
 	}
 	if ( browse && !rows.length ) {
-		const middle = table[1] + HEADER_HEIGHT + (BROWSE_ROWS * ROW_PITCH) / 2;
-		pen.text( "No listings match", [ left, middle - 22, LEFT_WIDTH, 20 ], GOLD, 1 );
-		pen.text( "Try another name, category, degree or filter.", [ left, middle, LEFT_WIDTH, 20 ], DIM, 1 );
+		emptyResult( pen, [ left, table[1] + HEADER_HEIGHT, LEFT_WIDTH, BROWSE_ROWS * ROW_PITCH ] );
 	}
 	// The footer bar inside the table: the count, the last write's outcome
 	// and, when there is more than one, the pages.
@@ -827,12 +834,17 @@ function sellPanel( pen: Pen ) {
 		MARKET_PRICE_DIGITS
 	);
 	const price = marketPriceValue( hud.sellPrice ), fee = marketFee( price, rules?.feePercent ?? 0 );
+	// At the cap the server refuses another listing (store MarketList,
+	// ErrMarketCap): the line says so before the click, not after.
+	const full = marketListingsFull( view.market?.mine );
 	pen.text(
-		price ?
+		full ?
+			`${rules?.openCap} / ${rules?.openCap} listed: cancel one to list more.` :
+			price ?
 			`Fee ${marketAmount( fee )} · you get ${priceText( price - fee, hud.sellCurrency )}` :
 			`Fee ${rules?.feePercent ?? 0}% of the price`,
 		[ left + 10, y + 28, width - 20, 18 ],
-		price ? priceColor( hud.sellCurrency ) : DIM
+		full ? REFUSED : price ? priceColor( hud.sellCurrency ) : DIM
 	);
 	const bottom = top + SELL_HEIGHT - BUTTON_HEIGHT - 8;
 	// The anonymous choice: the game's check box (com_checkbutton) and its
@@ -855,7 +867,7 @@ function sellPanel( pen: Pen ) {
 		selected: hud.anonymous
 	} );
 	pen.button( "market-tab:sell", "Pick from bag", left + 106, bottom, 84, false, hud.tab === "sell" );
-	pen.button( "market-list", "List it", left + 194, bottom, width - 204, !item || price < 1 || pen.busy );
+	pen.button( "market-list", "List it", left + 194, bottom, width - 204, !item || price < 1 || full || pen.busy );
 }
 
 /*
@@ -944,7 +956,7 @@ or Take back of the picked one.
 function listingsPage( pen: Pen, area: UiRect ) {
 	const { view } = pen, hud = view.hud, mine = view.market?.mine, rules = mine?.rules;
 	const listings = mine?.listings ?? [];
-	const active = listings.filter( row => row.state === "open" || row.state === "held" ).length;
+	const active = marketActiveListings( mine );
 	pen.text(
 		`${active} / ${rules?.openCap ?? 0} listed · ${Math.round( (rules?.durationMs ?? 0) / 3600000 )} hours each`,
 		[ area[0], area[1], area[2], 16 ],
@@ -993,6 +1005,57 @@ function listingsPage( pen: Pen, area: UiRect ) {
 
 /*
 ================
+emptyResult
+
+A search that found nothing: a card in the middle of the rows saying
+what was searched for and, when the search line narrows anything, the
+one click that clears it. An unnarrowed empty market says so instead.
+================
+*/
+function emptyResult( pen: Pen, rows: UiRect ) {
+	const hud = pen.view.hud, narrowed = marketSearchNarrowed( hud );
+	const card: UiRect = [
+		rows[0] + (rows[2] - EMPTY_CARD_WIDTH) / 2,
+		rows[1] + (rows[3] - EMPTY_CARD_HEIGHT) / 2,
+		EMPTY_CARD_WIDTH,
+		narrowed ? EMPTY_CARD_HEIGHT : EMPTY_CARD_HEIGHT - BUTTON_HEIGHT - 10
+	];
+	pen.panel( card, EDGE );
+	pen.frameDraw.rect( pen.frame, { r: [ card[0] + 1, card[1] + 1, card[2] - 2, 30 ], color: HEADER } );
+	pen.text(
+		narrowed ? "No listings match" : "Nothing is on sale yet",
+		[ card[0], card[1] + 6, card[2], 20 ],
+		GOLD,
+		1
+	);
+	const query = hud.query.trim();
+	pen.text(
+		narrowed ?
+			query ? `Nothing for "${query}" with these filters.` : "Nothing with these filters." :
+			"Be the first: list an item on the right.",
+		[ card[0] + 12, card[1] + 38, card[2] - 24, 18 ],
+		pen.frame.white,
+		1
+	);
+	if ( !narrowed ) return;
+	pen.text(
+		"Try fewer words, another category or a lower degree.",
+		[ card[0] + 12, card[1] + 56, card[2] - 24, 18 ],
+		DIM,
+		1
+	);
+	pen.button(
+		"market-clear-search",
+		"Clear search",
+		card[0] + (card[2] - CLEAR_SEARCH_WIDTH) / 2,
+		card[1] + card[3] - BUTTON_HEIGHT - 10,
+		CLEAR_SEARCH_WIDTH,
+		pen.busy
+	);
+}
+
+/*
+================
 historyPage
 
 What the account bought, newest first, and its listings that sold.
@@ -1015,8 +1078,10 @@ function historyPage( pen: Pen, area: UiRect ) {
 			color: OK,
 			note: "Sold"
 		}) )
-	].sort( ( a, b ) => b.at - a.at ).slice( 0, Math.floor( (area[3] - 4) / (SIDE_PITCH + 10) ) );
-	entries.forEach( ( entry, i ) => {
+	].sort( ( a, b ) => b.at - a.at );
+	const pages = Math.max( 1, Math.ceil( entries.length / MARKET_HISTORY_ROWS ) );
+	const page = Math.min( pen.view.hud.historyPage, pages - 1 );
+	entries.slice( page * MARKET_HISTORY_ROWS, (page + 1) * MARKET_HISTORY_ROWS ).forEach( ( entry, i ) => {
 		sideRow( pen, {
 			id: "market-history:" + i,
 			item: undefined,
@@ -1032,6 +1097,7 @@ function historyPage( pen: Pen, area: UiRect ) {
 	if ( mine && !entries.length ) {
 		pen.text( "Nothing bought or sold yet.", [ area[0], area[1] + 4, area[2], 20 ], pen.frame.white );
 	}
+	pager( pen, "market-history-", page, pages, area[0] + area[2], area[1] + area[3] - BUTTON_HEIGHT, true );
 }
 
 /*
