@@ -3991,7 +3991,7 @@ state here before a command can claim a native wire conversation.
 					command.choice !== undefined && chosen
 				) {
 					countJobs.choose( null );
-					return countJobUseRequest( chosen, command.choice );
+					return sendFrame( countJobUseRequest( chosen, command.choice ) );
 				}
 				const facts = {
 					alive: potionFacts.alive,
@@ -4011,7 +4011,7 @@ state here before a command can claim a native wire conversation.
 					countJobs.choose( admission.row );
 					return null;
 				}
-				return countJobUseRequest( admission.row );
+				return sendFrame( countJobUseRequest( admission.row ) );
 			}
 			if ( command.kind === "premium-command-cancel" ) {
 				countJobs.choose( null );
