@@ -141,7 +141,7 @@ fi
 echo "ok    unsafe id refused"
 
 echo "==> admin panel"
-compose up -d --no-deps admin-relay admin
+compose up -d --no-deps admin-relay admin-relay-pvp admin
 admin="http://127.0.0.1:$SMOKE_ADMIN_PORT"
 for _ in $(seq 1 30); do curl -fsS -o /dev/null --max-time 2 "$admin/accounts" && break; sleep 1; done
 check "admin panel" "$admin/accounts"
@@ -158,6 +158,10 @@ esac
 case "$(curl -fsS --max-time 10 "$admin/character?name=Nobody")" in
     *"character not found"*) echo "ok    the panel reaches the player operations" ;;
     *) echo "smoke: the panel cannot reach the player operations" >&2; exit 1 ;;
+esac
+case "$(curl -fsS --max-time 10 "$admin/character?shard=pvp&name=Nobody")" in
+    *"character not found"*) echo "ok    the panel reaches the PVP shard through its relay" ;;
+    *) echo "smoke: the panel cannot reach the PVP shard's player operations" >&2; exit 1 ;;
 esac
 if curl -fsS -o /dev/null --max-time 5 -H 'Host: evil.example' "$admin/accounts" 2>/dev/null; then
     echo "smoke: the panel answered a foreign Host" >&2; exit 1

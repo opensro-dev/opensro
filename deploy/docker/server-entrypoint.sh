@@ -35,10 +35,11 @@ case "$role" in
             head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$token.tmp"
             mv "$token.tmp" "$token"
         fi
-        # The panel's copies: it mounts this volume alone, never the cluster
-        # secrets (the session key ring) or the shard's database.
+        # The panel's copies, one operator token per shard: it mounts this
+        # volume alone, never the cluster secrets (the session key ring) or a
+        # shard's database.
         if [ -d /admin ]; then
-            cp "$token" /admin/operator-token
+            cp "$token" "/admin/operator-token-$SRO_SHARD_ID"
             cp /cluster/agent-provisioning-token /admin/agent-provisioning-token
         fi
         ;;

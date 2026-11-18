@@ -35,7 +35,7 @@ func TestRelayForwardsOnlyThePanelRoutes(t *testing.T) {
 		seen = append(seen, r.Method+" "+r.URL.Path)
 	}))
 	defer upstream.Close()
-	relay, err := newRelay(upstream.URL)
+	relay, err := newRelay(relayAccounts, upstream.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,8 @@ A panel wired to stand-ins for the GameWorld and the relay.
 func testPanel(t *testing.T, gameworld, accounts http.Handler) http.Handler {
 	t.Helper()
 	dir := t.TempDir()
-	for name, token := range map[string]string{"operator-token": "op-token\n", "provisioning-token": "prov-token"} {
+	for name, token := range map[string]string{"operator-token-main": "op-token\n", "operator-token-pvp": "pvp-token",
+		"provisioning-token": "prov-token"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(token), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -122,7 +123,11 @@ func testPanel(t *testing.T, gameworld, accounts http.Handler) http.Handler {
 	gw, ac := httptest.NewServer(gameworld), httptest.NewServer(accounts)
 	t.Cleanup(gw.Close)
 	t.Cleanup(ac.Close)
-	p, err := newPanel(panelConfig{OperatorURL: gw.URL, OperatorTokenFile: filepath.Join(dir, "operator-token"),
+	shards, err := parseShards("main="+gw.URL+",pvp="+gw.URL+"/pvp", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := newPanel(panelConfig{Shards: shards,
 		AccountsURL: ac.URL, ProvisioningTokenFile: filepath.Join(dir, "provisioning-token"), OperatorName: "staff"})
 	if err != nil {
 		t.Fatal(err)
@@ -243,5 +248,107 @@ func TestPanelCreatesAccounts(t *testing.T) {
 	}
 	if strings.Contains(response.Header().Get("Location"), "s3cret") {
 		t.Fatal("the password leaked into the redirect")
+	}
+}
+
+/*
+================
+TestOperatorRelayForwardsOnlyThePlayerOperations
+================
+*/
+func TestOperatorRelayForwardsOnlyThePlayerOperations(t *testing.T) {
+	calls := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Forwarded-For") != "" || r.Header.Get("X-SRO-Local-Diagnostics") != "1" {
+			t.Errorf("relay rewrote the request: %v", r.Header)
+		}
+		calls++
+	}))
+	defer upstream.Close()
+	relay, err := newRelay(relayOperator, upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		method, path string
+		allowed      bool
+	}{
+		{"GET", "/internal/operations/player?character=Probe", true},
+		{"POST", "/internal/operations/player", true},
+		{"PUT", "/internal/operations/player", false},
+		{"GET", "/internal/operations/history", false},
+		{"POST", "/v1/accounts", false},
+		{"GET", "/internal/operations/player/../history", false},
+	} {
+		request := httptest.NewRequest(row.method, "http://gameworld-pvp:9791"+row.path, nil)
+		request.Header.Set("X-SRO-Local-Diagnostics", "1")
+		response := httptest.NewRecorder()
+		relay.ServeHTTP(response, request)
+		if (response.Code == http.StatusOK) != row.allowed {
+			t.Fatalf("%s %s answered %d", row.method, row.path, response.Code)
+		}
+	}
+	if calls != 2 {
+		t.Fatalf("upstream saw %d calls", calls)
+	}
+	if _, err := newRelay("everything", upstream.URL); err == nil {
+		t.Fatal("an unknown route set was accepted")
+	}
+}
+
+/*
+================
+TestPanelOperatesOnTheChosenShard
+
+Each shard is read and operated at its own address with its own token; an
+unknown shard reaches nothing.
+================
+*/
+func TestPanelOperatesOnTheChosenShard(t *testing.T) {
+	var seen []string
+	gameworld := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.Method+" "+r.URL.Path+" "+r.Header.Get("Authorization"))
+		w.Write([]byte(`{"player":{"name":"Probe","level":110}}`))
+	})
+	panel := testPanel(t, gameworld, http.NotFoundHandler())
+
+	page := panelRequest(panel, "GET", "/character?shard=pvp&name=Probe", nil).Body.String()
+	if !strings.Contains(page, "shard pvp") || !strings.Contains(page, `name="shard" value="pvp"`) {
+		t.Fatal("the pvp sheet does not carry its shard into the forms")
+	}
+	response := panelRequest(panel, "POST", "/character", url.Values{"shard": {"pvp"}, "name": {"Probe"},
+		"action": {"clear-pk"}, "reason": {"support ticket"}})
+	if location := response.Header().Get("Location"); !strings.Contains(location, "shard=pvp") || !strings.Contains(location, "ok=") {
+		t.Fatalf("redirect %s", location)
+	}
+	panelRequest(panel, "GET", "/character?name=Probe", nil)
+	want := []string{
+		"GET /pvp/internal/operations/player Bearer pvp-token",
+		"POST /pvp/internal/operations/player Bearer pvp-token",
+		"GET /internal/operations/player Bearer op-token",
+	}
+	if strings.Join(seen, "|") != strings.Join(want, "|") {
+		t.Fatalf("calls %v", seen)
+	}
+	if !strings.Contains(panelRequest(panel, "GET", "/character?shard=nope&name=Probe", nil).Body.String(), "unknown shard") ||
+		len(seen) != 3 {
+		t.Fatalf("an unknown shard: calls %v", seen)
+	}
+}
+
+/*
+================
+TestParseShardsRefusesMalformedEntries
+================
+*/
+func TestParseShardsRefusesMalformedEntries(t *testing.T) {
+	for _, spec := range []string{"", "main", "main=ftp://x", "../x=http://a:1", "main=http://"} {
+		if _, err := parseShards(spec, "/admin"); err == nil {
+			t.Fatalf("%q accepted", spec)
+		}
+	}
+	shards, err := parseShards("global-official=http://127.0.0.1:8791, pvp=http://gameworld-pvp:9791", "/admin")
+	if err != nil || len(shards) != 2 || shards[1].TokenFile != "/admin/operator-token-pvp" {
+		t.Fatalf("%+v %v", shards, err)
 	}
 }
