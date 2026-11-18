@@ -1,0 +1,306 @@
+/*
+===========================================================================
+
+shop.go - Samarkand's PVP shops: which goods, on which tabs
+
+Port-only, not native. On the PVP shard three Samarkand merchants carry
+one more store group each: the smith the degree-11 rare weapons and
+shields, the armorer the degree-11 rare armour, the accessory merchant
+the degree-11 rare accessories and the degree-11 attribute and magic
+stones. Gear is sold +12; stones as they are.
+
+Both owners of a shop tab read the layout from here: the NPC roster
+(simulation, the conversation's tab rows) and the shop catalog
+(commerce, the offers behind a tab id). They cannot import each other,
+so each calls ShopLayout on the same textdata and gets the same ids.
+The ids sit above every authored tab and group, after the three tabs
+and one group Jangan's alchemy shop synthesizes (alchemyshop.go), so the
+two features never collide whether that one is on or off.
+
+===========================================================================
+*/
+
+package pvpserver
+
+import (
+	"encoding/binary"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"unicode/utf16"
+
+	"opensro.online/server/internal/data/texttable"
+)
+
+// The ids Jangan's alchemy shop takes above the authored maximum.
+const (
+	janganReservedTabs   int32 = 3
+	janganReservedGroups int32 = 1
+)
+
+// itemdata columns: service flag, codename, the type triple.
+const (
+	itemColService  = 0
+	itemColCodename = 2
+	itemColTypeID1  = 9
+	itemColTypeID2  = 10
+	itemColTypeID3  = 11
+	itemColumns     = 12
+)
+
+// refshoptab / refshoptabgroup: the id column.
+const shopColID = 2
+
+// The type triple's equipment and alchemy-stone families.
+const (
+	typeItem      = 3
+	typeEquipment = 1
+	typeEtc       = 3
+	typeAlchemy   = 11
+)
+
+/*
+================
+ShopItem
+
+One serviced itemdata row: its codename and type triple.
+================
+*/
+type ShopItem struct {
+	Codename                  string
+	TypeID1, TypeID2, TypeID3 int
+}
+
+/*
+================
+ShopTab
+
+One synthesized tab: the merchant it stands on, its ids and labels, the
+goods in slot order and the plus they are sold at.
+================
+*/
+type ShopTab struct {
+	Npc        string
+	TabID      int32
+	GroupID    int32
+	Label      string
+	GroupLabel string
+	Codenames  []string
+	Plus       uint8
+}
+
+/*
+================
+shopCategory
+
+A merchant's tab kind: the merchant, its group label, the tab label, the
+plus and which items it takes. The order here is the tab order.
+================
+*/
+type shopCategory struct {
+	npc, groupLabel, label string
+	plus                   uint8
+	takes                  func(item ShopItem) bool
+}
+
+func gear(kinds ...int) func(ShopItem) bool {
+	return func(item ShopItem) bool {
+		return item.TypeID1 == typeItem && item.TypeID2 == typeEquipment &&
+			slices.Contains(kinds, item.TypeID3) && pvpGrade(item.Codename)
+	}
+}
+
+func stones(prefix string) func(ShopItem) bool {
+	suffix := fmt.Sprintf("_%d", StoneDegree)
+	return func(item ShopItem) bool {
+		return item.TypeID1 == typeItem && item.TypeID2 == typeEtc && item.TypeID3 == typeAlchemy &&
+			strings.HasPrefix(item.Codename, prefix) && strings.HasSuffix(item.Codename, suffix)
+	}
+}
+
+var shopCategories = []shopCategory{
+	{"NPC_CA_SMITH", "SN_STORE_SMITH_EU_GROUP1", "SN_TAB_WEAPON", ShopPlus, gear(6)},
+	{"NPC_CA_SMITH", "SN_STORE_SMITH_EU_GROUP1", "SN_TAB_SHIELD", ShopPlus, gear(4)},
+	{"NPC_CA_ARMOR", "SN_STORE_ARMOR_EU_GROUP1", "SN_TAB_HEAVYARMOR_EU", ShopPlus, gear(3, 11)},
+	{"NPC_CA_ARMOR", "SN_STORE_ARMOR_EU_GROUP1", "SN_TAB_LIGHTARMOR_EU", ShopPlus, gear(2, 10)},
+	{"NPC_CA_ARMOR", "SN_STORE_ARMOR_EU_GROUP1", "SN_TAB_CLOTHES_EU", ShopPlus, gear(1, 9)},
+	{"NPC_CA_ACCESSORY", "SN_STORE_ACCESSORY_EU_GROUP1", "SN_TAB_ACCESSORY", ShopPlus, gear(5, 12)},
+	{"NPC_CA_ACCESSORY", "SN_STORE_ACCESSORY_EU_GROUP1", "UIIT_STT_ITEM_TYPE_ALCHEMY_ATTRSTONE", 0,
+		stones("ITEM_ETC_ARCHEMY_ATTRSTONE_")},
+	{"NPC_CA_ACCESSORY", "SN_STORE_ACCESSORY_EU_GROUP1", "UIIT_STT_ITEM_TYPE_ALCHEMY_MAGICSTONE", 0,
+		stones("ITEM_ETC_ARCHEMY_MAGICSTONE_")},
+}
+
+/*
+================
+pvpGrade
+
+The best gear for the level cap: degree 11 Nova (_A_RARE, including the
+part-coded armour like _AA_A_RARE) and the two sealed sets (_SET_A_RARE,
+_SET_B_RARE). The _ACTIVE and _HONOR variants end otherwise and stay out.
+================
+*/
+func pvpGrade(codename string) bool {
+	return strings.Contains(codename, "_11_") &&
+		(strings.HasSuffix(codename, "_A_RARE") || strings.HasSuffix(codename, "_SET_B_RARE"))
+}
+
+/*
+================
+Layout
+
+The tabs, in category order, each category's goods sorted and split into
+tabs of TabCapacity. Every merchant gets one new group.
+================
+*/
+func Layout(items []ShopItem, maxTabID, maxGroupID int32) []ShopTab {
+	nextTab := maxTabID + janganReservedTabs + 1
+	nextGroup := maxGroupID + janganReservedGroups + 1
+	groups := map[string]int32{}
+	var tabs []ShopTab
+	for _, category := range shopCategories {
+		var goods []string
+		for _, item := range items {
+			if category.takes(item) {
+				goods = append(goods, item.Codename)
+			}
+		}
+		if len(goods) == 0 {
+			continue
+		}
+		slices.Sort(goods)
+		group, ok := groups[category.npc]
+		if !ok {
+			group = nextGroup
+			groups[category.npc] = group
+			nextGroup++
+		}
+		for chunk := range slices.Chunk(goods, TabCapacity) {
+			tabs = append(tabs, ShopTab{
+				Npc: category.npc, TabID: nextTab, GroupID: group,
+				Label: category.label, GroupLabel: category.groupLabel,
+				Codenames: chunk, Plus: category.plus,
+			})
+			nextTab++
+		}
+	}
+	return tabs
+}
+
+/*
+================
+ShopLayout
+
+Layout over the textdata directory: the serviced itemdata rows and the
+largest authored tab and tab-group ids.
+================
+*/
+func ShopLayout(dir string) ([]ShopTab, error) {
+	items, err := readShopItems(dir)
+	if err != nil {
+		return nil, err
+	}
+	maxTab, err := maxID(filepath.Join(dir, "refshoptab.txt"))
+	if err != nil {
+		return nil, err
+	}
+	maxGroup, err := maxID(filepath.Join(dir, "refshoptabgroup.txt"))
+	if err != nil {
+		return nil, err
+	}
+	return Layout(items, maxTab, maxGroup), nil
+}
+
+/*
+================
+readShopItems
+
+Every serviced row of the item shards itemdata.txt names. The manifest
+spells names in mixed case; the shards are stored lower-case.
+================
+*/
+func readShopItems(dir string) ([]ShopItem, error) {
+	manifest, err := readTable(filepath.Join(dir, "itemdata.txt"))
+	if err != nil {
+		return nil, err
+	}
+	var items []ShopItem
+	for _, entry := range manifest {
+		if len(entry) == 0 || entry[0] == "" {
+			continue
+		}
+		rows, err := readTable(filepath.Join(dir, strings.ToLower(entry[0])))
+		if err != nil {
+			return nil, err
+		}
+		for _, cols := range rows {
+			if len(cols) < itemColumns || cols[itemColService] != "1" {
+				continue
+			}
+			t1, _ := strconv.Atoi(cols[itemColTypeID1])
+			t2, _ := strconv.Atoi(cols[itemColTypeID2])
+			t3, _ := strconv.Atoi(cols[itemColTypeID3])
+			items = append(items, ShopItem{Codename: cols[itemColCodename], TypeID1: t1, TypeID2: t2, TypeID3: t3})
+		}
+	}
+	return items, nil
+}
+
+/*
+================
+maxID
+================
+*/
+func maxID(path string) (int32, error) {
+	rows, err := readTable(path)
+	if err != nil {
+		return 0, err
+	}
+	var highest int32
+	for _, cols := range rows {
+		if len(cols) <= shopColID {
+			continue
+		}
+		if id, err := strconv.ParseInt(cols[shopColID], 10, 32); err == nil && int32(id) > highest {
+			highest = int32(id)
+		}
+	}
+	return highest, nil
+}
+
+/*
+================
+readTable
+
+A textdata table as rows of cells: UTF-16LE with a byte-order mark or
+UTF-8, comment and blank lines skipped (the roster's reader, npcworlddata.go).
+================
+*/
+func readTable(path string) ([][]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	text := string(data)
+	if len(data) >= 2 && data[0] == 0xff && data[1] == 0xfe {
+		units := make([]uint16, 0, (len(data)-2)/2)
+		for index := 2; index+1 < len(data); index += 2 {
+			units = append(units, binary.LittleEndian.Uint16(data[index:index+2]))
+		}
+		text = string(utf16.Decode(units))
+	}
+	text = strings.TrimPrefix(text, "\uFEFF")
+	cells := make(texttable.Cells)
+	var rows [][]string
+	for _, raw := range strings.Split(text, "\n") {
+		line := strings.TrimRight(raw, "\r\t ")
+		if line == "" || strings.HasPrefix(line, "//") {
+			continue
+		}
+		rows = append(rows, cells.Split(line))
+	}
+	return rows, nil
+}

@@ -34,6 +34,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/pvpserver"
 )
 
 // EnvShopExtraGoods names the setting: "on", "off" or "tab:item:price,...".
@@ -185,6 +186,16 @@ func LoadWithExtraGoods(dir string, refs enterworld.ItemRefSource, extra []Extra
 	}
 	if err := c.AddExtraGoods(extra, refs); err != nil {
 		return nil, err
+	}
+	// Port-only, not native: Samarkand's PVP tabs, on the PVP shard only.
+	if pvpserver.EnabledFromEnv() {
+		tabs, err := pvpserver.ShopLayout(dir)
+		if err != nil {
+			return nil, err
+		}
+		if err := c.RegisterPvpTabs(tabs, refs); err != nil {
+			return nil, err
+		}
 	}
 	return c, nil
 }
