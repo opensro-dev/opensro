@@ -84,9 +84,13 @@ const CHIP_TOP = 38;
 const FILTER_TOP = 68;
 const TABLE_TOP = 100;
 const HEADER_HEIGHT = 22;
-const ROW_PITCH = 26;
+const ROW_PITCH = 28;
+// The table runs to the window's bottom margin, level with the rules
+// panel; its last band is the footer bar (count, status, pages).
+const TABLE_HEIGHT = HEIGHT - TABLE_TOP - 12;
 const ROW_ICON = 22;
 const BROWSE_ROWS = 15;
+const FOOTER_HEIGHT = TABLE_HEIGHT - HEADER_HEIGHT - BROWSE_ROWS * ROW_PITCH - 2;
 // The right column: List an item, the account's pages, the rules.
 const RIGHT_LEFT = MARGIN + LEFT_WIDTH + MARGIN;
 const RIGHT_WIDTH = WIDTH - RIGHT_LEFT - MARGIN;
@@ -424,10 +428,12 @@ pager
 
 The Previous / n of m / Next pair every list shares. The arrows are the
 game's own (com_left_arrow, com_right_arrow, with their disabled art);
-the compact pair is the arrows alone.
+the compact pair is the arrows alone. A single page draws nothing.
 ================
 */
 function pager( pen: Pen, prefix: string, page: number, pages: number, right: number, y: number, compact = false ) {
+	// One page has nowhere to go: no dead buttons.
+	if ( pages <= 1 ) return;
 	const step = compact ? 30 : 74, middle = compact ? 46 : 56;
 	const left = right - (2 * step + middle + 8);
 	pagerButton( pen, prefix + "prev", compact ? "" : "Previous", left, y, step, page <= 0, "left" );
@@ -526,7 +532,7 @@ function browseColumn( pen: Pen ) {
 	}
 	pen.button( "market-search", "Search", left + LEFT_WIDTH - SEARCH_WIDTH, y, SEARCH_WIDTH );
 	// The listings.
-	const table: UiRect = [ left, py + TABLE_TOP, LEFT_WIDTH, HEADER_HEIGHT + BROWSE_ROWS * ROW_PITCH + 2 ];
+	const table: UiRect = [ left, py + TABLE_TOP, LEFT_WIDTH, TABLE_HEIGHT ];
 	pen.panel( table );
 	pen.frameDraw.rect( pen.frame, {
 		r: [ table[0] + 1, table[1] + 1, table[2] - 2, HEADER_HEIGHT - 1 ],
@@ -603,20 +609,38 @@ function browseColumn( pen: Pen ) {
 			x += width + 2;
 		}
 	} );
-	if ( browse && !rows.length ) {
-		pen.text(
-			"Nothing matches. Try another name, category or degree.",
-			[ left, table[1] + HEADER_HEIGHT + 30, LEFT_WIDTH, 20 ],
-			DIM,
-			1
-		);
+	// The empty slots keep the table's stripes and rules, so a short page
+	// reads as a table and not as a hole.
+	for ( let i = Math.min( rows.length, BROWSE_ROWS ); i < BROWSE_ROWS; i++ ) {
+		const slot: UiRect = [ left + 1, table[1] + HEADER_HEIGHT + i * ROW_PITCH, LEFT_WIDTH - 2, ROW_PITCH ];
+		if ( i % 2 ) pen.frameDraw.rect( pen.frame, { r: slot, color: STRIPE } );
+		pen.frameDraw.rect( pen.frame, { r: [ slot[0], slot[1] + slot[3] - 1, slot[2], 1 ], color: LINE } );
 	}
-	// The count and the pages.
-	const footer = table[1] + table[3] + 6;
+	if ( browse && !rows.length ) {
+		const middle = table[1] + HEADER_HEIGHT + (BROWSE_ROWS * ROW_PITCH) / 2;
+		pen.text( "No listings match", [ left, middle - 22, LEFT_WIDTH, 20 ], GOLD, 1 );
+		pen.text( "Try another name, category, degree or filter.", [ left, middle, LEFT_WIDTH, 20 ], DIM, 1 );
+	}
+	// The footer bar inside the table: the count, the last write's outcome
+	// and, when there is more than one, the pages.
+	const bar: UiRect = [ table[0] + 1, table[1] + table[3] - FOOTER_HEIGHT, table[2] - 2, FOOTER_HEIGHT - 1 ];
+	pen.frameDraw.rect( pen.frame, { r: bar, color: HEADER } );
+	pen.frameDraw.rect( pen.frame, { r: [ bar[0], bar[1], bar[2], 1 ], color: EDGE } );
 	const total = browse?.total ?? 0;
-	pen.text( `${marketAmount( total )} listing${total === 1 ? "" : "s"}`, [ left, footer, 200, BUTTON_HEIGHT ], DIM );
-	pager( pen, "market-", hud.page - 1, Math.max( 1, browse?.pages ?? 1 ), left + LEFT_WIDTH, footer );
-	statusLine( pen, footer + BUTTON_HEIGHT + 4 );
+	pen.text(
+		`${marketAmount( total )} listing${total === 1 ? "" : "s"}`,
+		[ bar[0] + 10, bar[1], 160, bar[3] ],
+		GOLD
+	);
+	statusLine( pen, [ bar[0] + 170, bar[1], bar[2] - 2 * 170, bar[3] ] );
+	pager(
+		pen,
+		"market-",
+		hud.page - 1,
+		Math.max( 1, browse?.pages ?? 1 ),
+		bar[0] + bar[2] - 6,
+		bar[1] + (bar[3] - BUTTON_HEIGHT) / 2
+	);
 }
 
 /*
@@ -753,9 +777,8 @@ statusLine
 The last write's outcome, or that one is on its way.
 ================
 */
-function statusLine( pen: Pen, y: number ) {
-	const { px, view } = pen, status = view.hud.status;
-	const r: UiRect = [ px + MARGIN, y, LEFT_WIDTH, 20 ];
+function statusLine( pen: Pen, r: UiRect ) {
+	const status = pen.view.hud.status;
 	if ( pen.writing ) pen.text( "Waiting for the market...", r, DIM, 1 );
 	else if ( status ) pen.text( status.text, r, status.ok ? OK : REFUSED, 1 );
 }

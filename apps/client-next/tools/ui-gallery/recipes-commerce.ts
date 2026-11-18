@@ -181,7 +181,7 @@ The consignment market over a storage keeper, on a shard that runs it
 Every listing, seller and price is synthetic; nothing is sent.
 ================
 */
-async function consignment( context: RecipeContext, page: "mine" | "offers" | "sell" | "buy" ) {
+async function consignment( context: RecipeContext, page: "mine" | "few" | "offers" | "sell" | "buy" ) {
 	const sword = {
 		...herb,
 		slot: 13,
@@ -240,7 +240,10 @@ async function consignment( context: RecipeContext, page: "mine" | "offers" | "s
 		market: {
 			categories: [ "Weapons", "Armor", "Accessories", "Avatars", "Pets", "Alchemy", "Consumables", "Other" ]
 				.map( name => ({ slug: name.toLowerCase(), name }) ),
-			browse: { rows, page: 1, pages: 23, total: 347 },
+			// "few": one listing on one page, the short-table case.
+			browse: page === "few" ?
+				{ rows: rows.slice( 0, 1 ), page: 1, pages: 1, total: 1 } :
+				{ rows, page: 1, pages: 23, total: 347 },
 			mine: {
 				listings: [ rows[7]!, { ...rows[3]!, id: 300, state: "held" as const, seller: "Tester" } ],
 				offersIn: [ offer( 1, "open" ), offer( 2, "rejected" ) ],
@@ -275,7 +278,11 @@ commerceRecipes
 ================
 */
 export const commerceRecipes: readonly ExtendedRecipe[] = [
-	...([ [ "browse", "mine", "market-row-buy:101" ], [ "offers", "offers", "market-accept" ], [
+	...([ [ "browse", "mine", "market-row-buy:101" ], [ "one-listing", "few", "market-row-buy:100" ], [
+		"offers",
+		"offers",
+		"market-accept"
+	], [
 		"sell",
 		"sell",
 		"market-sell-slot:13"
