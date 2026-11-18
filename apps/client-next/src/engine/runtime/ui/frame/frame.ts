@@ -168,9 +168,10 @@ export function windowBox(
 		y: number;
 		width: number;
 		height: number;
-		// A native CIFNormalTile texture for the body (com_bg_tile_*), as
-		// native windows fill theirs; without one the body is a flat fill,
-		// which leaves a seam where the ring's textured edge art meets it.
+		// A native CIFNormalTile body (com_bg_tile_*) laid over the ring's
+		// inner edge, WINDOW_TILE_INSET in from the outside, as the NPC talk
+		// window lays com_bg_tile_d on its mframe (GDR_NPCTALK_BGTILE at
+		// 20,20). Without one the body is a flat fill.
 		tile?: string;
 	}
 ) {
@@ -183,14 +184,20 @@ export function windowBox(
 	const FRAME = frame.chrome.frame, PARTS = frame.chrome.parts;
 	const r: UiRect = [ x, y, width, height ];
 	blocks.push( r );
-	if ( tile ) {
-		frame.paths.push( tile );
-		quads.push( ...normalTile( r, tile, resources.size( tile ), full ) );
-	}
-	if ( !tile || !resources.has( tile ) ) rect( frame, { r: r, color: [ .06, .075, .065, .96 ] } );
+	rect( frame, { r: r, color: [ .06, .075, .065, .96 ] } );
 	quads.push(
 		...frameRing( r, FRAME, PARTS.map( part => resources.size( FRAME + part + ".png" ) ), full )
 	);
+	if ( tile ) {
+		frame.paths.push( tile );
+		const body: UiRect = [
+			x + WINDOW_TILE_INSET,
+			y + WINDOW_TILE_INSET,
+			width - 2 * WINDOW_TILE_INSET,
+			height - 2 * WINDOW_TILE_INSET
+		];
+		quads.push( ...normalTile( body, tile, resources.size( tile ), full ) );
+	}
 	quads.push(
 		...text.quads( title, [ x + 10, y + 12, width - 21, 12 ], full, white, { hAlign: 1, vAlign: 1 } )
 	);
@@ -315,6 +322,9 @@ export function comboBox(
 
 // ============================================================================
 
+// A window body tile starts this far inside the frame's outer edge, over
+// the ring's inner half (GDR_NPCTALK_BGTILE sits at 20,20 of its mframe).
+const WINDOW_TILE_INSET = 20;
 // A label closer than this to its window's left edge has left its window
 // (the frame's border is about this wide; the Experimental "Fit window labels").
 const WINDOW_LABEL_MARGIN = 6;

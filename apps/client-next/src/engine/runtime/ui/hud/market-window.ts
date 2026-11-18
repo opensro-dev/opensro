@@ -69,8 +69,9 @@ const MENU_CURRENT: UiQuad["color"] = [ .2, .25, .3, 1 ];
 const MENU_HOVER: UiQuad["color"] = [ .12, .14, .17, 1 ];
 // The native interface art the window draws, and its sizes.
 const IFCOMMON = "/assets/images/Media_extracted/interface/ifcommon/";
-// The body's tile: the textured fill native windows and message boxes use.
-const WINDOW_TILE = IFCOMMON + "bg_tile/com_bg_tile_b.png";
+// The body's tile: the NPC talk window's on the same mframe (com_bg_tile_d),
+// dark enough to meet the frame's inner edge art without a seam.
+const WINDOW_TILE = IFCOMMON + "bg_tile/com_bg_tile_d.png";
 const ARROW_SIZE = 16;
 const ARROW_INSET = 6;
 const CHECK_SIZE = 16;
