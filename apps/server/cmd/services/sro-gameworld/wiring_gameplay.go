@@ -251,12 +251,9 @@ func newGameplayPlane(
 	// SRO_HALLOWEEN_HELMET_SEAL (port-only, not native): the event
 	// helmets stay sealed at the transfer doors after the event.
 	items.HalloweenHelmetSeal = halloweenHelmetSealFromEnv()
-	// SRO_CHRISTMAS_EVENT (port-only, not native in this client build):
-	// the Christmas event's switch and UTC window (wiring_christmas.go).
-	items.Christmas = christmasEventFromEnv()
-	// SRO_CHRISTMAS_EVENT_MODE=so_ok_2006 (port-only, not native): So-Ok's
-	// Christmas Gift on the same switch and window (wiring_christmas.go).
-	items.SoOkChristmas = sookChristmasFromEnv(deps.ItemReferences())
+	// SRO_CHRISTMAS_EVENT and its modes (port-only, not native in this
+	// client build): wiring_christmas.go composes them.
+	wireChristmasEvent(items, deps.ItemReferences(), authorityStore)
 	// SRO_WEATHER: the native climate cycle, on by default (wiring_weather.go).
 	startWeatherFromEnv(items)
 	// SRO_UNIQUE_GAP_EXEMPT / SRO_UNIQUE_POP_TICKET / SRO_UNIQUE_MAX_LEVEL_LOOT
@@ -401,6 +398,7 @@ func newGameplayPlane(
 		deps.MonsterState.SetSpawnCollisionTest(water.SpawnMoveTest)
 		deps.MonsterState.SetSpawnRegionAvailability(water.SpawnRegionAvailable)
 		deps.MonsterState.SetPopulationPlayers(items.PopulationPlayers)
+		installWinterSpawnReplacements(deps.MonsterState, items)
 		for _, division := range authorityStore.DivisionIDs() {
 			deps.MonsterState.StartDivision(division)
 		}

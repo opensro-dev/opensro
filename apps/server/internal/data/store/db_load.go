@@ -162,6 +162,10 @@ func loadDB(db *sql.DB, current int, currentLayout int, headroom int) (*loadedDB
 	if err != nil {
 		return nil, err
 	}
+	out.meta.WinterMissions, out.residues.planes[metaKeyWinterMissions], err = loadWinterMissions(db)
+	if err != nil {
+		return nil, err
+	}
 	if currentLayout >= 11 {
 		out.nameReservations, err = loadNameReservations(db)
 		if err != nil {

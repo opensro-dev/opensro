@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-christmas_test.go - the Christmas switch, its window and the socks
+christmas_test.go - the Christmas switch, its window and its tokens
 
 ===========================================================================
 */
@@ -14,33 +14,33 @@ import (
 
 /*
 ================
-TestChristmasSocksExpireWheneverTheEventDoesNotRun
+TestChristmasSnowflakesExpireWheneverTheEventDoesNotRun
 
-Inside its window the event runs and the socks stay; before or after it,
-on without a valid window, or off, it does not and the socks leave.
+Inside its window the event runs and the flakes stay; before or after it,
+on without a valid window, or off, it does not and the flakes leave.
 ================
 */
-func TestChristmasSocksExpireWheneverTheEventDoesNotRun(t *testing.T) {
+func TestChristmasSnowflakesExpireWheneverTheEventDoesNotRun(t *testing.T) {
 	inside := time.Date(2026, 12, 24, 12, 0, 0, 0, time.UTC)
 	t.Setenv(EnvChristmasEvent, "on")
 	t.Setenv(EnvChristmasEventWindow, "2026-12-20T00:00:00Z/2027-01-03T00:00:00Z")
 	on := ChristmasEventFromEnv()
-	if !on.ActiveAt(inside) || on.SocksExpireAt(inside) {
-		t.Fatal("inside the window: the event runs and keeps its socks")
+	if !on.ActiveAt(inside) || on.SnowflakesExpireAt(inside) {
+		t.Fatal("inside the window: the event runs and keeps its flakes")
 	}
 	for _, at := range []time.Time{time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC), time.Date(2027, 1, 3, 0, 0, 0, 0, time.UTC)} {
-		if on.ActiveAt(at) || !on.SocksExpireAt(at) {
-			t.Fatalf("outside the window at %v: the socks must leave", at)
+		if on.ActiveAt(at) || !on.SnowflakesExpireAt(at) {
+			t.Fatalf("outside the window at %v: the flakes must leave", at)
 		}
 	}
 	t.Setenv(EnvChristmasEventWindow, "")
-	if windowless := ChristmasEventFromEnv(); windowless.ActiveAt(inside) || !windowless.SocksExpireAt(inside) {
-		t.Fatal("on without a window: the event stays off and the socks leave")
+	if windowless := ChristmasEventFromEnv(); windowless.ActiveAt(inside) || !windowless.SnowflakesExpireAt(inside) {
+		t.Fatal("on without a window: the event stays off and the flakes leave")
 	}
 	t.Setenv(EnvChristmasEvent, "off")
 	t.Setenv(EnvChristmasEventWindow, "2026-12-20T00:00:00Z/2027-01-03T00:00:00Z")
-	if off := ChristmasEventFromEnv(); off.ActiveAt(inside) || !off.SocksExpireAt(inside) {
-		t.Fatal("off: nothing runs and the socks leave")
+	if off := ChristmasEventFromEnv(); off.ActiveAt(inside) || !off.SnowflakesExpireAt(inside) {
+		t.Fatal("off: nothing runs and the flakes leave")
 	}
 }
 

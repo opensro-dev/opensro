@@ -226,7 +226,7 @@ var Settings = []Setting{
 	{Env: "SRO_CHRISTMAS_EVENT", NomadVar: "christmas_event", Default: "off"},
 	{Env: "SRO_CHRISTMAS_EVENT_WINDOW", NomadVar: "christmas_event_window", Default: ""},
 	// Port-only, not native: which Christmas event the switch runs,
-	// "winter" (#3603) or "so_ok_2006" (So-Ok's Christmas Gift,
+	// "winter" (Winter Princess and Knights) or "so_ok_2006" (So-Ok's Christmas Gift,
 	// progression/christmas_mode.go), and the 2006 event's box chance in
 	// percent and gift weights (CODENAME=WEIGHT,...; empty keeps the
 	// owner's table).
