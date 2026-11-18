@@ -19488,7 +19488,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									}
 									const prerequisiteMet = design.option === 1 ||
 										(state!.skills.find( entry => entry.id === skill.id - 1 )?.level ?? 0) >=
-											design.maxLevel;
+											(petSkillDesign( design.id - 1 )?.maxLevel ?? design.maxLevel);
 									controls.push( {
 										id: "pet-skill:" + design.id,
 										label: design.name,
@@ -28263,7 +28263,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							game.petTraining.points,
 							design.option === 1 ||
 								(game.petTraining.skills.find( entry => entry.id === skill.id - 1 )?.level ?? 0) >=
-									design.maxLevel
+									(petSkillDesign( design.id - 1 )?.maxLevel ?? design.maxLevel)
 						);
 					}
 				}

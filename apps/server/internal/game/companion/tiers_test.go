@@ -143,3 +143,35 @@ func TestEveryThirdBookCanMaxAtLevel90(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestBooksCapAtTenTenOne
+
+Port-only: first and second books reach 10, the third stops at 1 with its
+former rank-10 values; a third book saved above 1 reads as 1 and refunds
+the excess points.
+================
+*/
+func TestBooksCapAtTenTenOne(t *testing.T) {
+	want := map[int]uint8{1: 10, 2: 10, 3: 1}
+	for _, species := range D.Pets {
+		p := &domain.CharacterCOS{Codename: species.CodenamePrefix + "_090", Level: 90, Training: domain.PetTraining{TreeVersion: 2, BonusPoints: 150}}
+		for _, s := range SkillsForPet(p) {
+			if s.MaxLevel != want[s.Option] {
+				t.Fatalf("%s max %d, want %d", s.Name, s.MaxLevel, want[s.Option])
+			}
+			if s.Option != 3 {
+				continue
+			}
+			if previous, _ := PetSkill(p, s.ID-1); s.ValueAt(1) < previous.ValueAt(10) {
+				t.Fatalf("%s rank 1 (%v) is weaker than %s rank 10 (%v)", s.Name, s.ValueAt(1), previous.Name, previous.ValueAt(10))
+			}
+			before := TrainingPoints(p)
+			p.Training.Levels[s.Index()] = 10 // saved while third books had 10 ranks
+			if Level(p, s) != 1 || TrainingPoints(p) != before-1 || LearnRefusal(p, s.ID) == "" {
+				t.Fatalf("%s: saved rank 10 reads %d, points %d->%d", s.Name, Level(p, s), before, TrainingPoints(p))
+			}
+		}
+	}
+}

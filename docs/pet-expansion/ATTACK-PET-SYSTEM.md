@@ -54,9 +54,12 @@ Pet base maximum HP remains the native per-level character row. Equipment
 and defensive skills modify survival without replacing that base HP.
 
 Books unlock at pet levels **10 / 40 / 90**. The first two books reach rank
-10 at levels 40 and 90. All ten ranks of the third book are available at
-level 90, still costing skill points and requiring the previous book at
-rank 10. This changes requirements, not the point budget: one starter point
+10 at levels 40 and 90. The third book has a single rank, learned at level
+90 for one skill point and requiring the previous book at rank 10. That rank
+carries the values its former rank 10 had (including Challenging Roar III's
+39 m radius); +skills gear still scales past it. A third
+book saved above rank 1 reads as rank 1 and its extra points return as free
+points. This changes requirements, not the point budget: one starter point
 plus one point per two pet levels. Players must choose where to spend them.
 
 

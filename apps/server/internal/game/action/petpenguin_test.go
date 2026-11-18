@@ -295,10 +295,7 @@ func TestPenguinShatterOwnerGateAndFrozenKillBurst(t *testing.T) {
 			}
 			hits := []combat.Result{{Damage: 100}}
 			rt.penguinOwnerShatter(testDivision, c, chilled, hits, clock.NowMs())
-			want := uint32(100)
-			if book >= 2 {
-				want = 110
-			}
+			want := []uint32{100, 110, 120}[book-1] // book III's single rank: +20%
 			if hits[0].Damage != want {
 				t.Fatal("owner Shatter tier gate", hits)
 			}
@@ -341,9 +338,10 @@ func TestPenguinShatterControlEffectsAndHalfKillingDamage(t *testing.T) {
 			learnPetBook(t, c, 39)
 			mob.Abnormal = &abnormal.Block{}
 			mob.Abnormal.Slots[status].Active = true
-			want := uint32(110)
+			// The strike carries 10%; the owner uses book III's single-rank 20%.
+			want, ownerWant := uint32(110), uint32(120)
 			if status == abnormal.Poison {
-				want = 100
+				want, ownerWant = 100, 100
 			}
 			hits := []combat.Result{{Damage: 100}}
 			rt.petTrainedDamage(&petTrainedStrike{shatter: 10}, mob, hits)
@@ -352,7 +350,7 @@ func TestPenguinShatterControlEffectsAndHalfKillingDamage(t *testing.T) {
 			}
 			hits[0].Damage = 100
 			rt.penguinOwnerShatter(testDivision, c, mob, hits, clock.NowMs())
-			if hits[0].Damage != want {
+			if hits[0].Damage != ownerWant {
 				t.Fatal("owner Shatter control bonus", hits)
 			}
 			step, _ := rt.penguinCompanion(testDivision, c, clock.NowMs())
