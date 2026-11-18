@@ -11,7 +11,8 @@
 #   a. first rollout with no seed account stops before the Agent starts,
 #      names the bootstrap command and leaves pending.env
 #   b. with a seed it comes up; release.env names the tag and the release
-#   c. a second release moves assets/current and records the previous one
+#   c. a second release moves assets/current and records the previous one; the admin
+#      panel still reaches the player operations
 #   d. each successful rollout leaves exactly one new backup
 #   e. a rollback to the previous release moves current back
 #   f. a release that was never synced is refused before anything stops
@@ -99,6 +100,11 @@ ASSETS_RELEASE=r2 rollout || fail "c: rollout failed"
 [ "$(readlink "$stack/assets/current")" = releases/r2 ] || fail "c: current is $(readlink "$stack/assets/current")"
 [ "$(value PREVIOUS_ASSETS_RELEASE)" = r1 ] || fail "c: previous release is '$(value PREVIOUS_ASSETS_RELEASE)'"
 case "$(served_release)" in *r2*) ;; *) fail "c: web does not serve r2" ;; esac
+# The panel shares the GameWorld's namespace: after a second rollout it still answers there and
+# still reaches the player operations ("not found", where a dead namespace or a bad token would not).
+case "$(compose exec -T gameworld-global-official curl -fsS 'http://127.0.0.1:9090/character?name=Nobody')" in
+    *"character not found"*) ;; *) fail "c: the admin panel does not reach the player operations" ;;
+esac
 echo "ok    c"
 
 echo "==> d. one backup per rollout"

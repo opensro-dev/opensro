@@ -22,6 +22,7 @@ keep=0
 export IMAGE_REPO="${SMOKE_IMAGE_REPO:-silkroad-local}"
 export IMAGE_TAG="${SMOKE_IMAGE_TAG:-test}"
 export SMOKE_PORT="${SMOKE_PORT:-18080}"
+export SMOKE_ADMIN_PORT="${SMOKE_ADMIN_PORT:-19090}"
 ASSETS_DIR="${SMOKE_ASSETS_DIR:-$(generated_dir client-public)}"
 export ASSETS_DIR
 PROJECT=silkroad-smoke
@@ -46,8 +47,8 @@ trap cleanup EXIT
 
 # Digest of every secret the provision jobs own: a re-run must not change one.
 secrets_digest() {
-    docker run --rm -v "${PROJECT}_cluster:/c:ro" -v "${PROJECT}_identity:/i:ro" alpine \
-        sh -c 'cd / && find c i -type f | sort | xargs sha256sum'
+    docker run --rm -v "${PROJECT}_cluster:/c:ro" -v "${PROJECT}_identity:/i:ro" -v "${PROJECT}_admin-secrets:/a:ro" alpine \
+        sh -c 'cd / && find c i a -type f | sort | xargs sha256sum'
 }
 
 check() { # name, url
@@ -138,6 +139,30 @@ if printf '%s\n' "$second" | accounts 'bad"id' >/dev/null 2>&1; then
     echo "smoke: accounts.sh accepted an unsafe id" >&2; exit 1
 fi
 echo "ok    unsafe id refused"
+
+echo "==> admin panel"
+compose up -d --no-deps admin-relay admin
+admin="http://127.0.0.1:$SMOKE_ADMIN_PORT"
+for _ in $(seq 1 30); do curl -fsS -o /dev/null --max-time 2 "$admin/accounts" && break; sleep 1; done
+check "admin panel" "$admin/accounts"
+third="$(openssl rand -hex 12)"
+created="$(curl -fsS -o /dev/null -w '%{redirect_url}' --max-time 10 --data-urlencode action=create \
+    --data-urlencode id=smoke3 --data-urlencode "password=$third" --data-urlencode "confirm=$third" "$admin/accounts")"
+case "$created" in *ok=*) ;; *) echo "smoke: the panel did not create an account: $created" >&2; exit 1 ;; esac
+case "$(login "$third" smoke3)" in
+    *'"ok":true'*) echo "ok    the panel created a working account (relay to the Agent)" ;;
+    *) echo "smoke: the account the panel created cannot log in" >&2; exit 1 ;;
+esac
+# No character exists on a fresh shard: "not found" proves the operator API answered
+# the panel's token over the GameWorld's loopback, where a 403 would not.
+case "$(curl -fsS --max-time 10 "$admin/character?name=Nobody")" in
+    *"character not found"*) echo "ok    the panel reaches the player operations" ;;
+    *) echo "smoke: the panel cannot reach the player operations" >&2; exit 1 ;;
+esac
+if curl -fsS -o /dev/null --max-time 5 -H 'Host: evil.example' "$admin/accounts" 2>/dev/null; then
+    echo "smoke: the panel answered a foreign Host" >&2; exit 1
+fi
+echo "ok    foreign Host refused"
 
 echo "==> provision is idempotent"
 before="$(secrets_digest)"

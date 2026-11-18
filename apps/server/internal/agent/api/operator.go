@@ -46,6 +46,14 @@ var operatorClause = regexp.MustCompile(`^[A-Za-z0-9.-]{1,16}$`)
 // (moderation.MaxMuteDuration); longer is an account block.
 const operatorMaxMuteMinutes = 30 * 24 * 60
 
+// operatorMaxLevel bounds a set-level request at the v1.150 curve's last
+// row; the shard refuses anything above its own configured cap.
+const operatorMaxLevel = 140
+
+// operatorMaxSkillPoints is SP's positive signed range (persistence and
+// the char-data block).
+const operatorMaxSkillPoints = 0x7fffffff
+
 /*
 ================
 PlayerOperation
@@ -72,6 +80,11 @@ type PlayerOperation struct {
 	// named character's guild crest, "union" for the crest of the
 	// union that guild stands in (#2282).
 	Crest string `json:"crest,omitempty"`
+	// Level is a set-level operation's target level.
+	Level uint32 `json:"level,omitempty"`
+	// SkillPoints is a set-sp operation's absolute SP; zero is a value,
+	// so absent and zero differ.
+	SkillPoints *uint32 `json:"skillPoints,omitempty"`
 }
 
 /*
@@ -115,6 +128,11 @@ type PlayerOperations struct {
 	// crest of the union that guild stands in, reverting it to none
 	// (#2282); the game world audits the removal itself.
 	RemoveCrest func(PlayerOperation) (any, error)
+	// SetLevel moves the character to the start of a level through the
+	// experience walk, and SetSkillPoints sets its free SP (port-only,
+	// operator tooling).
+	SetLevel       func(PlayerOperation) (any, error)
+	SetSkillPoints func(PlayerOperation) (any, error)
 }
 
 /*
@@ -222,6 +240,10 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "a gold amount belongs to adjust-gold only", http.StatusBadRequest)
 		return
 	}
+	if (request.Action != "set-level" && request.Level != 0) || (request.Action != "set-sp" && request.SkillPoints != nil) {
+		http.Error(w, "a level belongs to set-level and SP to set-sp only", http.StatusBadRequest)
+		return
+	}
 	operation := endpoint.config.Rescue
 	switch request.Action {
 	case "", "rescue":
@@ -291,6 +313,20 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		operation = endpoint.config.RemoveCrest
+	case "set-level":
+		if endpoint.config.SetLevel == nil || request.Town != 0 || len(request.Items) != 0 || request.Silk != 0 ||
+			request.Level == 0 || request.Level > operatorMaxLevel {
+			http.Error(w, "invalid level correction", http.StatusBadRequest)
+			return
+		}
+		operation = endpoint.config.SetLevel
+	case "set-sp":
+		if endpoint.config.SetSkillPoints == nil || request.Town != 0 || len(request.Items) != 0 || request.Silk != 0 ||
+			request.SkillPoints == nil || *request.SkillPoints > operatorMaxSkillPoints {
+			http.Error(w, "invalid SP correction", http.StatusBadRequest)
+			return
+		}
+		operation = endpoint.config.SetSkillPoints
 	default:
 		http.Error(w, "unknown player operation", http.StatusBadRequest)
 		return
