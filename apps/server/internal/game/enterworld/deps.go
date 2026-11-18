@@ -91,6 +91,9 @@ type Deps struct {
 	StarterKit []WireItem
 	// MasteryTotalOverride is shared with progression; zero means native.
 	MasteryTotalOverride int64
+	// BetaMasteryEarly keeps the beta budget for characters created before
+	// the native totals went live (port-only, betamastery_early.go).
+	BetaMasteryEarly bool
 	// LevelCap publishes the shard's configured character level cap
 	// (SRO_LEVEL_CAP, progression's vocabulary) so the client's level
 	// windows follow it; zero is the native cap and publishes nothing.

@@ -11,9 +11,9 @@ only while its own SRO_ARABIA is on. Build and server must agree.
 The sources are the operator's own, never committed: the v1.696 client
 (SRO_V1696_ROOT, default inputs/sro_1696 beside the game root) for the
 continent's regions, terrain, models and character rows, and the
-ISRO-R nest extraction (SRO_ARABIA_NESTS, default
-../research/investigations/later-sources-3247/arabia-population.json)
-for the authored nests, tactics and champions. When
+ISRO-R nest extraction (SRO_ARABIA_NESTS, arabia-population.json; no
+default, as the other later worlds' exports have none) for the
+authored nests, tactics and champions. When
 scripts/v1696_archive_pins.json exists (the mall-avatar import's pin
 file, #3250) the client archives are verified against it before
 anything reads them; the nest file's sha256 is recorded in the marker
@@ -107,7 +107,8 @@ from skytemple_import import (  # noqa: E402
 	source_root,
 	verify_archives,
 )
-from sro_paths import MAIN_CHECKOUT_ROOT, trees_overlap  # noqa: E402
+from later_world_import import missing_export  # noqa: E402
+from sro_paths import trees_overlap  # noqa: E402
 
 FLAG = "SRO_ARABIA"
 SOURCE_ENV = "SRO_V1696_ROOT"
@@ -158,16 +159,16 @@ def enabled(env=os.environ):
 # ================
 # nests_path
 #
-# The authored nest extraction: SRO_ARABIA_NESTS, else the research
-# extraction beside the game root (the sibling folder the sky temple
-# source default mirrors: operator data, never committed).
+# The authored nest extraction SRO_ARABIA_NESTS names. It is operator
+# data with no default, like every later world's population export: a
+# default into ../research only exists on a maintainer's machine, and a
+# contributor met it as a FileNotFoundError deep in the variant build.
 # ================
 def nests_path(env=os.environ):
 	configured = env.get(NESTS_ENV, "").strip()
-	if configured:
-		return Path(configured)
-	return (MAIN_CHECKOUT_ROOT.parent / "research" / "investigations"
-		/ "later-sources-3247" / "arabia-population.json")
+	if not configured:
+		raise missing_export(FLAG, NESTS_ENV, "the Arabia nest extraction (arabia-population.json)")
+	return Path(configured)
 
 
 # ================
@@ -494,6 +495,9 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		restore_map_tiles(output, prior)
 		remove_map_labels(output / TEXT_ROOT, prior)
 		return remove_owned(output, prior)
+	# Resolved before any archive is read: a missing extraction refuses
+	# here, by name, not after the continent's tables are loaded.
+	nests = Path(nests) if nests else nests_path()
 	root = Path(source) if source else source_root()
 	verify_archives(root)
 	text_root = output / TEXT_ROOT
@@ -513,7 +517,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			for row in tables.table_rows(read(shard[0].lower())) if len(row) > 2}
 		codename_by_id = {row[1]: row[2] for row in later.values()}
 		regions = continent_regions(tables.table_rows(read("regioncode.txt")))
-		extraction = load_nests(Path(nests) if nests else nests_path(), regions)
+		extraction = load_nests(nests, regions)
 		population = build_population(extraction["monsters"])
 		placements = npc_placements(extraction["npcs"], tables.table_rows(read("npcpos.txt")),
 			codename_by_id, regions)
@@ -619,7 +623,6 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			(native_text_root / "textdataname.txt").read_bytes()) if len(row) > 1}
 		gate_tables, gate_codes = prepare_gates(
 			later_gate_tables,
-			tables.table_rows((native_text_root / "teleportbuilding.txt").read_bytes()),
 			tables.table_rows((native_text_root / "teleportdata.txt").read_bytes()),
 			{row[1] for row in tables.table_rows(current["teleportdata.txt"]) if len(row) > 1},
 			{row[1] for row in tables.table_rows(current["teleportbuilding.txt"]) if len(row) > 1},

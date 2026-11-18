@@ -48,12 +48,14 @@ func BetaMasteryFromEnv() (int64, error) {
 masteryAllowance
 
 Zero preserves the original race-specific rule. The override is immutable
-runtime configuration, never a character field or a client-supplied value.
+runtime configuration, never a client-supplied value; for
+SRO_BETA_MASTERY_EARLY it reads the character's server-stamped creation
+time (enterworld.MasteryAllowanceOverride, which the bootstrap publishes).
 ================
 */
 func (rt *Runtime) masteryAllowance(character *enterworld.Character) int64 {
-	if rt.MasteryTotalOverride > 0 {
-		return rt.MasteryTotalOverride
+	if override := enterworld.MasteryAllowanceOverride(rt.MasteryTotalOverride, rt.BetaMasteryEarly, character); override > 0 {
+		return override
 	}
 	return totalMasteryCap(character)
 }

@@ -138,6 +138,18 @@ limits. An empty or invalid file refuses deployment. For a directly launched bin
 `SRO_BETA_MASTERY` or set it to `off`, then restart. Native total allowances
 are Chinese **300** and European **min(2 × character level, 240)**.
 
+### Early beta characters
+
+`SRO_BETA_MASTERY_EARLY=on` (port-only, not native; owner 2026-11-18, #3551)
+keeps the 5,000 budget for characters created before the native totals went
+live (2026-11-14 13:57 UTC, `enterworld.EarlyBetaCutoff`). Characters created
+since train under the native totals. On that day 416 of 1,218 live characters
+were over their native total, most of them fully trained, and could not raise
+any mastery. The character's server-stamped `createdAt` decides; a character
+without a readable one is native. `SRO_BETA_MASTERY=on` still gives everyone
+the budget and wins over this switch. Off (the default) is native for all.
+Our shard turns it on in `apps/server/config/shard-settings.json`.
+
 The game world reads the switch once at startup and publishes its override
 with every world-entry bootstrap. The browser skill window uses that value;
 there is no separate client build flag. Missing configuration uses the existing

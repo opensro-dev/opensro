@@ -28,6 +28,12 @@ the native extraction's folders (build_alexandria_variant.link_tree), and
 a time set on a link is set on the native file too, so a file with more
 than one link keeps whatever time it has: settle records it as it stands.
 
+The asset build writes a few imports of its own beside the extraction
+(ASSET_BUILD_FOLDERS). They are not variant content: a full variant build
+removes them and the asset build writes them again, so a ledger that counted
+them saw a "changed" tree on every run and rebuilt the variant (7.4 minutes)
+to produce no change at all (r201, 2026-11-18).
+
 ===========================================================================
 """
 from __future__ import annotations
@@ -37,6 +43,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import state_document
+from import_vsro_optional_teleport import OUTPUT_FOLDER as OPTIONAL_TELEPORT_FOLDER
 from prepare_client_resources import file_digest
 from sro_paths import tree_state_root
 
@@ -45,6 +52,10 @@ LEDGER_VERSION = 1
 # The trees settle walks: the game data the build reads. The build state,
 # the generated tree and loose root files are not variant content.
 CONTENT_ROOT = "extracted"
+# Folders under the content root that the asset build writes, not the
+# variant build: laterClientImports.mjs runs their importers after the
+# variant is settled, and the server game data reads them from there.
+ASSET_BUILD_FOLDERS = frozenset((OPTIONAL_TELEPORT_FOLDER,))
 
 
 # ================
@@ -79,8 +90,11 @@ def write_ledger(path: Path, entries: dict[str, list]) -> None:
 # ================
 def content_files(variant_root: Path) -> list[tuple[str, Path, os.stat_result]]:
 	base = Path(variant_root)
+	content = base / CONTENT_ROOT
 	found = []
-	for directory, _, names in os.walk(base / CONTENT_ROOT):
+	for directory, folders, names in os.walk(content):
+		if Path(directory) == content:
+			folders[:] = [folder for folder in folders if folder not in ASSET_BUILD_FOLDERS]
 		for name in names:
 			absolute = Path(directory, name)
 			found.append((absolute.relative_to(base).as_posix(), absolute, os.stat(absolute)))
@@ -88,24 +102,29 @@ def content_files(variant_root: Path) -> list[tuple[str, Path, os.stat_result]]:
 
 
 # ================
-# matches_ledger
+# ledger_difference
 #
-# Whether the tree is exactly what the last settle recorded: the same files,
-# each with its recorded size and mtime. variant_stamp.py asks this before
-# it lets an unchanged build skip; nothing is read but the directory.
+# None when the tree is exactly what the last settle recorded: the same
+# files, each with its recorded size and mtime. Otherwise the first file
+# that differs and how, so a rebuild says why. variant_stamp.py asks this
+# before it lets an unchanged build skip; nothing is read but the directory.
 # ================
-def matches_ledger(variant_root: Path) -> bool:
+def ledger_difference(variant_root: Path) -> str | None:
 	ledger = load_ledger(ledger_path(variant_root))
 	if not ledger:
-		return False
-	files = content_files(variant_root)
-	if len(files) != len(ledger):
-		return False
-	for relative, _, stat in files:
+		return "no content ledger"
+	seen = set()
+	for relative, _, stat in content_files(variant_root):
+		seen.add(relative)
 		known = ledger.get(relative)
-		if not known or known[0] != stat.st_size or known[1] != stat.st_mtime_ns:
-			return False
-	return True
+		if not known:
+			return f"{relative} is new"
+		if known[0] != stat.st_size or known[1] != stat.st_mtime_ns:
+			return f"{relative} changed"
+	for relative in ledger:
+		if relative not in seen:
+			return f"{relative} is gone"
+	return None
 
 
 # ================

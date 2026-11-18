@@ -42,6 +42,7 @@ import path from "node:path";
 import { buildStatePath } from "../../lib/generatedRoot.mjs";
 import { codeClosure } from "./codeStamp.mjs";
 import { openFileHashCache } from "./fileHashCache.mjs";
+import { crossCityTeleportEnabled } from "./crossCityTeleport.mjs";
 import { janganTombTeleportEnabled } from "./janganTombTeleport.mjs";
 import { resolveVsroRoot, VSRO_ROOT_ENV } from "./laterClientRoot.mjs";
 import { muhanEnabled } from "./muhan.mjs";
@@ -93,6 +94,9 @@ export const ENV_KNOBS = [
 	// Port-only, not native: the Jangan gate's tomb floor links join the
 	// teleport bake (shared/janganTombTeleport.mjs).
 	"SRO_JANGAN_TOMB_TELEPORT",
+	// Port-only, not native: the direct town-to-town gate links join the
+	// teleport bake (shared/crossCityTeleport.mjs).
+	"SRO_CROSS_CITY_TELEPORT",
 	"SRO_SOOK_SURVIVAL_ARENA",
 	"SRO_ALLOW_DEV_OUTDOOR_ROUTING",
 	"SRO_SKIP_TEXTURE_CONVERT",
@@ -119,7 +123,8 @@ only through this list. Its default stays in the shard settings registry
 export const BAKE_SWITCH_POSTURES = [
 	{ env: "SRO_QINSHI_TOMB", enabled: qinshiTombEnabled },
 	{ env: "SRO_MUHAN", enabled: muhanEnabled },
-	{ env: "SRO_JANGAN_TOMB_TELEPORT", enabled: janganTombTeleportEnabled }
+	{ env: "SRO_JANGAN_TOMB_TELEPORT", enabled: janganTombTeleportEnabled },
+	{ env: "SRO_CROSS_CITY_TELEPORT", enabled: crossCityTeleportEnabled }
 ];
 
 /*

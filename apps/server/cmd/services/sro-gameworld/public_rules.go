@@ -149,6 +149,7 @@ func publicRules() publicstats.RulesResponse {
 	dropMix, _ := progression.BetaDropMixFromEnv()
 	growth := progression.BetaGrowthFromEnv()
 	betaMastery, _ := progression.BetaMasteryFromEnv()
+	betaMasteryEarly, _ := enterworld.BetaMasteryEarlyFromEnv()
 	levelCap, _ := progression.LevelCapFromEnv()
 	pharaohGear, _ := monster.PharaohGearRateFromEnv()
 	alexandriaOn, _ := alexandria.EnabledFromEnv()
@@ -294,6 +295,11 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The total of all mastery levels is capped at 300 for Chinese characters and at twice the level, up to 240, for Europeans.",
 				Now:    fmt.Sprintf("Every character may train masteries up to a total of %d; each mastery's own limits stay.", betaMastery),
 				Why:    "Testers can try every mastery tree on one character."},
+			{Flag: enterworld.EnvBetaMasteryEarly, On: betaMasteryEarly && betaMastery == 0,
+				Native: "The total of all mastery levels is capped at 300 for Chinese characters and at twice the level, up to 240, for Europeans.",
+				Now: fmt.Sprintf("Characters created before %s keep the beta's total of %d; characters created since use the native totals.",
+					enterworld.EarlyBetaCutoff.Format("2 January 2006"), enterworld.EarlyBetaMasteryCap),
+				Why: "The closed beta's testers trained past the native totals; they keep training, and new characters start native."},
 			{Flag: progression.EnvBetaSealRates, On: progression.BetaSealRatesFromEnv().Enabled(),
 				Native: "Each Seal of Star, Moon and Sun drops at the rare rate, and degree-9 Star and Moon only from monsters of level 76 to 85.",
 				Now:    "Seals of degrees 1 to 8 drop three times as often; at degree 9 Star drops three times and Moon twice as often, Sun as before, and Star and Moon also from monsters of level 86 to 94.",
@@ -678,6 +684,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The Jangan teleporter does not lead into Qin-Shi Emperor Tomb; players walk in through its door.",
 				Now:    "The Jangan teleporter also offers Qin-Shi Emperor Tomb floors 1 to 3 and each corner of floor 4 for 40,000 gold, from level 70.",
 				Why:    "A quicker way to the tomb floors, on the same terms as the Alexandria rows of the same gate."},
+			{Flag: action.EnvCrossCityTeleport, On: action.CrossCityTeleportEnabled(),
+				Native: "Each town teleporter leads only to the next town on the Silk Road: Constantinople to Jangan takes four trips.",
+				Now:    "Every town teleporter (Jangan, Donwhang, Hotan, Samarkand, Constantinople) leads straight to the other four, for what the trips through the towns between cost (5,000 gold a trip: Constantinople to Jangan is 20,000).",
+				Why:    "Saves the walk between gates on long trips; the price stays what the chain of gates costs."},
 			{Flag: action.EnvFlagWarStartUTC, On: true,
 				Native: "Capture the Flag runs on the reference server's event schedule.",
 				Now: fmt.Sprintf("One Capture the Flag match a day at %02d:%02d UTC; sign-up opens ten minutes before the start at Event So-Ok (level 20 and up).",
