@@ -332,8 +332,8 @@ delay over 45-90 minutes instead of the operator backup's 20-36 minute
 rows. Port-only, not native (owner decision 2026-11-07, #2719): with
 SRO_JANGAN_CAVE_RESPAWN on, a respawning non-unique nest in the Ch'in
 Tomb cave regions draws over 1-3 seconds instead of its authored row
-(1-2 seconds on most tomb rows since ISRO-R's live table, 6-160 seconds
-on the rest); a unique nest keeps the beta window above or its authored row.
+(ISRO-R's live table: 1-2 seconds on Floors 1-2, 1-160 seconds on
+Floors 3-4); a unique nest keeps the beta window above or its authored row.
 Off or unset keeps the authored row.
 ================
 */
