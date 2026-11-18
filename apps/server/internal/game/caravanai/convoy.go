@@ -109,6 +109,7 @@ type outboxItem struct {
 	gold                int64
 	end                 HireEnd
 	chat                bool
+	contract            bool
 	regionID            uint16
 }
 
@@ -854,14 +855,7 @@ func (r *Runtime) HireAgent(division, player string, playerJob uint8, agentName 
 		}
 		return fmt.Sprintf("%s was just hired by someone else; your gold is returned.", short)
 	}
-	town := place
-	unit.HiredBy, unit.HiredAtMs, unit.HireTown = player, nowMs, town
-	unit.hireLeftTown, unit.leftTownAtMs, unit.leaderMissingAtMs = false, 0, 0
-	unit.RunKind, unit.State, unit.AvailableForHire = RunHired, StateTraveling, false
-	unit.EscortingTrader, unit.GoodsCostGold, unit.TownDepartAtMs = player, goods, 0
-	unit.OriginTown, unit.DestTown = town, nextTown(town)
-	unit.Route, unit.WaypointIndex = nil, 0
-	unit.catchingUp, unit.roamAtMs = false, 0
+	bindHire(unit, player, place, goods, nowMs)
 	if unit.Role == RoleTrader {
 		unit.CargoStacks = 10
 	}
@@ -878,6 +872,17 @@ func (r *Runtime) HireAgent(division, player string, playerJob uint8, agentName 
 		return fmt.Sprintf("%s joins you for one trade run. Paid %s gold (%s for goods).", short, GoldText(price), GoldText(goods))
 	}
 	return fmt.Sprintf("%s joins you for one trade run. Paid %s gold.", short, GoldText(price))
+}
+
+// bindHire puts unit on player's hire, made in town at hiredAtMs.
+func bindHire(unit *AgentUnit, player string, town TownID, goods, hiredAtMs int64) {
+	unit.HiredBy, unit.HiredAtMs, unit.HireTown = player, hiredAtMs, town
+	unit.hireLeftTown, unit.leftTownAtMs, unit.leaderMissingAtMs = false, 0, 0
+	unit.RunKind, unit.State, unit.AvailableForHire = RunHired, StateTraveling, false
+	unit.EscortingTrader, unit.GoodsCostGold, unit.TownDepartAtMs = player, goods, 0
+	unit.OriginTown, unit.DestTown = town, nextTown(town)
+	unit.Route, unit.WaypointIndex = nil, 0
+	unit.catchingUp, unit.roamAtMs = false, 0
 }
 
 /*
@@ -1026,6 +1031,11 @@ func (r *Runtime) superviseHireLocked(unit *AgentUnit, nowMs int64) bool {
 		return true
 	}
 	unit.leaderMissingAtMs = 0
+	if unit.rejoinParty {
+		// A hire restored at boot: back into the hirer's party.
+		unit.rejoinParty = false
+		r.outbox = append(r.outbox, outboxItem{contract: true, player: unit.HiredBy, agent: unit.Name})
+	}
 	if !CanHire(p.JobType, unit.Role) {
 		r.endHireLocked([]*AgentUnit{unit}, HireAborted, nowMs)
 		return true
@@ -1135,6 +1145,12 @@ func (r *Runtime) flushOutbox(division string) {
 		if item.chat {
 			if r.hooks.OnAgentChat != nil {
 				r.hooks.OnAgentChat(division, item.agent, item.regionID, item.text)
+			}
+			continue
+		}
+		if item.contract {
+			if r.hooks.OnContractFormed != nil {
+				r.hooks.OnContractFormed(division, item.player, item.agent)
 			}
 			continue
 		}

@@ -43,7 +43,12 @@ type hirePlayer struct {
 
 func hireRuntime(t *testing.T, players map[string]*hirePlayer, paid *map[string]int64) *Runtime {
 	t.Helper()
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+	return hireRuntimeWith(t, nil, players, paid)
+}
+
+func hireRuntimeWith(t *testing.T, store MemoryStore, players map[string]*hirePlayer, paid *map[string]int64) *Runtime {
+	t.Helper()
+	rt := NewRuntime(Config{Enabled: true}, store, WorldHooks{
 		Player: func(_, name string) (PlayerPosition, bool) {
 			p := players[name]
 			if p == nil || !p.online {

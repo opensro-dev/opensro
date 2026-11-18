@@ -14,6 +14,7 @@ package caravanai
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -108,6 +109,7 @@ type AgentUnit struct {
 	progressFrom       Waypoint
 	progressAtMs       int64
 	pendingTeleport    *Waypoint
+	rejoinParty        bool
 }
 
 const combatStallTimeoutMs int64 = 5000
@@ -173,6 +175,13 @@ type Runtime struct {
 	outbox        []outboxItem
 	// manualRuns stops the standing-run scheduler (tests drive runs by hand).
 	manualRuns bool
+	// hireStore keeps hires across restarts (hires.go); savedHires is what
+	// it holds, guarded by hireSaveMu (taken before mu, never after);
+	// restoredHires (under mu) hands the boot's rows to the next flush.
+	hireStore     HireStore
+	hireSaveMu    sync.Mutex
+	savedHires    map[string]domain.CaravanHireRow
+	restoredHires []domain.CaravanHireRow
 	// remoteCtx ends every remote request at Close.
 	remoteCtx    context.Context
 	cancelRemote context.CancelFunc
@@ -201,7 +210,10 @@ func NewRuntime(cfg Config, store MemoryStore, hooks WorldHooks) *Runtime {
 		remote = brain
 	}
 	remoteCtx, cancelRemote := context.WithCancel(context.Background())
+	hireStore, _ := store.(HireStore)
 	return &Runtime{
+		hireStore:     hireStore,
+		savedHires:    make(map[string]domain.CaravanHireRow),
 		cfg:           cfg,
 		local:         NewHardcodedBrain(),
 		remote:        remote,
@@ -240,6 +252,9 @@ func (r *Runtime) Run(ctx context.Context) {
 			if err := r.memories.Flush(); err != nil {
 				log.WithError(err).Warn("caravan-ai: memory flush failed; retrying next pass")
 			}
+			if err := r.flushHires(); err != nil {
+				log.WithError(err).Warn("caravan-ai: hire flush failed; retrying next pass")
+			}
 		}
 	}
 }
@@ -259,7 +274,7 @@ func (r *Runtime) Close() error {
 	}
 	r.cancelRemote()
 	r.remoteJobs.Wait()
-	return r.memories.Flush()
+	return errors.Join(r.memories.Flush(), r.flushHires())
 }
 
 /*
@@ -353,6 +368,7 @@ func (r *Runtime) EnsureDivisionRoster(division string) []*AgentUnit {
 
 	_ = r.memories.LoadDivision(division)
 	heat := r.memories.HeatSnapshot(division)
+	hires := r.loadHires(division)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -388,6 +404,7 @@ func (r *Runtime) EnsureDivisionRoster(division string) []*AgentUnit {
 		}
 	}
 	r.agents[division] = roster
+	r.restoreHiresLocked(division, hires, time.Now().UnixMilli())
 	return cloneUnits(roster)
 }
 

@@ -366,6 +366,10 @@ Distances use 10 world units per in-game metre (skill ranges: 180 units = 18m); 
   hour, a lost job, `!dismiss`, or the hirer being offline/out of the main world for 2 minutes they pay
   the goods' cost back; robbed goods pay nothing. A hired agent that dies respawns beside its hirer.
   Released agents leave the party and go home (teleport if outside town).
+- **Restarts:** hires in flight are mirrored to the `caravan_hires` table every 5 seconds (and at
+  shutdown). At boot each one resumes: the agent waits at the hire town's shop for up to 10 minutes,
+  then teleports to the hirer and rejoins their party when they log in; the hour still counts from the
+  original hire. A stored hire whose agent is busy or gone pays the goods' cost back.
 - **Standing runs:** 2 solo Traders and 2 Traders with 3 Hunters each are kept on the road. Escorts are
   released in the arrival town. Solo Traders pick either ferry crossing at random and bend every open leg
   of 150m+ through a point 60-150m off the road.
@@ -442,6 +446,6 @@ Settings deviation for local runs: this workstation's server game data has no va
 `SRO_ALEXANDRIA`, `SRO_CAP110_ITEMS/MONSTERS/TEMPLE`, `SRO_ARABIA`, `SRO_JUPITER(_TEMPLE)` and
 `SRO_PHARAOH_TEMPLE` were forced off for the test instance (the GameWorld refuses to boot otherwise).
 
-Known gaps: hires live in memory only (a server restart drops them; fee and goods are not refunded);
-a payout to a hirer who is not loaded on the server is lost (logged); idle agents gather on a 30m ring,
-so a busy shop still looks crowded.
+Known gaps: a hire made in the last 5 seconds before a crash is lost (the flush interval); a payout
+to a hirer who is not loaded on the server is lost (logged); idle agents gather on a 30m ring, so a
+busy shop still looks crowded.

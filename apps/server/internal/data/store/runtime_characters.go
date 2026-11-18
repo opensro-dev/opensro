@@ -83,3 +83,20 @@ func (src storeCharacterSource) LoadCaravanRouteHeat(division string) ([]domain.
 func (src storeCharacterSource) SaveCaravanRouteHeat(row domain.CaravanRouteHeatRow) error {
 	return src.s.SaveCaravanRouteHeat(row)
 }
+
+/*
+================
+LoadCaravanHires / SaveCaravanHire / DeleteCaravanHire
+================
+*/
+func (src storeCharacterSource) LoadCaravanHires(division string) ([]domain.CaravanHireRow, error) {
+	return src.s.LoadCaravanHires(division)
+}
+
+func (src storeCharacterSource) SaveCaravanHire(row domain.CaravanHireRow) error {
+	return src.s.SaveCaravanHire(row)
+}
+
+func (src storeCharacterSource) DeleteCaravanHire(division, agentName string) error {
+	return src.s.DeleteCaravanHire(division, agentName)
+}
