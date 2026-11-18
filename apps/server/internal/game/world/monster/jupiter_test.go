@@ -15,6 +15,8 @@ package monster
 import (
 	"encoding/json"
 	"testing"
+
+	"opensro.online/server/internal/game/world/jupiter"
 )
 
 /*
@@ -27,10 +29,25 @@ it; spawnType is the database's second spawn kind when nonzero.
 */
 func jupiterSource(t *testing.T, codename string, world, spawnType int) []byte {
 	t.Helper()
+	return jupiterSourceIn(t, codename, world, spawnType, jupiterTestRegion)
+}
+
+// jupiterTestRegion is the outdoor region jupiterSource's nest stands in.
+const jupiterTestRegion = 21000
+
+/*
+================
+jupiterSourceIn
+
+jupiterSource's row standing in the given region.
+================
+*/
+func jupiterSourceIn(t *testing.T, codename string, world, spawnType int, region uint16) []byte {
+	t.Helper()
 	source := struct {
 		Version int
 		Rows    []cap110Nest
-	}{cap110PopulationVersion, []cap110Nest{{Codename: codename, NestID: 41001, WorldID: world, RegionID: 21000,
+	}{cap110PopulationVersion, []cap110Nest{{Codename: codename, NestID: 41001, WorldID: world, RegionID: region,
 		X: 100, Y: 0, Z: 200, Radius: 400, GenerateRadius: 300, MaxCount: 10,
 		Respawn: true, RespawnDelayMinSec: 6, RespawnDelayMaxSec: 8, SpawnType: spawnType,
 		Controls: TacticsControls{ChangeTarget: 2, SightRange: 130}}}}
@@ -180,5 +197,36 @@ func TestJupiterCarriesTheSecondSpawnKind(t *testing.T) {
 	}
 	if got.Nests[1].SpawnType != 0 {
 		t.Fatalf("spawn kind = %d, want 0", got.Nests[1].SpawnType)
+	}
+}
+
+/*
+================
+TestJupiterTempleAdmitsItsInteriorsOnly
+
+The source places 1,048 temple nests in the temple's four interiors
+(jupiter.FirstInteriorRegion..LastInteriorRegion). They load, so a shard
+with SRO_JUPITER_TEMPLE on boots; a temple row in any other dungeon
+region still refuses the whole population, and the field stays outdoor.
+================
+*/
+func TestJupiterTempleAdmitsItsInteriorsOnly(t *testing.T) {
+	template := tombTemplate("MOB_JUPITER_SOLDIER", 115, 0)
+	for _, region := range []uint16{jupiter.FirstInteriorRegion, jupiter.LastInteriorRegion} {
+		got, err := appendJupiterTempleData(template, jupiterSourceIn(t, "MOB_JUPITER_SOLDIER", 88, 0, region))
+		if err != nil {
+			t.Fatalf("interior %#x nest refused: %v", region, err)
+		}
+		if nest := got.Nests[len(got.Nests)-1]; nest.RegionID != region {
+			t.Fatalf("interior nest joined region %#x, want %#x", nest.RegionID, region)
+		}
+	}
+	for _, region := range []uint16{jupiter.FirstInteriorRegion - 1, jupiter.LastInteriorRegion + 1} {
+		if _, err := appendJupiterTempleData(template, jupiterSourceIn(t, "MOB_JUPITER_SOLDIER", 88, 0, region)); err == nil {
+			t.Fatalf("temple nest in dungeon region %#x admitted", region)
+		}
+	}
+	if _, err := appendJupiterData(template, jupiterSourceIn(t, "MOB_JUPITER_SOLDIER", jupiter.FieldWorldID, 0, jupiter.FirstInteriorRegion)); err == nil {
+		t.Fatal("a field nest in a temple interior was admitted")
 	}
 }

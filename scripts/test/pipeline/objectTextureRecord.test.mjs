@@ -16,6 +16,7 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+	compoundNavMeshPath,
 	materialTexturePublicPath,
 	objectTextureRecord,
 	objectTextureSource
@@ -98,4 +99,32 @@ test("a block source keeps its game-relative name", () => {
 	assert.equal( record.imageSourcePath, "extracted/Data_extracted/prim/mtrl/particle/pokpo1.ddj" );
 	assert.equal( record.imagePublicPath, "/assets/world/outdoor/object-textures/prim/mtrl/particle/pokpo1.texture" );
 	assert.equal( record.blockFormat, "dxt5" );
+});
+
+test("a compound walks on the mesh of the branch its name names (v1.696 f8dff0)", () => {
+	const branches = [
+		{ sourcePath: "res/bldg/arabia/bagh_masin/bagh_masin_entry.bsr", primaryMeshPath: null },
+		{
+			sourcePath: "res/bldg/arabia/bagh_masin/bagh_masin_wall.bsr",
+			primaryMeshPath: "prim/mesh/bldg/arabia/bagh_masin/bagh_masin_wall01.bms"
+		},
+		{
+			sourcePath: "res/bldg/arabia/bagh_masin/bagh_masin_gate.bsr",
+			primaryMeshPath: "prim/mesh/bldg/arabia/bagh_masin/bagh_masin_gate01.bms"
+		}
+	];
+	// The name is the archive's backslash path, in any case.
+	assert.equal(
+		compoundNavMeshPath( { name: "res\\bldg\\Arabia\\bagh_masin\\bagh_masin_wall.bsr" }, branches ),
+		"prim/mesh/bldg/arabia/bagh_masin/bagh_masin_wall01.bms",
+		"the named branch, not the first with a mesh"
+	);
+	assert.equal(
+		compoundNavMeshPath( { name: "res\\bldg\\arabia\\bagh_masin\\bagh_masin_entry.bsr" }, branches ),
+		null,
+		"a named branch without a mesh gives none"
+	);
+	// v1.150's compounds carry an empty name: no mesh, as its loader (441700) gives.
+	assert.equal( compoundNavMeshPath( { name: "" }, branches ), null );
+	assert.equal( compoundNavMeshPath( { name: "x_mas_boxset01" }, branches ), null );
 });

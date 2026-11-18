@@ -7,6 +7,7 @@ package progression
 
 import (
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -88,6 +89,52 @@ func TestBetaMasteryKeepsLevelAndSPGates(t *testing.T) {
 		result = rt.HandleMasteryLevelUp(testDivision, c, masteryPayload(id, 1))
 		if result.Frames[0].Payload[0] != wire.ResultError || c.Masteries[0].Level != 1 {
 			t.Fatal("beta bypassed SP", result)
+		}
+	}
+}
+
+/*
+================
+TestEarlyBetaCharactersKeepTheBetaBudget
+
+SRO_BETA_MASTERY_EARLY (owner, 2026-11-18, #3551): a character created
+before the native totals went live, over its native total, trains again;
+one created since is held to the native total; with the switch off both
+are. Saved training never changes.
+================
+*/
+func TestEarlyBetaCharactersKeepTheBetaBudget(t *testing.T) {
+	stamp := func(offset time.Duration) string {
+		return enterworld.EarlyBetaCutoff.Add(offset).UTC().Format("2006-01-02T15:04:05.000Z")
+	}
+	for _, row := range []struct {
+		name    string
+		created string
+		early   bool
+		trains  bool
+	}{
+		{"early character, switch on", stamp(-24 * time.Hour), true, true},
+		{"new character, switch on", stamp(time.Minute), true, false},
+		{"early character, switch off", stamp(-24 * time.Hour), false, false},
+	} {
+		for _, c := range []*enterworld.Character{testCharacter(), testEuCharacter(40)} {
+			c.CreatedAt = row.created
+			id := c.Masteries[0].ID
+			loadMasterySum(t, c, id, 300)
+			rt := newTestRuntime(c)
+			rt.BetaMasteryEarly = row.early
+			sp := *c.SkillPoints
+			result := rt.HandleMasteryLevelUp(testDivision, c, masteryPayload(id, 1))
+			if !row.trains {
+				assertTotalLimitRefusal(t, result)
+				if masteryLevelSum(c) != 300 || *c.SkillPoints != sp {
+					t.Fatalf("%s: a refusal changed saved training", row.name)
+				}
+				continue
+			}
+			if result.Frames[0].Payload[0] != wire.ResultSuccess || masteryLevelSum(c) != 301 {
+				t.Fatalf("%s: training refused: %+v", row.name, result)
+			}
 		}
 	}
 }

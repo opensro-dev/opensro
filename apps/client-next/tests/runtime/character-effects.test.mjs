@@ -554,20 +554,31 @@ function effectFixture( answer, others = [] ) {
 			)
 	};
 }
-test("a hit effect following its victim keeps the caster's facing, not the victim's", () => {
-	// 8DB770 -> 8D5440: the victim's effect copies the caster's model matrix.
+test("a damage follow stage plays once on its caster; the victim's hit keeps the caster's facing", () => {
+	// 8DDF7B creates an AT_ONE_FOLLOW object once on the action's owner
+	// (+0x58); the damage flag only hands the results to 8DB770 (8DEF33).
+	// The AT_DMG_POS stage lands on the victim with the caster's yaw (8D5440).
 	const caster = { gid: 1, refObjId: 1, regionId: 257, x: 0, y: 20, z: 30, heading: 16384 };
-	const f = effectFixture( undefined, [ caster ] );
+	const other = { gid: 3, refObjId: 1, regionId: 257, x: 15, y: 20, z: 30, heading: 0 };
+	const f = effectFixture( undefined, [ caster, other ] );
 	f.gameplay.localGid = 99;
 	f.gameplay.casts = [ { token: 1, caster: 1, target: 2, skill: 1 } ];
 	let actors = [];
 	for ( let i = 0; i < 12 && !actors.length; i++ ) actors = f.step( i / 10 );
-	f.gameplay.casts = [ { token: 2, caster: 1, target: 2, skill: 1 } ];
-	actors = f.step( 1.5 );
-	const follow = actors.find( actor => actor.attachment?.root && actor.attachment.gid === f.entity.gid );
-	assert.ok( follow, "the follow stage attaches to the victim's root" );
-	assert.equal( follow.attachment.facing, nativeHeadingYaw( caster.heading ) );
-	assert.notEqual( follow.attachment.facing, nativeHeadingYaw( f.entity.heading ) );
+	const before = new Set( actors.map( actor => actor.gid ) );
+	f.gameplay.casts = [ {
+		token: 2,
+		caster: 1,
+		target: 2,
+		skill: 1,
+		results: [ { target: 2, impacts: [ { damage: 10 } ] }, { target: 3, impacts: [ { damage: 20 } ] } ]
+	} ];
+	actors = f.step( 1.5 ).filter( actor => !before.has( actor.gid ) );
+	const follows = actors.filter( actor => actor.attachment?.root );
+	assert.deepEqual( follows.map( actor => actor.attachment.gid ), [ caster.gid ], "one follow, on the caster" );
+	const hits = actors.filter( actor => !actor.attachment );
+	assert.equal( hits.length, 2, "one hit per victim" );
+	for ( const hit of hits ) assert.equal( hit.pose.yaw, nativeHeadingYaw( caster.heading ) );
 });
 test("effect catalogs recover with backoff and admit queued callbacks exactly once", () => {
 	const f = effectFixture( ( decode, requests ) =>
@@ -577,7 +588,7 @@ test("effect catalogs recover with backoff and admit queued callbacks exactly on
 			{ kind: "bytes", buffer: encode( { format: "invalid" } ).buffer } :
 			undefined
 	);
-	f.gameplay.casts = [ { token: 1, caster: 1, target: 2, skill: 1 } ];
+	f.gameplay.casts = [ { token: 1, caster: 2, target: 2, skill: 1 } ];
 	f.step( 0 );
 	f.step( 0.1 );
 	assert.match( f.effects.error(), /503/ );
@@ -597,7 +608,7 @@ test("effect catalogs recover with backoff and admit queued callbacks exactly on
 		[ "effects", "effects", "models", "models" ],
 		"accepted records are retained through model failure"
 	);
-	f.gameplay.casts = [ { token: 2, caster: 1, target: 2, skill: 1 } ];
+	f.gameplay.casts = [ { token: 2, caster: 2, target: 2, skill: 1 } ];
 	assert.equal( f.step( 1.5 ).length, 4 );
 	f.effects.dispose();
 	assert.deepEqual( f.step( 2 ), [] );
@@ -622,7 +633,8 @@ test("follow attachments resolve current region, heading and predicted local pos
 	f.step( 0 );
 	f.step( 0.1 );
 	f.step( 0.2 );
-	f.gameplay.casts = [ { token: 1, caster: 1, target: 2, skill: 1 } ];
+	// A self-cast: the follow stage holds the caster (8DDF7B).
+	f.gameplay.casts = [ { token: 1, caster: 2, target: 2, skill: 1 } ];
 	const initial = f.step( 1 );
 	assert.equal( initial.length, 2 );
 	Object.assign( f.entity, { regionId: 258, x: 100, y: 200, z: 300, heading: 16384 } );

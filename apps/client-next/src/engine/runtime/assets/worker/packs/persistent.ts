@@ -26,6 +26,14 @@ admitted (setStartup), never from what an earlier release stored: a warm
 entry the manifest names is protected at once, and one only an older
 release named becomes ordinary LRU data.
 
+The inventory (every stored key and its size) is rebuilt once per worker
+lifetime, before the first write. Writes wait behind it, and enqueue skips
+whatever arrives while they wait, so the rebuild must be quick: the
+admitted manifests already give the size of every digest they name
+(addSizes), and only entries no admitted manifest names - an older
+release's - have their stored size read. Those can never serve this
+release, so they are the first evicted.
+
 ===========================================================================
 */
 
@@ -45,6 +53,10 @@ const MAX_CACHE_OPERATIONS = 8;
 const CACHE_SCAN_MS = 30000;
 // Match the bounded publication backlog; waiting callers own no native work.
 const MAX_CACHE_WAITERS = 64;
+// Bounds on verified bytes waiting for publication (enqueue): copies held in
+// memory, so a burst beyond them skips persistence rather than growing.
+const MAX_PENDING_WRITES = 64;
+const MAX_QUEUED_BYTES = 32 << 20;
 
 /*
 ================
@@ -69,6 +81,8 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	let inventory: Map<string, number> | null = null, total = 0, budget = MIN_BUDGET_BYTES, estimatedAt = -Infinity;
 	// Keys of the current manifest's startup packs and members (setStartup).
 	let startup = new Set<string>();
+	// Stored size of every key an admitted manifest names (addSizes).
+	const sizes = new Map<string, number>();
 	let hits = 0, misses = 0, writes = 0, errors = 0, evictions = 0, queuedBytes = 0, skipped = 0;
 	// Set once the origin's quota cannot hold a pack (the header above).
 	let writesStopped = false;
@@ -336,6 +350,59 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	}
 	/*
 	================
+	rebuild
+
+	The inventory from Cache Storage, with total set to its size: one
+	keys() walk, sizes from the admitted manifests (addSizes). Only keys
+	no manifest names have their size header read, MAX_CACHE_OPERATIONS at
+	a time; one read per entry used to hold every write for minutes on a
+	store of tens of thousands. Unnamed keys lead the LRU order, so
+	eviction takes them first.
+	================
+	*/
+	async function rebuild( cache: Cache ) {
+		const requests = await storage( () => cache.keys(), undefined, undefined, undefined, CACHE_SCAN_MS );
+		// Classify every key before the first await: the HD index may add
+		// sizes during the scan, and a key it names then must not be counted
+		// both as read and as named.
+		const unnamed: Request[] = [], named: [string, number][] = [];
+		for ( const request of requests ) {
+			const size = sizes.get( request.url );
+			if ( size === undefined ) unnamed.push( request );
+			else named.push( [ request.url, size ] );
+		}
+		const rebuilt = new Map<string, number>();
+		let sum = 0;
+		for ( let i = 0; i < unnamed.length; i += MAX_CACHE_OPERATIONS ) {
+			const batch = unnamed.slice( i, i + MAX_CACHE_OPERATIONS );
+			// Only the size header is read: dispose cancels the body at
+			// settlement, before the slot frees (storage).
+			const responses = await Promise.all(
+				batch.map( request => storage( () => cache.match( request ), undefined, undefined, release ) )
+			);
+			batch.forEach( ( request, n ) => {
+				const size = Number( responses[n]?.headers.get( "content-length" ) ) || 0;
+				sum += size;
+				rebuilt.set( request.url, size );
+			} );
+		}
+		for ( const [url, size] of named ) {
+			sum += size;
+			rebuilt.set( url, size );
+		}
+		// Reads served before the rebuild still count as recent use.
+		for ( const url of touched ) {
+			const size = rebuilt.get( url );
+			if ( size === undefined ) continue;
+			rebuilt.delete( url );
+			rebuilt.set( url, size );
+		}
+		touched.clear();
+		total = sum;
+		return rebuilt;
+	}
+	/*
+	================
 	publish
 	================
 	*/
@@ -355,22 +422,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				} catch {}
 			}
 			if ( bytes.length > budget ) return;
-			if ( !inventory ) {
-				inventory = new Map();
-				total = 0;
-				const requests = await storage( () => cache.keys(), undefined, undefined, undefined, CACHE_SCAN_MS );
-				for ( const request of requests ) {
-					// Only the size header is read: dispose cancels the body at
-					// settlement, before the slot frees (storage).
-					const response = await storage( () => cache.match( request ), undefined, undefined, release ),
-						size = Number( response?.headers.get( "content-length" ) ) || 0;
-					total += size;
-					inventory.set( request.url, size );
-				}
-				const recent = [ ...touched ];
-				touched.clear();
-				for ( const url of recent ) if ( inventory.has( url ) ) touch( url );
-			}
+			if ( !inventory ) inventory = await rebuild( cache );
 			const target = key( origin, digest );
 			if ( inventory.has( target ) ) {
 				touch( target );
@@ -560,8 +612,11 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		*/
 		enqueue( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ) {
 			const id = key( origin, digest );
-			if ( stalled > 0 || pending.has( id ) ) return;
-			if ( pending.size >= 64 || queuedBytes + bytes.length > (32 << 20) ) {
+			if ( pending.has( id ) ) return;
+			if (
+				stalled > 0 || pending.size >= MAX_PENDING_WRITES ||
+				queuedBytes + bytes.length > MAX_QUEUED_BYTES
+			) {
 				skipped++;
 				return;
 			}
@@ -582,6 +637,19 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		*/
 		setStartup( origin: string, digests: Iterable<string> ) {
 			startup = new Set( Array.from( digests, digest => key( origin, digest ) ) );
+		},
+		/*
+		================
+		addSizes
+
+		The stored length of each digest an admitted manifest names (a
+		pack's bytes, a member's decoded length): what the inventory
+		rebuild needs instead of reading each entry. Additive, since the
+		HD set's index is admitted after the main one.
+		================
+		*/
+		addSizes( origin: string, digests: Iterable<readonly [string, number]> ) {
+			for ( const [digest, length] of digests ) sizes.set( key( origin, digest ), length );
 		},
 		flush: () => tail,
 		stats: () => ({

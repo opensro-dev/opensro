@@ -14,6 +14,7 @@ substitutes a runtime gid for a media-table key.
 
 import fs from "node:fs";
 import path from "node:path";
+import { crossCityTeleportEnabled, loadCrossCityTeleportLinkRows } from "../shared/crossCityTeleport.mjs";
 import { exportDataAsset } from "../shared/dataAssetExport.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { janganTombTeleportEnabled, loadJanganTombTeleportLinkRows } from "../shared/janganTombTeleport.mjs";
@@ -109,6 +110,11 @@ export function buildTeleportDataAsset() {
 	// they name already exists in v1.150 teleportdata.txt.
 	if ( janganTombTeleportEnabled() ) {
 		rawLinkRows.push( ...loadJanganTombTeleportLinkRows().rows );
+	}
+	// Port-only, not native: when SRO_CROSS_CITY_TELEPORT is on, include
+	// the direct town-to-town gate links.
+	if ( crossCityTeleportEnabled() ) {
+		rawLinkRows.push( ...loadCrossCityTeleportLinkRows().rows );
 	}
 	const linkRows = rawLinkRows
 		.filter( ( columns ) => Number( columns[0] ) !== 0 )

@@ -49,7 +49,11 @@ const STEP_BUDGET_MS = 30_000;
 const MOVE_BUDGET_MS = 8_000;
 // A short, server-confirmed move and back: small enough to stay walkable in
 // the probe's town, large enough to be a real movement.
-const MOVE_DISTANCE = 4;
+export const MOVE_DISTANCE = 4;
+// How far from the goal a receipt may report the probe: the probe walks out
+// and back, so the server has it at most two legs from any goal, plus the
+// whole-unit rounding of the request.
+const MOVE_REACH = 2 * MOVE_DISTANCE + 1;
 
 /*
 ================
@@ -148,30 +152,55 @@ async function enterWorld( simulation, name, label ) {
 
 /*
 ================
-moveAndConfirm
+moveConfirmed
 
-One server-confirmed move: the server's echo of our entity must carry a new
-movement toward the requested destination.
+The server's answer to one move, read from the gameplay state: null until
+a receipt later than acknowledged has arrived, the state once it has. A
+refused move throws the server's reason.
+
+The gate asserts only what the client itself relies on, the receipt
+(movement.ts receive): it acknowledges the command by id, a refusal sets
+the error, and the pose beside it is where the server has the probe at
+that moment - at the goal, or on the way to it. Nothing may be expected
+after it. The original sends nothing when a destination walk arrives, and
+the server sends its arrival correction only with the port-only position
+stream (#3721). Until 2026-11-18 this check waited for that correction to
+put the pose on the goal, so it could not pass on the first release that
+turned the stream off, and that release's maintenance window found out
+(opensro-ops RUNBOOK.md, incident 2026-11-18).
+
+A receipt with no acknowledgedMove is not one: compare with >, so a
+missing field never reads as acknowledged.
 ================
 */
-async function moveAndConfirm( simulation, destination ) {
+export function moveConfirmed( gameplay, acknowledged, destination ) {
+	if ( !gameplay || !(gameplay.acknowledgedMove > acknowledged) ) return null;
+	// The error belongs to the receipt just counted: an older refusal stays
+	// in the state until the next receipt replaces it.
+	if ( gameplay.error ) throw Error( "gameplay error: " + gameplay.error );
+	const at = gameplay.authoritativePose;
+	if ( !at || at.regionId !== destination.regionId ) return null;
+	// The request carries whole units.
+	const distance = Math.hypot( at.x - Math.trunc( destination.x ), at.z - Math.trunc( destination.z ) );
+	return distance <= MOVE_REACH ? gameplay : null;
+}
+
+/*
+================
+moveAndConfirm
+
+One server-confirmed move: the server must acknowledge this command and
+report the probe at or near its goal (moveConfirmed).
+================
+*/
+export async function moveAndConfirm( simulation, destination, budgetMs = MOVE_BUDGET_MS ) {
 	const acknowledged = simulation.state.gameplay?.acknowledgedMove ?? 0,
 		batches = simulation.state.batches;
 	simulation.session( { kind: "gameplay", command: { kind: "move", destination } } );
 	try {
-		// The server acknowledges the move by id and answers with the pose it
-		// accepted (the request carries whole units).
 		return await simulation.waitFor(
-			state => {
-				const gameplay = state.gameplay;
-				if ( gameplay?.error ) throw Error( "gameplay error: " + gameplay.error );
-				if ( !gameplay || gameplay.acknowledgedMove <= acknowledged ) return null;
-				const at = gameplay.authoritativePose;
-				return at && Math.hypot( at.x - Math.trunc( destination.x ), at.z - Math.trunc( destination.z ) ) < 1 ?
-					gameplay :
-					null;
-			},
-			MOVE_BUDGET_MS,
+			state => moveConfirmed( state.gameplay, acknowledged, destination ),
+			budgetMs,
 			"gameplay move"
 		);
 	} catch ( error ) {

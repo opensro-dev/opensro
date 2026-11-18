@@ -80,6 +80,9 @@ type NativeSpawnRoll struct {
 	Nest NestRow
 	// HeadingRadians is the native float32 heading passed to creation.
 	HeadingRadians float32
+	// ReplaceDraw is the event replacement roll's draw
+	// (ApplySpawnReplacement).
+	ReplaceDraw uint32
 }
 
 // Grade is the spawn byte: low nibble monster grade, high nibble party.
@@ -127,8 +130,68 @@ func RollNativeSpawn(ref MonsterRef, nest NestRow, partyArmed bool, draw func() 
 	// The event replacement roll draws before its region gate even
 	// though the default configuration (WINTER_EVENT_2009 off) leaves the
 	// replacement table empty.
-	draw()
+	roll.ReplaceDraw = draw()
 	return roll
+}
+
+/*
+================
+SpawnReplacement
+
+One row of the v1.188 server's spawn replace table. The winter event
+fills one: a nest spawn whose grade
+nibble is Grade may become Ref at grade NewGrade, RatePercent out of at
+least 100.
+================
+*/
+type SpawnReplacement struct {
+	Ref         MonsterRef
+	Grade       uint8
+	NewGrade    uint8
+	RatePercent float32
+}
+
+// spawnReplaceFloor is the replace roll's lowest span: a table whose rates
+// sum to 100 or less rolls out of 100.
+const spawnReplaceFloor = 100
+
+/*
+================
+ApplySpawnReplacement
+
+The v1.188 nest spawn's replacement, applied only in a normal world (the
+caller's gate): the roll is
+ReplaceDraw / 32767 times the table's span, and the first row of the
+spawn's grade whose running rate reaches it replaces the monster and the
+grade's low nibble. ok is false when nothing replaces.
+================
+*/
+func ApplySpawnReplacement(roll NativeSpawnRoll, rows []SpawnReplacement) (MonsterRef, NativeSpawnRoll, bool) {
+	if len(rows) == 0 {
+		return MonsterRef{}, roll, false
+	}
+	span := float32(0)
+	for _, row := range rows {
+		span += row.RatePercent
+	}
+	if span <= spawnReplaceFloor {
+		span = spawnReplaceFloor
+	}
+	fraction := float32(float64(roll.ReplaceDraw) / 32767.0)
+	threshold := float32(float64(span) * float64(fraction))
+	grade := roll.Grade()
+	reached := float32(0)
+	for _, row := range rows {
+		if grade&0x0f != row.Grade {
+			continue
+		}
+		reached += row.RatePercent
+		if reached >= threshold {
+			roll.Nest.RarityOverride = grade&0xf0 | row.NewGrade&0x0f
+			return row.Ref, roll, true
+		}
+	}
+	return MonsterRef{}, roll, false
 }
 
 // InitialDirRadians:

@@ -125,3 +125,27 @@ test("no asset owner yet reads as a null queue, not a failure", () => {
 	assert.equal( doc.current.queue, null );
 	assert.equal( doc.samples[0].t, -1 );
 });
+
+test("each sample carries the persistent store's counters", () => {
+	const { host, history } = harness();
+	const store = {
+		hits: 40,
+		misses: 7,
+		writes: 12,
+		skipped: 3,
+		errors: 0,
+		evictions: 1,
+		writesStopped: false,
+		budget: 4096,
+		rangeBytes: 900,
+		demandedBytes: 600
+	};
+	host.snapshot = { phase: "running", error: null, available: 8, jobs: [], store };
+	history.sample( 0 );
+	host.snapshot = { phase: "running", error: null, available: 8, jobs: [], store: null };
+	history.sample( ASSET_SAMPLE_MS );
+	const doc = history.document( 0, ASSET_SAMPLE_MS );
+	assert.deepEqual( doc.samples[0].queue.store, store );
+	// Before the worker's first progress there are no counters yet.
+	assert.equal( doc.samples[1].queue.store, null );
+});

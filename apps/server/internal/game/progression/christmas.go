@@ -9,8 +9,9 @@ in the Japanese row, with its snow), and the later client's Christmas
 town decoration (world layer 7), but no server that runs the event. The
 shard runs it behind SRO_CHRISTMAS_EVENT inside its UTC window
 (seasonal_event.go); off, or without a valid window, nothing of it
-exists, and the Red Santa Socks it handed out leave at each character's
-next world entry (SocksExpireAt).
+exists, and the snow flakes it handed out leave at each character's
+next world entry (SnowflakesExpireAt). Its Server Missions are
+winter_missions.go's.
 
 ===========================================================================
 */
@@ -30,9 +31,8 @@ const EnvChristmasEventWindow = "SRO_CHRISTMAS_EVENT_WINDOW"
 ================
 ChristmasEvent
 
-The Christmas event's switch and window, and its winter wave timetable
-(christmas_waves.go). The zero value is off and windowless: the native
-game.
+The Christmas event's switch and window. The zero value is off and
+windowless: the native game.
 ================
 */
 type ChristmasEvent struct {
@@ -43,7 +43,7 @@ type ChristmasEvent struct {
 ================
 ChristmasEventFromEnv
 
-The winter event (#3603) runs only in its own mode: SRO_CHRISTMAS_EVENT_MODE
+The winter event runs only in its own mode: SRO_CHRISTMAS_EVENT_MODE
 unset or "winter", the posture every shard had before the mode existed.
 In any other mode it is off, so two Christmas events never share a window
 (christmas_mode.go).
@@ -59,14 +59,14 @@ func ChristmasEventFromEnv() ChristmasEvent {
 
 /*
 ================
-ChristmasEvent.SocksExpireAt
+ChristmasEvent.SnowflakesExpireAt
 
-Whether the Red Santa Socks leave at a world entry now: whenever the
-event does not run, switched off, without a valid window, or outside it. They are the
-event's token and nothing else hands them out, so on a shard that never
-ran the event there is nothing to remove.
+Whether the snow flakes leave at a world entry now: whenever the event
+does not run (switched off, without a valid window, or outside it), as the
+native flakes were rental items that lapsed with their event
+(refrentitem RENT_ITEM_ETC_E091216_SNOWFLAKE).
 ================
 */
-func (e ChristmasEvent) SocksExpireAt(now time.Time) bool {
+func (e ChristmasEvent) SnowflakesExpireAt(now time.Time) bool {
 	return !e.ActiveAt(now)
 }

@@ -337,6 +337,22 @@ fields (shop, skill catalog, GM catalog, social).
 	}
 	/*
 ================
+localRideEnd
+
+The mount the local player leaves with this frame: a 0xB4B5 ride result
+(777F60: [1][u32 rider][u8 state][u32 mount]) whose state 0 names the local
+player while it rides. Read before the frame applies, which clears the
+rider's mount (entities.placeMount puts the vehicle where the ride ended).
+================
+	*/
+	function localRideEnd( frame: WireFrame, localGid: number ): number | undefined {
+		const p = frame.payload;
+		if ( frame.opcode !== 0xb4b5 || p.length !== 10 || p[0] !== 1 || p[5] !== 0 || !localGid ) return undefined;
+		if ( viewOf( p ).getUint32( 1, true ) !== localGid ) return undefined;
+		return entities.read( localGid )?.mountedOn || undefined;
+	}
+	/*
+================
 receive
 One server frame: travel resets, gameplay, then entities, then the
 cross-owner follow-ups (name colours, displacements, cancellations).
@@ -379,10 +395,12 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 		const stallReceipt: { title?: string; } | undefined = frame.opcode === STALL_EDIT_RESULT_OPCODE ?
 			{} :
 			undefined;
+		const leftMount = localRideEnd( frame, localGid );
 		// Port-only Bond carries both paid damage feedback and an entity animation cue.
 		if ( !gameplay.receive( frame, now, chatSender, stallReceipt ) || frame.opcode === PET_BOND_OPCODE ) {
 			entities.receive( frame, now );
 		}
+		if ( leftMount ) entities.placeMount( leftMount, gameplay.localPose() );
 		// The owner's edit receipt carries no title; gameplay resolves the
 		// accepted request before the entity journal publishes it.
 		if ( stallReceipt?.title !== undefined ) entities.renameStall( localGid, stallReceipt.title );

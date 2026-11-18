@@ -22,6 +22,7 @@ import type { GroundVisualClock } from "@/engine/foundation/animation/ground-vis
 import { createSceneryEmission } from "@/engine/foundation/animation/scenery-emission";
 import { createReferenceAppearances } from "@/engine/foundation/animation/reference-appearance";
 import { createDamageFeedback } from "./damage-feedback";
+import { createKnockbackPresentation } from "./knockback-presentation";
 import { skillLookup, type SkillLookup } from "@/engine/foundation/ui/buff-viewer";
 import { createPosePresentation } from "./pose-presentation";
 import { createPresentationSamples } from "./presentation-samples";
@@ -177,6 +178,7 @@ export function createCharacterPresentation(
 	const presentationState = createPresentationState();
 	const presentationEvents = createPresentationEvents();
 	const feedback = createDamageFeedback( ( key, at ) => health?.release( key, at ) );
+	const knockbacks = createKnockbackPresentation();
 	const retiring = new Set<number>(),
 		disappearing = new Map<number, PresentationDisappear>();
 	const allocateActor = createPresentationIds(), lizardGid = allocateActor();
@@ -315,6 +317,7 @@ export function createCharacterPresentation(
 		selection.reset();
 		stateIndex.reset();
 		feedback.reset();
+		knockbacks.reset();
 		presentationEvents.resetSequence();
 		appearances.clear();
 		auxiliary.resetHair();
@@ -622,6 +625,8 @@ export function createCharacterPresentation(
 			vitalsByGid,
 			health,
 			pendingDeaths: feedback.pendingDeaths( gameplay?.casts ?? [], health?.currentResult ),
+			pendingKnockbacks: feedback.pendingKnockbacks( gameplay?.casts ?? [], health?.currentResult ),
+			knockbacks,
 			statusOwner,
 			posePresentation
 		} );
@@ -701,7 +706,8 @@ export function createCharacterPresentation(
 				renderer,
 				feedback,
 				health,
-				sounds
+				sounds,
+				knockbacks
 			},
 			output,
 			published

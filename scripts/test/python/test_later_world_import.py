@@ -472,6 +472,52 @@ class ParticleClosureTest(unittest.TestCase):
 
 
 # ================
+# ZoneNameMergeTest
+#
+# v1.696 keeps textzonename.txt as an index of TextZoneName_<n>.txt
+# shards whose rows carry a text id after the service cell. The merge
+# read the index as the table and joined no name, so Arabia and Jupiter
+# shipped with empty minimap titles (2026-11-17).
+# ================
+class ZoneNameMergeTest(unittest.TestCase):
+	def later_row(self, serial, key, english):
+		return ["1", serial, key, "Korean", "0", "0", "0", "0", "0", english, "0", "0", "0",
+			english, english, english, english]
+
+	def test_the_merge_reads_the_sharded_v1696_table(self):
+		native = {
+			"regioncode.txt": utf16([["1", "20054", "xxx", "0"]]),
+			"textzonename.txt": utf16([["1", "NATIVE_ZONE"] + ["x"] * 9]),
+		}
+		sharded = {
+			"regioncode.txt": utf16([["1", "20054", "RN_ARABIA_FIELD_03", "0"]]),
+			"textzonename.txt": utf16([["TextZoneName_200.txt"], ["TextZoneName_3000.txt"]]),
+			"textzonename_200.txt": utf16([self.later_row("10", "99999", "Elsewhere")]),
+			"textzonename_3000.txt": utf16([
+				self.later_row("3025", "20054", "Arabia Coast"),
+				self.later_row("3810", "RN_ARABIA_FIELD_03_01", "Arabian Sea"),
+			]),
+		}
+		merged, summary, _prefixes = later.merge_region_tables_record(native, sharded, {20054})
+		names = {row[1]: row[8] for row in later.tables.table_rows(merged["textzonename.txt"]) if len(row) > 8}
+		self.assertEqual(names["20054"], "Arabia Coast")
+		self.assertEqual(names["RN_ARABIA_FIELD_03_01"], "Arabian Sea")
+		self.assertNotIn("99999", names)
+		self.assertNotIn("3025", names)
+		self.assertEqual(summary["zoneNames"], 2)
+
+	def test_a_single_vsro_table_still_reads_as_the_table(self):
+		native = {"regioncode.txt": utf16([["1", "20054", "xxx", "0"]]), "textzonename.txt": utf16([])}
+		vsro = {
+			"regioncode.txt": utf16([["1", "20054", "RN_ARABIA_FIELD_03", "0"]]),
+			"textzonename.txt": utf16([["1", "20054", "Korean", "", "x", "x", "x", "x", "Arabia Coast", "x"]]),
+		}
+		merged, _summary, _prefixes = later.merge_region_tables_record(native, vsro, {20054})
+		names = {row[1]: row[8] for row in later.tables.table_rows(merged["textzonename.txt"]) if len(row) > 8}
+		self.assertEqual(names["20054"], "Arabia Coast")
+
+
+# ================
 # ClientRootTest
 #
 # The one resolver of the v1.696 folder: an empty or unset value refuses
@@ -489,6 +535,43 @@ class ClientRootTest(unittest.TestCase):
 		env = {"SRO_V1696_ROOT": "from-env"}
 		self.assertEqual(later.client_root("given", "SRO_V1696_ROOT", env), Path("given"))
 		self.assertEqual(later.client_root(None, "SRO_V1696_ROOT", env), Path("from-env"))
+
+
+# ================
+# MissingExportTest
+#
+# A later world switched on without its population export refuses by
+# the switch and the variable, before any archive or pin is read, and
+# says how to build without it: a contributor's clone has no export.
+# ================
+class MissingExportTest(unittest.TestCase):
+	def assert_names_the_way_out(self, refusal, flag, env):
+		message = str(refusal.exception)
+		self.assertIn(f"{flag} is on, but {env} is not set", message)
+		self.assertIn("not in the repository or a public clone", message)
+		self.assertIn(f"turn {flag} off in apps/server/config/shard-settings.json", message)
+
+	def test_a_nest_driven_world_refuses_before_its_pins(self):
+		spec = jupiter.SPEC
+		env = {key: value for key, value in os.environ.items() if key != spec.source_env}
+		env[spec.flag] = "1"
+		if spec.requires:
+			env[spec.requires] = "1"
+		pins = mock.Mock()
+		with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, env, clear=True):
+			with self.assertRaises(SystemExit) as refusal:
+				later.add_world(spec, Path(tmp) / "native", Path(tmp) / "out", "v1696", None, False, pins)
+		self.assert_names_the_way_out(refusal, spec.flag, spec.source_env)
+		pins.assert_not_called()
+
+	def test_muhan_refuses_before_its_pins(self):
+		env = {key: value for key, value in os.environ.items() if key != muhan.SOURCE_ENV}
+		env[muhan.FLAG] = "1"
+		with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, env, clear=True), 				mock.patch.object(muhan, "require_v1696_pin") as pin:
+			with self.assertRaises(SystemExit) as refusal:
+				muhan.add_muhan(Path(tmp) / "native", Path(tmp) / "out", "v1696")
+		self.assert_names_the_way_out(refusal, muhan.FLAG, muhan.SOURCE_ENV)
+		pin.assert_not_called()
 
 
 if __name__ == "__main__":

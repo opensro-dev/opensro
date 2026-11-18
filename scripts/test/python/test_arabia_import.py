@@ -91,6 +91,10 @@ def extraction():
 		"rows": rows}
 
 
+# Jangan's native gate, which lists Baghdad among its destinations.
+NATIVE_GATE_DATA = [["1", "1", "GATE_CH", "2094", "SN_ZONE_CH", "25000", "969", "0", "1369", "0", "0", "0", "1"]]
+
+
 # ================
 # gate_tables
 # ================
@@ -206,29 +210,29 @@ class ArabiaHelpersTest(unittest.TestCase):
 	# ================
 	def test_prepare_gates_authors_the_chain(self):
 		data, buildings, links = gate_tables()
-		native_buildings = [["1", "2094", "STORE_CH_GATE"] + ["0"] * 38 + ["25000", "0", "1254", "-6", "1374"] + ["0"] * 12]
-		native_data = [["1", "1", "GATE_CH", "2094", "SN_ZONE_CH", "25000", "969", "0", "1369", "0", "0", "0", "1"]]
 		later = {"teleportdata.txt": data, "teleportbuilding.txt": buildings,
 			"teleportlink.txt": links, "text": b""}
-		encoded, codes = gates.prepare_gates(later, native_buildings, native_data, {"1"}, {"2094"})
+		encoded, codes = gates.prepare_gates(later, NATIVE_GATE_DATA, {"1"}, {"2094"})
 		self.assertEqual(codes, gates.GATE_CODES)
 		rows = {row[2]: row for row in tables.table_rows(encoded["teleportdata.txt"])}
-		hub = rows["GATE_TO_ARABIA"]
-		self.assertEqual(hub[5:9], ["25000", "1264", "-6", "1374"])
-		self.assertEqual(hub[4], "SN_ZONE_CH")
+		# Baghdad is a destination of Jangan's own gate: no second
+		# gate or building stands in Jangan to cover it.
+		self.assertNotIn("GATE_CH", codes)
+		jangan = rows["GATE_CH"]
+		self.assertEqual(jangan, NATIVE_GATE_DATA[0])
 		self.assertEqual(rows["GATE_ARABIA_DUNGEON_START"][12], "112")
 		self.assertEqual(rows["GATE_ARABIA_DUNGEON_END"][12], "112")
 		self.assertEqual(rows["GATE_BAGH_TO_ARABIA_DUNGEON"][12], "1")
 		built = {row[2]: row for row in tables.table_rows(encoded["teleportbuilding.txt"])}
-		self.assertEqual(built["STORE_ARABIA_GATE"][41], "25000")
+		self.assertFalse({row[41] for row in built.values()} & {"25000"})
 		self.assertEqual(built["STORE_BAGHDAD_GATE"][41], "22106")
 		self.assertEqual(built["STORE_ARABIA_DUNGEON_TOWN_GATE"][41], "22106")
 		self.assertEqual(built["STORE_ARABIA_DUNGEON_START_GATE"][1], "40797")
 		link_rows = tables.table_rows(encoded["teleportlink.txt"])
 		self.assertEqual({len(row) for row in link_rows}, {21})
 		pairs = {(row[1], row[2]) for row in link_rows}
-		self.assertIn((hub[1], rows["GATE_TO_LAST_FIELD_IN_BAGHDAD"][1]), pairs)
-		self.assertIn((rows["GATE_TO_LAST_FIELD_IN_BAGHDAD"][1], hub[1]), pairs)
+		self.assertIn((jangan[1], rows["GATE_TO_LAST_FIELD_IN_BAGHDAD"][1]), pairs)
+		self.assertIn((rows["GATE_TO_LAST_FIELD_IN_BAGHDAD"][1], jangan[1]), pairs)
 		self.assertIn((rows["GATE_BAGH_TO_ARABIA_DUNGEON"][1], rows["GATE_ARABIA_DUNGEON_START"][1]), pairs)
 		self.assertIn((rows["GATE_ARABIA_DUNGEON_END"][1], rows["GATE_BAGH_TO_ARABIA_DUNGEON"][1]), pairs)
 
@@ -239,9 +243,7 @@ class ArabiaHelpersTest(unittest.TestCase):
 		data, buildings, links = gate_tables()
 		later = {"teleportdata.txt": data, "teleportbuilding.txt": buildings,
 			"teleportlink.txt": links, "text": b""}
-		encoded, _ = gates.prepare_gates(later,
-			[["1", "2094", "STORE_CH_GATE"] + ["0"] * 38 + ["25000", "0", "1", "2", "3"] + ["0"] * 12],
-			[], {"246"}, {"40797"})
+		encoded, _ = gates.prepare_gates(later, NATIVE_GATE_DATA, {"246"}, {"40797"})
 		rows = tables.table_rows(encoded["teleportdata.txt"])
 		self.assertNotIn("246", {row[1] for row in rows})
 		self.assertNotIn("40797", {row[3] for row in rows})
@@ -258,8 +260,7 @@ def build_trees(base):
 	text = arabia.TEXT_ROOT
 	native_buildings = [["1", "2094", "STORE_CH_GATE"] + ["0"] * 38 + ["25000", "0", "1254", "-6", "1374"] + ["0"] * 12]
 	write_table(native / text, "teleportbuilding.txt", native_buildings)
-	write_table(native / text, "teleportdata.txt",
-		[["1", "1", "GATE_CH", "2094", "SN_ZONE_CH", "25000", "969", "0", "1369", "0", "0", "0", "1"]])
+	write_table(native / text, "teleportdata.txt", NATIVE_GATE_DATA)
 	write_table(native / text, "textdataname.txt", [
 		["1", "SN_NATIVE", "x", "", "", "Native", "", "", "", "", ""],
 		["1", "SN_NPC_NATIVE_NAMED", "x", "", "", "Native Named", "", "", "", "", ""],
@@ -283,8 +284,7 @@ def build_trees(base):
 	(output / text / "skilleffect.txt").write_bytes(b"\xff\xfe" + (
 		"#section\tcharacterinfo\r\nMOB_NATIVE\t0\r\n#section\tskillaniset2\r\n1\tname\tSKILL_NATIVE\tANI_TEST\r\n"
 	).encode("utf-16-le"))
-	write_table(output / text, "teleportdata.txt",
-		[["1", "1", "GATE_CH", "2094", "SN_ZONE_CH", "25000", "969", "0", "1369", "0", "0", "0", "1"]])
+	write_table(output / text, "teleportdata.txt", NATIVE_GATE_DATA)
 	write_table(output / text, "teleportbuilding.txt", native_buildings)
 	write_table(output / text, "teleportlink.txt", [["1", "1", "1"] + ["0"] * 18])
 	write_table(output / text, "regioncode.txt", [["1", "25000", "RN_CH_JANGAN", ""], ["1", "22106", "xxx", ""]])
@@ -325,7 +325,13 @@ def build_trees(base):
 		"npcchat.txt": utf16([["1", "NPC_AR_TEST", "SN_NPC_AR_TEST_CHAT", "SN_NPC_AR_TEST_PS"],
 			["1", "NPC_NATIVE_NAMED", "SN_NATIVE_CHAT", "0"]]),
 		"regioncode.txt": utf16([["1", str(region), f"RN_ARABIA_{family}", ""] for region, family in REGIONS]),
-		"textzonename.txt": utf16([["1", "RN_ARABIA_TOWN", "x", "", "", "Baghdad", "", "", "", "", ""]]),
+		# v1.696 shape: an index of shards, rows with a text id after the service cell.
+		"textzonename.txt": utf16([["TextZoneName_3000.txt"]]),
+		"textzonename_3000.txt": utf16([
+			object_row("RN_ARABIA_TOWN_01", "Baghdad"),
+			["1", "3025", str(TOWN_REGION), "Korean", "0", "0", "0", "0", "0", "Baghdad Town",
+				"0", "0", "0", "Baghdad Town", "Baghdad Town", "Baghdad Town", "Baghdad Town"],
+		]),
 		"textdata_object.txt": utf16([["TextData_Object_1000.txt"]]),
 		"textdata_object_1000.txt": utf16([
 			object_row("SN_MOB_AR_TEST", "Test Beast"),
@@ -434,10 +440,23 @@ class ArabiaImportTest(unittest.TestCase):
 			# exactly its native row; nothing is duplicated.
 			self.assertEqual([row[1] for row in read_rows(text / "npcchat.txt")].count("NPC_NATIVE_NAMED"), 1)
 			gates = {row[2]: row for row in read_rows(text / "teleportdata.txt")}
-			self.assertEqual(gates["GATE_TO_ARABIA"][5], "25000")
+			# Jangan's gate stays one row and lists Baghdad; Baghdad's
+			# arrival leads back to it.
+			self.assertEqual([row[2] for row in read_rows(text / "teleportdata.txt")].count("GATE_CH"), 1)
+			baghdad = gates["GATE_TO_LAST_FIELD_IN_BAGHDAD"][1]
+			pairs = {(row[1], row[2]) for row in read_rows(text / "teleportlink.txt") if len(row) > 2}
+			self.assertIn(("1", baghdad), pairs)
+			self.assertIn((baghdad, "1"), pairs)
+			self.assertFalse({row[41] for row in read_rows(text / "teleportbuilding.txt")
+				if len(row) > 41 and row[2] != "STORE_CH_GATE"} & {"25000"})
 			self.assertEqual(gates["GATE_ARABIA_DUNGEON_START"][12], "112")
 			regions = read_rows(text / "regioncode.txt")
 			self.assertEqual(sum(1 for row in regions if row[2].startswith("RN_ARABIA")), 7)
+			# The minimap title reads the zone row of the region id; the
+			# banner the code's _01 row (both from the sharded v1.696 table).
+			zones = {row[1]: row[8] for row in read_rows(text / "textzonename.txt") if len(row) > 8}
+			self.assertEqual(zones[str(TOWN_REGION)], "Baghdad Town")
+			self.assertEqual(zones["RN_ARABIA_TOWN_01"], "Baghdad")
 			# The unbuilt garden sector imports no terrain; its
 			# region code row above still imports.
 			self.assertFalse((output / "Map_extracted" / "123" / "246.m").exists())
@@ -475,7 +494,7 @@ class ArabiaImportTest(unittest.TestCase):
 			# orphaning the first set.
 			rebuilt_gates = [row for row in read_rows(text / "teleportdata.txt")
 				if len(row) > 2 and row[2] in rebuilt["gateCodes"]]
-			self.assertEqual(len(rebuilt_gates), 5)
+			self.assertEqual(len(rebuilt_gates), 4)
 			self.assertEqual({row[2]: row[1] for row in rebuilt_gates},
 				{row[2]: row[1] for row in gates.values() if row[2] in rebuilt["gateCodes"]})
 
@@ -496,7 +515,9 @@ class ArabiaImportTest(unittest.TestCase):
 			self.assertFalse(any(len(row) > 1 and row[1] == "SN_NPC_AR_TEST_CHAT"
 				for row in read_rows(text / "textquest.txt")))
 			gates = {row[2] for row in read_rows(text / "teleportdata.txt")}
-			self.assertNotIn("GATE_TO_ARABIA", gates)
+			self.assertNotIn("GATE_TO_LAST_FIELD_IN_BAGHDAD", gates)
+			self.assertEqual({(row[1], row[2]) for row in read_rows(text / "teleportlink.txt") if len(row) > 2},
+				{("1", "1")})
 			self.assertNotIn("SN_NPC_AR_DSTARTPORTAL",
 				{row[1] for row in read_rows(text / "textdataname.txt") if len(row) > 1})
 			# ...but the native-owned name row is never claimed, so
@@ -580,6 +601,28 @@ class ArabiaImportTest(unittest.TestCase):
 			native, output, source, nests = build_trees(Path(tmp))
 			with mock.patch.dict(os.environ, {arabia.FLAG: "off"}):
 				self.assertEqual(arabia.add_arabia(native, output, source, nests, FakeClosure()), {"enabled": False})
+			self.assertFalse((output / arabia.POPULATION_FILE).exists())
+
+	# ================
+	# test_on_without_nests_refuses_before_any_archive
+	#
+	# A contributor's clone has no nest extraction. The import names
+	# SRO_ARABIA_NESTS and the switch before it opens an archive (the
+	# source root here does not exist), never a FileNotFoundError on a
+	# ../research path deep in the build.
+	# ================
+	def test_on_without_nests_refuses_before_any_archive(self):
+		with tempfile.TemporaryDirectory() as tmp:
+			native, output, _source, _nests = build_trees(Path(tmp))
+			env = {key: value for key, value in os.environ.items() if key != arabia.NESTS_ENV}
+			env[arabia.FLAG] = "on"
+			with mock.patch.dict(os.environ, env, clear=True), 					mock.patch.object(arabia, "verify_archives") as archives:
+				with self.assertRaises(SystemExit) as refusal:
+					arabia.add_arabia(native, output, Path(tmp) / "absent", None, FakeClosure())
+			archives.assert_not_called()
+			message = str(refusal.exception)
+			self.assertIn("SRO_ARABIA is on, but SRO_ARABIA_NESTS is not set", message)
+			self.assertIn("turn SRO_ARABIA off", message)
 			self.assertFalse((output / arabia.POPULATION_FILE).exists())
 
 

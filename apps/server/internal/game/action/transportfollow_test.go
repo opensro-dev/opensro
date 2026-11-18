@@ -274,3 +274,64 @@ func TestFollowingTransportStaysWhereItWalkedWhenItsTraderDies(t *testing.T) {
 		t.Fatalf("the revived trader's transport set out from %+v, back near the dismount %+v", at, parked)
 	}
 }
+
+// The wall of the trail test: along x = trailWallX from z = 900 to z =
+// 1020; the gap is above it.
+const (
+	trailWallX    = 1000.0
+	trailWallLowZ = 900.0
+	trailWallTopZ = 1020.0
+)
+
+/*
+================
+trailWall
+
+A step that crosses the wall stops one unit short of it.
+================
+*/
+func trailWall(_ string, from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) {
+	if (from.X-trailWallX)*(to.X-trailWallX) >= 0 {
+		return to, nil
+	}
+	z := from.Z + (to.Z-from.Z)*(trailWallX-from.X)/(to.X-from.X)
+	if z < trailWallLowZ || z > trailWallTopZ {
+		return to, nil
+	}
+	stop := trailWallX - 1
+	if to.X < from.X {
+		stop = trailWallX + 1
+	}
+	return simulation.Spawn{RegionID: from.RegionID, X: stop, Y: to.Y, Z: from.Z + (to.Z-from.Z)*(stop-from.X)/(to.X-from.X)}, nil
+}
+
+/*
+================
+TestFollowingTransportTakesItsTradersWayPastAWall
+
+The trader steps off and walks round a wall through its gap (a town wall
+at a region seam); the following transport takes the trader's way
+instead of standing at the wall.
+================
+*/
+func TestFollowingTransportTakesItsTradersWayPastAWall(t *testing.T) {
+	rt, clock, c := caravanFixture(t)
+	rt.TransportFollow = true
+	rt.ConstrainMovement = trailWall
+	parked := simulation.Spawn{RegionID: caravanBattlefield, X: 960, Y: 20, Z: 960}
+	c.ActiveCOS.Mounted = false
+	rt.rememberTransportCOS(testDivision, c, parked)
+	walk := []simulation.Spawn{{X: 970, Z: 960}, {X: 970, Z: 1060}, {X: 1040, Z: 1060}, {X: 1040, Z: 960}, {X: 1200, Z: 960}}
+	for i := 1; i < len(walk); i++ {
+		// The trader outruns its transport (it went ahead and the
+		// transport met the wall alone): one follow tick a leg.
+		rideCaravanTo(rt, c, simulation.Spawn{RegionID: caravanBattlefield, X: walk[i].X, Y: 20, Z: walk[i].Z})
+		advanceTransportTicks(rt, clock, 1)
+	}
+	advanceTransportTicks(rt, clock, 40)
+	at := rt.cosLiveSpawn(testDivision, c, clock.NowMs())
+	trader := simulation.Spawn{RegionID: caravanBattlefield, X: 1200, Y: 20, Z: 960}
+	if at.X < trailWallX || simulation.WorldDistance2D(at, trader) > simulation.PetFollowDistance+1 {
+		t.Fatalf("the transport stands at %+v, %.0f from its trader", at, simulation.WorldDistance2D(at, trader))
+	}
+}

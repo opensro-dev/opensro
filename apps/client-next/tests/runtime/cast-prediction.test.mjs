@@ -12,7 +12,9 @@ import { goldDropModels } from "../helpers/gold-drop-models.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-const { createCastPrediction } = await import( "../../src/engine/foundation/gameplay/cast-prediction.ts" );
+const { createCastPrediction, releaseHeldEvents } = await import(
+	"../../src/engine/foundation/gameplay/cast-prediction.ts"
+);
 const { createCombat } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts"
 );
@@ -449,4 +451,20 @@ test("a row without admission inputs is sent but never predicted", () => {
 	} );
 	assert.equal( taken[0]?.castPrediction, undefined );
 	assert.equal( (taken[0]?.skillCooldowns ?? []).some( row => row.provisionalUntilMs !== undefined ), false );
+});
+
+test("held release events fire at the answer, in order, never back-dated", () => {
+	// A bow press predicted at 2.0 s holds its SHOT launch (cursor 2.1 s)
+	// and hit (2.3 s); the server's answer adopts them at 2.4 s. Stamped
+	// at 2.1 s the arrow's flight began 0.3 s along and landed unseen.
+	const held = [
+		{ phase: "SHOT", event: 1, at: 2.1 },
+		{ phase: "SHOT", event: 2, at: 2.3 },
+		{ phase: "SHOT", event: 3, at: 2.6 }
+	];
+	const released = releaseHeldEvents( held, 2.4 );
+	assert.deepEqual( released.map( event => event.at ), [ 2.4, 2.4, 2.6 ] );
+	assert.deepEqual( released.map( event => event.event ), [ 1, 2, 3 ] );
+	assert.ok( released.every( event => event.adopted === true ) );
+	assert.equal( held[0]?.at, 2.1, "the held events were mutated" );
 });

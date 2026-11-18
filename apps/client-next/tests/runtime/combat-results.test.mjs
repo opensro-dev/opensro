@@ -153,6 +153,19 @@ test("both steering coordinates preserve native order and replace pending input 
 	assert.equal( displacementSegment( from, d[0], 0, 50 ).duration, 200 );
 	assert.equal( displacementSegment( from, d[1], 0, 50 ).duration, 0 );
 });
+test("a knockback or knockdown keeps the struck entity's facing; only a dash faces its travel", () => {
+	// 8D56F6 -> 8DDBD0 (stepped by 8DD550) moves a knocked-back entity
+	// without aiming it: a monster facing its attacker recoils backwards.
+	const facing = 16384,
+		from = { regionId: 0x5c87, x: 100, y: 0, z: 200, angle: facing },
+		behind = { regionId: 0x5c87, x: 100, y: 0, z: 150 };
+	const knockback = displacementSegment( from, { kind: 5, destination: behind }, 0 );
+	assert.equal( knockback.to.angle, facing );
+	assert.equal( knockback.duration, 50 / 250 * 1000 );
+	assert.equal( displacementSegment( from, { kind: 4, destination: behind }, 0 ).to.angle, facing );
+	const dash = displacementSegment( from, { kind: 8, destination: behind }, 0 );
+	assert.notEqual( dash.to.angle, facing, "a dash turns to where it travels" );
+});
 test("idle waits 15 seconds, rolls motion before delay, falls back, and resets on activity", () => {
 	const s = { remaining: 15, previous: 0, started: 0 },
 		calls = [],
@@ -328,11 +341,12 @@ test("a world transfer keeps the skill cooldowns; ending the session drops them"
 ================
 knockback decoration
 
-CIDecoDamageEffect_Initialize (8D5440) attaches SYSTEM_KNOCKBACK only for a
-type-5 knockback; a type-4 knockdown walks its waypoint undecorated.
+CIDecoDamageEffect_Initialize (8D5440) attaches SYSTEM_KNOCKBACK when the
+hit lands, so the result packet only queues the travel; the decoration is
+the hit presenter's (knockback-at-impact.test.mjs).
 ================
 */
-test("a type-5 knockback decorates its target with SYSTEM_KNOCKBACK", () => {
+test("a knockback result queues its travel and leaves the decoration to the hit", () => {
 	for ( const type of [ 4, 5 ] ) {
 		const events = [], c = createCombat( undefined, e => events.push( e ) );
 		hp( c, 3, 99 );
@@ -343,8 +357,7 @@ test("a type-5 knockback decorates its target with SYSTEM_KNOCKBACK", () => {
 			)
 				.u16( 200 ).bytes()
 		);
-		const marks = events.filter( e => e.kind === "system-effect" );
-		assert.deepEqual( marks, type === 5 ? [ { kind: "system-effect", gid: 3, effect: 0x8000001d } ] : [] );
+		assert.deepEqual( events.filter( e => e.kind === "system-effect" ), [] );
 		assert.equal( c.takeDisplacements()[0].kind, type );
 	}
 });

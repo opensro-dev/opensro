@@ -166,6 +166,12 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 		}); err != nil {
 		return err
 	}
+	if err := s.commitMetaPlaneTx(tx, stagedMeta, rows, metaKeyWinterMissions, s.changes.winterMissions,
+		len(s.meta.WinterMissions) > 0, func() (string, error) {
+			return winterMissionsRecord(s.meta.WinterMissions, s.residues.planes[metaKeyWinterMissions])
+		}); err != nil {
+		return err
+	}
 	if err := s.commitMetaPlaneTx(tx, stagedMeta, rows, metaKeyHalloweenBoxes, s.changes.halloweenBoxes,
 		len(s.meta.HalloweenBoxes) > 0, func() (string, error) {
 			return halloweenBoxesRecord(s.meta.HalloweenBoxes, s.residues.planes[metaKeyHalloweenBoxes])

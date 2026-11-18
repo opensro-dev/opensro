@@ -254,12 +254,9 @@ func newGameplayPlane(
 	// SRO_HALLOWEEN_HELMET_SEAL (port-only, not native): the event
 	// helmets stay sealed at the transfer doors after the event.
 	items.HalloweenHelmetSeal = halloweenHelmetSealFromEnv()
-	// SRO_CHRISTMAS_EVENT (port-only, not native in this client build):
-	// the Christmas event's switch and UTC window (wiring_christmas.go).
-	items.Christmas = christmasEventFromEnv()
-	// SRO_CHRISTMAS_EVENT_MODE=so_ok_2006 (port-only, not native): So-Ok's
-	// Christmas Gift on the same switch and window (wiring_christmas.go).
-	items.SoOkChristmas = sookChristmasFromEnv(deps.ItemReferences())
+	// SRO_CHRISTMAS_EVENT and its modes (port-only, not native in this
+	// client build): wiring_christmas.go composes them.
+	wireChristmasEvent(items, deps.ItemReferences(), authorityStore)
 	// SRO_WEATHER: the native climate cycle, on by default (wiring_weather.go).
 	startWeatherFromEnv(items)
 	// SRO_UNIQUE_GAP_EXEMPT / SRO_UNIQUE_POP_TICKET / SRO_UNIQUE_MAX_LEVEL_LOOT
@@ -404,6 +401,7 @@ func newGameplayPlane(
 		deps.MonsterState.SetSpawnCollisionTest(water.SpawnMoveTest)
 		deps.MonsterState.SetSpawnRegionAvailability(water.SpawnRegionAvailable)
 		deps.MonsterState.SetPopulationPlayers(items.PopulationPlayers)
+		installWinterSpawnReplacements(deps.MonsterState, items)
 		for _, division := range authorityStore.DivisionIDs() {
 			deps.MonsterState.StartDivision(division)
 		}
@@ -615,11 +613,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if err != nil {
 		return fmt.Errorf("quest definitions: %w", err)
 	}
-	masteryOverride, err := progression.BetaMasteryFromEnv()
-	if err != nil {
+	// SRO_BETA_MASTERY and SRO_BETA_MASTERY_EARLY (port-only, not native):
+	// wiring_mastery.go.
+	if err = readMasteryAllowance(game.deps); err != nil {
 		return err
 	}
-	game.deps.MasteryTotalOverride = masteryOverride
 	// Port-only, not native (owner, 2026-11-07, #2769): world entry raises
 	// a character to the 2.5-page inventory base, never lowers one.
 	game.deps.InventoryPages = enterworld.InventoryPagesFromEnv()
@@ -759,10 +757,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	// the native blob byte-identical with the expansion off).
 	game.matches.LevelLimit = stats.LevelLimit
 	game.deps.LevelCap = publishedLevelCap(stats.LevelLimit)
-	stats.MasteryTotalOverride = masteryOverride
-	if masteryOverride != 0 {
-		log.Infof("progression: beta total mastery allowance %d for both races (%s)", masteryOverride, progression.EnvBetaMastery)
-	}
+	applyMasteryAllowance(stats, game.deps)
 	stats.Growth = progression.BetaGrowthFromEnv()
 	game.items.PetInventoryPages, err = companion.PetInventoryPagesFromEnv()
 	if err != nil {
