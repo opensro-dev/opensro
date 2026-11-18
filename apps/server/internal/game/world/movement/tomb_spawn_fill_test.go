@@ -90,14 +90,13 @@ func floor3Template(t *testing.T, generateRadius float64) (monster.Template, int
 
 /*
 ================
-fillFloor3
+fillFloor3State
 
 Runs the population for tombFillSimulatedMs with the production spawn
-authority and returns how many monsters stand on Floor 3 and the median
-planar distance from each to its nest centre.
+authority and returns it with the validator that placed it.
 ================
 */
-func fillFloor3(t *testing.T, template monster.Template) (int, float64) {
+func fillFloor3State(t *testing.T, template monster.Template) (*simulation.MonsterState, *WaterValidator) {
 	t.Helper()
 	t.Setenv(simulation.EnvJanganCaveRespawn, "on")
 	v := NewAuthorityValidator(gamedatatest.WorldAuthorityDir(t))
@@ -112,6 +111,21 @@ func fillFloor3(t *testing.T, template monster.Template) (int, float64) {
 		s.AdvancePopulation(s.CurrentTimeMillis())
 		now = now.Add(tombFillStepMs * time.Millisecond)
 	}
+	return s, v
+}
+
+/*
+================
+fillFloor3
+
+Runs the population for tombFillSimulatedMs with the production spawn
+authority and returns how many monsters stand on Floor 3 and the median
+planar distance from each to its nest centre.
+================
+*/
+func fillFloor3(t *testing.T, template monster.Template) (int, float64) {
+	t.Helper()
+	s, _ := fillFloor3State(t, template)
 	var distances []float64
 	for _, instance := range s.MaterializedInstances("tomb") {
 		if instance.Spawn.RegionID != tombFloor3Region {
