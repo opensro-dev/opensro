@@ -54,6 +54,11 @@ func npcPlacementHeading(code string, region uint16, x, y, z float64) (uint16, b
 	if heading, found := supplementalNPCHeadings[key]; found {
 		return heading, true
 	}
-	heading, found := alexandriaNPCHeadings[key]
+	if heading, found := alexandriaNPCHeadings[key]; found {
+		return heading, true
+	}
+	// Port-only, not native: inferred facing for the Arabia town's
+	// placements (npc_headings_arabia.go), present only with SRO_ARABIA.
+	heading, found := arabiaNPCHeadings[key]
 	return heading, found
 }
