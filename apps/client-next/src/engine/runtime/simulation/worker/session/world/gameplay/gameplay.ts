@@ -5611,9 +5611,11 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ),
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
-				// Port-only (#3529): a consignment market event prints in the chat.
+				// Port-only (#3529): a consignment market event is the centre
+				// notice, a message-list line and a (Notice) line in every chat tab.
 				for ( const notice of inventory.takeMarketNotices() ) {
 					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					if ( notice.text ) chat.notice( notice.text );
 					dirty = true;
 				}
 				if ( frame.opcode === ARENA_CHEST_OPCODE ) {

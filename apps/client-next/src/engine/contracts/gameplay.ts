@@ -195,6 +195,10 @@ export interface ChatLine {
 	// results, item breaks, renames). With the Event tab on, these leave
 	// All; a native type-7 server notice (the restart warning) stays.
 	readonly event?: boolean;
+	// Port-only: a line this client raised that shows on every native chat
+	// tab (the consignment market's notices, #3529; chat-layout.ts
+	// chatTabShows). A native notice line never carries it.
+	readonly everyTab?: boolean;
 	// Port-only (SRO_CHAT_ITEM_LINKS): the items a player line links, link i
 	// for the i-th marker (foundation/gameplay/chat-item-links.ts); undefined
 	// where a body could not be decoded.

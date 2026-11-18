@@ -27,7 +27,7 @@ import {
 import { INVENTORY_TRANSACTION_TIMEOUT, type Degradation } from "@/engine/contracts/network";
 import { createMall } from "./mall/mall";
 import { createArenaChest, ARENA_CHEST_OPCODE } from "@/engine/foundation/gameplay/arena-chest";
-import { createMarket, marketEventText } from "@/engine/foundation/gameplay/market";
+import { createMarket, MARKET_NOTICE_ARGB, marketEventText } from "@/engine/foundation/gameplay/market";
 import type { MarketRequest } from "@/engine/contracts/market";
 import { createCompanionRentals } from "./companion-rentals";
 import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
@@ -748,8 +748,10 @@ pet record names, for decoders of rows held elsewhere (the storage room).
 ================
 takeMarketNotices
 
-The consignment market's events not yet printed, as chat notices
-(port-only, #3529): a sale, an offer, an answer to one's offer.
+The consignment market's events not yet printed (port-only, #3529): a
+sale, an offer, an answer to one's offer. Each one is the centre notice
+(banner), a green line in the bottom-right message list, and, through
+the gameplay owner, a (Notice) line in every chat tab.
 ================
 		*/
 		takeMarketNotices(): SystemNotice[] {
@@ -760,7 +762,9 @@ The consignment market's events not yet printed, as chat notices
 				key: "",
 				value: 0,
 				text: marketEventText( event ),
-				nativeType: 5 as const
+				nativeType: 5 as const,
+				banner: true as const,
+				colorArgb: MARKET_NOTICE_ARGB
 			}) );
 		},
 		/*

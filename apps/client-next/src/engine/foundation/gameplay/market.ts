@@ -175,6 +175,11 @@ export function marketCurrencyText( currency: MarketCurrency ): string {
 	return currency === "silk" ? "Silk" : "Gold";
 }
 
+// A market event's colour in the bottom-right message list: bright green,
+// apart from the tan game lines and the blue tips, so a sale or an offer
+// is seen at a glance (port-only, #3529).
+export const MARKET_NOTICE_ARGB = 0xff7cfc9a;
+
 /*
 ================
 marketEventText
