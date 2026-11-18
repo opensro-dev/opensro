@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url";
 import { withHeavyLock } from "../../../scripts/checks/heavyLock.mjs";
 import { withGeneratedAssetsLock } from "../../../scripts/rebuildLock.mjs";
 import { LIST_PATH as ASSET_BACKED_LIST } from "./list-asset-backed-tests.mjs";
+import { publishWarmCaches, seedWarmCaches } from "./warm-cache.mjs";
 
 const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
 const node = process.execPath;
@@ -214,7 +215,12 @@ async function main() {
 	if ( sourceOnly ) {
 		process.stdout.write( "Retail audio parity and asset delivery remain required by the full check.\n" );
 	}
+	// typecheck and typecheck:gallery run tsc directly: seed their
+	// buildinfos before the gates start and publish after, as the
+	// `typecheck` script and verify-test-types.mjs do for themselves.
+	seedWarmCaches();
 	const results = await Promise.all( gates.map( ( [name, args] ) => runGate( name, args ) ) );
+	publishWarmCaches();
 	for ( const result of results ) {
 		printTimingLines( result );
 	}

@@ -66,6 +66,15 @@ function dependencies( resource ) {
 				}
 			}
 		}
+		// A multi-texture modifier (ModDataMultiTex / MultiTexRev) names an
+		// extra texture straight from the BSR, outside every material set:
+		// the flame spirits' (res/mob/arabia/firespirit*.bsr) prim/mtrl/etc/
+		// flame_spirit_t.ddj. A native resource's texture is native too.
+		if ( !resource.native ) {
+			for ( const modifier of character.multiTextureModifiers ) {
+				if ( modifier.texturePath ) paths.add( modifier.texturePath );
+			}
+		}
 		if ( !resource.native ) {
 			for ( const modifier of character.particleModifiers ) {
 				if ( modifier.kind !== 2 && resource.particles !== "all" ) {

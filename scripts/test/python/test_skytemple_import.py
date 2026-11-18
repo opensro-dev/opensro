@@ -296,14 +296,10 @@ class SkytempleHelpersTest(unittest.TestCase):
 		self.assertEqual(gates.d_arrival(found, fields), ("23001", "3", "1", "2"))
 
 
-# Jangan's native gate, which offers the Sky Temple fields.
-NATIVE_GATE_DATA = [["1", "1", "GATE_CH", "2094", "SN_ZONE_CH", "25000", "969", "0", "1369", "0", "0", "0", "1"]]
-
-
 # ================
 # gate_tables
 #
-# The later gates, as prepare_gates consumes them.
+# The later gates and the native anchor, as prepare_gates consumes them.
 # ================
 def gate_tables():
 	data = []
@@ -339,21 +335,27 @@ def gate_tables():
 	return data, buildings, links
 
 
+# Jangan's native gate, which lists the four fields among its destinations.
+NATIVE_GATE_DATA = [["1", "1", "GATE_CH", "2094", "SN_ZONE_CH", "25000", "969", "0", "1369", "0", "0", "0", "1"]]
+
+
 class SkytempleGatesTest(unittest.TestCase):
 	# ================
-	# test_prepare_gates_rehomes_and_authors
+	# test_prepare_gates_lists_the_fields_on_jangans_gate
+	#
+	# No second gate or building stands in Jangan to cover its own: the
+	# fields are destinations of GATE_CH and lead back to it.
 	# ================
-	def test_prepare_gates_rehomes_and_authors(self):
+	def test_prepare_gates_lists_the_fields_on_jangans_gate(self):
 		data, buildings, links = gate_tables()
 		later = {"teleportdata.txt": data, "teleportbuilding.txt": buildings,
 			"teleportlink.txt": links, "text": b""}
 		encoded, codes = gates.prepare_gates(later, NATIVE_GATE_DATA, {"1", "3480"}, {"2094"}, ("23001", "100", "5", "200"))
 		self.assertEqual(codes, gates.GATE_CODES)
-		rows = {row[2]: row for row in tables.table_rows(encoded["teleportdata.txt"])}
-		# Jangan's own gate offers the fields: no source entry row and
-		# no building of the chain stands in Jangan to cover the gate.
-		self.assertNotIn("GATE_TO_OTHER_SKYTEMPLE", rows)
 		self.assertNotIn("GATE_CH", codes)
+		self.assertNotIn("GATE_TO_OTHER_SKYTEMPLE", codes)
+		rows = {row[2]: row for row in tables.table_rows(encoded["teleportdata.txt"])}
+		self.assertNotIn("GATE_TO_OTHER_SKYTEMPLE", rows, "the source entry is never imported")
 		jangan = rows["GATE_CH"]
 		self.assertEqual(jangan, NATIVE_GATE_DATA[0])
 		self.assertTrue(all(row[12] == "1" for row in rows.values()))
@@ -361,19 +363,18 @@ class SkytempleGatesTest(unittest.TestCase):
 		self.assertEqual(d_row[5:9], ["23001", "100", "5", "200"])
 		built = {row[2]: row for row in tables.table_rows(encoded["teleportbuilding.txt"])}
 		self.assertNotIn("STORE_TK_TO_OTHER_TEMLPE_GATE", built)
-		self.assertFalse({row[41] for row in built.values()} & {"25000"})
+		self.assertFalse({row[41] for row in built.values()} & {"25000"}, "no building stands in Jangan")
 		self.assertEqual(built["STORE_OTHER_SKYTEMPLE_D_TO_TOWN"][41], "23001")
 		link_rows = tables.table_rows(encoded["teleportlink.txt"])
 		self.assertEqual({len(row) for row in link_rows}, {21})
 		pairs = {(row[1], row[2]) for row in link_rows}
-		entry_id = jangan[1]
-		# The source entry's own links (to A, back from A, to B) moved
-		# onto the Jangan gate.
-		self.assertIn((entry_id, rows["GATE_OTHER_SKYTEMPLE_A"][1]), pairs)
-		self.assertIn((rows["GATE_OTHER_SKYTEMPLE_A"][1], entry_id), pairs)
-		self.assertIn((entry_id, rows["GATE_OTHER_SKYTEMPLE_B"][1]), pairs)
-		self.assertIn((entry_id, rows["GATE_OTHER_SKYTEMPLE_C"][1]), pairs)
-		self.assertIn((rows["GATE_OTHER_SKYTEMPLE_D"][1], entry_id), pairs)
+		field = {code: rows[code][1] for code in gates.GATE_CODES}
+		# A and B on the source entry's own links, C and D authored.
+		for code in gates.GATE_CODES:
+			self.assertIn((jangan[1], field[code]), pairs, code)
+		for code in ("GATE_OTHER_SKYTEMPLE_A", "GATE_OTHER_SKYTEMPLE_C", "GATE_OTHER_SKYTEMPLE_D"):
+			self.assertIn((field[code], jangan[1]), pairs, code)
+		self.assertFalse({"348"} & {end for pair in pairs for end in pair}, "no link names the source entry")
 
 	# ================
 	# test_prepare_gates_renumbers_on_collision
@@ -384,7 +385,7 @@ class SkytempleGatesTest(unittest.TestCase):
 			"teleportlink.txt": links, "text": b""}
 		encoded, _ = gates.prepare_gates(later, NATIVE_GATE_DATA, {"349"}, {"43803"}, ("23001", "1", "1", "1"))
 		rows = tables.table_rows(encoded["teleportdata.txt"])
-		self.assertNotIn("349", {row[1] for row in rows})
+		self.assertNotIn("349", {row[1] for row in rows if row[2] != "GATE_CH"})
 		self.assertNotIn("43803", {row[3] for row in rows})
 
 
@@ -411,7 +412,8 @@ def build_trees(base):
 	text = sky.TEXT_ROOT
 	native_buildings = [["1", "2094", "STORE_CH_GATE"] + ["0"] * 38 + ["25000", "0", "1254", "-6", "1374"] + ["0"] * 12]
 	write_table(native / text, "teleportbuilding.txt", native_buildings)
-	write_table(native / text, "teleportdata.txt", NATIVE_GATE_DATA)
+	write_table(native / text, "teleportdata.txt",
+		[["1", "1", "GATE_CH", "2094", "SN_ZONE_CH", "25000", "969", "0", "1369", "0", "0", "0", "1"]])
 
 	write_table(output / text, "characterdata_5000.txt", [[str(v) for v in range(120)]])
 	native_char = ["0"] * 120
@@ -423,7 +425,8 @@ def build_trees(base):
 	(output / text / "skilleffect.txt").write_bytes(b"\xff\xfe" + (
 		"#section\tcharacterinfo\r\nMOB_NATIVE\t0\r\n#section\tskillaniset2\r\n1\tname\tSKILL_NATIVE\tANI_TEST\r\n"
 	).encode("utf-16-le"))
-	write_table(output / text, "teleportdata.txt", NATIVE_GATE_DATA)
+	write_table(output / text, "teleportdata.txt",
+		[["1", "1", "GATE_CH", "2094", "SN_ZONE_CH", "25000", "969", "0", "1369", "0", "0", "0", "1"]])
 	write_table(output / text, "teleportbuilding.txt", native_buildings)
 	write_table(output / text, "teleportlink.txt", [["1", "1", "1"] + ["0"] * 18])
 	region_rows = [["1", "25000", "RN_CH_JANGAN", ""], ["1", "21209", "xxx", ""]]
@@ -508,16 +511,18 @@ class SkytempleImportTest(unittest.TestCase):
 			population = json.loads((text / sky.POPULATION_FILE).read_text())
 			self.assertEqual([row["RegionID"] for row in population["Rows"]], [21209, region_id(225, 92)])
 			gates = {row[2]: row for row in read_rows(text / "teleportdata.txt")}
+			# Jangan's gate stays one row and lists the fields; no entry
+			# gate or building of the source stands in Jangan.
 			self.assertNotIn("GATE_TO_OTHER_SKYTEMPLE", gates)
 			self.assertEqual([row[2] for row in read_rows(text / "teleportdata.txt")].count("GATE_CH"), 1)
 			self.assertIn("GATE_OTHER_SKYTEMPLE_D", gates)
-			links = read_rows(text / "teleportlink.txt")
-			pairs = {(row[1], row[2]) for row in links if len(row) > 2}
-			for code in ("GATE_OTHER_SKYTEMPLE_A", "GATE_OTHER_SKYTEMPLE_B", "GATE_OTHER_SKYTEMPLE_C", "GATE_OTHER_SKYTEMPLE_D"):
-				self.assertIn(("1", gates[code][1]), pairs)
-				self.assertIn((gates[code][1], "1"), pairs)
+			pairs = {(row[1], row[2]) for row in read_rows(text / "teleportlink.txt") if len(row) > 2}
+			for code in ("GATE_OTHER_SKYTEMPLE_A", "GATE_OTHER_SKYTEMPLE_D"):
+				self.assertIn(("1", gates[code][1]), pairs, code)
+				self.assertIn((gates[code][1], "1"), pairs, code)
 			self.assertFalse({row[41] for row in read_rows(text / "teleportbuilding.txt")
 				if len(row) > 41 and row[2] != "STORE_CH_GATE"} & {"25000"})
+			links = read_rows(text / "teleportlink.txt")
 			self.assertTrue(any(row[6] == "1" and row[7] == "90" for row in links if len(row) > 7))
 			regions = read_rows(text / "regioncode.txt")
 			self.assertEqual(sum(1 for row in regions if row[2].startswith("RN_OTHER_SKYTEMPLE")), 288)

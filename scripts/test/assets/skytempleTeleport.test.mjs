@@ -12,6 +12,9 @@ them.
 ===========================================================================
 */
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { test } from "node:test";
 import { computeResourceBuildFingerprint } from "../../build/shared/resourceBuildFingerprint.mjs";
 import { closedSkytempleIds, skytempleEnabled } from "../../build/shared/skytemple.mjs";
@@ -54,9 +57,47 @@ test("skytempleEnabled mirrors the server words", ( t ) => {
 	}
 });
 
-test("an unset switch takes the registry default, closed", ( t ) => {
+/*
+================
+fixtureServerRoot
+
+A server root whose profile and registry row for the switch are the
+test's, set as SRO_SERVER_SOURCE_ROOT for the test, so the checkout's own
+shard-settings.json (which turns the fields on) does not decide it.
+================
+*/
+function fixtureServerRoot( t, profileValue ) {
+	const root = fs.mkdtempSync( path.join( os.tmpdir(), "sro-skytemple-" ) );
+	const previous = process.env.SRO_SERVER_SOURCE_ROOT;
+	t.after( () => {
+		if ( previous === undefined ) delete process.env.SRO_SERVER_SOURCE_ROOT;
+		else process.env.SRO_SERVER_SOURCE_ROOT = previous;
+		fs.rmSync( root, { recursive: true, force: true } );
+	} );
+	fs.mkdirSync( path.join( root, "config" ), { recursive: true } );
+	fs.mkdirSync( path.join( root, "internal", "config", "shardsettings" ), { recursive: true } );
+	const profile = profileValue === undefined ? {} : { SRO_SKYTEMPLE: profileValue };
+	fs.writeFileSync( path.join( root, "config", "shard-settings.json" ), JSON.stringify( profile ) );
+	fs.writeFileSync(
+		path.join( root, "internal", "config", "shardsettings", "shardsettings.go" ),
+		`var Settings = []Setting{
+	{Env: "SRO_SKYTEMPLE", NomadVar: "skytemple", Default: "off", Catalogue: true},
+}
+`
+	);
+	process.env.SRO_SERVER_SOURCE_ROOT = root;
+}
+
+test("an unset switch takes the release profile's value, else the registry default", ( t ) => {
 	withEnv( t, { SRO_SKYTEMPLE: "" } );
-	assert.equal( skytempleEnabled(), false );
+	fixtureServerRoot( t, undefined );
+	assert.equal( skytempleEnabled(), false, "no profile entry: the registry default, closed" );
+});
+
+test("an unset switch follows a profile that opens the fields", ( t ) => {
+	withEnv( t, { SRO_SKYTEMPLE: "" } );
+	fixtureServerRoot( t, "on" );
+	assert.equal( skytempleEnabled(), true );
 });
 
 test("closed, only the Sky Temple field gates leave the bake; open, none do", () => {

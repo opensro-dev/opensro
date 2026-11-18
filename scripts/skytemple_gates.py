@@ -9,17 +9,15 @@ The source chain stands in a Jupiter field this port does not import,
 and its C links name gates whose buildings the later client itself
 never shipped (GATE_TO_LAST_FIELD_IN_BAGHDAD / _IN_HOTAN name buildings
 that exist in no teleportbuilding table). Authored at import, and
-recorded here: Jangan's own gate (GATE_CH) stands in for the source
-entry (a Taklamakan NPC, GATE_TO_OTHER_SKYTEMPLE, whose row and building
-are not imported). It offers A and B on the source links and C and D on
-authored links of the same shape, every field's return leads back to
-it, and D gets an authored return building cloned from C's. No second
-gate stands in Jangan: an entry building re-homed beside STORE_CH_GATE
-overlapped it, so a click on the Jangan gate opened the Sky Temple menu
-and hid every native destination (the client folds the four fields
-under one row, PORTAL_GROUPS in gameplay/portal.ts). The Jangan row
-rides in the prepared tables only so merge_gate_tables renumbers its
-links by code; it is not one of GATE_CODES and is never appended.
+recorded here: Jangan's own gate (GATE_CH) lists the four fields among
+its destinations - A and B on the source's entry links, C and D on
+authored links of the same shape - and each field's return leads back
+to it; D gets an authored return building cloned from C's. No second
+gate stands in Jangan: the source entry building re-homed beside
+STORE_CH_GATE overlapped it, so a click on the gate opened a Sky
+Temple-only menu and hid every native destination (the same fault
+#3854 removed from Arabia's entry). The source entry gate is read only
+for its links; neither it nor its building is imported.
 Every row names world 1: the later per-field world ids (132-134) are
 not worlds of this port, whose portal catalogue refuses unknown
 worlds. The later link rows carry two trailing columns the v1.150
@@ -40,10 +38,10 @@ import cap110_monsters as monsters
 # (skytemple_import.build_population) names the same world in its rows.
 FIELD_WORLD = 1
 
-# The gate chain, by teleportdata code. The three field rows are the
-# source's; GATE_OTHER_SKYTEMPLE_D is authored (the source authors no
-# gate into D and no building standing in it). The source entry's links
-# are read only to move them onto the Jangan gate (ANCHOR_GATE).
+# The gate chain, by teleportdata code. The entry and the three fields
+# are the source's; GATE_OTHER_SKYTEMPLE_D is authored (the source
+# authors no gate into D and no building standing in it). The entry is
+# read only for its links (see the header), so it is not a gate code.
 ENTRY_GATE = "GATE_TO_OTHER_SKYTEMPLE"
 FIELD_GATES = ("GATE_OTHER_SKYTEMPLE_A", "GATE_OTHER_SKYTEMPLE_B", "GATE_OTHER_SKYTEMPLE_C")
 AUTHORED_GATE = "GATE_OTHER_SKYTEMPLE_D"
@@ -53,7 +51,7 @@ AUTHORED_BUILDING_NAME_KEY = "SN_STORE_OTHER_SKYTEMPLE_D_TO_TOWN"
 AUTHORED_ZONE_KEY = "RN_OTHER_SKYTEMPLE_D_01"
 # The authored D building stands this far east of the authored arrival.
 AUTHORED_OFFSET_X = 6
-# The native gate that offers the fields (Jangan's).
+# The native gate that lists the fields (Jangan's).
 ANCHOR_GATE = "GATE_CH"
 TELEPORT_COLUMNS = 13
 BUILDING_COLUMNS = 58
@@ -76,7 +74,8 @@ def format_coord(value):
 # The gate tables this import feeds merge_gate_tables, and its codes.
 # later holds the v1.696 teleportdata/teleportbuilding/teleportlink row
 # lists and its textdata_object raw bytes; native_data is the v1.150
-# teleportdata the Jangan gate is read from; current_ids and current_building_ids are the identities the variant's
+# teleportdata the Jangan gate is read from;
+# current_ids and current_building_ids are the identities the variant's
 # tables already use (the source identities stand unless one collides);
 # d_arrival is the authored D arrival, (region, x, y, z) as strings.
 # Returns (tables, codes) with tables mapping the three table names and
@@ -91,9 +90,9 @@ def prepare_gates(later, native_data, current_ids, current_building_ids, d_arriv
 
 	anchor = next((list(row) for row in native_data if len(row) >= TELEPORT_COLUMNS and row[2] == ANCHOR_GATE), None)
 	if anchor is None:
-		raise ValueError(f"native teleportdata has no {ANCHOR_GATE} to offer the fields on")
+		raise ValueError(f"native teleportdata has no {ANCHOR_GATE} to list the sky temple fields on")
 
-	source_data = [data_by_code[code] for code in FIELD_GATES]
+	source_data = [data_by_code[code] for code in (ENTRY_GATE,) + FIELD_GATES]
 	source_building_ids = [row[3] for row in source_data]
 	absent = [bid for bid in source_building_ids if bid not in buildings_by_id]
 	if absent:
@@ -115,8 +114,15 @@ def prepare_gates(later, native_data, current_ids, current_building_ids, d_arriv
 		building_ids = {bid: bid for bid in source_building_ids}
 		d_building_id = str(max([int(i) for i in current_building_ids if i.isdigit()] + [int(b) for b in source_building_ids]) + 1)
 
+	# The source entry's links name Jangan's gate instead: its id maps to
+	# the anchor's, so the source pairs entry <-> A/B become GATE_CH's.
+	entry_source_id = data_by_code[ENTRY_GATE][1]
+	teleport_ids[entry_source_id] = anchor[1]
+
 	data_rows, building_rows = [], []
 	for row in source_data:
+		if row[2] == ENTRY_GATE:
+			continue
 		row = list(row)
 		source_building = row[3]
 		row[1] = teleport_ids[row[1]]
@@ -146,13 +152,12 @@ def prepare_gates(later, native_data, current_ids, current_building_ids, d_arriv
 	d_building[44], d_building[45] = d_arrival[2], d_arrival[3]
 	building_rows.append(d_building)
 
-	# Links: the source's own pairs among the imported gates (the entry's
-	# move onto the Jangan gate), plus an authored pair on the same shape
-	# for every field the source does not join to the entry (C, D). The
-	# source's C links name gates whose buildings were never shipped, so
-	# the merge would drop them anyway; they are left out here instead.
+	# Links: the source's own pairs among the imported gates and the
+	# entry (now Jangan's gate), plus the authored C and D pairs on the
+	# same shape. The source's C links name
+	# gates whose buildings were never shipped, so the merge would drop
+	# them anyway; they are left out here instead.
 	entry_id = anchor[1]
-	teleport_ids[data_by_code[ENTRY_GATE][1]] = entry_id
 	source_ids = set(teleport_ids)
 	# The later client's link rows carry two trailing columns the v1.150
 	# table has no place for; they sit outside every condition triple the
@@ -167,7 +172,7 @@ def prepare_gates(later, native_data, current_ids, current_building_ids, d_arriv
 		row[1], row[2] = teleport_ids[row[1]], teleport_ids[row[2]]
 		link_rows.append(row)
 	pairs = {(row[1], row[2]) for row in link_rows}
-	for code in GATE_CODES:
+	for code in (FIELD_GATES[-1], AUTHORED_GATE):
 		target = next(row[1] for row in data_rows if row[2] == code)
 		for pair in ((entry_id, target), (target, entry_id)):
 			if pair in pairs:
@@ -182,7 +187,8 @@ def prepare_gates(later, native_data, current_ids, current_building_ids, d_arriv
 		raise ValueError("v1.696 teleportlink has no links among the sky temple gates")
 
 	encoded = {
-		# The anchor row maps the links' native end by code (merge_gate_tables).
+		# The anchor row maps the pairs' native end by code; it is not a
+		# gate code, so merge_gate_tables never appends it.
 		"teleportdata.txt": monsters.encode_rows(data_rows + [anchor]),
 		"teleportbuilding.txt": monsters.encode_rows(building_rows),
 		"teleportlink.txt": monsters.encode_rows(link_rows),

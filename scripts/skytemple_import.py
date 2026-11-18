@@ -33,11 +33,11 @@ What the source authors, and what this import does with it:
 	gates     the source chain stands in a Jupiter field this port does
 	          not import, and its C links name gates whose buildings the
 	          later client itself never shipped. Authored at import:
-	          Jangan's own gate stands in for the source entry (an NPC
-	          in Taklamakan, not imported) and offers A and B on the
-	          source links and C and D on authored links, every return
-	          leads back to it, and D gets an authored return building
-	          in the source's own shape (skytemple_gates.py). The rows name world 1:
+	          Jangan's own gate (GATE_CH) lists the four fields, A and B
+	          on the source entry's links and C and D on authored links,
+	          each field leads back to it, and D gets an authored return
+	          building in the source's own shape. No second gate stands in
+	          Jangan (skytemple_gates.py). The rows name world 1:
 	          the later per-field world ids (132-134) are not worlds of
 	          this port, whose portal catalogue refuses unknown worlds.
 	          Link level conditions clamp to the build's cap as every

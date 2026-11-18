@@ -967,6 +967,10 @@ export const runtimeCifImageReferences = [
 	"interface/ifcommon/com_pt_leader.ddj",
 	"interface/ifcommon/com_kindred_china16.ddj",
 	"interface/ifcommon/com_kindred_europe16.ddj",
+	// Quick-party portrait disc: the slot's CIFStaticWithPictureClip takes
+	// its alpha from qpt_face (+0x380, set by 5BA64B); without it the
+	// client drops the masked portrait and the slot shows a black disc.
+	"interface/quickparty/qpt_face.ddj",
 	// Quick-party distance shades: CIFQuickPartySlot_SetDistanceOverlay
 	// (5BA400) sets them on GDR_QPS_STATUS by code (5BD0A0 picks the step).
 	"interface/quickparty/qpt_face_faraway_60.ddj",
