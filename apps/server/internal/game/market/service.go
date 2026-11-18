@@ -77,6 +77,10 @@ type ItemInfo struct {
 	Name    string
 	TypeIDs [4]int64
 	Degree  int
+	// Race is publicstats.MarketRaceChinese or MarketRaceEuropean, "" for
+	// an item either race uses; Sealed is a sealed (rare) item.
+	Race   string
+	Sealed bool
 }
 
 /*
@@ -164,6 +168,12 @@ func (s *Service) Search(q publicstats.MarketSearch) (publicstats.MarketListings
 			continue
 		}
 		if q.Degree != 0 && view.Item.Degree != q.Degree {
+			continue
+		}
+		if q.Race != "" && view.Item.Race != "" && view.Item.Race != q.Race {
+			continue
+		}
+		if q.Rarity != "" && view.Item.Sealed != (q.Rarity == publicstats.MarketRaritySealed) {
 			continue
 		}
 		if needle != "" && !strings.Contains(strings.ToLower(view.Item.Name), needle) {
@@ -797,6 +807,8 @@ func (s *Service) itemView(row domain.InventoryRow) publicstats.MarketItem {
 	if info, ok := s.Item(row.Codename); ok {
 		view.Name = info.Name
 		view.Degree = info.Degree
+		view.Race = info.Race
+		view.Sealed = info.Sealed
 		view.Category = Category(info.TypeIDs)
 	}
 	return view

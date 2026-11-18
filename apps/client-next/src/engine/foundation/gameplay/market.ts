@@ -293,6 +293,16 @@ export function marketRequestPayload( request: MarketRequest ): Uint8Array {
 				}
 				if ( degree ) body.degree = degree;
 			}
+			if ( request.race ) {
+				if ( request.race !== "ch" && request.race !== "eu" ) throw Error( "Invalid market race" );
+				body.race = request.race;
+			}
+			if ( request.rarity ) {
+				if ( request.rarity !== "sealed" && request.rarity !== "normal" ) {
+					throw Error( "Invalid market rarity" );
+				}
+				body.rarity = request.rarity;
+			}
 			if ( request.currency ) body.currency = request.currency;
 			if ( request.sort ) body.sort = request.sort;
 			body.page = page;
@@ -475,6 +485,7 @@ export function createMarket( preview: ( row: CommercePreview ) => InventoryItem
 			anonymous: r.anonymous === true,
 			category: r.category,
 			degree: commerceInteger( r.degree, MARKET_MAX_DEGREE ),
+			sealed: r.sealed === true,
 			item: decodeItem( r.item )
 		};
 	};

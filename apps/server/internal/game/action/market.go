@@ -152,6 +152,8 @@ type marketRequest struct {
 	Q         string `json:"q,omitempty"`
 	Category  string `json:"category,omitempty"`
 	Degree    int    `json:"degree,omitempty"`
+	Race      string `json:"race,omitempty"`
+	Rarity    string `json:"rarity,omitempty"`
 	Currency  string `json:"currency,omitempty"`
 	Sort      string `json:"sort,omitempty"`
 	Page      int    `json:"page,omitempty"`
@@ -187,6 +189,7 @@ type marketRow struct {
 	Anonymous bool             `json:"anonymous,omitempty"`
 	Category  string           `json:"category"`
 	Degree    int              `json:"degree"`
+	Sealed    bool             `json:"sealed,omitempty"`
 	Item      shopInventoryRow `json:"item"`
 }
 
@@ -312,7 +315,8 @@ marketListingRow
 func marketListingRow(view publicstats.MarketListingView, preview shopInventoryRow) marketRow {
 	return marketRow{ID: view.ID, Version: view.Version, Currency: view.Currency, Price: view.Price,
 		ListedMs: view.ListedMs, ExpiresMs: view.ExpiresMs, State: view.State, Seller: view.Seller,
-		Anonymous: view.Anonymous, Category: view.Item.Category, Degree: view.Item.Degree, Item: preview}
+		Anonymous: view.Anonymous, Category: view.Item.Category, Degree: view.Item.Degree,
+		Sealed: view.Item.Sealed, Item: preview}
 }
 
 /*
@@ -471,12 +475,12 @@ category, currency and order, and a bounded text.
 */
 func (rt *Runtime) marketSearch(request marketRequest) (publicstats.MarketSearch, bool) {
 	q := publicstats.MarketSearch{Q: strings.TrimSpace(request.Q), Category: request.Category, Degree: request.Degree,
-		Currency: request.Currency, Sort: request.Sort, Page: request.Page}
+		Race: request.Race, Rarity: request.Rarity, Currency: request.Currency, Sort: request.Sort, Page: request.Page}
 	if q.Page == 0 {
 		q.Page = 1
 	}
 	if q.Page < 1 || q.Page > publicstats.MarketMaxPage || q.Degree < 0 || q.Degree > publicstats.MarketMaxDegree ||
-		len(q.Q) > maxMarketText {
+		len(q.Q) > maxMarketText || !publicstats.MarketFilterValid(q.Race, q.Rarity) {
 		return q, false
 	}
 	switch q.Currency {

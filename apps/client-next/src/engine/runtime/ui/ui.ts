@@ -422,7 +422,7 @@ import { textAllowed } from "@/engine/foundation/ui/character-create";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { compositeItemCaption, compositeItemLayout, createCompositeItemHud } from "./hud/composite-item-hud";
 import { createUniqueRankHud } from "./hud/unique-rank-hud";
-import { createMarketHud } from "./hud/market-hud";
+import { createMarketHud, MARKET_BAG_FIRST_SLOT, MARKET_HOTKEY_VK } from "./hud/market-hud";
 import { drawMarketWindow, type MarketPaint } from "./hud/market-window";
 import { uniqueRankLines } from "@/engine/foundation/gameplay/unique-rank";
 import {
@@ -8306,6 +8306,15 @@ export function createUi( ports: UiPorts ) {
 						}
 						return;
 					}
+					// Port-only (SRO_CONSIGNMENT): a bag item dropped on the market's
+					// List an item slot is the one to sell.
+					if (
+						item && target && !target.disabled && item.slot >= MARKET_BAG_FIRST_SLOT &&
+						(target.id === "market-sell-pick" || target.id === "market-sell-clear")
+					) {
+						activateMarket( "market-sell-slot:" + item.slot );
+						return;
+					}
 					if (
 						item && target && !target.disabled && panel === "Alchemy" && target.id.startsWith( "alchemy-" )
 					) {
@@ -9070,6 +9079,17 @@ export function createUi( ports: UiPorts ) {
 					dirty = true;
 					return;
 				}
+				// Ctrl+click puts a bag item into the open market's List an item
+				// (port-only, not native: SRO_CONSIGNMENT).
+				if (
+					event.ctrl && marketHud.isOpen() && event.id.startsWith( "slot:" ) &&
+					Number( event.id.slice( 5 ) ) >= MARKET_BAG_FIRST_SLOT
+				) {
+					activateMarket( "market-sell-slot:" + event.id.slice( 5 ) );
+					carriedItem = null;
+					inventorySlot = -1;
+					return;
+				}
 				if (
 					event.shift && event.id.startsWith( "slot:" ) &&
 					[ "Inventory", "Shop", "COS inventory", "Storage" ].includes( panel )
@@ -9433,6 +9453,12 @@ export function createUi( ports: UiPorts ) {
 					// F10 opens the mall exactly as the button does (ItemMallEvent_OpenItemMall).
 					if ( binding < 0 && event.code === "F10" ) {
 						activate( "item-mall" );
+						return;
+					}
+					// Port-only, not native (SRO_CONSIGNMENT): K toggles the market
+					// while no binding claims the key.
+					if ( binding < 0 && vk === MARKET_HOTKEY_VK && view.gameplay?.consignment === true ) {
+						activateMarket( "market-toggle" );
 						return;
 					}
 					if ( binding < 0 && event.code === "Enter" ) {

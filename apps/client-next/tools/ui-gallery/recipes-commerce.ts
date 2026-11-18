@@ -217,6 +217,7 @@ async function consignment( context: RecipeContext, page: "mine" | "offers" | "s
 			anonymous: false,
 			category: "weapon",
 			degree: 11 - i % 3,
+			sealed: i % 6 === 1,
 			item
 		};
 	} );

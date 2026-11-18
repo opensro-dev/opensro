@@ -62,6 +62,36 @@ const (
 	MarketSortPriceDesc = "price-desc"
 )
 
+// The race and rarity filters. An item either race wears (country 3, and
+// every item that is no equipment) matches both races.
+const (
+	MarketRaceChinese  = "ch"
+	MarketRaceEuropean = "eu"
+	MarketRaritySealed = "sealed"
+	MarketRarityNormal = "normal"
+)
+
+/*
+================
+MarketFilterValid
+
+Whether a race and a rarity filter are known values ("" is any): one
+check for the site's query and the in-game window.
+================
+*/
+func MarketFilterValid(race, rarity string) bool {
+	switch race {
+	case "", MarketRaceChinese, MarketRaceEuropean:
+	default:
+		return false
+	}
+	switch rarity {
+	case "", MarketRaritySealed, MarketRarityNormal:
+		return true
+	}
+	return false
+}
+
 /*
 ================
 MarketSource
@@ -89,13 +119,17 @@ type MarketSource interface {
 ================
 MarketSearch
 
-A parsed search: Degree 0 and the empty strings mean "any".
+A parsed search: Degree 0 and the empty strings mean "any". Race is
+MarketRaceChinese or MarketRaceEuropean; Rarity is MarketRaritySealed or
+MarketRarityNormal.
 ================
 */
 type MarketSearch struct {
 	Q        string
 	Category string
 	Degree   int
+	Race     string
+	Rarity   string
 	Currency string
 	Sort     string
 	Page     int
@@ -120,8 +154,12 @@ type MarketItem struct {
 	Name     string `json:"name"`
 	Category string `json:"category"`
 	Degree   int    `json:"degree"`
-	Plus     int64  `json:"plus"`
-	Quantity int64  `json:"quantity"`
+	// Race is the race that wears it ("ch", "eu"), "" for either.
+	Race string `json:"race,omitempty"`
+	// Sealed is a sealed (rare) item.
+	Sealed   bool  `json:"sealed,omitempty"`
+	Plus     int64 `json:"plus"`
+	Quantity int64 `json:"quantity"`
 }
 
 // MarketListingView is one listing. Seller is the listing character's
@@ -471,8 +509,8 @@ The search from the query; false for any value outside its list.
 func parseMarketSearch(r *http.Request, categories []MarketCategory) (MarketSearch, bool) {
 	query := r.URL.Query()
 	search := MarketSearch{Q: query.Get("q"), Category: query.Get("category"), Currency: query.Get("currency"),
-		Sort: query.Get("sort"), Page: 1}
-	if len(search.Q) > maxMarketQuery {
+		Race: query.Get("race"), Rarity: query.Get("rarity"), Sort: query.Get("sort"), Page: 1}
+	if len(search.Q) > maxMarketQuery || !MarketFilterValid(search.Race, search.Rarity) {
 		return search, false
 	}
 	if search.Category != "" && !knownCategory(categories, search.Category) {

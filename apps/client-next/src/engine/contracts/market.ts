@@ -74,6 +74,8 @@ export interface MarketRow {
 	readonly anonymous: boolean;
 	readonly category: string;
 	readonly degree: number;
+	// A sealed (rare) item.
+	readonly sealed: boolean;
 	readonly item: InventoryItem;
 }
 
@@ -230,12 +232,19 @@ One window request. Which fields count follows the op (action market.go
 marketRequest); the worker checks each before it is sent.
 ================
 */
+// The search's race (who wears it) and rarity filters (publicstats
+// market.go MarketRace* / MarketRarity*).
+export type MarketRace = "ch" | "eu";
+export type MarketRarity = "sealed" | "normal";
+
 export type MarketRequest =
 	| {
 		readonly op: "search";
 		readonly q?: string;
 		readonly category?: string;
 		readonly degree?: number;
+		readonly race?: MarketRace;
+		readonly rarity?: MarketRarity;
 		readonly currency?: MarketCurrency;
 		readonly sort?: MarketSort;
 		readonly page?: number;

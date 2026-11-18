@@ -31,6 +31,7 @@ import {
 	marketCurrencyText,
 	marketFee,
 	marketTimeLeft,
+	MARKET_MAX_DEGREE,
 	MARKET_PRICE_DIGITS
 } from "@/engine/foundation/gameplay/market";
 import type { UiAuthoredFrame } from "../frame/frame-contract";
@@ -47,6 +48,7 @@ import {
 	marketOwnRow,
 	marketPriceValue,
 	marketWriting,
+	type MarketMenu,
 	type MarketHudState
 } from "./market-hud";
 
@@ -55,7 +57,12 @@ const WIDTH = 1000;
 const HEIGHT = 600;
 const MARGIN = 14;
 // The left column: the listings.
-const LEFT_WIDTH = 650;
+const LEFT_WIDTH = 680;
+// The search line: the name field, the dropdowns and the Search button.
+const QUERY_WIDTH = 150;
+const SEARCH_WIDTH = 60;
+const MENU_GAP = 4;
+const MENU_ROW = 22;
 const CHIP_TOP = 38;
 const FILTER_TOP = 68;
 const TABLE_TOP = 100;
@@ -86,6 +93,31 @@ const OK: UiQuad["color"] = [ 150 / 255, 230 / 255, 130 / 255, 1 ];
 const REFUSED: UiQuad["color"] = [ 255 / 255, 130 / 255, 110 / 255, 1 ];
 const SILK: UiQuad["color"] = [ 130 / 255, 200 / 255, 255 / 255, 1 ];
 const PLUSSED: UiQuad["color"] = [ 140 / 255, 180 / 255, 255 / 255, 1 ];
+// A sealed (rare) item's name, as the bag's help colours one.
+const SEALED: UiQuad["color"] = [ 255 / 255, 200 / 255, 60 / 255, 1 ];
+
+/*
+================
+Column
+
+One listing column, offset from the table's left edge.
+================
+*/
+interface Column {
+	readonly x: number;
+	readonly width: number;
+	readonly align: 0 | 1 | 2;
+}
+const COLUMN = {
+	item: { x: 8, width: 164, align: 0 },
+	degree: { x: 172, width: 46, align: 1 },
+	qty: { x: 218, width: 26, align: 1 },
+	price: { x: 246, width: 106, align: 0 },
+	seller: { x: 354, width: 80, align: 0 },
+	left: { x: 436, width: 56, align: 0 }
+} as const satisfies Record<string, Column>;
+// Where each row's Buy, Send PM and Make offer start.
+const ACTIONS_LEFT = 496;
 const PANEL: UiQuad["color"] = [ .02, .03, .025, .82 ];
 const HEADER: UiQuad["color"] = [ .09, .075, .04, .9 ];
 const EDGE: UiQuad["color"] = [ .55, .45, .24, .85 ];
@@ -203,6 +235,7 @@ export function drawMarketWindow( frame: UiAuthoredFrame, frameDraw: MarketPaint
 	sellPanel( pen );
 	pagesPanel( pen );
 	rulesPanel( pen );
+	if ( view.hud.menu ) filterMenu( pen );
 	if ( view.hud.dialog ) dialogBox( pen );
 	frameDraw.endWindow( frame, admission, "market" );
 }
@@ -403,14 +436,21 @@ function browseColumn( pen: Pen ) {
 		);
 		x += width + 4;
 	}
-	// The search line.
+	// The search line: the name, the five dropdowns (filterMenus) and Search.
 	const y = py + FILTER_TOP;
-	pen.field( "market-query", hud.query, [ left, y, 210, BUTTON_HEIGHT ], "Search items...", 64 );
-	pen.button( "market-degree", hud.degree ? `Degree ${hud.degree}` : "All degrees", left + 216, y, 110 );
-	const currency = hud.currency ? marketCurrencyText( hud.currency ) : "all";
-	pen.button( "market-currency", `Currency: ${currency}`, left + 330, y, 120 );
-	pen.button( "market-sort", SORT_CAPTIONS[hud.sort], left + 454, y, 100 );
-	pen.button( "market-search", "Search", left + LEFT_WIDTH - 80, y, 80 );
+	pen.field( "market-query", hud.query, [ left, y, QUERY_WIDTH, BUTTON_HEIGHT ], "Search items...", 64 );
+	for ( const menu of filterMenus( hud ) ) {
+		pen.button(
+			"market-menu:" + menu.name,
+			menu.caption + " v",
+			left + menu.x,
+			y,
+			menu.width,
+			false,
+			hud.menu === menu.name
+		);
+	}
+	pen.button( "market-search", "Search", left + LEFT_WIDTH - SEARCH_WIDTH, y, SEARCH_WIDTH );
 	// The listings.
 	const table: UiRect = [ left, py + TABLE_TOP, LEFT_WIDTH, HEADER_HEIGHT + BROWSE_ROWS * ROW_PITCH + 2 ];
 	pen.panel( table );
@@ -418,26 +458,35 @@ function browseColumn( pen: Pen ) {
 		r: [ table[0] + 1, table[1] + 1, table[2] - 2, HEADER_HEIGHT - 1 ],
 		color: HEADER
 	} );
-	const columns: readonly (readonly [string, number, number, 0 | 1 | 2])[] = [
-		[ "Item", 8, 166, 0 ],
-		[ "Degree", 176, 44, 1 ],
-		[ "Qty", 220, 28, 1 ],
-		[ hud.sort === "price-asc" ? "Price ^" : hud.sort === "price-desc" ? "Price v" : "Price", 252, 112, 0 ],
-		[ "Seller", 366, 80, 0 ],
-		[ "Left", 448, 58, 0 ]
+	const priceCaption = hud.sort === "price-asc" ? "Price ^" : hud.sort === "price-desc" ? "Price v" : "Price ^v";
+	const headers: readonly (readonly [string, Column])[] = [
+		[ "Item", COLUMN.item ],
+		[ "Degree", COLUMN.degree ],
+		[ "Qty", COLUMN.qty ],
+		[ priceCaption, COLUMN.price ],
+		[ "Seller", COLUMN.seller ],
+		[ "Left", COLUMN.left ]
 	];
-	for ( const [caption, offset, width, align] of columns ) {
-		pen.text( caption, [ left + offset, table[1], width, HEADER_HEIGHT ], GOLD, align );
+	for ( const [caption, column] of headers ) {
+		pen.text( caption, [ left + column.x, table[1], column.width, HEADER_HEIGHT ], GOLD, column.align );
 	}
+	// The Price header sorts: cheapest first, then dearest first.
+	pen.frame.controls.push( {
+		id: "market-sort-price",
+		label: "Sort by price",
+		kind: "button",
+		rect: [ left + COLUMN.price.x, table[1], COLUMN.price.width, HEADER_HEIGHT ],
+		selected: hud.sort === "price-asc" || hud.sort === "price-desc"
+	} );
 	const rows = browse?.rows ?? [];
 	rows.slice( 0, BROWSE_ROWS ).forEach( ( row, i ) => {
 		const top = table[1] + HEADER_HEIGHT + i * ROW_PITCH;
-		const r: UiRect = [ left + 1, top, LEFT_WIDTH - 2, ROW_PITCH ];
 		const own = marketOwnRow( row, view.localName ), picked = hud.selected === row.id;
 		const buyable = row.state === "open" && !own;
+		const cell = ( column: Column ): UiRect => [ left + column.x, top, column.width, ROW_PITCH ];
 		pen.row(
 			"market-pick:" + row.id,
-			[ r[0] + ROW_ICON + 8, r[1], 500 - ROW_ICON, r[3] ],
+			[ left + 1 + ROW_ICON + 8, top, ACTIONS_LEFT - ROW_ICON - 12, ROW_PITCH ],
 			i,
 			picked,
 			row.item.name ?? ""
@@ -445,31 +494,35 @@ function browseColumn( pen: Pen ) {
 		pen.item(
 			"market-item:browse:" + row.id,
 			row.item,
-			[ r[0] + 4, top + (ROW_PITCH - ROW_ICON) / 2, ROW_ICON, ROW_ICON ],
+			[ left + 5, top + (ROW_PITCH - ROW_ICON) / 2, ROW_ICON, ROW_ICON ],
 			picked
 		);
 		pen.text(
 			itemCaption( row.item ),
-			[ left + 8 + ROW_ICON + 6, top, 166 - ROW_ICON, ROW_PITCH ],
-			itemColor( pen, row.item )
+			[ left + COLUMN.item.x + ROW_ICON + 6, top, COLUMN.item.width - ROW_ICON - 6, ROW_PITCH ],
+			row.sealed ? SEALED : itemColor( pen, row.item )
 		);
-		pen.text( row.degree ? String( row.degree ) : "-", [ left + 176, top, 44, ROW_PITCH ], pen.frame.white, 1 );
-		pen.text( String( Math.max( 1, row.item.quantity ) ), [ left + 220, top, 28, ROW_PITCH ], pen.frame.white, 1 );
-		pen.text(
-			priceText( row.price, row.currency ),
-			[ left + 252, top, 112, ROW_PITCH ],
-			priceColor( row.currency )
-		);
+		pen.text( row.degree ? String( row.degree ) : "-", cell( COLUMN.degree ), pen.frame.white, 1 );
+		pen.text( String( Math.max( 1, row.item.quantity ) ), cell( COLUMN.qty ), pen.frame.white, 1 );
+		pen.text( priceText( row.price, row.currency ), cell( COLUMN.price ), priceColor( row.currency ) );
 		pen.text(
 			own ? "Yours" : row.seller || "Anonymous",
-			[ left + 366, top, 80, ROW_PITCH ],
+			cell( COLUMN.seller ),
 			own || !row.seller ? DIM : pen.frame.white
 		);
-		pen.text( marketTimeLeft( row.expiresMs, view.now ), [ left + 448, top, 58, ROW_PITCH ], DIM );
+		pen.text( marketTimeLeft( row.expiresMs, view.now ), cell( COLUMN.left ), DIM );
 		const by = top + (ROW_PITCH - BUTTON_HEIGHT) / 2;
-		pen.button( "market-row-buy:" + row.id, "Buy", left + 508, by, 38, !buyable || pen.busy );
-		pen.button( "market-row-whisper:" + row.id, "PM", left + 548, by, 34, !buyable || !row.seller );
-		pen.button( "market-row-offer:" + row.id, "Offer", left + 584, by, 58, !buyable || pen.busy );
+		let x = left + ACTIONS_LEFT;
+		for (
+			const [kind, caption, width, disabled] of [
+				[ "buy", "Buy", 34, !buyable || pen.busy ],
+				[ "whisper", "Send PM", 58, !buyable || !row.seller ],
+				[ "offer", "Make offer", 76, !buyable || pen.busy ]
+			] as const
+		) {
+			pen.button( `market-row-${kind}:${row.id}`, caption, x, by, width, disabled );
+			x += width + 2;
+		}
 	} );
 	if ( browse && !rows.length ) {
 		pen.text(
@@ -485,6 +538,85 @@ function browseColumn( pen: Pen ) {
 	pen.text( `${marketAmount( total )} listing${total === 1 ? "" : "s"}`, [ left, footer, 200, BUTTON_HEIGHT ], DIM );
 	pager( pen, "market-", hud.page - 1, Math.max( 1, browse?.pages ?? 1 ), left + LEFT_WIDTH, footer );
 	statusLine( pen, footer + BUTTON_HEIGHT + 4 );
+}
+
+/*
+================
+filterMenus
+
+The search line's dropdowns: each one's caption for the current choice,
+its place on the line, and its choices as [value, caption].
+================
+*/
+function filterMenus( hud: MarketHudState ) {
+	const degrees: [string, string][] = [ [ "0", "All degrees" ] ];
+	for ( let degree = 1; degree <= MARKET_MAX_DEGREE; degree++ ) {
+		degrees.push( [ String( degree ), `Degree ${degree}` ] );
+	}
+	const menus: { name: MarketMenu; width: number; current: string; choices: readonly [string, string][]; }[] = [
+		{ name: "degree", width: 86, current: String( hud.degree ), choices: degrees },
+		{
+			name: "race",
+			width: 80,
+			current: hud.race,
+			choices: [ [ "", "Race: all" ], [ "ch", "Chinese" ], [ "eu", "European" ] ]
+		},
+		{
+			name: "rarity",
+			width: 86,
+			current: hud.rarity,
+			choices: [ [ "", "Rarity: all" ], [ "sealed", "Sealed" ], [ "normal", "Normal" ] ]
+		},
+		{
+			name: "currency",
+			width: 96,
+			current: hud.currency,
+			choices: [ [ "", "Currency: all" ], [ "gold", "Gold" ], [ "silk", "Silk" ] ]
+		},
+		{
+			name: "sort",
+			width: 96,
+			current: hud.sort,
+			choices: MARKET_SORT_ORDER.map( sort => [ sort, SORT_CAPTIONS[sort] ] as [string, string] )
+		}
+	];
+	let x = QUERY_WIDTH + MENU_GAP;
+	return menus.map( menu => {
+		const placed = {
+			...menu,
+			x,
+			caption: menu.choices.find( ( [value] ) => value === menu.current )?.[1] ?? menu.choices[0]![1]
+		};
+		x += menu.width + MENU_GAP;
+		return placed;
+	} );
+}
+
+/*
+================
+filterMenu
+
+The open dropdown's list under its button, over the listings.
+================
+*/
+function filterMenu( pen: Pen ) {
+	const { px, py, view } = pen;
+	const menu = filterMenus( view.hud ).find( row => row.name === view.hud.menu );
+	if ( !menu ) return;
+	const width = Math.max( menu.width, 110 );
+	const x = px + MARGIN + menu.x, y = py + FILTER_TOP + BUTTON_HEIGHT + 2;
+	pen.panel( [ x - 2, y - 2, width + 4, menu.choices.length * MENU_ROW + 4 ], GOLD );
+	menu.choices.forEach( ( [value, caption], i ) => {
+		pen.button(
+			`market-choose:${menu.name}:${value}`,
+			caption,
+			x,
+			y + i * MENU_ROW,
+			width,
+			false,
+			value === menu.current
+		);
+	} );
 }
 
 /*
@@ -530,7 +662,7 @@ function sellPanel( pen: Pen ) {
 		item ? itemColor( pen, item ) : DIM
 	);
 	pen.text(
-		item ? "Click it to put it back." : "Listing takes it out of your bag.",
+		item ? "Click it to put it back." : "Or Ctrl+click / drag a bag item here.",
 		[ left + 58, top + 48, width - 68, 20 ],
 		DIM
 	);
@@ -678,7 +810,7 @@ function listingsPage( pen: Pen, area: UiRect ) {
 	const bottom = area[1] + area[3];
 	const pages = Math.max( 1, Math.ceil( listings.length / MARKET_MINE_ROWS ) );
 	pager( pen, "market-mine-", hud.minePage, pages, area[0] + area[2], bottom - 2 * BUTTON_HEIGHT - 6, true );
-	destinationButtons( pen, "market-return-to:", hud.returnTo, area[0], bottom - 2 * BUTTON_HEIGHT - 6, 74 );
+	destinationButtons( pen, "market-return-to:", hud.returnTo, area[0], bottom - 2 * BUTTON_HEIGHT - 6, 70 );
 	const picked = listings.find( row => row.id === hud.mineSelected );
 	const half = (area[2] - 4) / 2;
 	pen.button(
@@ -878,10 +1010,10 @@ function rulesPanel( pen: Pen ) {
 	const left = px + RIGHT_LEFT, top = py + HEIGHT - RULES_HEIGHT - 12;
 	pen.panel( [ left, top, RIGHT_WIDTH, RULES_HEIGHT ], LINE );
 	const lines = [
-		"Gold goes to the character that listed the item,",
-		"Silk to your account. Unsold items come back.",
+		"Sale gold goes to the listing character,",
+		"Silk to your account. Unsold items return.",
 		`The seller pays a ${rules?.feePercent ?? 0}% fee on each sale.`,
-		"Open the market anywhere with its button."
+		"Hotkey: K, or the market button by FPS."
 	];
 	lines.forEach( ( line, i ) => pen.text( line, [ left + 8, top + 4 + i * 16, RIGHT_WIDTH - 16, 16 ], DIM ) );
 }

@@ -312,13 +312,39 @@ test("each offer list pages past its rows", () => {
 	assert.equal( hud.state().offerPages.out, 0, "the other list keeps its page" );
 });
 
-test("the chips, the degree step and a pick from the bag", () => {
+test("the chips, the dropdowns and a pick from the bag", () => {
 	const context = { market: market(), localName: "Me", now: 0 };
 	const hud = createMarketHud();
 	hud.open();
 	assert.deepEqual( hud.activate( "market-category:weapon", context ).requests.map( r => r.category ), [ "weapon" ] );
 	assert.deepEqual( hud.activate( "market-category:nope", context ).requests, [], "an unknown category" );
-	assert.equal( hud.activate( "market-degree", context ).requests[0].degree, 1 );
+	// A dropdown opens, a choice searches and closes it; any other click
+	// closes it too, and a choice the window never drew does nothing.
+	hud.activate( "market-menu:degree", context );
+	assert.equal( hud.state().menu, "degree" );
+	assert.equal( hud.activate( "market-choose:degree:11", context ).requests[0].degree, 11 );
+	assert.equal( hud.state().menu, "" );
+	hud.activate( "market-menu:race", context );
+	hud.activate( "market-pick:7", context );
+	assert.equal( hud.state().menu, "", "a click elsewhere closes the list" );
+	const raced = hud.activate( "market-choose:race:eu", context ).requests[0];
+	assert.equal( raced.race, "eu" );
+	assert.equal( raced.degree, 11, "the other filters stay" );
+	assert.equal( hud.activate( "market-choose:rarity:sealed", context ).requests[0].rarity, "sealed" );
+	for (
+		const bad of [
+			"market-choose:race:kr",
+			"market-choose:degree:12",
+			"market-choose:degree:",
+			"market-choose:nope:1"
+		]
+	) {
+		assert.deepEqual( hud.activate( bad, context ).requests, [], bad );
+	}
+	assert.equal( hud.activate( "market-choose:degree:0", context ).requests[0].degree, undefined, "All degrees" );
+	// The Price header: cheapest first, then dearest first.
+	assert.equal( hud.activate( "market-sort-price", context ).requests[0].sort, "price-asc" );
+	assert.equal( hud.activate( "market-sort-price", context ).requests[0].sort, "price-desc" );
 	assert.equal( hud.activate( "market-category:", context ).requests[0].category, undefined, "All" );
 	hud.activate( "market-sell-pick", context );
 	assert.equal( hud.state().tab, "sell", "the + opens the bag" );
@@ -329,4 +355,28 @@ test("the chips, the degree step and a pick from the bag", () => {
 	assert.equal( hud.state().sellSlot, -1 );
 	hud.activate( "market-offer-out:4", context );
 	assert.equal( hud.state().offerSide, "out" );
+});
+
+test("K toggles the market and Ctrl+click lists a bag item", () => {
+	const { f, step } = storageKeeper( true );
+	try {
+		f.state.gameplay = {
+			...f.state.gameplay,
+			npcConversation: undefined,
+			inventory: [ { ...f.state.gameplay.inventory?.[0], slot: 20, refObjId: 3633, quantity: 1, name: "Sword" } ]
+		};
+		step();
+		f.ui.event( { kind: "key", code: "KeyK" } );
+		step();
+		assert.ok( f.hasText( "Consignment Market" ), "K opens it" );
+		assert.equal( f.hasText( "Click it to put it back." ), false, "nothing picked yet" );
+		f.ui.event( { kind: "activate", id: "slot:20", ctrl: true } );
+		step();
+		assert.ok( f.hasText( "Click it to put it back." ), "Ctrl+click put the bag item in List an item" );
+		f.ui.event( { kind: "key", code: "KeyK" } );
+		step();
+		assert.equal( f.hasText( "Consignment Market" ), false, "K closes it" );
+	} finally {
+		f.dispose();
+	}
 });

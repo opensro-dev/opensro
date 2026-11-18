@@ -23,6 +23,8 @@ import type {
 	MarketDestination,
 	MarketOffer,
 	MarketOp,
+	MarketRace,
+	MarketRarity,
 	MarketRequest,
 	MarketRow,
 	MarketSort,
@@ -46,6 +48,15 @@ export const MARKET_TABS: readonly MarketTab[] = [ "mine", "history", "offers", 
 export const MARKET_SORT_ORDER: readonly MarketSort[] = [ "newest", "ending", "price-asc", "price-desc" ];
 // The currency filter's steps: any, then each currency.
 export const MARKET_CURRENCY_FILTERS: readonly (MarketCurrency | "")[] = [ "", "gold", "silk" ];
+// The race and rarity filters, "" for all.
+export const MARKET_RACES: readonly (MarketRace | "")[] = [ "", "ch", "eu" ];
+export const MARKET_RARITIES: readonly (MarketRarity | "")[] = [ "", "sealed", "normal" ];
+// The search line's dropdowns; "" is none open.
+export type MarketMenu = "" | "degree" | "race" | "rarity" | "currency" | "sort";
+export const MARKET_MENUS: readonly MarketMenu[] = [ "degree", "race", "rarity", "currency", "sort" ];
+// K opens and closes the market (virtual key 0x4B): no native default
+// binding uses it (input-options.ts), and a player's own binding wins.
+export const MARKET_HOTKEY_VK = 0x4b;
 // A refusal or a success stays on the window's status line this long.
 export const MARKET_STATUS_MS = 8000;
 // The rows one page of the account's own lists shows.
@@ -98,6 +109,10 @@ export interface MarketHudState {
 	readonly currency: MarketCurrency | "";
 	readonly sort: MarketSort;
 	readonly degree: number;
+	readonly race: MarketRace | "";
+	readonly rarity: MarketRarity | "";
+	// The open dropdown of the search line.
+	readonly menu: MarketMenu;
 	readonly page: number;
 	readonly selected: number;
 	// Sell: the bag slot, its price, currency and the anonymous choice, and
@@ -157,6 +172,9 @@ const CLOSED: MarketHudState = {
 	currency: "",
 	sort: "newest",
 	degree: 0,
+	race: "",
+	rarity: "",
+	menu: "",
 	page: 1,
 	selected: 0,
 	sellSlot: -1,
@@ -249,6 +267,36 @@ export function marketOfferAt( market: MarketState | undefined, selection: strin
 
 /*
 ================
+chooseFilter
+
+The search drafts one dropdown choice sets, or null for a value outside
+that menu's list (a choice id the window never drew).
+================
+*/
+function chooseFilter( menu: MarketMenu, value: string ): Partial<MarketHudState> | null {
+	switch ( menu ) {
+		case "degree": {
+			const degree = Number( value );
+			return value !== "" && Number.isInteger( degree ) && degree >= 0 && degree <= MARKET_MAX_DEGREE ?
+				{ degree } :
+				null;
+		}
+		case "race":
+			return MARKET_RACES.includes( value as MarketRace ) ? { race: value as MarketRace | "" } : null;
+		case "rarity":
+			return MARKET_RARITIES.includes( value as MarketRarity ) ? { rarity: value as MarketRarity | "" } : null;
+		case "currency":
+			return MARKET_CURRENCY_FILTERS.includes( value as MarketCurrency ) ?
+				{ currency: value as MarketCurrency | "" } :
+				null;
+		case "sort":
+			return MARKET_SORT_ORDER.includes( value as MarketSort ) ? { sort: value as MarketSort } : null;
+	}
+	return null;
+}
+
+/*
+================
 createMarketHud
 ================
 */
@@ -267,6 +315,8 @@ export function createMarketHud() {
 		q: s.query.trim().slice( 0, MARKET_QUERY_LIMIT ),
 		...(s.category ? { category: s.category } : {}),
 		...(s.degree ? { degree: s.degree } : {}),
+		...(s.race ? { race: s.race } : {}),
+		...(s.rarity ? { rarity: s.rarity } : {}),
 		...(s.currency ? { currency: s.currency } : {}),
 		sort: s.sort,
 		page
@@ -415,24 +465,30 @@ export function createMarketHud() {
 				s = { ...s, page: 1, selected: 0 };
 				return { requests: [ search( 1 ) ] };
 			}
-			if ( id === "market-sort" ) {
-				const next = MARKET_SORT_ORDER[(MARKET_SORT_ORDER.indexOf( s.sort ) + 1) % MARKET_SORT_ORDER.length]!;
-				s = { ...s, sort: next, page: 1, selected: 0 };
+			// The dropdowns: a button opens its list, a choice applies and
+			// searches, and any other click closes the list.
+			if ( id.startsWith( "market-menu:" ) ) {
+				const menu = id.slice( 12 ) as MarketMenu;
+				if ( MARKET_MENUS.includes( menu ) ) s = { ...s, menu: s.menu === menu ? "" : menu };
+				return none;
+			}
+			if ( id.startsWith( "market-choose:" ) ) {
+				const rest = id.slice( 14 ), colon = rest.indexOf( ":" );
+				const chosen = chooseFilter( rest.slice( 0, colon ) as MarketMenu, rest.slice( colon + 1 ) );
+				if ( !chosen ) return none;
+				s = { ...s, ...chosen, menu: "", page: 1, selected: 0 };
 				return { requests: [ search( 1 ) ] };
 			}
-			if ( id === "market-currency" ) {
-				const steps = MARKET_CURRENCY_FILTERS;
-				s = { ...s, currency: steps[(steps.indexOf( s.currency ) + 1) % steps.length]!, page: 1, selected: 0 };
+			if ( s.menu ) s = { ...s, menu: "" };
+			// The Price header flips between cheapest and dearest first.
+			if ( id === "market-sort-price" ) {
+				s = { ...s, sort: s.sort === "price-asc" ? "price-desc" : "price-asc", page: 1, selected: 0 };
 				return { requests: [ search( 1 ) ] };
 			}
 			if ( id.startsWith( "market-category:" ) ) {
 				const slug = id.slice( 16 );
 				if ( slug && !market?.categories.some( category => category.slug === slug ) ) return none;
 				s = { ...s, category: slug, page: 1, selected: 0 };
-				return { requests: [ search( 1 ) ] };
-			}
-			if ( id === "market-degree" ) {
-				s = { ...s, degree: (s.degree + 1) % (MARKET_MAX_DEGREE + 1), page: 1, selected: 0 };
 				return { requests: [ search( 1 ) ] };
 			}
 			if ( id === "market-prev" || id === "market-next" ) {

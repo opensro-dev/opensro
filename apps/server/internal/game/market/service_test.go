@@ -10,6 +10,7 @@ package market
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"opensro.online/server/internal/agent/publicstats"
@@ -237,6 +238,66 @@ func TestSearchFiltersOrdersAndPages(t *testing.T) {
 	none, _ := s.Search(publicstats.MarketSearch{Category: "weapon", Degree: 2, Sort: publicstats.MarketSortNewest, Page: 1})
 	if none.Total != 0 || none.Pages != 0 {
 		t.Fatalf("no match = %+v", none)
+	}
+}
+
+/*
+================
+TestSearchFiltersRaceAndRarity
+
+A Chinese sword, a sealed European sword and a herb either race uses:
+the race filter keeps the race's items and the shared herb; the rarity
+filter splits sealed from normal.
+================
+*/
+func TestSearchFiltersRaceAndRarity(t *testing.T) {
+	store := &fakeServiceStore{}
+	for i, codename := range []string{"ITEM_CH_SWORD_01_A", "ITEM_EU_SWORD_01_A_RARE", "ITEM_ETC_HP_POTION_01"} {
+		store.open = append(store.open, domain.MarketListing{ID: int64(i + 1), Item: domain.InventoryRow{Codename: codename},
+			Currency: domain.MarketGold, Price: 10, ListedMs: int64(i)})
+	}
+	s := testService(store)
+	item := s.Item
+	s.Item = func(codename string) (ItemInfo, bool) {
+		switch codename {
+		case "ITEM_CH_SWORD_01_A":
+			return ItemInfo{Name: "Iron Sword", TypeIDs: [4]int64{3, 1, 6, 2}, Degree: 1, Race: publicstats.MarketRaceChinese}, true
+		case "ITEM_EU_SWORD_01_A_RARE":
+			return ItemInfo{Name: "Sword (Seal of Star)", TypeIDs: [4]int64{3, 1, 6, 7}, Degree: 1,
+				Race: publicstats.MarketRaceEuropean, Sealed: true}, true
+		}
+		return item(codename)
+	}
+	ids := func(q publicstats.MarketSearch) []int64 {
+		q.Page = 1
+		page, err := s.Search(q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := []int64{}
+		for _, listing := range page.Listings {
+			out = append(out, listing.ID)
+		}
+		return out
+	}
+	for _, c := range []struct {
+		q    publicstats.MarketSearch
+		want []int64
+	}{
+		{publicstats.MarketSearch{Race: publicstats.MarketRaceChinese}, []int64{3, 1}},
+		{publicstats.MarketSearch{Race: publicstats.MarketRaceEuropean}, []int64{3, 2}},
+		{publicstats.MarketSearch{Rarity: publicstats.MarketRaritySealed}, []int64{2}},
+		{publicstats.MarketSearch{Rarity: publicstats.MarketRarityNormal}, []int64{3, 1}},
+		{publicstats.MarketSearch{Race: publicstats.MarketRaceChinese, Rarity: publicstats.MarketRaritySealed}, []int64{}},
+	} {
+		if got := ids(c.q); !slices.Equal(got, c.want) {
+			t.Errorf("search %+v = %v, want %v", c.q, got, c.want)
+		}
+	}
+	for _, bad := range [][2]string{{"kr", ""}, {"", "unique"}} {
+		if publicstats.MarketFilterValid(bad[0], bad[1]) {
+			t.Errorf("filter %v accepted", bad)
+		}
 	}
 }
 

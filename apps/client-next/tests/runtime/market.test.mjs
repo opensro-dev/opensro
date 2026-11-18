@@ -66,6 +66,13 @@ test("every write names where its item goes, and an offer is checked before it l
 		to: "warehouse"
 	} );
 	assert.deepEqual( decode( marketRequestPayload( { op: "accept", offer: 3 } ) ), { op: "accept", offer: 3 } );
+	assert.deepEqual( decode( marketRequestPayload( { op: "search", race: "eu", rarity: "sealed", degree: 11 } ) ), {
+		op: "search",
+		degree: 11,
+		race: "eu",
+		rarity: "sealed",
+		page: 1
+	} );
 	assert.deepEqual(
 		decode( marketRequestPayload( { op: "list", slot: 20, currency: "silk", price: 5, anonymous: true } ) ),
 		{ op: "list", slot: 20, currency: "silk", price: 5, anonymous: true }
@@ -82,7 +89,10 @@ test("every write names where its item goes, and an offer is checked before it l
 			{ op: "offer", listing: 5, price: 0, to: "bag" },
 			{ op: "offer", listing: 0, price: 10, to: "bag" },
 			{ op: "reject", offer: -1 },
-			{ op: "list", slot: 6, currency: "gold", price: 5, anonymous: false }
+			{ op: "list", slot: 6, currency: "gold", price: 5, anonymous: false },
+			{ op: "search", race: "kr" },
+			{ op: "search", rarity: "unique" },
+			{ op: "search", degree: 12 }
 		]
 	) {
 		assert.throws( () => marketRequestPayload( bad ), undefined, JSON.stringify( bad ) );
