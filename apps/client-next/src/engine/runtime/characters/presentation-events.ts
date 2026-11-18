@@ -27,6 +27,8 @@ import type { EffectTrigger, EffectImpactEvent, HawkImpact, ImpactFeedback } fro
 import type { Renderer } from "@/engine/contracts/runtime";
 import { actorQueryRows } from "@/engine/foundation/animation/actor-query-rows";
 import type { Resource, PresentationOutput } from "./internal/presentation-contract";
+import { isKnockback, KNOCKBACK_IMPACT } from "@/engine/foundation/gameplay/cast-knockback";
+import { SYSTEM_KNOCKBACK } from "@/engine/contracts/orb";
 
 /*
 ================
@@ -73,6 +75,7 @@ interface PresentationEventEffects {
 	takeImpacts(): readonly EffectImpactEvent[];
 	impactIndex( skill: number, phase: string, event: number ): number;
 	hitFlash( localCaster: boolean, hwan: boolean, flags: number, atMs: number ): void;
+	system( gid: number, effect: number ): void;
 	impactSource(
 		caster: number | undefined,
 		target: number,
@@ -186,6 +189,8 @@ interface PresentationEventFrame {
 		): void;
 		flush( now: number, position: ( gid: number ) => readonly [number, number, number] | undefined ): void;
 	};
+	// Starts a struck character's recoil at its hit (knockback-presentation.ts).
+	readonly knockbacks: { land( gid: number, at: number ): void; };
 }
 
 /*
@@ -233,7 +238,8 @@ export function createPresentationEvents() {
 				renderer,
 				feedback,
 				health,
-				sounds
+				sounds,
+				knockbacks
 			} = frame;
 			if ( state.damageTexts.length ) {
 				state.damageTexts = state.damageTexts.filter( row => seconds - row.started <= 3 );
@@ -473,6 +479,12 @@ export function createPresentationEvents() {
 							at + COMBAT_STANCE_SECONDS
 						)
 					);
+				}
+				// 8D5440: the hit itself starts a knockback's travel (8D56F6 ->
+				// 8DDBD0) and, for type 5, its SYSTEM_KNOCKBACK decoration.
+				if ( isKnockback( impact ) ) {
+					knockbacks.land( target.gid, at );
+					if ( impact.type === KNOCKBACK_IMPACT ) effects.system( target.gid, SYSTEM_KNOCKBACK );
 				}
 				effects.hitFlash(
 					hit.source !== "hawk" && caster !== undefined && caster.gid === gameplay?.localGid,

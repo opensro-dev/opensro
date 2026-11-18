@@ -658,15 +658,18 @@ type Runtime struct {
 	// christmasSnow is the snowfall state of the Christmas native group
 	// (event group 1) advanceEventGroups last saw; tick goroutine only.
 	christmasSnow eventGroupWatch
+	// winterMissions is the winter event's Server Missions
+	// (winter_missions.go).
+	winterMissions winterMissionsState
+	// WinterMissionStore keeps the missions' rows across a restart; nil
+	// keeps them for the process's life.
+	WinterMissionStore WinterMissionStore
+	// WinterMissionGoals are the port-only fixed test goals
+	// (SRO_WINTER_MISSION_GOALS); nil is native.
+	WinterMissionGoals progression.WinterMissionGoals
 	// weather is the climate cycle and its pending deliveries
 	// (weather.go); a nil cycle is SRO_WEATHER off.
 	weather weatherState
-	// christmasWavesAsked is the last instant advanceChristmasWaves asked
-	// the timetable about; the tick goroutine alone touches it.
-	christmasWavesAsked time.Time
-	// christmasSlaves is the standing Snow Slave crowd's step state
-	// (christmas_snow_slaves.go); tick goroutine only.
-	christmasSlaves christmasSnowSlaves
 	// Christmas is the Christmas event (port-only, not native in this
 	// client build; progression/christmas.go): its event snow and the
 	// towns' decoration. The zero value is off.

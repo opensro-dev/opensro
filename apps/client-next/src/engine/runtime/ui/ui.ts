@@ -1391,6 +1391,24 @@ export function createUi( ports: UiPorts ) {
 	let potionCombo = "";
 	let potionComboOffset = 0;
 	let potionDraft: AutoPotionDraft = autoPotionDraft( defaultAutoPotion() );
+	/*
+	================
+	setAutoPotionPercent
+
+	An HP/MP slider's percent, kept only for an enabled slot and a whole
+	1-100. A function of its own for the type checker's sake: read inside
+	the UI event handler, potionDraft made TypeScript walk that handler's
+	whole flow graph for each reference, 28 s of a 55 s client check
+	(trace, 2026-11-18).
+	================
+	*/
+	function setAutoPotionPercent( key: "hp" | "mp", percent: number ) {
+		if (
+			!autoPotionEntry( potionDraft[key] ).enabled || !Number.isInteger( percent ) || percent < 1 ||
+			percent > 100
+		) return;
+		potionDraft = { ...potionDraft, [key]: autoPotionWord( { ...autoPotionEntry( potionDraft[key] ), percent } ) };
+	}
 	const commonWindowPaths = [
 		BUTTON,
 		BUTTON_FOCUS,
@@ -9227,15 +9245,7 @@ export function createUi( ports: UiPorts ) {
 				} else if ( event.id.startsWith( "potion-percent:" ) ) {
 					const key = event.id.slice( 15 ), percent = Number( event.value );
 					if ( key === "vigorHp" || key === "vigorMp" ) companionPotions.percent( key, percent );
-					if (
-						(key === "hp" || key === "mp") && autoPotionEntry( potionDraft[key] ).enabled &&
-						Number.isInteger( percent ) && percent >= 1 && percent <= 100
-					) {
-						potionDraft = {
-							...potionDraft,
-							[key]: autoPotionWord( { ...autoPotionEntry( potionDraft[key] ), percent } )
-						};
-					}
+					if ( key === "hp" || key === "mp" ) setAutoPotionPercent( key, percent );
 				} else if ( event.id === "blocking-name" && blockDialog === "add" ) {
 					blockInput = event.value.slice( 0, 13 );
 				} else if ( event.id === "pet-name" && petNameDialog?.phase === "input" ) {
@@ -19925,17 +19935,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						hudCopy( "UIIT_STT_GOLD" ),
 						state.ownLocked
 					);
-					// 6B21B0: once the own offer locks, the server-driven confirm
-					// mode relabels this button UIIT_CTL_ACKNOWLEDGMENT ("Approve").
+					// 6B21B0 (CIFExchange_SetConfirmMode): 0xB095 [1] accepting the
+					// own lock (75B450) turns confirm mode on, which relabels this
+					// button UIIT_CTL_ACKNOWLEDGMENT ("Approve") at 6B21F6. It stays
+					// disabled until the partner locks too (6B1F40 / 540740), and
+					// 0xB34A [1] (75B4B0) only disables it again (6B1F30).
 					authoredLabeledButton(
 						at( 11 ),
 						px,
 						py,
 						"exchange-confirm",
-						// 6B21F6: once this side has confirmed, the button reads
-						// UIIT_CTL_ACKNOWLEDGMENT ("Approve"); the authored
-						// Confirm caption stays until then.
-						state.approved ?
+						state.ownLocked ?
 							hudCopy( "UIIT_CTL_ACKNOWLEDGMENT" ) || hudCopy( at( 11 ).text ) :
 							hudCopy( at( 11 ).text ),
 						state.approved || state.ownLocked && !state.theirLocked

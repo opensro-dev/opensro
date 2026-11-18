@@ -34,6 +34,18 @@ const MAX_DIAGNOSTIC_UNPACKED_BYTES = 8 * 1024 * 1024;
 // kinds) and request paths, nothing free-form.
 const SHARED_ASSET_WORD = /^[a-z][a-z0-9-]{0,31}$/;
 const SHARED_ASSET_PATH = /^\/[A-Za-z0-9_\-./%]{1,240}$/;
+// assets.json's store counters (AssetStoreStats), copied as numbers only.
+const SHARED_STORE_COUNTERS = [
+	"hits",
+	"misses",
+	"writes",
+	"skipped",
+	"errors",
+	"evictions",
+	"budget",
+	"rangeBytes",
+	"demandedBytes"
+] as const;
 const MIN_DIAGNOSTIC_BYTES = 4096;
 const MAX_USER_AGENT_LENGTH = 512;
 const SHARED_GAMEPLAY_FIELDS = [
@@ -649,7 +661,7 @@ async function diagnosticZip( documents: Record<string, unknown> ): Promise<{ bl
 sharedAssets
 
 assets.json rebuilt from typed fields alone (asset-history.ts): times, slot
-counts, ages, enumerated states and request paths. Paths are public asset
+counts, ages, enumerated states, request paths and the store's counters. Paths are public asset
 locations (the asset owner already strips credentials and queries); one that
 does not look like one is dropped, as is any free-form error text.
 ================
@@ -657,6 +669,14 @@ does not look like one is dropped, as is any free-form error text.
 function sharedAssets( value: Record<string, unknown> ): Record<string, unknown> {
 	const word = ( text: unknown ) => typeof text === "string" && SHARED_ASSET_WORD.test( text ) ? text : null;
 	const number = ( n: unknown ) => typeof n === "number" && Number.isFinite( n ) ? n : null;
+	const store = ( raw: unknown ) => {
+		if ( !raw || typeof raw !== "object" ) return null;
+		const s = raw as Record<string, unknown>;
+		return {
+			...Object.fromEntries( SHARED_STORE_COUNTERS.map( name => [ name, number( s[name] ) ] ) ),
+			writesStopped: s.writesStopped === true
+		};
+	};
 	const queue = ( raw: unknown ) => {
 		if ( !raw || typeof raw !== "object" ) return null;
 		const q = raw as Record<string, unknown>;
@@ -675,7 +695,8 @@ function sharedAssets( value: Record<string, unknown> ): Record<string, unknown>
 					result: word( job.result )
 				})
 			),
-			...(typeof q.omittedJobs === "number" ? { omittedJobs: q.omittedJobs } : {})
+			...(typeof q.omittedJobs === "number" ? { omittedJobs: q.omittedJobs } : {}),
+			store: store( q.store )
 		};
 	};
 	const sample = ( raw: unknown ) => {

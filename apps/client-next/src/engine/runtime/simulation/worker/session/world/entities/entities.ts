@@ -2055,6 +2055,38 @@ export function createEntities(
 		},
 		/*
 		================
+		placeMount
+
+		Puts a mount the local player just left where the rider stands. While
+		the local player rides, its walk is the gameplay owner's and drives the
+		mount in presentation; the mount's own row keeps the pose it was
+		mounted at (no B738 or prediction moves it). Native has one mover for
+		both (85E000 resolves the ridden actor), so the vehicle stays where the
+		ride ended; without this the dismounted vehicle was drawn back where
+		the ride began.
+		================
+		*/
+		placeMount( gid: number, pose: import("@/engine/contracts/gameplay").Pose | null ) {
+			const entity = entities.get( gid );
+			if ( !entity || !pose ) return;
+			motion.remove( gid );
+			apply( {
+				kind: "state",
+				entity: Object.freeze( {
+					...entity,
+					regionId: pose.regionId,
+					x: pose.x,
+					y: pose.y,
+					z: pose.z,
+					heading: pose.angle,
+					moving: false,
+					movementPath: undefined,
+					movementRevision: (entity.movementRevision ?? 0) + 1
+				} )
+			} );
+		},
+		/*
+		================
 		displace
 		================
 		*/

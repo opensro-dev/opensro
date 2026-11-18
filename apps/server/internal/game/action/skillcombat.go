@@ -150,6 +150,33 @@ func linkedStageTargetRefusal(caster, target simulation.Spawn) uint16 {
 
 /*
 ================
+chainStageJudgedAt
+
+The time a server-driven chain stage judges its target's motion at (a
+knocked-down requirement, the downed-target damage). Natively the client
+sends the stage command when the previous stage's motion ends and the
+reference server executes it on arrival, so the stage meets the target at
+its mark; the port runs it on the first 100 ms tick past that mark
+(chainStageMark). Judged at the tick, a knockdown that ended inside the
+rounding refused the stage 0x3006 although the native stage would have
+landed: a blade's second down-attack chop after Knockdown, or any chain
+stage with a knocked-down requirement. A root or a stage held past one
+tick judges at now.
+================
+*/
+func (rt *Runtime) chainStageJudgedAt(divisionID, characterName string, rootID uint32, nowMs int64) int64 {
+	if rootID == 0 {
+		return nowMs
+	}
+	intent, ok := rt.combatIntentFor(divisionID, characterName)
+	if !ok || intent.ComboRootID != rootID {
+		return nowMs
+	}
+	return chainStageMark(intent, nowMs)
+}
+
+/*
+================
 acceptSkillStageAt
 
 Enter a fresh stage without a prepared execution-cost snapshot.
@@ -259,7 +286,10 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		}
 	}
 	defender, err := combat.MonsterInstanceStats(target)
-	defender.MotionState = target.Motion.StateAt(nowMs)
+	// A chain stage meets its target as it stood at the stage's mark
+	// (chainStageJudgedAt): a knocked-down target that rose inside the
+	// tick's rounding is still down for the stage the root clip plays.
+	defender.MotionState = target.Motion.StateAt(rt.chainStageJudgedAt(divisionID, snapshot.Name, rootID, nowMs))
 	if err != nil {
 		return OpResult{}, skillCastRefused
 	}

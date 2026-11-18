@@ -690,7 +690,19 @@ async function draw( time: number ) {
 					filesReady: 42,
 					filesActive: 3,
 					cacheHits: 12,
-					currentFile: "fixture/scene.bin"
+					currentFile: "fixture/scene.bin",
+					store: {
+						hits: 12,
+						misses: 3,
+						writes: 3,
+						skipped: 0,
+						errors: 0,
+						evictions: 0,
+						writesStopped: false,
+						budget: 512 << 20,
+						rangeBytes: 0,
+						demandedBytes: 0
+					}
 				}
 			} );
 		}

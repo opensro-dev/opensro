@@ -8,6 +8,8 @@ adapters used by the variant's gate and map imports. No files are written.
 
 ===========================================================================
 """
+import re
+
 import import_vsro_alexandria as stage1
 
 # World map and minimap (worldmap_mapinfo, worldmap_localinfo, regioncode).
@@ -67,6 +69,64 @@ def native_text_row(row):
 	Korean, '', description, zh-CN, zh-TW, ja, en, vi, ''.
 	"""
 	return [row[0], row[1], row[2], "", "", row[5], row[4], row[7], row[8], row[9], ""]
+
+
+# ================
+# later_text_row
+#
+# One later name row in the layout the name merge reads: v1.696 text
+# rows carry 17 columns (a numeric text id after the service cell,
+# one more language cell, "0" where a translation is absent) where
+# the VSRO rows the merge was written for carry 15. Drop the id, and
+# let an absent translation take the English cell, as VSRO authors
+# them - the same mapping the mall avatar import applies.
+# ================
+def later_text_row(row):
+	if len(row) != 17 or not row[1].strip().isdigit():
+		return row
+	cells = [row[0]] + row[2:16]
+	english = cells[8]
+	for column in range(3, 15):
+		if cells[column] == "0":
+			cells[column] = "" if column == 3 else english
+	return cells
+
+
+# v1.696 names its zone-name shards TextZoneName_<n>.txt.
+ZONE_NAME_SHARD = re.compile(r"textzonename_\d+\.txt", re.IGNORECASE)
+
+
+# ================
+# zone_name_shards
+# ================
+def zone_name_shards(rows):
+	"""
+	The shard names a later textzonename.txt lists, or [] when the file is
+	the table itself (VSRO keeps one table; v1.696 an index of shards).
+	"""
+	listed = [row[0].strip() for row in rows if row and row[0].strip()]
+	if listed and all(len(row) == 1 and ZONE_NAME_SHARD.fullmatch(row[0].strip()) for row in rows if row and row[0].strip()):
+		return listed
+	return []
+
+
+# ================
+# later_zone_rows
+# ================
+def later_zone_rows(read):
+	"""
+	The later client's zone-name rows in the VSRO layout native_text_row
+	reads. read(name) returns one textdata table. v1.696 keeps
+	textzonename.txt as an index of shards whose rows carry a text id
+	after the service cell; reading the index as the table merged no
+	name at all, so Arabia's 264 and Jupiter's 93 regions shipped with
+	an empty minimap title (2026-11-17).
+	"""
+	rows = stage1.table_rows(read("textzonename.txt"))
+	shards = zone_name_shards(rows)
+	if shards:
+		rows = [row for shard in shards for row in stage1.table_rows(read(shard.lower()))]
+	return [later_text_row(row) for row in rows]
 
 
 # ================

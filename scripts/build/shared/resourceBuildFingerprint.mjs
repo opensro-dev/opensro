@@ -42,7 +42,9 @@ import path from "node:path";
 import { buildStatePath } from "../../lib/generatedRoot.mjs";
 import { codeClosure } from "./codeStamp.mjs";
 import { openFileHashCache } from "./fileHashCache.mjs";
+import { crossCityTeleportEnabled } from "./crossCityTeleport.mjs";
 import { janganTombTeleportEnabled } from "./janganTombTeleport.mjs";
+import { resolveVsroRoot, VSRO_ROOT_ENV } from "./laterClientRoot.mjs";
 import { muhanEnabled } from "./muhan.mjs";
 import { qinshiTombEnabled } from "./qinshiTomb.mjs";
 import { readJsonOrUndefined } from "./jsonOut.mjs";
@@ -92,6 +94,9 @@ export const ENV_KNOBS = [
 	// Port-only, not native: the Jangan gate's tomb floor links join the
 	// teleport bake (shared/janganTombTeleport.mjs).
 	"SRO_JANGAN_TOMB_TELEPORT",
+	// Port-only, not native: the direct town-to-town gate links join the
+	// teleport bake (shared/crossCityTeleport.mjs).
+	"SRO_CROSS_CITY_TELEPORT",
 	"SRO_SOOK_SURVIVAL_ARENA",
 	"SRO_ALLOW_DEV_OUTDOOR_ROUTING",
 	"SRO_SKIP_TEXTURE_CONVERT",
@@ -103,6 +108,23 @@ export const ENV_KNOBS = [
 	// The later client's dungeon floor pages join the build from the pinned
 	// archive this names (#2956); setting or moving it must not skip.
 	"SRO_VSRO_ROOT"
+];
+
+/*
+================
+BAKE_SWITCH_POSTURES
+
+The bake switches whose deployed posture joins the knob lines: each
+switch's env name and its enabled reader. A switch joins the fingerprint
+only through this list. Its default stays in the shard settings registry
+(shardsettings.go, the one owner), never copied here (#3779).
+================
+*/
+export const BAKE_SWITCH_POSTURES = [
+	{ env: "SRO_QINSHI_TOMB", enabled: qinshiTombEnabled },
+	{ env: "SRO_MUHAN", enabled: muhanEnabled },
+	{ env: "SRO_JANGAN_TOMB_TELEPORT", enabled: janganTombTeleportEnabled },
+	{ env: "SRO_CROSS_CITY_TELEPORT", enabled: crossCityTeleportEnabled }
 ];
 
 /*
@@ -121,9 +143,15 @@ registry flip skip the bake and ship the other posture's assets, the
 */
 export function buildKnobLines() {
 	const lines = ENV_KNOBS.map( ( name ) => `env ${name}=${process.env[name] ?? ""}` );
-	lines.push( `posture SRO_QINSHI_TOMB=${qinshiTombEnabled()}` );
-	lines.push( `posture SRO_MUHAN=${muhanEnabled()}` );
-	lines.push( `posture SRO_JANGAN_TOMB_TELEPORT=${janganTombTeleportEnabled()}` );
+	for ( const { env, enabled } of BAKE_SWITCH_POSTURES ) {
+		lines.push( `posture ${env}=${enabled()}` );
+	}
+	// The later client the variant stamp names stands in for an unset
+	// SRO_VSRO_ROOT (laterClientRoot.mjs): finding one must not skip. A
+	// shell that names the root is hashed above already; the line joins
+	// only then, so trees that set it keep their memos.
+	const later = resolveVsroRoot();
+	if ( later.source !== VSRO_ROOT_ENV && later.root ) lines.push( `posture SRO_VSRO_ROOT=${later.root}` );
 	return lines;
 }
 

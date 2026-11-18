@@ -128,6 +128,9 @@ type MonsterState struct {
 	divs             map[string]*divisionMonsterState
 	worldAllocators  map[string]*instance.Registry
 	worldPopulations map[populationKey]*divisionMonsterState
+	// uniqueNoticeWorlds are the instance worlds whose layers tell the
+	// division of their uniques (AnnounceUniqueWorld). Guarded by mu.
+	uniqueNoticeWorlds map[instance.DefinitionID]bool
 	// popHint is the population key and population the last
 	// populationForObject scan answered with. populationForObject
 	// verifies it against the registry and the population's own rows
@@ -145,10 +148,14 @@ type MonsterState struct {
 	// when a membership writer (division, AllocatePopulation,
 	// OpenInstanceLayer, ReleasePopulation) drops it; see
 	// populationKeys (#2033).
-	popKeysMemo          []populationKey
-	retirementRequests   map[populationKey]struct{}
-	ground               MonsterSpawnGroundResolver
-	collide              MonsterSpawnCollisionTest
+	popKeysMemo        []populationKey
+	retirementRequests map[populationKey]struct{}
+	ground             MonsterSpawnGroundResolver
+	collide            MonsterSpawnCollisionTest
+	// replacements is the special-target replace table a world event
+	// installs (SetSpawnReplacements); nil, the native default, replaces
+	// nothing.
+	replacements         func(nowMs int64) []monster.SpawnReplacement
 	spawnRegionAvailable func(uint16) bool
 	random               func() float64
 	clock                func() time.Time
@@ -272,6 +279,22 @@ func (s *MonsterState) SetSpawnRegionAvailability(available func(uint16) bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.spawnRegionAvailable = available
+}
+
+/*
+================
+SetSpawnReplacements
+
+Installs the special-target replace table, asked at every open-world nest
+spawn (monster.ApplySpawnReplacement). The table may change with time (a
+world event's window), so it is a function of the spawn's instant; it runs
+under the population lock and must not call back into this state.
+================
+*/
+func (s *MonsterState) SetSpawnReplacements(table func(nowMs int64) []monster.SpawnReplacement) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.replacements = table
 }
 
 // TemplateSize reports how many monster nest rows the catalog carries.

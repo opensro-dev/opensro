@@ -259,10 +259,16 @@ export function buildQuestDataAsset() {
 		"SN_TALK_QEV_CH_EVENT_KISAENG_071030_",
 		"SN_TALK_QEV_CH_EVENT_KISAENG_071225_"
 	];
+	// The winter event's So-ok talk (SN_TALK_QEV_SERVER_EVENT_QUEST_A..E)
+	// is imported from the v1.696 client only while SRO_CHRISTMAS_EVENT
+	// builds (scripts/winter_event_import.py): merged when present, and
+	// then all five or none.
+	const IMPORTED_TALK_PREFIXES = [ "SN_TALK_QEV_SERVER_EVENT_QUEST_" ];
+	const talkPrefixes = [ ...SEASONAL_TALK_PREFIXES, ...IMPORTED_TALK_PREFIXES ];
 	const seasonalTalkFound = new Set();
 	for ( const cols of readLocalizedTextDataRowsSync( textEventPath ) ) {
 		const key = cols[1]?.trim();
-		if ( !key || !SEASONAL_TALK_PREFIXES.some( ( prefix ) => key.startsWith( prefix ) ) || key in textEntries ) {
+		if ( !key || !talkPrefixes.some( ( prefix ) => key.startsWith( prefix ) ) || key in textEntries ) {
 			continue;
 		}
 		const english = cols[8]?.trim() ?? "";
@@ -277,6 +283,12 @@ export function buildQuestDataAsset() {
 			if ( !seasonalTalkFound.has( prefix + suffix ) ) {
 				throw new Error( `[questdata] seasonal talk row ${prefix + suffix} missing from textevent.txt` );
 			}
+		}
+	}
+	for ( const prefix of IMPORTED_TALK_PREFIXES ) {
+		const found = [ "A", "B", "C", "D", "E" ].filter( ( suffix ) => seasonalTalkFound.has( prefix + suffix ) );
+		if ( found.length !== 0 && found.length !== 5 ) {
+			throw new Error( `[questdata] imported talk rows ${prefix}A..E are incomplete in textevent.txt` );
 		}
 	}
 

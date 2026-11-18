@@ -1,17 +1,16 @@
 /*
 ===========================================================================
 
-christmas.go - Santa So-Ok's Red Santa Socks exchange
+christmas.go - So-ok's snow flake exchange (Winter Princess and Knights)
 
-Port-only, not native (SRO_CHRISTMAS_EVENT, default off; the tables are
-progression/christmas_loot.go). While the window runs So-ok
-(NPC_CH_EVENT_KISAENG1, the town's event host; the shipped Santa So-Ok
-row, NPC_CH_EVENT_SANTA_KISAENG1, has no place in the world data) offers
-the December 2007 event's one row, "Receive present for Red Santa
-Socks.": one pair buys one rolled present, and one click spends every
-pair in the bag (owner, 2026-11-15; the sibling event quests take one
-token per click). Only the shipped talk lines answer (textevent
-QEV_CH_EVENT_KISAENG_071225_A..E): no prize rows and no banners. The exchange itself is the shared one
+The v1.188 server's WINTER_EVENT_2009 talk at NPC_CH_EVENT_KISAENG1
+(SRO_CHRISTMAS_EVENT in mode winter; the tables are
+progression/christmas_loot.go): the prompt QUEST_A offers QUEST_B,
+"Receive gift with 10 snow flakes."; a click trades every ten flakes in
+the bag while it has room, answering QUEST_C on a gift,
+QUEST_D on a full bag and QUEST_E without ten flakes. The click's gift
+count is the Snow Flake Event's report (an exchange report,
+winter_missions.go). The exchange itself is the shared one
 (seasonal_exchange.go).
 
 ===========================================================================
@@ -26,16 +25,18 @@ import (
 
 // ChristmasExchangeService routes So-ok's gift row through
 // NpcQuestHooks.Finish, as HalloweenExchangeService does.
-const ChristmasExchangeService = "QEV_CH_EVENT_KISAENG_071225:exchange"
+const ChristmasExchangeService = "QEV_WINTER_EVENT_2009:exchange"
 
-// So-ok's Christmas talk rows (textevent): the prompt page, the exchange
-// row, and the three answers (gift granted, bag full, no socks).
+// So-ok's winter talk rows (v1.696 textevent, imported with the flake):
+// the prompt page, the exchange row, and the three answers (gift
+// granted, bag full, too few flakes).
 const (
-	christmasTalkPrompt  = "SN_TALK_QEV_CH_EVENT_KISAENG_071225_A"
-	christmasTalkOption  = "SN_TALK_QEV_CH_EVENT_KISAENG_071225_B"
-	christmasTalkGranted = "SN_TALK_QEV_CH_EVENT_KISAENG_071225_C"
-	christmasTalkBagFull = "SN_TALK_QEV_CH_EVENT_KISAENG_071225_D"
-	christmasTalkNoSocks = "SN_TALK_QEV_CH_EVENT_KISAENG_071225_E"
+	christmasTalkPrompt    = "SN_TALK_QEV_SERVER_EVENT_QUEST_A"
+	christmasTalkOption    = "SN_TALK_QEV_SERVER_EVENT_QUEST_B"
+	christmasTalkGranted   = "SN_TALK_QEV_SERVER_EVENT_QUEST_C"
+	christmasTalkBagFull   = "SN_TALK_QEV_SERVER_EVENT_QUEST_D"
+	christmasTalkNoFlakes  = "SN_TALK_QEV_SERVER_EVENT_QUEST_E"
+	christmasSnowflakeHost = halloweenSoOkCodename
 )
 
 /*
@@ -45,13 +46,14 @@ Runtime.christmasExchange
 */
 func (rt *Runtime) christmasExchange() *seasonalExchange {
 	return &seasonalExchange{
-		name: "christmas", host: halloweenSoOkCodename, token: progression.ChristmasSockCodename,
-		perGift: progression.ChristmasSocksPerGift, active: rt.Christmas.ActiveAt,
+		name: "christmas", host: christmasSnowflakeHost, token: progression.ChristmasSnowflakeCodename,
+		perGift: progression.ChristmasSnowflakesPerGift, active: rt.Christmas.ActiveAt,
 		gifts: progression.ChristmasGifts, service: ChristmasExchangeService,
 		talk: exchangeTalk{
 			prompt: christmasTalkPrompt, option: christmasTalkOption, granted: christmasTalkGranted,
-			bagFull: christmasTalkBagFull, noToken: christmasTalkNoSocks,
+			bagFull: christmasTalkBagFull, noToken: christmasTalkNoFlakes,
 		},
+		exchanged: rt.reportWinterExchange,
 	}
 }
 
@@ -59,8 +61,8 @@ func (rt *Runtime) christmasExchange() *seasonalExchange {
 ================
 Runtime.ChristmasTalkOptions
 
-So-ok's Christmas rows while the event runs, appended after her quest
-rows; outside the window, nothing.
+So-ok's winter row while the event runs, appended after her quest rows;
+outside the window, nothing.
 ================
 */
 func (rt *Runtime) ChristmasTalkOptions(npcCodename string, character *enterworld.Character) []NpcQuestOption {
@@ -69,11 +71,11 @@ func (rt *Runtime) ChristmasTalkOptions(npcCodename string, character *enterworl
 
 /*
 ================
-Runtime.ExchangeChristmasSocks
+Runtime.ExchangeChristmasSnowflakes
 
-Every pair in the bag buys a rolled present at once.
+Every ten flakes in the bag buy a rolled gift at once.
 ================
 */
-func (rt *Runtime) ExchangeChristmasSocks(character *enterworld.Character, npcCodename string) ([]wire.Frame, error) {
+func (rt *Runtime) ExchangeChristmasSnowflakes(character *enterworld.Character, npcCodename string) ([]wire.Frame, error) {
 	return rt.exchangeTokens(rt.christmasExchange(), character, npcCodename)
 }

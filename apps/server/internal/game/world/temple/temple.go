@@ -108,6 +108,31 @@ func CodeName(worldID int) (string, bool) {
 	return "", false
 }
 
+// FlameMountainRegion is the temple's one interior: the Flame Mountain
+// worlds' (69-76) dungeon region, bit 15 set (docs/features/GOD.md,
+// "Interiors"). The source database places 552 of the 1,616 temple
+// nests in it; every other temple nest stands in an outdoor region.
+const FlameMountainRegion uint16 = 0x8012
+
+// dungeonRegionBit marks a dungeon (interior) region id.
+const dungeonRegionBit uint16 = 0x8000
+
+/*
+================
+IsRegion
+
+Whether a temple nest may stand in region: any outdoor region, or the
+Flame Mountain interior. The monster catalogue's population loader asks
+it, as the Pharaoh Temple's asks pharaohtemple.IsRegion. Without it the
+loader admitted outdoor regions only and refused every Flame Mountain
+nest, so a shard with SRO_CAP110_TEMPLE on could not boot. Any other
+dungeon region stays refused: a temple row there is a bad export.
+================
+*/
+func IsRegion(region uint16) bool {
+	return region&dungeonRegionBit == 0 || region == FlameMountainRegion
+}
+
 /*
 ================
 Band

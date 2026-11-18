@@ -18,7 +18,7 @@ already overrides the angle of a held pose.
 ===========================================================================
 */
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
-import type { CastState, GameplayState, Pose, VitalState } from "@/engine/contracts/gameplay";
+import type { CastState, GameplayState, MovementPath, Pose, VitalState } from "@/engine/contracts/gameplay";
 import type { CharacterLayer } from "@/engine/contracts/character";
 import type { EntityState } from "@/engine/contracts/world";
 import type { CharacterPresentationState } from "./internal/presentation-contract";
@@ -50,6 +50,18 @@ export interface DrawnPosesFrame {
 	// presentation-events recomputes the set after its hits for
 	// actor-motion's own death state.
 	readonly pendingDeaths: ReadonlySet<number>;
+	// The targets whose knockback hit has not landed yet, and the owner that
+	// holds them there and plays their recoil from the hit (8D5440).
+	readonly pendingKnockbacks: ReadonlySet<number>;
+	readonly knockbacks: {
+		pose(
+			gid: number,
+			path: MovementPath | undefined,
+			pending: boolean,
+			seconds: number,
+			drawn: Pose
+		): Pose | undefined;
+	};
 	readonly statusOwner: {
 		view( gid: number, mask: number, bodyVisual: number ): { readonly poseLocked: boolean; };
 	};
@@ -83,6 +95,8 @@ export function resolveDrawnPoses( frame: DrawnPosesFrame ): Map<number, Pose> {
 		vitalsByGid,
 		health,
 		pendingDeaths,
+		pendingKnockbacks,
+		knockbacks,
 		statusOwner,
 		posePresentation
 	} = frame;
@@ -146,6 +160,18 @@ export function resolveDrawnPoses( frame: DrawnPosesFrame ): Map<number, Pose> {
 					state.navigationHold = undefined;
 				}
 			}
+		}
+		// A struck character's recoil starts when its hit lands, not when
+		// the result arrived (knockback-presentation.ts). The local player
+		// keeps the main-thread mover's own displacement.
+		if ( !localMover( entity.gid ) ) {
+			renderPose = knockbacks.pose(
+				entity.gid,
+				entity.movementPath,
+				pendingKnockbacks.has( entity.gid ),
+				seconds,
+				renderPose
+			) ?? renderPose;
 		}
 		if ( state?.navigationHold ) {
 			// The hold freezes XYZ; the yaw keeps tracking the cast

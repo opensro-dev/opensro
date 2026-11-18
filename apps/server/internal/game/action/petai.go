@@ -655,6 +655,9 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 	// Relocation and summons build new followers; every tick installs the one
 	// planner they all route with.
 	state.mover.AnyFollower().SetRoutePlanner(rt.PlanCompanionRoute)
+	// Port-only (transportfollow.go): a following transport takes its
+	// trader's trail past a wall; native followers keep the stuck event.
+	state.mover.AnyFollower().SetOwnerTrail(rt.TransportFollow && isVehicleCOS(ref.TidWord))
 	if cos.BroodStage == 1 {
 		rt.cancelPetCombat(key, state, nowMs)
 		return state.mover.AnyFollower().Stop(nowMs)

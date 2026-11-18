@@ -28,8 +28,8 @@ What the stamp covers:
 	           the Arabia population)
 
 The variant tree itself must also still be what the last build left
-(variant_settle.matches_ledger). A tree edited or half-deleted since then is
-rebuilt.
+(variant_settle.ledger_difference). A tree edited or half-deleted since then is
+rebuilt, and the reason names the first file that differs.
 
 A build clears the stamp before it writes anything and stamps only after it
 succeeds, with the inputs it read before it started; if those changed during
@@ -133,11 +133,13 @@ def code_hash() -> str:
 # output, not a source).
 # ================
 def source_roots(native: Path, imported: Path, vsro_root: Path, variant: Path, environ) -> list[Path]:
-	# Imported here, not at load: both import build_alexandria_variant, which
+	# Imported here, not at load: it imports build_alexandria_variant, which
 	# imports this module.
-	import arabia_import
 	import skytemple_import
-	candidates = [native, imported, vsro_root, skytemple_import.source_root(environ), arabia_import.nests_path(environ)]
+	# The Arabia nest extraction has no default (arabia_import.nests_path
+	# refuses an unset SRO_ARABIA_NESTS); when set, the source-variable
+	# walk below takes it, so a build without it still stamps.
+	candidates = [native, imported, vsro_root, skytemple_import.source_root(environ)]
 	for key, value in environ.items():
 		value = value.strip()
 		if SOURCE_VARIABLE.fullmatch(key) and key not in OUTPUT_ROOTS and value and Path(value).is_absolute():
@@ -254,8 +256,9 @@ def stale_parts(variant_root: Path, inputs: dict, required_files=()) -> list[str
 	missing = [name for name in required_files if not (Path(variant_root) / name).exists()]
 	if missing:
 		return [f"missing {name}" for name in missing]
-	if not variant_settle.matches_ledger(variant_root):
-		return ["the variant tree changed since it was built"]
+	difference = variant_settle.ledger_difference(variant_root)
+	if difference:
+		return [f"the variant tree changed since it was built: {difference}"]
 	return []
 
 

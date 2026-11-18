@@ -106,7 +106,68 @@ The server half follows the v1.188 reference server (addresses in `action/roc.go
   - the Roc's berserk and departure countdowns and its timed skills are not ported, because no v1.150 frame
     carries their minute count.
 
+### The Roc's notices (step 5a)
+
+- **Appearance:** when the Roc spawns on the summit, the whole shard is told (0x3058 kind 5, the client's unique
+  notice), as the v1.188 reference server's in-layer spawner announces a unique.
+- **Kill:** when it falls, the shard is told who killed it (kind 6).
+- **Which layers speak:** only worlds 40 and 41 send their layers' unique notices, because both Roc world classes
+  leave the notices uncontrolled. Every other instance world keeps today's behaviour: natively they are
+  data-driven worlds with a per-world switch the port does not read.
+- **Off:** with `SRO_ROC` off no world is registered, and nothing changes.
+
+### The Roc's drops (step 5b)
+
+- **Source:** every enabled reward rule the pinned vSRO backup authors for the Roc kinds, committed as
+  `scripts/data/roc/rewards-source.json` (`scripts/build/import_roc_rewards.py`). The v1.150 client has none.
+- **What ISRO-R adds:** its random rows for the Roc are disabled (service 0), but its fixed table, which has no
+  service column, gives the Roc kinds eight trophies at every kill:
+  - the Roc: `ITEM_QNO_RM_ARCHEMY_1`, `_2` and `_3`, one or two each;
+  - the Demon God Shaitan: `_4`, one or two;
+  - the four spirits: `_5` to `_8`, none or one.
+
+  The trophies are native v1.150 items (`itemdata_25000`). The quests that take them, `QNO_RM_ARCHEMY_1` to
+  `_8`, are not: v1.150 ships only their text. So the trophies wait for those quests (step 5d) rather than drop
+  with nothing to spend them on, and the build summary says so.
+- **What the Roc drops there:**
+  - three distinct Roc set pieces (group 1);
+  - two or three degree-11 pieces (group 12);
+  - a 1-in-100,000 degree-11 rare (group 13);
+  - five or six of each of the four E051123 scrolls.
+- **The bosses, spirits and wing knight:** one or two degree-11 pieces (group 12), plus the same rare chance.
+- **Joined to the variant:** `scripts/roc_rewards.py` keeps each group's members that the variant installs, at
+  their authored weights, and writes `roc-rewards.txt`. The server joins it after the cap110 overlay
+  (`loot/roc.go`).
+  - **The scrolls:** the four E051123 scrolls are native v1.150 items (`itemdata_5000`), so the Roc drops
+    them on every Roc build.
+  - **Group 12:** the degree-11 pieces come from `SRO_CAP110_ITEMS`.
+  - **Group 1:** the Roc sets join the equipment import when `SRO_ROC` and `SRO_CAP110_ITEMS` are both on (step
+    5c, below). Without them the rule waits and the build summary lists it. A rule that draws distinct pieces
+    also waits while the variant installs fewer pieces than it draws.
+  - **Not installed:** the rares are in no client the port reads.
+  - **Nothing installed:** no file is written, and the Roc kinds roll only the native passes.
+- **The scrolls' option bytes:** all 26 rows of the backup that carry option bytes (these four, plus the God
+  pillars' teleport holes) carry the same block, and all of them drop ETC items, which have no magic options.
+  The importer reads that block as an insert artefact (an inference) and refuses any other.
+- **Off:** with `SRO_ROC` off the file is removed and nothing joins.
+
+### The Roc's set armour (step 5c)
+
+- **What joins:** the 72 Roc set pieces (`ITEM_ROC_*_SET`: class 30, level 98, set groups 1-12). They are the
+  Red Lightning, Red Thunder and Red Storm sets, for CH and EU, male and female. They join the degree-10/11
+  equipment import (`SRO_CAP110_ITEMS`), but only when `SRO_ROC` is on too, because they drop only from the
+  Roc.
+- **What comes with them:** their own worn models (212 files), the later client's names (the client spells one
+  "Red Lightening Set") and their set groups, which the import already writes.
+- **Identities:**
+  - the pieces number after every other imported piece, so a fresh build numbers the rest the same either way;
+  - a build with `SRO_ROC` off keeps their identities reserved (`retiredIds` in the import marker), so no later
+    item takes an id a player's Roc piece holds.
+  - turned on over a variant built without them, they number above everything the other importers (rewards,
+    honor, Nasrun, pets, mall) already published there, so no published identity moves.
+- **Off:** with `SRO_ROC` off they aren't imported, and the rest of the import is unchanged.
+
 ## What is not here yet
 
 - **Content still to come**, each its own step of #3399:
-  - drops and the unique notice (step 5).
+  - the trophies (`ITEM_QNO_RM_ARCHEMY_1` to `_8`) and their exchange quests (step 5d).

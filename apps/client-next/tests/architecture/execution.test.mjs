@@ -319,6 +319,22 @@ test("rejects undeclared issued capability even with valid imports", () =>
 		fs.writeFileSync( p, JSON.stringify( contract ) );
 	}, dir =>
 		assert.ok( verifyExecution( dir, realGraph() ).some( x => x.includes( "undeclared capability" ) ) ), true ));
+test("rejects a declared grant no resolved call takes", () => {
+	// #3808: a split or a rename can leave a grant behind that widens what its
+	// consumer may call; the planted name sits on an edge the code does take.
+	let planted;
+	fixture( dir => {
+		const p = path.join( dir, "execution-contract.json" ), contract = JSON.parse( fs.readFileSync( p, "utf8" ) );
+		planted = defined( contract.capabilities.find( c => c.consumer.endsWith( "/frame/frame.ts" ) ) );
+		planted.functions.push( "neverCalled" );
+		fs.writeFileSync( p, JSON.stringify( contract ) );
+	}, dir =>
+		// The copied application keeps its frame-barrier seals unproven, so only
+		// the grant issues are compared, and exactly.
+		assert.deepEqual( verifyExecution( dir, realGraph() ).filter( x => x.startsWith( "unused grant" ) ), [
+			`unused grant ${planted.consumer} -> ${planted.provider}#neverCalled`
+		] ), true );
+});
 test("follows local aliases instead of trusting spelling", () =>
 	fixture( dir => {
 		const p = path.join( dir, runtime ),

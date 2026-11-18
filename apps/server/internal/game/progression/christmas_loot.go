@@ -1,105 +1,73 @@
 /*
 ===========================================================================
 
-christmas_loot.go - the Red Santa Socks: what the winter monsters leave
-and what Santa So-Ok gives for them
+christmas_loot.go - the winter event's snow flakes: who drops them and
+what So-ok gives for them
 
-Port-only, not native (SRO_CHRISTMAS_EVENT, default off). The v1.150
-data ships the December 2007 event whole except its server rules: the
-token, Red Santa Socks (ITEM_ETC_E071225_SANTASOCKS, "Red Santa Socks",
-described as socks the monsters stole), and its exchange quest
-QEV_CH_EVENT_KISAENG_071225 ("If it Snows on Christmas~") whose talk rows
-read "Receive present for Red Santa Socks." with a bag-full and a
-no-socks answer: the Halloween exchange's exact shape. The inference:
-the winter monsters are the thieves, so a Snow Slave carries one pair
-and nothing else, the uniques a pile beside their own loot, dropped
-outside the level-gap admission as the v1.188 winter event drops its
-token (action/christmas_loot.go); their ordinary loot keeps the gap.
-So-ok's one row trades each pair for one
-rolled present (action/christmas.go), from the owner's list of the
-event's presents (2026-11-15): the Santa costume, Rudolph, the Santa
-Wings and the 2005 event scrolls.
+The v1.188 server's WINTER_EVENT_2009, ported (SRO_CHRISTMAS_EVENT in
+mode winter). A Snow Slave's death drops one Snow flake
+(ITEM_ETC_E091216_SNOWFLAKE, imported from the v1.696 client by
+scripts/winter_event_import.py) from the quest's own drop hook,
+outside the loot tables: natively half the time (rate 50.0), here every
+time (owner, 2026-11-16). So-ok
+(NPC_CH_EVENT_KISAENG1, talk SN_TALK_QEV_SERVER_EVENT_QUEST_A..E) trades
+flakes for gifts while the bag has room, every exchange of the click at
+once, each gift rolled from the native table.
+
+Port-only, owner decisions 2026-11-16:
+  - the native exchange also takes one Pine (ITEM_ETC_E091216_PINE) per
+    gift; no source of the pine survives in the server, and the client's
+    own tooltip asks only "Bring 10 snow flakes to So-Ok", so the pine
+    is dropped: ten flakes buy a gift;
+  - the native table names v1.188 items the v1.150 data lacks; each
+    present item keeps its native weight under its v1.150 name (the
+    ITEM_EVENT_ copies are the MALL_ and COS_ rows), and the absent ones
+    (the 2010 Halloween avatars, the degree 11 weapons and the four
+    balloons, 20.905% together) are left out, their weight spread over
+    the rest by the roll's normalisation.
 
 ===========================================================================
 */
 package progression
 
-import "strings"
-
 const (
-	// ChristmasSockCodename is the event's token, native to v1.150.
-	ChristmasSockCodename = "ITEM_ETC_E071225_SANTASOCKS"
+	// ChristmasSnowflakeCodename is the winter event's token.
+	ChristmasSnowflakeCodename = "ITEM_ETC_E091216_SNOWFLAKE"
 
-	// The Red Santa Socks each winter monster leaves, one ground item
-	// each.
-	ChristmasSnowSlaveSocks = 1
-	ChristmasKnightSocks    = 10
-	ChristmasPrincessSocks  = 30
+	// ChristmasSnowflakesPerGift is one gift's price (the native ten;
+	// the pine is not asked, see the header).
+	ChristmasSnowflakesPerGift = 10
 
-	// ChristmasSocksPerGift is one present's price: one pair (owner,
-	// 2026-11-15). The socks stay their native row: no merchant buys
-	// them (canSell 0), a stack of ten (MaxStack 10), and no exchange or
-	// ground drop (canTrade 0, CanDrop clear), which the sale, trade and
-	// drop doors already enforce. So-ok's exchange is their only use, as
-	// the v1.188 server's token events trade tokens for presents and
-	// never sell them (owner 2026-11-16: unsellable, as native).
-	ChristmasSocksPerGift = 1
+	// ChristmasSnowflakeDropPercent is a Snow Slave's chance to drop its
+	// flake. Native is 50 (the quest's rate 50.0); port-only, the owner's
+	// call (2026-11-16): every Snow Slave drops its flake.
+	ChristmasSnowflakeDropPercent = 100
+
+	// ChristmasSnowSlaveCodename is the hunted Snow Slave.
+	ChristmasSnowSlaveCodename = "MOB_EV_WINTER_SNOWMAN"
 )
 
-/*
-================
-ChristmasSocks
-
-The Red Santa Socks a kill of this monster leaves; 0 for any other
-monster.
-================
-*/
-func ChristmasSocks(codename string) int {
-	switch {
-	case codename == ChristmasSnowSlaveCodename:
-		return ChristmasSnowSlaveSocks
-	case strings.HasPrefix(codename, christmasKnightPrefix):
-		return ChristmasKnightSocks
-	case strings.HasPrefix(codename, christmasPrincessPrefix):
-		return ChristmasPrincessSocks
-	}
-	return 0
-}
-
-/*
-================
-ChristmasSocksOnly
-
-A Snow Slave carries its socks and nothing else: no gold, no gear.
-================
-*/
-func ChristmasSocksOnly(codename string) bool {
-	return codename == ChristmasSnowSlaveCodename
-}
-
-// christmasGifts is the present table, weights out of 100: the
-// scrolls in threes, the wings in fives, and the costume and Rudolph as
-// the rare band. A sexed row names its male item; FemaleCodename is the
-// same piece for a female character.
+// christmasGifts is the native table's v1.150 half, at the native
+// weights (percent of the full native table).
 var christmasGifts = []HalloweenGift{
-	{Codename: "ITEM_ETC_E051123_EVATION_SCROLL", Count: 3, Weight: 15},
-	{Codename: "ITEM_ETC_E051123_AGILITY_SCROLL", Count: 3, Weight: 15},
-	{Codename: "ITEM_ETC_E051123_SPEED_UP_SCROLL", Count: 3, Weight: 15},
-	{Codename: "ITEM_ETC_E051123_HP500_SCROLL", Count: 3, Weight: 14},
-	{Codename: "ITEM_ETC_E051123_MP500_SCROLL", Count: 3, Weight: 14},
-	{Codename: "ITEM_ETC_E041225_SANTA_WINGS", Count: 5, Weight: 11},
-	{Codename: "ITEM_ETC_E041225_SANTA_HAT_M", FemaleCodename: "ITEM_ETC_E041225_SANTA_HAT_F", Count: 1, Weight: 3},
-	{Codename: "ITEM_ETC_E051125_SANTA_HAT_BLUE_M", FemaleCodename: "ITEM_ETC_E051125_SANTA_HAT_BLUE_F", Count: 1, Weight: 3},
-	{Codename: "ITEM_ETC_E051125_SANTA_SET_RED_M", FemaleCodename: "ITEM_ETC_E051125_SANTA_SET_RED_F", Count: 1, Weight: 3},
-	{Codename: "ITEM_ETC_E051125_SANTA_SET_BLUE_M", FemaleCodename: "ITEM_ETC_E051125_SANTA_SET_BLUE_F", Count: 1, Weight: 3},
-	{Codename: "ITEM_COS_C_RUDOLPH", Count: 1, Weight: 4},
+	{Codename: "ITEM_MALL_DAMAGE_ABS_20P_SCROLL", Count: 1, Weight: 5},
+	{Codename: "ITEM_MALL_DAMAGE_INC_20P_SCROLL", Count: 1, Weight: 5},
+	{Codename: "ITEM_MALL_GLOBAL_CHATTING", Count: 1, Weight: 5},
+	{Codename: "ITEM_MALL_REVERSE_RETURN_SCROLL", Count: 1, Weight: 4.095},
+	{Codename: "ITEM_MALL_RETURN_SCROLL_HIGH_SPEED", Count: 1, Weight: 15},
+	{Codename: "ITEM_MALL_REPAIR_HAMMER", Count: 1, Weight: 15},
+	{Codename: "ITEM_COS_C_SCARABAEUS_SCROLL", Count: 1, Weight: 6},
+	{Codename: "ITEM_COS_C_WILDPIG_SCROLL", Count: 1, Weight: 6},
+	{Codename: "ITEM_COS_C_OSTRICH_SCROLL", Count: 1, Weight: 6},
+	{Codename: "ITEM_COS_C_PEGASUS_SCROLL", Count: 1, Weight: 6},
+	{Codename: "ITEM_COS_C_RUDOLPH", Count: 1, Weight: 6},
 }
 
 /*
 ================
 ChristmasGifts
 
-The presents Santa So-Ok rolls.
+The gifts So-ok rolls for ten snow flakes.
 ================
 */
 func ChristmasGifts() []HalloweenGift {

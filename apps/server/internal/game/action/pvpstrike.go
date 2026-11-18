@@ -331,7 +331,7 @@ func (rt *Runtime) acceptPlayerTargetStage(st offensiveStage) (OpResult, skillCa
 	if st.rootID != 0 {
 		mask &^= admitCooldown
 	}
-	struck := &admitTarget{at: target.at, player: target.snapshot, motion: rt.playerTargetMotion(division, target.snapshot, now)}
+	struck := &admitTarget{at: target.at, player: target.snapshot, motion: rt.playerTargetMotion(division, target.snapshot, rt.chainStageJudgedAt(division, snapshot.Name, st.rootID, now))}
 	if code := rt.skillAdmission(division, snapshot, skill, now, struck, st.release, mask); code != 0 {
 		return offensiveRefusal(code), skillCastRefused
 	}

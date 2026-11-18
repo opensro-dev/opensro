@@ -742,6 +742,9 @@ func seedAuthorityDBTx(tx *sql.Tx, data *authoritySeed) error {
 	if err := writeHalloweenBoxes(tx, data.meta.HalloweenBoxes); err != nil {
 		return err
 	}
+	if err := writeWinterMissions(tx, data.meta.WinterMissions); err != nil {
+		return err
+	}
 	if err := writeSookArenaAccounts(tx, data.meta.SookArenaAccounts); err != nil {
 		return err
 	}

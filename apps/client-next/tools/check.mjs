@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url";
 import { withHeavyLock } from "../../../scripts/checks/heavyLock.mjs";
 import { withGeneratedAssetsLock } from "../../../scripts/rebuildLock.mjs";
 import { LIST_PATH as ASSET_BACKED_LIST } from "./list-asset-backed-tests.mjs";
+import { publishWarmCaches, seedWarmCaches } from "./warm-cache.mjs";
 
 const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
 const node = process.execPath;
@@ -35,13 +36,18 @@ const SOURCE_FLAG = "--source";
 // its per-file budget failures (printTimingLines, #2929).
 const TIMING_PREFIXES = [ "tests:", "tests slowest:", "tests budget:" ];
 const ASSET_ARCHITECTURE_TESTS = new Set( [ "audio-parity-audit.test.mjs" ] );
+// verify:ownership and verify:capabilities read only the source tree. Outside
+// this list a split file with no manifest row reached main unseen (#3740's
+// label-fit.ts): ownership.test.mjs checks fixtures, not the real manifest.
 const SOURCE_GATE_NAMES = new Set( [
 	"verify:test-types",
 	"typecheck",
 	"typecheck:gallery",
 	"verify:layout",
 	"verify:dependencies",
-	"verify:ui-census"
+	"verify:ui-census",
+	"verify:ownership",
+	"verify:capabilities"
 ] );
 
 // Longest first, so the critical path starts immediately.
@@ -209,7 +215,12 @@ async function main() {
 	if ( sourceOnly ) {
 		process.stdout.write( "Retail audio parity and asset delivery remain required by the full check.\n" );
 	}
+	// typecheck and typecheck:gallery run tsc directly: seed their
+	// buildinfos before the gates start and publish after, as the
+	// `typecheck` script and verify-test-types.mjs do for themselves.
+	seedWarmCaches();
 	const results = await Promise.all( gates.map( ( [name, args] ) => runGate( name, args ) ) );
+	publishWarmCaches();
 	for ( const result of results ) {
 		printTimingLines( result );
 	}
