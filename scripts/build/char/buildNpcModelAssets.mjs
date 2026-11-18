@@ -280,8 +280,12 @@ async function publishNpcModels( options, store ) {
 		}
 		// characterdata enables the small guard towers (STRUCTURE_SMALL_*_TOWER),
 		// whose BSRs the v1.150 Data.pk2 does not hold: the client cannot draw
-		// them, so they are not part of this client's world.
-		if ( structureNames.has( codename ) && (await loadOptionalDataAsset( model.bsrPath )) === null ) {
+		// them, so they are not part of this client's world. A teleport
+		// building whose model the data lacks stays a pick box, as before.
+		if (
+			(structureNames.has( codename ) || teleportNames.has( codename )) &&
+			(await loadOptionalDataAsset( model.bsrPath )) === null
+		) {
 			console.log( `[npc] SKIP ${codename}: v1.150 data ships no ${model.bsrPath}` );
 			continue;
 		}
