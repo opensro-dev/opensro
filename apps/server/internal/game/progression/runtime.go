@@ -177,6 +177,9 @@ type Runtime struct {
 	LevelLimit int64
 	// MasteryTotalOverride is the beta budget; zero keeps native race rules.
 	MasteryTotalOverride int64
+	// BetaMasteryEarly keeps that budget for characters created before the
+	// native totals went live (port-only, enterworld/betamastery_early.go).
+	BetaMasteryEarly bool
 }
 
 /*

@@ -2729,6 +2729,25 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/ui/hud/map-tools.ts",
+			"provider": "src/engine/runtime/ui/hud/map-level-filter.ts",
+			"functions": [
+				"band",
+				"checked",
+				"createLevelFilter",
+				"ground",
+				"takeSnap",
+				"toggle"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/hud/map-level-filter.ts",
+			"functions": [
+				"band"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/ui/hud/map-guide-tree.ts",
 			"provider": "src/engine/runtime/ui/hud/world-map.ts",
 			"functions": [
@@ -4336,6 +4355,27 @@
 			"function": "step",
 			"kind": "callback",
 			"reason": "Effective health and result-presentation owners lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "knockbacks.land",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Knockback presentation owner lends this synchronous operation through characters.ts; a presented knockback hit starts its drawn recoil (8D5440), effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "effects.system",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character effect owner lends this synchronous operation through characters.ts; a presented type-5 hit starts SYSTEM_KNOCKBACK (8D5440), effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
+			"expression": "knockbacks.pose",
+			"function": "resolveDrawnPoses",
+			"kind": "callback",
+			"reason": "Knockback presentation owner passed by characters.ts for this frame without retaining it; holds a struck body until its hit lands."
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-events.ts",

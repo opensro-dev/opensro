@@ -8,7 +8,6 @@ Owns casts and vitals; validated presentation events and animation never own HP.
 ===========================================================================
 */
 import { damageFeedback } from "@/engine/foundation/gameplay/damage-feedback";
-import { SYSTEM_KNOCKBACK } from "@/engine/contracts/orb";
 import {
 	appendCastResults,
 	castResultStageCount,
@@ -139,14 +138,10 @@ export function createCombat(
 				} );
 			}
 			for ( const impact of row.impacts ) {
+				// The SYSTEM_KNOCKBACK decoration and the drawn recoil wait for
+				// the hit (8D5440, presented by presentation-events.ts).
 				if ( impact.displacement ) {
 					displacements.impact( token, caster, row.target, impact.type as 4 | 5, impact.displacement );
-					// CIDecoDamageEffect_Initialize (8D5440): a type-5 knockback is
-					// carried by a SYSTEM_KNOCKBACK decoration on the struck
-					// character, whose guided trajectory is the 250/s travel.
-					if ( impact.type === 5 ) {
-						publishHp( { kind: "system-effect", gid: row.target, effect: SYSTEM_KNOCKBACK } );
-					}
 				}
 			}
 		}

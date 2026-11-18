@@ -32,11 +32,12 @@ What the source authors, and what this import does with it:
 	          respawn 1-3 s, sight 100.
 	gates     the source chain stands in a Jupiter field this port does
 	          not import, and its C links name gates whose buildings the
-	          later client itself never shipped. Authored at import: the
-	          source entry building (43802) is re-homed beside Jangan's
-	          STORE_CH_GATE, the entry offers A and B on the source links
-	          and C and D on authored links, and D gets an authored return
-	          building in the source's own shape. The rows name world 1:
+	          later client itself never shipped. Authored at import:
+	          Jangan's own gate (GATE_CH) lists the four fields, A and B
+	          on the source entry's links and C and D on authored links,
+	          each field leads back to it, and D gets an authored return
+	          building in the source's own shape. No second gate stands in
+	          Jangan (skytemple_gates.py). The rows name world 1:
 	          the later per-field world ids (132-134) are not worlds of
 	          this port, whose portal catalogue refuses unknown worlds.
 	          Link level conditions clamp to the build's cap as every
@@ -66,7 +67,7 @@ import cap110_skill_effects as effects  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
 import skilldata_enc as skill_tables  # noqa: E402
 import sro_pk2  # noqa: E402
-from alexandria_map_tables import native_text_row  # noqa: E402
+from alexandria_map_tables import later_zone_rows, native_text_row  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
 from skytemple_gates import FIELD_WORLD, d_arrival, prepare_gates  # noqa: E402
 from sro_paths import MAIN_CHECKOUT_ROOT, trees_overlap  # noqa: E402
@@ -701,7 +702,7 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 		native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != CHARACTER_SHARD
 			for r in tables.table_rows(p.read_bytes())]
 		occupied = {int(r[1]) for r in native_chars}
-		allocated = monsters.allocate_identities(occupied, sorted(refs), prior.get("characters", {}))
+		allocated = monsters.allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 		for code, row in sorted(refs.items()):
 			row[1] = str(allocated[code])
 		native_skills = [r for p in text_root.glob("skilldata_*.txt") if p.name != SKILL_SHARD
@@ -740,7 +741,6 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 		pre_gate_keys = {row[1] for row in tables.table_rows(current["text"]) if len(row) > 1}
 		gate_tables, gate_codes = prepare_gates(
 			later_gate_tables,
-			tables.table_rows((native_text_root / "teleportbuilding.txt").read_bytes()),
 			tables.table_rows((native_text_root / "teleportdata.txt").read_bytes()),
 			{row[1] for row in tables.table_rows(current["teleportdata.txt"]) if len(row) > 1},
 			{row[1] for row in tables.table_rows(current["teleportbuilding.txt"]) if len(row) > 1},
@@ -806,7 +806,7 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 		zone_path = text_root / "textzonename.txt"
 		zone_keys = {row[1] for row in tables.table_rows(zone_path.read_bytes()) if len(row) > 1}
 		zone_prefixes = tuple(sorted({REGION_PREFIX + letter + "_" for letter in "ABCD"}))
-		zone_rows = [native_text_row(row) for row in tables.table_rows(read("textzonename.txt"))
+		zone_rows = [native_text_row(row) for row in later_zone_rows(read)
 			if len(row) >= 10 and (row[1] in {str(region) for region in fields} or row[1].startswith(zone_prefixes))
 			and row[1] not in zone_keys]
 		write_atomically(zone_path, characters.append_rows(zone_path.read_bytes(), zone_rows))

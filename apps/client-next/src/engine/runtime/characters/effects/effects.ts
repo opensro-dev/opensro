@@ -72,6 +72,7 @@ import { carriedPose, createCorrectionCarry, predictedCast } from "./correction-
 import { impactSource } from "@/engine/foundation/animation/impact-source";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { projectileSpace, sampleProjectile, stepHomingProjectile } from "@/engine/foundation/animation/projectile-time";
+import { windupAwaitsTrade } from "./windup-trade";
 import {
 	projectileBasis,
 	movingFade,
@@ -1700,6 +1701,12 @@ export function createCharacterEffects(
 							const flying = distributed || radial || returning ||
 								!targetFollow && targetLocal && (stage.movement?.startSpeed ?? 0) !== 0;
 							const staticTarget = (targetLocal || sourceStatic) && !targetFollow && !flying;
+							// 8DDF73/8DDF7B (AT_STOP, AT_ONE_FOLLOW, AT_LOOP) create the
+							// stage's object once, on the action's owner (+0x58), damage
+							// stage or not: the damage flag (+0x02 bit 0) only hands the
+							// results to 8DB770 in the common tail (8DEF33), which gives
+							// each victim the record's damage effect (8D5440), not this.
+							const ownerStage = [ "AT_STOP", "AT_ONE_FOLLOW", "AT_LOOP" ].includes( stage.action );
 							const resultStage = impactIndex( cast.skill, trigger.phase, trigger.event );
 							const resultTargets = cast.results?.filter( row =>
 								resultStage < 0 || castResultAt( row.impacts, resultStage )
@@ -1710,7 +1717,7 @@ export function createCharacterEffects(
 								movingTargets( stage.count, cast.target, resultTargets ) :
 								radial ?
 								[ { target: cast.caster, owns: false, all: false } ] :
-								(!targetLocal && (stage.damageEvent || flying) ?
+								(!targetLocal && !ownerStage && (stage.damageEvent || flying) ?
 									[ ...new Set( resultTargets.length ? resultTargets : [ cast.target ] ) ] :
 									[ cast.target ]).map( target => ({ target, owns: true, all: targetLocal }) );
 							for ( const dispatch of targets ) {
@@ -1718,7 +1725,7 @@ export function createCharacterEffects(
 								const entity = byGid.get(
 									returning || sourceStatic || targetLocal ?
 										targetGid :
-										flying || !stage.damageEvent ?
+										flying || !stage.damageEvent || ownerStage ?
 										cast.caster :
 										targetGid
 								);
@@ -3309,11 +3316,13 @@ export function createCharacterEffects(
 					const command = visual.command;
 					if ( command ) {
 						const cast = castStates.get( visual.token );
-						// Inferred: a retained buff token must not keep its completed windup alive.
+						// Inferred: a retained buff token must not keep its completed windup alive,
+						// unless a SHOT mover of the cast still has to trade it (windup-trade.ts).
 						if (
 							!current.has( visual.token ) ||
 							cast?.cancelledAtMs !== undefined || !entity ||
-							command.windup && cast?.shotAtMs !== undefined && clock >= cast.shotAtMs
+							command.windup && cast?.shotAtMs !== undefined && clock >= cast.shotAtMs &&
+								!windupAwaitsTrade( catalog?.[String( cast.skill )]?.stages, command.slot )
 						) releaseCommand( command, now );
 						stepRelease( command, now );
 					}

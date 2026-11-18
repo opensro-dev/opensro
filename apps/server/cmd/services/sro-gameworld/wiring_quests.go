@@ -118,7 +118,7 @@ func (game *gameplayPlane) wireQuestDoors(quests *quest.Runtime) {
 				return game.items.ExchangeHalloweenPrize(character, npcCodename, codename)
 			}
 			if codename == action.ChristmasExchangeService {
-				return game.items.ExchangeChristmasSocks(character, npcCodename)
+				return game.items.ExchangeChristmasSnowflakes(character, npcCodename)
 			}
 			if codename == action.SoOkChristmasExchangeService {
 				return game.items.ExchangeSoOkChristmasBoxes(character, npcCodename)

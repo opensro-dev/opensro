@@ -4,7 +4,7 @@
 seasonal_exchange.go - So-ok's seasonal token exchange, one shape per event
 
 Port-only, not native. The seasonal events (Halloween's jewelry boxes,
-Christmas's Red Santa Socks) share one exchange at the town's event host:
+the winter event's snow flakes) share one exchange at the town's event host:
 a rolled row that spends tokens on weighted gifts (every token in the bag
 at once, or the native one gift per click), then any flat-price prize
 rows. The shipped talk text gives each event its own
@@ -53,6 +53,9 @@ type seasonalExchange struct {
 	prefix  string                                          // a prize row's service prefix; the prize follows
 	talk    exchangeTalk
 	banners exchangeBanners
+	// exchanged hears every committed click, outside the door: who
+	// traded and how many gifts it gave (nil: nobody listens).
+	exchanged func(character *enterworld.Character, gifts uint32)
 }
 
 /*
@@ -154,6 +157,9 @@ func (rt *Runtime) exchangeTokens(ex *seasonalExchange, character *enterworld.Ch
 	})
 	if rollErr != nil || (!committed && (answer == "" || answer == ex.talk.granted)) {
 		return nil, fmt.Errorf("%s exchange could not commit", ex.name)
+	}
+	if committed && ex.exchanged != nil {
+		ex.exchanged(character, gifts)
 	}
 	if committed && ex.banners.giftDone != "" {
 		frames = append(frames, exchangeBanner(ex.giftsBanner(gifts, tokens-gifts*ex.perGift)))

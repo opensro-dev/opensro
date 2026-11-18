@@ -112,18 +112,44 @@ test("seed never overwrites a cache the checkout already has", ( t ) => {
 	);
 });
 
-test("different input content gets no buildinfo", ( t ) => {
+test("different input content gets the newest buildinfo, an exact key wins", ( t ) => {
 	const { a, b, store } = fixture( t, "key-mismatch" );
 	makeCheckout( a, "one" );
 	makeCheckout( b, "two" );
 	writeCaches( a, "paid" );
 	publishWarmCaches( a, store );
-
 	assert.notEqual( warmCacheKey( b ), warmCacheKey( a ), "different inputs hash to a different key" );
+
+	// tsc revalidates a buildinfo, so the nearest state seeds a checkout
+	// whose inputs differ: a one-line change is not a cold run.
 	seedWarmCaches( b, store );
+	const seeded = path.join( b, "temp", "cache", "tsc", "client.tsbuildinfo" );
+	assert.equal( fs.readFileSync( seeded, "utf8" ), "buildinfo-paid" );
+
+	// b pays its own run and publishes under its key; a later, newer entry
+	// for a third tree must not displace a's exact match.
+	fs.writeFileSync( seeded, "buildinfo-b" );
+	const later = Date.now() / 1000 + 60;
+	fs.utimesSync( seeded, later, later );
+	publishWarmCaches( b, store );
+	fs.rmSync( path.join( a, "temp", "cache", "tsc", "client.tsbuildinfo" ) );
+	seedWarmCaches( a, store );
 	assert.equal(
-		fs.existsSync( path.join( b, "temp", "cache", "tsc", "client.tsbuildinfo" ) ),
-		false,
-		"no buildinfo crosses to a checkout whose inputs differ"
+		fs.readFileSync( path.join( a, "temp", "cache", "tsc", "client.tsbuildinfo" ), "utf8" ),
+		"buildinfo-paid"
 	);
+});
+
+test("the store keeps a bounded number of keys per program", ( t ) => {
+	const { a, store } = fixture( t, "prune" );
+	for ( let i = 0; i < 12; i++ ) {
+		makeCheckout( a, `tree-${i}` );
+		writeCaches( a, `paid-${i}` );
+		const file = path.join( a, "temp", "cache", "tsc", "client.tsbuildinfo" );
+		const stamp = Date.now() / 1000 + i;
+		fs.utimesSync( file, stamp, stamp );
+		publishWarmCaches( a, store );
+	}
+	const kept = fs.readdirSync( path.join( store, "tsc" ) );
+	assert.equal( kept.length, 8 );
 });

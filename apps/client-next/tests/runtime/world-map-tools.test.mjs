@@ -306,8 +306,10 @@ function ids( view ) {
 	return view.controls.map( row => row.id );
 }
 
-test("the level filter starts on and its toggle lifts the band", () => {
+test("the level filter starts off (v1.696 E72F30) and its toggle sets the band", () => {
 	const hud = tools();
+	assert.equal( hud.filterBand( 20 ), undefined );
+	assert.equal( hud.activate( "map-level-filter", catalogue(), 20 ), null );
 	assert.deepEqual( hud.filterBand( 20 ), { min: 20, max: 20 + MONSTER_LEVEL_FILTER_SPAN } );
 	assert.equal( hud.filterBand( undefined ), undefined );
 	assert.equal( hud.activate( "map-level-filter", catalogue(), 20 ), null );
@@ -326,11 +328,11 @@ test("the foot's checkbox is the one level filter switch, at its layout place", 
 	const switches = view.controls.filter( row => row.id === "map-level-filter" );
 	assert.equal( switches.length, 1 );
 	assert.deepEqual( switches[0].rect, [ 864, 704, 16, 16 ] );
-	assert.equal( switches[0].selected, true );
+	assert.equal( switches[0].selected, false );
 	assert.equal( hud.activate( "map-level-filter", catalogue(), 20 ), null );
-	assert.equal( hud.filterBand( 20 ), undefined );
-	assert.equal( control( paint( hud ), "map-level-filter" )?.selected, false );
-	assert.ok( paint( hud ).quads.some( quad => quad.texture.endsWith( "com_checkbutton_off.png" ) ) );
+	assert.deepEqual( hud.filterBand( 20 ), { min: 20, max: 20 + MONSTER_LEVEL_FILTER_SPAN } );
+	assert.equal( control( paint( hud ), "map-level-filter" )?.selected, true );
+	assert.ok( paint( hud ).quads.some( quad => quad.texture.endsWith( "com_checkbutton_on.png" ) ) );
 	hud.dispose();
 });
 
@@ -349,6 +351,7 @@ test("a dungeon page has one level filter switch, its foot checkbox", () => {
 test("the guide tree opens a group in place and a pick returns the anchor pose", () => {
 	const hud = tools();
 	const cat = catalogue();
+	hud.activate( "map-level-filter", cat, 20 );
 	assert.equal( ids( paint( hud ) ).includes( "map-region:50" ), false, "the guide starts shut" );
 	hud.activate( "map-side-tab", cat, 20 );
 	let view = paint( hud );
@@ -548,6 +551,7 @@ test("the dungeon page draws the atlas globe and pin and demands both (issue #32
 test("the dungeon page's monster list fills for its floor and a pick marks the species", () => {
 	const hud = tools();
 	const cat = catalogue();
+	hud.activate( "map-level-filter", cat, 20 );
 	const floors = caveDungeonFloors( CAVE, 32769 );
 	// Shut, the cave page carries the side tab; opening the guide lists
 	// the shown floor's species from the catalogue, not "Loading...".
@@ -614,7 +618,11 @@ test("the floor spinner and the foot note stand at their layout places", () => {
 	const filter = control( view, "map-level-filter" );
 	assert.equal( filter?.helpText, "Fixture note" );
 	hud.activate( "map-level-filter", undefined, undefined );
-	assert.equal( hud.filterBand( 20 ), undefined, "the foot's box lifts the filter" );
+	assert.deepEqual(
+		hud.filterBand( 20 ),
+		{ min: 20, max: 20 + MONSTER_LEVEL_FILTER_SPAN },
+		"the foot's box sets the filter"
+	);
 	hud.dispose();
 });
 
@@ -767,11 +775,17 @@ function control( view, id ) {
 	return view.controls.find( row => row.id === id );
 }
 
-test("the map opens with the filter and list on, and the drawer honours the filter", () => {
+test("the map opens with the filter off, and the drawer honours the filter once checked", () => {
 	const f = fixture();
 	try {
 		let view = f.activate( "open-window:Map" );
-		assert.equal( defined( control( view, "map-level-filter" ) ).selected, true, "the filter is on by default" );
+		assert.equal(
+			defined( control( view, "map-level-filter" ) ).selected,
+			false,
+			"the filter starts off (E72F30)"
+		);
+		view = f.activate( "map-level-filter" );
+		assert.equal( defined( control( view, "map-level-filter" ) ).selected, true );
 		defined( control( view, "map-side-tab" ) );
 		view = f.activate( "map-side-tab" );
 		defined( control( view, "map-region:" + REGION_A ) );

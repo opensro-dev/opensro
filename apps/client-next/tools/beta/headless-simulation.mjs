@@ -7,8 +7,16 @@ The simulation worker (session, network, world) is one self-contained module
 that talks to its page only through HostMessage/WorkerMessage. Node runs the
 shipped bytes in a worker_threads thread; this owner plays the page's part:
 it bridges postMessage/onmessage, recycles snapshot buffers, acknowledges
-world batches, and keeps session state and entities. Rendering, audio and
-the asset worker are absent by design: the release gate needs no GPU.
+world batches, and keeps session state, entities and the gameplay state.
+Rendering, audio and the asset worker are absent by design: the release
+gate needs no GPU.
+
+The gameplay state is kept as the page keeps it: every publication goes
+through the client's own merge (gameplay-snapshot.ts), because most of
+them are deltas that name only the fields that changed. Until 2026-11-18
+this owner kept the last publication alone, so a field survived only until
+the next tick's delta; the release gate read a move's acknowledgement out
+of whichever publication happened to be last.
 
 The thread gets what a browser gives a same-origin worker and nothing more:
 an Origin header on same-origin requests and WebSocket upgrades, and a
@@ -22,6 +30,7 @@ spends its time.
 ===========================================================================
 */
 import { MessageChannel, Worker } from "node:worker_threads";
+import { mergeGameplaySnapshots } from "../../src/engine/foundation/gameplay/gameplay-snapshot.ts";
 
 // HostMessage "start" version (contracts/simulation.ts PROTOCOL_VERSION).
 export const SIMULATION_PROTOCOL = 3;
@@ -180,7 +189,11 @@ export async function startHeadlessSimulation( { workerUrl, origin, cookies = []
 			state.batches++;
 			for ( const event of message.batch.events ) {
 				state.events++;
-				if ( event.kind === "gameplay" ) state.gameplay = event.state;
+				// A delta names only what changed (contracts/world.ts): the
+				// page's own merge keeps every other field.
+				if ( event.kind === "gameplay" ) {
+					state.gameplay = mergeGameplaySnapshots( state.gameplay, event.state, event.delta );
+				}
 				// The page reports readiness for the travel it presented; a newer
 				// travel needs a new report (world.ts ignores a stale revision).
 				if ( event.kind === "travel" && event.travel.revision !== state.travelRevision ) {
@@ -198,7 +211,12 @@ export async function startHeadlessSimulation( { workerUrl, origin, cookies = []
 				if ( event.kind === "spawn" || event.kind === "state" ) {
 					state.entities.set( event.entity.gid, event.entity );
 				} else if ( event.kind === "despawn" ) state.entities.delete( event.gid );
-				else if ( event.kind === "reset" ) state.entities.clear();
+				else if ( event.kind === "reset" ) {
+					// A reset empties the reader, the gameplay state included
+					// (presentation.ts): the whole publication it forces follows.
+					state.entities.clear();
+					state.gameplay = null;
+				}
 			}
 			worker.postMessage( { kind: "world-ack", sequence: message.batch.sequence } );
 		}

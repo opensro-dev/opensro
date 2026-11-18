@@ -105,12 +105,17 @@ func TestLightningChainRootBracketSpansEveryStage(t *testing.T) {
 	}
 	// Each stage follows the previous stage's full action time
 	// (casting + duration): the root's 256+340, then 1188, 464, 396, 788.
+	// The marks add up from the press, as the root clip's SHOT events
+	// do: a stage the tick ran late does not push the later ones
+	// (chainStageMark).
 	waits := []int64{int64(root.ActionCastingTimeMs + root.ActionDurationMs), int64(stages[1].ActionDurationMs),
 		int64(stages[2].ActionDurationMs), int64(stages[3].ActionDurationMs), int64(stages[4].ActionDurationMs)}
+	mark := started
 	for i := 1; i < 6; i++ {
-		gap := stageAt[stages[i].ID] - stageAt[stages[i-1].ID]
-		if gap <= waits[i-1] || gap > waits[i-1]+30 {
-			t.Fatalf("stage %d after %d ms, want just over %d", i+1, gap, waits[i-1])
+		mark += waits[i-1]
+		at := stageAt[stages[i].ID]
+		if at < mark || at > mark+30 {
+			t.Fatalf("stage %d at %d ms, want just over its %d ms mark", i+1, at-started, mark-started)
 		}
 	}
 	last := stageAt[stages[5].ID]

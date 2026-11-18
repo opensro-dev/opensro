@@ -278,6 +278,9 @@ type Meta struct {
 	// count (#3322), keyed by account id, with HalloweenBoxes' pointer
 	// discipline: the entry mutates the one record inside its door.
 	SookArenaAccounts map[string]*domain.SookArenaAccount `json:"sookArenaAccounts,omitempty"`
+	// WinterMissions is each division's winter Server Mission rows
+	// (wintermissions.go).
+	WinterMissions map[string]domain.WinterMissions `json:"winterMissions,omitempty"`
 }
 
 // retiredCharacterFields are v13 record keys no current field owns. Records

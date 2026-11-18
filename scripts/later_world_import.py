@@ -47,7 +47,9 @@ from pathlib import Path
 from typing import Callable
 
 import alexandria_npcs as characters
-from alexandria_map_tables import append_rows, native_text_row, table_text
+from alexandria_map_tables import (
+	append_rows, later_text_row, later_zone_rows, native_text_row, table_text, zone_name_shards,
+)
 import cap110_monsters as cap110
 import cap110_skill_effects as effects
 import import_vsro_alexandria as tables
@@ -69,6 +71,26 @@ MERGE_ARCHIVES = ("Map", "Media", "Data", "Particles")
 # compound objects, the files whose particle sets name effect programs.
 PARTICLE_SEED_EXTENSIONS = (".bsr", ".cpd")
 DATA_PREFIX = "data_extracted/"
+# Where the population exports come from, for the refusal below.
+EXPORT_ORIGIN = ("the maintainers' extraction from an ISRO-R shard backup "
+	"(research/investigations/later-sources-3247); it is not in the repository "
+	"or a public clone")
+
+
+# ================
+# missing_export
+#
+# The one refusal for a later-world import switched on without its
+# population export. The exports are operator data, never committed and
+# never defaulted, so a contributor's build stops here, before any
+# archive is read, with the variable to set and the switch that builds
+# without it - not deep in the import on a path that does not exist.
+# ================
+def missing_export(flag, env, what):
+	return SystemExit(
+		f"{flag} is on, but {env} is not set. {flag} needs {what}, {EXPORT_ORIGIN}. "
+		f"Set {env} to it, or turn {flag} off in apps/server/config/shard-settings.json "
+		f"to build the variant without it.")
 
 
 # ================
@@ -269,27 +291,6 @@ def later_object_text(read):
 	return tables.decode_table(read("textdata_object.txt"))
 
 
-# ================
-# later_text_row
-#
-# One later name row in the layout the name merge reads: v1.696 text
-# rows carry 17 columns (a numeric text id after the service cell,
-# one more language cell, "0" where a translation is absent) where
-# the VSRO rows the merge was written for carry 15. Drop the id, and
-# let an absent translation take the English cell, as VSRO authors
-# them - the same mapping the mall avatar import applies.
-# ================
-def later_text_row(row):
-	if len(row) != 17 or not row[1].strip().isdigit():
-		return row
-	cells = [row[0]] + row[2:16]
-	english = cells[8]
-	for column in range(3, 15):
-		if cells[column] == "0":
-			cells[column] = "" if column == 3 else english
-	return cells
-
-
 #============================================================================
 # The monster import
 #============================================================================
@@ -344,7 +345,7 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 		raise SystemExit(f"Pass the v1.696 client folder or set {spec.root_env}.")
 	require_pin(spec, v1696_root, ("Media",), pins_for)
 	if not source_root and not os.environ.get(spec.source_env):
-		raise SystemExit(f"{spec.source_env} names no population export folder")
+		raise missing_export(spec.flag, spec.source_env, "its population export folder")
 	source_root = Path(source_root or os.environ[spec.source_env])
 	export = read_population(spec, source_root)
 	# The export's nests also place the worlds' NPCs (believers, commerce
@@ -436,7 +437,7 @@ def later_characters(read):
 def stage_kinds(label, read, has, refs, text_root, prior, character_shard, skill_shard, info_owned, extra_skills=()):
 	native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != character_shard for r in tables.table_rows(p.read_bytes())]
 	occupied = {int(r[1]) for r in native_chars}
-	allocated = cap110.allocate_identities(occupied, sorted(refs), prior.get("characters", {}))
+	allocated = cap110.allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 	for code, row in refs.items():
 		row[1] = str(allocated[code])
 	native_skills = [r for p in text_root.glob("skilldata_*.txt") if p.name != skill_shard for r in tables.table_rows(p.read_bytes()) if len(r) == 118]
@@ -540,7 +541,7 @@ def merge_region_tables_record(native, later, region_ids):
 	prefixes = tuple(sorted({row[2] + "_" for row in code_rows}))
 	native_zone_keys = {row[1] for row in tables.table_rows(native["textzonename.txt"]) if len(row) > 1}
 	zone_rows = [
-		native_text_row(row) for row in tables.table_rows(later["textzonename.txt"])
+		native_text_row(row) for row in later_zone_rows(lambda name: later[name.lower()])
 		if len(row) >= 10 and (row[1] in id_strings or row[1].startswith(prefixes))
 		and row[1] not in native_zone_keys
 	]
@@ -575,7 +576,7 @@ def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for)
 	v1696_root = client_root(v1696_root, spec.root_env)
 	source_root = source_root or os.environ.get(spec.source_env, "")
 	if not source_root:
-		raise SystemExit(f"{spec.source_env} names no population export folder")
+		raise missing_export(spec.flag, spec.source_env, "its population export folder")
 	require_pin(spec, v1696_root, MERGE_ARCHIVES, pins_for)
 	export = read_population(spec, source_root)
 	regions = spec.regions_of(export, sub_enabled)
@@ -734,10 +735,14 @@ def merge_world(spec, native, out, v1696_root, regions, build_monsters):
 			return sro_pk2.payload(media_data, entry)
 
 		later_tables = {name: media_table(name) for name in ("regioncode.txt", "textzonename.txt")}
+		# v1.696 keeps its zone names in shards the index names; they
+		# ride along so the merge reads the rows, not the index.
+		for shard in zone_name_shards(tables.table_rows(later_tables["textzonename.txt"])):
+			later_tables[shard.lower()] = media_table(shard.lower())
 	finally:
 		media_data.close()
 		media_handle.close()
-	current_tables = {name: (out / textdata / name).read_bytes() for name in later_tables}
+	current_tables = {name: (out / textdata / name).read_bytes() for name in ("regioncode.txt", "textzonename.txt")}
 	merged_tables, table_summary, prefixes = merge_region_tables_record(current_tables, later_tables, regions)
 	for name, content in merged_tables.items():
 		variant.replace_file(out / textdata / name, content)

@@ -93,6 +93,19 @@ const RESIDENT_PACK_BYTES = 32 << 20;
 
 /*
 ================
+storedSizes
+
+The persistent store's size for every digest an index names: a pack is
+stored whole at its bytes, a member at its decoded length.
+================
+*/
+function* storedSizes( index: { packs: Map<string, PackDescriptor>; assets: Map<string, PackEntry>; } ) {
+	for ( const pack of index.packs.values() ) yield [ pack.sha256, pack.bytes ] as const;
+	for ( const entry of index.assets.values() ) yield [ entry.sha256, entry.length ] as const;
+}
+
+/*
+================
 createPacks
 
 The worker's pack reader: resolves a published path through the pack index
@@ -207,9 +220,33 @@ export function createPacks(
 		}
 		const start = await untilCancelled( header, signal );
 		if ( disposed || signal.aborted ) throw Error( "Asset request cancelled" );
-		const stored = await untilCancelled( blocks.read( base, descriptor, start, entry ), signal );
+		// Once the block is asked for, its bytes arrive whether or not this
+		// request still wants them (blocks.ts reads on the owner's lifetime).
+		// Checking and persisting them is shared work too: a read cancelled
+		// as the player moved on used to drop bytes it had already paid for,
+		// so the next visit downloaded them again.
+		const verified = blocks.read( base, descriptor, start, entry ).then( stored =>
+			persistedMember( base, entry, stored )
+		);
+		const bytes = await untilCancelled( verified, signal );
 		if ( disposed || signal.aborted ) throw Error( "Asset request cancelled" );
-		return decoded( entry, stored );
+		return bytes;
+	}
+	/*
+	================
+	persistedMember
+
+	A large pack's member decoded, checked against the manifest's length
+	and SHA-256, and queued for the persistent store.
+	================
+	*/
+	async function persistedMember( base: string, entry: PackEntry, stored: Uint8Array<ArrayBuffer> ) {
+		const bytes = await decoded( entry, stored );
+		// A short or substituted body: wrong bytes, transient (#2337).
+		if ( bytes.length !== entry.length ) throw assetFailure( "Asset length disagrees with manifest", true );
+		if ( await sha( bytes ) !== entry.sha256 ) throw assetFailure( "Asset SHA-256 mismatch", true );
+		if ( !disposed ) persistent.enqueue( base, entry.sha256, bytes );
+		return bytes;
 	}
 	/*
 	================
@@ -290,6 +327,7 @@ export function createPacks(
 							...pack.entries.map( entry => entry.sha256 )
 						] )
 					);
+					persistent.addSizes( base, storedSizes( admitted ) );
 					return admitted;
 				}
 			);
@@ -315,12 +353,14 @@ export function createPacks(
 	function hdRegistry( base: string ): Promise<Index | null> {
 		if ( !hdIndex ) {
 			hdIndex = download( base + "/hd/packs/manifest.json", PACK_INDEX_LIMIT_BYTES, lifetime.signal )
-				.then( bytes =>
-					parser.manifest(
+				.then( bytes => {
+					const admitted = parser.manifest(
 						JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( bytes ) ),
 						"/hd"
-					)
-				)
+					);
+					persistent.addSizes( base, storedSizes( admitted ) );
+					return admitted;
+				} )
 				.catch( () => null );
 		}
 		return hdIndex;
@@ -504,6 +544,8 @@ export function createPacks(
 			if ( entry.length > limit ) throw new Error( "Asset exceeds byte budget" );
 			if ( signal.aborted ) throw new Error( "Asset request cancelled" );
 			let bytes: Uint8Array<ArrayBuffer>;
+			// A large pack's member arrives checked and queued (member).
+			let checked = false;
 			// Loose deployments have no containers. A verified member surviving refresh
 			// can satisfy demand directly without probing a known-absent pack again.
 			let saved = cache.has( entry.packPath ) ?
@@ -529,6 +571,7 @@ export function createPacks(
 					const descriptor = owner.packs.get( entry.packPath )!;
 					if ( descriptor.bytes > SMALL_PACK_BYTES ) {
 						bytes = await member( url.origin, descriptor, entry, signal );
+						checked = true;
 					} else {
 						const loaded = await untilCancelled( pack( url.origin, descriptor ), signal );
 						bytes = await decoded(
@@ -549,15 +592,16 @@ export function createPacks(
 					bytes = await loose( url.origin, entry, signal );
 				}
 			}
-			if ( disposed || signal.aborted ) throw new Error( "Asset request cancelled" );
 			// A short or substituted body again: wrong bytes, marked
 			// transient like the pack digest above (#2337).
 			if ( bytes.length !== entry.length ) throw assetFailure( "Asset length disagrees with manifest", true );
-			if ( !saved && await sha( bytes ) !== entry.sha256 ) throw assetFailure( "Asset SHA-256 mismatch", true );
-			if ( disposed || signal.aborted ) throw Error( "Asset request cancelled" );
-			if ( !saved && !cache.has( entry.packPath ) ) {
+			const fetched = !saved && !checked;
+			if ( fetched && await sha( bytes ) !== entry.sha256 ) throw assetFailure( "Asset SHA-256 mismatch", true );
+			// Persist before honouring a cancellation: these bytes are paid for.
+			if ( fetched && !disposed && !cache.has( entry.packPath ) ) {
 				persistent.enqueue( url.origin, entry.sha256, bytes );
 			}
+			if ( disposed || signal.aborted ) throw Error( "Asset request cancelled" );
 			const result = gzip ?
 				await gunzipBytes( bytes, limit ) :
 				bytes;

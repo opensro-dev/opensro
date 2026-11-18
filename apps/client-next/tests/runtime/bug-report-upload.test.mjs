@@ -495,3 +495,38 @@ test("an oversized asset history is trimmed oldest first, never refused", async 
 	assert.equal( samples.at( -1 ).t, 71, "the newest sample is kept" );
 	assert.ok( documents["manifest.json"].omissions.some( line => line.startsWith( "assets.json: dropped" ) ) );
 });
+
+test("assets.json shares the store's counters as numbers and nothing else", async () => {
+	const input = fixture();
+	const sample = assetSample( 1, [] );
+	sample.queue.store = {
+		hits: 40,
+		misses: 7,
+		writes: 12,
+		skipped: "PRIVATE_TEXT",
+		errors: 0,
+		evictions: 1,
+		writesStopped: true,
+		budget: 4096,
+		rangeBytes: 900,
+		demandedBytes: 600,
+		extra: "PRIVATE_EXTRA"
+	};
+	input["assets.json"] = JSON.stringify( { samples: [ sample, assetSample( 2, [] ) ] } );
+	const { documents } = await readZip( await createDiagnosticUpload( input, OPTIONS ) );
+	const samples = documents["assets.json"].samples;
+	assert.doesNotMatch( JSON.stringify( samples ), /PRIVATE_/ );
+	assert.deepEqual( samples[0].queue.store, {
+		hits: 40,
+		misses: 7,
+		writes: 12,
+		skipped: null,
+		errors: 0,
+		evictions: 1,
+		budget: 4096,
+		rangeBytes: 900,
+		demandedBytes: 600,
+		writesStopped: true
+	} );
+	assert.equal( samples[1].queue.store, null );
+});

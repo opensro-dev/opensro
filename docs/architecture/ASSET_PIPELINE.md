@@ -114,6 +114,14 @@ done yet. After the region set changes, rebuild the outdoor world with
 `pnpm assets build world-outdoor -- --force`: the shared object index is kept
 when it exists.
 
+The later worlds the shard settings switch on (Arabia, God, Jupiter, Muhan,
+the Pharaoh Temple) also read a population export: the maintainers' extraction
+from an ISRO-R shard backup, named by `SRO_ARABIA_NESTS` or `SRO_<WORLD>_DATABASE`.
+The exports are not in the repository or a public clone, and none has a default.
+With a switch on and its variable unset the variant build stops at once and names
+both; turn the switch off in `apps/server/config/shard-settings.json` to build
+without that world.
+
 ## Packs
 
 The owner's newer Survival Colosseum can also be staged into a separate

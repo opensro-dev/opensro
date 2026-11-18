@@ -695,6 +695,14 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 	}
 	ref := s.template.Refs[nest.RefObjID]
 	roll := monster.RollNativeSpawn(ref, nest, n.partyArmed, s.randomWord)
+	// The replace table applies in a normal world only (the v1.188 nest
+	// spawn tests the world first): the open world's nests, never an
+	// instance's.
+	if s.replacements != nil && (nest.WorldCode == "" || nest.WorldCode == fieldDefaultWorld) {
+		if replaced, next, ok := monster.ApplySpawnReplacement(roll, s.replacements(nowMs)); ok {
+			ref, roll = replaced, next
+		}
+	}
 	spawn, placement := s.placeNativeSpawn(nest, ref, roll.Grade())
 	switch placement {
 	case spawnPlacementClipped:
