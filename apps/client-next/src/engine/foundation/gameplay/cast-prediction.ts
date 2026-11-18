@@ -134,3 +134,23 @@ export function createCastPrediction() {
 		}
 	};
 }
+
+/*
+================
+releaseHeldEvents
+
+The release events a prediction held back (SHOT callbacks: a projectile's
+launch, a strike's hit) fire when the server's answer adopts it, as the
+native client fires them only once the answer has started the cast. Each
+keeps its order but happens no earlier than now: stamped at its old cursor
+time, a held launch started its flight already that far along, so a quick
+arrow landed on the frame it was spawned and was never seen leaving the
+bow, and a held hit's number started part-way through its life.
+================
+*/
+export function releaseHeldEvents<T extends { readonly at: number; }>(
+	held: readonly T[],
+	now: number
+): (T & { readonly adopted: true; })[] {
+	return held.map( event => ({ ...event, at: Math.max( event.at, now ), adopted: true as const }) );
+}
