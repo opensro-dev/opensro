@@ -106,6 +106,16 @@ export const ASSET_TASKS = [
 		args: [ "scripts/refresh_asset_delivery.mjs" ]
 	} ),
 	commandTask( {
+		name: "assets:refresh:files",
+		description: "Repack the named published files into the groups that hold them (no full repack)",
+		kind: "assets",
+		ci: false,
+		requires: [ "generated-assets" ],
+		timeoutClass: "medium",
+		command: "node",
+		args: [ "scripts/refresh_asset_files.mjs" ]
+	} ),
+	commandTask( {
 		name: "assets:repack",
 		description: "Rebuild every asset pack from the published loose tree",
 		kind: "assets",
