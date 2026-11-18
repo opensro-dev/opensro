@@ -6,7 +6,9 @@ headless-simulation.test.mjs - the release gate runs a worker the way a page doe
 A stand-in release worker talks to a local HTTP origin through the headless
 runner: it must see browser same-origin behaviour (Origin header, cookies on
 credentialed requests only, cookies kept across a reload), and the runner
-must acknowledge world batches and recycle snapshot buffers.
+must acknowledge world batches and recycle snapshot buffers. It must also
+keep the gameplay state the way the page does: a delta names only what
+changed, and a reset empties it.
 
 ===========================================================================
 */
@@ -109,4 +111,58 @@ test("the worker gets browser same-origin behaviour and the page's acknowledgeme
 	const after = await reloaded.waitFor( s => s.session?.seen ? s.session : null, 10_000, "reloaded session" );
 	assert.equal( after.seen.login.cookie, "session=abc" );
 	await reloaded.stop();
+});
+
+// A stand-in worker that publishes the gameplay plane as the release's
+// does: whole once, then deltas, then a reset and the whole it forces.
+const GAMEPLAY_WORKER = `
+let sequence = 0;
+function batch( events ) {
+	postMessage( { kind: "world", batch: { sequence: ++sequence, events } } );
+}
+globalThis.onmessage = ( { data } ) => {
+	if ( data.kind !== "session" ) return;
+	if ( data.command.kind === "publish" ) {
+		batch( [ { kind: "gameplay", state: {
+			acknowledgedMove: 0, level: 5, inventory: [ { slot: 13 } ], target: 9, skillCatalog: [ { id: 1 } ]
+		} } ] );
+		batch( [ { kind: "gameplay", state: { acknowledgedMove: 1 }, delta: true } ] );
+		batch( [ { kind: "gameplay", state: { revision: 3, target: undefined }, delta: true } ] );
+	}
+	if ( data.command.kind === "reset" ) {
+		batch( [ { kind: "reset", epoch: 2 }, { kind: "gameplay", state: { acknowledgedMove: 0, level: 6 } } ] );
+	}
+};
+`;
+
+test("the gameplay state is the page's: deltas merge and a reset empties it", async t => {
+	const directory = await mkdtemp( path.join( os.tmpdir(), "sro-headless-" ) );
+	await writeFile( path.join( directory, "worker.mjs" ), GAMEPLAY_WORKER );
+	await writeFile( path.join( directory, "bootstrap.mjs" ), bootstrapSource() );
+	const simulation = await startHeadlessSimulation( {
+		origin: "http://127.0.0.1:1",
+		workerUrl: pathToFileURL( path.join( directory, "worker.mjs" ) ).href,
+		bootstrapUrl: pathToFileURL( path.join( directory, "bootstrap.mjs" ) )
+	} );
+	t.after( async () => {
+		await simulation.stop();
+		await rm( directory, { recursive: true, force: true } );
+	} );
+	simulation.session( { kind: "publish" } );
+	const merged = await simulation.waitFor( s => s.gameplay?.revision === 3 ? s.gameplay : null, 10_000, "deltas" );
+	// The last delta named neither field: both are the earlier publications'.
+	assert.equal( merged.acknowledgedMove, 1 );
+	assert.deepEqual( merged.inventory, [ { slot: 13 } ] );
+	assert.equal( merged.level, 5 );
+	assert.deepEqual( merged.skillCatalog, [ { id: 1 } ] );
+	assert.equal( merged.target, undefined, "a field a delta names undefined is gone" );
+
+	simulation.session( { kind: "reset" } );
+	const after = await simulation.waitFor( s => s.gameplay?.level === 6 ? s.gameplay : null, 10_000, "reset" );
+	assert.equal( after.acknowledgedMove, 0 );
+	// A whole publication keeps the skill catalogue it omits from the state
+	// before it (gameplay-snapshot.ts); behind a reset there is none.
+	assert.equal( after.skillCatalog, undefined, "nothing of the world before the reset survives it" );
+	assert.equal( "inventory" in after, false );
+	assert.equal( simulation.state.entities.size, 0 );
 });
