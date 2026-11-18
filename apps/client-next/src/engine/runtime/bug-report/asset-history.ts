@@ -14,7 +14,9 @@ The samples settle which stall it was:
 	no load listed at all                             the scene never asked
 
 Each sample is a bounded copy of AssetOwner.snapshot (paths only; the asset
-owner already strips credentials and queries).
+owner already strips credentials and queries). It also carries the
+persistent store's counters: a report of slow loading or heavy data use
+shows whether revisits were served locally or downloaded again.
 
 ===========================================================================
 */
@@ -49,6 +51,7 @@ interface AssetQueue {
 	readonly available: number;
 	readonly jobs: AssetJobSnapshot["jobs"];
 	readonly omittedJobs?: number;
+	readonly store: AssetJobSnapshot["store"];
 }
 
 /*
@@ -73,7 +76,8 @@ export function createAssetHistory( options: AssetHistoryOptions ) {
 			error: snapshot.error,
 			available: snapshot.available,
 			jobs: snapshot.jobs.slice( 0, MAX_ASSET_JOBS ).map( job => ({ ...job, ageMs: Math.round( job.ageMs ) }) ),
-			...(snapshot.jobs.length > MAX_ASSET_JOBS ? { omittedJobs: snapshot.jobs.length - MAX_ASSET_JOBS } : {})
+			...(snapshot.jobs.length > MAX_ASSET_JOBS ? { omittedJobs: snapshot.jobs.length - MAX_ASSET_JOBS } : {}),
+			store: snapshot.store
 		};
 	}
 
@@ -104,7 +108,8 @@ export function createAssetHistory( options: AssetHistoryOptions ) {
 			const at = ( ms: number ) => +((ms - zeroMs) / 1000).toFixed( 3 );
 			return {
 				note: "t is seconds from the first frame of replay.mp4 (negative: before the recording); " +
-					"available is free request slots; ageMs is how long each listed load has been open.",
+					"available is free request slots; ageMs is how long each listed load has been open; " +
+					"store is the persistent asset store's counters since the asset worker started.",
 				current: { t: at( nowMs ), phase: options.phase(), queue: queue() },
 				samples: samples.map( ( { atMs, ...sample } ) => ({ t: at( atMs ), ...sample }) )
 			};
