@@ -28,8 +28,8 @@ What the stamp covers:
 	           the Arabia population)
 
 The variant tree itself must also still be what the last build left
-(variant_settle.matches_ledger). A tree edited or half-deleted since then is
-rebuilt.
+(variant_settle.ledger_difference). A tree edited or half-deleted since then is
+rebuilt, and the reason names the first file that differs.
 
 A build clears the stamp before it writes anything and stamps only after it
 succeeds, with the inputs it read before it started; if those changed during
@@ -256,8 +256,9 @@ def stale_parts(variant_root: Path, inputs: dict, required_files=()) -> list[str
 	missing = [name for name in required_files if not (Path(variant_root) / name).exists()]
 	if missing:
 		return [f"missing {name}" for name in missing]
-	if not variant_settle.matches_ledger(variant_root):
-		return ["the variant tree changed since it was built"]
+	difference = variant_settle.ledger_difference(variant_root)
+	if difference:
+		return [f"the variant tree changed since it was built: {difference}"]
 	return []
 
 

@@ -118,7 +118,15 @@ class Stamp(unittest.TestCase):
 
 	def test_an_edited_or_extra_variant_file_rebuilds(self):
 		self.write(self.variant / "extracted" / "Media_extracted" / "b.txt", b"stray")
-		self.assertEqual(self.stale(), ["the variant tree changed since it was built"])
+		self.assertEqual(self.stale(),
+			["the variant tree changed since it was built: extracted/Media_extracted/b.txt is new"])
+
+	def test_the_asset_builds_own_import_does_not_rebuild(self):
+		# laterClientImports.mjs writes the reverse return table beside the
+		# extraction after the variant settled; r201 rebuilt for it.
+		folder = next(iter(variant_settle.ASSET_BUILD_FOLDERS))
+		self.write(self.variant / "extracted" / folder / "table.json", b"{}")
+		self.assertEqual(self.stale(), [])
 
 	def test_a_missing_manifest_rebuilds(self):
 		(self.variant / MANIFEST).unlink()
