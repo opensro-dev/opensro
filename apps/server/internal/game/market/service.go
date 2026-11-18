@@ -16,6 +16,10 @@ Two rules live here rather than in the store:
   - A website gold buy refuses a character that is online ("online"),
     since an online character's gold belongs to its action lane. It never
     waits for a logout.
+  - The game's two doors (GameList, GameBuy) are the mirror image: the
+    in-game window lists from the online character's bag and pays from
+    its gold, on the action lane that owns that record (game/action
+    market.go), which calls them under the division lock.
 
 The seller is never named: a listing shows the item, price and times.
 
@@ -342,6 +346,63 @@ func (s *Service) TakeBack(account string, listing int64) error {
 
 /*
 ================
+Service::GameList
+
+An in-game listing, from the online character's bag. The caller is the
+action lane under the division lock and has judged the slot a bag slot
+and the bag free of a stall or an exchange.
+================
+*/
+func (s *Service) GameList(c *domain.Character, slot int64, currency string, price int64) (publicstats.MarketListingView, error) {
+	listing, err := s.Store.MarketList(domain.MarketListRequest{
+		Division: s.Division, Account: c.AccountID, Character: c, Slot: slot, Currency: currency, Price: price,
+		Admit: func(row domain.InventoryRow) error {
+			if !s.Tradeable(row) {
+				return domain.ErrMarketNotTradeable
+			}
+			return nil
+		},
+		Rules: Rules(),
+	})
+	if err != nil {
+		return publicstats.MarketListingView{}, err
+	}
+	return s.listingView(listing), nil
+}
+
+/*
+================
+Service::GameBuy
+
+An in-game buy: a gold listing is paid from the online character's own
+gold, a Silk listing from its account's wallet. The item lands in the
+buyer's warehouse, as every buy's does. The caller is the action lane
+under the division lock, so the record the store debits is the one the
+lane owns; nothing here waits for a logout.
+================
+*/
+func (s *Service) GameBuy(c *domain.Character, listing, version int64) (publicstats.MarketSaleView, error) {
+	found, err := s.Store.MarketListingByID(listing)
+	if err != nil {
+		return publicstats.MarketSaleView{}, err
+	}
+	if found.Division != s.Division {
+		return publicstats.MarketSaleView{}, domain.ErrMarketNotFound
+	}
+	request := domain.MarketBuyRequest{ListingID: listing, Version: version, BuyerAccount: c.AccountID, Rules: Rules()}
+	if found.Currency == domain.MarketGold {
+		request.Payer = c
+	}
+	sale, err := s.Store.MarketBuy(request)
+	if err != nil {
+		return publicstats.MarketSaleView{}, err
+	}
+	return publicstats.MarketSaleView{ListingID: sale.ListingID, Currency: sale.Currency, Price: sale.Price, Fee: sale.Fee,
+		AtMs: sale.AtMs}, nil
+}
+
+/*
+================
 character
 
 The account's character of that name, or nil.
@@ -368,6 +429,7 @@ func (s *Service) listingView(listing domain.MarketListing) publicstats.MarketLi
 	return publicstats.MarketListingView{
 		ID: listing.ID, Version: listing.Version, Item: s.itemView(listing.Item), Currency: listing.Currency,
 		Price: listing.Price, ListedMs: listing.ListedMs, ExpiresMs: listing.ExpiresMs, State: listing.State,
+		Row: listing.Item,
 	}
 }
 

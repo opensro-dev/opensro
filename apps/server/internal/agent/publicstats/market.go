@@ -122,6 +122,9 @@ type MarketListingView struct {
 	ListedMs  int64      `json:"listedMs"`
 	ExpiresMs int64      `json:"expiresMs"`
 	State     string     `json:"state"`
+	// Row is the listed item itself, for the in-game window's item
+	// preview (game/action market.go); the site never receives it.
+	Row domain.InventoryRow `json:"-"`
 }
 
 // MarketListingsResponse is one search page.
@@ -227,6 +230,19 @@ func marketError(err error) (int, string) {
 		return http.StatusBadRequest, "price"
 	}
 	return http.StatusServiceUnavailable, "unavailable"
+}
+
+/*
+================
+MarketErrorCode
+
+The refusal's code alone, for a front end that is not HTTP: the in-game
+window (game/action market.go) names refusals with the site's codes.
+================
+*/
+func MarketErrorCode(err error) string {
+	_, code := marketError(err)
+	return code
 }
 
 /*

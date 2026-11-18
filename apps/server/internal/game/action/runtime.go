@@ -887,6 +887,10 @@ type Runtime struct {
 	// the /marks/ resolver's index. Nil refuses every crest upload
 	// and every staff crest removal - register items have no source.
 	Crests *crest.Store
+	// Market is the consignment market's desk for the in-game window
+	// (market.go, game/market.Service; port-only, not native). Nil is
+	// SRO_CONSIGNMENT off: every market request answers "unavailable".
+	Market MarketDesk
 	// RecordCrestChange journals each committed crest change or
 	// staff removal (crestregister.go), beside RecordSilkGrant.
 	RecordCrestChange func(CrestChange)

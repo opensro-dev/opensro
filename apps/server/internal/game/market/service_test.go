@@ -269,3 +269,50 @@ func TestGoldBuyNeedsAnOfflineCharacterOfTheAccount(t *testing.T) {
 		t.Fatal("a buy refused at the gate reached the store")
 	}
 }
+
+/*
+================
+TestGameDoorsActForTheOnlineCharacter
+
+The in-game doors are the website's mirror: a listing names the
+character and so comes from its bag, and a gold buy is paid by that
+character although it is online (the action lane owns it), never
+through the offline gate. A Silk buy names no payer; another shard's
+listing is not found.
+================
+*/
+func TestGameDoorsActForTheOnlineCharacter(t *testing.T) {
+	store := &fakeServiceStore{byID: map[int64]domain.MarketListing{
+		1: {ID: 1, Division: "global-official", Currency: domain.MarketGold},
+		2: {ID: 2, Division: "global-official", Currency: domain.MarketSilk},
+		3: {ID: 3, Division: "another-shard", Currency: domain.MarketGold},
+	}, storage: domain.AccountStorage{Rows: []domain.InventoryRow{
+		{Slot: 13, Codename: "ITEM_CH_SWORD_01_A"},
+		{Slot: 14, Codename: "ITEM_CH_SWORD_01_A", ForgeBound: true},
+	}}}
+	s := testService(store)
+	kekw := &domain.Character{ID: 1, AccountID: "alpha", Name: "Kekw"}
+
+	if _, err := s.GameList(kekw, 13, domain.MarketGold, 500); err != nil {
+		t.Fatal(err)
+	}
+	if req := store.listed[0]; req.Character != kekw || req.Account != "alpha" || req.Slot != 13 || req.Price != 500 {
+		t.Fatalf("a game listing = %+v", req)
+	}
+	if _, err := s.GameList(kekw, 14, domain.MarketGold, 500); !errors.Is(err, domain.ErrMarketNotTradeable) {
+		t.Fatalf("a forge-bound listing: %v", err)
+	}
+
+	if _, err := s.GameBuy(kekw, 1, 4); err != nil {
+		t.Fatal(err)
+	}
+	if req := store.bought[0]; req.Payer != kekw || req.BuyerAccount != "alpha" || req.Version != 4 {
+		t.Fatalf("a game gold buy = %+v", req)
+	}
+	if _, err := s.GameBuy(kekw, 2, 1); err != nil || store.bought[1].Payer != nil {
+		t.Fatalf("a game Silk buy = %v, payer %+v", err, store.bought[1].Payer)
+	}
+	if _, err := s.GameBuy(kekw, 3, 1); !errors.Is(err, domain.ErrMarketNotFound) || len(store.bought) != 2 {
+		t.Fatalf("another shard's listing: %v", err)
+	}
+}
