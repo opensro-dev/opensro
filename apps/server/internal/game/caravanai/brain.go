@@ -69,21 +69,24 @@ type ObservedPlayer struct {
 
 // Situation is the snapshot fed into Brain.Decide on an agent's decision tick.
 type Situation struct {
-	AgentName    string
-	Role         AgentRole
-	Personality  Personality
-	RegionID     uint16
-	RegionHeat   int
-	InTown       bool
-	HPPercent    int
-	MPPercent    int
-	CargoStars   uint8
-	CargoStacks  int
-	UnderAttack  bool
-	ParleyReady  bool
-	NearbyAllies int
-	Distress     *DistressCall
-	Players      []ObservedPlayer
+	AgentName          string
+	Role               AgentRole
+	Personality        Personality
+	RegionID           uint16
+	RegionHeat         int
+	InTown             bool
+	HPPercent          int
+	MPPercent          int
+	TransportHPPercent int
+	PotionDepleted     bool
+	Escorted           bool
+	CargoStars         uint8
+	CargoStacks        int
+	UnderAttack        bool
+	ParleyReady        bool
+	NearbyAllies       int
+	Distress           *DistressCall
+	Players            []ObservedPlayer
 }
 
 // Decision is the tactical action, optional target, in-character chat line,
@@ -152,8 +155,12 @@ func (h *HardcodedBrain) Decide(_ context.Context, sit Situation) Decision {
 		}
 	}
 
-	// 2. Emergency HP potion recovery when HP drops to 45% or below.
-	if sit.HPPercent > 0 && sit.HPPercent <= 45 {
+	// 2. Emergency HP potion recovery when actor or transport HP drops to 45% or below.
+	effectiveHP := sit.HPPercent
+	if sit.TransportHPPercent > 0 && (effectiveHP <= 0 || sit.TransportHPPercent < effectiveHP) {
+		effectiveHP = sit.TransportHPPercent
+	}
+	if !sit.PotionDepleted && effectiveHP > 0 && effectiveHP <= 45 {
 		return Decision{
 			Action:   ActionUsePotion,
 			Dialogue: "",
@@ -193,7 +200,7 @@ func (h *HardcodedBrain) Decide(_ context.Context, sit Situation) Decision {
 	// 5. Role-specific hostile engagement outside town.
 	if !sit.InTown {
 		if hostile := findPrimaryHostile(sit.Role, sit.Players); hostile != nil {
-			if sit.Role == RoleTrader && !sit.UnderAttack && sit.Personality == PersonalityCautious {
+			if sit.Role == RoleTrader && ((sit.Escorted && sit.CargoStacks > 0) || (!sit.UnderAttack && sit.Personality == PersonalityCautious)) {
 				return Decision{
 					Action:     ActionContinueRoute,
 					TargetName: hostile.Name,

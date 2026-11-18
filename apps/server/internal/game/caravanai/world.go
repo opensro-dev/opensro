@@ -14,6 +14,7 @@ import (
 	"strings"
 	"unicode"
 
+	"opensro.online/server/internal/domain"
 	worldgeom "opensro.online/server/internal/game/world"
 )
 
@@ -38,6 +39,14 @@ type agentEffects struct {
 	drop, heal int
 	reward     *EscortContract
 	follow     *Waypoint
+	teleport   *Waypoint
+}
+
+func stepDistanceFor(unit *AgentUnit) float32 {
+	if unit == nil || unit.RunSpeed <= 0 {
+		return 5
+	}
+	return max(unit.RunSpeed/10, 5)
 }
 
 /*
@@ -208,6 +217,27 @@ func (r *Runtime) ObserveVitals(division, name string, hp, mp int64, transportLo
 
 /*
 ================
+ObserveTransportVitals
+
+Tracks active transport HP percentage for trader potion sustain.
+================
+*/
+func (r *Runtime) ObserveTransportVitals(division, name string, hp, maxHP int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	unit := r.findAgentLocked(division, name)
+	if unit == nil || unit.RespawnPending {
+		return
+	}
+	if maxHP <= 0 {
+		unit.transportHPPercent = FullHPPercent
+		return
+	}
+	unit.transportHPPercent = HPPercent(hp, maxHP)
+}
+
+/*
+================
 ActorSynchronized
 ================
 */
@@ -227,18 +257,55 @@ Native NPC enemies use their authoritative pose, outside the player-memory list.
 ================
 */
 func (r *Runtime) ApproachWorldThreat(division, name string, target Waypoint) *AgentUnit {
+	unit, _ := r.ApproachWorldThreatAt(division, name, target, 0)
+	return unit
+}
+
+/*
+================
+ApproachWorldThreatAt
+
+Approaches an authoritative NPC threat and reports stalled=true when the agent
+fails to make movement or casting progress within combatStallTimeoutMs so the
+convoy does not remain deadlocked by an unreachable target.
+================
+*/
+func (r *Runtime) ApproachWorldThreatAt(division, name string, target Waypoint, nowMs int64) (*AgentUnit, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	unit := r.findAgentLocked(division, name)
 	if unit == nil || unit.RespawnPending {
-		return nil
+		return nil, false
+	}
+	if r.escortMustRejoinLocked(unit) {
+		unit.combatProgressAtMs = 0
+		snapshot := *unit
+		return &snapshot, false
 	}
 	unit.State = StateInCombat
-	if WaypointDistance(Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}, target) > 12 {
+	casting := r.hooks.Casting != nil && r.hooks.Casting(division, name)
+	before := Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}
+	dist := WaypointDistance(before, target)
+	stopDist := attackStopDistance(unit)
+	if !casting && dist > stopDist {
 		r.moveLocked(unit, target, unit.RunSpeed/10)
 	}
+	after := Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}
+	newDist := WaypointDistance(after, target)
+	if nowMs > 0 {
+		if casting || InCastRange(unit, newDist) || WaypointDistance(before, after) >= 0.5 {
+			unit.combatProgressAtMs = nowMs
+		} else if unit.combatProgressAtMs == 0 {
+			unit.combatProgressAtMs = nowMs
+		} else if nowMs-unit.combatProgressAtMs >= combatStallTimeoutMs {
+			unit.combatProgressAtMs = 0
+			unit.State = StateTraveling
+			snapshot := *unit
+			return &snapshot, true
+		}
+	}
 	snapshot := *unit
-	return &snapshot
+	return &snapshot, false
 }
 
 /*
@@ -256,7 +323,14 @@ func (r *Runtime) waitForEscortLocked(trader *AgentUnit) bool {
 		if guard.Role != RoleHunter || guard.EscortingTrader != trader.Name || guard.RespawnPending || guard.HP <= 0 {
 			continue
 		}
-		if guard.State == StateInCombat || WaypointDistance(Waypoint{RegionID: trader.RegionID, X: trader.X, Z: trader.Z}, Waypoint{RegionID: guard.RegionID, X: guard.X, Z: guard.Z}) > 64 {
+		if guard.State == StateIdleInTown || isTownRegion(guard.RegionID) {
+			continue
+		}
+		dist := WaypointDistance(Waypoint{RegionID: trader.RegionID, X: trader.X, Z: trader.Z}, Waypoint{RegionID: guard.RegionID, X: guard.X, Z: guard.Z})
+		if dist > 600 {
+			continue
+		}
+		if guard.State == StateInCombat || dist > 64 {
 			return true
 		}
 	}
@@ -276,4 +350,212 @@ func (r *Runtime) RequestManaRecovery(division, name string) {
 	if unit := r.findAgentLocked(division, name); unit != nil {
 		unit.needsManaRecovery = true
 	}
+}
+
+/*
+================
+stepEscortFollowLocked
+
+Advances an AI Hunter escort along its Trader's highway gates while exiting
+town or catching up from far behind before closing directly onto the Trader.
+================
+*/
+func (r *Runtime) stepEscortFollowLocked(unit, leader *AgentUnit) *Waypoint {
+	target := Waypoint{RegionID: leader.RegionID, X: leader.X, Y: leader.Y, Z: leader.Z}
+	dist := WaypointDistance(Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}, target)
+	var follow *Waypoint
+	if dist > 320 {
+		follow = &target
+	}
+	if (isTownRegion(unit.RegionID) && !isTownRegion(leader.RegionID)) || (dist > 120 && unit.WaypointIndex < leader.WaypointIndex) {
+		if unit.OriginTown != leader.OriginTown || unit.DestTown != leader.DestTown || len(unit.Route) == 0 {
+			unit.OriginTown, unit.DestTown = leader.OriginTown, leader.DestTown
+			unit.Route = r.route(unit)
+			unit.WaypointIndex = 0
+		}
+		before := Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}
+		for unit.WaypointIndex < len(unit.Route) && unit.WaypointIndex < leader.WaypointIndex {
+			wp := unit.Route[unit.WaypointIndex]
+			if wp.FerryTargetID != 0 || WaypointDistance(before, wp) <= 0.01 {
+				unit.WaypointIndex++
+				continue
+			}
+			if r.moveLocked(unit, wp, stepDistanceFor(unit)) {
+				unit.WaypointIndex++
+			}
+			return follow
+		}
+	}
+	r.moveLocked(unit, target, stepDistanceFor(unit))
+	return follow
+}
+
+func isTownRegion(regionID uint16) bool {
+	if allowed, known := worldgeom.RegionPlayerCombat(regionID); known && !allowed {
+		return true
+	}
+	return regionID == RegionJanganTown || regionID == RegionDonwhangTown || regionID == RegionHotanTown
+}
+
+// FullHPPercent is what a vital reads when its maximum is unknown.
+const FullHPPercent = 100
+
+func percentOf(cur, maxVal int) int {
+	return HPPercent(int64(cur), int64(maxVal))
+}
+
+/*
+==================
+HPPercent
+
+current as a whole percentage of maximum, clamped to [0, 100]; a maximum
+of zero or less reads as full.
+==================
+*/
+func HPPercent(current, maximum int64) int {
+	if maximum <= 0 {
+		return FullHPPercent
+	}
+	pct := (current * 100) / maximum
+	if pct < 0 {
+		return 0
+	}
+	if pct > FullHPPercent {
+		return FullHPPercent
+	}
+	return int(pct)
+}
+
+func countFriendlyHunters(players []ObservedPlayer) int {
+	n := 0
+	for _, p := range players {
+		if p.JobType == domain.JobHunter && p.TrustScore > domain.CaravanVendettaScore {
+			n++
+		}
+	}
+	return n
+}
+
+func defaultPotionCharges(role AgentRole) int {
+	if role == RoleThief {
+		return 3
+	}
+	return 300
+}
+
+func attackStopDistance(unit *AgentUnit) float64 {
+	if unit == nil {
+		return 20
+	}
+	code := strings.ToUpper(unit.WeaponCode)
+	if strings.Contains(code, "_BOW_") || strings.Contains(code, "_CROSSBOW_") {
+		return 140
+	}
+	return 20
+}
+
+/*
+==================
+InCastRange
+
+Reports whether dist is close enough to open an attack or skill cast
+without triggering out-of-range approach restarts.
+==================
+*/
+func InCastRange(unit *AgentUnit, dist float64) bool {
+	if unit == nil {
+		return dist <= 45
+	}
+	code := strings.ToUpper(unit.WeaponCode)
+	if strings.Contains(code, "_BOW_") || strings.Contains(code, "_CROSSBOW_") {
+		return dist <= 175
+	}
+	return dist <= 45
+}
+
+func (r *Runtime) hasLiveEscortLocked(unit *AgentUnit) bool {
+	if unit == nil || unit.Role != RoleTrader {
+		return false
+	}
+	for _, guard := range r.agents[unit.Division] {
+		if guard.Role != RoleHunter || !strings.EqualFold(guard.EscortingTrader, unit.Name) {
+			continue
+		}
+		if !guard.RespawnPending && guard.HP > 0 && isActiveTradeRunState(guard.State) {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Runtime) escortMustRejoinLocked(unit *AgentUnit) bool {
+	if unit == nil || unit.Role != RoleHunter || unit.EscortingTrader == "" {
+		return false
+	}
+	if leader := r.findAgentLocked(unit.Division, unit.EscortingTrader); leader != nil {
+		if leader.RespawnPending || leader.HP <= 0 {
+			return false
+		}
+		if isTownRegion(leader.RegionID) && !isTownRegion(unit.RegionID) {
+			return true
+		}
+		dist := WaypointDistance(
+			Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z},
+			Waypoint{RegionID: leader.RegionID, X: leader.X, Z: leader.Z},
+		)
+		return dist > 280
+	}
+	if r.hooks.Player != nil {
+		if leader, ok := r.hooks.Player(unit.Division, unit.EscortingTrader); ok && leader.HPPercent > 0 && leader.JobType == domain.JobTrader {
+			if isTownRegion(leader.At.RegionID) && !isTownRegion(unit.RegionID) {
+				return true
+			}
+			dist := WaypointDistance(
+				Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z},
+				leader.At,
+			)
+			return dist > HiredEscortRejoinDistance
+		}
+	}
+	return false
+}
+
+/*
+==================
+IsContractPartner
+
+Reports whether playerName and agentName currently share an active escort
+contract in division.
+==================
+*/
+func (r *Runtime) IsContractPartner(division, playerName, agentName string) bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if contract, ok := r.contracts.ActiveContractFor(division, agentName); ok && contract.Active {
+		if (strings.EqualFold(contract.TraderName, playerName) && strings.EqualFold(contract.HunterName, agentName)) ||
+			(strings.EqualFold(contract.TraderName, agentName) && strings.EqualFold(contract.HunterName, playerName)) {
+			return true
+		}
+	}
+	if unit := r.findAgentLocked(division, agentName); unit != nil && unit.Role == RoleHunter && strings.EqualFold(unit.EscortingTrader, playerName) {
+		return true
+	}
+	return false
+}
+
+/*
+==================
+EscortMustRejoin
+
+Reports whether a Hunter escort has drifted out of convoy tether range or
+out of town behind its Trader and must disengage combat to rejoin.
+==================
+*/
+func (r *Runtime) EscortMustRejoin(division, name string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.escortMustRejoinLocked(r.findAgentLocked(division, name))
 }

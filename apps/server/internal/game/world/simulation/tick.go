@@ -873,7 +873,7 @@ func (t *Ticker) routeHookFrames(routedFrames []DivisionFrames, work []divisionT
 					}
 					peer := PlayerObjectID(viewer.CharacterID) == routed.SourceGID || division.state.shownPeers[viewer.SessionID][routed.SourceGID]
 					published := false
-					if routed.SourceGID > domain.GroundItemGIDBase && routed.SourceGID <= domain.GroundItemGIDLimit {
+					if routed.SourceGID < domain.MonsterGIDBase || routed.SourceGID > domain.MonsterGIDLimit {
 						for _, gid := range viewer.PublishedObjects {
 							if gid == routed.SourceGID {
 								published = true

@@ -122,6 +122,58 @@ func (rt *Runtime) SyncServerActor(division string, c *enterworld.Character, at 
 
 /*
 ================
+ServerActorCasting
+================
+*/
+func (rt *Runtime) ServerActorCasting(division, name string) bool {
+	c := rt.findCharacter(division, name)
+	if c == nil || !c.RuntimeOnly {
+		return false
+	}
+	return rt.hasOpenSkillCast(division, c.Name) || rt.PlayerAttackLocked(division, c.Name)
+}
+
+func (rt *Runtime) serverActorCOSMaxVitals(cos *enterworld.CharacterCOS) (maxHP, maxMP uint32) {
+	if cos == nil {
+		return 0, 0
+	}
+	refs, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
+	if !ok {
+		return 0, 0
+	}
+	ref, ok := refs.CharacterRefByCodename(cos.Codename)
+	if !ok {
+		return 0, 0
+	}
+	return ref.MaxHP, ref.MaxMP
+}
+
+/*
+================
+ServerActorTransportVitals
+================
+*/
+func (rt *Runtime) ServerActorTransportVitals(division, name string) (hp, maxHP int64, lost bool) {
+	c := rt.findCharacter(division, name)
+	if c == nil || !c.RuntimeOnly {
+		return 0, 0, false
+	}
+	rt.deps.Read(division, func() {
+		if c.RuntimeTransportGID != 0 && c.ActiveCOS == nil {
+			lost = true
+			return
+		}
+		if c.ActiveCOS != nil {
+			hp = int64(c.ActiveCOS.CurrentHP)
+			mHP, _ := rt.serverActorCOSMaxVitals(c.ActiveCOS)
+			maxHP = int64(mHP)
+		}
+	})
+	return hp, maxHP, lost
+}
+
+/*
+================
 HealServerActor
 ================
 */
@@ -140,6 +192,15 @@ func (rt *Runtime) HealServerActor(division, name string, amount int64) int64 {
 		c.CurrentHP = &current
 		mp := min(enterworld.CurrentMP(c)+enterworld.DerivedMaxMP(c)*35/100, enterworld.DerivedMaxMP(c))
 		c.CurrentMP = &mp
+		if c.ActiveCOS != nil && c.ActiveCOS.CurrentHP > 0 {
+			cosMaxHP, cosMaxMP := rt.serverActorCOSMaxVitals(c.ActiveCOS)
+			if cosMaxHP > 0 {
+				c.ActiveCOS.CurrentHP = min(c.ActiveCOS.CurrentHP+max(cosMaxHP*35/100, 1), cosMaxHP)
+			}
+			if cosMaxMP > 0 {
+				c.ActiveCOS.CurrentMP = min(c.ActiveCOS.CurrentMP+max(cosMaxMP*35/100, 1), cosMaxMP)
+			}
+		}
 	})
 	return current
 }

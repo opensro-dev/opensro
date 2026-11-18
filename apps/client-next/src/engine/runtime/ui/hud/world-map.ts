@@ -567,6 +567,16 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			// quest tracker row widens it to every active quest (#840).
 			const mapMarkers: MapMarker[] = [];
 			const roster = pose ? rosterPositions( pose, game ?? null, next.entities ) : [];
+			const partyGids = new Set( (game?.social?.members ?? []).map( member => member.id ) );
+			const betaRoster: {
+				readonly kind: "beta";
+				readonly name: string;
+				readonly regionId: number;
+				readonly x: number;
+				readonly z: number;
+				readonly size: number;
+			}[] = [];
+			let betaStart = 0;
 			let rosterStart = 0;
 			// Port-only, not native: the unique nest signs, under every native
 			// pass. Only an open map lists them; a closed one demands the one
@@ -604,14 +614,30 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				}
 				// Beta operator roster (port-only, beta-map.ts): every other online
 				// player, drawn before the party pass so party signs stay on top.
+				betaStart = mapMarkers.length;
 				for ( const player of game?.betaPlayers ?? [] ) {
-					if ( player.gid === game?.localGid ) continue;
+					if ( player.gid === game?.localGid || partyGids.has( player.gid ) ) continue;
+					const isAI = player.name.startsWith( "[AI]" );
+					const isTrader = isAI && player.name.includes( "Trader" );
+					const size = isAI ? 12 : 8;
+					const path = isTrader ?
+						ROOT + "interface/minimap/mm_sign_npc.png" :
+						ROOT + "interface/minimap/mm_sign_otherplayer.png";
+					betaRoster.push( {
+						kind: "beta",
+						name: player.name,
+						regionId: player.regionId,
+						x: player.x,
+						z: player.z,
+						size
+					} );
 					mapMarkers.push( {
 						regionId: player.regionId,
 						x: player.x,
 						z: player.z,
 						rotation: 0,
-						path: ROOT + "interface/minimap/mm_sign_otherplayer.png"
+						size,
+						path
 					} );
 				}
 				rosterStart = mapMarkers.length;
@@ -743,20 +769,24 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				null;
 			const fontPath = text.path();
 			if ( !mapOpen && fontPath ) paths.push( fontPath );
+			const allRoster = [
+				...betaRoster.map( ( row, index ) => ({ ...row, markerIndex: betaStart + index }) ),
+				...roster.map( ( row, index ) => ({ ...row, markerIndex: rosterStart + index }) )
+			];
 			const rosterSigns = mapOpen && pose && !caveMap ?
 				worldMapPointMarkers( {
 					page: mapPage,
 					clip: mapClip,
 					pan: mapPan,
 					center: mapCenter ?? mapViewPose( pose ),
-					points: roster,
+					points: allRoster,
 					layout: mapLayout
 				} ) :
 				[];
 			const mapSigns = mapProjection ? [ ...mapProjection.markers ] : [];
 			const hovered = rosterSigns.find( sign => mapRosterId( sign.point ) === hover );
 			const signAt = mapProjection && hovered ?
-				mapProjection.markerRows.indexOf( rosterStart + roster.indexOf( hovered.point ) ) :
+				mapProjection.markerRows.indexOf( hovered.point.markerIndex ) :
 				-1;
 			if ( hovered && signAt >= 0 ) {
 				// Painted right after the member's own sign, so later signs cover it.

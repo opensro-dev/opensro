@@ -37,13 +37,15 @@ Port-only caravan state belongs with its feature wiring.
 ================
 */
 type caravanRuntimeState struct {
-	caravanSkills     map[string][]uint32
-	caravanAttackAt   map[string]int64
-	caravanAgents     *caravanai.Runtime
-	caravanNextStepMs int64
-	caravanActors     []*enterworld.Character
-	caravanMapAtMs    int64
-	caravanRoads      map[string]*caravanRoad
+	caravanSkills         map[string][]uint32
+	caravanAttackAt       map[string]int64
+	caravanAgents         *caravanai.Runtime
+	caravanNextStepMs     int64
+	caravanActors         []*enterworld.Character
+	caravanMapAtMs        int64
+	caravanMoving         map[string]bool
+	caravanRoads          map[string]*caravanRoad
+	caravanIgnoredThreats map[string]map[uint32]int64
 }
 
 const (
@@ -78,8 +80,15 @@ func (game *gameplayPlane) wireCaravanAgents() {
 	}
 	rt := caravanai.NewRuntime(cfg, memStore, caravanai.WorldHooks{
 		Move: game.caravanMove, Player: game.caravanPlayer, Heal: game.items.HealServerActor,
-		Ferry: game.caravanFerry, FollowFerry: game.caravanFollowFerry,
-		OnHireFee: game.caravanHireFee, OnContractReward: game.caravanEscortReward,
+		Casting: game.items.ServerActorCasting,
+		Ferry:   game.caravanFerry, FollowFerry: game.caravanFollowFerry,
+		OnHireFee: game.caravanHireFee,
+		OnContractFormed: func(division, playerName, agentName string) {
+			if game.parties != nil {
+				game.parties.InvitePlayerFromRuntimeActor(division, agentName, playerName)
+			}
+		},
+		OnContractReward: game.caravanEscortReward,
 		OnParleyCargoDrop: func(division, name string, _ uint16, _, _, _ float32, stacks int, _ int64) {
 			frames := game.items.DropServerActorCargo(division, name, stacks)
 			if c := game.deps.CharacterByName(division, name); c != nil {
@@ -110,6 +119,9 @@ func (game *gameplayPlane) wireCaravanAgents() {
 		_ = rt.Close()
 		game.caravanAgents = nil
 		return
+	}
+	if game.parties != nil {
+		game.parties.CanPartyWithRuntimeActor = rt.IsContractPartner
 	}
 	log.Infof(
 		"job: AI caravan & thief agents ON (%s, %s=%s, highway=Jangan-Donwhang-Hotan)",
@@ -220,7 +232,7 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 		}
 		pose := view.World.LiveSpawnAt(nowMs)
 
-		if c.GMPrivilege {
+		if c.GMPrivilege || simulation.BetaPlayerMapEnabled() {
 			adminSessions = append(adminSessions, view.SessionID)
 		}
 		mapPlayers = append(mapPlayers, wire.BetaMapPlayer{
@@ -266,32 +278,53 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 		if i < len(game.caravanActors) {
 			c := game.caravanActors[i]
 			hp, _, mp, _ := game.items.GameplayVitals(game.divisionID, c)
-			lost := false
-			game.deps.Read(game.divisionID, func() { lost = c.RuntimeTransportGID != 0 && c.ActiveCOS == nil })
+			cosHP, cosMaxHP, lost := game.items.ServerActorTransportVitals(game.divisionID, c.Name)
 			game.caravanAgents.ObserveVitals(game.divisionID, c.Name, hp, mp, lost, nowMs)
+			game.caravanAgents.ObserveTransportVitals(game.divisionID, c.Name, cosHP, cosMaxHP)
 		}
-		decision, updated, ok := game.caravanAgents.StepAgent(ctx, game.divisionID, unit.Name, nearby, nowMs)
+		mustRejoin := game.caravanAgents.EscortMustRejoin(game.divisionID, unit.Name)
+		var npcGID uint32
+		var npcAt caravanai.Waypoint
+		if !mustRejoin {
+			npcGID, npcAt = game.caravanNPCThreat(unit, nowMs)
+		}
+		decision, updated, ok := game.caravanAgents.StepAgentWithWorldThreat(ctx, game.divisionID, unit.Name, nearby, npcGID != 0, nowMs)
 		if !ok || updated == nil {
 			updated = unit
 		}
-		npcGID, npcAt := game.caravanNPCThreat(updated, nowMs)
-		if npcGID != 0 {
-			if engaged := game.caravanAgents.ApproachWorldThreat(game.divisionID, updated.Name, npcAt); engaged != nil {
+		casting := game.items.ServerActorCasting(game.divisionID, updated.Name)
+		if npcGID != 0 && !mustRejoin && !casting {
+			engaged, stalled := game.caravanAgents.ApproachWorldThreatAt(game.divisionID, updated.Name, npcAt, nowMs)
+			if engaged != nil {
 				updated = engaged
+			}
+			if stalled {
+				game.ignoreCaravanThreat(updated.Name, npcGID, nowMs+30_000)
+				npcGID = 0
 			}
 		}
 		if i < len(game.caravanActors) {
 			c := game.caravanActors[i]
-			if updated.Role == caravanai.RoleTrader {
+			if updated.Role == caravanai.RoleTrader && !casting {
 				game.publishCaravanAction(c, game.items.ServerActorRide(game.divisionID, c.Name, updated.State != caravanai.StateInCombat && updated.State != caravanai.StateParleying))
 			}
 			game.publishCaravanActor(ticker, views, unit, updated, c, nowMs)
-			if npcGID != 0 {
-				game.publishCaravanAction(c, game.caravanCast(c, npcGID, nowMs))
-			} else if decision.Action == caravanai.ActionAttackTarget {
+			if npcGID != 0 && !mustRejoin {
+				npcDist := caravanai.WaypointDistance(caravanai.Waypoint{RegionID: updated.RegionID, X: updated.X, Z: updated.Z}, npcAt)
+				if caravanai.InCastRange(updated, npcDist) {
+					game.publishCaravanAction(c, game.caravanCast(c, npcGID, nowMs))
+				}
+			} else if decision.Action == caravanai.ActionAttackTarget && !mustRejoin {
 				if target := game.deps.CharacterByName(game.divisionID, decision.TargetName); target != nil {
-					result := game.caravanCast(c, enterworld.ObjectIDForCharacter(target), nowMs)
-					game.publishCaravanAction(c, result)
+					tSpawn := game.items.LiveSpawnFor(game.divisionID, target)
+					targetDist := caravanai.WaypointDistance(
+						caravanai.Waypoint{RegionID: updated.RegionID, X: updated.X, Z: updated.Z},
+						caravanai.Waypoint{RegionID: tSpawn.RegionID, X: float32(tSpawn.X), Z: float32(tSpawn.Z)},
+					)
+					if caravanai.InCastRange(updated, targetDist) {
+						result := game.caravanCast(c, enterworld.ObjectIDForCharacter(target), nowMs)
+						game.publishCaravanAction(c, result)
+					}
 				}
 			}
 		}
@@ -309,26 +342,39 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 	return nil
 }
 
+func formatCaravanTownName(town caravanai.TownID) string {
+	switch town {
+	case caravanai.TownJangan:
+		return "Jangan"
+	case caravanai.TownDonwhang:
+		return "Donwhang"
+	case caravanai.TownHotan:
+		return "Hotan"
+	default:
+		return string(town)
+	}
+}
+
 func formatCaravanMapLabel(u *caravanai.AgentUnit) string {
 	switch u.Role {
 	case caravanai.RoleTrader:
 		if u.State == caravanai.StateIdleInTown || u.State == caravanai.StateRecruiting {
-			return fmt.Sprintf("%s (%d* Town)", u.Name, u.CargoStars)
+			return fmt.Sprintf("%s (%d* %s)", u.Name, u.CargoStars, formatCaravanTownName(u.OriginTown))
 		}
-		return fmt.Sprintf("%s (%d* %s->%s)", u.Name, u.CargoStars, u.OriginTown, u.DestTown)
+		return fmt.Sprintf("%s (%d* %s -> %s)", u.Name, u.CargoStars, formatCaravanTownName(u.OriginTown), formatCaravanTownName(u.DestTown))
 	case caravanai.RoleHunter:
 		if u.State == caravanai.StateReinforcing && u.ReinforcingTrader != "" {
-			return fmt.Sprintf("%s (Aid:%s)", u.Name, u.ReinforcingTrader)
+			return fmt.Sprintf("%s (Aiding %s)", u.Name, u.ReinforcingTrader)
 		}
 		if u.EscortingTrader != "" {
-			return fmt.Sprintf("%s (Escort:%s)", u.Name, u.EscortingTrader)
+			return fmt.Sprintf("%s (Escorting %s)", u.Name, u.EscortingTrader)
 		}
 		if u.AvailableForHire {
-			return fmt.Sprintf("%s (Hire)", u.Name)
+			return fmt.Sprintf("%s (Hireable - %s)", u.Name, formatCaravanTownName(u.OriginTown))
 		}
 		return fmt.Sprintf("%s (Patrol)", u.Name)
 	default:
-		return fmt.Sprintf("%s (Ambush)", u.Name)
+		return fmt.Sprintf("%s (Thief - %s)", u.Name, formatCaravanTownName(u.OriginTown))
 	}
 }
 

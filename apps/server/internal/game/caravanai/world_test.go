@@ -251,3 +251,387 @@ func TestNativeManaRefusalRequestsRecoveryAboveThePercentageThreshold(t *testing
 		t.Fatal("mana recovery request did not clear after healing")
 	}
 }
+
+/*
+================
+TestThiefPotionsAreBoundedAndNeverStalemateIndefinitely
+================
+*/
+func TestThiefPotionsAreBoundedAndNeverStalemateIndefinitely(t *testing.T) {
+	heals := 0
+	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{Heal: func(_, _ string, _ int64) int64 { heals++; return 5000 }})
+	t.Cleanup(func() { _ = rt.Close() })
+	rt.EnsureDivisionRoster("division")
+	rt.ObserveVitals("division", "[AI]Thief_Kael", 4000, 1000, false, 1000)
+	for i := 0; i < 6; i++ {
+		now := int64(2000 + i*2000)
+		rt.ObserveVitals("division", "[AI]Thief_Kael", 4000, 1000, false, now-100)
+		dec, unit, _ := rt.StepAgent(context.Background(), "division", "[AI]Thief_Kael", []ObservedPlayer{
+			{Name: "Guard", JobType: domain.JobHunter, HPPercent: 100, Distance: 100},
+		}, now)
+		if i < 3 && dec.Action != ActionUsePotion {
+			t.Fatalf("step %d: expected potion use while charges remain (%d), got %+v", i, unit.PotionCharges, dec)
+		}
+		if i >= 3 && dec.Action == ActionUsePotion {
+			t.Fatalf("step %d: depleted thief kept healing endlessly (%+v)", i, unit)
+		}
+	}
+	if heals != 3 {
+		t.Fatalf("expected thief potion heals capped at 3, got %d", heals)
+	}
+}
+
+/*
+================
+TestEscortDisengagesDistantStalemateToRejoinTrader
+================
+*/
+func TestEscortDisengagesDistantStalemateToRejoinTrader(t *testing.T) {
+	movedTo := Waypoint{}
+	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+		Move: func(_ string, from, to Waypoint, _ float32) (Waypoint, bool) {
+			movedTo = to
+			return from, false
+		},
+	})
+	t.Cleanup(func() { _ = rt.Close() })
+	rt.EnsureDivisionRoster("division")
+	rt.mu.Lock()
+	mei := rt.findAgentLocked("division", "[AI]Trader_Mei")
+	wei := rt.findAgentLocked("division", "[AI]Hunter_Wei")
+	mei.RegionID, mei.X, mei.Z = TownWaypoint(TownDonwhang).RegionID, 400, 1500
+	mei.State = StateTraveling
+	wei.RegionID, wei.X, wei.Z = 25239, 1000, 500
+	wei.State = StateInCombat
+	rt.mu.Unlock()
+
+	dec, updated, _ := rt.StepAgent(context.Background(), "division", "[AI]Hunter_Wei", []ObservedPlayer{
+		{Name: "Bandit", JobType: domain.JobThief, HPPercent: 80, Distance: 25},
+	}, 2000)
+	if dec.Action != ActionContinueRoute || updated.State != StateTraveling {
+		t.Fatalf("expected distant escort to disengage combat and rejoin trader, got dec=%+v state=%s", dec, updated.State)
+	}
+	if !rt.EscortMustRejoin("division", "[AI]Hunter_Wei") {
+		t.Fatal("EscortMustRejoin did not report distant trader gap")
+	}
+	if movedTo.RegionID != mei.RegionID || movedTo.X != mei.X {
+		t.Fatalf("expected escort to move toward Mei, got %+v", movedTo)
+	}
+}
+
+/*
+================
+TestDedicatedEscortRespawnsWithLeaderAndReattachesAtDeparture
+================
+*/
+func TestDedicatedEscortRespawnsWithLeaderAndReattachesAtDeparture(t *testing.T) {
+	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{})
+	t.Cleanup(func() { _ = rt.Close() })
+	rt.EnsureDivisionRoster("division")
+
+	_, defeated, _ := rt.RecordPlayerAttack("division", "[AI]Hunter_Wei", "KaelPlayer", 50000, 1000)
+	if !defeated {
+		t.Fatal("expected Wei to be defeated")
+	}
+	rt.mu.Lock()
+	wei := rt.findAgentLocked("division", "[AI]Hunter_Wei")
+	mei := rt.findAgentLocked("division", "[AI]Trader_Mei")
+	if wei.EscortingTrader != mei.Name || wei.OriginTown != mei.OriginTown {
+		t.Fatalf("expected dedicated escort to stay paired at Mei's origin %s, got escort=%q town=%s", mei.OriginTown, wei.EscortingTrader, wei.OriginTown)
+	}
+	mei.State = StateIdleInTown
+	wei.State = StateIdleInTown
+	rt.dispatchTraderLocked(mei, 2000)
+	if wei.State != StateTraveling || wei.EscortingTrader != mei.Name || wei.PotionCharges <= 0 {
+		t.Fatalf("expected Wei to dispatch with Mei, got state=%s escort=%q charges=%d", wei.State, wei.EscortingTrader, wei.PotionCharges)
+	}
+	rt.mu.Unlock()
+}
+
+/*
+================
+TestEscortedTraderStaysMountedAndHealsTransportAtLowHP
+================
+*/
+func TestEscortedTraderStaysMountedAndHealsTransportAtLowHP(t *testing.T) {
+	heals := 0
+	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{Heal: func(_, _ string, _ int64) int64 { heals++; return 21908 }})
+	t.Cleanup(func() { _ = rt.Close() })
+	rt.EnsureDivisionRoster("division")
+	rt.mu.Lock()
+	mei := rt.findAgentLocked("division", "[AI]Trader_Mei")
+	wei := rt.findAgentLocked("division", "[AI]Hunter_Wei")
+	mei.RegionID, mei.X, mei.Z = 25239, 1000, 500
+	mei.State = StateTraveling
+	wei.RegionID, wei.X, wei.Z = 25239, 1005, 500
+	wei.State = StateTraveling
+	rt.mu.Unlock()
+
+	// Escorted greedy trader keeps riding along route when a hostile is within 320u.
+	dec, unit, _ := rt.StepAgent(context.Background(), "division", "[AI]Trader_Mei", []ObservedPlayer{
+		{Name: "Bandit", JobType: domain.JobThief, HPPercent: 100, Distance: 80},
+	}, 2000)
+	if dec.Action != ActionContinueRoute || unit.State == StateInCombat {
+		t.Fatalf("expected escorted trader to remain mounted on route, got dec=%+v state=%s", dec, unit.State)
+	}
+
+	// Transport drops to 30% HP while rider stays 100% HP -> triggers potion heal.
+	rt.ObserveTransportVitals("division", "[AI]Trader_Mei", 10000, 35500)
+	dec, _, _ = rt.StepAgent(context.Background(), "division", "[AI]Trader_Mei", nil, 3000)
+	if dec.Action != ActionUsePotion || heals != 1 {
+		t.Fatalf("expected trader to heal damaged transport, got dec=%+v heals=%d", dec, heals)
+	}
+}
+
+/*
+================
+TestBowAgentStopsAtRangedDistanceAndHoldsWhileCasting
+================
+*/
+func TestBowAgentStopsAtRangedDistanceAndHoldsWhileCasting(t *testing.T) {
+	moves := 0
+	casting := false
+	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+		Move:    func(_ string, from, _ Waypoint, _ float32) (Waypoint, bool) { moves++; return from, false },
+		Casting: func(_, _ string) bool { return casting },
+	})
+	t.Cleanup(func() { _ = rt.Close() })
+	rt.EnsureDivisionRoster("division")
+	rt.mu.Lock()
+	kael := rt.findAgentLocked("division", "[AI]Thief_Kael")
+	kael.RegionID, kael.X, kael.Z = 25239, 1000, 500
+	kael.State = StateInCombat
+	rt.mu.Unlock()
+
+	// Within bow engagement stop range (100 <= 140) -> no approach toward melee.
+	rt.ApproachWorldThreat("division", "[AI]Thief_Kael", Waypoint{RegionID: 25239, X: 1100, Z: 500})
+	if moves != 0 {
+		t.Fatalf("bow thief walked into melee despite being inside bow range (moves=%d)", moves)
+	}
+
+	// Out of bow stop range (220 > 140), but mid-cast -> must stay planted.
+	casting = true
+	rt.ApproachWorldThreat("division", "[AI]Thief_Kael", Waypoint{RegionID: 25239, X: 1220, Z: 500})
+	if moves != 0 {
+		t.Fatalf("bow thief moved mid-cast (moves=%d)", moves)
+	}
+
+	// Not casting and outside 140 -> approaches cleanly.
+	casting = false
+	rt.ApproachWorldThreat("division", "[AI]Thief_Kael", Waypoint{RegionID: 25239, X: 1220, Z: 500})
+	if moves != 1 {
+		t.Fatalf("expected approach when out of bow range and idle, got moves=%d", moves)
+	}
+}
+
+/*
+================
+TestWorldThreatSuppressesCompetingPlayerChase
+================
+*/
+func TestWorldThreatSuppressesCompetingPlayerChase(t *testing.T) {
+	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+		Player: func(_, _ string) (PlayerPosition, bool) {
+			return PlayerPosition{
+				ObservedPlayer: ObservedPlayer{Name: "[AI]Thief_Kael", JobType: domain.JobThief, HPPercent: 100, Distance: 80},
+				At:             Waypoint{RegionID: 26008, X: 520, Z: 1100},
+			}, true
+		},
+	})
+	t.Cleanup(func() { _ = rt.Close() })
+	rt.EnsureDivisionRoster("division")
+	rt.mu.Lock()
+	wei := rt.findAgentLocked("division", "[AI]Hunter_Wei")
+	wei.RegionID, wei.X, wei.Z = 26008, 600, 1170
+	wei.State = StateInCombat
+	rt.mu.Unlock()
+
+	_, _, ok := rt.StepAgentWithWorldThreat(context.Background(), "division", "[AI]Hunter_Wei", []ObservedPlayer{
+		{Name: "[AI]Thief_Kael", JobType: domain.JobThief, HPPercent: 100, Distance: 105},
+	}, true, 2000)
+	if !ok {
+		t.Fatal("StepAgentWithWorldThreat failed")
+	}
+	after := rt.ApproachWorldThreat("division", "[AI]Hunter_Wei", Waypoint{RegionID: 26008, X: 760, Z: 1320})
+	if after.X <= 600 || after.Z <= 1170 {
+		t.Fatalf("expected Wei to advance northeast toward NPC threat without tug-of-war, got (%.1f, %.1f)", after.X, after.Z)
+	}
+}
+
+/*
+================
+TestHunterManaRecoveryPreservesBattleHPPotions
+================
+*/
+func TestHunterManaRecoveryPreservesBattleHPPotions(t *testing.T) {
+	heals := 0
+	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{Heal: func(_, _ string, _ int64) int64 { heals++; return 14500 }})
+	t.Cleanup(func() { _ = rt.Close() })
+	rt.EnsureDivisionRoster("division")
+	guard := rt.findAgentLocked("division", "[AI]Hunter_Wei")
+	startCharges := guard.PotionCharges
+
+	// Full HP with exhausted MP recovers mana without consuming battle HP charges.
+	rt.ObserveVitals("division", guard.Name, int64(guard.MaxHP), 0, false, 1000)
+	dec, updated, _ := rt.StepAgent(context.Background(), "division", guard.Name, nil, 2000)
+	if dec.Action != ActionUsePotion || heals != 1 {
+		t.Fatalf("expected MP recovery potion use, got dec=%+v heals=%d", dec, heals)
+	}
+	if updated.PotionCharges != startCharges {
+		t.Fatalf("mana recovery consumed HP battle potion charge (%d -> %d)", startCharges, updated.PotionCharges)
+	}
+
+	// Low HP (<=45%) consumes a battle HP charge.
+	rt.ObserveVitals("division", guard.Name, int64(guard.MaxHP/4), int64(guard.MaxMP), false, 3000)
+	dec, updated, _ = rt.StepAgent(context.Background(), "division", guard.Name, nil, 4000)
+	if dec.Action != ActionUsePotion || updated.PotionCharges != startCharges-1 {
+		t.Fatalf("expected low-HP heal to consume 1 potion charge, got dec=%+v charges=%d", dec, updated.PotionCharges)
+	}
+}
+
+func TestUnreachableWorldThreatDisengagesAfterCombatStall(t *testing.T) {
+	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+		Move: func(_ string, from, _ Waypoint, _ float32) (Waypoint, bool) {
+			// Simulate a nav-blocked cliff/wall preventing any approach progress.
+			return from, false
+		},
+	})
+	t.Cleanup(func() { _ = rt.Close() })
+	rt.EnsureDivisionRoster("division")
+	guard := rt.findAgentLocked("division", "[AI]Hunter_Wei")
+	leader := rt.findAgentLocked("division", "[AI]Trader_Mei")
+	guard.RegionID, guard.X, guard.Z, guard.State = 25238, 1157, 470, StateTraveling
+	leader.RegionID, leader.X, leader.Z, leader.State = 25238, 1160, 460, StateTraveling
+	threat := Waypoint{RegionID: 25238, X: 1123, Z: 590}
+
+	snap, stalled := rt.ApproachWorldThreatAt("division", guard.Name, threat, 1000)
+	if stalled || snap.State != StateInCombat {
+		t.Fatalf("expected initial engagement without stall, got state=%s stalled=%v", snap.State, stalled)
+	}
+	snap, stalled = rt.ApproachWorldThreatAt("division", guard.Name, threat, 4000)
+	if stalled || snap.State != StateInCombat {
+		t.Fatalf("expected combat pursuit before timeout, got state=%s stalled=%v", snap.State, stalled)
+	}
+	snap, stalled = rt.ApproachWorldThreatAt("division", guard.Name, threat, 6100)
+	if !stalled || snap.State != StateTraveling {
+		t.Fatalf("expected unreachable threat to stall and resume StateTraveling, got state=%s stalled=%v", snap.State, stalled)
+	}
+	if rt.waitForEscortLocked(leader) {
+		t.Fatalf("expected trader no longer held in town/route once escort disengaged stalled threat")
+	}
+}
+
+/*
+================
+TestHiredEscortTeleportsBeyond500AndFiresContractPartyHook
+================
+*/
+func TestHiredEscortTeleportsBeyond500AndFiresContractPartyHook(t *testing.T) {
+	jangan := TownWaypoint(TownJangan)
+	playerAt := jangan
+	var formed []string
+	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+		OnHireFee: func(_, _ string, _ int64) bool { return true },
+		OnContractFormed: func(division, playerName, agentName string) {
+			formed = append(formed, division+":"+playerName+":"+agentName)
+		},
+		Player: func(_, name string) (PlayerPosition, bool) {
+			if name != "PlayerTrader" {
+				return PlayerPosition{}, false
+			}
+			return PlayerPosition{
+				ObservedPlayer: ObservedPlayer{Name: name, JobType: domain.JobTrader, HPPercent: 100},
+				At:             playerAt,
+			}, true
+		},
+	})
+	t.Cleanup(func() { _ = rt.Close() })
+	rt.EnsureDivisionRoster("division")
+	rt.mu.Lock()
+	kwan := rt.findAgentLocked("division", "[AI]Hunter_Kwan")
+	kwan.RegionID, kwan.X, kwan.Y, kwan.Z = jangan.RegionID, jangan.X, jangan.Y, jangan.Z
+	kwan.RunSpeed = 75
+	rt.mu.Unlock()
+
+	reply, handled := rt.HandlePlayerCommand("division", "PlayerTrader", domain.JobTrader, "!hire [AI]Hunter_Kwan", 1000)
+	if !handled || reply == "" {
+		t.Fatalf("expected !hire to be handled, got handled=%v reply=%q", handled, reply)
+	}
+	if len(formed) != 1 || formed[0] != "division:PlayerTrader:[AI]Hunter_Kwan" {
+		t.Fatalf("expected OnContractFormed callback, got %v", formed)
+	}
+	if !rt.IsContractPartner("division", "PlayerTrader", "[AI]Hunter_Kwan") {
+		t.Fatal("expected hiring trader to be recognized as contract partner")
+	}
+	if rt.IsContractPartner("division", "OtherTrader", "[AI]Hunter_Kwan") {
+		t.Fatal("non-hirer must not be recognized as contract partner")
+	}
+
+	// Move player outside town and >250u ahead -> hunter must disengage combat to rejoin.
+	playerAt = Waypoint{RegionID: 25001, X: 500, Z: 500}
+	rt.mu.Lock()
+	kwan = rt.findAgentLocked("division", "[AI]Hunter_Kwan")
+	kwan.RegionID, kwan.X, kwan.Z = 25001, 200, 500
+	kwan.State = StateInCombat
+	rt.mu.Unlock()
+	if !rt.EscortMustRejoin("division", "[AI]Hunter_Kwan") {
+		t.Fatal("expected hired hunter >250u behind player to disengage combat to rejoin")
+	}
+
+	// Move player >500u (>100m) ahead -> hunter teleports directly to the hiring player.
+	playerAt = Waypoint{RegionID: 25001, X: 950, Z: 700}
+	_, updated, ok := rt.StepAgentWithWorldThreat(context.Background(), "division", "[AI]Hunter_Kwan", nil, false, 2000)
+	if !ok || updated == nil {
+		t.Fatal("StepAgentWithWorldThreat failed")
+	}
+	if updated.RegionID != playerAt.RegionID || updated.X != playerAt.X || updated.Z != playerAt.Z {
+		t.Fatalf("expected hired hunter >500u behind to teleport to (region=%d, x=%.1f, z=%.1f), got (region=%d, x=%.1f, z=%.1f)",
+			playerAt.RegionID, playerAt.X, playerAt.Z, updated.RegionID, updated.X, updated.Z)
+	}
+}
+
+/*
+================
+TestRespawnedEscortFollowsHighwayGateOutOfTown
+================
+*/
+func TestRespawnedEscortFollowsHighwayGateOutOfTown(t *testing.T) {
+	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{})
+	t.Cleanup(func() { _ = rt.Close() })
+	rt.EnsureDivisionRoster("division")
+	rt.mu.Lock()
+	mei := rt.findAgentLocked("division", "[AI]Trader_Mei")
+	wei := rt.findAgentLocked("division", "[AI]Hunter_Wei")
+	mei.OriginTown, mei.DestTown = TownDonwhang, TownHotan
+	mei.Route = rt.route(mei)
+	mei.WaypointIndex = 2
+	mei.RegionID, mei.X, mei.Z = mei.Route[2].RegionID, mei.Route[2].X, mei.Route[2].Z
+	mei.State = StateTraveling
+
+	wei.OriginTown, wei.DestTown = TownDonwhang, TownHotan
+	wei.Route = rt.route(wei)
+	wei.WaypointIndex = 0
+	dh := TownWaypoint(TownDonwhang)
+	wei.RegionID, wei.X, wei.Z = dh.RegionID, dh.X, dh.Z
+	wei.State = StateTraveling
+	rt.mu.Unlock()
+
+	gate := mei.Route[1]
+	beforeGate := WaypointDistance(Waypoint{RegionID: wei.RegionID, X: wei.X, Z: wei.Z}, gate)
+	beforeLeader := WaypointDistance(Waypoint{RegionID: wei.RegionID, X: wei.X, Z: wei.Z}, Waypoint{RegionID: mei.RegionID, X: mei.X, Z: mei.Z})
+	_, updated, ok := rt.StepAgentWithWorldThreat(context.Background(), "division", "[AI]Hunter_Wei", nil, false, 2000)
+	if !ok || updated == nil {
+		t.Fatal("StepAgentWithWorldThreat failed")
+	}
+	afterGate := WaypointDistance(Waypoint{RegionID: updated.RegionID, X: updated.X, Z: updated.Z}, gate)
+	afterLeader := WaypointDistance(Waypoint{RegionID: updated.RegionID, X: updated.X, Z: updated.Z}, Waypoint{RegionID: mei.RegionID, X: mei.X, Z: mei.Z})
+	if afterGate >= beforeGate {
+		t.Fatalf("expected Wei in town to move toward highway gate Route[1], before=%.2f after=%.2f", beforeGate, afterGate)
+	}
+	// Route[1] leads out of town even when Mei is in a different direction than the gate.
+	_ = beforeLeader
+	_ = afterLeader
+	if WaypointDistance(Waypoint{RegionID: dh.RegionID, X: dh.X, Z: dh.Z}, Waypoint{RegionID: updated.RegionID, X: updated.X, Z: updated.Z}) == 0 {
+		t.Fatal("expected Wei to advance toward highway gate")
+	}
+}

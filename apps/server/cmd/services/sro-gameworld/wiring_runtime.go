@@ -181,9 +181,11 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		}
 	}
 	log.Infof("simulation: a tick stuck %v dumps to %s and exits for restart (%s, 0 = never)", ticker.StallExit, ticker.StallDumpDir, simulation.EnvTickStallExit)
-	ticker.PlayerMap = simulation.BetaPlayerMapEnabled()
+	ticker.PlayerMap = simulation.BetaPlayerMapEnabled() && (game.caravanAgents == nil || !game.caravanAgents.Enabled())
 	if ticker.PlayerMap {
 		log.Infof("simulation: beta world map roster ON (%s)", simulation.EnvBetaPlayerMap)
+	} else if simulation.BetaPlayerMapEnabled() && game.caravanAgents != nil && game.caravanAgents.Enabled() {
+		log.Infof("simulation: beta world map roster ON via AI caravan tick (%s)", simulation.EnvBetaPlayerMap)
 	}
 	if game.deps.MonsterState != nil {
 		navigation := &simulation.NavigationMetrics{}

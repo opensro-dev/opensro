@@ -8,11 +8,13 @@ wiring_caravanai_test.go - shipped caravan actors and feature boundaries
 package main
 
 import (
+	"context"
+	"encoding/binary"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
-	"context"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/action"
@@ -20,11 +22,13 @@ import (
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	livepresence "opensro.online/server/internal/game/social"
+	"opensro.online/server/internal/game/social/party"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"time"
+	"opensro.online/server/internal/transport"
 )
 
 /*
@@ -288,4 +292,283 @@ func TestCaravanShippedActors(t *testing.T) {
 		t.Fatal("defeated caravan did not recover its actor and loaded transport")
 	}
 
+	// Regression: HealServerActor heals active transport HP alongside actor vitals, and
+	// caravanCast does not interrupt an open skill cast when ServerActorCasting is true.
+	cosHPBefore, cosMaxHP, cosLost := game.items.ServerActorTransportVitals(game.divisionID, trader.Name)
+	if cosLost || cosMaxHP == 0 || cosHPBefore == 0 {
+		t.Fatalf("unexpected transport vitals state: hp=%d max=%d lost=%v", cosHPBefore, cosMaxHP, cosLost)
+	}
+	deps.Mutate(trader, "damage transport", func() {
+		trader.ActiveCOS.CurrentHP = 100
+	})
+	game.items.HealServerActor(game.divisionID, trader.Name, 500)
+	cosHPAfter, _, _ := game.items.ServerActorTransportVitals(game.divisionID, trader.Name)
+	if cosHPAfter <= 100 {
+		t.Fatalf("expected HealServerActor to recover transport HP from 100, got %d", cosHPAfter)
+	}
+	if castRes := game.caravanCast(thief, enterworld.ObjectIDForCharacter(trader), now.Add(time.Minute).UnixMilli()); len(castRes.Frames) == 0 && len(castRes.Broadcast) == 0 {
+		t.Fatal("expected initial thief bow cast to emit frames")
+	}
+	if game.items.ServerActorCasting(game.divisionID, thief.Name) {
+		suppressed := game.caravanCast(thief, enterworld.ObjectIDForCharacter(trader), now.Add(time.Minute).UnixMilli())
+		if len(suppressed.Frames) != 0 || len(suppressed.Broadcast) != 0 {
+			t.Fatalf("expected overlapping caravanCast to suppress mid-cast restart, got frames=%d broadcast=%d", len(suppressed.Frames), len(suppressed.Broadcast))
+		}
+	}
+}
+
+/*
+================
+TestCaravanPartyAndMovementPolish
+================
+*/
+func TestCaravanPartyAndMovementPolish(t *testing.T) {
+	paths := gamedatatest.Paths(t)
+	authority, err := store.Open(t.TempDir(), store.Options{DefaultSkills: enterworld.DefaultSkillSeeder(enterworld.NewTextdataSkills(paths.TextdataDir))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(authority.Close)
+	roster, err := enterworld.LoadRoster(filepath.Join(paths.CharacterAuthorityDir, "catalog.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps := &enterworld.Deps{
+		Roster:            roster,
+		Characters:        authority.Characters(),
+		Items:             enterworld.NewTextdataItems(paths.TextdataDir),
+		Levels:            enterworld.NewTextdataLevels(paths.TextdataDir),
+		Skills:            enterworld.NewTextdataSkills(paths.TextdataDir),
+		MagicOptions:      enterworld.NewTextdataMagicOptions(paths.TextdataDir),
+		EquipItemsEnabled: true,
+	}
+	deps.ResolveDivisionID = enterworld.DevResolveDivisionIDFromCatalog(deps.Characters)
+	deps.MutateCharacter = authority.MutateCharacter
+	deps.UpdateCharacter = authority.UpdateCharacter
+	deps.MutateCharacters = authority.MutateCharacters
+	deps.UpdateCharacters = authority.UpdateCharacters
+	deps.ReadCharacter = func(_ string, read func()) { authority.ReadState(read) }
+
+	jangan := caravanai.TownWaypoint(caravanai.TownJangan)
+	ptrSpawn := func(r uint16, x, y, z float64) *domain.WorldSpawn {
+		ri := int64(r)
+		return &domain.WorldSpawn{RegionID: &ri, X: &x, Y: &y, Z: &z}
+	}
+	spawn := ptrSpawn(jangan.RegionID, float64(jangan.X), float64(jangan.Y), float64(jangan.Z))
+	mkPlayer := func(account, name string) *enterworld.Character {
+		lvl := int64(90)
+		str := int64(300)
+		intel := int64(300)
+		hp := int64(20000)
+		gold := int64(50000)
+		c := &enterworld.Character{
+			Name:          name,
+			ModelCodename: "CHAR_CH_MAN_ADVENTURER",
+			RaceIndex:     new(int64),
+			Gender:        new(int64),
+			Level:         &lvl,
+			MaxLevel:      &lvl,
+			Strength:      &str,
+			Intellect:     &intel,
+			CurrentHP:     &hp,
+			CurrentMP:     &hp,
+			Gold:          &gold,
+			World:         &domain.CharacterWorld{Spawn: spawn, SpawnSet: true},
+			MissionInventory: []domain.InventoryRow{
+				{Slot: enterworld.JobSuitSlot, RefObjID: 8986, Codename: "ITEM_CH_M_TRADE_TRADER_04", TypeFlags: wire.PackTypeFlags(3, 1, 7, domain.JobTrader), StackCount: 1},
+			},
+			Job: domain.CharacterJob{Type: domain.JobTrader, Grade: 1, Alias: name},
+		}
+		if err := authority.CreateCharacter(wiringPublicationDivision, account, c); err != nil {
+			t.Fatalf("CreateCharacter(%s): %v", name, err)
+		}
+		return deps.CharacterByName(wiringPublicationDivision, name)
+	}
+	hirer := mkPlayer("acct-hirer", "PlayerTrader")
+	other := mkPlayer("acct-other", "OtherTrader")
+
+	server := wiringPublicationServer(t)
+	pres := livepresence.NewDirectory(server.Hub)
+	items := action.NewRuntime(deps, nil)
+	items.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(nil, nil))
+	items.NpcRoster = simulation.LoadNpcWorldRoster(paths.TextdataDir)
+	if err := items.ConfigurePortals(paths.TextdataDir); err != nil {
+		t.Fatal(err)
+	}
+	parties := party.NewRuntime(deps, pres)
+	parties.UseMemberVitals(items.GameplayVitals)
+	parties.UseLivePose(items.LiveSpawnFor)
+	parties.Register(server.Hub)
+
+	game := &gameplayPlane{
+		divisionID: wiringPublicationDivision,
+		deps:       deps,
+		hub:        server.Hub,
+		presence:   pres,
+		items:      items,
+		parties:    parties,
+	}
+	game.water = movement.NewAuthorityValidator(paths.WorldAuthorityDir)
+	game.movement = movement.NewRuntime(deps, items.Worlds)
+	game.movement.Nav = game.water
+
+	cfg := caravanai.Config{Enabled: true}
+	if err := game.configureCaravanHighway(&cfg); err != nil {
+		t.Fatal(err)
+	}
+	rt := caravanai.NewRuntime(cfg, nil, caravanai.WorldHooks{
+		Move:      game.caravanMove,
+		Ferry:     game.caravanFerry,
+		Player:    game.caravanPlayer,
+		OnHireFee: game.caravanHireFee,
+		OnContractFormed: func(division, playerName, agentName string) {
+			game.parties.InvitePlayerFromRuntimeActor(division, agentName, playerName)
+		},
+	})
+	t.Cleanup(func() { _ = rt.Close() })
+	game.caravanAgents = rt
+	rt.EnsureDivisionRoster(wiringPublicationDivision)
+	if err := game.initCaravanActors(); err != nil {
+		t.Fatal(err)
+	}
+	parties.CanPartyWithRuntimeActor = rt.IsContractPartner
+
+	var kwanActor *enterworld.Character
+	for _, a := range game.caravanActors {
+		if a.Name == "[AI]Hunter_Kwan" {
+			kwanActor = a
+			break
+		}
+	}
+	if kwanActor == nil {
+		t.Fatal("missing [AI]Hunter_Kwan actor")
+	}
+	if speed := game.caravanRunSpeed(kwanActor); speed != 75 {
+		t.Fatalf("caravanRunSpeed(JobHunter) = %v, want 75", speed)
+	}
+	if label := formatCaravanMapLabel(&caravanai.AgentUnit{
+		Name: "[AI]Trader_Jin", Role: caravanai.RoleTrader, State: caravanai.StateTraveling,
+		CargoStars: 5, OriginTown: caravanai.TownJangan, DestTown: caravanai.TownDonwhang,
+	}); label != "[AI]Trader_Jin (5* Jangan -> Donwhang)" {
+		t.Fatalf("formatCaravanMapLabel = %q", label)
+	}
+
+	// Place Kwan right beside the players in Jangan and admit him.
+	rt.StageRecruiters(wiringPublicationDivision, caravanai.TownJangan, jangan)
+	var kwanSnap caravanai.AgentUnit
+	for _, u := range rt.EnsureDivisionRoster(wiringPublicationDivision) {
+		if u.Name == "[AI]Hunter_Kwan" {
+			kwanSnap = *u
+			break
+		}
+	}
+	kwanAt := simulation.Spawn{RegionID: kwanSnap.RegionID, X: float64(kwanSnap.X), Y: float64(kwanSnap.Y), Z: float64(kwanSnap.Z)}
+	items.SyncServerActor(wiringPublicationDivision, kwanActor, kwanAt, false, 0, false)
+	if err := items.AdmitServerActor(wiringPublicationDivision, kwanActor.Name); err != nil {
+		t.Fatal(err)
+	}
+	deps.MutateCharacter(hirer, "stage hirer", func() {
+		hirer.World.Spawn = ptrSpawn(kwanAt.RegionID, kwanAt.X, kwanAt.Y, kwanAt.Z)
+		gold := int64(50000)
+		hirer.Gold = &gold
+		hirer.MissionInventory = []domain.InventoryRow{
+			{Slot: enterworld.JobSuitSlot, RefObjID: 8986, Codename: "ITEM_CH_M_TRADE_TRADER_04", TypeFlags: wire.PackTypeFlags(3, 1, 7, domain.JobTrader), StackCount: 1},
+		}
+	})
+	deps.MutateCharacter(other, "stage other", func() {
+		other.World.Spawn = ptrSpawn(kwanAt.RegionID, kwanAt.X, kwanAt.Y, kwanAt.Z)
+		other.MissionInventory = []domain.InventoryRow{
+			{Slot: enterworld.JobSuitSlot, RefObjID: 8986, Codename: "ITEM_CH_M_TRADE_TRADER_04", TypeFlags: wire.PackTypeFlags(3, 1, 7, domain.JobTrader), StackCount: 1},
+		}
+	})
+
+	bindSession := func(account string, c *enterworld.Character) (*transport.Session, *wiringPublicationConn) {
+		conn := &wiringPublicationConn{
+			in: make(chan transport.Frame, 8), out: make(chan transport.Frame, 64), closed: make(chan struct{}),
+		}
+		conn.in <- transport.Frame{Opcode: transport.OpHello, Payload: transport.EncodeHello(transport.Hello{AdmissionToken: []byte(account)})}
+		go server.Hub.AcceptConn(conn)
+		t.Cleanup(func() { _ = conn.Close("test complete") })
+		var welcome transport.Frame
+		select {
+		case welcome = <-conn.out:
+		case <-time.After(wiringPublicationTimeout):
+			t.Fatal("missing welcome")
+		}
+		w, err := transport.DecodeWelcome(welcome.Payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sess, ok := server.Hub.Session(w.SessionID)
+		if !ok {
+			t.Fatal("missing session")
+		}
+		sess.BindCharacter(wiringPublicationDivision, c.Name, uint32(c.ID))
+		if !sess.TryMarkWorldReady() {
+			t.Fatal("world ready failed")
+		}
+		server.Hub.BindExclusive(wiringPublicationDivision+":"+strings.ToLower(c.Name), sess)
+		parties.WorldBound(sess, wiringPublicationDivision, c)
+		return sess, conn
+	}
+	_, hirerConn := bindSession("acct-hirer", hirer)
+	_, otherConn := bindSession("acct-other", other)
+
+	waitForOpcode := func(conn *wiringPublicationConn, opcode uint16) transport.Frame {
+		t.Helper()
+		deadline := time.After(2 * time.Second)
+		for {
+			select {
+			case f := <-conn.out:
+				if f.Opcode == opcode {
+					return f
+				}
+			case <-deadline:
+				t.Fatalf("timed out waiting for opcode 0x%04X", opcode)
+			}
+		}
+	}
+
+	kwanGID := enterworld.ObjectIDForCharacter(kwanActor)
+	invitePayload := make([]byte, 5)
+	binary.LittleEndian.PutUint32(invitePayload[0:4], kwanGID)
+	invitePayload[4] = party.PartyOptionExpShare | party.PartyOptionItemShare | party.PartyOptionJoinAnyone
+
+	// Non-hirer invite must be refused without forming a party.
+	otherConn.in <- transport.Frame{Opcode: party.OpPartyInviteRequest, Payload: invitePayload}
+	ack := waitForOpcode(otherConn, party.OpCreatePartyAck)
+	if len(ack.Payload) != 2 || ack.Payload[0] != 2 || ack.Payload[1] != 0x0c {
+		t.Fatalf("expected non-hirer 0x70D5 refusal {2, 0x0c}, got payload=% X", ack.Payload)
+	}
+
+	// !hire auto-invites the hiring player (0x3393 prompt) and accepting forms the party.
+	reply, handled := rt.HandlePlayerCommand(wiringPublicationDivision, hirer.Name, domain.JobTrader, "!hire [AI]Hunter_Kwan", 1000)
+	if !handled || !strings.Contains(reply, "guard your caravan") {
+		t.Fatalf("!hire unexpected reply=%q handled=%v", reply, handled)
+	}
+	_ = waitForOpcode(hirerConn, party.OpInvitationProposal)
+
+	hirerConn.in <- transport.Frame{Opcode: party.OpInvitationProposal, Payload: []byte{1, 1}}
+	_ = waitForOpcode(hirerConn, party.OpCreatePartyAck)
+	_ = waitForOpcode(hirerConn, party.OpPartyInfo)
+	if _, ok := parties.Registry().PartyOf(wiringPublicationDivision, "[AI]Hunter_Kwan"); !ok {
+		t.Fatal("expected party formed after accepting !hire prompt")
+	}
+
+	// Leaving dissolves bot-only party, then hirer manually sending 0x70D5 auto-accepts immediately.
+	hirerConn.in <- transport.Frame{Opcode: party.OpPartyLeaveRequest}
+	_ = waitForOpcode(hirerConn, party.OpPartyUpdate)
+	if _, ok := parties.Registry().PartyOf(wiringPublicationDivision, "[AI]Hunter_Kwan"); ok {
+		t.Fatal("bot-only party should not linger after hirer leaves")
+	}
+
+	hirerConn.in <- transport.Frame{Opcode: party.OpPartyInviteRequest, Payload: invitePayload}
+	ack = waitForOpcode(hirerConn, party.OpCreatePartyAck)
+	if len(ack.Payload) < 1 || ack.Payload[0] != 1 {
+		t.Fatalf("expected immediate auto-accept 0xB0D5 from hirer invite, got % X", ack.Payload)
+	}
+	_ = waitForOpcode(hirerConn, party.OpPartyInfo)
+	if _, ok := parties.Registry().PartyOf(wiringPublicationDivision, "[AI]Hunter_Kwan"); !ok {
+		t.Fatal("expected party formed after hirer direct 0x70D5 invite")
+	}
 }

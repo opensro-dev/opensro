@@ -21,6 +21,9 @@ caravanCast
 ================
 */
 func (game *gameplayPlane) caravanCast(c *enterworld.Character, target uint32, nowMs int64) action.OpResult {
+	if game.items.ServerActorCasting(game.divisionID, c.Name) {
+		return action.OpResult{}
+	}
 	if game.caravanAttackAt == nil {
 		game.caravanAttackAt = map[string]int64{}
 	}
@@ -29,7 +32,8 @@ func (game *gameplayPlane) caravanCast(c *enterworld.Character, target uint32, n
 	}
 	game.caravanAttackAt[c.Name] = nowMs + 500
 	skills := game.caravanSkills[c.Name]
-	skill := game.caravanAttackSkill(c)
+	basicSkill := game.caravanAttackSkill(c)
+	skill := basicSkill
 	if len(skills) > 0 {
 		var cooldowns []enterworld.EntrySkillCooldown
 		game.deps.Read(game.divisionID, func() { cooldowns = enterworld.RemainingSkillCooldowns(game.deps.Skills, c, nowMs) })
@@ -44,10 +48,16 @@ func (game *gameplayPlane) caravanCast(c *enterworld.Character, target uint32, n
 	result := game.items.HandleTargetInteract(game.divisionID, c, (wire.SkillAction{ActionId: skill, HasTarget: true, TargetGid: target}).Encode())
 
 	// Native B245 insufficient-MP refusal 0x3004 carries only its low error byte.
-	if game.caravanAgents != nil && slices.ContainsFunc(result.Frames, func(frame wire.Frame) bool {
+	if slices.ContainsFunc(result.Frames, func(frame wire.Frame) bool {
 		return frame.Opcode == wire.OpSkillCastResult && len(frame.Payload) == 2 && frame.Payload[0] == 2 && frame.Payload[1] == 4
 	}) {
-		game.caravanAgents.RequestManaRecovery(game.divisionID, c.Name)
+		if game.caravanAgents != nil {
+			game.caravanAgents.RequestManaRecovery(game.divisionID, c.Name)
+		}
+		if skill != basicSkill && basicSkill != 0 {
+			skill = basicSkill
+			result = game.items.HandleTargetInteract(game.divisionID, c, (wire.SkillAction{ActionId: basicSkill, HasTarget: true, TargetGid: target}).Encode())
+		}
 	}
 	return result
 }
@@ -66,24 +76,95 @@ func (game *gameplayPlane) caravanNPCThreat(unit *caravanai.AgentUnit, nowMs int
 		return 0, caravanai.Waypoint{}
 	}
 	from := caravanai.Waypoint{RegionID: unit.RegionID, X: unit.X, Y: unit.Y, Z: unit.Z}
-	var gid uint32
-	var at caravanai.Waypoint
-	distance := float64(160)
-	for _, npc := range game.items.Monsters.PopulationInterestInstances(game.divisionID, lease, worldgeom.RegionXZ{RegionID: unit.RegionID, X: float64(unit.X), Z: float64(unit.Z)}, nowMs) {
-		if npc.CurrentHP == 0 || !(npc.ThiefMonster() || npc.HunterMonster()) || npc.JobAttackerRefused(caravanJob(unit.Role)) {
-			continue
-		}
-		mover, exists := game.items.Monsters.Mover(game.divisionID, npc.Gid)
-		if !exists {
-			continue
-		}
-		pose := mover.LivePoseAt(nowMs, nil)
-		target := caravanai.Waypoint{RegionID: pose.RegionID, X: float32(pose.X), Y: float32(pose.Y), Z: float32(pose.Z)}
-		if d := caravanai.WaypointDistance(from, target); d < distance {
-			distance, gid, at = d, npc.Gid, target
+	var leaderGID, leaderCOSGID uint32
+	leaderFrom := from
+	hasLeader := false
+	if unit.Role == caravanai.RoleHunter && unit.EscortingTrader != "" {
+		if leader := game.deps.CharacterByName(game.divisionID, unit.EscortingTrader); leader != nil {
+			hasLeader = true
+			leaderGID = enterworld.ObjectIDForCharacter(leader)
+			game.deps.Read(game.divisionID, func() {
+				if leader.ActiveCOS != nil {
+					leaderCOSGID = leader.ActiveCOS.GID
+				}
+			})
+			at := game.items.LiveSpawnFor(game.divisionID, leader)
+			leaderFrom = caravanai.Waypoint{RegionID: at.RegionID, X: float32(at.X), Y: float32(at.Y), Z: float32(at.Z)}
 		}
 	}
-	return gid, at
+
+	var bestGID uint32
+	var bestAt caravanai.Waypoint
+	bestDist := float64(160)
+	var priorityGID uint32
+	var priorityAt caravanai.Waypoint
+	priorityDist := float64(200)
+
+	scan := func(center caravanai.Waypoint) {
+		for _, npc := range game.items.Monsters.PopulationInterestInstances(game.divisionID, lease, worldgeom.RegionXZ{RegionID: center.RegionID, X: float64(center.X), Z: float64(center.Z)}, nowMs) {
+			if npc.CurrentHP == 0 || !(npc.ThiefMonster() || npc.HunterMonster()) || npc.JobAttackerRefused(caravanJob(unit.Role)) {
+				continue
+			}
+			if game.isCaravanThreatIgnored(unit.Name, npc.Gid, nowMs) {
+				continue
+			}
+			mover, exists := game.items.Monsters.Mover(game.divisionID, npc.Gid)
+			if !exists {
+				continue
+			}
+			pose := mover.LivePoseAt(nowMs, nil)
+			target := caravanai.Waypoint{RegionID: pose.RegionID, X: float32(pose.X), Y: float32(pose.Y), Z: float32(pose.Z)}
+			targetGID := mover.TargetGID()
+			if hasLeader && (targetGID == leaderGID || (leaderCOSGID != 0 && targetGID == leaderCOSGID)) {
+				if d := caravanai.WaypointDistance(leaderFrom, target); d < priorityDist {
+					priorityDist, priorityGID, priorityAt = d, npc.Gid, target
+				}
+			}
+			if d := caravanai.WaypointDistance(from, target); d < bestDist {
+				bestDist, bestGID, bestAt = d, npc.Gid, target
+			}
+		}
+	}
+
+	scan(from)
+	if hasLeader && caravanai.WaypointDistance(from, leaderFrom) > 20 {
+		scan(leaderFrom)
+	}
+	if priorityGID != 0 {
+		return priorityGID, priorityAt
+	}
+	return bestGID, bestAt
+}
+
+func (game *gameplayPlane) ignoreCaravanThreat(name string, gid uint32, untilMs int64) {
+	if game.caravanIgnoredThreats == nil {
+		game.caravanIgnoredThreats = make(map[string]map[uint32]int64)
+	}
+	byGID := game.caravanIgnoredThreats[name]
+	if byGID == nil {
+		byGID = make(map[uint32]int64)
+		game.caravanIgnoredThreats[name] = byGID
+	}
+	byGID[gid] = untilMs
+}
+
+func (game *gameplayPlane) isCaravanThreatIgnored(name string, gid uint32, nowMs int64) bool {
+	if game.caravanIgnoredThreats == nil {
+		return false
+	}
+	byGID := game.caravanIgnoredThreats[name]
+	if byGID == nil {
+		return false
+	}
+	until, ok := byGID[gid]
+	if !ok {
+		return false
+	}
+	if nowMs >= until {
+		delete(byGID, gid)
+		return false
+	}
+	return true
 }
 
 /*

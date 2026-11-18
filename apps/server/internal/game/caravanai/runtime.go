@@ -20,7 +20,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
-	worldgeom "opensro.online/server/internal/game/world"
 )
 
 /*
@@ -44,47 +43,61 @@ const (
 
 // AgentUnit represents one active AI Caravan or Thief agent on the Silkroad.
 type AgentUnit struct {
-	Name              string
-	Division          string
-	Role              AgentRole
-	Personality       Personality
-	State             AgentState
-	HomeTown          TownID
-	OriginTown        TownID
-	DestTown          TownID
-	RegionID          uint16
-	X                 float32
-	Y                 float32
-	Z                 float32
-	MaxHP             int
-	HP                int
-	MaxMP             int
-	MP                int
-	WeaponCode        string
-	JobSuitCode       string
-	PrimarySkillID    uint32
-	RunSpeed          float32
-	RespawnPending    bool
-	CargoStars        uint8
-	CargoStacks       int
-	StackValueGold    int64
-	Route             []Waypoint
-	WaypointIndex     int
-	UnderAttack       bool
-	LastAttacker      string
-	LastPotionAtMs    int64
-	LastSpokeAtMs     int64
-	LastSpokenLine    string
-	TownDepartAtMs    int64
-	AvailableForHire  bool
-	EscortingTrader   string
-	ReinforcingTrader string
+	Name               string
+	Division           string
+	Role               AgentRole
+	Personality        Personality
+	State              AgentState
+	HomeTown           TownID
+	OriginTown         TownID
+	DestTown           TownID
+	RegionID           uint16
+	X                  float32
+	Y                  float32
+	Z                  float32
+	MaxHP              int
+	HP                 int
+	MaxMP              int
+	MP                 int
+	WeaponCode         string
+	JobSuitCode        string
+	PrimarySkillID     uint32
+	RunSpeed           float32
+	RespawnPending     bool
+	CargoStars         uint8
+	CargoStacks        int
+	StackValueGold     int64
+	Route              []Waypoint
+	WaypointIndex      int
+	UnderAttack        bool
+	LastAttacker       string
+	LastPotionAtMs     int64
+	LastSpokeAtMs      int64
+	LastSpokenLine     string
+	TownDepartAtMs     int64
+	AvailableForHire   bool
+	EscortingTrader    string
+	ReinforcingTrader  string
+	DedicatedEscortFor string
+	PotionCharges      int
 	// nextRemoteAtMs is the earliest time the next remote decision may be
 	// asked for this agent.
-	nextRemoteAtMs    int64
-	needsManaRecovery bool
-	lastMoveAtMs      int64
+	nextRemoteAtMs     int64
+	needsManaRecovery  bool
+	lastMoveAtMs       int64
+	transportHPPercent int
+	combatProgressAtMs int64
 }
+
+const (
+	combatStallTimeoutMs int64 = 5000
+	// HiredEscortTeleportDistance (500u ~= 100m in client coordinates) teleports
+	// a contracted escort directly back to its hiring player if left behind.
+	HiredEscortTeleportDistance float64 = 500
+	// HiredEscortRejoinDistance disengages a contracted escort from combat so
+	// it catches up to its hiring player before falling out of range.
+	HiredEscortRejoinDistance float64 = 250
+)
 
 // WorldHooks is an optional consumer-owned callback port invoked when an AI
 // agent speaks in local chat, drops parley cargo stacks, or pays out an escort
@@ -94,8 +107,10 @@ type WorldHooks struct {
 	FollowFerry       func(division, name string, leader Waypoint) (Waypoint, bool)
 	Move              func(name string, from, to Waypoint, distance float32) (Waypoint, bool)
 	Player            func(division, name string) (PlayerPosition, bool)
+	Casting           func(division, name string) bool
 	OnAgentChat       func(division, agentName string, regionID uint16, message string)
 	OnParleyCargoDrop func(division, agentName string, regionID uint16, x, y, z float32, stacks int, stackGoldValue int64)
+	OnContractFormed  func(division, playerName, agentName string)
 	OnContractReward  func(division, hunterPlayerName string, rewardGold int64, traderAgentName string)
 	OnHireFee         func(division, playerName string, fee int64) bool
 	Heal              func(division, name string, amount int64) int64
@@ -318,6 +333,11 @@ func (r *Runtime) EnsureDivisionRoster(division string) []*AgentUnit {
 		if terminal, ok := r.cfg.Terminals[unit.OriginTown]; ok && isTownRegion(unit.RegionID) {
 			unit.RegionID, unit.X, unit.Y, unit.Z = terminal.RegionID, terminal.X, terminal.Y, terminal.Z
 		}
+		unit.PotionCharges = defaultPotionCharges(unit.Role)
+		unit.transportHPPercent = FullHPPercent
+		if unit.Role == RoleHunter && !unit.AvailableForHire && unit.EscortingTrader != "" {
+			unit.DedicatedEscortFor = unit.EscortingTrader
+		}
 		unit.Route = r.route(unit)
 		if unit.Role == RoleThief && len(r.cfg.Highway) > 0 && len(unit.Route) > 1 {
 			point := unit.Route[1]
@@ -354,6 +374,25 @@ func (r *Runtime) StepAgent(
 	nearby []ObservedPlayer,
 	nowMs int64,
 ) (Decision, *AgentUnit, bool) {
+	return r.StepAgentWithWorldThreat(ctx, division, agentName, nearby, false, nowMs)
+}
+
+/*
+==================
+StepAgentWithWorldThreat
+
+Evaluates one AI caravan agent against nearby players at nowMs while
+optionally deferring combat movement when an authoritative NPC threat owns
+pursuit on the same tick.
+==================
+*/
+func (r *Runtime) StepAgentWithWorldThreat(
+	ctx context.Context,
+	division, agentName string,
+	nearby []ObservedPlayer,
+	worldThreatActive bool,
+	nowMs int64,
+) (Decision, *AgentUnit, bool) {
 	r.EnsureDivisionRoster(division)
 	r.parleys.ResolveExpired(nowMs, r.memories)
 
@@ -387,21 +426,24 @@ func (r *Runtime) StepAgent(
 	}
 
 	sit := Situation{
-		AgentName:    unit.Name,
-		Role:         unit.Role,
-		Personality:  unit.Personality,
-		RegionID:     unit.RegionID,
-		RegionHeat:   r.memories.RegionHeat(division, unit.RegionID),
-		InTown:       isTownRegion(unit.RegionID),
-		HPPercent:    percentOf(unit.HP, unit.MaxHP),
-		MPPercent:    percentOf(unit.MP, unit.MaxMP),
-		CargoStars:   unit.CargoStars,
-		CargoStacks:  unit.CargoStacks,
-		UnderAttack:  unit.UnderAttack,
-		ParleyReady:  r.parleys.CanOfferParley(division, unit.Name, nowMs),
-		NearbyAllies: countFriendlyHunters(enriched),
-		Distress:     r.activeDistressForLocked(division, unit, nowMs),
-		Players:      enriched,
+		AgentName:          unit.Name,
+		Role:               unit.Role,
+		Personality:        unit.Personality,
+		RegionID:           unit.RegionID,
+		RegionHeat:         r.memories.RegionHeat(division, unit.RegionID),
+		InTown:             isTownRegion(unit.RegionID),
+		HPPercent:          percentOf(unit.HP, unit.MaxHP),
+		MPPercent:          percentOf(unit.MP, unit.MaxMP),
+		TransportHPPercent: unit.transportHPPercent,
+		PotionDepleted:     unit.PotionCharges <= 0,
+		Escorted:           r.hasLiveEscortLocked(unit),
+		CargoStars:         unit.CargoStars,
+		CargoStacks:        unit.CargoStacks,
+		UnderAttack:        unit.UnderAttack,
+		ParleyReady:        r.parleys.CanOfferParley(division, unit.Name, nowMs),
+		NearbyAllies:       countFriendlyHunters(enriched),
+		Distress:           r.activeDistressForLocked(division, unit, nowMs),
+		Players:            enriched,
 	}
 	r.mu.Unlock()
 
@@ -419,14 +461,19 @@ func (r *Runtime) StepAgent(
 	if unit.Role == RoleTrader && !unit.UnderAttack && r.parleys.TruceActive(division, unit.Name, nowMs) {
 		decision = Decision{Action: ActionContinueRoute, Source: BrainHardcoded}
 	}
-	if unit.needsManaRecovery || unit.MaxMP > 0 && unit.MP <= unit.MaxMP/5 {
+	if (unit.Role != RoleThief || unit.PotionCharges > 0) && (unit.needsManaRecovery || unit.MaxMP > 0 && unit.MP <= unit.MaxMP/5) {
 		decision = Decision{Action: ActionUsePotion, Source: BrainHardcoded}
+	} else if unit.Role == RoleThief && unit.PotionCharges <= 0 {
+		unit.needsManaRecovery = false
+	}
+	if r.escortMustRejoinLocked(unit) {
+		decision = Decision{Action: ActionContinueRoute, Source: BrainHardcoded}
 	}
 	decision.Dialogue = SafeDialogue(decision.Dialogue)
 	decision.MemoryNote = SafeDialogue(decision.MemoryNote)
 	prevSpokeAtMs := unit.LastSpokeAtMs
 	prevLine := unit.LastSpokenLine
-	effects := r.applyDecisionLocked(unit, decision, nowMs)
+	effects := r.applyDecisionLocked(unit, decision, worldThreatActive, nowMs)
 	if decision.Action == ActionReinforceAlly && unit.State == StateInCombat {
 		decision.Action, decision.TargetName = ActionAttackTarget, unit.LastAttacker
 	}
@@ -467,9 +514,11 @@ func (r *Runtime) StepAgent(
 		}
 	}
 
+	followed := false
 	if effects.follow != nil && r.hooks.FollowFerry != nil {
 		next, ok := r.hooks.FollowFerry(division, snapshot.Name, *effects.follow)
 		if ok {
+			followed = true
 			r.mu.Lock()
 			if live := r.findAgentLocked(division, agentName); live != nil && !live.RespawnPending && live.RegionID == snapshot.RegionID && live.X == snapshot.X && live.Z == snapshot.Z {
 				live.RegionID, live.X, live.Y, live.Z = next.RegionID, next.X, next.Y, next.Z
@@ -477,6 +526,15 @@ func (r *Runtime) StepAgent(
 			}
 			r.mu.Unlock()
 		}
+	}
+	if !followed && effects.teleport != nil {
+		r.mu.Lock()
+		if live := r.findAgentLocked(division, agentName); live != nil && !live.RespawnPending {
+			live.RegionID, live.X, live.Y, live.Z = effects.teleport.RegionID, effects.teleport.X, effects.teleport.Y, effects.teleport.Z
+			live.lastMoveAtMs = nowMs
+			snapshot = *live
+		}
+		r.mu.Unlock()
 	}
 	if decision.Dialogue != "" && r.hooks.OnAgentChat != nil {
 		if decision.Dialogue != prevLine || nowMs-prevSpokeAtMs >= 15_000 {
@@ -574,11 +632,16 @@ func agentKey(division, agentName string) string {
 	return strings.TrimSpace(division) + "|" + strings.ToLower(strings.TrimSpace(agentName))
 }
 
-func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, nowMs int64) agentEffects {
+func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, worldThreatActive bool, nowMs int64) agentEffects {
 	effects := agentEffects{}
+	if d.Action != ActionAttackTarget && !worldThreatActive {
+		unit.combatProgressAtMs = 0
+	}
 	switch d.Action {
 	case ActionUsePotion:
-		if nowMs-unit.LastPotionAtMs >= 1500 {
+		needHP := (unit.MaxHP > 0 && percentOf(unit.HP, unit.MaxHP) <= 45) || (unit.transportHPPercent > 0 && unit.transportHPPercent <= 45)
+		canUse := unit.PotionCharges > 0 || (unit.Role != RoleThief && !needHP)
+		if canUse && nowMs-unit.LastPotionAtMs >= 1500 {
 			heal := (unit.MaxHP * 35) / 100
 			unit.HP += heal
 			if unit.HP > unit.MaxHP {
@@ -586,6 +649,9 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, nowMs int64) 
 			}
 			effects.heal = heal
 			unit.LastPotionAtMs = nowMs
+			if unit.Role == RoleThief || needHP {
+				unit.PotionCharges--
+			}
 		}
 	case ActionOfferParley:
 		dropStacks := ComputeParleyCargoDrop(unit.CargoStacks, unit.Personality)
@@ -599,6 +665,13 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, nowMs int64) 
 		}
 	case ActionAttackTarget:
 		unit.State = StateInCombat
+		casting := r.hooks.Casting != nil && r.hooks.Casting(unit.Division, unit.Name)
+		if worldThreatActive || casting {
+			if casting && nowMs > 0 {
+				unit.combatProgressAtMs = nowMs
+			}
+			break
+		}
 		var target Waypoint
 		found := false
 		if other := r.findAgentLocked(unit.Division, d.TargetName); other != nil {
@@ -608,8 +681,27 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, nowMs int64) 
 				target, found = player.At, true
 			}
 		}
-		if found && WaypointDistance(Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}, target) > 20 {
-			r.moveLocked(unit, target, 5)
+		if found {
+			before := Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}
+			dist := WaypointDistance(before, target)
+			if dist > attackStopDistance(unit) {
+				r.moveLocked(unit, target, stepDistanceFor(unit))
+			}
+			after := Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}
+			newDist := WaypointDistance(after, target)
+			if nowMs > 0 {
+				if InCastRange(unit, newDist) || WaypointDistance(before, after) >= 0.5 {
+					unit.combatProgressAtMs = nowMs
+				} else if unit.combatProgressAtMs == 0 {
+					unit.combatProgressAtMs = nowMs
+				} else if nowMs-unit.combatProgressAtMs >= combatStallTimeoutMs {
+					unit.combatProgressAtMs = 0
+					unit.State = StateTraveling
+					if unit.Role != RoleHunter || unit.EscortingTrader == "" {
+						effects.reward = r.advanceAlongRouteLocked(unit, nowMs)
+					}
+				}
+			}
 		}
 	case ActionReinforceAlly:
 		if call := r.activeDistressForLocked(unit.Division, unit, nowMs); call != nil {
@@ -617,26 +709,44 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, nowMs int64) 
 		}
 	case ActionContinueRoute, ActionAssistAlly, ActionRecruitEscort:
 		if unit.State == StateIdleInTown || unit.State == StateRecruiting {
-			// Town-staged agents stay in town until dispatched, hired, or called to reinforce.
-			break
+			if unit.Role == RoleHunter && unit.EscortingTrader != "" {
+				if leader := r.findAgentLocked(unit.Division, unit.EscortingTrader); leader != nil && isActiveTradeRunState(leader.State) {
+					unit.State = StateTraveling
+				} else if r.hooks.Player != nil {
+					if leader, ok := r.hooks.Player(unit.Division, unit.EscortingTrader); ok && leader.HPPercent > 0 && leader.JobType == domain.JobTrader {
+						unit.State = StateTraveling
+					} else {
+						break
+					}
+				} else {
+					break
+				}
+			} else {
+				// Town-staged agents stay in town until dispatched, hired, or called to reinforce.
+				break
+			}
 		}
 		unit.State = StateTraveling
 		if unit.Role == RoleHunter && unit.EscortingTrader != "" {
 			if leader := r.findAgentLocked(unit.Division, unit.EscortingTrader); leader != nil {
-				target := Waypoint{RegionID: leader.RegionID, X: leader.X, Y: leader.Y, Z: leader.Z}
-				if WaypointDistance(Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}, target) > 320 {
-					effects.follow = &target
-				}
-				r.moveLocked(unit, target, 5)
+				effects.follow = r.stepEscortFollowLocked(unit, leader)
 				break
 			}
 			if r.hooks.Player != nil {
 				if leader, ok := r.hooks.Player(unit.Division, unit.EscortingTrader); ok && leader.HPPercent > 0 && leader.JobType == domain.JobTrader {
-					if WaypointDistance(leader.At, Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}) > 320 {
+					dist := WaypointDistance(leader.At, Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z})
+					if dist > HiredEscortTeleportDistance {
+						tp := leader.At
+						effects.teleport = &tp
+						unit.RegionID, unit.X, unit.Y, unit.Z = leader.At.RegionID, leader.At.X, leader.At.Y, leader.At.Z
+						unit.lastMoveAtMs = nowMs
+						break
+					}
+					if dist > 320 {
 						effects.follow = &leader.At
 					}
-					if WaypointDistance(leader.At, Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}) > 12 {
-						r.moveLocked(unit, leader.At, 5)
+					if dist > 12 {
+						r.moveLocked(unit, leader.At, stepDistanceFor(unit))
 					}
 					break
 				}
@@ -750,8 +860,16 @@ func (r *Runtime) RecordPlayerAttack(
 		stolenGold = int64(unit.CargoStacks) * unit.StackValueGold
 		unit.CargoStacks = 0
 		r.contracts.Cancel(division, unit.Name)
-		home := TownWaypoint(unit.HomeTown)
-		if terminal, ok := r.cfg.Terminals[unit.HomeTown]; ok {
+		respawnTown := unit.HomeTown
+		var dedicatedLeader *AgentUnit
+		if unit.Role == RoleHunter && unit.DedicatedEscortFor != "" {
+			if leader := r.findAgentLocked(division, unit.DedicatedEscortFor); leader != nil {
+				dedicatedLeader = leader
+				respawnTown = leader.OriginTown
+			}
+		}
+		home := TownWaypoint(respawnTown)
+		if terminal, ok := r.cfg.Terminals[respawnTown]; ok {
 			home = terminal
 		}
 		unit.RegionID = home.RegionID
@@ -759,21 +877,35 @@ func (r *Runtime) RecordPlayerAttack(
 		unit.Y = home.Y
 		unit.Z = home.Z
 		unit.HP = unit.MaxHP
+		unit.MP = unit.MaxMP
+		unit.PotionCharges = defaultPotionCharges(unit.Role)
+		unit.transportHPPercent = FullHPPercent
+		unit.needsManaRecovery = false
+		unit.combatProgressAtMs = 0
 		unit.UnderAttack = false
 		unit.State = StateIdleInTown
-		unit.OriginTown = unit.HomeTown
-		if unit.DestTown == unit.HomeTown {
+		unit.OriginTown = respawnTown
+		if unit.DestTown == respawnTown {
 			unit.DestTown = TownDonwhang
-			if unit.HomeTown == TownDonwhang {
+			if respawnTown == TownDonwhang {
 				unit.DestTown = TownJangan
 			}
+		}
+		if dedicatedLeader != nil {
+			unit.DestTown = dedicatedLeader.DestTown
 		}
 		unit.Route, unit.WaypointIndex = nil, 0
 		unit.TownDepartAtMs = nowMs + TownRestDurationMs
 		if unit.Role == RoleHunter {
-			unit.AvailableForHire = true
-			unit.EscortingTrader = ""
-			unit.ReinforcingTrader = ""
+			if dedicatedLeader != nil {
+				unit.AvailableForHire = false
+				unit.EscortingTrader = dedicatedLeader.Name
+				unit.ReinforcingTrader = ""
+			} else {
+				unit.AvailableForHire = true
+				unit.EscortingTrader = ""
+				unit.ReinforcingTrader = ""
+			}
 		}
 		r.ensureMinActiveTradesLocked(division, nowMs)
 	}
@@ -802,50 +934,4 @@ func cloneUnits(src []*AgentUnit) []*AgentUnit {
 		out[i] = &cp
 	}
 	return out
-}
-
-func isTownRegion(regionID uint16) bool {
-	if allowed, known := worldgeom.RegionPlayerCombat(regionID); known && !allowed {
-		return true
-	}
-	return regionID == RegionJanganTown || regionID == RegionDonwhangTown || regionID == RegionHotanTown
-}
-
-// FullHPPercent is what a vital reads when its maximum is unknown.
-const FullHPPercent = 100
-
-func percentOf(cur, maxVal int) int {
-	return HPPercent(int64(cur), int64(maxVal))
-}
-
-/*
-==================
-HPPercent
-
-current as a whole percentage of maximum, clamped to [0, 100]; a maximum
-of zero or less reads as full.
-==================
-*/
-func HPPercent(current, maximum int64) int {
-	if maximum <= 0 {
-		return FullHPPercent
-	}
-	pct := (current * 100) / maximum
-	if pct < 0 {
-		return 0
-	}
-	if pct > FullHPPercent {
-		return FullHPPercent
-	}
-	return int(pct)
-}
-
-func countFriendlyHunters(players []ObservedPlayer) int {
-	n := 0
-	for _, p := range players {
-		if p.JobType == domain.JobHunter && p.TrustScore > domain.CaravanVendettaScore {
-			n++
-		}
-	}
-	return n
 }

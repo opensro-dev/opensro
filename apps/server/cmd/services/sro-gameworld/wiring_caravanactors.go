@@ -13,6 +13,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 
@@ -43,6 +44,9 @@ func (game *gameplayPlane) caravanRunSpeed(c *enterworld.Character) float32 {
 				return ref.RunSpeed
 			}
 		}
+	}
+	if c.Job.Type == domain.JobHunter {
+		return 75
 	}
 	return simulation.RunSpeed
 }
@@ -184,7 +188,15 @@ func (game *gameplayPlane) caravanMove(name string, from, to caravanai.Waypoint,
 		game.caravanRoads = make(map[string]*caravanRoad)
 	}
 	road := game.caravanRoads[name]
-	if road != nil && (road.goal.RegionID != to.RegionID || road.goal.X != to.X || road.goal.Z != to.Z) {
+	if road != nil && caravanai.WaypointDistance(road.goal, to) > 64 {
+		delete(game.caravanRoads, name)
+		road = nil
+	}
+	if road != nil && road.failed {
+		if road.cooldown > 1 && caravanai.WaypointDistance(road.from, from) < 1 && caravanai.WaypointDistance(road.goal, to) < 16 {
+			road.cooldown--
+			return from, false
+		}
 		delete(game.caravanRoads, name)
 		road = nil
 	}
@@ -195,7 +207,13 @@ func (game *gameplayPlane) caravanMove(name string, from, to caravanai.Waypoint,
 		if road.route == nil {
 			road.route = road.search.Advance(caravanRoadNodesPerTick)
 		}
-		if road.route == nil || road.route.Status() != monster.NavigationRouteReady {
+		if road.route == nil {
+			return from, false
+		}
+		if road.route.Status() != monster.NavigationRouteReady {
+			road.failed = true
+			road.cooldown = 10
+			road.from = from
 			return from, false
 		}
 		if road.index < road.route.Len() {
@@ -212,8 +230,22 @@ func (game *gameplayPlane) caravanMove(name string, from, to caravanai.Waypoint,
 	if path == nil || path.Result()&(monster.NavResultBlocked|monster.NavResultClipped) != 0 {
 		if road == nil {
 			leg := to
-			game.caravanRoads[name] = &caravanRoad{goal: to, search: game.water.NewRoadSearch(monster.Pose{RegionID: a.RegionID, X: a.X, Y: a.Y, Z: a.Z}, monster.Pose{RegionID: leg.RegionID, X: float64(leg.X), Y: float64(leg.Y), Z: float64(leg.Z)})}
+			game.caravanRoads[name] = &caravanRoad{from: from, goal: to, search: game.water.NewRoadSearch(monster.Pose{RegionID: a.RegionID, X: a.X, Y: a.Y, Z: a.Z}, monster.Pose{RegionID: leg.RegionID, X: float64(leg.X), Y: float64(leg.Y), Z: float64(leg.Z)})}
+			return from, false
 		}
+		if path != nil && path.Result()&monster.NavResultBlocked == 0 {
+			rest := path.Rest()
+			nextWp := caravanai.Waypoint{RegionID: rest.RegionID, X: float32(rest.X), Y: float32(rest.Y), Z: float32(rest.Z)}
+			if caravanai.WaypointDistance(from, nextWp) >= 0.25 {
+				if caravanai.WaypointDistance(nextWp, target) < 1.0 && road.index+1 < road.route.Len() {
+					road.index++
+				} else {
+					delete(game.caravanRoads, name)
+				}
+				return nextWp, false
+			}
+		}
+		delete(game.caravanRoads, name)
 		return from, false
 	}
 	next := path.Rest()
@@ -238,10 +270,13 @@ caravanRoad
 ================
 */
 type caravanRoad struct {
-	goal   caravanai.Waypoint
-	search *movement.RoadSearch
-	route  *monster.NavigationRoute
-	index  int
+	from     caravanai.Waypoint
+	goal     caravanai.Waypoint
+	search   *movement.RoadSearch
+	route    *monster.NavigationRoute
+	index    int
+	failed   bool
+	cooldown int
 }
 
 /*
@@ -309,15 +344,48 @@ func (game *gameplayPlane) publishCaravanActor(ticker *simulation.Ticker, views 
 			frames = append(frames, simulation.Frame{Opcode: wire.OpObjectDespawn, Payload: (wire.ObjectDespawn{Gid: gid}).Encode(), ScopeGID: gid})
 			shown = false
 		}
+		if game.caravanMoving == nil {
+			game.caravanMoving = make(map[string]bool)
+		}
+		moveKey := view.SessionID + "|" + c.Name
 		if visible && !shown {
+			delete(game.caravanMoving, moveKey)
 			frames = append(frames, game.items.PeerItemReferences(appearance.ItemIDs())...)
 			frames = append(frames, simulation.Frame{Opcode: wire.OpSingleObjectSpawn, Payload: simulation.BuildPeerSpawnRow(appearance, gid, at), ScopeGID: gid, ScopeVisible: true})
 		} else if !visible && shown {
+			delete(game.caravanMoving, moveKey)
 			frames = append(frames, simulation.Frame{Opcode: wire.OpObjectDespawn, Payload: (wire.ObjectDespawn{Gid: gid}).Encode(), ScopeGID: gid})
 		}
-		if visible && shown && (moveGID == gid || slices.Contains(view.PublishedObjects, moveGID)) && (previous.RegionID != unit.RegionID || previous.X != unit.X || previous.Z != unit.Z) {
-			from := simulation.MovementSourceFromSpawn(simulation.Spawn{RegionID: previous.RegionID, X: float64(previous.X), Y: float64(previous.Y), Z: float64(previous.Z)})
-			frames = append(frames, simulation.Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: moveGID, StateType: wire.StateChannelMove, Value: simulation.RunMode}).Encode()}, simulation.Frame{Opcode: simulation.OpMovementAck, Payload: simulation.BuildMovementAckPayload(moveGID, simulation.MovementRequest{Mode: simulation.MovementAckDestinationMode, RegionID: at.RegionID, X: at.X, Y: at.Y, Z: at.Z}, &from)})
+		moved := previous.RegionID != unit.RegionID || previous.X != unit.X || previous.Z != unit.Z
+		canMove := visible && shown && (moveGID == gid || slices.Contains(view.PublishedObjects, moveGID))
+		wasMoving := game.caravanMoving[moveKey]
+		if canMove && moved {
+			prevXZ := worldgeom.RegionXZ{RegionID: previous.RegionID, X: float64(previous.X), Z: float64(previous.Z)}
+			curXZ := worldgeom.RegionXZ{RegionID: unit.RegionID, X: float64(unit.X), Z: float64(unit.Z)}
+			dx, dz := worldgeom.Delta(prevXZ, curXZ)
+			if math.Hypot(dx, dz) > 32 {
+				frames = append(frames,
+					simulation.Frame{Opcode: wire.OpObjectDespawn, Payload: (wire.ObjectDespawn{Gid: gid}).Encode(), ScopeGID: gid},
+					simulation.Frame{Opcode: wire.OpSingleObjectSpawn, Payload: simulation.BuildPeerSpawnRow(appearance, gid, at), ScopeGID: gid, ScopeVisible: true},
+				)
+				game.caravanMoving[moveKey] = false
+			} else {
+				proj := worldgeom.NormalizeOutdoor(worldgeom.RegionXZ{RegionID: curXZ.RegionID, X: curXZ.X + 2*dx, Z: curXZ.Z + 2*dz})
+				goal := simulation.Spawn{RegionID: proj.RegionID, X: proj.X, Y: float64(unit.Y), Z: proj.Z}
+				from := simulation.MovementSourceFromSpawn(simulation.Spawn{RegionID: previous.RegionID, X: float64(previous.X), Y: float64(previous.Y), Z: float64(previous.Z)})
+				if !wasMoving {
+					frames = append(frames, simulation.Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: moveGID, StateType: wire.StateChannelMove, Value: simulation.RunMode}).Encode()})
+				}
+				frames = append(frames, simulation.Frame{Opcode: simulation.OpMovementAck, Payload: simulation.BuildMovementAckPayload(moveGID, simulation.MovementRequest{Mode: simulation.MovementAckDestinationMode, RegionID: goal.RegionID, X: goal.X, Y: goal.Y, Z: goal.Z}, &from)})
+				game.caravanMoving[moveKey] = true
+			}
+		} else if canMove && wasMoving {
+			from := simulation.MovementSourceFromSpawn(at)
+			frames = append(frames,
+				simulation.Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: moveGID, StateType: wire.StateChannelMove, Value: wire.MoveStateStand}).Encode()},
+				simulation.Frame{Opcode: simulation.OpMovementAck, Payload: simulation.BuildMovementAckPayload(moveGID, simulation.MovementRequest{Mode: simulation.MovementAckDestinationMode, RegionID: at.RegionID, X: at.X, Y: at.Y, Z: at.Z}, &from)},
+			)
+			game.caravanMoving[moveKey] = false
 		}
 		if c.ActiveCOS != nil {
 			pet := c.ActiveCOS

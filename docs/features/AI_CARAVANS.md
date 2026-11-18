@@ -247,3 +247,89 @@ Evidence SHA-256 (local logs retained, not shipped as fixtures):
 
 - `caravan-live-natural.stdout.log`: `2b5fa6defead1ab4e461b9149accf7781828de4b222c69a82bad8da1db8a763b`
 - `caravan-live-final.stdout.log`: `209b11d81b39a3474128f4594eec40b2ae84c3c9622e9262ad99f59856a93936`
+
+
+## Uninterrupted live run and thief animation verification
+
+Owner requested a full uninterrupted town-to-town convoy run, including its ferry and naturally
+spawned thieves, and verified fix for broken thief skill animations. **No PR or push.**
+
+### Thief bow skill animation fix
+
+Root cause diagnosed live against `[AI]Thief_Kael`: generated bow assets rendered cleanly when
+stationary, but `ActionAttackTarget` and `ApproachWorldThreat` kept walking bow agents into melee
+range (`<= 20` units) and issuing mid-cast movement updates every 100ms while `caravanCast`
+re-triggered `HandleTargetInteract` every 500ms over a 1200ms cast window, cancelling client attack
+poses (`OpSkillCastResult` error spam `0xB2CD [1, 2]`).
+
+Implemented fixes:
+
+- `internal/game/action/serveractor.go`: added `ServerActorCasting` (`hasOpenSkillCast`).
+- `internal/game/caravanai/runtime.go`, `internal/game/caravanai/world.go`: added `WorldHooks.Casting`,
+  weapon-aware `attackStopDistance` (`140` for `_BOW_`/`_CROSSBOW_`, `20` melee) and `InCastRange`
+  (`175` bow/crossbow, `45` melee), held movement while casting, and added `StepAgentWithWorldThreat`
+  to prevent player-vs-NPC pursuit tug-of-war.
+- `cmd/services/sro-gameworld/wiring_caravanai.go`, `wiring_caravancombat.go`: suppressed overlapping
+  casts while `ServerActorCasting` is true, gated `caravanCast` with `InCastRange`, and fell back to
+  0-MP base attack (`caravanAttackSkill`) on `0x3004`.
+
+Live browser observer verification on `[AI]Thief_Kael` (`SRO_GM_CHARACTERS=global-official:test`,
+`/MOVETOUSER [AI]Thief_Kael` in disposable scratch world): Kael held ~140u range, stopped moving
+during casts, emitted clean `0xB245` casts (~900ms spacing without `0xB2CD [1, 2]` spam), and drew
+and fired bow attacks cleanly (`.state/caravan-kael-before.jpg` -> `.state/caravan-kael-after.jpg`).
+
+### Convoy survival, navigation, and uninterrupted Donwhang -> Hotan run (`v6`)
+
+Additional stability fixes required for the uninterrupted live town-to-town run:
+
+- **Transport & escrow sustain**: `ServerActorTransportVitals`, `HealServerActor` (+35% `ActiveCOS`
+  HP/MP alongside actor HP/MP), escorted `RoleTrader` stays mounted and heals at transport HP <= 45%,
+  `RoleThief` potions bounded (`PotionCharges=3`), Hunter MP-only recovery preserves battle HP charges,
+  dedicated Hunter escorts stay paired across respawns, and `caravanNPCThreat` scans around both the
+  Hunter and escorted Trader.
+- **Tether, road cache, and unreachable-threat recovery**: `EscortMustRejoin` disengages Hunters >280u
+  away or stuck outside town; `waitForEscortLocked` only holds within 600u out of town; `caravanMove`
+  evicts failed road searches with backoff and avoids thrashing A* on minor target steps (`<= 64`u);
+  `ApproachWorldThreatAt` disengages unreachable world threats after `5000ms` without movement or
+  cast progress (`30s` threat ignore cooldown in `wiring_caravancombat.go`).
+
+Uninterrupted live proof in `.state/caravan-uninterrupted-v6.stdout.log` (run against disposable
+`.state/caravan-e2e-world` with `SRO_AI_CARAVANS=on`, `SRO_AGENT_BRAIN=hardcoded`, no convoy warps,
+no waypoint staging, no forced ferry, no shortened timer, no speed boost, and no bandit cap;
+SHA-256 `da647c770670cad5af221d75cbacb18341f71bc2d048e4d0cbafc32661fbde73`):
+
+- `1019` trace snapshots across `33.98m` (`6` native ferry crossings total across actors).
+- `[AI]Trader_Mei` departed Donwhang (`reg=26265`), navigated Western China & Tarim Basin through
+  natural uncapped mobs (`meiMinCosHP=13873` sustained back up via transport potions), crossed
+  Karakoram Ferry (`source=3824 target=16 arrival=23436`) at `28.41m`, and delivered in Hotan
+  (`reg=23687`) at `32.84m` with `0` Trader deaths before departing on the `hotan->donwhang` return leg.
+- `[AI]Hunter_Wei` escorted `[AI]Trader_Mei` from Donwhang past `25239` (`428` combat casts logged
+  before falling in combat around `10.0m` and respawning cleanly in Donwhang). Remaining non-blocking
+  limit observed in `v6`: after respawning in town far (>320u) behind a field-progressing leader, an
+  escort aims straight toward the leader's coordinates and caught on Donwhang's SW wall (`reg=26265`)
+  rather than walking out via highway gate waypoints; `[AI]Trader_Mei` completed the trip solo safely.
+
+### Regressions, cleanup, checks, and world restoration
+
+- Temporary live run trace file `development_caravan_run_trace.go` and its 3 trace calls were removed.
+- Regression tests added in `internal/game/caravanai/world_test.go` and
+  `cmd/services/sro-gameworld/wiring_caravanai_test.go`.
+- Verified checks after edits: `go vet` clean across `cmd/services/sro-gameworld`,
+  `internal/game/caravanai`, `internal/game/action`, `internal/game/world/simulation`, and
+  `internal/gates`; `go test ./internal/game/caravanai` (`0.726s`), `internal/game/action` (`50.592s`),
+  `internal/game/world/simulation` (`13.617s`), `internal/gates` (`13.043s`), and
+  `go test -v ./cmd/services/sro-gameworld -run TestCaravan` (`TestCaravanWorldBoundary`,
+  `TestCaravanShippedActors` `19.45s`) all pass; `apps/client-next` action tests and `npm run typecheck`
+  pass cleanly (`0 failed`).
+- Disposable scratch processes stopped and local runtime restored against the owner's original world
+  (`E:\CodeProjects\opensro-issue-hub\apps\server\.state`). **No PR or push.**
+
+## Player-hired escort, party, movement, and world-map polish (2026-11-18)
+
+Follow-up fixes addressing owner playtest findings on skills, hired escort catch-up/partying, smooth movement, world map rendering, and test-world provisioning:
+
+- **Skill animations & combo locks:** `simulation/tick.go` now routes tick-emitted frames for all non-monster `viewer.PublishedObjects` GIDs (`SourceGID < MonsterGIDBase || SourceGID > MonsterGIDLimit`), fixing dropped projectile/combo release and `0xB505` finalize frames for AI caravan actors; `action.Runtime.ServerActorCasting` now includes `PlayerAttackLocked` so combo stages are not interrupted mid-chain.
+- **Smooth movement, hired escort speed/teleport & town-gate exit:** `caravanRunSpeed` assigns speed `75` to `JobHunter` escorts; `publishCaravanActor` replaces `>32u` jumps with clean despawn+respawn teleports, projects normal `OpMovementAck` destinations `+2*dx/+2*dz` via `worldgeom.Delta`/`worldgeom.NormalizeOutdoor` (emitting `OpObjectStateRefresh` only on movement state transitions), and settles to `MoveStateStand` when stopped. In `caravanai`, `stepEscortFollowLocked` routes town-respawned or lagging escorts through highway gate waypoints (`unit.Route`), `escortMustRejoinLocked` disengages combat for player-hired Hunters >250u (`HiredEscortRejoinDistance`) behind or outside town, and `HiredEscortTeleportDistance` (`500u` / ~100m) teleports lagging hired escorts directly to the hiring player.
+- **Party (`pt`) auto-invite & hirer-only auto-accept:** `!hire` and `!accept` trigger `WorldHooks.OnContractFormed` -> `party.Runtime.InvitePlayerFromRuntimeActor` (sending `0x3393` proposal to solo players or joining existing parties); direct `0x70D5`/`0x751A` invites to runtime-only actors resolve via `domain.CharacterLookup`, auto-accept immediately only when `IsContractPartner` holds, refuse non-hirers (`0x0c` / `0x17`), stream `MemberUpdates` via `livePose`, and dissolve bot-only parties when no human member remains.
+- **World Map (`M`) polish:** `foundation/ui/world-map.ts` adds optional per-marker `size` (keeping `MAP_MARKER_SIZE = 16` default); `hud/world-map.ts` deduplicates party members from `betaPlayers`, renders AI Traders/Hunters/Thieves and players at crisp sizes (`12`/`8`), and adds `betaRoster` to hoverable `allRoster`; `wiring_caravanai.go` admits `BetaPlayerMapEnabled()` sessions with Title Case town/state labels and disables competing `ticker.PlayerMap` overwrites in `wiring_runtime.go`.
+- **Local provisioning & config:** Updated `apps/server/config/local.env` (`SRO_BETA_PLAYER_MAP`, `SRO_STARTING_SILK`, rate/pet/alchemy settings, `SRO_AI_CARAVANS=on`, `SRO_GM_CHARACTERS=global-official:test`) and credited Silk, GM privilege, gold, and Level-90 transport scrolls in both local/scratch `state.db` files.

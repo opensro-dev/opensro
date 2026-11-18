@@ -202,12 +202,38 @@ func (r *Runtime) dispatchTraderLocked(unit *AgentUnit, nowMs int64) {
 		unit.CargoStacks = 10
 	}
 	unit.HP = unit.MaxHP
+	unit.MP = unit.MaxMP
+	unit.PotionCharges = defaultPotionCharges(unit.Role)
+	unit.transportHPPercent = FullHPPercent
 	unit.UnderAttack = false
 	unit.ReinforcingTrader = ""
 	unit.State = StateTraveling
 	unit.TownDepartAtMs = 0
 	unit.Route = r.route(unit)
 	unit.WaypointIndex = 0
+	for _, other := range r.agents[unit.Division] {
+		if other.Role != RoleHunter || !strings.EqualFold(other.DedicatedEscortFor, unit.Name) {
+			continue
+		}
+		if other.State != StateIdleInTown && other.State != StateRecruiting {
+			continue
+		}
+		if _, contracted := r.contracts.ActiveContractFor(unit.Division, other.Name); contracted {
+			continue
+		}
+		other.HP = other.MaxHP
+		other.MP = other.MaxMP
+		other.PotionCharges = defaultPotionCharges(other.Role)
+		other.transportHPPercent = FullHPPercent
+		other.UnderAttack = false
+		other.AvailableForHire = false
+		other.EscortingTrader = unit.Name
+		other.ReinforcingTrader = ""
+		other.OriginTown, other.DestTown = unit.OriginTown, unit.DestTown
+		other.RegionID, other.X, other.Y, other.Z = unit.RegionID, unit.X, unit.Y, unit.Z
+		other.TownDepartAtMs = 0
+		other.State = StateTraveling
+	}
 	unit.LastSpokenLine = fmt.Sprintf(
 		"Departing %s with a %d-star caravan bound for %s!",
 		unit.OriginTown, unit.CargoStars, unit.DestTown,
@@ -235,7 +261,7 @@ func (r *Runtime) stepReinforcementLocked(unit *AgentUnit, call *DistressCall) {
 		RegionID: call.RegionID,
 		X:        call.X,
 		Z:        call.Z,
-	}, 5)
+	}, stepDistanceFor(unit))
 	unit.LastAttacker = call.AttackerName
 	if WaypointDistance(Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}, Waypoint{RegionID: call.RegionID, X: call.X, Z: call.Z}) <= 20 {
 		unit.State = StateInCombat
@@ -307,7 +333,11 @@ func (r *Runtime) HandlePlayerCommand(
 		if unit.State == StateRecruiting || unit.State == StateIdleInTown {
 			r.dispatchTraderLocked(unit, nowMs)
 		}
+		agentName := unit.Name
 		r.mu.Unlock()
+		if r.hooks.OnContractFormed != nil {
+			r.hooks.OnContractFormed(division, playerName, agentName)
+		}
 		return FormatContractReply(contract), true
 
 	case "!hire":
@@ -336,7 +366,11 @@ func (r *Runtime) HandlePlayerCommand(
 		unit.EscortingTrader = playerName
 		unit.State = StateTraveling
 		contract := r.contracts.HireAIHunter(division, playerName, unit.Name, unit.OriginTown, unit.DestTown, nowMs)
+		agentName := unit.Name
 		r.mu.Unlock()
+		if r.hooks.OnContractFormed != nil {
+			r.hooks.OnContractFormed(division, playerName, agentName)
+		}
 		return FormatContractReply(contract), true
 
 	case "!memory":

@@ -109,6 +109,9 @@ type Runtime struct {
 	// instance lane's party-status event (wiring installs it; nil in
 	// detached tests).
 	PartyChanged func(divisionID, name string)
+	// CanPartyWithRuntimeActor reports whether a player is allowed to invite or
+	// auto-party with a runtime-only (AI caravan) character.
+	CanPartyWithRuntimeActor func(divisionID, playerName, actorName string) bool
 }
 
 // NewRuntime builds the lane over a fresh in-memory registry. Construct
@@ -277,6 +280,13 @@ func findCharacterByGid(deps Dependencies, divisionID string, gid uint32) *enter
 			return characterSnapshot(deps, divisionID, candidate)
 		}
 	}
+	if gid > domain.PlayerGIDBase {
+		if lookup, ok := deps.(domain.CharacterLookup); ok {
+			if candidate := lookup.CharacterByID(divisionID, int64(gid-domain.PlayerGIDBase)); candidate != nil && enterworld.ObjectIDForCharacter(candidate) == gid {
+				return characterSnapshot(deps, divisionID, candidate)
+			}
+		}
+	}
 	return nil
 }
 
@@ -292,6 +302,11 @@ the fold stays defensive like the community lane's).
 func findCharacterByName(deps Dependencies, divisionID, name string) *enterworld.Character {
 	for _, candidate := range deps.CharactersForDivision(divisionID) {
 		if candidate != nil && strings.EqualFold(candidate.Name, name) {
+			return characterSnapshot(deps, divisionID, candidate)
+		}
+	}
+	if lookup, ok := deps.(domain.CharacterLookup); ok {
+		if candidate := lookup.CharacterByName(divisionID, name); candidate != nil {
 			return characterSnapshot(deps, divisionID, candidate)
 		}
 	}
@@ -369,11 +384,19 @@ func (r *Runtime) memberRowFor(divisionID string, character *enterworld.Characte
 		currentMP = enterworld.CurrentMP(character)
 	}
 	row.StatusNibbles = VitalStatusNibbles(currentHP, maxHP, currentMP, maxMP)
-	world := enterworld.WorldStateForCharacter(character, enterworld.ResolveCharacterRaceKey(character))
-	row.Region = uint16(world.Spawn.RegionID)
-	row.PosX = int16(world.Spawn.X)
-	row.PosY = int16(world.Spawn.Y)
-	row.PosZ = int16(world.Spawn.Z)
+	if character.RuntimeOnly && r.livePose != nil {
+		pose := r.livePose(divisionID, character)
+		row.Region = pose.RegionID
+		row.PosX = int16(pose.X)
+		row.PosY = int16(pose.Y)
+		row.PosZ = int16(pose.Z)
+	} else {
+		world := enterworld.WorldStateForCharacter(character, enterworld.ResolveCharacterRaceKey(character))
+		row.Region = uint16(world.Spawn.RegionID)
+		row.PosX = int16(world.Spawn.X)
+		row.PosY = int16(world.Spawn.Y)
+		row.PosZ = int16(world.Spawn.Z)
+	}
 	return row
 }
 
@@ -463,6 +486,10 @@ func (r *Runtime) handleInvite(s *transport.Session, opcode uint16, payload []by
 	if _, partied := r.registry.PartyOf(divisionID, target.Name); partied {
 		log.Debugf("party: 0x70D5 (invite) refused for %s: target already in a party", actor.Name)
 		_ = s.Send(OpCreatePartyAck, []byte{2, 0x18})
+		return
+	}
+	if target.RuntimeOnly {
+		r.acceptRuntimeActorFormInvite(s, divisionID, actor, target, request.OptionBits)
 		return
 	}
 	if r.proposalPending(divisionID, target.Name) {
@@ -568,6 +595,10 @@ func (r *Runtime) handleJoinInvite(s *transport.Session, opcode uint16, payload 
 			code = 0x12
 		}
 		_ = s.Send(OpPartyJoinInviteAck, []byte{2, code})
+		return
+	}
+	if target.RuntimeOnly {
+		r.acceptRuntimeActorJoinInvite(s, divisionID, snapshot, actor, target)
 		return
 	}
 	if r.proposalPending(divisionID, target.Name) {
@@ -691,7 +722,7 @@ func (r *Runtime) resolveInviteTarget(divisionID string, actor *enterworld.Chara
 		return nil, nil, "target is delete-pending"
 	}
 	targetSession, online := r.sessionByName(divisionID, target.Name)
-	if !online {
+	if !online && !target.RuntimeOnly {
 		return nil, nil, "target is offline"
 	}
 	return target, targetSession, ""
@@ -872,6 +903,11 @@ func (r *Runtime) dropMember(divisionID, name string, reason uint8, leaverSessio
 	}
 	r.notifyDeparture(divisionID, outcome, leaveFrame)
 	r.notePartyChanged(divisionID, outcome)
+	if !r.partyHasHumanMember(divisionID, outcome.Others) {
+		for _, member := range outcome.Others {
+			r.dropMember(divisionID, member.Name, PartyLeaveReasonLogout, nil)
+		}
+	}
 	return true
 }
 

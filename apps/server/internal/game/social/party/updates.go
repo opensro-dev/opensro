@@ -96,16 +96,15 @@ func (r *Runtime) MemberUpdates(sessions []simulation.SessionView, nowMs int64) 
 			var frames []simulation.Frame
 			for _, member := range party.Members {
 				session, present := online[member.MemberID]
-				if !present {
-					continue
-				}
 				character := findCharacterByName(r.deps, division, member.Name)
-				if character == nil {
+				if character == nil || (!present && !character.RuntimeOnly) {
 					continue
 				}
 				row := r.memberRowFor(division, character)
-				pose := session.World.LiveSpawnAt(nowMs)
-				row.Region, row.PosX, row.PosY, row.PosZ, row.War = pose.RegionID, int16(pose.X), int16(pose.Y), int16(pose.Z), session.WorldInstance
+				if present {
+					pose := session.World.LiveSpawnAt(nowMs)
+					row.Region, row.PosX, row.PosY, row.PosZ, row.War = pose.RegionID, int16(pose.X), int16(pose.Y), int16(pose.Z), session.WorldInstance
+				}
 				key := memberUpdateKey{division, party.ObjectOrder, member.MemberID}
 				next[key] = row
 				if previous, found := state.rows[key]; found && previous == row {
