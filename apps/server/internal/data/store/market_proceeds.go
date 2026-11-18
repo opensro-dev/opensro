@@ -18,6 +18,7 @@ warehouse instead: owed gold is never lost.
 package store
 
 import (
+	"database/sql"
 	"fmt"
 	"math"
 
@@ -106,7 +107,7 @@ WHERE seller_char = ? AND unpaid = 1 ORDER BY at_ms, listing_id`, c.ID)
 		return nil, err
 	}
 	for _, sale := range sales {
-		if _, err := tx.Exec("UPDATE market_sales SET unpaid = 0 WHERE listing_id = ? AND unpaid = 1", sale.ListingID); err != nil {
+		if err := markSalePaidTx(tx.Tx, sale.ListingID); err != nil {
 			return nil, err
 		}
 	}
@@ -177,7 +178,7 @@ WHERE sale.unpaid = 1 ORDER BY sale.at_ms, sale.listing_id`)
 		}
 		err = writeAccountStorageTx(tx, o.account, storage)
 		if err == nil {
-			_, err = tx.Exec("UPDATE market_sales SET unpaid = 0 WHERE listing_id = ? AND unpaid = 1", o.listing)
+			err = markSalePaidTx(tx, o.listing)
 		}
 		if err == nil {
 			err = s.commitMarketTxLocked(tx, "market-proceeds")
@@ -189,4 +190,16 @@ WHERE sale.unpaid = 1 ORDER BY sale.at_ms, sale.listing_id`)
 		paid++
 	}
 	return paid, nil
+}
+
+/*
+================
+markSalePaidTx
+
+Marks a sale's owed gold paid, once.
+================
+*/
+func markSalePaidTx(tx *sql.Tx, listingID int64) error {
+	_, err := tx.Exec("UPDATE market_sales SET unpaid = 0 WHERE listing_id = ? AND unpaid = 1", listingID)
+	return err
 }

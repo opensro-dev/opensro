@@ -241,8 +241,11 @@ func (s *Store) answerOffer(id int64, state string, allowed func(domain.MarketOf
 ================
 MarketOffers
 
-The account's offers: the open ones on its listings (to answer) and its
-own, open first, then the last limit it made.
+The account's offers: the newest limit open ones on its listings (to
+answer), and its own, open first, then the last limit it made. The
+incoming list is bounded because other accounts fill it: unbounded, a
+flood of offers would grow the seller's page past what the window
+reads. Answering one shows the next.
 ================
 */
 func (s *Store) MarketOffers(account string, limit int) (incoming, outgoing []domain.MarketOffer, err error) {
@@ -255,7 +258,8 @@ func (s *Store) MarketOffers(account string, limit int) (incoming, outgoing []do
 	rows, err := db.Query(`SELECT offer.id, offer.listing_id, offer.division, offer.buyer_account, offer.buyer_char,
 offer.buyer_name, offer.price, offer.dest, offer.state, offer.at_ms FROM market_offers offer
 JOIN market_listings listing ON listing.id = offer.listing_id
-WHERE listing.seller_account = ? AND offer.state = 'open' ORDER BY offer.at_ms DESC, offer.id DESC`, account)
+WHERE listing.seller_account = ? AND offer.state = 'open' ORDER BY offer.at_ms DESC, offer.id DESC LIMIT ?`,
+		account, limit)
 	if err != nil {
 		return nil, nil, err
 	}

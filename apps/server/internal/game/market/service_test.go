@@ -394,7 +394,8 @@ func TestSellerIsNamedUnlessAnonymous(t *testing.T) {
 	if sellers[1] != "Kekw" || sellers[2] != "" {
 		t.Fatalf("sellers = %v", sellers)
 	}
-	name, anonymous := s.ownSeller(store.open[1])
+	own := s.ownListingView(store.open[1])
+	name, anonymous := own.Seller, own.Anonymous
 	if name != "Lulu" || !anonymous {
 		t.Fatalf("own seller = %q %v", name, anonymous)
 	}

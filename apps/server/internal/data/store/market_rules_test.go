@@ -15,6 +15,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -416,5 +417,85 @@ INSERT INTO market_sales VALUES (1, 'a', 2, 'gold', 100, 1, 5);`); err != nil {
 	if err := db.QueryRow("SELECT unpaid, dest FROM market_sales WHERE listing_id = 1").Scan(&unpaid, &to); err != nil ||
 		unpaid != 0 || to != domain.MarketToWarehouse {
 		t.Fatalf("the old sale = unpaid %d, dest %q, %v", unpaid, to, err)
+	}
+}
+
+/*
+================
+TestMarketHeldListingsCountTowardTheCap
+
+A held item still sits in the market, so it takes a place under the
+cap: a full warehouse is no way to keep any number of items there.
+================
+*/
+func TestMarketHeldListingsCountTowardTheCap(t *testing.T) {
+	t.Parallel()
+	s, _, _, held := expiredHeldListing(t)
+	if held.ID == 0 {
+		t.Fatal("no held listing")
+	}
+	storage, err := s.MarketWarehouse(marketSeller)
+	if err != nil || len(storage.Rows) < 2 {
+		t.Fatalf("warehouse = %+v, %v", storage, err)
+	}
+	list := func(slot int64) error {
+		_, err := s.MarketList(domain.MarketListRequest{Division: testDivision, Account: marketSeller, Slot: slot,
+			Currency: domain.MarketSilk, Price: 10, Admit: admitAll, Rules: testMarketRules})
+		return err
+	}
+	if err := list(storage.Rows[0].Slot); err != nil {
+		t.Fatalf("the listing beside the held one: %v", err)
+	}
+	if err := list(storage.Rows[1].Slot); !errors.Is(err, domain.ErrMarketCap) {
+		t.Fatalf("one held and one open with a cap of %d: %v", testMarketRules.OpenCap, err)
+	}
+}
+
+/*
+================
+TestMarketReclaimIntoAFullWarehouseChangesNothing
+
+The player picked the warehouse: when it is full the cancel refuses and
+the listing stays on sale, never turned held behind the refusal.
+================
+*/
+func TestMarketReclaimIntoAFullWarehouseChangesNothing(t *testing.T) {
+	t.Parallel()
+	s, seller, _ := bagMarketFixture(t)
+	listing := listFromBag(t, s, seller, domain.MarketGold, 5000, false)
+	fillWarehouse(t, s, seller)
+	_, err := s.MarketReclaim(domain.MarketReclaimRequest{Account: marketSeller, ListingID: listing.ID,
+		To: domain.MarketToWarehouse})
+	if !errors.Is(err, domain.ErrMarketWarehouseFull) {
+		t.Fatalf("a cancel into a full warehouse: %v", err)
+	}
+	after, err := s.MarketListingByID(listing.ID)
+	if err != nil || after.State != domain.MarketOpen || after.Version != listing.Version {
+		t.Fatalf("after the refusal the listing is %+v, %v", after, err)
+	}
+}
+
+/*
+================
+TestMarketIncomingOffersAreBounded
+
+Other accounts fill the seller's incoming list, so it is cut to the
+newest limit open offers.
+================
+*/
+func TestMarketIncomingOffersAreBounded(t *testing.T) {
+	t.Parallel()
+	s, seller, _ := bagMarketFixture(t)
+	listing := listFromBag(t, s, seller, domain.MarketGold, 5000, false)
+	for i := 0; i < 5; i++ {
+		if _, err := s.syncDBLocked().Exec(`INSERT INTO market_offers (listing_id, division, buyer_account, buyer_char,
+buyer_name, price, dest, state, at_ms) VALUES (?, ?, ?, ?, ?, ?, 'bag', 'open', ?)`, listing.ID, testDivision,
+			fmt.Sprintf("flood%d", i), 100+i, fmt.Sprintf("Flood%d", i), 10, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	incoming, _, err := s.MarketOffers(marketSeller, 3)
+	if err != nil || len(incoming) != 3 || incoming[0].BuyerName != "Flood4" {
+		t.Fatalf("incoming = %+v, %v", incoming, err)
 	}
 }

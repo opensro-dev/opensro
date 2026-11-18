@@ -23,7 +23,9 @@ Two rules live here rather than in the store:
     calls them under the division lock.
   - A website offer or accept that needs a character's record (the
     offering character's gold) runs under WhileOffline, as a gold buy
-    does; an online character makes and answers offers in the game.
+    does. The game's accept runs on the lane under the division lock,
+    which already holds the buyer's record whether it is in the world or
+    not.
 
 A listing names its seller's character unless the seller listed
 anonymously (owner, 2026-11-19); the seller still sees its own choice.
@@ -232,7 +234,7 @@ func (s *Service) Account(account string) (publicstats.OwnMarketResponse, error)
 		return out, err
 	}
 	for _, listing := range listings {
-		out.Listings = append(out.Listings, s.listingView(listing))
+		out.Listings = append(out.Listings, s.ownListingView(listing))
 	}
 	purchases, err := s.Store.MarketPurchases(account, historyLimit)
 	if err != nil {
@@ -269,9 +271,6 @@ func (s *Service) Account(account string) (publicstats.OwnMarketResponse, error)
 		return out, err
 	}
 	out.OffersIn, out.OffersOut = s.offerViews(incoming), s.offerViews(outgoing)
-	for i := range out.Listings {
-		out.Listings[i].Seller, out.Listings[i].Anonymous = s.ownSeller(listings[i])
-	}
 	return out, nil
 }
 
@@ -285,13 +284,7 @@ A website listing, from the account warehouse.
 func (s *Service) List(account string, body publicstats.MarketListBody) (publicstats.MarketListingView, error) {
 	listing, err := s.Store.MarketList(domain.MarketListRequest{
 		Division: s.Division, Account: account, Slot: *body.Slot, Currency: body.Currency, Price: body.Price,
-		Admit: func(row domain.InventoryRow) error {
-			if !s.Tradeable(row) {
-				return domain.ErrMarketNotTradeable
-			}
-			return nil
-		},
-		Rules: Rules(),
+		Admit: s.admit, Rules: Rules(),
 	})
 	if err != nil {
 		return publicstats.MarketListingView{}, err
@@ -308,12 +301,9 @@ account's and offline; a Silk listing from the account's wallet.
 ================
 */
 func (s *Service) Buy(account string, body publicstats.MarketBuyBody) (publicstats.MarketSaleView, error) {
-	listing, err := s.Store.MarketListingByID(body.Listing)
+	listing, err := s.listingHere(body.Listing)
 	if err != nil {
 		return publicstats.MarketSaleView{}, err
-	}
-	if listing.Division != s.Division {
-		return publicstats.MarketSaleView{}, domain.ErrMarketNotFound
 	}
 	request := domain.MarketBuyRequest{ListingID: body.Listing, Version: body.Version, BuyerAccount: account, Rules: Rules()}
 	if listing.Currency == domain.MarketGold {
@@ -380,21 +370,12 @@ and the bag free of a stall or an exchange.
 func (s *Service) GameList(c *domain.Character, slot int64, currency string, price int64, anonymous bool) (publicstats.MarketListingView, error) {
 	listing, err := s.Store.MarketList(domain.MarketListRequest{
 		Division: s.Division, Account: c.AccountID, Character: c, Slot: slot, Currency: currency, Price: price,
-		Anonymous: anonymous,
-		Admit: func(row domain.InventoryRow) error {
-			if !s.Tradeable(row) {
-				return domain.ErrMarketNotTradeable
-			}
-			return nil
-		},
-		Rules: Rules(),
+		Anonymous: anonymous, Admit: s.admit, Rules: Rules(),
 	})
 	if err != nil {
 		return publicstats.MarketListingView{}, err
 	}
-	view := s.listingView(listing)
-	view.Seller, view.Anonymous = s.ownSeller(listing)
-	return view, nil
+	return s.ownListingView(listing), nil
 }
 
 /*
@@ -409,12 +390,9 @@ record the store writes is the one the lane owns.
 ================
 */
 func (s *Service) GameBuy(c *domain.Character, listing, version int64, to string, bagSlot int64) (publicstats.MarketSaleView, error) {
-	found, err := s.Store.MarketListingByID(listing)
+	found, err := s.listingHere(listing)
 	if err != nil {
 		return publicstats.MarketSaleView{}, err
-	}
-	if found.Division != s.Division {
-		return publicstats.MarketSaleView{}, domain.ErrMarketNotFound
 	}
 	request := domain.MarketBuyRequest{ListingID: listing, Version: version, BuyerAccount: c.AccountID, To: to,
 		BagSlot: bagSlot, Rules: Rules()}
@@ -451,12 +429,9 @@ Service::GameOffer
 ================
 */
 func (s *Service) GameOffer(c *domain.Character, listing, price int64, to string) (publicstats.MarketOfferView, error) {
-	found, err := s.Store.MarketListingByID(listing)
+	found, err := s.listingHere(listing)
 	if err != nil {
 		return publicstats.MarketOfferView{}, err
-	}
-	if found.Division != s.Division {
-		return publicstats.MarketOfferView{}, domain.ErrMarketNotFound
 	}
 	offer, err := s.Store.MarketMakeOffer(domain.MarketOfferRequest{ListingID: listing, BuyerAccount: c.AccountID,
 		Buyer: c, Price: price, To: to, Rules: Rules()})
@@ -470,9 +445,9 @@ func (s *Service) GameOffer(c *domain.Character, listing, price int64, to string
 ================
 Service::OfferBuyer
 
-The offer and the character that made it, for the lane to decide whose
-record an accept writes: the lane's own when that character is in the
-world, else an offline one under WhileOffline (GameAcceptOffline).
+The offer, for the lane to find the character that made it: the record
+an accept writes, which the lane holds under its division lock whether
+that character is in the world or not.
 ================
 */
 func (s *Service) OfferBuyer(offer int64) (domain.MarketOffer, error) {
@@ -483,8 +458,9 @@ func (s *Service) OfferBuyer(offer int64) (domain.MarketOffer, error) {
 ================
 Service::GameAccept
 
-The seller (c) accepts an offer whose buyer is online in this division:
-buyer is the lane's live record and bagSlot a free slot of its bag.
+The seller (c) accepts an offer in the game: buyer is the offering
+character's record, which the lane holds under the division lock, and
+bagSlot a free slot of its bag.
 ================
 */
 func (s *Service) GameAccept(c *domain.Character, offer int64, buyer *domain.Character, bagSlot int64) (publicstats.MarketSaleView, error) {
@@ -498,15 +474,14 @@ func (s *Service) GameAccept(c *domain.Character, offer int64, buyer *domain.Cha
 
 /*
 ================
-Service::AcceptOffline
+Service::AcceptOffer
 
-An accept whose buyer holds no world admission: the store writes the
-offline record under the entry gate (WhileOffline), so an entry either
-comes first and the accept answers "online", or follows and reads the
-sale. Both the game (a buyer not in the world) and the website use it.
+A website accept: the store writes the buyer's record under the entry
+gate (WhileOffline), so an entry either comes first and the accept
+answers "online", or follows and reads the sale.
 ================
 */
-func (s *Service) AcceptOffline(sellerAccount string, offer int64) (publicstats.MarketSaleView, error) {
+func (s *Service) AcceptOffer(sellerAccount string, offer int64) (publicstats.MarketSaleView, error) {
 	found, err := s.Store.MarketOfferByID(offer)
 	if err != nil {
 		return publicstats.MarketSaleView{}, err
@@ -621,12 +596,9 @@ warehouse.
 ================
 */
 func (s *Service) MakeOffer(account string, body publicstats.MarketOfferBody) (publicstats.MarketOfferView, error) {
-	listing, err := s.Store.MarketListingByID(body.Listing)
+	listing, err := s.listingHere(body.Listing)
 	if err != nil {
 		return publicstats.MarketOfferView{}, err
-	}
-	if listing.Division != s.Division {
-		return publicstats.MarketOfferView{}, domain.ErrMarketNotFound
 	}
 	buyer := s.character(account, body.Character)
 	if buyer == nil {
@@ -646,17 +618,6 @@ func (s *Service) MakeOffer(account string, body publicstats.MarketOfferBody) (p
 		return publicstats.MarketOfferView{}, err
 	}
 	return s.offerView(offer, listing), nil
-}
-
-/*
-================
-Service::AcceptOffer
-
-A website accept (AcceptOffline).
-================
-*/
-func (s *Service) AcceptOffer(account string, offer int64) (publicstats.MarketSaleView, error) {
-	return s.AcceptOffline(account, offer)
 }
 
 /*
@@ -734,14 +695,49 @@ func (s *Service) saleView(sale domain.MarketSale) publicstats.MarketSaleView {
 
 /*
 ================
-ownSeller
+ownListingView
 
-The seller line its own seller sees: the name even when anonymous, with
+A listing as its own seller sees it: the name even when anonymous, with
 the anonymous choice beside it.
 ================
 */
-func (s *Service) ownSeller(listing domain.MarketListing) (string, bool) {
-	return listing.SellerName, listing.Anonymous
+func (s *Service) ownListingView(listing domain.MarketListing) publicstats.MarketListingView {
+	view := s.listingView(listing)
+	view.Seller, view.Anonymous = listing.SellerName, listing.Anonymous
+	return view
+}
+
+/*
+================
+admit
+
+A listing's admission: the exchange's rule (Tradeable).
+================
+*/
+func (s *Service) admit(row domain.InventoryRow) error {
+	if !s.Tradeable(row) {
+		return domain.ErrMarketNotTradeable
+	}
+	return nil
+}
+
+/*
+================
+listingHere
+
+The listing id when it is this division's market's; another division's
+is no such listing.
+================
+*/
+func (s *Service) listingHere(id int64) (domain.MarketListing, error) {
+	listing, err := s.Store.MarketListingByID(id)
+	if err != nil {
+		return domain.MarketListing{}, err
+	}
+	if listing.Division != s.Division {
+		return domain.MarketListing{}, domain.ErrMarketNotFound
+	}
+	return listing, nil
 }
 
 /*

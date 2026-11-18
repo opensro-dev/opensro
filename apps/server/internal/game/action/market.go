@@ -526,6 +526,11 @@ func (rt *Runtime) HandleMarket(division string, character *enterworld.Character
 	if c == nil || c.DeletePending || c.AccountID == "" {
 		return marketRefusal(request.Op, marketRefusedUnavailable)
 	}
+	// The reads are what the website shows anyone; they also remember the
+	// keeper the window opened at. A write needs that keeper in reach.
+	if !rt.marketAtKeeper(division, c) && marketWrites(request.Op) {
+		return marketRefusal(request.Op, marketRefusedKeeper)
+	}
 	switch request.Op {
 	case marketOpSearch:
 		q, ok := rt.marketSearch(request)
@@ -668,10 +673,7 @@ func (rt *Runtime) marketPaySeller(division string, actor *enterworld.Character,
 		if seller == actor {
 			return frames, nil
 		}
-		if rt.marketAdmitted(division, seller) {
-			return nil, []RecipientFrames{{CharacterID: seller.ID, Frames: frames}}
-		}
-		return nil, nil
+		return nil, rt.marketTell(division, actor, seller.ID, frames...)
 	}
 	if !rt.marketAdmitted(division, seller) {
 		return nil, nil
@@ -684,6 +686,22 @@ func (rt *Runtime) marketPaySeller(division string, actor *enterworld.Character,
 		return nil, nil
 	}
 	return nil, []RecipientFrames{{CharacterID: seller.ID, Frames: frames}}
+}
+
+/*
+================
+marketTell
+
+The frames for the other party of a change, by character id: none when
+it is the actor or not in the world here.
+================
+*/
+func (rt *Runtime) marketTell(division string, actor *enterworld.Character, id int64, frames ...wire.Frame) []RecipientFrames {
+	party := rt.findCharacterByID(division, id)
+	if party == nil || party == actor || !rt.marketAdmitted(division, party) {
+		return nil
+	}
+	return []RecipientFrames{{CharacterID: party.ID, Frames: frames}}
 }
 
 /*
@@ -868,11 +886,8 @@ func (rt *Runtime) marketOffer(division string, c *enterworld.Character, request
 		frames = append(frames, references)
 	}
 	frames = append(frames, marketFrame(answer))
-	var others []RecipientFrames
-	if seller := rt.findCharacterByID(division, offer.SellerChar); seller != nil && seller != c && rt.marketAdmitted(division, seller) {
-		others = []RecipientFrames{{CharacterID: seller.ID, Frames: []wire.Frame{marketEventFrame(marketEvent{
-			Kind: marketEventOffer, Item: offer.Item.Name, Currency: offer.Currency, Price: offer.Price, Who: offer.Buyer})}}}
-	}
+	others := rt.marketTell(division, c, offer.SellerChar, marketEventFrame(marketEvent{Kind: marketEventOffer,
+		Item: offer.Item.Name, Currency: offer.Currency, Price: offer.Price, Who: offer.Buyer}))
 	return OpResult{Frames: frames, Recipients: others}
 }
 
@@ -948,10 +963,7 @@ func (rt *Runtime) marketAnswerOffer(division string, c *enterworld.Character, r
 		other = offer.SellerChar
 	}
 	frames := []wire.Frame{marketFrame(marketAnswer{Op: request.Op, OK: true})}
-	var others []RecipientFrames
-	if party := rt.findCharacterByID(division, other); party != nil && party != c && rt.marketAdmitted(division, party) {
-		others = []RecipientFrames{{CharacterID: party.ID, Frames: []wire.Frame{marketEventFrame(marketEvent{
-			Kind: kind, Item: offer.Item.Name, Currency: offer.Currency, Price: offer.Price, Who: offer.Buyer})}}}
-	}
+	others := rt.marketTell(division, c, other, marketEventFrame(marketEvent{Kind: kind, Item: offer.Item.Name,
+		Currency: offer.Currency, Price: offer.Price, Who: offer.Buyer}))
 	return OpResult{Frames: frames, Recipients: others}
 }

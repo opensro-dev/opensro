@@ -98,8 +98,9 @@ export interface MarketHudState {
 	readonly mineSelected: number;
 	readonly minePage: number;
 	readonly returnTo: MarketDestination;
-	// Offers: the picked offer, "in:<id>" or "out:<id>".
+	// Offers: the picked offer, "in:<id>" or "out:<id>", and each list's page.
 	readonly offerSelected: string;
+	readonly offerPages: { readonly in: number; readonly out: number; };
 	readonly dialog: MarketDialog | null;
 	readonly status: { readonly text: string; readonly ok: boolean; readonly until: number; } | null;
 	// The last notice sequence the status line took.
@@ -150,6 +151,7 @@ const CLOSED: MarketHudState = {
 	minePage: 0,
 	returnTo: "bag",
 	offerSelected: "",
+	offerPages: { in: 0, out: 0 },
 	dialog: null,
 	status: null,
 	noticeSeen: 0
@@ -159,11 +161,36 @@ const CLOSED: MarketHudState = {
 ================
 marketBusy
 
-A write is in flight: every write button waits for its answer.
+A request is in flight: every write button waits for its answer. A read
+counts too, because the worker sends one request at a time and would
+drop a write clicked during a read without a word.
 ================
 */
 export function marketBusy( market: MarketState | undefined ): boolean {
-	return !!market?.pending && market.pending !== "search" && market.pending !== "mine";
+	return !!market?.pending;
+}
+
+/*
+================
+marketWriting
+
+A write is in flight: the status line says so (a read is quick and
+silent).
+================
+*/
+export function marketWriting( market: MarketState | undefined ): boolean {
+	return marketBusy( market ) && market?.pending !== "search" && market?.pending !== "mine";
+}
+
+/*
+================
+marketOfferPages
+
+How many pages one offer list fills.
+================
+*/
+export function marketOfferPages( offers: readonly unknown[] ): number {
+	return Math.max( 1, Math.ceil( offers.length / MARKET_OFFER_ROWS ) );
 }
 
 /*
@@ -462,6 +489,14 @@ export function createMarketHud() {
 				return write( market, { op, listing: row.id, to: s.returnTo } );
 			}
 			// Offers.
+			const pager = /^market-offers-(in|out)-(prev|next)$/.exec( id );
+			if ( pager ) {
+				const side = pager[1] as "in" | "out";
+				const pages = marketOfferPages( (side === "in" ? mine?.offersIn : mine?.offersOut) ?? [] );
+				const page = Math.min( pages - 1, Math.max( 0, s.offerPages[side] + (pager[2] === "next" ? 1 : -1) ) );
+				s = { ...s, offerPages: { ...s.offerPages, [side]: page } };
+				return none;
+			}
 			if ( id.startsWith( "market-offer-in:" ) || id.startsWith( "market-offer-out:" ) ) {
 				s = { ...s, offerSelected: id.slice( 13 ) };
 				return none;

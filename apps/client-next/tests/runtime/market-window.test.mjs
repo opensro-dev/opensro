@@ -259,3 +259,43 @@ test("the drafts: an offer below the price, a listing's terms, the take-back pla
 	const busy = { ...context, market: market( { pending: "accept" } ) };
 	assert.deepEqual( hud.activate( "market-reject", busy ).requests, [], "one write at a time" );
 });
+
+test("a read in flight holds the writes, but only a write says it is waiting", () => {
+	const { f, step } = storageKeeper( true );
+	try {
+		step();
+		f.ui.event( { kind: "activate", id: "market-open" } );
+		step();
+		f.ui.event( { kind: "activate", id: "market-pick:7" } );
+		assert.equal( step().get( "market-buy" )?.disabled, false, "nothing in flight" );
+		f.state.gameplay = { ...f.state.gameplay, market: market( { pending: "search" } ) };
+		const controls = step();
+		assert.equal( controls.get( "market-buy" )?.disabled, true, "the worker would drop a write sent now" );
+		assert.ok( !f.hasText( "Waiting for the market..." ), "a read is silent" );
+	} finally {
+		f.dispose();
+	}
+	const hud = createMarketHud();
+	hud.open();
+	hud.activate( "market-tab:offers", { market: market(), localName: "Me", now: 0 } );
+	hud.activate( "market-offer-in:4", { market: market(), localName: "Me", now: 0 } );
+	const reading = { market: market( { pending: "mine" } ), localName: "Me", now: 0 };
+	assert.deepEqual( hud.activate( "market-accept", reading ).requests, [], "no write during a read" );
+});
+
+test("each offer list pages past its rows", () => {
+	const offer = id => ({ ...market().mine.offersIn[0], id });
+	const many = market( {
+		mine: { ...market().mine, offersIn: Array.from( { length: 8 }, ( _, i ) => offer( 10 + i ) ) }
+	} );
+	const context = { market: many, localName: "Me", now: 0 };
+	const hud = createMarketHud();
+	hud.open();
+	hud.activate( "market-tab:offers", context );
+	hud.activate( "market-offers-in-prev", context );
+	assert.equal( hud.state().offerPages.in, 0, "no page before the first" );
+	hud.activate( "market-offers-in-next", context );
+	hud.activate( "market-offers-in-next", context );
+	assert.equal( hud.state().offerPages.in, 1, "8 offers fill two pages of 6" );
+	assert.equal( hud.state().offerPages.out, 0, "the other list keeps its page" );
+});

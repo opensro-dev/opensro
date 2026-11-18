@@ -729,6 +729,7 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	rt.Pending.Clear(grounditem.PendingKey(divisionID, characterName))
 	rt.Selected.Clear(divisionID, characterName)
 	rt.closeStorageSession(divisionID, characterName)
+	rt.marketKeepers.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.NpcDialogs.Clear(divisionID, characterName)
 	rt.ClearCombatIntent(divisionID, characterName)
 	rt.clearSkillFinalizes(divisionID, characterName)

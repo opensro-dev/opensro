@@ -40,6 +40,8 @@ import {
 	MARKET_OFFER_ROWS,
 	MARKET_SORT_ORDER,
 	marketBusy,
+	marketOfferPages,
+	marketWriting,
 	marketOfferAt,
 	marketOwnRow,
 	marketPriceValue,
@@ -49,7 +51,7 @@ import {
 
 // The window's size and its inner margin.
 const WIDTH = 600;
-const HEIGHT = 500;
+const HEIGHT = 524;
 const MARGIN = 14;
 // The tab strip and the content below it.
 const TAB_TOP = 36;
@@ -226,7 +228,7 @@ penOf
 ================
 */
 function penOf( frame: UiAuthoredFrame, frameDraw: MarketPaint, view: MarketWindowView, px: number, py: number ) {
-	const busy = marketBusy( view.market );
+	const busy = marketBusy( view.market ), writing = marketWriting( view.market );
 	return {
 		frame,
 		frameDraw,
@@ -234,6 +236,7 @@ function penOf( frame: UiAuthoredFrame, frameDraw: MarketPaint, view: MarketWind
 		px,
 		py,
 		busy,
+		writing,
 		/*
 		================
 		text
@@ -602,7 +605,14 @@ function offersTab( pen: Pen ) {
 			[ "Offered", 350, 120, 2 ],
 			[ "State", 486, 100, 0 ]
 		] );
-		offers.slice( 0, MARKET_OFFER_ROWS ).forEach( ( offer, i ) => {
+		const pages = marketOfferPages( offers ), page = Math.min( hud.offerPages[side], pages - 1 );
+		if ( pages > 1 ) {
+			const right = px + WIDTH - MARGIN;
+			pen.button( `market-offers-${side}-prev`, "<", right - 130, top - 5, 32, page <= 0 );
+			pen.text( `${page + 1} / ${pages}`, [ right - 96, top, 60, 18 ], pen.frame.white, 1 );
+			pen.button( `market-offers-${side}-next`, ">", right - 32, top - 5, 32, page + 1 >= pages );
+		}
+		offers.slice( page * MARKET_OFFER_ROWS, (page + 1) * MARKET_OFFER_ROWS ).forEach( ( offer, i ) => {
 			const key = side + ":" + offer.id, picked = hud.offerSelected === key;
 			const r: UiRect = [ px + MARGIN, top + 40 + i * ROW_PITCH, WIDTH - 2 * MARGIN, ROW_PITCH ];
 			pen.row(
@@ -671,7 +681,7 @@ The last write's outcome, or that one is on its way.
 function statusLine( pen: Pen ) {
 	const { px, py, view } = pen, status = view.hud.status;
 	const r: UiRect = [ px + MARGIN, py + HEIGHT - FOOTER_BOTTOM - 24, WIDTH - 2 * MARGIN, 20 ];
-	if ( pen.busy ) pen.text( "Waiting for the market...", r, DIM, 1 );
+	if ( pen.writing ) pen.text( "Waiting for the market...", r, DIM, 1 );
 	else if ( status ) pen.text( status.text, r, status.ok ? OK : REFUSED, 1 );
 }
 

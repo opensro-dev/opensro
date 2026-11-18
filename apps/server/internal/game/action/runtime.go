@@ -162,7 +162,10 @@ type Runtime struct {
 	// world key -> the NPC, the character's own gid for a ticket, or the
 	// guild manager. Memory only, as native's pc+0x1D88 record is.
 	storageSessions sync.Map
-	criticals       criticalHistory
+	// marketKeepers is the storage keeper each character opened the
+	// market window at (market_keeper.go): world key -> NPC gid.
+	marketKeepers sync.Map
+	criticals     criticalHistory
 	// groundDrops is the per-tick ground pass's placed-drop cache
 	// (ground_scope.go).
 	groundDrops groundDropCache

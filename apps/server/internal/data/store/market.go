@@ -204,11 +204,11 @@ func (s *Store) MarketList(req domain.MarketListRequest) (domain.MarketListing, 
 	if err := checkMarketPrice(req.Currency, req.Price); err != nil {
 		return domain.MarketListing{}, err
 	}
-	open, err := countOpenListings(s.syncDBLocked(), req.Account)
+	active, err := countActiveListings(s.syncDBLocked(), req.Account)
 	if err != nil {
 		return domain.MarketListing{}, err
 	}
-	if open >= req.Rules.OpenCap {
+	if active >= req.Rules.OpenCap {
 		return domain.MarketListing{}, domain.ErrMarketCap
 	}
 	now := s.now().UnixMilli()
@@ -539,15 +539,9 @@ The seller takes an open listing back; it follows the expiry path.
 func (s *Store) MarketCancel(account string, id int64) (domain.MarketListing, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.db == nil {
-		return domain.MarketListing{}, domain.ErrMarketUnavailable
-	}
-	listing, err := readListing(s.syncDBLocked(), id)
+	listing, err := s.sellerListingLocked(account, id)
 	if err != nil {
 		return domain.MarketListing{}, err
-	}
-	if listing.SellerAccount != account {
-		return domain.MarketListing{}, domain.ErrMarketNotFound
 	}
 	if listing.State != domain.MarketOpen {
 		return domain.MarketListing{}, domain.ErrMarketChanged
@@ -565,15 +559,9 @@ A held item moves to the seller's warehouse once it has room.
 func (s *Store) MarketTakeBack(account string, id int64) (domain.MarketListing, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.db == nil {
-		return domain.MarketListing{}, domain.ErrMarketUnavailable
-	}
-	listing, err := readListing(s.syncDBLocked(), id)
+	listing, err := s.sellerListingLocked(account, id)
 	if err != nil {
 		return domain.MarketListing{}, err
-	}
-	if listing.SellerAccount != account {
-		return domain.MarketListing{}, domain.ErrMarketNotFound
 	}
 	if listing.State != domain.MarketHeld {
 		return domain.MarketListing{}, domain.ErrMarketNotHeld
@@ -590,29 +578,24 @@ func (s *Store) MarketTakeBack(account string, id int64) (domain.MarketListing, 
 MarketReclaim
 
 The game window's cancel and take-back: an open listing or a held item
-goes back to the bag slot the lane chose, or to the warehouse as on the
-website. A held item whose warehouse is still full can always come back
-this way into a free bag slot.
+goes back to the bag slot the lane chose, or to the warehouse. The player
+picked the place, so a full warehouse refuses and changes nothing (an
+open listing stays on sale) rather than turn the listing held behind a
+refusal; a free bag slot always takes it.
 ================
 */
 func (s *Store) MarketReclaim(req domain.MarketReclaimRequest) (domain.MarketListing, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.db == nil {
-		return domain.MarketListing{}, domain.ErrMarketUnavailable
-	}
-	listing, err := readListing(s.syncDBLocked(), req.ListingID)
+	listing, err := s.sellerListingLocked(req.Account, req.ListingID)
 	if err != nil {
 		return domain.MarketListing{}, err
-	}
-	if listing.SellerAccount != req.Account {
-		return domain.MarketListing{}, domain.ErrMarketNotFound
 	}
 	if listing.State != domain.MarketOpen && listing.State != domain.MarketHeld {
 		return domain.MarketListing{}, domain.ErrMarketNotHeld
 	}
 	if req.To != domain.MarketToBag {
-		returned, err := s.returnListingLocked(listing, listing.State == domain.MarketOpen)
+		returned, err := s.returnListingLocked(listing, false)
 		if err == nil && returned.State != domain.MarketReturned {
 			return listing, domain.ErrMarketWarehouseFull
 		}
@@ -735,6 +718,27 @@ func (s *Store) returnListingLocked(listing domain.MarketListing, fallBackToHeld
 }
 
 //============================================================================
+
+/*
+================
+sellerListingLocked
+
+The listing id when it is account's: anyone else finds no such listing.
+================
+*/
+func (s *Store) sellerListingLocked(account string, id int64) (domain.MarketListing, error) {
+	if s.db == nil {
+		return domain.MarketListing{}, domain.ErrMarketUnavailable
+	}
+	listing, err := readListing(s.syncDBLocked(), id)
+	if err != nil {
+		return domain.MarketListing{}, err
+	}
+	if listing.SellerAccount != account {
+		return domain.MarketListing{}, domain.ErrMarketNotFound
+	}
+	return listing, nil
+}
 
 /*
 ================
@@ -881,13 +885,19 @@ func freeStorageSlot(storage domain.AccountStorage) (int64, bool) {
 
 /*
 ================
-countOpenListings
+countActiveListings
+
+The account's listings the market still holds: open ones and held ones.
+A held item counts, or a seller with a full warehouse could keep any
+number of items in the market for free, listing more as each one's time
+runs out.
 ================
 */
-func countOpenListings(db *sql.DB, account string) (int, error) {
-	var open int
-	err := db.QueryRow("SELECT COUNT(*) FROM market_listings WHERE seller_account = ? AND state = 'open'", account).Scan(&open)
-	return open, err
+func countActiveListings(db *sql.DB, account string) (int, error) {
+	var active int
+	err := db.QueryRow("SELECT COUNT(*) FROM market_listings WHERE seller_account = ? AND state IN ('open', 'held')",
+		account).Scan(&active)
+	return active, err
 }
 
 /*
