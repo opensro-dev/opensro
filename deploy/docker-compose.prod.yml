@@ -35,6 +35,21 @@ services:
     restart: "no"
     profiles: [jobs]
 
+  # The PVP shard's authority on a first boot (port-only, not native: pvpserver).
+  provision-pvp:
+    image: *server-image
+    command: ["provision"]
+    environment:
+      SRO_SHARD_ID: pvp
+      SRO_SHARD_CATALOG_PATH: /app/deploy-config/shards.prod.json
+    volumes:
+      - *catalog
+      - cluster:/cluster
+      - shard-pvp:/data/shard
+    network_mode: none
+    restart: "no"
+    profiles: [jobs]
+
   # The GameWorld's copy of the session keys: the public half only.
   derive-public:
     image: *identity-image
@@ -51,6 +66,15 @@ services:
     command: ["upgrade"]
     volumes:
       - shard-global-official:/data/shard
+    network_mode: none
+    restart: "no"
+    profiles: [jobs]
+
+  upgrade-pvp:
+    image: *server-image
+    command: ["upgrade"]
+    volumes:
+      - shard-pvp:/data/shard
     network_mode: none
     restart: "no"
     profiles: [jobs]
@@ -100,7 +124,7 @@ services:
 
   identity:
     image: *identity-image
-    command: ["-key", "/identity/key.json", "-out-dir", "/out", "-shards", "global-official", "-namespace", "silkroad"]
+    command: ["-key", "/identity/key.json", "-out-dir", "/out", "-shards", "global-official,pvp", "-namespace", "silkroad"]
     volumes:
       - identity:/identity
       - identity-out:/out
@@ -154,6 +178,53 @@ services:
     stop_grace_period: 45s
     restart: unless-stopped
 
+  gameworld-pvp:
+    image: *server-image
+    command: ["gameworld"]
+    # The official shard's content flags, then the PVP shard's own (the later file wins).
+    env_file:
+      - path: ./shard.env
+        required: false
+      - path: ./shard-pvp.env
+        required: false
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SRO_SHARD_CATALOG_PATH: /app/deploy-config/shards.prod.json
+      SRO_SHARD_ID: pvp
+      SRO_AGENT_URL: http://agent:8787
+      SRO_AGENT_URL_REQUIRE: "1"
+      SRO_AGENT_IDENTITY_FILE: /identity/gameworld-pvp.jwt
+      SRO_AGENT_SESSION_PUBLIC_KEYS_PATH: /cluster/agent-session-public-keys.json
+      SRO_GAMEWORLD_PRIVATE_NETWORK: "1"
+      SRO_GAMEWORLD_CONTROL_ADDR: 0.0.0.0:8791
+      TRANSPORT_WS_ADDR: 0.0.0.0:8788
+      # WebTransport is out of scope (the client defaults to WebSocket, and Traefik cannot carry
+      # it): a non-loopback WT listener would require a production certificate, so it stays on
+      # loopback, unreachable.
+      TRANSPORT_WT_ADDR: 127.0.0.1:8788
+      TRANSPORT_ALLOWED_ORIGINS: https://${SRO_DOMAIN:?set SRO_DOMAIN in .env.prod}
+      TRANSPORT_CERT_DIR: /data/shard/certs
+      SRO_AUTHORITY_REQUIRE: "1"
+      SRO_AUTHORITY_STATE_DIR: /data/shard/authority
+    volumes:
+      - *catalog
+      - cluster:/cluster:ro
+      - identity-out:/identity:ro
+      - shard-pvp:/data/shard
+      - gamedata-cache:/cache/game-data
+    depends_on:
+      agent:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8788/transport/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    # The GameWorld drains sessions and commits within its 30 s shutdown budget.
+    stop_grace_period: 45s
+    restart: unless-stopped
+
   web:
     image: ${IMAGE_REPO:?set IMAGE_REPO}:web-${IMAGE_TAG:?set IMAGE_TAG}
     volumes:
@@ -191,4 +262,5 @@ volumes:
   identity:
   identity-out:
   shard-global-official:
+  shard-pvp:
   gamedata-cache:

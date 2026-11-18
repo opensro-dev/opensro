@@ -9,7 +9,7 @@
 #    the release that is up already has become hard links, so only what
 #    changed crosses the wire. A release already on the host is not resent.
 # 3. The stack files (compose, rollout.sh, config/, .env.prod.example) are
-#    swapped in whole; .env.prod, shard.env, release.env, pending.env,
+#    swapped in whole; .env.prod, shard.env, shard-pvp.env, release.env, pending.env,
 #    backups/ and assets/ stay.
 # 4. rollout.sh runs on the host with the tag and the release.
 #

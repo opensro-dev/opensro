@@ -2,6 +2,7 @@
 .env.prod
 .env.prod.bak*
 shard.env
+shard-pvp.env
 release.env
 deploy.env
 backups/

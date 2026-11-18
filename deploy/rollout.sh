@@ -36,7 +36,7 @@ if [ "${1:-}" = "--rollback" ]; then rollback=1; fi
 PROJECT="${COMPOSE_PROJECT_NAME:-silkroad}"
 KEEP_BACKUPS=5
 KEEP_RELEASES=2
-STATE_VOLUMES=(cluster agent identity shard-global-official)
+STATE_VOLUMES=(cluster agent identity shard-global-official shard-pvp)
 BACKUP_IMAGE="${ROLLOUT_BACKUP_IMAGE:-alpine:3.20}"
 
 fail() { echo "rollout: $*" >&2; exit 1; }
@@ -106,6 +106,7 @@ done
 
 echo "==> provision"
 compose run --rm provision
+compose run --rm provision-pvp
 compose run --rm derive-public
 
 if ! compose run --rm -T --no-deps --entrypoint test provision -e /cluster/accounts.json; then
@@ -131,7 +132,7 @@ recover() {
             compose() { docker compose -p "$0" -f docker-compose.prod.yml --env-file .env.prod "$@"; }
             compose up -d identity &&
             compose up -d --wait --force-recreate --no-deps agent &&
-            compose up -d --wait gameworld-global-official web' "$PROJECT" >&2 \
+            compose up -d --wait gameworld-global-official gameworld-pvp web' "$PROJECT" >&2 \
             || echo "rollout: the previous release did not come back; the stack is DOWN" >&2
     else
         echo "rollout: the stack is DOWN (stage: $stage). The backup taken before the upgrade is ${backup:-none}; see README \"Backups\"" >&2
@@ -140,8 +141,8 @@ recover() {
 }
 trap recover EXIT
 
-echo "==> stop the GameWorld, then the Agent"
-compose stop gameworld-global-official
+echo "==> stop the GameWorlds, then the Agent"
+compose stop gameworld-global-official gameworld-pvp
 compose stop agent
 
 mkdir -p backups
@@ -157,12 +158,16 @@ ls -1 backups/silkroad-*.tar.gz | sort -r | tail -n +$((KEEP_BACKUPS + 1)) | xar
 echo "==> upgrade"
 stage=upgrade
 upgrade_report="$(compose run --rm upgrade 2>&1)"
+upgrade_report_pvp="$(compose run --rm upgrade-pvp 2>&1)"
 echo "$upgrade_report"
+echo "$upgrade_report_pvp"
 upgraded=0
-case "$upgrade_report" in
-    *"already in the current format"*|*"no authority yet"*) ;;
-    *) upgraded=1 ;;
-esac
+for report in "$upgrade_report" "$upgrade_report_pvp"; do
+    case "$report" in
+        *"already in the current format"*|*"no authority yet"*) ;;
+        *) upgraded=1 ;;
+    esac
+done
 stage=starting
 
 echo "==> assets $ASSETS_RELEASE"
@@ -175,7 +180,7 @@ echo "==> start"
 # is always recreated after it.
 compose up -d identity
 compose up -d --wait --force-recreate --no-deps agent
-compose up -d --wait gameworld-global-official web
+compose up -d --wait gameworld-global-official gameworld-pvp web
 compose ps
 stage=up
 

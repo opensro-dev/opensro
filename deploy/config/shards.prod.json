@@ -12,6 +12,19 @@
       "controlUrl": "http://gameworld-global-official:8791",
       "transportUrl": "http://gameworld-global-official:8788",
       "publicTransportUrl": "/shards/global-official"
+    },
+    {
+      "id": "pvp",
+      "name": "PVP",
+      "nativeServerId": 2,
+      "nativeFarmId": 0,
+      "capacity": 1000,
+      "default": false,
+      "test": false,
+      "enabled": true,
+      "controlUrl": "http://gameworld-pvp:8791",
+      "transportUrl": "http://gameworld-pvp:8788",
+      "publicTransportUrl": "/shards/pvp"
     }
   ]
 }

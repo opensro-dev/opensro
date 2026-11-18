@@ -129,6 +129,7 @@ while [ $SECONDS -lt $until_at ]; do
     fi
     compose exec -T agent curl -fsS -o /dev/null http://127.0.0.1:8080/jwks.json || fail "g: the JWKS is gone after the Agent restarted"
     [ "$(compose ps --format '{{.Health}}' gameworld-global-official)" = healthy ] || fail "g: the GameWorld is not healthy"
+    [ "$(compose ps --format '{{.Health}}' gameworld-pvp)" = healthy ] || fail "g: the PVP GameWorld is not healthy"
     sleep 5
 done
 echo "ok    g"
