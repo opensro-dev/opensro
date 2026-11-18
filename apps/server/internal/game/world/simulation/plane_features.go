@@ -46,6 +46,10 @@ type PlaneFeatures struct {
 	// is one region id for the whole dungeon, so there it is the native
 	// message block, and a cave without an installed grid stays awake.
 	Dormancy bool
+	// DormancyByBlock: the plane sleeps and wakes by message block
+	// (worldgeom.InterestBlockAt) instead of by region, because one region
+	// id spans the whole cave floor (monster_dormancy.go).
+	DormancyByBlock bool
 	// SpawnTerrainLift: the enter-world repair that raises a spawn onto
 	// the terrain heightfield (enterworld.LiftSpawnAboveTerrain). The
 	// heightfield describes outdoor terrain only; a cave spawn stands
@@ -81,7 +85,7 @@ in a cave.
 */
 func featuresFor(kind PlaneKind) PlaneFeatures {
 	if kind == PlaneCave {
-		return PlaneFeatures{Dormancy: true}
+		return PlaneFeatures{Dormancy: true, DormancyByBlock: true}
 	}
 	return PlaneFeatures{QuestMonsterSpawns: true, CaravanBandits: true, UniqueReturnAnchors: true, Dormancy: true,
 		SpawnTerrainLift: true, SpawnStrandedRescue: true, QuestGatherAreas: true, HelpCallSight: true}

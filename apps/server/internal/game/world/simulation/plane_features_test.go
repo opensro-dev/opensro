@@ -27,8 +27,8 @@ func TestPlaneFeaturesPinTheCaveColumn(t *testing.T) {
 	for _, cave := range []uint16{0x8001, 0x8004} {
 		// A cave sleeps by message block (monster_dormancy.go); every
 		// other outdoor feature stays off.
-		if got := FeaturesAt(cave); got != (PlaneFeatures{Dormancy: true}) {
-			t.Errorf("cave %#x features %+v, want dormancy only", cave, got)
+		if got := FeaturesAt(cave); got != (PlaneFeatures{Dormancy: true, DormancyByBlock: true}) {
+			t.Errorf("cave %#x features %+v, want block dormancy only", cave, got)
 		}
 	}
 }

@@ -61,7 +61,7 @@ awake, the behaviour before caves slept.
 ================
 */
 func sleepCellAt(regionID uint16, x, z float64) (sleepCell, bool) {
-	if !IsDungeonRegion(regionID) {
+	if !FeaturesAt(regionID).DormancyByBlock {
 		return sleepCell{region: regionID}, true
 	}
 	block := worldgeom.InterestBlockAt(worldgeom.RegionXZ{RegionID: regionID, X: x, Z: z})
@@ -82,7 +82,7 @@ sleeps, which is how a cave behaved when it was one block.
 ================
 */
 func (state *divisionMonsterState) wakeCells(spawn Spawn, out []sleepCell) []sleepCell {
-	if !IsDungeonRegion(spawn.RegionID) {
+	if !FeaturesAt(spawn.RegionID).DormancyByBlock {
 		for _, region := range RegionScopeRing(spawn.RegionID) {
 			out = append(out, sleepCell{region: region})
 		}
@@ -215,7 +215,7 @@ func (s *MonsterState) tryDormant(state *divisionMonsterState, gid uint32, m mov
 	if !ok || now < state.keepAwakeUntil[cell] {
 		return false
 	}
-	if IsDungeonRegion(cell.region) && now < state.keepAwakeUntil[sleepCell{region: cell.region, whole: true}] {
+	if FeaturesAt(cell.region).DormancyByBlock && now < state.keepAwakeUntil[sleepCell{region: cell.region, whole: true}] {
 		return false
 	}
 	if !state.movers.compact(gid) {
@@ -297,7 +297,7 @@ so the per-actor schedule read stays as small as it was (#3027).
 ================
 */
 func (state *divisionMonsterState) sleepCellOf(gid uint32, regionID uint16) (sleepCell, bool) {
-	if !IsDungeonRegion(regionID) {
+	if !FeaturesAt(regionID).DormancyByBlock {
 		return sleepCell{region: regionID}, true
 	}
 	pose, ok := state.movers.pendingPose(gid)
