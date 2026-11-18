@@ -18,6 +18,8 @@ neighbours, seasonal layer members excluded), reviewed in game:
 	       the inverse of its distance), toward the open street;
 	watch  a field post with no solid model within 30 m faces away from
 	       the town's guards' centroid, as a lookout.
+	owner  a placement the owner corrected in game (the cardinal heading
+	       named in review: east 0, north 16384, west 32768, south 49151).
 
 The heading word is the native yaw convention (atan2(dz, dx) over the full
 circle, headingWordFromDelta). Join by codename and exact position, as the
@@ -39,7 +41,7 @@ var arabiaNPCHeadings = map[npcHeadingKey]uint16{
 	{"NPC_AR_ABSHAD", 22363, 11759, -3939, 1038}:                  13238, // open
 	{"NPC_AR_ACCESSORY", 22617, 10275, -4313, 9505}:               33831, // shop
 	{"NPC_AR_CASTLESOLDIER_1", 22618, 10727, -2366, 3911}:         59160, // open
-	{"NPC_AR_CASTLESOLDIER_2", 22362, 13170, -2366, 18543}:        6390,  // open
+	{"NPC_AR_CASTLESOLDIER_2", 22362, 13170, -2366, 18543}:        32768, // owner: west
 	{"NPC_AR_CHOUKRI", 22361, 7214, -4321, 4498}:                  4782,  // shop
 	{"NPC_AR_COMMERCE1", 22874, 8469, -4307, 8729}:                59749, // open
 	{"NPC_AR_COMMERCE2", 22363, 8458, -3200, 9996}:                46294, // open
