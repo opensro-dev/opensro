@@ -72,6 +72,7 @@ import { carriedPose, createCorrectionCarry, predictedCast } from "./correction-
 import { impactSource } from "@/engine/foundation/animation/impact-source";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { projectileSpace, sampleProjectile, stepHomingProjectile } from "@/engine/foundation/animation/projectile-time";
+import { windupAwaitsTrade } from "./windup-trade";
 import {
 	projectileBasis,
 	movingFade,
@@ -3309,11 +3310,13 @@ export function createCharacterEffects(
 					const command = visual.command;
 					if ( command ) {
 						const cast = castStates.get( visual.token );
-						// Inferred: a retained buff token must not keep its completed windup alive.
+						// Inferred: a retained buff token must not keep its completed windup alive,
+						// unless a SHOT mover of the cast still has to trade it (windup-trade.ts).
 						if (
 							!current.has( visual.token ) ||
 							cast?.cancelledAtMs !== undefined || !entity ||
-							command.windup && cast?.shotAtMs !== undefined && clock >= cast.shotAtMs
+							command.windup && cast?.shotAtMs !== undefined && clock >= cast.shotAtMs &&
+								!windupAwaitsTrade( catalog?.[String( cast.skill )]?.stages, command.slot )
 						) releaseCommand( command, now );
 						stepRelease( command, now );
 					}
