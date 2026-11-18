@@ -55,14 +55,18 @@ structure, and `enterworld.siegeFortressRows` adds the rows to the client's fort
 
 These are inferences and port choices, not native evidence:
 
-- **Two models no client ships.** v1.188 and v1.696 both name `fort_stone_bj.bsr` and `small_gate_bj.bsr`
-  for the Bandit structures, and neither `Data.pk2` has them.
-  - The fort stone takes `fort_stone_bd.bsr`. Fort stones are named by fortress initials, and the other
-    "-dan" fortress, Heukmakdan, uses `fort_stone_hd`.
-  - The small gate takes the fortress's own shipped `big_gate_bj.bsr`.
+- **Two Bandit model paths no client ships.** The Bandit structure rows name `fort_stone_bj.bsr` and
+  `small_gate_bj.bsr`. Neither is in the `Data.pk2` of v1.150, v1.188, v1.657 or v1.696. Each client ships
+  the fortress's own models under other names:
+  - **Fort stone:** every client ships exactly eight fort stones (`bd, ct, dw, er, hd, ht, ja, sk`) for
+    exactly eight siege worlds (`INS_FORT_BJ, CT, DW, ER, HM, HT, JA, SK`). The two "-dan" fortresses
+    carry the "d": Bijeokdan's stone is `fort_stone_bd`, Heukmakdan's `fort_stone_hd`.
+  - **Gate:** `Bldg\guild\bj\` holds one gate, `big_gate_bj.bsr`. The later maps' `object.ifo` (v1.188,
+    v1.657 and v1.696 alike) places it as object 1979. The Bandit rows author no big gate, only the
+    small one.
 
   Only the drawn model changes. If a source ever ships the authored file, the import stops and asks for
-  the fallback to be removed.
+  the mapping to be removed.
 - **One misfiled model.** Hotan's big gate names `Bldg\guild\ht\big_gate_ht.bsr`, but both clients ship
   that file in `Bldg\guild\hotang\`, beside the fortress's bridge, plaza and castle gate. The import uses
   the file where it is shipped.

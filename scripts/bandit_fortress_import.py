@@ -55,13 +55,18 @@ def vsro_root(env=os.environ):
 	return Path(configured)
 
 
-# Neither later client ships the two Bandit models its structure rows
-# name (v1.188 and v1.696 both author fort_stone_bj.bsr and
-# small_gate_bj.bsr; neither Data.pk2 has them). Inference, recorded
-# here and shipped: the fort stones are named by fortress initials, and
-# the two "-dan" fortresses take initial plus d - Heukmakdan's is
-# fort_stone_hd, so Bijeokdan's is the shipped fort_stone_bd. The small
-# gate takes the fortress's own shipped gate, big_gate_bj.bsr. Only the
+# The structure rows name two files no client ships: fort_stone_bj.bsr
+# and small_gate_bj.bsr are in no Data.pk2 of v1.150, v1.188, v1.657 or
+# v1.696. Each client ships the Bandit fortress's own models under
+# other names, and the rows map onto them one for one:
+# - Fort stone: every client ships exactly eight fort stones (bd, ct,
+#   dw, er, hd, ht, ja, sk) for exactly eight siege worlds (INS_FORT_BJ,
+#   CT, DW, ER, HM, HT, JA, SK). The two "-dan" fortresses carry the "d":
+#   Bijeokdan's stone is fort_stone_bd, Heukmakdan's fort_stone_hd.
+# - Gate: Bldg\guild\bj\ holds one gate, big_gate_bj.bsr. The later
+#   maps' object.ifo (v1.188, v1.657 and v1.696 alike) places it as
+#   object 1979. The Bandit rows author no big gate, only the small one.
+# The rows' paths are authoring slips, as Hotan's big gate is. Only the
 # drawn model changes; the structure's row, HP and zones are authored.
 MODEL_FALLBACKS = (
 	(r"Artifact\Guild\fort_stone\fort_stone_bj.bsr", r"Artifact\Guild\fort_stone\fort_stone_bd.bsr"),
