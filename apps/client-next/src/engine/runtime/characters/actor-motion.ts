@@ -15,6 +15,7 @@ that order, for every actor every frame.
 */
 import { movementEntryRate, transitionActionStates } from "@/engine/foundation/animation/action-refresh";
 import { selectAvatarOverride } from "@/engine/foundation/animation/avatar-override";
+import { castAnimating } from "@/engine/foundation/animation/auxiliary-motion";
 import { animationActivation, type AnimationActivation } from "@/engine/foundation/animation/animation-activation";
 import { postureLayers } from "@/engine/foundation/animation/posture";
 import { oneShotLayers } from "@/engine/foundation/animation/one-shot-layers";
@@ -318,8 +319,7 @@ export function createActorMotion( owner: ActorOwner ) {
 			(localMover( entity.gid ) ? gameplay!.movementTransition : entity.movementTransition)?.reason ===
 				"displacement";
 		const waiting = !dead && waitingActors.has( entity.gid );
-		const activeCast = !!cast && cast.cancelledAtMs === undefined &&
-			(actionLayersByActor.get( entity.gid )?.length ?? 0) > 0;
+		const activeCast = castAnimating( cast, actionLayersByActor.get( entity.gid )?.length ?? 0 );
 		// The navigation hold itself resolved in presentPoses
 		// (#1442c); a surviving hold still stops the walk's gait.
 		if ( state.navigationHold ) moving = false;

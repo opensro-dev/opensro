@@ -11,6 +11,7 @@ scenery and auxiliary actors cannot satisfy a player readiness barrier.
 */
 
 import { createStatusOwner } from "@/engine/foundation/animation/status-presentation";
+import { castAnimating } from "@/engine/foundation/animation/auxiliary-motion";
 import type { AvatarOverrideSelection } from "@/engine/foundation/animation/avatar-override";
 import { createAnimationEmission } from "@/engine/foundation/animation/animation-emission";
 import { createEntityLod } from "@/engine/foundation/animation/entity-lod";
@@ -842,7 +843,7 @@ export function createCharacterPresentation(
 		const { entities, seconds, cameraPitch, blindHeld } = input;
 		const { animationDeltaMs, localMover } = begun;
 		const { local } = presented;
-		const { gameplay, active, next, castByActor, entitiesByGid, effectActors } = events;
+		const { gameplay, active, next, castByActor, actionLayersByActor, entitiesByGid, effectActors } = events;
 		const { animationHolders, particleHolders } = actors;
 		probe?.detailBegin( "presentation-finalize" );
 		for ( const gid of states.keys() ) {
@@ -902,7 +903,15 @@ export function createCharacterPresentation(
 			{ renderer, resources, effects, probe }
 		);
 		auxiliary.step(
-			{ entities, seconds, next, gameplay, localMover, castByActor, particleHolders },
+			{
+				entities,
+				seconds,
+				next,
+				gameplay,
+				localMover,
+				casting: gid => castAnimating( castByActor.get( gid ), actionLayersByActor.get( gid )?.length ?? 0 ),
+				particleHolders
+			},
 			{
 				resourceFor,
 				dress: published.dress,
