@@ -21,7 +21,7 @@ import {
 	type LocomotionBlend
 } from "@/engine/foundation/animation/locomotion-blend";
 import { movementGait } from "@/engine/foundation/gameplay/native-movement";
-import { auxiliaryLocomotion } from "@/engine/foundation/animation/auxiliary-motion";
+import { auxiliaryLocomotion, castAnimating } from "@/engine/foundation/animation/auxiliary-motion";
 import { animationActivation, type AnimationActivation } from "@/engine/foundation/animation/animation-activation";
 import { createModifierDelta } from "@/engine/foundation/rendering/modifier-delta";
 import { createAnimationDispatch } from "@/engine/foundation/animation/animation-dispatch";
@@ -109,9 +109,11 @@ interface AuxiliaryFrame {
 	readonly next: Map<number, CharacterActor>;
 	readonly gameplay: GameplayState | null;
 	readonly localMover: ( gid: number ) => boolean;
-	// A cast that still drives the owner's motion (castAnimating), not mere
-	// membership in gameplay.casts, which outlives the animation.
-	readonly casting: ( gid: number ) => boolean;
+	// The owner's cast and its playing action layers: the wing stands only
+	// while castAnimating holds, not for mere membership in gameplay.casts,
+	// which outlives the animation.
+	readonly castByActor: ReadonlyMap<number, { readonly cancelledAtMs?: number; }>;
+	readonly actionLayersByActor: ReadonlyMap<number, readonly unknown[]>;
 	readonly particleHolders: { actor: CharacterActor; particles: readonly ModelParticle[]; }[];
 }
 
@@ -444,7 +446,8 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 		================
 		*/
 		step( frame: AuxiliaryFrame, bindings: AuxiliaryBindings ) {
-			const { entities, seconds, next, gameplay, localMover, casting, particleHolders } = frame;
+			const { entities, seconds, next, gameplay, localMover, castByActor, actionLayersByActor, particleHolders } =
+				frame;
 			const { resourceFor, dress, resources, ridesByRider, riderModes, committedAuxiliary } = bindings;
 			const hairOwners = new Set<number>();
 			for ( const entity of entities ) {
@@ -540,7 +543,10 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 				const requested = auxiliaryLocomotion( {
 					mounted: entity.mountedOn !== undefined,
 					dead: entity.appearanceState?.[0] === 2,
-					casting: casting( entity.gid ),
+					casting: castAnimating(
+						castByActor.get( entity.gid ),
+						actionLayersByActor.get( entity.gid )?.length ?? 0
+					),
 					moving,
 					gait: movementGait( entity.movementMode )
 				} );

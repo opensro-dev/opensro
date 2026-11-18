@@ -908,7 +908,8 @@ export function createCharacterPresentation(
 				next,
 				gameplay,
 				localMover,
-				casting: gid => castAnimating( castByActor.get( gid ), actionLayersByActor.get( gid )?.length ?? 0 ),
+				castByActor,
+				actionLayersByActor,
 				particleHolders
 			},
 			{
