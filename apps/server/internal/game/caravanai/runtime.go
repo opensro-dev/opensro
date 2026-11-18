@@ -91,6 +91,8 @@ type AgentUnit struct {
 	GoodsCostGold int64
 	// CooldownUntilMs holds a robbed Trader's next own run.
 	CooldownUntilMs int64
+	// Vengeance is the Trader a killed Thief leads its gang back after.
+	Vengeance string
 	// Walking is set while the agent strolls (published as walk mode).
 	Walking bool
 	// nextRemoteAtMs is the earliest time the next remote decision may be
@@ -110,6 +112,9 @@ type AgentUnit struct {
 	progressAtMs       int64
 	pendingTeleport    *Waypoint
 	rejoinParty        bool
+	vengeanceAt        Waypoint
+	vengeanceUntilMs   int64
+	walkFactor         float32
 }
 
 const combatStallTimeoutMs int64 = 5000
@@ -134,7 +139,20 @@ type WorldHooks struct {
 	// OnHireEnded reports a released hire (gold is what OnHirePayout got).
 	OnHireEnded func(division, playerName, agentName string, end HireEnd, gold int64)
 	Heal        func(division, name string, amount int64) int64
+	// UseItem has the actor drink one item from its bag (an HP, MP or
+	// transport potion); true when it was used. When set it replaces Heal.
+	UseItem func(division, name, codename string) bool
 }
+
+// The potions agents drink: the largest HP and MP potions and the
+// transport's HP potion, the supplies a player would carry.
+const (
+	HPPotionItem        = "ITEM_ETC_HP_POTION_05"
+	MPPotionItem        = "ITEM_ETC_MP_POTION_05"
+	TransportPotionItem = "ITEM_ETC_COS_HP_POTION_03"
+	SpeedPotionItem     = "ITEM_MALL_MOVE_SPEED_UP_50"
+	SpeedPotionFactor   = 1.5
+)
 
 const (
 	// remoteDecisionIntervalMs spaces one agent's remote decisions: at most
@@ -540,6 +558,13 @@ func (r *Runtime) StepAgentWithWorldThreat(
 		contract := effects.reward
 		r.hooks.OnContractReward(division, contract.HunterName, contract.RewardGold, snapshot.Name)
 	}
+	if effects.potion != "" && r.hooks.UseItem(division, snapshot.Name, effects.potion) && effects.potion == MPPotionItem {
+		r.mu.Lock()
+		if live := r.findAgentLocked(division, agentName); live != nil {
+			live.needsManaRecovery = false
+		}
+		r.mu.Unlock()
+	}
 	if effects.heal > 0 && r.hooks.Heal != nil {
 		hp := r.hooks.Heal(division, snapshot.Name, int64(effects.heal))
 		r.mu.Lock()
@@ -705,12 +730,25 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, worldThreatAc
 		needHP := (unit.MaxHP > 0 && percentOf(unit.HP, unit.MaxHP) <= 45) || (unit.transportHPPercent > 0 && unit.transportHPPercent <= 45)
 		canUse := unit.PotionCharges > 0 || (unit.Role != RoleThief && !needHP)
 		if canUse && nowMs-unit.LastPotionAtMs >= 1500 {
-			heal := (unit.MaxHP * 35) / 100
-			unit.HP += heal
-			if unit.HP > unit.MaxHP {
-				unit.HP = unit.MaxHP
+			if r.hooks.UseItem != nil {
+				// A real potion for what runs low: HP first, then the
+				// transport, then mana (the item's own amount and cooldown).
+				switch {
+				case unit.MaxHP > 0 && percentOf(unit.HP, unit.MaxHP) <= 45:
+					effects.potion = HPPotionItem
+				case unit.transportHPPercent > 0 && unit.transportHPPercent <= 45:
+					effects.potion = TransportPotionItem
+				default:
+					effects.potion = MPPotionItem
+				}
+			} else {
+				heal := (unit.MaxHP * 35) / 100
+				unit.HP += heal
+				if unit.HP > unit.MaxHP {
+					unit.HP = unit.MaxHP
+				}
+				effects.heal = heal
 			}
-			effects.heal = heal
 			unit.LastPotionAtMs = nowMs
 			if unit.Role == RoleThief || needHP {
 				unit.PotionCharges--
@@ -780,6 +818,10 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, worldThreatAc
 			// The leading hired Trader drives its hirer's run.
 			unit.State = StateTraveling
 			r.stepHiredLeadLocked(unit, nowMs)
+		case unit.Vengeance != "":
+			// A killed Thief leads its gang back after the Trader.
+			unit.State = StateTraveling
+			r.stepVengeanceLocked(unit, nowMs)
 		case unit.State == StateIdleInTown || unit.State == StateRecruiting:
 			// Town agents stroll around town until dispatched, hired or called to reinforce.
 			r.wanderInTownLocked(unit, nowMs)
@@ -829,7 +871,8 @@ func (r *Runtime) advanceAlongRouteLocked(unit *AgentUnit, nowMs int64) *EscortC
 		// the waypoint it cannot reach rather than standing forever.
 		stalled := unit.noteProgress(nowMs)
 		switch {
-		case target.Scenic && stalled >= stuckSkipMs:
+		case (target.Scenic || (unit.HiredBy != "" && unit.Role == RoleTrader)) && stalled >= stuckSkipMs:
+			// A hired Trader never teleports: it tries the next waypoint.
 			unit.WaypointIndex++
 			unit.progressAtMs = 0
 			return nil
@@ -908,6 +951,7 @@ func (r *Runtime) RecordPlayerAttack(
 	regionID := unit.RegionID
 	if unit.HP <= 0 {
 		defeated = true
+		fell, wasHunting := position(unit), unit.RunKind == RunVengeance
 		unit.RespawnPending = true
 		stolenGold = int64(unit.CargoStacks) * unit.StackValueGold
 		unit.CargoStacks = 0
@@ -951,6 +995,10 @@ func (r *Runtime) RecordPlayerAttack(
 		unit.ReinforcingTrader = ""
 		unit.catchingUp, unit.roamAtMs, unit.progressAtMs = false, 0, 0
 		switch {
+		case unit.HiredBy != "" && unit.Role == RoleTrader:
+			// A robbed hired Trader's run is over (its goods are gone).
+			r.endHireLocked([]*AgentUnit{unit}, HireAborted, nowMs)
+			unit.CooldownUntilMs = nowMs + RobbedCooldownMs
 		case unit.HiredBy != "":
 			// A hire outlives a death: the follow step teleports it back to
 			// its hirer (no player lookup here: combat calls in holding locks).
@@ -963,6 +1011,12 @@ func (r *Runtime) RecordPlayerAttack(
 			unit.EscortingTrader = dedicatedLeader.Name
 		default:
 			unit.EscortingTrader, unit.DedicatedEscortFor, unit.RunKind = "", "", RunNone
+		}
+		if unit.Role == RoleThief {
+			if wasHunting {
+				unit.RunKind = RunVengeance
+			}
+			r.startVengeanceLocked(unit, attackerPlayerName, fell, nowMs)
 		}
 		unit.AvailableForHire = hireable(unit)
 	}

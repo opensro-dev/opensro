@@ -225,6 +225,10 @@ func TestFirstTraderInPartyLeadsUntilTheHirerTypesLeed(t *testing.T) {
 	players := map[string]*hirePlayer{"Boss": {at: TownWaypoint(TownJangan), job: domain.JobTrader, online: true}}
 	paid := map[string]int64{}
 	rt := hireRuntime(t, players, &paid)
+	// Traders are hired in the town they wait in: bring Bao to Jangan.
+	rt.mu.Lock()
+	rt.findAgentLocked("division", "[AI]Trader_Bao").place(TownWaypoint(TownJangan), 0)
+	rt.mu.Unlock()
 	for _, name := range []string{"[AI]Trader_Jin", "[AI]Trader_Bao", "[AI]Hunter_Kwan"} {
 		if reply := rt.HireAgent("division", "Boss", domain.JobTrader, name, 1000); !strings.Contains(reply, "joins you") {
 			t.Fatalf("hire of %s refused: %s", name, reply)
@@ -287,13 +291,14 @@ func TestHireEndsWithTheRunTheHourOrTheHirer(t *testing.T) {
 
 	// The hour runs out: the goods' cost comes back.
 	paid["Boss"] = 0
-	rt.HireAgent("division", "Boss", domain.JobHunter, "[AI]Trader_Bao", 10_000)
+	// Mei waits in Donwhang, where Boss is now.
+	rt.HireAgent("division", "Boss", domain.JobHunter, "[AI]Trader_Mei", 10_000)
 	rt.mu.Lock()
-	cost = hiredGoodsCost(rt.findAgentLocked("division", "[AI]Trader_Bao"))
+	cost = hiredGoodsCost(rt.findAgentLocked("division", "[AI]Trader_Mei"))
 	rt.mu.Unlock()
 	players["Boss"].at = Waypoint{RegionID: 25239, X: 500, Z: 500}
-	step("[AI]Trader_Bao", 20_000)
-	if unit := step("[AI]Trader_Bao", 10_000+HireMaxDurationMs); unit.HiredBy != "" {
+	step("[AI]Trader_Mei", 20_000)
+	if unit := step("[AI]Trader_Mei", 10_000+HireMaxDurationMs); unit.HiredBy != "" {
 		t.Fatal("the hire outlived its hour")
 	}
 	if paid["Boss"] != -HireFeeGold {
@@ -310,7 +315,7 @@ func TestHireEndsWithTheRunTheHourOrTheHirer(t *testing.T) {
 	if unit := step("[AI]Hunter_Kwan", 110_000+HireLeaderMissingMs); unit.HiredBy != "" {
 		t.Fatal("the hire outlived a long disconnect")
 	}
-	if len(ended) != 3 || ended[0] != "[AI]Trader_Jin:completed" || ended[1] != "[AI]Trader_Bao:timed out" || ended[2] != "[AI]Hunter_Kwan:ended" {
+	if len(ended) != 3 || ended[0] != "[AI]Trader_Jin:completed" || ended[1] != "[AI]Trader_Mei:timed out" || ended[2] != "[AI]Hunter_Kwan:ended" {
 		t.Fatalf("hire ends reported %v", ended)
 	}
 }

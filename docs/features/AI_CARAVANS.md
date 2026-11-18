@@ -348,15 +348,24 @@ Distances use 10 world units per in-game metre (skill ranges: 180 units = 18m); 
   patrol the highway (killed ones are replaced by rested town Thieves); everyone else starts idle.
 - **Idle agents** stroll within 30m of their town's specialty shop and are the only hireable ones.
   Anyone on a run, mustering, escorting or hired is not offered.
-- **Followers** (escorts, grand-caravan members, hired agents) roam 15-50m around their leader,
-  run straight after it past 120m (and stop fighting to do so), and are teleported beside it past 200m
-  or when a catch-up makes no progress for 10s. A Trader waits while a follower within 120m fights or
-  one 120-200m back catches up.
-- **Hiring:** talk to `NPC_CH_SPECIAL` / `NPC_WC_SPECIAL` / `NPC_KT_SPECIAL`; one talk row per agent
-  the player may hire (`[AI]Name - Role in Town - fee [+ goods]`). Hunters and Traders hire Hunters and
-  Traders; Thieves hire Thieves; the player must be dressed and in town. Flat fee 15000 gold; a Trader
-  also costs its goods (10 stacks x stack value). At most 7 hires at once. The hired agent teleports to
-  the hirer and is invited to the party. `!hire <name>` does the same from chat; `!hire` lists names.
+- **Followers** (escorts, grand-caravan members, hired Hunters and Thieves) roam 15-50m around their
+  leader, run straight after it past 120m (and stop fighting to do so), and are teleported beside it
+  past 200m or when a catch-up makes no progress for 10s. A Trader waits while a follower within 120m
+  fights or one 120-200m back catches up.
+- **Following Traders** keep their own spot 5m from the leader (the angle comes from the name, so two
+  never share one), do not stroll, and never teleport: they run until they are back in the spot. A
+  stuck hired Trader on a route skips the waypoint after 20s instead of being teleported onto it.
+- **Hiring window** (port-only `0x3FC3` S->C JSON, `0x7FC3` C->S `u8 op, u8 stars, name`): the
+  specialty shops' talk menu has one row, "Hire Hunters and Traders" (the Thief Den's Stolen Goods
+  Dealer: "Hire Thieves"), which opens the window. It lists every agent of the kinds hired there,
+  available ones first in green, the rest in red with the reason (on a trade run, hired by X, waiting
+  in another town, out hunting a caravan, won't work for you, ...). "Show only available" filters the
+  list; Previous/Next page and Refresh. Clicking a green Hunter or Thief hires it; clicking a green
+  Trader opens a second dialog to pick 1-5 stars of goods (100,000 gold per star) with the total.
+  Hunters and Traders hire Hunters and Traders; Thieves hire Thieves; the player must be dressed and in
+  town. Flat fee 15000 gold plus a Trader's goods. At most 7 hires at once. Hunters and Thieves appear
+  at the hirer; a Trader is hired only in the town it waits in and walks over. Everyone hired is invited
+  to the party. `!hire <name>` still works from chat (a Trader then carries goods of its own rating).
 - **Leading:** hired Hunters/Thieves follow the hirer. Hired Traders follow the first hired Trader in
   party order (hire order when not in the party), which drives the run itself and waits while the hirer
   is more than 120m away. `!leed` (or `!lead`) toggles the hirer leading all of them.
@@ -364,7 +373,8 @@ Distances use 10 world units per in-game metre (skill ranges: 180 units = 18m); 
   enters another town (or the same town after 10 minutes out), or when the leading hired Trader reaches
   its destination shop. Then hired Traders pay the goods' sale (cost + 15% per cargo star); after the
   hour, a lost job, `!dismiss`, or the hirer being offline/out of the main world for 2 minutes they pay
-  the goods' cost back; robbed goods pay nothing. A hired agent that dies respawns beside its hirer.
+  the goods' cost back; robbed goods pay nothing. A hired Hunter or Thief that dies comes back to its
+  hirer; a hired Trader that dies is robbed, its hire ends and it rests 30 minutes.
   Released agents leave the party and go home (teleport if outside town).
 - **Restarts:** hires in flight are mirrored to the `caravan_hires` table every 5 seconds (and at
   shutdown). At boot each one resumes: the agent waits at the hire town's shop for up to 10 minutes,
@@ -382,6 +392,23 @@ Distances use 10 world units per in-game metre (skill ranges: 180 units = 18m); 
 - **Stuck recovery:** an off-road bend that makes no progress for 20s is skipped; any route waypoint
   unreachable for 60s is reached by teleport; a town stroll blocked for 6s picks another spot.
 - **Distress calls** are answered only by agents on the road within 300m, never by town or hired agents.
+- **Potions and speed:** agents drink real items from their bags through the normal item use
+  (`action.ServerActorUseItem`), so amounts, cooldowns and the effect observers see are a player's:
+  `ITEM_ETC_HP_POTION_05` at 45% HP or less, `ITEM_ETC_COS_HP_POTION_03` for a Trader's transport at
+  45% or less, `ITEM_ETC_MP_POTION_05` when mana runs low; nothing else heals them. Every agent keeps
+  `ITEM_MALL_MOVE_SPEED_UP_50` running (checked every 2s) and moves at the buffed speed (75 run, 30
+  walk); a mounted Trader rides at the transport's speed, as natively. An empty stack is restocked.
+- **Hunter targets:** a Hunter with an AI or player Thief within sight fights the Thief and skips the
+  scan for the world's own monsters (native NPC thieves and mobs) until no Thief is near.
+- **Persistence fix:** the caravan runtime's flush loop (memories, route heat, hires) is now started:
+  it was handed to the shard ledgers before the runtime existed, so nothing was ever written.
+- **Thief revenge:** a Thief that is killed respawns in the Thief Den, calls up to 3 idle Thieves
+  there ("Brothers, with me...") and leads them back after the Trader: the attacker if it is a Trader
+  agent, the Trader (or hirer) the attacking agent guarded, an attacking player who wears a Trader
+  suit, or else the nearest Trader agent within 300m of where it fell. The gang rides to the Trader
+  while it can be found outside a town (else to where the Thief fell); within sight the usual ambush
+  takes over. The hunt ends when the Trader is robbed or reaches a town, when nothing is found at the
+  spot, or after 15 minutes; a leader killed again sends its gang home.
 
 Checks: `go build ./...`, `go vet` on `sro-gameworld`, `caravanai`, `party`; `go test` for those
 packages (new `convoy_test.go`; scheduler/escort tests updated to the new ranges and roster); client

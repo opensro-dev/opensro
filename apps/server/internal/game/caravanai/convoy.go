@@ -158,8 +158,93 @@ func hireable(u *AgentUnit) bool {
 		(u.State == StateIdleInTown || u.State == StateRecruiting) && !u.RespawnPending && u.HP > 0
 }
 
+// HiredGoodsPerStarGold is what a hired Trader's goods cost per star;
+// MaxHireStars is the highest rating a hirer may choose.
+const (
+	HiredGoodsPerStarGold int64 = 100_000
+	MaxHireStars          uint8 = 5
+)
+
+func GoodsForStars(stars uint8) int64 {
+	return int64(stars) * HiredGoodsPerStarGold
+}
+
 func hiredGoodsCost(u *AgentUnit) int64 {
-	return 10 * u.StackValueGold
+	return GoodsForStars(u.CargoStars)
+}
+
+// HireRow is one agent in the hire window: who, and whether the viewer may
+// hire it here now (or why not).
+type HireRow struct {
+	Name      string
+	Role      AgentRole
+	Town      TownID
+	Stars     uint8
+	Available bool
+	Status    string
+}
+
+/*
+================
+HireRoster
+
+Every agent of the kind hired at place (Thieves in the Den, Hunters and
+Traders at a city shop), available ones first.
+================
+*/
+func (r *Runtime) HireRoster(division, player string, playerJob uint8, place TownID) []HireRow {
+	division = strings.TrimSpace(division)
+	r.EnsureDivisionRoster(division)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	full := len(r.hiresOfLocked(division, player)) >= MaxHiresPerPlayer
+	var out []HireRow
+	for _, u := range r.agents[division] {
+		if (u.Role == RoleThief) != (place == TownThiefDen) {
+			continue
+		}
+		row := HireRow{Name: u.Name, Role: u.Role, Town: r.homeLocked(u), Stars: u.CargoStars}
+		switch {
+		case u.HiredBy != "" && strings.EqualFold(u.HiredBy, player):
+			row.Status = "Working for you"
+		case u.HiredBy != "":
+			row.Status = "Hired by " + u.HiredBy
+		case u.RespawnPending || u.HP <= 0:
+			row.Status = "Recovering"
+		case u.RunKind == RunVengeance:
+			row.Status = "Out hunting a caravan"
+		case u.Role == RoleThief && !hireable(u):
+			row.Status = "Out on the roads"
+		case !hireable(u):
+			row.Status = "On a trade run"
+		case u.Role == RoleTrader && row.Town != place:
+			row.Status = "Waiting in " + townTitle(row.Town)
+		case !CanHire(playerJob, u.Role):
+			row.Status = "Won't work for you"
+		case full:
+			row.Status = "You lead too many already"
+		default:
+			row.Available, row.Status = true, "Available"
+		}
+		out = append(out, row)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Available != out[j].Available {
+			return out[i].Available
+		}
+		if out[i].Role != out[j].Role {
+			return out[i].Role > out[j].Role
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+// PlaceAt says which hiring place (a city or the Thief Den) a point is in.
+func (r *Runtime) PlaceAt(at Waypoint) (TownID, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.placeAtLocked(at)
 }
 
 func position(u *AgentUnit) Waypoint {
@@ -281,6 +366,9 @@ func (r *Runtime) stepFollowLocked(unit *AgentUnit, nowMs int64) *Waypoint {
 		}
 		return nil
 	}
+	if unit.Role == RoleTrader {
+		return r.stepTraderFollowLocked(unit, leader, leaderUnit, nowMs)
+	}
 	dist := WaypointDistance(position(unit), leader)
 	if dist > EscortTeleportDistance || (unit.catchingUp && unit.noteProgress(nowMs) >= followStuckMs) {
 		angle := rand.Float64() * 2 * math.Pi
@@ -321,6 +409,47 @@ func (r *Runtime) stepFollowLocked(unit *AgentUnit, nowMs int64) *Waypoint {
 	return nil
 }
 
+// traderSlotRadius is how far a following Trader keeps from its leader.
+const traderSlotRadius float64 = 5 * UnitsPerMeter
+
+/*
+================
+stepTraderFollowLocked
+
+A Trader keeps its own slot 5m off its leader: no strolling and never a
+teleport; when it falls behind it runs until it is back in the slot.
+================
+*/
+func (r *Runtime) stepTraderFollowLocked(unit *AgentUnit, leader Waypoint, leaderUnit *AgentUnit, nowMs int64) *Waypoint {
+	// The slot angle comes from the name, so two Traders never share one.
+	var h uint32
+	for _, c := range unit.Name {
+		h = h*31 + uint32(c)
+	}
+	angle := float64(h%360) * math.Pi / 180
+	slot := offsetPoint(leader, traderSlotRadius*math.Cos(angle), traderSlotRadius*math.Sin(angle))
+	unit.roamAtMs, unit.Walking = 0, false
+	dist := WaypointDistance(position(unit), slot)
+	if dist <= 15 {
+		unit.catchingUp, unit.progressAtMs = false, 0
+		return nil
+	}
+	unit.catchingUp = true
+	if leaderUnit != nil && WaypointDistance(position(unit), leader) > 320 {
+		// Far behind another agent: its route (and ferries) brings it back.
+		follow := r.stepEscortFollowLocked(unit, leaderUnit)
+		unit.noteProgress(nowMs)
+		return follow
+	}
+	var follow *Waypoint
+	if WaypointDistance(position(unit), leader) > 320 {
+		follow = &leader
+	}
+	r.moveLocked(unit, slot, stepDistanceFor(unit))
+	unit.noteProgress(nowMs)
+	return follow
+}
+
 /*
 ================
 wanderInTownLocked
@@ -353,7 +482,11 @@ func (r *Runtime) wanderInTownLocked(unit *AgentUnit, nowMs int64) {
 	}
 	// A stroll walks: the client plays the walk cycle at walk speed.
 	unit.Walking = true
-	r.moveLocked(unit, target, WalkStepPerTick)
+	step := WalkStepPerTick
+	if unit.walkFactor > 0 {
+		step *= unit.walkFactor
+	}
+	r.moveLocked(unit, target, step)
 	if unit.noteProgress(nowMs) >= 6000 {
 		// A building is in the way: choose another spot.
 		unit.roamAtMs = 0
@@ -784,11 +917,17 @@ func (r *Runtime) hiresOfLocked(division, player string) []*AgentUnit {
 ================
 HireAgent
 
-Charges the flat fee (plus a Trader's goods), then the agent teleports to
-the hirer and works for one trade run, an hour at most.
+Charges the flat fee (plus a Trader's goods), then the agent works for one
+trade run, an hour at most. Hunters and Thieves appear at the hirer; a
+Trader is hired in the town it waits in and walks over, loaded with goods
+of the chosen star rating (stars 0: its own rating).
 ================
 */
 func (r *Runtime) HireAgent(division, player string, playerJob uint8, agentName string, nowMs int64) string {
+	return r.HireAgentStars(division, player, playerJob, agentName, 0, nowMs)
+}
+
+func (r *Runtime) HireAgentStars(division, player string, playerJob uint8, agentName string, stars uint8, nowMs int64) string {
 	division = strings.TrimSpace(division)
 	r.EnsureDivisionRoster(division)
 	if r.hooks.Player == nil {
@@ -834,7 +973,15 @@ func (r *Runtime) HireAgent(division, player string, playerJob uint8, agentName 
 	}
 	goods := int64(0)
 	if unit.Role == RoleTrader {
-		goods = hiredGoodsCost(unit)
+		if town := r.nearestTownLocked(position(unit)); town != place {
+			r.mu.Unlock()
+			return fmt.Sprintf("%s waits in %s; Traders are hired in the town they wait in.", short, townTitle(town))
+		}
+		if stars == 0 {
+			stars = unit.CargoStars
+		}
+		stars = min(max(stars, 1), MaxHireStars)
+		goods = GoodsForStars(stars)
 	}
 	r.mu.Unlock()
 
@@ -857,10 +1004,13 @@ func (r *Runtime) HireAgent(division, player string, playerJob uint8, agentName 
 	}
 	bindHire(unit, player, place, goods, nowMs)
 	if unit.Role == RoleTrader {
-		unit.CargoStacks = 10
+		unit.CargoStars, unit.CargoStacks, unit.StackValueGold = stars, 10, goods/10
 	}
-	tp := offsetPoint(at.At, 12, 0)
-	unit.pendingTeleport = &tp
+	if unit.Role != RoleTrader {
+		// Traders walk over from the shop; the others appear at the hirer.
+		tp := offsetPoint(at.At, 12, 0)
+		unit.pendingTeleport = &tp
+	}
 	r.outbox = append(r.outbox, outboxItem{chat: true, agent: name, regionID: at.At.RegionID, text: hireGreeting(unit, player)})
 	r.mu.Unlock()
 	defer r.flushOutbox(division)

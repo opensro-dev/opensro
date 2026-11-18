@@ -3541,7 +3541,45 @@ export function createUi( ports: UiPorts ) {
 	================
 	*/
 	let arenaPage = 0, arenaPageKey = "", arenaHiddenID = "";
+	// The caravan hire window's local state (port-only, caravan-hire.ts):
+	// the availability filter, the list page, and a Trader's star choice.
+	let caravanOnlyAvailable = false, caravanPage = 0;
+	let caravanStarPick: { name: string; display: string; stars: number; } | null = null;
+	function activateCaravanHire( id: string ): boolean {
+		const hire = view?.gameplay?.caravanHire;
+		if ( !id.startsWith( "caravan-hire" ) || !hire ) return false;
+		dirty = true;
+		if ( id === "caravan-hire-close" ) {
+			caravanStarPick = null;
+			sendGameplay( { kind: "caravan-hire-close" } );
+		} else if ( id === "caravan-hire-filter" ) {
+			caravanOnlyAvailable = !caravanOnlyAvailable;
+			caravanPage = 0;
+		} else if ( id === "caravan-hire-prev" || id === "caravan-hire-next" ) {
+			caravanPage = Math.max( 0, caravanPage + (id === "caravan-hire-prev" ? -1 : 1) );
+		} else if ( id === "caravan-hire-refresh" ) {
+			sendGameplay( { kind: "caravan-hire", operation: 0, stars: 0, name: "" } );
+		} else if ( id.startsWith( "caravan-hire-row:" ) ) {
+			const row = hire.rows.find( r => r.name === id.slice( "caravan-hire-row:".length ) );
+			if ( row?.available && row.role === "Trader" && hire.stars.length > 0 ) {
+				caravanStarPick = { name: row.name, display: row.display, stars: 3 };
+			} else if ( row?.available ) {
+				sendGameplay( { kind: "caravan-hire", operation: 1, stars: 0, name: row.name } );
+			}
+		} else if ( id === "caravan-hire-star-less" || id === "caravan-hire-star-more" ) {
+			if ( caravanStarPick ) {
+				caravanStarPick.stars = Math.max( 1, Math.min( hire.stars.length, caravanStarPick.stars + (id === "caravan-hire-star-less" ? -1 : 1) ) );
+			}
+		} else if ( id === "caravan-hire-star-ok" && caravanStarPick ) {
+			sendGameplay( { kind: "caravan-hire", operation: 1, stars: caravanStarPick.stars, name: caravanStarPick.name } );
+			caravanStarPick = null;
+		} else if ( id === "caravan-hire-star-cancel" ) {
+			caravanStarPick = null;
+		}
+		return true;
+	}
 	function activate( id: string ) {
+		if ( activateCaravanHire( id ) ) return;
 		if ( id === "arena-prev" || id === "arena-next" ) {
 			arenaPage = Math.max(
 				0,
@@ -28070,6 +28108,95 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				if ( chest.phase === "recoverable" ) button( "arena-close", "Close", px + width - 76, py + 44, 50 );
 
 				endWindow( admission, "arena-chest" );
+			}
+			if ( worldVisible && game?.caravanHire ) {
+				// Port-only caravan hire window (caravan-hire.ts): available agents in
+				// green, the others in red with the reason; a Trader asks for its stars.
+				const hire = game.caravanHire, width = 540, height = 470, rowH = 22, perPage = 13;
+				const green: UiQuad["color"] = [ 0.47, 0.92, 0.47, 1 ], red: UiQuad["color"] = [ 0.95, 0.42, 0.38, 1 ];
+				const muted: UiQuad["color"] = [ 0.82, 0.77, 0.66, 1 ], gold: UiQuad["color"] = [ 1, 0.84, 0.5, 1 ];
+				const rows = caravanOnlyAvailable ? hire.rows.filter( r => r.available ) : hire.rows;
+				const pages = Math.max( 1, Math.ceil( rows.length / perPage ) );
+				caravanPage = Math.min( caravanPage, pages - 1 );
+				const px = Math.floor( (w - width) / 2 ), py = Math.floor( (h - height) / 2 );
+				controls = drawFrame.controls = [];
+				const admission = beginWindow();
+				blocks.push( full );
+				windowBox( hire.title, px, py, width, height );
+				closeButton( px + width - 26, py + 6, "caravan-hire-close" );
+				paths.push( MESSAGE_TILE, ...PARTS.map( part => FRAME + part + ".png" ) );
+				quads.push( ...normalTile( [ px + 16, py + 40, width - 32, height - 56 ], MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
+				const available = hire.rows.filter( r => r.available ).length;
+				label( `${available} of ${hire.rows.length} available - hire fee ${hire.fee} gold`, px + 28, py + 50, gold );
+				if ( hire.stars.length > 0 ) label( "Traders also carry goods you buy for them.", px + 28, py + 68, muted );
+				image(
+					[ px + width - 196, py + 50, 16, 16 ],
+					ROOT + "interface/ifcommon/com_checkbutton_" + (caravanOnlyAvailable ? "on" : "off") + ".png"
+				);
+				label( "Show only available", px + width - 174, py + 50 );
+				controls.push( {
+					id: "caravan-hire-filter",
+					label: "Show only available",
+					kind: "button",
+					rect: [ px + width - 200, py + 46, 176, 22 ],
+					selected: caravanOnlyAvailable
+				} );
+				const top = py + 92;
+				rect( [ px + 28, top - 4, width - 56, 1 ], [ 0.46, 0.4, 0.28, 0.8 ] );
+				label( "Name", px + 34, top, muted );
+				label( "Status", px + 330, top, muted );
+				rect( [ px + 28, top + 18, width - 56, 1 ], [ 0.46, 0.4, 0.28, 0.8 ] );
+				rows.slice( caravanPage * perPage, (caravanPage + 1) * perPage ).forEach( ( row, i ) => {
+					const y = top + 24 + i * rowH, color = row.available ? green : red;
+					if ( i % 2 === 0 ) rect( [ px + 28, y - 2, width - 56, rowH ], [ 1, 1, 1, 0.04 ] );
+					const who = row.role === "Thief" ? `${row.display} (Thief)` : `${row.display} (${row.role}, ${row.town})`;
+					quads.push( ...text.quads( who, [ px + 34, y, 290, rowH - 4 ], full, color, { vAlign: 1 } ) );
+					quads.push( ...text.quads( row.status, [ px + 330, y, width - 366, rowH - 4 ], full, color, { vAlign: 1 } ) );
+					if ( row.available ) {
+						controls.push( {
+							id: "caravan-hire-row:" + row.name,
+							label: `Hire ${row.display}`,
+							kind: "button",
+							rect: [ px + 28, y - 2, width - 56, rowH ]
+						} );
+					}
+				} );
+				if ( rows.length === 0 ) {
+					quads.push( ...text.quads( caravanOnlyAvailable ? "Nobody is free right now." : "Nobody works here.", [ px + 28, top + 40, width - 56, 20 ], full, muted, { hAlign: 1 } ) );
+				}
+				const bottom = py + height - 92;
+				button( "caravan-hire-prev", "Previous", px + 40, bottom, 100, caravanPage === 0 );
+				quads.push( ...text.quads( `Page ${caravanPage + 1} / ${pages}`, [ px + 150, bottom + 5, 120, 20 ], full, white, { hAlign: 1 } ) );
+				button( "caravan-hire-next", "Next page", px + 280, bottom, 100, caravanPage >= pages - 1 );
+				button( "caravan-hire-refresh", "Refresh", px + 400, bottom, 100 );
+				quads.push(
+					...text.quads(
+						hire.message || "Click a green name to hire.",
+						[ px + 24, bottom + 34, width - 48, 36 ],
+						full,
+						hire.message ? gold : muted,
+						{ hAlign: 1 }
+					)
+				);
+				if ( caravanStarPick ) {
+					// The Trader's goods: the hirer picks the stars and pays for those goods.
+					const pick = caravanStarPick, choice = hire.stars[pick.stars - 1];
+					const sw = 340, sh = 210, sx = px + Math.floor( (width - sw) / 2 ), sy = py + 120;
+					rect( [ px, py, width, height ], [ 0, 0, 0, 0.45 ] );
+					windowBox( `Hire ${pick.display}`, sx, sy, sw, sh );
+					quads.push( ...normalTile( [ sx + 14, sy + 38, sw - 28, sh - 52 ], MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
+					quads.push( ...text.quads( "How many stars of goods will this Trader carry?", [ sx + 20, sy + 46, sw - 40, 18 ], full, muted, { hAlign: 1 } ) );
+					button( "caravan-hire-star-less", "-", sx + 70, sy + 74, 40, pick.stars <= 1 );
+					quads.push( ...text.quads( `${pick.stars} ${pick.stars === 1 ? "star" : "stars"}`, [ sx + 115, sy + 78, 110, 20 ], full, gold, { hAlign: 1 } ) );
+					button( "caravan-hire-star-more", "+", sx + 230, sy + 74, 40, pick.stars >= hire.stars.length );
+					if ( choice ) {
+						quads.push( ...text.quads( `Goods: ${choice.goods} gold`, [ sx + 20, sy + 112, sw - 40, 18 ], full, white, { hAlign: 1 } ) );
+						quads.push( ...text.quads( `Total with the fee: ${choice.total} gold`, [ sx + 20, sy + 132, sw - 40, 18 ], full, gold, { hAlign: 1 } ) );
+					}
+					button( "caravan-hire-star-ok", "Hire", sx + 40, sy + 166, 110 );
+					button( "caravan-hire-star-cancel", "Cancel", sx + sw - 150, sy + 166, 110 );
+				}
+				endWindow( admission, "caravan-hire" );
 			}
 			if ( worldVisible && game && withdrawal.confirming() && hud.data() ) {
 				const state = withdrawal.read( game, hud.data()?.masteryCosts ?? {}, hud.data()?.withdrawalGoldPrices );

@@ -10,7 +10,9 @@ import (
 )
 
 // hireMemStore keeps hires in memory; memories and heat are not kept.
-type hireMemStore struct{ rows map[string]domain.CaravanHireRow }
+type hireMemStore struct {
+	rows map[string]domain.CaravanHireRow
+}
 
 func (s *hireMemStore) LoadCaravanAgentMemories(string) ([]domain.CaravanAgentMemoryRow, error) {
 	return nil, nil
@@ -104,5 +106,47 @@ func TestHiresSurviveARestart(t *testing.T) {
 	}
 	if err := after.flushHires(); err != nil || len(store.rows) != 0 {
 		t.Fatalf("ended hires stay stored: %v %+v", err, store.rows)
+	}
+}
+
+/*
+================
+TestHireRosterMarksWhoIsAvailableHere
+
+The hire window lists the city's kinds only, available ones first; a
+Trader waiting in another town or one hired already shows why not, and a
+star choice prices the goods.
+================
+*/
+func TestHireRosterMarksWhoIsAvailableHere(t *testing.T) {
+	players := map[string]*hirePlayer{"Boss": {at: TownWaypoint(TownJangan), job: domain.JobTrader, online: true}}
+	paid := map[string]int64{}
+	rt := hireRuntime(t, players, &paid)
+	if reply := rt.HireAgentStars("division", "Boss", domain.JobTrader, "[AI]Trader_Jin", 5, 1000); !strings.Contains(reply, "joins you") {
+		t.Fatalf("hire refused: %s", reply)
+	}
+	if want := -(HireFeeGold + GoodsForStars(5)); paid["Boss"] != want {
+		t.Fatalf("5-star hire charged %d, want %d", paid["Boss"], want)
+	}
+	rows := rt.HireRoster("division", "Boss", domain.JobTrader, TownJangan)
+	seenUnavailable := false
+	status := map[string]string{}
+	for _, row := range rows {
+		if row.Role == RoleThief {
+			t.Fatalf("a city lists Thief %s", row.Name)
+		}
+		if row.Available && seenUnavailable {
+			t.Fatal("an available agent is listed after an unavailable one")
+		}
+		seenUnavailable = seenUnavailable || !row.Available
+		status[row.Name] = row.Status
+	}
+	if status["[AI]Trader_Jin"] != "Working for you" || !strings.HasPrefix(status["[AI]Trader_Mei"], "Waiting in") || status["[AI]Hunter_Kwan"] != "Available" {
+		t.Fatalf("statuses: Jin %q, Mei %q, Kwan %q", status["[AI]Trader_Jin"], status["[AI]Trader_Mei"], status["[AI]Hunter_Kwan"])
+	}
+	for _, row := range rt.HireRoster("division", "Boss", domain.JobTrader, TownThiefDen) {
+		if row.Role != RoleThief || row.Available {
+			t.Fatalf("the Den offers %s (%v) to a Trader", row.Name, row.Available)
+		}
 	}
 }

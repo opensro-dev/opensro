@@ -45,9 +45,8 @@ func (game *gameplayPlane) caravanRunSpeed(c *enterworld.Character) float32 {
 			}
 		}
 	}
-	if c.Job.Type == domain.JobHunter {
-		return 75
-	}
+	// On foot every agent runs at the native speed; the 50% speed potion
+	// (keepCaravanSpeed) speeds it up the way it does a player.
 	return simulation.RunSpeed
 }
 

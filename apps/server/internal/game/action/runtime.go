@@ -186,7 +186,10 @@ type Runtime struct {
 	// PublicationHold receives publication-gate holds at or above the
 	// slow threshold, labelled by their holder (wired to the transport
 	// metrics, transport.RecordPublicationHold).
-	PublicationHold   func(label string, elapsed time.Duration)
+	PublicationHold func(label string, elapsed time.Duration)
+	// CaravanHire answers the port-only caravan hire window's request
+	// (OpCaravanHireRequest); nil when AI caravans are off.
+	CaravanHire       func(division string, c *enterworld.Character, payload []byte) []wire.Frame
 	SkillObjects      skillobject.Registry
 	CanPlaceQuestTrap func(*enterworld.Character, string) ([]wire.Frame, bool)
 	CaptureQuestTrap  func(*enterworld.Character, string, string, func() bool) ([]wire.Frame, bool)

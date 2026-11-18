@@ -38,9 +38,11 @@ Call world owners after releasing the AI lock: combat callbacks reenter AI.
 */
 type agentEffects struct {
 	drop, heal int
-	reward     *EscortContract
-	follow     *Waypoint
-	teleport   *Waypoint
+	// potion is the item the agent drinks after the lock (WorldHooks.UseItem).
+	potion   string
+	reward   *EscortContract
+	follow   *Waypoint
+	teleport *Waypoint
 }
 
 func stepDistanceFor(unit *AgentUnit) float32 {
@@ -146,6 +148,16 @@ WaypointDistance
 */
 func WaypointDistance(a, b Waypoint) float64 {
 	return worldgeom.Distance(worldgeom.RegionXZ{RegionID: a.RegionID, X: float64(a.X), Z: float64(a.Z)}, worldgeom.RegionXZ{RegionID: b.RegionID, X: float64(b.X), Z: float64(b.Z)})
+}
+
+// SetRunSpeed sets the speed the agent runs at and its walk factor (a live
+// speed buff scales both, as it does the client's).
+func (r *Runtime) SetRunSpeed(division, name string, run, walkFactor float32) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if unit := r.findAgentLocked(division, name); unit != nil {
+		unit.RunSpeed, unit.walkFactor = run, walkFactor
+	}
 }
 
 /*

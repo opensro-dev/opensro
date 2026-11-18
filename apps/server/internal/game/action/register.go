@@ -52,6 +52,7 @@ Register
 */
 func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(opArenaDecision, rt.hubHandler(hub, rt.HandleArenaDecision))
+	hub.Handle(OpCaravanHireRequest, rt.hubHandler(hub, rt.HandleCaravanHire))
 	rt.registerDeparture(hub)
 	rt.registerMall(hub)
 	rt.registerCrest(hub)

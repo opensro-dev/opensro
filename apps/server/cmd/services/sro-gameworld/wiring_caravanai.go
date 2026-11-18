@@ -16,8 +16,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -49,6 +49,9 @@ type caravanRuntimeState struct {
 	caravanMoving         map[string]bool
 	caravanMode           map[string]uint8
 	caravanLook           map[string]bool
+	caravanSpeedAtMs      map[string]int64
+	caravanSpeedRefused   map[string]bool
+	caravanSpeedSeen      bool
 	caravanRoads          map[string]*caravanRoad
 	caravanIgnoredThreats map[string]map[uint32]int64
 }
@@ -88,6 +91,7 @@ func (game *gameplayPlane) wireCaravanAgents() {
 		Casting: game.items.ServerActorCasting,
 		Ferry:   game.caravanFerry, FollowFerry: game.caravanFollowFerry,
 		OnHireFee: game.caravanHireFee, OnHirePayout: game.caravanHirePayout,
+		UseItem: game.caravanUseItem,
 		OnContractFormed: func(division, playerName, agentName string) {
 			if game.parties != nil {
 				game.parties.InvitePlayerFromRuntimeActor(division, agentName, playerName)
@@ -135,6 +139,9 @@ func (game *gameplayPlane) wireCaravanAgents() {
 	}
 	if game.parties != nil {
 		game.parties.CanPartyWithRuntimeActor = rt.IsContractPartner
+	}
+	if game.items != nil {
+		game.items.CaravanHire = game.caravanHireRequest
 	}
 	log.Infof(
 		"job: AI caravan & thief agents ON (%s, %s=%s, highway=Jangan-Donwhang-Hotan)",
@@ -309,6 +316,7 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 		}
 		if i < len(game.caravanActors) {
 			c := game.caravanActors[i]
+			game.keepCaravanSpeed(c, unit, nowMs)
 			hp, _, mp, _ := game.items.GameplayVitals(game.divisionID, c)
 			cosHP, cosMaxHP, lost := game.items.ServerActorTransportVitals(game.divisionID, c.Name)
 			game.caravanAgents.ObserveVitals(game.divisionID, c.Name, hp, mp, lost, nowMs)
@@ -318,7 +326,9 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 		var npcGID uint32
 		var npcAt caravanai.Waypoint
 		// Idle agents stroll in town, where no monster reaches them: no scan.
-		if !mustRejoin && unit.State != caravanai.StateIdleInTown && unit.State != caravanai.StateRecruiting {
+		// A Hunter with an AI or player Thief in sight goes for the Thief
+		// before any of the world's own monsters.
+		if !mustRejoin && unit.State != caravanai.StateIdleInTown && unit.State != caravanai.StateRecruiting && !(unit.Role == caravanai.RoleHunter && thiefInSight(nearby)) {
 			npcGID, npcAt = game.caravanNPCThreat(unit, nowMs)
 		}
 		decision, updated, ok := game.caravanAgents.StepAgentWithWorldThreat(ctx, game.divisionID, unit.Name, nearby, npcGID != 0, nowMs)
@@ -422,6 +432,68 @@ func formatCaravanMapLabel(u *caravanai.AgentUnit) string {
 	}
 }
 
+// thiefInSight reports an AI or player Thief among the observed.
+func thiefInSight(nearby []caravanai.ObservedPlayer) bool {
+	for _, p := range nearby {
+		if p.JobType == domain.JobThief && p.HPPercent > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
+caravanUseItem / keepCaravanSpeed
+
+Agents drink real potions from their bags (action.ServerActorUseItem),
+seen by everyone around like a player's; and keep a 50% speed potion
+running, which their own movement follows. A mounted Trader rides at the
+transport's speed: the potion does not move a transport, as natively.
+================
+*/
+func (game *gameplayPlane) caravanUseItem(division, name, codename string) bool {
+	c := game.deps.CharacterByName(division, name)
+	if c == nil {
+		return false
+	}
+	result := game.items.ServerActorUseItem(division, name, codename)
+	game.publishCaravanAction(c, result)
+	return action.ItemUsed(result)
+}
+
+func (game *gameplayPlane) keepCaravanSpeed(c *enterworld.Character, unit *caravanai.AgentUnit, nowMs int64) {
+	if unit.RespawnPending || unit.HP <= 0 || nowMs < game.caravanSpeedAtMs[c.Name] {
+		return
+	}
+	if game.caravanSpeedAtMs == nil {
+		game.caravanSpeedAtMs = make(map[string]int64)
+	}
+	game.caravanSpeedAtMs[c.Name] = nowMs + 2000
+	buffed := game.items.ServerActorMovementBuff(game.divisionID, c.Name)
+	if !buffed {
+		buffed = game.caravanUseItem(game.divisionID, c.Name, caravanai.SpeedPotionItem)
+		switch {
+		case !buffed && !game.caravanSpeedRefused[c.Name]:
+			if game.caravanSpeedRefused == nil {
+				game.caravanSpeedRefused = make(map[string]bool)
+			}
+			game.caravanSpeedRefused[c.Name] = true
+			log.Warnf("caravan-ai: %s could not drink %s", c.Name, caravanai.SpeedPotionItem)
+		case buffed && !game.caravanSpeedSeen:
+			game.caravanSpeedSeen = true
+			log.Infof("caravan-ai: agents keep %s running (first: %s)", caravanai.SpeedPotionItem, c.Name)
+		}
+	}
+	run, factor := game.caravanRunSpeed(c), float32(1)
+	if buffed && (c.ActiveCOS == nil || !c.ActiveCOS.Mounted) {
+		run, factor = run*caravanai.SpeedPotionFactor, caravanai.SpeedPotionFactor
+	}
+	if run != unit.RunSpeed {
+		game.caravanAgents.SetRunSpeed(game.divisionID, c.Name, run, factor)
+	}
+}
+
 /*
 ================
 caravanNotice
@@ -465,54 +537,104 @@ func (game *gameplayPlane) caravanHireOptions(divisionID string, character *ente
 	default:
 		return nil
 	}
-	var job uint8
-	game.deps.Read(divisionID, func() { job = enterworld.DressedJob(character) })
-	here := map[string]caravanai.TownID{"NPC_CH_SPECIAL": caravanai.TownJangan, "NPC_WC_SPECIAL": caravanai.TownDonwhang, "NPC_KT_SPECIAL": caravanai.TownHotan}[npcCodename]
-	offers := game.caravanAgents.HireOffers(divisionID, job)
-	// The ones strolling around this shop first.
-	sort.SliceStable(offers, func(i, j int) bool { return offers[i].Town == here && offers[j].Town != here })
-	var out []action.NpcQuestOption
-	for _, offer := range offers {
-		if (offer.Role == caravanai.RoleThief) != den {
-			continue
-		}
-		label := caravanHireLabel(offer)
-		out = append(out, action.NpcQuestOption{Codename: caravanHireServicePrefix + offer.Name, TitleSymbol: caravanTextSymbol + label, PromptSymbol: caravanTextSymbol + label, Immediate: true})
+	label := "Hire Hunters and Traders"
+	if den {
+		label = "Hire Thieves"
 	}
-	return out
+	// One row opens the hire window (OpCaravanHire).
+	return []action.NpcQuestOption{{Codename: caravanHireServicePrefix + "window", TitleSymbol: caravanTextSymbol + label, PromptSymbol: caravanTextSymbol + label, Immediate: true}}
+}
+
+func (game *gameplayPlane) caravanHireService(character *enterworld.Character, codename string) ([]wire.Frame, bool) {
+	if _, ok := strings.CutPrefix(codename, caravanHireServicePrefix); !ok || game.caravanAgents == nil {
+		return nil, false
+	}
+	return []wire.Frame{game.caravanHireWindow(character, "")}, true
 }
 
 /*
 ================
-caravanHireLabel
+caravanHireWindow / caravanHireRequest
 
-One talk row: "Hire Kwan, Hunter from Donwhang (15,000 gold)".
+The hire window (port-only 0x3FC3): every agent hired where the player
+stands, available ones first, with the Trader goods choices. The request
+(0x7FC3) refreshes it or hires one agent and answers with the window again.
 ================
 */
-func caravanHireLabel(offer caravanai.HireOffer) string {
-	name, fee := caravanai.DisplayName(offer.Name), caravanai.GoldText(offer.Fee)
-	if offer.Goods > 0 {
-		return fmt.Sprintf("Hire %s, Trader from %s (%s gold + %s for goods)", name, formatCaravanTownName(offer.Town), fee, caravanai.GoldText(offer.Goods))
-	}
-	if offer.Role == caravanai.RoleThief {
-		return fmt.Sprintf("Hire %s, Thief (%s gold)", name, fee)
-	}
-	return fmt.Sprintf("Hire %s, %s from %s (%s gold)", name, offer.Role.Title(), formatCaravanTownName(offer.Town), fee)
+type caravanHireRowJSON struct {
+	Name      string `json:"name"`
+	Display   string `json:"display"`
+	Role      string `json:"role"`
+	Town      string `json:"town"`
+	Available bool   `json:"available"`
+	Status    string `json:"status"`
 }
 
-func (game *gameplayPlane) caravanHireService(character *enterworld.Character, codename string) ([]wire.Frame, bool) {
-	agent, ok := strings.CutPrefix(codename, caravanHireServicePrefix)
-	if !ok || game.caravanAgents == nil {
-		return nil, false
-	}
+type caravanHireStarsJSON struct {
+	Stars uint8  `json:"stars"`
+	Goods string `json:"goods"`
+	Total string `json:"total"`
+}
+
+type caravanHireJSON struct {
+	Version int                    `json:"version"`
+	Title   string                 `json:"title"`
+	Fee     string                 `json:"fee"`
+	Message string                 `json:"message"`
+	Rows    []caravanHireRowJSON   `json:"rows"`
+	Stars   []caravanHireStarsJSON `json:"stars"`
+}
+
+func (game *gameplayPlane) caravanHireWindow(character *enterworld.Character, message string) wire.Frame {
 	var job uint8
 	var name string
 	game.deps.Read(game.divisionID, func() { job, name = enterworld.DressedJob(character), character.Name })
-	reply := game.caravanAgents.HireAgent(game.divisionID, name, job, agent, time.Now().UnixMilli())
+	out := caravanHireJSON{Version: 1, Title: "Caravan Hire", Fee: caravanai.GoldText(caravanai.HireFeeGold), Message: message, Rows: []caravanHireRowJSON{}, Stars: []caravanHireStarsJSON{}}
+	p, ok := game.caravanPlayer(game.divisionID, name)
+	place, inPlace := caravanai.TownID(""), false
+	if ok {
+		place, inPlace = game.caravanAgents.PlaceAt(p.At)
+	}
+	if !inPlace {
+		if out.Message == "" {
+			out.Message = "Caravan help is hired at a specialty shop or in the Thief Den."
+		}
+	} else {
+		if place == caravanai.TownThiefDen {
+			out.Title = "Thieves for Hire"
+		} else {
+			out.Title = "Hunters and Traders for Hire - " + formatCaravanTownName(place)
+			for s := uint8(1); s <= caravanai.MaxHireStars; s++ {
+				goods := caravanai.GoodsForStars(s)
+				out.Stars = append(out.Stars, caravanHireStarsJSON{Stars: s, Goods: caravanai.GoldText(goods), Total: caravanai.GoldText(caravanai.HireFeeGold + goods)})
+			}
+		}
+		for _, row := range game.caravanAgents.HireRoster(game.divisionID, name, job, place) {
+			out.Rows = append(out.Rows, caravanHireRowJSON{
+				Name: row.Name, Display: caravanai.DisplayName(row.Name), Role: row.Role.Title(),
+				Town: formatCaravanTownName(row.Town), Available: row.Available, Status: row.Status,
+			})
+		}
+	}
+	payload, _ := json.Marshal(out)
+	return wire.Frame{Opcode: action.OpCaravanHire, Payload: payload}
+}
+
+func (game *gameplayPlane) caravanHireRequest(division string, character *enterworld.Character, payload []byte) []wire.Frame {
+	if game.caravanAgents == nil || division != game.divisionID {
+		return nil
+	}
+	if payload[0] == 0 {
+		return []wire.Frame{game.caravanHireWindow(character, "")}
+	}
+	var job uint8
+	var name string
+	game.deps.Read(division, func() { job, name = enterworld.DressedJob(character), character.Name })
+	reply := game.caravanAgents.HireAgentStars(division, name, job, string(payload[2:]), payload[1], time.Now().UnixMilli())
 	return []wire.Frame{
 		{Opcode: chat.OpChatBroadcast, Payload: chat.EncodeChatNotice(reply)},
-		{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(caravanTextSymbol + reply)},
-	}, true
+		game.caravanHireWindow(character, reply),
+	}
 }
 
 /*

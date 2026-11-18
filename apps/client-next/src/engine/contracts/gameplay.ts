@@ -13,6 +13,7 @@ undefined shop closes it; other fields belong to the newest snapshot.
 */
 import type { MoverPublication } from "./mover-publication";
 import type { ArenaChest } from "@/engine/foundation/gameplay/arena-chest";
+import type { CaravanHire } from "@/engine/foundation/gameplay/caravan-hire";
 export type { MovementAim } from "./mover-publication";
 
 /*
@@ -496,6 +497,9 @@ export type GameplayCommand =
 	| { readonly kind: "cos-select"; readonly gid: number; }
 	| { readonly kind: "npc-talk"; }
 	| { readonly kind: "arena-dismiss"; }
+	// Port-only caravan hire window (caravan-hire.ts): refresh or hire, and close.
+	| { readonly kind: "caravan-hire"; readonly operation: 0 | 1; readonly stars: number; readonly name: string; }
+	| { readonly kind: "caravan-hire-close"; }
 	| { readonly kind: "arena-decision"; readonly operation: 0 | 1 | 2; readonly id: string; }
 	| { readonly kind: "npc-withdraw"; }
 	| { readonly kind: "npc-event-exchange"; }
@@ -821,6 +825,7 @@ export interface GameplayState extends MoverPublication {
 	// Port-only wolf skill tree of the pet window's wolf (pet-training.ts).
 	readonly petTraining?: PetTraining;
 	readonly arenaChest?: ArenaChest;
+	readonly caravanHire?: CaravanHire;
 	readonly petTailwind?: PetTraining["tailwind"];
 	readonly petGuidance?: PetTraining["guidance"];
 	readonly petHowl?: PetTraining["howl"];

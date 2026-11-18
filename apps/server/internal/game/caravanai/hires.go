@@ -71,7 +71,8 @@ func (r *Runtime) restoreHiresLocked(division string, rows []domain.CaravanHireR
 		town := TownID(row.HireTown)
 		bindHire(unit, row.PlayerName, town, row.GoodsCostGold, row.HiredAtMs)
 		if unit.Role == RoleTrader {
-			unit.CargoStacks = row.CargoStacks
+			stars := uint8(min(max(row.GoodsCostGold/HiredGoodsPerStarGold, 1), int64(MaxHireStars)))
+			unit.CargoStars, unit.CargoStacks, unit.StackValueGold = stars, row.CargoStacks, row.GoodsCostGold/10
 		}
 		unit.place(r.terminalLocked(town), nowMs)
 		unit.leaderMissingAtMs = nowMs + HireRestoreGraceMs - HireLeaderMissingMs
