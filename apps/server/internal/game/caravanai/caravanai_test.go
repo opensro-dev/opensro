@@ -243,7 +243,7 @@ func TestRuntimeParleyHonorBetrayalAndContracts(t *testing.T) {
 
 	// 2. Trader player hires [AI]Hunter_Kwan via chat command.
 	hireReply, ok := rt.HandlePlayerCommand(div, "MerchantLin", domain.JobTrader, "!hire [AI]Hunter_Kwan", 1_000)
-	if !ok || !strings.Contains(hireReply, "[AI]Hunter_Kwan joins you") {
+	if !ok || !strings.Contains(hireReply, "Kwan joins you") {
 		t.Fatalf("expected hunter hire reply for MerchantLin, got ok=%v reply=%q", ok, hireReply)
 	}
 

@@ -314,12 +314,31 @@ func (game *gameplayPlane) publishCaravanActor(ticker *simulation.Ticker, views 
 		game.caravanAgents.ActorSynchronized(game.divisionID, c.Name)
 	}
 	appearance := simulation.PeerAppearance{RefObjID: uint32(*c.ModelRef), Name: c.Name, JobType: c.Job.Type, JobGrade: c.Job.Grade, Run: unit.RunSpeed}
+	// An agent waiting for hire wears no job suit and carries a guild-row
+	// label ("[Hunter for hire]"), so players can tell who is free.
+	forHire := unit.AvailableForHire && !unit.RespawnPending
+	if forHire {
+		appearance.JobType, appearance.JobGrade = 0, 0
+		appearance.GuildName = unit.Role.Title() + " for hire"
+	}
 	for slot := int64(0); slot <= int64(enterworld.JobSuitSlot); slot++ {
+		if forHire && slot == int64(enterworld.JobSuitSlot) {
+			continue
+		}
 		for _, row := range c.MissionInventory {
 			if row.Slot == slot {
 				appearance.Equipment = append(appearance.Equipment, wire.PlayerEquipItem{RefObjID: row.RefObjID, TypeFlags: row.TypeFlags})
 			}
 		}
+	}
+	if game.caravanLook == nil {
+		game.caravanLook = make(map[string]bool)
+	}
+	lookChanged := game.caravanLook[c.Name] != forHire
+	game.caravanLook[c.Name] = forHire
+	moveMode := simulation.RunMode
+	if unit.Walking {
+		moveMode = simulation.WalkMode
 	}
 	gid := enterworld.ObjectIDForCharacter(c)
 	moveGID := gid
@@ -340,12 +359,13 @@ func (game *gameplayPlane) publishCaravanActor(ticker *simulation.Ticker, views 
 		viewer := view.World.LiveSpawnAt(nowMs)
 		visible := view.WorldInstance == domain.DefaultWorldInstance && worldgeom.InterestVisible(worldgeom.RegionXZ{RegionID: at.RegionID, X: at.X, Z: at.Z}, worldgeom.RegionXZ{RegionID: viewer.RegionID, X: viewer.X, Z: viewer.Z})
 		var frames []simulation.Frame
-		if unit.RespawnPending && shown {
+		if (unit.RespawnPending || lookChanged) && shown {
 			frames = append(frames, simulation.Frame{Opcode: wire.OpObjectDespawn, Payload: (wire.ObjectDespawn{Gid: gid}).Encode(), ScopeGID: gid})
 			shown = false
 		}
 		if game.caravanMoving == nil {
 			game.caravanMoving = make(map[string]bool)
+			game.caravanMode = make(map[string]uint8)
 		}
 		moveKey := view.SessionID + "|" + c.Name
 		if visible && !shown {
@@ -373,8 +393,9 @@ func (game *gameplayPlane) publishCaravanActor(ticker *simulation.Ticker, views 
 				proj := worldgeom.NormalizeOutdoor(worldgeom.RegionXZ{RegionID: curXZ.RegionID, X: curXZ.X + 2*dx, Z: curXZ.Z + 2*dz})
 				goal := simulation.Spawn{RegionID: proj.RegionID, X: proj.X, Y: float64(unit.Y), Z: proj.Z}
 				from := simulation.MovementSourceFromSpawn(simulation.Spawn{RegionID: previous.RegionID, X: float64(previous.X), Y: float64(previous.Y), Z: float64(previous.Z)})
-				if !wasMoving {
-					frames = append(frames, simulation.Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: moveGID, StateType: wire.StateChannelMove, Value: simulation.RunMode}).Encode()})
+				if !wasMoving || game.caravanMode[moveKey] != moveMode {
+					frames = append(frames, simulation.Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: moveGID, StateType: wire.StateChannelMove, Value: moveMode}).Encode()})
+					game.caravanMode[moveKey] = moveMode
 				}
 				frames = append(frames, simulation.Frame{Opcode: simulation.OpMovementAck, Payload: simulation.BuildMovementAckPayload(moveGID, simulation.MovementRequest{Mode: simulation.MovementAckDestinationMode, RegionID: goal.RegionID, X: goal.X, Y: goal.Y, Z: goal.Z}, &from)})
 				game.caravanMoving[moveKey] = true

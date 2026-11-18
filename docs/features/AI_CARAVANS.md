@@ -383,3 +383,65 @@ Checks: `go build ./...`, `go vet` on `sro-gameworld`, `caravanai`, `party`; `go
 packages (new `convoy_test.go`; scheduler/escort tests updated to the new ranges and roster); client
 `npm run typecheck`. `TestCaravanShippedActors` (now 40 actors) and `TestCaravanPartyAndMovementPolish`
 skip on this workstation (no extracted client media). Not yet verified in a live run. **No PR or push.**
+
+## Test plan and gaps (2026-11-18)
+
+Live setup: a second local instance beside any running `pnpm local` (alternate ports via the uncommitted
+runner overrides `SRO_LOCAL_SHARD_CATALOG`, `SRO_LOCAL_VITE_PORT`, `SRO_LOCAL_AGENT_ADDR`, plus
+`SRO_AGENT_PROXY_TARGET`), the disposable world `.state/caravan-e2e-world` (`SRO_LOCAL_STATE_ROOT`), the
+published client tree of `opensro-arena-main-sync` (`SRO_GENERATED_ROOT`), live shard settings from
+`config/local.env`, GM test character `test`.
+
+| # | Check | How |
+|---|-------|-----|
+| 1 | 40 actors spawn with gear, 2 solo + 2 escorted runs leave, 4 Thieves patrol | server log, `!caravans`, world map |
+| 2 | Idle Hunters/Traders stroll (walking) around each city shop, idle Thieves around the Thief Den buyer | browser, screenshots |
+| 3 | Idle agents read as available: no job suit, "[Hunter for hire]" row under the name | browser |
+| 4 | Specialty shop talk lists Hunters and Traders only, Thief Den buyer lists Thieves only, rows readable | talk window |
+| 5 | Hiring charges the fee (+ goods), agent appears beside the player, greets in chat, joins the party | browser, gold, party list |
+| 6 | Hired Hunter roams around the player, runs after past 120m, teleports past 200m | `/MOVETOUSER`-free walking, logs |
+| 7 | Two hired Traders: first in party leads, `!leed` hands the lead to the player | browser, `!caravans` |
+| 8 | Run end in another town pays the Trader's sale; `!dismiss` returns goods cost | gold, chat notices |
+| 9 | Grand caravan musters and departs (`!grandcaravan` for GM) | chat, world map |
+| 10 | Robbed Trader cools down, escorts return | `!caravans` after a kill |
+
+Gaps found while planning (being implemented): Thieves were hired at city shops instead of the Thief Den;
+idle agents looked identical to working ones; town strolls moved at half speed under a run animation;
+dialog rows showed raw `[AI]` names; no hire/farewell lines from the agents; no way to start a grand
+caravan on demand for testing.
+
+### Implemented from the gap list
+
+- Thieves live in the Thief Den (Burglar Town, region 24758): idle ones stroll around the Stolen Goods
+  Dealer (`NPC_TD_THIEF_BUY`), are hired only there, and only by Thieves; replacements for killed
+  highway Thieves leave from there. Hunters and Traders are hired only at the city specialty shops.
+- Idle agents drop the job suit and carry a guild-row label "[Hunter for hire]" / "[Trader for hire]" /
+  "[Thief for hire]"; the suit returns when they are hired or sent out (respawn of the appearance).
+- Town strolls walk (walk mode, 20 units/s) on a ring 8-30m around the shop, pausing between walks.
+- Talk rows read "Hire Kwan, Hunter from Jangan (15,000 gold)", agents of the current town first; the
+  answer line and a notice give the result; agents greet on hire and say goodbye when released.
+- GM-only `!grandcaravan` starts the muster now.
+- Live fixes: the store capped runtime actors at 16 (now 64); idle agents no longer scan for monsters
+  every tick (caravan hook ~25-60ms -> ~5-15ms per tick); the payout door has an economy reason.
+
+### Live test results (2026-11-18, second local instance, disposable world)
+
+Passed in the browser: 40 actors spawn; idle Hunters/Traders stroll the Jangan shop with "for hire"
+labels and no suit; world map labels (Hireable / Escorting); specialty shop dialog lists the agents with
+prices; hiring from the dialog and from `!hire` charges 15,000 (Trader 215,000 incl. 200,000 goods),
+teleports the agent in, greets, invites/joins the party, re-suits it; a busy agent is refused;
+`!leed` toggles the lead; `!dismiss` pays the goods back, says goodbye and dissolves the party;
+`!grandcaravan` mustered 6 Traders and 14 Hunters in Donwhang with an announcement; the Thief Den shows
+"[Thief for hire]" Thieves and offers no Thieves to a Trader.
+
+Not verified live (unit-tested only): a full hired run to another town and its sale payout, roaming and
+200m teleport on the open road, grand caravan departure and arrival, Thief-only rows for a dressed Thief,
+robbed-Trader cooldown.
+
+Settings deviation for local runs: this workstation's server game data has no variant overlays, so
+`SRO_ALEXANDRIA`, `SRO_CAP110_ITEMS/MONSTERS/TEMPLE`, `SRO_ARABIA`, `SRO_JUPITER(_TEMPLE)` and
+`SRO_PHARAOH_TEMPLE` were forced off for the test instance (the GameWorld refuses to boot otherwise).
+
+Known gaps: hires live in memory only (a server restart drops them; fee and goods are not refunded);
+a payout to a hirer who is not loaded on the server is lost (logged); idle agents gather on a 30m ring,
+so a busy shop still looks crowded.

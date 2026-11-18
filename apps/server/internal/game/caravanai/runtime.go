@@ -90,6 +90,8 @@ type AgentUnit struct {
 	GoodsCostGold int64
 	// CooldownUntilMs holds a robbed Trader's next own run.
 	CooldownUntilMs int64
+	// Walking is set while the agent strolls (published as walk mode).
+	Walking bool
 	// nextRemoteAtMs is the earliest time the next remote decision may be
 	// asked for this agent.
 	nextRemoteAtMs     int64
@@ -665,6 +667,7 @@ func agentKey(division, agentName string) string {
 func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, worldThreatActive bool, nowMs int64) agentEffects {
 	effects := agentEffects{}
 	defer func() { unit.AvailableForHire = hireable(unit) }()
+	unit.Walking = false
 	if tp := unit.pendingTeleport; tp != nil {
 		unit.pendingTeleport = nil
 		unit.place(*tp, nowMs)

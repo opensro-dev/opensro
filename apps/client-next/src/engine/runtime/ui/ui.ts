@@ -2202,8 +2202,8 @@ export function createUi( ports: UiPorts ) {
 	*/
 	function hudCopy( key: string ) {
 		if ( key === "UIIT_PORT_SOOK_ARENA" ) return "Survival Arena (5 stages, EXP/SP x5)";
-		// The specialty shops' caravan hire rows and answers (port-only) carry their text.
-		if ( key.startsWith( "[AI]" ) ) return key.replace( /^\[AI\] /, "" );
+		// The caravan hire rows and answers (port-only) carry their own text.
+		if ( key.startsWith( "UIIT_PORT_CARAVAN:" ) ) return key.slice( "UIIT_PORT_CARAVAN:".length );
 		// The Contributor login prompt (port-only, contributor-titles.ts).
 		const contributorCopy = CONTRIBUTOR_PROMPT_COPY[key];
 		if ( contributorCopy ) return contributorCopy;

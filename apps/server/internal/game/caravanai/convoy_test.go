@@ -139,7 +139,7 @@ TestHireRulesFeesGoodsAndAvailability
 func TestHireRulesFeesGoodsAndAvailability(t *testing.T) {
 	town := TownWaypoint(TownJangan)
 	players := map[string]*hirePlayer{
-		"Thief":  {at: town, job: domain.JobThief, online: true},
+		"Thief":  {at: TownWaypoint(TownThiefDen), job: domain.JobThief, online: true},
 		"Hunter": {at: town, job: domain.JobHunter, online: true},
 		"Busy":   {at: town, job: domain.JobTrader, online: true},
 	}
@@ -151,12 +151,28 @@ func TestHireRulesFeesGoodsAndAvailability(t *testing.T) {
 			t.Fatalf("a Thief was offered %s", offer.Name)
 		}
 	}
-	if reply := rt.HireAgent("division", "Thief", domain.JobThief, "[AI]Hunter_Kwan", 1000); !strings.Contains(reply, "only works for Hunters and Traders") {
+	if reply := rt.HireAgent("division", "Thief", domain.JobThief, "[AI]Hunter_Kwan", 1000); !strings.Contains(reply, "don't work for thieves") {
 		t.Fatalf("a Thief hired a Hunter: %s", reply)
 	}
-	if reply := rt.HireAgent("division", "Thief", domain.JobThief, "[AI]Thief_Wisp", 1000); !strings.Contains(reply, "joins you") {
-		t.Fatalf("a Thief could not hire a Thief: %s", reply)
+	// Thieves are hired in the Thief Den only, where idle ones wait.
+	players["Thief"].at = town
+	if reply := rt.HireAgent("division", "Thief", domain.JobThief, "[AI]Thief_Wisp", 1000); !strings.Contains(reply, "Thief Den") {
+		t.Fatalf("a Thief was hired in a city: %s", reply)
 	}
+	players["Thief"].at = TownWaypoint(TownThiefDen)
+	rt.mu.Lock()
+	if wisp := rt.findAgentLocked("division", "[AI]Thief_Wisp"); wisp.OriginTown != TownThiefDen || WaypointDistance(position(wisp), TownWaypoint(TownThiefDen)) > denRadius {
+		t.Fatalf("an idle Thief does not wait in the Den: %+v", position(wisp))
+	}
+	rt.mu.Unlock()
+	if reply := rt.HireAgent("division", "Thief", domain.JobThief, "[AI]Thief_Wisp", 1000); !strings.Contains(reply, "joins you") {
+		t.Fatalf("a Thief could not hire a Thief in the Den: %s", reply)
+	}
+	players["Hunter"].at = TownWaypoint(TownThiefDen)
+	if reply := rt.HireAgent("division", "Hunter", domain.JobHunter, "[AI]Hunter_Lei", 1000); !strings.Contains(reply, "specialty shop") {
+		t.Fatalf("a Hunter was hired in the Thief Den: %s", reply)
+	}
+	players["Hunter"].at = town
 
 	rt.mu.Lock()
 	jin := rt.findAgentLocked("division", "[AI]Trader_Jin")

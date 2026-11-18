@@ -62,7 +62,10 @@ const (
 	GrandCaravanIntervalMs int64 = 3 * 60 * 60_000
 	GrandCaravanMusterMs   int64 = 2 * 60_000
 
-	townWanderRadius     float64 = 30 * UnitsPerMeter
+	townWanderRadius float64 = 30 * UnitsPerMeter
+	townWanderInner  float64 = 8 * UnitsPerMeter
+	// WalkStepPerTick is the client's walk speed (20 units/s) per 100ms step.
+	WalkStepPerTick      float32 = 2
 	distressAnswerRadius float64 = 300 * UnitsPerMeter
 
 	scenicDetourMinLeg float64 = 1500
@@ -172,6 +175,42 @@ func (r *Runtime) terminalLocked(town TownID) Waypoint {
 		return t
 	}
 	return TownWaypoint(town)
+}
+
+// denRadius is how near the Thief Den buyer counts as being in the Den.
+const denRadius float64 = 80 * UnitsPerMeter
+
+/*
+================
+homeLocked / placeAtLocked
+
+Thieves live in the Thief Den; everyone else in the nearest city. placeAt
+says which home, if any, a point is in (a city's safe zone or the Den).
+================
+*/
+func (r *Runtime) homeLocked(u *AgentUnit) TownID {
+	if u.Role == RoleThief {
+		return TownThiefDen
+	}
+	return r.nearestTownLocked(position(u))
+}
+
+func (r *Runtime) placeAtLocked(at Waypoint) (TownID, bool) {
+	if WaypointDistance(at, r.terminalLocked(TownThiefDen)) <= denRadius {
+		return TownThiefDen, true
+	}
+	if isTownRegion(at.RegionID) {
+		return r.nearestTownLocked(at), true
+	}
+	return "", false
+}
+
+func GoldText(n int64) string {
+	s := fmt.Sprint(n)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return s
 }
 
 func (r *Runtime) nearestTownLocked(at Waypoint) TownID {
@@ -291,7 +330,7 @@ town walks back to it.
 */
 func (r *Runtime) wanderInTownLocked(unit *AgentUnit, nowMs int64) {
 	home := r.terminalLocked(unit.OriginTown)
-	if !isTownRegion(unit.RegionID) {
+	if _, inTown := r.placeAtLocked(position(unit)); !inTown {
 		r.moveLocked(unit, home, stepDistanceFor(unit))
 		if unit.noteProgress(nowMs) >= stuckTeleportMs {
 			unit.place(home, nowMs)
@@ -300,7 +339,8 @@ func (r *Runtime) wanderInTownLocked(unit *AgentUnit, nowMs int64) {
 	}
 	if nowMs >= unit.roamAtMs {
 		angle := rand.Float64() * 2 * math.Pi
-		radius := rand.Float64() * townWanderRadius
+		// A ring around the shop: near enough to find, never on its doorstep.
+		radius := townWanderInner + rand.Float64()*(townWanderRadius-townWanderInner)
 		unit.roamDX, unit.roamDZ = radius*math.Cos(angle), radius*math.Sin(angle)
 		unit.roamAtMs = nowMs + 8000 + rand.Int64N(12_000)
 		unit.progressAtMs = 0
@@ -310,7 +350,9 @@ func (r *Runtime) wanderInTownLocked(unit *AgentUnit, nowMs int64) {
 		unit.progressAtMs = 0
 		return
 	}
-	r.moveLocked(unit, target, max(stepDistanceFor(unit)/2, 3))
+	// A stroll walks: the client plays the walk cycle at walk speed.
+	unit.Walking = true
+	r.moveLocked(unit, target, WalkStepPerTick)
 	if unit.noteProgress(nowMs) >= 6000 {
 		// A building is in the way: choose another spot.
 		unit.roamAtMs = 0
@@ -330,11 +372,11 @@ func (r *Runtime) releaseLocked(u *AgentUnit, nowMs int64, teleportHome bool) {
 	u.HiredBy, u.hireLeftTown, u.leftTownAtMs, u.leaderMissingAtMs, u.GoodsCostGold = "", false, 0, 0, 0
 	u.RunKind, u.State = RunNone, StateIdleInTown
 	u.UnderAttack, u.catchingUp, u.roamAtMs, u.progressAtMs = false, false, 0, 0
-	town := r.nearestTownLocked(position(u))
+	town := r.homeLocked(u)
 	u.OriginTown, u.DestTown = town, nextTown(town)
 	u.Route, u.WaypointIndex = nil, 0
-	if teleportHome && !isTownRegion(u.RegionID) {
-		tp := r.terminalLocked(town)
+	if at, inTown := r.placeAtLocked(position(u)); teleportHome && (!inTown || at != town) {
+		tp := offsetPoint(r.terminalLocked(town), 20, 20)
 		u.pendingTeleport = &tp
 	}
 	if u.Role == RoleTrader {
@@ -509,9 +551,17 @@ func (r *Runtime) scheduleRunsLocked(division string, nowMs int64) {
 		}
 	}
 	for ; patrols < rosterHighwayThieves && len(spare) > 0; patrols++ {
+		// A replacement leaves the Den for an ambush spot on a city road.
 		thief := spare[0]
 		spare = spare[1:]
+		from := rosterTowns[rand.IntN(2)]
+		thief.OriginTown, thief.DestTown = from, nextTown(from)
 		thief.State, thief.Route, thief.WaypointIndex = StateTraveling, r.route(thief), 0
+		if len(thief.Route) > 2 {
+			thief.WaypointIndex = 2
+			tp := thief.Route[2]
+			thief.pendingTeleport = &tp
+		}
 	}
 	for ; escorted < StandingEscortedRuns; escorted++ {
 		trader := r.eligibleTraderLocked(division, nowMs)
@@ -744,30 +794,42 @@ func (r *Runtime) HireAgent(division, player string, playerJob uint8, agentName 
 		return "Caravan hiring is unavailable."
 	}
 	at, ok := r.hooks.Player(division, player)
-	if !ok || at.HPPercent <= 0 || !isTownRegion(at.At.RegionID) {
-		return "Hire caravan help in town."
+	if !ok || at.HPPercent <= 0 {
+		return "Caravan help is hired in town."
 	}
 	r.mu.Lock()
 	unit := r.findAgentLocked(division, agentName)
 	if unit == nil {
 		r.mu.Unlock()
-		return fmt.Sprintf("No caravan agent is named %s.", agentName)
+		return fmt.Sprintf("Nobody called %s is looking for work.", agentName)
 	}
-	name := unit.Name
+	name, short := unit.Name, DisplayName(unit.Name)
 	if !CanHire(playerJob, unit.Role) {
 		r.mu.Unlock()
-		if playerJob == domain.JobThief {
-			return fmt.Sprintf("%s only works for Hunters and Traders.", name)
+		switch {
+		case playerJob == domain.JobThief:
+			return fmt.Sprintf("%s spits: \"I don't work for thieves.\"", short)
+		case unit.Role == RoleThief:
+			return fmt.Sprintf("%s laughs: \"Hunters and merchants don't hire my kind.\"", short)
+		default:
+			return "Put on your job suit before you hire caravan help."
 		}
-		return fmt.Sprintf("%s only works for Thieves, and only a dressed Hunter, Trader or Thief can hire.", name)
+	}
+	place, inTown := r.placeAtLocked(at.At)
+	if !inTown || (unit.Role == RoleThief) != (place == TownThiefDen) {
+		r.mu.Unlock()
+		if unit.Role == RoleThief {
+			return "Thieves are hired in the Thief Den."
+		}
+		return "Hunters and Traders are hired at a town's specialty shop."
 	}
 	if !hireable(unit) {
 		r.mu.Unlock()
-		return fmt.Sprintf("%s is on the road and cannot be hired now.", name)
+		return fmt.Sprintf("%s is already on the road and cannot be hired now.", short)
 	}
 	if len(r.hiresOfLocked(division, player)) >= MaxHiresPerPlayer {
 		r.mu.Unlock()
-		return fmt.Sprintf("You already lead %d hired agents.", MaxHiresPerPlayer)
+		return fmt.Sprintf("You already lead %d hired companions.", MaxHiresPerPlayer)
 	}
 	goods := int64(0)
 	if unit.Role == RoleTrader {
@@ -778,9 +840,9 @@ func (r *Runtime) HireAgent(division, player string, playerJob uint8, agentName 
 	price := HireFeeGold + goods
 	if r.hooks.OnHireFee == nil || !r.hooks.OnHireFee(division, player, price) {
 		if goods > 0 {
-			return fmt.Sprintf("%s costs %d gold: %d to hire and %d for the goods.", name, price, HireFeeGold, goods)
+			return fmt.Sprintf("Hiring %s costs %s gold: %s for the hire and %s for the goods.", short, GoldText(price), GoldText(HireFeeGold), GoldText(goods))
 		}
-		return fmt.Sprintf("%s costs %d gold to hire.", name, price)
+		return fmt.Sprintf("Hiring %s costs %s gold.", short, GoldText(price))
 	}
 
 	r.mu.Lock()
@@ -790,9 +852,9 @@ func (r *Runtime) HireAgent(division, player string, playerJob uint8, agentName 
 		if r.hooks.OnHirePayout != nil {
 			r.hooks.OnHirePayout(division, player, price)
 		}
-		return fmt.Sprintf("%s was hired by someone else; your gold is returned.", name)
+		return fmt.Sprintf("%s was just hired by someone else; your gold is returned.", short)
 	}
-	town := r.nearestTownLocked(at.At)
+	town := place
 	unit.HiredBy, unit.HiredAtMs, unit.HireTown = player, nowMs, town
 	unit.hireLeftTown, unit.leftTownAtMs, unit.leaderMissingAtMs = false, 0, 0
 	unit.RunKind, unit.State, unit.AvailableForHire = RunHired, StateTraveling, false
@@ -805,15 +867,46 @@ func (r *Runtime) HireAgent(division, player string, playerJob uint8, agentName 
 	}
 	tp := offsetPoint(at.At, 12, 0)
 	unit.pendingTeleport = &tp
+	r.outbox = append(r.outbox, outboxItem{chat: true, agent: name, regionID: at.At.RegionID, text: hireGreeting(unit, player)})
 	r.mu.Unlock()
+	defer r.flushOutbox(division)
 
 	if r.hooks.OnContractFormed != nil {
 		r.hooks.OnContractFormed(division, player, name)
 	}
 	if goods > 0 {
-		return fmt.Sprintf("%s joins you for one trade run (1 hour at most), carrying %d gold of goods it sells for you on delivery. Paid %d gold.", name, goods, price)
+		return fmt.Sprintf("%s joins you for one trade run. Paid %s gold (%s for goods).", short, GoldText(price), GoldText(goods))
 	}
-	return fmt.Sprintf("%s joins you for one trade run (1 hour at most). Paid %d gold.", name, price)
+	return fmt.Sprintf("%s joins you for one trade run. Paid %s gold.", short, GoldText(price))
+}
+
+/*
+================
+hireGreeting / hireFarewell
+
+What a hired agent says in local chat.
+================
+*/
+func hireGreeting(u *AgentUnit, player string) string {
+	switch u.Role {
+	case RoleTrader:
+		return fmt.Sprintf("A pleasure, %s. My %d-star wagon is loaded; let's make this run count.", player, u.CargoStars)
+	case RoleThief:
+		return fmt.Sprintf("Your coin, your call, %s. Point me at a fat caravan.", player)
+	default:
+		return fmt.Sprintf("Lead the way, %s. Nobody touches your cargo while I'm around.", player)
+	}
+}
+
+func hireFarewell(u *AgentUnit, player string, end HireEnd) string {
+	switch end {
+	case HireCompleted:
+		return fmt.Sprintf("A good run, %s. Find me in town if you ride again.", player)
+	case HireTimedOut:
+		return fmt.Sprintf("That's my hour, %s. I'm heading home.", player)
+	default:
+		return fmt.Sprintf("Our deal is off, %s. I'm heading home.", player)
+	}
 }
 
 /*
@@ -941,13 +1034,14 @@ func (r *Runtime) superviseHireLocked(unit *AgentUnit, nowMs int64) bool {
 		r.endHireLocked([]*AgentUnit{unit}, HireTimedOut, nowMs)
 		return true
 	}
-	if !isTownRegion(p.At.RegionID) {
+	place, inTown := r.placeAtLocked(p.At)
+	if !inTown {
 		if !unit.hireLeftTown {
 			unit.hireLeftTown, unit.leftTownAtMs = true, nowMs
 		}
 		return false
 	}
-	if unit.hireLeftTown && (r.nearestTownLocked(p.At) != unit.HireTown || nowMs-unit.leftTownAtMs >= HireRunMinOutMs) {
+	if unit.hireLeftTown && (place != unit.HireTown || nowMs-unit.leftTownAtMs >= HireRunMinOutMs) {
 		r.endHireLocked(r.hiresOfLocked(unit.Division, unit.HiredBy), HireCompleted, nowMs)
 		return true
 	}
@@ -999,6 +1093,7 @@ func (r *Runtime) endHireLocked(units []*AgentUnit, end HireEnd, nowMs int64) {
 				gold = gold * int64(100+HiredGoodsMarginPerStarPct*int(u.CargoStars)) / 100
 			}
 		}
+		r.outbox = append(r.outbox, outboxItem{chat: true, agent: u.Name, regionID: u.RegionID, text: hireFarewell(u, player, end)})
 		r.releaseLocked(u, nowMs, true)
 		r.outbox = append(r.outbox, outboxItem{player: player, agent: u.Name, gold: gold, end: end})
 		if len(r.hiresOfLocked(u.Division, player)) == 0 {

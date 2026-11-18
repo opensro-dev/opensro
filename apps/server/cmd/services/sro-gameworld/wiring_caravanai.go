@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -46,6 +47,8 @@ type caravanRuntimeState struct {
 	caravanActors         []*enterworld.Character
 	caravanMapAtMs        int64
 	caravanMoving         map[string]bool
+	caravanMode           map[string]uint8
+	caravanLook           map[string]bool
 	caravanRoads          map[string]*caravanRoad
 	caravanIgnoredThreats map[string]map[uint32]int64
 }
@@ -94,9 +97,13 @@ func (game *gameplayPlane) wireCaravanAgents() {
 			if game.parties != nil {
 				game.parties.RemoveRuntimeActor(division, agentName)
 			}
-			text := fmt.Sprintf("%s's hire has %s.", agentName, end)
-			if gold > 0 {
-				text = fmt.Sprintf("%s's hire has %s: %d gold paid to you for the goods.", agentName, end, gold)
+			name := caravanai.DisplayName(agentName)
+			text := fmt.Sprintf("%s's hire has %s.", name, end)
+			switch {
+			case gold > 0 && end == caravanai.HireCompleted:
+				text = fmt.Sprintf("%s sold the goods: %s gold paid to you.", name, caravanai.GoldText(gold))
+			case gold > 0:
+				text = fmt.Sprintf("%s's hire has %s: %s gold for the goods paid back.", name, end, caravanai.GoldText(gold))
 			}
 			game.caravanNotice(division, playerName, text)
 		},
@@ -155,7 +162,7 @@ func (game *gameplayPlane) wireCaravanChat() {
 			return "", false
 		}
 		switch strings.ToLower(fields[0]) {
-		case "!caravans", "!caravan", "!accept", "!hire", "!memory", "!attack", "!leed", "!lead", "!dismiss":
+		case "!caravans", "!caravan", "!accept", "!hire", "!memory", "!attack", "!leed", "!lead", "!dismiss", "!grandcaravan":
 		default:
 			return "", false
 		}
@@ -174,6 +181,18 @@ func (game *gameplayPlane) wireCaravanChat() {
 		})
 		if !admitted {
 			return "Wait a second before another caravan command.", true
+		}
+		if strings.EqualFold(fields[0], "!grandcaravan") {
+			// GM only: start the grand caravan muster now (testing and events).
+			gm := false
+			game.deps.Read(divisionID, func() { gm = c.GMPrivilege })
+			if !gm {
+				return "", false
+			}
+			if !game.caravanAgents.StartGrandCaravan(divisionID, nowMs) {
+				return "No grand caravan can muster now (one is mustering, or no Trader is free).", true
+			}
+			return "Grand caravan mustering.", true
 		}
 		if strings.EqualFold(fields[0], "!accept") {
 			capped := false
@@ -298,7 +317,8 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 		mustRejoin := game.caravanAgents.EscortMustRejoin(game.divisionID, unit.Name)
 		var npcGID uint32
 		var npcAt caravanai.Waypoint
-		if !mustRejoin {
+		// Idle agents stroll in town, where no monster reaches them: no scan.
+		if !mustRejoin && unit.State != caravanai.StateIdleInTown && unit.State != caravanai.StateRecruiting {
 			npcGID, npcAt = game.caravanNPCThreat(unit, nowMs)
 		}
 		decision, updated, ok := game.caravanAgents.StepAgentWithWorldThreat(ctx, game.divisionID, unit.Name, nearby, npcGID != 0, nowMs)
@@ -363,6 +383,8 @@ func formatCaravanTownName(town caravanai.TownID) string {
 		return "Donwhang"
 	case caravanai.TownHotan:
 		return "Hotan"
+	case caravanai.TownThiefDen:
+		return "Thief Den"
 	default:
 		return string(town)
 	}
@@ -422,28 +444,60 @@ The specialty shops' talk menu lists every agent the player may hire now
 (port-only rows; the client shows "[AI]" symbols as written).
 ================
 */
-const caravanHireServicePrefix = "caravan-hire:"
+const (
+	caravanHireServicePrefix = "caravan-hire:"
+	// caravanTextSymbol marks a port-only dialog symbol that is its own text
+	// (client ui.ts hudCopy shows what follows it).
+	caravanTextSymbol  = "UIIT_PORT_CARAVAN:"
+	caravanThiefDenNPC = "NPC_TD_THIEF_BUY"
+)
 
 func (game *gameplayPlane) caravanHireOptions(divisionID string, character *enterworld.Character, npcCodename string) []action.NpcQuestOption {
 	if game.caravanAgents == nil || !game.caravanAgents.Enabled() {
 		return nil
 	}
+	// City specialty shops hire Hunters and Traders; the Thief Den's buyer hires Thieves.
+	var den bool
 	switch npcCodename {
 	case "NPC_CH_SPECIAL", "NPC_WC_SPECIAL", "NPC_KT_SPECIAL":
+	case caravanThiefDenNPC:
+		den = true
 	default:
 		return nil
 	}
 	var job uint8
 	game.deps.Read(divisionID, func() { job = enterworld.DressedJob(character) })
+	here := map[string]caravanai.TownID{"NPC_CH_SPECIAL": caravanai.TownJangan, "NPC_WC_SPECIAL": caravanai.TownDonwhang, "NPC_KT_SPECIAL": caravanai.TownHotan}[npcCodename]
+	offers := game.caravanAgents.HireOffers(divisionID, job)
+	// The ones strolling around this shop first.
+	sort.SliceStable(offers, func(i, j int) bool { return offers[i].Town == here && offers[j].Town != here })
 	var out []action.NpcQuestOption
-	for _, offer := range game.caravanAgents.HireOffers(divisionID, job) {
-		label := fmt.Sprintf("%s - %s in %s - %d gold", offer.Name, offer.Role.Title(), formatCaravanTownName(offer.Town), offer.Fee)
-		if offer.Goods > 0 {
-			label = fmt.Sprintf("%s - %s in %s - %d gold + %d goods", offer.Name, offer.Role.Title(), formatCaravanTownName(offer.Town), offer.Fee, offer.Goods)
+	for _, offer := range offers {
+		if (offer.Role == caravanai.RoleThief) != den {
+			continue
 		}
-		out = append(out, action.NpcQuestOption{Codename: caravanHireServicePrefix + offer.Name, TitleSymbol: label, PromptSymbol: label, Immediate: true})
+		label := caravanHireLabel(offer)
+		out = append(out, action.NpcQuestOption{Codename: caravanHireServicePrefix + offer.Name, TitleSymbol: caravanTextSymbol + label, PromptSymbol: caravanTextSymbol + label, Immediate: true})
 	}
 	return out
+}
+
+/*
+================
+caravanHireLabel
+
+One talk row: "Hire Kwan, Hunter from Donwhang (15,000 gold)".
+================
+*/
+func caravanHireLabel(offer caravanai.HireOffer) string {
+	name, fee := caravanai.DisplayName(offer.Name), caravanai.GoldText(offer.Fee)
+	if offer.Goods > 0 {
+		return fmt.Sprintf("Hire %s, Trader from %s (%s gold + %s for goods)", name, formatCaravanTownName(offer.Town), fee, caravanai.GoldText(offer.Goods))
+	}
+	if offer.Role == caravanai.RoleThief {
+		return fmt.Sprintf("Hire %s, Thief (%s gold)", name, fee)
+	}
+	return fmt.Sprintf("Hire %s, %s from %s (%s gold)", name, offer.Role.Title(), formatCaravanTownName(offer.Town), fee)
 }
 
 func (game *gameplayPlane) caravanHireService(character *enterworld.Character, codename string) ([]wire.Frame, bool) {
@@ -455,13 +509,9 @@ func (game *gameplayPlane) caravanHireService(character *enterworld.Character, c
 	var name string
 	game.deps.Read(game.divisionID, func() { job, name = enterworld.DressedJob(character), character.Name })
 	reply := game.caravanAgents.HireAgent(game.divisionID, name, job, agent, time.Now().UnixMilli())
-	answer := reply
-	if !strings.HasPrefix(answer, "[AI]") {
-		answer = "[AI] " + answer
-	}
 	return []wire.Frame{
 		{Opcode: chat.OpChatBroadcast, Payload: chat.EncodeChatNotice(reply)},
-		{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(answer)},
+		{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(caravanTextSymbol + reply)},
 	}, true
 }
 

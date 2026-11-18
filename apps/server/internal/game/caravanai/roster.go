@@ -11,7 +11,10 @@ highway and the rest wait in town for hire.
 */
 package caravanai
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 const (
 	RosterHunters = 20
@@ -30,6 +33,20 @@ var (
 	rosterArms   = []string{"ITEM_CH_SPEAR_07_C_RARE", "ITEM_CH_BOW_07_C_RARE", "ITEM_CH_BLADE_07_C_RARE", "ITEM_CH_SWORD_07_C_RARE", "ITEM_CH_TBLADE_07_C_RARE"}
 	rosterPeople = []Personality{PersonalityCautious, PersonalityGreedy, PersonalityHonorable, PersonalityVengeful}
 )
+
+/*
+================
+DisplayName
+
+"[AI]Hunter_Kwan" reads as "Kwan" in dialogs.
+================
+*/
+func DisplayName(name string) string {
+	if cut := strings.LastIndexByte(name, '_'); cut >= 0 && strings.HasPrefix(name, "[AI]") {
+		return name[cut+1:]
+	}
+	return name
+}
 
 /*
 ================
@@ -81,6 +98,9 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 	}
 	for i := 0; i < RosterThieves; i++ {
 		unit := add(RoleThief, thiefNames[i], "THIEF", i)
+		den := TownWaypoint(TownThiefDen)
+		unit.HomeTown, unit.OriginTown, unit.DestTown = TownThiefDen, TownThiefDen, TownThiefDen
+		unit.RegionID, unit.X, unit.Y, unit.Z = den.RegionID, den.X+float32(i%5)*8-16, den.Y, den.Z+float32(i/5%2)*8-4
 		if i < rosterHighwayThieves {
 			unit.State = StateTraveling
 			unit.OriginTown, unit.DestTown = rosterTowns[i%2], rosterTowns[i%2+1]

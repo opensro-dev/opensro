@@ -18,6 +18,9 @@ import (
 	"opensro.online/server/internal/domain"
 )
 
+// maxRuntimeActors bounds one division's AI actors (the caravan roster is 40).
+const maxRuntimeActors = 64
+
 /*
 ================
 RegisterRuntimeCharacters
@@ -27,7 +30,7 @@ func (src storeCharacterSource) RegisterRuntimeCharacters(division string, actor
 	s := src.s
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if strings.TrimSpace(division) == "" || len(actors) > 16 || len(s.runtimeCharacters[division]) != 0 {
+	if strings.TrimSpace(division) == "" || len(actors) > maxRuntimeActors || len(s.runtimeCharacters[division]) != 0 {
 		return fmt.Errorf("invalid or duplicate runtime actor roster for %q", division)
 	}
 	ids, names := make(map[int64]bool), make(map[string]bool)

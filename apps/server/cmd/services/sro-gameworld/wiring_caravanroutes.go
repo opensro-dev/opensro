@@ -50,6 +50,13 @@ func (game *gameplayPlane) configureCaravanHighway(cfg *caravanai.Config) error 
 	if len(cfg.Terminals) != 3 {
 		return fmt.Errorf("three shipped specialty shops are required")
 	}
+	// The Thieves' home: the Thief Den's stolen-goods buyer.
+	for _, npc := range game.items.NpcRoster {
+		if npc.Codename == caravanThiefDenNPC {
+			cfg.Terminals[caravanai.TownThiefDen] = caravanai.Waypoint{Town: caravanai.TownThiefDen, Name: npc.Name, SpecialtyShop: npc.Codename, RegionID: npc.Spawn.RegionID, X: float32(npc.Spawn.X), Y: float32(npc.Spawn.Y), Z: float32(npc.Spawn.Z)}
+			break
+		}
+	}
 	var desertPost caravanai.Waypoint
 	for _, npc := range game.items.NpcRoster {
 		if npc.Codename == "NPC_WC_SPECIAL2" {

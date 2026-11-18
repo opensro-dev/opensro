@@ -31,6 +31,8 @@ const (
 	TownJangan   TownID = "jangan"
 	TownDonwhang TownID = "donwhang"
 	TownHotan    TownID = "hotan"
+	// TownThiefDen is the Thieves' home, where they wait to be hired (port-only).
+	TownThiefDen TownID = "thiefden"
 )
 
 const (
@@ -155,6 +157,16 @@ var (
 		Y:        0,
 		Z:        680.0,
 	}
+	// The Thief Den's stolen-goods buyer (npcpos, NPC_TD_THIEF_BUY).
+	waypointThiefDen = Waypoint{
+		Name:          "Thief Den",
+		Town:          TownThiefDen,
+		SpecialtyShop: "NPC_TD_THIEF_BUY",
+		RegionID:      24758,
+		X:             953.42,
+		Y:             3.66,
+		Z:             1227.63,
+	}
 	waypointHotanSpecialty = Waypoint{
 		Name:          "Hotan Specialty Shop",
 		Town:          TownHotan,
@@ -179,6 +191,8 @@ func TownWaypoint(town TownID) Waypoint {
 		return waypointDonwhangSpecialty
 	case TownHotan:
 		return waypointHotanSpecialty
+	case TownThiefDen:
+		return waypointThiefDen
 	default:
 		return waypointJanganSpecialty
 	}
