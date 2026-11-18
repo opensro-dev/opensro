@@ -149,6 +149,7 @@ func publicRules() publicstats.RulesResponse {
 	dropMix, _ := progression.BetaDropMixFromEnv()
 	growth := progression.BetaGrowthFromEnv()
 	betaMastery, _ := progression.BetaMasteryFromEnv()
+	betaMasteryEarly, _ := enterworld.BetaMasteryEarlyFromEnv()
 	levelCap, _ := progression.LevelCapFromEnv()
 	pharaohGear, _ := monster.PharaohGearRateFromEnv()
 	alexandriaOn, _ := alexandria.EnabledFromEnv()
@@ -294,6 +295,11 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The total of all mastery levels is capped at 300 for Chinese characters and at twice the level, up to 240, for Europeans.",
 				Now:    fmt.Sprintf("Every character may train masteries up to a total of %d; each mastery's own limits stay.", betaMastery),
 				Why:    "Testers can try every mastery tree on one character."},
+			{Flag: enterworld.EnvBetaMasteryEarly, On: betaMasteryEarly && betaMastery == 0,
+				Native: "The total of all mastery levels is capped at 300 for Chinese characters and at twice the level, up to 240, for Europeans.",
+				Now: fmt.Sprintf("Characters created before %s keep the beta's total of %d; characters created since use the native totals.",
+					enterworld.EarlyBetaCutoff.Format("2 January 2006"), enterworld.EarlyBetaMasteryCap),
+				Why: "The closed beta's testers trained past the native totals; they keep training, and new characters start native."},
 			{Flag: progression.EnvBetaSealRates, On: progression.BetaSealRatesFromEnv().Enabled(),
 				Native: "Each Seal of Star, Moon and Sun drops at the rare rate, and degree-9 Star and Moon only from monsters of level 76 to 85.",
 				Now:    "Seals of degrees 1 to 8 drop three times as often; at degree 9 Star drops three times and Moon twice as often, Sun as before, and Star and Moon also from monsters of level 86 to 94.",
