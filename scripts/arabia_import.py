@@ -108,6 +108,7 @@ from skytemple_import import (  # noqa: E402
 	verify_archives,
 )
 from later_world_import import missing_export  # noqa: E402
+from world_layer_import import seasonal_members, strip_seasonal  # noqa: E402
 from sro_paths import trees_overlap  # noqa: E402
 
 FLAG = "SRO_ARABIA"
@@ -776,6 +777,12 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			archive_hashes["Map"] = tables.sha256_of(map_data)
 			sectors = sorted({(region & 0xFF, (region >> 8) & 0xFF) for region in regions})
 			terrain, used_tiles, used_objects = {}, set(), set()
+			# The town's seasonal decoration is world-layer content
+			# (world_layer_import.py, which runs after this import):
+			# its members leave the copied placements and come back as
+			# layer members their event switches, not as plain props.
+			seasonal = seasonal_members(map_data, map_index)
+			seasonal_stripped = 0
 			built = []
 			for sector_x, sector_y in sectors:
 				paths = [f"{sector_y}/{sector_x}{extension}" for extension in tables.MAP_EXTENSIONS]
@@ -791,9 +798,14 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 				built.append((sector_x, sector_y))
 				for archive_path in paths:
 					terrain[archive_path] = sro_pk2.payload(map_data, map_index[archive_path])
+				placements = f"{sector_y}/{sector_x}.o2"
+				terrain[placements], removed = strip_seasonal(terrain[placements], seasonal, placements)
+				seasonal_stripped += removed
 				used_tiles |= tables.terrain_tile_ids(terrain[f"{sector_y}/{sector_x}.m"])
 				used_objects |= o2_object_ids(terrain[f"{sector_y}/{sector_x}.o2"])
 			sectors = built
+			if seasonal_stripped:
+				tables.log(f"arabia map: {seasonal_stripped} seasonal layer placements left to the world layers")
 			if "tile2d.ifo" not in map_index or "object.ifo" not in map_index:
 				raise ValueError("v1.696 Map.pk2 lacks tile2d.ifo or object.ifo")
 			later_tiles = tables.tile_catalog(sro_pk2.payload(map_data, map_index["tile2d.ifo"]))

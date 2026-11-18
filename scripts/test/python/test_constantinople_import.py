@@ -16,7 +16,12 @@ import constantinople_import as ct
 import import_vsro_alexandria as tables
 import skytemple_import as sky
 import sro_pk2
+import world_layer_import as world_layers
 from test_skytemple_import import region_navmesh
+
+# A Christmas tree the town places: a member of a seasonal layer.
+SEASONAL_OBJECT = 778
+SEASONAL_UID = 7
 
 
 # ================
@@ -273,14 +278,23 @@ def build_trees(base):
 	}
 	(source / "Media.pk2").write_bytes(media_archive(media_files))
 
+	town = region_id(90, 59)
 	map_files = {"tile2d.ifo": 'sig\n1\n00000 0 "nature" "tile00.ddj"\n'.encode("cp949"),
-		"object.ifo": 'sig\n1\n00777 0 "res\\constantinople\\obj777.bsr"\n'.encode("cp949"),
-		"tile2d/tile00.ddj": b"texture"}
+		"object.ifo": ('sig\n2\n00777 0 "res\\constantinople\\obj777.bsr"\n'
+			'00778 0 "res\\etc\\x_mas\\x_mas_tree01.bsr"\n').encode("cp949"),
+		"tile2d/tile00.ddj": b"texture",
+		world_layers.LAYER_DEFINITIONS: '1 0 1 "BASIC"\n0 7 1 "Christmas (DECO)"\n'.encode("cp949"),
+		world_layers.LAYER_LIST: (f"{world_layers.LAYER_LIST_SIGNATURE}\n1\n"
+			f"0x{town << 16 | SEASONAL_UID:08x} 7 90 59 0x0 0x0 0x0 0x0 0\n").encode("cp949")}
 	for x, y in sectors():
 		map_files[f"{y}/{x}.m"] = terrain_m()
 		map_files[f"{y}/{x}.t"] = b"t"
 		map_files[f"{y}/{x}.o"] = b"o"
 		map_files[f"{y}/{x}.o2"] = placement_o2(777 if (x, y) == (90, 59) else None)
+	# A Christmas tree, a member of a seasonal layer, beside the town's object.
+	groups = world_layers.read_o2(map_files["59/90.o2"])
+	groups[1].append((SEASONAL_OBJECT, 1.0, 0.0, 1.0, 0, 0.0, SEASONAL_UID, 0, 0, 0, town))
+	map_files["59/90.o2"] = world_layers.write_o2(groups)
 	(source / "Map.pk2").write_bytes(map_archive(map_files))
 	data_files = {f"navmesh/nv_{region_id(x, y):04x}.nvm": region_navmesh() for x, y in sectors()}
 	data_files["navmesh/objectstring.ifo"] = ("\r\n".join(zone_lines()) + "\r\n").encode("latin1")
@@ -328,6 +342,10 @@ class ConstantinopleImportTest(unittest.TestCase):
 			owned = set(summary["nameSymbols"])
 			self.assertIn("SN_FORTRESS_CONSTANTINOPLE", owned)
 			self.assertNotIn("SN_NATIVE", owned)
+			# The seasonal pumpkin is left to the world layers: the copied
+			# placements keep only the town's own object.
+			placed = sky.o2_object_ids((output / "Map_extracted" / "59" / "90.o2").read_bytes())
+			self.assertEqual(len(placed), 1)
 
 			# A second enabled run appends nothing and keeps the ownership.
 			with mock.patch.dict(os.environ, {ct.FLAG: "1"}):

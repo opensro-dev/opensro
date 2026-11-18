@@ -159,6 +159,33 @@ def seasonal_layers(layers):
 
 
 # ================
+# seasonal_members
+#
+# The (region, uid) of every member of the layers this import owns. A
+# later-world import that copies whole .o2 files (Arabia's Baghdad holds
+# Halloween, Christmas, Lunar New Year and OBT members) strips them with
+# strip_seasonal, so this import lays them back as members its layers
+# show only while their event runs, not as plain placements on all year.
+# ================
+def seasonal_members(map_data, map_index):
+	layers = parse_layer_definitions(sro_pk2.payload(map_data, map_index[LAYER_DEFINITIONS]))
+	members = parse_layer_list(sro_pk2.payload(map_data, map_index[LAYER_LIST]))
+	wanted = seasonal_layers(layers)
+	return {key for key, layer in members.items() if layer in wanted}
+
+
+# ================
+# strip_seasonal
+# ================
+def strip_seasonal(raw, members, source="<o2>"):
+	"""A .o2 file without the placements members names; the count removed."""
+	groups = read_o2(raw, source)
+	kept = [[record for record in records if record_key(record) not in members] for records in groups]
+	removed = sum(len(records) for records in groups) - sum(len(records) for records in kept)
+	return (write_o2(kept) if removed else raw), removed
+
+
+# ================
 # region_files
 # ================
 def region_files(index):

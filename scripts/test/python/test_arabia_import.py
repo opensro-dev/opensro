@@ -17,6 +17,7 @@ import cap110_item_import
 import import_vsro_alexandria as tables
 import skytemple_import
 import sro_pk2
+import world_layer_import as world_layers
 from test_skytemple_import import (
 	FakeClosure,
 	character,
@@ -39,6 +40,9 @@ from test_skytemple_import import (
 TOWN_REGION = 22106
 TOWN_OBJECT = 777
 MOVED_OBJECT = 901
+# A Halloween pumpkin the town also places: a member of a seasonal layer.
+SEASONAL_OBJECT = 778
+SEASONAL_UID = 7
 REGIONS = [(22106, "TOWN"), (19792, "FIELD_01"), (20048, "FIELD_02"),
 	(20559, "FIELD_03"), (21325, "PETRA"), (23378, "DUNGEON"), (31734, "GARDEN")]
 REGION_IDS = {region for region, _family in REGIONS}
@@ -354,9 +358,14 @@ def build_trees(base):
 	}
 	(source / "Media.pk2").write_bytes(media_archive(media_files))
 
+	town_x, town_y = TOWN_REGION & 0xFF, (TOWN_REGION >> 8) & 0xFF
 	map_files = {"tile2d.ifo": 'sig\n1\n00000 0 "nature" "tile00.ddj"\n'.encode("cp949"),
-		"object.ifo": 'sig\n1\n00777 0 "res\\arabia\\obj777.bsr"\n'.encode("cp949"),
-		"tile2d/tile00.ddj": b"texture"}
+		"object.ifo": ('sig\n2\n00777 0 "res\\arabia\\obj777.bsr"\n'
+			'00778 0 "res\\etc\\halloween\\halloween_pu03.bsr"\n').encode("cp949"),
+		"tile2d/tile00.ddj": b"texture",
+		world_layers.LAYER_DEFINITIONS: '1 0 1 "BASIC"\n0 5 1 "Halloween (DECO)"\n'.encode("cp949"),
+		world_layers.LAYER_LIST: (f"{world_layers.LAYER_LIST_SIGNATURE}\n1\n"
+			f"0x{TOWN_REGION << 16 | SEASONAL_UID:08x} 5 {town_x} {town_y} 0x0 0x0 0x0 0x0 0\n").encode("cp949")}
 	for region, _family in REGIONS:
 		x, y = region & 0xFF, (region >> 8) & 0xFF
 		map_files[f"{y}/{x}.m"] = terrain_m()
@@ -365,6 +374,10 @@ def build_trees(base):
 		# The town places 777, which the native catalogue defines
 		# differently: the import moves it to 901 in both files.
 		map_files[f"{y}/{x}.o2"] = placement_o2(TOWN_OBJECT if region == TOWN_REGION else None)
+	# The town's pumpkin rides beside its placed object.
+	groups = world_layers.read_o2(map_files[f"{town_y}/{town_x}.o2"])
+	groups[1].append((SEASONAL_OBJECT, 1.0, 0.0, 1.0, 0, 0.0, SEASONAL_UID, 0, 0, 0, TOWN_REGION))
+	map_files[f"{town_y}/{town_x}.o2"] = world_layers.write_o2(groups)
 	# One sector stands unbuilt behind its region code, the boss
 	# lair's shape in miniature: no terrain files, no navmesh.
 	garden_x, garden_y = 31734 & 0xFF, (31734 >> 8) & 0xFF
