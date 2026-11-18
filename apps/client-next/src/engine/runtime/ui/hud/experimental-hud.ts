@@ -396,6 +396,12 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "When a unique you hit dies, show who did the most."
 					},
 					{
+						key: "consignmentMarket",
+						id: "experimental-consignment-market",
+						label: "Consignment market",
+						description: "Storage keepers open the shard's market to buy and sell."
+					},
+					{
 						key: "vHidesCompanions",
 						id: "experimental-v-hides-companions",
 						label: "V hides pets and transports",

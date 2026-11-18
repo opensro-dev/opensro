@@ -368,6 +368,8 @@ export type GameplayCommand =
 		readonly request: import("@/engine/foundation/gameplay/item-mall-wire").MallPurchase;
 	}
 	| { readonly kind: "mall-silk-inquire"; readonly period: number; }
+	// Port-only, not native (SRO_CONSIGNMENT, #3529): one consignment market request.
+	| { readonly kind: "market"; readonly request: import("./market").MarketRequest; }
 	| { readonly kind: "shop-open"; readonly gid: number; }
 	| { readonly kind: "shop-buy"; readonly tab: number; readonly slot: number; readonly quantity: number; }
 	| { readonly kind: "shop-sell"; readonly slot: number; readonly quantity: number; }
@@ -808,6 +810,8 @@ export interface GameplayState extends MoverPublication {
 	readonly petRecipientBuffs?: readonly PetRecipientBuffs[];
 	readonly itemMall?: import("./item-mall").MallState;
 	readonly itemMallSilkHistory?: import("./item-mall").MallSilkHistoryState;
+	// Port-only, not native (SRO_CONSIGNMENT, #3529): the consignment market's view.
+	readonly market?: import("./market").MarketState;
 	readonly betaPlayers?: readonly BetaMapPlayer[];
 	// Port-only (#2958): the 5-star caravan transport gids (caravan-stars.ts).
 	readonly caravanStars?: readonly number[];

@@ -156,6 +156,10 @@ export interface ExperimentalOptions {
 	// in a window (unique-rank-hud.ts). Off unless turned on, so each
 	// player opts in.
 	readonly uniqueDamageRank: boolean;
+	// Port-only, not native: v1.150 has no consignment market. The storage
+	// keeper's menu offers it (market-window.ts) while the server runs
+	// SRO_CONSIGNMENT. Off unless turned on, so the native menu stays.
+	readonly consignmentMarket: boolean;
 	// Port-only, not native: holding V (UIIT_STT_USER_MOSTER_BLIND) also
 	// hides other players' pets and transports. The original hides only
 	// monsters and players (8602C0, 85E550): a COS draws through its owner
@@ -523,6 +527,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		breakNotices: record.breakNotices !== false,
 		highlightEventNotices: record.highlightEventNotices !== false,
 		uniqueDamageRank: enabled( "uniqueDamageRank" ),
+		consignmentMarket: enabled( "consignmentMarket" ),
 		vHidesCompanions: enabled( "vHidesCompanions" ),
 		dungeonCharacterPvs: record.dungeonCharacterPvs !== false,
 		fitWindowLabels: record.fitWindowLabels !== false,

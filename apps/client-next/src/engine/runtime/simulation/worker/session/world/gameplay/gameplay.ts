@@ -3825,6 +3825,7 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "mall-open" ) return inventory.openMall( now );
 			if ( command.kind === "mall-buy" ) return inventory.purchaseMall( command.request, now );
 			if ( command.kind === "mall-silk-inquire" ) return inventory.inquireMallSilkHistory( command.period, now );
+			if ( command.kind === "market" ) return inventory.requestMarket( command.request, now );
 			if ( command.kind === "shop-open" ) {
 				if (
 					entity?.kind !== "npc" || targeting.state().target !== command.gid ||
@@ -5607,6 +5608,11 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ),
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
+				// Port-only (#3529): a consignment market event prints in the chat.
+				for ( const notice of inventory.takeMarketNotices() ) {
+					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					dirty = true;
+				}
 				if ( frame.opcode === ARENA_CHEST_OPCODE ) {
 					const chest = inventory.state().arenaChest;
 					if ( chest?.skillCooldowns ) combat.restoreCooldowns( chest, catalog, now );
