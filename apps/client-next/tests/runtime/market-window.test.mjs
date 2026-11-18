@@ -466,7 +466,7 @@ test("full account pages page their rows and never run under their buttons", () 
 		f.ui.event( { kind: "activate", id: "market-open" } );
 		for (
 			const [tabs, pager] of [
-				[ [ "market-tab:mine" ], "market-mine-next" ],
+				[ [ "market-tab:mine", "market-mine:100" ], "market-mine-next" ],
 				[ [ "market-tab:history" ], "market-history-next" ],
 				[ [ "market-tab:offers", "market-offer-side:in" ], "market-offers-in-next" ],
 				[ [ "market-tab:offers", "market-offer-side:out" ], "market-offers-out-next" ]
@@ -485,11 +485,22 @@ test("full account pages page their rows and never run under their buttons", () 
 				!c.id.startsWith( "market-item:" ) && !c.id.startsWith( "market-tab:" ) &&
 				!c.id.startsWith( "market-offer-side:" ) && c.rect[1] > listed[0].rect[1]
 			);
+			const page = controls.filter( c =>
+				c.kind === "button" && c.id.startsWith( "market-" ) && !c.id.startsWith( "market-item:" ) &&
+				c.rect[0] >= listed[0].rect[0] - 1
+			);
 			for ( const r of listed ) {
 				for ( const b of footer.filter( b => b.rect[0] >= listed[0].rect[0] - 1 ) ) {
 					assert.ok( !intersects( r.rect, b.rect ), `${r.id} runs under ${b.id}` );
 				}
 			}
+			// Nor do the page's own controls (pages, choices, answers) overlap.
+			const own = page.filter( c => !rows.test( c.id ) );
+			own.forEach( ( a, i ) =>
+				own.slice( i + 1 ).forEach( b => {
+					assert.ok( !intersects( a.rect, b.rect ), `${a.id} overlaps ${b.id}` );
+				} )
+			);
 		}
 	} finally {
 		f.dispose();
@@ -546,4 +557,45 @@ test("at the listing cap nothing more is listed, and one gone frees a place", ()
 	hud.edit( "market-price", "50" );
 	assert.deepEqual( hud.activate( "market-list", at( 20 ) ).requests, [], "20 / 20 listed" );
 	assert.equal( hud.activate( "market-list", at( 19 ) ).requests[0]?.op, "list", "a returned one does not count" );
+});
+
+test("My listings holds what is on sale, asks where it goes only once one is picked, and History keeps the rest", () => {
+	const { f, step } = storageKeeper( true );
+	const base = market();
+	f.state.gameplay = {
+		...f.state.gameplay,
+		market: {
+			...base,
+			mine: {
+				...base.mine,
+				listings: [
+					row( 50, { item: item( "Drako Sword" ) } ),
+					row( 51, { item: item( "Strom Bow" ), state: "returned" } ),
+					row( 52, { item: item( "Sky God Bow" ), state: "sold" } )
+				]
+			}
+		}
+	};
+	try {
+		step();
+		f.ui.event( { kind: "activate", id: "market-open" } );
+		let controls = step();
+		assert.ok( controls.has( "market-mine:50" ) );
+		assert.ok( !controls.has( "market-mine:51" ) && !controls.has( "market-mine:52" ), "done listings left" );
+		assert.ok( !controls.has( "market-return-to:bag" ), "no destination before a pick" );
+		assert.ok( f.hasText( "Pick one to cancel it." ) );
+		f.ui.event( { kind: "activate", id: "market-mine:50" } );
+		controls = step();
+		assert.equal( controls.get( "market-return-to:bag" )?.selected, true );
+		assert.ok( f.hasText( "Inventory" ) && f.hasText( "Warehouse" ), "both choices drawn whole" );
+		f.ui.event( { kind: "activate", id: "market-return-to:warehouse" } );
+		controls = step();
+		assert.equal( controls.get( "market-return-to:warehouse" )?.selected, true );
+		f.ui.event( { kind: "activate", id: "market-tab:history" } );
+		step();
+		assert.ok( f.hasText( "Strom Bow" ) && f.hasText( "Sky God Bow" ), "returned and sold in History" );
+		assert.ok( f.hasText( "Returned" ) );
+	} finally {
+		f.dispose();
+	}
 });

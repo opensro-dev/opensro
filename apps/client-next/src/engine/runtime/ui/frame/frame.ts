@@ -190,11 +190,14 @@ export function windowBox(
 	);
 	if ( tile ) {
 		frame.paths.push( tile );
+		// Below the title row, so the title keeps the frame's own texture,
+		// and wide enough to lie under every control: a window's content
+		// starts about 14 in, so a tile edge further in shows behind it.
 		const body: UiRect = [
 			x + WINDOW_TILE_INSET,
-			y + WINDOW_TILE_INSET,
+			y + WINDOW_TILE_TOP,
 			width - 2 * WINDOW_TILE_INSET,
-			height - 2 * WINDOW_TILE_INSET
+			height - WINDOW_TILE_TOP - WINDOW_TILE_INSET
 		];
 		quads.push( ...normalTile( body, tile, resources.size( tile ), full ) );
 	}
@@ -323,8 +326,12 @@ export function comboBox(
 // ============================================================================
 
 // A window body tile starts this far inside the frame's outer edge, over
-// the ring's inner half (GDR_NPCTALK_BGTILE sits at 20,20 of its mframe).
-const WINDOW_TILE_INSET = 20;
+// the ring's inner half and under the content's 14 margin (the NPC talk
+// window's GDR_NPCTALK_BGTILE sits at 20,20 because its content starts
+// further in).
+const WINDOW_TILE_INSET = 10;
+// The tile's top: under the title row (the title sits at 12..24).
+const WINDOW_TILE_TOP = 30;
 // A label closer than this to its window's left edge has left its window
 // (the frame's border is about this wide; the Experimental "Fit window labels").
 const WINDOW_LABEL_MARGIN = 6;

@@ -51,6 +51,7 @@ import {
 	marketListingsFull,
 	marketPriceValue,
 	marketSearchNarrowed,
+	marketShownListings,
 	marketWriting,
 	type MarketMenu,
 	type MarketHudState
@@ -847,25 +848,8 @@ function sellPanel( pen: Pen ) {
 		full ? REFUSED : price ? priceColor( hud.sellCurrency ) : DIM
 	);
 	const bottom = top + SELL_HEIGHT - BUTTON_HEIGHT - 8;
-	// The anonymous choice: the game's check box (com_checkbutton) and its
-	// caption, the whole line one control.
-	const anonymous: UiRect = [ left + 10, bottom, 92, BUTTON_HEIGHT ];
-	pen.frameDraw.image( pen.frame, {
-		r: [ anonymous[0], bottom + (BUTTON_HEIGHT - CHECK_SIZE) / 2, CHECK_SIZE, CHECK_SIZE ],
-		path: IFCOMMON + `com_checkbutton_${hud.anonymous ? "on" : "off"}.png`
-	} );
-	pen.text(
-		"Anonymous",
-		[ anonymous[0] + CHECK_SIZE + 5, bottom, anonymous[2] - CHECK_SIZE - 5, BUTTON_HEIGHT ],
-		pen.frame.white
-	);
-	pen.frame.controls.push( {
-		id: "market-anonymous",
-		label: "Anonymous",
-		kind: "button",
-		rect: anonymous,
-		selected: hud.anonymous
-	} );
+	// The anonymous choice, one line of the game's check box.
+	choice( pen, "market-anonymous", "Anonymous", [ left + 10, bottom, 92, BUTTON_HEIGHT ], hud.anonymous );
 	pen.button( "market-tab:sell", "Pick from bag", left + 106, bottom, 84, false, hud.tab === "sell" );
 	pen.button( "market-list", "List it", left + 194, bottom, width - 204, !item || price < 1 || full || pen.busy );
 }
@@ -955,19 +939,24 @@ or Take back of the picked one.
 */
 function listingsPage( pen: Pen, area: UiRect ) {
 	const { view } = pen, hud = view.hud, mine = view.market?.mine, rules = mine?.rules;
-	const listings = mine?.listings ?? [];
+	const listings = marketShownListings( mine );
 	const active = marketActiveListings( mine );
+	// The head line: the count against the cap, and the pages on its right,
+	// so the footer line is free for where a cancelled item goes.
 	pen.text(
-		`${active} / ${rules?.openCap ?? 0} listed · ${Math.round( (rules?.durationMs ?? 0) / 3600000 )} hours each`,
-		[ area[0], area[1], area[2], 16 ],
+		`${active} / ${rules?.openCap ?? 0} listed · ${Math.round( (rules?.durationMs ?? 0) / 3600000 )} h each`,
+		[ area[0], area[1], area[2], BUTTON_HEIGHT ],
 		DIM
 	);
+	const pages = Math.max( 1, Math.ceil( listings.length / MARKET_MINE_ROWS ) );
+	pager( pen, "market-mine-", hud.minePage, pages, area[0] + area[2], area[1], true );
+	const rowsTop = area[1] + BUTTON_HEIGHT + 3;
 	const shown = listings.slice( hud.minePage * MARKET_MINE_ROWS, (hud.minePage + 1) * MARKET_MINE_ROWS );
 	shown.forEach( ( row, i ) => {
 		sideRow( pen, {
 			id: "market-mine:" + row.id,
 			item: row.item,
-			r: [ area[0], area[1] + 20 + i * SIDE_PITCH, area[2], SIDE_PITCH ],
+			r: [ area[0], rowsTop + i * SIDE_PITCH, area[2], SIDE_PITCH ],
 			index: i,
 			picked: hud.mineSelected === row.id,
 			caption: itemCaption( row.item ) + (row.anonymous ? " (anon.)" : ""),
@@ -977,13 +966,38 @@ function listingsPage( pen: Pen, area: UiRect ) {
 		} );
 	} );
 	if ( mine && !listings.length ) {
-		pen.text( "You have nothing on sale.", [ area[0], area[1] + 24, area[2], 20 ], pen.frame.white );
+		pen.text( "Nothing on sale.", [ area[0], area[1] + 24, area[2], 20 ], pen.frame.white );
+		pen.text( "List an item above; sold and returned ones are in History.", [
+			area[0],
+			area[1] + 44,
+			area[2],
+			18
+		], DIM );
 	}
-	const bottom = area[1] + area[3];
-	const pages = Math.max( 1, Math.ceil( listings.length / MARKET_MINE_ROWS ) );
-	pager( pen, "market-mine-", hud.minePage, pages, area[0] + area[2], bottom - 2 * BUTTON_HEIGHT - 6, true );
-	destinationButtons( pen, "market-return-to:", hud.returnTo, area[0], bottom - 2 * BUTTON_HEIGHT - 6, 70 );
+	const bottom = area[1] + area[3], footer = bottom - 2 * BUTTON_HEIGHT - 6;
 	const picked = listings.find( row => row.id === hud.mineSelected );
+	// Where Cancel or Take back sends the item: asked only once a listing
+	// is picked, as a choice beside its own caption, never as two buttons
+	// that look like views.
+	if ( picked ) {
+		pen.text( "Send to", [ area[0], footer, 46, BUTTON_HEIGHT ], DIM );
+		choice(
+			pen,
+			"market-return-to:bag",
+			"Inventory",
+			[ area[0] + 48, footer, 80, BUTTON_HEIGHT ],
+			hud.returnTo === "bag"
+		);
+		choice(
+			pen,
+			"market-return-to:warehouse",
+			"Warehouse",
+			[ area[0] + 132, footer, 92, BUTTON_HEIGHT ],
+			hud.returnTo === "warehouse"
+		);
+	} else if ( listings.length ) {
+		pen.text( "Pick one to cancel it.", [ area[0], footer, area[2] - 120, BUTTON_HEIGHT ], DIM );
+	}
 	const half = (area[2] - 4) / 2;
 	pen.button(
 		"market-cancel",
@@ -1058,7 +1072,8 @@ function emptyResult( pen: Pen, rows: UiRect ) {
 ================
 historyPage
 
-What the account bought, newest first, and its listings that sold.
+What the account bought, newest first, and its listings that are done:
+sold, or returned (cancelled, taken back or unsold).
 ================
 */
 function historyPage( pen: Pen, area: UiRect ) {
@@ -1071,12 +1086,12 @@ function historyPage( pen: Pen, area: UiRect ) {
 			color: priceColor( buy.currency ),
 			note: "Bought · to your " + (buy.to === "bag" ? "inventory" : "warehouse")
 		}) ),
-		...(mine?.listings ?? []).filter( row => row.state === "sold" ).map( row => ({
+		...(mine?.listings ?? []).filter( row => row.state === "sold" || row.state === "returned" ).map( row => ({
 			at: row.listedMs,
 			caption: itemCaption( row.item ),
-			value: priceText( row.price, row.currency ),
-			color: OK,
-			note: "Sold"
+			value: row.state === "sold" ? priceText( row.price, row.currency ) : "Returned",
+			color: row.state === "sold" ? OK : DIM,
+			note: row.state === "sold" ? "Sold" : "Cancelled or unsold · back to you"
 		}) )
 	].sort( ( a, b ) => b.at - a.at );
 	const pages = Math.max( 1, Math.ceil( entries.length / MARKET_HISTORY_ROWS ) );
@@ -1241,6 +1256,23 @@ function rulesPanel( pen: Pen ) {
 		"Hotkey: K, or the market button by FPS."
 	];
 	lines.forEach( ( line, i ) => pen.text( line, [ left + 8, top + 4 + i * 16, RIGHT_WIDTH - 16, 16 ], DIM ) );
+}
+
+/*
+================
+choice
+
+One option of a pick-one choice: the game's check box (com_checkbutton)
+and its caption, the whole line one control.
+================
+*/
+function choice( pen: Pen, id: string, caption: string, r: UiRect, on: boolean ) {
+	pen.frameDraw.image( pen.frame, {
+		r: [ r[0], r[1] + (r[3] - CHECK_SIZE) / 2, CHECK_SIZE, CHECK_SIZE ],
+		path: IFCOMMON + `com_checkbutton_${on ? "on" : "off"}.png`
+	} );
+	pen.text( caption, [ r[0] + CHECK_SIZE + 4, r[1], r[2] - CHECK_SIZE - 4, r[3] ], on ? pen.frame.white : DIM );
+	pen.frame.controls.push( { id, label: caption, kind: "button", rect: r, selected: on } );
 }
 
 /*

@@ -207,7 +207,19 @@ that sold.
 ================
 */
 export function marketHistoryCount( mine: MarketState["mine"] | undefined ): number {
-	return (mine?.purchases.length ?? 0) + (mine?.listings.filter( row => row.state === "sold" ).length ?? 0);
+	return (mine?.purchases.length ?? 0) + (mine?.listings.length ?? 0) - marketShownListings( mine ).length;
+}
+
+/*
+================
+marketShownListings
+
+My listings' rows: what is on sale or held for the seller. A sold or
+returned listing is done and lives in History.
+================
+*/
+export function marketShownListings( mine: MarketState["mine"] | undefined ) {
+	return mine?.listings.filter( row => row.state === "open" || row.state === "held" ) ?? [];
 }
 
 /*
@@ -219,7 +231,7 @@ store's countActiveListings).
 ================
 */
 export function marketActiveListings( mine: MarketState["mine"] | undefined ): number {
-	return mine?.listings.filter( row => row.state === "open" || row.state === "held" ).length ?? 0;
+	return marketShownListings( mine ).length;
 }
 
 /*
@@ -638,7 +650,7 @@ export function createMarketHud() {
 				return none;
 			}
 			if ( id === "market-mine-prev" || id === "market-mine-next" ) {
-				const pages = Math.max( 1, Math.ceil( (mine?.listings.length ?? 0) / MARKET_MINE_ROWS ) );
+				const pages = Math.max( 1, Math.ceil( marketShownListings( mine ).length / MARKET_MINE_ROWS ) );
 				s = {
 					...s,
 					minePage: Math.min( pages - 1, Math.max( 0, s.minePage + (id === "market-mine-next" ? 1 : -1) ) )
