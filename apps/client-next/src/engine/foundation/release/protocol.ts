@@ -18,6 +18,8 @@ checks) reads the same numbers the client ships.
 ===========================================================================
 */
 
+// Protocol 19 adds the port-only 0x3FCB Blue Berserk level (cap-110 content,
+// hwan-level.ts), which 18 would drop as an unknown frame.
 // Protocol 18 admits the port-only consignment market's control frame
 // (opcode 20, commerce-controls.ts MARKET_CONTROL; SRO_CONSIGNMENT), which
 // the server pushes unasked to a seller or offer party and 17's world gate
@@ -52,7 +54,7 @@ checks) reads the same numbers the client ships.
 // every creatable monster's row in the reference file (#369); 5 added
 // populated persistent summoners and concurrent COS lifetimes.
 // Protocol 17 also adds survival checkpoint rewards (#3189).
-export const RELEASE_PROTOCOL = 18;
+export const RELEASE_PROTOCOL = 19;
 // The public reference file's contract (releaseprotocol.ReferencesContract).
 export const REFERENCES_CONTRACT = 3;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";

@@ -135,6 +135,9 @@ func (v *WaterValidator) tileOnMainland(start globalTile, tilesPerAxis int, cach
 //   - stranded, no mainland in radius -> (input, true, false); the caller
 //     owns the fallback (race start profile).
 func (v *WaterValidator) RelocateStrandedSpawn(spawn simulation.Spawn) (simulation.Spawn, bool, bool) {
+	if v.rescueExempt[spawn.RegionID] {
+		return spawn, false, false
+	}
 	surface := v.surfaceForRegion(spawn.RegionID)
 	if surface == nil {
 		return spawn, false, false

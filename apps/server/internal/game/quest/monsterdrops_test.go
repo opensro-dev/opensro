@@ -190,7 +190,7 @@ func TestQuestDropSpeciesRatesAndSecondRngFailure(t *testing.T) {
 		want    int
 	}{{"MOB_A", 0}, {"MOB_B", 1}} {
 		calls := 0
-		got := missionMonsterDrops(c, &def, tc.monster, 0, func() (uint32, error) {
+		got := missionMonsterDrops(c, &def, tc.monster, 0, 1, func() (uint32, error) {
 			calls++
 			if calls == 1 {
 				return 10000, nil
@@ -202,7 +202,7 @@ func TestQuestDropSpeciesRatesAndSecondRngFailure(t *testing.T) {
 		}
 	}
 	calls := 0
-	got := missionMonsterDrops(c, &def, "MOB_B", 0, func() (uint32, error) {
+	got := missionMonsterDrops(c, &def, "MOB_B", 0, 1, func() (uint32, error) {
 		calls++
 		if calls == 1 {
 			return 1, nil

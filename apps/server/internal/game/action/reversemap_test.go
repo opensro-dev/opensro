@@ -273,3 +273,39 @@ func TestReverseMapOffIgnoresAnImport(t *testing.T) {
 		t.Fatal("choice 7 was accepted with the option off")
 	}
 }
+
+/*
+================
+TestReverseMapExtraPointsJoinTheTableDenseAndOnlyWhileOn
+================
+*/
+func TestReverseMapExtraPointsJoinTheTableDenseAndOnlyWhileOn(t *testing.T) {
+	extra := []enterworld.ReverseMapPoint{
+		{Name: "Extra One", RegionID: reverseMapTestRegion, X: 100, Y: 5, Z: 200},
+		{Name: "Inside A Dungeon", RegionID: reverseMapTestDungeon, X: 10, Y: 5, Z: 10},
+		{Name: "Extra One Again", RegionID: reverseMapTestRegion, X: 100, Y: 9, Z: 200},
+	}
+	off, _, _ := reverseMapFixture(t, false)
+	t.Setenv(EnvReverseReturnMap, "off")
+	off.AddReverseReturnMapPoints(extra)
+	if len(off.ReverseReturnMapPoints()) != 0 {
+		t.Fatal("extra points were published with the option off")
+	}
+	rt, c, clock := reverseMapFixture(t, true)
+	rt.AddReverseReturnMapPoints(extra)
+	points := rt.ReverseReturnMapPoints()
+	if len(points) != 2 || points[1].ID != 2 || points[1].Name != "Extra One" {
+		t.Fatalf("published points %+v, want the town then one valid extra as id 2", points)
+	}
+	useReverseScroll(rt, c, reverseMapTail(2)...)
+	if c.MissionInventory[len(c.MissionInventory)-1].StackCount != 1 || c.NativeTeleportMode != 1 {
+		t.Fatal("the extra point did not start the cast")
+	}
+	rt.PushCharacterFrames = func(string, string, []wire.Frame) {}
+	clock.Advance(time.Second)
+	rt.TickHook()(clock.NowMs())
+	rt.processReturnArrivals()
+	if got := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}); got.X != 100 || got.Z != 200 {
+		t.Fatalf("arrived at %+v, not the extra point", got)
+	}
+}

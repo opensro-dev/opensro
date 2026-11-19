@@ -156,6 +156,7 @@ type MonsterState struct {
 	// installs (SetSpawnReplacements); nil, the native default, replaces
 	// nothing.
 	replacements         func(nowMs int64) []monster.SpawnReplacement
+	closedObject         func(Spawn) bool // SetSpawnClosedObjectCheck
 	spawnRegionAvailable func(uint16) bool
 	random               func() float64
 	clock                func() time.Time
@@ -251,6 +252,22 @@ func (s *MonsterState) SetSpawnGroundResolver(resolver MonsterSpawnGroundResolve
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ground = resolver
+}
+
+/*
+==================
+SetSpawnClosedObjectCheck
+
+SetSpawnClosedObjectCheck installs the test a quest spawn that asks to avoid
+closed objects (QuestMonsterSpawn.AvoidClosedObjects) uses: true when a pose is
+inside a tree, rock or pillar nothing can walk out of or hit into. Wiring calls
+this before listeners start; without it the request is ignored.
+==================
+*/
+func (s *MonsterState) SetSpawnClosedObjectCheck(check func(Spawn) bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closedObject = check
 }
 
 /*

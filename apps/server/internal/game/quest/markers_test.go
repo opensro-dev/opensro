@@ -4,11 +4,13 @@ import (
 	"encoding/binary"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/tier"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -242,6 +244,9 @@ func TestEveryQuestMarkerNpcHasAuthoredPlacement(t *testing.T) {
 	for _, npc := range simulation.LoadNpcWorldRoster(dir) {
 		anchors[npc.Codename]++
 	}
+	// The roster hides Alexandria's NPCs while SRO_ALEXANDRIA is off, so the
+	// Blue Berserk quests that name them (cap-110 data) have no placement then.
+	alexandriaOn, _ := alexandria.EnabledFromEnv()
 	for _, def := range defs.All() {
 		specs := []QuestSpec{def.QuestSpec}
 		for _, stage := range def.Stages {
@@ -249,6 +254,9 @@ func TestEveryQuestMarkerNpcHasAuthoredPlacement(t *testing.T) {
 		}
 		for _, spec := range specs {
 			for _, code := range []string{spec.StartNpcCodename, spec.EndNpcCodename, spec.DeliveryNpcCodename} {
+				if strings.HasPrefix(code, "NPC_SD_") && !alexandriaOn {
+					continue
+				}
 				if code != "" && anchors[code] != 1 {
 					t.Errorf("%s: NPC %s has %d authored placements", def.Codename, code, anchors[code])
 				}

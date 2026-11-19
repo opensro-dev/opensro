@@ -3,6 +3,7 @@ package quest
 import (
 	"fmt"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/tier"
@@ -56,6 +57,11 @@ func TestEveryQuestActorResolvesInPrimaryMedia(t *testing.T) {
 	defs, err := LoadDefinitions(NewCatalog(dir), enterworld.NewTextdataItems(dir))
 	if err != nil {
 		t.Fatal(err)
+	}
+	// The Ch'in Tomb's monsters are the server's own embedded table
+	// (SRO_QINSHI_TOMB), not the primary media; the Blue Berserk bell drops from them.
+	for _, name := range monster.QinShiTombCodenames() {
+		codes[name] = true
 	}
 	if len(codes) == 0 || defs.Len() == 0 {
 		t.Fatal("primary media missing")

@@ -126,6 +126,8 @@ const (
 	gatherAlways gatherRoll = iota
 	gatherIvyRoll
 	gatherAtMost
+	// gatherRelic is the Sun God relic dig: the roll is HwanKnobs.SunRelicFound.
+	gatherRelic
 )
 
 /*
@@ -144,9 +146,11 @@ type gatherJob struct {
 	nextMs           int64
 	award            string
 	failSymbol, full string
-	roll             gatherRoll
-	chance           uint8
-	advanceStep      bool
+	// success is the notice sent when the award lands (the relic dig's _08).
+	success     string
+	roll        gatherRoll
+	chance      uint8
+	advanceStep bool
 }
 
 /*
@@ -296,6 +300,12 @@ func (rt *Runtime) BeginItemUse(c *enterworld.Character, code string, at simulat
 		return rt.useAmulet(c)
 	case holyWater:
 		return rt.beginHolyWater(c, at, nowMs)
+	case hwanPurifiedBell:
+		return rt.useHwanBell(c, at)
+	case hwanMountainEssence:
+		return rt.useHwanEssence(c, at)
+	case hwanRadiantCrystal:
+		return rt.useHwanCrystal(c, at, nowMs)
 	default:
 		return nil, false
 	}
@@ -682,6 +692,10 @@ func (rt *Runtime) AdvanceItemUse(c *enterworld.Character, nowMs int64) []wire.F
 				return false
 			}
 			draw := value % captureRandomDomain
+			if job.roll == gatherRelic && !rt.Hwan.SunRelicFound(value) {
+				frames = []wire.Frame{questNotification(job.failSymbol)}
+				return false
+			}
 			if job.roll == gatherIvyRoll && draw < captureBaseChance || job.roll == gatherAtMost && draw > uint32(job.chance) {
 				frames = []wire.Frame{questNotification(job.failSymbol)}
 				return false
@@ -702,6 +716,9 @@ func (rt *Runtime) AdvanceItemUse(c *enterworld.Character, nowMs int64) []wire.F
 		c.MissionInventory = rows
 		objectives, _ := rt.applyInventoryChange(c)
 		frames = append(updates, objectives...)
+		if job.success != "" {
+			frames = append(frames, questNotification(job.success))
+		}
 		return true
 	})
 	return frames

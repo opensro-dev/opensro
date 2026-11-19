@@ -118,6 +118,15 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			return nil
 		}},
 	}
+	// Port-only: every client learns each online player's Blue Berserk level (body
+	// colour and title); the runtime paces the push, and a native shard sends nothing.
+	hooks = append(hooks, simulation.NamedTickHook{Name: "hwan-levels", Hook: func(nowMs int64) []simulation.DivisionFrames {
+		frames := game.items.HwanRosterFrames(game.divisionID, sessionViews(ticker.Source), nowMs)
+		if len(frames) != 0 {
+			ticker.Push.PushToDivision(game.divisionID, frames, "")
+		}
+		return nil
+	}})
 	// Port-only (#3529, SRO_CONSIGNMENT): gold a market sale owes a
 	// character reaches it once it is in the world (action market.go).
 	// Off installs no hook.

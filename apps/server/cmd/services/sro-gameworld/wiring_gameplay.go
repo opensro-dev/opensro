@@ -828,7 +828,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.deps.EntryEventFrames = game.items.EntryEventFrames
 	game.deps.EntryEventGroups = game.items.EntryEventGroups
 	game.deps.SceneWeatherFrames = game.items.SceneWeatherFrames
-	if err := game.validateQuestMarkerRoster(); err != nil {
+	if err := game.wireQuestRoster(quests); err != nil {
 		return err
 	}
 	// The quest runtime's doors and the item lane's quest hooks live
