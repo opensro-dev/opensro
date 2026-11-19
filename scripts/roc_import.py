@@ -94,6 +94,7 @@ import build_alexandria_variant as variant
 import cap110_monsters as cap110
 import import_vsro_alexandria as tables
 import later_world_import
+import published_ids
 import roc_rewards
 from prepare_client_resources import write_atomically
 
@@ -261,6 +262,14 @@ def add_gates(read, text_root):
 	taken = taken_building_ids(text_root, building_ids)
 	if taken:
 		raise ValueError(f"Roc gate buildings would reuse identities the variant holds: {taken}")
+	# The buildings keep the source's ids, so a released object id another
+	# code holds is a refusal too, even while that code's import is off
+	# (published_ids, #3815).
+	released = {str(identity): code for code, identity in published_ids.published(published_ids.OBJECTS).items()
+		if code not in building_codes}
+	clash = sorted(f"{identity} ({released[identity]})" for identity in building_ids if identity in released)
+	if clash:
+		raise ValueError(f"Roc gate buildings would take identities a release published: {clash}")
 
 	# ================
 	# source_rows
