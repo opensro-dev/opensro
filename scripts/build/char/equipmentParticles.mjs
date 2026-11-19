@@ -215,27 +215,48 @@ export function equipmentSources( record, female ) {
 
 /*
 ================
+readEquipmentModel
+
+A worn resource's parsed BSR from the extracted tree, or null when the
+tree does not hold it.
+================
+*/
+function readEquipmentModel( source ) {
+	const file = dataAssetPath( source );
+	return fs.existsSync( file ) ? parseCharacterBsr( fs.readFileSync( file ), source ) : null;
+}
+
+/*
+================
 equipmentAmbientParticles
 
 The ambient ModDataParticle sets authored inside worn equipment resources,
 by source path. In v1.150 only the 36 shoulder garments carry one: their
 orbs and crystals glow through item_equip_*shoulder*.efp on bones of the
-garment's private skeleton.
+garment's private skeleton. Avatars are worn too, though they have no
+compound-model slot: the later client's mall avatars carry ambient sets
+(the steampunk attachment's system/avatar_w_steampunk_wing.efp), and
+without them here the effect catalogue left their programs out while the
+client still asked for them (2,970 live asset_failed reports, 11-18/19).
+readModel returns a resource's parsed BSR, or null when it is absent.
 
 INFERENCE: an equipped item is a CRes like any other model, so its ambient
 set starts through the same ACD4D0 -> AE3840 path as a body's or a drop's;
 those programs have no other owner in the data.
 ================
 */
-export function equipmentAmbientParticles( records = loadEquipmentRecords( retailTextdataRoot ) ) {
+export function equipmentAmbientParticles(
+	records = loadEquipmentRecords( retailTextdataRoot ),
+	readModel = readEquipmentModel
+) {
 	const out = new Map();
 	for ( const record of records.values() ) {
-		if ( record.slot === null ) continue;
+		if ( record.slot === null && !record.avatar ) continue;
 		for ( const female of [ false, true ] ) {
 			for ( const source of equipmentSources( record, female ) ) {
-				if ( out.has( source ) || !fs.existsSync( dataAssetPath( source ) ) ) continue;
-				const bsr = parseCharacterBsr( fs.readFileSync( dataAssetPath( source ) ), source );
-				out.set( source, bsr.particleModifiers.filter( m => m.kind === AMBIENT_MODIFIER_KIND ) );
+				if ( out.has( source ) ) continue;
+				const bsr = readModel( source );
+				if ( bsr ) out.set( source, bsr.particleModifiers.filter( m => m.kind === AMBIENT_MODIFIER_KIND ) );
 			}
 		}
 	}
