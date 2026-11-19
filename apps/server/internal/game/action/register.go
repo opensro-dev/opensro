@@ -55,6 +55,7 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	rt.registerDeparture(hub)
 	rt.registerMall(hub)
 	rt.registerCrest(hub)
+	rt.registerMarket(hub)
 	hub.Handle(0x7341, rt.hubHandler(hub, rt.HandleBerserk))
 	hub.Handle(0x7495, rt.hubHandler(hub, rt.HandlePortal))
 	hub.Handle(opFortressInteraction, rt.hubHandler(hub, rt.HandleFortressInteraction))
@@ -301,6 +302,10 @@ func sceneLoadingRefusal(opcode uint16) []wire.Frame {
 		if payload, err := json.Marshal(mallProjection{Version: 1, Error: "mall is unavailable while entering"}); err == nil {
 			return []wire.Frame{{Opcode: opMallCatalog, Payload: payload}}
 		}
+	case opMarket:
+		// The market window waits on its own lane (extension opcode 20);
+		// an unavailable answer retires its request (market.go).
+		return marketRefusal("", marketRefusedUnavailable).Frames
 	case opCrestRegister:
 		// The crest upload waits on its own answer lane (extension
 		// opcode 19); a refused answer retires its pending the way a

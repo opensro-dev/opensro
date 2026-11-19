@@ -50,6 +50,10 @@ const SHARED_FIXTURES = [
 	{
 		canonical: `${CLIENT_NATIVE}/buff-replacement-cases.json`,
 		copy: "apps/server/internal/game/item/statuseffect/testdata/buff-replacement-cases.json"
+	},
+	{
+		canonical: `${CLIENT_NATIVE}/native-fortress-war-window.json`,
+		copy: "apps/server/internal/game/siege/testdata/native-fortress-war-window.json"
 	}
 ];
 

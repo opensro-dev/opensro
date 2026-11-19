@@ -21,6 +21,7 @@ import {
 	type LocomotionBlend
 } from "@/engine/foundation/animation/locomotion-blend";
 import { movementGait } from "@/engine/foundation/gameplay/native-movement";
+import { auxiliaryLocomotion, castAnimating } from "@/engine/foundation/animation/auxiliary-motion";
 import { animationActivation, type AnimationActivation } from "@/engine/foundation/animation/animation-activation";
 import { createModifierDelta } from "@/engine/foundation/rendering/modifier-delta";
 import { createAnimationDispatch } from "@/engine/foundation/animation/animation-dispatch";
@@ -108,7 +109,11 @@ interface AuxiliaryFrame {
 	readonly next: Map<number, CharacterActor>;
 	readonly gameplay: GameplayState | null;
 	readonly localMover: ( gid: number ) => boolean;
-	readonly castByActor: ReadonlyMap<number, unknown>;
+	// The owner's cast and its playing action layers: the wing stands only
+	// while castAnimating holds, not for mere membership in gameplay.casts,
+	// which outlives the animation.
+	readonly castByActor: ReadonlyMap<number, { readonly cancelledAtMs?: number; }>;
+	readonly actionLayersByActor: ReadonlyMap<number, readonly unknown[]>;
 	readonly particleHolders: { actor: CharacterActor; particles: readonly ModelParticle[]; }[];
 }
 
@@ -441,7 +446,8 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 		================
 		*/
 		step( frame: AuxiliaryFrame, bindings: AuxiliaryBindings ) {
-			const { entities, seconds, next, gameplay, localMover, castByActor, particleHolders } = frame;
+			const { entities, seconds, next, gameplay, localMover, castByActor, actionLayersByActor, particleHolders } =
+				frame;
 			const { resourceFor, dress, resources, ridesByRider, riderModes, committedAuxiliary } = bindings;
 			const hairOwners = new Set<number>();
 			for ( const entity of entities ) {
@@ -534,12 +540,16 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 				}
 				const alive = new Set<number>();
 				let moving = (localMover( entity.gid ) ? gameplay!.moving : entity.moving) ?? false;
-				const requested = entity.mountedOn !== undefined || entity.appearanceState?.[0] === 2 ||
-						castByActor.has( entity.gid ) ?
-					"stand" :
-					moving ?
-					movementGait( entity.movementMode ) :
-					"stand";
+				const requested = auxiliaryLocomotion( {
+					mounted: entity.mountedOn !== undefined,
+					dead: entity.appearanceState?.[0] === 2,
+					casting: castAnimating(
+						castByActor.get( entity.gid ),
+						actionLayersByActor.get( entity.gid )?.length ?? 0
+					),
+					moving,
+					gait: movementGait( entity.movementMode )
+				} );
 				for ( const { id, entry } of entries ) {
 					alive.add( id );
 					let child = children.get( id );

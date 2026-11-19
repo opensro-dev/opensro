@@ -28,6 +28,8 @@ every write answers.
 */
 type fakeMarket struct {
 	searched []MarketSearch
+	offers   []MarketOfferBody
+	answered []int64
 	err      error
 }
 
@@ -48,8 +50,11 @@ func (f *fakeMarket) Search(q MarketSearch) (MarketListingsResponse, error) {
 
 func (f *fakeMarket) Account(string) (OwnMarketResponse, error) {
 	return OwnMarketResponse{
-		Listings:   []MarketListingView{sampleListing()},
-		Purchases:  []MarketSaleView{{ListingID: 6, Currency: domain.MarketSilk, Price: 50, AtMs: 3}},
+		Listings: []MarketListingView{sampleListing()},
+		OffersIn: []MarketOfferView{{ID: 3, ListingID: 7, Item: sampleListing().Item, Currency: domain.MarketGold, Asked: 1000,
+			Price: 900, Buyer: "Lulu", To: domain.MarketToBag, State: domain.MarketOfferOpen, AtMs: 4}},
+		OffersOut:  []MarketOfferView{},
+		Purchases:  []MarketSaleView{{ListingID: 6, Currency: domain.MarketSilk, Price: 50, AtMs: 3, To: domain.MarketToWarehouse}},
 		Warehouse:  []MarketWarehouseItem{{Slot: 0, Item: sampleListing().Item, Tradeable: true}},
 		Characters: []MarketCharacter{{Name: "Kekw", Gold: 5, Online: true}},
 		Silk:       10,
@@ -67,6 +72,26 @@ func (f *fakeMarket) Buy(string, MarketBuyBody) (MarketSaleView, error) {
 
 func (f *fakeMarket) Cancel(string, int64) error   { return f.err }
 func (f *fakeMarket) TakeBack(string, int64) error { return f.err }
+
+func (f *fakeMarket) MakeOffer(_ string, body MarketOfferBody) (MarketOfferView, error) {
+	f.offers = append(f.offers, body)
+	return MarketOfferView{ID: 3, ListingID: body.Listing, Price: body.Price, Buyer: body.Character}, f.err
+}
+
+func (f *fakeMarket) AcceptOffer(_ string, offer int64) (MarketSaleView, error) {
+	f.answered = append(f.answered, offer)
+	return MarketSaleView{ListingID: 7, Price: 900}, f.err
+}
+
+func (f *fakeMarket) RejectOffer(_ string, offer int64) error {
+	f.answered = append(f.answered, offer)
+	return f.err
+}
+
+func (f *fakeMarket) WithdrawOffer(_ string, offer int64) error {
+	f.answered = append(f.answered, offer)
+	return f.err
+}
 
 /*
 ================
@@ -174,5 +199,60 @@ func TestMarketWritesMapEveryRefusal(t *testing.T) {
 		if code != want.status || answer["error"] != want.code {
 			t.Errorf("%v answered %d %q, want %d %q", err, code, answer["error"], want.status, want.code)
 		}
+	}
+}
+
+/*
+================
+TestMarketOfferRoutes
+
+An offer names its listing, price and character; the answers name the
+offer in the path; the offer refusals have their own codes, and no
+listing's seller ever rides out of the server but its public name.
+================
+*/
+func TestMarketOfferRoutes(t *testing.T) {
+	s := privacyService(newFixture(), testWriteToken)
+	market := &fakeMarket{}
+	s.src.Market = market
+	if code, body := authorizedPost(s, "/v1/accounts/alpha/market/offer", `{"listing":7,"price":900,"character":"Lulu"}`); code != http.StatusCreated ||
+		!strings.Contains(body, `"buyer":"Lulu"`) || strings.Contains(body, "Row") {
+		t.Fatalf("offer answered %d: %s", code, body)
+	}
+	for _, body := range []string{`{"listing":7,"price":900}`, `{"listing":0,"price":900,"character":"Lulu"}`,
+		`{"listing":7,"price":0,"character":"Lulu"}`, `{"listing":7,"price":9,"character":"Lulu","to":"bag"}`} {
+		if code, _ := authorizedPost(s, "/v1/accounts/alpha/market/offer", body); code != http.StatusBadRequest {
+			t.Errorf("%s answered %d, want 400", body, code)
+		}
+	}
+	if code, _ := authorizedPost(s, "/v1/accounts/alpha/market/offers/3/accept", ""); code != http.StatusCreated {
+		t.Fatalf("accept answered %d", code)
+	}
+	for _, action := range []string{"reject", "withdraw"} {
+		if code, _ := authorizedPost(s, "/v1/accounts/alpha/market/offers/3/"+action, ""); code != http.StatusNoContent {
+			t.Fatalf("%s answered %d", action, code)
+		}
+	}
+	if code, _ := authorizedPost(s, "/v1/accounts/alpha/market/offers/x/reject", ""); code != http.StatusNotFound {
+		t.Fatalf("a bad offer id answered %d", code)
+	}
+	if len(market.answered) != 3 {
+		t.Fatalf("answered %v", market.answered)
+	}
+	for err, want := range map[error]string{
+		domain.ErrMarketOfferPrice: "offer-price", domain.ErrMarketOfferOpen: "offer-open", domain.ErrMarketOfferCap: "offer-cap",
+		domain.ErrMarketOfferGone: "offer-gone", domain.ErrMarketBuyerFunds: "buyer-funds", domain.ErrMarketBuyerFull: "buyer-full",
+		domain.ErrMarketBagFull: "bag-full",
+	} {
+		if got := MarketErrorCode(err); got != want {
+			t.Errorf("%v = %q, want %q", err, got, want)
+		}
+	}
+	listing := sampleListing()
+	listing.Seller = "Kekw"
+	listing.Row = domain.InventoryRow{Codename: "secret"}
+	encoded, _ := json.Marshal(listing)
+	if !strings.Contains(string(encoded), `"seller":"Kekw"`) || strings.Contains(string(encoded), "secret") {
+		t.Fatalf("listing json = %s", encoded)
 	}
 }

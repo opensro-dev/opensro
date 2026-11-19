@@ -25,6 +25,7 @@ import alexandria_npcs as text_tables
 import build_alexandria_variant as variant
 import cap110_items as items
 import import_vsro_alexandria as tables
+import published_ids
 import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import EXTRACTED_ROOT, REPO_ROOT, trees_overlap
@@ -283,7 +284,7 @@ def add_items(vsro_root, native, output):
 		import roc_import
 		previous = {**prior.get("retiredIds", {}), **prior.get("idMap", {})}
 		equipment, summary = items.merge_equipment(native_rows, later_rows, reserved, previous,
-			roc=roc_import.flag_enabled())
+			roc=roc_import.flag_enabled(), pinned=published_ids.published(published_ids.OBJECTS))
 		summary["fullSetModelsDropped"] = items.plain_worn_models(equipment)
 		set_groups, set_magic, catalogue = items.set_catalogue(
 			tables.table_rows(read_later(items.SET_GROUP_TABLE)),

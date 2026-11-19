@@ -174,10 +174,157 @@ async function companion( context: RecipeContext, tab: number ) {
 
 /*
 ================
+consignment
+
+The consignment market over a storage keeper, on a shard that runs it
+(SRO_CONSIGNMENT): a full Browse page, the account's listings and offers.
+Every listing, seller and price is synthetic; nothing is sent.
+================
+*/
+async function consignment(
+	context: RecipeContext,
+	page: "mine" | "few" | "empty" | "many" | "offers" | "sell" | "buy"
+) {
+	const sword = {
+		...herb,
+		slot: 13,
+		refObjId: 3633,
+		typeFlags: 0x132c,
+		quantity: 1,
+		icon: "item/china/weapon/sword_01.ddj"
+	};
+	const bow = {
+		...herb,
+		slot: 15,
+		refObjId: 4161,
+		typeFlags: 13100,
+		quantity: 1,
+		icon: "item/china/weapon/bow_02.ddj"
+	};
+	const now = Date.now();
+	const names = [ "Drako Sword", "Sky God Bow", "Capricorn Blade", "Strom Bow", "HP recovery herb" ];
+	const sellers = [ "Yoshimitsu", "onV", "", "Bardovski", "Lulu" ];
+	const rows = Array.from( { length: 15 }, ( _, i ) => {
+		const item = i % 5 === 4 ?
+			{ ...herb, quantity: 50, name: names[4] } :
+			{ ...(i % 2 ? bow : sword), name: names[i % 4], plus: i % 3 };
+		return {
+			id: 100 + i,
+			version: 1,
+			currency: i % 4 === 0 ? "silk" as const : "gold" as const,
+			price: i % 4 === 0 ? 5 + i : 1_333_333 * (1 + i % 5),
+			listedMs: now - i * 60_000,
+			expiresMs: now + (23 * 60 + 30 - i) * 60_000,
+			state: "open" as const,
+			seller: i === 7 ? "Tester" : sellers[i % 5]!,
+			anonymous: false,
+			category: "weapon",
+			degree: 11 - i % 3,
+			sealed: i % 6 === 1,
+			item
+		};
+	} );
+	const offer = ( id: number, state: "open" | "rejected" ) => ({
+		id,
+		listingId: 107,
+		currency: "gold" as const,
+		asked: 2_000_000,
+		price: 1_500_000 + id,
+		buyer: "Kekw",
+		to: "bag" as const,
+		state,
+		atMs: now,
+		item: { ...sword, name: "Drako Sword", plus: 1 }
+	});
+	npc( context, 4, "Storage keeper" );
+	Object.assign( context.state.gameplay, {
+		consignment: true,
+		inventory: [ { ...sword, name: "Drako Sword", plus: 2 }, { ...herb }, { ...bow, name: "Sky God Bow" } ],
+		market: {
+			categories: [ "Weapons", "Armor", "Accessories", "Avatars", "Pets", "Alchemy", "Consumables", "Other" ]
+				.map( name => ({ slug: name.toLowerCase(), name }) ),
+			// "few": one listing on one page, the short-table case; "empty": a
+			// filtered search that found nothing.
+			browse: page === "few" ?
+				{ rows: rows.slice( 0, 1 ), page: 1, pages: 1, total: 1 } :
+				page === "empty" ?
+				{ rows: [], page: 1, pages: 1, total: 0 } :
+				{ rows, page: 1, pages: 23, total: 347 },
+			mine: {
+				// "many": the cap's 20 listed and three returned, over pages.
+				listings: page === "many" ?
+					Array.from( { length: 23 }, ( _, i ) => ({
+						...rows[i % 15]!,
+						id: 500 + i,
+						seller: "Tester",
+						state: i < 20 ? "open" as const : "returned" as const
+					}) ) :
+					[ rows[7]!, { ...rows[3]!, id: 300, state: "held" as const, seller: "Tester" } ],
+				offersIn: [ offer( 1, "open" ), offer( 2, "rejected" ) ],
+				offersOut: [],
+				purchases: [ {
+					listingId: 90,
+					currency: "gold" as const,
+					price: 400_000,
+					fee: 0,
+					atMs: now,
+					to: "bag" as const,
+					item: "Strom Bow (+3)"
+				} ],
+				silk: 40,
+				warehouseGold: 0,
+				rules: { feePercent: 1, durationMs: 86_400_000, openCap: 20, offerCap: 20 }
+			},
+			pending: null,
+			notice: null,
+			events: []
+		}
+	} );
+	await press( context, "market-open" );
+	if ( page === "offers" ) await press( context, "market-tab:offers" );
+	if ( page === "empty" ) {
+		await press( context, "market-menu:race" );
+		await press( context, "market-choose:race:eu" );
+	}
+	if ( page === "sell" ) await press( context, "market-sell-pick" );
+	if ( page === "buy" ) await press( context, "market-row-buy:101" );
+}
+
+/*
+================
 commerceRecipes
 ================
 */
 export const commerceRecipes: readonly ExtendedRecipe[] = [
+	...([
+		[ "browse", "mine", "market-row-buy:101" ],
+		[ "one-listing", "few", "market-row-buy:100" ],
+		[
+			"empty-search",
+			"empty",
+			"market-clear-search"
+		],
+		[ "many-listings", "many", "market-mine-next" ],
+		[
+			"offers",
+			"offers",
+			"market-accept"
+		],
+		[
+			"sell",
+			"sell",
+			"market-sell-slot:13"
+		],
+		[ "buy", "buy", "market-dialog-confirm" ]
+	] as const).map( ( [name, page, witness] ) => ({
+		id: "breadth:consignment-" + name,
+		title: "Consignment market - " + name,
+		family: "Services" as const,
+		source: "runtime/ui/hud/market-window.ts; tests/runtime/market-window.test.mjs (port-only, SRO_CONSIGNMENT)",
+		resources: [],
+		controls: [ witness ],
+		open: ( context: RecipeContext ) => consignment( context, page )
+	}) ),
 	...([ [ "restoration-list", false, false ], [ "restoration-confirm", false, true ], [
 		"resuscitation-confirm",
 		true,
