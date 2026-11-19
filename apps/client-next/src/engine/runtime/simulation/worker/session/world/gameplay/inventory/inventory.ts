@@ -739,6 +739,29 @@ useCooldown
 		present,
 		/*
 ================
+startAuthoredCooldown
+
+A limited use that ran without a bag item (a premium package's count job, the
+Energy of Life buff's charge) starts the cooldown its item's row authors, as an
+item-use answer starts a bag item's: the lane shows on every item that
+shares the group, in the bag and on the quick slots. Port-only for the Blue
+Berserk; nothing for an item without an authored cooldown.
+================
+		*/
+		startAuthoredCooldown( refObjId: number, now: number ) {
+			const fields = tooltipRefs.get( refObjId )?.fields ?? {};
+			const durationMs = fields.useCooldownDuration528 ?? 0;
+			if ( durationMs <= 0 ) return;
+			const group = fields.useCooldownGroup524 ?? 0;
+			itemCooldowns = [
+				...itemCooldowns.filter( row =>
+					row.category !== 18 || (group ? row.group !== group : !!row.group || row.refObjId !== refObjId)
+				),
+				{ category: 18, group, refObjId, startedAtMs: now, durationMs }
+			];
+		},
+		/*
+================
 objectRefs
 
 The summonable character references (refObjSnapshot) a summoner's

@@ -137,7 +137,12 @@ type EffectGameplay = Pick<
 	| "movementRevision"
 	| "movementPath"
 	| "movementTransition"
+	| "hwanLevels"
 >;
+// Port-only (Blue Berserk, not native): the 2nd Hwan body record the owner wears from Blue level 1.
+const HWAN2_MODE_RECORD = "SYSTEM_CH_HWAN2MODE";
+// How long after a character first appears a Berserk is taken as already running.
+const HWAN_ENTRY_QUIET_MS = 5000;
 // TID4 6 in the COS type word: the captured quest monster.
 const CAPTURED_MONSTER_TYPE = 6 << 11;
 // The effect actors drawn at once: cast visuals, state and attached
@@ -495,7 +500,10 @@ export function createCharacterEffects(
 			states: Readonly<Record<number, import("@/engine/contracts/effects").HawkAnimation>>;
 		};
 	};
-	type Attachment = import("@/engine/foundation/gameplay/attached-effects").AttachedEffect & { recordName?: string; };
+	type Attachment = import("@/engine/foundation/gameplay/attached-effects").AttachedEffect & {
+		recordName?: string;
+		quiet?: boolean;
+	};
 	const statuses = new Map<number, { view: StatusView; revisions: Map<string, number>; }>();
 	const recordFor = ( effect: Attachment ) =>
 		effect.recordName ? namedCatalog?.[effect.recordName] : catalog?.[String( effect.skill )];
@@ -523,8 +531,21 @@ export function createCharacterEffects(
 		materialOwners = new Map<string, number>();
 	const hwan = new Map<
 		number,
-		{ active: boolean; from: number; value: number; progress: number; previous: number; revision: number; }
+		{
+			active: boolean;
+			from: number;
+			value: number;
+			progress: number;
+			previous: number;
+			revision: number;
+			quiet: boolean;
+		}
 	>();
+	// When each character first appeared since the last reset. A Berserk that shows within
+	// HWAN_ENTRY_QUIET_MS of that is the one already running when the character entered
+	// (a loading screen), not an activation, and plays no sound; the state can trail the
+	// first frame of the character by a few packets.
+	const firstSeen = new Map<number, number>();
 	const roars = new Map<
 		number,
 		{
@@ -950,7 +971,7 @@ export function createCharacterEffects(
 				);
 				continue;
 			}
-			if ( stage.sound ) {
+			if ( stage.sound && !effect.quiet ) {
 				play( {
 					id: `attached:${effect.gid}:${effect.token}:${effect.receivedAtMs ?? 0}:${stop}:${result.length}`,
 					path: stage.sound,
@@ -1302,7 +1323,8 @@ export function createCharacterEffects(
 			load(
 				now,
 				entities.length > 0 || external.size > 0,
-				gameplay?.vitals?.some( v => !!((v.abnormal ?? 0) & STATUS_DECORATION_MASK) ) ?? false
+				(gameplay?.vitals?.some( v => !!((v.abnormal ?? 0) & STATUS_DECORATION_MASK) ) ?? false) ||
+					Object.keys( gameplay?.hwanLevels ?? {} ).length > 0
 			);
 			failure = null;
 			try {
@@ -1467,10 +1489,19 @@ export function createCharacterEffects(
 							} );
 						}
 					} else if ( !enabled && view.tint === null ) materials.delete( entity.gid );
+					if ( !firstSeen.has( entity.gid ) ) firstSeen.set( entity.gid, now );
 					let row = hwan.get( entity.gid );
 					if ( !row && !enabled ) continue;
 					if ( !row ) {
-						row = { active: enabled, from: 1, value: 1, progress: 0, previous: now, revision: clock };
+						row = {
+							active: enabled,
+							from: 1,
+							value: 1,
+							progress: 0,
+							previous: now,
+							revision: clock,
+							quiet: now - (firstSeen.get( entity.gid ) ?? now) < HWAN_ENTRY_QUIET_MS
+						};
 						hwan.set( entity.gid, row );
 					}
 					if ( row.active !== enabled ) {
@@ -1493,6 +1524,7 @@ export function createCharacterEffects(
 				}
 				for ( const gid of hwan.keys() ) if ( !byGid.has( gid ) ) hwan.delete( gid );
 				for ( const gid of appearances.keys() ) if ( !byGid.has( gid ) ) appearances.delete( gid );
+				for ( const gid of firstSeen.keys() ) if ( !byGid.has( gid ) ) firstSeen.delete( gid );
 				for ( const gid of statuses.keys() ) {
 					if ( !byGid.has( gid ) ) {
 						statuses.delete( gid );
@@ -2967,9 +2999,22 @@ export function createCharacterEffects(
 				}
 				if ( catalog && models ) {
 					const wanted = new Set<string>();
+					// A Blue Berserk player (any, once the roster told its level) wears the 2nd Hwan
+					// record (blue) when the named catalog has it.
+					const blueBody = !!namedCatalog?.[HWAN2_MODE_RECORD];
 					const stateEffects: Attachment[] = [ ...hwan ].filter( ( [, row] ) => row.active ).map( (
 						[gid, row]
-					) => ({ gid, skill: -2147483648, token: -1, phase: 0, receivedAtMs: row.revision }) );
+					) => blueBody && !!gameplay?.hwanLevels?.[gid] ?
+						{
+							gid,
+							recordName: HWAN2_MODE_RECORD,
+							skill: 0,
+							token: -1,
+							phase: 0,
+							receivedAtMs: row.revision
+						} :
+						{ gid, skill: -2147483648, token: -1, phase: 0, receivedAtMs: row.revision }
+					);
 					for ( const [gid, row] of statuses ) {
 						for ( const [recordName, revision] of row.revisions ) {
 							stateEffects.push( {
@@ -4348,6 +4393,7 @@ export function createCharacterEffects(
 			materials.clear();
 			materialOwners.clear();
 			hwan.clear();
+			firstSeen.clear();
 			roars.clear();
 			wolfSkills.clear();
 			penguinBolts.reset();
@@ -4397,6 +4443,7 @@ export function createCharacterEffects(
 			materials.clear();
 			materialOwners.clear();
 			hwan.clear();
+			firstSeen.clear();
 			roars.clear();
 			wolfSkills.clear();
 			roarAppearances.clear();

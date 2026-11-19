@@ -1,0 +1,51 @@
+/*
+===========================================================================
+
+hwan-skin.ts - the Blue Berserk's gauge art (port-only, not native)
+
+The v1.150 data ships a second set of the Berserk gauge's pictures, named
+pmi_jahwan_02* beside the plain pmi_jahwan*: the same sizes, in blue (circle
+sheet, face, glow, burn sprites and the three button states). The later
+client shows them for a character whose Blue Berserk level is above 0; this
+client does the same with the level the server tells (hwan-level.ts), by
+naming the blue file in place of the plain one.
+
+===========================================================================
+*/
+
+const GAUGE_ART = "interface/playerminiinfo/pmi_jahwan";
+const BLUE_MARK = "_02";
+
+/*
+================
+hwanSkin
+
+The gauge picture to draw: the blue file of a plain pmi_jahwan* path for a
+Blue Berserk level above 0, and every other path (or level 0) unchanged.
+================
+*/
+export function hwanSkin( path: string, level: number | undefined ): string {
+	if ( !level || level <= 0 ) return path;
+	const at = path.indexOf( GAUGE_ART );
+	if ( at < 0 ) return path;
+	const end = at + GAUGE_ART.length;
+	// Already blue, or a longer name that only starts with pmi_jahwan (none ships).
+	if ( path.startsWith( BLUE_MARK, end ) ) return path;
+	const next = path[end];
+	return next === "_" || next === "." ? path.slice( 0, end ) + BLUE_MARK + path.slice( end ) : path;
+}
+
+/*
+================
+hwanTitleKey
+
+The system-text symbol of a Blue Berserk level's title (Knight, Baronet, ... for
+the European race, the generals for the Chinese), or "" below level 1. The race
+is the character's country byte (0 Chinese, 1 European), as the server's notice
+chooses it.
+================
+*/
+export function hwanTitleKey( level: number | undefined, country: number | undefined ): string {
+	if ( !level || level < 1 ) return "";
+	return "UIO_SECOND_HWAN_" + (country === 1 ? "EU" : "CH") + "_NAME_LEVEL_" + Math.floor( level );
+}

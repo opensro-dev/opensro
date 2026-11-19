@@ -360,6 +360,7 @@ import { createCaravanStars } from "./caravan-stars/caravan-stars";
 import { createContributorTitles } from "./contributor-titles/contributor-titles";
 import { createTradeProgress } from "./trade-progress/trade-progress";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
+import { createHwanLevel } from "./hwan-level/hwan-level";
 import { createMostWanted } from "./most-wanted/most-wanted";
 import { createPetTraining } from "./pet-training/pet-training";
 import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
@@ -695,6 +696,7 @@ export function createGameplay(
 		tradeProgress = createTradeProgress(),
 		uniqueRank = createUniqueDamageRank(),
 		mostWanted = createMostWanted(),
+		hwanLevel = createHwanLevel(),
 		// The wolf tree's worn gear resolves through the bag's references.
 		petTraining = createPetTraining( ( ref, slot, magic ) => inventory.petGearItem( ref, slot, magic ) );
 	/*
@@ -1722,6 +1724,7 @@ clears it when another character enters.
 		contributorTitles.clear();
 		uniqueRank.clear();
 		mostWanted.clear();
+		hwanLevel.clear();
 		petTraining.clear();
 		partyMatching = emptyPartyMatching();
 		partyMatchAutoSession = false;
@@ -4353,6 +4356,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( hwanLevel.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( frame.opcode === DEATH_NOTICE ) {
 					if ( frame.payload.length !== 1 ) throw Error( "Invalid death notice" );
 					rebirthMode = frame.payload[0]!;
@@ -4586,6 +4593,10 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( countUpdate ) {
 					// 770820: a refused limited use is a category-1 notice.
 					const notice = countUpdate.kind === "refused" ? constantNativeNotice( 1, countUpdate.code ) : null;
+					// A spent use starts its item's authored cooldown (the Energy of Life charge's 20 minutes).
+					if ( countUpdate.kind === "spent" ) {
+						inventory.startAuthoredCooldown( countUpdate.itemRefObjId, now );
+					}
 					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					dirty = true;
 					return true;
@@ -6438,6 +6449,8 @@ The published plane when something changed since the last take, else null.
 				contributorTitles: contributorTitles.names(),
 				uniqueDamageRank: uniqueRank.current(),
 				mostWanted: mostWanted.current(),
+				hwanLevel: localGid === undefined ? undefined : hwanLevel.levelOf( localGid ) || undefined,
+				hwanLevels: hwanLevel.all(),
 				petTraining: petTraining.state(),
 				petTailwind: petTraining.tailwind(),
 				petGuidance: petTraining.guidance(),
