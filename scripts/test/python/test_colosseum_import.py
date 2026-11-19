@@ -14,6 +14,7 @@ from unittest import mock
 
 import colosseum_import as colosseum  # noqa: E402
 import later_world_import  # noqa: E402
+import variant_later_layers  # noqa: E402
 
 
 # ================
@@ -61,6 +62,13 @@ class ColosseumImportTest(unittest.TestCase):
 		self.assertEqual((native, out, root), ("n", "o", "r"))
 		tables = {"teleportdata.txt": safezone_rows(colosseum.COLOSSEUM_REGION)}
 		self.assertEqual(rule(tables.__getitem__), [colosseum.COLOSSEUM_REGION])
+
+	# The release outage (#3875, kresko5007): the arena was switched on
+	# while only a standalone tool built its venue, so the release variant
+	# had no Colosseum and admission refused every entrant. The layer must
+	# be one the variant build runs.
+	def test_the_variant_build_runs_the_layer(self):
+		self.assertIn(("colosseum", colosseum.add_colosseum), variant_later_layers.LATER_LAYERS)
 
 
 if __name__ == "__main__":
