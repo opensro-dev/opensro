@@ -21,6 +21,7 @@ import { listTextDataShardNamesSync, readTextDataRowsSync } from "../shared/text
 import { PORT_ITEM_TEMPLATE, portItemColumns } from "../shared/portItemRows.mjs";
 import { publicRoot, retailTextdataRoot } from "../world/paths.mjs";
 import { compareText } from "../shared/textOrder.mjs";
+import { loadQinShiTombCharacterRows, qinshiTombCombatEnabled } from "../shared/qinshiTomb.mjs";
 
 const npcManifestPath = path.join( publicRoot, "assets", "npc", "manifest.json" );
 const outputPath = path.join( publicRoot, "assets", "data", "missionPresentation.json" );
@@ -69,6 +70,56 @@ function itemTypeFlags( columns ) {
 
 /*
 ================
+tombCharacterRows
+
+Port-only, not native: with SRO_QINSHI_TOMB on, the server spawns the
+Qin-Shi overlay monsters (shared/qinshiTomb.mjs), so their rows join the
+retail table here as they do in the roster bake (resolveCharRoster.mjs).
+Without them the client had no recovery period for a knocked-down tomb
+monster ("Missing native recovery duration MOB_TQ_TOMBBUGGHOST", r202).
+================
+*/
+function tombCharacterRows() {
+	return qinshiTombCombatEnabled() ? loadQinShiTombCharacterRows().rows : [];
+}
+
+/*
+================
+readCharacterRows
+
+The characterdata facts this projection publishes: each in-service row's
+recovery period and the trade-bandit facts, from the retail shards and then
+the overlay rows. 808670 parses RefObjChar; its common-data base is
+allocation +4. Column 88 -> allocation +210 -> common base +20c, read by
+8E6720.
+================
+*/
+export function readCharacterRows( textdataRoot, overlayRows = [] ) {
+	const recoveryByCodename = {};
+	const charactersById = new Map();
+	const admit = columns => {
+		if ( columns[COL_SERVICE]?.trim() !== "1" ) return;
+		const name = columns[COL_CODENAME]?.trim(), period = Number( columns[COL_RECOVERY] );
+		if ( !name || !Number.isInteger( period ) || period < 0 || period > 0x7fffffff - 500 ) {
+			throw Error( `Invalid native recovery period ${name}` );
+		}
+		recoveryByCodename[name] = period;
+		charactersById.set( columns[COL_REF_OBJ_ID]?.trim(), {
+			codename: name,
+			country: Number( columns[COL_COUNTRY] ),
+			typeIds: [ 0, 1, 2, 3 ].map( i => Number( columns[COL_CHARACTER_TYPE_ID1 + i] ) ),
+			tradeSkill: Number( columns[COL_TRADE_SKILL] )
+		} );
+	};
+	for ( const shard of listTextDataShardNamesSync( textdataRoot, /^characterdata.*\.txt$/i ) ) {
+		for ( const columns of readTextDataRowsSync( path.join( textdataRoot, shard ) ) ) admit( columns );
+	}
+	for ( const columns of overlayRows ) admit( columns );
+	return { recoveryByCodename, charactersById };
+}
+
+/*
+================
 buildMissionPresentationAsset
 ================
 */
@@ -91,26 +142,10 @@ export function buildMissionPresentationAsset( options = {} ) {
 	}
 
 	const itemsByRefObjId = {};
-	const recoveryByCodename = {};
-	const charactersById = new Map();
-	// 808670 parses RefObjChar; its common-data base is allocation +4.
-	// Column 88 -> allocation +210 -> common base +20c, read by 8E6720.
-	for ( const shard of listTextDataShardNamesSync( textdataRoot, /^characterdata.*\.txt$/i ) ) {
-		for ( const columns of readTextDataRowsSync( path.join( textdataRoot, shard ) ) ) {
-			if ( columns[COL_SERVICE] !== "1" ) continue;
-			const name = columns[COL_CODENAME]?.trim(), period = Number( columns[COL_RECOVERY] );
-			if ( !name || !Number.isInteger( period ) || period < 0 || period > 0x7fffffff - 500 ) {
-				throw Error( `Invalid native recovery period ${name}` );
-			}
-			recoveryByCodename[name] = period;
-			charactersById.set( columns[COL_REF_OBJ_ID]?.trim(), {
-				codename: name,
-				country: Number( columns[COL_COUNTRY] ),
-				typeIds: [ 0, 1, 2, 3 ].map( i => Number( columns[COL_CHARACTER_TYPE_ID1 + i] ) ),
-				tradeSkill: Number( columns[COL_TRADE_SKILL] )
-			} );
-		}
-	}
+	const { recoveryByCodename, charactersById } = readCharacterRows(
+		textdataRoot,
+		options.characterOverlayRows ?? tombCharacterRows()
+	);
 	const shardNames = listTextDataShardNamesSync( textdataRoot, /^itemdata.*\.txt$/i ).sort( ( left, right ) =>
 		compareText( left, right )
 	);

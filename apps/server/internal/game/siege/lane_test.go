@@ -48,8 +48,8 @@ func subtypes(out []simulation.DivisionFrames) []uint8 {
 ================
 TestLaneRunsAWarWednesday
 
-From Wednesday morning (request and tax periods already running) through
-the war: the 30-minute warning, the begin, the four end warnings and the
+From Wednesday morning (the tax period running; applications closed the
+day before, as the client's window prints) through the war: the 30-minute warning, the begin, the four end warnings and the
 end, each once, with the war period following the schedule.
 ================
 */
@@ -58,8 +58,8 @@ func TestLaneRunsAWarWednesday(t *testing.T) {
 	at := func(hour, minute, second int) int64 {
 		return time.Date(2026, 10, 7, hour, minute, second, 0, loc).UnixMilli()
 	}
-	if got := subtypes(lane.Tick(at(9, 0, 0))); !bytes.Equal(got, []byte{0x33, 0x31}) {
-		t.Fatalf("boot inside the request and tax periods sent %x", got)
+	if got := subtypes(lane.Tick(at(9, 0, 0))); !bytes.Equal(got, []byte{0x31}) {
+		t.Fatalf("boot inside the tax period sent %x", got)
 	}
 	var warChanges []bool
 	lane.config.WarChanged = func(_ int64, active bool) []simulation.DivisionFrames {
@@ -67,7 +67,7 @@ func TestLaneRunsAWarWednesday(t *testing.T) {
 		return nil
 	}
 	var sent []uint8
-	for second := at(19, 0, 0); second <= at(21, 31, 0); second += 1000 {
+	for second := at(19, 0, 0); second <= at(22, 1, 0); second += 1000 {
 		sent = append(sent, subtypes(lane.Tick(second))...)
 		if second == at(20, 30, 0) && !authority.WarActive("d") {
 			t.Fatal("war period not set during the war")
@@ -79,7 +79,7 @@ func TestLaneRunsAWarWednesday(t *testing.T) {
 	if authority.WarActive("d") || len(warChanges) != 2 || !warChanges[0] || warChanges[1] {
 		t.Fatalf("war period after the war: active=%v changes=%v", authority.WarActive("d"), warChanges)
 	}
-	if got := subtypes(lane.Tick(at(23, 59, 59))); !bytes.Equal(got, []byte{0x34, 0x32}) {
+	if got := subtypes(lane.Tick(at(23, 59, 59))); !bytes.Equal(got, []byte{0x32}) {
 		t.Fatalf("day end sent %x", got)
 	}
 }
@@ -122,7 +122,7 @@ where WarStart says; during the war it is running.
 */
 func TestWindowsFollowTheWarSchedule(t *testing.T) {
 	lane, _, loc := laneFixture(t)
-	morning := time.Date(2026, 10, 7, 9, 0, 0, 0, loc).UnixMilli()
+	morning := time.Date(2026, 10, 6, 9, 0, 0, 0, loc).UnixMilli()
 	byName := func(nowMs int64) map[string]Window {
 		out := map[string]Window{}
 		for _, window := range lane.Windows(nowMs) {
@@ -134,6 +134,10 @@ func TestWindowsFollowTheWarSchedule(t *testing.T) {
 	request, war := windows["AllowSiegeRequest"], windows["SiegeProgressing"]
 	if !request.Running || war.Running || !war.Start.Equal(lane.WarStart(morning)) || !war.End.After(war.Start) {
 		t.Fatalf("morning windows %+v", windows)
+	}
+	// The application days read as one span, Sunday to Tuesday.
+	if !request.Start.Equal(time.Date(2026, 10, 4, 0, 0, 0, 0, loc)) || !request.End.Equal(time.Date(2026, 10, 6, 23, 59, 59, 0, loc)) {
+		t.Fatalf("registration span %s .. %s", request.Start, request.End)
 	}
 	during := war.Start.Add(30 * time.Minute).UnixMilli()
 	if !byName(during)["SiegeProgressing"].Running {

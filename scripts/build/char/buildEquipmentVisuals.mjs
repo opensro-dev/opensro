@@ -36,7 +36,7 @@ import { parseCharacterBsr } from "./formats.mjs";
 import { loadEquipmentRecords } from "./equipmentVisualRecords.mjs";
 import { equipmentGlowCatalog, equipmentGlowModelIds, equipmentGlowGlb } from "./equipmentGlowMetadata.mjs";
 import { publishEquipmentParticleMetadata } from "./equipmentParticles.mjs";
-import { imageSourceRoot, publicAssetsRoot, publicRoot } from "../world/paths.mjs";
+import { modelReadRoots, publicAssetsRoot, publicRoot } from "../world/paths.mjs";
 import { readPublishedAssetBytesSync } from "../../lib/publishedAsset.mjs";
 import { publishBytesAtomically } from "../shared/atomicPublish.mjs";
 import { MOONLIT_MESHES, moonlitGlb, moonlitModelPath } from "./moonlitThiefSuit.mjs";
@@ -48,7 +48,7 @@ const GLOW_SLOT_SHIELD = 7;
 
 const MODULE_FILE = fileURLToPath( import.meta.url );
 // The trees an item set's build reads: extracted game data and converted images.
-const ITEM_SET_READ_ROOTS = { data: dataRoot, images: imageSourceRoot };
+const ITEM_SET_READ_ROOTS = modelReadRoots( dataRoot );
 // Weapon and shield sets are written once their glows are known; their plain
 // GLBs are kept here between builds so a hit can hand them to that step.
 const PLAIN_ITEM_SET_ROOT = buildStatePath( "equipment-plain" );
@@ -288,7 +288,7 @@ export async function buildEquipmentVisuals( dress, options = {} ) {
 	// Items sharing native source paths share one conversion.
 	const sets = [];
 	for ( const row of rows.values() ) {
-		const avatar = row.tid[0] === 3 && row.tid[1] === 1 && row.tid[2] === 13;
+		const avatar = row.avatar;
 		const record = {
 			code: row.code,
 			slot: row.slot,

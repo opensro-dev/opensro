@@ -43,6 +43,9 @@ type wolfKitState struct {
 // Port-only: the wolf holds still for most of the client's 1.6 s pet-howl clip.
 const wolfHowlHoldMs int64 = 1400
 
+// petHowlLifetime: a Hunting Howl lasts 8 s; the client refuses a longer remaining time.
+const petHowlLifetime int64 = 8000
+
 type wolfHowl struct {
 	book    uint8
 	until   int64
@@ -157,7 +160,7 @@ func (rt *Runtime) castWolfHowl(division string, owner *enterworld.Character, gi
 	}) {
 		return petTrainingReceipt("The howl could not be cast.")
 	}
-	howl := wolfHowl{book: skill.ID, until: now + 8000, percent: skill.ValueAt(level), members: make(map[uint32]string)}
+	howl := wolfHowl{book: skill.ID, until: now + petHowlLifetime, percent: skill.ValueAt(level), members: make(map[uint32]string)}
 	if skill.Option >= 2 {
 		howl.members[enterworld.ObjectIDForCharacter(step.snapshot)] = owner.Name
 	}

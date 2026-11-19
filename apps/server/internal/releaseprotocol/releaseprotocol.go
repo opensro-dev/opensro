@@ -50,16 +50,28 @@ type Contracts struct {
 	Wanted     int // the port-only 0x3FBA most-wanted state frame
 	Chat       int // the port-only item-link tails on player chat
 	World      int // the seasonal layer a region bundle's placement carries
+	Market     int // the port-only opcode-20 consignment market control frame
 }
 
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	// Protocol 17 adds survival checkpoint rewards and tags the seasonal
-	// decoration's placements with their world layer (see WorldContract
-	// 1). Protocol 16 grows a pet chat link to name its pet (see
-	// ChatContract 2).
-	Current = 17
+	// Protocol 18 admits the port-only consignment market's control
+	// frame (see MarketContract 1). Protocol 17 adds survival checkpoint
+	// rewards and tags the seasonal decoration's placements with their
+	// world layer (see WorldContract 1). Protocol 16 grows a pet chat
+	// link to name its pet (see ChatContract 2).
+	Current = 18
+	// The market contract: 1 carries the port-only consignment market
+	// (SRO_CONSIGNMENT) on control opcode 20 both ways, and the server
+	// pushes it unasked: a sale's proceeds and notice to an online
+	// seller (action market.go MarketProceedsTick, marketPaySeller) and
+	// an offer's change to the other party (marketTell). A protocol-17
+	// client's world gate admits only controls 11-19 and ends the
+	// session on any other (commerce-controls.ts isWorldControl, the F10
+	// Item Mall disconnect), so the bump sends every open tab the 426
+	// that reloads it onto a client that admits the frame.
+	MarketContract = 1
 	// The world contract: 1 tags a region bundle placement with the
 	// seasonal layer that owns it (layerobject.json, #3265), drawn only
 	// while that layer's event group is on. Region bundles keep their
@@ -156,9 +168,10 @@ var history = map[int]Contracts{
 	14: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 1},
 	15: {Bootstrap: 2, Roster: 2, References: 3, Companions: 3, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 1},
 	16: {Bootstrap: 2, Roster: 2, References: 3, Companions: 3, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 2},
+	17: {Bootstrap: 2, Roster: 2, References: 3, Companions: 3, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 2, World: 1},
 	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
 		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract, Wanted: WantedContract,
-		Chat: ChatContract, World: WorldContract},
+		Chat: ChatContract, World: WorldContract, Market: MarketContract},
 }
 
 /*

@@ -13,6 +13,7 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 const fortress = await import( sourceFileUrl( "src/engine/foundation/gameplay/fortress.ts" ).href );
 const apply = await import( sourceFileUrl( "src/engine/foundation/ui/fortress-war-apply.ts" ).href );
@@ -103,6 +104,30 @@ test("a slot's button follows the guild's standing (663EB0)", () => {
 		"another NPC is not this official"
 	);
 	assert.deepEqual( apply.fortressWarRequest( 0x67 ), { withdraw: true, request: 1 } );
+});
+
+test("the window's offsets are the native fixture's (660C70)", () => {
+	// The server's schedule test reads a byte-identical copy of this fixture,
+	// so the week the window prints and the week the server accepts stay one.
+	const window = JSON.parse(
+		readFileSync( new URL( "../fixtures/native/native-fortress-war-window.json", import.meta.url ), "utf8" )
+	);
+	// A war at the start of a month moves the application period into the
+	// month before.
+	for ( const start of [ [ 2026, 10, 7, 20 ], [ 2026, 12, 2, 20 ], [ 2027, 3, 1, 18 ] ] ) {
+		const [year, month, day, hour] = start;
+		const at = Date.UTC( year, month - 1, day, hour );
+		const end = new Date( at + window.warLengthSeconds * 1e3 );
+		const opens = new Date( at - window.applyOpensBeforeSeconds * 1e3 );
+		const closes = new Date( opens.getTime() + window.applyLengthSeconds * 1e3 );
+		const dates = apply.fortressWarDates( { year, month, weekday: 0, day, hour, minute: 0 } );
+		assert.deepEqual( dates.war, [ month, day, hour, end.getUTCHours() ], start.join( "-" ) );
+		assert.deepEqual(
+			dates.apply,
+			[ opens.getUTCMonth() + 1, opens.getUTCDate(), closes.getUTCMonth() + 1, closes.getUTCDate() ],
+			start.join( "-" )
+		);
+	}
 });
 
 test("the window's dates come from the war start (660C70)", () => {

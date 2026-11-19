@@ -574,5 +574,59 @@ class MissingExportTest(unittest.TestCase):
 		pin.assert_not_called()
 
 
+
+# ================
+# MapWorldTest
+#
+# The map-only path (add_map_world): a world with no population owns
+# only its spec and its region rule; the engine owns the switch, the
+# pin, the Media read and the empty monster pass.
+# ================
+class MapWorldTest(unittest.TestCase):
+	SPEC = later.WorldImport(label="mapworld", flag="SRO_TEST_MAP_WORLD", root_env="SRO_TEST_MAP_ROOT",
+		character_shard="characterdata_990000.txt", skill_shard="skilldata_990000.txt",
+		marker=".opensro-mapworld.json", pin_file=Path("pins.json"), pin_sentence="test",
+		region_label="Map world", population_files=())
+
+	def test_the_marker_keeps_only_the_region_record(self):
+		with tempfile.TemporaryDirectory() as temp:
+			marker = Path(temp) / self.SPEC.marker
+			marker.write_text(json.dumps({"regionMerge": {"regions": [7]}, "stale": 1}))
+			self.assertEqual(later.write_map_marker(self.SPEC, temp), {"enabled": True, "characters": 0})
+			self.assertEqual(json.loads(marker.read_text()), {"regionMerge": {"regions": [7]}, "enabled": True})
+
+	def test_off_reaps_and_reads_no_archive(self):
+		with tempfile.TemporaryDirectory() as temp:
+			native, out = Path(temp) / "native", Path(temp) / "out"
+			with mock.patch.dict(os.environ, {self.SPEC.flag: ""}), 				mock.patch.object(later, "reap_world") as reap, 				mock.patch.object(later, "require_pin") as pin, 				mock.patch.object(later.tables, "open_archive") as opened, 				mock.patch.object(later, "merge_world") as merge:
+				self.assertEqual(later.add_map_world(self.SPEC, native, out, temp, lambda rows_of: [1]),
+					{"enabled": False})
+			reap.assert_called_once_with(self.SPEC, native, out)
+			pin.assert_not_called()
+			opened.assert_not_called()
+			merge.assert_not_called()
+
+	def test_on_pins_before_reading_then_merges_the_rule_s_regions(self):
+		order = []
+		with tempfile.TemporaryDirectory() as temp:
+			media, handle = mock.MagicMock(), mock.MagicMock()
+			with mock.patch.dict(os.environ, {self.SPEC.flag: "on"}), 				mock.patch.object(later, "require_pin", side_effect=lambda *a: order.append("pin")) as pin, 				mock.patch.object(later.tables, "open_archive",
+					side_effect=lambda *a: order.append("open") or (None, handle, media)), 				mock.patch.object(later.tables, "archive_index", return_value={}), 				mock.patch.object(later.tables, "table_text", return_value="text"), 				mock.patch.object(later.tables, "table_rows", side_effect=lambda text: [["row", text]]), 				mock.patch.object(later, "merge_world", return_value={"enabled": True}) as merge:
+				seen = []
+
+				def rule(rows_of):
+					seen.append(rows_of("teleportdata.txt"))
+					return [25580]
+				self.assertEqual(later.add_map_world(self.SPEC, "n", "o", temp, rule), {"enabled": True})
+			self.assertEqual(order, ["pin", "open"])
+			self.assertEqual(pin.call_args.args[2], later.MERGE_ARCHIVES)
+			self.assertEqual(seen, [[["row", "text"]]])
+			media.close.assert_called_once()
+			handle.close.assert_called_once()
+			spec, _native, _out, root, regions, _monsters = merge.call_args.args
+			self.assertIs(spec, self.SPEC)
+			self.assertEqual((root, regions), (Path(temp), [25580]))
+
+
 if __name__ == "__main__":
 	unittest.main()

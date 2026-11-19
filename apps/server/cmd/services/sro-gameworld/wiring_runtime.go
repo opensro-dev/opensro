@@ -18,6 +18,7 @@ import (
 	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
+	"opensro.online/server/internal/game/market"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
@@ -116,6 +117,16 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			game.creditOnlineSessions(sessionViews(ticker.Source), nowMs)
 			return nil
 		}},
+	}
+	// Port-only (#3529, SRO_CONSIGNMENT): gold a market sale owes a
+	// character reaches it once it is in the world (action market.go).
+	// Off installs no hook.
+	if market.FromEnv() {
+		hooks = append(hooks, simulation.NamedTickHook{Name: "market-proceeds", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			return game.items.MarketProceedsTick(game.divisionID, func() []simulation.SessionView {
+				return sessionViews(ticker.Source)
+			}, nowMs)
+		}})
 	}
 	// Native/off installs no hook and takes no extra session snapshots.
 	if game.betaSilk != nil {

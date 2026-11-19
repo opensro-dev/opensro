@@ -35,8 +35,12 @@ export function tooltipItems(
 	if ( id.startsWith( "arena-chest-item:" ) ) {
 		return game.arenaChest?.items.filter( row => row.slot === Number( id.slice( 17 ) ) ) ?? [];
 	}
+	if ( id.startsWith( "market-item:" ) ) return marketTooltipItems( id.slice( 12 ), game );
 	if ( id.startsWith( "slot:" ) ) item = game.inventory.find( row => row.slot === Number( id.slice( 5 ) ) );
-	else if ( id.startsWith( "item-mall-slot:" ) ) {
+	else if ( id.startsWith( "market-sell-slot:" ) ) {
+		// Port-only (#3529): the market's sell grid is the bag.
+		item = game.inventory.find( row => row.slot === Number( id.slice( 17 ) ) );
+	} else if ( id.startsWith( "item-mall-slot:" ) ) {
 		item = game.inventory.find( row => row.slot === Number( id.slice( "item-mall-slot:".length ) ) );
 	} else if ( id.startsWith( "avatar:" ) ) {
 		item = game.avatarInventory?.find( row => avatarSocket( row.typeFlags ) === Number( id.slice( 7 ) ) );
@@ -79,8 +83,10 @@ export function tooltipItems(
 	else if ( id.startsWith( "shop-buyback:" ) ) item = game.shop?.buyback?.[Number( id.slice( 13 ) )]?.item;
 	else if ( id.startsWith( "stall-slot:" ) ) {
 		item = game.stall?.offers.find( row => row.slot === Number( id.slice( "stall-slot:".length ) ) )?.item;
-	} else if ( id.startsWith( "stall-net-row:" ) ) {
-		item = game.stall?.network.rows[Number( id.slice( "stall-net-row:".length ) )]?.item;
+	} else if ( id.startsWith( "stall-net-item:" ) ) {
+		// The result row's CIFSlotWithHelp (ifstallnetworkslot 12) owns the
+		// help, so the tooltip sits beside the icon, not past the whole row.
+		item = game.stall?.network.rows[Number( id.slice( "stall-net-item:".length ) )]?.item;
 	} else if ( id.startsWith( "notice-item:" ) ) {
 		// Port-only: the item a chat-log notice names (notice-links.ts).
 		const sequence = parseInt( id.slice( "notice-item:".length ), 10 );
@@ -122,4 +128,28 @@ export function actionTooltipKey(
 	if ( actionId === 1000 ) return movementMode === 4 ? "UIIT_CTL_STAND" : "UIIT_CTL_SIT";
 	if ( actionId === 1001 ) return movementMode === 2 ? "UIIT_CTL_RUN" : "UIIT_CTL_WALK";
 	return actions.find( row => row.id === actionId )?.name;
+}
+
+/*
+================
+marketTooltipItems
+
+Port-only, not native (SRO_CONSIGNMENT, #3529): a market row's item,
+from the list that drew it - "browse:<listing>", "mine:<listing>",
+"in:<offer>", "out:<offer>" or "dialog:<listing>" (the open box's
+listing, which is a browse row).
+================
+*/
+function marketTooltipItems( key: string, game: GameplayState ): readonly InventoryItem[] {
+	const [list, raw] = key.split( ":" ), id = Number( raw ), market = game.market;
+	const item = list === "browse" || list === "dialog" ?
+		market?.browse?.rows.find( row => row.id === id )?.item :
+		list === "mine" ?
+		market?.mine?.listings.find( row => row.id === id )?.item :
+		list === "in" ?
+		market?.mine?.offersIn.find( offer => offer.id === id )?.item :
+		list === "out" ?
+		market?.mine?.offersOut.find( offer => offer.id === id )?.item :
+		undefined;
+	return item ? [ item ] : [];
 }

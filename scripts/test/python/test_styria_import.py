@@ -46,14 +46,6 @@ class StyriaImportTest(unittest.TestCase):
 		with self.assertRaisesRegex(ValueError, "dungeon"):
 			styria.arena_regions(region_rows(list(styria.ARENA_REGIONS) + [0x8000 | 5]))
 
-	def test_the_empty_monster_pass_keeps_the_region_record(self):
-		with tempfile.TemporaryDirectory() as temp:
-			marker = Path(temp) / styria.MARKER
-			marker.write_text(json.dumps({"regionMerge": {"regions": [31985]}, "stale": 1}))
-			summary = styria.write_marker(temp)
-			self.assertEqual(summary, {"enabled": True, "characters": 0})
-			self.assertEqual(json.loads(marker.read_text()), {"regionMerge": {"regions": [31985]}, "enabled": True})
-
 	def test_off_reaps_what_the_marker_enrolled_and_reads_no_archive(self):
 		with tempfile.TemporaryDirectory() as temp:
 			native, out = Path(temp) / "native", Path(temp) / "out"
@@ -75,23 +67,14 @@ class StyriaImportTest(unittest.TestCase):
 			self.assertIs(reap_kinds.call_args.args[0], styria.SPEC)
 			merge.assert_not_called()
 
-	def test_on_merges_the_regions_through_the_engine(self):
-		with tempfile.TemporaryDirectory() as temp:
-			native, out = Path(temp) / "native", Path(temp) / "out"
-			with mock.patch.dict(os.environ, {styria.FLAG: "on"}), \
-				mock.patch.object(styria, "require_v1696_pin"), \
-				mock.patch.object(styria, "open", mock.mock_open(), create=True), \
-				mock.patch.object(styria.mmap, "mmap") as mapped, \
-				mock.patch.object(styria.tables, "archive_index", return_value={}), \
-				mock.patch.object(styria.tables, "table_text", return_value=""), \
-				mock.patch.object(styria.tables, "table_rows", return_value=region_rows(styria.ARENA_REGIONS)), \
-				mock.patch.object(later_world_import, "merge_world", return_value={"enabled": True}) as merge:
-				mapped.return_value.__enter__.return_value = b""
-				self.assertEqual(styria.add_styria(native, out, v1696_root=temp), {"enabled": True})
-			spec, _native, _out, _root, regions, _monsters = merge.call_args.args
-			self.assertIs(spec, styria.SPEC)
-			self.assertEqual(regions, list(styria.ARENA_REGIONS))
-
+	def test_the_map_path_reads_the_arena_regions_from_regioncode(self):
+		with mock.patch.object(later_world_import, "add_map_world", return_value={"enabled": True}) as add:
+			self.assertEqual(styria.add_styria("n", "o", v1696_root="r"), {"enabled": True})
+		spec, native, out, root, rule = add.call_args.args
+		self.assertIs(spec, styria.SPEC)
+		self.assertEqual((native, out, root), ("n", "o", "r"))
+		tables = {"regioncode.txt": region_rows(styria.ARENA_REGIONS)}
+		self.assertEqual(rule(tables.__getitem__), list(styria.ARENA_REGIONS))
 
 if __name__ == "__main__":
 	unittest.main()

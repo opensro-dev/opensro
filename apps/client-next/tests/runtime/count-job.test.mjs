@@ -231,3 +231,40 @@ test("the reverse return runs from its type word", () => {
 	assert.equal( commandOfType( 0x36ec ), "resurrection" );
 	assert.equal( commandOfType( 0x72ec ), null );
 });
+
+test("gameplay sends a count-job use to the server, from the window button and the chat command", async () => {
+	const { createGameplay } = await import(
+		"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
+	);
+	const sent = [], g = createGameplay( frame => sent.push( frame ) );
+	// Only what the use reads; the full entity record is not needed.
+	const local = /** @type {import("../../src/engine/contracts/world").EntityState} */ (/** @type {unknown} */ ({
+		gid: 1,
+		countryByte9c: 1,
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	}));
+	g.bootstrap( {
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		refItemSnapshot: [],
+		equipItems: [],
+		character: { hp: 10, mp: 10, maxHp: 10, maxMp: 10 }
+	} );
+	g.worldReady();
+	g.seed( local );
+	g.references( [ { refObjId: 50134, typeFlags: 0x09ec, name: "Scroll" }, {
+		refObjId: 777,
+		typeFlags: 0x72ec,
+		name: "Pkg"
+	} ] );
+	g.receive( { opcode: 0x3021, payload: Uint8Array.of( ...u32( 777 ), ...u32( 3600 ), ...u32( 50134 ), 1 ) }, 0 );
+	g.command( { kind: "count-job-use", packageRefObjId: 777, itemRefObjId: 50134 }, 10, undefined, local );
+	assert.deepEqual( sent.filter( f => f.opcode === 0x76fd ).map( f => [ ...f.payload ] ), [
+		[ ...u32( 777 ), ...u32( 50134 ) ]
+	] );
+});

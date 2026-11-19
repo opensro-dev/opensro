@@ -16,6 +16,14 @@ answers 404, which is native.
 	POST /v1/accounts/{id}/market/buy             {listing, version, character} -> 201
 	POST /v1/accounts/{id}/market/{listing}/cancel     -> 204
 	POST /v1/accounts/{id}/market/{listing}/take-back  -> 204
+	POST /v1/accounts/{id}/market/offer           {listing, price, character} -> 201
+	POST /v1/accounts/{id}/market/offers/{offer}/accept   -> 201 the sale
+	POST /v1/accounts/{id}/market/offers/{offer}/reject   -> 204
+	POST /v1/accounts/{id}/market/offers/{offer}/withdraw -> 204
+
+A listing names its seller's character unless the seller chose to list
+anonymously (owner, 2026-11-19); a warehouse listing has no character
+and names none.
 
 A refusal answers {"error": code} with one of the marketError codes, so
 the site can say what happened in its own words. None charges anything.
@@ -54,6 +62,36 @@ const (
 	MarketSortPriceDesc = "price-desc"
 )
 
+// The race and rarity filters. An item either race wears (country 3, and
+// every item that is no equipment) matches both races.
+const (
+	MarketRaceChinese  = "ch"
+	MarketRaceEuropean = "eu"
+	MarketRaritySealed = "sealed"
+	MarketRarityNormal = "normal"
+)
+
+/*
+================
+MarketFilterValid
+
+Whether a race and a rarity filter are known values ("" is any): one
+check for the site's query and the in-game window.
+================
+*/
+func MarketFilterValid(race, rarity string) bool {
+	switch race {
+	case "", MarketRaceChinese, MarketRaceEuropean:
+	default:
+		return false
+	}
+	switch rarity {
+	case "", MarketRaritySealed, MarketRarityNormal:
+		return true
+	}
+	return false
+}
+
 /*
 ================
 MarketSource
@@ -71,19 +109,27 @@ type MarketSource interface {
 	Buy(account string, body MarketBuyBody) (MarketSaleView, error)
 	Cancel(account string, listing int64) error
 	TakeBack(account string, listing int64) error
+	MakeOffer(account string, body MarketOfferBody) (MarketOfferView, error)
+	AcceptOffer(account string, offer int64) (MarketSaleView, error)
+	RejectOffer(account string, offer int64) error
+	WithdrawOffer(account string, offer int64) error
 }
 
 /*
 ================
 MarketSearch
 
-A parsed search: Degree 0 and the empty strings mean "any".
+A parsed search: Degree 0 and the empty strings mean "any". Race is
+MarketRaceChinese or MarketRaceEuropean; Rarity is MarketRaritySealed or
+MarketRarityNormal.
 ================
 */
 type MarketSearch struct {
 	Q        string
 	Category string
 	Degree   int
+	Race     string
+	Rarity   string
 	Currency string
 	Sort     string
 	Page     int
@@ -108,11 +154,16 @@ type MarketItem struct {
 	Name     string `json:"name"`
 	Category string `json:"category"`
 	Degree   int    `json:"degree"`
-	Plus     int64  `json:"plus"`
-	Quantity int64  `json:"quantity"`
+	// Race is the race that wears it ("ch", "eu"), "" for either.
+	Race string `json:"race,omitempty"`
+	// Sealed is a sealed (rare) item.
+	Sealed   bool  `json:"sealed,omitempty"`
+	Plus     int64 `json:"plus"`
+	Quantity int64 `json:"quantity"`
 }
 
-// MarketListingView is one listing. The seller is never named.
+// MarketListingView is one listing. Seller is the listing character's
+// name, "" when the seller listed anonymously or from the warehouse.
 type MarketListingView struct {
 	ID        int64      `json:"id"`
 	Version   int64      `json:"version"`
@@ -122,6 +173,15 @@ type MarketListingView struct {
 	ListedMs  int64      `json:"listedMs"`
 	ExpiresMs int64      `json:"expiresMs"`
 	State     string     `json:"state"`
+	Seller    string     `json:"seller,omitempty"`
+	// Anonymous is shown to the seller alone, on its own listings.
+	Anonymous bool `json:"anonymous,omitempty"`
+	// Row is the listed item itself, for the in-game window's item
+	// preview (game/action market.go); the site never receives it.
+	Row domain.InventoryRow `json:"-"`
+	// SellerChar is the listing character, 0 for a warehouse listing: the
+	// game shows a character only its own (game/market GameAccount).
+	SellerChar int64 `json:"-"`
 }
 
 // MarketListingsResponse is one search page.
@@ -132,13 +192,42 @@ type MarketListingsResponse struct {
 	Total    int                 `json:"total"`
 }
 
-// MarketSaleView is one purchase.
+// MarketSaleView is one purchase. To is where the item went (bag or
+// warehouse) and Slot the slot it took there.
 type MarketSaleView struct {
 	ListingID int64  `json:"listingId"`
 	Currency  string `json:"currency"`
 	Price     int64  `json:"price"`
 	Fee       int64  `json:"fee"`
 	AtMs      int64  `json:"atMs"`
+	To        string `json:"to"`
+	Slot      int64  `json:"slot"`
+	// Item names the item; SellerChar is the listing character, for the
+	// game's seller notice, and never leaves the server.
+	Item       string `json:"item,omitempty"`
+	SellerChar int64  `json:"-"`
+	// BuyerChar is the buying character, 0 for a website buy.
+	BuyerChar int64 `json:"-"`
+}
+
+// MarketOfferView is one offer, with the listing's item and asked price.
+// Buyer names the offering character to the seller.
+type MarketOfferView struct {
+	ID        int64      `json:"id"`
+	ListingID int64      `json:"listingId"`
+	Item      MarketItem `json:"item"`
+	Currency  string     `json:"currency"`
+	Asked     int64      `json:"asked"`
+	Price     int64      `json:"price"`
+	Buyer     string     `json:"buyer"`
+	To        string     `json:"to"`
+	State     string     `json:"state"`
+	AtMs      int64      `json:"atMs"`
+	// Row is the listed item, for the in-game preview; the two parties'
+	// characters route the game's notices. None is sent to the site.
+	Row        domain.InventoryRow `json:"-"`
+	SellerChar int64               `json:"-"`
+	BuyerChar  int64               `json:"-"`
 }
 
 // MarketWarehouseItem is one warehouse row the player may list.
@@ -161,6 +250,7 @@ type MarketRulesView struct {
 	FeePercent int64 `json:"feePercent"`
 	DurationMs int64 `json:"durationMs"`
 	OpenCap    int   `json:"openCap"`
+	OfferCap   int   `json:"offerCap"`
 }
 
 // OwnMarketResponse is GET /v1/accounts/{id}/market.
@@ -172,6 +262,10 @@ type OwnMarketResponse struct {
 	Characters    []MarketCharacter     `json:"characters"`
 	Silk          uint32                `json:"silk"`
 	Rules         MarketRulesView       `json:"rules"`
+	// OffersIn are the open offers on the account's listings, OffersOut
+	// the account's own.
+	OffersIn  []MarketOfferView `json:"offersIn"`
+	OffersOut []MarketOfferView `json:"offersOut"`
 }
 
 // MarketListBody is POST .../market/list.
@@ -187,6 +281,15 @@ type MarketBuyBody struct {
 	Listing   int64  `json:"listing"`
 	Version   int64  `json:"version"`
 	Character string `json:"character,omitempty"`
+}
+
+// MarketOfferBody is POST .../market/offer. Character names the offering
+// character: the gold payer of a gold listing, and the one an accepted
+// offer delivers to. A website offer's item goes to the warehouse.
+type MarketOfferBody struct {
+	Listing   int64  `json:"listing"`
+	Price     int64  `json:"price"`
+	Character string `json:"character"`
 }
 
 // ErrMarketOnline refuses a website gold buy from an online character.
@@ -225,8 +328,35 @@ func marketError(err error) (int, string) {
 		return http.StatusUnprocessableEntity, "funds"
 	case errors.Is(err, domain.ErrMarketPrice):
 		return http.StatusBadRequest, "price"
+	case errors.Is(err, domain.ErrMarketBagFull):
+		return http.StatusConflict, "bag-full"
+	case errors.Is(err, domain.ErrMarketOfferPrice):
+		return http.StatusUnprocessableEntity, "offer-price"
+	case errors.Is(err, domain.ErrMarketOfferOpen):
+		return http.StatusConflict, "offer-open"
+	case errors.Is(err, domain.ErrMarketOfferCap):
+		return http.StatusConflict, "offer-cap"
+	case errors.Is(err, domain.ErrMarketOfferGone):
+		return http.StatusConflict, "offer-gone"
+	case errors.Is(err, domain.ErrMarketBuyerFunds):
+		return http.StatusConflict, "buyer-funds"
+	case errors.Is(err, domain.ErrMarketBuyerFull):
+		return http.StatusConflict, "buyer-full"
 	}
 	return http.StatusServiceUnavailable, "unavailable"
+}
+
+/*
+================
+MarketErrorCode
+
+The refusal's code alone, for a front end that is not HTTP: the in-game
+window (game/action market.go) names refusals with the site's codes.
+================
+*/
+func MarketErrorCode(err error) string {
+	_, code := marketError(err)
+	return code
 }
 
 /*
@@ -293,6 +423,61 @@ func (s *Service) installMarket(mux *http.ServeMux, digest [sha256.Size]byte) {
 	mux.HandleFunc("POST /v1/accounts/{id}/market/{listing}/take-back", func(w http.ResponseWriter, r *http.Request) {
 		s.marketListingAction(w, r, digest, market.TakeBack)
 	})
+	mux.HandleFunc("POST /v1/accounts/{id}/market/offer", func(w http.ResponseWriter, r *http.Request) {
+		if !authorized(w, r, digest) {
+			return
+		}
+		var body MarketOfferBody
+		if !decodeMarketBody(w, r, &body) || body.Listing < 1 || body.Price < 1 || body.Character == "" ||
+			len(body.Character) > maxNameLength {
+			writeStatus(w, http.StatusBadRequest, "body")
+			return
+		}
+		answer, err := market.MakeOffer(r.PathValue("id"), body)
+		writeMarketAnswer(w, http.StatusCreated, answer, err)
+	})
+	mux.HandleFunc("POST /v1/accounts/{id}/market/offers/{offer}/accept", func(w http.ResponseWriter, r *http.Request) {
+		if !authorized(w, r, digest) {
+			return
+		}
+		offer, err := strconv.ParseInt(r.PathValue("offer"), 10, 64)
+		if err != nil || offer < 1 {
+			writeStatus(w, http.StatusNotFound, "offer-gone")
+			return
+		}
+		answer, err := market.AcceptOffer(r.PathValue("id"), offer)
+		writeMarketAnswer(w, http.StatusCreated, answer, err)
+	})
+	mux.HandleFunc("POST /v1/accounts/{id}/market/offers/{offer}/reject", func(w http.ResponseWriter, r *http.Request) {
+		s.marketOfferAction(w, r, digest, market.RejectOffer)
+	})
+	mux.HandleFunc("POST /v1/accounts/{id}/market/offers/{offer}/withdraw", func(w http.ResponseWriter, r *http.Request) {
+		s.marketOfferAction(w, r, digest, market.WithdrawOffer)
+	})
+}
+
+/*
+================
+marketOfferAction
+
+A reject or withdraw: 204, or the refusal's code.
+================
+*/
+func (s *Service) marketOfferAction(w http.ResponseWriter, r *http.Request, digest [sha256.Size]byte, act func(string, int64) error) {
+	if !authorized(w, r, digest) {
+		return
+	}
+	offer, err := strconv.ParseInt(r.PathValue("offer"), 10, 64)
+	if err != nil || offer < 1 {
+		writeStatus(w, http.StatusNotFound, "offer-gone")
+		return
+	}
+	if err := act(r.PathValue("id"), offer); err != nil {
+		status, code := marketError(err)
+		writeStatus(w, status, code)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 /*
@@ -329,8 +514,8 @@ The search from the query; false for any value outside its list.
 func parseMarketSearch(r *http.Request, categories []MarketCategory) (MarketSearch, bool) {
 	query := r.URL.Query()
 	search := MarketSearch{Q: query.Get("q"), Category: query.Get("category"), Currency: query.Get("currency"),
-		Sort: query.Get("sort"), Page: 1}
-	if len(search.Q) > maxMarketQuery {
+		Race: query.Get("race"), Rarity: query.Get("rarity"), Sort: query.Get("sort"), Page: 1}
+	if len(search.Q) > maxMarketQuery || !MarketFilterValid(search.Race, search.Rarity) {
 		return search, false
 	}
 	if search.Category != "" && !knownCategory(categories, search.Category) {

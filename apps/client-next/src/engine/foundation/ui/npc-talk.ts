@@ -136,6 +136,10 @@ export interface NpcTalkInput {
 	// "Teleport to return point", 0x7495 type 1.
 	readonly canReturnPoint?: boolean;
 	readonly canStorage?: boolean;
+	// Port-only, not native (SRO_CONSIGNMENT, #3529): the storage keeper's
+	// consignment market row, after the storage row, while the Experimental
+	// row is on.
+	readonly canMarket?: boolean;
 	// canAcademyOpen is 5D9100's row 0x2D under capability 4: a campless
 	// player of level 60 or more may open an Academy.
 	readonly canAcademyOpen?: boolean;
@@ -245,6 +249,9 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 					...(input.canStorage ?
 						[ { id: "npc-academy-honor", label: copy( "UIIT_STT_TC_HONOR_RANKING" ) } ] :
 						[]),
+					// Port-only (#3529): after the storage keeper's native rows, so
+					// they keep their order.
+					...(input.canMarket ? [ { id: "market-open", label: "Consignment market" } ] : []),
 					// 5D9100 lists row 0x2F after the storage rows.
 					...(input.canMagicOption ?
 						[ {

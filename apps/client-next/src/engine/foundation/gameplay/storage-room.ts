@@ -4,11 +4,19 @@
 storage-room.ts - the NPC warehouse (CIFStorageRoom) state and wire
 
 The talk menu's storage row (CIFNpcTalk_ExecuteMenuAction case 3) sends
-0x72C3 [u32 npc][u8 0] while the room is unloaded, then, once the gold
+0x72C3 [u32 npc][u8 0] first, then, once the gold
 (0x3126) and the list (0x321A) arrived, the storage function itself:
-0x7338 [u32 npc][u32 4]. B338 [1][u32 4] opens the room. A loaded room is
-not listed again in the session (+0x7BC); the next visit asks for the
-function directly.
+0x7338 [u32 npc][u32 4]. B338 [1][u32 4] opens the room.
+
+Port-only, not native: the original lists a loaded room once per session
+(+0x7BC) and asks later visits for the function directly, which is safe
+only because its account holds one session. The port binds play per
+character, so another character of the same account can change the
+account's warehouse between two visits (#3944's report: a second
+character emptied it while the first still drew the old rows). Every
+visit therefore lists the room again; with one session the list is the
+same room the copy held. The server keeps the room to one open window
+per account (storage.go accountStorageHolder).
 
 Moves ride 0x706D (ItemMoveRequest_Serialize) and answer on 0xB06D:
 
@@ -322,8 +330,8 @@ export function guildStorageFunctionRequest( npc: number ): WireFrame {
 ================
 createStorageRoom
 
-The owner of the local player's warehouse: the session's loaded flag
-(+0x7BC), the room rows and gold, and the open phase. Moves change the room
+The owner of the local player's warehouse: the room rows and gold, and
+the open phase. Moves change the room
 only through apply(), fed by the inventory transaction that owns them.
 ================
 */
@@ -332,25 +340,18 @@ export function createStorageRoom( send: ( frame: WireFrame ) => void ) {
 	// The room a close left while a move it admitted may still be answered:
 	// the warehouse data outlives its window, so the echo settles here.
 	let closed: StorageRoom | null = null;
-	let loaded: { readonly capacity: number; readonly gold: string; readonly items: readonly InventoryItem[]; } | null =
-		null;
 	let gold = "0";
 	return {
 		/*
 ================
 open
 
-The talk menu's storage row: list the room once, then ask for the function.
+The talk menu's storage row: list the room, then ask for the function.
 ================
 		*/
 		open( npc: number ) {
 			if ( !Number.isInteger( npc ) || npc < 1 || npc > 0xffffffff ) throw Error( "Invalid storage NPC" );
 			closed = null;
-			if ( loaded ) {
-				room = { npc, phase: "opening", ...loaded };
-				send( storageOpenRequest( npc ) );
-				return;
-			}
 			room = { npc, phase: "listing", capacity: 0, gold, items: [] };
 			send( storageListRequest( npc ) );
 		},
@@ -431,9 +432,8 @@ True when the frame belonged to the warehouse.
 			}
 			if ( frame.opcode === OP_STORAGE_LIST ) {
 				const list = decodeStorageList( frame.payload, refs, objRefs );
-				loaded = { ...list, gold };
 				if ( room?.phase === "listing" ) {
-					room = { ...room, phase: "opening", ...loaded };
+					room = { ...room, phase: "opening", ...list, gold };
 					send( storageOpenRequest( room.npc ) );
 				}
 				return true;
@@ -463,14 +463,14 @@ or not the window is still open.
 			if ( room ) room = next;
 			else closed = next;
 			if ( next.guild ) return;
-			loaded = { capacity: next.capacity, gold: next.gold, items: next.items };
 			gold = next.gold;
 		},
 		/*
 ================
 close
 
-Leaving the warehouse keeps the session copy (+0x7BC stays set).
+Leaving the warehouse keeps the closed room, so a move answered after the
+close still settles.
 ================
 		*/
 		close() {
@@ -493,13 +493,12 @@ close left behind.
 ================
 reset
 
-World leave: the next session lists again.
+World leave.
 ================
 		*/
 		reset() {
 			room = null;
 			closed = null;
-			loaded = null;
 			gold = "0";
 		},
 		/*
