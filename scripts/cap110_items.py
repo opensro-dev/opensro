@@ -17,6 +17,7 @@ import re
 
 import alexandria_npcs as text_tables
 import import_vsro_alexandria as tables
+import published_ids
 from build_alexandria_variant import native_text_row
 
 ITEM_COLUMNS = 160
@@ -188,11 +189,24 @@ def plain_worn_models(equipment):
 # roc admits the Roc's set armour too. Its pieces are armour and ITEM_ROC_
 # sorts after every ITEM_CH_ and ITEM_EU_ code, so they number after every
 # other piece and a fresh overlay numbers the rest the same either way.
+#
+# pinned is the released object pin (published_ids.published): a piece
+# this merge adds keeps its released id, and every other released id stays
+# reserved, so a flag that adds pieces never moves one a player holds
+# (#3815). Only the pieces this merge adds count as its own: a later code it
+# leaves out (another import's honor goods) keeps its id reserved here.
 # ================
-def merge_equipment(native_rows, later_rows, reserved_ids=(), previous_ids=None, roc=False):
+def merge_equipment(native_rows, later_rows, reserved_ids=(), previous_ids=None, roc=False, pinned=None):
 	native, later = index_items(native_rows), index_items(later_rows)
 	occupied = {int(row[IDENTITY]) for row in native_rows + later_rows} | set(reserved_ids)
 	previous_ids = previous_ids or {}
+	if pinned:
+		adding = [code for code, row in later.items() if code not in native and equipment_degree(row, roc) in DEGREES]
+		targets = {code: int(entry["target"]) for code, entry in previous_ids.items()}
+		held, targets = published_ids.overlay(pinned, adding, occupied, targets)
+		occupied |= held
+		previous_ids = {code: previous_ids[code] if code in previous_ids and int(previous_ids[code]["target"]) == identity
+			else {"source": int(later[code][IDENTITY]), "target": identity} for code, identity in targets.items()}
 	retained = {int(entry["target"]) for entry in previous_ids.values()}
 	if len(retained) != len(previous_ids) or retained & occupied or any(not 0 < identity <= MAX_ID for identity in retained):
 		raise ValueError("previous imported IDs collide or exceed the wire width")

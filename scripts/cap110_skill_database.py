@@ -79,13 +79,14 @@ def load_database_rows(path):
 # Client tier first, database tier second: published client IDs/groups become
 # immutable native inputs to the second pass. Cross-source numeric IDs never
 # become runtime identities, and existing marker entries survive rebuilds.
+# pinned (published_ids, the released skill pin) reaches both passes.
 # ================
-def merge_database_tier(native, client, database, prior):
+def merge_database_tier(native, client, database, prior, pinned=None):
 	client_codes = {r[skills.CODENAME] for r in client}
 	old_ids = prior.get("idMap", {})
 	client_ids = {code: entry for code, entry in old_ids.items() if code in client_codes}
 	added, summary = skills.merge_skills(native, client, previous_ids=client_ids,
-		previous_groups=prior.get("newGroupIds"))
+		previous_groups=prior.get("newGroupIds"), pinned=pinned)
 	if not database:
 		if len(client_ids) != len(old_ids):
 			raise ValueError("published database skills require the configured database snapshot")
@@ -95,7 +96,7 @@ def merge_database_tier(native, client, database, prior):
 	database = [r for r in database if int(r[skills.MASTERY_LEVEL]) <= MAX_MASTERY]
 	database_ids = {code: entry for code, entry in old_ids.items() if code not in client_codes}
 	extra, report = skills.merge_skills(native + added, database, previous_ids=database_ids,
-		previous_groups=prior.get("databaseNewGroupIds"))
+		previous_groups=prior.get("databaseNewGroupIds"), pinned=pinned)
 	if any(int(r[skills.MASTERY_LEVEL]) <= 100 for r in extra):
 		raise ValueError("database supplement must contain only mastery 101-110 additions")
 	for key in ("added", "learnableRanks", "chainSubRanks", "groupsMappedToNative"):

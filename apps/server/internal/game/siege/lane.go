@@ -308,7 +308,9 @@ Windows
 
 The registration and war windows from the same schedules that drive the
 war (no second timetable), for the community site's calendar. A schedule
-with no window left is omitted.
+with no window left is omitted. The application days are one daily block
+each, so each window is reported as its joined span (Schedule.Span): the
+calendar shows Sunday to Tuesday, not Sunday alone.
 ================
 */
 func (l *Lane) Windows(nowMs int64) []Window {
@@ -318,7 +320,7 @@ func (l *Lane) Windows(nowMs int64) []Window {
 	now := time.UnixMilli(nowMs).In(l.config.Location)
 	var out []Window
 	for _, name := range publicWindows {
-		start, end, ok := l.config.Schedules[name].Window(now)
+		start, end, ok := l.config.Schedules[name].Span(now)
 		if !ok {
 			continue
 		}

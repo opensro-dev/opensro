@@ -50,6 +50,7 @@ import cap110_item_import as shared
 import cap110_items as items
 import import_vsro_alexandria as tables
 from pin_file import read_pin_field
+import published_ids
 import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import EXTRACTED_ROOT, REPO_ROOT, trees_overlap
@@ -195,10 +196,11 @@ def previous_targets(prior):
 # select_avatars
 #
 # missing(row) returns the names of a row's absent resources. Identities:
-# a retained one first, else the later one when free, else a fresh one.
+# a released one first (pinned, published_ids.overlay), else a retained
+# one, else the later one when free, else a fresh one.
 # ================
 def select_avatars(native_rows, later_rows, reserved_ids=(), previous=None, missing=lambda row: [], texts=None,
-		any_prefix=False):
+		any_prefix=False, pinned=None):
 	native, later = items.index_items(native_rows), items.index_items(later_rows)
 	taken = {int(row[items.IDENTITY]) for row in native_rows} | set(reserved_ids)
 	previous = previous or {}
@@ -220,6 +222,9 @@ def select_avatars(native_rows, later_rows, reserved_ids=(), previous=None, miss
 		chosen.append(row)
 	if not chosen:
 		raise ValueError("no mall avatar rows to import")
+	if pinned:
+		held, previous = published_ids.overlay(pinned, [row[items.CODENAME] for row in chosen], taken, previous)
+		taken |= held
 	targets = {}
 	for row in chosen:
 		code = row[items.CODENAME]
@@ -781,7 +786,7 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 		avatars, summary = select_avatars(
 			native_rows, later_rows, reserved, previous_targets(prior),
 			resource_check(archives, native_paths), known_text,
-			any_prefix=bool(source.get("boards")),
+			any_prefix=bool(source.get("boards")), pinned=published_ids.published(published_ids.OBJECTS),
 		)
 		merged_text, missing_descriptions = items.merge_texts(base_text, later_texts, avatars)
 		assets = shared.copy_asset_closure(avatars, native, output, archives)
