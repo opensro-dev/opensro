@@ -52,6 +52,7 @@ import alexandria_npcs as text_tables
 import cap110_item_import as shared
 import cap110_items as items
 import cap110_monsters as cap110
+import published_ids
 import import_vsro_alexandria as tables
 import mall_avatar_import as avatars
 import skilldata_enc as skill_tables
@@ -249,7 +250,7 @@ def add_nasrun(vsro_root, native, output):
 					occupied.add(int(row[items.IDENTITY]))
 					if row[items.CODENAME] in codes:
 						raise ValueError(f"Nasrun row {row[items.CODENAME]} already stands in the item tables")
-		allocated = cap110.allocate_identities(occupied, codes, prior.get("items", {}))
+		allocated = published_ids.allocate(published_ids.OBJECTS, occupied, codes, prior.get("items", {}))
 		staged = []
 		for row in rows:
 			converted = list(row)
@@ -420,7 +421,7 @@ def add_nasrun_skills(vsro_root, native, output):
 					occupied.add(int(row[SKILL_ID]))
 					if row[SKILL_CODENAME] in SKILL_CODES:
 						raise ValueError(f"Nasrun skill {row[SKILL_CODENAME]} already stands in the skill tables")
-		allocated = cap110.allocate_identities(occupied, list(SKILL_CODES), prior.get("skills", {}))
+		allocated = published_ids.allocate(published_ids.SKILLS, occupied, list(SKILL_CODES), prior.get("skills", {}))
 		staged = []
 		for row in rows:
 			converted = list(row)

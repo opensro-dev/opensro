@@ -24,9 +24,9 @@ import os
 import sys
 from pathlib import Path
 
-# The published character pin (cap110_monsters.published_characters): a
-# fixture names its own, so the real one never reserves ids in a test tree.
-os.environ["SRO_PUBLISHED_CHARACTERS"] = ""
+# The published identity pin (published_ids.published): a fixture names
+# its own, so the real one never reserves ids in a test tree.
+os.environ["SRO_PUBLISHED_IDENTITIES"] = ""
 
 SCRIPTS = Path(__file__).resolve().parents[2]
 FOLDERS = (SCRIPTS, SCRIPTS / "build", SCRIPTS / "build" / "catalogue", SCRIPTS / "analysis")

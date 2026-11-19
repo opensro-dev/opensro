@@ -59,6 +59,7 @@ import cap110_monsters
 import cap110_item_import as shared
 import cap110_items as items
 import import_vsro_alexandria as tables
+import published_ids
 import later_world_import
 from pin_file import read_pin_field
 from prepare_client_resources import safe_target, write_atomically
@@ -181,7 +182,8 @@ def previous_targets(prior):
 # the one owner of the 104 -> 120 column map). The item rows need no map:
 # itemdata is 160 columns in every client.
 # ================
-def select_pets(native_chars, native_items, earlier_codes, later_chars, later_items, previous=None, missing=lambda family, rows: [], reserved_ids=()):
+def select_pets(native_chars, native_items, earlier_codes, later_chars, later_items, previous=None, missing=lambda family, rows: [], reserved_ids=(),
+		pinned=None):
 	native_codes = {row[CHAR_CODE] for row in native_chars if len(row) > CHAR_CODE}
 	taken_ids = {int(row[CHAR_ID]) for row in native_chars if len(row) > CHAR_ID and row[CHAR_ID].isdigit()}
 	taken_ids |= {int(row[items.IDENTITY]) for row in native_items if len(row) > items.IDENTITY and row[items.IDENTITY].isdigit()}
@@ -220,9 +222,16 @@ def select_pets(native_chars, native_items, earlier_codes, later_chars, later_it
 			skipped.append({"family": family, "kind": kind, "missing": absent})
 			continue
 		chosen.append((family, kind, fresh_rows, linked))
-	# Identities: a retained one first, else the later one when free,
-	# else a fresh one above every known identity. Character and item
-	# rows share one identity space in the built data.
+	# Identities: a released one first (pinned, published_ids.overlay:
+	# every other released object id stays taken), else a retained one,
+	# else the later one when free, else a fresh one above every known
+	# identity. Character and item rows share one identity space in the
+	# built data.
+	if pinned:
+		staged = [row[CHAR_CODE] for _, _, rows, _ in chosen for row in rows]
+		staged += [row[items.CODENAME] for _, _, _, linked in chosen for row in linked]
+		held, previous = published_ids.overlay(pinned, staged, taken_ids, previous)
+		taken_ids |= held
 	targets = {}
 
 	def claim(code, source_id):
@@ -322,15 +331,14 @@ def later_tables_from_pk2(root):
 # own shards: earlier pet sources wrote theirs there, and so did every
 # other importer sharing the build. This source's own shard is left out
 # because the pass rewrites it whole and the marker retains its rows.
-# The character ids live publishes are taken too, whether or not their
-# importer has written its shard yet: run before the Arabia import, a
-# fresh pet took 18 of Arabia's published ids (r201's refused catalogue).
+# The ids a release published are select_pets' pinned, whether or not
+# their importer has written its shard yet: run before the Arabia import,
+# a fresh pet took 18 of Arabia's published ids (r201's refused catalogue).
 # ================
-def output_reserved_ids(output, source, published=None):
+def output_reserved_ids(output, source):
 	text_root = Path(output) / TEXT_ROOT
 	own = {source["char_shard"].lower(), source["item_shard"].lower()}
-	published = cap110_monsters.published_characters() if published is None else published
-	reserved = set(published.values())
+	reserved = set()
 	for pattern, column in (("characterdata_*.txt", CHAR_ID), ("itemdata_*.txt", items.IDENTITY)):
 		for path in text_root.glob(pattern):
 			if path.name.lower() in own:
@@ -479,7 +487,7 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 		char_rows, item_rows, report = select_pets(
 			native_chars, native_items, set(earlier_codes), later_chars, later_items,
 			previous=previous_targets(prior), missing=missing,
-			reserved_ids=output_reserved_ids(output, source))
+			reserved_ids=output_reserved_ids(output, source), pinned=published_ids.published(published_ids.OBJECTS))
 	if char_rows:
 		_merge_name_text(output, char_rows, item_rows, later_text, report)
 	return _write_pass(output, source, char_rows, item_rows, report)
@@ -524,7 +532,7 @@ def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 	char_rows, item_rows, report = select_pets(
 		native_chars, native_items, set(earlier_codes), later_chars, later_items,
 		previous=previous_targets(prior), missing=missing,
-		reserved_ids=output_reserved_ids(output, ARCHIVE_SOURCE))
+		reserved_ids=output_reserved_ids(output, ARCHIVE_SOURCE), pinned=published_ids.published(published_ids.OBJECTS))
 	if char_rows:
 		_merge_name_text(output, char_rows, item_rows, later_text, report)
 		# The archive's resources join the staging tree at their pk2
