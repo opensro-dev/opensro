@@ -11,10 +11,55 @@ the item goes, the Sell terms, and the requests each click sends.
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { defined } from "../helpers/defined.mjs";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
 const { createMarketHud } = await import( "../../src/engine/runtime/ui/hud/market-hud.ts" );
 
-const item = ( name, extra = {} ) => ({ slot: 0, refObjId: 3117, typeFlags: 1, name, quantity: 1, plus: 0, ...extra });
+/** @typedef {import("../../src/engine/contracts/gameplay.ts").InventoryItem} InventoryItem */
+/** @typedef {import("../../src/engine/contracts/market.ts").MarketRow} MarketRow */
+/** @typedef {import("../../src/engine/contracts/market.ts").MarketState} MarketState */
+
+/** @typedef {import("../../src/engine/contracts/market.ts").MarketRequest} MarketRequest */
+/** @typedef {ReturnType<typeof createMarketHud>} MarketHud */
+/** @typedef {Parameters<MarketHud["activate"]>[1]} MarketContext */
+
+/*
+================
+requests
+
+What a click sends; the click must be one the window handles.
+================
+*/
+/** @param {MarketHud} hud @param {string} id @param {MarketContext} context @returns {readonly MarketRequest[]} */
+const requests = ( hud, id, context ) => defined( hud.activate( id, context ), id ).requests;
+
+/*
+================
+search
+
+The one search a filter click sends.
+================
+*/
+/** @param {MarketHud} hud @param {string} id @param {MarketContext} context */
+function search( hud, id, context ) {
+	const sent = requests( hud, id, context );
+	assert.equal( sent.length, 1, id );
+	const request = defined( sent[0], id );
+	if ( request.op !== "search" ) throw new Error( `${id} sent ${request.op}, not a search` );
+	return request;
+}
+
+/** @param {string} name @param {Record<string, unknown>} [extra] @returns {InventoryItem} */
+const item = ( name, extra = {} ) => /** @type {InventoryItem} */ ({
+	slot: 0,
+	refObjId: 3117,
+	typeFlags: 1,
+	name,
+	quantity: 1,
+	plus: 0,
+	...extra
+});
+/** @param {number} id @param {Partial<MarketRow>} [extra] @returns {MarketRow} */
 const row = ( id, extra = {} ) => ({
 	id,
 	version: 2,
@@ -27,10 +72,12 @@ const row = ( id, extra = {} ) => ({
 	anonymous: false,
 	category: "weapon",
 	degree: 1,
+	sealed: false,
 	item: item( "Iron Sword" ),
 	...extra
 });
 const rules = { feePercent: 1, durationMs: 86400000, openCap: 20, offerCap: 20 };
+/** @param {Partial<MarketState>} [extra] @returns {MarketState} */
 const market = ( extra = {} ) => ({
 	categories: [ { slug: "weapon", name: "Weapons" } ],
 	browse: {
@@ -228,10 +275,10 @@ test("the drafts: an offer below the price, a listing's terms, the take-back pla
 	hud.activate( "market-pick:7", context );
 	hud.activate( "market-offer", context );
 	hud.edit( "market-offer-price", "1000" );
-	assert.deepEqual( hud.activate( "market-dialog-confirm", context ).requests, [], "at the asking price" );
+	assert.deepEqual( requests( hud, "market-dialog-confirm", context ), [], "at the asking price" );
 	hud.edit( "market-offer-price", "0x9a00" );
-	assert.equal( hud.state().dialog.price, "900" );
-	assert.deepEqual( hud.activate( "market-dialog-confirm", context ).requests, [ {
+	assert.equal( defined( hud.state().dialog ).price, "900" );
+	assert.deepEqual( requests( hud, "market-dialog-confirm", context ), [ {
 		op: "offer",
 		listing: 7,
 		price: 900,
@@ -240,12 +287,12 @@ test("the drafts: an offer below the price, a listing's terms, the take-back pla
 	hud.activate( "market-dialog-cancel", context );
 
 	hud.activate( "market-tab:sell", context );
-	assert.deepEqual( hud.activate( "market-list", context ).requests, [], "no item picked" );
+	assert.deepEqual( requests( hud, "market-list", context ), [], "no item picked" );
 	hud.activate( "market-sell-slot:20", context );
 	hud.activate( "market-sell-currency:silk", context );
 	hud.activate( "market-anonymous", context );
 	hud.edit( "market-price", "050" );
-	assert.deepEqual( hud.activate( "market-list", context ).requests, [ {
+	assert.deepEqual( requests( hud, "market-list", context ), [ {
 		op: "list",
 		slot: 20,
 		currency: "silk",
@@ -255,9 +302,9 @@ test("the drafts: an offer below the price, a listing's terms, the take-back pla
 
 	hud.activate( "market-tab:mine", context );
 	hud.activate( "market-mine:9", context );
-	assert.deepEqual( hud.activate( "market-cancel", context ).requests, [], "a held listing is taken back" );
+	assert.deepEqual( requests( hud, "market-cancel", context ), [], "a held listing is taken back" );
 	hud.activate( "market-return-to:warehouse", context );
-	assert.deepEqual( hud.activate( "market-takeback", context ).requests, [ {
+	assert.deepEqual( requests( hud, "market-takeback", context ), [ {
 		op: "takeback",
 		listing: 9,
 		to: "warehouse"
@@ -266,10 +313,10 @@ test("the drafts: an offer below the price, a listing's terms, the take-back pla
 	hud.activate( "market-tab:offers", context );
 	hud.activate( "market-offer-in:4", context );
 	assert.deepEqual( hud.activate( "market-offer-whisper", context ), { requests: [], whisper: "Lulu" } );
-	assert.deepEqual( hud.activate( "market-withdraw", context ).requests, [], "an incoming offer is not withdrawn" );
-	assert.deepEqual( hud.activate( "market-accept", context ).requests, [ { op: "accept", offer: 4 } ] );
+	assert.deepEqual( requests( hud, "market-withdraw", context ), [], "an incoming offer is not withdrawn" );
+	assert.deepEqual( requests( hud, "market-accept", context ), [ { op: "accept", offer: 4 } ] );
 	const busy = { ...context, market: market( { pending: "accept" } ) };
-	assert.deepEqual( hud.activate( "market-reject", busy ).requests, [], "one write at a time" );
+	assert.deepEqual( requests( hud, "market-reject", busy ), [], "one write at a time" );
 });
 
 test("a read in flight holds the writes, but only a write says it is waiting", () => {
@@ -292,13 +339,15 @@ test("a read in flight holds the writes, but only a write says it is waiting", (
 	hud.activate( "market-tab:offers", { market: market(), localName: "Me", now: 0 } );
 	hud.activate( "market-offer-in:4", { market: market(), localName: "Me", now: 0 } );
 	const reading = { market: market( { pending: "mine" } ), localName: "Me", now: 0 };
-	assert.deepEqual( hud.activate( "market-accept", reading ).requests, [], "no write during a read" );
+	assert.deepEqual( requests( hud, "market-accept", reading ), [], "no write during a read" );
 });
 
 test("each offer list pages past its rows", () => {
-	const offer = id => ({ ...market().mine.offersIn[0], id });
+	const mine = defined( market().mine );
+	/** @param {number} id */
+	const offer = id => ({ ...defined( mine.offersIn[0] ), id });
 	const many = market( {
-		mine: { ...market().mine, offersIn: Array.from( { length: 8 }, ( _, i ) => offer( 10 + i ) ) }
+		mine: { ...mine, offersIn: Array.from( { length: 8 }, ( _, i ) => offer( 10 + i ) ) }
 	} );
 	const context = { market: many, localName: "Me", now: 0 };
 	const hud = createMarketHud();
@@ -316,21 +365,21 @@ test("the chips, the dropdowns and a pick from the bag", () => {
 	const context = { market: market(), localName: "Me", now: 0 };
 	const hud = createMarketHud();
 	hud.open();
-	assert.deepEqual( hud.activate( "market-category:weapon", context ).requests.map( r => r.category ), [ "weapon" ] );
-	assert.deepEqual( hud.activate( "market-category:nope", context ).requests, [], "an unknown category" );
+	assert.equal( search( hud, "market-category:weapon", context ).category, "weapon" );
+	assert.deepEqual( requests( hud, "market-category:nope", context ), [], "an unknown category" );
 	// A dropdown opens, a choice searches and closes it; any other click
 	// closes it too, and a choice the window never drew does nothing.
 	hud.activate( "market-menu:degree", context );
 	assert.equal( hud.state().menu, "degree" );
-	assert.equal( hud.activate( "market-choose:degree:11", context ).requests[0].degree, 11 );
+	assert.equal( search( hud, "market-choose:degree:11", context ).degree, 11 );
 	assert.equal( hud.state().menu, "" );
 	hud.activate( "market-menu:race", context );
 	hud.activate( "market-pick:7", context );
 	assert.equal( hud.state().menu, "", "a click elsewhere closes the list" );
-	const raced = hud.activate( "market-choose:race:eu", context ).requests[0];
+	const raced = search( hud, "market-choose:race:eu", context );
 	assert.equal( raced.race, "eu" );
 	assert.equal( raced.degree, 11, "the other filters stay" );
-	assert.equal( hud.activate( "market-choose:rarity:sealed", context ).requests[0].rarity, "sealed" );
+	assert.equal( search( hud, "market-choose:rarity:sealed", context ).rarity, "sealed" );
 	for (
 		const bad of [
 			"market-choose:race:kr",
@@ -339,13 +388,13 @@ test("the chips, the dropdowns and a pick from the bag", () => {
 			"market-choose:nope:1"
 		]
 	) {
-		assert.deepEqual( hud.activate( bad, context ).requests, [], bad );
+		assert.deepEqual( requests( hud, bad, context ), [], bad );
 	}
-	assert.equal( hud.activate( "market-choose:degree:0", context ).requests[0].degree, undefined, "All degrees" );
+	assert.equal( search( hud, "market-choose:degree:0", context ).degree, undefined, "All degrees" );
 	// The Price header: cheapest first, then dearest first.
-	assert.equal( hud.activate( "market-sort-price", context ).requests[0].sort, "price-asc" );
-	assert.equal( hud.activate( "market-sort-price", context ).requests[0].sort, "price-desc" );
-	assert.equal( hud.activate( "market-category:", context ).requests[0].category, undefined, "All" );
+	assert.equal( search( hud, "market-sort-price", context ).sort, "price-asc" );
+	assert.equal( search( hud, "market-sort-price", context ).sort, "price-desc" );
+	assert.equal( search( hud, "market-category:", context ).category, undefined, "All" );
 	hud.activate( "market-sell-pick", context );
 	assert.equal( hud.state().tab, "sell", "the + opens the bag" );
 	hud.activate( "market-sell-slot:20", context );
@@ -363,7 +412,8 @@ test("K toggles the market and Ctrl+click lists a bag item", () => {
 		f.state.gameplay = {
 			...f.state.gameplay,
 			npcConversation: undefined,
-			inventory: [ { ...f.state.gameplay.inventory?.[0], slot: 20, refObjId: 3633, quantity: 1, name: "Sword" } ]
+			// The fixture's bag is empty: this is its only item.
+			inventory: [ /** @type {InventoryItem} */ ({ slot: 20, refObjId: 3633, quantity: 1, name: "Sword" }) ]
 		};
 		step();
 		f.ui.event( { kind: "key", code: "KeyK" } );
@@ -538,11 +588,13 @@ test("an empty search offers to clear it, and clearing searches everything", () 
 test("at the listing cap nothing more is listed, and one gone frees a place", () => {
 	const hud = createMarketHud();
 	const base = market();
+	const mine = defined( base.mine );
+	/** @param {number} count */
 	const at = ( count ) => ({
 		market: {
 			...base,
 			mine: {
-				...base.mine,
+				...mine,
 				listings: Array.from( { length: count }, ( _, i ) => row( 100 + i ) ).concat( [
 					row( 99, { state: "returned" } )
 				] )
@@ -555,8 +607,8 @@ test("at the listing cap nothing more is listed, and one gone frees a place", ()
 	hud.activate( "market-tab:sell", at( 20 ) );
 	hud.activate( "market-sell-slot:20", at( 20 ) );
 	hud.edit( "market-price", "50" );
-	assert.deepEqual( hud.activate( "market-list", at( 20 ) ).requests, [], "20 / 20 listed" );
-	assert.equal( hud.activate( "market-list", at( 19 ) ).requests[0]?.op, "list", "a returned one does not count" );
+	assert.deepEqual( requests( hud, "market-list", at( 20 ) ), [], "20 / 20 listed" );
+	assert.equal( requests( hud, "market-list", at( 19 ) )[0]?.op, "list", "a returned one does not count" );
 });
 
 test("My listings holds what is on sale, asks where it goes only once one is picked, and History keeps the rest", () => {

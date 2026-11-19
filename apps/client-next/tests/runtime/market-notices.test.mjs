@@ -39,7 +39,7 @@ function eventFrame( events ) {
 test("a market offer and a sale each raise the centre notice, a coloured list line and a chat notice", () => {
 	const g = createGameplay( () => {} );
 	g.bootstrap( {} );
-	g.seed( { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0 } );
+	g.seed( { gid: 1, refObjId: 1, kind: "player", name: "Me", regionId: 1, x: 0, y: 0, z: 0, heading: 0 } );
 	g.take();
 	const offer = { kind: "offer", item: "Drako Sword", currency: "gold", price: 900, who: "Lulu" };
 	const sold = { kind: "sold", item: "Strom Bow", currency: "silk", price: 50, paid: 50, who: "" };

@@ -22,6 +22,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 
 	"opensro.online/server/internal/domain"
 )
@@ -141,7 +142,7 @@ func (s *Store) MarketAcceptOffer(req domain.MarketAcceptRequest) (domain.Market
 		return domain.MarketSale{}, offer, s.closeOfferLocked(offer, domain.ErrMarketOfferGone)
 	}
 	if err := s.canPayLocked(listing.Currency, offer.BuyerAccount, buyer, offer.Price); err != nil {
-		if err == domain.ErrMarketFunds {
+		if errors.Is(err, domain.ErrMarketFunds) {
 			return domain.MarketSale{}, offer, s.closeOfferLocked(offer, domain.ErrMarketBuyerFunds)
 		}
 		return domain.MarketSale{}, offer, err

@@ -217,6 +217,8 @@
   "internals": {
     "src/engine/runtime/ui/hud/market-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/market-window.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/market-window-pen.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/market-window-side.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/map-chrome.ts": "src/engine/runtime/ui/hud/map-tools.ts",
     "src/engine/runtime/ui/hud/map-guide-tree.ts": "src/engine/runtime/ui/hud/map-tools.ts",
     "src/engine/runtime/ui/hud/map-level-filter.ts": "src/engine/runtime/ui/hud/map-tools.ts",

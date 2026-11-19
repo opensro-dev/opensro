@@ -6,6 +6,7 @@ answers, named and anonymous sellers, offers, destinations and events.
 */
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
+import { defined } from "../helpers/defined.mjs";
 import assert from "node:assert/strict";
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
@@ -95,7 +96,8 @@ test("every write names where its item goes, and an offer is checked before it l
 			{ op: "search", degree: 12 }
 		]
 	) {
-		assert.throws( () => marketRequestPayload( bad ), undefined, JSON.stringify( bad ) );
+		// Each is malformed on purpose, so it has no MarketRequest type.
+		assert.throws( () => marketRequestPayload( /** @type {any} */ (bad) ), Error, JSON.stringify( bad ) );
 	}
 });
 
@@ -125,7 +127,7 @@ test("the account page reads sellers, both offer lists and the offer cap", () =>
 			rules
 		}
 	} ) );
-	const mine = market.state().mine;
+	const mine = defined( market.state().mine );
 	assert.equal( mine.listings[0].seller, "Kekw" );
 	assert.equal( mine.listings[0].anonymous, true );
 	assert.equal( mine.offersIn[0].buyer, "Lulu" );
@@ -147,7 +149,7 @@ test("an anonymous listing has no seller, and a malformed answer changes nothing
 		search: { rows, page: 1, pages: 1, total: 1 }
 	});
 	market.receive( encode( page( [ row( 1 ), row( 2, { seller: "Kekw" } ) ] ) ) );
-	assert.deepEqual( market.state().browse.rows.map( r => r.seller ), [ "", "Kekw" ] );
+	assert.deepEqual( defined( market.state().browse ).rows.map( r => r.seller ), [ "", "Kekw" ] );
 	for (
 		const bad of [
 			{ ...page( [ row( 1, { seller: 5 } ) ] ) },
@@ -156,7 +158,7 @@ test("an anonymous listing has no seller, and a malformed answer changes nothing
 		]
 	) {
 		assert.throws( () => market.receive( encode( bad ) ) );
-		assert.equal( market.state().browse.rows.length, 2 );
+		assert.equal( defined( market.state().browse ).rows.length, 2 );
 	}
 });
 
@@ -182,8 +184,8 @@ test("a pushed event never answers the request in flight", () => {
 		sale: { listingId: 4, currency: "gold", price: 700, fee: 7, atMs: 5, to: "warehouse", slot: 0 }
 	} ) );
 	// The sale says where the item went, whatever the request asked.
-	assert.equal( market.state().notice.to, "warehouse" );
-	assert.match( marketNoticeText( market.state().notice ), /warehouse/ );
+	assert.equal( defined( market.state().notice ).to, "warehouse" );
+	assert.match( marketNoticeText( defined( market.state().notice ) ), /warehouse/ );
 	assert.equal( market.state().pending, null );
 	for ( let i = 0; i < MARKET_EVENT_LIMIT + 3; i++ ) {
 		market.receive( encode( {
@@ -195,7 +197,7 @@ test("a pushed event never answers the request in flight", () => {
 	}
 	const events = market.state().events;
 	assert.equal( events.length, MARKET_EVENT_LIMIT );
-	assert.equal( events.at( -1 ).sequence, MARKET_EVENT_LIMIT + 4 );
+	assert.equal( defined( events.at( -1 ) ).sequence, MARKET_EVENT_LIMIT + 4 );
 	assert.throws( () =>
 		market.receive(
 			encode( { version: 2, op: "event", ok: true, events: [ { kind: "stolen", currency: "gold" } ] } )
@@ -209,7 +211,7 @@ test("a refusal names its reason and the offer events read as chat lines", () =>
 	const market = createMarket( preview );
 	market.request( { op: "buy", listing: 4, version: 1, to: "bag" }, 0 );
 	market.receive( encode( { version: 2, op: "buy", ok: false, error: "bag-full" } ) );
-	assert.match( marketNoticeText( market.state().notice ), /inventory is full/ );
+	assert.match( marketNoticeText( defined( market.state().notice ) ), /inventory is full/ );
 	assert.equal(
 		marketNoticeText( { op: "buy", ok: false, code: "buyer-busy", to: "" } ),
 		"The buyer is trading right now. Try again in a moment."
