@@ -24,13 +24,13 @@ const { decodeAuthoredLayout } = await import( "../../src/engine/foundation/ui/a
 const { shopCatalog } = await import( "../../src/engine/foundation/gameplay/commerce.ts" );
 test("reagents preserve every existing alchemy operation without a synthetic mode menu", () => {
 	const item = ( slot, typeFlags ) => ({ slot, typeFlags });
-	assert.equal( alchemySelection( "reinforce", [], item( 13, 0x8ec ) ), null );
+	assert.equal( defined( alchemySelection( "reinforce", [], item( 13, 0x8ec ) ) ).slots.length, 0 );
 	assert.deepEqual( alchemySelection( "reinforce", [], item( 13, 0x32c ) ), { mode: "reinforce", slots: [ 13 ] } );
 	// 62B6D0 / 6245A0: job suits (3/1/7/* 0x03ac, 550410), avatar items
 	// (3/1/13/* 0x06ac, 550940) and fortress hammers (3/1/6/16 0x832c, 5504C0)
 	// are rejected from both reinforcement and dissolution slots.
 	for ( const excluded of [ 0x03ac, 0x0bac, 0x06ac, 0x0eac, 0x16ac, 0x1eac, 0x832c ] ) {
-		assert.equal( alchemySelection( "reinforce", [], item( 13, excluded ) ), null );
+		assert.equal( defined( alchemySelection( "reinforce", [], item( 13, excluded ) ) ).slots.length, 0 );
 		assert.equal( alchemySelection( "compound", [], item( 13, excluded ) ), null );
 	}
 	assert.deepEqual( alchemySelection( "reinforce", [], item( 13, 0x0bac ^ 0x0800 ^ 0x0080 ) ), {
@@ -54,6 +54,27 @@ test("reagents preserve every existing alchemy operation without a synthetic mod
 	assert.equal( alchemySelection( "advanced", [ 13 ], item( 14, 0x8ec ) ), null );
 	assert.deepEqual( defined( alchemySelection( "magic", [ 13, 14 ], item( 13, 0x32c ) ) ).slots, [] );
 	assert.equal( alchemySelection( "reinforce", [], item( 6, 0x32c ) ), null );
+});
+test("the empty Reinforce page refuses what it cannot reinforce with the native notice", () => {
+	const item = ( slot, typeFlags ) => ({ slot, typeFlags });
+	const refused = ( flags, key ) =>
+		assert.deepEqual( alchemySelection( "reinforce", [], item( 82, flags ) ), {
+			mode: "reinforce",
+			slots: [],
+			refusal: key
+		} );
+	// 62B801 (0x12, 0x15): a rondo (Void and Destroyer Rondo, 0x35ec, #3929),
+	// the tablet, the advanced elixir, a stone, a job suit (3/1/7) and an
+	// avatar item (3/1/13) bind nothing and ask for equipment first.
+	for ( const flags of [ 0x35ec, 0x25ec, 0x1dec, 0x0dec, 0x03ac, 0x06ac ] ) {
+		refused( flags, "UIIT_MSG_REINFORCERR_LOAD_EQUIP_FIRST" );
+	}
+	// 62B7C8 (0x12, 0x0f): the fortress hammer is equipment it cannot reinforce.
+	refused( 0x832c, "UIIT_MSG_REINFORCERR_TARGETEQUIP_CANT_BE_REINFORCED" );
+	// Equipment still binds as the target, and Material Processing still
+	// takes the rondo on its own page.
+	assert.deepEqual( alchemySelection( "reinforce", [], item( 82, 0x32c ) ), { mode: "reinforce", slots: [ 82 ] } );
+	assert.deepEqual( alchemySelection( "compound", [], item( 82, 0x35ec ) ), { mode: "compound", slots: [ 82 ] } );
 });
 test("a new main item replaces the slotted one instead of being refused", () => {
 	const item = ( slot, typeFlags ) => ({ slot, typeFlags });

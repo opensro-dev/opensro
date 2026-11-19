@@ -60,7 +60,7 @@ func petShieldFrame(s petShield, now int64, explode bool) wire.Frame {
 	p := binary.LittleEndian.AppendUint32(nil, s.key.gid)
 	p = binary.LittleEndian.AppendUint32(p, s.amount)
 	p = binary.LittleEndian.AppendUint32(p, s.maxHP)
-	p = binary.LittleEndian.AppendUint32(p, uint32(max(int64(0), s.until-now)))
+	p = binary.LittleEndian.AppendUint32(p, frameRemainingMs(s.until, now, petShieldDuration))
 	p = binary.LittleEndian.AppendUint32(p, s.source.gid)
 	flags := byte(0)
 	if explode {

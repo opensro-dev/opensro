@@ -215,11 +215,16 @@
     "src/engine/runtime/ui/hud/companion-potions.ts": "src/engine/runtime/ui/ui.ts"
   },
   "internals": {
+    "src/engine/runtime/ui/hud/market-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/market-window.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/market-window-pen.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/market-window-side.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/map-chrome.ts": "src/engine/runtime/ui/hud/map-tools.ts",
     "src/engine/runtime/ui/hud/map-guide-tree.ts": "src/engine/runtime/ui/hud/map-tools.ts",
     "src/engine/runtime/ui/hud/map-level-filter.ts": "src/engine/runtime/ui/hud/map-tools.ts",
     "src/engine/runtime/characters/resources/procedural-effects.ts": "src/engine/runtime/characters/resources/resources.ts",
     "src/engine/runtime/platform/telemetry.ts": "src/engine/runtime/platform/platform.ts",
+    "src/engine/runtime/platform/market-button.ts": "src/engine/runtime/platform/platform.ts",
     "src/engine/runtime/platform/keep-awake.ts": "src/engine/runtime/platform/platform.ts",
     "src/engine/runtime/platform/ui/credential-hints.ts": "src/engine/runtime/platform/ui/ui.ts",
     "src/engine/runtime/platform/ui/drag-shield.ts": "src/engine/runtime/platform/ui/ui.ts",

@@ -436,3 +436,22 @@ test("an hour-old looping effect replays one window and shows the same live elem
 	}
 	assert.ok( live( full )[1].length > 0 );
 });
+test("a collapsed element frame is kept, not refused: the native in-place inverse leaves a singular frame as it was", () => {
+	// A zero rotation axis authors a zero basis (particle-rotation.ts); the
+	// kept-matrix element inverts that frame on its next tick (AF13D0).
+	const zero = Array.from( identity() );
+	zero[0] = zero[5] = zero[10] = 0;
+	const graph = [
+		emitter( { rotations: [ zero ], program: { vectors: [ vector( "SetVelocity", [ 2, 0, 0 ] ) ] } } )
+	];
+	const state = run( graph, [ .1, .2, .3 ] );
+	const [element] = particleElements( state, 0 );
+	assert.ok( element.position.every( Number.isFinite ) );
+});
+test("a collapsed holder frame is kept, not refused", () => {
+	const holder = identity();
+	holder[0] = holder[5] = holder[10] = 0;
+	const graph = [ emitter( { program: { vectors: [ vector( "SetVelocity", [ 2, 0, 0 ] ) ] } } ) ];
+	const state = run( graph, [ .1, .2, .3 ], holder );
+	assert.ok( particleElements( state, 0 ).every( e => e.position.every( Number.isFinite ) ) );
+});

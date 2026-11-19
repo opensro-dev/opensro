@@ -27,6 +27,8 @@ import {
 import { INVENTORY_TRANSACTION_TIMEOUT, type Degradation } from "@/engine/contracts/network";
 import { createMall } from "./mall/mall";
 import { createArenaChest, ARENA_CHEST_OPCODE } from "@/engine/foundation/gameplay/arena-chest";
+import { createMarket, MARKET_NOTICE_ARGB, marketEventText } from "@/engine/foundation/gameplay/market";
+import type { MarketRequest } from "@/engine/contracts/market";
 import { createCompanionRentals } from "./companion-rentals";
 import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
 import {
@@ -75,6 +77,7 @@ import { decodeInventoryItem, etcCarriesPlusByte } from "@/engine/foundation/gam
 import {
 	applyExchangeSwap,
 	emptyExchange,
+	exchangeConfirmWarning,
 	exchangeFrame,
 	exchangeRequest,
 	type ExchangeCommand
@@ -90,7 +93,11 @@ import {
 } from "@/engine/foundation/gameplay/stall";
 import { equipDurabilityWarning } from "@/engine/foundation/audio/item-sounds";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
-import { MALL_BALANCE_CONTROL, MALL_SILK_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
+import {
+	MALL_BALANCE_CONTROL,
+	MALL_SILK_HISTORY_CONTROL,
+	MARKET_CONTROL
+} from "@/engine/foundation/gameplay/commerce-controls";
 import { MAX_INVENTORY_SLOT_COUNT } from "@/engine/foundation/gameplay/quickslots";
 import {
 	BUYBACK_REQUEST_OPCODE,
@@ -132,6 +139,11 @@ export function createInventory(
 ) {
 	const alchemy = createAlchemy(), gacha = createGacha(), mall = createMall(), magicOption = createMagicOptionGrant();
 	const arena = createArenaChest( preview );
+	// Port-only, not native (SRO_CONSIGNMENT, #3529): the consignment
+	// market's answers, previewed like the arena's rewards.
+	const market = createMarket( preview );
+	// The last market event raised as a chat notice (takeMarketNotices).
+	let marketPrinted = 0;
 	const companionRentals = createCompanionRentals();
 	let mallDelivery: { prepared: ReturnType<typeof decodeShopItems>; slots: number[]; } | null = null;
 	let avatars = new Map<number, InventoryItem>();
@@ -272,8 +284,35 @@ as natively; a good with no reference row never marks the page.
 	} | null = null;
 	// The chat line a voucher update raises, taken by the gameplay owner after each packet.
 	let exchangeNotice: SystemNotice | null = null;
+	// The exchange window's own confirm flag (v1.696 +0x778): the reaffirm
+	// warning prints on the first press only.
+	let exchangeConfirmPressed = false;
 	let magicRefs = itemMagicReferences( undefined );
 	let presentations = new WeakMap<InventoryItem, InventoryItem>();
+	/*
+================
+marketState
+
+The market's publication with every item presented as the bag's are.
+================
+	*/
+	function marketState(): import("@/engine/contracts/market").MarketState {
+		const state = market.state(),
+			show = <T extends { readonly item: InventoryItem; }>( row: T ): T => ({
+				...row,
+				item: present( row.item )
+			});
+		return {
+			...state,
+			browse: state.browse && { ...state.browse, rows: state.browse.rows.map( show ) },
+			mine: state.mine && {
+				...state.mine,
+				listings: state.mine.listings.map( show ),
+				offersIn: state.mine.offersIn.map( show ),
+				offersOut: state.mine.offersOut.map( show )
+			}
+		};
+	}
 	/*
 ================
 present
@@ -650,6 +689,19 @@ inquireMallSilkHistory
 		},
 		/*
 ================
+requestMarket
+
+One consignment market request (port-only, #3529). The server owns the
+escrow; this only sends what the window asked, once its answer is free.
+================
+		*/
+		requestMarket( request: MarketRequest, now: number ) {
+			const frame = market.request( request, now );
+			if ( frame ) send( frame );
+			return frame;
+		},
+		/*
+================
 takeBindingMoves
 ================
 		*/
@@ -695,6 +747,29 @@ pet record names, for decoders of rows held elsewhere (the storage room).
 		*/
 		objectRefs(): ReadonlyMap<number, number> {
 			return objRefs;
+		},
+		/*
+================
+takeMarketNotices
+
+The consignment market's events not yet printed (port-only, #3529): a
+sale, an offer, an answer to one's offer. Each one is the centre notice
+(banner), a green line in the bottom-right message list, and, through
+the gameplay owner, a (Notice) line in every chat tab.
+================
+		*/
+		takeMarketNotices(): SystemNotice[] {
+			const fresh = market.state().events.filter( event => event.sequence > marketPrinted );
+			if ( !fresh.length ) return [];
+			marketPrinted = fresh.at( -1 )!.sequence;
+			return fresh.map( event => ({
+				key: "",
+				value: 0,
+				text: marketEventText( event ),
+				nativeType: 5 as const,
+				banner: true as const,
+				colorArgb: MARKET_NOTICE_ARGB
+			}) );
 		},
 		/*
 ================
@@ -814,6 +889,7 @@ bootstrap
 			// published to the UI.
 			stall = { ...emptyStall( stall.namingSequence ), logSequence: stall.logSequence };
 			mall.reset();
+			market.reset();
 			mallDelivery = null;
 			tooltipRefs.clear();
 			magicRefs = itemMagicReferences( (value as { magicOptionSnapshot?: unknown; }).magicOptionSnapshot );
@@ -932,8 +1008,18 @@ exchange's, else the category-1 notice code it raised (0 for none).
 				published = null;
 			}
 			if ( outcome.message ) exchangeNotice = outcome.message;
+			// A new window starts with its confirm flag clear (v1.696 +0x778).
+			if ( !exchange.open && outcome.state.open ) exchangeConfirmPressed = false;
 			exchange = outcome.state;
 			return outcome.notice ?? 0;
+		},
+		/*
+================
+exchangeState
+================
+		*/
+		exchangeState(): ExchangeState {
+			return exchange;
 		},
 		/*
 ================
@@ -1020,6 +1106,11 @@ exchangeCommand
 		exchangeCommand( command: ExchangeCommand ) {
 			const frame = exchangeRequest( exchange, command );
 			if ( command.kind === "exchange-request" ) exchange = { ...exchange, requesting: true };
+			if ( command.kind === "exchange-confirm" ) {
+				const warning = exchangeConfirmWarning( exchange, exchangeConfirmPressed );
+				exchangeConfirmPressed = true;
+				if ( warning ) exchangeNotice = warning;
+			}
 			send( frame );
 			return frame;
 		},
@@ -1805,6 +1896,10 @@ receive
 				arena.receive( p, now );
 				return true;
 			}
+			if ( op === MARKET_CONTROL ) {
+				market.receive( p );
+				return true;
+			}
 			// After a timeout the inventory waits for the bootstrap that
 			// resynchronizes it. Frames before it (a resumed transport replays
 			// what it queued while detached, ahead of EnterWorld) are set aside,
@@ -2473,6 +2568,7 @@ step
 			const rentalUpdates = companionRentals.step( slots.values(), now );
 			for ( const item of rentalUpdates ) slots.set( item.slot, item );
 			mall.step( now );
+			market.expire( now );
 			const active = itemCooldowns.filter( row => now < row.startedAtMs + row.durationMs ),
 				expired = active.length !== itemCooldowns.length;
 			if ( expired ) itemCooldowns = active;
@@ -2534,6 +2630,7 @@ state
 					undefined,
 				itemMall: mall.state(),
 				itemMallSilkHistory: mall.silkHistory(),
+				market: marketState(),
 				itemCooldowns,
 				avatarInventory: [ ...avatars.values() ].map( present ),
 				alchemy: alchemy.state(),
@@ -2585,6 +2682,7 @@ clear
 			stall = { ...emptyStall( stall.namingSequence ), logSequence: stall.logSequence };
 			magicOption.reset();
 			mall.reset();
+			market.reset();
 			arena.clear();
 			mallDelivery = null;
 			shop = undefined;

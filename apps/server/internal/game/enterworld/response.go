@@ -288,6 +288,9 @@ type BootstrapResult struct {
 	// TradeTiers tells the client's TRADESCALE combo to rate a purchase by
 	// gold against the shard's tiers (port-only, not native; false is native).
 	TradeTiers bool
+	// Consignment tells the client the shard runs the consignment market, so
+	// the storage keeper's menu offers it (port-only, not native; false is native).
+	Consignment bool
 	// JobSuitHidesArmor tells the client that trader and hunter suits hide
 	// worn armour as thief suits do (port-only, not native; false is native).
 	JobSuitHidesArmor bool
@@ -362,6 +365,7 @@ type bootstrapSuccessView struct {
 	ChatItemLinks             int64                    `json:"chatItemLinks,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
+	Consignment               bool                     `json:"consignment,omitempty"`
 	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
 	MoonlitThiefSuit          bool                     `json:"moonlitThiefSuit,omitempty"`
 	Alexandria                bool                     `json:"alexandria,omitempty"`
@@ -451,6 +455,7 @@ type bootstrapBlobSuccessView struct {
 	ChatItemLinks             int64                    `json:"chatItemLinks,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
+	Consignment               bool                     `json:"consignment,omitempty"`
 	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
 	MoonlitThiefSuit          bool                     `json:"moonlitThiefSuit,omitempty"`
 	Alexandria                bool                     `json:"alexandria,omitempty"`
@@ -498,6 +503,7 @@ type bootstrapReferenceBlobSuccessView struct {
 	ChatItemLinks             int64                    `json:"chatItemLinks,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
+	Consignment               bool                     `json:"consignment,omitempty"`
 	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
 	MoonlitThiefSuit          bool                     `json:"moonlitThiefSuit,omitempty"`
 	Alexandria                bool                     `json:"alexandria,omitempty"`
@@ -577,6 +583,7 @@ func (r *BootstrapResult) blobView() any {
 		ChatItemLinks:             r.ChatItemLinks,
 		FastDenReturn:             r.FastDenReturn,
 		TradeTiers:                r.TradeTiers,
+		Consignment:               r.Consignment,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
 		MoonlitThiefSuit:          r.MoonlitThiefSuit,
 		Alexandria:                r.Alexandria,
@@ -638,6 +645,7 @@ func (r *BootstrapResult) referenceBlobView() any {
 		ChatItemLinks:             r.ChatItemLinks,
 		FastDenReturn:             r.FastDenReturn,
 		TradeTiers:                r.TradeTiers,
+		Consignment:               r.Consignment,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
 		MoonlitThiefSuit:          r.MoonlitThiefSuit,
 		Alexandria:                r.Alexandria,
@@ -713,6 +721,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		ChatItemLinks:             r.ChatItemLinks,
 		FastDenReturn:             r.FastDenReturn,
 		TradeTiers:                r.TradeTiers,
+		Consignment:               r.Consignment,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
 		MoonlitThiefSuit:          r.MoonlitThiefSuit,
 		Alexandria:                r.Alexandria,

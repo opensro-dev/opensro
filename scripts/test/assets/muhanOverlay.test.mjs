@@ -87,11 +87,16 @@ test("muhanEnabled mirrors the server flag words", ( t ) => {
 });
 
 test("an unset muhan flag takes the shard's deployed posture", ( t ) => {
-	// The checkout's own posture: the registry default is off, so a
-	// default build bakes the retail table alone.
+	// The checkout's own posture: what the shard profile it ships
+	// (apps/server/config/shard-settings.json) says, so a default build
+	// bakes what the live shard runs.
+	const profile = JSON.parse(
+		fs.readFileSync( new URL( "../../../apps/server/config/shard-settings.json", import.meta.url ), "utf8" )
+	);
+	const deployed = profile.SRO_MUHAN === "on";
 	for ( const unset of [ undefined, "", "  " ] ) {
 		withMuhanFlag( t, unset );
-		assert.equal( muhanEnabled(), false, `unset ${JSON.stringify( unset )} reads the shard default` );
+		assert.equal( muhanEnabled(), deployed, `unset ${JSON.stringify( unset )} reads the shard profile` );
 	}
 	// The registry default decides when the profile is silent...
 	withMuhanFlag( t, undefined );

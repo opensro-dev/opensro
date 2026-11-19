@@ -16,6 +16,7 @@ import { defaultUiTuning, type UiTuning, uiTuningFrom } from "@/engine/foundatio
 import { EVENT_EXCHANGE_FUNCTION } from "@/engine/foundation/ui/npc-talk";
 import { guildBanRefused, guildSoldierRefusal } from "@/engine/foundation/gameplay/guild-manager";
 import { advanceGuildWarClock } from "@/engine/foundation/gameplay/guild-war";
+import { exchangeOpenWarning } from "@/engine/foundation/gameplay/exchange";
 import { planarDistance, sameCoordinateSpace } from "@/engine/foundation/world/world-space";
 import { createSpeedJournal, type SpeedFrameRow } from "@/engine/foundation/gameplay/speed-journal";
 import {
@@ -618,6 +619,8 @@ export function createGameplay(
 	let fastDenReturn = false;
 	// The server's port-only trade-scale rule (tradeTiers).
 	let tradeTiers = false;
+	// The server's port-only consignment market (consignment).
+	let consignment = false;
 	// The server's port-only job-suit armour rule (jobSuitHidesArmor).
 	let jobSuitHidesArmor = false;
 	// The server's port-only Moonlit Ash thief suit rule (moonlitThiefSuit).
@@ -1938,6 +1941,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			uiTuning = uiTuningFrom( value );
 			fastDenReturn = (value as { fastDenReturn?: unknown; } | null)?.fastDenReturn === true;
 			tradeTiers = (value as { tradeTiers?: unknown; } | null)?.tradeTiers === true;
+			consignment = (value as { consignment?: unknown; } | null)?.consignment === true;
 			jobSuitHidesArmor = (value as { jobSuitHidesArmor?: unknown; } | null)?.jobSuitHidesArmor === true;
 			moonlitThiefSuit = (value as { moonlitThiefSuit?: unknown; } | null)?.moonlitThiefSuit === true;
 			alexandria = (value as { alexandria?: unknown; } | null)?.alexandria === true;
@@ -3658,9 +3662,13 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind.startsWith( "exchange-" ) ) {
 				if ( !localGid ) throw Error( "Local player is not initialized" );
-				return inventory.exchangeCommand(
+				const frame = inventory.exchangeCommand(
 					command as import("@/engine/foundation/gameplay/exchange").ExchangeCommand
 				);
+				// The first Confirm's reaffirm line (exchangeConfirmWarning).
+				const warning = inventory.takeExchangeNotice();
+				if ( warning ) api.notice( warning );
+				return frame;
 			}
 			if ( command.kind === "action-command" ) {
 				// 695420 case 1006: the selected player is asked to trade (0x7237).
@@ -3825,6 +3833,7 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "mall-open" ) return inventory.openMall( now );
 			if ( command.kind === "mall-buy" ) return inventory.purchaseMall( command.request, now );
 			if ( command.kind === "mall-silk-inquire" ) return inventory.inquireMallSilkHistory( command.period, now );
+			if ( command.kind === "market" ) return inventory.requestMarket( command.request, now );
 			if ( command.kind === "shop-open" ) {
 				if (
 					entity?.kind !== "npc" || targeting.state().target !== command.gid ||
@@ -4906,9 +4915,24 @@ Packet handling must not depend on which HUD panel is currently open.
 				}
 				// The exchange window (inventory owner) folds its frames first; its
 				// confirm, approve and cancel refusals stay the social lane's notices.
+				const exchangeWasOpen = inventory.exchangeState().open;
 				const exchangeNotice = inventory.exchangeReceive( frame );
 				if ( exchangeNotice !== null ) {
 					dirty = true;
+					const opened = inventory.exchangeState();
+					if ( !exchangeWasOpen && opened.open ) {
+						const partner = readEntity( opened.partner );
+						const warning = exchangeOpenWarning( {
+							partnerName: partner?.name ?? "",
+							partnerGuild: partner?.guildName ?? "",
+							friends: friends.state().rows.map( row => row.name ),
+							guildMembers: social.guild?.members.map( member => member.name ) ?? [],
+							unionGuilds: social.alliances?.map( guild => guild.name ) ?? []
+						} );
+						if ( warning ) {
+							notices = [ ...notices.slice( -99 ), { ...warning, sequence: ++noticeSequence } ];
+						}
+					}
 					if ( exchangeNotice ) {
 						const notice = inventoryNotice( 0xb06d, Uint8Array.of( 2, exchangeNotice ), localCountry );
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
@@ -5607,6 +5631,13 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ),
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
+				// Port-only (#3529): a consignment market event is the centre
+				// notice, a message-list line and a (Notice) line in every chat tab.
+				for ( const notice of inventory.takeMarketNotices() ) {
+					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					if ( notice.text ) chat.notice( notice.text );
+					dirty = true;
+				}
 				if ( frame.opcode === ARENA_CHEST_OPCODE ) {
 					const chest = inventory.state().arenaChest;
 					if ( chest?.skillCooldowns ) combat.restoreCooldowns( chest, catalog, now );
@@ -6336,6 +6367,7 @@ The published plane when something changed since the last take, else null.
 				...(chatItemLinks ? { chatItemLinks } : {}),
 				uiTuning,
 				...(tradeTiers ? { tradeTiers } : {}),
+				...(consignment ? { consignment } : {}),
 				...(jobSuitHidesArmor ? { jobSuitHidesArmor } : {}),
 				...(moonlitThiefSuit ? { moonlitThiefSuit } : {}),
 				...(alexandria ? { alexandria } : {}),

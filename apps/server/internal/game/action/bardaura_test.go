@@ -249,7 +249,7 @@ func TestBardAuraEndsOnALoadingScreen(t *testing.T) {
 	job := pendingReturn{division: testDivision, name: c.Name, character: c, due: clock.NowMs()}
 	rt.returnCasts.Store(returnKey(c), job)
 	c.NativeTeleportMode = 1
-	rt.completeReturnScroll(job, clock.NowMs())
+	rt.completeReturnScroll(job, clock.NowMs(), nil)
 	if hasSkillEffect(rt, c.Name, guardTambourID) {
 		t.Fatal("the Bard kept its aura through the loading screen")
 	}

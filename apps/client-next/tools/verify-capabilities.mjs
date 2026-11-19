@@ -24,6 +24,8 @@ const ASYNC_OWNERS = [
 	runtime + "simulation/worker/network/network.ts",
 	runtime + "assets/worker/loader.ts",
 	"src/engine/foundation/assets/read-bytes.ts",
+	// The digest that names and checks content-addressed bytes (packs, references).
+	"src/engine/foundation/assets/sha256.ts",
 	runtime + "assets/worker/packs/packs.ts",
 	runtime + "assets/worker/packs/blocks.ts",
 	runtime + "assets/worker/packs/persistent.ts",
@@ -115,6 +117,7 @@ export const rules = {
 	Audio: [ runtime + "audio/music/music.ts" ],
 	createElement: [
 		runtime + "platform/telemetry.ts",
+		runtime + "platform/market-button.ts",
 		uiBridge,
 		runtime + "platform/ui/cursor.ts",
 		runtime + "platform/ui/drag-shield.ts",
