@@ -41,11 +41,15 @@ type PlaneFeatures struct {
 	// only: a return point must be one the scroll can land on in the open
 	// world.
 	UniqueReturnAnchors bool
-	// Dormancy: an empty region's settled population sleeps (port-only,
-	// monster_dormancy.go). Inference: a cave floor is one region id for
-	// the whole floor, so region emptiness says nothing about the part of
-	// the floor a player stands in; caves stay awake.
+	// Dormancy: a settled population no player is near sleeps (port-only,
+	// monster_dormancy.go). Outdoors the unit is the region; a cave floor
+	// is one region id for the whole dungeon, so there it is the native
+	// message block, and a cave without an installed grid stays awake.
 	Dormancy bool
+	// DormancyByBlock: the plane sleeps and wakes by message block
+	// (worldgeom.InterestBlockAt) instead of by region, because one region
+	// id spans the whole cave floor (monster_dormancy.go).
+	DormancyByBlock bool
 	// SpawnTerrainLift: the enter-world repair that raises a spawn onto
 	// the terrain heightfield (enterworld.LiftSpawnAboveTerrain). The
 	// heightfield describes outdoor terrain only; a cave spawn stands
@@ -75,13 +79,13 @@ type PlaneFeatures struct {
 ================
 featuresFor
 
-The features of a plane of this kind: every one outdoors, none of these
+The features of a plane of this kind: every one outdoors, only dormancy
 in a cave.
 ================
 */
 func featuresFor(kind PlaneKind) PlaneFeatures {
 	if kind == PlaneCave {
-		return PlaneFeatures{}
+		return PlaneFeatures{Dormancy: true, DormancyByBlock: true}
 	}
 	return PlaneFeatures{QuestMonsterSpawns: true, CaravanBandits: true, UniqueReturnAnchors: true, Dormancy: true,
 		SpawnTerrainLift: true, SpawnStrandedRescue: true, QuestGatherAreas: true, HelpCallSight: true}

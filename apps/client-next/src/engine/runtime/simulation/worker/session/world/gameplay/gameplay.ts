@@ -619,6 +619,8 @@ export function createGameplay(
 	let fastDenReturn = false;
 	// The server's port-only trade-scale rule (tradeTiers).
 	let tradeTiers = false;
+	// The server's port-only consignment market (consignment).
+	let consignment = false;
 	// The server's port-only job-suit armour rule (jobSuitHidesArmor).
 	let jobSuitHidesArmor = false;
 	// The server's port-only Moonlit Ash thief suit rule (moonlitThiefSuit).
@@ -1941,6 +1943,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			uiTuning = uiTuningFrom( value );
 			fastDenReturn = (value as { fastDenReturn?: unknown; } | null)?.fastDenReturn === true;
 			tradeTiers = (value as { tradeTiers?: unknown; } | null)?.tradeTiers === true;
+			consignment = (value as { consignment?: unknown; } | null)?.consignment === true;
 			jobSuitHidesArmor = (value as { jobSuitHidesArmor?: unknown; } | null)?.jobSuitHidesArmor === true;
 			moonlitThiefSuit = (value as { moonlitThiefSuit?: unknown; } | null)?.moonlitThiefSuit === true;
 			alexandria = (value as { alexandria?: unknown; } | null)?.alexandria === true;
@@ -3831,6 +3834,7 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "mall-open" ) return inventory.openMall( now );
 			if ( command.kind === "mall-buy" ) return inventory.purchaseMall( command.request, now );
 			if ( command.kind === "mall-silk-inquire" ) return inventory.inquireMallSilkHistory( command.period, now );
+			if ( command.kind === "market" ) return inventory.requestMarket( command.request, now );
 			if ( command.kind === "shop-open" ) {
 				if (
 					entity?.kind !== "npc" || targeting.state().target !== command.gid ||
@@ -5617,6 +5621,13 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ),
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
+				// Port-only (#3529): a consignment market event is the centre
+				// notice, a message-list line and a (Notice) line in every chat tab.
+				for ( const notice of inventory.takeMarketNotices() ) {
+					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					if ( notice.text ) chat.notice( notice.text );
+					dirty = true;
+				}
 				if ( frame.opcode === ARENA_CHEST_OPCODE ) {
 					const chest = inventory.state().arenaChest;
 					if ( chest?.skillCooldowns ) combat.restoreCooldowns( chest, catalog, now );
@@ -6348,6 +6359,7 @@ The published plane when something changed since the last take, else null.
 				...(chatItemLinks ? { chatItemLinks } : {}),
 				uiTuning,
 				...(tradeTiers ? { tradeTiers } : {}),
+				...(consignment ? { consignment } : {}),
 				...(jobSuitHidesArmor ? { jobSuitHidesArmor } : {}),
 				...(moonlitThiefSuit ? { moonlitThiefSuit } : {}),
 				...(alexandria ? { alexandria } : {}),

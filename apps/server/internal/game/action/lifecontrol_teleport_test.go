@@ -163,7 +163,7 @@ func TestLifeControlSurvivesTeleportWithoutStacking(t *testing.T) {
 						t.Fatal("no return timer")
 					}
 					clock.Advance(5 * time.Second)
-					frames, _ := rt.completeReturnScroll(job.(pendingReturn), clock.NowMs())
+					frames, _ := rt.completeReturnScroll(job.(pendingReturn), clock.NowMs(), nil)
 					if len(frames) == 0 || frames[0].Opcode != enterworld.OpcodeResetClient {
 						t.Fatal("scroll did not reenter", frames)
 					}

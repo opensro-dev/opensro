@@ -146,7 +146,7 @@ func TestEveryReleasedProtocolNamesDistinctContracts(t *testing.T) {
 	current, ok := ContractsOf(Current)
 	if !ok || current != (Contracts{Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
 		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract, Wanted: WantedContract, Chat: ChatContract,
-		World: WorldContract}) {
+		World: WorldContract, Market: MarketContract}) {
 		t.Fatalf("protocol %d names %+v, want the current contract constants", Current, current)
 	}
 	seen := map[Contracts]int{}
@@ -364,5 +364,37 @@ func TestAClientWithoutChatLinksIsRefused(t *testing.T) {
 	}
 	if ChatContract < readsChatLinks || Current < 14 {
 		t.Fatalf("ChatContract = %d, Current = %d; this build sends link tails since protocol 14", ChatContract, Current)
+	}
+}
+
+/*
+================
+TestAClientWithoutTheMarketControlIsRefused
+
+Port-only, not native (SRO_CONSIGNMENT): the server pushes the market's
+opcode-20 control to an online seller or offer party unasked, and a
+protocol-17 browser's world gate ends the session on a control it does
+not admit, so it is refused with 426 and told to reload.
+================
+*/
+func TestAClientWithoutTheMarketControlIsRefused(t *testing.T) {
+	const admitsTheMarket = 1
+	refused := 0
+	for protocol, contracts := range history {
+		if contracts.Market >= admitsTheMarket {
+			continue
+		}
+		if reached, recorder := serve(t, http.MethodPost, strconv.Itoa(protocol)); reached || recorder.Code != http.StatusUpgradeRequired {
+			t.Fatalf("protocol %d (market %d): reached %v, status %d; want refused with 426",
+				protocol, contracts.Market, reached, recorder.Code)
+		}
+		refused++
+	}
+	released, ok := ContractsOf(17)
+	if !ok || released.World != 1 || released.Market != 0 || refused == 0 {
+		t.Fatalf("released protocol 17 changed or is not refused: %+v", released)
+	}
+	if MarketContract < admitsTheMarket || Current < 18 {
+		t.Fatalf("MarketContract = %d, Current = %d; this build pushes the market control since protocol 18", MarketContract, Current)
 	}
 }

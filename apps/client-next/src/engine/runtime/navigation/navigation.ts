@@ -20,12 +20,32 @@ import type { AssetOwner } from "@/engine/contracts/assets";
 import type { Pose, GameplayCommand } from "@/engine/contracts/gameplay";
 import { assetFailure, assetFailurePath, createAssetRecovery } from "@/engine/foundation/assets/asset-recovery";
 import { featuresAt } from "@/engine/foundation/world/plane";
+import { samePlaneAdjacent } from "@/engine/foundation/world/world-space";
 import { createNavigation, type NavigationView } from "@/engine/foundation/navigation/clipper";
 
 const LOAD_TIMEOUT_MS = 60000;
 const ADMISSION_TIMEOUT_MS = 15000;
 const CATALOG_LIMIT_BYTES = 16 << 20;
 const NAVIGATION_LIMIT_BYTES = 128 << 20;
+
+/*
+================
+covers
+
+Whether the product requested for center still covers a walker in
+region. An outdoor product is the center's 3x3 neighbourhood (the asset
+worker's navigation decoder assembles it), as the original requests a
+region with its 3x3 neighbours outdoors and a dungeon region alone
+(RegionSet_RequestRegionAnd3x3, 0x9216C0, skips the ring when region
+bit 0x8000 is set). So a walker one sector over still stands on an
+outdoor product; a dungeon product covers its own region only.
+================
+*/
+function covers( center: number, region: number ): boolean {
+	if ( center === region ) return true;
+	return !!featuresAt( center ).terrainGrid && !!featuresAt( region ).terrainGrid &&
+		samePlaneAdjacent( center, region );
+}
 
 /*
 ================
@@ -129,7 +149,16 @@ export function createNavigationStream(
 				forgetFailure();
 				return;
 			}
-			if ( state.phase !== "idle" && state.region !== pose.regionId ) {
+			// A walker that left the requested region keeps a load or an
+			// admission whose product still covers it: at riding speed a
+			// load cancelled at every sector crossing never lands, the
+			// installed product falls two sectors behind and the walk
+			// pauses off coverage while the server walks on (#3928). The
+			// catalog serves every region. Once that product is admitted
+			// (ready), the walker's own region is requested next.
+			const kept = state.phase === "loading" && (state.catalog || covers( state.region, pose.regionId )) ||
+				state.phase === "admitting" && covers( state.region, pose.regionId );
+			if ( state.phase !== "idle" && state.region !== pose.regionId && !kept ) {
 				cancel();
 				recovery.reset();
 				forgetFailure();
@@ -147,6 +176,9 @@ export function createNavigationStream(
 				state = { phase: "ready", region: state.region };
 				recovery.reset();
 				forgetFailure();
+				// A product kept across a crossing is installed; the walker's
+				// own sector is requested in this same step.
+				if ( state.region !== pose.regionId ) state = { phase: "idle" };
 			}
 			// A page that slept or was frozen could not step at all, and
 			// neither could the simulation it waits on: the admission
@@ -188,7 +220,7 @@ export function createNavigationStream(
 						state = { phase: "idle" };
 					} else {
 						if ( result.kind !== "navigation" ) throw new Error( "Navigation product response" );
-						if ( result.product.regionId !== pose.regionId ) {
+						if ( result.product.regionId !== state.region ) {
 							throw Error( "Navigation product region mismatch" );
 						}
 						installView( ++requestId, result.product.regionId, result.product );
@@ -199,7 +231,7 @@ export function createNavigationStream(
 							bundle: result.product
 						} );
 						deadline = now + ADMISSION_TIMEOUT_MS;
-						state = { phase: "admitting", region: pose.regionId };
+						state = { phase: "admitting", region: state.region };
 					}
 				}
 				if ( state.phase !== "idle" || !assets.available() ) return;

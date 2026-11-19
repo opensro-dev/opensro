@@ -20,6 +20,7 @@ from unittest import mock
 
 import arabia_import as arabia  # noqa: E402
 import cap110_monsters as cap110  # noqa: E402
+import colosseum_import as colosseum  # noqa: E402
 import constantinople_import as constantinople  # noqa: E402
 import export_world_import as export_world  # noqa: E402
 import god_import as god  # noqa: E402
@@ -75,8 +76,8 @@ SHARD_OWNERS = shard_owners()
 class TestShardBands(unittest.TestCase):
 	def test_the_owners_include_every_known_importer(self):
 		# The discovery itself: the importers the band rule was written for.
-		for module in (arabia, cap110, constantinople, export_world, god, hunting2, jupiter, muhan, pharaoh_temple,
-			roc, skytemple, styria, winter):
+		for module in (arabia, cap110, colosseum, constantinople, export_world, god, hunting2, jupiter, muhan,
+			pharaoh_temple, roc, skytemple, styria, winter):
 			self.assertIn(module, SHARD_OWNERS)
 
 	def test_every_shard_has_one_owner(self):

@@ -23,6 +23,7 @@ import cap110_skill_effects as skill_effects
 import cap110_skills as skills
 import cap110_skill_database as database_skills
 import import_vsro_alexandria as tables
+import published_ids
 import skilldata_enc as skill_tables
 import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
@@ -108,7 +109,8 @@ def add_skills(vsro_root, native, output, database_export=None):
 		later_rows = skill_tables.client_skill_rows(read_later, lambda name: tables.TEXTDATA + name in index)
 		database_path = database_export or os.environ.get(database_skills.DATABASE_ENV)
 		database_rows, database_hash = database_skills.load_database_rows(database_path) if database_path else ([], None)
-		added, summary = database_skills.merge_database_tier(native_rows, later_rows, database_rows, prior)
+		added, summary = database_skills.merge_database_tier(native_rows, later_rows, database_rows, prior,
+			pinned=published_ids.published(published_ids.SKILLS))
 		if database_hash:
 			summary["databaseSnapshotSha256"] = database_hash
 		text_path = output / TEXT_ROOT / "textdataname.txt"

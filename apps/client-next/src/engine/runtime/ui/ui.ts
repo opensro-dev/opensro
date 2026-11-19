@@ -430,6 +430,8 @@ import {
 	SERVER_EVENT_TEXT_COLOR,
 	serverEventLayout
 } from "./hud/server-event-hud";
+import { createMarketHud, MARKET_BAG_FIRST_SLOT, MARKET_HOTKEY_VK } from "./hud/market-hud";
+import { drawMarketWindow, type MarketPaint } from "./hud/market-window";
 import { uniqueRankLines } from "@/engine/foundation/gameplay/unique-rank";
 import {
 	allianceButtons,
@@ -1625,6 +1627,8 @@ export function createUi( ports: UiPorts ) {
 	const uniqueRankHud = createUniqueRankHud();
 	// Port-only, not native to v1.150: the later client's Server Mission gauge (0x34F2).
 	const serverEventHud = createServerEventHud();
+	// Port-only, not native (SRO_CONSIGNMENT, #3529): the consignment market.
+	const marketHud = createMarketHud();
 	const guildManagerHud = createGuildManagerHud();
 	const guildNoticeHud = createGuildNoticeHud();
 	const magicOptionHud = createMagicOptionHud();
@@ -2884,6 +2888,44 @@ export function createUi( ports: UiPorts ) {
 	}
 	/*
 	================
+	sendMarket
+	================
+	*/
+	function sendMarket( requests: readonly import("@/engine/contracts/market").MarketRequest[] ) {
+		for ( const request of requests ) sendGameplay( { kind: "market", request } );
+	}
+	/*
+	================
+	activateMarket
+
+	One click on the consignment market window (port-only, #3529): its
+	requests go to the worker, and a Whisper begins one.
+	================
+	*/
+	function activateMarket( id: string ): boolean {
+		// The HUD button beside FPS (platform.ts) toggles the window from
+		// anywhere in the world; the storage keeper's row opens it too.
+		if ( id === "market-toggle" && marketHud.isOpen() ) id = "market-close";
+		if ( id === "market-open" || id === "market-toggle" ) {
+			if ( view?.session?.phase !== "world" || view.gameplay?.consignment !== true ) return true;
+			npcPanel.hide();
+			sendMarket( marketHud.open() );
+			dirty = true;
+			return true;
+		}
+		const done = marketHud.activate( id, {
+			market: view?.gameplay?.market,
+			localName: view?.gameplay?.social?.localName ?? view?.session?.character ?? "",
+			now: uiNow
+		} );
+		if ( !done ) return false;
+		sendMarket( done.requests );
+		if ( done.whisper ) beginWhisper( done.whisper );
+		dirty = true;
+		return true;
+	}
+	/*
+	================
 	beginWhisper
 
 	6AC0F0 replaces the draft with "$name " and rejects the local name.
@@ -3550,6 +3592,7 @@ export function createUi( ports: UiPorts ) {
 	*/
 	let arenaPage = 0, arenaPageKey = "", arenaHiddenID = "";
 	function activate( id: string ) {
+		if ( id.startsWith( "market-" ) && activateMarket( id ) ) return;
 		if ( id === "arena-prev" || id === "arena-next" ) {
 			arenaPage = Math.max(
 				0,
@@ -7912,6 +7955,11 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
+			// Port-only (#3529): Escape closes the market's box, then the market.
+			if ( event.kind === "key" && event.code === "Escape" && marketHud.isOpen() ) {
+				activateMarket( marketHud.state().dialog ? "market-dialog-cancel" : "market-close" );
+				return;
+			}
 			if ( questDetails && event.kind === "drag" && event.id === "quest-detail-drag" && view ) {
 				questPosition = [
 					Math.max( 0, Math.min( Math.max( 0, view.width - 376 ), questPosition[0] + event.dx ) ),
@@ -8269,6 +8317,15 @@ export function createUi( ports: UiPorts ) {
 								modify: false
 							} );
 						}
+						return;
+					}
+					// Port-only (SRO_CONSIGNMENT): a bag item dropped on the market's
+					// List an item slot is the one to sell.
+					if (
+						item && target && !target.disabled && item.slot >= MARKET_BAG_FIRST_SLOT &&
+						(target.id === "market-sell-pick" || target.id === "market-sell-clear")
+					) {
+						activateMarket( "market-sell-slot:" + item.slot );
 						return;
 					}
 					if (
@@ -9035,6 +9092,17 @@ export function createUi( ports: UiPorts ) {
 					dirty = true;
 					return;
 				}
+				// Ctrl+click puts a bag item into the open market's List an item
+				// (port-only, not native: SRO_CONSIGNMENT).
+				if (
+					event.ctrl && marketHud.isOpen() && event.id.startsWith( "slot:" ) &&
+					Number( event.id.slice( 5 ) ) >= MARKET_BAG_FIRST_SLOT
+				) {
+					activateMarket( "market-sell-slot:" + event.id.slice( 5 ) );
+					carriedItem = null;
+					inventorySlot = -1;
+					return;
+				}
 				if (
 					event.shift && event.id.startsWith( "slot:" ) &&
 					[ "Inventory", "Shop", "COS inventory", "Storage" ].includes( panel )
@@ -9259,6 +9327,8 @@ export function createUi( ports: UiPorts ) {
 					const key = event.id.slice( 15 ), percent = Number( event.value );
 					if ( key === "vigorHp" || key === "vigorMp" ) companionPotions.percent( key, percent );
 					if ( key === "hp" || key === "mp" ) setAutoPotionPercent( key, percent );
+				} else if ( event.id.startsWith( "market-" ) && marketHud.edit( event.id, event.value ) ) {
+					// Port-only (#3529): the market's search, price and offer fields.
 				} else if ( event.id === "blocking-name" && blockDialog === "add" ) {
 					blockInput = event.value.slice( 0, 13 );
 				} else if ( event.id === "pet-name" && petNameDialog?.phase === "input" ) {
@@ -9396,6 +9466,12 @@ export function createUi( ports: UiPorts ) {
 					// F10 opens the mall exactly as the button does (ItemMallEvent_OpenItemMall).
 					if ( binding < 0 && event.code === "F10" ) {
 						activate( "item-mall" );
+						return;
+					}
+					// Port-only, not native (SRO_CONSIGNMENT): K toggles the market
+					// while no binding claims the key.
+					if ( binding < 0 && vk === MARKET_HOTKEY_VK && view.gameplay?.consignment === true ) {
+						activateMarket( "market-toggle" );
 						return;
 					}
 					if ( binding < 0 && event.code === "Enter" ) {
@@ -10401,6 +10477,16 @@ export function createUi( ports: UiPorts ) {
 					experimental.state().saved.serverEventGauge
 				);
 				if ( serverEventHud.shown() !== before ) dirty = true;
+			}
+			// Port-only (#3529): the market closes with the world, or when the
+			// shard does not run it; a write's answer refreshes what it changed.
+			if ( marketHud.isOpen() && (phase !== "world" || next.gameplay?.consignment !== true) ) {
+				marketHud.close();
+				dirty = true;
+			} else if ( phase === "world" ) {
+				const before = marketHud.state();
+				sendMarket( marketHud.observe( next.gameplay?.market, uiNow ) );
+				if ( marketHud.state() !== before ) dirty = true;
 			}
 			if ( phase !== "world" ) cosHud.reset();
 			else if (
@@ -16767,6 +16853,32 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					);
 					endWindow( admission, "composite-item" );
 				}
+				if ( marketHud.isOpen() && game ) {
+					// The window draws with this module's frame primitives.
+					const marketPaint: MarketPaint = {
+						beginWindow: frame => frameDraw.beginWindow( frame ),
+						endWindow: ( frame, mark, owner ) => frameDraw.endWindow( frame, mark, owner ),
+						windowOrigin: ( frame, spec ) => frameDraw.windowOrigin( frame, spec ),
+						windowBox: ( frame, spec ) => frameDraw.windowBox( frame, spec ),
+						closeButton: ( frame, x, y, id ) => frameDraw.closeButton( frame, x, y, id ),
+						button: ( frame, spec ) => frameDraw.button( frame, spec ),
+						rect: ( frame, spec ) => frameDraw.rect( frame, spec ),
+						comboBox: ( frame, spec ) => frameDraw.comboBox( frame, spec ),
+						image: ( frame, spec ) => frameDraw.image( frame, spec ),
+						nativeItem: ( frame, spec ) => frameDraw.nativeItem( frame, itemSlots, spec )
+					};
+					drawMarketWindow( drawFrame, marketPaint, {
+						hud: marketHud.state(),
+						market: game.market,
+						bag: game.inventory,
+						gold: Number( game.progression?.gold ?? 0 ),
+						localName: game.social?.localName ?? next.session?.character ?? "",
+						// A listing's end is the server's wall clock.
+						now: Date.now(),
+						focus,
+						caretVisible
+					} );
+				}
 				const uniqueRank = uniqueRankHud.state();
 				if ( uniqueRank && game ) {
 					// Port-only, not native (unique-rank-hud.ts): place, name, damage,
@@ -17427,6 +17539,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						canReverseReturn: !!(capabilities & 0x20000000),
 						gateRows: capabilities & 0x8000000 ? game.targetGateRows : undefined,
 						canStorage: !!(capabilities & 4),
+						// Port-only (#3529): the storage keeper also opens the market
+						// while the shard runs it (server SRO_CONSIGNMENT).
+						canMarket: !!(capabilities & 4) && game.consignment === true,
 						// 5D9100: the TC manager's +0x20 (set by any camp record)
 						// is clear and the player is level 60 or more.
 						canAcademyOpen: !!(capabilities & 4) && !game.academy?.member &&
@@ -28725,6 +28840,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			const semantics = {
 				loadingVisible: !!loading && !assetFailure,
 				titleCredit: next.frontend?.phase === "login" && !loading,
+				marketButton: next.session?.phase === "world" && next.gameplay?.consignment === true && !loading,
+				marketOpen: marketHud.isOpen(),
 				// The DOM tools keep their own row beside the map, below combat chrome.
 				hudCorner: compact ?
 					[ w, itemMall.isOpen() ? 52 : compactTelemetryTop, 0, 0 ] as UiRect :

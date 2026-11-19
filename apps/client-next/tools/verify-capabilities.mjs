@@ -115,6 +115,7 @@ export const rules = {
 	Audio: [ runtime + "audio/music/music.ts" ],
 	createElement: [
 		runtime + "platform/telemetry.ts",
+		runtime + "platform/market-button.ts",
 		uiBridge,
 		runtime + "platform/ui/cursor.ts",
 		runtime + "platform/ui/drag-shield.ts",

@@ -906,3 +906,58 @@ def reap_world(spec, native, out):
 	if record:
 		reap_regions(spec, native, out, record)
 	reap_monsters(spec, out, prior)
+
+
+#============================================================================
+# Map-only worlds
+#============================================================================
+
+
+# ================
+# map_world_enabled
+# ================
+def map_world_enabled(spec, env=os.environ):
+	"""True only when the world's switch names an on value; unset is native."""
+	return env.get(spec.flag, "").strip().lower() in tables.FLAG_ON
+
+
+# ================
+# write_map_marker
+#
+# A map-only world's monster pass: it has no kinds, so it only enrols
+# the world in its marker, keeping the region record merge_world then
+# extends and the off path reaps.
+# ================
+def write_map_marker(spec, out):
+	marker = Path(out) / spec.marker
+	prior = cap110.read_json(marker) if marker.exists() else {}
+	record = {key: value for key, value in prior.items() if key == "regionMerge"}
+	record["enabled"] = True
+	write_atomically(marker, (json.dumps(record, indent=2) + "\n").encode())
+	return {"enabled": True, "characters": 0}
+
+
+# ================
+# add_map_world
+#
+# A world that is its map alone, with no population of its own (the
+# Styria Clash arena, the Survival Arena's Colosseum): the import owns
+# only its spec and the rule that finds its regions in the v1.696 Media
+# tables (regions_of(rows_of), rows_of(name) the rows of one table).
+# Off reaps what the marker enrolled and reads no archive; on pins the
+# four archives before any read, then merges the regions.
+# ================
+def add_map_world(spec, native, out, v1696_root, regions_of, pins_for=None):
+	if not map_world_enabled(spec):
+		reap_world(spec, native, out)
+		return {"enabled": False}
+	v1696_root = client_root(v1696_root, spec.root_env)
+	require_pin(spec, v1696_root, MERGE_ARCHIVES, pins_for or (lambda: archive_pins(spec)))
+	_, handle, media = tables.open_archive(v1696_root, "Media")
+	try:
+		index = tables.archive_index(media)
+		regions = regions_of(lambda name: tables.table_rows(tables.table_text(media, index, name)))
+	finally:
+		media.close()
+		handle.close()
+	return merge_world(spec, native, out, v1696_root, regions, lambda: write_map_marker(spec, out))

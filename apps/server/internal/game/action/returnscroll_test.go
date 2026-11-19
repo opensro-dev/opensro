@@ -208,7 +208,7 @@ func TestReturnCancelReplacementStaleTimerAndDisconnect(t *testing.T) {
 	}
 	// Replacement at the identical clock value must still retire the old identity.
 	useReturn(rt, c)
-	if f, _ := rt.completeReturnScroll(old.(pendingReturn), clock.NowMs()+60000); len(f) != 0 || c.NativeTeleportMode != 1 {
+	if f, _ := rt.completeReturnScroll(old.(pendingReturn), clock.NowMs()+60000, nil); len(f) != 0 || c.NativeTeleportMode != 1 {
 		t.Fatal("stale timer cleared replacement")
 	}
 	rt.ForgetCharacter(testDivision, c.Name)

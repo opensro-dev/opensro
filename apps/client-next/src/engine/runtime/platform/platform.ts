@@ -43,6 +43,7 @@ import { gameOptions, initialGameOptions, type GameOptions } from "@/engine/foun
 import { windowPositions, type WindowPositions } from "@/engine/foundation/ui/window-positions";
 import { createUiBridge } from "./ui/ui";
 import { createTelemetry } from "./telemetry";
+import { createMarketButton } from "./market-button";
 import { createKeepAwake } from "./keep-awake";
 import { createCursor } from "./ui/cursor";
 import type { UiEvent, UiSemantics } from "@/engine/contracts/ui";
@@ -417,6 +418,7 @@ export function createPlatform(
 	// The login screen's project credit (index.html #title-credit), hidden
 	// everywhere else.
 	const titleCredit = document.getElementById( "title-credit" );
+	const marketButton = createMarketButton( fpsChip );
 	const keepAwake = createKeepAwake();
 	const telemetry = createTelemetry( {
 		enabled: experimental.developerDiagnostics,
@@ -444,6 +446,10 @@ export function createPlatform(
 	}
 	window.addEventListener( "pointerdown", onGesture, { signal: lifetime.signal, capture: true } );
 	window.addEventListener( "pagehide", onClose, { signal: lifetime.signal } );
+	// The market button beside FPS toggles the window (market-button.ts).
+	marketButton.addEventListener( "click", () => onUi( { kind: "activate", id: "market-toggle" } ), {
+		signal: lifetime.signal
+	} );
 	const bridge = createUiBridge(
 		canvas,
 		onUi,
@@ -836,6 +842,10 @@ export function createPlatform(
 			lastUi = state;
 			bridge.present( state );
 			if ( titleCredit && titleCredit.hidden === !!state.titleCredit ) titleCredit.hidden = !state.titleCredit;
+			if ( marketButton.hidden === !!state.marketButton ) marketButton.hidden = !state.marketButton;
+			if ( marketButton.ariaPressed !== String( !!state.marketOpen ) ) {
+				marketButton.ariaPressed = String( !!state.marketOpen );
+			}
 			if ( fpsChip ) {
 				const scale = displayScale(),
 					right = state.hudCorner ? Math.max( 4, canvasSize().width - state.hudCorner[0] * scale + 6 ) : 8,

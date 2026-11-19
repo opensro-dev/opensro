@@ -310,15 +310,18 @@ class ArchiveTests(unittest.TestCase):
 			marker = json.loads((output / importer.ARCHIVE_SOURCE["report"]).read_text(encoding="utf-8"))
 			self.assertNotEqual(marker["idMap"]["COS_P_DOG"]["target"], 9001)
 
-	def test_published_character_ids_are_reserved_before_their_import_runs(self):
+	def test_published_ids_are_reserved_before_their_import_runs(self):
 		# r201: the pet import ran before the Arabia import wrote its shard,
-		# and a fresh pet took a published Arabia id.
-		with tempfile.TemporaryDirectory() as folder:
-			text_root = Path(folder) / importer.TEXT_ROOT
-			text_root.mkdir(parents=True)
-			reserved = importer.output_reserved_ids(folder, importer.ARCHIVE_SOURCE, {"MOB_SD_ACHNISH": 50147})
-			self.assertIn(50147, reserved)
-			self.assertNotIn(50147, importer.output_reserved_ids(folder, importer.ARCHIVE_SOURCE, {}))
+		# and a fresh pet took a published Arabia id. The pin keeps it, and
+		# keeps a pet's own released ids though the source numbers it anew.
+		def pick(pinned):
+			chars, scrolls, _ = importer.select_pets([], [], set(), [char_row("COS_P_DOG", 50147)],
+				[scroll("ITEM_PET_DOG", 50148, "COS_P_DOG")], pinned=pinned)
+			return int(chars[0][importer.CHAR_ID]), int(scrolls[0][items.IDENTITY])
+		self.assertEqual(pick({}), (50147, 50148))
+		dog, _ = pick({"MOB_SD_ACHNISH": 50147})
+		self.assertNotEqual(dog, 50147)
+		self.assertEqual(pick({"COS_P_DOG": 7001, "ITEM_PET_DOG": 7002}), (7001, 7002))
 
 	def test_scroll_name_text_is_merged_with_the_kind_name(self):
 		with tempfile.TemporaryDirectory() as folder:

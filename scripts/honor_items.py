@@ -54,6 +54,7 @@ import alexandria_npcs as text_tables
 import cap110_item_import as shared
 import cap110_items as items
 import cap110_monsters as cap110
+import published_ids
 import import_vsro_alexandria as tables
 import nasrun_import as nasrun
 import sro_pk2
@@ -376,7 +377,7 @@ def add_honor_items(native, output):
 	rare_text = paths[shared.RARE_TABLE][1].read_bytes().decode("latin1")
 	resinfo_codes = {code for code, _ in resinfo_lines(rare_text) + resinfo_lines(glow_text) if code}
 	plan = plan_rows(rows, authored_kinds(set(rows) | resinfo_codes))
-	allocated = cap110.allocate_identities(occupied, [code for code, _ in plan], prior.get("items", {}))
+	allocated = published_ids.allocate(published_ids.OBJECTS, occupied, [code for code, _ in plan], prior.get("items", {}))
 	staged = sorted((build(allocated[code]) for code, build in plan), key=lambda row: int(row[items.IDENTITY]))
 	# Names: honor rows reuse their rare's symbols; the new stones get
 	# their degree 9 stone's row with its number changed.

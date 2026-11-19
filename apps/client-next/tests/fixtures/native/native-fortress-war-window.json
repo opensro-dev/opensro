@@ -1,0 +1,10 @@
+{
+	"source": "SRO_Client.exe v1.150 CIFFortress_FormatWarDateText 0x660C70",
+	"note": "The application window derives every date from the war's start: FILETIME offsets in 100 ns units, read from the function's SystemTimeToFileTime arithmetic.",
+	"warLengthFiletime": "0x10C388D000",
+	"applyOpensBeforeFiletime": "0x25B7F3D4000",
+	"applyLengthFiletime": "0x19254D38000",
+	"warLengthSeconds": 7200,
+	"applyOpensBeforeSeconds": 259200,
+	"applyLengthSeconds": 172800
+}
