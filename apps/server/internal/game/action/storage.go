@@ -51,6 +51,21 @@ const storableFlag = 0x80
 // errCodeInvalidStorageTarget is UIIT_MSG_STRGERR_INVALID_TARGET_STORAGE.
 const errCodeInvalidStorageTarget uint8 = 0x43
 
+// errCodeKeeperBusy is the B338 refusal UIIT_MSG_INTERACTION_FAIL_IM_BUSY
+// (category 13, code 0x0B): the account's warehouse is open for another of
+// its characters (accountStorageHolder).
+const errCodeKeeperBusy uint8 = 0x0b
+
+// storageOpen is one character's open warehouse. account names the
+// account whose warehouse it is; it is empty for a guild warehouse, which
+// keeps its own single-user lock (npcguildstorage.go).
+type storageOpen struct {
+	gid      uint32
+	division string
+	name     string
+	account  string
+}
+
 // storageRefusal carries the native notice code of a refused transfer.
 type storageRefusal uint8
 
@@ -142,7 +157,56 @@ it.
 ================
 */
 func (rt *Runtime) openStorageSession(divisionID, characterName string, gid uint32) {
-	rt.storageSessions.Store(simulation.WorldKey(divisionID, characterName), gid)
+	rt.storageSessions.Store(simulation.WorldKey(divisionID, characterName),
+		storageOpen{gid: gid, division: divisionID, name: characterName})
+}
+
+/*
+================
+openAccountStorageSession
+
+Records the account warehouse a character just opened (a keeper or a
+ticket), so a sibling character of the same account finds it held.
+================
+*/
+func (rt *Runtime) openAccountStorageSession(divisionID string, character *enterworld.Character, gid uint32) {
+	rt.storageSessions.Store(simulation.WorldKey(divisionID, character.Name),
+		storageOpen{gid: gid, division: divisionID, name: character.Name, account: character.AccountID})
+}
+
+/*
+================
+accountStorageHolder
+
+Another character of the same account that has its account warehouse
+open, if any.
+
+Port-only, not native: the original holds one session per account, so its
+warehouse is never open twice and its client lists the room once per
+session (CIFStorageRoom +0x7BC). The port binds play per character, so
+two characters of one account can stand at two keepers at once. One open
+room per account keeps the second window from moving items out of a stale
+copy. A holder that left the world is dropped, as guildStorageHolder does.
+================
+*/
+func (rt *Runtime) accountStorageHolder(divisionID string, character *enterworld.Character) (string, bool) {
+	if character.AccountID == "" {
+		return "", false
+	}
+	holder := ""
+	rt.storageSessions.Range(func(key, value any) bool {
+		open := value.(storageOpen)
+		if open.division != divisionID || open.account != character.AccountID || open.name == character.Name {
+			return true
+		}
+		if _, online := rt.characterAdmissions.Load(key); !online {
+			rt.storageSessions.CompareAndDelete(key, value)
+			return true
+		}
+		holder = open.name
+		return false
+	})
+	return holder, holder != ""
 }
 
 /*
@@ -157,7 +221,7 @@ func (rt *Runtime) storageSession(divisionID, characterName string) (uint32, boo
 	if !ok {
 		return 0, false
 	}
-	return value.(uint32), true
+	return value.(storageOpen).gid, true
 }
 
 /*
@@ -197,7 +261,7 @@ func (rt *Runtime) openRemoteStorage(divisionID string, character *enterworld.Ch
 	self := enterworld.ObjectIDForCharacter(character)
 	rt.Selected.Set(divisionID, character.Name, self)
 	rt.Selected.OpenFunction(divisionID, character.Name, self)
-	rt.openStorageSession(divisionID, character.Name, self)
+	rt.openAccountStorageSession(divisionID, character, self)
 }
 
 /*
@@ -236,6 +300,10 @@ func (rt *Runtime) HandleStorageList(divisionID string, character *enterworld.Ch
 	// takes the same hit-range gate as the function request that follows.
 	if !rt.remoteStorageOpen(divisionID, character, gid) && !rt.npcWithinHitRange(divisionID, character, npc) {
 		return npcFunctionTooFar(), fmt.Sprintf("NPC %s is beyond its interaction range", npc.Codename)
+	}
+	if holder, held := rt.accountStorageHolder(divisionID, character); held {
+		rt.closeStorageSession(divisionID, character.Name)
+		return npcFunctionRefusal(errCodeKeeperBusy), "the account warehouse is open for " + holder
 	}
 	storage, err := rt.storageAuthority.AccountStorage(character)
 	if err != nil {

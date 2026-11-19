@@ -123,6 +123,10 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 	}
 	// A warehouse ticket's room (storage.go) opens without an NPC.
 	if mask == simulation.NpcTalkFlagStorage && rt.storageAuthority != nil && rt.remoteStorageOpen(divisionID, character, gid) {
+		if holder, held := rt.accountStorageHolder(divisionID, character); held {
+			rt.closeStorageSession(divisionID, character.Name)
+			return npcFunctionRefusal(errCodeKeeperBusy), "the account warehouse is open for " + holder
+		}
 		return []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: wire.EncodeNpcInteractionAck(mask)}}, ""
 	}
 	// Port-only, not native (#3349): a Muhan change NPC is a nest entity,
@@ -209,8 +213,12 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 		}
 		// The storage function state, and the warehouse session the moves
 		// check (storage.go), which outlives later selections.
+		// One open room per account (accountStorageHolder, port-only).
+		if holder, held := rt.accountStorageHolder(divisionID, character); held {
+			return npcFunctionRefusal(errCodeKeeperBusy), "the account warehouse is open for " + holder
+		}
 		rt.Selected.OpenFunction(divisionID, character.Name, gid)
-		rt.openStorageSession(divisionID, character.Name, gid)
+		rt.openAccountStorageSession(divisionID, character, gid)
 		return []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: wire.EncodeNpcInteractionAck(mask)}}, ""
 	case simulation.NpcTalkFlagMagicOption:
 		// B338 lock 0x80000000 opens the avatar grant window beside the
