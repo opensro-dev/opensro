@@ -17,7 +17,7 @@ A schedule is a block:
 		DurationEnd	2030-12-31, 00:00:00
 		Weekly		1, {3, }	// every week, on Wednesday (0 = Sunday)
 		Daily		1,1		// or: every day
-		Once		20:00:00, 21:30:00
+		Once		20:00:00, 22:00:00
 	}
 
 It runs, inside its duration, on the matching days, from the Once start up

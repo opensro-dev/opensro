@@ -1,6 +1,8 @@
 package siege
 
 import (
+	"encoding/json"
+	"os"
 	"testing"
 	"time"
 )
@@ -94,14 +96,42 @@ func TestScheduleWindowFindsTheRunningOrNextWar(t *testing.T) {
 	}
 }
 
-// The v1.150 application window's offsets from the war's start
-// (CIFFortress_FormatWarDateText 660C70: FILETIME +0x10C388D000 for the
-// war's end, -0x25B7F3D4000 and then +0x19254D38000 for the period).
-const (
-	clientWarLength   = 2 * time.Hour
-	clientApplyOpens  = 3 * 24 * time.Hour
-	clientApplyCloses = 1 * 24 * time.Hour
-)
+/*
+================
+clientWindow
+
+The v1.150 application window's offsets from the war's start, from the
+native fixture the client's own date test reads
+(native-fortress-war-window.json, CIFFortress_FormatWarDateText 660C70).
+================
+*/
+type clientWindow struct {
+	WarLengthSeconds        int64 `json:"warLengthSeconds"`
+	ApplyOpensBeforeSeconds int64 `json:"applyOpensBeforeSeconds"`
+	ApplyLengthSeconds      int64 `json:"applyLengthSeconds"`
+}
+
+/*
+================
+loadClientWindow
+================
+*/
+func loadClientWindow(t *testing.T) (war, opens, length time.Duration) {
+	t.Helper()
+	data, err := os.ReadFile("testdata/native-fortress-war-window.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var w clientWindow
+	if err := json.Unmarshal(data, &w); err != nil {
+		t.Fatal(err)
+	}
+	if w.WarLengthSeconds <= 0 || w.ApplyOpensBeforeSeconds <= w.ApplyLengthSeconds || w.ApplyLengthSeconds <= 0 {
+		t.Fatalf("malformed client window %+v", w)
+	}
+	return time.Duration(w.WarLengthSeconds) * time.Second, time.Duration(w.ApplyOpensBeforeSeconds) * time.Second,
+		time.Duration(w.ApplyLengthSeconds) * time.Second
+}
 
 /*
 ================
@@ -119,6 +149,7 @@ func TestShippedScheduleMatchesTheClientWindow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	warLength, applyOpens, applyLength := loadClientWindow(t)
 	war, request := schedules["SiegeProgressing"], schedules["AllowSiegeRequest"]
 	now := time.Date(2026, 11, 1, 0, 0, 0, 0, loc)
 	for range 52 {
@@ -126,10 +157,11 @@ func TestShippedScheduleMatchesTheClientWindow(t *testing.T) {
 		if !ok {
 			t.Fatalf("no war after %s", now)
 		}
-		if end.Sub(start) != clientWarLength {
-			t.Fatalf("war %s lasts %s, the client prints %s", start, end.Sub(start), clientWarLength)
+		if end.Sub(start) != warLength {
+			t.Fatalf("war %s lasts %s, the client prints %s", start, end.Sub(start), warLength)
 		}
-		opens, closes := start.Add(-clientApplyOpens), start.Add(-clientApplyCloses)
+		opens := start.Add(-applyOpens)
+		closes := opens.Add(applyLength)
 		for day := time.Date(opens.Year(), opens.Month(), opens.Day(), 0, 0, 0, 0, loc); !day.After(closes); day = day.AddDate(0, 0, 1) {
 			for _, at := range []time.Time{day, day.Add(24*time.Hour - 2*time.Second)} {
 				if !request.Active(at) {
