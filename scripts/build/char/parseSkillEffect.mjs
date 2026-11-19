@@ -76,6 +76,15 @@ const SKILLDATA_COL_ANIMSET_BASE = 5;
 // motion-metadata remap GlobalEffectManager_FindSkillMotionMetadata
 // (917240) follows.
 const SKILLDATA_COL_ORIGINAL = 6;
+// Port-only, not native: the Blue Berserk effect rows the later client marks Service == 0 and the
+// port draws: the second Hwan body, and the two quest traps (the Niya General spirit trap and the
+// level 100 trial's Annihilation Trap), whose ground model the player must see.
+const HWAN_EFFECTS_WITHOUT_SERVICE = new Set( [
+	"SYSTEM_CH_HWAN2MODE",
+	"SKILL_QNO_CH_HWAN_1_4_04_01",
+	"SKILL_QNO_CH_WHAN_2_1_01_01",
+	"SKILL_QNO_EU_WHAN_2_1_01_01"
+] );
 
 /**
  * Native data_ccdca8: the built-in effect-name/id pairs registered into the
@@ -273,7 +282,13 @@ export function parseSkillAniSet( skillEffectPath ) {
 			// Port-only, not native: retail v1.150 ships the Qin-Shi Emperor Tomb
 			// skillaniset2 rows with Service == 0 while their skilleffectset rows
 			// are already present. Admit them only when SRO_QINSHI_TOMB is on.
-			if ( !qinshiTombCombatEnabled() || !isQinShiTombSkillEffectName( baseName ) ) {
+			// Port-only, not native: the 2nd Hwan body record (hit_4_hwan2mode.efp) also has
+			// Service == 0. Only a Blue Berserk owner (level frame 0x3FCB, cap-110 server)
+			// selects it, so shipping the record changes nothing for a native shard.
+			if (
+				!HWAN_EFFECTS_WITHOUT_SERVICE.has( baseName ) &&
+				(!qinshiTombCombatEnabled() || !isQinShiTombSkillEffectName( baseName ))
+			) {
 				continue;
 			}
 		}
