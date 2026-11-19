@@ -59,6 +59,8 @@ const CHAT_STRIP_FRAME = 62;
 const CHAT_STRIP_ROW = 56;
 const CHAT_STRIP_INPUT = 20;
 const PARTY_CHAT_GAP = 4;
+// The quest detail page's default body color (the native quest texts' own 255,44,15,1 as ARGB).
+const QUEST_DETAIL_TEXT: UiQuad["color"] = [ 44 / 255, 15 / 255, 1 / 255, 1 ];
 // The overhead job mark sits 4 px past the name board, which reaches 1.5 px
 // past the text (the beginner mark mirrors it at -21.5 = -20 - 1.5).
 const JOB_MARK_GAP = 5.5;
@@ -16578,11 +16580,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					authoredText( page.GDR_QUESTREWARD_TITLE!, px, py, meta?.rewardTitle ?? "" );
 					if ( q ) {
 						const r = authoredRect( page.GDR_QUESTREWARD_CONTENTS!, px, py );
+						// The default color of a body without its own font tag. Every v1.150 quest text sets
+						// 255,44,15,1 itself; the later client's strings (the cap-110 chains) leave the
+						// section bodies to the default, which must read on the parchment.
 						const result = text.guide(
 							guideTokens( meta?.rewardBody ?? "" ),
 							[ r[0], r[1] - questDetailScroll, r[2], r[3] ],
 							r,
-							gold,
+							QUEST_DETAIL_TEXT,
 							resources.size
 						);
 						questDetailMax = Math.max( 0, result.height - r[3] );
