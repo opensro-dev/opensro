@@ -357,7 +357,8 @@ export function createEffectPrograms() {
 							// last-wins, so a window of any length writes the same value
 							// each frame. The later client's dun/demon_altar_*.efp schedule
 							// it over frames 0-100.
-							((op.flags === 2 || op.flags === 3) && Number.isInteger( op.end ) && op.end >= 0 &&
+							((op.flags === 2 || op.flags === 3) && typeof op.end === "number" &&
+								Number.isInteger( op.end ) && op.end >= 0 &&
 								op.spacing === 1)
 						);
 						if (
