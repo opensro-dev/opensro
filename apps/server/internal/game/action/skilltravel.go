@@ -51,8 +51,10 @@ func (rt *Runtime) planSkillTravel(name string, from simulation.Spawn, owner sim
 planSkillTeleport
 
 tel2 lands at once: the destination is seated by FindNavCell at the point
-itself (nearest |deltaY|, terrain wins ties; client 0x98B1D0 -> 0x99FD90,
-the same rule movement.ts applies to a kind-2 displacement), never by the
+itself (nearest |deltaY|, terrain wins ties): the v1.188 server checks a
+teleport point afresh, with no owner hint, and keeps an object cell only
+when its height difference is strictly smaller than the terrain's. It is
+the same rule movement.ts applies to a kind-2 displacement. Never by the
 walk's resting surface. Seating with that surface as the hint kept a
 terrain owner and dropped a Wizard who teleported across a deck onto the
 ground under it (region 0x6687, y -30 -> -111, #3927).
