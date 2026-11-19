@@ -90,7 +90,9 @@ test("an unset muhan flag takes the shard's deployed posture", ( t ) => {
 	// The checkout's own posture: what the shard profile it ships
 	// (apps/server/config/shard-settings.json) says, so a default build
 	// bakes what the live shard runs.
-	const profile = JSON.parse( fs.readFileSync( new URL( "../../../apps/server/config/shard-settings.json", import.meta.url ), "utf8" ) );
+	const profile = JSON.parse(
+		fs.readFileSync( new URL( "../../../apps/server/config/shard-settings.json", import.meta.url ), "utf8" )
+	);
 	const deployed = profile.SRO_MUHAN === "on";
 	for ( const unset of [ undefined, "", "  " ] ) {
 		withMuhanFlag( t, unset );
