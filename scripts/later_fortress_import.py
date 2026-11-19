@@ -391,8 +391,7 @@ def add_fortress(spec, native, output, source=None, closure=sky.copy_resource_cl
 		# its shipped twin carries, so no skill shard joins). The
 		# shipped rows carry the same codenames and identities as the
 		# later ones, so the codename test is the identity test.
-		shipped_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != spec.character_shard
-			for r in tables.table_rows(p.read_bytes())]
+		shipped_chars = monsters.tree_characters(text_root, spec.character_shard)
 		shipped_codes = {r[2] for r in shipped_chars if len(r) > 2}
 		refs = {code: characters.convert_character(later[code])
 			for code in needed if code not in shipped_codes}

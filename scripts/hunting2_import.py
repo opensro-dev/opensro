@@ -154,12 +154,12 @@ def family_admits(code, row):
 #
 # The set's nests from its placements, by the cap-110 client posture:
 # one nest of one monster standing on each placement point of an
-# admitted species, identities sequential over the sorted
+# admitted species (kinds, staged or standing in the tree), identities sequential over the sorted
 # placements so a rebuild of the pinned client writes the same
 # file. The rows name the default world, whose regions these are.
 # ================
-def synthesize_population(placements, refs):
-	ordered = sorted((p for p in placements if p[0] in refs),
+def synthesize_population(placements, kinds):
+	ordered = sorted((p for p in placements if p[0] in kinds),
 		key=lambda p: (p[1], p[0], p[2], p[3], p[4]))
 	rows = []
 	for nest_id, (code, region, x, y, z) in enumerate(ordered, 1):
@@ -256,18 +256,31 @@ def add_monsters(v1696_root, native, output):
 		later = later_world_import.later_characters(read)
 		placements = hunting_placements(read("npcpos.txt"), later, set(regions))
 		codes = sorted({code for code, region, x, y, z in placements})
+		# 49 of the 71 placed kinds already stand in the tree (native
+		# Donwhang and Karakoram kinds, the cap-110, Arabia and Jupiter
+		# layers'): one codename stands in one row, so those are placed
+		# on their own row, under the same window the server admits them
+		# by (monster/hunting2.go admitHunting2), and only the rest are
+		# staged. Staging them again collided with their published ids (r203).
+		tree = {row[2]: row for row in cap110.tree_characters(text_root, CHARACTER_SHARD) if len(row) > 2}
 		refs = {}
+		placed = set()
 		for code in codes:
+			if code in tree:
+				if family_admits(code, tree[code]):
+					placed.add(code)
+				continue
 			if code not in later:
 				raise ValueError("placed monster has no v1.696 character row: " + code)
 			if family_admits(code, later[code]):
 				refs[code] = characters.convert_character(later[code])
-		missing = sorted(set(codes) - set(refs))
+				placed.add(code)
+		missing = sorted(set(codes) - placed)
 		if missing:
 			raise ValueError(f"hunting ground placements name unadmitted monsters: {missing}")
 		staged = later_world_import.stage_kinds("hunting ground", read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
 			lambda code: code in refs)
-		population = synthesize_population(placements, refs)
+		population = synthesize_population(placements, placed)
 		write_atomically(text_root / FIELD_FILE, (json.dumps(population) + "\n").encode())
 		summary = {"enabled": True,
 			"characters": staged["characters"], "skills": staged["skills"],
