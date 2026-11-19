@@ -14,7 +14,11 @@ are injected, so these run without the extracted tree.
 */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { AMBIENT_MODIFIER_KIND, equipmentAmbientParticles } from "../../build/char/equipmentParticles.mjs";
+import {
+	AMBIENT_MODIFIER_KIND,
+	equipmentAmbientParticles,
+	requireAmbientSockets
+} from "../../build/char/equipmentParticles.mjs";
 import { isAvatarItem, visualSocket } from "../../build/char/equipmentVisualRecords.mjs";
 
 const ATTACH = "res/item/avatar/avatar_w_steampunk_attach.bsr";
@@ -62,6 +66,17 @@ test("a worn avatar's ambient set is published although it has no slot", () => {
 	assert.deepEqual( [ ...ambient.keys() ], [ ATTACH ] );
 	assert.deepEqual( ambient.get( ATTACH ).map( m => m.kind ), [ AMBIENT_MODIFIER_KIND ] );
 	assert.ok( !read.includes( ARROWS ), "a slotless non-avatar row is not read" );
+});
+
+test("an avatar resource that is no branch places its ambient set on no socket", () => {
+	// The v1.696 Saytan attachment: a whole Bip02 rig, no attach bone.
+	const tail = [ { kind: AMBIENT_MODIFIER_KIND, entries: [ { effectPath: WING, boneName: "Bip02 Tail1" } ] } ];
+	const saytan = "res/item/avatar/avatar_saytan_attach.bsr";
+	assert.doesNotThrow( () => requireAmbientSockets( saytan, null, tail, true ) );
+	// A garment without its private bone, or with no branch, still refuses.
+	assert.throws( () => requireAmbientSockets( saytan, null, tail, false ), /Bip02 Tail1/ );
+	assert.throws( () => requireAmbientSockets( saytan, { nodes: [ { name: "Bip02" } ] }, tail, true ), /Bip02 Tail1/ );
+	assert.doesNotThrow( () => requireAmbientSockets( saytan, { nodes: [ { name: "Bip02 Tail1" } ] }, tail, false ) );
 });
 
 test("an absent resource publishes nothing", () => {
