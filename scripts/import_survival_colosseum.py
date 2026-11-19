@@ -29,6 +29,12 @@ from prepare_client_resources import safe_target, write_atomically
 from sro_paths import trees_overlap
 
 PIN_FILE = Path(__file__).with_name("survival_archive_pins.json")
+# The project's own pinned v1.696 client, the one the shard's variant build
+# already verifies (build_alexandria_variant.py). Its Map/Media/Data differ
+# from PIN_FILE's (a differently patched v1.696), so the arena could never be
+# imported for the shard: every entry was refused (#3931).
+PROJECT_PIN_FILE = Path(__file__).with_name("v1696_archive_pins.json")
+ARCHIVES = ("Map", "Media", "Data", "Particles")
 MANIFEST = ".opensro-survival-colosseum.json"
 SAFEZONE_PREFIX = "STRUCTURE_POS_COLOSSEUM_SAFEZONE_"
 SCRIPT_ROOT = Path(__file__).resolve().parent
@@ -158,33 +164,55 @@ def arena_character_rows(rows):
 
 
 # ================
+# accepted_pins
+#
+# Every accepted v1.696 set, PIN_FILE's first, each restricted to the four
+# archives the import reads.
+# ================
+def accepted_pins():
+	sets = [json.loads(PIN_FILE.read_text(encoding="utf8"))]
+	if PROJECT_PIN_FILE.is_file():
+		project = json.loads(PROJECT_PIN_FILE.read_text(encoding="utf8"))["archives"]
+		sets.append({name: project[name] for name in ARCHIVES})
+	return [pins for index, pins in enumerate(sets) if pins not in sets[:index]]
+
+
+# ================
 # archive_requirements
 # ================
 def archive_requirements(pins):
+	choices = pins if isinstance(pins, list) else [pins]
 	return (f"Required donor: {SOURCE_VERSION}. Supply your own legally obtained client; this tool does not download it.\n"
 		"Place these unchanged files together, e.g. C:/SRO-v1.696, and pass --client-root C:/SRO-v1.696.\n"
-		"Required SHA-256 hashes:\n" + "\n".join(f"  {name}.pk2  {digest}" for name, digest in pins.items()))
+		"Required SHA-256 hashes (any one set):\n" + "\n\n".join("\n".join(f"  {name}.pk2  {digest}" for name, digest in choice.items()) for choice in choices))
 
 
 # ================
 # open_archives
+#
+# Hash every archive once, before any parse, and accept the client only when
+# all of them match one accepted set. Returns the archives and that set.
 # ================
 def open_archives(stack, client, pins):
-	missing = [f"{name}.pk2" for name in pins if not (client / f"{name}.pk2").is_file()]
+	choices = pins if isinstance(pins, list) else [pins]
+	names = list(choices[0])
+	missing = [f"{name}.pk2" for name in names if not (client / f"{name}.pk2").is_file()]
 	if missing:
-		raise ValueError(f"Missing in {client}: {', '.join(missing)}\n{archive_requirements(pins)}")
-	archives = {}
-	for name, expected in pins.items():
+		raise ValueError(f"Missing in {client}: {', '.join(missing)}\n{archive_requirements(choices)}")
+	archives, actual = {}, {}
+	for name in names:
 		path = client / f"{name}.pk2"
 		if path.stat().st_size == 0:
-			raise ValueError(f"Empty archive: {path}\n{archive_requirements(pins)}")
+			raise ValueError(f"Empty archive: {path}\n{archive_requirements(choices)}")
 		handle = stack.enter_context(path.open("rb"))
 		data = stack.enter_context(mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ))
-		actual = source.sha256_of(data)
-		if actual != expected:
-			raise ValueError(f"Wrong {SOURCE_VERSION} archive: {path}\nExpected SHA-256: {expected}\nActual SHA-256:   {actual}")
+		actual[name] = source.sha256_of(data)
 		archives[name] = data
-	return archives
+	for choice in choices:
+		if all(actual[name] == choice.get(name) for name in names):
+			return archives, choice
+	wrong = next(name for name in names if all(actual[name] != choice.get(name) for choice in choices))
+	raise ValueError(f"Wrong {SOURCE_VERSION} archive: {client / (wrong + '.pk2')}\nActual SHA-256: {actual[wrong]}\n{archive_requirements(choices)}")
 
 
 # ================
@@ -196,14 +224,13 @@ def build_variant(client, native_root, output):
 		raise ValueError("Variant must be separate from the native game and source archives")
 	if output.exists() and any(output.iterdir()) and not (output / MANIFEST).is_file():
 		raise ValueError("Refuse reusing a nonempty folder without a Colosseum import manifest")
-	pins = json.loads(PIN_FILE.read_text(encoding="utf8"))
-	identity = {"format": "opensro-survival-colosseum-v1", "archives": pins, "nativeRoot": str(native_root)}
-	if (output / MANIFEST).exists():
-		previous = json.loads((output / MANIFEST).read_text(encoding="utf8"))
-		if previous.get("format") != identity["format"] or previous.get("nativeRoot") != identity["nativeRoot"] or any(pins.get(key) != value for key, value in previous.get("archives", {}).items()):
-			raise ValueError("Variant manifest belongs to different input assets")
 	with ExitStack() as stack:
-		archives = open_archives(stack, client, pins)
+		archives, pins = open_archives(stack, client, accepted_pins())
+		identity = {"format": "opensro-survival-colosseum-v1", "archives": pins, "nativeRoot": str(native_root)}
+		if (output / MANIFEST).exists():
+			previous = json.loads((output / MANIFEST).read_text(encoding="utf8"))
+			if previous.get("format") != identity["format"] or previous.get("nativeRoot") != identity["nativeRoot"] or any(pins.get(key) != value for key, value in previous.get("archives", {}).items()):
+				raise ValueError("Variant manifest belongs to different input assets")
 		# Validate every archive before parsing any directory or writing output.
 		indexes = {name: source.archive_index(data) for name, data in archives.items()}
 
@@ -316,7 +343,7 @@ def build_variant(client, native_root, output):
 # ================
 def main():
 	parser = argparse.ArgumentParser(description=__doc__,
-		epilog=archive_requirements(json.loads(PIN_FILE.read_text(encoding="utf8"))),
+		epilog=archive_requirements(accepted_pins()),
 		formatter_class=argparse.RawDescriptionHelpFormatter)
 	parser.add_argument("--client-root", type=Path, required=True, help="Folder containing the exact v1.696 Map/Media/Data/Particles.pk2 (see hashes below)")
 	parser.add_argument("--native-root", type=Path, required=True)

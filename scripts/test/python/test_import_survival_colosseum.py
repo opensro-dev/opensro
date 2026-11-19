@@ -37,13 +37,13 @@ class ColosseumImportTests(unittest.TestCase):
 			pins = {name: hashlib.sha256(name.encode()).hexdigest() for name in ("Map", "Media", "Data", "Particles")}
 			pin_file = root / "pins.json"
 			pin_file.write_text(json.dumps(pins), encoding="utf8")
-			with patch.object(arena, "PIN_FILE", pin_file), patch.object(arena.source, "archive_index") as parse:
+			with patch.object(arena, "PIN_FILE", pin_file), patch.object(arena, "PROJECT_PIN_FILE", root / "absent.json"), patch.object(arena.source, "archive_index") as parse:
 				with self.assertRaisesRegex(ValueError, "Missing.*Map.pk2"):
 					arena.build_variant(client, root / "native", output)
 				for name in pins:
 					(client / f"{name}.pk2").write_bytes(name.encode())
 				(client / "Particles.pk2").write_bytes(b"wrong build")
-				with self.assertRaisesRegex(ValueError, "Expected SHA-256.*\\nActual SHA-256"):
+				with self.assertRaisesRegex(ValueError, "Wrong .*Particles.pk2\\nActual SHA-256"):
 					arena.build_variant(client, root / "native", output)
 				parse.assert_not_called()
 				self.assertFalse(output.exists())
@@ -52,9 +52,40 @@ class ColosseumImportTests(unittest.TestCase):
 				arena.open_archives(stack, client, pins)
 			(client / "Particles.pk2").write_bytes(b"Particles")
 			with ExitStack() as stack:
-				archives = arena.open_archives(stack, client, pins)
+				archives, chosen = arena.open_archives(stack, client, pins)
 				self.assertEqual({name: bytes(data) for name, data in archives.items()}, {name: name.encode() for name in pins})
+				self.assertEqual(chosen, pins)
 			self.assertIn("v1.696", arena.archive_requirements(pins))
+
+	# ================
+	# test_the_projects_pinned_client_is_accepted
+	#
+	# The shard's variant build verifies its own v1.696 pins; the arena
+	# import accepts that client too, and still refuses one matching
+	# neither set (#3931).
+	# ================
+	def test_the_projects_pinned_client_is_accepted(self):
+		with tempfile.TemporaryDirectory() as folder:
+			root = Path(folder)
+			client = root / "client"
+			client.mkdir()
+			for name in arena.ARCHIVES:
+				(client / f"{name}.pk2").write_bytes(b"project " + name.encode())
+			own = {name: hashlib.sha256(b"other " + name.encode()).hexdigest() for name in arena.ARCHIVES}
+			project = {name: hashlib.sha256(b"project " + name.encode()).hexdigest() for name in arena.ARCHIVES}
+			project["Music"] = hashlib.sha256(b"music").hexdigest()
+			(root / "own.json").write_text(json.dumps(own), encoding="utf8")
+			(root / "project.json").write_text(json.dumps({"format": "opensro-vsro-archive-pins-v1", "archives": project}), encoding="utf8")
+			with patch.object(arena, "PIN_FILE", root / "own.json"), patch.object(arena, "PROJECT_PIN_FILE", root / "project.json"):
+				accepted = arena.accepted_pins()
+				self.assertEqual(len(accepted), 2)
+				self.assertNotIn("Music", accepted[1])
+				with ExitStack() as stack:
+					_, chosen = arena.open_archives(stack, client, accepted)
+					self.assertEqual(chosen, accepted[1])
+				(client / "Map.pk2").write_bytes(b"neither")
+				with ExitStack() as stack, self.assertRaisesRegex(ValueError, "Wrong .*Map.pk2"):
+					arena.open_archives(stack, client, accepted)
 
 	# ================
 	# test_higher_level_rows_reuse_native_models_and_skills
