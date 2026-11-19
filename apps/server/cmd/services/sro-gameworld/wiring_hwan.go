@@ -133,6 +133,7 @@ func (game *gameplayPlane) wireHwanLevel(quests *quest.Runtime) error {
 	game.movement.WalkAllowed = quests.HwanWalkAllowed
 	game.items.WalkAllowed = quests.HwanWalkAllowed
 	game.items.HwanLevel = quests.HwanLevel
+	game.items.SetHwanLevel = quests.SetGMHwanLevel
 	quests.HwanLevelFrames = game.items.HwanLevelFrames
 	halloween := game.deps.EntryEventFrames
 	game.deps.EntryEventFrames = func(division string, character *enterworld.Character) []enterworld.Packet {
