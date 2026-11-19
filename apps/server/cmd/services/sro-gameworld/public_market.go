@@ -13,6 +13,7 @@ references, the exchange's trade rule and the live session list.
 package main
 
 import (
+	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -37,7 +38,8 @@ func marketService(gameplay *gameplayPlane, authority *store.Store, shard string
 			if !ok || ref == nil {
 				return market.ItemInfo{}, false
 			}
-			return market.ItemInfo{Name: ref.Name, TypeIDs: ref.TypeIDs, Degree: enterworld.EquipmentDegree(ref)}, true
+			return market.ItemInfo{Name: ref.Name, TypeIDs: ref.TypeIDs, Degree: enterworld.EquipmentDegree(ref),
+				Race: marketRace(ref.Country), Sealed: enterworld.RaritySealed(int(ref.Rarity))}, true
 		},
 		Tradeable: func(row domain.InventoryRow) bool {
 			return gameplay.items.Tradeable(row.Codename, row.ForgeBound, row.Summon)
@@ -57,5 +59,24 @@ func marketService(gameplay *gameplayPlane, authority *store.Store, shard string
 		WhileOffline: func(c *domain.Character, write func() error) (bool, error) {
 			return gameplay.items.WhileOffline(shard, c.Name, write)
 		},
+		FreeBagSlot: gameplay.items.MarketFreeBagSlot,
 	}
+}
+
+/*
+================
+marketRace
+
+The market's race of an item reference's Country column (0 China,
+1 Europe, 3 either; equiproster.go).
+================
+*/
+func marketRace(country int64) string {
+	switch country {
+	case 0:
+		return publicstats.MarketRaceChinese
+	case 1:
+		return publicstats.MarketRaceEuropean
+	}
+	return ""
 }

@@ -93,10 +93,20 @@ port-only event notices (event: job kills, drops, plus results, breaks)
 live only there: All skips them and the native tabs never carried them.
 A native type-7 server notice, such as the operator's restart warning,
 is meant for every player, so All keeps it too (owner 2026-11-14).
+Port-only: a line marked everyTab (the consignment market's notices,
+#3529) shows on every native tab, as the native every-tab types do; a
+native notice stays on All.
 ================
 */
-export function chatTabShows( channel: number, tab: number, eventTab: boolean, event = false ): boolean {
+export function chatTabShows(
+	channel: number,
+	tab: number,
+	eventTab: boolean,
+	event = false,
+	everyTab = false
+): boolean {
 	if ( channel === STALL_CHAT_CHANNEL ) return false;
+	if ( everyTab && !(eventTab && tab === 4) ) return true;
 	if ( eventTab && tab === 4 ) return channel === 7;
 	if ( tab === 0 ) return !eventTab || !event;
 	return channel === CHAT_TAB_CHANNELS[tab] || EVERY_TAB_CHAT_CHANNELS.includes( channel );
@@ -427,47 +437,48 @@ button
 					sequence: undefined as number | undefined
 				}) ) :
 				[]),
-			...lines.filter( l => chatTabShows( l.channel, activeTab, !!state.eventTab, !!l.event ) ).flatMap(
-				l => {
-					const sun = isSunDropChatLine( l ),
-						color = sealNoticeChatColor( l ) ?? chatLineColor( l.channel ),
-						style: GlyphStyle | undefined = sun ? { fontStyle: 2 } : undefined,
-						// Port-only, not native (#3358): the contributor tag
-						// before a rostered sender, notices (channel 7)
-						// carry no sender and are never tagged.
-						tag = l.channel !== 7 && l.name !== "" && state.contributorTitles?.includes( l.name ) ?
-							CONTRIBUTOR_TAG :
-							"",
-						// Port-only item links: each marker shows its item's label. A line
-						// without a marker takes none of this path (the per-frame budget).
-						raw = tag + chatLineText( l, copy ),
-						labelled = raw.includes( CHAT_LINK_MARKER ) ?
-							chatLinkSpans( raw, l.links, state.chatItemLinks === true ) :
-							null,
-						full = labelled?.text ?? raw,
-						wrapped = chatWrappedLines(
-							state.wrapCache,
-							full,
-							textWidth,
-							style?.fontStyle ?? 0,
-							() => textLines( full, textWidth, value => measure( value, style ), true )
-						),
-						links = noticeWrappedLinks( full, wrapped, state.noticeLinks ? l.notice : undefined ),
-						itemLinks = labelled?.spans.length ? projectSpans( full, wrapped, labelled.spans ) : null;
-					return wrapped.map( ( value, index ) => ({
-						value,
-						tag: index === 0 ? tag : "",
-						color,
-						style,
-						recipient: l.channel !== 7 ? l.name : undefined,
-						sentAt: l.sentAt,
-						notice: state.noticeLinks ? l.notice : undefined,
-						links: links[index] ?? ([] as readonly NoticeRowLink[]),
-						itemLinks: itemLinks?.[index] ?? noItemLinks,
-						sequence: l.sequence
-					}) );
-				}
-			)
+			...lines.filter( l => chatTabShows( l.channel, activeTab, !!state.eventTab, !!l.event, !!l.everyTab ) )
+				.flatMap(
+					l => {
+						const sun = isSunDropChatLine( l ),
+							color = sealNoticeChatColor( l ) ?? chatLineColor( l.channel ),
+							style: GlyphStyle | undefined = sun ? { fontStyle: 2 } : undefined,
+							// Port-only, not native (#3358): the contributor tag
+							// before a rostered sender, notices (channel 7)
+							// carry no sender and are never tagged.
+							tag = l.channel !== 7 && l.name !== "" && state.contributorTitles?.includes( l.name ) ?
+								CONTRIBUTOR_TAG :
+								"",
+							// Port-only item links: each marker shows its item's label. A line
+							// without a marker takes none of this path (the per-frame budget).
+							raw = tag + chatLineText( l, copy ),
+							labelled = raw.includes( CHAT_LINK_MARKER ) ?
+								chatLinkSpans( raw, l.links, state.chatItemLinks === true ) :
+								null,
+							full = labelled?.text ?? raw,
+							wrapped = chatWrappedLines(
+								state.wrapCache,
+								full,
+								textWidth,
+								style?.fontStyle ?? 0,
+								() => textLines( full, textWidth, value => measure( value, style ), true )
+							),
+							links = noticeWrappedLinks( full, wrapped, state.noticeLinks ? l.notice : undefined ),
+							itemLinks = labelled?.spans.length ? projectSpans( full, wrapped, labelled.spans ) : null;
+						return wrapped.map( ( value, index ) => ({
+							value,
+							tag: index === 0 ? tag : "",
+							color,
+							style,
+							recipient: l.channel !== 7 ? l.name : undefined,
+							sentAt: l.sentAt,
+							notice: state.noticeLinks ? l.notice : undefined,
+							links: links[index] ?? ([] as readonly NoticeRowLink[]),
+							itemLinks: itemLinks?.[index] ?? noItemLinks,
+							sequence: l.sequence
+						}) );
+					}
+				)
 		];
 		const end = all.length - Math.min( Math.max( 0, offset ), Math.max( 0, all.length - rows * 4 ) ),
 			display = hidden ? [] : all.slice( Math.max( 0, end - rows * 4 ), end );
