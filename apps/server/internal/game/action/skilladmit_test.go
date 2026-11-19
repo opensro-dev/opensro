@@ -457,7 +457,9 @@ func TestRootedWizardTeleportStillTravels(t *testing.T) {
 		GroundX: uint16(from.X + 500), GroundY: uint16(from.Y), GroundZ: uint16(from.Z)}.Encode()
 	out := rt.HandleTargetInteract(testDivision, c, cast)
 	to := rt.liveSpawn(key, c, clock.NowMs())
-	if len(out.Frames) != 3 || to.X != from.X+float64(skill.PositionEffect.Range) {
+	// tel2's bracket stays open until its mode-2 close, so it arms the
+	// action latch (0xB2CD) every open skill cast arms (#3927).
+	if len(out.Frames) != 4 || out.Frames[3].Opcode != wire.OpActionState || to.X != from.X+float64(skill.PositionEffect.Range) {
 		t.Fatalf("rooted Teleport refused or did not travel: %+v %+v -> %+v", out.Frames, from, to)
 	}
 }
