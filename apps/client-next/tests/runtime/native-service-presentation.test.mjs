@@ -55,6 +55,19 @@ test("reagents preserve every existing alchemy operation without a synthetic mod
 	assert.deepEqual( defined( alchemySelection( "magic", [ 13, 14 ], item( 13, 0x32c ) ) ).slots, [] );
 	assert.equal( alchemySelection( "reinforce", [], item( 6, 0x32c ) ), null );
 });
+
+test("a processing reagent on the empty Reinforce page opens Material Processing", () => {
+	const item = ( slot, typeFlags ) => ({ slot, typeFlags });
+	// Void and Destroyer Rondo (7465/7492, 3/3/11/6 0x35ec), the tablet
+	// (0x25ec) and the advanced elixir (0x1dec) bind on their own page (#3929).
+	for ( const [flags, mode] of [ [ 0x35ec, "compound" ], [ 0x25ec, "compound" ], [ 0x1dec, "advanced" ] ] ) {
+		assert.deepEqual( alchemySelection( "reinforce", [], item( 82, flags ) ), { mode, slots: [ 82 ] } );
+	}
+	// With a reinforce target bound, a rondo is still not a reinforce reagent.
+	assert.equal( alchemySelection( "reinforce", [ 13 ], item( 82, 0x35ec ) ), null );
+	// A stone alone on the empty page still binds nothing.
+	assert.equal( alchemySelection( "reinforce", [], item( 82, 0xdec ) ), null );
+});
 test("a new main item replaces the slotted one instead of being refused", () => {
 	const item = ( slot, typeFlags ) => ({ slot, typeFlags });
 	// 62B80B..62B8E9: new equipment on the reinforce page replaces the target

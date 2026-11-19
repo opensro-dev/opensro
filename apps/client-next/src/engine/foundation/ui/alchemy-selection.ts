@@ -137,9 +137,16 @@ export function alchemySelection(
 	const flags = item.typeFlags & 0xfffe,
 		equipment = isAlchemyEquipment( flags ),
 		process = [ "compound", "advanced", "dissolve" ].includes( mode ),
-		rondoResets = flags === 0x35ec && (mode === "advanced" || slots.length >= alchemySlotCapacity( mode ));
+		rondoResets = flags === 0x35ec && (mode === "advanced" || slots.length >= alchemySlotCapacity( mode )),
+		// Material-processing reagents: the advanced elixir (0x1dec), the
+		// tablet (0x25ec) and the rondo (0x35ec).
+		processReagent = flags === 0x1dec || flags === 0x25ec || flags === 0x35ec;
 	if ( !slots.length ) {
-		if ( process ) {
+		// Inference (no binary shows the tabbed box's cross-tab drop): the
+		// reagent selects the operation (62B6D0), so a processing reagent on
+		// the empty Reinforce page opens Material Processing with it bound.
+		// Ignoring it left Void and Destroyer Rondo doing nothing (#3929).
+		if ( process || processReagent ) {
 			if ( equipment ) mode = "dissolve";
 			else if ( flags === 0x1dec ) mode = "advanced";
 			else if ( flags === 0x25ec || flags === 0x35ec ) mode = "compound";
