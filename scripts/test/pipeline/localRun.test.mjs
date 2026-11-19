@@ -28,7 +28,7 @@ import {
 	unpublishedStartupAssets,
 	upgradeLocalAuthority
 } from "../../local/preboot.mjs";
-import { stopAnnouncement } from "../../local/run.mjs";
+import { agentOriginsEnvironment, clientPort, stopAnnouncement } from "../../local/run.mjs";
 import {
 	countWorldCharacters,
 	describeWorld,
@@ -408,4 +408,65 @@ test("a stdin close announces itself; a console stop does not", () => {
 		"stdin closed: stopping (start with a terminal, or keep stdin open)"
 	);
 	assert.equal( stopAnnouncement( "console" ), "stopping..." );
+});
+
+/*
+================
+localSettings
+
+The runner's settings shape for a local.env holding these lines.
+================
+*/
+function localSettings( local = {}, env = {} ) {
+	return { local: new Map( Object.entries( local ) ), env: new Map( Object.entries( env ) ) };
+}
+
+/*
+================
+withoutOriginsEnvironment
+
+Runs body with SRO_AGENT_ALLOWED_ORIGINS unset in this process, so the
+shell the test runs from cannot decide it.
+================
+*/
+function withoutOriginsEnvironment( t, body ) {
+	const saved = process.env.SRO_AGENT_ALLOWED_ORIGINS;
+	delete process.env.SRO_AGENT_ALLOWED_ORIGINS;
+	t.after( () => {
+		if ( saved !== undefined ) {
+			process.env.SRO_AGENT_ALLOWED_ORIGINS = saved;
+		}
+	} );
+	body();
+}
+
+/*
+================
+TestClientPort
+================
+*/
+test("the client port is 5180 unless local.env names another, and only a real port", () => {
+	assert.equal( clientPort( localSettings() ), 5180 );
+	assert.equal( clientPort( localSettings( { LOCAL_CLIENT_PORT: "5190" } ) ), 5190 );
+	for ( const bad of [ "80", "70000", "51x0", "" ] ) {
+		assert.throws( () => clientPort( localSettings( { LOCAL_CLIENT_PORT: bad } ) ), /LOCAL_CLIENT_PORT/ );
+	}
+});
+
+/*
+================
+TestAgentOrigins
+================
+*/
+test("the Agent admits the client's port only when it moved, and a named list wins", t => {
+	withoutOriginsEnvironment( t, () => {
+		assert.deepEqual( agentOriginsEnvironment( localSettings(), 5180 ), {} );
+		assert.deepEqual( agentOriginsEnvironment( localSettings(), 5190 ), {
+			SRO_AGENT_ALLOWED_ORIGINS: "http://127.0.0.1:5190,http://localhost:5190"
+		} );
+		const named = localSettings( {}, { SRO_AGENT_ALLOWED_ORIGINS: "https://example.test" } );
+		assert.deepEqual( agentOriginsEnvironment( named, 5190 ), {
+			SRO_AGENT_ALLOWED_ORIGINS: "https://example.test"
+		} );
+	} );
 });
