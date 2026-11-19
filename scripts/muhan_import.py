@@ -417,8 +417,15 @@ def add_monsters(v1696_root, native, output, source_root=None):
 			if form not in later:
 				raise ValueError(f"muhan transform form {form} is absent from the later client")
 			refs[form] = characters.convert_character(later[form])
+		# The v1.696 client gives every change form one name symbol,
+		# SN_MOB_MUHAN_SOLO_A_75, and no text row for it in any of its
+		# 2,468 textdata files (checked 2026-11-19). The form is the
+		# player's own transformed body, named by the player, so the
+		# client never looks the symbol up (an inference from the missing
+		# row, recorded as AGENTS.md asks). Staged as the client ships them.
 		staged = later_world_import.stage_kinds("muhan", read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
-			lambda code: code in refs, sorted({row["SkillCodename"] for row in transforms["Rows"]}))
+			lambda code: code in refs, sorted({row["SkillCodename"] for row in transforms["Rows"]}),
+			unnamed={row["MonsterCodename"] for row in transforms["Rows"]})
 		write_atomically(text_root / WAVES_FILE, (json.dumps(waves) + "\n").encode())
 		write_atomically(text_root / NPCS_FILE, (json.dumps(npcs) + "\n").encode())
 		write_atomically(text_root / TRANSFORMS_FILE, (json.dumps(transforms) + "\n").encode())
