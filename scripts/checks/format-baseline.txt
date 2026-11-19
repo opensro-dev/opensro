@@ -42,7 +42,6 @@ apps/client-next/src/engine/foundation/animation/projectile-curve.ts
 apps/client-next/src/engine/foundation/animation/random-idle.ts
 apps/client-next/src/engine/foundation/animation/skill-motion.ts
 apps/client-next/src/engine/foundation/animation/status-presentation.ts
-apps/client-next/src/engine/foundation/assets/asset-budget.ts
 apps/client-next/src/engine/foundation/assets/image-budget.ts
 apps/client-next/src/engine/foundation/audio/environment.ts
 apps/client-next/src/engine/foundation/audio/item-sounds.ts
