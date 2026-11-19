@@ -278,5 +278,28 @@ class Hunting2ImportTest(unittest.TestCase):
 						hunting2.add_monsters(v1696, native, output)
 
 
+	# ================
+	# test_a_tomb_overlay_kind_is_placed_on_its_row_while_the_tomb_is_on
+	#
+	# r203g: five of the set's MOB_TQ_* kinds are rows of the Qin-Shi
+	# overlay the server appends while SRO_QINSHI_TOMB is on (the shard
+	# default); staging them too made the bake refuse a duplicate
+	# codename. Off, the overlay stands nowhere and the kind is staged.
+	# ================
+	def test_a_tomb_overlay_kind_is_placed_on_its_row_while_the_tomb_is_on(self):
+		overlay = ["0"] * 120
+		overlay[1], overlay[2], overlay[15], overlay[57] = "14808", "MOB_TQ_INSIDE", "0", "91"
+		for tomb, staged in (("on", False), ("off", True)):
+			with tempfile.TemporaryDirectory() as root:
+				v1696, native, output, text_root, pins = self.fixture(Path(root))
+				with mock.patch.object(jupiter, "archive_pins", return_value=pins), 						mock.patch.object(hunting2.shard_switch, "overlay_rows", return_value=[overlay]):
+					with mock.patch.dict(os.environ, {"SRO_HUNTING2": "on", hunting2.QINSHI_TOMB_FLAG: tomb}):
+						hunting2.add_monsters(v1696, native, output)
+				shard = (text_root / hunting2.CHARACTER_SHARD).read_bytes().decode("utf-16")
+				self.assertEqual("MOB_TQ_INSIDE" in shard, staged, tomb)
+				population = json.loads((text_root / hunting2.FIELD_FILE).read_text(encoding="utf-8"))
+				self.assertEqual([row["Codename"] for row in population["Rows"]].count("MOB_TQ_INSIDE"), 2, tomb)
+
+
 if __name__ == "__main__":
 	unittest.main()

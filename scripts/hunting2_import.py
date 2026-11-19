@@ -62,6 +62,7 @@ import import_vsro_alexandria as tables
 import jupiter_import as jupiter
 import later_world_import
 from prepare_client_resources import write_atomically
+import shard_switch
 from sro_paths import trees_overlap
 
 FLAG = "SRO_HUNTING2"
@@ -136,6 +137,30 @@ def hunting_placements(npcpos_raw, later, regions):
 		seen.add(key)
 		placements.append((code, region, x, y, z))
 	return placements
+
+
+# The Qin-Shi tomb's server overlay (monster/qinshi_tomb.go,
+# shared/qinshiTomb.mjs): 79 character rows the server appends while
+# SRO_QINSHI_TOMB is on, which the shard registry defaults on. Five of the
+# set's MOB_TQ_* kinds are among them.
+QINSHI_TOMB_FLAG = "SRO_QINSHI_TOMB"
+QINSHI_TOMB_ON_WORDS = ("1", "on", "true", "yes")
+QINSHI_TOMB_CHARACTERS = "internal/game/world/monster/data/qinshi_tomb_characterdata.tsv"
+
+
+# ================
+# standing_characters
+#
+# Every character row that stands beside this import's own shard: the
+# tree's other shards, and the Qin-Shi overlay's rows while the shard
+# admits them. A kind standing here is placed on its row, never staged
+# again: one codename, one row (the bake's roster refuses a duplicate).
+# ================
+def standing_characters(text_root, env=os.environ):
+	rows = cap110.tree_characters(text_root, CHARACTER_SHARD)
+	if shard_switch.switch_enabled(QINSHI_TOMB_FLAG, QINSHI_TOMB_ON_WORDS, env):
+		rows += shard_switch.overlay_rows(QINSHI_TOMB_CHARACTERS)
+	return {row[2]: row for row in rows if len(row) > 2}
 
 
 # ================
@@ -261,8 +286,9 @@ def add_monsters(v1696_root, native, output):
 		# layers'): one codename stands in one row, so those are placed
 		# on their own row, under the same window the server admits them
 		# by (monster/hunting2.go admitHunting2), and only the rest are
-		# staged. Staging them again collided with their published ids (r203).
-		tree = {row[2]: row for row in cap110.tree_characters(text_root, CHARACTER_SHARD) if len(row) > 2}
+		# staged. Staging them again collided with their published ids (r203),
+		# and the Qin-Shi overlay's five with the bake's roster (r203g).
+		tree = standing_characters(text_root)
 		refs = {}
 		placed = set()
 		for code in codes:
