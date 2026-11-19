@@ -100,7 +100,7 @@ test("scheduled rotation does not run before its authored frame", () => {
 test("every published rare effect preserves ordered BAN and rotation commands", () => {
 	const bytes = readPublishedAssetBytesSync( "assets/effects/programs.json", publicRoot );
 	const catalog = JSON.parse( new TextDecoder().decode( bytes ) );
-	let effects = 0, rotations = 0, positions = 0;
+	let effects = 0, rotations = 0, positions = 0, authoredRotations = 0, authoredPositions = 0;
 	const compiler = createEffectPrograms();
 	for ( const [path, source] of Object.entries( catalog.effects ) ) {
 		if ( !path.startsWith( "system/system_rare" ) ) continue;
@@ -124,14 +124,20 @@ test("every published rare effect preserves ordered BAN and rotation commands", 
 				expected.map( op => [ op.name, op.flags ] ),
 				path
 			);
+			authoredRotations += expected.filter( op => op.name === "SetBANRot" ).length;
+			authoredPositions += expected.filter( op => op.name === "SetBANPos" ).length;
 			rotations += actual.filter( op => op.name === "SetBANRot" ).length;
 			positions += actual.filter( op => op.name === "SetBANPos" ).length;
 		}
 		effects++;
 	}
 	assert.ok( effects > 0 );
-	assert.equal( rotations, 49 );
-	assert.equal( positions, 49 );
+	// Every authored BAN command reaches the graph, whatever the tree holds:
+	// a pinned count (49 on the base tree) broke as soon as a release
+	// published more rare effects.
+	assert.ok( authoredRotations > 0 && authoredPositions > 0 );
+	assert.equal( rotations, authoredRotations );
+	assert.equal( positions, authoredPositions );
 });
 
 test("BAN accumulation and constant rotation preserve their different native operand orders", () => {
