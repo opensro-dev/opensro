@@ -898,6 +898,26 @@ func (s *moverStorage) catchUpActivity(gid uint32, now uint32) {
 
 /*
 ================
+pendingPose
+
+The pose a pending row rests at, false for a live row or none: the
+dormancy sleep (sleepCellOf) keys a cave sleeper by the message block
+under it.
+================
+*/
+func (s *moverStorage) pendingPose(gid uint32) (monster.Pose, bool) {
+	if s == nil {
+		return monster.Pose{}, false
+	}
+	slot, ok := s.slotOf(gid)
+	if !ok || s.slots[slot].rec.pending == nil {
+		return monster.Pose{}, false
+	}
+	return s.slots[slot].rec.pending.pose, true
+}
+
+/*
+================
 compact
 ================
 */

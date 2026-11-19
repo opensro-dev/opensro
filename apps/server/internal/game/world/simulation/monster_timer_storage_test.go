@@ -25,13 +25,13 @@ func TestDormantTimerRestoresWithoutReset(t *testing.T) {
 	state.storeAITimer(77)
 	// The wake forgets a registered sleeper: production stores a bank
 	// only from tryDormant, which registers the gid first (#2029).
-	state.dormant = map[uint32]uint16{77: 7}
-	state.dormantRegions = map[uint16]map[uint32]struct{}{7: {77: {}}}
+	state.dormant = map[uint32]sleepCell{77: {region: 7}}
+	state.dormantCells = map[sleepCell]map[uint32]struct{}{{region: 7}: {77: {}}}
 	state.forgetDormant(77)
 	if state.aiTimers[77] == nil || *state.aiTimers[77] != want {
 		t.Fatal("wake did not restore timers")
 	}
-	if len(state.dormant) != 0 || len(state.dormantRegions) != 0 {
+	if len(state.dormant) != 0 || len(state.dormantCells) != 0 {
 		t.Fatal("wake left the sleeper registered")
 	}
 	if state.aiTimer(999) != nil {
