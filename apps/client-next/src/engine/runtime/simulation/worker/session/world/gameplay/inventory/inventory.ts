@@ -875,7 +875,7 @@ references
 bootstrap
 ================
 		*/
-		bootstrap( value: unknown ) {
+		bootstrap( value: unknown, receivedAtMs = 0 ) {
 			bindingMoves = [];
 			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
 			itemCooldowns = [];
@@ -897,6 +897,7 @@ bootstrap
 			const b = value as {
 				inventorySlotCount?: number;
 				equipmentSlotCount?: number;
+				itemCooldowns?: { group: number; remainingMs: number; }[];
 				refItemSnapshot?: {
 					icon?: string;
 					name?: string;
@@ -954,6 +955,25 @@ bootstrap
 				refs.set( r.refObjId, r.typeFlags );
 				if ( typeof r.name === "string" ) names.set( r.refObjId, r.name );
 				if ( typeof r.codename === "string" ) codenames.set( r.refObjId, r.codename );
+			}
+			// Item groups still cooling down at entry (a teleport re-enters the world):
+			// the server keeps refusing them, so the icons keep their sweep. The sweep's
+			// length is the group's authored duration; unknown, it is the time left.
+			for ( const row of b.itemCooldowns ?? [] ) {
+				if ( !Number.isInteger( row.group ) || !Number.isInteger( row.remainingMs ) || row.remainingMs <= 0 ) {
+					continue;
+				}
+				const authored = [ ...tooltipRefs.values() ].map( t =>
+					t.fields
+				).find( f => f.useCooldownGroup524 === row.group && (f.useCooldownDuration528 ?? 0) > 0 )
+					?.useCooldownDuration528 ?? 0;
+				const durationMs = Math.max( authored, row.remainingMs );
+				itemCooldowns = [ ...itemCooldowns, {
+					category: 18,
+					group: row.group,
+					startedAtMs: receivedAtMs - (durationMs - row.remainingMs),
+					durationMs
+				} ];
 			}
 			const next = new Map<number, InventoryItem>(), seenSlots = new Set<number>();
 			for ( const row of b.equipItems ?? [] ) {
