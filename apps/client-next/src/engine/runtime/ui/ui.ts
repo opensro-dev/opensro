@@ -1612,6 +1612,19 @@ export function createUi( ports: UiPorts ) {
 	// step clock the effect plays on (62B0B0, alchemy-result.ts).
 	let alchemyOutcomeSeen = 0, alchemyClock = 0;
 	let alchemyEffect: { readonly flags: number; readonly startedAt: number; } | null = null;
+	/*
+	================
+	alchemyFusing
+
+	Whether a reinforcement runs (native +0x378): from the press through the
+	prepare effect and the answer (the worker's pending) until the result
+	effect has played (62C350 timer 0xA clears it at 625260). 62AFA0 ignores
+	the Fuse press and 62B6F0 refuses a slot drop meanwhile.
+	================
+	*/
+	function alchemyFusing() {
+		return !!view?.gameplay?.inventoryPending || alchemyEffect !== null;
+	}
 	const fortressStaffHud = createFortressStaffHud();
 	const unionHud = createUnionHud();
 	const guildWarHud = createGuildWarHud();
@@ -4609,6 +4622,7 @@ export function createUi( ports: UiPorts ) {
 			}
 		} else if ( id === "alchemy-cancel" ) sendGameplay( { kind: "alchemy-cancel" } );
 		else if ( id === "alchemy-start" ) {
+			if ( alchemyFusing() ) return;
 			sendGameplay( {
 				kind: "alchemy-start",
 				mode: alchemyMode,
@@ -9765,6 +9779,7 @@ export function createUi( ports: UiPorts ) {
 				if ( !alchemyEffectCell( now - alchemyEffect.startedAt ) ) alchemyEffect = null;
 				dirty = true;
 			}
+			if ( next.gameplay?.alchemy?.preparing !== undefined ) dirty = true;
 			fortressStaffHud.observe(
 				next.session?.phase === "world" && next.gameplay?.npcConversation?.phase === "menu" &&
 					next.gameplay.target === next.gameplay.npcConversation.gid ?
@@ -17792,7 +17807,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						),
 						processing = [ "compound", "advanced", "dissolve" ].includes( alchemyMode ),
 						page = hudData.windows[processing ? "ifalchemyprocess" : "ifnewalchemyreinforce"]!,
-						busy = !!game?.inventoryPending;
+						busy = !!game?.inventoryPending,
+						fusing = !processing && alchemyFusing();
 					const top = ROOT + "interface/alchemy/alcm_window_2.png";
 					paths.push( top );
 					// 620180 sets alcm_window_2 (376x148) as the box's own texture and
@@ -17849,8 +17865,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					nativePage( page, px, py + 150 );
 					// CIFAlchemyReinforce's effect sprite, control 50 (625600).
 					const deco = page.GDR_AB_REINFORCE_PROCESS_DECO,
-						cell = alchemyEffect && alchemyEffectCell( alchemyClock - alchemyEffect.startedAt );
-					if ( !processing && deco && alchemyEffect && cell ) {
+						cell = alchemyEffect && alchemyEffectCell( alchemyClock - alchemyEffect.startedAt ),
+						preparing = game?.alchemy?.preparing,
+						prepareCell = preparing !== undefined &&
+							alchemyEffectCell( (view?.simulationTimeMs ?? alchemyClock) - preparing );
+					// 62AFA0 shows alcm_effect_prepare additively (51EDB0 with 1)
+					// until the held request is sent. The worker stamps the start
+					// on the simulation clock, so the cell is read on it too.
+					if ( !processing && deco && prepareCell ) {
+						additiveImage( authoredRect( deco, px, py + 150 ), PREPARE_SHEET, prepareCell );
+					} else if ( !processing && deco && alchemyEffect && cell ) {
 						const effect = ROOT + alchemyEffectTexture( alchemyEffect.flags ) + ".png",
 							r = authoredRect( deco, px, py + 150 );
 						if ( alchemyEffectAdditive( alchemyEffect.flags ) ) additiveImage( r, effect, cell );
@@ -17875,14 +17899,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							slot === undefined ? "alchemy-empty:" + i : "alchemy-slot:" + slot,
 							item,
 							r,
-							busy || closed
+							busy || fusing || closed
 						);
 					} );
 					for ( const node of Object.values( page ).filter( n => n.type === "CIFButton" ) ) {
+						// The reinforce page keeps Fuse up while it runs: 62AFA0
+						// only ignores the press (alchemyFusing).
 						if (
 							node.name.endsWith( "_CANCEL" ) ?
 								!busy :
-								node.name.endsWith( "_PROCESS" ) && busy
+								node.name.endsWith( "_PROCESS" ) && busy && processing
 						) continue;
 						const id = node.name.endsWith( "_CANCEL" ) ?
 							"alchemy-cancel" :
@@ -17899,7 +17925,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							py + 150,
 							id,
 							hudCopy( node.text ),
-							id === "alchemy-cancel" ? !busy : busy || alchemySlots.length < 2
+							id === "alchemy-cancel" ? !busy : busy && processing || alchemySlots.length < 2
 						);
 					}
 					const edit = page.GDR_AB_MANUFACTURING_EDIT_COUNT;
