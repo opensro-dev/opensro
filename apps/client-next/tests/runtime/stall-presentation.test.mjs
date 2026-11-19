@@ -686,3 +686,48 @@ test("a bag item dropped anywhere on an empty owner stall cell opens its focused
 	assert.equal( control( "stall-prompt-price" ), undefined, "a visitor's stall refuses the drop" );
 	assert.deepEqual( sent, [] );
 });
+
+test("the stall network page manager is the mall's: groups of four 20 pixel pages", async () => {
+	const { pageManagerLayout } = await import( "../../src/engine/foundation/ui/item-mall-layout.ts" );
+	// ifstallnetwork 80 (PAGE_MGR) at 80,582 385x26; 5ABE5B: InitializePages( 1, 4, 0x14 ).
+	assert.deepEqual( pageManagerLayout( [ 80, 582, 385, 26 ], 0, 1 ), {
+		first: 0,
+		count: 1,
+		pages: 1,
+		x: 262,
+		y: 588,
+		width: 20,
+		height: 14,
+		left: 245,
+		right: 299,
+		previous: -4,
+		next: 4
+	} );
+	// The sixth page of nine shows the second group, both ways open.
+	const second = pageManagerLayout( [ 80, 582, 385, 26 ], 5, 9 );
+	assert.equal( second.first, 4 );
+	assert.equal( second.count, 4 );
+	assert.equal( second.previous, 0 );
+	assert.equal( second.next, 8 );
+});
+
+test("an open stall network combo shows twelve rows at the font height plus four", async () => {
+	const { comboListLayout } = await import( "../../src/engine/foundation/ui/combo-box.ts" );
+	const { STALL_COMBO_ROWS } = await import( "../../src/engine/runtime/ui/hud/stall-hud.ts" );
+	assert.equal( STALL_COMBO_ROWS, 12 );
+	// Fourteen large categories: a scroll bar, a list 20 narrower, the top clamped to the range.
+	const long = comboListLayout( [ 100, 50, 96, 20 ], 14, STALL_COMBO_ROWS, 12, 5 );
+	assert.deepEqual( long.popup, [ 100, 70, 96, 200 ] );
+	assert.equal( long.first, 2 );
+	assert.equal( long.range, 2 );
+	assert.equal( long.rows.length, 12 );
+	assert.deepEqual( long.rows[0], { index: 2, rect: [ 104, 74, 68, 16 ] } );
+	assert.deepEqual( long.rows[11], { index: 13, rect: [ 104, 250, 68, 16 ] } );
+	assert.deepEqual( long.track, [ 176, 90, 16, 144 ] );
+	// Three medium categories: no scroll bar, the full width, the popup still twelve rows tall.
+	const short = comboListLayout( [ 100, 50, 96, 20 ], 3, STALL_COMBO_ROWS, 12, 0 );
+	assert.deepEqual( short.popup, [ 100, 70, 96, 200 ] );
+	assert.equal( short.rows.length, 3 );
+	assert.deepEqual( short.rows[2], { index: 2, rect: [ 104, 106, 88, 16 ] } );
+	assert.equal( short.track, undefined );
+});

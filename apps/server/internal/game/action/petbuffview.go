@@ -61,5 +61,5 @@ speed percent x10 u16, remaining milliseconds u32. The live publish
 */
 func wolfHowlFrame(gid uint32, howl wolfHowl, now int64) wire.Frame {
 	return wire.Frame{Opcode: 0x3fbd, Payload: wire.NewWriter(11).U32(gid).U8(howl.book).
-		U16(uint16(howl.percent * 10)).U32(uint32(max(int64(0), howl.until-now))).Payload()}
+		U16(uint16(howl.percent * 10)).U32(frameRemainingMs(howl.until, now, petHowlLifetime)).Payload()}
 }

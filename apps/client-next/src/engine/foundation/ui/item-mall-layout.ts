@@ -313,14 +313,27 @@ export function mallCategoryIcon(
 ================
 mallPageLayout
 
-6C8CDE configures groups of four pages at 20 pixels each. 5335D0 centers
-numbers in the manager rectangle; decorations are four pixels wide and the
-arrows sit thirteen pixels beyond their outside edges.
+The mall's page manager over its offer count (pageManagerLayout).
 ================
 */
 export function mallPageLayout( rect: readonly [number, number, number, number], page: number, offers: number ) {
+	return pageManagerLayout( rect, page, Math.ceil( offers / MALL_ROWS_PER_PAGE ) );
+}
+
+/*
+================
+pageManagerLayout
+
+A CIFPageManager in groups of four pages at 20 pixels each, as the mall
+(6C8CDE) and the stall network (5ABE5B: InitializePages 1, 4, 0x14)
+configure it. 5335D0 centers the numbers in the manager rectangle;
+decorations are four pixels wide and the arrows sit thirteen pixels
+beyond their outside edges.
+================
+*/
+export function pageManagerLayout( rect: readonly [number, number, number, number], page: number, pages: number ) {
 	const PAGE_GROUP = 4, PAGE_WIDTH = 20, TEXT_HEIGHT = 14, DECORATION_WIDTH = 4, ARROW_GAP = 13;
-	const pages = Math.ceil( offers / MALL_ROWS_PER_PAGE ), first = Math.floor( page / PAGE_GROUP ) * PAGE_GROUP;
+	const first = Math.floor( page / PAGE_GROUP ) * PAGE_GROUP;
 	const count = Math.min( PAGE_GROUP, pages - first );
 	const x = rect[0] + Math.floor( rect[2] / 2 ) - Math.floor( count * PAGE_WIDTH / 2 );
 	const y = rect[1] + Math.floor( rect[3] / 2 ) - TEXT_HEIGHT / 2;

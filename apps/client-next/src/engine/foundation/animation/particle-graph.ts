@@ -120,12 +120,22 @@ inverseInto
 
 Affine inverse into out. The 3x3 is stored as float32 first, and the
 translation is formed from those stored values, as the native does.
+
+A singular frame (a zero rotation axis collapses an element's basis,
+particle-rotation.ts) inverts to itself. CEFEffect_UpdateElementMatrices
+(AF13D0) calls D3DXMatrixInverse( m, NULL, m ) in place and ignores the
+NULL it returns for a zero determinant, which leaves m unwritten; the
+element then multiplies by its own frame. No epsilon: the native tests
+the determinant against zero only.
 ================
 */
 function inverseInto( m: Float32Array, out: Float32Array ): void {
 	const a = m[0]!, b = m[4]!, c = m[8]!, d = m[1]!, e = m[5]!, f = m[9]!, g = m[2]!, h = m[6]!, i = m[10]!;
 	const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
-	if ( Math.abs( det ) < 1e-12 ) throw Error( "Singular particle motion matrix" );
+	if ( det === 0 ) {
+		out.set( m.subarray( 0, 16 ) );
+		return;
+	}
 	out[0] = (e * i - f * h) / det;
 	out[1] = (f * g - d * i) / det;
 	out[2] = (d * h - e * g) / det;

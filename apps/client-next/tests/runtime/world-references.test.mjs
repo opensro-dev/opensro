@@ -7,6 +7,9 @@ Loads the TypeScript sources directly through the shared native loader
 (tests/helpers/native-source-loader.mjs), so the tests exercise the same
 modules the client ships, not a per-test bundle.
 
+A stored copy that does not match its own name is fetched again once with
+the HTTP cache bypassed; every other failure is final.
+
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
@@ -27,39 +30,89 @@ const data = JSON.stringify( {
 	bytes = new TextEncoder().encode( data ),
 	hash = Buffer.from( await crypto.subtle.digest( "SHA-256", bytes ) ).toString( "hex" );
 const identity = { path: `/transport/references/${hash}.json`, sha256: hash, bytes: bytes.length };
-test("immutable public references require bounded bytes, matching content identity and exact public schema", async t => {
-	const http = createSessionHttp(), signal = new AbortController().signal, base = "https://fixture.invalid";
-	let response = new Response( data ), requested;
+const parsed = {
+	refSkillSnapshot: [],
+	refItemSnapshot: [ { refObjId: 7 } ],
+	refObjSnapshot: [ { refObjId: 9, kind: "monster" } ]
+};
+
+/*
+================
+serve
+
+A fetch double answering each cache mode with its own body (a string, a
+Response factory or an Error to throw). It records every request, in order.
+================
+*/
+function serve( t, bodies ) {
+	const requests = [];
 	t.mock.method( globalThis, "fetch", async ( url, options ) => {
-		requested = String( url );
-		assert.equal( options.cache, "force-cache" );
-		assert.equal( options.credentials, "omit" );
-		return response;
+		requests.push( { url: String( url ), cache: options.cache, credentials: options.credentials } );
+		const body = bodies[options.cache];
+		if ( body === undefined ) throw new Error( "unexpected cache mode " + options.cache );
+		if ( body instanceof Error ) throw body;
+		return typeof body === "function" ? body() : new Response( body );
 	} );
-	assert.deepEqual( await http.references( identity, base, signal ), {
-		refSkillSnapshot: [],
-		refItemSnapshot: [ { refObjId: 7 } ],
-		refObjSnapshot: [ { refObjId: 9, kind: "monster" } ]
-	} );
-	assert.equal( requested, base + identity.path );
-	response = new Response( data );
-	await http.references( identity, base + "/shards/a", signal );
-	assert.equal( requested, base + "/shards/a" + identity.path, "an edge route prefixes the reference path" );
-	response = new Response( data.replace( "[]", "{}" ) );
-	await assert.rejects( http.references( identity, base, signal ), /digest/ );
-	response = new Response( data + " " );
-	await assert.rejects( http.references( identity, base, signal ), /byte limit/ );
-	response = new Response( data.slice( 1 ) );
-	await assert.rejects( http.references( identity, base, signal ), /size/ );
-	response = new Response( "", { status: 404 } );
-	await assert.rejects( http.references( identity, base, signal ), /404/ );
-	await assert.rejects(
-		http.references( { ...identity, path: "https://foreign.invalid/catalog" }, base, signal ),
-		/identity/
-	);
-	await assert.rejects( http.references( { ...identity, bytes: 33 << 20 }, base, signal ), /identity/ );
-	await assert.rejects( http.references( identity, "wss://fixture.invalid", signal ), /transport base/ );
+	return requests;
+}
+
+function load( ref = identity, base = "https://fixture.invalid" ) {
+	return createSessionHttp().references( ref, base, new AbortController().signal );
+}
+
+test("a valid stored copy is read once from the HTTP cache, without credentials", async t => {
+	const base = "https://fixture.invalid";
+	const requests = serve( t, { "force-cache": data } );
+	assert.deepEqual( await load( identity, base ), parsed );
+	await load( identity, base + "/shards/a" );
+	assert.deepEqual( requests, [
+		{ url: base + identity.path, cache: "force-cache", credentials: "omit" },
+		{ url: base + "/shards/a" + identity.path, cache: "force-cache", credentials: "omit" }
+	], "an edge route prefixes the reference path" );
 });
+
+test("a damaged, cut or overlong stored copy is fetched again with the cache bypassed", async t => {
+	for ( const stored of [ data.replace( "[]", "{}" ), data.slice( 1 ), data + " " ] ) {
+		const requests = serve( t, { "force-cache": stored, "reload": data } );
+		assert.deepEqual( await load(), parsed );
+		assert.deepEqual( requests.map( request => request.cache ), [ "force-cache", "reload" ] );
+		t.mock.restoreAll();
+	}
+});
+
+test("a publication that is wrong on the network too fails after one retry", async t => {
+	for (
+		const { stored, refusal } of [
+			{ stored: data.replace( "[]", "{}" ), refusal: /digest/ },
+			{ stored: data.slice( 1 ), refusal: /size/ },
+			{ stored: data + " ", refusal: /byte limit/ }
+		]
+	) {
+		const requests = serve( t, { "force-cache": stored, "reload": stored } );
+		await assert.rejects( load(), refusal );
+		assert.equal( requests.length, 2 );
+		t.mock.restoreAll();
+	}
+});
+
+test("HTTP and network failures are not retried", async t => {
+	const missing = serve( t, { "force-cache": () => new Response( "", { status: 404 } ) } );
+	await assert.rejects( load(), /404/ );
+	assert.equal( missing.length, 1 );
+	t.mock.restoreAll();
+	const offline = serve( t, { "force-cache": new TypeError( "Failed to fetch" ) } );
+	await assert.rejects( load(), /Failed to fetch/ );
+	assert.equal( offline.length, 1 );
+});
+
+test("a reference outside the transport identity is refused before any fetch", async t => {
+	const requests = serve( t, {} );
+	await assert.rejects( load( { ...identity, path: "https://foreign.invalid/catalog" } ), /identity/ );
+	await assert.rejects( load( { ...identity, bytes: 33 << 20 } ), /identity/ );
+	await assert.rejects( load( identity, "wss://fixture.invalid" ), /identity/ );
+	assert.equal( requests.length, 0 );
+});
+
 /*
 ================
 loadDocument

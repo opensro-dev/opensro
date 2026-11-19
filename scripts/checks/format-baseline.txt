@@ -94,7 +94,6 @@ apps/client-next/src/engine/foundation/ui/catalog-message.ts
 apps/client-next/src/engine/foundation/ui/character-status.ts
 apps/client-next/src/engine/foundation/ui/chat-presentation.ts
 apps/client-next/src/engine/foundation/ui/chat-scrollbar.ts
-apps/client-next/src/engine/foundation/ui/combo-box.ts
 apps/client-next/src/engine/foundation/ui/disconnect-dialog.ts
 apps/client-next/src/engine/foundation/ui/extended-quickslot.ts
 apps/client-next/src/engine/foundation/ui/frame-ring.ts
@@ -293,7 +292,6 @@ scripts/build/char/avatarVisualOverrides.mjs
 scripts/build/char/buildSkillEffectRecords.mjs
 scripts/build/char/compileBanTimeline.mjs
 scripts/build/char/defaultWearPolicy.mjs
-scripts/build/char/equipmentVisualRecords.mjs
 scripts/build/char/materialVariants.mjs
 scripts/build/char/native/animationSetNames.ts
 scripts/build/char/native/scriptObjAnimationRegistry.ts

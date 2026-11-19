@@ -142,7 +142,7 @@ function guildBlockPayload( level ) {
 	return Uint8Array.from( payload );
 }
 
-test("personal storage hides the NPC window before both uncached and cached requests without releasing it", () => {
+test("personal storage hides the NPC window before the first and every later list request without releasing it", () => {
 	const f = storageFixture();
 	try {
 		assert.equal( f.read().npcWindow.hidden, false );
@@ -159,11 +159,12 @@ test("personal storage hides the NPC window before both uncached and cached requ
 		f.command( { kind: "storage-close" } );
 		assert.equal( f.read().npcWindow.hidden, true, "closing only the room does not show the NPC window" );
 		f.command( { kind: "storage-open", gid: NPC.gid } );
-		const cached = defined( f.requests.at( -1 ) );
-		assert.equal( cached.frame.opcode, NPC_ACTION );
-		assert.deepEqual( [ ...cached.frame.payload ], [ NPC.gid, 0, 0, 0, PERSONAL_STORAGE, 0, 0, 0 ] );
-		assert.equal( cached.state.npcWindow.hidden, true );
-		assert.equal( cached.state.storage.phase, "opening" );
+		// Every visit lists the room again (storage-room.ts, port-only).
+		const again = defined( f.requests.at( -1 ) );
+		assert.equal( again.frame.opcode, STORAGE_LIST_REQUEST );
+		assert.deepEqual( [ ...again.frame.payload ], [ NPC.gid, 0, 0, 0, 0 ] );
+		assert.equal( again.state.npcWindow.hidden, true );
+		assert.equal( again.state.storage.phase, "listing" );
 		assert.equal( f.frames.filter( frame => frame.opcode === NPC_RELEASE ).length, 0 );
 	} finally {
 		f.game.dispose();

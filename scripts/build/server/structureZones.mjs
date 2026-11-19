@@ -12,7 +12,7 @@ the server joins the two to place each fortress structure.
 
 ===========================================================================
 */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const HEADER = "JMXVOBJI1000";
@@ -73,40 +73,66 @@ export function parseObjectStringIfo( text ) {
 
 /*
 ================
+portOnlyObjectStringFiles
+
+The port-only placement files beside objectstring.ifo, in name order:
+objectstring.portonly.ifo (scripts/constantinople_import.py) and one
+objectstring.<fortress>.portonly.ifo per later fortress importer
+(scripts/later_fortress_import.py). Each exists only while its flag is
+on. A missing folder lists none.
+================
+*/
+const PORT_ONLY_OBJECT_STRING = /^objectstring\.(?:[a-z0-9_]+\.)?portonly\.ifo$/;
+
+export async function portOnlyObjectStringFiles( navmeshRoot ) {
+	let names;
+	try {
+		names = await readdir( navmeshRoot );
+	} catch ( error ) {
+		if ( error.code === "ENOENT" ) return [];
+		throw error;
+	}
+	return names.filter( name => PORT_ONLY_OBJECT_STRING.test( name ) ).sort().map( name =>
+		path.join( navmeshRoot, name )
+	);
+}
+
+/*
+================
 buildStructureZoneProjection
 
 Writes world-authority/structure-zones.json into the bundle. The
-port-only placement file (navmesh/objectstring.portonly.ifo, written by
-scripts/constantinople_import.py while SRO_FORT_CONSTANTINOPLE is on)
-joins when it exists: its zone names are the later fortress's, disjoint
-from the native file's by construction. A name both files place at the
-same spot is kept once; a name they place differently is a build error
-rather than a silent pick. Without the file the
+port-only placement files (portOnlyObjectStringFiles; one path or a
+list) join when they exist: their zone names are the later fortresses',
+disjoint from the native file's and from each other's by construction.
+A name two files place at the same spot is kept once; a name they place
+differently is a build error rather than a silent pick. Without them the
 projection is exactly the native one.
 ================
 */
-export async function buildStructureZoneProjection( bundleRoot, objectStringFile, portOnlyStringFile ) {
+export async function buildStructureZoneProjection( bundleRoot, objectStringFile, portOnlyStringFiles ) {
 	const zones = parseObjectStringIfo( await readFile( objectStringFile, "latin1" ) );
-	if ( portOnlyStringFile ) {
+	const placed = new Map( zones.map( zone => [ zone.name, zone ] ) );
+	for ( const file of [].concat( portOnlyStringFiles ?? [] ) ) {
 		let extra = null;
 		try {
-			extra = await readFile( portOnlyStringFile, "latin1" );
+			extra = await readFile( file, "latin1" );
 		} catch ( error ) {
 			if ( error.code !== "ENOENT" ) throw error;
 		}
-		if ( extra !== null ) {
-			const placed = new Map( zones.map( zone => [ zone.name, zone ] ) );
-			for ( const zone of parseObjectStringIfo( extra ) ) {
-				const existing = placed.get( zone.name );
-				if ( existing ) {
-					if ( JSON.stringify( existing ) !== JSON.stringify( zone ) ) {
-						throw new Error( `objectstring port-only file re-places ${zone.name} elsewhere` );
-					}
-					continue;
+		if ( extra === null ) continue;
+		for ( const zone of parseObjectStringIfo( extra ) ) {
+			const existing = placed.get( zone.name );
+			if ( existing ) {
+				if ( JSON.stringify( existing ) !== JSON.stringify( zone ) ) {
+					throw new Error(
+						`objectstring port-only file ${path.basename( file )} re-places ${zone.name} elsewhere`
+					);
 				}
-				placed.set( zone.name, zone );
-				zones.push( zone );
+				continue;
 			}
+			placed.set( zone.name, zone );
+			zones.push( zone );
 		}
 	}
 	const target = path.join( bundleRoot, "world-authority", "structure-zones.json" );
