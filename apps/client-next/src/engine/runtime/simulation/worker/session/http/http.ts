@@ -11,7 +11,8 @@ session's release outdated, which the page shows as the update notice.
 ===========================================================================
 */
 import { HUNTING_GUIDE_BYTES_LIMIT } from "@/engine/contracts/hunting-guide";
-import { readBytes } from "@/engine/foundation/assets/read-bytes";
+import { isResponseByteLimitError, readBytes } from "@/engine/foundation/assets/read-bytes";
+import { sha256Hex } from "@/engine/foundation/assets/sha256";
 import { decodeReverseMapPoints } from "@/engine/foundation/gameplay/reverse-return-map";
 import {
 	RELEASE_OUTDATED_STATUS,
@@ -27,6 +28,8 @@ const KEEPALIVE_BODY_CHARS = 16 * 1024;
 const LIST_RESPONSE_BYTES = 1 << 20;
 const REFERENCE_BYTES_LIMIT = 32 * 1024 * 1024;
 const REFERENCE_ROWS_LIMIT = 65536;
+// Error code of a reference body that does not match its own name.
+const REFERENCE_CORRUPT = "REFERENCE_CORRUPT";
 
 // Routes that carry the browser session cookie.
 const BROWSER_AUTH_ROUTES = new Set( [
@@ -181,35 +184,10 @@ async function loadWorldReferences(
 	huntingGuide?: import("@/engine/contracts/hunting-guide").HuntingGuideSource;
 	reverseMapPoints?: unknown[];
 }> {
-	const ref = value as {
-		path?: unknown;
-		sha256?: unknown;
-		bytes?: unknown;
-		spawnAtlas?: unknown;
-		huntingGuide?: unknown;
-	};
-	if (
-		!ref || typeof ref.sha256 !== "string" || !/^[a-f0-9]{64}$/.test( ref.sha256 ) ||
-		ref.path !== `/transport/references/${ref.sha256}.json` || typeof ref.bytes !== "number" ||
-		!Number.isInteger( ref.bytes ) || ref.bytes < 1 || ref.bytes > REFERENCE_BYTES_LIMIT
-	) throw Error( "Invalid world reference identity" );
-	// References sit beside the socket under the transport base, including any edge route prefix.
-	const url = new URL( base );
-	if ( url.protocol !== "https:" && url.protocol !== "http:" ) throw Error( "Invalid transport base" );
-	url.pathname = url.pathname.replace( /\/$/, "" ) + ref.path;
-	url.search = "";
-	url.hash = "";
-	const response = await fetch( url, { signal, cache: "force-cache", credentials: "omit", redirect: "error" } );
-	if ( !response.ok || !response.body ) throw Error( `World references unavailable (${response.status})` );
-	// Bound the decoded stream too: Content-Length describes compressed bytes.
-	// Each chunk is progress for the caller's stall deadline (#1010).
-	const bytes = await readBytes( response.body, ref.bytes, { received: () => progress?.() } );
-	if ( bytes.length !== ref.bytes ) throw Error( "World references size mismatch" );
-	const digest = Array.from(
-		new Uint8Array( await crypto.subtle.digest( "SHA-256", bytes ) ),
-		n => n.toString( 16 ).padStart( 2, "0" )
-	).join( "" );
-	if ( digest !== ref.sha256 ) throw Error( "World references digest mismatch" );
+	const ref = value as { spawnAtlas?: unknown; huntingGuide?: unknown; } | null;
+	const source = referenceSource( value, base, REFERENCE_BYTES_LIMIT );
+	if ( !ref || !source ) throw Error( "Invalid world reference identity" );
+	const bytes = await fetchReference( source, signal, progress );
 	signal.throwIfAborted();
 	const parsed = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( bytes ) ) as {
 		referencesVersion?: unknown;
@@ -279,16 +257,114 @@ export function huntingGuideSource(
 	value: unknown,
 	base: string
 ): import("@/engine/contracts/hunting-guide").HuntingGuideSource | undefined {
-	const ref = value as { path?: unknown; sha256?: unknown; bytes?: unknown; };
+	const source = referenceSource( value, base, HUNTING_GUIDE_BYTES_LIMIT );
+	return source ? { url: source.url.href, bytes: source.bytes } : undefined;
+}
+
+// ============================================================================
+
+/*
+================
+ReferenceSource
+
+A transport reference resolved against the transport base: where it is,
+the digest that names it and its exact length.
+================
+*/
+interface ReferenceSource {
+	readonly url: URL;
+	readonly sha256: string;
+	readonly bytes: number;
+}
+
+/*
+================
+referenceSource
+
+The one identity rule for a transport reference: a content-addressed
+/transport/references/<sha256>.json of 1..limit bytes, beside the socket
+under the transport base (an edge route prefix is kept). Undefined when the
+value or the base breaks it; each caller decides whether that is fatal.
+================
+*/
+function referenceSource( value: unknown, base: string, limit: number ): ReferenceSource | undefined {
+	const ref = value as { path?: unknown; sha256?: unknown; bytes?: unknown; } | null;
 	if (
 		!ref || typeof ref.sha256 !== "string" || !/^[a-f0-9]{64}$/.test( ref.sha256 ) ||
 		ref.path !== `/transport/references/${ref.sha256}.json` || typeof ref.bytes !== "number" ||
-		!Number.isInteger( ref.bytes ) || ref.bytes < 1 || ref.bytes > HUNTING_GUIDE_BYTES_LIMIT
+		!Number.isInteger( ref.bytes ) || ref.bytes < 1 || ref.bytes > limit
 	) return undefined;
 	const url = new URL( base );
 	if ( url.protocol !== "http:" && url.protocol !== "https:" ) return undefined;
 	url.pathname = url.pathname.replace( /\/$/, "" ) + ref.path;
 	url.search = "";
 	url.hash = "";
-	return { url: url.href, bytes: ref.bytes };
+	return { url, sha256: ref.sha256, bytes: ref.bytes };
+}
+
+/*
+================
+corruptReference
+
+A body that does not match its own name. The discriminant keeps the retry
+decision off error prose, as isResponseByteLimitError does.
+================
+*/
+function corruptReference( message: string ): Error {
+	return Object.assign( new Error( message ), { code: REFERENCE_CORRUPT } );
+}
+
+function isCorruptReference( error: unknown ): boolean {
+	return isResponseByteLimitError( error ) ||
+		(error instanceof Error && "code" in error && error.code === REFERENCE_CORRUPT);
+}
+
+/*
+================
+fetchReferenceOnce
+
+One read of a reference under one cache mode, checked against its name.
+The decoded stream is bounded too (Content-Length describes compressed
+bytes), and each chunk is progress for the caller's stall deadline (#1010).
+================
+*/
+async function fetchReferenceOnce(
+	source: ReferenceSource,
+	cache: RequestCache,
+	signal: AbortSignal,
+	progress?: () => void
+): Promise<Uint8Array<ArrayBuffer>> {
+	const response = await fetch( source.url, { signal, cache, credentials: "omit", redirect: "error" } );
+	if ( !response.ok || !response.body ) throw Error( `Reference unavailable (${response.status})` );
+	const bytes = await readBytes( response.body, source.bytes, { received: () => progress?.() } );
+	if ( bytes.length !== source.bytes ) throw corruptReference( "Reference size mismatch" );
+	if ( await sha256Hex( bytes ) !== source.sha256 ) throw corruptReference( "Reference digest mismatch" );
+	return bytes;
+}
+
+/*
+================
+fetchReference
+
+The HTTP cache owns reference bytes across reloads: the path is the content's
+hash, so a stored copy never goes stale and force-cache serves it without a
+request. A stored copy that was cut or damaged would fail the check on every
+later login too, so one failed check refetches with cache "reload", which
+also overwrites the stored copy. A second failure is a bad publication and
+throws. Cancellation, network and HTTP failures are not retried: the network
+would give the same answer.
+================
+*/
+async function fetchReference(
+	source: ReferenceSource,
+	signal: AbortSignal,
+	progress?: () => void
+): Promise<Uint8Array<ArrayBuffer>> {
+	try {
+		return await fetchReferenceOnce( source, "force-cache", signal, progress );
+	} catch ( error ) {
+		if ( !isCorruptReference( error ) ) throw error;
+		signal.throwIfAborted();
+		return fetchReferenceOnce( source, "reload", signal, progress );
+	}
 }
