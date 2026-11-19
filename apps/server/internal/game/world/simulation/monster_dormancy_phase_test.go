@@ -148,7 +148,7 @@ func TestDormancyWakeMatchesNeverSleptTwin(t *testing.T) {
 	d2.movers.set(actor.Gid, twin)
 	// The twin stands in a watched region (the sleeper's wake grace), so
 	// the scheduler admits it instead of suspending it.
-	d2.keepAwakeUntil[0x6060] = 200000 + regionSleepGraceMs
+	d2.keepAwakeUntil[sleepCell{region: 0x6060}] = 200000 + regionSleepGraceMs
 	s2.scheduleBehavior(d2, actor.Gid, 200000)
 	twinAt := int64(-1)
 	if slot, ok := d2.behavior.byGID[actor.Gid]; ok {

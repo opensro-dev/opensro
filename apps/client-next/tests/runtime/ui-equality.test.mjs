@@ -107,6 +107,8 @@ function everyControlField( id, helpSource ) {
 const everySemanticsField = {
 	loadingVisible: true,
 	titleCredit: true,
+	marketButton: true,
+	marketOpen: true,
 	hudCorner: [ 1, 2, 3, 4 ],
 	hudToolsTop: 80,
 	/** @type {Required<NonNullable<import("../../src/engine/contracts/ui").UiSemantics["focusRequest"]>>} */

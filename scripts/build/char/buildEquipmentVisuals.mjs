@@ -288,7 +288,7 @@ export async function buildEquipmentVisuals( dress, options = {} ) {
 	// Items sharing native source paths share one conversion.
 	const sets = [];
 	for ( const row of rows.values() ) {
-		const avatar = row.tid[0] === 3 && row.tid[1] === 1 && row.tid[2] === 13;
+		const avatar = row.avatar;
 		const record = {
 			code: row.code,
 			slot: row.slot,

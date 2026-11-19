@@ -457,6 +457,9 @@ func newGameWorldApplication(
 	// the marks directory, and one audit event per committed change.
 	gameplay.items.Crests = authority.crests
 	gameplay.items.RecordCrestChange = func(change action.CrestChange) { journal.Record(crestChangeEvent(change)) }
+	// The consignment market's in-game window (#3529; port-only, not
+	// native, SRO_CONSIGNMENT): the desk the website's routes use.
+	wireGameMarket(gameplay, ts.Hub, authority.store, ownedShard.ID)
 	// A finished Halloween window's boxes leave characters who never
 	// enter again, before admission opens (#3587).
 	sweepExpiredHalloweenBoxes(authority.store, gameplay.items)
