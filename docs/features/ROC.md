@@ -103,8 +103,21 @@ The server half follows the v1.188 reference server (addresses in `action/roc.go
 - **Inferences** (recorded in `action/roc.go`):
   - the Front opens beside the summit, since its native opener was not found;
   - the notices use the 0x36BF text-key notice;
-  - the Roc's berserk and departure countdowns and its timed skills are not ported, because no v1.150 frame
-    carries their minute count.
+  - the Roc's timed skills (`MSKILL_RM_ROC_ATTACK10` at the hour, the spirits' five-minute respawn) are not
+    ported yet.
+
+### The Roc's countdowns
+
+The v1.188 reference server counts the living Roc down twice. The v1.696 client shows both (0x300C kinds
+0x0C14 and 0x0C15). The port sends them on 0x3058 as kinds 0x14 and 0x15, the low bytes, as kinds 5 and 6 carry
+0x0C05 and 0x0C06. Only the summit's residents hear them, and a fallen Roc stops both.
+
+- **Berserk** (the summit tick's step 3): 30 minutes after the Roc appears, "berserk in 30 minutes", then 15,
+  10, 5, 3 and 1 minutes, `UIIT_MSG_QUEST_ROC_BERSERKER_START` at the hour, and `_AGAIN` every 30 minutes,
+  four times. v1.150 lacks the `_AGAIN` line; the Roc import adds the VSRO client's row to `textuisystem.txt`
+  and takes it out again on an off build.
+- **Departure** (the Roc's six one-shot timers): "leaves in 30 minutes" at 3:00:01 after it appears, then 15, 10,
+  5, 3 and 1. At 3:30 every resident is sent to `GATE_RC_MOUNTAIN_GATE`'s spawn; the layer stays open.
 
 ### The Roc's notices (step 5a)
 

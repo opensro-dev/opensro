@@ -39,12 +39,29 @@ Inferences, as no binary shows them:
 - The client's notice for these symbols is the 0x36BF talk notice: the
   v1.150 client has no 0x300C string notice (unique-notices.ts), and its
   0x36BF handler banners any text key.
-- The Roc's berserk and departure countdowns (UIIT_MSG_QUEST_ROC_BERSERKER
-  and _BYEBYE carry a minute count: the summit tick's step 3 and the
-  escape shouts) and its timed skills are not ported: no v1.150 frame carries the
-  count. The Roc stays until killed or until the layer closes.
+- The Roc's countdowns ride the 0x3058 event notice as kinds 0x14 and
+  0x15. v1.150's kinds 5 and 6 are the low bytes of the later 0x300C
+  kinds 0x0C05 and 0x0C06; the reference server sends the countdowns as
+  0x300C 0x0C14 and 0x0C15, which the v1.696 client shows (its 0xD9E880),
+  so their low bytes carry them here. The v1.150 client
+  would show category 0x11 for those kinds; ours decodes them
+  (unique-notices.ts).
+- The Roc's timed skills (MSKILL_RM_ROC_ATTACK10 an hour after it
+  appears, the spirits' five-minute respawn) are not ported yet.
 - A missing kind or gate row (the variant build did not stage the Roc)
   spawns nothing; the window still opens and closes the worlds.
+
+Countdowns, both tied to the living Roc (its handlers die with it):
+
+	berserk   the summit tick's step 3 (its message step counter): 30
+	          minutes after the Roc appears the layer hears "berserk in
+	          30 minutes", then 15, 10, 5, 3 and 1, then _START at the
+	          hour, then _AGAIN every 30 minutes, four times (the step
+	          counter stops at 12)
+	departure the Roc's six one-shot timers, armed when it appears:
+	          "leaves in 30, 15, 10, 5, 3, 1 minutes" from 3:00:01 after
+	          it appeared; at 3:30 a seventh sends every resident to
+	          GATE_RC_MOUNTAIN_GATE's spawn
 
 The Roc tells the whole division when it appears and when it falls
 (0x3058 kinds 5 and 6, the v1.150 form of the reference server's
@@ -107,6 +124,16 @@ const (
 	// rocNoticeOpcode is the talk notice (quest/capture.go's 0x36BF).
 	rocNoticeOpcode uint16 = 0x36bf
 
+	// The countdowns' 0x3058 kinds (the later 0x0C14 and 0x0C15) and the
+	// berserk count's two special values: 0 is _START, 0xFF _AGAIN.
+	rocKindBerserk   byte = 0x14
+	rocKindDeparture byte = 0x15
+	rocBerserkAgain  byte = 0xff
+	// The berserk counter's end (the tick's step counter stops at 12).
+	rocBerserkEnd = 12
+	// The departure: the seventh one-shot's delay after the Roc appears.
+	rocDepartureMs = 12_600_000
+
 	rocSymAppear     = "UIIT_MSG_QUEST_ROC_APPEAR"
 	rocSymDisappear  = "UIIT_MSG_QUEST_ROC_DISAPPEAR"
 	rocSymBreakStone = "UIIT_MSG_QUEST_ROC_BREAK_STONE"
@@ -126,6 +153,41 @@ var rocSealStones = []struct {
 	{"MOB_RM_SEALSTONE_6", simulation.Spawn{RegionID: 26045, X: 1586.43, Y: -13.06, Z: 728.75}},
 	{"MOB_RM_SEALSTONE_7", simulation.Spawn{RegionID: 26045, X: 1582.73, Y: 17.09, Z: 1795.80}},
 	{"MOB_RM_SEALSTONE_8", simulation.Spawn{RegionID: 26045, X: 1858.34, Y: 26.25, Z: 1241.77}},
+}
+
+// rocBerserkSteps are the summit tick's step 3 cases 0 to 7: the minute
+// count each step shows and the wait to the next. Case 0 shows nothing;
+// the Roc's spawn takes its place (advanceRocTop).
+// Every later step shows _AGAIN and waits 30 minutes.
+var rocBerserkSteps = []struct {
+	minutes byte
+	waitMs  int64
+}{
+	{0, 1_800_000},
+	{30, 900_000},
+	{15, 300_000},
+	{10, 300_000},
+	{5, 120_000},
+	{3, 120_000},
+	{1, 60_000},
+	{0, 1_800_000},
+}
+
+// rocBerserkAgainMs is the wait after every step past the table.
+const rocBerserkAgainMs = 1_800_000
+
+// rocDepartureNotices are the six one-shots: the delay after the Roc
+// appears and the minute count each shows.
+var rocDepartureNotices = []struct {
+	afterMs int64
+	minutes byte
+}{
+	{10_801_000, 30},
+	{11_701_000, 15},
+	{12_001_000, 10},
+	{12_301_000, 5},
+	{12_421_000, 3},
+	{12_541_000, 1},
 }
 
 var (
@@ -167,6 +229,13 @@ type rocSummit struct {
 	stones      []uint32
 	roc         uint32
 	entryClosed bool
+	// The countdowns: when the Roc appeared, the berserk step and its
+	// next time, the departure notices sent, and the departure done.
+	rocMs       int64
+	berserkStep int
+	berserkMs   int64
+	departures  int
+	departed    bool
 }
 
 /*
@@ -462,9 +531,16 @@ func (rt *Runtime) advanceRocTop(division string, top *rocSummit, in bool, nowMs
 		}
 		// Native: a failed spawn dumps; the port waits for the close.
 		top.roc, _ = rt.spawnRocMonster(division, top.lease, rocCodename, rocSpawn, nowMs)
-		top.step = rocStepFight
+		// Step 3's case 0 runs on the next tick and only arms the first
+		// count 30 minutes on; the port arms it with the spawn.
+		top.step, top.rocMs = rocStepFight, nowMs
+		top.berserkStep, top.berserkMs = 1, nowMs+rocBerserkSteps[0].waitMs
 	case rocStepFight:
-		if top.roc == 0 || rt.roc.alive(division, top.roc) {
+		if top.roc == 0 {
+			return notices
+		}
+		if rt.roc.alive(division, top.roc) {
+			rt.advanceRocCountdowns(division, top, nowMs)
 			return notices
 		}
 		fell, known := rt.roc.takeFell(top.roc)
@@ -481,6 +557,49 @@ func (rt *Runtime) advanceRocTop(division string, top *rocSummit, in bool, nowMs
 		}
 	}
 	return notices
+}
+
+/*
+================
+advanceRocCountdowns
+
+The living Roc's two countdowns and its departure, one step of each per
+tick at most, as each native timer fires once. The caller holds the
+division lock.
+================
+*/
+func (rt *Runtime) advanceRocCountdowns(division string, top *rocSummit, nowMs int64) {
+	if top.berserkStep < rocBerserkEnd && nowMs >= top.berserkMs {
+		wait := int64(rocBerserkAgainMs)
+		if top.berserkStep < len(rocBerserkSteps) {
+			step := rocBerserkSteps[top.berserkStep]
+			rt.rocLayerFrame(division, top.lease, rocCountdown(rocKindBerserk, step.minutes))
+			wait = step.waitMs
+		} else {
+			rt.rocLayerFrame(division, top.lease, rocCountdown(rocKindBerserk, rocBerserkAgain))
+		}
+		top.berserkStep++
+		top.berserkMs = nowMs + wait
+	}
+	if top.departures < len(rocDepartureNotices) {
+		notice := rocDepartureNotices[top.departures]
+		if nowMs-top.rocMs >= notice.afterMs {
+			rt.rocLayerFrame(division, top.lease, rocCountdown(rocKindDeparture, notice.minutes))
+			top.departures++
+		}
+	}
+	if !top.departed && nowMs-top.rocMs >= rocDepartureMs {
+		top.departed = true
+		exit, ok := rt.rocGateSpawn(rocMountainGateCode)
+		if !ok {
+			return
+		}
+		for _, name := range rt.instanceResidentNames(division, top.lease) {
+			if c := rt.findCharacter(division, name); c != nil {
+				rt.leaveRocLayer(division, c, exit, "roc-departure", rt.tickDoors())
+			}
+		}
+	}
 }
 
 /*
@@ -610,13 +729,35 @@ One notice to every resident of a layer.
 ================
 */
 func (rt *Runtime) rocLayerNotice(division string, lease instance.Lease, symbol string) {
+	rt.rocLayerFrame(division, lease, rocNotice(symbol))
+}
+
+/*
+================
+rocLayerFrame
+
+One frame to every resident of a layer, as the reference server writes
+the countdowns to each character of the layer.
+================
+*/
+func (rt *Runtime) rocLayerFrame(division string, lease instance.Lease, frame simulation.Frame) {
 	if rt.PushCharacterFrames == nil {
 		return
 	}
-	notice := rocNotice(symbol)
 	for _, name := range rt.instanceResidentNames(division, lease) {
-		rt.PushCharacterFrames(division, name, []wire.Frame{{Opcode: notice.Opcode, Payload: notice.Payload}})
+		rt.PushCharacterFrames(division, name, []wire.Frame{{Opcode: frame.Opcode, Payload: frame.Payload}})
 	}
+}
+
+/*
+================
+rocCountdown
+
+A countdown's 0x3058 event notice: [u8 kind][u8 minutes].
+================
+*/
+func rocCountdown(kind, minutes byte) simulation.Frame {
+	return simulation.Frame{Opcode: opEventNotice, Payload: []byte{kind, minutes}}
 }
 
 /*
