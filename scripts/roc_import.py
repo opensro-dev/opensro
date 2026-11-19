@@ -91,9 +91,11 @@ from pathlib import Path
 
 import alexandria_npcs as characters
 import build_alexandria_variant as variant
+import cap110_items
 import cap110_monsters as cap110
 import import_vsro_alexandria as tables
 import later_world_import
+import published_ids
 import roc_rewards
 from prepare_client_resources import write_atomically
 
@@ -123,6 +125,12 @@ QUEST_COLUMNS = 11
 CONTENTS_TABLE = "questcontentsdata.txt"
 CONTENTS_COLUMNS = 13
 POPULATION_FILE = "roc-monsters.txt"
+# The countdown text v1.150 lacks: the summit's berserk countdown shows
+# _START at its end and _AGAIN on every later step (v1.696 0x0C14,
+# v1.188 RocTop tick 0x5FEE10); v1.150 ships _BERSERKER, _START and
+# _BYEBYE but not _AGAIN. Its row comes from the client.
+UI_TABLE = "textuisystem.txt"
+UI_SYMBOLS = frozenset({"UIIT_MSG_QUEST_ROC_BERSERKER_AGAIN"})
 QUEST_NESTS = Path(__file__).resolve().parent / "data" / "roc" / "quest-nests.json"
 QUEST_NESTS_FORMAT = "opensro-roc-quest-nests-v1"
 
@@ -261,6 +269,14 @@ def add_gates(read, text_root):
 	taken = taken_building_ids(text_root, building_ids)
 	if taken:
 		raise ValueError(f"Roc gate buildings would reuse identities the variant holds: {taken}")
+	# The buildings keep the source's ids, so a released object id another
+	# code holds is a refusal too, even while that code's import is off
+	# (published_ids, #3815).
+	released = {str(identity): code for code, identity in published_ids.published(published_ids.OBJECTS).items()
+		if code not in building_codes}
+	clash = sorted(f"{identity} ({released[identity]})" for identity in building_ids if identity in released)
+	if clash:
+		raise ValueError(f"Roc gate buildings would take identities a release published: {clash}")
 
 	# ================
 	# source_rows
@@ -363,6 +379,37 @@ def add_quests(read, text_root, prior):
 
 
 # ================
+# without_ui_texts
+#
+# The variant's textuisystem.txt rows without the given symbols, or None
+# when the variant has not written that table (it is the native one).
+# ================
+def without_ui_texts(text_root, symbols):
+	path = text_root / UI_TABLE
+	if not path.exists():
+		return None
+	return [row for row in tables.table_rows(path.read_bytes()) if len(row) < 2 or row[1] not in symbols]
+
+
+# ================
+# add_ui_texts
+#
+# The client's rows for UI_SYMBOLS, appended to the variant's interface
+# table (the native one when no earlier layer wrote it) after any previous
+# build's own rows leave it. A symbol the client lacks refuses by name.
+# ================
+def add_ui_texts(read, native, text_root, prior):
+	kept = without_ui_texts(text_root, set(prior.get("uiTexts", [])))
+	base = cap110.encode_rows(kept) if kept is not None else (native / TEXT_ROOT / UI_TABLE).read_bytes()
+	merged, added = cap110_items.merge_ui_texts(base, tables.table_rows(read(UI_TABLE)), UI_SYMBOLS)
+	missing = UI_SYMBOLS - set(added) - {row[1] for row in tables.table_rows(base) if len(row) > 1}
+	if missing:
+		raise ValueError("the VSRO client has no " + UI_TABLE + " row for " + ", ".join(sorted(missing)))
+	write_atomically(text_root / UI_TABLE, merged)
+	return added
+
+
+# ================
 # without_contents
 #
 # questcontentsdata.txt without the rows of the given codenames.
@@ -436,6 +483,10 @@ def add_roc(vsro_root, native, output):
 			write_atomically(text_root / QUEST_TABLE, cap110.encode_rows(without_quests(text_root, set(prior["quests"]))))
 		if prior.get("contents"):
 			write_atomically(text_root / CONTENTS_TABLE, cap110.encode_rows(without_contents(text_root, set(prior["contents"]))))
+		if prior.get("uiTexts"):
+			kept = without_ui_texts(text_root, set(prior["uiTexts"]))
+			if kept is not None:
+				write_atomically(text_root / UI_TABLE, cap110.encode_rows(kept))
 		roc_rewards.remove_rewards(text_root)
 		later_world_import.reap_world(SPEC, native, output)
 		return {"enabled": False}
@@ -444,7 +495,7 @@ def add_roc(vsro_root, native, output):
 	vsro_root = Path(vsro_root)
 	tables.require_vsro_pin(vsro_root, MERGE_ARCHIVES)
 	return later_world_import.merge_world(SPEC, native, output, vsro_root, [WAIT_REGION],
-		lambda: stage(vsro_root, output))
+		lambda: stage(vsro_root, native, output))
 
 
 # ================
@@ -453,7 +504,7 @@ def add_roc(vsro_root, native, output):
 # The kinds (step 1a) and the gates (step 1b) from the client's Media,
 # then the marker, keeping the region record merge_world enrols.
 # ================
-def stage(vsro_root, output):
+def stage(vsro_root, native, output):
 	marker = output / MARKER
 	prior = cap110.read_json(marker) if marker.exists() else {}
 	text_root = output / TEXT_ROOT
@@ -483,6 +534,7 @@ def stage(vsro_root, output):
 			lambda code: code in refs)
 		quests = add_quests(read, text_root, prior)
 		contents = add_contents(read, text_root, prior)
+		ui_texts = add_ui_texts(read, native, text_root, prior)
 	finally:
 		media.close()
 		handle.close()
@@ -502,7 +554,7 @@ def stage(vsro_root, output):
 		"enabled": True, "format": "opensro-roc-v4", "source": "vsro",
 		"characters": staged["characters"], "skills": staged["skills"],
 		"animationBases": staged["animationBases"], "characterInfo": staged["characterInfo"],
-		"nameSymbols": staged["nameSymbols"], "gates": gates, "quests": quests, "contents": contents,
+		"nameSymbols": staged["nameSymbols"], "gates": gates, "quests": quests, "contents": contents, "uiTexts": ui_texts,
 		"population": population,
 		"rewards": rewards,
 		**({"regionMerge": prior["regionMerge"]} if "regionMerge" in prior else {}),

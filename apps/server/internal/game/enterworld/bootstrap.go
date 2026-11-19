@@ -328,6 +328,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		ChatItemLinks:        deps.ChatItemLinks,
 		FastDenReturn:        deps.FastDenReturn,
 		TradeTiers:           deps.TradeTiers,
+		Consignment:          deps.Consignment,
 		JobSuitHidesArmor:    deps.JobSuitHidesArmor,
 		MoonlitThiefSuit:     deps.MoonlitThiefSuit,
 		Alexandria:           deps.Alexandria,

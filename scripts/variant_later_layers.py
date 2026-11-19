@@ -18,6 +18,7 @@ catalogue merges come first, and every later layer merges after them.
 ===========================================================================
 """
 import arabia_import
+import colosseum_import
 import constantinople_import
 import export_world_import
 import gears_stone_import
@@ -28,7 +29,6 @@ import muhan_import
 import pharaoh_temple_import
 import skytemple_import
 import styria_import
-import survival_colosseum_import
 import winter_event_import
 
 # (variant manifest key, layer entry point taking (native, out)), in
@@ -49,10 +49,9 @@ LATER_LAYERS = (
 	# The Styria Clash arena map (#3272): its own switch, on the
 	# later-world engine; the match rules are #3648.
 	("styria", styria_import.add_styria),
-	# The Sook survival arena's Colosseum: the arena's own switch, on
-	# the same later-world engine; the server's arena admission needs
-	# its navigation.
-	("survivalColosseum", survival_colosseum_import.add_survival_colosseum),
+	# The Survival Arena's Colosseum (#3931): the arena's own switch,
+	# the map alone on the same engine path as the Styria Clash.
+	("colosseum", colosseum_import.add_colosseum),
 	# The Constantinople fortress: its own switch and source (the v1.696
 	# client), on the merge machinery the Sky Temple shares.
 	("constantinople", constantinople_import.add_constantinople),

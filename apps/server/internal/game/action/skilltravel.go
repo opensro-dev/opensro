@@ -43,9 +43,40 @@ all authority unchanged; clipping retains the surface actually reached.
 ================
 */
 func (rt *Runtime) planSkillTravel(name string, from simulation.Spawn, owner simulation.NavOwner, to simulation.Spawn) (skillTravelPlan, bool) {
+	return rt.planSkillMove(name, from, owner, to, false)
+}
+
+/*
+================
+planSkillTeleport
+
+tel2 lands at once: the destination is seated by FindNavCell at the point
+itself (nearest |deltaY|, terrain wins ties): the v1.188 server checks a
+teleport point afresh, with no owner hint, and keeps an object cell only
+when its height difference is strictly smaller than the terrain's. It is
+the same rule movement.ts applies to a kind-2 displacement. Never by the
+walk's resting surface. Seating with that surface as the hint kept a
+terrain owner and dropped a Wizard who teleported across a deck onto the
+ground under it (region 0x6687, y -30 -> -111, #3927).
+================
+*/
+func (rt *Runtime) planSkillTeleport(name string, from simulation.Spawn, owner simulation.NavOwner, to simulation.Spawn) (skillTravelPlan, bool) {
+	return rt.planSkillMove(name, from, owner, to, true)
+}
+
+/*
+================
+planSkillMove
+
+The shared planner. The walk still refuses or clips the destination; only
+the landing seat differs between travel and teleport.
+================
+*/
+func (rt *Runtime) planSkillMove(name string, from simulation.Spawn, owner simulation.NavOwner, to simulation.Spawn, teleport bool) (skillTravelPlan, bool) {
 	if rt.ConstrainMovement == nil && rt.ConstrainWalk == nil {
 		return skillTravelPlan{}, false
 	}
+	requestedY := to.Y
 	to, walk, err := rt.constrainWalk(name, from, owner, to)
 	if err != nil {
 		return skillTravelPlan{}, false
@@ -53,7 +84,11 @@ func (rt *Runtime) planSkillTravel(name string, from simulation.Spawn, owner sim
 	to.X, to.Z = math.Trunc(to.X), math.Trunc(to.Z)
 	owner = walk.Rest
 	if rt.ResolveNavOwner != nil {
-		if resolved, y, ok := rt.ResolveNavOwner(to, walk.Rest); ok {
+		seat, hint := to, walk.Rest
+		if teleport {
+			seat.Y, hint = requestedY, simulation.NavOwner{}
+		}
+		if resolved, y, ok := rt.ResolveNavOwner(seat, hint); ok {
 			owner, to.Y = resolved, y
 		}
 	}

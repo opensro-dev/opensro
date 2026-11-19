@@ -17,7 +17,7 @@ A schedule is a block:
 		DurationEnd	2030-12-31, 00:00:00
 		Weekly		1, {3, }	// every week, on Wednesday (0 = Sunday)
 		Daily		1,1		// or: every day
-		Once		20:00:00, 21:30:00
+		Once		20:00:00, 22:00:00
 	}
 
 It runs, inside its duration, on the matching days, from the Once start up
@@ -278,4 +278,47 @@ func (s Schedule) Window(t time.Time) (start, end time.Time, ok bool) {
 		return start, end, true
 	}
 	return time.Time{}, time.Time{}, false
+}
+
+// spanJoinGap is the largest gap between two windows that Span joins: the
+// shipped daily blocks end at 23:59:59 and the next starts at midnight, so
+// back-to-back days leave one second between them.
+const spanJoinGap = time.Second
+
+// spanMaxWindows bounds the windows Span joins in each direction (a daily
+// block every day of the year).
+const spanMaxWindows = 400
+
+/*
+================
+Schedule.Span
+
+The window Window returns, widened over the windows that meet it within
+spanJoinGap on either side, so that a period written as one daily block per
+day (the application days) reads as one span. The schedule still runs day
+by day; only the reported span is joined.
+================
+*/
+func (s Schedule) Span(t time.Time) (start, end time.Time, ok bool) {
+	start, end, ok = s.Window(t)
+	if !ok {
+		return start, end, false
+	}
+	for i := 0; i < spanMaxWindows; i++ {
+		nextStart, nextEnd, more := s.Window(end)
+		if !more || nextStart.Sub(end) > spanJoinGap {
+			break
+		}
+		end = nextEnd
+	}
+	for i := 0; i < spanMaxWindows; i++ {
+		// One second inside the day before's block, which ends one
+		// second before this one starts.
+		prevStart, prevEnd, more := s.Window(start.Add(-spanJoinGap - time.Second))
+		if !more || !prevStart.Before(start) || start.Sub(prevEnd) > spanJoinGap {
+			break
+		}
+		start = prevStart
+	}
+	return start, end, true
 }

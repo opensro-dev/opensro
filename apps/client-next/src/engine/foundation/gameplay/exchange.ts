@@ -233,6 +233,63 @@ export function exchangeRequest( state: ExchangeState, command: ExchangeCommand 
 	}
 }
 
+// ============================================================================
+// Deception warnings
+// ============================================================================
+
+/*
+================
+ExchangeCircle
+
+What the opening warning weighs: the partner's name and guild, and the
+local player's friend, guild and union rosters.
+================
+*/
+export interface ExchangeCircle {
+	readonly partnerName: string;
+	readonly partnerGuild: string;
+	readonly friends: readonly string[];
+	readonly guildMembers: readonly string[];
+	readonly unionGuilds: readonly string[];
+}
+
+/*
+================
+exchangeOpenWarning
+
+The line an exchange opening prints for a partner outside the player's
+circles. v1.150 ships the text but its client never raises it; the
+later official client does (v1.696 afd4d1, v1.657 alike), and the port
+takes a later official client's behaviour as native. Its circle test
+(afb980) passes on a friend by name (70F850), a name in the second
+roster (70FA20), or the partner's guild (+0x8C8) in the third
+(70F370); the text names the three as guild, union and friend list.
+Any pass prints nothing. The NAME_WARNING branch is left out: its text
+is not in the v1.150 table.
+================
+*/
+export function exchangeOpenWarning( circle: ExchangeCircle ): SystemNotice | null {
+	const name = circle.partnerName;
+	if ( name && (circle.friends.includes( name ) || circle.guildMembers.includes( name )) ) return null;
+	if ( circle.partnerGuild && circle.unionGuilds.includes( circle.partnerGuild ) ) return null;
+	return { key: "UIIT_MSG_EXCHANGE_DECEPTION_COMPARE", value: 0 };
+}
+
+/*
+================
+exchangeConfirmWarning
+
+The line the first Confirm prints while the partner has not locked yet
+(v1.696 afbb00: the own confirm flag +0x778 is set once, then afbc19
+raises DECEPTION_REAFFIRM while the partner flag +0x779 is clear). A
+second press, or a press after the partner locked, prints nothing.
+================
+*/
+export function exchangeConfirmWarning( state: ExchangeState, alreadyPressed: boolean ): SystemNotice | null {
+	if ( alreadyPressed || !state.open || state.ownLocked || state.theirLocked ) return null;
+	return { key: "UIIT_MSG_EXCHANGE_DECEPTION_REAFFIRM", value: 0 };
+}
+
 /*
 ================
 applyExchangeSwap

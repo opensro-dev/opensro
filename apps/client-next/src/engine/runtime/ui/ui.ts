@@ -182,6 +182,7 @@ import {
 	mallCategoryIcon,
 	mallPageLayout,
 	mallPageNumberPresentation,
+	pageManagerLayout,
 	mallCurrencyRows,
 	mallQuestionLayout,
 	mallSilkPeriodTexts,
@@ -406,6 +407,7 @@ import {
 	STALL_CELL_PITCH_Y,
 	STALL_COMBO_DEGREE,
 	STALL_COMBO_LARGE,
+	STALL_COMBO_ROWS,
 	STALL_COMBO_MEDIUM,
 	STALL_CHAT_LIMIT,
 	STALL_PROMPT_SIZE,
@@ -422,6 +424,8 @@ import { textAllowed } from "@/engine/foundation/ui/character-create";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { compositeItemCaption, compositeItemLayout, createCompositeItemHud } from "./hud/composite-item-hud";
 import { createUniqueRankHud } from "./hud/unique-rank-hud";
+import { createMarketHud, MARKET_BAG_FIRST_SLOT, MARKET_HOTKEY_VK } from "./hud/market-hud";
+import { drawMarketWindow, type MarketPaint } from "./hud/market-window";
 import { uniqueRankLines } from "@/engine/foundation/gameplay/unique-rank";
 import {
 	allianceButtons,
@@ -727,6 +731,7 @@ import { feedbackLevels } from "@/engine/foundation/gameplay/feedback-levels";
 import { systemMessageLayout } from "@/engine/foundation/ui/system-message-layout";
 import { verticalSpinChrome } from "@/engine/foundation/ui/vertical-spin";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
+import { comboListLayout } from "@/engine/foundation/ui/combo-box";
 import { chatLayout, sunDropChatColor } from "@/engine/foundation/ui/chat-layout";
 import { expandedWorldMapOn, worldMapFrame, worldMapImagePaths, worldMapQuads } from "@/engine/foundation/ui/world-map";
 import {
@@ -1390,6 +1395,8 @@ export function createUi( ports: UiPorts ) {
 	let beginnerDraft = false;
 	let potionCombo = "";
 	let potionComboOffset = 0;
+	// The stall network's open list scroll range, as last drawn.
+	let stallComboRange = 0;
 	let potionDraft: AutoPotionDraft = autoPotionDraft( defaultAutoPotion() );
 	/*
 	================
@@ -1605,6 +1612,19 @@ export function createUi( ports: UiPorts ) {
 	// step clock the effect plays on (62B0B0, alchemy-result.ts).
 	let alchemyOutcomeSeen = 0, alchemyClock = 0;
 	let alchemyEffect: { readonly flags: number; readonly startedAt: number; } | null = null;
+	/*
+	================
+	alchemyFusing
+
+	Whether a reinforcement runs (native +0x378): from the press through the
+	prepare effect and the answer (the worker's pending) until the result
+	effect has played (62C350 timer 0xA clears it at 625260). 62AFA0 ignores
+	the Fuse press and 62B6F0 refuses a slot drop meanwhile.
+	================
+	*/
+	function alchemyFusing() {
+		return !!view?.gameplay?.inventoryPending || alchemyEffect !== null;
+	}
 	const fortressStaffHud = createFortressStaffHud();
 	const unionHud = createUnionHud();
 	const guildWarHud = createGuildWarHud();
@@ -1615,6 +1635,8 @@ export function createUi( ports: UiPorts ) {
 	const compositeItemHud = createCompositeItemHud();
 	// Port-only, not native: a unique kill's damage ranking (SRO_UNIQUE_DAMAGE_RANK).
 	const uniqueRankHud = createUniqueRankHud();
+	// Port-only, not native (SRO_CONSIGNMENT, #3529): the consignment market.
+	const marketHud = createMarketHud();
 	const guildManagerHud = createGuildManagerHud();
 	const guildNoticeHud = createGuildNoticeHud();
 	const magicOptionHud = createMagicOptionHud();
@@ -2874,6 +2896,44 @@ export function createUi( ports: UiPorts ) {
 	}
 	/*
 	================
+	sendMarket
+	================
+	*/
+	function sendMarket( requests: readonly import("@/engine/contracts/market").MarketRequest[] ) {
+		for ( const request of requests ) sendGameplay( { kind: "market", request } );
+	}
+	/*
+	================
+	activateMarket
+
+	One click on the consignment market window (port-only, #3529): its
+	requests go to the worker, and a Whisper begins one.
+	================
+	*/
+	function activateMarket( id: string ): boolean {
+		// The HUD button beside FPS (platform.ts) toggles the window from
+		// anywhere in the world; the storage keeper's row opens it too.
+		if ( id === "market-toggle" && marketHud.isOpen() ) id = "market-close";
+		if ( id === "market-open" || id === "market-toggle" ) {
+			if ( view?.session?.phase !== "world" || view.gameplay?.consignment !== true ) return true;
+			npcPanel.hide();
+			sendMarket( marketHud.open() );
+			dirty = true;
+			return true;
+		}
+		const done = marketHud.activate( id, {
+			market: view?.gameplay?.market,
+			localName: view?.gameplay?.social?.localName ?? view?.session?.character ?? "",
+			now: uiNow
+		} );
+		if ( !done ) return false;
+		sendMarket( done.requests );
+		if ( done.whisper ) beginWhisper( done.whisper );
+		dirty = true;
+		return true;
+	}
+	/*
+	================
 	beginWhisper
 
 	6AC0F0 replaces the draft with "$name " and rejects the local name.
@@ -3540,6 +3600,7 @@ export function createUi( ports: UiPorts ) {
 	*/
 	let arenaPage = 0, arenaPageKey = "", arenaHiddenID = "";
 	function activate( id: string ) {
+		if ( id.startsWith( "market-" ) && activateMarket( id ) ) return;
 		if ( id === "arena-prev" || id === "arena-next" ) {
 			arenaPage = Math.max(
 				0,
@@ -4561,6 +4622,7 @@ export function createUi( ports: UiPorts ) {
 			}
 		} else if ( id === "alchemy-cancel" ) sendGameplay( { kind: "alchemy-cancel" } );
 		else if ( id === "alchemy-start" ) {
+			if ( alchemyFusing() ) return;
 			sendGameplay( {
 				kind: "alchemy-start",
 				mode: alchemyMode,
@@ -4763,20 +4825,22 @@ export function createUi( ports: UiPorts ) {
 			sendGameplay( { kind: "stall-network-open", open: false } );
 		} else if ( id.startsWith( "stall-net-combo:" ) ) {
 			stallHud.toggleCombo( Number( id.slice( 16 ) ) );
+		} else if ( id === "stall-net-combo-scroll-up" || id === "stall-net-combo-scroll-down" ) {
+			stallHud.scrollCombo( id.endsWith( "-up" ) ? -1 : 1, stallComboRange );
 		} else if ( id.startsWith( "stall-net-choice:" ) ) {
 			stallHud.choose( Number( id.slice( 17 ) ) );
 		} else if ( id.startsWith( "stall-net-sort:" ) ) {
 			stallHud.sortBy( id.slice( 15 ) as StallNetworkSort );
-		} else if ( id.startsWith( "stall-net-row:" ) ) {
-			stallHud.selectRow( Number( id.slice( 14 ) ) );
-		} else if ( id === "stall-net-search" || id === "stall-net-prev" || id === "stall-net-next" ) {
+		} else if ( id.startsWith( "stall-net-row:" ) || id.startsWith( "stall-net-item:" ) ) {
+			// A press on the row's item slot picks its row, as one on the row does.
+			stallHud.selectRow( Number( id.slice( id.indexOf( ":" ) + 1 ) ) );
+		} else if ( id === "stall-net-search" || id.startsWith( "stall-net-page:" ) ) {
 			const draft = stallHud.network(),
 				network = view.gameplay?.stall?.network,
 				child = stallCategories.roots()?.[draft.large]?.children[draft.medium];
 			if ( network && stallHud.searchReady( uiNow ) ) {
 				// The pages walk the last search; a new search starts at its first.
-				const step = id === "stall-net-next" ? 1 : -1,
-					page = id === "stall-net-search" ? 0 : network.page + step,
+				const page = id === "stall-net-search" ? 0 : Number( id.slice( 15 ) ),
 					category = id === "stall-net-search" ? child?.id ?? 0 : network.category;
 				if ( category && page >= 0 && (id === "stall-net-search" || page < network.pages) ) {
 					stallHud.searched( uiNow );
@@ -7899,6 +7963,11 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
+			// Port-only (#3529): Escape closes the market's box, then the market.
+			if ( event.kind === "key" && event.code === "Escape" && marketHud.isOpen() ) {
+				activateMarket( marketHud.state().dialog ? "market-dialog-cancel" : "market-close" );
+				return;
+			}
 			if ( questDetails && event.kind === "drag" && event.id === "quest-detail-drag" && view ) {
 				questPosition = [
 					Math.max( 0, Math.min( Math.max( 0, view.width - 376 ), questPosition[0] + event.dx ) ),
@@ -8256,6 +8325,15 @@ export function createUi( ports: UiPorts ) {
 								modify: false
 							} );
 						}
+						return;
+					}
+					// Port-only (SRO_CONSIGNMENT): a bag item dropped on the market's
+					// List an item slot is the one to sell.
+					if (
+						item && target && !target.disabled && item.slot >= MARKET_BAG_FIRST_SLOT &&
+						(target.id === "market-sell-pick" || target.id === "market-sell-clear")
+					) {
+						activateMarket( "market-sell-slot:" + item.slot );
 						return;
 					}
 					if (
@@ -9022,6 +9100,17 @@ export function createUi( ports: UiPorts ) {
 					dirty = true;
 					return;
 				}
+				// Ctrl+click puts a bag item into the open market's List an item
+				// (port-only, not native: SRO_CONSIGNMENT).
+				if (
+					event.ctrl && marketHud.isOpen() && event.id.startsWith( "slot:" ) &&
+					Number( event.id.slice( 5 ) ) >= MARKET_BAG_FIRST_SLOT
+				) {
+					activateMarket( "market-sell-slot:" + event.id.slice( 5 ) );
+					carriedItem = null;
+					inventorySlot = -1;
+					return;
+				}
 				if (
 					event.shift && event.id.startsWith( "slot:" ) &&
 					[ "Inventory", "Shop", "COS inventory", "Storage" ].includes( panel )
@@ -9246,6 +9335,8 @@ export function createUi( ports: UiPorts ) {
 					const key = event.id.slice( 15 ), percent = Number( event.value );
 					if ( key === "vigorHp" || key === "vigorMp" ) companionPotions.percent( key, percent );
 					if ( key === "hp" || key === "mp" ) setAutoPotionPercent( key, percent );
+				} else if ( event.id.startsWith( "market-" ) && marketHud.edit( event.id, event.value ) ) {
+					// Port-only (#3529): the market's search, price and offer fields.
 				} else if ( event.id === "blocking-name" && blockDialog === "add" ) {
 					blockInput = event.value.slice( 0, 13 );
 				} else if ( event.id === "pet-name" && petNameDialog?.phase === "input" ) {
@@ -9383,6 +9474,12 @@ export function createUi( ports: UiPorts ) {
 					// F10 opens the mall exactly as the button does (ItemMallEvent_OpenItemMall).
 					if ( binding < 0 && event.code === "F10" ) {
 						activate( "item-mall" );
+						return;
+					}
+					// Port-only, not native (SRO_CONSIGNMENT): K toggles the market
+					// while no binding claims the key.
+					if ( binding < 0 && vk === MARKET_HOTKEY_VK && view.gameplay?.consignment === true ) {
+						activateMarket( "market-toggle" );
 						return;
 					}
 					if ( binding < 0 && event.code === "Enter" ) {
@@ -9682,6 +9779,7 @@ export function createUi( ports: UiPorts ) {
 				if ( !alchemyEffectCell( now - alchemyEffect.startedAt ) ) alchemyEffect = null;
 				dirty = true;
 			}
+			if ( next.gameplay?.alchemy?.preparing !== undefined ) dirty = true;
 			fortressStaffHud.observe(
 				next.session?.phase === "world" && next.gameplay?.npcConversation?.phase === "menu" &&
 					next.gameplay.target === next.gameplay.npcConversation.gid ?
@@ -10380,6 +10478,16 @@ export function createUi( ports: UiPorts ) {
 				phase === "world" &&
 				uniqueRankHud.reconcile( next.gameplay, experimental.state().saved.uniqueDamageRank )
 			) dirty = true;
+			// Port-only (#3529): the market closes with the world, or when the
+			// shard does not run it; a write's answer refreshes what it changed.
+			if ( marketHud.isOpen() && (phase !== "world" || next.gameplay?.consignment !== true) ) {
+				marketHud.close();
+				dirty = true;
+			} else if ( phase === "world" ) {
+				const before = marketHud.state();
+				sendMarket( marketHud.observe( next.gameplay?.market, uiNow ) );
+				if ( marketHud.state() !== before ) dirty = true;
+			}
 			if ( phase !== "world" ) cosHud.reset();
 			else if (
 				cosHud.reconcile(
@@ -11365,6 +11473,71 @@ export function createUi( ports: UiPorts ) {
 			*/
 			function nativePage( layout: AuthoredLayout, px: number, py: number, exclude: readonly number[] = [] ) {
 				return frameDraw.nativePage( drawFrame, { layout, px, py, exclude } );
+			}
+			/*
+			================
+			pageManager
+
+			A CIFPageManager (ifpagemanager) in its authored rect (window
+			relative, at ox, oy): "[" page numbers "]" with the arrows outside,
+			the current page in the manager's highlight colour and styled face.
+			Each number and arrow is a control `prefix + page`.
+			================
+			*/
+			function pageManager( rect: UiRect, ox: number, oy: number, page: number, pages: number, prefix: string ) {
+				const authored = hud.data()?.windows.ifpagemanager,
+					manager = pageManagerLayout( rect, page, pages );
+				if ( !authored || manager.count <= 0 ) return;
+				const node = ( id: number ) => Object.values( authored ).find( entry => entry.id === id )!;
+				const template = { ...node( 10 ), client: [ 0, 0, 0, 0 ] as UiRect, hAlign: 1, vAlign: 1 };
+				authoredText( { ...template, rect: [ manager.x - 4, manager.y, 4, manager.height ] }, ox, oy, "[" );
+				authoredText(
+					{ ...template, rect: [ manager.x + manager.count * manager.width, manager.y, 4, manager.height ] },
+					ox,
+					oy,
+					"]"
+				);
+				for ( let index = 0; index < manager.count; index++ ) {
+					const number = manager.first + index;
+					const control = {
+						...template,
+						rect: [ manager.x + index * manager.width, manager.y, manager.width, manager.height ] as UiRect
+					};
+					const presentation = mallPageNumberPresentation( number, page );
+					authoredText(
+						presentation.color ? { ...control, color: presentation.color } : control,
+						ox,
+						oy,
+						String( number + 1 ),
+						false,
+						presentation.fontStyle
+					);
+					controls.push( {
+						id: prefix + number,
+						label: String( number + 1 ),
+						rect: authoredRect( control, ox, oy ),
+						kind: "button"
+					} );
+				}
+				if ( manager.previous >= 0 ) {
+					const arrow = node( 1 );
+					authoredButton(
+						{ ...arrow, rect: [ manager.left - arrow.size[0], manager.y, 0, 0 ] },
+						ox,
+						oy,
+						prefix + manager.previous,
+						""
+					);
+				}
+				if ( manager.next < manager.pages ) {
+					authoredButton(
+						{ ...node( 2 ), rect: [ manager.right, manager.y, 0, 0 ] },
+						ox,
+						oy,
+						prefix + manager.next,
+						""
+					);
+				}
 			}
 			/*
 			================
@@ -16745,6 +16918,32 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					);
 					endWindow( admission, "composite-item" );
 				}
+				if ( marketHud.isOpen() && game ) {
+					// The window draws with this module's frame primitives.
+					const marketPaint: MarketPaint = {
+						beginWindow: frame => frameDraw.beginWindow( frame ),
+						endWindow: ( frame, mark, owner ) => frameDraw.endWindow( frame, mark, owner ),
+						windowOrigin: ( frame, spec ) => frameDraw.windowOrigin( frame, spec ),
+						windowBox: ( frame, spec ) => frameDraw.windowBox( frame, spec ),
+						closeButton: ( frame, x, y, id ) => frameDraw.closeButton( frame, x, y, id ),
+						button: ( frame, spec ) => frameDraw.button( frame, spec ),
+						rect: ( frame, spec ) => frameDraw.rect( frame, spec ),
+						comboBox: ( frame, spec ) => frameDraw.comboBox( frame, spec ),
+						image: ( frame, spec ) => frameDraw.image( frame, spec ),
+						nativeItem: ( frame, spec ) => frameDraw.nativeItem( frame, itemSlots, spec )
+					};
+					drawMarketWindow( drawFrame, marketPaint, {
+						hud: marketHud.state(),
+						market: game.market,
+						bag: game.inventory,
+						gold: Number( game.progression?.gold ?? 0 ),
+						localName: game.social?.localName ?? next.session?.character ?? "",
+						// A listing's end is the server's wall clock.
+						now: Date.now(),
+						focus,
+						caretVisible
+					} );
+				}
 				const uniqueRank = uniqueRankHud.state();
 				if ( uniqueRank && game ) {
 					// Port-only, not native (unique-rank-hud.ts): place, name, damage,
@@ -17405,6 +17604,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						canReverseReturn: !!(capabilities & 0x20000000),
 						gateRows: capabilities & 0x8000000 ? game.targetGateRows : undefined,
 						canStorage: !!(capabilities & 4),
+						// Port-only (#3529): the storage keeper also opens the market
+						// while the shard runs it (server SRO_CONSIGNMENT).
+						canMarket: !!(capabilities & 4) && game.consignment === true,
 						// 5D9100: the TC manager's +0x20 (set by any camp record)
 						// is clear and the player is level 60 or more.
 						canAcademyOpen: !!(capabilities & 4) && !game.academy?.member &&
@@ -17605,7 +17807,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						),
 						processing = [ "compound", "advanced", "dissolve" ].includes( alchemyMode ),
 						page = hudData.windows[processing ? "ifalchemyprocess" : "ifnewalchemyreinforce"]!,
-						busy = !!game?.inventoryPending;
+						busy = !!game?.inventoryPending,
+						fusing = !processing && alchemyFusing();
 					const top = ROOT + "interface/alchemy/alcm_window_2.png";
 					paths.push( top );
 					// 620180 sets alcm_window_2 (376x148) as the box's own texture and
@@ -17662,8 +17865,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					nativePage( page, px, py + 150 );
 					// CIFAlchemyReinforce's effect sprite, control 50 (625600).
 					const deco = page.GDR_AB_REINFORCE_PROCESS_DECO,
-						cell = alchemyEffect && alchemyEffectCell( alchemyClock - alchemyEffect.startedAt );
-					if ( !processing && deco && alchemyEffect && cell ) {
+						cell = alchemyEffect && alchemyEffectCell( alchemyClock - alchemyEffect.startedAt ),
+						preparing = game?.alchemy?.preparing,
+						prepareCell = preparing !== undefined &&
+							alchemyEffectCell( (view?.simulationTimeMs ?? alchemyClock) - preparing );
+					// 62AFA0 shows alcm_effect_prepare additively (51EDB0 with 1)
+					// until the held request is sent. The worker stamps the start
+					// on the simulation clock, so the cell is read on it too.
+					if ( !processing && deco && prepareCell ) {
+						additiveImage( authoredRect( deco, px, py + 150 ), PREPARE_SHEET, prepareCell );
+					} else if ( !processing && deco && alchemyEffect && cell ) {
 						const effect = ROOT + alchemyEffectTexture( alchemyEffect.flags ) + ".png",
 							r = authoredRect( deco, px, py + 150 );
 						if ( alchemyEffectAdditive( alchemyEffect.flags ) ) additiveImage( r, effect, cell );
@@ -17688,14 +17899,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							slot === undefined ? "alchemy-empty:" + i : "alchemy-slot:" + slot,
 							item,
 							r,
-							busy || closed
+							busy || fusing || closed
 						);
 					} );
 					for ( const node of Object.values( page ).filter( n => n.type === "CIFButton" ) ) {
+						// The reinforce page keeps Fuse up while it runs: 62AFA0
+						// only ignores the press (alchemyFusing).
 						if (
 							node.name.endsWith( "_CANCEL" ) ?
 								!busy :
-								node.name.endsWith( "_PROCESS" ) && busy
+								node.name.endsWith( "_PROCESS" ) && busy && processing
 						) continue;
 						const id = node.name.endsWith( "_CANCEL" ) ?
 							"alchemy-cancel" :
@@ -17712,7 +17925,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							py + 150,
 							id,
 							hudCopy( node.text ),
-							id === "alchemy-cancel" ? !busy : busy || alchemySlots.length < 2
+							id === "alchemy-cancel" ? !busy : busy && processing || alchemySlots.length < 2
 						);
 					}
 					const edit = page.GDR_AB_MANUFACTURING_EDIT_COUNT;
@@ -20246,7 +20459,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						80,
 						...rowIds
 					] );
-					for ( const id of [ 44, 45, 46, 47, 52, 53, 65 ] ) {
+					for ( const id of [ 44, 45, 46, 47, 52, 53 ] ) {
 						authoredText( at( id ), px, py, hudCopy( at( id ).text ) );
 					}
 					const choose = hudCopy( "UIIT_CTL_WARENETWORK_SCAN_SELECT" );
@@ -20300,6 +20513,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					for ( const [id, sort] of sorts ) {
 						authoredLabeledButton( at( id ), px, py, "stall-net-sort:" + sort, hudCopy( at( id ).text ) );
 					}
+					// The Item column head (65) is a CIFStatic with header art
+					// (gil_subj_button05) created with the sort buttons in the
+					// StallSearchResult section, after the Create section's result
+					// tile (BG_01), so it paints over that tile like the buttons.
+					nativePage( { [at( 65 ).name]: at( 65 ) }, px, py );
 					const order = stallNetworkOrder( network.rows, draft, network.rows.map( level ) );
 					for ( let i = 0; i < rowIds.length; i++ ) {
 						const index = order[i], row = index === undefined ? undefined : network.rows[index];
@@ -20309,14 +20527,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						const r = authoredRect( part( 12 ), ox, oy ), icon = iconPath( row.item.icon );
 						if ( icon ) {
 							image( r, icon );
-							itemEffects( "stall-net-row:" + index, row.item, r );
+							itemEffects( "stall-net-item:" + index, row.item, r );
 							itemCount( row.item, r );
 						}
 						authoredText( part( 11 ), ox, oy, String( network.page * 15 + index + 1 ) );
 						authoredText( part( 13 ), ox, oy, row.item.name ?? "" );
 						authoredText( part( 14 ), ox, oy, String( row.quantity ) );
 						authoredText( part( 15 ), ox, oy, String( level( row ) || "" ) );
-						authoredText( part( 16 ), ox, oy, String( row.price ) );
+						// 5AF9B0: the price grouped by thousands in UI_GetMoneyAmountColor's tier.
+						const price = moneyPresentation( String( row.price ) );
+						authoredText( { ...part( 16 ), color: price.color }, ox, oy, price.text );
 						controls.push( {
 							id: "stall-net-row:" + index,
 							label: row.item.name ?? "Stall network row " + index,
@@ -20324,28 +20544,28 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							kind: "button",
 							selected: draft.row === index
 						} );
+						// The slot over the row, so hovering the icon shows its help.
+						controls.push( {
+							id: "stall-net-item:" + index,
+							label: row.item.name ?? "",
+							rect: r,
+							kind: "button"
+						} );
 					}
-					// The page manager (80): previous and next around page / pages.
-					const pager = authoredRect( at( 80 ), px, py ), pagerY = pager[1] + 1;
-					button( "stall-net-prev", "<", pager[0], pagerY, 40, network.page <= 0 );
-					button(
-						"stall-net-next",
-						">",
-						pager[0] + pager[2] - 40,
-						pagerY,
-						40,
-						network.page + 1 >= network.pages
+					// The page manager (80), hidden until the first result arrives
+					// (5ABE6E hides it; the 0xB6F9 answer shows it at its page).
+					if ( network.pages > 0 ) {
+						pageManager( at( 80 ).rect, px, py, network.page, network.pages, "stall-net-page:" );
+					}
+					// 5A64D0: "%s %s", the carried gold grouped by thousands, then UIIT_STT_GOLD.
+					authoredText(
+						at( 55 ),
+						px,
+						py,
+						`${moneyPresentation( String( game?.progression?.gold ?? 0 ) ).text} ${
+							hudCopy( "UIIT_STT_GOLD" )
+						}`
 					);
-					quads.push(
-						...text.quads(
-							network.pages ? `${network.page + 1} / ${network.pages}` : "",
-							[ pager[0] + 40, pager[1], pager[2] - 80, pager[3] ],
-							full,
-							white,
-							{ hAlign: 1, vAlign: 1 }
-						)
-					);
-					authoredText( at( 55 ), px, py, String( game?.progression?.gold ?? 0 ) );
 					authoredLabeledButton(
 						at( 50 ),
 						px,
@@ -20356,16 +20576,49 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					);
 					const open = combos.find( combo => combo.id === draft.combo && !combo.disabled );
 					if ( open ) {
-						const r = authoredRect( at( open.id ), px, py ),
-							list: UiRect = [ r[0], r[1] + r[3], r[2], open.entries.length * 18 ];
-						rect( list, [ 0, 0, 0, 1 ] );
-						blocks.push( list );
-						for ( const [i, value] of open.entries.entries() ) {
-							const entry: UiRect = [ list[0], list[1] + i * 18, list[2], 18 ];
-							quads.push(
-								...text.quads( value, [ entry[0] + 4, entry[1], entry[2] - 8, 18 ], entry, white )
+						// CIFComboBox_OpenList (51EA20) with the twelve visible rows
+						// CIFStallNetwork_OnCreate sets on each combo.
+						const list = comboListLayout(
+							authoredRect( at( open.id ), px, py ),
+							open.entries.length,
+							STALL_COMBO_ROWS,
+							text.height(),
+							draft.comboFirst
+						);
+						stallComboRange = list.range;
+						rect( list.popup, [ 0, 0, 0, 1 ] );
+						const ring = stretchRing(
+							list.popup,
+							ROOT + "interface/ifcommon/com_blacksquare_",
+							resources.size,
+							full
+						);
+						paths.push( ...ring.paths );
+						quads.push( ...ring.quads );
+						blocks.push( list.popup );
+						for ( const { index, rect: entry } of list.rows ) {
+							const id = "stall-net-choice:" + index;
+							// Inference from 536E20's colour triple (normal white, then
+							// 0xFF8080FF): the row under the cursor draws in the second.
+							const color: UiQuad["color"] = hover === id ? [ 128 / 255, 128 / 255, 1, 1 ] : white;
+							quads.push( ...text.quads( open.entries[index]!, entry, entry, color ) );
+							controls.push( { id, label: open.entries[index]!, rect: entry, kind: "button" } );
+						}
+						if ( list.track ) {
+							const scroll = chatScrollbar(
+								"stall-net-combo-scroll",
+								list.track,
+								open.entries.length,
+								STALL_COMBO_ROWS,
+								list.range - list.first,
+								resources.size,
+								full,
+								hover,
+								pressed
 							);
-							controls.push( { id: "stall-net-choice:" + i, label: value, rect: entry, kind: "button" } );
+							paths.push( ...scroll.paths );
+							quads.push( ...scroll.quads );
+							controls.push( ...scroll.controls );
 						}
 					}
 					endWindow( admission, "service:Stall network" );
@@ -27524,84 +27777,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									hudCopy( tab.label );
 								authoredLabeledButton( control, sx, sy, control.name, caption );
 							}
-							const manager = mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count );
-							if ( manager.count > 0 ) {
-								const template = {
-									...mallControl( data.windows.ifpagemanager!, 10 ),
-									client: [ 0, 0, 0, 0 ] as UiRect,
-									hAlign: 1,
-									vAlign: 1
-								};
-								authoredText(
-									{ ...template, rect: [ manager.x - 4, manager.y, 4, manager.height ] },
-									sx,
-									sy,
-									"["
-								);
-								authoredText(
-									{
-										...template,
-										rect: [
-											manager.x + manager.count * manager.width,
-											manager.y,
-											4,
-											manager.height
-										]
-									},
-									sx,
-									sy,
-									"]"
-								);
-								for ( let index = 0; index < manager.count; index++ ) {
-									const page = manager.first + index;
-									const control = {
-										...template,
-										rect: [
-											manager.x + index * manager.width,
-											manager.y,
-											manager.width,
-											manager.height
-										] as UiRect
-									};
-									// The current page draws in the manager's highlight
-									// colour and styled face (mallPageNumberPresentation).
-									const presentation = mallPageNumberPresentation( page, state.page );
-									authoredText(
-										presentation.color ? { ...control, color: presentation.color } : control,
-										sx,
-										sy,
-										String( page + 1 ),
-										false,
-										presentation.fontStyle
-									);
-									controls.push( {
-										id: "item-mall-page:" + page,
-										label: String( page + 1 ),
-										rect: authoredRect( control, sx, sy ),
-										kind: "button"
-									} );
-								}
-								if ( manager.previous >= 0 ) {
-									const node = mallControl( data.windows.ifpagemanager!, 1 );
-									authoredButton(
-										{ ...node, rect: [ manager.left - node.size[0], manager.y, 0, 0 ] },
-										sx,
-										sy,
-										"item-mall-page:" + manager.previous,
-										""
-									);
-								}
-								if ( manager.next < manager.pages ) {
-									const node = mallControl( data.windows.ifpagemanager!, 2 );
-									authoredButton(
-										{ ...node, rect: [ manager.right, manager.y, 0, 0 ] },
-										sx,
-										sy,
-										"item-mall-page:" + manager.next,
-										""
-									);
-								}
-							}
+							pageManager(
+								mallControl( shop, 74 ).rect,
+								sx,
+								sy,
+								state.page,
+								mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count ).pages,
+								"item-mall-page:"
+							);
 
 							const row = data.windows.ifitemmallshopslot!;
 							for ( let index = 0; index < MALL_ROWS_PER_PAGE; index++ ) {
@@ -28661,6 +28844,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			const semantics = {
 				loadingVisible: !!loading && !assetFailure,
 				titleCredit: next.frontend?.phase === "login" && !loading,
+				marketButton: next.session?.phase === "world" && next.gameplay?.consignment === true && !loading,
+				marketOpen: marketHud.isOpen(),
 				// The DOM tools keep their own row beside the map, below combat chrome.
 				hudCorner: compact ?
 					[ w, itemMall.isOpen() ? 52 : compactTelemetryTop, 0, 0 ] as UiRect :

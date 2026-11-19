@@ -7,7 +7,7 @@ Browser-only frames in the transport control range (below 256) that carry
 state native packets cannot: commerce, and the beta public chat
 transcript. The server defines the same numbers (internal/game/action:
 commerce.go, buyback.go, commerce_references.go, itemmall.go;
-internal/game/social/chat: wire.go). The world session admits exactly
+market.go; internal/game/social/chat: wire.go). The world session admits exactly
 these after EnterWorld; a frame the gate does not know ends the session,
 which is how the Item Mall catalogue disconnected every client (F10).
 
@@ -32,6 +32,9 @@ export const MALL_SILK_HISTORY_CONTROL = 18;
 // opCrestRegister; #2282): the picked crest image rides up, the verdict
 // rides back.
 export const CREST_UPLOAD_CONTROL = 19;
+// The consignment market's requests and answers (server action/market.go
+// opMarket; port-only, not native, SRO_CONSIGNMENT; #3529).
+export const MARKET_CONTROL = 20;
 
 /*
 ================
@@ -42,5 +45,5 @@ export function isWorldControl( opcode: number ): boolean {
 	return opcode === SHOP_CATALOG_CONTROL || opcode === SHOP_INVENTORY_CONTROL ||
 		opcode === SHOP_BUYBACK_CONTROL || opcode === COMMERCE_REFERENCES_CONTROL || opcode === MALL_CATALOG_CONTROL ||
 		opcode === CHAT_HISTORY_CONTROL || opcode === MALL_BALANCE_CONTROL || opcode === MALL_SILK_HISTORY_CONTROL ||
-		opcode === CREST_UPLOAD_CONTROL;
+		opcode === CREST_UPLOAD_CONTROL || opcode === MARKET_CONTROL;
 }

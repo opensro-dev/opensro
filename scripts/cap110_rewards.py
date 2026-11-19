@@ -33,6 +33,7 @@ import alexandria_npcs as characters
 import cap110_item_import as item_import
 import cap110_items as items
 import cap110_monsters as monsters
+import published_ids
 import import_vsro_alexandria as tables
 import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
@@ -163,7 +164,7 @@ def select_imports(named, later, native):
 # identities from the later client never become runtime identities.
 # ================
 def convert_rows(selected, occupied, previous):
-	targets = monsters.allocate_identities(occupied, [row[items.CODENAME] for row in selected], previous)
+	targets = published_ids.allocate(published_ids.OBJECTS, occupied, [row[items.CODENAME] for row in selected], previous)
 	converted = []
 	for row in selected:
 		copy = list(row)

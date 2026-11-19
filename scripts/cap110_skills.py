@@ -14,6 +14,8 @@ invented here.
 """
 from collections import Counter
 
+import published_ids
+
 SKILL_COLUMNS = 118
 SERVICE = 0
 IDENTITY = 1
@@ -105,15 +107,33 @@ def apply_references(row, identity, group, chain_next, prereq_ids):
 # kept; only later player ranks above the native cap are added, with fresh
 # collision-free ids and group ids and their references remapped by codename.
 # previous_ids/previous_groups, read from a prior marker, keep published
-# identities stable across rebuilds.
+# identities stable across rebuilds. pinned is the released skill pin
+# (published_ids.published): a rank this merge adds keeps its released id,
+# and every other released skill id stays reserved (#3815), as
+# cap110_items.merge_equipment does for items.
 # ================
-def merge_skills(native_rows, later_rows, reserved_ids=(), previous_ids=None, previous_groups=None):
+def merge_skills(native_rows, later_rows, reserved_ids=(), previous_ids=None, previous_groups=None, pinned=None):
 	index_skills(native_rows)
 	index_skills(later_rows)
 	group_map = build_group_map(native_rows, later_rows)
 	previous_ids, previous_groups = previous_ids or {}, previous_groups or {}
 
+	native_codes = {row[CODENAME] for row in native_rows}
+	selected = [
+		row for row in later_rows
+		if row[SERVICE] == "1" and player_skill(row[CODENAME])
+		and row[CODENAME] not in native_codes and NATIVE_MASTERY_CAP < int(row[MASTERY_LEVEL]) <= IMPORT_MASTERY_CAP
+	]
+	selected.sort(key=lambda row: int(row[IDENTITY]))
+
 	occupied = {int(row[IDENTITY]) for row in native_rows + later_rows} | set(reserved_ids)
+	if pinned:
+		adding = {row[CODENAME]: row for row in selected}
+		targets = {code: int(entry["target"]) for code, entry in previous_ids.items()}
+		held, targets = published_ids.overlay(pinned, adding, occupied, targets)
+		occupied |= held
+		previous_ids = {code: previous_ids[code] if code in previous_ids and int(previous_ids[code]["target"]) == identity
+			else {"source": int(adding[code][IDENTITY]), "target": identity} for code, identity in targets.items()}
 	retained = {int(entry["target"]) for entry in previous_ids.values()}
 	if len(retained) != len(previous_ids) or retained & occupied or any(not 0 < identity <= MAX_ID for identity in retained):
 		raise ValueError("previous imported skill IDs collide or exceed the wire width")
@@ -125,14 +145,6 @@ def merge_skills(native_rows, later_rows, reserved_ids=(), previous_ids=None, pr
 	group_occupied = {int(row[GROUP]) for row in native_rows + later_rows}
 	if {int(value) for value in previous_groups.values()} & group_occupied:
 		raise ValueError("previous imported group IDs collide with the tables")
-
-	native_codes = {row[CODENAME] for row in native_rows}
-	selected = [
-		row for row in later_rows
-		if row[SERVICE] == "1" and player_skill(row[CODENAME])
-		and row[CODENAME] not in native_codes and NATIVE_MASTERY_CAP < int(row[MASTERY_LEVEL]) <= IMPORT_MASTERY_CAP
-	]
-	selected.sort(key=lambda row: int(row[IDENTITY]))
 
 	# Two passes: every identity first, so a chain can point at a later rank.
 	next_id = max(occupied, default=0) + 1

@@ -43,20 +43,52 @@ var constantinopleSiegeFortressRow = SiegeFortressDataRow{
 	TaxTargets:      63,
 }
 
+// banditSiegeFortressRow and hotanSiegeFortressRow are the v1.188
+// siegefortress.txt rows (ids 6 and 3), projected as Jangan's. Port-only,
+// not native (#3886): each joins only while its switch is on, the switch
+// that also builds the fortress's zones and structures. The Bandit row
+// names the Chinese official, as the v1.188 table does.
+var banditSiegeFortressRow = SiegeFortressDataRow{
+	FortressID:      6,
+	Icon:            "etc/fort_bijeokdan.ddj",
+	CodeName:        "FORTRESS_BIJEOKDAN",
+	NameStrID:       "SN_FORTRESS_BIJEOKDAN",
+	OfficialNpcCode: "NPC_CH_FORTRESS_OFFICIAL",
+	RequestFee:      500000,
+	TaxTargets:      96,
+}
+
+var hotanSiegeFortressRow = SiegeFortressDataRow{
+	FortressID:      3,
+	Icon:            "etc/fort_hotan.ddj",
+	CodeName:        "FORTRESS_HOTAN",
+	NameStrID:       "SN_FORTRESS_HOTAN",
+	OfficialNpcCode: "NPC_KT_FORTRESS_OFFICIAL",
+	RequestFee:      1000000,
+	TaxTargets:      63,
+}
+
 /*
 ================
 siegeFortressRows
 
 The shipped rows with each official's RefObjID resolved from character
-data. While the Constantinople switch is on the fortress joins the
-list (port-only, not native); the authority catalog and the world's
-structures come from the built tables, not from this projection.
+data. Each later fortress whose switch is on joins the list (port-only,
+not native), in fortress id order as the later tables list them; the
+authority catalog and the world's structures come from the built
+tables, not from this projection.
 ================
 */
 func siegeFortressRows(deps *Deps) []SiegeFortressDataRow {
 	rows := DefaultSiegeFortressDataRows()
+	if monster.HotanFortressEnabled() {
+		rows = append(rows, hotanSiegeFortressRow)
+	}
 	if monster.ConstantinopleEnabled() {
 		rows = append(rows, constantinopleSiegeFortressRow)
+	}
+	if monster.BanditFortressEnabled() {
+		rows = append(rows, banditSiegeFortressRow)
 	}
 	if deps == nil {
 		return rows

@@ -10,6 +10,7 @@ package action
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 	"time"
 
@@ -493,4 +494,117 @@ func rocTellsTheShard(t *testing.T, world instance.DefinitionID) {
 	if got := off.Monsters.DrainUniqueNotices(testDivision); len(got) != 0 {
 		t.Fatalf("off: world %d spoke %+v", world, got)
 	}
+}
+
+/*
+================
+rocCountdownHeard
+
+One countdown line a resident heard: seconds after the Roc appeared, the
+0x3058 kind and its minute byte.
+================
+*/
+type rocCountdownHeard struct {
+	at      int64
+	kind    byte
+	minutes byte
+}
+
+/*
+================
+TestRocCountdownsAndDeparture
+
+The living Roc's two countdowns on the native schedule, tick by tick
+each second: the berserk lines from 30 minutes after it appears (then
+_START at the hour and _AGAIN four times), the departure lines from
+3:00:01, and at 3:30 the residents go to the mountain gate. The Roc's
+death stops both (the second half).
+================
+*/
+func TestRocCountdownsAndDeparture(t *testing.T) {
+	rt, clock, monsters, c := rocFixture(t)
+	var heard []rocCountdownHeard
+	var rocAt time.Time
+	rt.PushCharacterFrames = func(_ string, _ string, frames []wire.Frame) {
+		for _, frame := range frames {
+			if frame.Opcode == opEventNotice {
+				if len(frame.Payload) != 2 {
+					t.Fatalf("countdown payload %x", frame.Payload)
+				}
+				heard = append(heard, rocCountdownHeard{int64(clock.now.Sub(rocAt) / time.Second), frame.Payload[0], frame.Payload[1]})
+			}
+		}
+	}
+	top := rocSummitAtTheRoc(t, rt, clock, monsters, c)
+	rocAt = clock.now
+	gid := monsters.gidOf(rocCodename)
+
+	end := rocAt.Add(3*time.Hour + 31*time.Minute)
+	for clock.now.Before(end) {
+		clock.now = clock.now.Add(time.Second)
+		rocTick(rt, clock)
+	}
+	min := int64(60)
+	want := []rocCountdownHeard{
+		{30 * min, rocKindBerserk, 30}, {45 * min, rocKindBerserk, 15}, {50 * min, rocKindBerserk, 10},
+		{55 * min, rocKindBerserk, 5}, {57 * min, rocKindBerserk, 3}, {59 * min, rocKindBerserk, 1},
+		{60 * min, rocKindBerserk, 0}, {90 * min, rocKindBerserk, rocBerserkAgain},
+		{120 * min, rocKindBerserk, rocBerserkAgain}, {150 * min, rocKindBerserk, rocBerserkAgain},
+		{180 * min, rocKindBerserk, rocBerserkAgain},
+		{180*min + 1, rocKindDeparture, 30}, {195*min + 1, rocKindDeparture, 15}, {200*min + 1, rocKindDeparture, 10},
+		{205*min + 1, rocKindDeparture, 5}, {207*min + 1, rocKindDeparture, 3}, {209*min + 1, rocKindDeparture, 1},
+	}
+	if fmt.Sprint(heard) != fmt.Sprint(want) {
+		t.Fatalf("heard %v\nwant  %v", heard, want)
+	}
+	if domain.CharacterWorldInstance(c) != domain.DefaultWorldInstance {
+		t.Fatalf("the departure left the resident in %#x", domain.CharacterWorldInstance(c))
+	}
+	if !monsters.alive[gid] || top.step != rocStepFight || !rocLayerOpen(rt, rocTopWorld) {
+		t.Fatal("the departure moved more than the residents")
+	}
+
+	// A fallen Roc counts nothing down.
+	rt, clock, monsters, c = rocFixture(t)
+	heard = nil
+	rocSummitAtTheRoc(t, rt, clock, monsters, c)
+	rocAt = clock.now
+	monsters.alive[monsters.gidOf(rocCodename)] = false
+	for end := rocAt.Add(3*time.Hour + 31*time.Minute); clock.now.Before(end); {
+		clock.now = clock.now.Add(time.Minute)
+		rocTick(rt, clock)
+	}
+	if len(heard) != 0 {
+		t.Fatalf("a fallen Roc counted down: %v", heard)
+	}
+}
+
+/*
+================
+rocSummitAtTheRoc
+
+Opens the summit, enters c, fells the stones and runs the tick to the
+Roc's appearance; the clock stands on that tick.
+================
+*/
+func rocSummitAtTheRoc(t *testing.T, rt *Runtime, clock *fakeClock, monsters *rocTestMonsters, c *enterworld.Character) *rocSummit {
+	t.Helper()
+	clock.now = rocTestOpen
+	rocTick(rt, clock)
+	top, _ := rt.roc.layers(testDivision)
+	if status := rt.TransferCharacterToInstance(testDivision, c, top.lease, rocSpawn); status != instance.Success {
+		t.Fatalf("transfer: status %d", status)
+	}
+	for _, stone := range rocSealStones {
+		monsters.alive[monsters.gidOf(stone.codename)] = false
+	}
+	rocTick(rt, clock)
+	clock.now = clock.now.Add(rocBreakStoneMs * time.Millisecond)
+	rocTick(rt, clock)
+	clock.now = clock.now.Add(rocEntranceMs * time.Millisecond)
+	rocTick(rt, clock)
+	if top.step != rocStepFight || monsters.gidOf(rocCodename) == 0 {
+		t.Fatalf("the Roc did not appear: step %d", top.step)
+	}
+	return top
 }

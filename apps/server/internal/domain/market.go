@@ -9,6 +9,11 @@ taken back; the store moves it in one transaction per door
 (store/market.go). The in-game window and the website are two front ends
 on the same rows.
 
+The owner's rules (2026-11-19): a listing names its seller unless the
+seller lists anonymously; the buyer picks the bag or the warehouse; a
+gold sale pays the character that listed it (MarketProceeds), a Silk
+sale the account; buyers may offer below the price (MarketOffer).
+
 ===========================================================================
 */
 package domain
@@ -31,6 +36,25 @@ const (
 	MarketHeld     = "held"
 )
 
+// Where a bought or returned item goes. The bag is the acting
+// character's (the game window); the website only has the warehouse.
+const (
+	MarketToWarehouse = "warehouse"
+	MarketToBag       = "bag"
+)
+
+// An offer's states. Open waits for the seller; the rest are final:
+// accepted made the sale, rejected and withdrawn are the two parties'
+// answers, and closed is an offer the listing outlived (sold, cancelled,
+// expired) or the buyer could no longer pay.
+const (
+	MarketOfferOpen      = "open"
+	MarketOfferAccepted  = "accepted"
+	MarketOfferRejected  = "rejected"
+	MarketOfferWithdrawn = "withdrawn"
+	MarketOfferClosed    = "closed"
+)
+
 // The refusals every front end maps to its own words. None changes
 // anything: a refused door leaves the item and the money where they were.
 var (
@@ -45,6 +69,13 @@ var (
 	ErrMarketWarehouseFull = errors.New("market: the warehouse is full")
 	ErrMarketNotHeld       = errors.New("market: the listing is not waiting to be taken back")
 	ErrMarketUnavailable   = errors.New("market: unavailable")
+	ErrMarketBagFull       = errors.New("market: the inventory is full")
+	ErrMarketOfferPrice    = errors.New("market: an offer must be below the price")
+	ErrMarketOfferOpen     = errors.New("market: an offer on this listing is already open")
+	ErrMarketOfferCap      = errors.New("market: too many open offers")
+	ErrMarketOfferGone     = errors.New("market: the offer is no longer open")
+	ErrMarketBuyerFunds    = errors.New("market: the offering character can no longer pay")
+	ErrMarketBuyerFull     = errors.New("market: the buyer has no room for the item")
 )
 
 /*
@@ -60,6 +91,8 @@ type MarketRules struct {
 	FeePercent int64
 	DurationMs int64
 	OpenCap    int
+	// OfferCap bounds one account's open offers (game/market OpenOfferCap).
+	OfferCap int
 }
 
 /*
@@ -84,7 +117,12 @@ type MarketListing struct {
 	SellerAccount string `json:"sellerAccount"`
 	// SellerChar is the listing character (a bag listing), 0 for one made
 	// from the warehouse on the website.
-	SellerChar int64        `json:"sellerChar"`
+	SellerChar int64 `json:"sellerChar"`
+	// SellerName is the listing character's name when it was listed, ""
+	// for a warehouse listing. Anonymous hides it from every viewer; the
+	// row keeps it for the audit trail.
+	SellerName string       `json:"sellerName"`
+	Anonymous  bool         `json:"anonymous"`
 	Item       InventoryRow `json:"item"`
 	Currency   string       `json:"currency"`
 	Price      int64        `json:"price"`
@@ -111,6 +149,41 @@ type MarketSale struct {
 	Price        int64  `json:"price"`
 	Fee          int64  `json:"fee"`
 	AtMs         int64  `json:"atMs"`
+	// SellerChar is owed Price - Fee gold while Unpaid: a gold sale of a
+	// bag listing pays the listing character, on its own action lane
+	// (MarketClaimProceeds), never by a write the lane does not own.
+	SellerChar int64 `json:"sellerChar"`
+	Unpaid     bool  `json:"unpaid"`
+	// Codename names the item for the seller's notice.
+	Codename string `json:"codename"`
+	// To is where the item went (MarketToBag or MarketToWarehouse) and
+	// Slot the slot it took there.
+	To   string `json:"to"`
+	Slot int64  `json:"slot"`
+}
+
+/*
+================
+MarketOffer
+
+A buyer's offer below a listing's price. Nothing is held: the buyer must
+be able to pay when it is made and again when the seller accepts, and the
+sale then runs at the offer's price as a buy would.
+================
+*/
+type MarketOffer struct {
+	ID           int64  `json:"id"`
+	ListingID    int64  `json:"listingId"`
+	Division     string `json:"division"`
+	BuyerAccount string `json:"buyerAccount"`
+	BuyerChar    int64  `json:"buyerChar"`
+	BuyerName    string `json:"buyerName"`
+	Price        int64  `json:"price"`
+	// To is the buyer's pick for the item; a full pick falls back to the
+	// other place at accept, and both full refuses (ErrMarketBuyerFull).
+	To    string `json:"to"`
+	State string `json:"state"`
+	AtMs  int64  `json:"atMs"`
 }
 
 /*
@@ -130,6 +203,7 @@ type MarketListRequest struct {
 	Slot      int64
 	Currency  string
 	Price     int64
+	Anonymous bool
 	Admit     func(InventoryRow) error
 	Rules     MarketRules
 }
@@ -142,6 +216,10 @@ A buy names the listing and the version the buyer saw. A gold listing is
 paid from Payer, one of the buyer's characters; a Silk listing from the
 buyer's purchased Silk. The caller makes sure a website buy's Payer is
 offline (game/market), since its record is then the store's alone.
+
+To picks the destination. A bag buy names Receiver (the character whose
+bag it is, the payer's own on a gold buy) and BagSlot, a free bag slot
+the action lane chose, since only the lane knows the bag's size.
 ================
 */
 type MarketBuyRequest struct {
@@ -149,7 +227,61 @@ type MarketBuyRequest struct {
 	Version      int64
 	BuyerAccount string
 	Payer        *Character
+	To           string
+	Receiver     *Character
+	BagSlot      int64
 	Rules        MarketRules
+}
+
+/*
+================
+MarketReclaimRequest
+
+The game window's cancel or take-back: To is the seller's pick, and a bag
+reclaim names Receiver (one of the account's characters) and BagSlot.
+================
+*/
+type MarketReclaimRequest struct {
+	Account   string
+	ListingID int64
+	To        string
+	Receiver  *Character
+	BagSlot   int64
+}
+
+/*
+================
+MarketOfferRequest
+
+A new offer, made by the acting character (Buyer): it is the gold payer
+of a gold listing and the receiver of a bag offer.
+================
+*/
+type MarketOfferRequest struct {
+	ListingID    int64
+	BuyerAccount string
+	Buyer        *Character
+	Price        int64
+	To           string
+	Rules        MarketRules
+}
+
+/*
+================
+MarketAcceptRequest
+
+The seller accepts an offer. Buyer is the offering character's record,
+resolved by the caller with the same ownership rule as a buy's payer
+(the lane's live record, or an offline one under the entry gate).
+BagSlot is a free slot of its bag, or -1 when it has none.
+================
+*/
+type MarketAcceptRequest struct {
+	OfferID       int64
+	SellerAccount string
+	Buyer         *Character
+	BagSlot       int64
+	Rules         MarketRules
 }
 
 /*
