@@ -175,3 +175,39 @@ func TestShippedScheduleMatchesTheClientWindow(t *testing.T) {
 		now = end
 	}
 }
+
+/*
+================
+TestSpanJoinsTheApplicationDays
+
+The calendar reads the application days as one span: before, during
+(Monday, mid-span) and on the last second of Tuesday the span is Sunday
+00:00 to Tuesday 23:59:59; the war, one block, is its own window.
+2026-11-22 is a Sunday.
+================
+*/
+func TestSpanJoinsTheApplicationDays(t *testing.T) {
+	loc := time.FixedZone("shard", 0)
+	schedules, err := ParseSchedules(shippedSchedule, loc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, war := schedules["AllowSiegeRequest"], schedules["SiegeProgressing"]
+	opens := time.Date(2026, 11, 22, 0, 0, 0, 0, loc)
+	closes := time.Date(2026, 11, 24, 23, 59, 59, 0, loc)
+	for _, at := range []time.Time{
+		time.Date(2026, 11, 19, 9, 0, 0, 0, loc),
+		opens,
+		time.Date(2026, 11, 23, 12, 0, 0, 0, loc),
+		time.Date(2026, 11, 24, 23, 59, 58, 0, loc),
+	} {
+		start, end, ok := request.Span(at)
+		if !ok || !start.Equal(opens) || !end.Equal(closes) {
+			t.Fatalf("span at %s: %s .. %s", at, start, end)
+		}
+	}
+	start, end, ok := war.Span(opens)
+	if !ok || !start.Equal(time.Date(2026, 11, 25, 20, 0, 0, 0, loc)) || !end.Equal(time.Date(2026, 11, 25, 22, 0, 0, 0, loc)) {
+		t.Fatalf("war span %s .. %s", start, end)
+	}
+}

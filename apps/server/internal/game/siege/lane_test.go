@@ -135,6 +135,10 @@ func TestWindowsFollowTheWarSchedule(t *testing.T) {
 	if !request.Running || war.Running || !war.Start.Equal(lane.WarStart(morning)) || !war.End.After(war.Start) {
 		t.Fatalf("morning windows %+v", windows)
 	}
+	// The application days read as one span, Sunday to Tuesday.
+	if !request.Start.Equal(time.Date(2026, 10, 4, 0, 0, 0, 0, loc)) || !request.End.Equal(time.Date(2026, 10, 6, 23, 59, 59, 0, loc)) {
+		t.Fatalf("registration span %s .. %s", request.Start, request.End)
+	}
 	during := war.Start.Add(30 * time.Minute).UnixMilli()
 	if !byName(during)["SiegeProgressing"].Running {
 		t.Fatalf("the war is not running at %v: %+v", time.UnixMilli(during).In(loc), byName(during))
