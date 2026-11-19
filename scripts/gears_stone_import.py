@@ -37,6 +37,7 @@ import os
 from pathlib import Path
 
 import cap110_monsters as cap110
+import published_ids
 import import_vsro_alexandria as tables
 import jupiter_import as jupiter
 import later_world_import
@@ -164,7 +165,7 @@ def add_stones(native, output, v1696_root=None):
 				native_ids.add(int(row[1]))
 				if row[2] in stone_codes:
 					raise ValueError(f"gears stone {row[2]} already stands in the native tables")
-	allocated = cap110.allocate_identities(native_ids, [stone[2] for stone in stones], prior.get("items", {}))
+	allocated = published_ids.allocate(published_ids.OBJECTS, native_ids, [stone[2] for stone in stones], prior.get("items", {}))
 	rows = []
 	for stone in stones:
 		row = list(stone)

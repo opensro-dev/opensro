@@ -12,6 +12,7 @@ from pathlib import Path
 
 import cap110_monsters as monsters
 import cap110_monster_loot as loot
+import published_ids
 
 
 # ================
@@ -97,11 +98,11 @@ class Cap110MonstersTest(unittest.TestCase):
 		previous = {"MOB_SD_OLD": 101, "MOB_SD_RESERVED": 104}
 		got = monsters.allocate_identities({100}, ["MOB_SD_NEW", "MOB_SD_OLD"], previous)
 		self.assertEqual(got, {"MOB_SD_NEW": 105, "MOB_SD_OLD": 101})
-		for invalid in ({"a": 101, "b": 101}, {"a": 100}, {"a": 0}, {"a": True}, {"a": monsters.MAX_ID + 1}):
+		for invalid in ({"a": 101, "b": 101}, {"a": 100}, {"a": 0}, {"a": True}, {"a": published_ids.MAX_ID + 1}):
 			with self.subTest(previous=invalid), self.assertRaises(ValueError):
 				monsters.allocate_identities({100}, ["MOB_SD_NEW"], invalid)
 		with self.assertRaises(ValueError):
-			monsters.allocate_identities({100}, ["MOB_SD_NEW"], {"old": monsters.MAX_ID})
+			monsters.allocate_identities({100}, ["MOB_SD_NEW"], {"old": published_ids.MAX_ID})
 
 	# ================
 	# test_published_character_ids_survive_an_earlier_addition
@@ -119,16 +120,16 @@ class Cap110MonstersTest(unittest.TestCase):
 		# id, past the other import's published 103 too.
 		self.assertEqual(got["COS_P_FOX"], 104)
 		# The pin file itself is read unless the variable names another.
-		self.assertEqual(monsters.published_characters(), {})
+		self.assertEqual(published_ids.published(published_ids.OBJECTS), {})
 		with tempfile.TemporaryDirectory() as folder:
 			pin = Path(folder) / "pin.json"
-			pin.write_text(json.dumps({"characters": pinned}), encoding="utf-8")
-			saved = monsters.os.environ[monsters.PUBLISHED_CHARACTERS_VARIABLE]
-			monsters.os.environ[monsters.PUBLISHED_CHARACTERS_VARIABLE] = str(pin)
+			pin.write_text(json.dumps({"format": published_ids.PIN_FORMAT, "characters": pinned}), encoding="utf-8")
+			saved = published_ids.os.environ[published_ids.PIN_VARIABLE]
+			published_ids.os.environ[published_ids.PIN_VARIABLE] = str(pin)
 			try:
 				self.assertEqual(monsters.allocate_characters({100}, ["MOB_SD_ACHNISH"], stale)["MOB_SD_ACHNISH"], 101)
 			finally:
-				monsters.os.environ[monsters.PUBLISHED_CHARACTERS_VARIABLE] = saved
+				published_ids.os.environ[published_ids.PIN_VARIABLE] = saved
 		# Without the pin the staging's previous ids win, as before.
 		self.assertEqual(monsters.allocate_characters({100}, ["COS_P_FOX", "MOB_SD_ACHNISH"], stale, {}),
 			{"COS_P_FOX": 101, "MOB_SD_ACHNISH": 105})
