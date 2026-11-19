@@ -14,7 +14,12 @@ linked git worktree names in its .git file.
 
 ===========================================================================
 */
-import { GENERATED_ROOT, MAIN_CHECKOUT_ROOT, intermediateImagePath } from "../../lib/generatedRoot.mjs";
+import {
+	GENERATED_ROOT,
+	MAIN_CHECKOUT_ROOT,
+	intermediateImagePath,
+	sharedCachePath
+} from "../../lib/generatedRoot.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -111,6 +116,29 @@ export const serverGameDataRoot = resolveServerGameDataRoot();
 export const publicRoot = path.join( generatedRoot, "client-public" );
 export const publicAssetsRoot = path.join( publicRoot, "assets" );
 export const imageSourceRoot = intermediateImagePath();
+// The native character textures (nativeCharacterTextures.mjs): named by
+// the generator's hash and the source bytes, so trees may share them
+// under SRO_SHARED_CACHE_ROOT; else beside the image sources.
+export const characterTextureRoot = sharedCachePath(
+	"native-character",
+	path.join( imageSourceRoot, "native-character" )
+);
+
+/*
+================
+modelReadRoots
+
+The discover roots of an action that reads model data and textures:
+its data root, the image sources, and the character texture cache. The
+cache comes last: unshared it lies inside images, which matches first,
+so a record names its reads as it always did; shared (opensro #3755) it
+lies outside, and without this root every read of it refused ("lies
+outside its discoverRoots", r203, 11-20).
+================
+*/
+export function modelReadRoots( data ) {
+	return { data, images: imageSourceRoot, characterTextures: characterTextureRoot };
+}
 export const imagePublicRoot = path.join( publicAssetsRoot, "images" );
 
 /*

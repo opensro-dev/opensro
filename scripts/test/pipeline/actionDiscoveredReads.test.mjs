@@ -16,6 +16,7 @@ hands back the small result the storing run returned.
 import assert from "node:assert/strict";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -175,4 +176,41 @@ test("another tree with the same bytes hits the shared store, one with other byt
 	await build( changed, [ model( changed, runs ) ] );
 	assert.deepEqual( runs, [ "model", "model" ] );
 	assert.equal( await readFile( path.join( changed.out, "model.glb" ), "utf8" ), "glb(vertices-variant)" );
+});
+
+/*
+================
+namedCharacterTextureRead
+
+Where a model action's roots name one read in the character texture
+cache, in a fresh Node whose SRO_SHARED_CACHE_ROOT is shared (or unset):
+paths.mjs resolves the cache when it loads.
+================
+*/
+function namedCharacterTextureRead( shared ) {
+	const env = { ...process.env };
+	delete env.SRO_SHARED_CACHE_ROOT;
+	if ( shared ) env.SRO_SHARED_CACHE_ROOT = shared;
+	const paths = new URL( "../../build/world/paths.mjs", import.meta.url ).href;
+	const action = new URL( "../../build/graph/action.mjs", import.meta.url ).href;
+	const script = `
+		const { characterTextureRoot, modelReadRoots } = await import( ${JSON.stringify( paths )} );
+		const { discoveredName } = await import( ${JSON.stringify( action )} );
+		const file = characterTextureRoot + "/ab.texture";
+		console.log( JSON.stringify( discoveredName( { discoverRoots: modelReadRoots( "/data" ) }, file ) ) );`;
+	return JSON.parse( execFileSync( process.execPath, [ "--input-type=module", "-e", script ], { env } ).toString() );
+}
+
+/*
+================
+TestModelReadRootsNameTheCharacterTextureCache
+================
+*/
+test("a model action may read the character texture cache, shared or not", async t => {
+	const shared = await mkdtemp( path.join( os.tmpdir(), "sro-shared-cache-" ) );
+	t.after( () => rm( shared, { recursive: true, force: true } ) );
+	// Shared (#3755): outside the image sources, named by its own root.
+	assert.deepEqual( namedCharacterTextureRead( shared ), [ "characterTextures", "ab.texture" ] );
+	// Unshared: inside the image sources, named as records always named it.
+	assert.deepEqual( namedCharacterTextureRead( null ), [ "images", "native-character/ab.texture" ] );
 });
