@@ -129,11 +129,6 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 		}
 		return []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: wire.EncodeNpcInteractionAck(mask)}}, ""
 	}
-	// Port-only, not native (#3349): a Muhan change NPC is a nest entity,
-	// not a roster NPC, and its Talk is the change (muhan_change.go).
-	if change, instance, isChange := rt.muhanChangeAt(divisionID, character, gid); isChange {
-		return rt.handleMuhanChangeTalk(divisionID, character, change, instance, mask)
-	}
 	npc, ok := rt.npcForCurrentViewer(divisionID, character, gid)
 	if !ok {
 		return npcFunctionRefusal(selectObjectNotFound), fmt.Sprintf("gid %d is not a live in-scope NPC", gid)
@@ -145,6 +140,11 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 	// open while walking away is refused here with the "too far" notice.
 	if !rt.npcWithinHitRange(divisionID, character, npc) {
 		return npcFunctionTooFar(), fmt.Sprintf("NPC %s is beyond its interaction range", npc.Codename)
+	}
+	// Port-only, not native (#3349): a Muhan change NPC's Talk is the
+	// change (muhan_change.go).
+	if change, isChange := rt.muhanChanges[npc.Codename]; isChange {
+		return rt.handleMuhanChangeTalk(divisionID, character, change, npc, mask)
 	}
 
 	switch mask {
@@ -272,6 +272,10 @@ func (rt *Runtime) npcForCurrentViewer(divisionID string, character *enterworld.
 			return simulation.NpcDef{}, false
 		}
 		return npc, true
+	}
+	// A static world NPC of the viewer's own world (worldnpc.go).
+	if npc := rt.worldNpcAt(character, gid); npc != nil && simulation.NpcVisibleAt(*npc, viewer) {
+		return *npc, true
 	}
 	return simulation.NpcDef{}, false
 }

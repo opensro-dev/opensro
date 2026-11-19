@@ -170,6 +170,15 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			)
 		}
 	}
+	if len(npcSpawns.WorldNpcs) == 0 {
+		// Port-only (#3314): the Muhan arenas' managers and change NPCs
+		// stand in their arena worlds while SRO_MUHAN is on.
+		var err error
+		npcSpawns.WorldNpcs, err = simulation.LoadMuhanArenaNpcs(textdataDir, monster.MuhanEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
+	}
 	if npcSpawns.Enabled {
 		if err := simulation.ValidateNpcRoster(npcSpawns.Roster); err != nil {
 			return nil, fmt.Errorf("bootstrap: invalid NPC roster: %w", err)
@@ -286,12 +295,6 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		muhanWaves, err := monster.LoadMuhanWaves(textdataDir, monster.MuhanEnabled())
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap muhan waves: %w", err)
-		}
-		// Port-only (#3314): the arenas' manager and change NPCs join
-		// their wave worlds while the same switch is on.
-		template, err = monster.AppendMuhanNPCs(template, textdataDir, monster.MuhanEnabled())
-		if err != nil {
-			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
 		// Before the second hunting grounds: five of their kinds are the
 		// tomb overlay's MOB_TQ_* rows while the tomb is on (the build
