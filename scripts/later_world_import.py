@@ -432,7 +432,10 @@ def later_characters(read):
 # with a name symbol it gives no text row (Muhan's change forms, all
 # SN_MOB_MUHAN_SOLO_A_75 in v1.696): they are staged without one, as
 # the client ships them; every other name without a row refuses, by
-# symbol. has(name) says whether the later archive holds a
+# symbol. A kind the tree already holds (native, or an earlier layer's)
+# refuses by name: one codename stands in one row, so an import places
+# such a kind on its own row instead of staging it (hunting2). has(name)
+# says whether the later archive holds a
 # textdata file: the client's skills are read the way the client reads
 # them (skilldata_enc.client_skill_rows), its encrypted set when it ships
 # one, else the plain manifest. Returns the summary keys every later-world marker
@@ -440,7 +443,10 @@ def later_characters(read):
 # ================
 def stage_kinds(label, read, has, refs, text_root, prior, character_shard, skill_shard, info_owned, extra_skills=(),
 		unnamed=frozenset()):
-	native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != character_shard for r in tables.table_rows(p.read_bytes())]
+	native_chars = cap110.tree_characters(text_root, character_shard)
+	standing = sorted(set(refs) & {r[2] for r in native_chars if len(r) > 2})
+	if standing:
+		raise ValueError(f"{label} kinds {standing}: each already stands in the character tables")
 	occupied = {int(r[1]) for r in native_chars}
 	allocated = cap110.allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 	for code, row in refs.items():

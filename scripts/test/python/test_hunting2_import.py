@@ -230,6 +230,53 @@ class Hunting2ImportTest(unittest.TestCase):
 					with self.assertRaises(ValueError):
 						hunting2.add_monsters(v1696, native, output)
 
+	# ================
+	# standing_row
+	#
+	# A tree row (an earlier layer's shard) for a kind the set places.
+	# ================
+	def standing_row(self, text_root, code, identity, level, grade=0):
+		row = ["0"] * 120
+		row[1], row[2], row[15], row[57] = str(identity), code, str(grade), str(level)
+		(text_root / "characterdata_7000.txt").write_bytes(utf16([row]))
+
+	# ================
+	# test_a_kind_the_tree_holds_is_placed_on_its_own_row
+	#
+	# r203: 49 of the set's 71 kinds already stand in the tree; staging
+	# them again collided with their published ids.
+	# ================
+	def test_a_kind_the_tree_holds_is_placed_on_its_own_row(self):
+		with tempfile.TemporaryDirectory() as root:
+			v1696, native, output, text_root, pins = self.fixture(Path(root))
+			self.standing_row(text_root, "MOB_TQ_INSIDE", 300, 80)
+			with mock.patch.object(jupiter, "archive_pins", return_value=pins):
+				with mock.patch.dict(os.environ, {"SRO_HUNTING2": "on"}):
+					summary = hunting2.add_monsters(v1696, native, output)
+			shard = (text_root / hunting2.CHARACTER_SHARD).read_bytes().decode("utf-16")
+			self.assertNotIn("MOB_TQ_INSIDE", shard)
+			self.assertIn("MOB_SD_RESTAGED", shard)
+			self.assertNotIn("MOB_TQ_INSIDE", summary["characters"])
+			population = json.loads((text_root / hunting2.FIELD_FILE).read_text(encoding="utf-8"))
+			placed = [row["Codename"] for row in population["Rows"]]
+			self.assertEqual(placed.count("MOB_TQ_INSIDE"), 2)
+			self.assertEqual(placed.count("MOB_SD_RESTAGED"), 1)
+
+	# ================
+	# test_a_tree_kind_outside_the_window_refuses
+	#
+	# The server admits a nest by its kind's row (admitHunting2); a tree
+	# row outside the window would place a nest the server drops.
+	# ================
+	def test_a_tree_kind_outside_the_window_refuses(self):
+		with tempfile.TemporaryDirectory() as root:
+			v1696, native, output, text_root, pins = self.fixture(Path(root))
+			self.standing_row(text_root, "MOB_TQ_INSIDE", 300, 30)
+			with mock.patch.object(jupiter, "archive_pins", return_value=pins):
+				with mock.patch.dict(os.environ, {"SRO_HUNTING2": "on"}):
+					with self.assertRaisesRegex(ValueError, "MOB_TQ_INSIDE"):
+						hunting2.add_monsters(v1696, native, output)
+
 
 if __name__ == "__main__":
 	unittest.main()
