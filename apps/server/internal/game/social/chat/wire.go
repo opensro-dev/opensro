@@ -270,6 +270,34 @@ func EncodeChatAckError(errCode, chatType, second uint8) []byte {
 
 /*
 ================
+ClampChatUnits
+
+text cut to at most limit UTF-16 code units, never inside a surrogate
+pair, with "..." marking a cut.
+================
+*/
+func ClampChatUnits(text string, limit int) string {
+	if len(utf16.Encode([]rune(text))) <= limit {
+		return text
+	}
+	units := 0
+	var out []rune
+	for _, r := range text {
+		n := utf16.RuneLen(r)
+		if n < 1 {
+			n = 1
+		}
+		if units+n > limit-3 {
+			break
+		}
+		out = append(out, r)
+		units += n
+	}
+	return string(out) + "..."
+}
+
+/*
+================
 EncodeChatNotice
 
 The 0x3667 channel 7 body: {u8 7, u16 wcharCount + UTF-16LE text}. The

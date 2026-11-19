@@ -228,10 +228,9 @@ func (h *HardcodedBrain) Decide(_ context.Context, sit Situation) Decision {
 		return Decision{
 			Action:     ActionReinforceAlly,
 			TargetName: sit.Distress.AttackerName,
-			Dialogue: fmt.Sprintf(
-				"Hold on %s! %s is rushing to region %d to help defend your caravan against %s!",
-				sit.Distress.TraderName, sit.AgentName, sit.Distress.RegionID, attacker,
-			),
+			// Short names and no region: a chat line holds 100 characters.
+			Dialogue: fmt.Sprintf("Hold on, %s! I'm coming to help against %s!",
+				DisplayName(sit.Distress.TraderName), DisplayName(attacker)),
 			MemoryNote: fmt.Sprintf("Rushed to reinforce %s in region %d", sit.Distress.TraderName, sit.Distress.RegionID),
 			Source:     BrainHardcoded,
 		}
