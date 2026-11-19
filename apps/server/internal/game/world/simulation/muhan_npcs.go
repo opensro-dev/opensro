@@ -50,7 +50,7 @@ const (
 	// One identity per row, stable in the file's authored order; the
 	// same identity stands in every layer of its arena world.
 	muhanNpcGIDBase uint32 = 241000
-	muhanNpcGIDSpan        = 1000
+	muhanNpcGIDSpan int    = 1000
 )
 
 /*
