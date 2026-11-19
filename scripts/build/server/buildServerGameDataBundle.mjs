@@ -29,7 +29,7 @@ import {
 	retailTextdataRoot,
 	serverGameDataRoot
 } from "../world/paths.mjs";
-import { buildStructureZoneProjection } from "./structureZones.mjs";
+import { buildStructureZoneProjection, portOnlyObjectStringFiles } from "./structureZones.mjs";
 import { buildAINavProjection } from "./aiNavProjection.mjs";
 import { buildServerGameDataArchive } from "./serverGameDataArchive.mjs";
 import { completeItemTextProjection, completeItemReferenceProjection } from "../shared/itemTextCompletions.mjs";
@@ -49,9 +49,9 @@ const PROTOCOL_VERSION = 2;
 const WORLD_PUBLIC_ROOT = path.join( publicRoot, "assets", "world" );
 // CObjectStringIfo_Load (98C7F0) reads this Data.pk2 file.
 const OBJECT_STRING_FILE = path.join( dataExtractedRoot, "navmesh", "objectstring.ifo" );
-// Port-only, not native: the Constantinople fortress's placements
-// (scripts/constantinople_import.py), merged when the file exists.
-const OBJECT_STRING_PORTONLY_FILE = path.join( dataExtractedRoot, "navmesh", "objectstring.portonly.ifo" );
+// Port-only, not native: the later fortresses' placements
+// (structureZones.portOnlyObjectStringFiles), merged when they exist.
+const OBJECT_STRING_ROOT = path.join( dataExtractedRoot, "navmesh" );
 // The dungeon route tables (aiNavProjection.mjs) sit beside objectstring.ifo.
 const AINAV_SOURCE_ROOT = path.join( dataExtractedRoot, "navmesh" );
 // Read by apps/server/internal/game/world/alexandria (OverlayFile).
@@ -97,7 +97,7 @@ export async function buildServerGameDataBundle( options ) {
 		await buildStructureZoneProjection(
 			temporaryRoot,
 			options.objectStringFile ?? OBJECT_STRING_FILE,
-			options.objectStringPortOnlyFile ?? OBJECT_STRING_PORTONLY_FILE
+			options.objectStringPortOnlyFiles ?? await portOnlyObjectStringFiles( OBJECT_STRING_ROOT )
 		);
 
 		const files = await describeProjectionFiles( temporaryRoot );
