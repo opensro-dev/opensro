@@ -57,13 +57,13 @@ import { convertTextureTrees } from "../shared/convertImagesRunner.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { quatMultiply, quatRotateVector } from "../shared/math3d.mjs";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
-import { gameRoot, imageSourceRoot, publicAssetsRoot, retailTextdataRoot } from "../world/paths.mjs";
+import { gameRoot, modelReadRoots, publicAssetsRoot, retailTextdataRoot } from "../world/paths.mjs";
 
 const MODULE_FILE = fileURLToPath( import.meta.url );
 const textdataDir = retailTextdataRoot;
 const publicAssets = publicAssetsRoot;
 // The trees a model's build reads: extracted game data and converted images.
-const MODEL_READ_ROOTS = { data: dataRoot, images: imageSourceRoot };
+const MODEL_READ_ROOTS = modelReadRoots( dataRoot );
 // "pick" = the ground-item pickup scoop (motion 0x26 / ANI_PICK): the mission
 // local player renders from this GLB, and the 0x35C7 -> state-10 chain plays
 // the scoop once with a 200ms blend.
