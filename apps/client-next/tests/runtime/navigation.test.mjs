@@ -267,7 +267,16 @@ test("published outdoor neighborhood and every dungeon decode and admit", async 
 		assert.doesNotThrow( () => nav.install( p.regionId, p ), path + id );
 	}
 });
-test("stream cancels stale completions and reset requires fresh collision admission", () => {
+/*
+================
+streamFixture
+
+A navigation stream over a scripted asset owner: requests are recorded,
+completions are set by the test, cancellations are recorded. The catalog
+publishes 0x0101 to 0x0103, one sector apart along x.
+================
+*/
+function streamFixture() {
 	let id = 0;
 	const pending = new Map(), sent = [], cancelled = [], requests = [];
 	const assets = {
@@ -310,31 +319,104 @@ cancel
 			JSON.stringify( {
 				regionsById: {
 					"0x0101": [ { bundlePublicPath: "/assets/a.json" } ],
-					"0x0102": [ { bundlePublicPath: "/assets/b.json" } ]
+					"0x0102": [ { bundlePublicPath: "/assets/b.json" } ],
+					"0x0103": [ { bundlePublicPath: "/assets/c.json" } ]
 				}
 			} )
 		)
 	} );
 	stream.step( pose );
 	assert.equal( requests[1].decode, "navigation" );
-	stream.step( { ...pose, regionId: 258 } );
+	assert.equal( new URL( requests[1].url ).hash, "#257" );
+	return { stream, pending, sent, cancelled, requests };
+}
+test("a crossing keeps the load whose neighbourhood still covers the walker, then loads the new sector", () => {
+	// #3928: a rider crossed a sector about every 8 s while each load took
+	// longer, so cancelling at every crossing left the walk off coverage.
+	const { stream, pending, sent, cancelled, requests } = streamFixture();
+	const next = { ...pose, regionId: 258 };
+	stream.step( next );
+	assert.deepEqual( cancelled, [] );
+	assert.equal( stream.phase(), "loading" );
+	pending.set( 2, { kind: "navigation", product: product() } );
+	stream.step( next );
+	assert.equal( sent.length, 1 );
+	assert.equal( sent[0].regionId, 257 );
+	assert.equal( stream.phase(), "admitting" );
+	stream.step( next, 257, undefined, sent[0].requestId );
+	assert.equal( requests.length, 3 );
+	assert.equal( new URL( requests[2].url ).hash, "#258" );
+	assert.deepEqual( cancelled, [] );
+	stream.dispose();
+});
+test("a crossing during admission keeps the admission, then loads the new sector", () => {
+	const { stream, pending, sent, cancelled, requests } = streamFixture();
+	pending.set( 2, { kind: "navigation", product: product() } );
+	stream.step( pose );
+	assert.equal( stream.phase(), "admitting" );
+	const next = { ...pose, regionId: 258 };
+	stream.step( next );
+	assert.equal( stream.phase(), "admitting" );
+	stream.step( next, 257, undefined, sent[0].requestId );
+	assert.deepEqual( cancelled, [] );
+	assert.equal( new URL( requests[2].url ).hash, "#258" );
+	stream.dispose();
+});
+test("a crossing past the loading sector's neighbourhood cancels it; reset requires fresh collision admission", () => {
+	const { stream, pending, sent, cancelled, requests } = streamFixture();
+	const far = { ...pose, regionId: 259 };
+	stream.step( far );
 	assert.deepEqual( cancelled, [ 2 ] );
 	pending.set( 2, { kind: "navigation", product: product() } );
-	pending.set( 3, { kind: "navigation", product: product( 258 ) } );
-	stream.step( { ...pose, regionId: 258 } );
+	pending.set( 3, { kind: "navigation", product: product( 259 ) } );
+	stream.step( far );
 	assert.equal( sent.length, 1 );
-	assert.equal( sent[0].regionId, 258 );
+	assert.equal( sent[0].regionId, 259 );
 	assert.equal( stream.phase(), "admitting" );
-	stream.step( { ...pose, regionId: 258 }, 257 );
+	stream.step( far, 257 );
 	assert.equal( stream.phase(), "admitting" );
-	stream.step( { ...pose, regionId: 258 }, 258, undefined, sent[0].requestId );
+	stream.step( far, 259, undefined, sent[0].requestId );
 	assert.equal( stream.phase(), "ready" );
 	stream.reset();
-	stream.step( { ...pose, regionId: 258 } );
+	stream.step( far );
 	assert.equal( requests.length, 4 );
 	stream.dispose();
 	assert.ok( cancelled.includes( 4 ) );
 	assert.equal( stream.error(), null );
+});
+
+test("a dungeon load covers its own region only, so a move to another dungeon region cancels it", () => {
+	// Every dungeon pair is one plane (samePlaneAdjacent), but a dungeon
+	// product is admitted for its origin alone (clipper available).
+	const requests = [], cancelled = [];
+	const assets = {
+		available: () => 4,
+		/*
+================
+request
+================
+		*/
+		request( url, limit, decode ) {
+			requests.push( { url, decode } );
+			return requests.length;
+		},
+		take: () => null,
+		/*
+================
+cancel
+================
+		*/
+		cancel( id ) {
+			cancelled.push( id );
+		}
+	};
+	const stream = createNavigationStream( assets, () => {}, "https://fixture.test" );
+	stream.step( { ...pose, regionId: 0x8001 } );
+	assert.equal( requests.length, 1 );
+	stream.step( { ...pose, regionId: 0x8002 } );
+	assert.deepEqual( cancelled, [ 1 ] );
+	assert.equal( new URL( requests[1].url ).hash, "#" + 0x8002 );
+	stream.dispose();
 });
 
 for ( const resume of [ "clock", "online", "region" ] ) {
