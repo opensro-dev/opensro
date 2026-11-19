@@ -168,8 +168,8 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		}
 	}
 	ticker.Source.(*worldsession.Bridge).PopulationLease = game.items.CharacterPopulationLease
-	// A quest instance's exit gate joins its world's NPC scope pass.
-	ticker.WorldNpcs = game.items.QuestGateNpcs
+	// Quest gates and static world NPCs join their world's NPC scope pass.
+	ticker.WorldNpcs = game.items.WorldNpcs
 	// A seasonal look (Santa So-Ok, port-only) changes which reference
 	// the static roster spawns under for its window.
 	if look, ok := game.deps.NpcSpawns.Looks.Look(); ok && look.RefObjID != 0 {
