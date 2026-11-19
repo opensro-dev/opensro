@@ -293,7 +293,6 @@ scripts/build/char/avatarVisualOverrides.mjs
 scripts/build/char/buildSkillEffectRecords.mjs
 scripts/build/char/compileBanTimeline.mjs
 scripts/build/char/defaultWearPolicy.mjs
-scripts/build/char/equipmentVisualRecords.mjs
 scripts/build/char/materialVariants.mjs
 scripts/build/char/native/animationSetNames.ts
 scripts/build/char/native/scriptObjAnimationRegistry.ts

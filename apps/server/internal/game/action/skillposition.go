@@ -97,7 +97,12 @@ func (rt *Runtime) acceptPositionSkill(division string, character, snapshot *ent
 		if !ok {
 			return false
 		}
-		plan, ok := rt.planSkillTravel(character.Name, from, fromOwner, to)
+		plan, ok := skillTravelPlan{}, false
+		if skill.PositionEffect.Teleport {
+			plan, ok = rt.planSkillTeleport(character.Name, from, fromOwner, to)
+		} else {
+			plan, ok = rt.planSkillTravel(character.Name, from, fromOwner, to)
+		}
 		if !ok {
 			return false
 		}
@@ -127,5 +132,13 @@ func (rt *Runtime) acceptPositionSkill(division string, character, snapshot *ent
 	// The instant native handler emits release; guided arrival owns the
 	// client close (8DD550). A zero-time finalize would truncate the dash.
 	release := wire.SkillCastReleaseFrame(token, gid)
+	// tel2 has no guided arrival (the client arms one only for bit 8), so
+	// it is an ordinary bracket: only a received 0xB505 mode 2 closes it
+	// (wire/skillcast.go header). Without it every Wizard teleport left a
+	// cast open and Sit, Trace and wing motion stayed blocked (#3927).
+	if skill.PositionEffect.Teleport {
+		lifetime, _ := skill.ActionLifecycleMs()
+		rt.queueSkillFinalize(division, snapshot.Name, gid, now+int64(lifetime), wire.SkillCastFinalizeFrame(token))
+	}
 	return OpResult{Frames: []wire.Frame{open, release, vitals}, Broadcast: []wire.Frame{open, release}, ActorPrivate: []wire.Frame{vitals}}
 }

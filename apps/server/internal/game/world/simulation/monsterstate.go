@@ -27,9 +27,9 @@ divisionMonsterState
 type divisionMonsterState struct {
 	archiveQueue    []uint32
 	archiveQueued   map[uint32]struct{}
-	dormant         map[uint32]uint16
-	dormantRegions  map[uint16]map[uint32]struct{}
-	keepAwakeUntil  map[uint16]int64
+	dormant         map[uint32]sleepCell
+	dormantCells    map[sleepCell]map[uint32]struct{}
+	keepAwakeUntil  map[sleepCell]int64
 	approachActors  map[uint32]uint32
 	approachTargets map[uint32]*monsterApproachSquad
 	behavior        behaviorQueue

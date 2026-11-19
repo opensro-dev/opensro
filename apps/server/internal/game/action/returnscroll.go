@@ -521,7 +521,9 @@ Complete one handed-off arrival: the division's publication gate
 held across the completion and the frame pushes, under the
 arrival's own label, exactly as a request-path teleport holds it -
 so a long hold names the arrival instead of the tick that used to
-run it. A panic costs this arrival only; the lane continues with
+run it. A slow hold also reports its parts (returnArrival.<step>,
+hold_breakdown.go), so a live read says which step kept the gate the
+tick and ground-scope wait on (#2802). A panic costs this arrival only; the lane continues with
 the next, as the ticker recovers a hook.
 ================
 */
@@ -534,14 +536,20 @@ func (rt *Runtime) runReturnArrival(job pendingReturn) {
 	}()
 	started := time.Now()
 	release := rt.LockPublication(job.division, "returnArrival")
-	defer release()
-	frames, peers := rt.completeReturnScrollInDivision(job, rt.Now().UnixMilli())
+	// The runtime clock (time.Now in production), so a test can drive it.
+	hold := newHoldBreakdown("returnArrival", rt.Now)
+	defer func() {
+		release()
+		hold.report(rt.PublicationHold)
+	}()
+	frames, peers := rt.completeReturnScrollInDivision(job, rt.Now().UnixMilli(), &hold)
 	if len(frames) > 0 && rt.PushCharacterFrames != nil {
 		rt.PushCharacterFrames(job.division, job.name, frames)
 	}
 	if len(peers) > 0 && rt.PushDivisionPeerFrames != nil {
 		rt.PushDivisionPeerFrames(job.division, job.name, peers)
 	}
+	hold.mark("push")
 	if elapsed := time.Since(started); elapsed >= simulation.SlowHookThreshold && rt.Steps.Slow != nil {
 		rt.Steps.Slow("returnScrollArrival", elapsed)
 	}
@@ -572,14 +580,15 @@ a wait past the slow threshold still names itself
 (#1820 E).
 ================
 */
-func (rt *Runtime) completeReturnScrollInDivision(job pendingReturn, now int64) ([]wire.Frame, []wire.Frame) {
+func (rt *Runtime) completeReturnScrollInDivision(job pendingReturn, now int64, hold *holdBreakdown) ([]wire.Frame, []wire.Frame) {
 	started := time.Now()
 	unlock := rt.lockDivision(job.division)
+	hold.mark("divisionWait")
 	if elapsed := time.Since(started); elapsed >= simulation.SlowHookThreshold && rt.Steps.Slow != nil {
 		rt.Steps.Slow("returnScrollDivisionWait", elapsed)
 	}
 	defer unlock()
-	return rt.completeReturnScroll(job, now)
+	return rt.completeReturnScroll(job, now, hold)
 }
 
 /*
@@ -587,7 +596,7 @@ func (rt *Runtime) completeReturnScrollInDivision(job pendingReturn, now int64) 
 completeReturnScroll
 ================
 */
-func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Frame, []wire.Frame) {
+func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64, hold *holdBreakdown) ([]wire.Frame, []wire.Frame) {
 	key := simulation.WorldKey(job.division, job.name)
 	current, ok := rt.returnCasts.Load(key)
 	if !ok || current.(pendingReturn) != job {
@@ -644,6 +653,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	}) {
 		return nil, nil
 	}
+	hold.mark("door")
 	if cancelled {
 		clear := teleportState(c, 0)
 		return []wire.Frame{clear}, []wire.Frame{clear}
@@ -653,7 +663,9 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	// The town teleport head: hostility and abnormal states settle
 	// before the move, and stay settled if the move is rolled back.
 	headActor, headPublic := rt.applyTownTeleportHead(job.division, c)
+	hold.mark("head")
 	membership, moved := rt.moveWorldMembership(job.division, c, currentWorld, arrival.world)
+	hold.mark("membership")
 	if !moved {
 		rt.deps.UpdateDeferred(c, "return-scroll-world-rollback", func() bool {
 			rt.Worlds.Update(key, func() simulation.WorldState { return previous }, func(w *simulation.WorldState) { *w = previous })
@@ -665,7 +677,9 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	rt.endTransformForLoadingDeferred(job.division, c)
 	rt.endPartyAurasForLoadingDeferred(job.division, c)
 	previousPets := rt.relocateReturningPet(job.division, c, destination)
+	hold.mark("unload")
 	packets, accepted := rt.deps.ReentryPackets(job.division, job.name)
+	hold.mark("reentry")
 	clear := teleportState(c, 0)
 	if !accepted || len(packets) == 0 || packets[0].NativeOpcode != enterworld.OpcodeResetClient {
 		if arrival.world != currentWorld {
@@ -687,6 +701,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	rt.ClearCombatIntent(job.division, job.name)
 	rt.clearSkillFinalizes(job.division, job.name)
 	rt.clearCompoundJob(compoundKey{job.division, job.name})
+	hold.mark("settle")
 	corpses, corpseDespawns := rt.retireCompanionCorpsesDeferred(job.division, c)
 	frames := append(missionReentryFrames(packets), corpses...)
 	frames = append(frames, rt.petArrivalFrames(job.division, c)...)
@@ -697,6 +712,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	if _, _, bodyStatus := rt.characterLifeState(job.division, c); bodyStatus != 0 {
 		frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), bodyStatus))
 	}
+	hold.mark("frames")
 	return frames, append(append(corpseDespawns, clear, wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()}), headPublic...)
 }
 

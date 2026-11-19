@@ -173,7 +173,14 @@ export function uiFixture(
 	const entity = { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0, kind: "player", name: "Player", mountedOn: 0 };
 	const state = {
 		session: { phase: "world", revision: 1, character: "Player" },
-		gameplay: { localGid: 1, pose: { ...entity, angle: 0 }, vitals: [], inventory: [], target: 0 },
+		gameplay: {
+			localGid: 1,
+			pose: { ...entity, angle: 0 },
+			vitals: [],
+			// Typed, so a test can fill the bag (an untyped [] is never[]).
+			inventory: /** @type {import("../../src/engine/contracts/gameplay.ts").InventoryItem[]} */ ([]),
+			target: 0
+		},
 		entities: [ entity ],
 		width: 1600,
 		height: 900,

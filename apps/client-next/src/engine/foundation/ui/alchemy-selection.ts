@@ -11,6 +11,15 @@ CIFEquipReinforce (0x00621100) and CIFEquipAlchemy (0x006245A0).
 
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { AlchemyMode } from "@/engine/contracts/item-process";
+import {
+	REINFORCE_LOAD_EQUIP_FIRST,
+	REINFORCE_TARGET_CANT_BE_REINFORCED,
+	reinforcePageNotice
+} from "@/engine/foundation/gameplay/alchemy-notices";
+
+// 0x005504C0: the fortress hammer (TypeID 3/1/6/16), equipment the
+// Reinforce page names as unreinforceable rather than as missing.
+const FORTRESS_HAMMER_FLAGS = 0x832c;
 
 /*
 ================
@@ -23,12 +32,13 @@ equipment requires TypeID1=3, TypeID2=1 (0x004FB2D0 CItemData_IsEquipment at
 0x00621195..0x006211B2 / 0x0062135C..0x00621371: (flags & 0x7e) === 0x2c)
 and excludes job suits (0x00550410: TypeID3=7, (flags & 0x780) === 0x380),
 avatar items (0x00550940: TypeID3=13, (flags & 0x780) === 0x680) and fortress
-hammers (0x005504C0: TypeID3=6, TypeID4=16, flags === 0x832c).
+hammers (0x005504C0: TypeID3=6, TypeID4=16, FORTRESS_HAMMER_FLAGS).
 ================
 */
 export function isAlchemyEquipment( typeFlags: number ): boolean {
 	const flags = typeFlags & 0xfffe;
-	return (flags & 0x7e) === 0x2c && (flags & 0x780) !== 0x380 && (flags & 0x780) !== 0x680 && flags !== 0x832c;
+	return (flags & 0x7e) === 0x2c && (flags & 0x780) !== 0x380 && (flags & 0x780) !== 0x680 &&
+		flags !== FORTRESS_HAMMER_FLAGS;
 }
 
 /*
@@ -119,6 +129,24 @@ export function alchemyStoneRefusal( target: InventoryItem, stone: InventoryItem
 
 /*
 ================
+emptyReinforceRefusal
+
+0x0062B6D0 with slot 0 empty (551420 true): a drop that is not
+reinforceable equipment binds nothing and raises a category 0x12 notice.
+Everything that is not equipment, a job suit and an avatar item say
+"load equipment first" (0x15 at 0x0062B801); a fortress hammer says the
+target cannot be reinforced (0x0F at 0x0062B7C8). A rondo or an elixir
+dropped here is refused the same way: the page never hands it to
+Material Processing (#3929).
+================
+*/
+function emptyReinforceRefusal( flags: number ): string {
+	const code = flags === FORTRESS_HAMMER_FLAGS ? REINFORCE_TARGET_CANT_BE_REINFORCED : REINFORCE_LOAD_EQUIP_FIRST;
+	return reinforcePageNotice( code )?.key ?? "";
+}
+
+/*
+================
 alchemySelection
 
 62B6D0 -> 6252B0/550600/550730/550660: the reagent selects the
@@ -144,7 +172,7 @@ export function alchemySelection(
 			else if ( flags === 0x1dec ) mode = "advanced";
 			else if ( flags === 0x25ec || flags === 0x35ec ) mode = "compound";
 			else return null;
-		} else if ( !equipment ) return null;
+		} else if ( !equipment ) return { mode, slots: [], refusal: emptyReinforceRefusal( flags ) };
 	} else if ( !process && equipment ) {
 		// 62B80B..62B8E9: equipment bound while a target is slotted clears
 		// reagent slots 1 and 2 and rebinds slot 0, replacing the target.

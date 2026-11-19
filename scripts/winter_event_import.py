@@ -49,6 +49,7 @@ from pathlib import Path
 import alexandria_npcs as characters
 import cap110_item_import as item_import
 import cap110_monsters as cap110
+import published_ids
 import import_vsro_alexandria as tables
 import jupiter_import as jupiter
 import later_world_import
@@ -272,7 +273,7 @@ def add_winter_items(native, output, read, archives, prior):
 	occupied = {int(row[1]) for pattern in ("itemdata*.txt", "characterdata*.txt") for path in sorted(text_root.glob(pattern))
 		if path.name.lower() != ITEM_SHARD
 		for row in tables.table_rows(path.read_bytes()) if len(row) > 2 and row[0] == "1" and row[1].isdigit()}
-	allocated = cap110.allocate_identities(occupied, [row[2] for row in rows], prior.get("items", {}))
+	allocated = published_ids.allocate(published_ids.OBJECTS, occupied, [row[2] for row in rows], prior.get("items", {}))
 	for row in rows:
 		row[1] = str(allocated[row[2]])
 	write_atomically(safe_target(text_root, ITEM_SHARD), cap110.encode_rows(rows))

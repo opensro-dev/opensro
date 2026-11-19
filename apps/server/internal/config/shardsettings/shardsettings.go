@@ -81,6 +81,9 @@ type Setting struct {
 
 // Settings is the table, in the job file's order.
 var Settings = []Setting{
+	// Port-only, not native: Event So-ok's solo survival arena. Build and
+	// server read the same switch: the Alexandria variant build imports
+	// the arena's Colosseum region (scripts/colosseum_import.py, #3931).
 	{Env: "SRO_SOOK_SURVIVAL_ARENA", NomadVar: "sook_survival_arena", Default: "off"},
 	// The arena's tunables, bounded by the game/tunables registry: the
 	// seconds between checkpoint chests (30..300) and a chest's capacity

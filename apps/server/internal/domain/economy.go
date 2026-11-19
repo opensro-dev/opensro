@@ -99,8 +99,11 @@ var economyDoorReasons = map[string]economyDoorReason{
 	// ordinary purchase so a run's start is on the ledger too (#3162).
 	"trade-load": {loss: "trade_goods_cost"},
 	// A market buy paid in gold (port-only, store/market.go): the buyer's
-	// gold moves to the seller's warehouse, less the 1% fee.
-	"market-buy": {loss: "market_sale"},
+	// gold leaves for the seller, less the 1% fee; a website listing's
+	// seller is paid in its warehouse, a bag listing's character by
+	// market-proceeds when its lane claims the sale (market_proceeds.go).
+	"market-buy":      {loss: "market_sale"},
+	"market-proceeds": {gain: "market_sale"},
 }
 
 // economyMemberReasons maps a settlement door whose label names its subject

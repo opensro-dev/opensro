@@ -17,6 +17,7 @@ import { createSessionDecoder } from "./decode/decode";
 import { createSessionHttp } from "./http/http";
 import type { SessionCommand, SessionOwner, SessionState } from "@/engine/contracts/session";
 import { type ClientIncident, INCIDENT_MESSAGE_LENGTH } from "@/engine/contracts/network";
+import { buildTag } from "@/engine/foundation/release/build-tag";
 import {
 	MAX_STARTING_WAIT_MS,
 	rosterStarting,
@@ -33,6 +34,8 @@ const INCIDENT_QUEUE_LIMIT = 8;
 const CLIENT_REPORT_CODES = 16;
 const INCIDENT_MAX_ATTEMPTS = 4;
 const INCIDENT_RETRY_MS = 6000;
+// The build every incident from this worker carries (build-tag.ts), read once.
+const INCIDENT_BUILD = buildTag( import.meta.url );
 const RELEASE_OUTDATED_MESSAGE = "A newer version of the game is available. Refresh the page to continue.";
 /*
 ================
@@ -136,9 +139,8 @@ report (client_incident.go) instead of it being lost.
 		const apiBase = identity?.apiBase ?? browserBase;
 		if ( !apiBase ) return;
 		if ( incidentQueue.length >= INCIDENT_QUEUE_LIMIT ) return;
-		const build = new URL( import.meta.url ).pathname.split( "/" ).at( -1 )?.slice( 0, 64 ) ?? "development";
 		incidentQueue.push( {
-			body: { ...incident, build },
+			body: { ...incident, build: INCIDENT_BUILD },
 			apiBase,
 			token: identity?.token,
 			attempts: 0,

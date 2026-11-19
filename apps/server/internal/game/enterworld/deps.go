@@ -133,6 +133,9 @@ type Deps struct {
 	// TradeTiers publishes the port-only SRO_TRADE_TIERS rule
 	// (action/tradetiers.go); false is native.
 	TradeTiers bool
+	// Consignment publishes the port-only SRO_CONSIGNMENT market (game/market):
+	// the storage keeper offers it only when the shard runs it; false is native.
+	Consignment bool
 	// JobSuitHidesArmor publishes the port-only SRO_JOB_SUIT_HIDES_ARMOR
 	// rule (action/jobsuitarmor.go); false is native.
 	JobSuitHidesArmor bool

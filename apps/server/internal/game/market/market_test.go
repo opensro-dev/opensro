@@ -13,13 +13,19 @@ import (
 )
 
 type fakeStore struct {
-	limits []int
-	err    error
+	limits       []int
+	err          error
+	orphanLimits []int
 }
 
 func (f *fakeStore) ExpireMarketListings(limit int) (int, error) {
 	f.limits = append(f.limits, limit)
 	return 3, f.err
+}
+
+func (f *fakeStore) SettleOrphanedMarketProceeds(limit int) (int, error) {
+	f.orphanLimits = append(f.orphanLimits, limit)
+	return 0, f.err
 }
 
 /*
@@ -43,7 +49,7 @@ TestRulesAreTheOwnersNumbers
 */
 func TestRulesAreTheOwnersNumbers(t *testing.T) {
 	rules := Rules()
-	if rules.FeePercent != 1 || rules.DurationMs != 24*60*60*1000 || rules.OpenCap != 20 {
+	if rules.FeePercent != 1 || rules.DurationMs != 24*60*60*1000 || rules.OpenCap != 20 || rules.OfferCap != OpenOfferCap {
 		t.Fatalf("rules = %+v", rules)
 	}
 	if fee := rules.MarketFee(1000); fee != 10 {
@@ -63,6 +69,9 @@ func TestExpireBoundsEachPass(t *testing.T) {
 	store := &fakeStore{}
 	if returned := Expire(store); returned != 3 || len(store.limits) != 1 || store.limits[0] != ExpiryBatch {
 		t.Fatalf("expire = %d, limits %v", returned, store.limits)
+	}
+	if len(store.orphanLimits) != 1 || store.orphanLimits[0] != ExpiryBatch {
+		t.Fatalf("the pass did not settle orphaned proceeds: %v", store.orphanLimits)
 	}
 	store.err = errors.New("disk")
 	Expire(store)

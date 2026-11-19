@@ -595,6 +595,19 @@ receive
 		},
 		/*
 ================
+notice
+
+A line this client raises itself on the notice channel (7): it reads
+"(Notice):" and shows on every native tab (everyTab, chat-layout.ts
+chatTabShows), where a native notice shows on All alone. Port-only: the
+consignment market's events (#3529).
+================
+		*/
+		notice( text: string ) {
+			append( { channel: 7, name: "", text, outgoing: false, everyTab: true } );
+		},
+		/*
+================
 step
 ================
 		*/

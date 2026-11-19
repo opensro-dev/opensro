@@ -195,6 +195,10 @@ export interface ChatLine {
 	// results, item breaks, renames). With the Event tab on, these leave
 	// All; a native type-7 server notice (the restart warning) stays.
 	readonly event?: boolean;
+	// Port-only: a line this client raised that shows on every native chat
+	// tab (the consignment market's notices, #3529; chat-layout.ts
+	// chatTabShows). A native notice line never carries it.
+	readonly everyTab?: boolean;
 	// Port-only (SRO_CHAT_ITEM_LINKS): the items a player line links, link i
 	// for the i-th marker (foundation/gameplay/chat-item-links.ts); undefined
 	// where a body could not be decoded.
@@ -368,6 +372,8 @@ export type GameplayCommand =
 		readonly request: import("@/engine/foundation/gameplay/item-mall-wire").MallPurchase;
 	}
 	| { readonly kind: "mall-silk-inquire"; readonly period: number; }
+	// Port-only, not native (SRO_CONSIGNMENT, #3529): one consignment market request.
+	| { readonly kind: "market"; readonly request: import("./market").MarketRequest; }
 	| { readonly kind: "shop-open"; readonly gid: number; }
 	| { readonly kind: "shop-buy"; readonly tab: number; readonly slot: number; readonly quantity: number; }
 	| { readonly kind: "shop-sell"; readonly slot: number; readonly quantity: number; }
@@ -808,6 +814,8 @@ export interface GameplayState extends MoverPublication {
 	readonly petRecipientBuffs?: readonly PetRecipientBuffs[];
 	readonly itemMall?: import("./item-mall").MallState;
 	readonly itemMallSilkHistory?: import("./item-mall").MallSilkHistoryState;
+	// Port-only, not native (SRO_CONSIGNMENT, #3529): the consignment market's view.
+	readonly market?: import("./market").MarketState;
 	readonly betaPlayers?: readonly BetaMapPlayer[];
 	// Port-only (#2958): the 5-star caravan transport gids (caravan-stars.ts).
 	readonly caravanStars?: readonly number[];
@@ -886,6 +894,9 @@ export interface GameplayState extends MoverPublication {
 	// The server's port-only SRO_TRADE_TIERS rule, published at world entry:
 	// the trade-scale combo rates a purchase by gold (specialty-deal.ts).
 	readonly tradeTiers?: boolean;
+	// The server's port-only SRO_CONSIGNMENT market, published at world entry:
+	// the storage keeper's menu offers it (market-window.ts); absent is off.
+	readonly consignment?: boolean;
 	// The server's port-only SRO_JOB_SUIT_HIDES_ARMOR rule, published at world
 	// entry: trader and hunter suits hide worn armour (equipment-visuals.ts).
 	readonly jobSuitHidesArmor?: boolean;

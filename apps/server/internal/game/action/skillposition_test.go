@@ -136,10 +136,17 @@ func TestGhostWalkShippedRanksAndAuthority(t *testing.T) {
 					}
 					return
 				}
-				if len(r.Frames) != 3 {
+				// tel2 owns an open bracket until its mode-2 close, so it arms
+				// the action latch every open skill cast arms (0xB2CD).
+				wizard := strings.HasPrefix(skill.Codename, "SKILL_EU_WIZARD_")
+				wantOps := []uint16{wire.OpSkillCastResult, wire.OpSkillEffectControl, simulation.OpVitalsUpdate}
+				if wizard {
+					wantOps = append(wantOps, wire.OpActionState)
+				}
+				if len(r.Frames) != len(wantOps) {
 					t.Fatalf("acceptance failed: %+v payload=%v called=%v", r, r.Frames, called)
 				}
-				assertOpcodes(t, r.Frames, wire.OpSkillCastResult, wire.OpSkillEffectControl, simulation.OpVitalsUpdate)
+				assertOpcodes(t, r.Frames, wantOps...)
 				if !called || *c.CurrentMP != 0 || c.OffensiveSkillCooldowns[skill.Group] != clock.NowMs()+5000 {
 					t.Fatalf("cost/cooldown: %+v", r)
 				}
@@ -152,14 +159,28 @@ func TestGhostWalkShippedRanksAndAuthority(t *testing.T) {
 				// tel2 (the Wizard's Teleport) publishes bit 2, an
 				// instant landing; tele (Ghost Walk) bit 8, a guided travel.
 				wantFlag := byte(8)
-				if strings.HasPrefix(skill.Codename, "SKILL_EU_WIZARD_") {
+				if wizard {
 					wantFlag = 2
 				}
 				if len(p) != 27 || p[18] != wantFlag || to.X != before.X+distance || int16(binary.LittleEndian.Uint16(p[21:])) != int16(to.X) || c.World.MoveSegment != nil {
 					t.Fatalf("wire/authority mismatch %x %+v", p, to)
 				}
-				if len(r.Broadcast) != 2 || r.Frames[1].Payload[0] != 1 || len(r.ActorPrivate) != 1 {
+				if len(r.Broadcast) != 2 || r.Frames[1].Payload[0] != 1 || len(r.ActorPrivate) != len(wantOps)-2 {
 					t.Fatal("incorrect publication or premature finalize")
+				}
+				// tel2 lands at once and has no guided arrival, so its bracket
+				// needs the ordinary mode-2 close; tele's arrival closes it.
+				token := binary.LittleEndian.Uint32(p[10:])
+				var closes int
+				for _, out := range rt.drainSkillFinalizes(clock.NowMs() + 600000) {
+					for _, f := range out.Frames {
+						if f.Opcode == wire.OpSkillEffectControl && f.Payload[0] == 2 && binary.LittleEndian.Uint32(f.Payload[2:]) == token {
+							closes++
+						}
+					}
+				}
+				if want := map[byte]int{2: 1, 8: 0}[wantFlag]; closes != want {
+					t.Fatalf("mode-2 closes for flag %d = %d, want %d", wantFlag, closes, want)
 				}
 			})
 		}
@@ -180,5 +201,59 @@ func TestPositionSkillRangeUses3DAndRegionFrames(t *testing.T) {
 	}
 	if _, ok := positionSkillGoal(simulation.Spawn{RegionID: 0x8001}, simulation.Spawn{RegionID: 0x8002}, 100); ok {
 		t.Fatal("cross-dungeon accepted")
+	}
+}
+
+/*
+================
+TestTeleportSeatsTheNearestLayer
+
+A deck stands over the ground. The walk rests with a terrain owner (the
+hint a walk under the deck would carry), and the clicked point is on the
+deck. tel2 seats the point itself (nearest height), so it lands on the
+deck; Ghost Walk keeps the walk's surface as before (#3927).
+================
+*/
+func TestTeleportSeatsTheNearestLayer(t *testing.T) {
+	const deckY, groundY = -30.0, -111.0
+	deck := simulation.NavOwner{Kind: simulation.NavOwnerObject, Object: simulation.NavObjectCell{Surface: 26247, Cell: 32}}
+	terrain := simulation.NavOwner{Kind: simulation.NavOwnerTerrain}
+	for _, teleport := range []bool{true, false} {
+		rt, _, _, _ := newCombatTestRuntime(t, 100)
+		rt.ConstrainMovement = nil
+		rt.ConstrainWalk = func(_ string, _ simulation.Spawn, _ simulation.NavOwner, to simulation.Spawn) (simulation.Spawn, simulation.NavWalk, *simulation.MoveError) {
+			return to, simulation.NavWalk{Rest: terrain}, nil
+		}
+		var hints []simulation.NavOwner
+		rt.ResolveNavOwner = func(p simulation.Spawn, hint simulation.NavOwner) (simulation.NavOwner, float64, bool) {
+			hints = append(hints, hint)
+			// The outdoor resolver keeps a terrain hint under a deck and
+			// otherwise takes the nearer layer.
+			if hint.Kind == simulation.NavOwnerTerrain || math.Abs(p.Y-groundY) < math.Abs(p.Y-deckY) {
+				return terrain, groundY, true
+			}
+			return deck, deckY, true
+		}
+		from := simulation.Spawn{RegionID: 26247, X: 400, Y: -35, Z: 300}
+		to := simulation.Spawn{RegionID: 26247, X: 341, Y: deckY, Z: 398}
+		plan, ok := skillTravelPlan{}, false
+		if teleport {
+			plan, ok = rt.planSkillTeleport("c", from, deck, to)
+		} else {
+			plan, ok = rt.planSkillTravel("c", from, deck, to)
+		}
+		if !ok || len(hints) != 1 {
+			t.Fatalf("teleport=%v: plan refused or resolved %d times", teleport, len(hints))
+		}
+		wantY, wantOwner := groundY, terrain
+		if teleport {
+			wantY, wantOwner = deckY, deck
+			if hints[0] != (simulation.NavOwner{}) {
+				t.Fatalf("teleport seated with hint %+v", hints[0])
+			}
+		}
+		if plan.to.Y != wantY || plan.owner != wantOwner {
+			t.Fatalf("teleport=%v landed y=%v owner=%+v, want y=%v owner=%+v", teleport, plan.to.Y, plan.owner, wantY, wantOwner)
+		}
 	}
 }
