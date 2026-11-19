@@ -182,6 +182,7 @@ import {
 	mallCategoryIcon,
 	mallPageLayout,
 	mallPageNumberPresentation,
+	pageManagerLayout,
 	mallCurrencyRows,
 	mallQuestionLayout,
 	mallSilkPeriodTexts,
@@ -406,6 +407,7 @@ import {
 	STALL_CELL_PITCH_Y,
 	STALL_COMBO_DEGREE,
 	STALL_COMBO_LARGE,
+	STALL_COMBO_ROWS,
 	STALL_COMBO_MEDIUM,
 	STALL_CHAT_LIMIT,
 	STALL_PROMPT_SIZE,
@@ -729,6 +731,7 @@ import { feedbackLevels } from "@/engine/foundation/gameplay/feedback-levels";
 import { systemMessageLayout } from "@/engine/foundation/ui/system-message-layout";
 import { verticalSpinChrome } from "@/engine/foundation/ui/vertical-spin";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
+import { comboListLayout } from "@/engine/foundation/ui/combo-box";
 import { chatLayout, sunDropChatColor } from "@/engine/foundation/ui/chat-layout";
 import { expandedWorldMapOn, worldMapFrame, worldMapImagePaths, worldMapQuads } from "@/engine/foundation/ui/world-map";
 import {
@@ -1392,6 +1395,8 @@ export function createUi( ports: UiPorts ) {
 	let beginnerDraft = false;
 	let potionCombo = "";
 	let potionComboOffset = 0;
+	// The stall network's open list scroll range, as last drawn.
+	let stallComboRange = 0;
 	let potionDraft: AutoPotionDraft = autoPotionDraft( defaultAutoPotion() );
 	/*
 	================
@@ -4806,20 +4811,22 @@ export function createUi( ports: UiPorts ) {
 			sendGameplay( { kind: "stall-network-open", open: false } );
 		} else if ( id.startsWith( "stall-net-combo:" ) ) {
 			stallHud.toggleCombo( Number( id.slice( 16 ) ) );
+		} else if ( id === "stall-net-combo-scroll-up" || id === "stall-net-combo-scroll-down" ) {
+			stallHud.scrollCombo( id.endsWith( "-up" ) ? -1 : 1, stallComboRange );
 		} else if ( id.startsWith( "stall-net-choice:" ) ) {
 			stallHud.choose( Number( id.slice( 17 ) ) );
 		} else if ( id.startsWith( "stall-net-sort:" ) ) {
 			stallHud.sortBy( id.slice( 15 ) as StallNetworkSort );
-		} else if ( id.startsWith( "stall-net-row:" ) ) {
-			stallHud.selectRow( Number( id.slice( 14 ) ) );
-		} else if ( id === "stall-net-search" || id === "stall-net-prev" || id === "stall-net-next" ) {
+		} else if ( id.startsWith( "stall-net-row:" ) || id.startsWith( "stall-net-item:" ) ) {
+			// A press on the row's item slot picks its row, as one on the row does.
+			stallHud.selectRow( Number( id.slice( id.indexOf( ":" ) + 1 ) ) );
+		} else if ( id === "stall-net-search" || id.startsWith( "stall-net-page:" ) ) {
 			const draft = stallHud.network(),
 				network = view.gameplay?.stall?.network,
 				child = stallCategories.roots()?.[draft.large]?.children[draft.medium];
 			if ( network && stallHud.searchReady( uiNow ) ) {
 				// The pages walk the last search; a new search starts at its first.
-				const step = id === "stall-net-next" ? 1 : -1,
-					page = id === "stall-net-search" ? 0 : network.page + step,
+				const page = id === "stall-net-search" ? 0 : Number( id.slice( 15 ) ),
 					category = id === "stall-net-search" ? child?.id ?? 0 : network.category;
 				if ( category && page >= 0 && (id === "stall-net-search" || page < network.pages) ) {
 					stallHud.searched( uiNow );
@@ -11451,6 +11458,71 @@ export function createUi( ports: UiPorts ) {
 			*/
 			function nativePage( layout: AuthoredLayout, px: number, py: number, exclude: readonly number[] = [] ) {
 				return frameDraw.nativePage( drawFrame, { layout, px, py, exclude } );
+			}
+			/*
+			================
+			pageManager
+
+			A CIFPageManager (ifpagemanager) in its authored rect (window
+			relative, at ox, oy): "[" page numbers "]" with the arrows outside,
+			the current page in the manager's highlight colour and styled face.
+			Each number and arrow is a control `prefix + page`.
+			================
+			*/
+			function pageManager( rect: UiRect, ox: number, oy: number, page: number, pages: number, prefix: string ) {
+				const authored = hud.data()?.windows.ifpagemanager,
+					manager = pageManagerLayout( rect, page, pages );
+				if ( !authored || manager.count <= 0 ) return;
+				const node = ( id: number ) => Object.values( authored ).find( entry => entry.id === id )!;
+				const template = { ...node( 10 ), client: [ 0, 0, 0, 0 ] as UiRect, hAlign: 1, vAlign: 1 };
+				authoredText( { ...template, rect: [ manager.x - 4, manager.y, 4, manager.height ] }, ox, oy, "[" );
+				authoredText(
+					{ ...template, rect: [ manager.x + manager.count * manager.width, manager.y, 4, manager.height ] },
+					ox,
+					oy,
+					"]"
+				);
+				for ( let index = 0; index < manager.count; index++ ) {
+					const number = manager.first + index;
+					const control = {
+						...template,
+						rect: [ manager.x + index * manager.width, manager.y, manager.width, manager.height ] as UiRect
+					};
+					const presentation = mallPageNumberPresentation( number, page );
+					authoredText(
+						presentation.color ? { ...control, color: presentation.color } : control,
+						ox,
+						oy,
+						String( number + 1 ),
+						false,
+						presentation.fontStyle
+					);
+					controls.push( {
+						id: prefix + number,
+						label: String( number + 1 ),
+						rect: authoredRect( control, ox, oy ),
+						kind: "button"
+					} );
+				}
+				if ( manager.previous >= 0 ) {
+					const arrow = node( 1 );
+					authoredButton(
+						{ ...arrow, rect: [ manager.left - arrow.size[0], manager.y, 0, 0 ] },
+						ox,
+						oy,
+						prefix + manager.previous,
+						""
+					);
+				}
+				if ( manager.next < manager.pages ) {
+					authoredButton(
+						{ ...node( 2 ), rect: [ manager.right, manager.y, 0, 0 ] },
+						ox,
+						oy,
+						prefix + manager.next,
+						""
+					);
+				}
 			}
 			/*
 			================
@@ -20361,7 +20433,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						80,
 						...rowIds
 					] );
-					for ( const id of [ 44, 45, 46, 47, 52, 53, 65 ] ) {
+					for ( const id of [ 44, 45, 46, 47, 52, 53 ] ) {
 						authoredText( at( id ), px, py, hudCopy( at( id ).text ) );
 					}
 					const choose = hudCopy( "UIIT_CTL_WARENETWORK_SCAN_SELECT" );
@@ -20415,6 +20487,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					for ( const [id, sort] of sorts ) {
 						authoredLabeledButton( at( id ), px, py, "stall-net-sort:" + sort, hudCopy( at( id ).text ) );
 					}
+					// The Item column head (65) is a CIFStatic with header art
+					// (gil_subj_button05) created with the sort buttons in the
+					// StallSearchResult section, after the Create section's result
+					// tile (BG_01), so it paints over that tile like the buttons.
+					nativePage( { [at( 65 ).name]: at( 65 ) }, px, py );
 					const order = stallNetworkOrder( network.rows, draft, network.rows.map( level ) );
 					for ( let i = 0; i < rowIds.length; i++ ) {
 						const index = order[i], row = index === undefined ? undefined : network.rows[index];
@@ -20424,14 +20501,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						const r = authoredRect( part( 12 ), ox, oy ), icon = iconPath( row.item.icon );
 						if ( icon ) {
 							image( r, icon );
-							itemEffects( "stall-net-row:" + index, row.item, r );
+							itemEffects( "stall-net-item:" + index, row.item, r );
 							itemCount( row.item, r );
 						}
 						authoredText( part( 11 ), ox, oy, String( network.page * 15 + index + 1 ) );
 						authoredText( part( 13 ), ox, oy, row.item.name ?? "" );
 						authoredText( part( 14 ), ox, oy, String( row.quantity ) );
 						authoredText( part( 15 ), ox, oy, String( level( row ) || "" ) );
-						authoredText( part( 16 ), ox, oy, String( row.price ) );
+						// 5AF9B0: the price grouped by thousands in UI_GetMoneyAmountColor's tier.
+						const price = moneyPresentation( String( row.price ) );
+						authoredText( { ...part( 16 ), color: price.color }, ox, oy, price.text );
 						controls.push( {
 							id: "stall-net-row:" + index,
 							label: row.item.name ?? "Stall network row " + index,
@@ -20439,28 +20518,28 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							kind: "button",
 							selected: draft.row === index
 						} );
+						// The slot over the row, so hovering the icon shows its help.
+						controls.push( {
+							id: "stall-net-item:" + index,
+							label: row.item.name ?? "",
+							rect: r,
+							kind: "button"
+						} );
 					}
-					// The page manager (80): previous and next around page / pages.
-					const pager = authoredRect( at( 80 ), px, py ), pagerY = pager[1] + 1;
-					button( "stall-net-prev", "<", pager[0], pagerY, 40, network.page <= 0 );
-					button(
-						"stall-net-next",
-						">",
-						pager[0] + pager[2] - 40,
-						pagerY,
-						40,
-						network.page + 1 >= network.pages
+					// The page manager (80), hidden until the first result arrives
+					// (5ABE6E hides it; the 0xB6F9 answer shows it at its page).
+					if ( network.pages > 0 ) {
+						pageManager( at( 80 ).rect, px, py, network.page, network.pages, "stall-net-page:" );
+					}
+					// 5A64D0: "%s %s", the carried gold grouped by thousands, then UIIT_STT_GOLD.
+					authoredText(
+						at( 55 ),
+						px,
+						py,
+						`${moneyPresentation( String( game?.progression?.gold ?? 0 ) ).text} ${
+							hudCopy( "UIIT_STT_GOLD" )
+						}`
 					);
-					quads.push(
-						...text.quads(
-							network.pages ? `${network.page + 1} / ${network.pages}` : "",
-							[ pager[0] + 40, pager[1], pager[2] - 80, pager[3] ],
-							full,
-							white,
-							{ hAlign: 1, vAlign: 1 }
-						)
-					);
-					authoredText( at( 55 ), px, py, String( game?.progression?.gold ?? 0 ) );
 					authoredLabeledButton(
 						at( 50 ),
 						px,
@@ -20471,16 +20550,49 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					);
 					const open = combos.find( combo => combo.id === draft.combo && !combo.disabled );
 					if ( open ) {
-						const r = authoredRect( at( open.id ), px, py ),
-							list: UiRect = [ r[0], r[1] + r[3], r[2], open.entries.length * 18 ];
-						rect( list, [ 0, 0, 0, 1 ] );
-						blocks.push( list );
-						for ( const [i, value] of open.entries.entries() ) {
-							const entry: UiRect = [ list[0], list[1] + i * 18, list[2], 18 ];
-							quads.push(
-								...text.quads( value, [ entry[0] + 4, entry[1], entry[2] - 8, 18 ], entry, white )
+						// CIFComboBox_OpenList (51EA20) with the twelve visible rows
+						// CIFStallNetwork_OnCreate sets on each combo.
+						const list = comboListLayout(
+							authoredRect( at( open.id ), px, py ),
+							open.entries.length,
+							STALL_COMBO_ROWS,
+							text.height(),
+							draft.comboFirst
+						);
+						stallComboRange = list.range;
+						rect( list.popup, [ 0, 0, 0, 1 ] );
+						const ring = stretchRing(
+							list.popup,
+							ROOT + "interface/ifcommon/com_blacksquare_",
+							resources.size,
+							full
+						);
+						paths.push( ...ring.paths );
+						quads.push( ...ring.quads );
+						blocks.push( list.popup );
+						for ( const { index, rect: entry } of list.rows ) {
+							const id = "stall-net-choice:" + index;
+							// Inference from 536E20's colour triple (normal white, then
+							// 0xFF8080FF): the row under the cursor draws in the second.
+							const color: UiQuad["color"] = hover === id ? [ 128 / 255, 128 / 255, 1, 1 ] : white;
+							quads.push( ...text.quads( open.entries[index]!, entry, entry, color ) );
+							controls.push( { id, label: open.entries[index]!, rect: entry, kind: "button" } );
+						}
+						if ( list.track ) {
+							const scroll = chatScrollbar(
+								"stall-net-combo-scroll",
+								list.track,
+								open.entries.length,
+								STALL_COMBO_ROWS,
+								list.range - list.first,
+								resources.size,
+								full,
+								hover,
+								pressed
 							);
-							controls.push( { id: "stall-net-choice:" + i, label: value, rect: entry, kind: "button" } );
+							paths.push( ...scroll.paths );
+							quads.push( ...scroll.quads );
+							controls.push( ...scroll.controls );
 						}
 					}
 					endWindow( admission, "service:Stall network" );
@@ -27639,84 +27751,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									hudCopy( tab.label );
 								authoredLabeledButton( control, sx, sy, control.name, caption );
 							}
-							const manager = mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count );
-							if ( manager.count > 0 ) {
-								const template = {
-									...mallControl( data.windows.ifpagemanager!, 10 ),
-									client: [ 0, 0, 0, 0 ] as UiRect,
-									hAlign: 1,
-									vAlign: 1
-								};
-								authoredText(
-									{ ...template, rect: [ manager.x - 4, manager.y, 4, manager.height ] },
-									sx,
-									sy,
-									"["
-								);
-								authoredText(
-									{
-										...template,
-										rect: [
-											manager.x + manager.count * manager.width,
-											manager.y,
-											4,
-											manager.height
-										]
-									},
-									sx,
-									sy,
-									"]"
-								);
-								for ( let index = 0; index < manager.count; index++ ) {
-									const page = manager.first + index;
-									const control = {
-										...template,
-										rect: [
-											manager.x + index * manager.width,
-											manager.y,
-											manager.width,
-											manager.height
-										] as UiRect
-									};
-									// The current page draws in the manager's highlight
-									// colour and styled face (mallPageNumberPresentation).
-									const presentation = mallPageNumberPresentation( page, state.page );
-									authoredText(
-										presentation.color ? { ...control, color: presentation.color } : control,
-										sx,
-										sy,
-										String( page + 1 ),
-										false,
-										presentation.fontStyle
-									);
-									controls.push( {
-										id: "item-mall-page:" + page,
-										label: String( page + 1 ),
-										rect: authoredRect( control, sx, sy ),
-										kind: "button"
-									} );
-								}
-								if ( manager.previous >= 0 ) {
-									const node = mallControl( data.windows.ifpagemanager!, 1 );
-									authoredButton(
-										{ ...node, rect: [ manager.left - node.size[0], manager.y, 0, 0 ] },
-										sx,
-										sy,
-										"item-mall-page:" + manager.previous,
-										""
-									);
-								}
-								if ( manager.next < manager.pages ) {
-									const node = mallControl( data.windows.ifpagemanager!, 2 );
-									authoredButton(
-										{ ...node, rect: [ manager.right, manager.y, 0, 0 ] },
-										sx,
-										sy,
-										"item-mall-page:" + manager.next,
-										""
-									);
-								}
-							}
+							pageManager(
+								mallControl( shop, 74 ).rect,
+								sx,
+								sy,
+								state.page,
+								mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count ).pages,
+								"item-mall-page:"
+							);
 
 							const row = data.windows.ifitemmallshopslot!;
 							for ( let index = 0; index < MALL_ROWS_PER_PAGE; index++ ) {

@@ -159,6 +159,8 @@ export function stallPromptLive( prompt: StallPrompt, stall: StallState | undefi
 export const STALL_COMBO_LARGE = 41;
 export const STALL_COMBO_MEDIUM = 42;
 export const STALL_COMBO_DEGREE = 43;
+// CIFStallNetwork_OnCreate: CIFComboBox_SetVisibleRowCount( combo, 0xC ) on each.
+export const STALL_COMBO_ROWS = 12;
 
 /*
 ================
@@ -173,6 +175,8 @@ export interface StallNetworkDraft {
 	readonly medium: number;
 	readonly degree: number;
 	readonly combo: number;
+	// The open list's top item (its scroll position).
+	readonly comboFirst: number;
 	readonly row: number;
 	readonly sort: StallNetworkSort;
 	readonly ascending: boolean;
@@ -189,6 +193,7 @@ const EMPTY_NETWORK: StallNetworkDraft = {
 	medium: -1,
 	degree: 0,
 	combo: 0,
+	comboFirst: 0,
 	row: -1,
 	sort: "number",
 	ascending: true
@@ -389,7 +394,18 @@ export function createStallHud( raisedGoldCaps = false ) {
 		================
 		*/
 		toggleCombo( combo: number ) {
-			network = { ...network, combo: network.combo === combo ? 0 : combo };
+			network = { ...network, combo: network.combo === combo ? 0 : combo, comboFirst: 0 };
+		},
+		/*
+		================
+		scrollCombo
+
+		Moves the open list by whole items; the drawing clamps it to the
+		list's range (comboListLayout).
+		================
+		*/
+		scrollCombo( delta: number, range: number ) {
+			network = { ...network, comboFirst: Math.max( 0, Math.min( range, network.comboFirst + delta ) ) };
 		},
 		/*
 		================
