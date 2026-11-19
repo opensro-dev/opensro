@@ -47,8 +47,8 @@ from pathlib import Path
 import alexandria_npcs as characters
 import cap110_skill_database as skill_database
 import cap110_skill_effects as effects
-from cap110_skills import MAX_ID
 import import_vsro_alexandria as tables
+import published_ids
 import skilldata_enc as skill_tables
 import sro_pk2
 from prepare_client_resources import write_atomically
@@ -448,78 +448,28 @@ def client_outdoor_regions(vsro_root):
 # ================
 # allocate_identities
 #
-# Reserve every published identity before allocating additions. Source order
-# may insert a new monster or dependency before an existing published row.
+# The generic allocator, owned by published_ids; kept under this name for
+# the importers and tests that call it here.
 # ================
-def allocate_identities(occupied, codes, previous):
-	occupied = set(occupied)
-	values = list(previous.values())
-	if any(type(value) is not int or not 0 < value <= MAX_ID for value in values):
-		raise ValueError("invalid published monster identity")
-	retained = set(values)
-	if len(retained) != len(values) or retained & occupied:
-		raise ValueError("published monster identities collide")
-	if len(codes) != len(set(codes)):
-		raise ValueError("duplicate monster codename")
-	occupied |= retained
-	next_id = max(occupied | {0}) + 1
-	identities = {}
-	for code in codes:
-		if code in previous:
-			identities[code] = previous[code]
-			continue
-		if next_id > MAX_ID:
-			raise ValueError("monster identity space exhausted")
-		identities[code] = next_id
-		next_id += 1
-	return identities
-
-
-# The character ids live publishes (pin_published_characters.py).
-PUBLISHED_CHARACTERS = Path(__file__).resolve().parent / "data" / "published-characters.json"
-# Names another pin file; empty names none. The Python tests set it empty
-# (test/python/script_paths.py): a fixture tree holds none of the published
-# rows, so the real pin would reserve all of them and move every fixture id.
-PUBLISHED_CHARACTERS_VARIABLE = "SRO_PUBLISHED_CHARACTERS"
-
-
-# ================
-# published_characters
-#
-# codename -> id from the pin, or the file the variable names.
-# ================
-def published_characters():
-	named = os.environ.get(PUBLISHED_CHARACTERS_VARIABLE)
-	path = PUBLISHED_CHARACTERS if named is None else Path(named) if named else None
-	if path is None:
-		return {}
-	return json.loads(Path(path).read_text(encoding="utf-8"))["characters"]
+allocate_identities = published_ids.allocate_identities
 
 
 # ================
 # allocate_characters
 #
-# allocate_identities for character rows, with the ids live publishes laid
-# over the staging's own previous ones. A staging remembers only its own
-# last build; when live was built in another staging, a code added since
-# (the v1.696 pets of #3572, sorting before MOB_SD_*) took published ids
-# and moved 39 Arabia monsters up by 18, which the host's catalogue gate
-# refused (r201). A pinned id stays with its code. A pinned id whose code
-# this import does not stage stays reserved, unless another shard already
-# holds it. A previous id that a pin or another shard now owns is dropped,
-# so its code is allocated anew after every reserved id.
+# allocate_identities for character rows under the published pin of the
+# object space (published_ids.overlay): characters and items share it, so a
+# monster never takes an id a released item holds. A staging remembers
+# only its own last build; when live was built in another staging, a code
+# added since (the v1.696 pets of #3572, sorting before MOB_SD_*) took
+# published ids and moved 39 Arabia monsters up by 18, which the host's
+# catalogue gate refused (r201). So a remembered id a row in the tree now
+# holds is given up here rather than refused, unlike published_ids.allocate.
 # ================
 def allocate_characters(occupied, codes, previous, pinned=None):
-	pinned = published_characters() if pinned is None else pinned
-	occupied, staged = set(occupied), set(codes)
-	merged = {code: identity for code, identity in pinned.items() if code in staged or identity not in occupied}
-	taken = set(merged.values())
-	for code, identity in previous.items():
-		if code in merged or identity in taken or identity in occupied:
-			continue
-		merged[code] = identity
-		taken.add(identity)
-	return allocate_identities(occupied, codes, merged)
+	occupied = set(occupied)
+	previous = {code: identity for code, identity in previous.items() if identity not in occupied}
+	return published_ids.allocate(published_ids.OBJECTS, occupied, codes, previous, pinned)
 
 
 # ================
@@ -563,7 +513,8 @@ def merge_skills(native, source, needed, previous):
 	occupied = {int(row[1]) for row in native}
 	identity_map, added = {}, []
 	new_codes = [row[3] for _, row in sorted(selected.items()) if row[3] not in by_code]
-	allocated = allocate_identities(occupied, new_codes, previous)
+	# Skills a character learns are held by id: the skill pin keeps them.
+	allocated = published_ids.allocate(published_ids.SKILLS, occupied, new_codes, previous)
 	for source_id, row in sorted(selected.items()):
 		code = row[3]
 		if code in by_code:

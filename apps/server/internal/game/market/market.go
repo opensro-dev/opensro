@@ -12,8 +12,15 @@ The escrow itself is the store's (data/store/market.go): one transaction
 per door. This package owns the numbers and the clock. The numbers are
 the owner's (2026-11-16, the market design doc): a 1% fee taken from the
 seller, matching the stall network's commission; listings open for 24
-hours; 20 open listings per account; no make-an-offer in the first
-version; no minimum price.
+hours; 20 open listings per account; no minimum price. On 2026-11-19 the
+owner added offers, a named seller with an anonymous choice, the buyer's
+pick of bag or warehouse, and gold paid to the listing character.
+The owner left two numbers to this port (2026-11-19). OpenOfferCap
+mirrors the listing cap: 20 offers lets a player haggle across the
+market, and the cap bounds lowball spam, because an offer holds no gold
+(an accept checks the buyer can still pay). The fee rounds down: a sale
+under 100 pays none. A floor of 1 would take 20% of a 5 Silk sale, and
+the fee is a sink on large sales, not a tax on small trades.
 
 ===========================================================================
 */
@@ -33,12 +40,15 @@ import (
 const EnvConsignment = "SRO_CONSIGNMENT"
 
 const (
-	// FeePercent is the seller's fee on a sale.
+	// FeePercent is the seller's fee on a sale, rounded down (a sale
+	// under 100 pays none).
 	FeePercent = 1
 	// ListingDuration is how long a listing stays open.
 	ListingDuration = 24 * time.Hour
 	// OpenListingCap bounds one account's open listings.
 	OpenListingCap = 20
+	// OpenOfferCap bounds one account's open offers.
+	OpenOfferCap = 20
 	// ExpiryInterval is how often expired listings are returned.
 	ExpiryInterval = time.Minute
 	// ExpiryBatch bounds one pass; a longer backlog drains over passes.
@@ -68,6 +78,7 @@ func Rules() domain.MarketRules {
 		FeePercent: FeePercent,
 		DurationMs: ListingDuration.Milliseconds(),
 		OpenCap:    OpenListingCap,
+		OfferCap:   OpenOfferCap,
 	}
 }
 
@@ -80,6 +91,7 @@ The store door the expiry tick needs.
 */
 type Store interface {
 	ExpireMarketListings(limit int) (int, error)
+	SettleOrphanedMarketProceeds(limit int) (int, error)
 }
 
 /*
@@ -95,6 +107,13 @@ func Expire(store Store) int {
 	returned, err := store.ExpireMarketListings(ExpiryBatch)
 	if err != nil {
 		log.WithError(err).Warn("market: expiry pass failed; retrying next pass")
+	}
+	// Gold owed to a character that no longer exists goes to its account
+	// warehouse (store market_proceeds.go), on the same clock.
+	if paid, err := store.SettleOrphanedMarketProceeds(ExpiryBatch); err != nil {
+		log.WithError(err).Warn("market: orphaned proceeds pass failed; retrying next pass")
+	} else if paid > 0 {
+		log.Infof("market: %d sale(s) owed to a removed character paid to its warehouse", paid)
 	}
 	return returned
 }
