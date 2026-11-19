@@ -82,10 +82,10 @@ test("a damaged, cut or overlong stored copy is fetched again with the cache byp
 
 test("a publication that is wrong on the network too fails after one retry", async t => {
 	for (
-		const [stored, refusal] of [
-			[ data.replace( "[]", "{}" ), /digest/ ],
-			[ data.slice( 1 ), /size/ ],
-			[ data + " ", /byte limit/ ]
+		const { stored, refusal } of [
+			{ stored: data.replace( "[]", "{}" ), refusal: /digest/ },
+			{ stored: data.slice( 1 ), refusal: /size/ },
+			{ stored: data + " ", refusal: /byte limit/ }
 		]
 	) {
 		const requests = serve( t, { "force-cache": stored, "reload": stored } );
