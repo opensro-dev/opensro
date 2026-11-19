@@ -424,6 +424,8 @@ import { textAllowed } from "@/engine/foundation/ui/character-create";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { compositeItemCaption, compositeItemLayout, createCompositeItemHud } from "./hud/composite-item-hud";
 import { createUniqueRankHud } from "./hud/unique-rank-hud";
+import { createSroMacroHud, MACRO_ID, macroAcquiredSkills } from "./hud/sro-macro-hud";
+import { drawSroMacro, type MacroPaint } from "./hud/sro-macro-window";
 import { createMarketHud, MARKET_BAG_FIRST_SLOT, MARKET_HOTKEY_VK } from "./hud/market-hud";
 import { drawMarketWindow, type MarketPaint } from "./hud/market-window";
 import { uniqueRankLines } from "@/engine/foundation/gameplay/unique-rank";
@@ -1019,6 +1021,10 @@ const PARTY_MATCH_CURRENT_COLOR: UiQuad["color"] = [ 135 / 255, 233 / 255, 1, 1 
 const BUG_COMMAND = /^\/bug(?:\s+|$)/i;
 const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
 const BUG_REPORTS_UNAVAILABLE = "Connecting to the bug reporter; the report window opens as soon as it answers.";
+// The SRO Macro's menu command (port-only, #3907): only with the Experimental
+// row on, and only on a shard that replayed the settings (SRO_AUTO_MACRO).
+const MACRO_COMMAND = /^\/macro\s*$/i;
+const MACRO_UNAVAILABLE = "The SRO Macro is not available on this server.";
 // The skin change scroll's window (CIFChangePlayerModel).
 const SKIN_PANEL = "Skin change";
 // CIFWholeChat, the Global Chatting item's window, and its line's edit box.
@@ -1635,6 +1641,8 @@ export function createUi( ports: UiPorts ) {
 	const compositeItemHud = createCompositeItemHud();
 	// Port-only, not native: a unique kill's damage ranking (SRO_UNIQUE_DAMAGE_RANK).
 	const uniqueRankHud = createUniqueRankHud();
+	// Port-only, not native (#3907): the v1.696 SRO Macro windows (SRO_AUTO_MACRO).
+	const sroMacroHud = createSroMacroHud();
 	// Port-only, not native (SRO_CONSIGNMENT, #3529): the consignment market.
 	const marketHud = createMarketHud();
 	const guildManagerHud = createGuildManagerHud();
@@ -5379,6 +5387,18 @@ export function createUi( ports: UiPorts ) {
 			dirty = true;
 			return;
 		} else if (
+			id === "chat-send" && MACRO_COMMAND.test( chatText.slice( chatTabPrefix( chatTab ).length ) ) &&
+			experimental.state().saved.sroMacro
+		) {
+			// Port-only (#3907): /macro opens the SRO Macro menu; never sent as chat.
+			if ( !sroMacroHud.toggleMenu( view.gameplay?.sroMacro, true ) ) hudMessages.append( MACRO_UNAVAILABLE );
+			chatText = chatTabPrefix( chatTab );
+			selection = [ chatText.length, chatText.length ];
+			focus = null;
+			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+			dirty = true;
+			return;
+		} else if (
 			id === "chat-send" && premiumCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy )
 		) {
 			// 6AD990: /Return, /Reverse Return and /Resurrection spend a premium
@@ -5477,6 +5497,15 @@ export function createUi( ports: UiPorts ) {
 			dirty = true;
 		} else if ( id === "unique-rank-ok" || id === "unique-rank-close" ) {
 			uniqueRankHud.close();
+			dirty = true;
+		} else if ( id.startsWith( MACRO_ID ) || id === "sro-macro-close" ) {
+			const game = view.gameplay;
+			const commands = sroMacroHud.click(
+				id === "sro-macro-close" ? MACRO_ID + "close" : id,
+				game?.sroMacro,
+				macroAcquiredSkills( game?.skills ?? [], game?.skillIndex )
+			);
+			for ( const command of commands ) sendGameplay( command );
 			dirty = true;
 		} else if ( id === "chat-send" && !view.gameplay?.chat?.pending ) {
 			const draft = composeChat(
@@ -7960,6 +7989,11 @@ export function createUi( ports: UiPorts ) {
 			}
 			if ( event.kind === "key" && event.code === "Escape" && uniqueRankHud.state() ) {
 				uniqueRankHud.close();
+				dirty = true;
+				return;
+			}
+			if ( event.kind === "key" && event.code === "Escape" && sroMacroHud.state().window !== "none" ) {
+				sroMacroHud.close();
 				dirty = true;
 				return;
 			}
@@ -10478,6 +10512,14 @@ export function createUi( ports: UiPorts ) {
 				phase === "world" &&
 				uniqueRankHud.reconcile( next.gameplay, experimental.state().saved.uniqueDamageRank )
 			) dirty = true;
+			// Port-only (#3907): the macro windows close with the row or the world.
+			if ( sroMacroHud.state().window !== "none" ) {
+				sroMacroHud.reconcile(
+					phase === "world" ? next.gameplay?.sroMacro : undefined,
+					experimental.state().saved.sroMacro
+				);
+				if ( sroMacroHud.state().window === "none" ) dirty = true;
+			}
 			// Port-only (#3529): the market closes with the world, or when the
 			// shard does not run it; a write's answer refreshes what it changed.
 			if ( marketHud.isOpen() && (phase !== "world" || next.gameplay?.consignment !== true) ) {
@@ -10540,6 +10582,7 @@ export function createUi( ports: UiPorts ) {
 					persistWindowPositions();
 					guildWarHud.reset( true );
 					uniqueRankHud.reset();
+					sroMacroHud.reset();
 					windowPlacement.reset();
 					itemMall.reset();
 					carriedShortcut = null;
@@ -16942,6 +16985,26 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						now: Date.now(),
 						focus,
 						caretVisible
+					} );
+				}
+				const macroHud = sroMacroHud.state();
+				if ( macroHud.window !== "none" && game?.sroMacro ) {
+					// Port-only (#3907): the macro windows draw with this module's primitives.
+					const macroPaint: MacroPaint = {
+						beginWindow: frame => frameDraw.beginWindow( frame ),
+						endWindow: ( frame, mark, owner ) => frameDraw.endWindow( frame, mark, owner ),
+						windowOrigin: ( frame, spec ) => frameDraw.windowOrigin( frame, spec ),
+						windowBox: ( frame, spec ) => frameDraw.windowBox( frame, spec ),
+						closeButton: ( frame, x, y, id ) => frameDraw.closeButton( frame, x, y, id ),
+						button: ( frame, spec ) => frameDraw.button( frame, spec ),
+						rect: ( frame, spec ) => frameDraw.rect( frame, spec ),
+						image: ( frame, spec ) => frameDraw.image( frame, spec )
+					};
+					drawSroMacro( drawFrame, macroPaint, {
+						hud: macroHud,
+						live: game.sroMacro,
+						acquired: macroAcquiredSkills( game.skills ?? [], game.skillIndex ),
+						skillIndex: game.skillIndex
 					} );
 				}
 				const uniqueRank = uniqueRankHud.state();

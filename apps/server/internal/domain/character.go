@@ -641,6 +641,7 @@ type Character struct {
 	// CICPlayer_PcRoomEventEligible_862a80 -> CIFEventInterface_OnCreate(1).
 	PCRoomEvent bool               `json:"pcRoomEvent,omitempty"`
 	AutoPotion  AutoPotionSettings `json:"autoPotion"`
+	Macro       MacroSettings      `json:"macro,omitzero"`
 
 	// Additional persisted presentation fields carried by the full snapshot.
 	CreatedAt string `json:"createdAt,omitempty"`

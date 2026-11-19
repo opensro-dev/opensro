@@ -358,6 +358,7 @@ import { createMoveReservation, type GroundCommand } from "./reservation/reserva
 import { createBetaPlayerMap } from "./beta-map/beta-map";
 import { createCaravanStars } from "./caravan-stars/caravan-stars";
 import { createContributorTitles } from "./contributor-titles/contributor-titles";
+import { createSroMacro } from "./sro-macro/sro-macro";
 import { createTradeProgress } from "./trade-progress/trade-progress";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createMostWanted } from "./most-wanted/most-wanted";
@@ -692,6 +693,7 @@ export function createGameplay(
 		betaMap = createBetaPlayerMap(),
 		caravanStars = createCaravanStars(),
 		contributorTitles = createContributorTitles(),
+		sroMacro = createSroMacro(),
 		tradeProgress = createTradeProgress(),
 		uniqueRank = createUniqueDamageRank(),
 		mostWanted = createMostWanted(),
@@ -1720,6 +1722,7 @@ clears it when another character enters.
 		betaMap.clear();
 		caravanStars.clear();
 		contributorTitles.clear();
+		sroMacro.clear();
 		uniqueRank.clear();
 		mostWanted.clear();
 		petTraining.clear();
@@ -3074,6 +3077,16 @@ state here before a command can claim a native wire conversation.
 				}
 				return frame;
 			}
+			if ( command.kind === "macro-switch" ) {
+				const frame = sroMacro.switchFrame( command.macro, command.on );
+				if ( frame ) send( frame );
+				return frame;
+			}
+			if ( command.kind === "macro-save" ) {
+				const frame = sroMacro.saveFrame( command.macro, command.settings );
+				if ( frame ) send( frame );
+				return frame;
+			}
 			if ( command.kind === "guide-event" ) {
 				if ( !guide || !localGid ) throw Error( "Guide session is not initialized" );
 				const next = revealGuide( guide, command.event );
@@ -4327,6 +4340,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if ( caravanStars.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
+				if ( sroMacro.receive( frame ) ) {
+					const failure = sroMacro.takeNotice();
+					if ( failure ) notices = [ ...notices.slice( -99 ), { ...failure, sequence: ++noticeSequence } ];
 					dirty = true;
 					return true;
 				}
@@ -6436,6 +6455,9 @@ The published plane when something changed since the last take, else null.
 				// Port-only (#3358): the shown Contributor roster
 				// (contributor-titles.ts), under SRO_CONTRIBUTOR_TITLES.
 				contributorTitles: contributorTitles.names(),
+				// Port-only (#3907): the SRO Macro settings (sro-macro.ts),
+				// under SRO_AUTO_MACRO.
+				...(sroMacro.view() ? { sroMacro: sroMacro.view() } : {}),
 				uniqueDamageRank: uniqueRank.current(),
 				mostWanted: mostWanted.current(),
 				petTraining: petTraining.state(),
