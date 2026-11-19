@@ -24,10 +24,12 @@ item. The server authors the mall listing itself
 lists none of the stones and boots the rest.
 
 A switch off removes exactly what the marker records: the shard, its
-manifest line and the marker itself. The client's texts for the rows
-(the SN_/SD_ symbols) ride the later client's own text tables through
-the variant's text merges; a row whose name text is absent still
-imports (the avatar import's posture) and is reported in the marker.
+manifest line, the name rows it added and the marker itself. Each
+stone's SN_/SD_ symbols come from the later client's text tables into
+textdataname.txt (cap110_items.merge_texts, the Nasrun import's path):
+no other merge stages them, and the variant's item-name check refuses
+an item without a title. A missing name refuses; a missing description
+is reported in the marker.
 
 ===========================================================================
 """
@@ -36,11 +38,14 @@ import mmap
 import os
 from pathlib import Path
 
+import cap110_items as items
 import cap110_monsters as cap110
 import published_ids
 import import_vsro_alexandria as tables
 import jupiter_import as jupiter
 import later_world_import
+import mall_avatar_import as avatars
+import nasrun_import as nasrun
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import trees_overlap
 
@@ -48,6 +53,7 @@ FLAG = "SRO_MALL_CATEGORIES"
 ROOT_ENV = "SRO_V1696_ROOT"
 MARKER = ".opensro-gears-stones.json"
 ITEM_SHARD = "itemdata_190000.txt"
+NAME_TABLE = "textdataname.txt"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 
 # The sixteen option kinds and their degree span, authored in one
@@ -128,6 +134,10 @@ def add_stones(native, output, v1696_root=None):
 	text_root = output / TEXT_ROOT
 	shard = safe_target(output / TEXT_ROOT, ITEM_SHARD)
 	manifest = safe_target(output / TEXT_ROOT, "itemdata.txt")
+	name_path = safe_target(text_root, NAME_TABLE)
+	# A rebuild, and the off path, start from the table without this
+	# import's own name rows.
+	nasrun.strip_texts(name_path, set(prior.get("texts", [])))
 	if not flag_enabled():
 		if shard.exists():
 			shard.unlink()
@@ -151,6 +161,7 @@ def add_stones(native, output, v1696_root=None):
 
 		later_rows = [row for name in tables.table_rows(read("itemdata.txt"))
 			for row in tables.table_rows(read(name[0]))]
+		later_texts = [row for name in nasrun.LATER_TEXT_TABLES for row in avatars.later_text_rows(media, index, name)]
 	stones = select_stones(later_rows)
 	# Identities stand above every published row of the merged item
 	# tables (the variant's accumulated shards, hunting2's posture),
@@ -172,7 +183,12 @@ def add_stones(native, output, v1696_root=None):
 		row[1] = str(allocated[stone[2]])
 		rows.append(row)
 	rows.sort(key=lambda row: int(row[1]))
+	base_names = name_path.read_bytes() if name_path.exists() else (native / TEXT_ROOT / NAME_TABLE).read_bytes()
+	merged_names, absent_descriptions = items.merge_texts(base_names, later_texts, rows)
+	known = {row[1] for row in tables.table_rows(base_names) if len(row) > 1}
+	added_texts = sorted({row[1] for row in tables.table_rows(merged_names) if len(row) > 1} - known)
 	write_atomically(shard, cap110.encode_rows(rows))
+	write_atomically(name_path, merged_names)
 	current = manifest.read_bytes() if manifest.exists() else (native / TEXT_ROOT / "itemdata.txt").read_bytes()
 	manifest_names = [row[0] for row in tables.table_rows(current) if row]
 	manifest_names = [name for name in manifest_names if name.lower() != ITEM_SHARD] + [ITEM_SHARD]
@@ -180,6 +196,7 @@ def add_stones(native, output, v1696_root=None):
 	summary = {"enabled": True, "format": "opensro-gears-stones-v1", "portOnly": True,
 		"items": {row[2]: int(row[1]) for row in rows}, "degrees": list(DEGREES),
 		"kinds": list(KINDS), "source": "v1696",
+		"texts": added_texts, "absentDescriptions": absent_descriptions,
 		"limits": [
 			"Listed in Premium > Gears only while SRO_MALL_CATEGORIES is on (commerce authors the listing).",
 			"No drop or event reward is added; the rows arrive by mall purchase or GM grant alone.",
