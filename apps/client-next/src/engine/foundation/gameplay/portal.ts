@@ -66,10 +66,16 @@ PORTAL_GROUPS
 
 Port-only, not native: destinations a gate folds under one row whose
 click opens their own page (SRO_JANGAN_TOMB_TELEPORT, the Jangan gate's
-Qin-Shi Tomb floors); End conversation closes it as any menu. Only a
+Qin-Shi Tomb floors; SRO_SKYTEMPLE, the four Sky Temple fields the
+Jangan gate offers); End conversation closes it as any menu. Only a
 gate outside the group folds: the tomb's own gates keep the native flat
 menu. No retail link leads from outside the tomb to a GATE_JINSI_ row,
-so a native catalogue never folds.
+nor to a GATE_OTHER_SKYTEMPLE_ row, so a native catalogue never folds.
+
+A group's row reads its caption text key, or its label, port-only
+English, when no table holds a fitting key (caption is then ""). The fields' own names all read "Shambhala (...)" or
+"Temple of Destruction" (RN_OTHER_SKYTEMPLE_*_01) and no table holds a
+bare "Shambhala", so the Sky Temple row's word is authored.
 
 corners tells apart the rows that share one zone name: floor 4's four
 corner passages all read SN_ZONE_26004, so each shows as
@@ -81,12 +87,19 @@ const PORTAL_GROUPS = [ {
 	key: "qinshi-tomb",
 	codePrefix: "GATE_JINSI_",
 	caption: "SN_ZONE_23001",
+	label: "",
 	corners: {
 		126: "Northeast",
 		127: "Southeast",
 		128: "Southwest",
 		129: "Northwest"
 	}
+}, {
+	key: "sky-temple",
+	codePrefix: "GATE_OTHER_SKYTEMPLE_",
+	caption: "",
+	label: "Shambhala",
+	corners: {}
 } ] as const;
 
 /*
@@ -131,7 +144,7 @@ export function portalMenu(
 		if ( (group?.key ?? "") !== open ) {
 			if ( group && !open && !shown.has( group.key ) ) {
 				shown.add( group.key );
-				rows.push( { id: "npc-portal-group:" + group.key, label: copy( group.caption ) } );
+				rows.push( { id: "npc-portal-group:" + group.key, label: group.label || copy( group.caption ) } );
 			}
 			continue;
 		}

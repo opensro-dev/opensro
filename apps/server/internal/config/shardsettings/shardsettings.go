@@ -90,6 +90,9 @@ var Settings = []Setting{
 	// (1..200).
 	{Env: "SRO_SOOK_CHECKPOINT_SECONDS", NomadVar: "sook_checkpoint_seconds", Default: "300"},
 	{Env: "SRO_SOOK_CHEST_CAPACITY", NomadVar: "sook_chest_capacity", Default: "200"},
+	// Port-only, not native: the v1.696 SRO Macro settings lane (0x7554,
+	// 0xB554, 0x3555; internal/game/macro, #3907). Off sends nothing.
+	{Env: "SRO_AUTO_MACRO", NomadVar: "auto_macro", Default: "off"},
 	// The catalogue publishes the expansion's derived pet-gear drops
 	// while it runs (items.json's petGear rows, droptables.json's
 	// petGear rule), so it is a catalogue setting (#2542).

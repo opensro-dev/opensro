@@ -16,6 +16,7 @@
     "src/engine/runtime/simulation/worker/session/world/gameplay/beta-map/beta-map.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/caravan-stars/caravan-stars.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/contributor-titles/contributor-titles.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+    "src/engine/runtime/simulation/worker/session/world/gameplay/sro-macro/sro-macro.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/trade-progress/trade-progress.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/unique-rank/unique-rank.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/most-wanted/most-wanted.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
@@ -217,6 +218,8 @@
   "internals": {
     "src/engine/runtime/ui/hud/market-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/market-window.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/sro-macro-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/sro-macro-window.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/market-window-pen.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/market-window-side.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/map-chrome.ts": "src/engine/runtime/ui/hud/map-tools.ts",

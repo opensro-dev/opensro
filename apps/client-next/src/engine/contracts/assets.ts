@@ -155,6 +155,11 @@ export type AssetRequest = {
 	// the row on starts the set's download, off stops it.
 	kind: "hd-textures";
 	format: import("@/engine/foundation/assets/texture-variants").HdTextureVariant | null;
+} | {
+	// The desktop launcher's local copy of the packs (pack-mirror.ts), or
+	// null in a browser. Sent once, before any load.
+	kind: "pack-mirror";
+	origin: string | null;
 };
 /*
 ================

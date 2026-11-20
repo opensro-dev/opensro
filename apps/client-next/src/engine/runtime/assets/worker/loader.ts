@@ -39,6 +39,7 @@ import { pngBytes, DECODED_IMAGE_BYTES } from "@/engine/foundation/assets/image-
 import { createWorldDecoder } from "./world/world";
 import { createModelDecoder } from "./model/model";
 import { AssetAbsentError, createPacks } from "./packs/packs";
+import { createPackMirror } from "@/engine/foundation/assets/pack-mirror";
 import { createBackgroundInstaller } from "./install";
 import { pageEntryBundle } from "@/engine/foundation/assets/page-entry";
 import { readBytes } from "@/engine/foundation/assets/read-bytes";
@@ -315,6 +316,19 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		activeDownloads++;
 		markFetching();
 		const partial: PartialRead = { chunks: [], size: 0, whole: null };
+		// The desktop launcher's copy first, once and without retries: any
+		// failure there is the network's read to make (pack-mirror.ts). Its
+		// bytes are checked by their owners exactly as the network's are.
+		const mirrored = mirror.url( url );
+		if ( mirrored !== null ) {
+			try {
+				return await downloadAttempt( { url: mirrored, limit, signal, range, partial } );
+			} catch ( error ) {
+				signal.throwIfAborted();
+				mirror.missed( error );
+				forgetPartial( partial );
+			}
+		}
 		// failures counts the retries spent since the read last moved
 		// further; reached is the furthest byte any attempt kept.
 		let failures = 0, reached = 0;
@@ -575,6 +589,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		}
 		return response.headers.get( "etag" );
 	}
+	// The desktop launcher's local pack copy, set by the page (pack-mirror.ts).
+	const mirror = createPackMirror();
 	const packs = createPacks( download, activity, hdAvailability, packGone, liveManifestValidator );
 	// The texture variant this device is served (texture-variants.ts): the
 	// page answers once its device knows its features; native texture reads
@@ -1109,6 +1125,10 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			}
 			if ( request.kind === "hd-textures" ) {
 				packs.hdTextures( request.format );
+				return;
+			}
+			if ( request.kind === "pack-mirror" ) {
+				mirror.set( request.origin );
 				return;
 			}
 			if (
