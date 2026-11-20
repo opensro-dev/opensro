@@ -281,3 +281,26 @@ test("mercenary cooldown restores remaining time and replaces its category", () 
 	assert.deepEqual( owner.state().itemCooldowns, rows );
 	assert.throws( () => owner.receive( 0x3792, state( 30 ).slice( 0, 5 ), 203, context ), /guild soldier cooldown/ );
 });
+
+test("a world entry restores the item groups still cooling down, with the authored sweep", () => {
+	const owner = createInventory( () => {} );
+	const snapshot = fixture();
+	snapshot.refItemSnapshot.push( {
+		refObjId: 77,
+		typeFlags: 0x40ec,
+		nativeFields: { useCooldownGroup524: 201, useCooldownDuration528: 1200000 }
+	} );
+	owner.bootstrap( {
+		...snapshot,
+		itemCooldowns: [ { group: 201, remainingMs: 300000 }, { group: 5, remainingMs: 0 } ]
+	}, 1000 );
+	assert.deepEqual( owner.state().itemCooldowns, [
+		{ category: 18, group: 201, startedAtMs: 1000 - 900000, durationMs: 1200000 }
+	] );
+	// A group whose duration no reference names sweeps over the time left.
+	owner.bootstrap( { ...fixture(), itemCooldowns: [ { group: 9, remainingMs: 4000 } ] }, 50 );
+	assert.deepEqual( owner.state().itemCooldowns, [ { category: 18, group: 9, startedAtMs: 50, durationMs: 4000 } ] );
+	// An entry without the field starts clean, as before.
+	owner.bootstrap( fixture(), 60 );
+	assert.deepEqual( owner.state().itemCooldowns, [] );
+});

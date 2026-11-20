@@ -53,6 +53,41 @@ func SkytempleEnabled() bool {
 	return false
 }
 
+// The Sky Temple chain's teleport and building codenames
+// (scripts/skytemple_gates.py): the four field gates and their return
+// buildings. Jangan's own gate offers them; the chain authors no gate of
+// its own in a town.
+const (
+	skytempleGatePrefix     = "GATE_OTHER_SKYTEMPLE_"
+	skytempleBuildingPrefix = "STORE_OTHER_SKYTEMPLE_"
+)
+
+/*
+================
+SkytempleHidesGate
+
+Port-only, not native: whether the portal catalogue skips a teleportdata
+row (by codename) while SRO_SKYTEMPLE is off. A variant built with the
+fields keeps them closed, and every link to them, until the switch opens
+them, as the Pharaoh Temple's gates are.
+================
+*/
+func SkytempleHidesGate(code string) bool {
+	return !SkytempleEnabled() && strings.HasPrefix(code, skytempleGatePrefix)
+}
+
+/*
+================
+SkytempleHidesBuilding
+
+Port-only, not native: the field gates' return buildings, skipped while
+SRO_SKYTEMPLE is off (SkytempleHidesGate).
+================
+*/
+func SkytempleHidesBuilding(code string) bool {
+	return !SkytempleEnabled() && strings.HasPrefix(code, skytempleBuildingPrefix)
+}
+
 /*
 ================
 AppendSkytemple

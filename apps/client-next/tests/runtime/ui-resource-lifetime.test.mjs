@@ -59,8 +59,8 @@ function fixture( t ) {
 		================
 		*/
 		postMessage( message ) {
-			// The texture variant answer is a control message, not a load.
-			if ( message.kind !== "texture-variant" ) messages.push( message );
+			// The texture variant and pack mirror are control messages, not loads.
+			if ( ![ "texture-variant", "pack-mirror" ].includes( message.kind ) ) messages.push( message );
 		}
 		/*
 		================
