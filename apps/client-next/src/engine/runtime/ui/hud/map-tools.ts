@@ -219,8 +219,7 @@ export function createMapToolsHud( options: {
 	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">;
 	base: string;
 } ) {
-	// Loads only while the M window is open: the player waits on it, so
-	// it is interface demand (asset-slots.ts, #3977).
+	// Loads only while the M window is open: interface demand (#3977).
 	const assets = interfaceLane( options.assets );
 	// The foot's level filter (map-level-filter.ts), unchecked at first.
 	const levelFilter = createLevelFilter();
