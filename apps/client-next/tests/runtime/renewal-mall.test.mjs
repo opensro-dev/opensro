@@ -28,7 +28,9 @@ const {
 	renewalPopupRect,
 	renewalRailRect,
 	renewalSubTabRect,
+	RENEWAL_GOODS_AREA,
 	RENEWAL_GOODS_PER_PAGE,
+	renewalPagerRects,
 	RENEWAL_MALL_HEIGHT,
 	RENEWAL_MALL_WIDTH
 } = await import( "../../src/engine/foundation/ui/renewal-mall.ts" );
@@ -606,11 +608,19 @@ test("rail, sub tabs and goods cards repeat inside the parents the layouts autho
 	for ( let index = 0; index < mallCategoriesLater().length; index++ ) {
 		assert.ok( inside( left, renewalRailRect( index ) ), "rail entry " + index );
 	}
+	// The cards, tabs and pager stay on the textured part of the middle
+	// art, never on its scroll-bar track (the live build's right column
+	// ran 10 pixels onto it, a strip with no background).
+	const area = RENEWAL_GOODS_AREA;
+	assert.ok( inside( mid, area ), "the textured area lies in the middle background" );
+	assert.equal( area[0] + area[2], mid[0] + 407, "the track starts at the art's column 407" );
 	for ( let index = 0; index < 4; index++ ) {
-		assert.ok( inside( mid, renewalSubTabRect( index ) ), "sub tab " + index );
+		assert.ok( inside( area, renewalSubTabRect( index ) ), "sub tab " + index );
 	}
+	const pager = renewalPagerRects();
+	for ( const rect of [ pager.prev, pager.next, pager.label ] ) assert.ok( inside( area, rect ), "pager" );
 	for ( let index = 0; index < RENEWAL_GOODS_PER_PAGE; index++ ) {
-		assert.ok( inside( mid, renewalGoodsRect( index ) ), "card " + index );
+		assert.ok( inside( area, renewalGoodsRect( index ) ), "card " + index );
 		assert.ok(
 			inside( [ 0, 0, RENEWAL_MALL_WIDTH, RENEWAL_MALL_HEIGHT ], renewalPopupRect( index ) ),
 			"popup " + index

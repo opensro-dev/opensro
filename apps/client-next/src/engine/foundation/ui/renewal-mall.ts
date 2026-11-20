@@ -17,9 +17,10 @@ inside of one goods card. They do not place the repeated children: the
 category rail entries, the sub-category tabs and the goods cards are
 created in code, and no v1.188 client binary is at hand to read it.
 INFERENCE for those three: each repeats inside its authored parent on
-its picture's own size with a 4 or 8 pixel gap, which is what the art
-fits (the rail's 116x32 entries in the 124-wide left frame, three 96x24
-tabs and a 2x5 grid of 200x84 cards in the 424x519 middle background).
+its picture's own size, which is what the art fits (the rail's 116x32
+entries in the 124-wide left frame; 96x24 tabs and a 2x5 grid of 200x84
+cards in the middle background's textured area, RENEWAL_GOODS_AREA,
+which stops short of the art's scroll-bar track).
 
 ===========================================================================
 */
@@ -37,14 +38,21 @@ export const RENEWAL_MALL_HEIGHT = 600;
 // authored children start at y 39).
 export const RENEWAL_MALL_TITLE_HEIGHT = 36;
 
-// The goods grid: two columns of five 200x84 cards (mall_item_wnd).
+// The textured goods area inside the middle background, window-relative:
+// mall_back_wnd (424x520 at 137,72) carries its pattern over its columns
+// 3-406 and rows 3-511 only; columns 407-420 are the black track of the
+// later mall's scroll bar, and a card there sat on no background.
+export const RENEWAL_GOODS_AREA = [ 140, 75, 404, 509 ] as const;
+// The goods grid: two columns of five 200x84 cards (mall_item_wnd),
+// filling the textured area's 404 pixels with a 2-pixel gap between
+// them and a 1-pixel margin each side.
 export const RENEWAL_GOODS_COLUMNS = 2;
 export const RENEWAL_GOODS_ROWS = 5;
 // RENEWAL_GOODS_COLUMNS * RENEWAL_GOODS_ROWS.
 export const RENEWAL_GOODS_PER_PAGE = 10;
-const GOODS_LEFT = 145;
+const GOODS_LEFT = 141;
 const GOODS_TOP = 108;
-const GOODS_PITCH_X = 208;
+const GOODS_PITCH_X = 202;
 const GOODS_PITCH_Y = 88;
 const GOODS_WIDTH = 200;
 const GOODS_HEIGHT = 84;
@@ -57,18 +65,21 @@ const RAIL_PITCH = 36;
 const RAIL_WIDTH = 116;
 const RAIL_HEIGHT = 32;
 
-// The sub-category tabs: 96x24 (mall_sub_tab), over the goods grid.
-const SUB_LEFT = 145;
+// The sub-category tabs: 96x24 (mall_sub_tab), over the goods grid,
+// starting at its left edge.
+const SUB_LEFT = 141;
 const SUB_TOP = 78;
 const SUB_PITCH = 100;
 const SUB_WIDTH = 96;
 const SUB_HEIGHT = 24;
 export const RENEWAL_SUB_TABS_MAX = 4;
 
-// The pager under the grid (mall_page_prev / mall_page_next, 36x12).
+// The pager under the grid (mall_page_prev / mall_page_next, 36x12),
+// centred on the grid (141..543, centre 342) with an 86-pixel label
+// between the arrows.
 const PAGER_TOP = 552;
-const PAGER_PREV_LEFT = 300;
-const PAGER_NEXT_LEFT = 422;
+const PAGER_PREV_LEFT = 263;
+const PAGER_NEXT_LEFT = 385;
 const PAGER_WIDTH = 36;
 const PAGER_HEIGHT = 12;
 
