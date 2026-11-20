@@ -419,11 +419,6 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 			Opcode:  wire.OpObjectSelectResult,
 			Payload: wire.EncodeMonsterObjectSelectResult(gid, target.monster.CurrentHP),
 		}}
-		// Port-only, not native (#3349): a Muhan change NPC is a nest
-		// entity that offers Talk (muhan_change.go).
-		if change := rt.muhanChangeSelect(divisionID, character, gid); change != nil {
-			outcome.Frames = change
-		}
 	}
 	if target.cos {
 		outcome.Frames = []wire.Frame{{
@@ -485,6 +480,10 @@ func (rt *Runtime) resolveLiveObject(
 				simulation.NpcVisibleAt(*npc, viewer) {
 				return selectedObject{npc: &rt.NpcRoster[index]}, true
 			}
+		}
+		// A static world NPC of the character's own world (worldnpc.go).
+		if npc := rt.worldNpcAt(character, gid); npc != nil && simulation.NpcVisibleAt(*npc, viewer) {
+			return selectedObject{npc: npc}, true
 		}
 	}
 	// Shared monsters are selectable only while they are live and inside
