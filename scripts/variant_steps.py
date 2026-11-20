@@ -80,6 +80,10 @@ WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_TRUNC
 CHANGE_EVENTS = frozenset(("os.remove", "os.truncate", "os.utime", "os.chmod"))
 # Audit events that start a process the hooks cannot follow.
 SHELL_EVENTS = frozenset(("os.system", "os.exec", "os.spawn", "os.posix_spawn", "os.startfile"))
+# The folder handle an audit event reports when a call names none.
+NO_FOLDER_HANDLE = -1
+# Where the import system writes compiled modules.
+BYTECODE_FOLDER = os.sep + "__pycache__" + os.sep
 # mmap access modes that can write: ACCESS_DEFAULT and ACCESS_WRITE.
 WRITABLE_MAPS = frozenset((0, 2))
 
@@ -136,8 +140,13 @@ class Recorder:
 	def write(self, value, event: str) -> None:
 		key = norm(value)
 		if key is None:
-			self.blind.append(f"{event} on a descriptor")
-		elif self.inside(key):
+			# A descriptor comes from an earlier open by path (recorded
+			# then), a pipe or a socket: nothing new to record.
+			return
+		if os.path.splitext(key)[1] in IGNORED_SUFFIXES or BYTECODE_FOLDER in key:
+			# The import system caching a module's bytecode, not a step's effect.
+			return
+		if self.inside(key):
 			self.written.setdefault(key, os.path.abspath(os.fsdecode(os.fspath(value))))
 		elif key != self.out and not self.ignored(key):
 			self.blind.append(f"{event} {value}")
@@ -185,7 +194,7 @@ def audit(event: str, args) -> None:
 		else:
 			recorder.read(args[0])
 		recorder.write(args[1], event)
-		if any(fd is not None for fd in args[2:]):
+		if any(fd is not None and fd != NO_FOLDER_HANDLE for fd in args[2:]):
 			recorder.blind.append(f"{event} relative to a folder handle")
 	elif event in ("shutil.copyfile", "shutil.copymode", "shutil.copystat"):
 		recorder.read(args[0])

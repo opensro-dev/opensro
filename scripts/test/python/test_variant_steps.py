@@ -132,6 +132,30 @@ class StepRunnerTests(unittest.TestCase):
 			self.assertEqual(calls, expected)
 			self.assertEqual(value, text)
 
+	def test_renames_bytecode_and_descriptors_are_recorded_or_ignored(self):
+		# A real importer writes atomically (a rename), may import a module
+		# for the first time (its bytecode cache) and writes through a
+		# descriptor; none of these may make the step unrecordable.
+		out, cache = self.out, self.variant.parent / "__pycache__"
+		calls = []
+
+		def atomic():
+			calls.append("atomic")
+			partial = out / "Data" / "table.txt.partial"
+			with open(os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), "wb") as handle:
+				handle.write(b"atomic\n")
+			os.replace(partial, out / "Data" / "table.txt")
+			cache.mkdir(exist_ok=True)
+			(cache / "module.cpython-312.pyc.123").write_bytes(b"cache")
+
+		for _ in range(2):
+			self.seed()
+			self.runner().take(variant_steps.Step("atomic", atomic))
+		self.assertEqual(calls, ["atomic"])
+		self.assertEqual((out / "Data" / "table.txt").read_bytes(), b"atomic\n")
+		self.assertFalse((out / "Data" / "table.txt.partial").exists())
+		shutil.rmtree(cache, ignore_errors=True)
+
 	def test_a_write_outside_the_tree_is_never_replayed(self):
 		elsewhere = self.variant / "manifest.json"
 		calls = []
