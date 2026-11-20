@@ -69,6 +69,7 @@ import pharaoh_temple as temple  # noqa: E402
 import sro_pk2  # noqa: E402
 import variant_settle  # noqa: E402
 import variant_stamp  # noqa: E402
+import variant_steps  # noqa: E402
 from build_parallelism import build_jobs  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT  # noqa: E402
@@ -498,8 +499,8 @@ def clear_content(variant, native):
 # ================
 # build_variant
 # ================
-def build_variant(vsro_root, native, variant, imported_root=None):
-	"""Make the variant's extracted/ tree; returns its manifest."""
+def build_variant(vsro_root, native, variant, inputs, imported_root=None):
+	"""Make the variant's extracted/ tree from inputs (variant_stamp.read_inputs); returns its manifest."""
 	imported = Path(imported_root) if imported_root else native / stage1.OUTPUT_FOLDER
 	# Stage 1 of this build hashed these archives minutes ago (#3590); an
 	# unchanged file with today's pinned digest is not hashed again.
@@ -524,132 +525,237 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		if not (variant / name).exists():
 			link_file(source, variant / name)
 
-	# Map: catalogs, remapped regions, tile textures.
-	vsro_catalogs = {name: (imported / "Map" / name).read_bytes() for name in stage1.CATALOGS}
-	tiles, remap = merge_tile_catalog(
-		(native / "Map_extracted" / "tile2d.ifo").read_bytes(), vsro_catalogs["tile2d.ifo"], set(stage_manifest["tileIds"])
-	)
-	objects = merge_object_catalog((native / "Map_extracted" / "object.ifo").read_bytes(), vsro_catalogs["object.ifo"])
-	replace_file(out / "Map_extracted" / "tile2d.ifo", tiles)
-	replace_file(out / "Map_extracted" / "object.ifo", objects)
+	# Every importer from here on is one step of a fold over out, in its
+	# load-bearing order; a step replays from its record when nothing it
+	# can see changed since it last ran (variant_steps.py).
+	store = variant_steps.StepStore(variant)
+	runner = variant_steps.StepRunner(out, store, inputs, log)
 
-	added, clashes = [], []
-	for source in sorted((imported / "Map").rglob("*")):
-		if not source.is_file() or source.name in stage1.CATALOGS:
-			continue
-		relative = source.relative_to(imported / "Map").as_posix()
-		target = out / "Map_extracted" / relative
-		stored = source.read_bytes()
-		if relative.endswith(".m"):
-			stored = remap_terrain(stored, remap)
-		if target.exists() and relative.startswith("tile2d/"):
-			if target.read_bytes() != stored:
-				clashes.append(relative)
-			continue
-		replace_file(target, stored)
-		added.append("Map_extracted/" + relative)
+	# ================
+	# take
+	# ================
+	def take(name, run):
+		return runner.take(variant_steps.Step(name, run))
 
-	# Data: every VSRO file the native tree lacks, the navmesh, the bitmap.
-	present = lower_paths(native / "Data_extracted")
-	data_added = add_missing_files(vsro_root, "Data", out / "Data_extracted", present, ("navmesh/",))
-	# Particles: the city's effect programs (alex_*.efp) and what they use.
-	particles_added = add_missing_files(
-		vsro_root, "Particles", out / "Particles_extracted", lower_paths(native / "Particles_extracted")
-	)
-	for source in sorted((imported / "Data").rglob("*.nvm")):
-		replace_file(out / "Data_extracted" / source.relative_to(imported / "Data").as_posix(), source.read_bytes())
-	mapinfo = out / "Data_extracted" / "navmesh" / "mapinfo.mfo"
-	replace_file(mapinfo, enable_regions((native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes(), regions))
+	# ================
+	# vsro_map_data
+	#
+	# Map: catalogs, remapped regions, tile textures; then every VSRO file
+	# the native tree lacks, the navmesh, the region bitmap.
+	# ================
+	def vsro_map_data():
+		vsro_catalogs = {name: (imported / "Map" / name).read_bytes() for name in stage1.CATALOGS}
+		tiles, remap = merge_tile_catalog(
+			(native / "Map_extracted" / "tile2d.ifo").read_bytes(), vsro_catalogs["tile2d.ifo"], set(stage_manifest["tileIds"])
+		)
+		objects = merge_object_catalog((native / "Map_extracted" / "object.ifo").read_bytes(), vsro_catalogs["object.ifo"])
+		replace_file(out / "Map_extracted" / "tile2d.ifo", tiles)
+		replace_file(out / "Map_extracted" / "object.ifo", objects)
+		added, clashes = [], []
+		for source in sorted((imported / "Map").rglob("*")):
+			if not source.is_file() or source.name in stage1.CATALOGS:
+				continue
+			relative = source.relative_to(imported / "Map").as_posix()
+			target = out / "Map_extracted" / relative
+			stored = source.read_bytes()
+			if relative.endswith(".m"):
+				stored = remap_terrain(stored, remap)
+			if target.exists() and relative.startswith("tile2d/"):
+				if target.read_bytes() != stored:
+					clashes.append(relative)
+				continue
+			replace_file(target, stored)
+			added.append("Map_extracted/" + relative)
+		present = lower_paths(native / "Data_extracted")
+		data_added = add_missing_files(vsro_root, "Data", out / "Data_extracted", present, ("navmesh/",))
+		# Particles: the city's effect programs (alex_*.efp) and what they use.
+		particles_added = add_missing_files(
+			vsro_root, "Particles", out / "Particles_extracted", lower_paths(native / "Particles_extracted")
+		)
+		for source in sorted((imported / "Data").rglob("*.nvm")):
+			replace_file(out / "Data_extracted" / source.relative_to(imported / "Data").as_posix(), source.read_bytes())
+		mapinfo = out / "Data_extracted" / "navmesh" / "mapinfo.mfo"
+		replace_file(mapinfo, enable_regions((native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes(), regions))
+		return {"remap": remap, "clashes": clashes, "added": len(added), "data": data_added, "particles": particles_added}
 
-	gates, gate_tables = add_gates(vsro_root, native, out)
-	stranded = stage1.gates_without_terrain(gate_tables["teleportdata.txt"], GATE_CODES,
-		set(regions) | stage1.mfo_regions((native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes()))
-	if stranded:
-		raise SystemExit(f"gates {', '.join(stranded)} stand on regions stage 1 did not import; rerun stage 1")
-	pharaoh_temple = temple.add_temple(vsro_root, native, out)
+	# ================
+	# gates_step
+	# ================
+	def gates_step():
+		gates, gate_tables = add_gates(vsro_root, native, out)
+		stranded = stage1.gates_without_terrain(gate_tables["teleportdata.txt"], GATE_CODES,
+			set(regions) | stage1.mfo_regions((native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes()))
+		if stranded:
+			raise SystemExit(f"gates {', '.join(stranded)} stand on regions stage 1 did not import; rerun stage 1")
+		return gates, gate_tables
+
+	# ================
+	# later_client
+	#
+	# The v1.696 root when its four archives are all there, else None.
+	# ================
+	def later_client(say):
+		from mall_avatar_import import v1696_root
+		later = v1696_root()
+		if later is not None and not all((later / f"{name}.pk2").is_file() for name in ("Map", "Data", "Media", "Particles")):
+			if say:
+				log(f"world layers: {later} lacks the v1.696 archives; no seasonal layers")
+			later = None
+		return later
+
+	# ================
+	# world_layers_step
+	#
+	# The later client's seasonal town decoration (Halloween and the other
+	# event layers), into the object catalog and region files written above.
+	# Without the v1.696 archives a previous import is removed.
+	# ================
+	def world_layers_step():
+		from world_layer_import import add_layers
+		from mall_avatar_import import V1696_SOURCE, source_pins
+		later = later_client(True)
+		return add_layers(later, native, out, source_pins(V1696_SOURCE) if later else None)
+
+	# ================
+	# avatar_source
+	# ================
+	def avatar_source(archive):
+		import mall_avatar_import as avatars
+		if archive:
+			return avatars.add_source(avatars.avatars_zip(), native, out, avatars.AVATARS_SOURCE)
+		return avatars.add_source(avatars.v1696_root(), native, out, avatars.V1696_SOURCE)
+
+	# Each importer step imports its module itself, with a real import
+	# statement: the whole build's code stamp (codeStamp.mjs) finds the
+	# importers by those statements, and only a step that runs loads one.
+	base = take("vsro-map-data", vsro_map_data)
+	remap, clashes = base["remap"], base["clashes"]
+	gates, gate_tables = take("gates", gates_step)
+	pharaoh_temple = take("pharaoh-temple", lambda: temple.add_temple(vsro_root, native, out))
 	# The map step adds to textdataname.txt on top of the gates' texts.
-	city_map = add_map(vsro_root, native, out, regions, gate_tables["text"])
-	city_npcs = add_npcs(vsro_root, native, out, regions)
+	city_map = take("city-map", lambda: add_map(vsro_root, native, out, regions, gate_tables["text"]))
+	city_npcs = take("city-npcs", lambda: add_npcs(vsro_root, native, out, regions))
 	# Imported equipment is independently optional; its off path also removes
 	# a shard from a previous on build so a reused variant cannot retain it.
-	from cap110_item_import import add_items
-	weapons = add_items(vsro_root, native, out)
+	def step_items():
+		from cap110_item_import import add_items
+		return add_items(vsro_root, native, out)
+
+	weapons = take("items", step_items)
 	# The mall avatars append their own shard to the manifest the item
 	# import just wrote, so they must follow it.
-	from mall_avatar_import import add_avatars, add_source, v1696_root, V1696_SOURCE, avatars_zip, AVATARS_SOURCE
-	mall_avatars = add_avatars(vsro_root, native, out)
+	def step_mall_avatars():
+		from mall_avatar_import import add_avatars
+		return add_avatars(vsro_root, native, out)
+
+	mall_avatars = take("mall-avatars", step_mall_avatars)
 	# The v1.696 client's avatars the VSRO client lacks (SRO_V1696_ROOT,
 	# pinned by v1696_archive_pins.json). Unset removes a previous import.
-	later_avatars = add_source(v1696_root(), native, out, V1696_SOURCE)
+	later_avatars = take("avatars-v1696", lambda: avatar_source(False))
 	# The v2.355 export's avatars from the pinned archive (SRO_AVATARS_ZIP,
 	# #3254): without it the build is byte-identical and a previous
 	# import is removed.
-	archive_avatars = add_source(avatars_zip(), native, out, AVATARS_SOURCE)
+	archive_avatars = take("avatars-archive", lambda: avatar_source(True))
 	# The Devil's Spirit (Nasrun) rows, inert (SRO_NASRUN, #3348): after the
 	# avatars, whose shards and identities they keep clear of.
-	from nasrun_import import add_nasrun
-	nasrun = add_nasrun(vsro_root, native, out)
+	def step_nasrun():
+		from nasrun_import import add_nasrun
+		return add_nasrun(vsro_root, native, out)
+
+	nasrun = take("nasrun", step_nasrun)
 	# The later clients' pets follow the avatars: their COS rows and
 	# summon scrolls append their own shards to the same manifests. The
 	# v1.696 pass and the pinned-archive pass read their sources from the
 	# environment and skip cleanly while those are not on the machine.
-	from pet_import import add_all_sources
-	pets = add_all_sources(vsro_root, native, out)
-	from cap110_skill_import import add_skills
-	skill_tier = add_skills(vsro_root, native, out)
-	from cap110_skill_import import add_skill_effects
-	skill_animation = add_skill_effects(vsro_root, native, out)
+	def step_pets():
+		from pet_import import add_all_sources
+		return add_all_sources(vsro_root, native, out)
+
+	pets = take("pets", step_pets)
+	def step_skills():
+		from cap110_skill_import import add_skills
+		return add_skills(vsro_root, native, out)
+
+	skill_tier = take("skills", step_skills)
+	def step_skill_effects():
+		from cap110_skill_import import add_skill_effects
+		return add_skill_effects(vsro_root, native, out)
+
+	skill_animation = take("skill-effects", step_skill_effects)
 	# The skills a worn Devil's Spirit lends (SRO_NASRUN, #3456): after
 	# the skill tier, which rewrites the skill manifest from the native
 	# one, and before the monsters, whose skill ids keep clear of them.
-	from nasrun_import import add_nasrun_skills
-	nasrun_skills = add_nasrun_skills(vsro_root, native, out)
-	from cap110_monsters import add_monsters
-	field_monsters = add_monsters(vsro_root, native, out)
+	def step_nasrun_skills():
+		from nasrun_import import add_nasrun_skills
+		return add_nasrun_skills(vsro_root, native, out)
+
+	nasrun_skills = take("nasrun-skills", step_nasrun_skills)
+	def step_monsters():
+		from cap110_monsters import add_monsters
+		return add_monsters(vsro_root, native, out)
+
+	field_monsters = take("monsters", step_monsters)
 	# The monsters' own database rewards follow the population they describe.
-	from cap110_rewards import add_rewards
-	monster_rewards = add_rewards(vsro_root, native, out)
+	def step_rewards():
+		from cap110_rewards import add_rewards
+		return add_rewards(vsro_root, native, out)
+
+	monster_rewards = take("rewards", step_rewards)
 	# The later sources' optional layers, in their load-bearing order
 	# (variant_later_layers.py owns the order and the manifest keys).
-	from variant_later_layers import add_later_layers
-	later_layers = add_later_layers(native, out)
+	def step_later_layers():
+		from variant_later_layers import add_later_layers
+		return add_later_layers(native, out)
+
+	later_layers = take("later-layers", step_later_layers)
 	# The Roc range's kinds (SRO_ROC, #3399): after every later layer,
 	# so their identities allocate above all of the layers' rows.
-	from roc_import import add_roc
-	roc = add_roc(vsro_root, native, out)
+	def step_roc():
+		from roc_import import add_roc
+		return add_roc(vsro_root, native, out)
+
+	roc = take("roc", step_roc)
 	# The two siege fortresses the v1.188 client authored and v1.150 never
 	# placed (SRO_FORT_BIJEOKDAN, SRO_FORT_HOTAN, #3886): after Roc, in a
 	# fixed order, so their structures allocate above every row before.
-	import bandit_fortress_import
-	import hotan_fortress_import
-	bandit_fortress = bandit_fortress_import.add(vsro_root, native, out)
-	hotan_fortress = hotan_fortress_import.add(vsro_root, native, out)
+	def step_bandit_fortress():
+		from bandit_fortress_import import add
+		return add(vsro_root, native, out)
+
+	bandit_fortress = take("bandit-fortress", step_bandit_fortress)
+	def step_hotan_fortress():
+		from hotan_fortress_import import add
+		return add(vsro_root, native, out)
+
+	hotan_fortress = take("hotan-fortress", step_hotan_fortress)
 	# The honor line the client authored and never shipped (SRO_HONOR_GOODS,
 	# #3548): after every other item import, whose identities it keeps
 	# clear of, and before the shops that sell it.
-	import honor_items
-	honor_goods = honor_items.add_honor_items(native, out)
+	def step_honor_goods():
+		from honor_items import add_honor_items
+		return add_honor_items(native, out)
+
+	honor_goods = take("honor-goods", step_honor_goods)
 	# The Blue Berserk imports follow their own switches (cap110_quest_layers.py owns the order).
-	from cap110_quest_layers import add_quest_layers
-	quest_layers = add_quest_layers(vsro_root, native, out)
-	from alexandria_npc_services import add_services
-	city_services = add_services(vsro_root, native, out, port_stock_enabled(), honor_goods["enabled"])
-	# The later client's seasonal town decoration (Halloween and the other
-	# event layers), into the object catalog and region files written above.
-	# Without the v1.696 archives a previous import is removed.
-	from world_layer_import import add_layers
-	from mall_avatar_import import V1696_SOURCE, source_pins, v1696_root
-	later = v1696_root()
-	if later is not None and not all((later / f"{name}.pk2").is_file() for name in ("Map", "Data", "Media", "Particles")):
-		log(f"world layers: {later} lacks the v1.696 archives; no seasonal layers")
-		later = None
-	world_layers = add_layers(later, native, out, source_pins(V1696_SOURCE) if later else None)
+	def step_quest_layers():
+		from cap110_quest_layers import add_quest_layers
+		return add_quest_layers(vsro_root, native, out)
+
+	quest_layers = take("quest-layers", step_quest_layers)
+	def step_npc_services():
+		from alexandria_npc_services import add_services
+		return add_services(vsro_root, native, out, port_stock_enabled(), honor_goods["enabled"])
+
+	city_services = take("npc-services", step_npc_services)
+	world_layers = take("world-layers", world_layers_step)
 	# Music last: its areas are those of every region the steps above left
 	# in the tree, stage 1's, the temple's and each later layer's (#3546).
-	music = area_music.add_music(vsro_root, native, out, later)
-
-	environment = read_vsro_file(vsro_root, "Map", "environment.ifo")
-	replace_file(out / "Map_extracted" / "environment.ifo", environment)
+	music = take("music", lambda: area_music.add_music(vsro_root, native, out, later_client(False)))
+	take("environment", lambda: replace_file(
+		out / "Map_extracted" / "environment.ifo", read_vsro_file(vsro_root, "Map", "environment.ifo")
+	))
+	store.prune()
+	log(f"steps: {runner.summary()}")
 
 	manifest = {
 		"fieldMonsters": field_monsters,
@@ -662,9 +768,9 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"regions": stage_manifest["regions"],
 		"tileRemap": {str(k): v for k, v in sorted(remap.items())},
 		"tileTextureClashes": clashes,
-		"mapFilesAdded": len(added),
-		"dataFilesAdded": data_added,
-		"particleFilesAdded": particles_added,
+		"mapFilesAdded": base["added"],
+		"dataFilesAdded": base["data"],
+		"particleFilesAdded": base["particles"],
 		"gates": gates,
 		"map": city_map,
 		"music": music,
@@ -937,7 +1043,7 @@ def main():
 		return
 	log(f"rebuilding: {', '.join(stale[:8])}{' ...' if len(stale) > 8 else ''}")
 	variant_stamp.clear_stamp(variant)
-	manifest = build_variant(vsro_root, EXTRACTED_ROOT, variant, args.imported_root)
+	manifest = build_variant(vsro_root, EXTRACTED_ROOT, variant, inputs, args.imported_root)
 	# Files the rebuild left byte-identical get their old mtime back, so the
 	# asset build's (size, mtime) caches still hit (variant_settle.py).
 	settled = variant_settle.settle(variant, build_jobs())

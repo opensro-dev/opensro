@@ -103,13 +103,14 @@ def stamp_path(variant_root: Path) -> Path:
 # ================
 # code_stamp
 #
-# One export of codeStamp.mjs (codeClosure or codeHash) on the builder: the
-# one owner of code closures, so the variant and the asset lanes agree on
-# what counts as code (imports, named scripts, pin files beside a module).
+# One export of codeStamp.mjs (codeClosure or codeHash) on entry, the
+# builder unless named: the one owner of code closures, so the variant and
+# the asset lanes agree on what counts as code (imports, named scripts, pin
+# files beside a module). variant_steps.py names the scripts a step runs.
 # ================
-def code_stamp(export: str):
+def code_stamp(export: str, entry: Path = BUILDER):
 	result = subprocess.run(
-		["node", "--input-type=module", "-e", CODE_STAMP_SCRIPT, str(CODE_STAMP), export, str(BUILDER)],
+		["node", "--input-type=module", "-e", CODE_STAMP_SCRIPT, str(CODE_STAMP), export, str(entry)],
 		cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8", check=False
 	)
 	if result.returncode != 0:
