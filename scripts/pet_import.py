@@ -78,6 +78,8 @@ V1696_PIN_FILE = Path(__file__).with_name("v1696_archive_pins.json")
 PIN_FORMAT = "opensro-vsro-archive-pins-v1"
 FOLDERS = shared.FOLDERS
 TEXT_ROOT = shared.TEXT_ROOT
+# Where a row's icon column points (Media icon/, under the staging tree).
+ICON_ROOT = Path("Media_extracted") / "icon"
 
 # Character row columns (the layout scripts/cap110_monsters.py reads):
 CHAR_ID = 1
@@ -388,7 +390,73 @@ def remove_import(output, source):
 	for manifest_name, shard in (("characterdata.txt", source["char_shard"]), ("itemdata.txt", source["item_shard"])):
 		_drop_manifest_line(output, manifest_name, shard)
 		(text_root / shard).unlink(missing_ok=True)
+	_remove_icons(output, read_marker(output, source))
 	(Path(output) / source["report"]).unlink(missing_ok=True)
+
+
+# ================
+# _remove_icons
+#
+# The icons a previous pass copied (its marker's "icons"), gone with it.
+# Only files this importer wrote are named there; native icons never are.
+# ================
+def _remove_icons(output, marker):
+	for name in marker.get("icons", []):
+		safe_target(Path(output) / ICON_ROOT, name).unlink(missing_ok=True)
+
+
+# ================
+# _copy_icons
+#
+# The icons of the added kinds and their scrolls (column 54, relative to
+# Media icon/): a pet's portrait and its scroll's inventory picture. The
+# later archive is the only source of a kind v1.150 lacks, and the row
+# import alone left the item with no picture at all (the snowman scroll's
+# "no image"). An icon the native tree has is never copied; one neither
+# holds is reported. A rebuild first removes what the last pass copied.
+# ================
+def _copy_icons(root, native, output, rows, report):
+	with open(Path(root) / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
+		index = tables.archive_index(media)
+
+		def later_icon(name):
+			entry = index.get("icon/" + name)
+			return None if entry is None else sro_pk2.payload(media, entry)
+
+		copy_icon_files(native, output, rows, report, later_icon)
+
+
+# ================
+# copy_icon_files
+#
+# _copy_icons' rule over any later source: later_icon(name) answers the
+# bytes of Media icon/<name>, or None. report's "_prior" is the previous
+# marker, whose copies go first; report gains "icons" (what was copied)
+# and, when some icon exists nowhere, "missingIcons".
+# ================
+def copy_icon_files(native, output, rows, report, later_icon):
+	_remove_icons(output, report.pop("_prior", {}))
+	icon_root = Path(native) / ICON_ROOT
+	native_icons = {
+		path.relative_to(icon_root).as_posix().lower() for path in icon_root.rglob("*") if path.is_file()
+	} if icon_root.exists() else set()
+	wanted = sorted({
+		shared.normalized_path(row[items.ICON]) for row in rows
+		if len(row) > items.ICON and row[items.ICON] not in ("", items.UNUSED)
+	})
+	copied, absent = [], []
+	for name in wanted:
+		if name in native_icons:
+			continue
+		raw = later_icon(name)
+		if raw is None:
+			absent.append(name)
+			continue
+		write_atomically(safe_target(Path(output) / ICON_ROOT, name), raw)
+		copied.append(name)
+	report["icons"] = copied
+	if absent:
+		report["missingIcons"] = absent
 
 
 def _manifest_with(output, manifest_name, shard):
@@ -490,6 +558,8 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 			reserved_ids=output_reserved_ids(output, source), pinned=published_ids.published(published_ids.OBJECTS))
 	if char_rows:
 		_merge_name_text(output, char_rows, item_rows, later_text, report)
+	report["_prior"] = prior
+	_copy_icons(root, native, output, char_rows + item_rows, report)
 	return _write_pass(output, source, char_rows, item_rows, report)
 
 

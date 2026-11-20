@@ -157,7 +157,6 @@ apps/client-next/tests/browser/character-texture-live.test.mjs
 apps/client-next/tests/browser/cosmetics.test.mjs
 apps/client-next/tests/browser/creation-body-shape.test.mjs
 apps/client-next/tests/browser/crests-war-buffs.test.mjs
-apps/client-next/tests/browser/cursor-click.test.mjs
 apps/client-next/tests/browser/cursor-focus.test.mjs
 apps/client-next/tests/browser/cursor.test.mjs
 apps/client-next/tests/browser/damage-occlusion.test.mjs

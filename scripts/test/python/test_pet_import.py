@@ -377,5 +377,47 @@ class ArchiveTests(unittest.TestCase):
 				self.assertFalse((text_root / shard).exists())
 
 
+class PetIconTest(unittest.TestCase):
+	"""An added kind's icons come from the later source when the native tree lacks them."""
+
+	@staticmethod
+	def _row(icon):
+		row = [""] * (items.ICON + 1)
+		row[items.ICON] = icon
+		return row
+
+	def test_missing_icons_are_copied_native_ones_kept_and_absent_ones_reported(self):
+		with tempfile.TemporaryDirectory() as folder:
+			native, output = Path(folder) / "native", Path(folder) / "out"
+			(native / importer.ICON_ROOT / "cos").mkdir(parents=True)
+			(native / importer.ICON_ROOT / "cos" / "native_pet.ddj").write_bytes(b"native")
+			later = {"cos/item_cos_p_event_winter_snowman.ddj": b"snowman"}
+			report = {}
+			rows = [
+				self._row("cos\\item_cos_p_event_winter_snowman.ddj"),
+				self._row("cos\\NATIVE_PET.ddj"),
+				self._row("cos\\nowhere.ddj"),
+				self._row(items.UNUSED),
+			]
+			importer.copy_icon_files(native, output, rows, report, later.get)
+			self.assertEqual(report["icons"], ["cos/item_cos_p_event_winter_snowman.ddj"])
+			self.assertEqual(report["missingIcons"], ["cos/nowhere.ddj"])
+			copied = output / importer.ICON_ROOT / "cos" / "item_cos_p_event_winter_snowman.ddj"
+			self.assertEqual(copied.read_bytes(), b"snowman")
+			self.assertFalse((output / importer.ICON_ROOT / "cos" / "native_pet.ddj").exists())
+
+	def test_a_rebuild_removes_what_the_last_pass_copied(self):
+		with tempfile.TemporaryDirectory() as folder:
+			native, output = Path(folder) / "native", Path(folder) / "out"
+			first = {}
+			importer.copy_icon_files(native, output, [self._row("cos\\gone.ddj")], first, {"cos/gone.ddj": b"x"}.get)
+			self.assertTrue((output / importer.ICON_ROOT / "cos" / "gone.ddj").exists())
+			second = {"_prior": first}
+			importer.copy_icon_files(native, output, [], second, {}.get)
+			self.assertFalse((output / importer.ICON_ROOT / "cos" / "gone.ddj").exists())
+			self.assertEqual(second["icons"], [])
+			self.assertNotIn("_prior", second)
+
+
 if __name__ == "__main__":
 	unittest.main()

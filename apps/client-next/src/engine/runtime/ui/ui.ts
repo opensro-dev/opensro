@@ -200,6 +200,14 @@ import {
 	MALL_ROWS_PER_PAGE
 } from "@/engine/foundation/ui/item-mall-layout";
 import {
+	RENEWAL_GOODS_PER_PAGE,
+	RENEWAL_MALL_HEIGHT,
+	RENEWAL_MALL_WIDTH,
+	renewalMallOrigin,
+	renewalNameLayout
+} from "@/engine/foundation/ui/renewal-mall";
+import { renewalMallPictures, renewalMallView } from "./hud/renewal-mall-view";
+import {
 	quickslotCooldownQuads,
 	quickslotItemCooldownQuads,
 	inventoryItemCooldownQuads,
@@ -1008,6 +1016,13 @@ const ROOT = "/assets/images/Media_extracted/",
 	BUTTON = ROOT + "interface/ifcommon/com_button.png";
 // 683B40 assigns the notice root this texture after creating it.
 const MALL_NOTICE_FRAME = ROOT + "interface/mall/mall_communicate.png";
+// A disabled renewal mall button's picture: the later art has no disable
+// face for every button, so the base face is drawn dimmed.
+const RENEWAL_DISABLED = [ 0.5, 0.5, 0.5, 1 ] as const;
+// How far below its box a card name's second line may draw: the font's
+// descenders (g, p, y) under a 13-pixel pitch. The price row starts 7
+// pixels below the box.
+const RENEWAL_NAME_DESCENT = 4;
 const PARTS = frameParts();
 // The Contributor login prompt's copy (port-only, not native; owner
 // 2026-11-14): the client has no text rows for it, so hudCopy serves
@@ -3822,6 +3837,22 @@ export function createUi( ports: UiPorts ) {
 			dirty = true;
 			return;
 		}
+		// Port-only, not native: the renewal window's goods card popup.
+		if ( id.startsWith( "item-mall-popup:" ) ) {
+			itemMall.openPopup( Number( id.slice( "item-mall-popup:".length ) ) );
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-search-find" ) {
+			itemMall.applySearch();
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-popup-close" ) {
+			itemMall.closePopup();
+			dirty = true;
+			return;
+		}
 
 		if ( id.startsWith( "item-mall-tab:" ) && view?.gameplay ) {
 			const state = itemMall.read( view.gameplay.itemMall );
@@ -6446,7 +6477,10 @@ export function createUi( ports: UiPorts ) {
 				if ( event.kind === "edit" && view?.gameplay?.itemMall ) {
 					const state = itemMall.read( view.gameplay.itemMall );
 					if ( event.id === "item-mall-search" ) {
-						itemMall.setSearch( event.value );
+						// The renewal field edits a draft its Search button applies;
+						// the classic later rail searches as it is typed.
+						if ( state.renewal ) itemMall.setSearchDraft( event.value );
+						else itemMall.setSearch( event.value );
 					}
 					if ( event.id === "item-mall-point-value" && /^\d{0,10}$/.test( event.value ) ) {
 						itemMall.editPointDraft( Number( event.value ), view.gameplay.itemMall );
@@ -6464,6 +6498,12 @@ export function createUi( ports: UiPorts ) {
 					activate( "item-mall-close" );
 					return;
 				}
+				// Enter applies the renewal window's search draft, as its
+				// Search button does.
+				if ( event.kind === "key" && event.code === "Enter" && itemMall.read().renewal ) {
+					activate( "item-mall-search-find" );
+					return;
+				}
 				if ( event.kind === "key" && event.code === "Escape" ) {
 					activate(
 						itemMall.read().pointDialog ?
@@ -6472,6 +6512,8 @@ export function createUi( ports: UiPorts ) {
 							"item-mall-question-cancel" :
 							itemMall.read().selected ?
 							"item-mall-cancel" :
+							itemMall.read().popup >= 0 ?
+							"item-mall-popup-close" :
 							"item-mall-close"
 					);
 					return;
@@ -10055,7 +10097,8 @@ export function createUi( ports: UiPorts ) {
 				view?.blindHeld !== next.blindHeld
 			) dirty = true;
 			if (
-				focus === "chat-text" || focus === "gm-input" || focus === "gold-amount" || focus === "shop-quantity"
+				focus === "chat-text" || focus === "gm-input" || focus === "gold-amount" || focus === "shop-quantity" ||
+				focus === "item-mall-search"
 			) {
 				if ( !caretDue ) {
 					caretDue = now + 200;
@@ -27144,6 +27187,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				// puts the later rail in force; the row off is the native
 				// rail, and switching rails restarts browsing there.
 				itemMall.setCategoriesLater( experimental.state().saved.mallCategories );
+				// The later client's renewal window is the desktop Item Mall
+				// whenever the later import published it (renewal-mall-view.ts;
+				// owner 2026-11-20, agreed with rptlee: default, not
+				// Experimental). A build without the import keeps the classic
+				// window, and the phone reflow keeps its own layout.
+				const renewalMall = !compact ? data.renewalMall : null;
+				itemMall.setRenewal( renewalMall !== null );
+				itemMall.setNames( data.strings );
 				let state = itemMall.read( game.itemMall );
 				const root = data.windows.ifitemmall!;
 				const frame = data.root.GDR_ITEM_MALL!;
@@ -27608,456 +27659,584 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					}
 					mallButton( "item-mall-close", "Close", [ w - margin - 64, margin, 64, touch ] );
 				} else {
-					itemMall.setPageSize( 6 );
+					itemMall.setPageSize( renewalMall ? RENEWAL_GOODS_PER_PAGE : MALL_ROWS_PER_PAGE );
 					state = itemMall.read( game.itemMall );
-					nativeFrame( frame, ox, oy, hudCopy( frame.text ), "item-mall-close" );
-					nativePage( root, ox, oy );
-					// 6BC17E..6BC197 explicitly disable Buying List and Obtained List
-					// through CIFButton_SetEnabled(false), even in the retail client.
-					// Port-only (#2269): the Experimental silk history option enables
-					// Buying List (6); Obtained List (7) stays native-disabled.
-					const silkHistoryEnabled = experimental.state().saved.silkHistory;
-					for ( const node of Object.values( root ) ) {
-						if ( node.type !== "CIFButton" ) continue;
-						// Control ids are unique: the frame X already owns "item-mall-close".
-						const id = node.id === 8 ? "item-mall-close-button" : node.id === 3 ?
-							"item-mall-home" :
-							node.id === 6 && silkHistoryEnabled ?
-							"item-mall-silk-open" :
-							"item-mall-root:" + node.id;
-						authoredLabeledButton(
-							node,
-							ox,
-							oy,
-							id,
-							hudCopy( node.text ),
-							node.id === 4 || node.id === 5 ?
-								state.worn.length === 0 || state.batchPending || !!game.inventoryPending :
-								node.id === 6 ?
-								!silkHistoryEnabled :
-								node.id !== 8 && node.id !== 3
-						);
-					}
-					for ( let index = 0; index < state.categories.length; index++ ) {
-						const category = state.categories[index]!;
-						const disabled = category.key !== "basket" &&
-							!game.itemMall?.tabs.some( row => row.category === category.key );
-						const node = mallMenuControl(
-							mallControl( root, 8 ),
-							index,
-							state.category === index,
-							disabled,
-							state.categories
-						);
-						authoredLabeledButton( node, ox, oy, node.name, hudCopy( node.text ), disabled );
-						authoredImage( mallCategoryIcon( node, index, disabled, state.categories ), ox, oy );
-					}
-					const infoOrigin = mallControl( root, 90 ).rect;
-					const info = data.windows.ifitemmallmyinfo!;
-					// CIFItemMallMyInfo_OnCreate (6BDA60) always hides the money sign
-					// (5); on an English client (GameConfig +0x138 language 4, the
-					// type.txt Language this port ships) it also hides the Point row
-					// (17 box, 18 value, 19 "P", 22 caption).
-					nativePage( info, ox + infoOrigin[0], oy + infoOrigin[1], [
-						5,
-						10,
-						11,
-						12,
-						14,
-						17,
-						18,
-						19,
-						22
-					] );
-					// 6BDA60 disables Buy silk (7) and Coupon (9) only when their link
-					// strings are shorter than 5; v1.150's open retail web pages.
-					// Deliberate deviation, port-only, not native: there is no shop to
-					// link to, so both stay disabled.
-					for ( const id of [ 7, 9 ] ) {
-						const node = mallControl( info, id );
-						authoredLabeledButton(
-							node,
-							ox + infoOrigin[0],
-							oy + infoOrigin[1],
-							"item-mall-funding:" + id,
-							hudCopy( node.text ),
-							true
-						);
-					}
-					if ( game.localGid ) {
-						const picture = authoredRect( mallControl( info, 4 ), ox + infoOrigin[0], oy + infoOrigin[1] );
-						paths.push( PICTURE_CLIP_PLAYER );
-						quads.push( {
-							portraitGid: game.localGid,
-							texture: "__portrait",
-							rect: picture,
-							uv: [ 0, 0, 1, 1 ],
-							color: white,
-							clip: full,
-							mask: pictureClip( PICTURE_CLIP_PLAYER, picture )
-						}, {
-							doll: { gid: state.previewGid ?? game.localGid, yaw: 0 },
-							texture: "__doll",
-							rect: (() => {
-								const [x, y, width, height] = authoredRect( mallControl( root, 9 ), ox, oy );
-								// 6BB5BA applies the native viewport insets before its 30-degree camera.
-								return [ x + 2, y + 15, width - 2, height - 37 ];
-							})(),
-							uv: [ 0, 0, 1, 1 ],
-							color: white,
-							clip: full
+					if ( renewalMall ) {
+						const origin = renewalMallOrigin( w, h );
+						const windowRect: UiRect = [ origin[0], origin[1], RENEWAL_MALL_WIDTH, RENEWAL_MALL_HEIGHT ];
+						blocks.push( windowRect );
+						const ops = renewalMallView( {
+							data: renewalMall,
+							browse: state,
+							balance: game.itemMall,
+							character: { name: next.session?.character ?? "", level: game.progression?.level },
+							origin,
+							strings: data.strings,
+							busy: !!game.inventoryPending,
+							wearable: state.offers.map( offer =>
+								!!game.itemMall && itemMall.canWear( offer, game.itemMall )
+							),
+							searchFocused: focus === "item-mall-search"
 						} );
-					}
-					for (
-						const [id, value] of [
-							[ 10, next.session?.character ],
-							[ 11, game.progression?.level ],
-							[ 12, game.itemMall?.silk ],
-							[ 14, game.itemMall?.giftSilk ]
-						] as const
-					) {
-						authoredText(
-							mallControl( info, id ),
-							ox + infoOrigin[0],
-							oy + infoOrigin[1],
-							String( value ?? "" )
-						);
-					}
-					const trunkOrigin = mallControl( root, 102 ).rect;
-					const tx = ox + trunkOrigin[0], ty = oy + trunkOrigin[1];
-					nativePage( data.windows.ifitemmalltrunk!, tx, ty );
-					nativePage( data.windows.ifitemmallinventory!, tx, ty );
-					// 6CD535 creates 32x32 cells at (17,19), using the inventory's
-					// ordinary 32-slot pages and 36-pixel pitch. Share slot admission.
-					const mallBag = inventorySlots(
-						tx - 1,
-						ty + 6,
-						game.inventorySlotCount ?? 0,
-						game.equipmentSlotCount ?? 13,
-						state.bagPage
-					);
-					for ( const cell of mallBag.slots ) {
-						const item = game.inventory.find( row => row.slot === cell.slot );
-						const path = cell.enabled ? item && iconPath( item.icon ) : data.popupArt.blocked;
-						if ( path ) image( cell.rect, path );
-						if ( cell.enabled && item ) {
-							equipmentOverlay( item, cell.rect );
-							itemEffects( "item-mall-slot:" + cell.slot, item, cell.rect );
-							itemCount( item, cell.rect );
-							controls.push( {
-								id: "item-mall-slot:" + cell.slot,
-								label: item.name ?? "",
-								rect: cell.rect,
-								kind: "button"
-							} );
-						}
-					}
-					const selector = mallControl( data.windows.ifitemmallinventory!, 12 );
-					const expansion = data.windows.ifitemmalltrunkexpbar!;
-					for ( let index = 0; index < 3; index++ ) {
-						const position = mallControl( data.windows.ifitemmallinventory!, 51 + index ).rect;
-						const count = Math.max(
-							0,
-							Math.min(
-								32,
-								(game.inventorySlotCount ?? 0) -
-									(game.equipmentSlotCount ?? 13) - 32 * index
-							)
-						);
-						const ex = tx + position[0], ey = ty + position[1];
-						nativePage( expansion, ex, ey );
-						authoredImage(
-							{
-								...mallControl( expansion, 2 ),
-								texture: ROOT + "interface/mall/mall_inven_icon" + (count > 0 ? "" : "_disable") +
-									".png"
-							},
-							ex,
-							ey
-						);
-						const spaces = mallControl( expansion, 3 ),
-							icon = mallControl( expansion, 2 ),
-							spacesText = count > 0 ?
-								hudCopy( "UIIT_STT_SILKMALL_REMAIN_INVENTORY" ).replace( "%d", String( count ) ) :
-								hudCopy( "UIIT_STT_NONE" ),
-							bar = mallControl( expansion, 1 ),
-							spacesLeft = ex + icon.rect[0] + icon.rect[2] + MALL_SPACES_GAP,
-							spacesRight = ex + bar.rect[0] + bar.rect[2] - MALL_BAR_BEVEL;
-						// GDR_ITEM_MALL_TRUNK_EXP_NUM right-aligns "32 spaces" (58
-						// pixels) in 31, over the bag icon on its left. Port-only, not
-						// native (Experimental "Fit window labels"): the count is laid
-						// between the icon and the bar art's bevel, on the icon's
-						// height ("32" over "spaces" in the narrow face).
-						if (
-							!frameDraw.fittedLabel( drawFrame, {
-								node: spaces,
-								room: [ spacesLeft, ey + icon.rect[1], spacesRight - spacesLeft, icon.rect[3] ],
-								values: [ spacesText ]
-							} )
-						) authoredText( spaces, ex, ey, spacesText );
-					}
-					const spin = data.windows.ifspincontrol!;
-					const spinX = tx + selector.rect[0], spinY = ty + selector.rect[1];
-					authoredText( mallControl( spin, 0 ), spinX, spinY, String( mallBag.page + 1 ) );
-					for ( const [id, delta] of [ [ 1, -1 ], [ 2, 1 ] ] as const ) {
-						const page = mallBag.page + delta;
-						authoredButton(
-							mallControl( spin, id ),
-							spinX,
-							spinY,
-							"item-mall-bag-page:" + page,
-							"",
-							page < 0 || page >= mallBag.pages
-						);
-					}
-					const shopOrigin = mallControl( root, 50 ).rect;
-					const shop = data.windows.ifitemmallshop!;
-					for ( const node of authoredPaintOrder( shop ) ) {
-						if (
-							state.silk.open ?
-								node.creationSection === 3 || node.creationSection === 4 ||
-								node.creationSection === 5 || node.creationSection === 9 :
-								node.creationSection === 0 || state.category === -1 && node.creationSection === 2
-						) {
-							authoredChrome( node, ox + shopOrigin[0], oy + shopOrigin[1] );
-						}
-					}
-
-					const sx = ox + shopOrigin[0], sy = oy + shopOrigin[1];
-					if ( state.silk.open ) {
-						// Port-only (#2269): the Buying list page. CIFSilkBuyList's
-						// OnCreate (0x6CED10) builds these same sections but never
-						// fills a row; the rows are the worker's recorded-history
-						// publication for the selected period.
-						const history = game.itemMallSilkHistory;
-						const shown = history?.period === state.silk.period ? history : undefined;
-						authoredChrome(
-							{ ...mallControl( shop, 40 ), text: "UIIT_STT_SILK_INQUIRY_MONTH_SILK" },
-							sx,
-							sy
-						);
-						authoredText( mallControl( shop, 30 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_NUMBER" ) );
-						authoredText( mallControl( shop, 31 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_CHARGE_SILK" ) );
-						authoredText( mallControl( shop, 32 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_DATE" ) );
-						authoredText(
-							mallControl( shop, 36 ),
-							sx,
-							sy,
-							shown?.pending ?
-								hudCopy( "UIIT_MSG_SILK_INQUIRY_WAIT" ) :
-								shown && shown.rows.length === 0 ?
-								hudCopy( "UIIT_MSG_SILK_INQUIRY_NOT_INQUIRY" ) :
-								""
-						);
-						authoredText(
-							mallControl( shop, 26 ),
-							sx,
-							sy,
-							shown ? `${shown.total}${hudCopy( "UIIT_STT_ROLL_OF_CLOTH" )}` : ""
-						);
-						if ( shown ) {
-							// The layout authors fourteen row bars (80..93 at y=189,
-							// step 23); the newest recorded uses fill them in order.
-							for ( let index = 0; index < Math.min( shown.rows.length, 14 ); index++ ) {
-								const row = shown.rows[index]!, y = sy + 189 + index * 23;
-								quads.push(
-									...text.quads( String( index + 1 ), [ sx + 24, y, 50, 24 ], full, white, {
-										hAlign: 1,
-										vAlign: 1
-									} ),
-									...text.quads( String( row.charged ), [ sx + 74, y, 146, 24 ], full, white, {
-										hAlign: 1,
-										vAlign: 1
-									} ),
-									...text.quads(
-										mallSilkHistoryDate( row.at ),
-										[ sx + 220, y, 154, 24 ],
-										full,
-										white,
-										{ hAlign: 1, vAlign: 1 }
-									)
+						paths.push( ...renewalMallPictures( ops, PARTS ) );
+						for ( const op of ops ) {
+							if ( op.kind === "frame" ) {
+								const sizes = PARTS.map( part => resources.size( op.prefix + part + ".png" ) );
+								quads.push( ...frameRing( op.rect, op.prefix, sizes, full ) );
+							} else if ( op.kind === "image" ) {
+								image( op.rect, op.path );
+							} else if ( op.kind === "tile" ) {
+								quads.push( ...normalTile( op.rect, op.path, resources.size( op.path ), full ) );
+							} else if ( op.kind === "icon" ) {
+								const icon = iconPath( op.icon );
+								if ( icon ) image( op.rect, icon );
+							} else if ( op.kind === "text" && op.wrap ) {
+								// A card's name: broken by the drawn runs' own widths into
+								// the box's two lines (renewalNameLayout), the second cut
+								// with "..." when more remain. Never wider than the box; the
+								// clip lets the second line's descenders finish below it.
+								const name = renewalNameLayout(
+									textLines( op.value, op.rect[2], value => text.run( value ).width ),
+									op.rect[3]
 								);
-							}
-						}
-						authoredLabeledButton(
-							mallControl( shop, 28 ),
-							sx,
-							sy,
-							"item-mall-silk-inquire",
-							hudCopy( "UIIT_CTL_SILK_INQUIRY" ),
-							!!shown?.pending || !!game.inventoryPending
-						);
-						const combo = authoredRect( mallControl( shop, 70 ), sx, sy );
-						comboBox(
-							combo,
-							"item-mall-silk-combo",
-							hudCopy( "UIIT_STT_SILK_INQUIRY_PERIOD" ),
-							hudCopy( mallSilkPeriodTexts[state.silk.period]! )
-						);
-						if ( state.silk.comboOpen ) {
-							const list: UiRect = [
-								combo[0],
-								combo[1] + combo[3],
-								combo[2],
-								mallSilkPeriodTexts.length * 18
-							];
-							rect( list, [ 0, 0, 0, 1 ] );
-							blocks.push( list );
-							for ( let index = 0; index < mallSilkPeriodTexts.length; index++ ) {
-								const cell: UiRect = [ list[0], list[1] + index * 18, list[2], 18 ];
-								if ( index === state.silk.period ) rect( cell, [ .2, .25, .3, 1 ] );
-								quads.push(
-									...text.quads(
-										hudCopy( mallSilkPeriodTexts[index]! ),
-										[ cell[0] + 4, cell[1], cell[2] - 8, cell[3] ],
-										cell,
-										white
-									)
-								);
+								const nameClip: UiRect = [
+									op.rect[0],
+									op.rect[1],
+									op.rect[2],
+									op.rect[3] + RENEWAL_NAME_DESCENT
+								];
+								name.lines.forEach( ( line, index ) => {
+									const lineRect: UiRect = [
+										op.rect[0],
+										op.rect[1] + index * name.pitch,
+										op.rect[2],
+										name.pitch
+									];
+									quads.push( ...text.quads( line, lineRect, nameClip, op.color, {
+										fontIndex: 0,
+										hAlign: op.hAlign,
+										vAlign: 0,
+										overflow: "ellipsis"
+									} ) );
+								} );
+							} else if ( op.kind === "text" ) {
+								// A caption: one line, centred as asked, cut with "...".
+								quads.push( ...text.quads( op.value, op.rect, op.rect, op.color, {
+									fontIndex: 0,
+									hAlign: op.hAlign,
+									vAlign: op.vAlign,
+									overflow: "ellipsis"
+								} ) );
+							} else if ( op.kind === "button" ) {
+								if ( op.texture ) image( op.rect, op.texture, op.disabled ? RENEWAL_DISABLED : white );
 								controls.push( {
-									id: "item-mall-silk-period:" + index,
-									label: hudCopy( mallSilkPeriodTexts[index]! ),
-									rect: cell,
+									id: op.id,
+									label: op.label,
+									rect: op.rect,
 									kind: "button",
-									selected: index === state.silk.period
+									disabled: op.disabled
+								} );
+							} else if ( op.kind === "edit" ) {
+								controls.push( {
+									id: op.id,
+									label: op.label,
+									rect: op.rect,
+									kind: "text",
+									value: op.value,
+									maxLength: op.maxLength
+								} );
+								// The focused field's blinking caret, after its text and
+								// centred on its line, as every single-line edit draws it.
+								if ( focus === op.id && caretVisible ) {
+									const box = op.textRect, lineHeight = text.extentHeight( 0 );
+									const caretX = Math.min(
+										box[0] + box[2] - EDIT_CARET_WIDTH,
+										box[0] + text.run( op.value ).width
+									);
+									const caretY = box[1] + Math.floor( (box[3] - lineHeight) / 2 );
+									rect(
+										[ caretX, caretY, EDIT_CARET_WIDTH, lineHeight ],
+										white,
+										"",
+										[ 0, 0, 1, 1 ],
+										box
+									);
+								}
+							} else if ( game.localGid ) {
+								quads.push( {
+									doll: { gid: state.previewGid ?? game.localGid, yaw: 0 },
+									texture: "__doll",
+									rect: op.rect,
+									uv: [ 0, 0, 1, 1 ],
+									color: white,
+									clip: full
 								} );
 							}
 						}
+						closeButton( origin[0] + RENEWAL_MALL_WIDTH - 26, origin[1] + 10, "item-mall-close" );
 					} else {
-						const currentTab = state.tabs[state.tab];
-						// Port-only (#3257): the later rail's search field
-						// stands where the subtitle stands while browsing.
-						const searching = state.categoriesLater && state.category >= 0 &&
-							state.categories[state.category]?.key !== "basket";
-						const description = state.category === -1 ?
-							"UIIT_STT_SILKMALL_MAIN_INTRO" :
-							state.categories[state.category]?.key === "basket" ?
-							"UIIT_STT_SILKMALL_MAIN_ZZIM_SUB_TITLE_ZZIM" :
-							currentTab ?
-							mallDescription( currentTab.category, currentTab.tab ) :
-							"";
-						if ( searching ) {
-							rect( [ sx + 26, sy + 39, 363, 32 ], [ .02, .025, .03, 1 ] );
-							if ( !state.search ) {
-								quads.push( ...text.quads( "Search", [ sx + 30, sy + 47, 355, 16 ], full, white, {
-									hAlign: 0,
-									vAlign: 0
-								} ) );
-							}
-							controls.push( {
-								id: "item-mall-search",
-								label: "Search",
-								kind: "text",
-								rect: [ sx + 26, sy + 39, 363, 32 ],
-								value: state.search,
-								maxLength: 32,
-								disabled: state.batchPending || !!game.inventoryPending
-							} );
-						} else {
-							authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
+						nativeFrame( frame, ox, oy, hudCopy( frame.text ), "item-mall-close" );
+						nativePage( root, ox, oy );
+						// 6BC17E..6BC197 explicitly disable Buying List and Obtained List
+						// through CIFButton_SetEnabled(false), even in the retail client.
+						// Port-only (#2269): the Experimental silk history option enables
+						// Buying List (6); Obtained List (7) stays native-disabled.
+						const silkHistoryEnabled = experimental.state().saved.silkHistory;
+						for ( const node of Object.values( root ) ) {
+							if ( node.type !== "CIFButton" ) continue;
+							// Control ids are unique: the frame X already owns "item-mall-close".
+							const id = node.id === 8 ? "item-mall-close-button" : node.id === 3 ?
+								"item-mall-home" :
+								node.id === 6 && silkHistoryEnabled ?
+								"item-mall-silk-open" :
+								"item-mall-root:" + node.id;
+							authoredLabeledButton(
+								node,
+								ox,
+								oy,
+								id,
+								hudCopy( node.text ),
+								node.id === 4 || node.id === 5 ?
+									state.worn.length === 0 || state.batchPending || !!game.inventoryPending :
+									node.id === 6 ?
+									!silkHistoryEnabled :
+									node.id !== 8 && node.id !== 3
+							);
 						}
-						if ( state.category === -1 ) {
+						for ( let index = 0; index < state.categories.length; index++ ) {
+							const category = state.categories[index]!;
+							const disabled = category.key !== "basket" &&
+								!game.itemMall?.tabs.some( row => row.category === category.key );
+							const node = mallMenuControl(
+								mallControl( root, 8 ),
+								index,
+								state.category === index,
+								disabled,
+								state.categories
+							);
+							authoredLabeledButton( node, ox, oy, node.name, hudCopy( node.text ), disabled );
+							authoredImage( mallCategoryIcon( node, index, disabled, state.categories ), ox, oy );
+						}
+						const infoOrigin = mallControl( root, 90 ).rect;
+						const info = data.windows.ifitemmallmyinfo!;
+						// CIFItemMallMyInfo_OnCreate (6BDA60) always hides the money sign
+						// (5); on an English client (GameConfig +0x138 language 4, the
+						// type.txt Language this port ships) it also hides the Point row
+						// (17 box, 18 value, 19 "P", 22 caption).
+						nativePage( info, ox + infoOrigin[0], oy + infoOrigin[1], [
+							5,
+							10,
+							11,
+							12,
+							14,
+							17,
+							18,
+							19,
+							22
+						] );
+						// 6BDA60 disables Buy silk (7) and Coupon (9) only when their link
+						// strings are shorter than 5; v1.150's open retail web pages.
+						// Deliberate deviation, port-only, not native: there is no shop to
+						// link to, so both stay disabled.
+						for ( const id of [ 7, 9 ] ) {
+							const node = mallControl( info, id );
+							authoredLabeledButton(
+								node,
+								ox + infoOrigin[0],
+								oy + infoOrigin[1],
+								"item-mall-funding:" + id,
+								hudCopy( node.text ),
+								true
+							);
+						}
+						if ( game.localGid ) {
+							const picture = authoredRect(
+								mallControl( info, 4 ),
+								ox + infoOrigin[0],
+								oy + infoOrigin[1]
+							);
+							paths.push( PICTURE_CLIP_PLAYER );
+							quads.push( {
+								portraitGid: game.localGid,
+								texture: "__portrait",
+								rect: picture,
+								uv: [ 0, 0, 1, 1 ],
+								color: white,
+								clip: full,
+								mask: pictureClip( PICTURE_CLIP_PLAYER, picture )
+							}, {
+								doll: { gid: state.previewGid ?? game.localGid, yaw: 0 },
+								texture: "__doll",
+								rect: (() => {
+									const [x, y, width, height] = authoredRect( mallControl( root, 9 ), ox, oy );
+									// 6BB5BA applies the native viewport insets before its 30-degree camera.
+									return [ x + 2, y + 15, width - 2, height - 37 ];
+								})(),
+								uv: [ 0, 0, 1, 1 ],
+								color: white,
+								clip: full
+							} );
+						}
+						for (
+							const [id, value] of [
+								[ 10, next.session?.character ],
+								[ 11, game.progression?.level ],
+								[ 12, game.itemMall?.silk ],
+								[ 14, game.itemMall?.giftSilk ]
+							] as const
+						) {
+							authoredText(
+								mallControl( info, id ),
+								ox + infoOrigin[0],
+								oy + infoOrigin[1],
+								String( value ?? "" )
+							);
+						}
+						const trunkOrigin = mallControl( root, 102 ).rect;
+						const tx = ox + trunkOrigin[0], ty = oy + trunkOrigin[1];
+						nativePage( data.windows.ifitemmalltrunk!, tx, ty );
+						nativePage( data.windows.ifitemmallinventory!, tx, ty );
+						// 6CD535 creates 32x32 cells at (17,19), using the inventory's
+						// ordinary 32-slot pages and 36-pixel pitch. Share slot admission.
+						const mallBag = inventorySlots(
+							tx - 1,
+							ty + 6,
+							game.inventorySlotCount ?? 0,
+							game.equipmentSlotCount ?? 13,
+							state.bagPage
+						);
+						for ( const cell of mallBag.slots ) {
+							const item = game.inventory.find( row => row.slot === cell.slot );
+							const path = cell.enabled ? item && iconPath( item.icon ) : data.popupArt.blocked;
+							if ( path ) image( cell.rect, path );
+							if ( cell.enabled && item ) {
+								equipmentOverlay( item, cell.rect );
+								itemEffects( "item-mall-slot:" + cell.slot, item, cell.rect );
+								itemCount( item, cell.rect );
+								controls.push( {
+									id: "item-mall-slot:" + cell.slot,
+									label: item.name ?? "",
+									rect: cell.rect,
+									kind: "button"
+								} );
+							}
+						}
+						const selector = mallControl( data.windows.ifitemmallinventory!, 12 );
+						const expansion = data.windows.ifitemmalltrunkexpbar!;
+						for ( let index = 0; index < 3; index++ ) {
+							const position = mallControl( data.windows.ifitemmallinventory!, 51 + index ).rect;
+							const count = Math.max(
+								0,
+								Math.min(
+									32,
+									(game.inventorySlotCount ?? 0) -
+										(game.equipmentSlotCount ?? 13) - 32 * index
+								)
+							);
+							const ex = tx + position[0], ey = ty + position[1];
+							nativePage( expansion, ex, ey );
+							authoredImage(
+								{
+									...mallControl( expansion, 2 ),
+									texture: ROOT + "interface/mall/mall_inven_icon" + (count > 0 ? "" : "_disable") +
+										".png"
+								},
+								ex,
+								ey
+							);
+							const spaces = mallControl( expansion, 3 ),
+								icon = mallControl( expansion, 2 ),
+								spacesText = count > 0 ?
+									hudCopy( "UIIT_STT_SILKMALL_REMAIN_INVENTORY" ).replace( "%d", String( count ) ) :
+									hudCopy( "UIIT_STT_NONE" ),
+								bar = mallControl( expansion, 1 ),
+								spacesLeft = ex + icon.rect[0] + icon.rect[2] + MALL_SPACES_GAP,
+								spacesRight = ex + bar.rect[0] + bar.rect[2] - MALL_BAR_BEVEL;
+							// GDR_ITEM_MALL_TRUNK_EXP_NUM right-aligns "32 spaces" (58
+							// pixels) in 31, over the bag icon on its left. Port-only, not
+							// native (Experimental "Fit window labels"): the count is laid
+							// between the icon and the bar art's bevel, on the icon's
+							// height ("32" over "spaces" in the narrow face).
+							if (
+								!frameDraw.fittedLabel( drawFrame, {
+									node: spaces,
+									room: [ spacesLeft, ey + icon.rect[1], spacesRight - spacesLeft, icon.rect[3] ],
+									values: [ spacesText ]
+								} )
+							) authoredText( spaces, ex, ey, spacesText );
+						}
+						const spin = data.windows.ifspincontrol!;
+						const spinX = tx + selector.rect[0], spinY = ty + selector.rect[1];
+						authoredText( mallControl( spin, 0 ), spinX, spinY, String( mallBag.page + 1 ) );
+						for ( const [id, delta] of [ [ 1, -1 ], [ 2, 1 ] ] as const ) {
+							const page = mallBag.page + delta;
+							authoredButton(
+								mallControl( spin, id ),
+								spinX,
+								spinY,
+								"item-mall-bag-page:" + page,
+								"",
+								page < 0 || page >= mallBag.pages
+							);
+						}
+						const shopOrigin = mallControl( root, 50 ).rect;
+						const shop = data.windows.ifitemmallshop!;
+						for ( const node of authoredPaintOrder( shop ) ) {
+							if (
+								state.silk.open ?
+									node.creationSection === 3 || node.creationSection === 4 ||
+									node.creationSection === 5 || node.creationSection === 9 :
+									node.creationSection === 0 || state.category === -1 && node.creationSection === 2
+							) {
+								authoredChrome( node, ox + shopOrigin[0], oy + shopOrigin[1] );
+							}
+						}
+
+						const sx = ox + shopOrigin[0], sy = oy + shopOrigin[1];
+						if ( state.silk.open ) {
+							// Port-only (#2269): the Buying list page. CIFSilkBuyList's
+							// OnCreate (0x6CED10) builds these same sections but never
+							// fills a row; the rows are the worker's recorded-history
+							// publication for the selected period.
+							const history = game.itemMallSilkHistory;
+							const shown = history?.period === state.silk.period ? history : undefined;
 							authoredChrome(
-								{ ...mallControl( shop, 53 ), text: "UIIT_STT_SILKMALL_MAIN_EXPLAIN" },
+								{ ...mallControl( shop, 40 ), text: "UIIT_STT_SILK_INQUIRY_MONTH_SILK" },
 								sx,
 								sy
 							);
-						}
-						if ( state.categories[state.category]?.key === "basket" ) {
-							const tab = mallTabControl( mallControl( root, 8 ), 0, true );
-							authoredLabeledButton( tab, sx, sy, tab.name, hudCopy( "UIIT_STT_SILKMALL_ZZIM" ) );
-							const buyAll = mallControl( shop, 42 );
-							authoredLabeledButton(
-								buyAll,
+							authoredText( mallControl( shop, 30 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_NUMBER" ) );
+							authoredText(
+								mallControl( shop, 31 ),
 								sx,
 								sy,
-								"item-mall-buy-all",
-								hudCopy( buyAll.text ),
-								state.count === 0 || state.batchPending || !!game.inventoryPending
+								hudCopy( "UIIT_STT_SILK_INQUIRY_CHARGE_SILK" )
 							);
-						}
-						if ( state.category >= 0 ) {
-							for ( let index = 0; index < state.tabs.length; index++ ) {
-								const tab = state.tabs[index]!;
-								const control = mallTabControl( mallControl( root, 8 ), index, index === state.tab );
-								const caption = state.categoriesLater ?
-									(mallTabCaptionLater( tab.category, index ) ?? hudCopy( tab.label )) :
-									hudCopy( tab.label );
-								authoredLabeledButton( control, sx, sy, control.name, caption );
-							}
-							pageManager(
-								mallControl( shop, 74 ).rect,
+							authoredText( mallControl( shop, 32 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_DATE" ) );
+							authoredText(
+								mallControl( shop, 36 ),
 								sx,
 								sy,
-								state.page,
-								mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count ).pages,
-								"item-mall-page:"
+								shown?.pending ?
+									hudCopy( "UIIT_MSG_SILK_INQUIRY_WAIT" ) :
+									shown && shown.rows.length === 0 ?
+									hudCopy( "UIIT_MSG_SILK_INQUIRY_NOT_INQUIRY" ) :
+									""
 							);
-
-							const row = data.windows.ifitemmallshopslot!;
-							for ( let index = 0; index < MALL_ROWS_PER_PAGE; index++ ) {
-								const offer = state.offers[index];
-								const origin = mallControl( shop, 61 + index ).rect;
-								const rx = sx + origin[0], ry = sy + origin[1];
-								if ( !offer ) {
-									// CIFItemMallShopSlot_ApplyVisibilityAndButtonStates (6C9420):
-									// an empty slot hides its bar, name, price, silk mark, icon and
-									// buttons, but the slot and its background (50) stay.
-									authoredChrome( mallControl( row, 50 ), rx, ry );
-									continue;
+							authoredText(
+								mallControl( shop, 26 ),
+								sx,
+								sy,
+								shown ? `${shown.total}${hudCopy( "UIIT_STT_ROLL_OF_CLOTH" )}` : ""
+							);
+							if ( shown ) {
+								// The layout authors fourteen row bars (80..93 at y=189,
+								// step 23); the newest recorded uses fill them in order.
+								for ( let index = 0; index < Math.min( shown.rows.length, 14 ); index++ ) {
+									const row = shown.rows[index]!, y = sy + 189 + index * 23;
+									quads.push(
+										...text.quads( String( index + 1 ), [ sx + 24, y, 50, 24 ], full, white, {
+											hAlign: 1,
+											vAlign: 1
+										} ),
+										...text.quads( String( row.charged ), [ sx + 74, y, 146, 24 ], full, white, {
+											hAlign: 1,
+											vAlign: 1
+										} ),
+										...text.quads(
+											mallSilkHistoryDate( row.at ),
+											[ sx + 220, y, 154, 24 ],
+											full,
+											white,
+											{ hAlign: 1, vAlign: 1 }
+										)
+									);
 								}
-								nativePage( row, rx, ry, [ 8, 10, 11 ] );
-								authoredText( mallControl( row, 11 ), rx, ry, hudCopy( offer.name ) );
-								authoredText( mallControl( row, 10 ), rx, ry, String( offer.silk ) );
-								authoredText( mallControl( row, 8 ), rx, ry, hudCopy( "UIIT_STT_SILKMALL_SILK" ) );
-								const icon = iconPath( offer.icon );
-								if ( icon ) authoredImage( { ...mallControl( row, 1 ), texture: icon }, rx, ry );
-								const mark = state.categoriesLater ? mallBadgeMark( offer.badge ) : undefined;
-								if ( mark ) {
-									const iconRect = authoredRect( mallControl( row, 1 ), rx, ry );
-									const chip: UiRect = [ iconRect[0] + iconRect[2] - 12, iconRect[1], 12, 12 ];
-									rect( chip, mark.color );
-									quads.push( ...text.quads(
-										mark.letter,
-										[
-											chip[0],
-											chip[1] + 1,
-											chip[2],
-											chip[3] - 2
-										],
-										full,
-										white,
-										{ hAlign: 1, vAlign: 1 }
-									) );
+							}
+							authoredLabeledButton(
+								mallControl( shop, 28 ),
+								sx,
+								sy,
+								"item-mall-silk-inquire",
+								hudCopy( "UIIT_CTL_SILK_INQUIRY" ),
+								!!shown?.pending || !!game.inventoryPending
+							);
+							const combo = authoredRect( mallControl( shop, 70 ), sx, sy );
+							comboBox(
+								combo,
+								"item-mall-silk-combo",
+								hudCopy( "UIIT_STT_SILK_INQUIRY_PERIOD" ),
+								hudCopy( mallSilkPeriodTexts[state.silk.period]! )
+							);
+							if ( state.silk.comboOpen ) {
+								const list: UiRect = [
+									combo[0],
+									combo[1] + combo[3],
+									combo[2],
+									mallSilkPeriodTexts.length * 18
+								];
+								rect( list, [ 0, 0, 0, 1 ] );
+								blocks.push( list );
+								for ( let index = 0; index < mallSilkPeriodTexts.length; index++ ) {
+									const cell: UiRect = [ list[0], list[1] + index * 18, list[2], 18 ];
+									if ( index === state.silk.period ) rect( cell, [ .2, .25, .3, 1 ] );
+									quads.push(
+										...text.quads(
+											hudCopy( mallSilkPeriodTexts[index]! ),
+											[ cell[0] + 4, cell[1], cell[2] - 8, cell[3] ],
+											cell,
+											white
+										)
+									);
+									controls.push( {
+										id: "item-mall-silk-period:" + index,
+										label: hudCopy( mallSilkPeriodTexts[index]! ),
+										rect: cell,
+										kind: "button",
+										selected: index === state.silk.period
+									} );
+								}
+							}
+						} else {
+							const currentTab = state.tabs[state.tab];
+							// Port-only (#3257): the later rail's search field
+							// stands where the subtitle stands while browsing.
+							const searching = state.categoriesLater && state.category >= 0 &&
+								state.categories[state.category]?.key !== "basket";
+							const description = state.category === -1 ?
+								"UIIT_STT_SILKMALL_MAIN_INTRO" :
+								state.categories[state.category]?.key === "basket" ?
+								"UIIT_STT_SILKMALL_MAIN_ZZIM_SUB_TITLE_ZZIM" :
+								currentTab ?
+								mallDescription( currentTab.category, currentTab.tab ) :
+								"";
+							if ( searching ) {
+								rect( [ sx + 26, sy + 39, 363, 32 ], [ .02, .025, .03, 1 ] );
+								if ( !state.search ) {
+									quads.push( ...text.quads( "Search", [ sx + 30, sy + 47, 355, 16 ], full, white, {
+										hAlign: 0,
+										vAlign: 0
+									} ) );
 								}
 								controls.push( {
-									id: "item-mall-offer:" + offer.packageId,
-									label: hudCopy( offer.name ),
-									rect: authoredRect( mallControl( row, 1 ), rx, ry ),
-									kind: "button"
+									id: "item-mall-search",
+									label: "Search",
+									kind: "text",
+									rect: [ sx + 26, sy + 39, 363, 32 ],
+									value: state.search,
+									maxLength: 32,
+									disabled: state.batchPending || !!game.inventoryPending
 								} );
-								for ( const node of Object.values( row ) ) {
-									if ( node.type !== "CIFButton" ) continue;
-									const action = node.id === 3 ? "item-mall-wear:" + index : node.id === 4 ?
-										"item-mall-buy:" + index :
-										node.id === 6 ?
-										"item-mall-reserve:" + index :
-										"item-mall-row:" + index + ":" + node.id;
-									authoredLabeledButton(
-										node,
-										rx,
-										ry,
-										action,
-										hudCopy(
-											node.id === 6 && state.categories[state.category]?.key === "basket" ?
-												"UIIT_STT_SILKMALL_DEL" :
-												node.text
-										),
-										(node.id === 3 ?
-											!game.itemMall || !itemMall.wearEnabled( offer, game.itemMall ) :
-											node.id !== 4 && node.id !== 6) ||
-											!!game.inventoryPending || state.batchPending
+							} else {
+								authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
+							}
+							if ( state.category === -1 ) {
+								authoredChrome(
+									{ ...mallControl( shop, 53 ), text: "UIIT_STT_SILKMALL_MAIN_EXPLAIN" },
+									sx,
+									sy
+								);
+							}
+							if ( state.categories[state.category]?.key === "basket" ) {
+								const tab = mallTabControl( mallControl( root, 8 ), 0, true );
+								authoredLabeledButton( tab, sx, sy, tab.name, hudCopy( "UIIT_STT_SILKMALL_ZZIM" ) );
+								const buyAll = mallControl( shop, 42 );
+								authoredLabeledButton(
+									buyAll,
+									sx,
+									sy,
+									"item-mall-buy-all",
+									hudCopy( buyAll.text ),
+									state.count === 0 || state.batchPending || !!game.inventoryPending
+								);
+							}
+							if ( state.category >= 0 ) {
+								for ( let index = 0; index < state.tabs.length; index++ ) {
+									const tab = state.tabs[index]!;
+									const control = mallTabControl(
+										mallControl( root, 8 ),
+										index,
+										index === state.tab
 									);
+									const caption = state.categoriesLater ?
+										(mallTabCaptionLater( tab.category, index ) ?? hudCopy( tab.label )) :
+										hudCopy( tab.label );
+									authoredLabeledButton( control, sx, sy, control.name, caption );
+								}
+								pageManager(
+									mallControl( shop, 74 ).rect,
+									sx,
+									sy,
+									state.page,
+									mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count ).pages,
+									"item-mall-page:"
+								);
+
+								const row = data.windows.ifitemmallshopslot!;
+								for ( let index = 0; index < MALL_ROWS_PER_PAGE; index++ ) {
+									const offer = state.offers[index];
+									const origin = mallControl( shop, 61 + index ).rect;
+									const rx = sx + origin[0], ry = sy + origin[1];
+									if ( !offer ) {
+										// CIFItemMallShopSlot_ApplyVisibilityAndButtonStates (6C9420):
+										// an empty slot hides its bar, name, price, silk mark, icon and
+										// buttons, but the slot and its background (50) stay.
+										authoredChrome( mallControl( row, 50 ), rx, ry );
+										continue;
+									}
+									nativePage( row, rx, ry, [ 8, 10, 11 ] );
+									authoredText( mallControl( row, 11 ), rx, ry, hudCopy( offer.name ) );
+									authoredText( mallControl( row, 10 ), rx, ry, String( offer.silk ) );
+									authoredText( mallControl( row, 8 ), rx, ry, hudCopy( "UIIT_STT_SILKMALL_SILK" ) );
+									const icon = iconPath( offer.icon );
+									if ( icon ) authoredImage( { ...mallControl( row, 1 ), texture: icon }, rx, ry );
+									const mark = state.categoriesLater ? mallBadgeMark( offer.badge ) : undefined;
+									if ( mark ) {
+										const iconRect = authoredRect( mallControl( row, 1 ), rx, ry );
+										const chip: UiRect = [ iconRect[0] + iconRect[2] - 12, iconRect[1], 12, 12 ];
+										rect( chip, mark.color );
+										quads.push( ...text.quads(
+											mark.letter,
+											[
+												chip[0],
+												chip[1] + 1,
+												chip[2],
+												chip[3] - 2
+											],
+											full,
+											white,
+											{ hAlign: 1, vAlign: 1 }
+										) );
+									}
+									controls.push( {
+										id: "item-mall-offer:" + offer.packageId,
+										label: hudCopy( offer.name ),
+										rect: authoredRect( mallControl( row, 1 ), rx, ry ),
+										kind: "button"
+									} );
+									for ( const node of Object.values( row ) ) {
+										if ( node.type !== "CIFButton" ) continue;
+										const action = node.id === 3 ? "item-mall-wear:" + index : node.id === 4 ?
+											"item-mall-buy:" + index :
+											node.id === 6 ?
+											"item-mall-reserve:" + index :
+											"item-mall-row:" + index + ":" + node.id;
+										authoredLabeledButton(
+											node,
+											rx,
+											ry,
+											action,
+											hudCopy(
+												node.id === 6 && state.categories[state.category]?.key === "basket" ?
+													"UIIT_STT_SILKMALL_DEL" :
+													node.text
+											),
+											(node.id === 3 ?
+												!game.itemMall || !itemMall.wearEnabled( offer, game.itemMall ) :
+												node.id !== 4 && node.id !== 6) ||
+												!!game.inventoryPending || state.batchPending
+										);
+									}
 								}
 							}
 						}
@@ -28690,10 +28869,15 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								undefined
 						),
 						item = items[0];
-					if ( id.startsWith( "item-mall-offer:" ) ) {
-						const offer = game.itemMall?.offers.find( row =>
-							row.packageId === Number( id.slice( "item-mall-offer:".length ) )
-						);
+					if ( id.startsWith( "item-mall-offer:" ) || id.startsWith( "item-mall-popup:" ) ) {
+						// The classic row's icon names its package; a renewal card
+						// names its place on the page (renewal-mall-view.ts).
+						const offer = id.startsWith( "item-mall-offer:" ) ?
+							game.itemMall?.offers.find( row =>
+								row.packageId === Number( id.slice( "item-mall-offer:".length ) )
+							) :
+							game.itemMall &&
+							itemMall.read( game.itemMall ).offers[Number( id.slice( "item-mall-popup:".length ) )];
 						if ( offer ) {
 							tooltip = [
 								{ value: lookup( offer.name ), color: 0xffffffff, heading: true },
