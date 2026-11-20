@@ -161,3 +161,36 @@ BUILD_STATE_ROOT = resolve_build_state_root()
 # ================
 def build_state_path(*parts) -> Path:
 	return BUILD_STATE_ROOT.joinpath(*parts)
+
+
+SHARED_CACHE_ROOT_ENV = "SRO_SHARED_CACHE_ROOT"
+
+
+# ================
+# resolve_shared_cache_root
+#
+# The folder the content-named caches share across trees and releases
+# (generatedRoot.mjs resolveSharedCacheRoot, the same contract), or None
+# when SRO_SHARED_CACHE_ROOT is unset. Like the generated root, it must be
+# absolute.
+# ================
+def resolve_shared_cache_root(env=os.environ) -> Path | None:
+	override = env.get(SHARED_CACHE_ROOT_ENV)
+	if not override:
+		return None
+	if not Path(override).is_absolute():
+		raise SystemExit(f"{SHARED_CACHE_ROOT_ENV} must be an absolute path, not {override!r}")
+	return Path(override).resolve()
+
+
+# ================
+# shared_cache_path
+#
+# Where a content-named cache lives (generatedRoot.mjs sharedCachePath):
+# name under the shared cache root when one is set, else under this tree's
+# build state. Only a cache whose entries are named by the content they
+# hold may come here: two trees then read the same answer for the same key.
+# ================
+def shared_cache_path(name: str, env=os.environ) -> Path:
+	root = resolve_shared_cache_root(env)
+	return root / name if root is not None else build_state_path(name)
