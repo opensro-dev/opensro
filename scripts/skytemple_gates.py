@@ -33,6 +33,8 @@ together, so a rebuild authors the same chain the marker recorded.
 ===========================================================================
 """
 import cap110_monsters as monsters
+from arabia_gates import renumbered_buildings
+import variant_gates
 
 # The fields are outdoor regions of the default world; the population
 # (skytemple_import.build_population) names the same world in its rows.
@@ -106,13 +108,13 @@ def prepare_gates(later, native_data, current_ids, current_building_ids, d_arriv
 	else:
 		teleport_ids = {row[1]: row[1] for row in source_data}
 		d_teleport_id = str(max([int(i) for i in current_ids if i.isdigit()] + [int(r[1]) for r in source_data]) + 1)
-	if any(bid in current_building_ids for bid in source_building_ids):
-		base = max([int(i) for i in current_building_ids if i.isdigit()] + [0]) + 1
-		building_ids = {bid: str(base + at) for at, bid in enumerate(source_building_ids)}
-		d_building_id = str(base + len(source_building_ids))
-	else:
-		building_ids = {bid: bid for bid in source_building_ids}
-		d_building_id = str(max([int(i) for i in current_building_ids if i.isdigit()] + [int(b) for b in source_building_ids]) + 1)
+	# Buildings keep their source ids unless an object holds one or it is
+	# past the server's band; the authored D building takes a free id under
+	# the limit (variant_gates.free_building_ids), never "highest + 1",
+	# which lands on the later imports' items and pets.
+	building_ids = renumbered_buildings(source_building_ids, current_building_ids)
+	taken = {int(i) for i in current_building_ids if i.isdigit()} | {int(i) for i in building_ids.values()}
+	d_building_id = str(variant_gates.free_building_ids(taken, 1)[0])
 
 	# The source entry's links name Jangan's gate instead: its id maps to
 	# the anchor's, so the source pairs entry <-> A/B become GATE_CH's.
