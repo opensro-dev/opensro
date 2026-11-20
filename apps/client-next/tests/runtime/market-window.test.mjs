@@ -141,7 +141,8 @@ function storageKeeper( enabled ) {
 		social: { ...(f.state.gameplay.social ?? {}), localName: "Me" }
 	};
 	const sent = () => commands.filter( c => c.command?.kind === "market" ).map( c => c.command.request );
-	return { f, step, sent };
+	const released = () => commands.some( c => c.command?.kind === "npc-close" );
+	return { f, step, sent, released };
 }
 
 test("the storage keeper offers the market only while the server runs it", () => {
@@ -162,6 +163,32 @@ test("the storage keeper offers the market only while the server runs it", () =>
 		} finally {
 			f.dispose();
 		}
+	}
+});
+
+test("opening the market ends the keeper's talk, so the keeper's rows show again after it closes", () => {
+	// Player report, 2026-11-21: open the market from the storage keeper,
+	// close it with X, click the keeper again: no rows.
+	const { f, step, released } = storageKeeper( true );
+	try {
+		step();
+		f.ui.event( { kind: "activate", id: "market-open" } );
+		step();
+		assert.ok( f.hasText( "Consignment Market" ) );
+		assert.ok( released(), "opening the market releases the NPC (npc-close)" );
+		// The server answers the release: the conversation ends.
+		f.state.gameplay = { ...f.state.gameplay, npcConversation: undefined };
+		step();
+		f.ui.event( { kind: "activate", id: "market-close" } );
+		step();
+		assert.equal( f.hasText( "Consignment Market" ), false );
+		// The player talks to the keeper again.
+		f.state.gameplay = { ...f.state.gameplay, npcConversation: { gid: 77, phase: "menu" } };
+		const controls = step();
+		assert.ok( controls.has( "storage-open" ), "the keeper's storage row shows again" );
+		assert.ok( controls.has( "market-open" ), "and its market row" );
+	} finally {
+		f.dispose();
 	}
 });
 
