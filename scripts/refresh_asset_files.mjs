@@ -144,16 +144,19 @@ main
 ================
 */
 async function main() {
-	const index = JSON.parse( await readFile( PACK_INDEX_PATH, "utf8" ) );
-	const members = new Set( index.assets.map( row => row.path.toLowerCase() ) );
-	const files = await publicFiles( process.argv.slice( 2 ), members );
-	const dedicated = await dedicatedOwners( files );
-	for ( const file of files.filter( file => file.toLowerCase().endsWith( ".json" + COMPRESSED_TWIN ) ) ) {
-		if ( await refreshCompressedTwin( path.join( CLIENT_PUBLIC_ROOT, file.slice( 1 ) ) ) ) {
-			console.log( `${file}: derived again from its JSON` );
+	// Everything that reads or writes the shared public tree runs under the
+	// generated-assets lock: a full build or another refresh in any worktree
+	// may be rewriting the pack index, a JSON or its twin at the same time.
+	const files = await withGeneratedAssetsLock( "Asset files refresh", async () => {
+		const index = JSON.parse( await readFile( PACK_INDEX_PATH, "utf8" ) );
+		const members = new Set( index.assets.map( row => row.path.toLowerCase() ) );
+		const files = await publicFiles( process.argv.slice( 2 ), members );
+		const dedicated = await dedicatedOwners( files );
+		for ( const file of files.filter( file => file.toLowerCase().endsWith( ".json" + COMPRESSED_TWIN ) ) ) {
+			if ( await refreshCompressedTwin( path.join( CLIENT_PUBLIC_ROOT, file.slice( 1 ) ) ) ) {
+				console.log( `${file}: derived again from its JSON` );
+			}
 		}
-	}
-	await withGeneratedAssetsLock( "Asset files refresh", async () => {
 		const { updates } = await refreshOwnedPackFiles( {
 			name: PUBLISHER,
 			files,
@@ -162,6 +165,7 @@ async function main() {
 		} );
 		const built = updates.reduce( ( count, update ) => count + (update.builtPackCount ?? 0), 0 );
 		console.log( `Repacked ${files.length} file(s); ${built} pack(s) rebuilt.` );
+		return files;
 	} );
 	const claimed = await currentClaims();
 	for ( const file of files.filter( file => !isClaimed( file, claimed ) ) ) {
