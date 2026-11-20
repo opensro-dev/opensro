@@ -78,6 +78,7 @@ import {
 	windowCorners,
 	type MapChromePaint
 } from "./map-chrome";
+import { interfaceLane } from "@/engine/foundation/assets/asset-slots";
 // The window's size, panel and own art, for the map HUD that draws and
 // demands it.
 export {
@@ -218,7 +219,9 @@ export function createMapToolsHud( options: {
 	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">;
 	base: string;
 } ) {
-	const assets = options.assets;
+	// Loads only while the M window is open: the player waits on it, so
+	// it is interface demand (asset-slots.ts, #3977).
+	const assets = interfaceLane( options.assets );
 	// The foot's level filter (map-level-filter.ts), unchecked at first.
 	const levelFilter = createLevelFilter();
 	// Port-only, not native: the foot's unique spawns switch, off until

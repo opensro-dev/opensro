@@ -23,9 +23,16 @@ they differed, the worker would queue a load the main thread had admitted.
 The interface lane borrows free stream slots, but never starves the
 streams: each slot it frees is admissible to them again.
 
+Which demand is interface demand is its owner's call: a UI owner whose
+loads a player waits on in an open window (its art, the M window's
+catalogues, the stall network's categories) wraps the asset owner it is
+given in interfaceLane once, and its load code stays lane-agnostic. Loads
+taken once behind the loading screen (layouts, catalogues, text) stay
+stream loads: on the lane they would only compete with an opening window.
+
 ===========================================================================
 */
-import type { AssetLane } from "@/engine/contracts/assets";
+import type { AssetLane, AssetOwner } from "@/engine/contracts/assets";
 
 // Four stream slots, as before the interface lane, plus its own.
 export const ASSET_SLOTS = 5;
@@ -55,4 +62,25 @@ export function assetSlotsFree(
 	if ( lane === "interface" ) return Math.max( 0, ASSET_SLOTS - interfaces - streams );
 	const reserved = Math.max( interfaces, INTERFACE_RESERVED_SLOTS );
 	return Math.max( 0, ASSET_SLOTS - reserved - streams );
+}
+
+/*
+================
+interfaceLane
+
+The asset owner as an interface-lane owner sees it: every request on the
+interface lane, and available() its free slots. Wrapped once where the
+owner is made; the four calls are otherwise the owner's own.
+================
+*/
+export function interfaceLane(
+	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">
+): Pick<AssetOwner, "available" | "request" | "take" | "cancel"> {
+	return {
+		available: () => assets.available( "interface" ),
+		request: ( url, limit, decode, options ) =>
+			assets.request( url, limit, decode, { ...options, lane: "interface" } ),
+		take: id => assets.take( id ),
+		cancel: id => assets.cancel( id )
+	};
 }

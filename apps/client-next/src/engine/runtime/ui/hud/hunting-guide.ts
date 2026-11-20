@@ -30,6 +30,7 @@ import {
 } from "@/engine/foundation/ui/hunting-guide";
 import { worldMapFrame, type WorldMapLayout } from "@/engine/foundation/ui/world-map";
 import { featuresAt } from "@/engine/foundation/world/plane";
+import { interfaceLane } from "@/engine/foundation/assets/asset-slots";
 
 const EMPTY: HuntingProjection = { quads: [], controls: [], labels: [], paths: [], areas: [] };
 const ART_BYTES_LIMIT = 512 * 1024;
@@ -56,9 +57,12 @@ while hidden; only an open, explicitly enabled map starts either request.
 ================
 */
 export function createHuntingGuideHud(
-	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
+	owner: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
 	base: string
 ) {
+	// Loads only while the M window's guide or monster drawer is open: the
+	// player waits on it, so it is interface demand (asset-slots.ts, #3977).
+	const assets = interfaceLane( owner );
 	let source: HuntingGuideSource | undefined, load: Load<HuntingCatalogue> = { kind: "idle" };
 	let art: Load<ReadonlyMap<number, string>> = { kind: "idle" }, cacheKey = "", projection = EMPTY;
 	/*

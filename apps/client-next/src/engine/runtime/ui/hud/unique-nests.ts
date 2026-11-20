@@ -13,6 +13,7 @@ load stays failed: the map simply draws no nest signs.
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { MapMarker } from "@/engine/foundation/ui/world-map";
 import { decodeUniqueNests, UNIQUE_NESTS_BYTES_LIMIT, UNIQUE_NESTS_PATH } from "@/engine/foundation/ui/unique-nests";
+import { interfaceLane } from "@/engine/foundation/assets/asset-slots";
 
 const NONE: readonly MapMarker[] = [];
 
@@ -34,9 +35,12 @@ createUniqueNestsHud
 ================
 */
 export function createUniqueNestsHud(
-	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
+	owner: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
 	base: string
 ) {
+	// Loads only while the M window's unique spawns box is ticked: the
+	// player waits on it, so it is interface demand (asset-slots.ts, #3977).
+	const assets = interfaceLane( owner );
 	let load: Load = { kind: "idle" };
 	return {
 		/*
