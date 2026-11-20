@@ -53,6 +53,7 @@ export const ACTION_CENSUS_ROOTS = [
 export const ACTION_CENSUS_FILES = [
 	"apps/client-next/tools/ui-action-census.mjs",
 	"apps/client-next/tools/census-expanded.mjs",
+	"apps/client-next/tools/replaced-windows.mjs",
 	"scripts/lib/expandedBuild.mjs",
 	"apps/client-next/tools/ui-action-census-gate.mjs",
 	"apps/client-next/tools/project.mjs",

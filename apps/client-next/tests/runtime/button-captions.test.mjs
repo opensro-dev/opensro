@@ -46,11 +46,12 @@ fit, and return the last scene, its controls and the font atlas.
 ================
 */
 async function openScene( name, fit ) {
-	const { uiFixture, fontAtlas } = await import( "../helpers/ui-fixture.mjs" );
+	// The captions below are the native windows' (the classic Item Mall too).
+	const { classicUiFixture, fontAtlas } = await import( "../helpers/ui-fixture.mjs" );
 	const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 	const script = SCENE_SCRIPTS.find( entry => entry.name === name );
 	assert.ok( script, name );
-	const fx = uiFixture();
+	const fx = classicUiFixture();
 	/** @type {any} */
 	const ctx = { fx, state: fx.state, now: 0, scene: undefined, semantics: undefined, event: e => fx.ui.event( e ) };
 	const settle = ( ticks = 16 ) => {

@@ -48,6 +48,7 @@ import { fileURLToPath } from "node:url";
 import { CLIENT_PUBLIC_ROOT } from "../../../scripts/lib/generatedRoot.mjs";
 import { EXPANDED_BUILD } from "../../../scripts/lib/expandedBuild.mjs";
 import { lostNativeRow } from "./census-expanded.mjs";
+import { replacedWindows } from "./replaced-windows.mjs";
 import "../tests/helpers/native-source-loader.mjs";
 import { censusWorkerCount } from "./censusWorkers.mjs";
 import { root } from "./project.mjs";
@@ -684,8 +685,11 @@ async function main() {
 		console.log( `ui-action-census: up to date (${sceneCount} scenes, ${rowCount} control rows)` );
 		return;
 	}
-	if ( current && EXPANDED_BUILD ) {
-		const lost = lostNativeRow( JSON.parse( current ), table, canonical );
+	// A build that replaces a native window with a later client's is checked
+	// as an expanded one: the window defines its own controls (#3971).
+	const replaced = replacedWindows().map( window => window.controlPrefix );
+	if ( current && (EXPANDED_BUILD || replaced.length > 0) ) {
+		const lost = lostNativeRow( JSON.parse( current ), table, canonical, replaced );
 		if ( lost === undefined ) {
 			console.log( `ui-action-census: every native row survives the expanded build (${rowCount} control rows)` );
 			return;
