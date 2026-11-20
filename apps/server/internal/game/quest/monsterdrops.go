@@ -47,6 +47,10 @@ type MonsterDropRule struct {
 	// DropCount is the stack one successful drop leaves (mission +0x245,
 	// read by the server's gather-mission drop); zero means one.
 	DropCount uint16
+	// FastDrop makes the drop follow SRO_HWAN_3_FAST_DROP (HwanKnobs): the
+	// stack is the knob's count (one off, FastDropCount on), never more than
+	// the quest still needs. Port-only, not native; off is DropCount.
+	FastDrop bool
 }
 
 /*
@@ -104,6 +108,7 @@ the killed monster's rarity byte.
 ================
 */
 func (rt *Runtime) MonsterDrops(c *enterworld.Character, monster string, rarity uint8, roll func() (uint32, error)) []inventory.ItemAmount {
+	fast := rt.Hwan.OstraconDropCount()
 	if c == nil || c.DeletePending || roll == nil {
 		return nil
 	}
@@ -118,7 +123,7 @@ func (rt *Runtime) MonsterDrops(c *enterworld.Character, monster string, rarity 
 		}
 		for i := 0; i < missionCount(def); i++ {
 			m := missionDefinition(def, i)
-			out = append(out, missionMonsterDrops(c, m, monster, rarity, roll)...)
+			out = append(out, missionMonsterDrops(c, m, monster, rarity, fast, roll)...)
 		}
 	}
 	return out
@@ -132,7 +137,7 @@ Held-item admission and drop identity share the same codename. A knife drop
 must not stop because a different stack of collected vines reached its cap.
 ================
 */
-func missionMonsterDrops(c *enterworld.Character, def *Definition, monster string, rarity uint8, roll func() (uint32, error)) []inventory.ItemAmount {
+func missionMonsterDrops(c *enterworld.Character, def *Definition, monster string, rarity uint8, fast uint16, roll func() (uint32, error)) []inventory.ItemAmount {
 	if def.Objective != ObjectiveCollect || def.MonsterDrop == nil {
 		return nil
 	}
@@ -180,6 +185,9 @@ func missionMonsterDrops(c *enterworld.Character, def *Definition, monster strin
 		return nil
 	}
 	count := uint32(max(1, rule.DropCount))
+	if rule.FastDrop {
+		count = min(uint32(max(1, fast)), uint32(cap)-uint32(held))
+	}
 	return []inventory.ItemAmount{{Codename: code, Count: count}}
 }
 

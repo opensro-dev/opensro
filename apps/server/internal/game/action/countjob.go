@@ -33,6 +33,8 @@ item rules it shares publish theirs from the bag use only.
 package action
 
 import (
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -55,6 +57,8 @@ const (
 	limitedUseReturn
 	limitedUseReverseReturn
 	limitedUseResurrection
+	// limitedUseHwanCharge is the Energy of Life buff's charge (hwan.go).
+	limitedUseHwanCharge
 )
 
 /*
@@ -70,6 +74,8 @@ func limitedUseKindOf(ref *enterworld.ItemRef) limitedUseKind {
 		return limitedUseReverseReturn
 	case ref.TypeIDs == [4]int64{3, 3, 13, 6}:
 		return limitedUseResurrection
+	case ref.TypeIDs == [4]int64{3, 3, 1, 8}:
+		return limitedUseHwanCharge
 	}
 	return limitedUseNone
 }
@@ -111,6 +117,22 @@ no bag row; the work spends a use only when it succeeds.
 ================
 */
 func (rt *Runtime) HandleCountJobUse(division string, c *enterworld.Character, payload []byte) OpResult {
+	result := rt.handleCountJobUse(division, c, payload)
+	// A refused use is otherwise silent on the server: name it, as item-use does.
+	if c != nil && len(result.Frames) > 0 && result.Frames[0].Opcode == wire.OpCountJobAnswer {
+		log.WithFields(log.Fields{"character": c.Name, "answer": result.Frames[0].Payload, "payload": payload}).Info("count-job: use answered")
+	}
+	return result
+}
+
+/*
+================
+handleCountJobUse
+
+HandleCountJobUse without the log line.
+================
+*/
+func (rt *Runtime) handleCountJobUse(division string, c *enterworld.Character, payload []byte) OpResult {
 	refuse := func(code uint8) OpResult {
 		return OpResult{Frames: []wire.Frame{{Opcode: wire.OpCountJobAnswer, Payload: wire.EncodeCountJobRefusal(code)}}}
 	}
@@ -153,6 +175,13 @@ func (rt *Runtime) HandleCountJobUse(division string, c *enterworld.Character, p
 		if !rt.runLimitedUse(division, c, ref, choice, now, &effect, &revived) {
 			code = itemUseFailureCode(effect)
 			return false
+		}
+		if limitedUseKindOf(ref) == limitedUseHwanCharge {
+			// The charge spends the whole buff: its row leaves the bar with it.
+			jobs := append(append([]domain.CompositeJob(nil), c.CompositeJobs[:index]...), c.CompositeJobs[index+1:]...)
+			c.CompositeJobs = jobs
+			effect.Frames = append(effect.Frames, wire.Frame{Opcode: wire.OpCountJobEnd, Payload: wire.EncodeCountJobEnd(job.PackageRefObjID, job.Target)})
+			return true
 		}
 		job.Uses--
 		jobs := append([]domain.CompositeJob(nil), c.CompositeJobs...)
@@ -239,6 +268,8 @@ func (rt *Runtime) runLimitedUse(division string, c *enterworld.Character, ref *
 			*revived = &done
 		}
 		return ok
+	case limitedUseHwanCharge:
+		return rt.hwanCharge(c, ref, now, result)
 	}
 	return false
 }

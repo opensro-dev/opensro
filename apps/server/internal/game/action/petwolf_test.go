@@ -128,7 +128,7 @@ func TestWolfSeventhAttackRadiusAndIndependentCounters(t *testing.T) {
 	at.X -= 20
 	at.Z += 20
 	equal := wolfSpawnAt(t, rt, c, at, clock.NowMs())
-	wolfWeaken(t, rt, equal, 19000)
+	wolfWeaken(t, rt, equal, 25300) // exactly Execute III's 25.3% threshold
 	for range 6 {
 		rt.wolfExecuteAttack(testDivision, c, c.ActiveCOS.GID, 0, []uint32{trigger.Gid}, clock.NowMs())
 	}

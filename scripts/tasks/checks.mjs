@@ -256,12 +256,8 @@ export const CHECK_TASKS = [
 		// Skipped when nothing it reads changed since its last pass (run_if_changed.mjs).
 		args: [
 			"scripts/checks/run_if_changed.mjs",
+			// Its inputs are the "server" set (scripts/data/input-sets.json).
 			"server",
-			"apps/server",
-			"scripts/checks/check_go_server.mjs",
-			"@go,version",
-			"!apps/server/.generated/game-data/1.150/server/manifest.json",
-			"!.generated/client-public/assets/packs/manifest.json",
 			"--",
 			"node",
 			"scripts/checks/check_go_server.mjs"

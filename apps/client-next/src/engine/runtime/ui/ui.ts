@@ -59,6 +59,14 @@ const CHAT_STRIP_FRAME = 62;
 const CHAT_STRIP_ROW = 56;
 const CHAT_STRIP_INPUT = 20;
 const PARTY_CHAT_GAP = 4;
+// The quest detail page's default body color (the native quest texts' own 255,44,15,1 as ARGB).
+const QUEST_DETAIL_TEXT: UiQuad["color"] = [ 44 / 255, 15 / 255, 1 / 255, 1 ];
+// A Berserk body that returns within this long of vanishing, with the minute not yet spent, is the same Berserk.
+const BERSERK_RESUME_WINDOW_MS = 30000;
+const BERSERK_RESUME_ELAPSED_MS = 59000;
+// Gap between a Blue Berserk title and the name, and its bold gold.
+const HWAN_TITLE_GAP = 4;
+const HWAN_TITLE_COLOR: UiQuad["color"] = [ 1, 0.84, 0.2, 1 ];
 // The overhead job mark sits 4 px past the name board, which reaches 1.5 px
 // past the text (the beginner mark mirrors it at -21.5 = -20 - 1.5).
 const JOB_MARK_GAP = 5.5;
@@ -120,6 +128,8 @@ import {
 } from "@/engine/foundation/gameplay/storage-room";
 import { berserkHud, berserkEntryFlash } from "@/engine/foundation/ui/berserk-hud";
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
+import { hwanSkin, hwanTitleKey } from "@/engine/foundation/gameplay/hwan-skin";
+import { questLocationTargets } from "@/engine/foundation/ui/quest-locations";
 import { portalMenu } from "@/engine/foundation/gameplay/portal";
 import { restoreSlotEntry } from "@/engine/foundation/gameplay/commerce";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
@@ -432,6 +442,16 @@ import { textAllowed } from "@/engine/foundation/ui/character-create";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { compositeItemCaption, compositeItemLayout, createCompositeItemHud } from "./hud/composite-item-hud";
 import { createUniqueRankHud } from "./hud/unique-rank-hud";
+import {
+	createServerEventHud,
+	gaugeRatio,
+	gaugeText,
+	SERVER_EVENT_ART,
+	SERVER_EVENT_TEXT_COLOR,
+	serverEventLayout
+} from "./hud/server-event-hud";
+import { createSroMacroHud, MACRO_ID, macroAcquiredSkills } from "./hud/sro-macro-hud";
+import { drawSroMacro, type MacroPaint } from "./hud/sro-macro-window";
 import { createMarketHud, MARKET_BAG_FIRST_SLOT, MARKET_HOTKEY_VK } from "./hud/market-hud";
 import { drawMarketWindow, type MarketPaint } from "./hud/market-window";
 import { uniqueRankLines } from "@/engine/foundation/gameplay/unique-rank";
@@ -511,7 +531,8 @@ import {
 	equipmentSlotMirror,
 	itemIsMallItem,
 	itemIsRare,
-	itemSlotBlockedOverlay
+	itemSlotBlockedOverlay,
+	itemSlotExchangeOverlay
 } from "@/engine/foundation/ui/item-slot-effects";
 import {
 	COS_CLASS_ATTACK,
@@ -1034,6 +1055,10 @@ const PARTY_MATCH_CURRENT_COLOR: UiQuad["color"] = [ 135 / 255, 233 / 255, 1, 1 
 const BUG_COMMAND = /^\/bug(?:\s+|$)/i;
 const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
 const BUG_REPORTS_UNAVAILABLE = "Connecting to the bug reporter; the report window opens as soon as it answers.";
+// The SRO Macro's menu command (port-only, #3907): only with the Experimental
+// row on, and only on a shard that replayed the settings (SRO_AUTO_MACRO).
+const MACRO_COMMAND = /^\/macro\s*$/i;
+const MACRO_UNAVAILABLE = "The SRO Macro is not available on this server.";
 // The skin change scroll's window (CIFChangePlayerModel).
 const SKIN_PANEL = "Skin change";
 // CIFWholeChat, the Global Chatting item's window, and its line's edit box.
@@ -1456,7 +1481,7 @@ export function createUi( ports: UiPorts ) {
 	const combatGlyphPaths = damageTextAssets();
 	let buffTick = -1;
 	// Derived two-state presentation clock; body channel 4 remains authoritative.
-	let berserkActor = 0, berserkStarted = 0, berserkFrame = -1, berserkDisplayed = 0;
+	let berserkActor = 0, berserkStarted = 0, berserkLostAt = -1, berserkFrame = -1, berserkDisplayed = 0;
 	let equipmentWarningPhase = 0, equipmentWarningDue = 0, equipmentWarningVisible = false;
 	// Low HP/MP caution atlas (100 ms cells) animates on retained world frames too.
 	let cautionVisible = false, cautionFrame = -1;
@@ -1650,6 +1675,10 @@ export function createUi( ports: UiPorts ) {
 	const compositeItemHud = createCompositeItemHud();
 	// Port-only, not native: a unique kill's damage ranking (SRO_UNIQUE_DAMAGE_RANK).
 	const uniqueRankHud = createUniqueRankHud();
+	// The v1.696 client's Server Mission gauge (CNIFServerEvent, 0x34F2): native, no row.
+	const serverEventHud = createServerEventHud();
+	// Port-only, not native (#3907): the v1.696 SRO Macro windows (SRO_AUTO_MACRO).
+	const sroMacroHud = createSroMacroHud();
 	// Port-only, not native (SRO_CONSIGNMENT, #3529): the consignment market.
 	const marketHud = createMarketHud();
 	const guildManagerHud = createGuildManagerHud();
@@ -5410,6 +5439,18 @@ export function createUi( ports: UiPorts ) {
 			dirty = true;
 			return;
 		} else if (
+			id === "chat-send" && MACRO_COMMAND.test( chatText.slice( chatTabPrefix( chatTab ).length ) ) &&
+			experimental.state().saved.sroMacro
+		) {
+			// Port-only (#3907): /macro opens the SRO Macro menu; never sent as chat.
+			if ( !sroMacroHud.toggleMenu( view.gameplay?.sroMacro, true ) ) hudMessages.append( MACRO_UNAVAILABLE );
+			chatText = chatTabPrefix( chatTab );
+			selection = [ chatText.length, chatText.length ];
+			focus = null;
+			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+			dirty = true;
+			return;
+		} else if (
 			id === "chat-send" && premiumCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy )
 		) {
 			// 6AD990: /Return, /Reverse Return and /Resurrection spend a premium
@@ -5508,6 +5549,17 @@ export function createUi( ports: UiPorts ) {
 			dirty = true;
 		} else if ( id === "unique-rank-ok" || id === "unique-rank-close" ) {
 			uniqueRankHud.close();
+			dirty = true;
+		} else if ( id === "server-event-close" ) {
+			serverEventHud.close();
+		} else if ( id.startsWith( MACRO_ID ) || id === "sro-macro-close" ) {
+			const game = view.gameplay;
+			const commands = sroMacroHud.click(
+				id === "sro-macro-close" ? MACRO_ID + "close" : id,
+				game?.sroMacro,
+				macroAcquiredSkills( game?.skills ?? [], game?.skillIndex )
+			);
+			for ( const command of commands ) sendGameplay( command );
 			dirty = true;
 		} else if ( id === "chat-send" && !view.gameplay?.chat?.pending ) {
 			const draft = composeChat(
@@ -8005,6 +8057,11 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
+			if ( event.kind === "key" && event.code === "Escape" && sroMacroHud.state().window !== "none" ) {
+				sroMacroHud.close();
+				dirty = true;
+				return;
+			}
 			// Port-only (#3529): Escape closes the market's box, then the market.
 			if ( event.kind === "key" && event.code === "Escape" && marketHud.isOpen() ) {
 				activateMarket( marketHud.state().dialog ? "market-dialog-cancel" : "market-close" );
@@ -10272,8 +10329,14 @@ export function createUi( ports: UiPorts ) {
 				next.entities.find( e => e.gid === next.gameplay?.localGid && e.appearanceState?.[2] === 1 )?.gid ?? 0 :
 				0;
 			if ( berserkGid !== berserkActor ) {
+				// A region change drops the local entity for a moment while the server's
+				// Berserk runs on: when it returns before the minute could have ended, the
+				// gauge resumes where it was instead of restarting full (port presentation).
+				const resumed = berserkGid && berserkLostAt >= 0 && now - berserkLostAt < BERSERK_RESUME_WINDOW_MS &&
+					berserkLostAt - berserkStarted < BERSERK_RESUME_ELAPSED_MS;
+				if ( !berserkGid ) berserkLostAt = now;
+				else if ( !resumed ) berserkStarted = now;
 				berserkActor = berserkGid;
-				berserkStarted = now;
 				dirty = true;
 			}
 			const nextBerserkFrame = berserkActor ? Math.floor( Math.min( 63000, now - berserkStarted ) / 50 ) : -1;
@@ -10521,6 +10584,20 @@ export function createUi( ports: UiPorts ) {
 				phase === "world" &&
 				uniqueRankHud.reconcile( next.gameplay, experimental.state().saved.uniqueDamageRank )
 			) dirty = true;
+			if ( phase === "signed-out" || phase === "character-select" ) serverEventHud.reset();
+			if ( phase === "world" ) {
+				const before = serverEventHud.shown();
+				serverEventHud.reconcile( next.gameplay?.serverEventGauge );
+				if ( serverEventHud.shown() !== before ) dirty = true;
+			}
+			// Port-only (#3907): the macro windows close with the row or the world.
+			if ( sroMacroHud.state().window !== "none" ) {
+				sroMacroHud.reconcile(
+					phase === "world" ? next.gameplay?.sroMacro : undefined,
+					experimental.state().saved.sroMacro
+				);
+				if ( sroMacroHud.state().window === "none" ) dirty = true;
+			}
 			// Port-only (#3529): the market closes with the world, or when the
 			// shard does not run it; a write's answer refreshes what it changed.
 			if ( marketHud.isOpen() && (phase !== "world" || next.gameplay?.consignment !== true) ) {
@@ -10583,6 +10660,7 @@ export function createUi( ports: UiPorts ) {
 					persistWindowPositions();
 					guildWarHud.reset( true );
 					uniqueRankHud.reset();
+					sroMacroHud.reset();
 					windowPlacement.reset();
 					itemMall.reset();
 					carriedShortcut = null;
@@ -12295,18 +12373,27 @@ export function createUi( ports: UiPorts ) {
 								(hudCopy( "UIIT_STT_LV_LEVEL" ) || "Lv %d").replace( "%d", String( level ) )
 							);
 						}
+						// Port-only: a Blue Berserk draws the gauge in its blue art (hwan-skin.ts).
+						// The blue file is requested like any gauge picture; until it is loaded (or if a
+						// build does not publish it) the plain one draws.
+						const blue = ( path: string ) => {
+							const art = hwanSkin( path, game?.hwanLevel );
+							if ( art === path ) return path;
+							paths.push( art );
+							return resources.has( art ) ? art : path;
+						};
 						if ( berserkActor ) {
 							const animation = berserkHud( now - berserkStarted ),
-								burn = ROOT + "interface/playerminiinfo/pmi_jahwan_burn.png",
+								burn = blue( ROOT + "interface/playerminiinfo/pmi_jahwan_burn.png" ),
 								size = resources.size( burn );
 							paths.push( burn );
 							for ( let i = 0; i < 5; i++ ) {
-								const circle = p["GDR_PMI_CIRCLE" + i]!;
-								if ( resources.has( circle.texture ) && animation.circles[i]! > 0 ) {
+								const circle = p["GDR_PMI_CIRCLE" + i]!, circleArt = blue( circle.texture );
+								if ( resources.has( circleArt ) && animation.circles[i]! > 0 ) {
 									rect(
 										authoredRect( circle, px, py ),
 										[ 1, 1, 1, animation.circles[i]! ],
-										circle.texture,
+										circleArt,
 										circle.uv
 									);
 								}
@@ -12326,18 +12413,32 @@ export function createUi( ports: UiPorts ) {
 								}
 							}
 							for ( const name of [ "GDR_PMI_HWAN_EFF_FACE", "GDR_PMI_HWAN_EFF_GLOW" ] ) {
-								const n = p[name]!;
-								if ( resources.has( n.texture ) && animation.glow > 0 ) {
-									rect( authoredRect( n, px, py ), [ 1, 1, 1, animation.glow ], n.texture, n.uv );
+								const n = p[name]!, art = blue( n.texture );
+								if ( resources.has( art ) && animation.glow > 0 ) {
+									rect( authoredRect( n, px, py ), [ 1, 1, 1, animation.glow ], art, n.uv );
 								}
 							}
 						} else {for ( let i = 0; i < Math.min( 5, gauge?.displayed ?? 0 ); i++ ) {
-								authoredImage( p["GDR_PMI_CIRCLE" + (4 - i)]!, px, py );
+								const circle = p["GDR_PMI_CIRCLE" + (4 - i)]!, art = blue( circle.texture );
+								// The filled ball is requested like any gauge picture: on a cold cache (first login
+								// after clearing site data) it was drawn before it loaded and the rings stayed empty
+								// until a refresh.
+								paths.push( art );
+								authoredImage( circle, px, py, art );
 							}}
 						if (
 							gauge?.displayed === 5 &&
 							next.entities.find( e => e.gid === game?.localGid )?.appearanceState?.[2] !== 1
-						) authoredButton( p.GDR_PMI_BTN_JAHWAN!, px, py, "berserk", "Berserk" );
+						) {
+							const plain = p.GDR_PMI_BTN_JAHWAN!;
+							authoredButton(
+								{ ...plain, texture: blue( plain.texture ) },
+								px,
+								py,
+								"berserk",
+								"Berserk"
+							);
+						}
 						if ( (game?.progression?.statPoints ?? 0) > 0 ) {
 							authoredButton(
 								p.GDR_PMI_BTN_STATUP!,
@@ -13849,6 +13950,17 @@ export function createUi( ports: UiPorts ) {
 							const target = minimapResources.positions()?.get( id );
 							if ( !target || !minimapSameFloor( pose, target, game ?? null ) ) continue;
 							const offset = minimapOffset( pose, target, minimapZoom );
+							if ( offset ) markers.push( minimapEdge( offset, "quest" ) );
+						}
+						// Port-only: the spot a quest tool is used at (quest-locations.ts).
+						for (
+							const spot of questLocationTargets(
+								game?.quests,
+								experimental.state().saved.questTrackerMarkers
+							)
+						) {
+							if ( !minimapSameFloor( pose, spot, game ?? null ) ) continue;
+							const offset = minimapOffset( pose, spot, minimapZoom );
 							if ( offset ) markers.push( minimapEdge( offset, "quest" ) );
 						}
 						markers.push( ...minimapHunting( pose, game, next.entities, minimapZoom ) );
@@ -16621,11 +16733,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					authoredText( page.GDR_QUESTREWARD_TITLE!, px, py, meta?.rewardTitle ?? "" );
 					if ( q ) {
 						const r = authoredRect( page.GDR_QUESTREWARD_CONTENTS!, px, py );
+						// The default color of a body without its own font tag. Every v1.150 quest text sets
+						// 255,44,15,1 itself; the later client's strings (the cap-110 chains) leave the
+						// section bodies to the default, which must read on the parchment.
 						const result = text.guide(
 							guideTokens( meta?.rewardBody ?? "" ),
 							[ r[0], r[1] - questDetailScroll, r[2], r[3] ],
 							r,
-							gold,
+							QUEST_DETAIL_TEXT,
 							resources.size
 						);
 						questDetailMax = Math.max( 0, result.height - r[3] );
@@ -16985,6 +17100,26 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						now: Date.now(),
 						focus,
 						caretVisible
+					} );
+				}
+				const macroHud = sroMacroHud.state();
+				if ( macroHud.window !== "none" && game?.sroMacro ) {
+					// Port-only (#3907): the macro windows draw with this module's primitives.
+					const macroPaint: MacroPaint = {
+						beginWindow: frame => frameDraw.beginWindow( frame ),
+						endWindow: ( frame, mark, owner ) => frameDraw.endWindow( frame, mark, owner ),
+						windowOrigin: ( frame, spec ) => frameDraw.windowOrigin( frame, spec ),
+						windowBox: ( frame, spec ) => frameDraw.windowBox( frame, spec ),
+						closeButton: ( frame, x, y, id ) => frameDraw.closeButton( frame, x, y, id ),
+						button: ( frame, spec ) => frameDraw.button( frame, spec ),
+						rect: ( frame, spec ) => frameDraw.rect( frame, spec ),
+						image: ( frame, spec ) => frameDraw.image( frame, spec )
+					};
+					drawSroMacro( drawFrame, macroPaint, {
+						hud: macroHud,
+						live: game.sroMacro,
+						acquired: macroAcquiredSkills( game.skills ?? [], game.skillIndex ),
+						skillIndex: game.skillIndex
 					} );
 				}
 				const uniqueRank = uniqueRankHud.state();
@@ -19744,7 +19879,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									}
 									const prerequisiteMet = design.option === 1 ||
 										(state!.skills.find( entry => entry.id === skill.id - 1 )?.level ?? 0) >=
-											design.maxLevel;
+											(petSkillDesign( design.id - 1 )?.maxLevel ?? design.maxLevel);
 									controls.push( {
 										id: "pet-skill:" + design.id,
 										label: design.name,
@@ -20160,7 +20295,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					nativePage( page, px, py, [ 11, 12, 15 ] );
 					for ( const id of [ 13, 14 ] ) authoredText( at( id ), px, py, hudCopy( at( id ).text ) );
 					for (
-						const [rows, base, mine] of [ [ state.theirs, 100, false ], [ state.own, 200, true ] ] as const
+						const [rows, base, mine, locked] of [
+							[ state.theirs, 100, false, state.theirLocked ],
+							[ state.own, 200, true, state.ownLocked ]
+						] as const
 					) {
 						for ( let slot = 0; slot < 12; slot++ ) {
 							const node = at( base + slot ),
@@ -20171,6 +20309,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								image( r, icon );
 								itemEffects( (mine ? "exchange-my:" : "exchange-their:") + slot, row.item, r );
 								itemCount( row.item, r );
+							}
+							// 6B21B0 / 6B2120: a locked side washes all twelve slots.
+							if ( locked ) {
+								const overlay = itemSlotExchangeOverlay( r );
+								image( overlay.rect, overlay.path, white, overlay.uv );
 							}
 							controls.push( {
 								id: (mine ? "exchange-my:" : "exchange-their:") + slot,
@@ -22956,6 +23099,26 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							} );
 						}
 					}
+					// Port-only Blue Berserk title (not native): bold gold, just before the
+					// character's name, for every player the server's level roster named (0x3FCB).
+					const titleText = entity.kind === "local-player" || entity.kind === "player" ?
+						hudCopy( hwanTitleKey( game?.hwanLevels?.[entity.gid], entity.countryByte9c ) ) :
+						"";
+					if ( titleText && name && height ) {
+						const titleWidth = text.run( titleText, 2 ).width;
+						quads.push(
+							...text.quads(
+								titleText,
+								[ left - titleWidth - HWAN_TITLE_GAP, top, titleWidth, height ],
+								full,
+								HWAN_TITLE_COLOR,
+								{
+									vAlign: 0,
+									fontStyle: 2
+								}
+							).map( q => ({ ...q, characterAnchor: entity.gid }) )
+						);
+					}
 					// CICUser 858810 gives the actual [GM] name prefix priority over player
 					// relation colors. This is presentation, never a privilege check.
 					const nameColor: UiQuad["color"] = nameColorRgba( entity.nameColor ?? 0xffffffff );
@@ -23088,6 +23251,48 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			// CIFEventGuide::UpdateAcademy (6660F0): sound only on hidden -> shown.
 			if ( academyVisible && !academyWasVisible ) sound( "quest" );
 			academyWasVisible = academyVisible;
+			// The v1.696 client's Server Mission gauge (server-event-hud.ts),
+			// drawn once its v1.696 art is here.
+			const serverEvent = worldVisible ? serverEventHud.shown() : null;
+			if ( serverEvent ) {
+				const frameArt = SERVER_EVENT_ART + "wind.png";
+				paths.push( frameArt );
+				if ( resources.has( frameArt ) ) {
+					const at = serverEventLayout( w, hudCorner ),
+						ratio = gaugeRatio( serverEvent.count, serverEvent.goal );
+					image( at.frame, frameArt );
+					image( at.snow, SERVER_EVENT_ART + "snow.png" );
+					if ( ratio > 0 ) {
+						image(
+							[ at.gauge[0], at.gauge[1], at.gauge[2] * ratio, at.gauge[3] ],
+							SERVER_EVENT_ART + "gage.png",
+							white,
+							[ 0, 0, ratio, 1 ]
+						);
+					}
+					quads.push(
+						...text.quads(
+							gaugeText( serverEvent.count, serverEvent.goal ),
+							at.text,
+							full,
+							SERVER_EVENT_TEXT_COLOR,
+							{
+								hAlign: 1,
+								vAlign: 1
+							}
+						)
+					);
+					const id = "server-event-close",
+						states = [ "close", "close_focus", "close_press" ].map( face =>
+							SERVER_EVENT_ART + face + ".png"
+						),
+						wanted = states[pressed === id && hover === id ? 2 : hover === id ? 1 : 0]!;
+					paths.push( ...states );
+					image( at.close, resources.has( wanted ) ? wanted : states[0]! );
+					blocks.push( at.frame );
+					controls.push( { id, label: "", rect: at.close, kind: "button" } );
+				}
+			}
 			if ( worldVisible && game?.academy ) {
 				const academy = game.academy,
 					level = game.progression?.level ?? roster.find( c => c.name === next.session?.character )?.level;
@@ -28625,7 +28830,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							game.petTraining.points,
 							design.option === 1 ||
 								(game.petTraining.skills.find( entry => entry.id === skill.id - 1 )?.level ?? 0) >=
-									design.maxLevel
+									(petSkillDesign( design.id - 1 )?.maxLevel ?? design.maxLevel)
 						);
 					}
 				}

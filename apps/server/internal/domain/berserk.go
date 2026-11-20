@@ -14,3 +14,7 @@ func (c *Character) ModifyBerserkPoints(delta int) bool {
 	c.BerserkPoints = next
 	return true
 }
+
+// HwanLevelMax is the highest Blue Berserk level the level table holds
+// (_RefHWANLevel rows 0 to 6).
+const HwanLevelMax = 6

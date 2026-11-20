@@ -60,6 +60,9 @@ const (
 	ValueBetaSilk
 	// ValueBetaGrowthBands is progression.ParseGrowthBands's band list.
 	ValueBetaGrowthBands
+	// ValueHwanKnob is quest.HwanKnobsFromEnv's parser for the setting's own
+	// variable (the Blue Berserk quest knobs).
+	ValueHwanKnob
 )
 
 /*
@@ -90,6 +93,9 @@ var Settings = []Setting{
 	// (1..200).
 	{Env: "SRO_SOOK_CHECKPOINT_SECONDS", NomadVar: "sook_checkpoint_seconds", Default: "300"},
 	{Env: "SRO_SOOK_CHEST_CAPACITY", NomadVar: "sook_chest_capacity", Default: "200"},
+	// Port-only, not native: the v1.696 SRO Macro settings lane (0x7554,
+	// 0xB554, 0x3555; internal/game/macro, #3907). Off sends nothing.
+	{Env: "SRO_AUTO_MACRO", NomadVar: "auto_macro", Default: "off"},
 	// The catalogue publishes the expansion's derived pet-gear drops
 	// while it runs (items.json's petGear rows, droptables.json's
 	// petGear rule), so it is a catalogue setting (#2542).
@@ -134,6 +140,17 @@ var Settings = []Setting{
 	// server data is built. Degrees 10-11 need SRO_CAP110_ITEMS too.
 	{Env: "SRO_HONOR_GOODS", NomadVar: "honor_goods", Default: "off"},
 	{Env: "SRO_CAP110_SKILLS", NomadVar: "cap110_skills", Default: "off"},
+	// Port-only, not native: the Blue Berserk quest chains (the 95/100
+	// Army and Military Tests and the Alexandria 105/110 steps) with what
+	// exists only for them. Consumed at build time (cap110_quest_*.py read
+	// it with SRO_LEVEL_CAP=110); the built quest tables are the switch the
+	// GameWorld sees. Server only: the catalogue reads the built data.
+	{Env: "SRO_CAP110_QUESTS", NomadVar: "cap110_quests", Default: "off"},
+	// Port-only, not native: operator knobs of those quests (quest/hwanknobs.go).
+	// Unset is the original behaviour; a malformed value refuses the boot.
+	{Env: "SRO_HWAN_NIYA_CAPTURE_RATES", NomadVar: "hwan_niya_capture_rates", Default: "", Validation: ValueHwanKnob},
+	{Env: "SRO_HWAN_SUN_RELIC", NomadVar: "hwan_sun_relic", Default: "", Validation: ValueHwanKnob},
+	{Env: "SRO_HWAN_3_FAST_DROP", NomadVar: "hwan_3_fast_drop", Default: "off", Validation: ValueHwanKnob},
 	// Port-only, not native: the later client's mall avatars (outfits, hats,
 	// attachments). Cosmetic, so the owner approved it on by default
 	// (2026-11-04). Build time only, like the two above: mall_avatar_import.py

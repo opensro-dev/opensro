@@ -41,6 +41,11 @@ func SkillsForPet(p *domain.CharacterCOS) []SkillDef {
 /*
 ================
 UpgradeTree
+
+Pours each old row's spent levels into its books in order. A book takes
+ranks only once the book before it holds that book's own MaxLevel, as the
+learn path requires (training.go): with 10 / 10 / 1 ranks the current
+book's cap is not the previous book's.
 ================
 */
 func UpgradeTree(p *domain.CharacterCOS) {
@@ -52,13 +57,15 @@ func UpgradeTree(p *domain.CharacterCOS) {
 	p.Training.Levels, p.Training.Slotted, p.Training.Queued = [15]uint8{}, [3]uint8{}, 0
 	for row := range RowCount {
 		remaining := int(old[row*3]) + int(old[row*3+1]) + int(old[row*3+2])
+		var previous SkillDef
 		for _, s := range SkillsForPet(p) {
 			if s.Row != row {
 				continue
 			}
-			if s.Option > 1 && p.Training.Levels[s.Index()-1] < s.MaxLevel {
+			if s.Option > 1 && p.Training.Levels[previous.Index()] < previous.MaxLevel {
 				break
 			}
+			previous = s
 			for remaining > 0 && p.Training.Levels[s.Index()] < s.MaxLevel && p.Level >= NextLevelRequirement(s, p.Training.Levels[s.Index()]) {
 				p.Training.Levels[s.Index()]++
 				remaining--

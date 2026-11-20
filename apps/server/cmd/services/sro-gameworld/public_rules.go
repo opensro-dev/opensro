@@ -27,8 +27,10 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/commerce"
+	"opensro.online/server/internal/game/macro"
 	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/contributor"
 	"opensro.online/server/internal/game/sookarena"
@@ -107,6 +109,12 @@ var unlistedSettings = map[string]string{
 	"SRO_CAP110_ITEMS":  "degree-11 equipment build input, consumed when the server data is built",
 	"SRO_HONOR_GOODS":   "honor store goods build input, consumed when the server data is built",
 	"SRO_CAP110_SKILLS": "degree-11 skill build input, consumed when the server data is built",
+	"SRO_CAP110_QUESTS": "Blue Berserk quest build input, consumed when the server data is built",
+	// Operator knobs of the Blue Berserk quests (quest/hwanknobs.go): they tune
+	// a quest roll or a quest drop; the unset value is the original.
+	quest.EnvHwanNiyaCaptureRates: "operator odds of the Niya trap quest's capture roll",
+	quest.EnvHwanSunRelic:         "operator odds of the Sun God relic dig",
+	quest.EnvHwan3FastDrop:        "operator switch for faster Alexandria ostracon drops",
 	// Cosmetic item rows the variant build imports; the GameWorld reads no
 	// such switch, the items simply exist in the built data.
 	"SRO_MALL_AVATARS": "mall avatar build input, consumed when the server data is built",
@@ -353,6 +361,7 @@ func publicRules() publicstats.RulesResponse {
 				Now:    "No monster drops an item above degree 9: equipment, elixirs, Lucky Powder, stones, tablets or elements. Every degree-9-and-below drop keeps its chance, and items already owned are kept.",
 				Why:    "The level cap stays 90 while community polls decide what the new areas drop; this keeps new degree-10 gear out of the economy until they close."},
 			{Flag: nasrun.Env, On: nasrun.Enabled(os.Getenv(nasrun.Env)), Native: "Avatar storage holds four avatars: hat, dress, attachment and flag.", Now: "A fifth avatar socket holds a Devil's Spirit.", Why: "Optional port-only step toward the later Devil's Spirit (#3456)."},
+			{Flag: macro.Env, On: macro.Enabled(os.Getenv), Native: "The game has no macro window: only the v1.150 auto-potion.", Now: "The server keeps each character's SRO Macro settings (auto-potion, auto-skill and auto-hunt) and their on/off states, and returns them at every login.", Why: "Optional port-only step toward the later official SRO Macro (#3907)."},
 			{Flag: sookarena.Env, On: sookarena.Enabled(os.Getenv(sookarena.Env)), Native: "Event So-ok offers no solo survival arena.", Now: "Three private survival entries per account per UTC day, shared by its characters, five stages, fivefold EXP/SP and checkpoint reward chests.", Why: "Optional port-only survival event."},
 			{Flag: progression.EnvHalloweenEvent, On: progression.HalloweenEventFromEnv().ActiveAt(time.Now()),
 				Native: "No Halloween event runs: monsters drop no jewelry boxes and So-ok offers no gift exchange.",

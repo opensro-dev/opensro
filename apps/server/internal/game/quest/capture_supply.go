@@ -110,9 +110,11 @@ captureSupplyForQuest
 ================
 */
 func captureSupplyForQuest(code string) (captureSupply, bool) {
-	for _, supply := range captureSupplies {
-		if supply.quest == code {
-			return supply, true
+	for _, table := range [][]captureSupply{captureSupplies, hwanSupplies} {
+		for _, supply := range table {
+			if supply.quest == code {
+				return supply, true
+			}
 		}
 	}
 	return captureSupply{}, false

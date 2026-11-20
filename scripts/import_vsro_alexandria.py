@@ -566,8 +566,11 @@ def import_alexandria(vsro_root, extracted, native_mapinfo=None):
 		# Empty connecting terrain and mountain sectors have no monster nests.
 		fields = field_seed_regions(vsro_root)
 		crossings = gate_seed_regions(table_text(media_data, media_index, "teleportdata.txt"))
+		# Port-only, not native: the Blue Berserk trial arenas are two isolated regions
+		# only the later client has; the quest switch seeds them like the fields.
+		from cap110_quest_arenas import arena_seeds
 		regions = connected_regions(
-			city, vsro_only_regions(data_data, data_index, native_mapinfo), set(fields) | crossings
+			city, vsro_only_regions(data_data, data_index, native_mapinfo), set(fields) | crossings | arena_seeds()
 		)
 		log(f"{len(city)} city regions, {len(regions)} regions with the fields and crossings around it")
 

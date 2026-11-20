@@ -107,6 +107,8 @@ type winterMissionsState struct {
 	seen      bool
 	active    bool
 	savedAt   time.Time
+	// gaugeOut holds the 0x34F2 frames drainWinterGauge sends.
+	gaugeOut []simulation.DivisionFrames
 }
 
 /*
@@ -123,6 +125,10 @@ type winterDivision struct {
 	countedAt  time.Time
 	expUpUntil time.Time
 	dirty      bool
+	// gaugeSyncedAt and gaugeSynced are the gauge's last count
+	// broadcast and the counts it carried (winter_gauge.go).
+	gaugeSyncedAt time.Time
+	gaugeSynced   map[uint32]uint32
 }
 
 /*
@@ -232,17 +238,16 @@ func (rt *Runtime) advanceWinterMissions() {
 	// The first sight only records the window: a restart inside it
 	// never announces a start again.
 	if w.seen && active != w.active {
-		line := winterNoticeEnd
-		if active {
-			line = winterNoticeStart
-		}
 		for _, population := range populations {
-			for _, row := range rt.WinterMissionProgress(population.Division) {
-				rt.announce(population.Division, announceWinterMission, fmt.Sprintf(line, progression.WinterMissionName(row.ID)), wire.NoticeLink{}, 0, now.UnixMilli())
-			}
+			rt.winterWindowChanged(population.Division, active, now.UnixMilli())
 		}
 	}
 	w.seen, w.active = true, active
+	if active {
+		for _, population := range populations {
+			rt.syncWinterGauge(population.Division, now)
+		}
+	}
 	paid := false
 	for _, reward := range rt.dueWinterRewards(now) {
 		if active {
@@ -414,6 +419,7 @@ func (rt *Runtime) payWinterReward(reward winterReward, now time.Time) {
 		rt.announce(division, announceWinterMission, fmt.Sprintf(winterNoticeClear, name), wire.NoticeLink{}, 0, nowMs)
 		rt.announce(division, announceWinterMission, fmt.Sprintf(winterNoticeIncrease,
 			int(progression.WinterExpUpDuration/time.Minute), progression.WinterExpUpPercent), wire.NoticeLink{}, 0, nowMs)
+		rt.queueWinterGaugeCompletion(division, reward.completion.ID)
 	case progression.WinterMissionSnowSlave:
 		rt.grantWinterWinner(division, reward.completion.Winner, nowMs)
 		rt.announce(division, announceWinterMission, fmt.Sprintf(winterNoticeWinner, reward.completion.Winner, name), wire.NoticeLink{}, 0, nowMs)
@@ -591,9 +597,12 @@ func (rt *Runtime) ChristmasEntryFrames(division string, character *enterworld.C
 			lines = append(lines, fmt.Sprintf(winterEntryNoticeMission, progression.WinterMissionName(row.ID), row.Count, row.Goal))
 		}
 	}
-	packets := make([]enterworld.Packet, 0, len(lines))
+	packets := make([]enterworld.Packet, 0, len(lines)+1)
 	for _, line := range lines {
 		frame := wire.DropPlusNotificationFrame(clampNotice(line), wire.NoticeLink{})
+		packets = append(packets, enterworld.NewPacket(frame.Opcode, frame.Payload))
+	}
+	if frame, ok := rt.winterGaugeEntryFrame(division); ok {
 		packets = append(packets, enterworld.NewPacket(frame.Opcode, frame.Payload))
 	}
 	return packets

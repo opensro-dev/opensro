@@ -177,6 +177,7 @@ type InstancePartyFacts struct {
 	Leader      bool
 	Shared      bool
 	Transported bool
+	JobSuit     bool
 }
 
 /*
@@ -193,6 +194,8 @@ type InstanceInviteCall struct {
 	Entry      simulation.Spawn
 	DeadlineMs int64
 	Eligible   func(*enterworld.Character) bool
+	// Solo opens a private layer for the caller alone (no party read, no prompts).
+	Solo bool
 }
 
 /*

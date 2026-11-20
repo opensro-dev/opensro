@@ -81,6 +81,7 @@ var catalogueExempt = map[string]string{
 	"SRO_SOOK_SURVIVAL_ARENA":                  "private encounters and checkpoint chests at runtime; the catalogue publishes static nests and timed global events, not private stage state or chest rolls",
 	"SRO_SOOK_CHECKPOINT_SECONDS":              "the arena's checkpoint chest interval at runtime; the catalogue publishes no private stage timing",
 	"SRO_SOOK_CHEST_CAPACITY":                  "the arena's checkpoint chest capacity at runtime; the catalogue publishes no chest contents",
+	"SRO_AUTO_MACRO":                           "stores each character's macro settings at runtime; the catalogue publishes no per-character settings",
 	"SRO_BETA_STARTER_KIT":                     "a character-creation grant; the catalogue publishes the granted items, not the grant",
 	"SRO_BETA_PLAYER_MAP":                      "shows other players on the world map at runtime; the catalogue publishes no live positions",
 	"SRO_BETA_MASTERY_EARLY":                   "a per-character allowance read from each character's creation time at runtime; levels.json keeps the native and shard-wide budgets",
@@ -210,4 +211,8 @@ var catalogueExempt = map[string]string{
 	"SRO_JANGAN_TOMB_TELEPORT":                 "the Jangan gate's tomb floor links; the teleport menu comes from the asset bake's teleportData.json, not the catalogue",
 	"SRO_CROSS_CITY_TELEPORT":                  "the direct town gate links; the teleport menu comes from the asset bake's teleportData.json, not the catalogue",
 	"SRO_WEBTRANSPORT_PUBLIC":                  "how the shard's transport is served; no catalogue file carries it",
+	"SRO_CAP110_QUESTS":                        "a build input consumed when the server data is built; the catalogue publishes the built data",
+	"SRO_HWAN_NIYA_CAPTURE_RATES":              "the odds of a quest's capture roll at runtime; the catalogue publishes no quest rolls",
+	"SRO_HWAN_SUN_RELIC":                       "the odds of a quest's dig roll at runtime; the catalogue publishes no quest rolls",
+	"SRO_HWAN_3_FAST_DROP":                     "how many quest items one kill drops at runtime; the catalogue publishes no quest drops",
 }

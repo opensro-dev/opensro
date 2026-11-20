@@ -28,6 +28,7 @@ import (
 	"opensro.online/server/internal/config/shardsettings"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/quest"
 )
 
 /*
@@ -88,6 +89,13 @@ func (settings portOnlySettings) validate() error {
 			_, err = action.ParseBetaSilk(raw)
 		case shardsettings.ValueBetaGrowthBands:
 			_, err = progression.ParseGrowthBands(raw)
+		case shardsettings.ValueHwanKnob:
+			_, err = quest.HwanKnobsFromEnv(func(name string) string {
+				if name == setting.Env {
+					return raw
+				}
+				return ""
+			})
 		default:
 			err = fmt.Errorf("unknown validation kind %d", setting.Validation)
 		}

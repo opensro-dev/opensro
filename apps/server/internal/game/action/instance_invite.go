@@ -226,6 +226,9 @@ type InstanceInviteRequest struct {
 	Entry      simulation.Spawn
 	DeadlineMs int64
 	Eligible   func(*enterworld.Character) bool
+	// Solo opens a private layer for the leader alone: no party is read and no
+	// member is prompted (the Blue Berserk arenas are one player's task).
+	Solo bool
 }
 
 /*
@@ -263,6 +266,9 @@ type InstancePartyFacts struct {
 	Leader      bool
 	Shared      bool
 	Transported bool
+	// JobSuit is whether the character wears a trade job suit (the Blue
+	// Berserk arenas refuse one).
+	JobSuit bool
 }
 
 /*
@@ -279,7 +285,8 @@ func (rt *Runtime) InstancePartyFacts(division, name string) InstancePartyFacts 
 	if character == nil {
 		return InstancePartyFacts{}
 	}
-	facts := InstancePartyFacts{Found: true, Transported: rt.transportSummoned(character)}
+	facts := InstancePartyFacts{Found: true, Transported: rt.transportSummoned(character),
+		JobSuit: wearsJobSuit(character, rt.deps.ItemReferences())}
 	if party := rt.rewardPartyOf(division, enterworld.ObjectIDForCharacter(character)); party != nil {
 		facts.InParty = true
 		facts.Leader = party.LeaderID == enterworld.ObjectIDForCharacter(character)
@@ -333,7 +340,7 @@ func (rt *Runtime) InvitePartyToInstance(req InstanceInviteRequest) InstanceInvi
 	}
 	leaderGid := enterworld.ObjectIDForCharacter(leader)
 	var memberGids []uint32
-	if party := rt.rewardPartyOf(req.Division, leaderGid); party != nil {
+	if party := rt.rewardPartyOf(req.Division, leaderGid); party != nil && !req.Solo {
 		if party.LeaderID != leaderGid || party.Options&instanceInviteShareOptions != instanceInviteShareOptions {
 			return result
 		}

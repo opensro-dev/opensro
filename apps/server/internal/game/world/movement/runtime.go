@@ -77,6 +77,10 @@ type Runtime struct {
 	// rules and may use authoritative character privileges. Nil is accepted
 	// only by narrow tests with no restricted-area catalog.
 	CanEnterRegion func(character *enterworld.Character, regionID uint16) bool
+	// WalkAllowed is the port-only leash of a quest arena that stands in an open region (the rituals): false for
+	// a pose the character may not walk to, so a destination click there is refused and a direction walk stops at the
+	// edge. Nil allows every pose.
+	WalkAllowed func(character *enterworld.Character, at simulation.Spawn) bool
 	// TownEntryBlocked is the thief's stolen-goods rule (#721): a thief in
 	// job mode with a summoned transport may not cross from a battlefield
 	// region into a protected one (the server's job-region transition rule
@@ -553,6 +557,12 @@ func (rt *Runtime) handleMoveLocked(divisionID string, character *enterworld.Cha
 		}
 		if rt.thiefCargoCrossingBlocked(character, live, goal) {
 			return thiefCargoTownRefusal()
+		}
+		if rt.WalkAllowed != nil && !rt.WalkAllowed(character, goal) {
+			return refusedMove(&simulation.MoveError{
+				NativeErrorCode: simulation.NativeErrorInvalidRequest,
+				Reason:          "arenaLeash",
+			})
 		}
 		committed, committedWalk, refusal := rt.AdmitGroundWalk(character.Name, live, state.LiveOwnerAt(nowMs), goal)
 		if refusal != nil {

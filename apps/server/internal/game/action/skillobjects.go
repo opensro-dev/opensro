@@ -71,7 +71,10 @@ func (rt *Runtime) useQuestTrap(c *enterworld.Character, use skillItemUse, skill
 	}
 	trap := skill.CastGate.QuestTrap
 	if code := rt.qestRefusal(use.division, c, trap.Radius, use.nowMs); code != 0 {
-		result.DiagnosticRefusal = "quest-trap: placement prerequisite refused"
+		// 0x3037: another trap too close; 0x3038: a monster too close. The client words both
+		// (UIIT_MSG_QUEST_ERR_CANNOT_MAKE_TRAP[_EXIST_MONSTER]); the item-use failure frees its wait.
+		*result = OpResult{Frames: append(offensiveRefusal(code).Frames, itemUseFailure(itemUseSkillRefused).Frames...),
+			DiagnosticRefusal: "quest-trap: placement prerequisite refused"}
 		return false
 	}
 	at := rt.liveSpawn(simulation.WorldKey(use.division, c.Name), c, use.nowMs)
