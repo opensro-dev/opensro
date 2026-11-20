@@ -514,7 +514,7 @@ class StepRunner:
 	def delta(self, recorder: Recorder) -> dict:
 		files = []
 		for key in sorted(recorder.written):
-			relative = Path(recorder.written[key]).relative_to(self.out).as_posix()
+			relative = self.disk_relative(recorder.written[key])
 			if os.path.isfile(key):
 				sha = file_digest(key)
 				self.store.put_blob(Path(key), sha)
@@ -522,10 +522,29 @@ class StepRunner:
 			elif not os.path.exists(key):
 				files.append([relative, None, 0])
 		trees = [Path(tree).relative_to(self.out).as_posix() for tree in recorder.trees]
-		dirs = sorted(
-			Path(path).relative_to(self.out).as_posix() for key, path in recorder.dirs.items() if os.path.isdir(key)
-		)
+		dirs = sorted(self.disk_relative(path) for key, path in recorder.dirs.items() if os.path.isdir(key))
 		return {"files": files, "trees": trees, "dirs": dirs}
+
+	# ================
+	# disk_relative
+	#
+	# A touched path relative to out, spelled as the disk holds it. On a
+	# case-insensitive disk a folder keeps the spelling of whoever made it
+	# first (an earlier step's "arabia"), while a later step may write
+	# through "Arabia/"; recording the step's own spelling made a replay
+	# create "Arabia" and change 1,771 paths. realpath reads the disk's
+	# names (on Windows, the final path name); a path gone by the step's
+	# end, or one realpath leads outside out, keeps the step's spelling.
+	# ================
+	def disk_relative(self, path: str) -> str:
+		written = Path(path).relative_to(self.out).as_posix()
+		if not os.path.exists(path):
+			return written
+		try:
+			real = Path(os.path.realpath(path)).relative_to(os.path.realpath(self.out)).as_posix()
+		except ValueError:
+			return written
+		return real if real.lower() == written.lower() else written
 
 	# ================
 	# replay

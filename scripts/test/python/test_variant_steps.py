@@ -156,6 +156,28 @@ class StepRunnerTests(unittest.TestCase):
 		self.assertFalse((out / "Data" / "table.txt.partial").exists())
 		shutil.rmtree(cache, ignore_errors=True)
 
+	def test_a_replay_keeps_the_folder_spelling_the_disk_holds(self):
+		# On a case-insensitive disk a folder keeps its first spelling
+		# ("arabia"), and one step may then make a subfolder through
+		# another ("Arabia/Petra"), as later-layers does. Replay makes
+		# folders in sorted order, where "Arabia" comes first; the replay
+		# must still leave the names the recording run left.
+		out = self.out
+
+		def layers():
+			(out / "Data" / "arabia").mkdir(parents=True, exist_ok=True)
+			(out / "Data" / "arabia" / "a.txt").write_bytes(b"a")
+			(out / "Data" / "Arabia" / "Petra").mkdir(parents=True, exist_ok=True)
+			(out / "Data" / "Arabia" / "Petra" / "b.txt").write_bytes(b"b")
+
+		names = []
+		for _ in range(2):
+			self.seed()
+			self.runner().take(variant_steps.Step("layers", layers))
+			names.append(sorted(str(path.relative_to(out)) for path in (out / "Data").rglob("*")))
+		self.assertTrue(any("replayed" in line for line in self.lines), self.lines)
+		self.assertEqual(names[0], names[1])
+
 	def test_a_write_outside_the_tree_is_never_replayed(self):
 		elsewhere = self.variant / "manifest.json"
 		calls = []
