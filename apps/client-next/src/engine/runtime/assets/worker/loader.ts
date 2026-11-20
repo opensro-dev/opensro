@@ -174,8 +174,74 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		try {
 			return run();
 		} finally {
-			for ( const restart of stallWindows ) restart();
+			restartStallWindows();
 		}
+	}
+	/*
+	================
+	restartStallWindows
+
+	Every in-flight download's stall window starts over: the span that
+	just ended parked the loop for its whole length, so the silence in
+	it was never time a download could have used.
+	================
+	*/
+	function restartStallWindows() {
+		for ( const restart of stallWindows ) restart();
+	}
+	/*
+	================
+	decodeWorld
+
+	Drive one world decode (world.ts decodeSteps) to its scene. At
+	each of the decode's yields the worker's message loop gets a turn
+	(decodeTurn), so a cancel posted during a minutes-long city decode
+	is read and the decode abandoned instead of outliving the caller's
+	acknowledgement window (#3998). The synchronous spans between the
+	turns still park the loop, so when the decode settles every
+	in-flight download's stall window restarts, as after a syncWork
+	span (#2862).
+	================
+	*/
+	async function decodeWorld(
+		steps: Generator<void, import("@/engine/contracts/scene").WorldScene>,
+		signal: AbortSignal
+	): Promise<import("@/engine/contracts/scene").WorldScene> {
+		try {
+			let step = steps.next();
+			while ( !step.done ) {
+				await decodeTurn( signal );
+				step = steps.next();
+			}
+			return step.value;
+		} finally {
+			restartStallWindows();
+		}
+	}
+	/*
+	================
+	decodeTurn
+
+	One turn of the worker's message loop between two decode spans,
+	and no further span once the decode's job was cancelled meanwhile.
+	A MessageChannel round trip is a task, not a timer: the queued
+	cancel is read during the turn, so its abort lands here instead of
+	after the whole decode. Both ports close before the promise
+	settles, so a long decode leaks no ports.
+	================
+	*/
+	function decodeTurn( signal: AbortSignal ): Promise<void> {
+		signal.throwIfAborted();
+		return new Promise<void>( ( resolve, reject ) => {
+			const channel = new MessageChannel();
+			channel.port1.onmessage = () => {
+				channel.port1.close();
+				channel.port2.close();
+				if ( signal.aborted ) reject( signal.reason );
+				else resolve();
+			};
+			channel.port2.postMessage( undefined );
+		} );
 	}
 	/*
 	================
@@ -720,15 +786,16 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					if ( part === "terrain" ) {
 						const terrain = await worlds.resolveTerrain( bytes, readWorldResource, url.pathname );
 						if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
-						const prepared = syncWork( () =>
-							prepareWorldScene(
-								worlds.decode( terrain, false, {
-									origin,
-									part,
-									onProgress: noteDecodeWork
-								} )
-							)
+						const decoded = await decodeWorld(
+							worlds.decodeSteps( terrain, false, {
+								origin,
+								part,
+								onProgress: noteDecodeWork,
+								signal: controller.signal
+							} ),
+							controller.signal
 						);
+						const prepared = syncWork( () => prepareWorldScene( decoded ) );
 						decodeBase = decodeUnits;
 						send( { kind: "world", id: request.id, prepared }, worldSceneTransfers( prepared.scene ) );
 						pending.delete( request.id );
@@ -786,12 +853,14 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					// The decode closures below capture the bundle: narrowing
 					// does not reach into them, so name the non-null value.
 					const resolvedBundle = resolved;
-					let scene = syncWork( () =>
-						worlds.decode( resolvedBundle, request.decode === "frontend-world", {
+					let scene = await decodeWorld(
+						worlds.decodeSteps( resolvedBundle, request.decode === "frontend-world", {
 							origin,
 							part,
-							onProgress: noteDecodeWork
-						} )
+							onProgress: noteDecodeWork,
+							signal: controller.signal
+						} ),
+						controller.signal
 					);
 					decodeBase = decodeUnits;
 					const propsPath = new URLSearchParams( url.hash.slice( 1 ) ).get( "props" );
@@ -813,8 +882,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 							if ( prop.name === "idol_lizard" ) continue;
 							if ( prop.scale !== 1 ) throw Error( "Unsupported interface model scale" );
 							const region = resolvedBundle.source.sectorX | (resolvedBundle.source.sectorY << 8);
-							const product = syncWork( () =>
-								worlds.decode(
+							const product = await decodeWorld(
+								worlds.decodeSteps(
 									{
 										source: resolvedBundle.source,
 										terrain: { blocks: [] },
@@ -825,8 +894,9 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 										}
 									},
 									true,
-									{ onProgress: noteDecodeWork }
-								)
+									{ onProgress: noteDecodeWork, signal: controller.signal }
+								),
+								controller.signal
 							);
 							decodeBase = decodeUnits;
 							added.push(

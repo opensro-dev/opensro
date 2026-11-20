@@ -87,11 +87,17 @@ export interface WorldDecodeOptions {
 	readonly origin?: number;
 	readonly part?: WorldDecodePart;
 	// The decoder's work notes: called with the cumulative count of work
-	// units (placements and terrain blocks processed) as the synchronous
-	// decode advances. A city decode is minutes of pure CPU on a slow
-	// device and moves no bytes; the caller forwards these to the asset
+	// units (placements and terrain blocks processed) as the decode
+	// advances. A city decode is minutes of pure CPU on a slow device
+	// and moves no bytes; the caller forwards these to the asset
 	// watchdog as the decode's only proof of life (#2862).
 	readonly onProgress?: ( units: number ) => void;
+	// The owning job's cancellation: checked at every decode yield
+	// (decodeSteps), and the decode is abandoned with the signal's
+	// reason. A decode that never yields cannot be cancelled at all:
+	// the cancel waits in the message queue for the decode's whole
+	// length, past the caller's acknowledgement window (#3998).
+	readonly signal?: AbortSignal;
 }
 
 /*
@@ -101,7 +107,7 @@ createWorldDecoder
 */
 export function createWorldDecoder( budget = WORLD_DECODE_BYTES ) {
 	const resources = createWorldResources();
-	return {
+	const decoder = {
 		resolve: resources.resolve,
 		resolveTerrain: resources.resolveTerrain,
 		/*
@@ -109,10 +115,34 @@ export function createWorldDecoder( budget = WORLD_DECODE_BYTES ) {
 		decode
 
 		One resolved bundle into a scene: the part options asks for, in the
-		coordinates of options.origin (WorldDecodeOptions).
+		coordinates of options.origin (WorldDecodeOptions), decoded in one
+		synchronous run of decodeSteps.
 		================
 		*/
 		decode( bytes: Uint8Array | Bundle, frontend = false, options: WorldDecodeOptions = {} ): WorldScene {
+			const steps = decoder.decodeSteps( bytes, frontend, options );
+			let step = steps.next();
+			while ( !step.done ) step = steps.next();
+			return step.value;
+		},
+		/*
+		================
+		decodeSteps
+
+		The decode as spans of synchronous work with a yield at every work
+		report: the scene it builds is the one the old straight-line decode
+		built, only the scheduling changed. decode drives the spans back
+		to back; the asset worker (loader.ts decodeWorld) gives the
+		worker's message loop a turn at each yield, so a cancel posted
+		during a minutes-long city decode is read - and the decode
+		abandoned - while it is still running (#3998).
+		================
+		*/
+		*decodeSteps(
+			bytes: Uint8Array | Bundle,
+			frontend = false,
+			options: WorldDecodeOptions = {}
+		): Generator<void, WorldScene> {
 			let reserved = 0;
 			/*
 ================
@@ -142,14 +172,22 @@ reserve
 noteWork
 
 Count one unit of decode work and, every WORK_REPORT_INTERVAL units,
-report the cumulative count: the synchronous decode's pulse. The check
-is one increment and one modulo per unit, so a hot loop pays nothing
-measurable for staying provably alive.
+report the cumulative count and yield the decode: the decode's pulse.
+The report is the asset watchdog's only proof of life (#2862); the
+yield is the seam where the driver gives the worker's message loop a
+turn, so a cancel can be read - and acted on - while the decode is
+still running (#3998). The check is one increment and one modulo per
+unit, so a hot loop pays nothing measurable for staying provably alive
+and cancellable.
 ================
 			*/
-			const noteWork = () => {
+			const noteWork = function*() {
 				workUnits++;
-				if ( workUnits % WORK_REPORT_INTERVAL === 0 ) options.onProgress?.( workUnits );
+				if ( workUnits % WORK_REPORT_INTERVAL === 0 ) {
+					options.onProgress?.( workUnits );
+					options.signal?.throwIfAborted();
+					yield;
+				}
 			};
 			const region = b.source.sectorX | (b.source.sectorY << 8),
 				origin = options.origin ?? region,
@@ -337,7 +375,7 @@ noteMaterial
 			const models: Record<string, import("@/engine/contracts/character").CharacterModel> = {},
 				scenery: import("@/engine/contracts/scenery").SceneryEmitter[] = [];
 			for ( const p of placements ) {
-				noteWork();
+				yield* noteWork();
 				const home = Number( p.regionId ),
 					key = `${home}:${p.objectId}:${p.uid}:${p.position.x}:${p.position.y}:${p.position.z}`;
 				if ( seen.has( key ) ) continue;
@@ -519,6 +557,7 @@ noteMaterial
 				}
 			}
 			for ( const [id, g] of instances ) {
+				yield* noteWork();
 				groups.push( {
 					id: `object:${id}`,
 					dungeonBlock: g.block,
@@ -544,6 +583,7 @@ noteMaterial
 				} );
 			}
 			for ( const entry of objectPart ? b.animated ?? [] : [] ) {
+				yield* noteWork();
 				const animatedPlacement = animatedPlacements.get( entry.glbPublicPath );
 				if ( !entry.model || !animatedPlacement ) continue;
 				const { matrices, visibility } = animatedPlacement;
@@ -555,6 +595,7 @@ noteMaterial
 				if ( !ref ) throw Error( "Animated world material provenance is absent" );
 				const materials = ref.materialPaths.flatMap( path => sets.get( path.toLowerCase() ) ?? [] );
 				for ( let i = 0; i < model.primitives.length; i++ ) {
+					yield* noteWork();
 					const p = model.primitives[i]!, mat = materials.find( row => row.name === p.name );
 					if ( !mat ) throw Error( "Animated world material is absent: " + p.name );
 					reserve(
@@ -645,7 +686,7 @@ noteMaterial
 			);
 			for ( const sector of terrainPart ? sectors : [] ) {
 				for ( const block of sector.blocks ) {
-					noteWork();
+					yield* noteWork();
 					if (
 						block.heights.length !== 289 || block.textureData.length !== 289 ||
 						!finiteNumbers( block.heights ) || !block.textureData.every( v =>
@@ -925,6 +966,7 @@ noteMaterial
 					ranges: TerrainRange[] = [];
 				let v = 0, i = 0;
 				for ( const group of list ) {
+					yield* noteWork();
 					const g = group.geometry;
 					positions.set( g.positions, v * 3 );
 					normals.set( g.normals!, v * 3 );
@@ -995,4 +1037,5 @@ noteMaterial
 			return scene;
 		}
 	};
+	return decoder;
 }
