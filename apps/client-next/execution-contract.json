@@ -2929,9 +2929,9 @@
 		{
 			"file": "src/engine/runtime/assets/worker/loader.ts",
 			"expression": "restart",
-			"function": "syncWork",
+			"function": "restartStallWindows",
 			"kind": "callback",
-			"reason": "Stall-window restarts of the downloads in flight (loader.ts downloadAttempt): a synchronous span restarts each attempt's own restart closure when the loop frees."
+			"reason": "Stall-window restarts of the downloads in flight (loader.ts downloadAttempt): a synchronous span (syncWork) or a world decode (decodeWorld) restarts each attempt's own restart closure when it ends."
 		},
 		{
 			"file": "src/engine/runtime/platform/keep-awake.ts",
