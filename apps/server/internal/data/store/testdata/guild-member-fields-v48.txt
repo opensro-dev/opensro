@@ -1,0 +1,12 @@
+charId
+donatedGp
+dword30
+dword34
+dword38
+fortressRole
+grade
+grantName
+jid
+name
+permMask
+refObjId

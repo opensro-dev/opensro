@@ -62,6 +62,7 @@ import import_vsro_alexandria as tables
 import jupiter_import as jupiter
 import later_world_import
 from prepare_client_resources import write_atomically
+import shard_switch
 from sro_paths import trees_overlap
 
 FLAG = "SRO_HUNTING2"
@@ -138,6 +139,30 @@ def hunting_placements(npcpos_raw, later, regions):
 	return placements
 
 
+# The Qin-Shi tomb's server overlay (monster/qinshi_tomb.go,
+# shared/qinshiTomb.mjs): 79 character rows the server appends while
+# SRO_QINSHI_TOMB is on, which the shard registry defaults on. Five of the
+# set's MOB_TQ_* kinds are among them.
+QINSHI_TOMB_FLAG = "SRO_QINSHI_TOMB"
+QINSHI_TOMB_ON_WORDS = ("1", "on", "true", "yes")
+QINSHI_TOMB_CHARACTERS = "internal/game/world/monster/data/qinshi_tomb_characterdata.tsv"
+
+
+# ================
+# standing_characters
+#
+# Every character row that stands beside this import's own shard: the
+# tree's other shards, and the Qin-Shi overlay's rows while the shard
+# admits them. A kind standing here is placed on its row, never staged
+# again: one codename, one row (the bake's roster refuses a duplicate).
+# ================
+def standing_characters(text_root, env=os.environ):
+	rows = cap110.tree_characters(text_root, CHARACTER_SHARD)
+	if shard_switch.switch_enabled(QINSHI_TOMB_FLAG, QINSHI_TOMB_ON_WORDS, env):
+		rows += shard_switch.overlay_rows(QINSHI_TOMB_CHARACTERS)
+	return {row[2]: row for row in rows if len(row) > 2}
+
+
 # ================
 # family_admits
 #
@@ -154,12 +179,12 @@ def family_admits(code, row):
 #
 # The set's nests from its placements, by the cap-110 client posture:
 # one nest of one monster standing on each placement point of an
-# admitted species, identities sequential over the sorted
+# admitted species (kinds, staged or standing in the tree), identities sequential over the sorted
 # placements so a rebuild of the pinned client writes the same
 # file. The rows name the default world, whose regions these are.
 # ================
-def synthesize_population(placements, refs):
-	ordered = sorted((p for p in placements if p[0] in refs),
+def synthesize_population(placements, kinds):
+	ordered = sorted((p for p in placements if p[0] in kinds),
 		key=lambda p: (p[1], p[0], p[2], p[3], p[4]))
 	rows = []
 	for nest_id, (code, region, x, y, z) in enumerate(ordered, 1):
@@ -256,18 +281,32 @@ def add_monsters(v1696_root, native, output):
 		later = later_world_import.later_characters(read)
 		placements = hunting_placements(read("npcpos.txt"), later, set(regions))
 		codes = sorted({code for code, region, x, y, z in placements})
+		# 49 of the 71 placed kinds already stand in the tree (native
+		# Donwhang and Karakoram kinds, the cap-110, Arabia and Jupiter
+		# layers'): one codename stands in one row, so those are placed
+		# on their own row, under the same window the server admits them
+		# by (monster/hunting2.go admitHunting2), and only the rest are
+		# staged. Staging them again collided with their published ids (r203),
+		# and the Qin-Shi overlay's five with the bake's roster (r203g).
+		tree = standing_characters(text_root)
 		refs = {}
+		placed = set()
 		for code in codes:
+			if code in tree:
+				if family_admits(code, tree[code]):
+					placed.add(code)
+				continue
 			if code not in later:
 				raise ValueError("placed monster has no v1.696 character row: " + code)
 			if family_admits(code, later[code]):
 				refs[code] = characters.convert_character(later[code])
-		missing = sorted(set(codes) - set(refs))
+				placed.add(code)
+		missing = sorted(set(codes) - placed)
 		if missing:
 			raise ValueError(f"hunting ground placements name unadmitted monsters: {missing}")
 		staged = later_world_import.stage_kinds("hunting ground", read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
 			lambda code: code in refs)
-		population = synthesize_population(placements, refs)
+		population = synthesize_population(placements, placed)
 		write_atomically(text_root / FIELD_FILE, (json.dumps(population) + "\n").encode())
 		summary = {"enabled": True,
 			"characters": staged["characters"], "skills": staged["skills"],

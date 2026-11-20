@@ -455,6 +455,19 @@ allocate_identities = published_ids.allocate_identities
 
 
 # ================
+# tree_characters
+#
+# Every character row the tree's characterdata shards hold but own's:
+# native rows and every earlier layer's. own is the import's own shard,
+# which its rebuild rewrites. An import allocates above these rows and
+# never stages one of their codenames again (one codename, one row).
+# ================
+def tree_characters(text_root, own):
+	return [row for path in Path(text_root).glob("characterdata_*.txt") if path.name != own
+		for row in tables.table_rows(path.read_bytes())]
+
+
+# ================
 # allocate_characters
 #
 # allocate_identities for character rows under the published pin of the
@@ -677,7 +690,7 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		refs = select_references(later, claims)
 		if not refs:
 			raise ValueError("no ordinary level 100-110 Alexandria field monsters")
-		native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != CHARACTER_SHARD for r in tables.table_rows(p.read_bytes())]
+		native_chars = tree_characters(text_root, CHARACTER_SHARD)
 		occupied = {int(r[1]) for r in native_chars}
 		allocated = allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 		for code, row in sorted(refs.items()):

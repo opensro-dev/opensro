@@ -358,6 +358,7 @@ import { createMoveReservation, type GroundCommand } from "./reservation/reserva
 import { createBetaPlayerMap } from "./beta-map/beta-map";
 import { createCaravanStars } from "./caravan-stars/caravan-stars";
 import { createContributorTitles } from "./contributor-titles/contributor-titles";
+import { createSroMacro } from "./sro-macro/sro-macro";
 import { createTradeProgress } from "./trade-progress/trade-progress";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createHwanLevel } from "./hwan-level/hwan-level";
@@ -518,6 +519,9 @@ const CAPE_SOCKET = 8;
 const UNARMED_REACH = 6;
 // Movement mode 4 is seated (motion 4, which 58E0BF refuses ao/pw from).
 const MOVEMENT_SEATED = 4;
+// The abnormal bits whose move the server drops while navigation stays open:
+// sleep 0x40, root 0x80, petrify 0x1000 and stun 0x4000 (movementDropped).
+const MOVEMENT_DROPPED_ABNORMAL = 0x40 | 0x80 | 0x1000 | 0x4000;
 // B2CD kind 1 admits a command (75BAA0); count 2 queues it behind an open one.
 const ACTION_STATE_ARM = 1;
 const QUEUED_COMMANDS = 2;
@@ -693,6 +697,7 @@ export function createGameplay(
 		betaMap = createBetaPlayerMap(),
 		caravanStars = createCaravanStars(),
 		contributorTitles = createContributorTitles(),
+		sroMacro = createSroMacro(),
 		tradeProgress = createTradeProgress(),
 		uniqueRank = createUniqueDamageRank(),
 		mostWanted = createMostWanted(),
@@ -1117,6 +1122,26 @@ scroll's kind-0 row does not.
 	}
 	/*
 	================
+	movementDropped
+
+	Port-only, not native: sleep, root, petrify and stun leave navigation
+	open on the native client (only freeze's action state 9 closes it), so
+	it sends the click, and the server's move handler drops it (action
+	PlayerMovementBlocked). The native client walks only on the server's
+	answer and shows nothing. This client predicts walks and its server
+	answers every command, refusals included: a predicted walk snapped
+	back, and a refused one still started the walking gait. A ground or
+	arrow walk is therefore not sent at all, as while frozen (the outcome
+	is the server's), and any other walk (an NPC approach, a run-up) is
+	sent unpredicted (movement.holdPrediction).
+	================
+	*/
+	function movementDropped(): boolean {
+		return ((combat.state().vitals.find( v => v.gid === localGid )?.abnormal ?? 0) & MOVEMENT_DROPPED_ABNORMAL) !==
+			0;
+	}
+	/*
+	================
 	castLocked
 
 	The local player's cast holds a world click until its action window ends
@@ -1152,6 +1177,7 @@ scroll's kind-0 row does not.
 		if ( teleportMode === 1 ) return "teleport";
 		if ( interactionBlocked() || inventory.tradePinned() ) return "blocked";
 		if ( frozen() ) return "frozen";
+		if ( movementDropped() ) return "dropped";
 		if ( castLocked( now ) ) return "cast";
 		if ( local.mountedOn && (!activeCos || activeCos.gid !== local.mountedOn || activeCos.dead) ) return "mounted";
 		return null;
@@ -1722,6 +1748,7 @@ clears it when another character enters.
 		betaMap.clear();
 		caravanStars.clear();
 		contributorTitles.clear();
+		sroMacro.clear();
 		uniqueRank.clear();
 		mostWanted.clear();
 		hwanLevel.clear();
@@ -2379,6 +2406,7 @@ state here before a command can claim a native wire conversation.
 			}
 			dirty = true;
 			soundClock = now;
+			movement.holdPrediction( movementDropped() );
 			if ( command.kind === "arena-decision" ) {
 				if ( command.operation === 0 && !inventory.requestArenaState() ) return null;
 				if ( !localGid || ![ 0, 1, 2 ].includes( command.operation ) || command.id.length > 128 ) {
@@ -2886,7 +2914,7 @@ state here before a command can claim a native wire conversation.
 				cancelActionForMovement();
 				if ( command.kind === "ground-move" && command.departing ) sendFrame( logoutCancelRequest() );
 			}
-			if ( frozen() && [ "move", "ground-move" ].includes( command.kind ) ) return null;
+			if ( (frozen() || movementDropped()) && [ "move", "ground-move" ].includes( command.kind ) ) return null;
 			// 693392..6933bd ground click / 692d07..692d1e entity click:
 			// seated interaction requests stand and RETURNS before any
 			// goal is stored, so the click is dropped, not walked later;
@@ -3075,6 +3103,16 @@ state here before a command can claim a native wire conversation.
 				for ( const kind of [ 0, 1, 2 ] as const ) {
 					if ( changed[kind] ) potionTimers[kind] = { ...potionTimers[kind], active: false };
 				}
+				return frame;
+			}
+			if ( command.kind === "macro-switch" ) {
+				const frame = sroMacro.switchFrame( command.macro, command.on );
+				if ( frame ) send( frame );
+				return frame;
+			}
+			if ( command.kind === "macro-save" ) {
+				const frame = sroMacro.saveFrame( command.macro, command.settings );
+				if ( frame ) send( frame );
 				return frame;
 			}
 			if ( command.kind === "guide-event" ) {
@@ -4330,6 +4368,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if ( caravanStars.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
+				if ( sroMacro.receive( frame ) ) {
+					const failure = sroMacro.takeNotice();
+					if ( failure ) notices = [ ...notices.slice( -99 ), { ...failure, sequence: ++noticeSequence } ];
 					dirty = true;
 					return true;
 				}
@@ -6002,6 +6046,7 @@ before take assembles the presentation snapshot.
 		*/
 		step( now: number, local?: EntityState ) {
 			inventorySince = inventory.state().inventoryPending ? inventorySince ?? now : undefined;
+			movement.holdPrediction( movementDropped() );
 			if ( arrowKeys.step( now, arrowMover( local ), arrowGate( now, local ) === "open" ) ) {
 				pickup.clear();
 				selectionDecal = null;
@@ -6447,6 +6492,9 @@ The published plane when something changed since the last take, else null.
 				// Port-only (#3358): the shown Contributor roster
 				// (contributor-titles.ts), under SRO_CONTRIBUTOR_TITLES.
 				contributorTitles: contributorTitles.names(),
+				// Port-only (#3907): the SRO Macro settings (sro-macro.ts),
+				// under SRO_AUTO_MACRO.
+				...(sroMacro.view() ? { sroMacro: sroMacro.view() } : {}),
 				uniqueDamageRank: uniqueRank.current(),
 				mostWanted: mostWanted.current(),
 				hwanLevel: localGid === undefined ? undefined : hwanLevel.levelOf( localGid ) || undefined,

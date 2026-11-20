@@ -522,8 +522,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		placements = npc_placements(extraction["npcs"], tables.table_rows(read("npcpos.txt")),
 			codename_by_id, regions)
 
-		native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != CHARACTER_SHARD
-			for r in tables.table_rows(p.read_bytes())]
+		native_chars = monsters.tree_characters(text_root, CHARACTER_SHARD)
 		# The Alexandria rule (alexandria_npcs.merge_npc_tables): an NPC
 		# kind the tables already hold keeps its row and its id, and only
 		# its Arabia standings are added. Converting it again shipped a

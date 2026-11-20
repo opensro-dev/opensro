@@ -269,6 +269,9 @@ type Runtime struct {
 	sookArena *sookArenaRuntime
 	// roc runs the Roc worlds (roc.go); nil with SRO_ROC off.
 	roc *rocRuntime
+	// macro opens the SRO Macro settings lane (macro.go); false, the
+	// default, is native: SRO_AUTO_MACRO off.
+	macro bool
 	// muhanChanges is the Muhan change pairing by change NPC codename
 	// (muhan_change.go). Port-only, not native: empty unless SRO_MUHAN is on.
 	muhanChanges map[string]muhanChange
@@ -282,6 +285,11 @@ type Runtime struct {
 	// independent copy so tests and future shard configuration cannot mutate
 	// another runtime or bootstrap's object list.
 	NpcRoster []simulation.NpcDef
+
+	// worldNpcs are the static NPCs that stand only in one world
+	// definition's layers (worldnpc.go), the runtime's own copy as for
+	// NpcRoster: the Muhan pairing gives its change NPCs Talk in place.
+	worldNpcs []simulation.WorldNpc
 	portals   *portalCatalog
 	// reverseMapPoints is the reverse return scroll's map table, empty
 	// unless SRO_REVERSE_RETURN_MAP is on (ConfigureReverseReturnMap).
@@ -1125,6 +1133,7 @@ func NewRuntime(deps Dependencies, monsters *simulation.MonsterState) *Runtime {
 		Monsters:           monsters,
 		NpcSpawn:           npcSpawns,
 		NpcRoster:          append([]simulation.NpcDef(nil), npcSpawns.Roster...),
+		worldNpcs:          append([]simulation.WorldNpc(nil), npcSpawns.WorldNpcs...),
 		GachaRoll:          secureGachaRoll,
 		AlchemyRoll:        secureAlchemyRoll,
 		CombatRoll:         combat.SecureRoll32767,

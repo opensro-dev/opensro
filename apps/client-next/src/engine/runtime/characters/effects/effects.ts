@@ -1428,6 +1428,30 @@ export function createCharacterEffects(
 						yaw
 					};
 				}
+				/*
+				================
+				moverYaw
+
+				The yaw a mover's Initialize caller hands it: the source
+				object's own yaw float (CICharactor +0x88; the TR client's 1TAR
+				caller a0ebf3 reads it at +0x80), which CIDecoSkill_Update
+				(8DC440) turns toward the target every
+				frame of the cast. That is the drawn body's yaw (cast-facing.ts),
+				not the logical heading the server set at cast start: a target
+				that moved since, or a press that turned no prediction, left the
+				logical heading behind and the bolt flew backwards. The
+				presented actor carries it as characterHeadingYaw (pi minus the
+				native yaw). A rider's yaw belongs to its vehicle in this port,
+				and a holder not drawn yet keeps the logical heading.
+				================
+				*/
+				function moverYaw( holder: EntityState, angle: number ): Radians {
+					const actor = presentation.get( holder.gid );
+					if ( !actor || holder.mountedOn !== undefined || actor.mountedOn !== undefined ) {
+						return nativeHeadingYaw( angle );
+					}
+					return radians( Math.PI - actor.pose.yaw );
+				}
 				const clock = Math.trunc( now * 1000 );
 				for ( const [token, gid] of weaponOwners ) {
 					if (
@@ -1924,16 +1948,24 @@ export function createCharacterEffects(
 									const gid = traded?.actor.gid ?? allocate();
 									if ( traded ) active.delete( gid );
 									// Effect world poses carry the native heading yaw; only the
-									// position comes from the binding (stageAnchor).
+									// position comes from the binding (stageAnchor). A sampled
+									// launch bone is a drawn actor's pose, whose yaw is
+									// characterHeadingYaw (pi minus the native yaw): an .efp
+									// mover took that mirror and flew sideways or backwards.
+									// A mover takes its holder's drawn yaw (moverYaw).
+									const launchYaw = flying ?
+										moverYaw( entity, pose.angle ) :
+										nativeHeadingYaw( pose.angle );
 									let source = flying && targetLocal ?
 										targetMoverPoint( pose, stage.offset ) :
-										sourceSocket ??
-											stageAnchor(
-												entity,
-												stageBinding( stage, false ),
-												trigger,
-												victimFacing ?? nativeHeadingYaw( pose.angle )
-											);
+										sourceSocket ?
+										{ ...sourceSocket, yaw: launchYaw } :
+										stageAnchor(
+											entity,
+											stageBinding( stage, false ),
+											trigger,
+											victimFacing ?? launchYaw
+										);
 									if ( !source ) {
 										refuse( `anchor-height:${entity.refObjId}` );
 										continue;
@@ -2028,15 +2060,18 @@ export function createCharacterEffects(
 										) :
 										flying && targetLocal ?
 										targetMoverPoint( pose, targetOffset ) :
-										targetSocket ??
-											(target ?
-												stageAnchor(
-													target,
-													stageBinding( stage, true ),
-													trigger,
-													nativeHeadingYaw( target.heading )
-												) ?? source :
-												source);
+										// A landing bone gives only its point too: its yaw
+										// reaches the arrival effect and a zero-length mover.
+										targetSocket && target ?
+										{ ...targetSocket, yaw: nativeHeadingYaw( target.heading ) } :
+										(target ?
+											stageAnchor(
+												target,
+												stageBinding( stage, true ),
+												trigger,
+												nativeHeadingYaw( target.heading )
+											) ?? source :
+											source);
 									// The fYaw this mover's Initialize caller gave it:
 									// kept verbatim if the path has zero length. Read
 									// before the radial lane re-aims the source pose.
