@@ -142,3 +142,23 @@ func TestBootstrapCooldownsOnlyProjectClientCatalogueSkills(t *testing.T) {
 		t.Fatal("projection discarded a hidden skill's authoritative deadline")
 	}
 }
+
+/*
+================
+TestBootstrapRestoresRunningItemCooldownGroups
+================
+*/
+func TestBootstrapRestoresRunningItemCooldownGroups(t *testing.T) {
+	character := chinaSpearman()
+	character.ItemGroupCooldowns = map[uint32]int64{0xc9: 1201000, 7: 1000, 9: 500}
+	deps := testDeps(character)
+	deps.Now = func() time.Time { return time.UnixMilli(1000) }
+	result := Build(deps, BootstrapRequest{CharacterName: character.Name})
+	if result.NativeResult != nativeResultSuccess {
+		t.Fatalf("bootstrap refused: %+v", result)
+	}
+	want := []EntryItemCooldown{{Group: 0xc9, RemainingMs: 1200000}}
+	if !reflect.DeepEqual(result.ItemCooldowns, want) {
+		t.Fatalf("entry item cooldowns %+v, want %+v (an ended group is not restored)", result.ItemCooldowns, want)
+	}
+}
