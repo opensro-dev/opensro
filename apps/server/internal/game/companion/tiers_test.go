@@ -77,6 +77,35 @@ func TestUpgradeRetainsPointBudgetGearAndCooldown(t *testing.T) {
 
 /*
 ================
+TestUpgradeGatesEachBookOnThePreviousBooksCap
+
+An old-tree row with ranks to spare, at every pet level: a book that
+receives ranks follows a book at its own MaxLevel (10 / 10 / 1), never one
+that only reached the next book's cap.
+================
+*/
+func TestUpgradeGatesEachBookOnThePreviousBooksCap(t *testing.T) {
+	const maxPetLevel = 120
+	for _, species := range D.Pets {
+		for level := uint8(1); level <= maxPetLevel; level++ {
+			p := &domain.CharacterCOS{Codename: species.CodenamePrefix + "_090", Level: level}
+			for i := range p.Training.Levels {
+				p.Training.Levels[i] = 10
+			}
+			UpgradeTree(p)
+			var previous SkillDef
+			for _, s := range SkillsForPet(p) {
+				if s.Option > 1 && previous.Row == s.Row && p.Training.Levels[s.Index()] > 0 && p.Training.Levels[previous.Index()] < previous.MaxLevel {
+					t.Fatalf("%s level %d: %s holds %d ranks after %s at %d of %d", species.CodenamePrefix, level, s.Name, p.Training.Levels[s.Index()], previous.Name, p.Training.Levels[previous.Index()], previous.MaxLevel)
+				}
+				previous = s
+			}
+		}
+	}
+}
+
+/*
+================
 TestSequentialPassivesAlwaysUseHighestLearnedBook
 ================
 */
