@@ -293,6 +293,40 @@ def by_column(raw, column, width=0):
 
 
 # ================
+# by_ids
+#
+# The object ids an object table's rows hold.
+# ================
+def by_ids(raw):
+	return {int(row[1]) for row in stage1.table_rows(raw) if len(row) > 1 and row[1].isdigit()}
+
+
+# ================
+# gate_buildings
+#
+# A gate building is an object: its id shares one space with every item
+# and character (#3994). A VSRO building id another object already holds
+# moves to a fresh id from the id owner (published_ids), in place in
+# buildings; returns {old id: new id} for the gate rows that name it.
+# Released items keep theirs: r203q shipped six Halloween avatars on the
+# ids of the Alexandria and temple gate buildings (27751-27756), and the
+# client resolved one object for both. The server and the hiding rules
+# name a building by code, never by id, so the building is free to move.
+# ================
+def gate_buildings(buildings, taken):
+	clashing = [row for row in buildings if int(row[1]) in taken]
+	if not clashing:
+		return {}
+	occupied = set(taken) | {int(row[1]) for row in buildings}
+	fresh = published_ids.allocate_identities(occupied, [row[2] for row in clashing], {})
+	moved = {}
+	for row in clashing:
+		moved[row[1]] = str(fresh[row[2]])
+		row[1] = moved[row[1]]
+	return moved
+
+
+# ================
 # translate_link
 # ================
 def translate_link(row, ids, level_cap, dropped=None, items=None):
@@ -337,7 +371,9 @@ def translate_link(row, ids, level_cap, dropped=None, items=None):
 # ================
 # merge_gate_tables
 # ================
-def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP, flatten=(), items=None):
+def merge_gate_tables(
+	native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP, flatten=(), items=None, taken=frozenset()
+):
 	"""
 	The native tables with the gates in codes added. native and vsro map
 	"teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt" and
@@ -348,8 +384,9 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 	temple's source world 60 does not exist in the port). items maps the
 	source client's item ids to the variant's for item conditions
 	(translate_link); a link whose item does not map is left out and
-	listed under omittedLinks. Returns {name: bytes} for the changed files,
-	and the list of gates added.
+	listed under omittedLinks. taken is the object ids other rows hold
+	(gate_buildings). Returns {name: bytes} for the changed files, and the
+	list of gates added.
 	"""
 	native_gates = by_column(native["teleportdata.txt"], 2, TELEPORT_COLUMNS)
 	vsro_gates = by_column(vsro["teleportdata.txt"], 2, TELEPORT_COLUMNS)
@@ -370,9 +407,12 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 		data_rows.append(row)
 	building_ids = {row[3] for row in data_rows}
 	buildings = [
-		row for row in stage1.table_rows(vsro["teleportbuilding.txt"])
+		list(row) for row in stage1.table_rows(vsro["teleportbuilding.txt"])
 		if len(row) >= BUILDING_COLUMNS and row[1] in building_ids
 	]
+	moved = gate_buildings(buildings, taken | by_ids(native["teleportbuilding.txt"]))
+	for row in data_rows:
+		row[3] = moved.get(row[3], row[3])
 	links, dropped_conditions, omitted_links = [], [], []
 	for row in stage1.table_rows(vsro["teleportlink.txt"]):
 		if len(row) != LINK_COLUMNS or row[0] != "1" or not ({row[1], row[2]} & new_ids):
@@ -767,8 +807,12 @@ def add_gates(vsro_root, native, out):
 	codes = GATE_CODES + TOMB_GATE_CODES if tomb_enabled() else GATE_CODES
 	if temple.temple_enabled():
 		codes += TEMPLE_GATE_CODES
+	# The ids the buildings must not take: every object row of the trees,
+	# and every released id, whose items later steps add (the pin).
+	taken = published_ids.occupied_objects(native / textdata) | published_ids.occupied_objects(out / textdata)
+	taken |= set(published_ids.published(published_ids.OBJECTS).values())
 	merged, summary = merge_gate_tables(
-		tables, vsro, codes=codes, level_cap=level_cap, flatten=TEMPLE_GATE_CODES
+		tables, vsro, codes=codes, level_cap=level_cap, flatten=TEMPLE_GATE_CODES, taken=taken
 	)
 	for dropped in summary.get("droppedConditions", []):
 		log(f"gates: link {dropped['from']} -> {dropped['to']}: condition kind {dropped['kind']} "

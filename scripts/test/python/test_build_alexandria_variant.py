@@ -158,6 +158,17 @@ class GateTests(unittest.TestCase):
 		}
 		return native, vsro
 
+	def test_a_building_on_a_taken_object_id_moves_and_its_gate_follows(self):
+		# r203q: six released avatars stood on the gate buildings' VSRO ids.
+		native, vsro = self.tables()
+		merged, _ = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES, taken={27753, 27755})
+		buildings = {row[2]: row[1] for row in stage1.table_rows(merged["teleportbuilding.txt"])}
+		self.assertEqual(buildings["STORE_SD_GATE2"], "27754")
+		self.assertNotIn(int(buildings["STORE_SD_GATE1"]), {27753, 27754, 27755})
+		gates = {row[2]: row[3] for row in stage1.table_rows(merged["teleportdata.txt"])}
+		self.assertEqual(gates["GATE_SD1"], buildings["STORE_SD_GATE1"])
+		self.assertEqual(gates["GATE_SD2"], "27754")
+
 	def test_gates_links_buildings_and_texts_are_added_to_the_native_tables(self):
 		native, vsro = self.tables()
 		merged, summary = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
