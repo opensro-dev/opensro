@@ -635,7 +635,7 @@ schedule
 
 Queue the next draw on whichever comes first: the display's animation
 frame or a short timer. Loading is paced by draws (the asset owner refills
-its four request slots once per UI step), and Chrome runs a tab it is not
+its request slots once per UI step), and Chrome runs a tab it is not
 painting - one behind another tab, or driven by a browser probe - at about
 one animation frame a second. An entry's ~400 startup reads then took about
 100 s to settle; the timer keeps a gallery frame loading at full speed

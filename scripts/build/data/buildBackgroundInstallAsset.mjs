@@ -3,7 +3,8 @@
 
 buildBackgroundInstallAsset.mjs - what the client installs after world entry
 
-The retail client plays every effect sound and effect on demand: the sound
+The retail client reads its interface art from the local PK2 and plays
+every effect sound and effect on demand: the sound
 cache (SoundResourceCache_Acquire, 8F7F90) loads a sound synchronously on
 its first play and keeps released sounds on an LRU list. That is instant
 because the archive is on the local disk. In the browser the same first play
@@ -15,7 +16,14 @@ list of presentation files combat can trigger, and the client installs them
 into its persistent asset store once the world is ready. Later plays read
 local bytes, as retail does.
 
+The interface is the same case. Retail opens a window on the frame it is
+asked for; the browser fetched each image on first use, so a first shop or
+storage opened seconds late (#3977).
+
 Tiers are installed in order:
+- interface: every interface image (the native-ui pack's own eligibility,
+  uiImageEligibility.mjs) and every item and skill icon (the ui-icons pack,
+  assetPackOwnership.mjs), so this list and the packs cannot disagree;
 - combat: the player's own sounds (swings, hits, footsteps, damage),
   skill and common sounds, pet sounds, particle textures and skill-stage
   models;
@@ -29,7 +37,9 @@ Music is not listed: it streams per region, as retail does.
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
+import { imagePackGroup } from "../assetPackOwnership.mjs";
 import { publishBytesAtomically } from "../shared/atomicPublish.mjs";
+import { uiImagePreloadReason } from "../shared/uiImageEligibility.mjs";
 import { listFiles } from "../shared/fsUtils.mjs";
 import { publicRoot as defaultPublicRoot } from "../world/paths.mjs";
 
@@ -47,16 +57,21 @@ const SKILL_STAGE_MODEL_ROOT = "/assets/skillfx/";
 backgroundInstallTier
 
 The tier a published file belongs to, or null when it is not installed in
-the background. `publicPath` is lower-case.
+the background. `publicPath` is lower-case; `inventory` holds every
+published path, lower-case (an image's state siblings decide whether it is
+interface art).
 ================
 */
-export function backgroundInstallTier( publicPath ) {
+export function backgroundInstallTier( publicPath, inventory ) {
 	if ( publicPath.startsWith( EFFECT_SOUND_ROOT ) ) {
 		const folder = publicPath.slice( EFFECT_SOUND_ROOT.length ).split( "/" )[0];
 		return COMBAT_SOUND_FOLDERS.includes( folder ) ? "combat" : "world-sounds";
 	}
 	if ( publicPath.startsWith( PARTICLE_TEXTURE_ROOT ) ) return "combat";
 	if ( publicPath.startsWith( SKILL_STAGE_MODEL_ROOT ) && publicPath.endsWith( ".glb" ) ) return "combat";
+	if ( uiImagePreloadReason( publicPath, inventory ) || imagePackGroup( publicPath ) === "ui-icons" ) {
+		return "interface";
+	}
 	return null;
 }
 
@@ -90,11 +105,12 @@ tree, so their route set is the authority rather than a development sidecar.
 ================
 */
 export function backgroundInstallDocument( paths ) {
-	const tiers = { "combat": [], "world-sounds": [] };
+	const tiers = { "interface": [], "combat": [], "world-sounds": [] };
+	const inventory = new Set( paths.map( publicPath => publicPath.toLowerCase() ) );
 	for ( const publicPath of new Set( paths ) ) {
 		// Precompressed sidecars are served in place of their base file.
 		if ( /\.(?:br|gz|zst)$/i.test( publicPath ) ) continue;
-		const tier = backgroundInstallTier( publicPath.toLowerCase() );
+		const tier = backgroundInstallTier( publicPath.toLowerCase(), inventory );
 		if ( tier ) tiers[tier].push( publicPath );
 	}
 	const document = {

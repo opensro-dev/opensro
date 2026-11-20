@@ -31,7 +31,9 @@ import { readFileSync, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-// assets.ts REQUEST_CAPACITY: the asset owner's foreground slots.
+// The stream lane's slots (ASSET_STREAM_SLOTS, foundation/assets/asset-slots.ts),
+// which character loads use. Kept here, not imported: the harness replays
+// older trees too, and they have no asset-slots.ts.
 const REQUEST_CAPACITY = 4;
 // assets.ts request()'s default byte limit.
 const DEFAULT_REQUEST_LIMIT = 16 << 20;

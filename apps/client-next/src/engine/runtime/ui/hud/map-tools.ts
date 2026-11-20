@@ -50,19 +50,18 @@ import {
 	type WorldMapLayout
 } from "@/engine/foundation/ui/world-map";
 import {
-	WORLDMAP_GUIDE_CATALOG,
 	guideAreaRows,
 	guideAreaTarget,
 	guideMonsterRows,
 	guideMonsterTarget,
 	levelFilterOverlay,
-	worldMapGuideCatalog,
 	type GuideTarget,
 	type GuideView,
 	type WorldMapGuideCatalog
 } from "@/engine/foundation/ui/worldmap-guide";
 import { featuresAt } from "@/engine/foundation/world/plane";
 import { dungeonRegionId } from "@/engine/foundation/world/world-space";
+import { createMapCatalogues, type RegionNamesLoad } from "./map-catalogues";
 import { createLevelFilter } from "./map-level-filter";
 import { GUIDE_MAIN, createGuideScroll, paintGuideTree, treeRow, type GuideTreeRow } from "./map-guide-tree";
 import {
@@ -94,8 +93,6 @@ export { GUIDE_TREE_ART } from "./map-guide-tree";
 // the foot checkbox (the dungeon catalogue already carries them as
 // its monsterLevelNote, issue #3238).
 const LEVEL_FILTER_NOTE_KEY = "UIIT_STT_WORLDMAP_LEVEL_MONSTER_LIST";
-const REGIONCODE_PATH = "/assets/text/regioncode.json";
-const GUIDE_BYTE_LIMIT = 4 << 20;
 // The guide trees' row ids: a main row, a monster, a place.
 export const GUIDE_MONSTER = "map-guide-monster:";
 const GUIDE_AREA = "map-guide-area:";
@@ -171,33 +168,6 @@ interface MapToolsPaint {
 
 /*
 ================
-RegionNamesLoad
-================
-*/
-type RegionNamesLoad =
-	| { kind: "idle"; }
-	| { kind: "loading"; id: number; }
-	| { kind: "ready"; names: ReadonlyMap<number, string>; }
-	| { kind: "failed"; }
-	| { kind: "disposed"; };
-
-/*
-================
-GuideLoad
-
-The guide catalogue's load. A build without it (no pinned v1.696
-client) answers 404 and the tabs fall back to the shard's catalogue.
-================
-*/
-type GuideLoad =
-	| { kind: "idle"; }
-	| { kind: "loading"; id: number; }
-	| { kind: "ready"; catalog: WorldMapGuideCatalog; }
-	| { kind: "absent"; }
-	| { kind: "disposed"; };
-
-/*
-================
 dungeonKey
 
 The dungeon a region belongs to, as the floor selector counts them:
@@ -218,7 +188,7 @@ export function createMapToolsHud( options: {
 	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">;
 	base: string;
 } ) {
-	const assets = options.assets;
+	const catalogues = createMapCatalogues( options );
 	// The foot's level filter (map-level-filter.ts), unchecked at first.
 	const levelFilter = createLevelFilter();
 	// Port-only, not native: the foot's unique spawns switch, off until
@@ -251,8 +221,6 @@ export function createMapToolsHud( options: {
 		names: RegionNamesLoad;
 		groups: readonly MonsterDirectoryRegion[];
 	} | null = null;
-	let regionLoad: RegionNamesLoad = { kind: "idle" };
-	let guideLoad: GuideLoad = { kind: "idle" };
 	// The guide trees' open main row (one per tab, as the tab switch
 	// shuts it), the picked monster (its overlay), and the floor a
 	// picked dungeon row asks for until the cave catalogue resolves it.
@@ -368,10 +336,13 @@ export function createMapToolsHud( options: {
 	*/
 	function drawerGroups( input: MapToolsPaint ): readonly MonsterDirectoryRegion[] {
 		const regions = directory( input.catalogue, levelFilter.band( input.characterLevel ) );
-		if ( groupsFor?.regions !== regions || groupsFor.zones !== input.zones || groupsFor.names !== regionLoad ) {
+		if (
+			groupsFor?.regions !== regions || groupsFor.zones !== input.zones ||
+			groupsFor.names !== catalogues.regions()
+		) {
 			const names = new Map( regions.map( row => [ row.region, regionName( row.region, input.zones ) ] ) );
 			const groups = directoryByName( regions, names );
-			groupsFor = { regions, zones: input.zones, names: regionLoad, groups };
+			groupsFor = { regions, zones: input.zones, names: catalogues.regions(), groups };
 		}
 		return groupsFor.groups;
 	}
@@ -419,7 +390,8 @@ export function createMapToolsHud( options: {
 	function regionName( region: number, zones: MapToolsPaint["zones"] ): string {
 		const byKey = zones?.[String( region )];
 		if ( byKey ) return byKey;
-		const code = regionLoad.kind === "ready" ? regionLoad.names.get( region ) : undefined;
+		const names = catalogues.regions();
+		const code = names.kind === "ready" ? names.names.get( region ) : undefined;
 		if ( code ) return zones?.[code + "_01"] ?? zones?.[code] ?? code;
 		return "Region " + region;
 	}
@@ -476,7 +448,8 @@ export function createMapToolsHud( options: {
 	================
 	*/
 	function guideActivate( id: string ): Pose | null | undefined {
-		const catalog = guideLoad.kind === "ready" ? guideLoad.catalog : undefined;
+		const guide = catalogues.guide();
+		const catalog = guide.kind === "ready" ? guide.catalog : undefined;
 		const prefix = [ GUIDE_MAIN, GUIDE_MONSTER, GUIDE_AREA ].find( value => id.startsWith( value ) );
 		if ( !prefix ) return undefined;
 		const index = Number( id.slice( prefix.length ) );
@@ -518,68 +491,7 @@ export function createMapToolsHud( options: {
 		================
 		*/
 		step( panel: string ): boolean {
-			if ( regionLoad.kind === "disposed" ) return false;
-			let changed = false;
-			if (
-				panel === "Map" && (drawerOpen || levelFilter.checked()) && guideLoad.kind === "idle" &&
-				assets.available() > 0
-			) {
-				guideLoad = {
-					kind: "loading",
-					id: assets.request( new URL( WORLDMAP_GUIDE_CATALOG, options.base ).href, GUIDE_BYTE_LIMIT )
-				};
-			}
-			if ( guideLoad.kind === "loading" ) {
-				const result = assets.take( guideLoad.id );
-				if ( result ) {
-					try {
-						if ( result.kind !== "bytes" ) throw Error( "no worldmap guide in this build" );
-						guideLoad = {
-							kind: "ready",
-							catalog: worldMapGuideCatalog(
-								JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( result.buffer ) )
-							)
-						};
-					} catch ( error ) {
-						// The tabs keep the shard's catalogue; the warning
-						// names why, so a stale tree names its rebuild.
-						console.warn( "[SRO map guide] " + (error instanceof Error ? error.message : String( error )) );
-						guideLoad = { kind: "absent" };
-					}
-					changed = true;
-				}
-			}
-			if ( panel === "Map" && regionLoad.kind === "idle" && assets.available() > 0 ) {
-				regionLoad = {
-					kind: "loading",
-					id: assets.request( new URL( REGIONCODE_PATH, options.base ).href )
-				};
-				changed = true;
-			}
-			if ( regionLoad.kind === "loading" ) {
-				const result = assets.take( regionLoad.id );
-				if ( result ) {
-					try {
-						if ( result.kind !== "bytes" ) throw Error( "Regioncode resource mismatch" );
-						const data = JSON.parse(
-							new TextDecoder( "utf-8", { fatal: true } ).decode( result.buffer )
-						) as { format?: unknown; entries?: Record<string, unknown>; };
-						if ( data?.format !== "sro-regioncode" || !data.entries ) {
-							throw Error( "Invalid regioncode" );
-						}
-						const names = new Map<number, string>();
-						for ( const [key, value] of Object.entries( data.entries ) ) {
-							const region = Number( key );
-							if ( Number.isInteger( region ) && typeof value === "string" ) names.set( region, value );
-						}
-						regionLoad = { kind: "ready", names };
-					} catch {
-						regionLoad = { kind: "failed" };
-					}
-					changed = true;
-				}
-			}
-			return changed;
+			return catalogues.step( panel === "Map", drawerOpen || levelFilter.checked() );
 		},
 		/*
 		================
@@ -631,8 +543,9 @@ export function createMapToolsHud( options: {
 		================
 		*/
 		guidePick(): { catalog: WorldMapGuideCatalog; index: number; } | null {
-			if ( guideLoad.kind !== "ready" || guidePicked === null ) return null;
-			return { catalog: guideLoad.catalog, index: guidePicked };
+			const guide = catalogues.guide();
+			if ( guide.kind !== "ready" || guidePicked === null ) return null;
+			return { catalog: guide.catalog, index: guidePicked };
 		},
 		/*
 		================
@@ -647,10 +560,10 @@ export function createMapToolsHud( options: {
 			frame: Parameters<typeof levelFilterOverlay>[2],
 			clip: Parameters<typeof levelFilterOverlay>[3]
 		) {
-			return levelFilter.ground( guideLoad, characterLevel, frame, clip );
+			return levelFilter.ground( catalogues.guide(), characterLevel, frame, clip );
 		},
 		takeLevelSnap( characterLevel: number | undefined ): Pose | null {
-			return levelFilter.takeSnap( guideLoad, characterLevel );
+			return levelFilter.takeSnap( catalogues.guide(), characterLevel );
 		},
 
 		/*
@@ -948,7 +861,8 @@ export function createMapToolsHud( options: {
 			guideScroll.place( drawerOpen ? [ guideLeft( input ), input.window[1], GUIDE_WIDTH, GUIDE_HEIGHT ] : null );
 			if ( drawerOpen ) {
 				guidePanel( paint, { tab: guideTab, size: input.size } );
-				const catalog = guideLoad.kind === "ready" ? guideLoad.catalog : undefined;
+				const guide = catalogues.guide();
+				const catalog = guide.kind === "ready" ? guide.catalog : undefined;
 				if ( input.cave && guideTab === "monster" ) {
 					caveDrawer( input, paint );
 				} else if ( catalog ) {
@@ -959,7 +873,7 @@ export function createMapToolsHud( options: {
 						input,
 						paint,
 						[],
-						guideLoad.kind === "absent" ? "No field guide in this build" : "Loading..."
+						guide.kind === "absent" ? "No field guide in this build" : "Loading..."
 					);
 				} else {
 					const rows: GuideTreeRow[] = [];
@@ -989,10 +903,7 @@ export function createMapToolsHud( options: {
 		================
 		*/
 		dispose() {
-			if ( regionLoad.kind === "loading" ) assets.cancel( regionLoad.id );
-			if ( guideLoad.kind === "loading" ) assets.cancel( guideLoad.id );
-			regionLoad = { kind: "disposed" };
-			guideLoad = { kind: "disposed" };
+			catalogues.dispose();
 		}
 	};
 }
