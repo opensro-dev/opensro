@@ -6404,7 +6404,7 @@ The published plane when something changed since the last take, else null.
 				// Port-only (#3163): the cargo's distance to the next star,
 				// published under SRO_TRADE_TIERS (trade-progress.ts).
 				...(tradeProgress.state() ? { tradeProgress: tradeProgress.state()! } : {}),
-				// Port-only: the Server Mission gauge 0x34F2 sets (server-event.ts).
+				// The v1.696 Server Mission gauge 0x34F2 sets (server-event.ts).
 				...(serverEvent.state() ? { serverEventGauge: serverEvent.state()! } : {}),
 				eligibility,
 				...(gmCatalogPending && gmCatalog ? { gmCatalog } : {}),

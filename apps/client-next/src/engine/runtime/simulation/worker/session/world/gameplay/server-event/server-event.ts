@@ -3,7 +3,7 @@
 
 server-event.ts - the Server Mission gauge the server event message sets
 
-Port-only, not native to v1.150: the later v1.696 client reads 0x34F2
+Native to the later v1.696 client, which is native here: it reads 0x34F2
 (0x00CFA790) and draws CNIFServerEvent, one mission's count towards its
 goal. Every row it is given replaces the window's mission (0x0080F4E0);
 a count alone moves the open window against the goal it holds

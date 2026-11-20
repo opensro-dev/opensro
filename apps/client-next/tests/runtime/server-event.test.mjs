@@ -3,7 +3,7 @@
 
 server-event.test.mjs - the 0x34F2 server event gauge the worker keeps
 
-Port-only: the later client's CNIFServerEvent reads 0x34F2 (v1.696
+The v1.696 client's CNIFServerEvent (native here) reads 0x34F2 (v1.696
 0x00CFA790); the worker keeps the one mission it shows. Bodies as the
 server's wire.ServerEvent* frames write them.
 

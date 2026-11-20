@@ -23140,8 +23140,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			// CIFEventGuide::UpdateAcademy (6660F0): sound only on hidden -> shown.
 			if ( academyVisible && !academyWasVisible ) sound( "quest" );
 			academyWasVisible = academyVisible;
-			// Port-only, not native to v1.150 (server-event-hud.ts): the later
-			// client's Server Mission gauge, drawn once its v1.696 art is here.
+			// The v1.696 client's Server Mission gauge (server-event-hud.ts),
+			// drawn once its v1.696 art is here.
 			const serverEvent = worldVisible ? serverEventHud.shown() : null;
 			if ( serverEvent ) {
 				const frameArt = SERVER_EVENT_ART + "wind.png";
