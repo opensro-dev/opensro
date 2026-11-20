@@ -47,11 +47,11 @@ const ALCHEMY_REFUSED = 2;
 const MAGIC_STONE_FAILED_ROLL = 0x23;
 // The server's "no room for another magic option" refusal (banner); silent natively.
 const STONE_OPTIONS_FULL = 2;
-const STONE_OPTIONS_FULL_NOTICE: SystemNotice = {
+const STONE_OPTIONS_FULL_NOTICE = {
 	key: "UIIT_MSG_AVATAR_MAGICOPTION_ADD_ERORR",
 	value: 0,
 	nativeType: 0
-};
+} as const;
 // 62B6D0's local refusals on the empty Reinforce page: anything but
 // reinforceable equipment (62B801), and a fortress hammer (62B7C8).
 export const REINFORCE_LOAD_EQUIP_FIRST = 0x15;
