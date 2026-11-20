@@ -643,6 +643,8 @@ export const runtimeCifImageReferences = [
 	"icon/action/icon_cha_run.ddj",
 	"icon/action/icon_cha_walk.ddj",
 	"icon/action/icon_cha_stand.ddj",
+	// The Actions window's port-only Auto Select row (action-layout.ts, AUTO_SELECT_ACTION_ID): no action record binds it.
+	"icon/action/icon_cha_autotarget.ddj",
 	// CIFCommunity window chrome ('U' hotkey, ginterface id 23): the six
 	// CIFSelectableArea tabs are built in code by CIFCommunity::OnCreate
 	// (CIFCommunity_CreateControls, texture strings @0x005dfdcf off / @0x005dfdfc on), so the
