@@ -57,8 +57,9 @@ type Contracts struct {
 // versions it fixes. Encoders version their payloads from these.
 const (
 	// Protocol 19 adds the port-only 0x3FCB Blue Berserk level (cap-110), so a
-	// client that reads it is the one served. Protocol 18 admits the port-only consignment market's control
-	// frame (see MarketContract 1). Protocol 17 adds survival checkpoint
+	// client that reads it is the one served. Protocol 18 admits the
+	// port-only consignment market's control frame (see MarketContract 1).
+	// Protocol 17 adds survival checkpoint
 	// rewards and tags the seasonal decoration's placements with their
 	// world layer (see WorldContract 1). Protocol 16 grows a pet chat
 	// link to name its pet (see ChatContract 2).

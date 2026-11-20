@@ -40,6 +40,14 @@ class QuestArenasTest(unittest.TestCase):
 		self.assertEqual(arenas.arena_seeds({}), set())
 
 	# ================
+	# test_a_value_the_quest_switch_does_not_accept_seeds_nothing
+	#
+	# The arenas read the one switch (cap110_quest_monsters): "yes" turns neither the quests nor the arenas on.
+	# ================
+	def test_a_value_the_quest_switch_does_not_accept_seeds_nothing(self):
+		self.assertEqual(arenas.arena_seeds({"SRO_CAP110_QUESTS": "yes", "SRO_LEVEL_CAP": "110"}), set())
+
+	# ================
 	# test_an_isolated_arena_joins_the_import_only_as_a_seed
 	# ================
 	def test_an_isolated_arena_joins_the_import_only_as_a_seed(self):
