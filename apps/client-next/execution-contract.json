@@ -3704,6 +3704,13 @@
 			"reason": "Character resource owner admits the requested authored motion; synchronously borrowed from characters.ts at the original action-phase position."
 		},
 		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "resources.animation",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character resource owner admits the clock's BAN phases against the caster's current body before the cast publishes layers; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
 			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",
 			"expression": "renderer.setCharacterAssembly",
 			"function": "presentStages",

@@ -361,7 +361,11 @@ export function createPresentationActions() {
 									resolved.banUrl &&
 									!resources.animation( resource.glb, resolved.clip, resolved.banUrl )
 								) loading = true;
-								return { clip: resolved.clip, definition: resolved.definition };
+								return {
+									clip: resolved.clip,
+									definition: resolved.definition,
+									banUrl: resolved.banUrl
+								};
 							}
 							const disguise = referenceAppearances.get( entity.gid ),
 								set = disguise ?
@@ -477,6 +481,34 @@ export function createPresentationActions() {
 			reconcileActionInstallations( actionClocks.values() );
 			for ( const clock of actionClocks.values() ) {
 				if ( clock.caster === undefined ) continue;
+				// 8E7150 resolves (set, state) on the caster's current model at
+				// install and installs nothing when the branch is absent. The
+				// clock froze its phases at creation, when every BAN phase was
+				// admitted; the body's admitted catalogue can turn over under
+				// it (residency retirement and a fresh decode reset both the
+				// renderer's clips and the duration table), and only the local
+				// player's learned motions are ever re-warmed. Re-check each
+				// BAN phase against the current body before publishing, as the
+				// combat stance and stall motions do on every frame: while one
+				// is not admitted the clock publishes no layers (its timeline
+				// still advances), and the check itself re-arms the load.
+				const casterEntity = entitiesByGid.get( clock.caster ),
+					casterBody = casterEntity ? resourceFor( casterEntity ) : undefined;
+				let admitted = casterBody !== undefined;
+				if ( casterBody ) {
+					const pending = [ ...clock.phases, clock.wait?.phase ];
+					for ( const install of clock.outgoing ?? [] ) pending.push( install.phase );
+					for ( const phase of pending ) {
+						if (
+							phase?.banUrl !== undefined &&
+							!resources.animation( casterBody.glb, phase.clip, phase.banUrl )
+						) {
+							admitted = false;
+							break;
+						}
+					}
+				}
+				if ( !admitted ) continue;
 				// 8E60C0 leaves action state 2 at the last motion callback and
 				// rejects callbacks from a replaced installation. A retained skill
 				// decoration does not own that state after its motion ends. Check

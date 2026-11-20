@@ -23,6 +23,10 @@ ActionPhase
 export interface ActionPhase {
 	readonly clip: string;
 	readonly definition: AnimationMetadata;
+	// The published BAN a native clip loads from, when it is not resident on
+	// the body. The cast owner re-checks admission against the caster's
+	// current body before it publishes the phase (presentation-actions.ts).
+	readonly banUrl?: string;
 }
 /*
 ================
