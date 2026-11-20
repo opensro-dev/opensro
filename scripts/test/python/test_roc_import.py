@@ -76,6 +76,12 @@ def contents_row(code, columns=17):
 NATIVE_CONTENTS = [contents_row(code, 13) for code in ("QTUTORIAL_CH", "QNO_RM_MEETROC_1", "QNO_RM_MEETROC_2", "QNO_RM_MEETROC_6")]
 SOURCE_CONTENTS = [contents_row(code) for code in SOURCE_QUEST_IDS]
 GUARDIANS = {"MOB_QT_%02d_ROCKY_CLON2" % n for n in range(1, 8)}
+# v1.150's interface table carries the countdown's other lines; the
+# client's adds _AGAIN, in its fifteen-column layout.
+NATIVE_UI = [["1", "UIIT_MSG_QUEST_ROC_BERSERKER_START", "k", "", "", "s", "t", "j", "The Roc has gone berserk.", "v", ""]]
+AGAIN = "UIIT_MSG_QUEST_ROC_BERSERKER_AGAIN"
+SOURCE_UI = [["1", AGAIN, "k", "", "t", "s", "d", "j", "Roc's Berserk mode is advanced.", "v", "", "", "", "", ""],
+	["1", "UIIT_MSG_QUEST_ROC_BERSERKER_START", "k", "", "t", "s", "d", "j", "started", "v", "", "", "", "", ""]]
 
 
 # ================
@@ -139,12 +145,13 @@ class RocImportTest(unittest.TestCase):
 	# replaces kind rows by codename; quests replaces the client's
 	# questdata rows.
 	# ================
-	def fixture(self, base, overrides=None, quests=None, contents=None):
+	def fixture(self, base, overrides=None, quests=None, contents=None, ui=None):
 		vsro, native, output = base / "vsro", base / "native", base / "output"
 		text_root = output / roc.TEXT_ROOT
 		text_root.mkdir(parents=True)
 		vsro.mkdir()
-		native.mkdir()
+		(native / roc.TEXT_ROOT).mkdir(parents=True)
+		(native / roc.TEXT_ROOT / roc.UI_TABLE).write_bytes(utf16(NATIVE_UI))
 		native_char = ["0"] * 104
 		native_char[1], native_char[2], native_char[5] = "100", "MOB_RM_TAHOMET", NATIVE_TAHOMET_SYMBOL
 		guardians = []
@@ -187,6 +194,7 @@ class RocImportTest(unittest.TestCase):
 			"itemdata_20000.txt": utf16([["1", SOURCE_KEY_ID, KEY_ITEM]]),
 			"questdata.txt": utf16(SOURCE_QUESTS if quests is None else quests),
 			"questcontentsdata.txt": utf16(SOURCE_CONTENTS if contents is None else contents),
+			roc.UI_TABLE: utf16(SOURCE_UI if ui is None else ui),
 			"skilleffect.txt": utf16([["#section", "characterinfo"]]
 				+ [[code] + ["0"] * 12 for code in roc.KINDS] + [["#section", "skillaniset"]]),
 		}
@@ -507,6 +515,45 @@ class RocImportTest(unittest.TestCase):
 			with self.assertRaisesRegex(ValueError, "already stands"):
 				self.run_import(vsro, native, output, pins, "on")
 
+
+
+	# ================
+	# test_on_adds_the_berserk_again_line
+	#
+	# The one countdown line v1.150 lacks joins the interface table in the
+	# v1.150 layout, with the client's English; the native rows stay.
+	# ================
+	def test_on_adds_the_berserk_again_line(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, text_root, pins = self.fixture(Path(root))
+			summary = self.run_import(vsro, native, output, pins, "on")
+			rows = tables.table_rows((text_root / roc.UI_TABLE).read_bytes())
+			self.assertEqual(summary["uiTexts"], [AGAIN])
+			self.assertEqual([row[1] for row in rows], ["UIIT_MSG_QUEST_ROC_BERSERKER_START", AGAIN])
+			self.assertEqual(rows[1][8], "Roc's Berserk mode is advanced.")
+			self.run_import(vsro, native, output, pins, "on")
+			rows = tables.table_rows((text_root / roc.UI_TABLE).read_bytes())
+			self.assertEqual([row[1] for row in rows].count(AGAIN), 1)
+
+	# ================
+	# test_off_takes_the_berserk_again_line_out
+	# ================
+	def test_off_takes_the_berserk_again_line_out(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, text_root, pins = self.fixture(Path(root))
+			self.run_import(vsro, native, output, pins, "on")
+			self.run_import(vsro, native, output, pins, "")
+			rows = tables.table_rows((text_root / roc.UI_TABLE).read_bytes())
+			self.assertEqual([row[1] for row in rows], ["UIIT_MSG_QUEST_ROC_BERSERKER_START"])
+
+	# ================
+	# test_a_client_without_the_again_line_refuses
+	# ================
+	def test_a_client_without_the_again_line_refuses(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, text_root, pins = self.fixture(Path(root), ui=SOURCE_UI[1:])
+			with self.assertRaisesRegex(ValueError, AGAIN):
+				self.run_import(vsro, native, output, pins, "on")
 
 if __name__ == "__main__":
 	unittest.main()

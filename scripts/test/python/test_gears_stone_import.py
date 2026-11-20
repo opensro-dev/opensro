@@ -4,8 +4,10 @@ test_gears_stone_import.py - the gears magic stones import's contract.
 
 Behind SRO_MALL_CATEGORIES the import stages exactly the later
 client's 112 leveled magic stones in their own itemdata shard under
-marker-kept identities; a switch off reaps the shard, its manifest
-line and the marker, and a native collision or a miscast row refuses.
+marker-kept identities, with their names from the later client's text
+tables; a switch off reaps the shard, its manifest line, the names and
+the marker, and a native collision, a miscast row or a nameless stone
+refuses.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
@@ -62,8 +64,21 @@ OPTIONS = {
 def stone_row(code, identity, degree, option):
 	row = ["0"] * gears.ITEM_COLUMNS
 	row[0], row[1], row[2] = "1", str(identity), code
+	row[5], row[6] = "SN_" + code, "SD_" + code
 	row[9:13] = ["3", "3", "11", "1"]
 	row[118], row[119] = str(degree), option
+	return row
+
+
+# ================
+# text_row
+#
+# One name row in the VSRO text layout (service, key, then 13 language
+# cells, English in 8), which the later-text reader passes unchanged.
+# ================
+def text_row(key, english):
+	row = ["1", key] + ["0"] * 13
+	row[8] = english
 	return row
 
 
@@ -81,7 +96,7 @@ class GearsStoneImportTest(unittest.TestCase):
 	# itemdata carries the 112 gears stones plus a decoy, and a native
 	# tree with one shipped item row.
 	# ================
-	def fixture(self, base, drop=None, mutate=None):
+	def fixture(self, base, drop=None, mutate=None, unnamed=None):
 		v1696, native, output = base / "v1696", base / "native", base / "output"
 		text_root = output / gears.TEXT_ROOT
 		text_root.mkdir(parents=True)
@@ -99,9 +114,11 @@ class GearsStoneImportTest(unittest.TestCase):
 				mutate(row)
 			rows.append(row)
 		decoy = stone_row("ITEM_ETC_ARCHEMY_MAGICSTONE_STR_05", 40000, 5, "MATTR_STR")
+		names = [text_row("SN_" + row[2], "Stone " + row[2][len(gears.PREFIX):]) for row in rows if row[2] != unnamed]
 		media = {
 			"itemdata.txt": utf16([["itemdata_6000.txt"]]),
 			"itemdata_6000.txt": utf16(rows + [decoy]),
+			"textdata_equip&skill.txt": utf16(names),
 		}
 		media_bytes = archive_bytes(media)
 		(v1696 / "Media.pk2").write_bytes(media_bytes)
@@ -109,6 +126,8 @@ class GearsStoneImportTest(unittest.TestCase):
 		native_row[0], native_row[1], native_row[2] = "1", "5000", "ITEM_NATIVE_THING"
 		(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
 		(text_root / "itemdata_5000.txt").write_bytes(utf16([native_row]))
+		(native / gears.TEXT_ROOT).mkdir(parents=True)
+		(native / gears.TEXT_ROOT / gears.NAME_TABLE).write_bytes(utf16([text_row("SN_ITEM_NATIVE_THING", "Native thing")]))
 		pins = {"Media": hashlib.sha256(media_bytes).hexdigest()}
 		return v1696, native, output, text_root, pins
 
@@ -133,11 +152,18 @@ class GearsStoneImportTest(unittest.TestCase):
 			# the later client's own numbers.
 			self.assertTrue(all(identity > 5000 for identity in summary["items"].values()))
 			self.assertTrue(all(not 30000 <= identity <= 40000 for identity in summary["items"].values()))
-			# A rebuild keeps the published identities.
+			# Every stone's title joins the name table beside the native rows.
+			names = (text_root / gears.NAME_TABLE).read_bytes().decode("utf-16")
+			self.assertIn("SN_ITEM_NATIVE_THING", names)
+			self.assertIn("Stone LUCK_07", names)
+			self.assertEqual(len(marker["texts"]), 112)
+			self.assertEqual(len(marker["absentDescriptions"]), 112)
+			# A rebuild keeps the published identities and one copy of each name.
 			with mock.patch.object(jupiter, "archive_pins", return_value=pins):
 				with mock.patch.dict(os.environ, {"SRO_MALL_CATEGORIES": "on"}):
 					again = gears.add_stones(native, output, v1696)
 			self.assertEqual(again["items"], summary["items"])
+			self.assertEqual((text_root / gears.NAME_TABLE).read_bytes().decode("utf-16").count("SN_ITEM_ETC_ARCHEMY_LEVEL_MAGICSTONE_STR_01	"), 1)
 
 	# ================
 	# test_off_rebuild_reaps_owned_outputs
@@ -155,6 +181,9 @@ class GearsStoneImportTest(unittest.TestCase):
 			manifest = (text_root / "itemdata.txt").read_bytes().decode("utf-16")
 			self.assertNotIn(gears.ITEM_SHARD, manifest)
 			self.assertIn("itemdata_5000.txt", manifest)
+			names = (text_root / gears.NAME_TABLE).read_bytes().decode("utf-16")
+			self.assertNotIn("LEVEL_MAGICSTONE", names)
+			self.assertIn("SN_ITEM_NATIVE_THING", names)
 
 	# ================
 	# test_missing_or_miscast_stone_refuses
@@ -166,6 +195,15 @@ class GearsStoneImportTest(unittest.TestCase):
 			with mock.patch.object(jupiter, "archive_pins", return_value=pins):
 				with mock.patch.dict(os.environ, {"SRO_MALL_CATEGORIES": "on"}):
 					with self.assertRaises(ValueError):
+						gears.add_stones(native, output, v1696)
+		with tempfile.TemporaryDirectory() as root:
+			# The later client has no title for one stone: the item-name
+			# check would refuse the build later, so the import refuses now.
+			v1696, native, output, text_root, pins = self.fixture(
+				Path(root), unnamed="ITEM_ETC_ARCHEMY_LEVEL_MAGICSTONE_HP_03")
+			with mock.patch.object(jupiter, "archive_pins", return_value=pins):
+				with mock.patch.dict(os.environ, {"SRO_MALL_CATEGORIES": "on"}):
+					with self.assertRaisesRegex(ValueError, "missing equipment names"):
 						gears.add_stones(native, output, v1696)
 		with tempfile.TemporaryDirectory() as root:
 			def miscast(row):

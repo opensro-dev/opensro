@@ -112,3 +112,49 @@ test("the exchange window's opening is reported once, to open the inventory tab 
 		true
 	] );
 });
+
+test("an opening warns only for a partner outside the friend, guild and union lists (v1.696 afb980)", () => {
+	const circle = {
+		partnerName: "Stranger",
+		partnerGuild: "Wolves",
+		friends: [ "Ally" ],
+		guildMembers: [ "Mate" ],
+		unionGuilds: [ "Bears" ]
+	};
+	assert.deepEqual( exchange.exchangeOpenWarning( circle ), {
+		key: "UIIT_MSG_EXCHANGE_DECEPTION_COMPARE",
+		value: 0
+	} );
+	assert.equal( exchange.exchangeOpenWarning( { ...circle, partnerName: "Ally" } ), null, "a friend" );
+	assert.equal( exchange.exchangeOpenWarning( { ...circle, partnerName: "Mate" } ), null, "a guild member" );
+	assert.equal( exchange.exchangeOpenWarning( { ...circle, partnerGuild: "Bears" } ), null, "a union guild" );
+	// A guildless partner never matches the union by an empty name.
+	assert.notEqual(
+		exchange.exchangeOpenWarning( { ...circle, partnerGuild: "", unionGuilds: [ "" ] } ),
+		null
+	);
+});
+
+test("the first Confirm reaffirms once, before the partner locks (v1.696 afbb00)", () => {
+	const inventory = createInventory( () => {} );
+	inventory.bootstrap( {} );
+	const reaffirm = { key: "UIIT_MSG_EXCHANGE_DECEPTION_REAFFIRM", value: 0 };
+	const open = () => inventory.exchangeReceive( frame( 0x3219, u32( 0x30d41 ) ) );
+	open();
+	inventory.exchangeCommand( { kind: "exchange-confirm" } );
+	assert.deepEqual( inventory.takeExchangeNotice(), reaffirm );
+	// A second press before the lock answer prints nothing more.
+	inventory.exchangeCommand( { kind: "exchange-confirm" } );
+	assert.equal( inventory.takeExchangeNotice(), null );
+	// A new window clears the flag; the partner locked first: no line.
+	inventory.exchangeReceive( frame( 0x3457, [ 1 ] ) );
+	open();
+	inventory.exchangeReceive( frame( 0x37cf, [] ) );
+	inventory.exchangeCommand( { kind: "exchange-confirm" } );
+	assert.equal( inventory.takeExchangeNotice(), null );
+	// The next window warns again.
+	inventory.exchangeReceive( frame( 0x3457, [ 1 ] ) );
+	open();
+	inventory.exchangeCommand( { kind: "exchange-confirm" } );
+	assert.deepEqual( inventory.takeExchangeNotice(), reaffirm );
+});

@@ -334,7 +334,7 @@ type Ticker struct {
 	Push   Pusher
 	Roster []NpcDef
 	// WorldNpcs names the runtime objects standing in one world instance
-	// (a quest instance's exit gate, action/questgate.go). They join the
+	// (quest gates and static world NPCs, action/worldnpc.go). They join the
 	// static roster in that world's sessions' NPC scope pass only. Nil
 	// means none.
 	WorldNpcs func(world uint32) []NpcDef

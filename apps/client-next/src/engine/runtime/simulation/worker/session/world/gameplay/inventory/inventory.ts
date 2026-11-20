@@ -77,6 +77,7 @@ import { decodeInventoryItem, etcCarriesPlusByte } from "@/engine/foundation/gam
 import {
 	applyExchangeSwap,
 	emptyExchange,
+	exchangeConfirmWarning,
 	exchangeFrame,
 	exchangeRequest,
 	type ExchangeCommand
@@ -283,6 +284,9 @@ as natively; a good with no reference row never marks the page.
 	} | null = null;
 	// The chat line a voucher update raises, taken by the gameplay owner after each packet.
 	let exchangeNotice: SystemNotice | null = null;
+	// The exchange window's own confirm flag (v1.696 +0x778): the reaffirm
+	// warning prints on the first press only.
+	let exchangeConfirmPressed = false;
 	let magicRefs = itemMagicReferences( undefined );
 	let presentations = new WeakMap<InventoryItem, InventoryItem>();
 	/*
@@ -1004,8 +1008,18 @@ exchange's, else the category-1 notice code it raised (0 for none).
 				published = null;
 			}
 			if ( outcome.message ) exchangeNotice = outcome.message;
+			// A new window starts with its confirm flag clear (v1.696 +0x778).
+			if ( !exchange.open && outcome.state.open ) exchangeConfirmPressed = false;
 			exchange = outcome.state;
 			return outcome.notice ?? 0;
+		},
+		/*
+================
+exchangeState
+================
+		*/
+		exchangeState(): ExchangeState {
+			return exchange;
 		},
 		/*
 ================
@@ -1092,6 +1106,11 @@ exchangeCommand
 		exchangeCommand( command: ExchangeCommand ) {
 			const frame = exchangeRequest( exchange, command );
 			if ( command.kind === "exchange-request" ) exchange = { ...exchange, requesting: true };
+			if ( command.kind === "exchange-confirm" ) {
+				const warning = exchangeConfirmWarning( exchange, exchangeConfirmPressed );
+				exchangeConfirmPressed = true;
+				if ( warning ) exchangeNotice = warning;
+			}
 			send( frame );
 			return frame;
 		},
@@ -1151,7 +1170,8 @@ exchangeCommand
 			const frame = command.kind === "gacha-open" ?
 				gacha.open( command.gid ) :
 				alchemy.start( command.mode, command.slots, slots, now, command.quantity, designated );
-			send( frame );
+			// A reinforcement is held until its prepare effect has played (step).
+			if ( frame ) send( frame );
 			return frame;
 		},
 		/*
@@ -2553,7 +2573,11 @@ step
 			const active = itemCooldowns.filter( row => now < row.startedAtMs + row.durationMs ),
 				expired = active.length !== itemCooldowns.length;
 			if ( expired ) itemCooldowns = active;
-			const unlocked = alchemy.step( now );
+			const unlocked = alchemy.step( now ), prepared = alchemy.prepare( now );
+			if ( prepared ) {
+				send( prepared );
+				return true;
+			}
 			const phase = gacha.state().phase, roll = gacha.step( now, slots.get( gacha.state().slot ?? -1 ) );
 			if ( roll ) {
 				send( roll );

@@ -123,12 +123,11 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 	}
 	// A warehouse ticket's room (storage.go) opens without an NPC.
 	if mask == simulation.NpcTalkFlagStorage && rt.storageAuthority != nil && rt.remoteStorageOpen(divisionID, character, gid) {
+		if holder, held := rt.accountStorageHolder(divisionID, character); held {
+			rt.closeStorageSession(divisionID, character.Name)
+			return npcFunctionRefusal(errCodeKeeperBusy), "the account warehouse is open for " + holder
+		}
 		return []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: wire.EncodeNpcInteractionAck(mask)}}, ""
-	}
-	// Port-only, not native (#3349): a Muhan change NPC is a nest entity,
-	// not a roster NPC, and its Talk is the change (muhan_change.go).
-	if change, instance, isChange := rt.muhanChangeAt(divisionID, character, gid); isChange {
-		return rt.handleMuhanChangeTalk(divisionID, character, change, instance, mask)
 	}
 	npc, ok := rt.npcForCurrentViewer(divisionID, character, gid)
 	if !ok {
@@ -141,6 +140,11 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 	// open while walking away is refused here with the "too far" notice.
 	if !rt.npcWithinHitRange(divisionID, character, npc) {
 		return npcFunctionTooFar(), fmt.Sprintf("NPC %s is beyond its interaction range", npc.Codename)
+	}
+	// Port-only, not native (#3349): a Muhan change NPC's Talk is the
+	// change (muhan_change.go).
+	if change, isChange := rt.muhanChanges[npc.Codename]; isChange {
+		return rt.handleMuhanChangeTalk(divisionID, character, change, npc, mask)
 	}
 
 	switch mask {
@@ -209,8 +213,12 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 		}
 		// The storage function state, and the warehouse session the moves
 		// check (storage.go), which outlives later selections.
+		// One open room per account (accountStorageHolder, port-only).
+		if holder, held := rt.accountStorageHolder(divisionID, character); held {
+			return npcFunctionRefusal(errCodeKeeperBusy), "the account warehouse is open for " + holder
+		}
 		rt.Selected.OpenFunction(divisionID, character.Name, gid)
-		rt.openStorageSession(divisionID, character.Name, gid)
+		rt.openAccountStorageSession(divisionID, character, gid)
 		return []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: wire.EncodeNpcInteractionAck(mask)}}, ""
 	case simulation.NpcTalkFlagMagicOption:
 		// B338 lock 0x80000000 opens the avatar grant window beside the
@@ -264,6 +272,10 @@ func (rt *Runtime) npcForCurrentViewer(divisionID string, character *enterworld.
 			return simulation.NpcDef{}, false
 		}
 		return npc, true
+	}
+	// A static world NPC of the viewer's own world (worldnpc.go).
+	if npc := rt.worldNpcAt(character, gid); npc != nil && simulation.NpcVisibleAt(*npc, viewer) {
+		return *npc, true
 	}
 	return simulation.NpcDef{}, false
 }

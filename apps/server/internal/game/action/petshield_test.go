@@ -423,3 +423,62 @@ func TestPetShieldBurstKillCreditsNoQuest(t *testing.T) {
 		t.Fatalf("the shield burst kill credited %d quest kills, want 0", quested)
 	}
 }
+
+/*
+================
+TestPetShieldFrameNeverOutlivesItsLifetime
+
+The r202 shape: the pet tick read its clock before an Iron Hide cast handled
+during the tick stamped the row, a hit zeroed publishAt, and the tick
+republished the row with its older clock. The frame said 5020 ms left and
+the client refused it ("Invalid shield state", 151 live reports).
+================
+*/
+func TestPetShieldFrameNeverOutlivesItsLifetime(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	roarField(t, rt, c, clock)
+	c.MissionInventory = nil
+	rt.AttackPetExpansion = true
+	skill := learnPetBook(t, c, 19)
+	tick := clock.NowMs()
+	const castLag = 20
+	rt.castPetShield(testDivision, c, c, c.ActiveCOS, skill, tick+castLag)
+	self := petShieldKey{testDivision, enterworld.ObjectIDForCharacter(c)}
+	rt.absorbPetShield(testDivision, self.gid, 1, tick+castLag)
+	published := false
+	for _, batch := range rt.advancePetShields(tick) {
+		for _, f := range batch.Frames {
+			if f.Opcode != petShieldOpcode || binary.LittleEndian.Uint32(f.Payload) != self.gid {
+				continue
+			}
+			published = true
+			if left := binary.LittleEndian.Uint32(f.Payload[12:]); left > uint32(petShieldDuration) {
+				t.Fatalf("frame says %d ms left, lifetime is %d", left, petShieldDuration)
+			}
+		}
+	}
+	if !published {
+		t.Fatal("the absorbed shield was not republished")
+	}
+}
+
+/*
+================
+TestFrameRemainingMs
+================
+*/
+func TestFrameRemainingMs(t *testing.T) {
+	for _, c := range []struct {
+		until, now, lifetime int64
+		want                 uint32
+	}{
+		{5020, 0, 5000, 5000},
+		{4000, 1000, 5000, 3000},
+		{1000, 2000, 5000, 0},
+	} {
+		if got := frameRemainingMs(c.until, c.now, c.lifetime); got != c.want {
+			t.Fatalf("frameRemainingMs(%d, %d, %d) = %d, want %d", c.until, c.now, c.lifetime, got, c.want)
+		}
+	}
+}

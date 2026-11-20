@@ -21,6 +21,7 @@ import { createPackIndex, PACK_MAGIC } from "./index/index";
 import type { PackDescriptor, PackEntry, PackDownload } from "./internal/pack-contract";
 import { assetFailure } from "@/engine/foundation/assets/asset-recovery";
 import { gunzipBytes } from "@/engine/foundation/assets/read-bytes";
+import { sha256Hex } from "@/engine/foundation/assets/sha256";
 import { createPackBlocks } from "./blocks";
 import {
 	HD_TEXTURE_VARIANT_ROOT,
@@ -158,11 +159,8 @@ export function createPacks(
 	The manifest's own digest, kept out of the member hash stats.
 	================
 	*/
-	async function digest( bytes: Uint8Array<ArrayBuffer> ): Promise<string> {
-		return Array.from(
-			new Uint8Array( await crypto.subtle.digest( "SHA-256", bytes ) ),
-			b => b.toString( 16 ).padStart( 2, "0" )
-		).join( "" );
+	function digest( bytes: Uint8Array<ArrayBuffer> ): Promise<string> {
+		return sha256Hex( bytes );
 	}
 	/*
 	================
@@ -281,10 +279,7 @@ export function createPacks(
 	async function sha( bytes: Uint8Array<ArrayBuffer> ) {
 		hashCalls++;
 		hashBytes += bytes.length;
-		return Array.from(
-			new Uint8Array( await crypto.subtle.digest( "SHA-256", bytes ) ),
-			b => b.toString( 16 ).padStart( 2, "0" )
-		).join( "" );
+		return sha256Hex( bytes );
 	}
 	/*
 	================

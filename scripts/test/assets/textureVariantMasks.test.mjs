@@ -15,9 +15,9 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { codeClosure } from "../../build/shared/codeStamp.mjs";
+import { codeClosure, codeHash } from "../../build/shared/codeStamp.mjs";
 import { cachedPickAlpha, maskCacheRoot, maskCodeHash } from "../../build/textures/buildTextureVariants.mjs";
+import { ENCODE_MODULE } from "../../build/textures/textureVariantEncode.mjs";
 
 const DIGEST = "ab".repeat( 32 );
 
@@ -62,11 +62,36 @@ test("another decoder source names another mask cache", () => {
 });
 
 test("the mask key covers the mask writer and the decoder it imports", async () => {
-	const closure = (await codeClosure(
-		fileURLToPath( new URL( "../../build/textures/buildTextureVariants.mjs", import.meta.url ) )
-	))
-		.map( file => path.basename( file ) );
-	assert.ok( closure.includes( "buildTextureVariants.mjs" ) );
+	const closure = (await codeClosure( ENCODE_MODULE )).map( file => path.basename( file ) );
+	assert.ok( closure.includes( "textureVariantEncode.mjs" ) );
+	assert.ok( closure.includes( "textureContainers.mjs" ) );
 	assert.ok( closure.includes( "native-texture.ts" ) );
-	assert.match( await maskCodeHash(), /^[0-9a-f]{64}$/ );
+	assert.equal( await maskCodeHash(), await codeHash( ENCODE_MODULE ) );
+});
+
+/*
+================
+the texture keys leave the build plumbing out
+
+2026-11-20: a change to world/paths.mjs alone (#3948) re-keyed all 19003
+textures of release r203, because the keys covered the pass module and
+with it the action store, the ledgers and the path resolvers. The bytes'
+code is its own closure; none of those may enter it.
+================
+*/
+test("the texture keys leave the build plumbing out", async () => {
+	const closure = (await codeClosure( ENCODE_MODULE )).map( file => path.basename( file ) );
+	for (
+		const plumbing of [
+			"buildTextureVariants.mjs",
+			"store.mjs",
+			"action.mjs",
+			"publicationLedger.mjs",
+			"paths.mjs",
+			"generatedRoot.mjs",
+			"encoders.mjs"
+		]
+	) {
+		assert.ok( !closure.includes( plumbing ), `${plumbing} keys every texture` );
+	}
 });

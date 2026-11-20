@@ -30,8 +30,18 @@ const EnvConstantinople = "SRO_FORT_CONSTANTINOPLE"
 ConstantinopleEnabled
 ================
 */
-func ConstantinopleEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvConstantinople))) {
+func ConstantinopleEnabled() bool { return switchOn(EnvConstantinople) }
+
+/*
+================
+switchOn
+
+The fortress switches' reading: "1", "on" or "true" in any case; any
+other value, or none, is the native off.
+================
+*/
+func switchOn(env string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(env))) {
 	case "1", "on", "true":
 		return true
 	}

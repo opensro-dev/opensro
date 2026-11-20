@@ -699,8 +699,7 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 		refs = select_kinds(later, {code for code, *_rest in found})
 		population = build_population(found, refs)
 
-		native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != CHARACTER_SHARD
-			for r in tables.table_rows(p.read_bytes())]
+		native_chars = monsters.tree_characters(text_root, CHARACTER_SHARD)
 		occupied = {int(r[1]) for r in native_chars}
 		allocated = monsters.allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 		for code, row in sorted(refs.items()):
