@@ -257,10 +257,14 @@ CIFSlotWithHelp item-slot effect sheets (CIFSlotWithHelp_LoadOverlayTextures
 shine, the summoned-companion glow, the revival flash, the item-changed
 flash and the repair flash, plus the blocked-slot grey (54FDB0's +0x614
 flag: slot 7 under a two-hand grip, 596190; the avatar attachment slot
-under a one-piece dress, 5965E0). Code-selected; no resinfo names them.
+under a one-piece dress, 5965E0), and the exchange lock wash (5548C0
+loads com_item_exchange.ddj at 554906 into +0x584; 565850 draws it while
+54FC60's +0x4FD flag stands, which CIFExchange raises on a locked side,
+6B21B0 / 6B2120). Code-selected; no resinfo names them.
 ================
 */
 export const slotEffectRuntimeImageReferences = [
+	"interface/ifcommon/com_item_exchange.ddj",
 	"icon/item/etc/icon_edge_rare.ddj",
 	"interface/pet/pt_edge_effect.ddj",
 	"interface/pet/pt_life_effect.ddj",

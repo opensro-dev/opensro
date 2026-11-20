@@ -513,7 +513,8 @@ import {
 	equipmentSlotMirror,
 	itemIsMallItem,
 	itemIsRare,
-	itemSlotBlockedOverlay
+	itemSlotBlockedOverlay,
+	itemSlotExchangeOverlay
 } from "@/engine/foundation/ui/item-slot-effects";
 import {
 	COS_CLASS_ATTACK,
@@ -20201,7 +20202,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					nativePage( page, px, py, [ 11, 12, 15 ] );
 					for ( const id of [ 13, 14 ] ) authoredText( at( id ), px, py, hudCopy( at( id ).text ) );
 					for (
-						const [rows, base, mine] of [ [ state.theirs, 100, false ], [ state.own, 200, true ] ] as const
+						const [rows, base, mine, locked] of [
+							[ state.theirs, 100, false, state.theirLocked ],
+							[ state.own, 200, true, state.ownLocked ]
+						] as const
 					) {
 						for ( let slot = 0; slot < 12; slot++ ) {
 							const node = at( base + slot ),
@@ -20212,6 +20216,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								image( r, icon );
 								itemEffects( (mine ? "exchange-my:" : "exchange-their:") + slot, row.item, r );
 								itemCount( row.item, r );
+							}
+							// 6B21B0 / 6B2120: a locked side washes all twelve slots.
+							if ( locked ) {
+								const overlay = itemSlotExchangeOverlay( r );
+								image( overlay.rect, overlay.path, white, overlay.uv );
 							}
 							controls.push( {
 								id: (mine ? "exchange-my:" : "exchange-their:") + slot,
