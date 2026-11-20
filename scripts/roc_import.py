@@ -91,6 +91,7 @@ from pathlib import Path
 
 import alexandria_npcs as characters
 import build_alexandria_variant as variant
+import variant_gates
 import cap110_items
 import cap110_monsters as cap110
 import import_vsro_alexandria as tables
@@ -200,8 +201,8 @@ def item_ids(rows_of, manifest):
 # ================
 def key_items(source_links, source_items, variant_items):
 	variant_ids = {code: identity for identity, code in variant_items.items()}
-	wanted = {row[at + 1] for row in source_links if len(row) >= variant.LINK_COLUMNS
-		for at in range(6, variant.LINK_COLUMNS, 3) if row[at].isdigit() and int(row[at]) in variant.LINK_KINDS_ITEM}
+	wanted = {row[at + 1] for row in source_links if len(row) >= variant_gates.LINK_COLUMNS
+		for at in range(6, variant_gates.LINK_COLUMNS, 3) if row[at].isdigit() and int(row[at]) in variant_gates.LINK_KINDS_ITEM}
 	return {item: variant_ids[source_items[item]] for item in sorted(wanted)
 		if item in source_items and source_items[item] in variant_ids}
 
@@ -295,8 +296,8 @@ def add_gates(read, text_root):
 		item_ids(source_rows, source_rows("itemdata.txt")),
 		item_ids(variant_rows, variant_rows("itemdata.txt")),
 	)
-	merged, summary = variant.merge_gate_tables(
-		current, source, codes=GATE_CODES, level_cap=variant.gate_level_cap(), items=items)
+	merged, summary = variant_gates.merge_gate_tables(
+		current, source, codes=GATE_CODES, level_cap=variant_gates.gate_level_cap(), items=items)
 	for dropped in summary.get("droppedConditions", []):
 		tables.log(f"Roc gates: link {dropped['from']} -> {dropped['to']}: condition kind {dropped['kind']} "
 			f"dropped; the v1.150 server has no evaluator for it")

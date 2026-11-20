@@ -34,6 +34,7 @@ from pathlib import Path
 
 import alexandria_npcs as characters
 import build_alexandria_variant as variant
+import variant_gates
 import cap110_item_import as item_import
 import cap110_items as items
 import cap110_monsters as monsters
@@ -57,8 +58,8 @@ QUEST_ITEM_KIND = ("3", "3", "9", "0")
 # The item switch and the expansion level cap; the quest switch is not asked.
 # ================
 def enabled(env=os.environ):
-	cap = env.get(variant.LEVEL_CAP_FLAG, "").strip().lower()
-	return item_import.enabled(env) and cap in variant.LEVEL_CAP_EXPANSION_VALUES
+	cap = env.get(variant_gates.LEVEL_CAP_FLAG, "").strip().lower()
+	return item_import.enabled(env) and cap in variant_gates.LEVEL_CAP_EXPANSION_VALUES
 
 
 # ================

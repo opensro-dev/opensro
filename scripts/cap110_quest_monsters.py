@@ -38,6 +38,7 @@ from pathlib import Path
 
 import alexandria_npcs as characters
 import build_alexandria_variant as variant
+import variant_gates
 import cap110_monsters as monsters
 import cap110_skill_effects as effects
 import cap110_rewards as rewards
@@ -68,8 +69,8 @@ MONSTERS = (
 # The quest switch and the expansion level cap.
 # ================
 def enabled(env=os.environ):
-	cap = env.get(variant.LEVEL_CAP_FLAG, "").strip().lower()
-	return env.get(FLAG, "").strip().lower() in tables.FLAG_ON and cap in variant.LEVEL_CAP_EXPANSION_VALUES
+	cap = env.get(variant_gates.LEVEL_CAP_FLAG, "").strip().lower()
+	return env.get(FLAG, "").strip().lower() in tables.FLAG_ON and cap in variant_gates.LEVEL_CAP_EXPANSION_VALUES
 
 
 # ================
