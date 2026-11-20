@@ -80,6 +80,7 @@ import { recordClaims } from "./shared/publicationLedger.mjs";
 import {
 	importLaterDungeonMapsStep,
 	importLaterOptionalTeleportStep,
+	importLaterRenewalMallStep,
 	importLaterTombMinimapStep,
 	importLaterWorldMapButtonsStep,
 	importLaterWorldMapGuideStep
@@ -89,6 +90,8 @@ export {
 	laterDungeonMapImportPlan,
 	laterDungeonMapPublicPaths,
 	laterOptionalTeleportImportPlan,
+	laterRenewalMallImportPlan,
+	laterRenewalMallPublicPaths,
 	laterTombMinimapImportPlan,
 	laterTombMinimapPublicPaths,
 	laterWorldMapButtonsImportPlan,
@@ -220,6 +223,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	importLaterWorldMapGuide: importLaterWorldMapGuideStep,
 	importLaterOptionalTeleport: importLaterOptionalTeleportStep,
 	importLaterTombMinimap: importLaterTombMinimapStep,
+	importLaterRenewalMall: importLaterRenewalMallStep,
 	packTree: packPublicTree
 } );
 
@@ -617,6 +621,9 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// The Ch'in Tomb's floor minimap rides the v1.188 archive under the same
 	// rule, claimed before the pack tail.
 	const laterTombMinimap = await timed( "laterTombMinimap", () => steps.importLaterTombMinimap() );
+	// The renewal Item Mall's layouts and art (port-only, Experimental) ride
+	// the v1.188 archive under the same rule, claimed before the pack tail.
+	const laterRenewalMall = await timed( "laterRenewalMall", () => steps.importLaterRenewalMall() );
 	// The ordered pack tail lives in packPublicTree.mjs, shared with the
 	// standalone repack. Only the outdoor gate is per-caller: when the world lane
 	// produced no outdoor region group there is nothing to list. A full build
@@ -694,6 +701,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		laterWorldMapGuide,
 		laterOptionalTeleport,
 		laterTombMinimap,
+		laterRenewalMall,
 		packGroups,
 		claimAudit,
 		jsonOptimization,

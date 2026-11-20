@@ -487,3 +487,82 @@ export async function importLaterTombMinimapStep( stamped = stampedVsroRoot() ) 
 	claimPublicPaths( laterTombMinimapPublicPaths( catalog ) );
 	return { tiles: Array.isArray( catalog.tilePaths ) ? catalog.tilePaths.length : 0 };
 }
+
+// The later client's renewal Item Mall window, the client's desktop Item
+// Mall whenever this import is published (owner 2026-11-20): its layouts,
+// caption strings and art. The art lands under Media_extracted/later/ so no v1.150 picture
+// of the same name is replaced; the client keeps the classic window when
+// the catalogue is absent.
+const LATER_RENEWAL_MALL_CATALOG = "/assets/data/renewal-mall.json";
+
+/*
+================
+laterRenewalMallImportPlan
+
+What the renewal mall step does with one environment: the same contract
+as the dungeon maps (SRO_VSRO_ROOT folder, else the one skip line),
+because one archive carries both. The importer verifies the archive
+against its pin before reading a byte.
+================
+*/
+export function laterRenewalMallImportPlan( env = process.env, archiveThere = false, stamped = stampedVsroRoot() ) {
+	return vsroImportPlan(
+		{
+			label: "Later renewal mall",
+			without: "the Item Mall keeps the classic window",
+			script: "scripts/import_vsro_renewal_mall.py"
+		},
+		env,
+		archiveThere,
+		stamped
+	);
+}
+
+/*
+================
+laterRenewalMallPublicPaths
+
+The public paths one import publishes, read back from its own catalogue
+so the publication ledger claims exactly what the client will ask for:
+the catalogue and every picture it lists.
+================
+*/
+export function laterRenewalMallPublicPaths( catalog ) {
+	const paths = [ LATER_RENEWAL_MALL_CATALOG ];
+	for ( const image of catalog?.images ?? [] ) {
+		if ( typeof image?.path === "string" && image.path ) paths.push( image.path );
+	}
+	return paths;
+}
+
+/*
+================
+importLaterRenewalMallStep
+
+The renewal mall's layouts and art land in the loose public tree with
+the other later-client imports, in time for the final pack tail, and
+the step claims them. Without the archive the build says so in one line.
+================
+*/
+export async function importLaterRenewalMallStep( stamped = stampedVsroRoot() ) {
+	const plan = await vsroStepPlan( laterRenewalMallImportPlan, stamped );
+	if ( !plan.run ) {
+		console.log( plan.line );
+		return { skipped: true };
+	}
+	const result = await runPython( plan.args, {
+		task: "[renewal-mall] later-client renewal Item Mall import",
+		cwd: rebuildRoot,
+		context: [
+			"The renewal Item Mall window is native to the later client; the build imports its layouts and art " +
+			"from the pinned VSRO archive (SRO_VSRO_ROOT); the client draws it as its desktop Item Mall."
+		]
+	} );
+	const output = result.stdout.trim();
+	if ( output ) console.log( output );
+	const catalog = JSON.parse(
+		await readFile( path.join( publicRoot, "assets", "data", "renewal-mall.json" ), "utf8" )
+	);
+	claimPublicPaths( laterRenewalMallPublicPaths( catalog ) );
+	return { images: Array.isArray( catalog.images ) ? catalog.images.length : 0 };
+}

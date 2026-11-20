@@ -13,6 +13,9 @@ import type { AuthoredControl, AuthoredLayout } from "./authored-layout";
 
 export const MALL_MENU_COUNT = 8;
 export const MALL_ROWS_PER_PAGE = 6;
+// The largest page any mall window shows: the renewal window's 2x5 goods
+// grid (port-only, foundation/ui/renewal-mall.ts RENEWAL_GOODS_PER_PAGE).
+export const MALL_PAGE_SIZE_LIMIT = 10;
 /*
 ================
 compactMallBagLayout
