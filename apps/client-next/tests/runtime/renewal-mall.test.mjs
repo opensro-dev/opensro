@@ -16,6 +16,7 @@ the authored parent it repeats in.
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { defined } from "../helpers/defined.mjs";
 const { createItemMall } = await import( "../../src/engine/runtime/ui/hud/item-mall.ts" );
 const { mallCategoriesLater } = await import( "../../src/engine/foundation/ui/item-mall-layout.ts" );
 const {
@@ -262,24 +263,28 @@ offers
 count offers in the avatar shop's dress tab, the first two badged.
 ================
 */
+/** @returns {import("../../src/engine/contracts/item-mall.ts").MallOffer[]} */
 function offers( count ) {
-	return Array.from( { length: count }, ( _, slot ) => ({
-		group: 852,
-		shop: 5,
-		tab: 1,
-		slot,
-		packageId: 30000 + slot,
-		name: "Dress " + slot,
-		description: "",
-		icon: "item/dress.ddj",
-		silk: 130,
-		giftSilk: 0,
-		currencyMask: 2,
-		allowsPoints: false,
-		purchaseLimit: 1,
-		itemIds: [ 500 + slot ],
-		...(slot === 0 ? { badge: "new" } : slot === 1 ? { badge: "hot" } : {})
-	}) );
+	return Array.from(
+		{ length: count },
+		( _, slot ) => /** @type {import("../../src/engine/contracts/item-mall.ts").MallOffer} */ ({
+			group: 852,
+			shop: 5,
+			tab: 1,
+			slot,
+			packageId: 30000 + slot,
+			name: "Dress " + slot,
+			description: "",
+			icon: "item/dress.ddj",
+			silk: 130,
+			giftSilk: 0,
+			currencyMask: 2,
+			allowsPoints: false,
+			purchaseLimit: 1,
+			itemIds: [ 500 + slot ],
+			...(slot === 0 ? { badge: "new" } : slot === 1 ? { badge: "hot" } : {})
+		})
+	);
 }
 
 /*
@@ -287,6 +292,7 @@ function offers( count ) {
 state
 ================
 */
+/** @returns {import("../../src/engine/contracts/item-mall.ts").MallState} */
 function state( count = 14 ) {
 	return {
 		tabs: [
@@ -312,7 +318,7 @@ holding the native strings that win over the later ones.
 ================
 */
 function view( mall, options = {} ) {
-	const data = decodeRenewalMall( catalogueFile() );
+	const data = defined( decodeRenewalMall( catalogueFile() ) );
 	const browse = mall.read( options.state ?? state() );
 	return renewalMallView( {
 		data,
@@ -405,12 +411,12 @@ test("an absent catalogue decodes to null, a foreign one throws", () => {
 	file.sections.window[1].texture = "https://example.invalid/x.png";
 	assert.throws( () => decodeRenewalMall( file ), /Foreign renewal mall texture/ );
 	const missing = catalogueFile();
-	delete missing.sections.myInfo;
+	delete /** @type {Record<string, unknown>} */ (missing.sections).myInfo;
 	assert.throws( () => decodeRenewalMall( missing ), /Missing renewal mall section myInfo/ );
 });
 
 test("the decoder keys controls by name and keeps the later strings", () => {
-	const data = decodeRenewalMall( catalogueFile() );
+	const data = defined( decodeRenewalMall( catalogueFile() ) );
 	assert.deepEqual( data.window.GDR_RENEWAL_ITEM_MALL_MID_BG.rect, [ 137, 72, 424, 519 ] );
 	assert.equal( data.window.GDR_RENEWAL_ITEM_MALL_LEFT_FRAME.frame, true );
 	assert.equal( data.strings.UIIT_CTL_SILKMALL_INIT_ITEM, "Original" );
@@ -555,7 +561,7 @@ test("Search is a live button, the field shows the draft, and only card names wr
 	const strings = Object.fromEntries( offers( 14 ).map( offer => [ offer.name, offer.name ] ) );
 	const ops = view( mall, { strings } );
 	assert.equal( button( ops, "item-mall-search-find" ).disabled, false );
-	assert.equal( ops.find( op => op.kind === "edit" ).value, "Dress" );
+	assert.equal( defined( ops.find( op => op.kind === "edit" ) ).value, "Dress" );
 	const texts = ops.filter( op => op.kind === "text" );
 	assert.ok( texts.some( op => op.value === "Dress" && !op.wrap ) );
 	const wrapped = texts.filter( op => op.wrap ).map( op => op.value );
@@ -571,7 +577,7 @@ test("the focused empty search field drops its prompt for the caret, and says wh
 	assert.ok( view( mall ).some( op => op.kind === "text" && op.value === prompt ) );
 	const focused = view( mall, { searchFocused: true } );
 	assert.ok( !focused.some( op => op.kind === "text" && op.value === prompt ) );
-	const edit = focused.find( op => op.kind === "edit" );
+	const edit = defined( focused.find( op => op.kind === "edit" ) );
 	assert.ok(
 		inside( edit.rect, edit.textRect ) || edit.textRect[0] >= edit.rect[0],
 		"the caret's line sits in the field"
@@ -602,7 +608,7 @@ test("the view draws each card in its grid cell and leaves empty cells bare", ()
 });
 
 test("rail, sub tabs and goods cards repeat inside the parents the layouts author", () => {
-	const data = decodeRenewalMall( catalogueFile() );
+	const data = defined( decodeRenewalMall( catalogueFile() ) );
 	const left = data.window.GDR_RENEWAL_ITEM_MALL_LEFT_FRAME.rect;
 	const mid = data.window.GDR_RENEWAL_ITEM_MALL_MID_BG.rect;
 	for ( let index = 0; index < mallCategoriesLater().length; index++ ) {
@@ -726,7 +732,7 @@ test("the rail, sub tabs and cards send the classic window's actions", () => {
 	const cards = buttons( ops ).filter( op => op.id.startsWith( "item-mall-popup:" ) );
 	assert.deepEqual( cards.map( op => op.id ), Array.from( { length: 10 }, ( _, i ) => "item-mall-popup:" + i ) );
 	assert.deepEqual( cards[0].rect, renewalGoodsRect( 0 ) );
-	const edit = ops.find( op => op.kind === "edit" );
+	const edit = defined( ops.find( op => op.kind === "edit" ) );
 	assert.equal( edit.id, "item-mall-search" );
 	assert.equal( edit.maxLength, 32 );
 	// The pager steps one page each way; on page one the back arrow is off.
