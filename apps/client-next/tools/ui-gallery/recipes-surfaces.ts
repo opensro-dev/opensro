@@ -309,6 +309,34 @@ export const surfaceRecipes: readonly ExtendedRecipe[] = [
 		}
 	}) ),
 	{
+		id: "inspect:quest-info",
+		title: "Quest notice - level-up QuestInfo window",
+		family: "Dialogs",
+		source: "runtime/ui/hud/quest-info.ts; runtime/ui/ui.ts quest-info window (#3968)",
+		controls: [ "quest-info-close", "quest-info-drag" ],
+		async open( context ) {
+			// A real level gain: the first view sets the baseline, the next
+			// level runs the walk over the served quest table, and the icon
+			// shows once the catalog has loaded.
+			const level = ( value: number ) => {
+				context.state.gameplay.progression = { ...context.state.gameplay.progression, level: value };
+			};
+			// The walk waits for the player's country byte (0: China).
+			const localGid = context.state.gameplay.localGid;
+			context.state.entities = context.state.entities.map( entity =>
+				entity.gid === localGid ? { ...entity, countryByte9c: 0 } : entity
+			);
+			level( 10 );
+			for ( let i = 0; i < 5; i++ ) await context.step();
+			level( 11 );
+			for ( let i = 0; i < 80 && !context.controls().some( row => row.id === "quest-info-icon" ); i++ ) {
+				context.advance( 100 );
+				await context.step();
+			}
+			await press( context, "quest-info-icon" );
+		}
+	},
+	{
 		id: "dom:recording",
 		title: "Report tools - recording progress",
 		family: "DOM",

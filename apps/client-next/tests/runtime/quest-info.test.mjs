@@ -358,6 +358,40 @@ test("the open quest info window draws its main frame and the row dividers", () 
 
 /*
 ================
+quest info close reachable
+
+A player could not close the window (BR-261118-0922-7648): a control
+stacks by its order in the published list (the platform's z-index), and
+the window's drag surface, pushed after the frame, covered the close
+button. The close control must stack above every control under it, and
+activating it closes the window.
+================
+*/
+test("the quest info close button sits above the window surface and closes it", () => {
+	const { f, step, scene } = armedQuestFixture();
+	try {
+		assert.ok( scene, "the level gain never armed the quest icon" );
+		f.ui.event( { kind: "activate", id: "quest-info-icon" } );
+		let product;
+		for ( let i = 0; i < 4; i++ ) product = step( 11, 20000 + i * 100 ) ?? product;
+		const controls = defined( product, "no publication" ).controls,
+			closeIndex = controls.findIndex( c => c.id === "quest-info-close" ),
+			close = defined( controls[closeIndex], "quest info close" ),
+			[cx, cy] = [ close.rect[0] + close.rect[2] / 2, close.rect[1] + close.rect[3] / 2 ],
+			inside = r => cx >= r[0] && cx < r[0] + r[2] && cy >= r[1] && cy < r[1] + r[3],
+			above = controls.slice( closeIndex + 1 ).filter( c => inside( c.rect ) ).map( c => c.id );
+		assert.deepEqual( above, [], "controls cover the close button's centre" );
+		f.ui.event( { kind: "activate", id: "quest-info-close" } );
+		let after;
+		for ( let i = 0; i < 4; i++ ) after = step( 11, 21000 + i * 100 ) ?? after;
+		assert.ok( !defined( after, "no publication after close" ).controls.some( c => c.id === "quest-info-drag" ) );
+	} finally {
+		f.dispose();
+	}
+});
+
+/*
+================
 quest condition wrap
 
 Port-only (Experimental "Fit window labels", on by default): a link
