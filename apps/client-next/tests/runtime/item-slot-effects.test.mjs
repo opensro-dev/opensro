@@ -71,6 +71,13 @@ test("the blocked overlay is the int_effect sheet over the slot", () => {
 	assert.deepEqual( overlay.rect, RECT );
 });
 
+test("the exchange lock overlay is the com_item_exchange sheet over the slot", () => {
+	const overlay = fx.itemSlotExchangeOverlay( RECT );
+	assert.ok( overlay.path.endsWith( "interface/ifcommon/com_item_exchange.png" ) );
+	assert.deepEqual( overlay.uv, [ 0, 0, 1, 1 ] );
+	assert.deepEqual( overlay.rect, RECT );
+});
+
 test("slot 7 mirrors exactly the two-hand-grip TypeID4 grips, and only while empty", () => {
 	for ( const tid4 of [ 4, 5, 8, 9, 11, 13, 14, 16 ] ) {
 		const weapon = { typeFlags: typeFlags( tid4 ) };
