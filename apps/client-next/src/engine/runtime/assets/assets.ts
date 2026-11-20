@@ -25,6 +25,7 @@ import type { AssetOwner, AssetRequest, AssetResult, AssetWorkerMessage } from "
 import type { Degradation } from "@/engine/contracts/network";
 import { storedExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
 import { chooseHdTextureVariant, chooseTextureVariant } from "@/engine/foundation/assets/texture-variants";
+import { packMirrorOrigin } from "@/engine/foundation/assets/pack-mirror";
 const REQUEST_CAPACITY = 4;
 // A load's watchdog is a stall window, not a total budget: the worker notes
 // the bytes it reads per job (job-progress), and a job that keeps moving
@@ -380,6 +381,9 @@ export function createAssets(): AssetOwner {
 	};
 	worker.onerror = () => fail( "Asset worker failed" );
 	worker.onmessageerror = () => fail( "Asset worker message could not be decoded" );
+	// The desktop launcher's pack copy, if this page runs inside it. Sent
+	// first, so the worker knows it before the first pack read.
+	send( { kind: "pack-mirror", origin: packMirrorOrigin() } );
 	// Port-only: whether a device without BC is served re-encoded textures
 	// (texture-variants.ts). The switch is read here because the worker
 	// starts before the platform; native texture reads wait for the answer,

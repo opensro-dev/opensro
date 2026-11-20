@@ -48,6 +48,7 @@ import {
 } from "@/engine/foundation/ui/world-map";
 import { guideOverlay, guideRace } from "@/engine/foundation/ui/worldmap-guide";
 import { NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
+import { huntingPose } from "@/engine/foundation/gameplay/hunting";
 import { HUNTING_AREA_PREFIX, HUNTING_MONSTER_SIGN } from "@/engine/foundation/ui/hunting-guide";
 import { UNIQUE_NEST_SIGN } from "@/engine/foundation/ui/unique-nests";
 import { createHuntingGuideHud } from "./hunting-guide";
@@ -593,12 +594,12 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					}
 				}
 				for ( const point of game?.huntingPoints ?? [] ) {
-					const live = next.entities.find( e => e.gid === point.gid ) ?? point;
+					const live = huntingPose( point, next.entities );
 					mapMarkers.push( {
 						regionId: live.regionId,
 						x: live.x,
 						z: live.z,
-						rotation: -point.angle * Math.PI * 2 / 65536,
+						rotation: -live.angle * Math.PI * 2 / 65536,
 						path: ROOT + "interface/worldmap/wmap_sign_huntingpoint.png"
 					} );
 				}

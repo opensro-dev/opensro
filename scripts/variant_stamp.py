@@ -67,15 +67,21 @@ CODE_STAMP = REPO_ROOT / "scripts" / "build" / "shared" / "codeStamp.mjs"
 # SRO_* variables the variant never reads: they name the asset build's own
 # outputs (sro_paths resolves them, the importers never open them) or set
 # how many workers run, not what they produce.
-IGNORED_ENV = frozenset(("SRO_BUILD_JOBS", "SRO_GENERATED_ROOT", "SRO_SERVER_GAME_DATA_ROOT", "SRO_CHECK_FORCE"))
+# The asset build's content caches (SRO_SHARED_CACHE_ROOT, generatedRoot.mjs)
+# hold results named by their own inputs, never a variant input: r203's
+# release walked the whole cache as a source, and each build's own cache
+# writes made the next one rebuild the variant from scratch.
+SHARED_CACHE_ROOT_ENV = "SRO_SHARED_CACHE_ROOT"
+IGNORED_ENV = frozenset(("SRO_BUILD_JOBS", "SRO_GENERATED_ROOT", "SRO_SERVER_GAME_DATA_ROOT", "SRO_CHECK_FORCE",
+	SHARED_CACHE_ROOT_ENV))
 ENV_PREFIX = "SRO_"
 # The importers' source variables, by their naming convention:
 # SRO_VSRO_ROOT, SRO_V1696_ROOT, SRO_AVATARS_ZIP, SRO_*_DATABASE,
 # SRO_ARABIA_NESTS. A machine variable such as SRO_HOME names the whole
 # project folder and is never walked.
 SOURCE_VARIABLE = re.compile(r"SRO_\w+_(?:ROOT|ZIP|DATABASE|NESTS)")
-# The roots that name the asset build's trees, not the variant's sources.
-OUTPUT_ROOTS = frozenset(("SRO_GAME_ROOT", "SRO_GENERATED_ROOT", "SRO_SERVER_GAME_DATA_ROOT"))
+# The roots that name the asset build's trees and caches, not the variant's sources.
+OUTPUT_ROOTS = frozenset(("SRO_GAME_ROOT", "SRO_GENERATED_ROOT", "SRO_SERVER_GAME_DATA_ROOT", SHARED_CACHE_ROOT_ENV))
 # A single source file up to this size is hashed by content, not stat.
 SMALL_FILE = 64 << 20
 # Calls one export of codeStamp.mjs on the builder and prints its result.

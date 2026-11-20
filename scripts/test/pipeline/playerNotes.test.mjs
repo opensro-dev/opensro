@@ -5,7 +5,8 @@ playerNotes.test.mjs - the "Player-note:" trailers a merge carries
 
 "Player-note: Area: sentence" lines in the bug forum's areas keep their
 area; a note under any other label, or none, is filed under Other rather
-than dropped, with its text whole; a label with no sentence is no note.
+than dropped, with its text whole; a label with no sentence is no note,
+and neither is a trailer that says "None".
 A repeated note counts once, and a line that is not a Player-note trailer
 adds nothing to the catalogue's notes.json. A later merge's
 "Player-note-retract: #<pr>" withdraws every note of that pull request.
@@ -59,6 +60,15 @@ test("a note that names no area is filed under Other with its whole sentence", (
 		parsePlayerNotes( 'Player-note: Fixed a disconnect ("Invalid experience update") after a trap kill.' ),
 		[ { area: "Other", text: 'Fixed a disconnect ("Invalid experience update") after a trap kill.' } ]
 	);
+});
+
+test("a trailer that says None is no note", () => {
+	// #3949's shape: the template's "None" written as the trailer itself.
+	assert.deepEqual( parsePlayerNotes( [ "Player-note: none", "Player-note: None." ].join( "\n" ) ), [] );
+	// The word inside a sentence is kept.
+	assert.deepEqual( parsePlayerNotes( "Player-note: World: None of the gates is invisible any more." ), [
+		{ area: "World", text: "None of the gates is invisible any more." }
+	] );
 });
 
 test("a message without a trailer yields nothing", () => {

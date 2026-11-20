@@ -243,6 +243,42 @@ test("Phase 6 native blend pairs, leaf anchor, lifetime budget, and inert rotati
 	assert.deepEqual( inertDecoded.model.nodes[1].translation, [ 0, 0, 10 ] );
 });
 
+/*
+================
+a constant rotation reassigned over a frame window is the same static transform
+
+The later client's dun/demon_altar_*.efp schedule a SetRotation (flags 2)
+over frames 0-100. Its parameter is one constant matrix and the native
+command overwrites last-wins (AF4410), so every frame writes the same
+value: the node decodes as the single assignment does. A spacing other
+than one is still refused.
+================
+*/
+test("a constant rotation reassigned over a frame window is the same static transform", () => {
+	const rotated = end => {
+		const value = catalog();
+		value.effects["hit.efp"].root.renderProgram.push( {
+			name: "SetRotation",
+			flags: 2,
+			start: 0,
+			spacing: 1,
+			end,
+			parameter: { kind: "RotVector", left: [ 0, 90, 0 ], right: [] }
+		} );
+		return value;
+	};
+	const once = createEffectPrograms().decode( encode( rotated( 0 ) ), "hit.efp" ).model;
+	const window = createEffectPrograms().decode( encode( rotated( 100 ) ), "hit.efp" ).model;
+	assert.ok( once.nodes.some( n => n.name.includes( ":rotation" ) ) );
+	assert.deepEqual( window.nodes, once.nodes );
+	const spaced = rotated( 100 );
+	spaced.effects["hit.efp"].root.renderProgram.at( -1 ).spacing = 2;
+	assert.throws(
+		() => createEffectPrograms().decode( encode( spaced ), "hit.efp" ),
+		/Unsupported particle rotation assignment/
+	);
+});
+
 test("MOV_UP uses native zero arc coefficients and works within a dungeon region", () => {
 	const catalog = createEffectDecoder().decode( encode( {
 		"1": {

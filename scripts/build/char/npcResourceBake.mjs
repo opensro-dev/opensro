@@ -50,13 +50,13 @@ import { claimPublicFile } from "../shared/publicationLedger.mjs";
 import { normalizeAssetPath } from "../shared/assetPaths.mjs";
 import { loadOptionalDataAsset } from "../shared/optionalDataAsset.mjs";
 import { qinshiTombCombatEnabled } from "../shared/qinshiTomb.mjs";
-import { imageSourceRoot, retailTextdataRoot } from "../world/paths.mjs";
+import { modelReadRoots, retailTextdataRoot } from "../world/paths.mjs";
 
 const MODULE_FILE = fileURLToPath( import.meta.url );
 const textdataDir = retailTextdataRoot;
 // The trees one resource's bake reads: extracted game data and converted
 // images (the native texture cache lives under the latter).
-const MODEL_READ_ROOTS = { data: dataRoot, images: imageSourceRoot };
+const MODEL_READ_ROOTS = modelReadRoots( dataRoot );
 
 /*
 ================

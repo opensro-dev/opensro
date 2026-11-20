@@ -271,7 +271,9 @@ test("shared recovery waits for the authoritative potion lane and scheduling mar
 test("odd viewport sizes keep the Auto Potion bitmap tiles on whole pixels", t => {
 	const { dialog } = openDialog( t, true, { width: 1601, height: 901 } );
 	const tab = defined( dialog.controls.find( c => c.id === "potion-tab:character" ) );
-	assert.deepEqual( tab.rect, [ 618, 154, 72, 24 ] );
+	// The window's origin is floored to a whole unit (window-placement.ts
+	// frame, #3896): (1601 - width) / 2 lands on 617, not a rounded 618.
+	assert.deepEqual( tab.rect, [ 617, 153, 72, 24 ] );
 	for (
 		const c of dialog.controls.filter( c => c.id.startsWith( "companion-potion" ) || c.id.startsWith( "potion-" ) )
 	) {

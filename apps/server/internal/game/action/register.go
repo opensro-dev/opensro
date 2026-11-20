@@ -18,6 +18,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/macro"
 	"opensro.online/server/internal/game/social/guild"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
@@ -52,6 +53,8 @@ Register
 */
 func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(opArenaDecision, rt.hubHandler(hub, rt.HandleArenaDecision))
+	// 0x7554 SRO Macro settings (macro.go; port-only, silent while off).
+	hub.Handle(macro.OpRequest, rt.hubHandler(hub, rt.HandleMacroRequest))
 	rt.registerDeparture(hub)
 	rt.registerMall(hub)
 	rt.registerCrest(hub)

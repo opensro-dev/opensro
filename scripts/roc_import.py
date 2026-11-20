@@ -323,10 +323,10 @@ def flag_enabled(env=os.environ):
 #
 # The admitted rows of the later characterdata, converted to the
 # v1.150 layout. A kind absent from the client, or authoring another
-# grade or level, refuses by name; so does a kind the native tree
-# already carries (the import would stand it twice).
+# grade or level, refuses by name; a kind the tree already carries
+# refuses in later_world_import.stage_kinds.
 # ================
-def select_kinds(later, native_codes):
+def select_kinds(later):
 	refs = {}
 	for code, (grade, level) in KINDS.items():
 		row = later.get(code)
@@ -334,8 +334,6 @@ def select_kinds(later, native_codes):
 			raise ValueError(f"the VSRO client has no Roc kind {code}")
 		if (int(row[GRADE_COLUMN]), int(row[LEVEL_COLUMN])) != (grade, level):
 			raise ValueError(f"Roc kind {code} authors grade {row[GRADE_COLUMN]} level {row[LEVEL_COLUMN]}, want {grade} {level}")
-		if code in native_codes:
-			raise ValueError(f"Roc kind {code} already stands in the character tables")
 		refs[code] = characters.convert_character(row)
 	return refs
 
@@ -527,9 +525,8 @@ def stage(vsro_root, native, output):
 		# Gates first: the merge rewrites textdataname.txt, and the name
 		# step below appends onto what it leaves.
 		gates = add_gates(read, text_root)
-		native_codes = {row[2] for path in text_root.glob("characterdata_*.txt") if path.name != CHARACTER_SHARD
-			for row in tables.table_rows(path.read_bytes()) if len(row) > 2}
-		refs = select_kinds(later_world_import.later_characters(read), native_codes)
+		native_codes = {row[2] for row in cap110.tree_characters(text_root, CHARACTER_SHARD) if len(row) > 2}
+		refs = select_kinds(later_world_import.later_characters(read))
 		staged = later_world_import.stage_kinds("Roc", read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
 			lambda code: code in refs)
 		quests = add_quests(read, text_root, prior)

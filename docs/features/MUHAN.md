@@ -91,8 +91,11 @@ These are inferences and port choices, not native evidence:
   Talk casts the BUFF01 as the mask capsule casts its skill. The form fills the transform block with the
   form's skin and speeds for the buff's 900 s, and the mask's guards come with it (a form above the caster,
   riding, sitting or a posture change refuse; berserk refuses as natively), as do every end path a mask has.
-  The change NPC stays its arena's nest entity: the eight arenas share region 27091, so a static roster NPC
-  would stand in all of them.
+- **The arena NPCs are world NPCs.** The manager and the two change NPCs of each arena are NPC-class rows
+  (TID 1/2/2) with no hit points, so they are NPCs, never monster-population nests. The eight arenas share
+  region 27091, so a static roster NPC would stand in all of them: each stands only in its own arena world's
+  layers (`simulation/muhan_npcs.go`, published and resolved by `action/worldnpc.go`), and select and Talk
+  answer it as any roster NPC.
 
 ## Still left
 

@@ -83,6 +83,7 @@ func TestUpgradeSourceLayoutRefusesOutsideTheWindow(t *testing.T) {
 		{preNasrunTokensVersion, CurrentLayoutVersion, true},
 		{preCaravanAgentsVersion, preCaravanAgentsLayoutVersion, true},
 		{preCaravanAgentsVersion, CurrentLayoutVersion, true},
+		{preSroMacroVersion, CurrentLayoutVersion, true},
 		{CurrentVersion, preGuildWarLayoutVersion, true},
 		{UpgradeFromVersion - 1, preMallLayoutVersion, false},
 		{CurrentVersion + 1, CurrentLayoutVersion, false},
