@@ -87,7 +87,9 @@ export function decodeQuestPresentation( value: unknown ): QuestPresentation {
 			c.length !== 7 || !Number.isSafeInteger( id ) || id <= 0 || !Number.isInteger( level ) || level < 0 ||
 			level > 255 || !Number.isInteger( warn ) || warn < 0 || warn > 255
 		) throw Error( "Invalid quest presentation fields" );
-		if ( level > 90 || records[id] ) continue;
+		// The v1.150 quest table stops at level 90; the cap-110 quest rows (the Blue Berserk chains,
+		// levels 95 to 110) are the only ones above it and need their titles and texts as well.
+		if ( records[id] ) continue;
 		records[id] = {
 			level,
 			title: v.textEntries[c[2]!.trim()] ?? "",
