@@ -66,6 +66,10 @@ function summonerSlotState( item: SummonerSlotItem | undefined ): number | undef
 // under a two-hand-grip weapon; CIFEquipment_SetAvatarSlotItem (5965E0)
 // raises it on the avatar attachment slot under a one-piece dress.
 const BLOCKED_SHEET = "/assets/images/Media_extracted/effect/icon/int_effect.png";
+// CIFSlotWithHelp's exchange flag (+0x4FD, written by 54FC60): while it
+// stands, 565850 lays com_item_exchange.ddj (loaded at 554906) over the
+// slot. CIFExchange raises it on all twelve slots of a locked side.
+const EXCHANGE_SHEET = "/assets/images/Media_extracted/interface/ifcommon/com_item_exchange.png";
 // The avatar dress TypeID4 (5965E0/56A1E0 test (word & 0xf800) == 0x1000).
 const AVATAR_DRESS_TID4 = 2;
 
@@ -261,6 +265,20 @@ The grey int_effect quad 565850 draws over a blocked slot (+0x614).
 */
 export function itemSlotBlockedOverlay( rect: UiRect ): ItemSlotOverlay {
 	return { path: BLOCKED_SHEET, uv: [ 0, 0, 1, 1 ], rect };
+}
+
+/*
+================
+itemSlotExchangeOverlay
+
+The light-blue com_item_exchange quad 565850 draws over an exchange slot
+whose side has locked (+0x4FD): 6B21B0 raises it on the own twelve slots
+when 0xB095 accepts the lock, 6B2120 on the partner's twelve on 0x37CF.
+Empty slots take it too; the flag is per slot, not per item.
+================
+*/
+export function itemSlotExchangeOverlay( rect: UiRect ): ItemSlotOverlay {
+	return { path: EXCHANGE_SHEET, uv: [ 0, 0, 1, 1 ], rect };
 }
 
 /*
