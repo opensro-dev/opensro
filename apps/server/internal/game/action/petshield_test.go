@@ -66,10 +66,10 @@ func TestPetShieldTiersAndExpiry(t *testing.T) {
 			if rt.petShields.rows[self].amount == 0 || rt.petShields.rows[petShieldKey{testDivision, c.ActiveCOS.GID}].amount == 0 {
 				t.Fatal("missing owner/bear shield")
 			}
-			percent := []uint32{20, 35, 50}[tier-1]
+			percent := []float64{20, 35, 63.5}[tier-1]
 			for _, shield := range rt.petShields.rows {
-				if shield.amount != uint32(uint64(shield.maxHP)*uint64(percent)/100) {
-					t.Fatalf("tier %d shield is not %d percent of recipient HP", tier, percent)
+				if shield.amount != uint32(float64(shield.maxHP)*percent/100) {
+					t.Fatalf("tier %d shield is not %v percent of recipient HP", tier, percent)
 				}
 			}
 			_, gotNear := rt.petShields.rows[petShieldKey{testDivision, enterworld.ObjectIDForCharacter(near)}]
