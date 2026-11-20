@@ -52,6 +52,7 @@
 		"checks/check_source_encoding.mjs",
 		"checks/check_shared_fixtures.mjs",
 		"checks/run_if_changed.mjs",
+		"lib/inputSets.mjs",
 		"checks/check_precompressed_freshness.mjs",
 		"checks/check_source_file_size.mjs",
 		"checks/check_world_space.mjs",
