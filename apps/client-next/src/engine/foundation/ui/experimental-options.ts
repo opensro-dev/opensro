@@ -320,6 +320,11 @@ export interface ExperimentalOptions {
 	// sides it with SRO_MALL_CATEGORIES; a client with the row off keeps
 	// the shipped mall exactly. Off unless turned on.
 	readonly mallCategories: boolean;
+	// Port-only, not native (#3907): the v1.696 SRO Macro (CNIFMacroMenuWnd
+	// and its option windows), which v1.150 does not have. The server sides
+	// it with SRO_AUTO_MACRO; a client with the row off never opens the
+	// windows and never sends 0x7554. Off unless turned on.
+	readonly sroMacro: boolean;
 }
 
 /*
@@ -559,7 +564,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		sealUnderHeading: enabled( "sealUnderHeading" ),
 		setBonusTooltip: enabled( "setBonusTooltip" ),
 		silkHistory: enabled( "silkHistory" ),
-		mallCategories: enabled( "mallCategories" )
+		mallCategories: enabled( "mallCategories" ),
+		sroMacro: enabled( "sroMacro" )
 	};
 }
 

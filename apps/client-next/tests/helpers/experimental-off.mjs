@@ -141,5 +141,7 @@ export const OFF = Object.freeze( {
 	silkHistory: false,
 	// Off by default (#3257): the later mall's categories, HOT shop and
 	// item search; the native mall stands.
-	mallCategories: false
+	mallCategories: false,
+	// Off by default (#3907): the v1.696 SRO Macro windows are port-only.
+	sroMacro: false
 } );

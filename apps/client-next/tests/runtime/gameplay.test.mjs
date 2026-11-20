@@ -1573,7 +1573,7 @@ test("a ground click during a logout countdown cancels it before walking the ray
 	assert.deepEqual( sent.map( f => f.opcode ), [ 9 ] );
 	game.dispose();
 });
-test("freeze blocks navigation and a cleared 0x36C7 snapshot releases it; sleep does not", async () => {
+test("freeze blocks navigation and a cleared 0x36C7 snapshot releases it; sleep drops the click too", async () => {
 	const { createGameplay } = await load( "gameplay" ),
 		sent = [],
 		game = createGameplay( f => sent.push( f ) ),
@@ -1594,8 +1594,43 @@ test("freeze blocks navigation and a cleared 0x36C7 snapshot releases it; sleep 
 	sent.length = 0;
 	game.receive( snap( 0x40 ), 14 );
 	game.command( { kind: "move", destination: { ...pose, x: 90 } }, 15, undefined, local );
-	assert.equal( sent.length, 1 );
+	assert.equal( sent.length, 0 );
 	game.dispose();
+});
+test("a stunned, asleep, rooted or petrified click is not sent and walks nothing", async () => {
+	const { createGameplay } = await load( "gameplay" );
+	const snap = mask => {
+		const payload = new Uint8Array( mask ? 9 : 4 );
+		new DataView( payload.buffer ).setUint32( 0, mask, true );
+		return { opcode: 0x36c7, payload };
+	};
+	// Sleep, root, petrify and stun: the server's move handler drops the
+	// command (action PlayerMovementBlocked). A predicted walk snapped back,
+	// and a sent one came back refused after starting the walking gait.
+	for ( const mask of [ 0x40, 0x80, 0x1000, 0x4000 ] ) {
+		const sent = [],
+			game = createGameplay( f => sent.push( f ) ),
+			local = { ...pose, gid: 7, heading: 0, appearanceState: [ 1, 0, 0 ] };
+		game.bootstrap( { simulationProtocolVersion: 1 } );
+		game.seed( local );
+		game.command( { kind: "navigation", regionId: pose.regionId, bundle: bundle() }, 1 );
+		game.receive( snap( mask ), 10 );
+		game.command( { kind: "move", destination: { ...pose, x: 140 } }, 11, undefined, local );
+		assert.deepEqual( sent.map( f => f.opcode ), [], `mask ${mask}: the dropped click was sent` );
+		game.step( 500, local );
+		const held = game.take();
+		assert.equal( held?.moving, false, `mask ${mask}: the worker predicted a walk` );
+		assert.equal( held?.pose?.x, pose.x, `mask ${mask}: the player left its spot` );
+		assert.equal( held?.walkPredictable, false, `mask ${mask}: the main-thread mover may predict` );
+		// The status ends: the next click predicts again.
+		game.receive( snap( 0 ), 600 );
+		game.command( { kind: "move", destination: { ...pose, x: 140 } }, 601, undefined, local );
+		game.step( 700, local );
+		const free = game.take();
+		assert.equal( free?.moving, true, `mask ${mask}: a free click did not walk at once` );
+		assert.equal( free?.walkPredictable, true );
+		game.dispose();
+	}
 });
 test("one decal is published with native target categories, ground replacement and world reset", async () => {
 	const { createGameplay } = await load( "gameplay" ), game = createGameplay( () => {} );

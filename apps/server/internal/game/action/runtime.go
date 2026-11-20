@@ -267,6 +267,9 @@ type Runtime struct {
 	sookArena *sookArenaRuntime
 	// roc runs the Roc worlds (roc.go); nil with SRO_ROC off.
 	roc *rocRuntime
+	// macro opens the SRO Macro settings lane (macro.go); false, the
+	// default, is native: SRO_AUTO_MACRO off.
+	macro bool
 	// muhanChanges is the Muhan change pairing by change NPC codename
 	// (muhan_change.go). Port-only, not native: empty unless SRO_MUHAN is on.
 	muhanChanges map[string]muhanChange

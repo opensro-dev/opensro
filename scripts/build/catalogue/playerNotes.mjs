@@ -5,7 +5,8 @@ playerNotes.mjs - the catalogue's notes.json: player-facing patch notes
 
 A release's notes are the "Player-note:" trailers of the changes merged
 since the previous release. Each trailer is "Player-note: Area: one plain
-sentence"; a change with none is not one a player notices. A note whose
+sentence"; a change with none is not one a player notices, and neither is
+one whose trailer says so ("Player-note: None", the template's word). A note whose
 area is not one of the forum's tags, or that names none, is filed under
 Other with its text whole: a fix players should hear about is never
 dropped, nor a word cut, over its label. The notes are read from main's
@@ -35,6 +36,8 @@ const NOTE_TRAILER = /^\s*\*?\s*Player-note:\s*(.+)$/i;
 // NOTE_RETRACT withdraws earlier notes by pull request number.
 const NOTE_RETRACT = /^\s*\*?\s*Player-note-retract:\s*(.+)$/i;
 const NOTE_LABEL = /^([A-Za-z]+)\s*:\s*(.*)$/;
+// NOTE_NONE is a trailer that states the change has no note.
+const NOTE_NONE = /^none\.?$/i;
 
 // NOTE_FALLBACK_AREA files a note with an unknown area or none.
 const NOTE_FALLBACK_AREA = "Other";
@@ -53,7 +56,8 @@ The notes of one commit message: every "Player-note:" line. An "Area:"
 label in the forum's tags names the area and is taken off the sentence;
 any other label, or none, files the note under Other with its text whole,
 since "Storage:" and "Warning:" read alike and the word may be the
-sentence's own. A label with no sentence after it is no note. Duplicate
+sentence's own. A label with no sentence after it is no note, and nor is
+"None". Duplicate
 lines (a note repeated in two branch commits) count once.
 ================
 */
@@ -63,6 +67,7 @@ export function parsePlayerNotes( message ) {
 		const match = NOTE_TRAILER.exec( line );
 		if ( !match ) continue;
 		const body = match[1].trim(), label = NOTE_LABEL.exec( body );
+		if ( NOTE_NONE.test( body ) ) continue;
 		const known = label && NOTE_AREAS.find( a => a.toLowerCase() === label[1].toLowerCase() );
 		const area = known || NOTE_FALLBACK_AREA;
 		const text = (known ? label[2] : body).trim();

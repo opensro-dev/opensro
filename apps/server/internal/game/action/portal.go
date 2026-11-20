@@ -221,6 +221,9 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 	if pharaohtemple.Enabled() {
 		key += "+pharaoh_temple"
 	}
+	if monster.SkytempleEnabled() {
+		key += "+skytemple"
+	}
 	if JanganTombTeleportEnabled() {
 		key += "+jangan_tomb_teleport"
 	}
@@ -275,7 +278,8 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 		if len(r) < 2 {
 			return nil, fmt.Errorf("truncated teleportbuilding")
 		}
-		if len(r) > 2 && (hidden.HidesBuilding(r[2]) || pharaohtemple.HidesBuilding(r[2])) {
+		if len(r) > 2 && (hidden.HidesBuilding(r[2]) || pharaohtemple.HidesBuilding(r[2]) ||
+			monster.SkytempleHidesBuilding(r[2])) {
 			continue
 		}
 		id, e := number(r[1])
@@ -326,7 +330,9 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 		if e != nil || id == 0 {
 			return nil, fmt.Errorf("teleportdata identity at row %d", i+1)
 		}
-		if hidden.HidesTeleport(r[2]) {
+		// Port-only, not native: the Sky Temple fields stay closed, with every
+		// link to them, while SRO_SKYTEMPLE is off.
+		if hidden.HidesTeleport(r[2]) || monster.SkytempleHidesGate(r[2]) {
 			hiddenIDs[id] = true
 			hiddenCodes[r[2]] = true
 			continue
