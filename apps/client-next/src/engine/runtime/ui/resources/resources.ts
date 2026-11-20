@@ -235,7 +235,9 @@ export function createUiAssets(
 					missing.has( path ) || loaded.has( path ) || pending.has( path ) ||
 					(failures.get( path )?.retryAt ?? -Infinity) > now
 				) continue;
-				if ( assets.available() === 0 ) break;
+				// The interface lane: a slot of its own, so a window's art never
+				// queues behind world streaming (asset-slots.ts, #3977).
+				if ( assets.available( "interface" ) === 0 ) break;
 				const request = fallback.has( path ) ? DEFAULT_ICON : path;
 				try {
 					pending.set(
@@ -244,7 +246,8 @@ export function createUiAssets(
 							new URL( request, base ).href,
 							crest( request ) ? 256 : 4 * 1024 * 1024,
 							// A native texture arrives as its container bytes.
-							crest( request ) ? "crest" : isNativeTexture( request ) ? undefined : "png"
+							crest( request ) ? "crest" : isNativeTexture( request ) ? undefined : "png",
+							{ lane: "interface" }
 						)
 					);
 				} catch ( error ) {
