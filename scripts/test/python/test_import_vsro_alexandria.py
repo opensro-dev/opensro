@@ -316,5 +316,119 @@ class ArchiveIndexTests(unittest.TestCase):
 		self.assertEqual(index["server_dep/a.txt"].offset, len(b"archive two!"))
 
 
+class PinnedIndexTests(unittest.TestCase):
+	"""A pinned archive's directory is walked once per cache, not once per release."""
+
+	SHA = "a" * 64
+
+	def setUp(self):
+		alex._archive_indexes.clear()
+		self.addCleanup(alex._archive_indexes.clear)
+		self.cache = Path(self.enterContext(tempfile.TemporaryDirectory()))
+		self.walks = 0
+		original = alex.sro_pk2.read_directory
+
+		def counting(data, blocks=None):
+			self.walks += 1
+			return [alex.sro_pk2.Entry(r"Server_Dep\A.txt", 2, 3)]
+
+		alex.sro_pk2.read_directory = counting
+		self.addCleanup(setattr, alex.sro_pk2, "read_directory", original)
+
+	def index(self, data=b"archive one"):
+		# A new process: nothing in memory, only what the cache holds.
+		alex._archive_indexes.clear()
+		return alex.pinned_index(data, self.SHA, self.cache)
+
+	def test_a_second_release_reads_the_walk_back(self):
+		first = self.index()
+		second = self.index()
+		self.assertEqual(self.walks, 1)
+		self.assertEqual({k: (e.path, e.offset, e.size) for k, e in second.items()},
+			{k: (e.path, e.offset, e.size) for k, e in first.items()})
+		self.assertEqual(second["server_dep/a.txt"].path, r"Server_Dep\A.txt", "the original-case path survives")
+
+	def test_a_cache_file_that_cannot_be_trusted_is_walked_again(self):
+		self.index()
+		path = self.cache / f"index-{self.SHA}.json"
+		for bad in (b"not json", b'{"format": "other"}', path.read_bytes().replace(self.SHA.encode(), b"b" * 64)):
+			path.write_bytes(bad)
+			self.index()
+		self.assertEqual(self.walks, 4)
+		# An entry past the end of these bytes is not this archive's.
+		self.index(b"abc")
+		self.assertEqual(self.walks, 5)
+
+
+class CachedPinTests(unittest.TestCase):
+	"""require_pins_with_cache hashes an unchanged pinned archive once across runs."""
+
+	def setUp(self):
+		alex._verified_archives.clear()
+		alex._verified_digests.clear()
+		self.addCleanup(alex._verified_archives.clear)
+		self.addCleanup(alex._verified_digests.clear)
+		self.vsro = Path(self.enterContext(tempfile.TemporaryDirectory()))
+		self.cache = self.vsro / "cache"
+		payload = b"the pinned client"
+		(self.vsro / "Media.pk2").write_bytes(payload)
+		self.pins = {"Media": hashlib.sha256(payload).hexdigest()}
+		self.hashes = 0
+		original = alex.file_digest
+
+		def counting(path):
+			self.hashes += 1
+			return original(path)
+
+		alex.file_digest = counting
+		self.addCleanup(setattr, alex, "file_digest", original)
+
+	def run_once(self):
+		# A new process: only the cache's record carries over.
+		alex._verified_archives.clear()
+		alex._verified_digests.clear()
+		alex.require_pins_with_cache(self.vsro, ("Media",), self.cache, self.pins)
+
+	def test_an_unchanged_archive_is_hashed_once(self):
+		self.run_once()
+		self.run_once()
+		self.assertEqual(self.hashes, 1)
+
+	def test_a_changed_archive_is_hashed_again_and_refused(self):
+		self.run_once()
+		archive = self.vsro / "Media.pk2"
+		archive.write_bytes(b"the pinned client, patched")
+		with self.assertRaises(SystemExit):
+			self.run_once()
+		self.assertEqual(self.hashes, 2)
+
+
+class OutputPoolTests(unittest.TestCase):
+	def setUp(self):
+		self.root = Path(self.enterContext(tempfile.TemporaryDirectory())) / "out"
+
+	def test_every_entry_lands_under_its_folder(self):
+		pool = alex.OutputPool()
+		names = [f"{x}/{y}.m" for x in range(40) for y in range(5)] + ["tile2d.ifo"]
+		for name in names:
+			pool.put(self.root, name, name.encode())
+		pool.close()
+		for name in names:
+			self.assertEqual((self.root / name).read_bytes(), name.encode())
+
+	def test_a_path_that_leaves_the_folder_is_refused(self):
+		pool = alex.OutputPool()
+		with self.assertRaises(ValueError):
+			pool.put(self.root, "../outside.m", b"x")
+		pool.close()
+		self.assertFalse((self.root.parent / "outside.m").exists())
+
+	def test_a_failed_write_fails_close(self):
+		pool = alex.OutputPool()
+		pool.put(self.root, "72/bad:name.m", b"x")
+		with self.assertRaises(ValueError):
+			pool.close()
+
+
 if __name__ == "__main__":
 	unittest.main()
