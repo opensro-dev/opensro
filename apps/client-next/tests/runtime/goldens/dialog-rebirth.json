@@ -11,6 +11,8 @@
   ],
   "loading": false,
   "loadingVisible": false,
+  "marketButton": false,
+  "marketOpen": false,
   "message": "Health 0; mana 0; target none. 1 nearby entities.",
   "title": "Silkroad game interface",
   "titleCredit": false

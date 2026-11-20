@@ -42,7 +42,6 @@ apps/client-next/src/engine/foundation/animation/projectile-curve.ts
 apps/client-next/src/engine/foundation/animation/random-idle.ts
 apps/client-next/src/engine/foundation/animation/skill-motion.ts
 apps/client-next/src/engine/foundation/animation/status-presentation.ts
-apps/client-next/src/engine/foundation/assets/asset-budget.ts
 apps/client-next/src/engine/foundation/assets/image-budget.ts
 apps/client-next/src/engine/foundation/audio/environment.ts
 apps/client-next/src/engine/foundation/audio/item-sounds.ts
@@ -58,7 +57,6 @@ apps/client-next/src/engine/foundation/gameplay/equipment-drop.ts
 apps/client-next/src/engine/foundation/gameplay/feedback-levels.ts
 apps/client-next/src/engine/foundation/gameplay/game-options.ts
 apps/client-next/src/engine/foundation/gameplay/guide.ts
-apps/client-next/src/engine/foundation/gameplay/hunting.ts
 apps/client-next/src/engine/foundation/gameplay/item-activation.ts
 apps/client-next/src/engine/foundation/gameplay/item-tooltip-reference.ts
 apps/client-next/src/engine/foundation/gameplay/merchant-branches.ts

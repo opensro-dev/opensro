@@ -81,6 +81,7 @@ var catalogueExempt = map[string]string{
 	"SRO_SOOK_SURVIVAL_ARENA":                  "private encounters and checkpoint chests at runtime; the catalogue publishes static nests and timed global events, not private stage state or chest rolls",
 	"SRO_SOOK_CHECKPOINT_SECONDS":              "the arena's checkpoint chest interval at runtime; the catalogue publishes no private stage timing",
 	"SRO_SOOK_CHEST_CAPACITY":                  "the arena's checkpoint chest capacity at runtime; the catalogue publishes no chest contents",
+	"SRO_AUTO_MACRO":                           "stores each character's macro settings at runtime; the catalogue publishes no per-character settings",
 	"SRO_BETA_STARTER_KIT":                     "a character-creation grant; the catalogue publishes the granted items, not the grant",
 	"SRO_BETA_PLAYER_MAP":                      "shows other players on the world map at runtime; the catalogue publishes no live positions",
 	"SRO_BETA_MASTERY_EARLY":                   "a per-character allowance read from each character's creation time at runtime; levels.json keeps the native and shard-wide budgets",

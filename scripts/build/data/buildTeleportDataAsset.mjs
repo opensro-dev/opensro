@@ -20,6 +20,7 @@ import { isMainScript } from "../shared/fsUtils.mjs";
 import { janganTombTeleportEnabled, loadJanganTombTeleportLinkRows } from "../shared/janganTombTeleport.mjs";
 import { loadMuhanTeleportDataRows, loadMuhanTeleportLinkRows, muhanEnabled } from "../shared/muhan.mjs";
 import { loadQinShiTombTeleportLinkRows, qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
+import { closedSkytempleIds, skytempleEnabled } from "../shared/skytemple.mjs";
 import { readTextDataLinesSync, splitTextDataRow } from "../shared/textDataIo.mjs";
 import { extractedRoot, gameRoot, publicRoot } from "../world/paths.mjs";
 
@@ -73,8 +74,12 @@ export function buildTeleportDataAsset() {
 	if ( muhanEnabled() ) {
 		rawTeleportRows.push( ...loadMuhanTeleportDataRows().rows );
 	}
+	// Port-only, not native: the Sky Temple fields stay out of the menu
+	// while SRO_SKYTEMPLE is off, as the server keeps them closed.
+	const closedIds = closedSkytempleIds( rawTeleportRows, skytempleEnabled() );
 	const teleportRows = rawTeleportRows
 		.filter( ( columns ) => Number( columns[0] ) !== 0 )
+		.filter( ( columns ) => !closedIds.has( Number( columns[1] ) >>> 0 ) )
 		.map( ( columns ) => ({
 			id: Number( columns[1] ) >>> 0,
 			codeName: columns[2] ?? "",
@@ -118,6 +123,9 @@ export function buildTeleportDataAsset() {
 	}
 	const linkRows = rawLinkRows
 		.filter( ( columns ) => Number( columns[0] ) !== 0 )
+		.filter( ( columns ) =>
+			!closedIds.has( Number( columns[1] ) >>> 0 ) && !closedIds.has( Number( columns[2] ) >>> 0 )
+		)
 		.map( ( columns ) => ({
 			sourceId: Number( columns[1] ) >>> 0,
 			destinationId: Number( columns[2] ) >>> 0,

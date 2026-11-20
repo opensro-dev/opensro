@@ -73,6 +73,7 @@ const preTradeHistoryLayoutVersion = 12
 const preNasrunTokensVersion = 45
 const preCaravanAgentsVersion = 46
 const preCaravanAgentsLayoutVersion = 13
+const preSroMacroVersion = 47
 
 /*
 ================
@@ -212,8 +213,8 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	if err := stampVersionTx(tx, metaKeyLayoutVersion, CurrentLayoutVersion); err != nil {
 		return backupPath, err
 	}
-	// Schemas 44 to 47 add only an optional deadline, tables and three
-	// optional character fields: preserve every existing record.
+	// Schemas 44 to 48 add only an optional deadline, tables and optional
+	// character fields: preserve every existing record.
 	if err := stampVersionTx(tx, metaKeySchemaVersion, CurrentVersion); err != nil {
 		return backupPath, err
 	}

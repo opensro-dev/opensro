@@ -251,6 +251,17 @@ export type GameplayCommand =
 		readonly kind: "auto-potion-save";
 		readonly settings: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;
 	}
+	// Port-only (#3907): an SRO Macro switch or save (0x7554).
+	| {
+		readonly kind: "macro-switch";
+		readonly macro: import("@/engine/foundation/gameplay/sro-macro").MacroKind;
+		readonly on: boolean;
+	}
+	| {
+		readonly kind: "macro-save";
+		readonly macro: import("@/engine/foundation/gameplay/sro-macro").MacroKind;
+		readonly settings: import("@/engine/foundation/gameplay/sro-macro").MacroSettings;
+	}
 	| { readonly kind: "rebirth"; readonly choice: 1 | 2; }
 	// An arrow key's press or release (#1574): Up walks the facing, Left and
 	// Right turn it (arrow-keys.ts).
@@ -864,6 +875,9 @@ export interface GameplayState extends MoverPublication {
 	// acknowledges them so no first-publication race can lose the list.
 	readonly gmCatalog?: import("@/engine/foundation/gameplay/gm-command").GmCatalog;
 	readonly autoPotion?: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;
+	// Port-only (#3907): the SRO Macro settings the server replayed under
+	// SRO_AUTO_MACRO (sro-macro.ts); absent on a shard without it.
+	readonly sroMacro?: import("@/engine/foundation/gameplay/sro-macro").MacroSettings;
 	readonly storage?: import("@/engine/foundation/gameplay/storage-room").StorageRoom | null;
 	readonly playerModels?: readonly import("@/engine/foundation/gameplay/skin-change").PlayerModel[];
 	readonly job?: import("@/engine/foundation/gameplay/job-guild").LocalJob;

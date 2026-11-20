@@ -16,6 +16,8 @@
   ],
   "loading": false,
   "loadingVisible": false,
+  "marketButton": false,
+  "marketOpen": false,
   "message": "Health unknown; mana unknown; target Guild Manager. 2 nearby entities.",
   "title": "Silkroad game interface",
   "titleCredit": false

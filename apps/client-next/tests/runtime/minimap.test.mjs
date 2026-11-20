@@ -34,6 +34,7 @@ const { minimapSameFloor, minimapPoseKey, minimapFloorQueries } = await import(
 	"../../src/engine/foundation/ui/minimap-floor.ts"
 );
 const { academyPacket } = await import( "../../src/engine/foundation/gameplay/academy.ts" );
+const { huntingPose } = await import( "../../src/engine/foundation/gameplay/hunting.ts" );
 const { createCombat } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts"
 );
@@ -210,6 +211,18 @@ test("B5ED creates hunting records; duplicate owner, unspawned movement and orde
 	assert.deepEqual( c.state().huntingPoints.map( p => p.gid ), [ 9 ] );
 	c.clear();
 	assert.deepEqual( c.state().huntingPoints, [] );
+});
+test("a hunted peer in view turns its marker by its live heading, not the last 0x30E3 sample", () => {
+	// Native movement (#3721) sends one B738 per move and no per-tick 0x30E3,
+	// so a peer in view walks and turns without the marker's sample changing.
+	const point = { ...pose, z: 900, gid: 8, token: 4, name: "Hunt", angle: 0 };
+	const live = entity( 8, { x: 900, z: 900, heading: 16384 } );
+	assert.deepEqual( huntingPose( point, [ live ] ), { regionId: 257, x: 900, y: 10, z: 900, angle: 16384 } );
+	assert.equal( huntingPose( point, [] ), point );
+	const [marker] = minimapHunting( pose, { huntingPoints: [ point ] }, [ live ], 1920 );
+	assert.equal( marker.rotation, -Math.PI / 2 );
+	assert.ok( marker.x > 0 );
+	assert.equal( minimapHunting( pose, { huntingPoints: [ point ] }, [], 1920 )[0].rotation, -0 );
 });
 test("B5ED linked source retains its subject and authored duration without creating a hunting point", () => {
 	const c = createCombat();

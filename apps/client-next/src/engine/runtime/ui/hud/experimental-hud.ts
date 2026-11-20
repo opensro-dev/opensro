@@ -400,6 +400,12 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-v-hides-companions",
 						label: "V hides pets and transports",
 						description: "Holding V also hides other players' pets and transports."
+					},
+					{
+						key: "sroMacro",
+						id: "experimental-sro-macro",
+						label: "SRO Macro",
+						description: "The later client's auto-potion, auto-skill and auto-hunt windows."
 					}
 				]
 			},

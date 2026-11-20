@@ -105,6 +105,17 @@ class Stamp(unittest.TestCase):
 		self.assertIn(str(Path(self.env["SRO_V1696_ROOT"]).resolve()), sources)
 		self.assertNotIn(str(Path(self.env["SRO_HOME"]).resolve()), sources)
 
+	# The asset build's content cache is written by every build; walking
+	# it as a source rebuilt r203's variant on each release.
+	def test_the_shared_cache_is_never_a_source(self):
+		cache = self.write(Path(self.temp.name) / "cache" / "actions" / "k.json", b"{}").parents[1]
+		env = {**self.env, variant_stamp.SHARED_CACHE_ROOT_ENV: str(cache)}
+		variant_stamp.write_stamp(self.variant, self.inputs(env))
+		self.assertNotIn(str(cache.resolve()), self.inputs(env)["sources"])
+		self.write(cache / "actions" / "new.json", b"{}")
+		self.assertEqual(self.stale(env), [])
+		self.assertEqual(self.stale({**env, variant_stamp.SHARED_CACHE_ROOT_ENV: str(cache / "actions")}), [])
+
 	# A build with no Arabia nest extraction named (SRO_ARABIA off, or a
 	# contributor's tree) still stamps: the extraction has no default, so
 	# only a set SRO_ARABIA_NESTS joins the sources.
