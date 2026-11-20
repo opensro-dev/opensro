@@ -60,14 +60,16 @@ barrier.
 ==================
 */
 type Runtime struct {
-	berserkActors     sync.Map // derived expiry index; character store owns state
-	spiritActors      sync.Map // attached Devil's Spirit lapse index (spiritability.go)
-	battleActors      sync.Map // battle-state expiry index (battlestate.go)
-	cosRefusalLog     sync.Map // cosground.go: cosRefusalKey -> *cosRefusalWindow (refusal log rollup)
-	cosRefusalTotals  sync.Map // cosground.go: cause string -> *atomic.Uint64 (refusal metric)
-	aggressionActors  sync.Map // scheduled counters; character owns aggression entries
-	caravanThiefMarks sync.Map // tradetiers.go (#2958): thief character id -> caravanThiefMark, session only
-	caravanStarDueMs  int64    // tradetiers.go (#2958): next 5-star caravan roster push
+	berserkActors     sync.Map         // derived expiry index; character store owns state
+	spiritActors      sync.Map         // attached Devil's Spirit lapse index (spiritability.go)
+	battleActors      sync.Map         // battle-state expiry index (battlestate.go)
+	cosRefusalLog     sync.Map         // cosground.go: cosRefusalKey -> *cosRefusalWindow (refusal log rollup)
+	cosRefusalTotals  sync.Map         // cosground.go: cause string -> *atomic.Uint64 (refusal metric)
+	aggressionActors  sync.Map         // scheduled counters; character owns aggression entries
+	caravanThiefMarks sync.Map         // tradetiers.go (#2958): thief character id -> caravanThiefMark, session only
+	caravanStarDueMs  int64            // tradetiers.go (#2958): next 5-star caravan roster push
+	hwanRosterDueMs   int64            // hwan.go: next Blue Berserk level roster push
+	hwanRosterSent    map[uint32]uint8 // hwan.go: the levels the last roster push named
 	// instanceWorlds tracks the instanced layers opened on demand
 	// (instance_world.go): the owning lease and deadline per layer.
 	instanceWorlds sync.Map // instanceWorldKey -> trackedInstanceWorld
@@ -741,6 +743,12 @@ type Runtime struct {
 	AdvanceQuestItem     func(*enterworld.Character, int64) []wire.Frame
 	ForgetQuestItem      func(*enterworld.Character)
 	UseQuestItem         func(*enterworld.Character, string, simulation.Spawn, int64) ([]wire.Frame, bool)
+	// HwanLevel answers a character's Blue Berserk level (the quest owner's
+	// derived value, quest/hwan_level.go); nil is level 0 (hwan.go).
+	HwanLevel func(*enterworld.Character) uint8
+	// WalkAllowed is the quest arena's leash for position skills (the same hook movement holds a walk with,
+	// quest/hwan_arena.go): false for a pose the character may not move to; nil allows every pose.
+	WalkAllowed func(*enterworld.Character, simulation.Spawn) bool
 	// CapturedFollowerDied tells a capture-escort quest its captured monster
 	// died (a captured COS); called inside the owner's character door.
 	CapturedFollowerDied        func(*enterworld.Character) []wire.Frame

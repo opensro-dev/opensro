@@ -4,7 +4,9 @@
 assets.ts - the main-thread owner of the asset worker
 
 Every asset request crosses to the asset worker through this owner, which
-holds at most four request slots shared by all runtime owners, enforces
+holds the request slots every runtime owner shares (five: four for the
+streams and one the interface lane always has, foundation/assets/
+asset-slots.ts), enforces
 per-request deadlines and byte budgets, and fails every handle when the
 worker dies. install() starts the worker's background install without
 using a slot.
@@ -13,20 +15,21 @@ A cancelled request keeps its slot until the worker acknowledges it, and the
 release can lag when the worker is inside a native decode that AbortSignal
 cannot interrupt (loader.ts createImageBitmap / DecompressionStream). A slow
 release is abandoned, not fatal: its slot stays reserved and the fault is
-reported as a degraded incident. Only a worker holding every slot in
-unacknowledged cancellations is treated as dead.
+reported as a degraded incident. Only a worker holding every stream slot in
+unacknowledged cancellations is treated as dead: the world could never load
+again.
 
 ===========================================================================
 */
 
 import { assetRequestBudget } from "@/engine/foundation/assets/asset-budget";
+import { ASSET_STREAM_SLOTS, assetSlotsFree } from "@/engine/foundation/assets/asset-slots";
 import { createWorldLease } from "./world-lease";
-import type { AssetOwner, AssetRequest, AssetResult, AssetWorkerMessage } from "@/engine/contracts/assets";
+import type { AssetLane, AssetOwner, AssetRequest, AssetResult, AssetWorkerMessage } from "@/engine/contracts/assets";
 import type { Degradation } from "@/engine/contracts/network";
 import { storedExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
 import { chooseHdTextureVariant, chooseTextureVariant } from "@/engine/foundation/assets/texture-variants";
 import { packMirrorOrigin } from "@/engine/foundation/assets/pack-mirror";
-const REQUEST_CAPACITY = 4;
 // A load's watchdog is a stall window, not a total budget: the worker notes
 // the bytes it reads per job (job-progress), and a job that keeps moving
 // bytes may run past any fixed total on a slow link (a trickling route to
@@ -67,6 +70,7 @@ export function createAssets(): AssetOwner {
 		url: string;
 		limit: number;
 		decode?: Extract<AssetRequest, { kind: "load"; }>["decode"];
+		lane?: AssetLane;
 		result: AssetResult | null;
 		// Cumulative worker bytes noted for this job, and whether the worker
 		// marked its primary bytes in (the decode stall window then applies).
@@ -96,6 +100,18 @@ export function createAssets(): AssetOwner {
 	let progress: import("@/engine/contracts/assets").AssetProgress | null = null;
 	let releaseStale = false;
 	let nextId = 0, disposed = false, failure: string | null = null;
+
+	/*
+	================
+	free
+
+	Slots a load of this lane may take. A job holds its slot until it is
+	taken, released or abandoned, exactly as the worker counts it.
+	================
+	*/
+	function free( lane?: AssetLane ) {
+		return disposed || failure ? 0 : assetSlotsFree( lane, jobs.values() );
+	}
 
 	/*
 	================
@@ -198,7 +214,7 @@ export function createAssets(): AssetOwner {
 			send( { kind: "cancel", id } );
 		}
 		const abandoned = [ ...jobs.values() ].filter( job => job.abandoned );
-		if ( abandoned.length >= REQUEST_CAPACITY ) {
+		if ( abandoned.length >= ASSET_STREAM_SLOTS ) {
 			fail(
 				"Asset worker stopped acknowledging cancellations: " +
 					abandoned.map( job => new URL( job.url ).pathname ).join( ", " )
@@ -477,7 +493,7 @@ export function createAssets(): AssetOwner {
 			return {
 				phase: disposed ? "disposed" : failure ? "failed" : "running",
 				error: failure,
-				available: disposed || failure ? 0 : REQUEST_CAPACITY - jobs.size,
+				available: free(),
 				jobs: [ ...jobs ].map( ( [id, job] ) => ({
 					id,
 					path: new URL( job.url ).pathname,
@@ -502,7 +518,7 @@ export function createAssets(): AssetOwner {
 				{ phase: "failed", error: failure } :
 				{ phase: "running" };
 		},
-		available: () => disposed || failure ? 0 : REQUEST_CAPACITY - jobs.size,
+		available: ( lane?: AssetLane ) => free( lane ),
 		takeReleaseStale: () => {
 			const stale = releaseStale;
 			releaseStale = false;
@@ -523,7 +539,7 @@ export function createAssets(): AssetOwner {
 			}
 			const url = new URL( value ).href;
 			if (
-				jobs.size >= REQUEST_CAPACITY || !Number.isSafeInteger( limit ) || limit < 1 ||
+				free( options?.lane ) === 0 || !Number.isSafeInteger( limit ) || limit < 1 ||
 				limit > assetRequestBudget( decode )
 			) {
 				throw new Error( "Asset request exceeds budget" );
@@ -536,6 +552,7 @@ export function createAssets(): AssetOwner {
 				url,
 				limit,
 				decode,
+				lane: options?.lane,
 				result: null,
 				bytes: 0,
 				decoding: false,
@@ -549,7 +566,8 @@ export function createAssets(): AssetOwner {
 					url,
 					limit,
 					decode,
-					...(options?.pickAlpha ? { pickAlpha: true } : {})
+					...(options?.pickAlpha ? { pickAlpha: true } : {}),
+					...(options?.lane ? { lane: options.lane } : {})
 				} );
 			} catch ( error ) {
 				jobs.delete( id );

@@ -157,6 +157,38 @@ func (rt *Runtime) ConfigureReverseReturnMap(enabled bool, imported []optionalte
 
 /*
 ================
+AddReverseReturnMapPoints
+
+Appends port-only destinations to the published table, after ConfigureReverseReturnMap
+(the owner's choice of extra places: the Blue Berserk ritual NPCs). Each takes the next
+public id, so the dense 1..n contract holds; an invalid or already listed point is
+skipped. A no-op while the option is off, so choice 7 stays refused natively.
+================
+*/
+func (rt *Runtime) AddReverseReturnMapPoints(extra []enterworld.ReverseMapPoint) {
+	if len(rt.reverseMapPoints) == 0 && !ReverseReturnMapFromEnv() {
+		return
+	}
+	for _, point := range extra {
+		if !reverseMapPointValid(point) || len(rt.reverseMapPoints) == maxReverseMapPoints {
+			continue
+		}
+		listed := false
+		for _, have := range rt.reverseMapPoints {
+			if have.RegionID == point.RegionID && have.X == point.X && have.Z == point.Z {
+				listed = true
+			}
+		}
+		if listed {
+			continue
+		}
+		point.ID = uint32(len(rt.reverseMapPoints) + 1)
+		rt.reverseMapPoints = append(rt.reverseMapPoints, point)
+	}
+}
+
+/*
+================
 useImportedReverseMap
 
 The imported field points in table order, published under the dense ids

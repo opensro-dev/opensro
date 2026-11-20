@@ -94,6 +94,25 @@ func QinShiTombChainOwned(region uint16, codename string) bool {
 
 /*
 ================
+QinShiTombCodenames
+
+Every monster codename the embedded tomb character table holds (the MOB_TQ_
+family and its quest copies). Exported for the quest tests, which check each
+authored quest actor against the primary media and the embedded tomb table.
+================
+*/
+func QinShiTombCodenames() []string {
+	var names []string
+	for _, row := range SplitTabbedText(qinshiTombCharacterDataTSV) {
+		if len(row) > 2 && row[0] == "1" {
+			names = append(names, strings.TrimSpace(row[2]))
+		}
+	}
+	return names
+}
+
+/*
+================
 QinShiTombFromEnv
 
 Reports whether SRO_QINSHI_TOMB enables the Qin-Shi Emperor Tomb Floor 1-4

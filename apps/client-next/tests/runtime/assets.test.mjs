@@ -299,3 +299,32 @@ test("a cancellation is acknowledged on receipt while its decode still drains", 
 		"neither drain publishes a payload or a second acknowledgement"
 	);
 });
+
+test("an interface load runs beside four stream loads and passes stream demand queued behind them", async t => {
+	const downloads = [];
+	t.mock.method( globalThis, "fetch", url => new Promise( resolve => downloads.push( { url, resolve } ) ) );
+	const loader = createLoader( () => {} );
+	t.after( () => loader.dispose() );
+	const request = ( id, lane ) =>
+		loader.receive( { kind: "load", id, url: "http://localhost/" + id, limit: 1, ...(lane ? { lane } : {}) } );
+	for ( let id = 1; id <= 6; id++ ) request( id );
+	assert.equal( downloads.length, 4, "the streams hold four slots; two stream loads wait" );
+	request( 7, "interface" );
+	assert.equal( downloads.length, 5, "the interface lane has a slot of its own" );
+	assert.equal( new URL( downloads[4].url ).pathname, "/7" );
+	request( 8, "interface" );
+	assert.equal( downloads.length, 5, "a second interface load waits for a slot" );
+	downloads[4].resolve( new Response( Uint8Array.of( 7 ) ) );
+	await settle();
+	// Every stream slot is still held: the freed slot is the interface
+	// lane's, so the interface load passes the stream loads queued first.
+	assert.equal( downloads.length, 6 );
+	assert.equal( new URL( downloads[5].url ).pathname, "/8" );
+	downloads[0].resolve( new Response( Uint8Array.of( 1 ) ) );
+	await settle();
+	assert.equal( new URL( downloads[6].url ).pathname, "/5", "a freed stream slot serves the oldest stream load" );
+	for ( const download of downloads.slice( 1 ) ) download.resolve( new Response( Uint8Array.of( 0 ) ) );
+	await settle();
+	for ( const download of downloads.slice( 7 ) ) download.resolve( new Response( Uint8Array.of( 0 ) ) );
+	await settle();
+});

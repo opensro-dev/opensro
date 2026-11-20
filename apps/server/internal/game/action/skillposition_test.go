@@ -206,6 +206,36 @@ func TestPositionSkillRangeUses3DAndRegionFrames(t *testing.T) {
 
 /*
 ================
+TestPositionGoalIsCutBackToTheAllowedArea
+
+A dash that would end outside the allowed disc stops at its edge on the same line; one that ends inside is
+untouched, and a start outside the area is left alone.
+================
+*/
+func TestPositionGoalIsCutBackToTheAllowedArea(t *testing.T) {
+	const region = 25253
+	centre := simulation.Spawn{RegionID: region, X: 1000, Z: 1000}
+	allowed := func(at simulation.Spawn) bool {
+		return math.Hypot(at.X-centre.X, at.Z-centre.Z) <= 600
+	}
+	from := simulation.Spawn{RegionID: region, X: 1100, Y: 50, Z: 1000}
+	inside := simulation.Spawn{RegionID: region, X: 1300, Y: 50, Z: 1000}
+	if got := clampPositionGoal(from, inside, allowed); got != inside {
+		t.Fatalf("a dash inside the area was cut: %+v", got)
+	}
+	got := clampPositionGoal(from, simulation.Spawn{RegionID: region, X: 1900, Y: 50, Z: 1000}, allowed)
+	if math.Abs(got.X-1600) > 0.01 || got.Z != 1000 || got.Y != 50 {
+		t.Fatalf("a dash out of the area ended at %+v, want x 1600 on the same line", got)
+	}
+	outside := simulation.Spawn{RegionID: region, X: 1900, Y: 50, Z: 1000}
+	far := simulation.Spawn{RegionID: region, X: 2500, Y: 50, Z: 1000}
+	if got := clampPositionGoal(outside, far, allowed); got != far {
+		t.Fatalf("a start outside the area was clamped: %+v", got)
+	}
+}
+
+/*
+================
 TestTeleportSeatsTheNearestLayer
 
 A deck stands over the ground. The walk rests with a terrain owner (the

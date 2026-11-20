@@ -538,7 +538,10 @@ func TestUnimplementedCatalogQuestsArePreservedThroughLogin(t *testing.T) {
 	slices.Sort(codes)
 	for _, code := range codes {
 		row := catalog.rows[code]
-		c.CompletedQuestIds = append(c.CompletedQuestIds, row.ID)
+		// The wire list holds maxQuestWireRecords ids; a cap-110 catalog is larger.
+		if len(c.CompletedQuestIds) < maxQuestWireRecords {
+			c.CompletedQuestIds = append(c.CompletedQuestIds, row.ID)
+		}
 		if _, implemented := defs.ByRefID(row.ID); implemented {
 			continue
 		}

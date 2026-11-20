@@ -76,7 +76,7 @@ func (rt *Runtime) HandleGiveUp(character *enterworld.Character, payload []byte)
 	if !changed {
 		return OpResult{}, fmt.Errorf("quest give-up: character is no longer authoritative")
 	}
-	if def.Codename == ivyMaterialQuest {
+	if def.Codename == ivyMaterialQuest || isHwanDigQuest(def.Codename) {
 		rt.ForgetItemUse(character)
 	}
 	return OpResult{Frames: append(inventoryFrames, wire.Frame{Opcode: OpQuestUpdate, Payload: EncodeQuestUpdateAbandon(refID)})}, nil

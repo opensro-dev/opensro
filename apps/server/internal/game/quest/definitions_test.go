@@ -273,8 +273,10 @@ func TestLoadDefinitionsAgainstShippedMedia(t *testing.T) {
 		t.Skip("shipped questdata.txt not present in this checkout")
 	}
 	catalog := NewCatalog(dir)
-	if catalog.Len() != 224 {
-		t.Fatalf("shipped questdata rows = %d, want 224", catalog.Len())
+	// 224 shipped rows; the cap-110 build (SRO_CAP110_QUESTS) adds the 52 Blue
+	// Berserk quests (scripts/cap110_quest_tables.py).
+	if _, expansion := catalog.QuestByCodename("QNO_SD_HW_018"); catalog.Len() != 224 && !(expansion && catalog.Len() == 224+52) {
+		t.Fatalf("shipped questdata rows = %d, want 224 (276 with the cap-110 quests)", catalog.Len())
 	}
 	defs, err := LoadDefinitions(catalog, enterworld.NewTextdataItems(dir))
 	if err != nil {

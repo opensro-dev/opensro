@@ -63,6 +63,51 @@ func TestQuestGuardianUsesExactPopulationAndDoesNotRespawn(t *testing.T) {
 
 /*
 ================
+TestQuestSpawnRedrawsAPointInsideAClosedObject
+
+A spawn that asks to avoid closed objects redraws its angle and radius while the
+point is inside one; without the ask the first draw stands, as the retail
+scripts take it.
+================
+*/
+func TestQuestSpawnRedrawsAPointInsideAClosedObject(t *testing.T) {
+	const code = "MOB_QT_CH_CHARGHOST_01"
+	land := func(avoid bool) (float64, int) {
+		state := NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{
+			1: {RefObjID: 1, Codename: code, TidWord: 0xc6, MaxHP: 100, WalkSpeed: 8, RunSpeed: 20},
+		}, nil))
+		// Draws: angle 0, radius 0 (east of the centre), then angle 0.5, radius 0 (west of it).
+		draws := []float64{0, 0, 0.5, 0, 0.5, 0}
+		next := 0
+		state.SetRandomSource(func() float64 {
+			value := draws[next%len(draws)]
+			next++
+			return value
+		})
+		checks := 0
+		state.SetSpawnClosedObjectCheck(func(at Spawn) bool {
+			checks++
+			return at.X > 1000
+		})
+		state.StartDivision("quest")
+		lease, _ := state.PopulationLease("quest", instance.Pack(1, 1))
+		if !state.SpawnQuestMonster(QuestMonsterSpawn{Division: "quest", Population: lease, Codename: code,
+			Position: Spawn{RegionID: 0x655e, X: 1000, Y: 85, Z: 449}, NowMs: 1000, RadiusMin: 90, RadiusSpan: 10,
+			AvoidClosedObjects: avoid}) {
+			t.Fatal("the spawn failed")
+		}
+		return state.MaterializedInstances("quest")[0].Spawn.X, checks
+	}
+	if x, checks := land(true); x >= 1000 || checks != 2 {
+		t.Fatalf("with the ask the monster landed at x %.1f after %d checks, want west of the centre after 2", x, checks)
+	}
+	if x, checks := land(false); x < 1000 || checks != 0 {
+		t.Fatalf("without the ask the monster landed at x %.1f after %d checks, want the first draw with none", x, checks)
+	}
+}
+
+/*
+================
 TestQuestMonstersLeaveOnTheirTimers
 
 The spawn base arms the Ivy guardian's 300 s, and a quest's own timer

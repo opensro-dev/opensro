@@ -253,3 +253,30 @@ test("every slot held by abandoned cancellations fails the owner with a named re
 	assert.equal( assets.health().phase, "failed" );
 	assert.match( assets.health().error, /stopped acknowledging cancellations: \/a, \/b, \/c, \/d/ );
 });
+test("the interface lane always has a slot, and borrows only free stream slots", t => {
+	const { assets, worker } = fixture( t ),
+		streams = Array.from( { length: 4 }, ( _, i ) => assets.request( "https://assets.test/s" + i ) );
+	assert.equal( assets.available(), 0 );
+	assert.throws( () => assets.request( "https://assets.test/s4" ), /budget/ );
+	assert.equal( assets.available( "interface" ), 1 );
+	const icon = assets.request( "https://assets.test/icon", 1024, "png", { lane: "interface" } );
+	assert.equal( defined( worker ).messages.at( -1 ).lane, "interface", "the worker admits by the same lane" );
+	assert.equal( defined( worker ).messages[0].lane, undefined );
+	assert.equal( assets.available( "interface" ), 0 );
+	assert.throws( () => assets.request( "https://assets.test/icon2", 1024, "png", { lane: "interface" } ), /budget/ );
+	// A finished stream load frees a slot either lane may take.
+	defined( worker ).onmessage( { data: { kind: "bytes", id: streams[0], buffer: new ArrayBuffer( 1 ) } } );
+	assets.take( streams[0] );
+	assert.equal( assets.available(), 1 );
+	assert.equal( assets.available( "interface" ), 1 );
+	const borrowed = assets.request( "https://assets.test/icon3", 1024, "png", { lane: "interface" } );
+	// Two interface loads now: the streams keep the other three slots only.
+	assert.equal( assets.available(), 0 );
+	defined( worker ).onmessage( { data: { kind: "bytes", id: icon, buffer: new ArrayBuffer( 1 ) } } );
+	assets.take( icon );
+	assert.equal( assets.available(), 1, "a slot the interface lane frees goes back to the streams" );
+	defined( worker ).onmessage( { data: { kind: "bytes", id: borrowed, buffer: new ArrayBuffer( 1 ) } } );
+	assets.take( borrowed );
+	assert.equal( assets.available(), 1, "while the interface lane is idle the streams hold four slots" );
+	assert.equal( assets.available( "interface" ), 2 );
+});

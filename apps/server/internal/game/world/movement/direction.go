@@ -189,6 +189,11 @@ func (rt *Runtime) constrainDirectionLeg(character *enterworld.Character, from s
 		end = furthestAdmitted(from, end, func(at simulation.Spawn) bool { return rt.CanEnterRegion(character, at.RegionID) })
 		blocked = true
 	}
+	// A quest arena's leash (WalkAllowed): the walk stops at the last pose inside it.
+	if rt.WalkAllowed != nil && !rt.WalkAllowed(character, end) {
+		end = furthestAdmitted(from, end, func(at simulation.Spawn) bool { return rt.WalkAllowed(character, at) })
+		blocked = true
+	}
 	// A thief's transport stops at the first protected region it would enter
 	// (#721): the reference server refuses that step with the thief-cart
 	// notice (v1.150 shows it for 0x3058 kind 1), and the walk ends there
