@@ -124,8 +124,10 @@ async function runScript( uiFixture, script ) {
 
 for ( const script of SCENE_SCRIPTS ) {
 	test( `scene golden: ${script.name}`, { skip: sceneSkip( script.name ) }, async () => {
-		const { uiFixture } = await import( "../helpers/ui-fixture.mjs" );
-		const text = await runScript( uiFixture, script );
+		// The goldens record the native windows, also where the build
+		// replaces one with a later client's (#3971).
+		const { classicUiFixture } = await import( "../helpers/ui-fixture.mjs" );
+		const text = await runScript( classicUiFixture, script );
 		const failure = checkSceneGolden( script.name, text );
 		if ( SCENE_GOLDENS_UPDATE ) return;
 		if ( failure !== null ) assert.fail( failure );

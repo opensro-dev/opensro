@@ -82,3 +82,65 @@ test("a lost control, a lost row, a changed row or a moved scene fails", () => {
 	assert.match( failure( map => map.rows["map-side-tab"].added.push( "map-guide" ) ), /row map-side-tab changed/ );
 	assert.match( defined( lostNativeRow( NATIVE, { scenes: {} }, asIs ), "the lost scene" ), /scene Map is gone/ );
 });
+
+const MALL = {
+	scenes: {
+		Academy: {
+			controls: [ "academy-close", "item-mall" ],
+			focus: null,
+			panel: "Academy",
+			rows: {
+				"item-mall": {
+					added: [ "item-mall-bag-page:1", "item-mall-close" ],
+					hash: "4dca",
+					panel: "Academy",
+					removed: [ "academy-close" ]
+				},
+				"item-mall-category:7": { panel: "Academy" }
+			}
+		}
+	}
+};
+
+/*
+================
+mallLost
+
+lostNativeRow over MALL with one change applied to the built Academy
+scene, on a build that replaces the window whose ids start with item-mall.
+================
+*/
+function mallLost( change ) {
+	const academy = structuredClone( MALL.scenes.Academy );
+	change( academy );
+	return lostNativeRow( MALL, { scenes: { Academy: academy } }, asIs, [ "item-mall" ] );
+}
+
+test("a replaced window's own controls may go, come or change (#3971)", () => {
+	assert.equal(
+		mallLost( academy => {
+			const row = academy.rows["item-mall"];
+			row.added = [ "item-mall-close", "item-mall-search" ];
+			row.hash = "0a35";
+			delete academy.rows["item-mall-category:7"];
+		} ),
+		undefined
+	);
+	// Without the replacement the same change is a lost native fact.
+	const academy = structuredClone( MALL.scenes.Academy );
+	academy.rows["item-mall"].added = [ "item-mall-close" ];
+	assert.match(
+		defined( lostNativeRow( MALL, { scenes: { Academy: academy } }, asIs ), "the lost native fact" ),
+		/row item-mall changed/
+	);
+});
+
+test("outside the replaced window every native fact still survives", () => {
+	const fails = change => defined( mallLost( change ), "the lost native fact" );
+	// The opener's own row: what it closes, and where it opens.
+	assert.match( fails( academy => academy.rows["item-mall"].removed = [] ), /row item-mall changed/ );
+	assert.match( fails( academy => academy.rows["item-mall"].panel = null ), /row item-mall changed/ );
+	// The opener is not inside the window it opens.
+	assert.match( fails( academy => academy.controls = [ "academy-close" ] ), /lost control item-mall/ );
+	assert.match( fails( academy => academy.controls = [ "item-mall" ] ), /lost control academy-close/ );
+});

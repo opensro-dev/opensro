@@ -13,7 +13,7 @@ HUD.
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { uiFixture } from "../helpers/ui-fixture.mjs";
+import { classicUiFixture } from "../helpers/ui-fixture.mjs";
 
 /*
 ================
@@ -42,7 +42,7 @@ function settle( f, from ) {
 }
 
 test("My info hides the money sign and the English Point row", () => {
-	const f = uiFixture();
+	const f = classicUiFixture();
 	try {
 		f.ui.step( f.state, 1000 );
 		f.ui.event( { kind: "key", code: "F10" } );
@@ -57,7 +57,7 @@ test("My info hides the money sign and the English Point row", () => {
 });
 
 test("a shop page keeps all six slot backgrounds when it has no offers", () => {
-	const f = uiFixture();
+	const f = classicUiFixture();
 	try {
 		f.ui.step( f.state, 1000 );
 		f.ui.event( { kind: "key", code: "F10" } );
@@ -71,7 +71,7 @@ test("a shop page keeps all six slot backgrounds when it has no offers", () => {
 });
 
 test("the desktop Item Mall blocks only its own window so world camera drag outside it passes through (9FEC50 -> 67CCA0)", () => {
-	const f = uiFixture();
+	const f = classicUiFixture();
 	try {
 		f.ui.step( f.state, 1000 );
 		f.ui.event( { kind: "key", code: "F10" } );

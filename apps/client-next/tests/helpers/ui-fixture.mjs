@@ -12,6 +12,7 @@ import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "./native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { classicPublished } from "../../tools/replaced-windows.mjs";
 const { createUi } = await import( "../../src/engine/runtime/ui/ui.ts" );
 const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 export const fontAtlas = JSON.parse(
@@ -264,4 +265,20 @@ export function uiFixture(
 			ui.dispose();
 		}
 	};
+}
+
+/*
+================
+classicUiFixture
+
+uiFixture with every native window a later client's import can replace
+(tools/replaced-windows.mjs: the renewal Item Mall) opened as the native
+one, whatever the build publishes: for the goldens and the tests of the
+native windows, which a native and an expanded build both ship (the phone
+reflow and any build without the later import keep them).
+================
+*/
+export function classicUiFixture( commands = () => {} ) {
+	const keep = undefined;
+	return uiFixture( commands, keep, keep, keep, keep, keep, keep, keep, classicPublished() );
 }

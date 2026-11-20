@@ -19,7 +19,7 @@ the UI gallery recipes the issue names and read the scene back to text.
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fontAtlas, uiFixture } from "../helpers/ui-fixture.mjs";
+import { classicUiFixture, fontAtlas } from "../helpers/ui-fixture.mjs";
 
 const { titleText, resolveTextOverlaps } = await import( "../../src/engine/foundation/rendering/ui-glyphs.ts" );
 const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
@@ -238,7 +238,8 @@ async function openRecipe( id, fit, seed = state => state ) {
 		{ open: context => OPENERS[id.slice( "opener:".length )]( context, context.step ) } :
 		extendedRecipes.find( r => r.id === id );
 	assert.ok( recipe, id );
-	const f = uiFixture();
+	// The native windows, the classic Item Mall too (#3971).
+	const f = classicUiFixture();
 	let now = 0, seen = null;
 	f.state.gameplay.social = guildSnapshot();
 	f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { fitWindowLabels: fit } ) } );
