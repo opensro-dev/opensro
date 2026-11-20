@@ -405,7 +405,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "sroMacro",
 						id: "experimental-sro-macro",
 						label: "SRO Macro",
-						description: "The later client's auto-potion, auto-skill and auto-hunt windows."
+						description: "Later client's auto-potion, skill and hunt windows."
 					}
 				]
 			},
@@ -469,8 +469,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "questTrackerMarkers",
 						id: "experimental-quest-tracker-markers",
 						label: "Quest target markers",
-						description:
-							"Show every active quest's target, and the spot its tool is used, on M and the minimap."
+						description: "Quest targets and tool spots on M and the minimap."
 					}
 				]
 			},

@@ -15254,15 +15254,14 @@
 						"experimental-homing-projectiles",
 						"experimental-main-thread-own-walk",
 						"experimental-predicted-run-up",
-						"experimental-silent-wing-flight",
 						"experimental-smooth-camera",
+						"experimental-sro-macro",
 						"experimental-unique-damage-rank",
-						"experimental-v-hides-companions",
-						"experimental-warp-arrival-sound"
+						"experimental-v-hides-companions"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "4a81cf8115f63298",
+					"hash": "34aa883467e77b45",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
