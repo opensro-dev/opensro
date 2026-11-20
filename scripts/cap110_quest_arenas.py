@@ -24,10 +24,6 @@ Witch's Lighthouse). Nothing here places a player or a monster.
 """
 import os
 
-FLAG = "SRO_CAP110_QUESTS"
-LEVEL_CAP_FLAG = "SRO_LEVEL_CAP"
-FLAG_ON = ("1", "on", "true", "yes")
-LEVEL_CAP_EXPANSION_VALUES = ("110",)
 # (sectorX, sectorY) of each arena: region id = (sectorY << 8) | sectorX.
 CHINESE_ARENA = (182, 89)
 EUROPEAN_ARENA = (182, 87)
@@ -35,20 +31,12 @@ ARENA_REGIONS = (CHINESE_ARENA, EUROPEAN_ARENA)
 
 
 # ================
-# enabled
-#
-# The quest switch and the expansion level cap.
-# ================
-def enabled(env=os.environ):
-	cap = env.get(LEVEL_CAP_FLAG, "").strip().lower()
-	return env.get(FLAG, "").strip().lower() in FLAG_ON and cap in LEVEL_CAP_EXPANSION_VALUES
-
-
-# ================
 # arena_seeds
 #
 # The regions to add to the Alexandria import as seeds: both arenas when the
-# quests are on, none otherwise.
+# quests are on (cap110_quest_monsters owns the one switch), none otherwise.
+# The import is lazy: cap110_quest_monsters reads import_vsro_alexandria.
 # ================
 def arena_seeds(env=os.environ):
+	from cap110_quest_monsters import enabled
 	return set(ARENA_REGIONS) if enabled(env) else set()
