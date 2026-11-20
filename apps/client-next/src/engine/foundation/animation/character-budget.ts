@@ -40,7 +40,21 @@ export const CHARACTER_MODELS = 1024;
 // Borrowed and assembled views (an equipped actor's merged body), which
 // share their sources' bytes and so need their own count bound.
 export const CHARACTER_ASSEMBLIES = 1024;
+// The scene's actor room: entities, rides, orbs, staged effects, animation
+// particles, scenery and portraits share it (character-selection.ts,
+// effect-room.ts).
 export const CHARACTER_ACTORS = 512;
+// Port-only, not native: the model particles' own room beyond the scene's
+// (presentation-finalize.ts presentEmission). The original draws every
+// decoration (85C020 appends to an unbounded list); these took the scene's
+// leftover slots, so a crowd with its loot left a Seal item's glow none.
+// 128 holds the local player's glows and the nearest thirty or so Seal
+// wearers'; a glow costs about 0.02 ms of main thread a frame (effects-bench,
+// 2026-11-19), so the room caps what it can add near 2.5 ms.
+export const MODEL_PARTICLE_ACTORS = 128;
+// What the renderer holds in all: the scene and the model particles
+// (CHARACTER_ACTORS + MODEL_PARTICLE_ACTORS; model-particle-room.test.mjs).
+export const RENDERED_ACTORS = 640;
 export const CHARACTER_MODEL_BYTES = 67108864;
 export const CHARACTER_RESIDENT_BYTES = 268435456;
 // One admitted source, geometry plus retained bitmap pixels or native mip blocks. Admission reserves this

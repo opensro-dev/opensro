@@ -358,8 +358,11 @@ func run(out, release, textdata string) error {
 	if err != nil {
 		return err
 	}
-	header := catalogue.Header{SchemaVersion: catalogue.SchemaVersion, Release: release,
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339)}
+	stamp, err := generatedAt(os.Getenv, time.Now)
+	if err != nil {
+		return err
+	}
+	header := catalogue.Header{SchemaVersion: catalogue.SchemaVersion, Release: release, GeneratedAt: stamp}
 	cap110 := monster.Cap110Enabled()
 	if err := loot.InitCap110(dir, cap110); err != nil {
 		return fmt.Errorf("catalogue loot: %w", err)

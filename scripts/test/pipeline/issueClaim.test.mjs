@@ -17,6 +17,7 @@ import {
 	CONTRIBUTOR_LEASE_HOURS,
 	MAINTAINER_LEASE_HOURS,
 	MAX_CONTRIBUTOR_CLAIMS,
+	coversIssue,
 	decideClaim,
 	decideSweep,
 	decideUnclaim,
@@ -306,6 +307,66 @@ test("run: one account holds at most the cap of live claims; a maintainer seat i
 		await repo.comment( "maintainer", "/claim T" + number, "OWNER", later, number );
 		assert.ok( repo.lastReply( number ).startsWith( `Claimed by @maintainer (T${number})` ), String( number ) );
 	}
+});
+
+/*
+================
+linkPull
+
+An open pull request by author that references the issue, as the
+timeline's cross-reference event carries it.
+================
+*/
+function linkPull( repo, number, author, state = "open" ) {
+	repo.at( number ).timeline.push( {
+		event: "cross-referenced",
+		source: {
+			issue: { pull_request: {}, state, user: { login: author }, updated_at: new Date( T0 ).toISOString() }
+		}
+	} );
+}
+
+test("coversIssue: only the actor's own open pull request covers an issue", () => {
+	const pulls = [ { state: "open", author: "other" }, { state: "closed", author: "contributor" } ];
+	assert.equal( coversIssue( pulls, "contributor" ), false );
+	assert.equal( coversIssue( [ ...pulls, { state: "open", author: "contributor" } ], "contributor" ), true );
+	assert.equal(
+		decideClaim( { lease: null, actor: "contributor", seat: "", association: "NONE", nowMs: T0, held: 2 } ).action,
+		"limit"
+	);
+	assert.equal(
+		decideClaim( {
+			lease: null,
+			actor: "contributor",
+			seat: "",
+			association: "NONE",
+			nowMs: T0,
+			held: 2,
+			covered: true
+		} )
+			.action,
+		"grant"
+	);
+});
+
+test("run: a claim the claimer's own open pull request covers passes the cap and takes no slot", async () => {
+	const repo = fakeRepo( { numbers: [ 1, 2, 3, 4, 5 ] } );
+	for ( const number of [ 1, 2 ] ) await repo.comment( "contributor", "/claim", "NONE", T0, number );
+	// #3884: the fix was already open when its /claim was refused.
+	linkPull( repo, 3, "contributor" );
+	await repo.comment( "contributor", "/claim", "NONE", T0, 3 );
+	assert.match( repo.lastReply( 3 ), /^Claimed by @contributor/ );
+	assert.equal( repo.at( 3 ).labels.has( CLAIMED_LABEL ), true );
+	// Someone else's pull request, or a closed one of the claimer's, covers nothing.
+	linkPull( repo, 4, "other" );
+	linkPull( repo, 4, "contributor", "closed" );
+	await repo.comment( "contributor", "/claim", "NONE", T0, 4 );
+	assert.match( repo.lastReply( 4 ), /already holds 2 claims/ );
+	// A held lease whose pull request is now open frees its slot.
+	linkPull( repo, 1, "contributor" );
+	await repo.comment( "contributor", "/claim", "NONE", T0, 5 );
+	assert.match( repo.lastReply( 5 ), /^Claimed by @contributor/ );
+	assert.deepEqual( [ 1, 2, 3, 4, 5 ].filter( n => repo.at( n ).labels.has( CLAIMED_LABEL ) ), [ 1, 2, 3, 5 ] );
 });
 
 test("run: /claim on many issues at once still leaves one account the cap", async () => {

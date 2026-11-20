@@ -4672,7 +4672,7 @@
 		{
 			"file": "src/engine/runtime/renderer/device/particle-query.ts",
 			"function": "query",
-			"sourceSha256": "5f5a585a19404f5e40d03e73b53ffff290eec615db97f9a1b5291e214309a45d",
+			"sourceSha256": "af139a5b6c0e44ec8b682c64c547415b2466c15ac6d2da231a3f2badc0149868",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser issues the readback without waiting: the answer is delivered between frames and folded into the next frame's advance (#2573). Ordinary frames issue no readback. Device disposal cancels pending mapping and ends the wait quietly - one all-invisible answer - so a late delivery is skipped instead of wedging on the cancelled readback (#2560).",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

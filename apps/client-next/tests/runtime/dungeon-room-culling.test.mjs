@@ -333,7 +333,8 @@ test("publishCharacters publishes selected actors without a second room-culling 
 		gameplay: { navigationBlock: WEST_ROOM },
 		next: new Map( [ 1, 2 ].map( gid => [ gid, { gid, model: "m" + gid, blindable: gid === 2 } ] ) ),
 		seconds: 0,
-		blindHeld: true
+		blindHeld: true,
+		modelParticles: 0
 	});
 	const bindings = /** @type {any} */ ({
 		renderer: {
@@ -360,7 +361,8 @@ test("publishCharacters drops the /hideme local player's body", () => {
 		gameplay: undefined,
 		next: new Map( [ 1, 2 ].map( gid => [ gid, { gid, model: "m" + gid } ] ) ),
 		seconds: 0,
-		blindHeld: false
+		blindHeld: false,
+		modelParticles: 0
 	});
 	const bindings = /** @type {any} */ ({
 		renderer: {

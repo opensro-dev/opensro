@@ -16799,6 +16799,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// world. 62D260 resizes the frame per row count; the ring
 					// follows.
 					const infoFrame = hudData.root.GDR_QUESTINFO!;
+					// The window's own surface goes first: a control stacks by
+					// its push order, so a surface pushed after the frame covered
+					// its close button and the window closed only on a reload.
+					controls.push( {
+						id: "quest-info-drag",
+						label: "Move quest info",
+						kind: "button",
+						draggable: true,
+						rect: [ px, py, QUEST_INFO_WINDOW_WIDTH, infoHeight ]
+					} );
 					nativeFrame(
 						{
 							...infoFrame,
@@ -16809,13 +16819,6 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						"",
 						"quest-info-close"
 					);
-					controls.push( {
-						id: "quest-info-drag",
-						label: "Move quest info",
-						kind: "button",
-						draggable: true,
-						rect: [ px, py, QUEST_INFO_WINDOW_WIDTH, infoHeight ]
-					} );
 					for ( const node of authoredPaintOrder( infoPage ) ) authoredChrome( node, px, py );
 					// 62D260: up to three rows at the native pitch, a tiled
 					// divider under each shown row but the last.

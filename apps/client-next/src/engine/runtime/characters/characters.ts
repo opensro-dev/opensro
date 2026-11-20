@@ -936,7 +936,7 @@ export function createCharacterPresentation(
 		presentDisappearing(
 			{ disappearing, seconds, next, animationDeltaMs, resources, animationHolders, particleHolders }
 		);
-		presentEmission(
+		const modelParticles = presentEmission(
 			{ entities, next, seconds, hideSilkCos, particleHolders, animationHolders, frameWork },
 			{
 				resources,
@@ -949,7 +949,7 @@ export function createCharacterPresentation(
 			}
 		);
 		publishCharacters(
-			{ local, gameplay, next, seconds, blindHeld },
+			{ local, gameplay, next, seconds, blindHeld, modelParticles },
 			output,
 			published,
 			{ renderer, resources, mallPreview, portraitEmission }
