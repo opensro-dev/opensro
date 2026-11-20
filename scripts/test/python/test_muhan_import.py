@@ -34,6 +34,9 @@ WORLDS = {
 # sit on it: the levels the fixture's waves can name.
 NEEDED_LEVELS = (74, 75, 76, 84, 85, 86, 94, 95, 96, 104, 105, 106)
 # The one change pairing the fixture carries (the source repeats rows).
+# The one name every v1.696 change form carries; the client has no text
+# row for it (muhan_import.add_monsters).
+FORM_SYMBOL = "SN_MOB_MUHAN_SOLO_A_75"
 TRANSFORM = {"NpcCodename": "NPC_MUHAN_CHANGE_SOLO_75_A", "SkillCodename": "SKILL_MUHAN_A_75_BUFF01",
 	"MonsterCodename": "MOB_MUHAN_CHANGE_SOLO_75_A"}
 
@@ -139,9 +142,11 @@ class MuhanImportTest(unittest.TestCase):
 	#
 	# A scratch world: a fake v1.696 root (one Media.pk2), a native
 	# root, an output textdata with native rows, and a population
-	# export whose waves name twelve levels.
+	# export whose waves name twelve levels. Like the v1.696 client,
+	# its object text has no row for FORM_SYMBOL, nor for any symbol in
+	# untranslated.
 	# ================
-	def fixture(self, base, kinds, waves, extra_rows=()):
+	def fixture(self, base, kinds, waves, extra_rows=(), untranslated=()):
 		v1696, native, output, source = base / "v1696", base / "native", base / "output", base / "source"
 		text_root = output / muhan.TEXT_ROOT
 		text_root.mkdir(parents=True)
@@ -163,7 +168,8 @@ class MuhanImportTest(unittest.TestCase):
 			"skilldata.txt": utf16([["skilldata_6000.txt"]]),
 			"skilldata_6000.txt": utf16([skill_row(7001, "MSKILL_MUHAN_TEST"), skill_row(7002, "SKILL_MUHAN_A_75_BUFF01")]),
 			"textdata_object.txt": utf16(
-				[[str(1 + at), row[5], "x", "x", row[5], "f", "x", "a", "b", "c"] for at, row in enumerate(kinds + extra)]),
+				[[str(1 + at), row[5], "x", "x", row[5], "f", "x", "a", "b", "c"] for at, row in enumerate(kinds + extra)
+					if row[5] not in {FORM_SYMBOL, *untranslated}]),
 			"skilleffect.txt": utf16([
 				["#section", "characterinfo"]]
 				+ [[row[2]] + ["0"] * 12 for row in kinds + extra]
@@ -187,7 +193,7 @@ class MuhanImportTest(unittest.TestCase):
 		rows.append(later_row("NPC_MUHAN_CHANGE_SOLO_75_A", "UIO_OBJ_NPC_MUHAN_CHANGE_SOLO_75_A", 0))
 		# The change form sits on a wave level (75): it must still never
 		# become that level's wave kind.
-		rows.append(later_row("MOB_MUHAN_CHANGE_SOLO_75_A", "UIO_OBJ_MOB_MUHAN_CHANGE_SOLO_75_A", 75))
+		rows.append(later_row("MOB_MUHAN_CHANGE_SOLO_75_A", FORM_SYMBOL, 75))
 		return rows
 
 	# ================
@@ -265,6 +271,21 @@ class MuhanImportTest(unittest.TestCase):
 		bad["waves"][0]["Count"] = 0
 		with self.assertRaises(ValueError):
 			muhan.project_waves(bad)
+
+	# ================
+	# test_a_wave_kind_without_a_name_refuses_by_symbol
+	#
+	# Only the change forms may go unnamed: a wave kind whose name the
+	# later client does not translate is a broken client, named.
+	# ================
+	def test_a_wave_kind_without_a_name_refuses_by_symbol(self):
+		with tempfile.TemporaryDirectory() as root:
+			v1696, native, output, source, _, pins = self.fixture(Path(root), self.kinds(), export_waves(),
+				untranslated=("UIO_OBJ_MOB_MUHAN_L84",))
+			with mock.patch.object(jupiter, "archive_pins", return_value=pins):
+				with mock.patch.dict(os.environ, {"SRO_MUHAN": "on"}):
+					with self.assertRaisesRegex(ValueError, r"missing muhan monster names: \['UIO_OBJ_MOB_MUHAN_L84'\]"):
+						muhan.add_monsters(v1696, native, output, source)
 
 	# ================
 	# test_import_writes_shard_waves_and_marker

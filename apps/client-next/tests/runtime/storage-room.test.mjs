@@ -55,7 +55,7 @@ test("the list decodes rows inside the capacity and refuses a stray byte", () =>
 	assert.throws( () => room.decodeStorageList( Uint8Array.from( [ 2, 1, ...potionRow( 5, 1 ) ] ), refs ), /row/ );
 });
 
-test("the owner lists once, opens, and applies acknowledged moves", () => {
+test("the owner lists, opens, and applies acknowledged moves", () => {
 	const sent = [], owner = room.createStorageRoom( frame => sent.push( frame ) );
 	owner.open( 17 );
 	assert.equal( sent.at( -1 ).opcode, 0x72c3 );
@@ -91,8 +91,28 @@ test("the owner lists once, opens, and applies acknowledged moves", () => {
 	assert.equal( refused.room, open, "a refusal changes nothing" );
 
 	owner.close();
+});
+
+test("every visit lists the room again, so a sibling character's withdrawal shows", () => {
+	// Two characters of one account (port-only): the first loads and closes
+	// the room, the second empties it, and the first's next visit must draw
+	// the room the server lists, not the rows it held before.
+	const sent = [], owner = room.createStorageRoom( frame => sent.push( frame ) );
 	owner.open( 17 );
-	assert.equal( sent.at( -1 ).opcode, 0x7338, "a loaded room asks for the function directly" );
+	owner.receive( { opcode: 0x321a, payload: Uint8Array.from( [ 150, 1, ...potionRow( 0, 30 ) ] ) }, refs );
+	owner.receive( { opcode: 0xb338, payload: Uint8Array.from( [ 1, 4, 0, 0, 0 ] ) }, refs );
+	assert.equal( defined( owner.state() ).items.length, 1 );
+	owner.close();
+
+	owner.open( 17 );
+	assert.equal( sent.at( -1 ).opcode, 0x72c3, "the second visit asks for the list, not the function" );
+	assert.equal( defined( owner.state() ).items.length, 0, "no stale row is drawn while it lists" );
+	owner.receive( { opcode: 0x321a, payload: Uint8Array.from( [ 150, 0 ] ) }, refs );
+	assert.equal( sent.at( -1 ).opcode, 0x7338 );
+	owner.receive( { opcode: 0xb338, payload: Uint8Array.from( [ 1, 4, 0, 0, 0 ] ) }, refs );
+	const reopened = defined( owner.state() );
+	assert.equal( reopened.phase, "open" );
+	assert.deepEqual( reopened.items, [], "the emptied room shows empty" );
 });
 
 test("a refused open releases the room and leaves the notice to the caller", () => {

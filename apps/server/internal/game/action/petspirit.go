@@ -37,7 +37,7 @@ petSpiritFrame
 func petSpiritFrame(pet *domain.CharacterCOS, until, now int64) wire.Frame {
 	skill, _, _ := companion.Spirit(pet)
 	return wire.Frame{Opcode: petSpiritOpcode, Payload: wire.NewWriter(10).U32(pet.GID).
-		U8(pet.ResolveStacks).U8(uint8(skill.Option)).U32(uint32(max(int64(0), until-now))).Payload()}
+		U8(pet.ResolveStacks).U8(uint8(skill.Option)).U32(frameRemainingMs(until, now, petSpiritLifetime)).Payload()}
 }
 
 /*

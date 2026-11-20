@@ -6,6 +6,8 @@
   "loadingProgress": 0,
   "loadingStatus": "Loading world assets",
   "loadingVisible": true,
+  "marketButton": false,
+  "marketOpen": false,
   "message": "Health unknown; mana unknown; target none. 1 nearby entities.",
   "title": "Silkroad game interface",
   "titleCredit": false

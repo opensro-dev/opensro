@@ -91,6 +91,7 @@ from pathlib import Path
 
 import alexandria_npcs as characters
 import build_alexandria_variant as variant
+import cap110_items
 import cap110_monsters as cap110
 import import_vsro_alexandria as tables
 import later_world_import
@@ -124,6 +125,12 @@ QUEST_COLUMNS = 11
 CONTENTS_TABLE = "questcontentsdata.txt"
 CONTENTS_COLUMNS = 13
 POPULATION_FILE = "roc-monsters.txt"
+# The countdown text v1.150 lacks: the summit's berserk countdown shows
+# _START at its end and _AGAIN on every later step (v1.696 0x0C14,
+# v1.188 RocTop tick 0x5FEE10); v1.150 ships _BERSERKER, _START and
+# _BYEBYE but not _AGAIN. Its row comes from the client.
+UI_TABLE = "textuisystem.txt"
+UI_SYMBOLS = frozenset({"UIIT_MSG_QUEST_ROC_BERSERKER_AGAIN"})
 QUEST_NESTS = Path(__file__).resolve().parent / "data" / "roc" / "quest-nests.json"
 QUEST_NESTS_FORMAT = "opensro-roc-quest-nests-v1"
 
@@ -316,10 +323,10 @@ def flag_enabled(env=os.environ):
 #
 # The admitted rows of the later characterdata, converted to the
 # v1.150 layout. A kind absent from the client, or authoring another
-# grade or level, refuses by name; so does a kind the native tree
-# already carries (the import would stand it twice).
+# grade or level, refuses by name; a kind the tree already carries
+# refuses in later_world_import.stage_kinds.
 # ================
-def select_kinds(later, native_codes):
+def select_kinds(later):
 	refs = {}
 	for code, (grade, level) in KINDS.items():
 		row = later.get(code)
@@ -327,8 +334,6 @@ def select_kinds(later, native_codes):
 			raise ValueError(f"the VSRO client has no Roc kind {code}")
 		if (int(row[GRADE_COLUMN]), int(row[LEVEL_COLUMN])) != (grade, level):
 			raise ValueError(f"Roc kind {code} authors grade {row[GRADE_COLUMN]} level {row[LEVEL_COLUMN]}, want {grade} {level}")
-		if code in native_codes:
-			raise ValueError(f"Roc kind {code} already stands in the character tables")
 		refs[code] = characters.convert_character(row)
 	return refs
 
@@ -369,6 +374,37 @@ def add_quests(read, text_root, prior):
 		added.append(row)
 	write_atomically(text_root / QUEST_TABLE, cap110.encode_rows(native + added))
 	return [row[2] for row in added]
+
+
+# ================
+# without_ui_texts
+#
+# The variant's textuisystem.txt rows without the given symbols, or None
+# when the variant has not written that table (it is the native one).
+# ================
+def without_ui_texts(text_root, symbols):
+	path = text_root / UI_TABLE
+	if not path.exists():
+		return None
+	return [row for row in tables.table_rows(path.read_bytes()) if len(row) < 2 or row[1] not in symbols]
+
+
+# ================
+# add_ui_texts
+#
+# The client's rows for UI_SYMBOLS, appended to the variant's interface
+# table (the native one when no earlier layer wrote it) after any previous
+# build's own rows leave it. A symbol the client lacks refuses by name.
+# ================
+def add_ui_texts(read, native, text_root, prior):
+	kept = without_ui_texts(text_root, set(prior.get("uiTexts", [])))
+	base = cap110.encode_rows(kept) if kept is not None else (native / TEXT_ROOT / UI_TABLE).read_bytes()
+	merged, added = cap110_items.merge_ui_texts(base, tables.table_rows(read(UI_TABLE)), UI_SYMBOLS)
+	missing = UI_SYMBOLS - set(added) - {row[1] for row in tables.table_rows(base) if len(row) > 1}
+	if missing:
+		raise ValueError("the VSRO client has no " + UI_TABLE + " row for " + ", ".join(sorted(missing)))
+	write_atomically(text_root / UI_TABLE, merged)
+	return added
 
 
 # ================
@@ -445,6 +481,10 @@ def add_roc(vsro_root, native, output):
 			write_atomically(text_root / QUEST_TABLE, cap110.encode_rows(without_quests(text_root, set(prior["quests"]))))
 		if prior.get("contents"):
 			write_atomically(text_root / CONTENTS_TABLE, cap110.encode_rows(without_contents(text_root, set(prior["contents"]))))
+		if prior.get("uiTexts"):
+			kept = without_ui_texts(text_root, set(prior["uiTexts"]))
+			if kept is not None:
+				write_atomically(text_root / UI_TABLE, cap110.encode_rows(kept))
 		roc_rewards.remove_rewards(text_root)
 		later_world_import.reap_world(SPEC, native, output)
 		return {"enabled": False}
@@ -453,7 +493,7 @@ def add_roc(vsro_root, native, output):
 	vsro_root = Path(vsro_root)
 	tables.require_vsro_pin(vsro_root, MERGE_ARCHIVES)
 	return later_world_import.merge_world(SPEC, native, output, vsro_root, [WAIT_REGION],
-		lambda: stage(vsro_root, output))
+		lambda: stage(vsro_root, native, output))
 
 
 # ================
@@ -462,7 +502,7 @@ def add_roc(vsro_root, native, output):
 # The kinds (step 1a) and the gates (step 1b) from the client's Media,
 # then the marker, keeping the region record merge_world enrols.
 # ================
-def stage(vsro_root, output):
+def stage(vsro_root, native, output):
 	marker = output / MARKER
 	prior = cap110.read_json(marker) if marker.exists() else {}
 	text_root = output / TEXT_ROOT
@@ -485,13 +525,13 @@ def stage(vsro_root, output):
 		# Gates first: the merge rewrites textdataname.txt, and the name
 		# step below appends onto what it leaves.
 		gates = add_gates(read, text_root)
-		native_codes = {row[2] for path in text_root.glob("characterdata_*.txt") if path.name != CHARACTER_SHARD
-			for row in tables.table_rows(path.read_bytes()) if len(row) > 2}
-		refs = select_kinds(later_world_import.later_characters(read), native_codes)
+		native_codes = {row[2] for row in cap110.tree_characters(text_root, CHARACTER_SHARD) if len(row) > 2}
+		refs = select_kinds(later_world_import.later_characters(read))
 		staged = later_world_import.stage_kinds("Roc", read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
 			lambda code: code in refs)
 		quests = add_quests(read, text_root, prior)
 		contents = add_contents(read, text_root, prior)
+		ui_texts = add_ui_texts(read, native, text_root, prior)
 	finally:
 		media.close()
 		handle.close()
@@ -511,7 +551,7 @@ def stage(vsro_root, output):
 		"enabled": True, "format": "opensro-roc-v4", "source": "vsro",
 		"characters": staged["characters"], "skills": staged["skills"],
 		"animationBases": staged["animationBases"], "characterInfo": staged["characterInfo"],
-		"nameSymbols": staged["nameSymbols"], "gates": gates, "quests": quests, "contents": contents,
+		"nameSymbols": staged["nameSymbols"], "gates": gates, "quests": quests, "contents": contents, "uiTexts": ui_texts,
 		"population": population,
 		"rewards": rewards,
 		**({"regionMerge": prior["regionMerge"]} if "regionMerge" in prior else {}),

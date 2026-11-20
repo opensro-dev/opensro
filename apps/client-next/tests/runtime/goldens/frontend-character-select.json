@@ -4,6 +4,8 @@
  "semantics": {
   "loading": false,
   "loadingVisible": false,
+  "marketButton": false,
+  "marketOpen": false,
   "message": "character-select",
   "title": "Silkroad character-select",
   "titleCredit": false

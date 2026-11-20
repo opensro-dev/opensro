@@ -17,6 +17,9 @@ import { defined } from "../helpers/defined.mjs";
 const { createInventory } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts"
 );
+const { ALCHEMY_PREPARE_MS } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/inventory/alchemy/alchemy.ts"
+);
 const { gachaPrizes } = await import(
 	"../../src/engine/foundation/gameplay/gacha-catalog.ts"
 );
@@ -103,6 +106,7 @@ test("Alchemy serializes wire slots and emits use/result only after an atomic re
 	const { owner, sounds, frames } = setup();
 	owner.process( { kind: "alchemy-open" }, 0 );
 	owner.process( { kind: "alchemy-start", mode: "reinforce", slots: [ 13, 14 ] }, 0 );
+	owner.step( ALCHEMY_PREPARE_MS );
 	assert.deepEqual( [ ...frames[0].payload ], [ 2, 13, 14 ] );
 	assert.deepEqual( sounds, [] );
 	const p = Buffer.from( [ 1, 1, 13, ...equipment( 1 ) ] ), before = owner.state();
@@ -117,6 +121,33 @@ test("Alchemy serializes wire slots and emits use/result only after an atomic re
 	owner.receive( 0xb373, Uint8Array.of( 1, 0, 13, 1 ) );
 	assert.equal( owner.state().inventory.some( i => i.slot === 13 ), false );
 	assert.deepEqual( sounds.slice( -2 ), [ "SND_ELIXIR_USE", "SND_ELIXIR_FAILURE" ] );
+});
+test("a reinforcement is held while its prepare effect plays, and the window stays busy (62AFA0, 62C350)", () => {
+	const { owner, frames } = setup();
+	owner.process( { kind: "alchemy-open" }, 0 );
+	owner.process( { kind: "alchemy-start", mode: "reinforce", slots: [ 13, 14 ] }, 1000 );
+	assert.equal( frames.length, 0, "nothing is sent while alcm_effect_prepare plays" );
+	assert.equal( owner.state().alchemy.preparing, 1000 );
+	assert.equal( owner.state().inventoryPending, true, "the press makes the window busy at once" );
+	owner.step( 1000 + ALCHEMY_PREPARE_MS - 1 );
+	assert.equal( frames.length, 0 );
+	owner.step( 1000 + ALCHEMY_PREPARE_MS );
+	assert.deepEqual( frames.map( f => [ f.opcode, ...f.payload ] ), [ [ 0x7373, 2, 13, 14 ] ] );
+	assert.equal( owner.state().alchemy.preparing, undefined );
+	assert.equal( owner.state().inventoryPending, true, "still busy until the answer" );
+	owner.step( 1000 + 2 * ALCHEMY_PREPARE_MS );
+	assert.equal( frames.length, 1, "sent once" );
+	owner.receive( 0xb373, Uint8Array.from( [ 1, 1, 13, ...equipment( 1 ) ] ) );
+	assert.equal( owner.state().inventoryPending, false );
+});
+test("closing the window during the prepare effect sends nothing (625550)", () => {
+	const { owner, frames } = setup();
+	owner.process( { kind: "alchemy-open" }, 0 );
+	owner.process( { kind: "alchemy-start", mode: "magic", slots: [ 13, 14 ] }, 0 );
+	owner.process( { kind: "alchemy-close" }, 100 );
+	assert.equal( owner.state().inventoryPending, false );
+	owner.step( ALCHEMY_PREPARE_MS );
+	assert.equal( frames.length, 0 );
 });
 test("a successful attribute stone outcome names the attribute its stone designates (625980)", () => {
 	const { owner } = setup();

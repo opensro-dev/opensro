@@ -15,16 +15,17 @@ one whose source has any alpha below 255 carries that alpha (level 0, one
 byte a texel, decoded bit-exactly from the BC blocks) after its levels,
 so a variant picks exactly as the original; an opaque source carries none
 (native-texture.ts NTX_PICK_ALPHA). The mask has its own cache beside the
-encoder's, keyed by the source's SHA-256 and by the code hash of this
-module and the decoder it imports, so a fix to either recomputes every
-mask while an unchanged texture is never decoded again. Cache records are
+encoder's, keyed by the source's SHA-256 and by the code hash of the
+byte code (textureVariantEncode.mjs, with the decoder it imports), so a
+fix there recomputes every mask while an unchanged texture is never
+decoded again. Cache records are
 written whole (a temp name, then a rename). WebGPU requires a
 block-compressed level 0 to be whole blocks, so a texture under 4x4 keeps
 its original.
 
 Each texture is also an action (graph/action.mjs, plan slice B2): keyed
-on its source bytes, this module's code closure, the encoder version and
-the preset, with its variant as the one output. A texture whose key has a
+on its source bytes, the byte code's closure (textureVariantEncode.mjs,
+never this pass's plumbing), the encoder version and the preset, with its variant as the one output. A texture whose key has a
 record is laid down from the action store (or left alone when its variant
 already holds those bytes) without reading its source, its caches or
 writing its variant: release r193 read 1000 MB and rewrote 2007 MB for
@@ -49,61 +50,25 @@ the variant reads, for side-by-side frames on a machine without ASTC.
 
 ===========================================================================
 */
-import { execFile } from "node:child_process";
 import { buildJobs } from "../shared/buildParallelism.mjs";
 import { codeHash } from "../shared/codeStamp.mjs";
-import {
-	existsSync,
-	mkdirSync,
-	mkdtempSync,
-	readdirSync,
-	readFileSync,
-	renameSync,
-	rmSync,
-	writeFileSync
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { defineAction, outputPath } from "../graph/action.mjs";
 import { keyOf, materialize, openStore, readRecord, storeOutputs } from "../graph/store.mjs";
 import { CLIENT_PUBLIC_ROOT, generatedPath, sharedCachePath } from "../../lib/generatedRoot.mjs";
 import { claimPublicFile, isPublicationOpen } from "../shared/publicationLedger.mjs";
 import { ENCODERS, encoderPath } from "./encoders.mjs";
-import {
-	astcBlocks,
-	NTX_ASTC_4X4,
-	ntxContainer,
-	pickAlphaSection as alphaSection,
-	tgaImage
-} from "./textureContainers.mjs";
-import {
-	decodeNativeTexture,
-	decodeNativeTextureLevel
-} from "../../../apps/client-next/src/engine/foundation/assets/native-texture.ts";
+import { ASTC_BLOCK, ENCODE_MODULE, encodeTexture, pickAlphaSection, PRESET } from "./textureVariantEncode.mjs";
+import { decodeNativeTexture } from "../../../apps/client-next/src/engine/foundation/assets/native-texture.ts";
 import { textureVariantPath } from "../../../apps/client-next/src/engine/foundation/assets/texture-variants.ts";
 import { compareText } from "../shared/textOrder.mjs";
 import { sha256Hex } from "../shared/hash.mjs";
 
-const run = promisify( execFile );
-
-const ASTC_BLOCK = 4;
-const D3DFMT_A8R8G8B8 = 21;
-const KTX_HEADER_BYTES = 64;
-const GL_UNSIGNED_BYTE = 0x1401;
-const GL_RGB = 0x1907;
-const GL_RGBA = 0x1908;
-const GL_RED = 0x1903;
-const GL_RG = 0x8227;
-// Bytes a texel for each format astcenc writes an LDR decode in: it picks
-// the fewest channels that hold the image. A grey image is RED (grey) or
-// RG (grey, then alpha).
-const KTX_CHANNELS = { [GL_RED]: 1, [GL_RG]: 2, [GL_RGB]: 3, [GL_RGBA]: 4 };
-const PRESET = "-medium";
 const VARIANT = "astc";
 const DECODER_DIGEST_CHARS = 16;
-const MODULE_FILE = fileURLToPath( import.meta.url );
 
 /*
 ================
@@ -160,64 +125,6 @@ function nativeTextures( root, only ) {
 
 /*
 ================
-ktxPixels
-
-The BGRA pixels of the uncompressed KTX astcenc decodes to: RGBA8, RGB8,
-or for a grey image RED8 (grey) or RG8 (grey, alpha); a missing alpha
-reads 255.
-Rows run top first.
-================
-*/
-function ktxPixels( bytes, width, height ) {
-	const glType = bytes.readUInt32LE( 16 ), glFormat = bytes.readUInt32LE( 24 );
-	const channels = KTX_CHANNELS[glFormat] ?? 0;
-	if ( bytes.subarray( 1, 7 ).toString( "latin1" ) !== "KTX 11" || glType !== GL_UNSIGNED_BYTE || !channels ) {
-		throw new Error(
-			`Unexpected decoded KTX layout (type ${glType.toString( 16 )}, format ${glFormat.toString( 16 )})`
-		);
-	}
-	if ( bytes.readUInt32LE( 36 ) !== width || bytes.readUInt32LE( 40 ) !== height ) {
-		throw new Error( "Decoded KTX size differs" );
-	}
-	// The stored image size gives the row stride: astcenc's rows may or may
-	// not carry KTX's four-byte padding, so neither is assumed.
-	const start = KTX_HEADER_BYTES + bytes.readUInt32LE( 60 ) + 4, imageBytes = bytes.readUInt32LE( start - 4 );
-	const rowBytes = imageBytes / height;
-	if ( !Number.isInteger( rowBytes ) || rowBytes < width * channels || start + imageBytes > bytes.length ) {
-		throw new Error( `Decoded KTX image size ${imageBytes} does not hold ${width}x${height}x${channels}` );
-	}
-	const out = Buffer.alloc( width * height * 4 );
-	for ( let y = 0; y < height; y++ ) {
-		for ( let x = 0; x < width; x++ ) {
-			const from = start + y * rowBytes + x * channels, to = (y * width + x) * 4;
-			if ( channels <= 2 ) {
-				out[to] = out[to + 1] = out[to + 2] = bytes[from];
-				out[to + 3] = channels === 2 ? bytes[from + 1] : 255;
-				continue;
-			}
-			out[to] = bytes[from + 2];
-			out[to + 1] = bytes[from + 1];
-			out[to + 2] = bytes[from];
-			out[to + 3] = channels === 4 ? bytes[from + 3] : 255;
-		}
-	}
-	return out;
-}
-
-/*
-================
-pickAlphaSection
-
-The source's level-0 alpha as a trailing NTX section, or an empty buffer
-when every texel is opaque.
-================
-*/
-export function pickAlphaSection( texture ) {
-	return alphaSection( decodeNativeTextureLevel( texture, 0 ), texture.width, texture.height );
-}
-
-/*
-================
 maskCacheRoot
 
 The mask cache for one mask writer: a folder named by its code hash
@@ -233,13 +140,14 @@ export function maskCacheRoot( cacheRoot, decoder ) {
 maskCodeHash
 
 The code hash of everything that shapes a mask (codeStamp.mjs, the owner
-every builder stamp uses): this module, which writes the tag, the
-opacity rule and the byte order (pickAlphaSection), and the client's NTX
-decoder it imports. A change to either serves no stale mask.
+every builder stamp uses): textureVariantEncode.mjs, which holds the
+opacity rule (pickAlphaSection), the container that writes the tag and
+byte order, and the client's NTX decoder. A change to any serves no stale
+mask; a change to this pass's plumbing keeps every mask.
 ================
 */
 export function maskCodeHash() {
-	return codeHash( import.meta.url );
+	return codeHash( ENCODE_MODULE );
 }
 
 /*
@@ -281,34 +189,6 @@ export async function cachedPickAlpha( maskRoot, digest, pick ) {
 
 /*
 ================
-encodeTexture
-
-One native texture to its ASTC 4x4 NTX and, when asked, its decoded BGRA NTX.
-================
-*/
-async function encodeTexture( astcenc, source, scratch, roundtrip ) {
-	const texture = decodeNativeTexture( new Uint8Array( source ) );
-	const astc = [], decoded = [];
-	for ( let level = 0; level < texture.levels.length; level++ ) {
-		const width = Math.max( 1, texture.width >> level ), height = Math.max( 1, texture.height >> level );
-		const input = path.join( scratch, `${level}.tga` ), output = path.join( scratch, `${level}.astc` );
-		writeFileSync( input, tgaImage( decodeNativeTextureLevel( texture, level ), width, height ) );
-		await run( astcenc, [ "-cl", input, output, "4x4", PRESET, "-silent" ] );
-		astc.push( astcBlocks( readFileSync( output ), ASTC_BLOCK ) );
-		if ( roundtrip ) {
-			const back = path.join( scratch, `${level}.back.ktx` );
-			await run( astcenc, [ "-dl", output, back, "-silent" ] );
-			decoded.push( ktxPixels( readFileSync( back ), width, height ) );
-		}
-	}
-	return {
-		variant: ntxContainer( texture.width, texture.height, NTX_ASTC_4X4, astc ),
-		roundtrip: roundtrip ? ntxContainer( texture.width, texture.height, D3DFMT_A8R8G8B8, decoded ) : null
-	};
-}
-
-/*
-================
 textureVariantAction
 
 One texture's variant as an action (see the file banner). roots.source is
@@ -324,7 +204,7 @@ function textureVariantAction( publicPath, roots ) {
 		inputs: [ publicPath.slice( 1 ) ],
 		outputRoot: roots.output,
 		outputs: [ textureVariantPath( publicPath, VARIANT ).replace( /^\//, "" ) ],
-		code: [ MODULE_FILE ],
+		code: [ ENCODE_MODULE ],
 		params: { encoder: ENCODERS.astcenc.version, preset: PRESET },
 		run: async () => {
 			throw new Error( `texture variant ${publicPath} is made by its pass, never alone` );

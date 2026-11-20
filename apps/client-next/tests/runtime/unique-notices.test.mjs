@@ -243,3 +243,33 @@ test("kind 7 prints the badge event line for bytes 1..4 and nothing outside them
 	assert.throws( () => uniqueNotice( 0x3058, Uint8Array.of( 7, 1, 9 ), refs ) );
 	assert.throws( () => uniqueNotice( 0x3058, Uint8Array.from( [ ...badgePacket( 1 ), 0 ] ), refs ) );
 });
+test("kinds 0x14 and 0x15 count the Roc down as the later client shows them", async () => {
+	const copy = JSON.parse(
+		await readFile( CLIENT_PUBLIC_ROOT + "/assets/text/textuisystem.en.json", "utf8" )
+	).entries;
+	// v1.696 0xD9E91F: 0 is _START, 0xFF _AGAIN, any other byte the count.
+	const berserk = defined( uniqueNotice( 0x3058, Uint8Array.of( 0x14, 15 ), refs ) );
+	assert.equal( berserk.key, "UIIT_MSG_QUEST_ROC_BERSERKER" );
+	assert.equal( berserk.banner, true );
+	assert.equal( noticeText( key => copy[key], berserk ), copy[berserk.key].replace( "%d", "15" ) );
+	assert.equal(
+		defined( uniqueNotice( 0x3058, Uint8Array.of( 0x14, 0 ), refs ) ).key,
+		"UIIT_MSG_QUEST_ROC_BERSERKER_START"
+	);
+	assert.equal(
+		defined( uniqueNotice( 0x3058, Uint8Array.of( 0x14, 0xff ), refs ) ).key,
+		"UIIT_MSG_QUEST_ROC_BERSERKER_AGAIN"
+	);
+	// 0xD9EAF2: the departure carries its count whatever the byte.
+	const leaving = defined( uniqueNotice( 0x3058, Uint8Array.of( 0x15, 3 ), refs ) );
+	assert.equal( leaving.key, "UIIT_MSG_QUEST_ROC_BYEBYE" );
+	assert.equal( noticeText( key => copy[key], leaving ), copy[leaving.key].replace( "%d", "3" ) );
+	for ( const bad of [ [ 0x14 ], [ 0x15 ], [ 0x14, 1, 0 ] ] ) {
+		assert.throws( () => uniqueNotice( 0x3058, Uint8Array.from( bad ), refs ), /Invalid Roc countdown/ );
+	}
+	// The kinds beside them keep their category 0x11 notice.
+	for ( const kind of [ 0x13, 0x16 ] ) {
+		const notice = uniqueNotice( 0x3058, Uint8Array.of( kind ), refs );
+		assert.ok( notice === null || !notice.key.startsWith( "UIIT_MSG_QUEST_ROC" ), String( kind ) );
+	}
+});

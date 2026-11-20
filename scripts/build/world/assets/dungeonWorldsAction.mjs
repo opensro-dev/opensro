@@ -29,7 +29,7 @@ import { runGraph } from "../../graph/graph.mjs";
 import { copyIntoPublicTree } from "../../shared/publicWrite.mjs";
 import { publishBytesAtomically } from "../../shared/atomicPublish.mjs";
 import { objectTextureSource } from "../objects/buildTitleSectorObjectResources.mjs";
-import { extractedRoot, imageSourceRoot, publicRoot } from "../paths.mjs";
+import { extractedRoot, imageSourceRoot, modelReadRoots, publicRoot } from "../paths.mjs";
 import { publishBlockTextureFile } from "./blockTextures.mjs";
 import { buildDungeonResourceManifest, DUNGEON_RESOURCE_PUBLIC_PATH } from "./buildDungeonResources.mjs";
 import { buildDungeonWorlds } from "./buildDungeonWorlds.mjs";
@@ -40,7 +40,7 @@ const MODULE_FILE = fileURLToPath( import.meta.url );
 
 // The trees the build reads: the extracted game data (dungeoninfo, DOF,
 // BSR, BMS, BMT, block DDJ sources) and the converted images.
-const DUNGEON_READ_ROOTS = { data: extractedRoot, images: imageSourceRoot };
+const DUNGEON_READ_ROOTS = modelReadRoots( extractedRoot );
 
 /*
 ================

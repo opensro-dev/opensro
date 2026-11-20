@@ -6,8 +6,9 @@ closed
 
 Drives the shipped gameplay dispatcher: the move is admitted while the room
 is open, the window closes before the 0xB06D echo, and the echo must still
-settle the bag and the session's room copy (+0x7BC), or the item shows in
-neither place until a reload relists the warehouse.
+settle the bag, or the item shows in neither place. The next visit lists
+the room from the server again (storage-room.ts, port-only), so the
+deposit shows there from the server's own list.
 
 ===========================================================================
 */
@@ -82,8 +83,8 @@ function snapshot( game ) {
 	return defined( game.take(), "gameplay snapshot" );
 }
 
-test("a deposit answered after the window closed lands in the room copy and leaves the bag", () => {
-	const { game } = warehouseFixture();
+test("a deposit answered after the window closed leaves the bag, and the next visit lists the room", () => {
+	const { game, sent } = warehouseFixture();
 	assert.equal( snapshot( game ).storage?.phase, "open" );
 	game.command(
 		{
@@ -100,14 +101,14 @@ test("a deposit answered after the window closed lands in the room copy and leav
 		!closed.inventory.some( row => row.slot === BAG_SLOT ),
 		"the deposited item stayed in the bag"
 	);
+	const before = sent.length;
 	game.command( { kind: "storage-open", gid: NPC_GID }, 9, undefined );
-	game.receive( { opcode: NPC_INTERACTION, payload: Uint8Array.of( 1, 4, 0, 0, 0 ) }, 10 );
-	const reopened = defined( snapshot( game ).storage, "reopened room" );
 	assert.deepEqual(
-		reopened.items.map( row => [ row.slot, row.refObjId ] ),
-		[ [ 0, POTION ] ],
-		"the deposited item is missing from the reopened warehouse"
+		sent.slice( before ).map( frame => frame.opcode ),
+		[ STORAGE_LIST_REQ ],
+		"the reopened warehouse is listed by the server, not drawn from a copy"
 	);
+	assert.equal( defined( snapshot( game ).storage, "reopened room" ).phase, "listing" );
 });
 
 test("a transport resume resets the cached warehouse so reopening relists stored items with their icons and names", () => {

@@ -4,6 +4,7 @@
 		"academy-honor.test.mjs",
 		"academy-open.test.mjs",
 		"alchemy-ctrl-click.test.mjs",
+		"alchemy-fuse-busy.test.mjs",
 		"arena-chest-ui.test.mjs",
 		"arena-correction.test.mjs",
 		"arrow-trail.test.mjs",

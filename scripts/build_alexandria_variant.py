@@ -617,6 +617,13 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# so their identities allocate above all of the layers' rows.
 	from roc_import import add_roc
 	roc = add_roc(vsro_root, native, out)
+	# The two siege fortresses the v1.188 client authored and v1.150 never
+	# placed (SRO_FORT_BIJEOKDAN, SRO_FORT_HOTAN, #3886): after Roc, in a
+	# fixed order, so their structures allocate above every row before.
+	import bandit_fortress_import
+	import hotan_fortress_import
+	bandit_fortress = bandit_fortress_import.add(vsro_root, native, out)
+	hotan_fortress = hotan_fortress_import.add(vsro_root, native, out)
 	# The honor line the client authored and never shipped (SRO_HONOR_GOODS,
 	# #3548): after every other item import, whose identities it keeps
 	# clear of, and before the shops that sell it.
@@ -678,6 +685,11 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	if pharaoh_temple["enabled"]:
 		# Absent while off, so an off manifest is what it was before the temple.
 		manifest["pharaohTemple"] = pharaoh_temple
+	# Absent while off, as the temple: an off manifest stays byte-for-byte.
+	if bandit_fortress["enabled"]:
+		manifest["banditFortress"] = bandit_fortress
+	if hotan_fortress["enabled"]:
+		manifest["hotanFortress"] = hotan_fortress
 	write_atomically(variant / VARIANT_MANIFEST, (json.dumps(manifest, indent=2) + "\n").encode("utf-8"))
 	return manifest
 

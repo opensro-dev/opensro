@@ -13,6 +13,12 @@ import type { AlchemyMode, AlchemyOutcome, AlchemyState } from "@/engine/contrac
 import { isAlchemyEquipment } from "@/engine/foundation/ui/alchemy-selection";
 import type { UiSoundHandle } from "@/engine/foundation/ui/sound-catalog";
 import { COMPOUND_REQUEST_OPCODE } from "@/engine/contracts/opcodes";
+import { ALCHEMY_EFFECT_FRAME_MS, ALCHEMY_EFFECT_FRAMES } from "@/engine/foundation/ui/alchemy-result";
+
+// 62AFA0 plays alcm_effect_prepare in control 50 before anything is sent:
+// timer 0xB steps it one cell every 50 ms (62C350) and sends the request
+// (62B5E0) once the sixteen-cell atlas wraps.
+export const ALCHEMY_PREPARE_MS = ALCHEMY_EFFECT_FRAMES * ALCHEMY_EFFECT_FRAME_MS;
 
 /*
 ================
@@ -49,6 +55,8 @@ createAlchemy
 export function createAlchemy() {
 	let state: AlchemyState = { visible: false, pending: false, mode: "reinforce", flags: 0, error: null, slot: null };
 	let outcomes = 0;
+	// The reinforcement request held while the prepare effect plays.
+	let prepared: { readonly opcode: number; readonly payload: Uint8Array; } | null = null;
 	return {
 		/*
 		================
@@ -64,6 +72,12 @@ export function createAlchemy() {
 		================
 		*/
 		close() {
+			// 625550: closing the window during the prepare effect cancels
+			// it; the request was never sent.
+			if ( prepared ) {
+				prepared = null;
+				state = { ...state, pending: false, preparing: undefined };
+			}
 			state = { ...state, visible: false };
 		},
 		/*
@@ -155,8 +169,35 @@ export function createAlchemy() {
 					selected.length,
 					...selected
 				] );
-			state = { visible: true, pending: true, mode, flags: 0, error: null, slot: selected[0]!, designated };
-			return { opcode, payload };
+			// 62AFA0 holds the request until the prepare effect has played
+			// (prepare); the window stays busy from the press on.
+			prepared = { opcode, payload };
+			state = {
+				visible: true,
+				pending: true,
+				mode,
+				flags: 0,
+				error: null,
+				slot: selected[0]!,
+				designated,
+				preparing: now
+			};
+			return null;
+		},
+		/*
+		================
+		prepare
+
+		The held reinforcement request once its prepare effect has played
+		(62C350 timer 0xB, then 62B5E0), or null.
+		================
+		*/
+		prepare( now: number ) {
+			if ( !prepared || now - (state.preparing ?? now) < ALCHEMY_PREPARE_MS ) return null;
+			const frame = prepared;
+			prepared = null;
+			state = { ...state, preparing: undefined };
+			return frame;
 		},
 		/*
 		================
@@ -169,9 +210,11 @@ export function createAlchemy() {
 			error: number | null = null,
 			detail?: Omit<AlchemyOutcome, "sequence" | "flags">
 		): readonly UiSoundHandle[] {
+			prepared = null;
 			state = {
 				...state,
 				pending: false,
+				preparing: undefined,
 				slot,
 				flags,
 				error,
@@ -226,6 +269,7 @@ export function createAlchemy() {
 		================
 		*/
 		reset() {
+			prepared = null;
 			state = { visible: false, pending: false, mode: "reinforce", flags: 0, error: null, slot: null };
 		}
 	};
