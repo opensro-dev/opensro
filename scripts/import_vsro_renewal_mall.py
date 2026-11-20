@@ -93,10 +93,10 @@ TEXT_TABLE = "server_dep/silkroad/textdata/textuisystem.txt"
 ENGLISH_COLUMN = 8
 
 # Caption keys the window draws that no layout control names: the title,
-# the rail's categories, the card popup and the empty-page notes
+# the rail's categories and the card popup
 # (runtime/ui/hud/renewal-mall-view.ts).
 VIEW_KEYS = (
-	"UIIT_STT_SILKMALL_TITLE",
+	"UIIT_STT_SILKMALL",
 	"UIIT_STT_SILKMALL_CONSUMPTION",
 	"UIIT_STT_SILKMALL_AVATA",
 	"UIIT_STT_SILKMALL_PET",
@@ -106,11 +106,9 @@ VIEW_KEYS = (
 	"UIIT_STT_SILKMALL_SHOPPING_BASKET_LIST",
 	"UIIT_STT_BUY",
 	"UIIT_STT_SILKMALL_PUT_ON",
-	"UIIT_STT_SILKMALL_SHOPPING_BASKET",
+	"UIIT_STT_SILKMALL_ZZIM",
 	"UIIT_STT_SILKMALL_DEL",
 	"UIIT_STT_SILKMALL_ITEM_GIFTSILK",
-	"UIIT_STT_SILKMALL_MAIN",
-	"UIIT_MSG_SILKMALL_NO_ITEM",
 )
 
 FRAME_PARTS = (

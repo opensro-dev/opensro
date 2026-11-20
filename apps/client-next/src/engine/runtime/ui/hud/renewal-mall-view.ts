@@ -151,9 +151,9 @@ export interface RenewalMallInput {
 const WHITE: Color = [ 1, 1, 1, 1 ];
 const GOLD: Color = [ 1, 0.86, 0.45, 1 ];
 const MUTED: Color = [ 0.62, 0.6, 0.55, 1 ];
-// The window title the outer frame carries (UIIT_STT_SILKMALL_TITLE is
-// the classic window's; the renewal window reuses it).
-const TITLE_KEY = "UIIT_STT_SILKMALL_TITLE";
+// The window title the outer frame carries: the classic window's own
+// (ginterface GDR_ITEM_MALL's Text, "Item Mall").
+const TITLE_KEY = "UIIT_STT_SILKMALL";
 const SEARCH_MAX = 32;
 
 /*
@@ -326,7 +326,6 @@ export function renewalMallView( input: RenewalMallInput ): RenewalMallOp[] {
 	const slotIcon = renewalMallControl( slot, "GDR_RENEWAL_SHOP_SLOT_ICON" );
 	const slotCount = renewalMallControl( slot, "GDR_RENEWAL_ITEM_MALL_ITEM_COUT" );
 	const grid = renewalPageGrid( browse );
-	const shownCards = browse.offers.length;
 	for ( let cell = 0; cell < grid.length; cell++ ) {
 		const index = grid[cell]!;
 		if ( index < 0 ) continue;
@@ -375,17 +374,8 @@ export function renewalMallView( input: RenewalMallInput ): RenewalMallOp[] {
 			);
 		}
 	}
-	if ( shownCards === 0 ) {
-		const mid = control( "GDR_RENEWAL_ITEM_MALL_MID_BG" ).rect;
-		label(
-			browse.category === -1 && browse.search === "" ?
-				copy( "UIIT_STT_SILKMALL_MAIN" ) :
-				copy( "UIIT_MSG_SILKMALL_NO_ITEM" ),
-			at( [ mid[0], mid[1] + mid[3] / 2 - 8, mid[2], 16 ] ),
-			MUTED,
-			1
-		);
-	}
+	// An empty page draws an empty grid: no client table carries a
+	// "no goods" text for the mall, and the port invents none.
 
 	// The pager: the arrows step one page; the label is "page / pages".
 	const pages = Math.max( 1, Math.ceil( browse.count / browse.pageSize ) );
@@ -502,7 +492,9 @@ export function renewalMallView( input: RenewalMallInput ): RenewalMallOp[] {
 		const popup = at( renewalPopupRect( Math.max( 0, grid.indexOf( browse.popup ) ) ) );
 		const frame = renewalMallControl( data.window, "GDR_RENEWAL_ITEM_MALL_POPUP_MENU" );
 		ops.push( { kind: "frame", prefix: frame.texture, rect: popup } );
-		const basketLabel = basketOpen ? "UIIT_STT_SILKMALL_DEL" : "UIIT_STT_SILKMALL_SHOPPING_BASKET";
+		// The classic slot's reserve button caption (ifitemmallshopslot
+		// button 6, "Reserve"); inside the basket it removes ("Delete").
+		const basketLabel = basketOpen ? "UIIT_STT_SILKMALL_DEL" : "UIIT_STT_SILKMALL_ZZIM";
 		const entries = [
 			[ "item-mall-buy:" + browse.popup, "UIIT_STT_BUY", false ],
 			[ "item-mall-wear:" + browse.popup, "UIIT_STT_SILKMALL_PUT_ON", input.wearable[browse.popup] !== true ],

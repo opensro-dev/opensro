@@ -322,6 +322,11 @@ function view( mall, options = {} ) {
 			UIIT_STT_SILKMALL_AVATA: "Avatar",
 			UIIT_STT_SILKMALL_BOOTH: "Booth",
 			UIIT_STT_SILKMALL_DRESS: "Dress",
+			// The client's table carries these mall captions; it has no
+			// UIIT_STT_SILKMALL_SHOPPING_BASKET (the blank reserve button).
+			UIIT_STT_SILKMALL_ZZIM: "Reserve",
+			UIIT_STT_SILKMALL_DEL: "Delete",
+			UIIT_STT_SILKMALL_PUT_ON: "Wear Item",
 			...options.strings
 		},
 		busy: options.busy ?? false,
@@ -725,6 +730,11 @@ test("the popup buys, tries on and reserves the card it opened on", () => {
 	assert.equal( button( ops, "item-mall-buy:4" ).disabled, false );
 	assert.equal( button( ops, "item-mall-wear:4" ).disabled, true );
 	assert.equal( button( ops, "item-mall-reserve:4" ).disabled, false );
+	// Every popup button carries a caption the client's table has.
+	assert.deepEqual(
+		[ "item-mall-buy:4", "item-mall-wear:4", "item-mall-reserve:4" ].map( id => button( ops, id ).label ),
+		[ "Buy", "Wear Item", "Reserve" ]
+	);
 	assert.equal( button( ops, "item-mall-popup:4" ).selected, true );
 	const busy = view( mall, { busy: true } );
 	assert.equal( button( busy, "item-mall-buy:4" ).disabled, true );
