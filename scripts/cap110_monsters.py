@@ -690,8 +690,7 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		refs = select_references(later, claims)
 		if not refs:
 			raise ValueError("no ordinary level 100-110 Alexandria field monsters")
-		native_chars = tree_characters(text_root, CHARACTER_SHARD)
-		occupied = {int(r[1]) for r in native_chars}
+		occupied = published_ids.occupied_objects(text_root, (CHARACTER_SHARD,))
 		allocated = allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 		for code, row in sorted(refs.items()):
 			row[1] = str(allocated[code])

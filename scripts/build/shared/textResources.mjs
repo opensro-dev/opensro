@@ -314,7 +314,23 @@ async function buildNpcPosRows( sourcePath ) {
 }
 
 async function buildRegionCodeCatalog( sourcePath ) {
-	const raw = await readText( sourcePath );
+	return {
+		sourcePath: toGameRelative( sourcePath ),
+		format: "sro-regioncode",
+		version: 1,
+		...parseRegionCodes( await readText( sourcePath ) )
+	};
+}
+
+/*
+================
+parseRegionCodes
+
+regioncode.txt's enabled RN_ rows: entries maps a region id to its code,
+rows lists every row in file order.
+================
+*/
+export function parseRegionCodes( raw ) {
 	const entries = {};
 	const rows = [];
 
@@ -330,7 +346,11 @@ async function buildRegionCodeCatalog( sourcePath ) {
 			continue;
 		}
 
-		entries[String( regionId )] = key;
+		// The client keeps the first row of a repeated id: its region table
+		// insert (sub_721530, called from the regioncode loader sub_722460)
+		// returns the existing entry unchanged. v1.696 names region 22478
+		// both RN_JUPITER_GOD and RN_JUPITER_SEA; the first one stands.
+		entries[String( regionId )] ??= key;
 		rows.push( {
 			regionId,
 			key,
@@ -338,13 +358,7 @@ async function buildRegionCodeCatalog( sourcePath ) {
 		} );
 	}
 
-	return {
-		sourcePath: toGameRelative( sourcePath ),
-		format: "sro-regioncode",
-		version: 1,
-		entries,
-		rows
-	};
+	return { entries, rows };
 }
 
 async function buildStrictEnglishTextEntries( sourcePath ) {

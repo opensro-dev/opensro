@@ -290,6 +290,23 @@ func openAuthorityPlane(
 	if err != nil {
 		return authorityPlane{}, fmt.Errorf("store: %w", err)
 	}
+	// Before any session: a build that numbered an item afresh (#3994)
+	// leaves stored rows under the old id, so every row takes its
+	// codename's current one.
+	rebound, err := authorityStore.RebindItemIdentities(ownedShard.ID, func(codename string) (uint32, bool) {
+		ref, ok := textdata.Items.ItemRefByCodename(codename)
+		if !ok || ref == nil {
+			return 0, false
+		}
+		return ref.RefObjID, true
+	})
+	if err != nil {
+		authorityStore.Close()
+		return authorityPlane{}, fmt.Errorf("shard %q item identities: %w", ownedShard.ID, err)
+	}
+	if rebound > 0 {
+		log.Infof("store: %d stored item rows moved to their codename's current id", rebound)
+	}
 	authorityStore.ReapMaturedDeletions()
 	if err := authorityStore.ValidateShardState([]string{ownedShard.ID}); err != nil {
 		authorityStore.Close()

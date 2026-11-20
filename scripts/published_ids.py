@@ -38,6 +38,8 @@ import json
 import os
 from pathlib import Path
 
+import import_vsro_alexandria as tables
+
 # The pin a release refreshes (pin_published_identities.py).
 PIN = Path(__file__).resolve().parent / "data" / "published-identities.json"
 # Names another pin file; empty names none. The Python tests set it empty
@@ -48,6 +50,9 @@ PIN_FORMAT = "opensro-published-identities-v1"
 
 # The pin's maps, by id space.
 OBJECTS = ("characters", "items")
+# The tables of the object id space (_RefObjCommon), by file name prefix.
+# itemdata.txt and characterdata.txt are manifests and hold no row ids.
+OBJECT_TABLES = ("itemdata_", "characterdata_", "teleportbuilding")
 SKILLS = ("skills",)
 MAPS = OBJECTS + SKILLS
 
@@ -91,45 +96,94 @@ def pin_path():
 # published
 #
 # codename -> id over the given maps of the pin (OBJECTS or SKILLS). A code
-# named under two ids refuses. An id two maps give two codes is kept for
-# both: r202 shipped five (the Arabia monsters 50327-50331 and five pet
-# scrolls), and the pin reproduces what live holds rather than choose
-# which one to move; shared() names them.
+# named under two ids refuses. r202 shipped five ids under two codes at
+# once (the Arabia monsters 50327-50331 and five pet scrolls), and the
+# client keeps one object per id (#3994). An id pinned under an item and a
+# character stays with the item, which a player can hold; the character is
+# left out of the pin, so its importer numbers it afresh above every
+# released id. Any other id pinned twice refuses.
 # ================
 def published(maps):
 	path = pin_path()
 	if path is None or not path.exists():
 		return {}
 	pin = read_pin(path)
-	merged = {}
+	merged, holders = {}, {}
 	for name in maps:
 		for code, identity in pin[name].items():
 			if merged.get(code, identity) != identity:
 				raise ValueError(f"published identity {code} is pinned at two ids across {', '.join(maps)}")
 			merged[code] = identity
+			holders.setdefault(identity, []).append((name, code))
+	for identity, named in holders.items():
+		if len(named) < 2:
+			continue
+		if sorted(name for name, _ in named) != ["characters", "items"]:
+			raise ValueError(f"published identity {identity} is pinned under {', '.join(code for _, code in named)}")
+		for name, code in named:
+			if name == "characters":
+				del merged[code]
 	return merged
 
 
 # ================
-# shared
+# occupied_objects
 #
-# The ids pinned under more than one code: the live collisions published
-# keeps. A staged code keeps such an id although a row of the other code
-# already stands in the tree.
+# Every object id the tree at text_root already holds: the rows of each
+# itemdata, characterdata and teleportbuilding table (_RefObjCommon is one
+# id space and the client keeps one object per id). own names the shards
+# the asking importer rewrites whole, which it leaves out because its
+# marker retains their ids. Every object allocator asks this one owner: an
+# importer that read its own table alone handed the gears stones the fox
+# pets' ids, and a pet spawn read as a stone disconnected players (#3994).
 # ================
-def shared(pinned):
-	seen, twice = set(), set()
-	for identity in pinned.values():
-		(twice if identity in seen else seen).add(identity)
-	return twice
+def occupied_objects(text_root, own=()):
+	occupied = set()
+	for _, row in object_rows(text_root, own):
+		occupied.add(int(row[1]))
+	return occupied
+
+
+# ================
+# shared_objects
+#
+# id -> codes for every object id two rows of the tree at text_root hold.
+# The variant build refuses a tree that has any (#3994).
+# ================
+def shared_objects(text_root):
+	holders = {}
+	for _, row in object_rows(text_root):
+		if len(row) > 2:
+			holders.setdefault(int(row[1]), set()).add(row[2])
+	return {identity: sorted(codes) for identity, codes in holders.items() if len(codes) > 1}
+
+
+# ================
+# object_rows
+#
+# (file name, row) for every id row of the object tables under text_root,
+# less the shards own names.
+# ================
+def object_rows(text_root, own=()):
+	text_root = Path(text_root)
+	if not text_root.is_dir():
+		return
+	skipped = {name.lower() for name in own}
+	for path in sorted(text_root.iterdir()):
+		name = path.name.lower()
+		if name in skipped or not name.startswith(OBJECT_TABLES) or not name.endswith(".txt"):
+			continue
+		for row in tables.table_rows(path.read_bytes()):
+			if len(row) > 1 and row[1].isdigit():
+				yield name, row
 
 
 # ================
 # reserved
 #
 # The released ids of every pinned code not in codes, less those a row in
-# the tree (occupied) already holds: that row is the code's own or a live
-# collision, and reserving it again would refuse a build live shipped.
+# the tree (occupied) already holds: that row is the code's own, and
+# reserving it again would refuse its own id.
 # ================
 def reserved(pinned, codes, occupied):
 	staged = set(codes)
@@ -159,7 +213,6 @@ def kept(pinned, codes):
 # ================
 def overlay(pinned, codes, occupied, previous):
 	own = kept(pinned, codes)
-	# A live collision (shared) is never held against the code that keeps it.
 	held = reserved(pinned, codes, occupied) - set(own.values())
 	owned = held | set(own.values())
 	merged = {code: identity for code, identity in previous.items() if code not in own and identity not in owned}
@@ -209,8 +262,4 @@ def allocate(space, occupied, codes, previous, pinned=None):
 	pinned = published(space) if pinned is None else pinned
 	occupied = set(occupied)
 	held, merged = overlay(pinned, codes, occupied, previous)
-	own = kept(pinned, codes)
-	# A live collision the other code's row already holds is kept, as live
-	# ships it; any other kept id a row holds still refuses as a collision.
-	occupied -= shared(pinned) & set(own.values())
 	return allocate_identities(occupied | held, codes, merged)

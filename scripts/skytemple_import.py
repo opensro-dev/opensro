@@ -65,6 +65,7 @@ import build_alexandria_variant as variant  # noqa: E402
 import cap110_monsters as monsters  # noqa: E402
 import cap110_skill_effects as effects  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
+import published_ids  # noqa: E402
 import skilldata_enc as skill_tables  # noqa: E402
 import sro_pk2  # noqa: E402
 from alexandria_map_tables import later_zone_rows, native_text_row  # noqa: E402
@@ -699,8 +700,7 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 		refs = select_kinds(later, {code for code, *_rest in found})
 		population = build_population(found, refs)
 
-		native_chars = monsters.tree_characters(text_root, CHARACTER_SHARD)
-		occupied = {int(r[1]) for r in native_chars}
+		occupied = published_ids.occupied_objects(text_root, (CHARACTER_SHARD,))
 		allocated = monsters.allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 		for code, row in sorted(refs.items()):
 			row[1] = str(allocated[code])

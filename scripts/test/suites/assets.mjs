@@ -96,6 +96,7 @@ export default {
 		"scripts/test/assets/assetPackLayout.test.mjs",
 		"scripts/test/assets/bsrAuthoredBox.test.mjs",
 		"scripts/test/assets/englishCorrections.test.mjs",
+		"scripts/test/assets/regionCodeCatalog.test.mjs",
 		"scripts/test/assets/memberCompression.test.mjs",
 		"scripts/test/assets/servedSize.test.mjs",
 		"scripts/test/assets/minimapTextureParity.test.mjs",

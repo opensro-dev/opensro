@@ -53,6 +53,7 @@ from alexandria_map_tables import (
 import cap110_monsters as cap110
 import cap110_skill_effects as effects
 import import_vsro_alexandria as tables
+import published_ids
 import skilldata_enc as skill_tables
 import sro_pk2
 from pin_file import read_pin_field
@@ -447,7 +448,7 @@ def stage_kinds(label, read, has, refs, text_root, prior, character_shard, skill
 	standing = sorted(set(refs) & {r[2] for r in native_chars if len(r) > 2})
 	if standing:
 		raise ValueError(f"{label} kinds {standing}: each already stands in the character tables")
-	occupied = {int(r[1]) for r in native_chars}
+	occupied = published_ids.occupied_objects(text_root, (character_shard,))
 	allocated = cap110.allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 	for code, row in refs.items():
 		row[1] = str(allocated[code])
