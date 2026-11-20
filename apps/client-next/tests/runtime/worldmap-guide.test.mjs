@@ -562,6 +562,18 @@ test("reverse return points are xy_returnicon buttons, the old sign without that
 	assert.ok( bare.paths.some( path => path.endsWith( "xy_returnicon.png" ) ), "the art is still asked for" );
 });
 
+test("the Qin-Shi entrance's reverse return icon is drawn lower, with the same target", async () => {
+	const { reverseMapButtons } = await import( "../../src/engine/runtime/ui/hud/reverse-map-buttons.ts" );
+	const rect = /** @type {import("../../src/engine/contracts/ui").UiRect} */ ([ 100, 200, 16, 16 ]);
+	const clip = /** @type {import("../../src/engine/contracts/ui").UiRect} */ ([ 0, 0, 800, 600 ]);
+	const view = point => reverseMapButtons( { points: [ { point, rect } ], clip, hover: null, has: () => true } );
+	const other = view( { id: 1, name: "Jangan", regionId: 26292, x: 960, z: 1600 } );
+	const tomb = view( { id: 2, name: "Qin-Shi Tomb Entrance", regionId: 26284, x: 960, z: 1600 } );
+	assert.equal( tomb.images[0].rect[1], other.images[0].rect[1] + 40, "the tomb's icon sits lower" );
+	assert.deepEqual( tomb.hits[0].rect, tomb.images[0].rect, "the click follows the icon" );
+	assert.equal( tomb.hits[0].id, "reverse-map-point:2", "the point it names is unchanged" );
+});
+
 test("a long row name ends in an ellipsis with the whole name on hover, and gives up the badge first", () => {
 	const hud = loadedTools();
 	hud.activate( "map-guide-tab:area", undefined, 10 );

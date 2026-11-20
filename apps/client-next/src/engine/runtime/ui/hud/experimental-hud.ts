@@ -469,7 +469,8 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "questTrackerMarkers",
 						id: "experimental-quest-tracker-markers",
 						label: "Quest target markers",
-						description: "Show every active quest's target on M and the minimap."
+						description:
+							"Show every active quest's target, and the spot its tool is used, on M and the minimap."
 					}
 				]
 			},

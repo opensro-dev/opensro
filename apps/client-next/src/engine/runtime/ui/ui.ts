@@ -61,6 +61,12 @@ const CHAT_STRIP_INPUT = 20;
 const PARTY_CHAT_GAP = 4;
 // The quest detail page's default body color (the native quest texts' own 255,44,15,1 as ARGB).
 const QUEST_DETAIL_TEXT: UiQuad["color"] = [ 44 / 255, 15 / 255, 1 / 255, 1 ];
+// A Berserk body that returns within this long of vanishing, with the minute not yet spent, is the same Berserk.
+const BERSERK_RESUME_WINDOW_MS = 30000;
+const BERSERK_RESUME_ELAPSED_MS = 59000;
+// Gap between a Blue Berserk title and the name, and its bold gold.
+const HWAN_TITLE_GAP = 4;
+const HWAN_TITLE_COLOR: UiQuad["color"] = [ 1, 0.84, 0.2, 1 ];
 // The overhead job mark sits 4 px past the name board, which reaches 1.5 px
 // past the text (the beginner mark mirrors it at -21.5 = -20 - 1.5).
 const JOB_MARK_GAP = 5.5;
@@ -122,6 +128,8 @@ import {
 } from "@/engine/foundation/gameplay/storage-room";
 import { berserkHud, berserkEntryFlash } from "@/engine/foundation/ui/berserk-hud";
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
+import { hwanSkin, hwanTitleKey } from "@/engine/foundation/gameplay/hwan-skin";
+import { questLocationTargets } from "@/engine/foundation/ui/quest-locations";
 import { portalMenu } from "@/engine/foundation/gameplay/portal";
 import { restoreSlotEntry } from "@/engine/foundation/gameplay/commerce";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
@@ -1458,7 +1466,7 @@ export function createUi( ports: UiPorts ) {
 	const combatGlyphPaths = damageTextAssets();
 	let buffTick = -1;
 	// Derived two-state presentation clock; body channel 4 remains authoritative.
-	let berserkActor = 0, berserkStarted = 0, berserkFrame = -1, berserkDisplayed = 0;
+	let berserkActor = 0, berserkStarted = 0, berserkLostAt = -1, berserkFrame = -1, berserkDisplayed = 0;
 	let equipmentWarningPhase = 0, equipmentWarningDue = 0, equipmentWarningVisible = false;
 	// Low HP/MP caution atlas (100 ms cells) animates on retained world frames too.
 	let cautionVisible = false, cautionFrame = -1;
@@ -10278,8 +10286,14 @@ export function createUi( ports: UiPorts ) {
 				next.entities.find( e => e.gid === next.gameplay?.localGid && e.appearanceState?.[2] === 1 )?.gid ?? 0 :
 				0;
 			if ( berserkGid !== berserkActor ) {
+				// A region change drops the local entity for a moment while the server's
+				// Berserk runs on: when it returns before the minute could have ended, the
+				// gauge resumes where it was instead of restarting full (port presentation).
+				const resumed = berserkGid && berserkLostAt >= 0 && now - berserkLostAt < BERSERK_RESUME_WINDOW_MS &&
+					berserkLostAt - berserkStarted < BERSERK_RESUME_ELAPSED_MS;
+				if ( !berserkGid ) berserkLostAt = now;
+				else if ( !resumed ) berserkStarted = now;
 				berserkActor = berserkGid;
-				berserkStarted = now;
 				dirty = true;
 			}
 			const nextBerserkFrame = berserkActor ? Math.floor( Math.min( 63000, now - berserkStarted ) / 50 ) : -1;
@@ -12316,18 +12330,27 @@ export function createUi( ports: UiPorts ) {
 								(hudCopy( "UIIT_STT_LV_LEVEL" ) || "Lv %d").replace( "%d", String( level ) )
 							);
 						}
+						// Port-only: a Blue Berserk draws the gauge in its blue art (hwan-skin.ts).
+						// The blue file is requested like any gauge picture; until it is loaded (or if a
+						// build does not publish it) the plain one draws.
+						const blue = ( path: string ) => {
+							const art = hwanSkin( path, game?.hwanLevel );
+							if ( art === path ) return path;
+							paths.push( art );
+							return resources.has( art ) ? art : path;
+						};
 						if ( berserkActor ) {
 							const animation = berserkHud( now - berserkStarted ),
-								burn = ROOT + "interface/playerminiinfo/pmi_jahwan_burn.png",
+								burn = blue( ROOT + "interface/playerminiinfo/pmi_jahwan_burn.png" ),
 								size = resources.size( burn );
 							paths.push( burn );
 							for ( let i = 0; i < 5; i++ ) {
-								const circle = p["GDR_PMI_CIRCLE" + i]!;
-								if ( resources.has( circle.texture ) && animation.circles[i]! > 0 ) {
+								const circle = p["GDR_PMI_CIRCLE" + i]!, circleArt = blue( circle.texture );
+								if ( resources.has( circleArt ) && animation.circles[i]! > 0 ) {
 									rect(
 										authoredRect( circle, px, py ),
 										[ 1, 1, 1, animation.circles[i]! ],
-										circle.texture,
+										circleArt,
 										circle.uv
 									);
 								}
@@ -12347,18 +12370,32 @@ export function createUi( ports: UiPorts ) {
 								}
 							}
 							for ( const name of [ "GDR_PMI_HWAN_EFF_FACE", "GDR_PMI_HWAN_EFF_GLOW" ] ) {
-								const n = p[name]!;
-								if ( resources.has( n.texture ) && animation.glow > 0 ) {
-									rect( authoredRect( n, px, py ), [ 1, 1, 1, animation.glow ], n.texture, n.uv );
+								const n = p[name]!, art = blue( n.texture );
+								if ( resources.has( art ) && animation.glow > 0 ) {
+									rect( authoredRect( n, px, py ), [ 1, 1, 1, animation.glow ], art, n.uv );
 								}
 							}
 						} else {for ( let i = 0; i < Math.min( 5, gauge?.displayed ?? 0 ); i++ ) {
-								authoredImage( p["GDR_PMI_CIRCLE" + (4 - i)]!, px, py );
+								const circle = p["GDR_PMI_CIRCLE" + (4 - i)]!, art = blue( circle.texture );
+								// The filled ball is requested like any gauge picture: on a cold cache (first login
+								// after clearing site data) it was drawn before it loaded and the rings stayed empty
+								// until a refresh.
+								paths.push( art );
+								authoredImage( circle, px, py, art );
 							}}
 						if (
 							gauge?.displayed === 5 &&
 							next.entities.find( e => e.gid === game?.localGid )?.appearanceState?.[2] !== 1
-						) authoredButton( p.GDR_PMI_BTN_JAHWAN!, px, py, "berserk", "Berserk" );
+						) {
+							const plain = p.GDR_PMI_BTN_JAHWAN!;
+							authoredButton(
+								{ ...plain, texture: blue( plain.texture ) },
+								px,
+								py,
+								"berserk",
+								"Berserk"
+							);
+						}
 						if ( (game?.progression?.statPoints ?? 0) > 0 ) {
 							authoredButton(
 								p.GDR_PMI_BTN_STATUP!,
@@ -13870,6 +13907,17 @@ export function createUi( ports: UiPorts ) {
 							const target = minimapResources.positions()?.get( id );
 							if ( !target || !minimapSameFloor( pose, target, game ?? null ) ) continue;
 							const offset = minimapOffset( pose, target, minimapZoom );
+							if ( offset ) markers.push( minimapEdge( offset, "quest" ) );
+						}
+						// Port-only: the spot a quest tool is used at (quest-locations.ts).
+						for (
+							const spot of questLocationTargets(
+								game?.quests,
+								experimental.state().saved.questTrackerMarkers
+							)
+						) {
+							if ( !minimapSameFloor( pose, spot, game ?? null ) ) continue;
+							const offset = minimapOffset( pose, spot, minimapZoom );
 							if ( offset ) markers.push( minimapEdge( offset, "quest" ) );
 						}
 						markers.push( ...minimapHunting( pose, game, next.entities, minimapZoom ) );
@@ -23007,6 +23055,26 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								color: white
 							} );
 						}
+					}
+					// Port-only Blue Berserk title (not native): bold gold, just before the
+					// character's name, for every player the server's level roster named (0x3FCB).
+					const titleText = entity.kind === "local-player" || entity.kind === "player" ?
+						hudCopy( hwanTitleKey( game?.hwanLevels?.[entity.gid], entity.countryByte9c ) ) :
+						"";
+					if ( titleText && name && height ) {
+						const titleWidth = text.run( titleText, 2 ).width;
+						quads.push(
+							...text.quads(
+								titleText,
+								[ left - titleWidth - HWAN_TITLE_GAP, top, titleWidth, height ],
+								full,
+								HWAN_TITLE_COLOR,
+								{
+									vAlign: 0,
+									fontStyle: 2
+								}
+							).map( q => ({ ...q, characterAnchor: entity.gid }) )
+						);
 					}
 					// CICUser 858810 gives the actual [GM] name prefix priority over player
 					// relation colors. This is presentation, never a privilege check.
