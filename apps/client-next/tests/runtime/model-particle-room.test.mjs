@@ -128,3 +128,16 @@ test("glows no longer take the scene room what follows them used to share", () =
 	const scenery = [ ...next.keys() ].filter( gid => gid >= 900000 );
 	assert.equal( scenery.length, CHARACTER_ACTORS - 500 );
 });
+
+test("a sparse scene shows every glow, past the reserved room, within the renderer's", () => {
+	// 150 scene actors and 40 wearers of four glows: 160 glows, more than
+	// MODEL_PARTICLE_ACTORS. All show, as they did before the reserved room,
+	// and scenery asking for far more stops at RENDERED_ACTORS.
+	const wearers = Array.from( { length: 40 }, ( _, i ) => [ i + 2, glowParticles( 4 ) ] );
+	const next = present( 150, wearers, 1000 );
+	const glows = [ ...next.values() ].filter( actor => actor.attachment !== undefined );
+	assert.equal( glows.length, 160, "a sparse scene cut glows main shows" );
+	assert.equal( next.size, RENDERED_ACTORS );
+	const scenery = [ ...next.keys() ].filter( gid => gid >= 900000 );
+	assert.equal( scenery.length, RENDERED_ACTORS - 150 - 160 );
+});
