@@ -2674,6 +2674,17 @@
 		},
 		{
 			"consumer": "src/engine/runtime/ui/hud/map-tools.ts",
+			"provider": "src/engine/runtime/ui/hud/map-catalogues.ts",
+			"functions": [
+				"createMapCatalogues",
+				"dispose",
+				"guide",
+				"regions",
+				"step"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/map-catalogues.ts",
 			"provider": "src/engine/runtime/assets/assets.ts",
 			"functions": [
 				"available",

@@ -20,7 +20,6 @@ static with no texture does.
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { UiTexture } from "@/engine/contracts/texture";
 import { decodeNativeTexture } from "@/engine/foundation/assets/native-texture";
-import { interfaceLane } from "@/engine/foundation/assets/asset-slots";
 
 const ICON_ROOT = "/assets/images/Media_extracted/icon/";
 
@@ -38,7 +37,7 @@ Retry history belongs to current demand and disappears when a screen releases it
 ================
 */
 export function createUiAssets(
-	owner: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
+	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
 	publish: ( id: string, image: UiTexture | null ) => void,
 	base: string,
 	report: (
@@ -48,8 +47,7 @@ export function createUiAssets(
 		else console.info( "[ui-assets]", event );
 	}
 ) {
-	// A window's art is what a player waits on: the interface lane (#3977).
-	const assets = interfaceLane( owner );
+	// Interface lane: a window's art is what a player waits on (#3977).
 	const pending = new Map<string, number>();
 	const loaded = new Map<string, readonly [number, number]>();
 	// What each loaded image holds in memory: RGBA for a bitmap, the block
@@ -238,7 +236,7 @@ export function createUiAssets(
 					missing.has( path ) || loaded.has( path ) || pending.has( path ) ||
 					(failures.get( path )?.retryAt ?? -Infinity) > now
 				) continue;
-				if ( assets.available() === 0 ) break;
+				if ( assets.available( "interface" ) === 0 ) break;
 				const request = fallback.has( path ) ? DEFAULT_ICON : path;
 				try {
 					pending.set(
@@ -247,7 +245,8 @@ export function createUiAssets(
 							new URL( request, base ).href,
 							crest( request ) ? 256 : 4 * 1024 * 1024,
 							// A native texture arrives as its container bytes.
-							crest( request ) ? "crest" : isNativeTexture( request ) ? undefined : "png"
+							crest( request ) ? "crest" : isNativeTexture( request ) ? undefined : "png",
+							{ lane: "interface" }
 						)
 					);
 				} catch ( error ) {

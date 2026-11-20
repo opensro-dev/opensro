@@ -59,7 +59,7 @@ function fixture( t ) {
 	Object.defineProperty( globalThis, "Worker", { configurable: true, value: Worker } );
 	t.after( () => {
 		if ( original ) Object.defineProperty( globalThis, "Worker", original );
-		else delete globalThis.Worker;
+		else Reflect.deleteProperty( globalThis, "Worker" );
 	} );
 	const assets = createAssets();
 	t.after( () => assets.dispose() );

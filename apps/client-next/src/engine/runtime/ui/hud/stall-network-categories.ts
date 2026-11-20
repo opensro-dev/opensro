@@ -15,7 +15,6 @@ import {
 	decodeStallNetworkCategories,
 	type StallNetworkCategory
 } from "@/engine/foundation/ui/stall-network-categories";
-import { interfaceLane } from "@/engine/foundation/assets/asset-slots";
 
 const CATEGORY_URL = "/assets/textdata/fmncategorytreedata.txt";
 // The table is about 6 KB; the cap only bounds a wrong response.
@@ -33,12 +32,11 @@ createStallNetworkCategories
 ================
 */
 export function createStallNetworkCategories(
-	owner: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
+	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
 	base: string
 ) {
-	// Loads only while the stall network window is open: the player waits
-	// on it, so it is interface demand (asset-slots.ts, #3977).
-	const assets = interfaceLane( owner );
+	// Interface lane: loads only while the stall network window is open, so
+	// the player waits on it (#3977).
 	let load: CategoryLoad = { kind: "idle" };
 	return {
 		/*
@@ -60,10 +58,12 @@ export function createStallNetworkCategories(
 				}
 				return true;
 			}
-			if ( load.kind === "idle" && needed && assets.available() ) {
+			if ( load.kind === "idle" && needed && assets.available( "interface" ) ) {
 				load = {
 					kind: "loading",
-					id: assets.request( new URL( CATEGORY_URL, base ).href, CATEGORY_MAX_BYTES )
+					id: assets.request( new URL( CATEGORY_URL, base ).href, CATEGORY_MAX_BYTES, undefined, {
+						lane: "interface"
+					} )
 				};
 			}
 			return false;

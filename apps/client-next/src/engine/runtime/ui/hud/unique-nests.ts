@@ -13,7 +13,6 @@ load stays failed: the map simply draws no nest signs.
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { MapMarker } from "@/engine/foundation/ui/world-map";
 import { decodeUniqueNests, UNIQUE_NESTS_BYTES_LIMIT, UNIQUE_NESTS_PATH } from "@/engine/foundation/ui/unique-nests";
-import { interfaceLane } from "@/engine/foundation/assets/asset-slots";
 
 const NONE: readonly MapMarker[] = [];
 
@@ -35,12 +34,11 @@ createUniqueNestsHud
 ================
 */
 export function createUniqueNestsHud(
-	owner: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
+	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
 	base: string
 ) {
-	// Loads only while the M window's unique spawns box is ticked: the
-	// player waits on it, so it is interface demand (asset-slots.ts, #3977).
-	const assets = interfaceLane( owner );
+	// Interface lane: loads only while the M window's unique spawns box is
+	// ticked, so the player waits on it (#3977).
 	let load: Load = { kind: "idle" };
 	return {
 		/*
@@ -51,10 +49,12 @@ export function createUniqueNestsHud(
 		================
 		*/
 		step( needed: boolean ) {
-			if ( load.kind === "idle" && needed && assets.available() > 0 ) {
+			if ( load.kind === "idle" && needed && assets.available( "interface" ) > 0 ) {
 				load = {
 					kind: "loading",
-					id: assets.request( new URL( UNIQUE_NESTS_PATH, base ).href, UNIQUE_NESTS_BYTES_LIMIT )
+					id: assets.request( new URL( UNIQUE_NESTS_PATH, base ).href, UNIQUE_NESTS_BYTES_LIMIT, undefined, {
+						lane: "interface"
+					} )
 				};
 			}
 			if ( load.kind !== "loading" ) return false;

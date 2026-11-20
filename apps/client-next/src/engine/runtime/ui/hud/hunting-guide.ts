@@ -30,7 +30,6 @@ import {
 } from "@/engine/foundation/ui/hunting-guide";
 import { worldMapFrame, type WorldMapLayout } from "@/engine/foundation/ui/world-map";
 import { featuresAt } from "@/engine/foundation/world/plane";
-import { interfaceLane } from "@/engine/foundation/assets/asset-slots";
 
 const EMPTY: HuntingProjection = { quads: [], controls: [], labels: [], paths: [], areas: [] };
 const ART_BYTES_LIMIT = 512 * 1024;
@@ -57,12 +56,11 @@ while hidden; only an open, explicitly enabled map starts either request.
 ================
 */
 export function createHuntingGuideHud(
-	owner: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
+	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
 	base: string
 ) {
-	// Loads only while the M window's guide or monster drawer is open: the
-	// player waits on it, so it is interface demand (asset-slots.ts, #3977).
-	const assets = interfaceLane( owner );
+	// Interface lane: loads only while the M window's guide or monster
+	// drawer is open, so the player waits on it (#3977).
 	let source: HuntingGuideSource | undefined, load: Load<HuntingCatalogue> = { kind: "idle" };
 	let art: Load<ReadonlyMap<number, string>> = { kind: "idle" }, cacheKey = "", projection = EMPTY;
 	/*
@@ -94,8 +92,11 @@ export function createHuntingGuideHud(
 				invalidate();
 				changed = true;
 			}
-			if ( load.kind === "idle" && needed && source && assets.available() > 0 ) {
-				load = { kind: "loading", id: assets.request( source.url, HUNTING_GUIDE_BYTES_LIMIT ) };
+			if ( load.kind === "idle" && needed && source && assets.available( "interface" ) > 0 ) {
+				load = {
+					kind: "loading",
+					id: assets.request( source.url, HUNTING_GUIDE_BYTES_LIMIT, undefined, { lane: "interface" } )
+				};
 				changed = true;
 			}
 			if ( load.kind === "loading" ) {
@@ -118,10 +119,12 @@ export function createHuntingGuideHud(
 					changed = true;
 				}
 			}
-			if ( art.kind === "idle" && artNeeded && source && assets.available() > 0 ) {
+			if ( art.kind === "idle" && artNeeded && source && assets.available( "interface" ) > 0 ) {
 				art = {
 					kind: "loading",
-					id: assets.request( new URL( HUNTING_PORTRAITS, base ).href, ART_BYTES_LIMIT )
+					id: assets.request( new URL( HUNTING_PORTRAITS, base ).href, ART_BYTES_LIMIT, undefined, {
+						lane: "interface"
+					} )
 				};
 				changed = true;
 			}
