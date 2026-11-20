@@ -52,7 +52,7 @@ export interface HudData {
 	// CIFEventInterface's three layouts (547750); PC-room and winter are
 	// null when the later import never published them.
 	readonly eventInterface: EventInterfaceData;
-	// The later client's renewal mall window (port-only, Experimental);
+	// The later client's renewal mall window, the desktop Item Mall;
 	// null when the later import never published it.
 	readonly renewalMall: RenewalMallData | null;
 	// config\command.txt: the debug console's command names by id (68D9C0).

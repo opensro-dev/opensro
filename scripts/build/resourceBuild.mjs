@@ -621,7 +621,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// The Ch'in Tomb's floor minimap rides the v1.188 archive under the same
 	// rule, claimed before the pack tail.
 	const laterTombMinimap = await timed( "laterTombMinimap", () => steps.importLaterTombMinimap() );
-	// The renewal Item Mall's layouts and art (port-only, Experimental) ride
+	// The renewal Item Mall's layouts and art (the desktop Item Mall) ride
 	// the v1.188 archive under the same rule, claimed before the pack tail.
 	const laterRenewalMall = await timed( "laterRenewalMall", () => steps.importLaterRenewalMall() );
 	// The ordered pack tail lives in packPublicTree.mjs, shared with the
