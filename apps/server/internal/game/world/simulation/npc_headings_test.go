@@ -50,6 +50,26 @@ func TestAlexandriaNPCHeadingsUseAuthoredPlacements(t *testing.T) {
 
 /*
 ================
+TestArabiaNPCHeadingsUseExactPlacements
+
+The inferred Arabia facing joins by codename and exact position only: the
+same NPC kind elsewhere, or a native placement, never inherits it.
+================
+*/
+func TestArabiaNPCHeadingsUseExactPlacements(t *testing.T) {
+	if got, found := npcPlacementHeading("NPC_AR_SMITH", 22617, 1028.4, -431.3, 950.5); found {
+		t.Fatalf("an unauthored Arabia position inherited heading %d", got)
+	}
+	for key, heading := range arabiaNPCHeadings {
+		x, y, z := float64(key.X10)/10, float64(key.Y10)/10, float64(key.Z10)/10
+		if got, found := npcPlacementHeading(key.Codename, key.Region, x, y, z); !found || got != heading {
+			t.Fatalf("%s heading=%d found=%v, want=%d", key.Codename, got, found, heading)
+		}
+	}
+}
+
+/*
+================
 TestNPCHeadingUsesPlacementNotCrossVersionIdentity
 ================
 */
