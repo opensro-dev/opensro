@@ -2960,6 +2960,11 @@ export function createUi( ports: UiPorts ) {
 		if ( id === "market-toggle" && marketHud.isOpen() ) id = "market-close";
 		if ( id === "market-open" || id === "market-toggle" ) {
 			if ( view?.session?.phase !== "world" || view.gameplay?.consignment !== true ) return true;
+			// The market is a window of its own, not an NPC page: opening it
+			// ends the NPC interaction as closing the shop does (npc-close).
+			// Hiding the menu alone left the conversation open, so the
+			// panel stayed hidden and the keeper's next click showed no rows.
+			if ( view.gameplay.npcConversation ) sendGameplay( { kind: "npc-close" } );
 			npcPanel.hide();
 			sendMarket( marketHud.open() );
 			dirty = true;
