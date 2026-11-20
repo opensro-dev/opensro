@@ -18,9 +18,12 @@ The Reinforce page refuses a drop locally with the same category 0x12
 table (62B6D0 calls CGInterface_ShowSystemNotification(0x12, code)), so
 its refusals come from here too (reinforcePageNotice).
 
-A stone refused with code 2 (the item already holds its most magic
-options: alchemy/stones.go magicLimit) has no row in that table, so the
-original says nothing and the stone looks dead. The port names the reason
+A stone refused with code 2 has no row in that table, so the original
+says nothing and the stone looks dead. The server answers 2 when the item
+already holds its most magic options (alchemy/stones.go magicLimit), and
+for a stone whose option its table does not know: a data fault, which
+shows the same text (the port-only gears stones are checked to resolve,
+TestGearsStoneOptionsResolveOnShippedTables). The port names the reason
 with the game's own UIIT_MSG_AVATAR_MAGICOPTION_ADD_ERORR text, on by
 default: a missing message is a presentation defect, not a rule (owner
 2026-11-21).
@@ -42,7 +45,7 @@ const COMPOUND_NOTICE_CATEGORY = 0x17;
 const ALCHEMY_REFUSED = 2;
 // 7503D0's code that the window shows as a failed roll, not as a notice.
 const MAGIC_STONE_FAILED_ROLL = 0x23;
-// The server's "no room for another magic option" refusal; silent natively.
+// The server's "no room for another magic option" refusal (banner); silent natively.
 const STONE_OPTIONS_FULL = 2;
 const STONE_OPTIONS_FULL_NOTICE: SystemNotice = {
 	key: "UIIT_MSG_AVATAR_MAGICOPTION_ADD_ERORR",
