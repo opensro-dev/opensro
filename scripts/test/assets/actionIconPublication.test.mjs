@@ -1,3 +1,15 @@
+/*
+===========================================================================
+
+actionIconPublication.test.mjs - every Actions window icon is published
+
+The asset build publishes only the images runtimeCifImageReferences lists.
+The port-only Auto Select row binds an icon no action record names, so it
+was converted and then left out of client-public: the button drew nothing
+(#3966). Every icon the Actions window can offer must be in that list.
+
+===========================================================================
+*/
 import assert from "node:assert/strict";
 import test from "node:test";
 
