@@ -29,6 +29,13 @@ const MAX_SILK_GRANT = 1_000_000;
 // speed. A bare /SETSPEED asks for normal speed. The server enforces the
 // same range (action/gmspeed.go).
 const GM_SET_SPEED = 0xf1;
+// The port's /SETBERSERK <character> <level> (GM test tooling, not native; action/hwan.go):
+// subcommand 0xF3, a u16-sized ANSI name and a u8 Blue Berserk level 0 to 6 (one digit). The
+// server sets the level for the life of the shard process and tells that character.
+const GM_SET_BERSERK = 0xf3;
+// The port's /SETGAUGE <character> <balls 0-5> (GM test tooling, not native; action/hwan.go):
+// subcommand 0xF4, a u16-sized ANSI name and a u8 count of Berserk gauge balls.
+const GM_SET_GAUGE = 0xf4;
 // The port's /FORGE <CODENAME> [key=value ...] and /FORGE help <CODENAME>
 // (GM tooling, not native; the server's SRO_GM_ITEM_FORGE, off unless a
 // shard enables it): subcommand 0xF2 and a u16-sized ANSI string carrying
@@ -350,6 +357,24 @@ export function gmReply( p: Uint8Array ): GmReply | null {
 		const balance = viewOf( p ).getUint32( 2, true );
 		return { console: true, text: "-> silk granted, balance " + balance };
 	}
+	if ( code === GM_SET_GAUGE ) {
+		// The port's /SETGAUGE answer: the balls now in the gauge, or a refusal.
+		if ( result === 2 ) {
+			if ( p.length !== 2 ) throw Error( "Trailing GM gauge refusal bytes" );
+			return { console: true, text: "Failed. -> gauge change refused" };
+		}
+		if ( p.length !== 3 ) throw Error( "Invalid GM gauge reply" );
+		return { console: true, text: "-> berserk gauge set to " + p[2] };
+	}
+	if ( code === GM_SET_BERSERK ) {
+		// The port's /SETBERSERK answer: the level now in force, or a refusal.
+		if ( result === 2 ) {
+			if ( p.length !== 2 ) throw Error( "Trailing GM berserk refusal bytes" );
+			return { console: true, text: "Failed. -> berserk level change refused" };
+		}
+		if ( p.length !== 3 ) throw Error( "Invalid GM berserk reply" );
+		return { console: true, text: "-> berserk level set to " + p[2] };
+	}
 	if ( code === GM_SET_SPEED ) {
 		// The port's /SETSPEED answer: the percent now in force, or a refusal.
 		if ( result === 2 ) {
@@ -415,6 +440,39 @@ function sizedNameFrame( subcommand: number, text: string ): WireFrame {
 	return { opcode: OP_GM_COMMAND, payload };
 }
 
+// The port's /HWANARENA <ch|eu> (GM test tooling, not native): the same warp /warp sends (GM
+// subcommand 16) to where the Army / Military Test trial's player lands, so a GM can check that the new
+// arena is reachable and walkable. The points mirror the server's arena table (quest/hwan_arena.go, the
+// trials' entry); the server still validates the destination against the terrain and the GM privilege.
+const HWAN_ARENA_WARPS = {
+	ch: [ 22966, 1043, 52, 1087 ],
+	eu: [ 22454, 1195, 91, 653 ]
+} as const;
+
+/*
+================
+warpFrame
+
+The coordinate warp /warp sends: u8 16, u16 region, float32 XYZ, u16 heading; null for a
+value the wire cannot carry.
+================
+*/
+function warpFrame( region: number, x: number, y: number, z: number, heading: number ): WireFrame | null {
+	if (
+		!Number.isInteger( region ) || region <= 0 || region > 65535 ||
+		![ x, y, z ].every( v => Number.isFinite( v ) && Number.isFinite( Math.fround( v ) ) ) ||
+		!Number.isInteger( heading ) || heading < 0 || heading > 65535
+	) return null;
+	const payload = new Uint8Array( 17 ), v = new DataView( payload.buffer );
+	payload[0] = 16;
+	v.setUint16( 1, region, true );
+	v.setFloat32( 3, x, true );
+	v.setFloat32( 7, y, true );
+	v.setFloat32( 11, z, true );
+	v.setUint16( 15, heading, true );
+	return { opcode: OP_GM_COMMAND, payload };
+}
+
 /*
 ================
 gmRequest
@@ -436,19 +494,16 @@ export function gmRequest(
 	if ( name === "/warp" ) {
 		if ( tokens.length !== 5 ) return null;
 		const [region, x, y, z] = tokens.slice( 1 ).map( Number );
-		if (
-			!Number.isInteger( region ) || region! <= 0 || region! > 65535 ||
-			![ x, y, z ].every( v => Number.isFinite( v ) && Number.isFinite( Math.fround( v! ) ) ) ||
-			!Number.isInteger( heading ) || heading < 0 || heading > 65535
-		) return null;
-		const payload = new Uint8Array( 17 ), v = new DataView( payload.buffer );
-		payload[0] = 16;
-		v.setUint16( 1, region!, true );
-		v.setFloat32( 3, x!, true );
-		v.setFloat32( 7, y!, true );
-		v.setFloat32( 11, z!, true );
-		v.setUint16( 15, heading, true );
-		return { opcode: OP_GM_COMMAND, payload };
+		return warpFrame( region!, x!, y!, z!, heading );
+	}
+	// Any case: the command is port-only. /HWANARENA ch (Army Test) or eu (Military Test).
+	if ( name?.toUpperCase() === "/HWANARENA" ) {
+		const point = tokens.length === 2 ?
+			(HWAN_ARENA_WARPS as Readonly<Record<string, readonly [number, number, number, number]>>)[
+				tokens[1]!.toLowerCase()
+			] :
+			undefined;
+		return point ? warpFrame( point[0], point[1], point[2], point[3], heading ) : null;
 	}
 	// Port-only: dedicated dummy references exist only with SRO_GM_TRAINING_DUMMY on.
 	if ( name?.toUpperCase() === "/TRAININGDUMMY" && tokens.length <= 2 ) {
@@ -522,6 +577,30 @@ export function gmRequest(
 		if ( percent < GM_SPEED_MIN_PERCENT || percent > GM_SPEED_MAX_PERCENT ) return null;
 		const payload = Uint8Array.of( GM_SET_SPEED, 0, 0 );
 		new DataView( payload.buffer ).setUint16( 1, percent, true );
+		return { opcode: OP_GM_COMMAND, payload };
+	}
+	// Any case: the command is port-only. /SETGAUGE <character> <balls 0-5>.
+	if ( name?.toUpperCase() === "/SETGAUGE" ) {
+		if ( tokens.length !== 3 || !/^[0-5]$/.test( tokens[2]! ) ) return null;
+		const bytes = new TextEncoder().encode( tokens[1]! );
+		if ( !bytes.length || bytes.length >= MAX_GM_NAME_BYTES ) throw Error( "Invalid GM name" );
+		const payload = new Uint8Array( 3 + bytes.length + 1 );
+		payload[0] = GM_SET_GAUGE;
+		new DataView( payload.buffer ).setUint16( 1, bytes.length, true );
+		payload.set( bytes, 3 );
+		payload[3 + bytes.length] = Number( tokens[2] );
+		return { opcode: OP_GM_COMMAND, payload };
+	}
+	// Any case: the command is port-only. /SETBERSERK <character> <level 0-6>.
+	if ( name?.toUpperCase() === "/SETBERSERK" ) {
+		if ( tokens.length !== 3 || !/^[0-6]$/.test( tokens[2]! ) ) return null;
+		const bytes = new TextEncoder().encode( tokens[1]! );
+		if ( !bytes.length || bytes.length >= MAX_GM_NAME_BYTES ) throw Error( "Invalid GM name" );
+		const payload = new Uint8Array( 3 + bytes.length + 1 );
+		payload[0] = GM_SET_BERSERK;
+		new DataView( payload.buffer ).setUint16( 1, bytes.length, true );
+		payload.set( bytes, 3 );
+		payload[3 + bytes.length] = Number( tokens[2] );
 		return { opcode: OP_GM_COMMAND, payload };
 	}
 	// Any case: the command is port-only, and players type it as /forge.
