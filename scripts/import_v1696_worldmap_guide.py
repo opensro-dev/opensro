@@ -91,6 +91,14 @@ ART = (
 	"guide/gd_contents_lamp",
 	"guide/gd_index_button_open",
 	"guide/gd_index_button_close",
+	# The Server Mission gauge (CNIFServerEvent, res_ui/nifserverevent.2dt):
+	# the client's later-art widget beside the guide (server-event-hud.ts).
+	"event/winter_count_wind",
+	"event/winter_count_gage",
+	"event/winter_count_snow",
+	"event/winter_count_close",
+	"event/winter_count_close_focus",
+	"event/winter_count_close_press",
 )
 
 

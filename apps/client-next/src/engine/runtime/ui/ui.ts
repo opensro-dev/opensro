@@ -426,6 +426,14 @@ import { textAllowed } from "@/engine/foundation/ui/character-create";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { compositeItemCaption, compositeItemLayout, createCompositeItemHud } from "./hud/composite-item-hud";
 import { createUniqueRankHud } from "./hud/unique-rank-hud";
+import {
+	createServerEventHud,
+	gaugeRatio,
+	gaugeText,
+	SERVER_EVENT_ART,
+	SERVER_EVENT_TEXT_COLOR,
+	serverEventLayout
+} from "./hud/server-event-hud";
 import { createSroMacroHud, MACRO_ID, macroAcquiredSkills } from "./hud/sro-macro-hud";
 import { drawSroMacro, type MacroPaint } from "./hud/sro-macro-window";
 import { createMarketHud, MARKET_BAG_FIRST_SLOT, MARKET_HOTKEY_VK } from "./hud/market-hud";
@@ -1644,6 +1652,8 @@ export function createUi( ports: UiPorts ) {
 	const compositeItemHud = createCompositeItemHud();
 	// Port-only, not native: a unique kill's damage ranking (SRO_UNIQUE_DAMAGE_RANK).
 	const uniqueRankHud = createUniqueRankHud();
+	// The v1.696 client's Server Mission gauge (CNIFServerEvent, 0x34F2): native, no row.
+	const serverEventHud = createServerEventHud();
 	// Port-only, not native (#3907): the v1.696 SRO Macro windows (SRO_AUTO_MACRO).
 	const sroMacroHud = createSroMacroHud();
 	// Port-only, not native (SRO_CONSIGNMENT, #3529): the consignment market.
@@ -5501,6 +5511,8 @@ export function createUi( ports: UiPorts ) {
 		} else if ( id === "unique-rank-ok" || id === "unique-rank-close" ) {
 			uniqueRankHud.close();
 			dirty = true;
+		} else if ( id === "server-event-close" ) {
+			serverEventHud.close();
 		} else if ( id.startsWith( MACRO_ID ) || id === "sro-macro-close" ) {
 			const game = view.gameplay;
 			const commands = sroMacroHud.click(
@@ -10515,6 +10527,12 @@ export function createUi( ports: UiPorts ) {
 				phase === "world" &&
 				uniqueRankHud.reconcile( next.gameplay, experimental.state().saved.uniqueDamageRank )
 			) dirty = true;
+			if ( phase === "signed-out" || phase === "character-select" ) serverEventHud.reset();
+			if ( phase === "world" ) {
+				const before = serverEventHud.shown();
+				serverEventHud.reconcile( next.gameplay?.serverEventGauge );
+				if ( serverEventHud.shown() !== before ) dirty = true;
+			}
 			// Port-only (#3907): the macro windows close with the row or the world.
 			if ( sroMacroHud.state().window !== "none" ) {
 				sroMacroHud.reconcile(
@@ -23122,6 +23140,48 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			// CIFEventGuide::UpdateAcademy (6660F0): sound only on hidden -> shown.
 			if ( academyVisible && !academyWasVisible ) sound( "quest" );
 			academyWasVisible = academyVisible;
+			// The v1.696 client's Server Mission gauge (server-event-hud.ts),
+			// drawn once its v1.696 art is here.
+			const serverEvent = worldVisible ? serverEventHud.shown() : null;
+			if ( serverEvent ) {
+				const frameArt = SERVER_EVENT_ART + "wind.png";
+				paths.push( frameArt );
+				if ( resources.has( frameArt ) ) {
+					const at = serverEventLayout( w, hudCorner ),
+						ratio = gaugeRatio( serverEvent.count, serverEvent.goal );
+					image( at.frame, frameArt );
+					image( at.snow, SERVER_EVENT_ART + "snow.png" );
+					if ( ratio > 0 ) {
+						image(
+							[ at.gauge[0], at.gauge[1], at.gauge[2] * ratio, at.gauge[3] ],
+							SERVER_EVENT_ART + "gage.png",
+							white,
+							[ 0, 0, ratio, 1 ]
+						);
+					}
+					quads.push(
+						...text.quads(
+							gaugeText( serverEvent.count, serverEvent.goal ),
+							at.text,
+							full,
+							SERVER_EVENT_TEXT_COLOR,
+							{
+								hAlign: 1,
+								vAlign: 1
+							}
+						)
+					);
+					const id = "server-event-close",
+						states = [ "close", "close_focus", "close_press" ].map( face =>
+							SERVER_EVENT_ART + face + ".png"
+						),
+						wanted = states[pressed === id && hover === id ? 2 : hover === id ? 1 : 0]!;
+					paths.push( ...states );
+					image( at.close, resources.has( wanted ) ? wanted : states[0]! );
+					blocks.push( at.frame );
+					controls.push( { id, label: "", rect: at.close, kind: "button" } );
+				}
+			}
 			if ( worldVisible && game?.academy ) {
 				const academy = game.academy,
 					level = game.progression?.level ?? roster.find( c => c.name === next.session?.character )?.level;

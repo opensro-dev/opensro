@@ -865,6 +865,9 @@ export interface GameplayState extends MoverPublication {
 	// Port-only (#3163): the cargo's stars and the gold short of the
 	// next star, published with the star answer under SRO_TRADE_TIERS.
 	readonly tradeProgress?: { readonly stars: number; readonly gap: number; };
+	// The Server Mission the v1.696 client's CNIFServerEvent shows (native:
+	// a later native client's window), set by 0x34F2 (server-event.ts).
+	readonly serverEventGauge?: { readonly id: number; readonly count: number; readonly goal: number; };
 	readonly eventGroups?: Readonly<Record<number, number>>;
 	readonly eligibility?: { readonly gm: boolean; readonly pcRoomEvent: boolean; };
 	// Port-only: a GM's compact console catalogues, resent until the UI
