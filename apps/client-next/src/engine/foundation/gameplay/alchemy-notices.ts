@@ -18,6 +18,13 @@ The Reinforce page refuses a drop locally with the same category 0x12
 table (62B6D0 calls CGInterface_ShowSystemNotification(0x12, code)), so
 its refusals come from here too (reinforcePageNotice).
 
+A stone refused with code 2 (the item already holds its most magic
+options: alchemy/stones.go magicLimit) has no row in that table, so the
+original says nothing and the stone looks dead. The port names the reason
+with the game's own UIIT_MSG_AVATAR_MAGICOPTION_ADD_ERORR text, on by
+default: a missing message is a presentation defect, not a rule (owner
+2026-11-21).
+
 ===========================================================================
 */
 import { constantNativeNotice } from "./native-notice";
@@ -35,6 +42,13 @@ const COMPOUND_NOTICE_CATEGORY = 0x17;
 const ALCHEMY_REFUSED = 2;
 // 7503D0's code that the window shows as a failed roll, not as a notice.
 const MAGIC_STONE_FAILED_ROLL = 0x23;
+// The server's "no room for another magic option" refusal; silent natively.
+const STONE_OPTIONS_FULL = 2;
+const STONE_OPTIONS_FULL_NOTICE: SystemNotice = {
+	key: "UIIT_MSG_AVATAR_MAGICOPTION_ADD_ERORR",
+	value: 0,
+	nativeType: 0
+};
 // 62B6D0's local refusals on the empty Reinforce page: anything but
 // reinforceable equipment (62B801), and a fortress hammer (62B7C8).
 export const REINFORCE_LOAD_EQUIP_FIRST = 0x15;
@@ -60,6 +74,7 @@ export function alchemyNotice( opcode: number, payload: Uint8Array ): SystemNoti
 	if ( payload.length !== 2 || payload[0] !== ALCHEMY_REFUSED ) return null;
 	const code = payload[1]!;
 	if ( opcode === ALCHEMY_STONE_RESULT_OPCODE && code === MAGIC_STONE_FAILED_ROLL ) return null;
+	if ( opcode === ALCHEMY_STONE_RESULT_OPCODE && code === STONE_OPTIONS_FULL ) return STONE_OPTIONS_FULL_NOTICE;
 	return constantNativeNotice( ALCHEMY_NOTICE_CATEGORY, code );
 }
 
