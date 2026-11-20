@@ -24,6 +24,7 @@ const {
 	renewalGoodsCells,
 	renewalGoodsRect,
 	renewalMallOrigin,
+	renewalNameLayout,
 	renewalPopupRect,
 	renewalRailRect,
 	renewalSubTabRect,
@@ -377,6 +378,21 @@ test("a catalogue missing a control the view draws is refused by name, and the H
 	}
 	assert.equal( warned.length, 2 );
 	assert.notEqual( optionalRenewalMall( catalogueFile() ), null );
+});
+
+test("a card name keeps two lines in its 26-pixel box, the rest joined onto the second", () => {
+	// The live build allowed one line: the font's full line (over 13 px)
+	// fitted the 26 px box once, so "Magic stone of Astral(Lvl.1)" lost the
+	// part that tells the stones apart.
+	const two = renewalNameLayout( [ "Magic stone of", "Astral(Lvl.1)" ], 26 );
+	assert.deepEqual( two.lines, [ "Magic stone of", "Astral(Lvl.1)" ] );
+	assert.equal( two.pitch, 13 );
+	assert.deepEqual( renewalNameLayout( [ "Cat Summon Scroll" ], 26 ).lines, [ "Cat Summon Scroll" ] );
+	assert.deepEqual(
+		renewalNameLayout( [ "A very long", "premium name", "that goes on" ], 26 ).lines,
+		[ "A very long", "premium name that goes on" ]
+	);
+	assert.deepEqual( renewalNameLayout( [], 26 ).lines, [] );
 });
 
 test("an absent catalogue decodes to null, a foreign one throws", () => {

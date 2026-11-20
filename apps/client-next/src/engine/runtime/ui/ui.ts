@@ -193,7 +193,8 @@ import {
 	RENEWAL_GOODS_PER_PAGE,
 	RENEWAL_MALL_HEIGHT,
 	RENEWAL_MALL_WIDTH,
-	renewalMallOrigin
+	renewalMallOrigin,
+	renewalNameLayout
 } from "@/engine/foundation/ui/renewal-mall";
 import { renewalMallPictures, renewalMallView } from "./hud/renewal-mall-view";
 import {
@@ -997,6 +998,10 @@ const MALL_NOTICE_FRAME = ROOT + "interface/mall/mall_communicate.png";
 // A disabled renewal mall button's picture: the later art has no disable
 // face for every button, so the base face is drawn dimmed.
 const RENEWAL_DISABLED = [ 0.5, 0.5, 0.5, 1 ] as const;
+// How far below its box a card name's second line may draw: the font's
+// descenders (g, p, y) under a 13-pixel pitch. The price row starts 7
+// pixels below the box.
+const RENEWAL_NAME_DESCENT = 4;
 const PARTS = frameParts();
 // The Contributor login prompt's copy (port-only, not native; owner
 // 2026-11-14): the client has no text rows for it, so hudCopy serves
@@ -27478,23 +27483,28 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								const icon = iconPath( op.icon );
 								if ( icon ) image( op.rect, icon );
 							} else if ( op.kind === "text" && op.wrap ) {
-								// A card's name: broken by the drawn runs' own widths, as
-								// many lines as the box holds from its top, the last cut
-								// with "..." when more remain. The box never overflows.
-								const lineHeight = Math.max( 1, text.extentHeight( 0 ) );
-								const most = Math.max( 1, Math.floor( op.rect[3] / lineHeight ) );
-								const lines = textLines( op.value, op.rect[2], value => text.run( value ).width );
-								const shown = lines.length > most ?
-									[ ...lines.slice( 0, most - 1 ), lines.slice( most - 1 ).join( " " ) ] :
-									lines;
-								shown.forEach( ( line, index ) => {
+								// A card's name: broken by the drawn runs' own widths into
+								// the box's two lines (renewalNameLayout), the second cut
+								// with "..." when more remain. Never wider than the box; the
+								// clip lets the second line's descenders finish below it.
+								const name = renewalNameLayout(
+									textLines( op.value, op.rect[2], value => text.run( value ).width ),
+									op.rect[3]
+								);
+								const nameClip: UiRect = [
+									op.rect[0],
+									op.rect[1],
+									op.rect[2],
+									op.rect[3] + RENEWAL_NAME_DESCENT
+								];
+								name.lines.forEach( ( line, index ) => {
 									const lineRect: UiRect = [
 										op.rect[0],
-										op.rect[1] + index * lineHeight,
+										op.rect[1] + index * name.pitch,
 										op.rect[2],
-										lineHeight
+										name.pitch
 									];
-									quads.push( ...text.quads( line, lineRect, op.rect, op.color, {
+									quads.push( ...text.quads( line, lineRect, nameClip, op.color, {
 										fontIndex: 0,
 										hAlign: op.hAlign,
 										vAlign: 0,

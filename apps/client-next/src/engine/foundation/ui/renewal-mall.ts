@@ -472,6 +472,33 @@ export function renewalGoodsCells(
 	return cells;
 }
 
+// A goods card's name box (GDR_RENEWAL_ITEM_MALL_ITEM_NAME, a 130x26
+// CIFTextBox) holds two lines; a name needing more ends the second with
+// "..." where it is drawn.
+export const RENEWAL_NAME_LINES = 2;
+
+/*
+================
+renewalNameLayout
+
+A card name's drawn lines and their pitch: lines is the name already
+broken at the box's width (text-lines.ts textLines); the box's height
+shares out between RENEWAL_NAME_LINES lines, so two lines fit even where
+the font's full line is taller than half the box. Lines past the last
+are joined onto it, which the renderer then cuts with "...".
+================
+*/
+export function renewalNameLayout(
+	lines: readonly string[],
+	height: number
+): { readonly lines: readonly string[]; readonly pitch: number; } {
+	const most = RENEWAL_NAME_LINES;
+	const shown = lines.length > most ?
+		[ ...lines.slice( 0, most - 1 ), lines.slice( most - 1 ).join( " " ) ] :
+		[ ...lines ];
+	return { lines: shown, pitch: Math.max( 1, Math.floor( height / most ) ) };
+}
+
 /*
 ================
 renewalBadgeArt
