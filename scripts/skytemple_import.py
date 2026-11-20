@@ -743,7 +743,7 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 			later_gate_tables,
 			tables.table_rows((native_text_root / "teleportdata.txt").read_bytes()),
 			{row[1] for row in tables.table_rows(current["teleportdata.txt"]) if len(row) > 1},
-			{row[1] for row in tables.table_rows(current["teleportbuilding.txt"]) if len(row) > 1},
+			variant_gates.gate_building_taken(current["teleportbuilding.txt"], text_root, CHARACTER_SHARD, allocated),
 			d_arrival(found, fields),
 		)
 		merged_gates, gate_summary = variant_gates.merge_gate_tables(

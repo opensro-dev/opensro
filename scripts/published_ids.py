@@ -145,6 +145,20 @@ def occupied_objects(text_root, own=()):
 
 
 # ================
+# taken_objects
+#
+# The object ids a new object must not take: occupied_objects, and every
+# released id (the pin), whose rows a later step of the build may add. A
+# gate import that numbered its buildings past its own table alone put a
+# Sky Temple gate on a fox pet's id, and the gate buildings sat on the
+# released Halloween avatars' ids (#4004). A gate import that rewrites its
+# buildings passes "teleportbuilding.txt" in own and adds its own set.
+# ================
+def taken_objects(text_root, own=()):
+	return occupied_objects(text_root, own) | set(published(OBJECTS).values())
+
+
+# ================
 # shared_objects
 #
 # id -> codes for every object id two rows of the tree at text_root hold.

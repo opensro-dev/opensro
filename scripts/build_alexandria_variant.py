@@ -568,8 +568,7 @@ def add_gates(vsro_root, native, out):
 		codes += variant_gates.TEMPLE_GATE_CODES
 	# The ids the buildings must not take: every object row of the trees,
 	# and every released id, whose items later steps add (the pin).
-	taken = published_ids.occupied_objects(native / textdata) | published_ids.occupied_objects(out / textdata)
-	taken |= set(published_ids.published(published_ids.OBJECTS).values())
+	taken = published_ids.occupied_objects(native / textdata) | published_ids.taken_objects(out / textdata)
 	merged, summary = variant_gates.merge_gate_tables(
 		tables, vsro, codes=codes, level_cap=level_cap, flatten=variant_gates.TEMPLE_GATE_CODES, taken=taken
 	)

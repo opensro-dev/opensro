@@ -170,6 +170,19 @@ class GateTests(unittest.TestCase):
 		self.assertEqual(gates["GATE_SD1"], buildings["STORE_SD_GATE1"])
 		self.assertEqual(gates["GATE_SD2"], "27754")
 
+	def test_a_later_gate_import_steps_over_every_other_object(self):
+		# r203r: the Sky Temple gate took max(teleportbuilding) + 1, a fox pet's id.
+		with tempfile.TemporaryDirectory() as scratch:
+			root = Path(scratch)
+			(root / "characterdata_5000.txt").write_bytes(table([["1", "51301", "COS_P_FOX_001"]]))
+			(root / "characterdata_160000.txt").write_bytes(table([["1", "60000", "MOB_OWN_OLD"]]))
+			(root / "itemdata_5000.txt").write_bytes(table([["1", "700", "ITEM_X"]]))
+			(root / "teleportbuilding.txt").write_bytes(table([["1", "900", "STORE_OWN_OLD"]]))
+			taken = variant_gates.gate_building_taken(
+				table([["1", "950", "STORE_KEPT"]]), root, "characterdata_160000.txt", {"MOB_NEW": 51400}
+			)
+		self.assertEqual(taken, {"51301", "700", "950", "51400"})
+
 	def test_gates_links_buildings_and_texts_are_added_to_the_native_tables(self):
 		native, vsro = self.tables()
 		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)

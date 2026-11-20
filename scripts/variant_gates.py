@@ -87,6 +87,23 @@ def by_ids(raw):
 
 
 # ================
+# gate_building_taken
+#
+# The ids, as strings, a later gate import's buildings must step over:
+# its teleportbuilding table as it stands (its own earlier rows already
+# stripped, so a rebuild keeps its chain), every other object of the tree
+# and the pin (published_ids.taken_objects, its own character shard left
+# out), and the characters it just allocated, which its shard holds only
+# once written. Numbered against teleportbuilding alone, the Sky Temple
+# gate took the id a fox pet held (#4004).
+# ================
+def gate_building_taken(buildings_raw, text_root, character_shard, allocated):
+	held = published_ids.taken_objects(text_root, (character_shard, "teleportbuilding.txt"))
+	held |= by_ids(buildings_raw) | {int(identity) for identity in allocated.values()}
+	return {str(identity) for identity in held}
+
+
+# ================
 # gate_buildings
 #
 # A gate building is an object: its id shares one space with every item
