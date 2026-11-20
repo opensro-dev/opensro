@@ -154,6 +154,42 @@ class WorldLayerImportTest(unittest.TestCase):
 			self.assertEqual(list(files), ["97/168.o2"])
 
 	# ================
+	# test_a_held_member_is_tagged_not_copied
+	#
+	# A region imported whole from the later map (Baghdad) holds the
+	# pumpkin already, at its uid and position: the import tags that
+	# record and adds no second copy, and a native record that only
+	# shares a uid is never tagged.
+	# ================
+	def test_a_held_member_is_tagged_not_copied(self):
+		with tempfile.TemporaryDirectory() as scratch:
+			out = Path(scratch)
+			map_root = out / "Map_extracted"
+			(map_root / "97").mkdir(parents=True)
+			# uid 7 is the later pumpkin itself; uid 9 a native wall where
+			# the later file places the Christmas tree.
+			(map_root / "97" / "168.o2").write_bytes(o2([(5, record(2, 7)), (0, record(1, 9, x=50.0))]))
+			(map_root / "object.ifo").write_bytes((
+				"JMXVOBJI1000\n3\n"
+				'00000 0x00000001 "res\\bldg\\china\\jangan\\gate.bsr"\n'
+				'00001 0x00000001 "res\\bldg\\china\\jangan\\wall.bsr"\n'
+				'00002 0x00000000 "res\\etc\\halloween\\halloween_pu03.bsr"\n'
+			).encode("cp949"))
+			blob, index = later_archive()
+			summary, files, _ = layers.import_layers(blob, index, out)
+			placed = [r for records in layers.read_o2((map_root / "97" / "168.o2").read_bytes()) for r in records]
+			pumpkins = [r for r in placed if r[0] == 2]
+			self.assertEqual(len(pumpkins), 1, "the held pumpkin is not copied again")
+			self.assertEqual(summary["recordsTagged"], 1)
+			table = json.loads((map_root / layers.OUTPUT_NAME).read_text(encoding="utf-8"))
+			tagged = {(region, uid): layer for region, uid, layer in table["placements"]}
+			self.assertEqual(tagged[(JANGAN_REGION, 7)], 5)
+			# The tree is copied in under a free uid; the wall stays untagged.
+			self.assertNotIn((JANGAN_REGION, 9), tagged)
+			self.assertEqual(len(placed), 3)
+			self.assertEqual(list(files), ["97/168.o2"])
+
+	# ================
 	# test_rerun_and_off_leave_no_stale_record
 	# ================
 	def test_rerun_and_off_leave_no_stale_record(self):

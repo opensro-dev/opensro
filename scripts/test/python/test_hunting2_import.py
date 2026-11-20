@@ -230,6 +230,76 @@ class Hunting2ImportTest(unittest.TestCase):
 					with self.assertRaises(ValueError):
 						hunting2.add_monsters(v1696, native, output)
 
+	# ================
+	# standing_row
+	#
+	# A tree row (an earlier layer's shard) for a kind the set places.
+	# ================
+	def standing_row(self, text_root, code, identity, level, grade=0):
+		row = ["0"] * 120
+		row[1], row[2], row[15], row[57] = str(identity), code, str(grade), str(level)
+		(text_root / "characterdata_7000.txt").write_bytes(utf16([row]))
+
+	# ================
+	# test_a_kind_the_tree_holds_is_placed_on_its_own_row
+	#
+	# r203: 49 of the set's 71 kinds already stand in the tree; staging
+	# them again collided with their published ids.
+	# ================
+	def test_a_kind_the_tree_holds_is_placed_on_its_own_row(self):
+		with tempfile.TemporaryDirectory() as root:
+			v1696, native, output, text_root, pins = self.fixture(Path(root))
+			self.standing_row(text_root, "MOB_TQ_INSIDE", 300, 80)
+			with mock.patch.object(jupiter, "archive_pins", return_value=pins):
+				with mock.patch.dict(os.environ, {"SRO_HUNTING2": "on"}):
+					summary = hunting2.add_monsters(v1696, native, output)
+			shard = (text_root / hunting2.CHARACTER_SHARD).read_bytes().decode("utf-16")
+			self.assertNotIn("MOB_TQ_INSIDE", shard)
+			self.assertIn("MOB_SD_RESTAGED", shard)
+			self.assertNotIn("MOB_TQ_INSIDE", summary["characters"])
+			population = json.loads((text_root / hunting2.FIELD_FILE).read_text(encoding="utf-8"))
+			placed = [row["Codename"] for row in population["Rows"]]
+			self.assertEqual(placed.count("MOB_TQ_INSIDE"), 2)
+			self.assertEqual(placed.count("MOB_SD_RESTAGED"), 1)
+
+	# ================
+	# test_a_tree_kind_outside_the_window_refuses
+	#
+	# The server admits a nest by its kind's row (admitHunting2); a tree
+	# row outside the window would place a nest the server drops.
+	# ================
+	def test_a_tree_kind_outside_the_window_refuses(self):
+		with tempfile.TemporaryDirectory() as root:
+			v1696, native, output, text_root, pins = self.fixture(Path(root))
+			self.standing_row(text_root, "MOB_TQ_INSIDE", 300, 30)
+			with mock.patch.object(jupiter, "archive_pins", return_value=pins):
+				with mock.patch.dict(os.environ, {"SRO_HUNTING2": "on"}):
+					with self.assertRaisesRegex(ValueError, "MOB_TQ_INSIDE"):
+						hunting2.add_monsters(v1696, native, output)
+
+
+	# ================
+	# test_a_tomb_overlay_kind_is_placed_on_its_row_while_the_tomb_is_on
+	#
+	# r203g: five of the set's MOB_TQ_* kinds are rows of the Qin-Shi
+	# overlay the server appends while SRO_QINSHI_TOMB is on (the shard
+	# default); staging them too made the bake refuse a duplicate
+	# codename. Off, the overlay stands nowhere and the kind is staged.
+	# ================
+	def test_a_tomb_overlay_kind_is_placed_on_its_row_while_the_tomb_is_on(self):
+		overlay = ["0"] * 120
+		overlay[1], overlay[2], overlay[15], overlay[57] = "14808", "MOB_TQ_INSIDE", "0", "91"
+		for tomb, staged in (("on", False), ("off", True)):
+			with tempfile.TemporaryDirectory() as root:
+				v1696, native, output, text_root, pins = self.fixture(Path(root))
+				with mock.patch.object(jupiter, "archive_pins", return_value=pins), 						mock.patch.object(hunting2.shard_switch, "overlay_rows", return_value=[overlay]):
+					with mock.patch.dict(os.environ, {"SRO_HUNTING2": "on", hunting2.QINSHI_TOMB_FLAG: tomb}):
+						hunting2.add_monsters(v1696, native, output)
+				shard = (text_root / hunting2.CHARACTER_SHARD).read_bytes().decode("utf-16")
+				self.assertEqual("MOB_TQ_INSIDE" in shard, staged, tomb)
+				population = json.loads((text_root / hunting2.FIELD_FILE).read_text(encoding="utf-8"))
+				self.assertEqual([row["Codename"] for row in population["Rows"]].count("MOB_TQ_INSIDE"), 2, tomb)
+
 
 if __name__ == "__main__":
 	unittest.main()

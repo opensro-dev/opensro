@@ -284,6 +284,10 @@ export function createMovement(
 	// approach: a skill press's run-up, whose goal the server derives from
 	// combat spacing and navigation (sameApproachWalk); since: its start.
 	let predicted: { from: Pose; to: Pose; approach: boolean; since: number; } | null = null;
+	// The local player's abnormal state makes the server drop every move
+	// (holdPrediction): commands are still sent, nothing walks before the
+	// server's answer.
+	let predictionHeld = false;
 	// A walk stopped where a cast command left it (holdForCast): the held
 	// pose, when the hold lapses, and the server walk to follow if it does.
 	let castHold: {
@@ -1729,7 +1733,7 @@ request
 				slide: false,
 				sourceOwner: owner
 			};
-			const clipped = navigation.available( pose ) ? to : null;
+			const clipped = !predictionHeld && navigation.available( pose ) ? to : null;
 			const frame = { opcode: OP_PREDICTED_MOVE, payload };
 			send( frame );
 			record( {
@@ -1769,6 +1773,22 @@ request
 		},
 		/*
 ================
+holdPrediction
+
+Port-only, not native: the native client never predicts a walk, it walks
+on the server's answer. While the local player is asleep, rooted,
+petrified or stunned the server's move handler drops every command
+(action PlayerMovementBlocked), so a walk predicted then snapped back to
+where the player stood. Held, request and direct still send their command
+and predict nothing, and no run-up is predicted: only the server's answer
+walks, as on the native client.
+================
+		*/
+		holdPrediction( held: boolean ) {
+			predictionHeld = held;
+		},
+		/*
+================
 predictApproach
 
 Start a walk the server drives (a pickup run-up: 0x72CD answered by a
@@ -1779,7 +1799,7 @@ walk (native); a refusal ends it (endPrediction).
 ================
 		*/
 		predictApproach( value: Pose, now: number, approach = false ): boolean {
-			if ( !pose || life === "dead" || walk || pending.size || predicted ) return false;
+			if ( !pose || life === "dead" || walk || pending.size || predicted || predictionHeld ) return false;
 			advanceTo( now );
 			const current = pose,
 				to = admitPose( value ),
@@ -1912,7 +1932,7 @@ over complete navigation coverage; otherwise the receipt starts the walk.
 			} );
 			nextId = id;
 			beginTransition( "input" );
-			const leg = directionSegment( pose, heading, now, "client", 1, true );
+			const leg = predictionHeld ? null : directionSegment( pose, heading, now, "client", 1, true );
 			pending.set( id, {
 				to: leg?.to ?? directionLegEnd( pose, heading ),
 				from: pose,

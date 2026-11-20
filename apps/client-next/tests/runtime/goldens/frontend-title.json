@@ -4,6 +4,8 @@
  "semantics": {
   "loading": false,
   "loadingVisible": false,
+  "marketButton": false,
+  "marketOpen": false,
   "message": "Disconnected from the server.",
   "title": "Silkroad disconnected",
   "titleCredit": true

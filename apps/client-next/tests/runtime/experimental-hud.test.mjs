@@ -204,7 +204,7 @@ test("six tabs group every preference once, in the spec's sections", () => {
 	// joined Sound and connection; 65: Plus +7 notices left once success
 	// notices began at +8 (#3681). Retail typos are fixed in the reviewed
 	// English table (englishCorrections.json), not by a row.
-	assert.equal( keys.length, 65 );
+	assert.equal( keys.length, 66 );
 	assert.deepEqual( [ ...keys ].sort(), Object.keys( OFF ).sort() );
 	const kinds = EXPERIMENTAL_TABS.flatMap( experimentalRows ).filter( row => row.parent );
 	assert.deepEqual(

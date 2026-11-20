@@ -266,6 +266,27 @@ export function equipmentAmbientParticles(
 
 /*
 ================
+requireAmbientSockets
+
+A branch must hold every bone its resource's ambient set names. A worn
+avatar resource with no attach bone is no branch (branch null): the v1.696
+Saytan attachment is a whole animated Bip02 rig with its own tail bones,
+which no branch here can hold, so its set is published (equipmentAmbient
+Particles) and placed by no branch, as before #3936. Any other resource
+without the bone refuses: a garment's set names its own private bones.
+================
+*/
+export function requireAmbientSockets( source, branch, modifiers, avatar ) {
+	if ( branch === null && avatar ) return;
+	for ( const entry of modifiers.flatMap( m => m.entries ) ) {
+		if ( !branch?.nodes.some( n => n.name === entry.boneName ) ) {
+			throw Error( "Missing native ambient particle socket " + source + ":" + entry.boneName );
+		}
+	}
+}
+
+/*
+================
 publishEquipmentParticleMetadata
 
 ABC680 links the private hierarchy; A981A0 searches its markers for skill
@@ -324,13 +345,7 @@ export async function publishEquipmentParticleMetadata( dress, vsroRoot = vsroIt
 						};
 					}
 					if ( ambient.has( source ) ) {
-						for ( const entry of ambient.get( source ).flatMap( m => m.entries ) ) {
-							if ( !branch?.nodes.some( n => n.name === entry.boneName ) ) {
-								throw Error(
-									"Missing native ambient particle socket " + source + ":" + entry.boneName
-								);
-							}
-						}
+						requireAmbientSockets( source, branch, ambient.get( source ), record.avatar );
 					}
 					cache.set( source, branch );
 				}

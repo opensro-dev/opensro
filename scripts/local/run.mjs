@@ -78,7 +78,12 @@ const localEnvPath = path.join( configDir, "local.env" );
 const devAccountPath = path.join( configDir, "dev-account.env" );
 const exeSuffix = process.platform === "win32" ? ".exe" : "";
 
-const vitePort = 5180;
+// The browser client's port when local.env names none (LOCAL_CLIENT_PORT).
+// The Agent's own default origins name this port, so a run on it sets
+// no origin list.
+const DEFAULT_CLIENT_PORT = 5180;
+const MIN_CLIENT_PORT = 1024;
+const MAX_CLIENT_PORT = 65535;
 const readyTimeoutMs = 300_000;
 const readyPollMs = 400;
 const stopTimeoutMs = 30_000;
@@ -152,6 +157,47 @@ localSetting
 */
 function localSetting( settings, key, fallback ) {
 	return settings.local.get( key ) ?? fallback;
+}
+
+/*
+================
+clientPort
+
+The port Vite serves the client on: LOCAL_CLIENT_PORT in local.env,
+else 5180. One run at a time still: the Agent and GameWorld ports and
+the shared world are the same whatever the client port.
+================
+*/
+function clientPort( settings ) {
+	const text = localSetting( settings, "LOCAL_CLIENT_PORT", String( DEFAULT_CLIENT_PORT ) );
+	const port = Number( text );
+	if ( !Number.isInteger( port ) || port < MIN_CLIENT_PORT || port > MAX_CLIENT_PORT ) {
+		throw new Error( `LOCAL_CLIENT_PORT=${text} is not a port from ${MIN_CLIENT_PORT} to ${MAX_CLIENT_PORT}` );
+	}
+	return port;
+}
+
+/*
+================
+agentOriginsEnvironment
+
+The Agent's browser origins for this run, as the environment it gets.
+The client calls the Agent through Vite's /api proxy, which keeps the
+page's Origin, so a client on another port needs that port admitted.
+On the default port the Agent keeps its own defaults (nothing is set);
+on another port it admits that port's two loopback origins. A list the
+settings file or the environment already names always wins.
+================
+*/
+function agentOriginsEnvironment( settings, port ) {
+	const named = settingOrEnvironment( settings, "SRO_AGENT_ALLOWED_ORIGINS", "" );
+	if ( named !== "" ) {
+		return { SRO_AGENT_ALLOWED_ORIGINS: named };
+	}
+	if ( port === DEFAULT_CLIENT_PORT ) {
+		return {};
+	}
+	return { SRO_AGENT_ALLOWED_ORIGINS: `http://127.0.0.1:${port},http://localhost:${port}` };
 }
 
 /*
@@ -257,7 +303,7 @@ async function doctor( settings, verbose ) {
 			[ "Agent", portOf( agentAddr ) ],
 			[ "GameWorld transport", portOf( shard.transportUrl ) ],
 			[ "GameWorld control", portOf( shard.controlUrl ) ],
-			[ "Vite", vitePort ]
+			[ "Vite", clientPort( settings ) ]
 		];
 		for ( const [label, port] of ports ) {
 			check(
@@ -327,7 +373,7 @@ provisions a fresh one.
 async function resetWorld( settings ) {
 	const shard = readCatalog( settings );
 	const agentAddr = localSetting( settings, "LOCAL_AGENT_ADDR", "127.0.0.1:8787" );
-	for ( const port of [ portOf( agentAddr ), portOf( shard.transportUrl ), vitePort ] ) {
+	for ( const port of [ portOf( agentAddr ), portOf( shard.transportUrl ), clientPort( settings ) ] ) {
 		if ( !await portFree( port ) ) {
 			console.error( `pnpm local --reset: port ${port} is in use; stop the running game first.` );
 			process.exit( 1 );
@@ -404,6 +450,7 @@ async function run( settings ) {
 	provision();
 	const identity = await prepareIdentity( shard );
 	const agentAddr = localSetting( settings, "LOCAL_AGENT_ADDR", "127.0.0.1:8787" );
+	const vitePort = clientPort( settings );
 
 	const agent = startChild( "agent", path.join( binDir, `sro-agent${exeSuffix}` ), [], {
 		cwd: serverRoot,
@@ -417,7 +464,8 @@ async function run( settings ) {
 			SRO_AGENT_API_ADDR: agentAddr,
 			SRO_NOMAD_IDENTITY_ISSUER: identity.issuer,
 			SRO_NOMAD_JWKS_URL: `${identity.issuer}/jwks.json`,
-			SRO_NOMAD_NAMESPACE: "local"
+			SRO_NOMAD_NAMESPACE: "local",
+			...agentOriginsEnvironment( settings, vitePort )
 		},
 		settings
 	} );
@@ -443,7 +491,7 @@ async function run( settings ) {
 		},
 		settings
 	} );
-	const vite = startVite();
+	const vite = startVite( vitePort );
 
 	const children = [ agent, gameworld, vite ];
 	const state = { stopping: false, consoleStop: false, stopReason: null, failed: null };
@@ -649,10 +697,10 @@ Node with apps/client-next as root (its vite.config owns the port and
 the /api proxy; the flags mirror its dev script). Going through the
 pnpm shim instead would make the child a launcher that can exit ahead
 of the server on Windows and orphan the port holder, so the runner
-starts the process that actually holds port 5180.
+starts the process that actually holds the client port.
 ================
 */
-function startVite() {
+function startVite( vitePort ) {
 	const require = createRequire( path.join( repoRoot, "package.json" ) );
 	const viteBin = path.join( path.dirname( require.resolve( "vite/package.json" ) ), "bin", "vite.js" );
 	const child = spawn(
@@ -893,10 +941,11 @@ function hostPortOf( url ) {
 	return `${parsed.hostname}:${parsed.port}`;
 }
 
-// The stop announcement is importable so its test runs without a
-// stack (the pre-boot checks are preboot.mjs); the runner itself
+// The stop announcement and the client port rules are importable so
+// their tests run without a stack (the pre-boot checks are
+// preboot.mjs); the runner itself
 // starts only when this file is the program.
-export { stopAnnouncement };
+export { agentOriginsEnvironment, clientPort, stopAnnouncement };
 
 if ( process.argv[1] && path.resolve( process.argv[1] ) === fileURLToPath( import.meta.url ) ) {
 	main().catch( error => {

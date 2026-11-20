@@ -2785,6 +2785,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/ui/hud/sro-macro-window.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": [
+				"quads"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/market.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts",
 			"functions": [

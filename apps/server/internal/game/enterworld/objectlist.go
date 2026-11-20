@@ -27,6 +27,10 @@ type NpcSpawnConfig struct {
 	// Roster is the immutable shipped npcpos/characterdata projection. An
 	// enabled production composition must provide a non-empty roster.
 	Roster []simulation.NpcDef
+	// WorldNpcs stand only in their world definition's layers, never in
+	// the field roster (port-only Muhan arena NPCs, simulation/
+	// muhan_npcs.go). The action runtime publishes and resolves them.
+	WorldNpcs []simulation.WorldNpc
 	// Look, when set, dresses one NPC as another reference for a window
 	// (port-only, not native; simulation/npc_looks.go). The bootstrap
 	// resolves it into Looks once the roster is loaded.
@@ -128,6 +132,14 @@ func (c NpcSpawnConfig) NpcRefObjSnapshot() []RefObjRow {
 	roster := c.roster()
 	if look, ok := c.Looks.Look(); ok {
 		roster = append(append(make([]simulation.NpcDef, 0, len(roster)+1), roster...), look)
+	}
+	// A world NPC can stream to any session that enters its world, and the
+	// client seeds its mirror once per session, so its row rides here too.
+	if len(c.WorldNpcs) > 0 {
+		roster = append(make([]simulation.NpcDef, 0, len(roster)+len(c.WorldNpcs)), roster...)
+		for _, worldNpc := range c.WorldNpcs {
+			roster = append(roster, worldNpc.Npc)
+		}
 	}
 	rows := make([]RefObjRow, 0, len(roster))
 	seen := make(map[uint32]bool)

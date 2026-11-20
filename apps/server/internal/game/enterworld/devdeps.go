@@ -170,6 +170,15 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			)
 		}
 	}
+	if len(npcSpawns.WorldNpcs) == 0 {
+		// Port-only (#3314): the Muhan arenas' managers and change NPCs
+		// stand in their arena worlds while SRO_MUHAN is on.
+		var err error
+		npcSpawns.WorldNpcs, err = simulation.LoadMuhanArenaNpcs(textdataDir, monster.MuhanEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
+	}
 	if npcSpawns.Enabled {
 		if err := simulation.ValidateNpcRoster(npcSpawns.Roster); err != nil {
 			return nil, fmt.Errorf("bootstrap: invalid NPC roster: %w", err)
@@ -287,11 +296,23 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap muhan waves: %w", err)
 		}
-		// Port-only (#3314): the arenas' manager and change NPCs join
-		// their wave worlds while the same switch is on.
-		template, err = monster.AppendMuhanNPCs(template, textdataDir, monster.MuhanEnabled())
-		if err != nil {
-			return nil, fmt.Errorf("bootstrap: %w", err)
+		// Before the second hunting grounds: five of their kinds are the
+		// tomb overlay's MOB_TQ_* rows while the tomb is on (the build
+		// places them there, hunting2_import.standing_characters), so the
+		// refs must stand when their nests resolve (sro-catalogue's order).
+		if monster.QinShiTombFromEnv() {
+			// Port-only, not native: Qin-Shi Emperor Tomb Floor 1-4
+			// monster refs and spawn nests (monster/qinshi_tomb.go).
+			template, err = template.WithQinShiTomb(textdataDir)
+			if err != nil {
+				return nil, fmt.Errorf("bootstrap: %w", err)
+			}
+		} else if sookarena.Enabled(os.Getenv(sookarena.Env)) {
+			// Port-only: arena encounters need cave actors, not cave nests or doors.
+			template, err = template.WithQinShiArenaRefs(textdataDir)
+			if err != nil {
+				return nil, fmt.Errorf("arena cave references: %w", err)
+			}
 		}
 		// Port-only (#3270): the second hunting grounds' population
 		// joins the default world while its switch is on.
@@ -323,20 +344,6 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		template, err = appendFortressStructures(template, textdataDir, paths.StructureZones)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
-		}
-		if monster.QinShiTombFromEnv() {
-			// Port-only, not native: Qin-Shi Emperor Tomb Floor 1-4
-			// monster refs and spawn nests (monster/qinshi_tomb.go).
-			template, err = template.WithQinShiTomb(textdataDir)
-			if err != nil {
-				return nil, fmt.Errorf("bootstrap: %w", err)
-			}
-		} else if sookarena.Enabled(os.Getenv(sookarena.Env)) {
-			// Port-only: arena encounters need cave actors, not cave nests or doors.
-			template, err = template.WithQinShiArenaRefs(textdataDir)
-			if err != nil {
-				return nil, fmt.Errorf("arena cave references: %w", err)
-			}
 		}
 		template, err = WithMonsterSummonReferences(template, skills)
 		if err != nil {
