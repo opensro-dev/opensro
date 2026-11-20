@@ -20,6 +20,7 @@ import unittest
 from pathlib import Path
 
 import build_alexandria_variant as variant  # noqa: E402
+import variant_gates  # noqa: E402
 import import_vsro_alexandria as stage1  # noqa: E402
 import pharaoh_temple as temple  # noqa: E402
 from test_build_alexandria_variant import building, gate, link, table, text  # noqa: E402
@@ -140,7 +141,7 @@ class TempleGateTests(unittest.TestCase):
 		]
 		for at in (2, 3):
 			gates[at][5] = "-32752"
-			gates[at][variant.TELEPORT_WORLD_COLUMN] = "60"
+			gates[at][variant_gates.TELEPORT_WORLD_COLUMN] = "60"
 		vsro = {
 			"teleportdata.txt": table(gates),
 			"teleportbuilding.txt": table([
@@ -158,14 +159,14 @@ class TempleGateTests(unittest.TestCase):
 		return native, vsro
 
 	def test_the_four_gates_are_opt_in_and_named_once(self):
-		self.assertEqual(variant.TEMPLE_GATE_CODES, temple.GATE_CODES)
+		self.assertEqual(variant_gates.TEMPLE_GATE_CODES, temple.GATE_CODES)
 		self.assertEqual(len(set(temple.GATE_CODES)), 4)
-		self.assertFalse(set(temple.GATE_CODES) & set(variant.GATE_CODES), "temple gates are opt-in")
-		self.assertFalse(set(temple.GATE_CODES) & set(variant.TOMB_GATE_CODES))
+		self.assertFalse(set(temple.GATE_CODES) & set(variant_gates.GATE_CODES), "temple gates are opt-in")
+		self.assertFalse(set(temple.GATE_CODES) & set(variant_gates.TOMB_GATE_CODES))
 
 	def test_each_desert_gate_links_to_its_temple_gate_and_back_at_level_105(self):
 		native, vsro = self.tables()
-		merged, summary = variant.merge_gate_tables(
+		merged, summary = variant_gates.merge_gate_tables(
 			native, vsro, codes=self.CODES, level_cap=110, flatten=self.CODES)
 		self.assertEqual(summary["links"], 4)
 		self.assertEqual(summary["buildings"], 2, "the two walk-in gates have no object")
@@ -175,10 +176,10 @@ class TempleGateTests(unittest.TestCase):
 
 	def test_the_world_column_is_flattened_to_the_persistent_world(self):
 		native, vsro = self.tables()
-		merged, summary = variant.merge_gate_tables(
+		merged, summary = variant_gates.merge_gate_tables(
 			native, vsro, codes=self.CODES, level_cap=110, flatten=self.CODES)
 		added = {r[2]: r for r in stage1.table_rows(merged["teleportdata.txt"]) if r[1] in {"171", "172", "173", "174"}}
-		self.assertEqual({code: row[variant.TELEPORT_WORLD_COLUMN] for code, row in added.items()},
+		self.assertEqual({code: row[variant_gates.TELEPORT_WORLD_COLUMN] for code, row in added.items()},
 			{code: "1" for code in self.CODES})
 		self.assertEqual(summary["worldsFlattened"], list(self.CODES))
 		# The destination region survives: the Temple's dungeon region 0x8010.
@@ -186,14 +187,14 @@ class TempleGateTests(unittest.TestCase):
 
 	def test_a_gate_not_named_in_flatten_keeps_its_authored_world(self):
 		native, vsro = self.tables()
-		merged, summary = variant.merge_gate_tables(native, vsro, codes=self.CODES, level_cap=110)
+		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=self.CODES, level_cap=110)
 		added = {r[2]: r for r in stage1.table_rows(merged["teleportdata.txt"]) if r[1] == "173"}
-		self.assertEqual(added["GATE_TEMPLE_MERCHANT_HUNTER_GATE"][variant.TELEPORT_WORLD_COLUMN], "60")
+		self.assertEqual(added["GATE_TEMPLE_MERCHANT_HUNTER_GATE"][variant_gates.TELEPORT_WORLD_COLUMN], "60")
 		self.assertNotIn("worldsFlattened", summary)
 
 	def test_the_native_cap_clamps_the_entry_level_like_every_other_gate(self):
 		native, vsro = self.tables()
-		merged, _ = variant.merge_gate_tables(native, vsro, codes=self.CODES, level_cap=90, flatten=self.CODES)
+		merged, _ = variant_gates.merge_gate_tables(native, vsro, codes=self.CODES, level_cap=90, flatten=self.CODES)
 		first = next(r for r in stage1.table_rows(merged["teleportlink.txt"]) if r[1:3] == ["171", "173"])
 		self.assertEqual(first[6:9], ["1", "90", "999"])
 

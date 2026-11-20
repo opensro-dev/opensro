@@ -51,7 +51,7 @@ not one of GATE_CODES and the merge never appends it. The later link rows carry 
 trailing columns the v1.150 table has no place for; they sit outside
 every condition triple the port evaluates, so rows project to the
 native 21 columns and the merge's own condition rules
-(build_alexandria_variant.translate_link) clamp or drop what it
+(variant_gates.translate_link) clamp or drop what it
 cannot evaluate.
 
 Identities are the source's own unless one already stands in the
@@ -103,7 +103,7 @@ def renumbered(source_ids, current_ids):
 # teleportdata the Jangan gate is read from; current_ids and current_building_ids are the identities the variant's
 # tables already use (the source identities stand unless one collides).
 # Returns (tables, codes) with tables mapping the three table names and
-# "text" to encoded bytes, ready for variant.merge_gate_tables.
+# "text" to encoded bytes, ready for variant_gates.merge_gate_tables.
 # ================
 def prepare_gates(later, native_data, current_ids, current_building_ids):
 	data_by_code = {row[2]: row for row in later["teleportdata.txt"] if len(row) >= TELEPORT_COLUMNS}

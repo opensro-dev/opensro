@@ -80,6 +80,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import alexandria_npcs as characters  # noqa: E402
 import build_alexandria_variant as variant  # noqa: E402
+import variant_gates  # noqa: E402
 import cap110_monsters as monsters  # noqa: E402
 import cap110_skill_effects as effects  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
@@ -627,8 +628,8 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			{row[1] for row in tables.table_rows(current["teleportdata.txt"]) if len(row) > 1},
 			{row[1] for row in tables.table_rows(current["teleportbuilding.txt"]) if len(row) > 1},
 		)
-		merged_gates, gate_summary = variant.merge_gate_tables(
-			current, gate_tables, codes=gate_codes, level_cap=variant.gate_level_cap())
+		merged_gates, gate_summary = variant_gates.merge_gate_tables(
+			current, gate_tables, codes=gate_codes, level_cap=variant_gates.gate_level_cap())
 		for dropped in gate_summary.get("droppedConditions", []):
 			tables.log(f"arabia gates: link {dropped['from']} -> {dropped['to']}: condition kind "
 				f"{dropped['kind']} dropped; the v1.150 server has no evaluator for it")
