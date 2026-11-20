@@ -17,7 +17,7 @@ live owner is an error.
 
 ===========================================================================
 */
-import { CHARACTER_ACTORS } from "@/engine/foundation/animation/character-budget";
+import { RENDERED_ACTORS } from "@/engine/foundation/animation/character-budget";
 
 /*
 ================
@@ -82,7 +82,7 @@ export function createParticleQuery( device: GPUDevice, format: GPUTextureFormat
 		): Promise<readonly boolean[]> {
 			if (
 				disposed || pending || !points.length || points.length % 4 ||
-				points.length > CHARACTER_ACTORS * 4 || !points.every( Number.isFinite ) ||
+				points.length > RENDERED_ACTORS * 4 || !points.every( Number.isFinite ) ||
 				matrix.length !== 16 || !matrix.every( Number.isFinite )
 			) throw Error( "Invalid particle query" );
 			pending = true;
@@ -93,7 +93,7 @@ export function createParticleQuery( device: GPUDevice, format: GPUTextureFormat
 				if ( !storage ) {
 					storage = device.createBuffer( {
 						label: "particle-query-points",
-						size: CHARACTER_ACTORS * 16,
+						size: RENDERED_ACTORS * 16,
 						usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
 					} );
 					uniform = device.createBuffer( {
@@ -103,15 +103,15 @@ export function createParticleQuery( device: GPUDevice, format: GPUTextureFormat
 					} );
 					resolve = device.createBuffer( {
 						label: "particle-query-resolve",
-						size: CHARACTER_ACTORS * 8,
+						size: RENDERED_ACTORS * 8,
 						usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC
 					} );
 					read = device.createBuffer( {
 						label: "particle-query-read",
-						size: CHARACTER_ACTORS * 8,
+						size: RENDERED_ACTORS * 8,
 						usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
 					} );
-					queries = device.createQuerySet( { type: "occlusion", count: CHARACTER_ACTORS } );
+					queries = device.createQuerySet( { type: "occlusion", count: RENDERED_ACTORS } );
 					binding = device.createBindGroup( {
 						layout: pipeline.getBindGroupLayout( 0 ),
 						entries: [
