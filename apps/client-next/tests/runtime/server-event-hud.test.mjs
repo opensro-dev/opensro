@@ -1,11 +1,11 @@
 /*
 ===========================================================================
 
-server-event-hud.test.mjs - the Server Mission gauge widget (port-only)
+server-event-hud.test.mjs - the Server Mission gauge widget (v1.696 native)
 
 The later client's CNIFServerEvent at its nifserverevent.2dt rects,
 anchored to the right edge; its gauge fill and "count/goal" text; shown
-only with the Experimental row on, hidden by its close button until the
+whenever the server sends a mission, hidden by its close button until the
 mission goes away. The production UI's draw is server-event-hud-ui.test.mjs
 (asset-backed).
 
@@ -17,7 +17,6 @@ import { test } from "node:test";
 const { serverEventLayout, gaugeRatio, gaugeText, createServerEventHud } = await import(
 	"../../src/engine/runtime/ui/hud/server-event-hud.ts"
 );
-const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 
 const GAUGE = { id: 30001, count: 59, goal: 118 };
 
@@ -54,33 +53,28 @@ test("the gauge fills count over goal, never past either end", () => {
 	assert.equal( gaugeText( 7, 118 ), "7/118" );
 });
 
-test("the row decides; close hides it until the mission goes away", () => {
+test("a mission shows; close hides it until the mission goes away", () => {
 	const hud = createServerEventHud();
-	hud.reconcile( GAUGE, false );
+	hud.reconcile( undefined );
 	assert.equal( hud.shown(), null );
-	hud.reconcile( GAUGE, true );
+	hud.reconcile( GAUGE );
 	assert.deepEqual( hud.shown(), GAUGE );
 	hud.close();
 	assert.equal( hud.shown(), null );
-	hud.reconcile( { ...GAUGE, count: 60 }, true );
+	hud.reconcile( { ...GAUGE, count: 60 } );
 	assert.equal( hud.shown(), null, "a new count keeps it closed" );
-	hud.reconcile( undefined, true );
-	hud.reconcile( GAUGE, true );
+	hud.reconcile( undefined );
+	hud.reconcile( GAUGE );
 	assert.deepEqual( hud.shown(), GAUGE, "the next mission shows again" );
-});
-
-test("the option is off unless stored on", () => {
-	assert.equal( experimentalOptions( {} ).serverEventGauge, false );
-	assert.equal( experimentalOptions( { serverEventGauge: true } ).serverEventGauge, true );
 });
 
 test("a new login forgets the close; the same session keeps it", () => {
 	const hud = createServerEventHud();
-	hud.reconcile( GAUGE, true );
+	hud.reconcile( GAUGE );
 	hud.close();
-	hud.reconcile( GAUGE, true );
+	hud.reconcile( GAUGE );
 	assert.equal( hud.shown(), null );
 	hud.reset();
-	hud.reconcile( GAUGE, true );
+	hud.reconcile( GAUGE );
 	assert.deepEqual( hud.shown(), GAUGE );
 });

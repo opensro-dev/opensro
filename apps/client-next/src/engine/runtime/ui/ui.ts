@@ -1650,7 +1650,7 @@ export function createUi( ports: UiPorts ) {
 	const compositeItemHud = createCompositeItemHud();
 	// Port-only, not native: a unique kill's damage ranking (SRO_UNIQUE_DAMAGE_RANK).
 	const uniqueRankHud = createUniqueRankHud();
-	// Port-only, not native to v1.150: the later client's Server Mission gauge (0x34F2).
+	// The v1.696 client's Server Mission gauge (CNIFServerEvent, 0x34F2): native, no row.
 	const serverEventHud = createServerEventHud();
 	// Port-only, not native (#3907): the v1.696 SRO Macro windows (SRO_AUTO_MACRO).
 	const sroMacroHud = createSroMacroHud();
@@ -10528,10 +10528,7 @@ export function createUi( ports: UiPorts ) {
 			if ( phase === "signed-out" || phase === "character-select" ) serverEventHud.reset();
 			if ( phase === "world" ) {
 				const before = serverEventHud.shown();
-				serverEventHud.reconcile(
-					next.gameplay?.serverEventGauge,
-					experimental.state().saved.serverEventGauge
-				);
+				serverEventHud.reconcile( next.gameplay?.serverEventGauge );
 				if ( serverEventHud.shown() !== before ) dirty = true;
 			}
 			// Port-only (#3907): the macro windows close with the row or the world.

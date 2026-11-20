@@ -156,10 +156,6 @@ export interface ExperimentalOptions {
 	// in a window (unique-rank-hud.ts). Off unless turned on, so each
 	// player opts in.
 	readonly uniqueDamageRank: boolean;
-	// Port-only, not native to v1.150: the later client's Server Mission
-	// gauge (CNIFServerEvent, 0x34F2) during the winter event
-	// (server-event-hud.ts). Off unless turned on.
-	readonly serverEventGauge: boolean;
 	// Port-only, not native: holding V (UIIT_STT_USER_MOSTER_BLIND) also
 	// hides other players' pets and transports. The original hides only
 	// monsters and players (8602C0, 85E550): a COS draws through its owner
@@ -532,7 +528,6 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		breakNotices: record.breakNotices !== false,
 		highlightEventNotices: record.highlightEventNotices !== false,
 		uniqueDamageRank: enabled( "uniqueDamageRank" ),
-		serverEventGauge: enabled( "serverEventGauge" ),
 		vHidesCompanions: enabled( "vHidesCompanions" ),
 		dungeonCharacterPvs: record.dungeonCharacterPvs !== false,
 		fitWindowLabels: record.fitWindowLabels !== false,

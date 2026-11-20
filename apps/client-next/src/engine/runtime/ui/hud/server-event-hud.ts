@@ -1,16 +1,19 @@
 /*
 ===========================================================================
 
-server-event-hud.ts - the Server Mission gauge widget (port-only, not native)
+server-event-hud.ts - the Server Mission gauge widget (v1.696 native)
 
 The later v1.696 client's CNIFServerEvent (res_ui\nifserverevent.2dt):
 a 120x24 frame with a snow icon, an 80x4 gauge filled count/goal and the
 "%d/%d" text (0x00E1E940), and a close button. The client moves it 244 px
 left of the screen's right edge (0x0080F4E0: x = right - 0xF4), at the
 2dt's y. Here it sits under the minimap instead (port-only, the owner's
-ask: the native spot covers the pet portrait). v1.150 has no such window, so it shows only with the
-Experimental "Server Mission gauge" row on; its art is the v1.696
-interface/event/winter_count_* published by the later-client import.
+ask: the native spot covers the pet portrait). The window is the later
+native client's own, so it needs no Experimental row (owner rule: a later
+native client's feature is native): it shows whenever the server sends
+0x34F2, which it does only during the winter event (SRO_CHRISTMAS_EVENT).
+Its art is the v1.696 interface/event/winter_count_* published by the
+later-client import.
 
 The close button hides the window (0x00E1EB00); the client creates it
 again only when it does not exist, so a hidden window stays hidden while
@@ -113,13 +116,13 @@ export function createServerEventHud() {
 		================
 		reconcile
 
-		The worker's mission, shown with the row on unless the player
-		closed it; a gone mission forgets the close.
+		The worker's mission, shown unless the player closed it; a gone
+		mission forgets the close.
 		================
 		*/
-		reconcile( gauge: ServerEventGauge | undefined, enabled: boolean ) {
+		reconcile( gauge: ServerEventGauge | undefined ) {
 			if ( !gauge ) closed = false;
-			shown = gauge && enabled && !closed ? gauge : null;
+			shown = gauge && !closed ? gauge : null;
 		},
 		shown: () => shown,
 		/*
