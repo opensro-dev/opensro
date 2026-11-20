@@ -146,7 +146,7 @@ Matches companion.SkillDef.RoarRadiusMeters; includes effective skill bonuses.
 */
 export function petRoarRadius( tier: number, level: number ): number {
 	const steps = Math.max( 1, level ) - 1;
-	return tier === 1 ? 10 + steps : tier === 3 ? 30 + steps : 12 + steps * 0.4;
+	return tier === 1 ? 10 + steps : tier === 3 ? 39 + steps : 12 + steps * 0.4;
 }
 
 /*
@@ -337,7 +337,7 @@ export function petEffect( design: PetSkillDesign, value: number, effectiveLevel
 			return `Revives the owner with ${rank * 10}% HP and ${rank * 10}% lost EXP. ` +
 				`Shared revival cooldown: ${formatValue( 600 - (rank - 1) * 300 / 9 )} s.`;
 		}
-		const transfer = (design.option === 2 ? 10 : 20) + (rank - 1) * 10 / 9;
+		const transfer = Math.min( design.option * 10, design.value + design.valuePerLevel * (rank - 1) );
 		return `Transfers ${formatValue( transfer )}% of ${
 			design.option === 3 ? "owner/party" : "owner"
 		} HP damage to the bear.`;
@@ -499,7 +499,10 @@ export function petSkillTooltip(
 		add( "Skill points 1", points < 1 ? red : white );
 		if ( design.option > 1 ) {
 			const previous = petSkillDesign( design.id - 1 );
-			add( `${previous?.name ?? "Previous book"} ${design.maxLevel}`, prerequisiteMet ? white : red );
+			add(
+				`${previous?.name ?? "Previous book"} ${previous?.maxLevel ?? design.maxLevel}`,
+				prerequisiteMet ? white : red
+			);
 		}
 	}
 	if ( !skill.live ) add( "Unavailable", red );
@@ -640,7 +643,9 @@ function petSkillEffectLines( d: PetSkillDesign, value: number, rank: number ): 
 				"Revival limit: pet level +10",
 				...(d.option > 1 ?
 					[
-						`Damage shared with bear ${formatValue( (d.option === 2 ? 10 : 20) + (r - 1) * 10 / 9 )}%`,
+						`Damage shared with bear ${
+							formatValue( Math.min( d.option * 10, d.value + d.valuePerLevel * (r - 1) ) )
+						}%`,
 						"Transfer cap 20% bear HP/s; leaves 1 HP"
 					] :
 					[])

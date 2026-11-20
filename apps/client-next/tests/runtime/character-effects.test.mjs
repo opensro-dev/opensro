@@ -1760,7 +1760,7 @@ test("challenging roar follows the storyboard without changing the bear or repla
 	assert.equal( effects.appearance( bear.gid ).scale, 1, "roaring does not enlarge the bear" );
 	const rings = step( 1 ).filter( actor => actor.model.endsWith( "bear-roar-ring" ) );
 	assert.equal( rings.length, 3 );
-	assert.equal( Math.max( ...rings.map( actor => actor.scale ) ), 300, "full 30m reach at 1s" );
+	assert.equal( Math.max( ...rings.map( actor => actor.scale ) ), 390, "full 39m reach at 1s" );
 	assert.equal( step( 1.4 ).length, 0 );
 	assert.equal( step( 5 ).length, 0, "a persistent emote never replays" );
 	assert.equal( effects.appearance( bear.gid ).pointLight, undefined );
