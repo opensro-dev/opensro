@@ -239,17 +239,15 @@ def add_nasrun(vsro_root, native, output):
 
 		rows = select_rows(shared.read_item_tables(read_later))
 		codes = [row[items.CODENAME] for row in rows]
-		# Identities stand above every published row of the merged item
-		# tables (the variant's accumulated shards), as the gears stones'.
-		occupied = set()
 		for path in sorted(text_root.glob("itemdata*.txt")):
 			if sro_pk2.fold_ascii(path.name) in (ITEM_SHARD, "itemdata.txt"):
 				continue
 			for row in tables.table_rows(path.read_bytes()):
-				if len(row) > items.CODENAME and row[items.SERVICE] == "1":
-					occupied.add(int(row[items.IDENTITY]))
-					if row[items.CODENAME] in codes:
-						raise ValueError(f"Nasrun row {row[items.CODENAME]} already stands in the item tables")
+				if len(row) > items.CODENAME and row[items.SERVICE] == "1" and row[items.CODENAME] in codes:
+					raise ValueError(f"Nasrun row {row[items.CODENAME]} already stands in the item tables")
+		# Identities stand above every object row of the tree, items and
+		# characters alike (#3994).
+		occupied = published_ids.occupied_objects(text_root, (ITEM_SHARD,))
 		allocated = published_ids.allocate(published_ids.OBJECTS, occupied, codes, prior.get("items", {}))
 		staged = []
 		for row in rows:

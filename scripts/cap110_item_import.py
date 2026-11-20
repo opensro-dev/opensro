@@ -190,28 +190,6 @@ def copy_resource_closure(pending, native, output, archives):
 
 
 # ================
-# output_identities
-#
-# Items, characters and teleport buildings share one reference space, and
-# every importer of a build numbers above what it finds. So the output's
-# tables hold what the others already published: the rewards, honor, Nasrun,
-# pet and mall shards sit above the equipment. All of them are reserved;
-# own_shard is left out, because its importer rewrites it whole and its
-# marker retains its rows.
-# ================
-def output_identities(text_root, own_shard):
-	occupied = set()
-	if not text_root.is_dir():
-		return occupied
-	for path in text_root.iterdir():
-		name = path.name.lower()
-		if name == own_shard or not name.startswith(("itemdata_", "characterdata_", "teleportbuilding")):
-			continue
-		occupied.update(int(row[1]) for row in tables.table_rows(path.read_bytes()) if len(row) > 1 and row[1].isdigit())
-	return occupied
-
-
-# ================
 # add_items
 #
 # A successful marker owns exactly one generated shard. Off removes that
@@ -277,7 +255,7 @@ def add_items(vsro_root, native, output):
 		# A piece this build adds for the first time (the Roc's armour, when
 		# SRO_ROC turns on over a kept variant) numbers above every importer
 		# that ran after the equipment in an earlier build.
-		reserved = output_identities(output / TEXT_ROOT, items.OUTPUT_SHARD)
+		reserved = published_ids.occupied_objects(output / TEXT_ROOT, (items.OUTPUT_SHARD,))
 		# The Roc's set armour joins when the Roc range is built too (#3399
 		# step 5c): its pieces drop only from the Roc. Retired identities stay
 		# reserved across builds (merge_equipment).

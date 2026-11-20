@@ -83,6 +83,7 @@ import build_alexandria_variant as variant  # noqa: E402
 import cap110_monsters as monsters  # noqa: E402
 import cap110_skill_effects as effects  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
+import published_ids  # noqa: E402
 import skilldata_enc as skill_tables  # noqa: E402
 import sro_pk2  # noqa: E402
 from alexandria_map_tables import later_zone_rows, native_text_row, overview_box  # noqa: E402
@@ -560,7 +561,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		npc_refs = select_kinds(later, {place[0] for place in placements} - set(native_by_code), window=False)
 		all_refs = {**refs, **npc_refs}
 
-		occupied = {int(r[1]) for r in native_chars}
+		occupied = published_ids.occupied_objects(text_root, (CHARACTER_SHARD,))
 		allocated = monsters.allocate_characters(occupied, sorted(all_refs), prior.get("characters", {}))
 		for code, row in sorted(all_refs.items()):
 			row[1] = str(allocated[code])

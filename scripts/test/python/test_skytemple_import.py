@@ -507,7 +507,8 @@ class SkytempleImportTest(unittest.TestCase):
 
 			shard = read_rows(text / sky.CHARACTER_SHARD)
 			self.assertEqual(len(shard), 1)
-			self.assertEqual((shard[0][1], shard[0][2], len(shard[0])), ("101", "MOB_SKYTEMPLE_A_TEST", 120))
+			# Above every object row, the native gate building's 2094 too (#3994).
+			self.assertEqual((shard[0][1], shard[0][2], len(shard[0])), ("2095", "MOB_SKYTEMPLE_A_TEST", 120))
 			population = json.loads((text / sky.POPULATION_FILE).read_text())
 			self.assertEqual([row["RegionID"] for row in population["Rows"]], [21209, region_id(225, 92)])
 			gates = {row[2]: row for row in read_rows(text / "teleportdata.txt")}

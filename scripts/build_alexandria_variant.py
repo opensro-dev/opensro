@@ -66,6 +66,7 @@ from alexandria_map_tables import (  # noqa: E402
 )
 import import_vsro_alexandria as stage1  # noqa: E402
 import pharaoh_temple as temple  # noqa: E402
+import published_ids  # noqa: E402
 import sro_pk2  # noqa: E402
 import variant_settle  # noqa: E402
 import variant_stamp  # noqa: E402
@@ -694,6 +695,13 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		manifest["banditFortress"] = bandit_fortress
 	if hotan_fortress["enabled"]:
 		manifest["hotanFortress"] = hotan_fortress
+	# Items, characters and teleport buildings share one id space and the
+	# client keeps one object per id: a fox pet whose id a gears stone also
+	# held spawned as a ground item and disconnected players (#3994).
+	shared = published_ids.shared_objects(out / "Media_extracted" / stage1.TEXTDATA)
+	if shared:
+		sample = ", ".join(f"{identity} {'/'.join(codes)}" for identity, codes in sorted(shared.items())[:5])
+		raise ValueError(f"{len(shared)} object ids are held by two rows: {sample}")
 	write_atomically(variant / VARIANT_MANIFEST, (json.dumps(manifest, indent=2) + "\n").encode("utf-8"))
 	return manifest
 

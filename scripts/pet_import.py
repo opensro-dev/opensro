@@ -326,31 +326,6 @@ def later_tables_from_pk2(root):
 		return later_tables_from_media(media, tables.archive_index(media))
 
 
-# ================
-# output_reserved_ids
-#
-# The identities the staging tree already carries outside this source's
-# own shards: earlier pet sources wrote theirs there, and so did every
-# other importer sharing the build. This source's own shard is left out
-# because the pass rewrites it whole and the marker retains its rows.
-# The ids a release published are select_pets' pinned, whether or not
-# their importer has written its shard yet: run before the Arabia import,
-# a fresh pet took 18 of Arabia's published ids (r201's refused catalogue).
-# ================
-def output_reserved_ids(output, source):
-	text_root = Path(output) / TEXT_ROOT
-	own = {source["char_shard"].lower(), source["item_shard"].lower()}
-	reserved = set()
-	for pattern, column in (("characterdata_*.txt", CHAR_ID), ("itemdata_*.txt", items.IDENTITY)):
-		for path in text_root.glob(pattern):
-			if path.name.lower() in own:
-				continue
-			for row in tables.table_rows(path.read_bytes()):
-				if len(row) > column and row[column].isdigit():
-					reserved.add(int(row[column]))
-	return reserved
-
-
 def native_tables(native):
 	text_root = Path(native) / TEXT_ROOT
 	chars = [row for path in sorted(text_root.glob("characterdata_*.txt")) for row in tables.table_rows(path.read_bytes())]
@@ -555,7 +530,7 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 		char_rows, item_rows, report = select_pets(
 			native_chars, native_items, set(earlier_codes), later_chars, later_items,
 			previous=previous_targets(prior), missing=missing,
-			reserved_ids=output_reserved_ids(output, source), pinned=published_ids.published(published_ids.OBJECTS))
+			reserved_ids=published_ids.occupied_objects(Path(output) / TEXT_ROOT, (source["char_shard"], source["item_shard"])), pinned=published_ids.published(published_ids.OBJECTS))
 	if char_rows:
 		_merge_name_text(output, char_rows, item_rows, later_text, report)
 	report["_prior"] = prior
@@ -602,7 +577,7 @@ def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 	char_rows, item_rows, report = select_pets(
 		native_chars, native_items, set(earlier_codes), later_chars, later_items,
 		previous=previous_targets(prior), missing=missing,
-		reserved_ids=output_reserved_ids(output, ARCHIVE_SOURCE), pinned=published_ids.published(published_ids.OBJECTS))
+		reserved_ids=published_ids.occupied_objects(Path(output) / TEXT_ROOT, (ARCHIVE_SOURCE["char_shard"], ARCHIVE_SOURCE["item_shard"])), pinned=published_ids.published(published_ids.OBJECTS))
 	if char_rows:
 		_merge_name_text(output, char_rows, item_rows, later_text, report)
 		# The archive's resources join the staging tree at their pk2

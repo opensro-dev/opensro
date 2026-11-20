@@ -362,16 +362,14 @@ def add_honor_items(native, output):
 	remove_import(native, output, prior, marker, shard, manifest)
 	if not enabled():
 		return {"enabled": False}
-	rows, occupied = {}, set()
+	rows = {}
 	for path in sorted(text_root.glob("itemdata*.txt")):
 		if sro_pk2.fold_ascii(path.name) == MANIFEST:
 			continue
 		for row in tables.table_rows(path.read_bytes()):
 			if len(row) > items.CODENAME and row[items.SERVICE] == "1":
 				rows[row[items.CODENAME]] = row
-				occupied.add(int(row[items.IDENTITY]))
-	for path in text_root.glob("characterdata_*.txt"):
-		occupied |= {int(row[1]) for row in tables.table_rows(path.read_bytes()) if len(row) > 1 and row[1].isdigit()}
+	occupied = published_ids.occupied_objects(text_root, (ITEM_SHARD,))
 	paths = resinfo_paths(native, output)
 	glow_text = paths[shared.GLOW_TABLE][1].read_bytes().decode("latin1")
 	rare_text = paths[shared.RARE_TABLE][1].read_bytes().decode("latin1")

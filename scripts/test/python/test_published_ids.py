@@ -51,18 +51,63 @@ class PublishedIdsTest(unittest.TestCase):
 		self.assertEqual(held, {11})
 
 	# ================
-	# test_a_live_collision_is_kept_for_both_codes
+	# test_a_pinned_live_collision_stays_with_the_item
 	#
-	# r202 shipped five ids under a monster and a pet scroll at once; the
-	# scroll keeps its id though the monster's row is in the tree.
+	# r202 shipped five ids under a monster and a pet scroll at once, and
+	# the client keeps one object per id (#3994). The scroll a player can
+	# hold keeps the id; the monster leaves the pin and is numbered afresh.
 	# ================
-	def test_a_live_collision_is_kept_for_both_codes(self):
-		pinned = {"MOB_ARABIA_MUSTAFA": 50331, "ITEM_PRE_COS_P_TOGUIDOL_SCROLL": 50331}
-		got = published_ids.allocate(published_ids.OBJECTS, {50331}, ["ITEM_PRE_COS_P_TOGUIDOL_SCROLL"], {}, pinned)
-		self.assertEqual(got, {"ITEM_PRE_COS_P_TOGUIDOL_SCROLL": 50331})
-		# Any other kept id a row holds still refuses.
+	def test_a_pinned_live_collision_stays_with_the_item(self):
+		with tempfile.TemporaryDirectory() as folder:
+			path = Path(folder) / "pin.json"
+			pin = {"format": published_ids.PIN_FORMAT, "characters": {"MOB_ARABIA_MUSTAFA": 50331, "MOB_OTHER": 50330},
+				"items": {"ITEM_PRE_COS_P_TOGUIDOL_SCROLL": 50331}}
+			path.write_text(json.dumps(pin), encoding="utf-8")
+			saved = published_ids.os.environ[published_ids.PIN_VARIABLE]
+			published_ids.os.environ[published_ids.PIN_VARIABLE] = str(path)
+			try:
+				pinned = published_ids.published(published_ids.OBJECTS)
+				self.assertEqual(pinned, {"MOB_OTHER": 50330, "ITEM_PRE_COS_P_TOGUIDOL_SCROLL": 50331})
+				# Whichever importer runs first, the monster never takes 50331.
+				monsters = published_ids.allocate(published_ids.OBJECTS, set(), ["MOB_ARABIA_MUSTAFA"], {}, pinned)
+				self.assertEqual(monsters, {"MOB_ARABIA_MUSTAFA": 50332})
+				scrolls = published_ids.allocate(published_ids.OBJECTS, {50332}, ["ITEM_PRE_COS_P_TOGUIDOL_SCROLL"], {},
+					pinned)
+				self.assertEqual(scrolls, {"ITEM_PRE_COS_P_TOGUIDOL_SCROLL": 50331})
+				# Two items under one id has no holder to prefer, so it refuses.
+				pin["items"]["ITEM_TWIN"] = 50331
+				path.write_text(json.dumps(pin), encoding="utf-8")
+				with self.assertRaises(ValueError):
+					published_ids.published(published_ids.OBJECTS)
+			finally:
+				published_ids.os.environ[published_ids.PIN_VARIABLE] = saved
+		# A kept id another row of the tree holds still refuses.
 		with self.assertRaises(ValueError):
 			published_ids.allocate(published_ids.OBJECTS, {7}, ["A"], {}, {"A": 7})
+
+	# ================
+	# test_occupied_objects_reads_every_object_table
+	#
+	# #3994: the gears stones read the item tables alone and took the fox
+	# pets' character ids. Every object table counts; the asker's own
+	# shard and the manifests do not.
+	# ================
+	def test_occupied_objects_reads_every_object_table(self):
+		with tempfile.TemporaryDirectory() as folder:
+			root = Path(folder)
+			(root / "itemdata.txt").write_text("itemdata_5000.txt\n", encoding="utf-8")
+			(root / "itemdata_5000.txt").write_text("1\t10\tITEM_A\n", encoding="utf-8")
+			(root / "characterdata_130000.txt").write_text("1\t50853\tCOS_P_FOX_001\n", encoding="utf-8")
+			(root / "teleportbuilding.txt").write_text("1\t27751\tSTORE_GATE\n", encoding="utf-8")
+			(root / "itemdata_190000.txt").write_text("1\t50854\tITEM_STONE\n", encoding="utf-8")
+			(root / "skilldata_5000.txt").write_text("1\t99\tSKILL_X\n", encoding="utf-8")
+			self.assertEqual(published_ids.occupied_objects(root, ("ITEMDATA_190000.txt",)), {10, 50853, 27751})
+			stones = published_ids.allocate(published_ids.OBJECTS, published_ids.occupied_objects(root, ("itemdata_190000.txt",)),
+				["ITEM_STONE"], {}, {})
+			self.assertEqual(stones, {"ITEM_STONE": 50854})
+			self.assertEqual(published_ids.shared_objects(root), {})
+			(root / "itemdata_190000.txt").write_text("1\t50853\tITEM_STONE\n", encoding="utf-8")
+			self.assertEqual(published_ids.shared_objects(root), {50853: ["COS_P_FOX_001", "ITEM_STONE"]})
 
 	# ================
 	# test_equipment_keeps_released_ids_across_the_roc_flag

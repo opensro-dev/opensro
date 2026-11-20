@@ -56,6 +56,7 @@ import alexandria_npcs as characters  # noqa: E402
 import build_alexandria_variant as variant  # noqa: E402
 import cap110_monsters as monsters  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
+import published_ids  # noqa: E402
 import skytemple_import as sky  # noqa: E402
 import sro_pk2  # noqa: E402
 from alexandria_map_tables import later_zone_rows, native_text_row  # noqa: E402
@@ -395,7 +396,7 @@ def add_fortress(spec, native, output, source=None, closure=sky.copy_resource_cl
 		shipped_codes = {r[2] for r in shipped_chars if len(r) > 2}
 		refs = {code: characters.convert_character(later[code])
 			for code in needed if code not in shipped_codes}
-		occupied = {int(r[1]) for r in shipped_chars if len(r) > 1 and r[1].isdigit()}
+		occupied = published_ids.occupied_objects(text_root, (spec.character_shard,))
 		allocated = monsters.allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 		fallbacks = dict(spec.model_fallbacks)
 		for code, row in refs.items():

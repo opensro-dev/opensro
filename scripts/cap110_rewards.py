@@ -182,7 +182,7 @@ def convert_rows(selected, occupied, previous):
 # does not reserve the identities it is about to retain).
 # ================
 def occupied_identities(text_root, later_rows, own_shard=OUTPUT_SHARD):
-	return {int(row[items.IDENTITY]) for row in later_rows} | item_import.output_identities(text_root, own_shard)
+	return {int(row[items.IDENTITY]) for row in later_rows} | published_ids.occupied_objects(text_root, (own_shard,))
 
 
 # ================

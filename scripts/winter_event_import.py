@@ -270,9 +270,7 @@ def add_winter_items(native, output, read, archives, prior):
 	# Items and characters share one identity space (_RefObjCommon): the
 	# flake takes one no row of either table holds, this import's own
 	# monsters included.
-	occupied = {int(row[1]) for pattern in ("itemdata*.txt", "characterdata*.txt") for path in sorted(text_root.glob(pattern))
-		if path.name.lower() != ITEM_SHARD
-		for row in tables.table_rows(path.read_bytes()) if len(row) > 2 and row[0] == "1" and row[1].isdigit()}
+	occupied = published_ids.occupied_objects(text_root, (ITEM_SHARD,))
 	allocated = published_ids.allocate(published_ids.OBJECTS, occupied, [row[2] for row in rows], prior.get("items", {}))
 	for row in rows:
 		row[1] = str(allocated[row[2]])
