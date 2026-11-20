@@ -2674,6 +2674,17 @@
 		},
 		{
 			"consumer": "src/engine/runtime/ui/hud/map-tools.ts",
+			"provider": "src/engine/runtime/ui/hud/map-catalogues.ts",
+			"functions": [
+				"createMapCatalogues",
+				"dispose",
+				"guide",
+				"regions",
+				"step"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/map-catalogues.ts",
 			"provider": "src/engine/runtime/assets/assets.ts",
 			"functions": [
 				"available",
@@ -2782,6 +2793,13 @@
 			"provider": "src/engine/runtime/ui/text/text.ts",
 			"functions": [
 				"run"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/sro-macro-window.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": [
+				"quads"
 			]
 		},
 		{

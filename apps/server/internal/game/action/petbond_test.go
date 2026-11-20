@@ -83,7 +83,7 @@ func TestGuardianSharingTiersBudgetAndParty(t *testing.T) {
 			c.MissionInventory = nil
 			rt.AttackPetExpansion = true
 			skill := learnPetBook(t, c, 24+tier)
-			c.ActiveCOS.Training.Levels[skill.Index()] = 10
+			c.ActiveCOS.Training.Levels[skill.Index()] = skill.MaxLevel
 			near := nearbyCharacter(rt, c, 21, "bond-near", 50)
 			near.ActiveCOS = nil
 			rt.BindPetSession(testDivision, near, 2)

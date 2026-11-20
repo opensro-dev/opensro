@@ -20,8 +20,7 @@ TestCrowRechargeUsesHighestBook
 */
 func TestCrowRechargeUsesHighestBook(t *testing.T) {
 	_, clock, c, _, _ := tailwindFixture(t, 1)
-	skill := learnPetBook(t, c, 51)
-	c.ActiveCOS.Training.Levels[skill.Index()] = 10
+	learnPetBook(t, c, 51) // book III's only rank
 	row, _ := crowRechargeRow(c.ActiveCOS, clock.NowMs())
 	if row.RechargeMs != 900000 || row.ReadyAtMs != clock.NowMs()+900000 || row.Capacity != 3 || row.Charges != 1 {
 		t.Fatal("highest book recharge", row)
@@ -65,8 +64,7 @@ TestManaSpringActualRestorationBurst
 */
 func TestManaSpringActualRestorationBurst(t *testing.T) {
 	rt, clock, c, mob, key := tailwindFixture(t, 1)
-	skill := learnPetBook(t, c, 54)
-	c.ActiveCOS.Training.Levels[skill.Index()] = 10
+	learnPetBook(t, c, 54) // book III's only rank restores 30% of damage
 	c.Intellect = testInt64(3000)
 	c.CurrentMP = testInt64(1)
 	c.MissionInventory = nil

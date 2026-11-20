@@ -1,0 +1,12 @@
+buffLive
+buffValue
+buffWindowStartMs
+charId
+honorPoints
+joinLevel
+joinedAtMs
+kind
+reservedBuffs
+reservedBuffs[].donorCharId
+reservedBuffs[].points
+reservedBuffs[].windowStartMs

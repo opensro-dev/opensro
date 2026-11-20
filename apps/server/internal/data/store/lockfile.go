@@ -123,7 +123,7 @@ func claimAuthority(dir string, now time.Time) (func(), string, error) {
 	return releaseClaimFunc(key), warning, nil
 }
 
-// releaseClaimFunc builds the claim's release: drop the OS lock and
+// releaseClaimFunc builds the claim's release: release the lock and
 // forget the directory.
 func releaseClaimFunc(key string) func() {
 	return func() {
@@ -133,10 +133,29 @@ func releaseClaimFunc(key string) func() {
 		if file == nil {
 			return
 		}
-		_ = unlockFileExclusive(file)
-		_ = file.Close()
+		releaseLock(file)
 		delete(claims, key)
 	}
+}
+
+/*
+==================
+releaseLock
+
+The one clean release of an acquireLock handle. The pid payload is
+cleared while the OS lock is still held, then the lock drops: a clean
+release leaves no owner behind. Without the clear, the closed owner's
+pid outlives its lock, and while that process is still exiting the
+next opener reads it as a live writer and refuses - the canary standby
+takeover's crash on 2026-11-20 (r203), 83 ms after the old GameWorld's
+"shutdown: complete". A kill skips this and leaves the payload, which
+the dead-pid rule in acquireLock reclaims.
+==================
+*/
+func releaseLock(file *os.File) {
+	_ = rewriteLockedPayload(file, nil)
+	_ = unlockFileExclusive(file)
+	_ = file.Close()
 }
 
 /*

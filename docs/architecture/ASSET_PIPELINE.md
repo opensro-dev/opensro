@@ -69,6 +69,7 @@ client together as a data release.
 | `pnpm assets build world-outdoor -- --region=0x6a48 --force --jobs=1` | Rebuild one outdoor region |
 | `pnpm assets refresh <family>` | Re-publish one family into an existing tree (`pnpm task list --kind assets` lists them) |
 | `pnpm assets refresh delivery` | Regenerate the web manifest and stale precompressed sidecars |
+| `pnpm task assets:refresh:files -- <paths>` | Repack only the named published files (a rebaked `assets/data/teleportData.json`, a re-converted image) into the groups that hold them: seconds, where `repack` takes minutes. It packs, never produces: run the file's builder first. A JSON resolves to its packed `.json.gz` twin, derived again from the JSON. Write paths without the leading slash under Git Bash |
 | `pnpm assets repack` | Rebuild every pack from the published loose tree |
 | `pnpm assets gc` | Report asset-pack outputs the published index no longer uses; `-- --apply` soft-archives them to `temp/archives/` (publishers also do this after every index publish) |
 | `pnpm assets check integrity` | Verify pack manifests and artifacts |

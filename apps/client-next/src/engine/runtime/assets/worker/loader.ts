@@ -6,8 +6,10 @@ loader.ts - the asset worker's request dispatcher
 Receives load, cancel and install requests from the main thread. Each load
 reads verified bytes through the pack reader, decodes them for the
 requested kind (image, model, character, world, effects, navigation) and
-transfers the result back. Foreground loads hold one of four capacity
-slots; the background installer runs only while none is held.
+transfers the result back. Foreground loads hold one of the capacity
+slots foundation/assets/asset-slots.ts counts (four for the streams, one
+the interface lane always has); the background installer runs only while
+none is held.
 
 Demand and execution are separate counts. A cancellation is acknowledged
 ("released") when it is received: nothing is delivered for the id again
@@ -22,6 +24,7 @@ cancellation is admitted as the drain settles, never refused.
 
 import { decodeGuildCrest } from "@/engine/foundation/ui/guild-crest";
 import { assetRequestBudget } from "@/engine/foundation/assets/asset-budget";
+import { assetSlotsFree } from "@/engine/foundation/assets/asset-slots";
 import { prepareWorldScene, worldSceneTransfers } from "@/engine/foundation/rendering/world-scene";
 import { createNavigationResources } from "./navigation/navigation";
 import { decodeDxt1 } from "@/engine/foundation/assets/dds";
@@ -36,6 +39,7 @@ import { pngBytes, DECODED_IMAGE_BYTES } from "@/engine/foundation/assets/image-
 import { createWorldDecoder } from "./world/world";
 import { createModelDecoder } from "./model/model";
 import { AssetAbsentError, createPacks } from "./packs/packs";
+import { createPackMirror } from "@/engine/foundation/assets/pack-mirror";
 import { createBackgroundInstaller } from "./install";
 import { pageEntryBundle } from "@/engine/foundation/assets/page-entry";
 import { readBytes } from "@/engine/foundation/assets/read-bytes";
@@ -120,9 +124,9 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	// Demand can be cancelled immediately; execution holds capacity until its
 	// promise settles, including native decodes that AbortSignal cannot stop.
 	// pending maps every live demand (waiting or executing) to its controller;
-	// active counts only the executions holding a capacity slot.
+	// active maps only the executions holding a capacity slot to their request.
 	const pending = new Map<number, AbortController>();
-	const active = new Set<AbortController>();
+	const active = new Map<AbortController, Extract<AssetRequest, { kind: "load"; }>>();
 	// Demand admitted while every execution slot is held. A waiting entry
 	// owns nothing but its controller; it starts as an execution settles.
 	const waiting: {
@@ -312,6 +316,19 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		activeDownloads++;
 		markFetching();
 		const partial: PartialRead = { chunks: [], size: 0, whole: null };
+		// The desktop launcher's copy first, once and without retries: any
+		// failure there is the network's read to make (pack-mirror.ts). Its
+		// bytes are checked by their owners exactly as the network's are.
+		const mirrored = mirror.url( url );
+		if ( mirrored !== null ) {
+			try {
+				return await downloadAttempt( { url: mirrored, limit, signal, range, partial } );
+			} catch ( error ) {
+				signal.throwIfAborted();
+				mirror.missed( error );
+				forgetPartial( partial );
+			}
+		}
 		// failures counts the retries spent since the read last moved
 		// further; reached is the furthest byte any attempt kept.
 		let failures = 0, reached = 0;
@@ -572,6 +589,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		}
 		return response.headers.get( "etag" );
 	}
+	// The desktop launcher's local pack copy, set by the page (pack-mirror.ts).
+	const mirror = createPackMirror();
 	const packs = createPacks( download, activity, hdAvailability, packGone, liveManifestValidator );
 	// The texture variant this device is served (texture-variants.ts): the
 	// page answers once its device knows its features; native texture reads
@@ -619,16 +638,23 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	================
 	pump
 
-	Start waiting demand while an execution slot is free. Called when
-	demand arrives and whenever an execution settles; a cancelled waiter
-	is skipped (its demand already left with the acknowledgement).
+	Start waiting demand while an execution slot is free for its lane
+	(foundation/assets/asset-slots.ts, the rule the main thread admits by).
+	The oldest admissible waiter goes first, so an interface load passes
+	stream loads queued behind a draining cancellation. Called when demand
+	arrives and whenever an execution settles; a cancelled waiter is
+	dropped (its demand already left with the acknowledgement).
 	================
 	*/
 	function pump() {
-		while ( !disposed && waiting.length && active.size < 4 ) {
-			const next = waiting.shift()!;
+		while ( !disposed && waiting.length ) {
+			const index = waiting.findIndex( entry =>
+				entry.controller.signal.aborted || assetSlotsFree( entry.request.lane, active.values() ) > 0
+			);
+			if ( index < 0 ) return;
+			const next = waiting.splice( index, 1 )[0]!;
 			if ( next.controller.signal.aborted ) continue;
-			active.add( next.controller );
+			active.set( next.controller, next.request );
 			void load( next.request, next.controller );
 		}
 	}
@@ -1099,6 +1125,10 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			}
 			if ( request.kind === "hd-textures" ) {
 				packs.hdTextures( request.format );
+				return;
+			}
+			if ( request.kind === "pack-mirror" ) {
+				mirror.set( request.origin );
 				return;
 			}
 			if (

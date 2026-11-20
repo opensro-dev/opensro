@@ -35,6 +35,8 @@ export function createStallNetworkCategories(
 	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
 	base: string
 ) {
+	// Interface lane: loads only while the stall network window is open, so
+	// the player waits on it (#3977).
 	let load: CategoryLoad = { kind: "idle" };
 	return {
 		/*
@@ -56,10 +58,12 @@ export function createStallNetworkCategories(
 				}
 				return true;
 			}
-			if ( load.kind === "idle" && needed && assets.available() ) {
+			if ( load.kind === "idle" && needed && assets.available( "interface" ) ) {
 				load = {
 					kind: "loading",
-					id: assets.request( new URL( CATEGORY_URL, base ).href, CATEGORY_MAX_BYTES )
+					id: assets.request( new URL( CATEGORY_URL, base ).href, CATEGORY_MAX_BYTES, undefined, {
+						lane: "interface"
+					} )
 				};
 			}
 			return false;

@@ -366,6 +366,7 @@ session's held effects key (#2033).
 func (rt *Runtime) statModifierWritesFrom(division string, writes []paramkeeper.Write, c *enterworld.Character) []paramkeeper.Write {
 	writes = append(writes, rt.mostWantedWrites(c)...)
 	writes = append(writes, rt.jobSuitWrites(c)...)
+	writes = append(writes, rt.hwanWrites(c)...)
 	writes = append(writes, rt.wolfHowlWrites(division, c)...)
 	writes = append(writes, rt.wolfBloodWrites(division, c)...)
 	return append(writes, rt.penguinMagicWrites(division, c)...)

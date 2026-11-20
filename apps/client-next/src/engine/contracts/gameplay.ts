@@ -251,6 +251,17 @@ export type GameplayCommand =
 		readonly kind: "auto-potion-save";
 		readonly settings: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;
 	}
+	// Port-only (#3907): an SRO Macro switch or save (0x7554).
+	| {
+		readonly kind: "macro-switch";
+		readonly macro: import("@/engine/foundation/gameplay/sro-macro").MacroKind;
+		readonly on: boolean;
+	}
+	| {
+		readonly kind: "macro-save";
+		readonly macro: import("@/engine/foundation/gameplay/sro-macro").MacroKind;
+		readonly settings: import("@/engine/foundation/gameplay/sro-macro").MacroSettings;
+	}
 	| { readonly kind: "rebirth"; readonly choice: 1 | 2; }
 	// An arrow key's press or release (#1574): Up walks the facing, Left and
 	// Right turn it (arrow-keys.ts).
@@ -826,6 +837,10 @@ export interface GameplayState extends MoverPublication {
 	readonly uniqueDamageRank?: import("./unique-rank").UniqueDamageRank | null;
 	// Port-only most-wanted state of the local player (most-wanted.ts).
 	readonly mostWanted?: import("./most-wanted").MostWantedState;
+	// Port-only Blue Berserk level of the local player (hwan-level.ts); absent at 0.
+	readonly hwanLevel?: number;
+	// Port-only Blue Berserk level of every player told (hwan-level.ts), by object id.
+	readonly hwanLevels?: Readonly<Record<number, number>>;
 	// Port-only wolf skill tree of the pet window's wolf (pet-training.ts).
 	readonly petTraining?: PetTraining;
 	readonly arenaChest?: ArenaChest;
@@ -854,12 +869,18 @@ export interface GameplayState extends MoverPublication {
 	// Port-only (#3163): the cargo's stars and the gold short of the
 	// next star, published with the star answer under SRO_TRADE_TIERS.
 	readonly tradeProgress?: { readonly stars: number; readonly gap: number; };
+	// The Server Mission the v1.696 client's CNIFServerEvent shows (native:
+	// a later native client's window), set by 0x34F2 (server-event.ts).
+	readonly serverEventGauge?: { readonly id: number; readonly count: number; readonly goal: number; };
 	readonly eventGroups?: Readonly<Record<number, number>>;
 	readonly eligibility?: { readonly gm: boolean; readonly pcRoomEvent: boolean; };
 	// Port-only: a GM's compact console catalogues, resent until the UI
 	// acknowledges them so no first-publication race can lose the list.
 	readonly gmCatalog?: import("@/engine/foundation/gameplay/gm-command").GmCatalog;
 	readonly autoPotion?: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;
+	// Port-only (#3907): the SRO Macro settings the server replayed under
+	// SRO_AUTO_MACRO (sro-macro.ts); absent on a shard without it.
+	readonly sroMacro?: import("@/engine/foundation/gameplay/sro-macro").MacroSettings;
 	readonly storage?: import("@/engine/foundation/gameplay/storage-room").StorageRoom | null;
 	readonly playerModels?: readonly import("@/engine/foundation/gameplay/skin-change").PlayerModel[];
 	readonly job?: import("@/engine/foundation/gameplay/job-guild").LocalJob;

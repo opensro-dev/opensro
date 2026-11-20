@@ -739,6 +739,29 @@ useCooldown
 		present,
 		/*
 ================
+startAuthoredCooldown
+
+A limited use that ran without a bag item (a premium package's count job, the
+Energy of Life buff's charge) starts the cooldown its item's row authors, as an
+item-use answer starts a bag item's: the lane shows on every item that
+shares the group, in the bag and on the quick slots. Port-only for the Blue
+Berserk; nothing for an item without an authored cooldown.
+================
+		*/
+		startAuthoredCooldown( refObjId: number, now: number ) {
+			const fields = tooltipRefs.get( refObjId )?.fields ?? {};
+			const durationMs = fields.useCooldownDuration528 ?? 0;
+			if ( durationMs <= 0 ) return;
+			const group = fields.useCooldownGroup524 ?? 0;
+			itemCooldowns = [
+				...itemCooldowns.filter( row =>
+					row.category !== 18 || (group ? row.group !== group : !!row.group || row.refObjId !== refObjId)
+				),
+				{ category: 18, group, refObjId, startedAtMs: now, durationMs }
+			];
+		},
+		/*
+================
 objectRefs
 
 The summonable character references (refObjSnapshot) a summoner's
@@ -875,7 +898,7 @@ references
 bootstrap
 ================
 		*/
-		bootstrap( value: unknown ) {
+		bootstrap( value: unknown, receivedAtMs = 0 ) {
 			bindingMoves = [];
 			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
 			itemCooldowns = [];
@@ -897,6 +920,7 @@ bootstrap
 			const b = value as {
 				inventorySlotCount?: number;
 				equipmentSlotCount?: number;
+				itemCooldowns?: { group: number; remainingMs: number; }[];
 				refItemSnapshot?: {
 					icon?: string;
 					name?: string;
@@ -954,6 +978,25 @@ bootstrap
 				refs.set( r.refObjId, r.typeFlags );
 				if ( typeof r.name === "string" ) names.set( r.refObjId, r.name );
 				if ( typeof r.codename === "string" ) codenames.set( r.refObjId, r.codename );
+			}
+			// Item groups still cooling down at entry (a teleport re-enters the world):
+			// the server keeps refusing them, so the icons keep their sweep. The sweep's
+			// length is the group's authored duration; unknown, it is the time left.
+			for ( const row of b.itemCooldowns ?? [] ) {
+				if ( !Number.isInteger( row.group ) || !Number.isInteger( row.remainingMs ) || row.remainingMs <= 0 ) {
+					continue;
+				}
+				const authored = [ ...tooltipRefs.values() ].map( t =>
+					t.fields
+				).find( f => f.useCooldownGroup524 === row.group && (f.useCooldownDuration528 ?? 0) > 0 )
+					?.useCooldownDuration528 ?? 0;
+				const durationMs = Math.max( authored, row.remainingMs );
+				itemCooldowns = [ ...itemCooldowns, {
+					category: 18,
+					group: row.group,
+					startedAtMs: receivedAtMs - (durationMs - row.remainingMs),
+					durationMs
+				} ];
 			}
 			const next = new Map<number, InventoryItem>(), seenSlots = new Set<number>();
 			for ( const row of b.equipItems ?? [] ) {

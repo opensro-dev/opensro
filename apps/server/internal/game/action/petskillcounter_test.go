@@ -214,7 +214,7 @@ func TestPetSkillPreviewIncludesGear(t *testing.T) {
 	rt, _, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
 	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
 	rt.AttackPetExpansion = true
-	skill := learnPetBook(t, c, 24)
+	skill := learnPetBook(t, c, 23) // book II still has a next rank to preview
 	c.ActiveCOS.Training.Levels[skill.Index()] = 1
 	c.ActiveCOS.Training.Gear[2].RefObjID = companion.D.Gear[7].Items[2].ID
 	c.ActiveCOS.Training.Gear[2].Options[0] = companion.EncodeAffix(65, 2) // of the Bulwark: +2 Bear skills.

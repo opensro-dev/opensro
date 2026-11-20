@@ -59,8 +59,12 @@ const TYPE_MASK = 0xfffc;
 const RETURN_SCROLL_TYPE = 0x09ec; // 3/3/3/1
 const REVERSE_RETURN_TYPE = 0x19ec; // 3/3/3/3
 const RESURRECTION_TYPE = 0x36ec; // 3/3/13/6
+// Port-only (cap-110 Blue Berserk): the Energy of Life buff item ITEM_ETC_SECOND_HWAN, the
+// limited item whose use fills the Berserk gauge. The 1.188 client composes it through the
+// same package window; the v1.150 type table lacks it, so it is named here.
+const HWAN_CHARGE_TYPE = 0x40ec; // 3/3/1/8
 
-export type PremiumCommand = "return" | "reverse-return" | "resurrection";
+export type PremiumCommand = "return" | "reverse-return" | "resurrection" | "hwan-charge";
 
 /*
 ================
@@ -173,6 +177,8 @@ function commandItemType( command: PremiumCommand ): number {
 			return REVERSE_RETURN_TYPE;
 		case "resurrection":
 			return RESURRECTION_TYPE;
+		case "hwan-charge":
+			return HWAN_CHARGE_TYPE;
 	}
 }
 
@@ -245,6 +251,8 @@ export function commandOfType( typeFlags: number ): PremiumCommand | null {
 			return "reverse-return";
 		case RESURRECTION_TYPE:
 			return "resurrection";
+		case HWAN_CHARGE_TYPE:
+			return "hwan-charge";
 	}
 	return null;
 }

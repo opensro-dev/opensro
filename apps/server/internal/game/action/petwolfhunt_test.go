@@ -103,7 +103,7 @@ func TestWolfBloodHuntRealRendBonus(t *testing.T) {
 			}
 			normal, _ := damage(false)
 			boosted, charges := damage(true)
-			expected := normal + uint32(float64(normal)*float64(50+25*(tier-1))/100)
+			expected := normal + uint32(float64(normal)*[]float64{50, 75, 150}[tier-1]/100)
 			if boosted != expected || charges != 1 {
 				t.Fatalf("Rend normal=%d boosted=%d expected=%d charges=%d", normal, boosted, expected, charges)
 			}
@@ -153,7 +153,7 @@ func TestWolfBloodHuntRendGuardsAndBurst(t *testing.T) {
 	rt.wolfHuntRend(step, target, hit)
 	after, _ := rt.Monsters.Get(testDivision, near.Gid)
 	untouched, _ := rt.Monsters.Get(testDivision, clean.Gid)
-	if before.CurrentHP-after.CurrentHP != 50 || untouched.CurrentHP != clean.CurrentHP || step.state.wolf.huntHits != 0 {
+	if before.CurrentHP-after.CurrentHP != 75 || untouched.CurrentHP != clean.CurrentHP || step.state.wolf.huntHits != 0 {
 		t.Fatal("burst filtering/consumption", before.CurrentHP, after.CurrentHP)
 	}
 	rt.wolfHuntRend(step, target, hit)

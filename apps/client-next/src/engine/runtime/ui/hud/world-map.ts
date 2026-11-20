@@ -31,6 +31,7 @@ import {
 import { panelCloseId } from "@/engine/foundation/ui/panels";
 import { minimapSameFloor } from "@/engine/foundation/ui/minimap-floor";
 import { questMarkerTargets, rosterPositions } from "@/engine/foundation/ui/minimap-markers";
+import { questLocationTargets } from "@/engine/foundation/ui/quest-locations";
 import {
 	worldMapDemand,
 	expandedWorldMapOn,
@@ -48,6 +49,7 @@ import {
 } from "@/engine/foundation/ui/world-map";
 import { guideOverlay, guideRace } from "@/engine/foundation/ui/worldmap-guide";
 import { NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
+import { huntingPose } from "@/engine/foundation/gameplay/hunting";
 import { HUNTING_AREA_PREFIX, HUNTING_MONSTER_SIGN } from "@/engine/foundation/ui/hunting-guide";
 import { UNIQUE_NEST_SIGN } from "@/engine/foundation/ui/unique-nests";
 import { createHuntingGuideHud } from "./hunting-guide";
@@ -592,13 +594,26 @@ export function createWorldMapHud( options: MapHudOptions ) {
 						} );
 					}
 				}
+				// Port-only: the spot a quest tool is used at (quest-locations.ts).
+				for (
+					const spot of questLocationTargets( game?.quests, experimental.state().saved.questTrackerMarkers )
+				) {
+					if ( !minimapSameFloor( pose, spot, game ?? null ) ) continue;
+					mapMarkers.push( {
+						regionId: spot.regionId,
+						x: spot.x,
+						z: spot.z,
+						rotation: 0,
+						path: ROOT + "interface/worldmap/wmap_sign_questnpc.png"
+					} );
+				}
 				for ( const point of game?.huntingPoints ?? [] ) {
-					const live = next.entities.find( e => e.gid === point.gid ) ?? point;
+					const live = huntingPose( point, next.entities );
 					mapMarkers.push( {
 						regionId: live.regionId,
 						x: live.x,
 						z: live.z,
-						rotation: -point.angle * Math.PI * 2 / 65536,
+						rotation: -live.angle * Math.PI * 2 / 65536,
 						path: ROOT + "interface/worldmap/wmap_sign_huntingpoint.png"
 					} );
 				}

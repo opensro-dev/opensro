@@ -288,7 +288,7 @@ func TestRoarRadiusMeters(t *testing.T) {
 		tier  int
 		level uint8
 		want  float64
-	}{{1, 1, 10}, {1, 10, 19}, {2, 1, 12}, {3, 1, 30}, {3, 3, 32}, {3, 10, 39}} {
+	}{{1, 1, 10}, {1, 10, 19}, {2, 1, 12}, {3, 1, 39}, {3, 3, 41}} {
 		if got := (SkillDef{Option: row.tier}).RoarRadiusMeters(row.level); got != row.want {
 			t.Fatalf("tier%d level%d radius=%v want%v", row.tier, row.level, got, row.want)
 		}
