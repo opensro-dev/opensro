@@ -5,9 +5,13 @@ cursor.ts - the retail mouse cursor, presented by the browser
 
 Retail 0xA15AF0 uses SetCursor. Give the browser the extracted cursor and
 hotspot; it owns pointer presentation independently of game frames outside
-editor interaction. Admit the image on editor hover, before a click can
-focus it and before Windows can hide the native pointer. Keep that owner
-through focused editing/selection; never hand off on keys. The cursor files
+editor interaction. Admit the image when a press on an editor begins (its
+pointerdown), before the click can focus it and before Windows can hide
+the native pointer. Keep that owner through focused editing/selection;
+never hand off on keys. A pointer only passing over an editor keeps the
+browser's cursor: the image follows pointer events a frame behind it, and
+on hover that lag is all a player gets (owner 2026-11-20, the renewal
+mall's search bar). The cursor files
 are browser-loaded PNGs decoded from the native DIBs
 (scripts/extract_client_cursors.py): every browser draws a PNG cursor, and
 Safari drew no .cur at all (BUG-068). CCursorManager_SetVisible (A15A70)
@@ -138,10 +142,19 @@ export function createCursor() {
 	================
 	*/
 	function present( target: EventTarget | null = document.activeElement, hit?: Element | null ) {
-		// Focus is not the start of an editor gesture: pointer entry precedes it.
-		// Hit-test the current point rather than retaining a potentially removed UI
-		// element or trusting event.target while an element owns pointer capture.
-		const hovered = hit !== undefined ? hit : point ? document.elementFromPoint( point[0], point[1] ) : null;
+		// Focus is not the start of an editor gesture: the press precedes it.
+		// While the primary button is down, hit-test the current point rather
+		// than retaining a potentially removed UI element or trusting
+		// event.target while an element owns pointer capture. A pointer that
+		// only passes over an editor is not a gesture and needs no hit test.
+		const pressing = (mouseButtons & 1) !== 0;
+		const hovered = !pressing ?
+			null :
+			hit !== undefined ?
+			hit :
+			point ?
+			document.elementFromPoint( point[0], point[1] ) :
+			null;
 		const editing = visible && !!point && !document.hidden && typing.complete && typing.naturalWidth > 0 &&
 			(editable( target ) || editable( hovered ));
 		if ( editing ) {
