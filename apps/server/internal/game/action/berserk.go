@@ -89,7 +89,7 @@ func (rt *Runtime) HandleBerserk(division string, c *enterworld.Character, paylo
 		}
 
 		c.ModifyBerserkPoints(-5)
-		c.NativeBodyStatus, c.BodyStatusOwner, c.BerserkUntilMs = 1, 0, now+60000
+		c.NativeBodyStatus, c.BodyStatusOwner, c.BerserkUntilMs = 1, 0, now+berserkBaseMs+hwanBerserkExtraMs(c, now)
 		rt.berserkActors.Store(simulation.WorldKey(division, c.Name), berserkExpiry{division, c.Name, c.BerserkUntilMs})
 		frames = append(frames, berserkPointsFrame(c, 0))
 		public = append(public, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), 1))

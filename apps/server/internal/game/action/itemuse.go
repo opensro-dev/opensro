@@ -16,6 +16,8 @@ import (
 	"math"
 	"slices"
 
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
@@ -158,6 +160,44 @@ func (rt *Runtime) HandleItemUse(
 	character *enterworld.Character,
 	payload []byte,
 ) OpResult {
+	result := rt.handleItemUse(divisionID, character, payload)
+	// A refused use is otherwise silent on the server: name it, so an operator
+	// can tell a use that never arrived from one the rules turned away.
+	if character != nil && len(payload) >= 3 && (result.DiagnosticRefusal != "" || itemUseRefused(result)) {
+		log.WithFields(log.Fields{"character": character.Name, "slot": payload[0], "typeFlags": binary.LittleEndian.Uint16(payload[1:3]),
+			"code": itemUseFailureCode(result), "reason": result.DiagnosticRefusal}).Info("item-use: refused")
+	}
+	return result
+}
+
+/*
+================
+itemUseRefused
+
+Whether the result is the [2][code] refusal of an item use.
+================
+*/
+func itemUseRefused(result OpResult) bool {
+	for _, frame := range result.Frames {
+		if frame.Opcode == wire.OpItemUseResponse && len(frame.Payload) == 2 && frame.Payload[0] == wire.ResultError {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
+handleItemUse
+
+The item use itself (HandleItemUse names a refusal in the log).
+================
+*/
+func (rt *Runtime) handleItemUse(
+	divisionID string,
+	character *enterworld.Character,
+	payload []byte,
+) OpResult {
 	request, tail, err := wire.ReadItemUseRequest(payload)
 	// Check the wire's maximum here; the authority door checks the current
 	// character capacity before a persisted row can authorize an effect.
@@ -259,6 +299,10 @@ func (rt *Runtime) HandleItemUse(
 				return false
 			}
 			return rt.wakeSpirit(character, ref, rowIndex, request, &result)
+		}
+		if code := rt.hwanItemRequirement(character, ref); code != 0 {
+			result = itemUseFailure(code)
+			return false
 		}
 		nowMs := rt.Now().UnixMilli()
 		if family == itemUseMercenary {
