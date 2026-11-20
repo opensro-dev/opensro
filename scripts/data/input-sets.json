@@ -1,0 +1,24 @@
+{
+	"format": "opensro-input-sets-v1",
+	"sets": {
+		"client": [
+			"apps/client-next",
+			"scripts/build",
+			"scripts/lib",
+			"scripts/rebuildLock.mjs",
+			"scripts/rebuild_lock.py",
+			"scripts/checks/check_asset_delivery.mjs",
+			"package.json",
+			"pnpm-lock.yaml",
+			"@node,--version",
+			"!.generated/client-public/assets/packs/manifest.json"
+		],
+		"server": [
+			"apps/server",
+			"scripts/checks/check_go_server.mjs",
+			"@go,version",
+			"!apps/server/.generated/game-data/1.150/server/manifest.json",
+			"!.generated/client-public/assets/packs/manifest.json"
+		]
+	}
+}
