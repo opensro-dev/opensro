@@ -35,6 +35,11 @@ export const MAINTAINER_LEASE_HOURS = 24;
 // pull would stop for nothing (ops #311: abuse must cost nothing). Two
 // covers a contributor with one pull request in review and the next
 // started. Maintainers' seats are not capped: the queue seats them.
+// A lease the holder's own open pull request already covers is work in
+// review, not a reservation: it is granted past the cap and uses no slot,
+// so a contributor with several pull requests in review can still claim
+// the issue each one fixes (#3884 was refused and then duplicated). It
+// costs a visible pull request per issue, which a maintainer closes.
 export const MAX_CONTRIBUTOR_CLAIMS = 2;
 const HOUR_MS = 60 * 60 * 1000;
 const MARKER = /<!-- opensro-claim (\{[^\n]*?\}) -->/;
@@ -137,19 +142,32 @@ export function holderName( holder, seat ) {
 
 /*
 ================
+coversIssue
+
+True when login has an open pull request among the issue's linked ones:
+that issue's lease is work in review, outside the cap.
+================
+*/
+export function coversIssue( linkedPullRequests, login ) {
+	return linkedPullRequests.some( pull => pull.state === "open" && pull.author === login );
+}
+
+/*
+================
 decideClaim
 
 What a /claim does. grant: no live lease (none, or an expired one).
 renew: the holder claims again. refuse: someone else holds it. limit:
 a non-maintainer already holds MAX_CONTRIBUTOR_CLAIMS live leases on
-other issues (held), so a new one is refused; a renewal never is.
+other issues (held), so a new one is refused; a renewal never is, nor
+a claim the actor's own open pull request covers (covered).
 ================
 */
-export function decideClaim( { lease, actor, seat, association, nowMs, held = 0 } ) {
+export function decideClaim( { lease, actor, seat, association, nowMs, held = 0, covered = false } ) {
 	const hours = leaseHours( association );
 	const until = new Date( nowMs + hours * HOUR_MS ).toISOString();
 	if ( !lease || Date.parse( lease.until ) <= nowMs ) {
-		if ( !isMaintainer( association ) && held >= MAX_CONTRIBUTOR_CLAIMS ) return { action: "limit" };
+		if ( !isMaintainer( association ) && !covered && held >= MAX_CONTRIBUTOR_CLAIMS ) return { action: "limit" };
 		return { action: "grant", until, hours };
 	}
 	if ( lease.holder === actor && lease.seat === seat ) return { action: "renew", until, hours };
@@ -228,7 +246,8 @@ limitText
 */
 function limitText( actor ) {
 	return `@${actor} already holds ${MAX_CONTRIBUTOR_CLAIMS} claims, the most one account holds at once. ` +
-		"Finish or `/unclaim` one of them first.";
+		"Finish or `/unclaim` one of them first. A pull request of yours that links this issue " +
+		"(`Fixes #N`) lets you claim it past the cap.";
 }
 
 /*
@@ -252,7 +271,8 @@ async function claimedIssues( github, owner, repo ) {
 liveLeasesHeld
 
 How many live leases actor holds on open issues other than except,
-read from the workflow's own lease markers. Not from the assignees:
+read from the workflow's own lease markers. A lease actor's own open
+pull request covers takes no slot (coversIssue). Not from the assignees:
 GitHub silently ignores an assignee it will not accept, so a count of
 assignments would let such an account claim without limit. With before,
 only the leases whose marker comment is older than that comment count.
@@ -263,7 +283,11 @@ async function liveLeasesHeld( { github, owner, repo, actor, except, botLogin, n
 	for ( const issue of await claimedIssues( github, owner, repo ) ) {
 		if ( issue.number === except ) continue;
 		const lease = readLease( await listComments( github, owner, repo, issue.number ), botLogin );
-		if ( lease && lease.holder === actor && Date.parse( lease.until ) > nowMs && lease.commentId < before ) held++;
+		if ( !lease || lease.holder !== actor || Date.parse( lease.until ) <= nowMs || lease.commentId >= before ) {
+			continue;
+		}
+		if ( coversIssue( await linkedPullRequests( github, owner, repo, issue.number ), actor ) ) continue;
+		held++;
 	}
 	return held;
 }
@@ -333,10 +357,12 @@ async function handleComment( { github, context, botLogin, nowMs } ) {
 	if ( command.verb === "claim" ) {
 		if ( issue.state !== "open" ) return;
 		const fresh = !lease || Date.parse( lease.until ) <= nowMs;
-		const held = fresh && !isMaintainer( association ) ?
+		const capped = fresh && !isMaintainer( association );
+		const covered = capped && coversIssue( await linkedPullRequests( github, owner, repo, number ), actor );
+		const held = capped && !covered ?
 			await liveLeasesHeld( { github, owner, repo, actor, except: number, botLogin, nowMs } ) :
 			0;
-		const decision = decideClaim( { lease, actor, seat: command.seat, association, nowMs, held } );
+		const decision = decideClaim( { lease, actor, seat: command.seat, association, nowMs, held, covered } );
 		if ( decision.action === "limit" ) {
 			await github.rest.issues.createComment( {
 				owner,
@@ -386,7 +412,7 @@ async function handleComment( { github, context, botLogin, nowMs } ) {
 		// leases posted before this one, and give this one back when they
 		// already fill the cap. The earliest MAX_CONTRIBUTOR_CLAIMS survive
 		// however the runs interleave.
-		if ( decision.action === "grant" && !isMaintainer( association ) ) {
+		if ( decision.action === "grant" && !isMaintainer( association ) && !covered ) {
 			const earlier = await liveLeasesHeld( {
 				github,
 				owner,
