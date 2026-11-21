@@ -272,7 +272,7 @@ test("Auto-Hunt select passes the monster entity so Auto-Skills can attack", asy
 	const ATTACK = 11;
 	const LOCAL_GID = 1;
 	const MONSTER_GID = 2;
-	const skillRef = ( id, over = {} ) => ( {
+	const skillRef = ( id, over = {} ) => ({
 		id,
 		group: over.group ?? id,
 		level: 1,
@@ -288,7 +288,7 @@ test("Auto-Hunt select passes the monster entity so Auto-Skills can attack", asy
 			masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
 			prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ]
 		}
-	} );
+	});
 	/** @type {{ opcode: number, payload: Uint8Array }[]} */
 	const sent = [];
 	const entities = new Map();
