@@ -21,6 +21,7 @@ import unittest
 from pathlib import Path
 
 import build_alexandria_variant as variant  # noqa: E402
+import variant_gates  # noqa: E402
 import import_vsro_alexandria as stage1  # noqa: E402
 from test_import_vsro_alexandria import terrain  # noqa: E402
 from alexandria_map_tables import overview_tiles  # noqa: E402
@@ -113,7 +114,7 @@ def table(rows):
 
 def link(source, target, fee, level_min="0", scheduling="0"):
 	row = ["1", source, target, fee, scheduling, "0", "1", level_min, "999", "2", "0", "0"]
-	return row + ["0"] * (variant.LINK_COLUMNS - len(row))
+	return row + ["0"] * (variant_gates.LINK_COLUMNS - len(row))
 
 
 def gate(teleport_id, code, building, zone):
@@ -121,7 +122,7 @@ def gate(teleport_id, code, building, zone):
 
 
 def building(object_id, code, name):
-	return ["1", object_id, code, "k", "xxx", name] + ["0"] * (variant.BUILDING_COLUMNS - 6)
+	return ["1", object_id, code, "k", "xxx", name] + ["0"] * (variant_gates.BUILDING_COLUMNS - 6)
 
 
 def text(key, korean, trad, simp, jp, en):
@@ -158,9 +159,33 @@ class GateTests(unittest.TestCase):
 		}
 		return native, vsro
 
+	def test_a_building_on_a_taken_object_id_moves_and_its_gate_follows(self):
+		# r203q: six released avatars stood on the gate buildings' VSRO ids.
+		native, vsro = self.tables()
+		merged, _ = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES, taken={27753, 27755})
+		buildings = {row[2]: row[1] for row in stage1.table_rows(merged["teleportbuilding.txt"])}
+		self.assertEqual(buildings["STORE_SD_GATE2"], "27754")
+		self.assertNotIn(int(buildings["STORE_SD_GATE1"]), {27753, 27754, 27755})
+		gates = {row[2]: row[3] for row in stage1.table_rows(merged["teleportdata.txt"])}
+		self.assertEqual(gates["GATE_SD1"], buildings["STORE_SD_GATE1"])
+		self.assertEqual(gates["GATE_SD2"], "27754")
+
+	def test_a_later_gate_import_steps_over_every_other_object(self):
+		# r203r: the Sky Temple gate took max(teleportbuilding) + 1, a fox pet's id.
+		with tempfile.TemporaryDirectory() as scratch:
+			root = Path(scratch)
+			(root / "characterdata_5000.txt").write_bytes(table([["1", "51301", "COS_P_FOX_001"]]))
+			(root / "characterdata_160000.txt").write_bytes(table([["1", "60000", "MOB_OWN_OLD"]]))
+			(root / "itemdata_5000.txt").write_bytes(table([["1", "700", "ITEM_X"]]))
+			(root / "teleportbuilding.txt").write_bytes(table([["1", "900", "STORE_OWN_OLD"]]))
+			taken = variant_gates.gate_building_taken(
+				table([["1", "950", "STORE_KEPT"]]), root, "characterdata_160000.txt", {"MOB_NEW": 51400}
+			)
+		self.assertEqual(taken, {"51301", "700", "950", "51400"})
+
 	def test_gates_links_buildings_and_texts_are_added_to_the_native_tables(self):
 		native, vsro = self.tables()
-		merged, summary = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
+		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
 		self.assertEqual(summary, {
 			"gates": ["GATE_SD1", "GATE_SD2"], "links": 4, "buildings": 2, "texts": 3,
 			"buildingCodes": ["STORE_SD_GATE1", "STORE_SD_GATE2"]
@@ -174,9 +199,9 @@ class GateTests(unittest.TestCase):
 
 	def test_links_take_the_scheduling_word_the_native_server_accepts_and_clamp_the_level(self):
 		native, vsro = self.tables()
-		merged, _ = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES, level_cap=90)
+		merged, _ = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES, level_cap=90)
 		added = [row for row in stage1.table_rows(merged["teleportlink.txt"])][1:]
-		self.assertTrue(all(row[4] == "1" and row[5] == "0" and len(row) == variant.LINK_COLUMNS for row in added))
+		self.assertTrue(all(row[4] == "1" and row[5] == "0" and len(row) == variant_gates.LINK_COLUMNS for row in added))
 		entry = next(row for row in added if row[1:3] == ["1", "175"])
 		self.assertEqual(entry[6:9], ["1", "90", "999"])
 		leave = next(row for row in added if row[1:3] == ["175", "1"])
@@ -184,13 +209,13 @@ class GateTests(unittest.TestCase):
 
 	def test_a_condition_kind_the_server_does_not_evaluate_is_dropped_and_the_others_stay(self):
 		row = ["1", "3", "4", "5000", "0", "0", "1", "95", "999", "2", "0", "0", "3", "9", "9"] + ["0"] * 6
-		columns = variant.translate_link(row, {"3": "3", "4": "4"}, 90)
+		columns = variant_gates.translate_link(row, {"3": "3", "4": "4"}, 90)
 		self.assertEqual(columns[6:15], ["1", "90", "999", "2", "0", "0", "0", "0", "0"])
 
 	def test_a_dropped_condition_is_reported_with_its_link_and_operands(self):
 		row = ["1", "3", "4", "5000", "0", "0", "1", "95", "999", "2", "0", "0", "3", "5", "6"] + ["0"] * 6
 		dropped = []
-		variant.translate_link(row, {"3": "3", "4": "4"}, 90, dropped)
+		variant_gates.translate_link(row, {"3": "3", "4": "4"}, 90, dropped)
 		self.assertEqual(dropped, [{"from": "3", "to": "4", "kind": 3, "operands": ["5", "6"]}])
 
 	def test_an_item_condition_takes_the_variant_item_id(self):
@@ -198,32 +223,32 @@ class GateTests(unittest.TestCase):
 		row = ["1", "3", "4", "0", "0", "0", "4", "23973", "0", "5", "23973", "0", "1", "80", "102", "6", "0", "0"]
 		row += ["0"] * 3
 		dropped = []
-		columns = variant.translate_link(row, {"3": "3", "4": "4"}, 90, dropped, {"23973": "50100"})
+		columns = variant_gates.translate_link(row, {"3": "3", "4": "4"}, 90, dropped, {"23973": "50100"})
 		self.assertEqual(columns[6:18], ["4", "50100", "0", "5", "50100", "0", "1", "80", "102", "6", "0", "0"])
 		self.assertEqual(dropped, [])
 
 	def test_an_item_condition_without_its_item_keeps_the_link_out(self):
 		# Dropping the condition would open a keyed gate to everyone.
 		row = ["1", "3", "4", "0", "0", "0", "5", "23973", "0"] + ["0"] * 12
-		self.assertIsNone(variant.translate_link(row, {"3": "3", "4": "4"}, 90))
-		self.assertIsNone(variant.translate_link(row, {"3": "3", "4": "4"}, 90, None, {"1": "2"}))
+		self.assertIsNone(variant_gates.translate_link(row, {"3": "3", "4": "4"}, 90))
+		self.assertIsNone(variant_gates.translate_link(row, {"3": "3", "4": "4"}, 90, None, {"1": "2"}))
 
 	def test_the_gate_summary_lists_a_keyed_link_left_out(self):
 		native, vsro = self.tables()
 		keyed = link("175", "176", "0")
 		keyed[12:15] = ["4", "23973", "0"]
 		vsro["teleportlink.txt"] = table([keyed, link("176", "175", "0")])
-		merged, summary = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
+		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
 		self.assertEqual(summary["omittedLinks"], [{"from": "175", "to": "176", "items": ["23973"]}])
 		added = [row for row in stage1.table_rows(merged["teleportlink.txt"])][1:]
 		self.assertEqual([row[1:3] for row in added], [["176", "175"]])
-		_, mapped = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES, items={"23973": "7"})
+		_, mapped = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES, items={"23973": "7"})
 		self.assertNotIn("omittedLinks", mapped)
 
 	def test_the_thief_suit_condition_kind_survives_unreported(self):
 		row = ["1", "3", "4", "5000", "0", "0", "1", "95", "999", "2", "0", "0", "7", "0", "0"] + ["0"] * 6
 		dropped = []
-		columns = variant.translate_link(row, {"3": "3", "4": "4"}, 90, dropped)
+		columns = variant_gates.translate_link(row, {"3": "3", "4": "4"}, 90, dropped)
 		self.assertEqual(columns[6:15], ["1", "90", "999", "2", "0", "0", "7", "0", "0"])
 		self.assertEqual(dropped, [])
 
@@ -232,7 +257,7 @@ class GateTests(unittest.TestCase):
 		conditional = link("175", "176", "0")
 		conditional[12:15] = ["3", "42", "7"]
 		vsro["teleportlink.txt"] = table([conditional])
-		merged, summary = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
+		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
 		self.assertEqual(summary["droppedConditions"],
 			[{"from": "175", "to": "176", "kind": 3, "operands": ["42", "7"]}])
 		added = [row for row in stage1.table_rows(merged["teleportlink.txt"])][1:]
@@ -243,7 +268,7 @@ class GateTests(unittest.TestCase):
 		conditional = link("175", "176", "0")
 		conditional[12:15] = ["6", "0", "0"]
 		vsro["teleportlink.txt"] = table([conditional])
-		merged, summary = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
+		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
 		self.assertNotIn("droppedConditions", summary)
 		added = [row for row in stage1.table_rows(merged["teleportlink.txt"])][1:]
 		self.assertEqual(added[0][12:15], ["6", "0", "0"])
@@ -253,14 +278,14 @@ class GateTests(unittest.TestCase):
 		conditional = link("175", "176", "0")
 		conditional[12:15] = ["7", "0", "0"]
 		vsro["teleportlink.txt"] = table([conditional])
-		merged, summary = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
+		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
 		self.assertNotIn("droppedConditions", summary)
 		added = [row for row in stage1.table_rows(merged["teleportlink.txt"])][1:]
 		self.assertEqual(added[0][12:15], ["7", "0", "0"])
 
 	def test_texts_use_the_native_column_layout_and_never_replace_a_native_key(self):
 		native, vsro = self.tables()
-		merged, _ = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
+		merged, _ = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
 		rows = {row[1]: row for row in stage1.table_rows(merged["text"])}
 		self.assertEqual(rows["SN_ZONE_15"], ["1", "SN_ZONE_15", "kor15", "", "", "simp15", "trad15", "jp15", "South", "vi", ""])
 		self.assertEqual(rows["SN_Z1"][8], "Jangan")
@@ -269,7 +294,7 @@ class GateTests(unittest.TestCase):
 		native, vsro = self.tables()
 		native["teleportdata.txt"] = table([gate("175", "GATE_CH", "2094", "SN_Z1")])
 		with self.assertRaises(SystemExit):
-			variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
+			variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
 
 	# ================
 	# test_outdoor_crossings_keep_both_directions_and_authored_conditions
@@ -284,27 +309,27 @@ class GateTests(unittest.TestCase):
 		vsro["teleportbuilding.txt"] = table(buildings)
 		vsro["teleportlink.txt"] = table(links)
 		vsro["text"] = table([text(r[4], "k", "t", "s", "j", "Outdoor") for r in gates])
-		merged, summary = variant.merge_gate_tables(native, vsro, codes=codes, level_cap=110)
+		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=codes, level_cap=110)
 		self.assertEqual(summary["buildings"], 4)
 		self.assertEqual(summary["links"], 4)
 		actual = [r for r in stage1.table_rows(merged["teleportlink.txt"]) if r[1] in {"178", "179", "180", "181"}]
 		self.assertEqual([r[1:4] for r in actual], [r[1:4] for r in links])
 		self.assertEqual([r[6:9] for r in actual], [r[6:9] for r in links])
 		self.assertEqual(list(stage1.table_rows(merged["teleportbuilding.txt"]))[-4:], buildings)
-		self.assertTrue(set(codes).issubset(variant.GATE_CODES))
+		self.assertTrue(set(codes).issubset(variant_gates.GATE_CODES))
 
 	# ================
 	# test_tomb_gates_link_the_entrance_to_three_exits_and_drop_unplaced_rows
 	# ================
 	def test_tomb_gates_link_the_entrance_to_three_exits_and_drop_unplaced_rows(self):
 		native, vsro = self.tables()
-		codes = variant.TOMB_GATE_CODES
+		codes = variant_gates.TOMB_GATE_CODES
 		self.assertEqual(codes[0], "GATE_TOMB_GATE_IN")
 		self.assertEqual(len(codes), 4)
-		self.assertFalse(set(codes) & set(variant.GATE_CODES), "tomb gates are opt-in")
+		self.assertFalse(set(codes) & set(variant_gates.GATE_CODES), "tomb gates are opt-in")
 		gates = [gate(str(164 + i), code, str(27744 + i), "SN_TOMB_" + str(i)) for i, code in enumerate(codes)]
 		for at in (1, 2, 3):
-			gates[at][variant.TELEPORT_WORLD_COLUMN] = str(56 + at)  # the source's worlds 57, 58, 59
+			gates[at][variant_gates.TELEPORT_WORLD_COLUMN] = str(56 + at)  # the source's worlds 57, 58, 59
 		unplaced = gate("168", "GATE_TOMBOSIRIS_GATE_OUT_1", "27748", "SN_TOMB_OSIRIS")
 		buildings = [building(str(27744 + i), code.replace("GATE_", "STORE_", 1), "SN_TOMB_" + str(i)) for i, code in enumerate(codes)]
 		links = [link("164", "165", "0"), link("164", "166", "0"), link("164", "167", "0"),
@@ -313,7 +338,7 @@ class GateTests(unittest.TestCase):
 		vsro["teleportbuilding.txt"] = table(buildings)
 		vsro["teleportlink.txt"] = table(links + [link("168", "164", "0")])
 		vsro["text"] = table([text(r[4], "k", "t", "s", "j", "Tomb") for r in gates])
-		merged, summary = variant.merge_gate_tables(native, vsro, codes=codes, level_cap=110)
+		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=codes, level_cap=110)
 		self.assertEqual(summary["buildings"], 4)
 		self.assertEqual(summary["links"], 6, "the unplaced Osiris exit's link is not carried")
 		added = [r for r in stage1.table_rows(merged["teleportdata.txt"]) if r[1] in {"164", "165", "166", "167", "168"}]
@@ -321,7 +346,7 @@ class GateTests(unittest.TestCase):
 		# The three exits keep their authored destination worlds 57, 58, 59: the
 		# port defines one permanent world per tomb while SRO_PHARAOH_TOMB is on
 		# (#1750). The entrance stays in the persistent world, as authored.
-		worlds = {r[2]: r[variant.TELEPORT_WORLD_COLUMN] for r in added}
+		worlds = {r[2]: r[variant_gates.TELEPORT_WORLD_COLUMN] for r in added}
 		self.assertEqual(worlds, {
 			"GATE_TOMB_GATE_IN": "1", "GATE_TOMB_GATE_OUT_1": "57",
 			"GATE_TOMB_GATE_OUT_2": "58", "GATE_TOMB_GATE_OUT_3": "59"})
@@ -573,11 +598,11 @@ class GateLevelCapTests(unittest.TestCase):
 
 	def test_native_values_keep_the_v1150_cap(self):
 		for value in ("", "0", "off", "OFF", "false", "90", " 90 "):
-			self.assertEqual(variant.gate_level_cap({variant.LEVEL_CAP_FLAG: value}), variant.NATIVE_LEVEL_CAP, value)
-		self.assertEqual(variant.gate_level_cap({}), variant.NATIVE_LEVEL_CAP)
+			self.assertEqual(variant_gates.gate_level_cap({variant_gates.LEVEL_CAP_FLAG: value}), variant_gates.NATIVE_LEVEL_CAP, value)
+		self.assertEqual(variant_gates.gate_level_cap({}), variant_gates.NATIVE_LEVEL_CAP)
 
 	def test_110_lifts_the_cap(self):
-		self.assertEqual(variant.gate_level_cap({variant.LEVEL_CAP_FLAG: "110"}), variant.EXPANSION_LEVEL_CAP)
+		self.assertEqual(variant_gates.gate_level_cap({variant_gates.LEVEL_CAP_FLAG: "110"}), variant_gates.EXPANSION_LEVEL_CAP)
 
 	def test_port_stock_defaults_to_the_official_stock(self):
 		"""#2846: unset or off keeps each store's official goods."""
@@ -597,7 +622,7 @@ class GateLevelCapTests(unittest.TestCase):
 	def test_a_value_the_server_refuses_is_refused(self):
 		for value in ("on", "true", "1", "100", "yes"):
 			with self.assertRaises(ValueError, msg=value):
-				variant.gate_level_cap({variant.LEVEL_CAP_FLAG: value})
+				variant_gates.gate_level_cap({variant_gates.LEVEL_CAP_FLAG: value})
 
 
 class AddGatesTests(unittest.TestCase):
@@ -611,8 +636,8 @@ class AddGatesTests(unittest.TestCase):
 			variant.TEXTDATA + "teleportlink.txt": vsro_tables["teleportlink.txt"],
 			variant.TEXTDATA + "textdata_object.txt": vsro_tables["text"]
 		}
-		original_read, original_merge = variant.read_vsro_file, variant.merge_gate_tables
-		original_cap = variant.os.environ.get(variant.LEVEL_CAP_FLAG)
+		original_read, original_merge = variant.read_vsro_file, variant_gates.merge_gate_tables
+		original_cap = variant.os.environ.get(variant_gates.LEVEL_CAP_FLAG)
 		with tempfile.TemporaryDirectory() as scratch:
 			native, out = Path(scratch) / "native", Path(scratch) / "out"
 			textdata = native / "Media_extracted" / variant.TEXTDATA
@@ -622,17 +647,17 @@ class AddGatesTests(unittest.TestCase):
 			(textdata / "textdataname.txt").write_bytes(native_tables["text"])
 			variant.read_vsro_file = lambda root, archive, name: vsro_files[name]
 			# merge_gate_tables binds GATE_CODES at definition; route the synthetic gates in.
-			variant.merge_gate_tables = lambda *a, **k: original_merge(*a, **{**k, "codes": SYNTHETIC_GATES})
-			variant.os.environ[variant.LEVEL_CAP_FLAG] = cap
+			variant_gates.merge_gate_tables = lambda *a, **k: original_merge(*a, **{**k, "codes": SYNTHETIC_GATES})
+			variant.os.environ[variant_gates.LEVEL_CAP_FLAG] = cap
 			try:
 				summary, merged = variant.add_gates(Path(scratch) / "vsro", native, out)
 				written = (out / "Media_extracted" / variant.TEXTDATA / "teleportlink.txt").read_bytes()
 			finally:
-				variant.read_vsro_file, variant.merge_gate_tables = original_read, original_merge
+				variant.read_vsro_file, variant_gates.merge_gate_tables = original_read, original_merge
 				if original_cap is None:
-					variant.os.environ.pop(variant.LEVEL_CAP_FLAG, None)
+					variant.os.environ.pop(variant_gates.LEVEL_CAP_FLAG, None)
 				else:
-					variant.os.environ[variant.LEVEL_CAP_FLAG] = original_cap
+					variant.os.environ[variant_gates.LEVEL_CAP_FLAG] = original_cap
 		return summary, merged, written
 
 	def entry_level(self, merged):

@@ -23,7 +23,7 @@ not worlds of this port, whose portal catalogue refuses unknown
 worlds. The later link rows carry two trailing columns the v1.150
 table has no place for; they sit outside every condition triple the
 port evaluates, so rows project to the native 21 columns and the
-merge's own condition rules (build_alexandria_variant.translate_link)
+merge's own condition rules (variant_gates.translate_link)
 clamp or drop what it cannot evaluate.
 
 Identities are the source's own unless one already stands in the
@@ -33,6 +33,8 @@ together, so a rebuild authors the same chain the marker recorded.
 ===========================================================================
 """
 import cap110_monsters as monsters
+from arabia_gates import renumbered_buildings
+import variant_gates
 
 # The fields are outdoor regions of the default world; the population
 # (skytemple_import.build_population) names the same world in its rows.
@@ -79,7 +81,7 @@ def format_coord(value):
 # tables already use (the source identities stand unless one collides);
 # d_arrival is the authored D arrival, (region, x, y, z) as strings.
 # Returns (tables, codes) with tables mapping the three table names and
-# "text" to encoded bytes, ready for variant.merge_gate_tables.
+# "text" to encoded bytes, ready for variant_gates.merge_gate_tables.
 # ================
 def prepare_gates(later, native_data, current_ids, current_building_ids, d_arrival):
 	data_by_code = {row[2]: row for row in later["teleportdata.txt"] if len(row) >= TELEPORT_COLUMNS}
@@ -106,13 +108,13 @@ def prepare_gates(later, native_data, current_ids, current_building_ids, d_arriv
 	else:
 		teleport_ids = {row[1]: row[1] for row in source_data}
 		d_teleport_id = str(max([int(i) for i in current_ids if i.isdigit()] + [int(r[1]) for r in source_data]) + 1)
-	if any(bid in current_building_ids for bid in source_building_ids):
-		base = max([int(i) for i in current_building_ids if i.isdigit()] + [0]) + 1
-		building_ids = {bid: str(base + at) for at, bid in enumerate(source_building_ids)}
-		d_building_id = str(base + len(source_building_ids))
-	else:
-		building_ids = {bid: bid for bid in source_building_ids}
-		d_building_id = str(max([int(i) for i in current_building_ids if i.isdigit()] + [int(b) for b in source_building_ids]) + 1)
+	# Buildings keep their source ids unless an object holds one or it is
+	# past the server's band; the authored D building takes a free id under
+	# the limit (variant_gates.free_building_ids), never "highest + 1",
+	# which lands on the later imports' items and pets.
+	building_ids = renumbered_buildings(source_building_ids, current_building_ids)
+	taken = {int(i) for i in current_building_ids if i.isdigit()} | {int(i) for i in building_ids.values()}
+	d_building_id = str(variant_gates.free_building_ids(taken, 1)[0])
 
 	# The source entry's links name Jangan's gate instead: its id maps to
 	# the anchor's, so the source pairs entry <-> A/B become GATE_CH's.

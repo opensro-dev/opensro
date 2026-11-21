@@ -67,6 +67,7 @@ from alexandria_map_tables import (  # noqa: E402
 import import_vsro_alexandria as stage1  # noqa: E402
 import pharaoh_temple as temple  # noqa: E402
 import published_ids  # noqa: E402
+import variant_gates  # noqa: E402
 import sro_pk2  # noqa: E402
 import variant_settle  # noqa: E402
 import variant_stamp  # noqa: E402
@@ -85,58 +86,12 @@ LINKED_FILES = ("SRO_Client.exe", "Particles.pk2")
 ENVIRONMENT_NOTE = "environment keys 6 and 11 differ from native in the variant"
 
 TEXTDATA = stage1.TEXTDATA
-# Port-only, not native: the city's gates and ferry, plus the two authored
-# outdoor crossings: Delta East is Abundance Ground; Delta West is Forbidden Plain.
-# Ferry teleportdata names an NPC, not a teleportbuilding.
-# The crossings' far ends come from stage 1, which imports their terrain.
-GATE_CODES = (
-	"GATE_SD1", "GATE_SD2", "GATE_NPC_SD_M_AREA_FERRY", "GATE_DELTA_GATE_E", "GATE_DELTA_GATE_W"
-) + stage1.CROSSING_GATE_CODES
-# Port-only, not native: the Pharaoh Tomb's gates, added with SRO_PHARAOH_TOMB.
-# The one entrance in Kings Valley links to the three tomb exits. The source's
-# GATE_TOMBOSIRIS_* rows have no position and are not carried.
-TOMB_GATE_CODES = (
-	"GATE_TOMB_GATE_IN", "GATE_TOMB_GATE_OUT_1", "GATE_TOMB_GATE_OUT_2", "GATE_TOMB_GATE_OUT_3"
-)
-# Port-only, not native: the Pharaoh Temple's four gates, added with
-# SRO_PHARAOH_TEMPLE (pharaoh_temple.py): the two clicked desert gates and the
-# two walk-in gates inside the Temple. Their world column is flattened (below).
-TEMPLE_GATE_CODES = temple.GATE_CODES
-# The last teleportdata column names the destination game world. The source's
-# tomb exits name worlds 57-59, one per tomb. The v1.150 world table does not
-# define them, but the port does while SRO_PHARAOH_TOMB is on (the three
-# permanent per-tomb worlds, #1750), so the column stands as authored and the
-# server resolves it through its widened world catalogue.
-TELEPORT_WORLD_COLUMN = 12
-# The v1.150 server's level cap (levels.json levelCap). The VSRO links need
-# level 95 for a cap of 110; clamped here so the city stays reachable.
-NATIVE_LEVEL_CAP = 90
-# The server's level-cap flag (progression/levelcap.go LevelCapFromEnv): the
-# gate conditions are clamped to the cap the shard runs, read with the same
-# values the server accepts so build and server can never disagree.
-LEVEL_CAP_FLAG = "SRO_LEVEL_CAP"
 # The shops' stock choice (#2846): unset, the Alexandria variant stocks
 # each store with the goods one official source had active; on, the
 # shop passes stock the port's own degree goods instead.
 PORT_STOCK_FLAG = "SRO_ALEXANDRIA_PORT_STOCK"
 SWITCH_OFF_VALUES = ("", "0", "off", "false")
 SWITCH_ON_VALUES = ("1", "on", "true")
-EXPANSION_LEVEL_CAP = 110
-LEVEL_CAP_NATIVE_VALUES = ("", "0", "off", "false", "90")
-LEVEL_CAP_EXPANSION_VALUES = ("110",)
-LINK_COLUMNS = 21
-LINK_KIND_LEVEL = 1
-# The condition kinds the v1.150 server's portal catalogue evaluates
-# (portalAdmission): 1 level, 2 transport, 4 and 5 an item held (5 spends
-# one), 6 outside job mode (portal_conditions.go, #3399), 7 thief suit
-# with a transport (#1749 PR-C(ii)). Any other kind is dropped and
-# reported, below.
-LINK_KINDS_EVALUATED = (1, 2, 4, 5, 6, 7)
-# The item kinds: Data_1 is an item identity of the source client, which
-# the variant's item tables number differently.
-LINK_KINDS_ITEM = (4, 5)
-TELEPORT_COLUMNS = 13
-BUILDING_COLUMNS = 58
 
 
 # The VSRO characterdata files (characterdata.txt lists them).
@@ -285,145 +240,6 @@ def enable_regions(mapinfo, regions):
 
 
 # ================
-# by_column
-# ================
-def by_column(raw, column, width=0):
-	"""{value of column: row} of a table, keeping rows at least width wide."""
-	return {row[column]: row for row in stage1.table_rows(raw) if len(row) > column and len(row) >= width}
-
-
-# ================
-# translate_link
-# ================
-def translate_link(row, ids, level_cap, dropped=None, items=None):
-	"""
-	One VSRO teleportlink row for the native table: its two ends renumbered by
-	teleport code, the scheduling word set to the one v1.150 server accepts
-	(1), a level condition clamped to the build's cap, an item condition's
-	item renumbered through items ({source item id: variant item id}) and
-	conditions of a kind the server does not evaluate dropped. Every drop is
-	appended to dropped (when given) as {"from", "to", "kind", "operands"}
-	with the renumbered ends, so the loss is reported, never silent (#1749
-	PR-C(i); kind 3 still has no port evaluator).
-
-	Returns None when an item condition names an item items does not map:
-	dropping that condition would open a keyed gate to everyone, so the
-	whole link stays out (merge_gate_tables reports it).
-	"""
-	columns = list(row[:LINK_COLUMNS])
-	columns[1], columns[2] = ids[row[1]], ids[row[2]]
-	columns[4], columns[5] = "1", "0"
-	for at in range(6, LINK_COLUMNS, 3):
-		if columns[at] == str(LINK_KIND_LEVEL) and int(columns[at + 1]) > level_cap:
-			columns[at + 1] = str(level_cap)
-		if int(columns[at]) in LINK_KINDS_ITEM:
-			item = (items or {}).get(columns[at + 1])
-			if item is None:
-				return None
-			columns[at + 1] = item
-			continue
-		# A condition kind the v1.150 server does not evaluate is dropped;
-		# the server refuses the whole catalogue otherwise.
-		if int(columns[at]) != 0 and int(columns[at]) not in LINK_KINDS_EVALUATED:
-			if dropped is not None:
-				dropped.append({
-					"from": columns[1], "to": columns[2],
-					"kind": int(columns[at]), "operands": columns[at + 1:at + 3]
-				})
-			columns[at:at + 3] = ["0", "0", "0"]
-	return columns
-
-
-# ================
-# merge_gate_tables
-# ================
-def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP, flatten=(), items=None):
-	"""
-	The native tables with the gates in codes added. native and vsro map
-	"teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt" and
-	"text" (textdataname / textdata_object) to raw bytes. Teleport ids differ
-	between the clients, so links are renumbered by code; the new gates take
-	their VSRO ids, which the native table does not use. A gate named in
-	flatten has its destination world set to the persistent world (the
-	temple's source world 60 does not exist in the port). items maps the
-	source client's item ids to the variant's for item conditions
-	(translate_link); a link whose item does not map is left out and
-	listed under omittedLinks. Returns {name: bytes} for the changed files,
-	and the list of gates added.
-	"""
-	native_gates = by_column(native["teleportdata.txt"], 2, TELEPORT_COLUMNS)
-	vsro_gates = by_column(vsro["teleportdata.txt"], 2, TELEPORT_COLUMNS)
-	native_ids = {code: row[1] for code, row in native_gates.items()}
-	vsro_codes = {row[1]: code for code, row in vsro_gates.items()}
-	new_ids = {row[1] for code, row in vsro_gates.items() if code in codes}
-	if len(new_ids) != len(codes):
-		raise SystemExit(f"VSRO teleportdata lacks some of {codes}")
-	if new_ids & {row[1] for row in native_gates.values()}:
-		raise SystemExit("a VSRO gate id is already a native teleport id")
-	ids = {vsro_id: native_ids.get(code, vsro_id) for vsro_id, code in vsro_codes.items()}
-
-	data_rows = []
-	for code in codes:
-		row = list(vsro_gates[code])
-		if code in flatten:
-			row[TELEPORT_WORLD_COLUMN] = temple.SOURCE_WORLD_COLUMN_VALUE
-		data_rows.append(row)
-	building_ids = {row[3] for row in data_rows}
-	buildings = [
-		row for row in stage1.table_rows(vsro["teleportbuilding.txt"])
-		if len(row) >= BUILDING_COLUMNS and row[1] in building_ids
-	]
-	links, dropped_conditions, omitted_links = [], [], []
-	for row in stage1.table_rows(vsro["teleportlink.txt"]):
-		if len(row) != LINK_COLUMNS or row[0] != "1" or not ({row[1], row[2]} & new_ids):
-			continue
-		other = row[2] if row[1] in new_ids else row[1]
-		if other not in new_ids and (other not in vsro_codes or vsro_codes[other] not in native_ids):
-			continue
-		translated = translate_link(row, ids, level_cap, dropped_conditions, items)
-		if translated is None:
-			omitted_links.append({
-				"from": ids[row[1]], "to": ids[row[2]],
-				"items": sorted({row[at + 1] for at in range(6, LINK_COLUMNS, 3) if int(row[at]) in LINK_KINDS_ITEM})
-			})
-			continue
-		links.append(translated)
-
-	text_keys = {row[4] for row in data_rows} | {row[5] for row in buildings}
-	native_keys = {row[1] for row in stage1.table_rows(native["text"]) if len(row) > 1}
-	texts = {
-		row[1]: row for row in stage1.table_rows(vsro["text"]) if len(row) >= 10 and row[1] in text_keys
-	}
-	text_rows = [native_text_row(texts[key]) for key in sorted(texts) if key not in native_keys]
-	return {
-		"teleportdata.txt": append_rows(native["teleportdata.txt"], data_rows),
-		"teleportbuilding.txt": append_rows(native["teleportbuilding.txt"], buildings),
-		"teleportlink.txt": append_rows(native["teleportlink.txt"], links),
-		"text": append_rows(native["text"], text_rows)
-	}, {
-		"gates": list(codes), "links": len(links), "buildings": len(buildings), "texts": len(text_rows),
-		# The server hides these structures while SRO_ALEXANDRIA is off (alexandria.go).
-		"buildingCodes": sorted(row[2] for row in buildings),
-		# Link conditions the native catalogue cannot evaluate yet, reported
-		# so the loss is visible in the build output and manifest (#1749).
-		**({"droppedConditions": dropped_conditions} if dropped_conditions else {}),
-		# Keyed links whose item the variant does not carry (translate_link).
-		**({"omittedLinks": omitted_links} if omitted_links else {}),
-		**({"worldsFlattened": [code for code in codes if code in flatten]} if set(codes) & set(flatten) else {})
-	}
-
-
-#============================================================================
-# Region names, world map and minimap
-#============================================================================
-
-
-#============================================================================
-# Trees
-#============================================================================
-
-
-# ================
 # link_tree
 # ================
 def link_tree(source, target):
@@ -563,7 +379,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	replace_file(mapinfo, enable_regions((native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes(), regions))
 
 	gates, gate_tables = add_gates(vsro_root, native, out)
-	stranded = stage1.gates_without_terrain(gate_tables["teleportdata.txt"], GATE_CODES,
+	stranded = stage1.gates_without_terrain(gate_tables["teleportdata.txt"], variant_gates.GATE_CODES,
 		set(regions) | stage1.mfo_regions((native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes()))
 	if stranded:
 		raise SystemExit(f"gates {', '.join(stranded)} stand on regions stage 1 did not import; rerun stage 1")
@@ -707,23 +523,6 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 
 
 # ================
-# gate_level_cap
-# ================
-def gate_level_cap(environ=None):
-	"""
-	The level cap the gate conditions are clamped to, from SRO_LEVEL_CAP with
-	the server's own values: 90 unless "110"; anything else is refused, as the
-	server refuses to start on it.
-	"""
-	value = (os.environ if environ is None else environ).get(LEVEL_CAP_FLAG, "").strip().lower()
-	if value in LEVEL_CAP_NATIVE_VALUES:
-		return NATIVE_LEVEL_CAP
-	if value in LEVEL_CAP_EXPANSION_VALUES:
-		return EXPANSION_LEVEL_CAP
-	raise ValueError(f"{LEVEL_CAP_FLAG} must be off, 90 or 110, not {value!r}")
-
-
-# ================
 # build_switch
 #
 # An on/off build flag: unset or an off value is False (native), an on
@@ -756,7 +555,7 @@ def port_stock_enabled(environ=None):
 # ================
 def add_gates(vsro_root, native, out):
 	"""Write the gate rows into the variant's textdata; returns their summary and tables."""
-	level_cap = gate_level_cap()
+	level_cap = variant_gates.gate_level_cap()
 	textdata = Path("Media_extracted") / TEXTDATA
 	names = ("teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt")
 	tables = {name: (native / textdata / name).read_bytes() for name in names}
@@ -764,11 +563,14 @@ def add_gates(vsro_root, native, out):
 	vsro = {name: read_vsro_file(vsro_root, "Media", TEXTDATA + name) for name in names}
 	vsro["text"] = read_vsro_file(vsro_root, "Media", TEXTDATA + "textdata_object.txt")
 	from cap110_monsters import tomb_enabled
-	codes = GATE_CODES + TOMB_GATE_CODES if tomb_enabled() else GATE_CODES
+	codes = variant_gates.GATE_CODES + variant_gates.TOMB_GATE_CODES if tomb_enabled() else variant_gates.GATE_CODES
 	if temple.temple_enabled():
-		codes += TEMPLE_GATE_CODES
-	merged, summary = merge_gate_tables(
-		tables, vsro, codes=codes, level_cap=level_cap, flatten=TEMPLE_GATE_CODES
+		codes += variant_gates.TEMPLE_GATE_CODES
+	# The ids the buildings must not take: every object row of the trees,
+	# and every released id, whose items later steps add (the pin).
+	taken = published_ids.occupied_objects(native / textdata) | published_ids.taken_objects(out / textdata)
+	merged, summary = variant_gates.merge_gate_tables(
+		tables, vsro, codes=codes, level_cap=level_cap, flatten=variant_gates.TEMPLE_GATE_CODES, taken=taken
 	)
 	for dropped in summary.get("droppedConditions", []):
 		log(f"gates: link {dropped['from']} -> {dropped['to']}: condition kind {dropped['kind']} "
@@ -782,7 +584,7 @@ def add_gates(vsro_root, native, out):
 # ================
 # log_omitted_links
 #
-# One line per keyed link merge_gate_tables left out: the gate it would
+# One line per keyed link variant_gates.merge_gate_tables left out: the gate it would
 # have joined stays shut rather than open without its key.
 # ================
 def log_omitted_links(label, summary):

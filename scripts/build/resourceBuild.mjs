@@ -82,6 +82,7 @@ import {
 	importLaterOptionalTeleportStep,
 	importLaterRenewalMallStep,
 	importLaterTombMinimapStep,
+	importLaterMacroGuideStep,
 	importLaterWorldMapButtonsStep,
 	importLaterWorldMapGuideStep
 } from "./laterClientImports.mjs";
@@ -89,6 +90,8 @@ import {
 export {
 	laterDungeonMapImportPlan,
 	laterDungeonMapPublicPaths,
+	laterMacroGuideImportPlan,
+	laterMacroGuidePublicPaths,
 	laterOptionalTeleportImportPlan,
 	laterRenewalMallImportPlan,
 	laterRenewalMallPublicPaths,
@@ -221,6 +224,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	importLaterDungeonMaps: importLaterDungeonMapsStep,
 	importLaterWorldMapButtons: importLaterWorldMapButtonsStep,
 	importLaterWorldMapGuide: importLaterWorldMapGuideStep,
+	importLaterMacroGuide: importLaterMacroGuideStep,
 	importLaterOptionalTeleport: importLaterOptionalTeleportStep,
 	importLaterTombMinimap: importLaterTombMinimapStep,
 	importLaterRenewalMall: importLaterRenewalMallStep,
@@ -615,6 +619,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// The M map guide's tables and art (#3387) come from the v1.696
 	// archive under the same rule, claimed before the pack tail.
 	const laterWorldMapGuide = await timed( "laterWorldMapGuide", () => steps.importLaterWorldMapGuide() );
+	const laterMacroGuide = await timed( "laterMacroGuide", () => steps.importLaterMacroGuide() );
 	// The reverse return map's destination table rides the v1.188 archive
 	// too, but lands in the game root for the server game-data build.
 	const laterOptionalTeleport = await timed( "laterOptionalTeleport", () => steps.importLaterOptionalTeleport() );
@@ -699,6 +704,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		laterDungeonMaps,
 		laterWorldMapButtons,
 		laterWorldMapGuide,
+		laterMacroGuide,
 		laterOptionalTeleport,
 		laterTombMinimap,
 		laterRenewalMall,

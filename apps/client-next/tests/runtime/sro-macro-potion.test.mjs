@@ -1,0 +1,280 @@
+/*
+===========================================================================
+
+sro-macro-potion.test.mjs - the SRO Macro's character auto-potion
+
+Port-only, not native (#3907): the v1.696 auto-potion rows (readers
+00692e00, 00692f60, 00692d20), the executor's order and 500 ms re-arm
+(006931b0), binding a bag item to a row, and the worker running the loop
+only with the Experimental row on and the server's Auto-Potion ON.
+
+===========================================================================
+*/
+import "../helpers/native-source-loader.mjs";
+import assert from "node:assert/strict";
+import test from "node:test";
+import { macroReplay } from "../helpers/sro-macro-frames.mjs";
+
+const codec = await import( "../../src/engine/foundation/gameplay/sro-macro.ts" );
+const loop = await import( "../../src/engine/foundation/gameplay/sro-macro-potion.ts" );
+const { createSroMacroHud } = await import( "../../src/engine/runtime/ui/hud/sro-macro-hud.ts" );
+const { macroPotionStock } = await import( "../../src/engine/runtime/ui/hud/sro-macro-window.ts" );
+const { experimentalGameplay, experimentalOptions } = await import(
+	"../../src/engine/foundation/ui/experimental-options.ts"
+);
+const { createGameplay } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
+);
+const { MACRO_ROW_HP, MACRO_ROW_MP, MACRO_ROW_CURE } = codec;
+
+const POTION_REF = 7;
+const OTHER_REF = 8;
+// 0xec: expendable potion band, TID3 1 (HP). 0x16c: same band, TID3 2 (MP).
+const CONSUMABLE_TYPE = 0xec;
+const MP_POTION_TYPE = 0x16c;
+const ITEM_USE_OPCODE = 0x75bd;
+
+/*
+================
+row
+
+A potion block with one row set.
+================
+*/
+/**
+ * @param {number} index
+ * @param {{ item: number, a: number, b: number }} slot
+ * @param {readonly number[]} [potion]
+ */
+function row( index, slot, potion = codec.defaultMacroSettings().potion ) {
+	return codec.withPotionSlot( potion, index, slot );
+}
+
+/*
+================
+facts
+================
+*/
+/** @param {Partial<import("../../src/engine/foundation/gameplay/auto-potion.ts").AutoPotionFacts>} [over] */
+function facts( over = {} ) {
+	return { alive: true, hp: 100, mp: 100, maxHp: 100, maxMp: 100, abnormal: 0, ...over };
+}
+
+test("a gauge row is on by its second byte and a check-box row by its first", () => {
+	const gauge = row( MACRO_ROW_HP, { item: 1, a: 50, b: 0 } );
+	assert.equal( codec.potionRowOn( gauge, MACRO_ROW_HP ), false );
+	assert.equal( codec.potionRowOn( row( MACRO_ROW_HP, { item: 1, a: 0, b: 1 } ), MACRO_ROW_HP ), true );
+	assert.equal( codec.potionRowOn( row( MACRO_ROW_CURE, { item: 1, a: 1, b: 0 } ), MACRO_ROW_CURE ), true );
+	assert.equal( codec.potionRowOn( row( MACRO_ROW_CURE, { item: 1, a: 0, b: 1 } ), MACRO_ROW_CURE ), false );
+
+	const on = codec.withPotionRowOn( codec.defaultMacroSettings().potion, MACRO_ROW_MP, true, 50 );
+	assert.deepEqual( codec.potionSlot( on, MACRO_ROW_MP ), { item: 0, a: 50, b: 1 } );
+	const kept = codec.withPotionRowOn( codec.withPotionRowPercent( on, MACRO_ROW_MP, 30 ), MACRO_ROW_MP, false, 50 );
+	assert.deepEqual( codec.potionSlot( kept, MACRO_ROW_MP ), { item: 0, a: 30, b: 0 } );
+	const bound = codec.withPotionRowItem( kept, MACRO_ROW_MP, 0x01020304 );
+	assert.equal( codec.potionSlot( bound, MACRO_ROW_MP ).item, 0x01020304 );
+});
+
+test("HP and MP fire at or under their percent; HP waits out the blocking abnormal bit", () => {
+	const potion = row( MACRO_ROW_MP, { item: 2, a: 40, b: 1 }, row( MACRO_ROW_HP, { item: 1, a: 50, b: 1 } ) );
+	assert.equal( loop.macroPotionWants( potion, MACRO_ROW_HP, facts( { hp: 50 } ) ), true );
+	assert.equal( loop.macroPotionWants( potion, MACRO_ROW_HP, facts( { hp: 51 } ) ), false );
+	assert.equal( loop.macroPotionWants( potion, MACRO_ROW_HP, facts( { hp: 10, abnormal: 0x20 } ) ), false );
+	assert.equal( loop.macroPotionWants( potion, MACRO_ROW_MP, facts( { mp: 40, abnormal: 0x20 } ) ), true );
+	assert.equal( loop.macroPotionWants( potion, MACRO_ROW_MP, facts( { mp: 41 } ) ), false );
+	assert.equal( loop.macroPotionWants( potion, MACRO_ROW_HP, facts( { hp: 10, alive: false } ) ), false );
+});
+
+test("cure fires on any curable abnormal bit; an off or empty row never fires", () => {
+	const cure = row( MACRO_ROW_CURE, { item: 3, a: 1, b: 0 } );
+	assert.equal( loop.macroPotionWants( cure, MACRO_ROW_CURE, facts() ), false );
+	assert.equal( loop.macroPotionWants( cure, MACRO_ROW_CURE, facts( { abnormal: 1 } ) ), true );
+	assert.equal( loop.macroPotionWants( cure, MACRO_ROW_CURE, facts( { abnormal: 0x4000 } ) ), false );
+	const off = row( MACRO_ROW_HP, { item: 1, a: 50, b: 0 } );
+	assert.equal( loop.macroPotionWants( off, MACRO_ROW_HP, facts( { hp: 1 } ) ), false );
+	const empty = row( MACRO_ROW_HP, { item: 0, a: 50, b: 1 } );
+	assert.equal( loop.macroPotionWants( empty, MACRO_ROW_HP, facts( { hp: 1 } ) ), false );
+});
+
+test("a fired row sits out its re-arm, then rejoins at the back of the order", () => {
+	let queue = loop.emptyMacroPotionQueue();
+	assert.deepEqual( queue.ready, [ MACRO_ROW_HP, MACRO_ROW_MP, MACRO_ROW_CURE ] );
+	queue = loop.macroPotionFired( queue, MACRO_ROW_HP, 0 );
+	queue = loop.macroPotionFired( queue, MACRO_ROW_MP, 10 );
+	assert.deepEqual( queue.ready, [ MACRO_ROW_CURE ] );
+	assert.equal( loop.rearmMacroPotion( queue, 499 ), queue, "nothing has re-armed yet" );
+	queue = loop.rearmMacroPotion( queue, 600 );
+	assert.deepEqual( queue.ready, [ MACRO_ROW_CURE, MACRO_ROW_HP ], "one row returns per tick" );
+	queue = loop.rearmMacroPotion( queue, 600 );
+	assert.deepEqual( queue.ready, [ MACRO_ROW_CURE, MACRO_ROW_HP, MACRO_ROW_MP ] );
+	assert.deepEqual( queue.waiting, [] );
+});
+
+test("a row uses the first bag stack of its item, never an equipment socket", () => {
+	const potion = row( MACRO_ROW_HP, { item: POTION_REF, a: 50, b: 1 } );
+	const inventory = [
+		{ slot: 5, refObjId: POTION_REF },
+		{ slot: 20, refObjId: POTION_REF },
+		{ slot: 14, refObjId: POTION_REF },
+		{ slot: 13, refObjId: OTHER_REF }
+	];
+	assert.equal( loop.macroPotionBagSlot( potion, MACRO_ROW_HP, inventory ), 14 );
+	assert.equal( loop.macroPotionBagSlot( potion, MACRO_ROW_MP, inventory ), undefined );
+	assert.equal( loop.macroPotionBagSlot( potion, MACRO_ROW_HP, [ { slot: 3, refObjId: POTION_REF } ] ), undefined );
+});
+
+/*
+================
+optionsHud
+
+The options window open on the potion tab over a fresh replay.
+================
+*/
+function optionsHud() {
+	const live = codec.decodeMacroConfig( macroReplay().payload, codec.defaultMacroSettings() );
+	const hud = createSroMacroHud();
+	hud.toggleMenu( live, true );
+	hud.click( "sro-macro:options:0", live );
+	return { hud, live };
+}
+
+test("a consumable dropped on a row binds its item; a click on the slot clears it", () => {
+	const { hud, live } = optionsHud();
+	assert.equal( hud.bindItem( "slot:13", { refObjId: POTION_REF, typeFlags: CONSUMABLE_TYPE } ), false );
+	assert.equal( hud.bindItem( "sro-macro:item:0", { refObjId: POTION_REF, typeFlags: CONSUMABLE_TYPE } ), true );
+	assert.equal( hud.bindItem( "sro-macro:item:1", { refObjId: OTHER_REF, typeFlags: MP_POTION_TYPE } ), true );
+	let draft = hud.state().draft;
+	assert.ok( draft );
+	assert.equal( codec.potionSlot( draft.potion, MACRO_ROW_HP ).item, POTION_REF );
+	assert.equal( codec.potionSlot( draft.potion, MACRO_ROW_MP ).item, OTHER_REF );
+
+	assert.equal( hud.bindItem( "sro-macro:item:0", { refObjId: OTHER_REF, typeFlags: 0x1 } ), false );
+	// Equipment shares class 0x0c but sits in band 0x20 (press-admission).
+	const EQUIPMENT_TYPE = 0x2c;
+	assert.equal( loop.macroPotionAdmits( 2, EQUIPMENT_TYPE ), false );
+	assert.equal( hud.bindItem( "sro-macro:item:2", { refObjId: OTHER_REF, typeFlags: EQUIPMENT_TYPE } ), false );
+	assert.equal( hud.bindItem( "sro-macro:item:3", { refObjId: OTHER_REF, typeFlags: EQUIPMENT_TYPE } ), false );
+	// Alchemy stones / elixirs (TID3 10/11) on the anomaly rows.
+	const MAGIC_STONE_TYPE = 0x0dec;
+	const ELIXIR_TYPE = 0x0d6c;
+	assert.equal( loop.macroPotionAdmits( 2, MAGIC_STONE_TYPE ), false );
+	assert.equal( loop.macroPotionAdmits( 3, ELIXIR_TYPE ), false );
+	assert.equal( hud.bindItem( "sro-macro:item:2", { refObjId: OTHER_REF, typeFlags: MAGIC_STONE_TYPE } ), false );
+	assert.equal( hud.bindItem( "sro-macro:item:3", { refObjId: OTHER_REF, typeFlags: ELIXIR_TYPE } ), false );
+	// Universal pill (0x16c, TID4 1) binds the Chinese anomaly row only.
+	const CURE_PILL_TYPE = 0x16c | 1 << 11;
+	assert.equal( loop.macroPotionAdmits( 2, CURE_PILL_TYPE ), true );
+	assert.equal( loop.macroPotionAdmits( 3, CURE_PILL_TYPE ), false );
+	const dirty = codec.withPotionRowItem(
+		codec.withPotionRowItem( codec.defaultMacroSettings().potion, 2, OTHER_REF ),
+		3,
+		OTHER_REF
+	);
+	const scrubbed = loop.scrubMacroPotion(
+		{ ...codec.defaultMacroSettings(), potion: dirty },
+		[ { slot: 13, refObjId: OTHER_REF, typeFlags: EQUIPMENT_TYPE } ]
+	);
+	assert.equal( codec.potionSlot( scrubbed.potion, 2 ).item, 0 );
+	assert.equal( codec.potionSlot( scrubbed.potion, 3 ).item, 0 );
+	assert.equal(
+		hud.bindItem( "sro-macro:item:0", { refObjId: OTHER_REF, typeFlags: MP_POTION_TYPE } ),
+		false,
+		"MP potion refuses the HP row"
+	);
+	assert.equal(
+		hud.bindItem( "sro-macro:item:1", { refObjId: POTION_REF, typeFlags: CONSUMABLE_TYPE } ),
+		false,
+		"HP potion refuses the MP row"
+	);
+	draft = hud.state().draft;
+	assert.ok( draft );
+	assert.equal( codec.potionSlot( draft.potion, MACRO_ROW_HP ).item, POTION_REF, "equipment is refused" );
+	assert.equal( hud.isPotionItemSlot( "sro-macro:item:1" ), true );
+	assert.equal( hud.isPotionItemSlot( "sro-macro:check:1" ), false );
+
+	hud.click( "sro-macro:item:1", live );
+	draft = hud.state().draft;
+	assert.ok( draft );
+	assert.equal( codec.potionSlot( draft.potion, MACRO_ROW_MP ).item, 0 );
+
+	assert.equal( hud.bindItem( "sro-macro:item:1", { refObjId: OTHER_REF, typeFlags: MP_POTION_TYPE } ), true );
+	assert.equal( hud.potionItemRef( "sro-macro:item:1" ), OTHER_REF );
+	assert.equal( hud.clearItem( "sro-macro:item:1" ), true );
+	assert.equal( hud.potionItemRef( "sro-macro:item:1" ), 0 );
+	assert.equal( hud.clearItem( "sro-macro:item:1" ), false );
+
+	hud.click( "sro-macro:tab:2", live );
+	assert.equal( hud.bindItem( "sro-macro:item:1", { refObjId: OTHER_REF, typeFlags: MP_POTION_TYPE } ), false );
+});
+
+test("the row's stock sums the bag's stacks of one item", () => {
+	const stock = macroPotionStock( [
+		{ slot: 13, refObjId: POTION_REF, quantity: 10, icon: "a.ddj" },
+		{ slot: 20, refObjId: POTION_REF, quantity: 5 },
+		{ slot: 2, refObjId: POTION_REF, quantity: 99 }
+	], icon => icon ? "/icons/" + icon : null );
+	assert.deepEqual( stock.get( POTION_REF ), { icon: "/icons/a.ddj", quantity: 15 } );
+});
+
+/*
+================
+macroWorld
+
+A world where the v1.150 auto-potion is off, one potion stack sits in the
+first bag slot and the character is at 40 of 100 HP.
+================
+*/
+/** @param {{ row: boolean, potionOn: number }} setup */
+function macroWorld( setup ) {
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const g = createGameplay( /** @param {{ opcode: number, payload: Uint8Array }} f */ f => sent.push( f ) );
+	const local = {
+		gid: 1,
+		refObjId: 1907,
+		kind: /** @type {const} */ ("local-player"),
+		name: "macro",
+		countryByte9c: 0,
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	g.bootstrap( {
+		character: {
+			hp: 40,
+			mp: 100,
+			maxHp: 100,
+			maxMp: 100,
+			autoPotion: { hp: 0x3211, mp: 0x3212, cure: 0x13, timing: 0x8a }
+		},
+		refItemSnapshot: [ { refObjId: POTION_REF, typeFlags: CONSUMABLE_TYPE, nativeFields: {} } ],
+		// The body leads with the RefItem ID (u32), then the stack count.
+		equipItems: [ { slot: 13, refObjId: POTION_REF, body: [ POTION_REF, 0, 0, 0, 10, 0 ] } ]
+	} );
+	g.worldReady();
+	g.seed( local );
+	g.experimental( experimentalGameplay( experimentalOptions( { sroMacro: setup.row } ) ) );
+	const potion = row( MACRO_ROW_HP, { item: POTION_REF, a: 50, b: 1 } );
+	g.receive( macroReplay( { potion, potionOn: setup.potionOn } ), 0 );
+	return { sent, g, local };
+}
+
+test("the worker drinks a bound potion only with the row on and Auto-Potion ON", () => {
+	for (
+		const [setup, uses] of /** @type {const} */ ([
+			[ { row: true, potionOn: 1 }, 1 ],
+			[ { row: false, potionOn: 1 }, 0 ],
+			[ { row: true, potionOn: 0 }, 0 ]
+		])
+	) {
+		const { sent, g, local } = macroWorld( setup );
+		g.step( 0, local );
+		const used = sent.filter( frame => frame.opcode === ITEM_USE_OPCODE );
+		assert.equal( used.length, uses, JSON.stringify( setup ) );
+		if ( uses ) assert.equal( used[0]?.payload[0], 13 );
+		g.dispose();
+	}
+});

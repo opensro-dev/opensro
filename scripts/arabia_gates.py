@@ -51,7 +51,7 @@ not one of GATE_CODES and the merge never appends it. The later link rows carry 
 trailing columns the v1.150 table has no place for; they sit outside
 every condition triple the port evaluates, so rows project to the
 native 21 columns and the merge's own condition rules
-(build_alexandria_variant.translate_link) clamp or drop what it
+(variant_gates.translate_link) clamp or drop what it
 cannot evaluate.
 
 Identities are the source's own unless one already stands in the
@@ -61,6 +61,7 @@ together, so a rebuild authors the same chain the marker recorded.
 ===========================================================================
 """
 import cap110_monsters as monsters
+import variant_gates
 
 # The gate chain, by teleportdata code: the source's rows.
 TOWN_GATE = "GATE_TO_LAST_FIELD_IN_BAGHDAD"
@@ -95,6 +96,22 @@ def renumbered(source_ids, current_ids):
 
 
 # ================
+# renumbered_buildings
+#
+# renumbered for gate buildings: a source id an object holds, or one past
+# the server's building band, moves to a free id under the limit
+# (variant_gates.free_building_ids); the others keep theirs.
+# ================
+def renumbered_buildings(source_ids, taken_ids):
+	taken = {int(i) for i in taken_ids if i.isdigit()}
+	moving = [i for i in source_ids if int(i) in taken or int(i) >= variant_gates.BUILDING_ID_LIMIT]
+	fresh = variant_gates.free_building_ids(taken | {int(i) for i in source_ids}, len(moving))
+	ids = {identity: identity for identity in source_ids}
+	ids.update({identity: str(new) for identity, new in zip(moving, fresh)})
+	return ids
+
+
+# ================
 # prepare_gates
 #
 # The gate tables this import feeds merge_gate_tables, and its codes.
@@ -103,7 +120,7 @@ def renumbered(source_ids, current_ids):
 # teleportdata the Jangan gate is read from; current_ids and current_building_ids are the identities the variant's
 # tables already use (the source identities stand unless one collides).
 # Returns (tables, codes) with tables mapping the three table names and
-# "text" to encoded bytes, ready for variant.merge_gate_tables.
+# "text" to encoded bytes, ready for variant_gates.merge_gate_tables.
 # ================
 def prepare_gates(later, native_data, current_ids, current_building_ids):
 	data_by_code = {row[2]: row for row in later["teleportdata.txt"] if len(row) >= TELEPORT_COLUMNS}
@@ -123,7 +140,7 @@ def prepare_gates(later, native_data, current_ids, current_building_ids):
 		raise ValueError(f"v1.696 teleportbuilding lacks the buildings of the Arabia gates: {unshipped}")
 
 	teleport_ids = renumbered([row[1] for row in source_data], current_ids)
-	building_ids = renumbered([row[3] for row in built], current_building_ids)
+	building_ids = renumbered_buildings([row[3] for row in built], current_building_ids)
 
 	data_rows, building_rows = [], []
 	for row in source_data:

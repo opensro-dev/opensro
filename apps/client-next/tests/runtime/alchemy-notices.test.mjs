@@ -74,3 +74,15 @@ test("a failed magic roll, a success and other frames show no notice", () => {
 	assert.equal( alchemyNotice( 0xb549, Uint8Array.of( 1 ) ), null );
 	assert.equal( alchemyNotice( 0xb16f, Uint8Array.of( 2, 0x40 ) ), null );
 });
+
+/*
+================
+full item refusal
+================
+*/
+test("a stone refused on an item full of magic options says so (0xB651 [2, 2])", () => {
+	// Silent in the original client: the stone looked dead (owner 2026-11-21).
+	assert.equal( alchemyNotice( 0xb651, Uint8Array.of( 2, 2 ) )?.key, "UIIT_MSG_AVATAR_MAGICOPTION_ADD_ERORR" );
+	// The elixir answer's code 2 keeps its own (silent) category 0x12 row.
+	assert.equal( alchemyNotice( 0xb373, Uint8Array.of( 2, 2 ) ), null );
+});

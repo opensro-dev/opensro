@@ -32,6 +32,8 @@ copied from the later archives, pinned by hash by the caller. Each avatar
 the later client's Item Mall sold is listed in the matching mall tab at its
 authored silk price; the rest are carried by GM grant only. Nothing here
 adds a drop or an event reward. No retail table is committed to Git.
+The later client's worn auras (avatar_effects.py) are listed in the
+marker's "effects" for the equipment-particle build.
 
 ===========================================================================
 """
@@ -46,6 +48,7 @@ import re
 
 import alexandria_npcs as text_tables
 import avatar_archive
+import avatar_effects
 import cap110_item_import as shared
 import cap110_items as items
 import import_vsro_alexandria as tables
@@ -764,11 +767,13 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 		# An earlier source's avatars are already in the game: this source
 		# skips their codenames as it skips native ones, and keeps clear of
 		# their identities.
+		imported_before = []
 		for earlier in SOURCES[:source_index(source)]:
 			earlier_shard = output / TEXT_ROOT / earlier["shard"]
 			if earlier_shard.exists():
 				earlier_rows = tables.table_rows(earlier_shard.read_bytes())
 				native_rows = native_rows + earlier_rows
+				imported_before += earlier_rows
 				reserved |= {int(row[items.IDENTITY]) for row in earlier_rows}
 		native_paths = {
 			name: {
@@ -790,6 +795,12 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 		)
 		merged_text, missing_descriptions = items.merge_texts(base_text, later_texts, avatars)
 		assets = shared.copy_asset_closure(avatars, native, output, archives)
+		# An earlier source's avatars take this client's auras too; native ones never do.
+		effects, refused_effects, effect_assets = avatar_effects.import_effects(
+			later_table_rows(media, index, avatar_effects.EFFECT_TABLE), imported_before + avatars,
+			native, output, archives, native_paths["Particles"],
+		)
+		assets += effect_assets
 		strip_mall(output, set(prior.get("mall", {}).get("packages", [])))
 		strip_tabs(output, set(prior.get("mall", {}).get("tabs", [])))
 		strip_text_rows(output, set(prior.get("mall", {}).get("tabLabels", [])))
@@ -856,6 +867,7 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 			"laterArchiveHashes": identities, "shardSha256": sro_pk2.digest(raw_shard),
 			"absentAuthoredDescriptions": missing_descriptions,
 			"assets": assets, "mall": mall_summary,
+			"effects": effects, "refusedEffects": refused_effects,
 			"limits": [
 				"Listed in the Item Mall only where the later client's mall sold them; the rest are granted by GM. No drop or event reward is added.",
 				"Event copies and rows with absent resources (the Nasrun mounts) are not imported.",

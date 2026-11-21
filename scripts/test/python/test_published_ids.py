@@ -54,33 +54,40 @@ class PublishedIdsTest(unittest.TestCase):
 	# test_a_pinned_live_collision_stays_with_the_item
 	#
 	# r202 shipped five ids under a monster and a pet scroll at once, and
-	# the client keeps one object per id (#3994). The scroll a player can
-	# hold keeps the id; the monster leaves the pin and is numbered afresh.
+	# the client keeps one object per id (#3994). The refresh settles it in
+	# the pin: the scroll a player can hold keeps the id, the monster moves
+	# into "former" and is numbered afresh, and an unsettled pin refuses.
 	# ================
 	def test_a_pinned_live_collision_stays_with_the_item(self):
+		pin = {"format": published_ids.PIN_FORMAT, "characters": {"MOB_ARABIA_MUSTAFA": 50331, "MOB_OTHER": 50330},
+			"items": {"ITEM_PRE_COS_P_TOGUIDOL_SCROLL": 50331}}
+		settled = published_ids.settle_shared(pin)
+		self.assertEqual(settled["characters"], {"MOB_OTHER": 50330})
+		self.assertEqual(settled["former"], {"characters": {"MOB_ARABIA_MUSTAFA": [50331]}})
+		self.assertEqual(published_ids.settle_shared(settled), settled)
 		with tempfile.TemporaryDirectory() as folder:
 			path = Path(folder) / "pin.json"
-			pin = {"format": published_ids.PIN_FORMAT, "characters": {"MOB_ARABIA_MUSTAFA": 50331, "MOB_OTHER": 50330},
-				"items": {"ITEM_PRE_COS_P_TOGUIDOL_SCROLL": 50331}}
-			path.write_text(json.dumps(pin), encoding="utf-8")
 			saved = published_ids.os.environ[published_ids.PIN_VARIABLE]
 			published_ids.os.environ[published_ids.PIN_VARIABLE] = str(path)
 			try:
+				path.write_text(json.dumps(pin), encoding="utf-8")
+				with self.assertRaises(ValueError):
+					published_ids.published(published_ids.OBJECTS)
+				path.write_text(json.dumps(settled), encoding="utf-8")
 				pinned = published_ids.published(published_ids.OBJECTS)
 				self.assertEqual(pinned, {"MOB_OTHER": 50330, "ITEM_PRE_COS_P_TOGUIDOL_SCROLL": 50331})
+				self.assertEqual(published_ids.former_ids("characters"), {"MOB_ARABIA_MUSTAFA": [50331]})
 				# Whichever importer runs first, the monster never takes 50331.
 				monsters = published_ids.allocate(published_ids.OBJECTS, set(), ["MOB_ARABIA_MUSTAFA"], {}, pinned)
 				self.assertEqual(monsters, {"MOB_ARABIA_MUSTAFA": 50332})
 				scrolls = published_ids.allocate(published_ids.OBJECTS, {50332}, ["ITEM_PRE_COS_P_TOGUIDOL_SCROLL"], {},
 					pinned)
 				self.assertEqual(scrolls, {"ITEM_PRE_COS_P_TOGUIDOL_SCROLL": 50331})
-				# Two items under one id has no holder to prefer, so it refuses.
-				pin["items"]["ITEM_TWIN"] = 50331
-				path.write_text(json.dumps(pin), encoding="utf-8")
-				with self.assertRaises(ValueError):
-					published_ids.published(published_ids.OBJECTS)
 			finally:
 				published_ids.os.environ[published_ids.PIN_VARIABLE] = saved
+		# Two items under one id has no holder to prefer, so it refuses.
+		with self.assertRaises(ValueError):
+			published_ids.settle_shared({**pin, "items": {"ITEM_PRE_COS_P_TOGUIDOL_SCROLL": 50331, "ITEM_TWIN": 50331}})
 		# A kept id another row of the tree holds still refuses.
 		with self.assertRaises(ValueError):
 			published_ids.allocate(published_ids.OBJECTS, {7}, ["A"], {}, {"A": 7})
@@ -169,6 +176,22 @@ class PinToolTest(unittest.TestCase):
 			document = pin_tool.build_pin(folder, {"items": {"OLD": 9}})
 		self.assertEqual(document, {"format": published_ids.PIN_FORMAT, "release": "abc",
 			"characters": {"MOB": 3}, "items": {"ITEM": 4, "OLD": 9}, "skills": {"SKILL": 3}})
+
+	# ================
+	# test_a_refresh_settles_a_shared_id_and_keeps_the_former_map
+	#
+	# A refresh from a catalogue that still lists a monster on a scroll's
+	# id settles it, and the former map of the previous pin carries over.
+	# ================
+	def test_a_refresh_settles_a_shared_id_and_keeps_the_former_map(self):
+		with tempfile.TemporaryDirectory() as folder:
+			for file, key, rows in (("monsters.json", "monsters", [{"codename": "MOB", "id": 4}]),
+					("items.json", "items", [{"codename": "ITEM", "id": 4}]),
+					("skills.json", "skills", [])):
+				(Path(folder) / file).write_text(json.dumps({"release": "abc", key: rows}), encoding="utf-8")
+			document = pin_tool.build_pin(folder, {"former": {"characters": {"OLD_MOB": [2]}}})
+		self.assertEqual(document["characters"], {})
+		self.assertEqual(document["former"], {"characters": {"MOB": [4], "OLD_MOB": [2]}})
 
 
 if __name__ == "__main__":

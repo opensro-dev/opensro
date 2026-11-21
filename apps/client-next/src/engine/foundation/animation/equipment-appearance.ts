@@ -75,6 +75,9 @@ export interface DressCatalog {
 	specialGlows?: Record<string, readonly ModelParticle[]>;
 	// Port-only, not native: equipmentEnchantSparks' rows, by item id.
 	enchantSparks?: Record<string, readonly ModelParticle[]>;
+	// Port-only, not native: the later mall avatars' worn auras
+	// (avatarWornEffects), by item id, on the wearer's own bones.
+	avatarEffects?: Record<string, readonly ModelParticle[]>;
 	avatarVisualOverrides?: Record<string, { animation: string; priority: number; additionalBsr: string; }>;
 	avatarAuxiliary?: Record<string, AuxiliaryEntry>;
 	equipment?: Record<string, EquipmentRecord>;
@@ -330,6 +333,9 @@ export function assembleEquipmentAppearance( input: AppearanceInput ): Appearanc
 		const entry = visual.bodies[prefix];
 		if ( entry === undefined ) throw Error( `Missing cosmetic attachment ${prefix}/${item.refObjId}` );
 		if ( entry === null ) continue;
+		// Port-only, not native: a later mall avatar's worn aura, on the
+		// wearer's bones (or origin) like the body's own ambient set.
+		particles.push( ...(dress.avatarEffects?.[item.refObjId] ?? []) );
 		// Native item masks already decide admission. Mesh coverage hides
 		// base-body geometry; it must not remove another accepted item.
 		if ( entry.auxiliary ) {
