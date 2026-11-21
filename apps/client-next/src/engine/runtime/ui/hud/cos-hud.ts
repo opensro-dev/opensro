@@ -23,7 +23,7 @@ import type { GameplayCommand, InventoryItem, CosRecord } from "@/engine/contrac
 import { cosClass } from "@/engine/foundation/ui/cos-command";
 import { companionItemTargetCommand } from "@/engine/foundation/gameplay/cos-item-use";
 import {
-	isWeaponSwitchScrollItem,
+	isWeaponSwitchScroll,
 	weaponKind,
 	weaponSwitchKinds,
 	WEAPON_RACES
@@ -100,7 +100,7 @@ export function createCosHud() {
 		*/
 		chooseItemTarget( item: InventoryItem | undefined ) {
 			if ( !source || !item || targetUse ) return false;
-			if ( isWeaponSwitchScrollItem( source.refObjId ) ) {
+			if ( isWeaponSwitchScroll( source.codename ) ) {
 				// Port-only: a bag weapon opens the race step; anything else
 				// leaves the cursor armed for another click.
 				if ( item.slot < 13 || weaponKind( item.typeFlags ) === 0 ) return false;
@@ -109,7 +109,7 @@ export function createCosHud() {
 				targetUse = { kind: "item-use", slot: source.slot, targetSlot: item.slot };
 				return true;
 			}
-			const raceKind = raceSwitchKindOf( source.refObjId );
+			const raceKind = raceSwitchKindOf( source.codename );
 			if ( raceKind ) {
 				// Port-only: a bag item the race switch scroll takes opens
 				// the Yes/No confirmation; anything else leaves the cursor
@@ -198,8 +198,8 @@ export function createCosHud() {
 		*/
 		targetUseBox(): "cos-revive" | "cos-renew" | "gender-change" | "weapon-switch" | "race-switch" | null {
 			if ( !targetUse || targetUse.kind !== "item-use" ) return null;
-			if ( source && isWeaponSwitchScrollItem( source.refObjId ) ) return "weapon-switch";
-			if ( source && raceSwitchKindOf( source.refObjId ) ) return "race-switch";
+			if ( source && isWeaponSwitchScroll( source.codename ) ) return "weapon-switch";
+			if ( source && raceSwitchKindOf( source.codename ) ) return "race-switch";
 			if ( targetUse.targetSlot !== undefined ) return "gender-change";
 			return targetUse.revivalSlot !== undefined ? "cos-revive" : "cos-renew";
 		},

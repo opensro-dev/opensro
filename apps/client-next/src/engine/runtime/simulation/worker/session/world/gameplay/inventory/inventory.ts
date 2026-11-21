@@ -18,7 +18,7 @@ import { globalChatTail, isGlobalChatItem } from "@/engine/foundation/gameplay/g
 import { isTradeGoods } from "@/engine/foundation/gameplay/specialty-deal";
 import { type ChatLinkRef, encodeChatLinkRefs } from "@/engine/foundation/gameplay/chat-item-links";
 import { isNameChangeScrollItem, nameChangeTail } from "@/engine/foundation/gameplay/name-change";
-import { isWeaponSwitchScrollItem, weaponSwitchTail } from "@/engine/foundation/gameplay/weapon-switch";
+import { isWeaponSwitchScroll, weaponSwitchTail } from "@/engine/foundation/gameplay/weapon-switch";
 import { raceSwitchKindOf, raceSwitchTail } from "@/engine/foundation/gameplay/race-switch";
 import {
 	nativeStackIdentity,
@@ -327,6 +327,7 @@ present
 		const result = {
 			...item,
 			name: names.get( item.refObjId ) ?? item.name,
+			codename: codenames.get( item.refObjId ) ?? item.codename,
 			icon: icons.get( item.refObjId ) ?? item.icon,
 			tooltip,
 			nativeFields: tooltip?.fields,
@@ -1900,9 +1901,9 @@ use
 			// companion tail path.
 			const tail = isNameChangeScrollItem( item.refObjId ) ?
 				nameChangeTail( context?.renameName ?? "" ) :
-				isWeaponSwitchScrollItem( item.refObjId ) ?
+				isWeaponSwitchScroll( codenames.get( item.refObjId ) ) ?
 				weaponSwitchTail( context?.targetSlot, context?.weaponKind ) :
-				raceSwitchKindOf( item.refObjId ) ?
+				raceSwitchKindOf( codenames.get( item.refObjId ) ) ?
 				raceSwitchTail( context?.targetSlot ) :
 				isGlobalChatItem( item.typeFlags ) ?
 				Uint8Array.from( [ ...globalChatTail( message ?? "" ), ...encodeChatLinkRefs( links ) ] ) :

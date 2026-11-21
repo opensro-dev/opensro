@@ -6,11 +6,12 @@ weapon-switch.ts - the weapon switch scroll's identity, kinds and tail
 Port-only, not native (owner, 2026-11-04; 2026-11-21): a scroll sold in
 the Item Mall while the server runs SRO_WEAPON_SWITCH_SCROLL turns a bag
 weapon into another kind of the same degree, grade and seal, its plus
-and blue options kept. It is a
-shipped item the v1.150 game never sells, drops or uses (ITEM_MALL_
-REINFORCE_WEAPON_INC_2_SCROLL, ref 3790), so the client knows it by its
-RefObjID alone: its type word (3/3/13/11) is shared with the reinforce
-scrolls and the name-change scroll (name-change.ts).
+and blue options kept. It is an item of its own the variant build stages
+(ITEM_MALL_WEAPON_SWITCH_SCROLL, scripts/switch_scroll_import.py), a copy
+of a reinforce scroll's row under a build-assigned RefObjID, so the
+client knows it by its codename alone: its type word (3/3/13/11) is
+shared with the reinforce scrolls and the name-change scroll
+(name-change.ts).
 
 Using it arms the item-target cursor (cos-hud.ts); the clicked bag weapon
 opens a box that asks the race (Chinese or European), then the kind of
@@ -23,8 +24,8 @@ live here.
 ===========================================================================
 */
 
-// The donor item's shipped identity (see the file banner).
-export const WEAPON_SWITCH_SCROLL_REF_OBJ_ID = 3790;
+// The scroll's item (see the file banner).
+export const WEAPON_SWITCH_SCROLL_CODENAME = "ITEM_MALL_WEAPON_SWITCH_SCROLL";
 
 // A wielded weapon's type word under the TypeID 1..3 mask: 3/1/6, that is
 // 3 << 2 | 1 << 5 | 6 << 7.
@@ -46,13 +47,13 @@ const EUROPEAN_LAST_KIND = 15;
 
 /*
 ================
-isWeaponSwitchScrollItem
+isWeaponSwitchScroll
 
-Whether a bag row is the scroll. RefObjID, never the type word.
+Whether a bag row's codename is the scroll's; never the type word.
 ================
 */
-export function isWeaponSwitchScrollItem( refObjId: number ): boolean {
-	return refObjId === WEAPON_SWITCH_SCROLL_REF_OBJ_ID;
+export function isWeaponSwitchScroll( codename: string | undefined ): boolean {
+	return codename === WEAPON_SWITCH_SCROLL_CODENAME;
 }
 
 /*

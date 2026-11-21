@@ -24,7 +24,13 @@ The scroll in bag slot 13 and a Chinese sword (3/1/6/2) in slot 14.
 function weaponSwitchFixture() {
 	const sent = [], f = uiFixture( command => sent.push( command ) );
 	const base = { quantity: 1, plus: 0, durability: 0, variance: "0", magic: [] };
-	const scroll = { ...base, slot: 13, refObjId: 3790, typeFlags: 0x5eec };
+	const scroll = {
+		...base,
+		slot: 13,
+		refObjId: 290001,
+		typeFlags: 0x5eec,
+		codename: "ITEM_MALL_WEAPON_SWITCH_SCROLL"
+	};
 	const sword = { ...base, slot: 14, refObjId: 9101, typeFlags: 0x132c };
 	const state = {
 		...f.state,

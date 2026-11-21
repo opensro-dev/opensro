@@ -621,7 +621,7 @@ import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-t
 import { AUTO_SELECT_ACTION_ID, offeredActions } from "@/engine/foundation/ui/action-layout";
 import { itemTooltip, weaponTypeSymbol } from "@/engine/foundation/ui/item-tooltip";
 import { itemTooltipSet, tooltipSetViewer } from "@/engine/foundation/ui/item-tooltip-set";
-import { isWeaponSwitchScrollItem, weaponRaceName } from "@/engine/foundation/gameplay/weapon-switch";
+import { isWeaponSwitchScroll, weaponRaceName } from "@/engine/foundation/gameplay/weapon-switch";
 import { raceSwitchKindOf } from "@/engine/foundation/gameplay/race-switch";
 import { commerceTooltip, mallTooltipRows } from "@/engine/foundation/ui/commerce-tooltip";
 import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
@@ -2841,8 +2841,8 @@ export function createUi( ports: UiPorts ) {
 			// cursor; their box's pick carries the target, so it uses
 			// straight through.
 			if (
-				item && (armsItemTargetCursor( item.typeFlags ) || isWeaponSwitchScrollItem( item.refObjId ) ||
-					raceSwitchKindOf( item.refObjId ) !== null) &&
+				item && (armsItemTargetCursor( item.typeFlags ) || isWeaponSwitchScroll( item.codename ) ||
+					raceSwitchKindOf( item.codename ) !== null) &&
 				command.summonerSlot === undefined && command.revivalSlot === undefined &&
 				command.targetSlot === undefined
 			) {

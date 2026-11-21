@@ -4095,7 +4095,7 @@ state here before a command can claim a native wire conversation.
 				// Port-only: the weapon switch scroll's refusal bytes likewise.
 				if ( sent && command.weaponKind !== undefined ) weaponSwitchUseInFlight = true;
 				// Port-only: the race switch scrolls' refusal bytes likewise.
-				if ( sent && usedItem ) raceSwitchUseInFlight = raceSwitchKindOf( usedItem.refObjId );
+				if ( sent && usedItem ) raceSwitchUseInFlight = raceSwitchKindOf( usedItem.codename );
 				return sent;
 			}
 			if ( command.kind === "crest-register" ) {
