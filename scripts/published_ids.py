@@ -236,6 +236,25 @@ def shared_objects(text_root):
 
 
 # ================
+# moved_objects
+#
+# code -> (pinned id, built id) for every row of the tree at text_root
+# whose code the pin holds at another id. A released id is what a
+# player's records name (a stored pet, an appointed gate), and an
+# allocator that stepped over its own code's pinned id as taken moved it
+# silently: the fox pets moved in r203r and a summoned fox locked its
+# owner out (#4019). The variant build refuses a tree that has any.
+# ================
+def moved_objects(text_root):
+	pinned = published(OBJECTS)
+	moved = {}
+	for _, row in object_rows(text_root):
+		if len(row) > 2 and row[2] in pinned and pinned[row[2]] != int(row[1]):
+			moved[row[2]] = (pinned[row[2]], int(row[1]))
+	return moved
+
+
+# ================
 # object_rows
 #
 # (file name, row) for every id row of the object tables under text_root,
