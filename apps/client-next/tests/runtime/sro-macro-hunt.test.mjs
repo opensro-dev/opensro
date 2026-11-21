@@ -47,9 +47,16 @@ block
 A hunt block with selected bytes overwritten.
 ================
 */
+/**
+ * @param {Record<number, number>} [overrides]
+ * @returns {number[]}
+ */
 function block( overrides = {} ) {
 	const next = codec.defaultHuntBlock();
-	for ( const [byte, value] of Object.entries( overrides ) ) next[Number( byte )] = value;
+	for ( const byte of Object.keys( overrides ) ) {
+		const index = Number( byte );
+		next[index] = overrides[index] ?? 0;
+	}
 	return next;
 }
 
@@ -58,6 +65,10 @@ function block( overrides = {} ) {
 facts
 ================
 */
+/**
+ * @param {Partial<import("../../src/engine/foundation/gameplay/sro-macro-hunt.ts").MacroHuntFacts>} [overrides]
+ * @returns {import("../../src/engine/foundation/gameplay/sro-macro-hunt.ts").MacroHuntFacts}
+ */
 function facts( overrides = {} ) {
 	return {
 		alive: true,
@@ -241,7 +252,9 @@ test("hunt group values are not choice indices for range and return", async () =
 	const { MACRO_HUNT_GROUPS } = await import( "../../src/engine/runtime/ui/hud/sro-macro-hud.ts" );
 	const range = MACRO_HUNT_GROUPS.find( g => g.byte === HUNT_BYTE_RANGE );
 	const ret = MACRO_HUNT_GROUPS.find( g => g.byte === HUNT_BYTE_RETURN );
+	assert.ok( range );
+	assert.ok( ret );
 	assert.deepEqual( range.choices.map( c => c.value ), [ 0, 1, 2, 3, 4 ] );
-	assert.equal( range.choices[0].label, "In place" );
+	assert.equal( range.choices[0]?.label, "In place" );
 	assert.deepEqual( ret.choices.map( c => c.value ), [ 0, 1, 3, 5, 10 ] );
 });

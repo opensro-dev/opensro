@@ -30,21 +30,19 @@ The nearest living monster inside the reach, or undefined. 861580 tests a
 state bit on each list entry; the port's list holds spawned monsters, and
 the inference recorded here is that the bit excludes the dead, which no
 player could select to any purpose. reach defaults to Auto Select's 70;
-the SRO Macro hunt pass (0068e700) supplies its configured range.
-skip drops candidates the hunt's Dimension-pillar check refuses.
+the SRO Macro hunt pass (0068e700) supplies its configured range. The
+caller filters out Dimension pillars when hunt byte 9 is set.
 ================
 */
 export function nearestMonster(
 	monsters: readonly EntityState[],
 	local: { readonly regionId: number; readonly x: number; readonly y: number; readonly z: number; },
-	reach: number = AUTO_SELECT_REACH,
-	skip?: ( monster: EntityState ) => boolean
+	reach: number = AUTO_SELECT_REACH
 ): EntityState | undefined {
 	if ( !(reach > 0) ) return undefined;
 	let best: EntityState | undefined, bestDistance = reach * reach;
 	for ( const monster of monsters ) {
 		if ( monster.appearanceState?.[0] === APPEARANCE_DEAD ) continue;
-		if ( skip?.( monster ) ) continue;
 		if ( !samePlane( monster.regionId, local.regionId ) ) continue;
 		const height = monster.y - local.y, distance = planarDistanceSquared( local, monster ) + height * height;
 		if ( distance > bestDistance ) continue;

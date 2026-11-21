@@ -1354,6 +1354,8 @@
 			"functions": [
 				"callback:createGameplay:1",
 				"callback:createGameplay:4",
+				"callback:createGameplay:5",
+				"callback:createGameplay:6",
 				"structure"
 			]
 		},

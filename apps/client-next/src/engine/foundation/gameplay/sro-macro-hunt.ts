@@ -34,12 +34,6 @@ export const HUNT_BYTE_TIME_TOWN = 11;
 // 0068e700 jump table: 0 = In place, 1..4 = 30/50/70/100 m (native units
 // are metres * 10: 300/500/700/1000).
 export const HUNT_RANGE_IN_PLACE = 0;
-const HUNT_RANGE_METRES: Readonly<Record<number, number>> = {
-	1: 30,
-	2: 50,
-	3: 70,
-	4: 100
-};
 // In-place still selects a mob in melee reach; native 68db80 keeps a
 // short-range finder when the float is 0. Port inference: 7 units.
 export const HUNT_IN_PLACE_REACH = 7;
@@ -156,7 +150,11 @@ the range byte is unknown (refuse to roam).
 */
 export function huntRangeReach( rangeByte: number ): number {
 	if ( rangeByte === HUNT_RANGE_IN_PLACE ) return HUNT_IN_PLACE_REACH;
-	return HUNT_RANGE_METRES[rangeByte] ?? 0;
+	if ( rangeByte === 1 ) return 30;
+	if ( rangeByte === 2 ) return 50;
+	if ( rangeByte === 3 ) return 70;
+	if ( rangeByte === 4 ) return 100;
+	return 0;
 }
 
 /*

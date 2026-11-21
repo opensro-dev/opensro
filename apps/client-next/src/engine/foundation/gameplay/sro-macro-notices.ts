@@ -131,13 +131,15 @@ macroTownDisableKinds
 OFF and print MACRO_OFF. Returns the kinds to turn off (empty when none).
 ================
 */
+export type MacroCombatKind = typeof MACRO_SKILL | typeof MACRO_HUNT;
+
 export function macroTownDisableKinds(
 	skillOn: boolean,
 	huntOn: boolean,
 	inTown: boolean
-): readonly MacroKind[] {
+): readonly MacroCombatKind[] {
 	if ( !inTown || (!skillOn && !huntOn) ) return [];
-	const next: MacroKind[] = [];
+	const next: MacroCombatKind[] = [];
 	if ( huntOn ) next.push( MACRO_HUNT );
 	if ( skillOn ) next.push( MACRO_SKILL );
 	return next;

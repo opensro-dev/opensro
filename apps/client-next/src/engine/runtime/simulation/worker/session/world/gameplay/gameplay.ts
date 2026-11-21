@@ -6941,7 +6941,7 @@ requestMacroOff
 Send 0x7554 OFF for a kind that is currently on (006865e0 / 006861c0).
 ================
 	*/
-	function requestMacroOff( kind: typeof MACRO_HUNT | typeof MACRO_SKILL ) {
+	function requestMacroOff( kind: typeof MACRO_SKILL | typeof MACRO_HUNT ) {
 		const frame = sroMacro.switchFrame( kind, false );
 		if ( frame ) send( frame );
 	}
@@ -7021,14 +7021,10 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 			target.appearanceState?.[0] !== 2;
 		const reach = huntRangeReach( settings.hunt[0] ?? 0 );
 		const skipPillar = (settings.hunt[HUNT_BYTE_PILLAR] ?? 0) !== 0;
-		const nearest = pose ?
-			nearestMonster(
-				listMonsters(),
-				pose,
-				reach,
-				skipPillar ? m => isDimensionPillarName( m.name ) : undefined
-			) :
-			undefined;
+		const monsters = skipPillar ?
+			listMonsters().filter( monster => !isDimensionPillarName( monster.name ) ) :
+			listMonsters();
+		const nearest = pose ? nearestMonster( monsters, pose, reach ) : undefined;
 		const party = new Set( social.members.map( member => member.id ) );
 		const pickup = pose && localGid ?
 			nearestPickable(
