@@ -256,7 +256,7 @@ test("compound advances mixed stacks using per-step counts instead of restarting
 	assert.equal( a.state().remaining, 0 );
 	assert.equal( a.state().pending, false );
 });
-test("advanced pads five native slots; dissolve rides the compound packet; invalid requests preserve state", () => {
+test("advanced pads five native slots; dissolve uses its separate opcode; invalid requests preserve state", () => {
 	const a = createAlchemy(),
 		items = new Map( [ [ 13, { quantity: 5, typeFlags: 0x032c } ], [ 14, { quantity: 8 } ] ] );
 	a.open();
@@ -280,40 +280,27 @@ test("advanced pads five native slots; dissolve rides the compound packet; inval
 	] );
 	a.compound( true, 1 );
 	assert.equal( a.state().pending, false );
-	// A dissolve carries the window's count field as it stands (the All
-	// button sums the staged stacks); it is no batch count and never
-	// refuses the request.
+	// The window's count edit never reaches the dissolve frame: the All
+	// button's summed stacks (5000) still send one {n, s0, s1} request.
 	const bulk = a.start( "dissolve", [ 13, 14 ], items, 2000, 5000 );
-	assert.equal( bulk.opcode, 0x716f );
-	assert.deepEqual( [ ...bulk.payload ], [ 2, 3, 0x88, 0x13, 0, 0, 2, 13, 14, 12, 12, 12 ] );
+	assert.equal( bulk.opcode, 0x7549 );
+	assert.deepEqual( [ ...bulk.payload ], [ 2, 13, 14 ] );
+	assert.equal( a.state().total, 1 );
 	a.compound( false, undefined, 7 );
 	assert.throws( () => a.start( "dissolve", [ 13, 14, 15 ], items, 4000, 1 ), /unavailable/ );
 	const dissolve = a.start( "dissolve", [ 13, 14 ], items, 4000, 1 );
-	assert.equal( dissolve.opcode, 0x716f );
-	assert.deepEqual( [ ...dissolve.payload ], [ 2, 3, 1, 0, 0, 0, 2, 13, 14, 12, 12, 12 ] );
+	assert.equal( dissolve.opcode, 0x7549 );
+	assert.deepEqual( [ ...dissolve.payload ], [ 2, 13, 14 ] );
 	a.compound( false, undefined, 7 );
 	assert.equal( a.state().pending, false );
 	assert.equal( a.state().error, 7 );
 });
-test("single-selection compound and dissolution requests share the compound framing", () => {
+test("native single-selection compound and dissolution requests retain their distinct layouts", () => {
 	const a = createAlchemy(), items = new Map( [ [ 13, { quantity: 5, typeFlags: 0x032c } ] ] );
 	a.open();
 	assert.deepEqual( [ ...a.start( "compound", [ 13 ], items, 0, 2 ).payload ], [ 2, 1, 2, 0, 0, 0, 1, 13 ] );
 	a.compound( true, 2 );
-	assert.deepEqual( [ ...a.start( "dissolve", [ 13 ], items, 2000, 1 ).payload ], [
-		2,
-		3,
-		1,
-		0,
-		0,
-		0,
-		1,
-		13,
-		12,
-		12,
-		12,
-		12
-	] );
+	assert.deepEqual( [ ...a.start( "dissolve", [ 13 ], items, 2000, 1 ).payload ], [ 1, 13, 12 ] );
 	const b = createAlchemy();
 	b.open();
 	for ( const excluded of [ 0x03ac, 0x06ac, 0x832c ] ) {

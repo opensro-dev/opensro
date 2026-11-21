@@ -131,6 +131,11 @@ export function createAlchemy() {
 				throw Error( "Alchemy target must be equipment" );
 			}
 			if ( process ) {
+				// 6220A0 window mode 2 sends a dissolve through Enchant7549 as
+				// {n, s0, s1}: the frame has no quantity field, so the window's
+				// count edit (the All button sums the staged stacks) never reaches
+				// the wire and never refuses the request. One request, one step.
+				const steps = mode === "dissolve" ? 1 : quantity;
 				if ( mode === "advanced" && quantity !== 1 ) throw Error( "Tablet manufacture requires quantity one" );
 				const available = mode === "compound" ?
 					selected.reduce(
@@ -141,29 +146,14 @@ export function createAlchemy() {
 					) :
 					items.get( selected[0]! )!.quantity;
 				if (
-					mode !== "dissolve" &&
-					(!Number.isSafeInteger( quantity ) || quantity < 1 || quantity > 0xffffffff || quantity > available)
+					!Number.isSafeInteger( steps ) || steps < 1 || steps > 0xffffffff || steps > available
 				) {
 					throw Error( "Invalid compound quantity" );
 				}
 				let opcode: number, payload: Uint8Array;
 				if ( mode === "dissolve" ) {
-					// 6220A0 (window mode 3) -> 702180: the disassemble request
-					// rides the compound packet: 2, mode 3, the window's count
-					// field, the slot count, then five bag slots padded with
-					// 12. The count field is no batch count - the server
-					// dissolves the one named equipment and takes the Rondo
-					// from the bag - so any quantity the window carries (the
-					// All button sums the staged stacks) goes on the wire as
-					// it stands and never refuses the request here.
-					opcode = 0x716f;
-					payload = new Uint8Array( 12 );
-					payload[0] = 2;
-					payload[1] = 3;
-					new DataView( payload.buffer ).setUint32( 2, quantity >>> 0, true );
-					payload[6] = selected.length;
-					payload.set( selected, 7 );
-					payload.fill( 12, 7 + selected.length );
+					opcode = 0x7549;
+					payload = Uint8Array.of( selected.length, selected[0]!, selected[1] ?? 12 );
 				} else {
 					opcode = 0x716f;
 					const slots = mode === "advanced" ?
@@ -184,8 +174,8 @@ export function createAlchemy() {
 					error: null,
 					slot: selected[0]!,
 					designated,
-					remaining: quantity,
-					total: quantity,
+					remaining: steps,
+					total: steps,
 					lockUntil: now + 2000,
 					locked: true,
 					cancelled: false

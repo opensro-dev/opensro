@@ -212,36 +212,3 @@ func TestProcessDecoderRejectsTruncationTrailingAndDuplicateSlots(t *testing.T) 
 		t.Fatal(r, err)
 	}
 }
-
-/*
-================
-TestProcessDecoderAcceptsNativeDisassembleFrame
-
-The v1.150 window sends a dismantle as a 0x716F mode-3 request in the
-compound framing (client 6220A0 -> 702180): {2, 3, u32 count field, count,
-five slots 12-padded}. The count field is the window's count edit, not a
-batch count, so the decode pins quantity one. Bad pads, duplicates and
-the short framing stay refusals, and the legacy 0x7549 frame keeps
-decoding for tabs built against it.
-================
-*/
-func TestProcessDecoderAcceptsNativeDisassembleFrame(t *testing.T) {
-	// The All button's summed count field (5000) standing in the u32.
-	r, err := DecodeProcess(OpCompound, []byte{2, 3, 0x88, 0x13, 0, 0, 2, 13, 14, 12, 12, 12})
-	if err != nil || r.Mode != 3 || r.Quantity != 1 || !reflect.DeepEqual(r.Slots, []uint8{13, 14}) {
-		t.Fatal("native disassemble frame diverged", r, err)
-	}
-	for _, p := range [][]byte{
-		{2, 3, 1, 0, 0, 0, 2, 13, 14, 12, 12, 11}, // pad byte is not 12
-		{2, 3, 1, 0, 0, 0, 2, 13, 13, 12, 12, 12}, // duplicate slot
-		{2, 3, 1, 0, 0, 0, 1, 13},                 // mode-1 short framing
-		{2, 4, 1, 0, 0, 0, 1, 13, 12, 12, 12, 12}, // unknown mode
-	} {
-		if _, err := DecodeProcess(OpCompound, p); err == nil {
-			t.Fatal("accepted malformed disassemble", p)
-		}
-	}
-	if r, err := DecodeProcess(OpDissolve, []byte{2, 13, 14}); err != nil || r.Mode != 3 || len(r.Slots) != 2 {
-		t.Fatal("legacy dissolve frame regressed", r, err)
-	}
-}

@@ -37,21 +37,12 @@ func DecodeProcess(op uint16, p []byte) (ProcessRequest, error) {
 		r.Quantity = 1
 		r.Slots = append([]uint8(nil), p[1:1+int(p[0])]...)
 	} else {
-		if op != OpCompound || len(p) < 8 || p[0] != 2 || (p[1] != 1 && p[1] != 2 && p[1] != 3) {
+		if op != OpCompound || len(p) < 8 || p[0] != 2 || (p[1] != 1 && p[1] != 2) {
 			return r, Refusal(0x10)
 		}
 		r.Mode = p[1]
 		r.Quantity = binary.LittleEndian.Uint32(p[2:6])
 		count := int(p[6])
-		// Mode 3 is the disassemble request riding the compound packet:
-		// CIFAlchemyBox_ExecuteAction (client 6220A0) sends window mode 3
-		// through NetClient_SendAlchemyDisassemble716F (client 702180) in
-		// the compound framing. The u32 is the window's count field, not a
-		// batch count; a dismantle dissolves the one named equipment, so
-		// the request's quantity is one whatever the field carries.
-		if r.Mode == 3 {
-			r.Quantity = 1
-		}
 		if r.Quantity == 0 || count < 1 || count > 9 {
 			return r, Refusal(0x10)
 		}

@@ -148,13 +148,13 @@ test("a dissolve whose products would not fit prints the needed count and sends 
 	// A roomier bag has the seven free slots and sends.
 	const roomy = world( { inventorySlotCount: 45, price: 187500, magicCount: 2 } );
 	const sentFrame = roomy.game.command( { kind: "alchemy-start", mode: "dissolve", slots: [ 13, 14 ] }, 1 );
-	assert.equal( sentFrame.opcode, 0x716f );
+	assert.equal( sentFrame.opcode, 0x7549 );
 	assert.deepEqual( noticeKeys( roomy.game ), [] );
 	// The boundary is strict: a cheap item needs four slots, and a bag
 	// with exactly four free (nine slots, five rows) still sends.
 	const cheap = world( { inventorySlotCount: 22, price: 100 } );
 	const cheapFrame = cheap.game.command( { kind: "alchemy-start", mode: "dissolve", slots: [ 13, 14 ] }, 1 );
-	assert.equal( cheapFrame.opcode, 0x716f );
+	assert.equal( cheapFrame.opcode, 0x7549 );
 	assert.deepEqual( noticeKeys( cheap.game ), [] );
 });
 
