@@ -65,6 +65,40 @@ path).
 ================
 */
 func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
+	result := buildBootstrap(deps, request)
+	if result.NativeResult != nativeResultSuccess {
+		logRefusedEntry(request, result)
+	}
+	return result
+}
+
+/*
+================
+logRefusedEntry
+
+Every refused entry, login and re-entry alike, as one log line: the
+player sees only a native code (S2 is 0x02, which eleven refusals share),
+so without this line a refusal is found only by reading the store
+(#4019).
+================
+*/
+func logRefusedEntry(request BootstrapRequest, result *BootstrapResult) {
+	fields := log.Fields{"division": request.DivisionID, "character": request.CharacterName,
+		"code": fmt.Sprintf("0x%02X", result.NativeErrorCode), "reason": result.Reason}
+	if result.cause != "" {
+		fields["cause"] = result.cause
+	}
+	log.WithFields(fields).Warn("enterworld: entry refused")
+}
+
+/*
+================
+buildBootstrap
+
+Build's body; every return is the result Build logs when it refuses.
+================
+*/
+func buildBootstrap(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	divisionID := resolveBootstrapDivision(deps, request.DivisionID)
 	if divisionID == "" {
 		return Failure(nativeErrorInvalidRequest, "unknownDivision")
@@ -249,7 +283,8 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 	inventoryRows := InventoryWireItems(character.MissionInventory)
 	for _, row := range inventoryRows {
 		if len(BuildItemBody(row)) == 0 {
-			return Failure(nativeErrorInvalidRequest, "invalidPersistentItem")
+			return FailureCause(nativeErrorInvalidRequest, "invalidPersistentItem",
+				fmt.Errorf("slot %d item %d has no item body", row.Slot, row.RefObjID))
 		}
 	}
 
@@ -287,7 +322,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 
 	packets, packetErr := buildBootstrapPackets(deps, divisionID, character, &entry, localPlayerPayload, objectID)
 	if packetErr != nil {
-		return Failure(nativeErrorInvalidRequest, "invalidCOSRestoration")
+		return FailureCause(nativeErrorInvalidRequest, "invalidCOSRestoration", packetErr)
 	}
 	academyMember := false
 	var skillSnapshot []SpawnSkillRow
@@ -421,6 +456,31 @@ func readCharacterSnapshot(
 
 /*
 ================
+companionRefusal
+
+Which of the restore's identity checks a summoned companion failed, for
+the refusal's log line: an unknown codename, a stored id the catalogue
+moved (#4019), a band no restore admits, or a GID that is not its own.
+================
+*/
+func companionRefusal(cos *CharacterCOS, ref *CharacterRef, expectedGID uint32, gidOK, unique bool) error {
+	switch {
+	case ref == nil:
+		return fmt.Errorf("companion %s (stored id %d): codename not in the catalogue", cos.Codename, cos.RefObjID)
+	case ref.RefObjID != cos.RefObjID:
+		return fmt.Errorf("companion %s: stored id %d, catalogue id %d", cos.Codename, cos.RefObjID, ref.RefObjID)
+	case ref.TidWord>>11 < 1 || ref.TidWord>>11 > 5:
+		return fmt.Errorf("companion %s (id %d): band %d is not a companion band", cos.Codename, ref.RefObjID, ref.TidWord>>11)
+	case !gidOK || cos.GID != expectedGID:
+		return fmt.Errorf("companion %s (id %d): gid %d, expected %d (derivable %v)", cos.Codename, ref.RefObjID, cos.GID, expectedGID, gidOK)
+	case !unique:
+		return fmt.Errorf("companion %s (id %d): gid %d is held by another companion record", cos.Codename, ref.RefObjID, cos.GID)
+	}
+	return fmt.Errorf("companion %s (id %d) failed validation", cos.Codename, ref.RefObjID)
+}
+
+/*
+================
 buildBootstrapPackets
 
 buildBootstrapPackets assembles the packet sequence in the exact Node
@@ -470,7 +530,7 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 		}
 		if !found || ref == nil || ref.RefObjID != cos.RefObjID || (ref.TidWord>>11 < 1 || ref.TidWord>>11 > 5) ||
 			!gidOK || cos.GID != expectedGID || character.CompanionByGID(cos.GID) != cos {
-			return nil, fmt.Errorf("active COS failed authoritative media/identity validation")
+			return nil, companionRefusal(cos, ref, expectedGID, gidOK, character.CompanionByGID(cos.GID) == cos)
 		} else {
 			record, recordErr := BuildCOSRecord(cos, ref, deps.Items)
 			if recordErr != nil {

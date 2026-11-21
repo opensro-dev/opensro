@@ -242,6 +242,10 @@ type BootstrapResult struct {
 	NativeErrorCode     int
 	NativeError         *NativeAgentError
 	Reason              string
+	// cause is a refusal's detail for the server log (Build logs every
+	// refusal): which row or companion failed and why. It never reaches
+	// the client, whose blob views name their fields.
+	cause string
 
 	DivisionID           string
 	Character            *Character
@@ -735,6 +739,22 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		RaisedGoldCaps:            r.RaisedGoldCaps,
 		UiTuning:                  r.UiTuning,
 	})
+}
+
+/*
+================
+FailureCause
+
+A failed bootstrap result whose log line carries cause: the record that
+failed, which Reason alone does not name (#4019).
+================
+*/
+func FailureCause(nativeErrorCode int, reason string, cause error) *BootstrapResult {
+	result := Failure(nativeErrorCode, reason)
+	if cause != nil {
+		result.cause = cause.Error()
+	}
+	return result
 }
 
 /*
