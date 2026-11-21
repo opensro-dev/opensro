@@ -3,17 +3,17 @@
 
 accrual.go - guild points that accrue passively while members hunt
 
-Native rule (issue #4051, v1.188 SR_GameServer): when a guilded member's
+Native rule (issue #4051, the v1.188 reference server): when a guilded member's
 hunting skill EXP converts to SP (400 skill EXP = 1 SP), the same
-whole-SP amount is set aside on the player object (PC +0x2184, the
-experience apply at 0x4E5625). At 10 (0xA) or more it is
+whole-SP amount is set aside on the player object by the
+experience apply. At 10 (0xA) or more it is
 credited to the member's current guild through the donation credit
 (guild GP and the member's DonatedGP rise together) and zeroed. On exit
-(the session release at 0x4DEF90) a positive remainder is
+(the session release) a positive remainder is
 credited only while the member is still guilded.
 
 Nothing on the guild leave, kick or disband path touches the set-aside
-(an `/ad/ 0x2184]` search finds only the mint, the exit flush and the
+(every access to the field is the mint, the exit flush or the
 spawn reset), so a remainder survives a leave and is credited to
 whatever guild the member is in at the next credit. A guildless logout
 drops it. The set-aside is memory-only, as natively.
@@ -29,6 +29,7 @@ inside a character transaction.
 package guild
 
 import (
+	"math"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -84,7 +85,7 @@ func NewGpAccrual(deps Dependencies, presence Presence) *GpAccrual {
 NoteSPMinted - GpAccrual
 
 Record whole SP minted by one guilded character (natively only a
-character with a guild pointer adds to the set-aside, 0x4E561C). Called
+character with a guild pointer adds to the set-aside). Called
 from the progression mint inside the character transaction: it only
 takes the tracker mutex, so it can never deadlock a store door.
 ================
@@ -136,7 +137,7 @@ func (a *GpAccrual) Drain() {
 ================
 SessionClosed - GpAccrual
 
-The native exit flush (0x4DEF90): credit one character's whole
+The native exit flush: credit one character's whole
 set-aside, whatever its size, to their current guild; a guildless
 character's remainder is dropped with the session. Unknown characters
 are a no-op.
@@ -179,8 +180,8 @@ func (a *GpAccrual) credit(key gpAccrualKey, amount int64) bool {
 	}
 	for left := amount; left > 0; {
 		chunk := left
-		if chunk > 0xffffffff {
-			chunk = 0xffffffff
+		if chunk > math.MaxUint32 {
+			chunk = math.MaxUint32
 		}
 		result, refusal := a.deps.GuildAuthority().CreditGuildPoints(
 			key.divisionID, key.characterID, uint32(chunk))

@@ -94,7 +94,7 @@ func leaveGuildForTest(t *testing.T, deps *enterworld.Deps, character *enterworl
 }
 
 // TestGpAccrualIgnoresGuildlessMint proves a guildless character
-// records nothing (natively only a guild pointer adds, 0x4E561C).
+// records nothing (natively only a guild pointer adds).
 func TestGpAccrualIgnoresGuildlessMint(t *testing.T) {
 	t.Parallel()
 	deps, _, _, berk, guildID := newTwoMemberGuildFixture(t)
@@ -159,7 +159,7 @@ func TestGpAccrualLeaveKeepsTheRemainder(t *testing.T) {
 }
 
 // TestGpAccrualGuildlessExitDropsTheRemainder pins the exit flush's
-// guild test (0x4DEF9F): a remainder is credited only while guilded.
+// guild test: a remainder is credited only while guilded.
 func TestGpAccrualGuildlessExitDropsTheRemainder(t *testing.T) {
 	t.Parallel()
 	deps, _, alfa, berk, guildID := newTwoMemberGuildFixture(t)
