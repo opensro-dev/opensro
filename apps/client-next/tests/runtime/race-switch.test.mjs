@@ -3,7 +3,7 @@
 
 race-switch.test.mjs - the armor and accessory switch scrolls' client half
 
-Port-only: the armor scroll (ref 3791) and the accessory scroll (ref 3793)
+Port-only: the armor and accessory switch scrolls, known by their codenames,
 arm the item-target cursor; a bag item the scroll switches opens a Yes/No
 confirmation, Yes sends [target slot] after the type word, and the
 server's 0xF5/0xF6/0xF8 refusals read as the scroll's own lines only
@@ -43,15 +43,16 @@ const CH_SWORD_TYPE = 0x132c;
 bagItem
 ================
 */
-function bagItem( slot, refObjId, typeFlags ) {
-	return { slot, refObjId, typeFlags, quantity: 1, plus: 0, durability: 0, variance: "0", magic: [] };
+function bagItem( slot, refObjId, typeFlags, codename ) {
+	return { slot, refObjId, typeFlags, codename, quantity: 1, plus: 0, durability: 0, variance: "0", magic: [] };
 }
 
-test("the scrolls are refs 3791 and 3793 alone", () => {
-	assert.equal( raceSwitchKindOf( 3791 ), "armor" );
-	assert.equal( raceSwitchKindOf( 3793 ), "accessory" );
-	assert.equal( raceSwitchKindOf( 3790 ), null );
-	assert.equal( raceSwitchKindOf( 3792 ), null );
+test("the scrolls are their codenames alone, never the donors they copy", () => {
+	assert.equal( raceSwitchKindOf( "ITEM_MALL_ARMOR_SWITCH_SCROLL" ), "armor" );
+	assert.equal( raceSwitchKindOf( "ITEM_MALL_ACCESSORY_SWITCH_SCROLL" ), "accessory" );
+	assert.equal( raceSwitchKindOf( "ITEM_MALL_WEAPON_SWITCH_SCROLL" ), null );
+	assert.equal( raceSwitchKindOf( "ITEM_MALL_REINFORCE_ARMOR_INC_1_SCROLL" ), null );
+	assert.equal( raceSwitchKindOf( undefined ), null );
 });
 
 test("the armor scroll takes armor and shields, the accessory scroll accessories", () => {
@@ -73,7 +74,7 @@ test("the tail is the target slot", () => {
 });
 
 test("the cursor picks a bag item the scroll switches, then asks Yes or No", () => {
-	const hud = createCosHud(), scroll = bagItem( 25, 3791, SCROLL_TYPE );
+	const hud = createCosHud(), scroll = bagItem( 25, 290002, SCROLL_TYPE, "ITEM_MALL_ARMOR_SWITCH_SCROLL" );
 	hud.armItemTarget( scroll );
 	// A weapon, a ring or an equipped piece keeps the cursor armed.
 	assert.equal( hud.chooseItemTarget( bagItem( 23, 9205, CH_SWORD_TYPE ) ), false );
@@ -88,7 +89,8 @@ test("the cursor picks a bag item the scroll switches, then asks Yes or No", () 
 test("Yes on the confirmation sends one use with the target", () => {
 	const sent = [], f = uiFixture( command => sent.push( command ) );
 	try {
-		const scroll = bagItem( 13, 3793, SCROLL_TYPE ), ring = bagItem( 14, 9207, CH_RING_TYPE );
+		const scroll = bagItem( 13, 290003, SCROLL_TYPE, "ITEM_MALL_ACCESSORY_SWITCH_SCROLL" ),
+			ring = bagItem( 14, 9207, CH_RING_TYPE );
 		const state = {
 			...f.state,
 			gameplay: { ...f.state.gameplay, inventory: [ scroll, ring ], inventorySlotCount: 45 }
@@ -114,13 +116,13 @@ test("Yes on the confirmation sends one use with the target", () => {
 
 test("the use carries its tail and only its own answer reads as its lines", () => {
 	const scrollBody = Buffer.alloc( 6 );
-	scrollBody.writeUInt32LE( 3791 );
+	scrollBody.writeUInt32LE( 290002 );
 	scrollBody.writeUInt16LE( 1, 4 );
 	const sent = [];
 	const g = createGameplay( frame => sent.push( frame ) );
 	g.bootstrap( {
-		refItemSnapshot: [ { refObjId: 3791, typeFlags: SCROLL_TYPE } ],
-		equipItems: [ { slot: 25, refObjId: 3791, body: [ ...scrollBody ] } ]
+		refItemSnapshot: [ { refObjId: 290002, typeFlags: SCROLL_TYPE, codename: "ITEM_MALL_ARMOR_SWITCH_SCROLL" } ],
+		equipItems: [ { slot: 25, refObjId: 290002, body: [ ...scrollBody ] } ]
 	} );
 	g.seed( {
 		gid: 1,

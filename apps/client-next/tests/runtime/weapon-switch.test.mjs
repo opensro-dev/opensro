@@ -3,7 +3,7 @@
 
 weapon-switch.test.mjs - the weapon switch scroll's client half (port-only)
 
-The scroll is the shipped ref 3790 alone; it arms the item-target cursor,
+The scroll is its own item, known by its codename alone; it arms the item-target cursor,
 a bag weapon opens a box that asks the race, then a kind of that race
 (the weapon's own excepted), the pick goes out as
 [target slot][kind] after the type word, and the server's 0xF5..0xF8
@@ -15,7 +15,7 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 const {
-	isWeaponSwitchScrollItem,
+	isWeaponSwitchScroll,
 	weaponKind,
 	weaponSwitchKinds,
 	weaponSwitchTail,
@@ -40,13 +40,14 @@ const SIEGE_TYPE = 0x832c;
 bagItem
 ================
 */
-function bagItem( slot, refObjId, typeFlags ) {
-	return { slot, refObjId, typeFlags, quantity: 1, plus: 0, durability: 0, variance: "0", magic: [] };
+function bagItem( slot, refObjId, typeFlags, codename ) {
+	return { slot, refObjId, typeFlags, codename, quantity: 1, plus: 0, durability: 0, variance: "0", magic: [] };
 }
 
-test("the scroll is ref 3790 alone, never its shared type word", () => {
-	assert.equal( isWeaponSwitchScrollItem( 3790 ), true );
-	assert.equal( isWeaponSwitchScrollItem( 3789 ), false );
+test("the scroll is its codename alone, never its shared type word or the donor it copies", () => {
+	assert.equal( isWeaponSwitchScroll( "ITEM_MALL_WEAPON_SWITCH_SCROLL" ), true );
+	assert.equal( isWeaponSwitchScroll( "ITEM_MALL_REINFORCE_WEAPON_INC_2_SCROLL" ), false );
+	assert.equal( isWeaponSwitchScroll( undefined ), false );
 });
 
 test("a weapon's kinds are a race's kinds but its own; a shield or siege weapon has none", () => {
@@ -69,7 +70,7 @@ test("the tail is the target slot then the kind", () => {
 });
 
 test("the cursor picks a bag weapon, then the box its race and kind once", () => {
-	const hud = createCosHud(), scroll = bagItem( 25, 3790, SCROLL_TYPE );
+	const hud = createCosHud(), scroll = bagItem( 25, 290001, SCROLL_TYPE, "ITEM_MALL_WEAPON_SWITCH_SCROLL" );
 	hud.armItemTarget( scroll );
 	assert.equal( hud.itemTargetCursor(), 0xa6 );
 	// A shield or an equipped weapon keeps the cursor armed.
@@ -101,13 +102,13 @@ test("the cursor picks a bag weapon, then the box its race and kind once", () =>
 
 test("the use carries its tail and only its own answer reads as its lines", () => {
 	const scrollBody = Buffer.alloc( 6 );
-	scrollBody.writeUInt32LE( 3790 );
+	scrollBody.writeUInt32LE( 290001 );
 	scrollBody.writeUInt16LE( 1, 4 );
 	const sent = [];
 	const g = createGameplay( frame => sent.push( frame ) );
 	g.bootstrap( {
-		refItemSnapshot: [ { refObjId: 3790, typeFlags: SCROLL_TYPE } ],
-		equipItems: [ { slot: 25, refObjId: 3790, body: [ ...scrollBody ] } ]
+		refItemSnapshot: [ { refObjId: 290001, typeFlags: SCROLL_TYPE, codename: "ITEM_MALL_WEAPON_SWITCH_SCROLL" } ],
+		equipItems: [ { slot: 25, refObjId: 290001, body: [ ...scrollBody ] } ]
 	} );
 	g.seed( {
 		gid: 1,

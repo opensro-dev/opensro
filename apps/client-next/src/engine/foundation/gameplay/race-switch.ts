@@ -8,12 +8,12 @@ Mall while the server runs SRO_ARMOR_SWITCH_SCROLL or
 SRO_ACCESSORY_SWITCH_SCROLL turn a bag item into the same item of the
 other race, its plus and blue options kept. The armor scroll takes armor
 (robe <-> garment, light <-> protector, heavy <-> armor) and shields, the
-accessory scroll earrings, necklaces and rings. They are shipped items
-the v1.150 game never sells, drops or uses (ITEM_MALL_REINFORCE_ARMOR_
-INC_1_SCROLL ref 3791, ITEM_MALL_REINFORCE_ACCESSARY_INC_1_SCROLL ref
-3793), so the client knows them by RefObjID alone: their type word
-(3/3/13/11) is shared with the reinforce, name-change and weapon switch
-scrolls.
+accessory scroll earrings, necklaces and rings. They are items of
+the variant build stages as items of their own (ITEM_MALL_ARMOR_SWITCH_
+SCROLL, ITEM_MALL_ACCESSORY_SWITCH_SCROLL, scripts/switch_scroll_import.py)
+under build-assigned RefObjIDs, so the client knows them by codename
+alone: their type word (3/3/13/11) is shared with the reinforce,
+name-change and weapon switch scrolls.
 
 Using one arms the item-target cursor (cos-hud.ts); a bag item the scroll
 switches opens a Yes/No confirmation, and Yes sends the use with
@@ -24,9 +24,9 @@ switches opens a Yes/No confirmation, and Yes sends the use with
 ===========================================================================
 */
 
-// The donor items' shipped identities (see the file banner).
-export const ARMOR_SWITCH_SCROLL_REF_OBJ_ID = 3791;
-export const ACCESSORY_SWITCH_SCROLL_REF_OBJ_ID = 3793;
+// The scrolls' items (see the file banner).
+export const ARMOR_SWITCH_SCROLL_CODENAME = "ITEM_MALL_ARMOR_SWITCH_SCROLL";
+export const ACCESSORY_SWITCH_SCROLL_CODENAME = "ITEM_MALL_ACCESSORY_SWITCH_SCROLL";
 
 export type RaceSwitchKind = "armor" | "accessory";
 
@@ -49,12 +49,12 @@ const FIRST_BAG_SLOT = 13;
 raceSwitchKindOf
 
 What a bag row's scroll switches, or null when it is no race switch
-scroll. RefObjID, never the type word.
+scroll. Its codename, never the type word.
 ================
 */
-export function raceSwitchKindOf( refObjId: number ): RaceSwitchKind | null {
-	if ( refObjId === ARMOR_SWITCH_SCROLL_REF_OBJ_ID ) return "armor";
-	if ( refObjId === ACCESSORY_SWITCH_SCROLL_REF_OBJ_ID ) return "accessory";
+export function raceSwitchKindOf( codename: string | undefined ): RaceSwitchKind | null {
+	if ( codename === ARMOR_SWITCH_SCROLL_CODENAME ) return "armor";
+	if ( codename === ACCESSORY_SWITCH_SCROLL_CODENAME ) return "accessory";
 	return null;
 }
 
