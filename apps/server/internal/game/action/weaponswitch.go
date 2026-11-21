@@ -50,10 +50,10 @@ import (
 // client reads them as this scroll's lines only while its use is in
 // flight, and one item use is in flight at a time.
 const (
-	weaponSwitchErrTarget   uint8 = 0xF5 // not a weapon the scroll changes
-	weaponSwitchErrFamily   uint8 = 0xF6 // the blues could not follow the twin
-	weaponSwitchErrKind     uint8 = 0xF7 // the chosen kind is not offered
-	weaponSwitchErrNoTwin   uint8 = 0xF8 // no weapon of that kind matches
+	weaponSwitchErrTarget uint8 = 0xF5 // not a weapon the scroll changes
+	weaponSwitchErrFamily uint8 = 0xF6 // the blues could not follow the twin
+	weaponSwitchErrKind   uint8 = 0xF7 // the chosen kind is not offered
+	weaponSwitchErrNoTwin uint8 = 0xF8 // no weapon of that kind matches
 )
 
 // weaponSwitchTailBytes is the tail after the type word: target slot and
@@ -194,16 +194,31 @@ func sameEquipFamily(from, to *enterworld.ItemRef) bool {
 
 /*
 ================
+useEquipSwitchScroll
+
+Runs one switch scroll's use by what it switches.
+================
+*/
+func (rt *Runtime) useEquipSwitchScroll(use skillItemUse, c *enterworld.Character, tail []byte, result *OpResult) bool {
+	scroll, ok := commerce.EquipSwitchScrollByCodename(use.ref.Codename)
+	if !ok {
+		return false
+	}
+	switch scroll.Kind {
+	case commerce.SwitchWeapon:
+		return rt.useWeaponSwitchScroll(use, c, tail, result)
+	}
+	return false
+}
+
+/*
+================
 useWeaponSwitchScroll
 
 Runs inside the item use's character Update. Refusals change nothing.
 ================
 */
 func (rt *Runtime) useWeaponSwitchScroll(use skillItemUse, c *enterworld.Character, tail []byte, result *OpResult) bool {
-	_, ok := commerce.WeaponSwitchScrollByCodename(use.ref.Codename)
-	if !ok {
-		return false
-	}
 	if len(tail) != weaponSwitchTailBytes {
 		return false
 	}

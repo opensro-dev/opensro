@@ -139,6 +139,22 @@ var unlistedSettings = map[string]string{
 
 /*
 ================
+equipSwitchOn
+
+Whether the equipment switch scroll behind one flag is on.
+================
+*/
+func equipSwitchOn(env string) bool {
+	for _, scroll := range commerce.EquipSwitchScrolls {
+		if scroll.Env == env {
+			return commerce.EquipSwitchEnabledFromEnv(scroll)
+		}
+	}
+	return false
+}
+
+/*
+================
 publicRules
 
 Built once at boot: the switches are read from the environment at startup,
@@ -441,10 +457,18 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A character's name never changes.",
 				Now:    "The Item Mall sells a name-change scroll for 500 silk; the new name applies at the next login, renames cool down for 30 days, and the old name stays reserved for 90 days.",
 				Why:    "Owner decision (#1689): a paid, rate-limited way to fix a name."},
-			{Flag: commerce.EnvWeaponSwitchScroll, On: commerce.WeaponSwitchScrollFromEnv(),
+			{Flag: commerce.EnvWeaponSwitchScroll, On: equipSwitchOn(commerce.EnvWeaponSwitchScroll),
 				Native: "A weapon keeps its kind for good.",
 				Now:    "The Item Mall sells a weapon switch scroll for 1490 silk: use it on a weapon in the bag to turn it into another kind, Chinese or European, of the same degree, grade and seal; its plus and blue options are kept.",
 				Why:    "Owner decision: try another build without farming the weapon again."},
+			{Flag: commerce.EnvArmorSwitchScroll, On: equipSwitchOn(commerce.EnvArmorSwitchScroll),
+				Native: "Armor and shields keep their race for good.",
+				Now:    "The Item Mall sells an armor switch scroll for 990 silk: use it on armor or a shield in the bag to turn it into the same piece of the other race (robe and garment, light armor and protector, heavy armor and armor); its plus and blue options are kept.",
+				Why:    "Owner decision (2026-11-21): change race without farming the gear again."},
+			{Flag: commerce.EnvAccessorySwitchScroll, On: equipSwitchOn(commerce.EnvAccessorySwitchScroll),
+				Native: "Accessories keep their race for good.",
+				Now:    "The Item Mall sells an accessory switch scroll for 990 silk: use it on an earring, necklace or ring in the bag to turn it into the same accessory of the other race; its plus and blue options are kept.",
+				Why:    "Owner decision (2026-11-21): change race without farming the gear again."},
 			{Flag: simulation.EnvBetaPlayerMap, On: simulation.BetaPlayerMapEnabled(),
 				Native: "The world map shows only your own position.",
 				Now:    "The world map also shows other players.",

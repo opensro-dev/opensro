@@ -46,7 +46,7 @@ func weaponSwitchFixture(t *testing.T) (*Runtime, *enterworld.Character, *enterw
 	sword := weapon(9101, "ITEM_CH_SWORD_08_A_RARE", [4]int64{3, 1, 6, 2})
 	spear := weapon(9102, "ITEM_CH_SPEAR_08_A_RARE", [4]int64{3, 1, 6, 4})
 	shield := weapon(9103, "ITEM_CH_SHIELD_08_A_RARE", [4]int64{3, 1, 4, 1})
-	scroll := &enterworld.ItemRef{RefObjID: 3790, Codename: commerce.WeaponSwitchScrolls[0].Codename, Country: 3,
+	scroll := &enterworld.ItemRef{RefObjID: 3790, Codename: commerce.EquipSwitchScrolls[0].Codename, Country: 3,
 		TypeIDs: [4]int64{3, 3, 13, 11}, ReqQuadTypes: [4]int64{-1, -1, -1, -1},
 		NativeFields: enterworld.NewNativeFields(map[string]float64{"canUse": 1, "maxStack": 50})}
 	for _, ref := range []*enterworld.ItemRef{sword, spear, shield, scroll} {
@@ -60,7 +60,7 @@ func weaponSwitchFixture(t *testing.T) (*Runtime, *enterworld.Character, *enterw
 		enterworld.InventoryRow{Slot: switchScrollSlot, RefObjID: scroll.RefObjID, Codename: scroll.Codename,
 			TypeFlags: scroll.TypeFlags(), StackCount: 2})
 	rt, _ := newTestRuntime(c, items)
-	rt.WeaponSwitchScroll = true
+	rt.EquipSwitch = map[commerce.EquipSwitchKind]bool{commerce.SwitchWeapon: true}
 	return rt, c, scroll
 }
 
@@ -110,7 +110,7 @@ With the flag off the scroll is an item no family serves.
 */
 func TestWeaponSwitchScrollOffIsNative(t *testing.T) {
 	rt, c, scroll := weaponSwitchFixture(t)
-	rt.WeaponSwitchScroll = false
+	rt.EquipSwitch = nil
 	assertItemUseRefusedUnchanged(t, rt, c, weaponSwitchUse(scroll, switchWeaponSlot, 4))
 }
 
@@ -192,7 +192,7 @@ Switches one shipped weapon with the last shipped scroll.
 func shippedWeaponSwitch(t *testing.T, from string, kind uint8, want string) {
 	t.Helper()
 	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
-	scroll, ok := items.ItemRefByCodename(commerce.WeaponSwitchScrolls[0].Codename)
+	scroll, ok := items.ItemRefByCodename(commerce.EquipSwitchScrolls[0].Codename)
 	sword, swordOK := items.ItemRefByCodename(from)
 	if !ok || !swordOK {
 		t.Fatalf("shipped scroll or %s missing", from)
@@ -204,7 +204,7 @@ func shippedWeaponSwitch(t *testing.T, from string, kind uint8, want string) {
 		enterworld.InventoryRow{Slot: switchScrollSlot, RefObjID: scroll.RefObjID, Codename: scroll.Codename,
 			TypeFlags: scroll.TypeFlags(), StackCount: 1})
 	rt, _ := newTestRuntime(c, items)
-	rt.WeaponSwitchScroll = true
+	rt.EquipSwitch = map[commerce.EquipSwitchKind]bool{commerce.SwitchWeapon: true}
 	out := rt.HandleItemUse(testDivision, c, weaponSwitchUse(scroll, switchWeaponSlot, kind))
 	if len(out.Frames) < 3 || out.Frames[0].Payload[0] != wire.ResultSuccess {
 		t.Fatalf("use = %+v / %q", out.Frames, out.DiagnosticRefusal)

@@ -68,7 +68,7 @@ const (
 	itemUseSpiritExtension
 	itemUsePartySummonScroll
 	itemUsePandoraBox
-	itemUseWeaponSwitch
+	itemUseEquipSwitch
 )
 
 /*
@@ -91,11 +91,11 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	if ref.Codename == NameChangeScrollItem {
 		return itemUseNameChange
 	}
-	// Port-only, not native: the weapon switch scrolls reuse shipped items
-	// no native family claims, so admission is by codename too and the
-	// handler re-checks SRO_WEAPON_SWITCH_SCROLL (weaponswitch.go).
-	if _, ok := commerce.WeaponSwitchScrollByCodename(ref.Codename); ok {
-		return itemUseWeaponSwitch
+	// Port-only, not native: the equipment switch scrolls reuse shipped
+	// items no native family claims, so admission is by codename too and
+	// the handler re-checks each scroll's own flag (commerce/equipswitch.go).
+	if _, ok := commerce.EquipSwitchScrollByCodename(ref.Codename); ok {
+		return itemUseEquipSwitch
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 12, 1} {
 		return itemUseMercenary
