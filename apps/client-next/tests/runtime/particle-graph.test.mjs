@@ -455,3 +455,25 @@ test("a collapsed holder frame is kept, not refused", () => {
 	const state = run( graph, [ .1, .2, .3 ], holder );
 	assert.ok( particleElements( state, 0 ).every( e => e.position.every( Number.isFinite ) ) );
 });
+test("a program's length unit scales the velocities it adds without a frame", () => {
+	// A v12+ .efp header scale (v1.696 Viking 0.1): the holder frame carries
+	// it, and an unturned world velocity takes it as the graph's unit.
+	const graph = [ emitter( { program: { vectors: [ vector( "SetVelocity", [ 2, 0, 0 ] ) ] } } ) ];
+	const scaled = createParticleGraph( graph, 0, undefined, .5 ), full = run( graph, [ .2 ] );
+	advanceParticleGraph( scaled, graph, .2, identity(), table );
+	assert.deepEqual( particleElements( full, 0 )[0].velocity, [ 2, 0, 0 ] );
+	assert.deepEqual( particleElements( scaled, 0 )[0].velocity, [ 1, 0, 0 ] );
+	assert.deepEqual( particleElements( scaled, 0 )[0].position, [ 4, 0, 0 ] );
+	assert.throws( () => createParticleGraph( graph, 0, undefined, 0 ), /unit/ );
+});
+test("an authored absolute frame keeps the program's length unit", () => {
+	// A constant SetRotation replaces the holder frame; a position read
+	// through it (SetPosition flag 3) stays in the unit, as it would
+	// through the scaled holder frame.
+	const turn = [ 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ];
+	const graph = [ emitter( { matrix: turn, program: { vectors: [ vector( "SetPosition", [ 4, 0, 0 ], 3 ) ] } } ) ];
+	const scaled = createParticleGraph( graph, 0, undefined, .5 );
+	advanceParticleGraph( scaled, graph, .05, identity(), table );
+	assert.deepEqual( particleElements( scaled, 0 )[0].position, [ 0, 2, 0 ] );
+	assert.deepEqual( particleElements( run( graph, [ .05 ] ), 0 )[0].position, [ 0, 4, 0 ] );
+});

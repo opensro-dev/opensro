@@ -113,6 +113,11 @@ export interface ParticleGraphState {
 	frame: number;
 	index: number;
 	revision: number;
+	// The program's length unit (its .efp header scale, 1 in every v1.150
+	// program): authored lengths the graph adds in holder space without a
+	// frame (sphere radii, unturned cone and force vectors, world positions
+	// and velocities) are multiplied by it, as the frames already carry it.
+	readonly unit: number;
 	// The model's plan (particle-graph-plan.ts): the tables every tick reads.
 	readonly plan: ParticleGraphPlan;
 	readonly counts: Int32Array;
@@ -177,6 +182,26 @@ function identities( count: number ): Float32Array {
 
 /*
 ================
+unitFrame
+
+An authored absolute frame of slot s (a constant or BAN rotation that
+replaces the inherited frame, or a translation-only frame) in the graph's
+unit: the holder frame it replaces carried that scale
+(ParticleGraphState unit), so lengths the element then reads through
+its frame keep it.
+================
+*/
+export function unitFrame( graph: ParticleGraphState, s: number ): void {
+	const unit = graph.unit;
+	if ( unit === 1 ) return;
+	const m = graph.matrix, at = s * 16;
+	for ( let c = 0; c < 3; c++ ) {
+		for ( let r = 0; r < 3; r++ ) m[at + c * 4 + r] = Math.fround( m[at + c * 4 + r]! * unit );
+	}
+}
+
+/*
+================
 createParticleGraph
 
 plan is graph's plan; a caller that ticks many graphs of one model passes
@@ -188,9 +213,11 @@ origin, alive.
 export function createParticleGraph(
 	graph: readonly ParticleEmitter[],
 	index: number,
-	plan = createParticleGraphPlan( graph )
+	plan = createParticleGraphPlan( graph ),
+	unit = 1
 ): ParticleGraphState {
 	if ( plan.graph !== graph ) throw Error( "Particle graph plan of another graph" );
+	if ( !(unit > 0) || !Number.isFinite( unit ) ) throw Error( "Invalid particle graph unit" );
 	const total = plan.total, snapshots = plan.snapshotTotal;
 	const state: ParticleGraphState = {
 		serial: 0,
@@ -198,6 +225,7 @@ export function createParticleGraph(
 		frame: -1,
 		index,
 		revision: 0,
+		unit,
 		plan,
 		counts: new Int32Array( graph.length ),
 		flags: new Uint8Array( total ),

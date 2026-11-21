@@ -138,7 +138,13 @@ export function createParticleStream( model: CharacterModel, index: number, rows
 	let graphPalette: Float32Array | undefined;
 	if ( model.particleGraph ) {
 		graphPalette = new Float32Array( 16 );
-		for ( let axis = 0; axis < 3; axis++ ) graphPalette[axis * 5] = model.nodes[0]!.scale[axis]!;
+		// The graph's holder transform already carries the program's header
+		// scale (characters.ts graphHolderTransform), so a mesh element's
+		// record matrix is scaled. A billboard cancels its record matrix
+		// (effect-billboard.ts faceEffectMesh) and takes its size from this
+		// palette alone, so it keeps the scale here.
+		const scaled = primitive.billboard !== undefined;
+		for ( let axis = 0; axis < 3; axis++ ) graphPalette[axis * 5] = scaled ? model.nodes[0]!.scale[axis]! : 1;
 		graphPalette[15] = 1;
 	}
 	return {
