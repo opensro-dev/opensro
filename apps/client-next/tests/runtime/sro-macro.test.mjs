@@ -84,10 +84,14 @@ function draftOf( hud ) {
 	return draft;
 }
 
-test("the Experimental row is off by default and only an explicit true turns it on", () => {
-	assert.equal( experimentalOptions().sroMacro, false );
-	assert.equal( experimentalOptions( { sroMacro: "yes" } ).sroMacro, false );
+test("the Experimental row is on by default and only an explicit false turns it off", () => {
+	// Owner, 2026-11-21: the SRO Macro ships on in the next release.
+	// Like the other default-on rows, a stored non-boolean never turns
+	// it off; only an explicit false does.
+	assert.equal( experimentalOptions().sroMacro, true );
+	assert.equal( experimentalOptions( { sroMacro: "yes" } ).sroMacro, true );
 	assert.equal( experimentalOptions( { sroMacro: true } ).sroMacro, true );
+	assert.equal( experimentalOptions( { sroMacro: false } ).sroMacro, false );
 });
 
 test("a full replay decodes every section and unsaved blocks load the defaults", () => {

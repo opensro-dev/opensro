@@ -319,7 +319,8 @@ export interface ExperimentalOptions {
 	// Port-only, not native (#3907): the v1.696 SRO Macro (CNIFMacroMenuWnd
 	// and its option windows), which v1.150 does not have. The server sides
 	// it with SRO_AUTO_MACRO; a client with the row off never opens the
-	// windows and never sends 0x7554. Off unless turned on.
+	// windows and never sends 0x7554. On unless turned off (owner,
+	// 2026-11-21: the macro ships on in the next release).
 	readonly sroMacro: boolean;
 }
 
@@ -477,8 +478,8 @@ experimentalOptions
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices, confirmGuildBan,
-petClickOpensWindow, smartPetPickup, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion, silentWingFlight, dungeonCharacterPvs and
-christmasCarols (owner, 2026-11-15: on by default, off by the player's choice), which only an explicit false turns off.
+petClickOpensWindow, smartPetPickup, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion, silentWingFlight, dungeonCharacterPvs,
+christmasCarols and sroMacro (owners, 2026-11-15 and 2026-11-21: on by default, off by the player's choice), which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
@@ -560,7 +561,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		setBonusTooltip: enabled( "setBonusTooltip" ),
 		silkHistory: enabled( "silkHistory" ),
 		mallCategories: enabled( "mallCategories" ),
-		sroMacro: enabled( "sroMacro" )
+		sroMacro: record.sroMacro !== false
 	};
 }
 
@@ -568,19 +569,53 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 // version bumped with the WebTransport default flip (#1451 step 3): a
 // record saved under the previous key carries the old explicit default
 // for that row, so it migrates on read without its webTransport value
-// and the new default reaches every saved profile. A choice stored
-// under the current key is kept as written.
-export const EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:2";
-export const PREVIOUS_EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:1";
+// and the new default reaches every saved profile. It bumped again with
+// the SRO Macro default flip (owner, 2026-11-21): a record saved under
+// the :2 key migrates without its sroMacro value, and one under the
+// oldest (:1) key without its webTransport and sroMacro values. A
+// choice stored under the current key is kept as written.
+export const EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:3";
+export const PREVIOUS_EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:2";
+export const FIRST_EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:1";
+
+/*
+================
+migratedExperimentalOptions
+
+A record saved under an older key, read with the flipped rows' stored
+values dropped (see the keys above), or undefined when that key holds
+nothing. A stored value that is not a JSON object loads as itself, so
+every row falls back to its rule for an invalid record.
+================
+*/
+function migratedExperimentalOptions(
+	storage: Pick<Storage, "getItem"> | undefined,
+	key: string,
+	flippedRows: readonly string[]
+): { readonly options: ExperimentalOptions; readonly raw: unknown; } | undefined {
+	const stored = storage?.getItem( key ) ?? null;
+	if ( stored === null ) {
+		return undefined;
+	}
+	const parsed: unknown = JSON.parse( stored );
+	if ( typeof parsed !== "object" || parsed === null || Array.isArray( parsed ) ) {
+		return { options: experimentalOptions( parsed ), raw: parsed };
+	}
+	const raw: Record<string, unknown> = { ...(parsed as Record<string, unknown>) };
+	for ( const row of flippedRows ) {
+		delete raw[row];
+	}
+	return { options: experimentalOptions( raw ), raw };
+}
 
 /*
 ================
 storedExperimentalOptions
 
 The saved preferences from storage, or the defaults when there are none or
-they cannot be read. A record found only under the previous key migrates
-without its webTransport value (see the key above); the platform's next
-save writes the current key and retires the old one. The platform owns
+they cannot be read. A record found only under an older key migrates
+without the flipped rows' values (see the keys above); the platform's next
+save writes the current key and retires the old ones. The platform owns
 saving them; an owner that must act before the platform starts (the asset
 worker's texture variant) reads them here. Throws only for a stored value
 that is not JSON, which the platform reports.
@@ -595,17 +630,19 @@ export function storedExperimentalOptions( storage: Pick<Storage, "getItem"> | u
 		const raw: unknown = JSON.parse( stored );
 		return { options: experimentalOptions( raw ), raw };
 	}
-	const previous = storage?.getItem( PREVIOUS_EXPERIMENTAL_STORAGE_KEY ) ?? null;
-	if ( previous === null ) {
-		return { options: experimentalOptions(), raw: null };
+	const previous = migratedExperimentalOptions( storage, PREVIOUS_EXPERIMENTAL_STORAGE_KEY, [ "sroMacro" ] );
+	if ( previous !== undefined ) {
+		return previous;
 	}
-	const parsed: unknown = JSON.parse( previous );
-	if ( typeof parsed !== "object" || parsed === null || Array.isArray( parsed ) ) {
-		return { options: experimentalOptions( parsed ), raw: parsed };
+	const first = migratedExperimentalOptions(
+		storage,
+		FIRST_EXPERIMENTAL_STORAGE_KEY,
+		[ "webTransport", "sroMacro" ]
+	);
+	if ( first !== undefined ) {
+		return first;
 	}
-	const raw: Record<string, unknown> = { ...(parsed as Record<string, unknown>) };
-	delete raw.webTransport;
-	return { options: experimentalOptions( raw ), raw };
+	return { options: experimentalOptions(), raw: null };
 }
 
 /*

@@ -95,7 +95,9 @@ var Settings = []Setting{
 	{Env: "SRO_SOOK_CHEST_CAPACITY", NomadVar: "sook_chest_capacity", Default: "200"},
 	// Port-only, not native: the v1.696 SRO Macro settings lane (0x7554,
 	// 0xB554, 0x3555; internal/game/macro, #3907). Off sends nothing.
-	{Env: "SRO_AUTO_MACRO", NomadVar: "auto_macro", Default: "off"},
+	// Owner, 2026-11-21: on in the next release. Off is native in code;
+	// on is this shard's deployed value.
+	{Env: "SRO_AUTO_MACRO", NomadVar: "auto_macro", Default: "on"},
 	// The catalogue publishes the expansion's derived pet-gear drops
 	// while it runs (items.json's petGear rows, droptables.json's
 	// petGear rule), so it is a catalogue setting (#2542).
@@ -145,7 +147,11 @@ var Settings = []Setting{
 	// exists only for them. Consumed at build time (cap110_quest_*.py read
 	// it with SRO_LEVEL_CAP=110); the built quest tables are the switch the
 	// GameWorld sees. Server only: the catalogue reads the built data.
-	{Env: "SRO_CAP110_QUESTS", NomadVar: "cap110_quests", Default: "off"},
+	// Owner, 2026-11-21: on in the next release. The variant build must
+	// also run with SRO_LEVEL_CAP=110 (the importers read both), or the
+	// quest tables never build. Off is native in code; on is this
+	// shard's deployed value.
+	{Env: "SRO_CAP110_QUESTS", NomadVar: "cap110_quests", Default: "on"},
 	// Port-only, not native: operator knobs of those quests (quest/hwanknobs.go).
 	// Unset is the original behaviour; a malformed value refuses the boot.
 	{Env: "SRO_HWAN_NIYA_CAPTURE_RATES", NomadVar: "hwan_niya_capture_rates", Default: "", Validation: ValueHwanKnob},
@@ -644,8 +650,9 @@ var Settings = []Setting{
 	// Port-only, not native: every Silk Road town gate (Jangan, Donwhang,
 	// Hotan, Samarkand, Constantinople) also leads straight to the other
 	// four, for the native chain's 5000 gold per gate skipped. "off" is
-	// native.
-	{Env: "SRO_CROSS_CITY_TELEPORT", NomadVar: "cross_city_teleport", Default: "off"},
+	// native in code. Owner, 2026-11-21: on in the next release; on is
+	// this shard's deployed value.
+	{Env: "SRO_CROSS_CITY_TELEPORT", NomadVar: "cross_city_teleport", Default: "on"},
 	// The Alexandria city of a build_alexandria_variant.py game root: its
 	// regions, gates and NPCs (port-only, not native; internal/game/world/
 	// alexandria). "off" is native and hides them from a variant's data;

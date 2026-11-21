@@ -140,6 +140,7 @@ export const OFF = Object.freeze( {
 	// Off by default (#3257): the later mall's categories, HOT shop and
 	// item search; the native mall stands.
 	mallCategories: false,
-	// Off by default (#3907): the v1.696 SRO Macro windows are port-only.
-	sroMacro: false
+	// On by default (owner 2026-11-21, #3907): the v1.696 SRO Macro
+	// windows are port-only and ship on in the next release.
+	sroMacro: true
 } );

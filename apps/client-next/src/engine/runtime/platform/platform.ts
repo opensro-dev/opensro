@@ -34,6 +34,7 @@ import { cameraWheelDelta } from "@/engine/foundation/rendering/camera-wheel";
 import { createTouchCamera, type TouchCameraOutput } from "@/engine/foundation/rendering/touch-camera";
 import {
 	EXPERIMENTAL_STORAGE_KEY,
+	FIRST_EXPERIMENTAL_STORAGE_KEY,
 	PREVIOUS_EXPERIMENTAL_STORAGE_KEY,
 	experimentalOptions,
 	storedExperimentalOptions,
@@ -443,6 +444,7 @@ export function createPlatform(
 		try {
 			localStorage.setItem( experimentalKey, JSON.stringify( experimental ) );
 			localStorage.removeItem( PREVIOUS_EXPERIMENTAL_STORAGE_KEY );
+			localStorage.removeItem( FIRST_EXPERIMENTAL_STORAGE_KEY );
 			localStorage.removeItem( "sro.developerDiagnostics" );
 		} catch ( error ) {
 			status.value = "Experimental options could not be saved: " + String( error );
