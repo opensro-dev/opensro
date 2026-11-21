@@ -94,6 +94,10 @@ class FakeRizin:
 	def func_ops(self, va):
 		return list(OPS_402A70) if va == 0x402A70 else []
 
+	def containing_function(self, va):
+		# sub_402a70's canned body spans 0x402A70..0x402A7F.
+		return 0x402A70 if 0x402A70 <= va < 0x402A80 else None
+
 	def xrefs_to(self, va):
 		if va == 0x401100:
 			return [{"from": 0x402A74, "to": 0x401100, "type": "CALL"}]
@@ -277,6 +281,19 @@ class TestCommands(unittest.TestCase):
 		self.assertIn("call HelperFree", out)       # rename applied
 		self.assertIn("data_f5b3d8", out)            # known datum spelled
 		self.assertIn("renamed in this view", out)
+
+	def test_view_resolves_an_address_inside_a_function(self):
+		# A strings/byte-search hit is an interior address: view shows the
+		# function that holds it, and says so; an address no function
+		# holds is still refused.
+		con, binary, _tmp = self.open_seeded()
+		args = make_args(target="0x402a78", binary=binary, raw=True)
+		rc, out = capture(rz.cmd_view, args, con, FakeRizin())
+		self.assertEqual(rc, 0)
+		self.assertIn("call fcn.00401100", out)
+		args = make_args(target="0x403000", binary=binary, raw=True)
+		rc, _out = capture(rz.cmd_view, args, con, FakeRizin())
+		self.assertEqual(rc, 1)
 
 	def test_view_raw_keeps_rizin_spelling(self):
 		con, binary, _tmp = self.open_seeded()
