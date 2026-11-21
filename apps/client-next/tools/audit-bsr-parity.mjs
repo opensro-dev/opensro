@@ -9,7 +9,11 @@ import { parseCharacterBsr } from "../../../scripts/build/char/formats.mjs";
 import { dataAssetPath } from "../../../scripts/build/shared/jmxAssetIO.mjs";
 import { readPublishedAssetBytesSync, readPackedAssetBytesSync } from "../../../scripts/lib/publishedAsset.mjs";
 import { npcManifestModels } from "../../../scripts/build/shared/npcManifest.mjs";
-import { readEffectIndexSync, readEffectProgramSync } from "../../../scripts/lib/effectCatalog.mjs";
+import {
+	readEffectCatalogSync,
+	readEffectIndexSync,
+	readEffectProgramSync
+} from "../../../scripts/lib/effectCatalog.mjs";
 const root = path.resolve( import.meta.dirname, ".." ), publicRoot = CLIENT_PUBLIC_ROOT;
 const output = path.join( root, "temp/artifacts/bsr-parity" );
 fs.mkdirSync( output, { recursive: true } );
@@ -52,7 +56,8 @@ const report = {
 	format: "sro-bsr-parity-v1",
 	qualification:
 		"v1.150 original BSR -> published metadata -> production decoder; admission is not native pixel equivalence",
-	inputs: { programs: hash( JSON.stringify( programs ) ) },
+	// Every effect, mesh and texture of the closure, not only its index.
+	inputs: { programs: hash( JSON.stringify( readEffectCatalogSync( CLIENT_PUBLIC_ROOT ) ) ) },
 	models: [],
 	effects: [],
 	issues: [],

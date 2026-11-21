@@ -706,8 +706,18 @@ export async function buildEffectProgramsAsset() {
 	// run writes or keeps; the pack tail retires what it no longer names
 	// (the old single programs.json among them).
 	const unavailable = { archiveSha256: archiveEvidence.sha256 };
+	// Keys fold to lower case on disk: two that fold together, or an effect
+	// the archive also proves absent, would overwrite one file silently.
+	const written = new Map();
+	const claimFile = ( publicPath, key ) => {
+		if ( written.has( publicPath ) ) {
+			throw new Error( `Effect programs ${written.get( publicPath )} and ${key} share ${publicPath}` );
+		}
+		written.set( publicPath, key );
+		return publicAssetFile( publicPath );
+	};
 	for ( const key of Object.keys( effects ).sort( compareText ) ) {
-		writeJsonIfChangedSync( publicAssetFile( effectProgramFile( key ) ), {
+		writeJsonIfChangedSync( claimFile( effectProgramFile( key ), key ), {
 			...effectProgramHeader(),
 			// Nested: the parsed EFP carries its own version field.
 			effect: effects[key],
@@ -720,13 +730,13 @@ export async function buildEffectProgramsAsset() {
 	// AFF730 keeps the reset stored object for an archive-proven absence: its
 	// file says so, with the archive evidence, and draws nothing.
 	for ( const key of nativeUnavailableEffects ) {
-		writeJsonIfChangedSync( publicAssetFile( effectProgramFile( key ) ), {
+		writeJsonIfChangedSync( claimFile( effectProgramFile( key ), key ), {
 			...effectProgramHeader(),
 			unavailable
 		} );
 	}
 	for ( const name of Object.keys( meshes ) ) {
-		writeJsonIfChangedSync( publicAssetFile( effectMeshFile( name ) ), meshes[name] );
+		writeJsonIfChangedSync( claimFile( effectMeshFile( name ), name ), meshes[name] );
 	}
 	const outPath = publicAssetFile( EFFECT_PROGRAM_INDEX );
 	writeJsonIfChangedSync( outPath, {

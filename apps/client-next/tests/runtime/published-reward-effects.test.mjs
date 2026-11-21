@@ -11,10 +11,9 @@ modules the client ships, not a per-test bundle.
 */
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
-import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { createCatalogEffects } from "../helpers/effect-programs.mjs";
 import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
 

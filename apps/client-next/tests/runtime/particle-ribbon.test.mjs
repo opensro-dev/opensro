@@ -14,7 +14,6 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
 async function load( file ) {
 	return import( sourceFileUrl( "src/engine/foundation/" + file ).href );

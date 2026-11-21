@@ -46,7 +46,6 @@ import "./native-source-loader.mjs";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
-import { readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
 import { EXPANDED_BUILD } from "./expanded-build.mjs";
 import { vsroItemGlowRoot } from "../../../../scripts/build/char/equipmentGlowMetadata.mjs";
 import { createCatalogEffects } from "./effect-programs.mjs";

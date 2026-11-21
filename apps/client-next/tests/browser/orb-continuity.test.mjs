@@ -21,7 +21,7 @@ test( "kill reward orbs remain visible through native root cycles until arrival"
 		const result = await page.evaluate( async () => {
 			const { createRenderer } = await import( "/src/engine/runtime/renderer/renderer.ts" );
 			const { createEffectDecoder } = await import( "/src/engine/runtime/assets/worker/effects/effects.ts" );
-			const { effectMeshFile, effectProgramFile } = await import(
+			const { effectMeshFile, effectProgramFile, effectProgramModel } = await import(
 				"/src/engine/foundation/assets/effect-programs.ts"
 			);
 			// One published effect file and its meshes, as the asset worker reads them.
@@ -46,7 +46,7 @@ test( "kill reward orbs remain visible through native root cycles until arrival"
 			const durations = new Map(),
 				results = [];
 			const names = [ "hwan_g", "hwan_y", "hwan_v", "hwn_blue_indraft", "hwn_red_indraft", "hwn_violet_indraft" ];
-			const id = name => "/assets/effects/programs.json#" + encodeURIComponent( "battle/" + name + ".efp" );
+			const id = name => effectProgramModel( "battle/" + name + ".efp" );
 			try {
 				const start = performance.now();
 				while ( renderer.phase() === "starting" && performance.now() - start < 15000 ) {

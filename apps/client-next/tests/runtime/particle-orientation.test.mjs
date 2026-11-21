@@ -11,7 +11,6 @@ that resulting element orientation. Identity-only fixtures miss both errors.
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
 import { publicRoot } from "../../../../scripts/build/world/paths.mjs";
 import { createCatalogEffects } from "../helpers/effect-programs.mjs";
 import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";

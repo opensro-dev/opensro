@@ -14,6 +14,7 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+const { effectProgramModel } = await import( "../../src/engine/foundation/assets/effect-programs.ts" );
 import { defined } from "../helpers/defined.mjs";
 import { NATIVE_ONLY } from "../helpers/expanded-build.mjs";
 const { stepHawk, hawkEvent, hawkYaw } = await import( "../../src/engine/foundation/animation/hawk.ts" );
@@ -178,8 +179,7 @@ test(
 				for ( const [i, row] of rows.slice( 1 ).entries() ) {
 					assert.equal(
 						row.model,
-						"/assets/effects/programs.json#" +
-							encodeURIComponent( ambient[i].effectPath.replaceAll( "\\", "/" ) )
+						effectProgramModel( ambient[i].effectPath.replaceAll( "\\", "/" ) )
 					);
 					assert.equal( row.attachment.gid, rows[0].gid );
 				}

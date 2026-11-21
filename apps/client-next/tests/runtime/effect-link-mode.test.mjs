@@ -13,7 +13,6 @@ must resolve to exactly what their element headers already say.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
 

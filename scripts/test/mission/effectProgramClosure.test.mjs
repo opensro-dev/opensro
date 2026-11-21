@@ -64,7 +64,7 @@ test("every generated skill-effect EFP reaches the generated GPU program catalog
 });
 
 test("every runtime-reachable EFP is mandatory source, never tolerated debt", async () => {
-	const catalog = await readEffectCatalogSync();
+	const catalog = readEffectCatalogSync();
 	assert.deepEqual( catalog.missingEffects, [] );
 });
 
@@ -89,7 +89,7 @@ test("published stage models retain every native particle modifier and its EFP d
 });
 
 test("direct executable EFP literals are discovered from retail instead of hand-carried", async () => {
-	const catalog = await readEffectCatalogSync();
+	const catalog = readEffectCatalogSync();
 	const executableReferences = collectNativeExecutableEffectReferences(
 		path.join( gameRoot, "SRO_Client.exe" )
 	);

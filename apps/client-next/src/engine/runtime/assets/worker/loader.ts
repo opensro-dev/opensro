@@ -137,8 +137,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		request: Extract<AssetRequest, { kind: "load"; }>;
 		controller: AbortController;
 	}[] = [];
-	// The effect program catalog is parsed once and kept parsed (program.ts);
-	// its 40 MB of source bytes are needed only for that first parse.
+	// An effect request reads its own published file and that file's meshes
+	// (#3951); nothing of one effect is kept for the next.
 	let disposed = false;
 	const files = new Map<string, number>(), readyFiles = new Set<string>();
 	let bytesRead = 0;
@@ -978,16 +978,17 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				} else if ( request.decode === "character" || request.decode === "effect" ) {
 					let model: import("@/engine/contracts/character").CharacterSource;
 					if ( request.decode === "effect" ) {
-						const program = effects.program( bytes ), meshBytes: Uint8Array[] = [];
-						for ( const key of program.meshes ) {
-							meshBytes.push(
-								await packs.read(
+						const program = effects.program( bytes );
+						// Every mesh at once, each under its own cap; the order is the file's.
+						const meshBytes = await Promise.all(
+							program.meshes.map( key =>
+								packs.read(
 									new URL( effectMeshFile( key ), url.origin ),
 									EFFECT_MESH_BYTES,
 									controller.signal
 								)
-							);
-						}
+							)
+						);
 						const meshes = effects.meshes( program, meshBytes );
 						const decoded = effects.model( program, meshes, effectPath ), raw = [];
 						let size = 0;
