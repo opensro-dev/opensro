@@ -17,6 +17,7 @@ package store
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/domain"
 )
@@ -315,6 +316,39 @@ func TestItemLedgerOwnTransactionDoorWritesItsRow(t *testing.T) {
 	rows := itemLedgerRows(t, s)
 	if len(rows) != 1 || rows[0].door != "storage-transfer" || rows[0].item != "ITEM_EU_SWORD_01_A" || rows[0].count != -1 {
 		t.Fatalf("warehouse rows %+v", rows)
+	}
+}
+
+/*
+================
+TestItemLedgerDeletionWritesNoRows
+
+A matured deletion archives the character with what it held: the
+archive keeps the record's bytes and a restore brings the items back,
+so the reap writes no item row, and the ledger lets go of the record.
+================
+*/
+func TestItemLedgerDeletionWritesNoRows(t *testing.T) {
+	t.Parallel()
+
+	clock := newTestClock()
+	s := openTest(t, t.TempDir(), clock)
+	c := newItemCharacter(t, s, "ItemGone")
+	s.MutateCharacter(c, "delete-reserve ItemGone", func() {
+		c.DeletePending = true
+		c.DeleteReservedAt = clock.Now().Add(-8 * 24 * time.Hour).UTC().Format("2006-01-02T15:04:05.000Z")
+	})
+	if reaped := s.ReapMaturedDeletions(); len(reaped) != 1 {
+		t.Fatalf("reaped %v, want the matured character", reaped)
+	}
+	if rows := itemLedgerRows(t, s); len(rows) != 0 {
+		t.Fatalf("a deletion wrote item rows %+v", rows)
+	}
+	s.mu.Lock()
+	_, held := s.items.seen[c]
+	s.mu.Unlock()
+	if held {
+		t.Fatal("the ledger still holds the deleted record's baseline")
 	}
 }
 
