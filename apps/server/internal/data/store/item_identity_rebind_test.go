@@ -6,7 +6,9 @@ item_identity_rebind_test.go - tests for item_identity_rebind.go
 A gears stone stored under the fox pet's old id (#3994) takes its
 codename's current id in the bag, the warehouse and a market listing, and
 keeps it across a reopen. A row the catalogue does not know, and one
-already current, are left alone.
+already current, are left alone. A summoned fox stored under the stone's
+id (#4019) takes the fox character's current id in the bag and the
+warehouse.
 
 ===========================================================================
 */
@@ -23,6 +25,9 @@ const (
 	rebindOldID   = 50853
 	rebindNewID   = 61001
 	rebindUnknown = "ITEM_GONE"
+	rebindScroll  = "ITEM_COS_P_FOX_SCROLL"
+	rebindFox     = "COS_P_FOX_001"
+	rebindFoxID   = 51295
 )
 
 /*
@@ -77,7 +82,7 @@ func TestRebindItemIdentitiesFollowsTheCodename(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	moved, err := s.RebindItemIdentities(testDivision, rebindCatalogue)
+	moved, err := s.RebindItemIdentities(testDivision, ObjectIdentities{Item: rebindCatalogue})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +91,7 @@ func TestRebindItemIdentitiesFollowsTheCodename(t *testing.T) {
 	if moved != 4 {
 		t.Fatalf("moved %d rows, want 4", moved)
 	}
-	again, err := s.RebindItemIdentities(testDivision, rebindCatalogue)
+	again, err := s.RebindItemIdentities(testDivision, ObjectIdentities{Item: rebindCatalogue})
 	if err != nil || again != 0 {
 		t.Fatalf("a second boot moved %d rows (%v)", again, err)
 	}
@@ -94,7 +99,7 @@ func TestRebindItemIdentitiesFollowsTheCodename(t *testing.T) {
 
 	reopened := openTest(t, dir, newTestClock())
 	// The GameWorld's boot order: the rebind runs on the store as it opens.
-	if again, err := reopened.RebindItemIdentities(testDivision, rebindCatalogue); err != nil || again != 0 {
+	if again, err := reopened.RebindItemIdentities(testDivision, ObjectIdentities{Item: rebindCatalogue}); err != nil || again != 0 {
 		t.Fatalf("the rebind on a freshly opened store moved %d rows (%v)", again, err)
 	}
 	var loaded *domain.Character
@@ -133,5 +138,97 @@ func TestRebindItemIdentitiesFollowsTheCodename(t *testing.T) {
 	}
 	if stored.Item.RefObjID != rebindNewID || stored.Item.Codename != rebindStone {
 		t.Fatalf("listed stone = %+v", stored.Item)
+	}
+}
+
+/*
+================
+rebindCompanions
+
+The test's character catalogue: only the fox has a current id.
+================
+*/
+func rebindCompanions(codename string) (uint32, bool) {
+	if codename == rebindFox {
+		return rebindFoxID, true
+	}
+	return 0, false
+}
+
+/*
+================
+TestRebindItemIdentitiesMovesAStoredCompanion
+
+The fox a player summoned before #3995 is stored in its scroll row under
+the stone's id. Without the companion catalogue the boot leaves it there;
+with it the fox takes its codename's id in the bag and the warehouse, a
+second boot moves nothing, and the scroll item itself keeps its id.
+================
+*/
+func TestRebindItemIdentitiesMovesAStoredCompanion(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	s, _, seller, _ := marketFixtureIn(t, dir)
+	scroll := func(slot int64) domain.InventoryRow {
+		return domain.InventoryRow{Slot: slot, RefObjID: 23323, Codename: rebindScroll, StackCount: 1,
+			Summon: &domain.CharacterCOS{RefObjID: rebindOldID, Codename: rebindFox, Level: 1}}
+	}
+	s.Mutate("rebind-companion-fixture", func() {
+		seller.MissionInventory = append(seller.MissionInventory, scroll(22))
+	})
+	if _, err := s.TransactStorage(seller, func(_ *domain.Character, storage *domain.AccountStorage) error {
+		storage.Rows = append(storage.Rows, scroll(5))
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if moved, err := s.RebindItemIdentities(testDivision, ObjectIdentities{}); err != nil || moved != 0 {
+		t.Fatalf("no catalogue moved %d rows (%v)", moved, err)
+	}
+	identities := ObjectIdentities{Item: rebindCatalogue, Companion: rebindCompanions}
+	moved, err := s.RebindItemIdentities(testDivision, identities)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The bag fox and the warehouse fox; the fixture's sword moves too.
+	if moved != 3 {
+		t.Fatalf("moved %d rows, want 3", moved)
+	}
+	if again, err := s.RebindItemIdentities(testDivision, identities); err != nil || again != 0 {
+		t.Fatalf("a second boot moved %d rows (%v)", again, err)
+	}
+	s.Close()
+
+	reopened := openTest(t, dir, newTestClock())
+	var loaded *domain.Character
+	for _, c := range reopened.Characters().CharactersForDivision(testDivision) {
+		if c.Name == seller.Name {
+			loaded = c
+		}
+	}
+	if loaded == nil {
+		t.Fatal("seller not reloaded")
+	}
+	storage, err := reopened.AccountStorage(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foxes := 0
+	for _, row := range append(append([]domain.InventoryRow(nil), loaded.MissionInventory...), storage.Rows...) {
+		if row.Codename != rebindScroll {
+			continue
+		}
+		foxes++
+		if row.RefObjID != 23323 {
+			t.Fatalf("the scroll item moved to %d", row.RefObjID)
+		}
+		if row.Summon == nil || row.Summon.RefObjID != rebindFoxID {
+			t.Fatalf("stored fox = %+v, want id %d", row.Summon, rebindFoxID)
+		}
+	}
+	if foxes != 2 {
+		t.Fatalf("found %d stored foxes, want 2", foxes)
 	}
 }

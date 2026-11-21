@@ -290,15 +290,24 @@ func openAuthorityPlane(
 	if err != nil {
 		return authorityPlane{}, fmt.Errorf("store: %w", err)
 	}
-	// Before any session: a build that numbered an item afresh (#3994)
-	// leaves stored rows under the old id, so every row takes its
-	// codename's current one.
-	rebound, err := authorityStore.RebindItemIdentities(ownedShard.ID, func(codename string) (uint32, bool) {
-		ref, ok := textdata.Items.ItemRefByCodename(codename)
-		if !ok || ref == nil {
-			return 0, false
-		}
-		return ref.RefObjID, true
+	// Before any session: a build that numbered an object afresh (#3994)
+	// leaves stored rows under the old id, so every row, and the companion
+	// it carries (#4019), takes its codename's current one.
+	rebound, err := authorityStore.RebindItemIdentities(ownedShard.ID, store.ObjectIdentities{
+		Item: func(codename string) (uint32, bool) {
+			ref, ok := textdata.Items.ItemRefByCodename(codename)
+			if !ok || ref == nil {
+				return 0, false
+			}
+			return ref.RefObjID, true
+		},
+		Companion: func(codename string) (uint32, bool) {
+			ref, ok := textdata.Items.CharacterRefByCodename(codename)
+			if !ok || ref == nil {
+				return 0, false
+			}
+			return ref.RefObjID, true
+		},
 	})
 	if err != nil {
 		authorityStore.Close()

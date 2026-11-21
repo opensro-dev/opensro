@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-item_identity_rebind.go - stored items follow their codename's id at boot
+item_identity_rebind.go - stored objects follow their codename's id at boot
 
 A stored item row keeps both its reference id and its codename. The id is
 what the wire and most lookups use; the codename is the stable name. A
@@ -15,8 +15,14 @@ current id. It covers every container the offline shard swap walks (bags,
 worn and avatar sockets, companions, the arena chest, warehouses, guild
 storage, the ground plane) and the market's open and held listings. A row
 whose codename the catalogue does not know is left as it is: the existing
-missing-reference handling owns it. Companions' own character ids are not
-rebound; no build has moved one.
+missing-reference handling owns it.
+
+A stored companion (a pet or a ride kept in its scroll row's summon) names
+its own character the same way, and the same build moved one: #3995 kept
+the clashing id with the stone and numbered COS_P_FOX_001 afresh (50853 to
+51295). A fox summoned before that release still named the stone, so its
+owner's entry was refused (invalidCOSRestoration, #4019). The companion
+takes its character codename's current id as well.
 
 ===========================================================================
 */
@@ -40,14 +46,27 @@ type ItemIdentity func(codename string) (uint32, bool)
 
 /*
 ================
+ObjectIdentities
+
+The two catalogues a stored row can name: its own item, and the character
+of the companion it carries. A nil Companion leaves companions alone.
+================
+*/
+type ObjectIdentities struct {
+	Item      ItemIdentity
+	Companion ItemIdentity
+}
+
+/*
+================
 rebindSwap
 
 The swap that gives a row its codename's current id.
 ================
 */
-func rebindSwap(identity ItemIdentity) ItemSwapFunc {
+func rebindSwap(identities ObjectIdentities) ItemSwapFunc {
 	return func(row domain.InventoryRow) (domain.InventoryRow, bool, error) {
-		next, changed := rebindRow(row, identity)
+		next, changed := rebindRow(row, identities)
 		return next, changed, nil
 	}
 }
@@ -55,35 +74,63 @@ func rebindSwap(identity ItemIdentity) ItemSwapFunc {
 /*
 ================
 rebindRow
+
+The row's own item id, then its companion's character id. The companion
+is copied before it changes: the row's summon is shared with the caller's
+copy of the row.
 ================
 */
-func rebindRow(row domain.InventoryRow, identity ItemIdentity) (domain.InventoryRow, bool) {
-	if row.Codename == "" {
-		return row, false
+func rebindRow(row domain.InventoryRow, identities ObjectIdentities) (domain.InventoryRow, bool) {
+	changed := false
+	if id, moved := currentID(identities.Item, row.Codename, row.RefObjID); moved {
+		row.RefObjID = id
+		changed = true
 	}
-	id, known := identity(row.Codename)
-	if !known || id == 0 || id == row.RefObjID {
-		return row, false
+	if row.Summon != nil {
+		if id, moved := currentID(identities.Companion, row.Summon.Codename, row.Summon.RefObjID); moved {
+			summon := *row.Summon
+			summon.RefObjID = id
+			row.Summon = &summon
+			changed = true
+		}
 	}
-	row.RefObjID = id
-	return row, true
+	return row, changed
+}
+
+/*
+================
+currentID
+
+The codename's current id when it differs from stored; false for an
+empty codename, one the catalogue does not know, or no catalogue.
+================
+*/
+func currentID(identity ItemIdentity, codename string, stored uint32) (uint32, bool) {
+	if identity == nil || codename == "" {
+		return 0, false
+	}
+	id, known := identity(codename)
+	if !known || id == 0 || id == stored {
+		return 0, false
+	}
+	return id, true
 }
 
 /*
 ================
 RebindItemIdentities
 
-Rebinds every stored item of division and its market listings; returns
-how many rows moved. One transaction per part: the containers commit
+Rebinds every stored item and companion of division and its market
+listings; returns how many rows moved. One transaction per part: the containers commit
 together, then the listings.
 ================
 */
-func (s *Store) RebindItemIdentities(division string, identity ItemIdentity) (int, error) {
-	swaps, err := s.SwapItemsOfflineShard(division, rebindSwap(identity), true)
+func (s *Store) RebindItemIdentities(division string, identities ObjectIdentities) (int, error) {
+	swaps, err := s.SwapItemsOfflineShard(division, rebindSwap(identities), true)
 	if err != nil {
 		return 0, fmt.Errorf("rebind stored items: %w", err)
 	}
-	listings, err := s.rebindListings(division, identity)
+	listings, err := s.rebindListings(division, identities)
 	if err != nil {
 		return len(swaps), fmt.Errorf("rebind market listings: %w", err)
 	}
@@ -99,7 +146,7 @@ every container. Sold and returned rows are history and keep what they
 recorded.
 ================
 */
-func (s *Store) rebindListings(division string, identity ItemIdentity) (int, error) {
+func (s *Store) rebindListings(division string, identities ObjectIdentities) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	db := s.syncDBLocked()
@@ -124,7 +171,7 @@ func (s *Store) rebindListings(division string, identity ItemIdentity) (int, err
 			rows.Close()
 			return 0, fmt.Errorf("listing %d: %w", id, err)
 		}
-		next, ok := rebindRow(item, identity)
+		next, ok := rebindRow(item, identities)
 		if !ok {
 			continue
 		}
