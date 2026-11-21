@@ -371,3 +371,39 @@ func TestMallCategoriesListOnlyImportedSwitchers(t *testing.T) {
 		t.Fatalf("switcher quote = %+v, %v; want %d silk", quote.Cost, err, modelSwitcherSilk)
 	}
 }
+
+/*
+================
+TestImportedPetScrollsTakeTheShippedTiers
+
+The imported pets sell at the shipped mall's own pet prices, read from
+its listings: the fox at the growth pets' (the bear's), the snowman at
+the silk pickup pets' (the cat's). The event snowman scroll is never
+sold (#3328 listed all three at 30).
+================
+*/
+func TestImportedPetScrollsTakeTheShippedTiers(t *testing.T) {
+	tier.Long(t, "imported pet scroll prices")
+	catalog, err := LoadMall(gamedatatest.TextdataDir(t), nil, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	growth := mallOfferNamed(catalog, "PACKAGE_ITEM_COS_P_BEAR_SCROLL")
+	pickup := mallOfferNamed(catalog, "PACKAGE_ITEM_COS_P_CAT_SCROLL")
+	if growth == nil || pickup == nil {
+		t.Fatal("the shipped mall lost its bear or cat scroll")
+	}
+	want := map[string]uint32{
+		"PACKAGE_ITEM_COS_P_FOX_SCROLL":            growth.Silk,
+		"PACKAGE_ITEM_COS_P_WINTER_SNOWMAN_SCROLL": pickup.Silk,
+	}
+	goods := petScrollGoods()
+	if len(goods) != len(want) {
+		t.Fatalf("%d pet listings, want %d (the event scroll is not sold)", len(goods), len(want))
+	}
+	for _, good := range goods {
+		if price, ok := want[good.Package]; !ok || good.Silk != price {
+			t.Fatalf("%s at %d silk, want %d", good.Package, good.Silk, price)
+		}
+	}
+}
