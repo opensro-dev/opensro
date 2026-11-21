@@ -20,10 +20,23 @@ const {
 	videoOptions,
 	backgroundDrawDistance,
 	uiPixelScaleFor,
-	fitCanvasViewport
+	fitCanvasViewport,
+	surfaceSize,
+	SURFACE_MAX_DIMENSION
 } = await import(
 	sourceFileUrl( "src/engine/foundation/rendering/video-options.ts" ).href
 );
+test("a page wider than the device's texture limit gets a backing store it can configure (#4028)", () => {
+	assert.deepEqual( surfaceSize( 1920, 1080 ), { width: 1920, height: 1080 } );
+	assert.deepEqual( surfaceSize( SURFACE_MAX_DIMENSION, 4000 ), { width: SURFACE_MAX_DIMENSION, height: 4000 } );
+	// The reported Apple window: 8820 x 5226 failed configure at 8192.
+	const wide = surfaceSize( 8820, 5226 );
+	assert.equal( wide.width, SURFACE_MAX_DIMENSION );
+	assert.ok( Math.abs( wide.width / wide.height - 8820 / 5226 ) < 0.001, "aspect kept" );
+	const tall = surfaceSize( 3000, 12000 );
+	assert.equal( tall.height, SURFACE_MAX_DIMENSION );
+	assert.ok( tall.width <= SURFACE_MAX_DIMENSION && tall.width >= 2047 );
+});
 test("background range and effect quality survive the persisted two-record option format", () => {
 	let options = defaultVideoOptions();
 	const untouched = [ ...options.records[1] ];
