@@ -1,49 +1,29 @@
 /*
 ===========================================================================
 
-particle-tick-digest.test.mjs - the particle graph tick against its catalogue digest
+particle-tick-digest.test.mjs - the particle tick digest's rules and coverage
 
-Every effect of the built catalogue with a particle graph keeps the tick
-digest the fixture holds (tests/helpers/particle-tick-digest.mjs): the
-graph tick (src/engine/foundation/animation/particle-graph.ts) gives the
-same results, bit for bit, in all three scenarios. A change that alters
-results on purpose rewrites the fixture with
+The catalogue check itself lives in particle-tick-digest-NN.test.mjs,
+one effect-path range (shard) per file, so no file runs for minutes
+(the release's package step measured the unsplit check at 280 s;
+ops #436). What stays here is what needs no catalogue: the comparison
+rules (digestDifferences) and the proof that the shard ranges cover
+the fixture - every recorded effect in exactly one shard, and a file
+on disk for every shard there is. A change that alters tick results
+on purpose rewrites the fixture with
 `node tools/particle-tick-digest.mjs --write` and names the effects.
-
-The fixture is the native catalogue's. A native build matches it exactly;
-an expanded build (the Alexandria variant) must keep every recorded
-effect's digest, and its added effects pass (digestDifferences says why).
-So does a build that read the operator's optional later-client glow tables
-(scripts/import_vsro_item_glow.py): they name enchant sparks the native
-catalogue never loads (system_enchant_b_01.efp), so the catalogue gains
-effects while every recorded one must still match.
 
 ===========================================================================
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
-import { digestDifferences, particleTickDigests, DIGEST_PATH } from "../helpers/particle-tick-digest.mjs";
-import { EXPANDED_BUILD } from "../helpers/expanded-build.mjs";
-import { vsroItemGlowRoot } from "../../../../scripts/build/char/equipmentGlowMetadata.mjs";
-
-// How many differing effects a failure names.
-const NAMED_DIFFERENCES = 20;
-// A build that adds effects to the native catalogue: the variant, or the
-// optional glow import the asset build reads when it is present.
-const ADDS_EFFECTS = EXPANDED_BUILD || existsSync( vsroItemGlowRoot );
-
-test("every catalogue particle graph ticks to its recorded digest", () => {
-	const expected = JSON.parse( readFileSync( DIGEST_PATH, "utf8" ) ).effects, actual = particleTickDigests();
-	const changed = digestDifferences( expected, actual, ADDS_EFFECTS );
-	assert.deepEqual(
-		changed.slice( 0, NAMED_DIFFERENCES ).map( path =>
-			`${path}: ${expected[path] ?? "(missing)"} -> ${actual[path] ?? "(missing)"}`
-		),
-		[],
-		`${changed.length} effects differ`
-	);
-});
+import { readFileSync, readdirSync } from "node:fs";
+import {
+	DIGEST_PATH,
+	PARTICLE_TICK_SHARD_COUNT,
+	digestDifferences,
+	particleTickShardExpected
+} from "../helpers/particle-tick-digest.mjs";
 
 test("an expanded build passes only additions; a changed or lost recorded effect fails on any build", () => {
 	const expected = { "a.efp": "1", "b.efp": "2" }, added = { "a.efp": "1", "b.efp": "2", "c.efp": "3" };
@@ -53,4 +33,29 @@ test("an expanded build passes only additions; a changed or lost recorded effect
 		assert.deepEqual( digestDifferences( expected, { "a.efp": "1", "b.efp": "9" }, expanded ), [ "b.efp" ] );
 		assert.deepEqual( digestDifferences( expected, { "a.efp": "1" }, expanded ), [ "b.efp" ] );
 	}
+});
+
+test("the shard ranges cover every recorded effect exactly once, with a file per shard", () => {
+	const recorded = JSON.parse( readFileSync( DIGEST_PATH, "utf8" ) ).effects, seen = new Set();
+	for ( let shard = 0; shard < PARTICLE_TICK_SHARD_COUNT; shard++ ) {
+		const expected = particleTickShardExpected( shard );
+		assert.ok(
+			Object.keys( expected ).length > 0,
+			`shard ${shard + 1} of ${PARTICLE_TICK_SHARD_COUNT} records nothing`
+		);
+		for ( const path of Object.keys( expected ) ) {
+			assert.ok( !seen.has( path ), `${path} is in two shards` );
+			seen.add( path );
+		}
+	}
+	assert.equal( seen.size, Object.keys( recorded ).length );
+	const files = readdirSync( new URL( ".", import.meta.url ) )
+		.filter( name => /^particle-tick-digest-\d\d\.test\.mjs$/.test( name ) ).sort();
+	assert.deepEqual(
+		files,
+		Array.from(
+			{ length: PARTICLE_TICK_SHARD_COUNT },
+			( _, i ) => `particle-tick-digest-${String( i + 1 ).padStart( 2, "0" )}.test.mjs`
+		)
+	);
 });
