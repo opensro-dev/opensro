@@ -40,7 +40,7 @@ import type {
 	SecondaryModel,
 	ItemPresentation
 } from "./internal/presentation-contract";
-import { compoundPart } from "./compound-part";
+import { compoundPart } from "@/engine/foundation/rendering/compound-part";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 
 // The ride transform modes 8602C0 reads from ride+0x29D (EffectSyntax_RotationType

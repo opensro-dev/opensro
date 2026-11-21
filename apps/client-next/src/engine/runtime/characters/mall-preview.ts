@@ -24,7 +24,7 @@ import {
 } from "@/engine/foundation/animation/equipment-appearance";
 import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
 import { radians } from "@/engine/foundation/math/angles";
-import { compoundPart } from "./compound-part";
+import { compoundPart } from "@/engine/foundation/rendering/compound-part";
 
 // Above both the unsigned wire GID range and the party portrait range.
 export const MALL_PREVIEW_GID = 0x200000000;
