@@ -608,3 +608,79 @@ func rocSummitAtTheRoc(t *testing.T, rt *Runtime, clock *fakeClock, monsters *ro
 	}
 	return top
 }
+
+/*
+================
+TestRocSpiritsKeepThreeUp
+
+The Roc's 5-minute spirit timer: nothing before the first run, the first
+three slots at the first run (table order among equal flags), then each
+run fills 3 - alive into the slots empty longest, each codename at its
+own point; a fallen Roc stops the timer.
+================
+*/
+func TestRocSpiritsKeepThreeUp(t *testing.T) {
+	rt, clock, monsters, c := rocFixture(t)
+	top := rocSummitAtTheRoc(t, rt, clock, monsters, c)
+	spirits := func() []string {
+		var up []string
+		for i, gid := range top.spirits {
+			if gid != 0 {
+				if got := monsters.spawned[gid]; got.Codename != rocSpirits[i].codename || got.Position != rocSpirits[i].spawn || got.Population != top.lease {
+					t.Fatalf("slot %d spawned %+v", i, got)
+				}
+				up = append(up, rocSpirits[i].codename)
+			}
+		}
+		return up
+	}
+	step := func(d time.Duration) {
+		clock.now = clock.now.Add(d)
+		rocTick(rt, clock)
+	}
+
+	step(rocSpiritRespawnMs*time.Millisecond - time.Second)
+	if up := spirits(); len(up) != 0 {
+		t.Fatalf("spirits before the first run: %v", up)
+	}
+	step(time.Second)
+	if up := fmt.Sprint(spirits()); up != "[MOB_RM_SPIRITS MOB_RM_SPIRITS_CLON MOB_RM_SPIRITS_CLON2]" {
+		t.Fatalf("first run: %s", up)
+	}
+
+	// The fourth slot has been empty since the start, longer than the
+	// spirit felled now, so the next run fills it; a run with three up
+	// spawns nothing.
+	monsters.alive[top.spirits[0]] = false
+	step(time.Second)
+	step(rocSpiritRespawnMs * time.Millisecond)
+	if up := fmt.Sprint(spirits()); up != "[MOB_RM_SPIRITS_CLON MOB_RM_SPIRITS_CLON2 MOB_RM_SPIRITS_CLON3]" {
+		t.Fatalf("second run: %s", up)
+	}
+	spawned := len(monsters.spawned)
+	step(rocSpiritRespawnMs * time.Millisecond)
+	if len(monsters.spawned) != spawned {
+		t.Fatal("a run with three up spawned")
+	}
+
+	// Slot 0 is still empty from the first fall; two more fall a minute
+	// apart, leaving one alive. The run spawns two into the slots empty
+	// longest (0, then 1), so the last to fall (3) stays down.
+	monsters.alive[top.spirits[1]] = false
+	step(time.Minute)
+	monsters.alive[top.spirits[3]] = false
+	step(rocSpiritRespawnMs * time.Millisecond)
+	if up := fmt.Sprint(spirits()); up != "[MOB_RM_SPIRITS MOB_RM_SPIRITS_CLON MOB_RM_SPIRITS_CLON2]" {
+		t.Fatalf("after two fell, the run fills the longest-empty slots: %s", up)
+	}
+
+	// A fallen Roc stops the timer.
+	monsters.alive[monsters.gidOf(rocCodename)] = false
+	spawned = len(monsters.spawned)
+	for i := 0; i < 4; i++ {
+		step(rocSpiritRespawnMs * time.Millisecond)
+	}
+	if len(monsters.spawned) != spawned {
+		t.Fatal("the spirits came back after the Roc fell")
+	}
+}

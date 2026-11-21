@@ -46,8 +46,8 @@ Inferences, as no binary shows them:
   so their low bytes carry them here. The v1.150 client
   would show category 0x11 for those kinds; ours decodes them
   (unique-notices.ts).
-- The Roc's timed skills (MSKILL_RM_ROC_ATTACK10 an hour after it
-  appears, the spirits' five-minute respawn) are not ported yet.
+- The Roc's hour-mark cast (MSKILL_RM_ROC_ATTACK10, its stacking
+  enrage) is not ported yet: the variant does not stage the skill.
 - A missing kind or gate row (the variant build did not stage the Roc)
   spawns nothing; the window still opens and closes the worlds.
 
@@ -62,6 +62,13 @@ Countdowns, both tied to the living Roc (its handlers die with it):
 	          "leaves in 30, 15, 10, 5, 3, 1 minutes" from 3:00:01 after
 	          it appeared; at 3:30 a seventh sends every resident to
 	          GATE_RC_MOUNTAIN_GATE's spawn
+	spirits   the Roc's repeating 5-minute timer (v1.188 0x5FD840) keeps
+	          three of the four spirits up: it counts the living ones and
+	          spawns 3 - alive into the slots empty longest. Each slot is
+	          one codename at one fixed point; its layer flag holds when it
+	          emptied (the death hook 0x5FD4A0 writes RocTop_ElapsedTime;
+	          the layer start writes 1, so the first pass fills the first
+	          three in table order: the list sort 0x600880 is stable)
 
 The Roc tells the whole division when it appears and when it falls
 (0x3058 kinds 5 and 6, the v1.150 form of the reference server's
@@ -134,6 +141,10 @@ const (
 	// The departure: the seventh one-shot's delay after the Roc appears.
 	rocDepartureMs = 12_600_000
 
+	// The spirits' respawn: the timer's period and how many it keeps up.
+	rocSpiritRespawnMs = 300_000
+	rocSpiritsKept     = 3
+
 	rocSymAppear     = "UIIT_MSG_QUEST_ROC_APPEAR"
 	rocSymDisappear  = "UIIT_MSG_QUEST_ROC_DISAPPEAR"
 	rocSymBreakStone = "UIIT_MSG_QUEST_ROC_BREAK_STONE"
@@ -190,6 +201,18 @@ var rocDepartureNotices = []struct {
 	{12_541_000, 1},
 }
 
+// rocSpirits are the respawn timer's four slots, in its table order: each
+// codename has its own point (v1.188 0x5FD840's float table).
+var rocSpirits = [4]struct {
+	codename string
+	spawn    simulation.Spawn
+}{
+	{"MOB_RM_SPIRITS", simulation.Spawn{RegionID: 26045, X: 1339.62, Y: -0.52, Z: 1498.44}},
+	{"MOB_RM_SPIRITS_CLON", simulation.Spawn{RegionID: 26045, X: 715.95, Y: -27.52, Z: 1101.13}},
+	{"MOB_RM_SPIRITS_CLON2", simulation.Spawn{RegionID: 26045, X: 714.96, Y: -23.86, Z: 1497.42}},
+	{"MOB_RM_SPIRITS_CLON3", simulation.Spawn{RegionID: 26045, X: 1338.30, Y: -16.68, Z: 1101.78}},
+}
+
 var (
 	// rocSpawn is where step 2 places the Roc.
 	rocSpawn = simulation.Spawn{RegionID: 26045, X: 1028.9, Y: -7.29, Z: 1769.52}
@@ -236,6 +259,11 @@ type rocSummit struct {
 	berserkMs   int64
 	departures  int
 	departed    bool
+	// The spirits: each slot's gid (zero while empty), when it emptied
+	// (zero from the layer start) and the respawn timer's next run.
+	spirits       [len(rocSpirits)]uint32
+	spiritEmptyMs [len(rocSpirits)]int64
+	spiritMs      int64
 }
 
 /*
@@ -535,6 +563,7 @@ func (rt *Runtime) advanceRocTop(division string, top *rocSummit, in bool, nowMs
 		// count 30 minutes on; the port arms it with the spawn.
 		top.step, top.rocMs = rocStepFight, nowMs
 		top.berserkStep, top.berserkMs = 1, nowMs+rocBerserkSteps[0].waitMs
+		top.spiritMs = nowMs + rocSpiritRespawnMs
 	case rocStepFight:
 		if top.roc == 0 {
 			return notices
@@ -569,6 +598,7 @@ division lock.
 ================
 */
 func (rt *Runtime) advanceRocCountdowns(division string, top *rocSummit, nowMs int64) {
+	rt.advanceRocSpirits(division, top, nowMs)
 	if top.berserkStep < rocBerserkEnd && nowMs >= top.berserkMs {
 		wait := int64(rocBerserkAgainMs)
 		if top.berserkStep < len(rocBerserkSteps) {
@@ -599,6 +629,52 @@ func (rt *Runtime) advanceRocCountdowns(division string, top *rocSummit, nowMs i
 				rt.leaveRocLayer(division, c, exit, "roc-departure", rt.tickDoors())
 			}
 		}
+	}
+}
+
+/*
+================
+advanceRocSpirits
+
+The living Roc's spirit timer. Every tick notes the slots whose spirit
+fell (the death hook's time stamp); each run spawns 3 - alive into the
+slots empty longest, in table order among equals. The caller holds the
+division lock.
+================
+*/
+func (rt *Runtime) advanceRocSpirits(division string, top *rocSummit, nowMs int64) {
+	alive := 0
+	for i, gid := range top.spirits {
+		if gid == 0 {
+			continue
+		}
+		if rt.roc.alive(division, gid) {
+			alive++
+			continue
+		}
+		top.spirits[i], top.spiritEmptyMs[i] = 0, nowMs
+	}
+	if nowMs < top.spiritMs {
+		return
+	}
+	top.spiritMs = nowMs + rocSpiritRespawnMs
+	for want := rocSpiritsKept - alive; want > 0; want-- {
+		slot := -1
+		for i, gid := range top.spirits {
+			if gid == 0 && (slot < 0 || top.spiritEmptyMs[i] < top.spiritEmptyMs[slot]) {
+				slot = i
+			}
+		}
+		if slot < 0 {
+			return
+		}
+		spirit := rocSpirits[slot]
+		gid, ok := rt.spawnRocMonster(division, top.lease, spirit.codename, spirit.spawn, nowMs)
+		if !ok {
+			// Native: a failed spawn dumps and ends the run.
+			return
+		}
+		top.spirits[slot] = gid
 	}
 }
 
