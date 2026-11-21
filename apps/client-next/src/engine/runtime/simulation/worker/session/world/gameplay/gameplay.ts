@@ -362,6 +362,7 @@ import { createCaravanStars } from "./caravan-stars/caravan-stars";
 import { createContributorTitles } from "./contributor-titles/contributor-titles";
 import { createSroMacro } from "./sro-macro/sro-macro";
 import {
+	BAG_FIRST_SLOT,
 	emptyMacroPotionQueue,
 	macroPotionBagSlot,
 	macroPotionFired,
@@ -609,6 +610,10 @@ function skillPressAnswer( frame: WireFrame, localGid: number ): "answered" | "q
 	if ( p.length < 10 ) return null;
 	return ((p[6]! | p[7]! << 8 | p[8]! << 16 | p[9]! << 24) >>> 0) === localGid ? "answered" : null;
 }
+
+// Port-only (#3907): the Auto-Hunt tick resends an unanswered request at
+// most once a second.
+const MACRO_HUNT_RETRY_MS = 1000;
 
 /*
 ================
@@ -1509,7 +1514,11 @@ fails; retry persistence without restoring stale slot occupancy.
 	let macroSkillLoop = emptyMacroSkillLoop();
 	let macroHuntStartedAtMs = 0;
 	let macroHuntWasOn = false;
-	let macroHuntRegionId = 0;
+	// The last Auto-Hunt request and when it went out: one request per
+	// MACRO_HUNT_RETRY_MS, so a step the server has not answered yet
+	// (rebirth, berserk, pickup, select, hunt OFF) is not resent each tick.
+	let macroHuntLastAction = "";
+	let macroHuntLastActionAtMs = 0;
 	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	const cosSelection = createCosSelection();
@@ -1849,7 +1858,8 @@ clears it when another character enters.
 		macroSkillLoop = emptyMacroSkillLoop();
 		macroHuntStartedAtMs = 0;
 		macroHuntWasOn = false;
-		macroHuntRegionId = 0;
+		macroHuntLastAction = "";
+		macroHuntLastActionAtMs = 0;
 		uniqueRank.clear();
 		mostWanted.clear();
 		hwanLevel.clear();
@@ -6948,6 +6958,23 @@ Send 0x7554 OFF for a kind that is currently on (006865e0 / 006861c0).
 
 	/*
 ================
+macroHuntRepeats
+
+True while the same Auto-Hunt request went out less than
+MACRO_HUNT_RETRY_MS ago (port-only pacing: the native loop waits on its
+own request state, which the worker has no mirror of). Otherwise records
+this request and returns false.
+================
+	*/
+	function macroHuntRepeats( key: string, now: number ): boolean {
+		if ( key === macroHuntLastAction && now - macroHuntLastActionAtMs < MACRO_HUNT_RETRY_MS ) return true;
+		macroHuntLastAction = key;
+		macroHuntLastActionAtMs = now;
+		return false;
+	}
+
+	/*
+================
 checkMacroHunt
 
 Port-only, not native (#3907): one tick of the SRO Macro's Auto-Hunt
@@ -6970,45 +6997,41 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 			}
 		}
 		const huntOn = !!(live && sroMacroEnabled && settings?.huntOn);
-		if ( huntOn && !macroHuntWasOn ) {
-			macroHuntStartedAtMs = now;
-			macroHuntRegionId = movement.state().pose?.regionId ?? 0;
-		}
+		if ( huntOn && !macroHuntWasOn ) macroHuntStartedAtMs = now;
 		if ( !huntOn ) {
 			macroHuntWasOn = false;
 			macroHuntStartedAtMs = 0;
-			macroHuntRegionId = 0;
+			macroHuntLastAction = "";
 			return;
 		}
 		macroHuntWasOn = true;
 		if ( !local || !settings ) return;
 
-		const pose = movement.state().pose;
-		// Map / region change ends hunt (UIIT ... TELEPORT_OFF; 68b330 path).
-		if ( pose && macroHuntRegionId !== 0 && pose.regionId !== macroHuntRegionId ) {
-			api.notice( { key: "", value: 0, text: MACRO_NOTICE_TELEPORT_OFF, nativeType: 5 } );
-			requestMacroOff( MACRO_HUNT );
-			macroHuntWasOn = false;
-			macroHuntStartedAtMs = 0;
-			macroHuntRegionId = 0;
-			dirty = true;
+		// 68b330: a teleport ends Auto-Hunt with TELEPORT_OFF. teleportMode is
+		// the 0x3057 state-11 latch, 1 while a teleport is under way. A region
+		// id change alone is a walk across a 192 m cell, not a teleport.
+		if ( teleportMode === 1 ) {
+			if ( !macroHuntRepeats( "teleport-off", now ) ) {
+				api.notice( { key: "", value: 0, text: MACRO_NOTICE_TELEPORT_OFF, nativeType: 5 } );
+				requestMacroOff( MACRO_HUNT );
+				dirty = true;
+			}
 			return;
 		}
-		if ( pose && macroHuntRegionId === 0 ) macroHuntRegionId = pose.regionId;
 
+		const pose = movement.state().pose;
 		const bag = inventory.state().inventory;
-		const bagFirst = 13;
 		const countRef = ( ref: number ) => {
 			if ( !ref ) return 0;
 			let total = 0;
 			for ( const entry of bag ) {
-				if ( entry.slot >= bagFirst && entry.refObjId === ref ) total += entry.quantity;
+				if ( entry.slot >= BAG_FIRST_SLOT && entry.refObjId === ref ) total += entry.quantity;
 			}
 			return total;
 		};
 		const findKindSlot = ( kind: ReturnType<typeof huntItemKind> ) => {
 			for ( const entry of bag ) {
-				if ( entry.slot < bagFirst || entry.quantity <= 0 ) continue;
+				if ( entry.slot < BAG_FIRST_SLOT || entry.quantity <= 0 ) continue;
 				if ( huntItemKind( entry.typeFlags ) === kind ) return entry.slot;
 			}
 			return undefined;
@@ -7034,7 +7057,7 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 			) :
 			undefined;
 		const wornBroken = bag.some( entry =>
-			entry.slot < bagFirst && equipmentBroken( entry.typeFlags, entry.durability )
+			entry.slot < BAG_FIRST_SLOT && equipmentBroken( entry.typeFlags, entry.durability )
 		);
 		const action = pickMacroHuntAction( settings.hunt, {
 			alive: potionFacts.alive,
@@ -7044,7 +7067,7 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 			potionOn: settings.potionOn,
 			hpPotionCount: countRef( hpRef ),
 			mpPotionCount: countRef( mpRef ),
-			hasReturnScroll: bag.some( e => e.slot >= bagFirst && isReturnScroll( e.typeFlags ) ),
+			hasReturnScroll: bag.some( e => e.slot >= BAG_FIRST_SLOT && isReturnScroll( e.typeFlags ) ),
 			hasResurrectScroll: findKindSlot( "resurrect" ) !== undefined,
 			hasRepairHammer: findKindSlot( "repair-hammer" ) !== undefined,
 			hasEnergyOfLife: findKindSlot( "energy" ) !== undefined,
@@ -7063,6 +7086,11 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 			if ( text ) api.notice( { key: "", value: 0, text, nativeType: 5 } );
 		};
 
+		if ( action.kind !== "none" && action.kind !== "wait-resurrect" ) {
+			const key = "gid" in action ? `${action.kind}:${action.gid}` : action.kind;
+			if ( macroHuntRepeats( key, now ) ) return;
+		}
+
 		try {
 			switch ( action.kind ) {
 				case "none":
@@ -7080,7 +7108,7 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 					return;
 				}
 				case "return-scroll": {
-					const slot = bag.find( e => e.slot >= bagFirst && isReturnScroll( e.typeFlags ) )?.slot;
+					const slot = bag.find( e => e.slot >= BAG_FIRST_SLOT && isReturnScroll( e.typeFlags ) )?.slot;
 					if ( slot === undefined || !useAutomaticItem( slot, now, true ) ) return;
 					announce();
 					// 006865e0: queue hunt OFF after a return that ends the session.

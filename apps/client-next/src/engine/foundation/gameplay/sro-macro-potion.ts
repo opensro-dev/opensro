@@ -44,7 +44,7 @@ export const MACRO_CURE_ABNORMAL = 0x17fafff;
 // 00692e00 / 00692f60 scale the percent byte by this double (0x12befb8).
 const PERCENT_SCALE = 0.01;
 // Slots below this are the equipment sockets, never a potion source.
-const BAG_FIRST_SLOT = 13;
+export const BAG_FIRST_SLOT = 13;
 // Expendable class bits, same mask autoPotionItemSlot reads.
 const CONSUMABLE_MASK = 0x1c;
 const CONSUMABLE = 0x0c;
