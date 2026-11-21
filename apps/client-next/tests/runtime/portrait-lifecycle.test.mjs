@@ -14,6 +14,7 @@ import test from "node:test";
 const { createCharacters } = await import( "../../src/engine/runtime/renderer/characters/characters.ts" );
 const { createPortrait } = await import( "../../src/engine/runtime/renderer/characters/portrait.ts" );
 const { radians } = await import( "../../src/engine/foundation/math/angles.ts" );
+const { effectProgramModel } = await import( "../../src/engine/foundation/assets/effect-programs.ts" );
 
 /*
 ================
@@ -328,8 +329,8 @@ test("a doll wears its items' glows, never the world's skill and buff effects", 
 	// (8EAA90) -> ApplyWeaponGlow (8EA960): a rare weapon's itemrare effects
 	// draw on the inventory doll and the viewer. Buff effects stay world-only.
 	const f = fixture();
-	const glowModel = "/assets/effects/programs.json#" + encodeURIComponent( "system/system_raretype_a_step1.efp" );
-	const buffModel = "/assets/effects/programs.json#" + encodeURIComponent( "skill/buff_aura.efp" );
+	const glowModel = effectProgramModel( "system/system_raretype_a_step1.efp" );
+	const buffModel = effectProgramModel( "skill/buff_aura.efp" );
 	for ( const model of [ "body", glowModel, buffModel ] ) {
 		f.characters.borrowModel( model, f.source.model, f.source.images );
 	}
@@ -379,7 +380,7 @@ test("a glow that appears on a long-drawn doll starts its own clock, not the dol
 	// Equipping a rare item attaches a fresh itemrare effect (ApplyWeaponGlow
 	// 8EA960). Handing it the doll's age replayed that whole age in one frame.
 	const f = fixture();
-	const glowModel = "/assets/effects/programs.json#" + encodeURIComponent( "system/system_raretype_a_step1.efp" );
+	const glowModel = effectProgramModel( "system/system_raretype_a_step1.efp" );
 	f.characters.borrowModel( glowModel, f.source.model, f.source.images );
 	/** @type {import("../../src/engine/contracts/portrait.ts").PortraitPart} */
 	const glow = {

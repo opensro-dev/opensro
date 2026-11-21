@@ -30,6 +30,12 @@ import { createNavigationResources } from "./navigation/navigation";
 import { decodeDxt1 } from "@/engine/foundation/assets/dds";
 import { createEffectDecoder } from "./effects/effects";
 import {
+	EFFECT_MESH_BYTES,
+	EFFECT_PROGRAM_PREFIX,
+	effectMeshFile,
+	effectProgramFile
+} from "@/engine/foundation/assets/effect-programs";
+import {
 	decodeNativeTexture,
 	NATIVE_TEXTURE_MIME,
 	validateNativeTexture
@@ -65,8 +71,6 @@ const DOWNLOAD_RETRY_DELAYS_MS = [ 250, 1000 ] as const;
 // one that never delivers still fails after the three attempts above.
 const DOWNLOAD_NO_PROGRESS_MS = 15000;
 const TRANSIENT_HTTP_STATUS = new Set( [ 408, 429, 500, 502, 503, 504 ] );
-// Stands in for the effect catalog's bytes once the decoder holds it parsed.
-const PARSED_EFFECT_CATALOG = new Uint8Array( 0 );
 // Stands in for a world bundle's bytes once they are parsed.
 const RELEASED_WORLD_BYTES = new Uint8Array( 0 );
 /*
@@ -133,9 +137,9 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		request: Extract<AssetRequest, { kind: "load"; }>;
 		controller: AbortController;
 	}[] = [];
-	// The effect program catalog is parsed once and kept parsed (program.ts);
-	// its 40 MB of source bytes are needed only for that first parse.
-	let disposed = false, effectCatalogParsed = false;
+	// An effect request reads its own published file and that file's meshes
+	// (#3951); nothing of one effect is kept for the next.
+	let disposed = false;
 	const files = new Map<string, number>(), readyFiles = new Set<string>();
 	let bytesRead = 0;
 	// The watchdog's per-job notes. Bytes cannot be attributed to one load:
@@ -749,10 +753,15 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				throw new Error( "Invalid asset URL" );
 			}
 			primaryVerified = url.pathname.startsWith( "/assets/" );
-			let bytes = request.decode === "effect" && effectCatalogParsed ?
-				PARSED_EFFECT_CATALOG :
-				primaryVerified ?
-				await packs.read( url, request.limit, controller.signal ) :
+			// An effect is named by its model address; its bytes are its own
+			// published file (foundation/assets/effect-programs.ts).
+			if ( request.decode === "effect" && !(url.pathname + "#").startsWith( EFFECT_PROGRAM_PREFIX ) ) {
+				throw new Error( "Invalid effect program address" );
+			}
+			const effectPath = request.decode === "effect" ? decodeURIComponent( url.hash.slice( 1 ) ) : "";
+			const source = request.decode === "effect" ? new URL( effectProgramFile( effectPath ), url.origin ) : url;
+			let bytes = primaryVerified ?
+				await packs.read( source, request.limit, controller.signal ) :
 				await download( url.href, request.limit, controller.signal );
 			job.primaryDone = true;
 			// The primary bytes are in. The decoding mark still waits for
@@ -969,8 +978,19 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				} else if ( request.decode === "character" || request.decode === "effect" ) {
 					let model: import("@/engine/contracts/character").CharacterSource;
 					if ( request.decode === "effect" ) {
-						const decoded = effects.model( bytes, decodeURIComponent( url.hash.slice( 1 ) ) ), raw = [];
-						effectCatalogParsed = true;
+						const program = effects.program( bytes );
+						// Every mesh at once, each under its own cap; the order is the file's.
+						const meshBytes = await Promise.all(
+							program.meshes.map( key =>
+								packs.read(
+									new URL( effectMeshFile( key ), url.origin ),
+									EFFECT_MESH_BYTES,
+									controller.signal
+								)
+							)
+						);
+						const meshes = effects.meshes( program, meshBytes );
+						const decoded = effects.model( program, meshes, effectPath ), raw = [];
 						let size = 0;
 						for ( const path of decoded.imagePaths ) {
 							if ( !path.startsWith( "/assets/" ) || path.includes( ".." ) ) {
@@ -1228,8 +1248,6 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			if ( progressTimer !== null ) clearTimeout( progressTimer );
 			progressTimer = null;
 			animationCatalogs.clear();
-			effectCatalogParsed = false;
-			effects.dispose();
 			installer.dispose();
 			wakeIdleWaiters();
 			packs.dispose();

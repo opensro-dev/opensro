@@ -15,10 +15,14 @@ BSR the npc builder bakes into a compound row.
 */
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import fs from "node:fs";
+import { dataAssetPath } from "../../build/shared/jmxAssetIO.mjs";
 import { entitySource } from "../../build/char/publishEntityBsrModifiers.mjs";
 import { collectEntityParticleReferences, readEntityModel } from "../../build/effects/buildEffectPrograms.mjs";
 
 const SHINMU = "res/char/china/shinmu.cpd";
+// A shinmu branch the v1.150 archive lacks (a degree-10 item).
+const ABSENT_BRANCH = "res/item/china/man_item/heavy_10_aa.bsr";
 const HAIR_PARTICLES = 1;
 const SHINMU_BODY = "res/char/china/chinaman_warrior.bsr";
 
@@ -63,8 +67,12 @@ compound entity without the tomb refuses its absent branches
 ================
 */
 test("a compound entity refuses a branch v1.150 lacks when the tomb is off", () => {
+	// The tree is injected: a variant that imports later-client degree-10
+	// items ships this branch, and then reading it is right. The rule under
+	// test is the refusal when the branch is absent.
+	const v150 = gamePath => gamePath !== ABSENT_BRANCH && fs.existsSync( dataAssetPath( gamePath ) );
 	assert.throws(
-		() => withTomb( "off", () => readEntityModel( SHINMU ) ),
+		() => withTomb( "off", () => readEntityModel( SHINMU, undefined, v150 ) ),
 		/compound branch absent: res\/item\/china\/man_item\/heavy_10_aa\.bsr/
 	);
 });

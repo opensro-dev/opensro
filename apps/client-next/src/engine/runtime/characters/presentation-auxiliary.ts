@@ -42,6 +42,7 @@ import type {
 } from "./internal/presentation-contract";
 import { compoundPart } from "@/engine/foundation/rendering/compound-part";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
+import { effectProgramModel } from "@/engine/foundation/assets/effect-programs";
 
 // The ride transform modes 8602C0 reads from ride+0x29D (EffectSyntax_RotationType
 // table CCDB10: none = 0, RT_FIXED = 1, RT_DUMMY = 2).
@@ -269,9 +270,7 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 				const paths = [
 					resource.glb,
 					...(resource.animationParticlePaths ?? []),
-					...(resource.ambientParticles ?? []).map( particle =>
-						"/assets/effects/programs.json#" + encodeURIComponent( particle.effectPath )
-					)
+					...(resource.ambientParticles ?? []).map( particle => effectProgramModel( particle.effectPath ) )
 				];
 				// Start only after the model and particle programs are resident, so
 				// admission cannot consume a time-zero animation modifier key.

@@ -3,12 +3,16 @@
 
 buildEffectPrograms.mjs - the particle effect programs catalog
 
-Publishes assets/effects/programs.json: every EFP the native client can
-reach (enabled skill-effect records, character actions, equipment, model,
-scenery and entity BSR particle modifiers, and the EFP literals in
-SRO_Client.exe), with their meshes and textures. The retail Particles.pk2
-must match the committed archive evidence
-(scripts/build/reference/particle-archive.json).
+Publishes every EFP the native client can reach (enabled skill-effect
+records, character actions, equipment, model, scenery and entity BSR
+particle modifiers, and the EFP literals in SRO_Client.exe), with their
+meshes and textures. The retail Particles.pk2 must match the committed
+archive evidence (scripts/build/reference/particle-archive.json).
+
+The layout is one file per effect and one per BMS mesh (#3951), named by
+the client's foundation/assets/effect-programs.ts, so one runtime request
+carries one effect however far content grows. programs/index.json records
+the whole closure for tooling; the runtime never reads it.
 
 ===========================================================================
 */
@@ -20,6 +24,12 @@ import {
 	equipmentParticleCatalog
 } from "../char/equipmentParticles.mjs";
 import { readPublishedAssetBytesSync } from "../../lib/publishedAsset.mjs";
+import {
+	effectProgramHeader,
+	EFFECT_PROGRAM_INDEX,
+	effectMeshFile,
+	effectProgramFile
+} from "../../../apps/client-next/src/engine/foundation/assets/effect-programs.ts";
 /*
  * Build the authored v1.150 EasyFX data plane used by the browser renderer.
  *
@@ -36,7 +46,6 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { isMainScript } from "../shared/fsUtils.mjs";
 
-import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { compareText } from "../shared/textOrder.mjs";
 import { dataAssetPath } from "../shared/jmxAssetIO.mjs";
@@ -67,7 +76,6 @@ const skillEffectPath = path.join(
 );
 const clientBinaryPath = path.join( gameRoot, "SRO_Client.exe" );
 const particleImageRoot = path.join( imageSourceRoot, "Particles_extracted" );
-const outputRoot = path.join( publicRoot, "assets", "effects" );
 const publicParticleImageRoot = path.join(
 	publicRoot,
 	"assets",
@@ -572,6 +580,17 @@ function compactMesh( mesh, key ) {
 
 /*
 ================
+publicAssetFile
+
+The file under the public root of an /assets/... path.
+================
+*/
+function publicAssetFile( publicPath ) {
+	return path.join( publicRoot, ...publicPath.slice( 1 ).split( "/" ) );
+}
+
+/*
+================
 buildEffectProgramsAsset
 
 Build and publish the catalog; see the file banner.
@@ -609,6 +628,9 @@ export async function buildEffectProgramsAsset() {
 	}
 	const meshNames = new Set();
 	const textureNames = new Set();
+	// Each effect's own meshes and textures: its file carries only these.
+	const effectMeshes = new Map();
+	const effectTextures = new Map();
 
 	const reachability = collectEffectReferences();
 	for ( const effectName of reachability.references ) {
@@ -644,10 +666,12 @@ export async function buildEffectProgramsAsset() {
 			// diagnostics table; choosing one silently would invent archive order.
 			const key = resolved.length === 1 ? effectName : resolvedName;
 			effects[key] = parsed;
-			for ( const mesh of collectMeshPaths( parsed ) ) meshNames.add( mesh );
-			for ( const texture of collectJmxEffectTexturePaths( parsed ) ) {
-				textureNames.add( effectTexturePngPath( texture ) );
-			}
+			const ownMeshes = collectMeshPaths( parsed );
+			const ownTextures = new Set( [ ...collectJmxEffectTexturePaths( parsed ) ].map( effectTexturePngPath ) );
+			effectMeshes.set( key, ownMeshes );
+			effectTextures.set( key, ownTextures );
+			for ( const mesh of ownMeshes ) meshNames.add( mesh );
+			for ( const texture of ownTextures ) textureNames.add( texture );
 		}
 	}
 
@@ -678,16 +702,47 @@ export async function buildEffectProgramsAsset() {
 		textures[textureName] = `/assets/images/Particles_extracted/${textureName}`;
 	}
 
-	fs.mkdirSync( outputRoot, { recursive: true } );
-	const outPath = path.join( outputRoot, "programs.json" );
+	// One file per effect and per mesh (#3951). The ledger claims what this
+	// run writes or keeps; the pack tail retires what it no longer names
+	// (the old single programs.json among them).
+	const unavailable = { archiveSha256: archiveEvidence.sha256 };
+	// Keys fold to lower case on disk: two that fold together, or an effect
+	// the archive also proves absent, would overwrite one file silently.
+	const written = new Map();
+	const claimFile = ( publicPath, key ) => {
+		if ( written.has( publicPath ) ) {
+			throw new Error( `Effect programs ${written.get( publicPath )} and ${key} share ${publicPath}` );
+		}
+		written.set( publicPath, key );
+		return publicAssetFile( publicPath );
+	};
+	for ( const key of Object.keys( effects ).sort( compareText ) ) {
+		writeJsonIfChangedSync( claimFile( effectProgramFile( key ), key ), {
+			...effectProgramHeader(),
+			// Nested: the parsed EFP carries its own version field.
+			effect: effects[key],
+			meshes: [ ...effectMeshes.get( key ) ].sort( compareText ),
+			textures: Object.fromEntries(
+				[ ...effectTextures.get( key ) ].sort( compareText ).map( name => [ name, textures[name] ] )
+			)
+		} );
+	}
+	// AFF730 keeps the reset stored object for an archive-proven absence: its
+	// file says so, with the archive evidence, and draws nothing.
+	for ( const key of nativeUnavailableEffects ) {
+		writeJsonIfChangedSync( claimFile( effectProgramFile( key ), key ), {
+			...effectProgramHeader(),
+			unavailable
+		} );
+	}
+	for ( const name of Object.keys( meshes ) ) {
+		writeJsonIfChangedSync( claimFile( effectMeshFile( name ), name ), meshes[name] );
+	}
+	const outPath = publicAssetFile( EFFECT_PROGRAM_INDEX );
 	writeJsonIfChangedSync( outPath, {
-		format: "sro-jmx-easyfx-programs",
-		version: 3,
+		...effectProgramHeader(),
 		source:
 			"native reachable CIDecoSkillRecord EFP closure including BSR ModDataParticle plus SRO_Client.exe direct EFP literals",
-		// Native ProcessManager publishes one EasyFX step for each crossed 50 ms
-		// quantum (data_f0c90c), so EFP timeline frames are 20 Hz.
-		framesPerSecond: 20,
 		reachability: {
 			effectRecordCount: reachability.effectRecordCount,
 			effectRecordReferences: reachability.recordReferences.length,
@@ -697,20 +752,19 @@ export async function buildEffectProgramsAsset() {
 			entityParticleReferences: reachability.entityParticleReferences,
 			nativeExecutableReferences: reachability.nativeExecutableReferences
 		},
-		effects,
+		effects: Object.keys( effects ).sort( compareText ),
 		ambiguousEffectAliases,
 		missingEffects,
-		nativeUnavailable: { archiveSha256: archiveEvidence.sha256, effects: nativeUnavailableEffects },
-		meshes,
+		nativeUnavailable: { ...unavailable, effects: nativeUnavailableEffects },
+		meshes: Object.keys( meshes ),
 		textures
 	} );
-	await refreshPrecompressedSidecars( [ outPath ], { onlyWhenStale: true } );
 	console.log(
 		`[effect-programs] wrote ${Object.keys( effects ).length} EFP program(s), ` +
 			`${Object.keys( meshes ).length} BMS mesh(es), ${Object.keys( textures ).length} texture(s) ` +
 			`(${copiedTextures} copied), ${reachability.recordReferences.length} reachable record EFP(s), ` +
 			`${reachability.nativeExecutableReferences.length} native literal EFP(s) -> ${
-				path.relative( publicRoot, outPath )
+				path.relative( publicRoot, path.dirname( outPath ) )
 			}`
 	);
 	return {

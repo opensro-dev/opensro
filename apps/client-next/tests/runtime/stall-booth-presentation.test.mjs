@@ -17,13 +17,14 @@ const { createAuxiliaryPresentation } = await import( "../../src/engine/runtime/
 const { CHARACTER_ACTORS } = await import( "../../src/engine/foundation/animation/character-budget.ts" );
 const { radians } = await import( "../../src/engine/foundation/math/angles.ts" );
 const { createCharacters } = await import( "../../src/engine/runtime/renderer/characters/characters.ts" );
+const { effectProgramModel } = await import( "../../src/engine/foundation/assets/effect-programs.ts" );
 
 const CHINA = "res/item/china/item/cj_store.bsr";
 const EUROPE = "res/item/europe/item/euro_streetstall01.bsr";
 const DECORATION = "res/item/etc/booth.bsr";
 const MANIFEST = "/assets/npc/manifest.json";
 const PARTICLE = "system/booth.efp";
-const PROGRAM = "/assets/effects/programs.json#" + encodeURIComponent( PARTICLE );
+const PROGRAM = effectProgramModel( PARTICLE );
 
 /*
 ================

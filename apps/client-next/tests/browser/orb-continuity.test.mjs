@@ -20,21 +20,33 @@ test( "kill reward orbs remain visible through native root cycles until arrival"
 		await page.goto( CLIENT_NEXT_BASE_URL );
 		const result = await page.evaluate( async () => {
 			const { createRenderer } = await import( "/src/engine/runtime/renderer/renderer.ts" );
-			const { createEffectPrograms } = await import(
-				"/src/engine/runtime/assets/worker/effects/program/program.ts"
+			const { createEffectDecoder } = await import( "/src/engine/runtime/assets/worker/effects/effects.ts" );
+			const { effectMeshFile, effectProgramFile, effectProgramModel } = await import(
+				"/src/engine/foundation/assets/effect-programs.ts"
 			);
+			// One published effect file and its meshes, as the asset worker reads them.
+			const fetchBytes = async path => {
+				const response = await fetch( path );
+				if ( !response.ok ) throw Error( path + " HTTP " + response.status );
+				return new Uint8Array( await response.arrayBuffer() );
+			};
+			const effectDecoder = createEffectDecoder();
+			const decodeEffect = async path => {
+				const program = effectDecoder.program( await fetchBytes( effectProgramFile( path ) ) );
+				const meshBytes = await Promise.all( program.meshes.map( key => fetchBytes( effectMeshFile( key ) ) ) );
+				return effectDecoder.model( program, effectDecoder.meshes( program, meshBytes ), path );
+			};
 			const { createOrbs } = await import( "/src/engine/runtime/characters/orbs/orbs.ts" );
 			const { createPresentationRandom } = await import( "/src/engine/runtime/random/random.ts" );
 			const canvas = document.createElement( "canvas" ),
 				renderer = createRenderer( canvas ),
 				out = document.createElement( "canvas" );
 			out.width = out.height = 128;
-			const ctx = out.getContext( "2d" ), decoder = createEffectPrograms();
-			const bytes = new Uint8Array( await (await fetch( "/assets/effects/programs.json" )).arrayBuffer() ),
-				durations = new Map(),
+			const ctx = out.getContext( "2d" );
+			const durations = new Map(),
 				results = [];
 			const names = [ "hwan_g", "hwan_y", "hwan_v", "hwn_blue_indraft", "hwn_red_indraft", "hwn_violet_indraft" ];
-			const id = name => "/assets/effects/programs.json#" + encodeURIComponent( "battle/" + name + ".efp" );
+			const id = name => effectProgramModel( "battle/" + name + ".efp" );
 			try {
 				const start = performance.now();
 				while ( renderer.phase() === "starting" && performance.now() - start < 15000 ) {
@@ -43,7 +55,7 @@ test( "kill reward orbs remain visible through native root cycles until arrival"
 				if ( renderer.phase() !== "running" ) throw Error( renderer.error() );
 				renderer.setWorld( { id: "orb-continuity", originRegion: 0, groups: [], warnings: [] } );
 				for ( const name of names ) {
-					const { model, imagePaths } = decoder.decode( bytes, "battle/" + name + ".efp" ),
+					const { model, imagePaths } = await decodeEffect( "battle/" + name + ".efp" ),
 						images = await Promise.all( imagePaths.map( async path => {
 							const response = await fetch( path );
 							if ( !response.ok ) throw Error( "Texture " + response.status );

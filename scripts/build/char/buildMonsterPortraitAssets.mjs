@@ -35,6 +35,10 @@ import { clientBuildDefinitions } from "../../../apps/client-next/tools/build-me
 import { publishedAssets } from "../../../apps/client-next/tools/published-assets.mjs";
 import { compareText } from "../shared/textOrder.mjs";
 import { sha256Hex } from "../shared/hash.mjs";
+import {
+	EFFECT_PROGRAM_INDEX,
+	effectProgramIndexFiles
+} from "../../../apps/client-next/src/engine/foundation/assets/effect-programs.ts";
 
 const PREFIX = "/assets/npc/hunting-portraits/";
 // Drawn stills wait here between builds, outside the public tree: only the
@@ -44,7 +48,6 @@ const CLIENT = path.resolve( import.meta.dirname, "../../../apps/client-next" );
 export const MONSTER_PORTRAIT_SIZE = 384;
 const STILL_TIMEOUT_MS = 45000;
 const PNG_DATA_URL = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/;
-const EFFECT_PROGRAMS = "/assets/effects/programs.json";
 const VIEWER_MANIFESTS = [
 	"assets/char/roster.json",
 	"assets/npc/manifest.json",
@@ -148,9 +151,11 @@ export async function monsterPortraitRendererFingerprint( manifest, readAsset = 
 		hash.update( await readFile( path.join( CLIENT, file ) ) );
 	}
 	for ( const file of VIEWER_MANIFESTS ) hash.update( await readAsset( "/" + file ) );
-	const effectBytes = await readAsset( EFFECT_PROGRAMS );
-	hash.update( EFFECT_PROGRAMS ).update( effectBytes );
-	const effects = JSON.parse( effectBytes.toString( "utf8" ) );
+	// The effect programs are one file per effect and per mesh (#3951).
+	const indexBytes = await readAsset( EFFECT_PROGRAM_INDEX );
+	hash.update( EFFECT_PROGRAM_INDEX ).update( indexBytes );
+	const effects = JSON.parse( indexBytes.toString( "utf8" ) );
+	for ( const file of effectProgramIndexFiles( effects ) ) hash.update( file ).update( await readAsset( file ) );
 	for ( const texture of [ ...new Set( Object.values( effects.textures ?? {} ) ) ].sort() ) {
 		hash.update( texture ).update( await readAsset( texture ) );
 	}

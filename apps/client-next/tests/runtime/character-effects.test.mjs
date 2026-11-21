@@ -16,8 +16,8 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defined } from "../helpers/defined.mjs";
+import { createCatalogEffects } from "../helpers/effect-programs.mjs";
 const { createPresentationRandom } = await import( "../../src/engine/runtime/random/random.ts" );
-const { createEffectPrograms } = await import( "../../src/engine/runtime/assets/worker/effects/program/program.ts" );
 const { createEffectDecoder } = await import( "../../src/engine/runtime/assets/worker/effects/effects.ts" );
 const { createCharacterEffects } = await import( "../../src/engine/runtime/characters/effects/effects.ts" );
 const { createCameraScripts } = await import( "../../src/engine/runtime/world/camera/camera.ts" );
@@ -77,7 +77,7 @@ function catalog() {
 	};
 }
 test("authored effect mesh, scale, blend and atlas frames compile without generated substitute geometry", () => {
-	const decoded = createEffectPrograms().decode( encode( catalog() ), "hit.efp" ),
+	const decoded = createCatalogEffects().decode( encode( catalog() ), "hit.efp" ),
 		model = decoded.model,
 		p = model.primitives[0];
 	assert.equal( model.clips[0].duration, 0.5 );
@@ -94,16 +94,16 @@ test("native plates use the retail quad and carry explicit camera-facing behavio
 	node.renderCommand.name = "RenderPlate";
 	node.viewCommand.name = "ViewBillboard";
 	node.resource.meshes[0].path = "";
-	const { model } = createEffectPrograms().decode( encode( value ), "hit.efp" ), p = model.primitives[0];
+	const { model } = createCatalogEffects().decode( encode( value ), "hit.efp" ), p = model.primitives[0];
 	assert.equal( p.billboard, "camera" );
 	assert.deepEqual( [ ...p.geometry.positions ], [ -.5, .5, 0, .5, .5, 0, .5, -.5, 0, -.5, -.5, 0 ] );
 	assert.deepEqual( [ ...p.geometry.indices ], [ 0, 1, 2, 0, 2, 3 ] );
 	assert.deepEqual( [ ...p.geometry.uvs ], [ 0, 0, 1, 0, 1, 1, 0, 1 ] );
 	node.viewCommand.name = "ViewUnsupported";
-	assert.throws( () => createEffectPrograms().decode( encode( value ), "hit.efp" ), /lifecycle\/view/ );
+	assert.throws( () => createCatalogEffects().decode( encode( value ), "hit.efp" ), /lifecycle\/view/ );
 	node.viewCommand.name = "ViewBillboard";
 	Object.assign( node.emitterProgram[0].parameter.value, { minParticles: 12, max: 10 } );
-	const repeated = createEffectPrograms().decode( encode( value ), "hit.efp" ).model;
+	const repeated = createCatalogEffects().decode( encode( value ), "hit.efp" ).model;
 	assert.deepEqual(
 		defined( repeated.primitives[0].emission ).births,
 		Array.from( { length: 10 }, ( _, i ) => i / 20 )
@@ -117,7 +117,7 @@ test("RenderLinkDPipe and RenderLinkObj admit with plate geometry and ribbon tre
 		const value = catalog(), node = value.effects["hit.efp"].root;
 		node.renderCommand.name = cmd;
 		node.resource.meshes[0].path = "";
-		const { model } = createEffectPrograms().decode( encode( value ), "hit.efp" ), p = model.primitives[0];
+		const { model } = createCatalogEffects().decode( encode( value ), "hit.efp" ), p = model.primitives[0];
 		assert.ok( p.ribbon );
 		assert.equal( p.ribbon.fps, 20 );
 		assert.deepEqual( [ ...p.geometry.positions ], [ -.5, .5, 0, .5, .5, 0, .5, -.5, 0, -.5, -.5, 0 ] );
@@ -128,7 +128,7 @@ test("RenderLinkDPipe and RenderLinkObj admit with plate geometry and ribbon tre
 test("authored scale animation does not overwrite the enclosing effect scale", () => {
 	const value = catalog();
 	value.effects["hit.efp"].scale = 2;
-	const { model } = createEffectPrograms().decode( encode( value ), "hit.efp" );
+	const { model } = createCatalogEffects().decode( encode( value ), "hit.efp" );
 	assert.deepEqual( model.nodes[0].scale, [ 2, 2, 2 ] );
 	assert.equal( model.clips[0].channels[0].node, 1 );
 	assert.equal( model.nodes[1].parent, 0 );
@@ -165,7 +165,7 @@ test("SetBANPos and SetBANRot map frame tables to translation and rotation anima
 			] ]
 		}
 	} );
-	const { model } = createEffectPrograms().decode( encode( value ), "hit.efp" );
+	const { model } = createCatalogEffects().decode( encode( value ), "hit.efp" );
 	const posChannel = model.clips[0].channels.find( c => c.path === "translation" );
 	const rotChannel = model.clips[0].channels.find( c => c.path === "rotation" );
 	assert.ok( posChannel );
@@ -185,7 +185,7 @@ test("Phase 6 native blend pairs, leaf anchor, lifetime budget, and inert rotati
 		const value = catalog();
 		value.effects["hit.efp"].root.resource.srcBlend = src;
 		value.effects["hit.efp"].root.resource.dstBlend = dst;
-		const decoded = createEffectPrograms().decode( encode( value ), "hit.efp" );
+		const decoded = createCatalogEffects().decode( encode( value ), "hit.efp" );
 		assert.deepEqual( defined( decoded.model.primitives[0].geometry.material ).blendPair, {
 			source: src,
 			destination: dst
@@ -197,7 +197,7 @@ test("Phase 6 native blend pairs, leaf anchor, lifetime budget, and inert rotati
 		invalid.effects["hit.efp"].root.resource.srcBlend = src;
 		invalid.effects["hit.efp"].root.resource.dstBlend = dst;
 		assert.throws(
-			() => createEffectPrograms().decode( encode( invalid ), "hit.efp" ),
+			() => createCatalogEffects().decode( encode( invalid ), "hit.efp" ),
 			/Undefined native effect blend/
 		);
 	}
@@ -209,17 +209,17 @@ test("Phase 6 native blend pairs, leaf anchor, lifetime budget, and inert rotati
 	leafNode.renderCommand = { name: "RenderNone" };
 	leafNode.children = [];
 	leafNode.globalData = { totalFrames: 0 };
-	const leafDecoded = createEffectPrograms().decode( encode( leafVal ), "hit.efp" );
+	const leafDecoded = createCatalogEffects().decode( encode( leafVal ), "hit.efp" );
 	assert.equal( leafDecoded.model.primitives.length, 0 );
 
 	const longVal = catalog();
 	longVal.effects["hit.efp"].root.globalData.totalFrames = 803;
-	const longDecoded = createEffectPrograms().decode( encode( longVal ), "hit.efp" );
+	const longDecoded = createCatalogEffects().decode( encode( longVal ), "hit.efp" );
 	assert.equal( longDecoded.model.clips[0].duration, 803 / 20 );
 	const excessiveVal = catalog();
 	excessiveVal.effects["hit.efp"].root.globalData.totalFrames = 0;
 	assert.throws(
-		() => createEffectPrograms().decode( encode( excessiveVal ), "hit.efp" ),
+		() => createCatalogEffects().decode( encode( excessiveVal ), "hit.efp" ),
 		/Effect lifetime exceeds budget/
 	);
 
@@ -236,7 +236,7 @@ test("Phase 6 native blend pairs, leaf anchor, lifetime budget, and inert rotati
 		end: 0,
 		parameter: { right: [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] }
 	} );
-	const inertDecoded = createEffectPrograms().decode( encode( inertVal ), "hit.efp" );
+	const inertDecoded = createCatalogEffects().decode( encode( inertVal ), "hit.efp" );
 	assert.ok( inertDecoded.model );
 	assert.equal( inertDecoded.model.nodes.length, 2 );
 	assert.ok( !inertDecoded.model.nodes.some( n => n.name.includes( ":rotation" ) ) );
@@ -267,14 +267,14 @@ test("a constant rotation reassigned over a frame window is the same static tran
 		} );
 		return value;
 	};
-	const once = createEffectPrograms().decode( encode( rotated( 0 ) ), "hit.efp" ).model;
-	const window = createEffectPrograms().decode( encode( rotated( 100 ) ), "hit.efp" ).model;
+	const once = createCatalogEffects().decode( encode( rotated( 0 ) ), "hit.efp" ).model;
+	const window = createCatalogEffects().decode( encode( rotated( 100 ) ), "hit.efp" ).model;
 	assert.ok( once.nodes.some( n => n.name.includes( ":rotation" ) ) );
 	assert.deepEqual( window.nodes, once.nodes );
 	const spaced = rotated( 100 );
 	spaced.effects["hit.efp"].root.renderProgram.at( -1 ).spacing = 2;
 	assert.throws(
-		() => createEffectPrograms().decode( encode( spaced ), "hit.efp" ),
+		() => createCatalogEffects().decode( encode( spaced ), "hit.efp" ),
 		/Unsupported particle rotation assignment/
 	);
 });
@@ -359,12 +359,12 @@ test("unsupported particle operations and malformed mesh indices fail admission"
 	const unsupported = catalog();
 	unsupported.effects["hit.efp"].root.renderProgram.push( { name: "UnsupportedOp" } );
 	assert.throws(
-		() => createEffectPrograms().decode( encode( unsupported ), "hit.efp" ),
+		() => createCatalogEffects().decode( encode( unsupported ), "hit.efp" ),
 		/Unsupported effect operation/
 	);
 	const malformed = catalog();
 	malformed.meshes["mesh.bms"].indices[2] = 9;
-	assert.throws( () => createEffectPrograms().decode( encode( malformed ), "hit.efp" ), /Invalid effect geometry/ );
+	assert.throws( () => createCatalogEffects().decode( encode( malformed ), "hit.efp" ), /Invalid effect geometry/ );
 });
 test("cold explicit callbacks queue once and admitted effects expire", () => {
 	let id = 0;
@@ -773,7 +773,7 @@ test("effect preflight rejects cumulative expansion before allocating any output
 		);
 	}
 	for ( const [bytes, error] of fixtures ) {
-		assert.throws( () => createEffectPrograms().decode( bytes, "hit.efp" ), error );
+		assert.throws( () => createCatalogEffects().decode( bytes, "hit.efp" ), error );
 	}
 	assert.equal( allocations, 0 );
 });
@@ -1169,11 +1169,11 @@ test("later update/trailing operations reject the whole effect instead of silent
 	for ( const field of [ "updateProgram", "trailingProgram" ] ) {
 		const value = catalog();
 		value.effects["hit.efp"].root[field] = [ { name: "SetVelocity" } ];
-		assert.throws( () => createEffectPrograms().decode( encode( value ), "hit.efp" ), /lifecycle/ );
+		assert.throws( () => createCatalogEffects().decode( encode( value ), "hit.efp" ), /lifecycle/ );
 	}
 	const empty = catalog();
 	empty.effects["hit.efp"].root.emitterProgram[0].parameter.value.spawnRate = 0;
-	assert.equal( createEffectPrograms().decode( encode( empty ), "hit.efp" ).model.primitives.length, 0 );
+	assert.equal( createCatalogEffects().decode( encode( empty ), "hit.efp" ).model.primitives.length, 0 );
 });
 
 test("a projectile inherits its callback group result even when the damage flag is on a sibling stage", () => {

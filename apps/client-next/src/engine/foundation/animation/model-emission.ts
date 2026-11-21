@@ -13,6 +13,7 @@ the same 'bsr' particle transform.
 */
 import { ambientModelParticles, type ModelParticle } from "./model-particles";
 import type { CharacterActor } from "@/engine/contracts/character";
+import { effectProgramModel } from "@/engine/foundation/assets/effect-programs";
 
 /*
 ================
@@ -127,9 +128,7 @@ export function createModelEmission( allocate: () => number ) {
 						model: actor.model,
 						scale: actor.scale,
 						particles,
-						programs: particles.map( particle =>
-							"/assets/effects/programs.json#" + encodeURIComponent( particle.effectPath )
-						),
+						programs: particles.map( particle => effectProgramModel( particle.effectPath ) ),
 						ids: particles.map( () => allocate() ),
 						started: particles.map( () => null ),
 						holder: -1,

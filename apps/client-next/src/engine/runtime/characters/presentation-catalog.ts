@@ -45,6 +45,7 @@ import type {
 	SecondaryModel,
 	SoundRule
 } from "./internal/presentation-contract";
+import { effectProgramModel } from "@/engine/foundation/assets/effect-programs";
 
 /*
 ================
@@ -141,9 +142,7 @@ function admitSecondaryModel( row: Partial<Resource> ): SecondaryModel {
 		animationParticles: particles,
 		animationParticlePaths: [
 			...new Set(
-				particles.flatMap( set =>
-					set.particles.map( p => "/assets/effects/programs.json#" + encodeURIComponent( p.effectPath ) )
-				)
+				particles.flatMap( set => set.particles.map( p => effectProgramModel( p.effectPath ) ) )
 			)
 		],
 		modifierBindings: modelAnimationBindings( row.animationBindings ),
@@ -468,9 +467,7 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 						animationParticlePaths: [
 							...new Set(
 								modelAnimationParticles( row.particleModifiers ).flatMap( s =>
-									s.particles.map( p =>
-										"/assets/effects/programs.json#" + encodeURIComponent( p.effectPath )
-									)
+									s.particles.map( p => effectProgramModel( p.effectPath ) )
 								)
 							)
 						],

@@ -17,6 +17,7 @@ import type { Geometry } from "@/engine/contracts/geometry";
 import { finiteGeometryValues, finiteNumbers, geometryIndicesInRange, numbersWithin } from "./geometry-validation";
 import { PICK_BLOCK_INDICES } from "./picking";
 import { packGeometryVertices } from "./geometry-vertices";
+import { EFFECT_PROGRAM_PREFIX } from "@/engine/foundation/assets/effect-programs";
 // Frontend stage manifests intentionally retain the complete scripted route.
 // Constantinople reference measurement: 406 MiB scene, 731 MiB decode scratch.
 export const FRONTEND_SCENE_BYTES = 536870912;
@@ -94,7 +95,7 @@ export function worldSceneBytes( scene: WorldScene | null ): number {
 		const scenery: NonNullable<WorldScene["scenery"]> = scene.scenery;
 		for ( const e of scenery ) {
 			if (
-				!e.id || keys.has( e.id ) || !e.placement || !e.model.startsWith( "/assets/effects/programs.json#" ) ||
+				!e.id || keys.has( e.id ) || !e.placement || !e.model.startsWith( EFFECT_PROGRAM_PREFIX ) ||
 				e.basis.length !== 9 || !e.basis.every( Number.isFinite ) ||
 				!Object.values( e.pose ).every( Number.isFinite ) || typeof e.nightOnly !== "boolean" ||
 				!Number.isInteger( e.renderPriority ) || e.renderPriority < 0 || e.renderPriority > 255 ||

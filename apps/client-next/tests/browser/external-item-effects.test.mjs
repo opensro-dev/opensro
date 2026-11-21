@@ -24,19 +24,31 @@ test(
 			await page.goto( CLIENT_NEXT_BASE_URL );
 			const samples = await page.evaluate( async () => {
 				const { createRenderer } = await import( "/src/engine/runtime/renderer/renderer.ts" );
-				const { createEffectPrograms } = await import(
-					"/src/engine/runtime/assets/worker/effects/program/program.ts"
+				const { createEffectDecoder } = await import( "/src/engine/runtime/assets/worker/effects/effects.ts" );
+				const { EFFECT_PROGRAM_INDEX, effectMeshFile, effectProgramFile } = await import(
+					"/src/engine/foundation/assets/effect-programs.ts"
 				);
+				// One published effect file and its meshes, as the asset worker reads them.
+				const fetchBytes = async path => {
+					const response = await fetch( path );
+					if ( !response.ok ) throw Error( path + " HTTP " + response.status );
+					return new Uint8Array( await response.arrayBuffer() );
+				};
+				const effectDecoder = createEffectDecoder();
+				const decodeEffect = async path => {
+					const program = effectDecoder.program( await fetchBytes( effectProgramFile( path ) ) );
+					const meshBytes = await Promise.all(
+						program.meshes.map( key => fetchBytes( effectMeshFile( key ) ) )
+					);
+					return effectDecoder.model( program, effectDecoder.meshes( program, meshBytes ), path );
+				};
 				const canvas = document.createElement( "canvas" ),
 					renderer = createRenderer( canvas ),
-					decoder = createEffectPrograms(),
 					out = document.createElement( "canvas" );
 				out.width = out.height = 256;
 				const ctx = out.getContext( "2d" );
-				const response = await fetch( "/assets/effects/programs.json" );
-				if ( !response.ok ) throw Error( "Effect catalog HTTP " + response.status );
-				const bytes = new Uint8Array( await response.arrayBuffer() );
-				const paths = Object.keys( JSON.parse( new TextDecoder().decode( bytes ) ).effects ).filter( p =>
+				const index = JSON.parse( new TextDecoder().decode( await fetchBytes( EFFECT_PROGRAM_INDEX ) ) );
+				const paths = index.effects.filter( p =>
 					p.startsWith( "system/" ) && p.includes( "firework" ) ||
 					[
 						"battle/status_bad_stone_on.efp",
@@ -91,7 +103,7 @@ test(
 									far: 2000
 								}
 						);
-						const { model, imagePaths } = decoder.decode( bytes, path );
+						const { model, imagePaths } = await decodeEffect( path );
 						const images = await Promise.all( imagePaths.map( async p => {
 							const r = await fetch( p );
 							if ( !r.ok ) throw Error( "Texture HTTP " + r.status + " " + p );

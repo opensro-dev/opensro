@@ -20,6 +20,7 @@ import type { SceneryEmitter } from "@/engine/contracts/scenery";
 import { radians } from "@/engine/foundation/math/angles";
 import { multiply } from "@/engine/foundation/math/pose-math";
 import { identity } from "./world-math";
+import { effectProgramModel } from "@/engine/foundation/assets/effect-programs";
 
 const MAX_SCENERY_PARTICLE_MODIFIERS = 128;
 // jinsi_floor01.bsr (Qin-Shi Tomb B1, 0x8007) carries 174 ambient particle
@@ -174,7 +175,7 @@ export function sceneryParticles(
 			out.push( {
 				id: `${placement}:${branch}:${mi}:${ei}`,
 				placement,
-				model: "/assets/effects/programs.json#" + encodeURIComponent( path ),
+				model: effectProgramModel( path ),
 				pose: {
 					regionId: region,
 					x: holder[12]! + holder[0]! * x + holder[4]! * y + holder[8]! * z,

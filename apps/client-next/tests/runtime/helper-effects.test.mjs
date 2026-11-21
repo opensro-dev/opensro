@@ -17,21 +17,22 @@ import assert from "node:assert/strict";
 import { readFile, mkdir } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
+import { createCatalogEffects } from "../helpers/effect-programs.mjs";
+import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
 await mkdir( "temp/artifacts/helper-tests", { recursive: true } );
 async function load( file, name ) {
 	return import( sourceFileUrl( file ).href );
 }
-const { createEffectPrograms } = await load( "src/engine/runtime/assets/worker/effects/program/program.ts", "program" );
 const { createEffectDecoder } = await load( "src/engine/runtime/assets/worker/effects/effects.ts", "decoder" );
 const { createCharacterEffects } = await load( "src/engine/runtime/characters/effects/effects.ts", "owner" );
 const { createPresentationRandom } = await load( "src/engine/runtime/random/random.ts", "random" );
 const encode = v => new TextEncoder().encode( JSON.stringify( v ) );
-const programs = await readFile( CLIENT_PUBLIC_ROOT + "/assets/effects/programs.json" );
+const programs = readEffectCatalogSync( CLIENT_PUBLIC_ROOT );
 const records = await readFile( CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json" );
 const manifest = await readFile( CLIENT_PUBLIC_ROOT + "/assets/skillfx/manifest.json" );
 
 test("retail helper EFP compiles all three plates and its rotation without a substitute icon", () => {
-	const { model, imagePaths } = createEffectPrograms().decode( programs, "system/system_helpermark.efp" );
+	const { model, imagePaths } = createCatalogEffects().decode( programs, "system/system_helpermark.efp" );
 	assert.equal( model.primitives.length, 3 );
 	assert.equal( model.primitives.filter( p => p.billboard === "camera" ).length, 3 );
 	assert.equal( model.clips[0].duration, 1.5 );
@@ -138,7 +139,7 @@ test("helper lifetime survives casts, slow assets and movement; clears on flag, 
 });
 
 test("repeated static rotation keeps the last authored matrix", () => {
-	const catalog = JSON.parse( programs ), root = catalog.effects["system/system_helpermark.efp"].root;
+	const catalog = structuredClone( programs ), root = catalog.effects["system/system_helpermark.efp"].root;
 	const first = root.renderProgram[0];
 	// Use hit_4_cold_hit_e's flags-2 schedule and a later overwrite without
 	// requiring that effect to be reachable in the native-only publication.
@@ -148,7 +149,7 @@ test("repeated static rotation keeps the last authored matrix", () => {
 	last.flags = 3;
 	last.parameter.left = [ 0, 30, 0 ];
 	root.renderProgram.splice( 1, 0, last );
-	const { model } = createEffectPrograms().decode( encode( catalog ), "system/system_helpermark.efp" );
+	const { model } = createCatalogEffects().decode( encode( catalog ), "system/system_helpermark.efp" );
 	const transform = model.nodes.find( node => node.name === "helpermark:rotation" );
 	assert.ok( transform?.matrix );
 	const cosine = Math.cos( Math.PI / 6 );
@@ -159,18 +160,18 @@ test("repeated static rotation keeps the last authored matrix", () => {
 });
 
 test("static rotation coexists with animated scale and unsupported timing stays explicit", () => {
-	const catalog = JSON.parse( programs ), root = catalog.effects["system/system_helpermark.efp"].root;
+	const catalog = structuredClone( programs ), root = catalog.effects["system/system_helpermark.efp"].root;
 	// RotVector.left is authored degrees; right is native conversion scratch.
 	root.renderProgram[0].parameter.left = [ 0, 0, 90 ];
 	root.renderProgram[0].parameter.right = Array( 16 ).fill( 123 );
-	const { model } = createEffectPrograms().decode( encode( catalog ), "system/system_helpermark.efp" );
+	const { model } = createCatalogEffects().decode( encode( catalog ), "system/system_helpermark.efp" );
 	const matrix = model.nodes.find( n => n.name === "helpermark:rotation" ).matrix,
 		expected = [ 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ];
 	for ( let i = 0; i < 16; i++ ) assert.ok( Math.abs( matrix[i] - expected[i] ) < 1e-6, `rotation component ${i}` );
 	assert.ok( model.clips[0].channels.every( c => !model.nodes[c.node].matrix ) );
 	root.renderProgram[0].end = 1;
 	assert.throws(
-		() => createEffectPrograms().decode( encode( catalog ), "system/system_helpermark.efp" ),
+		() => createCatalogEffects().decode( encode( catalog ), "system/system_helpermark.efp" ),
 		/rotation assignment/
 	);
 });

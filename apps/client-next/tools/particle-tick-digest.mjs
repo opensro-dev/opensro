@@ -6,8 +6,8 @@ particle-tick-digest.mjs - the particle graph tick digest of the effect catalogu
 	node tools/particle-tick-digest.mjs           check the fixture
 	node tools/particle-tick-digest.mjs --write   rewrite it
 
-tests/fixtures/particle-tick-digest.json holds, for every effect of
-/assets/effects/programs.json with a particle graph, the digest of its
+tests/fixtures/particle-tick-digest.json holds, for every
+published effect program with a particle graph, the digest of its
 tick through three scenarios (tests/helpers/particle-tick-digest.mjs).
 A change to the tick that must not change results leaves it as it is;
 one that changes results on purpose rewrites it with --write, and the

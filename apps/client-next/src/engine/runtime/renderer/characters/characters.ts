@@ -93,6 +93,7 @@ import type { DungeonBlockLight } from "@/engine/contracts/scene";
 import { dungeonPointLight } from "@/engine/foundation/rendering/dungeon-lights";
 import type { GeometryCommands, GeometryDraw, ImageCommands, ImageDraw } from "../internal/gpu-contract";
 import { hypot3 } from "@/engine/foundation/math/hypot";
+import { isEffectProgramModel } from "@/engine/foundation/assets/effect-programs";
 
 /*
 ================
@@ -290,7 +291,6 @@ const MAX_ATTACHMENT_DEPTH = 8;
 // An equipment socket's name (equipment-sockets.ts) and an effect actor's
 // model, which names its program in the effect bundle.
 const EQUIPMENT_SOCKET_PREFIX = "equipment:";
-const EFFECT_PROGRAMS = "/effects/programs.json#";
 // Missing-clip reports one renderer holds between takes: each pose evaluator
 // already reports a name once, so this only bounds an undrained owner.
 const MAX_POSE_DEGRADATIONS = 32;
@@ -1840,7 +1840,7 @@ the next full prepare pass, so this may run between frames.
 	function batchKey( frame: PrepareFrame, actor: CharacterActor, plan: ModelResource["plan"] ) {
 		const opacity = frame.opacity;
 		const ownBatch = () =>
-			plan.drawClocked || plan.blended || opacity( actor ) < 1 || actor.model.includes( EFFECT_PROGRAMS );
+			plan.drawClocked || plan.blended || opacity( actor ) < 1 || isEffectProgramModel( actor.model );
 		const variant = (plan.cloth ?
 			"\0cloth:" + actor.gid :
 			"") +
@@ -3379,7 +3379,7 @@ the next full prepare pass, so this may run between frames.
 				if (
 					!child.attachment || !parents.has( child.attachment.gid ) ||
 					!child.attachment.bone?.startsWith( EQUIPMENT_SOCKET_PREFIX ) ||
-					!child.model.includes( EFFECT_PROGRAMS )
+					!isEffectProgramModel( child.model )
 				) {
 					continue;
 				}
@@ -3451,7 +3451,7 @@ the next full prepare pass, so this may run between frames.
 			models.set( id, {
 				model,
 				plan: createCharacterRenderPlan( model, planCaches ),
-				effect: id.includes( EFFECT_PROGRAMS ),
+				effect: isEffectProgramModel( id ),
 				images: [ ...images ],
 				textures: [],
 				owned: false,
@@ -3700,7 +3700,7 @@ the next full prepare pass, so this may run between frames.
 				models.set( id, {
 					model: admitted,
 					plan: createCharacterRenderPlan( admitted, planCaches ),
-					effect: id.includes( EFFECT_PROGRAMS ),
+					effect: isEffectProgramModel( id ),
 					images: [ ...images ],
 					textures: [],
 					owned: true,
@@ -3809,7 +3809,7 @@ the next full prepare pass, so this may run between frames.
 			models.set( id, {
 				model: assembled,
 				plan: createCharacterRenderPlan( assembled, planCaches ),
-				effect: id.includes( EFFECT_PROGRAMS ),
+				effect: isEffectProgramModel( id ),
 				images: pixels,
 				textures: [],
 				owned: false,

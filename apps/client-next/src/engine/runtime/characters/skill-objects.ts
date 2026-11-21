@@ -17,6 +17,7 @@ import type { EntityState } from "@/engine/contracts/world";
 import { characterHeadingYaw } from "@/engine/foundation/math/angles";
 import { modelAmbientParticles } from "@/engine/foundation/animation/model-emission";
 import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
+import { effectProgramModel } from "@/engine/foundation/assets/effect-programs";
 
 export const SKILL_OBJECT_MANIFESTS = [
 	"/assets/skillfx/manifest.json"
@@ -218,7 +219,7 @@ export function createSkillObjects( allocate: () => number ) {
 			if ( !resource ) return null;
 			const model: ObjectModel | undefined = resource.kind === "effect" ?
 				{
-					glb: "/assets/effects/programs.json#" + encodeURIComponent( resource.path ),
+					glb: effectProgramModel( resource.path ),
 					clips: [ "effect" ],
 					clipLoop: true,
 					particles: []
