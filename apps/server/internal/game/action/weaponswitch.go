@@ -39,6 +39,7 @@ package action
 import (
 	"strings"
 
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
@@ -194,6 +195,27 @@ func sameEquipFamily(from, to *enterworld.ItemRef) bool {
 
 /*
 ================
+clampSwitchedDurability
+
+A switched item keeps its durability up to its twin's maximum: the kinds
+and races of one degree author different maxima, and a row above its
+maximum would never be repaired (npcrepair.go refuses at the maximum).
+A twin without an authored maximum (test data) keeps the row as is.
+================
+*/
+func (rt *Runtime) clampSwitchedDurability(twin *enterworld.ItemRef, row *enterworld.InventoryRow) {
+	if twin.MaxDurability <= 0 {
+		return
+	}
+	maximum, err := combat.EquipmentMaxDurability(twin, *row, rt.deps.MagicOptionDefinitions())
+	if err != nil || maximum == 0 {
+		return
+	}
+	row.Durability = min(row.Durability, int64(maximum))
+}
+
+/*
+================
 useEquipSwitchScroll
 
 Runs one switch scroll's use by what it switches.
@@ -268,6 +290,7 @@ func (rt *Runtime) useWeaponSwitchScroll(use skillItemUse, c *enterworld.Charact
 	// last unit rebuilds the bag without the scroll's row (gendertool.go).
 	moved := &c.MissionInventory[index]
 	moved.RefObjID, moved.Codename, moved.TypeFlags = twin.RefObjID, twin.Codename, twin.TypeFlags()
+	rt.clampSwitchedDurability(twin, moved)
 	changed := *moved
 	remaining := rt.consumeItemUseRow(c, use.row)
 	state := wire.NewWriter(6).U8(target).U8(itemStateRefFlag).U32(twin.RefObjID).Payload()

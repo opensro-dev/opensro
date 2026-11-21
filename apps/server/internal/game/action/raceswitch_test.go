@@ -322,3 +322,25 @@ TestRaceSwitchAccessoryOnTheShippedData
 func TestRaceSwitchAccessoryOnTheShippedData(t *testing.T) {
 	shippedRaceSwitch(t, commerce.SwitchAccessory, "ITEM_CH_NECKLACE_08_A", "ITEM_EU_NECKLACE_08_A")
 }
+
+/*
+================
+TestRaceSwitchClampsDurability
+
+The twin's maximum durability can be lower than the item's current
+one: the switched item never holds more than its twin can, so a repair
+still serves it.
+================
+*/
+func TestRaceSwitchClampsDurability(t *testing.T) {
+	rt, c, scroll := raceSwitchFixture(t, commerce.SwitchArmor)
+	refs := rt.deps.ItemReferences()
+	protector, _ := refs.ItemRefByCodename("ITEM_EU_W_LIGHT_08_BA_A")
+	low := int64(20)
+	protector.MaxDurability, protector.VarianceIntMin1c0 = low, &low
+	out := rt.HandleItemUse(testDivision, c, raceSwitchUse(scroll, raceArmorSlot))
+	row := assertRaceSwitched(t, out, c, raceArmorSlot, 9202, "ITEM_EU_W_LIGHT_08_BA_A")
+	if row.Durability != 20 {
+		t.Fatalf("switched durability %d, want the twin's maximum 20", row.Durability)
+	}
+}
