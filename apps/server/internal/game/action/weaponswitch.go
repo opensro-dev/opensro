@@ -207,6 +207,8 @@ func (rt *Runtime) useEquipSwitchScroll(use skillItemUse, c *enterworld.Characte
 	switch scroll.Kind {
 	case commerce.SwitchWeapon:
 		return rt.useWeaponSwitchScroll(use, c, tail, result)
+	case commerce.SwitchArmor, commerce.SwitchAccessory:
+		return rt.useRaceSwitchScroll(use, c, scroll, tail, result)
 	}
 	return false
 }
