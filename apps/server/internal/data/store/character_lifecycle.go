@@ -235,6 +235,8 @@ func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Characte
 	// A new character's gold is minted by its creation: the ledger starts
 	// it at nothing, so the creation commit records the starting gold.
 	s.seedLedgerAtLocked(c, 0)
+	// Its starting items are granted by the same creation (item_ledger.go).
+	s.seedItemsEmptyLocked(c)
 	s.markCharacterLocked(c)
 	s.changes.nextCharID[divisionID] = true
 	s.commitLocked("create-character " + c.Name)

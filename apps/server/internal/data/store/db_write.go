@@ -79,6 +79,13 @@ type characterRowTx struct {
 	// the rows this transaction writes, retained at Commit under the
 	// written digests' discipline.
 	copies map[committedCharacterKey]*domain.Character
+	// label is the door's: the gold ledger (ledgerOwnTxLocked) and the
+	// item ledger (noteItems) both record under it.
+	label string
+	// itemRows are the item changes the writes noted, written at Commit
+	// inside the transaction; itemWrites settle their baselines after.
+	itemRows   []itemLedgerRow
+	itemWrites []*ownTxItemWrite
 }
 
 /*
@@ -89,12 +96,12 @@ A character-writing door's transaction: beginTxLocked (which first
 flushes deferred rows) wrapped so its character rows are recorded.
 ================
 */
-func (s *Store) beginCharacterTxLocked() (*characterRowTx, error) {
+func (s *Store) beginCharacterTxLocked(label string) (*characterRowTx, error) {
 	tx, err := s.beginTxLocked()
 	if err != nil {
 		return nil, err
 	}
-	return &characterRowTx{Tx: tx, store: s,
+	return &characterRowTx{Tx: tx, store: s, label: label,
 		written: map[committedCharacterKey][32]byte{}, deleted: map[committedCharacterKey]bool{},
 		copies: map[committedCharacterKey]*domain.Character{}}, nil
 }
@@ -108,6 +115,8 @@ its digest for Commit to retain.
 ================
 */
 func (w *characterRowTx) upsertCharacter(division string, c *domain.Character) error {
+	// Whatever the bytes, the item ledger reads what this write moves.
+	w.noteItems(division, c)
 	// The section skip (#2141), as in the commit path: a row whose
 	// sections all equal its committed copy already holds these
 	// bytes on disk. The digest is re-recorded so Commit retains it
@@ -177,9 +186,13 @@ never make a later commit skip a row the disk does not hold.
 ================
 */
 func (w *characterRowTx) Commit() error {
+	if err := flushItemLedgerTx(w.Tx, w.itemRows); err != nil {
+		return err
+	}
 	if err := w.Tx.Commit(); err != nil {
 		return err
 	}
+	w.settleItems()
 	for key := range w.deleted {
 		delete(w.store.committedDigests, key)
 		delete(w.store.committedRows, key)
@@ -202,6 +215,7 @@ func (w *characterRowTx) Rollback() error {
 	w.written = map[committedCharacterKey][32]byte{}
 	w.deleted = map[committedCharacterKey]bool{}
 	w.copies = map[committedCharacterKey]*domain.Character{}
+	w.itemRows, w.itemWrites = nil, nil
 	return w.Tx.Rollback()
 }
 

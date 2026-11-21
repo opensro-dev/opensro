@@ -92,7 +92,7 @@ WHERE seller_char = ? AND unpaid = 1 ORDER BY at_ms, listing_id`, c.ID)
 		}
 		balance += paid
 	}
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("market-proceeds")
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ WHERE seller_char = ? AND unpaid = 1 ORDER BY at_ms, listing_id`, c.ID)
 	if err := tx.upsertCharacter(division, &committed); err != nil {
 		return nil, err
 	}
-	settle, err := s.ledgerOwnTxLocked(tx.Tx, "market-proceeds", division, c, balance)
+	settle, err := s.ledgerOwnTxLocked(tx, division, c, balance)
 	if err != nil {
 		return nil, err
 	}

@@ -236,7 +236,7 @@ func (door storeFortressDoor) StartFortressItemForge(division string, start doma
 	gold -= start.Gold
 	next.Gold = &gold
 	guild.GP -= start.GP
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("fortress-item-forge")
 	if err != nil {
 		return domain.FortressForgeErrFailure, err
 	}
@@ -244,7 +244,7 @@ func (door storeFortressDoor) StartFortressItemForge(division string, start doma
 	if err = tx.upsertCharacter(division, &next); err != nil {
 		return domain.FortressForgeErrFailure, err
 	}
-	settle, err := s.ledgerOwnTxLocked(tx.Tx, "fortress-item-forge", division, actor, gold)
+	settle, err := s.ledgerOwnTxLocked(tx, division, actor, gold)
 	if err != nil {
 		return domain.FortressForgeErrFailure, err
 	}
@@ -295,7 +295,7 @@ func (door storeFortressDoor) CollectFortressItemForge(division string, collect 
 	}
 	next := *actor
 	next.MissionInventory = append(append([]domain.InventoryRow(nil), actor.MissionInventory...), collect.Item)
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("fortress-item-collect")
 	if err != nil {
 		return domain.FortressForgeErrFailure, err
 	}

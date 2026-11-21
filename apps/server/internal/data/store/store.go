@@ -357,6 +357,8 @@ type Store struct {
 	batch tickBatch
 	// ledger attributes every committed gold change (economy_ledger.go).
 	ledger economyLedger
+	// items attributes every committed item change (item_ledger.go).
+	items itemLedger
 	// trades holds the trade rows noted by committed trades until the
 	// commit that writes them (trade_history.go).
 	trades tradeHistoryState
@@ -645,6 +647,11 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 		db.Close()
 		return nil, nil, err
 	}
+	// The item ledger's tables (#3307): additive, like the buckets.
+	if err := ensureItemLedger(db); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
 	// The market tables (port-only, SRO_CONSIGNMENT): additive too.
 	if err := ensureMarket(db); err != nil {
 		db.Close()
@@ -756,10 +763,12 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	s.committedRows = map[committedCharacterKey]*domain.Character{}
 	s.committedMetaDigests = map[string][32]byte{}
 	s.ledger.seen = map[*domain.Character]int64{}
+	s.items.seen = map[*domain.Character][]domain.ItemCount{}
 	for divisionID, records := range s.characters {
 		for _, c := range records {
 			s.charDivision[c] = divisionID
 			s.seedLedgerLocked(c)
+			s.seedItemsLocked(c)
 		}
 	}
 	// The writer handle adopted above never auto-checkpoints

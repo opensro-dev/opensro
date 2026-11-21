@@ -40,7 +40,7 @@ commitLocked for a caller that acts on the outcome.
 ================
 */
 func (s *Store) commitCheckedLocked(label string) error {
-	s.noteGoldLocked(label)
+	s.noteLedgersLocked(label)
 	// Every record this commit carries moves its write epoch, so a
 	// writer outside the scoped doors (the guild, camp and trade
 	// doors mark the change set directly) retires exactly its own
@@ -338,6 +338,9 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	if err := flushLedgerItemsTx(tx, s.ledger.items); err != nil {
 		return err
 	}
+	if err := flushItemLedgerTx(tx, s.items.pending); err != nil {
+		return err
+	}
 	// The trade rows noted by this attempt's doors ride the same
 	// transaction (trade_history.go); a failed commit keeps them pending.
 	trades := s.snapshotPendingTrades()
@@ -372,6 +375,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	s.countLedgerRows(s.ledger.pending)
 	s.ledger.pending = nil
 	s.ledger.items = nil
+	s.items.pending = nil
 	s.forgetPendingTrades(len(trades))
 
 	if ground != nil {

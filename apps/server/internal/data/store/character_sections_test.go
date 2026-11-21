@@ -321,7 +321,7 @@ func TestDoorTransactionRollbackRetainsNothing(t *testing.T) {
 	c, copy := stageCommittedCopy(t, s)
 	key := committedCharacterKey{division: testDivision, id: c.ID}
 
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("test-own-tx")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -444,7 +444,7 @@ func TestDoorTransactionDeleteDropsCopy(t *testing.T) {
 	c, _ := stageCommittedCopy(t, s)
 	key := committedCharacterKey{division: testDivision, id: c.ID}
 
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("test-own-tx")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -475,7 +475,7 @@ func TestDoorTransactionSkipsUnchangedRow(t *testing.T) {
 	key := committedCharacterKey{division: testDivision, id: c.ID}
 	before := readCharacterRecordRaw(t, s, testDivision, strings.ToLower(c.Name))
 
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("test-own-tx")
 	if err != nil {
 		t.Fatal(err)
 	}

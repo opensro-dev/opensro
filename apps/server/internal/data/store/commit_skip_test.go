@@ -150,7 +150,7 @@ func TestFailedDoorRetainsNoDigest(t *testing.T) {
 	}
 
 	s.mu.Lock()
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("test-own-tx")
 	if err != nil {
 		s.mu.Unlock()
 		t.Fatal(err)

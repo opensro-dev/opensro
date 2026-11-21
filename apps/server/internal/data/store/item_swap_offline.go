@@ -489,7 +489,7 @@ func (s *Store) swapItemsOfflineLocked(division string, scope swapScope, swap It
 	if s.commitFail != nil {
 		return nil, s.commitFail
 	}
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("item-swap-offline")
 	if err != nil {
 		return nil, err
 	}
