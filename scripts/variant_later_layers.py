@@ -27,6 +27,7 @@ import hunting2_import
 import jupiter_import
 import muhan_import
 import pharaoh_temple_import
+import reset_scroll_import
 import skytemple_import
 import styria_import
 import winter_event_import
@@ -69,6 +70,10 @@ LATER_LAYERS = (
 	# (SRO_MALL_CATEGORIES): on stages their item shard beside the mall
 	# layout that lists them.
 	("gearsStones", gears_stone_import.add_stones),
+	# The Item Mall reset scrolls (port-only): each its own switch
+	# (SRO_STAT_RESET_SCROLL, SRO_SKILL_RESET_SCROLL) stages its v1.696
+	# item in its own shard (300000).
+	("resetScrolls", reset_scroll_import.add_reset_scrolls),
 	# The winter event's monsters ride the Christmas event's switch
 	# (SRO_CHRISTMAS_EVENT): their own identity band, no placement.
 	("winterEvent", winter_event_import.add_winter_monsters),
