@@ -153,6 +153,33 @@ class PublishedIdsTest(unittest.TestCase):
 				published_ids.os.environ[published_ids.PIN_VARIABLE] = saved
 
 
+	# ================
+	# test_a_built_tree_that_moved_a_released_object_is_named
+	#
+	# #4019: a summoned fox names its pet by id, so a build that numbered a
+	# pinned code afresh locked its owner out. moved_objects names the
+	# code, its pinned id and its built id; a code at its pinned id and an
+	# unpinned code are not named.
+	# ================
+	def test_a_built_tree_that_moved_a_released_object_is_named(self):
+		with tempfile.TemporaryDirectory() as folder:
+			path = Path(folder) / "pin.json"
+			path.write_text(json.dumps({"format": published_ids.PIN_FORMAT, "release": "abc", "skills": {},
+				"characters": {"COS_P_FOX_001": 51295}, "items": {"ITEM_STONE": 50853}}), encoding="utf-8")
+			root = Path(folder) / "textdata"
+			root.mkdir()
+			(root / "itemdata_10000.txt").write_text("1\t50853\tITEM_STONE\n1\t7\tITEM_NEW\n", encoding="utf-8")
+			(root / "characterdata_10000.txt").write_text("1\t51295\tCOS_P_FOX_001\n", encoding="utf-8")
+			saved = published_ids.os.environ[published_ids.PIN_VARIABLE]
+			published_ids.os.environ[published_ids.PIN_VARIABLE] = str(path)
+			try:
+				self.assertEqual(published_ids.moved_objects(root), {})
+				(root / "characterdata_10000.txt").write_text("1\t51300\tCOS_P_FOX_001\n", encoding="utf-8")
+				self.assertEqual(published_ids.moved_objects(root), {"COS_P_FOX_001": (51295, 51300)})
+			finally:
+				published_ids.os.environ[published_ids.PIN_VARIABLE] = saved
+
+
 class PinToolTest(unittest.TestCase):
 	# ================
 	# test_a_refresh_keeps_a_dropped_code_and_refuses_a_move
@@ -173,9 +200,37 @@ class PinToolTest(unittest.TestCase):
 					("items.json", "items", [{"codename": "ITEM", "id": 4}]),
 					("skills.json", "skills", [{"codename": "SKILL", "id": 3}])):
 				(Path(folder) / file).write_text(json.dumps({"release": "abc", key: rows}), encoding="utf-8")
-			document = pin_tool.build_pin(folder, {"items": {"OLD": 9}})
+			textdata = served_textdata(folder, "1\t3\tMOB\n", "1\t4\tITEM\n")
+			document = pin_tool.build_pin(folder, {"items": {"OLD": 9}}, textdata)
 		self.assertEqual(document, {"format": published_ids.PIN_FORMAT, "release": "abc",
 			"characters": {"MOB": 3}, "items": {"ITEM": 4, "OLD": 9}, "skills": {"SKILL": 3}})
+
+	# ================
+	# test_build_pin_pins_every_served_object
+	#
+	# #4019: the catalogue lists monsters only, so a pet, a gate and an
+	# unlisted item a player's records name by id were never pinned and
+	# the next full build moved them. The served textdata pins them all,
+	# a disabled row too; a code the catalogue numbers differently from
+	# the textdata refuses, and a textdata with no object tables refuses
+	# rather than pin nothing.
+	# ================
+	def test_build_pin_pins_every_served_object(self):
+		with tempfile.TemporaryDirectory() as folder:
+			for file, key, rows in (("monsters.json", "monsters", [{"codename": "MOB", "id": 3}]),
+					("items.json", "items", []), ("skills.json", "skills", [])):
+				(Path(folder) / file).write_text(json.dumps({"release": "abc", key: rows}), encoding="utf-8")
+			textdata = served_textdata(folder, "1\t3\tMOB\n1\t51295\tCOS_P_FOX_001\n0\t51296\tCOS_P_FOX_002\n",
+				"1\t50853\tITEM_STONE\n")
+			(textdata / "teleportbuilding.txt").write_text("1\t49997\tSTORE_SD_GATE1\n", encoding="utf-8")
+			document = pin_tool.build_pin(folder, {}, textdata)
+			self.assertEqual(document["characters"],
+				{"COS_P_FOX_001": 51295, "COS_P_FOX_002": 51296, "MOB": 3, "STORE_SD_GATE1": 49997})
+			self.assertEqual(document["items"], {"ITEM_STONE": 50853})
+			with self.assertRaises(ValueError):
+				pin_tool.build_pin(folder, {}, served_textdata(folder, "1\t8\tMOB\n", "1\t4\tITEM\n"))
+			with self.assertRaises(ValueError):
+				pin_tool.build_pin(folder, {}, Path(folder))
 
 	# ================
 	# test_a_refresh_settles_a_shared_id_and_keeps_the_former_map
@@ -189,9 +244,24 @@ class PinToolTest(unittest.TestCase):
 					("items.json", "items", [{"codename": "ITEM", "id": 4}]),
 					("skills.json", "skills", [])):
 				(Path(folder) / file).write_text(json.dumps({"release": "abc", key: rows}), encoding="utf-8")
-			document = pin_tool.build_pin(folder, {"former": {"characters": {"OLD_MOB": [2]}}})
-		self.assertEqual(document["characters"], {})
+			textdata = served_textdata(folder, "1\t7\tNPC\n", "1\t8\tITEM_B\n")
+			document = pin_tool.build_pin(folder, {"former": {"characters": {"OLD_MOB": [2]}}}, textdata)
+		self.assertEqual(document["characters"], {"NPC": 7})
 		self.assertEqual(document["former"], {"characters": {"MOB": [4], "OLD_MOB": [2]}})
+
+
+# ================
+# served_textdata
+#
+# A served textdata folder under folder with one character shard and one
+# item shard holding the given rows.
+# ================
+def served_textdata(folder, characters, items):
+	root = Path(folder) / "textdata"
+	root.mkdir(exist_ok=True)
+	(root / "characterdata_10000.txt").write_text(characters, encoding="utf-8")
+	(root / "itemdata_10000.txt").write_text(items, encoding="utf-8")
+	return root
 
 
 if __name__ == "__main__":
