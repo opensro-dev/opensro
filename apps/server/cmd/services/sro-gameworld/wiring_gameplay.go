@@ -323,6 +323,13 @@ func newGameplayPlane(
 		})
 		log.Infof("mall: name change scroll listed at %d silk (%s, port-only, not native)", action.NameChangePriceSilk, action.EnvNameChangeScroll)
 	}
+	// SRO_WEAPON_SWITCH_SCROLL (port-only, not native): the action runtime
+	// serves the scroll's use; the alchemy shop and the mall list it (commerce).
+	items.WeaponSwitchScroll = commerce.WeaponSwitchScrollFromEnv()
+	if items.WeaponSwitchScroll {
+		mallExtra = append(mallExtra, commerce.WeaponSwitchMallGoods()...)
+		log.Infof("shop: weapon switch scroll on, in the alchemy shop and the mall (%s, port-only, not native)", commerce.EnvWeaponSwitchScroll)
+	}
 	// SRO_MALL_CATEGORIES (port-only, not native, #3257): the later
 	// mall's categories, HOT shop and goods badges; "off" (the
 	// default) is the shipped mall (commerce/mallcategories.go).

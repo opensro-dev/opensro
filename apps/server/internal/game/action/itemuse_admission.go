@@ -10,9 +10,10 @@ package action
 
 import (
 	"math"
-	"opensro.online/server/internal/game/item/wire"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/commerce"
+	"opensro.online/server/internal/game/item/wire"
 )
 
 /*
@@ -67,6 +68,7 @@ const (
 	itemUseSpiritExtension
 	itemUsePartySummonScroll
 	itemUsePandoraBox
+	itemUseWeaponSwitch
 )
 
 /*
@@ -88,6 +90,12 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	// (namechange.go). The classification alone grants nothing.
 	if ref.Codename == NameChangeScrollItem {
 		return itemUseNameChange
+	}
+	// Port-only, not native: the weapon switch scrolls reuse shipped items
+	// no native family claims, so admission is by codename too and the
+	// handler re-checks SRO_WEAPON_SWITCH_SCROLL (weaponswitch.go).
+	if _, ok := commerce.WeaponSwitchScrollByCodename(ref.Codename); ok {
+		return itemUseWeaponSwitch
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 12, 1} {
 		return itemUseMercenary

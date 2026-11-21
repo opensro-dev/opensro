@@ -554,6 +554,11 @@ type Runtime struct {
 	// nothing extra.
 	NameChangeScroll bool
 
+	// WeaponSwitchScroll enables the port-only weapon switch scroll
+	// (SRO_WEAPON_SWITCH_SCROLL; weaponswitch.go). The zero value is
+	// native: the donor item keeps its unsupported-use answer.
+	WeaponSwitchScroll bool
+
 	// SealDrops counts sealed drops for the weekly board (sealboard.go;
 	// port-only, not native). Nil, the default, counts nothing; the
 	// composition root installs the counter only when EnvSealBoard is on.

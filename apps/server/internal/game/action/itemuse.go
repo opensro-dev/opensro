@@ -22,6 +22,7 @@ import (
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/recovery"
 	"opensro.online/server/internal/game/item/wire"
@@ -290,6 +291,11 @@ func (rt *Runtime) handleItemUse(
 			result.DiagnosticRefusal = "item-use: name change scroll is off (" + EnvNameChangeScroll + ")"
 			return false
 		}
+		if family == itemUseWeaponSwitch && !rt.WeaponSwitchScroll {
+			// Port-only: with the flag off the scroll is the native game.
+			result.DiagnosticRefusal = "item-use: weapon switch scroll is off (" + commerce.EnvWeaponSwitchScroll + ")"
+			return false
+		}
 		if code := itemUseRequirements(character, ref); code != 0 {
 			result = itemUseFailure(code)
 			return false
@@ -475,6 +481,11 @@ func (rt *Runtime) handleItemUse(
 		}
 		if family == itemUseModelSwitcher {
 			return rt.useModelSwitcher(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result)
+		}
+		if family == itemUseWeaponSwitch {
+			return rt.useWeaponSwitchScroll(skillItemUse{
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
 			}, character, tail, &result)
 		}
