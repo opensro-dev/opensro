@@ -554,6 +554,13 @@ type Runtime struct {
 	// nothing extra.
 	NameChangeScroll bool
 
+	// EquipSwitch enables each port-only equipment switch scroll by kind
+	// (SRO_WEAPON_SWITCH_SCROLL, SRO_ARMOR_SWITCH_SCROLL,
+	// SRO_ACCESSORY_SWITCH_SCROLL; commerce/equipswitch.go). A missing
+	// kind, and the nil zero value, is native: the donor item keeps its
+	// unsupported-use answer.
+	EquipSwitch map[commerce.EquipSwitchKind]bool
+
 	// SealDrops counts sealed drops for the weekly board (sealboard.go;
 	// port-only, not native). Nil, the default, counts nothing; the
 	// composition root installs the counter only when EnvSealBoard is on.

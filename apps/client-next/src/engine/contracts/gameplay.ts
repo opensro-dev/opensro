@@ -493,6 +493,9 @@ export type GameplayCommand =
 		// The crest delete's confirmed use (#2282): the confirm box
 		// (0x16/0x19) already asked, so the use goes out as composed.
 		readonly crestDelete?: boolean;
+		// The weapon switch box's kind (port-only, weapon-switch.ts): the
+		// target weapon's new fourth TypeID; targetSlot names the weapon.
+		readonly weaponKind?: number;
 	}
 	| {
 		readonly kind: "crest-register";
@@ -553,6 +556,10 @@ export interface InventoryItem {
 	};
 	readonly transformRefObjId?: number;
 	readonly name?: string;
+	// The reference's codename, as the server's reference rows name it;
+	// the port-only scrolls that are build-staged items (their RefObjID is
+	// the build's) are known by it (weapon-switch.ts, race-switch.ts).
+	readonly codename?: string;
 	// The reference row's authored itemdata fields (the same record
 	// the tooltip reference carries), so activation rules can read
 	// them - the mall-use gate reads canUse (token 24).

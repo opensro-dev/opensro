@@ -342,6 +342,14 @@ var Settings = []Setting{
 	// Owner, 2026-10-27: the name-change scroll (#1689, port-only, not
 	// native; "off" is native: the scroll is neither sold nor usable).
 	{Env: "SRO_NAME_CHANGE_SCROLL", NomadVar: "name_change_scroll", Default: "off"},
+	// Owner, 2026-11-04: the weapon switch scroll (port-only, not native;
+	// "off" is native: the scroll is neither sold nor usable).
+	{Env: "SRO_WEAPON_SWITCH_SCROLL", NomadVar: "weapon_switch_scroll", Default: "off"},
+	// Owner, 2026-11-21: the armor and accessory switch scrolls (port-
+	// only, not native; "off" is native: the scroll is neither sold nor
+	// usable).
+	{Env: "SRO_ARMOR_SWITCH_SCROLL", NomadVar: "armor_switch_scroll", Default: "off"},
+	{Env: "SRO_ACCESSORY_SWITCH_SCROLL", NomadVar: "accessory_switch_scroll", Default: "off"},
 	// Owner, 2026-10-25: count kills and EXP per online hour by level
 	// band for the staff console (#1639, port-only, not native; "off"
 	// counts nothing and the economy route answers 404).

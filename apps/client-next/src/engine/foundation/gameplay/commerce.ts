@@ -390,6 +390,7 @@ export interface CommerceItemReference {
 	readonly refObjId: number;
 	readonly typeFlags: number;
 	readonly name: string;
+	readonly codename?: string;
 }
 
 /*
@@ -407,6 +408,9 @@ export function commerceReferences( p: Uint8Array ): readonly CommerceItemRefere
 		}
 		if ( row.icon !== undefined && (typeof row.icon !== "string" || row.icon.length > 256) ) {
 			throw Error( "Invalid item icon" );
+		}
+		if ( row.codename !== undefined && (typeof row.codename !== "string" || row.codename.length > 256) ) {
+			throw Error( "Invalid item codename" );
 		}
 		const id = commerceInteger( row.refObjId, 0xffffffff, 1 );
 		commerceInteger( row.typeFlags, 65535 );
