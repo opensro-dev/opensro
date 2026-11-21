@@ -63,7 +63,8 @@ const (
 // (and back) for the scroll that switches it; the shield (4) pairs on
 // its fourth TypeID instead.
 var raceTypeTwins = map[commerce.EquipSwitchKind]map[int64]int64{
-	commerce.SwitchArmor: {1: 9, 2: 10, 3: 11, 9: 1, 10: 2, 11: 3},
+	commerce.SwitchArmor:     {1: 9, 2: 10, 3: 11, 9: 1, 10: 2, 11: 3},
+	commerce.SwitchAccessory: {5: 12, 12: 5},
 }
 
 // shieldType is the shield's third TypeID; its fourth is the race
