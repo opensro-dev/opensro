@@ -304,41 +304,10 @@ func newGameplayPlane(
 	if err != nil {
 		return nil, err
 	}
-	// SRO_MALL_EXTRA_GOODS (port-only, not native): authored packages the
-	// v1.150 mall does not list; "off" is the shipped mall (commerce/mallextra.go).
-	mallExtra, err := commerce.MallExtraGoodsFromEnv()
-	if err != nil {
+	// The Item Mall's catalogue and its port-only goods (wiring_itemmall.go).
+	if err := configureItemMall(items, devPaths.TextdataDir, mallAuthority, deps.ItemReferences()); err != nil {
 		return nil, err
 	}
-	if len(mallExtra) > 0 {
-		log.Infof("mall: %d extra Item Mall goods from %s", len(mallExtra), commerce.EnvMallExtraGoods)
-	}
-	// SRO_NAME_CHANGE_SCROLL (port-only, not native, #1689): the mall
-	// sells the name-change scroll and the action runtime serves its use.
-	items.NameChangeScroll = action.NameChangeScrollFromEnv()
-	if items.NameChangeScroll {
-		mallExtra = append(mallExtra, commerce.MallExtraGood{
-			Tab: action.NameChangeMallTab, Package: action.NameChangeMallPackage,
-			Item: action.NameChangeScrollItem, Silk: action.NameChangePriceSilk,
-		})
-		log.Infof("mall: name change scroll listed at %d silk (%s, port-only, not native)", action.NameChangePriceSilk, action.EnvNameChangeScroll)
-	}
-	// The equipment switch scrolls (port-only, wiring_equipswitch.go).
-	mallExtra = append(mallExtra, applyEquipSwitchScrolls(items, deps.ItemReferences())...)
-	// SRO_MALL_CATEGORIES (port-only, not native, #3257): the later
-	// mall's categories, HOT shop and goods badges; "off" (the
-	// default) is the shipped mall (commerce/mallcategories.go).
-	mallCategories, err := commerce.MallCategoriesFromEnv()
-	if err != nil {
-		return nil, err
-	}
-	if mallCategories {
-		log.Infof("mall: later category layout from %s (port-only, not native)", commerce.EnvMallCategories)
-	}
-	if err := items.ConfigureMall(devPaths.TextdataDir, mallAuthority, mallExtra, mallCategories); err != nil {
-		return nil, fmt.Errorf("mall catalogue: %w", err)
-	}
-	items.StatRecallWindows = commerce.StatRecallListed(mallExtra)
 	deps.SceneReferenceFrames = items.CommerceReferenceSeed
 	// #1689 (port-only): the name-change scroll's queue door. The store's
 	// refusal vocabulary is translated at this boundary so the gameplay
