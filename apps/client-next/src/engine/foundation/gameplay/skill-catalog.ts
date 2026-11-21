@@ -75,6 +75,9 @@ export interface SkillMetadata {
 	// resolves to once its weapon kinds match the loadout. The chase
 	// resolves the same row to claim its reach (gameplay.ts chaseAttack).
 	readonly basicAttack?: boolean;
+	// A learn-applied passive (SkillExecutionPassive): never pressed. The
+	// catalogue still publishes admit for its reqi; Auto-Skills filters here.
+	readonly passive?: boolean;
 	// The authored MP cost: flat plus percent of maximum MP (skillMpCost).
 	readonly mp?: number;
 	readonly mpPercent?: number;
@@ -206,6 +209,7 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			ui.rangeBonus !== undefined && typeof ui.rangeBonus !== "boolean" ||
 			ui.rangeUp !== undefined && typeof ui.rangeUp !== "boolean" ||
 			ui.basicAttack !== undefined && typeof ui.basicAttack !== "boolean" ||
+			ui.passive !== undefined && typeof ui.passive !== "boolean" ||
 			ui.haltsWalk !== undefined && typeof ui.haltsWalk !== "boolean" ||
 			ui.needsFooting !== undefined && typeof ui.needsFooting !== "boolean" ||
 			ui.range !== undefined && (typeof ui.range !== "number" || !Number.isFinite( ui.range ) || ui.range < 0)
@@ -251,6 +255,7 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			...(ui.rangeBonus ? { rangeBonus: true } : {}),
 			...(ui.rangeUp ? { rangeUp: true } : {}),
 			...(ui.basicAttack ? { basicAttack: true } : {}),
+			...(ui.passive ? { passive: true } : {}),
 			...(ui.mp ? { mp: uint( ui.mp ) } : {}),
 			...(ui.mpPercent ? { mpPercent: uint( ui.mpPercent, 65535 ) } : {}),
 			...(ui.targets ? { targets: uint( ui.targets, 0xffff ) } : {}),

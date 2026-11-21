@@ -19,11 +19,11 @@ const { createSroMacro } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/sro-macro/sro-macro.ts"
 );
 const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
-const { createSroMacroHud, macroAcquiredSkills } = await import(
+const { createSroMacroHud, macroAcquiredSkills, scrubMacroSkillLists } = await import(
 	"../../src/engine/runtime/ui/hud/sro-macro-hud.ts"
 );
+import { macroAnswer as answer, macroReplay as replay } from "../helpers/sro-macro-frames.mjs";
 const {
-	OP_MACRO_ANSWER,
 	OP_MACRO_CONFIG,
 	OP_MACRO_REQUEST,
 	MACRO_POTION,
@@ -32,54 +32,6 @@ const {
 	MACRO_POTION_BYTES,
 	MACRO_HUNT_BYTES
 } = codec;
-
-/*
-================
-u16
-================
-*/
-function u16( value ) {
-	return [ value & 0xff, value >>> 8 ];
-}
-
-/*
-================
-replay
-
-A 0x3555 full replay as the server writes it (ConfigPayload): every kind
-available, unsaved potion and hunt sections as version 0, length 0.
-================
-*/
-/**
- * @param {{ potion?: number[], hunt?: number[], potionOn?: number, skillOn?: number, huntOn?: number,
- *   attack?: { slot: number, skill: number }[] }} [sections]
- */
-function replay( { potion, hunt, potionOn = 0, skillOn = 0, huntOn = 0, attack = [] } = {} ) {
-	const out = [ 0, 7, 3 ];
-	out.push( MACRO_POTION, potionOn );
-	if ( potion ) out.push( ...u16( 3 ), ...u16( MACRO_POTION_BYTES ), ...potion );
-	else out.push( 0, 0, 0, 0 );
-	out.push( MACRO_SKILL, skillOn, ...u16( 2 ), 1, 0 );
-	if ( attack.length === 0 ) out.push( ...u16( 1 ), 0 );
-	else {
-		out.push( ...u16( attack.length * 5 ) );
-		for ( const { slot, skill } of attack ) out.push( slot, skill & 0xff, (skill >>> 8) & 0xff, 0, 0 );
-	}
-	out.push( 0, 1, ...u16( 1 ), 0 );
-	out.push( MACRO_HUNT, huntOn );
-	if ( hunt ) out.push( ...u16( 2 ), ...u16( MACRO_HUNT_BYTES ), ...hunt );
-	else out.push( 0, 0, 0, 0 );
-	return { opcode: OP_MACRO_CONFIG, payload: Uint8Array.from( out ) };
-}
-
-/*
-================
-answer
-================
-*/
-function answer( ...bytes ) {
-	return { opcode: OP_MACRO_ANSWER, payload: Uint8Array.from( bytes ) };
-}
 
 /*
 ================
@@ -276,6 +228,24 @@ test("the menu opens only with the row on and the server's replay", () => {
 	assert.equal( hud.state().window, "none" );
 });
 
+test("the under-minimap guide icon toggles the menu", async () => {
+	const {
+		MACRO_GUIDE_ID,
+		MACRO_GUIDE_ICON_PATH,
+		MACRO_GUIDE_ICON_X_INSET,
+		MACRO_GUIDE_ICON_Y
+	} = await import( "../../src/engine/runtime/ui/hud/sro-macro-hud.ts" );
+	assert.equal( MACRO_GUIDE_ID, "sro-macro-icon" );
+	assert.match( MACRO_GUIDE_ICON_PATH, /mecro_0\.png$/ );
+	assert.equal( MACRO_GUIDE_ICON_X_INSET, 0x57 );
+	assert.equal( MACRO_GUIDE_ICON_Y, 0xb3 );
+	const hud = createSroMacroHud(), live = liveSettings();
+	assert.equal( hud.toggleMenu( live, true ), true );
+	assert.equal( hud.state().window, "menu" );
+	assert.equal( hud.toggleMenu( live, true ), true );
+	assert.equal( hud.state().window, "none" );
+});
+
 test("the menu's ON/OFF asks the worker to flip the live state", () => {
 	const hud = createSroMacroHud(), live = liveSettings();
 	hud.toggleMenu( live, true );
@@ -302,7 +272,8 @@ test("the options window edits a draft that only Save sends", () => {
 	hud.click( "sro-macro:hunt-group:0", live );
 	hud.click( "sro-macro:hunt-check:8", live );
 	const draft = draftOf( hud );
-	assert.deepEqual( codec.potionSlot( draft.potion, 0 ), { item: 0, a: 1, b: 55 } );
+	// A gauge row is on by b and fires at a (00692e00); on starts at 50%.
+	assert.deepEqual( codec.potionSlot( draft.potion, 0 ), { item: 0, a: 55, b: 1 } );
 	assert.equal( draft.hunt[0], 1 );
 	assert.equal( draft.hunt[8], 1 );
 	assert.deepEqual( live.potion, codec.defaultMacroSettings().potion );
@@ -321,29 +292,127 @@ test("the options window edits a draft that only Save sends", () => {
 	assert.equal( hud.state().draft, null );
 });
 
-test("the skill tab assigns targeted skills to attack and the rest to buff", () => {
+test("the skill tab assigns acquired skills to the active Attack / Buff page", () => {
 	// Only the fields the skill tab reads; the rest of SkillMetadata is the catalog's.
 	const index =
 		/** @type {ReadonlyMap<number, import("../../src/engine/foundation/gameplay/skill-catalog.ts").SkillMetadata>} */ (
 			/** @type {unknown} */ (new Map( [
-				[ 10, { id: 10, name: "Strike", targetRequired: true, actionMs: 900 } ],
-				[ 11, { id: 11, name: "Guard", targetRequired: false, actionMs: 600 } ],
-				[ 12, { id: 12, name: "Passive", targetRequired: false } ],
-				[ 13, { id: 13, name: "Punch", targetRequired: true, actionMs: 500, basicAttack: true } ]
+				[ 10, {
+					id: 10,
+					group: 1,
+					name: "Strike",
+					targetRequired: true,
+					actionMs: 900,
+					cooldownMs: 0,
+					admit: {}
+				} ],
+				[ 11, {
+					id: 11,
+					group: 2,
+					name: "Guard",
+					targetRequired: false,
+					actionMs: 600,
+					cooldownMs: 0,
+					admit: {}
+				} ],
+				// Instant self-buff (Grass Walk): no actionMs, but a cooldown.
+				[ 113, {
+					id: 113,
+					group: 260,
+					name: "Grass Walk",
+					targetRequired: false,
+					cooldownMs: 1000,
+					admit: {}
+				} ],
+				// Castle Shield: actionMs 0, 60s cool — must stay in the acquired list.
+				[
+					27,
+					{
+						id: 27,
+						group: 182,
+						name: "Castle shield",
+						nameSymbol: "SN_SKILL_CH_SWORD_SHIELD_A",
+						targetRequired: false,
+						cooldownMs: 60000,
+						admit: { reqi: { pairs: [ [ 4, 1 ] ] } }
+					}
+				],
+				// Lightning-style passive: admit is published for reqi, but it is
+				// never pressed — must stay out of the acquired / Buff lists.
+				[ 12, {
+					id: 12,
+					group: 3,
+					name: "Lightning Passive",
+					targetRequired: false,
+					cooldownMs: 0,
+					admit: {},
+					passive: true
+				} ],
+				[ 13, {
+					id: 13,
+					group: 4,
+					name: "Punch",
+					targetRequired: true,
+					actionMs: 500,
+					basicAttack: true,
+					cooldownMs: 0
+				} ],
+				[ 114, {
+					id: 114,
+					group: 261,
+					name: "Ghost Walk",
+					targetRequired: true,
+					groundTarget: true,
+					cooldownMs: 5000
+				} ],
+				// Sibling rank of Guard — same skilldata group.
+				[ 1111, {
+					id: 1111,
+					group: 2,
+					name: "Guard II",
+					targetRequired: false,
+					actionMs: 600,
+					cooldownMs: 0,
+					admit: {}
+				} ]
 			] ))
 		);
-	const acquired = macroAcquiredSkills( [ 10, 11, 12, 13, 99 ], index );
-	assert.deepEqual( acquired.map( s => s.id ), [ 10, 11 ] );
+	const board = [
+		{ id: 27, mastery: 257, row: 2, column: 0, icon: "a", name: "SN_SKILL_CH_SWORD_SHIELD_A" },
+		{ id: 10, mastery: 257, row: 0, column: 0, icon: "b", name: "Strike" },
+		{ id: 11, mastery: 257, row: 1, column: 0, icon: "c", name: "Guard" },
+		{ id: 113, mastery: 274, row: 2, column: 0, icon: "d", name: "Grass" },
+		{ id: 1111, mastery: 257, row: 1, column: 1, icon: "e", name: "Guard II" }
+	];
+	const acquired = macroAcquiredSkills( [ 10, 11, 113, 12, 13, 114, 99, 10, 1111, 27 ], index, board );
+	assert.deepEqual( acquired.map( s => s.id ), [ 27, 10, 11, 113, 1111 ] );
+	// A saved Lightning passive is scrubbed off Buff even though admit was set.
+	assert.deepEqual(
+		scrubMacroSkillLists( {
+			...liveSettings(),
+			buff: [ { slot: 0, skill: 12 }, { slot: 1, skill: 113 } ]
+		}, index ).buff,
+		[ { slot: 0, skill: 113 } ]
+	);
 	const hud = createSroMacroHud(), live = liveSettings();
 	hud.toggleMenu( live, true );
-	hud.click( "sro-macro:options:1", live );
-	hud.click( "sro-macro:skill-add:10", live, acquired );
-	hud.click( "sro-macro:skill-add:11", live, acquired );
-	hud.click( "sro-macro:skill-add:10", live, acquired );
-	hud.click( "sro-macro:skill-add:12", live, acquired );
+	hud.click( "sro-macro:options:1", live, acquired, [], index );
+	hud.click( "sro-macro:skill-add:10", live, acquired, [], index );
+	hud.click( "sro-macro:skill-add:10", live, acquired, [], index );
+	// Grass Walk is a self-buff — refused on the Attack tab.
+	hud.click( "sro-macro:skill-add:113", live, acquired, [], index );
 	assert.deepEqual( draftOf( hud ).attack, [ { slot: 0, skill: 10 } ] );
-	assert.deepEqual( draftOf( hud ).buff, [ { slot: 0, skill: 11 } ] );
-	hud.click( "sro-macro:skill-remove:attack:0", live, acquired );
+	assert.deepEqual( draftOf( hud ).buff, [] );
+	hud.click( "sro-macro:skill-page:buff", live, acquired, [], index );
+	hud.click( "sro-macro:skill-add:11", live, acquired, [], index );
+	hud.click( "sro-macro:skill-add:11", live, acquired, [], index );
+	hud.click( "sro-macro:skill-add:1111", live, acquired, [], index );
+	hud.click( "sro-macro:skill-add:113", live, acquired, [], index );
+	// A target-required strike does not belong on Buff.
+	hud.click( "sro-macro:skill-add:10", live, acquired, [], index );
+	assert.deepEqual( draftOf( hud ).attack, [ { slot: 0, skill: 10 } ] );
+	assert.deepEqual( draftOf( hud ).buff, [ { slot: 0, skill: 11 }, { slot: 1, skill: 113 } ] );
+	hud.click( "sro-macro:skill-remove:attack:0", live, acquired, [], index );
 	assert.deepEqual( draftOf( hud ).attack, [] );
 });
 

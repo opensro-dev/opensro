@@ -262,8 +262,12 @@ func TestSkillUiChaseMarksFollowTheRows(t *testing.T) {
 		if !ok || ref.UI == nil {
 			continue
 		}
+		wantPassive := source.ExecutionPlan(row.ID).Kind() == SkillExecutionPassive
 		if ref.UI.BasicAttack != basicAttacks[row.Codename] {
 			t.Errorf("%s: basicAttack %v, want %v", row.Codename, ref.UI.BasicAttack, basicAttacks[row.Codename])
+		}
+		if ref.UI.Passive != wantPassive {
+			t.Errorf("%s: passive %v, want %v", row.Codename, ref.UI.Passive, wantPassive)
 		}
 		if ref.UI.RangeUp != row.BuffModifiers.Ru {
 			t.Errorf("%s: rangeUp %v, want %v", row.Codename, ref.UI.RangeUp, row.BuffModifiers.Ru)
@@ -272,7 +276,11 @@ func TestSkillUiChaseMarksFollowTheRows(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for field, marked := range map[string]bool{"basicAttack": ref.UI.BasicAttack, "rangeUp": ref.UI.RangeUp} {
+		for field, marked := range map[string]bool{
+			"basicAttack": ref.UI.BasicAttack,
+			"passive":     ref.UI.Passive,
+			"rangeUp":     ref.UI.RangeUp,
+		} {
 			if marked && !strings.Contains(string(data), `"`+field+`":true`) {
 				t.Errorf("%s: UI JSON lost the %s mark: %s", row.Codename, field, data)
 			}
@@ -286,5 +294,17 @@ func TestSkillUiChaseMarksFollowTheRows(t *testing.T) {
 	}
 	if basicMarked == 0 {
 		t.Fatal("no shipped row carries the basicAttack mark")
+	}
+	passive, ok := source.SkillByCodename("SKILL_CH_LIGHTNING_PASSIVE_A_01")
+	if !ok {
+		t.Fatal("Lightning passive missing")
+	}
+	for _, ref := range source.SpawnSkillRows() {
+		if ref.ID == passive.ID {
+			if ref.UI == nil || !ref.UI.Passive {
+				t.Fatalf("Lightning passive UI = %+v, want passive", ref.UI)
+			}
+			break
+		}
 	}
 }

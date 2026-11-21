@@ -345,6 +345,76 @@ export async function importLaterWorldMapGuideStep() {
 	return { monsters: Array.isArray( catalog.monsters ) ? catalog.monsters.length : 0 };
 }
 
+// CIFMacroSystemGuide's under-minimap icon (#3907): icon/etc/mecro_0.ddj
+// from the pinned v1.696 Media.pk2 (SRO_V1696_ROOT).
+const LATER_MACRO_GUIDE_ICON = "/assets/images/Media_extracted/icon/etc/mecro_0.png";
+
+/*
+================
+laterMacroGuideImportPlan
+================
+*/
+export function laterMacroGuideImportPlan( env = process.env, archiveThere = false ) {
+	const root = (env.SRO_V1696_ROOT ?? "").trim();
+	if ( !root ) {
+		return {
+			run: false,
+			line: "Later macro guide: skipped (SRO_V1696_ROOT is not set; the under-minimap macro icon stays missing)"
+		};
+	}
+	if ( !archiveThere ) {
+		return { run: false, line: `Later macro guide: skipped (no Media.pk2 under SRO_V1696_ROOT ${root})` };
+	}
+	return { run: true, root, args: [ "scripts/import_v1696_macro_guide.py", "--v1696-root", root ] };
+}
+
+/*
+================
+laterMacroGuidePublicPaths
+================
+*/
+export function laterMacroGuidePublicPaths() {
+	return [ LATER_MACRO_GUIDE_ICON ];
+}
+
+/*
+================
+importLaterMacroGuideStep
+
+Publishes mecro_0.png for CIFMacroSystemGuide. Without the archive the
+build says so in one line; the HUD hides the button when the image is
+missing.
+================
+*/
+export async function importLaterMacroGuideStep() {
+	const root = (process.env.SRO_V1696_ROOT ?? "").trim();
+	const archiveThere = root !== "" &&
+		await stat( path.join( root, "Media.pk2" ) ).then( ( entry ) => entry.isFile(), () => false );
+	const plan = laterMacroGuideImportPlan( process.env, archiveThere );
+	if ( !plan.run ) {
+		console.log( plan.line );
+		return { skipped: true };
+	}
+	const result = await runPython( plan.args, {
+		task: "[macro-guide] later-client SRO Macro guide icon import",
+		cwd: rebuildRoot,
+		context: [
+			"CIFMacroSystemGuide's mecro_0 icon is native to the v1.696 client (#3907); the build imports " +
+			"it from the pinned archive (SRO_V1696_ROOT) beside the other Media_extracted icons."
+		]
+	} );
+	const output = result.stdout.trim();
+	if ( output ) console.log( output );
+	const paths = laterMacroGuidePublicPaths();
+	for ( const publicPath of paths ) {
+		const there = await stat( path.join( publicRoot, publicPath ) )
+			.then( ( entry ) => entry.isFile(), () => false );
+		if ( !there ) throw Error( `The macro guide import published no ${publicPath}` );
+	}
+	claimPublicPaths( paths );
+	return { icons: paths.length };
+}
+
 // The reverse return map's destination table (SRO_REVERSE_RETURN_MAP):
 // the later client's refoptionalteleport.txt, written beside the v1.150
 // extraction (extracted/VsroOptionalTeleport_extracted) for the server
