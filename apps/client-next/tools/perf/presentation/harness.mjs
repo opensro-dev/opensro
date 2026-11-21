@@ -47,10 +47,7 @@ const VIEW_ASPECT = 16 / 9;
 // explicit false turns these off, vHidesCompanions only an explicit true on.
 const EXPERIMENTAL_DEFAULTS = {
 	enchantSparks: true,
-	sharedActorRoom: true,
-	vHidesCompanions: false,
-	dungeonCharacterPvs: true,
-	silentWingFlight: true
+	vHidesCompanions: false
 };
 // The renderer port calls that leave the presentation, and how each is
 // recorded. A model or clip is recorded by what the presentation chose
@@ -415,10 +412,7 @@ export async function createPresentationHarness( root, session, options = {} ) {
 			presentationCamera: () => view.camera,
 			audioListener: () => view.listener,
 			enchantSparks: () => experimental.enchantSparks,
-			sharedActorRoom: () => experimental.sharedActorRoom,
 			vHidesCompanions: () => experimental.vHidesCompanions,
-			silentWingFlight: () => experimental.silentWingFlight,
-			dungeonCharacterPvs: () => experimental.dungeonCharacterPvs,
 			dungeonBlockHides: () => false,
 			scenery: () => null,
 			setFootprints() {},

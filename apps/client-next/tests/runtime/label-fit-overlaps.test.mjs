@@ -1,15 +1,14 @@
 /*
 ===========================================================================
 
-label-fit-overlaps.test.mjs - "Fit window labels" keeps colliding text whole
+label-fit-overlaps.test.mjs - the label fitting keeps colliding text whole
 
 Issue #3674: the port's overlap repair (ui-glyphs resolveTextOverlaps)
 cut every label whose ink entered a neighbouring text box to "Compe...",
-"Retained ...", "Guild ma...". Under the Experimental "Fit window labels"
-(port-only, on by default) a colliding label wraps inside its box, slides
+"Retained ...", "Guild ma...". Port-only, not native (owner 2026-11-21:
+the default, no row): a colliding label wraps inside its box, slides
 clear of its neighbours' boxes, or stays whole where its ink misses
-theirs; only a label none of those places is shortened. Off keeps the
-shortened run as the only repair.
+theirs; only a label none of those places is shortened.
 
 The unit cases lay text with the published font; the window cases drive
 the UI gallery recipes the issue names and read the scene back to text.
@@ -26,8 +25,6 @@ const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/
 const { extendedRecipes } = await import( "../../tools/ui-gallery/extended.ts" );
 const { OPENERS } = await import( "../../tools/ui-gallery/entry-recipes.mjs" );
 const { guildSnapshot, seedJourney } = await import( "../../tools/ui-gallery/scenarios.ts" );
-
-const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 
 /**
  * @typedef {[number, number, number, number]} Rect
@@ -143,21 +140,12 @@ function inkRight( quads ) {
 
 // ============================================================================
 
-test("off, a colliding label is shortened as before", () => {
-	const label = titleText( fontAtlas, "Retained number", [ 34, 106, 64, 19 ], CLIP, WHITE, { hAlign: 1, vAlign: 0 } );
-	const count = titleText( fontAtlas, "48", [ 105, 106, 41, 19 ], CLIP, WHITE, { overflow: "clip", vAlign: 0 } );
-	assert.deepEqual( lines( resolveTextOverlaps( [ ...label, ...count ] ) ).map( l => l.text ), [
-		"Retained ...",
-		"48"
-	] );
-});
-
 test("a label with a space wraps inside its box's columns", () => {
 	/** @type {Rect} */
 	const box = [ 34, 106, 64, 19 ];
 	const label = titleText( fontAtlas, "Retained number", box, CLIP, WHITE, { hAlign: 1, vAlign: 0 } );
 	const count = titleText( fontAtlas, "48", [ 105, 106, 41, 19 ], CLIP, WHITE, { overflow: "clip", vAlign: 0 } );
-	const drawn = lines( resolveTextOverlaps( [ ...label, ...count ], true ) );
+	const drawn = lines( resolveTextOverlaps( [ ...label, ...count ] ) );
 	assert.deepEqual( drawn.map( l => l.text ), [ "Retained", "number", "48" ] );
 	for ( const line of drawn.slice( 0, 2 ) ) {
 		assert.ok( line.rect[0] >= box[0] && line.rect[2] <= box[0] + box[2], `${line.text} inside its box` );
@@ -175,13 +163,13 @@ test("a wrap that would reach the rows above and below is refused", () => {
 	const count = titleText( fontAtlas, "48", [ 105, 106, 41, 19 ], CLIP, WHITE, { overflow: "clip", vAlign: 0 } );
 	const above = titleText( fontAtlas, "Above", [ 34, 92, 64, 12 ], CLIP, WHITE, { hAlign: 1, vAlign: 1 } );
 	const below = titleText( fontAtlas, "Below", [ 34, 127, 64, 12 ], CLIP, WHITE, { hAlign: 1, vAlign: 1 } );
-	const painted = resolveTextOverlaps( [ ...above, ...label, ...count, ...below ], true );
+	const painted = resolveTextOverlaps( [ ...above, ...label, ...count, ...below ] );
 	const drawn = lines( painted ).map( l => l.text );
 	assert.ok( !drawn.includes( "number" ), `no wrapped second line in ${JSON.stringify( drawn )}` );
 	assert.ok( drawn.includes( "Retained ..." ), "a value-style label falls back to its shortened run" );
 	assert.deepEqual( inkCrossings( painted ), [] );
 	// Without the rows the same label wraps (the case above).
-	assert.ok( lines( resolveTextOverlaps( [ ...label, ...count ], true ) ).some( l => l.text === "number" ) );
+	assert.ok( lines( resolveTextOverlaps( [ ...label, ...count ] ) ).some( l => l.text === "number" ) );
 });
 
 test("a single word slides clear of its neighbour's box, at most its overflow", () => {
@@ -193,7 +181,7 @@ test("a single word slides clear of its neighbour's box, at most its overflow", 
 	const field = [ 108, 117, 71, 14 ];
 	const label = titleText( fontAtlas, "Compensation", box, CLIP, WHITE, { vAlign: 1, label: true } );
 	const gold = titleText( fontAtlas, "400", field, CLIP, WHITE, { hAlign: 2, vAlign: 1 } );
-	const painted = resolveTextOverlaps( [ ...label, ...gold ], true );
+	const painted = resolveTextOverlaps( [ ...label, ...gold ] );
 	const [stake] = lines( painted );
 	assert.equal( stake.text, "Compensation" );
 	assert.ok( stake.rect[2] <= field[0], `ends at ${stake.rect[2]}, before the field` );
@@ -210,8 +198,7 @@ test("a label stays whole where its ink misses a centred neighbour's ink; a valu
 	const rank = titleText( fontAtlas, "Member", [ 201, 46, 104, 17 ], CLIP, WHITE, { hAlign: 1, vAlign: 1 } );
 	const slot = label =>
 		titleText( fontAtlas, "80(80)", [ 172, 46, 19, 17 ], CLIP, WHITE, { vAlign: 1, ...(label ? { label } : {}) } );
-	const drawn = label =>
-		lines( resolveTextOverlaps( [ ...lv, ...slot( label ), ...rank ], true ) ).map( l => l.text );
+	const drawn = label => lines( resolveTextOverlaps( [ ...lv, ...slot( label ), ...rank ] ) ).map( l => l.text );
 	assert.deepEqual( drawn( true ), [ "Lv80(80)", "Member" ] );
 	// The character panel's honour value cut to its 28-pixel field is the
 	// same rule: a value never runs past its field's art.
@@ -224,14 +211,13 @@ test("a label stays whole where its ink misses a centred neighbour's ink; a valu
 ================
 openRecipe
 
-The scene a gallery recipe settles into, with "Fit window labels" on or
-off. "open-window:<panel>" opens a registry panel the way its sidebar
+The scene a gallery recipe settles into. "open-window:<panel>" opens a registry panel the way its sidebar
 button does; "opener:<name>" runs the gallery's opener of that name;
 "seeded" opens nothing, for a window seed's state shows by itself. seed
 edits the fixture's state before anything opens.
 ================
 */
-async function openRecipe( id, fit, seed = state => state ) {
+async function openRecipe( id, seed = state => state ) {
 	const recipe = id === "seeded" ? { open: () => {} } : id.startsWith( "open-window:" ) ?
 		{ open: context => context.ui.event( { kind: "activate", id } ) } :
 		id.startsWith( "opener:" ) ?
@@ -242,7 +228,6 @@ async function openRecipe( id, fit, seed = state => state ) {
 	const f = classicUiFixture();
 	let now = 0, seen = null;
 	f.state.gameplay.social = guildSnapshot();
-	f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { fitWindowLabels: fit } ) } );
 	seed( f.state );
 	const step = async () => {
 		for ( let i = 0; i < 6; i++ ) seen = f.ui.step( f.state, now += 300 ) ?? seen;
@@ -267,29 +252,28 @@ async function openRecipe( id, fit, seed = state => state ) {
 	return quads;
 }
 
-// Each recipe the issue names and the label it cut, as drawn with the row
-// on (its lines) and off (the shortened run).
+// Each recipe the issue names, the lines its label is drawn in and the
+// shortened run the old repair cut it to.
 const WINDOWS = [
-	{ id: "breadth:guild-union", on: [ "Number of", "guilds" ], off: "Number o..." },
-	{ id: "open-window:Guild", on: [ "Guild", "master" ], off: "Guild ma..." },
-	{ id: "reach:guild-war-agreement", on: [ "Compensation" ], off: "Compe..." },
-	{ id: "inspect:guild-war-declaration", on: [ "Compensation" ], off: "Compe..." },
-	{ id: "inspect:inventory-split", on: [ "Retained", "number", "Distributed", "number" ], off: "Retained ..." },
+	{ id: "breadth:guild-union", on: [ "Number of", "guilds" ], cut: "Number o..." },
+	{ id: "open-window:Guild", on: [ "Guild", "master" ], cut: "Guild ma..." },
+	{ id: "reach:guild-war-agreement", on: [ "Compensation" ], cut: "Compe..." },
+	{ id: "inspect:guild-war-declaration", on: [ "Compensation" ], cut: "Compe..." },
+	{ id: "inspect:inventory-split", on: [ "Retained", "number", "Distributed", "number" ], cut: "Retained ..." },
 	// #3712: the academy's level value, the matching search labels and
 	// the job ranking's title of level.
-	{ id: "breadth:academy-master", on: [ "Lv80(80)" ], off: "Lv8..." },
-	{ id: "inspect:academy-matching", on: [ "Recruitment", "Condition", "Honor", "Grade" ], off: "Recr..." },
-	{ id: "opener:Job ranking", on: [ "Apprentice", "Merchant" ], off: "Apprentice M..." }
+	{ id: "breadth:academy-master", on: [ "Lv80(80)" ], cut: "Lv8..." },
+	{ id: "inspect:academy-matching", on: [ "Recruitment", "Condition", "Honor", "Grade" ], cut: "Recr..." },
+	{ id: "opener:Job ranking", on: [ "Apprentice", "Merchant" ], cut: "Apprentice M..." }
 ];
 
-for ( const { id, on, off } of WINDOWS ) {
+for ( const { id, on, cut } of WINDOWS ) {
 	test(`${id}: ${on.join( " " )} is drawn whole and on no other text`, async () => {
-		const quads = await openRecipe( id, true );
+		const quads = await openRecipe( id );
 		const drawn = lines( quads ).map( l => l.text );
 		for ( const text of on ) assert.ok( drawn.includes( text ), `${text} in ${JSON.stringify( drawn )}` );
-		assert.ok( !drawn.some( text => text.endsWith( "..." ) && text.startsWith( off.slice( 0, 3 ) ) ), "no cut" );
+		assert.ok( !drawn.some( text => text.endsWith( "..." ) && text.startsWith( cut.slice( 0, 3 ) ) ), "no cut" );
 		assert.deepEqual( inkCrossings( quads ), [] );
-		assert.ok( lines( await openRecipe( id, false ) ).some( l => l.text === off ), `off draws ${off}` );
 	});
 }
 
@@ -308,23 +292,19 @@ function lineNamed( quads, text ) {
 }
 
 test("a caption wider than its plate takes the narrow face (#3712)", async () => {
-	for ( const fit of [ true, false ] ) {
-		const matching = await openRecipe( "inspect:academy-matching", fit );
-		const graduates = lineNamed( matching, "Graduates" ), member = lineNamed( matching, "Member" );
-		// On, the heads keep a gap; off, "Graduates" runs into "Member" as before.
-		assert.equal( graduates.rect[2] < member.rect[0], fit, `fit ${fit}: ${graduates.rect} | ${member.rect}` );
-		const dismiss = lineNamed( await openRecipe( "breadth:academy-master", fit ), "Dismiss" );
-		assert.equal( dismiss.rect[2] - dismiss.rect[0] < DISMISS_PLATE - 4, fit, `fit ${fit}: ${dismiss.rect}` );
-	}
+	const matching = await openRecipe( "inspect:academy-matching" );
+	const graduates = lineNamed( matching, "Graduates" ), member = lineNamed( matching, "Member" );
+	// The heads keep a gap; natively "Graduates" runs into "Member".
+	assert.ok( graduates.rect[2] < member.rect[0], `${graduates.rect} | ${member.rect}` );
+	const dismiss = lineNamed( await openRecipe( "breadth:academy-master" ), "Dismiss" );
+	assert.ok( dismiss.rect[2] - dismiss.rect[0] < DISMISS_PLATE - 4, `${dismiss.rect}` );
 });
 
-test("a grade column is headed Grade, not level, with the row on or off (#3712)", async () => {
-	for ( const fit of [ true, false ] ) {
-		for ( const id of [ "open-window:Guild", "opener:Job ranking" ] ) {
-			const drawn = lines( await openRecipe( id, fit ) ).map( l => l.text );
-			assert.ok( drawn.some( text => text.startsWith( "Grade" ) ), `${id}: ${JSON.stringify( drawn )}` );
-			assert.ok( !drawn.some( text => /^level|Level ?level/.test( text ) ), `${id}: ${JSON.stringify( drawn )}` );
-		}
+test("a grade column is headed Grade, not level (#3712)", async () => {
+	for ( const id of [ "open-window:Guild", "opener:Job ranking" ] ) {
+		const drawn = lines( await openRecipe( id ) ).map( l => l.text );
+		assert.ok( drawn.some( text => text.startsWith( "Grade" ) ), `${id}: ${JSON.stringify( drawn )}` );
+		assert.ok( !drawn.some( text => /^level|Level ?level/.test( text ) ), `${id}: ${JSON.stringify( drawn )}` );
 	}
 });
 
@@ -348,9 +328,9 @@ function artRect( quads, name, x = Infinity ) {
 const MALL_BAG = { inventorySlotCount: 13 + 32 + 30, equipmentSlotCount: 13 };
 
 test("the merchant, stall and Item Mall labels stay inside their art (#3728)", async () => {
-	// Merchant: off, "Repurchase" runs left out of the window; on, "Buy"
+	// Merchant: natively "Repurchase" runs left out of the window; "Buy"
 	// over "back" sits between the window frame and the buyback strip.
-	const merchant = await openRecipe( "breadth:merchant", true );
+	const merchant = await openRecipe( "breadth:merchant" );
 	const strip = artRect( merchant, "com_redeem_window.png" ),
 		frame = artRect( merchant, "mframe_wnd_left_side.png", strip[0] );
 	for ( const text of [ "Buy", "back" ] ) {
@@ -384,13 +364,12 @@ test("the merchant, stall and Item Mall labels stay inside their art (#3728)", a
 		),
 		"a caption on the shop tab"
 	);
-	assert.ok( lineNamed( await openRecipe( "breadth:merchant", false ), "Repurchase" ).rect[0] < frame[0] );
 
 	// Tabs: Magic Pang's selected "Equipment" (69 pixels bold) ran past
 	// both edges of its 60-pixel tab; on, it reads in the narrow face
 	// inside it. The stall's "Items to sell" only nears its 80-pixel tab's
-	// edges and keeps the native bold, on and off.
-	const pang = await openRecipe( "opener:Magic Pang", true ), equipment = lineNamed( pang, "Equipment" );
+	// edges and keeps the native bold.
+	const pang = await openRecipe( "opener:Magic Pang" ), equipment = lineNamed( pang, "Equipment" );
 	const pangTab = pang.find( q =>
 		String( q.texture?.src ?? q.texture ).endsWith( "com_tab_on.png" ) &&
 		q.rect[0] < equipment.rect[2] && q.rect[0] + q.rect[2] > equipment.rect[0] &&
@@ -400,19 +379,14 @@ test("the merchant, stall and Item Mall labels stay inside their art (#3728)", a
 		equipment.rect[0] >= pangTab[0] && equipment.rect[2] <= pangTab[0] + pangTab[2],
 		`${equipment.rect} on ${pangTab}`
 	);
-	// Off keeps the bold face (glyphs this file's map does not name).
-	assert.ok( !lines( await openRecipe( "opener:Magic Pang", false ) ).some( l => l.text === "Equipment" ) );
-	for ( const fit of [ true, false ] ) {
-		const stall = await openRecipe( "seeded", fit, state => {
-			state.gameplay.stall = seedJourney( "stall-owner" ).gameplay.stall;
-		} );
-		assert.ok( !lines( stall ).some( l => l.text === "Items to sell" ), `fit ${fit}: the stall tab stays bold` );
-	}
+	const stall = await openRecipe( "seeded", state => {
+		state.gameplay.stall = seedJourney( "stall-owner" ).gameplay.stall;
+	} );
+	assert.ok( !lines( stall ).some( l => l.text === "Items to sell" ), "the stall tab stays bold" );
 
-	// Item Mall: off, "32 spaces" is drawn on its bag icon; on, "32" over
+	// Item Mall: natively "32 spaces" is drawn on its bag icon; "32" over
 	// "spaces" starts right of it.
-	const mall = fit => openRecipe( "dialog:item-mall", fit, state => Object.assign( state.gameplay, MALL_BAG ) );
-	const onMall = await mall( true ), icon = artRect( onMall, "mall_inven_icon.png" );
+	const onMall = await openRecipe( "dialog:item-mall", state => Object.assign( state.gameplay, MALL_BAG ) ),
+		icon = artRect( onMall, "mall_inven_icon.png" );
 	for ( const text of [ "32", "spaces" ] ) assert.ok( lineNamed( onMall, text ).rect[0] > icon[0] + icon[2] );
-	assert.ok( lineNamed( await mall( false ), "32 spaces" ).rect[0] < icon[0] + icon[2] );
 });

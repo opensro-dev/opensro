@@ -49,8 +49,8 @@ export interface AcademyFilter {
 ================
 AcademyLayoutArgs
 
-fitLabels is the Experimental "Fit window labels" row (port-only; off
-draws the original): column heads wider than their plate take the narrow
+Port-only, not native (the former Experimental "Fit window labels";
+owner 2026-11-21: the default, no row): column heads wider than their plate take the narrow
 face and the search labels fit the room left of them.
 ================
 */
@@ -78,7 +78,6 @@ export interface AcademyLayoutArgs {
 	readonly pressed: string | null;
 	readonly filter?: AcademyFilter;
 	readonly level?: number;
-	readonly fitLabels?: boolean;
 }
 
 /*
@@ -157,11 +156,9 @@ export function academyLayout( args: AcademyLayoutArgs ) {
 			paths.push( ...variants );
 			image( variants[disabled ? 3 : pressed === id ? 2 : hover === id ? 1 : 0]!, r );
 			const caption = data.strings[node.text] ?? node.text;
-			// Port-only (fitLabels): a head wider than its plate ("Graduates"
-			// on 48 pixels runs into "Member") takes the narrow face.
-			const fontIndex = args.fitLabels ?
-				narrowFace( caption, r[2], node.fontIndex, args.measure ) :
-				node.fontIndex;
+			// Port-only: a head wider than its plate ("Graduates" on 48
+			// pixels runs into "Member") takes the narrow face.
+			const fontIndex = narrowFace( caption, r[2], node.fontIndex, args.measure );
 			quads.push(
 				...text( caption, r, r, disabled ? [ .5, .5, .5, 1 ] : node.color, { fontIndex, hAlign: 1, vAlign: 1 } )
 			);
@@ -291,7 +288,7 @@ export function academyLayout( args: AcademyLayoutArgs ) {
 ================
 staticText
 
-A static's label. Port-only (fitLabels): a right-aligned search label
+A static's label. Port-only: a right-aligned search label
 wider than its 35-pixel box ("Honor Grade" over the name edit,
 "Recruitment Condition" cut to "Recr...") takes the room back to the
 control on its left, on one or two lines, in its face or the narrow one.
@@ -301,7 +298,7 @@ function staticText( args: AcademyLayoutArgs, node: AuthoredControl, r: UiRect )
 	const data = args.data, clip = args.clip, text = args.text, measure = args.measure;
 	const value = data.strings[node.text] ?? node.text,
 		style = { fontIndex: node.fontIndex, hAlign: node.hAlign, vAlign: node.vAlign };
-	const search = !!args.fitLabels && node.hAlign === 2 && node.name.startsWith( "GDR_MENTORMATCH_SEARCH_" );
+	const search = node.hAlign === 2 && node.name.startsWith( "GDR_MENTORMATCH_SEARCH_" );
 	if ( !search || measure( value, node.fontIndex ) <= r[2] ) return text( value, r, clip, node.color, style );
 	const room = searchLabelRoom( data.mentor, node ), fitted = fitLines( value, room, node.fontIndex, measure );
 	if ( !fitted ) return text( value, r, clip, node.color, style );

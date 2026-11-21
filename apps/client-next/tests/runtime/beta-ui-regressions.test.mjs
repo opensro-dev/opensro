@@ -353,41 +353,36 @@ test("pet setting tab disables save when unchanged and re-binds on 0xB05B and cy
 	}
 });
 
-test("a pet's disabled setting tab is dimmed with the Experimental row and looks native without it", () => {
-	for ( const grey of [ true, false ] ) {
-		const f = createFixture();
-		try {
-			f.ui.event( {
-				kind: "experimental-preferences",
-				value: experimentalOptions( { greyDisabledTabs: grey } )
-			} );
-			// band 3 is an attack pet: 6A1920 disables Setting (class 2 only).
-			f.setGame( { cosRecords: [ { gid: 7, refObjId: 100, band: 3, hp: 100, mp: 0, status: 0, dead: false } ] } );
-			f.ui.event( { kind: "key", code: "Insert" } );
-			const semantics = f.step();
-			const quads = f.scene()?.quads ?? [];
-			const tabLook = id => {
-				const tab = semantics?.controls.find( c => c.id === id );
-				assert.ok( tab, id );
-				const inside = q =>
-					q.rect[0] >= tab.rect[0] && q.rect[1] >= tab.rect[1] &&
-					q.rect[0] < tab.rect[0] + tab.rect[2] && q.rect[1] < tab.rect[1] + tab.rect[3];
-				const plate = quads.find( q => q.texture.includes( "/com_long_tab_" ) && inside( q ) );
-				const label = quads.filter( q => q.texture.endsWith( "/native-ui-font-atlas.png" ) && inside( q ) );
-				assert.ok( plate, id + " plate" );
-				assert.ok( label.length, id + " label" );
-				return { tab, plateAlpha: plate.color[3], labelRed: label[0].color[0] };
-			};
-			const setting = tabLook( "cos-tab:2" ), info = tabLook( "cos-tab:0" );
-			assert.equal( setting.tab.disabled, true );
-			// The original draws the off plate in white (5376A0 at 53784F).
-			assert.equal( setting.plateAlpha, grey ? 0x80 / 255 : 1, "plate alpha, grey " + grey );
-			assert.equal( setting.labelRed, grey ? 0x99 / 255 : 1, "label colour, grey " + grey );
-			assert.equal( info.plateAlpha, 1, "an enabled tab is never dimmed" );
-			assert.equal( info.labelRed, 1, "an enabled tab's label stays white" );
-		} finally {
-			f.ui.dispose();
-		}
+// Port-only, not native (owner 2026-11-21: the default, no row): the
+// original draws the off plate in white (5376A0 at 53784F).
+test("a pet's disabled setting tab is dimmed", () => {
+	const f = createFixture();
+	try {
+		// band 3 is an attack pet: 6A1920 disables Setting (class 2 only).
+		f.setGame( { cosRecords: [ { gid: 7, refObjId: 100, band: 3, hp: 100, mp: 0, status: 0, dead: false } ] } );
+		f.ui.event( { kind: "key", code: "Insert" } );
+		const semantics = f.step();
+		const quads = f.scene()?.quads ?? [];
+		const tabLook = id => {
+			const tab = semantics?.controls.find( c => c.id === id );
+			assert.ok( tab, id );
+			const inside = q =>
+				q.rect[0] >= tab.rect[0] && q.rect[1] >= tab.rect[1] &&
+				q.rect[0] < tab.rect[0] + tab.rect[2] && q.rect[1] < tab.rect[1] + tab.rect[3];
+			const plate = quads.find( q => q.texture.includes( "/com_long_tab_" ) && inside( q ) );
+			const label = quads.filter( q => q.texture.endsWith( "/native-ui-font-atlas.png" ) && inside( q ) );
+			assert.ok( plate, id + " plate" );
+			assert.ok( label.length, id + " label" );
+			return { tab, plateAlpha: plate.color[3], labelRed: label[0].color[0] };
+		};
+		const setting = tabLook( "cos-tab:2" ), info = tabLook( "cos-tab:0" );
+		assert.equal( setting.tab.disabled, true );
+		assert.equal( setting.plateAlpha, 0x80 / 255, "plate alpha" );
+		assert.equal( setting.labelRed, 0x99 / 255, "label colour" );
+		assert.equal( info.plateAlpha, 1, "an enabled tab is never dimmed" );
+		assert.equal( info.labelRed, 1, "an enabled tab's label stays white" );
+	} finally {
+		f.ui.dispose();
 	}
 });
 
@@ -758,45 +753,37 @@ Drop on bag tabs
 
 A player dragged the first item of the bag's second page onto the first
 page's tab and nothing happened (the original's tabs answer a press only).
-With the port-only Experimental "Drop on bag tabs" on, the drop moves it to
-that page's first free slot; off, it does nothing, as the original.
+Port-only, not native (owner 2026-11-21: the default, no row): the drop
+moves it to that page's first free slot.
 ================
 */
-for ( const on of [ true, false ] ) {
-	test(`an item dropped on the other page's tab ${on ? "moves to its first free slot" : "stays (row off)"}`, () => {
-		const f = createFixture();
-		try {
-			const earring = {
-				slot: 46,
-				refObjId: 1,
-				typeFlags: 0x8ec,
-				quantity: 1,
-				name: "Earring",
-				plus: 0,
-				durability: 0,
-				variance: "0",
-				magic: []
-			};
-			f.ui.event( /** @type {any} */ ({ kind: "experimental-preferences", value: { dropOnBagTab: on } }) );
-			f.setGame( { inventorySlotCount: 59, equipmentSlotCount: 13, inventory: [ earring ] } );
-			f.ui.event( { kind: "key", code: "KeyI" } );
-			f.step();
-			f.ui.event( { kind: "activate", id: "inventory-page:1" } );
-			const tab = defined( f.step()?.controls.find( c => c.id === "inventory-page:0" ) );
-			f.ui.event( { kind: "drag", id: "slot:46", dx: 50, dy: 50 } );
-			f.ui.event( { kind: "drag-end", id: "slot:46", x: tab.rect[0] + 5, y: tab.rect[1] + 5 } );
-			f.step();
-			assert.deepEqual(
-				f.commands,
-				on ?
-					[ {
-						kind: "gameplay",
-						command: { kind: "inventory-move", source: 46, destination: 13, quantity: 1 }
-					} ] :
-					[]
-			);
-		} finally {
-			f.ui.dispose();
-		}
-	});
-}
+test("an item dropped on the other page's tab moves to its first free slot", () => {
+	const f = createFixture();
+	try {
+		const earring = {
+			slot: 46,
+			refObjId: 1,
+			typeFlags: 0x8ec,
+			quantity: 1,
+			name: "Earring",
+			plus: 0,
+			durability: 0,
+			variance: "0",
+			magic: []
+		};
+		f.setGame( { inventorySlotCount: 59, equipmentSlotCount: 13, inventory: [ earring ] } );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		f.step();
+		f.ui.event( { kind: "activate", id: "inventory-page:1" } );
+		const tab = defined( f.step()?.controls.find( c => c.id === "inventory-page:0" ) );
+		f.ui.event( { kind: "drag", id: "slot:46", dx: 50, dy: 50 } );
+		f.ui.event( { kind: "drag-end", id: "slot:46", x: tab.rect[0] + 5, y: tab.rect[1] + 5 } );
+		f.step();
+		assert.deepEqual( f.commands, [ {
+			kind: "gameplay",
+			command: { kind: "inventory-move", source: 46, destination: 13, quantity: 1 }
+		} ] );
+	} finally {
+		f.ui.dispose();
+	}
+});

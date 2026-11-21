@@ -134,7 +134,7 @@ labelRoom
 
 How far a text control's lines may reach above and below its rect
 without entering a neighbour (frame.ts authoredText's wrap, the
-Experimental "Fit window labels"): half the gap to the nearest control
+former Experimental "Fit window labels"): half the gap to the nearest control
 over its column and half the gap to the nearest under it, so two
 neighbours that both wrap meet at the gap's middle and never cross.
 A control that encloses the label (its frame, the window) or stands

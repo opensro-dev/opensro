@@ -5,7 +5,7 @@ window-fit.test.mjs - the F9 visual gate's four fits
 
 The letter read and write windows are centred msgbox2 popups (607830 /
 607A10), not a translucent sheet over the letter page; their long button
-captions fit, whole, inside the 76-pixel plate under "Fit window labels"; every
+captions fit, whole, inside the 76-pixel plate (port-only); every
 Experimental description fits its 304-pixel line; and a tooltip never
 leaves a narrow screen.
 
@@ -49,7 +49,7 @@ The Community window's Letter page with one letter, then the read window
 (reading 0) or the write window (the Send message command).
 ================
 */
-function openLetter( { fit, write } ) {
+function openLetter( { write } ) {
 	const fixture = uiFixture();
 	let time = 0, published;
 	const draw = () => {
@@ -57,7 +57,6 @@ function openLetter( { fit, write } ) {
 		assert.equal( fixture.ui.stats().error, null );
 		return defined( published );
 	};
-	fixture.ui.event( /** @type {any} */ ({ kind: "experimental-preferences", value: { fitWindowLabels: fit } }) );
 	const row = { sender: "Berk", modelRefId: 1907, received: 0, read: false, body: "Hello" };
 	Object.assign( fixture.state.gameplay, {
 		social: emptySocial( "Player" ),
@@ -91,7 +90,7 @@ function glyphsBeside( fixture, rect ) {
 
 for ( const write of [ false, true ] ) {
 	test(`the letter ${write ? "write" : "read"} window is a centred msgbox2 popup`, () => {
-		const { fixture, output } = openLetter( { fit: true, write } );
+		const { fixture, output } = openLetter( { write } );
 		try {
 			const { width, height } = fixture.state;
 			const left = Math.floor( (width - POPUP[0]) / 2 ), top = Math.floor( (height - POPUP[1]) / 2 );
@@ -113,67 +112,61 @@ for ( const write of [ false, true ] ) {
 	});
 }
 
-for ( const fit of [ true, false ] ) {
-	test(`the letter popups' and page's long captions ${fit ? "fit their plates" : "stay native with the row off"}`, () => {
-		for (
-			const { write, id, full } of [
-				{ write: false, id: "letter-read-delete", full: "Delete message" },
-				{ write: false, id: "letter-delete", full: "Delete message" },
-				{ write: true, id: "letter-write-send", full: "Send message" }
-			]
-		) {
-			const { fixture, output } = openLetter( { fit, write } );
-			try {
-				const button = defined( output.controls.find( c => c.id === id ) );
-				// Both ways the caption is whole: the fit shrinks or wraps it
-				// inside the plate (#3675) rather than dropping its last word.
-				assert.equal( button.label, full );
-				const ink = glyphsBeside( fixture, button.rect );
-				assert.ok( ink.length > 0, id );
-				const inside = ink.every( q =>
-					q.rect[0] >= button.rect[0] && q.rect[0] + q.rect[2] <= button.rect[0] + button.rect[2]
-				);
-				assert.equal( inside, fit, `${id}: caption inside its plate` );
-			} finally {
-				fixture.dispose();
-			}
-		}
-	});
-
-	test(`Stall Network's right-aligned 'Large category' label ${fit ? "wraps inside the window" : "overflows left natively"}`, () => {
-		const fixture = uiFixture();
+test("the letter popups' and page's long captions fit their plates", () => {
+	for (
+		const { write, id, full } of [
+			{ write: false, id: "letter-read-delete", full: "Delete message" },
+			{ write: false, id: "letter-delete", full: "Delete message" },
+			{ write: true, id: "letter-write-send", full: "Send message" }
+		]
+	) {
+		const { fixture, output } = openLetter( { write } );
 		try {
-			let time = 0, published;
-			const draw = () => {
-				for ( let i = 0; i < 4; i++ ) published = fixture.ui.step( fixture.state, ++time * 100 ) ?? published;
-				assert.equal( fixture.ui.stats().error, null );
-				return defined( published );
-			};
-			fixture.ui.event(
-				/** @type {any} */ ({ kind: "experimental-preferences", value: { fitWindowLabels: fit } })
+			const button = defined( output.controls.find( c => c.id === id ) );
+			// The caption is whole: the fit shrinks or wraps it inside the
+			// plate (#3675) rather than dropping its last word.
+			assert.equal( button.label, full );
+			const ink = glyphsBeside( fixture, button.rect );
+			assert.ok( ink.length > 0, id );
+			const inside = ink.every( q =>
+				q.rect[0] >= button.rect[0] && q.rect[0] + q.rect[2] <= button.rect[0] + button.rect[2]
 			);
-			fixture.state.gameplay.stall = /** @type {any} */ ({
-				network: { open: true, rows: [], page: 0, pages: 1 }
-			});
-			const output = draw();
-			const combo = defined( output.controls.find( c => c.id === "stall-net-combo:41" ) );
-			// ifstallnetwork.txt: combo id 41 is at [82, 74, 150, 24]; id 44 is at [31, 79, 43, 15].
-			const px = combo.rect[0] - 82, py = combo.rect[1] - 74;
-			const scene = defined( fixture.scenes.at( -1 ) );
-			const glyphs = scene.quads.filter( q =>
-				q.texture === fontAtlas.image &&
-				q.rect[0] >= px - 20 && q.rect[0] <= px + 80 &&
-				q.rect[1] >= py + 65 && q.rect[1] <= py + 105
-			);
-			assert.ok( glyphs.length > 0, "GDR_STALL_SEARCH_LEV_1_STA glyphs" );
-			const minX = Math.min( ...glyphs.map( q => q.rect[0] ) );
-			if ( fit ) assert.ok( minX >= px + 6, `wrapped inside window border: minX ${minX} >= ${px + 6}` );
-			else assert.ok( minX < px, `native single-line overflow left of window: minX ${minX} < ${px}` );
+			assert.ok( inside, `${id}: caption inside its plate` );
 		} finally {
 			fixture.dispose();
 		}
-	});
-}
+	}
+});
+
+test("Stall Network's right-aligned 'Large category' label wraps inside the window", () => {
+	const fixture = uiFixture();
+	try {
+		let time = 0, published;
+		const draw = () => {
+			for ( let i = 0; i < 4; i++ ) published = fixture.ui.step( fixture.state, ++time * 100 ) ?? published;
+			assert.equal( fixture.ui.stats().error, null );
+			return defined( published );
+		};
+		fixture.state.gameplay.stall = /** @type {any} */ ({
+			network: { open: true, rows: [], page: 0, pages: 1 }
+		});
+		const output = draw();
+		const combo = defined( output.controls.find( c => c.id === "stall-net-combo:41" ) );
+		// ifstallnetwork.txt: combo id 41 is at [82, 74, 150, 24]; id 44 is at [31, 79, 43, 15].
+		const px = combo.rect[0] - 82, py = combo.rect[1] - 74;
+		const scene = defined( fixture.scenes.at( -1 ) );
+		const glyphs = scene.quads.filter( q =>
+			q.texture === fontAtlas.image &&
+			q.rect[0] >= px - 20 && q.rect[0] <= px + 80 &&
+			q.rect[1] >= py + 65 && q.rect[1] <= py + 105
+		);
+		assert.ok( glyphs.length > 0, "GDR_STALL_SEARCH_LEV_1_STA glyphs" );
+		const minX = Math.min( ...glyphs.map( q => q.rect[0] ) );
+		assert.ok( minX >= px + 6, `wrapped inside window border: minX ${minX} >= ${px + 6}` );
+	} finally {
+		fixture.dispose();
+	}
+});
 
 /*
 ================
@@ -210,62 +203,53 @@ function bandText( scene, px, py, x0, x1, y0, y1 ) {
 	);
 }
 
-for ( const fit of [ true, false ] ) {
-	test(`Stall Network's filter and gold labels ${fit ? "read in full" : "stay native with the row off"}`, () => {
-		const fixture = uiFixture();
-		try {
-			let time = 0, published;
-			const draw = () => {
-				for ( let i = 0; i < 4; i++ ) published = fixture.ui.step( fixture.state, ++time * 100 ) ?? published;
-				assert.equal( fixture.ui.stats().error, null );
-				return defined( published );
-			};
-			fixture.ui.event(
-				/** @type {any} */ ({ kind: "experimental-preferences", value: { fitWindowLabels: fit } })
-			);
-			fixture.state.gameplay.stall = /** @type {any} */ ({
-				network: { open: true, rows: [], page: 0, pages: 1 }
-			});
-			const output = draw();
-			const combo = defined( output.controls.find( c => c.id === "stall-net-combo:41" ) );
-			// ifstallnetwork.txt: combo id 41 is at [82, 74, 150, 24]; the labels
-			// 44/45/46 sit left of the three combos, 53 left of the gold value.
-			const px = combo.rect[0] - 82, py = combo.rect[1] - 74;
-			const scene = defined( fixture.scenes.at( -1 ) );
-			const bands = [
-				[ -10, 80, 60, 110, "Largecategory" ],
-				[ 195, 260, 60, 110, "Mediumcategory" ],
-				[ 355, 425, 60, 110, "Smallcategory" ],
-				[ -40, 80, 560, 660, "Amountofgold" ]
-			];
-			for ( const [x0, x1, y0, y1, full] of bands ) {
-				const read = bandText(
-					scene,
-					px,
-					py,
-					/** @type {number} */ (x0),
-					/** @type {number} */ (x1),
-					/** @type {number} */ (y0),
-					/** @type {number} */ (y1)
-				).join( "" );
-				if ( fit ) assert.equal( read, full, `${full} reads in full` );
-				else if ( full === "Mediumcategory" || full === "Smallcategory" ) {
-					assert.notEqual( read, full, `${full} keeps its native ellipsis with the row off` );
-				} else assert.equal( read, full, `${full} natively overflows in full with the row off` );
-			}
-			const gold = scene.quads.filter( q =>
-				q.texture === fontAtlas.image && q.rect[1] >= py + 560 && q.rect[1] < py + 660 &&
-				q.rect[0] >= px - 10 && q.rect[0] < px + 80
-			);
-			assert.ok( gold.length > 0, "the gold label is drawn" );
-			const goldMinX = Math.min( ...gold.map( q => q.rect[0] ) );
-			if ( fit ) assert.ok( goldMinX >= px + 6, "the gold label stays inside the window border" );
-			else assert.ok( goldMinX < px, "the gold label natively runs past the window's left edge" );
-		} finally {
-			fixture.dispose();
+test("Stall Network's filter and gold labels read in full", () => {
+	const fixture = uiFixture();
+	try {
+		let time = 0, published;
+		const draw = () => {
+			for ( let i = 0; i < 4; i++ ) published = fixture.ui.step( fixture.state, ++time * 100 ) ?? published;
+			assert.equal( fixture.ui.stats().error, null );
+			return defined( published );
+		};
+		fixture.state.gameplay.stall = /** @type {any} */ ({
+			network: { open: true, rows: [], page: 0, pages: 1 }
+		});
+		const output = draw();
+		const combo = defined( output.controls.find( c => c.id === "stall-net-combo:41" ) );
+		// ifstallnetwork.txt: combo id 41 is at [82, 74, 150, 24]; the labels
+		// 44/45/46 sit left of the three combos, 53 left of the gold value.
+		const px = combo.rect[0] - 82, py = combo.rect[1] - 74;
+		const scene = defined( fixture.scenes.at( -1 ) );
+		const bands = [
+			[ -10, 80, 60, 110, "Largecategory" ],
+			[ 195, 260, 60, 110, "Mediumcategory" ],
+			[ 355, 425, 60, 110, "Smallcategory" ],
+			[ -40, 80, 560, 660, "Amountofgold" ]
+		];
+		for ( const [x0, x1, y0, y1, full] of bands ) {
+			const read = bandText(
+				scene,
+				px,
+				py,
+				/** @type {number} */ (x0),
+				/** @type {number} */ (x1),
+				/** @type {number} */ (y0),
+				/** @type {number} */ (y1)
+			).join( "" );
+			assert.equal( read, full, `${full} reads in full` );
 		}
-	});
-}
+		const gold = scene.quads.filter( q =>
+			q.texture === fontAtlas.image && q.rect[1] >= py + 560 && q.rect[1] < py + 660 &&
+			q.rect[0] >= px - 10 && q.rect[0] < px + 80
+		);
+		assert.ok( gold.length > 0, "the gold label is drawn" );
+		const goldMinX = Math.min( ...gold.map( q => q.rect[0] ) );
+		assert.ok( goldMinX >= px + 6, "the gold label stays inside the window border" );
+	} finally {
+		fixture.dispose();
+	}
+});
 
 test("captionWords keeps the leading words that fit", () => {
 	const measure = value => value.length * 7;
@@ -290,30 +274,18 @@ test("every Experimental description fits its line", () => {
 	}
 });
 
-test("a tooltip stays inside a narrow screen with Fit window labels", () => {
+test("a tooltip stays inside a narrow screen", () => {
 	const measure = value => value.length * 7;
 	const rows = [ { value: "A long item name that fills the bubble", color: 0xffffffff } ];
 	// A phone portrait: the anchor near the left, too far right for the right side.
-	const phone = tooltipBubble( rows, [ 100, 300, 260, 32 ], [ 0, 0, 390, 844 ], measure, true );
+	const phone = tooltipBubble( rows, [ 100, 300, 260, 32 ], [ 0, 0, 390, 844 ], measure );
 	const fill = phone.quads[0].rect;
 	assert.ok( fill[0] - 8 >= 0, `left border at ${fill[0] - 8}` );
 	assert.ok( fill[0] + fill[2] + 8 <= 390, `right border at ${fill[0] + fill[2] + 8}` );
 	assert.ok( phone.lines.every( line => line.rect[0] === fill[0] ), "the text moves with the bubble" );
 	// Where a native side fits, the bubble keeps 6791C0's placement.
-	for ( const fit of [ true, false ] ) {
-		const right = tooltipBubble( rows, [ 100, 300, 32, 32 ], [ 0, 0, 1200, 900 ], measure, fit );
-		assert.equal( right.quads[0].rect[0], 140 );
-		const left = tooltipBubble( rows, [ 1100, 300, 32, 32 ], [ 0, 0, 1200, 900 ], measure, fit );
-		assert.equal( left.quads[0].rect[0], 1100 - left.quads[0].rect[2] - 8 );
-	}
-});
-
-test("without Fit window labels a tooltip keeps 6791C0's placement exactly", () => {
-	const measure = value => value.length * 7;
-	const rows = [ { value: "A long item name that fills the bubble", color: 0xffffffff } ];
-	const phone = tooltipBubble( rows, [ 100, 300, 260, 32 ], [ 0, 0, 390, 844 ], measure );
-	const width = phone.quads[0].rect[2];
-	// The right side does not fit (100 + 260 + width + 20 > 390): left side -8.
-	assert.equal( phone.quads[0].rect[0], 100 - width - 8 );
-	assert.ok( phone.quads[0].rect[0] < 0, "natively the bubble leaves a narrow screen" );
+	const right = tooltipBubble( rows, [ 100, 300, 32, 32 ], [ 0, 0, 1200, 900 ], measure );
+	assert.equal( right.quads[0].rect[0], 140 );
+	const left = tooltipBubble( rows, [ 1100, 300, 32, 32 ], [ 0, 0, 1200, 900 ], measure );
+	assert.equal( left.quads[0].rect[0], 1100 - left.quads[0].rect[2] - 8 );
 });

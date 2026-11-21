@@ -1472,9 +1472,6 @@ fails; retry persistence without restoring stale slot occupancy.
 	// The Experimental "Homing projectiles" row: off by default so projectiles
 	// fly to their launch-captured endpoint as natively.
 	let homingProjectiles = false;
-	// The Experimental "Keep pet gold pickup when full" row: on unless turned
-	// off (experimentalGameplay); off is the native 0x0077DD61 disable.
-	let smartPetPickup = true;
 	// The Experimental pickup-pet item filter's kind mask (#841,
 	// experimentalGameplay); undefined while the row is off, which leaves
 	// the native pickup loop untouched.
@@ -1998,8 +1995,6 @@ The Experimental window's gameplay rows (experimentalGameplay).
 			christmasCarols = value.christmasCarols === true;
 			highlightEventNotices = value.highlightEventNotices !== false;
 			homingProjectiles = value.homingProjectiles === true;
-			smartPetPickup = value.smartPetPickup !== false;
-			if ( !smartPetPickup ) cosPickup.spaceChanged();
 			petPickupKinds = value.petPickupKinds;
 			sroMacroEnabled = value.sroMacro === true;
 		},
@@ -5399,12 +5394,10 @@ Packet handling must not depend on which HUD panel is currently open.
 						gid: v.getUint32( at, true ),
 						itemGid: p[1] === 8 ? v.getUint32( at + 4, true ) : undefined
 					};
-					if ( cosPickup.result( cosResult, now, smartPetPickup ) ) {
-						const record = cosRecords.get( cosResult.gid );
-						if ( record && !record.dead && record.hp && record.commandMode !== undefined ) {
-							sendWhenLive( cosBehaviorRequest( record, record.commandMode & ~0x80 ), true );
-						}
-					}
+					// Port-only, not native (owner 2026-11-21: the default, no row):
+					// a full bag pauses the refused pickup instead of the native
+					// 0x0077DD61 disable request (cos-pickup.ts result).
+					cosPickup.result( cosResult, now );
 					// 74FD56..74FE15: selector 2 failures dispatch category 4
 					// (74FDEB) and clear the assist target (+0xAB2C, 74FE0B);
 					// pickup (74FDCC) and every other selector (74FD6C) dispatch
@@ -6231,7 +6224,6 @@ before take assembles the presentation snapshot.
 					records: cosRecords.values(),
 					sharedOwners,
 					read: readEntity,
-					smartPetPickup,
 					pickupKinds: petPickupKinds
 				} )
 			) {

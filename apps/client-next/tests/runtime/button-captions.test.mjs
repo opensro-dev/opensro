@@ -6,10 +6,9 @@ button-captions.test.mjs - button captions stay inside their plates
 The party and academy windows' "Dismiss" ran past both sides of its
 44-pixel plate, the blocking window's "Block Registration" wrapped out of
 its 24-pixel plate, and the Item Mall's "Buy Item Worn" and "Bundle goods"
-wrapped out of theirs (#3675). Under the Experimental "Fit window labels"
-(on by default) each caption is drawn whole inside its plate, in the
-ui-small face or on two lines; with the row off every caption is drawn as
-the original draws it.
+wrapped out of theirs (#3675). Port-only, not native (owner 2026-11-21:
+the default, no row): each caption is drawn whole inside its plate, in
+the ui-small face or on two lines.
 
 The windows are the production ones, opened by the scene scripts the
 golden suite plays, so this suite also needs the generated asset tree.
@@ -41,11 +40,11 @@ const CASES = [
 ================
 openScene
 
-Play one scene script against a fresh HUD with Fit window labels set to
-fit, and return the last scene, its controls and the font atlas.
+Play one scene script against a fresh HUD and return the last scene, its
+controls and the font atlas.
 ================
 */
-async function openScene( name, fit ) {
+async function openScene( name ) {
 	// The captions below are the native windows' (the classic Item Mall too).
 	const { classicUiFixture, fontAtlas } = await import( "../helpers/ui-fixture.mjs" );
 	const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
@@ -62,7 +61,6 @@ async function openScene( name, fit ) {
 		ctx.scene = fx.scenes.at( -1 );
 	};
 	try {
-		fx.ui.event( /** @type {any} */ ({ kind: "experimental-preferences", value: { fitWindowLabels: fit } }) );
 		settle();
 		for ( const beat of script.beats ) {
 			beat.run( ctx );
@@ -100,11 +98,11 @@ function captionInk( glyphs, rect ) {
 	};
 }
 
-test( "with Fit window labels every reported caption is whole and inside its plate", {
+test( "every reported caption is whole and inside its plate", {
 	skip: ASSETS_HERE ? false : "needs the generated asset tree"
 }, async () => {
 	for ( const scene of new Set( CASES.map( c => c.scene ) ) ) {
-		const { glyphs, controls } = await openScene( scene, true );
+		const { glyphs, controls } = await openScene( scene );
 		for ( const { id, caption } of CASES.filter( c => c.scene === scene ) ) {
 			const control = controls.find( c => c.id === id );
 			assert.ok( control, `${scene}: ${id} is drawn` );
@@ -119,21 +117,5 @@ test( "with Fit window labels every reported caption is whole and inside its pla
 			assert.ok( ink.left >= x && ink.right <= x + w, `${id}: ink ${ink.left}..${ink.right} in ${x}..${x + w}` );
 			assert.ok( ink.top >= y && ink.bottom <= y + h, `${id}: ink ${ink.top}..${ink.bottom} in ${y}..${y + h}` );
 		}
-	}
-} );
-
-test( "without Fit window labels the party and blocking captions are the original's", {
-	skip: ASSETS_HERE ? false : "needs the generated asset tree"
-}, async () => {
-	// The original draws "Dismiss" whole in its own face past both sides
-	// of its plate, and wraps "Block Registration" out of its plate's
-	// bottom only through the port's label wrap, which is off too: one
-	// line, wider than the plate.
-	for ( const { scene, id } of CASES.filter( c => c.scene !== "item-mall" && c.id !== "blocking-remove" ) ) {
-		const { glyphs, controls } = await openScene( scene, false );
-		const control = controls.find( c => c.id === id );
-		assert.ok( control, `${scene}: ${id} is drawn` );
-		const [x, , w] = control.rect, ink = captionInk( glyphs, control.rect );
-		assert.ok( ink.left < x || ink.right > x + w, `${id}: the original overflows (${ink.left}..${ink.right})` );
 	}
 } );

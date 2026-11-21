@@ -418,7 +418,7 @@ Borrow only the mall mannequin operations this publication phase consumes.
 interface PortraitBindings {
 	readonly renderer: Pick<
 		Renderer,
-		"setCharacterAssembly" | "setCharacterActors" | "vHidesCompanions" | "enchantSparks" | "silentWingFlight"
+		"setCharacterAssembly" | "setCharacterActors" | "vHidesCompanions" | "enchantSparks"
 	>;
 	readonly resources: PortraitResources;
 	readonly portraitEmission: Pick<ReturnType<typeof createModelEmission>, "step">;

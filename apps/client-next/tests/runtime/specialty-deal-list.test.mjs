@@ -5,9 +5,9 @@ specialty-deal-list.test.mjs - the trade window's scale list stays visible
 
 The open Trade scale list is a popup: it is published after the window's
 Confirm button, so nothing draws over it (a player saw Confirm cover rows 2
-and 3). With the port-only Experimental "Fit window labels" on, a list that
-would leave the window opens upward from its box; off, it opens downward as
-the original.
+and 3). Port-only, not native (owner 2026-11-21: the default, no row): a
+list that would leave the window opens upward from its box; the original
+opens it downward.
 
 ===========================================================================
 */
@@ -29,7 +29,7 @@ The deal box for one trade good with its scale list open; the published
 controls.
 ================
 */
-function openScaleList( fit ) {
+function openScaleList() {
 	const f = uiFixture();
 	let now = 0;
 	/** @type {any} */
@@ -37,7 +37,6 @@ function openScaleList( fit ) {
 	const step = () => {
 		for ( let i = 0; i < 16; i++ ) seen = f.ui.step( f.state, now += 100 ) ?? seen;
 	};
-	f.ui.event( /** @type {any} */ ({ kind: "experimental-preferences", value: { fitWindowLabels: fit } }) );
 	f.state.entities.push( { ...f.state.entities[0], gid: TRADER, refObjId: 2011, kind: "npc", name: "Trader" } );
 	f.state.gameplay.cosRecords = [
 		{ gid: TRANSPORT, refObjId: 100, band: 4, hp: 100, mp: 0, status: 0, dead: false, inventory: [] }
@@ -73,19 +72,16 @@ function openScaleList( fit ) {
 }
 
 test("the open scale list is published after Confirm, so nothing covers it", () => {
-	for ( const fit of [ true, false ] ) {
-		const ids = openScaleList( fit ).map( control => control.id );
-		const ok = ids.indexOf( "specialty-deal-ok" ), first = ids.indexOf( "specialty-deal-row:0" );
-		assert.ok( ok >= 0 && first > ok, `fit=${fit}: rows ${first} after Confirm ${ok}` );
-	}
+	const ids = openScaleList().map( control => control.id );
+	const ok = ids.indexOf( "specialty-deal-ok" ), first = ids.indexOf( "specialty-deal-row:0" );
+	assert.ok( ok >= 0 && first > ok, `rows ${first} after Confirm ${ok}` );
 });
 
-test("Fit window labels opens a list that would leave the window upward; off, downward", () => {
+test("a list that would leave the window opens upward", () => {
 	const at = controls => ({
 		box: controls.find( control => control.id === "specialty-deal-scale" ).rect,
 		row: controls.find( control => control.id === "specialty-deal-row:0" ).rect
 	});
-	const on = at( openScaleList( true ) ), off = at( openScaleList( false ) );
-	assert.ok( off.row[1] >= off.box[1] + off.box[3], "off: the list starts below its box" );
-	assert.ok( on.row[1] < on.box[1], "on: the list sits above its box" );
+	const on = at( openScaleList() );
+	assert.ok( on.row[1] < on.box[1], "the list sits above its box" );
 });

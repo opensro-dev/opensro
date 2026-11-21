@@ -49,11 +49,11 @@ test("companion auto-potion defaults on; a saved record without the key keeps it
 		assert.equal( experimentalOptions( value ).transportAutoPotion, true, JSON.stringify( value ) );
 	}
 	assert.equal( experimentalOptions( { transportAutoPotion: false } ).transportAutoPotion, false );
-	const saved = experimentalOptions( { chatTimestamps: true, skyDetail: true, confirmGuildBan: false } );
+	const saved = experimentalOptions( { chatTimestamps: true, skyDetail: true, shortNotices: false } );
 	assert.equal( saved.transportAutoPotion, true );
 	assert.equal( saved.chatTimestamps, true );
 	assert.equal( saved.skyDetail, true );
-	assert.equal( saved.confirmGuildBan, false );
+	assert.equal( saved.shortNotices, false );
 });
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -89,12 +89,7 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		smoothCamera: true,
 		// Enchant sparks are on by default (owner 2026-10-17).
 		enchantSparks: true,
-		// The shared actor room is on by default (owner 2026-10-14).
-		sharedActorRoom: true,
-		vHidesCompanions: false,
-		dungeonCharacterPvs: true,
-		// Silent wing flight is on by default (owner 2026-11-15, #3547).
-		silentWingFlight: true
+		vHidesCompanions: false
 	} );
 	for (
 		const key of [
@@ -347,7 +342,6 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		breakNotices: true,
 		highlightEventNotices: true,
 		homingProjectiles: false,
-		smartPetPickup: true,
 		sunDropMarker: false,
 		warpArrivalSound: false,
 		christmasCarols: true,
@@ -367,7 +361,6 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		breakNotices: true,
 		highlightEventNotices: true,
 		homingProjectiles: false,
-		smartPetPickup: true,
 		sunDropMarker: false,
 		warpArrivalSound: false,
 		christmasCarols: true,
@@ -487,24 +480,6 @@ test("a profile saved before the flip loads with WebTransport on; a choice under
 	assert.equal( both.options.chatTimestamps, true );
 });
 
-test("the shared actor room is on unless explicitly false, and reaches the renderer's video options", () => {
-	for ( const value of [ undefined, null, {}, { sharedActorRoom: 1 }, { sharedActorRoom: "false" } ] ) {
-		assert.equal( experimentalOptions( value ).sharedActorRoom, true );
-	}
-	const off = experimentalOptions( { sharedActorRoom: false } );
-	assert.equal( off.sharedActorRoom, false );
-	assert.equal( experimentalVideo( off ).sharedActorRoom, false );
-	assert.equal( experimentalVideo( experimentalOptions( {} ) ).sharedActorRoom, true );
-});
-
-test("grey disabled tabs is on unless explicitly false and stays out of the renderer's video options", () => {
-	for ( const value of [ undefined, null, {}, { greyDisabledTabs: 1 }, { greyDisabledTabs: "false" } ] ) {
-		assert.equal( experimentalOptions( value ).greyDisabledTabs, true );
-	}
-	assert.equal( experimentalOptions( { greyDisabledTabs: false } ).greyDisabledTabs, false );
-	assert.equal( "greyDisabledTabs" in experimentalVideo( experimentalOptions( {} ) ), false );
-});
-
 test("job kill notices are on unless explicitly false and reach the worker's gameplay slice", () => {
 	for ( const value of [ undefined, null, {}, { jobKillNotices: 1 }, { jobKillNotices: "false" } ] ) {
 		assert.equal( experimentalOptions( value ).jobKillNotices, true );
@@ -556,24 +531,6 @@ test("V hides pets and transports only when explicitly on, and reaches the rende
 	assert.equal( on.vHidesCompanions, true );
 	assert.equal( experimentalVideo( on ).vHidesCompanions, true );
 	assert.ok( EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "vHidesCompanions" ) ) );
-});
-
-test("fit window labels is on unless explicitly false and stays out of the worker's slices", () => {
-	for ( const value of [ undefined, null, {}, { fitWindowLabels: 1 }, { fitWindowLabels: "false" } ] ) {
-		assert.equal( experimentalOptions( value ).fitWindowLabels, true );
-	}
-	assert.equal( experimentalOptions( { fitWindowLabels: false } ).fitWindowLabels, false );
-	assert.equal( "fitWindowLabels" in experimentalVideo( experimentalOptions( {} ) ), false );
-	assert.equal( "fitWindowLabels" in experimentalGameplay( experimentalOptions( {} ) ), false );
-});
-
-test("drop on bag tabs is on unless explicitly false and stays out of the worker's slices", () => {
-	for ( const value of [ undefined, null, {}, { dropOnBagTab: 1 }, { dropOnBagTab: "false" } ] ) {
-		assert.equal( experimentalOptions( value ).dropOnBagTab, true );
-	}
-	assert.equal( experimentalOptions( { dropOnBagTab: false } ).dropOnBagTab, false );
-	assert.equal( "dropOnBagTab" in experimentalVideo( experimentalOptions( {} ) ), false );
-	assert.equal( "dropOnBagTab" in experimentalGameplay( experimentalOptions( {} ) ), false );
 });
 
 test("exchange click shortcuts are on unless explicitly false and stay out of the worker's slices", () => {
@@ -636,19 +593,6 @@ test("pet panel click-to-open defaults on (BUG-086) and stays out of the worker'
 	);
 });
 
-test("smart pet pickup defaults on unless explicitly false and reaches the worker's gameplay slice", () => {
-	for ( const value of [ undefined, null, {}, { smartPetPickup: 1 }, { smartPetPickup: "false" } ] ) {
-		const options = experimentalOptions( value );
-		assert.equal( options.smartPetPickup, true );
-		assert.equal( experimentalGameplay( options ).smartPetPickup, true );
-		assert.equal( "smartPetPickup" in experimentalVideo( options ), false );
-	}
-	const off = experimentalOptions( { smartPetPickup: false } );
-	assert.equal( off.smartPetPickup, false );
-	assert.equal( experimentalGameplay( off ).smartPetPickup, false );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "smartPetPickup" ) ) );
-});
-
 test("the expanded world map has no option and no row; the server's switch owns it", () => {
 	for ( const value of [ undefined, {}, { expandedWorldMap: true } ] ) {
 		assert.equal( "expandedWorldMap" in experimentalOptions( value ), false );
@@ -670,19 +614,6 @@ test("interpolated own movement has no option, no row, and no video slice (#1564
 		!EXPERIMENTAL_TABS.some( tab =>
 			experimentalRows( tab ).some( row => String( row.key ) === "interpolatedOwnWalk" )
 		)
-	);
-});
-
-test("main-thread own movement defaults on, turns off only on an explicit false, and stays out of the worker's and renderer's slices", () => {
-	for ( const value of [ undefined, null, {}, { mainThreadOwnWalk: 1 }, { mainThreadOwnWalk: "false" } ] ) {
-		const options = experimentalOptions( value );
-		assert.equal( options.mainThreadOwnWalk, true );
-		assert.equal( "mainThreadOwnWalk" in experimentalGameplay( options ), false );
-		assert.equal( "mainThreadOwnWalk" in experimentalVideo( options ), false );
-	}
-	assert.equal( experimentalOptions( { mainThreadOwnWalk: false } ).mainThreadOwnWalk, false );
-	assert.ok(
-		EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "mainThreadOwnWalk" ) )
 	);
 });
 
