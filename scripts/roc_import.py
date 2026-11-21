@@ -104,6 +104,9 @@ FLAG = "SRO_ROC"
 MARKER = ".opensro-roc.json"
 CHARACTER_SHARD = "characterdata_260000.txt"
 SKILL_SHARD = "skilldata_260000.txt"
+# Skills the summit event casts: the hour-mark enrage (MSKILL_RM_ROC_ATTACK10,
+# a stacking mom buff on the Roc itself).
+ROC_EVENT_SKILLS = ("MSKILL_RM_ROC_ATTACK10",)
 TEXT_ROOT = later_world_import.TEXT_ROOT
 # The Roc range's gates, by teleportdata code (step 1b).
 GATE_CODES = ("GATE_RC_MOUNTAIN_GATE", "GATE_RC_TAHOMET_GATE", "GATE_RC_ROC_GATE", "GATE_RC_ROC_FRONT_GATE")
@@ -528,8 +531,10 @@ def stage(vsro_root, native, output):
 		gates = add_gates(read, text_root)
 		native_codes = {row[2] for row in cap110.tree_characters(text_root, CHARACTER_SHARD) if len(row) > 2}
 		refs = select_kinds(later_world_import.later_characters(read))
+		# The Roc's hour-mark enrage is cast by the summit's event, not
+		# named in any kind's skill columns (#4054).
 		staged = later_world_import.stage_kinds("Roc", read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
-			lambda code: code in refs)
+			lambda code: code in refs, extra_skills=ROC_EVENT_SKILLS)
 		quests = add_quests(read, text_root, prior)
 		contents = add_contents(read, text_root, prior)
 		ui_texts = add_ui_texts(read, native, text_root, prior)

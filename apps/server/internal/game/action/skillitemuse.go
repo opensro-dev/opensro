@@ -41,14 +41,11 @@ uses the owner timed-job path, not a combat cast or a name-specific effect.
 ================
 */
 func (rt *Runtime) useSkillItem(character *enterworld.Character, use skillItemUse, result *OpResult) bool {
-	source, ok := rt.deps.SkillData().(interface {
-		SkillByCodename(string) (enterworld.SkillRow, bool)
-	})
-	if !ok || use.ref.AssociatedSkillCodename == "" {
+	if use.ref.AssociatedSkillCodename == "" {
 		result.DiagnosticRefusal = "item-use: missing skill reference prerequisite " + use.ref.Codename
 		return false
 	}
-	skill, found := source.SkillByCodename(use.ref.AssociatedSkillCodename)
+	skill, found := rt.skillByCodename(use.ref.AssociatedSkillCodename)
 	if found && skill.CastGate.QuestTrap.Present {
 		return rt.useQuestTrap(character, use, skill, result)
 	}

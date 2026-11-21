@@ -46,8 +46,10 @@ Inferences, as no binary shows them:
   so their low bytes carry them here. The v1.150 client
   would show category 0x11 for those kinds; ours decodes them
   (unique-notices.ts).
-- The Roc's timed skills (MSKILL_RM_ROC_ATTACK10 an hour after it
-  appears, the spirits' five-minute respawn) are not ported yet.
+- The spirits' five-minute respawn is not ported yet.
+- The hour-mark enrage's cast and buff go to the summit layer's
+  residents: the reference server shows them to the Roc's observers,
+  and on its fixed perch the layer holds them.
 - A missing kind or gate row (the variant build did not stage the Roc)
   spawns nothing; the window still opens and closes the worlds.
 
@@ -62,6 +64,11 @@ Countdowns, both tied to the living Roc (its handlers die with it):
 	          "leaves in 30, 15, 10, 5, 3, 1 minutes" from 3:00:01 after
 	          it appeared; at 3:30 a seventh sends every resident to
 	          GATE_RC_MOUNTAIN_GATE's spawn
+	enrage    the Roc's one-shot hour timer (v1.188) casts
+	          MSKILL_RM_ROC_ATTACK10 on itself, untargeted: a persistent
+	          mom buff that adds ten to its damage rates, defences,
+	          evasion and hit rate when it lands and ten more every ten
+	          minutes until it dies (enterworld, combat)
 
 The Roc tells the whole division when it appears and when it falls
 (0x3058 kinds 5 and 6, the v1.150 form of the reference server's
@@ -102,7 +109,10 @@ const (
 	rocTopWorld   = instance.DefinitionID(40) // INS_ROC_TOP
 	rocFrontWorld = instance.DefinitionID(41) // INS_ROC_FRONT
 
-	rocCodename        = "MOB_RM_ROC"
+	rocCodename = "MOB_RM_ROC"
+	// The Roc's hour-mark enrage and when it begins after the Roc appears.
+	rocEnrageSkill     = "MSKILL_RM_ROC_ATTACK10"
+	rocEnrageAfterMs   = 3_600_000
 	rocTahometCodename = "MOB_RM_TAHOMET_ROC"
 
 	// The gates whose spawns the Roc worlds send people to.
@@ -236,6 +246,12 @@ type rocSummit struct {
 	berserkMs   int64
 	departures  int
 	departed    bool
+	// The enrage: when it begins, the cast in flight once begun, and
+	// done once it landed or could not.
+	enrageMs  int64
+	enrage    monsterEventCast
+	enraging  bool
+	enrageEnd bool
 }
 
 /*
@@ -270,6 +286,10 @@ type rocRuntime struct {
 
 	spawn func(request simulation.QuestMonsterSpawn) (uint32, bool)
 	alive func(division string, gid uint32) bool
+	// The enrage's cast: begun on the Roc, then landed after its
+	// casting time (monsterselfeffect.go).
+	beginCast func(gid uint32, codename string, nowMs int64) (monsterEventCast, wire.Frame, bool)
+	landCast  func(division string, cast monsterEventCast, nowMs int64) ([]wire.Frame, bool)
 }
 
 /*
@@ -292,13 +312,15 @@ func (rt *Runtime) ConfigureRoc(enabled bool) {
 		return
 	}
 	rt.roc = &rocRuntime{
-		loc:    time.Local,
-		top:    map[string]*rocSummit{},
-		front:  map[string]*rocFront{},
-		opened: map[string]int64{},
-		fell:   map[uint32]simulation.Spawn{},
-		spawn:  rt.Monsters.SpawnQuestMonsterGID,
-		alive:  rt.Monsters.QuestMonsterAlive,
+		loc:       time.Local,
+		top:       map[string]*rocSummit{},
+		front:     map[string]*rocFront{},
+		opened:    map[string]int64{},
+		fell:      map[uint32]simulation.Spawn{},
+		spawn:     rt.Monsters.SpawnQuestMonsterGID,
+		alive:     rt.Monsters.QuestMonsterAlive,
+		beginCast: rt.beginMonsterStackingCast,
+		landCast:  rt.landMonsterStackingCast,
 	}
 }
 
@@ -535,6 +557,7 @@ func (rt *Runtime) advanceRocTop(division string, top *rocSummit, in bool, nowMs
 		// count 30 minutes on; the port arms it with the spawn.
 		top.step, top.rocMs = rocStepFight, nowMs
 		top.berserkStep, top.berserkMs = 1, nowMs+rocBerserkSteps[0].waitMs
+		top.enrageMs = nowMs + rocEnrageAfterMs
 	case rocStepFight:
 		if top.roc == 0 {
 			return notices
@@ -569,6 +592,7 @@ division lock.
 ================
 */
 func (rt *Runtime) advanceRocCountdowns(division string, top *rocSummit, nowMs int64) {
+	rt.advanceRocEnrage(division, top, nowMs)
 	if top.berserkStep < rocBerserkEnd && nowMs >= top.berserkMs {
 		wait := int64(rocBerserkAgainMs)
 		if top.berserkStep < len(rocBerserkSteps) {
@@ -599,6 +623,44 @@ func (rt *Runtime) advanceRocCountdowns(division string, top *rocSummit, nowMs i
 				rt.leaveRocLayer(division, c, exit, "roc-departure", rt.tickDoors())
 			}
 		}
+	}
+}
+
+/*
+================
+advanceRocEnrage
+
+The living Roc's hour timer: at the hour it begins its enrage cast, and
+after the cast's casting time the buff lands. A row the variant did not
+stage, or a Roc that cannot take the buff, ends the timer; as a native
+handler, it fires once. The caller holds the division lock.
+================
+*/
+func (rt *Runtime) advanceRocEnrage(division string, top *rocSummit, nowMs int64) {
+	if top.enrageEnd || nowMs < top.enrageMs {
+		return
+	}
+	if !top.enraging {
+		cast, frame, ok := rt.roc.beginCast(top.roc, rocEnrageSkill, nowMs)
+		if !ok {
+			log.Printf("roc: division %s: %s is not staged; the Roc does not enrage", division, rocEnrageSkill)
+			top.enrageEnd = true
+			return
+		}
+		top.enrage, top.enraging = cast, true
+		rt.rocLayerFrame(division, top.lease, simulation.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
+		return
+	}
+	if nowMs < top.enrage.releaseAtMs {
+		return
+	}
+	top.enrageEnd = true
+	frames, ok := rt.roc.landCast(division, top.enrage, nowMs)
+	if !ok {
+		return
+	}
+	for _, frame := range frames {
+		rt.rocLayerFrame(division, top.lease, simulation.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
 	}
 }
 

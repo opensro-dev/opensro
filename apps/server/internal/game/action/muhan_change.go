@@ -73,12 +73,6 @@ func (rt *Runtime) ConfigureMuhanTransforms(rows []monster.MuhanTransform) error
 	if rt.Monsters == nil {
 		return fmt.Errorf("muhan transforms: no monster population")
 	}
-	source, ok := rt.deps.SkillData().(interface {
-		SkillByCodename(string) (enterworld.SkillRow, bool)
-	})
-	if !ok {
-		return fmt.Errorf("muhan transforms: the skill table has no codename lookup")
-	}
 	changes := make(map[string]muhanChange, len(rows))
 	for _, row := range rows {
 		if !rt.worldNpcNamed(row.NpcCodename) {
@@ -88,7 +82,7 @@ func (rt *Runtime) ConfigureMuhanTransforms(rows []monster.MuhanTransform) error
 		if !found {
 			return fmt.Errorf("muhan transforms: form %s is not in the population", row.MonsterCodename)
 		}
-		skill, found := source.SkillByCodename(row.SkillCodename)
+		skill, found := rt.skillByCodename(row.SkillCodename)
 		if !found {
 			return fmt.Errorf("muhan transforms: skill %s is not in the skill table", row.SkillCodename)
 		}

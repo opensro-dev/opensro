@@ -124,3 +124,53 @@ func TestSelfEffectAndConsumedConditionCannotBeArchived(t *testing.T) {
 		t.Fatal("removed actor effect retained")
 	}
 }
+
+/*
+================
+TestStackingEffectStepsAndRetiresOnlyWithItsMonster
+
+An event's persistent stepped buff (the Roc's enrage): it takes a slot no
+conditional entry owns, counts one step when it lands and one more each
+full period, never expires on the clock, refuses a second copy, and
+retires when its monster dies.
+================
+*/
+func TestStackingEffectStepsAndRetiresOnlyWithItsMonster(t *testing.T) {
+	s := damageTestState()
+	m := firstDamageTestMonster(t, s, "stacking")
+	s.mu.Lock()
+	pop := s.populationForObject("stacking", m.Gid)
+	m.Nest.ConditionalSkills[0] = monster.ConditionalSkill{SkillID: 11, Data: 100}
+	pop.instances.set(m.Gid, m)
+	s.mu.Unlock()
+	const period = 600000
+	enrage := monster.SelfEffect{SkillID: 31102, Token: 70, Tag: 0x6d6f6d, First: period, Second: 10, StartedAtMs: 1000}
+	if !s.InstallMonsterStackingEffect("stacking", m.Gid, enrage, 1000) {
+		t.Fatal("install")
+	}
+	live, _ := s.Get("stacking", m.Gid)
+	if live.SelfEffects[0].Token != 0 || live.SelfEffects[1].Token != 70 || live.SelfEffects[1].Steps != 1 {
+		t.Fatalf("slot or first step: %+v", live.SelfEffects)
+	}
+	again := enrage
+	again.Token = 71
+	if s.InstallMonsterStackingEffect("stacking", m.Gid, again, 2000) {
+		t.Fatal("a second copy installed")
+	}
+	for _, tc := range []struct {
+		at    int64
+		steps uint32
+	}{{1000 + period - 1, 1}, {1000 + period, 2}, {1000 + 5*period, 6}} {
+		s.AdvanceMonsterStackingEffects(tc.at)
+		if live, _ = s.Get("stacking", m.Gid); live.SelfEffects[1].Steps != tc.steps {
+			t.Fatalf("at %d: %d steps, want %d", tc.at, live.SelfEffects[1].Steps, tc.steps)
+		}
+		if rows := s.RetireMonsterSelfEffects(tc.at); len(rows) != 0 {
+			t.Fatalf("at %d: retired on the clock %v", tc.at, rows)
+		}
+	}
+	s.ApplyDamage("stacking", m.Gid, 1000000)
+	if rows := s.RetireMonsterSelfEffects(1000 + 5*period); len(rows) != 1 || rows[0].Tokens[0] != 70 {
+		t.Fatalf("death cleanup %v", rows)
+	}
+}
