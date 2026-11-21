@@ -911,6 +911,7 @@ bootstrap
 			presentations = new WeakMap();
 			gachaRows = null;
 			alchemy.reset();
+			alchemy.quickFuse( (value as { quickFuse?: unknown; } | null)?.quickFuse === true );
 			companionRentals.reset();
 			gacha.reset();
 			exchange = emptyExchange();

@@ -138,6 +138,7 @@ var catalogueExempt = map[string]string{
 	"SRO_NASRUN":                               "an avatar socket rule at runtime; items.json publishes the Spirit rows only when the build imported them",
 	"SRO_CONNECTION_JOURNAL":                   "staff census and the status page's people counts; no catalogue file carries it",
 	"SRO_JOB_SUIT_HIDES_ARMOR":                 "how a worn suit is drawn; the catalogue publishes no rendering",
+	"SRO_QUICK_FUSE":                           "a client wait in the alchemy window; the catalogue publishes no timers",
 	"SRO_JOB_SUIT_TIERS":                       "stats a worn suit grants at runtime; items.json publishes the suits either way",
 	"SRO_JOB_DRESS_TOWN_SPAWN":                 "where a finished dress reloads the wearer at runtime; no catalogue file carries it",
 	"SRO_JOB_BLOCK_RESURRECTION_SCROLL":        "an item-use refusal while suited; no catalogue file carries it",

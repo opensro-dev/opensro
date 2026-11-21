@@ -366,6 +366,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		TradeTiers:           deps.TradeTiers,
 		Consignment:          deps.Consignment,
 		JobSuitHidesArmor:    deps.JobSuitHidesArmor,
+		QuickFuse:            deps.QuickFuse,
 		MoonlitThiefSuit:     deps.MoonlitThiefSuit,
 		Alexandria:           deps.Alexandria,
 		RaisedGoldCaps:       deps.RaisedGoldCaps,

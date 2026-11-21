@@ -139,6 +139,9 @@ type Deps struct {
 	// JobSuitHidesArmor publishes the port-only SRO_JOB_SUIT_HIDES_ARMOR
 	// rule (action/jobsuitarmor.go); false is native.
 	JobSuitHidesArmor bool
+	// QuickFuse publishes the port-only SRO_QUICK_FUSE rule
+	// (action/quickfuse.go); false is native.
+	QuickFuse bool
 	// MoonlitThiefSuit publishes the port-only SRO_MOONLIT_THIEF_SUIT rule
 	// (action/moonlitthiefsuit.go); false is native.
 	MoonlitThiefSuit bool

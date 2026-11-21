@@ -57,7 +57,22 @@ export function createAlchemy() {
 	let outcomes = 0;
 	// The reinforcement request held while the prepare effect plays.
 	let prepared: { readonly opcode: number; readonly payload: Uint8Array; } | null = null;
+	// The server's port-only SRO_QUICK_FUSE rule (quickFuse); false is native.
+	let quick = false;
 	return {
+		/*
+		================
+		quickFuse
+
+		The server's port-only rule, from the world-entry bootstrap: with it
+		a reinforcement is sent on the press instead of after the prepare
+		effect, and the window publishes quick so the UI takes the next
+		press once the answer is in, not after the result effect.
+		================
+		*/
+		quickFuse( on: boolean ) {
+			quick = on;
+		},
 		/*
 		================
 		open
@@ -170,8 +185,8 @@ export function createAlchemy() {
 					...selected
 				] );
 			// 62AFA0 holds the request until the prepare effect has played
-			// (prepare); the window stays busy from the press on.
-			prepared = { opcode, payload };
+			// (prepare); the window stays busy from the press on. Under the
+			// quick rule it goes now, and only the answer keeps it busy.
 			state = {
 				visible: true,
 				pending: true,
@@ -180,8 +195,10 @@ export function createAlchemy() {
 				error: null,
 				slot: selected[0]!,
 				designated,
-				preparing: now
+				...(quick ? {} : { preparing: now })
 			};
+			if ( quick ) return { opcode, payload };
+			prepared = { opcode, payload };
 			return null;
 		},
 		/*
@@ -262,7 +279,7 @@ export function createAlchemy() {
 		state
 		================
 		*/
-		state: () => state,
+		state: (): AlchemyState => quick ? { ...state, quick } : state,
 		/*
 		================
 		reset

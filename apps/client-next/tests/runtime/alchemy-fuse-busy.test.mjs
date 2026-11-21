@@ -104,3 +104,26 @@ test("Fuse is ignored from the press until the result effect has played", t => {
 	press();
 	assert.equal( sent.length, 2, "Fuse answers again once the result effect has played" );
 });
+
+test("under the server's quick rule Fuse answers once the result is in, during the result effect", t => {
+	const { f, sent, step, press } = fuseFixture( t );
+	f.state.gameplay.alchemy = { ...f.state.gameplay.alchemy, quick: true };
+	press();
+	assert.equal( sent.length, 1 );
+	// The worker sent at once: only the answer keeps the window busy.
+	f.state.gameplay.inventoryPending = true;
+	f.state.gameplay.alchemy = { ...f.state.gameplay.alchemy, pending: true };
+	step();
+	press();
+	assert.equal( sent.length, 1, "a press while the answer is out is still ignored" );
+	f.state.gameplay.inventoryPending = false;
+	f.state.gameplay.alchemy = {
+		...f.state.gameplay.alchemy,
+		pending: false,
+		flags: 0x10,
+		outcome: { sequence: 1, flags: 0x10, plus: 1, previousPlus: 0, durability: 1, previousDurability: 1 }
+	};
+	step();
+	press();
+	assert.equal( sent.length, 2, "the next press goes while the result effect still plays" );
+});
