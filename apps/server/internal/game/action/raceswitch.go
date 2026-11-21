@@ -31,8 +31,9 @@ races' items alike after the race segment (ITEM_CH_M_LIGHT_08_BA_A and
 ITEM_EU_M_LIGHT_08_BA_A, ITEM_CH_RING_08_B and ITEM_EU_RING_08_B) with
 the same degree and required level, so the port swaps ITEM_CH_ and
 ITEM_EU_ and requires the twin to exist with the expected TypeIDs and
-race. An item the other race does not make (a few low heavy pieces, the
-trade and PvP gear) has no twin and is refused.
+race. An item the other race does not make (in the shipped data the
+twelve ITEM_CH_M_HEAVY_07_*_C_SUPER pieces and ITEM_EU_W_HEAVY_05_HA_C_RARE,
+and the trade and PvP gear) has no twin and is refused.
 
 ===========================================================================
 */
