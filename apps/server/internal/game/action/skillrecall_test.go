@@ -32,7 +32,17 @@ skill the reset forgets (77) and one of a skill it keeps (88).
 */
 func skillRecallUseCase(t *testing.T, on bool, recalls bool) (*Runtime, *enterworld.Character) {
 	t.Helper()
-	ref := &enterworld.ItemRef{RefObjID: 51601, Codename: "ITEM_MALL_SKILL_POINT_RECALL_A", TypeIDs: [4]int64{3, 3, 13, 13},
+	return skillRecallItemCase(t, "ITEM_MALL_SKILL_POINT_RECALL_A", on, recalls)
+}
+
+/*
+================
+skillRecallItemCase
+================
+*/
+func skillRecallItemCase(t *testing.T, codename string, on bool, recalls bool) (*Runtime, *enterworld.Character) {
+	t.Helper()
+	ref := &enterworld.ItemRef{RefObjID: 51601, Codename: codename, TypeIDs: [4]int64{3, 3, 13, 13},
 		ReqQuadTypes: [4]int64{-1, -1, -1, -1},
 		NativeFields: enterworld.NewNativeFields(map[string]float64{"canUse": 1, "itemParam1_29c": 5})}
 	c := testCharacter()
@@ -46,12 +56,13 @@ func skillRecallUseCase(t *testing.T, on bool, recalls bool) (*Runtime, *enterwo
 		if !recalls {
 			return progression.SkillRecall{}, false
 		}
-		return progression.SkillRecall{Removed: []uint32{77}, Frames: []wire.Frame{
+		return progression.SkillRecall{Removed: []uint32{77}, RemovedGroups: []uint32{700}, Frames: []wire.Frame{
 			{Opcode: progression.SkillRecallControl, Payload: []byte(`{"version":1}`)}}}, true
 	}
-	for _, id := range []uint32{77, 88} {
+	// 76 is a lower rank of 77's group (700), cast before 77 was learned.
+	for id, group := range map[uint32]uint32{77: 700, 76: 700, 88: 880} {
 		if !rt.effects.Apply(statuseffect.Effect{DivisionID: testDivision, CharacterName: c.Name,
-			SkillID: id, SkillGroup: id, InstanceToken: id, State: statuseffect.StateActive}) {
+			SkillID: id, SkillGroup: group, InstanceToken: id, State: statuseffect.StateActive}) {
 			t.Fatalf("failed to install effect %d", id)
 		}
 	}
@@ -92,8 +103,8 @@ func TestSkillRecallUseRetiresForgottenEffects(t *testing.T) {
 	if !control {
 		t.Fatalf("frames %+v; want the recall's control", r.Frames)
 	}
-	if resident := residentSkills(rt, c); resident[77] || !resident[88] {
-		t.Fatalf("resident effects %v; want 77 retired and 88 kept", resident)
+	if resident := residentSkills(rt, c); resident[77] || resident[76] || !resident[88] {
+		t.Fatalf("resident effects %v; want 77 and its lower rank 76 retired, 88 kept", resident)
 	}
 }
 
@@ -120,5 +131,22 @@ func TestSkillRecallNothingToReturnKeepsTheScroll(t *testing.T) {
 	r := useSlot21(rt, c)
 	if r.DiagnosticRefusal == "" || len(c.MissionInventory) != 1 || !residentSkills(rt, c)[77] {
 		t.Fatalf("nothing back: refusal %q, bag %+v; want refused and kept", r.DiagnosticRefusal, c.MissionInventory)
+	}
+}
+
+/*
+================
+TestSkillRecallServesOnlyTheSoldScroll
+
+Another later Param1-5 row (an event or pre-mall copy a future import
+might stage) is not the sold scroll: it never runs a reset, whatever the
+switch says.
+================
+*/
+func TestSkillRecallServesOnlyTheSoldScroll(t *testing.T) {
+	rt, c := skillRecallItemCase(t, "ITEM_EVENT_SKILL_POINT_RECALL", true, true)
+	r := useSlot21(rt, c)
+	if r.DiagnosticRefusal == "" || len(c.MissionInventory) != 1 || !residentSkills(rt, c)[77] {
+		t.Fatalf("other Param1-5 row: refusal %q, bag %+v; want refused and kept", r.DiagnosticRefusal, c.MissionInventory)
 	}
 }

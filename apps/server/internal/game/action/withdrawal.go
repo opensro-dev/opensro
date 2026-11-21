@@ -43,7 +43,7 @@ door and division lock after all fallible planning has succeeded.
 ================
 */
 func (rt *Runtime) finishWithdrawal(division string, c *enterworld.Character, previousSkill uint32) []wire.Frame {
-	return rt.finishSkillRemoval(division, c, []uint32{previousSkill})
+	return rt.finishSkillRemoval(division, c, []uint32{previousSkill}, nil)
 }
 
 /*
@@ -51,16 +51,18 @@ func (rt *Runtime) finishWithdrawal(division string, c *enterworld.Character, pr
 finishSkillRemoval
 
 finishWithdrawal for any number of removed skills (the skill reset
-scroll forgets a whole build): their attached instances retire in one
-pass, then the derived parameters and gauges are rebuilt once.
+scroll forgets a whole build): the attached instances of each removed
+skill id, and of every rank of each removed group, retire in one pass,
+then the derived parameters and gauges are rebuilt once.
 ================
 */
-func (rt *Runtime) finishSkillRemoval(division string, c *enterworld.Character, skills []uint32) []wire.Frame {
+func (rt *Runtime) finishSkillRemoval(division string, c *enterworld.Character, skills, groups []uint32) []wire.Frame {
 	now := rt.Now().UnixMilli()
 	if rt.effects != nil {
 		var tokens []uint32
 		for _, effect := range rt.effects.Snapshot(division, c.Name) {
-			if effect.SkillID != 0 && slices.Contains(skills, effect.SkillID) {
+			if effect.SkillID != 0 && slices.Contains(skills, effect.SkillID) ||
+				effect.SkillGroup != 0 && slices.Contains(groups, effect.SkillGroup) {
 				tokens = append(tokens, effect.InstanceToken)
 			}
 		}

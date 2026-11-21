@@ -17,8 +17,9 @@ gold and potions. These two scrolls do the full reset in one use, for silk.
 | Stat Recall (All Levels) | `ITEM_MALL_STATS_POINT_RECALL_ALL` | 690 | STR and INT go back to their value for the character's highest level; every point spent returns to the pool. Any level. |
 | Scroll of Skill Restore | `ITEM_MALL_SKILL_POINT_RECALL_A` | 690 | Every learned skill is forgotten and every mastery goes back to 0; all the SP they cost returns. |
 
-Both are the real v1.696 items, with their own icons, sold on the Item Mall's scroll tab next to the tier
-stat recall scrolls. They are not dropped and not sold by NPCs. The six tier scrolls keep their prices and
+Both are the real v1.696 items, sold on the Item Mall's scroll tab next to the tier stat recall scrolls.
+The skill scroll brings its own icon. The stat scroll uses the same icon as the tier stat recall scrolls,
+as it does in v1.696. They are not dropped and not sold by NPCs. The six tier scrolls keep their prices and
 their level windows.
 
 The skill reset keeps only the free basic skills: skills whose ranks cost no SP and need no mastery or
@@ -71,8 +72,9 @@ in the GameWorld. A build without the item removes it from the data while player
 
 - **Data** (`scripts/reset_scroll_import.py`, a variant later layer after the gears stones). Each enabled
   scroll is its pinned v1.696 row, identical except for:
-  - its identity, allocated above every object row of the tree and kept in `.opensro-reset-scrolls.json` so
-    a rebuild never moves an item a player holds;
+  - its identity, allocated by `published_ids` above every object row of the tree. Once a release ships
+    the scroll, its id is pinned in `data/published-identities.json`, and every later build keeps it for
+    the items players hold;
   - for the skill scroll, its requirement cells: v1.696 limits it to levels 1-100, and the import lifts the
     limit.
 

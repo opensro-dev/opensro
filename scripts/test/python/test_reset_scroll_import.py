@@ -30,7 +30,12 @@ ALL_ON = {flag: "on" for flag, *_ in resets.SCROLLS}
 ALL_OFF = {flag: "" for flag, *_ in resets.SCROLLS}
 STAT, SKILL = (code for _, code, *_ in resets.SCROLLS)
 NATIVE_ID = 5000
-SKILL_WINDOW = ["1", "1", "100", "-1", "0", "-1", "0", "-1"]
+# The four typed requirement pairs, types at 32/34/36/38 and values at
+# 33/35/37/39 (server enterworld/itemrefs.go): the v1.696 skill scroll asks
+# level 1 (type 1) and at most level 100; the stat scroll asks nothing.
+REQUIREMENT_CELLS = slice(32, 40)
+SKILL_WINDOW = ["1", "1", "1", "100", "-1", "0", "-1", "0"]
+NO_REQUIREMENT = ["-1", "0"] * 4
 
 
 # ================
@@ -47,7 +52,7 @@ def later_row(code, identity, param1, window):
 	row[items.MODEL] = items.UNUSED
 	row[items.DROP_MODEL] = "item\\etc\\drop_ch_bag.bsr"
 	row[items.ICON] = "item\\etc\\" + code.lower() + ".ddj"
-	row[resets.REQUIREMENTS] = window
+	row[REQUIREMENT_CELLS] = window
 	row[resets.PARAM1] = param1
 	return row
 
@@ -69,9 +74,9 @@ class ResetScrollImportTest(unittest.TestCase):
 		text_root.mkdir(parents=True)
 		later.mkdir()
 		native.mkdir()
-		rows = [later_row("ITEM_MALL_DECOY", 40000, "2", ["0", "-1"] * 4)]
+		rows = [later_row("ITEM_MALL_DECOY", 40000, "2", NO_REQUIREMENT)]
 		if drop != STAT:
-			rows.append(later_row(STAT, 40001, "2", ["0", "-1"] * 4))
+			rows.append(later_row(STAT, 40001, "2", NO_REQUIREMENT))
 		if drop != SKILL:
 			rows.append(later_row(SKILL, 40002, "5", SKILL_WINDOW))
 		self.media = archive_bytes({
@@ -147,7 +152,8 @@ class ResetScrollImportTest(unittest.TestCase):
 				self.assertGreater(int(rows[code][items.IDENTITY]), NATIVE_ID)
 				self.assertEqual(int(rows[code][items.IDENTITY]), summary["items"][code])
 			# The skill scroll's 1-100 window is lifted; its Param1 stays 5.
-			self.assertEqual(rows[SKILL][resets.REQUIREMENTS], ["0", "-1"] * 4)
+			self.assertEqual(rows[SKILL][REQUIREMENT_CELLS], NO_REQUIREMENT)
+			self.assertEqual(rows[STAT][REQUIREMENT_CELLS], NO_REQUIREMENT)
 			self.assertEqual(rows[SKILL][resets.PARAM1], "5")
 			self.assertEqual(rows[STAT][resets.PARAM1], "2")
 			self.assertIn(resets.ITEM_SHARD, (text_root / "itemdata.txt").read_bytes().decode("utf-16"))

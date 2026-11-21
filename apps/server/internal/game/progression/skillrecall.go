@@ -50,13 +50,17 @@ const skillRecallVersion = 1
 ================
 SkillRecall
 
-What a skill reset sent and forgot: the frames for the browser and the
-forgotten skills, whose resident effects the caller retires.
+What a skill reset sent and forgot: the frames for the browser, the
+forgotten skills' current ranks and their groups. The caller retires the
+resident effects of every forgotten group: a buff cast at a lower rank
+before the current one was learned carries that rank's id, not the
+current one.
 ================
 */
 type SkillRecall struct {
-	Frames  []wire.Frame
-	Removed []uint32
+	Frames        []wire.Frame
+	Removed       []uint32
+	RemovedGroups []uint32
 }
 
 /*
@@ -65,10 +69,11 @@ skillRecallPlan
 ================
 */
 type skillRecallPlan struct {
-	Kept      []uint32
-	Removed   []uint32
-	Masteries []enterworld.CharacterMastery
-	Refund    int64
+	Kept          []uint32
+	Removed       []uint32
+	RemovedGroups []uint32
+	Masteries     []enterworld.CharacterMastery
+	Refund        int64
 }
 
 /*
@@ -142,8 +147,10 @@ func planSkillRecall(c *enterworld.Character, data withdrawalCatalog, levels ent
 		}
 		plan.Refund += refund
 		plan.Removed = append(plan.Removed, id)
+		plan.RemovedGroups = append(plan.RemovedGroups, row.Group)
 	}
-	plan.Masteries = slices.Clone(c.Masteries)
+	// Never nil: the control's list must be a list (the browser refuses null).
+	plan.Masteries = append([]enterworld.CharacterMastery{}, c.Masteries...)
 	trained := false
 	for i := range plan.Masteries {
 		if plan.Masteries[i].Level <= 0 {
@@ -203,7 +210,7 @@ func (rt *Runtime) recallSkills(c *enterworld.Character) (SkillRecall, bool) {
 		return SkillRecall{}, false
 	}
 	c.Skills, c.Masteries, c.SkillPoints, c.QuickSlots = next.Skills, next.Masteries, next.SkillPoints, next.QuickSlots
-	return SkillRecall{Removed: plan.Removed, Frames: []wire.Frame{
+	return SkillRecall{Removed: plan.Removed, RemovedGroups: plan.RemovedGroups, Frames: []wire.Frame{
 		{Opcode: wire.OpPointsUpdate, Payload: wire.EncodePointsSkillUpdate(uint32(available), false)},
 		{Opcode: wire.OpBaseStats, Payload: enterworld.BuildLoginStatBlock(next, stats)},
 		{Opcode: SkillRecallControl, Payload: body},

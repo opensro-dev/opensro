@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"math"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -86,8 +87,8 @@ func TestSkillRecallRefundsEveryPaidRankAndMastery(t *testing.T) {
 	if !reflect.DeepEqual(c.Masteries, []enterworld.CharacterMastery{{ID: 257, Level: 0}, {ID: 258, Level: 0}}) {
 		t.Fatalf("masteries = %+v, want every mastery at 0", c.Masteries)
 	}
-	if !reflect.DeepEqual(recall.Removed, []uint32{12, 20}) {
-		t.Fatalf("removed = %v, want [12 20]", recall.Removed)
+	if !reflect.DeepEqual(recall.Removed, []uint32{12, 20}) || !reflect.DeepEqual(recall.RemovedGroups, []uint32{100, 200}) {
+		t.Fatalf("removed = %v groups %v, want [12 20] groups [100 200]", recall.Removed, recall.RemovedGroups)
 	}
 }
 
@@ -167,6 +168,26 @@ func TestSkillRecallRefusesSPOverflow(t *testing.T) {
 	c.SkillPoints = &full
 	if _, ok := rt.SkillRecallUpdater()(c); ok || len(c.Skills) != 3 || c.Masteries[0].Level != 6 {
 		t.Fatalf("overflow: skills %v, masteries %+v; want refused and unchanged", c.Skills, c.Masteries)
+	}
+}
+
+/*
+================
+TestSkillRecallSendsAnEmptyMasteryList
+
+A record without masteries still sends a list, never null: the browser
+ends the session on a malformed control.
+================
+*/
+func TestSkillRecallSendsAnEmptyMasteryList(t *testing.T) {
+	rt, c := skillRecallCase(t)
+	c.Masteries = nil
+	recall, ok := rt.SkillRecallUpdater()(c)
+	if !ok {
+		t.Fatal("the recall was refused")
+	}
+	if got := string(recall.Frames[len(recall.Frames)-1].Payload); !strings.Contains(got, `"masteries":[]`) {
+		t.Fatalf("control body %s, want an empty mastery list", got)
 	}
 }
 

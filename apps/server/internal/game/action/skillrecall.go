@@ -19,6 +19,7 @@ package action
 
 import (
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -31,6 +32,14 @@ func (rt *Runtime) useSkillRecall(use skillItemUse, c *enterworld.Character, tai
 	if len(tail) != 0 || rt.RecallSkills == nil {
 		return false
 	}
+	// The family is Param1 5; only the sold scroll, with its switch on,
+	// resets (a later event or pre-mall copy a future import stages is
+	// not it and must not bypass SRO_SKILL_RESET_SCROLL).
+	if scroll, sold := commerce.ResetScrollByCodename(use.ref.Codename); !sold || scroll.Kind != commerce.SkillReset ||
+		!rt.ResetScrolls[commerce.SkillReset] {
+		result.DiagnosticRefusal = "item-use: " + use.ref.Codename + " is not the sold skill reset scroll"
+		return false
+	}
 	recall, ok := rt.RecallSkills(c)
 	if !ok {
 		result.DiagnosticRefusal = "item-use: no skill or mastery point to recall"
@@ -39,6 +48,6 @@ func (rt *Runtime) useSkillRecall(use skillItemUse, c *enterworld.Character, tai
 	remaining := rt.consumeItemUseRow(c, use.row)
 	frames := append([]wire.Frame{{Opcode: wire.OpItemUseResponse,
 		Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)}}, recall.Frames...)
-	*result = OpResult{Frames: append(frames, rt.finishSkillRemoval(use.division, c, recall.Removed)...)}
+	*result = OpResult{Frames: append(frames, rt.finishSkillRemoval(use.division, c, recall.Removed, recall.RemovedGroups)...)}
 	return true
 }

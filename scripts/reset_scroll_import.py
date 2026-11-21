@@ -16,8 +16,9 @@ A scroll's row is its pinned v1.696 row (SRO_V1696_ROOT,
 v1696_archive_pins.json) byte for byte but its identity and, for the
 skill scroll, its requirement cells: v1.696 holds it to levels 1-100,
 which this import lifts to the stat scroll's level-free cells. Each
-takes a fresh identity above every object row of the tree, remembered in
-the marker so a rebuild never moves an item a player holds; its icon is
+takes its identity from published_ids: above every object row of the
+tree, and the published one once a release ships it
+(data/published-identities.json), so the items players hold keep it; its icon is
 copied from the later client (cap110 copy_asset_closure, as the Nasrun
 import does) and its English name and description are authored here,
 joining textdataname.txt in the v1.150 layout (English in column 8): the
@@ -55,9 +56,11 @@ MARKER = ".opensro-reset-scrolls.json"
 ITEM_SHARD = "itemdata_300000.txt"
 NAME_TABLE = "textdataname.txt"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
-# The four requirement pairs (cells 33-40) and Param1 (itemParam1_29c).
-REQUIREMENTS = slice(items.REQUIRED_LEVEL, items.REQUIRED_LEVEL + 8)
-LEVEL_FREE = ["0", "-1"] * 4
+# The four typed requirement pairs, types at cells 32/34/36/38 and values
+# at 33/35/37/39 (server enterworld/itemrefs.go), and Param1
+# (itemParam1_29c). LEVEL_FREE is the stat scroll's own cells: no type.
+REQUIREMENTS = slice(32, 40)
+LEVEL_FREE = ["-1", "0"] * 4
 PARAM1 = 118
 
 # Each scroll: (switch, codename, name, description), in the server
