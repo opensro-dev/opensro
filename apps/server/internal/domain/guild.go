@@ -235,6 +235,14 @@ type GuildStore interface {
 	// the donor's new DonatedGP. A non-zero refusal means no mutation and
 	// no commit.
 	DonateGuildPoints(divisionID string, characterID int64, amount uint32) (GuildDonationResult, GuildRefusal)
+	// CreditGuildPoints is the ATOMIC passive-accrual credit (issue
+	// #4051): the credit half of DonateGuildPoints - guild GP and the
+	// member row's DonatedGP rise in ONE commit - with NO SP debit,
+	// because the points were already earned as SP by hunting. Every
+	// precondition re-validates under the store lock exactly as the
+	// donation door's (guild stored, member row present, amount >= 1,
+	// no u32 wrap). A non-zero refusal means no mutation and no commit.
+	CreditGuildPoints(divisionID string, characterID int64, amount uint32) (GuildDonationResult, GuildRefusal)
 	// LevelUpGuildAs is the ATOMIC level-up door: the acting leader's
 	// guild pays the next level's GP and the leader pays its gold, and the
 	// level rises by one, in ONE commit. The refusals are the last level,

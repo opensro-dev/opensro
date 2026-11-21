@@ -106,6 +106,13 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		// The fortress war's schedule edges run on the mission clock.
 		{Name: "siege", Hook: game.siege.Tick},
 		{Name: "guild-wars", Hook: game.guildWars.Tick},
+		// Hunted GP lands once a set-aside reaches the native threshold
+		// (issue #4051); sub-threshold remainders flush on leave and
+		// session close instead.
+		{Name: "guild-gp-accrual", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			game.gpAccrual.Drain()
+			return nil
+		}},
 		// The job guilds' week closes on the mission clock (jobrank.go).
 		{Name: "job-week", Hook: func(nowMs int64) []simulation.DivisionFrames {
 			game.items.JobWeekTick(game.divisionID, nowMs)

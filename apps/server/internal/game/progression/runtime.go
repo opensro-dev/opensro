@@ -180,6 +180,12 @@ type Runtime struct {
 	// BetaMasteryEarly keeps that budget for characters created before the
 	// native totals went live (port-only, enterworld/betamastery_early.go).
 	BetaMasteryEarly bool
+	// SPMINTEDHook observes the whole SP each skill-EXP conversion mints
+	// (levelup.go, issue #4051): composition binds the guild GP accrual's
+	// note. It runs inside the caller's character transaction, so it may
+	// only record - never open a store door or send. Nil wires no
+	// consumer (tests, tools) and changes nothing.
+	SPMintedHook func(character *enterworld.Character, spMinted int64)
 }
 
 /*

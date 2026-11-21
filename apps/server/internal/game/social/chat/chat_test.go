@@ -217,6 +217,15 @@ func (g stubGuilds) DonateGuildPoints(string, int64, uint32) (enterworld.GuildDo
 	return enterworld.GuildDonationResult{}, enterworld.GuildRefusalUpdateRejected
 }
 
+/*
+================
+CreditGuildPoints
+================
+*/
+func (g stubGuilds) CreditGuildPoints(string, int64, uint32) (enterworld.GuildDonationResult, enterworld.GuildRefusal) {
+	return enterworld.GuildDonationResult{}, enterworld.GuildRefusalUpdateRejected
+}
+
 func (g stubGuilds) ClaimWarCompensationAs(string, int64) (int64, enterworld.GuildRefusal) {
 	return 0, enterworld.GuildRefusalUpdateRejected
 }

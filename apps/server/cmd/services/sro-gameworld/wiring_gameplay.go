@@ -79,14 +79,17 @@ type gameplayPlane struct {
 	presence *livepresence.Directory
 	// mutes is the chat mute book (moderation_wiring.go), set once the
 	// shard is known; the console's conduct actions reach it.
-	mutes         *moderation.Book
-	chat          *chat.Runtime
-	chatFeed      *chatfeed.Feed
-	parties       *party.Runtime
-	friends       *community.FriendRequests
-	guildInvites  *guild.InviteRuntime
-	unions        *guild.UnionRuntime
-	guildWars     *guild.WarRuntime
+	mutes        *moderation.Book
+	chat         *chat.Runtime
+	chatFeed     *chatfeed.Feed
+	parties      *party.Runtime
+	friends      *community.FriendRequests
+	guildInvites *guild.InviteRuntime
+	unions       *guild.UnionRuntime
+	guildWars    *guild.WarRuntime
+	// gpAccrual is the guild GP hunting accrual (issue #4051): the
+	// progression mint notes into it, the tick drains it.
+	gpAccrual     *guild.GpAccrual
 	mentorInvites *mentor.InviteRuntime
 	matches       *match.Runtime
 	siege         *siege.Lane
@@ -723,6 +726,13 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if err = applyLevelCap(stats); err != nil {
 		return err
 	}
+	// Guild GP hunting accrual (issue #4051): the SP mint notes each
+	// whole SP into the tracker; the tick drains it through the credit
+	// door and the leave/session-close paths flush the remainder.
+	game.gpAccrual = guild.NewGpAccrual(game.deps, game.presence)
+	stats.SPMintedHook = func(character *enterworld.Character, spMinted int64) {
+		game.gpAccrual.NoteSPMinted(game.divisionID, character, spMinted)
+	}
 	// The configured cap reaches the party-matching bound directly and
 	// the client through the world-entry blob (publishedLevelCap keeps
 	// the native blob byte-identical with the expansion off).
@@ -944,7 +954,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	gmcommand.Register(hub, game.deps, game.presence, game.items)
 	game.matches.Register(hub)
 	game.parties.Register(hub)
-	guild.Register(hub, game.deps, game.presence, game.items, game.unions)
+	guild.Register(hub, game.deps, game.presence, game.items, game.unions, game.gpAccrual)
 	game.unions.Register(hub)
 	game.guildWars.Register(hub)
 	game.guildInvites.Register(hub)

@@ -58,7 +58,7 @@ type GuildManagers interface {
 Register
 ================
 */
-func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers GuildManagers, unions *UnionRuntime) {
+func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers GuildManagers, unions *UnionRuntime, accrual *GpAccrual) {
 	hub.Handle(OpGuildCreateRequest, func(s *transport.Session, opcode uint16, payload []byte) {
 		actor, divisionID, bound := enterworld.SessionCharacter(deps, s)
 		if !bound {
@@ -139,6 +139,13 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 			return
 		}
 		guildID := characterGuild(actor)
+		// The native remainder flush (issue #4051): the leaver's
+		// un-credited hunted GP lands on the guild being left before
+		// the membership goes away, exactly as the guild pointer's
+		// teardown sends it first.
+		if accrual != nil {
+			accrual.FlushCharacter(divisionID, actor.ID)
+		}
 		outcome := HandleLeave(deps, divisionID, actor, payload)
 		if outcome.Refusal != "" && outcome.AckPayload != nil {
 			_ = s.Send(OpGuildLeaveAck, outcome.AckPayload)

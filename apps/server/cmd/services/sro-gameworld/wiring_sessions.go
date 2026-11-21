@@ -167,6 +167,9 @@ func (game *gameplayPlane) sessionClosed(session *transport.Session, cause error
 
 	character, divisionID, bound := enterworld.SessionCharacter(game.deps, session)
 	if bound {
+		// The closing member's un-credited hunted GP flushes to their
+		// guild (issue #4051) while their membership is still on record.
+		game.gpAccrual.FlushCharacter(divisionID, character.ID)
 		// Port-only (#2675): the session's last time-online credit. The
 		// record's anchor makes this safe against an evicted duplicate
 		// session closing after its replacement: only un-credited time

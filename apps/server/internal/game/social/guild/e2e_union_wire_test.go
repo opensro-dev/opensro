@@ -123,7 +123,7 @@ func startUnionServer(t *testing.T, dir string, seeds []*enterworld.Character) (
 	deps.PublishEntry = guild.EntryPublisher(func() domain.GuildStore { return deps.Guilds })
 	enterworld.Register(srv.Hub, deps)
 	parties.Register(srv.Hub)
-	guild.Register(srv.Hub, deps, directory, nil, lane)
+	guild.Register(srv.Hub, deps, directory, nil, lane, nil)
 	lane.Register(srv.Hub)
 	wars.Register(srv.Hub)
 	if err := srv.Start(); err != nil {

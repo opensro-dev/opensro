@@ -608,6 +608,44 @@ func (door storeGuildDoor) DonateGuildPoints(
 	characterID int64,
 	amount uint32,
 ) (domain.GuildDonationResult, domain.GuildRefusal) {
+	return door.moveGuildPoints(divisionID, characterID, amount, true)
+}
+
+// CreditGuildPoints is the passive-accrual credit (issue #4051): the
+// hunted-SP flush lands here. Same door, same lock, same commit shape
+// as DonateGuildPoints, but nothing is debited - the SP were earned
+// and spent into SP by the progression mint already.
+/*
+================
+CreditGuildPoints
+================
+*/
+func (door storeGuildDoor) CreditGuildPoints(
+	divisionID string,
+	characterID int64,
+	amount uint32,
+) (domain.GuildDonationResult, domain.GuildRefusal) {
+	return door.moveGuildPoints(divisionID, characterID, amount, false)
+}
+
+/*
+================
+moveGuildPoints
+
+The one GP-credit body both doors share: guild GP and the member row's
+DonatedGP rise together under one lock hold and one commit. debitSP
+(the manual 0x740F donation) also takes the amount from the character's
+SP in the same commit; the accrual credit (debitSP=false) never
+touches SP. Every precondition re-validates under the lock; a refusal
+means no mutation and no commit.
+================
+*/
+func (door storeGuildDoor) moveGuildPoints(
+	divisionID string,
+	characterID int64,
+	amount uint32,
+	debitSP bool,
+) (domain.GuildDonationResult, domain.GuildRefusal) {
 	var refused domain.GuildDonationResult
 	s := door.s
 	s.mu.Lock()
@@ -629,7 +667,7 @@ func (door storeGuildDoor) DonateGuildPoints(
 	if amount < 1 {
 		return refused, domain.GuildRefusalInvalidAmount
 	}
-	if int64(amount) > sp {
+	if debitSP && int64(amount) > sp {
 		return refused, domain.GuildRefusalInsufficientPoints
 	}
 	if guild.GP > 0xffffffff-amount || members[memberIndex].DonatedGP > 0xffffffff-amount {
@@ -641,14 +679,18 @@ func (door storeGuildDoor) DonateGuildPoints(
 	copy(next, members)
 	next[memberIndex].DonatedGP += amount
 	guild.GP += amount
-	remaining := sp - int64(amount)
-	donor.SkillPoints = &remaining
 	s.guilds[divisionID][guildID] = guild
 	storedMembers := guildMembersForStorage(next)
 	s.guildMembers[divisionID][guildID] = storedMembers
 	s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
-	s.markCharacterLocked(donor)
-	s.commitLocked(fmt.Sprintf("guild-gp-donate %s/%d", divisionID, guildID))
+	label := "guild-gp-accrual"
+	if debitSP {
+		remaining := sp - int64(amount)
+		donor.SkillPoints = &remaining
+		s.markCharacterLocked(donor)
+		label = "guild-gp-donate"
+	}
+	s.commitLocked(fmt.Sprintf("%s %s/%d", label, divisionID, guildID))
 
 	committedMembers, coherent := door.guildMemberViewsLocked(divisionID, guildID, storedMembers)
 	if !coherent {

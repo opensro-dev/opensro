@@ -108,6 +108,12 @@ func (s staticGuildStore) DonateGuildPoints(string, int64, uint32) (enterworld.G
 	return enterworld.GuildDonationResult{}, enterworld.GuildRefusalUpdateRejected
 }
 
+// CreditGuildPoints completes the contract the GP-accrual door added -
+// inert like the other write doors.
+func (s staticGuildStore) CreditGuildPoints(string, int64, uint32) (enterworld.GuildDonationResult, enterworld.GuildRefusal) {
+	return enterworld.GuildDonationResult{}, enterworld.GuildRefusalUpdateRejected
+}
+
 func (s staticGuildStore) ClaimWarCompensationAs(string, int64) (int64, enterworld.GuildRefusal) {
 	return 0, enterworld.GuildRefusalUpdateRejected
 }

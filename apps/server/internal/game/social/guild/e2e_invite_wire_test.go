@@ -171,7 +171,7 @@ func startInviteServer(t *testing.T, dir string, seeds []*enterworld.Character) 
 	deps.PublishEntry = guild.EntryPublisher(func() domain.GuildStore { return deps.Guilds })
 	enterworld.Register(srv.Hub, deps)
 	partyRt.Register(srv.Hub)
-	guild.Register(srv.Hub, deps, directory, nil, nil)
+	guild.Register(srv.Hub, deps, directory, nil, nil, nil)
 	invites.Register(srv.Hub)
 	if err := srv.Start(); err != nil {
 		t.Fatal(err)
