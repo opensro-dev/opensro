@@ -11,6 +11,7 @@
 		"authored-animation-bindings.test.mjs",
 		"avatar-visual-overrides.test.mjs",
 		"bear-roar.test.mjs",
+		"berserk-flare-tint.test.mjs",
 		"beta-ui-regressions.test.mjs",
 		"burn-effects.test.mjs",
 		"button-captions.test.mjs",

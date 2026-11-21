@@ -4221,9 +4221,14 @@ export function createCharacterEffects(
 		appearance( gid: number ): EffectAppearance {
 			const spineRotation = spineAims.rotation( gid );
 			const roar = roarAppearances.get( gid );
+			// 85C590 makes no material call while +0x2B6 is 1: a berserk body
+			// wears only the Hwan register's SCT_MAT. The port-only flares (pet
+			// signals on their owner, absorb shields) keep their light but give
+			// way, or the red drops out for the flare's length (#3543).
+			const berserk = hwan.get( gid )?.active === true;
 			const pointLight = roar?.pointLight ?? hitLights.get( gid ),
 				weaponHidden = hiddenWeapons.has( gid ),
-				materialTint = roar?.materialTint ?? materials.get( gid )?.color,
+				materialTint = (berserk ? undefined : roar?.materialTint) ?? materials.get( gid )?.color,
 				scale = (hwan.get( gid )?.value ?? 1) * (roar?.scale ?? 1);
 			if ( spineRotation ) {
 				return Object.freeze( {
