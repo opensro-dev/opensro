@@ -5,7 +5,7 @@ particle-tick-digest.mjs - a digest of every particle graph tick in the catalogu
 
 The oracle for changes to the particle graph tick
 (src/engine/foundation/animation/particle-graph.ts) that must not change
-its results: every effect of /assets/effects/programs.json with a particle
+its results: every published effect program with a particle
 graph runs through three scenarios, and after every call a sha256 takes in
 the whole graph state (clock, random cursor, root, every slot below each
 emitter's slots in use with its links, group totals in group order, the
@@ -49,6 +49,8 @@ import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
 import { EXPANDED_BUILD } from "./expanded-build.mjs";
 import { vsroItemGlowRoot } from "../../../../scripts/build/char/equipmentGlowMetadata.mjs";
+import { createCatalogEffects } from "./effect-programs.mjs";
+import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
 
 const SOURCE = new URL( "../../src/engine/", import.meta.url );
 
@@ -61,7 +63,6 @@ async function load( path ) {
 	return import( new URL( path, SOURCE ).href );
 }
 
-const { createEffectPrograms } = await load( "runtime/assets/worker/effects/program/program.ts" );
 const { advanceParticleGraph } = await load( "foundation/animation/particle-graph.ts" );
 const { createParticleGraph, ROOT_SLOT, SLOT_ALIVE, SLOT_OCCUPIED, SLOT_RELEASED, SLOT_SNAPSHOT } = await load(
 	"foundation/animation/particle-graph-slots.ts"
@@ -474,13 +475,12 @@ so a shard pays only for its own effects.
 ================
 */
 function tickDigests( shard ) {
-	const bytes = readPublishedAssetBytesSync( "/assets/effects/programs.json", CLIENT_PUBLIC_ROOT );
-	const catalog = JSON.parse( new TextDecoder().decode( bytes ) );
-	const decoder = createEffectPrograms(), table = particleRandomTable(), values = createValues();
+	const published = readEffectCatalogSync( CLIENT_PUBLIC_ROOT );
+	const decoder = createCatalogEffects(), table = particleRandomTable(), values = createValues();
 	const scenarios = SCENARIOS.map( scenarioCalls ), digests = {};
-	for ( const path of Object.keys( catalog.effects ) ) {
+	for ( const path of Object.keys( published.effects ) ) {
 		if ( shard >= 0 && particleTickShardIndex( path ) !== shard ) continue;
-		const model = decoder.decode( bytes, path ).model;
+		const model = decoder.decode( published, path ).model;
 		if ( !model.particleGraph?.length ) continue;
 		digests[path] = scenarios.map( scenario => scenarioDigest( model, path, scenario, table, values ) ).join( " " );
 	}

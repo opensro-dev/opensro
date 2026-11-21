@@ -16,8 +16,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readPublishedAssetBytesSync, readPublishedAssetJsonSync } from "../../../../scripts/lib/publishedAsset.mjs";
 import { publicRoot } from "../../../../scripts/build/world/paths.mjs";
+import { createCatalogEffects } from "../helpers/effect-programs.mjs";
+import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
 const { itemTooltip } = await import( "../../src/engine/foundation/ui/item-tooltip.ts" );
-const { createEffectPrograms } = await import( "../../src/engine/runtime/assets/worker/effects/program/program.ts" );
 
 /*
 ================
@@ -160,12 +161,12 @@ test("all equipment families show capacity and preserve their native description
 
 test("Star Moon and Sun bows compile distinct moving effect paths and texture layers", () => {
 	const roster = readPublishedAssetJsonSync( "assets/char/roster.json", publicRoot );
-	const bytes = readPublishedAssetBytesSync( "assets/effects/programs.json", publicRoot );
+	const published = readEffectCatalogSync( publicRoot );
 	const signatures = [];
 	for ( const [tier, suffix] of [ "a", "b", "c" ].entries() ) {
 		const path = `system/system_rarebow_${suffix}.efp`;
 		assert.equal( roster.dress.specialGlows[4161 + tier][0].effectPath, path );
-		const { model, imagePaths } = createEffectPrograms().decode( bytes, path );
+		const { model, imagePaths } = createCatalogEffects().decode( published, path );
 		const paths = model.particleGraph?.filter( row => row.positions.length > 0 ) ?? [];
 		assert.equal( paths.length, tier + 1, "authored tiers have one, two and three moving paths" );
 		for ( const motion of paths ) {

@@ -63,4 +63,4 @@ export const REFERENCES_CONTRACT = 3;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";
 // 426 Upgrade Required: the server speaks another release protocol.
 export const RELEASE_OUTDATED_STATUS = 426;
-export const ASSET_SCHEMA = 4;
+export const ASSET_SCHEMA = 5;

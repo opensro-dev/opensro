@@ -19,8 +19,11 @@ History:
      (ASTC re-encodings at /assets/texture-variants/astc/, NTX code "AS44").
      Older clients never ask for those paths; newer ones read the original
      when a variant is absent.
+  5  EasyFX effect programs as one file per effect and per BMS mesh under
+     /assets/effects/programs/ and /assets/effects/meshes/ (#3951); the
+     single effects/programs.json is no longer published
 
 ===========================================================================
 */
 
-export const ASSET_SCHEMA = 4;
+export const ASSET_SCHEMA = 5;

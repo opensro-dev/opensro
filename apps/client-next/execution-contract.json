@@ -1020,8 +1020,9 @@
 			"consumer": "src/engine/runtime/assets/worker/loader.ts",
 			"provider": "src/engine/runtime/assets/worker/effects/program/program.ts",
 			"functions": [
-				"decode",
-				"clear"
+				"parseEffectProgram",
+				"decodeEffectMeshes",
+				"compileEffectProgram"
 			]
 		},
 		{

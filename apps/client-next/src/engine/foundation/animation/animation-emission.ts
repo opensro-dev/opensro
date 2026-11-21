@@ -15,6 +15,7 @@ import { modelParticleAttachment } from "./model-emission";
 import { radians } from "@/engine/foundation/math/angles";
 import type { ModifierSelector } from "./model-animation";
 import type { CharacterActor } from "@/engine/contracts/character";
+import { effectProgramModel } from "@/engine/foundation/assets/effect-programs";
 export interface AnimationParticleSet extends ModifierSelector {
 	readonly particles: readonly ModelParticle[];
 	readonly override: boolean;
@@ -159,7 +160,7 @@ export function createAnimationEmission( allocate: () => number ) {
 							) {
 								continue;
 							}
-							const model = "/assets/effects/programs.json#" + encodeURIComponent( particle.effectPath );
+							const model = effectProgramModel( particle.effectPath );
 							if (
 								ready( model ) && (actor.animationLod?.fraction ?? 0) <= Math.fround( .9 ) &&
 								(!particle.nightOnly || night)
@@ -191,7 +192,7 @@ export function createAnimationEmission( allocate: () => number ) {
 				}
 				for ( const set of sets ) {
 					for ( const particle of set.particles ) {
-						const model = "/assets/effects/programs.json#" + encodeURIComponent( particle.effectPath ),
+						const model = effectProgramModel( particle.effectPath ),
 							loaded = ready( model );
 						const instance = owner.instances.get( particle );
 						if ( !instance || !loaded || out.length >= capacity ) continue;

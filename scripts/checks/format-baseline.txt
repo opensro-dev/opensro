@@ -341,7 +341,6 @@ scripts/test/assets/pythonRun.test.mjs
 scripts/test/assets/rebuildLockInterop.test.mjs
 scripts/test/assets/skillPaneImageReferences.test.mjs
 scripts/test/lib/generatedAssetTestMode.mjs
-scripts/test/mission/effectProgramClosure.test.mjs
 scripts/test/mission/minimapArtCoverage.test.mjs
 scripts/test/mission/missionMinimapBuild.test.mjs
 scripts/test/suites/cif.mjs

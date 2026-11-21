@@ -5,6 +5,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { readEffectIndexSync, readEffectProgramSync } from "../../../scripts/lib/effectCatalog.mjs";
 const root = path.resolve( import.meta.dirname, ".." ), out = path.join( root, "temp/artifacts/effect-coverage" );
 fs.mkdirSync( out, { recursive: true } );
 const source = path.join( root, "src/engine/runtime/assets/worker/effects/effects.ts" ),
@@ -13,7 +14,7 @@ await build( { entryPoints: [ source ], outfile: modulePath, bundle: true, platf
 const { createEffectDecoder } = await import( pathToFileURL( modulePath ) );
 const assetRoot = CLIENT_PUBLIC_ROOT, read = p => fs.readFileSync( path.join( assetRoot, "assets", p ) );
 const recordBytes = read( "skill/effectRecords.json" ),
-	programBytes = read( "effects/programs.json" ),
+	programIndex = readEffectIndexSync( assetRoot ),
 	manifest = JSON.parse( read( "skillfx/manifest.json" ) ),
 	models = manifest.models;
 const decoder = createEffectDecoder(), records = JSON.parse( recordBytes ), catalog = decoder.decode( recordBytes );
@@ -23,7 +24,7 @@ const report = {
 	qualification: "catalog admission inventory; runtime semantics and native pixels require independent tests",
 	inputs: {
 		records: hash( recordBytes ),
-		programs: hash( programBytes ),
+		programs: hash( JSON.stringify( programIndex ) ),
 		decoder: hash( fs.readFileSync( modulePath ) )
 	},
 	records: Object.keys( records ).length,
@@ -99,7 +100,8 @@ for ( const resource of [ ...paths ].sort() ) {
 			if ( !Object.keys( manifest.weapons ?? {} ).length ) throw Error( "No equipped weapon resource mappings" );
 			row.admission = { kind: "equipped-weapon", references: Object.keys( manifest.weapons ).length };
 		} else if ( resource.endsWith( ".efp" ) ) {
-			const { model, imagePaths } = decoder.model( programBytes, resource );
+			const { bytes, meshes } = readEffectProgramSync( resource, assetRoot );
+			const { model, imagePaths } = decoder.model( decoder.program( bytes ), meshes, resource );
 			const missing = imagePaths.filter( p => !fs.existsSync( path.join( assetRoot, p ) ) );
 			if ( missing.length ) throw Error( "Missing textures: " + missing.join( "," ) );
 			row.admission = { kind: "efp", primitives: model.primitives.length, images: imagePaths.length };

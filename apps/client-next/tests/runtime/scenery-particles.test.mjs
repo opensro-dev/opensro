@@ -17,12 +17,13 @@ import { readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAs
 import { publicRoot } from "../../../../scripts/build/world/paths.mjs";
 import { collectSceneryParticleReferences } from "../../../../scripts/build/effects/buildEffectPrograms.mjs";
 import { defined } from "../helpers/defined.mjs";
+import { createCatalogEffects } from "../helpers/effect-programs.mjs";
+import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
 const { sceneryParticles, sceneryOrientation, holderSphere, placedSphere } = await import(
 	"../../src/engine/foundation/rendering/scenery-particles.ts"
 );
 const { createSceneryEmission } = await import( "../../src/engine/foundation/animation/scenery-emission.ts" );
 const { createDeferredParticles } = await import( "../../src/engine/foundation/animation/deferred-particles.ts" );
-const { createEffectPrograms } = await import( "../../src/engine/runtime/assets/worker/effects/program/program.ts" );
 const { createTextureAtlas } = await import( "../../src/engine/foundation/rendering/texture-atlas.ts" );
 const { createMaterialTimeline } = await import( "../../src/engine/foundation/rendering/material-timeline.ts" );
 const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
@@ -48,8 +49,8 @@ test("every installed outdoor particle record projects and every referenced EFP 
 		)
 	);
 	assert.ok( count > 0 );
-	const bytes = readPublishedAssetBytesSync( "/assets/effects/programs.json", publicRoot ),
-		decoder = createEffectPrograms(),
+	const published = readEffectCatalogSync( publicRoot ),
+		decoder = createCatalogEffects(),
 		refs = new Set( collectSceneryParticleReferences( index ).map( r => r.effectPath ) );
 	assert.ok( refs.size >= 47 );
 	// An EFP the archive proves empty or absent (v1.696 ships
@@ -57,9 +58,9 @@ test("every installed outdoor particle record projects and every referenced EFP 
 	// AFF730 keeps the reset object, so that emitter draws nothing. The
 	// catalogue names exactly those (buildEffectPrograms.mjs); every other
 	// referenced EFP must draw.
-	const unavailable = new Set( JSON.parse( new TextDecoder().decode( bytes ) ).nativeUnavailable?.effects ?? [] );
+	const unavailable = new Set( published.nativeUnavailable?.effects ?? [] );
 	for ( const path of refs ) {
-		const result = decoder.decode( bytes, path );
+		const result = decoder.decode( published, path );
 		if ( unavailable.has( path ) ) assert.equal( result.model.primitives.length, 0, path );
 		else assert.ok( result.model.primitives.length > 0, path );
 	}

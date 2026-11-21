@@ -15,15 +15,14 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { createCatalogEffects } from "../helpers/effect-programs.mjs";
+import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
 
-const { createEffectPrograms } = await import(
-	sourceFileUrl( "src/engine/runtime/assets/worker/effects/program/program.ts" ).href
-);
-const bytes = new Uint8Array( await readFile( CLIENT_PUBLIC_ROOT + "/assets/effects/programs.json" ) );
+const published = readEffectCatalogSync( CLIENT_PUBLIC_ROOT );
 test("stone keeps its native source-colour blend pair and temptation retains loop identity", () => {
-	const decoder = createEffectPrograms(),
-		stone = decoder.decode( bytes, "battle/status_bad_stone_on.efp" ).model,
-		temptation = decoder.decode( bytes, "battle/status_bad_temptation.efp" ).model;
+	const decoder = createCatalogEffects(),
+		stone = decoder.decode( published, "battle/status_bad_stone_on.efp" ).model,
+		temptation = decoder.decode( published, "battle/status_bad_temptation.efp" ).model;
 	// The resource's own D3D pair: SRCCOLOR (3) as the source factor.
 	assert.ok( stone.primitives.some( p => p.geometry.material.blendPair?.source === 3 ) );
 	assert.equal( temptation.particleGraph.filter( e => e.loop ).length, 2 );
@@ -32,10 +31,10 @@ test("stone keeps its native source-colour blend pair and temptation retains loo
 test("every published effect decodes with native fog exclusion", () => {
 	// battle/status_bad_sleep.efp carries the only SetSpherePos flag 0 (0x37),
 	// whose native scratch input is ported by its intent (particle-program.ts).
-	const decoder = createEffectPrograms(), catalog = JSON.parse( new TextDecoder().decode( bytes ) ), failures = [];
-	for ( const path of Object.keys( catalog.effects ) ) {
+	const decoder = createCatalogEffects(), failures = [];
+	for ( const path of Object.keys( published.effects ) ) {
 		try {
-			const { model } = decoder.decode( bytes, path );
+			const { model } = decoder.decode( published, path );
 			for ( const primitive of model.primitives ) {
 				assert.equal( primitive.geometry.material.fogDisabled, true, path );
 			}
@@ -47,7 +46,7 @@ test("every published effect decodes with native fog exclusion", () => {
 });
 test("element links come from the LinkMode controller, not only the header (B1F6F0)", () => {
 	const path = "skill/europe/wizard_fire_trap_creation.efp";
-	const catalog = JSON.parse( new TextDecoder().decode( bytes ) ), effect = structuredClone( catalog.effects[path] );
+	const effect = structuredClone( published.effects[path] );
 	// Clear every header link field; the LinkMode controllers still carry them.
 	const stack = [ effect.root ];
 	while ( stack.length ) {
@@ -55,7 +54,7 @@ test("element links come from the LinkMode controller, not only the header (B1F6
 		Object.assign( element, { int0: 0, int1: 0, int2: 0, int3: 0, byte0: 0, byte1: 0 } );
 		stack.push( ...element.children );
 	}
-	const stripped = new TextEncoder().encode( JSON.stringify( { ...catalog, effects: { [path]: effect } } ) );
+	const stripped = new TextEncoder().encode( JSON.stringify( { ...published, effects: { [path]: effect } } ) );
 	const links = model =>
 		model.particleGraph.map( e => [
 			e.positionDepth,
@@ -65,7 +64,7 @@ test("element links come from the LinkMode controller, not only the header (B1F6
 			e.keepMatrix,
 			e.keepOrigin
 		] );
-	const shipped = links( createEffectPrograms().decode( bytes, path ).model );
+	const shipped = links( createCatalogEffects().decode( published, path ).model );
 	assert.ok( shipped.some( row => row[3] > 0 ), "the trap's elements follow their parents" );
-	assert.deepEqual( links( createEffectPrograms().decode( stripped, path ).model ), shipped );
+	assert.deepEqual( links( createCatalogEffects().decode( stripped, path ).model ), shipped );
 });

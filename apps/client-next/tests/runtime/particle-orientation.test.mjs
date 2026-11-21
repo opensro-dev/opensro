@@ -13,10 +13,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
 import { publicRoot } from "../../../../scripts/build/world/paths.mjs";
+import { createCatalogEffects } from "../helpers/effect-programs.mjs";
+import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
 const { advanceParticleGraph } = await import( "../../src/engine/foundation/animation/particle-graph.ts" );
 const { createParticleGraph } = await import( "../../src/engine/foundation/animation/particle-graph-slots.ts" );
 const { particleElements } = await import( "../helpers/particle-slots.mjs" );
-const { createEffectPrograms } = await import( "../../src/engine/runtime/assets/worker/effects/program/program.ts" );
 const { identity } = await import( "../../src/engine/foundation/rendering/world-math.ts" );
 
 /*
@@ -98,13 +99,12 @@ test("scheduled rotation does not run before its authored frame", () => {
 });
 
 test("every published rare effect preserves ordered BAN and rotation commands", () => {
-	const bytes = readPublishedAssetBytesSync( "assets/effects/programs.json", publicRoot );
-	const catalog = JSON.parse( new TextDecoder().decode( bytes ) );
+	const published = readEffectCatalogSync( publicRoot );
 	let effects = 0, rotations = 0, positions = 0, authoredRotations = 0, authoredPositions = 0;
-	const compiler = createEffectPrograms();
-	for ( const [path, source] of Object.entries( catalog.effects ) ) {
+	const compiler = createCatalogEffects();
+	for ( const [path, source] of Object.entries( published.effects ) ) {
 		if ( !path.startsWith( "system/system_rare" ) ) continue;
-		const { model } = compiler.decode( bytes, path );
+		const { model } = compiler.decode( published, path );
 		const nodes = [];
 		const visit = node => {
 			nodes.push( node );

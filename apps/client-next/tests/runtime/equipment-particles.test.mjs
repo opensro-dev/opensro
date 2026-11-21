@@ -21,6 +21,7 @@ import {
 	equipmentParticleCatalog,
 	publishEquipmentParticleMetadata
 } from "../../../../scripts/build/char/equipmentParticles.mjs";
+import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
 async function load( entry ) {
 	return import( sourceFileUrl( entry ).href );
 }
@@ -127,7 +128,7 @@ test("equipment particle lifetime survives cold resources and retires on replace
 });
 test("every authored active special-state item has reachable effects and real private sockets on every admitted body", () => {
 	const roster = readPublishedAssetJsonSync( "/assets/char/roster.json", publicRoot ),
-		programs = readPublishedAssetJsonSync( "/assets/effects/programs.json", publicRoot ),
+		programs = readEffectCatalogSync( publicRoot ),
 		catalog = equipmentParticleCatalog(),
 		cache = new Map();
 	let cases = 0;
@@ -289,7 +290,7 @@ turns the crystal bones the particles sit on.
 */
 test( "every equipment ambient set is published with its garment and reachable programs", NATIVE_ONLY, () => {
 	const roster = readPublishedAssetJsonSync( "/assets/char/roster.json", publicRoot ),
-		programs = readPublishedAssetJsonSync( "/assets/effects/programs.json", publicRoot ),
+		programs = readEffectCatalogSync( publicRoot ),
 		ambient = equipmentAmbientParticles(),
 		models = new Map();
 	let branches = 0, animated = 0;

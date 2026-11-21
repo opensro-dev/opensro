@@ -98,6 +98,7 @@ import {
 	worldDelta
 } from "@/engine/foundation/world/world-space";
 import { SYSTEM_CAPTURE_MARK } from "@/engine/contracts/orb";
+import { effectProgramModel, isEffectProgramModel } from "@/engine/foundation/assets/effect-programs";
 
 /*
 ================
@@ -800,9 +801,7 @@ export function createCharacterEffects(
 								paths: [
 									...new Set(
 										particles.flatMap( set =>
-											set.particles.map( p =>
-												"/assets/effects/programs.json#" + encodeURIComponent( p.effectPath )
-											)
+											set.particles.map( p => effectProgramModel( p.effectPath ) )
 										)
 									)
 								]
@@ -866,7 +865,7 @@ export function createCharacterEffects(
 	const modelFor = ( path: string ) =>
 		path.endsWith( ".efp" ) ?
 			{
-				glb: "/assets/effects/programs.json#" + encodeURIComponent( path ),
+				glb: effectProgramModel( path ),
 				clips: [ "effect" ],
 				clipLoop: false
 			} :
@@ -1058,7 +1057,7 @@ export function createCharacterEffects(
 							result.push( {
 								actor: {
 									gid: allocate(),
-									model: "/assets/effects/programs.json#" + encodeURIComponent( particle.effectPath ),
+									model: effectProgramModel( particle.effectPath ),
 									pose: owner.pose,
 									clip: "effect",
 									time: 0,
@@ -1120,7 +1119,7 @@ export function createCharacterEffects(
 						result.push( {
 							actor: {
 								gid: allocate(),
-								model: "/assets/effects/programs.json#" + encodeURIComponent( particle.effectPath ),
+								model: effectProgramModel( particle.effectPath ),
 								pose: owner.pose,
 								clip: "effect",
 								time: 0,
@@ -1622,8 +1621,7 @@ export function createCharacterEffects(
 									for ( const particle of ambientModelParticles( model.particleModifiers ) ) {
 										actors.push( {
 											gid: allocate(),
-											model: "/assets/effects/programs.json#" +
-												encodeURIComponent( particle.effectPath ),
+											model: effectProgramModel( particle.effectPath ),
 											pose: owner.pose,
 											clip: "effect",
 											time: 0,
@@ -3149,7 +3147,7 @@ export function createCharacterEffects(
 						}
 						row.visuals = row.visuals.filter( v =>
 							v.released !== undefined ?
-								v.actor.model.includes( "/effects/programs.json#" ) &&
+								isEffectProgramModel( v.actor.model ) &&
 								now - v.released < (v.fade || duration( v.actor.model, v.actor.clip )) :
 								v.keep || now - v.started < (v.life || duration( v.actor.model, v.actor.clip ))
 						);
@@ -3340,7 +3338,7 @@ export function createCharacterEffects(
 								stepRelease( visual, now );
 								if ( !resident.has( visual.actor.model ) ) continue;
 								const period = duration( visual.actor.model, visual.actor.clip ),
-									cycle = !visual.actor.model.includes( "/effects/programs.json#" ) &&
+									cycle = !isEffectProgramModel( visual.actor.model ) &&
 											visual.released !== undefined && visual.actor.loop && period ?
 										Math.floor( (visual.released - visual.started) / period ) * period :
 										0;
@@ -3408,7 +3406,7 @@ export function createCharacterEffects(
 					}
 					if (
 						command?.released !== undefined &&
-						(!visual.actor.model.includes( "/effects/programs.json#" ) ||
+						(!isEffectProgramModel( visual.actor.model ) ||
 							now - command.released >=
 								(command.fade || duration( visual.actor.model, visual.actor.clip )))
 					) {
@@ -3774,7 +3772,7 @@ export function createCharacterEffects(
 					}
 					if ( visual.visualStarted !== undefined ) elapsed = Math.max( 0, now - visual.visualStarted );
 					const period = duration( visual.actor.model, visual.actor.clip ),
-						cycle = !visual.actor.model.includes( "/effects/programs.json#" ) &&
+						cycle = !isEffectProgramModel( visual.actor.model ) &&
 								command?.released !== undefined && command.loop && period ?
 							Math.floor(
 								(command.released - (visualStarts.get( gid ) ?? visual.actor.time)) / period
@@ -3798,11 +3796,10 @@ export function createCharacterEffects(
 						auxiliary.started ??= now;
 						const end = visual.landed?.at ?? visual.family?.end?.at,
 							period = duration( auxiliary.actor.model, auxiliary.actor.clip );
-						const cycle =
-							!auxiliary.actor.model.includes( "/effects/programs.json#" ) && end !== undefined &&
+						const cycle = !isEffectProgramModel( auxiliary.actor.model ) && end !== undefined &&
 								period ?
-								Math.floor( Math.max( 0, end - auxiliary.started ) / period ) * period :
-								0;
+							Math.floor( Math.max( 0, end - auxiliary.started ) / period ) * period :
+							0;
 						result.push( {
 							...auxiliary.actor,
 							time: Math.max( 0, now - auxiliary.started - cycle ),
@@ -4060,7 +4057,7 @@ export function createCharacterEffects(
 					}
 					for ( const [index, part] of parts.entries() ) {
 						const age = elapsed - part.at,
-							model = "/assets/effects/programs.json#" + encodeURIComponent( part.path );
+							model = effectProgramModel( part.path );
 						if ( age < 0 || !ready( model ) ) continue;
 						const life = duration( model, "effect" ) || 2;
 						if ( age >= life ) continue;

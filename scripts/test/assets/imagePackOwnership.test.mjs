@@ -17,12 +17,17 @@ import { collectAssetPackGroups } from "../../build/assetPackGroups.mjs";
 import { LOOSE_FAMILIES } from "../../build/families/looseFamilies.mjs";
 import { publicIndex } from "../../../apps/client-next/tools/beta/policy.mjs";
 import { ASSET_PACK_VERSION } from "../../build/shared/packFormat.mjs";
+import { effectProgramFile } from "../../../apps/client-next/src/engine/foundation/assets/effect-programs.ts";
 
 test("focused publishers give new images their full-build group", () => {
 	const particle = "/assets/images/Particles_extracted/textures/new.texture";
 	for ( const family of [ "effect", "entity-bsr" ] ) {
 		assert.equal( LOOSE_FAMILIES[family].defaultGroup( particle, {} ), "particle-textures", family );
-		assert.equal( LOOSE_FAMILIES[family].defaultGroup( "/assets/effects/programs.json.gz", {} ), "game-data" );
+		assert.equal( LOOSE_FAMILIES[family].defaultGroup( "/assets/skill/effectRecords.json.gz", {} ), "game-data" );
+		assert.equal(
+			LOOSE_FAMILIES[family].defaultGroup( effectProgramFile( "battle/hit.efp" ), {} ),
+			"game-data"
+		);
 	}
 	assert.equal( LOOSE_FAMILIES["entity-bsr"].defaultGroup( "/assets/skillfx/new.glb", {} ), "game-models" );
 	assert.equal(

@@ -15,6 +15,7 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
 async function load( file ) {
 	return import( sourceFileUrl( "src/engine/foundation/" + file ).href );
 }
@@ -85,7 +86,7 @@ test("relative cone velocity flags 2 transforms velocity by emitter orientation 
 });
 test("published derived rotation and cone parameters use authored inputs rather than serialized scratch", async () => {
 	const { particleRotation, particleCone } = await load( "animation/particle-rotation.ts" );
-	const catalog = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/effects/programs.json", "utf8" ) ),
+	const catalog = readEffectCatalogSync( CLIENT_PUBLIC_ROOT ),
 		counts = { AxisVector4: 0, RotVector: 0, AngleVector1: 0 };
 	function visit( node ) {
 		for ( const op of node.renderProgram ?? [] ) {

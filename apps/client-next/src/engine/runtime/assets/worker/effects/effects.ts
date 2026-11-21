@@ -11,7 +11,7 @@ kept for explicit presentation diagnostics.
 
 ===========================================================================
 */
-import { createEffectPrograms } from "./program/program";
+import { compileEffectProgram, decodeEffectMeshes, parseEffectProgram } from "./program/program";
 import { skillMotionRole } from "@/engine/foundation/animation/skill-motion";
 import { effectScript } from "@/engine/foundation/animation/effect-script";
 import type { EffectCatalog, EffectRecord, EffectStage } from "@/engine/contracts/effects";
@@ -74,10 +74,12 @@ Preserve unsupported operations for explicit presentation diagnostics.
 ================
 */
 export function createEffectDecoder() {
-	const programs = createEffectPrograms();
 	return {
-		model: programs.decode,
-		dispose: programs.clear,
+		// One effect program file, then its compiled model (program.ts).
+		program: parseEffectProgram,
+		// Its meshes, from the bytes the caller read (effectMeshFile per key).
+		meshes: decodeEffectMeshes,
+		model: compileEffectProgram,
 		/*
 		================
 		decode

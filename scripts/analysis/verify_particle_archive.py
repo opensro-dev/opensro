@@ -54,7 +54,9 @@ def main():
             mismatches.append(name)
     if mismatches:
         raise ValueError('Extraction differs from archive: '+repr(mismatches))
-    programs = json.loads((PUBLIC_ROOT/'assets/effects/programs.json').read_text())
+    # The closure record the effect build publishes (EFFECT_PROGRAM_INDEX in
+    # apps/client-next/src/engine/foundation/assets/effect-programs.ts).
+    programs = json.loads((PUBLIC_ROOT/'assets/effects/programs/index.json').read_text())
     referenced = {r['effectPath'] for r in programs['reachability']['entityParticleReferences']}
     absent = sorted(name for name in referenced if name not in files)
     certificate = {'format': 'sro-particle-archive-v1', 'archive': archive.name,

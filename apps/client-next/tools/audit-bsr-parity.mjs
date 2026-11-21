@@ -9,6 +9,7 @@ import { parseCharacterBsr } from "../../../scripts/build/char/formats.mjs";
 import { dataAssetPath } from "../../../scripts/build/shared/jmxAssetIO.mjs";
 import { readPublishedAssetBytesSync, readPackedAssetBytesSync } from "../../../scripts/lib/publishedAsset.mjs";
 import { npcManifestModels } from "../../../scripts/build/shared/npcManifest.mjs";
+import { readEffectIndexSync, readEffectProgramSync } from "../../../scripts/lib/effectCatalog.mjs";
 const root = path.resolve( import.meta.dirname, ".." ), publicRoot = CLIENT_PUBLIC_ROOT;
 const output = path.join( root, "temp/artifacts/bsr-parity" );
 fs.mkdirSync( output, { recursive: true } );
@@ -35,13 +36,23 @@ const { modelAnimationParticles } = await load(
 );
 const { createEffectDecoder } = await load( "src/engine/runtime/assets/worker/effects/effects.ts", "decoder" );
 const decoder = createEffectDecoder(),
-	programBytes = read( "/assets/effects/programs.json" ),
-	programs = JSON.parse( programBytes );
+	programs = readEffectIndexSync( CLIENT_PUBLIC_ROOT );
+/*
+================
+compileEffect
+
+One effect through the worker's own parse and compile.
+================
+*/
+function compileEffect( resource ) {
+	const { bytes, meshes } = readEffectProgramSync( resource, CLIENT_PUBLIC_ROOT );
+	return decoder.model( decoder.program( bytes ), meshes, resource );
+}
 const report = {
 	format: "sro-bsr-parity-v1",
 	qualification:
 		"v1.150 original BSR -> published metadata -> production decoder; admission is not native pixel equivalence",
-	inputs: { programs: hash( programBytes ) },
+	inputs: { programs: hash( JSON.stringify( programs ) ) },
 	models: [],
 	effects: [],
 	issues: [],
@@ -169,7 +180,7 @@ const allEffects = new Set( [
 for ( const resource of [ ...allEffects ].sort() ) {
 	const entry = { resource, ambient: effects.has( resource ) };
 	try {
-		const { model, imagePaths } = decoder.model( programBytes, resource );
+		const { model, imagePaths } = compileEffect( resource );
 		for ( const url of imagePaths ) read( url );
 		entry.primitives = model.primitives.length;
 		entry.images = imagePaths.length;
@@ -188,7 +199,7 @@ if (
 ) report.issues.push( { reason: "published native-empty resource list differs from original archive certificate" } );
 for ( const resource of archiveEvidence.absent ) {
 	try {
-		const { model, imagePaths } = decoder.model( programBytes, resource );
+		const { model, imagePaths } = compileEffect( resource );
 		if ( model.nodes.length || model.primitives.length || imagePaths.length ) {
 			throw Error( "Absent native resource produced a visual" );
 		}

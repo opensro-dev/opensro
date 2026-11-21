@@ -14,9 +14,7 @@ the game never calls them.
 import type { EntityState } from "@/engine/contracts/world";
 import type { CharacterActor } from "@/engine/contracts/character";
 import type { ItemPresentation, Resource } from "./internal/presentation-contract";
-
-// An effect actor's model names its program in the effect bundle.
-const EFFECT_PROGRAMS = "/effects/programs.json#";
+import { isEffectProgramModel } from "@/engine/foundation/assets/effect-programs";
 
 /*
 ================
@@ -114,7 +112,7 @@ export function createViewerQueries(
 			if ( !wanted ) return true;
 			let drawn = 0;
 			for ( const actor of output.displayed.values() ) {
-				if ( actor.attachment?.gid === gid && actor.model.includes( EFFECT_PROGRAMS ) ) drawn++;
+				if ( actor.attachment?.gid === gid && isEffectProgramModel( actor.model ) ) drawn++;
 			}
 			return drawn >= wanted;
 		},

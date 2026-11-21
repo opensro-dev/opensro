@@ -79,7 +79,7 @@ const SKILLDATA_COL_ORIGINAL = 6;
 // Port-only, not native: the Blue Berserk effect rows the later client marks Service == 0 and the
 // port draws: the second Hwan body, and the two quest traps (the Niya General spirit trap and the
 // level 100 trial's Annihilation Trap), whose ground model the player must see.
-const HWAN_EFFECTS_WITHOUT_SERVICE = new Set( [
+export const HWAN_EFFECTS_WITHOUT_SERVICE = new Set( [
 	"SYSTEM_CH_HWAN2MODE",
 	"SKILL_QNO_CH_HWAN_1_4_04_01",
 	"SKILL_QNO_CH_WHAN_2_1_01_01",

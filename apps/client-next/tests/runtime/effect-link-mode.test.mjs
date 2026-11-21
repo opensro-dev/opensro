@@ -15,6 +15,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
+import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
 
 const { effectLinks: resolveLinks } = await import( "../../src/engine/foundation/animation/effect-link-mode.ts" );
 
@@ -127,7 +128,7 @@ test("a malformed LinkMode is refused", () => {
 });
 
 test("every shipped effect's LinkMode agrees with its element headers", () => {
-	const { effects } = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/effects/programs.json", "utf8" ) );
+	const { effects } = readEffectCatalogSync( CLIENT_PUBLIC_ROOT );
 	let checked = 0;
 	for ( const [path, effect] of Object.entries( effects ) ) {
 		if ( !effect?.root ) continue;

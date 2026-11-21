@@ -19,6 +19,7 @@ import type { AssetOwner } from "@/engine/contracts/assets";
 import type { CharacterModel } from "@/engine/contracts/character";
 import type { Renderer } from "@/engine/contracts/runtime";
 import type { NativeTexture } from "@/engine/contracts/texture";
+import { isEffectProgramModel } from "@/engine/foundation/assets/effect-programs";
 // A failed resource has its own retry deadline. It never stops actor reconciliation.
 
 /*
@@ -253,7 +254,7 @@ export function createCharacterResources(
 			if ( !path.startsWith( "/assets/" ) || path.includes( ".." ) || path.includes( "\\" ) ) {
 				throw new Error( "Unpublished character resource" );
 			}
-			const decode = model ? (path.includes( "/effects/programs.json#" ) ? "effect" : "character") : undefined;
+			const decode = model ? (isEffectProgramModel( path ) ? "effect" : "character") : undefined;
 			jobs.set( path, {
 				id: assets.request( new URL( path, origin ).href, assetRequestBudget( decode ), decode ),
 				path,

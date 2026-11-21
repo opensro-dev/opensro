@@ -22,9 +22,7 @@ test( "nested particle raster equals an independently positioned quad, including
 		await page.goto( CLIENT_NEXT_BASE_URL );
 		const result = await page.evaluate( async () => {
 			const { createRenderer } = await import( "/src/engine/runtime/renderer/renderer.ts" );
-			const { createEffectPrograms } = await import(
-				"/src/engine/runtime/assets/worker/effects/program/program.ts"
-			);
+			const { createEffectDecoder } = await import( "/src/engine/runtime/assets/worker/effects/effects.ts" );
 			const canvas = document.createElement( "canvas" ),
 				renderer = createRenderer( canvas ),
 				output = document.createElement( "canvas" );
@@ -98,7 +96,7 @@ test( "nested particle raster equals an independently positioned quad, including
 				meshes: {},
 				textures: { "white.png": "white" }
 			};
-			const bytes = new TextEncoder().encode( JSON.stringify( catalog ) ), decoder = createEffectPrograms();
+			const decoder = createEffectDecoder();
 			try {
 				const start = performance.now();
 				while ( renderer.phase() === "starting" && performance.now() - start < 15000 ) {
@@ -115,7 +113,9 @@ test( "nested particle raster equals an independently positioned quad, including
 					far: 1000
 				} );
 				for ( const name of [ "nested.efp", "reference.efp", "stone.efp" ] ) {
-					const { model } = decoder.decode( bytes, name );
+					// The compiler's input: one effect with the catalogue's textures.
+					const file = { effect: catalog.effects[name], meshes: [], textures: catalog.textures };
+					const { model } = decoder.model( file, catalog.meshes, name );
 					renderer.setCharacterModel( name, {
 						...model,
 						images: [ { width: white.width, height: white.height } ]
