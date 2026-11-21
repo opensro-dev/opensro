@@ -221,6 +221,17 @@ class RizinSession:
 		doc = self.cmdj(f"pdfj @ {va:#x}") or {}
 		return doc.get("ops") or []
 
+	def containing_function(self, va):
+		"""Start of the analyzed function whose body holds va, or None.
+
+		A string or immediate search lands inside a function, never on
+		its first byte; afij answers for any address the function covers.
+		"""
+		rows = self.cmdj(f"afij @ {va:#x}") or []
+		if not rows or rows[0].get("offset") is None:
+			return None
+		return int(rows[0]["offset"])
+
 	def xrefs_to(self, va):
 		"""axtj rows pointing at va: [{from, to, type}]."""
 		self.cmd(f"s {va:#x}")
@@ -468,12 +479,35 @@ def cmd_index(args, con, rz):
 # view
 # =====================================================================
 
+def resolve_view_target(con, rz, target):
+	"""The function row `view` shows for target, and the address it held.
+
+	A name or a function's first address resolves as everywhere else. An
+	address inside a function (what `strings` or a byte search reports)
+	resolves to the function that contains it, so the reader lands on
+	the code that uses the hit instead of a "not found".
+	"""
+	row = revtool.resolve_func(con, target)
+	if row:
+		return row, None
+	addr = revtool.norm_addr(target)
+	if not addr:
+		return None, None
+	owner = rz.containing_function(int(addr, 16))
+	if owner is None:
+		return None, None
+	return revtool.resolve_func(con, f"{owner:08x}"), int(addr, 16)
+
+
 def cmd_view(args, con, rz):
-	row = revtool.resolve_func(con, args.target)
+	row, inside = resolve_view_target(con, rz, args.target)
 	if not row:
 		print(f"error: function not found: {args.target}", file=sys.stderr)
-		print("  (run `index` first, or try `find`)", file=sys.stderr)
+		print("  (no indexed function starts at or contains it; run `index` first, or try `find`)",
+		      file=sys.stderr)
 		return 1
+	if inside is not None:
+		print(f"note: {args.target} is inside {row[1]} @ 0x{row[0]}", file=sys.stderr)
 	addr, name, sig, _sb, _eb, _sl, _el = row
 	va = int(addr, 16)
 	gate = revtool.investigation_gate(con, args, name)
