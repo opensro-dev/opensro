@@ -288,6 +288,11 @@ var Settings = []Setting{
 	{Env: "SRO_PET_INVENTORY_PAGES", NomadVar: "pet_inventory_pages", Default: "on"},
 	{Env: "SRO_GRAB_PET_INVENTORY_PAGES", NomadVar: "grab_pet_inventory_pages", Default: ""},
 	{Env: "SRO_TRANSPORT_PET_INVENTORY_PAGES", NomadVar: "transport_pet_inventory_pages", Default: ""},
+	// Owner, 2026-11-21: eight warehouse pages, and eight guild storage
+	// pages at level 5 scaled down the levels (domain/storagepages.go).
+	// Unset or "off" is native in code; "8" is this shard's deployed value.
+	{Env: "SRO_STORAGE_PAGES", NomadVar: "storage_pages", Default: "8"},
+	{Env: "SRO_GUILD_STORAGE_PAGES", NomadVar: "guild_storage_pages", Default: "8"},
 	{Env: "SRO_STORAGE_AUTO_STACK", NomadVar: "storage_auto_stack", Default: "on"},
 	// Owner, 2026-11-07: Alt+click links an item into a chat line. Off is
 	// native: chat lines are text only. The limit is a tunable (game/tunables).

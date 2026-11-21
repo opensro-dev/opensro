@@ -270,6 +270,17 @@ func openAuthorityPlane(
 	// created at the 2.5-page inventory base; the world entry raises the
 	// rest (wiring_gameplay.go publishes the same reading to the entry).
 	options.InventoryPages = enterworld.InventoryPagesFromEnv()
+	// Port-only, not native (owner, 2026-11-21): raised account and guild
+	// warehouses (storage_pages.go); unset is native.
+	storagePages, err := storagePagesFromEnv()
+	if err != nil {
+		return authorityPlane{}, err
+	}
+	options.StoragePages = storagePages
+	if storagePages.Personal > 0 || storagePages.Guild > 0 {
+		log.Infof("storage: account warehouse %d pages, level-5 guild warehouse %d pages (%s, %s; 0 is native)",
+			storagePages.Personal, storagePages.Guild, EnvStoragePages, EnvGuildStoragePages)
+	}
 	options.DefaultSkills = enterworld.DefaultSkillSeeder(textdata.Skills)
 	options.DefaultInventory = enterworld.StarterInventorySeeder(
 		characterRoster,

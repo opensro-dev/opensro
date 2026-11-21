@@ -198,7 +198,7 @@ func TestSwapItemsOfflineShardCoversEveryone(t *testing.T) {
 			t.Fatalf("%s bag row %+v", c.Name, got)
 		}
 	}
-	storage, err := readAccountStorage(reopened.syncDBLocked(), "acct-Leaving")
+	storage, err := reopened.readAccountStorage(reopened.syncDBLocked(), "acct-Leaving")
 	if err != nil || len(storage.Rows) != 1 || storage.Rows[0].Codename != "MOON" {
 		t.Fatalf("storage %v %+v", err, storage.Rows)
 	}
