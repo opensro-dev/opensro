@@ -141,9 +141,7 @@ ExtraGoodsFromEnv
 
 The environment's goods: the parsed setting, regrouped onto Jangan's
 three alchemy tabs while SRO_JANGAN_ALCHEMY_SHOP is on and the default
-list is in force (alchemyshop.go). The weapon switch scrolls ride the
-regrouped elixirs tab while SRO_WEAPON_SWITCH_SCROLL is on too
-(weaponswitch.go): the alchemy shop is where the owner sells them.
+list is in force (alchemyshop.go).
 ================
 */
 func ExtraGoodsFromEnv() ([]ExtraGood, error) {
@@ -158,9 +156,6 @@ func ExtraGoodsFromEnv() ([]ExtraGood, error) {
 	}
 	if active {
 		goods = regroupJanganAlchemy(goods)
-		if WeaponSwitchScrollFromEnv() {
-			goods = append(goods, weaponSwitchGoods()...)
-		}
 	}
 	// The Devil's Spirit token goods (SRO_NASRUN) are not this setting's:
 	// the shop builders append NasrunGoodsFromEnv beside it, so the rules

@@ -135,3 +135,7 @@ test("the use carries its tail and only its own answer reads as its lines", () =
 	assert.deepEqual( defined( defined( g.take() ).notices ).map( n => n.sequence ), [ notice.sequence ] );
 	g.dispose();
 });
+
+test("0xF6 reads as the blue options that cannot follow the weapon", () => {
+	assert.equal( weaponSwitchFailureText( 0xF6 ), "This item's blue options cannot follow it to that kind." );
+});

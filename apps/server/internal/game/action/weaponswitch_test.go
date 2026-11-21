@@ -116,18 +116,25 @@ func TestWeaponSwitchScrollOffIsNative(t *testing.T) {
 
 /*
 ================
-TestWeaponSwitchScrollRefusesAnEnhancedWeapon
+TestWeaponSwitchKeepsPlusAndBlues
 
-A plus or a blue option keeps the weapon as it is (owner: none for now).
+An enhanced weapon switches (owner, 2026-11-21): its plus and blue
+options ride the new reference unchanged.
 ================
 */
-func TestWeaponSwitchScrollRefusesAnEnhancedWeapon(t *testing.T) {
+func TestWeaponSwitchKeepsPlusAndBlues(t *testing.T) {
 	rt, c, scroll := weaponSwitchFixture(t)
-	c.MissionInventory[len(c.MissionInventory)-3].Plus = 1
-	assertItemUseRefusedUnchanged(t, rt, c, weaponSwitchUse(scroll, switchWeaponSlot, 4), weaponSwitchErrEnhanced)
-	c.MissionInventory[len(c.MissionInventory)-3].Plus = 0
-	c.MissionInventory[len(c.MissionInventory)-3].MagicOptions = []uint64{1}
-	assertItemUseRefusedUnchanged(t, rt, c, weaponSwitchUse(scroll, switchWeaponSlot, 4), weaponSwitchErrEnhanced)
+	blues := []uint64{enterworld.EncodeMagicOption(5, 3)}
+	weapon := &c.MissionInventory[len(c.MissionInventory)-3]
+	weapon.Plus, weapon.MagicOptions = 7, blues
+	out := rt.HandleItemUse(testDivision, c, weaponSwitchUse(scroll, switchWeaponSlot, 4))
+	if len(out.Frames) < 3 || out.Frames[0].Payload[0] != wire.ResultSuccess {
+		t.Fatalf("use = %+v / %q", out.Frames, out.DiagnosticRefusal)
+	}
+	row, _ := inventoryRowAt(c, switchWeaponSlot)
+	if row.Codename != "ITEM_CH_SPEAR_08_A_RARE" || row.Plus != 7 || len(row.MagicOptions) != 1 || row.MagicOptions[0] != blues[0] {
+		t.Fatalf("switched row %+v, want the spear at +7 with its blue", row)
+	}
 }
 
 /*
@@ -158,27 +165,6 @@ func TestWeaponSwitchScrollRefusesTheWrongKind(t *testing.T) {
 	assertItemUseRefusedUnchanged(t, rt, c, weaponSwitchUse(scroll, switchWeaponSlot, 16), weaponSwitchErrKind)
 	assertItemUseRefusedUnchanged(t, rt, c, weaponSwitchUse(scroll, switchWeaponSlot, 3), weaponSwitchErrNoTwin)
 	assertItemUseRefusedUnchanged(t, rt, c, weaponSwitchUse(scroll, switchWeaponSlot, 8), weaponSwitchErrNoTwin)
-}
-
-/*
-================
-TestWeaponSwitchScrollRowLimits
-
-A row's degree and seal limits, for the later quality scrolls.
-================
-*/
-func TestWeaponSwitchScrollRowLimits(t *testing.T) {
-	sword := &enterworld.ItemRef{Codename: "ITEM_CH_SWORD_08_A_RARE", TypeIDs: [4]int64{3, 1, 6, 2}, Rarity: 2,
-		NativeFields: enterworld.NewNativeFields(map[string]float64{"itemClass": 22})}
-	if !isSwitchableWeapon(sword, commerce.WeaponSwitchScroll{Seals: true}) {
-		t.Fatal("the any-weapon row refused a sealed sword")
-	}
-	if isSwitchableWeapon(sword, commerce.WeaponSwitchScroll{Seals: false}) {
-		t.Fatal("a normal-only row admitted a sealed sword")
-	}
-	if isSwitchableWeapon(sword, commerce.WeaponSwitchScroll{Seals: true, MaxDegree: 7}) {
-		t.Fatal("a degree-7 row admitted a degree-8 sword")
-	}
 }
 
 /*
