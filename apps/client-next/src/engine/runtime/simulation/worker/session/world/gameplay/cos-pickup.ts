@@ -221,7 +221,9 @@ result
 
 Port-only, not native (owner 2026-11-21: the default, no row): the
 original answers 0xB4/0xB5 by sending the disable-setting request
-(0x0077DD61), which turns pickup off. Here pickup stays on: 0xB4 (the pet's
+(DropItemManager_ApplyCosPickupResult 0x77DE3D -> CosEntryPanel_
+SendCashPetPickupSetting 0x6A1B10: 0x705B selector 2 with commandMode
+bit 0x80 cleared), which turns pickup off. Here pickup stays on: 0xB4 (the pet's
 bag is full) pauses non-gold item pickup for that pet until spaceChanged
 fires, so gold pickup continues without spamming 0x769E; 0xB5 (the owner's
 player bag is full) holds back only the refused drop, since every other

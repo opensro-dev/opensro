@@ -5396,7 +5396,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					};
 					// Port-only, not native (owner 2026-11-21: the default, no row):
 					// a full bag pauses the refused pickup instead of the native
-					// 0x0077DD61 disable request (cos-pickup.ts result).
+					// 0x77DE3D disable request (cos-pickup.ts result).
 					cosPickup.result( cosResult, now );
 					// 74FD56..74FE15: selector 2 failures dispatch category 4
 					// (74FDEB) and clear the assist target (+0xAB2C, 74FE0B);
