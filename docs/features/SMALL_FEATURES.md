@@ -189,3 +189,16 @@ Settings:
   boot).
 - Client: Experimental window, Chat tab, "Item links in chat" (on by
   default). Off inserts nothing and shows received links as plain text.
+
+## Quick fuse
+
+In the original client, pressing Fuse in the alchemy window first plays a short
+preparation effect (about 0.8 s, sixteen 50 ms cells) and sends the attempt
+only when it ends; Fuse then ignores presses until the result effect has played.
+That is the default here.
+
+`SRO_QUICK_FUSE=on` (port-only, off by default; read at startup and sent at
+world entry) makes Fuse send the attempt on the press and take the next press as
+soon as the result arrives. The result effect still plays, and a press while an
+attempt is still out is ignored, as before. The server's reinforcement and its
+success rates do not change. This shard deploys it on.

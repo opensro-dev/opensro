@@ -72,6 +72,10 @@ func (game *gameplayPlane) wireJobRules() error {
 	// Port-only, not native: trader and hunter suits hide worn armour
 	// (presentation, published to the client).
 	game.deps.JobSuitHidesArmor = action.JobSuitHidesArmorFromEnv()
+	game.deps.QuickFuse = action.QuickFuseFromEnv()
+	if game.deps.QuickFuse {
+		log.Infof("alchemy: Fuse sends at once, no effect wait (%s)", action.EnvQuickFuse)
+	}
 	if game.deps.JobSuitHidesArmor {
 		log.Infof("job: trader and hunter suits hide worn armour (%s)", action.EnvJobSuitHidesArmor)
 	}

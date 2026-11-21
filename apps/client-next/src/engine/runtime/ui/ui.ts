@@ -1681,7 +1681,10 @@ export function createUi( ports: UiPorts ) {
 	================
 	*/
 	function alchemyFusing() {
-		return !!view?.gameplay?.inventoryPending || alchemyEffect !== null;
+		// The server's port-only quick rule (alchemy.ts quickFuse) waits for
+		// the answer only, never for the result effect.
+		const waitsForEffect = alchemyEffect !== null && view?.gameplay?.alchemy?.quick !== true;
+		return !!view?.gameplay?.inventoryPending || waitsForEffect;
 	}
 	const fortressStaffHud = createFortressStaffHud();
 	const unionHud = createUnionHud();
