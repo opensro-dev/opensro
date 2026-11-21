@@ -474,6 +474,9 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 					loop: true,
 					scale: 1,
 					pickable: false,
+					// A compound part like any other: it wears the owner's one
+					// material register (A91970 applies it to every part).
+					materialTint: owner.materialTint,
 					attachment: { gid: entity.gid, bone: hair.bone, offset: [ 0, 0, 0 ], basis: "compound" }
 				} );
 			}
@@ -583,6 +586,10 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 						layers,
 						scale: 1,
 						pickable: false,
+						// One CCompChar register tints every part (A91970): the
+						// child wears the owner's current tint, or its wings stay
+						// white while the body is berserk red (#3543).
+						materialTint: owner.materialTint,
 						attachment: { gid: entity.gid, bone: entry.bone, offset: [ 0, 0, 0 ], basis: "compound" }
 					} );
 					// The resource's own ambient set rides its animated bones
