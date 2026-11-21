@@ -20,11 +20,13 @@ options kept (action/weaponswitch.go, action/raceswitch.go):
 Each scroll has its own flag (default off); off is the native game: the
 donor item is sold nowhere and keeps its unsupported-use answer.
 
-v1.150 has no such items, so each scroll reuses a shipped one the native
-game never sells, drops or uses, whose art fits: the +2 weapon reinforce
-scroll (ref 3790; its +1 twin, ref 3789, is the name-change scroll,
-action/namechange.go), the +1 armor reinforce scroll (ref 3791) and the
-+1 accessory reinforce scroll (ref 3793).
+v1.150 has no such items, so each scroll is an item of its own the
+variant build stages while its flag is on (scripts/switch_scroll_import.py):
+a copy of a shipped reinforce scroll's row whose art fits (the +2 weapon,
++1 armor and +1 accessory reinforce scrolls), under its own codename,
+identity, name and description. The shipped scrolls stay untouched
+(owner, 2026-11-21). A flag on without its item in the data lists
+nothing (sro-gameworld wiring_equipswitch.go).
 
 This package owns the table because both the mall catalogue (here) and
 the action runtime read it, and action already imports commerce.
@@ -76,11 +78,11 @@ const equipSwitchMallTab = "MALL_CONSUME_SCROLL"
 // EquipSwitchScrolls is every scroll the feature sells (owner's prices,
 // 2026-11-21).
 var EquipSwitchScrolls = []EquipSwitchScroll{
-	{Kind: SwitchWeapon, Env: EnvWeaponSwitchScroll, Codename: "ITEM_MALL_REINFORCE_WEAPON_INC_2_SCROLL",
+	{Kind: SwitchWeapon, Env: EnvWeaponSwitchScroll, Codename: "ITEM_MALL_WEAPON_SWITCH_SCROLL",
 		MallPackage: "PACKAGE_ITEM_MALL_WEAPON_SWITCH", Silk: 1490},
-	{Kind: SwitchArmor, Env: EnvArmorSwitchScroll, Codename: "ITEM_MALL_REINFORCE_ARMOR_INC_1_SCROLL",
+	{Kind: SwitchArmor, Env: EnvArmorSwitchScroll, Codename: "ITEM_MALL_ARMOR_SWITCH_SCROLL",
 		MallPackage: "PACKAGE_ITEM_MALL_ARMOR_SWITCH", Silk: 990},
-	{Kind: SwitchAccessory, Env: EnvAccessorySwitchScroll, Codename: "ITEM_MALL_REINFORCE_ACCESSARY_INC_1_SCROLL",
+	{Kind: SwitchAccessory, Env: EnvAccessorySwitchScroll, Codename: "ITEM_MALL_ACCESSORY_SWITCH_SCROLL",
 		MallPackage: "PACKAGE_ITEM_MALL_ACCESSORY_SWITCH", Silk: 990},
 }
 

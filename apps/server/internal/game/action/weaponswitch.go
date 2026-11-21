@@ -4,9 +4,9 @@
 weaponswitch.go - the weapon switch scroll: a bag weapon becomes another kind
 
 Port-only, not native (owner, 2026-11-04). The scroll and its listing live
-in commerce/weaponswitch.go; this file serves its use, behind the same
-SRO_WEAPON_SWITCH_SCROLL. Off is native: the donor item is an item no
-family serves.
+in commerce/equipswitch.go; this file serves its use, behind the same
+SRO_WEAPON_SWITCH_SCROLL. Off is native: the scroll's item is not in the
+data and no family serves it.
 
 The browser client arms an item-target cursor when the scroll is used,
 the player clicks a weapon in the bag, then picks the new kind in a
