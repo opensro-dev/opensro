@@ -40,7 +40,7 @@ func TestWeaponSwitchListsOnlyInMall(t *testing.T) {
 			t.Fatalf("the alchemy shop lists the scroll: %+v", good)
 		}
 	}
-	if mall := WeaponSwitchMallGoods(); len(mall) != 1 || mall[0].Silk != 1490 {
+	if mall := EquipSwitchMallGoods(map[EquipSwitchKind]bool{SwitchWeapon: true}); len(mall) != 1 || mall[0].Silk != 1490 {
 		t.Fatalf("mall goods %+v, want one at 1490 silk", mall)
 	}
 }
@@ -59,7 +59,7 @@ func TestWeaponSwitchScrollOffListsNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, good := range goods {
-		if _, ok := WeaponSwitchScrollByCodename(good.Codename); ok {
+		if _, ok := EquipSwitchScrollByCodename(good.Codename); ok {
 			t.Fatalf("flag off still lists %s", good.Codename)
 		}
 	}
@@ -74,10 +74,10 @@ The authored package reaches the mall catalogue at the row's silk.
 */
 func TestWeaponSwitchScrollListsInTheMall(t *testing.T) {
 	tier.Long(t, "the shipped mall data plus the weapon switch package")
-	scroll := WeaponSwitchScrolls[0]
+	scroll := EquipSwitchScrolls[0]
 	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
-	catalog, err := LoadMall(dir, WeaponSwitchMallGoods(), false, items)
+	catalog, err := LoadMall(dir, EquipSwitchMallGoods(map[EquipSwitchKind]bool{SwitchWeapon: true}), false, items)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,4 +94,25 @@ func TestWeaponSwitchScrollListsInTheMall(t *testing.T) {
 		return
 	}
 	t.Fatalf("mall does not list %s", scroll.MallPackage)
+}
+
+/*
+================
+TestEquipSwitchMallGoodsFollowFlags
+
+Each scroll lists only while its own flag is on.
+================
+*/
+func TestEquipSwitchMallGoodsFollowFlags(t *testing.T) {
+	goods := EquipSwitchMallGoods(map[EquipSwitchKind]bool{SwitchArmor: true})
+	want := MallExtraGood{Tab: "MALL_CONSUME_SCROLL", Package: "PACKAGE_ITEM_MALL_ARMOR_SWITCH",
+		Item: "ITEM_MALL_REINFORCE_ARMOR_INC_1_SCROLL", Silk: 990}
+	if len(goods) != 1 || goods[0] != want {
+		t.Fatalf("armor-only goods %+v, want %+v", goods, want)
+	}
+	all := EquipSwitchMallGoods(map[EquipSwitchKind]bool{SwitchWeapon: true, SwitchArmor: true, SwitchAccessory: true})
+	if len(all) != 3 || all[2].Item != "ITEM_MALL_REINFORCE_ACCESSARY_INC_1_SCROLL" || all[2].Silk != 990 ||
+		all[0].Silk != 1490 {
+		t.Fatalf("all goods %+v", all)
+	}
 }

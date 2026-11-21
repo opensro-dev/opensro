@@ -291,10 +291,13 @@ func (rt *Runtime) handleItemUse(
 			result.DiagnosticRefusal = "item-use: name change scroll is off (" + EnvNameChangeScroll + ")"
 			return false
 		}
-		if family == itemUseWeaponSwitch && !rt.WeaponSwitchScroll {
-			// Port-only: with the flag off the scroll is the native game.
-			result.DiagnosticRefusal = "item-use: weapon switch scroll is off (" + commerce.EnvWeaponSwitchScroll + ")"
-			return false
+		if family == itemUseEquipSwitch {
+			// Port-only: with its own flag off a switch scroll is the
+			// native game (commerce/equipswitch.go).
+			if scroll, _ := commerce.EquipSwitchScrollByCodename(ref.Codename); !rt.EquipSwitch[scroll.Kind] {
+				result.DiagnosticRefusal = "item-use: equipment switch scroll is off (" + scroll.Env + ")"
+				return false
+			}
 		}
 		if code := itemUseRequirements(character, ref); code != 0 {
 			result = itemUseFailure(code)
@@ -484,8 +487,8 @@ func (rt *Runtime) handleItemUse(
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
 			}, character, tail, &result)
 		}
-		if family == itemUseWeaponSwitch {
-			return rt.useWeaponSwitchScroll(skillItemUse{
+		if family == itemUseEquipSwitch {
+			return rt.useEquipSwitchScroll(skillItemUse{
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
 			}, character, tail, &result)
 		}
