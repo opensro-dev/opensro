@@ -62,13 +62,13 @@ Countdowns, both tied to the living Roc (its handlers die with it):
 	          "leaves in 30, 15, 10, 5, 3, 1 minutes" from 3:00:01 after
 	          it appeared; at 3:30 a seventh sends every resident to
 	          GATE_RC_MOUNTAIN_GATE's spawn
-	spirits   the Roc's repeating 5-minute timer (v1.188 0x5FD840) keeps
+	spirits   the Roc's repeating 5-minute timer (v1.188) keeps
 	          three of the four spirits up: it counts the living ones and
 	          spawns 3 - alive into the slots empty longest. Each slot is
 	          one codename at one fixed point; its layer flag holds when it
-	          emptied (the death hook 0x5FD4A0 writes RocTop_ElapsedTime;
+	          emptied (the spirit's death hook writes the layer's elapsed time;
 	          the layer start writes 1, so the first pass fills the first
-	          three in table order: the list sort 0x600880 is stable)
+	          three in table order: the slot list sort is stable)
 
 The Roc tells the whole division when it appears and when it falls
 (0x3058 kinds 5 and 6, the v1.150 form of the reference server's
@@ -202,7 +202,7 @@ var rocDepartureNotices = []struct {
 }
 
 // rocSpirits are the respawn timer's four slots, in its table order: each
-// codename has its own point (v1.188 0x5FD840's float table).
+// codename has its own point (the v1.188 timer's position table).
 var rocSpirits = [4]struct {
 	codename string
 	spawn    simulation.Spawn
