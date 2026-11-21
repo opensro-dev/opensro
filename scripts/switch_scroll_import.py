@@ -15,9 +15,10 @@ SCROLL for the weapon scroll, ..._ARMOR_INC_1_SCROLL for the armor one,
 ..._ACCESSARY_INC_1_SCROLL for the accessory one), byte for byte but its
 identity, its codename and its two name symbols: the donor's icon, type
 (3/3/13/11), stack and price come along, so the client draws and stacks
-it like the scroll whose art it wears. Each takes a fresh identity above
-every object row of the tree, remembered in the marker so a rebuild never
-moves an item a player holds, and its English name and description join
+it like the scroll whose art it wears. Each takes its identity from
+published_ids: above every object row of the tree, and the published one
+once a release ships it (data/published-identities.json), so the items
+players hold keep it; its English name and description join
 textdataname.txt in the v1.150 layout (English in column 8).
 
 A flag off removes exactly what that scroll added: its row (the shard

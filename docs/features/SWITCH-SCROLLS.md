@@ -79,8 +79,8 @@ is an item of its own:
   scroll is a copy of a shipped reinforce scroll's itemdata row (the +2 weapon, +1 armor and +1 accessory
   reinforce scrolls) under its own codename, name symbols and identity, so it wears that scroll's icon,
   type (3/3/13/11) and stack. The rows go to their own shard, `itemdata_290000.txt`. Each identity is
-  allocated above every object row of the tree and remembered in `.opensro-switch-scrolls.json`, so a rebuild
-  never moves an item a player holds. The English name and description join `textdataname.txt`. A switch
+  allocated by `published_ids` above every object row of the tree; once a release ships the scroll, its id
+  is pinned in `data/published-identities.json`, and every later build keeps it for the items players hold. The English name and description join `textdataname.txt`. A switch
   off removes exactly what its scroll added.
 - **Server** (`internal/game/item/commerce/equipswitch.go`: the table of scrolls, switches, prices and mall
   listing; `cmd/services/sro-gameworld/wiring_equipswitch.go`: which scrolls are on). The use is admitted by
