@@ -5,7 +5,8 @@ wiring_itemmall.go - the Item Mall's catalogue and its port-only goods
 
 The mall lists the client's own packages (ConfigureMall reads them from
 textdata) plus the port-only goods each switch adds: the authored extra
-packages, the name change scroll, the equipment switch scrolls. This file
+packages, the name change scroll, the stat and skill reset scrolls, the
+equipment switch scrolls. This file
 gathers those goods, picks the category layout and configures the mall
 once at boot; newGameplayPlane calls it after the commerce catalogue.
 
@@ -52,6 +53,8 @@ func configureItemMall(items *action.Runtime, textdataDir string, mallAuthority 
 		})
 		log.Infof("mall: name change scroll listed at %d silk (%s, port-only, not native)", action.NameChangePriceSilk, action.EnvNameChangeScroll)
 	}
+	// The stat and skill reset scrolls (port-only, wiring_resetscrolls.go).
+	mallExtra = append(mallExtra, applyResetScrolls(items, refs)...)
 	// The equipment switch scrolls (port-only, wiring_equipswitch.go).
 	mallExtra = append(mallExtra, applyEquipSwitchScrolls(items, refs)...)
 	// SRO_MALL_CATEGORIES (port-only, not native, #3257): the later

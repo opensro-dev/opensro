@@ -814,6 +814,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.items.TrainingCampKill = game.mentorInvites.CampKillGrant
 	game.items.RefundExperience = stats.ExperienceRefundUpdater()
 	game.items.RecallStatPoints = stats.StatRecallUpdater()
+	game.items.RecallSkills = stats.SkillRecallUpdater()
 	game.items.ApplyDeathPenalty = stats.DeathPenaltyUpdater()
 	game.items.UpdateJobExperience = stats.JobExperienceUpdater()
 	// Delivery resolves sessions from their bindings alone and never reads the
