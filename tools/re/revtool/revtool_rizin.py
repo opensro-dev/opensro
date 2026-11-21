@@ -9,8 +9,9 @@ same facts from the contributor's own retail binary via rizin
 `afsj`, a function's text from `pdfj` disassembly, cross references
 from `axtj`. Commands that never touched the dump (they read the
 overlay DB) delegate to revtool unchanged: `find`, `audit`, `rename`,
-`doctor`, `sync`. `revtool.py --backend rizin` dispatches here; this
-module is also runnable on its own, with the same argument shapes.
+`note`, `seen`, `doctor`, `sync`. `revtool.py --backend rizin`
+dispatches here; this module is also runnable on its own, with the
+same argument shapes.
 
     py revtool_rizin.py --binary SRO_Client.exe index
     py revtool_rizin.py --binary SRO_Client.exe view sub_402a70
@@ -88,6 +89,8 @@ except ImportError:  # repo layout not merged yet: allow an explicit home
 		raise SystemExit(
 			"error: revtool_rizin needs revtool.py beside it "
 			"(tools/re/revtool/) or REVTOOL_HOME pointing at it.")
+
+import revtool_seed  # noqa: E402  (the applied-seed record, #4043)
 
 RIZIN_VERSION = "0.8.2"
 ANALYSIS_CHOICES = ("aac", "aap", "aaa", "none")
@@ -442,8 +445,9 @@ def cmd_index(args, con, rz):
 	# reference step run on it, or a fresh session's analysis.
 	analysis = (f"project+{refs_step}" if from_project
 	            else getattr(args, "analyze", "aac"))
+	target_sha = revtool.sha256_file(binary)
 	revtool.meta_set(con, "backend", "rizin")
-	revtool.meta_set(con, "target_sha256", revtool.sha256_file(binary))
+	revtool.meta_set(con, "target_sha256", target_sha)
 	revtool.meta_set(con, "rizin_analysis", analysis)
 	revtool.record_artifact(
 		con, "target", binary, record_count=len(rows), producer="PE file")
@@ -472,7 +476,44 @@ def cmd_index(args, con, rz):
 		print("note: rizin sees analysis-reachable code only; the BN dump "
 		      "index holds roughly 4x this many functions. The two "
 		      "backends are not interchangeable views of one set.")
+	# A project applied from a seed other than the pinned one indexes
+	# without a word otherwise (#4043); say so once, here.
+	stale = revtool_seed.stale_seed_warning(target_sha, rz.rzdb)
+	if stale:
+		print(stale)
 	return 0
+
+
+# =====================================================================
+# find
+# =====================================================================
+
+def warn_stale_seed(args, con):
+	"""Print the stale-seed line for args' project, when it is stale (#4043).
+
+	The project is the one the session would load: --rzdb, else the
+	project beside --db (open_session's default).
+	"""
+	binary = revtool.get_binary(con, args) or getattr(args, "binary", None) \
+		or revtool.DEFAULT_BINARY
+	if not binary or not os.path.isfile(binary):
+		return
+	rzdb = getattr(args, "rzdb", None)
+	if rzdb is None and getattr(args, "db", None):
+		rzdb = os.path.splitext(args.db)[0] + ".rzdb"
+	line = revtool_seed.stale_seed_warning(revtool.sha256_file(binary), rzdb)
+	if line:
+		print(line)
+
+
+def cmd_find(args, con, _rz):
+	"""find (delegated); an empty result also checks the project's seed.
+
+	"(no matches)" on a stale project reads as "the maintainers never
+	named it" when the pinned seed names it (#4043).
+	"""
+	return revtool.cmd_find(
+		args, con, on_empty=lambda: warn_stale_seed(args, con))
 
 
 # =====================================================================
@@ -994,7 +1035,7 @@ def main(argv=None) -> int:
 	sp = sub.add_parser("find", help="find functions by name/signature substring")
 	sp.add_argument("pattern")
 	sp.add_argument("--limit", type=int, default=40)
-	sp.set_defaults(handler=lambda a, c, _rz: revtool.cmd_find(a, c), need_rizin=False)
+	sp.set_defaults(handler=cmd_find, need_rizin=False)
 
 	sp = sub.add_parser("view", help="render one function (rizin disassembly + overlay)")
 	sp.add_argument("target", help="sub_xxxx | applied name | address")
@@ -1041,6 +1082,29 @@ def main(argv=None) -> int:
 	rl.add_argument("--tier", default="guess", help=f"confidence: {'|'.join(revtool.TIERS)}")
 	rl.add_argument("--evidence", default=None)
 	sp.set_defaults(handler=cmd_rename, need_rizin=False)
+
+	# view's label-debt footer tells the reader to run `seen`/`note`;
+	# both are overlay-only (like find/audit/rename), so they delegate
+	# with the same argument shapes as the dump CLI (#4043).
+	sp = sub.add_parser("note", help="attach/list/remove notes")
+	sp.add_argument("action", choices=["add", "list", "rm"])
+	sp.add_argument("target", nargs="?",
+	                help="addr | symbol | symbol@addr | (list filter) | (rm id)")
+	sp.add_argument("body", nargs="?")
+	sp.add_argument("--tier", default="mechanism",
+	                help=f"confidence: {'|'.join(revtool.TIERS)}")
+	sp.add_argument("--supersedes", default=None,
+	                help="comma-separated note ids this note RETIRES "
+	                     "(they get a visible [SUPERSEDED by #N] prefix). Use when "
+	                     "correcting an earlier claim instead of letting both coexist.")
+	sp.set_defaults(handler=lambda a, c, _rz: revtool.cmd_note(a, c), need_rizin=False)
+
+	sp = sub.add_parser("seen",
+	                    help="one-shot triage: label an investigated symbol with a hypothesis")
+	sp.add_argument("symbol", help="sub_/data_ token (or applied name) you investigated")
+	sp.add_argument("body", help="what it does / your best guess (required, >=8 chars)")
+	sp.add_argument("--tier", default="guess", help=f"confidence: {'|'.join(revtool.TIERS)}")
+	sp.set_defaults(handler=lambda a, c, _rz: revtool.cmd_seen(a, c), need_rizin=False)
 
 	sp = sub.add_parser("doctor",
 	                    help="fail-closed provenance, DB, and ledger audit (rizin checks)")

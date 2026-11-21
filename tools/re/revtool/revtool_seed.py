@@ -639,7 +639,120 @@ def cmd_seed_apply(args, con):
 	print(f"  sampled labelled names {sampled_ok} of {sampled} match")
 	if sampled and sampled_ok != sampled:
 		raise SystemExit("error: sampled names do not match the seed")
+	record_applied_seed(rzdb, _sha256_file(args.seed), args.seed, payload)
+	print(f"  recorded the seed's sha beside the project ({seed_record_path(rzdb)})")
 	return 0
+
+
+# =====================================================================
+# the applied-seed record: which seed a project came from (#4043)
+#
+# `seed apply` writes <rzdb>.seed.json beside the project it saved:
+# the applied seed file's sha256 and the binary it describes. `index`
+# and an empty `find` (revtool_rizin) compare that sha with the pin in
+# seed-manifest.json and say so when they differ: a project applied
+# from an older seed otherwise loads silently, and `find` answers
+# "(no matches)" for names the pinned seed carries, which reads as
+# "the maintainers never named it".
+# =====================================================================
+
+SEED_RECORD_FORMAT = "sro-revtool-applied-seed"
+SEED_RECORD_VERSION = 1
+SEED_RECORD_SUFFIX = ".seed.json"
+
+
+def seed_record_path(rzdb_path):
+	"""The applied-seed record that belongs to a rizin project."""
+	return rzdb_path + SEED_RECORD_SUFFIX
+
+
+def record_applied_seed(rzdb_path, seed_sha256, seed_file, payload):
+	"""Write the applied-seed record beside a freshly applied project.
+
+	Atomic (temp file + os.replace in the project's directory), like
+	the project save itself, so a crash never leaves a torn record.
+	"""
+	record = {
+		"format": SEED_RECORD_FORMAT,
+		"version": SEED_RECORD_VERSION,
+		"seed_sha256": seed_sha256,
+		"seed_file": os.path.basename(seed_file),
+		"binary_sha256": payload["binary_sha256"],
+		"target": payload["target"],
+	}
+	path = seed_record_path(rzdb_path)
+	fd, tmp = tempfile.mkstemp(
+		dir=os.path.dirname(os.path.abspath(path)), suffix=".tmp")
+	try:
+		with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+			json.dump(record, fh, indent=2, sort_keys=True)
+			fh.write("\n")
+		os.replace(tmp, path)
+	except BaseException:
+		if os.path.exists(tmp):
+			os.remove(tmp)
+		raise
+	return path
+
+
+def load_applied_seed(rzdb_path):
+	"""The applied-seed record beside a project, or None.
+
+	None for a project applied before records existed, a missing or
+	unreadable record, or a record of another format: the staleness
+	check is advisory and must never break a command over its inputs.
+	"""
+	if not rzdb_path:
+		return None
+	try:
+		with open(seed_record_path(rzdb_path), encoding="utf-8") as fh:
+			record = json.load(fh)
+	except (OSError, ValueError):
+		return None
+	if not isinstance(record, dict) or record.get("format") != SEED_RECORD_FORMAT:
+		return None
+	if not record.get("seed_sha256") or not record.get("binary_sha256"):
+		return None
+	return record
+
+
+def _manifest_pins(manifest_path):
+	"""(tag, assets) from a seed manifest, or (None, []) when unreadable."""
+	try:
+		with open(manifest_path, encoding="utf-8") as fh:
+			manifest = json.load(fh)
+	except (OSError, ValueError):
+		return None, []
+	if not isinstance(manifest, dict):
+		return None, []
+	return manifest.get("tag"), manifest.get("assets") or []
+
+
+def stale_seed_warning(binary_sha256, rzdb_path, manifest_path=None):
+	"""The stale-seed warning line for a project, or None when current.
+
+	One comparison: the seed sha `seed apply` recorded beside the
+	project against the manifest pin for the same binary. Silent when
+	there is no record (applied before records, or not from a seed),
+	no manifest, no pin for this binary, or the shas agree.
+	"""
+	record = load_applied_seed(rzdb_path)
+	if record is None or record["binary_sha256"] != binary_sha256:
+		return None
+	if manifest_path is None:
+		manifest_path = _default_manifest()
+	if manifest_path is None:
+		return None
+	tag, assets = _manifest_pins(manifest_path)
+	for pin in assets:
+		if pin.get("binary_sha256") != binary_sha256:
+			continue
+		if pin.get("sha256") == record["seed_sha256"]:
+			return None
+		return (f"project seeded from {record['seed_sha256']} but the manifest "
+				f"pins {tag or pin.get('file')} ({pin.get('sha256')}); "
+				f"re-run seed apply")
+	return None
 
 
 # =====================================================================

@@ -352,6 +352,113 @@ class ApplyTests(unittest.TestCase):
 				revtool_seed.cmd_seed_apply(args, None)
 
 
+class StaleSeedTests(unittest.TestCase):
+	"""#4043: the applied-seed record and the stale-seed warning."""
+
+	BINARY_SHA = "ab" * 32
+	SEED_SHA = "cd" * 32
+	PIN_SHA = "ef" * 32
+
+	def setUp(self):
+		self.dir = tempfile.TemporaryDirectory()
+		self.addCleanup(self.dir.cleanup)
+		self.rzdb = os.path.join(self.dir.name, "SRO_Client.rzdb")
+		self.manifest = os.path.join(self.dir.name, "seed-manifest.json")
+
+	def _payload(self):
+		return {"binary_sha256": self.BINARY_SHA, "target": "client"}
+
+	def _write_manifest(self, tag="revtool-seed-2026-11-13", sha=None):
+		doc = {"assets": [{
+			"target": "client", "file": "revtool-seed-client.xz",
+			"sha256": sha or self.PIN_SHA, "bytes": 1,
+			"binary_sha256": self.BINARY_SHA, "functions": 1,
+			"ledger_lines": 1}]}
+		if tag is not None:
+			doc["tag"] = tag
+		Path(self.manifest).write_text(json.dumps(doc), encoding="utf-8")
+
+	def _record(self, seed_sha=None):
+		return revtool_seed.record_applied_seed(
+			self.rzdb, seed_sha or self.SEED_SHA, "revtool-seed-client.xz",
+			self._payload())
+
+	def test_record_round_trips_beside_the_project(self):
+		path = self._record()
+		self.assertEqual(path, self.rzdb + ".seed.json")
+		record = revtool_seed.load_applied_seed(self.rzdb)
+		self.assertEqual(record["seed_sha256"], self.SEED_SHA)
+		self.assertEqual(record["binary_sha256"], self.BINARY_SHA)
+		self.assertEqual(record["target"], "client")
+
+	def test_missing_or_foreign_record_reads_as_none(self):
+		self.assertIsNone(revtool_seed.load_applied_seed(self.rzdb))
+		Path(self.rzdb + ".seed.json").write_text(
+			"{not json", encoding="utf-8")
+		self.assertIsNone(revtool_seed.load_applied_seed(self.rzdb))
+		Path(self.rzdb + ".seed.json").write_text(
+			json.dumps({"format": "other", "seed_sha256": "x",
+						"binary_sha256": "y"}), encoding="utf-8")
+		self.assertIsNone(revtool_seed.load_applied_seed(self.rzdb))
+
+	def test_stale_seed_warns_with_the_pin(self):
+		self._record()
+		self._write_manifest()
+		self.assertEqual(
+			revtool_seed.stale_seed_warning(
+				self.BINARY_SHA, self.rzdb, self.manifest),
+			f"project seeded from {self.SEED_SHA} but the manifest pins "
+			f"revtool-seed-2026-11-13 ({self.PIN_SHA}); re-run seed apply")
+
+	def test_pinned_seed_is_silent(self):
+		self._record(seed_sha=self.PIN_SHA)
+		self._write_manifest()
+		self.assertIsNone(revtool_seed.stale_seed_warning(
+			self.BINARY_SHA, self.rzdb, self.manifest))
+
+	def test_no_record_no_manifest_or_other_binary_is_silent(self):
+		self._write_manifest()
+		self.assertIsNone(revtool_seed.stale_seed_warning(
+			self.BINARY_SHA, self.rzdb, self.manifest))
+		self._record()
+		self.assertIsNone(revtool_seed.stale_seed_warning(
+			"00" * 32, self.rzdb, self.manifest))
+		self.assertIsNone(revtool_seed.stale_seed_warning(
+			self.BINARY_SHA, self.rzdb,
+			os.path.join(self.dir.name, "absent.json")))
+
+	def test_manifest_without_a_tag_falls_back_to_the_file(self):
+		self._record()
+		self._write_manifest(tag=None)
+		line = revtool_seed.stale_seed_warning(
+			self.BINARY_SHA, self.rzdb, self.manifest)
+		self.assertIn("pins revtool-seed-client.xz", line)
+
+	def test_apply_records_the_seed_it_applied(self):
+		seed = os.path.join(self.dir.name, "revtool-seed-client.xz")
+		Path(seed).write_bytes(b"seed-bytes")
+		binary = os.path.join(self.dir.name, "SRO_Client.exe")
+		Path(binary).write_bytes(b"binary-bytes")
+		payload = {
+			"binary_sha256": hashlib.sha256(b"binary-bytes").hexdigest(),
+			"target": "client",
+			"functions": [[0x401000, "sub_401000"]]}
+		args = SimpleNamespace(
+			seed=seed, seed_binary=None, binary=binary,
+			rzdb=self.rzdb, limit=0, force=False)
+		with mock.patch.object(revtool_seed, "load_seed",
+							   return_value=payload), \
+				mock.patch.object(revtool_seed, "apply_seed",
+								  return_value=(1, 1, 1, 1)) as applied:
+			with redirect_stdout(io.StringIO()):
+				self.assertEqual(revtool_seed.cmd_seed_apply(args, None), 0)
+		applied.assert_called_once()
+		record = revtool_seed.load_applied_seed(self.rzdb)
+		self.assertEqual(
+			record["seed_sha256"],
+			hashlib.sha256(b"seed-bytes").hexdigest())
+
+
 class ParserTests(unittest.TestCase):
 	def test_seed_commands_parse(self):
 		args = revtool.build_parser().parse_args(

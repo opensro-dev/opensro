@@ -345,7 +345,7 @@ def cmd_view(args, con):
 # --------------------------------------------------------------------------- #
 # find
 # --------------------------------------------------------------------------- #
-def cmd_find(args, con):
+def cmd_find(args, con, on_empty=None):
 	pat = args.pattern.lower()
 	rows = con.execute(
 		"SELECT f.addr,f.name,f.signature FROM functions f "
@@ -357,6 +357,10 @@ def cmd_find(args, con):
 	).fetchall()
 	if not rows:
 		print("(no matches)")
+		# A backend that can qualify an empty answer (the rizin stale-seed
+		# warning, #4043) hooks here; the dump backend passes nothing.
+		if on_empty is not None:
+			on_empty()
 		return 0
 	gmap = load_globals(con)
 	for addr, name, sig in rows[: args.limit]:

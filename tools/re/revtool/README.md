@@ -179,6 +179,8 @@ rz --db revtool.db coverage sub_402a70
 rz --db revtool.db find CIFMain
 rz --db revtool.db audit some_writeup.md
 rz --db revtool.db rename global sub_402a70 WidgetDraw
+rz --db revtool.db seen sub_402a70 "draws the widget; sizing unmeasured"
+rz --db revtool.db note add sub_402a70 "CORRECTION: not the widget ctor"
 rz --db revtool.db doctor
 ```
 
@@ -193,6 +195,15 @@ because a seeded project defines functions but holds no references
 until rizin reads the code once; without it every `xref` and
 `strings` answers 0. `--refs none` skips it, and `xref` then warns
 before you trust a 0.
+
+`seed apply` records the applied seed's sha256 beside the project
+(`<rzdb>.seed.json`). `index`, and `find` when it finds nothing,
+compare that sha with the pin in `seed-manifest.json` and print one
+line when they differ ("project seeded from ... but the manifest
+pins ...; re-run seed apply"): a project applied from an older seed
+otherwise loads silently, and its missing names read as "the
+maintainers never named it" (#4043). A project applied before
+records existed has no record and warns about nothing.
 
 `strings PATTERN` (case-insensitive; `--regex` for a regex) lists the
 binary's data strings that match and every function referencing each,
@@ -211,6 +222,8 @@ feature's UI or log text to its code.
 | coverage | `aflj` call/data refs      | exact refs; field depth from disassembly (see below) |
 | audit    | overlay DB (delegated)     | identical to the dump backend |
 | rename   | overlay DB (delegated)     | the strict depth gate measures the function's disassembly (below) |
+| note     | overlay DB (delegated)     | identical to the dump backend |
+| seen     | overlay DB (delegated)     | identical to the dump backend |
 | doctor   | overlay DB + artifact rows | rizin provenance audit; the BN evidence checks do not apply |
 | sync     | overlay DB (delegated)     | identical to the dump backend |
 
