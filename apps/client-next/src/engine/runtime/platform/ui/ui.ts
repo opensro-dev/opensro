@@ -15,6 +15,7 @@ focus from a disabled element and never returns it.
 ===========================================================================
 */
 import type { UiBridge, UiControl, UiEvent, UiSemantics } from "@/engine/contracts/ui";
+import { controlHitRect } from "@/engine/foundation/ui/hit-test";
 import { createLayoutKeys } from "@/engine/foundation/ui/layout-keys";
 import { configureCredentialHints } from "./credential-hints";
 import { createDragShield } from "./drag-shield";
@@ -969,7 +970,10 @@ export function createUiBridge(
 				const fontSize = INPUT_FONT_PIXELS * scale + "px";
 				if ( el.style.fontSize !== fontSize ) el.style.fontSize = fontSize;
 				if ( el instanceof HTMLTextAreaElement ) el.style.lineHeight = 16 * scale + "px";
-				const [x, y, w, h] = control.rect,
+				// The element covers the control's hit area, which can be larger
+				// than what it draws (controlHitRect), so the browser's hit test
+				// and topmostControlAt agree.
+				const [x, y, w, h] = controlHitRect( control ),
 					left = box.left + x * scale,
 					top = box.top + y * scale,
 					width = w * scale,
