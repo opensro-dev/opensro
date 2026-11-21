@@ -112,9 +112,11 @@ def prepare_gates(later, native_data, current_ids, current_building_ids, d_arriv
 	# past the server's band; the authored D building takes a free id under
 	# the limit (variant_gates.free_building_ids), never "highest + 1",
 	# which lands on the later imports' items and pets.
-	building_ids = renumbered_buildings(source_building_ids, current_building_ids)
+	building_ids = renumbered_buildings([buildings_by_id[i] for i in source_building_ids], current_building_ids)
 	taken = {int(i) for i in current_building_ids if i.isdigit()} | {int(i) for i in building_ids.values()}
-	d_building_id = str(variant_gates.free_building_ids(taken, 1)[0])
+	# The authored D building is numbered by the same rule as a row with
+	# no free source id: its pinned id, or a free one under the limit.
+	d_building_id = variant_gates.building_identities([["1", "0", AUTHORED_BUILDING_CODENAME]], taken | {0})["0"]
 
 	# The source entry's links name Jangan's gate instead: its id maps to
 	# the anchor's, so the source pairs entry <-> A/B become GATE_CH's.
