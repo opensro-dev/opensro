@@ -689,6 +689,8 @@ export interface ExperimentalGameplay {
 	readonly sunDropMarker?: boolean;
 	readonly warpArrivalSound?: boolean;
 	readonly christmasCarols?: boolean;
+	// Port-only (#3907): the SRO Macro's automation runs only while on.
+	readonly sroMacro?: boolean;
 	// The pickup pet filter's kind mask (ground-item's PICKUP_KIND bits);
 	// undefined while the filter row is off, which is the native loop.
 	readonly petPickupKinds?: number;
@@ -712,6 +714,7 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		sunDropMarker: options.sunDropMarker,
 		warpArrivalSound: options.warpArrivalSound,
 		christmasCarols: options.christmasCarols,
+		sroMacro: options.sroMacro,
 		petPickupKinds: options.petPickupFilter ?
 			(options.petFilterGold ? PICKUP_KIND_GOLD : 0) |
 			(options.petFilterEquipment ? PICKUP_KIND_EQUIPMENT : 0) |

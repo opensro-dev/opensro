@@ -450,8 +450,15 @@ import {
 	SERVER_EVENT_TEXT_COLOR,
 	serverEventLayout
 } from "./hud/server-event-hud";
-import { createSroMacroHud, MACRO_ID, macroAcquiredSkills } from "./hud/sro-macro-hud";
-import { drawSroMacro, type MacroPaint } from "./hud/sro-macro-window";
+import {
+	createSroMacroHud,
+	MACRO_GUIDE_ICON_PATH,
+	MACRO_GUIDE_ICON_X_INSET,
+	MACRO_GUIDE_ICON_Y,
+	MACRO_ID,
+	macroAcquiredSkills
+} from "./hud/sro-macro-hud";
+import { drawSroMacro, type MacroPaint, macroPotionStock } from "./hud/sro-macro-window";
 import { createMarketHud, MARKET_BAG_FIRST_SLOT, MARKET_HOTKEY_VK } from "./hud/market-hud";
 import { drawMarketWindow, type MarketPaint } from "./hud/market-window";
 import { uniqueRankLines } from "@/engine/foundation/gameplay/unique-rank";
@@ -1055,9 +1062,8 @@ const PARTY_MATCH_CURRENT_COLOR: UiQuad["color"] = [ 135 / 255, 233 / 255, 1, 1 
 const BUG_COMMAND = /^\/bug(?:\s+|$)/i;
 const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
 const BUG_REPORTS_UNAVAILABLE = "Connecting to the bug reporter; the report window opens as soon as it answers.";
-// The SRO Macro's menu command (port-only, #3907): only with the Experimental
-// row on, and only on a shard that replayed the settings (SRO_AUTO_MACRO).
-const MACRO_COMMAND = /^\/macro\s*$/i;
+// Port-only (#3907): shown when the under-minimap CIFMacroSystemGuide click
+// cannot open (Experimental row off, or the shard never replayed SRO_AUTO_MACRO).
 const MACRO_UNAVAILABLE = "The SRO Macro is not available on this server.";
 // The skin change scroll's window (CIFChangePlayerModel).
 const SKIN_PANEL = "Skin change";
@@ -2055,6 +2061,8 @@ export function createUi( ports: UiPorts ) {
 	const masteryByTab = new Map<number, number>();
 	let selectedSkill = 0, skillPage = 0, hotbarPage = 0, trainingMode = false, clearHotbar = false;
 	let carriedShortcut: { id: string; x: number; y: number; } | null = null;
+	// Port-only (#3907): a bound SRO Macro potion icon lifted for drag-out clear.
+	let carriedMacroPotion: { id: string; icon: string | undefined; x: number; y: number; } | null = null;
 	let quickslotTime = 0, quickslotTick = -1;
 	let extVertical = true,
 		extDouble = true,
@@ -2824,6 +2832,7 @@ export function createUi( ports: UiPorts ) {
 				if ( item.slot < 13 || view?.gameplay?.inventoryPending ) return;
 				carriedItem = null;
 				carriedShortcut = null;
+				carriedMacroPotion = null;
 				inventorySlot = -1;
 				repairHud.disarm();
 				cosHud.armItemTarget( item );
@@ -5443,18 +5452,14 @@ export function createUi( ports: UiPorts ) {
 			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
 			dirty = true;
 			return;
-		} else if (
-			id === "chat-send" && MACRO_COMMAND.test( chatText.slice( chatTabPrefix( chatTab ).length ) ) &&
-			experimental.state().saved.sroMacro
-		) {
-			// Port-only (#3907): /macro opens the SRO Macro menu; never sent as chat.
-			if ( !sroMacroHud.toggleMenu( view.gameplay?.sroMacro, true ) ) hudMessages.append( MACRO_UNAVAILABLE );
-			chatText = chatTabPrefix( chatTab );
-			selection = [ chatText.length, chatText.length ];
-			focus = null;
-			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+		} else if ( id === "sro-macro-icon" ) {
+			// Port-only (#3907): CIFMacroSystemGuide (0xab9080 / MACRO_GUIDE_ID).
+			if (
+				!sroMacroHud.toggleMenu( view.gameplay?.sroMacro, experimental.state().saved.sroMacro )
+			) {
+				hudMessages.append( MACRO_UNAVAILABLE );
+			}
 			dirty = true;
-			return;
 		} else if (
 			id === "chat-send" && premiumCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy )
 		) {
@@ -5559,13 +5564,35 @@ export function createUi( ports: UiPorts ) {
 			serverEventHud.close();
 		} else if ( id.startsWith( MACRO_ID ) || id === "sro-macro-close" ) {
 			const game = view.gameplay;
-			const commands = sroMacroHud.click(
-				id === "sro-macro-close" ? MACRO_ID + "close" : id,
-				game?.sroMacro,
-				macroAcquiredSkills( game?.skills ?? [], game?.skillIndex )
-			);
-			for ( const command of commands ) sendGameplay( command );
-			dirty = true;
+			// Carried bag item on a potion row or Weapon / Shield slot: only
+			// the admitted class binds. Other classes are refused — end the
+			// carry (a kept refuse ghost stuck over the macro window).
+			const carried = carriedItem && !carriedItem.avatar ?
+				game?.inventory?.find( item => item.slot === carriedItem!.slot ) :
+				undefined;
+			if ( carried && sroMacroHud.isPotionItemSlot( id ) ) {
+				sroMacroHud.bindItem( id, carried );
+				carriedItem = null;
+				dirty = true;
+			} else if ( carried && sroMacroHud.isGearItemSlot( id ) ) {
+				sroMacroHud.bindGear( id, carried );
+				carriedItem = null;
+				dirty = true;
+			} else {
+				const commands = sroMacroHud.click(
+					id === "sro-macro-close" ? MACRO_ID + "close" : id,
+					game?.sroMacro,
+					macroAcquiredSkills(
+						game?.skills ?? [],
+						game?.skillIndex,
+						hud.data()?.skillUi.skills
+					),
+					game?.inventory ?? [],
+					game?.skillIndex
+				);
+				for ( const command of commands ) sendGameplay( command );
+				dirty = true;
+			}
 		} else if ( id === "chat-send" && !view.gameplay?.chat?.pending ) {
 			const draft = composeChat(
 				panel === "Chat" ?
@@ -6471,6 +6498,7 @@ export function createUi( ports: UiPorts ) {
 			if ( event.kind === "drag-cancel" ) {
 				if ( carriedItem?.source === event.id ) carriedItem = null;
 				if ( carriedShortcut?.id === event.id ) carriedShortcut = null;
+				if ( carriedMacroPotion?.id === event.id ) carriedMacroPotion = null;
 				// Port-only, not native: a cancelled Experimental drag (pointercancel,
 				// blur) never reaches drag-end, so its travel would otherwise carry
 				// into the next press and swallow that row's click.
@@ -7647,6 +7675,19 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
+			if ( event.kind === "scroll" && sroMacroHud.state().window === "options" ) {
+				const acquired = controls.find( c => c.id === MACRO_ID + "wheel:acquired" );
+				const use = controls.find( c => c.id === MACRO_ID + "wheel:use" );
+				const zone = acquired && containsPoint( acquired.rect, event.x, event.y ) ?
+					"acquired" as const :
+					use && containsPoint( use.rect, event.x, event.y ) ?
+					"use" as const :
+					null;
+				if ( zone && sroMacroHud.scroll( zone, Math.sign( event.delta ) ) ) {
+					dirty = true;
+					return;
+				}
+			}
 			if ( event.kind === "scroll" && panel === "Experimental" ) {
 				experimental.scroll( Math.sign( event.delta ), experimentalRange( view?.session ) );
 				dirty = true;
@@ -8187,9 +8228,46 @@ export function createUi( ports: UiPorts ) {
 				}
 				return;
 			}
+			// Port-only (#3907): lift a bound SRO Macro potion or Weapon /
+			// Shield for drag-out clear.
+			if (
+				event.kind === "drag" &&
+				(sroMacroHud.isPotionItemSlot( event.id ) || sroMacroHud.isGearItemSlot( event.id ))
+			) {
+				const source = controls.find( c => c.id === event.id && c.draggable && !c.disabled );
+				if ( source ) {
+					const prior = carriedMacroPotion?.id === event.id ?
+						carriedMacroPotion :
+						{
+							id: event.id,
+							icon: (() => {
+								if ( !view?.gameplay ) return undefined;
+								if ( sroMacroHud.isGearItemSlot( event.id ) ) {
+									const bag = sroMacroHud.gearBagSlot( event.id );
+									const item = bag ?
+										view.gameplay.inventory?.find( row => row.slot === bag ) :
+										undefined;
+									return item ? iconPath( item.icon ) ?? undefined : undefined;
+								}
+								const ref = sroMacroHud.potionItemRef( event.id );
+								if ( !ref ) return undefined;
+								return macroPotionStock( view.gameplay.inventory ?? [], iconPath ).get( ref )?.icon;
+							})(),
+							x: source.rect[0] + source.rect[2] / 2,
+							y: source.rect[1] + source.rect[3] / 2
+						};
+					carriedMacroPotion = { ...prior, x: prior.x + event.dx, y: prior.y + event.dy };
+					dirty = true;
+				}
+				return;
+			}
 			// The shortcut this drag carried, whether or not its slot is still drawn.
 			const carried = event.kind === "drag-end" && carriedShortcut?.id === event.id;
-			if ( event.kind === "drag-end" ) carriedShortcut = null;
+			const carriedMacro = event.kind === "drag-end" && carriedMacroPotion?.id === event.id;
+			if ( event.kind === "drag-end" ) {
+				carriedShortcut = null;
+				carriedMacroPotion = null;
+			}
 			if ( event.kind === "drag-end" && event.id === "ext-drag" ) {
 				persistQuickslots();
 				return;
@@ -8218,6 +8296,57 @@ export function createUi( ports: UiPorts ) {
 			}
 			if ( event.kind === "drag-end" && view?.gameplay ) {
 				const target = topmostControlAt( controls, event.x, event.y );
+				// Port-only (#3907): releasing a bound potion or Weapon /
+				// Shield away from its cell clears it (CIFSlot drag-out).
+				// Dropping a potion back on the same cell keeps it; on
+				// another potion row moves.
+				if (
+					carriedMacro || sroMacroHud.isPotionItemSlot( event.id ) ||
+					sroMacroHud.isGearItemSlot( event.id )
+				) {
+					if ( sroMacroHud.isGearItemSlot( event.id ) ) {
+						if ( !target || target.id !== event.id ) sroMacroHud.clearGear( event.id );
+						dirty = true;
+						return;
+					}
+					if ( target && sroMacroHud.isPotionItemSlot( target.id ) && target.id !== event.id ) {
+						const ref = sroMacroHud.potionItemRef( event.id );
+						const stock = ref ?
+							view.gameplay.inventory?.find( row => row.refObjId === ref && row.slot >= 13 ) :
+							undefined;
+						// Re-admit with the bag stack's typeFlags (0xdafff0). A
+						// refused move keeps the source; no bag stack transfers
+						// the already-bound RefItem without a TypeId re-check.
+						if ( stock ) {
+							if ( sroMacroHud.bindItem( target.id, stock ) ) sroMacroHud.clearItem( event.id );
+						} else if ( ref ) sroMacroHud.transferItem( event.id, target.id );
+					} else if ( !target || target.id !== event.id ) {
+						sroMacroHud.clearItem( event.id );
+					}
+					dirty = true;
+					return;
+				}
+				// Port-only (#3907): a hotbar item dropped on an SRO Macro
+				// potion row or Weapon / Shield slot binds when admitted.
+				if (
+					target &&
+					(sroMacroHud.isPotionItemSlot( target.id ) || sroMacroHud.isGearItemSlot( target.id )) &&
+					event.id.startsWith( "hotbar:" ) && (carried || controls.some( c => c.id === event.id ))
+				) {
+					const binding = view.gameplay.quickSlots?.find( row =>
+						row.slot === Number( event.id.slice( 7 ) ) && row.kind !== 0
+					);
+					const bagSlot = binding ? quickSlotItemSlot( binding ) : null;
+					const item = bagSlot !== null ?
+						view.gameplay.inventory?.find( row => row.slot === bagSlot ) :
+						undefined;
+					if ( item ) {
+						if ( sroMacroHud.isPotionItemSlot( target.id ) ) sroMacroHud.bindItem( target.id, item );
+						else sroMacroHud.bindGear( target.id, item );
+					}
+					dirty = true;
+					return;
+				}
 				if ( target?.id.startsWith( "hotbar:" ) ) {
 					const slot = Number( target.id.slice( 7 ) ),
 						source = controls.find( c => c.id === event.id && c.draggable && !c.disabled );
@@ -8404,6 +8533,18 @@ export function createUi( ports: UiPorts ) {
 						if ( target?.id.startsWith( "slot:" ) ) {
 							moveAvatar( false, carried.slot, Number( target.id.slice( 5 ) ) );
 						}
+						return;
+					}
+					// Port-only (#3907): a bag item on an SRO Macro potion row
+					// or Weapon / Shield slot binds only when admitted. A
+					// refused drop ends the carry like any other miss —
+					// restoring it left a stuck ghost over the macro window.
+					if ( item && target && sroMacroHud.isPotionItemSlot( target.id ) ) {
+						sroMacroHud.bindItem( target.id, item );
+						return;
+					}
+					if ( item && target && sroMacroHud.isGearItemSlot( target.id ) ) {
+						sroMacroHud.bindGear( target.id, item );
 						return;
 					}
 					// CIFExchange: a bag item dropped on the own side goes on the table.
@@ -9266,9 +9407,10 @@ export function createUi( ports: UiPorts ) {
 					!controls.some( c => c.id === event.id && c.rightActivate && !c.disabled )
 				) return;
 				// 564030 cancels an active carry before dispatching the pressed icon.
-				if ( carriedItem || carriedShortcut || clearHotbar ) {
+				if ( carriedItem || carriedShortcut || carriedMacroPotion || clearHotbar ) {
 					carriedItem = null;
 					carriedShortcut = null;
+					carriedMacroPotion = null;
 					clearHotbar = false;
 					dirty = true;
 					return;
@@ -9953,7 +10095,7 @@ export function createUi( ports: UiPorts ) {
 				const game = next.gameplay, references = hud.data()?.cosReferences, clock = next.simulationTimeMs ?? 0;
 				const potionState = companionPotions.state(), potionSettings = potionState.saved;
 				const potionBlocked = transportPotionBlocked( game ) || itemMall.isOpen() ||
-					!!(carriedItem || carriedShortcut);
+					!!(carriedItem || carriedShortcut || carriedMacroPotion);
 				const potionRetrying = potionState.lastSentMs !== undefined && clock >= potionState.lastSentMs &&
 					clock - potionState.lastSentMs < TRANSPORT_POTION_RETRY_MS;
 				let use: { readonly slot: number; readonly companionGid?: number; } | null = null;
@@ -10575,7 +10717,8 @@ export function createUi( ports: UiPorts ) {
 			else {
 				// 572770 reads the selected/dragged control; 561D50 checks the
 				// Item Mall child (69B2E0), not arbitrary nonmodal windows.
-				const blocked = !!(carriedItem || carriedShortcut), itemMallOpen = itemMall.isOpen();
+				const blocked = !!(carriedItem || carriedShortcut || carriedMacroPotion),
+					itemMallOpen = itemMall.isOpen();
 				if ( autoPotionInput.sync( blocked, itemMallOpen ) ) {
 					sendGameplay( { kind: "auto-potion-input", blocked, itemMallOpen } );
 				}
@@ -10669,6 +10812,7 @@ export function createUi( ports: UiPorts ) {
 					windowPlacement.reset();
 					itemMall.reset();
 					carriedShortcut = null;
+					carriedMacroPotion = null;
 					if ( panel === "Option" ) audioPreference( audioSaved, false );
 					chatFeedbackObserved = -1;
 					focusRequest = undefined;
@@ -17126,8 +17270,19 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					drawSroMacro( drawFrame, macroPaint, {
 						hud: macroHud,
 						live: game.sroMacro,
-						acquired: macroAcquiredSkills( game.skills ?? [], game.skillIndex ),
-						skillIndex: game.skillIndex
+						acquired: macroAcquiredSkills(
+							game.skills ?? [],
+							game.skillIndex,
+							hud.data()?.skillUi.skills
+						).map( skill => ({
+							...skill,
+							// skillUi / NameSymbol → "Castle shield"; Codename is a fallback.
+							name: hudCopy( skill.nameSymbol ?? skill.name )
+						}) ),
+						skillIndex: game.skillIndex,
+						potionStock: macroPotionStock( game.inventory ?? [], iconPath ),
+						inventory: game.inventory ?? [],
+						iconPath
 					} );
 				}
 				const uniqueRank = uniqueRankHud.state();
@@ -28770,6 +28925,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				}
 				endWindow( admission, "withdrawal-confirm" );
 			}
+			if ( worldVisible && carriedMacroPotion?.icon ) {
+				paths.push( carriedMacroPotion.icon );
+				if ( resources.has( carriedMacroPotion.icon ) ) {
+					rect(
+						[ carriedMacroPotion.x - 16, carriedMacroPotion.y - 16, 32, 32 ],
+						white,
+						carriedMacroPotion.icon
+					);
+				}
+			}
 			if ( worldVisible && carriedShortcut && game ) {
 				const binding = quickSlotDrag( carriedShortcut.id, 0, game ),
 					skill = binding?.kind === 0x49 ?
@@ -29085,6 +29250,27 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						label: "New quests",
 						kind: "button",
 						rect: iconRect
+					} );
+				}
+			}
+			// Port-only (#3907): CIFMacroSystemGuide under the minimap
+			// (0xab8fe0 loads mecro_0; 0xab9080 opens CNIFMacroMenuWnd).
+			if ( worldVisible && experimental.state().saved.sroMacro && game?.sroMacro ) {
+				paths.push( MACRO_GUIDE_ICON_PATH );
+				const macroIconSize = resources.size( MACRO_GUIDE_ICON_PATH );
+				if ( macroIconSize ) {
+					const macroIconRect: UiRect = [
+						w - MACRO_GUIDE_ICON_X_INSET,
+						MACRO_GUIDE_ICON_Y,
+						macroIconSize[0],
+						macroIconSize[1]
+					];
+					rect( macroIconRect, white, MACRO_GUIDE_ICON_PATH );
+					controls.push( {
+						id: "sro-macro-icon",
+						label: "SRO Macro",
+						kind: "button",
+						rect: macroIconRect
 					} );
 				}
 			}

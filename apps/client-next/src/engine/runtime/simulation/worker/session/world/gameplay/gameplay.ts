@@ -359,6 +359,23 @@ import { createBetaPlayerMap } from "./beta-map/beta-map";
 import { createCaravanStars } from "./caravan-stars/caravan-stars";
 import { createContributorTitles } from "./contributor-titles/contributor-titles";
 import { createSroMacro } from "./sro-macro/sro-macro";
+import {
+	emptyMacroPotionQueue,
+	macroPotionBagSlot,
+	macroPotionFired,
+	macroPotionWants,
+	rearmMacroPotion
+} from "@/engine/foundation/gameplay/sro-macro-potion";
+import {
+	emptyMacroSkillLoop,
+	MACRO_SKILL_SWAP_MS,
+	macroBuffAlreadyOn,
+	macroInventoryAfterSwap,
+	macroSkillCast,
+	macroSkillSwapHelps,
+	macroSkillWantSwap,
+	pickMacroSkill
+} from "@/engine/foundation/gameplay/sro-macro-skill";
 import { createTradeProgress } from "./trade-progress/trade-progress";
 import { createServerEvent } from "./server-event/server-event";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
@@ -1456,6 +1473,12 @@ fails; retry persistence without restoring stale slot occupancy.
 	// experimentalGameplay); undefined while the row is off, which leaves
 	// the native pickup loop untouched.
 	let petPickupKinds: number | undefined;
+	// Port-only (#3907): the Experimental "SRO Macro" row, and the macro
+	// auto-potion's row order (checkMacroPotion) and auto-skill cursors
+	// (checkMacroSkill).
+	let sroMacroEnabled = false;
+	let macroPotionQueue = emptyMacroPotionQueue();
+	let macroSkillLoop = emptyMacroSkillLoop();
 	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	const cosSelection = createCosSelection();
@@ -1525,6 +1548,19 @@ reuse gate as manual activation. Recovery completion is server-owned.
 		// 561D50 checks the NPC interaction latch (69F870 includes storage)
 		// and the return-delay control. The retry timer itself stays armed.
 		if ( slot === null ) return;
+		useAutomaticItem( slot, now );
+	}
+	/*
+================
+useAutomaticItem
+
+The use gates every automatic item attempt shares (the v1.150 auto-potion
+and the port-only SRO Macro): interaction refusals, the category cooldown,
+the use target and one open inventory transaction. True when the use
+request went out.
+================
+	*/
+	function useAutomaticItem( slot: number, now: number, quiet = false ): boolean {
 		// 561E57..561E6B tests the visible stall control, including the owner
 		// editing a closed stall and a visitor. Naming and network are separate windows.
 		const stallVisible = inventory.stallPhase() === "owner" || inventory.stallPhase() === "visitor";
@@ -1535,11 +1571,11 @@ reuse gate as manual activation. Recovery completion is server-owned.
 			conversation.gid === targeting.state().target && inventory.state().shop?.npc === conversation.gid;
 		if ( stallVisible || autoPotionItemMallOpen || returnScroll || shopActive || storage.state() ) {
 			const notice = constantNativeNotice( ITEM_NOTICE_CATEGORY, ITEM_INTERACTION_REFUSAL );
-			if ( notice ) api.notice( notice );
-			return;
+			if ( notice && !quiet ) api.notice( notice );
+			return false;
 		}
 		const item = inventory.state().inventory.find( row => row.slot === slot )!;
-		if ( itemCooldown( inventory.state().itemCooldowns, item.typeFlags, now ) ) return;
+		if ( itemCooldown( inventory.state().itemCooldowns, item.typeFlags, now ) ) return false;
 		const context = autoPotionTarget(
 			item.typeFlags,
 			[ ...cosRecords.values() ],
@@ -1552,17 +1588,44 @@ reuse gate as manual activation. Recovery completion is server-owned.
 				[ ...cosRecords.values() ],
 				cosSelection.selected()
 			);
-			if ( notice ) api.notice( notice );
-			return;
+			if ( notice && !quiet ) api.notice( notice );
+			return false;
 		}
-		if ( inventory.state().inventoryPending ) return;
+		if ( inventory.state().inventoryPending ) return false;
 		const refusal = inventory.useNotice( slot, context );
 		if ( refusal ) {
-			api.notice( refusal );
-			return;
+			if ( !quiet ) api.notice( refusal );
+			return false;
 		}
 		inventory.use( slot, now, context );
 		dirty = true;
+		return true;
+	}
+	/*
+================
+checkMacroPotion
+
+Port-only, not native (#3907): one tick of the SRO Macro's character
+auto-potion (sro-macro-potion.ts), while the Experimental row is on and
+the server has accepted Auto-Potion ON. A row's item is the first bag
+stack of its RefItem ID. The attempts are quiet: the loop retries every
+tick, so a standing refusal would otherwise repeat its notice.
+================
+	*/
+	function checkMacroPotion( now: number ) {
+		const settings = sroMacro.view();
+		if ( !live || !sroMacroEnabled || !settings?.potionOn || autoPotionInputBlocked ) {
+			macroPotionQueue = emptyMacroPotionQueue();
+			return;
+		}
+		macroPotionQueue = rearmMacroPotion( macroPotionQueue, now );
+		for ( const row of macroPotionQueue.ready ) {
+			if ( !macroPotionWants( settings.potion, row, potionFacts ) ) continue;
+			const slot = macroPotionBagSlot( settings.potion, row, inventory.state().inventory );
+			if ( slot === undefined || !useAutomaticItem( slot, now, true ) ) continue;
+			macroPotionQueue = macroPotionFired( macroPotionQueue, row, now );
+			return;
+		}
 	}
 
 	let localGid = 0, revision = 0, dirty = false, protocol = 0, localCountry: number | undefined;
@@ -1751,6 +1814,8 @@ clears it when another character enters.
 		caravanStars.clear();
 		contributorTitles.clear();
 		sroMacro.clear();
+		macroPotionQueue = emptyMacroPotionQueue();
+		macroSkillLoop = emptyMacroSkillLoop();
 		uniqueRank.clear();
 		mostWanted.clear();
 		hwanLevel.clear();
@@ -1930,6 +1995,7 @@ The Experimental window's gameplay rows (experimentalGameplay).
 			smartPetPickup = value.smartPetPickup !== false;
 			if ( !smartPetPickup ) cosPickup.spaceChanged();
 			petPickupKinds = value.petPickupKinds;
+			sroMacroEnabled = value.sroMacro === true;
 		},
 		/*
 ================
@@ -6243,6 +6309,8 @@ before take assembles the presentation snapshot.
 				dirty = true;
 			}
 			for ( const kind of [ 0, 1, 2 ] as const ) checkAutomaticPotion( kind, now, "timer" );
+			checkMacroPotion( now );
+			checkMacroSkill( now, local );
 
 			// A predicted attack chase follows its target: while the target
 			// moves, the leg re-aims at its new boundary, as the server's
@@ -6644,5 +6712,152 @@ dispose
 		journalBagChange( now, frame.opcode, frame.payload );
 		return handled;
 	};
+	/*
+================
+checkMacroSkill
+
+Port-only, not native (#3907): one tick of the SRO Macro's auto-skill
+loop (sro-macro-skill.ts), while the Experimental row is on and the
+server has accepted Auto-Skills ON. The pure picker advances past each
+entry; a cast goes out only when the skill is learned, off cooldown,
+admitted, and (for a buff) not already on the caster. Ground-target and
+basic-attack entries are skipped. On the attack step, a bound Weapon /
+Shield bag item is equipped first (0068ede0) and the loop waits 2000 ms
+instead of casting that tick. A cast arms the loop for the skill's
+action time; a skip leaves the re-arm alone so the next tick can look
+at the next entry.
+================
+	*/
+	function checkMacroSkill( now: number, local: EntityState | undefined ) {
+		const settings = sroMacro.view();
+		if ( !live || !sroMacroEnabled || !settings?.skillOn || !potionFacts.alive || !local ) {
+			macroSkillLoop = emptyMacroSkillLoop();
+			return;
+		}
+		// selectionIntent: the clicked monster even before its B45A grant, as
+		// a hotbar press does (targeting.ts). state().target alone lagged the
+		// grant and left the attack step idle after a fresh click.
+		const targetGid = targeting.selectionIntent();
+		const target = targetGid ? readEntity( targetGid ) : undefined;
+		const monsterTargeted = !!target && target.kind === "monster" &&
+			target.appearanceState?.[0] !== 2;
+		const pick = pickMacroSkill(
+			macroSkillLoop,
+			{ buff: settings.buff, attack: settings.attack },
+			now,
+			monsterTargeted
+		);
+		macroSkillLoop = pick.loop;
+		if ( !("entry" in pick) ) return;
+		const skillId = pick.entry.skill;
+		if ( !bindings.skills.includes( skillId ) ) return;
+		const metadata = catalog.find( row => row.id === skillId );
+		if ( !metadata || metadata.groundTarget || metadata.basicAttack ) return;
+		if ( skillCooldown( combat.state().skillCooldowns, skillId, metadata.cooldownGroup ?? 0, now ) ) {
+			return;
+		}
+		// A rider is refused at the press with a notice; skip quietly here.
+		if ( local.mountedOn || local.movementMode === MOVEMENT_SEATED ) return;
+		// Buff list: skip when the caster already holds this buff
+		// (00686bc0 → 00abd630). Exact id, skilldata group, or replace
+		// group — a live shield must not be re-pressed every pass.
+		if ( pick.list === "buff" ) {
+			const mine = combat.state().attachedEffects.filter( effect => effect.gid === localGid );
+			if (
+				macroBuffAlreadyOn(
+					{
+						id: skillId,
+						group: metadata.group,
+						...(metadata.admit?.replace ? { replace: metadata.admit.replace } : {})
+					},
+					mine,
+					catalog.map( row => ({
+						id: row.id,
+						group: row.group,
+						...(row.admit?.replace ? { replace: row.admit.replace } : {})
+					}) )
+				)
+			) {
+				return;
+			}
+		}
+		const bag = inventory.state().inventory;
+		const admission = pressAdmission( {
+			admit: metadata.admit,
+			needsFooting: metadata.needsFooting,
+			mpCost: skillMpCost( metadata, potionFacts.maxMp )
+		}, {
+			abnormal: combat.state().vitals.find( v => v.gid === localGid )?.abnormal ?? 0,
+			hp: potionFacts.hp,
+			maxHp: potionFacts.maxHp,
+			mp: potionFacts.mp,
+			maxMp: potionFacts.maxMp,
+			body: local.appearanceState?.[2] ?? 0,
+			mounted: !!local.mountedOn,
+			seated: local.movementMode === MOVEMENT_SEATED,
+			equipped: bag,
+			effects: combat.state().attachedEffects.filter( effect => effect.gid === localGid ).map( effect =>
+				catalog.find( row => row.id === effect.skill )?.admit?.replace
+			),
+			casting: combat.state().casts.some( cast => cast.caster === localGid && cast.cancelledAtMs === undefined )
+		} );
+		// Wrong weapon: try the Weapon / Shield bag bind once (0068ede0).
+		// Only when the swap would clear the refusal — otherwise a bound
+		// alternate and the worn main weapon would trade every cast.
+		if ( admission.kind === "refuse" && macroSkillSwapHelps( admission.code ) ) {
+			const swap = macroSkillWantSwap( settings.skillFlags, bag );
+			if ( swap ) {
+				const after = pressAdmission( {
+					admit: metadata.admit,
+					needsFooting: metadata.needsFooting,
+					mpCost: skillMpCost( metadata, potionFacts.maxMp )
+				}, {
+					abnormal: combat.state().vitals.find( v => v.gid === localGid )?.abnormal ?? 0,
+					hp: potionFacts.hp,
+					maxHp: potionFacts.maxHp,
+					mp: potionFacts.mp,
+					maxMp: potionFacts.maxMp,
+					body: local.appearanceState?.[2] ?? 0,
+					mounted: !!local.mountedOn,
+					seated: local.movementMode === MOVEMENT_SEATED,
+					equipped: macroInventoryAfterSwap( bag, swap.source, swap.destination ),
+					effects: combat.state().attachedEffects.filter( effect => effect.gid === localGid ).map(
+						effect => catalog.find( row => row.id === effect.skill )?.admit?.replace
+					),
+					casting: combat.state().casts.some( cast =>
+						cast.caster === localGid && cast.cancelledAtMs === undefined
+					)
+				} );
+				if ( after.kind !== "refuse" || !macroSkillSwapHelps( after.code ) ) {
+					try {
+						if ( !api.command( swap, now, undefined, local ) ) return;
+					} catch {
+						return;
+					}
+					// Native does not advance the list cursor on a swap
+					// (00687af5); rewind the picker's already-advanced entry.
+					const cursor = pick.list === "attack" ?
+						{ attack: Math.max( 0, macroSkillLoop.attack - 1 ) } :
+						{ buff: Math.max( 0, macroSkillLoop.buff - 1 ) };
+					macroSkillLoop = macroSkillCast( { ...macroSkillLoop, ...cursor }, now, MACRO_SKILL_SWAP_MS );
+					dirty = true;
+					return;
+				}
+			}
+			return;
+		}
+		if ( admission.kind === "refuse" ) return;
+		if ( pick.list === "attack" && (!targetGid || !target) ) return;
+		const command = pick.list === "attack" && targetGid ?
+			{ kind: "skill" as const, skillId, gid: targetGid } :
+			{ kind: "skill" as const, skillId };
+		try {
+			if ( !api.command( command, now, pick.list === "attack" ? target : undefined, local ) ) return;
+		} catch {
+			return;
+		}
+		macroSkillLoop = macroSkillCast( macroSkillLoop, now, metadata.actionMs ?? 0 );
+		dirty = true;
+	}
 	return api;
 }

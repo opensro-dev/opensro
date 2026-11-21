@@ -46,11 +46,27 @@ const CONFIG_AVAILABILITY = 2;
 export const MACRO_POTION_BYTES = 0x48;
 export const MACRO_POTION_SLOTS = 9;
 const POTION_SLOT_STRIDE = 8;
+// The character rows the auto-potion readers serve (004c2ce0). Row 3 is the
+// UIIT "European Status Anomaly" slot whose reader is a buff-item gate
+// (006930a0); it and the pet rows 4..8 are not automated yet.
+export const MACRO_ROW_HP = 0;
+export const MACRO_ROW_MP = 1;
+export const MACRO_ROW_CURE = 2;
+export const MACRO_GAUGE_SLOTS = [ 0, 1, 4, 5 ] as const;
 export const MACRO_HUNT_BYTES = 0x0c;
 export const MACRO_SKILL_FLAGS = 4;
+// skillFlags indices for the Weapon / Shield bag slots (save tags 3 and 4
+// at 00694170; the attack step reads them at 0x17b37de / 0x17b37df).
+export const MACRO_SKILL_FLAG_WEAPON = 2;
+export const MACRO_SKILL_FLAG_SHIELD = 3;
+// Absolute bag slots the Weapon / Shield UI accepts (00687520: >= 0x0d, < 0x70).
+export const MACRO_GEAR_SLOT_MIN = 0x0d;
+export const MACRO_GEAR_SLOT_MAX = 0x70;
 // No list cap is read from the client; 32 matches the server's store
 // (domain.MacroSkillsPerList) and is far above macro_2.2dt's slot grid.
 export const MACRO_SKILLS_PER_LIST = 32;
+
+export type MacroGearKind = "weapon" | "shield";
 
 const POTION_VERSION = 3;
 const SKILL_VERSION = 2;
@@ -79,8 +95,10 @@ export interface MacroSettings {
 	readonly buff: readonly MacroSkill[];
 }
 
-// One potion row: the item reference and its two bytes. Gauge rows (0, 1,
-// 4, 5) use both; checkbox rows (2, 3, 6, 7, 8) use a only (00db1650).
+// One potion row: the item's RefItem ID (0068b4c0 compares it with each
+// bag item's reference) and its two bytes. A gauge row (0, 1, 4, 5) is on
+// by b and fires at a percent (readers 00692e00, 00692f60; loader 00db2070);
+// a check-box row (2, 3, 6, 7, 8) is on by a (00692d20, 006930a0).
 export interface MacroPotionSlot {
 	readonly item: number;
 	readonly a: number;
@@ -181,6 +199,59 @@ export function withPotionSlot( potion: readonly number[], index: number, slot: 
 
 /*
 ================
+potionGauge
+================
+*/
+export function potionGauge( index: number ): boolean {
+	return (MACRO_GAUGE_SLOTS as readonly number[]).includes( index );
+}
+
+/*
+================
+potionRowOn
+================
+*/
+export function potionRowOn( potion: readonly number[], index: number ): boolean {
+	const slot = potionSlot( potion, index );
+	return (potionGauge( index ) ? slot.b : slot.a) !== 0;
+}
+
+/*
+================
+withPotionRowOn
+
+A gauge row switched on with no percent yet takes percent; check-box rows
+ignore it.
+================
+*/
+export function withPotionRowOn( potion: readonly number[], index: number, on: boolean, percent: number ): number[] {
+	const slot = potionSlot( potion, index );
+	if ( !potionGauge( index ) ) return withPotionSlot( potion, index, { ...slot, a: on ? 1 : 0 } );
+	return withPotionSlot( potion, index, { ...slot, a: on && slot.a === 0 ? percent : slot.a, b: on ? 1 : 0 } );
+}
+
+/*
+================
+withPotionRowPercent
+================
+*/
+export function withPotionRowPercent( potion: readonly number[], index: number, percent: number ): number[] {
+	return withPotionSlot( potion, index, { ...potionSlot( potion, index ), a: percent } );
+}
+
+/*
+================
+withPotionRowItem
+
+Binds a RefItem ID to a row; 0 clears it.
+================
+*/
+export function withPotionRowItem( potion: readonly number[], index: number, item: number ): number[] {
+	return withPotionSlot( potion, index, { ...potionSlot( potion, index ), item } );
+}
+
+/*
+================
 withHuntByte
 ================
 */
@@ -188,6 +259,61 @@ export function withHuntByte( hunt: readonly number[], index: number, value: num
 	const next = hunt.slice();
 	next[index] = value & 0xff;
 	return next;
+}
+
+/*
+================
+macroGearFlagIndex
+
+The skillFlags index that holds the Weapon or Shield bag slot.
+================
+*/
+export function macroGearFlagIndex( kind: MacroGearKind ): number {
+	return kind === "weapon" ? MACRO_SKILL_FLAG_WEAPON : MACRO_SKILL_FLAG_SHIELD;
+}
+
+/*
+================
+macroGearBagSlot
+
+The absolute bag slot bound to Weapon or Shield, or 0 when unset / out of
+the native 0x0d..0x6f range.
+================
+*/
+export function macroGearBagSlot( skillFlags: readonly number[], kind: MacroGearKind ): number {
+	const slot = skillFlags[macroGearFlagIndex( kind )] ?? 0;
+	if ( slot < MACRO_GEAR_SLOT_MIN || slot >= MACRO_GEAR_SLOT_MAX ) return 0;
+	return slot;
+}
+
+/*
+================
+withSkillFlag
+
+One of the four skill flag bytes replaced; 0 clears a Weapon / Shield bind.
+================
+*/
+export function withSkillFlag( skillFlags: readonly number[], index: number, value: number ): number[] {
+	if ( index < 0 || index >= MACRO_SKILL_FLAGS ) throw new Error( "Invalid SRO Macro skill flag" );
+	const next = skillFlags.slice();
+	while ( next.length < MACRO_SKILL_FLAGS ) next.push( 0 );
+	next[index] = value & 0xff;
+	return next;
+}
+
+/*
+================
+withMacroGearSlot
+
+Binds an absolute bag slot to Weapon or Shield; 0 clears it.
+================
+*/
+export function withMacroGearSlot(
+	skillFlags: readonly number[],
+	kind: MacroGearKind,
+	bagSlot: number
+): number[] {
+	return withSkillFlag( skillFlags, macroGearFlagIndex( kind ), bagSlot );
 }
 
 // ============================================================================
