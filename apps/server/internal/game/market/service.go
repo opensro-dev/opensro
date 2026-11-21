@@ -78,9 +78,11 @@ type ItemInfo struct {
 	TypeIDs [4]int64
 	Degree  int
 	// Race is publicstats.MarketRaceChinese or MarketRaceEuropean, "" for
-	// an item either race uses; Sealed is a sealed (rare) item.
+	// an item either race uses; Sealed is a sealed (rare) item and Seal
+	// its tier (MarketRarityStar, Moon or Sun) when it is equipment.
 	Race   string
 	Sealed bool
+	Seal   string
 }
 
 /*
@@ -173,7 +175,10 @@ func (s *Service) Search(q publicstats.MarketSearch) (publicstats.MarketListings
 		if q.Race != "" && view.Item.Race != "" && view.Item.Race != q.Race {
 			continue
 		}
-		if q.Rarity != "" && view.Item.Sealed != (q.Rarity == publicstats.MarketRaritySealed) {
+		if !rarityMatches(view.Item, q.Rarity) {
+			continue
+		}
+		if q.Armor != "" && view.Item.Armor != q.Armor {
 			continue
 		}
 		if needle != "" && !strings.Contains(strings.ToLower(view.Item.Name), needle) {
@@ -921,9 +926,61 @@ func (s *Service) itemView(row domain.InventoryRow) publicstats.MarketItem {
 		view.Degree = info.Degree
 		view.Race = info.Race
 		view.Sealed = info.Sealed
+		view.Seal = info.Seal
 		view.Category = Category(info.TypeIDs)
+		view.Armor = ArmorType(info.TypeIDs)
 	}
 	return view
+}
+
+/*
+================
+rarityMatches
+
+Whether an item passes the rarity filter: "" any, sealed any seal, normal
+no seal, star, moon or sun that one seal tier.
+================
+*/
+func rarityMatches(item publicstats.MarketItem, rarity string) bool {
+	switch rarity {
+	case "":
+		return true
+	case publicstats.MarketRaritySealed:
+		return item.Sealed
+	case publicstats.MarketRarityNormal:
+		return !item.Sealed
+	}
+	return item.Sealed && item.Seal == rarity
+}
+
+/*
+================
+ArmorType
+
+The armour type filter's value for an item's TypeIDs: the body armour
+rows of the categories table (TypeID3 1-3 Chinese, 9-11 European), ""
+for anything else.
+================
+*/
+func ArmorType(types [4]int64) string {
+	if types[0] != 3 || types[1] != 1 {
+		return ""
+	}
+	switch types[2] {
+	case 1:
+		return publicstats.MarketArmorGarment
+	case 2:
+		return publicstats.MarketArmorProtector
+	case 3:
+		return publicstats.MarketArmorArmor
+	case 9:
+		return publicstats.MarketArmorRobe
+	case 10:
+		return publicstats.MarketArmorLight
+	case 11:
+		return publicstats.MarketArmorHeavy
+	}
+	return ""
 }
 
 /*

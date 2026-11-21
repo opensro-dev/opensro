@@ -71,7 +71,7 @@ import { sideColumn } from "./market-window-side";
 export type { MarketPaint, MarketWindowView } from "./market-window-pen";
 
 // The search line: the name field, the dropdowns and the Search button.
-const QUERY_WIDTH = 130;
+const QUERY_WIDTH = 92;
 const SEARCH_WIDTH = 56;
 const MENU_GAP = 4;
 const MENU_ROW = 20;
@@ -206,7 +206,7 @@ function browseColumn( pen: Pen ) {
 		);
 		x += width + 4;
 	}
-	// The search line: the name, the five dropdowns (filterMenus) and Search.
+	// The search line: the name, the six dropdowns (filterMenus) and Search.
 	const y = py + FILTER_TOP;
 	pen.field( "market-query", hud.query, [ left, y, QUERY_WIDTH, BUTTON_HEIGHT ], "Search items...", 64 );
 	for ( const menu of filterMenus( hud ) ) {
@@ -382,32 +382,56 @@ function filterMenus( hud: MarketHudState ) {
 		current: string;
 		choices: readonly [string, string][];
 	}[] = [
-		{ name: "degree", label: "Degree", width: 88, current: String( hud.degree ), choices: degrees },
+		{ name: "degree", label: "Degree", width: 80, current: String( hud.degree ), choices: degrees },
 		{
 			name: "race",
 			label: "Race",
-			width: 88,
+			width: 80,
 			current: hud.race,
 			choices: [ [ "", "All races" ], [ "ch", "Chinese" ], [ "eu", "European" ] ]
 		},
 		{
 			name: "rarity",
 			label: "Rarity",
-			width: 88,
+			width: 84,
 			current: hud.rarity,
-			choices: [ [ "", "All rarities" ], [ "sealed", "Sealed" ], [ "normal", "Normal" ] ]
+			choices: [
+				[ "", "All rarities" ],
+				[ "sealed", "Any seal" ],
+				[ "star", "Seal of Star" ],
+				[ "moon", "Seal of Moon" ],
+				[ "sun", "Seal of Sun" ],
+				[ "normal", "Normal" ]
+			]
+		},
+		{
+			// The body armour types: Chinese garment, protector and armor,
+			// European robe, light and heavy armor (TypeID3 1-3, 9-11).
+			name: "armor",
+			label: "Armour type",
+			width: 88,
+			current: hud.armor,
+			choices: [
+				[ "", "All types" ],
+				[ "garment", "Garment" ],
+				[ "protector", "Protector" ],
+				[ "armor", "Armor" ],
+				[ "robe", "Robe" ],
+				[ "light", "Light armor" ],
+				[ "heavy", "Heavy armor" ]
+			]
 		},
 		{
 			name: "currency",
 			label: "Currency",
-			width: 96,
+			width: 84,
 			current: hud.currency,
 			choices: [ [ "", "Gold + Silk" ], [ "gold", "Gold" ], [ "silk", "Silk" ] ]
 		},
 		{
 			name: "sort",
 			label: "Sort",
-			width: 104,
+			width: 84,
 			current: hud.sort,
 			choices: MARKET_SORT_ORDER.map( sort => [ sort, SORT_CAPTIONS[sort] ] as [string, string] )
 		}
