@@ -41,7 +41,7 @@ func (s *Store) AccountStorage(character *domain.Character) (domain.AccountStora
 	if _, known := s.charDivision[character]; !known {
 		return domain.AccountStorage{}, fmt.Errorf("storage: unknown character")
 	}
-	return readAccountStorage(s.syncDBLocked(), character.AccountID)
+	return s.readAccountStorage(s.syncDBLocked(), character.AccountID)
 }
 
 /*
@@ -59,7 +59,7 @@ func (s *Store) TransactStorage(character *domain.Character, mutate func(next *d
 	if !known {
 		return domain.AccountStorage{}, fmt.Errorf("storage: unknown character")
 	}
-	current, err := readAccountStorage(s.syncDBLocked(), character.AccountID)
+	current, err := s.readAccountStorage(s.syncDBLocked(), character.AccountID)
 	if err != nil {
 		return current, err
 	}
@@ -150,11 +150,30 @@ func writeAccountStorageTx(tx *sql.Tx, account string, storage domain.AccountSto
 ================
 readAccountStorage
 
+The account's warehouse as every reader sees it: the stored record with
+its capacity raised to the shard's pages (Options.StoragePages; never
+lowered, domain/storagepages.go). The raise is written back with the
+next transaction, as the record is.
+================
+*/
+func (s *Store) readAccountStorage(db *sql.DB, account string) (domain.AccountStorage, error) {
+	storage, err := readAccountStorageRecord(db, account)
+	if err != nil {
+		return storage, err
+	}
+	storage.Capacity = s.storagePages.PersonalCapacity(storage.Capacity)
+	return storage, nil
+}
+
+/*
+================
+readAccountStorageRecord
+
 An account without a row has never stored anything: the default warehouse.
 A row that fails to decode or validate is an error, never an empty room.
 ================
 */
-func readAccountStorage(db *sql.DB, account string) (domain.AccountStorage, error) {
+func readAccountStorageRecord(db *sql.DB, account string) (domain.AccountStorage, error) {
 	var record string
 	err := db.QueryRow("SELECT record FROM account_storage WHERE account_id = ?", account).Scan(&record)
 	if errors.Is(err, sql.ErrNoRows) {

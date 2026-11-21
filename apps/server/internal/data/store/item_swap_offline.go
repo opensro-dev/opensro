@@ -447,7 +447,7 @@ func (s *Store) swapItemsOfflineLocked(division string, scope swapScope, swap It
 		}
 	}
 	for _, owner := range scope.accounts {
-		stored, err := readAccountStorage(s.syncDBLocked(), owner.account)
+		stored, err := s.readAccountStorage(s.syncDBLocked(), owner.account)
 		if err != nil {
 			return nil, err
 		}
