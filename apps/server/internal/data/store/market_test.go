@@ -87,7 +87,7 @@ func swordCount(t *testing.T, s *Store, characters ...*domain.Character) int {
 	t.Helper()
 	count := 0
 	for _, account := range []string{marketSeller, marketBuyer} {
-		storage, err := readAccountStorage(s.syncDBLocked(), account)
+		storage, err := s.readAccountStorage(s.syncDBLocked(), account)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -160,7 +160,7 @@ func TestMarketListTakesTheItemOutOfTheWarehouse(t *testing.T) {
 	if err != nil || listing.State != domain.MarketOpen || listing.Item.Codename != marketSword || listing.Version != 1 {
 		t.Fatalf("list = %+v, %v", listing, err)
 	}
-	storage, _ := readAccountStorage(s.syncDBLocked(), marketSeller)
+	storage, _ := s.readAccountStorage(s.syncDBLocked(), marketSeller)
 	if len(storage.Rows) != 0 {
 		t.Fatalf("the warehouse still holds %d rows", len(storage.Rows))
 	}
@@ -272,7 +272,7 @@ func TestMarketBuyWithSilk(t *testing.T) {
 	if buyerWallet.Silk != 300 || sellerWallet.Silk != 495 {
 		t.Fatalf("wallets after the sale: buyer %d, seller %d", buyerWallet.Silk, sellerWallet.Silk)
 	}
-	storage, _ := readAccountStorage(s.syncDBLocked(), marketBuyer)
+	storage, _ := s.readAccountStorage(s.syncDBLocked(), marketBuyer)
 	if len(storage.Rows) != 1 || storage.Rows[0].Codename != marketSword {
 		t.Fatalf("the buyer's warehouse = %+v", storage.Rows)
 	}
@@ -317,7 +317,7 @@ func TestMarketBuyWithGold(t *testing.T) {
 	if *buyer.Gold != 12345-1000 {
 		t.Fatalf("the buyer kept %d gold", *buyer.Gold)
 	}
-	storage, _ := readAccountStorage(s.syncDBLocked(), marketSeller)
+	storage, _ := s.readAccountStorage(s.syncDBLocked(), marketSeller)
 	if storage.Gold != 990 {
 		t.Fatalf("the seller's warehouse gold = %d, want 990", storage.Gold)
 	}

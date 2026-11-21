@@ -147,7 +147,7 @@ func (s *Store) MarketAcceptOffer(req domain.MarketAcceptRequest) (domain.Market
 		}
 		return domain.MarketSale{}, offer, err
 	}
-	storage, err := readAccountStorage(db, offer.BuyerAccount)
+	storage, err := s.readAccountStorage(db, offer.BuyerAccount)
 	if err != nil {
 		return domain.MarketSale{}, offer, err
 	}

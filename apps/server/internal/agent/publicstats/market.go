@@ -63,30 +63,51 @@ const (
 )
 
 // The race and rarity filters. An item either race wears (country 3, and
-// every item that is no equipment) matches both races.
+// every item that is no equipment) matches both races. Sealed is any seal;
+// Star, Moon and Sun are one seal tier each (enterworld.EquipmentSeal).
 const (
 	MarketRaceChinese  = "ch"
 	MarketRaceEuropean = "eu"
 	MarketRaritySealed = "sealed"
+	MarketRarityStar   = "star"
+	MarketRarityMoon   = "moon"
+	MarketRaritySun    = "sun"
 	MarketRarityNormal = "normal"
+)
+
+// The armour type filter: the body armour's TypeID3 (v1.150 itemdata),
+// Chinese garment, protector and armor, European robe, light and heavy.
+const (
+	MarketArmorGarment   = "garment"
+	MarketArmorProtector = "protector"
+	MarketArmorArmor     = "armor"
+	MarketArmorRobe      = "robe"
+	MarketArmorLight     = "light"
+	MarketArmorHeavy     = "heavy"
 )
 
 /*
 ================
 MarketFilterValid
 
-Whether a race and a rarity filter are known values ("" is any): one
-check for the site's query and the in-game window.
+Whether the race, rarity and armour type filters are known values ("" is
+any): one check for the site's query and the in-game window.
 ================
 */
-func MarketFilterValid(race, rarity string) bool {
+func MarketFilterValid(race, rarity, armor string) bool {
 	switch race {
 	case "", MarketRaceChinese, MarketRaceEuropean:
 	default:
 		return false
 	}
 	switch rarity {
-	case "", MarketRaritySealed, MarketRarityNormal:
+	case "", MarketRaritySealed, MarketRarityStar, MarketRarityMoon, MarketRaritySun, MarketRarityNormal:
+	default:
+		return false
+	}
+	switch armor {
+	case "", MarketArmorGarment, MarketArmorProtector, MarketArmorArmor, MarketArmorRobe, MarketArmorLight,
+		MarketArmorHeavy:
 		return true
 	}
 	return false
@@ -120,8 +141,8 @@ type MarketSource interface {
 MarketSearch
 
 A parsed search: Degree 0 and the empty strings mean "any". Race is
-MarketRaceChinese or MarketRaceEuropean; Rarity is MarketRaritySealed or
-MarketRarityNormal.
+MarketRaceChinese or MarketRaceEuropean; Rarity is one of MarketRarity*;
+Armor is one of MarketArmor*.
 ================
 */
 type MarketSearch struct {
@@ -130,6 +151,7 @@ type MarketSearch struct {
 	Degree   int
 	Race     string
 	Rarity   string
+	Armor    string
 	Currency string
 	Sort     string
 	Page     int
@@ -156,10 +178,14 @@ type MarketItem struct {
 	Degree   int    `json:"degree"`
 	// Race is the race that wears it ("ch", "eu"), "" for either.
 	Race string `json:"race,omitempty"`
-	// Sealed is a sealed (rare) item.
-	Sealed   bool  `json:"sealed,omitempty"`
-	Plus     int64 `json:"plus"`
-	Quantity int64 `json:"quantity"`
+	// Sealed is a sealed (rare) item; Seal its tier ("star", "moon",
+	// "sun") when it is sealed equipment.
+	Sealed bool   `json:"sealed,omitempty"`
+	Seal   string `json:"seal,omitempty"`
+	// Armor is a body armour's type (MarketArmor*), "" for anything else.
+	Armor    string `json:"armor,omitempty"`
+	Plus     int64  `json:"plus"`
+	Quantity int64  `json:"quantity"`
 }
 
 // MarketListingView is one listing. Seller is the listing character's
@@ -514,8 +540,8 @@ The search from the query; false for any value outside its list.
 func parseMarketSearch(r *http.Request, categories []MarketCategory) (MarketSearch, bool) {
 	query := r.URL.Query()
 	search := MarketSearch{Q: query.Get("q"), Category: query.Get("category"), Currency: query.Get("currency"),
-		Race: query.Get("race"), Rarity: query.Get("rarity"), Sort: query.Get("sort"), Page: 1}
-	if len(search.Q) > maxMarketQuery || !MarketFilterValid(search.Race, search.Rarity) {
+		Race: query.Get("race"), Rarity: query.Get("rarity"), Armor: query.Get("armor"), Sort: query.Get("sort"), Page: 1}
+	if len(search.Q) > maxMarketQuery || !MarketFilterValid(search.Race, search.Rarity, search.Armor) {
 		return search, false
 	}
 	if search.Category != "" && !knownCategory(categories, search.Category) {

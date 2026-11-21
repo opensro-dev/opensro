@@ -174,7 +174,7 @@ TransactGuildStorageAs
 
 The guild warehouse transfer (v1.188 guild storage jobs): the acting
 member and their guild's warehouse change together in one commit. The
-capacity is the guild level's (GuildStorageCapacity); rows the level no
+capacity is the guild level's (StoragePages.GuildCapacity); rows the level no
 longer covers stay stored but out of reach.
 ================
 */
@@ -191,7 +191,7 @@ func (door storeGuildDoor) TransactGuildStorageAs(divisionID string, actorID int
 	if guild.Storage != nil {
 		current = *guild.Storage
 	}
-	current.Capacity = domain.GuildStorageCapacity(guild.Level)
+	current.Capacity = s.storagePages.GuildCapacity(guild.Level)
 	storage := current
 	storage.Rows = append([]domain.InventoryRow(nil), current.Rows...)
 	for i := range storage.Rows {

@@ -47,7 +47,6 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -135,25 +134,7 @@ or failing that the nearest higher one.
 ================
 */
 func pandoraWaveKind(level int64, wave int, has func(string) bool) (string, bool) {
-	key := min(level, partySummonMaxLevel) - pandoraLevelSpan + int64(wave)
-	key = max(key, pandoraLowKey)
-	row := func(at int64) string {
-		if at < partySummonMinLevel {
-			return pandoraLowKinds[at-pandoraLowKey]
-		}
-		return partySummonKinds[at-partySummonMinLevel]
-	}
-	for at := key; at >= pandoraLowKey; at-- {
-		if kind := row(at); kind != "" && has(kind) {
-			return kind, true
-		}
-	}
-	for at := key + 1; at <= partySummonMaxLevel; at++ {
-		if kind := row(at); kind != "" && has(kind) {
-			return kind, true
-		}
-	}
-	return "", false
+	return strongSummonKind(min(level, partySummonMaxLevel)-pandoraLevelSpan+int64(wave), has)
 }
 
 /*
@@ -175,17 +156,8 @@ func (rt *Runtime) usePandoraBox(use persistentSummonUse, result *OpResult) bool
 		result.DiagnosticRefusal = "item-use: Pandora's Box owner unavailable"
 		return false
 	}
-	at := rt.liveSpawn(simulation.WorldKey(use.division, c.Name), c, use.nowMs)
-	if battlefield, known := world.RegionPlayerCombat(at.RegionID); !known || !battlefield {
-		result.Frames = append(result.Frames, exchangeBanner(partySummonTownLine))
-		return false
-	}
-	if *c.Level < partySummonMinLevel {
-		result.Frames = append(result.Frames, exchangeBanner(partySummonLevelLine))
-		return false
-	}
-	if rt.sookRun(use.division, c) != nil {
-		result.Frames = append(result.Frames, exchangeBanner(partySummonArenaLine))
+	at, ok := rt.summonEventRefusal(use, partySummonMinLevel, partySummonLevelLine, result)
+	if !ok {
 		return false
 	}
 	lease, admitted := rt.EntryPopulationLease(use.division, c.Name)

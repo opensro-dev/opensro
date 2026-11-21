@@ -109,6 +109,8 @@ var catalogueExempt = map[string]string{
 	"SRO_CHAT_ITEM_LINKS_PER_MESSAGE":          "chat behaviour at runtime; the catalogue publishes no chat",
 	"SRO_POSITION_STREAM":                      "which movement packets viewers get at runtime; the catalogue publishes no packets",
 	"SRO_STORAGE_AUTO_STACK":                   "where a quick move lands in storage at runtime; the catalogue publishes no storage behaviour",
+	"SRO_STORAGE_PAGES":                        "a warehouse's size at runtime; the catalogue publishes no storage",
+	"SRO_GUILD_STORAGE_PAGES":                  "a guild warehouse's size at runtime; the catalogue publishes no storage",
 	"SRO_INVENTORY_PAGES":                      "a character's inventory base at creation and world entry; the catalogue publishes no character state",
 	"SRO_FAST_DEN_RETURN":                      "a scroll countdown at runtime; the catalogue publishes no timers",
 	"SRO_UNIQUE_DAMAGE_RANK":                   "a post-kill damage notice; the catalogue publishes no notices",

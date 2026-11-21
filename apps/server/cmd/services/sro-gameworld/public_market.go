@@ -39,7 +39,7 @@ func marketService(gameplay *gameplayPlane, authority *store.Store, shard string
 				return market.ItemInfo{}, false
 			}
 			return market.ItemInfo{Name: ref.Name, TypeIDs: ref.TypeIDs, Degree: enterworld.EquipmentDegree(ref),
-				Race: marketRace(ref.Country), Sealed: enterworld.RaritySealed(int(ref.Rarity))}, true
+				Race: marketRace(ref.Country), Sealed: enterworld.RaritySealed(int(ref.Rarity)), Seal: marketSeal(ref)}, true
 		},
 		Tradeable: func(row domain.InventoryRow) bool {
 			return gameplay.items.Tradeable(row.Codename, row.ForgeBound, row.Summon)
@@ -79,4 +79,27 @@ func marketRace(country int64) string {
 		return publicstats.MarketRaceEuropean
 	}
 	return ""
+}
+
+// marketSeals names each seal tier for the rarity filter.
+var marketSeals = [enterworld.SealTiers]string{
+	enterworld.SealStar: publicstats.MarketRarityStar,
+	enterworld.SealMoon: publicstats.MarketRarityMoon,
+	enterworld.SealSun:  publicstats.MarketRaritySun,
+}
+
+/*
+================
+marketSeal
+
+The seal tier of a sealed equipment reference (enterworld.EquipmentSeal),
+"" for anything else.
+================
+*/
+func marketSeal(ref *enterworld.ItemRef) string {
+	tier, sealed := enterworld.EquipmentSeal(ref)
+	if !sealed || tier < 0 || tier >= enterworld.SealTiers {
+		return ""
+	}
+	return marketSeals[tier]
 }

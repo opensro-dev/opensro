@@ -1,75 +1,81 @@
 /*
 ===========================================================================
 
-summonscroll_test.go - the mall summon scrolls through the item-use door
+summonscroll_test.go - the mall Monster Summon Scrolls through the
+item-use door
 
-Port-only, not native (issue #3257): with SRO_MALL_CATEGORIES on, a
-scroll in the bag stands its count of guild soldiers beside the owner
-for the native 1,200 s and is spent; a second use is refused while
-the soldiers stand, dismissal frees the owner but keeps the summon
-cooldown, and with the setting off the scroll is dead stock.
+Port-only, not native (issues #3257, #4030): with SRO_MALL_CATEGORIES on,
+the 1, 2 and 5 people scrolls land 1, 2 and 5 strong monsters of the
+user's level around the user and are spent; below level 10, in a town,
+or with the setting off the scroll is refused and kept.
 
 ===========================================================================
 */
 package action
 
 import (
-	"bytes"
 	"testing"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
-	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/monster"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
-// The suffix a soldier group's rows carry past its base row.
-const summonScrollSoldierLevels = 3
+// summonScrollTestLevel is the user's level: the strong table's Yeti row.
+const summonScrollTestLevel = 59
 
 /*
 ================
 summonScrollFixture
 
-A level-1 owner holding the three scrolls, facing a three-row soldier
-group for their own country plus the other country's base row (which
-the owner must never draw from).
+A level-59 user in region holding the three scrolls, in a division
+whose template holds the Yeti (the table's level-59 kind).
 ================
 */
-func summonScrollFixture(t *testing.T) (*Runtime, *enterworld.Character, map[string]*enterworld.ItemRef) {
+func summonScrollFixture(t *testing.T, region uint16) (*Runtime, *enterworld.Character, map[string]*enterworld.ItemRef) {
 	t.Helper()
 	c := testCharacter()
-	refs := testCosSource(testItems())
-	country := enterworld.NativeCountryByte9C(c)
-	base := &enterworld.CharacterRef{Codename: "COS_GUILD_CH_SOLDIER1_001", GroupCodename: "SOLDIERS",
-		RefObjID: 9910, TidWord: 0x1c6 | domain.MercenaryBand<<11,
-		Level: 1, MaxHP: 100, MaxMP: 50, RunSpeed: 60, WalkSpeed: 20, Scale: 100}
-	base.Parameters.Country = uint8(country)
-	refs.characters[base.Codename] = base
-	for level := 2; level <= summonScrollSoldierLevels; level++ {
-		row := *base
-		row.Codename = "COS_GUILD_CH_SOLDIER1_00" + string(rune('0'+level))
-		row.RefObjID++
-		row.Level = uint8(level)
-		refs.characters[row.Codename] = &row
-	}
-	other := *base
-	other.Codename = "COS_GUILD_EU_SOLDIER1_001"
-	other.GroupCodename = "SOLDIERS_EU"
-	other.Parameters.Country = uint8(country) + 1
-	refs.characters[other.Codename] = &other
-
+	level := int64(summonScrollTestLevel)
+	c.Level, c.MaxLevel = &level, &level
+	regionID, x, y, z := int64(region), 900.0, 85.0, 900.0
+	c.World = &domain.CharacterWorld{Spawn: &domain.WorldSpawn{RegionID: &regionID, X: &x, Y: &y, Z: &z}}
+	refs := testItems()
 	scrolls := map[string]*enterworld.ItemRef{}
 	for i, code := range []string{SummonScrollItem, SummonScrollOneItem, SummonScrollTwoItem} {
 		ref := &enterworld.ItemRef{Codename: code, RefObjID: uint32(9950 + i), TypeIDs: [4]int64{3, 3, 9, 0}, Country: 3,
 			NativeFields: enterworld.NewNativeFields(map[string]float64{"canUse": 1})}
-		refs.staticItemSource[code] = ref
+		refs[code] = ref
 		scrolls[code] = ref
 		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
 			Slot: int64(23 + i), RefObjID: ref.RefObjID, Codename: code, TypeFlags: ref.TypeFlags(), StackCount: 2})
 	}
 	rt, _ := newTestRuntime(c, refs)
-	rt.BindPetSession(testDivision, c, 1)
+	yeti := monster.MonsterRef{RefObjID: 1, Codename: "MOB_KK_YETI", Name: "Yeti", TidWord: 0xc6,
+		Level: summonScrollTestLevel, MaxHP: 7059, WalkSpeed: 8, RunSpeed: 20}
+	nests := []monster.NestRow{{SpawnPoint: monster.SpawnPoint{RefObjID: 1, RegionID: waveTestRegion, X: 900, Y: 85, Z: 900}, SightRange: 77}}
+	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{1: yeti}, nests))
+	rt.Monsters.SetRandomSource(func() float64 { return 0.5 })
+	rt.Monsters.StartDivision(testDivision)
+	if err := rt.admitPopulationSession(testDivision, c.Name, 1); err != nil {
+		t.Fatal(err)
+	}
 	return rt, c, scrolls
+}
+
+/*
+================
+summonScrollUse
+================
+*/
+func summonScrollUse(c *enterworld.Character, ref *enterworld.ItemRef) persistentSummonUse {
+	for i, row := range c.MissionInventory {
+		if row.Codename == ref.Codename {
+			return persistentSummonUse{division: testDivision, character: c, ref: ref, row: i}
+		}
+	}
+	return persistentSummonUse{}
 }
 
 /*
@@ -77,9 +83,9 @@ func summonScrollFixture(t *testing.T) (*Runtime, *enterworld.Character, map[str
 summonScrollRowLeft
 ================
 */
-func summonScrollRowLeft(c *enterworld.Character, slot int64) int64 {
+func summonScrollRowLeft(c *enterworld.Character, codename string) int64 {
 	for _, row := range c.MissionInventory {
-		if row.Slot == slot {
+		if row.Codename == codename {
 			return row.StackCount
 		}
 	}
@@ -88,89 +94,103 @@ func summonScrollRowLeft(c *enterworld.Character, slot int64) int64 {
 
 /*
 ================
-TestSummonScrollsSummonTheirSoldiers
+TestSummonScrollsLandTheirPeoplesMonsters
 
-ONE and the plain scroll stand one soldier, TWO stands two; each use
-spends one scroll, stamps the 1,200 s expiry and cooldown, and a
-further use is refused while the soldiers stand.
+#4030: each scroll is "N people use" and lands N grade-7 strong monsters
+of the user's level, spending one scroll; it summoned guild soldiers and
+no monster before.
 ================
 */
-func TestSummonScrollsSummonTheirSoldiers(t *testing.T) {
+func TestSummonScrollsLandTheirPeoplesMonsters(t *testing.T) {
 	t.Setenv(commerce.EnvMallCategories, "on")
 	for _, tc := range []struct {
 		code string
-		slot int64
 		want int
-	}{
-		{SummonScrollOneItem, 24, 1},
-		{SummonScrollItem, 23, 1},
-		{SummonScrollTwoItem, 25, 2},
-	} {
-		rt, c, scrolls := summonScrollFixture(t)
-		nowSec := rt.Now().Unix()
-		request := wire.NewWriter(3).U8(uint8(tc.slot)).U16(scrolls[tc.code].TypeFlags()).Payload()
-		result := rt.HandleItemUse(testDivision, c, request)
-		if len(result.Frames) == 0 || result.Frames[0].Payload[0] != 1 {
-			t.Fatalf("%s refused: %+v", tc.code, result)
+	}{{SummonScrollOneItem, 1}, {SummonScrollTwoItem, 2}, {SummonScrollItem, 5}} {
+		rt, c, scrolls := summonScrollFixture(t, waveTestRegion)
+		var result OpResult
+		if !rt.useSummonScroll(summonScrollUse(c, scrolls[tc.code]), &result) {
+			t.Fatalf("%s refused: %q %+v", tc.code, result.DiagnosticRefusal, result.Frames)
 		}
-		if len(c.Mercenaries) != tc.want {
-			t.Fatalf("%s summoned %d soldiers, want %d", tc.code, len(c.Mercenaries), tc.want)
+		actors := detachedActors(rt)
+		if len(actors) != tc.want {
+			t.Fatalf("%s landed %d monsters, want %d", tc.code, len(actors), tc.want)
 		}
-		seen := map[uint32]bool{}
-		for _, pet := range c.Mercenaries {
-			if seen[pet.GID] || !c.OwnsMercenaryID(pet.GID) {
-				t.Fatalf("soldier identity: %+v", pet)
+		for _, actor := range actors {
+			if actor.Ref.Codename != "MOB_KK_YETI" || actor.Rarity() != partySummonGrade {
+				t.Fatalf("%s landed %s at grade %d", tc.code, actor.Ref.Codename, actor.Rarity())
 			}
-			if pet.RentalExpiresAtUnix != nowSec+domain.MercenarySummonSeconds {
-				t.Fatalf("soldier expiry %d, want %d", pet.RentalExpiresAtUnix, nowSec+domain.MercenarySummonSeconds)
-			}
-			seen[pet.GID] = true
 		}
-		if want := (nowSec + domain.MercenarySummonSeconds) * 1000; c.MercenarySummonUntilMs != want {
-			t.Fatalf("cooldown stamp %d, want %d", c.MercenarySummonUntilMs, want)
+		if summonScrollRowLeft(c, tc.code) != 1 {
+			t.Fatalf("%s was not spent once", tc.code)
 		}
-		if left := summonScrollRowLeft(c, tc.slot); left != 1 {
-			t.Fatalf("%s: %d scrolls left, want 1", tc.code, left)
-		}
-		// A second scroll while the soldiers stand is refused and kept.
-		again := rt.HandleItemUse(testDivision, c, request)
-		if !bytes.Equal(again.Frames[0].Payload, itemUseFailure(mercenaryAlreadySummoned).Frames[0].Payload) {
-			t.Fatalf("second %s answered %+v, want the already-summoned refusal", tc.code, again)
-		}
-		if left := summonScrollRowLeft(c, tc.slot); left != 1 {
-			t.Fatalf("refused use consumed a scroll: %d left", left)
-		}
-		// Dismissal releases the soldiers; the cooldown stands.
-		rt.HandleMercenaryDismiss(testDivision, c, nil)
-		if len(c.Mercenaries) != 0 || c.MercenarySummonUntilMs == 0 {
-			t.Fatalf("dismiss: %d soldiers, cooldown %d", len(c.Mercenaries), c.MercenarySummonUntilMs)
+		if len(c.Mercenaries) != 0 {
+			t.Fatalf("%s still stands soldiers", tc.code)
 		}
 	}
 }
 
 /*
 ================
-TestSummonScrollOffIsDeadStock
+TestSummonScrollRefusesBeforeSpending
 
-With the setting off (or garbage), the scroll keeps the native
-answer: no soldiers, no consumption.
+Off, below the item's level 10, and in a town the scroll answers and
+stays in the bag; a level-10 user gets the table's lowest row.
 ================
 */
-func TestSummonScrollOffIsDeadStock(t *testing.T) {
-	for _, setting := range []string{"off", "", "later"} {
-		t.Setenv(commerce.EnvMallCategories, setting)
-		rt, c, scrolls := summonScrollFixture(t)
-		ref := scrolls[SummonScrollTwoItem]
-		request := wire.NewWriter(3).U8(25).U16(ref.TypeFlags()).Payload()
-		result := rt.HandleItemUse(testDivision, c, request)
-		if len(c.Mercenaries) != 0 {
-			t.Fatalf("setting %q summoned %d soldiers", setting, len(c.Mercenaries))
+func TestSummonScrollRefusesBeforeSpending(t *testing.T) {
+	t.Setenv(commerce.EnvMallCategories, "off")
+	rt, c, scrolls := summonScrollFixture(t, waveTestRegion)
+	var result OpResult
+	if rt.useSummonScroll(summonScrollUse(c, scrolls[SummonScrollOneItem]), &result) || summonScrollRowLeft(c, SummonScrollOneItem) != 2 {
+		t.Fatal("the scroll was served with the setting off")
+	}
+
+	t.Setenv(commerce.EnvMallCategories, "on")
+	low := int64(summonScrollMinLevel - 1)
+	c.Level = &low
+	result = OpResult{}
+	if rt.useSummonScroll(summonScrollUse(c, scrolls[SummonScrollOneItem]), &result) || summonScrollRowLeft(c, SummonScrollOneItem) != 2 {
+		t.Fatal("a level-9 user spent the scroll")
+	}
+	if len(detachedActors(rt)) != 0 {
+		t.Fatal("a refused scroll landed a monster")
+	}
+
+	const jangan = 0x61a8
+	rt, c, scrolls = summonScrollFixture(t, jangan)
+	result = OpResult{}
+	if rt.useSummonScroll(summonScrollUse(c, scrolls[SummonScrollOneItem]), &result) || summonScrollRowLeft(c, SummonScrollOneItem) != 2 {
+		t.Fatal("the scroll was spent in a town")
+	}
+
+	all := func(string) bool { return true }
+	if kind, ok := strongSummonKind(summonScrollMinLevel, all); !ok || kind != "MOB_AM_CRAB_CLON" {
+		t.Fatalf("a level-10 user summons %q, want the table's lowest row", kind)
+	}
+	if kind, _ := strongSummonKind(summonScrollTestLevel, all); kind != "MOB_KK_YETI" {
+		t.Fatalf("level 59 summons %q", kind)
+	}
+}
+
+/*
+================
+TestSummonScrollsAreAdmittedByCodename
+
+The three rows, and only they, leave the quest-tool type for the scroll
+family, with their people counts.
+================
+*/
+func TestSummonScrollsAreAdmittedByCodename(t *testing.T) {
+	for code, want := range map[string]int{SummonScrollOneItem: 1, SummonScrollTwoItem: 2, SummonScrollItem: 5} {
+		if SummonScrollCount(code) != want {
+			t.Fatalf("%s calls %d", code, SummonScrollCount(code))
 		}
-		if result.DiagnosticRefusal == "" {
-			t.Fatalf("setting %q: use answered %+v, want the off refusal", setting, result)
+		if family := admittedItemUseFamily(&enterworld.ItemRef{Codename: code, TypeIDs: [4]int64{3, 3, 9, 0}}); family != itemUseSummonScroll {
+			t.Fatalf("%s is admitted as family %d", code, family)
 		}
-		if left := summonScrollRowLeft(c, 25); left != 2 {
-			t.Fatalf("setting %q consumed a scroll: %d left", setting, left)
-		}
+	}
+	if SummonScrollCount(PartySummonScrollItem) != 0 {
+		t.Fatal("the party scroll counts as a mall scroll")
 	}
 }

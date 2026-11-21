@@ -50,22 +50,6 @@ const searchScan = 5000
 // account page shows.
 const historyLimit = 50
 
-// The categories, by item TypeID (TID1 3 = item; TID2 1 = equipment,
-// 2 = pet, 3 = consumable and the rest). The equipment TID3 values are
-// v1.150's itemdata: 1-3 Chinese garment/protector/armor, 9-11 European
-// robe/light/heavy armor, 4 shield, 5 and 12 accessories, 6 weapons, 13
-// and 14 avatars. "other" takes every item no row names.
-var categories = []publicstats.MarketCategory{
-	{Slug: "weapon", Name: "Weapons"},
-	{Slug: "shield", Name: "Shields"},
-	{Slug: "armor", Name: "Armor"},
-	{Slug: "accessory", Name: "Accessories"},
-	{Slug: "avatar", Name: "Avatars"},
-	{Slug: "pet", Name: "Pets"},
-	{Slug: "consumable", Name: "Consumables"},
-	{Slug: "other", Name: "Other"},
-}
-
 /*
 ================
 ItemInfo
@@ -78,9 +62,11 @@ type ItemInfo struct {
 	TypeIDs [4]int64
 	Degree  int
 	// Race is publicstats.MarketRaceChinese or MarketRaceEuropean, "" for
-	// an item either race uses; Sealed is a sealed (rare) item.
+	// an item either race uses; Sealed is a sealed (rare) item and Seal
+	// its tier (MarketRarityStar, Moon or Sun) when it is equipment.
 	Race   string
 	Sealed bool
+	Seal   string
 }
 
 /*
@@ -173,7 +159,10 @@ func (s *Service) Search(q publicstats.MarketSearch) (publicstats.MarketListings
 		if q.Race != "" && view.Item.Race != "" && view.Item.Race != q.Race {
 			continue
 		}
-		if q.Rarity != "" && view.Item.Sealed != (q.Rarity == publicstats.MarketRaritySealed) {
+		if !rarityMatches(view.Item, q.Rarity) {
+			continue
+		}
+		if q.Armor != "" && view.Item.Armor != q.Armor {
 			continue
 		}
 		if needle != "" && !strings.Contains(strings.ToLower(view.Item.Name), needle) {
@@ -921,42 +910,11 @@ func (s *Service) itemView(row domain.InventoryRow) publicstats.MarketItem {
 		view.Degree = info.Degree
 		view.Race = info.Race
 		view.Sealed = info.Sealed
+		view.Seal = info.Seal
 		view.Category = Category(info.TypeIDs)
+		view.Armor = ArmorType(info.TypeIDs)
 	}
 	return view
-}
-
-/*
-================
-Category
-
-The picker slug for an item's TypeIDs (the categories table above).
-================
-*/
-func Category(types [4]int64) string {
-	if types[0] != 3 {
-		return "other"
-	}
-	switch types[1] {
-	case 2:
-		return "pet"
-	case 3:
-		return "consumable"
-	case 1:
-		switch types[2] {
-		case 6:
-			return "weapon"
-		case 4:
-			return "shield"
-		case 1, 2, 3, 9, 10, 11:
-			return "armor"
-		case 5, 12:
-			return "accessory"
-		case 13, 14:
-			return "avatar"
-		}
-	}
-	return "other"
 }
 
 /*

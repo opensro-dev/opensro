@@ -191,6 +191,9 @@ func TestCategoryFollowsTheTypeIDs(t *testing.T) {
 		{3, 1, 6, 2}:  "weapon",
 		{3, 1, 4, 1}:  "shield",
 		{3, 1, 10, 1}: "armor",
+		{3, 1, 1, 1}:  "armor",
+		{3, 1, 5, 1}:  "accessory",
+		{3, 1, 14, 1}: "avatar",
 		{3, 1, 12, 1}: "accessory",
 		{3, 1, 13, 1}: "avatar",
 		{3, 2, 1, 1}:  "pet",
@@ -258,12 +261,20 @@ TestSearchFiltersRaceAndRarity
 
 A Chinese sword, a sealed European sword and a herb either race uses:
 the race filter keeps the race's items and the shared herb; the rarity
-filter splits sealed from normal.
+filter splits sealed from normal and one seal tier from another; the
+armour filter keeps one body armour type (a Moon-sealed CH protector).
 ================
 */
 func TestSearchFiltersRaceAndRarity(t *testing.T) {
+	for types, want := range map[[4]int64]string{{3, 1, 1, 1}: "garment", {3, 1, 3, 1}: "armor", {3, 1, 9, 1}: "robe",
+		{3, 1, 10, 1}: "light", {3, 1, 11, 1}: "heavy", {3, 1, 6, 2}: "", {3, 1, 4, 1}: ""} {
+		if got := ArmorType(types); got != want {
+			t.Errorf("ArmorType(%v) = %q, want %q", types, got, want)
+		}
+	}
 	store := &fakeServiceStore{}
-	for i, codename := range []string{"ITEM_CH_SWORD_01_A", "ITEM_EU_SWORD_01_A_RARE", "ITEM_ETC_HP_POTION_01"} {
+	for i, codename := range []string{"ITEM_CH_SWORD_01_A", "ITEM_EU_SWORD_01_A_RARE", "ITEM_ETC_HP_POTION_01",
+		"ITEM_CH_M_LIGHT_01_BA_B_RARE"} {
 		store.open = append(store.open, domain.MarketListing{ID: int64(i + 1), Item: domain.InventoryRow{Codename: codename},
 			Currency: domain.MarketGold, Price: 10, ListedMs: int64(i)})
 	}
@@ -275,7 +286,10 @@ func TestSearchFiltersRaceAndRarity(t *testing.T) {
 			return ItemInfo{Name: "Iron Sword", TypeIDs: [4]int64{3, 1, 6, 2}, Degree: 1, Race: publicstats.MarketRaceChinese}, true
 		case "ITEM_EU_SWORD_01_A_RARE":
 			return ItemInfo{Name: "Sword (Seal of Star)", TypeIDs: [4]int64{3, 1, 6, 7}, Degree: 1,
-				Race: publicstats.MarketRaceEuropean, Sealed: true}, true
+				Race: publicstats.MarketRaceEuropean, Sealed: true, Seal: publicstats.MarketRarityStar}, true
+		case "ITEM_CH_M_LIGHT_01_BA_B_RARE":
+			return ItemInfo{Name: "Protector (Seal of Moon)", TypeIDs: [4]int64{3, 1, 2, 1}, Degree: 1,
+				Race: publicstats.MarketRaceChinese, Sealed: true, Seal: publicstats.MarketRarityMoon}, true
 		}
 		return item(codename)
 	}
@@ -295,18 +309,23 @@ func TestSearchFiltersRaceAndRarity(t *testing.T) {
 		q    publicstats.MarketSearch
 		want []int64
 	}{
-		{publicstats.MarketSearch{Race: publicstats.MarketRaceChinese}, []int64{3, 1}},
+		{publicstats.MarketSearch{Race: publicstats.MarketRaceChinese}, []int64{4, 3, 1}},
 		{publicstats.MarketSearch{Race: publicstats.MarketRaceEuropean}, []int64{3, 2}},
-		{publicstats.MarketSearch{Rarity: publicstats.MarketRaritySealed}, []int64{2}},
+		{publicstats.MarketSearch{Rarity: publicstats.MarketRaritySealed}, []int64{4, 2}},
 		{publicstats.MarketSearch{Rarity: publicstats.MarketRarityNormal}, []int64{3, 1}},
-		{publicstats.MarketSearch{Race: publicstats.MarketRaceChinese, Rarity: publicstats.MarketRaritySealed}, []int64{}},
+		{publicstats.MarketSearch{Rarity: publicstats.MarketRarityStar}, []int64{2}},
+		{publicstats.MarketSearch{Rarity: publicstats.MarketRarityMoon}, []int64{4}},
+		{publicstats.MarketSearch{Rarity: publicstats.MarketRaritySun}, []int64{}},
+		{publicstats.MarketSearch{Armor: publicstats.MarketArmorProtector}, []int64{4}},
+		{publicstats.MarketSearch{Armor: publicstats.MarketArmorRobe}, []int64{}},
+		{publicstats.MarketSearch{Race: publicstats.MarketRaceEuropean, Rarity: publicstats.MarketRarityMoon}, []int64{}},
 	} {
 		if got := ids(c.q); !slices.Equal(got, c.want) {
 			t.Errorf("search %+v = %v, want %v", c.q, got, c.want)
 		}
 	}
-	for _, bad := range [][2]string{{"kr", ""}, {"", "unique"}} {
-		if publicstats.MarketFilterValid(bad[0], bad[1]) {
+	for _, bad := range [][3]string{{"kr", "", ""}, {"", "unique", ""}, {"", "", "plate"}} {
+		if publicstats.MarketFilterValid(bad[0], bad[1], bad[2]) {
 			t.Errorf("filter %v accepted", bad)
 		}
 	}
