@@ -87,7 +87,8 @@ An absent file fingerprints stably, and differs from a present one.
 func TestFingerprintAbsentFile(t *testing.T) {
 	dir := t.TempDir()
 	absent := filepath.Join(dir, "absent.txt")
-	if Fingerprint(absent) != Fingerprint(absent) {
+	first, second := Fingerprint(absent), Fingerprint(absent)
+	if first != second {
 		t.Fatal("absent fingerprint is unstable")
 	}
 	present := filepath.Join(dir, "present.txt")
