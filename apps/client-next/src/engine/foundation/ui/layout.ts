@@ -150,7 +150,8 @@ export function fitUiGroup(
 	}
 	for ( let i = firstControl; i < controls.length; i++ ) {
 		const c = controls[i]!;
-		controls[i] = { ...c, rect: transform( c.rect ) };
+		// The hit area is in the same space as the rect, so it fits with it.
+		controls[i] = { ...c, rect: transform( c.rect ), ...(c.hitRect ? { hitRect: transform( c.hitRect ) } : {}) };
 	}
 	const blocks = options.blocks;
 	if ( blocks ) {

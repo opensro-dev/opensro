@@ -166,6 +166,10 @@ UiControl
 export interface UiControl {
 	// Optional convex hit outline in the same absolute UI coordinates as rect.
 	readonly hitPolygon?: readonly (readonly [number, number])[];
+	// Optional pointer area larger than rect, in the same coordinates: the
+	// control takes presses and drops there while drawing in rect (a bag
+	// cell's share of the gap to its neighbours). controlHitRect reads it.
+	readonly hitRect?: UiRect;
 	readonly multiline?: boolean;
 	readonly valueText?: string;
 	readonly whisperTarget?: string;
