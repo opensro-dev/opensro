@@ -7,7 +7,8 @@ Browser-only frames in the transport control range (below 256) that carry
 state native packets cannot: commerce, and the beta public chat
 transcript. The server defines the same numbers (internal/game/action:
 commerce.go, buyback.go, commerce_references.go, itemmall.go;
-market.go; internal/game/social/chat: wire.go). The world session admits exactly
+market.go; internal/game/social/chat: wire.go; internal/game/progression:
+skillrecall.go). The world session admits exactly
 these after EnterWorld; a frame the gate does not know ends the session,
 which is how the Item Mall catalogue disconnected every client (F10).
 
@@ -35,6 +36,10 @@ export const CREST_UPLOAD_CONTROL = 19;
 // The consignment market's requests and answers (server action/market.go
 // opMarket; port-only, not native, SRO_CONSIGNMENT; #3529).
 export const MARKET_CONTROL = 20;
+// A skill reset scroll's kept skills and masteries (server
+// progression/skillrecall.go SkillRecallControl; port-only, not native,
+// SRO_SKILL_RESET_SCROLL; release protocol 20).
+export const SKILL_RECALL_CONTROL = 21;
 
 /*
 ================
@@ -45,5 +50,5 @@ export function isWorldControl( opcode: number ): boolean {
 	return opcode === SHOP_CATALOG_CONTROL || opcode === SHOP_INVENTORY_CONTROL ||
 		opcode === SHOP_BUYBACK_CONTROL || opcode === COMMERCE_REFERENCES_CONTROL || opcode === MALL_CATALOG_CONTROL ||
 		opcode === CHAT_HISTORY_CONTROL || opcode === MALL_BALANCE_CONTROL || opcode === MALL_SILK_HISTORY_CONTROL ||
-		opcode === CREST_UPLOAD_CONTROL || opcode === MARKET_CONTROL;
+		opcode === CREST_UPLOAD_CONTROL || opcode === MARKET_CONTROL || opcode === SKILL_RECALL_CONTROL;
 }

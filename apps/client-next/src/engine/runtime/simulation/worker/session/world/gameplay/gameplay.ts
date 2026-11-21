@@ -4387,6 +4387,24 @@ references
 				);
 			}
 		},
+		/*
+================
+skillRecall
+
+Port-only: a skill reset scroll's result (control 21). The server
+already cleared and saved the forgotten skills' quick slots; the
+bindings mirror it, and the masteries take the reset levels.
+================
+		*/
+		skillRecall( recall: import("@/engine/foundation/gameplay/skill-recall").SkillRecall ) {
+			const kept = new Set( recall.skills );
+			bindings = {
+				skills: [ ...recall.skills ],
+				quickSlots: bindings.quickSlots.filter( row => row.kind !== 0x49 || kept.has( row.payload ) )
+			};
+			progression = { ...progression, masteries: recall.masteries.map( row => ({ ...row }) ) };
+			dirty = true;
+		},
 		surface: movement.surface,
 		entityBlock: movement.entityBlock,
 		clipMovement: movement.clipMovement,
