@@ -147,11 +147,7 @@ var Settings = []Setting{
 	// exists only for them. Consumed at build time (cap110_quest_*.py read
 	// it with SRO_LEVEL_CAP=110); the built quest tables are the switch the
 	// GameWorld sees. Server only: the catalogue reads the built data.
-	// Owner, 2026-11-21: on in the next release. The variant build must
-	// also run with SRO_LEVEL_CAP=110 (the importers read both), or the
-	// quest tables never build. Off is native in code; on is this
-	// shard's deployed value.
-	{Env: "SRO_CAP110_QUESTS", NomadVar: "cap110_quests", Default: "on"},
+	{Env: "SRO_CAP110_QUESTS", NomadVar: "cap110_quests", Default: "off"},
 	// Port-only, not native: operator knobs of those quests (quest/hwanknobs.go).
 	// Unset is the original behaviour; a malformed value refuses the boot.
 	{Env: "SRO_HWAN_NIYA_CAPTURE_RATES", NomadVar: "hwan_niya_capture_rates", Default: "", Validation: ValueHwanKnob},
