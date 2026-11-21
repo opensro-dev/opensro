@@ -104,7 +104,7 @@ func (s *Store) commitStorageLocked(division string, live, character *domain.Cha
 	if s.commitFail != nil {
 		return nil, s.commitFail
 	}
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("storage-transfer")
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func (s *Store) commitStorageLocked(division string, live, character *domain.Cha
 	if err := tx.upsertCharacter(division, character); err != nil {
 		return nil, err
 	}
-	settle, err := s.ledgerOwnTxLocked(tx.Tx, "storage-transfer", division, live, ledgerGold(character))
+	settle, err := s.ledgerOwnTxLocked(tx, division, live, ledgerGold(character))
 	if err != nil {
 		return nil, err
 	}

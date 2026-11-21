@@ -131,6 +131,39 @@ func EconomyDoor(label string) string {
 	return door
 }
 
+// itemBulkDoors are the doors whose item changes the item ledger
+// (store/item_ledger.go, #3307) folds into per-character hourly buckets
+// instead of exact rows: consumption and loot, a change every potion,
+// arrow or pickup, where a row each would be noise beside the evidence
+// rows of grants, sales, transfers and destroys. The ammunition debit
+// rides the four strike doors (action/ammunition.go applyAmmunitionDebit:
+// skillcombat.go, skillarea.go, pvpstrike.go, playerstrike_cos.go). An NPC
+// shop's sold items also land in the sale buckets (NoteItemSale), which
+// carry the gold per item a holdings diff cannot see.
+var itemBulkDoors = map[string]bool{
+	"item-use":             true,
+	"potion-recovery":      true,
+	"player-basic-attack":  true,
+	"player-area-attack":   true,
+	"player-strike-player": true,
+	"player-strike-cos":    true,
+	"pickup-item":          true,
+	"cos-ground-item":      true,
+	"shop-transaction":     true,
+}
+
+/*
+================
+ItemDoorBulk
+
+Whether the item ledger buckets a door's item changes instead of
+keeping a row each. door is EconomyDoor's word.
+================
+*/
+func ItemDoorBulk(door string) bool {
+	return itemBulkDoors[door]
+}
+
 /*
 ================
 economyDoorBase

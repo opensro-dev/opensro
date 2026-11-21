@@ -134,7 +134,7 @@ func (s *Store) commitMallPurchaseLocked(division string, character *domain.Char
 	if s.commitFail != nil {
 		return s.commitFail
 	}
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("mall-purchase")
 	if err != nil {
 		return err
 	}

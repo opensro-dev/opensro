@@ -286,7 +286,7 @@ func (s *Store) listFromBagLocked(req domain.MarketListRequest, listing domain.M
 	listing.Item = row
 	committed := *character
 	committed.MissionInventory = rest
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("market-list")
 	if err != nil {
 		return domain.MarketListing{}, err
 	}
@@ -459,7 +459,7 @@ func (s *Store) settleSaleLocked(t saleTerms) (domain.MarketSale, error) {
 	// One character row when the payer's bag receives the item.
 	sameRecord := gold && toBag && t.receiver == t.payer
 
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("market-buy")
 	if err != nil {
 		return domain.MarketSale{}, err
 	}
@@ -479,7 +479,7 @@ func (s *Store) settleSaleLocked(t saleTerms) (domain.MarketSale, error) {
 		if err := tx.upsertCharacter(payerDivision, &committed); err != nil {
 			return domain.MarketSale{}, err
 		}
-		if settle, err = s.ledgerOwnTxLocked(tx.Tx, "market-buy", payerDivision, t.payer, paidGold); err != nil {
+		if settle, err = s.ledgerOwnTxLocked(tx, payerDivision, t.payer, paidGold); err != nil {
 			return domain.MarketSale{}, err
 		}
 		if creditWarehouse {
@@ -610,7 +610,7 @@ func (s *Store) MarketReclaim(req domain.MarketReclaimRequest) (domain.MarketLis
 	}
 	item := listing.Item
 	item.Slot = req.BagSlot
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("market-reclaim")
 	if err != nil {
 		return domain.MarketListing{}, err
 	}

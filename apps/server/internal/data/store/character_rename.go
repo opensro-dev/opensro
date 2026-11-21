@@ -149,7 +149,7 @@ func (s *Store) renameCharacterLocked(division string, selected *domain.Characte
 			ground[division][i].DroppedBy = after
 		}
 	}
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("character-rename")
 	if err != nil {
 		return err
 	}

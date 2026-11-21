@@ -109,6 +109,9 @@ func loadDB(db *sql.DB, current int, currentLayout int, headroom int) (*loadedDB
 		if err := validateEconomyLedger(db); err != nil {
 			return nil, fmt.Errorf("validating economy ledger: %w", err)
 		}
+		if err := validateItemLedger(db); err != nil {
+			return nil, fmt.Errorf("validating item ledger: %w", err)
+		}
 	}
 	if currentLayout >= 11 {
 		if err := validateNameReservations(db); err != nil {

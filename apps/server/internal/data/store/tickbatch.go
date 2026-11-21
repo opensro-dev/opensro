@@ -121,7 +121,7 @@ batch when the door is a deferred one.
 func (s *Store) finishDoorLocked(label string, deferred bool, cs []*domain.Character) {
 	if deferred && s.batch.open {
 		// The batch commits under its own label: the gold rows name this door.
-		s.noteDoorGoldLocked(label, cs)
+		s.noteDoorLedgersLocked(label, cs)
 		s.batch.pending = true
 		s.batch.deferred++
 		return
