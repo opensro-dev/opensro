@@ -17,6 +17,12 @@ const BAG_PAGE_SLOTS = 32;
 const BAG_COLUMNS = 4;
 const BAG_CELL_PITCH = 36;
 const BAG_CELL_SIZE = 32;
+// The 4 px between two cells, split evenly: a cell's hit area reaches this
+// far past each edge, so neighbouring areas meet without overlapping.
+// Port-only, not native: the original's cells take only their 32 px, so a
+// drop in the gap lands on no cell and does nothing (BUG-092); the
+// Experimental "Drop between bag cells" row hands the cells these areas.
+const BAG_CELL_REACH = (BAG_CELL_PITCH - BAG_CELL_SIZE) / 2;
 // 59DF10: the inventory's first cell sits at (0x12, 0xd) inside the bag pane.
 const INVENTORY_CELL_X = 18;
 const INVENTORY_CELL_Y = 13;
@@ -58,6 +64,9 @@ inventorySlots
 
 59DF10: capacity is bag capacity (wire total minus equipment slots).
 Each page has 32 controls; spare controls use pt_block, never wire slots.
+Each cell carries its drawn rect and hitRect, the rect grown by half the
+gap on every side (BAG_CELL_REACH); a window that wants drops between
+cells to land hands hitRect to its control.
 ================
 */
 export function inventorySlots( x: number, y: number, total: number, equipment: number, page: number ) {
@@ -67,16 +76,21 @@ export function inventorySlots( x: number, y: number, total: number, equipment: 
 	return {
 		pages,
 		page: selected,
-		slots: Array.from( { length: BAG_PAGE_SLOTS }, ( _, index ) => ({
-			slot: equipment + selected * BAG_PAGE_SLOTS + index,
-			enabled: selected * BAG_PAGE_SLOTS + index < capacity,
-			rect: [
-				x + INVENTORY_CELL_X + (index % BAG_COLUMNS) * BAG_CELL_PITCH,
-				y + INVENTORY_CELL_Y + Math.floor( index / BAG_COLUMNS ) * BAG_CELL_PITCH,
-				BAG_CELL_SIZE,
-				BAG_CELL_SIZE
-			] as UiRect
-		}) )
+		slots: Array.from( { length: BAG_PAGE_SLOTS }, ( _, index ) => {
+			const left = x + INVENTORY_CELL_X + (index % BAG_COLUMNS) * BAG_CELL_PITCH,
+				top = y + INVENTORY_CELL_Y + Math.floor( index / BAG_COLUMNS ) * BAG_CELL_PITCH;
+			return {
+				slot: equipment + selected * BAG_PAGE_SLOTS + index,
+				enabled: selected * BAG_PAGE_SLOTS + index < capacity,
+				rect: [ left, top, BAG_CELL_SIZE, BAG_CELL_SIZE ] as UiRect,
+				hitRect: [
+					left - BAG_CELL_REACH,
+					top - BAG_CELL_REACH,
+					BAG_CELL_SIZE + 2 * BAG_CELL_REACH,
+					BAG_CELL_SIZE + 2 * BAG_CELL_REACH
+				] as UiRect
+			};
+		} )
 	};
 }
 

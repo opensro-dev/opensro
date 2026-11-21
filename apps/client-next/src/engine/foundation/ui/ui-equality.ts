@@ -136,7 +136,8 @@ function sameUiControl( x: UiControl, y: UiControl ): boolean {
 			x.rightActivate === y.rightActivate && x.helpText === y.helpText && x.captureKeys === y.captureKeys &&
 			x.draggable === y.draggable && x.carry === y.carry && x.inspect === y.inspect &&
 			x.keepFocusOnAltPress === y.keepFocusOnAltPress && x.min === y.min && x.max === y.max &&
-			x.maxLength === y.maxLength && tuple( x.rect, y.rect ) && tuple( x.textInsets, y.textInsets ) &&
+			x.maxLength === y.maxLength && tuple( x.rect, y.rect ) && tuple( x.hitRect, y.hitRect ) &&
+			tuple( x.textInsets, y.textInsets ) &&
 			samePolygon( x.hitPolygon, y.hitPolygon ) && sameHelpSource( x.helpSource, y.helpSource );
 }
 /*

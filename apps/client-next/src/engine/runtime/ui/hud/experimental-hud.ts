@@ -258,6 +258,12 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "Drop an item on a bag tab to move it to that page."
 					},
 					{
+						key: "bagCellGapDrops",
+						id: "experimental-bag-cell-gap-drops",
+						label: "Drop between bag cells",
+						description: "An item dropped between two bag cells lands in the nearer one."
+					},
+					{
 						key: "exchangeClickShortcuts",
 						id: "experimental-exchange-click-shortcuts",
 						label: "Exchange click shortcuts",

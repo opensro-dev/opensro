@@ -184,6 +184,13 @@ export interface ExperimentalOptions {
 	// turned off (the owner's choice, 2026-10-15); off is the original,
 	// where a drop on a tab does nothing.
 	readonly dropOnBagTab: boolean;
+	// Port-only, not native (BUG-092): a bag cell takes presses and drops
+	// in its half of the gap to its neighbours (inventory-layout.ts
+	// BAG_CELL_REACH), so an item released between two cells lands in the
+	// nearer one. On unless turned off (the owner's standing rule for
+	// retail UI defects, 2026-11-16); off is the original, where a drop in
+	// the gap does nothing.
+	readonly bagCellGapDrops: boolean;
 	// Port-only, not native: Ctrl+click, right-click or double-click a bag
 	// item stages it into the open exchange, as a drop on the table does;
 	// the original stages by drag and drop only. On unless turned off (the
@@ -476,7 +483,7 @@ experimentalOptions
 
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
-breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices, confirmGuildBan,
+breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, bagCellGapDrops, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices, confirmGuildBan,
 petClickOpensWindow, smartPetPickup, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion, silentWingFlight, dungeonCharacterPvs and
 christmasCarols (owner, 2026-11-15: on by default, off by the player's choice), which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
@@ -532,6 +539,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		dungeonCharacterPvs: record.dungeonCharacterPvs !== false,
 		fitWindowLabels: record.fitWindowLabels !== false,
 		dropOnBagTab: record.dropOnBagTab !== false,
+		bagCellGapDrops: record.bagCellGapDrops !== false,
 		exchangeClickShortcuts: record.exchangeClickShortcuts !== false,
 		noticeLinks: record.noticeLinks !== false,
 		chatItemLinks: record.chatItemLinks !== false,

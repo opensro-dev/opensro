@@ -66,3 +66,36 @@ test("no page enables a wire slot past its capacity", () => {
 		}
 	}
 });
+
+/*
+================
+bag cell hit areas
+
+BUG-092: the hit areas (hitRect) cover the whole grid between the first and
+the last cell, gaps included, with no point in two areas, and each area
+holds its drawn cell. So a drop anywhere on the grid lands in exactly one
+cell, the nearer one across a gap.
+================
+*/
+test("every point between the bag cells belongs to exactly one cell's hit area", () => {
+	const { slots } = inventorySlots( 0, 0, 45, 13, 0 );
+	const inside = ( r, x, y ) => x >= r[0] && y >= r[1] && x < r[0] + r[2] && y < r[1] + r[3];
+	for ( const cell of slots ) {
+		const [x, y, w, h] = cell.rect, hit = cell.hitRect;
+		assert.ok(
+			hit[0] <= x && hit[1] <= y && hit[0] + hit[2] >= x + w && hit[1] + hit[3] >= y + h,
+			"hit area holds cell " + cell.slot
+		);
+	}
+	const first = slots[0].hitRect, last = slots.at( -1 ).hitRect;
+	for ( let y = first[1]; y < last[1] + last[3]; y++ ) {
+		for ( let x = first[0]; x < last[0] + last[2]; x++ ) {
+			const owners = slots.filter( cell => inside( cell.hitRect, x, y ) );
+			assert.equal( owners.length, 1, `point ${x},${y} is in ${owners.length} hit areas` );
+		}
+	}
+	// Two pixels right of slot 13's cell (in the gap) is slot 13's; three is slot 14's.
+	const [x0, y0, w0] = slots[0].rect;
+	assert.equal( slots.find( cell => inside( cell.hitRect, x0 + w0 + 1, y0 + 4 ) ).slot, 13 );
+	assert.equal( slots.find( cell => inside( cell.hitRect, x0 + w0 + 2, y0 + 4 ) ).slot, 14 );
+});
