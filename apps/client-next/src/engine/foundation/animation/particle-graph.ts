@@ -41,6 +41,7 @@ import {
 	NO_SLOT,
 	ROOT_SLOT,
 	setIdentityAt,
+	unitFrame,
 	SLOT_ALIVE,
 	SLOT_OCCUPIED,
 	SLOT_RELEASED,
@@ -505,7 +506,7 @@ function bornSlot(
 	const position = graph.position, velocity = graph.velocity, matrix = graph.matrix;
 	const program: ParticleProgram = def.commands ? NO_PROGRAM : def.program ?? NO_PROGRAM;
 	copy16( matrix, parent * 16, scratch.basis, 0 );
-	graph.index = sampleParticle( program, table, graph.index, scratch.basis, sample );
+	graph.index = sampleParticle( program, table, graph.index, scratch.basis, sample, graph.unit );
 	const inherited = scratch.inherited;
 	copy3( velocity, from, inherited, 0 );
 	for ( let i = 0; i < 3; i++ ) {
@@ -541,8 +542,12 @@ function bornSlot(
 		// The frame keeps only its translation.
 		for ( let i = 0; i < 12; i++ ) matrix[s * 16 + i] = i % 5 === 0 ? 1 : 0;
 		matrix[s * 16 + 15] = 1;
+		unitFrame( graph, s );
 	}
-	if ( def.matrix && !def.commands ) matrix.set( def.matrix, s * 16 );
+	if ( def.matrix && !def.commands ) {
+		matrix.set( def.matrix, s * 16 );
+		unitFrame( graph, s );
+	}
 	const follow = ancestor( graph, s, def.followDepth );
 	for ( let i = 0; i < 3; i++ ) {
 		inherited[i] = Math.fround( inherited[i]! - (follow >= 0 ? velocity[follow * 3 + i]! : 0) );
@@ -590,7 +595,10 @@ function liveSlot(
 		for ( let i = 0; i < 3; i++ ) position[to + i] = Math.fround( position[to + i]! + position[from + i]! );
 	}
 	const rot = !def.commands && def.rotations[Math.min( age, def.rotations.length - 1 )];
-	if ( rot ) graph.matrix.set( rot, s * 16 );
+	if ( rot ) {
+		graph.matrix.set( rot, s * 16 );
+		unitFrame( graph, s );
+	}
 }
 
 /*
