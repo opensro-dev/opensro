@@ -301,9 +301,8 @@ func (s *Store) noteCharacterItemsLocked(label, division string, c *domain.Chara
 itemChangeRowsLocked
 
 One row per item whose count differs from before to after (row counts,
-domain.DiffItemRowCounts), stamped now
-under the door word. Both note paths (the commit's and an own
-transaction's) build their rows here.
+domain.DiffItemRowCounts), stamped now under the door word. Both note
+paths (the commit's and an own transaction's) build their rows here.
 ================
 */
 func (s *Store) itemChangeRowsLocked(label, division string, charID int64, before, after []domain.ItemCount) []itemLedgerRow {
