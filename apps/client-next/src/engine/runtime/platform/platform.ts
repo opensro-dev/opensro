@@ -20,6 +20,7 @@ import { chatBlocks } from "@/engine/foundation/gameplay/chat-blocks";
 import {
 	defaultVideoOptions,
 	fitCanvasViewport,
+	surfaceSize,
 	uiPixelScaleFor,
 	videoOptions,
 	type VideoOptions
@@ -80,6 +81,10 @@ export function createPlatform(
 	// clientWidth every frame forces a synchronous layout whenever the UI
 	// touched the DOM that frame (a trace showed it among the top costs).
 	const canvasBox = { width: canvas.clientWidth, height: canvas.clientHeight };
+	// Backing pixels per CSS pixel: devicePixelRatio unless surfaceSize
+	// clamped the store (#4028); pointer mapping and the UI scale use it so a
+	// click lands on what the clamped frame drew there.
+	let surfacePixelRatio = devicePixelRatio;
 	const canvasObserver = typeof ResizeObserver === "undefined" ?
 		null :
 		new ResizeObserver( refreshCanvasBox );
@@ -212,7 +217,8 @@ export function createPlatform(
 	================
 	*/
 	function displayScale(): number {
-		return uiPixelScale() / devicePixelRatio * uiScaleFactor( experimental ); // UI size: 1 at native 100
+		// uiPixelScale reads the viewport first, so the ratio is this frame's.
+		return uiPixelScale() / surfacePixelRatio * uiScaleFactor( experimental ); // UI size: 1 at native 100
 	}
 	/*
 	================
@@ -228,7 +234,7 @@ export function createPlatform(
 	function uiPixelScale(): number {
 		if ( video.displaySize ) return 1;
 		const physical = readViewport();
-		return uiPixelScaleFor( physical.width, physical.height, devicePixelRatio );
+		return uiPixelScaleFor( physical.width, physical.height, surfacePixelRatio );
 	}
 	/*
 	================
@@ -679,8 +685,12 @@ export function createPlatform(
 		const fit = fitCanvasViewport( window, video.displaySize, pinVisualViewport ), box = canvasSize();
 		const width = fit.pinned || box.width <= 0 ? fit.width : box.width,
 			height = fit.pinned || box.height <= 0 ? fit.height : box.height;
-		viewport.width = Math.max( 1, Math.round( width * devicePixelRatio ) );
-		viewport.height = Math.max( 1, Math.round( height * devicePixelRatio ) );
+		// Clamped to what the device can configure (#4028).
+		const full = Math.max( 1, Math.round( width * devicePixelRatio ) ),
+			surface = surfaceSize( full, Math.max( 1, Math.round( height * devicePixelRatio ) ) );
+		viewport.width = surface.width;
+		viewport.height = surface.height;
+		surfacePixelRatio = devicePixelRatio * surface.width / full;
 		return viewport;
 	}
 	return {
