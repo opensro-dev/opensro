@@ -57,13 +57,16 @@ test("the decoder holds the control to its shape", () => {
 			{ version: 1, skills: [], masteries: Array.from( { length: 257 }, ( _, i ) => ({ id: i + 1, level: 0 }) ) },
 			{ version: 1, masteries: [] }
 		]
-	) assert.throws( () => skillRecallFrame( body( bad ) ), undefined, JSON.stringify( bad ) );
+	) assert.throws( () => skillRecallFrame( body( bad ) ), Error, JSON.stringify( bad ) );
 	assert.throws( () => skillRecallFrame( Uint8Array.of( 0x7b ) ) );
 });
 
 test("both reset scrolls ask the native mall-use question first", () => {
 	const type = (13 << 11) | (13 << 7) | (3 << 5) | (3 << 2);
-	assert.equal( isMallUseConfirmItem( { typeFlags: type, nativeFields: { canUse: 129 } } ), true );
+	const scroll = /** @type {import("../../src/engine/contracts/gameplay").InventoryItem} */ (
+		/** @type {unknown} */ ({ typeFlags: type, nativeFields: { canUse: 129 } })
+	);
+	assert.equal( isMallUseConfirmItem( scroll ), true );
 });
 
 test("gameplay applies a reset: masteries at 0, forgotten skills and their slots gone", () => {
@@ -84,6 +87,6 @@ test("gameplay applies a reset: masteries at 0, forgotten skills and their slots
 	const state = defined( g.take() );
 	assert.deepEqual( state.skills, [ 1 ] );
 	assert.deepEqual( state.quickSlots, [ { slot: 1, kind: 0x49, payload: 1 } ] );
-	assert.deepEqual( state.progression.masteries, [ { id: 257, level: 0 }, { id: 258, level: 0 } ] );
+	assert.deepEqual( defined( state.progression ).masteries, [ { id: 257, level: 0 }, { id: 258, level: 0 } ] );
 	g.dispose();
 });
