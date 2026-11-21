@@ -22,6 +22,7 @@ import (
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/recovery"
 	"opensro.online/server/internal/game/item/wire"
@@ -288,6 +289,12 @@ func (rt *Runtime) handleItemUse(
 			// Port-only (#1689): with the flag off the scroll is the
 			// native game - an item no family serves.
 			result.DiagnosticRefusal = "item-use: name change scroll is off (" + EnvNameChangeScroll + ")"
+			return false
+		}
+		// Port-only: a reset scroll with its own switch off is the native
+		// game, its item sold nowhere (commerce/resetscrolls.go).
+		if scroll, isReset := commerce.ResetScrollByCodename(ref.Codename); isReset && !rt.ResetScrolls[scroll.Kind] {
+			result.DiagnosticRefusal = "item-use: reset scroll is off (" + scroll.Env + ")"
 			return false
 		}
 		if code := itemUseRequirements(character, ref); code != 0 {

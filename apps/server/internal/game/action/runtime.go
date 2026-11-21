@@ -879,6 +879,11 @@ type Runtime struct {
 	// use, gated by the minimum level alone.
 	StatRecallWindows bool
 
+	// ResetScrolls holds which reset scrolls are on (commerce/resetscrolls.go,
+	// one switch each; port-only, not native). A scroll whose kind is
+	// missing or false is refused and kept.
+	ResetScrolls map[commerce.ResetScrollKind]bool
+
 	// ApplyDeathPenalty is progression's door-free death updater: the EXP
 	// and SP a death costs (pkdeath.go resolves which). Combat invokes it
 	// from inside the fatal-HP character transaction.

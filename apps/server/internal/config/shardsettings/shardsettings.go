@@ -342,6 +342,10 @@ var Settings = []Setting{
 	// Owner, 2026-10-27: the name-change scroll (#1689, port-only, not
 	// native; "off" is native: the scroll is neither sold nor usable).
 	{Env: "SRO_NAME_CHANGE_SCROLL", NomadVar: "name_change_scroll", Default: "off"},
+	// Owner, 2026-11-21: the stat and skill reset scrolls (port-only, not
+	// native; "off" is native: the scroll is neither sold nor usable).
+	{Env: "SRO_STAT_RESET_SCROLL", NomadVar: "stat_reset_scroll", Default: "off"},
+	{Env: "SRO_SKILL_RESET_SCROLL", NomadVar: "skill_reset_scroll", Default: "off"},
 	// Owner, 2026-10-25: count kills and EXP per online hour by level
 	// band for the staff console (#1639, port-only, not native; "off"
 	// counts nothing and the economy route answers 404).

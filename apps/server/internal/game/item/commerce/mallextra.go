@@ -174,7 +174,8 @@ dear high one. v1.150 sells none, and with the preset off use is as today.
 */
 func StatRecallListed(goods []MallExtraGood) bool {
 	for _, good := range goods {
-		if strings.HasPrefix(good.Item, "ITEM_MALL_STATS_POINT_RECALL") {
+		// The all-levels scroll (resetscrolls.go) has no window to hold.
+		if strings.HasPrefix(good.Item, "ITEM_MALL_STATS_POINT_RECALL") && good.Item != StatResetScrollItem {
 			return true
 		}
 	}

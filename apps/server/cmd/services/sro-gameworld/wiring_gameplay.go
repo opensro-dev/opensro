@@ -323,6 +323,7 @@ func newGameplayPlane(
 		})
 		log.Infof("mall: name change scroll listed at %d silk (%s, port-only, not native)", action.NameChangePriceSilk, action.EnvNameChangeScroll)
 	}
+	mallExtra = append(mallExtra, applyResetScrolls(items, deps.ItemReferences())...)
 	// SRO_MALL_CATEGORIES (port-only, not native, #3257): the later
 	// mall's categories, HOT shop and goods badges; "off" (the
 	// default) is the shipped mall (commerce/mallcategories.go).
