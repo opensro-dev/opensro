@@ -14,6 +14,7 @@ must match the committed archive evidence
 */
 import { loadCharacterActionEffectRows } from "../data/buildSkillDataAsset.mjs";
 import {
+	avatarWornEffects,
 	equipmentAmbientParticles,
 	equipmentEnchantSparks,
 	equipmentParticleCatalog
@@ -205,6 +206,8 @@ export function collectEffectReferences() {
 	for ( const rows of Object.values( equipmentParticleCatalog() ) ) for ( const row of rows ) add( row.effectPath );
 	// Port-only, not native: the Experimental enchant sparks (equipmentEnchantSparks).
 	for ( const rows of Object.values( equipmentEnchantSparks() ) ) for ( const row of rows ) add( row.effectPath );
+	// Port-only, not native: the later mall avatars' worn auras (avatarWornEffects).
+	for ( const rows of Object.values( avatarWornEffects() ) ) for ( const row of rows ) add( row.effectPath );
 	for ( const modifiers of equipmentAmbientParticles().values() ) {
 		for ( const modifier of modifiers ) for ( const entry of modifier.entries ) add( entry.effectPath );
 	}
