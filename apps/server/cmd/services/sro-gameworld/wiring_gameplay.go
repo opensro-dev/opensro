@@ -79,14 +79,17 @@ type gameplayPlane struct {
 	presence *livepresence.Directory
 	// mutes is the chat mute book (moderation_wiring.go), set once the
 	// shard is known; the console's conduct actions reach it.
-	mutes         *moderation.Book
-	chat          *chat.Runtime
-	chatFeed      *chatfeed.Feed
-	parties       *party.Runtime
-	friends       *community.FriendRequests
-	guildInvites  *guild.InviteRuntime
-	unions        *guild.UnionRuntime
-	guildWars     *guild.WarRuntime
+	mutes        *moderation.Book
+	chat         *chat.Runtime
+	chatFeed     *chatfeed.Feed
+	parties      *party.Runtime
+	friends      *community.FriendRequests
+	guildInvites *guild.InviteRuntime
+	unions       *guild.UnionRuntime
+	guildWars    *guild.WarRuntime
+	// gpAccrual is the guild GP hunting accrual (issue #4051): the
+	// progression mint notes into it, the tick drains it.
+	gpAccrual     *guild.GpAccrual
 	mentorInvites *mentor.InviteRuntime
 	matches       *match.Runtime
 	siege         *siege.Lane
@@ -722,6 +725,13 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	stats := progression.NewRuntime(game.deps)
 	if err = applyLevelCap(stats); err != nil {
 		return err
+	}
+	// Guild GP hunting accrual (issue #4051): the SP mint notes each
+	// whole SP into the tracker; the tick drains it through the credit
+	// door and session close credits the remainder while still guilded.
+	game.gpAccrual = guild.NewGpAccrual(game.deps, game.presence)
+	stats.SPMintedHook = func(character *enterworld.Character, spMinted int64) {
+		game.gpAccrual.NoteSPMinted(game.divisionID, character, spMinted)
 	}
 	// The configured cap reaches the party-matching bound directly and
 	// the client through the world-entry blob (publishedLevelCap keeps
