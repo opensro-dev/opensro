@@ -103,6 +103,57 @@ func TestAlchemyPublishedDissolveCommitsOnceThroughHandler(t *testing.T) {
 
 /*
 ================
+TestAlchemyNativeDisassembleFrameCommitsThroughHandler
+
+The frame the v1.150 window composes for a dismantle (0x716F mode 3 in the
+compound framing, count field 1, five slots 12-padded) commits exactly one
+dissolution: the compound result answers {1, 2, Completed 1} on 0xB16F,
+the equipment goes and the Rondo stack drops by exactly the price step.
+================
+*/
+func TestAlchemyNativeDisassembleFrameCommitsThroughHandler(t *testing.T) {
+	clientdata.RequireGameData(t)
+	dir := gamedatatest.TextdataDir(t)
+	catalog, err := alchemy.LoadCatalog(dir, enterworld.NewTextdataItems(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt, c := alchemyRuntime()
+	rt.Alchemy = catalog
+	var weapon alchemy.Reference
+	for _, ref := range catalog.Items {
+		if ref.Flags&0x7fe == 0x32c && ref.Degree() == 1 && (weapon.ID == 0 || ref.ID < weapon.ID) {
+			weapon = ref
+		}
+	}
+	if weapon.ID == 0 {
+		t.Fatal("missing published weapon")
+	}
+	rondo := catalog.Items["ITEM_ETC_ARCHEMY_RONDO_02"]
+	c.MissionInventory = []enterworld.InventoryRow{
+		{Slot: 13, RefObjID: weapon.ID, Codename: weapon.Name, TypeFlags: weapon.Flags, StackCount: 1},
+		{Slot: 14, RefObjID: rondo.ID, Codename: rondo.Name, TypeFlags: rondo.Flags, StackCount: 5000},
+	}
+	cost := int64(weapon.Price/20000 + 1)
+	// Two materials staged: the Rondo and the equipment. One request, one
+	// dissolution.
+	frames := rt.HandleAlchemyProcess(testDivision, c, alchemy.OpCompound, []byte{2, 3, 1, 0, 0, 0, 2, 14, 13, 12, 12, 12})
+	last := frames[len(frames)-1]
+	if last.Opcode != alchemy.OpCompoundResult || !reflect.DeepEqual(last.Payload, []byte{1, 2, 1, 0, 0, 0}) {
+		t.Fatal("native disassemble answer diverged", frames)
+	}
+	for _, row := range c.MissionInventory {
+		if row.RefObjID == weapon.ID {
+			t.Fatal("equipment survived", row)
+		}
+		if row.RefObjID == rondo.ID && row.StackCount != 5000-cost {
+			t.Fatal("Rondo spent other than once", row)
+		}
+	}
+}
+
+/*
+================
 TestAlchemyCompoundConcurrentCommitAddsNewRowsOnce
 ================
 */

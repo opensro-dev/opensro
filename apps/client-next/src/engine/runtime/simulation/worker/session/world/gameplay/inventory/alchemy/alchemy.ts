@@ -131,7 +131,6 @@ export function createAlchemy() {
 				throw Error( "Alchemy target must be equipment" );
 			}
 			if ( process ) {
-				if ( mode === "dissolve" && quantity !== 1 ) throw Error( "Dissolve has no quantity field" );
 				if ( mode === "advanced" && quantity !== 1 ) throw Error( "Tablet manufacture requires quantity one" );
 				const available = mode === "compound" ?
 					selected.reduce(
@@ -142,14 +141,29 @@ export function createAlchemy() {
 					) :
 					items.get( selected[0]! )!.quantity;
 				if (
-					!Number.isSafeInteger( quantity ) || quantity < 1 || quantity > 0xffffffff || quantity > available
+					mode !== "dissolve" &&
+					(!Number.isSafeInteger( quantity ) || quantity < 1 || quantity > 0xffffffff || quantity > available)
 				) {
 					throw Error( "Invalid compound quantity" );
 				}
 				let opcode: number, payload: Uint8Array;
 				if ( mode === "dissolve" ) {
-					opcode = 0x7549;
-					payload = Uint8Array.of( selected.length, selected[0]!, selected[1] ?? 12 );
+					// 6220A0 (window mode 3) -> 702180: the disassemble request
+					// rides the compound packet: 2, mode 3, the window's count
+					// field, the slot count, then five bag slots padded with
+					// 12. The count field is no batch count - the server
+					// dissolves the one named equipment and takes the Rondo
+					// from the bag - so any quantity the window carries (the
+					// All button sums the staged stacks) goes on the wire as
+					// it stands and never refuses the request here.
+					opcode = 0x716f;
+					payload = new Uint8Array( 12 );
+					payload[0] = 2;
+					payload[1] = 3;
+					new DataView( payload.buffer ).setUint32( 2, quantity >>> 0, true );
+					payload[6] = selected.length;
+					payload.set( selected, 7 );
+					payload.fill( 12, 7 + selected.length );
 				} else {
 					opcode = 0x716f;
 					const slots = mode === "advanced" ?
