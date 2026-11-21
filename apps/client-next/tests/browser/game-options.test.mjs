@@ -28,6 +28,7 @@ test(
 				localStorage.removeItem( "sro:v1150:game-options:1" );
 				localStorage.removeItem( "sro:v1150:experimental-options:1" );
 				localStorage.removeItem( "sro:v1150:experimental-options:2" );
+				localStorage.removeItem( "sro:v1150:experimental-options:3" );
 				const entry = Array.from( document.scripts ).find( s =>
 					s.src && new URL( s.src ).pathname === "/src/bootstrap.ts"
 				);
@@ -228,7 +229,7 @@ test(
 			await click( "experimental-chat-timestamps" );
 			await click( "experimental-cancel" );
 			assert.equal(
-				await page.evaluate( () => localStorage.getItem( "sro:v1150:experimental-options:2" ) ),
+				await page.evaluate( () => localStorage.getItem( "sro:v1150:experimental-options:3" ) ),
 				null
 			);
 			await page.keyboard.press( "Escape" );
@@ -270,7 +271,7 @@ test(
 			assert.equal( await page.locator( "#developer-toggle" ).getAttribute( "aria-expanded" ), "true" );
 
 			assert.deepEqual(
-				await page.evaluate( () => JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:2" ) ) ),
+				await page.evaluate( () => JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:3" ) ) ),
 				{
 					chatTimestamps: true,
 					developerDiagnostics: true,
@@ -313,7 +314,7 @@ test(
 			await click( "experimental-default" );
 			await click( "experimental-confirm" );
 			assert.deepEqual(
-				await page.evaluate( () => JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:2" ) ) ),
+				await page.evaluate( () => JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:3" ) ) ),
 				{
 					chatTimestamps: false,
 					monsterGuide: false,
@@ -349,7 +350,7 @@ test(
 			}
 			await click( "experimental-confirm" );
 			const savedEnvironment = await page.evaluate( () =>
-				JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:2" ) )
+				JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:3" ) )
 			);
 			for ( const control of environmentControls ) assert.equal( savedEnvironment[control.key], true );
 			await page.keyboard.press( "Escape" );
@@ -365,7 +366,7 @@ test(
 			await click( "experimental-default" );
 			await click( "experimental-confirm" );
 			const resetEnvironment = await page.evaluate( () =>
-				JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:2" ) )
+				JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:3" ) )
 			);
 			for ( const control of environmentControls ) assert.equal( resetEnvironment[control.key], false );
 			await page.evaluate( () => {

@@ -351,7 +351,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		sunDropMarker: false,
 		warpArrivalSound: false,
 		christmasCarols: true,
-		sroMacro: false,
+		sroMacro: true,
 		petPickupKinds: undefined
 	} );
 	for ( const value of [ 1, "true", null, {} ] ) {
@@ -371,7 +371,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		sunDropMarker: false,
 		warpArrivalSound: false,
 		christmasCarols: true,
-		sroMacro: false,
+		sroMacro: true,
 		petPickupKinds: undefined
 	} );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );
@@ -456,35 +456,75 @@ test("HD textures are off unless explicitly true, so an old profile never downlo
 	assert.equal( experimentalOptions( { hdTextures: true } ).hdTextures, true );
 });
 
-test("a profile saved before the flip loads with WebTransport on; a choice under the current key is kept", () => {
-	const { storedExperimentalOptions, EXPERIMENTAL_STORAGE_KEY, PREVIOUS_EXPERIMENTAL_STORAGE_KEY } =
-		experimentalModule;
+test("profiles saved before the flips load with WebTransport and the SRO Macro on; a choice under the current key is kept", () => {
+	const {
+		storedExperimentalOptions,
+		EXPERIMENTAL_STORAGE_KEY,
+		PREVIOUS_EXPERIMENTAL_STORAGE_KEY,
+		FIRST_EXPERIMENTAL_STORAGE_KEY
+	} = experimentalModule;
 	const storageOf = entries => {
 		const saved = new Map( entries );
 		return { getItem: key => saved.get( key ) ?? null };
 	};
-	// Saved before the flip (platform.ts wrote the whole options object,
-	// so a Confirm under the old default stored webTransport: false):
-	// the flip reaches it, and its other choices carry over.
+	// Saved before the macro flip under the previous key (platform.ts
+	// wrote the whole options object, so a save under the old default
+	// stored sroMacro: false): the flip reaches it, its other choices
+	// carry over, and a webTransport choice stored under that key (made
+	// under the already-flipped rule) is kept as written.
 	const before = storedExperimentalOptions( storageOf( [
-		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false, chatTimestamps: true } ) ]
+		[
+			PREVIOUS_EXPERIMENTAL_STORAGE_KEY,
+			JSON.stringify( { sroMacro: false, webTransport: false, chatTimestamps: true } )
+		]
 	] ) );
-	assert.equal( before.options.webTransport, true );
+	assert.equal( before.options.sroMacro, true );
+	assert.equal( before.options.webTransport, false );
 	assert.equal( before.options.chatTimestamps, true );
-	assert.ok( before.raw && typeof before.raw === "object" && !("webTransport" in before.raw) );
-	// Stored under the current key after the flip: an explicit off stays off.
+	assert.ok( before.raw && typeof before.raw === "object" && !("sroMacro" in before.raw) );
+	// Saved before both flips under the oldest key: both rows take the
+	// new defaults, and the other choices carry over.
+	const oldest = storedExperimentalOptions( storageOf( [
+		[
+			FIRST_EXPERIMENTAL_STORAGE_KEY,
+			JSON.stringify( { webTransport: false, sroMacro: false, chatTimestamps: true } )
+		]
+	] ) );
+	assert.equal( oldest.options.webTransport, true );
+	assert.equal( oldest.options.sroMacro, true );
+	assert.equal( oldest.options.chatTimestamps, true );
+	assert.ok(
+		oldest.raw && typeof oldest.raw === "object" && !("webTransport" in oldest.raw) &&
+			!("sroMacro" in oldest.raw)
+	);
+	// Stored under the current key after the flips: explicit offs stay off.
 	const after = storedExperimentalOptions( storageOf( [
 		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { chatTimestamps: true } ) ],
-		[ EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false } ) ]
+		[ EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false, sroMacro: false } ) ]
 	] ) );
 	assert.equal( after.options.webTransport, false );
-	// The current key wins even when the previous one is also present.
+	assert.equal( after.options.sroMacro, false );
+	// The current key wins even when both older keys are also present.
 	const both = storedExperimentalOptions( storageOf( [
-		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false, chatTimestamps: false } ) ],
-		[ EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false, chatTimestamps: true } ) ]
+		[
+			FIRST_EXPERIMENTAL_STORAGE_KEY,
+			JSON.stringify( { webTransport: false, sroMacro: false, chatTimestamps: false } )
+		],
+		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { sroMacro: false, chatTimestamps: false } ) ],
+		[
+			EXPERIMENTAL_STORAGE_KEY,
+			JSON.stringify( { webTransport: false, sroMacro: false, chatTimestamps: true } )
+		]
 	] ) );
 	assert.equal( both.options.webTransport, false );
+	assert.equal( both.options.sroMacro, false );
 	assert.equal( both.options.chatTimestamps, true );
+	// The previous key wins over the oldest one.
+	const chained = storedExperimentalOptions( storageOf( [
+		[ FIRST_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { chatTimestamps: false } ) ],
+		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { chatTimestamps: true } ) ]
+	] ) );
+	assert.equal( chained.options.chatTimestamps, true );
 });
 
 test("the shared actor room is on unless explicitly false, and reaches the renderer's video options", () => {
