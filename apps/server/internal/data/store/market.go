@@ -229,7 +229,7 @@ listFromStorageLocked
 ================
 */
 func (s *Store) listFromStorageLocked(req domain.MarketListRequest, listing domain.MarketListing) (domain.MarketListing, error) {
-	storage, err := readAccountStorage(s.syncDBLocked(), req.Account)
+	storage, err := s.readAccountStorage(s.syncDBLocked(), req.Account)
 	if err != nil {
 		return domain.MarketListing{}, err
 	}
@@ -390,7 +390,7 @@ func (s *Store) settleSaleLocked(t saleTerms) (domain.MarketSale, error) {
 		// The warehouse unless the bag is named: the website has no bag.
 		sale.To = domain.MarketToWarehouse
 		var err error
-		if buyerStorage, err = readAccountStorage(db, t.buyer); err != nil {
+		if buyerStorage, err = s.readAccountStorage(db, t.buyer); err != nil {
 			return domain.MarketSale{}, err
 		}
 		slot, free := freeStorageSlot(buyerStorage)
@@ -445,7 +445,7 @@ func (s *Store) settleSaleLocked(t saleTerms) (domain.MarketSale, error) {
 			// Read before the transaction: the store has one connection, so a
 			// read outside an open transaction would wait on it forever.
 			var err error
-			if sellerStorage, err = readAccountStorage(db, listing.SellerAccount); err != nil {
+			if sellerStorage, err = s.readAccountStorage(db, listing.SellerAccount); err != nil {
 				return domain.MarketSale{}, err
 			}
 			if sellerStorage.Gold > math.MaxInt64-(t.price-fee) {
@@ -680,7 +680,7 @@ listings. A held item is never dropped.
 ================
 */
 func (s *Store) returnListingLocked(listing domain.MarketListing, fallBackToHeld bool) (domain.MarketListing, error) {
-	storage, err := readAccountStorage(s.syncDBLocked(), listing.SellerAccount)
+	storage, err := s.readAccountStorage(s.syncDBLocked(), listing.SellerAccount)
 	if err != nil {
 		return domain.MarketListing{}, err
 	}

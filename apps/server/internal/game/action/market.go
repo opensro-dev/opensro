@@ -154,6 +154,7 @@ type marketRequest struct {
 	Degree    int    `json:"degree,omitempty"`
 	Race      string `json:"race,omitempty"`
 	Rarity    string `json:"rarity,omitempty"`
+	Armor     string `json:"armor,omitempty"`
 	Currency  string `json:"currency,omitempty"`
 	Sort      string `json:"sort,omitempty"`
 	Page      int    `json:"page,omitempty"`
@@ -190,6 +191,8 @@ type marketRow struct {
 	Category  string           `json:"category"`
 	Degree    int              `json:"degree"`
 	Sealed    bool             `json:"sealed,omitempty"`
+	Seal      string           `json:"seal,omitempty"`
+	Armor     string           `json:"armor,omitempty"`
 	Item      shopInventoryRow `json:"item"`
 }
 
@@ -316,7 +319,7 @@ func marketListingRow(view publicstats.MarketListingView, preview shopInventoryR
 	return marketRow{ID: view.ID, Version: view.Version, Currency: view.Currency, Price: view.Price,
 		ListedMs: view.ListedMs, ExpiresMs: view.ExpiresMs, State: view.State, Seller: view.Seller,
 		Anonymous: view.Anonymous, Category: view.Item.Category, Degree: view.Item.Degree,
-		Sealed: view.Item.Sealed, Item: preview}
+		Sealed: view.Item.Sealed, Seal: view.Item.Seal, Armor: view.Item.Armor, Item: preview}
 }
 
 /*
@@ -475,12 +478,13 @@ category, currency and order, and a bounded text.
 */
 func (rt *Runtime) marketSearch(request marketRequest) (publicstats.MarketSearch, bool) {
 	q := publicstats.MarketSearch{Q: strings.TrimSpace(request.Q), Category: request.Category, Degree: request.Degree,
-		Race: request.Race, Rarity: request.Rarity, Currency: request.Currency, Sort: request.Sort, Page: request.Page}
+		Race: request.Race, Rarity: request.Rarity, Armor: request.Armor, Currency: request.Currency, Sort: request.Sort,
+		Page: request.Page}
 	if q.Page == 0 {
 		q.Page = 1
 	}
 	if q.Page < 1 || q.Page > publicstats.MarketMaxPage || q.Degree < 0 || q.Degree > publicstats.MarketMaxDegree ||
-		len(q.Q) > maxMarketText || !publicstats.MarketFilterValid(q.Race, q.Rarity) {
+		len(q.Q) > maxMarketText || !publicstats.MarketFilterValid(q.Race, q.Rarity, q.Armor) {
 		return q, false
 	}
 	switch q.Currency {

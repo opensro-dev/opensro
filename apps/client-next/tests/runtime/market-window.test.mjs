@@ -407,8 +407,16 @@ test("the chips, the dropdowns and a pick from the bag", () => {
 	assert.equal( raced.race, "eu" );
 	assert.equal( raced.degree, 11, "the other filters stay" );
 	assert.equal( search( hud, "market-choose:rarity:sealed", context ).rarity, "sealed" );
+	// One seal tier and one body armour type each narrow the search.
+	assert.equal( search( hud, "market-choose:rarity:moon", context ).rarity, "moon" );
+	const armored = search( hud, "market-choose:armor:protector", context );
+	assert.equal( armored.armor, "protector" );
+	assert.equal( armored.rarity, "moon", "the tier stays beside the type" );
+	assert.equal( search( hud, "market-choose:armor:", context ).armor, undefined, "All types" );
 	for (
 		const bad of [
+			"market-choose:armor:plate",
+			"market-choose:rarity:unique",
 			"market-choose:race:kr",
 			"market-choose:degree:12",
 			"market-choose:degree:",
@@ -475,11 +483,36 @@ test("every page of the window draws with unique controls", () => {
 				"market-sell-pick",
 				"market-menu:degree",
 				"market-menu:race",
+				"market-menu:armor",
 				"market-tab:mine"
 			]
 		) {
 			f.ui.event( { kind: "activate", id } );
 			const controls = step();
+			if ( id === "market-menu:armor" ) {
+				assert.ok( controls.has( "market-choose:armor:heavy" ), "the armour type list drew" );
+				// The six dropdowns share the search line with the name field and
+				// the Search button without overlapping either.
+				const line = [
+					"market-query",
+					"market-menu:degree",
+					"market-menu:race",
+					"market-menu:rarity",
+					"market-menu:armor",
+					"market-menu:currency",
+					"market-menu:sort",
+					"market-search"
+				]
+					.map( name => controls.get( name )?.rect );
+				line.forEach( ( rect, i ) => assert.ok( rect, `the search line drew control ${i}` ) );
+				for ( let i = 1; i < line.length; i++ ) {
+					assert.equal(
+						intersects( line[i - 1], line[i] ),
+						false,
+						`search line controls ${i - 1} and ${i} overlap`
+					);
+				}
+			}
 			if ( id === "market-sell-pick" ) assert.ok( f.hasText( "Pick the item to sell" ), "the bag page drew" );
 			if ( id === "market-menu:race" ) assert.ok( controls.has( "market-choose:race:eu" ), "the race list drew" );
 		}

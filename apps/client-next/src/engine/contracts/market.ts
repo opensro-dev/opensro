@@ -232,10 +232,14 @@ One window request. Which fields count follows the op (action market.go
 marketRequest); the worker checks each before it is sent.
 ================
 */
-// The search's race (who wears it) and rarity filters (publicstats
-// market.go MarketRace* / MarketRarity*).
+// The search's race (who wears it), rarity and armour type filters
+// (publicstats market.go MarketRace* / MarketRarity* / MarketArmor*):
+// "sealed" is any seal, "star", "moon" and "sun" one seal tier each.
 export type MarketRace = "ch" | "eu";
-export type MarketRarity = "sealed" | "normal";
+export const MARKET_RARITY_VALUES = [ "sealed", "star", "moon", "sun", "normal" ] as const;
+export type MarketRarity = (typeof MARKET_RARITY_VALUES)[number];
+export const MARKET_ARMOR_VALUES = [ "garment", "protector", "armor", "robe", "light", "heavy" ] as const;
+export type MarketArmor = (typeof MARKET_ARMOR_VALUES)[number];
 
 export type MarketRequest =
 	| {
@@ -245,6 +249,7 @@ export type MarketRequest =
 		readonly degree?: number;
 		readonly race?: MarketRace;
 		readonly rarity?: MarketRarity;
+		readonly armor?: MarketArmor;
 		readonly currency?: MarketCurrency;
 		readonly sort?: MarketSort;
 		readonly page?: number;

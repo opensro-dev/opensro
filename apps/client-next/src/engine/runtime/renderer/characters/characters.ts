@@ -88,7 +88,7 @@ import {
 	prepareViewFrustum,
 	visibleFrustumSphere
 } from "@/engine/foundation/rendering/world-math";
-import type { CharacterActor, CharacterModel } from "@/engine/contracts/character";
+import type { CharacterActor, CharacterModel, CharacterNode } from "@/engine/contracts/character";
 import type { DungeonBlockLight } from "@/engine/contracts/scene";
 import { dungeonPointLight } from "@/engine/foundation/rendering/dungeon-lights";
 import type { GeometryCommands, GeometryDraw, ImageCommands, ImageDraw } from "../internal/gpu-contract";
@@ -294,6 +294,65 @@ const EFFECT_PROGRAMS = "/effects/programs.json#";
 // Missing-clip reports one renderer holds between takes: each pose evaluator
 // already reports a name once, so this only bounds an undrained owner.
 const MAX_POSE_DEGRADATIONS = 32;
+// graphHolderTransform's result, consumed by advanceGraphEmitter before the
+// next emitter asks for it.
+const graphHolder = new Float32Array( 16 );
+// The identity palette root exportGlb (avatarToGlb) gives a resource whose
+// vertices have no influence.
+const UNBOUND_JOINT = "NativeUnbound";
+
+/*
+================
+bodyAncestor
+
+The body's index of a resource node's nearest ancestor the body also has
+(by name; -1 at the root), passing only identity nodes on the way:
+exportGlb's NativeModelSpace group holds NativeUnbound beside Bip01, under
+the loader's __gltf_left_handed__ root. Undefined when an ancestor the
+body lacks would move the joint.
+================
+*/
+function bodyAncestor(
+	resource: readonly CharacterNode[],
+	parent: number,
+	body: ReadonlyMap<string, number>
+): number | undefined {
+	for ( let depth = 0; parent >= 0 && depth < resource.length; depth++ ) {
+		const node = resource[parent]!, index = body.get( node.name );
+		if ( index !== undefined ) return index;
+		const identity = !node.matrix && node.translation.every( v => v === 0 ) &&
+			node.rotation[0] === 0 && node.rotation[1] === 0 && node.rotation[2] === 0 && node.rotation[3] === 1 &&
+			node.scale.every( v => v === 1 );
+		if ( !identity ) return undefined;
+		parent = node.parent;
+	}
+	return parent < 0 ? -1 : undefined;
+}
+
+/*
+================
+graphHolderTransform
+
+The holder frame a program's particle graph simulates in: the holder's
+transform under the program's header scale (an .efp v12+ header float, the
+compiled model's "effect-scale" root node, program.ts). The compiled nodes
+already sit under that root, so their positions scale with it; the graph
+read only its palette, which sized the elements but left their positions,
+sphere and cone radii and velocities at full size (v1.696 Steam Punk's
+avatar_m_steampunk.efp, scale 0.175, burst ~6x too wide). INFERENCE: the
+header scale applies to the whole program, as it does to its nodes. Every
+v1.150 program is v11 (scale 1), so native content is unchanged.
+================
+*/
+function graphHolderTransform( model: CharacterModel, transform: Float32Array ): Float32Array {
+	const scale = model.nodes[0]!.scale;
+	if ( scale[0] === 1 && scale[1] === 1 && scale[2] === 1 ) return transform;
+	graphHolder.set( transform );
+	for ( let c = 0; c < 3; c++ ) {
+		for ( let n = 0; n < 3; n++ ) graphHolder[c * 4 + n] = transform[c * 4 + n]! * scale[c]!;
+	}
+	return graphHolder;
+}
 
 /*
 ================
@@ -1456,7 +1515,13 @@ the next full prepare pass, so this may run between frames.
 			history.cycle !== (frame.cycles.get( actor.gid ) ?? 0)
 		) {
 			const graph = model.particleGraph ?
-				createParticleGraph( model.particleGraph, particleRandom.index, plan.particleGraph ) :
+				createParticleGraph(
+					model.particleGraph,
+					particleRandom.index,
+					plan.particleGraph,
+					// The program header scale (graphHolderTransform) as its length unit.
+					model.nodes[0]!.scale[0]!
+				) :
 				undefined;
 			history = {
 				model: actor.model,
@@ -1658,7 +1723,7 @@ the next full prepare pass, so this may run between frames.
 		if ( !transform ) return;
 		const shift = regionOffsetXZ( origin, history.origin );
 		if ( history.graph && model.particleGraph ) {
-			advanceGraphEmitter( actor, model, history, transform, shift );
+			advanceGraphEmitter( actor, model, history, graphHolderTransform( model, transform ), shift );
 		} else {
 			advanceBirthEmitter( actor, model, history, transform, shift );
 		}
@@ -2480,8 +2545,10 @@ the next full prepare pass, so this may run between frames.
 					Math.floor( age * ribbon.fps )
 				),
 				at = Math.min( material.colors.length / 4 - 1, Math.floor( age * material.fps ) );
+			// A graph element's frame already carries the header scale
+			// (graphHolderTransform); a birth's frame does not.
 			const scale = hypot3( matrices[b * 16]!, matrices[b * 16 + 1]!, matrices[b * 16 + 2]! ) *
-				group.model.nodes[0]!.scale[0]!;
+				(graph ? 1 : group.model.nodes[0]!.scale[0]!);
 			pushRibbonPoint(
 				points,
 				matrices,
@@ -3701,7 +3768,19 @@ the next full prepare pass, so this may run between frames.
 				for ( const primitive of resource.model.primitives ) {
 					if ( part.parts.includes( primitive.name.replace( /^part:/, "" ) ) ) {
 						const joints = primitive.joints.map( joint => {
-							const name = resource.model.nodes[joint]!.name, index = nodes.get( name );
+							const node = resource.model.nodes[joint]!, name = node.name;
+							let index = nodes.get( name );
+							// exportGlb adds this model-space identity joint only to
+							// resources with unbound vertices (the v1.696 female
+							// Plague Doctor); carry it over when the body has none.
+							if ( index === undefined && name === UNBOUND_JOINT ) {
+								const parent = bodyAncestor( resource.model.nodes, node.parent, nodes );
+								if ( parent !== undefined ) {
+									index = assembledNodes.length;
+									assembledNodes = [ ...assembledNodes, { ...node, parent } ];
+									nodes.set( name, index );
+								}
+							}
 							if ( index === undefined ) {
 								throw new Error( `Attachment joint ${name} is absent from body` );
 							}

@@ -85,6 +85,9 @@ type Options struct {
 	// InventoryPages stamps the port-only 2.5-page base on a new record
 	// (SRO_INVENTORY_PAGES, #2769); false is the native 45.
 	InventoryPages bool
+	// StoragePages raises the account and guild warehouses (port-only,
+	// SRO_STORAGE_PAGES and SRO_GUILD_STORAGE_PAGES); zero is native.
+	StoragePages domain.StoragePages
 	// AsyncCommit applies commits on the asynchronous writer
 	// (commit_writer.go, SRO_STORE_ASYNC_COMMIT, #2802); false is the
 	// native-default synchronous door. Port-only, not native.
@@ -367,6 +370,9 @@ type Store struct {
 	defaultInventory InventorySeedFunc
 	// inventoryPages is Options.InventoryPages, used only at creation.
 	inventoryPages bool
+	// storagePages is Options.StoragePages: every warehouse read and the
+	// guild warehouse's capacity go through it.
+	storagePages domain.StoragePages
 
 	// requireStore is Options.RequireStore (the production posture);
 	// CreateCharacter's unseeded-creation refusal keys off it.
@@ -444,6 +450,7 @@ func Open(dir string, opts Options) (*Store, error) {
 		defaultQuests:    opts.DefaultQuests,
 		defaultInventory: opts.DefaultInventory,
 		inventoryPages:   opts.InventoryPages,
+		storagePages:     opts.StoragePages,
 		requireStore:     opts.RequireStore,
 		asyncCommit:      opts.AsyncCommit,
 		openCtx:          openCtx,

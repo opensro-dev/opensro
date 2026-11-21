@@ -36,6 +36,7 @@ import type {
 	MarketRow,
 	MarketState
 } from "@/engine/contracts/market";
+import { MARKET_ARMOR_VALUES, MARKET_RARITY_VALUES } from "../../contracts/market";
 import type { CommercePreview } from "./commerce";
 import { commerceInteger } from "./commerce";
 import { MARKET_CONTROL } from "./commerce-controls";
@@ -303,10 +304,12 @@ export function marketRequestPayload( request: MarketRequest ): Uint8Array {
 				body.race = request.race;
 			}
 			if ( request.rarity ) {
-				if ( request.rarity !== "sealed" && request.rarity !== "normal" ) {
-					throw Error( "Invalid market rarity" );
-				}
+				if ( !MARKET_RARITY_VALUES.includes( request.rarity ) ) throw Error( "Invalid market rarity" );
 				body.rarity = request.rarity;
+			}
+			if ( request.armor ) {
+				if ( !MARKET_ARMOR_VALUES.includes( request.armor ) ) throw Error( "Invalid market armor" );
+				body.armor = request.armor;
 			}
 			if ( request.currency ) body.currency = request.currency;
 			if ( request.sort ) body.sort = request.sort;

@@ -183,6 +183,7 @@ func publicRules() publicstats.RulesResponse {
 	hideAlexandriaD11, _ := commerce.AlexandriaHideD11GoodsFromEnv()
 	thiefCartTownAreasOn, _ := townarea.ThiefCartTownAreasFromEnv()
 	petPages, _ := companion.PetInventoryPagesFromEnv()
+	storagePages, _ := storagePagesFromEnv()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
 	mallCategoriesOn, _ := commerce.MallCategoriesFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
@@ -283,6 +284,14 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Growth pets use their original skills and stats.",
 				Now:    "Bear, wolf, penguin and crow have two active and three passive skill rows. Monster equipment drops can also yield same-degree pet gear with up to six bonuses; the database controls its relative drop chance.",
 				Why:    "Owner-approved attack-pet expansion; competitive and instanced worlds keep original stats."},
+			{Flag: EnvStoragePages, On: storagePages.Personal > 0,
+				Native: "A storage keeper's warehouse holds 5 pages (150 slots).",
+				Now:    storagePagesNow("The warehouse", storagePages.Personal),
+				Why:    "Requested by players and approved by the owner: more storage without an expansion item."},
+			{Flag: EnvGuildStoragePages, On: storagePages.Guild > 0,
+				Native: "Guild storage opens at guild level 2 with 1 page and grows one page a level to 4 pages at level 5.",
+				Now:    guildStoragePagesNow(storagePages),
+				Why:    "Requested by players and approved by the owner: guild storage that keeps up with the larger warehouse."},
 			{Flag: companion.EnvGrabPetInventoryPages, On: petPages.Grab > 0,
 				Native: "A grab pet's bag holds 28 slots.",
 				Now:    petInventoryPagesNow("grab pet", petPages.Grab),
@@ -581,6 +590,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Only a revival makes you briefly untouchable; a scroll, gate or move arrives as attackable as you left.",
 				Now:    "After a return scroll, reverse return scroll, gate or move, you are untouchable for 6 seconds (11 in a fortress war) once loading ends: monsters ignore you and you cannot attack.",
 				Why:    "Requested so a slow load cannot end with monsters already attacking; the original returns with one setting."},
+			{Flag: action.EnvQuickFuse, On: action.QuickFuseFromEnv(),
+				Native: "Fuse plays a short preparation effect (about 0.8 s) before the attempt is sent, and the window takes no new press until the result effect has played.",
+				Now:    "Fuse sends the attempt at once and takes the next press as soon as the result arrives; the effects still play.",
+				Why:    "Requested so repeated fusing is not slowed by the animation; the success rates are unchanged, and the original timing returns with one setting."},
 			{Flag: action.EnvJobSuitHidesArmor, On: action.JobSuitHidesArmorFromEnv(),
 				Native: "Only a thief suit hides the armour worn under it; trader and hunter suits are drawn over it.",
 				Now:    "Trader and hunter suits hide worn armour too.",

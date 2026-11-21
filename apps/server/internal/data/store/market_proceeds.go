@@ -164,7 +164,7 @@ WHERE sale.unpaid = 1 ORDER BY sale.at_ms, sale.listing_id`)
 	rows.Close()
 	paid := 0
 	for _, o := range orphans {
-		storage, err := readAccountStorage(db, o.account)
+		storage, err := s.readAccountStorage(db, o.account)
 		if err != nil {
 			return paid, err
 		}
