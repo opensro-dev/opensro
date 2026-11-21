@@ -273,3 +273,52 @@ func shippedRaceSwitch(t *testing.T, kind commerce.EquipSwitchKind, from, want s
 		t.Fatalf("switched row %+v, want %s", row, want)
 	}
 }
+
+/*
+================
+TestRaceSwitchAccessory
+
+A Chinese ring becomes the European ring of the same grade, its blues
+kept.
+================
+*/
+func TestRaceSwitchAccessory(t *testing.T) {
+	rt, c, scroll := raceSwitchFixture(t, commerce.SwitchAccessory)
+	blues := []uint64{enterworld.EncodeMagicOption(5, 3)}
+	rowAtSlot(t, c, raceRingSlot).MagicOptions = blues
+	out := rt.HandleItemUse(testDivision, c, raceSwitchUse(scroll, raceRingSlot))
+	row := assertRaceSwitched(t, out, c, raceRingSlot, 9208, "ITEM_EU_RING_08_B")
+	if len(row.MagicOptions) != 1 || row.MagicOptions[0] != blues[0] {
+		t.Fatalf("switched ring %+v lost its blue", row)
+	}
+}
+
+/*
+================
+TestRaceSwitchAccessoryRefusesArmor
+================
+*/
+func TestRaceSwitchAccessoryRefusesArmor(t *testing.T) {
+	rt, c, scroll := raceSwitchFixture(t, commerce.SwitchAccessory)
+	assertItemUseRefusedUnchanged(t, rt, c, raceSwitchUse(scroll, raceArmorSlot), weaponSwitchErrTarget)
+	assertItemUseRefusedUnchanged(t, rt, c, raceSwitchUse(scroll, raceShieldSlot), weaponSwitchErrTarget)
+}
+
+/*
+================
+TestRaceSwitchArmorRefusesAccessory
+================
+*/
+func TestRaceSwitchArmorRefusesAccessory(t *testing.T) {
+	rt, c, scroll := raceSwitchFixture(t, commerce.SwitchArmor)
+	assertItemUseRefusedUnchanged(t, rt, c, raceSwitchUse(scroll, raceRingSlot), weaponSwitchErrTarget)
+}
+
+/*
+================
+TestRaceSwitchAccessoryOnTheShippedData
+================
+*/
+func TestRaceSwitchAccessoryOnTheShippedData(t *testing.T) {
+	shippedRaceSwitch(t, commerce.SwitchAccessory, "ITEM_CH_NECKLACE_08_A", "ITEM_EU_NECKLACE_08_A")
+}
