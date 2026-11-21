@@ -4,23 +4,21 @@
 item_ledger.go - every item entering or leaving a character, at commit
 (#3307)
 
-Port-only, not native: the original keeps no item journal. The gold
-ledger (economy_ledger.go) proved the design this file repeats for items:
-the store attributes every change itself, at the door boundary, so no
-gameplay path needs a ledger call and none can be missed. The ledger
-remembers what each stored character held as of its last door (its row
-counts, domain.AppendItemRowCounts); a door that leaves different
-holdings (domain.FoldItemCounts, a count per item codename) notes each
-item's signed change against the door. A door that moved no item leaves
-the row counts equal and costs one linear comparison.
+Port-only, not native: the original keeps no item journal. The store
+attributes every change itself, at the door boundary (ledger_door.go),
+so no gameplay path needs a ledger call and none can be missed: a door
+snapshots the row counts of the characters it changes
+(domain.AppendItemRowCounts), and when it finishes each one whose
+holdings differ (domain.FoldItemCounts, a count per item codename) notes
+every item's signed change against the door. A door that moved no item
+leaves the row counts equal and costs one linear comparison.
 
 Moves inside one character (bag slots, a pet's bag, the body) leave the
 holdings unchanged and write nothing. Every noted change joins the
 transaction that writes the character, so a change and its record are
 durable together or not at all; a failed commit keeps them pending, and
 the next commit writes them once. A door with its own transaction
-(characterRowTx) notes the characters it writes inside that transaction
-and advances the baseline only when it commits.
+(characterRowTx) notes the copies it writes inside that transaction.
 
 What is written: an exact row in item_ledger for every door the domain
 does not name as bulk (grants, quest rewards, GM and operator doors, the
@@ -148,152 +146,11 @@ type itemLedgerRow struct {
 ================
 itemLedger
 
-seen is each stored character's row counts as of its last door. pending
-holds the rows of doors whose commit has not succeeded yet. scratch is
-the holdings buffer a door's read reuses, so a door that moved no item
-allocates nothing.
+pending holds the rows of doors whose commit has not succeeded yet.
 ================
 */
 type itemLedger struct {
-	seen    map[*domain.Character][]domain.ItemCount
 	pending []itemLedgerRow
-	scratch []domain.ItemCount
-}
-
-/*
-================
-seedItemsLocked
-
-A character the store starts to own: what it holds is where its rows
-begin.
-================
-*/
-func (s *Store) seedItemsLocked(c *domain.Character) {
-	if s.items.seen == nil {
-		s.items.seen = map[*domain.Character][]domain.ItemCount{}
-	}
-	s.items.seen[c] = domain.AppendItemRowCounts(nil, c)
-}
-
-/*
-================
-seedItemsEmptyLocked
-
-A new character: its creation grants what it starts with, so its rows
-begin at nothing and the creation commit records the starting items.
-================
-*/
-func (s *Store) seedItemsEmptyLocked(c *domain.Character) {
-	if s.items.seen == nil {
-		s.items.seen = map[*domain.Character][]domain.ItemCount{}
-	}
-	s.items.seen[c] = nil
-}
-
-/*
-================
-forgetItemsLocked
-================
-*/
-func (s *Store) forgetItemsLocked(c *domain.Character) {
-	delete(s.items.seen, c)
-}
-
-/*
-================
-noteLedgersLocked
-
-A door finished: both ledgers read what its characters' gold and items
-did. The commit path calls this one note, so a third ledger joins here.
-================
-*/
-func (s *Store) noteLedgersLocked(label string) {
-	s.noteGoldLocked(label)
-	s.noteItemsLocked(label)
-}
-
-/*
-================
-noteDoorLedgersLocked
-
-noteLedgersLocked for a deferred door: only its declared characters.
-================
-*/
-func (s *Store) noteDoorLedgersLocked(label string, cs []*domain.Character) {
-	s.noteDoorGoldLocked(label, cs)
-	s.noteDoorItemsLocked(label, cs)
-}
-
-/*
-================
-noteItemsLocked
-
-Every dirty character whose holdings changed since its last door gets
-its rows under this door; one noted by an earlier door of the same
-commit has not changed again, so nothing counts twice.
-================
-*/
-func (s *Store) noteItemsLocked(label string) {
-	if s.changes.all {
-		for division, records := range s.characters {
-			for _, c := range records {
-				s.noteCharacterItemsLocked(label, division, c)
-			}
-		}
-		return
-	}
-	for c := range s.changes.characters {
-		if division, known := s.charDivision[c]; known {
-			s.noteCharacterItemsLocked(label, division, c)
-		}
-	}
-}
-
-/*
-================
-noteDoorItemsLocked
-
-A deferred door: only the characters it declared can have changed. A
-door that escalated to the whole world notes everyone.
-================
-*/
-func (s *Store) noteDoorItemsLocked(label string, cs []*domain.Character) {
-	if s.changes.all {
-		s.noteItemsLocked(label)
-		return
-	}
-	for _, c := range cs {
-		if division, known := s.charDivision[c]; c != nil && known {
-			s.noteCharacterItemsLocked(label, division, c)
-		}
-	}
-}
-
-/*
-================
-noteCharacterItemsLocked
-
-The door's rows for c, if what it holds changed. Equal row counts are
-the common case (a door that moved no item) and stop at the comparison;
-only a changed sequence is folded and diffed, and a move that changed it
-writes nothing. A character the ledger never saw (a wiring bug) is
-seeded, not guessed at.
-================
-*/
-func (s *Store) noteCharacterItemsLocked(label, division string, c *domain.Character) {
-	s.items.scratch = domain.AppendItemRowCounts(s.items.scratch, c)
-	before, known := s.items.seen[c]
-	if known && domain.SameItemHoldings(before, s.items.scratch) {
-		return
-	}
-	if known {
-		s.items.pending = append(s.items.pending, s.itemChangeRowsLocked(label, division, c.ID, before, s.items.scratch)...)
-	}
-	if s.items.seen == nil {
-		s.items.seen = map[*domain.Character][]domain.ItemCount{}
-	}
-	// The baseline is this character's own buffer: reused in place.
-	s.items.seen[c] = append(before[:0], s.items.scratch...)
 }
 
 /*
@@ -391,79 +248,6 @@ ON CONFLICT (hour_ms, char_id, door, item) DO UPDATE SET
 		}
 		return nil
 	})
-}
-
-/*
-================
-ownTxItemWrite
-
-One character an own-transaction door writes: its live record and the
-row counts the written copy carries, which become its baseline once the
-transaction commits.
-================
-*/
-type ownTxItemWrite struct {
-	live     *domain.Character
-	holdings []domain.ItemCount
-}
-
-/*
-================
-characterRowTx::noteItems
-
-The door wrote copy for division: the rows of the live record's holdings
-becoming the copy's join this transaction (Commit writes them), and the
-copy's holdings become the baseline once it commits. A second write of
-the same character in one transaction diffs against the first, so a
-change is never counted twice; a rolled-back door leaves no row and no
-moved baseline.
-================
-*/
-func (w *characterRowTx) noteItems(division string, copy *domain.Character) {
-	s := w.store
-	live := s.characterByIDLocked(division, copy.ID)
-	if live == nil {
-		// A row the roster does not hold (a fixture writing a detached
-		// record): nothing to attribute it to.
-		return
-	}
-	after := domain.AppendItemRowCounts(nil, copy)
-	var prior *ownTxItemWrite
-	for _, write := range w.itemWrites {
-		if write.live == live {
-			prior = write
-		}
-	}
-	before, known := s.items.seen[live]
-	if prior != nil {
-		before, known = prior.holdings, true
-	}
-	if known && !domain.SameItemHoldings(before, after) {
-		w.itemRows = append(w.itemRows, s.itemChangeRowsLocked(w.label, division, live.ID, before, after)...)
-	}
-	if prior != nil {
-		prior.holdings = after
-		return
-	}
-	w.itemWrites = append(w.itemWrites, &ownTxItemWrite{live: live, holdings: after})
-}
-
-/*
-================
-characterRowTx::settleItems
-
-The transaction committed: each written character's baseline is what
-its last written copy held.
-================
-*/
-func (w *characterRowTx) settleItems() {
-	s := w.store
-	if s.items.seen == nil {
-		s.items.seen = map[*domain.Character][]domain.ItemCount{}
-	}
-	for _, write := range w.itemWrites {
-		s.items.seen[write.live] = write.holdings
-	}
 }
 
 /*

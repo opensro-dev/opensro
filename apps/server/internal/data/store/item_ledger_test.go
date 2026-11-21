@@ -325,7 +325,7 @@ TestItemLedgerDeletionWritesNoRows
 
 A matured deletion archives the character with what it held: the
 archive keeps the record's bytes and a restore brings the items back,
-so the reap writes no item row, and the ledger lets go of the record.
+so the reap writes no item row, and no door stays open.
 ================
 */
 func TestItemLedgerDeletionWritesNoRows(t *testing.T) {
@@ -344,110 +344,7 @@ func TestItemLedgerDeletionWritesNoRows(t *testing.T) {
 	if rows := itemLedgerRows(t, s); len(rows) != 0 {
 		t.Fatalf("a deletion wrote item rows %+v", rows)
 	}
-	s.mu.Lock()
-	_, held := s.items.seen[c]
-	s.mu.Unlock()
-	if held {
-		t.Fatal("the ledger still holds the deleted record's baseline")
-	}
-}
-
-/*
-================
-benchItemCharacter
-
-A full stored character for the item benchmarks: a 96-slot bag of stacks,
-the equipment, and a pet with a 32-slot bag (142 rows).
-================
-*/
-func benchItemCharacter(b *testing.B, s *Store, name string) *domain.Character {
-	b.Helper()
-	c := seededCharacter()
-	c.Name = name
-	if err := s.CreateCharacter(testDivision, "item-account-"+name, c); err != nil {
-		b.Fatal(err)
-	}
-	pet := &domain.CharacterCOS{Codename: "COS_P_RABBIT", Container: &domain.COSContainer{Capacity: 32}}
-	s.UpdateCharacter(c, "test-fill", func() bool {
-		for slot := int64(0); slot < 13; slot++ {
-			c.MissionInventory = append(c.MissionInventory, domain.InventoryRow{Slot: slot, Codename: "ITEM_GEAR_" + string(rune('A'+slot)), StackCount: 1})
-		}
-		for slot := int64(13); slot < 109; slot++ {
-			c.MissionInventory = append(c.MissionInventory, domain.InventoryRow{Slot: slot, Codename: "ITEM_ETC_" + string(rune('A'+slot%40)), StackCount: 50})
-		}
-		for slot := int64(0); slot < 32; slot++ {
-			pet.Container.Rows = append(pet.Container.Rows, domain.InventoryRow{Slot: slot, Codename: "ITEM_ETC_" + string(rune('a'+slot%20)), StackCount: 10})
-		}
-		c.ActiveCOS = pet
-		return true
-	})
-	return c
-}
-
-/*
-================
-BenchmarkNoteItemsDoor
-
-One door's item read for a full character that moved nothing: the cost
-every door pays, beside BenchmarkNoteGoldDoor's.
-================
-*/
-func BenchmarkNoteItemsDoor(b *testing.B) {
-	s := openTest(b, b.TempDir(), newTestClock())
-	c := benchItemCharacter(b, s, "ItemBench")
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	b.ReportAllocs()
-	b.ResetTimer()
-	for b.Loop() {
-		s.noteCharacterItemsLocked("move", testDivision, c)
-	}
-	b.StopTimer()
-	b.ReportMetric(float64(len(s.items.seen[c])), "rows")
-}
-
-/*
-================
-BenchmarkNoteItemsDoorChanged
-
-A door that used one potion from a full character: the fold, the diff
-and the row, the cost of a door that does move an item.
-================
-*/
-func BenchmarkNoteItemsDoorChanged(b *testing.B) {
-	s := openTest(b, b.TempDir(), newTestClock())
-	c := benchItemCharacter(b, s, "ItemMoved")
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	b.ReportAllocs()
-	b.ResetTimer()
-	for b.Loop() {
-		c.MissionInventory[20].StackCount ^= 1
-		s.noteCharacterItemsLocked("item-use", testDivision, c)
-		s.items.pending = s.items.pending[:0]
-	}
-}
-
-/*
-================
-BenchmarkNoteGoldDoor
-
-The gold ledger's per-door read for the same kind of character, for
-scale.
-================
-*/
-func BenchmarkNoteGoldDoor(b *testing.B) {
-	s := openTest(b, b.TempDir(), newTestClock())
-	c := seededCharacter()
-	c.Name = "GoldBench"
-	if err := s.CreateCharacter(testDivision, "gold-account-bench", c); err != nil {
-		b.Fatal(err)
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	b.ReportAllocs()
-	b.ResetTimer()
-	for b.Loop() {
-		s.noteCharacterGoldLocked("move", testDivision, c)
+	if open := openDoorCount(s); open != 0 {
+		t.Fatalf("%d snapshots left open after the reap", open)
 	}
 }

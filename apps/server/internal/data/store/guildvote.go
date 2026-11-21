@@ -208,13 +208,13 @@ func (door storeGuildDoor) TransactGuildStorageAs(divisionID string, actorID int
 	if err := validateAccountStorage(storage); err != nil {
 		return current, domain.GuildRefusalNone, err
 	}
+	s.beginDoorLocked(actor)
 	actor.MissionInventory = next.MissionInventory
 	actor.Gold = next.Gold
 	stored := storage
 	guild.Storage = &stored
 	s.guilds[divisionID][guildID] = guild
 	s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
-	s.markCharacterLocked(actor)
-	s.commitLocked(fmt.Sprintf("guild-storage %s/%d", divisionID, guildID))
+	s.finishDoorLocked(fmt.Sprintf("guild-storage %s/%d", divisionID, guildID), false, []*domain.Character{actor})
 	return storage, domain.GuildRefusalNone, nil
 }

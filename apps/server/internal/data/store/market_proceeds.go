@@ -102,10 +102,6 @@ WHERE seller_char = ? AND unpaid = 1 ORDER BY at_ms, listing_id`, c.ID)
 	if err := tx.upsertCharacter(division, &committed); err != nil {
 		return nil, err
 	}
-	settle, err := s.ledgerOwnTxLocked(tx, division, c, balance)
-	if err != nil {
-		return nil, err
-	}
 	for _, sale := range sales {
 		if err := markSalePaidTx(tx.Tx, sale.ListingID); err != nil {
 			return nil, err
@@ -115,7 +111,6 @@ WHERE seller_char = ? AND unpaid = 1 ORDER BY at_ms, listing_id`, c.ID)
 		return nil, err
 	}
 	c.Gold = &balance
-	settle()
 	return sales, nil
 }
 

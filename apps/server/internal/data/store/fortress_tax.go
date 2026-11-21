@@ -74,10 +74,6 @@ func (door storeFortressDoor) CollectFortressTax(division string, record domain.
 	if err = tx.upsertCharacter(division, &next); err != nil {
 		return 0, domain.FortressTaxErrFailure, err
 	}
-	settle, err := s.ledgerOwnTxLocked(tx, division, actor, gold)
-	if err != nil {
-		return 0, domain.FortressTaxErrFailure, err
-	}
 	if err = upsertFortressTx(tx.Tx, division, record); err != nil {
 		return 0, domain.FortressTaxErrFailure, err
 	}
@@ -85,7 +81,6 @@ func (door storeFortressDoor) CollectFortressTax(division string, record domain.
 		return 0, domain.FortressTaxErrFailure, err
 	}
 	actor.Gold = &gold
-	settle()
 	s.recordWriteSuccessLocked()
 	return amount, 0, nil
 }

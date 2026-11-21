@@ -81,14 +81,12 @@ func (s *Store) TransactStorage(character *domain.Character, mutate func(next *d
 	committed := *character
 	committed.MissionInventory = next.MissionInventory
 	committed.Gold = next.Gold
-	settle, err := s.commitStorageLocked(division, character, &committed, storage)
-	if err != nil {
+	if err := s.commitStorageLocked(division, &committed, storage); err != nil {
 		s.recordWriteFailureLocked("storage-transfer", err)
 		return current, err
 	}
 	character.MissionInventory = next.MissionInventory
 	character.Gold = next.Gold
-	settle()
 	if s.changes.empty() {
 		s.recordWriteSuccessLocked()
 	}
@@ -100,26 +98,22 @@ func (s *Store) TransactStorage(character *domain.Character, mutate func(next *d
 commitStorageLocked
 ================
 */
-func (s *Store) commitStorageLocked(division string, live, character *domain.Character, storage domain.AccountStorage) (func(), error) {
+func (s *Store) commitStorageLocked(division string, character *domain.Character, storage domain.AccountStorage) error {
 	if s.commitFail != nil {
-		return nil, s.commitFail
+		return s.commitFail
 	}
 	tx, err := s.beginCharacterTxLocked("storage-transfer")
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 	if err := writeAccountStorageTx(tx.Tx, character.AccountID, storage); err != nil {
-		return nil, err
+		return err
 	}
 	if err := tx.upsertCharacter(division, character); err != nil {
-		return nil, err
+		return err
 	}
-	settle, err := s.ledgerOwnTxLocked(tx, division, live, ledgerGold(character))
-	if err != nil {
-		return nil, err
-	}
-	return settle, tx.Commit()
+	return tx.Commit()
 }
 
 // accountStorageUpsert writes one account's warehouse record.

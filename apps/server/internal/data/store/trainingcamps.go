@@ -249,6 +249,7 @@ func (door storeCampDoor) OpenCamp(divisionID string, opening domain.TrainingCam
 		}
 	}
 
+	s.beginDoorLocked(master)
 	gold := ledgerGold(master) - opening.Fee
 	master.Gold = &gold
 	master.CampDisbandedAtMs = 0
@@ -274,8 +275,7 @@ func (door storeCampDoor) OpenCamp(divisionID string, opening domain.TrainingCam
 	key := campKey{division: divisionID, campID: camp.ID}
 	delete(s.changes.dissolvedCamp, key)
 	s.changes.camps[key] = true
-	s.markCharacterLocked(master)
-	s.commitLocked(fmt.Sprintf("training-camp-open %s/%d", divisionID, camp.ID))
+	s.finishDoorLocked(fmt.Sprintf("training-camp-open %s/%d", divisionID, camp.ID), false, []*domain.Character{master})
 	return domain.TrainingCampOpenResult{
 		Camp:    camp,
 		Members: append([]domain.TrainingCampMemberRecord(nil), members...),
@@ -393,8 +393,8 @@ func (door storeCampDoor) DisbandCamp(divisionID string, masterCharID int64, now
 	delete(s.changes.camps, key)
 	s.changes.dissolvedCamp[key] = true
 
+	s.beginDoorLocked(master)
 	master.CampDisbandedAtMs = nowMs
-	s.markCharacterLocked(master)
 
 	rankChanges := door.recomputeEvaluationRanksLocked(divisionID)
 	if camp.EvaluationRank > 0 {
@@ -406,7 +406,7 @@ func (door storeCampDoor) DisbandCamp(divisionID string, masterCharID int64, now
 		}}, rankChanges...)
 	}
 
-	s.commitLocked(fmt.Sprintf("training-camp-disband %s/%d", divisionID, campID))
+	s.finishDoorLocked(fmt.Sprintf("training-camp-disband %s/%d", divisionID, campID), false, []*domain.Character{master})
 	return domain.TrainingCampDisbandResult{
 		Refusal:       domain.TrainingCampDisbandAccepted,
 		Camp:          camp,

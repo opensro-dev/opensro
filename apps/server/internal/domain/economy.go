@@ -23,6 +23,15 @@ import (
 // not know; its row keeps the door label so the table can learn it.
 const EconomyReasonUnattributed = "unattributed"
 
+// EconomyDoorUndeclared is the reserved door of a change the commit found
+// that no door noted (store/ledger_door.go): a writer changed a character
+// outside the door lifecycle. Its gold rows carry EconomyReasonUndeclared,
+// as unknown a kind as unattributed, and its item rows this door word.
+const EconomyDoorUndeclared = "undeclared-write"
+
+// EconomyReasonUndeclared is the reason of an undeclared change's gold.
+const EconomyReasonUndeclared = "undeclared"
+
 /*
 ================
 economyDoorReason
@@ -203,6 +212,9 @@ The reason of a gold change of the given sign committed by the door.
 ================
 */
 func EconomyReason(door string, gain bool) string {
+	if door == EconomyDoorUndeclared {
+		return EconomyReasonUndeclared
+	}
 	reasons := economyDoorReasons[economyDoorBase(door)]
 	name := reasons.loss
 	if gain {
@@ -337,11 +349,11 @@ Every named reason, sorted, for the endpoint's meta.
 ================
 */
 func EconomyReasons() []string {
-	names := make([]string, 0, len(economyReasonKinds)+1)
+	names := make([]string, 0, len(economyReasonKinds)+2)
 	for name := range economyReasonKinds {
 		names = append(names, name)
 	}
-	names = append(names, EconomyReasonUnattributed)
+	names = append(names, EconomyReasonUnattributed, EconomyReasonUndeclared)
 	slices.Sort(names)
 	return names
 }

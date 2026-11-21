@@ -273,13 +273,17 @@ Mutate
 func (s *Store) Mutate(label string, fn func()) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// The unscoped door may have touched any record: every one is in
+	// its door, and its commit counts the roster-wide write (changes.all
+	// in persistence.go).
+	for _, records := range s.characters {
+		s.beginDoorLocked(records...)
+	}
 	if fn != nil {
 		fn()
 	}
-	// The unscoped door may have touched any record; its commit
-	// counts the roster-wide write (changes.all in persistence.go).
 	s.changes.all = true
-	s.commitLocked(label)
+	s.finishDoorLocked(label, false, nil)
 }
 
 /*
@@ -343,22 +347,9 @@ mutateCharacterLocked
 ================
 */
 func (s *Store) mutateCharacterLocked(c *domain.Character, label string, fn func(), deferred bool) {
+	s.beginDoorLocked(c)
 	if fn != nil {
 		fn()
-	}
-	if c != nil {
-		if _, known := s.charDivision[c]; known {
-			s.noteCharacterWriteLocked(c)
-			s.markCharacterLocked(c)
-		} else {
-			// A record the store does not own (detached fixture or a
-			// wiring bug): persisting everything is the lossless answer,
-			// and the log makes the wiring bug findable.
-			s.noteRosterWriteLocked()
-			c.CommitRevision++
-			s.changes.all = true
-			log.Warnf("store: MutateCharacter(%q) received an unknown character record %q; persisting the whole world for this commit", label, c.Name)
-		}
 	}
 	s.finishDoorLocked(label, deferred, []*domain.Character{c})
 }
@@ -396,11 +387,11 @@ func (s *Store) updateCharacterLocked(c *domain.Character, label string, update 
 		log.Warnf("store: UpdateCharacter(%q) refused an unknown character record %q", label, c.Name)
 		return false
 	}
+	s.beginDoorLocked(c)
 	if !update() {
+		s.abandonDoorLocked()
 		return false
 	}
-	s.noteCharacterWriteLocked(c)
-	s.markCharacterLocked(c)
 	s.finishDoorLocked(label, deferred, []*domain.Character{c})
 	return true
 }
@@ -443,26 +434,9 @@ mutateCharactersLocked
 ================
 */
 func (s *Store) mutateCharactersLocked(cs []*domain.Character, label string, fn func(), deferred bool) {
+	s.beginDoorLocked(cs...)
 	if fn != nil {
 		fn()
-	}
-	for _, c := range cs {
-		if c == nil {
-			continue
-		}
-		if _, known := s.charDivision[c]; known {
-			s.noteCharacterWriteLocked(c)
-			s.markCharacterLocked(c)
-		} else {
-			// The MutateCharacter posture for a record the store does
-			// not own (detached fixture or a wiring bug): persisting
-			// everything is the lossless answer, and the log makes the
-			// wiring bug findable.
-			s.noteRosterWriteLocked()
-			c.CommitRevision++
-			s.changes.all = true
-			log.Warnf("store: MutateCharacters(%q) received an unknown character record %q; persisting the whole world for this commit", label, c.Name)
-		}
 	}
 	s.finishDoorLocked(label, deferred, cs)
 }
@@ -499,12 +473,10 @@ func (s *Store) updateCharactersLocked(cs []*domain.Character, label string, upd
 			return false
 		}
 	}
+	s.beginDoorLocked(cs...)
 	if !update() {
+		s.abandonDoorLocked()
 		return false
-	}
-	for _, character := range cs {
-		s.noteCharacterWriteLocked(character)
-		s.markCharacterLocked(character)
 	}
 	s.finishDoorLocked(label, deferred, cs)
 	return true

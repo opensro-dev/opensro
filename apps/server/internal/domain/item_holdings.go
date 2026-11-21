@@ -15,13 +15,14 @@ count is a multiset by codename. A move inside one character (between bag
 slots, into a pet's bag, onto the body) leaves the multiset unchanged and
 records nothing; only an item entering or leaving the character does.
 
-The ledger keeps, per stored character, the row counts in row order
-(AppendItemRowCounts): a door that moved no item leaves that sequence
-equal, and the check is one linear pass whose codename strings share
-their bytes with the rows (measured 2026-11-22: a full bag and pet,
-142 rows, 0.7 us; BenchmarkNoteItemsDoor). Only a changed sequence is folded
-into holdings - sorted by item, one entry per item - and two holdings
-diff in one merge pass.
+A door snapshots the row counts of the characters it changes, in row
+order (AppendItemRowCounts, store/ledger_door.go): a door that moved no
+item leaves that sequence equal, and the check is one linear pass whose
+codename strings share their bytes with the rows (measured 2026-11-22:
+a full bag and pet, 142 rows, snapshot and check 0.86 us together;
+BenchmarkDoorLedgerUnchanged). Only a changed sequence is folded into
+holdings - sorted by item, one entry per item - and two holdings diff in
+one merge pass.
 The census (platform/economy/census.go) walks the same containers over
 snapshot JSON, not live records, and keeps its own walk for that reason.
 
@@ -215,10 +216,15 @@ func DiffItemHoldings(before, after []ItemCount) []ItemCount {
 	for i < len(before) || j < len(after) {
 		switch {
 		case j == len(after) || i < len(before) && before[i].Item < after[j].Item:
-			out = append(out, ItemCount{Item: before[i].Item, Count: -before[i].Count})
+			// A zero entry (an expectation's item noted away) is no change.
+			if before[i].Count != 0 {
+				out = append(out, ItemCount{Item: before[i].Item, Count: -before[i].Count})
+			}
 			i++
 		case i == len(before) || after[j].Item < before[i].Item:
-			out = append(out, after[j])
+			if after[j].Count != 0 {
+				out = append(out, after[j])
+			}
 			j++
 		default:
 			if delta := after[j].Count - before[i].Count; delta != 0 {

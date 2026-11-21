@@ -359,6 +359,9 @@ type Store struct {
 	ledger economyLedger
 	// items attributes every committed item change (item_ledger.go).
 	items itemLedger
+	// door is the open door's snapshots, for both ledgers
+	// (ledger_door.go): empty between doors.
+	door doorLedger
 	// trades holds the trade rows noted by committed trades until the
 	// commit that writes them (trade_history.go).
 	trades tradeHistoryState
@@ -762,13 +765,9 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	s.committedDigests = map[committedCharacterKey][32]byte{}
 	s.committedRows = map[committedCharacterKey]*domain.Character{}
 	s.committedMetaDigests = map[string][32]byte{}
-	s.ledger.seen = map[*domain.Character]int64{}
-	s.items.seen = map[*domain.Character][]domain.ItemCount{}
 	for divisionID, records := range s.characters {
 		for _, c := range records {
 			s.charDivision[c] = divisionID
-			s.seedLedgerLocked(c)
-			s.seedItemsLocked(c)
 		}
 	}
 	// The writer handle adopted above never auto-checkpoints

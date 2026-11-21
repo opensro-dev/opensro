@@ -38,6 +38,8 @@ import (
 	"database/sql"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/domain"
 )
 
@@ -114,14 +116,32 @@ func (s *Store) FlushTickBatch() TickBatchStats {
 ================
 finishDoorLocked
 
-The end of a character door: commit now, or leave the rows to the open
-batch when the door is a deferred one.
+The end of every character door (ledger_door.go has its beginning):
+the declared characters are marked dirty, the ledgers note what the
+door changed under its label, and the door commits now, or leaves the
+rows to the open batch when it is a deferred one. A record the store
+does not own (a detached fixture or a wiring bug) persists the whole
+world for this commit - the lossless answer - and the log names it.
 ================
 */
 func (s *Store) finishDoorLocked(label string, deferred bool, cs []*domain.Character) {
+	for _, c := range cs {
+		if c == nil {
+			continue
+		}
+		if _, known := s.charDivision[c]; known {
+			s.noteCharacterWriteLocked(c)
+			s.markCharacterLocked(c)
+			continue
+		}
+		s.noteRosterWriteLocked()
+		c.CommitRevision++
+		s.changes.all = true
+		log.Warnf("store: door %q received an unknown character record %q; persisting the whole world for this commit", label, c.Name)
+	}
+	s.noteDoorLocked(label)
 	if deferred && s.batch.open {
-		// The batch commits under its own label: the gold rows name this door.
-		s.noteDoorLedgersLocked(label, cs)
+		// The batch commits under its own label: the rows name this door.
 		s.batch.pending = true
 		s.batch.deferred++
 		return
@@ -138,7 +158,11 @@ write outside the dirty set.
 ================
 */
 func (s *Store) flushDeferredLocked() error {
-	if !s.batch.pending {
+	// Ledger rows a failed commit left pending count as deferred too: an
+	// own transaction writing their character would otherwise land a
+	// copy that holds their change while their rows still wait, and the
+	// commit check (ledger_door.go) could not tell them apart.
+	if !s.batch.pending && len(s.ledger.pending) == 0 && len(s.items.pending) == 0 {
 		return nil
 	}
 	return s.commitCheckedLocked("tick-batch-early")

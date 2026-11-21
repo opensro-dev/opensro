@@ -57,11 +57,12 @@ func (door storeGuildDoor) UpdateMercenaryOwner(division string, c *domain.Chara
 			context.UnionMaster = alliance.Guilds[0] == id
 		}
 	}
+	s.beginDoorLocked(c)
 	if !update(context) {
+		s.abandonDoorLocked()
 		return false
 	}
-	s.markCharacterLocked(c)
-	s.commitLocked("mercenary-summon")
+	s.finishDoorLocked("mercenary-summon", false, []*domain.Character{c})
 	return true
 }
 
@@ -110,18 +111,18 @@ func (door storeGuildDoor) PurchaseMercenaryAttribute(division string, actorID i
 	} else {
 		guild.Byte10 = 0
 	}
+	s.beginDoorLocked(actor)
 	remaining := *actor.Gold - gold
 	actor.Gold = &remaining
 	guild.GP -= gp
 	s.guilds[division][id] = guild
 	s.markGuildLocked(guildKey{division: division, guildID: id})
-	s.markCharacterLocked(actor)
 	// The server refreshes only the requester and skips dead/unspawned actors.
 	for _, pet := range actor.Mercenaries {
 		if pet != nil && pet.Summoned && pet.CurrentHP > 0 {
 			pet.MercenaryAttributes = guild.Byte10
 		}
 	}
-	s.commitLocked("mercenary-attribute")
+	s.finishDoorLocked("mercenary-attribute", false, []*domain.Character{actor})
 	return domain.GuildSnapshot{Guild: guild, Members: members}, 0
 }
