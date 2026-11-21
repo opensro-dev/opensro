@@ -105,6 +105,7 @@ func TestCommerceReferencesResolvesByRefObjIDBeforeCodename(t *testing.T) {
 	var body struct {
 		Items []struct {
 			ID                uint32                  `json:"refObjId"`
+			Codename          string                  `json:"codename"`
 			Name              string                  `json:"name"`
 			MaxStack          uint16                  `json:"maxStack"`
 			Icon              string                  `json:"icon"`
@@ -121,5 +122,10 @@ func TestCommerceReferencesResolvesByRefObjIDBeforeCodename(t *testing.T) {
 	got := body.Items[0]
 	if got.ID != potion.RefObjID || got.Name != potion.Name || got.Icon != potion.Icon || got.DescriptionSymbol != potion.DescriptionSymbol || got.MaxStack != 50 {
 		t.Fatalf("resolved reference = %+v, want id=%d name=%q icon=%q desc=%q maxStack=50", got, potion.RefObjID, potion.Name, potion.Icon, potion.DescriptionSymbol)
+	}
+	// The codename travels too: the client knows an item bought mid-session
+	// (a switch scroll) by it, as it knows a bootstrap row by its own.
+	if got.Codename != potion.Codename {
+		t.Fatalf("codename = %q, want %q", got.Codename, potion.Codename)
 	}
 }

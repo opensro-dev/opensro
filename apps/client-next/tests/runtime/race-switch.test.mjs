@@ -148,6 +148,43 @@ test("the use carries its tail and only its own answer reads as its lines", () =
 	g.dispose();
 });
 
+test("a scroll bought mid-session is known by its reference delta's codename", () => {
+	const scrollBody = Buffer.alloc( 6 );
+	scrollBody.writeUInt32LE( 290003 );
+	scrollBody.writeUInt16LE( 1, 4 );
+	const sent = [];
+	const g = createGameplay( frame => sent.push( frame ) );
+	// The bootstrap never named the scroll: it arrived after login, and
+	// only the commerce reference delta (opcode 14) names it.
+	g.bootstrap( {
+		refItemSnapshot: [ { refObjId: 290003, typeFlags: SCROLL_TYPE } ],
+		equipItems: [ { slot: 25, refObjId: 290003, body: [ ...scrollBody ] } ]
+	} );
+	g.references( [ {
+		refObjId: 290003,
+		typeFlags: SCROLL_TYPE,
+		name: "Accessory Switch Scroll",
+		codename: "ITEM_MALL_ACCESSORY_SWITCH_SCROLL"
+	} ] );
+	g.seed( {
+		gid: 1,
+		refObjId: 1,
+		kind: "local-player",
+		regionId: 25000,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		name: "Author",
+		countryByte9c: 0
+	} );
+	g.take();
+	g.command( { kind: "item-use", slot: 25, targetSlot: 21 }, 0, undefined );
+	const use = defined( sent.find( f => f.opcode === 0x75bd ) );
+	assert.deepEqual( [ ...use.payload ], [ 25, SCROLL_TYPE & 0xff, SCROLL_TYPE >>> 8, 21 ] );
+	g.dispose();
+});
+
 test("each scroll's refusals read as its own lines", () => {
 	assert.equal(
 		raceSwitchFailureText( "armor", 0xF5 ),

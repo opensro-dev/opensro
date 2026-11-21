@@ -888,6 +888,9 @@ references
 			for ( const row of rows ) {
 				refs.set( row.refObjId, row.typeFlags );
 				names.set( row.refObjId, row.name );
+				// An item bought after login (a switch scroll) is known by
+				// the delta's codename, as a bootstrap row is by its own.
+				if ( row.codename !== undefined ) codenames.set( row.refObjId, row.codename );
 				if ( row.icon !== undefined ) icons.set( row.refObjId, row.icon );
 				if ( row.tooltip ) tooltipRefs.set( row.refObjId, row.tooltip );
 			}
