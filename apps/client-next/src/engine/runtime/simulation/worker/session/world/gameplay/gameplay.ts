@@ -375,8 +375,8 @@ import {
 	macroBuffAlreadyOn,
 	macroInventoryAfterSwap,
 	macroSkillCast,
+	macroSkillSwapCandidates,
 	macroSkillSwapHelps,
-	macroSkillWantSwap,
 	pickMacroSkill
 } from "@/engine/foundation/gameplay/sro-macro-skill";
 import {
@@ -6394,8 +6394,10 @@ before take assembles the presentation snapshot.
 			}
 			for ( const kind of [ 0, 1, 2 ] as const ) checkAutomaticPotion( kind, now, "timer" );
 			checkMacroPotion( now );
-			checkMacroSkill( now, local );
+			// Hunt selects (and survives) before the skill tick so a new
+			// target is visible to Auto-Skills on the same frame.
 			checkMacroHunt( now, local );
+			checkMacroSkill( now, local );
 
 			// A predicted attack chase follows its target: while the target
 			// moves, the leg re-aims at its new boundary, as the server's
@@ -6886,12 +6888,15 @@ at the next entry.
 			),
 			casting: combat.state().casts.some( cast => cast.caster === localGid && cast.cancelledAtMs === undefined )
 		} );
-		// Wrong weapon: try the Weapon / Shield bag bind once (0068ede0).
-		// Only when the swap would clear the refusal — otherwise a bound
-		// alternate and the worn main weapon would trade every cast.
+		// Wrong weapon: try the Weapon / Shield bag binds (0068ede0).
+		// weaponKinds refusals only consider the Weapon bind — equipping a
+		// bound Shield cannot change the primary TID4 and a 2H swap that
+		// kicks the shield into the bag would re-equip it every other cast.
+		// reqi rows may need the Shield bind; each candidate is judged with
+		// an after-press check so a useless bind is skipped, not armed.
 		if ( admission.kind === "refuse" && macroSkillSwapHelps( admission.code ) ) {
-			const swap = macroSkillWantSwap( settings.skillFlags, bag );
-			if ( swap ) {
+			const swapKinds = metadata.admit?.reqi ? [ "weapon" as const, "shield" as const ] : [ "weapon" as const ];
+			for ( const swap of macroSkillSwapCandidates( settings.skillFlags, bag, swapKinds ) ) {
 				const after = pressAdmission( {
 					admit: metadata.admit,
 					needsFooting: metadata.needsFooting,
@@ -6913,21 +6918,21 @@ at the next entry.
 						cast.caster === localGid && cast.cancelledAtMs === undefined
 					)
 				} );
-				if ( after.kind !== "refuse" || !macroSkillSwapHelps( after.code ) ) {
-					try {
-						if ( !api.command( swap, now, undefined, local ) ) return;
-					} catch {
-						return;
-					}
-					// Native does not advance the list cursor on a swap
-					// (00687af5); rewind the picker's already-advanced entry.
-					const cursor = pick.list === "attack" ?
-						{ attack: Math.max( 0, macroSkillLoop.attack - 1 ) } :
-						{ buff: Math.max( 0, macroSkillLoop.buff - 1 ) };
-					macroSkillLoop = macroSkillCast( { ...macroSkillLoop, ...cursor }, now, MACRO_SKILL_SWAP_MS );
-					dirty = true;
+				// Only equip when this candidate clears the wrong-weapon gate.
+				if ( after.kind === "refuse" && macroSkillSwapHelps( after.code ) ) continue;
+				try {
+					if ( !api.command( swap, now, undefined, local ) ) return;
+				} catch {
 					return;
 				}
+				// Native does not advance the list cursor on a swap
+				// (00687af5); rewind the picker's already-advanced entry.
+				const cursor = pick.list === "attack" ?
+					{ attack: Math.max( 0, macroSkillLoop.attack - 1 ) } :
+					{ buff: Math.max( 0, macroSkillLoop.buff - 1 ) };
+				macroSkillLoop = macroSkillCast( { ...macroSkillLoop, ...cursor }, now, MACRO_SKILL_SWAP_MS );
+				dirty = true;
+				return;
 			}
 			return;
 		}
@@ -7134,14 +7139,22 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 					if ( !api.command( { kind: "berserk" }, now, undefined, local ) ) return;
 					dirty = true;
 					return;
-				case "select":
-					if ( !api.command( { kind: "select", gid: action.gid }, now, undefined, local ) ) return;
+				case "select": {
+					const monster = readEntity( action.gid );
+					if ( !monster || !api.command( { kind: "select", gid: action.gid }, now, monster, local ) ) {
+						return;
+					}
 					dirty = true;
 					return;
-				case "pickup":
-					if ( !api.command( { kind: "pickup", gid: action.gid }, now, undefined, local ) ) return;
+				}
+				case "pickup": {
+					const drop = readEntity( action.gid );
+					if ( !drop || !api.command( { kind: "pickup", gid: action.gid }, now, drop, local ) ) {
+						return;
+					}
 					dirty = true;
 					return;
+				}
 			}
 		} catch {
 			return;

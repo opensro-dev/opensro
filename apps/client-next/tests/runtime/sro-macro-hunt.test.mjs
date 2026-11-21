@@ -258,3 +258,111 @@ test("hunt group values are not choice indices for range and return", async () =
 	assert.equal( range.choices[0]?.label, "In place" );
 	assert.deepEqual( ret.choices.map( c => c.value ), [ 0, 1, 3, 5, 10 ] );
 });
+
+test("Auto-Hunt select passes the monster entity so Auto-Skills can attack", async () => {
+	const { createGameplay } = await import(
+		"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
+	);
+	const { experimentalGameplay, experimentalOptions } = await import(
+		"../../src/engine/foundation/ui/experimental-options.ts"
+	);
+	const { macroReplay } = await import( "../helpers/sro-macro-frames.mjs" );
+	const SELECT_OPCODE = 0x745a;
+	const SKILL_PRESS_OPCODE = 0x72cd;
+	const ATTACK = 11;
+	const LOCAL_GID = 1;
+	const MONSTER_GID = 2;
+	const skillRef = ( id, over = {} ) => ( {
+		id,
+		group: over.group ?? id,
+		level: 1,
+		status: false,
+		effectRider: false,
+		ui: {
+			name: `SKILL_${id}`,
+			trainable: true,
+			spCost: 1,
+			targetRequired: over.targetRequired === true,
+			cooldownMs: 0,
+			actionMs: over.actionMs ?? 100,
+			masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
+			prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ]
+		}
+	} );
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const entities = new Map();
+	const local = {
+		gid: LOCAL_GID,
+		refObjId: 1907,
+		kind: /** @type {const} */ ("local-player"),
+		name: "hunter",
+		countryByte9c: 0,
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	const monster = {
+		gid: MONSTER_GID,
+		refObjId: 2000,
+		kind: /** @type {const} */ ("monster"),
+		name: "mob",
+		regionId: 257,
+		x: 5,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	entities.set( LOCAL_GID, local );
+	entities.set( MONSTER_GID, monster );
+	const g = createGameplay(
+		f => sent.push( f ),
+		() => {},
+		() => {},
+		gid => entities.get( gid ),
+		() => {},
+		() => [ ...entities.values() ].filter( e => e.kind === "monster" ),
+		() => []
+	);
+	g.bootstrap( {
+		character: {
+			hp: 100,
+			mp: 100,
+			maxHp: 100,
+			maxMp: 100,
+			skills: [ ATTACK ],
+			autoPotion: { hp: 0x3211, mp: 0x3212, cure: 0x13, timing: 0x8a }
+		},
+		refSkillSnapshot: [ skillRef( ATTACK, { targetRequired: true, actionMs: 100 } ) ]
+	} );
+	g.worldReady();
+	g.seed( monster );
+	g.seed( local );
+	g.experimental( experimentalGameplay( experimentalOptions( { sroMacro: true } ) ) );
+	const hunt = codec.defaultHuntBlock();
+	hunt[0] = 1; // 30 m so the mob at 5 units is inside range
+	g.receive(
+		macroReplay( {
+			huntOn: 1,
+			skillOn: 1,
+			hunt,
+			buff: [],
+			attack: [ { slot: 0, skill: ATTACK } ]
+		} ),
+		0
+	);
+	sent.length = 0;
+	g.step( 0, local );
+	assert.ok( sent.some( frame => frame.opcode === SELECT_OPCODE ), "hunt must select the monster" );
+	assert.equal( g.skillTarget(), MONSTER_GID, "selection intent names the hunt target" );
+	// Same tick: hunt ran before skill, so the attack press should also go out.
+	assert.ok(
+		sent.some( frame => frame.opcode === SKILL_PRESS_OPCODE ),
+		"Auto-Skills attacks the hunt target on the same tick"
+	);
+	g.dispose();
+});

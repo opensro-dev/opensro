@@ -451,6 +451,43 @@ test("macroSkillWantSwap equips the bound bag weapon then the shield", () => {
 	);
 });
 
+test("weaponKinds swaps never propose the Shield bind; a shield in the Weapon slot is ignored", () => {
+	const flags = codec.withMacroGearSlot(
+		codec.withMacroGearSlot( codec.defaultMacroSettings().skillFlags, "weapon", 14 ),
+		"shield",
+		15
+	);
+	assert.deepEqual(
+		loop.macroSkillSwapCandidates(
+			flags,
+			[
+				{ slot: 14, typeFlags: WEAPON_TYPE, refObjId: WEAPON_REF },
+				{ slot: 15, typeFlags: SHIELD_TYPE, refObjId: 99 }
+			],
+			[ "weapon" ]
+		),
+		[ { kind: "inventory-move", source: 14, destination: 6, quantity: 0, activation: true } ]
+	);
+	assert.deepEqual(
+		loop.macroSkillSwapCandidates(
+			flags,
+			[ { slot: 15, typeFlags: SHIELD_TYPE, refObjId: 99 } ],
+			[ "weapon" ]
+		),
+		[],
+		"Shield-only bind cannot clear a weaponKinds refusal"
+	);
+	assert.deepEqual(
+		loop.macroSkillSwapCandidates(
+			codec.withMacroGearSlot( codec.defaultMacroSettings().skillFlags, "weapon", 14 ),
+			[ { slot: 14, typeFlags: SHIELD_TYPE, refObjId: 99 } ],
+			[ "weapon", "shield" ]
+		),
+		[],
+		"a shield that landed in the Weapon bag slot is not a weapon swap"
+	);
+});
+
 test("scrubMacroGear clears an empty or wrong-class bag bind", () => {
 	const base = {
 		...codec.defaultMacroSettings(),
@@ -580,6 +617,170 @@ test("a wrong-weapon attack equips the bound bag weapon once, then casts without
 	sent.length = 0;
 	g.step( 2500, local );
 	assert.equal( sent.filter( frame => frame.opcode === ITEM_MOVE_OPCODE ).length, 0, "still no oscillation" );
+	g.dispose();
+});
+
+test("a bound Shield is not equipped for a weaponKinds wrong-weapon refusal", () => {
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const entities = new Map();
+	const local = {
+		gid: LOCAL_GID,
+		refObjId: 1907,
+		kind: /** @type {const} */ ("local-player"),
+		name: "macro",
+		countryByte9c: 0,
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	const monster = {
+		gid: MONSTER_GID,
+		refObjId: 2000,
+		kind: /** @type {const} */ ("monster"),
+		name: "mob",
+		regionId: 257,
+		x: 10,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	entities.set( LOCAL_GID, local );
+	entities.set( MONSTER_GID, monster );
+	const g = createGameplay( f => sent.push( f ), () => {}, () => {}, gid => entities.get( gid ) );
+	g.bootstrap( {
+		character: {
+			hp: 100,
+			mp: 100,
+			maxHp: 100,
+			maxMp: 100,
+			skills: [ ATTACK ],
+			autoPotion: { hp: 0x3211, mp: 0x3212, cure: 0x13, timing: 0x8a }
+		},
+		refSkillSnapshot: [
+			skillRef( ATTACK, { targetRequired: true, actionMs: 100, admit: SWORD_ADMIT } )
+		],
+		refItemSnapshot: [
+			{ refObjId: WEAPON_REF, typeFlags: WEAPON_TYPE, nativeFields: {} },
+			{ refObjId: OTHER_WEAPON_REF, typeFlags: OTHER_WEAPON_TYPE, nativeFields: {} },
+			{ refObjId: 60, typeFlags: SHIELD_TYPE, nativeFields: {} }
+		],
+		equipItems: [
+			{ slot: 6, refObjId: OTHER_WEAPON_REF, body: weaponBody( OTHER_WEAPON_REF ) },
+			{ slot: 14, refObjId: WEAPON_REF, body: weaponBody( WEAPON_REF ) },
+			{ slot: 15, refObjId: 60, body: [ 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ] }
+		]
+	} );
+	g.worldReady();
+	g.seed( monster );
+	g.seed( local );
+	g.experimental( experimentalGameplay( experimentalOptions( { sroMacro: true } ) ) );
+	g.receive(
+		macroReplay( {
+			skillOn: 1,
+			// Weapon + Shield both bound: only the sword may move.
+			skillFlags: [ 0, 0, 14, 15 ],
+			buff: [],
+			attack: [ { slot: 0, skill: ATTACK } ]
+		} ),
+		0
+	);
+	g.command( { kind: "select", gid: MONSTER_GID }, 0, monster, local );
+	const grant = new Uint8Array( 11 );
+	grant[0] = 1;
+	new DataView( grant.buffer ).setUint32( 1, MONSTER_GID, true );
+	g.receive( { opcode: 0xb45a, payload: grant }, 0 );
+	sent.length = 0;
+	g.step( 0, local );
+	const moves = sent.filter( frame => frame.opcode === ITEM_MOVE_OPCODE );
+	assert.equal( moves.length, 1, "one weapon swap" );
+	assert.equal( moves[0].payload[1], 14, "source is the Weapon bag slot" );
+	assert.equal( moves[0].payload[2], 6, "destination is the weapon socket" );
+	g.dispose();
+});
+
+test("a Shield-only bind does not flail on a weaponKinds refusal", () => {
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const entities = new Map();
+	const local = {
+		gid: LOCAL_GID,
+		refObjId: 1907,
+		kind: /** @type {const} */ ("local-player"),
+		name: "macro",
+		countryByte9c: 0,
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	const monster = {
+		gid: MONSTER_GID,
+		refObjId: 2000,
+		kind: /** @type {const} */ ("monster"),
+		name: "mob",
+		regionId: 257,
+		x: 10,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	entities.set( LOCAL_GID, local );
+	entities.set( MONSTER_GID, monster );
+	const g = createGameplay( f => sent.push( f ), () => {}, () => {}, gid => entities.get( gid ) );
+	g.bootstrap( {
+		character: {
+			hp: 100,
+			mp: 100,
+			maxHp: 100,
+			maxMp: 100,
+			skills: [ ATTACK ],
+			autoPotion: { hp: 0x3211, mp: 0x3212, cure: 0x13, timing: 0x8a }
+		},
+		refSkillSnapshot: [
+			skillRef( ATTACK, { targetRequired: true, actionMs: 100, admit: SWORD_ADMIT } )
+		],
+		refItemSnapshot: [
+			{ refObjId: OTHER_WEAPON_REF, typeFlags: OTHER_WEAPON_TYPE, nativeFields: {} },
+			{ refObjId: 60, typeFlags: SHIELD_TYPE, nativeFields: {} }
+		],
+		equipItems: [
+			{ slot: 6, refObjId: OTHER_WEAPON_REF, body: weaponBody( OTHER_WEAPON_REF ) },
+			{ slot: 15, refObjId: 60, body: [ 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ] }
+		]
+	} );
+	g.worldReady();
+	g.seed( monster );
+	g.seed( local );
+	g.experimental( experimentalGameplay( experimentalOptions( { sroMacro: true } ) ) );
+	g.receive(
+		macroReplay( {
+			skillOn: 1,
+			skillFlags: [ 0, 0, 0, 15 ],
+			buff: [],
+			attack: [ { slot: 0, skill: ATTACK } ]
+		} ),
+		0
+	);
+	g.command( { kind: "select", gid: MONSTER_GID }, 0, monster, local );
+	const grant = new Uint8Array( 11 );
+	grant[0] = 1;
+	new DataView( grant.buffer ).setUint32( 1, MONSTER_GID, true );
+	g.receive( { opcode: 0xb45a, payload: grant }, 0 );
+	sent.length = 0;
+	for ( let t = 0; t <= 4000; t += 500 ) g.step( t, local );
+	assert.equal(
+		sent.filter( frame => frame.opcode === ITEM_MOVE_OPCODE ).length,
+		0,
+		"Shield bind must not keep equipping on a weaponKinds refuse"
+	);
 	g.dispose();
 });
 
