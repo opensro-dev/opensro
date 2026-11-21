@@ -131,7 +131,11 @@ export function createAlchemy() {
 				throw Error( "Alchemy target must be equipment" );
 			}
 			if ( process ) {
-				if ( mode === "dissolve" && quantity !== 1 ) throw Error( "Dissolve has no quantity field" );
+				// 6220A0 window mode 2 sends a dissolve through Enchant7549 as
+				// {n, s0, s1}: the frame has no quantity field, so the window's
+				// count edit (the All button sums the staged stacks) never reaches
+				// the wire and never refuses the request. One request, one step.
+				const steps = mode === "dissolve" ? 1 : quantity;
 				if ( mode === "advanced" && quantity !== 1 ) throw Error( "Tablet manufacture requires quantity one" );
 				const available = mode === "compound" ?
 					selected.reduce(
@@ -142,7 +146,7 @@ export function createAlchemy() {
 					) :
 					items.get( selected[0]! )!.quantity;
 				if (
-					!Number.isSafeInteger( quantity ) || quantity < 1 || quantity > 0xffffffff || quantity > available
+					!Number.isSafeInteger( steps ) || steps < 1 || steps > 0xffffffff || steps > available
 				) {
 					throw Error( "Invalid compound quantity" );
 				}
@@ -170,8 +174,8 @@ export function createAlchemy() {
 					error: null,
 					slot: selected[0]!,
 					designated,
-					remaining: quantity,
-					total: quantity,
+					remaining: steps,
+					total: steps,
 					lockUntil: now + 2000,
 					locked: true,
 					cancelled: false

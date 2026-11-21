@@ -280,9 +280,15 @@ test("advanced pads five native slots; dissolve uses its separate opcode; invali
 	] );
 	a.compound( true, 1 );
 	assert.equal( a.state().pending, false );
-	assert.throws( () => a.start( "dissolve", [ 13, 14 ], items, 2000, 2 ), /quantity/ );
-	assert.throws( () => a.start( "dissolve", [ 13, 14, 15 ], items, 2000, 1 ), /unavailable/ );
-	const dissolve = a.start( "dissolve", [ 13, 14 ], items, 2000, 1 );
+	// The window's count edit never reaches the dissolve frame: the All
+	// button's summed stacks (5000) still send one {n, s0, s1} request.
+	const bulk = a.start( "dissolve", [ 13, 14 ], items, 2000, 5000 );
+	assert.equal( bulk.opcode, 0x7549 );
+	assert.deepEqual( [ ...bulk.payload ], [ 2, 13, 14 ] );
+	assert.equal( a.state().total, 1 );
+	a.compound( false, undefined, 7 );
+	assert.throws( () => a.start( "dissolve", [ 13, 14, 15 ], items, 4000, 1 ), /unavailable/ );
+	const dissolve = a.start( "dissolve", [ 13, 14 ], items, 4000, 1 );
 	assert.equal( dissolve.opcode, 0x7549 );
 	assert.deepEqual( [ ...dissolve.payload ], [ 2, 13, 14 ] );
 	a.compound( false, undefined, 7 );
