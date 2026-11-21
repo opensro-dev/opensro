@@ -11,10 +11,9 @@ ITEM_ETC_E050729_SUMMON_ONE_SCROLL (1인용, "1 person use"),
 use"). The items ship in v1.150's data as 3/3/9/0 quest tools with no
 associated character and Param1 -1, required level 10, and no source
 names a handler for them. revtool, 2026-11-21: neither the v1.150 client
-(375e8682) nor the v1.696 client holds an E050729 string, and the v1.188
-server's quest-event item table (0x872bd4-0x872cbf) registers only the
-E060526 party scroll and, at 0x872dd8, Pandora's Box; the ISRO-R export
-lists only the codenames.
+(375e8682) nor the v1.696 client holds an E050729 string, and the later
+server's quest-event item table registers only the E060526 party scroll
+and Pandora's Box; the ISRO-R export lists only the codenames.
 Behind SRO_MALL_CATEGORIES (default
 off) the mall lists them in Premium's Others tab
 (commerce/mallcategories.go) and this file serves their use; off, the
