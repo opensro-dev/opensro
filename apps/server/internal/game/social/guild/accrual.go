@@ -5,11 +5,11 @@ accrual.go - guild points that accrue passively while members hunt
 
 Native rule (issue #4051, v1.188 SR_GameServer): when a guilded member's
 hunting skill EXP converts to SP (400 skill EXP = 1 SP), the same
-whole-SP amount is set aside on the player object (PC +0x2184,
-CGObjPC_ApplyExperienceAndSend3056 0x4E5625). At 10 (0xA) or more it is
+whole-SP amount is set aside on the player object (PC +0x2184, the
+experience apply at 0x4E5625). At 10 (0xA) or more it is
 credited to the member's current guild through the donation credit
 (guild GP and the member's DonatedGP rise together) and zeroed. On exit
-(CGObjPC_ReleaseSessionsOnExit 0x4DEF90) a positive remainder is
+(the session release at 0x4DEF90) a positive remainder is
 credited only while the member is still guilded.
 
 Nothing on the guild leave, kick or disband path touches the set-aside
