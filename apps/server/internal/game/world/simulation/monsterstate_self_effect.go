@@ -1,3 +1,16 @@
+/*
+===========================================================================
+
+monsterstate_self_effect.go - the buffs a monster carries on itself
+
+MonsterState owns every monster's self and target effect slots: the AI's
+conditional self buffs, other actors' buffs on it, and an event's
+persistent stepped buff (the Roc's enrage). Installation, the step count
+and retirement on expiry or death all go through here.
+
+===========================================================================
+*/
+
 package simulation
 
 import (
@@ -115,6 +128,83 @@ func (s *MonsterState) InstallMonsterSelfEffect(division string, gid uint32, eff
 	i.SelfEffects[slot] = effect
 	state.instances.set(gid, i)
 	return true
+}
+
+/*
+================
+InstallMonsterStackingEffect
+
+An event's persistent self buff on a living monster (the Roc's hour-mark
+enrage). It takes a self-effect slot no conditional entry owns, so the
+AI's own buffs keep theirs; a monster already carrying the skill, or one
+with no free slot, refuses. It lasts until the monster dies.
+================
+*/
+func (s *MonsterState) InstallMonsterStackingEffect(division string, gid uint32, effect monster.SelfEffect, now int64) bool {
+	if effect.Token == 0 || effect.SkillID == 0 || effect.UntilMs != 0 || effect.First == 0 {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForObject(division, gid)
+	r, ok := state.instances.hotRow(gid)
+	if !ok {
+		return false
+	}
+	i := state.instances.hotValue(gid, r)
+	if i.CurrentHP == 0 || spawnEffectCount(i) >= maxMonsterSpawnSkills {
+		return false
+	}
+	slot := -1
+	for n, e := range i.SelfEffects {
+		if e.Token != 0 && e.SkillID == effect.SkillID {
+			return false
+		}
+		if slot < 0 && e.Token == 0 && i.Nest.ConditionalSkills[n].SkillID == 0 {
+			slot = n
+		}
+	}
+	if slot < 0 {
+		return false
+	}
+	effect.Steps = effect.StepsAt(now)
+	i.SelfEffects[slot] = effect
+	state.instances.set(gid, i)
+	return true
+}
+
+/*
+================
+AdvanceMonsterStackingEffects
+
+Counts each persistent stepped effect's steps on the tick clock, so the
+stat projection (which reads no clock) writes the current growth. Only
+monsters indexed as carrying self effects are read.
+================
+*/
+func (s *MonsterState) AdvanceMonsterStackingEffects(now int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, key := range s.populationKeys() {
+		state := s.populationForLease(key.division, key.lease)
+		for gid := range state.instances.selfEffects {
+			r, ok := state.instances.hotRow(gid)
+			if !ok {
+				panic("monster effect lost resident owner")
+			}
+			i := state.instances.hotValue(gid, r)
+			changed := false
+			for n, e := range i.SelfEffects {
+				if steps := e.StepsAt(now); e.Persistent() && steps != e.Steps {
+					i.SelfEffects[n].Steps = steps
+					changed = true
+				}
+			}
+			if changed {
+				state.instances.set(gid, i)
+			}
+		}
+	}
 }
 
 /*

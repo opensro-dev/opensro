@@ -36,6 +36,8 @@ from test_hunting2_import import archive_bytes, later_row, skill_row, utf16  # n
 
 NATIVE_TAHOMET_SYMBOL = "SN_MOB_RM_TAHOMET"
 ROC_SKILL = 7101
+# The summit event's enrage: no kind's skill columns name it (#4054).
+ROC_ENRAGE_SKILL = 7102
 # The key item: its id in the source client, and the one a variant
 # that carries it gives it.
 KEY_ITEM = "ITEM_QNO_RM_MEETROC_6_01"
@@ -182,7 +184,8 @@ class RocImportTest(unittest.TestCase):
 			"characterdata.txt": utf16([["characterdata_6000.txt"]]),
 			"characterdata_6000.txt": utf16(rows),
 			"skilldata.txt": utf16([["skilldata_6000.txt"]]),
-			"skilldata_6000.txt": utf16([skill_row(ROC_SKILL, "MSKILL_RM_ROC_TEST")]),
+			"skilldata_6000.txt": utf16([skill_row(ROC_SKILL, "MSKILL_RM_ROC_TEST"),
+				skill_row(ROC_ENRAGE_SKILL, "MSKILL_RM_ROC_ATTACK10")]),
 			"textdata_object.txt": utf16([[str(at), symbol_of(code), "x", "x", code, "f", "x", "a", "b", "c"]
 				for at, code in enumerate(roc.KINDS) if code != "MOB_RM_TAHOMET_ROC"]
 				+ [["1", "SN_STORE_RC_TAHOMET_GATE", "k", "", "", "s", "t", "j", "Summit Gate", "v"]]),
@@ -307,7 +310,8 @@ class RocImportTest(unittest.TestCase):
 			summary = self.run_import(vsro, native, output, pins, "on")
 			self.assertEqual(sorted(summary["characters"]), sorted(roc.KINDS))
 			self.assertTrue(all(identity > 100 for identity in summary["characters"].values()))
-			self.assertEqual(list(summary["skills"]), ["MSKILL_RM_ROC_TEST"])
+			# The enrage is staged by codename: the event casts it, no kind names it.
+			self.assertEqual(sorted(summary["skills"]), ["MSKILL_RM_ROC_ATTACK10", "MSKILL_RM_ROC_TEST"])
 			shard = (text_root / roc.CHARACTER_SHARD).read_bytes().decode("utf-16")
 			converted = [line.split("\t") for line in shard.splitlines() if "\tMOB_RM_ROC\t" in line][0]
 			self.assertEqual(len(converted), 120)

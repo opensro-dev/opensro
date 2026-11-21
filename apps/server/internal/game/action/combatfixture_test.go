@@ -84,6 +84,20 @@ func (source staticSkillSource) SkillByID(id uint32) (enterworld.SkillRow, bool)
 
 /*
 ================
+SkillByCodename
+================
+*/
+func (source staticSkillSource) SkillByCodename(codename string) (enterworld.SkillRow, bool) {
+	for _, row := range source {
+		if row.Codename == codename {
+			return row, true
+		}
+	}
+	return enterworld.SkillRow{}, false
+}
+
+/*
+================
 testInt64
 ================
 */

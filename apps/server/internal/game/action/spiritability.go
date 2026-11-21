@@ -76,13 +76,9 @@ func (rt *Runtime) deriveSpirit(avatars *domain.AvatarInventory, nowUnix int64) 
 		}
 		effect := &domain.SpiritEffect{Slot: row.Slot, Plus: row.Plus,
 			HPPercent: ability.HPPercent, MPPercent: ability.MPPercent, Block: ability.Block}
-		if skills, named := rt.deps.SkillData().(interface {
-			SkillByCodename(string) (enterworld.SkillRow, bool)
-		}); named {
-			for _, codename := range ability.Skills {
-				if skill, found := skills.SkillByCodename(codename); found {
-					effect.Skills = append(effect.Skills, skill.ID)
-				}
+		for _, codename := range ability.Skills {
+			if skill, found := rt.skillByCodename(codename); found {
+				effect.Skills = append(effect.Skills, skill.ID)
 			}
 		}
 		return effect

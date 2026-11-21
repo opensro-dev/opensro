@@ -10,6 +10,7 @@ package combat
 
 import (
 	"opensro.online/server/internal/game/abnormal"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/paramkeeper"
 	"opensro.online/server/internal/game/world/monster"
 )
@@ -21,7 +22,8 @@ MonsterInstanceStats
 MonsterInstanceStats projects the live actor's combat parameters: the
 RefObjChar base (flat source zero), monster self effects (the skill
 parameter installer: flat 5/6 for defp, flat/percent 12 for cr, flat 80..83
-for dru, each an independent source) and the abnormal block's writes (source
+for dru, steps * value from mom: flat 80..83, percent 5/6, both 9/0xB; each
+an independent source) and the abnormal block's writes (source
 5, or source 0 for frostbite's 8C). Curse factors B2..B5 come from the block
 alone.
 ==================
@@ -154,6 +156,19 @@ func applyMonsterSelfEffects(s *Stats, effects monster.SelfEffects, targets mons
 				}
 				if entry.id == 130 || entry.id == 131 {
 					value, applies = e.Second, true
+				}
+			case enterworld.TagMonsterStacking:
+				// mom: steps * value per step. The flat channel takes the
+				// four damage rates, the percent channel both defences,
+				// and evasion and hit rate take both.
+				growth := e.Steps * e.Second
+				if entry.id >= 128 && entry.id <= 131 || entry.id == 9 || entry.id == 11 {
+					value, applies = growth, true
+				}
+				if entry.id == 5 || entry.id == 6 || entry.id == 9 || entry.id == 11 {
+					if _, err = p.Apply(paramkeeper.PercentSum, e.Token, float32(growth)); err != nil {
+						return err
+					}
 				}
 			}
 			if applies {

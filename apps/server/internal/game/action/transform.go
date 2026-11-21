@@ -181,14 +181,11 @@ skill's cast broadcast is not sent, as for every item skill here.
 */
 func (rt *Runtime) useMonsterCapsule(division string, c *enterworld.Character, ref *enterworld.ItemRef, rowIndex int, request wire.ItemUseRequest, now int64, result *OpResult) bool {
 	skin := c.MissionInventory[rowIndex].Data
-	source, ok := rt.deps.SkillData().(interface {
-		SkillByCodename(string) (enterworld.SkillRow, bool)
-	})
-	if c.NativeBodyStatus == 4 || skin == 0 || !ok || ref.AssociatedSkillCodename == "" {
+	if c.NativeBodyStatus == 4 || skin == 0 || ref.AssociatedSkillCodename == "" {
 		*result = itemUseFailure(wire.ErrCodeInvalidRequest)
 		return false
 	}
-	skill, found := source.SkillByCodename(ref.AssociatedSkillCodename)
+	skill, found := rt.skillByCodename(ref.AssociatedSkillCodename)
 	if !found || !transformRow(skill) {
 		*result = itemUseFailure(wire.ErrCodeInvalidRequest)
 		return false

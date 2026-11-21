@@ -280,13 +280,7 @@ A USU1 skill: a persistent, pinned item program (skillitemeffect.go).
 ================
 */
 func (rt *Runtime) compositeSkill(codename string) (enterworld.SkillRow, bool) {
-	source, ok := rt.deps.SkillData().(interface {
-		SkillByCodename(string) (enterworld.SkillRow, bool)
-	})
-	if !ok {
-		return enterworld.SkillRow{}, false
-	}
-	skill, found := source.SkillByCodename(codename)
+	skill, found := rt.skillByCodename(codename)
 	return skill, found && skill.TimedEffect.Pinned && skill.TimedEffect.ItemProgram && skill.EffectDurationMs > 0
 }
 

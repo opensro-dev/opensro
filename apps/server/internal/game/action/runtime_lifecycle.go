@@ -49,6 +49,7 @@ func (rt *Runtime) MonsterActionTickHook() simulation.TickHook {
 		defer rt.endTickSnapshots()
 		if rt.Monsters != nil {
 			rt.Monsters.AdvanceSummons(nowMs)
+			rt.Monsters.AdvanceMonsterStackingEffects(nowMs)
 		}
 		out := rt.retireMonsterSelfEffects(nowMs)
 		out = append(out, rt.advanceMonsterCasts(nowMs)...)

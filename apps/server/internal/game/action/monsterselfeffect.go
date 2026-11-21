@@ -44,24 +44,92 @@ func (rt *Runtime) releaseMonsterSelfEffect(division string, instance monster.In
 	}
 	effectToken := atomic.AddUint32(&rt.castTokenCounter, 1)
 	effect := monster.SelfEffect{SkillID: skill.ID, Token: effectToken, Tag: skill.MonsterSelfEffect.Tag, First: skill.MonsterSelfEffect.First, Second: skill.MonsterSelfEffect.Second, StartedAtMs: now, UntilMs: now + int64(skill.EffectDurationMs)}
-	payload, err := (wire.AttachedEffect{GID: instance.Gid, SkillID: skill.ID, InstanceToken: effectToken, Phase: 2}).Encode(wire.AttachedEffectLayout{})
-	if err != nil {
-		panic(err)
-	}
 	if !rt.Monsters.InstallMonsterSelfEffect(division, instance.Gid, effect, now) {
 		return result
 	}
-	appendFrame := func(f wire.Frame) {
+	var frames []wire.Frame
+	if pending == nil {
+		frames = append(frames, wire.SkillCastSelfFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: instance.Gid, InstanceToken: token}))
+	}
+	frames = append(frames, rt.landMonsterSelfCast(division, instance.Gid, skill, token, effectToken, now)...)
+	for _, f := range frames {
 		result.Frames = append(result.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
 	}
-	if pending == nil {
-		appendFrame(wire.SkillCastSelfFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: instance.Gid, InstanceToken: token}))
-	}
-	appendFrame(wire.SkillCastReleaseFrame(token, 0))
-	appendFrame(wire.Frame{Opcode: wire.OpAttachedEffect, Payload: payload})
-	rt.queueSkillFinalize(division, monsterCastOwner(instance.Gid), instance.Gid, now+int64(skill.ActionDurationMs), wire.SkillCastFinalizeFrame(token))
 	result.Accepted = true
 	return result
+}
+
+/*
+================
+landMonsterSelfCast
+
+The wire side of a monster's self cast landing, once its buff is
+installed: the cast's release, the buff attached under its own token,
+and the cast's close queued for when its action ends.
+================
+*/
+func (rt *Runtime) landMonsterSelfCast(division string, gid uint32, skill enterworld.SkillRow, token, effectToken uint32, now int64) []wire.Frame {
+	payload, err := (wire.AttachedEffect{GID: gid, SkillID: skill.ID, InstanceToken: effectToken, Phase: 2}).Encode(wire.AttachedEffectLayout{})
+	if err != nil {
+		panic(err)
+	}
+	rt.queueSkillFinalize(division, monsterCastOwner(gid), gid, now+int64(skill.ActionDurationMs), wire.SkillCastFinalizeFrame(token))
+	return []wire.Frame{wire.SkillCastReleaseFrame(token, 0), {Opcode: wire.OpAttachedEffect, Payload: payload}}
+}
+
+/*
+================
+monsterEventCast
+
+A self cast an event begins on a monster (the Roc's hour mark), not its
+AI: begun at once, landing when its casting time has passed.
+================
+*/
+type monsterEventCast struct {
+	gid         uint32
+	skill       enterworld.SkillRow
+	token       uint32
+	releaseAtMs int64
+}
+
+/*
+================
+beginMonsterStackingCast
+
+Starts an event's stacking self buff (the v1.188 server's indirect
+skill begin, no target): the observers see the cast begin, and it lands
+after the row's casting time (landMonsterStackingCast). Only a row the
+mom parse pinned is cast. The caller holds the division lock.
+================
+*/
+func (rt *Runtime) beginMonsterStackingCast(gid uint32, codename string, now int64) (monsterEventCast, wire.Frame, bool) {
+	skill, found := rt.skillByCodename(codename)
+	if !found || !skill.MonsterStackingEffect.Pinned {
+		return monsterEventCast{}, wire.Frame{}, false
+	}
+	cast := monsterEventCast{gid: gid, skill: skill, token: atomic.AddUint32(&rt.castTokenCounter, 1),
+		releaseAtMs: now + int64(skill.ActionCastingTimeMs)}
+	return cast, wire.SkillCastSelfFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: gid, InstanceToken: cast.token}), true
+}
+
+/*
+================
+landMonsterStackingCast
+
+Installs a begun stacking cast's buff on its still-living caster and
+answers the frames its observers see. False when the caster died or
+already carries the buff. The caller holds the division lock.
+================
+*/
+func (rt *Runtime) landMonsterStackingCast(division string, cast monsterEventCast, now int64) ([]wire.Frame, bool) {
+	effectToken := atomic.AddUint32(&rt.castTokenCounter, 1)
+	stacking := cast.skill.MonsterStackingEffect
+	effect := monster.SelfEffect{SkillID: cast.skill.ID, Token: effectToken, Tag: enterworld.TagMonsterStacking,
+		First: stacking.PeriodMs, Second: stacking.StepValue, StartedAtMs: now}
+	if rt.Monsters == nil || !rt.Monsters.InstallMonsterStackingEffect(division, cast.gid, effect, now) {
+		return nil, false
+	}
+	return rt.landMonsterSelfCast(division, cast.gid, cast.skill, cast.token, effectToken, now), true
 }
 
 func (rt *Runtime) retireMonsterSelfEffects(now int64) []simulation.DivisionFrames {

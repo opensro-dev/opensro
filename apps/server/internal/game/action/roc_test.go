@@ -611,6 +611,78 @@ func rocSummitAtTheRoc(t *testing.T, rt *Runtime, clock *fakeClock, monsters *ro
 
 /*
 ================
+TestRocEnragesAtTheHour
+
+An hour after the Roc appears it begins its enrage on itself; the buff
+lands after the cast's casting time, the layer sees both, and the timer
+fires once. A Roc that fell first never casts, and a variant without the
+row ends the timer at its first try.
+================
+*/
+func TestRocEnragesAtTheHour(t *testing.T) {
+	const castMs = 2633
+	type call struct {
+		kind string
+		gid  uint32
+		at   time.Duration
+	}
+	run := func(fall bool, staged bool) ([]call, int) {
+		rt, clock, monsters, c := rocFixture(t)
+		var calls []call
+		heard := 0
+		var rocAt time.Time
+		rt.PushCharacterFrames = func(_ string, _ string, frames []wire.Frame) {
+			for _, frame := range frames {
+				if frame.Opcode == 0xdead || frame.Opcode == 0xbeef {
+					heard++
+				}
+			}
+		}
+		rt.roc.beginCast = func(gid uint32, codename string, nowMs int64) (monsterEventCast, wire.Frame, bool) {
+			if codename != rocEnrageSkill {
+				t.Fatalf("cast %s", codename)
+			}
+			calls = append(calls, call{"begin", gid, clock.now.Sub(rocAt)})
+			return monsterEventCast{gid: gid, token: 5, releaseAtMs: nowMs + castMs}, wire.Frame{Opcode: 0xdead}, staged
+		}
+		rt.roc.landCast = func(_ string, cast monsterEventCast, nowMs int64) ([]wire.Frame, bool) {
+			calls = append(calls, call{"land", cast.gid, clock.now.Sub(rocAt)})
+			return []wire.Frame{{Opcode: 0xbeef}}, true
+		}
+		rocSummitAtTheRoc(t, rt, clock, monsters, c)
+		rocAt = clock.now
+		if fall {
+			monsters.alive[monsters.gidOf(rocCodename)] = false
+		}
+		for end := rocAt.Add(2 * time.Hour); clock.now.Before(end); {
+			clock.now = clock.now.Add(time.Second)
+			rocTick(rt, clock)
+		}
+		for i := range calls {
+			if calls[i].gid != monsters.gidOf(rocCodename) {
+				t.Fatalf("cast on %d, not the Roc", calls[i].gid)
+			}
+		}
+		return calls, heard
+	}
+	calls, heard := run(false, true)
+	want := fmt.Sprint([]call{{"begin", 0, time.Hour}, {"land", 0, time.Hour + 3*time.Second}})
+	for i := range calls {
+		calls[i].gid = 0
+	}
+	if fmt.Sprint(calls) != want || heard != 2 {
+		t.Fatalf("calls %v (the layer heard %d)\nwant  %v (2)", calls, heard, want)
+	}
+	if calls, _ := run(true, true); len(calls) != 0 {
+		t.Fatalf("a fallen Roc enraged: %v", calls)
+	}
+	if calls, _ := run(false, false); len(calls) != 1 {
+		t.Fatalf("an unstaged row was retried: %v", calls)
+	}
+}
+
+/*
+================
 TestRocSpiritsKeepThreeUp
 
 The Roc's 5-minute spirit timer: nothing before the first run, the first

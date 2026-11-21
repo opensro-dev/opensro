@@ -114,11 +114,8 @@ the owner used (its PSU1 skill, installed on the pet with the buff modifiers).
 ================
 */
 func (rt *Runtime) petGrowthPercent(c *enterworld.Character, nowMs int64) float32 {
-	skills, ok := rt.deps.SkillData().(interface {
-		SkillByCodename(string) (enterworld.SkillRow, bool)
-	})
 	refs := rt.deps.ItemReferences()
-	if !ok || refs == nil {
+	if refs == nil {
 		return 0
 	}
 	percent := float32(0)
@@ -130,7 +127,7 @@ func (rt *Runtime) petGrowthPercent(c *enterworld.Character, nowMs int64) float3
 		if !found || item == nil {
 			continue
 		}
-		if skill, cast := skills.SkillByCodename(petPotionSkill(item)); cast {
+		if skill, cast := rt.skillByCodename(petPotionSkill(item)); cast {
 			percent += float32(skill.ExpIncrease[1])
 		}
 	}

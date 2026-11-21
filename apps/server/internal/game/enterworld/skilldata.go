@@ -211,6 +211,8 @@ type SkillRow struct {
 	Duplicate         SkillDuplicate
 	DamageCancel      SkillDamageCancel
 	MonsterSelfEffect SkillMonsterSelfEffect
+	// MonsterStackingEffect is an event-cast persistent mom buff (skillmonsterself.go).
+	MonsterStackingEffect SkillMonsterStackingEffect
 	// HostileDebuff is an enemy-targeted buff instance (skillhostiledebuff.go).
 	HostileDebuff        SkillHostileDebuff
 	Consumption          SkillConsumption
@@ -864,6 +866,7 @@ func (t *TextdataSkills) parse(shards []string) {
 			parseSkillMonsterCapture(fields, &row)
 			parseSkillDuplicate(fields, &row)
 			parseSkillMonsterSelfEffect(fields, &row)
+			parseSkillMonsterStackingEffect(fields, &row)
 			if row.Codename != "" {
 				if firstID, dup := t.byCodename[row.Codename]; dup && firstID != row.ID {
 					log.Warnf("bootstrap: skilldata codename %q is ambiguous (ids %d and %d); keeping the first - codename lookups must not seed off ambiguous rows", row.Codename, firstID, row.ID)
