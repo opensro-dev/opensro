@@ -3,12 +3,11 @@
 
 bag-tab-drop.ts - where an item dropped on a bag page's tab lands
 
-Port-only, not native (Experimental "Drop on bag tabs", the owner's choice
-on 2026-10-15, on by default). The original's page tabs answer a button
+Port-only, not native (the owner's choice on 2026-10-15; the default with
+no row since 2026-11-21). The original's page tabs answer a button
 press only (5373F0 routes 0x201), so a drag released over the other page's
 tab does nothing; moving an item between pages takes a click on the item,
-a click on the tab and a click on a free slot. With the row on, the drop
-asks for the target page's first free slot, through the same move request
+a click on the tab and a click on a free slot. Here the drop asks for the target page's first free slot, through the same move request
 a drop on that slot sends.
 
 ===========================================================================

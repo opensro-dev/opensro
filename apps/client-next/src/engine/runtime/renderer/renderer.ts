@@ -227,16 +227,6 @@ export function createRenderer(
 		},
 		/*
 		================
-		sharedActorRoom
-
-		Read by the character presenter each frame.
-		================
-		*/
-		sharedActorRoom() {
-			return experimental.sharedActorRoom;
-		},
-		/*
-		================
 		vHidesCompanions
 
 		Read by the character presenter when V is held.
@@ -247,35 +237,17 @@ export function createRenderer(
 		},
 		/*
 		================
-		silentWingFlight
-
-		Read by the character presenter as it advances an actor's sounds.
-		================
-		*/
-		silentWingFlight() {
-			return experimental.silentWingFlight;
-		},
-		/*
-		================
-		dungeonCharacterPvs
-		================
-		*/
-		dungeonCharacterPvs() {
-			return experimental.dungeonCharacterPvs;
-		},
-		/*
-		================
 		dungeonBlockHides
 
-		Port-only, not native (Experimental "Dungeon character PVS", on by
-		default): a character whose navmesh room the local player's room does
+		Port-only, not native (owner 2026-11-21: the default, no row): a
+		character whose navmesh room the local player's room does
 		not draw is neither drawn nor picked, as that room's scenery is not
 		drawn. `activeBlock` is the same frame's navigation block, so a
 		character and its room switch on the frame the viewer crosses.
 		================
 		*/
 		dungeonBlockHides( block, activeBlock ) {
-			return experimental.dungeonCharacterPvs && world.blockHides( block, activeBlock );
+			return world.blockHides( block, activeBlock );
 		},
 		/*
 		================

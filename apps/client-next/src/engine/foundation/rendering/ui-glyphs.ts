@@ -35,7 +35,7 @@ export interface GlyphStyle {
 	hAlign?: number;
 	vAlign?: number;
 	overflow?: "ellipsis" | "clip" | "avoid-overlap";
-	// A label rather than a value in its field: under "Fit window labels"
+	// A label rather than a value in its field: by the label fitting
 	// its line may leave its box (resolveTextOverlaps).
 	label?: boolean;
 }
@@ -273,7 +273,7 @@ export const NARROW_FONT_INDEX = 1;
 ================
 narrowRun
 
-Port-only, not native (the Experimental "Fit window labels"): a face 0
+Port-only, not native (the former Experimental "Fit window labels"): a face 0
 text too wide for its box on one line in NARROW_FONT_INDEX, when that
 fits the box. Undefined for any other face or a line still too wide.
 resolveTextOverlaps tries it after a label's slide.
@@ -305,7 +305,7 @@ const LINE_EXTRA_HEIGHT = 5;
 ================
 wrappedRun
 
-Port-only, not native (the Experimental "Fit window labels"): a text too
+Port-only, not native (the former Experimental "Fit window labels"): a text too
 wide for its box on two lines, each inside the box's columns, split at
 the space that keeps the wider line narrowest. The pair stacks at its ink
 height plus WRAP_LEADING and its ink is centred on the box; each line
@@ -469,9 +469,9 @@ horizontally disjoint text box: overlapping boxes are intentional layers,
 not neighbouring columns. Anchored labels neither fit nor block. Resolve
 once per complete UI projection; layouts are dropped from the result.
 
-Port-only, not native: with fit (the Experimental "Fit window labels",
-on by default; off keeps the shortened run as the only repair) a
-colliding run is kept whole where it can be, in this order: its two-line
+Port-only, not native (the former Experimental "Fit window labels";
+owner 2026-11-21: the default, no row): the original's only repair is the shortened run. Here
+a colliding run is kept whole where it can be, in this order: its two-line
 wrap inside its box (clear of every text box but its layers, the rows
 above and below too), and for a label (GlyphStyle label; a value keeps
 to its field) its line slid sideways (still spanning its box, so
@@ -482,7 +482,7 @@ neighbour leaves its box's near side empty). Only a run none of them
 places is shortened (#3674).
 ================
 */
-export function resolveTextOverlaps( quads: readonly UiQuad[], fit = false ): UiQuad[] {
+export function resolveTextOverlaps( quads: readonly UiQuad[] ): UiQuad[] {
 	const boxes: UiQuad[] = [];
 	for ( const q of quads ) {
 		if ( !q.textLayout ) continue;
@@ -501,10 +501,6 @@ export function resolveTextOverlaps( quads: readonly UiQuad[], fit = false ): Ui
 		} );
 		const enters = ( run: UiQuad ) => neighbors.some( neighbor => runInkEnters( run, neighbor.textLayout!.box ) );
 		if ( !enters( q ) ) continue;
-		if ( !fit ) {
-			placed.set( layout, layout.fitted );
-			continue;
-		}
 		// The wrap reaches above and below its box, so it is held off the
 		// rows over and under it too, not only the columns beside it;
 		// a box over the label's own is a layer, as above.
@@ -551,7 +547,7 @@ const FIT_INK_GAP = 2;
 ================
 fittedPlacement
 
-The run a colliding text is drawn with under "Fit window labels"
+The run a colliding text is drawn with by the label fitting
 (resolveTextOverlaps): its wrap, its slid line, its line in the narrow
 face, its whole line or, last, its shortened run (null when no glyph of
 that fits). A value tries only its wrap and its narrow line.

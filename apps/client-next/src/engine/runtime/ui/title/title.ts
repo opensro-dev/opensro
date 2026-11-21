@@ -40,9 +40,7 @@ createTitleUi
 */
 export function createTitleUi(
 	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
-	base: string,
-	// The Experimental "Fit window labels" row; off draws the original.
-	fitLabels: () => boolean = () => false
+	base: string
 ) {
 	const resources = createTitleResources( assets, base );
 	let listAlpha = 0, lastTime: number | null = null;
@@ -378,7 +376,7 @@ export function createTitleUi(
 						data.text,
 						state.creation,
 						input,
-						{ w, h, interactive: phase === "customize", fitLabels: fitLabels() }
+						{ w, h, interactive: phase === "customize" }
 					);
 					quads.push( ...output.quads );
 					controls.push( ...output.controls );

@@ -1192,7 +1192,7 @@ const STALL_TAB_X = 0x1c, STALL_TAB_Y = 0x56, STALL_TAB_W = 0x50, STALL_TAB_H = 
 // The buyback strip's art (com_redeem_window) starts this far left of its
 // first slot; a fitted "Repurchase" ends this far before the art.
 const BUYBACK_STRIP_INSET = 4, BUYBACK_LABEL_GAP = 2;
-// Port-only, not native ("Fit window labels"): the merchant's buyback
+// Port-only, not native (label fitting): the merchant's buyback
 // label where no face fits "Repurchase" beside the strip (#3728).
 const BUYBACK_SHORT_LABEL = "Buy back";
 // A fitted Item Mall bag count starts this far right of its bag icon and
@@ -1793,7 +1793,7 @@ export function createUi( ports: UiPorts ) {
 	// keeps it when the current room has none (865690 returns null).
 	let minimapRoomName = "";
 	let abilityDetails = false, mapWorldLoading = false;
-	const title = createTitleUi( assets, base, () => experimental.state().saved.fitWindowLabels );
+	const title = createTitleUi( assets, base );
 	let serverList = false,
 		serverDraft = "",
 		serverOffset = 0,
@@ -4775,15 +4775,12 @@ export function createUi( ports: UiPorts ) {
 			// 5E4C30 slot 2 → 703DD0 sends the ban on the click. With no member
 			// selected nothing happens; the worker refuses the master or oneself
 			// (guildBanRefused) with its 0x10 notice, before any question.
-			// Port-only, not native: the Experimental "Confirm guild ban" row
-			// (on by default, the owner's choice 2026-10-15) asks first.
+			// Port-only, not native (owner 2026-10-15; the default with no row
+			// since 2026-11-21): Withdraw asks first.
 			const social = view.gameplay?.social;
 			const member = social?.guild?.members.find( m => m.id === socialMember );
 			if ( !member ) return;
-			if (
-				experimental.state().saved.confirmGuildBan &&
-				!guildBanRefused( social?.guild ?? null, social?.localName ?? "", member.name )
-			) confirmSocial = id;
+			if ( !guildBanRefused( social?.guild ?? null, social?.localName ?? "", member.name ) ) confirmSocial = id;
 			else sendGameplay( { kind: "guild-kick", name: member.name } );
 		} else if ( [ "party-kick", "guild-leave", "guild-dissolve" ].includes( id ) ) {
 			// The question box below (socialQuestion) asks first.
@@ -8741,12 +8738,10 @@ export function createUi( ports: UiPorts ) {
 						dirty = true;
 						return;
 					}
-					// Port-only (Experimental "Drop on bag tabs"): a drop on the other
-					// page's tab sends the item to that page's first free slot.
-					if (
-						item && target?.id.startsWith( "inventory-page:" ) && !target.disabled &&
-						experimental.state().saved.dropOnBagTab
-					) {
+					// Port-only, not native (owner 2026-11-21: the default, no row): a
+					// drop on the other page's tab sends the item to that page's first
+					// free slot; the original's tabs answer a press only.
+					if ( item && target?.id.startsWith( "inventory-page:" ) && !target.disabled ) {
 						const page = Number( target.id.slice( 15 ) ),
 							destination = bagTabDropSlot(
 								game.inventory,
@@ -11035,9 +11030,7 @@ export function createUi( ports: UiPorts ) {
 				hover,
 				focus,
 				copy: hudCopy,
-				buttonFamily: hud.buttonFamily,
-				fitWindowLabels: () => experimental.state().saved.fitWindowLabels,
-				greyDisabledTabs: () => experimental.state().saved.greyDisabledTabs
+				buttonFamily: hud.buttonFamily
 			};
 			const itemSlots: ItemSlotContext = {
 				gameplay: next.gameplay,
@@ -17061,7 +17054,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							ox,
 							oy,
 							value: entry.condition,
-							clipToControl: experimental.state().saved.fitWindowLabels ? true : "clip",
+							clipToControl: true,
 							label: true
 						} );
 					}
@@ -19072,7 +19065,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								const value = slot[node.id];
 								if ( value === undefined ) continue;
 								// The title of level ("Apprentice Merchant" in 82 pixels)
-								// is fitted as a label under "Fit window labels" rather
+								// is fitted as a label by the label fitting rather
 								// than cut to "Apprentice M...".
 								frameDraw.authoredText( drawFrame, {
 									node,
@@ -19559,10 +19552,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// Confirm button covered rows 2 and 3).
 					if ( combo && specialtyCombo && buying ) {
 						const r = authoredRect( combo, px, py ), height = inputs.rows * 18;
-						// Port-only (Experimental "Fit window labels"): a list that would
-						// leave the window opens upward from the box.
-						const up = experimental.state().saved.fitWindowLabels &&
-							r[1] + r[3] + height > py + root.rect[3] && r[1] - height >= py;
+						// Port-only, not native (owner 2026-11-21: the default, no row): a list that
+						// would leave the window opens upward from the box.
+						const up = r[1] + r[3] + height > py + root.rect[3] && r[1] - height >= py;
 						const list: UiRect = [ r[0], up ? r[1] - height : r[1] + r[3], r[2], height ];
 						rect( list, [ 0, 0, 0, 1 ] );
 						blocks.push( list );
@@ -23417,14 +23409,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				const speakers = next.entities.filter( e => e.kind === "local-player" || e.kind === "player" );
 				bugReport?.chat( game?.chat?.lines ?? [] );
 				for ( const [gid, row] of speech.step( game?.chat?.lines ?? [], speakers, now, chatLinksOn() ) ) {
-					// Port-only, not native (Experimental "Fit window labels", off is
-					// the original): the board breaks between words. Retail breaks at
+					// Port-only, not native (owner 2026-11-21: the default, no row): the
+					// board breaks between words. Retail breaks at
 					// whichever glyph passes the width (CGFontTexture_UpdateExtent
 					// 7824F0), splitting words ("human r" / "eview").
 					const measure = ( value: string ) => text.run( value ).width,
-						lines = experimental.state().saved.fitWindowLabels ?
-							textLines( row.text, SPEECH_BOARD_WIDTH, measure ) :
-							textBoardLines( row.text, SPEECH_BOARD_WIDTH, measure ),
+						lines = textLines( row.text, SPEECH_BOARD_WIDTH, measure ),
 						lineHeight = text.boardHeight(),
 						height = lines.length * lineHeight,
 						width = Math.max( 0, ...lines.map( value => text.run( value ).width ) ),
@@ -23583,8 +23573,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						hover,
 						pressed,
 						filter: { name: academyName, grade: academyGrade, kind: academyKind, open: academyCombo },
-						level,
-						fitLabels: experimental.state().saved.fitWindowLabels
+						level
 					} );
 					quads.push( ...projected.quads );
 					paths.push( ...projected.paths );
@@ -27917,10 +27906,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						quads.length = mallAdmission[0];
 						controls = drawFrame.controls = [];
 					} else {
-						const painted = resolveTextOverlaps(
-							quads.slice( mallAdmission[0] ),
-							experimental.state().saved.fitWindowLabels
-						);
+						const painted = resolveTextOverlaps( quads.slice( mallAdmission[0] ) );
 						quads.length = mallAdmission[0];
 						quads.push( ...painted );
 					}
@@ -28221,7 +28207,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								spacesRight = ex + bar.rect[0] + bar.rect[2] - MALL_BAR_BEVEL;
 							// GDR_ITEM_MALL_TRUNK_EXP_NUM right-aligns "32 spaces" (58
 							// pixels) in 31, over the bag icon on its left. Port-only, not
-							// native (Experimental "Fit window labels"): the count is laid
+							// native (former Experimental "Fit window labels"): the count is laid
 							// between the icon and the bar art's bevel, on the icon's
 							// height ("32" over "spaces" in the narrow face).
 							if (
@@ -29295,8 +29281,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						tooltip,
 						control.rect,
 						full,
-						( s, strong ) => text.run( s, strong ? 2 : 0 ).width,
-						experimental.state().saved.fitWindowLabels
+						( s, strong ) => text.run( s, strong ? 2 : 0 ).width
 					);
 					paths.push( ...bubble.paths );
 					if ( bubble.paths.every( resources.has ) ) {
@@ -29315,8 +29300,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							sideTooltip,
 							bubble.quads[0]!.rect,
 							full,
-							( s, strong ) => text.run( s, strong ? 2 : 0 ).width,
-							experimental.state().saved.fitWindowLabels
+							( s, strong ) => text.run( s, strong ? 2 : 0 ).width
 						);
 						paths.push( ...side.paths );
 						if ( side.paths.every( resources.has ) ) {
@@ -29632,7 +29616,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			gauges.end();
 			// Text runs travel to the renderer whole: the GPU packer writes one record
 			// per glyph straight into its buffer (text-run.ts, device/ui.ts).
-			quads = drawFrame.quads = resolveTextOverlaps( quads, experimental.state().saved.fitWindowLabels );
+			quads = drawFrame.quads = resolveTextOverlaps( quads );
 			probe?.detailEnd( "ui-finalize" );
 			probe?.detailBegin( "ui-compare" );
 			// Semantics are returned only when they change (uiPublication): a

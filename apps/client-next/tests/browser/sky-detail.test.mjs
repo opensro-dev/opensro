@@ -58,9 +58,7 @@ test(
 					skyDetail: false,
 					smoothCamera: false,
 					enchantSparks: false,
-					sharedActorRoom: false,
-					vHidesCompanions: false,
-					dungeonCharacterPvs: false
+					vHidesCompanions: false
 				};
 				let deadline = performance.now() + 15000;
 				while ( renderer.phase() === "starting" && performance.now() < deadline ) {
