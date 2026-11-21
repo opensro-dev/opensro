@@ -16,7 +16,6 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/testsupport/gamedatatest"
 )
 
 // The race switch fixture's bag slots.
@@ -245,16 +244,9 @@ Switches one shipped item with the last shipped scroll of a kind.
 */
 func shippedRaceSwitch(t *testing.T, kind commerce.EquipSwitchKind, from, want string) {
 	t.Helper()
-	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
-	var codename string
-	for _, row := range commerce.EquipSwitchScrolls {
-		if row.Kind == kind {
-			codename = row.Codename
-		}
-	}
-	scroll, ok := items.ItemRefByCodename(codename)
+	items, scroll := shippedSwitchScroll(t, kind)
 	item, itemOK := items.ItemRefByCodename(from)
-	if !ok || !itemOK {
+	if !itemOK {
 		t.Fatalf("shipped scroll or %s missing", from)
 	}
 	c := testCharacter()

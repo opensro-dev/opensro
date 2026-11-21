@@ -6,7 +6,7 @@ raceswitch.go - the armor and accessory switch scrolls: an item changes race
 Port-only, not native (owner, 2026-11-21). The scrolls and their listing
 live in commerce/equipswitch.go; this file serves their use, each behind
 its own flag (SRO_ARMOR_SWITCH_SCROLL, SRO_ACCESSORY_SWITCH_SCROLL). Off
-is native: the donor item is an item no family serves.
+is native: the scroll's item is not in the data and no family serves it.
 
 The browser client arms the item-target cursor when a scroll is used, the
 player clicks an item in the bag and confirms. The use request is 0x75BD

@@ -16,7 +16,6 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/testsupport/gamedatatest"
 )
 
 // The fixture's bag slots.
@@ -191,10 +190,9 @@ Switches one shipped weapon with the last shipped scroll.
 */
 func shippedWeaponSwitch(t *testing.T, from string, kind uint8, want string) {
 	t.Helper()
-	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
-	scroll, ok := items.ItemRefByCodename(commerce.EquipSwitchScrolls[0].Codename)
+	items, scroll := shippedSwitchScroll(t, commerce.SwitchWeapon)
 	sword, swordOK := items.ItemRefByCodename(from)
-	if !ok || !swordOK {
+	if !swordOK {
 		t.Fatalf("shipped scroll or %s missing", from)
 	}
 	c := testCharacter()

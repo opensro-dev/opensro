@@ -1,11 +1,10 @@
 /*
 ===========================================================================
 
-weaponswitch_test.go - the weapon switch scroll's listing (port-only)
+equipswitch_test.go - the equipment switch scrolls' listing (port-only)
 
-On, the alchemy shop's elixirs tab sells every scroll row at its price
-after the elixirs and the powder, and the mall's scroll tab at its silk;
-off, the shops are today's.
+On, the mall's scroll tab sells each scroll at its silk, and never the
+alchemy shop; off, the shops are today's.
 
 ===========================================================================
 */
@@ -36,7 +35,7 @@ func TestWeaponSwitchListsOnlyInMall(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, good := range goods {
-		if good.Codename == "ITEM_MALL_REINFORCE_WEAPON_INC_2_SCROLL" {
+		if good.Codename == "ITEM_MALL_WEAPON_SWITCH_SCROLL" {
 			t.Fatalf("the alchemy shop lists the scroll: %+v", good)
 		}
 	}
@@ -76,7 +75,17 @@ func TestWeaponSwitchScrollListsInTheMall(t *testing.T) {
 	tier.Long(t, "the shipped mall data plus the weapon switch package")
 	scroll := EquipSwitchScrolls[0]
 	dir := gamedatatest.TextdataDir(t)
-	items := enterworld.NewTextdataItems(dir)
+	shipped := enterworld.NewTextdataItems(dir)
+	// The native test data carries no variant rows: the scroll's item is
+	// its donor's row under its own codename, as the variant import
+	// stages it (scripts/switch_scroll_import.py).
+	donor, ok := shipped.ItemRefByCodename("ITEM_MALL_REINFORCE_WEAPON_INC_2_SCROLL")
+	if !ok {
+		t.Fatal("shipped donor missing")
+	}
+	item := *donor
+	item.Codename, item.RefObjID = scroll.Codename, 290001
+	items := oneMoreItem{ItemRefSource: shipped, item: &item}
 	catalog, err := LoadMall(dir, EquipSwitchMallGoods(map[EquipSwitchKind]bool{SwitchWeapon: true}), false, items)
 	if err != nil {
 		t.Fatal(err)
@@ -98,6 +107,42 @@ func TestWeaponSwitchScrollListsInTheMall(t *testing.T) {
 
 /*
 ================
+oneMoreItem
+
+An item table plus one item.
+================
+*/
+type oneMoreItem struct {
+	enterworld.ItemRefSource
+	item *enterworld.ItemRef
+}
+
+/*
+================
+oneMoreItem.ItemRefByCodename
+================
+*/
+func (s oneMoreItem) ItemRefByCodename(codename string) (*enterworld.ItemRef, bool) {
+	if codename == s.item.Codename {
+		return s.item, true
+	}
+	return s.ItemRefSource.ItemRefByCodename(codename)
+}
+
+/*
+================
+oneMoreItem.ItemRefByID
+================
+*/
+func (s oneMoreItem) ItemRefByID(id uint32) (*enterworld.ItemRef, bool) {
+	if id == s.item.RefObjID {
+		return s.item, true
+	}
+	return s.ItemRefSource.ItemRefByID(id)
+}
+
+/*
+================
 TestEquipSwitchMallGoodsFollowFlags
 
 Each scroll lists only while its own flag is on.
@@ -106,12 +151,12 @@ Each scroll lists only while its own flag is on.
 func TestEquipSwitchMallGoodsFollowFlags(t *testing.T) {
 	goods := EquipSwitchMallGoods(map[EquipSwitchKind]bool{SwitchArmor: true})
 	want := MallExtraGood{Tab: "MALL_CONSUME_SCROLL", Package: "PACKAGE_ITEM_MALL_ARMOR_SWITCH",
-		Item: "ITEM_MALL_REINFORCE_ARMOR_INC_1_SCROLL", Silk: 990}
+		Item: "ITEM_MALL_ARMOR_SWITCH_SCROLL", Silk: 990}
 	if len(goods) != 1 || goods[0] != want {
 		t.Fatalf("armor-only goods %+v, want %+v", goods, want)
 	}
 	all := EquipSwitchMallGoods(map[EquipSwitchKind]bool{SwitchWeapon: true, SwitchArmor: true, SwitchAccessory: true})
-	if len(all) != 3 || all[2].Item != "ITEM_MALL_REINFORCE_ACCESSARY_INC_1_SCROLL" || all[2].Silk != 990 ||
+	if len(all) != 3 || all[2].Item != "ITEM_MALL_ACCESSORY_SWITCH_SCROLL" || all[2].Silk != 990 ||
 		all[0].Silk != 1490 {
 		t.Fatalf("all goods %+v", all)
 	}
