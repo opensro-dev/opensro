@@ -323,17 +323,8 @@ func newGameplayPlane(
 		})
 		log.Infof("mall: name change scroll listed at %d silk (%s, port-only, not native)", action.NameChangePriceSilk, action.EnvNameChangeScroll)
 	}
-	// The equipment switch scrolls (port-only, not native), one flag
-	// each: the action runtime serves a scroll's use and the mall lists
-	// it only while its own flag is on (commerce/equipswitch.go).
-	items.EquipSwitch = map[commerce.EquipSwitchKind]bool{}
-	for _, scroll := range commerce.EquipSwitchScrolls {
-		if commerce.EquipSwitchEnabledFromEnv(scroll) {
-			items.EquipSwitch[scroll.Kind] = true
-			log.Infof("mall: %s listed at %d silk (%s, port-only, not native)", scroll.Codename, scroll.Silk, scroll.Env)
-		}
-	}
-	mallExtra = append(mallExtra, commerce.EquipSwitchMallGoods(items.EquipSwitch)...)
+	// The equipment switch scrolls (port-only, wiring_equipswitch.go).
+	mallExtra = append(mallExtra, applyEquipSwitchScrolls(items)...)
 	// SRO_MALL_CATEGORIES (port-only, not native, #3257): the later
 	// mall's categories, HOT shop and goods badges; "off" (the
 	// default) is the shipped mall (commerce/mallcategories.go).
