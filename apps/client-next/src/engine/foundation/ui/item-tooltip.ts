@@ -22,6 +22,34 @@ import { itemTooltipStone } from "./item-tooltip-stone";
 import { itemTooltipSetName } from "./item-tooltip-set";
 import type { EquipmentSet } from "../gameplay/equipment-sets";
 import { tooltipFormat, type TooltipRow } from "./tooltip-rows";
+/*
+================
+weaponTypeSymbol
+
+The text symbol naming a weapon kind (its fourth TypeID), or undefined.
+The tooltip's weapon type row and the weapon switch box share it.
+================
+*/
+export function weaponTypeSymbol( kind: number ): string | undefined {
+	return ({
+		2: "PARAM_WEAPON_SWORD",
+		3: "PARAM_WEAPON_BLADE",
+		4: "PARAM_WEAPON_SPEAR",
+		5: "PARAM_WEAPON_TBLADE",
+		6: "PARAM_WEAPON_BOW",
+		7: "UIO_NEWCHAR_STT_EU_ONEHANDSWORD",
+		8: "UIO_NEWCHAR_STT_EU_TWOHANDSWORD",
+		9: "UIO_NEWCHAR_STT_EU_DUELAXE",
+		10: "UIO_NEWCHAR_STT_EU_DARKSTAFF",
+		11: "UIO_NEWCHAR_STT_EU_TWOHANDSTAFF",
+		12: "UIO_NEWCHAR_STT_EU_CROSSBOW",
+		13: "UIO_NEWCHAR_STT_EU_DAGGER",
+		14: "UIO_NEWCHAR_STT_EU_HARP",
+		15: "UIO_NEWCHAR_STT_EU_ONEHANDSTAFF",
+		16: "UIIT_STT_FORT_ETC_SIEGEWEAPON"
+	} as Record<number, string>)[kind];
+}
+
 // 56CDA0/56CB80 family dispatch, 564230 name, 558CB0 degree and
 // 568500 requirements. This takes an item instance, never just a ref id.
 /*
@@ -149,23 +177,7 @@ export function itemTooltip(
 				add( `${text( "UIIT_STT_ARMOR_POSITION" )}: ${text( "UIIT_STT_ARMOR_POSITION_" + position )}` );
 			}
 		} else if ( t === 6 ) {
-			const symbol = ({
-				2: "PARAM_WEAPON_SWORD",
-				3: "PARAM_WEAPON_BLADE",
-				4: "PARAM_WEAPON_SPEAR",
-				5: "PARAM_WEAPON_TBLADE",
-				6: "PARAM_WEAPON_BOW",
-				7: "UIO_NEWCHAR_STT_EU_ONEHANDSWORD",
-				8: "UIO_NEWCHAR_STT_EU_TWOHANDSWORD",
-				9: "UIO_NEWCHAR_STT_EU_DUELAXE",
-				10: "UIO_NEWCHAR_STT_EU_DARKSTAFF",
-				11: "UIO_NEWCHAR_STT_EU_TWOHANDSTAFF",
-				12: "UIO_NEWCHAR_STT_EU_CROSSBOW",
-				13: "UIO_NEWCHAR_STT_EU_DAGGER",
-				14: "UIO_NEWCHAR_STT_EU_HARP",
-				15: "UIO_NEWCHAR_STT_EU_ONEHANDSTAFF",
-				16: "UIIT_STT_FORT_ETC_SIEGEWEAPON"
-			} as Record<number, string>)[k];
+			const symbol = weaponTypeSymbol( k );
 			if ( symbol ) add( `${text( "UIIT_STT_WEAPON_TYPE" )}: ${text( symbol )}` );
 		} else if ( t === 4 ) add( text( "UIIT_STT_SHIELD" ) );
 		else if ( t === 5 || t === 12 ) {

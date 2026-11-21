@@ -128,6 +128,35 @@ def gate_building_taken(buildings_raw, text_root, character_shard, allocated):
 
 
 # ================
+# building_identities
+#
+# {source id: variant id} for gate building rows (id in column 1, code in
+# column 2), the one numbering rule of every gate import: a code the pin
+# holds takes its released id, since a player's appointed rebirth gate
+# names it by id (#4024); a source id no object holds and under the
+# server's band keeps itself; any other takes a free id under the limit.
+# taken holds the pin's ids, a code's own among them, so the pinned rows
+# are settled first and never read their own id as a clash.
+# ================
+def building_identities(rows, taken):
+	pinned = published_ids.published(published_ids.OBJECTS)
+	ids = {row[1]: str(pinned[row[2]]) for row in rows if len(row) > 2 and row[2] in pinned}
+	own = {int(identity) for identity in ids.values()}
+	held = set(taken) | own
+	moving = []
+	for row in rows:
+		if row[1] in ids:
+			continue
+		if int(row[1]) in held or int(row[1]) >= BUILDING_ID_LIMIT:
+			moving.append(row[1])
+		else:
+			ids[row[1]] = row[1]
+	fresh = free_building_ids(held | {int(row[1]) for row in rows}, len(moving))
+	ids.update({identity: str(new) for identity, new in zip(moving, fresh)})
+	return ids
+
+
+# ================
 # gate_buildings
 #
 # A gate building is an object: its id shares one space with every item
@@ -140,17 +169,12 @@ def gate_building_taken(buildings_raw, text_root, character_shard, allocated):
 # name a building by code, never by id, so the building is free to move.
 # ================
 def gate_buildings(buildings, taken):
-	clashing = [row for row in buildings if int(row[1]) in taken or int(row[1]) >= BUILDING_ID_LIMIT]
-	if not clashing:
-		return {}
-	occupied = set(taken) | {int(row[1]) for row in buildings}
-	# Not published_ids' next id: that one is above every object, past
-	# the server's building band (BUILDING_ID_LIMIT).
-	fresh = free_building_ids(occupied, len(clashing))
+	ids = building_identities(buildings, taken)
 	moved = {}
-	for row, identity in zip(clashing, fresh):
-		moved[row[1]] = str(identity)
-		row[1] = moved[row[1]]
+	for row in buildings:
+		if ids[row[1]] != row[1]:
+			moved[row[1]] = ids[row[1]]
+			row[1] = moved[row[1]]
 	return moved
 
 

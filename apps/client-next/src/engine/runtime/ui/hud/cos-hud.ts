@@ -12,11 +12,23 @@ the executor raises (6A2350 case 5), and the item-target cursor A6 that
 Grass of Life, the clock and the armour gender tool arm on right-button use.
 The UI draws from it every frame.
 
+Port-only, not native: the weapon switch scroll (weapon-switch.ts) arms
+the same cursor; its clicked weapon opens a box instead of the Yes/No
+confirmation that asks the race, then the kind of that race, and the
+picked kind completes the use.
+
 ===========================================================================
 */
 import type { GameplayCommand, InventoryItem, CosRecord } from "@/engine/contracts/gameplay";
 import { cosClass } from "@/engine/foundation/ui/cos-command";
 import { companionItemTargetCommand } from "@/engine/foundation/gameplay/cos-item-use";
+import {
+	isWeaponSwitchScroll,
+	weaponKind,
+	weaponSwitchKinds,
+	WEAPON_RACES
+} from "@/engine/foundation/gameplay/weapon-switch";
+import { raceSwitchAccepts, raceSwitchKindOf } from "@/engine/foundation/gameplay/race-switch";
 
 const ITEM_TARGET_CURSOR = 0xa6;
 
@@ -28,6 +40,29 @@ createCosHud
 export function createCosHud() {
 	let selected = 0, open = true, cleanConfirm: number | null = null;
 	let source: InventoryItem | null = null, targetUse: GameplayCommand | null = null;
+	// The weapon switch box (port-only): the chosen weapon's type word and
+	// the race picked in its first step, null until then.
+	let switchType = 0, switchRace: number | null = null;
+	/*
+	================
+	switchKinds
+
+	The kinds the box's second step offers, empty before a race is picked.
+	================
+	*/
+	function switchKinds(): readonly number[] {
+		if ( switchType === 0 || !targetUse || switchRace === null ) return [];
+		return weaponSwitchKinds( switchType, switchRace );
+	}
+	/*
+	================
+	resetSwitch
+	================
+	*/
+	function resetSwitch() {
+		switchType = 0;
+		switchRace = null;
+	}
 	return {
 		/*
 		================
@@ -41,6 +76,7 @@ export function createCosHud() {
 		armItemTarget( item: InventoryItem ) {
 			source = item;
 			targetUse = null;
+			resetSwitch();
 		},
 		/*
 		================
@@ -64,8 +100,85 @@ export function createCosHud() {
 		*/
 		chooseItemTarget( item: InventoryItem | undefined ) {
 			if ( !source || !item || targetUse ) return false;
+			if ( isWeaponSwitchScroll( source.codename ) ) {
+				// Port-only: a bag weapon opens the race step; anything else
+				// leaves the cursor armed for another click.
+				if ( item.slot < 13 || weaponKind( item.typeFlags ) === 0 ) return false;
+				switchType = item.typeFlags;
+				switchRace = null;
+				targetUse = { kind: "item-use", slot: source.slot, targetSlot: item.slot };
+				return true;
+			}
+			const raceKind = raceSwitchKindOf( source.codename );
+			if ( raceKind ) {
+				// Port-only: a bag item the race switch scroll takes opens
+				// the Yes/No confirmation; anything else leaves the cursor
+				// armed for another click.
+				if ( item.slot < 13 || !raceSwitchAccepts( raceKind, item.typeFlags ) ) return false;
+				targetUse = { kind: "item-use", slot: source.slot, targetSlot: item.slot };
+				return true;
+			}
 			targetUse = companionItemTargetCommand( source, item );
 			return targetUse !== null;
+		},
+		/*
+		================
+		weaponSwitchRaces
+
+		The races the weapon switch box's first step offers, empty when the
+		box is not up or a race is already picked.
+		================
+		*/
+		weaponSwitchRaces(): readonly number[] {
+			return switchType !== 0 && targetUse && switchRace === null ? WEAPON_RACES : [];
+		},
+		/*
+		================
+		chooseWeaponRace
+
+		The first step's pick; false for a race the box does not offer.
+		================
+		*/
+		chooseWeaponRace( race: number ): boolean {
+			if ( switchType === 0 || !targetUse || switchRace !== null || !WEAPON_RACES.includes( race ) ) return false;
+			switchRace = race;
+			return true;
+		},
+		/*
+		================
+		backWeaponRace
+
+		The second step's Back: the race step again, the weapon kept.
+		================
+		*/
+		backWeaponRace(): boolean {
+			if ( switchType === 0 || !targetUse || switchRace === null ) return false;
+			switchRace = null;
+			return true;
+		},
+		/*
+		================
+		weaponSwitchKinds
+		================
+		*/
+		weaponSwitchKinds(): readonly number[] {
+			return switchKinds();
+		},
+		/*
+		================
+		chooseWeaponKind
+
+		The second step's pick: the use with its kind, or null for a kind the
+		box does not offer.
+		================
+		*/
+		chooseWeaponKind( kind: number ): GameplayCommand | null {
+			if ( !targetUse || targetUse.kind !== "item-use" || !switchKinds().includes( kind ) ) return null;
+			const command: GameplayCommand = { ...targetUse, weaponKind: kind };
+			source = null;
+			targetUse = null;
+			resetSwitch();
+			return command;
 		},
 		/*
 		================
@@ -83,8 +196,10 @@ export function createCosHud() {
 		boxes ever publish the same control.
 		================
 		*/
-		targetUseBox(): "cos-revive" | "cos-renew" | "gender-change" | null {
+		targetUseBox(): "cos-revive" | "cos-renew" | "gender-change" | "weapon-switch" | "race-switch" | null {
 			if ( !targetUse || targetUse.kind !== "item-use" ) return null;
+			if ( source && isWeaponSwitchScroll( source.codename ) ) return "weapon-switch";
+			if ( source && raceSwitchKindOf( source.codename ) ) return "race-switch";
 			if ( targetUse.targetSlot !== undefined ) return "gender-change";
 			return targetUse.revivalSlot !== undefined ? "cos-revive" : "cos-renew";
 		},
@@ -97,6 +212,7 @@ export function createCosHud() {
 			const command = targetUse;
 			source = null;
 			targetUse = null;
+			resetSwitch();
 			return command;
 		},
 		/*

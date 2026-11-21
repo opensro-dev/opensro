@@ -18,6 +18,8 @@ import { globalChatTail, isGlobalChatItem } from "@/engine/foundation/gameplay/g
 import { isTradeGoods } from "@/engine/foundation/gameplay/specialty-deal";
 import { type ChatLinkRef, encodeChatLinkRefs } from "@/engine/foundation/gameplay/chat-item-links";
 import { isNameChangeScrollItem, nameChangeTail } from "@/engine/foundation/gameplay/name-change";
+import { isWeaponSwitchScroll, weaponSwitchTail } from "@/engine/foundation/gameplay/weapon-switch";
+import { raceSwitchKindOf, raceSwitchTail } from "@/engine/foundation/gameplay/race-switch";
 import {
 	nativeStackIdentity,
 	planContainerMove,
@@ -325,6 +327,7 @@ present
 		const result = {
 			...item,
 			name: names.get( item.refObjId ) ?? item.name,
+			codename: codenames.get( item.refObjId ) ?? item.codename,
 			icon: icons.get( item.refObjId ) ?? item.icon,
 			tooltip,
 			nativeFields: tooltip?.fields,
@@ -885,6 +888,9 @@ references
 			for ( const row of rows ) {
 				refs.set( row.refObjId, row.typeFlags );
 				names.set( row.refObjId, row.name );
+				// An item bought after login (a switch scroll) is known by
+				// the delta's codename, as a bootstrap row is by its own.
+				if ( row.codename !== undefined ) codenames.set( row.refObjId, row.codename );
 				if ( row.icon !== undefined ) icons.set( row.refObjId, row.icon );
 				if ( row.tooltip ) tooltipRefs.set( row.refObjId, row.tooltip );
 			}
@@ -1892,10 +1898,16 @@ use
 			}
 			if ( itemCooldown( itemCooldowns, item.typeFlags, now ) ) return null;
 			// The Global Chatting item carries its line (693C90); the
-			// name-change scroll carries its new name (#1689); nothing
-			// else leaves the companion tail path.
+			// name-change scroll carries its new name (#1689) and the
+			// weapon switch scroll its weapon and kind and the race switch
+			// scrolls their target (port-only); nothing else leaves the
+			// companion tail path.
 			const tail = isNameChangeScrollItem( item.refObjId ) ?
 				nameChangeTail( context?.renameName ?? "" ) :
+				isWeaponSwitchScroll( codenames.get( item.refObjId ) ) ?
+				weaponSwitchTail( context?.targetSlot, context?.weaponKind ) :
+				raceSwitchKindOf( codenames.get( item.refObjId ) ) ?
+				raceSwitchTail( context?.targetSlot ) :
 				isGlobalChatItem( item.typeFlags ) ?
 				Uint8Array.from( [ ...globalChatTail( message ?? "" ), ...encodeChatLinkRefs( links ) ] ) :
 				cosItemUseTail( item.typeFlags, [ ...slots.values() ], companionContext( item.typeFlags, context ) );

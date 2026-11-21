@@ -518,6 +518,12 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	if shared:
 		sample = ", ".join(f"{identity} {'/'.join(codes)}" for identity, codes in sorted(shared.items())[:5])
 		raise ValueError(f"{len(shared)} object ids are held by two rows: {sample}")
+	# A released object keeps its id whichever importer numbered it: a
+	# player's records name it by id (#4019).
+	moved = published_ids.moved_objects(out / "Media_extracted" / stage1.TEXTDATA)
+	if moved:
+		sample = ", ".join(f"{code} {pinned}->{built}" for code, (pinned, built) in sorted(moved.items())[:5])
+		raise ValueError(f"{len(moved)} released object ids moved: {sample}")
 	write_atomically(variant / VARIANT_MANIFEST, (json.dumps(manifest, indent=2) + "\n").encode("utf-8"))
 	return manifest
 

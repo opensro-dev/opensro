@@ -61,6 +61,39 @@ export function displaySizes(): readonly (readonly [number, number])[] {
 
 /*
 ================
+SURFACE_MAX_DIMENSION
+
+The widest canvas backing store the renderer's device accepts: WebGPU's
+default maxTextureDimension2D. renderer/device/device.ts requests no
+limits, so every device has exactly this one, whatever its adapter offers;
+configuring a larger canvas fails the renderer outright (#4028: an 8820
+pixel wide window on Apple, "Invalid surface size").
+================
+*/
+export const SURFACE_MAX_DIMENSION = 8192;
+
+/*
+================
+surfaceSize
+
+The backing store for a page of width x height device pixels: unchanged
+when it fits, otherwise scaled down whole, keeping the aspect ratio, so the
+browser stretches a slightly softer frame over the same CSS box. Every
+reader of the viewport (renderer, UI scale, pointer mapping) sees this one
+size, so the scene and the interface stay aligned.
+================
+*/
+export function surfaceSize( width: number, height: number ): { width: number; height: number; } {
+	const scale = Math.min( 1, SURFACE_MAX_DIMENSION / width, SURFACE_MAX_DIMENSION / height );
+	if ( scale >= 1 ) return { width, height };
+	return {
+		width: Math.max( 1, Math.min( SURFACE_MAX_DIMENSION, Math.floor( width * scale ) ) ),
+		height: Math.max( 1, Math.min( SURFACE_MAX_DIMENSION, Math.floor( height * scale ) ) )
+	};
+}
+
+/*
+================
 uiPixelScaleFor
 
 Physical pixels per native UI pixel for the whole-page screen size. The

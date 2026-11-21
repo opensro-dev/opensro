@@ -41,6 +41,8 @@ export interface CosItemUseContext {
 	// The name-change scroll's new name (#1689, port-only), from its
 	// entry window.
 	readonly renameName?: string;
+	// The weapon switch scroll's picked kind (port-only, weapon-switch.ts).
+	readonly weaponKind?: number;
 }
 
 /*

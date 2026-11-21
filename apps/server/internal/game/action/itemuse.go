@@ -297,6 +297,14 @@ func (rt *Runtime) handleItemUse(
 			result.DiagnosticRefusal = "item-use: reset scroll is off (" + scroll.Env + ")"
 			return false
 		}
+		if family == itemUseEquipSwitch {
+			// Port-only: with its own flag off a switch scroll is the
+			// native game (commerce/equipswitch.go).
+			if scroll, _ := commerce.EquipSwitchScrollByCodename(ref.Codename); !rt.EquipSwitch[scroll.Kind] {
+				result.DiagnosticRefusal = "item-use: equipment switch scroll is off (" + scroll.Env + ")"
+				return false
+			}
+		}
 		if code := itemUseRequirements(character, ref); code != 0 {
 			result = itemUseFailure(code)
 			return false
@@ -482,6 +490,11 @@ func (rt *Runtime) handleItemUse(
 		}
 		if family == itemUseModelSwitcher {
 			return rt.useModelSwitcher(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result)
+		}
+		if family == itemUseEquipSwitch {
+			return rt.useEquipSwitchScroll(skillItemUse{
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
 			}, character, tail, &result)
 		}

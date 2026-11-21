@@ -49,6 +49,7 @@ func (rt *Runtime) commerceReferences(items, before []inventory.Item) wire.Frame
 		DescriptionSymbol string                  `json:"descriptionSymbol,omitempty"`
 		ID                uint32                  `json:"refObjId"`
 		Type              uint16                  `json:"typeFlags"`
+		Codename          string                  `json:"codename,omitempty"`
 		Name              string                  `json:"name"`
 		MaxStack          uint16                  `json:"maxStack"`
 		Icon              string                  `json:"icon,omitempty"`
@@ -86,7 +87,7 @@ func (rt *Runtime) commerceReferences(items, before []inventory.Item) wire.Frame
 				descriptionSymbol = reference.DescriptionSymbol
 				nativeFields = enterworld.ItemUseNativeFields(reference, rt.deps.SkillData())
 			}
-			refs = append(refs, ref{descriptionSymbol, row.RefObjID, row.TypeFlags, name, rt.maxStackFor(row.TypeFlags, codename), icon, nativeFields})
+			refs = append(refs, ref{descriptionSymbol, row.RefObjID, row.TypeFlags, codename, name, rt.maxStackFor(row.TypeFlags, codename), icon, nativeFields})
 		}
 	}
 	b, _ := json.Marshal(struct {

@@ -114,6 +114,8 @@ import {
 	crestRegisterUploadPayload
 } from "@/engine/foundation/gameplay/crest-register";
 import { CREST_UPLOAD_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
+import { weaponSwitchFailureText } from "@/engine/foundation/gameplay/weapon-switch";
+import { raceSwitchFailureText, raceSwitchKindOf, type RaceSwitchKind } from "@/engine/foundation/gameplay/race-switch";
 import { alchemyNotice } from "@/engine/foundation/gameplay/alchemy-notices";
 import {
 	emptyPartyMatching,
@@ -1349,6 +1351,10 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	// outstanding. The success box is the 0xB5BD answer's business, not
 	// this flight's, exactly as a delete's box is.
 	let crestUploadInFlight = false;
+	// Port-only: a weapon switch scroll's use is in flight (weapon-switch.ts).
+	let weaponSwitchUseInFlight = false;
+	// Port-only: a race switch scroll's use is in flight, by kind (race-switch.ts).
+	let raceSwitchUseInFlight: RaceSwitchKind | null = null;
 	let flagWarTeam: number | null = null;
 	let progression: Progression = { masteries: [] };
 	const skillGroups = new Map<number, { group: number; level: number; }>();
@@ -4042,7 +4048,8 @@ state here before a command can claim a native wire conversation.
 					targetSlot: command.targetSlot,
 					reverseChoice: command.reverseChoice,
 					reverseMapPoint: command.reverseMapPoint,
-					renameName: command.renameName
+					renameName: command.renameName,
+					weaponKind: command.weaponKind
 				};
 				const usedSlot = command.slot;
 				const usedItem = inventory.state().inventory.find( row => row.slot === usedSlot );
@@ -4085,6 +4092,10 @@ state here before a command can claim a native wire conversation.
 				// Port-only (#1689): the scroll's use went out; its answer
 				// is the one 0xB5BD the refusal chain reads as its lines.
 				if ( sent && command.renameName !== undefined ) renameUseInFlight = true;
+				// Port-only: the weapon switch scroll's refusal bytes likewise.
+				if ( sent && command.weaponKind !== undefined ) weaponSwitchUseInFlight = true;
+				// Port-only: the race switch scrolls' refusal bytes likewise.
+				if ( sent && usedItem ) raceSwitchUseInFlight = raceSwitchKindOf( usedItem.codename );
 				return sent;
 			}
 			if ( command.kind === "crest-register" ) {
@@ -6022,18 +6033,27 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					return true;
 				}
-				// Port-only (#1689): while the scroll's use is in flight its
-				// refusal bytes read as the scroll's own lines; any 0xB5BD
-				// answer retires the flight. All other refusals stay on
-				// the native mapper, byte-exact.
-				const renameLine =
-					renameUseInFlight && frame.opcode === ITEM_USE_RESPONSE_OPCODE && frame.payload[0] === 2 &&
-						frame.payload[1] !== undefined ?
-						nameChangeFailureText( frame.payload[1]! ) :
-						undefined;
-				if ( frame.opcode === ITEM_USE_RESPONSE_OPCODE ) renameUseInFlight = false;
-				const refusal = (renameLine ?
-					{ key: "", value: 0, text: renameLine, nativeType: 5 as const } :
+				// Port-only (#1689, and the weapon switch scroll): while a
+				// port scroll's use is in flight its refusal bytes read as
+				// that scroll's own lines; any 0xB5BD answer retires the
+				// flight. All other refusals stay on the native mapper,
+				// byte-exact.
+				const portRefusal = frame.opcode === ITEM_USE_RESPONSE_OPCODE && frame.payload[0] === 2 &&
+					frame.payload[1] !== undefined;
+				const portLine = renameUseInFlight && portRefusal ?
+					nameChangeFailureText( frame.payload[1]! ) :
+					weaponSwitchUseInFlight && portRefusal ?
+					weaponSwitchFailureText( frame.payload[1]! ) :
+					raceSwitchUseInFlight && portRefusal ?
+					raceSwitchFailureText( raceSwitchUseInFlight, frame.payload[1]! ) :
+					undefined;
+				if ( frame.opcode === ITEM_USE_RESPONSE_OPCODE ) {
+					renameUseInFlight = false;
+					weaponSwitchUseInFlight = false;
+					raceSwitchUseInFlight = null;
+				}
+				const refusal = (portLine ?
+					{ key: "", value: 0, text: portLine, nativeType: 5 as const } :
 					undefined) ??
 					recallAppointmentNotice( frame.opcode, frame.payload ) ??
 					targetNotice( frame.opcode, frame.payload ) ?? portalNotice( frame.opcode, frame.payload ) ??

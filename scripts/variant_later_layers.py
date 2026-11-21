@@ -30,6 +30,7 @@ import pharaoh_temple_import
 import reset_scroll_import
 import skytemple_import
 import styria_import
+import switch_scroll_import
 import winter_event_import
 
 # (variant manifest key, layer entry point taking (native, out)), in
@@ -74,6 +75,10 @@ LATER_LAYERS = (
 	# (SRO_STAT_RESET_SCROLL, SRO_SKILL_RESET_SCROLL) stages its v1.696
 	# item in its own shard (300000).
 	("resetScrolls", reset_scroll_import.add_reset_scrolls),
+	# The Item Mall switch scrolls ride their own flags (SRO_WEAPON_,
+	# SRO_ARMOR_ and SRO_ACCESSORY_SWITCH_SCROLL): each on stages its
+	# item beside the mall listing the server authors.
+	("switchScrolls", switch_scroll_import.add_switch_scrolls),
 	# The winter event's monsters ride the Christmas event's switch
 	# (SRO_CHRISTMAS_EVENT): their own identity band, no placement.
 	("winterEvent", winter_event_import.add_winter_monsters),

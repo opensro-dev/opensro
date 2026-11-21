@@ -151,9 +151,11 @@ reverseReturnLayout
 The reverse return box: the question, then one button per point and
 Cancel under them. A port-only third point (the map, reverse-return-map.ts)
 takes Cancel's place, and Cancel and the box move down by one row pitch.
+The port-only weapon switch box (weapon-switch.ts) grows the same way, a
+row per offered kind.
 ================
 */
-export function reverseReturnLayout( width: number, height: number, rows: 2 | 3 ) {
+export function reverseReturnLayout( width: number, height: number, rows: number ) {
 	const extra = (rows - 2) * REVERSE_RETURN_ROW;
 	const box = messageBox( width, height, REVERSE_RETURN_WIDTH, REVERSE_RETURN_HEIGHT + extra ),
 		[x, y] = box.frame;
