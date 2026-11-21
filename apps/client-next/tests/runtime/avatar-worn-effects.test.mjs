@@ -109,7 +109,7 @@ test("the avatar table admits an origin anchor and the wearer's scale; item tabl
 test("the build publishes an enabled marker's auras by item id and ignores an off one", () => {
 	const dir = fs.mkdtempSync( path.join( os.tmpdir(), "opensro-avatar-effects-" ) );
 	try {
-		const records = new Map( [ [ ARMOR, { id: ARMOR, code: CODE } ] ] );
+		const records = new Map( [ [ ARMOR, { id: ARMOR, code: CODE, avatar: true } ] ] );
 		const marker = ( enabled ) =>
 			JSON.stringify( {
 				enabled,
@@ -130,6 +130,11 @@ test("the build publishes an enabled marker's auras by item id and ignores an of
 				{ ...FOREARM, offset: [ Math.fround( 1.1 ), Math.fround( 0.3 ), Math.fround( -1 ) ] }
 			]
 		} );
+		// The records say what an avatar is, not the dress a caller holds.
+		assert.throws(
+			() => avatarWornEffects( new Map( [ [ ARMOR, { id: ARMOR, code: CODE, avatar: false } ] ] ), dir ),
+			/Avatar effect for a non-avatar item/
+		);
 		fs.writeFileSync( path.join( dir, ".opensro-mall-avatars-v1696.json" ), marker( false ) );
 		assert.deepEqual( avatarWornEffects( records, dir ), {} );
 	} finally {

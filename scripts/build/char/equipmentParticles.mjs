@@ -219,6 +219,10 @@ export function avatarWornEffects( records = loadEquipmentRecords( retailTextdat
 		for ( const [code, rows] of Object.entries( marker.effects ?? {} ) ) {
 			const record = byCode.get( code );
 			if ( !record || !Array.isArray( rows ) ) throw Error( "Avatar effect for an unknown item " + code );
+			// The equipment records own what an avatar is (buildEquipmentVisuals
+			// avatarSlot comes from the same flag), so a marker naming a
+			// worn item that is not one refuses here, whichever dress asks.
+			if ( !record.avatar ) throw Error( "Avatar effect for a non-avatar item " + code );
 			out[record.id] = rows.map( row => {
 				const effectPath = String( row.effectPath ).replaceAll( "\\", "/" ).toLowerCase();
 				const offset = row.offset ?? [ 0, 0, 0 ];
@@ -359,9 +363,6 @@ export async function publishEquipmentParticleMetadata( dress, vsroRoot = vsroIt
 	// Port-only, not native: avatarWornEffects. Their bones are the wearer's
 	// own, so no private branch is needed.
 	const avatarEffects = avatarWornEffects( records );
-	for ( const id of Object.keys( avatarEffects ) ) {
-		if ( dress.equipment[id]?.avatarSlot === undefined ) throw Error( "Avatar effect for a non-avatar item " + id );
-	}
 	dress.avatarEffects = avatarEffects;
 	for ( const [id, record] of records ) {
 		// A shield needs its private branch for its sparks' bones too.
