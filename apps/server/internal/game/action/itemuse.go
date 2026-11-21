@@ -291,6 +291,12 @@ func (rt *Runtime) handleItemUse(
 			result.DiagnosticRefusal = "item-use: name change scroll is off (" + EnvNameChangeScroll + ")"
 			return false
 		}
+		// Port-only: a reset scroll with its own switch off is the native
+		// game, its item sold nowhere (commerce/resetscrolls.go).
+		if scroll, isReset := commerce.ResetScrollByCodename(ref.Codename); isReset && !rt.ResetScrolls[scroll.Kind] {
+			result.DiagnosticRefusal = "item-use: reset scroll is off (" + scroll.Env + ")"
+			return false
+		}
 		if family == itemUseEquipSwitch {
 			// Port-only: with its own flag off a switch scroll is the
 			// native game (commerce/equipswitch.go).
@@ -531,6 +537,11 @@ func (rt *Runtime) handleItemUse(
 				Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}, recalled...)}
 			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
 			return true
+		}
+		if family == itemUseSkillRecall {
+			return rt.useSkillRecall(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result)
 		}
 		if family == itemUseResurrection {
 			return rt.useResurrectionScroll(character, skillItemUse{

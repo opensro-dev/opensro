@@ -886,6 +886,17 @@ type Runtime struct {
 	// use, gated by the minimum level alone.
 	StatRecallWindows bool
 
+	// ResetScrolls holds which reset scrolls are on (commerce/resetscrolls.go,
+	// one switch each; port-only, not native). A scroll whose kind is
+	// missing or false is refused and kept.
+	ResetScrolls map[commerce.ResetScrollKind]bool
+
+	// RecallSkills is progression's door-free skill reset
+	// (progression/skillrecall.go): every paid skill forgotten, every
+	// mastery at 0, the SP back. False changes nothing. Nil refuses the
+	// skill reset scroll.
+	RecallSkills func(character *enterworld.Character) (progression.SkillRecall, bool)
+
 	// ApplyDeathPenalty is progression's door-free death updater: the EXP
 	// and SP a death costs (pkdeath.go resolves which). Combat invokes it
 	// from inside the fatal-HP character transaction.

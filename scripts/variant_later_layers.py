@@ -27,6 +27,7 @@ import hunting2_import
 import jupiter_import
 import muhan_import
 import pharaoh_temple_import
+import reset_scroll_import
 import skytemple_import
 import styria_import
 import switch_scroll_import
@@ -70,6 +71,10 @@ LATER_LAYERS = (
 	# (SRO_MALL_CATEGORIES): on stages their item shard beside the mall
 	# layout that lists them.
 	("gearsStones", gears_stone_import.add_stones),
+	# The Item Mall reset scrolls (port-only): each its own switch
+	# (SRO_STAT_RESET_SCROLL, SRO_SKILL_RESET_SCROLL) stages its v1.696
+	# item in its own shard (300000).
+	("resetScrolls", reset_scroll_import.add_reset_scrolls),
 	# The Item Mall switch scrolls ride their own flags (SRO_WEAPON_,
 	# SRO_ARMOR_ and SRO_ACCESSORY_SWITCH_SCROLL): each on stages its
 	# item beside the mall listing the server authors.

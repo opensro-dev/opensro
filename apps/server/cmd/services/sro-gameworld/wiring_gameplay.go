@@ -323,6 +323,7 @@ func newGameplayPlane(
 		})
 		log.Infof("mall: name change scroll listed at %d silk (%s, port-only, not native)", action.NameChangePriceSilk, action.EnvNameChangeScroll)
 	}
+	mallExtra = append(mallExtra, applyResetScrolls(items, deps.ItemReferences())...)
 	// The equipment switch scrolls (port-only, wiring_equipswitch.go).
 	mallExtra = append(mallExtra, applyEquipSwitchScrolls(items, deps.ItemReferences())...)
 	// SRO_MALL_CATEGORIES (port-only, not native, #3257): the later
@@ -845,6 +846,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.items.TrainingCampKill = game.mentorInvites.CampKillGrant
 	game.items.RefundExperience = stats.ExperienceRefundUpdater()
 	game.items.RecallStatPoints = stats.StatRecallUpdater()
+	game.items.RecallSkills = stats.SkillRecallUpdater()
 	game.items.ApplyDeathPenalty = stats.DeathPenaltyUpdater()
 	game.items.UpdateJobExperience = stats.JobExperienceUpdater()
 	// Delivery resolves sessions from their bindings alone and never reads the

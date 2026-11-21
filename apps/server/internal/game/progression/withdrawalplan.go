@@ -97,21 +97,11 @@ func planSkillWithdrawal(c *enterworld.Character, data withdrawalCatalog, reques
 	plan.PreviousSkill = row.ID
 	plan.ReceiptID = row.ID
 	plan.PotionCount = uint32(row.Level - target)
-	for rank := row.Level; rank > target; rank-- {
-		removed, found := data.SkillByGroupLevel(row.Group, rank)
-		if !found || removed.SPCost < 0 || removed.SPCost > math.MaxUint32-plan.Refund {
-			return withdrawalPlan{}, withdrawalUnavailable
-		}
-		plan.Refund += removed.SPCost
-		goldRank := int64(0)
-		for _, requirement := range removed.Masteries {
-			if requirement.ID != 0 {
-				goldRank = requirement.Level
-				break
-			}
-		}
-		plan.GoldRanks = append(plan.GoldRanks, goldRank)
+	refund, goldRanks, ok := skillRankRefund(data, row, target)
+	if !ok {
+		return withdrawalPlan{}, withdrawalUnavailable
 	}
+	plan.Refund, plan.GoldRanks = refund, goldRanks
 	if plan.Refund == 0 {
 		return withdrawalPlan{}, withdrawalUnavailable
 	}
@@ -157,13 +147,11 @@ func planMasteryWithdrawal(c *enterworld.Character, data enterworld.SkillDataSou
 			}
 		}
 	}
-	for rank := current; rank > target && rank > 1; rank-- {
-		cost, found := levels.SkillPointCost(rank - 1)
-		if !found || cost < 0 || cost > math.MaxUint32-plan.Refund {
-			return withdrawalPlan{}, withdrawalUnavailable
-		}
-		plan.Refund += cost
+	refund, ok := masteryRankRefund(levels, current, target)
+	if !ok {
+		return withdrawalPlan{}, withdrawalUnavailable
 	}
+	plan.Refund = refund
 	plan.Masteries = slices.Clone(c.Masteries)
 	for i := range plan.Masteries {
 		if plan.Masteries[i].ID == request.LearnedID {
@@ -176,6 +164,57 @@ func planMasteryWithdrawal(c *enterworld.Character, data enterworld.SkillDataSou
 	}
 	plan.ReceiptID = request.LearnedID
 	return plan, 0
+}
+
+/*
+================
+skillRankRefund
+
+The SP a skill's ranks above target cost, the training charge each
+removal refunds, and each removed rank's mastery level (the gold basis of
+a resuscitation). False when a rank is missing or the sum leaves the SP
+word. Shared by the withdrawal and the skill reset scroll (skillrecall.go).
+================
+*/
+func skillRankRefund(data withdrawalCatalog, row enterworld.SkillRow, target int64) (int64, []int64, bool) {
+	refund, goldRanks := int64(0), []int64(nil)
+	for rank := row.Level; rank > target; rank-- {
+		removed, found := data.SkillByGroupLevel(row.Group, rank)
+		if !found || removed.SPCost < 0 || removed.SPCost > math.MaxUint32-refund {
+			return 0, nil, false
+		}
+		refund += removed.SPCost
+		goldRank := int64(0)
+		for _, requirement := range removed.Masteries {
+			if requirement.ID != 0 {
+				goldRank = requirement.Level
+				break
+			}
+		}
+		goldRanks = append(goldRanks, goldRank)
+	}
+	return refund, goldRanks, true
+}
+
+/*
+================
+masteryRankRefund
+
+The SP a mastery's ranks above target cost: the free initial rank
+contributes none, every higher rank the leveldata row training charged.
+Shared by the withdrawal and the skill reset scroll (skillrecall.go).
+================
+*/
+func masteryRankRefund(levels enterworld.LevelDataSource, current, target int64) (int64, bool) {
+	refund := int64(0)
+	for rank := current; rank > target && rank > 1; rank-- {
+		cost, found := levels.SkillPointCost(rank - 1)
+		if !found || cost < 0 || cost > math.MaxUint32-refund {
+			return 0, false
+		}
+		refund += cost
+	}
+	return refund, true
 }
 
 /*

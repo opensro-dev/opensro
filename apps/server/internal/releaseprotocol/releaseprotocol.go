@@ -56,6 +56,9 @@ type Contracts struct {
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
+	// Protocol 20 admits the port-only skill reset control (opcode 21,
+	// progression/skillrecall.go SkillRecallControl; SRO_SKILL_RESET_SCROLL),
+	// which a protocol-19 tab's world gate would end the session on.
 	// Protocol 19 adds the port-only 0x3FCB Blue Berserk level (cap-110), so a
 	// client that reads it is the one served. Protocol 18 admits the
 	// port-only consignment market's control frame (see MarketContract 1).
@@ -63,7 +66,7 @@ const (
 	// rewards and tags the seasonal decoration's placements with their
 	// world layer (see WorldContract 1). Protocol 16 grows a pet chat
 	// link to name its pet (see ChatContract 2).
-	Current = 19
+	Current = 20
 	// The market contract: 1 carries the port-only consignment market
 	// (SRO_CONSIGNMENT) on control opcode 20 both ways, and the server
 	// pushes it unasked: a sale's proceeds and notice to an online

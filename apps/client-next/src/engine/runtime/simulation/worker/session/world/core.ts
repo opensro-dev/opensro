@@ -20,6 +20,8 @@ import { fortressActive } from "@/engine/foundation/gameplay/fortress";
 import type { EntityState, WorldEvent } from "@/engine/contracts/world";
 import { travelMode, resetTravelRegion, gateRequest, isReturnScroll } from "@/engine/foundation/gameplay/travel";
 import { commerceReferences } from "@/engine/foundation/gameplay/commerce";
+import { SKILL_RECALL_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
+import { skillRecallFrame } from "@/engine/foundation/gameplay/skill-recall";
 import {
 	capturedMonsterCos,
 	cosInteraction,
@@ -366,6 +368,10 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 			gameplay.references( refs );
 			entities.references( refs );
 			for ( const row of refs ) admitCape( row.refObjId, row.typeFlags, row.tooltip?.fields.itemParam2_2a0 );
+			return;
+		}
+		if ( frame.opcode === SKILL_RECALL_CONTROL ) {
+			gameplay.skillRecall( skillRecallFrame( frame.payload ) );
 			return;
 		}
 		const region = resetTravelRegion( frame );
