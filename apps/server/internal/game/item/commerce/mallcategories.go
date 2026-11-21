@@ -37,7 +37,8 @@ later-client import, so a catalogue built without it lists none of
 them rather than refusing the boot (Imported below). The summon
 scrolls stand in Premium's Others tab below: the three shipped
 ITEM_ETC_E050729_SUMMON*_SCROLL rows no native family serves, priced
-30 silk for one soldier and 60 for two, badged new; their use is
+30 silk (1 and 5 people use) and 60 (2 people use), badged new;
+they summon strong monsters (#4030), and their use is
 action/summonscroll.go, behind this same setting.
 
 Three screenshot kinds are not listed yet (#3331, recorded in
@@ -188,7 +189,8 @@ var mallLayoutGoods = []mallCategoryGood{
 	{Tab: "MALL_HOT_MODELS", Package: "PACKAGE_ITEM_MALL_AVATAR_M_HALLOWEEN_HAT", Badge: mallBadgeHot},
 	{Tab: "MALL_HOT_MODELS", Package: "PACKAGE_ITEM_MALL_AVATAR_W_HALLOWEEN_HAT", Badge: mallBadgeHot},
 	// The summon scrolls (issue #3257): shipped items no native
-	// family serves; one soldier for 30 silk, two for 60, badged new.
+	// family serves, monster summons for 1, 2 and 5 people (#4030):
+	// 30 silk, 60 for the 2 people scroll, 30 for 5, badged new.
 	// Their use is action/summonscroll.go behind this same setting.
 	{Tab: "MALL_PREMIUM_OTHERS", Package: "PACKAGE_ITEM_ETC_E050729_SUMMON_SCROLL",
 		Item: "ITEM_ETC_E050729_SUMMON_SCROLL", Silk: 30, Badge: mallBadgeNew},

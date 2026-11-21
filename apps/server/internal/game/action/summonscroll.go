@@ -1,49 +1,51 @@
 /*
 ===========================================================================
 
-summonscroll.go - the Item Mall summon scrolls: personal guild soldiers
+summonscroll.go - the Item Mall Monster Summon Scrolls (1, 2 and 5 people
+use): a powerfully dangerous monster to hunt, sized by the scroll
 
 Port-only, not native (owner ask 2026-11-12, issue #3257): the later
 mall sells three summon scrolls v1.150's mall never listed -
-ITEM_ETC_E050729_SUMMON_SCROLL, ..._ONE_SCROLL (1인용) and
-..._TWO_SCROLL (2인용). The items ship in v1.150's data as dead
-3/3/9/0 quest tools: no associated character, Param1 -1, named by no
-native family. Behind SRO_MALL_CATEGORIES (default off) the mall lists
-them in Premium's Others tab (commerce/mallcategories.go) and this
-file serves their use; off, the items keep the native game - the
-quest-tool family has no handler for them and the mall lists nothing.
+ITEM_ETC_E050729_SUMMON_ONE_SCROLL (1인용, "1 person use"),
+..._TWO_SCROLL (2인용, "2 people use") and ..._SUMMON_SCROLL ("5 people
+use"). The items ship in v1.150's data as 3/3/9/0 quest tools with no
+associated character and Param1 -1, required level 10, and no source
+names a handler for them. revtool, 2026-11-21: neither the v1.150 client
+(375e8682) nor the v1.696 client holds an E050729 string, and the later
+server's quest-event item table registers only the E060526 party scroll
+and Pandora's Box; the ISRO-R export lists only the codenames.
+Behind SRO_MALL_CATEGORIES (default
+off) the mall lists them in Premium's Others tab
+(commerce/mallcategories.go) and this file serves their use; off, the
+items keep the native game - the quest-tool family has no handler for
+them and the mall lists nothing.
 
-The effect is authored on the guild-soldier lane (mercenary.go), the
-one native mechanism that summons character-owned soldiers from a
-consumed scroll: ONE and the plain scroll call one soldier, TWO calls
-two, each at the player's own level row of their country's guild
-soldier group (COS_GUILD_CH_SOLDIER1 / COS_GUILD_EU_SOLDIER1, the
-groups the guild scrolls name). The scroll's own row carries no
-duration, so the soldiers stand for the guild soldiers' native
-1,200 s (domain.MercenarySummonSeconds, the guild scrolls' Param1
-20 minutes) and share the guild lane's summon cooldown and its
-0x7458 dismissal: the soldiers live in c.Mercenaries, so no new
-persisted state exists. Refusals mirror the mercenary switch minus
-its guild arms (no guild, master or union is asked of a personal
-scroll). Prices are authored in mallcategories.go.
+The item's own text is the rule (SN_..._TT_DESC): "If you use this a
+powerfully dangerous monster will appear. The summoned monster will
+disappear after 5 minutes. Eligible Levels: Lvl.10 and up". #3304 first
+authored them as guild soldiers, which summoned no monster at all
+(#4030). Inference, recorded here: the scrolls are the party summon
+scroll's event (partysummonscroll.go, the v1.188 rule) at a fixed head
+count instead of the party's. The v1.188 party scroll gives a lone user
+exactly one grade-7 strong monster, so one person's share is one such
+monster: the 1, 2 and 5 people scrolls land 1, 2 and 5 of them, the
+strong table's kind at the user's level, 300 s, no owner. The refusals
+are that event's (town, arena) with the item's level 10 in place of the
+party scroll's 30; a user from 10 to 20 gets the table's lowest row
+(key 21), as Pandora's Box pads below its table.
 
 ===========================================================================
 */
 package action
 
 import (
-	"strings"
-
-	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
-	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/game/world/simulation"
 )
 
-// The three scrolls and the soldier count each one calls. Admission is
-// by codename (itemuse_admission.go): the shipped 3/3/9/0 type is the
-// quest tools', and only these three rows leave it.
+// The three scrolls and the monsters each one calls: its "N people use".
+// Admission is by codename (itemuse_admission.go): the shipped 3/3/9/0
+// type is the quest tools', and only these three rows leave it.
 const (
 	SummonScrollItem    = "ITEM_ETC_E050729_SUMMON_SCROLL"
 	SummonScrollOneItem = "ITEM_ETC_E050729_SUMMON_ONE_SCROLL"
@@ -51,24 +53,27 @@ const (
 )
 
 var summonScrollCounts = map[string]int{
-	SummonScrollItem:    1,
+	SummonScrollItem:    5,
 	SummonScrollOneItem: 1,
 	SummonScrollTwoItem: 2,
 }
 
-// The guild-soldier groups a personal scroll draws from, by the
-// owner's country: the same base rows the guild soldier scrolls name
-// (ITEM_ETC_GUILD_CH_SOLDIER1_SCROLL / _EU_ in the shipped itemdata).
-var summonScrollSoldierBases = []string{
-	"COS_GUILD_CH_SOLDIER1_001",
-	"COS_GUILD_EU_SOLDIER1_001",
-}
+// summonScrollMinLevel is the scrolls' required level (itemdata ReqLevel1
+// 10, and "Eligible Levels: Lvl.10 and up").
+const summonScrollMinLevel = 10
+
+// The scrolls' notices. Port-only: the level line is the party scroll's
+// at the item's own level.
+const (
+	summonScrollLevelLine = "Monster summon scroll can be used if your character is over Lv. 10."
+	summonScrollManyLine  = "Summoned monsters have appeared. They will disappear in 5 minutes."
+)
 
 /*
 ================
 SummonScrollCount
 
-The soldiers a scroll codename calls; zero for any other item.
+The monsters a scroll codename calls; zero for any other item.
 ================
 */
 func SummonScrollCount(codename string) int {
@@ -79,11 +84,10 @@ func SummonScrollCount(codename string) int {
 ================
 useSummonScroll
 
-One use spends the scroll and stands the scroll's count of soldiers
-beside the owner. Every record is encoded before any state changes,
-exactly as the guild lane orders it; the flag is re-checked here so a
-scroll bought while the categories stood open is dead stock once
-they close.
+The summon event's refusals answer first and spend nothing; then the
+scroll's count of strong monsters lands around the user and the scroll
+is spent. The flag is re-checked here so a scroll bought while the
+categories stood open is dead stock once they close.
 ================
 */
 func (rt *Runtime) useSummonScroll(use persistentSummonUse, result *OpResult) bool {
@@ -92,94 +96,18 @@ func (rt *Runtime) useSummonScroll(use persistentSummonUse, result *OpResult) bo
 		result.DiagnosticRefusal = "item-use: summon scrolls are off (" + commerce.EnvMallCategories + ")"
 		return false
 	}
-	count := SummonScrollCount(use.ref.Codename)
-	refs, referenceSource := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
-	var base *enterworld.CharacterRef
-	var baseCode string
-	if referenceSource {
-		for _, code := range summonScrollSoldierBases {
-			candidate, found := refs.CharacterRefByCodename(code)
-			if found && candidate != nil && int(candidate.Parameters.Country) == int(enterworld.NativeCountryByte9C(c)) {
-				base, baseCode = candidate, code
-				break
-			}
-		}
-	}
-	refusal := uint8(0)
-	motion := rt.playerMotionState(use.division, c, use.nowMs)
-	switch {
-	case rt.QuestTravelBlocks != nil && rt.QuestTravelBlocks(c)&mercenaryQuestOperationMask != 0:
-		refusal = mercenaryQuestRestricted
-	case teleportBlocks(c.NativeTeleportMode):
-		refusal = 0x69
-	case motion == simulation.MotionSitting:
-		refusal = cosSummonBusy
-	case rt.jobDressPending(use.division, c.Name):
-		refusal = mercenaryDressPending
-	case c.ActiveCOS != nil && c.ActiveCOS.Mounted:
-		refusal = mercenaryMounted
-	case count == 0:
-		refusal = cosSummonBusy
-	case base == nil:
-		refusal = mercenaryCountryMismatch
-	case motion == simulation.MotionWall || motion == mercenaryMotionRestricted || rt.PlayerAttackLocked(use.division, c.Name) || rt.objectActionCommitted(use.division, c.Name):
-		refusal = cosSummonBusy
-	case len(c.Mercenaries) != 0:
-		refusal = mercenaryAlreadySummoned
-	case c.MercenarySummonUntilMs != 0:
-		refusal = mercenaryCooldownActive
-	}
-	if refusal != 0 {
-		*result = itemUseFailure(refusal)
+	if rt.Monsters == nil || !enterworld.CharacterAlive(c) || c.Level == nil {
+		result.DiagnosticRefusal = "item-use: summon scroll owner unavailable"
 		return false
 	}
-	ref, valid := enterworld.MercenaryReference(refs, baseCode, (&characterEquipRequirements{character: c}).characterLevel())
-	if !valid {
-		*result = itemUseFailure(mercenaryUnknownLevel)
+	if _, ok := rt.summonEventRefusal(use, summonScrollMinLevel, summonScrollLevelLine, result); !ok {
 		return false
 	}
-	soldiers := make([]*domain.CharacterCOS, 0, count)
-	var frames []wire.Frame
-	for slot := 0; slot < count; slot++ {
-		gid, valid := domain.MercenaryObjectID(c.ID, slot)
-		if !valid {
-			return false
-		}
-		pet := &domain.CharacterCOS{GID: gid, RefObjID: ref.RefObjID, Codename: ref.Codename,
-			Level: ref.Level, CurrentHP: ref.MaxHP, CurrentMP: ref.MaxMP, StateFlags: 3,
-			Summoned: true, SummonGeneration: 1, Satiety: initialCompanionSatiety,
-			RentalExpiresAtUnix: use.nowMs/1000 + domain.MercenarySummonSeconds,
-			NativeBodyStatus:    domain.InitialCOSBodyStatus(c.NativeBodyStatus)}
-		// The reference server initializes current vitals before applying guild maximum-HP modifiers.
-		pet.RefreshRentalTimes(use.nowMs / 1000)
-		record, err := enterworld.BuildCOSRecord(pet, ref, rt.deps.ItemReferences())
-		if err != nil {
-			return false
-		}
-		soldiers = append(soldiers, pet)
-		frames = append(frames, wire.Frame{Opcode: wire.OpCosRecordCreate, Payload: record})
+	kind, found := strongSummonKind(*c.Level, rt.monsterHeld)
+	if !found {
+		result.Frames = append(result.Frames, exchangeBanner(partySummonFailedLine))
+		return false
 	}
-	remaining := rt.consumeItemUseRow(c, use.row)
-	c.Mercenaries = soldiers
-	c.MercenarySummonUntilMs = (use.nowMs/1000 + domain.MercenarySummonSeconds) * 1000
-	rt.petMu.Lock()
-	owner := rt.petSessions[petOwnerKey{division: use.division, name: strings.ToLower(c.Name)}]
-	rt.petMu.Unlock()
-	for _, pet := range soldiers {
-		if owner != nil {
-			rt.bindCompanionSession(use.division, owner, pet).summonedAtMs = use.nowMs
-		}
-		pose := rt.companionLiveSpawn(use.division, c, pet, use.nowMs)
-		frames = append(frames, wire.Frame{Opcode: wire.OpSingleObjectSpawn, Payload: wire.EncodeCosSpawnBand2(wire.CosSpawnBand2{
-			Band: domain.MercenaryBand, RefObjID: ref.RefObjID, Gid: pet.GID, BodyStatus: pet.NativeBodyStatus,
-			Position: wire.Position{RegionID: pose.RegionID, X: float32(pose.X), Y: float32(pose.Y), Z: float32(pose.Z), Heading: pose.Angle},
-			Walk:     ref.WalkSpeed, Run: ref.RunSpeed, Scale: ref.Scale, OwnerName: enterworld.PartyMemberName(c), HoldType: enterworld.DressedJob(c), PvpState: c.PVPState(),
-			OwnerModelRef: enterworld.CharacterModelRef(c, nil), OwnerGid: enterworld.ObjectIDForCharacter(c), State: cosSpawnFresh,
-		})})
-	}
-	*result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)}}}
-	result.Frames = append(result.Frames, frames...)
-	result.Frames = append(result.Frames, MercenaryCooldownFrames(c, use.nowMs)...)
-	result.Frames = append(result.Frames, rt.updateQuestInventory(c)...)
-	return true
+	return rt.landStrongSummon(use, strongSummon{kind: kind, count: SummonScrollCount(use.ref.Codename),
+		one: partySummonSoloLine, many: summonScrollManyLine}, result)
 }

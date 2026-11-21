@@ -128,11 +128,131 @@ func partySummonKind(level int64, has func(string) bool) (string, bool) {
 
 /*
 ================
+strongSummonKind
+
+The strong table's kind at key (clamped to the table's 21..110), or the
+nearest lower row the shard holds, or failing that the nearest higher
+one. Keys 21 to 29 are pandoraLowKinds, 30 to 110 partySummonKinds.
+================
+*/
+func strongSummonKind(key int64, has func(string) bool) (string, bool) {
+	key = min(max(key, pandoraLowKey), partySummonMaxLevel)
+	row := func(at int64) string {
+		if at < partySummonMinLevel {
+			return pandoraLowKinds[at-pandoraLowKey]
+		}
+		return partySummonKinds[at-partySummonMinLevel]
+	}
+	for at := key; at >= pandoraLowKey; at-- {
+		if kind := row(at); kind != "" && has(kind) {
+			return kind, true
+		}
+	}
+	for at := key + 1; at <= partySummonMaxLevel; at++ {
+		if kind := row(at); kind != "" && has(kind) {
+			return kind, true
+		}
+	}
+	return "", false
+}
+
+/*
+================
+Runtime.monsterHeld
+
+Whether the division's monster template holds codename: the shard may
+lack a later region's kinds.
+================
+*/
+func (rt *Runtime) monsterHeld(codename string) bool {
+	_, held := rt.Monsters.ReferenceByCodename(codename)
+	return held
+}
+
+/*
+================
+Runtime.summonEventRefusal
+
+The summon event's native refusals, in order, none spending the item: a
+town region, a user below minLevel (levelLine), the battle arena. The
+refusal's notice is appended to result; ok is false when one answered.
+at is where the user stands, for a caller that opens its event there.
+================
+*/
+func (rt *Runtime) summonEventRefusal(use persistentSummonUse, minLevel int64, levelLine string, result *OpResult) (at simulation.Spawn, ok bool) {
+	c := use.character
+	at = rt.liveSpawn(simulation.WorldKey(use.division, c.Name), c, use.nowMs)
+	if battlefield, known := world.RegionPlayerCombat(at.RegionID); !known || !battlefield {
+		result.Frames = append(result.Frames, exchangeBanner(partySummonTownLine))
+		return at, false
+	}
+	if *c.Level < minLevel {
+		result.Frames = append(result.Frames, exchangeBanner(levelLine))
+		return at, false
+	}
+	if rt.sookRun(use.division, c) != nil {
+		result.Frames = append(result.Frames, exchangeBanner(partySummonArenaLine))
+		return at, false
+	}
+	return at, true
+}
+
+/*
+================
+strongSummon
+
+One summon of the strong table's monsters: count of kind, each grade 7
+for 300 s on the scroll's ring, with no owner. one and many are the
+notices for a single monster and for several.
+================
+*/
+type strongSummon struct {
+	kind      string
+	count     int
+	one, many string
+}
+
+/*
+================
+Runtime.landStrongSummon
+
+Lands the summon around the user and spends the item, whatever the
+ground let land (the native handler spends it on success either way);
+the notice says when nothing could land.
+================
+*/
+func (rt *Runtime) landStrongSummon(use persistentSummonUse, summon strongSummon, result *OpResult) bool {
+	c := use.character
+	request := simulation.QuestMonsterSpawn{
+		Codename: summon.kind, RadiusMin: partySummonRadiusMin, RadiusSpan: partySummonRadiusSpan,
+		LifetimeMs: partySummonLifetimeMs, Rarity: partySummonGrade, HasRarity: true, Aggressive: true,
+	}
+	landed := 0
+	for range summon.count {
+		if rt.SpawnQuestMonster(use.division, c, request) {
+			landed++
+		}
+	}
+	line := summon.one
+	if summon.count > 1 {
+		line = summon.many
+	}
+	if landed == 0 {
+		line = partySummonFailedLine
+	}
+	remaining := rt.consumeItemUseRow(c, use.row)
+	*result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)}}}
+	result.Frames = append(result.Frames, exchangeBanner(line))
+	result.Frames = append(result.Frames, rt.updateQuestInventory(c)...)
+	return true
+}
+
+/*
+================
 Runtime.usePartySummonScroll
 
 The native refusals answer first and spend nothing; then one monster per
-party member lands around the user and the scroll is spent, whatever the
-ground let land (the native handler spends it on success either way).
+party member lands around the user and the scroll is spent.
 ================
 */
 func (rt *Runtime) usePartySummonScroll(use persistentSummonUse, result *OpResult) bool {
@@ -145,48 +265,15 @@ func (rt *Runtime) usePartySummonScroll(use persistentSummonUse, result *OpResul
 		result.DiagnosticRefusal = "item-use: party summon scroll owner unavailable"
 		return false
 	}
-	at := rt.liveSpawn(simulation.WorldKey(use.division, c.Name), c, use.nowMs)
-	if battlefield, known := world.RegionPlayerCombat(at.RegionID); !known || !battlefield {
-		result.Frames = append(result.Frames, exchangeBanner(partySummonTownLine))
+	if _, ok := rt.summonEventRefusal(use, partySummonMinLevel, partySummonLevelLine, result); !ok {
 		return false
 	}
-	if *c.Level < partySummonMinLevel {
-		result.Frames = append(result.Frames, exchangeBanner(partySummonLevelLine))
-		return false
-	}
-	if rt.sookRun(use.division, c) != nil {
-		result.Frames = append(result.Frames, exchangeBanner(partySummonArenaLine))
-		return false
-	}
-	kind, found := partySummonKind(*c.Level, func(codename string) bool {
-		_, held := rt.Monsters.ReferenceByCodename(codename)
-		return held
-	})
+	kind, found := partySummonKind(*c.Level, rt.monsterHeld)
 	if !found {
 		result.Frames = append(result.Frames, exchangeBanner(partySummonFailedLine))
 		return false
 	}
-	request := simulation.QuestMonsterSpawn{
-		Codename: kind, RadiusMin: partySummonRadiusMin, RadiusSpan: partySummonRadiusSpan,
-		LifetimeMs: partySummonLifetimeMs, Rarity: partySummonGrade, HasRarity: true, Aggressive: true,
-	}
 	members := max(1, len(rt.auraParty(use.division, c)))
-	landed := 0
-	for range members {
-		if rt.SpawnQuestMonster(use.division, c, request) {
-			landed++
-		}
-	}
-	line := partySummonSoloLine
-	if members > 1 {
-		line = partySummonPartyLine
-	}
-	if landed == 0 {
-		line = partySummonFailedLine
-	}
-	remaining := rt.consumeItemUseRow(c, use.row)
-	*result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)}}}
-	result.Frames = append(result.Frames, exchangeBanner(line))
-	result.Frames = append(result.Frames, rt.updateQuestInventory(c)...)
-	return true
+	return rt.landStrongSummon(use, strongSummon{kind: kind, count: members,
+		one: partySummonSoloLine, many: partySummonPartyLine}, result)
 }
