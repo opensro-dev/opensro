@@ -493,6 +493,9 @@ export type GameplayCommand =
 		// The crest delete's confirmed use (#2282): the confirm box
 		// (0x16/0x19) already asked, so the use goes out as composed.
 		readonly crestDelete?: boolean;
+		// The weapon switch box's kind (port-only, weapon-switch.ts): the
+		// target weapon's new fourth TypeID; targetSlot names the weapon.
+		readonly weaponKind?: number;
 	}
 	| {
 		readonly kind: "crest-register";

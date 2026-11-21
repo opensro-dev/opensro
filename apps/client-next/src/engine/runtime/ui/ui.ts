@@ -619,8 +619,9 @@ import { mouseModeLabel } from "@/engine/foundation/ui/mouse-modes";
 import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
 import { AUTO_SELECT_ACTION_ID, offeredActions } from "@/engine/foundation/ui/action-layout";
-import { itemTooltip } from "@/engine/foundation/ui/item-tooltip";
+import { itemTooltip, weaponTypeSymbol } from "@/engine/foundation/ui/item-tooltip";
 import { itemTooltipSet, tooltipSetViewer } from "@/engine/foundation/ui/item-tooltip-set";
+import { isWeaponSwitchScrollItem, weaponRaceName } from "@/engine/foundation/gameplay/weapon-switch";
 import { commerceTooltip, mallTooltipRows } from "@/engine/foundation/ui/commerce-tooltip";
 import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
@@ -1070,6 +1071,14 @@ const SKIN_PANEL = "Skin change";
 // CIFWholeChat, the Global Chatting item's window, and its line's edit box.
 const GLOBAL_CHAT_PANEL = "Global chat";
 const GLOBAL_CHAT_TEXT = "wholechat-text";
+// The weapon switch box (port-only, weapon-switch.ts): its race and kind
+// rows' control prefixes, the kind step's Back, and its English lines.
+const WEAPON_SWITCH_RACE_PREFIX = "weapon-switch-race:";
+const WEAPON_SWITCH_KIND_PREFIX = "weapon-switch:";
+const WEAPON_SWITCH_BACK = "Back";
+const WEAPON_SWITCH_TITLE = "Weapon Switch";
+const WEAPON_SWITCH_RACE_QUESTION = "Choose the race of the new weapon.";
+const WEAPON_SWITCH_QUESTION = "Choose the new kind of weapon.";
 // The name-change scroll's entry window (#1689, port-only): the
 // CIFWholeChat frame under its own title and edit box.
 const RENAME_PANEL = "Name change";
@@ -2825,9 +2834,12 @@ export function createUi( ports: UiPorts ) {
 			const item = view?.gameplay?.inventory.find( row => row.slot === command.slot );
 			// 572858 dispatches hotbar items through the same cursor arming as
 			// an inventory activation. A confirmed use already has its target.
+			// Port-only: the weapon switch scroll arms the same cursor; its
+			// box's pick carries the target, so it uses straight through.
 			if (
-				item && armsItemTargetCursor( item.typeFlags ) && command.summonerSlot === undefined &&
-				command.revivalSlot === undefined && command.targetSlot === undefined
+				item && (armsItemTargetCursor( item.typeFlags ) || isWeaponSwitchScrollItem( item.refObjId )) &&
+				command.summonerSlot === undefined && command.revivalSlot === undefined &&
+				command.targetSlot === undefined
 			) {
 				if ( item.slot < 13 || view?.gameplay?.inventoryPending ) return;
 				carriedItem = null;
@@ -7292,6 +7304,37 @@ export function createUi( ports: UiPorts ) {
 					repairHud.takeConfirm();
 					dirty = true;
 					if ( view?.session?.phase === "world" ) sendGameplay( { kind: "shop-repair", mode: 2, slot: 0 } );
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			if ( cosHud.targetUseBox() === "weapon-switch" ) {
+				// Port-only: the weapon switch box asks the race, then the
+				// kind; its refuse button is Cancel on the race step and Back
+				// on the kind step. Escape ends the use; Enter picks nothing.
+				if ( event.kind === "activate" && event.id === "weapon-switch-cancel" ) {
+					if ( !cosHud.backWeaponRace() ) cosHud.takeTargetUse();
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "key" && event.code === "Escape" ) {
+					cosHud.takeTargetUse();
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "activate" && event.id.startsWith( WEAPON_SWITCH_RACE_PREFIX ) ) {
+					cosHud.chooseWeaponRace( Number( event.id.slice( WEAPON_SWITCH_RACE_PREFIX.length ) ) );
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "activate" && event.id.startsWith( WEAPON_SWITCH_KIND_PREFIX ) ) {
+					const command = cosHud.chooseWeaponKind(
+						Number( event.id.slice( WEAPON_SWITCH_KIND_PREFIX.length ) )
+					);
+					if ( command && view?.session?.phase === "world" && !view.gameplay?.inventoryPending ) {
+						sendGameplay( command );
+					}
+					dirty = true;
 					return;
 				}
 				if ( event.kind !== "hover" ) return;
@@ -26287,7 +26330,57 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
 			}
-			if ( worldVisible && (cosHud.cleanConfirm() !== null || cosHud.targetUse() !== null) ) {
+			const switchRaces = cosHud.weaponSwitchRaces(), switchKinds = cosHud.weaponSwitchKinds();
+			const switchRows = switchRaces.length > 0 ? switchRaces : switchKinds;
+			if ( worldVisible && switchRows.length > 0 ) {
+				// Port-only: the weapon switch box, the reverse return box's
+				// geometry with a row per offered race (first step) or kind
+				// (second step), and Cancel or Back under them.
+				const raceStep = switchRaces.length > 0;
+				const box = reverseReturnLayout( w, h, switchRows.length );
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						box.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( WEAPON_SWITCH_TITLE, box.title, full, white, { hAlign: 1, vAlign: 0 } ),
+					...text.quads(
+						raceStep ? WEAPON_SWITCH_RACE_QUESTION : WEAPON_SWITCH_QUESTION,
+						box.question,
+						full,
+						white,
+						{ hAlign: 1, vAlign: 0 }
+					)
+				);
+				switchRows.forEach( ( value, index ) => {
+					const row = box.points[index]!;
+					if ( raceStep ) {
+						button( WEAPON_SWITCH_RACE_PREFIX + value, weaponRaceName( value ), row[0], row[1], row[2] );
+						return;
+					}
+					const symbol = weaponTypeSymbol( value );
+					button(
+						WEAPON_SWITCH_KIND_PREFIX + value,
+						symbol ? hudCopy( symbol ) : String( value ),
+						row[0],
+						row[1],
+						row[2]
+					);
+				} );
+				button(
+					"weapon-switch-cancel",
+					raceStep ? hudCopy( "UIIT_CTL_CANCEL" ) : WEAPON_SWITCH_BACK,
+					box.refuse[0],
+					box.refuse[1],
+					box.refuse[2]
+				);
+			} else if ( worldVisible && (cosHud.cleanConfirm() !== null || cosHud.targetUse() !== null) ) {
 				// 6A2350 case 5 raises the type 0xD box with the two
 				// UIIT_MSG_COS_CLEAN_CONFIRM lines before a transport is destroyed.
 				// The item-target pick (cursor A6 at 567372, kind 0x1F pushed at

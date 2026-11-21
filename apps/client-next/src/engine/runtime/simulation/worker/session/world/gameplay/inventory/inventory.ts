@@ -18,6 +18,7 @@ import { globalChatTail, isGlobalChatItem } from "@/engine/foundation/gameplay/g
 import { isTradeGoods } from "@/engine/foundation/gameplay/specialty-deal";
 import { type ChatLinkRef, encodeChatLinkRefs } from "@/engine/foundation/gameplay/chat-item-links";
 import { isNameChangeScrollItem, nameChangeTail } from "@/engine/foundation/gameplay/name-change";
+import { isWeaponSwitchScrollItem, weaponSwitchTail } from "@/engine/foundation/gameplay/weapon-switch";
 import {
 	nativeStackIdentity,
 	planContainerMove,
@@ -1892,10 +1893,13 @@ use
 			}
 			if ( itemCooldown( itemCooldowns, item.typeFlags, now ) ) return null;
 			// The Global Chatting item carries its line (693C90); the
-			// name-change scroll carries its new name (#1689); nothing
+			// name-change scroll carries its new name (#1689) and the
+			// weapon switch scroll its weapon and kind (port-only); nothing
 			// else leaves the companion tail path.
 			const tail = isNameChangeScrollItem( item.refObjId ) ?
 				nameChangeTail( context?.renameName ?? "" ) :
+				isWeaponSwitchScrollItem( item.refObjId ) ?
+				weaponSwitchTail( context?.targetSlot, context?.weaponKind ) :
 				isGlobalChatItem( item.typeFlags ) ?
 				Uint8Array.from( [ ...globalChatTail( message ?? "" ), ...encodeChatLinkRefs( links ) ] ) :
 				cosItemUseTail( item.typeFlags, [ ...slots.values() ], companionContext( item.typeFlags, context ) );
