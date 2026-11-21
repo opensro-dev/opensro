@@ -14,11 +14,8 @@ package market
 
 import "opensro.online/server/internal/agent/publicstats"
 
-// The categories, by item TypeID (TID1 3 = item; TID2 1 = equipment,
-// 2 = pet, 3 = consumable and the rest). The equipment TID3 values are
-// v1.150's itemdata: 1-3 Chinese garment/protector/armor, 9-11 European
-// robe/light/heavy armor, 4 shield, 5 and 12 accessories, 6 weapons, 13
-// and 14 avatars. "other" takes every item no row names.
+// The categories the picker offers, in its order. Equipment takes its
+// slug from equipmentClasses; "other" takes every item no row names.
 var categories = []publicstats.MarketCategory{
 	{Slug: "weapon", Name: "Weapons"},
 	{Slug: "shield", Name: "Shields"},
@@ -50,34 +47,65 @@ func rarityMatches(item publicstats.MarketItem, rarity string) bool {
 	return item.Sealed && item.Seal == rarity
 }
 
+// The item TypeIDs the classification reads (TID1 3 = item; TID2 1 =
+// equipment, 2 = pet, 3 = consumable).
+const (
+	typeItem       = 3
+	typeEquipment  = 1
+	typePet        = 2
+	typeConsumable = 3
+)
+
+// equipmentClass is one equipment TypeID3 row: its category and, for body
+// armour, its armour type.
+type equipmentClass struct {
+	category string
+	armor    string
+}
+
+// equipmentClasses is v1.150's itemdata equipment TypeID3: the one table
+// both the category and the armour type read.
+var equipmentClasses = map[int64]equipmentClass{
+	1:  {"armor", publicstats.MarketArmorGarment},
+	2:  {"armor", publicstats.MarketArmorProtector},
+	3:  {"armor", publicstats.MarketArmorArmor},
+	9:  {"armor", publicstats.MarketArmorRobe},
+	10: {"armor", publicstats.MarketArmorLight},
+	11: {"armor", publicstats.MarketArmorHeavy},
+	4:  {category: "shield"},
+	5:  {category: "accessory"},
+	12: {category: "accessory"},
+	6:  {category: "weapon"},
+	13: {category: "avatar"},
+	14: {category: "avatar"},
+}
+
+/*
+================
+classOf
+
+An equipment item's row of equipmentClasses, false for anything else.
+================
+*/
+func classOf(types [4]int64) (equipmentClass, bool) {
+	if types[0] != typeItem || types[1] != typeEquipment {
+		return equipmentClass{}, false
+	}
+	class, ok := equipmentClasses[types[2]]
+	return class, ok
+}
+
 /*
 ================
 ArmorType
 
-The armour type filter's value for an item's TypeIDs: the body armour
-rows of the categories table (TypeID3 1-3 Chinese, 9-11 European), ""
-for anything else.
+The armour type filter's value for an item's TypeIDs, "" for anything
+that is no body armour.
 ================
 */
 func ArmorType(types [4]int64) string {
-	if types[0] != 3 || types[1] != 1 {
-		return ""
-	}
-	switch types[2] {
-	case 1:
-		return publicstats.MarketArmorGarment
-	case 2:
-		return publicstats.MarketArmorProtector
-	case 3:
-		return publicstats.MarketArmorArmor
-	case 9:
-		return publicstats.MarketArmorRobe
-	case 10:
-		return publicstats.MarketArmorLight
-	case 11:
-		return publicstats.MarketArmorHeavy
-	}
-	return ""
+	class, _ := classOf(types)
+	return class.armor
 }
 
 /*
@@ -88,26 +116,15 @@ The picker slug for an item's TypeIDs (the categories table above).
 ================
 */
 func Category(types [4]int64) string {
-	if types[0] != 3 {
-		return "other"
+	if class, ok := classOf(types); ok {
+		return class.category
 	}
-	switch types[1] {
-	case 2:
-		return "pet"
-	case 3:
-		return "consumable"
-	case 1:
-		switch types[2] {
-		case 6:
-			return "weapon"
-		case 4:
-			return "shield"
-		case 1, 2, 3, 9, 10, 11:
-			return "armor"
-		case 5, 12:
-			return "accessory"
-		case 13, 14:
-			return "avatar"
+	if types[0] == typeItem {
+		switch types[1] {
+		case typePet:
+			return "pet"
+		case typeConsumable:
+			return "consumable"
 		}
 	}
 	return "other"
