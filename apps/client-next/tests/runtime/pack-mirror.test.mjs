@@ -22,6 +22,10 @@ const { settle, packedAsset } = await import( "../helpers/asset-download.mjs" );
 
 const ORIGIN = "https://opensro.online", MIRROR = "sropack://localhost";
 const PACK = ORIGIN + "/assets/packs/game-images-004-0123456789ab.bin";
+// The loader checks each block with crypto.subtle.digest, which runs on the
+// thread pool in real time: a count of event-loop turns is no deadline on a
+// busy runner (#4017), so the wait is a wall-clock one.
+const LOAD_DEADLINE_MS = 10000;
 
 /*
 ================
@@ -50,7 +54,8 @@ async function load( t, origin, answer = ( url, options, served ) => served() ) 
 	t.after( () => loader.dispose() );
 	loader.receive( { kind: "pack-mirror", origin } );
 	loader.receive( { kind: "load", id: 1, url: ORIGIN + asset.path, limit: asset.bytes.length } );
-	for ( let i = 0; i < 200 && messages.length === 0; i++ ) await settle();
+	const deadline = Date.now() + LOAD_DEADLINE_MS;
+	while ( messages.length === 0 && Date.now() < deadline ) await settle();
 	assert.equal( messages.length, 1, "the load settled" );
 	assert.equal( messages[0].kind, "bytes", messages[0].error );
 	assert.deepEqual( new Uint8Array( messages[0].buffer ), asset.bytes );
