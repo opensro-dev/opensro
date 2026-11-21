@@ -239,26 +239,35 @@ var PetScrollItems = []string{
 	"ITEM_COS_P_WINTER_SNOWMAN_EVENT_SCROLL",
 }
 
+// The shipped mall's two pet tiers: every growth (attack) pet scroll is
+// 130 silk (bear, kangaroo, penguin, raven) and every silk pickup pet 88
+// (cat, brownie, pink pig, rabbit). The v1.696 client sells its winter
+// snowman at the same 88; its fox has no real price (a 9999999
+// placeholder), so the fox takes its kind's tier.
+const (
+	growthPetScrollSilk = 130
+	pickupPetScrollSilk = 88
+)
+
 /*
 ================
 petScrollGoods
 
-One Pet-shop listing per imported pet scroll, in the tabs the shipped
-mall keeps for its own kinds: growth pets in MALL_PET_A_GROWTH, the
-silk pickup pets in MALL_PET_B_SILK. The later mall's growth scrolls
-share the summon scrolls' 30-silk tier here. The rows only exist when
-the optional pet import wrote them (Imported), so a build without a
-later source lists none and still boots.
+One Pet-shop listing per imported pet scroll the later mall sells, in
+the tabs the shipped mall keeps for its own kinds and at their tier:
+growth pets in MALL_PET_A_GROWTH, the silk pickup pets in
+MALL_PET_B_SILK. The event copy of the snowman scroll has no mall row in
+the v1.696 client, so it is not listed. The rows only exist when the
+optional pet import wrote them (Imported), so a build without a later
+source lists none and still boots.
 ================
 */
 func petScrollGoods() []mallCategoryGood {
 	return []mallCategoryGood{
 		{Tab: "MALL_PET_A_GROWTH", Package: "PACKAGE_ITEM_COS_P_FOX_SCROLL",
-			Item: "ITEM_COS_P_FOX_SCROLL", Silk: 30, Badge: mallBadgeNew, Imported: true},
+			Item: "ITEM_COS_P_FOX_SCROLL", Silk: growthPetScrollSilk, Badge: mallBadgeNew, Imported: true},
 		{Tab: "MALL_PET_B_SILK", Package: "PACKAGE_ITEM_COS_P_WINTER_SNOWMAN_SCROLL",
-			Item: "ITEM_COS_P_WINTER_SNOWMAN_SCROLL", Silk: 30, Badge: mallBadgeNew, Imported: true},
-		{Tab: "MALL_PET_B_SILK", Package: "PACKAGE_ITEM_COS_P_WINTER_SNOWMAN_EVENT_SCROLL",
-			Item: "ITEM_COS_P_WINTER_SNOWMAN_EVENT_SCROLL", Silk: 30, Badge: mallBadgeNew, Imported: true},
+			Item: "ITEM_COS_P_WINTER_SNOWMAN_SCROLL", Silk: pickupPetScrollSilk, Badge: mallBadgeNew, Imported: true},
 	}
 }
 
