@@ -86,6 +86,30 @@ def by_ids(raw):
 	return {int(row[1]) for row in stage1.table_rows(raw) if len(row) > 1 and row[1].isdigit()}
 
 
+# The server spawns a gate building at GID 250000 + its id, below the
+# ground items' band at 300000 (npcworlddata.go, domain.GroundItemGIDBase:
+# "teleport identity overflow"), so a building id stays under 50000.
+BUILDING_ID_LIMIT = 50000
+
+
+# ================
+# free_building_ids
+#
+# count building ids no object holds, the highest first under
+# BUILDING_ID_LIMIT: the native items and characters sit low, the later
+# imports' fresh ids above the limit, so the top of the band is free.
+# ================
+def free_building_ids(taken, count):
+	taken, out, candidate = set(taken), [], BUILDING_ID_LIMIT - 1
+	while len(out) < count:
+		if candidate <= 0:
+			raise ValueError("no free gate building id under the server's limit")
+		if candidate not in taken:
+			out.append(candidate)
+		candidate -= 1
+	return out
+
+
 # ================
 # gate_building_taken
 #
@@ -116,14 +140,16 @@ def gate_building_taken(buildings_raw, text_root, character_shard, allocated):
 # name a building by code, never by id, so the building is free to move.
 # ================
 def gate_buildings(buildings, taken):
-	clashing = [row for row in buildings if int(row[1]) in taken]
+	clashing = [row for row in buildings if int(row[1]) in taken or int(row[1]) >= BUILDING_ID_LIMIT]
 	if not clashing:
 		return {}
 	occupied = set(taken) | {int(row[1]) for row in buildings}
-	fresh = published_ids.allocate_identities(occupied, [row[2] for row in clashing], {})
+	# Not published_ids' next id: that one is above every object, past
+	# the server's building band (BUILDING_ID_LIMIT).
+	fresh = free_building_ids(occupied, len(clashing))
 	moved = {}
-	for row in clashing:
-		moved[row[1]] = str(fresh[row[2]])
+	for row, identity in zip(clashing, fresh):
+		moved[row[1]] = str(identity)
 		row[1] = moved[row[1]]
 	return moved
 
