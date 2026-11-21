@@ -232,14 +232,12 @@ func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Characte
 	s.characters[divisionID] = append(s.characters[divisionID], c)
 	s.rebuildCharacterLookupLocked(divisionID)
 	s.charDivision[c] = divisionID
-	// A new character's gold is minted by its creation: the ledger starts
-	// it at nothing, so the creation commit records the starting gold.
-	s.seedLedgerAtLocked(c, 0)
-	// Its starting items are granted by the same creation (item_ledger.go).
-	s.seedItemsEmptyLocked(c)
-	s.markCharacterLocked(c)
+	// A new character's gold and items are granted by its creation: its
+	// door starts from nothing, so the creation records what it starts
+	// with (ledger_door.go).
+	s.beginNewCharacterLocked(c)
 	s.changes.nextCharID[divisionID] = true
-	s.commitLocked("create-character " + c.Name)
+	s.finishDoorLocked("create-character "+c.Name, false, []*domain.Character{c})
 	return nil
 }
 
@@ -309,10 +307,10 @@ func (s *Store) ReserveCharacterDeletion(c *domain.Character, reservedAt string)
 	if c.DeletePending {
 		return true
 	}
+	s.beginDoorLocked(c)
 	c.DeletePending = true
 	c.DeleteReservedAt = reservedAt
-	s.markCharacterLocked(c)
-	s.commitLocked("delete-reserve " + c.Name)
+	s.finishDoorLocked("delete-reserve "+c.Name, false, []*domain.Character{c})
 	return true
 }
 

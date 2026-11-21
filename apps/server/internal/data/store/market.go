@@ -469,7 +469,6 @@ func (s *Store) settleSaleLocked(t saleTerms) (domain.MarketSale, error) {
 			return domain.MarketSale{}, err
 		}
 	}
-	settle := func() {}
 	if gold {
 		committed := *t.payer
 		committed.Gold = &paidGold
@@ -477,9 +476,6 @@ func (s *Store) settleSaleLocked(t saleTerms) (domain.MarketSale, error) {
 			committed.MissionInventory = withRow(t.payer.MissionInventory, item)
 		}
 		if err := tx.upsertCharacter(payerDivision, &committed); err != nil {
-			return domain.MarketSale{}, err
-		}
-		if settle, err = s.ledgerOwnTxLocked(tx, payerDivision, t.payer, paidGold); err != nil {
 			return domain.MarketSale{}, err
 		}
 		if creditWarehouse {
@@ -525,7 +521,6 @@ func (s *Store) settleSaleLocked(t saleTerms) (domain.MarketSale, error) {
 	if toBag {
 		t.receiver.MissionInventory = withRow(t.receiver.MissionInventory, item)
 	}
-	settle()
 	return sale, nil
 }
 

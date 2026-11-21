@@ -168,3 +168,21 @@ func TestDiffItemRowCountsMatchesTheFoldedDiff(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestDiffItemHoldingsSkipsZeroEntries
+
+An item held at zero on one side (the commit check's expectation after a
+noted loss) is no change against its absence on the other.
+================
+*/
+func TestDiffItemHoldingsSkipsZeroEntries(t *testing.T) {
+	t.Parallel()
+
+	before := []ItemCount{{Item: "A", Count: 0}, {Item: "B", Count: 2}}
+	after := []ItemCount{{Item: "B", Count: 2}, {Item: "C", Count: 0}}
+	if got := DiffItemHoldings(before, after); len(got) != 0 {
+		t.Fatalf("zero entries diffed %+v", got)
+	}
+}

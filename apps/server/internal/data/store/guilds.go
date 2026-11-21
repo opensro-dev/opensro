@@ -337,12 +337,12 @@ func (door storeGuildDoor) CreateGuild(divisionID string, guild domain.GuildReco
 	s.guildMembers[divisionID][id] = guildMembersForStorage(
 		[]domain.GuildMemberRecord{leader},
 	)
+	s.beginDoorLocked(leaderCharacter)
 	leaderCharacter.GuildID = &id
 	s.meta.NextGuildID[divisionID] = id + 1
 	s.markGuildLocked(guildKey{division: divisionID, guildID: id})
 	s.changes.nextGuildID[divisionID] = true
-	s.markCharacterLocked(leaderCharacter)
-	s.commitLocked("guild-create " + guild.Name)
+	s.finishDoorLocked("guild-create "+guild.Name, false, []*domain.Character{leaderCharacter})
 	return id, nil
 }
 
@@ -499,10 +499,10 @@ func (door storeGuildDoor) AddGuildMemberAs(
 	storedMembers := guildMembersForStorage(next)
 	s.guildMembers[divisionID][guildID] = storedMembers
 	id := guildID
+	s.beginDoorLocked(joiner)
 	joiner.GuildID = &id
 	s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
-	s.markCharacterLocked(joiner)
-	s.commitLocked(fmt.Sprintf("guild-add-member %s/%d", divisionID, guildID))
+	s.finishDoorLocked(fmt.Sprintf("guild-add-member %s/%d", divisionID, guildID), false, []*domain.Character{joiner})
 
 	committedMembers, coherent := door.guildMemberViewsLocked(divisionID, guildID, storedMembers)
 	if !coherent {
@@ -571,11 +571,11 @@ func (door storeGuildDoor) DissolveGuildAs(
 	delete(s.guildViews, key)
 	s.guildViewMu.Unlock()
 	s.changes.dissolvedGuild[key] = true
+	s.beginDoorLocked(memberCharacters...)
 	for _, character := range memberCharacters {
 		character.GuildID = nil
-		s.markCharacterLocked(character)
 	}
-	s.commitLocked(fmt.Sprintf("guild-dissolve %s/%d", divisionID, guildID))
+	s.finishDoorLocked(fmt.Sprintf("guild-dissolve %s/%d", divisionID, guildID), false, memberCharacters)
 
 	resultMembers := make([]domain.GuildMemberRecord, len(members))
 	copy(resultMembers, members)
@@ -684,13 +684,15 @@ func (door storeGuildDoor) moveGuildPoints(
 	s.guildMembers[divisionID][guildID] = storedMembers
 	s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
 	label := "guild-gp-accrual"
+	var donors []*domain.Character
 	if debitSP {
+		s.beginDoorLocked(donor)
 		remaining := sp - int64(amount)
 		donor.SkillPoints = &remaining
-		s.markCharacterLocked(donor)
+		donors = append(donors, donor)
 		label = "guild-gp-donate"
 	}
-	s.commitLocked(fmt.Sprintf("%s %s/%d", label, divisionID, guildID))
+	s.finishDoorLocked(fmt.Sprintf("%s %s/%d", label, divisionID, guildID), false, donors)
 
 	committedMembers, coherent := door.guildMemberViewsLocked(divisionID, guildID, storedMembers)
 	if !coherent {
@@ -736,14 +738,14 @@ func (door storeGuildDoor) LevelUpGuildAs(divisionID string, actorID int64) (dom
 	if guild.GP < cost.GP {
 		return refused, domain.GuildRefusalGPDeficit
 	}
+	s.beginDoorLocked(leader)
 	gold := *leader.Gold - cost.Gold
 	leader.Gold = &gold
 	guild.GP -= cost.GP
 	guild.Level++
 	s.guilds[divisionID][guildID] = guild
 	s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
-	s.markCharacterLocked(leader)
-	s.commitLocked(fmt.Sprintf("guild-level-up %s/%d", divisionID, guildID))
+	s.finishDoorLocked(fmt.Sprintf("guild-level-up %s/%d", divisionID, guildID), false, []*domain.Character{leader})
 	return domain.GuildSnapshot{Guild: guild, Members: members}, domain.GuildRefusalNone
 }
 
@@ -778,12 +780,12 @@ func (door storeGuildDoor) ClaimWarCompensationAs(divisionID string, actorID int
 		return 0, domain.GuildRefusalNumericOverflow
 	}
 	gold += amount
+	s.beginDoorLocked(leader)
 	leader.Gold = &gold
 	guild.WarCompensation = 0
 	s.guilds[divisionID][guildID] = guild
 	s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
-	s.markCharacterLocked(leader)
-	s.commitLocked(fmt.Sprintf("guild-war-compensation %s/%d", divisionID, guildID))
+	s.finishDoorLocked(fmt.Sprintf("guild-war-compensation %s/%d", divisionID, guildID), false, []*domain.Character{leader})
 	return amount, domain.GuildRefusalNone
 }
 
@@ -952,10 +954,10 @@ func (door storeGuildDoor) removeGuildMemberLocked(
 	kept = append(kept, members[:targetIndex]...)
 	kept = append(kept, members[targetIndex+1:]...)
 	door.s.guildMembers[divisionID][guildID] = guildMembersForStorage(kept)
+	door.s.beginDoorLocked(character)
 	character.GuildID = nil
 	door.s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
-	door.s.markCharacterLocked(character)
-	door.s.commitLocked(fmt.Sprintf("%s %s/%d", label, divisionID, guildID))
+	door.s.finishDoorLocked(fmt.Sprintf("%s %s/%d", label, divisionID, guildID), false, []*domain.Character{character})
 	return domain.GuildRemovalResult{
 		Guild:         guild,
 		RemovedMember: target,

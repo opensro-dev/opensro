@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	log "github.com/sirupsen/logrus"
+
+	"opensro.online/server/internal/domain"
 )
 
 // EnvGMCharacters is the operator's GM allowlist: a comma-separated list
@@ -85,6 +87,7 @@ func (s *Store) ReconcileGMPrivilege(allowed []GMIdentity) (promoted, demoted []
 
 	s.mu.Lock()
 	matched := map[string]bool{}
+	var changed []*domain.Character
 	for divisionID, records := range s.characters {
 		for _, c := range records {
 			identity := GMIdentity{DivisionID: divisionID, CharacterName: c.Name}
@@ -96,8 +99,9 @@ func (s *Store) ReconcileGMPrivilege(allowed []GMIdentity) (promoted, demoted []
 			if c.GMPrivilege == target {
 				continue
 			}
+			s.beginDoorLocked(c)
 			c.GMPrivilege = target
-			s.markCharacterLocked(c)
+			changed = append(changed, c)
 			if target {
 				promoted = append(promoted, identity.String())
 			} else {
@@ -105,8 +109,8 @@ func (s *Store) ReconcileGMPrivilege(allowed []GMIdentity) (promoted, demoted []
 			}
 		}
 	}
-	if len(promoted) > 0 || len(demoted) > 0 {
-		s.commitLocked("gm-privilege reconcile")
+	if len(changed) > 0 {
+		s.finishDoorLocked("gm-privilege reconcile", false, changed)
 	}
 	s.mu.Unlock()
 

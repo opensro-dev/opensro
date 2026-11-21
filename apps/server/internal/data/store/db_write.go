@@ -79,13 +79,16 @@ type characterRowTx struct {
 	// the rows this transaction writes, retained at Commit under the
 	// written digests' discipline.
 	copies map[committedCharacterKey]*domain.Character
-	// label is the door's: the gold ledger (ledgerOwnTxLocked) and the
-	// item ledger (noteItems) both record under it.
+	// label is the door's: both ledgers record its writes under it
+	// (noteWrite).
 	label string
-	// itemRows are the item changes the writes noted, written at Commit
-	// inside the transaction; itemWrites settle their baselines after.
-	itemRows   []itemLedgerRow
-	itemWrites []*ownTxItemWrite
+	// goldRows and itemRows are the changes the writes noted, written
+	// at Commit inside the transaction. writes is each written
+	// character's state as of its last write here, so a second write
+	// of one character diffs against the first.
+	goldRows []ledgerRow
+	itemRows []itemLedgerRow
+	writes   []doorBefore
 }
 
 /*
@@ -115,8 +118,8 @@ its digest for Commit to retain.
 ================
 */
 func (w *characterRowTx) upsertCharacter(division string, c *domain.Character) error {
-	// Whatever the bytes, the item ledger reads what this write moves.
-	w.noteItems(division, c)
+	// Whatever the bytes, the ledgers read what this write moves.
+	w.noteWrite(division, c)
 	// The section skip (#2141), as in the commit path: a row whose
 	// sections all equal its committed copy already holds these
 	// bytes on disk. The digest is re-recorded so Commit retains it
@@ -186,13 +189,18 @@ never make a later commit skip a row the disk does not hold.
 ================
 */
 func (w *characterRowTx) Commit() error {
+	w.reconcileCopies()
+	if err := flushLedgerTx(w.Tx, w.goldRows); err != nil {
+		return err
+	}
 	if err := flushItemLedgerTx(w.Tx, w.itemRows); err != nil {
 		return err
 	}
 	if err := w.Tx.Commit(); err != nil {
 		return err
 	}
-	w.settleItems()
+	w.store.countLedgerRows(w.goldRows)
+	w.store.countUndeclaredItemRows(w.itemRows)
 	for key := range w.deleted {
 		delete(w.store.committedDigests, key)
 		delete(w.store.committedRows, key)
@@ -208,6 +216,73 @@ func (w *characterRowTx) Commit() error {
 
 /*
 ================
+characterRowTx::noteWrite
+
+The door wrote copy for division: the gold and item rows of the live
+record becoming the copy join this transaction. The before is the live
+record, or this transaction's earlier write of the same character, so
+a change is never counted twice; a rolled-back door drops its rows.
+================
+*/
+func (w *characterRowTx) noteWrite(division string, copy *domain.Character) {
+	s := w.store
+	live := s.characterByIDLocked(division, copy.ID)
+	if live == nil {
+		// A row the roster does not hold (a fixture writing a detached
+		// record): nothing to attribute it to.
+		return
+	}
+	var before *doorBefore
+	for i := range w.writes {
+		if w.writes[i].c == live {
+			before = &w.writes[i]
+		}
+	}
+	if before == nil {
+		w.writes = append(w.writes, doorBefore{c: live, gold: ledgerGold(live), items: domain.AppendItemRowCounts(nil, live)})
+		before = &w.writes[len(w.writes)-1]
+	}
+	gold, moved, items := s.ledgerRowsLocked(w.label, division, before, copy)
+	if moved {
+		w.goldRows = append(w.goldRows, gold)
+	}
+	w.itemRows = append(w.itemRows, items...)
+	before.gold = ledgerGold(copy)
+	before.items = domain.AppendItemRowCounts(before.items, copy)
+}
+
+/*
+================
+characterRowTx::reconcileCopies
+
+The commit check (ledger_door.go) for this transaction's written
+copies: each must differ from its committed copy by exactly the rows
+the writes noted. beginTxLocked wrote every pending row before this
+transaction opened, so these notes are all there are.
+================
+*/
+func (w *characterRowTx) reconcileCopies() {
+	if len(w.copies) == 0 {
+		return
+	}
+	s := w.store
+	noted := notedByCharacter(w.goldRows, w.itemRows)
+	_ = visitSorted(w.copies, lessCharacterKey, func(key committedCharacterKey, written *domain.Character) error {
+		committed, known := s.committedRows[key]
+		if !known {
+			return nil
+		}
+		gold, moved, items := s.reconcileWriteLocked(key, committed, written, noted[key])
+		if moved {
+			w.goldRows = append(w.goldRows, gold)
+		}
+		w.itemRows = append(w.itemRows, items...)
+		return nil
+	})
+}
+
+/*
+================
 characterRowTx::Rollback
 ================
 */
@@ -215,7 +290,7 @@ func (w *characterRowTx) Rollback() error {
 	w.written = map[committedCharacterKey][32]byte{}
 	w.deleted = map[committedCharacterKey]bool{}
 	w.copies = map[committedCharacterKey]*domain.Character{}
-	w.itemRows, w.itemWrites = nil, nil
+	w.goldRows, w.itemRows, w.writes = nil, nil, nil
 	return w.Tx.Rollback()
 }
 

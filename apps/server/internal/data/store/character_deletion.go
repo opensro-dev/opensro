@@ -97,8 +97,6 @@ func (s *Store) ReapMaturedDeletions() []string {
 		delete(s.charDivision, victim.c)
 		// The victim's retained digest went with the archive
 		// transaction's Commit (characterRowTx::deleteCharacter).
-		s.forgetLedgerLocked(victim.c)
-		s.forgetItemsLocked(victim.c)
 		delete(s.changes.characters, victim.c)
 		// The archived record's mailbox dies with it (the archive keeps
 		// the character's final bytes, not its mail).

@@ -74,10 +74,6 @@ func (door storeFortressDoor) HireFortressStaff(division string, record domain.F
 	if err = tx.upsertCharacter(division, &next); err != nil {
 		return 2, err
 	}
-	settle, err := s.ledgerOwnTxLocked(tx, division, actor, gold)
-	if err != nil {
-		return 2, err
-	}
 	if err = replaceGuildTx(tx.Tx, division, guildID, guild, s.guildMembers[division][guildID], &s.residues); err != nil {
 		return 2, err
 	}
@@ -88,7 +84,6 @@ func (door storeFortressDoor) HireFortressStaff(division string, record domain.F
 		return 2, err
 	}
 	actor.Gold = &gold
-	settle()
 	s.guilds[division][guildID] = guild
 	s.recordWriteSuccessLocked()
 	return 0, nil
