@@ -104,7 +104,7 @@ test("a full replay decodes every section and unsaved blocks load the defaults",
 	assert.equal( settings.potionOn, false );
 	assert.equal( settings.skillOn, true );
 	assert.deepEqual( settings.potion, potion );
-	assert.deepEqual( settings.hunt, new Array( MACRO_HUNT_BYTES ).fill( 0 ) );
+	assert.deepEqual( settings.hunt, codec.defaultHuntBlock() );
 	assert.deepEqual( settings.skillFlags, [ 1, 0, 0, 1 ] );
 	assert.deepEqual( settings.attack, [ { slot: 2, skill: 0x1234 } ] );
 	assert.deepEqual( settings.buff, [] );
@@ -141,7 +141,7 @@ test("saves encode the server's layout and send only what changed", () => {
 		MACRO_HUNT,
 		2,
 		0,
-		0,
+		hunt[1],
 		...hunt
 	] );
 

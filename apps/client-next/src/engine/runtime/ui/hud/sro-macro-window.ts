@@ -733,8 +733,9 @@ function huntTab( pen: Pen, draft: MacroSettings, body: UiRect ) {
 	MACRO_HUNT_GROUPS.forEach( ( group, i ) => {
 		const top = y + 8 + i * (ROW + 4);
 		pen.text( group.caption, [ x + 12, top, width - 200, ROW ] );
-		const choice = group.choices[draft.hunt[group.byte] ?? 0] ?? group.choices[0]!;
-		pen.button( `hunt-group:${group.byte}`, choice, x + width - 184, top, 172 );
+		const held = draft.hunt[group.byte] ?? 0;
+		const choice = group.choices.find( c => c.value === held ) ?? group.choices[0]!;
+		pen.button( `hunt-group:${group.byte}`, choice.label, x + width - 184, top, 172 );
 	} );
 	const checksTop = y + 8 + MACRO_HUNT_GROUPS.length * (ROW + 4) + 8;
 	MACRO_HUNT_CHECKS.forEach( ( check, i ) => {

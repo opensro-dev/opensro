@@ -18,7 +18,7 @@ import type { EntityState } from "@/engine/contracts/world";
 import { planarDistanceSquared, samePlane } from "@/engine/foundation/world/world-space";
 
 // 861580 seeds its best distance with 70.0.
-const AUTO_SELECT_REACH = 70;
+export const AUTO_SELECT_REACH = 70;
 // The appearance byte of a dead character (gameplay.ts reads the same value).
 const APPEARANCE_DEAD = 2;
 
@@ -29,16 +29,22 @@ nearestMonster
 The nearest living monster inside the reach, or undefined. 861580 tests a
 state bit on each list entry; the port's list holds spawned monsters, and
 the inference recorded here is that the bit excludes the dead, which no
-player could select to any purpose.
+player could select to any purpose. reach defaults to Auto Select's 70;
+the SRO Macro hunt pass (0068e700) supplies its configured range.
+skip drops candidates the hunt's Dimension-pillar check refuses.
 ================
 */
 export function nearestMonster(
 	monsters: readonly EntityState[],
-	local: { readonly regionId: number; readonly x: number; readonly y: number; readonly z: number; }
+	local: { readonly regionId: number; readonly x: number; readonly y: number; readonly z: number; },
+	reach: number = AUTO_SELECT_REACH,
+	skip?: ( monster: EntityState ) => boolean
 ): EntityState | undefined {
-	let best: EntityState | undefined, bestDistance = AUTO_SELECT_REACH * AUTO_SELECT_REACH;
+	if ( !(reach > 0) ) return undefined;
+	let best: EntityState | undefined, bestDistance = reach * reach;
 	for ( const monster of monsters ) {
 		if ( monster.appearanceState?.[0] === APPEARANCE_DEAD ) continue;
+		if ( skip?.( monster ) ) continue;
 		if ( !samePlane( monster.regionId, local.regionId ) ) continue;
 		const height = monster.y - local.y, distance = planarDistanceSquared( local, monster ) + height * height;
 		if ( distance > bestDistance ) continue;

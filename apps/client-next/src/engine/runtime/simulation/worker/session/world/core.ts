@@ -82,7 +82,9 @@ export function createWorldCore( send: ( frame: WireFrame ) => void ) {
 			( handle, at ) => entities.publish( { kind: "ui-sound", handle, at } ),
 			event => entities.publish( event ),
 			gid => entities.read( gid ),
-			( cue, at ) => entities.publish( { kind: "item-sound", cue, at } )
+			( cue, at ) => entities.publish( { kind: "item-sound", cue, at } ),
+			() => entities.monsters(),
+			() => entities.groundItems()
 		);
 	gameplay.bindReferences( {
 		country: refObjId => entities.characterCountry( refObjId ),

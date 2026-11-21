@@ -110,34 +110,75 @@ export const MACRO_POTION_ROWS: Readonly<Record<MacroPotionPage, readonly MacroP
 
 /*
 ================
+MacroHuntChoice
+
+One radio of a hunt option group: the label and the byte value native
+stores (not always the radio index — range and return-timer encode
+specially; see sro-macro.md).
+================
+*/
+export interface MacroHuntChoice {
+	readonly value: number;
+	readonly label: string;
+}
+
+/*
+================
 MacroHuntGroup
 
-One pick-one option group of the hunt block: its byte and its choices,
-the byte holding the chosen index.
+One pick-one option group of the hunt block: its byte and its choices.
 ================
 */
 export interface MacroHuntGroup {
 	readonly byte: number;
 	readonly caption: string;
-	readonly choices: readonly string[];
+	readonly choices: readonly MacroHuntChoice[];
 }
 
-// Group order from macro_3.2dt (hypothesis, sro-macro.md); captions and
-// choices are the v1.696 UIIT_STT_SRO_MACRO_AUTO_HUNTING_* rows.
+// Group order from macro_3.2dt / 00da8bb0; values from 0068e700 (range),
+// 00687130 (return hours), 006862d0 / 00686b50 (resurrect / repair).
 export const MACRO_HUNT_GROUPS: readonly MacroHuntGroup[] = [
-	{ byte: 0, caption: "Configure Hunting Range", choices: [ "30 m", "50 m", "70 m", "100 m", "In place" ] },
-	{ byte: 2, caption: "Configure Berserk Mode", choices: [ "All", "Not use" ] },
+	{
+		byte: 0,
+		caption: "Configure Hunting Range",
+		choices: [
+			{ value: 0, label: "In place" },
+			{ value: 1, label: "30 m" },
+			{ value: 2, label: "50 m" },
+			{ value: 3, label: "70 m" },
+			{ value: 4, label: "100 m" }
+		]
+	},
+	{
+		byte: 2,
+		caption: "Configure Berserk Mode",
+		choices: [ { value: 0, label: "All" }, { value: 1, label: "Not use" } ]
+	},
 	{
 		byte: 4,
 		caption: "Configure Auto-Resurrect",
-		choices: [ "Use Resurrection Scroll", "Resurrect in town", "Wait for resurrection" ]
+		choices: [
+			{ value: 0, label: "Use Resurrection Scroll" },
+			{ value: 1, label: "Resurrect in town" },
+			{ value: 2, label: "Wait for resurrection" }
+		]
 	},
 	{
 		byte: 5,
 		caption: "Configure Auto-Return",
-		choices: [ "Not use", "In 1 hour", "In 3 hours", "In 5 hours", "In 10 hours" ]
+		choices: [
+			{ value: 0, label: "Not use" },
+			{ value: 1, label: "In 1 hour" },
+			{ value: 3, label: "In 3 hours" },
+			{ value: 5, label: "In 5 hours" },
+			{ value: 10, label: "In 10 hours" }
+		]
 	},
-	{ byte: 7, caption: "Configure Auto-Repair", choices: [ "Use Repair Hammer", "Return to town" ] }
+	{
+		byte: 7,
+		caption: "Configure Auto-Repair",
+		choices: [ { value: 0, label: "Use Repair Hammer" }, { value: 1, label: "Return to town" } ]
+	}
 ];
 
 export const MACRO_HUNT_CHECKS: readonly { readonly byte: number; readonly caption: string; }[] = [
@@ -505,14 +546,12 @@ acquired-scroll:<+1|-1>, skill-scroll:<+1|-1>, save, cancel, close.
 			} else if ( verb === "hunt-group" ) {
 				const group = MACRO_HUNT_GROUPS.find( g => g.byte === slot );
 				if ( group ) {
-					editDraft( settings => ({
-						...settings,
-						hunt: withHuntByte(
-							settings.hunt,
-							slot,
-							((settings.hunt[slot] ?? 0) + 1) % group.choices.length
-						)
-					}) );
+					editDraft( settings => {
+						const current = settings.hunt[slot] ?? 0;
+						const at = group.choices.findIndex( choice => choice.value === current );
+						const next = group.choices[(at < 0 ? 0 : at + 1) % group.choices.length]!;
+						return { ...settings, hunt: withHuntByte( settings.hunt, slot, next.value ) };
+					} );
 				}
 			} else if ( verb === "hunt-check" ) {
 				if ( MACRO_HUNT_CHECKS.some( c => c.byte === slot ) ) {
