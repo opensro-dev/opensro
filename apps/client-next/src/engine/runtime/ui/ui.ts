@@ -16261,12 +16261,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						}
 						itemCount( item, r );
 					}
-					// Port-only (Experimental "Drop between bag cells", BUG-092): a cell
-					// also takes its half of the gap to its neighbours.
-					const gapDrops = experimental.state().saved.bagCellGapDrops;
-					for ( const s of slots.slots ) {
-						itemSlot( s.slot, s.rect, s.enabled, undefined, gapDrops ? s.hitRect : undefined );
-					}
+					// Port-only (BUG-092): a cell also takes its half of the gap to its
+					// neighbours, so a drop between two cells lands in the nearer one.
+					for ( const s of slots.slots ) itemSlot( s.slot, s.rect, s.enabled, undefined, s.hitRect );
 					// 5952F9/59530D explicitly draw hidden equipment children 4 then 5.
 					const ef = Object.values( equipment ).find( n => n.id === 4 )!,
 						eb = Object.values( equipment ).find( n => n.id === 5 )!;

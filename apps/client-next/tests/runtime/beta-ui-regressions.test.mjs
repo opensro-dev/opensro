@@ -757,49 +757,41 @@ test("a worn job suit dragged to the bag sends the move and shows the server's r
 Drop between bag cells
 
 BUG-092: an item released in the 4 px between two bag cells landed on no
-cell and nothing happened, as in the original. With the port-only
-Experimental "Drop between bag cells" on, each cell takes its half of the
-gap, so the drop lands in the nearer cell; off, it does nothing.
+cell and nothing happened, as in the original. Each cell now takes its half
+of the gap (port-only, the default with no row, owner 2026-11-21), so the
+drop lands in the nearer cell.
 ================
 */
-for ( const on of [ true, false ] ) {
-	test(`an item dropped between two bag cells ${on ? "lands in the nearer one" : "stays (row off)"}`, () => {
-		const f = createFixture();
-		try {
-			const earring = {
-				slot: 13,
-				refObjId: 1,
-				typeFlags: 0x8ec,
-				quantity: 1,
-				name: "Earring",
-				plus: 0,
-				durability: 0,
-				variance: "0",
-				magic: []
-			};
-			f.ui.event( /** @type {any} */ ({ kind: "experimental-preferences", value: { bagCellGapDrops: on } }) );
-			f.setGame( { inventorySlotCount: 45, equipmentSlotCount: 13, inventory: [ earring ] } );
-			f.ui.event( { kind: "key", code: "KeyI" } );
-			const cell = defined( f.step()?.controls.find( c => c.id === "slot:14" ) );
-			// One pixel into the gap right of slot 14, level with its middle.
-			const x = cell.rect[0] + cell.rect[2], y = cell.rect[1] + cell.rect[3] / 2;
-			f.ui.event( { kind: "drag", id: "slot:13", dx: 50, dy: 0 } );
-			f.ui.event( { kind: "drag-end", id: "slot:13", x, y } );
-			f.step();
-			assert.deepEqual(
-				f.commands,
-				on ?
-					[ {
-						kind: "gameplay",
-						command: { kind: "inventory-move", source: 13, destination: 14, quantity: 1 }
-					} ] :
-					[]
-			);
-		} finally {
-			f.ui.dispose();
-		}
-	});
-}
+test("an item dropped between two bag cells lands in the nearer one", () => {
+	const f = createFixture();
+	try {
+		const earring = {
+			slot: 13,
+			refObjId: 1,
+			typeFlags: 0x8ec,
+			quantity: 1,
+			name: "Earring",
+			plus: 0,
+			durability: 0,
+			variance: "0",
+			magic: []
+		};
+		f.setGame( { inventorySlotCount: 45, equipmentSlotCount: 13, inventory: [ earring ] } );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		const cell = defined( f.step()?.controls.find( c => c.id === "slot:14" ) );
+		// One pixel into the gap right of slot 14, level with its middle.
+		const x = cell.rect[0] + cell.rect[2], y = cell.rect[1] + cell.rect[3] / 2;
+		f.ui.event( { kind: "drag", id: "slot:13", dx: 50, dy: 0 } );
+		f.ui.event( { kind: "drag-end", id: "slot:13", x, y } );
+		f.step();
+		assert.deepEqual( f.commands, [ {
+			kind: "gameplay",
+			command: { kind: "inventory-move", source: 13, destination: 14, quantity: 1 }
+		} ] );
+	} finally {
+		f.ui.dispose();
+	}
+});
 
 /*
 ================

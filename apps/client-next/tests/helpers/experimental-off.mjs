@@ -76,8 +76,6 @@ export const OFF = Object.freeze( {
 	fitWindowLabels: true,
 	// On by default (owner 2026-10-15): a drop on a bag tab moves the item there.
 	dropOnBagTab: true,
-	// On by default (BUG-092): a drop between bag cells lands in the nearer one.
-	bagCellGapDrops: true,
 	// On by default (owner 2026-10-24): click shortcuts stage into an exchange.
 	exchangeClickShortcuts: true,
 	// On by default (owner 2026-10-15): a notice's player and item are links.

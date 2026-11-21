@@ -15,6 +15,8 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+import { defined } from "../helpers/defined.mjs";
+
 const { inventorySlots } = await import( "../../src/engine/foundation/ui/inventory-layout.ts" );
 
 const EQUIPMENT = 13;
@@ -87,7 +89,7 @@ test("every point between the bag cells belongs to exactly one cell's hit area",
 			"hit area holds cell " + cell.slot
 		);
 	}
-	const first = slots[0].hitRect, last = slots.at( -1 ).hitRect;
+	const first = defined( slots[0] ).hitRect, last = defined( slots.at( -1 ) ).hitRect;
 	for ( let y = first[1]; y < last[1] + last[3]; y++ ) {
 		for ( let x = first[0]; x < last[0] + last[2]; x++ ) {
 			const owners = slots.filter( cell => inside( cell.hitRect, x, y ) );
@@ -95,7 +97,7 @@ test("every point between the bag cells belongs to exactly one cell's hit area",
 		}
 	}
 	// Two pixels right of slot 13's cell (in the gap) is slot 13's; three is slot 14's.
-	const [x0, y0, w0] = slots[0].rect;
-	assert.equal( slots.find( cell => inside( cell.hitRect, x0 + w0 + 1, y0 + 4 ) ).slot, 13 );
-	assert.equal( slots.find( cell => inside( cell.hitRect, x0 + w0 + 2, y0 + 4 ) ).slot, 14 );
+	const [x0, y0, w0] = defined( slots[0] ).rect;
+	assert.equal( defined( slots.find( cell => inside( cell.hitRect, x0 + w0 + 1, y0 + 4 ) ) ).slot, 13 );
+	assert.equal( defined( slots.find( cell => inside( cell.hitRect, x0 + w0 + 2, y0 + 4 ) ) ).slot, 14 );
 });
