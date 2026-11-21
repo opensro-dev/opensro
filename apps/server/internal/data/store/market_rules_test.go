@@ -108,7 +108,7 @@ func TestMarketGoldSaleOwesTheListingCharacter(t *testing.T) {
 	if err != nil || !sale.Unpaid || sale.SellerChar != seller.ID || sale.To != domain.MarketToWarehouse {
 		t.Fatalf("sale = %+v, %v", sale, err)
 	}
-	if storage, _ := readAccountStorage(s.syncDBLocked(), marketSeller); storage.Gold != 0 {
+	if storage, _ := s.readAccountStorage(s.syncDBLocked(), marketSeller); storage.Gold != 0 {
 		t.Fatalf("the seller's warehouse got %d gold", storage.Gold)
 	}
 	owed, err := s.MarketOwedCharacters()
@@ -175,7 +175,7 @@ func TestMarketBuyIntoTheBag(t *testing.T) {
 	if len(buyer.MissionInventory) != 1 || buyer.MissionInventory[0].Slot != 20 || *buyer.Gold != 12345-1000 {
 		t.Fatalf("the buyer's record = %+v, gold %d", buyer.MissionInventory, *buyer.Gold)
 	}
-	if storage, _ := readAccountStorage(s.syncDBLocked(), marketBuyer); len(storage.Rows) != 0 {
+	if storage, _ := s.readAccountStorage(s.syncDBLocked(), marketBuyer); len(storage.Rows) != 0 {
 		t.Fatalf("the bag buy also filled the warehouse: %+v", storage.Rows)
 	}
 	if n := swordCount(t, s, seller, buyer); n != 1 {
@@ -370,7 +370,7 @@ func TestMarketOrphanedProceedsGoToTheWarehouse(t *testing.T) {
 	if paid, err := s.SettleOrphanedMarketProceeds(10); err != nil || paid != 1 {
 		t.Fatalf("orphan pass = %d, %v", paid, err)
 	}
-	if storage, _ := readAccountStorage(s.syncDBLocked(), marketSeller); storage.Gold != 990 {
+	if storage, _ := s.readAccountStorage(s.syncDBLocked(), marketSeller); storage.Gold != 990 {
 		t.Fatalf("the seller's warehouse gold = %d", storage.Gold)
 	}
 	if paid, _ := s.SettleOrphanedMarketProceeds(10); paid != 0 {
