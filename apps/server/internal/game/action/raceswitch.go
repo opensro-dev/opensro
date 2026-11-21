@@ -158,6 +158,7 @@ func (rt *Runtime) useRaceSwitchScroll(use skillItemUse, c *enterworld.Character
 	// last unit rebuilds the bag without the scroll's row (gendertool.go).
 	moved := &c.MissionInventory[index]
 	moved.RefObjID, moved.Codename, moved.TypeFlags = twin.RefObjID, twin.Codename, twin.TypeFlags()
+	rt.clampSwitchedDurability(twin, moved)
 	changed := *moved
 	remaining := rt.consumeItemUseRow(c, use.row)
 	state := wire.NewWriter(6).U8(target).U8(itemStateRefFlag).U32(twin.RefObjID).Payload()
