@@ -40,6 +40,7 @@ import type {
 	SecondaryModel,
 	ItemPresentation
 } from "./internal/presentation-contract";
+import { compoundPart } from "./compound-part";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 
 // The ride transform modes 8602C0 reads from ride+0x29D (EffectSyntax_RotationType
@@ -167,34 +168,6 @@ interface StageBindings {
 	};
 	// The frame probe, when a bench installed one.
 	readonly probe: Pick<import("@/engine/contracts/runtime").RenderFrameProbe, "characterCount"> | undefined;
-}
-
-/*
-================
-compoundPart
-
-The fields every part of one compound character shares: it stands in the
-owner's pose, loops at the owner's scale, casts the attachment shadow,
-never picks, and wears the owner's one material register — the compound
-draw (A91970) applies that single register to every mesh node, so the
-Hwan hair, the berserk wings and any future part tint with the body by
-construction (wings staying white on a red body is #3543). Rides and
-booths are separate compounds natively and stay out.
-================
-*/
-function compoundPart( owner: CharacterActor, ownerGid: number, bone: string ): Pick<
-	CharacterActor,
-	"shadowAttachment" | "pose" | "loop" | "scale" | "pickable" | "materialTint" | "attachment"
-> {
-	return {
-		shadowAttachment: true,
-		pose: owner.pose,
-		loop: true,
-		scale: 1,
-		pickable: false,
-		materialTint: owner.materialTint,
-		attachment: { gid: ownerGid, bone, offset: [ 0, 0, 0 ], basis: "compound" }
-	};
 }
 
 /*
@@ -494,6 +467,7 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 				// A missing hair marker retains the renderer's existing parent fallback.
 				next.set( state.gid, {
 					...compoundPart( owner, entity.gid, hair.bone ),
+					shadowAttachment: true,
 					gid: state.gid,
 					model: hair.glb,
 					clip: hair.clip,
@@ -597,6 +571,7 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 					// Auxiliary BSR skeletons use the same AB5870 attach-root frame as Hwan hair.
 					next.set( child.gid, {
 						...compoundPart( owner, entity.gid, entry.bone ),
+						shadowAttachment: true,
 						gid: child.gid,
 						model: entry.glb,
 						clip: child.motion.clip,
