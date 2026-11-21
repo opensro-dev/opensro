@@ -16201,7 +16201,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					itemSlot
 					================
 					*/
-					function itemSlot( slot: number, r: UiRect, enabled: boolean, empty?: string ) {
+					function itemSlot( slot: number, r: UiRect, enabled: boolean, empty?: string, hitRect?: UiRect ) {
 						const item = game?.inventory.find( i => i.slot === slot );
 						// 596190: while slot 6's weapon grips two-handed and slot 7 is
 						// empty, slot 7 mirrors the weapon's icon under int_effect and
@@ -16226,6 +16226,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							label: item?.name ??
 								(slot < 13 ? "Equipment slot " + slot : "Empty bag slot " + (slot - 13)),
 							rect: r,
+							hitRect,
 							kind: "button",
 							// 699359: a move while one is pending is dropped (highlights reset);
 							// native slots stay enabled, so hover and tooltips keep working.
@@ -16253,7 +16254,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						}
 						itemCount( item, r );
 					}
-					for ( const s of slots.slots ) itemSlot( s.slot, s.rect, s.enabled );
+					// Port-only (BUG-092): a cell also takes its half of the gap to its
+					// neighbours, so a drop between two cells lands in the nearer one.
+					for ( const s of slots.slots ) itemSlot( s.slot, s.rect, s.enabled, undefined, s.hitRect );
 					// 5952F9/59530D explicitly draw hidden equipment children 4 then 5.
 					const ef = Object.values( equipment ).find( n => n.id === 4 )!,
 						eb = Object.values( equipment ).find( n => n.id === 5 )!;

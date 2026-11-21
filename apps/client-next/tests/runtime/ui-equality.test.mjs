@@ -77,6 +77,7 @@ function everyControlField( id, helpSource ) {
 	/** @type {Required<import("../../src/engine/contracts/ui").UiControl>} */
 	const control = {
 		hitPolygon: [ [ 0, 0 ], [ 10, 0 ], [ 5, 8 ] ],
+		hitRect: [ 8, 18, 34, 44 ],
 		multiline: true,
 		valueText: "5 of 9",
 		whisperTarget: "Friend",
