@@ -40,6 +40,7 @@ import type {
 	SecondaryModel,
 	ItemPresentation
 } from "./internal/presentation-contract";
+import { compoundPart } from "@/engine/foundation/rendering/compound-part";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 
 // The ride transform modes 8602C0 reads from ride+0x29D (EffectSyntax_RotationType
@@ -467,16 +468,12 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 				// AB5870 cancels the parent bind rotation and keeps its sampled position.
 				// A missing hair marker retains the renderer's existing parent fallback.
 				next.set( state.gid, {
+					...compoundPart( owner, entity.gid, hair.bone ),
 					shadowAttachment: true,
 					gid: state.gid,
 					model: hair.glb,
-					pose: owner.pose,
 					clip: hair.clip,
-					time: seconds - state.started,
-					loop: true,
-					scale: 1,
-					pickable: false,
-					attachment: { gid: entity.gid, bone: hair.bone, offset: [ 0, 0, 0 ], basis: "compound" }
+					time: seconds - state.started
 				} );
 			}
 			for ( const gid of hwanHairActors.keys() ) if ( !hairOwners.has( gid ) ) hwanHairActors.delete( gid );
@@ -575,17 +572,13 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 					if ( next.size >= CHARACTER_ACTORS ) continue;
 					// Auxiliary BSR skeletons use the same AB5870 attach-root frame as Hwan hair.
 					next.set( child.gid, {
+						...compoundPart( owner, entity.gid, entry.bone ),
 						shadowAttachment: true,
 						gid: child.gid,
 						model: entry.glb,
-						pose: owner.pose,
 						clip: child.motion.clip,
 						time: seconds - child.motion.started,
-						loop: true,
-						layers,
-						scale: 1,
-						pickable: false,
-						attachment: { gid: entity.gid, bone: entry.bone, offset: [ 0, 0, 0 ], basis: "compound" }
+						layers
 					} );
 					// The resource's own ambient set rides its animated bones
 					// (the EU shoulder crystals' glow).
