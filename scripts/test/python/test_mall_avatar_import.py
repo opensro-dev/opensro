@@ -20,6 +20,7 @@ from unittest.mock import patch
 import zipfile
 
 import avatar_archive  # noqa: E402
+import avatar_effects as auras  # noqa: E402
 import cap110_items as items  # noqa: E402
 import mall_avatar_import as importer  # noqa: E402
 import sro_pk2  # noqa: E402
@@ -58,6 +59,72 @@ def native_row(identity, code="ITEM_CH_SWORD_01"):
 	row = avatar(code, identity)
 	row[9:13] = ["3", "1", "6", "2"]
 	return row
+
+
+# ================
+# effect_row
+#
+# One later skilleffectset row as the v1.696 client authors a worn aura.
+# ================
+def effect_row(key, effect, bone, phase="ACT_L", attach="AT_LOOP", offset="0,0,0", scale="none", service="1"):
+	row = ["0"] * auras.EFFECT_COLUMNS
+	row[auras.EFFECT_SERVICE], row[auras.EFFECT_KEY] = service, key
+	row[auras.EFFECT_PHASE], row[auras.EFFECT_ATTACH] = phase, attach
+	row[auras.EFFECT_FOLDER], row[auras.EFFECT_FILE], row[auras.EFFECT_BONE] = "system\\", effect, bone
+	row[auras.EFFECT_OFFSET], row[auras.EFFECT_SCALE] = offset, scale
+	return row
+
+
+class AvatarEffectTests(unittest.TestCase):
+	# ================
+	# test_worn_loops_follow_the_avatar_name_and_refuse_what_they_cannot_draw
+	# ================
+	def test_worn_loops_follow_the_avatar_name_and_refuse_what_they_cannot_draw(self):
+		code = "ITEM_MALL_AVATAR_M_BLUE_SOULKNIGHT"
+		rows = [
+			effect_row("AVATAR_M_BLUE_SOULKNIGHT", "avatar_m_bluesoulknight_a.efp", "Bip01 L Forearm"),
+			effect_row("AVATAR_M_BLUE_SOULKNIGHT", "avatar_m_bluesoulknight_s.efp", "none", scale="SCT_EFFECT_SCALE,1.2"),
+			effect_row("AVATAR_M_BLUE_SOULKNIGHT", "avatar_m_bluesoulknight_eye.efp", "#Bip01 Head", offset="1.1,0.3,1"),
+			effect_row("AVATAR_M_BLUE_SOULKNIGHT", "avatar_m_bluesoulknight_eye.efp", "@Bip01 Head"),
+			effect_row("AVATAR_M_BLUE_SOULKNIGHT", "avatar_m_bluesoulknight_x.efp", "Bip01", phase="ACT_S", attach="AT_ONE_FOLLOW"),
+			effect_row("AVATAR_M_BLUE_SOULKNIGHT", "avatar_m_bluesoulknight_gone.efp", "Bip01 Head"),
+			effect_row("AVATAR_M_BLUE_SOULKNIGHT", "avatar_m_bluesoulknight_t.efp", "Bip01 L Thigh", service="0"),
+			effect_row("AVATAR_M_NOT_IMPORTED", "avatar_m_other.efp", "Bip01 Head"),
+		]
+		present = {"system/avatar_m_bluesoulknight_a.efp", "system/avatar_m_bluesoulknight_s.efp",
+			"system/avatar_m_bluesoulknight_eye.efp", "system/avatar_m_bluesoulknight_x.efp", "system/avatar_m_other.efp"}
+		effects, refused = auras.avatar_effects(rows, [avatar(code, FIRST_ID)], present.__contains__)
+		self.assertEqual(effects, {code: [
+			{"effectPath": "system/avatar_m_bluesoulknight_a.efp", "bone": "Bip01 L Forearm", "root": False, "scale": 1.0},
+			{"effectPath": "system/avatar_m_bluesoulknight_s.efp", "bone": "", "root": True, "scale": 1.2},
+			{"effectPath": "system/avatar_m_bluesoulknight_eye.efp", "bone": "Bip01 Head", "root": False, "scale": 1.0,
+				"offset": [1.1, 0.3, 1.0]},
+		]})
+		self.assertEqual([entry["reason"] for entry in refused], [
+			"bone token @Bip01 Head", "not a worn loop (ACT_S AT_ONE_FOLLOW)",
+			"missing effect system/avatar_m_bluesoulknight_gone.efp",
+		])
+
+	# ================
+	# test_the_later_spellings_of_an_avatar_name_are_found
+	# ================
+	def test_the_later_spellings_of_an_avatar_name_are_found(self):
+		cases = {
+			"ITEM_MALL_AVATAR_M_DARKLKNIGHT": "AVATAR_DARKLKNIGHT",
+			"ITEM_MALL_AVATAR_W_DARKLKNIGHT_HAT": "AVATAR_DARKLKNIGHT_W_HAT",
+			"ITEM_MALL_AVATAR_M_VIKING_HAT": "AVATAR_VIKING_HAT",
+			"ITEM_MALL_AVATAR_M_PIRATECREW_2": "AVATAR_M_PIRATECREW2",
+		}
+		for code, key in cases.items():
+			self.assertIn(key, auras.effect_keys(code))
+		self.assertIn("AVATAR_M_SAYTAN", auras.effect_keys("ITEM_MALL_AVATAR_M_SAYTAN_DRESS", "item\\Avatar\\avatar_m_saytan.bsr"))
+		# The codename's own spelling comes first: BlueSoul keeps its rows.
+		self.assertEqual(auras.effect_keys("ITEM_MALL_AVATAR_M_BLUE_SOULKNIGHT")[0], "AVATAR_M_BLUE_SOULKNIGHT")
+		row = avatar("ITEM_MALL_AVATAR_M_DARKLKNIGHT", FIRST_ID)
+		effects, _ = auras.avatar_effects(
+			[effect_row("AVATAR_DARKLKNIGHT", "avatar_darknight_body.efp", "Bip01 Spine")], [row], lambda path: True,
+		)
+		self.assertEqual(list(effects), ["ITEM_MALL_AVATAR_M_DARKLKNIGHT"])
 
 
 class TextLayoutTests(unittest.TestCase):
