@@ -98,17 +98,12 @@ def renumbered(source_ids, current_ids):
 # ================
 # renumbered_buildings
 #
-# renumbered for gate buildings: a source id an object holds, or one past
-# the server's building band, moves to a free id under the limit
-# (variant_gates.free_building_ids); the others keep theirs.
+# renumbered for gate building rows, by the gate imports' one rule
+# (variant_gates.building_identities): a pinned code keeps its released
+# id, a free source id keeps itself, any other moves under the limit.
 # ================
-def renumbered_buildings(source_ids, taken_ids):
-	taken = {int(i) for i in taken_ids if i.isdigit()}
-	moving = [i for i in source_ids if int(i) in taken or int(i) >= variant_gates.BUILDING_ID_LIMIT]
-	fresh = variant_gates.free_building_ids(taken | {int(i) for i in source_ids}, len(moving))
-	ids = {identity: identity for identity in source_ids}
-	ids.update({identity: str(new) for identity, new in zip(moving, fresh)})
-	return ids
+def renumbered_buildings(rows, taken_ids):
+	return variant_gates.building_identities(rows, {int(i) for i in taken_ids if i.isdigit()})
 
 
 # ================
@@ -140,7 +135,7 @@ def prepare_gates(later, native_data, current_ids, current_building_ids):
 		raise ValueError(f"v1.696 teleportbuilding lacks the buildings of the Arabia gates: {unshipped}")
 
 	teleport_ids = renumbered([row[1] for row in source_data], current_ids)
-	building_ids = renumbered_buildings([row[3] for row in built], current_building_ids)
+	building_ids = renumbered_buildings([buildings_by_id[row[3]] for row in built], current_building_ids)
 
 	data_rows, building_rows = [], []
 	for row in source_data:
