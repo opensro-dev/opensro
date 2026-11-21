@@ -107,8 +107,8 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		{Name: "siege", Hook: game.siege.Tick},
 		{Name: "guild-wars", Hook: game.guildWars.Tick},
 		// Hunted GP lands once a set-aside reaches the native threshold
-		// (issue #4051); sub-threshold remainders flush on leave and
-		// session close instead.
+		// (issue #4051); sub-threshold remainders wait for more hunting (a
+		// leave keeps them, natively) or session close.
 		{Name: "guild-gp-accrual", Hook: func(nowMs int64) []simulation.DivisionFrames {
 			game.gpAccrual.Drain()
 			return nil

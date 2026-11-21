@@ -146,7 +146,7 @@ func startGuildServerWith(t *testing.T, dir string, seeds []*enterworld.Characte
 	// The entry seed records its guild block as the GameWorld does.
 	deps.PublishEntry = guild.EntryPublisher(func() domain.GuildStore { return deps.Guilds })
 	enterworld.Register(srv.Hub, deps)
-	guild.Register(srv.Hub, deps, directory, nil, nil, nil)
+	guild.Register(srv.Hub, deps, directory, nil, nil)
 	if err := srv.Start(); err != nil {
 		t.Fatal(err)
 	}

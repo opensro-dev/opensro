@@ -3,20 +3,25 @@
 
 accrual.go - guild points that accrue passively while members hunt
 
-Native rule (issue #4051): when a guilded member's hunting skill EXP
-converts to SP (400 skill EXP = 1 SP, progression's SkillExpPerSP), the
-same whole-SP amount is set aside for the guild in a per-character
-accumulator. At 10 (0xA) or more the set-aside is credited through the
-same credit a manual SP donation lands (guild GP and the member's
-DonatedGP rise together), and any smaller remainder is credited when
-the member leaves the guild or their session closes, so nothing earned
-is lost. The accumulator is memory-only, as natively: a crash loses
-only the sub-threshold remainder of one online session.
+Native rule (issue #4051, v1.188 SR_GameServer): when a guilded member's
+hunting skill EXP converts to SP (400 skill EXP = 1 SP), the same
+whole-SP amount is set aside on the player object (PC +0x2184,
+CGObjPC_ApplyExperienceAndSend3056 0x4E5625). At 10 (0xA) or more it is
+credited to the member's current guild through the donation credit
+(guild GP and the member's DonatedGP rise together) and zeroed. On exit
+(CGObjPC_ReleaseSessionsOnExit 0x4DEF90) a positive remainder is
+credited only while the member is still guilded.
+
+Nothing on the guild leave, kick or disband path touches the set-aside
+(an `/ad/ 0x2184]` search finds only the mint, the exit flush and the
+spawn reset), so a remainder survives a leave and is credited to
+whatever guild the member is in at the next credit. A guildless logout
+drops it. The set-aside is memory-only, as natively.
 
 Ownership: progression mints SP and reports the mint (SPMintedHook);
 this tracker only records. The credit door (CreditGuildPoints) runs
-from Drain (the simulation tick) and FlushCharacter (leave / session
-close) - never from inside a character transaction.
+from Drain (the simulation tick) and SessionClosed - never from
+inside a character transaction.
 
 ===========================================================================
 */
@@ -40,22 +45,17 @@ type gpAccrualKey struct {
 	characterID int64
 }
 
-// gpAccrualEntry is one character's un-credited set-aside and the guild
-// it was earned in (a membership change must not re-home points).
-type gpAccrualEntry struct {
-	guildID int64
-	amount  int64
-}
-
 /*
 ================
 GpAccrual
 
 The guild GP accrual tracker: a mutex-guarded set of per-character
-set-asides. NoteSPMinted is safe to call from inside a character
-transaction (it only records); Drain and FlushCharacter open the
-credit door and fan the GP pushes out, so they run from the tick and
-from packet/session-close handling, never from a character door.
+set-asides, keyed by the character alone (natively the field lives on
+the player, not on the membership). NoteSPMinted is safe to call from
+inside a character transaction (it only records); Drain and
+SessionClosed open the credit door and fan the GP pushes out, so they
+run from the tick and from session-close handling, never from a
+character door.
 ================
 */
 type GpAccrual struct {
@@ -63,7 +63,7 @@ type GpAccrual struct {
 	presence Presence
 
 	mu      sync.Mutex
-	pending map[gpAccrualKey]gpAccrualEntry
+	pending map[gpAccrualKey]int64
 }
 
 /*
@@ -75,7 +75,7 @@ func NewGpAccrual(deps Dependencies, presence Presence) *GpAccrual {
 	return &GpAccrual{
 		deps:     deps,
 		presence: presence,
-		pending:  make(map[gpAccrualKey]gpAccrualEntry),
+		pending:  make(map[gpAccrualKey]int64),
 	}
 }
 
@@ -83,9 +83,10 @@ func NewGpAccrual(deps Dependencies, presence Presence) *GpAccrual {
 ================
 NoteSPMinted - GpAccrual
 
-Record whole SP minted by one guilded character. Called from the
-progression mint inside the character transaction: it only takes the
-tracker mutex, so it can never deadlock a store door.
+Record whole SP minted by one guilded character (natively only a
+character with a guild pointer adds to the set-aside, 0x4E561C). Called
+from the progression mint inside the character transaction: it only
+takes the tracker mutex, so it can never deadlock a store door.
 ================
 */
 func (a *GpAccrual) NoteSPMinted(divisionID string, character *enterworld.Character, spMinted int64) {
@@ -94,10 +95,7 @@ func (a *GpAccrual) NoteSPMinted(divisionID string, character *enterworld.Charac
 	}
 	key := gpAccrualKey{divisionID: divisionID, characterID: character.ID}
 	a.mu.Lock()
-	entry := a.pending[key]
-	entry.guildID = *character.GuildID
-	entry.amount += spMinted
-	a.pending[key] = entry
+	a.pending[key] += spMinted
 	a.mu.Unlock()
 }
 
@@ -105,9 +103,11 @@ func (a *GpAccrual) NoteSPMinted(divisionID string, character *enterworld.Charac
 ================
 Drain - GpAccrual
 
-Credit every set-aside that reached the native flush threshold. The
-tick calls this once per pass; sub-threshold remainders keep waiting
-for more hunting, a leave, or a session close.
+Credit every set-aside that reached the native threshold to the
+earner's current guild. The tick calls this once per pass. A set-aside
+whose character has no guild by now (left between the mint and the
+tick) goes back into the tracker, as the native remainder stays on the
+player until a later credit or exit.
 ================
 */
 func (a *GpAccrual) Drain() {
@@ -115,41 +115,45 @@ func (a *GpAccrual) Drain() {
 		return
 	}
 	a.mu.Lock()
-	due := make(map[gpAccrualKey]gpAccrualEntry)
-	for key, entry := range a.pending {
-		if entry.amount >= gpAccrualFlushThreshold {
-			due[key] = entry
+	due := make(map[gpAccrualKey]int64)
+	for key, amount := range a.pending {
+		if amount >= gpAccrualFlushThreshold {
+			due[key] = amount
 			delete(a.pending, key)
 		}
 	}
 	a.mu.Unlock()
-	for key, entry := range due {
-		a.credit(key, entry)
+	for key, amount := range due {
+		if !a.credit(key, amount) {
+			a.mu.Lock()
+			a.pending[key] += amount
+			a.mu.Unlock()
+		}
 	}
 }
 
 /*
 ================
-FlushCharacter - GpAccrual
+SessionClosed - GpAccrual
 
-Credit one character's whole set-aside whatever its size - the native
-remainder flush when the guild pointer goes away (guild leave) or the
-session ends. Unknown characters are a no-op.
+The native exit flush (0x4DEF90): credit one character's whole
+set-aside, whatever its size, to their current guild; a guildless
+character's remainder is dropped with the session. Unknown characters
+are a no-op.
 ================
 */
-func (a *GpAccrual) FlushCharacter(divisionID string, characterID int64) {
+func (a *GpAccrual) SessionClosed(divisionID string, characterID int64) {
 	if a == nil {
 		return
 	}
 	key := gpAccrualKey{divisionID: divisionID, characterID: characterID}
 	a.mu.Lock()
-	entry, ok := a.pending[key]
-	if ok {
-		delete(a.pending, key)
-	}
+	amount, ok := a.pending[key]
+	delete(a.pending, key)
 	a.mu.Unlock()
-	if ok && entry.amount > 0 {
-		a.credit(key, entry)
+	if ok && amount > 0 && !a.credit(key, amount) {
+		log.Debugf("guild: GP remainder of %d for character %d dropped at exit (no guild)",
+			amount, characterID)
 	}
 }
 
@@ -157,31 +161,24 @@ func (a *GpAccrual) FlushCharacter(divisionID string, characterID int64) {
 ================
 credit - GpAccrual
 
-Land one set-aside through the credit door and fan the two 0x3B29 GP
-deltas out to the guild's online members (the donation fan-out minus
-the donor-only ack: a passive credit has no requesting client). The
-entry is already out of the tracker, matching the native send-and-zero:
-a refusal (the member left, the guild dissolved, a u32 would wrap)
-drops the points with a log line instead of retrying forever.
+Land one set-aside on the character's current guild through the credit
+door and fan the two 0x3B29 GP deltas out to its online members (the
+donation fan-out minus the donor-only ack: a passive credit has no
+requesting client). Returns false only when the character has no guild,
+so the caller decides whether the amount waits or is dropped. Any other
+refusal (a u32 would wrap, the guild dissolved mid-credit) drops the
+points with a log line, matching the native send-and-zero.
 ================
 */
-func (a *GpAccrual) credit(key gpAccrualKey, entry gpAccrualEntry) {
-	if a.deps == nil || a.deps.GuildAuthority() == nil || entry.amount < 1 {
-		return
+func (a *GpAccrual) credit(key gpAccrualKey, amount int64) bool {
+	if a.deps == nil || a.deps.GuildAuthority() == nil || amount < 1 {
+		return true
 	}
-	// The points belong to the guild they were earned in: if the
-	// character has since left or changed guilds (a detach flush was
-	// missed, e.g. a kick), drop them rather than re-home them onto
-	// the new guild. The native flush leaves with the guild pointer,
-	// before any new membership exists.
-	if guildID, ok := a.deps.GuildAuthority().GuildOfCharacter(key.divisionID, key.characterID); !ok || guildID != entry.guildID {
-		log.Debugf("guild: GP accrual of %d for character %d dropped (earned in guild %d, no longer a member)",
-			entry.amount, key.characterID, entry.guildID)
-		return
+	if _, ok := a.deps.GuildAuthority().GuildOfCharacter(key.divisionID, key.characterID); !ok {
+		return false
 	}
-	amount := entry.amount
-	for amount > 0 {
-		chunk := amount
+	for left := amount; left > 0; {
+		chunk := left
 		if chunk > 0xffffffff {
 			chunk = 0xffffffff
 		}
@@ -189,25 +186,19 @@ func (a *GpAccrual) credit(key gpAccrualKey, entry gpAccrualEntry) {
 			key.divisionID, key.characterID, uint32(chunk))
 		if refusal.Refused() {
 			log.Debugf("guild: GP accrual of %d for character %d dropped (%s)",
-				entry.amount, key.characterID, guildRefusalReason(refusal))
-			return
+				amount, key.characterID, guildRefusalReason(refusal))
+			return true
 		}
-		if result.Snapshot.Guild.ID != entry.guildID {
-			// The character changed guilds after earning these points;
-			// the credit landed on the guild of record at earn time or
-			// not at all - never re-home them onto a new guild.
-			log.Debugf("guild: GP accrual of %d for character %d dropped (earned in guild %d, credited guild %d)",
-				entry.amount, key.characterID, entry.guildID, result.Snapshot.Guild.ID)
-			return
-		}
+		guildID := result.Snapshot.Guild.ID
 		names := make([]string, 0, len(result.Snapshot.Members))
 		for _, member := range result.Snapshot.Members {
 			names = append(names, member.Name)
 		}
-		sendToOnlineMembers(a.presence, key.divisionID, entry.guildID, names,
+		sendToOnlineMembers(a.presence, key.divisionID, guildID, names,
 			EncodeGuildGp3B29(result.Snapshot.Guild.GP))
-		sendToOnlineMembers(a.presence, key.divisionID, entry.guildID, names,
+		sendToOnlineMembers(a.presence, key.divisionID, guildID, names,
 			EncodeMemberDonatedGp3B29(result.Donor.JID, result.Donor.DonatedGP))
-		amount -= chunk
+		left -= chunk
 	}
+	return true
 }

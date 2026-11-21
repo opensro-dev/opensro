@@ -728,7 +728,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	}
 	// Guild GP hunting accrual (issue #4051): the SP mint notes each
 	// whole SP into the tracker; the tick drains it through the credit
-	// door and the leave/session-close paths flush the remainder.
+	// door and session close credits the remainder while still guilded.
 	game.gpAccrual = guild.NewGpAccrual(game.deps, game.presence)
 	stats.SPMintedHook = func(character *enterworld.Character, spMinted int64) {
 		game.gpAccrual.NoteSPMinted(game.divisionID, character, spMinted)
@@ -954,7 +954,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	gmcommand.Register(hub, game.deps, game.presence, game.items)
 	game.matches.Register(hub)
 	game.parties.Register(hub)
-	guild.Register(hub, game.deps, game.presence, game.items, game.unions, game.gpAccrual)
+	guild.Register(hub, game.deps, game.presence, game.items, game.unions)
 	game.unions.Register(hub)
 	game.guildWars.Register(hub)
 	game.guildInvites.Register(hub)
