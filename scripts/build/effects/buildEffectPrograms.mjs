@@ -66,8 +66,7 @@ import { collectJmxEffectTexturePaths, parseJmxVisualEffect } from "./parseJmxVi
 import { buildEffectRecordTable } from "../char/parseSkillEffect.mjs";
 import { loadCharacterDataRows } from "../char/resolveCharRoster.mjs";
 import { parseStructureEffects } from "../char/structureEffects.mjs";
-import { CROW_EGG_BSR } from "../char/crowEgg.mjs";
-import { PORT_PET_DROP_MODEL } from "../shared/portItemRows.mjs";
+import { isOwnedModel } from "../char/ownedModels.mjs";
 
 const particlesRoot = path.join( extractedRoot, "Particles_extracted" );
 const skillEffectPath = path.join(
@@ -145,6 +144,23 @@ function resolveEffectFiles( index, resourceName ) {
 	return [ ...index ]
 		.filter( ( [key] ) => key.endsWith( suffix ) )
 		.sort( ( [a], [b] ) => compareText( a, b ) );
+}
+
+/*
+================
+isEmptyArchiveEffect
+
+Whether an effect name means only zero-length archive files. An empty file
+fails B1F270's header read exactly as an absent one does, so AFF730 keeps
+the reset object and the effect draws nothing: the build publishes it as
+native-unavailable. v1.696 ships one (dun/petra_flame_yellow_glow.efp,
+0 bytes). Only a zero-length file qualifies; a truncated one still fails
+its parse. The BSR parity audit asks the same question of the published list.
+================
+*/
+export function isEmptyArchiveEffect( resourceName, index = fileIndex( particlesRoot, ".efp" ) ) {
+	const resolved = resolveEffectFiles( index, resourceName );
+	return resolved.length > 0 && resolved.every( ( [, source] ) => fs.statSync( source ).size === 0 );
 }
 
 /*
@@ -270,12 +286,10 @@ export function collectEntityParticleReferences(
 			] )
 		);
 		for ( const modelPath of [ ...models.keys() ].sort() ) {
-			// Owned GLB, not a retail BSR: buildDropModelAssets writes the
-			// modifiers it borrows from the armor chest into its row.
-			const modifiers = domain === "npc" && modelPath === CROW_EGG_BSR ?
-				[] :
-				domain === "itemdrop" && modelPath === `res/${PORT_PET_DROP_MODEL}` ?
-				models.get( modelPath ).particleModifiers :
+			// An owned GLB has no retail BSR: its row carries what it has
+			// (the collar's borrowed chest glow; the egg has none).
+			const modifiers = isOwnedModel( domain, modelPath ) ?
+				models.get( modelPath ).particleModifiers ?? [] :
 				readModel( modelPath ).particleModifiers;
 			for (
 				const effectPath of [
@@ -650,16 +664,11 @@ export async function buildEffectProgramsAsset() {
 			ambiguousEffectAliases[effectName] = resolved.map( ( [key] ) => key );
 		}
 		for ( const [resolvedName, source] of resolved ) {
-			const bytes = fs.readFileSync( source );
-			// An empty file fails B1F270's header read exactly as an absent one
-			// does, so AFF730 keeps the reset object: the effect draws nothing.
-			// v1.696 ships one (dun/petra_flame_yellow_glow.efp, 0 bytes). Only
-			// a zero-length file takes this path; a truncated one still fails
-			// the parse below.
-			if ( bytes.length === 0 ) {
+			if ( isEmptyArchiveEffect( resolvedName, efpIndex ) ) {
 				nativeUnavailableEffects.push( resolved.length === 1 ? effectName : resolvedName );
 				continue;
 			}
+			const bytes = fs.readFileSync( source );
 			const parsed = parseJmxVisualEffect( bytes, source );
 			// A unique basename keeps its authored lookup key. Ambiguous basenames
 			// remain explicit full-path entries and are published in the alias

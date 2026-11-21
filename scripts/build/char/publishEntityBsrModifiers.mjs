@@ -9,7 +9,7 @@ including secondary stall booth resources owned by the NPC publisher.
 ===========================================================================
 */
 
-import { CROW_EGG_BSR } from "./crowEgg.mjs";
+import { isOwnedModel } from "./ownedModels.mjs";
 import { entityMaterialMetadata } from "./entityMaterialMetadata.mjs";
 import fs from "node:fs";
 import path from "node:path";
@@ -20,7 +20,6 @@ import { publicRoot } from "../world/paths.mjs";
 import { readPublishedAssetBytesSync } from "../../lib/publishedAsset.mjs";
 import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
-import { PORT_PET_DROP_MODEL } from "../shared/portItemRows.mjs";
 
 // A compound resource (.cpd, the Qin-Shi tomb flamemaster, #2024).
 const COMPOUND_RESOURCE = /\.cpd$/i;
@@ -64,10 +63,7 @@ export async function publishEntityBsrModifiers() {
 			Object.entries( manifest.models ).map( ( [key, row] ) => [ key, row, row.bsr ?? `res/${key}` ] );
 		for ( const [, row, bsr] of rows ) {
 			// Owned GLB, not a retail BSR: its builder owns the borrowed chest glow.
-			if (
-				domain === "itemdrop" && bsr === `res/${PORT_PET_DROP_MODEL}` ||
-				domain === "npc" && bsr === CROW_EGG_BSR
-			) continue;
+			if ( isOwnedModel( domain, bsr ) ) continue;
 			if ( !cache.has( bsr ) ) {
 				const source = await entitySource( bsr );
 				cache.set( bsr, { ...source, modifiers: parseCharacterBsr( source.buffer, source.path ) } );

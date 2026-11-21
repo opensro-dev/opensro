@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { readEffectCatalogSync, readEffectProgramSync } from "../../../scripts/lib/effectCatalog.mjs";
+import { effectRecordAlias } from "../src/engine/foundation/animation/effect-record-alias.ts";
 const root = path.resolve( import.meta.dirname, ".." ), out = path.join( root, "temp/artifacts/effect-coverage" );
 fs.mkdirSync( out, { recursive: true } );
 const source = path.join( root, "src/engine/runtime/assets/worker/effects/effects.ts" ),
@@ -28,6 +29,8 @@ const report = {
 		decoder: hash( fs.readFileSync( modulePath ) )
 	},
 	records: Object.keys( records ).length,
+	// Basic_Original aliases (effect-record-alias.ts), audited at their original.
+	aliases: 0,
 	stages: 0,
 	actions: {},
 	moves: {},
@@ -51,6 +54,11 @@ for (
 	]
 ) report.inputs[file] = hash( fs.readFileSync( path.join( root, "src/engine", file ) ) );
 for ( const [id, record] of Object.entries( catalog ) ) {
+	// An alias draws through its original's record: audited there, once.
+	if ( effectRecordAlias( records[id] ) !== undefined ) {
+		report.aliases++;
+		continue;
+	}
 	for ( let index = 0; index < record.stages.length; index++ ) {
 		const s = record.stages[index], raw = records[id].authoredStages[index];
 		report.stages++;
@@ -126,6 +134,7 @@ console.log(
 	JSON.stringify(
 		{
 			records: report.records,
+			aliases: report.aliases,
 			stages: report.stages,
 			scriptedRecords: scripted.size,
 			knownStageIssues: report.stageIssues.length,
