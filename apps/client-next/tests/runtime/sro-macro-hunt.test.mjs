@@ -155,13 +155,36 @@ test("return timer fires before potion-empty and acquire", () => {
 	assert.deepEqual( action, { kind: "return-scroll", reason: "timer", endHunt: true } );
 });
 
-test("potion-empty return needs potion ON and a registered stack under 10", () => {
+test("potion-empty return needs potion ON and a found stack of at most 10", () => {
+	// 68b4c0: found stack and quantity <= 10 (cmp 0xa; jg). Count 10 fires;
+	// count 0 (no stacks found) and count 11 do not.
 	assert.deepEqual(
 		pickMacroHuntAction(
 			block( { [HUNT_BYTE_POTION_EMPTY]: 1 } ),
 			facts( { hpPotionCount: 5 } )
 		),
 		{ kind: "return-scroll", reason: "potion-hp", endHunt: true }
+	);
+	assert.deepEqual(
+		pickMacroHuntAction(
+			block( { [HUNT_BYTE_POTION_EMPTY]: 1 } ),
+			facts( { hpPotionCount: 10 } )
+		),
+		{ kind: "return-scroll", reason: "potion-hp", endHunt: true }
+	);
+	assert.deepEqual(
+		pickMacroHuntAction(
+			block( { [HUNT_BYTE_POTION_EMPTY]: 1 } ),
+			facts( { hpPotionCount: 0 } )
+		),
+		{ kind: "select", gid: 42 }
+	);
+	assert.deepEqual(
+		pickMacroHuntAction(
+			block( { [HUNT_BYTE_POTION_EMPTY]: 1 } ),
+			facts( { hpPotionCount: 11 } )
+		),
+		{ kind: "select", gid: 42 }
 	);
 	assert.deepEqual(
 		pickMacroHuntAction(

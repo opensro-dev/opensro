@@ -56,7 +56,9 @@ export const HUNT_BERSERK_ALL = 0;
 // 00687130: hours * 0x36ee80 ms from hunt start.
 export const HUNT_HOUR_MS = 0x36ee80;
 
-// 00686450: return when a registered HP/MP potion stack is under this.
+// 68b4c0 (from 00686450): return when a registered HP/MP row has at least
+// one bag stack and the summed quantity is <= this (cmp 0xa; jg skips).
+// A registered row with no stacks left does not fire (found-flag stays 0).
 export const HUNT_POTION_EMPTY_COUNT = 10;
 
 // Item type words (bits 0xFFFC), same packing as count-job.ts.
@@ -260,10 +262,16 @@ export function pickMacroHuntAction(
 	}
 
 	if ( (hunt[HUNT_BYTE_POTION_EMPTY] ?? 0) !== 0 && facts.potionOn ) {
-		if ( facts.hpPotionCount > 0 && facts.hpPotionCount < HUNT_POTION_EMPTY_COUNT && facts.hasReturnScroll ) {
+		if (
+			facts.hpPotionCount > 0 && facts.hpPotionCount <= HUNT_POTION_EMPTY_COUNT &&
+			facts.hasReturnScroll
+		) {
 			return { kind: "return-scroll", reason: "potion-hp", endHunt: true };
 		}
-		if ( facts.mpPotionCount > 0 && facts.mpPotionCount < HUNT_POTION_EMPTY_COUNT && facts.hasReturnScroll ) {
+		if (
+			facts.mpPotionCount > 0 && facts.mpPotionCount <= HUNT_POTION_EMPTY_COUNT &&
+			facts.hasReturnScroll
+		) {
 			return { kind: "return-scroll", reason: "potion-mp", endHunt: true };
 		}
 	}
