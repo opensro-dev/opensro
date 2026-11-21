@@ -46,6 +46,7 @@ const (
 	itemUsePetExtension
 	itemUseResurrection
 	itemUseStatRecall
+	itemUseSkillRecall
 	itemUseFirework
 	itemUseRepairHammer
 	itemUseWarehouseTicket
@@ -206,12 +207,19 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	// Type 4 = 13 splits on Param1 (itemdata column 29c): 1 is the Hwan
 	// scroll, which fills the berserk gauge like the type 3/3/1/8 item
 	// above (ITEM_MALL_HWAN 9259); 2 is the stat point recall
-	// (ITEM_MALL_(STR|INT)_RECALL 9253..9258, progression/statrecall.go).
+	// (ITEM_MALL_(STR|INT)_RECALL 9253..9258, progression/statrecall.go);
+	// 5 is the port's skill reset scroll.
 	// The family read Param1 or it sends a Hwan to the recall, which
 	// spends it resetting a player's stat points.
 	if ref.TypeIDs == [4]int64{3, 3, 13, 13} {
-		if param1, _ := ref.NativeFields.Lookup("itemParam1_29c"); param1 == 1 {
+		param1, _ := ref.NativeFields.Lookup("itemParam1_29c")
+		if param1 == 1 {
 			return itemUseBerserk
+		}
+		// Param1 5 is the v1.696 skill reset (port-only, not native:
+		// progression/skillrecall.go); it must not reach the stat recall.
+		if param1 == 5 {
+			return itemUseSkillRecall
 		}
 		return itemUseStatRecall
 	}

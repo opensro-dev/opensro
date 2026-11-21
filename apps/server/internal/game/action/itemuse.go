@@ -525,6 +525,11 @@ func (rt *Runtime) handleItemUse(
 			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
 			return true
 		}
+		if family == itemUseSkillRecall {
+			return rt.useSkillRecall(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result)
+		}
 		if family == itemUseResurrection {
 			return rt.useResurrectionScroll(character, skillItemUse{
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
