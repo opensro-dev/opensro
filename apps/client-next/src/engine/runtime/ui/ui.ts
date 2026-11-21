@@ -622,6 +622,7 @@ import { AUTO_SELECT_ACTION_ID, offeredActions } from "@/engine/foundation/ui/ac
 import { itemTooltip, weaponTypeSymbol } from "@/engine/foundation/ui/item-tooltip";
 import { itemTooltipSet, tooltipSetViewer } from "@/engine/foundation/ui/item-tooltip-set";
 import { isWeaponSwitchScrollItem, weaponRaceName } from "@/engine/foundation/gameplay/weapon-switch";
+import { raceSwitchKindOf } from "@/engine/foundation/gameplay/race-switch";
 import { commerceTooltip, mallTooltipRows } from "@/engine/foundation/ui/commerce-tooltip";
 import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
@@ -1075,6 +1076,8 @@ const GLOBAL_CHAT_TEXT = "wholechat-text";
 // rows' control prefixes, the kind step's Back, and its English lines.
 const WEAPON_SWITCH_RACE_PREFIX = "weapon-switch-race:";
 const WEAPON_SWITCH_KIND_PREFIX = "weapon-switch:";
+// The race switch confirmation's question (port-only, race-switch.ts).
+const RACE_SWITCH_QUESTION = "Switch this item to the other race?";
 const WEAPON_SWITCH_BACK = "Back";
 const WEAPON_SWITCH_TITLE = "Weapon Switch";
 const WEAPON_SWITCH_RACE_QUESTION = "Choose the race of the new weapon.";
@@ -2834,10 +2837,12 @@ export function createUi( ports: UiPorts ) {
 			const item = view?.gameplay?.inventory.find( row => row.slot === command.slot );
 			// 572858 dispatches hotbar items through the same cursor arming as
 			// an inventory activation. A confirmed use already has its target.
-			// Port-only: the weapon switch scroll arms the same cursor; its
-			// box's pick carries the target, so it uses straight through.
+			// Port-only: the weapon and race switch scrolls arm the same
+			// cursor; their box's pick carries the target, so it uses
+			// straight through.
 			if (
-				item && (armsItemTargetCursor( item.typeFlags ) || isWeaponSwitchScrollItem( item.refObjId )) &&
+				item && (armsItemTargetCursor( item.typeFlags ) || isWeaponSwitchScrollItem( item.refObjId ) ||
+					raceSwitchKindOf( item.refObjId ) !== null) &&
 				command.summonerSlot === undefined && command.revivalSlot === undefined &&
 				command.targetSlot === undefined
 			) {
@@ -26393,7 +26398,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					message = text.guide(
 						guideTokens(
 							targeted ?
-								"<center>" + hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE" ) + "</center>" :
+								"<center>" + (cosHud.targetUseBox() === "race-switch" ?
+									RACE_SWITCH_QUESTION :
+									hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE" )) +
+								"</center>" :
 								"<center>" +
 								hudCopy( "UIIT_MSG_COS_CLEAN_CONFIRM1" ) +
 								"<br>" +

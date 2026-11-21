@@ -28,6 +28,7 @@ import {
 	weaponSwitchKinds,
 	WEAPON_RACES
 } from "@/engine/foundation/gameplay/weapon-switch";
+import { raceSwitchAccepts, raceSwitchKindOf } from "@/engine/foundation/gameplay/race-switch";
 
 const ITEM_TARGET_CURSOR = 0xa6;
 
@@ -105,6 +106,15 @@ export function createCosHud() {
 				if ( item.slot < 13 || weaponKind( item.typeFlags ) === 0 ) return false;
 				switchType = item.typeFlags;
 				switchRace = null;
+				targetUse = { kind: "item-use", slot: source.slot, targetSlot: item.slot };
+				return true;
+			}
+			const raceKind = raceSwitchKindOf( source.refObjId );
+			if ( raceKind ) {
+				// Port-only: a bag item the race switch scroll takes opens
+				// the Yes/No confirmation; anything else leaves the cursor
+				// armed for another click.
+				if ( item.slot < 13 || !raceSwitchAccepts( raceKind, item.typeFlags ) ) return false;
 				targetUse = { kind: "item-use", slot: source.slot, targetSlot: item.slot };
 				return true;
 			}
@@ -186,9 +196,10 @@ export function createCosHud() {
 		boxes ever publish the same control.
 		================
 		*/
-		targetUseBox(): "cos-revive" | "cos-renew" | "gender-change" | "weapon-switch" | null {
+		targetUseBox(): "cos-revive" | "cos-renew" | "gender-change" | "weapon-switch" | "race-switch" | null {
 			if ( !targetUse || targetUse.kind !== "item-use" ) return null;
 			if ( source && isWeaponSwitchScrollItem( source.refObjId ) ) return "weapon-switch";
+			if ( source && raceSwitchKindOf( source.refObjId ) ) return "race-switch";
 			if ( targetUse.targetSlot !== undefined ) return "gender-change";
 			return targetUse.revivalSlot !== undefined ? "cos-revive" : "cos-renew";
 		},
