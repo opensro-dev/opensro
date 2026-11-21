@@ -115,6 +115,7 @@ import {
 } from "@/engine/foundation/gameplay/crest-register";
 import { CREST_UPLOAD_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 import { weaponSwitchFailureText } from "@/engine/foundation/gameplay/weapon-switch";
+import { raceSwitchFailureText, raceSwitchKindOf, type RaceSwitchKind } from "@/engine/foundation/gameplay/race-switch";
 import { alchemyNotice } from "@/engine/foundation/gameplay/alchemy-notices";
 import {
 	emptyPartyMatching,
@@ -1352,6 +1353,8 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	let crestUploadInFlight = false;
 	// Port-only: a weapon switch scroll's use is in flight (weapon-switch.ts).
 	let weaponSwitchUseInFlight = false;
+	// Port-only: a race switch scroll's use is in flight, by kind (race-switch.ts).
+	let raceSwitchUseInFlight: RaceSwitchKind | null = null;
 	let flagWarTeam: number | null = null;
 	let progression: Progression = { masteries: [] };
 	const skillGroups = new Map<number, { group: number; level: number; }>();
@@ -4091,6 +4094,8 @@ state here before a command can claim a native wire conversation.
 				if ( sent && command.renameName !== undefined ) renameUseInFlight = true;
 				// Port-only: the weapon switch scroll's refusal bytes likewise.
 				if ( sent && command.weaponKind !== undefined ) weaponSwitchUseInFlight = true;
+				// Port-only: the race switch scrolls' refusal bytes likewise.
+				if ( sent && usedItem ) raceSwitchUseInFlight = raceSwitchKindOf( usedItem.refObjId );
 				return sent;
 			}
 			if ( command.kind === "crest-register" ) {
@@ -6015,15 +6020,19 @@ Packet handling must not depend on which HUD panel is currently open.
 				// that scroll's own lines; any 0xB5BD answer retires the
 				// flight. All other refusals stay on the native mapper,
 				// byte-exact.
-				const portRefusal = frame.opcode === ITEM_USE_RESPONSE_OPCODE && frame.payload[0] === 2 && frame.payload[1] !== undefined;
+				const portRefusal = frame.opcode === ITEM_USE_RESPONSE_OPCODE && frame.payload[0] === 2 &&
+					frame.payload[1] !== undefined;
 				const portLine = renameUseInFlight && portRefusal ?
 					nameChangeFailureText( frame.payload[1]! ) :
 					weaponSwitchUseInFlight && portRefusal ?
 					weaponSwitchFailureText( frame.payload[1]! ) :
+					raceSwitchUseInFlight && portRefusal ?
+					raceSwitchFailureText( raceSwitchUseInFlight, frame.payload[1]! ) :
 					undefined;
 				if ( frame.opcode === ITEM_USE_RESPONSE_OPCODE ) {
 					renameUseInFlight = false;
 					weaponSwitchUseInFlight = false;
+					raceSwitchUseInFlight = null;
 				}
 				const refusal = (portLine ?
 					{ key: "", value: 0, text: portLine, nativeType: 5 as const } :
