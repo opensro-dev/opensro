@@ -21,22 +21,27 @@ import (
 
 /*
 ================
-TestWeaponSwitchScrollListsOnTheElixirsTab
+TestWeaponSwitchListsOnlyInMall
+
+The scroll sells in the Item Mall alone, at 1490 silk (owner,
+2026-11-21): the alchemy shop's elixirs tab never lists it.
 ================
 */
-func TestWeaponSwitchScrollListsOnTheElixirsTab(t *testing.T) {
+func TestWeaponSwitchListsOnlyInMall(t *testing.T) {
 	t.Setenv(EnvShopExtraGoods, "on")
 	t.Setenv(EnvJanganAlchemyShop, "on")
 	t.Setenv(EnvWeaponSwitchScroll, "on")
-	c := janganCatalog(t)
-	elixirs := c.Tabs[c.tabIDs[janganElixirsTab]]
-	last := elixirs[len(elixirs)-1]
-	scroll := WeaponSwitchScrolls[0]
-	if last.Ref.Codename != scroll.Codename || last.Ref.RefObjID != 3790 {
-		t.Fatalf("elixirs tab ends with %s, want the scroll", last.Ref.Codename)
+	goods, err := ExtraGoodsFromEnv()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if last.Price != scroll.Price || last.Currency != PaymentGold {
-		t.Fatalf("scroll price = %d in currency %d, want %d gold", last.Price, last.Currency, scroll.Price)
+	for _, good := range goods {
+		if good.Codename == "ITEM_MALL_REINFORCE_WEAPON_INC_2_SCROLL" {
+			t.Fatalf("the alchemy shop lists the scroll: %+v", good)
+		}
+	}
+	if mall := WeaponSwitchMallGoods(); len(mall) != 1 || mall[0].Silk != 1490 {
+		t.Fatalf("mall goods %+v, want one at 1490 silk", mall)
 	}
 }
 

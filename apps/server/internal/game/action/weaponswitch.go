@@ -15,8 +15,11 @@ choice box. The use request is 0x75BD [slot][type][u8 target slot]
 Chinese, 7..15 European), of either race. The answer is the armour gender tool's
 (gendertool.go): the target's reference changes in place, a reference
 row for the new item, then 0x3645 [slot][1][u32 ref]. Every other field
-of the item (white stats, durability) is kept; the target carries no
-plus and no blue option, so none has to be carried over or dropped.
+of the item (white stats, durability, plus, blue options) is kept
+(owner, 2026-11-21: enhanced weapons switch too). The twin stays in the
+target's equipment family and socket (sameEquipFamily), the only inputs
+of the blue options' target rule (alchemy Magic.Allows), so every blue
+stays valid on it.
 
 INFERENCE: the new item is found by its codename. Every shipped weapon is
 ITEM_<race>_<kind>_<degree>_<grade>[_RARE...], and its siblings of the
@@ -48,7 +51,7 @@ import (
 // flight, and one item use is in flight at a time.
 const (
 	weaponSwitchErrTarget   uint8 = 0xF5 // not a weapon the scroll changes
-	weaponSwitchErrEnhanced uint8 = 0xF6 // a plus or a blue option
+	weaponSwitchErrFamily   uint8 = 0xF6 // the blues could not follow the twin
 	weaponSwitchErrKind     uint8 = 0xF7 // the chosen kind is not offered
 	weaponSwitchErrNoTwin   uint8 = 0xF8 // no weapon of that kind matches
 )
@@ -133,21 +136,60 @@ func weaponSwitchTwin(ref *enterworld.ItemRef, kind int64) string {
 ================
 isSwitchableWeapon
 
-A wielded weapon (3/1/6, a player kind) the scroll's row admits by degree
-and seal. The shield (3/1/4) is no weapon here.
+A wielded weapon (3/1/6, a player kind), sealed or not, of any degree.
+The shield (3/1/4) is no weapon here.
 ================
 */
-func isSwitchableWeapon(ref *enterworld.ItemRef, scroll commerce.WeaponSwitchScroll) bool {
+func isSwitchableWeapon(ref *enterworld.ItemRef) bool {
 	if ref.TypeIDs[0] != 3 || ref.TypeIDs[1] != 1 || ref.TypeIDs[2] != 6 {
 		return false
 	}
-	if _, ok := findWeaponKind(ref.TypeIDs[3]); !ok {
+	_, ok := findWeaponKind(ref.TypeIDs[3])
+	return ok
+}
+
+/*
+================
+equipFamily
+
+An equipment reference's blue-option family, alchemy's category():
+weapon, shield, accessory or armor by the third TypeID, "" otherwise.
+================
+*/
+func equipFamily(ref *enterworld.ItemRef) string {
+	if ref.TypeIDs[0] != 3 || ref.TypeIDs[1] != 1 {
+		return ""
+	}
+	switch ref.TypeIDs[2] {
+	case 6:
+		return "weapon"
+	case 4:
+		return "shield"
+	case 5, 12:
+		return "accessory"
+	case 1, 2, 3, 9, 10, 11:
+		return "armor"
+	}
+	return ""
+}
+
+/*
+================
+sameEquipFamily
+
+Whether a switch keeps the item in the same blue-option family and
+equipment socket: alchemy's Magic.Allows reads only those two, so a
+blue the item carries stays valid on its twin.
+================
+*/
+func sameEquipFamily(from, to *enterworld.ItemRef) bool {
+	family := equipFamily(from)
+	if family == "" || family != equipFamily(to) {
 		return false
 	}
-	if scroll.MaxDegree > 0 && enterworld.ItemDegree(ref) > scroll.MaxDegree {
-		return false
-	}
-	return scroll.Seals || ref.Rarity == 0
+	fromSocket, fromOK := inventory.EquipSocketForTypeFlags(from.TypeFlags())
+	toSocket, toOK := inventory.EquipSocketForTypeFlags(to.TypeFlags())
+	return fromOK == toOK && fromSocket == toSocket
 }
 
 /*
@@ -158,7 +200,7 @@ Runs inside the item use's character Update. Refusals change nothing.
 ================
 */
 func (rt *Runtime) useWeaponSwitchScroll(use skillItemUse, c *enterworld.Character, tail []byte, result *OpResult) bool {
-	scroll, ok := commerce.WeaponSwitchScrollByCodename(use.ref.Codename)
+	_, ok := commerce.WeaponSwitchScrollByCodename(use.ref.Codename)
 	if !ok {
 		return false
 	}
@@ -186,12 +228,8 @@ func (rt *Runtime) useWeaponSwitchScroll(use skillItemUse, c *enterworld.Charact
 	}
 	row := c.MissionInventory[index]
 	ref, found := refs.ItemRefByCodename(row.Codename)
-	if !found || ref == nil || ref.RefObjID != row.RefObjID || !isSwitchableWeapon(ref, scroll) {
+	if !found || ref == nil || ref.RefObjID != row.RefObjID || !isSwitchableWeapon(ref) {
 		*result = itemUseFailure(weaponSwitchErrTarget)
-		return false
-	}
-	if row.Plus != 0 || len(row.MagicOptions) != 0 {
-		*result = itemUseFailure(weaponSwitchErrEnhanced)
 		return false
 	}
 	twinName := weaponSwitchTwin(ref, kind)
@@ -203,6 +241,10 @@ func (rt *Runtime) useWeaponSwitchScroll(use skillItemUse, c *enterworld.Charact
 	twin, twinOK := refs.ItemRefByCodename(twinName)
 	if !twinOK || twin == nil || twin.TypeIDs != [4]int64{3, 1, 6, kind} || twin.Country != to.country {
 		*result = itemUseFailure(weaponSwitchErrNoTwin)
+		return false
+	}
+	if !sameEquipFamily(ref, twin) {
+		*result = itemUseFailure(weaponSwitchErrFamily)
 		return false
 	}
 	// Change the target while index still names it: spending the scroll's

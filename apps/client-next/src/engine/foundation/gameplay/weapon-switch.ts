@@ -3,9 +3,10 @@
 
 weapon-switch.ts - the weapon switch scroll's identity, kinds and tail
 
-Port-only, not native (owner, 2026-11-04): a scroll sold at OpenSRO
-Alchemy - Jangan while the server runs SRO_WEAPON_SWITCH_SCROLL turns a
-bag weapon into another kind of the same degree, grade and seal. It is a
+Port-only, not native (owner, 2026-11-04; 2026-11-21): a scroll sold in
+the Item Mall while the server runs SRO_WEAPON_SWITCH_SCROLL turns a bag
+weapon into another kind of the same degree, grade and seal, its plus
+and blue options kept. It is a
 shipped item the v1.150 game never sells, drops or uses (ITEM_MALL_
 REINFORCE_WEAPON_INC_2_SCROLL, ref 3790), so the client knows it by its
 RefObjID alone: its type word (3/3/13/11) is shared with the reinforce
@@ -131,7 +132,7 @@ export function weaponSwitchFailureText( code: number ): string | undefined {
 		case 0xF5:
 			return "The weapon switch scroll works only on a weapon in your bag.";
 		case 0xF6:
-			return "Only a weapon without enhancement or blue options can be switched.";
+			return "This item's blue options cannot follow it to that kind.";
 		case 0xF7:
 			return "That weapon cannot be switched to this kind.";
 		case 0xF8:

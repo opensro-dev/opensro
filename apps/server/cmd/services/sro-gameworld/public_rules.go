@@ -443,7 +443,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Owner decision (#1689): a paid, rate-limited way to fix a name."},
 			{Flag: commerce.EnvWeaponSwitchScroll, On: commerce.WeaponSwitchScrollFromEnv(),
 				Native: "A weapon keeps its kind for good.",
-				Now:    "OpenSRO Alchemy - Jangan and the Item Mall sell a weapon switch scroll: use it on a weapon in the bag with no plus and no blue option to turn it into another kind, Chinese or European, of the same degree, grade and seal.",
+				Now:    "The Item Mall sells a weapon switch scroll for 1490 silk: use it on a weapon in the bag to turn it into another kind, Chinese or European, of the same degree, grade and seal; its plus and blue options are kept.",
 				Why:    "Owner decision: try another build without farming the weapon again."},
 			{Flag: simulation.EnvBetaPlayerMap, On: simulation.BetaPlayerMapEnabled(),
 				Native: "The world map shows only your own position.",
