@@ -27,8 +27,11 @@ export const HUNT_BYTE_RETURN = 5;
 export const HUNT_BYTE_POTION_EMPTY = 6;
 export const HUNT_BYTE_REPAIR = 7;
 export const HUNT_BYTE_PICKUP = 8;
-export const HUNT_BYTE_PILLAR = 9;
-export const HUNT_BYTE_SPIRIT = 10;
+// Byte 9 is the Spirit checkbox in the UI; its engine use is still unread.
+export const HUNT_BYTE_SPIRIT = 9;
+// 00686720 reads 017b3810 (hunt[10]) and skips via 68c3d0's MOB_GOD_PILLAR_*
+// codename prefixes. The UIIT row is UIIT_STT_MACRO_NOT_ATTACK_HOLL.
+export const HUNT_BYTE_PILLAR = 10;
 export const HUNT_BYTE_TIME_TOWN = 11;
 
 // 0068e700 jump table: 0 = In place, 1..4 = 30/50/70/100 m (native units
@@ -169,18 +172,56 @@ export function huntReturnDeadlineMs( returnByte: number, startedAtMs: number ):
 	return startedAtMs + returnByte * HUNT_HOUR_MS;
 }
 
+// 68c3d0: codename prefix match (character record +8).
+const PILLAR_CODENAME_PREFIXES = [
+	"MOB_GOD_PILLAR_FLAME_",
+	"MOB_GOD_PILLAR_TOGUI_",
+	"MOB_GOD_PILLAR_WRECK_"
+] as const;
+// 68c310: always skipped when selecting a hunt target (no checkbox).
+const SUMMON_FLOWER_CODENAME_PREFIX = "STRUCTURE_SUMMON_FLOWER_";
+
+/*
+================
+isDimensionPillarTarget
+
+Hunt byte 10 (00686720 → 68c3d0): true when the target is a Dimension
+pillar. Native matches the character's codename prefixes; the port also
+keeps the English display-name heuristic for rows that only publish a name.
+================
+*/
+export function isDimensionPillarTarget( name: string, codename = "" ): boolean {
+	const code = codename || name;
+	for ( const prefix of PILLAR_CODENAME_PREFIXES ) {
+		if ( code.startsWith( prefix ) ) return true;
+	}
+	const lower = name.toLowerCase();
+	return lower.includes( "dimension pillar" ) || lower.includes( "dimensional pillar" );
+}
+
 /*
 ================
 isDimensionPillarName
 
-Byte 9 ("Do not attack Dimension pillar") has no engine imm xref beyond
-the loader (sro-macro.md). Port inference: skip a monster whose display
-name names the pillar (UIIT_STT_MACRO_NOT_ATTACK_HOLL / media English).
+Display-name form of isDimensionPillarTarget (tests and call sites that
+only have a name).
 ================
 */
 export function isDimensionPillarName( name: string ): boolean {
-	const lower = name.toLowerCase();
-	return lower.includes( "dimension pillar" ) || lower.includes( "dimensional pillar" );
+	return isDimensionPillarTarget( name );
+}
+
+/*
+================
+isMacroHuntNeverTarget
+
+68c310: STRUCTURE_SUMMON_FLOWER_* is refused as a hunt target with no
+checkbox — always filter it out of the nearest-monster list.
+================
+*/
+export function isMacroHuntNeverTarget( name: string, codename = "" ): boolean {
+	const code = codename || name;
+	return code.startsWith( SUMMON_FLOWER_CODENAME_PREFIX );
 }
 
 /*

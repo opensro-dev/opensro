@@ -383,7 +383,8 @@ import {
 	HUNT_BYTE_PILLAR,
 	huntItemKind,
 	huntRangeReach,
-	isDimensionPillarName,
+	isDimensionPillarTarget,
+	isMacroHuntNeverTarget,
 	pickMacroHuntAction
 } from "@/engine/foundation/gameplay/sro-macro-hunt";
 import {
@@ -7049,9 +7050,12 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 			target.appearanceState?.[0] !== 2;
 		const reach = huntRangeReach( settings.hunt[0] ?? 0 );
 		const skipPillar = (settings.hunt[HUNT_BYTE_PILLAR] ?? 0) !== 0;
-		const monsters = skipPillar ?
-			listMonsters().filter( monster => !isDimensionPillarName( monster.name ) ) :
-			listMonsters();
+		// 68c310 always drops summon flowers; 68c3d0 drops pillars when byte 10 is on.
+		const monsters = listMonsters().filter( monster => {
+			if ( isMacroHuntNeverTarget( monster.name ) ) return false;
+			if ( skipPillar && isDimensionPillarTarget( monster.name ) ) return false;
+			return true;
+		} );
 		const nearest = pose ? nearestMonster( monsters, pose, reach ) : undefined;
 		const party = new Set( social.members.map( member => member.id ) );
 		const pickup = pose && localGid ?

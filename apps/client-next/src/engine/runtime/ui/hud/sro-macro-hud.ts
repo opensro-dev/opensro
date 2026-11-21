@@ -185,8 +185,11 @@ export const MACRO_HUNT_CHECKS: readonly { readonly byte: number; readonly capti
 	{ byte: 3, caption: "Use Energy of Life" },
 	{ byte: 6, caption: "Auto - Return when HP/MP potion remain less than 10" },
 	{ byte: 8, caption: "Auto-Pickup" },
-	{ byte: 9, caption: "Do not attack Dimension pillar" },
-	{ byte: 10, caption: "Use Devil's Spirit, Angel's Spirit" },
+	// Byte indices follow the live hunt block (017b3806..): 00686720 reads
+	// hunt[10] for the Dimension pillar skip (68c3d0). Byte 9 is the Spirit
+	// checkbox; its use path is still unread.
+	{ byte: 9, caption: "Use Devil's Spirit, Angel's Spirit" },
+	{ byte: 10, caption: "Do not attack Dimension pillar" },
 	{ byte: 11, caption: "Whether to return to the town when the usage time ends" }
 ];
 

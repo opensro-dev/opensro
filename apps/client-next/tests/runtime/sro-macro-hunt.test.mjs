@@ -23,6 +23,8 @@ const {
 	HUNT_BYTE_POTION_EMPTY,
 	HUNT_BYTE_REPAIR,
 	HUNT_BYTE_PICKUP,
+	HUNT_BYTE_SPIRIT,
+	HUNT_BYTE_PILLAR,
 	HUNT_RANGE_IN_PLACE,
 	HUNT_IN_PLACE_REACH,
 	HUNT_HOUR_MS,
@@ -37,6 +39,8 @@ const {
 	huntReturnDeadlineMs,
 	huntItemKind,
 	isDimensionPillarName,
+	isDimensionPillarTarget,
+	isMacroHuntNeverTarget,
 	pickMacroHuntAction
 } = hunt;
 
@@ -209,10 +213,18 @@ test("VIP usage-time end returns when byte 11 is on", () => {
 	);
 });
 
-test("Dimension pillar names match the hunt skip heuristic", () => {
+test("Dimension pillar skip matches 68c3d0 codenames and English names", () => {
 	assert.equal( isDimensionPillarName( "Dimension Pillar" ), true );
 	assert.equal( isDimensionPillarName( "Dimensional Pillar" ), true );
 	assert.equal( isDimensionPillarName( "Tiger" ), false );
+	assert.equal( isDimensionPillarTarget( "Flame", "MOB_GOD_PILLAR_FLAME_01" ), true );
+	assert.equal( isDimensionPillarTarget( "Togui", "MOB_GOD_PILLAR_TOGUI_A" ), true );
+	assert.equal( isDimensionPillarTarget( "Wreck", "MOB_GOD_PILLAR_WRECK_B" ), true );
+	assert.equal( isDimensionPillarTarget( "Tiger", "MOB_TIGER" ), false );
+	assert.equal( isMacroHuntNeverTarget( "Flower", "STRUCTURE_SUMMON_FLOWER_01" ), true );
+	assert.equal( isMacroHuntNeverTarget( "Tiger", "MOB_TIGER" ), false );
+	assert.equal( HUNT_BYTE_PILLAR, 10, "00686720 reads 017b3810" );
+	assert.equal( HUNT_BYTE_SPIRIT, 9 );
 });
 
 test("Energy of Life and berserk All fire when their gauges want them", () => {
@@ -363,6 +375,143 @@ test("Auto-Hunt select passes the monster entity so Auto-Skills can attack", asy
 	assert.ok(
 		sent.some( frame => frame.opcode === SKILL_PRESS_OPCODE ),
 		"Auto-Skills attacks the hunt target on the same tick"
+	);
+	g.dispose();
+});
+
+test("Auto-Hunt ends on teleportMode, not a region walk, and paces unanswered selects", async () => {
+	const { createGameplay } = await import(
+		"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
+	);
+	const { experimentalGameplay, experimentalOptions } = await import(
+		"../../src/engine/foundation/ui/experimental-options.ts"
+	);
+	const { macroReplay } = await import( "../helpers/sro-macro-frames.mjs" );
+	const { OP_MACRO_REQUEST, MACRO_HUNT, MACRO_ACTION_SWITCH } = codec;
+	const SELECT_OPCODE = 0x745a;
+	const STATE_REFRESH = 0x3122;
+	const LOCAL_GID = 1;
+	const MONSTER_GID = 2;
+	const skillRef = ( id, over = {} ) => ({
+		id,
+		group: over.group ?? id,
+		level: 1,
+		status: false,
+		effectRider: false,
+		ui: {
+			name: `SKILL_${id}`,
+			trainable: true,
+			spCost: 1,
+			targetRequired: false,
+			cooldownMs: 0,
+			actionMs: 100,
+			masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
+			prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ]
+		}
+	});
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const entities = new Map();
+	const local = {
+		gid: LOCAL_GID,
+		refObjId: 1907,
+		kind: /** @type {const} */ ("local-player"),
+		name: "hunter",
+		countryByte9c: 0,
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	const monster = {
+		gid: MONSTER_GID,
+		refObjId: 2000,
+		kind: /** @type {const} */ ("monster"),
+		name: "mob",
+		regionId: 257,
+		x: 5,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	entities.set( LOCAL_GID, local );
+	entities.set( MONSTER_GID, monster );
+	const g = createGameplay(
+		f => sent.push( f ),
+		() => {},
+		() => {},
+		gid => entities.get( gid ),
+		() => {},
+		() => [ ...entities.values() ].filter( e => e.kind === "monster" ),
+		() => []
+	);
+	g.bootstrap( {
+		character: {
+			hp: 100,
+			mp: 100,
+			maxHp: 100,
+			maxMp: 100,
+			skills: [],
+			autoPotion: { hp: 0x3211, mp: 0x3212, cure: 0x13, timing: 0x8a }
+		},
+		refSkillSnapshot: [ skillRef( 11 ) ]
+	} );
+	g.worldReady();
+	g.seed( monster );
+	g.seed( local );
+	g.experimental( experimentalGameplay( experimentalOptions( { sroMacro: true } ) ) );
+	const hunt = codec.defaultHuntBlock();
+	hunt[0] = 1;
+	g.receive( macroReplay( { huntOn: 1, hunt, buff: [], attack: [] } ), 0 );
+	sent.length = 0;
+	g.step( 0, local );
+	assert.equal( sent.filter( f => f.opcode === SELECT_OPCODE ).length, 1, "first select" );
+	// Selection intent already names the mob, so the next ticks want "none"
+	// and must not re-issue select inside the retry window either.
+	g.step( 500, local );
+	assert.equal(
+		sent.filter( f => f.opcode === SELECT_OPCODE ).length,
+		1,
+		"select is not resent inside MACRO_HUNT_RETRY_MS"
+	);
+
+	// Region walk must not end hunt: seed a new region without a teleport latch.
+	local.regionId = 258;
+	g.seed( local );
+	sent.length = 0;
+	g.step( 2000, local );
+	assert.equal(
+		sent.filter( f => f.opcode === OP_MACRO_REQUEST ).length,
+		0,
+		"a region cell change alone does not send hunt OFF"
+	);
+
+	// 0x3122 state 11 value 1 is the teleport latch.
+	const teleport = new Uint8Array( 6 );
+	new DataView( teleport.buffer ).setUint32( 0, LOCAL_GID, true );
+	teleport[4] = 11;
+	teleport[5] = 1;
+	g.receive( { opcode: STATE_REFRESH, payload: teleport }, 2500 );
+	sent.length = 0;
+	g.step( 2500, local );
+	const offs = sent.filter( f => f.opcode === OP_MACRO_REQUEST );
+	assert.ok( offs.length >= 1, "teleportMode ends Auto-Hunt" );
+	const huntOff = offs.find(
+		f => f.payload[0] === MACRO_ACTION_SWITCH && f.payload[1] === MACRO_HUNT
+	);
+	assert.ok( huntOff, "hunt OFF request" );
+	assert.equal( huntOff.payload[2], 0, "hunt OFF" );
+	g.step( 2600, local );
+	assert.equal(
+		sent.filter(
+			f => f.opcode === OP_MACRO_REQUEST && f.payload[0] === MACRO_ACTION_SWITCH &&
+				f.payload[1] === MACRO_HUNT
+		).length,
+		1,
+		"teleport OFF is not resent every tick"
 	);
 	g.dispose();
 });
