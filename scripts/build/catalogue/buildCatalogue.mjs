@@ -30,6 +30,7 @@ import { fileURLToPath } from "node:url";
 import { buildStatePath, clientPublicPath, generatedPath } from "../../lib/generatedRoot.mjs";
 import { sharedCacheEnvironment } from "../../lib/goEnvironment.mjs";
 import { runPython } from "../shared/pythonRun.mjs";
+import { fillFormerIds, readFormerIds } from "./formerIds.mjs";
 import { playerNotes } from "./playerNotes.mjs";
 import { renderPortraits } from "./renderPortraits.mjs";
 
@@ -415,6 +416,7 @@ async function main() {
 				);
 			}
 		}
+		fillFormerIds( monsters.monsters, await readFormerIds() );
 		writeFileSync( path.join( out, "monsters.json" ), JSON.stringify( monsters ) + "\n" );
 		const atlas = readJSON( path.join( work, "atlas.json" ) );
 		const tiles = atlasTiles( out );

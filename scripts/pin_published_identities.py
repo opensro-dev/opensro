@@ -23,7 +23,10 @@ built:
 A refresh never drops or moves a pinned entry: an id a player may hold
 stays with its code even when the new catalogue leaves the code out (a
 flag turned off since). Moving one refuses; drop it from the file by hand
-only for a code no player can hold.
+only for a code no player can hold. The one move a refresh makes is the
+id owner's rule for a released id a character and an item both hold
+(published_ids.settle_shared): the item keeps it, and the character's old
+id is kept in "former", which the catalogue publishes as formerIds.
 
 ===========================================================================
 """
@@ -83,11 +86,13 @@ def merge_pin(previous, current):
 # ================
 def build_pin(catalogue, previous):
 	document = {"format": published_ids.PIN_FORMAT, "release": ""}
+	if previous.get(published_ids.FORMER):
+		document[published_ids.FORMER] = previous[published_ids.FORMER]
 	for name, (file, key) in SOURCES.items():
 		source = json.loads((Path(catalogue) / file).read_text(encoding="utf-8"))
 		document["release"] = document["release"] or str(source.get("release") or "")
 		document[name] = merge_pin(previous.get(name, {}), pin_rows(source[key]))
-	return document
+	return published_ids.settle_shared(document)
 
 
 # ================

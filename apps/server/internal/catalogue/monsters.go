@@ -137,6 +137,9 @@ type Monster struct {
 	Model   string `json:"model,omitempty"`
 	// Portrait is filled by the Node stage's portrait pass.
 	Portrait string `json:"portrait,omitempty" doc:"The monster's portrait, portraits/<id>.webp beside this file: a transparent still of its model from the game's own renderer (the viewer). Absent when the build drew none."`
+	// FormerIDs is filled by the Node stage from the published-id pin
+	// (scripts/build/catalogue/formerIds.mjs, #3994).
+	FormerIDs []uint32 `json:"formerIds,omitempty" doc:"The ids this monster had in earlier releases, ascending. A monster moves only off a released id a player-held item also shipped on (#3994); a link to an old id names this monster. Absent when it never moved."`
 	// Regions are the world regions with a nest of this monster.
 	Regions  []uint16         `json:"regions"`
 	Variants []MonsterVariant `json:"variants"`
