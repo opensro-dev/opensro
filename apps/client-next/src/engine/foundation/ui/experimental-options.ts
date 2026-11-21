@@ -111,23 +111,6 @@ export interface ExperimentalOptions {
 	// downloads with progress, and the retail texture stays the fallback
 	// for every path the set does not hold.
 	readonly hdTextures: boolean;
-	// Port-only, not native: characters and effects share one nearest-first
-	// order under the renderer's CHARACTER_ACTORS (the original keeps every
-	// decoration, 85C020), so a far character gives way to a near effect.
-	// On unless turned off (the owner's choice, 2026-10-14); off is the
-	// previous rule, characters first.
-	readonly sharedActorRoom: boolean;
-	// Port-only, not native: the local player's ground-click walk is stepped
-	// on the main thread from the click frame (runtime/movement/local-mover.ts,
-	// Unreal's locally controlled character, epic #1437, with
-	// reconciliation #1441b). The original client predicts its own walk the
-	// same way (0x6932A0 -> StartGroundMove 0x878600). On unless turned off
-	// (the owner's choice, 2026-10-25); off is the worker-driven walk.
-	readonly mainThreadOwnWalk: boolean;
-	// Port-only, not native: a disabled tab is dimmed with a grey label (the
-	// original draws it like an unselected tab, 5376A0). On unless turned
-	// off (the owner's choice, 2026-10-15); off is the original look.
-	readonly greyDisabledTabs: boolean;
 	// Port-only, not native: the shard's job-kill announcements (their own
 	// 0x3667 channel, server wire.JobKillNoticeChannel). On unless turned off
 	// (the owner's choice, 2026-10-15); off hides them from the banner and
@@ -162,28 +145,6 @@ export interface ExperimentalOptions {
 	// (CICCos_ResolveDrawOwner 854680), which ignores the key. Off unless
 	// turned on (the balance advisor's ask, owner-approved 2026-10-15).
 	readonly vHidesCompanions: boolean;
-	// Port-only, not native: a character the navmesh puts in a dungeon room
-	// the camera's room does not draw is hidden and cannot be clicked, as
-	// that room's scenery is not drawn, so characters and rooms appear and
-	// vanish together. The original draws every entity in its frustum, so
-	// mobs show floating in the void behind a culled room (World_PickEntity-
-	// AtScreenPoint 692680 likewise raycasts entities only). On unless
-	// turned off (the owner's choice, 2026-10-19); off is the original,
-	// frustum-only draw and pick.
-	readonly dungeonCharacterPvs: boolean;
-	// Port-only, not native: an authored label wider than its box wraps onto
-	// two lines inside it, a button caption wider than its plate keeps its
-	// leading words (in game and on the creation screen), a speech board
-	// breaks between words, and an open list that would leave its window opens
-	// upward (the original runs the text past the window's edge, breaks a
-	// board at any glyph and draws the list below the box). On unless turned off (the owner's choice,
-	// 2026-10-15); off is the original look.
-	readonly fitWindowLabels: boolean;
-	// Port-only, not native: an item dropped on the other bag page's tab
-	// moves to that page's first free slot (bag-tab-drop.ts). On unless
-	// turned off (the owner's choice, 2026-10-15); off is the original,
-	// where a drop on a tab does nothing.
-	readonly dropOnBagTab: boolean;
 	// Port-only, not native: Ctrl+click, right-click or double-click a bag
 	// item stages it into the open exchange, as a drop on the table does;
 	// the original stages by drag and drop only. On unless turned off (the
@@ -205,11 +166,6 @@ export interface ExperimentalOptions {
 	// runtime/ui/hud/unique-banner.ts). On unless turned off (the balance
 	// advisor's ask, owner-approved 2026-10-15); off is the original timing.
 	readonly shortNotices: boolean;
-	// Port-only, not native: the guild window's Withdraw asks "Ban [name]?"
-	// (UIIT_MSG_GUILD_QUESTION_EXPULSION_ANYONE) before it bans; 5E4C30 sends
-	// the ban on the click. On unless turned off (the owner's choice,
-	// 2026-10-15); off is the original.
-	readonly confirmGuildBan: boolean;
 	// Port-only, not native: straight AT_MOV_1TAR projectiles re-aim at the
 	// target's live socket each frame (stepHomingProjectile). The original
 	// interpolates between the launch-captured start (+0x58) and end (+0x64)
@@ -238,11 +194,6 @@ export interface ExperimentalOptions {
 	// CIFCOSStatus maps no left-click message (6A9BC0). On unless turned off
 	// (the owner's choice, 2026-10-18, BUG-086); off is native.
 	readonly petClickOpensWindow: boolean;
-	// Port-only, not native (0x0077DD61 clears commandMode bit 0x80 via 0x705B
-	// selector 2 on 0xB69E pickup error 0xB4/0xB5, stopping gold pickup too):
-	// when on, keep bit 0x80 enabled on full-bag errors and pause non-gold item
-	// pickup until bag space changes so the pet keeps picking up gold. Default on.
-	readonly smartPetPickup: boolean;
 	// Port-only, not native (#841): an item filter for the pickup pet. Off
 	// unless turned on; off, the pet proposes exactly the native categories
 	// and the kind switches below are never read. The filter only ever
@@ -284,11 +235,6 @@ export interface ExperimentalOptions {
 	// 0x68eafd in 0x68e530 never reaches it on the traced path - so the
 	// native arrival is silent. Off unless turned on.
 	readonly warpArrivalSound: boolean;
-	// Port-only, not native (#3547): a wing dress's flight plays no ground
-	// footsteps. The wing set has no sound binding, so the native client
-	// falls back to the Default run's snd_run1 (0xADEAB5 -> 0xADEADE). On
-	// by default (the owner's choice, 2026-11-15); off is the native steps.
-	readonly silentWingFlight: boolean;
 	// Port-only, not native: the four Christmas carols (event_carol_01..04,
 	// music mode 1) while the Christmas event group (1) is on. The native
 	// carol branch (8F7A43) is reached only through the music manager's
@@ -476,9 +422,9 @@ export function uiScaleFactor( options: ExperimentalOptions ): number {
 experimentalOptions
 
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
-compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
-breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices, confirmGuildBan,
-petClickOpensWindow, smartPetPickup, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion, silentWingFlight, dungeonCharacterPvs,
+compressedTextures, jobKillNotices, dropPlusNotices,
+breakNotices, highlightEventNotices, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices,
+petClickOpensWindow, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion,
 christmasCarols and sroMacro (owners, 2026-11-15 and 2026-11-21: on by default, off by the player's choice), which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
@@ -521,29 +467,21 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		enchantSparks: record.enchantSparks !== false,
 		compressedTextures: record.compressedTextures !== false,
 		hdTextures: enabled( "hdTextures" ),
-		sharedActorRoom: record.sharedActorRoom !== false,
-		mainThreadOwnWalk: record.mainThreadOwnWalk !== false,
-		greyDisabledTabs: record.greyDisabledTabs !== false,
 		jobKillNotices: record.jobKillNotices !== false,
 		dropPlusNotices: record.dropPlusNotices !== false,
 		breakNotices: record.breakNotices !== false,
 		highlightEventNotices: record.highlightEventNotices !== false,
 		uniqueDamageRank: enabled( "uniqueDamageRank" ),
 		vHidesCompanions: enabled( "vHidesCompanions" ),
-		dungeonCharacterPvs: record.dungeonCharacterPvs !== false,
-		fitWindowLabels: record.fitWindowLabels !== false,
-		dropOnBagTab: record.dropOnBagTab !== false,
 		exchangeClickShortcuts: record.exchangeClickShortcuts !== false,
 		noticeLinks: record.noticeLinks !== false,
 		chatItemLinks: record.chatItemLinks !== false,
 		shortNotices: record.shortNotices !== false,
 		autoSelect: enabled( "autoSelect" ),
-		confirmGuildBan: record.confirmGuildBan !== false,
 		homingProjectiles: enabled( "homingProjectiles" ),
 		transportAutoPotion: record.transportAutoPotion !== false,
 		webTransport: record.webTransport !== false,
 		petClickOpensWindow: record.petClickOpensWindow !== false,
-		smartPetPickup: record.smartPetPickup !== false,
 		petPickupFilter: enabled( "petPickupFilter" ),
 		petFilterGold: record.petFilterGold !== false,
 		petFilterEquipment: record.petFilterEquipment !== false,
@@ -555,7 +493,6 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		uniqueSpawnPoints: record.uniqueSpawnPoints !== false,
 		sunDropMarker: enabled( "sunDropMarker" ),
 		warpArrivalSound: enabled( "warpArrivalSound" ),
-		silentWingFlight: record.silentWingFlight !== false,
 		christmasCarols: record.christmasCarols !== false,
 		sealUnderHeading: enabled( "sealUnderHeading" ),
 		setBonusTooltip: enabled( "setBonusTooltip" ),
@@ -670,10 +607,7 @@ export interface ExperimentalVideo {
 	readonly sceneFxaa: boolean;
 	readonly smoothCamera: boolean;
 	readonly enchantSparks: boolean;
-	readonly sharedActorRoom: boolean;
 	readonly vHidesCompanions: boolean;
-	readonly dungeonCharacterPvs: boolean;
-	readonly silentWingFlight: boolean;
 }
 
 /*
@@ -699,10 +633,7 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		sceneFxaa: options.sceneFxaa,
 		smoothCamera: options.smoothCamera,
 		enchantSparks: options.enchantSparks,
-		sharedActorRoom: options.sharedActorRoom,
-		vHidesCompanions: options.vHidesCompanions,
-		dungeonCharacterPvs: options.dungeonCharacterPvs,
-		silentWingFlight: options.silentWingFlight
+		vHidesCompanions: options.vHidesCompanions
 	};
 }
 
@@ -722,7 +653,6 @@ export interface ExperimentalGameplay {
 	readonly highlightEventNotices?: boolean;
 	readonly webTransport: boolean;
 	readonly homingProjectiles?: boolean;
-	readonly smartPetPickup?: boolean;
 	readonly sunDropMarker?: boolean;
 	readonly warpArrivalSound?: boolean;
 	readonly christmasCarols?: boolean;
@@ -747,7 +677,6 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		breakNotices: options.breakNotices,
 		highlightEventNotices: options.highlightEventNotices,
 		homingProjectiles: options.homingProjectiles,
-		smartPetPickup: options.smartPetPickup,
 		sunDropMarker: options.sunDropMarker,
 		warpArrivalSound: options.warpArrivalSound,
 		christmasCarols: options.christmasCarols,

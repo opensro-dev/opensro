@@ -253,22 +253,13 @@ export interface Renderer extends Disposable {
 	experimentalVideo( value: import("@/engine/foundation/ui/experimental-options").ExperimentalVideo ): void;
 	// Port-only, not native: whether the Experimental enchant sparks are on.
 	enchantSparks?(): boolean;
-	// Port-only, not native: whether characters and effects share one
-	// nearest-first actor room (Experimental; the original has no cap).
-	sharedActorRoom?(): boolean;
 	// Port-only, not native: whether holding V also hides other players'
 	// companions (Experimental, off by default).
 	vHidesCompanions?(): boolean;
-	// Port-only, not native (#3547): whether a wing dress's flight drops
-	// its fallback footsteps (Experimental, on by default).
-	silentWingFlight?(): boolean;
-	// Port-only, not native (Experimental "Dungeon character PVS", on by
-	// default): whether dungeon character PVS and floor admission are on.
-	dungeonCharacterPvs?(): boolean;
 	// Port-only, not native: whether a character in dungeon room `block` is
 	// hidden because the room the local player stands in (`activeBlock`, the
-	// same frame's navigation block) does not draw it (Experimental
-	// "Dungeon character PVS", on by default; off is the native frame).
+	// same frame's navigation block) does not draw it (owner 2026-11-21:
+	// the default, no row).
 	dungeonBlockHides?( block: number, activeBlock?: number ): boolean;
 	setSelectionDecal(
 		value: { readonly pose: import("./gameplay").Pose; readonly slot: 0 | 1 | 2 | 3; } | null

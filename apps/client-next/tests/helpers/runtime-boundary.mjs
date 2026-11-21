@@ -202,6 +202,9 @@ presentUpdate
 	owners.renderer.setWorldLayers = () => {};
 	owners.frontend.step = () => ({ phase: "loading-title" });
 	Object.assign( owners.navigation, {
+		// No navigation published yet (navigation.ts view): the own-walk
+		// mover reads it every frame.
+		view: () => null,
 		error: () => null,
 		reconnecting: () => false,
 		terminalFailure: () => undefined,

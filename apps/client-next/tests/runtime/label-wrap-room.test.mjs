@@ -3,7 +3,7 @@
 
 label-wrap-room.test.mjs - a wrapped label stays clear of the rows beside it
 
-The port-only Experimental "Fit window labels" wraps an authored label
+The port-only label fitting (owner 2026-11-21: the default, no row) wraps an authored label
 wider than its box onto two lines. Two lines at the font's full extent
 did not fit a box sized for one: centred on it they ran 8 pixels into the
 row above and the row below, and where both neighbours wrapped their
@@ -12,8 +12,7 @@ Fortress tax window, "Purchase amount" over "Profit amount" in the
 special goods trade window, #3673). Each label now keeps to half the gap
 to its neighbours (authored-layout.ts labelRoom) and stacks its lines as
 tight as that needs (frame.ts wrappedLabelBand). The check is the
-picture's: no two glyphs of the window cross, with the row on; off, the
-labels keep the original one-line overflow.
+picture's: no two glyphs of the window cross.
 
 ===========================================================================
 */
@@ -45,11 +44,10 @@ const ORIGIN_Y = new Map(
 ================
 openWindow
 
-A fixture with the row set, opened by recipe; the last scene and the
-published controls.
+A fixture opened by recipe; the last scene and the published controls.
 ================
 */
-function openWindow( fit, recipe ) {
+function openWindow( recipe ) {
 	const f = uiFixture();
 	let now = 0;
 	/** @type {any} */
@@ -57,7 +55,6 @@ function openWindow( fit, recipe ) {
 	const step = () => {
 		for ( let i = 0; i < 8; i++ ) seen = f.ui.step( f.state, now += 200 ) ?? seen;
 	};
-	f.ui.event( /** @type {any} */ ({ kind: "experimental-preferences", value: { fitWindowLabels: fit } }) );
 	recipe( f, step );
 	step();
 	assert.equal( f.ui.stats().error, null );
@@ -226,7 +223,7 @@ const WINDOWS = [
 for ( const { recipe, panels } of WINDOWS ) {
 	for ( const [panel, height] of panels ) {
 		test(`${panel}: no wrapped label crosses another label`, () => {
-			const { scene, controls } = openWindow( true, recipe );
+			const { scene, controls } = openWindow( recipe );
 			const rect = windowRect( controls, panel, height );
 			const crossed = crossings( scene, rect );
 			assert.deepEqual( crossed.slice( 0, 4 ), [], `${crossed.length} line crossings in ${rect}` );
@@ -240,27 +237,20 @@ for ( const { recipe, panels } of WINDOWS ) {
 const DEAL_LABELS = { left: 13, right: 76, top: 110, bottom: 240, count: 4 };
 
 test("the trade window's wrapped labels read as pairs, each apart from the next", () => {
-	for ( const fit of [ true, false ] ) {
-		const { scene, controls } = openWindow( fit, specialtyDeal );
-		const [x, y] = windowRect( controls, "Specialty deal", 0 );
-		const column = textLines( scene, [
-			x + DEAL_LABELS.left - 12,
-			y + DEAL_LABELS.top,
-			DEAL_LABELS.right - DEAL_LABELS.left + 12,
-			DEAL_LABELS.bottom - DEAL_LABELS.top
-		] ).sort( ( a, b ) => a[1] - b[1] );
-		if ( !fit ) {
-			// Off, the original: each label one line, past its box's left edge.
-			assert.ok( column.length < 2 * DEAL_LABELS.count, "the row off wraps nothing" );
-			continue;
-		}
-		assert.equal( column.length, 2 * DEAL_LABELS.count, "four labels, two lines each" );
-		const pitches = column.slice( 1 ).map( ( line, index ) => line[1] - column[index][1] );
-		for ( let pair = 0; pair < DEAL_LABELS.count; pair++ ) {
-			const inside = pitches[2 * pair];
-			for ( const between of [ pitches[2 * pair - 1], pitches[2 * pair + 1] ] ) {
-				if ( between !== undefined ) assert.ok( inside < between, `label ${pair}: ${pitches}` );
-			}
+	const { scene, controls } = openWindow( specialtyDeal );
+	const [x, y] = windowRect( controls, "Specialty deal", 0 );
+	const column = textLines( scene, [
+		x + DEAL_LABELS.left - 12,
+		y + DEAL_LABELS.top,
+		DEAL_LABELS.right - DEAL_LABELS.left + 12,
+		DEAL_LABELS.bottom - DEAL_LABELS.top
+	] ).sort( ( a, b ) => a[1] - b[1] );
+	assert.equal( column.length, 2 * DEAL_LABELS.count, "four labels, two lines each" );
+	const pitches = column.slice( 1 ).map( ( line, index ) => line[1] - column[index][1] );
+	for ( let pair = 0; pair < DEAL_LABELS.count; pair++ ) {
+		const inside = pitches[2 * pair];
+		for ( const between of [ pitches[2 * pair - 1], pitches[2 * pair + 1] ] ) {
+			if ( between !== undefined ) assert.ok( inside < between, `label ${pair}: ${pitches}` );
 		}
 	}
 });

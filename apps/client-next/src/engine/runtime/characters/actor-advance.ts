@@ -180,7 +180,6 @@ export function createActorAdvance( owner: ActorOwner ) {
 			// ADD670 retains both outgoing and incoming installations. Clip
 			// names and weights cannot identify cursors across a reinstallation.
 			const retainedActivations = new Set<AnimationActivation>();
-			const silentWingFlight = renderer.silentWingFlight?.() === true;
 			const dispatch = (state.dispatch ??= createAnimationDispatch()).step(
 				layers,
 				animationDeltaMs,
@@ -212,7 +211,7 @@ export function createActorAdvance( owner: ActorOwner ) {
 					layer.activation.started,
 					(row?.elapsedMs ?? 0) / 1000,
 					layer.loop,
-					flightSoundDefinition( layer.clip, motionMetadata( layer.clip ), silentWingFlight ),
+					flightSoundDefinition( layer.clip, motionMetadata( layer.clip ) ),
 					seconds,
 					soundSource,
 					layer.activation

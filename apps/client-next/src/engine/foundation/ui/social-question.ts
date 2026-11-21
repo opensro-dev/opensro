@@ -6,10 +6,10 @@ social-question.ts - the question a guild or party action asks first
 Secede and Disband (the guild manager's rows), a guild nickname (box
 0x17, 5E35E0) and the party ban ask their native question before
 anything is sent. The guild window's Withdraw (UIIT_STT_GUILD_EXPULSION,
-the ban) asks UIIT_MSG_GUILD_QUESTION_EXPULSION_ANYONE only while the
-Experimental "Confirm guild ban" row is on: port-only, not native (5E4C30
-sends the ban on the click and v1.150 never shows that text); the owner
-kept the question by default on 2026-10-15. The window draws the box
+the ban) asks UIIT_MSG_GUILD_QUESTION_EXPULSION_ANYONE first: port-only,
+not native (5E4C30 sends the ban on the click and v1.150 never shows that
+text); the owner kept the question on 2026-10-15 and dropped its row on
+2026-11-21. The window draws the box
 (simpleMessageBox); Yes sends the action, No drops it.
 
 ===========================================================================

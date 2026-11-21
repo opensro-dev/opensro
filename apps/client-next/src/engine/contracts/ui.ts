@@ -31,7 +31,7 @@ export interface UiTextLayout {
 	// enter a neighbouring text box; null when no glyph of it fits, absent
 	// when the text fits its box.
 	readonly fitted?: UiQuad | null;
-	// Port-only (the Experimental "Fit window labels"): the text on two
+	// Port-only (the former Experimental "Fit window labels"): the text on two
 	// lines inside its box's columns, tried before the shortened run;
 	// absent when the text has no space or a line would not fit.
 	readonly wrapped?: UiQuad;
@@ -40,7 +40,7 @@ export interface UiTextLayout {
 	// job ranking's 56-pixel head); tried after a label's slide.
 	readonly narrow?: UiQuad;
 	// A label (an authored static's text key, not a value in its field)
-	// may be slid or kept whole past its box under "Fit window labels".
+	// may be slid or kept whole past its box by the label fitting.
 	readonly label?: boolean;
 }
 /*

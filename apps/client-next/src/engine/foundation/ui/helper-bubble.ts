@@ -85,18 +85,17 @@ tooltipBubble
 
 6791C0 places the bubble 8 pixels right of its anchor when it fits,
 otherwise 8 pixels left of it, and keeps it 15 pixels above the bottom.
-Port-only, not native (Experimental "Fit window labels", fit): on a screen
-narrower than the original's, the left side can run off the screen too, so
-x is clamped inside the viewport, border included. Where either native side
-fits, the clamp changes nothing; without fit the placement is 6791C0's.
+Port-only, not native (the former Experimental "Fit window labels";
+owner 2026-11-21: the default, no row): on a screen narrower than the original's, the left
+side can run off the screen too, so x is clamped inside the viewport,
+border included. Where either native side fits, the clamp changes nothing.
 ================
 */
 export function tooltipBubble(
 	rows: readonly TooltipRow[],
 	anchor: UiRect,
 	viewport: UiRect,
-	measure: ( s: string, strong?: boolean ) => number,
-	fit = false
+	measure: ( s: string, strong?: boolean ) => number
 ) {
 	const gutter = Math.ceil( 12 / Math.max( 1, measure( " " ) ) ) + 1;
 	const expanded = rows.flatMap( row =>
@@ -110,9 +109,10 @@ export function tooltipBubble(
 	const side = anchor[0] + anchor[2] + width + 20 <= viewport[2] ?
 		anchor[0] + anchor[2] + BUBBLE_BORDER :
 		anchor[0] - width - BUBBLE_BORDER;
-	const x = fit ?
-		Math.max( viewport[0] + BUBBLE_BORDER, Math.min( side, viewport[0] + viewport[2] - width - BUBBLE_BORDER ) ) :
-		side;
+	const x = Math.max(
+		viewport[0] + BUBBLE_BORDER,
+		Math.min( side, viewport[0] + viewport[2] - width - BUBBLE_BORDER )
+	);
 	const y = Math.min( anchor[1] + 8, viewport[3] - height - 15 ), r: UiRect = [ x, y, width, height ];
 	const corner = BUBBLE_ROOT + "com_tooltip_corner.png", edge = BUBBLE_ROOT + "com_tooltip_edge.png";
 	const quads: UiQuad[] = [ {
@@ -182,14 +182,13 @@ export function sideBubble(
 	rows: readonly TooltipRow[],
 	main: UiRect,
 	viewport: UiRect,
-	measure: ( s: string, strong?: boolean ) => number,
-	fit = false
+	measure: ( s: string, strong?: boolean ) => number
 ) {
 	const y = main[1] + SIDE_BUBBLE_DROP;
 	// The anchor is wider by one border so the two boxes' borders meet, not overlap.
-	const right = tooltipBubble( rows, [ main[0], y, main[2] + BUBBLE_BORDER, main[3] ], viewport, measure, fit );
+	const right = tooltipBubble( rows, [ main[0], y, main[2] + BUBBLE_BORDER, main[3] ], viewport, measure );
 	if ( right.quads[0]!.rect[0] > main[0] ) return right;
 	// No room on the right: an anchor spanning the viewport makes tooltipBubble place it to the left of
 	// the anchor's x, which sits one border left of the main box.
-	return tooltipBubble( rows, [ main[0] - BUBBLE_BORDER, y, viewport[2], main[3] ], viewport, measure, fit );
+	return tooltipBubble( rows, [ main[0] - BUBBLE_BORDER, y, viewport[2], main[3] ], viewport, measure );
 }

@@ -501,9 +501,6 @@ export function createCharacterPresentation(
 			gameplay,
 			localGid: local?.gid,
 			mountedOn: local?.mountedOn,
-			dungeonCharacterPvs: renderer.dungeonCharacterPvs ?
-				renderer.dungeonCharacterPvs() :
-				renderer.dungeonBlockHides !== undefined,
 			dungeonBlockHides: renderer.dungeonBlockHides
 		} );
 		// Port-only survival arena: dense spells must not evict live enemies and their pick meshes.

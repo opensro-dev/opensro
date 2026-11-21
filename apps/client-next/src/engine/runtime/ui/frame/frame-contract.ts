@@ -194,9 +194,6 @@ export interface UiFrame {
 	pressed: string | null;
 	hover: string | null;
 	focus: string | null;
-	// The Experimental "Fit window labels" row; absent reads as off (a
-	// window's admission fits its text with it, ui-glyphs resolveTextOverlaps).
-	fitWindowLabels?(): boolean;
 }
 
 /*
@@ -205,8 +202,8 @@ UiAuthoredFrame
 
 The frame the authored widgets (authored.ts) draw into: the whole text
 owner (widths, line height and SML2 layout besides quads), the system-text
-catalogue, the button art family of a texture and the Experimental "Fit
-window labels" and "Grey disabled tabs" preferences. The coordinator's drawFrame is one.
+catalogue and the button art family of a texture. The coordinator's
+drawFrame is one.
 ================
 */
 export interface UiAuthoredFrame extends UiFrame {
@@ -225,6 +222,4 @@ export interface UiAuthoredFrame extends UiFrame {
 	};
 	copy( key: string ): string;
 	buttonFamily( texture: string ): readonly string[];
-	fitWindowLabels(): boolean;
-	greyDisabledTabs(): boolean;
 }

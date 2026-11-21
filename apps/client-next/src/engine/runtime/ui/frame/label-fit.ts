@@ -3,8 +3,7 @@
 
 label-fit.ts - where a fitted label or button caption goes
 
-Port-only, not native (Experimental "Fit window labels", off is the
-original): the layout half of fitting text inside its art. It chooses a
+Port-only, not native (owner 2026-11-21: the default, no row): the layout half of fitting text inside its art. It chooses a
 static's lines inside a measured room (labelFit), a button caption's
 face and lines inside its plate (buttonCaptionFit), and the band two
 wrapped lines stack in (wrappedLabelBand); it pushes only the fitted
@@ -60,7 +59,7 @@ export function wrappedLabelBand( box: UiRect, room: readonly [number, number] |
 ================
 fittedLabel
 
-Port-only, not native (Experimental "Fit window labels"): a static's
+Port-only, not native (former Experimental "Fit window labels"): a static's
 text laid inside room, a rect its caller measured from the art around
 it, in the first of values that fitLines places there (one line, two,
 the narrow face, two narrow). The lines keep the node's horizontal
@@ -97,8 +96,7 @@ export interface LabelFit {
 ================
 labelFit
 
-fittedLabel's choice, drawing nothing: undefined when the row is off
-or no value fits. Lets a caller leave the native static out of art it
+fittedLabel's choice, drawing nothing: undefined when no value fits. Lets a caller leave the native static out of art it
 draws first and lay the fitted lines over that art afterwards.
 ================
 */
@@ -106,7 +104,6 @@ export function labelFit(
 	frame: UiAuthoredFrame,
 	{ node, room, values }: { node: AuthoredControl; room: UiRect; values: readonly string[]; }
 ): LabelFit | undefined {
-	if ( !frame.fitWindowLabels() ) return undefined;
 	const measure = ( line: string, face: number ) => frame.text.run( line, 0, face ).width;
 	for ( const value of values ) {
 		const fit = fitLines( value, room[2], node.fontIndex ?? 0, measure );
@@ -149,8 +146,8 @@ export interface CaptionFit {
 buttonCaptionFit
 
 How a button's caption is drawn inside its plate and client box. Port-only, not native
-(Experimental "Fit window labels", off is the original, which draws
-every caption whole in its own face and lets it run past the plate,
+(owner 2026-11-21: the default, no row; the original draws every caption
+whole in its own face and lets it run past the plate,
 #3675). A caption wider than its room is, in order of preference:
 
   the whole caption in the narrow face, NARROW_FONT_INDEX ("Dismiss" on the party
@@ -171,7 +168,7 @@ export function buttonCaptionFit(
 	{ node, ox, oy, caption }: { node: AuthoredControl; ox: number; oy: number; caption: string; }
 ): CaptionFit {
 	const own = node.fontIndex, whole = { label: caption, fontIndex: own, lines: [ caption ] };
-	if ( !frame.fitWindowLabels() || caption === "" ) return whole;
+	if ( caption === "" ) return whole;
 	// The caption keeps to its client box (the Item Mall's category
 	// buttons inset it past their icon) and inside the plate's bevel.
 	const plate = authoredRect( node, ox, oy ), box = authoredClientRect( node, ox, oy ), text = frame.text;

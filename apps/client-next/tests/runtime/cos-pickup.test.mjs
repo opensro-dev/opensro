@@ -58,19 +58,12 @@ test("gameplay frame loop sends automatic pickup and consumes native completion"
 	// A pet pickup holds no lock: a stray receipt applies and arms nothing.
 	gameplay.receive( receipt, 2 );
 	assert.equal( gameplay.take()?.inventoryPending ?? false, false );
-	gameplay.experimental( {
-		predictedRunUp: false,
-		webTransport: false,
-		jobKillNotices: true,
-		dropPlusNotices: true,
-		breakNotices: true,
-		homingProjectiles: false,
-		smartPetPickup: false
-	} );
 	gameplay.step( 2, f.frame.local );
 	assert.deepEqual( sent[2], cosPickupRequest( 2, 11 ) );
 	gameplay.receive( { opcode: 0xb69e, payload: Uint8Array.of( 2, 8, 0xb4, 2, 0, 0, 0, 11, 0, 0, 0 ) }, 3 );
-	assert.deepEqual( sent[3], { opcode: 0x705b, payload: Uint8Array.of( 2, 0, 0, 0, 2, 0x47, 0, 0, 0 ) } );
+	// Port-only, not native (owner 2026-11-21: the default, no row): a full
+	// bag sends no 0x705B disable; pickup stays on (cos-pickup.ts result).
+	assert.equal( sent.length, 3 );
 	const fullBag = gameplay.take();
 	assert.equal( fullBag?.cosRecords?.[0]?.commandMode, 0xc7 );
 	assert.equal( fullBag?.notices?.at( -1 )?.key, "UIIT_MSG_COSPETERR_CANT_PICKITEM1" );
@@ -86,9 +79,11 @@ test("gameplay frame loop sends automatic pickup and consumes native completion"
 	assert.throws( () =>
 		gameplay.command( { kind: "cos-follow", gid: 2 }, 5, f.pet, { ...f.frame.local, mountedOn: 2 } )
 	);
+	// A world reset retires the pickup work: the next step sends nothing.
+	const before = sent.length;
 	gameplay.resetWorld();
 	gameplay.step( 6, f.frame.local );
-	assert.equal( sent.length, 6 );
+	assert.equal( sent.length, before );
 });
 
 /*
@@ -334,50 +329,50 @@ test("native retry classes expire on simulation time and stale results cannot re
 	f.owner.result( { subtype: 2, selector: 8, result: 0x14, gid: 2, itemGid: 4 }, 6000 );
 	assert.deepEqual( f.owner.step( { ...f.frame, now: 8999 } ), [] );
 	assert.equal( f.owner.step( { ...f.frame, now: 9000 } ).length, 1 );
-	assert.equal( f.owner.result( { subtype: 2, selector: 8, result: 0xb4, gid: 2, itemGid: 4 }, 9000 ), true );
 });
 
 /*
 ================
 an owner-bag refusal holds back only its own drop
 
-Port-only (smartPetPickup): 0xB5 says the owner's player bag is full, which
+Port-only, not native (owner 2026-11-21: the default, no row): 0xB5 says
+the owner's player bag is full, which
 only a drop bound for that bag (a personal quest item) needs. The pet's own
 bag still has room, so the next drop (here equipment) is proposed at once;
 the refused drop returns after its hold or when bag space changes.
 ================
 */
-test("smartPetPickup: an owner-bag refusal holds back only its own drop, never the pet", () => {
+test("an owner-bag refusal holds back only its own drop, never the pet", () => {
 	const f = fixture();
 	f.drop( 10, 1, 0x4ec, 1 );
 	f.drop( 11, 5, 0x82c, 1 );
 	assert.deepEqual( f.owner.step( f.frame ), [ cosPickupRequest( 2, 10 ) ] );
-	assert.equal( f.owner.result( { subtype: 2, selector: 8, result: 0xb5, gid: 2, itemGid: 10 }, 0, true ), false );
-	assert.deepEqual( f.owner.step( { ...f.frame, now: 1, smartPetPickup: true } ), [ cosPickupRequest( 2, 11 ) ] );
-	f.owner.result( { subtype: 1, selector: 8, gid: 2, itemGid: 11 }, 2, true );
+	f.owner.result( { subtype: 2, selector: 8, result: 0xb5, gid: 2, itemGid: 10 }, 0 );
+	assert.deepEqual( f.owner.step( { ...f.frame, now: 1 } ), [ cosPickupRequest( 2, 11 ) ] );
+	f.owner.result( { subtype: 1, selector: 8, gid: 2, itemGid: 11 }, 2 );
 	f.entities.delete( 11 );
 	f.owner.track( { kind: "despawn", gid: 11 } );
-	assert.deepEqual( f.owner.step( { ...f.frame, now: 29999, smartPetPickup: true } ), [] );
-	assert.deepEqual( f.owner.step( { ...f.frame, now: 30000, smartPetPickup: true } ), [ cosPickupRequest( 2, 10 ) ] );
-	f.owner.result( { subtype: 2, selector: 8, result: 0xb5, gid: 2, itemGid: 10 }, 30000, true );
+	assert.deepEqual( f.owner.step( { ...f.frame, now: 29999 } ), [] );
+	assert.deepEqual( f.owner.step( { ...f.frame, now: 30000 } ), [ cosPickupRequest( 2, 10 ) ] );
+	f.owner.result( { subtype: 2, selector: 8, result: 0xb5, gid: 2, itemGid: 10 }, 30000 );
 	f.owner.spaceChanged();
-	assert.deepEqual( f.owner.step( { ...f.frame, now: 30001, smartPetPickup: true } ), [ cosPickupRequest( 2, 10 ) ] );
+	assert.deepEqual( f.owner.step( { ...f.frame, now: 30001 } ), [ cosPickupRequest( 2, 10 ) ] );
 	// An item-share retry (0x9C) holds back the drop, not the pet.
 	const share = fixture();
 	share.drop( 10, 1, 0x4ec, 1 );
 	share.drop( 11, 5, 0x82c, 1 );
 	share.owner.step( share.frame );
-	share.owner.result( { subtype: 2, selector: 8, result: 0x9c, gid: 2, itemGid: 10 }, 0, true );
-	assert.deepEqual( share.owner.step( { ...share.frame, now: 1, smartPetPickup: true } ), [
+	share.owner.result( { subtype: 2, selector: 8, result: 0x9c, gid: 2, itemGid: 10 }, 0 );
+	assert.deepEqual( share.owner.step( { ...share.frame, now: 1 } ), [
 		cosPickupRequest( 2, 11 )
 	] );
 	// The pet's own full bag (0xB4) still pauses every non-gold drop.
-	f.owner.result( { subtype: 2, selector: 8, result: 0xb4, gid: 2, itemGid: 10 }, 30002, true );
+	f.owner.result( { subtype: 2, selector: 8, result: 0xb4, gid: 2, itemGid: 10 }, 30002 );
 	f.drop( 12, 5, 0x82c, 1 );
-	assert.deepEqual( f.owner.step( { ...f.frame, now: 40000, smartPetPickup: true } ), [] );
+	assert.deepEqual( f.owner.step( { ...f.frame, now: 40000 } ), [] );
 });
 
-test("smartPetPickup keeps 0x80 enabled on 0xB4/0xB5, pauses non-gold items without spam, and resumes when bag space changes", () => {
+test("a full bag keeps 0x80 enabled on 0xB4/0xB5, pauses non-gold items without spam, and resumes when bag space changes", () => {
 	const f = fixture();
 	const sent = [];
 	const gameplay = createGameplay( frame => sent.push( frame ), undefined, undefined, f.frame.read );
@@ -404,7 +399,7 @@ test("smartPetPickup keeps 0x80 enabled on 0xB4/0xB5, pauses non-gold items with
 	assert.deepEqual( sent, [ cosPickupRequest( 2, 20 ) ] );
 	// Server rejects equipment drop 20 with 0xB4 (pet bag full).
 	gameplay.receive( { opcode: 0xb69e, payload: Uint8Array.of( 2, 8, 0xb4, 2, 0, 0, 0, 20, 0, 0, 0 ) }, 1 );
-	// Default smartPetPickup ON: no 0x705B disable sent; bit 0x80 remains set.
+	// Port-only: no 0x705B disable is sent; bit 0x80 remains set.
 	assert.equal( sent.length, 1 );
 	const afterFull = gameplay.take();
 	assert.equal( afterFull?.cosRecords?.[0]?.commandMode, 0xc7 );

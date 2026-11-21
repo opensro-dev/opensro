@@ -23,10 +23,9 @@ import { bindPlayableRuntime } from "./helpers/playable-session.mjs";
 
 // #1541 (epic #1437, C1): the A5 acceptance of movement-cadence.test.mjs
 // driven by real ground clicks instead of session move commands, so the
-// measured walk starts where a player's click starts it. One run walks
-// with the Experimental "Instant own movement" row (mainThreadOwnWalk)
-// on - the main-thread mover presents the walk - and one with it off, the
-// worker-driven presenter. Both runs owe the #1530 bars: no drawn frame
+// measured walk starts where a player's click starts it. The main-thread
+// mover presents the walk (port-only, not native; owner 2026-11-21: the
+// default, no row). The run owes the #1530 bars: no drawn frame
 // above 1.05x the entity's own gait speed (median anchored to the pose's
 // own walk/run speed within 5%), a real turn of at least a radian across
 // the redirect, and a stop that settles.
@@ -35,27 +34,19 @@ import { bindPlayableRuntime } from "./helpers/playable-session.mjs";
 ================
 clickAcceptance
 
-One acceptance run with the row on or off: a warp to flat ground, a leg,
+One acceptance run: a warp to flat ground, a leg,
 a reversing click and a settle, every drawn frame read at the final
 presented pose and held to the bars above.
 ================
 */
-async function clickAcceptance( rowOn ) {
+async function clickAcceptance() {
 	const character = assertCharacterAllowed( "asd2", { context: "client-next mission entry" } );
 	const { browser, page } = await launchProbeBrowser( { viewport: { width: 1024, height: 768 } } ),
 		control = id => page.locator( `[data-ui-id="${id}"]` );
-	const artifactDir = "temp/artifacts/motion-cadence-click-" + (rowOn ? "on" : "off");
+	const artifactDir = "temp/artifacts/motion-cadence-click";
 	await mkdir( artifactDir, { recursive: true } );
 	try {
-		await page.addInitScript( rowOn => {
-			if ( rowOn ) {
-				localStorage.setItem(
-					"sro:v1150:experimental-options:3",
-					JSON.stringify( { mainThreadOwnWalk: true } )
-				);
-			} else {
-				localStorage.removeItem( "sro:v1150:experimental-options:3" );
-			}
+		await page.addInitScript( () => {
 			const WorkerBase = window.Worker;
 			window.__entry = {
 				commands: [],
@@ -117,7 +108,7 @@ async function clickAcceptance( rowOn ) {
 					} );
 				}
 			};
-		}, rowOn );
+		} );
 		await page.route( "**/character/list", async route => {
 			const response = await route.fetch(), body = await response.json();
 			assert.ok(
@@ -202,13 +193,6 @@ async function clickAcceptance( rowOn ) {
 			{ timeout: 60000 }
 		);
 		assert.equal( await page.evaluate( () => window.__entry.failure ), undefined );
-		// The row's seeded state survived boot: the run measures the
-		// presenter it claims to measure.
-		const storedRow = await page.evaluate( () => {
-			const raw = localStorage.getItem( "sro:v1150:experimental-options:3" );
-			return raw ? JSON.parse( raw ).mainThreadOwnWalk === true : false;
-		} );
-		assert.equal( storedRow, rowOn, "the Experimental row seeding did not survive boot" );
 		await bindPlayableRuntime( page );
 		const poseNow = () => page.evaluate( () => __playableRuntime.gameplay().pose );
 		const settled = async () => {
@@ -344,13 +328,10 @@ async function clickAcceptance( rowOn ) {
 			"the redirect really turns (measured " + (turned * 180 / Math.PI).toFixed( 0 ) +
 				" degrees over " + turnTravel.toFixed( 1 ) + " units)"
 		);
-		if ( rowOn ) {
-			// The input sequence only exists in C1's worker: its advance
-			// proves the on run measured the build that has the mover,
-			// not a silently inert seed on an older presenter.
-			const seqAfter = await page.evaluate( () => window.__entry.game?.movementInputSeq ?? 0 );
-			assert.ok( seqAfter > seqBefore, "the click never reached the sequenced worker input" );
-		}
+		// The input sequence only exists in C1's worker: its advance proves
+		// the run measured the build that has the mover.
+		const seqAfter = await page.evaluate( () => window.__entry.game?.movementInputSeq ?? 0 );
+		assert.ok( seqAfter > seqBefore, "the click never reached the sequenced worker input" );
 		const trace = await page.evaluate( mark => window.__entry.visual.slice( mark ), startMark ), frames = [];
 		for ( let i = 1; i < trace.length; i++ ) {
 			const a = trace[i - 1], b = trace[i], dt = b.at - a.at;
@@ -435,7 +416,7 @@ async function clickAcceptance( rowOn ) {
 			"the stop settles instead of surging past it"
 		);
 		console.log(
-			`cadence-click row=${rowOn ? "on" : "off"} frames=${frames.length} moving=${moving.length} ` +
+			`cadence-click frames=${frames.length} moving=${moving.length} ` +
 				`median=${walk.toFixed( 2 )} average=${average.toFixed( 2 )} expected=${expectedSpeed} ` +
 				`worst=${worst.speed.toFixed( 2 )} ratio=${(worst.speed / expectedSpeed).toFixed( 4 )} ` +
 				`turn=${(turned * 180 / Math.PI).toFixed( 0 )}deg`
@@ -457,11 +438,5 @@ async function clickAcceptance( rowOn ) {
 test(
 	"movement cadence (ground clicks): the main-thread mover never outruns the walk",
 	{ timeout: 300000 },
-	async () => clickAcceptance( true )
-);
-
-test(
-	"movement cadence (ground clicks): the worker-driven walk never outruns the walk",
-	{ timeout: 300000 },
-	async () => clickAcceptance( false )
+	async () => clickAcceptance()
 );
