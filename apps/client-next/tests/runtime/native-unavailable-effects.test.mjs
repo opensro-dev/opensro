@@ -52,11 +52,11 @@ test("archive-proven absent EFPs reproduce the retained empty native resource on
 test("malformed or contradictory archive certificates and foreign layouts fail closed", () => {
 	const decoder = createEffectDecoder();
 	for (
-		const [mutate, error] of [
-			[ c => c.unavailable.archiveSha256 = "unverified", /Invalid native unavailable/ ],
-			[ c => c.effect = { scale: 1 }, /Invalid native unavailable/ ],
-			[ c => c.version = effectProgramHeader().version - 1, /Unsupported effect program layout/ ],
-			[ c => c.framesPerSecond = 30, /Unsupported effect time base/ ]
+		const { mutate, error } of [
+			{ mutate: c => c.unavailable.archiveSha256 = "unverified", error: /Invalid native unavailable/ },
+			{ mutate: c => c.effect = { scale: 1 }, error: /Invalid native unavailable/ },
+			{ mutate: c => c.version = effectProgramHeader().version - 1, error: /Unsupported effect program layout/ },
+			{ mutate: c => c.framesPerSecond = 30, error: /Unsupported effect time base/ }
 		]
 	) {
 		const c = absentFile();

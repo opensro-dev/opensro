@@ -88,18 +88,14 @@ test("all six native animation tables and separate resource slots survive build 
 		assert.equal( record.flags02, 1 );
 		assert.equal( record.byteBe, 1, "+BE is the final column, independently of +BD=0" );
 		const decoder = createEffectDecoder();
-		try {
-			const value = decoder.decode( new TextEncoder().encode( JSON.stringify( table ) ) )[77];
-			assert.deepEqual(
-				value.phaseClips,
-				Array.from( { length: 6 }, () => [ "native:default:2", "native:default:5" ] ),
-				"native DEFAULT set and CCD620 state IDs survive all six phase tables"
-			);
-			assert.deepEqual( value.attachedAction, { priority: 7, defense: "defense.efp", attack: "attack.efp" } );
-			assert.equal( value.secondaryEffect, true );
-		} finally {
-			decoder.dispose();
-		}
+		const value = decoder.decode( new TextEncoder().encode( JSON.stringify( table ) ) )[77];
+		assert.deepEqual(
+			value.phaseClips,
+			Array.from( { length: 6 }, () => [ "native:default:2", "native:default:5" ] ),
+			"native DEFAULT set and CCD620 state IDs survive all six phase tables"
+		);
+		assert.deepEqual( value.attachedAction, { priority: 7, defense: "defense.efp", attack: "attack.efp" } );
+		assert.equal( value.secondaryEffect, true );
 	} ));
 test("proved character range shares anchor data for inclusive aliases and later registrations replace earlier ones", () =>
 	fixture( dir => {

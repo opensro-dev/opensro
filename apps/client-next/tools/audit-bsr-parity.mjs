@@ -212,7 +212,6 @@ report.nativeUnavailable = {
 	effects: archiveEvidence.absent,
 	behavior: "B1F270 reset, failed read; AFF730 retains empty stored object"
 };
-decoder.dispose();
 if ( process.argv.includes( "--verify" ) ) {
 	const args = [
 		"--test",

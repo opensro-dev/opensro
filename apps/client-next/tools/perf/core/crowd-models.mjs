@@ -188,6 +188,5 @@ export async function loadCrowdModels( renderer, actors ) {
 		throw error;
 	} finally {
 		bytesByPath.clear();
-		effects.dispose();
 	}
 }

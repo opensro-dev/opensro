@@ -120,7 +120,6 @@ for ( const resource of [ ...paths ].sort() ) {
 		console.log( "Audited " + report.resources.length + "/" + paths.size + " resources" );
 	}
 }
-decoder.dispose();
 const destination = path.join( out, "report.json" );
 fs.writeFileSync( destination, JSON.stringify( report, null, 2 ) + "\n" );
 console.log(
