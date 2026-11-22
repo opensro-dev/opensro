@@ -41,16 +41,16 @@ ITEM_ETC_E050729_SUMMON*_SCROLL rows no native family serves, priced
 they summon strong monsters (#4030), and their use is
 action/summonscroll.go, behind this same setting.
 
-Three screenshot kinds are not listed yet (#3331, recorded in
-docs/features/GEARS-STONES.md). Sabakun's jewel and the extension
-gear have rows in the pinned later clients and the ISRO-R backup,
-but both serve only the Devil's Spirit - a wearable, awakening
-clock and alchemy line this port does not have yet. The owner's
-call (2026-11-12) is to port that system first (#3348) and list
-both with it; until then a listing would sell items that cannot be
-used. The Joon and Firespirits summon scrolls of HOT shop >
-Halloween Exclusive have no row in any source this build reads and
-wait for one; no rows are invented.
+Sabakun's jewel and the extension gear were held back on the same
+evidence (#3331): both serve only the Devil's Spirit, and a listing
+would have sold items that cannot be used. The owner's call
+(2026-11-12) was to port that system first (#3348) and list both
+with it. The system stands now (#3456), so with SRO_NASRUN on both
+list in Premium > Gears (nasrunGoods); off, or without their
+imported rows, the tab is exactly as shipped. The Joon and
+Firespirits summon scrolls of HOT shop > Halloween Exclusive have
+no row in any source this build reads and wait for one; no rows
+are invented.
 
 ===========================================================================
 */
@@ -64,6 +64,7 @@ import (
 	"strings"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/nasrun"
 )
 
 // EnvMallCategories names the setting: "on" authors the later mall's
@@ -101,6 +102,12 @@ type mallCategoryGood struct {
 	// import authors: without its row the listing is skipped, not
 	// refused, so a build without the archive boots the rest.
 	Imported bool
+	// Nasrun marks a Devil's Spirit good (#3456 step 5): it lists
+	// only while SRO_NASRUN stands. The rows ride the import like
+	// every other optional row, but a listing without the socket,
+	// awakening clock and alchemy behind it would sell an item that
+	// cannot be used (#3331), so the runtime switch gates it too.
+	Nasrun bool
 }
 
 // ModelSwitcherItems are the sixteen weapon model switchers the later
@@ -173,10 +180,40 @@ func gearsStoneGoods() []mallCategoryGood {
 	return goods
 }
 
+// nasrunMallSilk is the authored price of each Devil's Spirit good
+// in the mall: the Gears tab's own 30-silk tier (gearsStoneSilk). No
+// source this build reads prices either kind in a mall, so the
+// number is authored here with the rest, retunable in this place.
+const nasrunMallSilk = 30
+
+/*
+================
+nasrunGoods
+
+Sabakun's jewel and the extension gear in Premium > Gears (#3456
+step 5), each its own authored package at the authored price,
+badged new. Both ride SRO_NASRUN twice over: their rows only exist
+when the import staged them (Imported), and the mall lists them
+only while the system stands (Nasrun) - until the Spirit's socket,
+awakening clock and alchemy were ported, a listing would have sold
+items that cannot be used (#3331). Both also sell on the honor
+shops' second tabs for tokens (nasrungoods.go); the mall listing
+is the silk door the later mall's screenshot shows.
+================
+*/
+func nasrunGoods() []mallCategoryGood {
+	goods := make([]mallCategoryGood, 0, 2)
+	for _, item := range []string{nasrunJewel, nasrunGear} {
+		goods = append(goods, mallCategoryGood{Tab: "MALL_PREMIUM_GEARS", Package: "PACKAGE_" + item,
+			Item: item, Silk: nasrunMallSilk, Badge: mallBadgeNew, Imported: true, Nasrun: true})
+	}
+	return goods
+}
+
 // mallCategoryGoods is the layout's whole stock: the authored rows
 // below plus the gears stones' and the model switchers' generated
 // listings.
-var mallCategoryGoods = slices.Concat(mallLayoutGoods, gearsStoneGoods(), modelSwitcherGoods(), petScrollGoods())
+var mallCategoryGoods = slices.Concat(mallLayoutGoods, gearsStoneGoods(), nasrunGoods(), modelSwitcherGoods(), petScrollGoods())
 
 var mallLayoutGoods = []mallCategoryGood{
 	// Halloween Exclusive: the two attachment pieces; Models: the
@@ -382,6 +419,9 @@ func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSo
 	badges := map[string]string{}
 	for _, good := range mallCategoryGoods {
 		if good.Imported && !itemRefPresent(refs, good.Item) {
+			continue
+		}
+		if good.Nasrun && !nasrun.Enabled(os.Getenv(nasrun.Env)) {
 			continue
 		}
 		if good.Badge != "" {
