@@ -29,6 +29,9 @@ export function createItemMall() {
 	let category = -1;
 	let tab = 0;
 	let page = 0;
+	// The first sub tab the renewal window's scrolled tab row draws
+	// (issue #4093); the view clamps it to the category's tabs.
+	let tabFirst = 0;
 	// Port-only (issue #3257): the later category rail is in force only
 	// while the Experimental mall categories row is on, and the item
 	// search text the rail's search field edits. Native browsing never
@@ -134,6 +137,7 @@ export function createItemMall() {
 		visible = false;
 		category = -1;
 		tab = 0;
+		tabFirst = 0;
 		page = 0;
 		categoriesLater = false;
 		search = "";
@@ -215,6 +219,8 @@ export function createItemMall() {
 		browse( index: number, nextTab = 0 ) {
 			if ( !Number.isInteger( index ) || index < -1 || index >= categories().length ) return;
 			if ( !Number.isInteger( nextTab ) || nextTab < 0 ) return;
+			// A tab of the open category keeps the row where it stands.
+			if ( index !== category ) tabFirst = 0;
 			category = index;
 			compactView = "shop";
 			tab = nextTab;
@@ -245,6 +251,7 @@ export function createItemMall() {
 			if ( categories() === before ) return;
 			category = -1;
 			tab = 0;
+			tabFirst = 0;
 			page = 0;
 			search = "";
 			searchDraft = "";
@@ -265,6 +272,7 @@ export function createItemMall() {
 			renewal = on;
 			category = -1;
 			tab = 0;
+			tabFirst = 0;
 			page = 0;
 			search = "";
 			searchDraft = "";
@@ -374,6 +382,18 @@ export function createItemMall() {
 		*/
 		toggleSilkCombo() {
 			silkComboOpen = !silkComboOpen;
+		},
+		/*
+		================
+		scrollTabs
+
+		Starts the renewal window's scrolled tab row at first (issue
+		#4093). The selected tab stays selected wherever the row stands.
+		================
+		*/
+		scrollTabs( first: number ) {
+			if ( !Number.isInteger( first ) || first < 0 ) return;
+			tabFirst = first;
 		},
 		/*
 		================
@@ -573,6 +593,7 @@ export function createItemMall() {
 				searchDraft,
 				category,
 				tab,
+				tabFirst,
 				page: currentPage,
 				pageSize,
 				selected,

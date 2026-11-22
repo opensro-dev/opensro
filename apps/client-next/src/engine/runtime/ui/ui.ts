@@ -3908,6 +3908,11 @@ export function createUi( ports: UiPorts ) {
 			dirty = true;
 			return;
 		}
+		if ( id.startsWith( "item-mall-tab-scroll:" ) ) {
+			itemMall.scrollTabs( Number( id.slice( "item-mall-tab-scroll:".length ) ) );
+			dirty = true;
+			return;
+		}
 		if ( id.startsWith( "item-mall-buy:" ) && view?.gameplay?.itemMall ) {
 			const state = itemMall.read( view.gameplay.itemMall );
 			const offer = state.offers[Number( id.slice( "item-mall-buy:".length ) )];

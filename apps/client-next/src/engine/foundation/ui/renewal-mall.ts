@@ -73,6 +73,12 @@ const SUB_PITCH = 100;
 const SUB_WIDTH = 96;
 const SUB_HEIGHT = 24;
 export const RENEWAL_SUB_TABS_MAX = 4;
+// A category with more tabs than the row holds (v1.150's Expendables and
+// Pet have five, issue #4093) scrolls its row: three tabs and the page
+// arrows at the row's right end. INFERENCE: no v1.188 client binary is
+// at hand to show how the later mall scrolls its tabs; the arrows are
+// the window's own page arrows, so no new art is published.
+export const RENEWAL_SUB_TABS_SCROLLED = 3;
 
 // The pager under the grid (mall_page_prev / mall_page_next, 36x12),
 // centred on the grid (141..543, centre 342) with an 86-pixel label
@@ -82,6 +88,13 @@ const PAGER_PREV_LEFT = 263;
 const PAGER_NEXT_LEFT = 385;
 const PAGER_WIDTH = 36;
 const PAGER_HEIGHT = 12;
+// The scrolled row's arrows (the pager's 36x12 art): centred on the
+// 78..102 tab row, the next arrow ending one pixel inside the goods
+// area's right edge (543, the cards' margin), the previous one 4 pixels
+// before it; the three tabs end at 437.
+const SUB_ARROW_TOP = 84;
+const SUB_NEXT_LEFT = 507;
+const SUB_PREV_LEFT = 467;
 
 // The popup a goods card opens (GDR_RENEWAL_ITEM_MALL_POPUP_MENU, 126x143,
 // mall_sub_wnd04_ frame): three 104x32 buttons from 16 pixels in.
@@ -359,6 +372,40 @@ The window-relative rect of sub-category tab index.
 */
 export function renewalSubTabRect( index: number ): UiRect {
 	return [ SUB_LEFT + index * SUB_PITCH, SUB_TOP, SUB_WIDTH, SUB_HEIGHT ];
+}
+
+/*
+================
+renewalSubTabWindow
+
+The tabs the row draws for a category of count tabs whose row starts at
+first: all of them when they fit (first is 0), else the scrolled row's
+three from first, clamped so the row never runs past the last tab.
+================
+*/
+export function renewalSubTabWindow( count: number, first: number ): {
+	readonly first: number;
+	readonly shown: number;
+	readonly scrolled: boolean;
+} {
+	if ( count <= RENEWAL_SUB_TABS_MAX ) return { first: 0, shown: count, scrolled: false };
+	const shown = RENEWAL_SUB_TABS_SCROLLED;
+	const start = Number.isInteger( first ) ? first : 0;
+	return { first: Math.max( 0, Math.min( count - shown, start ) ), shown, scrolled: true };
+}
+
+/*
+================
+renewalSubTabArrowRects
+
+The scrolled tab row's previous and next arrows, window-relative.
+================
+*/
+export function renewalSubTabArrowRects(): { readonly prev: UiRect; readonly next: UiRect; } {
+	return {
+		prev: [ SUB_PREV_LEFT, SUB_ARROW_TOP, PAGER_WIDTH, PAGER_HEIGHT ],
+		next: [ SUB_NEXT_LEFT, SUB_ARROW_TOP, PAGER_WIDTH, PAGER_HEIGHT ]
+	};
 }
 
 /*
