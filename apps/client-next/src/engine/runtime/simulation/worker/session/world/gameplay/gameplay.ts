@@ -1705,8 +1705,9 @@ container sort. Returns true when the sort ended, so the view republishes.
 			} else {
 				const record = cosRecords.get( inventorySort.gid() )!;
 				const item = record.inventory?.find( row => row.slot === move.source );
-				// 6A8740: a specialty good stays where it is inside a
-				// non-transport companion; the sort cannot place it.
+				// A specialty good stays where it is inside a non-transport
+				// companion (the cos-inventory-move command's own refusal);
+				// the sort cannot place it.
 				if ( item && cosSpecialtyMoveRefused( item.typeFlags, record.band ) ) throw Error( "Specialty good" );
 				inventory.cosMove( cosContainerRequest( record, move.source, move.destination, move.quantity ), now );
 			}
