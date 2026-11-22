@@ -39,7 +39,13 @@ system is the Academy's (the native check on #3530).
 - The buff is the dressed job's honor: the tier a character holds for the job it is wearing. Another job's suit - or no suit - carries no job buff (inference: tiers are ranked per job, so the grant belongs to that job's suit).
 - One reconcile owns the buff set for both honors: the camp's native rank and the job tier's rank fold together, strongest wins, so a camp master keeps the stronger of the two and neither lane strips the other's grant. A convergence pass (first sight of a session, a dress change, the 05:00 change, and a 15-second sweep) keeps every entered character's buffs on its current want.
 
-Still later slices of #3530: the ambush and the coloured title.
+## The ambush
+
+- A run - goods bought, or a thief's fresh haul - rolls a one-in-ten chance of an NPC bandit ambush when it opens (inference: the issue's "small chance" gives no number). The roll has its own domain, so the native bandit draws fall exactly where they fall natively.
+- The ambush meets the caravan on the road: at the caravan timer's fire - the carrier alive, its vehicle loaded, standing in a battlefield region, the native pack's own gates - two more bandits of the caravan's own tables spawn beside the native pack and must be fought off. They are ordinary monsters of that fight: if they kill the carrier or its vehicle, the cargo is lost the native way (the death drop). The ledger pays nothing for them: the ambush is a run's risk, never a score.
+- The mark fires once per run; a run whose cargo sold or emptied first never meets its bandits.
+
+Still later slices of #3530: the coloured title.
 
 ## Days and tiers
 

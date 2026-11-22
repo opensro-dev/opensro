@@ -12,6 +12,7 @@ characters (the real ledger); off, nothing scores.
 package action
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -48,6 +49,49 @@ func honorDressed(id int64, account string, job uint8) *enterworld.Character {
 	c.MissionInventory = []domain.InventoryRow{{Slot: enterworld.JobSuitSlot,
 		TypeFlags: wire.PackTypeFlags(3, 1, 7, job), StackCount: 1}}
 	return c
+}
+
+/*
+================
+TestTheAmbushRollsOncePerRun
+
+One roll in ten opens a run's ambush (its own roll domain, stubbed
+here); the caravan takes the mark once.
+================
+*/
+func TestTheAmbushRollsOncePerRun(t *testing.T) {
+	at := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	rt := honorRuntime(t, at)
+	c := honorCharacter(1, "acct")
+
+	rt.JobHonorRoll = func() (uint32, error) { return 10, nil }
+	rt.openHonorRun(c)
+	if rt.takeHonorAmbush(c) {
+		t.Fatal("a roll of 10 in 100 opened the ambush, want one in ten")
+	}
+
+	rt.JobHonorRoll = func() (uint32, error) { return 9, nil }
+	rt.openHonorRun(c)
+	if !rt.takeHonorAmbush(c) {
+		t.Fatal("a roll of 9 in 100 did not open the ambush")
+	}
+	if rt.takeHonorAmbush(c) {
+		t.Fatal("the same run's ambush was taken twice")
+	}
+
+	// A failed draw means no ambush.
+	rt.JobHonorRoll = func() (uint32, error) { return 0, errors.New("no roll") }
+	rt.openHonorRun(c)
+	if rt.takeHonorAmbush(c) {
+		t.Fatal("a failed roll opened the ambush")
+	}
+
+	// Off (no sink), nothing rolls and nothing is taken.
+	rt.JobHonor = nil
+	rt.openHonorRun(c)
+	if rt.takeHonorAmbush(c) {
+		t.Fatal("with job honor off an ambush was taken")
+	}
 }
 
 func TestASaleScoresItsProfitNotItsValue(t *testing.T) {
