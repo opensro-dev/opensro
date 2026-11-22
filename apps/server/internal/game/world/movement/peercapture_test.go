@@ -63,3 +63,28 @@ func TestCapturePeerAppearanceSizesCopiesByPassingRows(t *testing.T) {
 		t.Fatalf("an empty inventory allocated copies: %+v", plain)
 	}
 }
+
+/*
+================
+TestPeerAppearanceCaptureCarriesTitleID
+
+The worn title rides the capture into the built appearance (the title
+frame after the spawn row carries it, #3502); an untitled character
+captures zero.
+================
+*/
+func TestPeerAppearanceCaptureCarriesTitleID(t *testing.T) {
+	c := &domain.Character{Name: "Titled", TitleID: 5}
+	captured := capturePeerAppearance(c, 1907)
+	if captured.titleID != 5 {
+		t.Fatalf("captured titleID = %d, want 5", captured.titleID)
+	}
+	appearance := peerAppearance(nil, nil, "test", captured)
+	if appearance == nil || appearance.TitleID != 5 {
+		t.Fatalf("appearance = %+v, want TitleID 5", appearance)
+	}
+	plain := capturePeerAppearance(&domain.Character{Name: "Plain"}, 1907)
+	if plain.titleID != 0 {
+		t.Fatalf("untitled titleID = %d, want 0", plain.titleID)
+	}
+}

@@ -169,7 +169,11 @@ func isVersionMismatch(err error) bool {
 // Version 48 adds the optional per-character SRO Macro settings (port-only,
 // SRO_AUTO_MACRO, game/macro). The offline upgrade preserves all records;
 // an absent macro record stays zero.
-const CurrentVersion = 48
+// Version 49 adds the optional per-character title id (titleId,
+// later-native title system, #3502): the RefTitle id the name line
+// prints through (game/title). Characters saved earlier carry none and
+// wear no title; the offline upgrade rewrites no record.
+const CurrentVersion = 49
 
 /*
 ================
@@ -240,15 +244,16 @@ var storeSteps = map[int]storeStep{
 	41: {true, "optional account gourdCount", 12, 14},
 	42: {true, "optional arena entry markers and reward chest", 12, 14},
 	43: {false, "the survival arena count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 12, 14},
-	// 44 to 47 are no longer the current schema: each low end is the
+	// 44 to 48 are no longer the current schema: each low end is the
 	// layout it ran at, and its high end follows the current layout
 	// (layouts 25 and up always end at the current one). The current
-	// schema (48) takes the wide low end.
+	// schema (49) takes the wide low end.
 	44: {true, "optional top-level ravenRefugeReadyAtMs recovery deadline", 12, 14},
 	45: {true, "no record change; layout 13 adds trade_history", 13, 14},
 	46: {true, "optional per-character Nasrun token balance and daily count", 13, 14},
 	47: {true, "no record change; layout 14 adds the AI caravan tables", 14, 14},
-	48: {true, "optional per-character SRO Macro settings", 5, 14},
+	48: {true, "optional per-character SRO Macro settings", 14, 14},
+	49: {true, "optional per-character titleId (later-native titles, #3502)", 5, 14},
 }
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving

@@ -47,8 +47,12 @@ type PeerAppearance struct {
 	BodyShapeByte uint8
 	// JobType/JobGrade are a dressed job player's job and grade (+0x782 /
 	// +0x783); zero outside job mode.
-	JobType     uint8
-	JobGrade    uint8
+	JobType  uint8
+	JobGrade uint8
+	// TitleID is the worn character title (later-native, #3502): the
+	// title frame after the spawn row carries it (game/title), never
+	// the row itself, whose decoder is length-strict in older tabs.
+	TitleID     uint32
 	VisualFlags uint8
 	// Skin is the transform the player wears (RefObjID 0: none).
 	Skin wire.TransformSkin

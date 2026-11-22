@@ -710,6 +710,7 @@ import {
 	companionOwnerNameplate,
 	CONTRIBUTOR_TITLE_COLOR,
 	overheadLayout,
+	titledDisplayName,
 	titledNameRow,
 	withoutBoardPass
 } from "@/engine/foundation/ui/overhead-layout";
@@ -23308,10 +23309,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					const title = overheads.get( entity.gid )?.contributorText ?? "",
 						titleWidth = title ? text.run( title, selected ? 2 : 0 ).width : 0;
 					if ( named && beginnerMarkShown( entity, options ) ) {
-						const name = boardText(
-								entity,
-								entity.boardName ?? entity.name ??
-									(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
+						const name = titledDisplayName(
+								boardText(
+									entity,
+									entity.boardName ?? entity.name ??
+										(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
+								),
+								entity.characterTitleFormat
 							),
 							width = text.run( name, selected ? 2 : 0 ).width,
 							height = text.boardHeight();
@@ -23329,10 +23333,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						}
 					}
 					if ( !named ) continue;
-					const name = boardText(
-							entity,
-							entity.boardName ?? entity.name ??
-								(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
+					const name = titledDisplayName(
+							boardText(
+								entity,
+								entity.boardName ?? entity.name ??
+									(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
+							),
+							entity.characterTitleFormat
 						),
 						width = text.run( name, selected ? 2 : 0 ).width,
 						height = text.boardHeight();

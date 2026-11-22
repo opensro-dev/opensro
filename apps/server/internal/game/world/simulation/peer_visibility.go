@@ -25,6 +25,7 @@ package simulation
 
 import (
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/title"
 )
 
 /*
@@ -233,6 +234,16 @@ func (t *Ticker) showPeerTo(state *divisionTickState, viewer, peer *SessionSnaps
 		Opcode:  wire.OpSingleObjectSpawn,
 		Payload: BuildPeerSpawnRow(appearance, gid, pose),
 	})
+	// The worn title rides its own frame behind the row (game/title):
+	// the native client reads the id off the spawn stream, but a grown
+	// row would fail older tabs' length-strict decoder at this spawn.
+	if appearance.TitleID != 0 {
+		frames = append(frames, Frame{
+			ScopeGID: gid, ScopeVisible: true,
+			Opcode:  title.OpPeerTitle,
+			Payload: title.EncodePeerTitle(gid, appearance.TitleID),
+		})
+	}
 	if peer.NativeBodyStatus != 0 {
 		frames = append(frames, Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: gid, StateType: wire.StateChannelBody, Value: peer.NativeBodyStatus}).Encode()})
 	}

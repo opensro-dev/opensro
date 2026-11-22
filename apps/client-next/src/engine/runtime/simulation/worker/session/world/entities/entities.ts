@@ -87,6 +87,14 @@ import { viewOf } from "@/engine/foundation/binary/byte-view";
 const CHARACTER_KINDS = new Set( [ "player", "local-player", "npc", "monster", "cos", "structure" ] );
 // Peer appearance slot 6 selects the overhead title; STALL_TITLE_MODE owns a stall.
 const STALL_TITLE_SLOT = 6;
+// The peer title frame (later-native titles, #3502): a port-carried S->C
+// opcode (server game/title/wire.go). The later native client reads the
+// title id off the spawn stream (0x96DA40); the port carries it here
+// instead, because a tab loaded before this release decodes the spawn
+// row length-strictly - a grown row would fail it at the first player
+// spawn, while a client that predates this frame drops the unknown
+// opcode. It rides right after the peer's spawn row.
+const PEER_TITLE_OPCODE = 0x3fc3;
 // Skipped cosmetic steps held between world takes (degrade).
 const MAX_PENDING_DEGRADATIONS = 64;
 // The one-shot natives a compaction keeps for its resync (dropQueuedJournal):
@@ -1260,6 +1268,30 @@ export function createEntities(
 					kind: "state",
 					entity: { ...entity, titleText, titleId, appearanceState }
 				} );
+				return;
+			}
+			if ( frame.opcode === PEER_TITLE_OPCODE ) {
+				// u32 gid, u32 title id, u16 length + the format's UTF-8 bytes
+				// (server game/title EncodePeerTitle). A frame for a gid with
+				// no entity is dropped: the spawn row it follows creates the
+				// entity first, in the same pushed batch.
+				if ( p.length < 10 ) throw Error( "Invalid peer title" );
+				const gid = v.getUint32( 0, true ), titleId = v.getUint32( 4, true ), n = v.getUint16( 8, true );
+				if ( 10 + n !== p.length ) throw Error( "Invalid peer title" );
+				const entity = entities.get( gid );
+				if ( entity ) {
+					const format = n ?
+						new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( 10, 10 + n ) ) :
+						"";
+					apply( {
+						kind: "state",
+						entity: {
+							...entity,
+							characterTitleId: titleId || undefined,
+							characterTitleFormat: format || undefined
+						}
+					} );
+				}
 				return;
 			}
 			if ( frame.opcode === GROUND_OWNERSHIP_EXPIRED_OPCODE ) {
