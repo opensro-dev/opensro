@@ -671,6 +671,20 @@ test("quest target markers default off (tracked quest only) and stay out of the 
 	);
 });
 
+test("the guide waypoint default is off and stays out of the worker's slices (#3394)", () => {
+	for ( const value of [ undefined, null, {}, { guideWaypoint: 1 }, { guideWaypoint: "true" } ] ) {
+		const options = experimentalOptions( value );
+		assert.equal( options.guideWaypoint, false );
+		assert.equal( "guideWaypoint" in experimentalGameplay( options ), false );
+		assert.equal( "guideWaypoint" in experimentalVideo( options ), false );
+	}
+	const on = experimentalOptions( { guideWaypoint: true } );
+	assert.equal( on.guideWaypoint, true );
+	assert.ok(
+		EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "guideWaypoint" ) )
+	);
+});
+
 test("unique spawn points default on, only an explicit false turns them off, and stay out of the worker", () => {
 	for ( const value of [ undefined, null, {}, { uniqueSpawnPoints: 0 }, { uniqueSpawnPoints: "false" } ] ) {
 		const options = experimentalOptions( value );

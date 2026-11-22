@@ -15217,11 +15217,10 @@
 				"experimental-tab:0": null,
 				"experimental-tab:1": {
 					"added": [
-						"experimental-confirm-guild-ban",
-						"experimental-drop-on-bag-tab",
+						"experimental-chat-item-links",
+						"experimental-chat-timestamps",
+						"experimental-event-chat-tab",
 						"experimental-exchange-click-shortcuts",
-						"experimental-fit-window-labels",
-						"experimental-grey-disabled-tabs",
 						"experimental-mall-categories",
 						"experimental-seal-under-heading",
 						"experimental-set-bonus-tooltip",
@@ -15230,7 +15229,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "79b03fde81258636",
+					"hash": "72240a8071fe1341",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -15251,17 +15250,18 @@
 				"experimental-tab:2": {
 					"added": [
 						"experimental-auto-select",
+						"experimental-christmas-carols",
 						"experimental-homing-projectiles",
-						"experimental-main-thread-own-walk",
 						"experimental-predicted-run-up",
 						"experimental-smooth-camera",
 						"experimental-sro-macro",
 						"experimental-unique-damage-rank",
-						"experimental-v-hides-companions"
+						"experimental-v-hides-companions",
+						"experimental-warp-arrival-sound"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "34aa883467e77b45",
+					"hash": "d43b038c17ff64a0",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -15281,13 +15281,14 @@
 				},
 				"experimental-tab:3": {
 					"added": [
+						"experimental-guide-waypoint",
 						"experimental-quest-tracker-markers",
 						"experimental-sun-drop-marker",
 						"experimental-unique-spawn-points"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "32f5d9442c5bcb12",
+					"hash": "ff77ab4985e19575",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -15349,12 +15350,11 @@
 						"experimental-pet-filter-other",
 						"experimental-pet-filter-potions",
 						"experimental-pet-pickup-filter",
-						"experimental-smart-pet-pickup",
 						"experimental-transport-auto-potion"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "d1e9351c82057f92",
+					"hash": "23f62880aa036734",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",

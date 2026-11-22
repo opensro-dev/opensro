@@ -541,6 +541,39 @@ test("the tools load the guide and fill the Monster tab from it", () => {
 	hud.dispose();
 });
 
+test("a guide monster pick holds its point for the minimap until another row replaces it (#3394)", () => {
+	const body = fixture();
+	// The Wolf stands apart from the Mangyang, so the move names which.
+	body.monsters[4].point = [ 40, 10 ];
+	const hud = loadedTools( body );
+	assert.equal( hud.guideWaypoint(), null );
+	hud.activate( "map-guide-main:0", undefined, 10 );
+	const mangyang = hud.activate( "map-guide-monster:2", undefined, 10 );
+	assert.notEqual( mangyang, null );
+	assert.deepEqual( hud.guideWaypoint(), mangyang, "the pick's point is the waypoint" );
+	// Another monster's pick moves it to that monster's point.
+	hud.activate( "map-guide-main:1", undefined, 10 );
+	const wolf = hud.activate( "map-guide-monster:4", undefined, 10 );
+	assert.notDeepEqual( wolf, mangyang );
+	assert.deepEqual( hud.guideWaypoint(), wolf );
+	// A main row's pick clears it.
+	hud.activate( "map-guide-main:1", undefined, 10 );
+	assert.equal( hud.guideWaypoint(), null, "a main row clears the waypoint" );
+	// A dungeon pick has no world point, so it clears it too.
+	hud.activate( "map-guide-main:0", undefined, 10 );
+	hud.activate( "map-guide-monster:2", undefined, 10 );
+	assert.notEqual( hud.guideWaypoint(), null );
+	hud.activate( "map-guide-monster:7", undefined, 10 );
+	assert.equal( hud.guideWaypoint(), null, "a dungeon pick leaves no point" );
+	// An area row's pick clears it as well.
+	hud.activate( "map-guide-monster:2", undefined, 10 );
+	assert.notEqual( hud.guideWaypoint(), null );
+	hud.activate( "map-guide-tab:area", undefined, 10 );
+	hud.activate( "map-guide-area:4", undefined, 10 );
+	assert.equal( hud.guideWaypoint(), null, "an area row clears the waypoint" );
+	hud.dispose();
+});
+
 test("the level filter does not reach the Monster tab", () => {
 	const hud = loadedTools( fixture(), true );
 	const mains = level =>
