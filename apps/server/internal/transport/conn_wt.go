@@ -50,6 +50,12 @@ const wtDatagramQueueLen = 256
 // being counted as sent and then vanishing in the drain.
 const wtMaxDatagramPayload = 1024
 
+// wtGoodbyeLinger bounds how long a closing session waits for the
+// client to end it after the control stream's FIN (wtConn.Close): the
+// WebSocket close frame's bound (wsCloseFrameDeadline), which a BYE and
+// its acknowledgement need only a round trip of.
+const wtGoodbyeLinger = wsCloseFrameDeadline
+
 // errWTConnClosed reports a write on a WebTransport connection that has
 // already closed.
 var errWTConnClosed = errors.New("transport: webtransport connection closed")
@@ -96,6 +102,15 @@ type wtConn struct {
 	readErr   error
 	readDone  chan struct{}
 
+	// writeMu serializes the control stream's writes with Close's FIN:
+	// quic-go forbids closing a stream concurrently with a write to it.
+	writeMu sync.Mutex
+
+	// closing is the server's count of goodbyes still in flight
+	// (Server.Shutdown waits on it before closing the QUIC listener);
+	// nil when nothing waits, as in the unit tests' bare connections.
+	closing *closeGroup
+
 	closeOnce sync.Once
 }
 
@@ -108,7 +123,7 @@ the stream pump and datagram pump inbound, the datagram drain outbound.
 All three exit when the connection closes.
 ================
 */
-func newWTConn(sess *webtransport.Session) *wtConn {
+func newWTConn(sess *webtransport.Session, closing *closeGroup) *wtConn {
 	ctx, cancel := context.WithCancel(context.Background())
 	w := &wtConn{
 		sess:         sess,
@@ -121,6 +136,7 @@ func newWTConn(sess *webtransport.Session) *wtConn {
 		ctxCancel:    cancel,
 		strReady:     make(chan struct{}),
 		readDone:     make(chan struct{}),
+		closing:      closing,
 	}
 	go w.streamPump()
 	go w.datagramPump()
@@ -342,6 +358,8 @@ The control stream write with the stall deadline re-armed per piece.
 ================
 */
 func (w *wtConn) writeStream(buf []byte) error {
+	w.writeMu.Lock()
+	defer w.writeMu.Unlock()
 	return writeAllWithinStall(w.str, buf, func() {
 		_ = w.str.SetWriteDeadline(time.Now().Add(wtWriteTimeout))
 	})
@@ -382,17 +400,168 @@ func (w *wtConn) WriteUnreliable(f Frame) error {
 	}
 }
 
+/*
+================
+wtConn.Close
+
+Ends the session without losing what the writer already handed to the
+control stream: above all the BYE that CloseWhenDrained queues last.
+webtransport-go's CloseWithError resets every stream of the session
+(v0.13.0 closeWithSession: CancelWrite), and a reset discards whatever
+the stream has not delivered yet. So a BYE written a moment before the
+close never reached the browser, the session's closed promise rejected,
+and every polite end - an Exit or Restart, a reload replacing a tab, a
+server restart - filed as a lost connection: 216 of the 477 live
+connection_closed incidents on 11-21/22, each with no BYE in the
+client's journal (#4115).
+
+The close now finishes the control stream first: Close sends a FIN
+after every queued byte, and QUIC retransmits that data until it is
+acknowledged. The client closes its session as soon as it reads the
+BYE (network.ts end()), which ends the wait at once; a client that
+never does is closed after wtGoodbyeLinger. The session close then
+resets a stream that has nothing left to lose.
+
+That wait runs on its own goroutine, as the WebSocket close frame does
+(conn_ws.go, #2142): callers close sessions from inside a division
+lane and must never wait on a peer. A writer parked on a peer that
+stopped reading holds writeMu; then the stream cannot be finished in
+order (Close must not race a Write) and the session closes at once, as
+before - a peer that is not reading would not read a BYE either.
+================
+*/
 func (w *wtConn) Close(reason string) error {
 	var err error
 	w.closeOnce.Do(func() {
 		close(w.closed)
+		if w.streamOpen() && w.writeMu.TryLock() {
+			w.closing.begin()
+			go func() {
+				defer w.closing.end()
+				defer w.writeMu.Unlock()
+				w.finishStream()
+				w.ctxCancel()
+				_ = w.sess.CloseWithError(0, reason)
+			}()
+			return
+		}
 		w.ctxCancel()
 		err = w.sess.CloseWithError(0, reason)
 	})
 	return err
 }
 
+/*
+================
+wtConn.streamOpen
+
+Whether the client's control stream was accepted, so there is a stream
+to finish.
+================
+*/
+func (w *wtConn) streamOpen() bool {
+	select {
+	case <-w.strReady:
+		return true
+	default:
+		return false
+	}
+}
+
+/*
+================
+wtConn.finishStream
+
+Sends the control stream's FIN behind everything written to it, then
+waits until the client ends the session or wtGoodbyeLinger passes.
+The caller holds writeMu.
+================
+*/
+func (w *wtConn) finishStream() {
+	_ = w.str.SetWriteDeadline(time.Now().Add(wtGoodbyeLinger))
+	if err := w.str.Close(); err != nil {
+		return
+	}
+	linger := time.NewTimer(wtGoodbyeLinger)
+	defer linger.Stop()
+	select {
+	case <-w.sess.Context().Done():
+	case <-linger.C:
+	}
+}
+
 func (w *wtConn) Kind() string { return "webtransport" }
+
+/*
+================
+closeGroup
+
+The WebTransport goodbyes still in flight (wtConn.Close). A plain
+WaitGroup does not fit: a session can still close while Shutdown
+waits, and a WaitGroup forbids an Add from zero concurrent with Wait.
+A nil group counts nothing.
+================
+*/
+type closeGroup struct {
+	mu     sync.Mutex
+	active int
+	idle   chan struct{}
+}
+
+/*
+================
+closeGroup.begin
+================
+*/
+func (g *closeGroup) begin() {
+	if g == nil {
+		return
+	}
+	g.mu.Lock()
+	if g.active == 0 {
+		g.idle = make(chan struct{})
+	}
+	g.active++
+	g.mu.Unlock()
+}
+
+/*
+================
+closeGroup.end
+================
+*/
+func (g *closeGroup) end() {
+	if g == nil {
+		return
+	}
+	g.mu.Lock()
+	g.active--
+	if g.active == 0 {
+		close(g.idle)
+	}
+	g.mu.Unlock()
+}
+
+/*
+================
+closeGroup.wait
+
+Returns once no goodbye is in flight, or when ctx ends.
+================
+*/
+func (g *closeGroup) wait(ctx context.Context) {
+	g.mu.Lock()
+	if g.active == 0 {
+		g.mu.Unlock()
+		return
+	}
+	idle := g.idle
+	g.mu.Unlock()
+	select {
+	case <-idle:
+	case <-ctx.Done():
+	}
+}
 
 /*
 ================

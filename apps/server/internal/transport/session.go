@@ -640,6 +640,7 @@ func (s *Session) detachGen(gen int, cause error) {
 		s.expireTimer = time.AfterFunc(grace, func() { s.expireIfDetached() })
 	}
 	s.recordHistoryLocked("detached", cause)
+	s.hub.metrics.closeCauses.note("detached", cause)
 	s.cond.Broadcast()
 	s.mu.Unlock()
 	s.hub.metrics.detaches.Add(1)
@@ -696,6 +697,7 @@ func (s *Session) closeNow(cause error) (bool, error) {
 		cause = *s.closeReason
 	}
 	s.recordHistoryLocked("ended", cause)
+	s.hub.metrics.closeCauses.note("ended", cause)
 	conn := s.conn
 	s.conn = nil
 	s.attached = false

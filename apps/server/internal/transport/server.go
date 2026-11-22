@@ -70,7 +70,10 @@ type Server struct {
 	// for this run because its pair failed at boot (wtDisabled says why).
 	Cert *Certificate
 
-	cfg        Config
+	cfg Config
+	// wtClosing counts the WebTransport goodbyes still finishing
+	// (wtConn.Close); Shutdown waits on it before closing the listener.
+	wtClosing  closeGroup
 	wtDisabled string
 	wtServer   *webtransport.Server
 	httpServer *http.Server
@@ -520,7 +523,7 @@ func NewServer(cfg Config) (*Server, error) {
 		}
 		// The session keeps neither the request nor its headers once
 		// Upgrade returns: take the client facts here (clientaddr.go).
-		conn := newWTConn(sess)
+		conn := newWTConn(sess, &s.wtClosing)
 		conn.clientAddr = clientAddr(sess.RemoteAddr().String(), r.Header)
 		conn.userAgent = r.Header.Get("User-Agent")
 		go s.Hub.AcceptConn(conn)
@@ -854,6 +857,11 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.mu.Unlock()
 
 	s.Hub.shutdown(ctx)
+	// Each drained session's BYE is still finishing on its control
+	// stream (wtConn.Close): closing the QUIC listener now would reset
+	// it and the restart would reach every player as a lost connection
+	// (#4115).
+	s.wtClosing.wait(ctx)
 
 	// Stop the WT accept loop by closing OUR socket and wait for Serve to
 	// return before wtServer.Close(): calling Close concurrently with
