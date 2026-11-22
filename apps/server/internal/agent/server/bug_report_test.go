@@ -99,10 +99,43 @@ func loginCookie(t *testing.T, fixture agentFixture) *http.Cookie {
 
 /*
 ================
+loginSession
+
+One login's cookie and the session token it minted - the same value in
+the browser's jar and in the client session owner's hands.
+================
+*/
+func loginSession(t *testing.T, fixture agentFixture) (*http.Cookie, string) {
+	t.Helper()
+	login := performJSON(t, fixture.handler, http.MethodPost, "/title/login", `{"id":"tester","password":"123123","serverId":"alpha"}`, "")
+	cookies := login.Result().Cookies()
+	var body struct {
+		SessionToken string `json:"sessionToken"`
+	}
+	if login.Code != http.StatusOK || len(cookies) == 0 || json.Unmarshal(login.Body.Bytes(), &body) != nil || body.SessionToken == "" {
+		t.Fatalf("login failed: %d %s", login.Code, login.Body.String())
+	}
+	return cookies[0], body.SessionToken
+}
+
+/*
+================
 postBugReport
 ================
 */
 func postBugReport(t *testing.T, fixture agentFixture, cookie *http.Cookie, description string) *httptest.ResponseRecorder {
+	return postBugReportAuth(t, fixture, cookie, "", description)
+}
+
+/*
+================
+postBugReportAuth
+
+One report with whichever credentials the caller holds - the cookie,
+the session token the in-game client presents, both, or neither.
+================
+*/
+func postBugReportAuth(t *testing.T, fixture agentFixture, cookie *http.Cookie, token, description string) *httptest.ResponseRecorder {
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -130,6 +163,9 @@ func postBugReport(t *testing.T, fixture agentFixture, cookie *http.Cookie, desc
 	request.Header.Set("Content-Type", writer.FormDataContentType())
 	if cookie != nil {
 		request.AddCookie(cookie)
+	}
+	if token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
 	}
 	response := httptest.NewRecorder()
 	fixture.handler.ServeHTTP(response, request)
@@ -220,5 +256,57 @@ func TestBugReportDeliversWithSessionIdentity(t *testing.T) {
 	invalid := postBugReport(t, fixture, cookie, "short")
 	if invalid.Code != http.StatusTooManyRequests {
 		t.Fatalf("pacing must be checked before the body: %d", invalid.Code)
+	}
+}
+
+/*
+================
+TestBugReportAdmitsTheSessionTokenWithoutTheCookie
+
+#4109: the report lane read only the login cookie, a copy of the
+session set once and never renewed, so a signed-in player whose cookie
+was gone (expired alongside the session, or cleared by another tab) was
+told to log in. The in-game client files with the session token it
+holds: admitted on the token alone, its cookie copy re-issued at the
+token's own expiry, and a presented token that is not live refused
+even beside a live cookie.
+================
+*/
+func TestBugReportAdmitsTheSessionTokenWithoutTheCookie(t *testing.T) {
+	fixture, recorder := newBugReportFixture(t, true)
+	cookie, token := loginSession(t, fixture)
+
+	response := postBugReportAuth(t, fixture, nil, token, "The bridge eats my character")
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"id":"42"`) {
+		t.Fatalf("token-only report: %d %s", response.Code, response.Body.String())
+	}
+	if len(recorder.payloads) != 1 {
+		t.Fatalf("want one Discord message, got %d", len(recorder.payloads))
+	}
+	var reissued *http.Cookie
+	for _, candidate := range response.Result().Cookies() {
+		if candidate.Name == browserSessionCookie {
+			reissued = candidate
+		}
+	}
+	if reissued == nil || reissued.Value != token || reissued.MaxAge <= 0 || reissued.MaxAge > 43200 {
+		t.Fatalf("cookie copy not re-issued at the token's expiry: %v", reissued)
+	}
+
+	// A presented session that is not live governs: no trade for the cookie.
+	if refused := postBugReportAuth(t, fixture, cookie, token+"x", "Forged session"); refused.Code != http.StatusUnauthorized {
+		t.Fatalf("forged token beside a live cookie: %d", refused.Code)
+	}
+	if refused := postBugReportAuth(t, fixture, nil, token+"x", "Forged session"); refused.Code != http.StatusUnauthorized {
+		t.Fatalf("forged token: %d", refused.Code)
+	}
+	if len(recorder.payloads) != 1 {
+		t.Fatalf("a refused report was delivered: %d payloads", len(recorder.payloads))
+	}
+
+	// The token's report counts against the account's pacing like the cookie's.
+	again := postBugReportAuth(t, fixture, nil, token, "The bridge eats my character again")
+	if again.Code != http.StatusTooManyRequests {
+		t.Fatalf("second report within a minute: %d", again.Code)
 	}
 }
