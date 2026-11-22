@@ -86,10 +86,7 @@ through untouched.
 func monsterFramesForViewer(frames []Frame, viewer *SessionSnapshot) []Frame {
 	hasRide := false
 	for i := range frames {
-		if frames[i].Opcode != wire.OpCosRideState {
-			continue
-		}
-		if _, ok := wire.CosRideStateRider(frames[i].Payload); ok {
+		if _, ok := wire.FrameRideRider(frames[i].Opcode, frames[i].Payload); ok {
 			hasRide = true
 			break
 		}
@@ -99,7 +96,7 @@ func monsterFramesForViewer(frames []Frame, viewer *SessionSnapshot) []Frame {
 	}
 	out := make([]Frame, 0, len(frames))
 	for i := range frames {
-		if frames[i].Opcode == wire.OpCosRideState && !viewerHoldsRide(viewer, frames[i]) {
+		if !viewerHoldsRide(viewer, frames[i]) {
 			continue
 		}
 		out = append(out, frames[i])
@@ -111,14 +108,15 @@ func monsterFramesForViewer(frames []Frame, viewer *SessionSnapshot) []Frame {
 ================
 viewerHoldsRide
 
-Whether this session may take one ride state: it holds the rider (its
-published set names the rider gid), or it is the rider (it owns the
-mount the frame names). An undecodable payload stays shared, as in
+Whether this session may take one frame of the batch: any frame but a
+decodable ride state, or a ride state whose rider it holds (its
+published set names the rider gid) or is (it owns the mount the frame
+names). An undecodable ride state stays shared, as in
 monsterFramesForViewer above.
 ================
 */
 func viewerHoldsRide(viewer *SessionSnapshot, frame Frame) bool {
-	rider, ok := wire.CosRideStateRider(frame.Payload)
+	rider, ok := wire.FrameRideRider(frame.Opcode, frame.Payload)
 	if !ok {
 		return true
 	}
