@@ -35,6 +35,8 @@ package census
 import (
 	"sort"
 	"strings"
+
+	"opensro.online/server/internal/platform/connjournal"
 )
 
 const (
@@ -602,16 +604,21 @@ type PersonAccount struct {
 	LastSeen   int64    `json:"lastSeen"`
 }
 
-// PersonSpan is one entered session of the person's history.
+// PersonSpan is one entered session of the person's history. Activity
+// is what the span did on the wire (#3307): frames in, each handled
+// opcode's count and first offset - null while the span is open or when
+// it closed without a summary. "Time to first action" is read from it
+// here, by whoever asks, never decided on the server.
 type PersonSpan struct {
-	Session   string `json:"session"`
-	Account   string `json:"account"`
-	Character string `json:"character"`
-	Transport string `json:"transport"`
-	Started   int64  `json:"started"`
-	Ended     int64  `json:"ended"`
-	Open      bool   `json:"open"`
-	Estimated bool   `json:"estimated"`
+	Session   string                `json:"session"`
+	Account   string                `json:"account"`
+	Character string                `json:"character"`
+	Transport string                `json:"transport"`
+	Started   int64                 `json:"started"`
+	Ended     int64                 `json:"ended"`
+	Open      bool                  `json:"open"`
+	Estimated bool                  `json:"estimated"`
+	Activity  *connjournal.Activity `json:"activity"`
 }
 
 /*
@@ -688,7 +695,7 @@ func (s *Service) Person(character string) (Person, bool, error) {
 	for _, span := range history {
 		person.History = append(person.History, PersonSpan{Session: span.Session, Account: span.Account,
 			Character: span.Character, Transport: span.Transport, Started: span.Started, Ended: span.Ended,
-			Open: span.Ended == 0, Estimated: span.Estimated})
+			Open: span.Ended == 0, Estimated: span.Estimated, Activity: span.Activity})
 	}
 	if person.History == nil {
 		person.History = []PersonSpan{}

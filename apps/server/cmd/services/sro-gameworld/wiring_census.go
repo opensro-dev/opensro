@@ -34,7 +34,8 @@ import (
 censusObserver
 
 The transport's census half: entered sessions open a journal row with
-the attachment's client facts, ended sessions close it. Session names
+the attachment's client facts, ended sessions close it, and either
+hands the closing span's traffic summary over. Session names
 come from the history journal, so the two journals join on them.
 ================
 */
@@ -60,10 +61,30 @@ func (observer censusObserver) RecordLifecycle(event transport.LifecycleEvent) {
 	case "world_entered":
 		observer.journal.RecordEntered(connjournal.Entry{Session: event.Session, Account: event.Account,
 			Character: event.Character, Shard: event.Shard, Transport: event.Transport,
-			Address: event.ClientAddr, UserAgent: event.UserAgent})
+			Address: event.ClientAddr, UserAgent: event.UserAgent, Closing: journalActivity(event.Closing)})
 	case "ended":
-		observer.journal.CloseSession(event.Session)
+		observer.journal.CloseSession(event.Session, journalActivity(event.Closing))
 	}
+}
+
+/*
+================
+journalActivity
+
+The transport's span summary in the journal's form; nil stays nil.
+================
+*/
+func journalActivity(summary *transport.ActivitySummary) *connjournal.Activity {
+	if summary == nil {
+		return nil
+	}
+	activity := &connjournal.Activity{FramesIn: summary.FramesIn, FirstHandledMs: summary.FirstHandledMs,
+		Opcodes: make([]connjournal.OpcodeActivity, 0, len(summary.Opcodes))}
+	for _, opcode := range summary.Opcodes {
+		activity.Opcodes = append(activity.Opcodes,
+			connjournal.OpcodeActivity{Opcode: opcode.Opcode, Count: opcode.Count, FirstMs: opcode.FirstMs})
+	}
+	return activity
 }
 
 /*

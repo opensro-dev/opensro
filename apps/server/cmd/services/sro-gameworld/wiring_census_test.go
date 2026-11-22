@@ -32,6 +32,7 @@ import (
 	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/security/auth"
+	"opensro.online/server/internal/testsupport/wait"
 	"opensro.online/server/internal/transport"
 )
 
@@ -218,5 +219,37 @@ func TestCensusReadsInstallOnlyWithTheJournal(t *testing.T) {
 	}
 	if code := censusOnlineCode(t, application.controlAPI, token); code != http.StatusOK {
 		t.Fatalf("census on: got %d, want 200", code)
+	}
+}
+
+/*
+================
+TestCensusObserverStoresTheSpanSummary
+
+A transport span summary on the session's end reaches the journal row
+it closes, in the journal's form (#3307).
+================
+*/
+func TestCensusObserverStoresTheSpanSummary(t *testing.T) {
+	t.Setenv(connjournal.EnvConnectionJournal, "on")
+	application, server, named, _ := installCensusForTest(t)
+	if err := installConnectionJournal(application, server, named, "global-official"); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = application.connJournal.Close() }()
+	observer := server.Hub.Census
+	observer.RecordLifecycle(transport.LifecycleEvent{Kind: "world_entered", Session: "s1", Account: "alice", Character: "Hero"})
+	observer.RecordLifecycle(transport.LifecycleEvent{Kind: "ended", Session: "s1", Closing: &transport.ActivitySummary{
+		FramesIn: 9, FirstHandledMs: 300, Opcodes: []transport.OpcodeActivity{{Opcode: 0x7034, Count: 4, FirstMs: 300}}}})
+	var rows []connjournal.Row
+	wait.Eventually(t, 5*time.Second, "the row to close", func() bool {
+		var err error
+		rows, err = application.connJournal.Rows(0)
+		return err == nil && len(rows) == 1 && rows[0].Ended != 0
+	})
+	got := rows[0].Activity
+	if got == nil || got.FramesIn != 9 || got.FirstHandledMs != 300 || len(got.Opcodes) != 1 ||
+		got.Opcodes[0] != (connjournal.OpcodeActivity{Opcode: 0x7034, Count: 4, FirstMs: 300}) {
+		t.Fatalf("stored summary %+v", got)
 	}
 }
