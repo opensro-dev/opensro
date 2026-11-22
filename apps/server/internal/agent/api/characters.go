@@ -565,7 +565,7 @@ func (api *API) handleEnterWorldToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": false, "code": "BAD_REQUEST"})
 		return
 	}
-	if !admitTicket(w, api.enterWorldTickets, requestAccountID(r)) {
+	if !api.admitTicket(w, TicketEnterWorld, requestAccountID(r)) {
 		return
 	}
 	// Lazy reap first, like every character read on this surface: a
@@ -602,6 +602,7 @@ func (api *API) handleEnterWorldToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	api.recordIssuedTicket(requestAccountID(r), token, expiresAt)
+	api.noteTicket(requestAccountID(r), TicketEnterWorld, true)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":            true,
 		"token":         token,

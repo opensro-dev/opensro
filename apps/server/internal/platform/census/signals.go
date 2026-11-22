@@ -3,7 +3,7 @@
 
 signals.go - bot signals per session, from data the server keeps
 
-Three signals are computable from what the server already retains -
+Four signals are computable from what the server already retains -
 the connection journal's spans and the moderation chat log's counts:
 
   - long-session: one unbroken entered span of eight hours or more.
@@ -12,6 +12,10 @@ the connection journal's spans and the moderation chat log's counts:
   - chat-silent: a span of two hours or more in which the character
     said nothing the chat log accepted. The count must have read
     clean; damaged evidence silences the signal, never the player.
+  - no-user-agent: the session presented no User-Agent. Both
+    transports read it at accept and every browser sends one, so the
+    client was not a browser (#3307). The answer also counts them
+    over the whole window, past the session cap.
 
 Movement cadence, identical path loops and grinding in one spot are
 not here: the server retains no movement history to compute them
@@ -89,6 +93,9 @@ type Signals struct {
 	ChatOK        bool             `json:"chatOk"`
 	Sessions      []SessionSignals `json:"sessions"`
 	Truncated     bool             `json:"truncated"`
+	// NoUserAgent counts the window's sessions without a User-Agent,
+	// the truncated ones too.
+	NoUserAgent int `json:"noUserAgent"`
 }
 
 /*
@@ -135,6 +142,11 @@ func (s *Service) Signals() (Signals, error) {
 		}
 		return sessions[i].Started > sessions[j].Started
 	})
+	for _, span := range sessions {
+		if span.NoUserAgent {
+			answer.NoUserAgent++
+		}
+	}
 	answer.Truncated = len(sessions) > signalsMax
 	if answer.Truncated {
 		sessions = sessions[:signalsMax]
@@ -155,6 +167,9 @@ func (s *Service) Signals() (Signals, error) {
 		if answer.ChatOK && length >= chatSilenceMs && chatCounts[strings.ToLower(span.Character)] == 0 {
 			entry.Signals = append(entry.Signals,
 				Signal{Kind: "chat-silent", Value: round1(float64(length) / 3600000.0), Unit: "hours"})
+		}
+		if span.NoUserAgent {
+			entry.Signals = append(entry.Signals, Signal{Kind: "no-user-agent", Value: 1, Unit: "session"})
 		}
 		answer.Sessions = append(answer.Sessions, entry)
 	}

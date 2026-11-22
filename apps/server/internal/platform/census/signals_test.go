@@ -141,3 +141,32 @@ func TestSignalsWithoutChatEvidence(t *testing.T) {
 		t.Fatal("no chat source read as OK")
 	}
 }
+
+/*
+================
+TestSignalsFlagSessionsWithoutAUserAgent
+
+A session that presented no User-Agent fires no-user-agent and is
+counted; a browser session beside it fires nothing.
+================
+*/
+func TestSignalsFlagSessionsWithoutAUserAgent(t *testing.T) {
+	now := nowMs()
+	bare := span("s-bare", "acct-bot", "Scripted", now-hourMs, 0, "ip-a", "net-a", "")
+	bare.NoUserAgent = true
+	spans := []Span{bare, span("s-browser", "acct-human", "Talker", now-hourMs, 0, "ip-b", "net-b", "client-b")}
+	chat := func(int64, int64) (map[string]int, error) { return map[string]int{"talker": 3}, nil }
+	answer, err := testService(spans, chat).Signals()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer.NoUserAgent != 1 {
+		t.Fatalf("noUserAgent = %d, want 1", answer.NoUserAgent)
+	}
+	if kinds := signalKinds(sessionByID(answer, "s-bare")); kinds["no-user-agent"] != 1 {
+		t.Fatalf("the bare session fired %v", kinds)
+	}
+	if kinds := signalKinds(sessionByID(answer, "s-browser")); len(kinds) != 0 {
+		t.Fatalf("a browser session fired %v", kinds)
+	}
+}

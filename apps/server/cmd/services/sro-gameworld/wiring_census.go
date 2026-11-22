@@ -22,6 +22,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/platform/census"
 	"opensro.online/server/internal/platform/connjournal"
@@ -89,9 +90,35 @@ func installConnectionJournal(application *gameWorldApplication, ts *transport.S
 	}
 	application.connJournal = journal
 	ts.Hub.Census = censusObserver{journal: journal, named: named}
+	application.controlAPI.InstallTicketObserver(ticketObserver(journal))
 	log.Infof("connection journal: entered sessions recorded with keyed address hashes (%s, port-only, not native)",
 		connjournal.EnvConnectionJournal)
 	return nil
+}
+
+/*
+================
+ticketObserver
+
+The agent API's ticket outcomes as the journal's hour buckets: one
+increment per decided request, by kind and outcome (#3307).
+================
+*/
+func ticketObserver(journal *connjournal.Journal) func(account string, kind agentapi.TicketKind, minted bool) {
+	return func(account string, kind agentapi.TicketKind, minted bool) {
+		var counts connjournal.TicketCounts
+		switch {
+		case kind == agentapi.TicketTransport && minted:
+			counts.TransportMinted = 1
+		case kind == agentapi.TicketTransport:
+			counts.TransportPaced = 1
+		case minted:
+			counts.EnterWorldMinted = 1
+		default:
+			counts.EnterWorldPaced = 1
+		}
+		journal.RecordTicket(account, counts)
+	}
 }
 
 /*
@@ -111,7 +138,7 @@ func installCensusReads(application *gameWorldApplication, ownedShardID string) 
 		return nil
 	}
 	directory := store.DirForShardFromEnv(ownedShardID)
-	service := census.NewService(census.JournalRows(journal), census.ChatLogCounts(directory), time.Now)
+	service := census.NewService(census.JournalRows(journal), census.ChatLogCounts(directory), census.JournalTickets(journal), time.Now)
 	// The public status answer's people counts read this same
 	// service (opensro-web#78); installPublicAPI runs after us.
 	application.census = service
