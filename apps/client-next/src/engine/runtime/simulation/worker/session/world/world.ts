@@ -51,10 +51,12 @@ const ADMISSION_TIMEOUT_MS = 10000;
 // whole, and the server's loading pings queue behind it on the same
 // ordered stream. A slow socket therefore shows total silence for the
 // whole download, and the ten-second admission window tore healthy
-// answers down mid-flight (#2867). The wait runs to the server's own
-// patience instead: the transport detaches a silent session at its
-// 60 s idle timeout (apps/server/internal/transport/config.go), so a
-// longer client wait buys nothing the server would have kept.
+// answers down mid-flight (#2867). The wait runs to the client's own
+// silence bound instead: the transport no longer detaches a session
+// that is loading its scene at its 60 s idle timeout (#4139), so a
+// longer wait would buy something the server keeps - but a full
+// window without one inbound byte is a dead link, not a slow one,
+// and this wait is where it fails.
 const ENTER_WORLD_ANSWER_TIMEOUT_MS = 60000;
 const REFERENCE_TIMEOUT_MS = 30000;
 // Progress may slide a deadline this many windows past its arm, no further:
