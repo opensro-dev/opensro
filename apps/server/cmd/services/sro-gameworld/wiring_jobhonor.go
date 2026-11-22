@@ -113,3 +113,47 @@ func (game *gameplayPlane) jobHonorTick(ticker *simulation.Ticker, nowMs int64) 
 	}
 	return nil
 }
+
+/*
+================
+hotRouteTick
+
+The hot route's announcement (#3530): the first time the tick sees a
+session in an hour - and the first after the hour turns - that session
+gets the hour's route as one server notice (0x3667, the line the chat
+log shows). The scorer multiplies by the same selector
+(action.HotRouteNames / hotRouteAt), so the line never promises what
+the scorer does not pay. Sessions the tick stops seeing are forgotten.
+================
+*/
+func (game *gameplayPlane) hotRouteTick(ticker *simulation.Ticker, nowMs int64) []simulation.DivisionFrames {
+	at := time.UnixMilli(nowMs).UTC()
+	hour := at.Unix() / 3600
+	if game.hotRouteSeen == nil {
+		game.hotRouteSeen = map[string]int64{}
+	}
+	line := ""
+	seen := map[string]bool{}
+	for _, view := range sessionViews(ticker.Source) {
+		if view.DivisionID != game.divisionID {
+			continue
+		}
+		seen[view.SessionID] = true
+		if game.hotRouteSeen[view.SessionID] == hour {
+			continue
+		}
+		game.hotRouteSeen[view.SessionID] = hour
+		if line == "" {
+			from, to := action.HotRouteNames(at)
+			line = "Hot route this hour: " + from + " to " + to + " - job honor on this route pays x1.5."
+		}
+		frame := wire.NotificationFrame(line)
+		ticker.Push.PushToSession(view.SessionID, []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload}})
+	}
+	for sessionID := range game.hotRouteSeen {
+		if !seen[sessionID] {
+			delete(game.hotRouteSeen, sessionID)
+		}
+	}
+	return nil
+}

@@ -326,12 +326,16 @@ scoreTradeSale
 
 Scores one committed trade sale: its points are cut to what the run has
 left, then to what the account's day has left (the sink). The run is
-charged only what the sink kept.
+charged only what the sink kept. A sale on the hour's hot route counts
+its profit at hotRouteHonorPercent before the same caps (hotroute.go).
 ================
 */
-func (rt *Runtime) scoreTradeSale(c *enterworld.Character, job uint8, profit int64, at time.Time) int {
+func (rt *Runtime) scoreTradeSale(c *enterworld.Character, job uint8, profit int64, hot bool, at time.Time) int {
 	if rt == nil || rt.JobHonor == nil || c == nil || c.ID <= 0 || c.AccountID == "" {
 		return 0
+	}
+	if hot {
+		profit = profit * hotRouteHonorPercent / 100
 	}
 	points := tradeHonorPoints(job, profit)
 	if points == 0 {
@@ -453,10 +457,11 @@ A trader's trade-goods sale is its caravan's arrival: the escort
 damage held against it pays out, a point per
 honorHunterDamagePerPoint applied damage, at most a run's cap per
 hunter. Paid once: the escrow clears whether or not the sale scored
-the trader anything itself.
+the trader anything itself. An arrival on the hour's hot route pays
+the escrow at hotRouteHonorPercent, still under the run cap.
 ================
 */
-func (rt *Runtime) payHonorEscorts(trader *enterworld.Character, at time.Time) {
+func (rt *Runtime) payHonorEscorts(trader *enterworld.Character, hot bool, at time.Time) {
 	if rt == nil || rt.JobHonor == nil || trader == nil {
 		return
 	}
@@ -468,6 +473,9 @@ func (rt *Runtime) payHonorEscorts(trader *enterworld.Character, at time.Time) {
 		}
 		delete(rt.jobHonorRuns.escort, key)
 		points := int(min(due.damage/honorHunterDamagePerPoint, honorRunPointCap))
+		if hot {
+			points = min(points*hotRouteHonorPercent/100, honorRunPointCap)
+		}
 		if points > 0 && due.account != "" {
 			rt.JobHonor.AwardJobHonor(due.account, key.hunter, int(domain.JobHunter), points, at)
 		}

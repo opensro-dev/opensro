@@ -27,7 +27,13 @@ system is the Academy's (the native check on #3530).
 - A dressed thief's landed hit on a dressed trader (or its trade transport) marks the thief for 120 seconds; a dressed hunter's applied damage on the marked thief accrues against that caravan and pays out, at most 250 per hunter, when the trader next sells trade goods. Standing near a caravan scores nothing, and damage outside the window scores nothing. The escrow is memory-only: a restart forgets unpaid damage.
 - A job kill stakes when the victim carried trade goods (on its transport or in its bag) or kept honor points today. An account never scores off itself, and both killer and victim must be dressed. The rates are the same recorded inference: a kill is worth a fifth of a run's cap, a fought-off robbery like a small run.
 
-Still later slices of #3530: the hourly hot route, the ambush, and the tier's Academy honor buff and coloured title.
+## What scores (slice 3): the hourly hot route
+
+- Each UTC hour names one hot route: an unordered pair of distinct specialty towns (Jangan, Donwhang, Hotan, Samarkand, Constantinople - ten pairs). The pair is a splitmix64 of the hour index, so every division and every restart agrees with no stored state, and the announcement and the scorer read the same selector (`game/action/hotroute.go`).
+- At the hour's first sight - and each time the hour turns - every entered player gets one server notice (0x3667): the hour's towns and the x1.5 rate.
+- On the route, a trader's foreign-sale points and the escort payout that sale releases are counted at 150%, still under the 250-point run cap and the account's daily cap. A thief's den sale ends at no town pair and a job kill is tied to no route, so neither is multiplied (inference from the issue's "traders reroute, thieves and hunters follow").
+
+Still later slices of #3530: the ambush, and the tier's Academy honor buff and coloured title.
 
 ## Days and tiers
 

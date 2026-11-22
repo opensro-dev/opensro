@@ -75,8 +75,12 @@ type gameplayPlane struct {
 	// honorFeed is the Job Honor ranking feed (nil when SRO_JOB_HONOR
 	// is off; wiring_jobhonor.go).
 	honorFeed *honorfeed.Service
-	movement  *movement.Runtime
-	water     *movement.WaterValidator
+	// hotRouteSeen is the hour each session last heard the hot route
+	// announced (wiring_jobhonor.go's hotRouteTick; only used while
+	// honorFeed is built).
+	hotRouteSeen map[string]int64
+	movement     *movement.Runtime
+	water        *movement.WaterValidator
 	// planes owns every AI route, monster and pet alike: the outdoor
 	// detour in the field, the cave's region route on a dungeon floor.
 	planes   simulation.Planes
