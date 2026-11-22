@@ -1,6 +1,7 @@
 package simulation
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/title"
 )
 
 func peerSession(id, division string, characterID int64, name string) SessionSnapshot {
@@ -81,6 +83,62 @@ func TestTickerSpawnsPeerOncePerViewer(t *testing.T) {
 		spawn := DefaultWorldState(EuropeStartProfile()).Spawn
 		if decoded.RegionID != spawn.RegionID || decoded.X != float32(spawn.X) || decoded.Z != float32(spawn.Z) {
 			t.Fatalf("%s spawn pose = %+v, want the live spawn %+v", want.viewer, decoded.Position, spawn)
+		}
+	}
+}
+
+/*
+================
+TestTickerSendsTitleFrameAfterPeerSpawn
+
+A titled peer's spawn push carries the title frame (0x3FC3) right
+after the spawn row, addressed to the peer's gid with its title id
+(#3502); an untitled peer sends none, and the spawn row bytes are the
+pre-title row either way.
+================
+*/
+func TestTickerSendsTitleFrameAfterPeerSpawn(t *testing.T) {
+	const startMs = int64(1_784_000_000_000)
+	titled := peerSession("s2", "DIV_A", 2, "PeerB")
+	titled.Appearance.TitleID = 5
+	source := &fakeSource{sessions: []SessionSnapshot{
+		peerSession("s1", "DIV_A", 1, "PeerA"),
+		titled,
+	}}
+	push := &fakePusher{}
+	ticker := newTestTicker(source, push)
+
+	ticker.RunTick(startMs)
+
+	for _, pushed := range push.toSession {
+		var spawnAt, titleAt = -1, -1
+		for i, frame := range pushed.frames {
+			switch frame.Opcode {
+			case wire.OpSingleObjectSpawn:
+				spawnAt = i
+			case title.OpPeerTitle:
+				titleAt = i
+			}
+		}
+		switch pushed.sessionID {
+		case "s1":
+			if spawnAt < 0 || titleAt != spawnAt+1 {
+				t.Fatalf("s1 push order spawn %d title %d, want the title right after the spawn", spawnAt, titleAt)
+			}
+			body := pushed.frames[titleAt].Payload
+			if len(body) != 10 {
+				t.Fatalf("title frame = %d bytes, want 10 (no table loaded)", len(body))
+			}
+			if gid := binary.LittleEndian.Uint32(body[0:4]); gid != PlayerObjectID(2) {
+				t.Fatalf("title frame gid = %d, want %d", gid, PlayerObjectID(2))
+			}
+			if id := binary.LittleEndian.Uint32(body[4:8]); id != 5 {
+				t.Fatalf("title frame id = %d, want 5", id)
+			}
+		case "s2":
+			if titleAt >= 0 {
+				t.Fatal("the untitled peer's viewer received a title frame")
+			}
 		}
 	}
 }
