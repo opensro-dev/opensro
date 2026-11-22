@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 const { uniqueBannerQuads } = await import( "../../src/engine/foundation/ui/unique-banner.ts" );
 const {
 	createNoticeBanner,
+	centreBannerPaths,
 	noticeBannerRow,
 	noticeTiming,
 	notificationBannerPaths,
@@ -56,6 +57,8 @@ const STAR = "Looter has dropped D6 Star Blade (Seal Of Star) from Tiger Girl";
 const MOON = "Looter has dropped D6 Moon Blade (Seal Of Moon) from Tiger Girl";
 const SUN = "SEAL OF SUN: Looter has dropped D8 Sun Blade from Tiger Girl";
 const GUILD_WAR = "The guild AzureSky has declared war on the guild CrimsonFang";
+const SUCCESS = "[Smith] has succeded in augmenting <<D9 Blade>> to [+9].";
+const FAILED = "[Smith] has failed in augmenting <<D9 Blade>> to [+9]: destroyed.";
 
 test("a style grows the plate and sets its opacity, inside the native chrome", () => {
 	const frame = { padX: 16, padY: 6, plateAlpha: 0.8 };
@@ -95,6 +98,77 @@ test("the runtime row takes a tier's weight only for a seal drop", () => {
 	assert.deepEqual( native.paths, notificationBannerPaths );
 	assert.deepEqual( row( STAR ).row.frame, sealBannerStyle( 0 ).frame );
 	assert.deepEqual( row( SUN ).row.color, sealBannerStyle( 2 ).plate );
+});
+
+test("a reinforcement success wears the centre plate at screen centre (#3260)", () => {
+	const banner = createNoticeBanner( "notificationBanner" );
+	banner.step( [ notice( SUCCESS ) ], 0, true );
+	assert.equal( banner.centreSuccess(), true );
+	const row = noticeBannerRow( banner );
+	assert.deepEqual( row.paths, centreBannerPaths );
+	assert.deepEqual( row.color, [ 84, 0, 102 ], "the centre art's own violet, 0x540066" );
+	assert.deepEqual( row.textRgb, [ 1, 1, 1 ] );
+	assert.deepEqual( row.frame, {}, "the centre plate hugs the caption like the native one" );
+	assert.equal( row.centred, true );
+	const quads = uniqueBannerQuads(
+		SUCCESS,
+		1,
+		1024,
+		768,
+		200,
+		16,
+		centreBannerPaths,
+		size,
+		(768 - 16) / 2,
+		row.color
+	);
+	assert.deepEqual( quads[0].rect, [ 412, 376, 200, 16 ], "the caption centres on the screen" );
+	assert.deepEqual( quads[0].color.slice( 0, 3 ), [ 84 / 255, 0, 102 / 255 ] );
+});
+
+test("a +7 success centres too, and every failure keeps the native plate", () => {
+	const seven = createNoticeBanner( "notificationBanner" );
+	seven.step( [ notice( SUCCESS.replace( "[+9]", "[+7]" ) ) ], 0, true );
+	assert.equal( seven.centreSuccess(), true );
+	assert.equal( noticeBannerRow( seven ).centred, true );
+	// A failure on the drop/plus bucket, and one on the break channel:
+	// neither ever centres.
+	/** @type {import("../../src/engine/foundation/gameplay/system-notices.ts").SystemNotice[]} */
+	const failures = [
+		notice( FAILED ),
+		{
+			key: "",
+			text: FAILED,
+			value: 0,
+			notificationBanner: true,
+			bannerOnly: true,
+			itemBreak: true,
+			sequence: 1
+		}
+	];
+	for ( const failure of failures ) {
+		const banner = createNoticeBanner( "notificationBanner" );
+		banner.step( [ failure ], 0, true );
+		assert.equal( banner.centreSuccess(), false, failure.text ?? "" );
+		const row = noticeBannerRow( banner );
+		assert.equal( row.centred, false );
+		assert.deepEqual( row.paths, notificationBannerPaths );
+		assert.deepEqual( row.color, [ 128, 45, 67 ] );
+	}
+	const sun = createNoticeBanner( "notificationBanner" );
+	sun.step( [ notice( SUN ) ], 0, true );
+	assert.equal( sun.centreSuccess(), false, "a seal drop on the same channel never centres" );
+	assert.equal( noticeBannerRow( sun ).centred, false );
+	assert.deepEqual( noticeBannerRow( sun ).color, sealBannerStyle( 2 ).plate );
+});
+
+test("without the published centre art a success keeps the native plate", () => {
+	const banner = createNoticeBanner( "notificationBanner" );
+	banner.step( [ notice( SUCCESS ) ], 0, true );
+	const row = noticeBannerRow( banner, false );
+	assert.equal( row.centred, false );
+	assert.deepEqual( row.paths, notificationBannerPaths );
+	assert.deepEqual( row.color, [ 128, 45, 67 ] );
 });
 
 test("a quieter seal never cuts off a louder one, and a louder one always does", () => {

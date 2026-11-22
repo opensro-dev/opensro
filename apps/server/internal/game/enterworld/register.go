@@ -16,6 +16,7 @@ import (
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/title"
 	"opensro.online/server/internal/platform/jsonscratch"
 	"opensro.online/server/internal/transport"
 )
@@ -564,6 +565,13 @@ func HandleGameReady(character *Character, stats wire.BaseStats) []Packet {
 	}
 	if character.NativeBodyStatus != 0 {
 		frames = append(frames, NewPacket(wire.OpObjectStateRefresh, (wire.ObjectStateRefresh{Gid: ObjectIDForCharacter(character), StateType: wire.StateChannelBody, Value: character.NativeBodyStatus}).Encode()))
+	}
+	// The local player's own worn title (later-native, #3502): the same
+	// peer title frame, addressed to the local gid, so the own name line
+	// prints through the title format like every peer's.
+	if character.TitleID != 0 {
+		gid := ObjectIDForCharacter(character)
+		frames = append(frames, NewPacket(title.OpPeerTitle, title.EncodePeerTitle(gid, character.TitleID)))
 	}
 	// Current HP rides the entered corpus, but native life state does not.
 	// Game-ready runs after 0x31DB committed the local CICPlayer, so replay a

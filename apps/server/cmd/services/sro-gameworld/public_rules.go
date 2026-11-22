@@ -174,6 +174,10 @@ func publicRules() publicstats.RulesResponse {
 	dropMix, _ := progression.BetaDropMixFromEnv()
 	growth := progression.BetaGrowthFromEnv()
 	betaMastery, _ := progression.BetaMasteryFromEnv()
+	betaMasteryNow := "The native race-specific mastery totals apply."
+	if betaMastery > 0 {
+		betaMasteryNow = fmt.Sprintf("Every character may train masteries up to a total of %d; each mastery's own limits stay.", betaMastery)
+	}
 	betaMasteryEarly, _ := enterworld.BetaMasteryEarlyFromEnv()
 	levelCap, _ := progression.LevelCapFromEnv()
 	pharaohGear, _ := monster.PharaohGearRateFromEnv()
@@ -191,6 +195,10 @@ func publicRules() publicstats.RulesResponse {
 	flagWar, _ := action.FlagWarSettingsFromEnv()
 	settings := tunables.Current()
 	testKills := settings.Int(tunables.MostWantedTestKills)
+	alchemyMaxPlusNow := fmt.Sprintf("The native +%d reinforcement ceiling applies.", alchemy.NativeReinforceCeiling)
+	if alchemyMaxPlus > 0 {
+		alchemyMaxPlusNow = fmt.Sprintf("Reinforcement stops at +%d.", alchemyMaxPlus)
+	}
 	return publicstats.RulesResponse{
 		Rules: []publicstats.Rule{
 			{Flag: progression.EnvLevelCap, On: levelCap == progression.ExpansionLevelCap,
@@ -335,7 +343,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Beta balance, so testers can try seal gear."},
 			{Flag: progression.EnvBetaMastery, On: betaMastery > 0,
 				Native: "The total of all mastery levels is capped at 300 for Chinese characters and at twice the level, up to 240, for Europeans.",
-				Now:    fmt.Sprintf("Every character may train masteries up to a total of %d; each mastery's own limits stay.", betaMastery),
+				Now:    betaMasteryNow,
 				Why:    "Testers can try every mastery tree on one character."},
 			{Flag: enterworld.EnvBetaMasteryEarly, On: betaMasteryEarly && betaMastery == 0,
 				Native: "The total of all mastery levels is capped at 300 for Chinese characters and at twice the level, up to 240, for Europeans.",
@@ -509,7 +517,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Players asked for it; the original rates return with one setting."},
 			{Flag: alchemy.EnvReinforceMaxPlus, On: alchemyMaxPlus > 0,
 				Native: "Items can be reinforced far beyond +11.",
-				Now:    fmt.Sprintf("Reinforcement stops at +%d.", alchemyMaxPlus),
+				Now:    alchemyMaxPlusNow,
 				Why:    "The success table ends at +11; the cap keeps gear in the balanced range."},
 			{Flag: action.EnvTeamDeathRevive, On: !teamDeathRevive,
 				Native: "A death in a free battle or the arena revives on the spot, at any level.",

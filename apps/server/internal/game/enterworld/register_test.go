@@ -7,6 +7,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/title"
 	"opensro.online/server/internal/testsupport/entryauth"
 	"opensro.online/server/internal/transport"
 )
@@ -153,6 +154,25 @@ func TestHandleGameReady(t *testing.T) {
 	}.Encode())
 	if death.NativeOpcode != wantDeath.NativeOpcode || !reflect.DeepEqual(death.Payload, wantDeath.Payload) {
 		t.Fatalf("death frame = %+v, want %+v", death, wantDeath)
+	}
+}
+
+func TestHandleGameReadyCarriesTitle(t *testing.T) {
+	stats := wire.BaseStats{PhysicalAttackMin: 7, PhysicalAttackMax: 9}
+	character := chinaSpearman()
+	character.ID = 1
+	character.TitleID = 5
+	frames := HandleGameReady(character, stats)
+	if len(frames) != 4 {
+		t.Fatalf("frame count = %d, want clock + base stats + vitals + title", len(frames))
+	}
+	last := frames[3]
+	if last.NativeOpcode != title.OpPeerTitle {
+		t.Fatalf("title frame opcode = %#x, want %#x", last.NativeOpcode, title.OpPeerTitle)
+	}
+	want := title.EncodePeerTitle(ObjectIDForCharacter(character), 5)
+	if !reflect.DeepEqual(last.Payload, want) {
+		t.Fatalf("title payload = %v, want %v", last.Payload, want)
 	}
 }
 
