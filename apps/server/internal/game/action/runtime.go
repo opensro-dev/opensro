@@ -573,6 +573,10 @@ type Runtime struct {
 	// installs platform/jobhonor only when EnvJobHonor is on.
 	JobHonor     JobHonorSink
 	jobHonorRuns honorRuns
+	// JobHonorRoll is the honor ambush's own roll domain (jobhonor.go).
+	// Nil is the secure roll; never the caravan's domain, whose draws
+	// are the native bandits' and fall where they fall natively.
+	JobHonorRoll combat.Roll32767
 
 	// SunDrops counts Sun drops for the #2538 measurement cycle
 	// (sundrops.go; port-only, not native, count-only). Nil, the

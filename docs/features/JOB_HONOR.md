@@ -45,7 +45,11 @@ system is the Academy's (the native check on #3530).
 - The server pushes a tier roster (wire 0x3FC7) to the division: every entered character holding a tier for the job it is dressed as, rebuilt on a 5-second sweep and sent when the bytes change. The nameplate matches by character name, the way the Contributor roster (0x3FC1) does, so the title shows in the suit whose tier earned it and comes off with it.
 - A malformed roster can only cost the roster: the client lane decodes contained and records a degradation, never the session.
 
-Still later slices of #3530: the ambush.
+## The ambush
+
+- A run - goods bought, or a thief's fresh haul - rolls a one-in-ten chance of an NPC bandit ambush when it opens (inference: the issue's "small chance" gives no number). The roll has its own domain, so the native bandit draws fall exactly where they fall natively.
+- The ambush meets the caravan on the road: at the caravan timer's fire - the carrier alive, its vehicle loaded, standing in a battlefield region, the native pack's own gates - two more bandits of the caravan's own tables spawn beside the native pack and must be fought off. They are ordinary monsters of that fight: if they kill the carrier or its vehicle, the cargo is lost the native way (the death drop). The ledger pays nothing for them: the ambush is a run's risk, never a score.
+- The mark fires once per run; a run whose cargo sold or emptied first never meets its bandits.
 
 ## Days and tiers
 
