@@ -256,6 +256,12 @@ var Settings = []Setting{
 	// Port-only, not native: the Christmas event's snow and town
 	// decoration (progression/christmas.go). Off is native.
 	{Env: "SRO_CHRISTMAS_EVENT", NomadVar: "christmas_event", Default: "off"},
+	// Port-only, not native (#3533): the EventBot host for automated
+	// chat events (social/eventbot). Off is native: nobody answers to
+	// the name EventBot and nothing is announced. The schedule file
+	// itself is named by SRO_EVENT_BOT_FILE, an operator path rather
+	// than a shard rule, like the maintenance gate's file.
+	{Env: "SRO_EVENT_BOT", NomadVar: "event_bot", Default: "off"},
 	{Env: "SRO_CHRISTMAS_EVENT_WINDOW", NomadVar: "christmas_event_window", Default: ""},
 	// Port-only, not native: which Christmas event the switch runs,
 	// "winter" (Winter Princess and Knights) or "so_ok_2006" (So-Ok's Christmas Gift,
@@ -309,6 +315,11 @@ var Settings = []Setting{
 	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},
 	// Port-only, off by default: a unique's attackers see its damage ranking.
 	{Env: "SRO_UNIQUE_DAMAGE_RANK", NomadVar: "unique_damage_rank", Default: "off"},
+	// Port-only, not native (#3531): the in-game Unique Status window's
+	// feed - every unique's alive/dead state, death time and killer,
+	// composed from the same owners as the public API's uniques page
+	// (game/uniquestatus). Off, no frame is ever sent.
+	{Env: "SRO_UNIQUE_STATUS", NomadVar: "unique_status", Default: "off"},
 	// Owner, 2026-10-15: a login inside a closed object (a tree trunk) is
 	// rescued to the nearest open ground.
 	{Env: "SRO_CLOSED_OBJECT_RESCUE", NomadVar: "closed_object_rescue", Default: "on"},

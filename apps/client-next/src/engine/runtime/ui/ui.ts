@@ -461,6 +461,8 @@ import { textAllowed } from "@/engine/foundation/ui/character-create";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { compositeItemCaption, compositeItemLayout, createCompositeItemHud } from "./hud/composite-item-hud";
 import { createUniqueRankHud } from "./hud/unique-rank-hud";
+import { createUniqueStatusHud, notifyBrowserUnique } from "./hud/unique-status-hud";
+import { UNIQUE_STATUS_HEIGHT, UNIQUE_STATUS_WIDTH, uniqueStatusView } from "./hud/unique-status-view";
 import {
 	createServerEventHud,
 	gaugeRatio,
@@ -481,6 +483,8 @@ import { drawSroMacro, type MacroPaint, macroPotionStock } from "./hud/sro-macro
 import { createMarketHud, MARKET_BAG_FIRST_SLOT, MARKET_HOTKEY_VK } from "./hud/market-hud";
 import { drawMarketWindow, type MarketPaint } from "./hud/market-window";
 import { uniqueRankLines } from "@/engine/foundation/gameplay/unique-rank";
+import { uniqueStatusAlertText } from "@/engine/foundation/gameplay/unique-status";
+import type { UniqueStatusFlip, UniqueStatusTab } from "@/engine/foundation/gameplay/unique-status";
 import {
 	allianceButtons,
 	allianceGuildCountText,
@@ -973,6 +977,7 @@ import {
 	systemMenuHeight,
 	EXPERIMENTAL_MENU_ID,
 	EVENT_CALENDAR_MENU_ID,
+	UNIQUE_STATUS_MENU_ID,
 	JOB_HONOR_MENU_ID
 } from "@/engine/foundation/ui/system-menu";
 import {
@@ -1407,11 +1412,11 @@ export function createUi( ports: UiPorts ) {
 	const jobHonor = createJobHonorHud();
 	// The System menu's extra rows: one menu id per Experimental row
 	// that adds an entry, in the order the entries stack (#3532's
-	// calendar, then #3530's Job Honor Rank; 17 is the Unique Status
-	// window's, #3531). One click route maps each id to the window it
-	// opens.
+	// calendar, then #3531's Unique Status, then #3530's Job Honor
+	// Rank). One click route maps each id to the window it opens.
 	const SYSTEM_MENU_WINDOWS: Readonly<Record<number, string>> = {
 		[EVENT_CALENDAR_MENU_ID]: "Event Calendar",
+		[UNIQUE_STATUS_MENU_ID]: "Unique Status",
 		[JOB_HONOR_MENU_ID]: "Job Honor Rank"
 	};
 
@@ -1423,6 +1428,7 @@ export function createUi( ports: UiPorts ) {
 	function systemMenuExtras(): readonly number[] {
 		const extras: number[] = [];
 		if ( experimental.state().saved.eventCalendar ) extras.push( EVENT_CALENDAR_MENU_ID );
+		if ( experimental.state().saved.uniqueStatus ) extras.push( UNIQUE_STATUS_MENU_ID );
 		if ( experimental.state().saved.jobHonor ) extras.push( JOB_HONOR_MENU_ID );
 		return extras;
 	}
@@ -1759,6 +1765,11 @@ export function createUi( ports: UiPorts ) {
 	const compositeItemHud = createCompositeItemHud();
 	// Port-only, not native: a unique kill's damage ranking (SRO_UNIQUE_DAMAGE_RANK).
 	const uniqueRankHud = createUniqueRankHud();
+	const uniqueStatusHud = createUniqueStatusHud( extensions.uniqueNotifyBook?.() ?? {} );
+	// Port-only (#3531): the Unique Status window's last drawn list (its
+	// wheel and thumb drag find it here) and the server clock's base: the
+	// last feed's server time and the local time it landed, so the Died
+	// column's "ago" runs between updates.
 	// The v1.696 client's Server Mission gauge (CNIFServerEvent, 0x34F2): native, no row.
 	const serverEventHud = createServerEventHud();
 	// Port-only, not native (#3907): the v1.696 SRO Macro windows (SRO_AUTO_MACRO).
@@ -5668,6 +5679,20 @@ export function createUi( ports: UiPorts ) {
 		} else if ( id === "unique-rank-ok" || id === "unique-rank-close" ) {
 			uniqueRankHud.close();
 			dirty = true;
+		} else if ( id.startsWith( "unique-status-" ) ) {
+			// Port-only (#3531): the window's clicks; the page keeps the
+			// two platform calls a Save can ask for.
+			const action = uniqueStatusHud.click( id );
+			if ( action ) {
+				if ( action.save ) extensions.saveUniqueNotify?.( uniqueStatusHud.character(), action.save );
+				if (
+					action.askPermission && typeof Notification !== "undefined" &&
+					Notification.permission === "default"
+				) {
+					void Notification.requestPermission();
+				}
+				dirty = true;
+			}
 		} else if ( id === "server-event-close" ) {
 			serverEventHud.close();
 		} else if ( id.startsWith( MACRO_ID ) || id === "sro-macro-close" ) {
@@ -8063,6 +8088,16 @@ export function createUi( ports: UiPorts ) {
 							down = controls.find( c => c.id === "magic-option-down" );
 						if ( up && down ) magicOptionHud.drag( event.dy, down.rect[1] - up.rect[1] - 32, count );
 					}
+					dirty = true;
+					return;
+				}
+			}
+			if (
+				(event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end") &&
+				panel === "Unique Status"
+			) {
+				// Port-only (#3531): the list's wheel and thumb live in the hud.
+				if ( uniqueStatusHud.pointer( event ) ) {
 					dirty = true;
 					return;
 				}
@@ -10879,6 +10914,27 @@ export function createUi( ports: UiPorts ) {
 				phase === "world" &&
 				uniqueRankHud.reconcile( next.gameplay, experimental.state().saved.uniqueDamageRank )
 			) dirty = true;
+			if ( phase === "world" ) {
+				// Port-only (#3531): the Unique Status alerts. The notify
+				// list belongs to the character in the world; a marked
+				// unique's spawn (and death, when allowed) raises the
+				// in-game line and, once the player allowed it on Save,
+				// the browser's notification. (The panel itself follows
+				// the menu's gating, like the Event Calendar's.)
+				uniqueStatusHud.attach( next.session?.character ?? "" );
+				const alertFlips = uniqueStatusHud.reconcile(
+					next.gameplay?.uniqueStatus,
+					experimental.state().saved.uniqueStatus
+				);
+				for ( const flip of alertFlips ) {
+					sendGameplay( {
+						kind: "local-notice",
+						notice: { key: "", value: 0, text: uniqueStatusAlertText( flip ) }
+					} );
+					notifyBrowserUnique( flip, uniqueStatusHud.savedSettings().browser );
+					dirty = true;
+				}
+			}
 			// Port-only (#3532): the calendar fetches only while its panel is open.
 			eventCalendar.frame( apiBase, Date.now(), panel === "Event Calendar" );
 			// Port-only (#3530): the honor window reads the worker's feed
@@ -10964,6 +11020,7 @@ export function createUi( ports: UiPorts ) {
 					persistWindowPositions();
 					guildWarHud.reset( true );
 					uniqueRankHud.reset();
+					uniqueStatusHud.reset();
 					eventCalendar.reset();
 					jobHonor.reset();
 					sroMacroHud.reset();
@@ -17657,6 +17714,79 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					}
 					button( "unique-rank-ok", hudCopy( "UIIT_CTL_CONFIRM" ), px + (width - 120) / 2, py + height - 40 );
 					endWindow( admission, "unique-rank" );
+				}
+				const uniqueStatusState = uniqueStatusHud.state();
+				if ( panel === "Unique Status" && game ) {
+					// Port-only, not native (#3531): the window is drawn from the
+					// operations unique-status-view.ts shapes; this loop only
+					// paints them with the ordinary window primitives.
+					const feed = next.gameplay?.uniqueStatus ?? null;
+					const admission = beginWindow();
+					const statusView = uniqueStatusView( {
+						origin: windowOrigin( "UniqueStatus", [
+							(w - UNIQUE_STATUS_WIDTH) / 2,
+							Math.max( 0, (h - UNIQUE_STATUS_HEIGHT) / 3 ),
+							UNIQUE_STATUS_WIDTH,
+							UNIQUE_STATUS_HEIGHT
+						] ),
+						feed,
+						tab: uniqueStatusState.tab,
+						firstRow: uniqueStatusState.firstRow,
+						draft: uniqueStatusHud.draft(),
+						dirty: uniqueStatusHud.dirty(),
+						hover,
+						serverNowMs: uniqueStatusHud.serverNowMs( feed, next.simulationTimeMs ?? 0 )
+					} );
+					uniqueStatusHud.noteDrawn( statusView.list );
+					for ( const op of statusView.ops ) {
+						if ( op.kind === "box" ) {
+							windowBox( op.title, op.rect[0], op.rect[1], op.rect[2], op.rect[3] );
+							closeButton(
+								op.rect[0] + op.rect[2] - 26,
+								op.rect[1] + 10,
+								panelCloseId( "Unique Status" )
+							);
+						} else if ( op.kind === "button" ) {
+							button( op.id, op.label, op.rect[0], op.rect[1], op.rect[2], op.disabled, op.selected );
+						} else if ( op.kind === "image" ) {
+							image( op.rect, op.path );
+						} else if ( op.kind === "text" ) {
+							quads.push(
+								...text.quads( op.value, op.rect, op.rect, op.color, {
+									hAlign: op.hAlign,
+									vAlign: op.vAlign,
+									overflow: "ellipsis"
+								} )
+							);
+						} else if ( op.kind === "rect" ) {
+							rect( op.rect, op.color );
+						} else if ( op.kind === "hit" ) {
+							controls.push( {
+								id: op.id,
+								label: op.label,
+								kind: "button",
+								rect: op.rect,
+								selected: op.selected
+							} );
+						} else if ( op.kind === "scrollbar" ) {
+							const bar = chatScrollbar(
+								op.id,
+								op.rect,
+								op.total,
+								op.page,
+								op.value,
+								resources.size,
+								full,
+								hover,
+								pressed
+							);
+							paths.push( ...bar.paths );
+							quads.push( ...bar.quads );
+							controls.push( ...bar.controls );
+							uniqueStatusHud.noteDrawn( statusView.list, bar.travel );
+						}
+					}
+					endWindow( admission, "unique-status" );
 				}
 				// The bag scroll's box (561D50 opens type 0x21 at 562251) and
 				// 6AD990's type 0x24 box are one box: 52F460 runs 53259C for both,

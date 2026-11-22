@@ -858,6 +858,7 @@ export interface GameplayState extends MoverPublication {
 	readonly uniqueDamageRank?: import("./unique-rank").UniqueDamageRank | null;
 	// Port-only job honor board and own standing (job-honor.ts), under SRO_JOB_HONOR.
 	readonly jobHonor?: import("./job-honor").JobHonorFeed | null;
+	readonly uniqueStatus?: import("./unique-status").UniqueStatusFeed | null;
 	// Port-only most-wanted state of the local player (most-wanted.ts).
 	readonly mostWanted?: import("./most-wanted").MostWantedState;
 	// Port-only Blue Berserk level of the local player (hwan-level.ts); absent at 0.

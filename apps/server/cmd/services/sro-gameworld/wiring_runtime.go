@@ -133,6 +133,14 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		}
 		return nil
 	}})
+	// Port-only (#3533): the EventBot host's rounds run on the mission
+	// clock. Off installs no hook and nothing is ever announced.
+	if game.eventBot != nil {
+		hooks = append(hooks, simulation.NamedTickHook{Name: "event-bot", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			game.eventBot.Tick(time.UnixMilli(nowMs))
+			return nil
+		}})
+	}
 	// Port-only (#3529, SRO_CONSIGNMENT): gold a market sale owes a
 	// character reaches it once it is in the world (action market.go).
 	// Off installs no hook.
@@ -173,6 +181,13 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	if game.honorFeed != nil {
 		hooks = append(hooks, simulation.NamedTickHook{Name: "job-honor", Hook: func(nowMs int64) []simulation.DivisionFrames {
 			return game.jobHonorTick(ticker, nowMs)
+		}})
+	}
+	// Port-only (#3531): the Unique Status feed's snapshots and
+	// updates; the service paces the pass itself.
+	if game.uniqueStatus != nil {
+		hooks = append(hooks, simulation.NamedTickHook{Name: "unique-status", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			return game.uniqueStatusTick(ticker, nowMs)
 		}})
 	}
 	if game.caravanAgents != nil {

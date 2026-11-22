@@ -408,6 +408,7 @@ import { createTradeProgress } from "./trade-progress/trade-progress";
 import { createServerEvent } from "./server-event/server-event";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createJobHonor } from "./job-honor/job-honor";
+import { createUniqueStatus } from "./unique-status/unique-status";
 import { createHwanLevel } from "./hwan-level/hwan-level";
 import { createMostWanted } from "./most-wanted/most-wanted";
 import { createPetTraining } from "./pet-training/pet-training";
@@ -785,6 +786,7 @@ export function createGameplay(
 		serverEvent = createServerEvent(),
 		uniqueRank = createUniqueDamageRank(),
 		jobHonor = createJobHonor(),
+		uniqueStatus = createUniqueStatus(),
 		mostWanted = createMostWanted(),
 		hwanLevel = createHwanLevel(),
 		// The wolf tree's worn gear resolves through the bag's references.
@@ -1973,6 +1975,7 @@ clears it when another character enters.
 		macroHuntLastActionAtMs = 0;
 		uniqueRank.clear();
 		jobHonor.clear();
+		uniqueStatus.clear();
 		mostWanted.clear();
 		hwanLevel.clear();
 		petTraining.clear();
@@ -4671,6 +4674,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( uniqueStatus.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( jobHonor.receive( frame ) ) {
 					dirty = true;
 					return true;
@@ -6797,6 +6804,9 @@ The published plane when something changed since the last take, else null.
 				...(sroMacro.view() ? { sroMacro: sroMacro.view() } : {}),
 				uniqueDamageRank: uniqueRank.current(),
 				jobHonor: jobHonor.current(),
+				// Port-only (#3531): the Unique Status feed
+				// (unique-status.ts), under SRO_UNIQUE_STATUS.
+				uniqueStatus: uniqueStatus.current(),
 				mostWanted: mostWanted.current(),
 				hwanLevel: localGid === undefined ? undefined : hwanLevel.levelOf( localGid ) || undefined,
 				hwanLevels: hwanLevel.all(),

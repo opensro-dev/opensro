@@ -33,8 +33,10 @@ import (
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/contributor"
+	"opensro.online/server/internal/game/social/eventbot"
 	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/tunables"
+	"opensro.online/server/internal/game/uniquestatus"
 	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/climate"
 	"opensro.online/server/internal/game/world/monster"
@@ -197,6 +199,10 @@ func publicRules() publicstats.RulesResponse {
 	alchemyMaxPlusNow := fmt.Sprintf("The native +%d reinforcement ceiling applies.", alchemy.NativeReinforceCeiling)
 	if alchemyMaxPlus > 0 {
 		alchemyMaxPlusNow = fmt.Sprintf("Reinforcement stops at +%d.", alchemyMaxPlus)
+	}
+	eventBotNow := "Nobody answers to the name EventBot; no automated chat events run."
+	if eventbot.EnabledFromEnv() {
+		eventBotNow = "EventBot announces the schedule file's chat events, takes entries and answers by whisper, draws each round's winner and pays the file's item prize (audited, capped per account per day)."
 	}
 	return publicstats.RulesResponse{
 		Rules: []publicstats.Rule{
@@ -644,6 +650,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "When a unique dies, the shard is told only who killed it.",
 				Now:    "Everyone who damaged it also sees the twelve players who did the most damage, with each one's share and party place, and their own place.",
 				Why:    "So every attacker sees what their part was. Off by default; the original notice alone is the native setting."},
+			{Flag: eventbot.EnvEventBot, On: eventbot.EnabledFromEnv(),
+				Native: "Nobody answers to the name EventBot; the original runs no automated chat events.",
+				Now:    eventBotNow,
+				Why:    "Automated chat events from the shard's schedule file, with drawn winners and audited item prizes. Off by default; the original silence is the native setting."},
 			{Flag: movement.EnvCaveSeamStep, On: movement.CaveSeamStepFromEnv(),
 				Native: "A monster chasing you through a cave can get stuck pacing at a few doorways.",
 				Now:    "It steps through those doorways and keeps following.",
@@ -737,6 +747,10 @@ func publicRules() publicstats.RulesResponse {
 				Now: fmt.Sprintf("Everyone sees \"<alias> failed +N on <item>: destroyed\", \"saved by Immortal\" or \"dropped to +M\" for a failed reinforce attempted at +%d or above, for players who opted in on the account page, named by job alias (\"a player\" when they set none), never by character name.",
 					action.AnnouncementsFromEnv().PlusFailMin),
 				Why: "Owner report (#2852), keeping the break notice's alias rule (#1738); the original silence returns with one setting, and the opt-in stays off until a player turns it on."},
+			{Flag: uniquestatus.EnvUniqueStatus, On: uniquestatus.Enabled(os.Getenv),
+				Native: "No window lists the uniques; a spawn or a kill is announced as it happens and then is gone.",
+				Now:    "The Unique Status window (Experimental row) lists every unique with its level, Alive or Dead, and for the dead when it died (server time) and who killed it - the same states and kill record as the public API's uniques page. A player can mark uniques to be told in game, and in the browser, when they spawn or die.",
+				Why:    "Feature request (#3531), so hunters can see which uniques are up without leaving the game; the original silence returns with one setting, and no respawn timing is ever shown."},
 			{Flag: action.EnvJobKillNoticeRepeat, On: action.AnnouncementsFromEnv().JobKillRepeat,
 				Native: fmt.Sprintf("The same two players' job kills are announced at most once every %d minutes.",
 					settings.Int(tunables.JobKillRepeatMinutes)),

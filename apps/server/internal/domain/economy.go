@@ -54,7 +54,10 @@ var economyDoorReasons = map[string]economyDoorReason{
 	// before the creation seed existed) at its first world entry.
 	"create-character": {gain: "starting_gold"},
 	"bootstrap-seed":   {gain: "starting_gold"},
-	"shop-buyback":     {loss: "buyback"},
+	// An EventBot win (social/eventbot, port-only #3533): the prize
+	// item lands in the winner's bag through this door.
+	"eventbot-reward": {gain: "event_reward"},
+	"shop-buyback":    {loss: "buyback"},
 	// A portal or guide's fee, and its refund when the travel rolls back.
 	"portal-travel":         {loss: "teleport_fee"},
 	"guide-reverse-return":  {loss: "teleport_fee"},
@@ -173,12 +176,17 @@ const (
 	GrantStarterSilk   = "starter-silk"
 	GrantBetaSilk      = "beta-silk"
 	GrantReferralSilk  = "referral-silk"
+	// GrantEventBotReward is the EventBot host's win payment
+	// (social/eventbot, port-only #3533): an audited free grant, so
+	// the daily win cap reads the same rows the audit keeps.
+	GrantEventBotReward = "eventbot-reward"
 )
 
 // freeGrantDoors are the item doors whose gains count as free grants.
 var freeGrantDoors = map[string]bool{
-	GrantStarterKit:    true,
-	GrantStarterRefill: true,
+	GrantStarterKit:     true,
+	GrantStarterRefill:  true,
+	GrantEventBotReward: true,
 }
 
 /*
@@ -305,6 +313,7 @@ var economyReasonKinds = map[string]string{
 	"most_wanted_bounty":     EconomyKindMint,
 	"fortress_withdraw":      EconomyKindMint,
 	"guild_war_compensation": EconomyKindMint,
+	"event_reward":           EconomyKindMint,
 	"trade_payout":           EconomyKindMint,
 	"trade_sale_credit":      EconomyKindMint,
 	"trade_party_share":      EconomyKindMint,

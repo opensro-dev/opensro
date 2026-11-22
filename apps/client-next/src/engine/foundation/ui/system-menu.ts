@@ -18,8 +18,7 @@ import type { UiRect } from "@/engine/contracts/ui";
 export const SYSTEM_MENU_HEIGHT = 246;
 export const EXPERIMENTAL_MENU_ID = 15;
 export const EVENT_CALENDAR_MENU_ID = 16;
-// 17 is the Unique Status window's (#3531); the Job Honor Rank
-// window's row is 18 (#3530).
+export const UNIQUE_STATUS_MENU_ID = 17;
 export const JOB_HONOR_MENU_ID = 18;
 const ROW_HEIGHT = 34;
 

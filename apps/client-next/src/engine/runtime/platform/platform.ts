@@ -42,6 +42,11 @@ import {
 	type ExperimentalOptions
 } from "@/engine/foundation/ui/experimental-options";
 import { gameOptions, initialGameOptions, type GameOptions } from "@/engine/foundation/gameplay/game-options";
+import {
+	uniqueNotifyBook,
+	uniqueNotifySettings,
+	type UniqueNotifySettings
+} from "@/engine/foundation/gameplay/unique-status";
 import { windowPositions, type WindowPositions } from "@/engine/foundation/ui/window-positions";
 import { createUiBridge } from "./ui/ui";
 import { createTelemetry } from "./telemetry";
@@ -137,6 +142,16 @@ export function createPlatform(
 		status.value = "Experimental options could not be restored: " + String( error );
 	}
 	onUi( { kind: "experimental-preferences", value: experimental } );
+	// Port-only (#3531): the Unique Status window's notify book,
+	// character name to its list. A corrupt record restores as empty.
+	const uniqueNotifyKey = "sro:v1150:unique-notify:1";
+	let uniqueNotify: Readonly<Record<string, UniqueNotifySettings>> = {};
+	try {
+		const stored = localStorage.getItem( uniqueNotifyKey );
+		if ( stored !== null ) uniqueNotify = uniqueNotifyBook( JSON.parse( stored ) );
+	} catch ( error ) {
+		status.value = "Unique notify list could not be restored: " + String( error );
+	}
 	const preferenceKey = "sro:v1150:game-options:1";
 	let preferences = initialGameOptions();
 	try {
@@ -698,6 +713,24 @@ export function createPlatform(
 	return {
 		displayScale,
 		saveExperimentalOptions,
+		// Port-only (#3531): the Unique Status window's notify book.
+		uniqueNotifyBook: () => uniqueNotify,
+		/*
+		================
+		saveUniqueNotify
+
+		One character's saved notify list joins the book and persists.
+		================
+		*/
+		saveUniqueNotify( character: string, value: UniqueNotifySettings ) {
+			if ( !character ) return;
+			uniqueNotify = { ...uniqueNotify, [character]: uniqueNotifySettings( value ) };
+			try {
+				localStorage.setItem( uniqueNotifyKey, JSON.stringify( uniqueNotify ) );
+			} catch ( error ) {
+				status.value = "Unique notify list could not be saved: " + String( error );
+			}
+		},
 		/*
 		================
 		saveCameraWaypoints
