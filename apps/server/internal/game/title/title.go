@@ -16,8 +16,8 @@ codenames and categories stay server-side for the title window slice.
 
 The later client keeps the id on the character object (v1.696 client,
 pinned sha256 52118aaf075877851483d400b6b2905943e47b97b971d85b6cf59c3032c32d34:
-name builder 0xF5F7C0 reads it at object+0x88, the by-id lookup
-0x907190 resolves it and the record text at +0x28 prints through the
+name builder F5F7C0 reads it at object+0x88, the by-id lookup
+907190 resolves it and the record text at +0x28 prints through the
 format). Which spawn-stream read stores it there was not isolated in
 that build, so no native byte position is claimed; the id is plainly
 server-supplied there (nothing local writes it outside the title
