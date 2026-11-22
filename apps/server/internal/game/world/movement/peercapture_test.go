@@ -74,7 +74,7 @@ captures zero.
 ================
 */
 func TestPeerAppearanceCaptureCarriesTitleID(t *testing.T) {
-	c := &domain.Character{Name: "Titled", TitleID: 5}
+	c := &domain.Character{Name: "Titled", TitleState: domain.TitleState{TitleID: 5}}
 	captured := capturePeerAppearance(c, 1907)
 	if captured.titleID != 5 {
 		t.Fatalf("captured titleID = %d, want 5", captured.titleID)

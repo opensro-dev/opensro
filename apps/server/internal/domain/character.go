@@ -378,11 +378,9 @@ type Character struct {
 	// stores the item's reference id in the persistent record. Zero is the
 	// country's default stall.
 	StallDecoration uint32 `json:"stallDecoration,omitempty"`
-	// TitleID is the character title the character wears (later-native,
-	// #3502, schema 49): the later client's RefTitle id its name line
-	// prints through (game/title). Zero is no title, the native default
-	// every record starts with; choosing one is the title window slice.
-	TitleID uint32 `json:"titleId,omitempty"`
+	// The worn title (later-native, #3502, schema 49); character_title.go
+	// owns the title state.
+	TitleState
 	// PublicHidden keeps the character off the community site's public read
 	// API (port-only, not native: the opensro.online privacy choice). Its
 	// kills read as "a hunter" there and its profile answers 404.
@@ -977,29 +975,4 @@ type TimedSkillJob struct {
 	SkillID     uint32 `json:"skillId"`
 	Token       uint32 `json:"token"`
 	RemainingMs uint32 `json:"remainingMs"`
-}
-
-/*
-================
-MostWanted
-
-A suited player's streak of counted job kills (port-only, not native;
-action/mostwanted.go). Death clears it; the wanted level also decays
-one level per day without a counted kill (NextDecayAtMs). Taking the
-suit off keeps it: only the bonuses shelve while the suit is off.
-================
-*/
-type MostWanted struct {
-	Streak int64 `json:"streak"`
-	// ExpiresAtMs was the seven-day lapse stamp (schema 35), retired
-	// by the decay at schema 40: no reader remains, and the field
-	// stays only so records a rolled-back release writes still
-	// decode. Dropping it is a later schema step's work.
-	ExpiresAtMs int64 `json:"expiresAtMs,omitempty"`
-	// NextDecayAtMs is when the next decay step lands (Unix
-	// milliseconds), restamped by every counted kill. Streaks saved
-	// before the field existed carry zero: the first door that judges
-	// the streak stamps a fresh day instead of dropping a level, so
-	// no saved streak ever decays early.
-	NextDecayAtMs int64 `json:"nextDecayAtMs,omitempty"`
 }
