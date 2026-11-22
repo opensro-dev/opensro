@@ -145,6 +145,7 @@ type Deps struct {
 	// MoonlitThiefSuit publishes the port-only SRO_MOONLIT_THIEF_SUIT rule
 	// (action/moonlitthiefsuit.go); false is native.
 	MoonlitThiefSuit bool
+	InventorySort    bool // port-only SRO_INVENTORY_SORT (action/inventorysort.go); false is native
 	// Alexandria publishes the port-only SRO_ALEXANDRIA switch
 	// (world/alexandria); false is native.
 	Alexandria bool

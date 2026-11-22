@@ -206,6 +206,15 @@ export interface ChatLine {
 }
 /*
 ================
+InventorySortContainer
+
+Port-only, not native (SRO_INVENTORY_SORT): what a sort
+rearranges. "storage" is the open warehouse, personal or guild.
+================
+*/
+export type InventorySortContainer = "bag" | "storage" | "cos";
+/*
+================
 GameplayCommand
 
 Closed intent vocabulary accepted by the simulation command owner. Server
@@ -470,6 +479,11 @@ export type GameplayCommand =
 		// drop-action gate (594980) that owns the free-battle warning.
 		readonly activation?: boolean;
 	}
+	// Port-only, not native (SRO_INVENTORY_SORT): sort the bag,
+	// the open warehouse (personal or guild) or a companion's bag with
+	// ordinary moves, one at a time (inventory-sort-run.ts). gid names the
+	// companion.
+	| { readonly kind: "inventory-sort"; readonly container: InventorySortContainer; readonly gid?: number; }
 	| {
 		readonly kind: "item-use";
 		readonly slot: number;
@@ -936,6 +950,9 @@ export interface GameplayState extends MoverPublication {
 	readonly alexandria?: boolean;
 	// Port-only SRO_RAISED_GOLD_CAPS: the stall and warehouse deposit caps are raised.
 	readonly raisedGoldCaps?: boolean;
+	// Port-only SRO_INVENTORY_SORT, published at world entry: the bag, the
+	// warehouses and companion bags carry a sort button (inventory-sort-run.ts).
+	readonly inventorySort?: boolean;
 	// The Experimental "Homing projectiles" row (port-only, default off):
 	// target-bone projectiles re-read the victim's socket in flight instead of
 	// flying to the launch-captured endpoint (effects.ts).
@@ -1078,6 +1095,9 @@ export interface GameplayState extends MoverPublication {
 	readonly avatarInventory?: readonly InventoryItem[];
 	readonly inventory: readonly InventoryItem[];
 	readonly inventoryPending: boolean;
+	// Port-only, not native: the container a sort is rearranging
+	// (inventory-sort-run.ts), absent when none is.
+	readonly inventorySorting?: InventorySortContainer;
 	// Port-only diagnostics: the bag slots each inventory answer changed,
 	// flattened rows (foundation/gameplay/inventory-journal.ts).
 	readonly inventoryJournal?: readonly number[];
