@@ -71,8 +71,8 @@ The frames of one monster's publication that one of its viewers may
 take. Every frame reaches every viewer of the monster except a 0xB4B5
 ride state: a ride state names its rider, and the client applies it to
 that rider with no absent-actor arm (client 0x777F60: the registry
-find at 0x777FB2 flows untested into CICharactor_SetMountedActionState
-at 0x777FC3), so it may reach only a viewer that holds the rider - a
+find at client 0x777FB2 flows untested into CICharactor_SetMountedActionState
+at client 0x777FC3), so it may reach only a viewer that holds the rider - a
 session whose published set names it, or the rider's own session,
 which owns the mount. A slain mounted pet's dismount therefore leaves
 with the pet's death frames for the monster's viewers who hold the
