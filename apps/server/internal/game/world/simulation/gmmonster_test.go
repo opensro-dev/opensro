@@ -63,6 +63,35 @@ func TestArenaEliteOverrideKeepsNativeGMResolution(t *testing.T) {
 
 /*
 ================
+TestDespawnGMMonsterRemovesTheTrackedSpawn
+
+The port-only despawn takes a tracked GM spawn out silently (the
+EventBot hider at round end); anything not GM-spawned stays.
+================
+*/
+func TestDespawnGMMonsterRemovesTheTrackedSpawn(t *testing.T) {
+	state, lease := gmMonsterState(t, 0)
+	ids := state.SpawnGMMonstersTracked(GMMonsterSpawn{Division: "gm", Population: lease, RefObjID: 1, Count: 1,
+		Position: Spawn{RegionID: 23644, X: 100, Z: 100}, NowMs: 1000})
+	if len(ids) != 1 {
+		t.Fatal("spawn failed")
+	}
+	if !state.DespawnGMMonster("gm", ids[0]) {
+		t.Fatal("the tracked spawn refused to despawn")
+	}
+	if _, ok := state.Get("gm", ids[0]); ok {
+		t.Fatal("the despawned monster is still in the population")
+	}
+	if state.DespawnGMMonster("gm", ids[0]) {
+		t.Fatal("a second despawn of the same gid reported success")
+	}
+	if state.DespawnGMMonster("gm", 424242) {
+		t.Fatal("an unknown gid reported a despawn")
+	}
+}
+
+/*
+================
 gmMonsterState
 ================
 */

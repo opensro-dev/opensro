@@ -556,7 +556,7 @@ func newGameplayPlane(
 		matches:       matches,
 		siege:         siegeRuntime,
 		betaSilk:      betaSilk,
-		eventBot:      buildEventBot(deps, presence, authorityStore, items),
+		eventBot:      buildEventBot(ownedShard.ID, deps, presence, authorityStore, items),
 	}
 	// The Unique Status feed (port-only, #3531; nil while off).
 	wireUniqueStatus(game, authorityStore)

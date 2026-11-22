@@ -20,7 +20,10 @@ Port-only, not native.
 */
 package eventbot
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 /*
 ================
@@ -43,6 +46,45 @@ type Kind interface {
 	OpenLine(event Event, round int) string
 	// Judge scores one whisper's text for an entrant.
 	Judge(text string) bool
+}
+
+/*
+================
+EntryLiner
+
+A kind with its own entry reply; the host's default names the draw
+at round close. A seek round is won by reaching the hider, so it
+says that instead.
+================
+*/
+type EntryLiner interface {
+	// EntryLine answers a player who just entered the round.
+	EntryLine(event Event, round int) string
+}
+
+/*
+================
+WorldKind
+
+A kind whose rounds act in the world while they run (Hide & Seek,
+#3536): the host spawns its hider through the spawn door when a
+round opens, posts its hints on its own cadence, never draws a
+winner for it (the first finder reported to the host wins instead),
+and despawns the hider when the round ends however it ends.
+ValidateEvent refuses a schedule row the kind cannot run.
+================
+*/
+type WorldKind interface {
+	Kind
+	// ValidateEvent checks the row's world fields (hider, spots).
+	ValidateEvent(event Event) error
+	// SpotFor picks the round's hiding spot, deterministically.
+	SpotFor(event Event, round int) (Spot, bool)
+	// Hint is the hint posted at elapsed into the round. It is built
+	// from the spot's name only: coordinates never reach a hint.
+	Hint(event Event, spot Spot, elapsed time.Duration) string
+	// HintEvery is the hint cadence inside a round.
+	HintEvery() time.Duration
 }
 
 // kinds is the registry, by data-file name.
