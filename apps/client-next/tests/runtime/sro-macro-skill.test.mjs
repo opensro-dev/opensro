@@ -104,7 +104,13 @@ skillRef
 */
 /**
  * @param {number} id
- * @param {{ targetRequired?: boolean, actionMs?: number, group?: number, admit?: object }} [over]
+ * @param {{
+ *   targetRequired?: boolean,
+ *   actionMs?: number,
+ *   group?: number,
+ *   admit?: object,
+ *   effectDurationMs?: number
+ * }} [over]
  */
 function skillRef( id, over = {} ) {
 	return {
