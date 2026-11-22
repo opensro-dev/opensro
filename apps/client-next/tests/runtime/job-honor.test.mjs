@@ -25,7 +25,14 @@ const { createJobHonor, OP_JOB_HONOR_SNAPSHOT } = await load(
 const { honorRows, honorToday, honorCountdownText } = await load( "foundation/ui/job-honor.ts" );
 const { jobHonorView, jobHonorPictures } = await load( "runtime/ui/hud/job-honor-view.ts" );
 
+/** @typedef {{ job: number, alias: string, points: number, tier: number, tonight: number }} HonorRowFixture */
+/** @typedef {{ job: number, place: number, tier: number, tonight: number, capLeft: number, today: number[], month: number[] }} HonorOwnFixture */
+
 // A snapshot frame, built the way the server wire writes it.
+/**
+ * @param {{ now?: number, change?: number, prevEnd?: number, current?: HonorRowFixture[],
+ *   previous?: HonorRowFixture[], own?: HonorOwnFixture | null }} [options]
+ */
 function snapshot( { now = 1000, change = 2000, prevEnd = 500, current = [], previous = [], own = null } = {} ) {
 	const bytes = [];
 	const u8 = value => bytes.push( value & 0xff );
@@ -40,6 +47,7 @@ function snapshot( { now = 1000, change = 2000, prevEnd = 500, current = [], pre
 			left >>= 8n;
 		}
 	};
+	/** @param {HonorRowFixture} entry */
 	const row = entry => {
 		u8( entry.job );
 		const alias = new TextEncoder().encode( entry.alias );
