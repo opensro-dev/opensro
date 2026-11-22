@@ -27,7 +27,12 @@ const {
 	spanText,
 	eventStatusText
 } = await load( "foundation/ui/event-calendar.ts" );
-const { systemMenu, SYSTEM_MENU_HEIGHT } = await load( "foundation/ui/system-menu.ts" );
+const {
+	systemMenu,
+	systemMenuHeight,
+	SYSTEM_MENU_HEIGHT,
+	EVENT_CALENDAR_MENU_ID
+} = await load( "foundation/ui/system-menu.ts" );
 const { experimentalOptions } = await load( "foundation/ui/experimental-options.ts" );
 
 // Monday 2026-11-23 12:00 UTC on the server.
@@ -133,7 +138,7 @@ test("a malformed feed is refused whole", () => {
 	);
 });
 
-test("the System menu gains the calendar row only while its Experimental row is on", () => {
+test("the System menu stacks the extra rows it is given after Experimental", () => {
 	const layout = Object.fromEntries(
 		[ 10, 11, 13, 14 ].map(
 			id => [ "node" + id, { id, text: "UIIT_" + id, size: [ 160, 26 ], rect: [ 0, 0, 160, 26 ] } ]
@@ -141,11 +146,15 @@ test("the System menu gains the calendar row only while its Experimental row is 
 	);
 	layout.GDR_SYSTEM_FRAME = { id: 0, text: "GDR_SYSTEM_FRAME", size: [ 214, 212 ], rect: [ 0, 0, 214, 212 ] };
 	layout.GDR_SYSTEM_BGTILE = { id: 0, text: "GDR_SYSTEM_BGTILE", size: [ 214, 146 ], rect: [ 0, 0, 214, 146 ] };
-	const off = systemMenu( layout, 0, 0, false ), on = systemMenu( layout, 0, 0, true );
+	const off = systemMenu( layout, 0, 0, [] ), on = systemMenu( layout, 0, 0, [ EVENT_CALENDAR_MENU_ID ] );
 	assert.deepEqual( off.buttons.map( button => button.id ), [ 10, 15, 11, 13, 14 ] );
 	assert.deepEqual( on.buttons.map( button => button.id ), [ 10, 15, 16, 11, 13, 14 ] );
 	assert.equal( off.frame[3], SYSTEM_MENU_HEIGHT );
 	assert.equal( on.frame[3], SYSTEM_MENU_HEIGHT + 34 );
+	assert.equal( systemMenuHeight( 0 ), SYSTEM_MENU_HEIGHT );
+	assert.equal( systemMenuHeight( 2 ), SYSTEM_MENU_HEIGHT + 68 );
+	const two = systemMenu( layout, 0, 0, [ EVENT_CALENDAR_MENU_ID, 17 ] );
+	assert.deepEqual( two.buttons.map( button => button.id ), [ 10, 15, 16, 17, 11, 13, 14 ] );
 });
 
 test("the Experimental row is off unless explicitly turned on", () => {

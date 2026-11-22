@@ -267,7 +267,12 @@ import {
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalRows, experimentalTabs } from "./hud/experimental-hud";
 import { createEventCalendarHud } from "./hud/event-calendar-hud";
-import { clockText, dateText, dayHeading, eventStatusText, spanText } from "@/engine/foundation/ui/event-calendar";
+import {
+	EVENT_CALENDAR_HEIGHT,
+	EVENT_CALENDAR_WIDTH,
+	eventCalendarPictures,
+	eventCalendarView
+} from "./hud/event-calendar-view";
 import {
 	EXPERIMENTAL_DESCRIPTION_WIDTH,
 	EXPERIMENTAL_HEAD_HEIGHT,
@@ -1387,6 +1392,24 @@ export function createUi( ports: UiPorts ) {
 	const experimental = createExperimentalHud();
 	// Port-only, not native (#3532): the Event Calendar's feed state.
 	const eventCalendar = createEventCalendarHud();
+	// The System menu's extra rows: one menu id per Experimental row
+	// that adds an entry, in the order the entries stack (#3532's
+	// calendar; #4100's Unique Status adopts this list next). One
+	// click route maps each id to the window it opens.
+	const SYSTEM_MENU_WINDOWS: Readonly<Record<number, string>> = {
+		[EVENT_CALENDAR_MENU_ID]: "Event Calendar"
+	};
+
+	/*
+	================
+	systemMenuExtras
+	================
+	*/
+	function systemMenuExtras(): readonly number[] {
+		const extras: number[] = [];
+		if ( experimental.state().saved.eventCalendar ) extras.push( EVENT_CALENDAR_MENU_ID );
+		return extras;
+	}
 	const companionPotions = createCompanionPotions( pageStorage() );
 	let consolePhase: 0 | 1 | 2 | 3 = 0, consoleY = -112, consoleLast = 0, consoleText = "", gmObserved = 0;
 	let consoleHistory: string[] = [], consoleHistoryIndex = 0;
@@ -9095,7 +9118,7 @@ export function createUi( ports: UiPorts ) {
 				return;
 			}
 			if ( event.kind === "drag" && event.id === "system-drag" && panel === "System" ) {
-				const menuHeight = systemMenuHeight( experimental.state().saved.eventCalendar );
+				const menuHeight = systemMenuHeight( systemMenuExtras().length );
 				systemX = Math.max( 0, Math.min( (view?.width ?? 214) - 214, (systemX ?? 0) + event.dx ) );
 				systemY = Math.max(
 					0,
@@ -14333,7 +14356,7 @@ export function createUi( ports: UiPorts ) {
 					// Clamp at render like the drag does: a position stored on a
 					// larger viewport must not strand the menu off screen after
 					// the window shrinks.
-					const menuHeight = systemMenuHeight( experimental.state().saved.eventCalendar );
+					const menuHeight = systemMenuHeight( systemMenuExtras().length );
 					const sx = Math.max( 0, Math.min( w - 214, systemX ?? Math.trunc( (w - 214) / 2 ) ) ),
 						sy = Math.max(
 							0,
@@ -14342,7 +14365,7 @@ export function createUi( ports: UiPorts ) {
 					systemX = sx;
 					systemY = sy;
 					const authored = hudData.windows.ifsystemwnd!,
-						layout = systemMenu( authored, sx, sy, experimental.state().saved.eventCalendar ),
+						layout = systemMenu( authored, sx, sy, systemMenuExtras() ),
 						inner = authored.GDR_SYSTEM_FRAME!,
 						tile = authored.GDR_SYSTEM_BGTILE!;
 					blocks.push( layout.frame );
@@ -14379,10 +14402,11 @@ export function createUi( ports: UiPorts ) {
 					);
 					closeButton( sx + 188, sy + 10, panelCloseId( "System" ) );
 					for ( const node of layout.buttons ) {
-						const id = node.id === EXPERIMENTAL_MENU_ID ? "open-window:Experimental" : node.id === 10 ?
+						const menuWindow = SYSTEM_MENU_WINDOWS[node.id];
+						const id = node.id === EXPERIMENTAL_MENU_ID ? "open-window:Experimental" : menuWindow ?
+							"open-window:" + menuWindow :
+							node.id === 10 ?
 							"open-window:Option" :
-							node.id === EVENT_CALENDAR_MENU_ID ?
-							"open-window:Event Calendar" :
 							node.id === 11 ?
 							"open-window:Game Guide" :
 							node.id === 13 ?
@@ -14393,168 +14417,53 @@ export function createUi( ports: UiPorts ) {
 							sx,
 							sy,
 							id,
-							node.id === EXPERIMENTAL_MENU_ID ? "Experimental" : node.id === EVENT_CALENDAR_MENU_ID ?
-								"Event Calendar" :
-								hudCopy( node.text )
+							node.id === EXPERIMENTAL_MENU_ID ? "Experimental" : menuWindow ?? hudCopy( node.text )
 						);
 					}
 					endWindow( admission );
 				}
 				if ( panel === "Event Calendar" && hudData ) {
 					const admission = beginWindow();
-					// Port-only, not native (#3532): the week's scheduled events
-					// from the public schedule feed (#3520) in seven day columns,
-					// today first, over the native option window's tile, with the
-					// selected event's detail under the grid. All times are the
-					// feed's server time.
-					const width = 780, height = 470;
+					// Port-only, not native (#3532): the window's drawing is
+					// hud/event-calendar-view.ts's ops; admission, the chrome
+					// and the op-to-quad loop stay here.
 					const [px, py] = windowOrigin( "Event Calendar", [
-						(w - width) / 2,
-						(h - height) / 2,
-						width,
-						height
+						(w - EVENT_CALENDAR_WIDTH) / 2,
+						(h - EVENT_CALENDAR_HEIGHT) / 2,
+						EVENT_CALENDAR_WIDTH,
+						EVENT_CALENDAR_HEIGHT
 					] );
-					const calendar = eventCalendar.state(),
-						nowServer = eventCalendar.serverNowMs( Date.now() );
-					windowBox( "Event Calendar", px, py, width, height );
-					closeButton( px + width - 26, py + 10, panelCloseId( "Event Calendar" ) );
-					const optionLayout = hudData.windows.ifoption!;
-					authoredChrome(
-						{ ...optionLayout.GDR_OPTION_BGTILE!, rect: [ 16, 44, width - 32, 268 ] },
-						px,
-						py
-					);
-					const gold = [ 1, .85, .5, 1 ] as const, dim = [ .72, .72, .72, 1 ] as const;
-					if ( calendar.status === "ready" ) {
-						const columnWidth = 102, gap = 6, left = px + 22, top = py + 52;
-						calendar.week.forEach( ( day, dayIndex ) => {
-							const x = left + dayIndex * (columnWidth + gap),
-								heading = dayHeading( day.startMs, dayIndex === 0 );
-							if ( dayIndex === 0 ) rect( [ x - 3, top - 4, columnWidth + 6, 252 ], [ 1, .85, .5, .08 ] );
-							quads.push(
-								...text.quads(
-									heading.title,
-									[ x, top, columnWidth, 14 ],
-									full,
-									dayIndex === 0 ? gold : white,
-									{
-										hAlign: 1,
-										vAlign: 0
-									}
-								)
-							);
-							quads.push( ...text.quads( heading.date, [ x, top + 14, columnWidth, 14 ], full, dim, {
-								hAlign: 1,
-								vAlign: 0
+					windowBox( "Event Calendar", px, py, EVENT_CALENDAR_WIDTH, EVENT_CALENDAR_HEIGHT );
+					closeButton( px + EVENT_CALENDAR_WIDTH - 26, py + 10, panelCloseId( "Event Calendar" ) );
+					const ops = eventCalendarView( {
+						origin: [ px, py ],
+						tile: hudData.windows.ifoption!.GDR_OPTION_BGTILE!.texture,
+						state: eventCalendar.state(),
+						serverNowMs: eventCalendar.serverNowMs( Date.now() )
+					} );
+					paths.push( ...eventCalendarPictures( ops ) );
+					for ( const op of ops ) {
+						if ( op.kind === "tile" ) {
+							quads.push( ...normalTile( op.rect, op.path, resources.size( op.path ), full ) );
+						} else if ( op.kind === "rect" ) {
+							rect( op.rect, op.color );
+						} else if ( op.kind === "text" ) {
+							quads.push( ...text.quads( op.value, op.rect, full, op.color, {
+								hAlign: op.hAlign,
+								vAlign: op.vAlign
 							} ) );
-							day.events.slice( 0, 6 ).forEach( ( event, index ) => {
-								const r: UiRect = [ x, top + 36 + index * 36, columnWidth, 32 ],
-									skin = ROOT + "interface/option/opt_key02.png",
-									chosen = calendar.selected === event;
-								paths.push( skin );
-								if ( resources.has( skin ) ) rect( r, chosen ? gold : white, skin );
-								quads.push(
-									...text.quads(
-										clockText( event.startsAtMs ),
-										[ r[0] + 5, r[1] + 2, columnWidth - 10, 12 ],
-										full,
-										event.running ? [ .55, 1, .55, 1 ] as const : white
-									)
-								);
-								quads.push(
-									...text.quads(
-										event.title,
-										[ r[0] + 5, r[1] + 15, columnWidth - 10, 12 ],
-										full,
-										white
-									)
-								);
-								controls.push( {
-									id: "event-calendar-event:" + dayIndex + ":" + index,
-									label: event.title,
-									rect: r,
-									kind: "button",
-									selected: chosen,
-									disabled: false
-								} );
+						} else {
+							if ( op.texture && resources.has( op.texture ) ) rect( op.rect, op.color, op.texture );
+							controls.push( {
+								id: op.id,
+								label: op.label,
+								rect: op.rect,
+								kind: "button",
+								selected: op.selected,
+								disabled: false
 							} );
-							if ( day.events.length > 6 ) {
-								quads.push(
-									...text.quads(
-										"+" + (day.events.length - 6) + " more",
-										[ x, top + 36 + 6 * 36, columnWidth, 12 ],
-										full,
-										dim,
-										{
-											hAlign: 1,
-											vAlign: 0
-										}
-									)
-								);
-							}
-							if ( !day.events.length ) {
-								quads.push( ...text.quads( "No events", [ x, top + 36, columnWidth, 12 ], full, dim, {
-									hAlign: 1,
-									vAlign: 0
-								} ) );
-							}
-						} );
-					} else {
-						quads.push( ...text.quads(
-							calendar.status === "failed" ?
-								"The schedule could not be loaded." :
-								"Loading the schedule...",
-							[ px + 22, py + 60, width - 44, 16 ],
-							full,
-							white,
-							{ hAlign: 1, vAlign: 0 }
-						) );
+						}
 					}
-					authoredChrome(
-						{ ...optionLayout.GDR_OPTION_BGTILE!, rect: [ 16, 322, width - 32, 96 ] },
-						px,
-						py
-					);
-					const chosen = calendar.selected;
-					if ( chosen ) {
-						quads.push( ...text.quads( chosen.title, [ px + 28, py + 332, width - 56, 16 ], full, gold ) );
-						quads.push( ...text.quads(
-							dateText( chosen.startsAtMs ) + "  " + spanText( chosen ),
-							[ px + 28, py + 354, width - 56, 14 ],
-							full,
-							white
-						) );
-						quads.push( ...text.quads(
-							eventStatusText( chosen, nowServer ),
-							[ px + 28, py + 374, width - 56, 14 ],
-							full,
-							chosen.running ? [ .55, 1, .55, 1 ] as const : white
-						) );
-					} else if ( calendar.status === "ready" ) {
-						quads.push(
-							...text.quads( "No events this week.", [ px + 28, py + 332, width - 56, 16 ], full, dim )
-						);
-					}
-					if ( calendar.week.length ) {
-						quads.push( ...text.quads(
-							dateText( calendar.week[0]!.startMs ) + " - " + dateText( calendar.week[6]!.startMs ),
-							[ px + 28, py + height - 40, 300, 14 ],
-							full,
-							dim
-						) );
-					}
-					quads.push(
-						...text.quads(
-							"All times are server time.",
-							[ px + width - 328, py + height - 40, 300, 14 ],
-							full,
-							dim,
-							{
-								hAlign: 2,
-								vAlign: 0
-							}
-						)
-					);
 					endWindow( admission );
 				}
 				if ( panel === "Auto Potion" && hudData ) {
