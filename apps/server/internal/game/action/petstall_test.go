@@ -22,6 +22,7 @@ import (
 
 	"github.com/sirupsen/logrus/hooks/test"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -99,6 +100,133 @@ func TestWedgedBattleApproachYieldsToFollow(t *testing.T) {
 	if distance := simulation.WorldDistance2D(pet, owner); distance > 61 {
 		t.Fatalf("the yielded pet ended %.1f units from its owner (stall spot %+v, owner %+v): want the follow stand-off, well inside the %d cancel range",
 			distance, stall, owner, cosCancelRange)
+	}
+}
+
+/*
+================
+TestStalledTargetSitsOutRepeatedOrders
+
+The yield would be undone by re-picking the same target: an order (or
+a macro) repeated at the wedged monster re-enters BATTLE at once,
+three more seconds wedge, yield, repeat - the follow lane never
+collects the ten stops of its warp. A yielded target sits out
+petStallCooldownMs against further orders; after it lapses, the same
+order stands again.
+================
+*/
+func TestStalledTargetSitsOutRepeatedOrders(t *testing.T) {
+	rt, clock, c, m := newPetCombatRuntime(t, 100, attackPetBand)
+	petGID := c.ActiveCOS.GID
+	state := rt.petSessionFor(testDivision, c.Name, petGID)
+	if state == nil || state.mover.AnyFollower() == nil {
+		t.Fatal("fixture pet has no follower")
+	}
+	live, _ := rt.Monsters.Get(testDivision, m.Gid)
+	state.mover.FollowFrom(petGID, simulation.Spawn{RegionID: live.Spawn.RegionID, X: live.Spawn.X - 60, Y: live.Spawn.Y, Z: live.Spawn.Z})
+	rt.ConstrainMovement = func(_ string, from, _ simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return from, nil }
+	rt.HandleCosCommand(testDivision, c, petAttackOrder(petGID, m.Gid))
+	if state.combat == nil {
+		t.Fatal("the attack order left no combat intent")
+	}
+	tick := func(n int) {
+		for range n {
+			clock.now = clock.now.Add(100 * time.Millisecond)
+			rt.TickHook()(clock.NowMs())
+		}
+	}
+	yields := 0
+	for step := 0; step < 100 && state.combat != nil; step++ {
+		tick(1)
+		yields++
+	}
+	if state.combat != nil {
+		t.Fatal("the wedged battle never yielded")
+	}
+
+	// The repeated order lands inside the cooldown: no new battle.
+	rt.HandleCosCommand(testDivision, c, petAttackOrder(petGID, m.Gid))
+	tick(30)
+	if state.combat != nil {
+		t.Fatalf("the yielded target was re-picked inside its cooldown (after %d ticks of follow)", 30)
+	}
+
+	// After the cooldown the same order stands again.
+	tick(100)
+	rt.HandleCosCommand(testDivision, c, petAttackOrder(petGID, m.Gid))
+	if state.combat == nil {
+		t.Fatal("the yielded target stayed refused after its cooldown lapsed")
+	}
+}
+
+/*
+================
+TestStalledTargetSitsOutSightAcquisition
+
+The mercenary loop is faster: no order at all. The soldier acquires
+the wedged monster by sight, yields at the stall, and without the
+cooldown re-acquires it on the very next tick - before one follow
+stop can count. With the cooldown the soldier stays on the follow
+lane, warps home, and only re-acquires the monster (still in sight)
+once the cooldown has lapsed.
+================
+*/
+func TestStalledTargetSitsOutSightAcquisition(t *testing.T) {
+	rt, clock, c, m := newPetCombatRuntime(t, 1000000, domain.MercenaryBand)
+	petGID := c.ActiveCOS.GID
+	state := rt.petSessionFor(testDivision, c.Name, petGID)
+	if state == nil || state.mover.AnyFollower() == nil {
+		t.Fatal("fixture soldier has no follower")
+	}
+	live, _ := rt.Monsters.Get(testDivision, m.Gid)
+	state.mover.FollowFrom(petGID, simulation.Spawn{RegionID: live.Spawn.RegionID, X: live.Spawn.X - 60, Y: live.Spawn.Y, Z: live.Spawn.Z})
+	rt.ConstrainMovement = func(_ string, from, _ simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return from, nil }
+	tick := func(n int) {
+		for range n {
+			clock.now = clock.now.Add(100 * time.Millisecond)
+			rt.TickHook()(clock.NowMs())
+		}
+	}
+	// Acquired by sight alone, then yielded at the stall.
+	acquired := false
+	for step := 0; step < 50 && !acquired; step++ {
+		tick(1)
+		acquired = state.combat != nil
+	}
+	if !acquired {
+		t.Fatal("the soldier never acquired the monster in sight")
+	}
+	yielded := false
+	for step := 0; step < 100 && !yielded; step++ {
+		tick(1)
+		yielded = state.combat == nil
+	}
+	if !yielded {
+		t.Fatal("the wedged soldier never yielded")
+	}
+
+	// Inside the cooldown the monster is in sight the whole time and
+	// is nevertheless not re-acquired; the soldier gets home meanwhile.
+	for step := 0; step < 50; step++ {
+		tick(1)
+		if state.combat != nil {
+			t.Fatalf("the yielded target was re-acquired %d ticks into its cooldown (the loop)", step+1)
+		}
+	}
+	owner := rt.liveSpawn(simulation.WorldKey(testDivision, c.Name), c, clock.NowMs())
+	pet := state.mover.AnyFollower().Position(clock.NowMs())
+	if distance := simulation.WorldDistance2D(pet, owner); distance > 61 {
+		t.Fatalf("the yielded soldier ended %.1f units from its owner inside the cooldown; want the follow stand-off", distance)
+	}
+
+	// Once the cooldown lapses, the still-visible monster is fair again.
+	reacquired := false
+	for step := 0; step < 100 && !reacquired; step++ {
+		tick(1)
+		reacquired = state.combat != nil
+	}
+	if !reacquired {
+		t.Fatal("the yielded target stayed un-acquired after its cooldown lapsed")
 	}
 }
 
