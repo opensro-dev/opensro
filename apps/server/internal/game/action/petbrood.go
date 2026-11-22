@@ -492,7 +492,7 @@ func (rt *Runtime) advanceCrowBroodSession(key petOwnerKey, state *petSession, n
 				if state.combat == nil {
 					rt.cancelPetCombat(childKey, child, now)
 				} else if child.combat == nil || child.combat.target != state.combat.target {
-					rt.orderPetAttack(key.division, state.character, rt.characterSnapshot(key.division, state.character), gid, state.combat.target, now, rt.tickDoors())
+					rt.relayPetAttack(key.division, state.character, gid, state.combat.target, now, rt.tickDoors())
 				}
 			}
 			state.public = append(state.public, output...)
@@ -584,7 +584,7 @@ func (rt *Runtime) advanceCrowBroodSession(key petOwnerKey, state *petSession, n
 			if state.combat == nil {
 				rt.cancelPetCombat(childKey, child, now)
 			} else if child.combat == nil || child.combat.target != state.combat.target {
-				rt.orderPetAttack(key.division, state.character, rt.characterSnapshot(key.division, state.character), pet.GID, state.combat.target, now, rt.tickDoors())
+				rt.relayPetAttack(key.division, state.character, pet.GID, state.combat.target, now, rt.tickDoors())
 			}
 		}
 	}

@@ -1,15 +1,15 @@
 /*
 ===========================================================================
 
-petstall_test.go - a battle approach that stops closing gives up to FOLLOW
+petstall_test.go - a battle approach that cannot reach gives up to FOLLOW
 
-Port-only recovery (see advancePetCombat): the collision owner refuses a
-clipped goal where the native mover slides toward it, so a pet ordered
-onto a target past a wall can be refused every tick where it stands.
-BATTLE's stuck answer retains the fight, so the refused pursuit itself
-yields after petApproachStallMs without progress: the pet leaves BATTLE,
-returns to FOLLOW, and FOLLOW's own stuck answer warps it home. A
-pursuit that keeps closing is never "stalled", however long it runs.
+Port-only recovery (petrecovery.go): native BATTLE's stuck answer retains
+the fight, so a pet ordered onto a target past a wall could stand there
+for as long as the target lived. An approach with no way to strike range
+yields on its first judged tick; one whose way is known but never closes
+yields after petProgressStallMs. Either way the pet leaves BATTLE, returns
+to FOLLOW, and is brought home. A pursuit that keeps closing is never
+"stalled", however long it runs.
 
 ===========================================================================
 */
@@ -31,10 +31,9 @@ import (
 TestWedgedBattleApproachYieldsToFollow
 
 The live pet-stuck report: every approach segment of an ordered wolf
-stops where it starts (the wall it cannot round). The pet must leave
-BATTLE at the stall threshold instead of standing at the stall spot
-until a return scroll, and on the follow lane the same refusal walks
-it home: the follow stuck warp puts it beside its owner.
+stops where it starts (the wall it cannot round) and no route leads past.
+The pet must leave BATTLE at once instead of standing at the wall until a
+return scroll, and the follow lane brings it beside its owner.
 ================
 */
 func TestWedgedBattleApproachYieldsToFollow(t *testing.T) {
@@ -71,8 +70,8 @@ func TestWedgedBattleApproachYieldsToFollow(t *testing.T) {
 	if clearedAt < 0 {
 		t.Fatal("the wedged battle was never yielded: the pet still fights after 10 s (the live freeze)")
 	}
-	if clearedAt < 25 || clearedAt > 45 {
-		t.Fatalf("the wedged battle yielded after %d ticks, want the %d ms stall threshold at the 100 ms cadence", clearedAt, petApproachStallMs)
+	if clearedAt > 3 {
+		t.Fatalf("the battle with no way yielded after %d ticks, want at once (its second pursuit tick)", clearedAt)
 	}
 	if pet := c.CompanionByGID(petGID); pet == nil || pet.CurrentHP == 0 {
 		t.Fatal("the yielded pet is dead; the live reports say alive")
@@ -87,8 +86,7 @@ func TestWedgedBattleApproachYieldsToFollow(t *testing.T) {
 		t.Fatalf("stall reported %d times, want the one report the live server logged", stalled)
 	}
 
-	// On FOLLOW the same refusal is ten stops from home: the follow
-	// stuck warp lands the pet beside its owner.
+	// On FOLLOW the pet is brought beside its owner.
 	for range 100 {
 		tick()
 	}
@@ -100,6 +98,44 @@ func TestWedgedBattleApproachYieldsToFollow(t *testing.T) {
 	if distance := simulation.WorldDistance2D(pet, owner); distance > 61 {
 		t.Fatalf("the yielded pet ended %.1f units from its owner (stall spot %+v, owner %+v): want the follow stand-off, well inside the %d cancel range",
 			distance, stall, owner, cosCancelRange)
+	}
+}
+
+/*
+================
+TestRoutedButNeverClosingBattleYieldsAtTheWatchdog
+
+The watchdog: a route to the target is known, so no move is ever judged
+"no way", but every step is refused. The fight holds through the native
+stuck answer (BATTLE retains it) and the watchdog ends it at the stall
+window, counted as battle_stall.
+================
+*/
+func TestRoutedButNeverClosingBattleYieldsAtTheWatchdog(t *testing.T) {
+	rt, clock, c, m := newPetCombatRuntime(t, 100, attackPetBand)
+	petGID := c.ActiveCOS.GID
+	state := rt.petSessionFor(testDivision, c.Name, petGID)
+	live, _ := rt.Monsters.Get(testDivision, m.Gid)
+	state.mover.FollowFrom(petGID, simulation.Spawn{RegionID: live.Spawn.RegionID, X: live.Spawn.X - 60, Y: live.Spawn.Y, Z: live.Spawn.Z})
+	rt.ConstrainMovement = func(_ string, from, _ simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return from, nil }
+	rt.PlanCompanionRoute = func(from, goal simulation.Spawn) []simulation.Spawn {
+		return []simulation.Spawn{from, {RegionID: from.RegionID, X: from.X, Z: from.Z + 100}, goal}
+	}
+	rt.HandleCosCommand(testDivision, c, petAttackOrder(petGID, m.Gid))
+	clearedAt := -1
+	for step := 1; step <= 100 && clearedAt < 0; step++ {
+		clock.now = clock.now.Add(100 * time.Millisecond)
+		rt.TickHook()(clock.NowMs())
+		if state.combat == nil {
+			clearedAt = step
+		}
+	}
+	if clearedAt < 25 || clearedAt > 45 {
+		t.Fatalf("the routed but never closing battle yielded after %d ticks, want the %d ms watchdog at the 100 ms cadence", clearedAt, petProgressStallMs)
+	}
+	counters := rt.PetCombatCounters()
+	if counters["recovery.battle_stall"] != 1 || counters["recovery.battle_no_route"] != 0 {
+		t.Fatalf("counted %v, want one battle_stall", counters)
 	}
 }
 
@@ -263,7 +299,7 @@ func TestProgressingApproachKeepsFighting(t *testing.T) {
 	if state.combat == nil {
 		t.Fatal("the attack order left no combat intent")
 	}
-	// Past petApproachStallMs of pursuit, still closing: the battle stands.
+	// Past petProgressStallMs of pursuit, still closing: the battle stands.
 	for range 40 {
 		clock.now = clock.now.Add(100 * time.Millisecond)
 		rt.TickHook()(clock.NowMs())

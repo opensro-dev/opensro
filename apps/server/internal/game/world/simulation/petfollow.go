@@ -49,6 +49,22 @@ type PetFollower struct {
 	trail      []Spawn
 	ownerTrail bool
 	following  bool
+	// reach is the last move's reach verdict (Reach).
+	reach PetReach
+}
+
+/*
+================
+PetReach
+
+A move's reach verdict: Blocked when the straight segment toward Goal was
+refused or cut short and no detour leads there; Reached is where that
+segment stops. Goal tells its readers which move the verdict belongs to.
+================
+*/
+type PetReach struct {
+	Goal, Reached Spawn
+	Blocked       bool
 }
 
 // PetRoutePlanner plans a pet's way around what its straight path cannot
@@ -70,6 +86,10 @@ type petDetour struct {
 	// trail marks a route taken from the owner's trail (trailRoute):
 	// its later points may come into straight reach (skipAhead).
 	trail bool
+	// found is the last search's outcome: a route (planned or trail) was
+	// known. It outlives a refused leg and the retry pause after it, so a
+	// pause between plans never reads as "no way" (noteReach).
+	found bool
 }
 
 /*
@@ -263,6 +283,7 @@ func (p *PetFollower) Approach(owner Spawn, speed float64, nowMs int64, stopDist
 		// (a state change clears the stuck count).
 		frames := p.Stop(nowMs)
 		p.ResetStuck()
+		p.reach = PetReach{}
 		return frames
 	}
 	// Reuse the shared region conversion. A pet approaches the owner's live
@@ -286,7 +307,9 @@ func (p *PetFollower) moveTo(goal Spawn, speed float64, nowMs int64, constrain f
 	from := p.Position(nowMs)
 	target := goal
 	goal, fault := constrain(from, target)
-	waypoint, detouring := p.detourWaypoint(from, target, petClip{reached: goal, fault: fault}, nowMs, constrain)
+	straight := petClip{reached: goal, fault: fault}
+	waypoint, detouring := p.detourWaypoint(from, target, straight, nowMs, constrain)
+	p.noteReach(from, target, straight, detouring)
 	if detouring {
 		goal, fault = constrain(from, waypoint)
 	}
@@ -347,6 +370,41 @@ func (p *PetFollower) moveTo(goal Spawn, speed float64, nowMs int64, constrain f
 
 /*
 ================
+noteReach
+
+Records whether the goal this move asked for can be reached: blocked when
+the straight segment was refused or stopped short of it and the last search
+found no detour (planned route or owner trail) - a pause between searches
+after a refused leg keeps the route it found. The follower only records the
+fact; its owners judge it (action petrecovery.go), because "close enough"
+differs between a strike and a follow.
+================
+*/
+func (p *PetFollower) noteReach(from, goal Spawn, straight petClip, detouring bool) {
+	p.reach = PetReach{
+		Goal:    goal,
+		Reached: straight.reached,
+		Blocked: !detouring && !p.detour.found && (straight.fault != nil || WorldDistance2D(straight.reached, goal) >= petDetourArrived),
+	}
+	if straight.fault != nil {
+		p.reach.Reached = from
+	}
+}
+
+/*
+================
+Reach
+
+The last move's reach verdict (noteReach). A pet in reach of its goal, or
+relocated, is never blocked.
+================
+*/
+func (p *PetFollower) Reach() PetReach {
+	return p.reach
+}
+
+/*
+================
 detourWaypoint
 
 The next waypoint toward goal when the straight segment (straight, the
@@ -360,6 +418,7 @@ plan, or a refused leg (moveTo).
 */
 func (p *PetFollower) detourWaypoint(from, goal Spawn, straight petClip, nowMs int64, constrain func(Spawn, Spawn) (Spawn, *MoveError)) (Spawn, bool) {
 	if p.planRoute == nil && !(p.following && p.ownerTrail) {
+		p.detour.found = false
 		return Spawn{}, false
 	}
 	route := &p.detour
@@ -390,20 +449,20 @@ func (p *PetFollower) detourWaypoint(from, goal Spawn, straight petClip, nowMs i
 		return Spawn{}, false
 	}
 	if points := p.trailRoute(from, goal, constrain); len(points) > 0 {
-		route.points, route.goal, route.retryAt, route.trail = points, goal, nowMs+petDetourRetryMs, true
+		route.points, route.goal, route.retryAt, route.trail, route.found = points, goal, nowMs+petDetourRetryMs, true, true
 		return points[0], true
 	}
 	if p.planRoute == nil {
-		route.retryAt = nowMs + petDetourRetryMs
+		route.retryAt, route.found = nowMs+petDetourRetryMs, false
 		return Spawn{}, false
 	}
 	route.trail = false
 	points := p.planRoute(from, goal)
 	if len(points) < 2 {
-		route.retryAt = nowMs + petDetourRetryMs
+		route.retryAt, route.found = nowMs+petDetourRetryMs, false
 		return Spawn{}, false
 	}
-	route.points, route.goal, route.retryAt = points, goal, nowMs+petDetourRetryMs
+	route.points, route.goal, route.retryAt, route.found = points, goal, nowMs+petDetourRetryMs, true
 	return points[0], true
 }
 
@@ -626,6 +685,7 @@ The cast result carries the position to observers.
 ================
 */
 func (p *PetFollower) Displace(pose Spawn, now int64) {
+	p.reach = PetReach{}
 	p.world.Spawn = pose
 	p.world.MoveSegment = nil
 	p.lastTick, p.clockStarted = now, true

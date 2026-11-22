@@ -39,10 +39,9 @@ func (rt *Runtime) acquireMercenaryTarget(step petCombatStep) {
 	at := step.state.mover.AnyFollower().Position(step.nowMs)
 	best, gid := uint32(mercenarySightRange), uint32(0)
 	admit := func(target uint32, pose simulation.Spawn) {
-		// A target whose wedged approach just yielded to a stall sits
-		// out its cooldown (petcombat.go): re-acquiring it on the next
-		// tick would re-wedge the soldier before the follow lane can
-		// warp it home.
+		// A target a fight just yielded on sits out its cooldown
+		// (petrecovery.go): re-acquiring it on the next tick would send
+		// the soldier straight back to the wall it could not pass.
 		if target == step.state.stallTarget && step.nowMs < step.state.stallUntilMs {
 			return
 		}

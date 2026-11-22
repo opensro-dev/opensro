@@ -21,6 +21,9 @@ attack it.
 Damage credit belongs to the owner; aggression belongs to the attacking
 companion. Monster pursuit already resolves both kinds of opponent.
 
+A fight the pet cannot reach ends (port-only, petrecovery.go); native BATTLE
+never gives a target up.
+
 ===========================================================================
 */
 
@@ -70,42 +73,74 @@ type petCombatIntent struct {
 	castToken    uint32
 	releaseAtMs  int64
 	pursuing     bool
-	// pursuingSinceMs is when the current approach last closed the
-	// distance to its target (petdiagnostics.go): a pursuit that stops
-	// closing has stalled for as long as this has stood still.
-	pursuingSinceMs int64
-	// pursuitBest is the closest distance to the target the current
-	// approach has reached: closing past it is progress and re-arms
-	// the stall clock, so a long chase is never "stalled".
-	pursuitBest float64
+	// progress is the approach's watchdog (petrecovery.go): a pursuit
+	// that stops closing on its target is resolved after the window.
+	progress petProgress
+	// ordered marks a fight its owner ordered (orderPetAttack): one that
+	// cannot be carried out answers the owner (yieldPetBattle).
+	ordered bool
 }
 
-// petPursuitProgressDistance is the distance an approach must close for
-// the closing to count as progress: anything less is the pet standing
-// where its step was refused. Destination coordinates are integers; one
-// unit sits far above that noise and far below one tick of running.
-const petPursuitProgressDistance = 1.0
+/*
+================
+petAttackRequest
 
-// petStallCooldownMs is how long a target whose approach yielded to a
-// stall is not re-acquired by sight (the mercenary acquisition): the
-// follow lane collects its tenth stop in about a second of ticks and
-// walking home takes a few more, so ten seconds lets the pet get home
-// several times over. An owner's admitted order on the yielded target
-// clears the cooldown instead of sitting it out (orderPetAttack): the
-// pet obeys its owner, and a pursuit that wedges again yields again.
-const petStallCooldownMs = 10_000
+One attack order on one pet: whose, on what, and whether its owner gave it
+(the owner's command or training spell) or a brood mother relayed hers.
+================
+*/
+type petAttackRequest struct {
+	division            string
+	character, snapshot *enterworld.Character
+	cosGID, targetGID   uint32
+	nowMs               int64
+	doors               characterDoors
+	relayed             bool
+}
 
 /*
 ================
 orderPetAttack
 
-AI event 0x19 for an attack pet: admit the order and set the combat
-target. An order the pet cannot follow is dropped silently; the native
-refusal bytes for this reply are not pinned for v1.150 (see the 0xB69E
-note in item/wire/coscommand.go).
+The owner's attack order (the COS command, a training spell): AI event
+0x19 for an attack pet. It is the owner's word, so it is obeyed even on a
+target a fight just yielded on (admitPetAttack), and a fight it starts that
+cannot be carried out tells the owner why (petrecovery.go).
 ================
 */
 func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterworld.Character, cosGID, targetGID uint32, nowMs int64, doors characterDoors) OpResult {
+	return rt.admitPetAttack(petAttackRequest{division: division, character: character, snapshot: snapshot, cosGID: cosGID, targetGID: targetGID, nowMs: nowMs, doors: doors})
+}
+
+/*
+================
+relayPetAttack
+
+A brood mother's target relayed to her child. A relay repeats every tick
+the two targets differ, so it sits out the child's yield cooldown: a child
+whose fight just yielded walks home instead of being sent back at once.
+================
+*/
+func (rt *Runtime) relayPetAttack(division string, character *enterworld.Character, cosGID, targetGID uint32, nowMs int64, doors characterDoors) OpResult {
+	if child := rt.petSessionFor(division, character.Name, cosGID); child != nil && child.stallTarget == targetGID && nowMs < child.stallUntilMs {
+		return OpResult{DiagnosticRefusal: "pet attack: relayed target yielded"}
+	}
+	return rt.admitPetAttack(petAttackRequest{division: division, character: character, snapshot: rt.characterSnapshot(division, character), cosGID: cosGID, targetGID: targetGID, nowMs: nowMs, doors: doors, relayed: true})
+}
+
+/*
+================
+admitPetAttack
+
+Admits an attack order and sets the combat target. An order the pet cannot
+follow at all (no such pet or target, a target it may not attack) is
+refused with a diagnostic; the native refusal bytes for those are not
+pinned for v1.150 (see the 0xB69E note in item/wire/coscommand.go).
+================
+*/
+func (rt *Runtime) admitPetAttack(order petAttackRequest) OpResult {
+	division, character, snapshot := order.division, order.character, order.snapshot
+	cosGID, targetGID, nowMs, doors := order.cosGID, order.targetGID, order.nowMs, order.doors
 	refuse := func(reason string) OpResult {
 		rt.petDiagnostic(division, character.Name, cosGID, "order refused: "+reason, log.Fields{"target": targetGID})
 		return OpResult{DiagnosticRefusal: "pet attack: " + reason}
@@ -158,20 +193,22 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 		})
 	}()
 	if state.combat != nil && state.combat.target == targetGID {
+		// The owner taking up the fight the pet already has makes it theirs.
+		state.combat.ordered = state.combat.ordered || !order.relayed
 		return OpResult{}
 	}
 	// The native battle target change keeps the strategy; a new BATTLE
 	// starts with a fresh one. Either way the next strike is due now.
-	intent := &petCombatIntent{target: targetGID, nextAttackMs: nowMs}
+	intent := &petCombatIntent{target: targetGID, nextAttackMs: nowMs, ordered: !order.relayed}
 	if state.combat != nil {
 		intent.intervalMs = state.combat.intervalMs
 	}
 	rt.cancelPetCombat(petOwnerKey{division: division, name: strings.ToLower(character.Name), gid: cosGID}, state, nowMs)
-	// An admitted order is the owner's word: re-ordering the target a
-	// stall yielded on clears that target's cooldown instead of
-	// sitting it out - the pet obeys its owner, and a pursuit that
-	// wedges again simply yields again. Only the un-ordered re-picks
-	// (the mercenary sight acquisition) sit the cooldown out.
+	// An owner's order is the owner's word: re-ordering the target a
+	// fight yielded on clears that target's cooldown instead of sitting
+	// it out - the pet obeys, and a pursuit that cannot reach yields
+	// again and says so. The re-picks (the mercenary sight acquisition,
+	// a brood relay) sit the cooldown out.
 	if state.stallTarget == targetGID {
 		state.stallTarget, state.stallUntilMs = 0, 0
 	}
@@ -304,51 +341,31 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 	}
 	at := step.state.mover.AnyFollower().Position(step.nowMs)
 	if intent.castToken == 0 && !spacing.Contains(at, targetAt) {
+		follower := step.state.mover.AnyFollower()
 		distance := simulation.WorldDistance2D(at, targetAt)
+		yield := petYield{at: at, fields: log.Fields{
+			"target": intent.target, "distance": distance, "admission": spacing.AdmissionRadius(),
+			"standOff": spacing.StandOffRadius(), "moving": follower.Moving(step.nowMs), "region": at.RegionID,
+		}}
 		if !intent.pursuing {
 			intent.pursuing = true
-			intent.pursuingSinceMs = step.nowMs
-			intent.pursuitBest = distance
-		}
-		if distance <= intent.pursuitBest-petPursuitProgressDistance {
-			// The approach is closing: re-arm the stall clock. A pet
-			// chasing a moving target may pursue for minutes without
-			// reaching strike range; only a pursuit that stops closing
-			// has stalled.
-			intent.pursuitBest = distance
-			intent.pursuingSinceMs = step.nowMs
-		}
-		if step.nowMs-intent.pursuingSinceMs >= petApproachStallMs {
-			rt.petDiagnostic(step.key.division, step.snapshot.Name, step.pet.GID, "approach not reaching strike range", log.Fields{
-				"target": intent.target, "distance": distance, "admission": spacing.AdmissionRadius(),
-				"standOff": spacing.StandOffRadius(), "moving": step.state.mover.AnyFollower().Moving(step.nowMs), "pursuingMs": step.nowMs - intent.pursuingSinceMs,
-			})
-			// Recovery for a port defect; it restores the native
-			// outcome, it does not add a behaviour. The native mover
-			// slides along a wall toward its target, so the native
-			// pet never stands wedged; the port's collision owner
-			// instead refuses a clipped goal, so a pet here can be
-			// refused every tick at a wall (the live pet-stuck
-			// report: a wolf held 111 units from an unreachable
-			// target until its owner's return scroll). BATTLE's
-			// stuck answer retains the fight
-			// (monster.NativeStuckResponse), leaving the pet no way
-			// out, so a pursuit that has made no progress for the
-			// stall threshold ends: the pet leaves BATTLE and returns
-			// to FOLLOW, whose own stuck answer (the warp to its
-			// owner) still rescues it if it cannot walk there either.
-			// The yielded target is not re-acquired by sight until
-			// the pet has had the follow lane's whole window to get
-			// home (petStallCooldownMs); an owner's fresh order on
-			// it clears that pause and stands. Default path, no flag: the native
-			// behaviour - a pet that walks to its target or comes
-			// back - is what this restores.
-			stalledTarget := intent.target
-			rt.cancelPetCombat(step.key, step.state, step.nowMs)
-			step.state.stallTarget, step.state.stallUntilMs = stalledTarget, step.nowMs+petStallCooldownMs
+			intent.progress.reset()
+		} else if reach := follower.Reach(); reach.Blocked && !spacing.Contains(reach.Reached, targetAt) {
+			// No way to strike range (petrecovery.go): this approach's last
+			// move ends short of it with no detour, so the fight ends now
+			// instead of the pet walking to the wall and standing there. The
+			// verdict is read only once this pursuit has moved, never one a
+			// follow move left behind.
+			yield.kind = petRecoveryBattleNoRoute
+			rt.yieldPetBattle(step, yield)
 			return nil, false
 		}
-		return step.state.mover.AnyFollower().Approach(targetAt, float64(rt.cosPacedRun(step.ref, step.run)), step.nowMs, spacing.StandOffRadius(), step.constraint), true
+		if intent.progress.stalled(distance, at, false, step.nowMs) {
+			yield.kind = petRecoveryBattleStall
+			rt.yieldPetBattle(step, yield)
+			return nil, false
+		}
+		return follower.Approach(targetAt, float64(rt.cosPacedRun(step.ref, step.run)), step.nowMs, spacing.StandOffRadius(), step.constraint), true
 	}
 	intent.pursuing = false
 	frames = step.state.mover.AnyFollower().Stop(step.nowMs)

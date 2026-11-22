@@ -76,6 +76,9 @@ type gameplayPlane struct {
 	jobHonor *jobhonor.Service
 	movement *movement.Runtime
 	water    *movement.WaterValidator
+	// planes owns every AI route, monster and pet alike: the outdoor
+	// detour in the field, the cave's region route on a dungeon floor.
+	planes   simulation.Planes
 	presence *livepresence.Directory
 	// mutes is the chat mute book (moderation_wiring.go), set once the
 	// shard is known; the console's conduct actions reach it.
@@ -405,7 +408,8 @@ func newGameplayPlane(
 	items.InsideClosedObject = water.InsideClosedObject
 	items.CompanionSurfaceHeight = water.WalkableSpawnHeightAt
 	items.ConstrainWalk = movementRuntime.ConstrainMovementFrom
-	items.PlanCompanionRoute = simulation.PetRouteFromMonster(water.PlanMonsterRoute)
+	planes := movement.NewPlanes(movementRuntime, water)
+	items.PlanCompanionRoute = simulation.PetRouteFromPlanes(planes)
 	items.AdmitGroundWalk = movementRuntime.AdmitGroundWalk
 	items.LineOfSight = movementRuntime.LineOfSight
 	items.ResolveNavOwner = water.ResolveNavOwner
@@ -539,6 +543,7 @@ func newGameplayPlane(
 		items:         items,
 		movement:      movementRuntime,
 		water:         water,
+		planes:        planes,
 		presence:      presence,
 		parties:       parties,
 		guildInvites:  guildInvites,
