@@ -19,6 +19,9 @@ Step 3c: the six MEETROC questdata rows join under their source ids and
 leave by codename when off, restoring the native table byte for byte;
 the quest kinds' committed nests (scripts/data/roc/quest-nests.json)
 become roc-monsters.txt, and a nest naming an unstaged kind refuses.
+
+Step 5d: the eight ARCHEMY exchanges (source ids 377-384) ride the same
+two lists, and their trophies' drops join the rewards file's fixed rules.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
@@ -46,7 +49,9 @@ VARIANT_KEY_ID = "50100"
 MOUNTAIN_BUILDING = "24296"
 NATIVE_QUEST = ["1", "1", "QTUTORIAL_CH", "1", "x", "SN_QTUTORIAL_CH", "SN_PAY", "xxx", "SN_PAYCON", "SN_NN", "SN_NC"]
 SOURCE_QUEST_IDS = {"QNO_RM_MEETROC_1": "91", "QNO_RM_MEETROC_2": "92", "QNO_RM_MEETROC_6": "96",
-	"QNO_RM_MEETROC_ECT_1": "374", "QNO_RM_MEETROC_ECT_2": "375", "QNO_RM_MEETROC_ECT_3": "376"}
+	"QNO_RM_MEETROC_ECT_1": "374", "QNO_RM_MEETROC_ECT_2": "375", "QNO_RM_MEETROC_ECT_3": "376",
+	"QNO_RM_ARCHEMY_1": "377", "QNO_RM_ARCHEMY_2": "378", "QNO_RM_ARCHEMY_3": "379", "QNO_RM_ARCHEMY_4": "380",
+	"QNO_RM_ARCHEMY_5": "381", "QNO_RM_ARCHEMY_6": "382", "QNO_RM_ARCHEMY_7": "383", "QNO_RM_ARCHEMY_8": "384"}
 
 
 # ================
@@ -74,7 +79,7 @@ def contents_row(code, columns=17):
 
 
 # v1.150 ships the contents rows of MEETROC_1, _2 and _6; the client
-# ships all six.
+# ships all fourteen.
 NATIVE_CONTENTS = [contents_row(code, 13) for code in ("QTUTORIAL_CH", "QNO_RM_MEETROC_1", "QNO_RM_MEETROC_2", "QNO_RM_MEETROC_6")]
 SOURCE_CONTENTS = [contents_row(code) for code in SOURCE_QUEST_IDS]
 GUARDIANS = {"MOB_QT_%02d_ROCKY_CLON2" % n for n in range(1, 8)}
@@ -373,6 +378,9 @@ class RocImportTest(unittest.TestCase):
 			(text_root / "itemdata_110000.txt").write_bytes(utf16([piece]))
 			summary = self.run_import(vsro, native, output, pins, "on")
 			self.assertEqual(summary["rewards"]["random"], 8)
+			# The fixture installs no trophy: all eight drops wait.
+			self.assertEqual(summary["rewards"]["trophies"], 0)
+			self.assertEqual(len(summary["rewards"]["waitingTrophies"]), 8)
 			written = json.loads((text_root / roc.roc_rewards.REWARDS_FILE).read_text(encoding="utf-8"))
 			self.assertEqual({rule["Monster"] for rule in written["Random"]} - set(roc.KINDS), set())
 			self.run_import(vsro, native, output, pins, "")
@@ -385,9 +393,9 @@ class RocImportTest(unittest.TestCase):
 		return [row[2] for row in tables.table_rows((text_root / roc.QUEST_TABLE).read_bytes()) if len(row) > 2]
 
 	# ================
-	# test_on_stages_the_six_quests_under_their_source_ids
+	# test_on_stages_the_chain_quests_under_their_source_ids
 	# ================
-	def test_on_stages_the_six_quests_under_their_source_ids(self):
+	def test_on_stages_the_chain_quests_under_their_source_ids(self):
 		with tempfile.TemporaryDirectory() as root:
 			vsro, native, output, text_root, pins = self.fixture(Path(root))
 			summary = self.run_import(vsro, native, output, pins, "on")
@@ -465,14 +473,15 @@ class RocImportTest(unittest.TestCase):
 	# ================
 	# test_on_stages_only_the_contents_rows_v1150_lacks
 	#
-	# The three ECT rows come from the client, cut to v1.150's thirteen
-	# columns; the native MEETROC_1 row stays as v1.150 ships it.
+	# The ECT and ARCHEMY rows come from the client, cut to v1.150's
+	# thirteen columns; the native MEETROC_1 row stays as v1.150 ships it.
 	# ================
 	def test_on_stages_only_the_contents_rows_v1150_lacks(self):
 		with tempfile.TemporaryDirectory() as root:
 			vsro, native, output, text_root, pins = self.fixture(Path(root))
 			summary = self.run_import(vsro, native, output, pins, "on")
-			ect = ["QNO_RM_MEETROC_ECT_1", "QNO_RM_MEETROC_ECT_2", "QNO_RM_MEETROC_ECT_3"]
+			ect = ["QNO_RM_MEETROC_ECT_1", "QNO_RM_MEETROC_ECT_2", "QNO_RM_MEETROC_ECT_3"] + \
+				[f"QNO_RM_ARCHEMY_{n}" for n in range(1, 9)]
 			self.assertEqual(summary["contents"], ect)
 			rows = tables.table_rows((text_root / roc.CONTENTS_TABLE).read_bytes())
 			self.assertEqual(rows[:len(NATIVE_CONTENTS)], NATIVE_CONTENTS)
@@ -485,7 +494,7 @@ class RocImportTest(unittest.TestCase):
 	def test_a_contents_row_the_client_lacks_refuses(self):
 		with tempfile.TemporaryDirectory() as root:
 			vsro, native, output, text_root, pins = self.fixture(Path(root), contents=SOURCE_CONTENTS[:-1])
-			with self.assertRaisesRegex(ValueError, "row for Roc quest QNO_RM_MEETROC_ECT_3"):
+			with self.assertRaisesRegex(ValueError, "row for Roc quest QNO_RM_ARCHEMY_8"):
 				self.run_import(vsro, native, output, pins, "on")
 
 	# ================

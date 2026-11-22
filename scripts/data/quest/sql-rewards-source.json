@@ -1647,6 +1647,150 @@
 					"count": 1
 				}
 			]
+		},
+		"QNO_RM_ARCHEMY_1": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_ETC_ARCHEMY_MAGICSTONE_SHARP_10",
+					"count": 1
+				}
+			]
+		},
+		"QNO_RM_ARCHEMY_2": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_ETC_ARCHEMY_MAGICSTONE_IRONWALL_10",
+					"count": 1
+				}
+			]
+		},
+		"QNO_RM_ARCHEMY_3": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_ETC_ARCHEMY_MAGICSTONE_GUARD_10",
+					"count": 1
+				}
+			]
+		},
+		"QNO_RM_ARCHEMY_4": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_ETC_ARCHEMY_MAGICSTONE_DEVIL_10",
+					"count": 1
+				}
+			]
+		},
+		"QNO_RM_ARCHEMY_5": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_ETC_ARCHEMY_MAGICSTONE_ABYSS_10",
+					"count": 1
+				}
+			]
+		},
+		"QNO_RM_ARCHEMY_6": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_ETC_ARCHEMY_MAGICSTONE_HEAT_10",
+					"count": 1
+				}
+			]
+		},
+		"QNO_RM_ARCHEMY_7": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_ETC_ARCHEMY_MAGICSTONE_STUPOR_10",
+					"count": 1
+				}
+			]
+		},
+		"QNO_RM_ARCHEMY_8": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_ETC_ARCHEMY_MAGICSTONE_STRONGMIND_10",
+					"count": 1
+				}
+			]
 		}
 	}
 }

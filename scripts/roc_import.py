@@ -65,7 +65,11 @@ VSRO client's questdata ships exactly six MEETROC quests
 while its textquest, questcontentsdata and items already carry them.
 Their rows join questdata.txt under the source ids (91, 92, 96 and
 374-376, all free in v1.150), so the compiled specs #3796 snapshots
-admit (quest catalogSpecs needs the catalog row). QNO_RM_MEETROC_1
+admit (quest catalogSpecs needs the catalog row). Step 5d appends the
+eight ARCHEMY trophy exchanges the same way (source ids 377-384;
+their questcontentsdata rows come from the client too). The trophies
+they exchange are native v1.150 items; their drops join with the
+database rewards below. QNO_RM_MEETROC_1
 gathers from two quest kinds v1.150 lacks, staged with the arena's:
 
 	MOB_QT_RM_FEATHERMASK_01  the feather mask the first drop rides
@@ -120,12 +124,15 @@ QUEST_TABLE = "questdata.txt"
 QUEST_CODES = (
 	"QNO_RM_MEETROC_1", "QNO_RM_MEETROC_2", "QNO_RM_MEETROC_6",
 	"QNO_RM_MEETROC_ECT_1", "QNO_RM_MEETROC_ECT_2", "QNO_RM_MEETROC_ECT_3",
+	"QNO_RM_ARCHEMY_1", "QNO_RM_ARCHEMY_2", "QNO_RM_ARCHEMY_3", "QNO_RM_ARCHEMY_4",
+	"QNO_RM_ARCHEMY_5", "QNO_RM_ARCHEMY_6", "QNO_RM_ARCHEMY_7", "QNO_RM_ARCHEMY_8",
 )
 QUEST_COLUMNS = 11
 # v1.150 ships questcontentsdata rows for MEETROC_1, _2 and _6 but none
-# for the three ECT quests; those come from the client, cut to v1.150's
-# thirteen columns (the VSRO rows append four later ones the v1.150
-# parser never reads: the server's catalog.go questcontentsColumns).
+# for the ECT or ARCHEMY quests; those come from the client, cut to
+# v1.150's thirteen columns (the source rows append four later ones the
+# v1.150 parser never reads: the server's catalog.go
+# questcontentsColumns).
 CONTENTS_TABLE = "questcontentsdata.txt"
 CONTENTS_COLUMNS = 13
 POPULATION_FILE = "roc-monsters.txt"
@@ -547,10 +554,10 @@ def stage(vsro_root, native, output):
 		"The arena kinds stand in no nest; the server spawns them when the arena opens (#3399 step 4).",
 		"QNO_RM_MEETROC_6's Soul Crystal has no source: the quests that fuse it (MEETROC_3 to _5) never shipped.",
 	]
-	limits.append("The trophies ISRO-R's fixed table drops (ITEM_QNO_RM_ARCHEMY_1 to _8) wait for their exchange "
-		"quests, QNO_RM_ARCHEMY_1 to _8 (#3399 step 5d).")
 	if rewards["waiting"]:
 		limits.append("Database rewards wait for items the variant lacks: " + ", ".join(rewards["waiting"]) + ".")
+	if rewards["waitingTrophies"]:
+		limits.append("Trophy drops wait for items the variant lacks: " + ", ".join(rewards["waitingTrophies"]) + ".")
 	if "omittedLinks" in gates:
 		limits.append("The summit link is out: the variant carries no key item its conditions name.")
 	summary = {
