@@ -32,6 +32,7 @@ export function uiPanels() {
 		"COS inventory",
 		"Character",
 		"Chat",
+		"Event Calendar",
 		"Experimental",
 		"Fortress war application",
 		"Fortress war schedule",

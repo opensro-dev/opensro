@@ -125,5 +125,8 @@ export const OFF = Object.freeze( {
 	mallCategories: false,
 	// On by default (owner 2026-11-21, #3907): the v1.696 SRO Macro
 	// windows are port-only and ship on in the next release.
-	sroMacro: true
+	sroMacro: true,
+	// Off by default (#3532): the Event Calendar is port-only; off, the
+	// System menu has no calendar entry.
+	eventCalendar: false
 } );
