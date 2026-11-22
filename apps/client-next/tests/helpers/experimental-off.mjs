@@ -128,5 +128,6 @@ export const OFF = Object.freeze( {
 	sroMacro: true,
 	// Off by default (#3532): the Event Calendar is port-only; off, the
 	// System menu has no calendar entry.
-	eventCalendar: false
+	eventCalendar: false,
+	jobHonor: false
 } );

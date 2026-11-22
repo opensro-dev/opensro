@@ -17,7 +17,17 @@ system is the Academy's (the native check on #3530).
 - An account scores at most 1000 points per honor day, shared by all its characters (`platform/jobhonor`).
 - The rates are an inference recorded in `jobhonor.go`: one good level-cap run reaches the run cap, and five runs reach the day's cap.
 
-Later slices of #3530: the hunter's escort damage on arrival, the job kill decay per victim, the hourly hot route, the ambush, the tier's Academy honor buff and coloured title, and the in-game window.
+## What scores (slice 2)
+
+| Event | Points | Owner |
+| --- | --- | --- |
+| A hunter's damage on a marked thief | applied damage / 1,000, paid when the attacked caravan's trader sells | `game/action/jobhonor.go` |
+| A job kill with goods or points at stake | 20, then 10 against the same victim account that day, then 0 | the same |
+
+- A dressed thief's landed hit on a dressed trader (or its trade transport) marks the thief for 120 seconds; a dressed hunter's applied damage on the marked thief accrues against that caravan and pays out, at most 250 per hunter, when the trader next sells trade goods. Standing near a caravan scores nothing, and damage outside the window scores nothing. The escrow is memory-only: a restart forgets unpaid damage.
+- A job kill stakes when the victim carried trade goods (on its transport or in its bag) or kept honor points today. An account never scores off itself, and both killer and victim must be dressed. The rates are the same recorded inference: a kill is worth a fifth of a run's cap, a fought-off robbery like a small run.
+
+Still later slices of #3530: the hourly hot route, the ambush, and the tier's Academy honor buff and coloured title.
 
 ## Days and tiers
 
@@ -37,3 +47,7 @@ Later slices of #3530: the hunter's escort damage on arrival, the job kill decay
 - **previous** is the snapshot that set today's tiers.
 - Rows name the **job alias**, never the character: the alias is what keeps a thief or hunter anonymous, as in the native job ranking and the seal board. Public-hidden characters and characters with no alias have no row.
 - Off, the route answers 404.
+
+## In-game window
+
+The Job Honor Rank window (Experimental row "Job honor ranking", off by default; System-menu entry while on) reads a snapshot feed the server sends only with `SRO_JOB_HONOR` on: both periods' boards (the same composition as the public board, capped at 256 rows) plus the viewer's own standing - place, tiers, the account's cap left and its kept points today and this month per job (`game/honorfeed`, wire 0x3FC6). Tabs All, Trader and Thief re-run the board's composition over one job; Current and Previous switch periods; a viewer with no visible row reads "You are not in this ranking." Off on either side, nothing is sent and the window never opens.

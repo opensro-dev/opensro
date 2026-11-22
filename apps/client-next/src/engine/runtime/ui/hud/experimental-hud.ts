@@ -378,6 +378,15 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-event-calendar",
 						label: "Event calendar",
 						description: "System menu: the week's scheduled events, in server time."
+					},
+					{
+						// Port-only, not native (#3530): the Job Honor Rank
+						// window over the honor feed; the row only adds its
+						// System menu entry and window.
+						key: "jobHonor",
+						id: "experimental-job-honor",
+						label: "Job honor ranking",
+						description: "System menu: the job honor ranking and your standing."
 					}
 				]
 			},
