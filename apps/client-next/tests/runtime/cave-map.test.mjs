@@ -161,3 +161,82 @@ test("a picked species' sign draws at its anchor on the page", () => {
 	assert.deepEqual( sign?.rect.slice( 0, 2 ), [ CLIP[0] + 150 - 8, CLIP[1] + 150 - 8 ] );
 	assert.equal( view().quads.some( quad => quad.texture.endsWith( "mm_sign_monster.png" ) ), false );
 });
+
+// The picked guide monster's ground arrives in region-local units
+// (worldmap-guide.ts guideDungeonGround; the guide test pins these
+// numbers from the published guide catalogue). The pages below are
+// the published cave catalogue's own rows.
+/** @type {readonly [number, number, number, number]} */
+const TINT = [ 0xe9 / 255, 0xc6 / 255, 0x24 / 255, 0x80 / 255 ];
+/** @type {import("../../src/engine/foundation/ui/cave-map.ts").CaveMapPage} */
+const DONWHANG_PAGE = {
+	regionId: 0x8001,
+	floorIndex: 0,
+	layer: 1,
+	floorLabel: "DH_A01_FLOOR01",
+	columns: 3,
+	rows: 3,
+	width: 768,
+	height: 768,
+	left: 127,
+	top: 128,
+	image: "map_world_donf01",
+	caption: "Donwhang Cave B1",
+	labels: [],
+	signs: []
+};
+
+test("a Donwhang ground tints on the cave page at the guide page's pixels (issue #3395)", () => {
+	const pose = { regionId: 0x8001, x: 0, y: 0, z: 0, angle: 0 };
+	const shown = caveMapView( {
+		pose,
+		center: pose,
+		page: DONWHANG_PAGE,
+		catalog: CATALOG,
+		clip: [ 0, 0, 768, 768 ],
+		pan: [ 0, 0 ],
+		local: false,
+		// The Bug Ghost's two tiles and its 432x507 page point, in the
+		// floor's coordinates (a pose's units, ten to the world unit).
+		ground: {
+			tiles: [
+				{ x: 0, z: 0, w: 1920, h: 1920, texture: "mask/a.png", color: TINT },
+				{ x: 0, z: -1920, w: 1920, h: 1920, texture: "mask/b.png", color: TINT }
+			],
+			icon: { x: 1320, z: -1882.5, size: 32, texture: "icon.png" }
+		}
+	} );
+	// 256 pixels a sector: the tiles stack at the page's west edge and
+	// the icon stands on its point, at the v1.696 page's own pixels.
+	assert.deepEqual( shown.ground.map( quad => quad.rect ), [
+		[ 256, 256, 256, 256 ],
+		[ 256, 512, 256, 256 ],
+		[ 432, 507, 32, 32 ]
+	] );
+	assert.deepEqual( shown.ground[0]?.color, TINT );
+	assert.deepEqual( shown.ground[2]?.color, [ 1, 1, 1, 1 ], "the icon is not tinted" );
+});
+
+test("a tomb ground tints on the 64-pixel floor (issue #3395)", () => {
+	const shown = view( {
+		clip: [ 0, 0, 1408, 640 ],
+		// The Tomb Archer's north-west tiles and its 694x122 page point
+		// on jinsi2, in the floor's coordinates.
+		ground: {
+			tiles: [
+				{ x: -9600, z: 9600, w: 1920, h: 1920, texture: "mask/a.png", color: TINT },
+				{ x: -7680, z: 9600, w: 1920, h: 1920, texture: "mask/b.png", color: TINT }
+			],
+			icon: { x: -300, z: 5940, size: 32, texture: "icon.png" }
+		}
+	} );
+	assert.deepEqual( shown.ground.map( quad => quad.rect ), [
+		[ 384, 0, 64, 64 ],
+		[ 448, 0, 64, 64 ],
+		[ 694, 122, 32, 32 ]
+	] );
+});
+
+test("no picked guide monster, no ground (issue #3395)", () => {
+	assert.deepEqual( view().ground, [] );
+});

@@ -64,17 +64,23 @@ export function mapSignName( text: CavePageText, name: string, x: number, y: num
 ================
 cavePageImages
 
-The page quads, then its floor labels, then the hovered gate sign's name.
+The page quads, then the picked guide monster's ground (already
+held to the images that are in, world-map.ts), then its floor
+labels, then the hovered gate sign's name: the ground tints over
+the page's signs and under its names, as the world page's ground
+paints under its labels (issue #3395).
 ================
 */
 export function cavePageImages(
 	page: CaveMapFrame,
 	text: CavePageText,
 	clip: UiRect,
-	hover: string | null | undefined
+	hover: string | null | undefined,
+	ground: readonly UiQuad[] = []
 ): UiQuad[] {
 	return [
 		...page.quads,
+		...ground,
 		...page.labels.flatMap( label => {
 			const width = text.run( label.text, 0, label.font ).width,
 				height = text.extentHeight( label.font ),
