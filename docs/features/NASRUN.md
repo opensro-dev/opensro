@@ -50,9 +50,9 @@ These are inferences and port choices, not native evidence:
   stone (`ITEM_MALL_NASRUN_ARCHEMY_MAGICSTONE_UMDU`) names `MATTR_NASRUN_UMDU`, which has no row in the
   v1.150 magicoption table.
 - **Built since (#3456).** The socket (#3477), the awakening clock (#3622), the unique-kill tokens (#3710), the
-  token shop (#3741), Nasrun alchemy (below), what the plus gives (below), the extension gear (below) and the
-  lucky drops (below).
-- **Still open (#3456).** The mall listing (step 5, #3257) and the client step that shows the lent skills.
+  token shop (#3741), Nasrun alchemy (below), what the plus gives (below), the extension gear (below), the
+  lucky drops (below) and the mall listing (below).
+- **Still open (#3456).** The client step that shows the lent skills.
 
 ## Nasrun alchemy (#3456 step 3c)
 
@@ -125,3 +125,10 @@ their bag, beside the token award (`internal/game/action/nasrun_drops.go`, odds 
 - The Spirit is the plain A grade row of the winner's sex; the colours stay a shop choice.
 - No cap and nothing saved: the roll is per kill, and a full bag keeps neither prize - the notice travels only
   for an item that landed.
+
+## The mall listing (#3456 step 5)
+
+With `SRO_NASRUN` on, Sabakun's jewel and the extension gear list in the Item Mall's Premium > Gears tab through
+the gears-stones layout (`internal/game/item/commerce/mallcategories.go`, `nasrunGoods`), at the tab's 30-silk
+tier, badged new - the silk door beside the token shop's honor tabs. The listing stands only while the system
+does: off, or with the items' rows unstaged, the catalogue is the shipped 91 offers exactly (#3331).
