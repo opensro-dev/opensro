@@ -86,7 +86,7 @@ func TestPublicRulesShowNativeBehaviorWhenBetaCapsAreOff(t *testing.T) {
 	t.Setenv(alchemy.EnvReinforceMaxPlus, "on")
 	on := rulesByFlag()
 	for flag, wantNow := range map[string]string{
-		progression.EnvBetaMastery:  "Every character may train masteries up to a total of 5000; each master's own limits stay.",
+		progression.EnvBetaMastery:  "Every character may train masteries up to a total of 5000; each mastery's own limits stay.",
 		alchemy.EnvReinforceMaxPlus: "Reinforcement stops at +11.",
 	} {
 		rule := on[flag]

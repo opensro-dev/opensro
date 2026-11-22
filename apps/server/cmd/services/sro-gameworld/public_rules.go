@@ -175,7 +175,7 @@ func publicRules() publicstats.RulesResponse {
 	betaMastery, _ := progression.BetaMasteryFromEnv()
 	betaMasteryNow := "The native race-specific mastery totals apply."
 	if betaMastery > 0 {
-		betaMasteryNow = fmt.Sprintf("Every character may train masteries up to a total of %d; each master's own limits stay.", betaMastery)
+		betaMasteryNow = fmt.Sprintf("Every character may train masteries up to a total of %d; each mastery's own limits stay.", betaMastery)
 	}
 	betaMasteryEarly, _ := enterworld.BetaMasteryEarlyFromEnv()
 	levelCap, _ := progression.LevelCapFromEnv()
@@ -194,7 +194,7 @@ func publicRules() publicstats.RulesResponse {
 	flagWar, _ := action.FlagWarSettingsFromEnv()
 	settings := tunables.Current()
 	testKills := settings.Int(tunables.MostWantedTestKills)
-	alchemyMaxPlusNow := "The native +250 reinforcement ceiling applies."
+	alchemyMaxPlusNow := fmt.Sprintf("The native +%d reinforcement ceiling applies.", alchemy.NativeReinforceCeiling)
 	if alchemyMaxPlus > 0 {
 		alchemyMaxPlusNow = fmt.Sprintf("Reinforcement stops at +%d.", alchemyMaxPlus)
 	}
