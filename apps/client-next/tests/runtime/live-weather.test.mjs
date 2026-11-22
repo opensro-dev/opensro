@@ -280,3 +280,42 @@ test("native app caps elapsed weather simulation at three seconds after a stall"
 	}
 	assert.deepEqual( sample( 30 ), sample( 3 ) );
 });
+
+// #4108: a frame uploads only the span its rows cover (plus the tail an
+// earlier frame wrote, zeroed again), never the whole power-of-two
+// capacity; the padded tail beyond the uploaded span stays zero, so the
+// collapsed triangles at the origin draw nothing, as the old
+// full-capacity fill left them.
+test("weather uploads track the live rows and the padded tail stays zero", () => {
+	const spans = new Map();
+	let rainMesh;
+	const weather = createWeather( { range: ( a, b ) => Math.trunc( (a + b) / 2 ) } ),
+		gpu = {
+			upload( mesh, image ) {
+				if ( image === "rain1" ) rainMesh = mesh;
+				return { image };
+			},
+			release() {},
+			updatePositions( draw, positions ) {
+				spans.set( draw.image, positions.length );
+			}
+		},
+		images = new Map(
+			[ "rain1", "rain2", "snow1", "snow2" ].map(
+				n => [ "/assets/images/Map_extracted/weather/" + n + ".png", n ]
+			)
+		),
+		step = t => (weather.update( camera, t, 0, true, () => 0 ), weather.prepare( gpu, images, camera, matrix ));
+	weather.set( { mode: 2, amount: 255 } );
+	for ( let i = 0; i <= 120; i++ ) step( i / 20 );
+	const steady = spans.get( "rain1" );
+	assert.ok( defined( rainMesh ).positions.length > defined( steady ), "the batch capacity exceeds the live span" );
+	weather.set( { mode: 1, amount: 0 } );
+	for ( let i = 121; i <= 130; i++ ) step( i / 20 );
+	const drained = spans.get( "rain1" );
+	assert.ok( defined( drained ) < defined( steady ), "the upload span did not shrink as the rain drained" );
+	const positions = defined( rainMesh ).positions;
+	for ( let i = defined( drained ); i < positions.length; i++ ) {
+		assert.equal( positions[i], 0, "a padded vertex beyond the uploaded span is not zero" );
+	}
+});
