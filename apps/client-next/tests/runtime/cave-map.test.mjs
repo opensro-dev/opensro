@@ -166,6 +166,7 @@ test("a picked species' sign draws at its anchor on the page", () => {
 // (worldmap-guide.ts guideDungeonGround; the guide test pins these
 // numbers from the published guide catalogue). The pages below are
 // the published cave catalogue's own rows.
+/** @type {readonly [number, number, number, number]} */
 const TINT = [ 0xe9 / 255, 0xc6 / 255, 0x24 / 255, 0x80 / 255 ];
 /** @type {import("../../src/engine/foundation/ui/cave-map.ts").CaveMapPage} */
 const DONWHANG_PAGE = {
