@@ -275,30 +275,86 @@ test("the window edits a draft and saves it once", () => {
 	hud.attach( "Ann" );
 	assert.deepEqual( hud.draft(), { refs: [ TIGER_GIRL ], deathsToo: false, browser: false } );
 	assert.equal( hud.dirty(), false );
-	assert.equal( hud.takeSave(), null );
+	assert.deepEqual( hud.click( "unique-status-save" ), { save: null, askPermission: false } );
 
-	hud.toggleMark( URUCHI );
-	hud.toggleDeaths();
+	hud.click( `unique-status-mark:${URUCHI}` );
+	hud.click( "unique-status-deaths" );
 	assert.equal( hud.dirty(), true );
-	assert.deepEqual( hud.takeSave(), { refs: [ TIGER_GIRL, URUCHI ], deathsToo: true, browser: false } );
+	assert.deepEqual( hud.click( "unique-status-save" ), {
+		save: { refs: [ TIGER_GIRL, URUCHI ], deathsToo: true, browser: false },
+		askPermission: false
+	} );
 	assert.equal( hud.dirty(), false );
-	assert.equal( hud.takeSave(), null );
+	assert.deepEqual( hud.click( "unique-status-save" ), { save: null, askPermission: false } );
 
 	// A different character re-reads the book and drops unsaved edits.
-	hud.toggleMark( ISYUTARU );
+	hud.click( `unique-status-mark:${ISYUTARU}` );
 	hud.attach( "Bo" );
 	assert.deepEqual( hud.draft(), emptyUniqueNotify() );
 	// The same character keeps them.
-	hud.toggleBrowser();
+	hud.click( "unique-status-browser" );
 	hud.attach( "Bo" );
 	assert.equal( hud.draft().browser, true );
+});
+
+test("clicks route to the window's own ids and nothing else's", () => {
+	const hud = createUniqueStatusHud( {} );
+	hud.attach( "Ann" );
+	assert.equal( hud.click( "unique-rank-close" ), null );
+	assert.equal( hud.click( "unique-status" ), null );
+	assert.deepEqual( hud.click( "unique-status-tab:dead" ), { save: null, askPermission: false } );
+	assert.equal( hud.state().tab, "dead" );
+	// Browser notifications ask permission only on Save, and only then.
+	hud.click( "unique-status-browser" );
+	assert.deepEqual( hud.click( "unique-status-save" ), {
+		save: { refs: [], deathsToo: false, browser: true },
+		askPermission: true
+	} );
+});
+
+test("the list scrolls by wheel, thumb and buttons against the drawn geometry", () => {
+	const hud = createUniqueStatusHud( {} );
+	hud.attach( "Ann" );
+	// Nothing drawn yet: the pointer is not the list's.
+	assert.equal( hud.pointer( { kind: "scroll", x: 5, y: 5, delta: 120 } ), false );
+	hud.noteDrawn( { rect: [ 0, 0, 100, 240 ], total: 30, page: 12 }, 100 );
+	assert.equal( hud.pointer( { kind: "scroll", x: 500, y: 5, delta: 120 } ), false );
+	assert.equal( hud.state().firstRow, 0 );
+	assert.equal( hud.pointer( { kind: "scroll", x: 5, y: 5, delta: 120 } ), true );
+	assert.equal( hud.state().firstRow, 1 );
+	assert.equal( hud.pointer( { kind: "scroll", x: 5, y: 5, delta: -120 } ), true );
+	assert.equal( hud.state().firstRow, 0 );
+	// The bar's buttons step the same list.
+	hud.click( "unique-status-scroll-down" );
+	assert.equal( hud.state().firstRow, 1 );
+	hud.click( "unique-status-scroll-up" );
+	assert.equal( hud.state().firstRow, 0 );
+	// The thumb: a full-travel drag reaches the last page, and the
+	// drag's end is the list's too (consumed, position unchanged).
+	assert.equal( hud.pointer( { kind: "drag", id: "unique-status-thumb", dy: 100 } ), true );
+	assert.equal( hud.state().firstRow, 18 );
+	assert.equal( hud.pointer( { kind: "drag-end", id: "unique-status-thumb" } ), true );
+	assert.equal( hud.state().firstRow, 18 );
+	assert.equal( hud.pointer( { kind: "drag", id: "other-thumb", dy: 10 } ), false );
+});
+
+test("the server clock runs forward between feed frames", () => {
+	const hud = createUniqueStatusHud( {} );
+	assert.equal( hud.serverNowMs( null, 5000 ), 0 );
+	const feed = { serverNowMs: 100000, rows: [], revision: 3 };
+	assert.equal( hud.serverNowMs( feed, 1000 ), 100000 );
+	assert.equal( hud.serverNowMs( feed, 61000 ), 160000 );
+	// A new revision rebases on its own frame time.
+	assert.equal( hud.serverNowMs( { serverNowMs: 200000, rows: [], revision: 4 }, 62000 ), 200000 );
+	hud.reset();
+	assert.equal( hud.serverNowMs( feed, 1000 ), 100000 );
 });
 
 test("alerts follow the saved list and never the first feed", () => {
 	const hud = createUniqueStatusHud( {} );
 	hud.attach( "Ann" );
-	hud.toggleMark( TIGER_GIRL );
-	hud.takeSave();
+	hud.click( `unique-status-mark:${TIGER_GIRL}` );
+	hud.click( "unique-status-save" );
 
 	// The first feed is the baseline: the death already in it says nothing.
 	const base = { serverNowMs: 1, rows: [ DEAD_A ], revision: 1 };
@@ -309,8 +365,8 @@ test("alerts follow the saved list and never the first feed", () => {
 	const gone = { serverNowMs: 3, rows: [ DEAD_A ], revision: 3 };
 	assert.deepEqual( hud.reconcile( gone, true ), [] );
 
-	hud.toggleDeaths();
-	hud.takeSave();
+	hud.click( "unique-status-deaths" );
+	hud.click( "unique-status-save" );
 	const bornAgain = { serverNowMs: 4, rows: [ ALIVE_A ], revision: 4 };
 	assert.deepEqual( hud.reconcile( bornAgain, true ), [ { row: ALIVE_A, spawned: true } ] );
 	const goneAgain = { serverNowMs: 5, rows: [ DEAD_A ], revision: 5 };
@@ -556,9 +612,9 @@ test("the System menu lists both port-only rows together", t => {
 test("with the row off changes are consumed silently", () => {
 	const hud = createUniqueStatusHud( {} );
 	hud.attach( "Ann" );
-	hud.toggleMark( TIGER_GIRL );
-	hud.toggleDeaths();
-	hud.takeSave();
+	hud.click( `unique-status-mark:${TIGER_GIRL}` );
+	hud.click( "unique-status-deaths" );
+	hud.click( "unique-status-save" );
 
 	const base = { serverNowMs: 1, rows: [ DEAD_A ], revision: 1 };
 	assert.deepEqual( hud.reconcile( base, true ), [] );

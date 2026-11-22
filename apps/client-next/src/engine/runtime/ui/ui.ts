@@ -451,7 +451,7 @@ import { textAllowed } from "@/engine/foundation/ui/character-create";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { compositeItemCaption, compositeItemLayout, createCompositeItemHud } from "./hud/composite-item-hud";
 import { createUniqueRankHud } from "./hud/unique-rank-hud";
-import { createUniqueStatusHud } from "./hud/unique-status-hud";
+import { createUniqueStatusHud, notifyBrowserUnique } from "./hud/unique-status-hud";
 import { UNIQUE_STATUS_HEIGHT, UNIQUE_STATUS_WIDTH, uniqueStatusView } from "./hud/unique-status-view";
 import {
 	createServerEventHud,
@@ -1258,27 +1258,6 @@ The release's git revision as the build stamps it (tools/build-metadata.mjs);
 "" where nothing defines it (a test importing the source).
 ================
 */
-/*
-================
-notifyBrowserUnique
-
-Port-only (#3531): the browser's own notification for a marked unique's
-flip - only when the saved list allows it and the browser's permission
-(granted at Save, never asked here) is in place. A browser without the
-Notification API simply stays quiet.
-================
-*/
-function notifyBrowserUnique( flip: UniqueStatusFlip, allowed: boolean ): void {
-	if ( !allowed || typeof Notification === "undefined" || Notification.permission !== "granted" ) {
-		return;
-	}
-	try {
-		new Notification( flip.row.name, { body: uniqueStatusAlertText( flip ) } );
-	} catch {
-		// A refused notification is the browser's business, not a frame's.
-	}
-}
-
 function stampedClientRevision(): string {
 	try {
 		return String( import.meta.env.SRO_CLIENT_REVISION ?? "" );
@@ -1776,10 +1755,6 @@ export function createUi( ports: UiPorts ) {
 	// wheel and thumb drag find it here) and the server clock's base: the
 	// last feed's server time and the local time it landed, so the Died
 	// column's "ago" runs between updates.
-	let uniqueStatusList: { rect: UiRect; total: number; page: number; } | null = null;
-	let uniqueStatusThumbTravel = 0;
-	let uniqueStatusClockRevision = -1;
-	let uniqueStatusClockBase = { serverMs: 0, atMs: 0 };
 	// The v1.696 client's Server Mission gauge (CNIFServerEvent, 0x34F2): native, no row.
 	const serverEventHud = createServerEventHud();
 	// Port-only, not native (#3907): the v1.696 SRO Macro windows (SRO_AUTO_MACRO).
@@ -5673,36 +5648,20 @@ export function createUi( ports: UiPorts ) {
 		} else if ( id === "unique-rank-ok" || id === "unique-rank-close" ) {
 			uniqueRankHud.close();
 			dirty = true;
-		} else if ( id.startsWith( "unique-status-tab:" ) ) {
-			uniqueStatusHud.selectTab( id.slice( "unique-status-tab:".length ) as UniqueStatusTab );
-			dirty = true;
-		} else if ( id.startsWith( "unique-status-mark:" ) ) {
-			uniqueStatusHud.toggleMark( Number( id.slice( "unique-status-mark:".length ) ) );
-			dirty = true;
-		} else if ( id === "unique-status-deaths" ) {
-			uniqueStatusHud.toggleDeaths();
-			dirty = true;
-		} else if ( id === "unique-status-browser" ) {
-			uniqueStatusHud.toggleBrowser();
-			dirty = true;
-		} else if ( id === "unique-status-save" ) {
-			// Port-only (#3531): persist the notify list, and - only here,
-			// after the player opted in - ask the browser's permission.
-			const taken = uniqueStatusHud.takeSave();
-			if ( taken ) {
-				extensions.saveUniqueNotify?.( uniqueStatusHud.character(), taken );
-				if ( taken.browser && typeof Notification !== "undefined" && Notification.permission === "default" ) {
+		} else if ( id.startsWith( "unique-status-" ) ) {
+			// Port-only (#3531): the window's clicks; the page keeps the
+			// two platform calls a Save can ask for.
+			const action = uniqueStatusHud.click( id );
+			if ( action ) {
+				if ( action.save ) extensions.saveUniqueNotify?.( uniqueStatusHud.character(), action.save );
+				if (
+					action.askPermission && typeof Notification !== "undefined" &&
+					Notification.permission === "default"
+				) {
 					void Notification.requestPermission();
 				}
+				dirty = true;
 			}
-			dirty = true;
-		} else if ( id === "unique-status-scroll-up" || id === "unique-status-scroll-down" ) {
-			uniqueStatusHud.scroll(
-				id === "unique-status-scroll-up" ? -1 : 1,
-				uniqueStatusList?.total ?? 0,
-				uniqueStatusList?.page ?? 0
-			);
-			dirty = true;
 		} else if ( id === "server-event-close" ) {
 			serverEventHud.close();
 		} else if ( id.startsWith( MACRO_ID ) || id === "sro-macro-close" ) {
@@ -8106,28 +8065,9 @@ export function createUi( ports: UiPorts ) {
 				(event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end") &&
 				panel === "Unique Status"
 			) {
-				// Port-only (#3531): the Unique Status list's wheel and thumb,
-				// over the rect its last frame drew.
-				if ( event.kind === "scroll" ) {
-					if ( uniqueStatusList && containsPoint( uniqueStatusList.rect, event.x, event.y ) ) {
-						uniqueStatusHud.scroll(
-							Math.sign( event.delta ),
-							uniqueStatusList.total,
-							uniqueStatusList.page
-						);
-						dirty = true;
-						return;
-					}
-				} else if ( event.id === "unique-status-thumb" && uniqueStatusList ) {
-					if ( event.kind === "drag" ) {
-						uniqueStatusHud.dragThumb(
-							event.dy,
-							uniqueStatusThumbTravel,
-							uniqueStatusList.total,
-							uniqueStatusList.page
-						);
-						dirty = true;
-					}
+				// Port-only (#3531): the list's wheel and thumb live in the hud.
+				if ( uniqueStatusHud.pointer( event ) ) {
+					dirty = true;
 					return;
 				}
 			}
@@ -17699,16 +17639,6 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// operations unique-status-view.ts shapes; this loop only
 					// paints them with the ordinary window primitives.
 					const feed = next.gameplay?.uniqueStatus ?? null;
-					// The server's clock at the last frame, run forward by the
-					// local one so "50 min ago" keeps moving between updates.
-					if ( feed && feed.revision !== uniqueStatusClockRevision ) {
-						uniqueStatusClockRevision = feed.revision;
-						uniqueStatusClockBase = { serverMs: feed.serverNowMs, atMs: next.simulationTimeMs ?? 0 };
-					}
-					const serverNow = feed ?
-						uniqueStatusClockBase.serverMs +
-						Math.max( 0, (next.simulationTimeMs ?? 0) - uniqueStatusClockBase.atMs ) :
-						0;
 					const admission = beginWindow();
 					const statusView = uniqueStatusView( {
 						origin: windowOrigin( "UniqueStatus", [
@@ -17723,9 +17653,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						draft: uniqueStatusHud.draft(),
 						dirty: uniqueStatusHud.dirty(),
 						hover,
-						serverNowMs: serverNow
+						serverNowMs: uniqueStatusHud.serverNowMs( feed, next.simulationTimeMs ?? 0 )
 					} );
-					uniqueStatusList = statusView.list;
+					uniqueStatusHud.noteDrawn( statusView.list );
 					for ( const op of statusView.ops ) {
 						if ( op.kind === "box" ) {
 							windowBox( op.title, op.rect[0], op.rect[1], op.rect[2], op.rect[3] );
@@ -17771,7 +17701,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							paths.push( ...bar.paths );
 							quads.push( ...bar.quads );
 							controls.push( ...bar.controls );
-							uniqueStatusThumbTravel = bar.travel;
+							uniqueStatusHud.noteDrawn( statusView.list, bar.travel );
 						}
 					}
 					endWindow( admission, "unique-status" );
