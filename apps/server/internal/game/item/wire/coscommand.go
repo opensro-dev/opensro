@@ -327,6 +327,21 @@ func CosRideStateRider(payload []byte) (uint32, bool) {
 
 /*
 ================
+CosRideStateMount
+
+The vehicle a mode-1 B4B5 body names; false for a refusal ([2][code]) or a
+malformed body.
+================
+*/
+func CosRideStateMount(payload []byte) (uint32, bool) {
+	if len(payload) != cosRideStateApplyLen || payload[0] != 1 {
+		return 0, false
+	}
+	return binary.LittleEndian.Uint32(payload[6:]), true
+}
+
+/*
+================
 EncodeCosRecordCreateBand2
 
 EncodeCosRecordCreateBand2 builds the 0x3158 record for a TID-band-2
