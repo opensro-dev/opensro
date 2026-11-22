@@ -139,8 +139,8 @@ test("the System menu gains the calendar row only while its Experimental row is 
 			id => [ "node" + id, { id, text: "UIIT_" + id, size: [ 160, 26 ], rect: [ 0, 0, 160, 26 ] } ]
 		)
 	);
-	layout.GDR_SYSTEM_FRAME = { rect: [ 0, 0, 214, 212 ] };
-	layout.GDR_SYSTEM_BGTILE = { rect: [ 0, 0, 214, 146 ] };
+	layout.GDR_SYSTEM_FRAME = { id: 0, text: "GDR_SYSTEM_FRAME", size: [ 214, 212 ], rect: [ 0, 0, 214, 212 ] };
+	layout.GDR_SYSTEM_BGTILE = { id: 0, text: "GDR_SYSTEM_BGTILE", size: [ 214, 146 ], rect: [ 0, 0, 214, 146 ] };
 	const off = systemMenu( layout, 0, 0, false ), on = systemMenu( layout, 0, 0, true );
 	assert.deepEqual( off.buttons.map( button => button.id ), [ 10, 15, 11, 13, 14 ] );
 	assert.deepEqual( on.buttons.map( button => button.id ), [ 10, 15, 16, 11, 13, 14 ] );
