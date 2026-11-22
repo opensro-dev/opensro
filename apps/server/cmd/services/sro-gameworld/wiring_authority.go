@@ -27,6 +27,7 @@ import (
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/social/crest"
+	"opensro.online/server/internal/game/title"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/platform/readiness"
@@ -149,6 +150,12 @@ func loadAuthorityTextdata(devPaths enterworld.DevPaths) (authorityTextdata, err
 		return authorityTextdata{}, err
 	}
 	if err := loot.InitRoc(textdataDir, monster.RocEnabled()); err != nil {
+		return authorityTextdata{}, err
+	}
+	// Later-native (#3502): the title table every name line resolves
+	// through; no switch, and a missing generated file leaves ids
+	// unresolved (game/title).
+	if err := title.InitTitles(textdataDir); err != nil {
 		return authorityTextdata{}, err
 	}
 	textdata.Items.ApplyAttackPetExpansion()
