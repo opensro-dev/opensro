@@ -43,3 +43,19 @@ func TestRecoverVital(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestRecoverVitalUnknownMaximumKeepsTheVital
+
+A maximum the caller could not resolve (zero, or below) never saturates
+the vital to it: a heal must not be able to kill (#4081).
+================
+*/
+func TestRecoverVitalUnknownMaximumKeepsTheVital(t *testing.T) {
+	for _, maximum := range []int64{0, -1} {
+		if got := RecoverVital(5000, maximum, 80, 0); got != 5000 {
+			t.Fatalf("maximum %d: recovered current = %d, want 5000 kept", maximum, got)
+		}
+	}
+}

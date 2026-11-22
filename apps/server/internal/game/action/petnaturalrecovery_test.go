@@ -27,10 +27,22 @@ due at 1_004_000.
 */
 func petRecoveryRuntime(t *testing.T) (*Runtime, *enterworld.Character, *enterworld.CharacterCOS, petOwnerKey) {
 	t.Helper()
+	return petRecoveryRuntimeWith(t, 1000, 100)
+}
+
+/*
+================
+petRecoveryRuntimeWith
+
+petRecoveryRuntime with the pet's catalogue maxima given.
+================
+*/
+func petRecoveryRuntimeWith(t *testing.T, maxHP, maxMP uint32) (*Runtime, *enterworld.Character, *enterworld.CharacterCOS, petOwnerKey) {
+	t.Helper()
 	c := testCharacter()
 	rt, _ := newTestRuntime(c, nil)
 	ref := equipCombatTestPet(t, rt, c, 3)
-	ref.MaxHP, ref.MaxMP = 1000, 100
+	ref.MaxHP, ref.MaxMP = maxHP, maxMP
 	pet := c.ActiveCOS
 	pet.CurrentHP, pet.CurrentMP = 100, 10
 	pet.Satiety = 3000
@@ -225,5 +237,26 @@ func TestRiddenTransportRecoveryReadsTheRidersMotion(t *testing.T) {
 	rt.advancePetNaturalRecovery(key, 1_012_000)
 	if pet.CurrentHP == 100 {
 		t.Fatal("a halted ridden transport must recover")
+	}
+}
+
+/*
+================
+TestPetNaturalRecoveryUnresolvedMaximumNeverKills
+
+A pet whose catalogue row resolves no maximum (MaxHP and MaxMP 0) keeps
+its vitals across many pulses. The pulse used to saturate them to the
+zero projection, and the pet stood summoned with 0 HP, refused by every
+lane and by both unsummon paths (#4081).
+================
+*/
+func TestPetNaturalRecoveryUnresolvedMaximumNeverKills(t *testing.T) {
+	rt, _, pet, key := petRecoveryRuntimeWith(t, 0, 0)
+	pet.CurrentHP, pet.CurrentMP = 5000, 40
+	for now := int64(1_004_000); now <= 1_040_000; now += 4000 {
+		rt.advancePetNaturalRecovery(key, now)
+		if pet.CurrentHP != 5000 || pet.CurrentMP != 40 {
+			t.Fatalf("pulse at %d wrote %d/%d, want 5000/40 kept", now, pet.CurrentHP, pet.CurrentMP)
+		}
 	}
 }
