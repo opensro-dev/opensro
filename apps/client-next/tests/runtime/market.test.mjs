@@ -6,6 +6,7 @@ answers, named and anonymous sellers, offers, destinations and events.
 */
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
+import { readFile } from "node:fs/promises";
 import { defined } from "../helpers/defined.mjs";
 import assert from "node:assert/strict";
 const { createGameplay } = await import(
@@ -136,6 +137,70 @@ test("the account page reads sellers, both offer lists and the offer cap", () =>
 	assert.equal( mine.rules.offerCap, 20 );
 	assert.equal( market.state().pending, null );
 	assert.equal( market.state().notice, null );
+});
+
+test("the largest mine answer the server can send decodes whole", async () => {
+	// The wire's row limit has one owner per side (game/market
+	// WireRowLimit, MARKET_ROW_LIMIT here); the pinned fixture the Go
+	// test generates from an over-limit account is how the two are
+	// pinned together: raise the server's limit and the regenerated
+	// fixture stops decoding until the client's follows (#4111). The
+	// 50s below say what the fixture is: the server's largest answer.
+	const fixture = await readFile(
+		new URL( "../../../server/internal/game/action/testdata/market_mine_max_fixture.json", import.meta.url )
+	);
+	const market = createMarket( preview );
+	market.request( { op: "mine" }, 0 );
+	market.receive( fixture );
+	const page = defined( market.state().mine );
+	assert.equal( page.listings.length, 50 );
+	assert.equal( page.offersIn.length, 50 );
+	assert.equal( page.offersOut.length, 50 );
+	assert.equal( page.purchases.length, 50 );
+	assert.equal( market.state().pending, null );
+});
+
+test("a malformed answer costs the window its request, never the session", () => {
+	const market = createMarket( preview );
+	const overLimit = encode( {
+		version: 2,
+		op: "mine",
+		ok: true,
+		mine: {
+			listings: Array.from( { length: 51 }, ( _, i ) => row( i + 1 ) ),
+			offersIn: [],
+			offersOut: [],
+			purchases: [],
+			silk: 0,
+			warehouseGold: 0,
+			rules
+		}
+	} );
+	market.request( { op: "mine" }, 0 );
+	// The contained error comes back for the lane's incident report,
+	// once per distinct message; the identical failure repeats silent.
+	assert.equal( market.receiveContained( overLimit ), "Invalid market rows" );
+	market.request( { op: "mine" }, 5 );
+	assert.equal( market.receiveContained( overLimit ), null );
+	assert.equal( market.state().pending, null );
+	assert.equal( market.state().mine, null );
+	assert.equal( defined( market.state().notice ).code, "unavailable" );
+	assert.equal(
+		marketNoticeText( defined( market.state().notice ) ),
+		"The consignment market is closed right now."
+	);
+	// Garbage bytes are contained the same way, and the lane still works.
+	market.request( { op: "search", page: 1 }, 10 );
+	assert.notEqual( market.receiveContained( new Uint8Array( [ 0xff, 0xfe ] ) ), null );
+	assert.equal( market.state().pending, null );
+	market.request( { op: "mine" }, 20 );
+	market.receiveContained( encode( {
+		version: 2,
+		op: "mine",
+		ok: true,
+		mine: { listings: [ row( 1 ) ], offersIn: [], offersOut: [], purchases: [], silk: 3, warehouseGold: 0, rules }
+	} ) );
+	assert.equal( defined( market.state().mine ).listings.length, 1 );
 });
 
 test("an anonymous listing has no seller, and a malformed answer changes nothing", () => {
