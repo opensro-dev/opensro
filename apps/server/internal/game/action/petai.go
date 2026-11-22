@@ -160,13 +160,16 @@ type petSession struct {
 	// combat is the attack pet's BATTLE state (petcombat.go); nil follows.
 	combat *petCombatIntent
 	// stallTarget/stallUntilMs pause the un-ordered re-pick of a target
-	// whose wedged approach just yielded (petcombat.go): without the
-	// pause, the mercenary sight acquisition re-wedges the pet on the
-	// very next tick and the follow lane never collects the ten stops
-	// of its warp home. An admitted owner order on the target clears
-	// the pair instead of sitting it out.
+	// a fight yielded on (petrecovery.go): without the pause, the
+	// mercenary sight acquisition sends the pet straight back. An
+	// admitted owner order on the target clears the pair instead.
 	stallTarget  uint32
 	stallUntilMs int64
+	// followProgress is the follow lane's watchdog (petrecovery.go).
+	followProgress petProgress
+	// notices are frames for the owner a step raised (the obstacle
+	// refusal of an ordered fight), drained by advancePetSession.
+	notices []simulation.Frame
 	// others holds kill-settlement frames for other characters (a party's
 	// shared experience), drained with public by advancePets.
 	others []RecipientFrames
@@ -576,6 +579,8 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 		if answerStuck != nil {
 			output = append(output, answerStuck()...)
 		}
+		output = append(output, state.notices...)
+		state.notices = nil
 	}()
 	// The session binds the canonical character pointer. Avoid searching the
 	// division's entire saved-character population on every pet tick. The
@@ -742,6 +747,9 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 		for _, f := range result.Frames {
 			frames = append(frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
 		}
+		return frames
+	}
+	if frames, done := rt.resolvePetFollow(key, state, snapshot, cos, ref.TidWord, owner, nowMs); done {
 		return frames
 	}
 	if ref.TidWord>>11 >= 3 && ref.TidWord>>11 <= domain.MercenaryBand {

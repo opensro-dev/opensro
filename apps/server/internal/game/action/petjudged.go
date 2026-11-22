@@ -171,6 +171,11 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 	if !monster.FollowLocationCompatible(state.mover.AnyFollower().Position(nowMs).RegionID, ownerWorld.LiveSpawnAt(nowMs).RegionID) {
 		return nil, false
 	}
+	// A stuck follower relocates (petrecovery.go), which publishes from the
+	// pet record: abstain on that gate too, and the copy path relocates.
+	if _, stuck := rt.petFollowStuck(state, ref.TidWord, ownerWorld.LiveSpawnAt(nowMs), nowMs); stuck {
+		return nil, false
+	}
 	if ref.TidWord>>11 >= 3 && ref.TidWord>>11 <= domain.MercenaryBand {
 		*following = true
 		return rt.advanceOwnerFormation(petCombatStep{key: key, state: state, snapshot: state.character, ownerWorld: ownerWorld, pet: pet, ref: ref, run: run, constraint: constraint, nowMs: nowMs}), true

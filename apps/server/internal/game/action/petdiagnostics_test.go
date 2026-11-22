@@ -143,7 +143,7 @@ func TestPetTargetEndedReadsLifeWithoutACopy(t *testing.T) {
 ================
 TestStalledPetApproachIsLogged
 
-A pet that pursues for petApproachStallMs without reaching strike range is
+A pet that pursues for petProgressStallMs without reaching strike range is
 reported once, with the distances that tell a blocked path from a bad goal.
 ================
 */

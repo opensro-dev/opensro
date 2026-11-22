@@ -20,7 +20,6 @@ import (
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/market"
 	"opensro.online/server/internal/game/world/monster"
-	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/security/auth"
 	"opensro.online/server/internal/transport"
@@ -220,7 +219,7 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		// The mover's routes come from the plane that owns the
 		// region: the open-terrain search outdoors, the cave's
 		// region route inside a dungeon floor (#1645/#1646).
-		planes := movement.NewPlanes(game.movement, game.water)
+		planes := game.planes
 		ticker.Monsters = &simulation.MonsterMoverOps{
 			Navigation: navigation,
 			Monsters:   game.deps.MonsterState,

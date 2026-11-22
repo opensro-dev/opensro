@@ -365,6 +365,8 @@ type Runtime struct {
 	petMu            sync.Mutex
 	// petDiag throttles the attack pet fight log (petdiagnostics.go).
 	petDiag petDiagnostics
+	// petRecovery counts the pets resolved for want of a way (petrecovery.go).
+	petRecovery petRecoveryCounters
 	// placements counts non-walk placements inside a closed object
 	// (placementguard.go).
 	placements  placementGuard
