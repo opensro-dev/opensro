@@ -25,10 +25,12 @@ from the same import when SRO_ROC is on too (step 5c). The rares are in no
 client the port reads. With nothing kept, no file is written and the Roc
 kinds drop only what the native passes roll.
 
-The backup is not the whole of it: ISRO-R's fixed table also gives the Roc
-kinds the eight ITEM_QNO_RM_ARCHEMY trophies. They are native v1.150
-items, but the exchange quests that take them are not staged, so they are
-not joined here; roc_import.py lists them as waiting (#3399 step 5d).
+Step 5d joins the fixed table's other half: ISRO-R's shard database
+gives the Roc kinds the eight ITEM_QNO_RM_ARCHEMY trophies
+(scripts/data/roc/trophies-source.json, import_roc_trophies.py). They
+are native v1.150 items and the exchange quests that take them stage
+with the MEETROC chain, so their rows join here as fixed rules, under
+the same checks as the backup's.
 
 ===========================================================================
 """
@@ -42,6 +44,10 @@ SOURCE = Path(__file__).resolve().parent / "data" / "roc" / "rewards-source.json
 SOURCE_FORMAT = "opensro-roc-rewards-source-v1"
 # The pinned vSRO backup the evidence was read from.
 SOURCE_SHA256 = "9b9179e598f303f3293df1771ed7a9339a5e9c9de0dd2401884db2817d5dd9a4"
+TROPHIES_SOURCE = Path(__file__).resolve().parent / "data" / "roc" / "trophies-source.json"
+TROPHIES_FORMAT = "opensro-roc-trophies-source-v1"
+# The pinned ISRO-R shard backup the trophy evidence was read from.
+TROPHIES_SHA256 = "89c6835f8e51b1a75950242c89cf3ad639ea7d50a22191a90632cca333664a45"
 REWARDS_FILE = "roc-rewards.txt"
 REWARDS_VERSION = 1
 # Source groups are offset into a range neither the native groups nor
@@ -80,6 +86,31 @@ def checked_rule(low, high, chance, what):
 
 
 # ================
+# project_fixed
+#
+# The fixed rows the installed items can serve; the rest wait. A row
+# the server cannot represent (a rent code, options on anything but an
+# ETC item) refuses rather than ship another reward.
+# ================
+def project_fixed(rows, installed, waiting):
+	kept = []
+	for row in rows:
+		what = f"{row['monster']}/{row['item']}"
+		checked_rule(row["min"], row["max"], row["probability"], what)
+		if row["rent"] not in NO_RENT:
+			raise ValueError(f"Roc reward carries a rent code: {what}")
+		item = installed.get(row["item"])
+		if item is None:
+			waiting.append(what)
+			continue
+		if row.get("options") and tuple(item[TYPE_FIRST:TYPE_SECOND + 1]) != ETC_TYPE:
+			raise ValueError(f"Roc reward options name equipment: {what}")
+		kept.append({"Monster": row["monster"], "Item": row["item"], "Plus": row["plus"],
+			"Min": row["min"], "Max": row["max"], "Probability": row["probability"]})
+	return kept
+
+
+# ================
 # project_rewards
 #
 # The rules the installed items can serve, and what waits. A rule the
@@ -94,19 +125,7 @@ def project_rewards(source, installed):
 		raise ValueError(f"{SOURCE.name} is not the pinned {SOURCE_FORMAT}")
 	rules = {"Version": REWARDS_VERSION, "Fixed": [], "Random": [], "Groups": {}}
 	waiting = []
-	for row in source["fixed"]:
-		what = f"{row['monster']}/{row['item']}"
-		checked_rule(row["min"], row["max"], row["probability"], what)
-		if row["rent"] not in NO_RENT:
-			raise ValueError(f"Roc reward carries a rent code: {what}")
-		item = installed.get(row["item"])
-		if item is None:
-			waiting.append(what)
-			continue
-		if row.get("options") and tuple(item[TYPE_FIRST:TYPE_SECOND + 1]) != ETC_TYPE:
-			raise ValueError(f"Roc reward options name equipment: {what}")
-		rules["Fixed"].append({"Monster": row["monster"], "Item": row["item"], "Plus": row["plus"],
-			"Min": row["min"], "Max": row["max"], "Probability": row["probability"]})
+	rules["Fixed"] = project_fixed(source["fixed"], installed, waiting)
 	for row in source["random"]:
 		what = f"{row['monster']}/group {row['group']}"
 		checked_rule(row["min"], row["max"], row["probability"], what)
@@ -125,6 +144,20 @@ def project_rewards(source, installed):
 
 
 # ================
+# project_trophies
+#
+# The trophy rows of the ISRO-R shard's fixed table, under the same
+# checks as the backup's. The trophies are native items, so on a real
+# build all eight join; a row waits only where the variant lacks one.
+# ================
+def project_trophies(source, installed):
+	if source.get("format") != TROPHIES_FORMAT or source.get("sha256") != TROPHIES_SHA256:
+		raise ValueError(f"{TROPHIES_SOURCE.name} is not the pinned {TROPHIES_FORMAT}")
+	waiting = []
+	return project_fixed(source["fixed"], installed, waiting), waiting
+
+
+# ================
 # remove_rewards
 # ================
 def remove_rewards(text_root):
@@ -139,11 +172,16 @@ def remove_rewards(text_root):
 # ================
 def add_rewards(text_root):
 	source = json.loads(SOURCE.read_text(encoding="utf-8"))
-	rules, waiting = project_rewards(source, installed_items(text_root))
+	installed = installed_items(text_root)
+	rules, waiting = project_rewards(source, installed)
+	trophies_source = json.loads(TROPHIES_SOURCE.read_text(encoding="utf-8"))
+	trophies, waiting_trophies = project_trophies(trophies_source, installed)
+	rules["Fixed"].extend(trophies)
 	if not rules["Fixed"] and not rules["Random"]:
 		remove_rewards(text_root)
 	else:
 		write_atomically(text_root / REWARDS_FILE, (json.dumps(rules) + "\n").encode())
 	return {"fixed": len(rules["Fixed"]), "random": len(rules["Random"]),
 		"members": sum(len(members) for members in rules["Groups"].values()), "waiting": waiting,
-		"sourceSHA256": source["sha256"]}
+		"trophies": len(trophies), "waitingTrophies": waiting_trophies,
+		"sourceSHA256": source["sha256"], "trophiesSourceSHA256": trophies_source["sha256"]}
