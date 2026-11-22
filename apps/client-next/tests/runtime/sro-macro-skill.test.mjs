@@ -104,7 +104,13 @@ skillRef
 */
 /**
  * @param {number} id
- * @param {{ targetRequired?: boolean, actionMs?: number, group?: number, admit?: object }} [over]
+ * @param {{
+ *   targetRequired?: boolean,
+ *   actionMs?: number,
+ *   group?: number,
+ *   admit?: object,
+ *   effectDurationMs?: number
+ * }} [over]
  */
 function skillRef( id, over = {} ) {
 	return {
@@ -113,6 +119,7 @@ function skillRef( id, over = {} ) {
 		level: 1,
 		status: false,
 		effectRider: false,
+		...(over.effectDurationMs !== undefined ? { effectDurationMs: over.effectDurationMs } : {}),
 		ui: {
 			name: `SKILL_${id}`,
 			trainable: true,
@@ -291,6 +298,97 @@ test("a clicked monster is enough for the attack step, even before its select gr
 	g.dispose();
 });
 
+test("an attack with admit.replace still fires while a non-replace buff is attached", () => {
+	const replace = {
+		category: 3,
+		group: 40,
+		rank: 1,
+		states: 0,
+		ovl2: 0,
+		cbuf: false,
+		undecided: false
+	};
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const entities = new Map();
+	const local = {
+		gid: LOCAL_GID,
+		refObjId: 1907,
+		kind: /** @type {const} */ ("local-player"),
+		name: "macro",
+		countryByte9c: 0,
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	const monster = {
+		gid: MONSTER_GID,
+		refObjId: 2000,
+		kind: /** @type {const} */ ("monster"),
+		name: "mob",
+		regionId: 257,
+		x: 10,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	entities.set( LOCAL_GID, local );
+	entities.set( MONSTER_GID, monster );
+	const g = createGameplay( f => sent.push( f ), () => {}, () => {}, gid => entities.get( gid ) );
+	g.bootstrap( {
+		character: {
+			hp: 100,
+			mp: 100,
+			maxHp: 100,
+			maxMp: 100,
+			skills: [ BUFF, ATTACK ],
+			autoPotion: { hp: 0x3211, mp: 0x3212, cure: 0x13, timing: 0x8a }
+		},
+		refSkillSnapshot: [
+			skillRef( BUFF, { actionMs: 100 } ),
+			skillRef( ATTACK, {
+				targetRequired: true,
+				actionMs: 100,
+				admit: { weaponKinds: [ 0xff, 0xff ], replace }
+			} )
+		]
+	} );
+	g.worldReady();
+	g.seed( monster );
+	g.seed( local );
+	g.experimental( experimentalGameplay( experimentalOptions( { sroMacro: true } ) ) );
+	g.receive(
+		macroReplay( { skillOn: 1, buff: [], attack: [ { slot: 0, skill: ATTACK } ] } ),
+		0
+	);
+	// A live buff with no replace descriptor must not make DecideReplacement
+	// return "undecided effect" and starve the attack step.
+	g.receive(
+		{ opcode: 0xb419, payload: Uint8Array.from( [ ...u32le( LOCAL_GID ), ...u32le( BUFF ), ...u32le( 77 ) ] ) },
+		0
+	);
+	g.command( { kind: "select", gid: MONSTER_GID }, 0, monster, local );
+	const grant = new Uint8Array( 11 );
+	grant[0] = 1;
+	new DataView( grant.buffer ).setUint32( 1, MONSTER_GID, true );
+	g.receive( { opcode: 0xb45a, payload: grant }, 0 );
+	sent.length = 0;
+	g.step( 0, local );
+	const presses = sent.filter( frame => frame.opcode === SKILL_PRESS_OPCODE );
+	assert.equal( presses.length, 1, "attack fires beside a non-replace buff" );
+	const view = new DataView(
+		presses[0].payload.buffer,
+		presses[0].payload.byteOffset,
+		presses[0].payload.byteLength
+	);
+	assert.equal( view.getUint32( 2, true ), ATTACK );
+	g.dispose();
+});
+
 test("macroBuffAlreadyOn matches exact id, skill group, and replace group", () => {
 	const replace = { category: 1, group: 40, rank: 1, states: 0, ovl2: 0, cbuf: false, undecided: false };
 	const catalog = [
@@ -319,6 +417,26 @@ test("macroBuffAlreadyOn matches exact id, skill group, and replace group", () =
 		"same SkillUiReplace group across different skill ids"
 	);
 	assert.equal( loop.macroBuffAlreadyOn( catalog[0], [], catalog ), false );
+	assert.equal(
+		loop.macroBuffAlreadyOn(
+			catalog[0],
+			[ { skill: BUFF, remainingMs: 1000, receivedAtMs: 0 } ],
+			catalog,
+			1000
+		),
+		false,
+		"exhausted UI timer is not already-on"
+	);
+	assert.equal(
+		loop.macroBuffAlreadyOn(
+			catalog[0],
+			[ { skill: BUFF, remainingMs: 1000, receivedAtMs: 0 } ],
+			catalog,
+			999
+		),
+		true,
+		"timer still running counts as on"
+	);
 });
 
 test("an already-applied buff is not re-pressed after a monster is selected", () => {
@@ -335,6 +453,99 @@ test("an already-applied buff is not re-pressed after a monster is selected", ()
 		const view = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength );
 		assert.equal( view.getUint32( 2, true ), ATTACK, "the live buff must not be re-pressed" );
 	}
+	g.dispose();
+});
+
+test("a buff is re-pressed after its attached effect ends (Grass Walk)", () => {
+	const { sent, g, local } = macroWorld( { row: true, skillOn: 1, selectMonster: false } );
+	g.receive(
+		{ opcode: 0xb419, payload: Uint8Array.from( [ ...u32le( LOCAL_GID ), ...u32le( BUFF ), ...u32le( 77 ) ] ) },
+		0
+	);
+	sent.length = 0;
+	for ( let t = 0; t <= 2000; t += 100 ) g.step( t, local );
+	assert.equal(
+		sent.filter( frame => frame.opcode === SKILL_PRESS_OPCODE ).length,
+		0,
+		"live buff is not re-pressed"
+	);
+	// 0xb6a0 tears the token down — the macro must cast again (native 00abd630).
+	g.receive( { opcode: 0xb6a0, payload: Uint8Array.from( [ 1, ...u32le( 77 ) ] ) }, 2100 );
+	sent.length = 0;
+	for ( let t = 2200; t <= 5000; t += 100 ) g.step( t, local );
+	const presses = sent.filter( frame => frame.opcode === SKILL_PRESS_OPCODE );
+	assert.ok( presses.length >= 1, "buff re-pressed after expiry" );
+	const view = new DataView(
+		presses[0].payload.buffer,
+		presses[0].payload.byteOffset,
+		presses[0].payload.byteLength
+	);
+	assert.equal( view.getUint32( 2, true ), BUFF );
+	g.dispose();
+});
+
+test("a buff is re-pressed when its UI timer hits 0 before 0xb6a0 (Grass Walk)", () => {
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const entities = new Map();
+	const local = {
+		gid: LOCAL_GID,
+		refObjId: 1907,
+		kind: /** @type {const} */ ("local-player"),
+		name: "macro",
+		countryByte9c: 0,
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	entities.set( LOCAL_GID, local );
+	const g = createGameplay( f => sent.push( f ), () => {}, () => {}, gid => entities.get( gid ) );
+	g.bootstrap( {
+		character: {
+			hp: 100,
+			mp: 100,
+			maxHp: 100,
+			maxMp: 100,
+			skills: [ BUFF, ATTACK ],
+			autoPotion: { hp: 0x3211, mp: 0x3212, cure: 0x13, timing: 0x8a }
+		},
+		refSkillSnapshot: [
+			skillRef( BUFF, { actionMs: 100, effectDurationMs: 1500 } ),
+			skillRef( ATTACK, { targetRequired: true, actionMs: 100 } )
+		]
+	} );
+	g.worldReady();
+	g.seed( local );
+	g.experimental( experimentalGameplay( experimentalOptions( { sroMacro: true } ) ) );
+	g.receive(
+		macroReplay( { skillOn: 1, buff: [ { slot: 0, skill: BUFF } ], attack: [] } ),
+		0
+	);
+	g.receive(
+		{ opcode: 0xb419, payload: Uint8Array.from( [ ...u32le( LOCAL_GID ), ...u32le( BUFF ), ...u32le( 77 ) ] ) },
+		0
+	);
+	sent.length = 0;
+	for ( let t = 0; t <= 1400; t += 100 ) g.step( t, local );
+	assert.equal(
+		sent.filter( frame => frame.opcode === SKILL_PRESS_OPCODE ).length,
+		0,
+		"timer still running"
+	);
+	// Authoritative instance is still held (no 0xb6a0); the UI timer is done.
+	sent.length = 0;
+	for ( let t = 1500; t <= 4000; t += 100 ) g.step( t, local );
+	const presses = sent.filter( frame => frame.opcode === SKILL_PRESS_OPCODE );
+	assert.ok( presses.length >= 1, "rebuff at exhausted UI timer" );
+	const view = new DataView(
+		presses[0].payload.buffer,
+		presses[0].payload.byteOffset,
+		presses[0].payload.byteLength
+	);
+	assert.equal( view.getUint32( 2, true ), BUFF );
 	g.dispose();
 });
 
@@ -448,6 +659,40 @@ test("macroSkillWantSwap equips the bound bag weapon then the shield", () => {
 		loop.macroSkillWantSwap( [ 0, 0, 5, 0 ], [ { slot: 5, typeFlags: WEAPON_TYPE } ] ),
 		null,
 		"equipment sockets are outside the 0x0d..0x6f bind range"
+	);
+});
+
+test("68ede0 equips weapon or shield from either bind slot (restore after shield buff)", () => {
+	const flags = codec.withMacroGearSlot(
+		codec.withMacroGearSlot( codec.defaultMacroSettings().skillFlags, "weapon", 14 ),
+		"shield",
+		15
+	);
+	assert.deepEqual(
+		loop.macroSkillSwapCandidates( flags, [
+			{ slot: 14, typeFlags: WEAPON_TYPE, refObjId: WEAPON_REF },
+			{ slot: 15, typeFlags: SHIELD_TYPE, refObjId: 99 }
+		] ),
+		[
+			{ kind: "inventory-move", source: 14, destination: 6, quantity: 0, activation: true },
+			{ kind: "inventory-move", source: 15, destination: 7, quantity: 0, activation: true }
+		]
+	);
+	// After a shield cast the primary often sits in the Shield bind slot.
+	assert.deepEqual(
+		loop.macroSkillSwapCandidates( flags, [
+			{ slot: 15, typeFlags: WEAPON_TYPE, refObjId: WEAPON_REF }
+		] ),
+		[ { kind: "inventory-move", source: 15, destination: 6, quantity: 0, activation: true } ],
+		"weapon in the Shield bind is re-equipped (native 68ede0)"
+	);
+	// A shield that landed in the Weapon bind is still shield-class → socket 7.
+	assert.deepEqual(
+		loop.macroSkillSwapCandidates(
+			codec.withMacroGearSlot( codec.defaultMacroSettings().skillFlags, "weapon", 14 ),
+			[ { slot: 14, typeFlags: SHIELD_TYPE, refObjId: 99 } ]
+		),
+		[ { kind: "inventory-move", source: 14, destination: 7, quantity: 0, activation: true } ]
 	);
 });
 
@@ -580,6 +825,170 @@ test("a wrong-weapon attack equips the bound bag weapon once, then casts without
 	sent.length = 0;
 	g.step( 2500, local );
 	assert.equal( sent.filter( frame => frame.opcode === ITEM_MOVE_OPCODE ).length, 0, "still no oscillation" );
+	g.dispose();
+});
+
+test("a bound Shield is not equipped for a weaponKinds wrong-weapon refusal", () => {
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const entities = new Map();
+	const local = {
+		gid: LOCAL_GID,
+		refObjId: 1907,
+		kind: /** @type {const} */ ("local-player"),
+		name: "macro",
+		countryByte9c: 0,
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	const monster = {
+		gid: MONSTER_GID,
+		refObjId: 2000,
+		kind: /** @type {const} */ ("monster"),
+		name: "mob",
+		regionId: 257,
+		x: 10,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	entities.set( LOCAL_GID, local );
+	entities.set( MONSTER_GID, monster );
+	const g = createGameplay( f => sent.push( f ), () => {}, () => {}, gid => entities.get( gid ) );
+	g.bootstrap( {
+		character: {
+			hp: 100,
+			mp: 100,
+			maxHp: 100,
+			maxMp: 100,
+			skills: [ ATTACK ],
+			autoPotion: { hp: 0x3211, mp: 0x3212, cure: 0x13, timing: 0x8a }
+		},
+		refSkillSnapshot: [
+			skillRef( ATTACK, { targetRequired: true, actionMs: 100, admit: SWORD_ADMIT } )
+		],
+		refItemSnapshot: [
+			{ refObjId: WEAPON_REF, typeFlags: WEAPON_TYPE, nativeFields: {} },
+			{ refObjId: OTHER_WEAPON_REF, typeFlags: OTHER_WEAPON_TYPE, nativeFields: {} },
+			{ refObjId: 60, typeFlags: SHIELD_TYPE, nativeFields: {} }
+		],
+		equipItems: [
+			{ slot: 6, refObjId: OTHER_WEAPON_REF, body: weaponBody( OTHER_WEAPON_REF ) },
+			{ slot: 14, refObjId: WEAPON_REF, body: weaponBody( WEAPON_REF ) },
+			{ slot: 15, refObjId: 60, body: [ 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ] }
+		]
+	} );
+	g.worldReady();
+	g.seed( monster );
+	g.seed( local );
+	g.experimental( experimentalGameplay( experimentalOptions( { sroMacro: true } ) ) );
+	g.receive(
+		macroReplay( {
+			skillOn: 1,
+			// Weapon + Shield both bound: only the sword may move.
+			skillFlags: [ 0, 0, 14, 15 ],
+			buff: [],
+			attack: [ { slot: 0, skill: ATTACK } ]
+		} ),
+		0
+	);
+	g.command( { kind: "select", gid: MONSTER_GID }, 0, monster, local );
+	const grant = new Uint8Array( 11 );
+	grant[0] = 1;
+	new DataView( grant.buffer ).setUint32( 1, MONSTER_GID, true );
+	g.receive( { opcode: 0xb45a, payload: grant }, 0 );
+	sent.length = 0;
+	g.step( 0, local );
+	const moves = sent.filter( frame => frame.opcode === ITEM_MOVE_OPCODE );
+	assert.equal( moves.length, 1, "one weapon swap" );
+	assert.equal( moves[0].payload[1], 14, "source is the Weapon bag slot" );
+	assert.equal( moves[0].payload[2], 6, "destination is the weapon socket" );
+	g.dispose();
+});
+
+test("a Shield-only bind does not flail on a weaponKinds refusal", () => {
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const entities = new Map();
+	const local = {
+		gid: LOCAL_GID,
+		refObjId: 1907,
+		kind: /** @type {const} */ ("local-player"),
+		name: "macro",
+		countryByte9c: 0,
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	const monster = {
+		gid: MONSTER_GID,
+		refObjId: 2000,
+		kind: /** @type {const} */ ("monster"),
+		name: "mob",
+		regionId: 257,
+		x: 10,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	entities.set( LOCAL_GID, local );
+	entities.set( MONSTER_GID, monster );
+	const g = createGameplay( f => sent.push( f ), () => {}, () => {}, gid => entities.get( gid ) );
+	g.bootstrap( {
+		character: {
+			hp: 100,
+			mp: 100,
+			maxHp: 100,
+			maxMp: 100,
+			skills: [ ATTACK ],
+			autoPotion: { hp: 0x3211, mp: 0x3212, cure: 0x13, timing: 0x8a }
+		},
+		refSkillSnapshot: [
+			skillRef( ATTACK, { targetRequired: true, actionMs: 100, admit: SWORD_ADMIT } )
+		],
+		refItemSnapshot: [
+			{ refObjId: OTHER_WEAPON_REF, typeFlags: OTHER_WEAPON_TYPE, nativeFields: {} },
+			{ refObjId: 60, typeFlags: SHIELD_TYPE, nativeFields: {} }
+		],
+		equipItems: [
+			{ slot: 6, refObjId: OTHER_WEAPON_REF, body: weaponBody( OTHER_WEAPON_REF ) },
+			{ slot: 15, refObjId: 60, body: [ 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ] }
+		]
+	} );
+	g.worldReady();
+	g.seed( monster );
+	g.seed( local );
+	g.experimental( experimentalGameplay( experimentalOptions( { sroMacro: true } ) ) );
+	g.receive(
+		macroReplay( {
+			skillOn: 1,
+			skillFlags: [ 0, 0, 0, 15 ],
+			buff: [],
+			attack: [ { slot: 0, skill: ATTACK } ]
+		} ),
+		0
+	);
+	g.command( { kind: "select", gid: MONSTER_GID }, 0, monster, local );
+	const grant = new Uint8Array( 11 );
+	grant[0] = 1;
+	new DataView( grant.buffer ).setUint32( 1, MONSTER_GID, true );
+	g.receive( { opcode: 0xb45a, payload: grant }, 0 );
+	sent.length = 0;
+	for ( let t = 0; t <= 4000; t += 500 ) g.step( t, local );
+	assert.equal(
+		sent.filter( frame => frame.opcode === ITEM_MOVE_OPCODE ).length,
+		0,
+		"Shield bind must not keep equipping on a weaponKinds refuse"
+	);
 	g.dispose();
 });
 

@@ -114,11 +114,24 @@ export interface MacroAnswer {
 
 /*
 ================
+defaultHuntBlock
+
+Native ctor 006938a0: range In place (0), byte 1 = 1 (not a UI control;
+also the save's leading u8), every other option at its first choice.
+================
+*/
+export function defaultHuntBlock(): number[] {
+	const hunt = new Array<number>( MACRO_HUNT_BYTES ).fill( 0 );
+	hunt[1] = 1;
+	return hunt;
+}
+
+/*
+================
 defaultMacroSettings
 
-Nothing available and every block zeroed. The native defaults (00694010)
-are not read; an all-zero block is the inferred empty setup: no item in
-any row and every option at its first choice.
+Nothing available. Potion and skill blocks zeroed (empty rows / first
+choice). Hunt uses defaultHuntBlock (006938a0).
 ================
 */
 export function defaultMacroSettings(): MacroSettings {
@@ -128,7 +141,7 @@ export function defaultMacroSettings(): MacroSettings {
 		skillOn: false,
 		huntOn: false,
 		potion: new Array<number>( MACRO_POTION_BYTES ).fill( 0 ),
-		hunt: new Array<number>( MACRO_HUNT_BYTES ).fill( 0 ),
+		hunt: defaultHuntBlock(),
 		skillFlags: new Array<number>( MACRO_SKILL_FLAGS ).fill( 0 ),
 		attack: [],
 		buff: []
@@ -510,9 +523,9 @@ function sameBytes( a: readonly number[], b: readonly number[] ): boolean {
 encodeMacroSave
 
 One 0x7554 save of kind, or null when nothing in it changed. The potion
-and hunt saves carry the whole block after one byte whose meaning is not
-read (00694170 sends it literally; zero here). The skill save carries
-only the changed records, as the native onlyIfChanged save does.
+save carries the whole block after one unread byte (00694170; zero here).
+The hunt save carries pending[1] then the 0xC block. The skill save
+carries only the changed records, as the native onlyIfChanged save does.
 ================
 */
 export function encodeMacroSave( kind: MacroKind, next: MacroSettings, current: MacroSettings ): Uint8Array | null {
@@ -525,7 +538,8 @@ export function encodeMacroSave( kind: MacroKind, next: MacroSettings, current: 
 	if ( kind === MACRO_HUNT ) {
 		if ( next.hunt.length !== MACRO_HUNT_BYTES ) throw new Error( "Invalid SRO Macro hunt block" );
 		if ( sameBytes( next.hunt, current.hunt ) ) return null;
-		return Uint8Array.from( [ ...head, HUNT_VERSION, 0, 0, ...next.hunt ] );
+		// 00694170: u16 version, then pending[1] (the non-UI flag byte), then the 0xC block.
+		return Uint8Array.from( [ ...head, HUNT_VERSION, 0, next.hunt[1]! & 0xff, ...next.hunt ] );
 	}
 	const body: number[] = [];
 	SKILL_FLAG_TAGS.forEach( ( tag, i ) => {

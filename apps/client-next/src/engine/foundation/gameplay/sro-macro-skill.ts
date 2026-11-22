@@ -183,37 +183,72 @@ export function macroInventoryAfterSwap<T extends { readonly slot: number; }>(
 
 /*
 ================
-macroSkillWantSwap
+MacroSwapKind
 
-Weapon / Shield equip (0068ede0): when a flag byte names a bag slot that
-still holds a weapon or shield, return the inventory-move onto its
-CIFEquipment socket. The worker only issues this when the skill's press
-is refused for a wrong weapon — otherwise a dual loadout would oscillate
-every cast (equip puts the previous weapon back into the bound bag slot).
+Which Auto-Skills gear-bind slots to look at. 68ede0 equips whatever
+weapon or shield sits in that bag slot (bind kind does not filter the
+item class) — after a shield buff the primary often rests in the Shield
+bind slot and must be wearable again from there.
 ================
 */
-export function macroSkillWantSwap(
+export type MacroSwapKind = MacroGearKind;
+
+/*
+================
+macroSkillSwapCandidates
+
+Weapon / Shield equip candidates (0068ede0): each named bind bag slot
+whose item is a weapon (68c9d0) or shield/arrow (68c670), not already on
+its socket. Native does not require the item class to match the bind
+label — a 2H that landed in the Shield bind after a shield cast is
+re-equipped from that same slot on the next attack. The worker still
+runs an after-press check so a useless shield equip cannot clear a
+weaponKinds refuse and oscillate.
+================
+*/
+export function macroSkillSwapCandidates(
 	skillFlags: readonly number[],
-	inventory: readonly { readonly slot: number; readonly typeFlags: number; }[]
-): Extract<GameplayCommand, { kind: "inventory-move"; }> | null {
-	for ( const index of [ MACRO_SKILL_FLAG_WEAPON, MACRO_SKILL_FLAG_SHIELD ] ) {
+	inventory: readonly { readonly slot: number; readonly typeFlags: number; readonly refObjId?: number; }[],
+	kinds: readonly MacroSwapKind[] = [ "weapon", "shield" ]
+): Extract<GameplayCommand, { kind: "inventory-move"; }>[] {
+	const out: Extract<GameplayCommand, { kind: "inventory-move"; }>[] = [];
+	const seen = new Set<number>();
+	for ( const kind of kinds ) {
+		const index = kind === "weapon" ? MACRO_SKILL_FLAG_WEAPON : MACRO_SKILL_FLAG_SHIELD;
 		const abs = skillFlags[index] ?? 0;
 		if ( abs < MACRO_GEAR_SLOT_MIN || abs >= MACRO_GEAR_SLOT_MAX ) continue;
+		if ( seen.has( abs ) ) continue;
+		seen.add( abs );
 		const item = inventory.find( row => row.slot === abs );
-		if ( !item ) continue;
+		// 68ede0: 68c670 (shield socket) or 68c9d0 (weapon socket).
+		if ( !item || (!macroGearAdmits( "weapon", item.typeFlags ) && !macroGearAdmits( "shield", item.typeFlags )) ) {
+			continue;
+		}
 		const destination = equipmentSocket( item.typeFlags );
 		if ( destination !== WEAPON_SOCKET && destination !== SHIELD_SOCKET ) continue;
 		const equipped = inventory.find( row => row.slot === destination );
 		// Already wearing this exact stack — nothing to do.
-		if (
-			equipped && "refObjId" in item && "refObjId" in equipped &&
-			(equipped as { refObjId: number; }).refObjId === (item as { refObjId: number; }).refObjId
-		) {
-			continue;
-		}
-		return { kind: "inventory-move", source: abs, destination, quantity: 0, activation: true };
+		if ( equipped && item.refObjId !== undefined && equipped.refObjId === item.refObjId ) continue;
+		out.push( { kind: "inventory-move", source: abs, destination, quantity: 0, activation: true } );
 	}
-	return null;
+	return out;
+}
+
+/*
+================
+macroSkillWantSwap
+
+The first candidate from macroSkillSwapCandidates (Weapon then Shield).
+The worker walks the full list with an after-press check so a shield
+equip that would not clear the refuse is skipped.
+================
+*/
+export function macroSkillWantSwap(
+	skillFlags: readonly number[],
+	inventory: readonly { readonly slot: number; readonly typeFlags: number; readonly refObjId?: number; }[],
+	kinds?: readonly MacroSwapKind[]
+): Extract<GameplayCommand, { kind: "inventory-move"; }> | null {
+	return macroSkillSwapCandidates( skillFlags, inventory, kinds )[0] ?? null;
 }
 
 /*
@@ -265,6 +300,38 @@ export interface MacroBuffSkill {
 
 /*
 ================
+MacroBuffEffect
+
+An attached effect the already-on gate can see. remainingMs / receivedAtMs
+are the authored UI timer (effectRemainingMs); an exhausted timer is
+treated as absent so Grass Walk rebuffs when its bar hits 0, even before
+0xb6a0 retires the row (attached-effects keeps the instance until the
+server teardown — that is authority for presentation, not for this gate).
+================
+*/
+export interface MacroBuffEffect {
+	readonly skill: number;
+	readonly remainingMs?: number;
+	readonly receivedAtMs?: number;
+}
+
+/*
+================
+macroBuffEffectLive
+
+True while the effect still counts for the buff step's already-on gate.
+Mirrors effectRemainingMs: no authored timer stays live; a timer at 0
+does not.
+================
+*/
+function macroBuffEffectLive( effect: MacroBuffEffect, nowMs: number ): boolean {
+	if ( effect.remainingMs === undefined ) return true;
+	const elapsed = Math.max( 0, nowMs - (effect.receivedAtMs ?? nowMs) );
+	return effect.remainingMs - elapsed > 0;
+}
+
+/*
+================
 macroBuffAlreadyOn
 
 The buff step's "already applied" gate (00686bc0 → 00abd630): skip when
@@ -272,16 +339,21 @@ the caster already holds this buff. Exact skill id matches the native
 list walk; the port also treats the same skilldata group or the same
 SkillUiReplace group as present, so a live shield (or any self-buff)
 whose attached effect id is a sibling rank is not re-cast every pass.
+An authored duration that has reached 0 no longer counts — players see
+that as finished (Grass Walk), and waiting only on 0xb6a0 left the macro
+idle for the whole gap between the UI timer and the teardown.
 ================
 */
 export function macroBuffAlreadyOn(
 	skill: MacroBuffSkill,
-	effects: readonly { readonly skill: number; }[],
-	catalog: readonly MacroBuffSkill[]
+	effects: readonly MacroBuffEffect[],
+	catalog: readonly MacroBuffSkill[],
+	nowMs = 0
 ): boolean {
-	if ( effects.some( effect => effect.skill === skill.id ) ) return true;
+	const live = effects.filter( effect => macroBuffEffectLive( effect, nowMs ) );
+	if ( live.some( effect => effect.skill === skill.id ) ) return true;
 	if (
-		skill.group && effects.some( effect => {
+		skill.group && live.some( effect => {
 			const row = catalog.find( entry => entry.id === effect.skill );
 			return !!row && row.group === skill.group;
 		} )
@@ -290,7 +362,7 @@ export function macroBuffAlreadyOn(
 	}
 	const replace = skill.replace;
 	if ( !replace || replace.cbuf ) return false;
-	return effects.some( effect => {
+	return live.some( effect => {
 		const old = catalog.find( entry => entry.id === effect.skill )?.replace;
 		return !!old && !old.cbuf && old.category === replace.category && old.group === replace.group;
 	} );

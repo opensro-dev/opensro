@@ -98,7 +98,7 @@ import {
 } from "@/engine/foundation/gameplay/avatar-magic-option";
 import { skillNotice } from "@/engine/foundation/gameplay/skill-notices";
 import { returnScrollCast, type ReturnScrollCast } from "@/engine/foundation/gameplay/return-scroll";
-import { isStallChangeItem } from "@/engine/foundation/gameplay/travel";
+import { isReturnScroll, isStallChangeItem } from "@/engine/foundation/gameplay/travel";
 import { fortressActive } from "@/engine/foundation/gameplay/fortress";
 import { itemCooldown } from "@/engine/foundation/gameplay/item-cooldowns";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
@@ -318,7 +318,7 @@ import {
 import { createCastMotionLock } from "@/engine/foundation/gameplay/cast-motion-lock";
 import { createSkillPressQueue, decidePress } from "@/engine/foundation/gameplay/skill-queue";
 import { combatAdmissionRadius, combatStopPoint, refBodyRadius } from "@/engine/foundation/gameplay/combat-spacing";
-import { equippedWeaponKind, pressAdmission } from "@/engine/foundation/gameplay/press-admission";
+import { equipmentBroken, equippedWeaponKind, pressAdmission } from "@/engine/foundation/gameplay/press-admission";
 import { movementHeading } from "@/engine/foundation/gameplay/native-movement";
 import {
 	bootstrapProgression,
@@ -362,6 +362,7 @@ import { createCaravanStars } from "./caravan-stars/caravan-stars";
 import { createContributorTitles } from "./contributor-titles/contributor-titles";
 import { createSroMacro } from "./sro-macro/sro-macro";
 import {
+	BAG_FIRST_SLOT,
 	emptyMacroPotionQueue,
 	macroPotionBagSlot,
 	macroPotionFired,
@@ -374,10 +375,33 @@ import {
 	macroBuffAlreadyOn,
 	macroInventoryAfterSwap,
 	macroSkillCast,
+	macroSkillSwapCandidates,
 	macroSkillSwapHelps,
-	macroSkillWantSwap,
 	pickMacroSkill
 } from "@/engine/foundation/gameplay/sro-macro-skill";
+import {
+	HUNT_BYTE_PILLAR,
+	huntItemKind,
+	huntRangeReach,
+	isDimensionPillarTarget,
+	isMacroHuntNeverTarget,
+	pickMacroHuntAction
+} from "@/engine/foundation/gameplay/sro-macro-hunt";
+import {
+	MACRO_NOTICE_TELEPORT_OFF,
+	MACRO_NOTICE_TOWN_OFF,
+	macroHuntNoticeText,
+	macroPotionHasRegisteredItem,
+	macroSwitchRefuseNotice,
+	macroTownDisableKinds
+} from "@/engine/foundation/gameplay/sro-macro-notices";
+import {
+	MACRO_HUNT,
+	MACRO_ROW_HP,
+	MACRO_ROW_MP,
+	MACRO_SKILL,
+	potionSlot
+} from "@/engine/foundation/gameplay/sro-macro";
 import { createTradeProgress } from "./trade-progress/trade-progress";
 import { createServerEvent } from "./server-event/server-event";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
@@ -588,6 +612,10 @@ function skillPressAnswer( frame: WireFrame, localGid: number ): "answered" | "q
 	return ((p[6]! | p[7]! << 8 | p[8]! << 16 | p[9]! << 24) >>> 0) === localGid ? "answered" : null;
 }
 
+// Port-only (#3907): the Auto-Hunt tick resends an unanswered request at
+// most once a second.
+const MACRO_HUNT_RETRY_MS = 1000;
+
 /*
 ================
 createGameplay
@@ -606,7 +634,10 @@ export function createGameplay(
 			| import("@/engine/contracts/movement-diagnostic").MovementDiagnostic
 	) => void = () => {},
 	readEntity: ( gid: number ) => import("@/engine/contracts/world").EntityState | undefined = () => undefined,
-	playItem: ( cue: import("@/engine/contracts/audio").ItemSoundRequest, at: number ) => void = () => {}
+	playItem: ( cue: import("@/engine/contracts/audio").ItemSoundRequest, at: number ) => void = () => {},
+	// Port-only (#3907): Auto-Hunt's nearest-monster / pickup scanners.
+	listMonsters: () => readonly import("@/engine/contracts/world").EntityState[] = () => [],
+	listGroundItems: () => readonly import("@/engine/contracts/world").EntityState[] = () => []
 ) {
 	let entryVitals: Partial<
 		Pick<import("@/engine/contracts/gameplay").VitalState, "hp" | "mp" | "maxHp" | "maxMp" | "abnormal">
@@ -1477,11 +1508,18 @@ fails; retry persistence without restoring stale slot occupancy.
 	// the native pickup loop untouched.
 	let petPickupKinds: number | undefined;
 	// Port-only (#3907): the Experimental "SRO Macro" row, and the macro
-	// auto-potion's row order (checkMacroPotion) and auto-skill cursors
-	// (checkMacroSkill).
+	// auto-potion's row order (checkMacroPotion), auto-skill cursors
+	// (checkMacroSkill), and auto-hunt start clock (checkMacroHunt).
 	let sroMacroEnabled = false;
 	let macroPotionQueue = emptyMacroPotionQueue();
 	let macroSkillLoop = emptyMacroSkillLoop();
+	let macroHuntStartedAtMs = 0;
+	let macroHuntWasOn = false;
+	// The last Auto-Hunt request and when it went out: one request per
+	// MACRO_HUNT_RETRY_MS, so a step the server has not answered yet
+	// (rebirth, berserk, pickup, select, hunt OFF) is not resent each tick.
+	let macroHuntLastAction = "";
+	let macroHuntLastActionAtMs = 0;
 	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	const cosSelection = createCosSelection();
@@ -1819,6 +1857,10 @@ clears it when another character enters.
 		sroMacro.clear();
 		macroPotionQueue = emptyMacroPotionQueue();
 		macroSkillLoop = emptyMacroSkillLoop();
+		macroHuntStartedAtMs = 0;
+		macroHuntWasOn = false;
+		macroHuntLastAction = "";
+		macroHuntLastActionAtMs = 0;
 		uniqueRank.clear();
 		mostWanted.clear();
 		hwanLevel.clear();
@@ -3179,6 +3221,19 @@ state here before a command can claim a native wire conversation.
 				return frame;
 			}
 			if ( command.kind === "macro-switch" ) {
+				const macroLive = sroMacro.view();
+				// 00dade90: town / empty-potion ON refuses before 0x7554.
+				// inTown stays false until the client has region-combat facts.
+				const refuse = macroLive ?
+					macroSwitchRefuseNotice( command.macro, command.on, {
+						inTown: false,
+						potionHasItem: macroPotionHasRegisteredItem( macroLive.potion )
+					} ) :
+					undefined;
+				if ( refuse ) {
+					api.notice( { key: "", value: 0, text: refuse, nativeType: 5 } );
+					return null;
+				}
 				const frame = sroMacro.switchFrame( command.macro, command.on );
 				if ( frame ) send( frame );
 				return frame;
@@ -6340,6 +6395,9 @@ before take assembles the presentation snapshot.
 			}
 			for ( const kind of [ 0, 1, 2 ] as const ) checkAutomaticPotion( kind, now, "timer" );
 			checkMacroPotion( now );
+			// Hunt selects (and survives) before the skill tick so a new
+			// target is visible to Auto-Skills on the same frame.
+			checkMacroHunt( now, local );
 			checkMacroSkill( now, local );
 
 			// A predicted attack chase follows its target: while the target
@@ -6750,12 +6808,16 @@ Port-only, not native (#3907): one tick of the SRO Macro's auto-skill
 loop (sro-macro-skill.ts), while the Experimental row is on and the
 server has accepted Auto-Skills ON. The pure picker advances past each
 entry; a cast goes out only when the skill is learned, off cooldown,
-admitted, and (for a buff) not already on the caster. Ground-target and
-basic-attack entries are skipped. On the attack step, a bound Weapon /
-Shield bag item is equipped first (0068ede0) and the loop waits 2000 ms
-instead of casting that tick. A cast arms the loop for the skill's
-action time; a skip leaves the re-arm alone so the next tick can look
-at the next entry.
+not press-refused, and (for a buff) not already on the caster. Attack
+rows skip only while our own cast is running (replace gate) so a
+shield-loadout press cannot print wrong-weapon; buff rows still send
+on unknown so Grass Walk rebuffs during an attack cast. Ground-target
+and basic-attack entries are skipped. On wrong-weapon, a bound Weapon
+/ Shield bag item is equipped first (0068ede0) and the loop waits
+2000 ms instead of casting that tick. A cast arms the loop for the
+skill's action time; a skip leaves the re-arm alone so the next tick
+can look at the next entry. After one buff-list pass the attack step
+runs (native 00687520).
 ================
 	*/
 	function checkMacroSkill( now: number, local: EntityState | undefined ) {
@@ -6790,7 +6852,8 @@ at the next entry.
 		if ( local.mountedOn || local.movementMode === MOVEMENT_SEATED ) return;
 		// Buff list: skip when the caster already holds this buff
 		// (00686bc0 → 00abd630). Exact id, skilldata group, or replace
-		// group — a live shield must not be re-pressed every pass.
+		// group — a live shield must not be re-pressed every pass. An
+		// exhausted UI timer no longer counts (Grass Walk rebuff).
 		if ( pick.list === "buff" ) {
 			const mine = combat.state().attachedEffects.filter( effect => effect.gid === localGid );
 			if (
@@ -6805,13 +6868,24 @@ at the next entry.
 						id: row.id,
 						group: row.group,
 						...(row.admit?.replace ? { replace: row.admit.replace } : {})
-					}) )
+					}) ),
+					now
 				)
 			) {
 				return;
 			}
 		}
 		const bag = inventory.state().inventory;
+		// Only rows with a published replace descriptor feed DecideReplacement.
+		// Mapping missing ones to undefined made every attack with replace
+		// return "undecided effect" and, with the mid-cast skip below, never
+		// fire while any non-replace buff (or Grass Walk gap) was attached.
+		const replaceEffects = combat.state().attachedEffects.filter( effect => effect.gid === localGid ).map(
+			effect => catalog.find( row => row.id === effect.skill )?.admit?.replace
+		).filter( ( row ): row is NonNullable<typeof row> => !!row );
+		const casting = combat.state().casts.some(
+			cast => cast.caster === localGid && cast.cancelledAtMs === undefined
+		);
 		const admission = pressAdmission( {
 			admit: metadata.admit,
 			needsFooting: metadata.needsFooting,
@@ -6826,17 +6900,17 @@ at the next entry.
 			mounted: !!local.mountedOn,
 			seated: local.movementMode === MOVEMENT_SEATED,
 			equipped: bag,
-			effects: combat.state().attachedEffects.filter( effect => effect.gid === localGid ).map( effect =>
-				catalog.find( row => row.id === effect.skill )?.admit?.replace
-			),
-			casting: combat.state().casts.some( cast => cast.caster === localGid && cast.cancelledAtMs === undefined )
+			effects: replaceEffects,
+			casting
 		} );
-		// Wrong weapon: try the Weapon / Shield bag bind once (0068ede0).
-		// Only when the swap would clear the refusal — otherwise a bound
-		// alternate and the worn main weapon would trade every cast.
+		// Wrong weapon: try both bag binds (0068ede0). Native equips
+		// whichever weapon/shield sits in those slots — after a shield
+		// buff the primary often rests in the Shield bind and must come
+		// back from there. Each candidate is judged with an after-press
+		// check so a useless shield equip cannot clear a weaponKinds
+		// refuse and oscillate.
 		if ( admission.kind === "refuse" && macroSkillSwapHelps( admission.code ) ) {
-			const swap = macroSkillWantSwap( settings.skillFlags, bag );
-			if ( swap ) {
+			for ( const swap of macroSkillSwapCandidates( settings.skillFlags, bag ) ) {
 				const after = pressAdmission( {
 					admit: metadata.admit,
 					needsFooting: metadata.needsFooting,
@@ -6851,32 +6925,37 @@ at the next entry.
 					mounted: !!local.mountedOn,
 					seated: local.movementMode === MOVEMENT_SEATED,
 					equipped: macroInventoryAfterSwap( bag, swap.source, swap.destination ),
-					effects: combat.state().attachedEffects.filter( effect => effect.gid === localGid ).map(
-						effect => catalog.find( row => row.id === effect.skill )?.admit?.replace
-					),
-					casting: combat.state().casts.some( cast =>
-						cast.caster === localGid && cast.cancelledAtMs === undefined
-					)
+					effects: replaceEffects,
+					casting
 				} );
-				if ( after.kind !== "refuse" || !macroSkillSwapHelps( after.code ) ) {
-					try {
-						if ( !api.command( swap, now, undefined, local ) ) return;
-					} catch {
-						return;
-					}
-					// Native does not advance the list cursor on a swap
-					// (00687af5); rewind the picker's already-advanced entry.
-					const cursor = pick.list === "attack" ?
-						{ attack: Math.max( 0, macroSkillLoop.attack - 1 ) } :
-						{ buff: Math.max( 0, macroSkillLoop.buff - 1 ) };
-					macroSkillLoop = macroSkillCast( { ...macroSkillLoop, ...cursor }, now, MACRO_SKILL_SWAP_MS );
-					dirty = true;
+				// Only equip when this candidate clears the wrong-weapon gate.
+				if ( after.kind === "refuse" && macroSkillSwapHelps( after.code ) ) continue;
+				try {
+					if ( !api.command( swap, now, undefined, local ) ) return;
+				} catch {
 					return;
 				}
+				// Native does not advance the list cursor on a swap
+				// (00687af5); rewind the picker's already-advanced entry.
+				const cursor = pick.list === "attack" ?
+					{ attack: Math.max( 0, macroSkillLoop.attack - 1 ) } :
+					{ buff: Math.max( 0, macroSkillLoop.buff - 1 ) };
+				macroSkillLoop = macroSkillCast( { ...macroSkillLoop, ...cursor }, now, MACRO_SKILL_SWAP_MS );
+				dirty = true;
+				return;
 			}
 			return;
 		}
+		// Refuse never casts. Attack skips only while our own cast is
+		// running (replace gate "own cast running") so a press cannot land
+		// on the shield loadout mid-swap and print wrong-weapon. Other
+		// unknowns still send — the hotbar does. Buffs always send on
+		// unknown so Grass Walk rebuffs during an attack cast.
 		if ( admission.kind === "refuse" ) return;
+		if (
+			pick.list === "attack" && admission.kind === "unknown" &&
+			admission.gate === "own cast running"
+		) return;
 		if ( pick.list === "attack" && (!targetGid || !target) ) return;
 		const command = pick.list === "attack" && targetGid ?
 			{ kind: "skill" as const, skillId, gid: targetGid } :
@@ -6888,6 +6967,220 @@ at the next entry.
 		}
 		macroSkillLoop = macroSkillCast( macroSkillLoop, now, metadata.actionMs ?? 0 );
 		dirty = true;
+	}
+	/*
+================
+requestMacroOff
+
+Send 0x7554 OFF for a kind that is currently on (006865e0 / 006861c0).
+================
+	*/
+	function requestMacroOff( kind: typeof MACRO_SKILL | typeof MACRO_HUNT ) {
+		const frame = sroMacro.switchFrame( kind, false );
+		if ( frame ) send( frame );
+	}
+
+	/*
+================
+macroHuntRepeats
+
+True while the same Auto-Hunt request went out less than
+MACRO_HUNT_RETRY_MS ago (port-only pacing: the native loop waits on its
+own request state, which the worker has no mirror of). Otherwise records
+this request and returns false.
+================
+	*/
+	function macroHuntRepeats( key: string, now: number ): boolean {
+		if ( key === macroHuntLastAction && now - macroHuntLastActionAtMs < MACRO_HUNT_RETRY_MS ) return true;
+		macroHuntLastAction = key;
+		macroHuntLastActionAtMs = now;
+		return false;
+	}
+
+	/*
+================
+checkMacroHunt
+
+Port-only, not native (#3907): one tick of the SRO Macro's Auto-Hunt
+(sro-macro-hunt.ts), while the Experimental row is on and the server has
+accepted Auto-Hunt ON. Survival steps (resurrect, return, repair, Energy
+of Life, berserk) run first; then pickup / nearest-monster select inside
+the configured range. Notices mirror 00dade90 / return-reason UIIT rows
+(sro-macro-notices.ts). Attack after select is the Auto-Skill tick
+(006882e0 needs skill-on).
+================
+	*/
+	function checkMacroHunt( now: number, local: EntityState | undefined ) {
+		const settings = sroMacro.view();
+		// 006861c0: skill/hunt OFF in town. inTown is false until region-combat
+		// lands on the client; the pure helper is still tested.
+		if ( settings && live && sroMacroEnabled ) {
+			for ( const kind of macroTownDisableKinds( settings.skillOn, settings.huntOn, false ) ) {
+				requestMacroOff( kind );
+				api.notice( { key: "", value: 0, text: MACRO_NOTICE_TOWN_OFF, nativeType: 5 } );
+			}
+		}
+		const huntOn = !!(live && sroMacroEnabled && settings?.huntOn);
+		if ( huntOn && !macroHuntWasOn ) macroHuntStartedAtMs = now;
+		if ( !huntOn ) {
+			macroHuntWasOn = false;
+			macroHuntStartedAtMs = 0;
+			macroHuntLastAction = "";
+			return;
+		}
+		macroHuntWasOn = true;
+		if ( !local || !settings ) return;
+
+		// 68b330: a teleport ends Auto-Hunt with TELEPORT_OFF. teleportMode is
+		// the 0x3057 state-11 latch, 1 while a teleport is under way. A region
+		// id change alone is a walk across a 192 m cell, not a teleport.
+		if ( teleportMode === 1 ) {
+			if ( !macroHuntRepeats( "teleport-off", now ) ) {
+				api.notice( { key: "", value: 0, text: MACRO_NOTICE_TELEPORT_OFF, nativeType: 5 } );
+				requestMacroOff( MACRO_HUNT );
+				dirty = true;
+			}
+			return;
+		}
+
+		const pose = movement.state().pose;
+		const bag = inventory.state().inventory;
+		const countRef = ( ref: number ) => {
+			if ( !ref ) return 0;
+			let total = 0;
+			for ( const entry of bag ) {
+				if ( entry.slot >= BAG_FIRST_SLOT && entry.refObjId === ref ) total += entry.quantity;
+			}
+			return total;
+		};
+		const findKindSlot = ( kind: ReturnType<typeof huntItemKind> ) => {
+			for ( const entry of bag ) {
+				if ( entry.slot < BAG_FIRST_SLOT || entry.quantity <= 0 ) continue;
+				if ( huntItemKind( entry.typeFlags ) === kind ) return entry.slot;
+			}
+			return undefined;
+		};
+		const hpRef = potionSlot( settings.potion, MACRO_ROW_HP ).item;
+		const mpRef = potionSlot( settings.potion, MACRO_ROW_MP ).item;
+		const targetGid = targeting.selectionIntent();
+		const target = targetGid ? readEntity( targetGid ) : undefined;
+		const targetLivingMonster = !!target && target.kind === "monster" &&
+			target.appearanceState?.[0] !== 2;
+		const reach = huntRangeReach( settings.hunt[0] ?? 0 );
+		const skipPillar = (settings.hunt[HUNT_BYTE_PILLAR] ?? 0) !== 0;
+		// 68c310 always drops summon flowers; 68c3d0 drops pillars when byte 10 is on.
+		const monsters = listMonsters().filter( monster => {
+			if ( isMacroHuntNeverTarget( monster.name ) ) return false;
+			if ( skipPillar && isDimensionPillarTarget( monster.name ) ) return false;
+			return true;
+		} );
+		const nearest = pose ? nearestMonster( monsters, pose, reach ) : undefined;
+		const party = new Set( social.members.map( member => member.id ) );
+		const pickup = pose && localGid ?
+			nearestPickable(
+				listGroundItems(),
+				{ gid: localGid, regionId: pose.regionId, x: pose.x, z: pose.z },
+				party
+			) :
+			undefined;
+		const wornBroken = bag.some( entry =>
+			entry.slot < BAG_FIRST_SLOT && equipmentBroken( entry.typeFlags, entry.durability )
+		);
+		const action = pickMacroHuntAction( settings.hunt, {
+			alive: potionFacts.alive,
+			startedAtMs: macroHuntStartedAtMs,
+			nowMs: now,
+			berserkGauge: feedback.gauge(),
+			potionOn: settings.potionOn,
+			hpPotionCount: countRef( hpRef ),
+			mpPotionCount: countRef( mpRef ),
+			hasReturnScroll: bag.some( e => e.slot >= BAG_FIRST_SLOT && isReturnScroll( e.typeFlags ) ),
+			hasResurrectScroll: findKindSlot( "resurrect" ) !== undefined,
+			hasRepairHammer: findKindSlot( "repair-hammer" ) !== undefined,
+			hasEnergyOfLife: findKindSlot( "energy" ) !== undefined,
+			equipmentBroken: wornBroken,
+			// 006872d0 walks timed VIP slots; the client has no remaining-time
+			// fact yet, so the decision arm stays covered by unit tests only.
+			usageTimeEnded: false,
+			targetGid,
+			targetLivingMonster,
+			nearestMonsterGid: nearest?.gid,
+			nearestPickupGid: pickup?.gid
+		} );
+
+		const announce = () => {
+			const text = macroHuntNoticeText( action );
+			if ( text ) api.notice( { key: "", value: 0, text, nativeType: 5 } );
+		};
+
+		if ( action.kind !== "none" && action.kind !== "wait-resurrect" ) {
+			const key = "gid" in action ? `${action.kind}:${action.gid}` : action.kind;
+			if ( macroHuntRepeats( key, now ) ) return;
+		}
+
+		try {
+			switch ( action.kind ) {
+				case "none":
+				case "wait-resurrect":
+					return;
+				case "resurrect-town":
+					if ( !api.command( { kind: "rebirth", choice: 1 }, now, undefined, local ) ) return;
+					announce();
+					dirty = true;
+					return;
+				case "resurrect-scroll": {
+					const slot = findKindSlot( "resurrect" );
+					if ( slot === undefined || !useAutomaticItem( slot, now, true ) ) return;
+					dirty = true;
+					return;
+				}
+				case "return-scroll": {
+					const slot = bag.find( e => e.slot >= BAG_FIRST_SLOT && isReturnScroll( e.typeFlags ) )?.slot;
+					if ( slot === undefined || !useAutomaticItem( slot, now, true ) ) return;
+					announce();
+					// 006865e0: queue hunt OFF after a return that ends the session.
+					if ( action.endHunt ) requestMacroOff( MACRO_HUNT );
+					dirty = true;
+					return;
+				}
+				case "repair-hammer": {
+					const slot = findKindSlot( "repair-hammer" );
+					if ( slot === undefined || !useAutomaticItem( slot, now, true ) ) return;
+					announce();
+					dirty = true;
+					return;
+				}
+				case "energy-of-life": {
+					const slot = findKindSlot( "energy" );
+					if ( slot === undefined || !useAutomaticItem( slot, now, true ) ) return;
+					announce();
+					dirty = true;
+					return;
+				}
+				case "berserk":
+					if ( !api.command( { kind: "berserk" }, now, undefined, local ) ) return;
+					dirty = true;
+					return;
+				case "select": {
+					const monster = readEntity( action.gid );
+					if ( !monster || !api.command( { kind: "select", gid: action.gid }, now, monster, local ) ) {
+						return;
+					}
+					dirty = true;
+					return;
+				}
+				case "pickup": {
+					const drop = readEntity( action.gid );
+					if ( !drop || !api.command( { kind: "pickup", gid: action.gid }, now, drop, local ) ) {
+						return;
+					}
+					dirty = true;
+					return;
+				}
+			}
+		} catch {
+			return;
+		}
 	}
 	return api;
 }

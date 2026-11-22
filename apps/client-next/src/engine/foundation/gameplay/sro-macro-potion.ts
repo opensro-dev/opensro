@@ -44,7 +44,7 @@ export const MACRO_CURE_ABNORMAL = 0x17fafff;
 // 00692e00 / 00692f60 scale the percent byte by this double (0x12befb8).
 const PERCENT_SCALE = 0.01;
 // Slots below this are the equipment sockets, never a potion source.
-const BAG_FIRST_SLOT = 13;
+export const BAG_FIRST_SLOT = 13;
 // Expendable class bits, same mask autoPotionItemSlot reads.
 const CONSUMABLE_MASK = 0x1c;
 const CONSUMABLE = 0x0c;
@@ -55,8 +55,10 @@ macroPotionAdmits
 
 CNIFMacroAutoPotionSlot drop (0xdafff0): kind 0x46 then per-row TypeId
 checks (0x690b70 HP, 0x690bf0 MP, 0x690b00 cure, 0x690c70 buff-item).
-The port's typeFlags pack TID3 at bits 7..10 and TID4 at bits 11+
-(item-cooldowns / mall-use).
+Native reads the TypeId high byte (>>24): HP admits 1 or 3, MP admits
+2 or 3, after potion helper 690f30. On the port's typeFlags word that
+high byte is TID4 (bits 11..15); recovery potions are PackTypeFlags
+(3,3,1,tid4) — e.g. HP XL 0x8ec, MP XL 0x10ec, universal 0x18ec.
 
 Every row requires the expendable band (typeFlags & 0x60) === 0x60 —
 equipment shares class bits 0x0c but sits in band 0x20. Alchemy stones
@@ -75,8 +77,9 @@ export function macroPotionAdmits( row: number, typeFlags: number ): boolean {
 	const tid4 = typeFlags >>> 11 & 31;
 	// Elixirs / lucky powder (10) and stones / tablets (11).
 	if ( tid3 === 10 || tid3 === 11 ) return false;
-	if ( row === MACRO_ROW_HP ) return tid3 === 1 || tid3 === 3;
-	if ( row === MACRO_ROW_MP ) return tid3 === 2 || tid3 === 3;
+	// 690b70 / 690bf0: high byte (TID4) 1=HP, 2=MP, 3=both.
+	if ( row === MACRO_ROW_HP ) return tid4 === 1 || tid4 === 3;
+	if ( row === MACRO_ROW_MP ) return tid4 === 2 || tid4 === 3;
 	// 690ec0 (pill mid-byte) + high byte in {1,6,8,9}: port maps to the
 	// 0x16c cure family (item-cooldowns' universal pill lane) with those TID4s.
 	if ( row === MACRO_ROW_CURE ) {
