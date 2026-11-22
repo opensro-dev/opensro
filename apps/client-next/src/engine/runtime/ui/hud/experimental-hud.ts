@@ -360,6 +360,15 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "Every unique's Alive or Dead state, and alerts for the ones you mark."
 					},
 					{
+						// Port-only, not native (#3529): the market has no
+						// native counterpart; the row only adds its System
+						// menu entry, over the shard's SRO_CONSIGNMENT switch.
+						key: "consignmentMarket",
+						id: "experimental-consignment-market",
+						label: "Consignment market",
+						description: "System menu: buy and sell items while the seller is offline."
+					},
+					{
 						key: "vHidesCompanions",
 						id: "experimental-v-hides-companions",
 						label: "V hides pets and transports",

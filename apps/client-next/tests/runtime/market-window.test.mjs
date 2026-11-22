@@ -14,6 +14,7 @@ import { test } from "node:test";
 import { defined } from "../helpers/defined.mjs";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
 const { createMarketHud } = await import( "../../src/engine/runtime/ui/hud/market-hud.ts" );
+const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 
 /** @typedef {import("../../src/engine/contracts/gameplay.ts").InventoryItem} InventoryItem */
 /** @typedef {import("../../src/engine/contracts/market.ts").MarketRow} MarketRow */
@@ -187,6 +188,77 @@ test("opening the market ends the keeper's talk, so the keeper's rows show again
 		const controls = step();
 		assert.ok( controls.has( "storage-open" ), "the keeper's storage row shows again" );
 		assert.ok( controls.has( "market-open" ), "and its market row" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the System menu's market entry follows its Experimental row and opens the window", () => {
+	for ( const rowOn of [ false, true ] ) {
+		const commands = [], f = uiFixture( command => commands.push( command ) );
+		let now = 1000, seen = null;
+		const step = () => {
+			for ( let i = 0; i < 20; i++ ) seen = f.ui.step( f.state, now += 50 ) ?? seen;
+			return new Map( (seen?.controls ?? []).map( control => [ control.id, control ] ) );
+		};
+		try {
+			f.ui.event( {
+				kind: "experimental-preferences",
+				value: experimentalOptions( { consignmentMarket: rowOn } )
+			} );
+			f.state.gameplay = {
+				...f.state.gameplay,
+				consignment: true,
+				market: market(),
+				social: { ...(f.state.gameplay.social ?? {}), localName: "Me" }
+			};
+			step();
+			f.ui.event( { kind: "activate", id: "open-window:System" } );
+			let controls = step();
+			assert.equal(
+				controls.has( "system-menu-market" ),
+				rowOn,
+				`the menu entry with the row ${rowOn ? "on" : "off"}`
+			);
+			assert.equal( f.hasText( "Consignment Market" ), rowOn, "the entry's label" );
+			if ( !rowOn ) continue;
+			// Choosing the entry leaves the menu and opens the window.
+			f.ui.event( { kind: "activate", id: "system-menu-market" } );
+			controls = step();
+			assert.ok( controls.has( "market-close" ), "the entry opens the window" );
+			assert.equal( controls.has( "close-window:System" ), false, "and closes the menu" );
+			// From the menu again, the same entry closes the window.
+			f.ui.event( { kind: "activate", id: "open-window:System" } );
+			step();
+			f.ui.event( { kind: "activate", id: "system-menu-market" } );
+			controls = step();
+			assert.equal( controls.has( "market-close" ), false, "the entry toggles the window shut" );
+		} finally {
+			f.dispose();
+		}
+	}
+});
+
+test("the System menu's port-only entries each name their window and its route", () => {
+	const f = uiFixture( () => {} );
+	let now = 1000, seen = null;
+	const step = () => {
+		for ( let i = 0; i < 20; i++ ) seen = f.ui.step( f.state, now += 50 ) ?? seen;
+		return seen;
+	};
+	try {
+		f.ui.event( {
+			kind: "experimental-preferences",
+			value: experimentalOptions( { eventCalendar: true, uniqueStatus: true, consignmentMarket: true } )
+		} );
+		step();
+		f.ui.event( { kind: "activate", id: "open-window:System" } );
+		const controls = new Map( (step()?.controls ?? []).map( control => [ control.id, control ] ) );
+		// Each entry's control id is the click it sends and its label the
+		// window it opens (SYSTEM_MENU_ENTRIES in ui.ts).
+		assert.equal( controls.get( "open-window:Event Calendar" )?.label, "Event Calendar" );
+		assert.equal( controls.get( "open-window:Unique Status" )?.label, "Unique Status" );
+		assert.equal( controls.get( "system-menu-market" )?.label, "Consignment Market" );
 	} finally {
 		f.dispose();
 	}

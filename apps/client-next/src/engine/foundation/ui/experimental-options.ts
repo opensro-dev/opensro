@@ -145,6 +145,12 @@ export interface ExperimentalOptions {
 	// and in the browser once allowed - when a marked unique spawns or
 	// dies. Off unless turned on, so each player opts in.
 	readonly uniqueStatus: boolean;
+	// Port-only, not native: the Consignment Market (market-hud.ts) sells
+	// while the seller is offline (server SRO_CONSIGNMENT). The row adds
+	// its System menu entry; the window itself also opens from its button
+	// beside FPS, the K key and a storage keeper, all of which the shard's
+	// own switch already gates. Off unless turned on, so each player opts in.
+	readonly consignmentMarket: boolean;
 	// Port-only, not native: holding V (UIIT_STT_USER_MOSTER_BLIND) also
 	// hides other players' pets and transports. The original hides only
 	// monsters and players (8602C0, 85E550): a COS draws through its owner
@@ -494,6 +500,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		highlightEventNotices: record.highlightEventNotices !== false,
 		uniqueDamageRank: enabled( "uniqueDamageRank" ),
 		uniqueStatus: enabled( "uniqueStatus" ),
+		consignmentMarket: enabled( "consignmentMarket" ),
 		vHidesCompanions: enabled( "vHidesCompanions" ),
 		exchangeClickShortcuts: record.exchangeClickShortcuts !== false,
 		noticeLinks: record.noticeLinks !== false,

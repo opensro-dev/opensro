@@ -206,11 +206,12 @@ test("six tabs group every preference once, in the spec's sections", () => {
 	// defaults (owner 2026-11-21); 58: the guide's hunting-ground waypoint
 	// (#3394) joined Map and minimap; 59: the Event Calendar (#3532)
 	// joined Game; 60: the Unique Status window (#3531) joined Combat;
-	// 61: the Job Honor Rank (#3530) joined Game.
+	// 61: the Consignment Market's menu entry (#3529) joined Combat;
+	// 62: the Job Honor Rank (#3530) joined Game.
 	// The Server Mission gauge (#3803) has no row: it is the v1.696 client's
 	// own window, native here. Retail typos are fixed in the reviewed
 	// English table (englishCorrections.json), not by a row.
-	assert.equal( keys.length, 61 );
+	assert.equal( keys.length, 62 );
 	assert.deepEqual( [ ...keys ].sort(), Object.keys( OFF ).sort() );
 	const kinds = EXPERIMENTAL_TABS.flatMap( experimentalRows ).filter( row => row.parent );
 	assert.deepEqual(
