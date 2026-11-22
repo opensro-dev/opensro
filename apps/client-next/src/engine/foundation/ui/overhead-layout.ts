@@ -85,6 +85,28 @@ export function titledDisplayName( name: string, format: string | undefined ): s
 
 /*
 ================
+visibleTitleFormat
+
+The title format the name line may print for this entity, after the
+two title options (#3502 slice 2). The later client's name builder
+(0x9689B0) reads option +0x1F for the player's own title and +0x20 for
+everyone else's; with the matching option off the title is simply not
+indicated and the plain name prints, exactly as an untitled character
+prints. The local player is the entity whose gid is the local gid.
+================
+*/
+export function visibleTitleFormat(
+	entity: Pick<EntityState, "gid" | "characterTitleFormat">,
+	localGid: number | undefined,
+	options: GameOptions
+): string | undefined {
+	if ( !entity.characterTitleFormat ) return undefined;
+	const shown = entity.gid === localGid ? options.ownTitle : options.otherTitles;
+	return shown ? entity.characterTitleFormat : undefined;
+}
+
+/*
+================
 companionOwnerShown
 
 CICCos 855C40 draws the owner board, and lifts the anchor the status gauge
