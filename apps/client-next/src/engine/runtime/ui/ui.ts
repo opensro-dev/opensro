@@ -445,6 +445,7 @@ import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { compositeItemCaption, compositeItemLayout, createCompositeItemHud } from "./hud/composite-item-hud";
 import { createUniqueRankHud } from "./hud/unique-rank-hud";
 import { createUniqueStatusHud } from "./hud/unique-status-hud";
+import { UNIQUE_STATUS_HEIGHT, UNIQUE_STATUS_WIDTH, uniqueStatusView } from "./hud/unique-status-view";
 import {
 	createServerEventHud,
 	gaugeRatio,
@@ -465,12 +466,7 @@ import { drawSroMacro, type MacroPaint, macroPotionStock } from "./hud/sro-macro
 import { createMarketHud, MARKET_BAG_FIRST_SLOT, MARKET_HOTKEY_VK } from "./hud/market-hud";
 import { drawMarketWindow, type MarketPaint } from "./hud/market-window";
 import { uniqueRankLines } from "@/engine/foundation/gameplay/unique-rank";
-import {
-	uniqueStatusAlertText,
-	uniqueStatusAgo,
-	uniqueStatusClock,
-	uniqueStatusRows
-} from "@/engine/foundation/gameplay/unique-status";
+import { uniqueStatusAlertText } from "@/engine/foundation/gameplay/unique-status";
 import type { UniqueStatusFlip, UniqueStatusTab } from "@/engine/foundation/gameplay/unique-status";
 import {
 	allianceButtons,
@@ -17631,72 +17627,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				}
 				const uniqueStatusState = uniqueStatusHud.state();
 				if ( uniqueStatusState.open && game ) {
-					// Port-only, not native (unique-status-hud.ts): every unique's
-					// state from the shard's feed, the marked ones' checkboxes,
-					// and the notify toggles over a Save. The frame, buttons,
-					// checks and scrollbar are the client's own window parts.
+					// Port-only, not native (#3531): the window is drawn from the
+					// operations unique-status-view.ts shapes; this loop only
+					// paints them with the ordinary window primitives.
 					const feed = next.gameplay?.uniqueStatus ?? null;
-					const draftMarks = uniqueStatusHud.draft();
-					const allRows = feed ? uniqueStatusRows( feed.rows, uniqueStatusState.tab, draftMarks.refs ) : [];
-					const statusWidth = 560, statusRowPitch = 20, statusPageRows = 12;
-					const statusTabsTop = 40, statusHeadTop = 78, statusListTop = 98;
-					const statusListHeight = statusPageRows * statusRowPitch;
-					const statusTogglesTop = statusListTop + statusListHeight + 12;
-					const statusHeight = statusTogglesTop + 56;
-					const firstRow = Math.min(
-						uniqueStatusState.firstRow,
-						Math.max( 0, allRows.length - statusPageRows )
-					);
-					const admission = beginWindow();
-					const [px, py] = windowOrigin( "UniqueStatus", [
-						(w - statusWidth) / 2,
-						Math.max( 0, (h - statusHeight) / 3 ),
-						statusWidth,
-						statusHeight
-					] );
-					windowBox( "Unique Status", px, py, statusWidth, statusHeight );
-					closeButton( px + statusWidth - 26, py + 10, "unique-status-close" );
-					const tabIds = [
-						[ "all", "All" ],
-						[ "alive", "Alive" ],
-						[ "dead", "Dead" ],
-						[ "notify", "Notify list" ]
-					] as const;
-					tabIds.forEach( ( [tab, label], i ) => {
-						button(
-							"unique-status-tab:" + tab,
-							label,
-							px + 14 + i * 108,
-							py + statusTabsTop,
-							100,
-							false,
-							uniqueStatusState.tab === tab
-						);
-					} );
-					const headerColor = [ 180 / 255, 180 / 255, 180 / 255, 1 ] as const;
-					// [left, width, hAlign] of the name, level, status, died and killer columns.
-					const statusColumns = [
-						[ 42, 176, 0 ],
-						[ 222, 44, 2 ],
-						[ 272, 62, 0 ],
-						[ 340, 112, 0 ],
-						[ 458, 92, 0 ]
-					] as const;
-					const statusCells = (
-						values: readonly string[],
-						top: number,
-						color: readonly [number, number, number, number]
-					) => {
-						values.forEach( ( value, i ) => {
-							const [left, cellWidth, hAlign] = statusColumns[i]!,
-								cell: UiRect = [ px + left, top, cellWidth, statusRowPitch ];
-							quads.push(
-								...text.quads( value, cell, cell, color, { hAlign, vAlign: 1, overflow: "ellipsis" } )
-							);
-						} );
-					};
-					statusCells( [ "Unique", "Lv", "Status", "Died", "Killed by" ], py + statusHeadTop, headerColor );
-					rect( [ px + 10, py + statusListTop - 3, statusWidth - 20, 1 ], headerColor );
 					// The server's clock at the last frame, run forward by the
 					// local one so "50 min ago" keeps moving between updates.
 					if ( feed && feed.revision !== uniqueStatusClockRevision ) {
@@ -17707,125 +17641,67 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						uniqueStatusClockBase.serverMs +
 						Math.max( 0, (next.simulationTimeMs ?? 0) - uniqueStatusClockBase.atMs ) :
 						0;
-					const visibleRows = allRows.slice( firstRow, firstRow + statusPageRows );
-					visibleRows.forEach( ( row, i ) => {
-						const top = py + statusListTop + i * statusRowPitch,
-							markId = "unique-status-mark:" + row.refObjId,
-							marked = draftMarks.refs.includes( row.refObjId );
-						if ( hover === markId ) {
-							rect( [ px + 10, top, statusWidth - 20, statusRowPitch ], [ 1, 1, 1, .07 ] );
-						}
-						image(
-							[ px + 16, top + 2, 16, 16 ],
-							ROOT + "interface/ifcommon/com_checkbutton_" + (marked ? "on" : "off") + ".png",
-							[ 1, 1, 1, 1 ]
-						);
-						controls.push( {
-							id: markId,
-							label: row.name,
-							kind: "button",
-							rect: [ px + 10, top, 218, statusRowPitch ],
-							selected: marked
-						} );
-						statusCells(
-							[
-								row.name,
-								String( row.level ),
-								row.alive ? "Alive" : "Dead",
-								!row.alive && row.diedAtMs > 0 ?
-									`${uniqueStatusClock( row.diedAtMs )} (${
-										uniqueStatusAgo( row.diedAtMs, serverNow )
-									})` :
-									"-",
-								row.killer || "-"
-							],
-							top,
-							row.alive ? [ .62, 1, .62, 1 ] : white
-						);
+					const admission = beginWindow();
+					const statusView = uniqueStatusView( {
+						origin: windowOrigin( "UniqueStatus", [
+							(w - UNIQUE_STATUS_WIDTH) / 2,
+							Math.max( 0, (h - UNIQUE_STATUS_HEIGHT) / 3 ),
+							UNIQUE_STATUS_WIDTH,
+							UNIQUE_STATUS_HEIGHT
+						] ),
+						feed,
+						tab: uniqueStatusState.tab,
+						firstRow: uniqueStatusState.firstRow,
+						draft: uniqueStatusHud.draft(),
+						dirty: uniqueStatusHud.dirty(),
+						hover,
+						serverNowMs: serverNow
 					} );
-					if ( !feed ) {
-						quads.push(
-							...text.quads(
-								"No unique states yet - the shard's feed may be off.",
-								[ px + 14, py + statusListTop + 40, statusWidth - 28, 20 ],
-								full,
-								headerColor,
-								{ hAlign: 1, vAlign: 1 }
-							)
-						);
-					} else if ( allRows.length === 0 ) {
-						quads.push(
-							...text.quads(
-								"Nothing on this tab.",
-								[ px + 14, py + statusListTop + 40, statusWidth - 28, 20 ],
-								full,
-								headerColor,
-								{ hAlign: 1, vAlign: 1 }
-							)
-						);
-					}
-					uniqueStatusList = {
-						rect: [ px + 10, py + statusListTop, statusWidth - 20, statusListHeight ],
-						total: allRows.length,
-						page: statusPageRows
-					};
-					if ( allRows.length > statusPageRows ) {
-						const range = allRows.length - statusPageRows,
-							bar = chatScrollbar(
-								"unique-status-scroll",
-								[ px + statusWidth - 30, py + statusListTop + 16, 16, statusListHeight - 32 ],
-								allRows.length,
-								statusPageRows,
-								range - firstRow,
+					uniqueStatusList = statusView.list;
+					for ( const op of statusView.ops ) {
+						if ( op.kind === "box" ) {
+							windowBox( op.title, op.rect[0], op.rect[1], op.rect[2], op.rect[3] );
+							closeButton( op.rect[0] + op.rect[2] - 26, op.rect[1] + 10, op.closeId );
+						} else if ( op.kind === "button" ) {
+							button( op.id, op.label, op.rect[0], op.rect[1], op.rect[2], op.disabled, op.selected );
+						} else if ( op.kind === "image" ) {
+							image( op.rect, op.path );
+						} else if ( op.kind === "text" ) {
+							quads.push(
+								...text.quads( op.value, op.rect, op.rect, op.color, {
+									hAlign: op.hAlign,
+									vAlign: op.vAlign,
+									overflow: "ellipsis"
+								} )
+							);
+						} else if ( op.kind === "rect" ) {
+							rect( op.rect, op.color );
+						} else if ( op.kind === "hit" ) {
+							controls.push( {
+								id: op.id,
+								label: op.label,
+								kind: "button",
+								rect: op.rect,
+								selected: op.selected
+							} );
+						} else if ( op.kind === "scrollbar" ) {
+							const bar = chatScrollbar(
+								op.id,
+								op.rect,
+								op.total,
+								op.page,
+								op.value,
 								resources.size,
 								full,
 								hover,
 								pressed
 							);
-						paths.push( ...bar.paths );
-						quads.push( ...bar.quads );
-						controls.push( ...bar.controls );
-						uniqueStatusThumbTravel = bar.travel;
+							paths.push( ...bar.paths );
+							quads.push( ...bar.quads );
+							controls.push( ...bar.controls );
+							uniqueStatusThumbTravel = bar.travel;
+						}
 					}
-					const toggles = [
-						[ "unique-status-deaths", "Also when it dies", draftMarks.deathsToo ],
-						[ "unique-status-browser", "Browser notifications", draftMarks.browser ]
-					] as const;
-					toggles.forEach( ( [id, label, on], i ) => {
-						const top = py + statusTogglesTop + i * 22;
-						image(
-							[ px + 16, top + 2, 16, 16 ],
-							ROOT + "interface/ifcommon/com_checkbutton_" + (on ? "on" : "off") + ".png",
-							[ 1, 1, 1, 1 ]
-						);
-						quads.push(
-							...text.quads( label, [ px + 40, top, 240, statusRowPitch ], full, white, { vAlign: 1 } )
-						);
-						controls.push( {
-							id,
-							label,
-							kind: "button",
-							rect: [ px + 10, top, 280, 22 ],
-							selected: on
-						} );
-					} );
-					quads.push(
-						...text.quads(
-							"Times are server time.",
-							[ px + 14, py + statusHeight - 36, 240, 16 ],
-							full,
-							headerColor,
-							{ vAlign: 1 }
-						)
-					);
-					button(
-						"unique-status-save",
-						"Save",
-						px + statusWidth - 134,
-						py + statusHeight - 42,
-						120,
-						!uniqueStatusHud.dirty()
-					);
 					endWindow( admission, "unique-status" );
 				}
 				// The bag scroll's box (561D50 opens type 0x21 at 562251) and

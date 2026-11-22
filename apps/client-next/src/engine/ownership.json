@@ -47,6 +47,7 @@
     "src/engine/runtime/ui/hud/guild-war-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/unique-rank-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/unique-status-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/unique-status-view.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/server-event-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/exchange-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/gacha-hud.ts": "src/engine/runtime/ui/ui.ts",

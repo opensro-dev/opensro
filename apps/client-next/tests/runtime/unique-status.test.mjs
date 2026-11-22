@@ -34,6 +34,7 @@ const {
 	uniqueStatusRows
 } = await import( "../../src/engine/foundation/gameplay/unique-status.ts" );
 const { createUniqueStatusHud } = await import( "../../src/engine/runtime/ui/hud/unique-status-hud.ts" );
+const { uniqueStatusView } = await import( "../../src/engine/runtime/ui/hud/unique-status-view.ts" );
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
@@ -320,6 +321,104 @@ test("alerts follow the saved list and never the first feed", () => {
 	assert.deepEqual( hud.reconcile( wide, true ), [] );
 	const bornB = { serverNowMs: 7, rows: [ DEAD_A, ALIVE_B ], revision: 7 };
 	assert.deepEqual( hud.reconcile( bornB, true ), [] );
+});
+
+/** @type {import("../../src/engine/runtime/ui/hud/unique-status-view.ts").UniqueStatusViewInput} */
+const VIEW_BASE = {
+	origin: [ 100, 50, 560, 406 ],
+	feed: { serverNowMs: 1_700_000_300_000, rows: [ ALIVE_A, DEAD_C ], revision: 1 },
+	tab: "all",
+	firstRow: 0,
+	draft: { refs: [], deathsToo: false, browser: false },
+	dirty: false,
+	hover: null,
+	serverNowMs: 1_700_000_300_000
+};
+
+/*
+================
+viewTexts
+================
+*/
+function viewTexts( view ) {
+	return view.ops.filter( ( op ) => op.kind === "text" ).map( ( op ) => op.value );
+}
+
+test("the view shapes the four tabs and both row states", () => {
+	const view = uniqueStatusView( VIEW_BASE );
+	assert.ok(
+		view.ops.some(
+			( op ) => op.kind === "box" && op.title === "Unique Status" && op.closeId === "unique-status-close"
+		)
+	);
+	assert.deepEqual( view.list, { rect: [ 110, 148, 540, 240 ], total: 2, page: 12 } );
+	const tabs = view.ops.flatMap( ( op ) =>
+		op.kind === "button" && op.id.startsWith( "unique-status-tab:" ) ? [ op ] : []
+	);
+	assert.deepEqual(
+		tabs.map( ( op ) => [ op.id, op.label, op.selected ] ),
+		[
+			[ "unique-status-tab:all", "All", true ],
+			[ "unique-status-tab:alive", "Alive", false ],
+			[ "unique-status-tab:dead", "Dead", false ],
+			[ "unique-status-tab:notify", "Notify list", false ]
+		]
+	);
+	// The living row reads Alive; the dead one its server clock, age and killer.
+	const texts = viewTexts( view );
+	assert.ok( texts.includes( "Tiger Girl" ) );
+	assert.ok( texts.includes( "Alive" ) );
+	assert.ok( texts.includes( "Isyutaru" ) );
+	assert.ok( texts.includes( "Dead" ) );
+	assert.ok( texts.includes( "22:16 (1 min ago)" ), texts.join( "|" ) );
+	assert.ok( texts.includes( "Bo" ) );
+	assert.ok( texts.includes( "Times are server time." ) );
+
+	// Each tab filters: the dead tab hides the living, the notify tab
+	// shows only the marked.
+	const dead = uniqueStatusView( { ...VIEW_BASE, tab: "dead" } );
+	assert.ok( viewTexts( dead ).includes( "Isyutaru" ) );
+	assert.ok( !viewTexts( dead ).includes( "Tiger Girl" ) );
+	const notify = uniqueStatusView( {
+		...VIEW_BASE,
+		tab: "notify",
+		draft: { refs: [ ISYUTARU ], deathsToo: false, browser: false }
+	} );
+	assert.ok( viewTexts( notify ).includes( "Isyutaru" ) );
+	assert.ok( !viewTexts( notify ).includes( "Tiger Girl" ) );
+
+	// The marks are checkboxes: on for the marked, off for the rest, and
+	// the two toggles ride along; Save waits for an unsaved change.
+	const marked = uniqueStatusView( {
+		...VIEW_BASE,
+		draft: { refs: [ ISYUTARU ], deathsToo: true, browser: false },
+		dirty: true
+	} );
+	assert.deepEqual(
+		marked.ops.flatMap( ( op ) => (op.kind === "hit" ? [ op ] : []) ).map( ( op ) => [ op.id, op.selected ] ),
+		[
+			[ "unique-status-mark:1954", false ],
+			[ "unique-status-mark:2002", true ],
+			[ "unique-status-deaths", true ],
+			[ "unique-status-browser", false ]
+		]
+	);
+	const checks = marked.ops.flatMap( ( op ) => (op.kind === "image" ? [ op.path ] : []) );
+	assert.ok( defined( checks[0] ).endsWith( "com_checkbutton_off.png" ) );
+	assert.ok( defined( checks[1] ).endsWith( "com_checkbutton_on.png" ) );
+	const saveOf = ( shaped ) =>
+		shaped.ops.flatMap( ( op ) => (op.kind === "button" && op.id === "unique-status-save" ? [ op ] : []) )[0];
+	assert.equal( defined( saveOf( view ) ).disabled, true );
+	assert.equal( defined( saveOf( marked ) ).disabled, false );
+});
+
+test("the view reads empty without a feed and on an empty tab", () => {
+	const none = uniqueStatusView( { ...VIEW_BASE, feed: null } );
+	assert.ok( viewTexts( none ).includes( "No unique states yet - the shard's feed may be off." ) );
+	assert.equal( none.list.total, 0 );
+	const emptyTab = uniqueStatusView( { ...VIEW_BASE, tab: "notify" } );
+	assert.ok( viewTexts( emptyTab ).includes( "Nothing on this tab." ) );
+	assert.equal( emptyTab.list.total, 0 );
 });
 
 /*
