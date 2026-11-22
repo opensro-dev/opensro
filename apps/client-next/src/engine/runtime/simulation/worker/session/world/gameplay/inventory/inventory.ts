@@ -1050,8 +1050,8 @@ Folds an exchange frame; returns null when the frame is not the
 exchange's, else the category-1 notice code it raised (0 for none).
 ================
 		*/
-		exchangeReceive( frame: import("@/engine/contracts/network").WireFrame ): number | null {
-			const outcome = exchangeFrame( exchange, frame, refs, objRefs );
+		exchangeReceive( frame: import("@/engine/contracts/network").WireFrame, localGid = 0 ): number | null {
+			const outcome = exchangeFrame( exchange, frame, refs, objRefs, localGid );
 			if ( !outcome ) return null;
 			if ( outcome.swap ) {
 				slots = applyExchangeSwap( slots, outcome.swap, equipmentSlotCount ?? 13, inventorySlotCount ?? 45 );
@@ -1954,7 +1954,17 @@ receive
 				return true;
 			}
 			if ( op === MARKET_CONTROL ) {
-				market.receive( p );
+				// The market lane is port-only and self-delimiting (JSON,
+				// versioned): a malformed answer fails its window, never
+				// the session (#4111). Every native lane below keeps the
+				// session-fatal rule - a bad native packet means the
+				// world stream itself is desynced. The contained error
+				// still files as a degraded incident, once per distinct
+				// message, or the mismatch would go unseen.
+				const rejected = market.receiveContained( p );
+				if ( rejected !== null ) {
+					degrade( { code: "market_answer_rejected", message: rejected } );
+				}
 				return true;
 			}
 			// After a timeout the inventory waits for the bootstrap that

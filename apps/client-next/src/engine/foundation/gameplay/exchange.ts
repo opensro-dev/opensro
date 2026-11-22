@@ -89,13 +89,19 @@ exchangeFrame
 
 Folds one frame; null for frames the exchange does not own. refs maps a
 RefObjID to its type word (the inventory's reference projection).
+localGid is the local player's gid: the native 0x3569 handler (75B690)
+decides whose list it reads by comparing the owner gid to the local
+player's, and the bag-slot byte rides only on that side. Keying the
+reader on the remembered partner instead misreads a partner list
+whenever that memory is empty or stale (#4113).
 ================
 */
 export function exchangeFrame(
 	state: ExchangeState,
 	frame: WireFrame,
 	refs: ReadonlyMap<number, number>,
-	objRefs: ReadonlyMap<number, number> = new Map()
+	objRefs: ReadonlyMap<number, number> = new Map(),
+	localGid = 0
 ): ExchangeOutcome | null {
 	const p = frame.payload, v = viewOf( p );
 	const result = () => {
@@ -114,7 +120,13 @@ export function exchangeFrame(
 			if ( p.length !== 4 ) throw Error( "Invalid exchange opening" );
 			return { state: { ...emptyExchange(), open: true, partner: v.getUint32( 0, true ) } };
 		case OP_EXCHANGE_OFFER: {
-			const owner = v.getUint32( 0, true ), count = p[4]!, mine = owner !== state.partner;
+			// 75B690: the side is the reader's own when the owner gid is
+			// the local player's; only then does a bag-slot byte lead
+			// each row. The slot byte itself is not range-checked
+			// native-side (it indexes the window's twelve slots,
+			// 6B2DA0); the guard below keeps a corrupt stream from
+			// placing a row outside them.
+			const owner = v.getUint32( 0, true ), count = p[4]!, mine = owner === localGid;
 			let o = 5;
 			const rows: ExchangeOffer[] = [];
 			for ( let i = 0; i < count; i++ ) {

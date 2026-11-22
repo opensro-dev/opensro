@@ -13,7 +13,54 @@ actor, which the transport then dropped after resolving the session.
 
 package simulation
 
-import "testing"
+import (
+	"testing"
+
+	"opensro.online/server/internal/game/item/wire"
+)
+
+/*
+================
+TestMonsterFramesForViewerHoldsRideStatesToRiderHolders
+
+#4112's exact sequence: a slain mounted pet's death batch carries the
+owner's dismount (the client incident payload 01ca8a0100002a04c000:
+client ids rider 0x00018aca, flag 0, mount 0x00c0042a) to every viewer
+of the monster that dealt the blow. A viewer that was never sent the rider must not
+take the ride state; a viewer holding the rider, and the rider's own
+session, take the whole batch in order.
+================
+*/
+func TestMonsterFramesForViewerHoldsRideStatesToRiderHolders(t *testing.T) {
+	incident := []byte{0x01, 0xca, 0x8a, 0x01, 0x00, 0x00, 0x2a, 0x04, 0xc0, 0x00}
+	frames := []Frame{
+		{Opcode: 0xB245, Payload: []byte{9}},
+		{Opcode: wire.OpCosRideState, Payload: incident},
+		{Opcode: wire.OpObjectDespawn, Payload: []byte{1}},
+	}
+	holder := &SessionSnapshot{PublishedObjects: []uint32{0x00018ACA, 0x00C0042A}}
+	if got := monsterFramesForViewer(frames, holder); len(got) != 3 {
+		t.Fatalf("a viewer holding the rider lost frames: %v", got)
+	}
+	stranger := &SessionSnapshot{PublishedObjects: []uint32{0x00C0042A}}
+	got := monsterFramesForViewer(frames, stranger)
+	if len(got) != 2 || got[0].Opcode != 0xB245 || got[1].Opcode != wire.OpObjectDespawn {
+		t.Fatalf("a viewer without the rider took the ride state: %v", got)
+	}
+	owner := &SessionSnapshot{Companions: []*PeerCOS{{Row: wire.CosSpawnBand2{Gid: 0x00C0042A, OwnerGid: 0x00018ACA}}}}
+	if got := monsterFramesForViewer(frames, owner); len(got) != 3 {
+		t.Fatalf("the rider's own session lost its dismount: %v", got)
+	}
+	// No ride state in the batch: the frames pass through untouched,
+	// and an undecodable ride state stays shared for everyone.
+	if got := monsterFramesForViewer(frames[:1], stranger); len(got) != 1 {
+		t.Fatalf("a rideless batch changed: %v", got)
+	}
+	broken := []Frame{{Opcode: wire.OpCosRideState, Payload: []byte{2, 4}}}
+	if got := monsterFramesForViewer(broken, stranger); len(got) != 1 {
+		t.Fatalf("an undecodable ride state was filtered: %v", got)
+	}
+}
 
 /*
 ================

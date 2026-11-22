@@ -37,7 +37,10 @@ const BROWSER_AUTH_ROUTES = new Set( [
 	"/title/session",
 	"/title/logout",
 	"/title/character-select",
-	"/auth/enterworld-token"
+	"/auth/enterworld-token",
+	// The bug report also presents the session token (report below); its
+	// cookie copy still rides along, as the login minted it (#4109).
+	"/title/bug-report"
 ] );
 
 type SessionResponse = { httpOk: boolean; status: number; body: unknown; };
@@ -47,6 +50,8 @@ type RequestOptions = {
 	route: string;
 	signal: AbortSignal;
 	body?: unknown;
+	/** A multipart body, sent as composed (the bug report's form). */
+	form?: FormData;
 	token?: string;
 	limit?: number;
 	keepalive?: boolean;
@@ -69,19 +74,19 @@ export function createSessionHttp() {
 	================
 	*/
 	async function request( options: RequestOptions ): Promise<SessionResponse> {
-		const { base, route, signal, body, token, limit = DEFAULT_RESPONSE_BYTES, keepalive = false } = options;
+		const { base, route, signal, body, form, token, limit = DEFAULT_RESPONSE_BYTES, keepalive = false } = options;
 		const headers: Record<string, string> = { [RELEASE_PROTOCOL_HEADER]: String( RELEASE_PROTOCOL ) };
 		if ( body !== undefined ) headers["Content-Type"] = "application/json";
 		if ( token ) headers.Authorization = `Bearer ${token}`;
-		const encoded = body !== undefined ? JSON.stringify( body ) : undefined;
+		const encoded = form !== undefined ? form : body !== undefined ? JSON.stringify( body ) : undefined;
 		const response = await fetch( `${base}${route}`, {
-			method: body === undefined ? "GET" : "POST",
+			method: body === undefined && form === undefined ? "GET" : "POST",
 			headers,
 			credentials: BROWSER_AUTH_ROUTES.has( route ) ? "include" : "omit",
 			redirect: "error",
 			cache: "no-store",
 			...(encoded !== undefined ? { body: encoded } : {}),
-			...(keepalive && encoded !== undefined && encoded.length <= KEEPALIVE_BODY_CHARS ?
+			...(keepalive && typeof encoded === "string" && encoded.length <= KEEPALIVE_BODY_CHARS ?
 				{ keepalive: true } :
 				{}),
 			signal
@@ -149,6 +154,12 @@ export function createSessionHttp() {
 			// A failing page may be closing: keepalive lets the post finish
 			// instead of reaching the Agent cut short (#2149).
 			return request( { base, route: "/client/incident", signal, body, token, keepalive: true } );
+		},
+		report( base: string, token: string, form: FormData, signal: AbortSignal ) {
+			// The in-game bug report, filed with the session's own token
+			// (#4109): the credential the game session was admitted with,
+			// not only the login cookie's copy in the browser jar.
+			return request( { base, route: "/title/bug-report", signal, form, token } );
 		},
 		roster( base: string, token: string, signal: AbortSignal ) {
 			return request( { base, route: "/character/list", signal, token, limit: LIST_RESPONSE_BYTES } );

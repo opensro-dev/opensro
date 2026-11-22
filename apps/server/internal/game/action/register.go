@@ -335,10 +335,8 @@ hold (#1613: an attacker's observer got a killed rider's dismount).
 ================
 */
 func frameSourceGID(defaultSourceGID uint32, f wire.Frame) uint32 {
-	if f.Opcode == wire.OpCosRideState {
-		if rider, ok := wire.CosRideStateRider(f.Payload); ok {
-			return rider
-		}
+	if rider, ok := wire.FrameRideRider(f.Opcode, f.Payload); ok {
+		return rider
 	}
 	if f.Opcode == wire.OpObjectDespawn && len(f.Scope) == 1 && !f.Scope[0].Visible {
 		gid := f.Scope[0].GID

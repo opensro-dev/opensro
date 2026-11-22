@@ -10,9 +10,11 @@ import (
 // one component prevents the live-session registry from becoming a catch-all
 // for unrelated synchronization.
 type hubMetrics struct {
-	wtOK      atomic.Uint64
-	wsOK      atomic.Uint64
-	rlDropped atomic.Uint64
+	// closeCauses counts detaches and ends by their history code (#4115).
+	closeCauses closeCauseCounts
+	wtOK        atomic.Uint64
+	wsOK        atomic.Uint64
+	rlDropped   atomic.Uint64
 
 	handshakeBusy             atomic.Uint64
 	accountSessionEvictions   atomic.Uint64
@@ -83,6 +85,11 @@ type hubMetrics struct {
 type Metrics struct {
 	// WTOk counts completed handshakes (fresh or resumed) on WebTransport.
 	WTOk uint64 `json:"wt_ok"`
+	// CloseCauses counts session detaches and ends since boot by the
+	// same code the history journal records (classifyClose), keyed
+	// "<detached|ended>.<code>", so a rise in lost connections shows
+	// which cause moved (#4115). The codes are a fixed set.
+	CloseCauses map[string]uint64 `json:"close_causes"`
 	// WSOK counts completed handshakes on the WebSocket transport.
 	WSOK uint64 `json:"ws_ok"`
 	// LiveSessions is the current session count.
@@ -409,6 +416,7 @@ func (h *Hub) Metrics() Metrics {
 		ResumeGap:                 h.metrics.resumeGap.Load(),
 		HelloAdmissionAccepted:    h.metrics.helloAdmissionAccepted.Load(),
 		HelloAdmissionRefused:     h.metrics.helloAdmissionRefused.Load(),
+		CloseCauses:               h.metrics.closeCauses.snapshot(),
 		Detaches:                  h.metrics.detaches.Load(),
 		DetachesIdle:              h.metrics.detachesIdle.Load(),
 		DetachesRingPark:          h.metrics.detachesRingPark.Load(),
@@ -636,4 +644,50 @@ func (t *tickStats) snapshotInto(m *Metrics) {
 	if t.count > 0 {
 		m.TickMeanMs = float64(t.sum) / float64(time.Millisecond) / float64(t.count)
 	}
+}
+
+/*
+================
+closeCauseCounts
+
+Session detaches and ends by cause. classifyClose returns one of a
+fixed set of codes, so the map stays a few dozen keys at most.
+================
+*/
+type closeCauseCounts struct {
+	mu     sync.Mutex
+	counts map[string]uint64
+}
+
+/*
+================
+closeCauseCounts.note
+
+Counts one lifecycle event (kind "detached" or "ended") under its
+cause's history code.
+================
+*/
+func (c *closeCauseCounts) note(kind string, cause error) {
+	_, code := classifyClose(cause)
+	c.mu.Lock()
+	if c.counts == nil {
+		c.counts = make(map[string]uint64)
+	}
+	c.counts[kind+"."+code]++
+	c.mu.Unlock()
+}
+
+/*
+================
+closeCauseCounts.snapshot
+================
+*/
+func (c *closeCauseCounts) snapshot() map[string]uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make(map[string]uint64, len(c.counts))
+	for k, v := range c.counts {
+		out[k] = v
+	}
+	return out
 }

@@ -40,8 +40,8 @@ test("name distance follows prediction across regions instead of the spawn recor
 });
 const packet = ( type, extra = [] ) => ({ opcode: 0x3393, payload: Uint8Array.of( type, 2, 0, 0, 0, ...extra ) });
 test("all local option bytes are separate and defaults have only two disabled fields", () => {
-	assert.equal( gameOptionRows().length, 23 );
-	assert.equal( new Set( gameOptionRows().map( r => r[1] ) ).size, 23 );
+	assert.equal( gameOptionRows().length, 25 );
+	assert.equal( new Set( gameOptionRows().map( r => r[1] ) ).size, 25 );
 	assert.deepEqual( Object.keys( options ).filter( k => !options[k] ), [ "windowMode", "hideSilkCos" ] );
 	const copy = gameOptions( options );
 	assert.notEqual( copy, options );
@@ -50,6 +50,22 @@ test("all local option bytes are separate and defaults have only two disabled fi
 		assert.equal( gameOptions( { ...options, [key]: false } )[key], false );
 		assert.throws( () => gameOptions( { ...options, [key]: 1 } ) );
 	}
+});
+test("a record saved before the title rows validates with their defaults (#3502 slice 2)", () => {
+	const legacy = { ...options };
+	delete legacy.ownTitle;
+	delete legacy.otherTitles;
+	const migrated = gameOptions( legacy );
+	assert.equal( migrated.ownTitle, true );
+	assert.equal( migrated.otherTitles, true );
+	assert.deepEqual( migrated, options );
+	// A stored title choice is kept as written, and a bad one refuses.
+	assert.equal( gameOptions( { ...options, ownTitle: false } ).ownTitle, false );
+	assert.throws( () => gameOptions( { ...options, otherTitles: 1 } ) );
+	// Every other row stays required.
+	const missing = { ...options };
+	delete missing.ownName;
+	assert.throws( () => gameOptions( missing ) );
 });
 test("native hover, distance, own/other, guild and owned COS name branches", () => {
 	const off = {
