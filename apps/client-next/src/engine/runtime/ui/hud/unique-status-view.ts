@@ -7,9 +7,9 @@ Port-only, not native (#3531). This module turns the window's state -
 the worker's feed (contracts/unique-status.ts), the open tab, and the
 notify draft - into a flat list of draw operations; the renderer
 (ui.ts) paints them with its ordinary primitives between beginWindow
-and endWindow and owns nothing else of the window. Every action id is
-one ui.ts already dispatches (unique-status-open/-close/-tab:/-mark:/
--deaths/-browser/-save/-scroll).
+and endWindow and owns nothing else of the window. The window is the
+"Unique Status" panel; every other action id is one ui.ts already
+dispatches (unique-status-tab:/-mark:/-deaths/-browser/-save/-scroll).
 
 Row text is shaped here from the server's clock, run forward by the
 caller: the Died column reads "HH:MM (x min ago)" beside the killer,
@@ -75,7 +75,7 @@ or label is a separate op).
 ================
 */
 export type UniqueStatusOp =
-	| { readonly kind: "box"; readonly title: string; readonly rect: UiRect; readonly closeId: "unique-status-close"; }
+	| { readonly kind: "box"; readonly title: string; readonly rect: UiRect; }
 	| {
 		readonly kind: "button";
 		readonly id: string;
@@ -174,8 +174,7 @@ export function uniqueStatusView( input: UniqueStatusViewInput ): UniqueStatusVi
 	ops.push( {
 		kind: "box",
 		title: "Unique Status",
-		rect: [ px, py, UNIQUE_STATUS_WIDTH, UNIQUE_STATUS_HEIGHT ],
-		closeId: "unique-status-close"
+		rect: [ px, py, UNIQUE_STATUS_WIDTH, UNIQUE_STATUS_HEIGHT ]
 	} );
 	TABS.forEach( ( [tab, label], i ) => {
 		ops.push( {

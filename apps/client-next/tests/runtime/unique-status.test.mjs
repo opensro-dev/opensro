@@ -348,7 +348,7 @@ test("the view shapes the four tabs and both row states", () => {
 	const view = uniqueStatusView( VIEW_BASE );
 	assert.ok(
 		view.ops.some(
-			( op ) => op.kind === "box" && op.title === "Unique Status" && op.closeId === "unique-status-close"
+			( op ) => op.kind === "box" && op.title === "Unique Status" && op.rect[2] === 560
 		)
 	);
 	assert.deepEqual( view.list, { rect: [ 110, 148, 540, 240 ], total: 2, page: 12 } );
@@ -429,7 +429,7 @@ The production UI with the Experimental status row set as given, and
 the notify saves recorded.
 ================
 */
-function statusFixture( enabled ) {
+function statusFixture( enabled, extra = {} ) {
 	const saved = [];
 	const f = uiFixture(
 		() => {},
@@ -444,7 +444,10 @@ function statusFixture( enabled ) {
 			saveUniqueNotify: ( character, value ) => saved.push( [ character, value ] )
 		}
 	);
-	f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { uniqueStatus: enabled } ) } );
+	f.ui.event( {
+		kind: "experimental-preferences",
+		value: experimentalOptions( { uniqueStatus: enabled, ...extra } )
+	} );
 	return { f, saved };
 }
 
@@ -463,10 +466,10 @@ test("the production UI draws the window, edits and saves the notify list", t =>
 	} );
 	settle( 4 );
 	// Nothing is drawn until the menu entry opens the window.
-	assert.ok( !settle( 1 ).controls.some( ( control ) => control.id === "unique-status-close" ) );
-	f.ui.event( { kind: "activate", id: "unique-status-open" } );
+	assert.ok( !settle( 1 ).controls.some( ( control ) => control.id === "close-window:Unique Status" ) );
+	f.ui.event( { kind: "activate", id: "open-window:Unique Status" } );
 	settle( 2 );
-	assert.ok( settle( 1 ).controls.some( ( control ) => control.id === "unique-status-close" ) );
+	assert.ok( settle( 1 ).controls.some( ( control ) => control.id === "close-window:Unique Status" ) );
 	assert.ok( f.hasText( "Unique Status" ) );
 	assert.ok( f.hasText( "Tiger Girl" ) );
 	assert.ok( f.hasText( "Isyutaru" ) );
@@ -488,9 +491,17 @@ test("the production UI draws the window, edits and saves the notify list", t =>
 	settle( 1 );
 	assert.deepEqual( saved, [ [ "Player", { refs: [ 2002 ], deathsToo: false, browser: false } ] ] );
 
-	f.ui.event( { kind: "activate", id: "unique-status-close" } );
+	f.ui.event( { kind: "activate", id: "close-window:Unique Status" } );
 	settle( 2 );
-	assert.ok( !settle( 1 ).controls.some( ( control ) => control.id === "unique-status-close" ) );
+	assert.ok( !settle( 1 ).controls.some( ( control ) => control.id === "close-window:Unique Status" ) );
+	assert.ok( !f.hasText( "Tiger Girl" ) );
+
+	// Escape closes it like every panel.
+	f.ui.event( { kind: "activate", id: "open-window:Unique Status" } );
+	settle( 2 );
+	assert.ok( f.hasText( "Tiger Girl" ) );
+	f.ui.event( { kind: "key", code: "Escape" } );
+	settle( 2 );
 	assert.ok( !f.hasText( "Tiger Girl" ) );
 });
 
@@ -509,25 +520,51 @@ test("the production UI draws no window while the Experimental row is off", t =>
 	} );
 	settle( 4 );
 	// The menu carries no entry, so the window can never be opened.
-	assert.ok( !settle( 1 ).controls.some( ( control ) => control.id === "unique-status-open" ) );
-	assert.ok( !settle( 1 ).controls.some( ( control ) => control.id === "unique-status-close" ) );
+	f.ui.event( { kind: "activate", id: "open-window:System" } );
+	settle( 2 );
+	assert.ok( !f.hasText( "Unique Status" ) );
+	assert.ok( !settle( 1 ).controls.some( ( control ) => control.id === "close-window:Unique Status" ) );
 	assert.ok( !f.hasText( "Tiger Girl" ) );
 });
 
-test("with the row off the window closes and changes are consumed silently", () => {
+test("the System menu lists both port-only rows together", t => {
+	const { f } = statusFixture( true, { eventCalendar: true } );
+	t.after( () => f.dispose() );
+	let now = 0;
+	let view;
+	const settle = ( steps ) => {
+		for ( let i = 0; i < steps; i++ ) view = f.ui.step( f.state, now += 100 ) ?? view;
+		return defined( view );
+	};
+	settle( 12 );
+	Object.assign( f.state.gameplay, {
+		uniqueStatus: { serverNowMs: 1_700_000_300_000, rows: [ ALIVE_A, DEAD_C ], revision: 1 }
+	} );
+	settle( 4 );
+	f.ui.event( { kind: "activate", id: "open-window:System" } );
+	settle( 2 );
+	// Both entries stack in the menu while both rows are on.
+	assert.ok( f.hasText( "Event Calendar" ) );
+	assert.ok( f.hasText( "Unique Status" ) );
+	// Its entry opens the Unique Status window.
+	f.ui.event( { kind: "activate", id: "open-window:Unique Status" } );
+	settle( 2 );
+	assert.ok( f.hasText( "Tiger Girl" ) );
+	assert.ok( settle( 1 ).controls.some( ( control ) => control.id === "close-window:Unique Status" ) );
+});
+
+test("with the row off changes are consumed silently", () => {
 	const hud = createUniqueStatusHud( {} );
 	hud.attach( "Ann" );
 	hud.toggleMark( TIGER_GIRL );
 	hud.toggleDeaths();
 	hud.takeSave();
-	hud.openWindow();
 
 	const base = { serverNowMs: 1, rows: [ DEAD_A ], revision: 1 };
 	assert.deepEqual( hud.reconcile( base, true ), [] );
-	// Off: the window closes, and the spawn is consumed, not queued.
+	// Off: the spawn is consumed, not queued (ui.ts closes the panel).
 	const born = { serverNowMs: 2, rows: [ ALIVE_A ], revision: 2 };
 	assert.deepEqual( hud.reconcile( born, false ), [] );
-	assert.equal( hud.state().open, false );
 	// Back on: no alert for the change that happened while off.
 	const gone = { serverNowMs: 3, rows: [ DEAD_A ], revision: 3 };
 	assert.deepEqual( hud.reconcile( gone, true ), [ { row: DEAD_A, spawned: false } ] );

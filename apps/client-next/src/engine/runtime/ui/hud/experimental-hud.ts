@@ -374,6 +374,20 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 				]
 			},
 			{
+				title: "Events",
+				rows: [
+					{
+						// Port-only, not native (#3532): the calendar has no
+						// native counterpart; the row only adds its System
+						// menu entry and window over the schedule feed.
+						key: "eventCalendar",
+						id: "experimental-event-calendar",
+						label: "Event calendar",
+						description: "System menu: the week's scheduled events, in server time."
+					}
+				]
+			},
+			{
 				title: "Sound and connection",
 				rows: [
 					{

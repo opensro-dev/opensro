@@ -46,7 +46,6 @@ createUniqueStatusHud
 ================
 */
 export function createUniqueStatusHud( book: Readonly<Record<string, UniqueNotifySettings>> ) {
-	let open = false;
 	let tab: UniqueStatusTab = "all";
 	let firstRow = 0;
 	// The character the settings belong to, its saved list, and the draft.
@@ -73,10 +72,11 @@ Unsaved edits exist (the Save button's state).
 ================
 state
 
-What the window draws: open or not, the tab, the first visible row.
+What the window draws: the tab and the first visible row. (The window
+itself is the "Unique Status" panel; ui.ts owns its opening.)
 ================
 		*/
-		state: () => ({ open, tab, firstRow }),
+		state: () => ({ tab, firstRow }),
 		/*
 ================
 draft
@@ -112,22 +112,6 @@ any unsaved edits; the same one keeps them.
 			saved = name ? uniqueNotifySettings( book[name] ) : emptyUniqueNotify();
 			draft = saved;
 			firstRow = 0;
-		},
-		/*
-================
-openWindow
-================
-		*/
-		openWindow() {
-			open = true;
-		},
-		/*
-================
-close
-================
-		*/
-		close() {
-			open = false;
 		},
 		/*
 ================
@@ -212,12 +196,11 @@ reconcile
 The flips the saved list alerts on in this feed: a marked unique that
 spawned, and (only with deathsToo) one that died. The first feed is
 the baseline and alerts on nothing. With the Experimental row off the
-window closes and flips are still consumed, so turning it back on
-never alerts on an old change.
+flips are still consumed (and ui.ts closes the panel), so turning it
+back on never alerts on an old change.
 ================
 		*/
 		reconcile( feed: UniqueStatusFeed | null | undefined, enabled: boolean ): readonly UniqueStatusFlip[] {
-			if ( !enabled ) open = false;
 			if ( !feed ) return [];
 			const previous = lastRows;
 			lastRows = feed.rows;
@@ -230,12 +213,11 @@ never alerts on an old change.
 ================
 reset
 
-Leaving the world closes the window and forgets the baseline: the
-next world's first feed starts a fresh one.
+Leaving the world forgets the baseline: the next world's first feed
+starts a fresh one.
 ================
 		*/
 		reset() {
-			open = false;
 			lastRows = null;
 			firstRow = 0;
 		}
