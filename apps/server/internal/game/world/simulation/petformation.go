@@ -35,25 +35,14 @@ type PetFormationStep struct {
 
 /*
 ================
-PetRouteFromMonster
-
-The monster AI's detour planner (PlanMonsterRoute) as a pet's: a ready
-route of two or more points becomes the pet's waypoints. A direct route
-(one point) or an unresolved one is no detour.
-================
-*/
-func PetRouteFromMonster(plan func(from, goal monster.Pose) *monster.NavigationRoute) PetRoutePlanner {
-	return petRouteFrom(plan)
-}
-
-/*
-================
 PetRouteFromPlanes
 
 A pet routes as a monster does (#1645/#1646): through the plane that owns
 both ends, the outdoor detour in the field and the cave's region route on a
-dungeon floor. Ends no one plane owns (the outdoor/cave boundary) have no
-route; the owner-follow warp answers those.
+dungeon floor. A ready route of two or more points becomes the pet's
+waypoints; a direct route (one point) or an unresolved one is no detour.
+Ends no one plane owns (the outdoor/cave boundary) have no route; the
+owner-follow warp answers those.
 ================
 */
 func PetRouteFromPlanes(planes Planes) PetRoutePlanner {
