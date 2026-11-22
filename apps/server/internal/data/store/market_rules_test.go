@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/platform/sqlitecol"
 )
 
 // testOfferRules adds an offer cap to the listing rules.
@@ -408,8 +409,8 @@ INSERT INTO market_sales VALUES (1, 'a', 2, 'gold', 100, 1, 5);`); err != nil {
 		}
 	}
 	for _, c := range marketColumns {
-		if present, err := tableHasColumn(db, c.table, c.column); err != nil || !present {
-			t.Fatalf("%s.%s missing: %v", c.table, c.column, err)
+		if present, err := sqlitecol.Has(db, c.Table, c.Name); err != nil || !present {
+			t.Fatalf("%s.%s missing: %v", c.Table, c.Name, err)
 		}
 	}
 	var unpaid int

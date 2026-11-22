@@ -44,6 +44,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/platform/sqlitecol"
 )
 
 const (
@@ -262,19 +263,10 @@ every account starts at epoch 1 without requiring a manual migration.
 ================
 */
 func ensureAccountSessionEpoch(db *sql.DB) error {
-	var count int
-	if err := db.QueryRow(
-		`SELECT count(*) FROM pragma_table_info('accounts') WHERE name = 'session_epoch'`,
-	).Scan(&count); err != nil {
-		return fmt.Errorf("account schema inspect: %w", err)
-	}
-	if count > 0 {
-		return nil
-	}
-	if _, err := db.Exec(
-		`ALTER TABLE accounts ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 1`,
-	); err != nil {
-		return fmt.Errorf("account schema session_epoch: %w", err)
+	if err := sqlitecol.Ensure(db, []sqlitecol.Column{
+		{Table: "accounts", Name: "session_epoch", Definition: "INTEGER NOT NULL DEFAULT 1"},
+	}); err != nil {
+		return fmt.Errorf("account schema: %w", err)
 	}
 	return nil
 }
@@ -291,23 +283,11 @@ their columns, so a rollback keeps opening the same file.
 ================
 */
 func ensureAccountBlock(db *sql.DB) error {
-	for _, column := range []struct{ name, ddl string }{
-		{"block_reason", `ALTER TABLE accounts ADD COLUMN block_reason TEXT NOT NULL DEFAULT ''`},
-		{"block_until_ms", `ALTER TABLE accounts ADD COLUMN block_until_ms INTEGER NOT NULL DEFAULT 0`},
-	} {
-		var count int
-		if err := db.QueryRow(
-			`SELECT count(*) FROM pragma_table_info('accounts') WHERE name = ?`,
-			column.name,
-		).Scan(&count); err != nil {
-			return fmt.Errorf("account schema inspect: %w", err)
-		}
-		if count > 0 {
-			continue
-		}
-		if _, err := db.Exec(column.ddl); err != nil {
-			return fmt.Errorf("account schema %s: %w", column.name, err)
-		}
+	if err := sqlitecol.Ensure(db, []sqlitecol.Column{
+		{Table: "accounts", Name: "block_reason", Definition: "TEXT NOT NULL DEFAULT ''"},
+		{Table: "accounts", Name: "block_until_ms", Definition: "INTEGER NOT NULL DEFAULT 0"},
+	}); err != nil {
+		return fmt.Errorf("account schema: %w", err)
 	}
 	return nil
 }

@@ -43,6 +43,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/platform/sqlitecol"
 )
 
 // economyLedgerSchema is layout 10's addition (authority_upgrade.go adds it
@@ -162,31 +163,8 @@ func ensureEconomyBuckets(db *sql.DB) error {
 	if _, err := db.Exec(economyBucketSchema); err != nil {
 		return fmt.Errorf("economy buckets: %w", err)
 	}
-	columns, err := db.Query("PRAGMA table_info(economy_ledger)")
-	if err != nil {
-		return err
-	}
-	defer columns.Close()
-	marked := false
-	for columns.Next() {
-		var cid int
-		var name, kind string
-		var notNull, pk int
-		var fallback any
-		if err := columns.Scan(&cid, &name, &kind, &notNull, &fallback, &pk); err != nil {
-			return err
-		}
-		if name == "bucketed" {
-			marked = true
-		}
-	}
-	if err := columns.Err(); err != nil {
-		return err
-	}
-	if !marked {
-		if _, err := db.Exec("ALTER TABLE economy_ledger ADD COLUMN bucketed INTEGER"); err != nil {
-			return fmt.Errorf("economy ledger bucketed marker: %w", err)
-		}
+	if err := sqlitecol.Ensure(db, []sqlitecol.Column{{Table: "economy_ledger", Name: "bucketed", Definition: "INTEGER"}}); err != nil {
+		return fmt.Errorf("economy ledger bucketed marker: %w", err)
 	}
 	return nil
 }
