@@ -498,6 +498,10 @@ var Settings = []Setting{
 	// 1,000,000,000 warehouse gold deposit replace the native
 	// 1,000,000,000 and 100,000,000 caps. "off" is native.
 	{Env: "SRO_RAISED_GOLD_CAPS", NomadVar: "raised_gold_caps", Default: "off"},
+	// Port-only, not native (owner, 2026-11-22): a sort button on the bag,
+	// the warehouses and companion bags that sends ordinary item moves.
+	// "off" is native.
+	{Env: "SRO_INVENTORY_SORT", NomadVar: "inventory_sort", Default: "off"},
 	{Env: "SRO_REVERSE_RETURN_MAP", NomadVar: "reverse_return_map", Default: ""},
 	{Env: "SRO_HUNTING_GUIDE", NomadVar: "hunting_guide", Default: ""},
 	{Env: "SRO_GM_SETSPEED", NomadVar: "gm_setspeed", Default: "on"},
