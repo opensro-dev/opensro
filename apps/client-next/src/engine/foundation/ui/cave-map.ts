@@ -195,6 +195,23 @@ export interface CaveMapInput {
 	// A picked species' anchor on this page, in region-local
 	// coordinates; drawn as the monster sign (issue #3239).
 	readonly mark?: { readonly x: number; readonly z: number; } | null;
+	// A picked guide monster's hunting ground on this floor, in
+	// region-local coordinates (worldmap-guide.ts guideDungeonGround):
+	// its tinted tiles and its icon's anchor, projected into the
+	// result's ground quads for the map HUD to draw (issue #3395).
+	readonly ground?: {
+		readonly tiles: readonly {
+			readonly x: number;
+			readonly z: number;
+			readonly w: number;
+			readonly h: number;
+			readonly texture: string;
+			readonly color: UiQuad["color"];
+		}[];
+		readonly icon:
+			| { readonly x: number; readonly z: number; readonly size: number; readonly texture: string; }
+			| null;
+	} | null;
 }
 
 /*
@@ -229,11 +246,14 @@ caveMapView
 The page image, gate signs, a picked species' sign and the player's
 sign (only on their own floor) in paint order, its room names at
 screen positions, the pan after clamping, and the inverse pick from a
-screen pixel back to the floor region's coordinates.
+screen pixel back to the floor region's coordinates. A picked guide
+monster's ground (issue #3395) is projected beside the page quads, in
+the result's ground, so its caller can hold a mask back until the
+mask's image is in, as the world page's overlay does.
 ================
 */
 export function caveMapView( input: CaveMapInput ) {
-	const { pose, center, page, catalog, clip, pan, local, mark } = input;
+	const { pose, center, page, catalog, clip, pan, local, mark, ground: groundIn } = input;
 	const unitX = page.width / page.columns, unitY = page.height / page.rows;
 	const mapX = ( x: number ) => (x / REGION_SIZE + CAVE_TILE_ORIGIN - page.left) * unitX,
 		mapY = ( z: number ) => (page.top + 1 - CAVE_TILE_ORIGIN - z / REGION_SIZE) * unitY;
@@ -294,6 +314,44 @@ export function caveMapView( input: CaveMapInput ) {
 			rotation: minimapRotation( pose.angle )
 		} );
 	}
+	// The picked guide monster's ground: its tiles tinted over the
+	// page, then its icon with the corner on its point (sub_e75d50's
+	// anchor, as the world page draws it). A tile's z is its north
+	// edge, so its south edge is z - h; the edges snap to whole
+	// pixels from the unrounded corners, so neighbouring tiles share
+	// an edge and the half-alpha tint shows no seam (guideOverlay).
+	const ground: UiQuad[] = [];
+	if ( groundIn ) {
+		for ( const tile of groundIn.tiles ) {
+			const gx = Math.round( left + mapX( tile.x ) ), gy = Math.round( top + mapY( tile.z ) );
+			ground.push( {
+				texture: tile.texture,
+				rect: [
+					gx,
+					gy,
+					Math.round( left + mapX( tile.x + tile.w ) ) - gx,
+					Math.round( top + mapY( tile.z - tile.h ) ) - gy
+				],
+				uv: [ 0, 0, 1, 1 ],
+				color: tile.color,
+				clip
+			} );
+		}
+		if ( groundIn.icon ) {
+			ground.push( {
+				texture: groundIn.icon.texture,
+				rect: [
+					Math.round( left + mapX( groundIn.icon.x ) ),
+					Math.round( top + mapY( groundIn.icon.z ) ),
+					groundIn.icon.size,
+					groundIn.icon.size
+				],
+				uv: [ 0, 0, 1, 1 ],
+				color: white,
+				clip
+			} );
+		}
+	}
 	const labels = page.labels.map( label => ({
 		text: label.text,
 		x: left + label.x,
@@ -324,5 +382,5 @@ export function caveMapView( input: CaveMapInput ) {
 			z: (page.top + 1 - CAVE_TILE_ORIGIN - (sy - top) / unitY) * REGION_SIZE
 		};
 	};
-	return { quads, labels, signs, pan: clampedPan, point };
+	return { quads, ground, labels, signs, pan: clampedPan, point };
 }
