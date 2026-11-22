@@ -6809,15 +6809,15 @@ loop (sro-macro-skill.ts), while the Experimental row is on and the
 server has accepted Auto-Skills ON. The pure picker advances past each
 entry; a cast goes out only when the skill is learned, off cooldown,
 not press-refused, and (for a buff) not already on the caster. Attack
-rows with published admit inputs also skip "unknown" (mid-cast /
-replace) so a shield-loadout press cannot print wrong-weapon; buff
-rows still send on unknown so Grass Walk rebuffs while an attack cast
-is running. Ground-target and basic-attack entries are skipped. On
-wrong-weapon, a bound Weapon / Shield bag item is equipped first
-(0068ede0) and the loop waits 2000 ms instead of casting that tick. A
-cast arms the loop for the skill's action time; a skip leaves the
-re-arm alone so the next tick can look at the next entry. After one
-buff-list pass the attack step runs (native 00687520).
+rows skip only while our own cast is running (replace gate) so a
+shield-loadout press cannot print wrong-weapon; buff rows still send
+on unknown so Grass Walk rebuffs during an attack cast. Ground-target
+and basic-attack entries are skipped. On wrong-weapon, a bound Weapon
+/ Shield bag item is equipped first (0068ede0) and the loop waits
+2000 ms instead of casting that tick. A cast arms the loop for the
+skill's action time; a skip leaves the re-arm alone so the next tick
+can look at the next entry. After one buff-list pass the attack step
+runs (native 00687520).
 ================
 	*/
 	function checkMacroSkill( now: number, local: EntityState | undefined ) {
@@ -6876,6 +6876,16 @@ buff-list pass the attack step runs (native 00687520).
 			}
 		}
 		const bag = inventory.state().inventory;
+		// Only rows with a published replace descriptor feed DecideReplacement.
+		// Mapping missing ones to undefined made every attack with replace
+		// return "undecided effect" and, with the mid-cast skip below, never
+		// fire while any non-replace buff (or Grass Walk gap) was attached.
+		const replaceEffects = combat.state().attachedEffects.filter( effect => effect.gid === localGid ).map(
+			effect => catalog.find( row => row.id === effect.skill )?.admit?.replace
+		).filter( ( row ): row is NonNullable<typeof row> => !!row );
+		const casting = combat.state().casts.some(
+			cast => cast.caster === localGid && cast.cancelledAtMs === undefined
+		);
 		const admission = pressAdmission( {
 			admit: metadata.admit,
 			needsFooting: metadata.needsFooting,
@@ -6890,10 +6900,8 @@ buff-list pass the attack step runs (native 00687520).
 			mounted: !!local.mountedOn,
 			seated: local.movementMode === MOVEMENT_SEATED,
 			equipped: bag,
-			effects: combat.state().attachedEffects.filter( effect => effect.gid === localGid ).map( effect =>
-				catalog.find( row => row.id === effect.skill )?.admit?.replace
-			),
-			casting: combat.state().casts.some( cast => cast.caster === localGid && cast.cancelledAtMs === undefined )
+			effects: replaceEffects,
+			casting
 		} );
 		// Wrong weapon: try both bag binds (0068ede0). Native equips
 		// whichever weapon/shield sits in those slots — after a shield
@@ -6917,12 +6925,8 @@ buff-list pass the attack step runs (native 00687520).
 					mounted: !!local.mountedOn,
 					seated: local.movementMode === MOVEMENT_SEATED,
 					equipped: macroInventoryAfterSwap( bag, swap.source, swap.destination ),
-					effects: combat.state().attachedEffects.filter( effect => effect.gid === localGid ).map(
-						effect => catalog.find( row => row.id === effect.skill )?.admit?.replace
-					),
-					casting: combat.state().casts.some( cast =>
-						cast.caster === localGid && cast.cancelledAtMs === undefined
-					)
+					effects: replaceEffects,
+					casting
 				} );
 				// Only equip when this candidate clears the wrong-weapon gate.
 				if ( after.kind === "refuse" && macroSkillSwapHelps( after.code ) ) continue;
@@ -6942,14 +6946,16 @@ buff-list pass the attack step runs (native 00687520).
 			}
 			return;
 		}
-		// Refuse never casts. Attack with published admit inputs also
-		// skips "unknown" (own cast / undecided replace) so a mid-cast
-		// press cannot land on the shield loadout and print wrong-weapon.
-		// A row with no admit still sends — the hotbar does. Buffs always
-		// send on unknown so Grass Walk rebuffs while an attack cast keeps
-		// decideReplacement at "own cast running".
+		// Refuse never casts. Attack skips only while our own cast is
+		// running (replace gate "own cast running") so a press cannot land
+		// on the shield loadout mid-swap and print wrong-weapon. Other
+		// unknowns still send — the hotbar does. Buffs always send on
+		// unknown so Grass Walk rebuffs during an attack cast.
 		if ( admission.kind === "refuse" ) return;
-		if ( pick.list === "attack" && admission.kind === "unknown" && metadata.admit ) return;
+		if (
+			pick.list === "attack" && admission.kind === "unknown" &&
+			admission.gate === "own cast running"
+		) return;
 		if ( pick.list === "attack" && (!targetGid || !target) ) return;
 		const command = pick.list === "attack" && targetGid ?
 			{ kind: "skill" as const, skillId, gid: targetGid } :

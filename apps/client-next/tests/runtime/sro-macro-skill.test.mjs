@@ -292,6 +292,97 @@ test("a clicked monster is enough for the attack step, even before its select gr
 	g.dispose();
 });
 
+test("an attack with admit.replace still fires while a non-replace buff is attached", () => {
+	const replace = {
+		category: 3,
+		group: 40,
+		rank: 1,
+		states: 0,
+		ovl2: 0,
+		cbuf: false,
+		undecided: false
+	};
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const entities = new Map();
+	const local = {
+		gid: LOCAL_GID,
+		refObjId: 1907,
+		kind: /** @type {const} */ ("local-player"),
+		name: "macro",
+		countryByte9c: 0,
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	const monster = {
+		gid: MONSTER_GID,
+		refObjId: 2000,
+		kind: /** @type {const} */ ("monster"),
+		name: "mob",
+		regionId: 257,
+		x: 10,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	entities.set( LOCAL_GID, local );
+	entities.set( MONSTER_GID, monster );
+	const g = createGameplay( f => sent.push( f ), () => {}, () => {}, gid => entities.get( gid ) );
+	g.bootstrap( {
+		character: {
+			hp: 100,
+			mp: 100,
+			maxHp: 100,
+			maxMp: 100,
+			skills: [ BUFF, ATTACK ],
+			autoPotion: { hp: 0x3211, mp: 0x3212, cure: 0x13, timing: 0x8a }
+		},
+		refSkillSnapshot: [
+			skillRef( BUFF, { actionMs: 100 } ),
+			skillRef( ATTACK, {
+				targetRequired: true,
+				actionMs: 100,
+				admit: { weaponKinds: [ 0xff, 0xff ], replace }
+			} )
+		]
+	} );
+	g.worldReady();
+	g.seed( monster );
+	g.seed( local );
+	g.experimental( experimentalGameplay( experimentalOptions( { sroMacro: true } ) ) );
+	g.receive(
+		macroReplay( { skillOn: 1, buff: [], attack: [ { slot: 0, skill: ATTACK } ] } ),
+		0
+	);
+	// A live buff with no replace descriptor must not make DecideReplacement
+	// return "undecided effect" and starve the attack step.
+	g.receive(
+		{ opcode: 0xb419, payload: Uint8Array.from( [ ...u32le( LOCAL_GID ), ...u32le( BUFF ), ...u32le( 77 ) ] ) },
+		0
+	);
+	g.command( { kind: "select", gid: MONSTER_GID }, 0, monster, local );
+	const grant = new Uint8Array( 11 );
+	grant[0] = 1;
+	new DataView( grant.buffer ).setUint32( 1, MONSTER_GID, true );
+	g.receive( { opcode: 0xb45a, payload: grant }, 0 );
+	sent.length = 0;
+	g.step( 0, local );
+	const presses = sent.filter( frame => frame.opcode === SKILL_PRESS_OPCODE );
+	assert.equal( presses.length, 1, "attack fires beside a non-replace buff" );
+	const view = new DataView(
+		presses[0].payload.buffer,
+		presses[0].payload.byteOffset,
+		presses[0].payload.byteLength
+	);
+	assert.equal( view.getUint32( 2, true ), ATTACK );
+	g.dispose();
+});
+
 test("macroBuffAlreadyOn matches exact id, skill group, and replace group", () => {
 	const replace = { category: 1, group: 40, rank: 1, states: 0, ovl2: 0, cbuf: false, undecided: false };
 	const catalog = [
