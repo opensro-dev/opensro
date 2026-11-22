@@ -4,9 +4,11 @@
 keepalive.go - a session's liveness: keepalive pings and idle detach
 
 The keepalive loop pings an attached client that has gone quiet, detaches
-one silent past the idle timeout (into the resume grace window), and pings
-on a short cadence while a scene is loading, because a healthy world entry
-sends nothing while the server builds it (#1417). It also closes a scene
+one silent past the idle timeout once no scene is loading (into the resume
+grace window), and pings on a short cadence while a scene is loading,
+because a healthy world entry sends nothing while the server builds it
+(#1417) - nor while the client loads it, which the idle detach waits out
+(#4139). It also closes a scene
 admission whose bootstrap never reached the queue within the entry bound
 (the wedged-entry watchdog), and detaches a session whose writer stayed
 parked on a full resume ring past the park bound into the same grace
@@ -187,7 +189,15 @@ func (s *Session) keepaliveLoop() {
 				lastGen = gen
 				lastPing = time.Time{}
 			}
-			if idle > s.hub.cfg.IdleTimeout {
+			// A loading session's silence is the entry's own shape, not a
+			// dead client: the client owes the wire nothing until its scene
+			// is ready, and a frozen tab answers no ping however healthy
+			// its entry is. The idle detach therefore waits the load out;
+			// the admission's bounds own a loading session instead (the
+			// entry bound above until the bootstrap queues, the
+			// connection's own life after it) (#4139). Live, this detach
+			// fired mid-entry and the session lost its entry with it.
+			if !loading && idle > s.hub.cfg.IdleTimeout {
 				s.detachGen(gen, errIdle)
 				continue
 			}
