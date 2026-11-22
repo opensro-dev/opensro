@@ -63,9 +63,11 @@ market could never open again, and the decode error ended the whole
 session. GameAccount bounds every list it hands the game to this
 limit, active rows first, then the newest history; Account (the
 website page) is not bounded by it. The two numbers are pinned
-together: TestGameAccountBoundsMineRowsToTheWireLimit here and the
-row-limit test in the client's market suite each fail if their side's
-number moves alone.
+together by behaviour, not text: TestMarketMineFixturePinned (in
+game/action) pins the largest mine answer this bound produces as a
+committed fixture, and the client's market suite decodes that fixture
+whole - raise this number and the regenerated fixture stops decoding
+until the client's follows.
 ================
 */
 const WireRowLimit = 50

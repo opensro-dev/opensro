@@ -37,6 +37,7 @@ import type {
 	MarketState
 } from "@/engine/contracts/market";
 import { MARKET_ARMOR_VALUES, MARKET_RARITY_VALUES } from "../../contracts/market";
+import { MAX_RECORDED_DEGRADATIONS } from "../session/degradation-record";
 import type { CommercePreview } from "./commerce";
 import { commerceInteger } from "./commerce";
 import { MARKET_CONTROL } from "./commerce-controls";
@@ -57,7 +58,8 @@ export const MARKET_PRICE_DIGITS = 12;
 const MARKET_MAX_PRICE = 999_999_999_999;
 // The rows of one list on the account page: the wire's one row limit,
 // owned server-side (game/market WireRowLimit, the same number; the
-// two are pinned together by the row-limit tests on both sides, #4111).
+// two are pinned together by the server's pinned mine-answer fixture,
+// testdata/market_mine_max_fixture.json, #4111).
 const MARKET_ROW_LIMIT = 50;
 // The account page previews its listings and both offer lists in one
 // reference frame, so an item's preview slot runs up to three lists
@@ -443,6 +445,10 @@ export function createMarket( preview: ( row: CommercePreview ) => InventoryItem
 	let events: readonly MarketEvent[] = [];
 	let pending: MarketOp | null = null, pendingTo: MarketDestination | "" = "", deadline = 0, sequence = 0;
 	let eventSequence = 0;
+	// The contained answers already handed to the lane for reporting:
+	// one incident per distinct message, so a repeated mismatch cannot
+	// flood the Agent (receiveContained).
+	const reportedRejections = new Set<string>();
 
 	/*
 	================
@@ -676,17 +682,29 @@ export function createMarket( preview: ( row: CommercePreview ) => InventoryItem
 		0x690C02 and returns to the pump; nothing tears the session down
 		over content its handlers did not claim. receive stays strict
 		above, so the wire's shape is still pinned by the tests.
+
+		Contained is not silent: the error's message comes back once per
+		distinct message, and the lane files it as a client incident
+		(market_answer_rejected), or the next mismatch would be
+		invisible now that it no longer ends the session.
 		================
 		*/
-		receiveContained( payload: Uint8Array ) {
+		receiveContained( payload: Uint8Array ): string | null {
 			try {
 				machine.receive( payload );
-			} catch {
+				return null;
+			} catch ( error ) {
 				const op = pending ?? "search";
 				const to = pendingTo;
 				pending = null;
 				pendingTo = "";
 				notice = { op, ok: false, code: "unavailable", to, sequence: ++sequence };
+				const message = error instanceof Error ? error.message : String( error );
+				if ( reportedRejections.has( message ) || reportedRejections.size >= MAX_RECORDED_DEGRADATIONS ) {
+					return null;
+				}
+				reportedRejections.add( message );
+				return message;
 			}
 		},
 		/*

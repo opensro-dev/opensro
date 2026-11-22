@@ -1958,8 +1958,13 @@ receive
 				// versioned): a malformed answer fails its window, never
 				// the session (#4111). Every native lane below keeps the
 				// session-fatal rule - a bad native packet means the
-				// world stream itself is desynced.
-				market.receiveContained( p );
+				// world stream itself is desynced. The contained error
+				// still files as a degraded incident, once per distinct
+				// message, or the mismatch would go unseen.
+				const rejected = market.receiveContained( p );
+				if ( rejected !== null ) {
+					degrade( { code: "market_answer_rejected", message: rejected } );
+				}
 				return true;
 			}
 			// After a timeout the inventory waits for the bootstrap that

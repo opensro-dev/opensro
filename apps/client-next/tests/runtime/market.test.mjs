@@ -139,57 +139,30 @@ test("the account page reads sellers, both offer lists and the offer cap", () =>
 	assert.equal( market.state().notice, null );
 });
 
-test("the largest mine answer the server can send decodes whole, and one row more refuses", async () => {
-	// The wire's row limit has one owner (game/market WireRowLimit);
-	// reading its number here pins the two sides together: a change to
-	// either side's limit fails this test (#4111).
-	const service = await readFile(
-		new URL( "../../../server/internal/game/market/service.go", import.meta.url ),
-		"utf8"
+test("the largest mine answer the server can send decodes whole", async () => {
+	// The wire's row limit has one owner per side (game/market
+	// WireRowLimit, MARKET_ROW_LIMIT here); the pinned fixture the Go
+	// test generates from an over-limit account is how the two are
+	// pinned together: raise the server's limit and the regenerated
+	// fixture stops decoding until the client's follows (#4111). The
+	// 50s below say what the fixture is: the server's largest answer.
+	const fixture = await readFile(
+		new URL( "../../../server/internal/game/action/testdata/market_mine_max_fixture.json", import.meta.url )
 	);
-	const limit = Number( /const WireRowLimit = (\d+)/.exec( service )?.[1] );
-	assert.ok( limit > 0, "WireRowLimit not found in game/market/service.go" );
-	const rows = Array.from( { length: limit }, ( _, i ) => row( i + 1 ) );
-	const offers = Array.from( { length: limit }, ( _, i ) => offer( i + 1, i ) );
-	const purchase = i => ({
-		listingId: i + 1,
-		currency: "silk",
-		price: 50,
-		fee: 0,
-		atMs: 4,
-		to: "bag",
-		slot: 21,
-		item: "Bow"
-	});
-	const mine = listings => ({
-		version: 2,
-		op: "mine",
-		ok: true,
-		mine: {
-			listings,
-			offersIn: offers,
-			offersOut: offers,
-			purchases: Array.from( { length: limit }, ( _, i ) => purchase( i ) ),
-			silk: 9,
-			warehouseGold: 0,
-			rules
-		}
-	});
 	const market = createMarket( preview );
 	market.request( { op: "mine" }, 0 );
-	market.receive( encode( mine( rows ) ) );
+	market.receive( fixture );
 	const page = defined( market.state().mine );
-	assert.equal( page.listings.length, limit );
-	assert.equal( page.offersIn.length, limit );
-	assert.equal( page.offersOut.length, limit );
-	assert.equal( page.purchases.length, limit );
-	assert.throws( () => market.receive( encode( mine( [ ...rows, row( limit + 1 ) ] ) ) ), /Invalid market rows/ );
+	assert.equal( page.listings.length, 50 );
+	assert.equal( page.offersIn.length, 50 );
+	assert.equal( page.offersOut.length, 50 );
+	assert.equal( page.purchases.length, 50 );
+	assert.equal( market.state().pending, null );
 });
 
 test("a malformed answer costs the window its request, never the session", () => {
 	const market = createMarket( preview );
-	market.request( { op: "mine" }, 0 );
-	market.receiveContained( encode( {
+	const overLimit = encode( {
 		version: 2,
 		op: "mine",
 		ok: true,
@@ -202,7 +175,13 @@ test("a malformed answer costs the window its request, never the session", () =>
 			warehouseGold: 0,
 			rules
 		}
-	} ) );
+	} );
+	market.request( { op: "mine" }, 0 );
+	// The contained error comes back for the lane's incident report,
+	// once per distinct message; the identical failure repeats silent.
+	assert.equal( market.receiveContained( overLimit ), "Invalid market rows" );
+	market.request( { op: "mine" }, 5 );
+	assert.equal( market.receiveContained( overLimit ), null );
 	assert.equal( market.state().pending, null );
 	assert.equal( market.state().mine, null );
 	assert.equal( defined( market.state().notice ).code, "unavailable" );
@@ -212,7 +191,7 @@ test("a malformed answer costs the window its request, never the session", () =>
 	);
 	// Garbage bytes are contained the same way, and the lane still works.
 	market.request( { op: "search", page: 1 }, 10 );
-	market.receiveContained( new Uint8Array( [ 0xff, 0xfe ] ) );
+	assert.notEqual( market.receiveContained( new Uint8Array( [ 0xff, 0xfe ] ) ), null );
 	assert.equal( market.state().pending, null );
 	market.request( { op: "mine" }, 20 );
 	market.receiveContained( encode( {
