@@ -256,6 +256,59 @@ default); tests pass their own.
 */
 export interface JournalOptions {
 	readonly scriptPaths?: () => ReadonlySet<string>;
+	/** The first throw of each distinct uncaught failure, redacted for an
+	 * automatic incident (uncaughtIncident); at most MAX_KEPT_ERRORS per
+	 * page. */
+	readonly firstError?: ( failure: UncaughtFailure ) => void;
+}
+
+/*
+================
+UncaughtFailure
+
+An uncaught error or rejection as an automatic incident may carry it.
+A bug report is sent by the player, with the message and stack it
+kept; an incident is filed with no one asking, so it carries no text a
+player could have put into an error: the class name, the message only
+when the engine itself wrote it (ENGINE_ERRORS), and only the stack's
+own frames (stackFrames: script path, line and column).
+================
+*/
+export interface UncaughtFailure {
+	readonly message: string;
+	readonly frames: readonly string[];
+}
+
+// The engine's own error classes, whose messages the engine writes
+// ("Maximum call stack size exceeded", "Cannot read properties of
+// undefined"). An Error our code throws may interpolate game data.
+const ENGINE_ERRORS: ReadonlyMap<string, ErrorConstructor> = new Map( [
+	[ "RangeError", RangeError ],
+	[ "TypeError", TypeError ],
+	[ "ReferenceError", ReferenceError ],
+	[ "SyntaxError", SyntaxError ],
+	[ "URIError", URIError ],
+	[ "EvalError", EvalError ]
+] );
+
+/*
+================
+uncaughtFailure
+================
+*/
+function uncaughtFailure( error: unknown, frames: readonly string[] | undefined ): UncaughtFailure {
+	// The name is text too (code may rename an error), so it is trusted
+	// only when the object is exactly an engine class's instance.
+	const name = error instanceof Error ? error.name : "";
+	const engine = error instanceof Error && Object.getPrototypeOf( error ) === ENGINE_ERRORS.get( name )?.prototype;
+	return {
+		message: engine ?
+			`${name}: ${(error as Error).message}`.slice( 0, MAX_ERROR_MESSAGE ) :
+			error instanceof Error ?
+			"Error" :
+			"Rejection",
+		frames: frames ?? []
+	};
 }
 
 /*
@@ -340,6 +393,7 @@ export function createJournal( canvas: HTMLCanvasElement, options: JournalOption
 		}
 		if ( keptErrors.size < MAX_KEPT_ERRORS ) {
 			keptErrors.set( signature, { ...fields, atMs, kind: "error", count: 1, lastAtMs: atMs } );
+			options.firstError?.( uncaughtFailure( error, fields.frames ) );
 			return;
 		}
 		errorTimes = errorTimes.filter( time => atMs - time < ERROR_RATE_WINDOW_MS );

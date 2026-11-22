@@ -170,6 +170,8 @@ export interface BugReportOptions {
 	readonly network?: () => Float64Array;
 	/** The asset owner's copied request state (AssetOwner.snapshot), for assets.json. */
 	readonly assets?: () => import("@/engine/contracts/assets").AssetJobSnapshot | undefined;
+	/** Files the first throw of each distinct uncaught failure (journal.ts firstError). */
+	readonly firstError?: ( failure: import("./journal").UncaughtFailure ) => void;
 }
 
 /*
@@ -198,7 +200,7 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 	const lifetime = new AbortController();
 	const recorder = createReplayRecorder( options.canvas, options.sound );
 	const archive = createReportArchive();
-	const journal = createJournal( options.canvas );
+	const journal = createJournal( options.canvas, { firstError: options.firstError } );
 	const assetHistory = createAssetHistory( {
 		read: () => options.assets?.(),
 		phase: () => options.state().session?.phase ?? null
