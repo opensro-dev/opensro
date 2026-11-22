@@ -33,15 +33,17 @@ const EnvReinforceMaxPlus = "SRO_ALCHEMY_MAX_PLUS"
 // 2026-10-13): the last plus the shard's success table prices.
 const requestedReinforceMaxPlus = 11
 
-// nativeReinforceCeiling is the plus at which Reinforce refuses natively.
-const nativeReinforceCeiling = 250
+// NativeReinforceCeiling is the plus at which Reinforce refuses natively
+// (0x0F). Exported so the public rules page states the rule from this one
+// owner rather than a copy of the number.
+const NativeReinforceCeiling = 250
 
 /*
 ================
 ParseReinforceMaxPlus
 
 "" and "off" are native (0, no cap below the native ceiling); "on" is +11;
-anything else must be a plus in 1..nativeReinforceCeiling-1. A malformed
+anything else must be a plus in 1..NativeReinforceCeiling-1. A malformed
 value is an error so a typo never ships the wrong cap silently.
 ================
 */
@@ -54,8 +56,8 @@ func ParseReinforceMaxPlus(text string) (uint8, error) {
 		return requestedReinforceMaxPlus, nil
 	}
 	n, err := strconv.Atoi(text)
-	if err != nil || n < 1 || n >= nativeReinforceCeiling {
-		return 0, fmt.Errorf("%s: %q is not a plus between 1 and %d", EnvReinforceMaxPlus, text, nativeReinforceCeiling-1)
+	if err != nil || n < 1 || n >= NativeReinforceCeiling {
+		return 0, fmt.Errorf("%s: %q is not a plus between 1 and %d", EnvReinforceMaxPlus, text, NativeReinforceCeiling-1)
 	}
 	return uint8(n), nil
 }

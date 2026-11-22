@@ -83,6 +83,7 @@ import {
 	importLaterRenewalMallStep,
 	importLaterTombMinimapStep,
 	importLaterMacroGuideStep,
+	importLaterCentreBannerStep,
 	importLaterWorldMapButtonsStep,
 	importLaterWorldMapGuideStep
 } from "./laterClientImports.mjs";
@@ -92,6 +93,8 @@ export {
 	laterDungeonMapPublicPaths,
 	laterMacroGuideImportPlan,
 	laterMacroGuidePublicPaths,
+	laterCentreBannerImportPlan,
+	laterCentreBannerPublicPaths,
 	laterOptionalTeleportImportPlan,
 	laterRenewalMallImportPlan,
 	laterRenewalMallPublicPaths,
@@ -225,6 +228,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	importLaterWorldMapButtons: importLaterWorldMapButtonsStep,
 	importLaterWorldMapGuide: importLaterWorldMapGuideStep,
 	importLaterMacroGuide: importLaterMacroGuideStep,
+	importLaterCentreBanner: importLaterCentreBannerStep,
 	importLaterOptionalTeleport: importLaterOptionalTeleportStep,
 	importLaterTombMinimap: importLaterTombMinimapStep,
 	importLaterRenewalMall: importLaterRenewalMallStep,
@@ -620,6 +624,9 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// archive under the same rule, claimed before the pack tail.
 	const laterWorldMapGuide = await timed( "laterWorldMapGuide", () => steps.importLaterWorldMapGuide() );
 	const laterMacroGuide = await timed( "laterMacroGuide", () => steps.importLaterMacroGuide() );
+	// The centre banner's plate art (#3260) rides the v1.696 archive
+	// under the same rule, claimed before the pack tail.
+	const laterCentreBanner = await timed( "laterCentreBanner", () => steps.importLaterCentreBanner() );
 	// The reverse return map's destination table rides the v1.188 archive
 	// too, but lands in the game root for the server game-data build.
 	const laterOptionalTeleport = await timed( "laterOptionalTeleport", () => steps.importLaterOptionalTeleport() );
@@ -705,6 +712,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		laterWorldMapButtons,
 		laterWorldMapGuide,
 		laterMacroGuide,
+		laterCentreBanner,
 		laterOptionalTeleport,
 		laterTombMinimap,
 		laterRenewalMall,

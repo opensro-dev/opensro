@@ -244,6 +244,7 @@ import {
 	createNoticeBanner,
 	noticeTiming,
 	notificationBannerPaths,
+	centreBannerPaths,
 	noticeBannerRow
 } from "./hud/unique-banner";
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
@@ -11512,8 +11513,14 @@ export function createUi( ports: UiPorts ) {
 			function drawTransientBanners( top?: number ) {
 				// Port-only (#1976): only a seal drop's notice takes its
 				// tier's weight (noticeBannerRow); every other notice on
-				// this row keeps the native plate untouched.
-				const noticeRow = noticeBannerRow( notificationBanner );
+				// this row keeps the native plate untouched. A reinforcement
+				// success takes the later client's centre banner (#3260)
+				// while its art is published, centred on the desktop;
+				// compact mode still stacks it with the other rows.
+				const noticeRow = noticeBannerRow(
+					notificationBanner,
+					centreBannerPaths.every( p => !!resources.size( p ) )
+				);
 				const rows = [
 					{
 						value: uniqueBanner.value( hudCopy ),
@@ -11522,7 +11529,8 @@ export function createUi( ports: UiPorts ) {
 						y: 130,
 						color: [ 0, 52, 92 ] as const,
 						textRgb: undefined as readonly [number, number, number] | undefined,
-						frame: {}
+						frame: {},
+						centred: false
 					},
 					{
 						value: notificationBanner.value( hudCopy ),
@@ -11531,7 +11539,8 @@ export function createUi( ports: UiPorts ) {
 						y: 100,
 						color: noticeRow.color,
 						textRgb: noticeRow.textRgb,
-						frame: noticeRow.frame
+						frame: noticeRow.frame,
+						centred: noticeRow.centred
 					},
 					{
 						value: questBanner.value(),
@@ -11540,11 +11549,15 @@ export function createUi( ports: UiPorts ) {
 						y: 160,
 						color: [ 0, 91, 66 ] as const,
 						textRgb: undefined as readonly [number, number, number] | undefined,
-						frame: {}
+						frame: {},
+						centred: false
 					}
 				];
 				if ( top !== undefined ) rows.sort( ( a, b ) => a.y - b.y );
 				let bottom = top ?? 0;
+				// The centre plate's art loads ahead of the first success
+				// line, the way the notice art does through its own row.
+				paths.push( ...centreBannerPaths );
 				for ( const row of rows ) {
 					paths.push( ...row.paths );
 					if ( row.alpha <= 0 ) continue;
@@ -11554,7 +11567,9 @@ export function createUi( ports: UiPorts ) {
 					const lineHeight = text.extentHeight( 0, 2 ),
 						width = Math.ceil( Math.max( 0, ...lines.map( value => text.run( value, 2 ).width ) ) ),
 						height = lineHeight * lines.length,
-						y = top === undefined ? row.y : bottom,
+						y = top === undefined ?
+							(row.centred ? Math.max( 0, (h - height) / 2 ) : row.y) :
+							bottom,
 						x = (w >> 1) - (width >> 1);
 					quads.push(
 						...uniqueBannerQuads(
