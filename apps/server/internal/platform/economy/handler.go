@@ -106,6 +106,10 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
+	if route == "grants" {
+		s.serveGrants(w, q, at)
+		return
+	}
 	if route == "distribution" {
 		block, known := blocks[q.Get("division")]
 		if !known {

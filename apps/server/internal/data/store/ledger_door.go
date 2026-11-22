@@ -233,7 +233,7 @@ func (s *Store) ledgerRowsLocked(label, division string, before *doorBefore, aft
 	if domain.SameItemHoldings(before.items, s.door.scratch) {
 		return gold, moved, nil
 	}
-	return gold, moved, s.itemChangeRowsLocked(label, division, after.ID, before.items, s.door.scratch)
+	return gold, moved, s.itemChangeRowsLocked(label, division, after, before.items, s.door.scratch)
 }
 
 //============================================================================
