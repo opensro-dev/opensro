@@ -158,15 +158,18 @@ func buildBootstrap(deps *Deps, request BootstrapRequest) *BootstrapResult {
 
 	// The beta starter kit backfills every character on entry (starterkit.go),
 	// and its HP/MP potions are topped up to a full stack (starterrefill.go).
-	kitMissing := len(deps.StarterKit) > 0 && StarterKitMissing(character, deps.StarterKit)
-	refillShort := len(deps.StarterRefills) > 0 && StarterRefillShort(character, deps.StarterRefills)
-	if kitMissing || refillShort {
-		deps.Mutate(liveCharacter, "starter-kit", func() {
-			GrantStarterKit(liveCharacter, deps.StarterKit)
-			RefillStarterPotions(liveCharacter, deps.StarterRefills)
-		})
-		character = readCharacterSnapshot(deps, divisionID, liveCharacter)
-		if character == nil {
+	// Each is its own door, so the item ledger and the free-grant days
+	// (#3307) tell a kit from a refill; the refill reads the snapshot the
+	// kit left, as it did when both shared one door.
+	if len(deps.StarterKit) > 0 && StarterKitMissing(character, deps.StarterKit) {
+		deps.Mutate(liveCharacter, domain.GrantStarterKit, func() { GrantStarterKit(liveCharacter, deps.StarterKit) })
+		if character = readCharacterSnapshot(deps, divisionID, liveCharacter); character == nil {
+			return Failure(nativeErrorCharacter, "characterNotFound")
+		}
+	}
+	if len(deps.StarterRefills) > 0 && StarterRefillShort(character, deps.StarterRefills) {
+		deps.Mutate(liveCharacter, domain.GrantStarterRefill, func() { RefillStarterPotions(liveCharacter, deps.StarterRefills) })
+		if character = readCharacterSnapshot(deps, divisionID, liveCharacter); character == nil {
 			return Failure(nativeErrorCharacter, "characterNotFound")
 		}
 	}

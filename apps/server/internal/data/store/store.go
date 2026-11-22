@@ -655,6 +655,11 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 		db.Close()
 		return nil, nil, err
 	}
+	// The free-grant days (#3307), additive the same way.
+	if err := ensureGrantDays(db); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
 	// The market tables (port-only, SRO_CONSIGNMENT): additive too.
 	if err := ensureMarket(db); err != nil {
 		db.Close()

@@ -130,13 +130,16 @@ WHERE type = 'table' AND name IN ('item_ledger', 'item_ledger_char_hours')`).Sca
 ================
 itemLedgerRow
 
-One item's change through one door: count is signed.
+One item's change through one door: count is signed. account is the
+character's at the change, so a free grant's day (grant_days.go) needs
+no record read and survives the character's deletion.
 ================
 */
 type itemLedgerRow struct {
 	atMs     int64
 	division string
 	charID   int64
+	account  string
 	door     string
 	item     string
 	count    int64
@@ -162,13 +165,13 @@ domain.DiffItemRowCounts), stamped now under the door word. Both note
 paths (the commit's and an own transaction's) build their rows here.
 ================
 */
-func (s *Store) itemChangeRowsLocked(label, division string, charID int64, before, after []domain.ItemCount) []itemLedgerRow {
+func (s *Store) itemChangeRowsLocked(label, division string, character *domain.Character, before, after []domain.ItemCount) []itemLedgerRow {
 	door := domain.EconomyDoor(label)
 	atMs := s.now().UnixMilli()
 	var rows []itemLedgerRow
 	for _, change := range domain.DiffItemRowCounts(before, after) {
 		rows = append(rows, itemLedgerRow{
-			atMs: atMs, division: division, charID: charID,
+			atMs: atMs, division: division, charID: character.ID, account: character.AccountID,
 			door: door, item: change.Item, count: change.Count,
 		})
 	}
@@ -205,7 +208,8 @@ type itemBucketFold struct {
 flushItemLedgerTx
 
 Writes a commit's noted item changes inside tx: a bulk door's change
-joins its hourly bucket, every other change keeps its exact row.
+joins its hourly bucket, every other change keeps its exact row, and a
+free grant's gain also joins the account's day (grant_days.go).
 ================
 */
 func flushItemLedgerTx(tx sqlExecer, rows []itemLedgerRow) error {
@@ -225,6 +229,11 @@ func flushItemLedgerTx(tx sqlExecer, rows []itemLedgerRow) error {
 		if _, err := tx.Exec(`INSERT INTO item_ledger (at_ms, division, char_id, door, item, count)
 VALUES (?, ?, ?, ?, ?, ?)`, row.atMs, row.division, row.charID, row.door, row.item, row.count); err != nil {
 			return fmt.Errorf("item ledger: %w", err)
+		}
+		if domain.FreeGrantDoor(row.door) {
+			if err := addGrantDayTx(tx, row.atMs, row.account, row.door, row.item, row.count); err != nil {
+				return err
+			}
 		}
 	}
 	return visitSorted(buckets, func(a, b itemBucketKey) bool {

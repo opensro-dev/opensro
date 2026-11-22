@@ -161,6 +161,38 @@ var itemBulkDoors = map[string]bool{
 	"shop-transaction":     true,
 }
 
+// The free grants (#3307): what the shard hands an account for nothing,
+// counted per account and day at grant time (store/grant_days.go) so a
+// create-grant-sell-delete loop stays visible after the character is
+// gone. The two item grants are door words (enterworld/bootstrap.go);
+// the three silk grants name their store writers (betasilk.go,
+// referrals.go). An operator's grant is staff work, not a free grant.
+const (
+	GrantStarterKit    = "starter-kit"
+	GrantStarterRefill = "starter-refill"
+	GrantStarterSilk   = "starter-silk"
+	GrantBetaSilk      = "beta-silk"
+	GrantReferralSilk  = "referral-silk"
+)
+
+// freeGrantDoors are the item doors whose gains count as free grants.
+var freeGrantDoors = map[string]bool{
+	GrantStarterKit:    true,
+	GrantStarterRefill: true,
+}
+
+/*
+================
+FreeGrantDoor
+
+Whether an item door's gains are a free grant. door is EconomyDoor's
+word.
+================
+*/
+func FreeGrantDoor(door string) bool {
+	return freeGrantDoors[door]
+}
+
 /*
 ================
 ItemDoorBulk

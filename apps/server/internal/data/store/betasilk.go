@@ -55,7 +55,11 @@ ON CONFLICT(account_id) DO NOTHING`, accountID, starter)
 	}
 	// The starter silk is a charge like any other credit (silkhistory.go):
 	// it lands in the history with the wallet row that creates it.
-	if err := insertSilkHistoryTx(tx, accountID, s.now().UnixMilli(), silkHistoryCharge, domain.MallBalance{Silk: starter}); err != nil {
+	atMs := s.now().UnixMilli()
+	if err := insertSilkHistoryTx(tx, accountID, atMs, silkHistoryCharge, domain.MallBalance{Silk: starter}); err != nil {
+		return false, err
+	}
+	if err := addGrantDayTx(tx, atMs, accountID, domain.GrantStarterSilk, grantItemSilk, int64(starter)); err != nil {
 		return false, err
 	}
 	return true, tx.Commit()
@@ -99,7 +103,11 @@ ON CONFLICT(account_id) DO UPDATE SET silk = excluded.silk`, accountID, balance.
 	}
 	// Only what actually landed is a charge (silkhistory.go): the cap can
 	// trim the credit below the amount asked for.
-	if err := insertSilkHistoryTx(tx, accountID, s.now().UnixMilli(), silkHistoryCharge, domain.MallBalance{Silk: balance.Silk - before}); err != nil {
+	atMs := s.now().UnixMilli()
+	if err := insertSilkHistoryTx(tx, accountID, atMs, silkHistoryCharge, domain.MallBalance{Silk: balance.Silk - before}); err != nil {
+		return domain.MallBalance{}, false, err
+	}
+	if err := addGrantDayTx(tx, atMs, accountID, domain.GrantBetaSilk, grantItemSilk, int64(balance.Silk-before)); err != nil {
 		return domain.MallBalance{}, false, err
 	}
 	return balance, true, tx.Commit()

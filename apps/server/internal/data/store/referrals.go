@@ -501,5 +501,8 @@ ON CONFLICT(account_id) DO UPDATE SET gift_silk = excluded.gift_silk`, accountID
 	if err != nil {
 		return err
 	}
-	return insertSilkHistoryTx(tx, accountID, atMs, silkHistoryCharge, domain.MallBalance{GiftSilk: amount})
+	if err := insertSilkHistoryTx(tx, accountID, atMs, silkHistoryCharge, domain.MallBalance{GiftSilk: amount}); err != nil {
+		return err
+	}
+	return addGrantDayTx(tx, atMs, accountID, domain.GrantReferralSilk, grantItemGiftSilk, int64(amount))
 }
