@@ -443,6 +443,7 @@ import { textAllowed } from "@/engine/foundation/ui/character-create";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { compositeItemCaption, compositeItemLayout, createCompositeItemHud } from "./hud/composite-item-hud";
 import { createUniqueRankHud } from "./hud/unique-rank-hud";
+import { createUniqueStatusHud } from "./hud/unique-status-hud";
 import {
 	createServerEventHud,
 	gaugeRatio,
@@ -463,6 +464,13 @@ import { drawSroMacro, type MacroPaint, macroPotionStock } from "./hud/sro-macro
 import { createMarketHud, MARKET_BAG_FIRST_SLOT, MARKET_HOTKEY_VK } from "./hud/market-hud";
 import { drawMarketWindow, type MarketPaint } from "./hud/market-window";
 import { uniqueRankLines } from "@/engine/foundation/gameplay/unique-rank";
+import {
+	uniqueStatusAlertText,
+	uniqueStatusAgo,
+	uniqueStatusClock,
+	uniqueStatusRows
+} from "@/engine/foundation/gameplay/unique-status";
+import type { UniqueStatusFlip, UniqueStatusTab } from "@/engine/foundation/gameplay/unique-status";
 import {
 	allianceButtons,
 	allianceGuildCountText,
@@ -949,7 +957,13 @@ import {
 } from "@/engine/foundation/ui/resurrection-proposal";
 import { createInstancePrompt, instanceBoxLayout, instanceQuestion } from "@/engine/foundation/ui/instance-proposal";
 import { markupLines, messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
-import { systemMenu, SYSTEM_MENU_HEIGHT, EXPERIMENTAL_MENU_ID } from "@/engine/foundation/ui/system-menu";
+import {
+	systemMenu,
+	systemMenuHeight,
+	SYSTEM_MENU_HEIGHT,
+	EXPERIMENTAL_MENU_ID,
+	UNIQUE_STATUS_MENU_ID
+} from "@/engine/foundation/ui/system-menu";
 import {
 	bagTabRow,
 	GACHA_BAG_CELL_SHIFT,
@@ -1239,6 +1253,27 @@ The release's git revision as the build stamps it (tools/build-metadata.mjs);
 "" where nothing defines it (a test importing the source).
 ================
 */
+/*
+================
+notifyBrowserUnique
+
+Port-only (#3531): the browser's own notification for a marked unique's
+flip - only when the saved list allows it and the browser's permission
+(granted at Save, never asked here) is in place. A browser without the
+Notification API simply stays quiet.
+================
+*/
+function notifyBrowserUnique( flip: UniqueStatusFlip, allowed: boolean ): void {
+	if ( !allowed || typeof Notification === "undefined" || Notification.permission !== "granted" ) {
+		return;
+	}
+	try {
+		new Notification( flip.row.name, { body: uniqueStatusAlertText( flip ) } );
+	} catch {
+		// A refused notification is the browser's business, not a frame's.
+	}
+}
+
 function stampedClientRevision(): string {
 	try {
 		return String( import.meta.env.SRO_CLIENT_REVISION ?? "" );
@@ -1709,6 +1744,15 @@ export function createUi( ports: UiPorts ) {
 	const compositeItemHud = createCompositeItemHud();
 	// Port-only, not native: a unique kill's damage ranking (SRO_UNIQUE_DAMAGE_RANK).
 	const uniqueRankHud = createUniqueRankHud();
+	const uniqueStatusHud = createUniqueStatusHud( extensions.uniqueNotifyBook?.() ?? {} );
+	// Port-only (#3531): the Unique Status window's last drawn list (its
+	// wheel and thumb drag find it here) and the server clock's base: the
+	// last feed's server time and the local time it landed, so the Died
+	// column's "ago" runs between updates.
+	let uniqueStatusList: { rect: UiRect; total: number; page: number; } | null = null;
+	let uniqueStatusThumbTravel = 0;
+	let uniqueStatusClockRevision = -1;
+	let uniqueStatusClockBase = { serverMs: 0, atMs: 0 };
 	// The v1.696 client's Server Mission gauge (CNIFServerEvent, 0x34F2): native, no row.
 	const serverEventHud = createServerEventHud();
 	// Port-only, not native (#3907): the v1.696 SRO Macro windows (SRO_AUTO_MACRO).
@@ -5595,6 +5639,44 @@ export function createUi( ports: UiPorts ) {
 		} else if ( id === "unique-rank-ok" || id === "unique-rank-close" ) {
 			uniqueRankHud.close();
 			dirty = true;
+		} else if ( id === "unique-status-close" ) {
+			uniqueStatusHud.close();
+			dirty = true;
+		} else if ( id === "unique-status-open" ) {
+			// Port-only (#3531): the System menu's Unique Status entry.
+			uniqueStatusHud.openWindow();
+			setPanel( "" );
+			dirty = true;
+		} else if ( id.startsWith( "unique-status-tab:" ) ) {
+			uniqueStatusHud.selectTab( id.slice( "unique-status-tab:".length ) as UniqueStatusTab );
+			dirty = true;
+		} else if ( id.startsWith( "unique-status-mark:" ) ) {
+			uniqueStatusHud.toggleMark( Number( id.slice( "unique-status-mark:".length ) ) );
+			dirty = true;
+		} else if ( id === "unique-status-deaths" ) {
+			uniqueStatusHud.toggleDeaths();
+			dirty = true;
+		} else if ( id === "unique-status-browser" ) {
+			uniqueStatusHud.toggleBrowser();
+			dirty = true;
+		} else if ( id === "unique-status-save" ) {
+			// Port-only (#3531): persist the notify list, and - only here,
+			// after the player opted in - ask the browser's permission.
+			const taken = uniqueStatusHud.takeSave();
+			if ( taken ) {
+				extensions.saveUniqueNotify?.( uniqueStatusHud.character(), taken );
+				if ( taken.browser && typeof Notification !== "undefined" && Notification.permission === "default" ) {
+					void Notification.requestPermission();
+				}
+			}
+			dirty = true;
+		} else if ( id === "unique-status-scroll-up" || id === "unique-status-scroll-down" ) {
+			uniqueStatusHud.scroll(
+				id === "unique-status-scroll-up" ? -1 : 1,
+				uniqueStatusList?.total ?? 0,
+				uniqueStatusList?.page ?? 0
+			);
+			dirty = true;
 		} else if ( id === "server-event-close" ) {
 			serverEventHud.close();
 		} else if ( id.startsWith( MACRO_ID ) || id === "sro-macro-close" ) {
@@ -7994,6 +8076,35 @@ export function createUi( ports: UiPorts ) {
 					return;
 				}
 			}
+			if (
+				(event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end") &&
+				uniqueStatusHud.state().open
+			) {
+				// Port-only (#3531): the Unique Status list's wheel and thumb,
+				// over the rect its last frame drew.
+				if ( event.kind === "scroll" ) {
+					if ( uniqueStatusList && containsPoint( uniqueStatusList.rect, event.x, event.y ) ) {
+						uniqueStatusHud.scroll(
+							Math.sign( event.delta ),
+							uniqueStatusList.total,
+							uniqueStatusList.page
+						);
+						dirty = true;
+						return;
+					}
+				} else if ( event.id === "unique-status-thumb" && uniqueStatusList ) {
+					if ( event.kind === "drag" ) {
+						uniqueStatusHud.dragThumb(
+							event.dy,
+							uniqueStatusThumbTravel,
+							uniqueStatusList.total,
+							uniqueStatusList.page
+						);
+						dirty = true;
+					}
+					return;
+				}
+			}
 			if ( event.kind === "scroll" && panel === "Blocking" ) {
 				const area = controls.find( c => c.id === "blocking-list" );
 				if ( area && containsPoint( area.rect, event.x, event.y ) ) {
@@ -8175,6 +8286,11 @@ export function createUi( ports: UiPorts ) {
 			}
 			if ( event.kind === "key" && event.code === "Escape" && uniqueRankHud.state() ) {
 				uniqueRankHud.close();
+				dirty = true;
+				return;
+			}
+			if ( event.kind === "key" && event.code === "Escape" && uniqueStatusHud.state().open ) {
+				uniqueStatusHud.close();
 				dirty = true;
 				return;
 			}
@@ -9077,10 +9193,11 @@ export function createUi( ports: UiPorts ) {
 				return;
 			}
 			if ( event.kind === "drag" && event.id === "system-drag" && panel === "System" ) {
+				const dragMenuHeight = systemMenuHeight( experimental.state().saved.uniqueStatus );
 				systemX = Math.max( 0, Math.min( (view?.width ?? 214) - 214, (systemX ?? 0) + event.dx ) );
 				systemY = Math.max(
 					0,
-					Math.min( (view?.height ?? SYSTEM_MENU_HEIGHT) - SYSTEM_MENU_HEIGHT, (systemY ?? 0) + event.dy )
+					Math.min( (view?.height ?? dragMenuHeight) - dragMenuHeight, (systemY ?? 0) + event.dy )
 				);
 				dirty = true;
 				return;
@@ -10805,6 +10922,26 @@ export function createUi( ports: UiPorts ) {
 				phase === "world" &&
 				uniqueRankHud.reconcile( next.gameplay, experimental.state().saved.uniqueDamageRank )
 			) dirty = true;
+			if ( phase === "world" ) {
+				// Port-only (#3531): the Unique Status alerts. The notify
+				// list belongs to the character in the world; a marked
+				// unique's spawn (and death, when allowed) raises the
+				// in-game line and, once the player allowed it on Save,
+				// the browser's notification.
+				uniqueStatusHud.attach( next.session?.character ?? "" );
+				const alertFlips = uniqueStatusHud.reconcile(
+					next.gameplay?.uniqueStatus,
+					experimental.state().saved.uniqueStatus
+				);
+				for ( const flip of alertFlips ) {
+					sendGameplay( {
+						kind: "local-notice",
+						notice: { key: "", value: 0, text: uniqueStatusAlertText( flip ) }
+					} );
+					notifyBrowserUnique( flip, uniqueStatusHud.savedSettings().browser );
+					dirty = true;
+				}
+			}
 			if ( phase === "signed-out" || phase === "character-select" ) serverEventHud.reset();
 			if ( phase === "world" ) {
 				const before = serverEventHud.shown();
@@ -10881,6 +11018,7 @@ export function createUi( ports: UiPorts ) {
 					persistWindowPositions();
 					guildWarHud.reset( true );
 					uniqueRankHud.reset();
+					uniqueStatusHud.reset();
 					sroMacroHud.reset();
 					windowPlacement.reset();
 					itemMall.reset();
@@ -14297,15 +14435,18 @@ export function createUi( ports: UiPorts ) {
 					// Clamp at render like the drag does: a position stored on a
 					// larger viewport must not strand the menu off screen after
 					// the window shrinks.
-					const sx = Math.max( 0, Math.min( w - 214, systemX ?? Math.trunc( (w - 214) / 2 ) ) ),
+					// Port-only (#3531): the Unique Status entry joins the menu
+					// (and grows it a row) only while its Experimental row is on.
+					const menuHeight = systemMenuHeight( experimental.state().saved.uniqueStatus ),
+						sx = Math.max( 0, Math.min( w - 214, systemX ?? Math.trunc( (w - 214) / 2 ) ) ),
 						sy = Math.max(
 							0,
-							Math.min( h - SYSTEM_MENU_HEIGHT, systemY ?? Math.trunc( (h - SYSTEM_MENU_HEIGHT) / 2 ) )
+							Math.min( h - menuHeight, systemY ?? Math.trunc( (h - menuHeight) / 2 ) )
 						);
 					systemX = sx;
 					systemY = sy;
 					const authored = hudData.windows.ifsystemwnd!,
-						layout = systemMenu( authored, sx, sy ),
+						layout = systemMenu( authored, sx, sy, experimental.state().saved.uniqueStatus ),
 						inner = authored.GDR_SYSTEM_FRAME!,
 						tile = authored.GDR_SYSTEM_BGTILE!;
 					blocks.push( layout.frame );
@@ -14344,6 +14485,8 @@ export function createUi( ports: UiPorts ) {
 					for ( const node of layout.buttons ) {
 						const id = node.id === EXPERIMENTAL_MENU_ID ? "open-window:Experimental" : node.id === 10 ?
 							"open-window:Option" :
+							node.id === UNIQUE_STATUS_MENU_ID ?
+							"unique-status-open" :
 							node.id === 11 ?
 							"open-window:Game Guide" :
 							node.id === 13 ?
@@ -14354,7 +14497,9 @@ export function createUi( ports: UiPorts ) {
 							sx,
 							sy,
 							id,
-							node.id === EXPERIMENTAL_MENU_ID ? "Experimental" : hudCopy( node.text )
+							node.id === EXPERIMENTAL_MENU_ID ? "Experimental" : node.id === UNIQUE_STATUS_MENU_ID ?
+								"Unique status" :
+								hudCopy( node.text )
 						);
 					}
 					endWindow( admission );
@@ -17467,6 +17612,205 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					}
 					button( "unique-rank-ok", hudCopy( "UIIT_CTL_CONFIRM" ), px + (width - 120) / 2, py + height - 40 );
 					endWindow( admission, "unique-rank" );
+				}
+				const uniqueStatusState = uniqueStatusHud.state();
+				if ( uniqueStatusState.open && game ) {
+					// Port-only, not native (unique-status-hud.ts): every unique's
+					// state from the shard's feed, the marked ones' checkboxes,
+					// and the notify toggles over a Save. The frame, buttons,
+					// checks and scrollbar are the client's own window parts.
+					const feed = next.gameplay?.uniqueStatus ?? null;
+					const draftMarks = uniqueStatusHud.draft();
+					const allRows = feed ? uniqueStatusRows( feed.rows, uniqueStatusState.tab, draftMarks.refs ) : [];
+					const statusWidth = 560, statusRowPitch = 20, statusPageRows = 12;
+					const statusTabsTop = 40, statusHeadTop = 78, statusListTop = 98;
+					const statusListHeight = statusPageRows * statusRowPitch;
+					const statusTogglesTop = statusListTop + statusListHeight + 12;
+					const statusHeight = statusTogglesTop + 56;
+					const firstRow = Math.min(
+						uniqueStatusState.firstRow,
+						Math.max( 0, allRows.length - statusPageRows )
+					);
+					const admission = beginWindow();
+					const [px, py] = windowOrigin( "UniqueStatus", [
+						(w - statusWidth) / 2,
+						Math.max( 0, (h - statusHeight) / 3 ),
+						statusWidth,
+						statusHeight
+					] );
+					windowBox( "Unique Status", px, py, statusWidth, statusHeight );
+					closeButton( px + statusWidth - 26, py + 10, "unique-status-close" );
+					const tabIds = [
+						[ "all", "All" ],
+						[ "alive", "Alive" ],
+						[ "dead", "Dead" ],
+						[ "notify", "Notify list" ]
+					] as const;
+					tabIds.forEach( ( [tab, label], i ) => {
+						button(
+							"unique-status-tab:" + tab,
+							label,
+							px + 14 + i * 108,
+							py + statusTabsTop,
+							100,
+							false,
+							uniqueStatusState.tab === tab
+						);
+					} );
+					const headerColor = [ 180 / 255, 180 / 255, 180 / 255, 1 ] as const;
+					// [left, width, hAlign] of the name, level, status, died and killer columns.
+					const statusColumns = [
+						[ 42, 176, 0 ],
+						[ 222, 44, 2 ],
+						[ 272, 62, 0 ],
+						[ 340, 112, 0 ],
+						[ 458, 92, 0 ]
+					] as const;
+					const statusCells = (
+						values: readonly string[],
+						top: number,
+						color: readonly [number, number, number, number]
+					) => {
+						values.forEach( ( value, i ) => {
+							const [left, cellWidth, hAlign] = statusColumns[i]!,
+								cell: UiRect = [ px + left, top, cellWidth, statusRowPitch ];
+							quads.push(
+								...text.quads( value, cell, cell, color, { hAlign, vAlign: 1, overflow: "ellipsis" } )
+							);
+						} );
+					};
+					statusCells( [ "Unique", "Lv", "Status", "Died", "Killed by" ], py + statusHeadTop, headerColor );
+					rect( [ px + 10, py + statusListTop - 3, statusWidth - 20, 1 ], headerColor );
+					// The server's clock at the last frame, run forward by the
+					// local one so "50 min ago" keeps moving between updates.
+					if ( feed && feed.revision !== uniqueStatusClockRevision ) {
+						uniqueStatusClockRevision = feed.revision;
+						uniqueStatusClockBase = { serverMs: feed.serverNowMs, atMs: next.simulationTimeMs ?? 0 };
+					}
+					const serverNow = feed ?
+						uniqueStatusClockBase.serverMs +
+						Math.max( 0, (next.simulationTimeMs ?? 0) - uniqueStatusClockBase.atMs ) :
+						0;
+					const visibleRows = allRows.slice( firstRow, firstRow + statusPageRows );
+					visibleRows.forEach( ( row, i ) => {
+						const top = py + statusListTop + i * statusRowPitch,
+							markId = "unique-status-mark:" + row.refObjId,
+							marked = draftMarks.refs.includes( row.refObjId );
+						if ( hover === markId ) {
+							rect( [ px + 10, top, statusWidth - 20, statusRowPitch ], [ 1, 1, 1, .07 ] );
+						}
+						image(
+							[ px + 16, top + 2, 16, 16 ],
+							ROOT + "interface/ifcommon/com_checkbutton_" + (marked ? "on" : "off") + ".png",
+							[ 1, 1, 1, 1 ]
+						);
+						controls.push( {
+							id: markId,
+							label: row.name,
+							kind: "button",
+							rect: [ px + 10, top, 218, statusRowPitch ],
+							selected: marked
+						} );
+						statusCells(
+							[
+								row.name,
+								String( row.level ),
+								row.alive ? "Alive" : "Dead",
+								!row.alive && row.diedAtMs > 0 ?
+									`${uniqueStatusClock( row.diedAtMs )} (${
+										uniqueStatusAgo( row.diedAtMs, serverNow )
+									})` :
+									"-",
+								row.killer || "-"
+							],
+							top,
+							row.alive ? [ .62, 1, .62, 1 ] : white
+						);
+					} );
+					if ( !feed ) {
+						quads.push(
+							...text.quads(
+								"No unique states yet - the shard's feed may be off.",
+								[ px + 14, py + statusListTop + 40, statusWidth - 28, 20 ],
+								full,
+								headerColor,
+								{ hAlign: 1, vAlign: 1 }
+							)
+						);
+					} else if ( allRows.length === 0 ) {
+						quads.push(
+							...text.quads(
+								"Nothing on this tab.",
+								[ px + 14, py + statusListTop + 40, statusWidth - 28, 20 ],
+								full,
+								headerColor,
+								{ hAlign: 1, vAlign: 1 }
+							)
+						);
+					}
+					uniqueStatusList = {
+						rect: [ px + 10, py + statusListTop, statusWidth - 20, statusListHeight ],
+						total: allRows.length,
+						page: statusPageRows
+					};
+					if ( allRows.length > statusPageRows ) {
+						const range = allRows.length - statusPageRows,
+							bar = chatScrollbar(
+								"unique-status-scroll",
+								[ px + statusWidth - 30, py + statusListTop + 16, 16, statusListHeight - 32 ],
+								allRows.length,
+								statusPageRows,
+								range - firstRow,
+								resources.size,
+								full,
+								hover,
+								pressed
+							);
+						paths.push( ...bar.paths );
+						quads.push( ...bar.quads );
+						controls.push( ...bar.controls );
+						uniqueStatusThumbTravel = bar.travel;
+					}
+					const toggles = [
+						[ "unique-status-deaths", "Also when it dies", draftMarks.deathsToo ],
+						[ "unique-status-browser", "Browser notifications", draftMarks.browser ]
+					] as const;
+					toggles.forEach( ( [id, label, on], i ) => {
+						const top = py + statusTogglesTop + i * 22;
+						image(
+							[ px + 16, top + 2, 16, 16 ],
+							ROOT + "interface/ifcommon/com_checkbutton_" + (on ? "on" : "off") + ".png",
+							[ 1, 1, 1, 1 ]
+						);
+						quads.push(
+							...text.quads( label, [ px + 40, top, 240, statusRowPitch ], full, white, { vAlign: 1 } )
+						);
+						controls.push( {
+							id,
+							label,
+							kind: "button",
+							rect: [ px + 10, top, 280, 22 ],
+							selected: on
+						} );
+					} );
+					quads.push(
+						...text.quads(
+							"Times are server time.",
+							[ px + 14, py + statusHeight - 36, 240, 16 ],
+							full,
+							headerColor,
+							{ vAlign: 1 }
+						)
+					);
+					button(
+						"unique-status-save",
+						"Save",
+						px + statusWidth - 134,
+						py + statusHeight - 42,
+						120,
+						!uniqueStatusHud.dirty()
+					);
+					endWindow( admission, "unique-status" );
 				}
 				// The bag scroll's box (561D50 opens type 0x21 at 562251) and
 				// 6AD990's type 0x24 box are one box: 52F460 runs 53259C for both,

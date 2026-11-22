@@ -856,6 +856,7 @@ export interface GameplayState extends MoverPublication {
 	readonly contributorTitles?: readonly string[];
 	// Port-only damage ranking of the latest unique kill (unique-rank.ts).
 	readonly uniqueDamageRank?: import("./unique-rank").UniqueDamageRank | null;
+	readonly uniqueStatus?: import("./unique-status").UniqueStatusFeed | null;
 	// Port-only most-wanted state of the local player (most-wanted.ts).
 	readonly mostWanted?: import("./most-wanted").MostWantedState;
 	// Port-only Blue Berserk level of the local player (hwan-level.ts); absent at 0.

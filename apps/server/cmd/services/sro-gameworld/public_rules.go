@@ -35,6 +35,7 @@ import (
 	"opensro.online/server/internal/game/social/contributor"
 	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/tunables"
+	"opensro.online/server/internal/game/uniquestatus"
 	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/climate"
 	"opensro.online/server/internal/game/world/monster"
@@ -729,6 +730,10 @@ func publicRules() publicstats.RulesResponse {
 				Now: fmt.Sprintf("Everyone sees \"<alias> failed +N on <item>: destroyed\", \"saved by Immortal\" or \"dropped to +M\" for a failed reinforce attempted at +%d or above, for players who opted in on the account page, named by job alias (\"a player\" when they set none), never by character name.",
 					action.AnnouncementsFromEnv().PlusFailMin),
 				Why: "Owner report (#2852), keeping the break notice's alias rule (#1738); the original silence returns with one setting, and the opt-in stays off until a player turns it on."},
+			{Flag: uniquestatus.EnvUniqueStatus, On: uniquestatus.Enabled(os.Getenv),
+				Native: "No window lists the uniques; a spawn or a kill is announced as it happens and then is gone.",
+				Now:    "The Unique Status window (Experimental row) lists every unique with its level, Alive or Dead, and for the dead when it died (server time) and who killed it - the same states and kill record as the public API's uniques page. A player can mark uniques to be told in game, and in the browser, when they spawn or die.",
+				Why:    "Feature request (#3531), so hunters can see which uniques are up without leaving the game; the original silence returns with one setting, and no respawn timing is ever shown."},
 			{Flag: action.EnvJobKillNoticeRepeat, On: action.AnnouncementsFromEnv().JobKillRepeat,
 				Native: fmt.Sprintf("The same two players' job kills are announced at most once every %d minutes.",
 					settings.Int(tunables.JobKillRepeatMinutes)),

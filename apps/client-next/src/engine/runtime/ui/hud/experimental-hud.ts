@@ -354,6 +354,12 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "When a unique you hit dies, show who did the most."
 					},
 					{
+						key: "uniqueStatus",
+						id: "experimental-unique-status",
+						label: "Unique status window",
+						description: "Every unique's Alive or Dead state, and alerts for the ones you mark."
+					},
+					{
 						key: "vHidesCompanions",
 						id: "experimental-v-hides-companions",
 						label: "V hides pets and transports",

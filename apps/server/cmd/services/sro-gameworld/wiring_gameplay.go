@@ -51,6 +51,7 @@ import (
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/tunables"
+	"opensro.online/server/internal/game/uniquestatus"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
@@ -102,6 +103,9 @@ type gameplayPlane struct {
 	// contributors is the Contributor title (nil when
 	// SRO_CONTRIBUTOR_TITLES is off; wiring_contributor.go).
 	contributors *contributor.Registry
+	// uniqueStatus is the Unique Status feed (nil when
+	// SRO_UNIQUE_STATUS is off; wiring_uniquestatus.go).
+	uniqueStatus *uniquestatus.Service
 	// caravanAgents is the AI Caravan & Thief runtime (nil when
 	// SRO_AI_CARAVANS is off; wiring_caravanai.go).
 	caravanAgents *caravanai.Runtime
@@ -536,7 +540,7 @@ func newGameplayPlane(
 	items.FortressWarDates = siegeRuntime.WarDates
 	items.FortressList = siegeRuntime.FortressList
 
-	return &gameplayPlane{
+	game := &gameplayPlane{
 		divisionID:    ownedShard.ID,
 		hub:           ts.Hub,
 		deps:          deps,
@@ -553,7 +557,10 @@ func newGameplayPlane(
 		matches:       matches,
 		siege:         siegeRuntime,
 		betaSilk:      betaSilk,
-	}, nil
+	}
+	// The Unique Status feed (port-only, #3531; nil while off).
+	wireUniqueStatus(game, authorityStore)
+	return game, nil
 }
 
 /*

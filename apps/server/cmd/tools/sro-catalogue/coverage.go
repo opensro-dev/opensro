@@ -114,6 +114,7 @@ var catalogueExempt = map[string]string{
 	"SRO_INVENTORY_PAGES":                      "a character's inventory base at creation and world entry; the catalogue publishes no character state",
 	"SRO_FAST_DEN_RETURN":                      "a scroll countdown at runtime; the catalogue publishes no timers",
 	"SRO_UNIQUE_DAMAGE_RANK":                   "a post-kill damage notice; the catalogue publishes no notices",
+	"SRO_UNIQUE_STATUS":                        "the in-game unique status feed at runtime; the catalogue publishes no live monster state (the public API reads the same owners either way)",
 	"SRO_CLOSED_OBJECT_RESCUE":                 "a login placement rescue; monsters.json publishes nests, not login placement",
 	"SRO_CAVE_SEAM_STEP":                       "monster pathing at runtime; the catalogue publishes no pathing",
 	"SRO_CAVE_MODERN_CHASE":                    "monster pathing at runtime; the catalogue publishes no pathing",
