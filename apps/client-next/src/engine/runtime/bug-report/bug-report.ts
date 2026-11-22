@@ -36,6 +36,9 @@ import {
 } from "@/engine/foundation/media/replay-window";
 import { createReplayRecorder } from "./recorder";
 import { createBugReportDialog, type OutgoingReport, type SendOutcome } from "./dialog";
+import { fileReport, type BugReportSessionLane, type ReportParts } from "./filing";
+
+export type { ReportParts } from "./filing";
 import { createRecording } from "./recording";
 import { createReportArchive, createDiagnosticUpload, diagnosticUploadBudget, diagnosticValue } from "./archive";
 import { fitTrack } from "./transcode";
@@ -158,6 +161,13 @@ BugReportOptions
 export interface BugReportOptions {
 	readonly canvas: HTMLCanvasElement;
 	readonly apiBase: string;
+	/**
+	 * The session owner's filing lane (#4109): fileReport below sends
+	 * through it and waits on the session state for the answer. Absent,
+	 * or when the owner holds no session, the direct cookie fetch in
+	 * deliver is the lane, as on the title screens.
+	 */
+	readonly session?: BugReportSessionLane;
 	/** The WebGPU adapter's facts, read by the device owner (foundation/rendering/gpu-facts.ts). */
 	readonly gpu?: () => import("@/engine/foundation/rendering/gpu-facts").GpuFacts | null;
 	/** Game context at the moment the window opens (character, place…). */
@@ -491,28 +501,47 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 				throw Error( "The clip and diagnostics are too large; choose a shorter clip" );
 			}
 			progress( "Sending the report…" );
-			const form = new FormData();
-			form.append( "description", report.description );
-			form.append( "meta", JSON.stringify( { context: reportContext( id, report, sent ), errors } ) );
-			if ( diagnosticZip ) form.append( "diagnostics", diagnosticZip, "diagnostics.zip" );
-			if ( media ) {
-				form.append( sent ? "clip" : "screenshot", media, sent ? "replay.mp4" : "screenshot.jpg" );
+			const parts: ReportParts = {
+				description: report.description,
+				meta: JSON.stringify( { context: reportContext( id, report, sent ), errors } ),
+				diagnostics: diagnosticZip,
+				media: media ? { field: sent ? "clip" : "screenshot", blob: media } : null
+			};
+			const filed = options.session ? await fileReport( options.session, parts, options.state ) : null;
+			if ( filed ) {
+				// A sent recording is not offered again with the next report.
+				if ( filed.ok ) recording.sent( report.replay );
+				outcome = filed.ok ?
+					{ ok: true, message: `Report ${id} sent. Thank you!` } :
+					{ ok: false, message: refusalMessage( filed.code, filed.retryAfter ) };
+			} else {
+				const form = new FormData();
+				form.append( "description", parts.description );
+				form.append( "meta", parts.meta );
+				if ( parts.diagnostics ) form.append( "diagnostics", parts.diagnostics, "diagnostics.zip" );
+				if ( parts.media ) {
+					form.append(
+						parts.media.field,
+						parts.media.blob,
+						parts.media.field === "clip" ? "replay.mp4" : "screenshot.jpg"
+					);
+				}
+				const response = await fetch( options.apiBase + ROUTE, {
+					method: "POST",
+					headers: { [RELEASE_PROTOCOL_HEADER]: String( RELEASE_PROTOCOL ) },
+					credentials: "include",
+					cache: "no-store",
+					redirect: "error",
+					body: form,
+					signal: lifetime.signal
+				} );
+				const body = await response.json().catch( () => ({}) ) as { code?: string; retryAfter?: number; };
+				// A sent recording is not offered again with the next report.
+				if ( response.ok ) recording.sent( report.replay );
+				outcome = response.ok ?
+					{ ok: true, message: `Report ${id} sent. Thank you!` } :
+					{ ok: false, message: refusalMessage( body.code, body.retryAfter ) };
 			}
-			const response = await fetch( options.apiBase + ROUTE, {
-				method: "POST",
-				headers: { [RELEASE_PROTOCOL_HEADER]: String( RELEASE_PROTOCOL ) },
-				credentials: "include",
-				cache: "no-store",
-				redirect: "error",
-				body: form,
-				signal: lifetime.signal
-			} );
-			const body = await response.json().catch( () => ({}) ) as { code?: string; retryAfter?: number; };
-			// A sent recording is not offered again with the next report.
-			if ( response.ok ) recording.sent( report.replay );
-			outcome = response.ok ?
-				{ ok: true, message: `Report ${id} sent. Thank you!` } :
-				{ ok: false, message: refusalMessage( body.code, body.retryAfter ) };
 		} catch ( failure ) {
 			outcome = { ok: false, message: "The report could not be sent: " + String( failure ) };
 		}

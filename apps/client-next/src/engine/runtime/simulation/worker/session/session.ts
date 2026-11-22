@@ -28,6 +28,9 @@ import { dockRetryDelayMs } from "@/engine/foundation/session/dock-retry";
 
 // How long a failure report may take; it never holds up the session ending.
 const INCIDENT_TIMEOUT_MS = 5000;
+// A bug report carries a clip on a player's uplink: generous, but a hung
+// connection must still settle the send the window is waiting on (#4109).
+const BUG_REPORT_TIMEOUT_MS = 300000;
 const INCIDENT_QUEUE_LIMIT = 8;
 // One client report per code per session owner, and at most this many codes:
 // a repeating fault cannot flood the Agent (as DEGRADED_CODES_PER_SESSION).
@@ -217,6 +220,66 @@ flushIncidents
 			}
 		} );
 	}
+	// One bug report in flight (#4109) and its last answer, which
+	// publishWorld carries like the incidents' delivery marks.
+	let bugReportSending = false;
+	let bugReportResult: import("@/engine/contracts/session").BugReportResult | undefined;
+	/*
+================
+fileBugReport
+
+The in-game reporter files through this owner (#4109): the parts ride
+the bug-report command, and this posts them with the session token the
+game session was admitted with - the login cookie is only the browser's
+copy of that session, erasable by another tab and expired with it, so a
+player still in the world was told to log in. The answer (the Agent's
+own ok or refusal code) is published by operation for the reporter.
+Without an identity the reporter hears NO_SESSION and falls back to its
+cookie fetch, which is also the title screens' lane. One report at a
+time; the report window locks its own send meanwhile.
+================
+	*/
+	function fileBugReport( command: Extract<SessionCommand, { kind: "bug-report"; }> ) {
+		const answer = ( result: import("@/engine/contracts/session").BugReportResult ) => {
+			bugReportResult = result;
+			if ( scope === "world" ) publishWorld();
+			else publish( { ...state, bugReportResult: result } );
+		};
+		if ( !identity ) {
+			answer( { operationId: command.operationId, ok: false, code: "NO_SESSION" } );
+			return;
+		}
+		if ( bugReportSending ) {
+			answer( { operationId: command.operationId, ok: false, code: "BUSY" } );
+			return;
+		}
+		bugReportSending = true;
+		const form = new FormData();
+		form.append( "description", command.description );
+		form.append( "meta", command.meta );
+		if ( command.diagnostics ) form.append( "diagnostics", command.diagnostics, "diagnostics.zip" );
+		if ( command.media && command.mediaField ) {
+			form.append(
+				command.mediaField,
+				command.media,
+				command.mediaField === "clip" ? "replay.mp4" : "screenshot.jpg"
+			);
+		}
+		http.report( identity.apiBase, identity.token, form, AbortSignal.timeout( BUG_REPORT_TIMEOUT_MS ) ).then(
+			result => {
+				const body = result.body as { ok?: boolean; code?: string; retryAfter?: number; } | null;
+				answer( {
+					operationId: command.operationId,
+					ok: result.httpOk && body?.ok === true,
+					...(typeof body?.code === "string" ? { code: body.code } : {}),
+					...(typeof body?.retryAfter === "number" ? { retryAfter: body.retryAfter } : {})
+				} );
+			},
+			() => answer( { operationId: command.operationId, ok: false, code: "DELIVERY_FAILED" } )
+		).finally( () => {
+			bugReportSending = false;
+		} );
+	}
 	const world = createWorldSession( mintWorldToken, http.references, reportIncident );
 	let worldRevision = 0;
 	// Only the active lifecycle may publish session state. Request generations
@@ -340,6 +403,7 @@ publishWorld
 			disconnectMessage: value.disconnectMessage,
 			incidentID: value.incidentID,
 			incidentDelivery: incidentDelivery.get( value.incidentID ),
+			bugReportResult,
 			divisionId: identity?.divisionId,
 			characters: state.characters
 		} );
@@ -507,6 +571,10 @@ baseUrl
 			}
 			if ( command.kind === "client-report" ) {
 				reportClient( command );
+				return;
+			}
+			if ( command.kind === "bug-report" ) {
+				fileBugReport( command );
 				return;
 			}
 			if ( command.kind === "gameplay" ) {

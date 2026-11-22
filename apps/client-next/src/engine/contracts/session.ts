@@ -40,6 +40,14 @@ export interface LoginCommand {
 	readonly divisionId?: string;
 }
 export type WorldExitCommand = { readonly kind: "exit"; };
+/** The Agent's answer to one filed bug report (worker/session/http), by operation. */
+export interface BugReportResult {
+	readonly operationId: number;
+	readonly ok: boolean;
+	/** The Agent's refusal code (UNAUTHORIZED, RATE_LIMITED, ...), when it refused. */
+	readonly code?: string;
+	readonly retryAfter?: number;
+}
 export type SessionCommand =
 	| WorldExitCommand
 	| { readonly kind: "chat-blocks"; readonly value: readonly string[]; }
@@ -83,6 +91,18 @@ export type SessionCommand =
 		readonly stack?: string;
 	}
 	| LoginCommand
+	// A composed bug report to file with the session's own credential
+	// (#4109): the parts ride to the session owner, which posts them as
+	// itself, and the answer lands in bugReportResult below.
+	| {
+		readonly kind: "bug-report";
+		readonly operationId: number;
+		readonly description: string;
+		readonly meta: string;
+		readonly diagnostics?: Blob;
+		readonly mediaField?: "clip" | "screenshot";
+		readonly media?: Blob;
+	}
 	| {
 		readonly kind: "logout";
 	}
@@ -112,6 +132,8 @@ export type SessionState = Readonly<{
 		| "disconnected";
 	revision: number;
 	characterOperation?: CharacterOperationResult;
+	/** The last filed bug report's answer, matched by operationId. */
+	bugReportResult?: BugReportResult;
 	character?: string;
 	restoringWorld?: boolean;
 	entityCount?: number;

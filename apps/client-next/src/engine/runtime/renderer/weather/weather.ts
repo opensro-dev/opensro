@@ -29,7 +29,16 @@ type Particle = {
 	dx: boolean;
 	dz: boolean;
 };
-type Batch = { draw: GeometryDraw; capacity: number; positions: Float32Array; colors: Float32Array; image: ImageDraw; };
+type Batch = {
+	draw: GeometryDraw;
+	capacity: number;
+	positions: Float32Array;
+	colors: Float32Array;
+	image: ImageDraw;
+	// Vertices the last upload covered: the span the next frame must
+	// zero again where its rows no longer reach (#4108).
+	written: number;
+};
 // The weather owner retains particles and GPU batches. The manager's shared
 // remainder, frame-counter bits and draw-gated RNG follow 8CE9C0/8D1910.
 export function createWeather( random?: PresentationRandom, sound?: ( event: SoundEvent ) => void ) {
@@ -40,6 +49,10 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 		origin: number | null = null;
 	let thunder = initialThunder(), soundSequence = 0, overlayVisible = false, drawDelta = 0;
 	let particles: Particle[] = [];
+	// The per-kind visible rows of one prepare, reused across frames:
+	// prepare is synchronous, so retained buckets cannot be observed
+	// half-filled (#4108).
+	const buckets: Particle[][] = [ [], [], [], [] ];
 	const batches = new Map<number, Batch>();
 	const names = [ "rain1", "rain2", "snow1", "snow2" ] as const;
 	const path = ( kind: number ) => "/assets/images/Map_extracted/weather/" + names[kind] + ".png";
@@ -217,9 +230,16 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 					z = matrix[2]! * p.x + matrix[6]! * p.y + matrix[10]! * p.z + matrix[14]!;
 				return w > 0 && Math.abs( x ) <= w && Math.abs( y ) <= w && z >= 0 && z <= w;
 			};
+			// One pass over the particles, one visibility test each: the
+			// per-kind filter this replaces recomputed the transform four
+			// times per particle per frame (#4108).
+			for ( const bucket of buckets ) bucket.length = 0;
+			for ( const p of particles ) {
+				if ( visible( p ) ) buckets[p.kind]!.push( p );
+			}
 			const output: GeometryDraw[] = [];
 			for ( let kind = 0; kind < 4; kind++ ) {
-				const rows = particles.filter( p => p.kind === kind && visible( p ) );
+				const rows = buckets[kind]!;
 				// Native 8CF730 traverses typed render lists; texture availability must
 				// not suppress the corresponding visible particle callbacks.
 				if ( kind >= 2 ) {
@@ -286,11 +306,19 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 							fogDisabled: true
 						}
 					}, image );
-					batch = { draw, capacity, positions, colors, image };
+					batch = { draw, capacity, positions, colors, image, written: 0 };
 					batches.set( kind, batch );
 				}
-				batch.positions.fill( 0 );
-				batch.colors.fill( 1 );
+				// Upload only the span the draw can show (#4108): the live
+				// rows plus the tail earlier frames wrote, zeroed again here
+				// so the padded triangles stay degenerate at the origin,
+				// exactly as the full-capacity fill left them. The geometry
+				// owner's checks, mirror copy and GPU write then all run over
+				// the live span instead of the power-of-two capacity.
+				const live = rows.length * vertices,
+					span = Math.max( live, batch.written );
+				batch.positions.fill( 0, live * 3, span * 3 );
+				batch.colors.fill( 1, 0, span * 4 );
 				// The corners are the same for every particle of a kind - the
 				// camera axes and the rain's right are per-frame constants, and
 				// the splash's own scale is the only per-particle term. Hoisted
@@ -357,7 +385,15 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 						batch.positions[at + 8] = p.z + e2z;
 					}
 				}
-				gpu.updatePositions( batch.draw, batch.positions, batch.colors );
+				gpu.updatePositions(
+					batch.draw,
+					batch.positions.subarray( 0, span * 3 ),
+					batch.colors.subarray( 0, span * 4 ),
+					undefined,
+					undefined,
+					0
+				);
+				batch.written = live;
 				output.push( batch.draw );
 			}
 			return output;

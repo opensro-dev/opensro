@@ -38,6 +38,8 @@ const ASYNC_OWNERS = [
 	// The bug reporter: its settings and upload, the capture stream's
 	// playback and the report window's send (issue #90).
 	runtime + "bug-report/bug-report.ts",
+	// The session filing lane's answer wait (#4109).
+	runtime + "bug-report/filing.ts",
 	runtime + "bug-report/recorder.ts",
 	runtime + "bug-report/dialog.ts",
 	runtime + "bug-report/trimmer.ts",

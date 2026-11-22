@@ -19,7 +19,8 @@ import { defined } from "../helpers/defined.mjs";
 const { createEntities } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/entities/entities.ts"
 );
-const { titledDisplayName } = await import( "../../src/engine/foundation/ui/overhead-layout.ts" );
+const { titledDisplayName, visibleTitleFormat } = await import( "../../src/engine/foundation/ui/overhead-layout.ts" );
+const { defaultGameOptions } = await import( "../../src/engine/foundation/gameplay/game-options.ts" );
 const peer = JSON.parse( readFileSync(
 	new URL( "../../../server/internal/game/world/simulation/testdata/peer_spawn_row_fixture.json", import.meta.url ),
 	"utf8"
@@ -113,6 +114,25 @@ test("a replacement spawn starts untitled", () => {
 	assert.equal( entity.characterTitleId, undefined );
 	assert.equal( entity.characterTitleFormat, undefined );
 	owner.dispose();
+});
+
+test("the two title options gate own and other formats separately (#3502 slice 2)", () => {
+	const all = defaultGameOptions(),
+		mine = { gid: LOCAL_GID, characterTitleFormat: "<Snake Slayer> %s" },
+		peerEntity = { gid: 4242, characterTitleFormat: "<Big Spender> %s" };
+	assert.equal( visibleTitleFormat( mine, LOCAL_GID, all ), "<Snake Slayer> %s" );
+	assert.equal( visibleTitleFormat( peerEntity, LOCAL_GID, all ), "<Big Spender> %s" );
+	// Own title off hides only mine; other titles off hides only peers'.
+	assert.equal( visibleTitleFormat( mine, LOCAL_GID, { ...all, ownTitle: false } ), undefined );
+	assert.equal( visibleTitleFormat( peerEntity, LOCAL_GID, { ...all, ownTitle: false } ), "<Big Spender> %s" );
+	assert.equal( visibleTitleFormat( mine, LOCAL_GID, { ...all, otherTitles: false } ), "<Snake Slayer> %s" );
+	assert.equal( visibleTitleFormat( peerEntity, LOCAL_GID, { ...all, otherTitles: false } ), undefined );
+	// No format stays no format, whatever the options say.
+	assert.equal( visibleTitleFormat( { gid: LOCAL_GID }, LOCAL_GID, all ), undefined );
+	assert.equal(
+		titledDisplayName( "PeerA", visibleTitleFormat( peerEntity, LOCAL_GID, { ...all, otherTitles: false } ) ),
+		"PeerA"
+	);
 });
 
 test("titledDisplayName prints the plain name without a usable format", () => {

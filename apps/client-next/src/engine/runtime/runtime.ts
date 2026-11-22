@@ -36,7 +36,7 @@ import { createReleaseWatch } from "./release/release-watch";
 import { createInput } from "./input/input";
 import { createPlatform } from "./platform/platform";
 import { createBuildInfo } from "./build-info/build-info";
-import { createBugReport, diagnosticActors } from "./bug-report/bug-report";
+import { createBugReport, diagnosticActors, type ReportParts } from "./bug-report/bug-report";
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { frameProbe } from "./frame-probes";
 import { createFrameWork } from "./frame-work";
@@ -490,10 +490,30 @@ export function startRuntime(
 		const buildInfo = own(
 			createBuildInfo( apiBase, import.meta.env.SRO_CLIENT_REVISION, import.meta.env.SRO_CLIENT_SUBJECT )
 		);
+		// The reporter's filing lane (#4109): the composed report goes to
+		// the session owner as a command, and the reporter's wait reads
+		// the answer from the session state the host publishes.
+		let bugReportOperation = 0;
 		const bugReport = own(
 			createBugReport( {
 				canvas,
 				apiBase,
+				session: {
+					file: ( parts: ReportParts ): number => {
+						const operationId = ++bugReportOperation;
+						simulation.session( {
+							kind: "bug-report",
+							operationId,
+							description: parts.description,
+							meta: parts.meta,
+							...(parts.diagnostics ? { diagnostics: parts.diagnostics } : {}),
+							...(parts.media ? { mediaField: parts.media.field, media: parts.media.blob } : {})
+						} );
+						return operationId;
+					},
+					wake: () => simulation.delivery(),
+					failed: () => simulation.error() !== null
+				},
 				gpu: () => renderer.adapterFacts(),
 				network: () => simulation.netJournal(),
 				assets: () => assets.snapshot?.(),
