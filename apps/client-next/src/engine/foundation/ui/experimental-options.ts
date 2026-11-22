@@ -274,6 +274,10 @@ export interface ExperimentalOptions {
 	// windows and never sends 0x7554. On unless turned off (owner,
 	// 2026-11-21: the macro ships on in the next release).
 	readonly sroMacro: boolean;
+	// Port-only, not native (#3532): the Event Calendar window over the
+	// public schedule feed (#3520). Off unless turned on; off, the System
+	// menu has no calendar entry and the window never opens.
+	readonly eventCalendar: boolean;
 }
 
 /*
@@ -505,7 +509,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		setBonusTooltip: enabled( "setBonusTooltip" ),
 		silkHistory: enabled( "silkHistory" ),
 		mallCategories: enabled( "mallCategories" ),
-		sroMacro: record.sroMacro !== false
+		sroMacro: record.sroMacro !== false,
+		eventCalendar: enabled( "eventCalendar" )
 	};
 }
 
