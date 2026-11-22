@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/game/restriction"
 	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/social/chatreport"
+	"opensro.online/server/internal/game/social/eventbot"
 	"opensro.online/server/internal/transport"
 )
 
@@ -67,6 +68,22 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 		// Native admission precedes decoding and all publication/mutation.
 		if restriction.Report(s, transport.CommandRestrictionChat) {
 			return
+		}
+		// Port-only, not native (#3533): a whisper the EventBot host
+		// claims (its name) is consumed the same way: the sender gets
+		// the success ack and the bot's reply lines, and nothing
+		// reaches the room, the transcript or the feed. With no host
+		// wired the name is nobody's, natively.
+		if rt.EventBotWhisper != nil {
+			if request, err := DecodeChatRequestWithLinks(payload); err == nil && request.ChatType == ChatTypeWhisper {
+				if replies, handled := rt.EventBotWhisper(divisionID, character, request.TargetName, request.Message); handled {
+					_ = s.Send(OpChatAck, EncodeChatAckSuccess(request.ChatType, request.Second))
+					for _, reply := range replies {
+						_ = s.Send(OpChatBroadcast, EncodeChatBroadcastNamed(ChatTypeWhisper, eventbot.BotName, reply))
+					}
+					return
+				}
+			}
 		}
 		// Port-only, not native (#3358): a /contributor line sets the
 		// speaker's own title and is consumed the same way as /report.

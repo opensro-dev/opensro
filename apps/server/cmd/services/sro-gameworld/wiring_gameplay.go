@@ -42,6 +42,7 @@ import (
 	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/social/community"
 	"opensro.online/server/internal/game/social/contributor"
+	"opensro.online/server/internal/game/social/eventbot"
 	"opensro.online/server/internal/game/social/guild"
 	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/match"
@@ -99,6 +100,9 @@ type gameplayPlane struct {
 	quests        *quest.Runtime
 	// betaSilk earns the beta's Item Mall silk (nil when SRO_BETA_SILK is off).
 	betaSilk *action.BetaSilk
+	// eventBot is the EventBot chat-event host (nil when SRO_EVENT_BOT
+	// is off; wiring_eventbot.go, port-only #3533).
+	eventBot *eventbot.Host
 	// contributors is the Contributor title (nil when
 	// SRO_CONTRIBUTOR_TITLES is off; wiring_contributor.go).
 	contributors *contributor.Registry
@@ -553,6 +557,7 @@ func newGameplayPlane(
 		matches:       matches,
 		siege:         siegeRuntime,
 		betaSilk:      betaSilk,
+		eventBot:      buildEventBot(deps, presence, authorityStore),
 	}, nil
 }
 
@@ -947,6 +952,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.chat.ModerationLog = moderationLog
 	game.items.ModerationLog = moderationLog
 	wireChatReports(game)
+	game.installEventBotChat()
 	if err := wireContributorTitles(game); err != nil {
 		return err
 	}

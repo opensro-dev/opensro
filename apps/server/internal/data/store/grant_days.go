@@ -74,6 +74,27 @@ func ensureGrantDays(db *sql.DB) error {
 
 /*
 ================
+FreeGrantDayCount
+
+How many grants of one source an account received on the UTC day
+containing atMs (the n column: grants, not units). The EventBot host
+reads its daily win cap from the same rows its audit writes
+(social/eventbot, #3533).
+================
+*/
+func (s *Store) FreeGrantDayCount(accountID, source string, atMs int64) (int64, error) {
+	dayMs := atMs - atMs%grantDayMs
+	var n sql.NullInt64
+	err := s.db.QueryRow(`SELECT SUM(n) FROM grant_account_days WHERE day_ms = ? AND account_id = ? AND source = ?`,
+		dayMs, accountID, source).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("grant days: %w", err)
+	}
+	return n.Int64, nil
+}
+
+/*
+================
 addGrantDayTx
 
 Adds one grant of total to the account's day, inside the granting
