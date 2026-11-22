@@ -8,12 +8,15 @@ eventbot_test.go - the host on a frozen clock
 package eventbot
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"opensro.online/server/internal/game/enterworld"
 )
+
+var errStoreDown = errors.New("store down")
 
 const fixtureSchedule = `# an evening raffle
 19:30 raffle rounds=2 round=1m reward=ITEM_ETC_SILK_SCROLLx10 title=Evening Raffle
@@ -23,14 +26,16 @@ const fixtureSchedule = `# an evening raffle
 var day = time.Date(2026, 11, 23, 0, 0, 0, 0, time.Local)
 
 type fakeDoors struct {
-	whispers  []string
-	announces []string
-	grants    []grantCall
-	wins      map[string]int
-	pick      int
+	whispers   []string
+	announces  []string
+	grants     []grantCall
+	wins       map[string]int
+	pick       int
+	grantFails bool
 }
 
 type grantCall struct {
+	division string
 	name     string
 	codename string
 	count    int
@@ -42,8 +47,11 @@ func (f *fakeDoors) deps() Dependencies {
 			f.whispers = append(f.whispers, name+": "+text)
 		},
 		Announce: func(text string) { f.announces = append(f.announces, text) },
-		Grant: func(character *enterworld.Character, codename string, count int) bool {
-			f.grants = append(f.grants, grantCall{name: character.Name, codename: codename, count: count})
+		Grant: func(division string, character *enterworld.Character, codename string, count int) bool {
+			f.grants = append(f.grants, grantCall{division: division, name: character.Name, codename: codename, count: count})
+			if f.grantFails {
+				return false
+			}
 			f.wins[character.AccountID]++
 			return true
 		},
@@ -146,8 +154,8 @@ func TestRoundRunsOnTheClock(t *testing.T) {
 		t.Fatalf("grants = %v", doors.grants)
 	}
 	grant := doors.grants[0]
-	if grant.name != "Bo" || grant.codename != "ITEM_ETC_SILK_SCROLL" || grant.count != 10 {
-		t.Fatalf("grant = %+v, want Bo paid exactly the file's 10x ITEM_ETC_SILK_SCROLL", grant)
+	if grant.name != "Bo" || grant.codename != "ITEM_ETC_SILK_SCROLL" || grant.count != 10 || grant.division != "d1" {
+		t.Fatalf("grant = %+v, want Bo paid exactly the file's 10x ITEM_ETC_SILK_SCROLL in d1", grant)
 	}
 	if len(doors.whispers) != 1 || !strings.HasPrefix(doors.whispers[0], "Bo: You won") {
 		t.Fatalf("whispers = %v", doors.whispers)
@@ -184,6 +192,49 @@ func TestDailyWinCapLeavesTheAccountOut(t *testing.T) {
 	host.Tick(start.Add(time.Minute))
 	if len(doors.grants) != 1 || doors.grants[0].name != "Bo" {
 		t.Fatalf("grants = %v, want Bo (a1 is at the cap)", doors.grants)
+	}
+}
+
+/*
+================
+TestUnpaidWinIsNotCounted
+
+A prize the bag cannot take (the grant door refuses) is announced as
+not counted and never reaches the win count the cap reads.
+================
+*/
+func TestUnpaidWinIsNotCounted(t *testing.T) {
+	doors := &fakeDoors{wins: map[string]int{}, grantFails: true}
+	host := New(true, parseFixture(t), doors.deps())
+	start := day.Add(19*time.Hour + 30*time.Minute)
+	host.Tick(start)
+	host.HandleWhisper(entrant("Ana", "a1"), "join")
+	host.Tick(start.Add(time.Minute))
+	if len(doors.grants) != 1 {
+		t.Fatalf("grants = %v, want the one attempted payment", doors.grants)
+	}
+	if doors.wins["a1"] != 0 {
+		t.Fatalf("wins = %v, an unpaid win counted", doors.wins)
+	}
+	joined := strings.Join(doors.announces, " ")
+	if !strings.Contains(joined, "not counted") {
+		t.Fatalf("announces = %v, want the unpaid win announced as not counted", doors.announces)
+	}
+}
+
+/*
+================
+TestWinsAfterReadFailsClosed
+
+A failed cap read counts as the cap, never as zero wins.
+================
+*/
+func TestWinsAfterReadFailsClosed(t *testing.T) {
+	if got := WinsAfterRead(0, errStoreDown); got != MaxWinsPerAccountPerDay {
+		t.Fatalf("errored read = %d, want the cap %d", got, MaxWinsPerAccountPerDay)
+	}
+	if got := WinsAfterRead(2, nil); got != 2 {
+		t.Fatalf("clean read = %d, want 2", got)
 	}
 }
 

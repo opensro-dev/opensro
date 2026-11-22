@@ -557,7 +557,7 @@ func newGameplayPlane(
 		matches:       matches,
 		siege:         siegeRuntime,
 		betaSilk:      betaSilk,
-		eventBot:      buildEventBot(deps, presence, authorityStore),
+		eventBot:      buildEventBot(deps, presence, authorityStore, items),
 	}, nil
 }
 

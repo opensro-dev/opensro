@@ -71,6 +71,23 @@ func EnabledFromEnv() bool {
 
 /*
 ================
+WinsAfterRead
+
+The daily-cap read, fail closed: a failed count counts as the cap
+itself, so the account sits the draw out instead of slipping past it
+(abuse must cost nothing). WinsToday in the wiring routes its store
+read through here.
+================
+*/
+func WinsAfterRead(count int64, err error) int {
+	if err != nil {
+		return MaxWinsPerAccountPerDay
+	}
+	return int(count)
+}
+
+/*
+================
 WhisperSender
 
 Who whispered: the live character and its division.
@@ -102,7 +119,7 @@ production, fixed in tests).
 type Dependencies struct {
 	Whisper   func(division, name, text string)
 	Announce  func(text string)
-	Grant     func(character *enterworld.Character, codename string, count int) bool
+	Grant     func(division string, character *enterworld.Character, codename string, count int) bool
 	WinsToday func(accountID string, day time.Time) int
 	KnownItem func(codename string) bool
 	Pick      func(n int) int

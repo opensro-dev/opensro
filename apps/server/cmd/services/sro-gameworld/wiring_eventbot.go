@@ -22,7 +22,10 @@ import (
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/item/wire"
 	livepresence "opensro.online/server/internal/game/social"
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/eventbot"
@@ -37,7 +40,7 @@ that refuses to parse leaves the host running empty (the error is
 logged once): the operator fixes the file and restarts.
 ================
 */
-func buildEventBot(deps *enterworld.Deps, presence *livepresence.Directory, authority *store.Store) *eventbot.Host {
+func buildEventBot(deps *enterworld.Deps, presence *livepresence.Directory, authority *store.Store, items *action.Runtime) *eventbot.Host {
 	if !eventbot.EnabledFromEnv() {
 		return nil
 	}
@@ -81,24 +84,41 @@ func buildEventBot(deps *enterworld.Deps, presence *livepresence.Directory, auth
 				}
 			}
 		},
-		Grant: func(character *enterworld.Character, codename string, count int) bool {
-			ref, ok := deps.Items.ItemRefByCodename(codename)
-			if !ok {
-				return false
-			}
+		Grant: func(division string, character *enterworld.Character, codename string, count int) bool {
+			// The atomic quest-inventory owner plans the prize (stacks,
+			// slots, capacity) on a detached bag copy; the rows commit
+			// inside the labelled door and its frames go to the winner's
+			// session, so an online winner sees the prize at once. A
+			// refusal (a full bag) commits nothing, so the win never
+			// reaches the audit and never counts against the cap.
 			paid := false
+			var frames []wire.Frame
 			deps.Mutate(character, domain.GrantEventBotReward, func() {
-				paid = eventbot.AddReward(character, ref, count)
+				rows, planned, err := items.PlanQuestInventory(character, nil,
+					[]inventory.ItemAmount{{Codename: codename, Count: uint32(count)}})
+				if err != nil {
+					log.Infof("eventbot: prize %dx %s for %s refused: %v", count, codename, character.Name, err)
+					return
+				}
+				character.MissionInventory = rows
+				frames = planned
+				paid = true
 			})
+			if paid {
+				if session, online := presence.SessionByName(division, character.Name); online {
+					for _, frame := range frames {
+						_ = session.Send(frame.Opcode, frame.Payload)
+					}
+				}
+			}
 			return paid
 		},
 		WinsToday: func(accountID string, day time.Time) int {
 			n, err := authority.FreeGrantDayCount(accountID, domain.GrantEventBotReward, day.UnixMilli())
 			if err != nil {
-				log.Warnf("eventbot: win count for %s: %v", accountID, err)
-				return 0
+				log.Warnf("eventbot: win count for %s: %v (counts as at the cap)", accountID, err)
 			}
-			return int(n)
+			return eventbot.WinsAfterRead(n, err)
 		},
 		KnownItem: knownItem,
 	})

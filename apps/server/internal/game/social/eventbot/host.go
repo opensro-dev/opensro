@@ -127,7 +127,7 @@ func (h *Host) closeRound(now time.Time) {
 			pool = withoutAccount(pool, winner.accountID)
 			continue
 		}
-		paid := h.deps.Grant != nil && h.deps.Grant(winner.character, live.event.RewardCodename, live.event.RewardCount)
+		paid := h.deps.Grant != nil && h.deps.Grant(winner.division, winner.character, live.event.RewardCodename, live.event.RewardCount)
 		h.whisperTo(winner, winLine(live, paid))
 		if paid {
 			h.announce(fmt.Sprintf("%s won %s round %d and takes %dx %s!",
