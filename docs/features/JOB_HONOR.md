@@ -39,7 +39,13 @@ system is the Academy's (the native check on #3530).
 - The buff is the dressed job's honor: the tier a character holds for the job it is wearing. Another job's suit - or no suit - carries no job buff (inference: tiers are ranked per job, so the grant belongs to that job's suit).
 - One reconcile owns the buff set for both honors: the camp's native rank and the job tier's rank fold together, strongest wins, so a camp master keeps the stronger of the two and neither lane strips the other's grant. A convergence pass (first sight of a session, a dress change, the 05:00 change, and a 15-second sweep) keeps every entered character's buffs on its current want.
 
-Still later slices of #3530: the ambush and the coloured title.
+## The coloured title
+
+- A tier holder wears its tier's word as a coloured title on the name board, in front of the name: Silver in pale silver, Gold in gold, King in amber - the word the Job Honor window's `tierName` speaks, coloured by its metal.
+- The server pushes a tier roster (wire 0x3FC7) to the division: every entered character holding a tier for the job it is dressed as, rebuilt on a 5-second sweep and sent when the bytes change. The nameplate matches by character name, the way the Contributor roster (0x3FC1) does, so the title shows in the suit whose tier earned it and comes off with it.
+- A malformed roster can only cost the roster: the client lane decodes contained and records a degradation, never the session.
+
+Still later slices of #3530: the ambush.
 
 ## Days and tiers
 

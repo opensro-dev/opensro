@@ -14,6 +14,7 @@ its board. Off, nothing opens, nothing scores and the route answers 404.
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -215,5 +216,61 @@ func (game *gameplayPlane) honorBuffTick(ticker *simulation.Ticker, nowMs int64)
 			delete(game.honorBuffSeen, sessionID)
 		}
 	}
+	return nil
+}
+
+// jobHonorTierSweepMs is how often the tier roster is rebuilt; a
+// dress change or the 05:00 change shows within one sweep.
+const jobHonorTierSweepMs = 5_000
+
+/*
+================
+jobHonorTierTick
+
+The coloured titles' roster pass (#3530): every entered character of
+the division holding a tier for the job it is dressed as, pushed to
+the division when the bytes change. The tiers are the newest
+snapshot's (the ledger's Previous) and the dress the live record's,
+so the roster shows the same grant the honor buff folds
+(SyncTrainingCampHonorBuffs): a title is worn in the suit whose tier
+earned it.
+================
+*/
+func (game *gameplayPlane) jobHonorTierTick(ticker *simulation.Ticker, nowMs int64) []simulation.DivisionFrames {
+	if nowMs < game.jobHonorTierNext {
+		return nil
+	}
+	game.jobHonorTierNext = nowMs + jobHonorTierSweepMs
+	held, _, err := game.jobHonor.Previous()
+	if err != nil {
+		return nil
+	}
+	tiers := make(map[[2]int64]int, len(held))
+	for _, row := range held {
+		if row.Tier != jobhonor.TierNone {
+			tiers[[2]int64{row.CharacterID, int64(row.Job)}] = row.Tier
+		}
+	}
+	var entries []wire.JobHonorTierEntry
+	for _, view := range sessionViews(ticker.Source) {
+		if view.DivisionID != game.divisionID {
+			continue
+		}
+		c := game.deps.CharacterByID(game.divisionID, view.CharacterID)
+		if c == nil {
+			continue
+		}
+		if job := enterworld.DressedJob(c); job != 0 {
+			if tier := tiers[[2]int64{c.ID, int64(job)}]; tier != jobhonor.TierNone {
+				entries = append(entries, wire.JobHonorTierEntry{Name: c.Name, Tier: tier})
+			}
+		}
+	}
+	payload := wire.EncodeJobHonorTierRoster(entries)
+	if bytes.Equal(payload, game.jobHonorTierBytes) {
+		return nil
+	}
+	game.jobHonorTierBytes = payload
+	ticker.Push.PushToDivision(game.divisionID, []simulation.Frame{{Opcode: wire.OpJobHonorTierRoster, Payload: payload}}, "")
 	return nil
 }
