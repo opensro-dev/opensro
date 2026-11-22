@@ -25,6 +25,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/platform/jobhonor"
 )
 
 // caravanBattlefield is a CHINA battlefield region (23196) of zone 0.
@@ -404,6 +405,53 @@ func TestStarAmbushFixesTheCountPerStar(t *testing.T) {
 	native, _ := heavyCaravanAmbush(t, 8)
 	if len(native) != 8 {
 		t.Fatalf("off: %d bandits, want the capped 8", len(native))
+	}
+}
+
+/*
+================
+TestAHonorAmbushMeetsTheCaravanOnTheRoad
+
+The honor run's rolled ambush (#3530) beside the native pack: the
+same drive onto a battlefield spawns the native bandits and, when
+the run rolled one, honorAmbushBandits more; a run that rolled none,
+and every run with the flag off, draws the native pack alone, and
+the mark fires once per run.
+================
+*/
+func TestAHonorAmbushMeetsTheCaravanOnTheRoad(t *testing.T) {
+	drive := func(t *testing.T, honorRoll uint32, honor bool) int {
+		rt, clock, c := caravanFixture(t)
+		if honor {
+			ledger, err := jobhonor.Open(t.TempDir(), clock.Now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = ledger.Close() })
+			rt.JobHonor = ledger
+			rt.JobHonorRoll = func() (uint32, error) { return honorRoll, nil }
+			rt.openHonorRun(c)
+		}
+		town := rt.cosLiveSpawn(testDivision, c, clock.Now().UnixMilli())
+		rt.rememberTransportCOS(testDivision, c, town)
+		rt.advanceCaravans(clock.Now().UnixMilli())
+		clock.Advance(60091 * time.Millisecond)
+		rt.advanceCaravans(clock.Now().UnixMilli())
+		rideCaravanTo(rt, c, simulation.Spawn{RegionID: caravanBattlefield, X: 960, Y: 20, Z: 960})
+		clock.Advance(60091 * time.Millisecond)
+		rt.advanceCaravans(clock.Now().UnixMilli())
+		return len(caravanBandits(rt, caravanBattlefield))
+	}
+
+	native := drive(t, 0, false)
+	if native == 0 {
+		t.Fatal("the drive drew no native bandits; the fixture cannot judge the ambush")
+	}
+	if got := drive(t, 9, true); got != native+honorAmbushBandits {
+		t.Fatalf("a rolled ambush drew %d bandits, want the native %d + %d", got, native, honorAmbushBandits)
+	}
+	if got := drive(t, 50, true); got != native {
+		t.Fatalf("an unrolled run drew %d bandits, want the native %d alone", got, native)
 	}
 }
 
