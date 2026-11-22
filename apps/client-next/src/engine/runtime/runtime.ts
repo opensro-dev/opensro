@@ -517,6 +517,19 @@ export function startRuntime(
 				gpu: () => renderer.adapterFacts(),
 				network: () => simulation.netJournal(),
 				assets: () => assets.snapshot?.(),
+				// An uncaught error never reached an incident, only a bug
+				// report the player had to file, so the stack overflow of
+				// #3684 stayed unlocated for a week (#3425): the first throw
+				// of each distinct failure files one, redacted (journal.ts
+				// uncaughtFailure), with its own frames as the stack.
+				firstError: failure =>
+					sessionCommand( {
+						kind: "client-report",
+						incidentKind: "runtime",
+						code: "uncaught_error",
+						message: failure.message,
+						stack: failure.frames.join( "\n" ) || undefined
+					} ),
 				context: (): readonly BugReportField[] => {
 					const game = presentation.gameplay();
 					const local = game?.localGid ? presentation.read( game.localGid ) : undefined;
