@@ -290,6 +290,11 @@ export interface ExperimentalOptions {
 	// public schedule feed (#3520). Off unless turned on; off, the System
 	// menu has no calendar entry and the window never opens.
 	readonly eventCalendar: boolean;
+	// Port-only, not native (#3530): the Job Honor Rank window over the
+	// honor feed. Off unless turned on; off, the System menu has no
+	// honor entry and the window never opens. The server sides it with
+	// SRO_JOB_HONOR; with that off nothing is ever sent.
+	readonly jobHonor: boolean;
 }
 
 /*
@@ -524,7 +529,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		silkHistory: enabled( "silkHistory" ),
 		mallCategories: enabled( "mallCategories" ),
 		sroMacro: record.sroMacro !== false,
-		eventCalendar: enabled( "eventCalendar" )
+		eventCalendar: enabled( "eventCalendar" ),
+		jobHonor: enabled( "jobHonor" )
 	};
 }
 

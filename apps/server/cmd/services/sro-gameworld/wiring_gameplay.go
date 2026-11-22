@@ -26,6 +26,7 @@ import (
 	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/honorfeed"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/macro"
@@ -71,8 +72,11 @@ type gameplayPlane struct {
 	items      *action.Runtime
 	// jobHonor is the job honor ledger the public board reads; nil off.
 	jobHonor *jobhonor.Service
-	movement *movement.Runtime
-	water    *movement.WaterValidator
+	// honorFeed is the Job Honor ranking feed (nil when SRO_JOB_HONOR
+	// is off; wiring_jobhonor.go).
+	honorFeed *honorfeed.Service
+	movement  *movement.Runtime
+	water     *movement.WaterValidator
 	// planes owns every AI route, monster and pet alike: the outdoor
 	// detour in the field, the cave's region route on a dungeon floor.
 	planes   simulation.Planes

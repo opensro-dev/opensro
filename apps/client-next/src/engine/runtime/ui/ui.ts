@@ -267,6 +267,16 @@ import {
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalRows, experimentalTabs } from "./hud/experimental-hud";
 import { createEventCalendarHud } from "./hud/event-calendar-hud";
+import { createJobHonorHud } from "./hud/job-honor-hud";
+import {
+	JOB_HONOR_HEIGHT,
+	JOB_HONOR_ROWS,
+	JOB_HONOR_WIDTH,
+	jobHonorPictures,
+	jobHonorView
+} from "./hud/job-honor-view";
+import type { JobHonorPeriod, JobHonorTab } from "@/engine/foundation/ui/job-honor";
+import { honorRows } from "@/engine/foundation/ui/job-honor";
 import {
 	EVENT_CALENDAR_HEIGHT,
 	EVENT_CALENDAR_WIDTH,
@@ -968,7 +978,8 @@ import {
 	EXPERIMENTAL_MENU_ID,
 	EVENT_CALENDAR_MENU_ID,
 	MARKET_MENU_ID,
-	UNIQUE_STATUS_MENU_ID
+	UNIQUE_STATUS_MENU_ID,
+	JOB_HONOR_MENU_ID
 } from "@/engine/foundation/ui/system-menu";
 import {
 	bagTabRow,
@@ -1398,17 +1409,21 @@ export function createUi( ports: UiPorts ) {
 	const experimental = createExperimentalHud();
 	// Port-only, not native (#3532): the Event Calendar's feed state.
 	const eventCalendar = createEventCalendarHud();
+	// Port-only, not native (#3530): the Job Honor Rank window's state.
+	const jobHonor = createJobHonorHud();
 	// The System menu's extra rows: one menu id per Experimental row
 	// that adds an entry, in the order the entries stack (#3532's
-	// calendar, then #3531's Unique Status, then #3529's market). Each
-	// entry names its label and the click it sends: a panel window's
-	// open route, or the market's own toggle (activateMarket's
-	// "system-menu-market"), the market being a window of its own and
-	// not a panel. The next entry is one more row here.
+	// calendar, then #3531's Unique Status, then #3529's market, then
+	// #3530's honor rank). Each entry names its label and the click it
+	// sends: a panel window's open route, or the market's own toggle
+	// (activateMarket's "system-menu-market"), the market being a
+	// window of its own and not a panel. The next entry is one more
+	// row here.
 	const SYSTEM_MENU_ENTRIES: Readonly<Record<number, { label: string; action: string; }>> = {
 		[EVENT_CALENDAR_MENU_ID]: { label: "Event Calendar", action: "open-window:Event Calendar" },
 		[UNIQUE_STATUS_MENU_ID]: { label: "Unique Status", action: "open-window:Unique Status" },
-		[MARKET_MENU_ID]: { label: "Consignment Market", action: "system-menu-market" }
+		[MARKET_MENU_ID]: { label: "Consignment Market", action: "system-menu-market" },
+		[JOB_HONOR_MENU_ID]: { label: "Job Honor Rank", action: "open-window:Job Honor Rank" }
 	};
 
 	/*
@@ -1421,6 +1436,7 @@ export function createUi( ports: UiPorts ) {
 		if ( experimental.state().saved.eventCalendar ) extras.push( EVENT_CALENDAR_MENU_ID );
 		if ( experimental.state().saved.uniqueStatus ) extras.push( UNIQUE_STATUS_MENU_ID );
 		if ( experimental.state().saved.consignmentMarket ) extras.push( MARKET_MENU_ID );
+		if ( experimental.state().saved.jobHonor ) extras.push( JOB_HONOR_MENU_ID );
 		return extras;
 	}
 	const companionPotions = createCompanionPotions( pageStorage() );
@@ -3832,6 +3848,22 @@ export function createUi( ports: UiPorts ) {
 			const [day, index] = id.slice( "event-calendar-event:".length ).split( ":" ).map( Number );
 			const event = eventCalendar.state().week[day!]?.events[index!];
 			if ( event ) eventCalendar.select( event );
+			dirty = true;
+			return;
+		}
+		if ( panel === "Job Honor Rank" && id.startsWith( "job-honor-" ) ) {
+			const honorState = jobHonor.state( Date.now() );
+			if ( id.startsWith( "job-honor-tab:" ) ) {
+				jobHonor.selectTab( id.slice( "job-honor-tab:".length ) as JobHonorTab );
+			} else if ( id.startsWith( "job-honor-period:" ) ) {
+				jobHonor.selectPeriod( id.slice( "job-honor-period:".length ) as JobHonorPeriod );
+			} else if ( id.startsWith( "job-honor-page:" ) ) {
+				const rows = honorState.feed ? honorRows( honorState.feed, honorState.tab, honorState.period ) : [];
+				jobHonor.turnPage(
+					Number( id.slice( "job-honor-page:".length ) ),
+					Math.max( 1, Math.ceil( rows.length / JOB_HONOR_ROWS ) )
+				);
+			}
 			dirty = true;
 			return;
 		}
@@ -10920,6 +10952,13 @@ export function createUi( ports: UiPorts ) {
 			}
 			// Port-only (#3532): the calendar fetches only while its panel is open.
 			eventCalendar.frame( apiBase, Date.now(), panel === "Event Calendar" );
+			// Port-only (#3530): the honor window reads the worker's feed
+			// while the row is on; off, the feed is dropped.
+			jobHonor.reconcile(
+				phase === "world" ? next.gameplay?.jobHonor : null,
+				experimental.state().saved.jobHonor,
+				Date.now()
+			);
 			if ( phase === "signed-out" || phase === "character-select" ) serverEventHud.reset();
 			if ( phase === "world" ) {
 				const before = serverEventHud.shown();
@@ -10998,6 +11037,7 @@ export function createUi( ports: UiPorts ) {
 					uniqueRankHud.reset();
 					uniqueStatusHud.reset();
 					eventCalendar.reset();
+					jobHonor.reset();
 					sroMacroHud.reset();
 					windowPlacement.reset();
 					itemMall.reset();
@@ -14518,6 +14558,49 @@ export function createUi( ports: UiPorts ) {
 						serverNowMs: eventCalendar.serverNowMs( Date.now() )
 					} );
 					paths.push( ...eventCalendarPictures( ops ) );
+					for ( const op of ops ) {
+						if ( op.kind === "tile" ) {
+							quads.push( ...normalTile( op.rect, op.path, resources.size( op.path ), full ) );
+						} else if ( op.kind === "rect" ) {
+							rect( op.rect, op.color );
+						} else if ( op.kind === "text" ) {
+							quads.push( ...text.quads( op.value, op.rect, full, op.color, {
+								hAlign: op.hAlign,
+								vAlign: op.vAlign
+							} ) );
+						} else {
+							if ( op.texture && resources.has( op.texture ) ) rect( op.rect, op.color, op.texture );
+							controls.push( {
+								id: op.id,
+								label: op.label,
+								rect: op.rect,
+								kind: "button",
+								selected: op.selected,
+								disabled: false
+							} );
+						}
+					}
+					endWindow( admission );
+				}
+				if ( panel === "Job Honor Rank" && hudData ) {
+					const admission = beginWindow();
+					// Port-only, not native (#3530): the window's drawing is
+					// hud/job-honor-view.ts's ops; admission, the chrome and
+					// the op-to-quad loop stay here.
+					const [px, py] = windowOrigin( "Job Honor Rank", [
+						(w - JOB_HONOR_WIDTH) / 2,
+						(h - JOB_HONOR_HEIGHT) / 2,
+						JOB_HONOR_WIDTH,
+						JOB_HONOR_HEIGHT
+					] );
+					windowBox( "Job Honor Rank", px, py, JOB_HONOR_WIDTH, JOB_HONOR_HEIGHT );
+					closeButton( px + JOB_HONOR_WIDTH - 26, py + 10, panelCloseId( "Job Honor Rank" ) );
+					const ops = jobHonorView( {
+						origin: [ px, py ],
+						tile: hudData.windows.ifoption!.GDR_OPTION_BGTILE!.texture,
+						state: jobHonor.state( Date.now() )
+					} );
+					paths.push( ...jobHonorPictures( ops ) );
 					for ( const op of ops ) {
 						if ( op.kind === "tile" ) {
 							quads.push( ...normalTile( op.rect, op.path, resources.size( op.path ), full ) );

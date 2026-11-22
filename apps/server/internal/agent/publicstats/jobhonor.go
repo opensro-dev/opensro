@@ -24,7 +24,6 @@ package publicstats
 import (
 	"fmt"
 	"net/http"
-	"sort"
 	"time"
 
 	"opensro.online/server/internal/platform/jobhonor"
@@ -109,32 +108,17 @@ leaderboardSize rows.
 */
 func (s *Service) jobHonorRows(standings []jobhonor.Standing, wanted int) []JobHonorRow {
 	r := s.loadRoster()
-	visible := make([]jobhonor.Standing, 0, len(standings))
-	aliases := map[int64]string{}
-	for _, row := range standings {
-		if wanted != 0 && row.Job != wanted {
-			continue
-		}
-		c := r.byID[row.CharacterID]
+	board := jobhonor.BoardRows(standings, wanted, leaderboardSize, func(characterID int64) (string, bool) {
+		c := r.byID[characterID]
 		if c == nil || c.PublicHidden || c.Job.Alias == "" {
-			continue
+			return "", false
 		}
-		aliases[row.CharacterID] = c.Job.Alias
-		visible = append(visible, row)
-	}
-	sort.SliceStable(visible, func(i, j int) bool {
-		if visible[i].Points != visible[j].Points {
-			return visible[i].Points > visible[j].Points
-		}
-		return aliases[visible[i].CharacterID] < aliases[visible[j].CharacterID]
+		return c.Job.Alias, true
 	})
 	rows := []JobHonorRow{}
-	for i, row := range visible {
-		if i == leaderboardSize {
-			break
-		}
-		rows = append(rows, JobHonorRow{Rank: i + 1, Alias: aliases[row.CharacterID], Job: jobHonorJobs[row.Job],
-			Points: row.Points, Tier: jobHonorTiers[row.Held], Tonight: jobHonorTiers[row.Tier]})
+	for _, row := range board {
+		rows = append(rows, JobHonorRow{Rank: row.Rank, Alias: row.Alias, Job: jobHonorJobs[row.Job],
+			Points: row.Points, Tier: jobHonorTiers[row.Tier], Tonight: jobHonorTiers[row.Tonight]})
 	}
 	return rows
 }
