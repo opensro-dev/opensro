@@ -1050,8 +1050,8 @@ Folds an exchange frame; returns null when the frame is not the
 exchange's, else the category-1 notice code it raised (0 for none).
 ================
 		*/
-		exchangeReceive( frame: import("@/engine/contracts/network").WireFrame ): number | null {
-			const outcome = exchangeFrame( exchange, frame, refs, objRefs );
+		exchangeReceive( frame: import("@/engine/contracts/network").WireFrame, localGid = 0 ): number | null {
+			const outcome = exchangeFrame( exchange, frame, refs, objRefs, localGid );
 			if ( !outcome ) return null;
 			if ( outcome.swap ) {
 				slots = applyExchangeSwap( slots, outcome.swap, equipmentSlotCount ?? 13, inventorySlotCount ?? 45 );
