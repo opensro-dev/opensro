@@ -136,6 +136,12 @@ type Journal struct {
 	done    chan struct{}
 	dropped atomic.Uint64
 	failed  atomic.Uint64
+
+	// tickets are the ticket hours counted since the last checkpoint
+	// (tickets.go); ticketsDropped counts the outcomes past their bound.
+	ticketMu       sync.Mutex
+	tickets        map[ticketKey]TicketCounts
+	ticketsDropped atomic.Uint64
 }
 
 // millis is the journal's one time form: UTC milliseconds.
@@ -160,7 +166,8 @@ func Open(path, shard string, key []byte) (*Journal, error) {
 	}
 	db.SetMaxOpenConns(1)
 	j := &Journal{db: db, shard: shard, key: append([]byte(nil), key...), now: time.Now,
-		queue: make(chan write, queueCapacity), stop: make(chan struct{}), done: make(chan struct{})}
+		queue: make(chan write, queueCapacity), stop: make(chan struct{}), done: make(chan struct{}),
+		tickets: map[ticketKey]TicketCounts{}}
 	if err := j.initialize(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -196,7 +203,7 @@ CREATE INDEX IF NOT EXISTS connections_session ON connections(session);
 CREATE INDEX IF NOT EXISTS connections_account ON connections(account, started);
 CREATE INDEX IF NOT EXISTS connections_ip_key ON connections(ip_key, started);
 CREATE INDEX IF NOT EXISTS connections_started ON connections(started);
-UPDATE connections SET ended=seen, estimated=1 WHERE ended=0;`)
+UPDATE connections SET ended=seen, estimated=1 WHERE ended=0;` + ticketSchema)
 	return err
 }
 
@@ -320,9 +327,10 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
 ================
 checkpoint
 
-Open rows advance their seen mark (the crash recovery's estimate), and
-rows closed longer than the retention are pruned. Open rows are never
-pruned: a session still entered is still evidence.
+Open rows advance their seen mark (the crash recovery's estimate), the
+ticket hours counted since the last checkpoint are written, and rows
+and ticket hours older than the retention are pruned. Open rows are
+never pruned: a session still entered is still evidence.
 ================
 */
 func (j *Journal) checkpoint() error {
@@ -330,8 +338,14 @@ func (j *Journal) checkpoint() error {
 	if _, err := j.db.Exec(`UPDATE connections SET seen=? WHERE ended=0`, now); err != nil {
 		return err
 	}
+	if err := j.flushTickets(); err != nil {
+		return err
+	}
 	cutoff := now - int64(retentionDays)*24*int64(time.Hour/time.Millisecond)
-	_, err := j.db.Exec(`DELETE FROM connections WHERE ended!=0 AND ended<?`, cutoff)
+	if _, err := j.db.Exec(`DELETE FROM connections WHERE ended!=0 AND ended<?`, cutoff); err != nil {
+		return err
+	}
+	_, err := j.db.Exec(`DELETE FROM ticket_hours WHERE hour_ms<?`, cutoff)
 	return err
 }
 
@@ -360,14 +374,16 @@ func (j *Journal) Close() error {
 Health
 
 The counts an operator read can show: records dropped at a full queue,
-records the writer failed to store, and the rows currently open.
+records the writer failed to store, ticket outcomes dropped past their
+bound, and the rows currently open.
 ================
 */
 func (j *Journal) Health() map[string]any {
 	var open int64
 	err := j.db.QueryRow(`SELECT count(*) FROM connections WHERE ended=0`).Scan(&open)
 	health := map[string]any{"dropped": j.dropped.Load(), "failed": j.failed.Load(), "open": open,
-		"shard": j.shard, "retentionDays": retentionDays}
+		"ticketsDropped": j.ticketsDropped.Load(),
+		"shard":          j.shard, "retentionDays": retentionDays}
 	if err != nil {
 		health["lastError"] = err.Error()
 	}

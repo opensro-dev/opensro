@@ -35,6 +35,8 @@ package census
 import (
 	"sort"
 	"strings"
+
+	"opensro.online/server/internal/platform/connjournal"
 )
 
 const (
@@ -592,14 +594,17 @@ type Person struct {
 	HistoryTruncated bool            `json:"historyTruncated"`
 }
 
-// PersonAccount is one account of the person.
+// PersonAccount is one account of the person. Tickets are its world
+// tickets per hour over the trailing day (#3307): a loop that mints
+// without ever entering shows there and nowhere in its sessions.
 type PersonAccount struct {
-	Account    string   `json:"account"`
-	Characters []string `json:"characters"`
-	Online     bool     `json:"online"`
-	Sessions   int      `json:"sessions"`
-	FirstSeen  int64    `json:"firstSeen"`
-	LastSeen   int64    `json:"lastSeen"`
+	Account    string                   `json:"account"`
+	Characters []string                 `json:"characters"`
+	Online     bool                     `json:"online"`
+	Sessions   int                      `json:"sessions"`
+	FirstSeen  int64                    `json:"firstSeen"`
+	LastSeen   int64                    `json:"lastSeen"`
+	Tickets    []connjournal.TicketHour `json:"tickets"`
 }
 
 // PersonSpan is one entered session of the person's history.
@@ -658,7 +663,14 @@ func (s *Service) Person(character string) (Person, bool, error) {
 	var history []Span
 	for _, member := range cluster.Accounts {
 		facts := idx.accounts[member]
-		entry := PersonAccount{Account: member, Sessions: len(facts.spans)}
+		entry := PersonAccount{Account: member, Sessions: len(facts.spans), Tickets: []connjournal.TicketHour{}}
+		if s.tickets != nil {
+			hours, err := s.tickets(member, now-windowDayMs)
+			if err != nil {
+				return Person{}, false, err
+			}
+			entry.Tickets = append(entry.Tickets, hours...)
+		}
 		for _, name := range facts.characters {
 			entry.Characters = append(entry.Characters, name)
 		}

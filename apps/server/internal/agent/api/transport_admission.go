@@ -21,7 +21,7 @@ func (api *API) handleTransportAdmissionToken(w http.ResponseWriter, r *http.Req
 		return
 	}
 	identity := requestIdentity(r)
-	if !admitTicket(w, api.transportTickets, identity.accountID) {
+	if !api.admitTicket(w, TicketTransport, identity.accountID) {
 		return
 	}
 	expiresAt := api.now().Add(transportAdmissionTokenTTL)
@@ -37,6 +37,7 @@ func (api *API) handleTransportAdmissionToken(w http.ResponseWriter, r *http.Req
 		return
 	}
 	api.recordIssuedTicket(identity.accountID, token, expiresAt)
+	api.noteTicket(identity.accountID, TicketTransport, true)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":            true,
 		"token":         token,

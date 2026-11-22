@@ -37,6 +37,9 @@ import (
 )
 
 // SchemaVersion is the answer shape's version; the console checks it.
+// Fields added to an answer (the no-user-agent signal and count, the
+// person view's ticket hours, #3307) keep it: a reader of version 1
+// ignores a field it does not know.
 const SchemaVersion = 1
 
 // Path is the handler's route prefix on the operator listener.
@@ -58,20 +61,23 @@ One entered session as the census reasons about it. Times are UTC
 milliseconds; Ended 0 means still entered (its end is now). Client
 is the client fingerprint the session presented (user agent, build,
 screen), empty when it presented none - an absent fingerprint is no
-signal, never a shared one.
+signal, never a shared one. NoUserAgent is the one fact the absence
+does carry: every browser sends a User-Agent on both transports, so
+a session without one was not a browser (signals.go).
 ================
 */
 type Span struct {
-	Session   string
-	Account   string
-	Character string
-	Transport string
-	Started   int64
-	Ended     int64
-	Estimated bool
-	IPKey     string
-	NetKey    string
-	Client    string
+	Session     string
+	Account     string
+	Character   string
+	Transport   string
+	Started     int64
+	Ended       int64
+	Estimated   bool
+	IPKey       string
+	NetKey      string
+	Client      string
+	NoUserAgent bool
 }
 
 // end returns the span's effective end: its close, or now while open.
@@ -116,7 +122,7 @@ func JournalRows(journal *connjournal.Journal) RowSource {
 		for _, row := range rows {
 			spans = append(spans, Span{Session: row.Session, Account: row.Account, Character: row.Character,
 				Transport: row.Transport, Started: row.Started, Ended: row.Ended, Estimated: row.Estimated,
-				IPKey: row.IPKey, NetKey: row.NetKey, Client: clientFingerprint(row)})
+				IPKey: row.IPKey, NetKey: row.NetKey, Client: clientFingerprint(row), NoUserAgent: row.UserAgent == ""})
 		}
 		return spans, nil
 	}
@@ -132,6 +138,28 @@ func clientFingerprint(row connjournal.Row) string {
 		return ""
 	}
 	return row.UserAgent + "\x00" + row.Build + "\x00" + row.Screen
+}
+
+/*
+================
+TicketHours
+
+One account's world tickets per hour from sinceMs on (minted, and
+refused by the pacer, of each kind): the journal's ticket buckets in
+production (JournalTickets), a fixture in tests.
+================
+*/
+type TicketHours func(account string, sinceMs int64) ([]connjournal.TicketHour, error)
+
+/*
+================
+JournalTickets
+
+The connection journal's ticket buckets as TicketHours.
+================
+*/
+func JournalTickets(journal *connjournal.Journal) TicketHours {
+	return journal.TicketHours
 }
 
 /*
@@ -185,9 +213,10 @@ disagree about the same instant.
 ================
 */
 type Service struct {
-	source RowSource
-	chat   ChatCounts
-	now    func() time.Time
+	source  RowSource
+	chat    ChatCounts
+	tickets TicketHours
+	now     func() time.Time
 
 	mu    sync.Mutex
 	at    time.Time
@@ -197,12 +226,13 @@ type Service struct {
 }
 
 // NewService builds the census over a row source; chat may be nil,
-// which only silences the chat signal.
-func NewService(source RowSource, chat ChatCounts, now func() time.Time) *Service {
+// which only silences the chat signal, and tickets may be nil, which
+// leaves the person view's ticket hours empty.
+func NewService(source RowSource, chat ChatCounts, tickets TicketHours, now func() time.Time) *Service {
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{source: source, chat: chat, now: now}
+	return &Service{source: source, chat: chat, tickets: tickets, now: now}
 }
 
 // nowMs is the service's one time form: UTC milliseconds.
