@@ -64,6 +64,8 @@ export const OFF = Object.freeze( {
 	uniqueDamageRank: false,
 	// Off by default: each player opts in to the Unique Status window (#3531).
 	uniqueStatus: false,
+	// Off by default: each player opts in to the market's menu entry (#3529).
+	consignmentMarket: false,
 	// Off by default: V hides only monsters and players, as the original does.
 	vHidesCompanions: false,
 	// On by default (owner 2026-10-24): click shortcuts stage into an exchange.

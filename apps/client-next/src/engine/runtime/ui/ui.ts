@@ -967,6 +967,7 @@ import {
 	systemMenuHeight,
 	EXPERIMENTAL_MENU_ID,
 	EVENT_CALENDAR_MENU_ID,
+	MARKET_MENU_ID,
 	UNIQUE_STATUS_MENU_ID
 } from "@/engine/foundation/ui/system-menu";
 import {
@@ -1399,8 +1400,10 @@ export function createUi( ports: UiPorts ) {
 	const eventCalendar = createEventCalendarHud();
 	// The System menu's extra rows: one menu id per Experimental row
 	// that adds an entry, in the order the entries stack (#3532's
-	// calendar, then #3531's Unique Status). One click route maps each
-	// id to the window it opens.
+	// calendar, then #3531's Unique Status, then #3529's market). One
+	// click route maps each id to the window it opens; the market is a
+	// window of its own, so its row names its toggle instead (the draw
+	// loop below and activateMarket's "market-menu").
 	const SYSTEM_MENU_WINDOWS: Readonly<Record<number, string>> = {
 		[EVENT_CALENDAR_MENU_ID]: "Event Calendar",
 		[UNIQUE_STATUS_MENU_ID]: "Unique Status"
@@ -1415,6 +1418,7 @@ export function createUi( ports: UiPorts ) {
 		const extras: number[] = [];
 		if ( experimental.state().saved.eventCalendar ) extras.push( EVENT_CALENDAR_MENU_ID );
 		if ( experimental.state().saved.uniqueStatus ) extras.push( UNIQUE_STATUS_MENU_ID );
+		if ( experimental.state().saved.consignmentMarket ) extras.push( MARKET_MENU_ID );
 		return extras;
 	}
 	const companionPotions = createCompanionPotions( pageStorage() );
@@ -3043,6 +3047,13 @@ export function createUi( ports: UiPorts ) {
 	================
 	*/
 	function activateMarket( id: string ): boolean {
+		// The System menu's row (port-only, #3529): choosing it leaves the
+		// menu, as every other row does, then toggles the window like the
+		// button beside FPS.
+		if ( id === "market-menu" ) {
+			setPanel( "" );
+			id = "market-toggle";
+		}
 		// The HUD button beside FPS (platform.ts) toggles the window from
 		// anywhere in the world; the storage keeper's row opens it too.
 		if ( id === "market-toggle" && marketHud.isOpen() ) id = "market-close";
@@ -14461,7 +14472,11 @@ export function createUi( ports: UiPorts ) {
 					closeButton( sx + 188, sy + 10, panelCloseId( "System" ) );
 					for ( const node of layout.buttons ) {
 						const menuWindow = SYSTEM_MENU_WINDOWS[node.id];
-						const id = node.id === EXPERIMENTAL_MENU_ID ? "open-window:Experimental" : menuWindow ?
+						const id = node.id === EXPERIMENTAL_MENU_ID ?
+							"open-window:Experimental" :
+							node.id === MARKET_MENU_ID ?
+							"market-menu" :
+							menuWindow ?
 							"open-window:" + menuWindow :
 							node.id === 10 ?
 							"open-window:Option" :
@@ -14475,7 +14490,11 @@ export function createUi( ports: UiPorts ) {
 							sx,
 							sy,
 							id,
-							node.id === EXPERIMENTAL_MENU_ID ? "Experimental" : menuWindow ?? hudCopy( node.text )
+							node.id === EXPERIMENTAL_MENU_ID ?
+								"Experimental" :
+								node.id === MARKET_MENU_ID ?
+								"Consignment Market" :
+								menuWindow ?? hudCopy( node.text )
 						);
 					}
 					endWindow( admission );
