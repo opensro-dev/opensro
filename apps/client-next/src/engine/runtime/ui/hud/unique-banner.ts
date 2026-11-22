@@ -8,13 +8,15 @@ current one at once and restarts its timer (CIFNoticeWindow_LayoutAndShow
 6B3180 arms 7000 ms; 6B30F0 fades over the final 2000 ms). The port-only
 Experimental "Short notices" row shortens the notice banner to 5000 ms with
 a 1000 ms fade. Port-only: a seal drop never cuts off a louder seal drop
-still on screen, so a Star cannot erase a Sun.
+still on screen, so a Star cannot erase a Sun. A reinforcement success
+wears the later client's centre plate (#3260) while its art is published.
 
 ===========================================================================
 */
 import {
 	SEAL_NOTICE_COLOR_MOON,
 	type SystemNotice,
+	reinforceSuccessNotice,
 	sealDropTierFromText
 } from "@/engine/foundation/gameplay/system-notices";
 import { noticeText } from "@/engine/foundation/ui/notice-text";
@@ -27,6 +29,13 @@ export const uniqueBannerPaths = [ "corner", "edge", "edge2" ].map( part =>
 // 67d030 targets warning id 35, not the red notice sibling.
 export const notificationBannerPaths = [ "corner", "edge", "edge2" ].map( part =>
 	`/assets/images/Media_extracted/interface/ifcommon/com_notice_${part}.png`
+);
+// The later client's centre plate family (#3260), published from the
+// pinned v1.696 archive by scripts/import_v1696_centre_banner.py; the
+// build without that archive never publishes it, and the row then
+// keeps the native notice plate above.
+export const centreBannerPaths = [ "corner", "edge", "edge2" ].map( part =>
+	`/assets/images/Media_extracted/interface/ifcommon/com_center_${part}.png`
 );
 
 /*
@@ -77,6 +86,9 @@ function argbTextRgb( argb: number ): readonly [number, number, number] {
 // The native notice's and warning's plates and caption (uniqueBannerQuads).
 const NOTICE_PLATE = [ 128, 45, 67 ] as const;
 const WARNING_PLATE = [ 0, 52, 92 ] as const;
+// The centre plate's own violet (0x540066), read off the v1.696 art's
+// bytes the way the two plates above match their families' art.
+const CENTRE_PLATE = [ 84, 0, 102 ] as const;
 const NOTICE_TEXT_RGB = [ 1, 1, 1 ] as const;
 // Star is a plain native notice that leaves sooner. Moon takes the blue
 // warning sibling, which its pale colour sits on. Sun stays on the red
@@ -150,25 +162,47 @@ function shownTiming( notice: SystemNotice | null, timing: NoticeTiming ): Notic
 noticeBannerRow
 
 The notification row's plate choice (port-only, #1976): a line that
-announces a seal drop wears its tier's weight. Every other notice -
-academy, guild war, friends, letters, plain server notices - keeps the
-native plate exactly: crimson, hugging the caption, the shipped alpha.
+announces a seal drop wears its tier's weight. A reinforcement success
+takes the later client's centre banner (#3260): the violet centre
+plate, worn at screen centre - but only while its art is published
+(centreArt); a build without the v1.696 import keeps the native plate,
+as does every failure, which the later client never centres. Every
+other notice - academy, guild war, friends, letters, plain server
+notices - keeps the native plate exactly: crimson, hugging the
+caption, the shipped alpha.
 ================
 */
 export function noticeBannerRow(
-	banner: Pick<ReturnType<typeof createNoticeBanner>, "sealTier">
+	banner: Pick<ReturnType<typeof createNoticeBanner>, "sealTier" | "centreSuccess">,
+	centreArt = true
 ): {
 	readonly color: readonly [number, number, number];
 	readonly textRgb: readonly [number, number, number];
 	readonly frame: BannerPlateStyle;
 	readonly paths: readonly string[];
+	readonly centred: boolean;
 } {
+	if ( centreArt && banner.centreSuccess() ) {
+		return {
+			color: CENTRE_PLATE,
+			textRgb: NOTICE_TEXT_RGB,
+			frame: {},
+			paths: centreBannerPaths,
+			centred: true
+		};
+	}
 	const tier = banner.sealTier();
 	if ( tier !== undefined ) {
 		const style = sealBannerStyle( tier );
-		return { color: style.plate, textRgb: style.textRgb, frame: style.frame, paths: style.paths };
+		return { color: style.plate, textRgb: style.textRgb, frame: style.frame, paths: style.paths, centred: false };
 	}
-	return { color: NOTICE_PLATE, textRgb: NOTICE_TEXT_RGB, frame: {}, paths: notificationBannerPaths };
+	return {
+		color: NOTICE_PLATE,
+		textRgb: NOTICE_TEXT_RGB,
+		frame: {},
+		paths: notificationBannerPaths,
+		centred: false
+	};
 }
 
 // The banner's alpha steps (the native quad alpha byte).
@@ -284,7 +318,16 @@ export function createNoticeBanner( kind: "banner" | "notificationBanner" = "ban
 		announces a seal drop, so the banner can set its weight (#1976).
 		================
 		*/
-		sealTier: () => current ? noticeSealTier( current ) : undefined
+		sealTier: () => current ? noticeSealTier( current ) : undefined,
+		/*
+		================
+		centreSuccess
+
+		Whether the current line is a reinforcement success, so the
+		banner wears the later client's centre plate (#3260).
+		================
+		*/
+		centreSuccess: () => current ? reinforceSuccessNotice( current ) : false
 	};
 }
 

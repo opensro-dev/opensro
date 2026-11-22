@@ -266,6 +266,7 @@ const AFTER_FAMILIES = [
 	"importLaterWorldMapButtons",
 	"importLaterWorldMapGuide",
 	"importLaterMacroGuide",
+	"importLaterCentreBanner",
 	"importLaterOptionalTeleport",
 	"importLaterTombMinimap",
 	"importLaterRenewalMall"
