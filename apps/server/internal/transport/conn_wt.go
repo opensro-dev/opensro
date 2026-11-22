@@ -440,15 +440,26 @@ func (w *wtConn) Close(reason string) error {
 				defer w.closing.end()
 				defer w.writeMu.Unlock()
 				w.finishStream()
-				w.ctxCancel()
-				_ = w.sess.CloseWithError(0, reason)
+				_ = w.endSession(reason)
 			}()
 			return
 		}
-		w.ctxCancel()
-		err = w.sess.CloseWithError(0, reason)
+		err = w.endSession(reason)
 	})
 	return err
+}
+
+/*
+================
+wtConn.endSession
+
+Stops the pumps and closes the session with the polite code 0 the
+client reads as a goodbye (network.ts WT_CLEAN_CLOSE_CODE).
+================
+*/
+func (w *wtConn) endSession(reason string) error {
+	w.ctxCancel()
+	return w.sess.CloseWithError(0, reason)
 }
 
 /*
