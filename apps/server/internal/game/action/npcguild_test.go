@@ -344,6 +344,85 @@ func TestGuildWarehouseOpensAtLevelTwoForOneMember(t *testing.T) {
 
 /*
 ================
+openGuildWarehouse
+
+The fixture guild at level 2 with its room open and 5000 gold in hand.
+================
+*/
+func openGuildWarehouse(t *testing.T, d *doorRuntime) {
+	t.Helper()
+	c := d.character
+	guilds := d.authority.Guilds()
+	if _, refusal := guilds.UpdateGuildAs(testDivision, c.ID, "fixture-level", enterworld.GuildAuthorization{},
+		func(g enterworld.GuildRecord, m []enterworld.GuildMemberRecord) (enterworld.GuildRecord, []enterworld.GuildMemberRecord, bool) {
+			g.Level = 2
+			return g, m, true
+		}); refusal.Refused() {
+		t.Fatalf("fixture level %v", refusal)
+	}
+	d.rt.characterAdmissions.Store(simulation.WorldKey(testDivision, c.Name), populationAdmission{division: testDivision, name: c.Name})
+	request := wire.NewWriter(4).U32(guildManagerGid).Payload()
+	if out := d.rt.HandleGuildStorageOpen(testDivision, c, request); !bytes.Equal(out.Frames[0].Payload, []byte{1}) {
+		t.Fatalf("open answered %x", out.Frames[0].Payload)
+	}
+	gold := int64(5000)
+	if !d.authority.UpdateCharacters([]*enterworld.Character{c}, "fixture-gold", func() bool { c.Gold = &gold; return true }) {
+		t.Fatal("fixture gold refused")
+	}
+}
+
+/*
+================
+TestGuildWarehouseGoldDepositTakesNoRangeTest
+
+#3568: at the personal warehouse gold takes no range test
+(TestStorageItemMovesNeedTheKeeperInRange), but the guild room applied
+one, so stepping back from the manager made every deposit fail with
+the silent generic code. The deposit now lands at range.
+================
+*/
+func TestGuildWarehouseGoldDepositTakesNoRangeTest(t *testing.T) {
+	d := guildManagerFixture(t)
+	c := d.character
+	openGuildWarehouse(t, d)
+	moveMerchantAway(d.rt, npcHitRange+10)
+	out := d.rt.applyGuildStorageMove(testDivision, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeGuildStorageGoldDeposit, GoldAmount: 1200})
+	if out.Frames[0].Payload[0] != 1 || goldOf(c) != 3800 {
+		t.Fatalf("far deposit %+v gold %d", out.Frames, goldOf(c))
+	}
+	guilds := d.authority.Guilds()
+	guildID, _ := guilds.GuildOfCharacter(testDivision, c.ID)
+	if record, _, _ := guilds.Guild(testDivision, guildID); record.Storage == nil || record.Storage.Gold != 1200 {
+		t.Fatalf("guild room %+v", record.Storage)
+	}
+}
+
+/*
+================
+TestGuildWarehouseMoveAnswersBlockedWithoutTheHold
+
+#3568: a room move after the hold is lost answered the generic code,
+whose notice text does not exist, so the player saw silence. It now
+answers the blocked code the client names - "You cannot move items or
+trade at the moment." - and no gold moves.
+================
+*/
+func TestGuildWarehouseMoveAnswersBlockedWithoutTheHold(t *testing.T) {
+	d := guildManagerFixture(t)
+	c := d.character
+	openGuildWarehouse(t, d)
+	d.rt.HandleGuildStorageClose(testDivision, c, wire.NewWriter(4).U32(guildManagerGid).Payload())
+	out := d.rt.applyGuildStorageMove(testDivision, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeGuildStorageGoldDeposit, GoldAmount: 1})
+	if !bytes.Equal(out.Frames[0].Payload, []byte{2, wire.ErrCodeStorageOperationBlocked}) {
+		t.Fatalf("a closed room answered %x", out.Frames[0].Payload)
+	}
+	if goldOf(c) != 5000 {
+		t.Fatalf("gold moved on a refused deposit: %d", goldOf(c))
+	}
+}
+
+/*
+================
 TestGuildDeltasGoThroughTheGuildPublication
 
 The master's handover publishes its four 0x3B29 deltas to the heir through

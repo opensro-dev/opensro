@@ -112,10 +112,7 @@ func splitRideStates(in []simulation.Frame) ([]simulation.Frame, []rideStateRout
 	shared := make([]simulation.Frame, 0, len(in))
 	var rides []rideStateRoute
 	for _, f := range in {
-		rider, ok := uint32(0), false
-		if f.Opcode == wire.OpCosRideState {
-			rider, ok = wire.CosRideStateRider(f.Payload)
-		}
+		rider, ok := wire.FrameRideRider(f.Opcode, f.Payload)
 		if !ok {
 			shared = append(shared, f)
 			continue

@@ -24,6 +24,18 @@ import { isEffectProgramModel } from "@/engine/foundation/assets/effect-programs
 
 /*
 ================
+CHARACTER_RETRY_SECONDS
+
+How long a failed source waits before its next request. A source the
+asset owner answers absent (this release does not publish it) or stale
+(the release this page loaded has been replaced) never gets a next
+request: no retry in this page can succeed (#4114).
+================
+*/
+const CHARACTER_RETRY_SECONDS = 2;
+
+/*
+================
 CHARACTER_LOAD_SLOTS
 
 Character sources in flight at once. One slot made a crowd's wearers
@@ -114,7 +126,7 @@ export function createCharacterResources(
 	*/
 	function reservable( path: string ): boolean {
 		if ( jobs.has( path ) || reservations.has( path ) ) return true;
-		if ( (failures.get( path )?.retryAt ?? -Infinity) > now ) return false;
+		if ( waiting( path ) ) return false;
 		if ( !priority.has( path ) && priorityPending() ) return false;
 		return openSlots() > 0;
 	}
@@ -131,7 +143,7 @@ export function createCharacterResources(
 	function priorityPending(): boolean {
 		for ( const path of priority ) {
 			if (
-				!loaded.has( path ) && !jobs.has( path ) && (failures.get( path )?.retryAt ?? -Infinity) <= now
+				!loaded.has( path ) && !jobs.has( path ) && !waiting( path )
 			) return true;
 		}
 		return false;
@@ -198,6 +210,13 @@ export function createCharacterResources(
 		retryAt: number;
 		message: string;
 	}>();
+	// The sources answered absent or stale, for the page's lifetime: never
+	// requested again, so each files its incident once (#4114). Kept apart
+	// from failures, which retainWanted clears when no actor wants the
+	// source: a cleared 404 was fetched and filed again at every sighting,
+	// 319 times from one tab left open on a replaced release. A new world
+	// (reset) keeps them: the page's release has not changed.
+	const gone = new Set<string>();
 	// The loads in flight, by path (at most CHARACTER_LOAD_SLOTS).
 	const jobs = new Map<string, {
 		id: number;
@@ -209,6 +228,34 @@ export function createCharacterResources(
 	// returns; later polls return them in completion order.
 	const deliveries: { path: string; buffer: ArrayBuffer; }[] = [];
 	let now = 0, disposed = false;
+
+	/*
+	================
+	waiting
+
+	Whether a source may not be requested now: it is gone for the page, or
+	its last failure's retry deadline has not passed.
+	================
+	*/
+	function waiting( path: string ): boolean {
+		return gone.has( path ) || (failures.get( path )?.retryAt ?? -Infinity) > now;
+	}
+
+	/*
+	================
+	fail
+
+	Record one source's failure. A permanent one (absent or stale) is gone
+	for the page; any other waits out CHARACTER_RETRY_SECONDS.
+	================
+	*/
+	function fail( path: string, error: unknown, permanent = false ) {
+		if ( permanent ) gone.add( path );
+		failures.set( path, {
+			retryAt: permanent ? Infinity : now + CHARACTER_RETRY_SECONDS,
+			message: String( error )
+		} );
+	}
 
 	/*
 	================
@@ -240,8 +287,7 @@ export function createCharacterResources(
 		if ( model && !plan( [ path ] ) ) return;
 		wanted.add( path );
 		if (
-			disposed || jobs.has( path ) || loaded.has( path ) ||
-			(failures.get( path )?.retryAt ?? -Infinity) > now
+			disposed || jobs.has( path ) || loaded.has( path ) || waiting( path )
 		) {
 			return;
 		}
@@ -261,7 +307,7 @@ export function createCharacterResources(
 				model
 			} );
 		} catch ( error ) {
-			failures.set( path, { retryAt: now + 2, message: String( error ) } );
+			fail( path, error );
 		}
 	}
 
@@ -279,7 +325,9 @@ export function createCharacterResources(
 	): { path: string; buffer: ArrayBuffer; } | null {
 		try {
 			if ( result.kind === "error" ) {
-				throw new Error( result.error );
+				// The asset owner's verdict decides whether a retry can help.
+				fail( completed.path, new Error( result.error ), result.absent === true || result.stale === true );
+				return null;
 			}
 			if ( completed.model && result.kind === "character" ) {
 				const model = /\/npc\/cos\/p_bear0[12]\.glb$/i.test( completed.path ) ?
@@ -322,7 +370,7 @@ export function createCharacterResources(
 				throw new Error( "Character resource result mismatch" );
 			}
 		} catch ( error ) {
-			failures.set( completed.path, { retryAt: now + 2, message: String( error ) } );
+			fail( completed.path, error );
 		}
 		return null;
 	}
@@ -428,7 +476,7 @@ export function createCharacterResources(
 		================
 		*/
 		rejected( path: string, error: unknown ) {
-			failures.set( path, { retryAt: now + 2, message: String( error ) } );
+			fail( path, error );
 		},
 		plan,
 
@@ -460,7 +508,7 @@ export function createCharacterResources(
 			if ( built && !costs.has( path ) ) costs.set( path, characterBytes( built.model, built.images ) );
 			// A failing source keeps its own retry deadline and stays wanted so
 			// retainWanted does not drop the deadline and refetch every frame.
-			if ( !loaded.has( path ) && (failures.get( path )?.retryAt ?? -Infinity) > now ) {
+			if ( !loaded.has( path ) && waiting( path ) ) {
 				wanted.add( path );
 				return false;
 			}
@@ -566,7 +614,7 @@ export function createCharacterResources(
 		================
 		*/
 		failed( path: string ) {
-			return failures.has( path );
+			return failures.has( path ) || gone.has( path );
 		},
 
 		/*
@@ -630,6 +678,7 @@ export function createCharacterResources(
 			jobs.clear();
 			deliveries.length = 0;
 			failures.clear();
+			gone.clear();
 			wanted.clear();
 			loaded.clear();
 			durations.clear();

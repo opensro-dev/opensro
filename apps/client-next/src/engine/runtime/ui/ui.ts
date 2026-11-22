@@ -736,6 +736,7 @@ import {
 	titledDisplayName,
 	titledNameRow,
 	TITLE_NAME_GAP,
+	visibleTitleFormat,
 	withoutBoardPass
 } from "@/engine/foundation/ui/overhead-layout";
 import { vitalWarning } from "@/engine/foundation/ui/vital-warning";
@@ -2373,6 +2374,12 @@ export function createUi( ports: UiPorts ) {
 	*/
 	function hudCopy( key: string ) {
 		if ( key === "UIIT_PORT_SOOK_ARENA" ) return "Survival Arena (5 stages, EXP/SP x5)";
+		// Later-native (#3502): the two title-indicator labels are the
+		// later client's own option rows; the v1.150 system-text
+		// catalogue has no such codes, so the text is carried here in
+		// the catalogue's own "Indicate ..." voice.
+		if ( key === "UIIT_STT_CHAR_TITLE_SIGN" ) return "Indicate own title";
+		if ( key === "UIIT_STT_OTHER_TITLE_SIGN" ) return "Indicate other titles";
 		// The Contributor login prompt (port-only, contributor-titles.ts).
 		const contributorCopy = CONTRIBUTOR_PROMPT_COPY[key];
 		if ( contributorCopy ) return contributorCopy;
@@ -23675,7 +23682,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									entity.boardName ?? entity.name ??
 										(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
 								),
-								entity.characterTitleFormat
+								visibleTitleFormat( entity, game?.localGid, options )
 							),
 							width = text.run( name, selected ? 2 : 0 ).width,
 							height = text.boardHeight();
@@ -23704,7 +23711,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								entity.boardName ?? entity.name ??
 									(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
 							),
-							entity.characterTitleFormat
+							visibleTitleFormat( entity, game?.localGid, options )
 						),
 						width = text.run( name, selected ? 2 : 0 ).width,
 						height = text.boardHeight();

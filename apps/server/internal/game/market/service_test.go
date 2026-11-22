@@ -548,6 +548,85 @@ func TestGamePageIsTheCharacters(t *testing.T) {
 
 /*
 ================
+TestGameAccountBoundsMineRowsToTheWireLimit
+
+#4111: an account with 20 open listings and 60 sold ones got a mine
+answer over the window's row limit, the decoder refused it and the
+session ended. The game page now hands over at most WireRowLimit rows
+per list - the active rows first, then the newest history - while the
+website page keeps the whole account.
+================
+*/
+func TestGameAccountBoundsMineRowsToTheWireLimit(t *testing.T) {
+	const division = "global-official"
+	listing := func(id int64, state string) domain.MarketListing {
+		return domain.MarketListing{ID: id, Division: division, SellerAccount: "alpha", SellerChar: 1,
+			Currency: domain.MarketGold, State: state, ListedMs: id}
+	}
+	// The store's shape, newest first: the newest history ahead of the
+	// older open rows, as a long-lived account's union reads.
+	rows := []domain.MarketListing{}
+	for id := int64(80); id >= 71; id-- {
+		rows = append(rows, listing(id, domain.MarketSold))
+	}
+	for id := int64(20); id >= 1; id-- {
+		rows = append(rows, listing(id, domain.MarketOpen))
+	}
+	for id := int64(70); id >= 21; id-- {
+		rows = append(rows, listing(id, domain.MarketSold))
+	}
+	store := &fakeServiceStore{accountListings: rows,
+		byID: map[int64]domain.MarketListing{30: {ID: 30, Division: division, SellerAccount: "beta", SellerChar: 5}}}
+	for id := int64(63); id >= 59; id-- {
+		store.offersOut = append(store.offersOut, domain.MarketOffer{ID: id, ListingID: 30, BuyerChar: 1, State: domain.MarketOfferOpen})
+	}
+	for id := int64(58); id >= 1; id-- {
+		store.offersOut = append(store.offersOut, domain.MarketOffer{ID: id, ListingID: 30, BuyerChar: 1, State: domain.MarketOfferRejected})
+	}
+	for id := int64(60); id >= 1; id-- {
+		store.purchases = append(store.purchases, domain.MarketSale{ListingID: id, BuyerChar: 1})
+	}
+	s := testService(store)
+	first := &domain.Character{ID: 1, AccountID: "alpha", Name: "First"}
+
+	page, err := s.GameAccount(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Listings) != WireRowLimit {
+		t.Fatalf("listings = %d, want the wire limit %d", len(page.Listings), WireRowLimit)
+	}
+	for i := 0; i < 20; i++ {
+		if page.Listings[i].State != domain.MarketOpen {
+			t.Fatalf("listing %d state = %q, want the open rows first", i, page.Listings[i].State)
+		}
+	}
+	if page.Listings[20].ID != 80 || page.Listings[49].ID != 51 {
+		t.Fatalf("history kept = ids %d..%d, want the newest 80..51", page.Listings[20].ID, page.Listings[49].ID)
+	}
+	if len(page.OffersOut) != WireRowLimit {
+		t.Fatalf("offers out = %d rows, want the wire limit %d", len(page.OffersOut), WireRowLimit)
+	}
+	for i := 0; i < 5; i++ {
+		if page.OffersOut[i].State != domain.MarketOfferOpen {
+			t.Fatalf("offer %d state = %q, want the open rows first", i, page.OffersOut[i].State)
+		}
+	}
+	if page.OffersOut[5].ID != 58 {
+		t.Fatalf("offer history starts at id %d, want the newest 58", page.OffersOut[5].ID)
+	}
+	if len(page.Purchases) != WireRowLimit || page.Purchases[49].ListingID != 11 {
+		t.Fatalf("purchases = %d rows ending at %d, want %d ending at 11",
+			len(page.Purchases), page.Purchases[len(page.Purchases)-1].ListingID, WireRowLimit)
+	}
+	whole, err := s.Account("alpha")
+	if err != nil || len(whole.Listings) != len(rows) {
+		t.Fatalf("the website page = %d listings, %v; want all %d", len(whole.Listings), err, len(rows))
+	}
+}
+
+/*
+================
 TestSellerIsNamedUnlessAnonymous
 
 Every viewer sees a named seller's name and no anonymous one's; the
