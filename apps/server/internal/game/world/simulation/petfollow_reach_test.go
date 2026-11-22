@@ -89,3 +89,40 @@ func TestReachAndRelocationClearTheVerdict(t *testing.T) {
 		t.Fatal("a pet in reach of its goal stayed blocked")
 	}
 }
+
+/*
+================
+TestAFailedSearchSpeaksOnlyForItsGoal
+
+opensro-cursor2's probe on #4083: a search that found no way to goal A
+must not call goal B unreachable inside the retry pause, when nobody has
+searched for B. B is unknown until its own search runs, and then that
+search decides.
+================
+*/
+func TestAFailedSearchSpeaksOnlyForItsGoal(t *testing.T) {
+	start := Spawn{RegionID: detourRegion, X: 100, Z: 100}
+	p := NewPetFollower(55, start)
+	plans := 0
+	p.SetRoutePlanner(func(from, goal Spawn) []Spawn {
+		plans++
+		if goal.X > 500 {
+			return nil
+		}
+		return []Spawn{from, {RegionID: detourRegion, X: from.X, Z: from.Z + 50}, goal}
+	})
+	// Every straight segment stops one unit after it starts.
+	clip := func(from, to Spawn) (Spawn, *MoveError) {
+		return Spawn{RegionID: from.RegionID, X: from.X + 1, Y: from.Y, Z: from.Z}, nil
+	}
+	p.Approach(Spawn{RegionID: detourRegion, X: 900, Z: 100}, detourSpeed, 100, detourReach, clip)
+	if !p.Reach().Blocked || plans != 1 {
+		t.Fatalf("fixture: goal A was not searched and found blocked (plans %d, %+v)", plans, p.Reach())
+	}
+	p.Displace(start, 150)
+	p.Approach(Spawn{RegionID: detourRegion, X: 900, Z: 100}, detourSpeed, 160, detourReach, clip)
+	p.Approach(Spawn{RegionID: detourRegion, X: 300, Z: 100}, detourSpeed, 200, detourReach, clip)
+	if reach := p.Reach(); reach.Blocked {
+		t.Fatalf("goal B, never searched, was called unreachable from goal A's search: %+v (plans %d)", reach, plans)
+	}
+}

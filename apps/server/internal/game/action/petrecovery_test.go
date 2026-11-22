@@ -261,3 +261,48 @@ func TestRecoveryCountersByRegion(t *testing.T) {
 		t.Fatal("a kind never counted is missing from the block; want it at zero")
 	}
 }
+
+/*
+================
+TestALeftLaneVerdictNeverSpeaksForFollow
+
+opensro-cursor2's probe on #4083: a pickup that gives up on an item near
+its owner (or a fight that yields on a monster near the owner) leaves a
+blocked verdict whose goal stands within the follow distance. Leaving the
+lane is a state change and clears it, so the follow judge does not
+relocate the pet on someone else's verdict.
+================
+*/
+func TestALeftLaneVerdictNeverSpeaksForFollow(t *testing.T) {
+	owner := simulation.Spawn{RegionID: 0x62a8, X: 100, Z: 500}
+	away := simulation.Spawn{RegionID: 0x62a8, X: 300, Z: 500}
+	attackTid := uint16(0x1c6 | attackPetBand<<11)
+	refuse := func(from, _ simulation.Spawn) (simulation.Spawn, *simulation.MoveError) {
+		return from, &simulation.MoveError{Reason: "walled in"}
+	}
+	item := simulation.Spawn{RegionID: 0x62a8, X: 140, Z: 500}
+	for _, leave := range []struct {
+		name string
+		exit func(*petSession)
+	}{
+		{"pickup", func(state *petSession) {
+			state.pickup = &wire.ItemMoveRequest{}
+			finishPendingCosPickup(state, OpResult{})
+		}},
+		{"fight", func(state *petSession) {
+			state.combat = &petCombatIntent{target: 9}
+			(&Runtime{}).cancelPetCombat(petOwnerKey{}, state, 100)
+		}},
+	} {
+		state := &petSession{}
+		state.mover.FollowFrom(77, away)
+		state.mover.AnyFollower().Approach(item, 100, 100, 1, refuse)
+		if !state.mover.AnyFollower().Reach().Blocked {
+			t.Fatalf("%s fixture: the move toward the near goal was not blocked", leave.name)
+		}
+		leave.exit(state)
+		if kind, stuck := (&Runtime{}).petFollowStuck(state, attackTid, owner, 100); stuck {
+			t.Fatalf("after leaving %s, its verdict relocated the pet as %s", leave.name, petRecoveryNames[kind])
+		}
+	}
+}

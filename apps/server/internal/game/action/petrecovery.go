@@ -22,8 +22,8 @@ The rules, one owner for all of them:
   - The owner hears why. A fight the owner ordered (orderPetAttack) that
     ends this way is answered with the client's own refusal for an attack
     command: 0xB69E [2][selector 2][code 16][cosGid], which the client
-    turns into "Cannot attack due to an obstacle." (client 0x74FDD9: selector
-    2 dispatches category 4 at 0x74FDEB; category 4 code 16 is
+    turns into "Cannot attack due to an obstacle." (client 0x74FDD9 dispatches
+    selector 2 as category 4, client 0x74FDEB; category 4 code 16 is
     UIIT_SKILL_USE_FAIL_PATH_INTERRUPTED) and which clears its assist
     target.
   - A watchdog as the last net. A pet that has made no progress toward its
@@ -261,8 +261,9 @@ func (rt *Runtime) petFollowStuck(state *petSession, tid uint16, owner simulatio
 		state.followProgress.reset()
 		return 0, false
 	}
-	// Only a verdict on a follow move counts: its goal stands within the
-	// follow distance of the owner, where a pickup's or a fight's does not.
+	// Only a verdict on a follow move counts: leaving BATTLE or PICKITEM
+	// clears the move's verdict (resetPetStuck -> ResetStuck), and a follow
+	// move's goal stands within the follow distance of the owner.
 	if reach := follower.Reach(); reach.Blocked && simulation.WorldDistance2D(reach.Goal, owner) <= simulation.PetFollowDistance &&
 		simulation.WorldDistance2D(reach.Reached, owner) > simulation.PetFollowDistance {
 		return petRecoveryFollowNoRoute, true

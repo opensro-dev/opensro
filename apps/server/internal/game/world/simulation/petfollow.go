@@ -86,10 +86,33 @@ type petDetour struct {
 	// trail marks a route taken from the owner's trail (trailRoute):
 	// its later points may come into straight reach (skipAhead).
 	trail bool
-	// found is the last search's outcome: a route (planned or trail) was
-	// known. It outlives a refused leg and the retry pause after it, so a
-	// pause between plans never reads as "no way" (noteReach).
-	found bool
+	// searched/found are the last search's outcome for goal: a route
+	// (planned or trail) was known. They outlive a refused leg and the
+	// retry pause after it, so a pause between plans never reads as "no
+	// way"; they speak only for the goal searched (noteReach).
+	searched bool
+	found    bool
+}
+
+/*
+================
+petDetour.failedFor
+
+True when the last search was for goal (within the slack a route serves)
+and found nothing. A goal never searched is unknown, not unreachable.
+================
+*/
+func (d *petDetour) failedFor(goal Spawn) bool {
+	return d.searched && !d.found && WorldDistance2D(d.goal, goal) <= petDetourGoalSlack
+}
+
+/*
+================
+petDetour.noteSearch
+================
+*/
+func (d *petDetour) noteSearch(goal Spawn, found bool) {
+	d.searched, d.found, d.goal = true, found, goal
 }
 
 /*
@@ -373,9 +396,10 @@ func (p *PetFollower) moveTo(goal Spawn, speed float64, nowMs int64, constrain f
 noteReach
 
 Records whether the goal this move asked for can be reached: blocked when
-the straight segment was refused or stopped short of it and the last search
-found no detour (planned route or owner trail) - a pause between searches
-after a refused leg keeps the route it found. The follower only records the
+the straight segment was refused or stopped short of it and the last search,
+for this goal, found no detour (planned route or owner trail). A pause
+between searches after a refused leg keeps the route it found, and a goal
+no search has served yet is unknown, never "no way" (petDetour.failedFor). The follower only records the
 fact; its owners judge it (action petrecovery.go), because "close enough"
 differs between a strike and a follow.
 ================
@@ -384,7 +408,7 @@ func (p *PetFollower) noteReach(from, goal Spawn, straight petClip, detouring bo
 	p.reach = PetReach{
 		Goal:    goal,
 		Reached: straight.reached,
-		Blocked: !detouring && !p.detour.found && (straight.fault != nil || WorldDistance2D(straight.reached, goal) >= petDetourArrived),
+		Blocked: !detouring && p.detour.failedFor(goal) && (straight.fault != nil || WorldDistance2D(straight.reached, goal) >= petDetourArrived),
 	}
 	if straight.fault != nil {
 		p.reach.Reached = from
@@ -418,7 +442,7 @@ plan, or a refused leg (moveTo).
 */
 func (p *PetFollower) detourWaypoint(from, goal Spawn, straight petClip, nowMs int64, constrain func(Spawn, Spawn) (Spawn, *MoveError)) (Spawn, bool) {
 	if p.planRoute == nil && !(p.following && p.ownerTrail) {
-		p.detour.found = false
+		p.detour.noteSearch(goal, false)
 		return Spawn{}, false
 	}
 	route := &p.detour
@@ -449,20 +473,24 @@ func (p *PetFollower) detourWaypoint(from, goal Spawn, straight petClip, nowMs i
 		return Spawn{}, false
 	}
 	if points := p.trailRoute(from, goal, constrain); len(points) > 0 {
-		route.points, route.goal, route.retryAt, route.trail, route.found = points, goal, nowMs+petDetourRetryMs, true, true
+		route.points, route.retryAt, route.trail = points, nowMs+petDetourRetryMs, true
+		route.noteSearch(goal, true)
 		return points[0], true
 	}
 	if p.planRoute == nil {
-		route.retryAt, route.found = nowMs+petDetourRetryMs, false
+		route.retryAt = nowMs + petDetourRetryMs
+		route.noteSearch(goal, false)
 		return Spawn{}, false
 	}
 	route.trail = false
 	points := p.planRoute(from, goal)
 	if len(points) < 2 {
-		route.retryAt, route.found = nowMs+petDetourRetryMs, false
+		route.retryAt = nowMs + petDetourRetryMs
+		route.noteSearch(goal, false)
 		return Spawn{}, false
 	}
-	route.points, route.goal, route.retryAt, route.found = points, goal, nowMs+petDetourRetryMs, true
+	route.points, route.retryAt = points, nowMs+petDetourRetryMs
+	route.noteSearch(goal, true)
 	return points[0], true
 }
 
@@ -629,6 +657,9 @@ the origins stay.
 func (p *PetFollower) ResetStuck() {
 	p.progress.ResetFailures()
 	p.stuck = false
+	// A state change ends the move the reach verdict belongs to: a fight's
+	// or a pickup's verdict never speaks for the follow that comes next.
+	p.reach = PetReach{}
 }
 
 /*
