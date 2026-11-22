@@ -34,25 +34,21 @@ import "encoding/binary"
 // OpPeerTitle is the port-carried S->C peer title push.
 const OpPeerTitle uint16 = 0x3FC3
 
-// maxFormatBytes bounds the format a frame carries; the later client's
-// formats are a few dozen bytes, so a longer one is a bad table row,
-// not a title.
-const maxFormatBytes = 512
-
 /*
 ================
 EncodePeerTitle
 
 One peer title frame body for a spawned player. The caller sends it
 only for a worn title (id non-zero); the format resolves here, empty
-when the table does not carry the id.
+when the table does not carry the id. The u16 length always holds it:
+ParseTitles refuses a format over maxFormatBytes.
 ================
 */
 func EncodePeerTitle(gid, titleID uint32) []byte {
+	// ParseTitles admitted only bounded, valid UTF-8 formats, so the
+	// format goes out whole: cutting it here could split a character,
+	// and the client decodes the bytes strictly.
 	format, _ := FormatFor(titleID)
-	if len(format) > maxFormatBytes {
-		format = format[:maxFormatBytes]
-	}
 	out := binary.LittleEndian.AppendUint32(nil, gid)
 	out = binary.LittleEndian.AppendUint32(out, titleID)
 	out = binary.LittleEndian.AppendUint16(out, uint16(len(format)))

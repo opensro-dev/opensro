@@ -36,10 +36,17 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // titlesFile is the generated table's name in the server textdata root.
 const titlesFile = "titles.txt"
+
+// maxFormatBytes bounds a name-line format. The later client's formats
+// are a few dozen bytes, so a longer one is a bad table row, not a
+// title. The peer title frame carries the format whole, so its bound
+// lives here, where the table is judged.
+const maxFormatBytes = 512
 
 // Title is one row of the later client's RefTitle with its resolved
 // name-line format.
@@ -89,8 +96,8 @@ ParseTitles
 Parses the generated titles.txt: one title per line,
 id <TAB> codename <TAB> category <TAB> format, '#' comments and blank
 lines aside. Strict, because a half-read table would print some names
-titled and some not: a malformed row, a duplicate id or an empty
-format refuses the whole file.
+titled and some not: a malformed row, a duplicate id, or a format that
+is empty, over maxFormatBytes or not UTF-8 refuses the whole file.
 ================
 */
 func ParseTitles(data []byte) (map[uint32]Title, error) {
@@ -114,6 +121,12 @@ func ParseTitles(data []byte) (map[uint32]Title, error) {
 		}
 		if fields[1] == "" || fields[3] == "" {
 			return nil, fmt.Errorf("line %d: empty codename or format", lineNo+1)
+		}
+		// The client decodes the frame's format as strict UTF-8, and a
+		// frame that fails to decode breaks the batch it rides in, so a
+		// row the frame could not carry whole is refused here.
+		if len(fields[3]) > maxFormatBytes || !utf8.ValidString(fields[3]) {
+			return nil, fmt.Errorf("line %d: format is over %d bytes or not UTF-8", lineNo+1, maxFormatBytes)
 		}
 		if _, dup := parsed[uint32(id)]; dup {
 			return nil, fmt.Errorf("line %d: duplicate title id %d", lineNo+1, id)

@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -50,6 +51,8 @@ func TestParseTitlesRefusesMalformedRows(t *testing.T) {
 		"1\tTITLE\t0\t<A> %s\n1\tT2\t0\t<B> %s\n", // duplicate id
 		"1\t\t0\t<A> %s\n",                        // empty codename
 		"1\tTITLE\t0\t\n",                         // empty format
+		"1\tTITLE\t0\t<" + strings.Repeat("x", maxFormatBytes) + "> %s\n", // over the frame's bound
+		"1\tTITLE\t0\t<\xff> %s\n", // not UTF-8
 	} {
 		if _, err := ParseTitles([]byte(body)); err == nil {
 			t.Fatalf("ParseTitles(%q) succeeded, want refusal", body)
