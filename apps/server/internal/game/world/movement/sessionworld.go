@@ -371,9 +371,13 @@ type peerAppearanceCapture struct {
 	visualFlags   uint8
 	jobType       uint8
 	jobGrade      uint8
-	skin          wire.TransformSkin
-	worn          []wornEquipRow
-	avatars       []wornEquipRow
+	// titleID is the worn character title (later-native, #3502); the
+	// title frame after the spawn row carries it, so it is part of the
+	// fingerprint: a changed title re-shows the peer titled.
+	titleID uint32
+	skin    wire.TransformSkin
+	worn    []wornEquipRow
+	avatars []wornEquipRow
 }
 
 /*
@@ -413,6 +417,7 @@ func capturePeerAppearance(character *enterworld.Character, resolvedModelRef uin
 		displayName: character.Name,
 		charID:      character.ID,
 		modelRef:    resolvedModelRef,
+		titleID:     character.TitleID,
 	}
 	if resolvedModelRef == 0 {
 		return captured
@@ -717,7 +722,7 @@ func (f peerAppearanceFingerprint) equal(other peerAppearanceFingerprint) bool {
 		a.hasModel == b.hasModel && a.modelRef == b.modelRef && a.name == b.name &&
 		a.displayName == b.displayName && a.charID == b.charID && a.hasGuild == b.hasGuild &&
 		a.guildID == b.guildID && a.bodyShapeByte == b.bodyShapeByte && a.visualFlags == b.visualFlags &&
-		a.jobType == b.jobType && a.jobGrade == b.jobGrade && a.skin == b.skin &&
+		a.jobType == b.jobType && a.jobGrade == b.jobGrade && a.skin == b.skin && a.titleID == b.titleID &&
 		slices.Equal(a.worn, b.worn) && slices.Equal(a.avatars, b.avatars) &&
 		f.guild == other.guild && f.stallTitle == other.stallTitle && f.stallDecor == other.stallDecor &&
 		f.actionSpeed == other.actionSpeed
@@ -776,6 +781,7 @@ func buildPeerAppearance(half peerGuildHalf, captured peerAppearanceCapture) *si
 		VisualFlags:   captured.visualFlags,
 		JobType:       captured.jobType,
 		JobGrade:      captured.jobGrade,
+		TitleID:       captured.titleID,
 		Skin:          captured.skin,
 	}
 	if captured.hasEvent {

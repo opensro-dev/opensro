@@ -68,6 +68,23 @@ export function titledNameRow( titleWidth: number, nameWidth: number ) {
 
 /*
 ================
+titledDisplayName
+
+The name line's one string for a titled character: the name printed
+through the title's format ("<Big Spender> %s"), the later client's
+BuildDisplayNameWithTitle shape (it formats the name through the
+title record's text, "%s" with no title). No format - no title, or an
+id the server's table does not carry - prints the plain name, and so
+does a format with no %s in it: a bad row can never blank a nameplate.
+================
+*/
+export function titledDisplayName( name: string, format: string | undefined ): string {
+	if ( !format || !name ) return name;
+	return format.includes( "%s" ) ? format.replace( "%s", name ) : name;
+}
+
+/*
+================
 companionOwnerShown
 
 CICCos 855C40 draws the owner board, and lifts the anchor the status gauge
