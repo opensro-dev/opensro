@@ -29,9 +29,9 @@ const { MACRO_ROW_HP, MACRO_ROW_MP, MACRO_ROW_CURE } = codec;
 
 const POTION_REF = 7;
 const OTHER_REF = 8;
-// 0xec: expendable potion band, TID3 1 (HP). 0x16c: same band, TID3 2 (MP).
-const CONSUMABLE_TYPE = 0xec;
-const MP_POTION_TYPE = 0x16c;
+// PackTypeFlags(3,3,1,tid4): HP=1 → 0x8ec, MP=2 → 0x10ec (ITEM_ETC_*_POTION_05).
+const CONSUMABLE_TYPE = 0x8ec;
+const MP_POTION_TYPE = 0x10ec;
 const ITEM_USE_OPCODE = 0x75bd;
 
 /*
@@ -137,6 +137,17 @@ function optionsHud() {
 	hud.click( "sro-macro:options:0", live );
 	return { hud, live };
 }
+
+test("HP/MP rows admit by TID4 (690b70 / 690bf0 high byte), not TID3", () => {
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_HP, 0x8ec ), true, "HP recovery (tid4=1)" );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_MP, 0x10ec ), true, "MP recovery (tid4=2)" );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_HP, 0x10ec ), false, "MP refuses HP row" );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_MP, 0x8ec ), false, "HP refuses MP row" );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_HP, 0x18ec ), true, "universal tid4=3 on HP" );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_MP, 0x18ec ), true, "universal tid4=3 on MP" );
+	// Old wrong mapping: TID3=2 (0x16c) is the pill family, not MP recovery.
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_MP, 0x16c ), false );
+});
 
 test("a consumable dropped on a row binds its item; a click on the slot clears it", () => {
 	const { hud, live } = optionsHud();

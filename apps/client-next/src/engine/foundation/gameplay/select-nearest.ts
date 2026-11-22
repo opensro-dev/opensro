@@ -30,8 +30,9 @@ The nearest living monster inside the reach, or undefined. 861580 tests a
 state bit on each list entry; the port's list holds spawned monsters, and
 the inference recorded here is that the bit excludes the dead, which no
 player could select to any purpose. reach defaults to Auto Select's 70;
-the SRO Macro hunt pass (0068e700) supplies its configured range. The
-caller filters out Dimension pillars when hunt byte 9 is set.
+the SRO Macro hunt pass (0068e700) supplies its configured range in the
+same world units (metres×10). The caller filters Dimension pillars when
+hunt byte 10 is on.
 ================
 */
 export function nearestMonster(

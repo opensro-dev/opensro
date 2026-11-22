@@ -101,12 +101,13 @@ test("default hunt block keeps byte 1 at 1 (006938a0)", () => {
 	assert.deepEqual( codec.defaultMacroSettings().hunt, codec.defaultHuntBlock() );
 });
 
-test("range reach: In place is short; 1..4 are 30/50/70/100 m", () => {
+test("range reach: In place is short; 1..4 are metres*10 world units", () => {
+	// 0068e700 floats: 300/500/700/1000 (10 units per metre).
 	assert.equal( huntRangeReach( HUNT_RANGE_IN_PLACE ), HUNT_IN_PLACE_REACH );
-	assert.equal( huntRangeReach( 1 ), 30 );
-	assert.equal( huntRangeReach( 2 ), 50 );
-	assert.equal( huntRangeReach( 3 ), 70 );
-	assert.equal( huntRangeReach( 4 ), 100 );
+	assert.equal( huntRangeReach( 1 ), 300 );
+	assert.equal( huntRangeReach( 2 ), 500 );
+	assert.equal( huntRangeReach( 3 ), 700 );
+	assert.equal( huntRangeReach( 4 ), 1000 );
 	assert.equal( huntRangeReach( 9 ), 0 );
 });
 

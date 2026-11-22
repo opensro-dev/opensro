@@ -338,6 +338,34 @@ test("an already-applied buff is not re-pressed after a monster is selected", ()
 	g.dispose();
 });
 
+test("a buff is re-pressed after its attached effect ends (Grass Walk)", () => {
+	const { sent, g, local } = macroWorld( { row: true, skillOn: 1, selectMonster: false } );
+	g.receive(
+		{ opcode: 0xb419, payload: Uint8Array.from( [ ...u32le( LOCAL_GID ), ...u32le( BUFF ), ...u32le( 77 ) ] ) },
+		0
+	);
+	sent.length = 0;
+	for ( let t = 0; t <= 2000; t += 100 ) g.step( t, local );
+	assert.equal(
+		sent.filter( frame => frame.opcode === SKILL_PRESS_OPCODE ).length,
+		0,
+		"live buff is not re-pressed"
+	);
+	// 0xb6a0 tears the token down — the macro must cast again (native 00abd630).
+	g.receive( { opcode: 0xb6a0, payload: Uint8Array.from( [ 1, ...u32le( 77 ) ] ) }, 2100 );
+	sent.length = 0;
+	for ( let t = 2200; t <= 5000; t += 100 ) g.step( t, local );
+	const presses = sent.filter( frame => frame.opcode === SKILL_PRESS_OPCODE );
+	assert.ok( presses.length >= 1, "buff re-pressed after expiry" );
+	const view = new DataView(
+		presses[0].payload.buffer,
+		presses[0].payload.byteOffset,
+		presses[0].payload.byteLength
+	);
+	assert.equal( view.getUint32( 2, true ), BUFF );
+	g.dispose();
+});
+
 test("a buff whose attached effect is a sibling skill id is not re-pressed", () => {
 	/** @type {{ opcode: number, payload: Uint8Array }[]} */
 	const sent = [];
@@ -451,40 +479,37 @@ test("macroSkillWantSwap equips the bound bag weapon then the shield", () => {
 	);
 });
 
-test("weaponKinds swaps never propose the Shield bind; a shield in the Weapon slot is ignored", () => {
+test("68ede0 equips weapon or shield from either bind slot (restore after shield buff)", () => {
 	const flags = codec.withMacroGearSlot(
 		codec.withMacroGearSlot( codec.defaultMacroSettings().skillFlags, "weapon", 14 ),
 		"shield",
 		15
 	);
 	assert.deepEqual(
-		loop.macroSkillSwapCandidates(
-			flags,
-			[
-				{ slot: 14, typeFlags: WEAPON_TYPE, refObjId: WEAPON_REF },
-				{ slot: 15, typeFlags: SHIELD_TYPE, refObjId: 99 }
-			],
-			[ "weapon" ]
-		),
-		[ { kind: "inventory-move", source: 14, destination: 6, quantity: 0, activation: true } ]
+		loop.macroSkillSwapCandidates( flags, [
+			{ slot: 14, typeFlags: WEAPON_TYPE, refObjId: WEAPON_REF },
+			{ slot: 15, typeFlags: SHIELD_TYPE, refObjId: 99 }
+		] ),
+		[
+			{ kind: "inventory-move", source: 14, destination: 6, quantity: 0, activation: true },
+			{ kind: "inventory-move", source: 15, destination: 7, quantity: 0, activation: true }
+		]
 	);
+	// After a shield cast the primary often sits in the Shield bind slot.
 	assert.deepEqual(
-		loop.macroSkillSwapCandidates(
-			flags,
-			[ { slot: 15, typeFlags: SHIELD_TYPE, refObjId: 99 } ],
-			[ "weapon" ]
-		),
-		[],
-		"Shield-only bind cannot clear a weaponKinds refusal"
+		loop.macroSkillSwapCandidates( flags, [
+			{ slot: 15, typeFlags: WEAPON_TYPE, refObjId: WEAPON_REF }
+		] ),
+		[ { kind: "inventory-move", source: 15, destination: 6, quantity: 0, activation: true } ],
+		"weapon in the Shield bind is re-equipped (native 68ede0)"
 	);
+	// A shield that landed in the Weapon bind is still shield-class → socket 7.
 	assert.deepEqual(
 		loop.macroSkillSwapCandidates(
 			codec.withMacroGearSlot( codec.defaultMacroSettings().skillFlags, "weapon", 14 ),
-			[ { slot: 14, typeFlags: SHIELD_TYPE, refObjId: 99 } ],
-			[ "weapon", "shield" ]
+			[ { slot: 14, typeFlags: SHIELD_TYPE, refObjId: 99 } ]
 		),
-		[],
-		"a shield that landed in the Weapon bag slot is not a weapon swap"
+		[ { kind: "inventory-move", source: 14, destination: 7, quantity: 0, activation: true } ]
 	);
 });
 

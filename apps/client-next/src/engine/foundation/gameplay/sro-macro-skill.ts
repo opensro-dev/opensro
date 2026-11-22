@@ -185,9 +185,10 @@ export function macroInventoryAfterSwap<T extends { readonly slot: number; }>(
 ================
 MacroSwapKind
 
-Which Auto-Skills gear binds to consider for one refusal. weaponKinds
-refusals (0x300d without reqi) can only be cleared by the Weapon bind;
-a Shield bind must not run or a 2H↔shield loadout oscillates every cast.
+Which Auto-Skills gear-bind slots to look at. 68ede0 equips whatever
+weapon or shield sits in that bag slot (bind kind does not filter the
+item class) — after a shield buff the primary often rests in the Shield
+bind slot and must be wearable again from there.
 ================
 */
 export type MacroSwapKind = MacroGearKind;
@@ -196,11 +197,13 @@ export type MacroSwapKind = MacroGearKind;
 ================
 macroSkillSwapCandidates
 
-Weapon / Shield equip candidates (0068ede0): each flag byte that still
-names a bag slot of the matching class, not already on its socket. The
-Weapon bind only yields socket-6 gear; the Shield bind only socket-7
-(arrows / shields) — a shield that landed in the Weapon bag slot after a
-2H equip must not be treated as a weapon swap.
+Weapon / Shield equip candidates (0068ede0): each named bind bag slot
+whose item is a weapon (68c9d0) or shield/arrow (68c670), not already on
+its socket. Native does not require the item class to match the bind
+label — a 2H that landed in the Shield bind after a shield cast is
+re-equipped from that same slot on the next attack. The worker still
+runs an after-press check so a useless shield equip cannot clear a
+weaponKinds refuse and oscillate.
 ================
 */
 export function macroSkillSwapCandidates(
@@ -209,12 +212,18 @@ export function macroSkillSwapCandidates(
 	kinds: readonly MacroSwapKind[] = [ "weapon", "shield" ]
 ): Extract<GameplayCommand, { kind: "inventory-move"; }>[] {
 	const out: Extract<GameplayCommand, { kind: "inventory-move"; }>[] = [];
+	const seen = new Set<number>();
 	for ( const kind of kinds ) {
 		const index = kind === "weapon" ? MACRO_SKILL_FLAG_WEAPON : MACRO_SKILL_FLAG_SHIELD;
 		const abs = skillFlags[index] ?? 0;
 		if ( abs < MACRO_GEAR_SLOT_MIN || abs >= MACRO_GEAR_SLOT_MAX ) continue;
+		if ( seen.has( abs ) ) continue;
+		seen.add( abs );
 		const item = inventory.find( row => row.slot === abs );
-		if ( !item || !macroGearAdmits( kind, item.typeFlags ) ) continue;
+		// 68ede0: 68c670 (shield socket) or 68c9d0 (weapon socket).
+		if ( !item || (!macroGearAdmits( "weapon", item.typeFlags ) && !macroGearAdmits( "shield", item.typeFlags )) ) {
+			continue;
+		}
 		const destination = equipmentSocket( item.typeFlags );
 		if ( destination !== WEAPON_SOCKET && destination !== SHIELD_SOCKET ) continue;
 		const equipped = inventory.find( row => row.slot === destination );
@@ -230,8 +239,8 @@ export function macroSkillSwapCandidates(
 macroSkillWantSwap
 
 The first candidate from macroSkillSwapCandidates (Weapon then Shield).
-The worker walks the full candidate list with an after-press check so a
-Shield bind is not equipped when only a Weapon swap would clear 0x300d.
+The worker walks the full list with an after-press check so a shield
+equip that would not clear the refuse is skipped.
 ================
 */
 export function macroSkillWantSwap(

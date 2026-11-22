@@ -6808,12 +6808,16 @@ Port-only, not native (#3907): one tick of the SRO Macro's auto-skill
 loop (sro-macro-skill.ts), while the Experimental row is on and the
 server has accepted Auto-Skills ON. The pure picker advances past each
 entry; a cast goes out only when the skill is learned, off cooldown,
-admitted, and (for a buff) not already on the caster. Ground-target and
-basic-attack entries are skipped. On the attack step, a bound Weapon /
-Shield bag item is equipped first (0068ede0) and the loop waits 2000 ms
-instead of casting that tick. A cast arms the loop for the skill's
-action time; a skip leaves the re-arm alone so the next tick can look
-at the next entry.
+not press-refused, and (for a buff) not already on the caster. Attack
+rows with published admit inputs also skip "unknown" (mid-cast /
+replace) so a shield-loadout press cannot print wrong-weapon; buff
+rows still send on unknown so Grass Walk rebuffs while an attack cast
+is running. Ground-target and basic-attack entries are skipped. On
+wrong-weapon, a bound Weapon / Shield bag item is equipped first
+(0068ede0) and the loop waits 2000 ms instead of casting that tick. A
+cast arms the loop for the skill's action time; a skip leaves the
+re-arm alone so the next tick can look at the next entry. After one
+buff-list pass the attack step runs (native 00687520).
 ================
 	*/
 	function checkMacroSkill( now: number, local: EntityState | undefined ) {
@@ -6889,15 +6893,14 @@ at the next entry.
 			),
 			casting: combat.state().casts.some( cast => cast.caster === localGid && cast.cancelledAtMs === undefined )
 		} );
-		// Wrong weapon: try the Weapon / Shield bag binds (0068ede0).
-		// weaponKinds refusals only consider the Weapon bind — equipping a
-		// bound Shield cannot change the primary TID4 and a 2H swap that
-		// kicks the shield into the bag would re-equip it every other cast.
-		// reqi rows may need the Shield bind; each candidate is judged with
-		// an after-press check so a useless bind is skipped, not armed.
+		// Wrong weapon: try both bag binds (0068ede0). Native equips
+		// whichever weapon/shield sits in those slots — after a shield
+		// buff the primary often rests in the Shield bind and must come
+		// back from there. Each candidate is judged with an after-press
+		// check so a useless shield equip cannot clear a weaponKinds
+		// refuse and oscillate.
 		if ( admission.kind === "refuse" && macroSkillSwapHelps( admission.code ) ) {
-			const swapKinds = metadata.admit?.reqi ? [ "weapon" as const, "shield" as const ] : [ "weapon" as const ];
-			for ( const swap of macroSkillSwapCandidates( settings.skillFlags, bag, swapKinds ) ) {
+			for ( const swap of macroSkillSwapCandidates( settings.skillFlags, bag ) ) {
 				const after = pressAdmission( {
 					admit: metadata.admit,
 					needsFooting: metadata.needsFooting,
@@ -6937,7 +6940,14 @@ at the next entry.
 			}
 			return;
 		}
+		// Refuse never casts. Attack with published admit inputs also
+		// skips "unknown" (own cast / undecided replace) so a mid-cast
+		// press cannot land on the shield loadout and print wrong-weapon.
+		// A row with no admit still sends — the hotbar does. Buffs always
+		// send on unknown so Grass Walk rebuffs while an attack cast keeps
+		// decideReplacement at "own cast running".
 		if ( admission.kind === "refuse" ) return;
+		if ( pick.list === "attack" && admission.kind === "unknown" && metadata.admit ) return;
 		if ( pick.list === "attack" && (!targetGid || !target) ) return;
 		const command = pick.list === "attack" && targetGid ?
 			{ kind: "skill" as const, skillId, gid: targetGid } :
