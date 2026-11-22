@@ -738,6 +738,70 @@ test("the rail, sub tabs and cards send the classic window's actions", () => {
 	// The pager steps one page each way; on page one the back arrow is off.
 	assert.equal( button( ops, "item-mall-page:0" ).disabled, true );
 	assert.equal( button( ops, "item-mall-page:1" ).disabled, false );
+	// Two tabs fit the row: it does not scroll.
+	assert.equal( buttons( ops ).some( op => op.id.startsWith( "item-mall-tab-scroll:" ) ), false );
+});
+
+/*
+================
+petState
+
+The v1.150 Pet category's five tabs (refshoptab 2287-2291): one more
+than the row holds.
+================
+*/
+function petState() {
+	return {
+		...state(),
+		tabs: [ "PET_GROWTH", "PET_SILK", "VEHICLE", "CART", "PET_STORES" ].map( ( name, tab ) => ({
+			shop: 2,
+			tab,
+			category: "MALL_PET",
+			label: "SN_TAB_" + name
+		}) )
+	};
+}
+
+test("a category with five tabs scrolls its tab row, so its fifth tab can be chosen (issue #4093)", () => {
+	const mall = renewalMall();
+	mall.browse( 2 );
+	const draw = () => view( mall, { state: petState() } );
+	const tabIds = ops => buttons( ops ).filter( op => op.id.startsWith( "item-mall-tab:" ) ).map( op => op.id );
+	let ops = draw();
+	assert.deepEqual( tabIds( ops ), [ "item-mall-tab:0", "item-mall-tab:1", "item-mall-tab:2" ] );
+	assert.equal( button( ops, "item-mall-tab-scroll:0" ).disabled, true );
+	assert.equal( button( ops, "item-mall-tab-scroll:1" ).disabled, false );
+	// The tabs and both arrows stay on the goods area and never overlap.
+	const row = buttons( ops ).filter( op => op.id.startsWith( "item-mall-tab" ) ).map( op => op.rect );
+	assert.equal( row.length, 5 );
+	for ( const [index, rect] of row.entries() ) {
+		assert.ok( inside( RENEWAL_GOODS_AREA, rect ), "row control " + index );
+		for ( const other of row.slice( index + 1 ) ) {
+			assert.ok( rect[0] + rect[2] <= other[0] || other[0] + other[2] <= rect[0], "row controls overlap" );
+		}
+	}
+	// Each arrow steps one tab; past the last the row stays put.
+	mall.scrollTabs( 1 );
+	assert.deepEqual( tabIds( draw() ), [ "item-mall-tab:1", "item-mall-tab:2", "item-mall-tab:3" ] );
+	mall.scrollTabs( 9 );
+	ops = draw();
+	assert.deepEqual( tabIds( ops ), [ "item-mall-tab:2", "item-mall-tab:3", "item-mall-tab:4" ] );
+	assert.equal( button( ops, "item-mall-tab-scroll:1" ).disabled, false );
+	assert.equal( button( ops, "item-mall-tab-scroll:2" ).disabled, true );
+	assert.deepEqual( button( ops, "item-mall-tab:2" ).rect, renewalSubTabRect( 0 ) );
+	// Choosing a tab keeps the row where it stands.
+	mall.browse( 2, 4 );
+	ops = draw();
+	assert.deepEqual( tabIds( ops ), [ "item-mall-tab:2", "item-mall-tab:3", "item-mall-tab:4" ] );
+	assert.equal( button( ops, "item-mall-tab:4" ).selected, true );
+	// Another category starts its row at its first tab.
+	mall.browse( 0 );
+	mall.browse( 2 );
+	assert.deepEqual( tabIds( draw() ), [ "item-mall-tab:0", "item-mall-tab:1", "item-mall-tab:2" ] );
+	// A malformed scroll is ignored.
+	mall.scrollTabs( -1 );
+	mall.scrollTabs( 1.5 );
+	assert.equal( mall.read( petState() ).tabFirst, 0 );
 });
 
 test("the native text wins and the later strings fill the keys v1.150 lacks", () => {
