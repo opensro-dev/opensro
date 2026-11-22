@@ -256,6 +256,12 @@ var Settings = []Setting{
 	// Port-only, not native: the Christmas event's snow and town
 	// decoration (progression/christmas.go). Off is native.
 	{Env: "SRO_CHRISTMAS_EVENT", NomadVar: "christmas_event", Default: "off"},
+	// Port-only, not native (#3533): the EventBot host for automated
+	// chat events (social/eventbot). Off is native: nobody answers to
+	// the name EventBot and nothing is announced. The schedule file
+	// itself is named by SRO_EVENT_BOT_FILE, an operator path rather
+	// than a shard rule, like the maintenance gate's file.
+	{Env: "SRO_EVENT_BOT", NomadVar: "event_bot", Default: "off"},
 	{Env: "SRO_CHRISTMAS_EVENT_WINDOW", NomadVar: "christmas_event_window", Default: ""},
 	// Port-only, not native: which Christmas event the switch runs,
 	// "winter" (Winter Princess and Knights) or "so_ok_2006" (So-Ok's Christmas Gift,

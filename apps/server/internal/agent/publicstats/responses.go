@@ -354,6 +354,10 @@ const (
 	// ScheduleKindFlagWarSignup is the ten-minute sign-up before a match.
 	ScheduleKindFlagWarSignup = "capture-the-flag-registration"
 	ScheduleKindHalloween     = "halloween"
+	// ScheduleKindEventBot is one scheduled EventBot chat event
+	// (sro-gameworld's event host publishes its data file's rows,
+	// port-only #3533).
+	ScheduleKindEventBot = "event-bot"
 )
 
 // ScheduleEvent is one event the server runs. Kind is one of the

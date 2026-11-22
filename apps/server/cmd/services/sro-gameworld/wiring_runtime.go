@@ -133,6 +133,14 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		}
 		return nil
 	}})
+	// Port-only (#3533): the EventBot host's rounds run on the mission
+	// clock. Off installs no hook and nothing is ever announced.
+	if game.eventBot != nil {
+		hooks = append(hooks, simulation.NamedTickHook{Name: "event-bot", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			game.eventBot.Tick(time.UnixMilli(nowMs))
+			return nil
+		}})
+	}
 	// Port-only (#3529, SRO_CONSIGNMENT): gold a market sale owes a
 	// character reaches it once it is in the world (action market.go).
 	// Off installs no hook.

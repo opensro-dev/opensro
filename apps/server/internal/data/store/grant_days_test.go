@@ -105,6 +105,44 @@ func TestFreeItemGrantsCountPerAccountAndSurviveDeletion(t *testing.T) {
 
 /*
 ================
+TestEventBotRewardCountsTowardTheDailyCap
+
+The EventBot win grant (domain.GrantEventBotReward, #3533) is a free
+grant like the kit: FreeGrantDayCount reads its grants per account
+and UTC day, and no other door moves the count.
+================
+*/
+func TestEventBotRewardCountsTowardTheDailyCap(t *testing.T) {
+	t.Parallel()
+
+	clock := newTestClock()
+	s := openTest(t, t.TempDir(), clock)
+	c := newItemCharacter(t, s, "EventWinner")
+	for range 2 {
+		s.UpdateCharacter(c, domain.GrantEventBotReward, func() bool {
+			c.MissionInventory = append(c.MissionInventory, potionRow(14, 10))
+			return true
+		})
+	}
+	s.UpdateCharacter(c, "quest-reward", func() bool {
+		c.MissionInventory = append(c.MissionInventory, potionRow(15, 10))
+		return true
+	})
+	account := "item-account-EventWinner"
+	nowMs := clock.Now().UnixMilli()
+	if n, err := s.FreeGrantDayCount(account, domain.GrantEventBotReward, nowMs); err != nil || n != 2 {
+		t.Fatalf("FreeGrantDayCount = %d, %v; want 2", n, err)
+	}
+	if n, err := s.FreeGrantDayCount(account, domain.GrantEventBotReward, nowMs+grantDayMs); err != nil || n != 0 {
+		t.Fatalf("next day count = %d, %v; want 0", n, err)
+	}
+	if n, err := s.FreeGrantDayCount("nobody", domain.GrantEventBotReward, nowMs); err != nil || n != 0 {
+		t.Fatalf("unknown account count = %d, %v; want 0", n, err)
+	}
+}
+
+/*
+================
 TestFreeItemGrantWaitsThroughAFailedCommit
 ================
 */

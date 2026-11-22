@@ -33,6 +33,7 @@ import (
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/contributor"
+	"opensro.online/server/internal/game/social/eventbot"
 	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/uniquestatus"
@@ -198,6 +199,10 @@ func publicRules() publicstats.RulesResponse {
 	alchemyMaxPlusNow := fmt.Sprintf("The native +%d reinforcement ceiling applies.", alchemy.NativeReinforceCeiling)
 	if alchemyMaxPlus > 0 {
 		alchemyMaxPlusNow = fmt.Sprintf("Reinforcement stops at +%d.", alchemyMaxPlus)
+	}
+	eventBotNow := "Nobody answers to the name EventBot; no automated chat events run."
+	if eventbot.EnabledFromEnv() {
+		eventBotNow = "EventBot announces the schedule file's chat events, takes entries and answers by whisper, draws each round's winner and pays the file's item prize (audited, capped per account per day)."
 	}
 	return publicstats.RulesResponse{
 		Rules: []publicstats.Rule{
@@ -645,6 +650,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "When a unique dies, the shard is told only who killed it.",
 				Now:    "Everyone who damaged it also sees the twelve players who did the most damage, with each one's share and party place, and their own place.",
 				Why:    "So every attacker sees what their part was. Off by default; the original notice alone is the native setting."},
+			{Flag: eventbot.EnvEventBot, On: eventbot.EnabledFromEnv(),
+				Native: "Nobody answers to the name EventBot; the original runs no automated chat events.",
+				Now:    eventBotNow,
+				Why:    "Automated chat events from the shard's schedule file, with drawn winners and audited item prizes. Off by default; the original silence is the native setting."},
 			{Flag: movement.EnvCaveSeamStep, On: movement.CaveSeamStepFromEnv(),
 				Native: "A monster chasing you through a cave can get stuck pacing at a few doorways.",
 				Now:    "It steps through those doorways and keeps following.",

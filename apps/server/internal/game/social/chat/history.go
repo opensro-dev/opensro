@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/social/chatreport"
@@ -96,6 +97,12 @@ type Runtime struct {
 	// port-only, not native, #3358): the answer line and true when the
 	// line was the command; nil leaves "/contributor" ordinary text.
 	Contributor func(accountID, message string) (answer string, handled bool)
+	// EventBotWhisper is the EventBot host's intake (social/eventbot,
+	// port-only, not native, #3533): the host is asked about every
+	// whisper and claims the ones addressed to it (handled), answering
+	// with the bot's reply lines. Nil is never asked: a whisper to the
+	// bot's name is the native cannot-find-target refusal.
+	EventBotWhisper func(divisionID string, sender *enterworld.Character, target, text string) (replies []string, handled bool)
 }
 
 /*
