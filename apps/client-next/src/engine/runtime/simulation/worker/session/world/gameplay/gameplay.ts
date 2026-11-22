@@ -6852,7 +6852,8 @@ buff-list pass the attack step runs (native 00687520).
 		if ( local.mountedOn || local.movementMode === MOVEMENT_SEATED ) return;
 		// Buff list: skip when the caster already holds this buff
 		// (00686bc0 → 00abd630). Exact id, skilldata group, or replace
-		// group — a live shield must not be re-pressed every pass.
+		// group — a live shield must not be re-pressed every pass. An
+		// exhausted UI timer no longer counts (Grass Walk rebuff).
 		if ( pick.list === "buff" ) {
 			const mine = combat.state().attachedEffects.filter( effect => effect.gid === localGid );
 			if (
@@ -6867,7 +6868,8 @@ buff-list pass the attack step runs (native 00687520).
 						id: row.id,
 						group: row.group,
 						...(row.admit?.replace ? { replace: row.admit.replace } : {})
-					}) )
+					}) ),
+					now
 				)
 			) {
 				return;

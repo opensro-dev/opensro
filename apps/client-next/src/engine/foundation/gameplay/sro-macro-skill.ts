@@ -300,6 +300,38 @@ export interface MacroBuffSkill {
 
 /*
 ================
+MacroBuffEffect
+
+An attached effect the already-on gate can see. remainingMs / receivedAtMs
+are the authored UI timer (effectRemainingMs); an exhausted timer is
+treated as absent so Grass Walk rebuffs when its bar hits 0, even before
+0xb6a0 retires the row (attached-effects keeps the instance until the
+server teardown — that is authority for presentation, not for this gate).
+================
+*/
+export interface MacroBuffEffect {
+	readonly skill: number;
+	readonly remainingMs?: number;
+	readonly receivedAtMs?: number;
+}
+
+/*
+================
+macroBuffEffectLive
+
+True while the effect still counts for the buff step's already-on gate.
+Mirrors effectRemainingMs: no authored timer stays live; a timer at 0
+does not.
+================
+*/
+function macroBuffEffectLive( effect: MacroBuffEffect, nowMs: number ): boolean {
+	if ( effect.remainingMs === undefined ) return true;
+	const elapsed = Math.max( 0, nowMs - (effect.receivedAtMs ?? nowMs) );
+	return effect.remainingMs - elapsed > 0;
+}
+
+/*
+================
 macroBuffAlreadyOn
 
 The buff step's "already applied" gate (00686bc0 → 00abd630): skip when
@@ -307,16 +339,21 @@ the caster already holds this buff. Exact skill id matches the native
 list walk; the port also treats the same skilldata group or the same
 SkillUiReplace group as present, so a live shield (or any self-buff)
 whose attached effect id is a sibling rank is not re-cast every pass.
+An authored duration that has reached 0 no longer counts — players see
+that as finished (Grass Walk), and waiting only on 0xb6a0 left the macro
+idle for the whole gap between the UI timer and the teardown.
 ================
 */
 export function macroBuffAlreadyOn(
 	skill: MacroBuffSkill,
-	effects: readonly { readonly skill: number; }[],
-	catalog: readonly MacroBuffSkill[]
+	effects: readonly MacroBuffEffect[],
+	catalog: readonly MacroBuffSkill[],
+	nowMs = 0
 ): boolean {
-	if ( effects.some( effect => effect.skill === skill.id ) ) return true;
+	const live = effects.filter( effect => macroBuffEffectLive( effect, nowMs ) );
+	if ( live.some( effect => effect.skill === skill.id ) ) return true;
 	if (
-		skill.group && effects.some( effect => {
+		skill.group && live.some( effect => {
 			const row = catalog.find( entry => entry.id === effect.skill );
 			return !!row && row.group === skill.group;
 		} )
@@ -325,7 +362,7 @@ export function macroBuffAlreadyOn(
 	}
 	const replace = skill.replace;
 	if ( !replace || replace.cbuf ) return false;
-	return effects.some( effect => {
+	return live.some( effect => {
 		const old = catalog.find( entry => entry.id === effect.skill )?.replace;
 		return !!old && !old.cbuf && old.category === replace.category && old.group === replace.group;
 	} );

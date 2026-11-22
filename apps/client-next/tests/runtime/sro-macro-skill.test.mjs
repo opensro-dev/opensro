@@ -113,6 +113,7 @@ function skillRef( id, over = {} ) {
 		level: 1,
 		status: false,
 		effectRider: false,
+		...(over.effectDurationMs !== undefined ? { effectDurationMs: over.effectDurationMs } : {}),
 		ui: {
 			name: `SKILL_${id}`,
 			trainable: true,
@@ -319,6 +320,26 @@ test("macroBuffAlreadyOn matches exact id, skill group, and replace group", () =
 		"same SkillUiReplace group across different skill ids"
 	);
 	assert.equal( loop.macroBuffAlreadyOn( catalog[0], [], catalog ), false );
+	assert.equal(
+		loop.macroBuffAlreadyOn(
+			catalog[0],
+			[ { skill: BUFF, remainingMs: 1000, receivedAtMs: 0 } ],
+			catalog,
+			1000
+		),
+		false,
+		"exhausted UI timer is not already-on"
+	);
+	assert.equal(
+		loop.macroBuffAlreadyOn(
+			catalog[0],
+			[ { skill: BUFF, remainingMs: 1000, receivedAtMs: 0 } ],
+			catalog,
+			999
+		),
+		true,
+		"timer still running counts as on"
+	);
 });
 
 test("an already-applied buff is not re-pressed after a monster is selected", () => {
@@ -357,6 +378,71 @@ test("a buff is re-pressed after its attached effect ends (Grass Walk)", () => {
 	for ( let t = 2200; t <= 5000; t += 100 ) g.step( t, local );
 	const presses = sent.filter( frame => frame.opcode === SKILL_PRESS_OPCODE );
 	assert.ok( presses.length >= 1, "buff re-pressed after expiry" );
+	const view = new DataView(
+		presses[0].payload.buffer,
+		presses[0].payload.byteOffset,
+		presses[0].payload.byteLength
+	);
+	assert.equal( view.getUint32( 2, true ), BUFF );
+	g.dispose();
+});
+
+test("a buff is re-pressed when its UI timer hits 0 before 0xb6a0 (Grass Walk)", () => {
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const entities = new Map();
+	const local = {
+		gid: LOCAL_GID,
+		refObjId: 1907,
+		kind: /** @type {const} */ ("local-player"),
+		name: "macro",
+		countryByte9c: 0,
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	entities.set( LOCAL_GID, local );
+	const g = createGameplay( f => sent.push( f ), () => {}, () => {}, gid => entities.get( gid ) );
+	g.bootstrap( {
+		character: {
+			hp: 100,
+			mp: 100,
+			maxHp: 100,
+			maxMp: 100,
+			skills: [ BUFF, ATTACK ],
+			autoPotion: { hp: 0x3211, mp: 0x3212, cure: 0x13, timing: 0x8a }
+		},
+		refSkillSnapshot: [
+			skillRef( BUFF, { actionMs: 100, effectDurationMs: 1500 } ),
+			skillRef( ATTACK, { targetRequired: true, actionMs: 100 } )
+		]
+	} );
+	g.worldReady();
+	g.seed( local );
+	g.experimental( experimentalGameplay( experimentalOptions( { sroMacro: true } ) ) );
+	g.receive(
+		macroReplay( { skillOn: 1, buff: [ { slot: 0, skill: BUFF } ], attack: [] } ),
+		0
+	);
+	g.receive(
+		{ opcode: 0xb419, payload: Uint8Array.from( [ ...u32le( LOCAL_GID ), ...u32le( BUFF ), ...u32le( 77 ) ] ) },
+		0
+	);
+	sent.length = 0;
+	for ( let t = 0; t <= 1400; t += 100 ) g.step( t, local );
+	assert.equal(
+		sent.filter( frame => frame.opcode === SKILL_PRESS_OPCODE ).length,
+		0,
+		"timer still running"
+	);
+	// Authoritative instance is still held (no 0xb6a0); the UI timer is done.
+	sent.length = 0;
+	for ( let t = 1500; t <= 4000; t += 100 ) g.step( t, local );
+	const presses = sent.filter( frame => frame.opcode === SKILL_PRESS_OPCODE );
+	assert.ok( presses.length >= 1, "rebuff at exhausted UI timer" );
 	const view = new DataView(
 		presses[0].payload.buffer,
 		presses[0].payload.byteOffset,
