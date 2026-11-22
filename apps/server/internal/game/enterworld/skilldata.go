@@ -420,6 +420,20 @@ activities (imbues, speed skills) run beside the walk.
 ==================
 */
 func (r SkillRow) HaltsWalk() bool {
+	return r.QueuedActivity()
+}
+
+/*
+==================
+QueuedActivity
+
+Whether the row is an ordinary queued cast (activity 2). The server's
+skill-cast command (CGCharAutoCommandActor_Handler_SkillCast, v1.188
+@0x004ae6e6) starts only these; any other activity - 0 on every passive -
+is consumed there with no frame (@0x004ae9dc returns 1).
+==================
+*/
+func (r SkillRow) QueuedActivity() bool {
 	return r.ActionKind == skillActivityQueued
 }
 

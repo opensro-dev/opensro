@@ -28,6 +28,13 @@ func (rt *Runtime) resolveOffensiveSkill(c *enterworld.Character, id uint32) (en
 	}
 	skill, known := rt.deps.SkillData().SkillByID(id)
 	sequence, immediate := enterworld.OffensiveSequence(rt.deps.SkillData(), id)
+	if known && !offensiveShapeAdmitted(skill, immediate) && !skill.QueuedActivity() {
+		// A passive (activity 0) or other non-queued row with no owner of
+		// its own: natively the command is consumed with no frame
+		// (v1.188 @0x004ae9dc). Only a bot presses one (#4152); it must
+		// not read "not implemented".
+		return enterworld.SkillRow{}, combat.Loadout{}, "offensive-not-queued"
+	}
 	if !known || !offensiveShapeAdmitted(skill, immediate) {
 		return enterworld.SkillRow{}, combat.Loadout{}, "offensive-shape-unsupported"
 	}
@@ -115,11 +122,14 @@ func (rt *Runtime) beginOffensiveSkill(division string, c, snapshot *enterworld.
 offensiveAdmissionRefusal
 
 Keep unsupported-program diagnostics distinct from native gameplay refusals.
+A non-queued row (a passive) is the native silent consume, not a gap.
 ================
 */
 func (rt *Runtime) offensiveAdmissionRefusal(reason string) OpResult {
 	var result OpResult
 	switch reason {
+	case "offensive-not-queued":
+		// Consumed with no frame, as the original does.
 	case "offensive-shape-unsupported":
 		notice := wire.NotificationFrame("This skill is not implemented yet.")
 		result.Frames, result.ActorPrivate = []wire.Frame{notice}, []wire.Frame{notice}
