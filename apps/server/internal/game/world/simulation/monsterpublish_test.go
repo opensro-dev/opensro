@@ -24,9 +24,9 @@ import (
 TestMonsterFramesForViewerHoldsRideStatesToRiderHolders
 
 #4112's exact sequence: a slain mounted pet's death batch carries the
-owner's dismount (the incident payload 01ca8a0100002a04c000: rider
-0x00018aca, flag 0, mount 0x00c0042a) to every viewer of the monster
-that dealt the blow. A viewer that was never sent the rider must not
+owner's dismount (the client incident payload 01ca8a0100002a04c000:
+client ids rider 0x00018aca, flag 0, mount 0x00c0042a) to every viewer
+of the monster that dealt the blow. A viewer that was never sent the rider must not
 take the ride state; a viewer holding the rider, and the rider's own
 session, take the whole batch in order.
 ================
