@@ -55,7 +55,9 @@ export const MARKET_QUERY_LIMIT = 64;
 // above any gold a character carries; the server judges the real bound.
 export const MARKET_PRICE_DIGITS = 12;
 const MARKET_MAX_PRICE = 999_999_999_999;
-// The rows of one list on the account page (game/market historyLimit).
+// The rows of one list on the account page: the wire's one row limit,
+// owned server-side (game/market WireRowLimit, the same number; the
+// two are pinned together by the row-limit tests on both sides, #4111).
 const MARKET_ROW_LIMIT = 50;
 // The account page previews its listings and both offer lists in one
 // reference frame, so an item's preview slot runs up to three lists
@@ -550,7 +552,7 @@ export function createMarket( preview: ( row: CommercePreview ) => InventoryItem
 		events = [ ...events, ...decoded ].slice( -MARKET_EVENT_LIMIT );
 	};
 
-	return {
+	const machine = {
 		/*
 		================
 		request
@@ -660,6 +662,35 @@ export function createMarket( preview: ( row: CommercePreview ) => InventoryItem
 		},
 		/*
 		================
+		receiveContained
+
+		The lane as the session runs it. This lane is port-only (op 20,
+		JSON, versioned), so a malformed answer can only be a version
+		skew or a server bug, never a desync of the world: it costs the
+		window its request in flight and tells it the market is closed,
+		exactly what the timeout path already settles for, and the
+		session plays on (#4111: an over-limit "mine" answer used to end
+		it). The native client likewise lets an opcode with no handler
+		end at its dispatcher - CPSMission_OnPacket (0x729C70) forwards
+		to the table dispatch (0x690BD0), which returns 0 for a miss at
+		0x690C02 and returns to the pump; nothing tears the session down
+		over content its handlers did not claim. receive stays strict
+		above, so the wire's shape is still pinned by the tests.
+		================
+		*/
+		receiveContained( payload: Uint8Array ) {
+			try {
+				machine.receive( payload );
+			} catch {
+				const op = pending ?? "search";
+				const to = pendingTo;
+				pending = null;
+				pendingTo = "";
+				notice = { op, ok: false, code: "unavailable", to, sequence: ++sequence };
+			}
+		},
+		/*
+		================
 		expire
 
 		A request the server never answered frees the window.
@@ -692,6 +723,7 @@ export function createMarket( preview: ( row: CommercePreview ) => InventoryItem
 			return { categories, browse, mine, pending, notice, events };
 		}
 	};
+	return machine;
 }
 
 /*

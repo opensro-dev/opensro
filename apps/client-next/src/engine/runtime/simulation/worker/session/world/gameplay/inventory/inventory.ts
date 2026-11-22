@@ -1954,7 +1954,12 @@ receive
 				return true;
 			}
 			if ( op === MARKET_CONTROL ) {
-				market.receive( p );
+				// The market lane is port-only and self-delimiting (JSON,
+				// versioned): a malformed answer fails its window, never
+				// the session (#4111). Every native lane below keeps the
+				// session-fatal rule - a bad native packet means the
+				// world stream itself is desynced.
+				market.receiveContained( p );
 				return true;
 			}
 			// After a timeout the inventory waits for the bootstrap that

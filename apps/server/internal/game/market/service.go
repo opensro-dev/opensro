@@ -52,6 +52,26 @@ const historyLimit = 50
 
 /*
 ================
+WireRowLimit
+
+The one owner of the wire's row limit: the most rows any one list of
+the game's account answer (the "mine" answer) may carry. The window's
+decoder refuses a longer list outright (apps/client-next
+foundation/gameplay/market.ts MARKET_ROW_LIMIT, the same number), and
+#4111 was an account whose open-plus-finished listings passed it: the
+market could never open again, and the decode error ended the whole
+session. GameAccount bounds every list it hands the game to this
+limit, active rows first, then the newest history; Account (the
+website page) is not bounded by it. The two numbers are pinned
+together: TestGameAccountBoundsMineRowsToTheWireLimit here and the
+row-limit test in the client's market suite each fail if their side's
+number moves alone.
+================
+*/
+const WireRowLimit = 50
+
+/*
+================
 ItemInfo
 
 What the market shows of an item reference.
@@ -296,7 +316,49 @@ func (s *Service) GameAccount(c *domain.Character) (publicstats.OwnMarketRespons
 	out.Purchases = kept(out.Purchases, func(v publicstats.MarketSaleView) bool { return heldBy(v.BuyerChar, c) })
 	out.OffersIn = kept(out.OffersIn, func(v publicstats.MarketOfferView) bool { return heldBy(v.SellerChar, c) })
 	out.OffersOut = kept(out.OffersOut, func(v publicstats.MarketOfferView) bool { return heldBy(v.BuyerChar, c) })
+	out.Listings = boundWireRows(out.Listings, func(v publicstats.MarketListingView) bool {
+		return v.State == domain.MarketOpen || v.State == domain.MarketHeld
+	})
+	out.Purchases = boundWireRows(out.Purchases, func(publicstats.MarketSaleView) bool { return false })
+	out.OffersIn = boundWireRows(out.OffersIn, func(v publicstats.MarketOfferView) bool {
+		return v.State == domain.MarketOpen
+	})
+	out.OffersOut = boundWireRows(out.OffersOut, func(v publicstats.MarketOfferView) bool {
+		return v.State == domain.MarketOpen
+	})
 	return out, nil
+}
+
+/*
+================
+boundWireRows
+
+One list of the mine answer under the wire limit: the active rows
+first, then the history, each side in the order it arrived (the
+store's newest first), at most WireRowLimit rows. An ordinary page
+keeps every row it had; only an account whose rows pass the limit
+loses the oldest history.
+================
+*/
+func boundWireRows[T any](rows []T, active func(T) bool) []T {
+	out := make([]T, 0, min(len(rows), WireRowLimit))
+	for _, row := range rows {
+		if len(out) == WireRowLimit {
+			return out
+		}
+		if active(row) {
+			out = append(out, row)
+		}
+	}
+	for _, row := range rows {
+		if len(out) == WireRowLimit {
+			return out
+		}
+		if !active(row) {
+			out = append(out, row)
+		}
+	}
+	return out
 }
 
 /*

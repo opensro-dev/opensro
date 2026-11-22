@@ -6,6 +6,7 @@ answers, named and anonymous sellers, offers, destinations and events.
 */
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
+import { readFile } from "node:fs/promises";
 import { defined } from "../helpers/defined.mjs";
 import assert from "node:assert/strict";
 const { createGameplay } = await import(
@@ -136,6 +137,91 @@ test("the account page reads sellers, both offer lists and the offer cap", () =>
 	assert.equal( mine.rules.offerCap, 20 );
 	assert.equal( market.state().pending, null );
 	assert.equal( market.state().notice, null );
+});
+
+test("the largest mine answer the server can send decodes whole, and one row more refuses", async () => {
+	// The wire's row limit has one owner (game/market WireRowLimit);
+	// reading its number here pins the two sides together: a change to
+	// either side's limit fails this test (#4111).
+	const service = await readFile(
+		new URL( "../../../server/internal/game/market/service.go", import.meta.url ),
+		"utf8"
+	);
+	const limit = Number( /const WireRowLimit = (\d+)/.exec( service )?.[1] );
+	assert.ok( limit > 0, "WireRowLimit not found in game/market/service.go" );
+	const rows = Array.from( { length: limit }, ( _, i ) => row( i + 1 ) );
+	const offers = Array.from( { length: limit }, ( _, i ) => offer( i + 1, i ) );
+	const purchase = i => ({
+		listingId: i + 1,
+		currency: "silk",
+		price: 50,
+		fee: 0,
+		atMs: 4,
+		to: "bag",
+		slot: 21,
+		item: "Bow"
+	});
+	const mine = listings => ({
+		version: 2,
+		op: "mine",
+		ok: true,
+		mine: {
+			listings,
+			offersIn: offers,
+			offersOut: offers,
+			purchases: Array.from( { length: limit }, ( _, i ) => purchase( i ) ),
+			silk: 9,
+			warehouseGold: 0,
+			rules
+		}
+	});
+	const market = createMarket( preview );
+	market.request( { op: "mine" }, 0 );
+	market.receive( encode( mine( rows ) ) );
+	const page = defined( market.state().mine );
+	assert.equal( page.listings.length, limit );
+	assert.equal( page.offersIn.length, limit );
+	assert.equal( page.offersOut.length, limit );
+	assert.equal( page.purchases.length, limit );
+	assert.throws( () => market.receive( encode( mine( [ ...rows, row( limit + 1 ) ] ) ) ), /Invalid market rows/ );
+});
+
+test("a malformed answer costs the window its request, never the session", () => {
+	const market = createMarket( preview );
+	market.request( { op: "mine" }, 0 );
+	market.receiveContained( encode( {
+		version: 2,
+		op: "mine",
+		ok: true,
+		mine: {
+			listings: Array.from( { length: 51 }, ( _, i ) => row( i + 1 ) ),
+			offersIn: [],
+			offersOut: [],
+			purchases: [],
+			silk: 0,
+			warehouseGold: 0,
+			rules
+		}
+	} ) );
+	assert.equal( market.state().pending, null );
+	assert.equal( market.state().mine, null );
+	assert.equal( defined( market.state().notice ).code, "unavailable" );
+	assert.equal(
+		marketNoticeText( defined( market.state().notice ) ),
+		"The consignment market is closed right now."
+	);
+	// Garbage bytes are contained the same way, and the lane still works.
+	market.request( { op: "search", page: 1 }, 10 );
+	market.receiveContained( new Uint8Array( [ 0xff, 0xfe ] ) );
+	assert.equal( market.state().pending, null );
+	market.request( { op: "mine" }, 20 );
+	market.receiveContained( encode( {
+		version: 2,
+		op: "mine",
+		ok: true,
+		mine: { listings: [ row( 1 ) ], offersIn: [], offersOut: [], purchases: [], silk: 3, warehouseGold: 0, rules }
+	} ) );
+	assert.equal( defined( market.state().mine ).listings.length, 1 );
 });
 
 test("an anonymous listing has no seller, and a malformed answer changes nothing", () => {
