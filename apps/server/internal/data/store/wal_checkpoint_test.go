@@ -520,12 +520,18 @@ with writers locked out. With it the log restarts under the writer,
 the file stays near journal_size_limit, and no reset runs.
 
 The verdict is driven by checkpoint results, not by how fast this
-box happens to chase (#3231): the writer may lead the completed
-cycles by one cycle of commits and no more, so the bytes written
-between two restarts are bounded whatever the machine's speed, and
-the cycles keep coming until the restarts land - maxCycles bounds a
-chase that truly never restarts, which is the failure this test
-exists for. Machine load stretches the soak; it cannot flip it.
+box happens to chase (#3231, #4076). A pass costs about as long as
+the writer's interval on an ordinary disk (its fsync), so a writer
+free to commit through the whole cycle meets every pass with a new
+commit, and the chase is caught only when scheduling happens to
+stall the writer: the log then grew past 38 MB on one box and stayed
+at 16 MB on the next. The writer may therefore finish at most
+leadCommits commits while a cycle runs, two fewer than the pass cap:
+of the cycle's pass gaps one at least sees no commit, so a working
+chase is level with the writer in every cycle whatever the machine's
+speed, and the log restarts at the writer's next commit. maxCycles
+bounds a chase that truly never restarts, which is the failure this
+test exists for. Machine load stretches the soak; it cannot flip it.
 ================
 */
 func TestWALStaysShortBesideASteadyWriter(t *testing.T) {
@@ -536,6 +542,11 @@ func TestWALStaysShortBesideASteadyWriter(t *testing.T) {
 		rowsPerCommit   = 20
 		commitEvery     = 20 * time.Millisecond
 		commitsPerCycle = 16
+		// leadCommits is how many commits the writer may finish while
+		// a cycle runs: fewer than the cycle's pass gaps
+		// (walCheckpointPassesPerCycle - 1), so one gap stays free of
+		// commits and a working chase catches the writer (#4076).
+		leadCommits = walCheckpointPassesPerCycle - 2
 		// Bounds a wedged writer only: 16 commits take about a third
 		// of a second on a quiet box.
 		cycleWait = 30 * time.Second
@@ -583,12 +594,12 @@ func TestWALStaysShortBesideASteadyWriter(t *testing.T) {
 	// says it stopped early, so a cycle never waits out a dead writer.
 	var commits atomic.Int64
 	var writerEnded atomic.Bool
-	// allowance caps the writer's finished commits: it may run one
-	// cycle of commits ahead of the cycles the test has completed,
-	// and no further, so a slow chase cannot let the log outgrow the
-	// bound between restarts however busy the box is (#3231).
+	// allowance caps the writer's finished commits: it may run
+	// leadCommits past the commits the next cycle waits for, and no
+	// further, so neither a slow chase nor a fast writer decides
+	// whether the log restarts (#3231, #4076).
 	var allowance atomic.Int64
-	allowance.Store(2 * commitsPerCycle)
+	allowance.Store(commitsPerCycle + leadCommits)
 	// worstCommit is the writer's slowest begin-to-commit, in
 	// nanoseconds: reported, never asserted (a busy box may spike it;
 	// the absence of resets is the property this test holds).
@@ -638,8 +649,8 @@ func TestWALStaysShortBesideASteadyWriter(t *testing.T) {
 	var peak int64
 	cycles := 0
 	for cycles < maxCycles {
-		allowance.Store(int64(cycles+2) * commitsPerCycle)
 		target := int64(cycles+1) * commitsPerCycle
+		allowance.Store(target + leadCommits)
 		wait.Eventually(t, cycleWait, "the writer's next commits before a cycle", func() bool {
 			return commits.Load() >= target || writerEnded.Load()
 		})
