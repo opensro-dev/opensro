@@ -420,6 +420,11 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 	tokenFrames, tokenOthers := rt.payNasrunTokensInsideDoor(division, actor, roster, impact, died, arena != nil, now)
 	out.actorFrames = append(out.actorFrames, tokenFrames...)
 	out.others = append(out.others, tokenOthers...)
+	// Port-only, not native (nasrun_drops.go): the Devil's Spirit lucky
+	// drops, rolled for the same contributors as the tokens.
+	dropFrames, dropOthers := rt.payNasrunLuckyDropsInsideDoor(division, actor, roster, impact, died, arena != nil, now)
+	out.actorFrames = append(out.actorFrames, dropFrames...)
+	out.others = append(out.others, dropOthers...)
 	groups := monsterRewardGroups(impact.Contributions, roster.actors)
 	var winner uint32
 	var best uint32
