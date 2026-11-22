@@ -275,6 +275,17 @@ export function createWorldMapHud( options: MapHudOptions ) {
 		},
 		/*
 		================
+		guideWaypoint
+
+		The guide pick's point for the minimap (port-only, #3394),
+		delegated from the guide's tool state; see hud/map-tools.ts.
+		================
+		*/
+		guideWaypoint(): Pose | null {
+			return mapTools.guideWaypoint();
+		},
+		/*
+		================
 		restorePosition
 		================
 		*/

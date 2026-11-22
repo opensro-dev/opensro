@@ -226,6 +226,11 @@ export function createMapToolsHud( options: {
 	// picked dungeon row asks for until the cave catalogue resolves it.
 	let guideOpen: number | null = null;
 	let guidePicked: number | null = null;
+	// The picked monster's point for the minimap (port-only, #3394):
+	// the pose its guide pick centres on, or null once another row is
+	// picked or the pick has no world point (a dungeon floor, a page
+	// point). The minimap reads it only while its Experimental row is on.
+	let waypoint: Pose | null = null;
 	// The Field tab's picked place: its lamp lights as a monster's does
 	// (the tree slot's selected face, CNIFTreeViewSlot).
 	let guideAreaPicked: number | null = null;
@@ -456,14 +461,20 @@ export function createMapToolsHud( options: {
 		if ( !catalog || !Number.isInteger( index ) ) return null;
 		if ( prefix === GUIDE_MAIN ) {
 			guideOpen = guideOpen === index ? null : index;
+			waypoint = null;
 			return null;
 		}
 		if ( prefix === GUIDE_MONSTER ) {
 			guidePicked = index;
 			mark = null;
-			return guideTarget( guideMonsterTarget( catalog, index ) );
+			// The pose the pick centres on is the waypoint's point; a
+			// pick with none (a dungeon floor, a page point) leaves
+			// the minimap without one.
+			waypoint = guideTarget( guideMonsterTarget( catalog, index ) );
+			return waypoint;
 		}
 		guideAreaPicked = index;
+		waypoint = null;
 		return guideTarget( guideAreaTarget( catalog, index ) );
 	}
 
@@ -546,6 +557,19 @@ export function createMapToolsHud( options: {
 			const guide = catalogues.guide();
 			if ( guide.kind !== "ready" || guidePicked === null ) return null;
 			return { catalog: guide.catalog, index: guidePicked };
+		},
+		/*
+		================
+		guideWaypoint
+
+		The guide pick's point for the minimap (port-only, #3394):
+		the pose the last monster pick centred on, or null when a
+		later row replaced it or the pick had no world point. The
+		minimap draws it only while its Experimental row is on.
+		================
+		*/
+		guideWaypoint(): Pose | null {
+			return waypoint;
 		},
 		/*
 		================
@@ -744,6 +768,7 @@ export function createMapToolsHud( options: {
 						};
 						mark = { regionId: pose.regionId, x: pose.x, z: pose.z, refObjId };
 						guidePicked = null;
+						waypoint = null;
 						return pose;
 					}
 				}

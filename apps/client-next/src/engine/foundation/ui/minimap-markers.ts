@@ -260,3 +260,33 @@ export function minimapHunting(
 	}
 	return result;
 }
+
+/*
+================
+minimapWaypoint
+
+Port-only, not native (#3394): the M map guide's picked hunting ground
+as one minimap marker - the hunting point's ring while the point is on
+the radar, the quest edge arrow clamped to the ring while it is off
+it. Callers gate the Experimental row and the floor; this only
+projects the point.
+================
+*/
+export function minimapWaypoint(
+	local: Pose,
+	waypoint: Pick<Pose, "regionId" | "x" | "z">,
+	zoom: number
+): MinimapMarker | null {
+	const offset = minimapOffset( local, waypoint, zoom );
+	if ( !offset ) return null;
+	if ( Math.hypot( ...offset ) < 47 ) {
+		return {
+			x: offset[0],
+			y: offset[1],
+			size: 16,
+			rotation: 0,
+			path: "/assets/images/Media_extracted/interface/worldmap/wmap_sign_huntingpoint.png"
+		};
+	}
+	return minimapEdge( offset, "quest" );
+}
