@@ -131,15 +131,25 @@ test("a +7 success centres too, and every failure keeps the native plate", () =>
 	seven.step( [ notice( SUCCESS.replace( "[+9]", "[+7]" ) ) ], 0, true );
 	assert.equal( seven.centreSuccess(), true );
 	assert.equal( noticeBannerRow( seven ).centred, true );
-	for (
-		const [text, flags] of [
-			[ FAILED, {} ],
-			[ FAILED, { dropPlus: undefined, itemBreak: true } ]
-		]
-	) {
+	// A failure on the drop/plus bucket, and one on the break channel:
+	// neither ever centres.
+	/** @type {import("../../src/engine/foundation/gameplay/system-notices.ts").SystemNotice[]} */
+	const failures = [
+		notice( FAILED ),
+		{
+			key: "",
+			text: FAILED,
+			value: 0,
+			notificationBanner: true,
+			bannerOnly: true,
+			itemBreak: true,
+			sequence: 1
+		}
+	];
+	for ( const failure of failures ) {
 		const banner = createNoticeBanner( "notificationBanner" );
-		banner.step( [ { ...notice( text ), ...flags } ], 0, true );
-		assert.equal( banner.centreSuccess(), false, text );
+		banner.step( [ failure ], 0, true );
+		assert.equal( banner.centreSuccess(), false, failure.text ?? "" );
 		const row = noticeBannerRow( banner );
 		assert.equal( row.centred, false );
 		assert.deepEqual( row.paths, notificationBannerPaths );
