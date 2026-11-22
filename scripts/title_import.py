@@ -50,8 +50,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import sro_pk2  # noqa: E402
-from pin_file import read_pin_field  # noqa: E402
-from prepare_client_resources import file_digest, write_atomically  # noqa: E402
+from pin_file import require_pinned_archive  # noqa: E402
+from prepare_client_resources import write_atomically  # noqa: E402
 from sro_paths import MAIN_CHECKOUT_ROOT  # noqa: E402
 
 REF_TITLE_PATH = "server_dep/silkroad/textdata/RefTitle.txt"
@@ -210,16 +210,7 @@ def title_plan(env=os.environ, default_root=None):
 # of it is read.
 # ================
 def verify_media(root):
-	archives = read_pin_field(PIN_FILE, PIN_FORMAT, "archives")
-	if "Media" not in archives:
-		raise SystemExit(f"{PIN_FILE} pins no Media.pk2")
-	path = Path(root) / "Media.pk2"
-	if not path.is_file():
-		raise SystemExit(f"{path} not found; {SOURCE_ENV} must name the pinned v1.696 client folder")
-	actual = file_digest(path)
-	if actual != archives["Media"]:
-		raise SystemExit(f"{path} does not match the pinned v1.696 Media.pk2 (sha256 {actual})")
-	return path
+	return require_pinned_archive(PIN_FILE, PIN_FORMAT, root, "Media", f"{SOURCE_ENV} must name the pinned v1.696 client folder")
 
 
 # ================
