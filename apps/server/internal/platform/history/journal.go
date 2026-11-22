@@ -26,6 +26,7 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+	"opensro.online/server/internal/platform/sqlitecol"
 )
 
 const QueueCapacity = 4096
@@ -182,39 +183,14 @@ ensureSessionTransportColumns
 
 The #1449 schema step: session rows gain the transport and fallback
 columns. A journal written before them keeps its rows; the columns
-arrive empty and fill from the next lifecycle event. SQLite has no
-ADD COLUMN IF NOT EXISTS, so the table shape is probed first.
+arrive empty and fill from the next lifecycle event (platform/sqlitecol).
 ================
 */
 func (j *Journal) ensureSessionTransportColumns() error {
-	rows, err := j.db.Query(`PRAGMA table_info(sessions)`)
-	if err != nil {
-		return err
-	}
-	have := map[string]bool{}
-	for rows.Next() {
-		var cid int
-		var name, kind string
-		var notNull, pk int
-		var defaultValue any
-		if err := rows.Scan(&cid, &name, &kind, &notNull, &defaultValue, &pk); err != nil {
-			rows.Close()
-			return err
-		}
-		have[name] = true
-	}
-	if err := firstError(rows.Err(), rows.Close()); err != nil {
-		return err
-	}
-	for _, column := range []string{"transport", "fallback"} {
-		if have[column] {
-			continue
-		}
-		if _, err := j.db.Exec(`ALTER TABLE sessions ADD COLUMN ` + column + ` TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
-	}
-	return nil
+	return sqlitecol.Ensure(j.db, []sqlitecol.Column{
+		{Table: "sessions", Name: "transport", Definition: "TEXT NOT NULL DEFAULT ''"},
+		{Table: "sessions", Name: "fallback", Definition: "TEXT NOT NULL DEFAULT ''"},
+	})
 }
 
 /*

@@ -106,19 +106,23 @@ func TestCorePackageBoundaries(t *testing.T) {
 		modulePath + "/internal/domain": true,
 	}, true)
 	checkPackageImports(t, root, modulePath, "internal/security/auth", map[string]bool{
-		modulePath + "/internal/domain": true,
+		modulePath + "/internal/domain":             true,
+		modulePath + "/internal/platform/sqlitecol": true,
 	}, true)
 	checkPackageImports(t, root, modulePath, "internal/security/workload", nil, true)
 	checkPackageImports(t, root, modulePath, "internal/platform/readiness", nil, false)
 	checkPackageImports(t, root, modulePath, "internal/platform/latency", nil, false)
 	checkPackageImports(t, root, modulePath, "internal/platform/jsonscratch", nil, false)
 	checkPackageImports(t, root, modulePath, "internal/platform/pacer", nil, false)
+	// The additive column migration every SQLite owner shares: a leaf.
+	checkPackageImports(t, root, modulePath, "internal/platform/sqlitecol", nil, false)
 	checkPackageImports(t, root, modulePath, "internal/data/store", map[string]bool{
 		modulePath + "/internal/domain":                 true,
 		modulePath + "/internal/domain/charactervitals": true,
 		modulePath + "/internal/platform/jsonscratch":   true,
 		modulePath + "/internal/platform/latency":       true,
 		modulePath + "/internal/platform/privatepath":   true,
+		modulePath + "/internal/platform/sqlitecol":     true,
 	}, true)
 	checkPackageImports(t, root, modulePath, "internal/transport", map[string]bool{
 		modulePath + "/internal/platform/latency":     true,
