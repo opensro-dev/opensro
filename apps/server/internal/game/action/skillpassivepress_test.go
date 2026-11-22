@@ -5,9 +5,9 @@ skillpassivepress_test.go - a pressed passive is consumed with no frame
 
 The v1.150 client never presses a passive, but a bot does (#4152: a
 crossbow Rogue's bot cast the learned passives and the port answered
-"This skill is not implemented yet."). The v1.188 skill-cast command
-starts only queued casts (activity 2, @0x004ae6e6); any other activity
-returns with no frame (@0x004ae9dc).
+"This skill is not implemented yet."). The reference server's skill-cast
+command starts only queued casts (activity 2); any other activity returns
+with no frame.
 
 ===========================================================================
 */

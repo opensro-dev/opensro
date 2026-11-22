@@ -427,10 +427,9 @@ func (r SkillRow) HaltsWalk() bool {
 ==================
 QueuedActivity
 
-Whether the row is an ordinary queued cast (activity 2). The server's
-skill-cast command (CGCharAutoCommandActor_Handler_SkillCast, v1.188
-@0x004ae6e6) starts only these; any other activity - 0 on every passive -
-is consumed there with no frame (@0x004ae9dc returns 1).
+Whether the row is an ordinary queued cast (activity 2). The reference
+server's skill-cast command starts only these; any other activity - 0 on
+every passive - is consumed there with no frame (#4152 cites the read).
 ==================
 */
 func (r SkillRow) QueuedActivity() bool {

@@ -30,9 +30,8 @@ func (rt *Runtime) resolveOffensiveSkill(c *enterworld.Character, id uint32) (en
 	sequence, immediate := enterworld.OffensiveSequence(rt.deps.SkillData(), id)
 	if known && !offensiveShapeAdmitted(skill, immediate) && !skill.QueuedActivity() {
 		// A passive (activity 0) or other non-queued row with no owner of
-		// its own: natively the command is consumed with no frame
-		// (v1.188 @0x004ae9dc). Only a bot presses one (#4152); it must
-		// not read "not implemented".
+		// its own: the reference server consumes the command with no frame.
+		// Only a bot presses one (#4152); it must not read "not implemented".
 		return enterworld.SkillRow{}, combat.Loadout{}, "offensive-not-queued"
 	}
 	if !known || !offensiveShapeAdmitted(skill, immediate) {
