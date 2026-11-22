@@ -167,6 +167,40 @@ func TestTheChangeSnapshotsTheWindowOnce(t *testing.T) {
 	}
 }
 
+func TestHeldTierReadsTheNewestSnapshot(t *testing.T) {
+	c := &clock{at: time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)}
+	s := openAt(t, t.TempDir(), c)
+	defer s.Close()
+	if got := s.HeldTier(1, JobTrader); got != TierNone {
+		t.Fatalf("before any change, character 1 holds tier %d", got)
+	}
+	s.Award(Award{Account: "a", CharacterID: 1, Job: JobTrader, Points: 300, At: c.at})
+	s.Award(Award{Account: "a", CharacterID: 1, Job: JobThief, Points: 900, At: c.at})
+	s.Award(Award{Account: "b", CharacterID: 2, Job: JobTrader, Points: 100, At: c.at})
+	if _, err := s.Recompute(); err != nil {
+		t.Fatal(err)
+	}
+	c.at = time.Date(2026, 11, 17, 5, 0, 30, 0, time.UTC)
+	if _, err := s.Recompute(); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.HeldTier(1, JobTrader); got != TierKing {
+		t.Fatalf("character 1 holds trader tier %d, want King", got)
+	}
+	if got := s.HeldTier(1, JobThief); got != TierKing {
+		t.Fatalf("character 1 holds thief tier %d, want King", got)
+	}
+	if got := s.HeldTier(2, JobTrader); got != TierNone {
+		t.Fatalf("character 2 holds trader tier %d, want none (a 2-character field crowns only its King)", got)
+	}
+	if got := s.HeldTier(1, JobHunter); got != TierNone {
+		t.Fatalf("character 1 holds hunter tier %d, want none", got)
+	}
+	if got := s.HeldTier(99, JobTrader); got != TierNone {
+		t.Fatalf("an unranked character holds tier %d", got)
+	}
+}
+
 /*
 ================
 TestCharacterPointsSumsPerJobOverWindows

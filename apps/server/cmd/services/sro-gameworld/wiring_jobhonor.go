@@ -113,3 +113,107 @@ func (game *gameplayPlane) jobHonorTick(ticker *simulation.Ticker, nowMs int64) 
 	}
 	return nil
 }
+
+/*
+================
+hotRouteTick
+
+The hot route's announcement (#3530): the first time the tick sees a
+session in an hour - and the first after the hour turns - that session
+gets the hour's route as one server notice (0x3667, the line the chat
+log shows). The scorer multiplies by the same selector
+(action.HotRouteNames / hotRouteAt), so the line never promises what
+the scorer does not pay. Sessions the tick stops seeing are forgotten.
+================
+*/
+func (game *gameplayPlane) hotRouteTick(ticker *simulation.Ticker, nowMs int64) []simulation.DivisionFrames {
+	at := time.UnixMilli(nowMs).UTC()
+	hour := at.Unix() / 3600
+	if game.hotRouteSeen == nil {
+		game.hotRouteSeen = map[string]int64{}
+	}
+	line := ""
+	seen := map[string]bool{}
+	for _, view := range sessionViews(ticker.Source) {
+		if view.DivisionID != game.divisionID {
+			continue
+		}
+		seen[view.SessionID] = true
+		if game.hotRouteSeen[view.SessionID] == hour {
+			continue
+		}
+		game.hotRouteSeen[view.SessionID] = hour
+		if line == "" {
+			from, to := action.HotRouteNames(at)
+			line = "Hot route this hour: " + from + " to " + to + " - job honor on this route pays x1.5."
+		}
+		frame := wire.NotificationFrame(line)
+		ticker.Push.PushToSession(view.SessionID, []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload}})
+	}
+	for sessionID := range game.hotRouteSeen {
+		if !seen[sessionID] {
+			delete(game.hotRouteSeen, sessionID)
+		}
+	}
+	return nil
+}
+
+// honorBuffSweepMs is how often the tier buff convergence re-checks a
+// session whose day and dress have not changed, so a tier or camp rank
+// written behind the session's back still lands.
+const honorBuffSweepMs = 15_000
+
+// honorBuffKey is what a session's tier honor buffs were last
+// reconciled against: the honor day, the job it is dressed as and the
+// sweep step. A dress change or the 05:00 change moves the key at
+// once; the step re-checks on the sweep.
+type honorBuffKey struct {
+	day   int64
+	job   uint8
+	sweep int64
+}
+
+/*
+================
+honorBuffTick
+
+Converges every entered session's Academy honor buffs onto the tier it
+holds (#3530): the first sight of a session, a dress change and the
+05:00 tier change reconcile at once, and the sweep re-checks the rest.
+The reconciler (SyncTrainingCampHonorBuffs) folds the job tier into
+the camp's native rank, strongest wins, so this pass passes the
+camp's own rank (CampHonorRank) and can only ever raise a master's
+want to its tier, never strip the camp's grant. Sessions the tick
+stops seeing are forgotten.
+================
+*/
+func (game *gameplayPlane) honorBuffTick(ticker *simulation.Ticker, nowMs int64) []simulation.DivisionFrames {
+	now := time.UnixMilli(nowMs)
+	base := honorBuffKey{day: jobhonor.DayStart(now).Unix(), sweep: nowMs / honorBuffSweepMs}
+	if game.honorBuffSeen == nil {
+		game.honorBuffSeen = map[string]honorBuffKey{}
+	}
+	seen := map[string]bool{}
+	for _, view := range sessionViews(ticker.Source) {
+		if view.DivisionID != game.divisionID {
+			continue
+		}
+		seen[view.SessionID] = true
+		key := base
+		if c := honorCharacter(game, view.CharacterID); c != nil {
+			key.job = enterworld.DressedJob(c)
+		}
+		if game.honorBuffSeen[view.SessionID] == key {
+			continue
+		}
+		game.honorBuffSeen[view.SessionID] = key
+		game.items.SyncTrainingCampHonorBuffs(game.divisionID, view.CharacterID,
+			game.items.CampHonorRank(game.divisionID, view.CharacterID))
+	}
+	for sessionID := range game.honorBuffSeen {
+		if !seen[sessionID] {
+			delete(game.honorBuffSeen, sessionID)
+		}
+	}
+	return nil
+}

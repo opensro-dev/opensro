@@ -187,6 +187,14 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		hooks = append(hooks, simulation.NamedTickHook{Name: "job-honor", Hook: func(nowMs int64) []simulation.DivisionFrames {
 			return game.jobHonorTick(ticker, nowMs)
 		}})
+		// Port-only (#3530): the hourly hot route announcement.
+		hooks = append(hooks, simulation.NamedTickHook{Name: "hot-route", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			return game.hotRouteTick(ticker, nowMs)
+		}})
+		// Port-only (#3530): the tier's Academy honor buff convergence.
+		hooks = append(hooks, simulation.NamedTickHook{Name: "job-honor-buffs", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			return game.honorBuffTick(ticker, nowMs)
+		}})
 	}
 	// Port-only (#3531): the Unique Status feed's snapshots and
 	// updates; the service paces the pass itself.

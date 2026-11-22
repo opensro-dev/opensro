@@ -578,6 +578,31 @@ func (s *Service) Previous() ([]Standing, time.Time, error) {
 
 /*
 ================
+Service::HeldTier
+
+The tier a character holds for one job: the newest snapshot's tier for
+it, TierNone when the snapshot never ranked it (or none has run yet).
+The tier's honor buff reads it - it is the grant "for the day" the
+05:00 change wrote.
+================
+*/
+func (s *Service) HeldTier(characterID int64, job int) int {
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
+	held, _, err := s.snapshotLocked()
+	if err != nil {
+		return TierNone
+	}
+	for _, row := range held {
+		if row.CharacterID == characterID && row.Job == job {
+			return row.Tier
+		}
+	}
+	return TierNone
+}
+
+/*
+================
 Service::CharacterPoints
 
 One character's kept points per job over [from, to) of honor days: the

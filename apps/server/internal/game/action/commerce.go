@@ -459,6 +459,8 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	// after the commit; a goods purchase opens a new run.
 	var honorProfit int64
 	var honorJob uint8
+	// Whether the sale travels the hour's hot route (hotroute.go).
+	var honorHot bool
 	var boughtGoods bool
 	// A dressed trader's trade-goods sale is its caravan's arrival,
 	// profitable or not (the honor escorts' payout).
@@ -702,6 +704,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				if !priced {
 					return false
 				}
+				honorHot = rt.saleRouteHot(npc, part, rt.Now())
 				payouts = rt.tradeRewards(division, c, roster, commerce.TradeRewardInput{Credit: int64(credit), Profit: profit},
 					settings)
 				for _, payout := range payouts {
@@ -803,12 +806,12 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 		rt.openHonorRun(snapshot)
 	}
 	if honorProfit > 0 {
-		rt.scoreTradeSale(snapshot, honorJob, honorProfit, rt.Now())
+		rt.scoreTradeSale(snapshot, honorJob, honorProfit, honorHot, rt.Now())
 	}
 	if tradeArrival {
 		// Port-only, not native (#3530): the caravan arrived; its
 		// escorts' held damage pays out.
-		rt.payHonorEscorts(snapshot, rt.Now())
+		rt.payHonorEscorts(snapshot, honorHot, rt.Now())
 	}
 	if honorCost > 0 {
 		rt.spendHonorPoints(division, snapshot, uint32(honorCost))
