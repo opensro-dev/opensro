@@ -147,7 +147,30 @@ func (rt *Runtime) fireCaravan(entry caravan.Entry, nowMs int64) bool {
 	if err := rt.spawnCaravanBandits(entry.Division, c, vehicle, nowMs); err != nil {
 		log.Warnf("caravan: bandits for %s: %v", c.Name, err)
 	}
+	if rt.takeHonorAmbush(c) {
+		// Port-only, not native (#3530): the honor run's rolled ambush
+		// meets the caravan on the same road, beside the native pack.
+		if err := rt.spawnHonorAmbush(entry.Division, c, vehicle, nowMs); err != nil {
+			log.Warnf("caravan: honor ambush for %s: %v", c.Name, err)
+		}
+	}
 	return true
+}
+
+/*
+================
+spawnHonorAmbush
+
+The honor run's bandit pack (#3530): honorAmbushBandits more bandits
+of the caravan's own tables around the vehicle, through the native
+pack spawn - real monsters of the fight the native ambush already
+fights, so a caravan that cannot fight them loses its cargo the
+native way (the death drop), and the honor ledger pays nothing for
+them: the ambush is a run's risk, never a score.
+================
+*/
+func (rt *Runtime) spawnHonorAmbush(division string, c *enterworld.Character, vehicle simulation.Spawn, nowMs int64) error {
+	return rt.spawnBanditPack(division, c, vehicle, nowMs, honorAmbushBandits)
 }
 
 /*
@@ -162,9 +185,9 @@ roll.
 */
 func (rt *Runtime) spawnCaravanBandits(division string, c *enterworld.Character, vehicle simulation.Spawn, nowMs int64) error {
 	roll := rt.caravanRoll()
-	// Port-only, not native with SRO_TRADE_TIERS: both from cargo gold
-	// (tradetiers.go).
-	tier, stars := rt.caravanTier(c)
+	// Port-only, not native with SRO_TRADE_TIERS: from cargo gold
+	// (tradetiers.go); the pack reads its own tier (spawnBanditPack).
+	_, stars := rt.caravanTier(c)
 	count, err := caravan.SpawnCount(stars, roll)
 	if err != nil || count == 0 {
 		return err
@@ -180,6 +203,23 @@ func (rt *Runtime) spawnCaravanBandits(division string, c *enterworld.Character,
 		// above still ran, so every bandit's draws fall where natively.
 		count = caravan.StarAmbushCount(stars)
 	}
+	return rt.spawnBanditPack(division, c, vehicle, nowMs, count)
+}
+
+/*
+================
+spawnBanditPack
+
+count bandits of the caravan's own tables around the vehicle: the
+tier and tactics from the cargo and job, then per bandit its level,
+reference, heading and champion roll, in that order. The native
+ambush (spawnCaravanBandits) and the honor run's (spawnHonorAmbush)
+share it; the population lease admits both or neither.
+================
+*/
+func (rt *Runtime) spawnBanditPack(division string, c *enterworld.Character, vehicle simulation.Spawn, nowMs int64, count int) error {
+	roll := rt.caravanRoll()
+	tier, _ := rt.caravanTier(c)
 	job := c.Job.Type
 	tacticsID, err := caravan.TacticsID(job, roll)
 	if err != nil {

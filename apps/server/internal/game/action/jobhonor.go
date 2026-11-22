@@ -51,6 +51,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/platform/jobhonor"
@@ -86,6 +87,14 @@ const (
 	// INFERENCE: a robbery fight at the cap moves tens of thousands of
 	// HP, so a fought-off robbery pays like a small run.
 	honorHunterDamagePerPoint = 1000
+	// honorAmbushChancePercent is a run's chance of the NPC bandit
+	// ambush (#3530's "a small chance"), rolled when the run opens.
+	// INFERENCE: the issue gives no number; a tenth of runs keeps the
+	// ambush a spice beside the native star ambush, not a tax.
+	honorAmbushChancePercent = 10
+	// honorAmbushBandits is the honor pack's size, a small fight
+	// beside the native star pack, which already scales with cargo.
+	honorAmbushBandits = 2
 )
 
 /*
@@ -241,11 +250,15 @@ type honorRuns struct {
 // victim and the halvings its steal decay applies (honorStealsScored or
 // more scores nothing). sold marks a haul that has reached a sale, so a
 // later pickup opens a new steal even when the sale scored nothing.
+// ambush is the run's rolled bandit ambush (#3530) still waiting for
+// the caravan's road: the caravan fire takes it, once (caravan.go's
+// fireHonorAmbush), and a run that ends first never meets it.
 type honorRun struct {
 	sold   bool
 	scored int
 	victim string
 	decay  int
+	ambush bool
 }
 
 // honorSteal keys the per-victim decay: the thief's account, the
@@ -318,9 +331,66 @@ func (rt *Runtime) openHonorRun(c *enterworld.Character) {
 	if rt == nil || rt.JobHonor == nil || c == nil {
 		return
 	}
+	ambush := rt.rollHonorAmbush()
 	rt.jobHonorRuns.mu.Lock()
 	defer rt.jobHonorRuns.mu.Unlock()
-	delete(rt.jobHonorRuns.runs, c.ID)
+	if rt.jobHonorRuns.runs == nil {
+		rt.jobHonorRuns.runs = map[int64]*honorRun{}
+	}
+	rt.jobHonorRuns.runs[c.ID] = &honorRun{ambush: ambush}
+}
+
+/*
+================
+honorRoll
+
+The ambush roll's domain: its own, never the caravan's - the native
+bandit draws fall exactly where they fall natively, flag or no flag.
+The composition root injects a deterministic one in tests; the zero
+value is the secure roll.
+================
+*/
+func (rt *Runtime) honorRoll() combat.Roll32767 {
+	if rt.JobHonorRoll != nil {
+		return rt.JobHonorRoll
+	}
+	return combat.SecureRoll32767
+}
+
+/*
+================
+rollHonorAmbush
+
+This run's ambush draw: one roll in honorAmbushChancePercent of
+opening a run. A failed draw means no ambush.
+================
+*/
+func (rt *Runtime) rollHonorAmbush() bool {
+	value, err := rt.honorRoll()()
+	return err == nil && value%100 < honorAmbushChancePercent
+}
+
+/*
+================
+takeHonorAmbush
+
+Takes the run's pending ambush, once: the caravan fire calls it on
+the road, and a run whose cargo sold (or emptied) first never meets
+its bandits - the mark dies with the entry the next load replaces.
+================
+*/
+func (rt *Runtime) takeHonorAmbush(c *enterworld.Character) bool {
+	if rt == nil || rt.JobHonor == nil || c == nil {
+		return false
+	}
+	rt.jobHonorRuns.mu.Lock()
+	defer rt.jobHonorRuns.mu.Unlock()
+	run := rt.jobHonorRuns.runs[c.ID]
+	if run == nil || !run.ambush {
+		return false
+	}
+	run.ambush = false
+	return true
 }
 
 /*
@@ -379,6 +449,7 @@ func (rt *Runtime) openStealRun(c *enterworld.Character, victim, lostTo string, 
 	if rt == nil || rt.JobHonor == nil || c == nil {
 		return
 	}
+	ambush := rt.rollHonorAmbush()
 	rt.jobHonorRuns.mu.Lock()
 	defer rt.jobHonorRuns.mu.Unlock()
 	runs := &rt.jobHonorRuns
@@ -414,11 +485,11 @@ func (rt *Runtime) openStealRun(c *enterworld.Character, victim, lostTo string, 
 	// characters online at once, one account could run a trader and a
 	// thief together. The run scores nothing and counts toward nothing.
 	if victim == honorAccountVictim(c.AccountID) || !realLoss {
-		runs.runs[c.ID] = &honorRun{victim: victim, decay: honorStealsScored}
+		runs.runs[c.ID] = &honorRun{victim: victim, decay: honorStealsScored, ambush: ambush}
 		return
 	}
 	key := honorSteal{account: c.AccountID, victim: victim, day: day}
-	runs.runs[c.ID] = &honorRun{victim: victim, decay: runs.steals[key]}
+	runs.runs[c.ID] = &honorRun{victim: victim, decay: runs.steals[key], ambush: ambush}
 	runs.steals[key]++
 }
 
