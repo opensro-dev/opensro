@@ -35,8 +35,9 @@ The steal counts are memory only: a restart forgets them, as it forgets
 the open runs. INFERENCE: worth a restart's reset, which the operator
 alone can cause.
 
-The hunter's escort damage, the job kill decay, the hot route and the
-ambush are later slices of #3530.
+A job kill (both dressed, victim carrying goods or holding points)
+and a hunter's escort damage on a thief marked for attacking a caravan
+score below; the hot route and the ambush are later slices of #3530.
 
 ===========================================================================
 */
@@ -50,6 +51,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/platform/jobhonor"
 )
 
@@ -69,6 +71,20 @@ const (
 	// honorStealsScored is how many steals of one victim in one honor
 	// day score at all; each after the first scores half the one before.
 	honorStealsScored = 2
+	// honorKillPoints is what a job kill scores before its per-victim
+	// decay (honorKillsScored kills score: full, half, then nothing).
+	// INFERENCE (#3530 left the numbers to the build): a kill is worth
+	// a fifth of a run's cap, so kills season a day a sale built.
+	honorKillPoints = 20
+	// honorKillsScored is how many kills of one victim in one honor
+	// day score at all.
+	honorKillsScored = 2
+	// honorHunterDamagePerPoint turns escort damage on a marked thief
+	// into points when its caravan arrives, one point per this much
+	// applied damage, at most a run's cap per hunter per caravan.
+	// INFERENCE: a robbery fight at the cap moves tens of thousands of
+	// HP, so a fought-off robbery pays like a small run.
+	honorHunterDamagePerPoint = 1000
 )
 
 /*
@@ -111,6 +127,12 @@ type honorRuns struct {
 	mu     sync.Mutex
 	runs   map[int64]*honorRun
 	steals map[honorSteal]int
+	// marks is a thief's last attack on a caravan (by thief character
+	// id); escort is the hunter damage held against a caravan's
+	// arrival; kills counts the day's scored kills per victim.
+	marks  map[int64]honorCaravanMark
+	escort map[honorEscort]honorEscortDue
+	kills  map[honorKill]int
 }
 
 // honorRun is one run: the points it scored, and for a thief's haul the
@@ -127,6 +149,36 @@ type honorRun struct {
 // honorSteal keys the per-victim decay: the thief's account, the
 // victim's account (goodsVictim), the honor day.
 type honorSteal struct {
+	account string
+	victim  string
+	day     int64
+}
+
+// honorCaravanMark is one thief's last attack on one caravan: the
+// trader whose arrival will pay the escort damage, and when (strike
+// clock, ms). The rob window (caravanRobWindowMs) bounds it, as it
+// bounds the five-star bounty mark.
+type honorCaravanMark struct {
+	trader int64
+	at     int64
+}
+
+// honorEscort keys escort damage held against one caravan's arrival.
+type honorEscort struct {
+	trader int64
+	hunter int64
+}
+
+// honorEscortDue is the damage one hunter dealt a marked thief, and
+// the account the arrival pays it to.
+type honorEscortDue struct {
+	account string
+	damage  int64
+}
+
+// honorKill keys the kill decay: the killer's account, the victim's
+// account, the honor day.
+type honorKill struct {
 	account string
 	victim  string
 	day     int64
@@ -311,4 +363,196 @@ func (rt *Runtime) scoreTradeSale(c *enterworld.Character, job uint8, profit int
 	kept := rt.JobHonor.AwardJobHonor(c.AccountID, c.ID, int(job), points, at)
 	run.scored += kept
 	return kept
+}
+
+/*
+================
+honorAppliedDamage
+
+The HP a committed player strike actually removed.
+================
+*/
+func honorAppliedDamage(struck playerStruck) int64 {
+	var total int64
+	for _, result := range struckDamageResults(struck) {
+		total += int64(result.Applied)
+	}
+	return total
+}
+
+/*
+================
+noteHonorCaravanAttack
+
+A dressed thief's landed hit on a caravan - its trader, or its trade
+transport - marks the thief for the escort escrow: hunters damaging
+the marked thief are held against that caravan's arrival. Any caravan
+marks (the five-star bounty keeps its own, narrower mark). Called
+once the hit is in, so refused or whiffed casts never mark.
+================
+*/
+func (rt *Runtime) noteHonorCaravanAttack(attacker, owner *enterworld.Character, now int64) {
+	if rt == nil || rt.JobHonor == nil || attacker == nil || owner == nil || attacker.ID == owner.ID {
+		return
+	}
+	if enterworld.DressedJob(attacker) != domain.JobThief ||
+		enterworld.DressedJob(owner) != domain.JobTrader {
+		return
+	}
+	rt.jobHonorRuns.mu.Lock()
+	defer rt.jobHonorRuns.mu.Unlock()
+	if rt.jobHonorRuns.marks == nil {
+		rt.jobHonorRuns.marks = map[int64]honorCaravanMark{}
+	}
+	rt.jobHonorRuns.marks[attacker.ID] = honorCaravanMark{trader: owner.ID, at: now}
+}
+
+/*
+================
+noteHonorEscortDamage
+
+A dressed hunter's landed damage on a thief marked for attacking a
+caravan accrues against that caravan's arrival. Standing near a
+caravan scores nothing: only damage on the marked thief counts, and
+only inside the rob window.
+================
+*/
+func (rt *Runtime) noteHonorEscortDamage(attacker, victim *enterworld.Character, damage int64, now int64) {
+	if rt == nil || rt.JobHonor == nil || attacker == nil || victim == nil || damage <= 0 {
+		return
+	}
+	if enterworld.DressedJob(attacker) != domain.JobHunter ||
+		enterworld.DressedJob(victim) != domain.JobThief {
+		return
+	}
+	rt.jobHonorRuns.mu.Lock()
+	defer rt.jobHonorRuns.mu.Unlock()
+	mark, ok := rt.jobHonorRuns.marks[victim.ID]
+	if !ok {
+		return
+	}
+	if now < mark.at || now-mark.at > caravanRobWindowMs {
+		delete(rt.jobHonorRuns.marks, victim.ID)
+		return
+	}
+	if rt.jobHonorRuns.escort == nil {
+		rt.jobHonorRuns.escort = map[honorEscort]honorEscortDue{}
+	}
+	key := honorEscort{trader: mark.trader, hunter: attacker.ID}
+	due := rt.jobHonorRuns.escort[key]
+	due.account = attacker.AccountID
+	due.damage += damage
+	rt.jobHonorRuns.escort[key] = due
+}
+
+/*
+================
+payHonorEscorts
+
+A trader's trade-goods sale is its caravan's arrival: the escort
+damage held against it pays out, a point per
+honorHunterDamagePerPoint applied damage, at most a run's cap per
+hunter. Paid once: the escrow clears whether or not the sale scored
+the trader anything itself.
+================
+*/
+func (rt *Runtime) payHonorEscorts(trader *enterworld.Character, at time.Time) {
+	if rt == nil || rt.JobHonor == nil || trader == nil {
+		return
+	}
+	rt.jobHonorRuns.mu.Lock()
+	defer rt.jobHonorRuns.mu.Unlock()
+	for key, due := range rt.jobHonorRuns.escort {
+		if key.trader != trader.ID {
+			continue
+		}
+		delete(rt.jobHonorRuns.escort, key)
+		points := int(min(due.damage/honorHunterDamagePerPoint, honorRunPointCap))
+		if points > 0 && due.account != "" {
+			rt.JobHonor.AwardJobHonor(due.account, key.hunter, int(domain.JobHunter), points, at)
+		}
+	}
+}
+
+/*
+================
+honorKillStake
+
+Whether a job-kill victim had anything at stake: trade goods loaded
+on its transport or carried, or honor points kept today. A failed
+points read counts as no points; the goods still stake.
+================
+*/
+func (rt *Runtime) honorKillStake(victim *enterworld.Character, at time.Time) bool {
+	if victim == nil {
+		return false
+	}
+	if rt.loadedTransport(victim.ActiveCOS) {
+		return true
+	}
+	for _, row := range victim.MissionInventory {
+		if inventory.IsTradeGoods(row.TypeFlags) {
+			return true
+		}
+	}
+	points, ok := rt.JobHonor.(interface {
+		CharacterPoints(characterID int64, from, to time.Time) (map[int]int64, error)
+	})
+	if !ok {
+		return false
+	}
+	day := jobhonor.DayStart(at)
+	today, err := points.CharacterPoints(victim.ID, day, day.AddDate(0, 0, 1))
+	if err != nil {
+		return false
+	}
+	for _, kept := range today {
+		if kept > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
+scoreHonorKill
+
+A job kill scores honorKillPoints for the killer's job, cut by the
+per-victim decay (full, half, then nothing more that day) and by the
+account cap in the sink. The victim must have had goods or points at
+stake (honorKillStake), both killers must be dressed (checked by the
+caller classification and here), and an account never scores off
+itself. Returns what the sink kept.
+================
+*/
+func (rt *Runtime) scoreHonorKill(killer, victim *enterworld.Character, stake bool, at time.Time) int {
+	if rt == nil || rt.JobHonor == nil || killer == nil || victim == nil || !stake {
+		return 0
+	}
+	killerJob := enterworld.DressedJob(killer)
+	if killerJob == 0 || enterworld.DressedJob(victim) == 0 {
+		return 0
+	}
+	if killer.AccountID == "" || killer.AccountID == victim.AccountID {
+		return 0
+	}
+	day := jobhonor.DayStart(at).Unix()
+	rt.jobHonorRuns.mu.Lock()
+	defer rt.jobHonorRuns.mu.Unlock()
+	if rt.jobHonorRuns.kills == nil {
+		rt.jobHonorRuns.kills = map[honorKill]int{}
+	}
+	for key := range rt.jobHonorRuns.kills {
+		if key.day != day {
+			delete(rt.jobHonorRuns.kills, key)
+		}
+	}
+	key := honorKill{account: killer.AccountID, victim: honorAccountVictim(victim.AccountID), day: day}
+	decay := rt.jobHonorRuns.kills[key]
+	rt.jobHonorRuns.kills[key]++
+	if decay >= honorKillsScored {
+		return 0
+	}
+	return rt.JobHonor.AwardJobHonor(killer.AccountID, killer.ID, int(killerJob), honorKillPoints>>decay, at)
 }

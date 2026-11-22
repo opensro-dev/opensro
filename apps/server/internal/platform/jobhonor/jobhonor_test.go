@@ -166,3 +166,38 @@ func TestTheChangeSnapshotsTheWindowOnce(t *testing.T) {
 		t.Fatalf("points past the window still ranked: %+v", current)
 	}
 }
+
+/*
+================
+TestCharacterPointsSumsPerJobOverWindows
+
+The per-character sums a My honor panel reads: each job on its own,
+over exactly the window asked for.
+================
+*/
+func TestCharacterPointsSumsPerJobOverWindows(t *testing.T) {
+	c := &clock{at: time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)}
+	s := openAt(t, t.TempDir(), c)
+	defer s.Close()
+	s.Award(Award{Account: "a", CharacterID: 7, Job: JobTrader, Points: 30, At: c.at})
+	s.Award(Award{Account: "a", CharacterID: 7, Job: JobHunter, Points: 12, At: c.at})
+	day := DayStart(c.at)
+	today, err := s.CharacterPoints(7, day, day.AddDate(0, 0, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(today) != 2 || today[JobTrader] != 30 || today[JobHunter] != 12 {
+		t.Fatalf("today = %v, want 30 trader and 12 hunter", today)
+	}
+	before, err := s.CharacterPoints(7, day.AddDate(0, 0, -2), day)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before) != 0 {
+		t.Fatalf("the window ending today counts %v", before)
+	}
+	none, err := s.CharacterPoints(9, day, day.AddDate(0, 0, 1))
+	if err != nil || len(none) != 0 {
+		t.Fatalf("an unknown character summed %v (err %v)", none, err)
+	}
+}

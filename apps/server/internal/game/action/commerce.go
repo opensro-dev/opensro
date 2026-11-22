@@ -460,6 +460,9 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	var honorProfit int64
 	var honorJob uint8
 	var boughtGoods bool
+	// A dressed trader's trade-goods sale is its caravan's arrival,
+	// profitable or not (the honor escorts' payout).
+	var tradeArrival bool
 	label, cargoCapacity := commerceDoorLabel(snapshot, q, isCOS)
 	if cargoCapacity >= 0 {
 		// The stars are read off the snapshot, as the door word was: the
@@ -706,6 +709,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 						return false
 					}
 				}
+				tradeArrival = enterworld.DressedJob(c) == domain.JobTrader
 				if profit > 0 {
 					weeklyCredit = credit
 					honorProfit, honorJob = profit, enterworld.DressedJob(c)
@@ -800,6 +804,11 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	}
 	if honorProfit > 0 {
 		rt.scoreTradeSale(snapshot, honorJob, honorProfit, rt.Now())
+	}
+	if tradeArrival {
+		// Port-only, not native (#3530): the caravan arrived; its
+		// escorts' held damage pays out.
+		rt.payHonorEscorts(snapshot, rt.Now())
 	}
 	if honorCost > 0 {
 		rt.spendHonorPoints(division, snapshot, uint32(honorCost))

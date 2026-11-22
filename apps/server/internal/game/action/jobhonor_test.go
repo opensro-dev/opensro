@@ -17,6 +17,8 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/platform/jobhonor"
 )
 
@@ -39,6 +41,13 @@ func honorRuntime(t *testing.T, at time.Time) *Runtime {
 
 func honorCharacter(id int64, account string) *enterworld.Character {
 	return &enterworld.Character{ID: id, AccountID: account}
+}
+
+func honorDressed(id int64, account string, job uint8) *enterworld.Character {
+	c := honorCharacter(id, account)
+	c.MissionInventory = []domain.InventoryRow{{Slot: enterworld.JobSuitSlot,
+		TypeFlags: wire.PackTypeFlags(3, 1, 7, job), StackCount: 1}}
+	return c
 }
 
 func TestASaleScoresItsProfitNotItsValue(t *testing.T) {
@@ -232,5 +241,142 @@ func TestAStealScoresOnlyOnTheThiefsOwnKill(t *testing.T) {
 	rt.openStealRun(thief, "Third", "", at)
 	if got := rt.scoreTradeSale(thief, domain.JobThief, full, at); got != 0 {
 		t.Fatalf("a haul mixed with free goods kept %d", got)
+	}
+}
+
+/*
+================
+TestAHuntersEscortDamagePaysOnlyOnArrival
+
+A hunter's damage on a thief who hit a caravan is held, not scored;
+the caravan's arrival pays it, once.
+================
+*/
+func TestAHuntersEscortDamagePaysOnlyOnArrival(t *testing.T) {
+	at := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	rt := honorRuntime(t, at)
+	ledger := rt.JobHonor.(*jobhonor.Service)
+	trader := honorDressed(1, "trader-account", domain.JobTrader)
+	thief := honorDressed(2, "thief-account", domain.JobThief)
+	hunter := honorDressed(3, "hunter-account", domain.JobHunter)
+	const now = int64(1_000_000)
+	// Damage with no attacked caravan behind it scores nothing.
+	rt.noteHonorEscortDamage(hunter, thief, 10_000, now)
+	rt.payHonorEscorts(trader, at)
+	if got := ledger.Used("hunter-account"); got != 0 {
+		t.Fatalf("unmarked damage paid %d", got)
+	}
+	rt.noteHonorCaravanAttack(thief, trader, now)
+	rt.noteHonorEscortDamage(hunter, thief, 3*honorHunterDamagePerPoint, now)
+	rt.noteHonorEscortDamage(hunter, thief, 1, now)
+	if got := ledger.Used("hunter-account"); got != 0 {
+		t.Fatalf("escort damage scored %d before the caravan arrived", got)
+	}
+	rt.payHonorEscorts(trader, at)
+	if got := ledger.Used("hunter-account"); got != 3 {
+		t.Fatalf("arrival paid %d, want 3", got)
+	}
+	// The escrow is spent: a second arrival pays nothing more.
+	rt.payHonorEscorts(trader, at)
+	if got := ledger.Used("hunter-account"); got != 3 {
+		t.Fatalf("a second arrival paid again: %d", got)
+	}
+}
+
+/*
+================
+TestEscortDamageIsCappedAndExpires
+
+One caravan pays a hunter at most a run's cap, and damage on a thief
+whose rob window has closed scores nothing.
+================
+*/
+func TestEscortDamageIsCappedAndExpires(t *testing.T) {
+	at := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	rt := honorRuntime(t, at)
+	ledger := rt.JobHonor.(*jobhonor.Service)
+	trader := honorDressed(1, "trader-account", domain.JobTrader)
+	thief := honorDressed(2, "thief-account", domain.JobThief)
+	hunter := honorDressed(3, "hunter-account", domain.JobHunter)
+	const now = int64(1_000_000)
+	rt.noteHonorCaravanAttack(thief, trader, now)
+	rt.noteHonorEscortDamage(hunter, thief, int64(honorRunPointCap+50)*honorHunterDamagePerPoint, now)
+	rt.payHonorEscorts(trader, at)
+	if got := ledger.Used("hunter-account"); got != honorRunPointCap {
+		t.Fatalf("a fought-off robbery paid %d, want the run cap", got)
+	}
+	// A second attack, answered after the window closed.
+	rt.noteHonorCaravanAttack(thief, trader, now)
+	rt.noteHonorEscortDamage(hunter, thief, 10*honorHunterDamagePerPoint, now+caravanRobWindowMs+1)
+	rt.payHonorEscorts(trader, at)
+	if got := ledger.Used("hunter-account"); got != honorRunPointCap {
+		t.Fatalf("late damage paid: %d", got)
+	}
+}
+
+/*
+================
+TestAJobKillDecaysPerVictimAccount
+
+A job kill with something at stake scores full, then half, then
+nothing against one victim account in a day; without a stake, or
+inside one account, it scores nothing at all.
+================
+*/
+func TestAJobKillDecaysPerVictimAccount(t *testing.T) {
+	at := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	rt := honorRuntime(t, at)
+	killer := honorDressed(1, "killer-account", domain.JobThief)
+	victim := honorDressed(2, "victim-account", domain.JobTrader)
+	alt := honorDressed(3, "victim-account", domain.JobTrader)
+	for i, want := range []int{honorKillPoints, honorKillPoints / 2, 0} {
+		if got := rt.scoreHonorKill(killer, victim, true, at); got != want {
+			t.Fatalf("kill %d scored %d, want %d", i+1, got, want)
+		}
+	}
+	// The victim's alt shares the decay: the account is the victim.
+	if got := rt.scoreHonorKill(killer, alt, true, at); got != 0 {
+		t.Fatalf("a kill of the victim's alt scored %d", got)
+	}
+	if got := rt.scoreHonorKill(killer, victim, false, at); got != 0 {
+		t.Fatalf("a kill with nothing at stake scored %d", got)
+	}
+	sameAccount := honorDressed(9, "killer-account", domain.JobTrader)
+	if got := rt.scoreHonorKill(killer, sameAccount, true, at); got != 0 {
+		t.Fatalf("an intra-account kill scored %d", got)
+	}
+	naked := honorCharacter(4, "naked-account")
+	if got := rt.scoreHonorKill(naked, victim, true, at); got != 0 {
+		t.Fatalf("an undressed killer scored %d", got)
+	}
+}
+
+/*
+================
+TestAJobKillStakesGoodsAndPoints
+
+Carried trade goods stake a kill; a victim with honor kept today is
+staked even empty-handed; a victim with neither is not.
+================
+*/
+func TestAJobKillStakesGoodsAndPoints(t *testing.T) {
+	at := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	rt := honorRuntime(t, at)
+	loaded := honorDressed(1, "loaded-account", domain.JobTrader)
+	loaded.MissionInventory = append(loaded.MissionInventory,
+		domain.InventoryRow{Slot: 13, TypeFlags: wire.PackTypeFlags(3, 3, 8, 0), StackCount: 1})
+	if !inventory.IsTradeGoods(loaded.MissionInventory[1].TypeFlags) {
+		t.Fatal("test fixture is not trade goods")
+	}
+	if !rt.honorKillStake(loaded, at) {
+		t.Fatal("carried trade goods did not stake the kill")
+	}
+	empty := honorDressed(2, "empty-account", domain.JobTrader)
+	if rt.honorKillStake(empty, at) {
+		t.Fatal("an empty victim with no points was staked")
+	}
+	rt.JobHonor.AwardJobHonor("empty-account", empty.ID, int(domain.JobTrader), 5, at)
+	if !rt.honorKillStake(empty, at) {
+		t.Fatal("points kept today did not stake the kill")
 	}
 }

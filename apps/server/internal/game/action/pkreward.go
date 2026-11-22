@@ -186,6 +186,9 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 		if notice, ok := jobKillNoticeOf(division, killer, victim, now); ok {
 			after.notices = append(after.notices, notice)
 		}
+		// Port-only, not native (#3530): the kill scores job honor when
+		// the victim had goods or points at stake, decaying per victim.
+		rt.scoreHonorKill(killer, victim, rt.honorKillStake(victim, rt.Now()), rt.Now())
 		// Port-only, not native (#2958): a hunter's kill of a thief marked
 		// for attacking a 5-star caravan raises every job EXP share.
 		bountyPercent := rt.fiveStarBountyPercent(killer, victim, now)

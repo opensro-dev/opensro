@@ -296,6 +296,9 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 		// caravan's transport marks the thief for the hunter bounty.
 		if target.cos != nil && owner.ActiveCOS == target.cos && target.cosRef.TidWord>>11 == cosBandTransport {
 			rt.noteCaravanAttack(character, owner, now)
+			// Port-only, not native (#3530): the same hit marks the thief
+			// for the job honor escort escrow.
+			rt.noteHonorCaravanAttack(character, owner, now)
 		}
 		if hit.strike.fatal {
 			// Natively the kill is booked against the owner (payCOSKillInDoor)

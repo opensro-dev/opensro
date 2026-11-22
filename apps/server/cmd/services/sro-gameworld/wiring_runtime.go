@@ -168,6 +168,13 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			return game.contributorRosterTick(ticker, nowMs)
 		}})
 	}
+	// Port-only (#3530): the Job Honor ranking feed's snapshots; the
+	// service paces the pass and sends only what changed.
+	if game.honorFeed != nil {
+		hooks = append(hooks, simulation.NamedTickHook{Name: "job-honor", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			return game.jobHonorTick(ticker, nowMs)
+		}})
+	}
 	if game.caravanAgents != nil {
 		hooks = append(hooks, simulation.NamedTickHook{Name: "caravan-ai", Hook: func(nowMs int64) []simulation.DivisionFrames {
 			return game.caravanAgentsTick(ticker, nowMs)

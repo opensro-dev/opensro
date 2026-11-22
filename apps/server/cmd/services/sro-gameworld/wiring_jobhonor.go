@@ -21,6 +21,10 @@ import (
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
+	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/honorfeed"
+	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/platform/jobhonor"
 )
 
@@ -44,7 +48,68 @@ func installJobHonor(application *gameWorldApplication, gameplay *gameplayPlane,
 	application.ledgers.jobHonor = service
 	gameplay.jobHonor = service
 	gameplay.items.JobHonor = service
+	gameplay.honorFeed = honorfeed.New(honorfeed.Sources{
+		Current:  service.Current,
+		Previous: service.Previous,
+		Points:   service.CharacterPoints,
+		Used:     service.Used,
+		Now:      time.Now,
+		Alias: func(characterID int64) (string, bool) {
+			c := honorCharacter(gameplay, characterID)
+			if c == nil || c.PublicHidden || c.Job.Alias == "" {
+				return "", false
+			}
+			return c.Job.Alias, true
+		},
+		Account: func(characterID int64) (string, bool) {
+			c := honorCharacter(gameplay, characterID)
+			if c == nil || c.AccountID == "" {
+				return "", false
+			}
+			return c.AccountID, true
+		},
+	})
 	log.Infof("job honor: trade sales score honor points (%s, port-only, not native); ledger in %s",
 		action.EnvJobHonor, filepath.Join(dir, jobhonor.FileName))
+	return nil
+}
+
+/*
+================
+honorCharacter
+
+The division's live record of a character, for the feed's alias and
+account joins (the public board joins its own roster the same way).
+================
+*/
+func honorCharacter(game *gameplayPlane, characterID int64) *enterworld.Character {
+	for _, c := range game.deps.CharactersForDivision(game.divisionID) {
+		if c != nil && c.ID == characterID {
+			return c
+		}
+	}
+	return nil
+}
+
+/*
+================
+jobHonorTick
+
+The ranking feed's tick hook: one paced pass over the division's
+entered sessions; a snapshot goes to each session whose bytes changed.
+================
+*/
+func (game *gameplayPlane) jobHonorTick(ticker *simulation.Ticker, nowMs int64) []simulation.DivisionFrames {
+	views := sessionViews(ticker.Source)
+	sessions := make([]honorfeed.Session, 0, len(views))
+	for _, view := range views {
+		if view.DivisionID != game.divisionID {
+			continue
+		}
+		sessions = append(sessions, honorfeed.Session{ID: view.SessionID, CharacterID: view.CharacterID})
+	}
+	for sessionID, payload := range game.honorFeed.Tick(nowMs, sessions) {
+		ticker.Push.PushToSession(sessionID, []simulation.Frame{{Opcode: wire.OpJobHonorSnapshot, Payload: payload}})
+	}
 	return nil
 }
