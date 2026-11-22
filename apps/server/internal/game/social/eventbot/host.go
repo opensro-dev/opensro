@@ -23,6 +23,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"opensro.online/server/internal/game/enterworld"
 )
 
 /*
@@ -45,6 +47,16 @@ func (h *Host) Tick(now time.Time) {
 	}
 	if h.live != nil && !now.Before(h.live.endsAt) {
 		h.closeRound(now)
+	}
+	// A world kind posts its hints on its own cadence while its
+	// hider stands.
+	if h.live != nil && h.live.hider != nil && !now.Before(h.live.nextHint) {
+		if wk, ok := kindByName(h.live.event.Kind); ok {
+			if wk, ok := wk.(WorldKind); ok {
+				h.announce(wk.Hint(h.live.event, h.live.spot, now.Sub(h.live.endsAt.Add(-h.live.event.RoundLength))))
+				h.live.nextHint = now.Add(wk.HintEvery())
+			}
+		}
 	}
 	if h.occ != nil && h.live == nil {
 		if h.occ.round > h.occ.event.Rounds {
@@ -97,7 +109,23 @@ func (h *Host) openRound(now time.Time) {
 		byName:    map[string]int{},
 		byAccount: map[string]int{},
 	}
+	// A world kind hides before it announces: the hider stands in
+	// the world when the first hint names its area.
+	if wk, ok := kind.(WorldKind); ok {
+		if spot, ok := wk.SpotFor(event, h.occ.round); ok {
+			h.live.spot = spot
+			if h.deps.SpawnHider != nil {
+				if hider, spawned := h.deps.SpawnHider(event, spot, now); spawned {
+					h.live.hider = &hider
+					h.live.nextHint = now.Add(wk.HintEvery())
+				}
+			}
+		}
+	}
 	h.announce(kind.OpenLine(event, h.occ.round))
+	if wk, ok := kind.(WorldKind); ok && h.live.hider != nil {
+		h.announce(wk.Hint(event, h.live.spot, 0))
+	}
 	h.occ.round++
 }
 
@@ -111,7 +139,14 @@ Draws and pays the winner, then whispers and announces the result.
 func (h *Host) closeRound(now time.Time) {
 	live := h.live
 	h.live = nil
+	despawnHider(live)
 	kind, _ := kindByName(live.event.Kind)
+	// A world kind never draws: only a reported finder wins, and
+	// the timer running out means nobody found the hider.
+	if _, ok := kind.(WorldKind); ok {
+		h.announce(fmt.Sprintf("%s round %d ends with no winner.", live.event.DisplayTitle(), live.round))
+		return
+	}
 	pool := make([]entry, 0, len(live.entries))
 	for _, e := range live.entries {
 		if kind.Judge(e.answer) {
@@ -139,6 +174,139 @@ func (h *Host) closeRound(now time.Time) {
 		return
 	}
 	h.announce(fmt.Sprintf("%s round %d ends with no winner.", live.event.DisplayTitle(), live.round))
+}
+
+/*
+================
+despawnHider
+
+Removes a round's hider exactly once, whoever ends the round.
+================
+*/
+func despawnHider(live *liveRound) {
+	if live != nil && live.hider != nil {
+		if live.hider.Despawn != nil {
+			live.hider.Despawn()
+		}
+		live.hider = nil
+	}
+}
+
+/*
+================
+ReportFound
+
+A finder reached the hider: the composition root has already
+checked the world side (the player's own selection on the hider,
+in range, alive, not in a stall) and asks the host to judge the
+claim. Under the host's lock, exactly one claim wins: the finder
+must have entered, its account must be under the daily cap, and
+then the round ends - paid through the grant door, or announced
+not counted when the bag refuses. A capped finder's round runs on.
+False means the hunt goes on.
+================
+*/
+func (h *Host) ReportFound(character *enterworld.Character) bool {
+	if !h.Enabled() || character == nil {
+		return false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	live := h.live
+	if live == nil || live.hider == nil {
+		return false
+	}
+	kind, ok := kindByName(live.event.Kind)
+	if !ok {
+		return false
+	}
+	if _, world := kind.(WorldKind); !world {
+		return false
+	}
+	at, entered := live.byName[strings.ToLower(character.Name)]
+	if !entered {
+		return false
+	}
+	winner := live.entries[at]
+	now := h.now()
+	if h.deps.WinsToday != nil && h.deps.WinsToday(winner.accountID, now) >= MaxWinsPerAccountPerDay {
+		h.whisperTo(winner, "You found the hider! But your account has already won enough today, so the hunt goes on.")
+		return false
+	}
+	h.live = nil
+	despawnHider(live)
+	paid := h.deps.Grant != nil && h.deps.Grant(winner.division, winner.character, live.event.RewardCodename, live.event.RewardCount)
+	h.whisperTo(winner, winLine(live, paid))
+	if paid {
+		h.announce(fmt.Sprintf("%s found the hider and won %s round %d, taking %dx %s!",
+			winner.name, live.event.DisplayTitle(), live.round, live.event.RewardCount, live.event.RewardCodename))
+	} else {
+		h.announce(fmt.Sprintf("%s found the hider in %s round %d - but the prize could not be delivered, so this win is not counted.",
+			winner.name, live.event.DisplayTitle(), live.round))
+	}
+	return true
+}
+
+/*
+================
+LiveHider
+
+The live round's hider, for the composition root's found-checks.
+================
+*/
+func (h *Host) LiveHider() (Hider, bool) {
+	if !h.Enabled() {
+		return Hider{}, false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.live == nil || h.live.hider == nil {
+		return Hider{}, false
+	}
+	return *h.live.hider, true
+}
+
+/*
+================
+HiderLost
+
+The hider is gone from the world (slain): the round ends with no
+winner and the next round hides anew. False when no hider stands.
+================
+*/
+func (h *Host) HiderLost() bool {
+	if !h.Enabled() {
+		return false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	live := h.live
+	if live == nil || live.hider == nil {
+		return false
+	}
+	h.live = nil
+	despawnHider(live)
+	h.announce(fmt.Sprintf("The hider was slain! %s round %d ends with no winner.", live.event.DisplayTitle(), live.round))
+	return true
+}
+
+/*
+================
+Shutdown
+
+The composition root is going down: the live hider leaves the
+world with it. The host runs nothing after this.
+================
+*/
+func (h *Host) Shutdown() {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	despawnHider(h.live)
+	h.live = nil
+	h.occ = nil
 }
 
 /*
@@ -205,6 +373,11 @@ func (h *Host) HandleWhisper(sender WhisperSender, text string) []string {
 	live.byName[strings.ToLower(name)] = len(live.entries)
 	live.entries = append(live.entries, e)
 	live.byAccount[e.accountID]++
+	if el, ok := kindByName(live.event.Kind); ok {
+		if liner, ok := el.(EntryLiner); ok {
+			return []string{liner.EntryLine(live.event, live.round)}
+		}
+	}
 	return []string{fmt.Sprintf("You are in %s round %d! The winner is drawn when the round closes.",
 		live.event.DisplayTitle(), live.round)}
 }

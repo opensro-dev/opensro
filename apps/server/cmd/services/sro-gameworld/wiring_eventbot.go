@@ -15,6 +15,7 @@ nobody's.
 package main
 
 import (
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -29,7 +30,14 @@ import (
 	livepresence "opensro.online/server/internal/game/social"
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/eventbot"
+	"opensro.online/server/internal/game/world/instance"
+	"opensro.online/server/internal/game/world/simulation"
 )
+
+// eventSeekRange is how close a finder must stand to the hider for
+// the find to count (the composition root's world check, host.go's
+// ReportFound judges the claim itself).
+const eventSeekRange = 30.0
 
 /*
 ================
@@ -40,7 +48,7 @@ that refuses to parse leaves the host running empty (the error is
 logged once): the operator fixes the file and restarts.
 ================
 */
-func buildEventBot(deps *enterworld.Deps, presence *livepresence.Directory, authority *store.Store, items *action.Runtime) *eventbot.Host {
+func buildEventBot(division string, deps *enterworld.Deps, presence *livepresence.Directory, authority *store.Store, items *action.Runtime) *eventbot.Host {
 	if !eventbot.EnabledFromEnv() {
 		return nil
 	}
@@ -55,6 +63,14 @@ func buildEventBot(deps *enterworld.Deps, presence *livepresence.Directory, auth
 			log.Errorf("eventbot: schedule file %s refused: %v (host runs empty)", path, err)
 		} else {
 			schedule = loaded
+			for _, event := range schedule.Events {
+				if event.Hider == "" {
+					continue
+				}
+				if _, known := items.Monsters.ReferenceByCodename(event.Hider); !known {
+					log.Errorf("eventbot: %q hider %q is not a monster codename; its rounds will run hiderless", event.Title, event.Hider)
+				}
+			}
 		}
 	} else {
 		log.Infof("eventbot: %s is unset; the host runs with an empty schedule", eventbot.EnvEventBotFile)
@@ -120,6 +136,41 @@ func buildEventBot(deps *enterworld.Deps, presence *livepresence.Directory, auth
 			}
 			return eventbot.WinsAfterRead(n, err)
 		},
+		// Hide & Seek's hider (#3536): a tracked GM spawn in the open
+		// world's population at the file's spot, so visibility,
+		// selection and entry all take the ordinary monster lanes;
+		// the despawn is the spawn's silent counterpart. An unknown
+		// codename or a closed world runs the round hiderless.
+		SpawnHider: func(event eventbot.Event, spot eventbot.Spot, at time.Time) (eventbot.Hider, bool) {
+			ref, ok := items.Monsters.ReferenceByCodename(event.Hider)
+			if !ok {
+				log.Warnf("eventbot: hider %q is not a monster codename; the round runs hiderless", event.Hider)
+				return eventbot.Hider{}, false
+			}
+			lease, open := items.Monsters.PopulationLease(division, instance.ID(domain.DefaultWorldInstance))
+			if !open {
+				return eventbot.Hider{}, false
+			}
+			gids := items.Monsters.SpawnGMMonstersTracked(simulation.GMMonsterSpawn{
+				Division:   division,
+				Population: lease,
+				RefObjID:   ref.RefObjID,
+				Count:      1,
+				Position:   simulation.Spawn{RegionID: uint16(spot.RegionID), X: spot.X, Z: spot.Z},
+				NowMs:      at.UnixMilli(),
+			})
+			if len(gids) != 1 {
+				return eventbot.Hider{}, false
+			}
+			gid := gids[0]
+			return eventbot.Hider{
+				ObjectID: gid,
+				RegionID: spot.RegionID,
+				X:        spot.X,
+				Z:        spot.Z,
+				Despawn:  func() { items.Monsters.DespawnGMMonster(division, gid) },
+			}, true
+		},
 		KnownItem: knownItem,
 	})
 	log.Infof("eventbot: ON, %d scheduled event(s)", len(schedule.Events))
@@ -143,5 +194,79 @@ func (game *gameplayPlane) installEventBotChat() {
 			return nil, false
 		}
 		return game.eventBot.HandleWhisper(eventbot.WhisperSender{Division: divisionID, Character: sender}, text), true
+	}
+}
+
+/*
+================
+eventSeekTick
+
+Hide & Seek's world check (#3536): while a hider is live, the round
+goes to the first entrant standing close with the hider actually
+selected, alive and out of a stall. A slain (or otherwise gone)
+hider ends the round here. Per-tick over the division's characters;
+the host re-checks entry and the cap before paying.
+================
+*/
+func (game *gameplayPlane) eventSeekTick(nowMs int64) {
+	host := game.eventBot
+	if host == nil {
+		return
+	}
+	hider, live := host.LiveHider()
+	if !live {
+		return
+	}
+	if spawn, ok := game.items.Monsters.Get(game.divisionID, hider.ObjectID); !ok || spawn.CurrentHP == 0 {
+		host.HiderLost()
+		return
+	}
+	var hunters []*enterworld.Character
+	game.deps.Read(game.divisionID, func() {
+		for _, character := range game.deps.CharactersForDivision(game.divisionID) {
+			if character != nil && !character.DeletePending {
+				hunters = append(hunters, character)
+			}
+		}
+	})
+	for _, character := range hunters {
+		selected, okSel := game.items.Selected.Get(game.divisionID, character.Name)
+		if !okSel || selected != hider.ObjectID {
+			continue
+		}
+		if !enterworld.CharacterAlive(character) {
+			continue
+		}
+		if _, owns := game.items.Stalls.Get(game.divisionID, character.Name); owns {
+			continue
+		}
+		if _, visiting := game.items.Stalls.Visiting(game.divisionID, character.Name); visiting {
+			continue
+		}
+		pose := game.items.LiveSpawnFor(game.divisionID, character)
+		if int(pose.RegionID) != hider.RegionID {
+			continue
+		}
+		if math.Hypot(pose.X-hider.X, pose.Z-hider.Z) > eventSeekRange {
+			continue
+		}
+		if host.ReportFound(character) {
+			return
+		}
+	}
+}
+
+/*
+================
+shutdownEventBot
+
+The drain's last seat: a live hider leaves the population with the
+process instead of lingering as a phantom in a world that outlives
+no one. The hook is optional exactly like the host itself.
+================
+*/
+func (game *gameplayPlane) shutdownEventBot() {
+	if game.eventBot != nil {
+		game.eventBot.Shutdown()
 	}
 }

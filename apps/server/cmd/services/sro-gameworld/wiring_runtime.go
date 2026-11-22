@@ -140,6 +140,11 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			game.eventBot.Tick(time.UnixMilli(nowMs))
 			return nil
 		}})
+		// Hide & Seek's world check (#3536): no-op until a hider is live.
+		hooks = append(hooks, simulation.NamedTickHook{Name: "event-bot-seek", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			game.eventSeekTick(nowMs)
+			return nil
+		}})
 	}
 	// Port-only (#3529, SRO_CONSIGNMENT): gold a market sale owes a
 	// character reaches it once it is in the world (action market.go).

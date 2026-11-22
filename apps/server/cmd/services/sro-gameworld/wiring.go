@@ -1,7 +1,9 @@
 /*
 ===========================================================================
 
-wiring.go - GameWorld construction, service ownership and orderly shutdown
+wiring.go - GameWorld construction and service ownership
+
+The shutdown tail (drain, lease release, rollback) is wiring_shutdown.go's.
 
 ===========================================================================
 */
@@ -13,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -95,17 +96,20 @@ type gameWorldApplication struct {
 	// (port-only, #1639); nil while SRO_KILL_STATS is off.
 	killStatsFlush       func() error
 	preserveArenaRewards func()
-	settings             *settingsapi.SQLiteStore
-	skillCache           io.Closer
-	itemCache            io.Closer
-	populationCache      io.Closer
-	transport            *transport.Server
-	authority            *store.Store
-	controlAPI           *agentapi.API
-	publicAPI            *publicAPI
-	controlErrors        <-chan error
-	reporter             *shard.Reporter
-	ticker               *simulation.Ticker
+	// shutdownEventBot despawns a live Hide & Seek hider at shutdown
+	// (port-only, #3536); nil while SRO_EVENT_BOT is off.
+	shutdownEventBot func()
+	settings         *settingsapi.SQLiteStore
+	skillCache       io.Closer
+	itemCache        io.Closer
+	populationCache  io.Closer
+	transport        *transport.Server
+	authority        *store.Store
+	controlAPI       *agentapi.API
+	publicAPI        *publicAPI
+	controlErrors    <-chan error
+	reporter         *shard.Reporter
+	ticker           *simulation.Ticker
 	// returnArrivals is the action runtime's return lane
 	// (RunReturnArrivals): it completes the return-scroll arrivals
 	// the tick hands off, beside the ticker in Run.
@@ -374,6 +378,9 @@ func newGameWorldApplication(
 	}
 	installCertificateWatch(application, ts, ownedShard.ID)
 	application.preserveArenaRewards = gameplay.items.PrepareSookShutdown
+	if gameplay.eventBot != nil {
+		application.shutdownEventBot = gameplay.shutdownEventBot
+	}
 	if err := installShardLedgers(application, gameplay, ownedShard.ID); err != nil {
 		return nil, err
 	}
@@ -788,110 +795,6 @@ func waitForServeError(
 		}
 		return fmt.Errorf("%s stopped unexpectedly: %w", name, err)
 	}
-}
-
-/*
-================
-drainNetwork
-================
-*/
-func (application *gameWorldApplication) drainNetwork() error {
-	if application.preserveArenaRewards != nil {
-		application.preserveArenaRewards()
-	}
-	application.readiness.Close()
-	log.Info("shutdown: draining the game transport and control API")
-
-	ctx, cancel := context.WithTimeout(
-		context.Background(),
-		networkDrainTimeout,
-	)
-	defer cancel()
-	var drains errgroup.Group
-	if application.transport != nil {
-		drains.Go(func() error {
-			if err := application.transport.Shutdown(ctx); err != nil {
-				return fmt.Errorf("transport drain: %w", err)
-			}
-			return nil
-		})
-	}
-	if application.controlAPI != nil {
-		drains.Go(func() error {
-			if err := application.controlAPI.Shutdown(ctx); err != nil {
-				return fmt.Errorf("control API drain: %w", err)
-			}
-			return nil
-		})
-	}
-	return drains.Wait()
-}
-
-/*
-================
-releaseLease
-================
-*/
-func (application *gameWorldApplication) releaseLease() {
-	if !application.leaseOwned || application.reporter == nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(
-		context.Background(),
-		leaseReleaseTimeout,
-	)
-	defer cancel()
-	if err := application.reporter.Release(ctx); err != nil {
-		log.Warnf("shutdown: releasing shard lease: %v", err)
-	}
-}
-
-/*
-================
-rollback
-================
-*/
-func (application *gameWorldApplication) rollback() {
-	application.readiness.Close()
-	if err := application.drainNetwork(); err != nil &&
-		!errors.Is(err, http.ErrServerClosed) {
-		log.Warnf("startup rollback: %v", err)
-	}
-	if application.publicAPI != nil {
-		if err := application.publicAPI.Close(); err != nil {
-			log.Warnf("startup rollback public api: %v", err)
-		}
-	}
-	for _, cache := range []io.Closer{application.skillCache, application.itemCache} {
-		if cache != nil {
-			if err := cache.Close(); err != nil {
-				log.Warnf("startup rollback reference cache: %v", err)
-			}
-		}
-	}
-	if application.populationCache != nil {
-		if err := application.populationCache.Close(); err != nil {
-			log.Warnf("startup rollback population cache: %v", err)
-		}
-	}
-	if application.authority != nil {
-		application.authority.Close()
-	}
-	application.releaseLease()
-	application.leaseOwned = false
-	if application.economy != nil {
-		_ = application.economy.Close()
-	}
-	_ = application.ledgers.close()
-	if application.settings != nil {
-		_ = application.settings.Close()
-	}
-	// The history journal closes last, as in Run: every rollback line
-	// above is still recorded (#3186).
-	if application.history != nil {
-		_ = application.history.Close()
-	}
-	application.closeGuard("startup rollback")
 }
 
 // boundedCatalogueEnv opts a small host into the disk-backed skill and item
