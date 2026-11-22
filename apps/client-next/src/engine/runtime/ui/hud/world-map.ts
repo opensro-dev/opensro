@@ -47,7 +47,7 @@ import {
 	type MapMarker,
 	mapLabelVisible
 } from "@/engine/foundation/ui/world-map";
-import { guideOverlay, guideRace } from "@/engine/foundation/ui/worldmap-guide";
+import { guideDungeonGround, guideMonsterTarget, guideOverlay, guideRace } from "@/engine/foundation/ui/worldmap-guide";
 import { NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
 import { huntingPose } from "@/engine/foundation/gameplay/hunting";
 import { HUNTING_AREA_PREFIX, HUNTING_MONSTER_SIGN } from "@/engine/foundation/ui/hunting-guide";
@@ -668,6 +668,18 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			const toolsPage = mapTools.cavePage( input.caveMaps, pose );
 			const cavePage = toolsPage?.page ?? indoorPage;
 			const caveMark = mapTools.mark();
+			// The monster picked in the guide, when the floor on screen
+			// is its own: its hunting ground for the cave page
+			// (worldmap-guide.ts guideDungeonGround, issue #3395).
+			const cavePick = mapTools.guidePick();
+			const caveTarget = cavePick ? guideMonsterTarget( cavePick.catalog, cavePick.index ) : null;
+			const caveFloor = caveTarget?.kind === "dungeon" && input.caveMaps ?
+				caveDungeonFloors( input.caveMaps, caveTarget.dungeon )[caveTarget.floor] :
+				undefined;
+			const guideCaveGround = cavePick && caveFloor && cavePage &&
+					caveFloor.regionId === cavePage.regionId && caveFloor.floorIndex === cavePage.floorIndex ?
+				guideDungeonGround( cavePick.catalog, cavePick.index ) :
+				null;
 			const caveMap = mapOpen && pose && cavePage && input.caveMaps ?
 				caveMapView( {
 					pose,
@@ -680,7 +692,8 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					// The "you are here" sign stands only on the floor
 					// the player is on (issue #3239).
 					local: cavePageLocal( input.caveMaps, cavePage, pose, game?.navigationFloor ),
-					mark: caveMark && caveMark.regionId === cavePage.regionId ? caveMark : null
+					mark: caveMark && caveMark.regionId === cavePage.regionId ? caveMark : null,
+					ground: guideCaveGround
 				} ) :
 				null;
 			mapCaveShown = caveMap !== null;
@@ -786,7 +799,15 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				);
 			}
 			const mapImages = caveMap ?
-				cavePageImages( caveMap, text, mapClip, hover ) :
+				// A mask drawn before its image loads would tint the
+				// whole tile square: each waits for its own texture.
+				cavePageImages(
+					caveMap,
+					text,
+					mapClip,
+					hover,
+					caveMap.ground.filter( q => resources.has( q.texture ) )
+				) :
 				mapProjection ?
 				[
 					...mapProjection.background,
@@ -882,6 +903,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					...(mapGuide?.paths ?? []),
 					...(levelGround?.paths ?? []),
 					...(guideGround?.paths ?? []),
+					...(guideCaveGround?.paths ?? []),
 					...mapImages.map( q => q.texture ).filter( Boolean )
 				);
 			} else if ( cavePage && input.caveMaps ) {
