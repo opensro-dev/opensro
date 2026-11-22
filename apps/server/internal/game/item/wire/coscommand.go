@@ -333,8 +333,8 @@ The rider a frame's mode-1 B4B5 ride state names; false for any other
 opcode, a refusal or a malformed body. The one test every publication
 lane keys ride states by (the action lane's frameSourceGID, the abnormal
 tick's splitRideStates, the monster leg's per-viewer filter): the client
-applies a ride state to its rider with no absent-actor arm (client
-0x777FB2..0x777FC3), so each lane must route it by this rider.
+applies a ride state to its rider with no absent-actor arm
+(client 0x777FB2..0x777FC3), so each lane must route it by this rider.
 ================
 */
 func FrameRideRider(opcode uint16, payload []byte) (uint32, bool) {
