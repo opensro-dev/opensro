@@ -215,23 +215,52 @@ test("the System menu's market entry follows its Experimental row and opens the 
 			step();
 			f.ui.event( { kind: "activate", id: "open-window:System" } );
 			let controls = step();
-			assert.equal( controls.has( "market-menu" ), rowOn, `the menu entry with the row ${rowOn ? "on" : "off"}` );
+			assert.equal(
+				controls.has( "system-menu-market" ),
+				rowOn,
+				`the menu entry with the row ${rowOn ? "on" : "off"}`
+			);
 			assert.equal( f.hasText( "Consignment Market" ), rowOn, "the entry's label" );
 			if ( !rowOn ) continue;
 			// Choosing the entry leaves the menu and opens the window.
-			f.ui.event( { kind: "activate", id: "market-menu" } );
+			f.ui.event( { kind: "activate", id: "system-menu-market" } );
 			controls = step();
 			assert.ok( controls.has( "market-close" ), "the entry opens the window" );
 			assert.equal( controls.has( "close-window:System" ), false, "and closes the menu" );
 			// From the menu again, the same entry closes the window.
 			f.ui.event( { kind: "activate", id: "open-window:System" } );
 			step();
-			f.ui.event( { kind: "activate", id: "market-menu" } );
+			f.ui.event( { kind: "activate", id: "system-menu-market" } );
 			controls = step();
 			assert.equal( controls.has( "market-close" ), false, "the entry toggles the window shut" );
 		} finally {
 			f.dispose();
 		}
+	}
+});
+
+test("the System menu's port-only entries each name their window and its route", () => {
+	const f = uiFixture( () => {} );
+	let now = 1000, seen = null;
+	const step = () => {
+		for ( let i = 0; i < 20; i++ ) seen = f.ui.step( f.state, now += 50 ) ?? seen;
+		return seen;
+	};
+	try {
+		f.ui.event( {
+			kind: "experimental-preferences",
+			value: experimentalOptions( { eventCalendar: true, uniqueStatus: true, consignmentMarket: true } )
+		} );
+		step();
+		f.ui.event( { kind: "activate", id: "open-window:System" } );
+		const controls = new Map( (step()?.controls ?? []).map( control => [ control.id, control ] ) );
+		// Each entry's control id is the click it sends and its label the
+		// window it opens (SYSTEM_MENU_ENTRIES in ui.ts).
+		assert.equal( controls.get( "open-window:Event Calendar" )?.label, "Event Calendar" );
+		assert.equal( controls.get( "open-window:Unique Status" )?.label, "Unique Status" );
+		assert.equal( controls.get( "system-menu-market" )?.label, "Consignment Market" );
+	} finally {
+		f.dispose();
 	}
 });
 
