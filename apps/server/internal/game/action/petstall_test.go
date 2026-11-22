@@ -105,17 +105,16 @@ func TestWedgedBattleApproachYieldsToFollow(t *testing.T) {
 
 /*
 ================
-TestStalledTargetSitsOutRepeatedOrders
+TestOwnerOrderInsideCooldownIsObeyed
 
-The yield would be undone by re-picking the same target: an order (or
-a macro) repeated at the wedged monster re-enters BATTLE at once,
-three more seconds wedge, yield, repeat - the follow lane never
-collects the ten stops of its warp. A yielded target sits out
-petStallCooldownMs against further orders; after it lapses, the same
-order stands again.
+Agency over cooldown: an admitted owner order on the yielded target
+clears that target's cooldown and stands - the pet obeys its owner,
+and a pursuit that wedges again simply yields again. The cooldown
+binds only the un-ordered re-picks (the mercenary sight acquisition,
+next test), never the owner's word.
 ================
 */
-func TestStalledTargetSitsOutRepeatedOrders(t *testing.T) {
+func TestOwnerOrderInsideCooldownIsObeyed(t *testing.T) {
 	rt, clock, c, m := newPetCombatRuntime(t, 100, attackPetBand)
 	petGID := c.ActiveCOS.GID
 	state := rt.petSessionFor(testDivision, c.Name, petGID)
@@ -135,27 +134,38 @@ func TestStalledTargetSitsOutRepeatedOrders(t *testing.T) {
 			rt.TickHook()(clock.NowMs())
 		}
 	}
-	yields := 0
 	for step := 0; step < 100 && state.combat != nil; step++ {
 		tick(1)
-		yields++
 	}
 	if state.combat != nil {
 		t.Fatal("the wedged battle never yielded")
 	}
-
-	// The repeated order lands inside the cooldown: no new battle.
-	rt.HandleCosCommand(testDivision, c, petAttackOrder(petGID, m.Gid))
-	tick(30)
-	if state.combat != nil {
-		t.Fatalf("the yielded target was re-picked inside its cooldown (after %d ticks of follow)", 30)
+	if state.stallTarget != m.Gid || state.stallUntilMs <= clock.NowMs() {
+		t.Fatalf("the yield left no live cooldown: target %d until %d at now %d", state.stallTarget, state.stallUntilMs, clock.NowMs())
 	}
 
-	// After the cooldown the same order stands again.
-	tick(100)
+	// The repeated order lands inside the cooldown and is obeyed at
+	// once; the cooldown is gone, not sat out.
 	rt.HandleCosCommand(testDivision, c, petAttackOrder(petGID, m.Gid))
 	if state.combat == nil {
-		t.Fatal("the yielded target stayed refused after its cooldown lapsed")
+		t.Fatal("an owner order inside the cooldown was not obeyed")
+	}
+	if state.stallTarget != 0 || state.stallUntilMs != 0 {
+		t.Fatalf("the obeyed order left the cooldown standing: target %d until %d", state.stallTarget, state.stallUntilMs)
+	}
+
+	// The re-entered pursuit wedges and yields again, and the next
+	// order inside the fresh cooldown is obeyed again: agency repeats,
+	// the yield is the only brake.
+	for step := 0; step < 100 && state.combat != nil; step++ {
+		tick(1)
+	}
+	if state.combat != nil {
+		t.Fatal("the re-entered pursuit never yielded")
+	}
+	rt.HandleCosCommand(testDivision, c, petAttackOrder(petGID, m.Gid))
+	if state.combat == nil {
+		t.Fatal("the second owner order inside a cooldown was not obeyed")
 	}
 }
 

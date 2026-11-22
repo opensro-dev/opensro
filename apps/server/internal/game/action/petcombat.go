@@ -87,11 +87,12 @@ type petCombatIntent struct {
 const petPursuitProgressDistance = 1.0
 
 // petStallCooldownMs is how long a target whose approach yielded to a
-// stall is not picked again, by an owner's repeated order or by the
-// mercenary sight acquisition: the follow lane collects its tenth stop
-// in about a second of ticks and walking home takes a few more, so ten
-// seconds lets the pet get home several times over while a deliberate
-// re-order on the same target still lands promptly.
+// stall is not re-acquired by sight (the mercenary acquisition): the
+// follow lane collects its tenth stop in about a second of ticks and
+// walking home takes a few more, so ten seconds lets the pet get home
+// several times over. An owner's admitted order on the yielded target
+// clears the cooldown instead of sitting it out (orderPetAttack): the
+// pet obeys its owner, and a pursuit that wedges again yields again.
 const petStallCooldownMs = 10_000
 
 /*
@@ -148,13 +149,6 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 	if state == nil {
 		return refuse("no pet session")
 	}
-	// A target whose wedged approach just yielded to FOLLOW sits out
-	// its cooldown (petStallCooldownMs): re-ordering it at once would
-	// re-wedge the pet every stall window and starve the follow lane
-	// of the ten stops of its warp home.
-	if state.stallTarget == targetGID && nowMs < state.stallUntilMs {
-		return refuse("approach stalled on this target")
-	}
 	// The native command retires the owner's event-bit-2 effects after the
 	// admitted order, including a repeated order for the existing target.
 	defer func() {
@@ -173,6 +167,14 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 		intent.intervalMs = state.combat.intervalMs
 	}
 	rt.cancelPetCombat(petOwnerKey{division: division, name: strings.ToLower(character.Name), gid: cosGID}, state, nowMs)
+	// An admitted order is the owner's word: re-ordering the target a
+	// stall yielded on clears that target's cooldown instead of
+	// sitting it out - the pet obeys its owner, and a pursuit that
+	// wedges again simply yields again. Only the un-ordered re-picks
+	// (the mercenary sight acquisition) sit the cooldown out.
+	if state.stallTarget == targetGID {
+		state.stallTarget, state.stallUntilMs = 0, 0
+	}
 	state.combat = intent
 	// Entering BATTLE is a state change.
 	resetPetStuck(state)
@@ -334,10 +336,11 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 			// out, so a pursuit that has made no progress for the
 			// stall threshold ends: the pet leaves BATTLE and returns
 			// to FOLLOW, whose own stuck answer (the warp to its
-			// owner) still rescues it if it cannot walk there either,
-			// and the yielded target is not picked again until the
-			// pet has had the follow lane's whole window to get home
-			// (petStallCooldownMs). Default path, no flag: the native
+			// owner) still rescues it if it cannot walk there either.
+			// The yielded target is not re-acquired by sight until
+			// the pet has had the follow lane's whole window to get
+			// home (petStallCooldownMs); an owner's fresh order on
+			// it clears that pause and stands. Default path, no flag: the native
 			// behaviour - a pet that walks to its target or comes
 			// back - is what this restores.
 			stalledTarget := intent.target
