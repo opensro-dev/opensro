@@ -36,11 +36,13 @@ test("the window opens, fills both sides and swaps in slot order", () => {
 	assert.equal( state.open, true );
 	assert.equal( state.partner, 0x30d41 );
 	// Own list: [owner][count][bag slot][exchange slot][CSOItem: ref, u16 count].
+	// The reader is the local player 0x30d40 (75B690 reads a list by its
+	// owner against the local gid, not against the remembered partner).
 	const own = frame( 0x3569, [ ...u32( 0x30d40 ), 1, 20, 0, ...u32( POTION ), 5, 0 ] );
-	state = defined( exchange.exchangeFrame( state, own, refs ) ).state;
+	state = defined( exchange.exchangeFrame( state, own, refs, new Map(), 0x30d40 ) ).state;
 	assert.deepEqual( state.own.map( r => [ r.slot, r.bagSlot, r.item.quantity ] ), [ [ 0, 20, 5 ] ] );
 	const theirs = frame( 0x3569, [ ...u32( 0x30d41 ), 2, 3, ...u32( POTION ), 2, 0, 1, ...u32( POTION ), 7, 0 ] );
-	state = defined( exchange.exchangeFrame( state, theirs, refs ) ).state;
+	state = defined( exchange.exchangeFrame( state, theirs, refs, new Map(), 0x30d40 ) ).state;
 	assert.deepEqual( state.theirs.map( r => r.slot ), [ 3, 1 ] );
 	state = defined( exchange.exchangeFrame( state, frame( 0x30bb, [ 2, ...u32( 1000 ) ] ), refs ) ).state;
 	assert.equal( state.theirGold, 1000 );
@@ -66,6 +68,69 @@ test("the window opens, fills both sides and swaps in slot order", () => {
 	assert.deepEqual( [ ...next.keys() ].sort( ( a, b ) => a - b ), [ 13, 14, 15 ] );
 	assert.equal( next.get( 14 )?.quantity, 7 );
 	assert.equal( next.get( 15 )?.quantity, 2 );
+});
+
+test("both captured 0x3569 payloads decode against the local gid (#4113)", () => {
+	// The two live captures of #4113: character 897 (gid 100897) offers
+	// one item. Keyed on the remembered partner, the old reader ate the
+	// slot byte (0) as a bag slot and refused the item's RefObjID low
+	// byte (0x0f, then 0x10) as an exchange slot, ending the session.
+	// Keyed on the local gid as native (75B690), both carry slot 0.
+	// 6927 is an attribute stone (3.3.11.2); 4112 a spear (3.1.6.4).
+	const captured = new Map( [ ...refs, [ 6927, 0x15ec ], [ 4112, 0x232c ] ] );
+	const viewer = 0x30d99;
+	const first = frame( 0x3569, [
+		0xe1,
+		0x8a,
+		0x01,
+		0x00,
+		0x01,
+		0x00,
+		0x0f,
+		0x1b,
+		0x00,
+		0x00,
+		0xc7,
+		0x00,
+		0x00
+	] );
+	const folded = defined( exchange.exchangeFrame( exchange.emptyExchange(), first, captured, new Map(), viewer ) );
+	assert.deepEqual(
+		folded.state.theirs.map( r => [ r.slot, r.item.refObjId, r.item.quantity ] ),
+		[ [ 0, 6927, 199 ] ]
+	);
+	// The second capture is elided in the issue after the spear's
+	// durability: the fold passes the slot byte and reaches the item
+	// body, failing only on the bytes the issue does not carry.
+	const second = frame( 0x3569, [
+		0xe1,
+		0x8a,
+		0x01,
+		0x00,
+		0x01,
+		0x00,
+		0x10,
+		0x10,
+		0x00,
+		0x00,
+		0x0c,
+		0x17,
+		0x9e,
+		0x94,
+		0x66,
+		0x02,
+		0x00,
+		0x00,
+		0x00,
+		0xe8,
+		0x00,
+		0x00,
+		0x00
+	] );
+	assert.throws(
+		() => exchange.exchangeFrame( exchange.emptyExchange(), second, captured, new Map(), viewer ),
+		/Truncated inventory item/
+	);
 });
 
 test("a successful exchange raises its line once, through the inventory owner (765260)", () => {
