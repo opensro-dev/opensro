@@ -430,6 +430,15 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# (variant_later_layers.py owns the order and the manifest keys).
 	from variant_later_layers import add_later_layers
 	later_layers = add_later_layers(native, out)
+	# The later client's character title table (#3502): later-native,
+	# no switch, so it is a stage here rather than a layer - titles.txt
+	# joins the variant's server textdata after the layers merged
+	# theirs, and the server bundle's projection copies it with the
+	# root's other tables. A tree naming no later client prints one
+	# skip line; a tree naming one that cannot produce the table
+	# fails inside title_import.
+	from title_import import add_titles
+	titles = add_titles(native, out)
 	# The Roc range's kinds (SRO_ROC, #3399): after every later layer,
 	# so their identities allocate above all of the layers' rows.
 	from roc_import import add_roc
@@ -495,6 +504,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"nasrun": nasrun,
 		"nasrunSkills": nasrun_skills,
 		"roc": roc,
+		"titles": titles,
 		"pets": pets["pets"],
 		"petsV1696": pets["petsV1696"],
 		"petsArchive": pets["petsArchive"],

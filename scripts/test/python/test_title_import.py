@@ -11,7 +11,9 @@ The rendered file is one title per line, sorted by id.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import tempfile
 import unittest
+from pathlib import Path
 
 import title_import as titles  # noqa: E402
 
@@ -72,6 +74,58 @@ class TitleImportTest(unittest.TestCase):
 			titles.parse_ref_titles("1\tTITLE\t9\tSN_TITLE_X")
 		with self.assertRaises(ValueError):
 			titles.parse_ref_titles("1\tTITLE")
+
+
+class TitleBuildTest(unittest.TestCase):
+	# ================
+	# test_plan_skips_when_no_client_named
+	# ================
+	def test_plan_skips_when_no_client_named(self):
+		with tempfile.TemporaryDirectory() as scratch:
+			run, root = titles.title_plan({}, default_root=Path(scratch) / "absent")
+		self.assertFalse(run)
+		self.assertIsNone(root)
+
+	# ================
+	# test_plan_runs_for_a_named_client_with_its_archive
+	# ================
+	def test_plan_runs_for_a_named_client_with_its_archive(self):
+		with tempfile.TemporaryDirectory() as scratch:
+			root = Path(scratch)
+			(root / "Media.pk2").write_bytes(b"pk2")
+			run, named = titles.title_plan({"SRO_V1696_ROOT": str(root)})
+		self.assertTrue(run)
+		self.assertEqual(named, root)
+
+	# ================
+	# test_plan_refuses_a_named_client_without_its_archive
+	# ================
+	def test_plan_refuses_a_named_client_without_its_archive(self):
+		with tempfile.TemporaryDirectory() as scratch:
+			with self.assertRaises(SystemExit):
+				titles.title_plan({"SRO_V1696_ROOT": scratch})
+
+	# ================
+	# test_verify_media_refuses_an_archive_off_the_pin
+	# ================
+	def test_verify_media_refuses_an_archive_off_the_pin(self):
+		with tempfile.TemporaryDirectory() as scratch:
+			(Path(scratch) / "Media.pk2").write_bytes(b"not the pinned archive")
+			with self.assertRaises(SystemExit):
+				titles.verify_media(scratch)
+
+	# ================
+	# test_add_titles_skip_reaps_a_stale_table
+	# ================
+	def test_add_titles_skip_reaps_a_stale_table(self):
+		with tempfile.TemporaryDirectory() as scratch:
+			out = Path(scratch) / "variant"
+			target = out / titles.TEXT_ROOT / "titles.txt"
+			target.parent.mkdir(parents=True)
+			target.write_bytes(b"stale")
+			summary = titles.add_titles(Path(scratch), out, {}, default_root=Path(scratch) / "absent")
+			self.assertEqual(summary, {"enabled": False, "titles": 0})
+			self.assertFalse(target.exists())
 
 
 if __name__ == "__main__":
