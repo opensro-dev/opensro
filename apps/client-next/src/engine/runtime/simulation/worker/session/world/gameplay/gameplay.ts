@@ -5261,7 +5261,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				// The exchange window (inventory owner) folds its frames first; its
 				// confirm, approve and cancel refusals stay the social lane's notices.
 				const exchangeWasOpen = inventory.exchangeState().open;
-				const exchangeNotice = inventory.exchangeReceive( frame );
+				const exchangeNotice = inventory.exchangeReceive( frame, localGid ?? 0 );
 				if ( exchangeNotice !== null ) {
 					dirty = true;
 					const opened = inventory.exchangeState();

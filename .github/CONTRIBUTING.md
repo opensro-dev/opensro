@@ -128,6 +128,9 @@ Also:
   this are kept with the operator's release tooling (F6's COS bag cap
   broke a strict decoder).
 - **Link the issue or bug report** (for example `BUG-064`) it fixes.
+- **Name every open item's issue.** Anything the body lists as not ported,
+  left open or not covered names the issue that tracks it, or says why it
+  needs none (done since, native has none, owner's decision).
 - **Mark non-native behaviour** and name its flag (section 3).
 - Keep secrets out of commits and pull requests: tokens, passwords, webhook URLs.
 

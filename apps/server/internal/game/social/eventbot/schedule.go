@@ -9,6 +9,8 @@ many rounds of how long, and exactly what a win pays:
 
 	# an evening raffle, three two-minute rounds, ten silk scrolls
 	19:30 raffle rounds=3 round=2m reward=ITEM_ETC_SILK_SCROLLx10 title=Evening Raffle
+	# hide & seek: a hider codename and its spots (Name|Region|X|Z)
+	20:30 hideandseek rounds=5 round=10m reward=ITEM_ETC_SILK_SCROLLx10 hider=MOB_EVENT_HIDER spot=West_Gate|2499|100|200 title=Hide & Seek
 
 Fields after the kind are key=value; title= takes the rest of the
 line. The parse is strict like the house's other operator files: one
@@ -61,6 +63,39 @@ type Event struct {
 	// Reward pays a win: exactly this item, this many, never more.
 	RewardCodename string
 	RewardCount    int
+	// Hider is the monster/NPC codename a world kind hides (the
+	// file's hider=); empty for kinds that act nowhere.
+	Hider string
+	// Spots are the hiding places a world kind rotates through (the
+	// file's spot= rows); empty for kinds that act nowhere.
+	Spots []Spot
+}
+
+/*
+================
+Spot
+
+One hiding place from the data file: spot=Name|Region|X|Z. The name
+is display text (underscores read as spaces) and the only part a
+hint ever names - the coordinates place the hider and are never
+announced.
+================
+*/
+type Spot struct {
+	Name     string
+	RegionID int
+	X, Z     float64
+}
+
+/*
+================
+DisplayName
+
+The spot's name as players read it.
+================
+*/
+func (s Spot) DisplayName() string {
+	return strings.ReplaceAll(s.Name, "_", " ")
 }
 
 /*
@@ -171,11 +206,24 @@ func parseScheduleLine(line string) (Event, error) {
 	seen := map[string]bool{}
 	for _, field := range fields[2:] {
 		key, value, found := strings.Cut(field, "=")
-		if !found || seen[key] {
+		// spot= repeats (a world kind's hiding places); every other
+		// field is single.
+		if !found || (key != "spot" && seen[key]) {
 			return Event{}, fmt.Errorf("bad field %q", field)
 		}
 		seen[key] = true
 		switch key {
+		case "hider":
+			if value == "" {
+				return Event{}, fmt.Errorf("hider %q is empty", field)
+			}
+			event.Hider = value
+		case "spot":
+			spot, err := parseSpot(value)
+			if err != nil {
+				return Event{}, err
+			}
+			event.Spots = append(event.Spots, spot)
 		case "rounds":
 			n, err := strconv.Atoi(value)
 			if err != nil || n < 1 || n > maxRounds {
@@ -209,7 +257,39 @@ func parseScheduleLine(line string) (Event, error) {
 	if event.RewardCodename == "" {
 		return Event{}, fmt.Errorf("no reward= item")
 	}
+	// A world kind refuses a row it cannot run (no hider, no spots).
+	if kind, ok := kindByName(event.Kind); ok {
+		if wk, ok := kind.(WorldKind); ok {
+			if err := wk.ValidateEvent(event); err != nil {
+				return Event{}, err
+			}
+		}
+	}
 	return event, nil
+}
+
+/*
+================
+parseSpot
+
+One spot= value: Name|Region|X|Z.
+================
+*/
+func parseSpot(value string) (Spot, error) {
+	parts := strings.Split(value, "|")
+	if len(parts) != 4 || parts[0] == "" {
+		return Spot{}, fmt.Errorf("spot %q is not Name|Region|X|Z", value)
+	}
+	region, err := strconv.Atoi(parts[1])
+	if err != nil || region < 1 || region > 65535 {
+		return Spot{}, fmt.Errorf("spot %q has no region 1..65535", value)
+	}
+	x, errX := strconv.ParseFloat(parts[2], 64)
+	z, errZ := strconv.ParseFloat(parts[3], 64)
+	if errX != nil || errZ != nil {
+		return Spot{}, fmt.Errorf("spot %q has bad coordinates", value)
+	}
+	return Spot{Name: parts[0], RegionID: region, X: x, Z: z}, nil
 }
 
 /*

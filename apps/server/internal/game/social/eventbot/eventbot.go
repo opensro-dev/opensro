@@ -112,17 +112,21 @@ into a live character (the caller holds the character's store door;
 false = the bag could not take it). WinsToday reads the account's
 paid wins on the UTC day containing the given instant from the grant
 audit (store grant days). KnownItem validates a reward codename at
-schedule load. Pick chooses the winner index (crypto-random in
-production, fixed in tests).
+schedule load. SpawnHider places a world kind's hider (kinds.go's
+WorldKind) and hands back how to remove it; a nil door or a false
+answer runs the round hiderless, so nothing can be found. Pick
+chooses the winner index (crypto-random in production, fixed in
+tests).
 ================
 */
 type Dependencies struct {
-	Whisper   func(division, name, text string)
-	Announce  func(text string)
-	Grant     func(division string, character *enterworld.Character, codename string, count int) bool
-	WinsToday func(accountID string, day time.Time) int
-	KnownItem func(codename string) bool
-	Pick      func(n int) int
+	Whisper    func(division, name, text string)
+	Announce   func(text string)
+	Grant      func(division string, character *enterworld.Character, codename string, count int) bool
+	WinsToday  func(accountID string, day time.Time) int
+	KnownItem  func(codename string) bool
+	SpawnHider func(event Event, spot Spot, at time.Time) (Hider, bool)
+	Pick       func(n int) int
 	// Now is the host's clock for whisper-side text (the tick brings
 	// its own); nil is the wall clock. Tests freeze it.
 	Now func() time.Time
@@ -139,6 +143,23 @@ type entry struct {
 	answer    string
 }
 
+/*
+================
+Hider
+
+One live hiding NPC in the world, from the spawn door: its object
+id (what a finder's selection must name), where it stands, and how
+the composition root removes it. The host despawns it at round end
+(found, timed out, lost or shut down), exactly once.
+================
+*/
+type Hider struct {
+	ObjectID uint32
+	RegionID int
+	X, Z     float64
+	Despawn  func()
+}
+
 // liveRound is the round currently taking entries.
 type liveRound struct {
 	event     Event
@@ -147,6 +168,11 @@ type liveRound struct {
 	entries   []entry
 	byName    map[string]int // character name (folded) -> entries index
 	byAccount map[string]int // account -> entries count (this round)
+	// A world kind's live play (nil for drawn kinds): the spot in
+	// use, the spawned hider and the next hint's time.
+	spot     Spot
+	hider    *Hider
+	nextHint time.Time
 }
 
 // occurrenceState tracks one scheduled occurrence across its rounds.
