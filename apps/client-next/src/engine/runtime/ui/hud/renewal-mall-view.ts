@@ -18,7 +18,8 @@ Every action id is one the classic window already dispatches
 (item-mall-category, item-mall-tab, item-mall-buy, item-mall-wear,
 item-mall-reserve, item-mall-root:4/5, item-mall-buy-all, item-mall-page,
 item-mall-home, item-mall-search, item-mall-close), plus the card popup's
-item-mall-popup:<index> and item-mall-popup-close.
+item-mall-popup:<index> and item-mall-popup-close, and the scrolled tab
+row's item-mall-tab-scroll:<first> (issue #4093).
 
 ===========================================================================
 */
@@ -32,7 +33,6 @@ import {
 	RENEWAL_MALL_HEIGHT,
 	RENEWAL_MALL_TITLE_HEIGHT,
 	RENEWAL_MALL_WIDTH,
-	RENEWAL_SUB_TABS_MAX,
 	RENEWAL_WINDOW_FRAME,
 	renewalBadgeArt,
 	renewalGoodsRect,
@@ -42,7 +42,9 @@ import {
 	renewalPopupRect,
 	renewalRailIcon,
 	renewalRailRect,
+	renewalSubTabArrowRects,
 	renewalSubTabRect,
+	renewalSubTabWindow,
 	type RenewalMallControl,
 	type RenewalMallData
 } from "@/engine/foundation/ui/renewal-mall";
@@ -108,6 +110,8 @@ export interface RenewalMallBrowse {
 	readonly categories: MallCategoryList;
 	readonly category: number;
 	readonly tab: number;
+	// The first tab of the scrolled tab row (renewalSubTabWindow clamps it).
+	readonly tabFirst: number;
 	readonly tabs: readonly MallTab[];
 	readonly page: number;
 	readonly pageSize: number;
@@ -295,14 +299,15 @@ export function renewalMallView( input: RenewalMallInput ): RenewalMallOp[] {
 	button( find, "item-mall-search-find", input.busy );
 	label( copy( find.text ), at( find.rect ), WHITE, 1 );
 
-	// The sub-category tabs of the open category.
+	// The sub-category tabs of the open category. A category with more
+	// tabs than the row holds scrolls the row one tab per arrow.
 	if ( browse.category >= 0 && browse.search === "" ) {
-		const shown = Math.min( browse.tabs.length, RENEWAL_SUB_TABS_MAX );
-		for ( let index = 0; index < shown; index++ ) {
+		const row = renewalSubTabWindow( browse.tabs.length, browse.tabFirst );
+		for ( let index = row.first; index < row.first + row.shown; index++ ) {
 			const on = index === browse.tab;
 			const caption = mallTabCaptionLater( browse.tabs[index]!.category, index ) ??
 				copy( browse.tabs[index]!.label );
-			const rect = at( renewalSubTabRect( index ) );
+			const rect = at( renewalSubTabRect( index - row.first ) );
 			ops.push( {
 				kind: "button",
 				id: "item-mall-tab:" + index,
@@ -315,6 +320,27 @@ export function renewalMallView( input: RenewalMallInput ): RenewalMallOp[] {
 			// A button op is pixels and a hit area; its caption is drawn
 			// here, as the rail's and the panel buttons' are.
 			label( caption, rect, on ? GOLD : WHITE, 1 );
+		}
+		if ( row.scrolled ) {
+			const arrows = renewalSubTabArrowRects();
+			ops.push( {
+				kind: "button",
+				id: "item-mall-tab-scroll:" + Math.max( 0, row.first - 1 ),
+				label: "",
+				rect: at( arrows.prev ),
+				texture: RENEWAL_ART + "mall_page_prev.png",
+				disabled: row.first === 0,
+				selected: false
+			} );
+			ops.push( {
+				kind: "button",
+				id: "item-mall-tab-scroll:" + Math.min( browse.tabs.length - row.shown, row.first + 1 ),
+				label: "",
+				rect: at( arrows.next ),
+				texture: RENEWAL_ART + "mall_page_next.png",
+				disabled: row.first + row.shown >= browse.tabs.length,
+				selected: false
+			} );
 		}
 	}
 
