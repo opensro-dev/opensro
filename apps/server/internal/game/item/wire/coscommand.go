@@ -327,6 +327,40 @@ func CosRideStateRider(payload []byte) (uint32, bool) {
 
 /*
 ================
+FrameRideRider
+
+The rider a frame's mode-1 B4B5 ride state names; false for any other
+opcode, a refusal or a malformed body. The one test every publication
+lane keys ride states by (the action lane's frameSourceGID, the abnormal
+tick's splitRideStates, the monster leg's per-viewer filter): the client
+applies a ride state to its rider with no absent-actor arm
+(client 0x777FB2..0x777FC3), so each lane must route it by this rider.
+================
+*/
+func FrameRideRider(opcode uint16, payload []byte) (uint32, bool) {
+	if opcode != OpCosRideState {
+		return 0, false
+	}
+	return CosRideStateRider(payload)
+}
+
+/*
+================
+CosRideStateMount
+
+The vehicle a mode-1 B4B5 body names; false for a refusal ([2][code]) or a
+malformed body.
+================
+*/
+func CosRideStateMount(payload []byte) (uint32, bool) {
+	if len(payload) != cosRideStateApplyLen || payload[0] != 1 {
+		return 0, false
+	}
+	return binary.LittleEndian.Uint32(payload[6:]), true
+}
+
+/*
+================
 EncodeCosRecordCreateBand2
 
 EncodeCosRecordCreateBand2 builds the 0x3158 record for a TID-band-2
