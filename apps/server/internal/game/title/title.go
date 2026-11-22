@@ -14,9 +14,15 @@ name prints through ("<Big Spender> %s"). No title is id 0 and prints
 as plain "%s". Only the format rides to the client in this slice;
 codenames and categories stay server-side for the title window slice.
 
-The later client reads the id off the spawn stream (its spawn reader
-reads a u32 and calls its title setter before building the display
-name). The port carries the id on its own frame instead (wire.go): a
+The later client keeps the id on the character object (v1.696 client,
+pinned sha256 52118aaf075877851483d400b6b2905943e47b97b971d85b6cf59c3032c32d34:
+name builder 0xF5F7C0 reads it at object+0x88, the by-id lookup
+0x907190 resolves it and the record text at +0x28 prints through the
+format). Which spawn-stream read stores it there was not isolated in
+that build, so no native byte position is claimed; the id is plainly
+server-supplied there (nothing local writes it outside the title
+window's choose flow), and the port carries it on its own frame
+instead (wire.go): a
 tab loaded before this release decodes the spawn row length-strictly,
 so a grown row would fail it at the first player spawn, while a client
 that predates the frame drops the unknown opcode.

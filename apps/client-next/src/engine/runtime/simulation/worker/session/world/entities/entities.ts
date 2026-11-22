@@ -88,9 +88,13 @@ const CHARACTER_KINDS = new Set( [ "player", "local-player", "npc", "monster", "
 // Peer appearance slot 6 selects the overhead title; STALL_TITLE_MODE owns a stall.
 const STALL_TITLE_SLOT = 6;
 // The peer title frame (later-native titles, #3502): a port-carried S->C
-// opcode (server game/title/wire.go). The later native client reads the
-// title id off the spawn stream (0x96DA40); the port carries it here
-// instead, because a tab loaded before this release decodes the spawn
+// opcode (server game/title/wire.go). The later native client keeps the
+// title id on the character object (v1.696 client, pinned sha256
+// 52118aaf075877851483d400b6b2905943e47b97b971d85b6cf59c3032c32d34: name
+// builder 0xF5F7C0 reads it at object+0x88 and resolves it by id); which
+// spawn-stream read stores it there was not isolated in that build, so
+// no native byte position is claimed. The port carries it here instead,
+// because a tab loaded before this release decodes the spawn
 // row length-strictly - a grown row would fail it at the first player
 // spawn, while a client that predates this frame drops the unknown
 // opcode. It rides right after the peer's spawn row.

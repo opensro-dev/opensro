@@ -5,9 +5,16 @@ wire.go - the peer title frame (later-native titles, #3502 slice 1)
 
 OpPeerTitle is an S->C opcode of this build, the next free one after
 the contributor prompt (0x3FC2); server wire and client dispatch were
-both searched for 0x3FC3. The later native client reads the title id
-off the spawn stream (its spawn reader at 0x96DA40 reads a u32 and
-calls its title setter, then builds the display name). The port
+both searched for 0x3FC3. The later native client keeps the title id
+on the character object and prints it on the name line (v1.696 client,
+pinned sha256 52118aaf075877851483d400b6b2905943e47b97b971d85b6cf59c3032c32d34:
+the overhead name builder 0xF5F7C0 reads the id at object+0x88
+(0xF5F92D), resolves it through the by-id RefTitle lookup 0x907190
+and prints the record text at +0x28 through the title's format; the
+chat renderer 0xCEB3A0 formats the same text as <%s>%s). Which
+spawn-stream read stores the id there was not isolated in that build
+(searched: every caller of 0x907190, and the census of dword writes
+to +0x88), so no native byte position is claimed for it. The port
 carries the id here instead, because a tab loaded before this release
 decodes the player spawn row length-strictly: growing the row would
 fail old tabs at the first player spawn, while a client that predates
