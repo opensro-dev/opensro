@@ -217,6 +217,12 @@ export interface ExperimentalOptions {
 	// the world map and the minimap, not only the one quest the journal
 	// tracks. Off unless turned on; off is the native tracked quest only.
 	readonly questTrackerMarkers: boolean;
+	// Port-only, not native (#3394): a monster picked in the M map guide's
+	// Monster tab also marks its hunting ground on the minimap (the edge
+	// arrow while the point is off the ring) until another row is picked.
+	// The later client only tints the ground on the M map. Off unless
+	// turned on; off, the minimap is unchanged.
+	readonly guideWaypoint: boolean;
 	// Port-only, not native: the world map (M, never the minimap) offers a
 	// "Unique spawns" box at its foot, off until ticked; with both on it
 	// draws one unique sign on every nest a unique may spawn from, all
@@ -490,6 +496,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		petFilterOther: record.petFilterOther !== false,
 		touchInspect: record.touchInspect !== false,
 		questTrackerMarkers: enabled( "questTrackerMarkers" ),
+		guideWaypoint: enabled( "guideWaypoint" ),
 		uniqueSpawnPoints: record.uniqueSpawnPoints !== false,
 		sunDropMarker: enabled( "sunDropMarker" ),
 		warpArrivalSound: enabled( "warpArrivalSound" ),

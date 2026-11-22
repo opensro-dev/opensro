@@ -145,6 +145,7 @@ import {
 	minimapOffset,
 	minimapEdge,
 	minimapHunting,
+	minimapWaypoint,
 	questMarkerTargets
 } from "@/engine/foundation/ui/minimap-markers";
 import { createMinimapResources } from "./hud/minimap";
@@ -14213,6 +14214,15 @@ export function createUi( ports: UiPorts ) {
 							if ( offset ) markers.push( minimapEdge( offset, "quest" ) );
 						}
 						markers.push( ...minimapHunting( pose, game, next.entities, minimapZoom ) );
+						// Port-only, not native (#3394): the M map guide's
+						// picked hunting ground also on the minimap.
+						if ( experimental.state().saved.guideWaypoint ) {
+							const waypoint = mapHud.guideWaypoint();
+							if ( waypoint && minimapSameFloor( pose, waypoint, game ?? null ) ) {
+								const marker = minimapWaypoint( pose, waypoint, minimapZoom );
+								if ( marker ) markers.push( marker );
+							}
+						}
 						for ( const marker of markers ) {
 							sprite(
 								[

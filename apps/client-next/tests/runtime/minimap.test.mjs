@@ -22,6 +22,7 @@ const {
 	minimapEdge,
 	minimapHunting,
 	minimapOffset,
+	minimapWaypoint,
 	questMarkerTargets
 } = await import(
 	"../../src/engine/foundation/ui/minimap-markers.ts"
@@ -155,6 +156,15 @@ test("party and academy retain separate self, offline, world, order and edge rul
 		assert.ok( minimapEdge( [ 47, 0 ], kind ).path.endsWith( "arrow.png" ) );
 		assert.equal( minimapEdge( [ 46, 0 ], kind ).size, kind === "quest" ? 16 : 8 );
 	}
+});
+test("guide waypoint rings its point on the radar and arrow-clamps off it (#3394)", () => {
+	const inside = defined( minimapWaypoint( pose, { ...pose, x: 810, z: 790 }, 1920 ) );
+	assert.deepEqual( [ inside.x, inside.y, inside.size, inside.rotation ], [ 10, 10, 16, 0 ] );
+	assert.ok( inside.path.endsWith( "wmap_sign_huntingpoint.png" ) );
+	const outside = defined( minimapWaypoint( pose, { ...pose, x: 900 }, 1920 ) );
+	assert.deepEqual( [ outside.x, outside.size, outside.rotation ], [ 47, 32, -Math.PI ] );
+	assert.ok( outside.y === 0 );
+	assert.ok( outside.path.endsWith( "mm_sign_questarrow.png" ) );
 });
 test("academy location and online lifecycle packets preserve detached snapshots and signed coordinates", () => {
 	let state = { member: true, localMemberId: 1, members: [ { id: 2, name: "Peer", offline: true } ], rows: [] };

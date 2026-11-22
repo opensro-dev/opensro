@@ -203,11 +203,12 @@ test("six tabs group every preference once, in the spec's sections", () => {
 	// joined Sound and connection; 65: Plus +7 notices left once success
 	// notices began at +8 (#3681); 66: the SRO Macro (#3907) joined Combat;
 	// 57: nine rows that only fixed what the original got wrong became plain
-	// defaults (owner 2026-11-21).
+	// defaults (owner 2026-11-21); 58: the guide's hunting-ground waypoint
+	// (#3394) joined Map and minimap.
 	// The Server Mission gauge (#3803) has no row: it is the v1.696 client's
 	// own window, native here. Retail typos are fixed in the reviewed
 	// English table (englishCorrections.json), not by a row.
-	assert.equal( keys.length, 57 );
+	assert.equal( keys.length, 58 );
 	assert.deepEqual( [ ...keys ].sort(), Object.keys( OFF ).sort() );
 	const kinds = EXPERIMENTAL_TABS.flatMap( experimentalRows ).filter( row => row.parent );
 	assert.deepEqual(

@@ -18,6 +18,7 @@ import { test } from "node:test";
 const {
 	guideAreaRows,
 	guideAreaTarget,
+	guideDungeonGround,
 	guideGroups,
 	guideLevelColor,
 	guideMonsterRows,
@@ -255,6 +256,126 @@ test("the picked hunting ground: its tiles tinted 0x80e9c624, the icon's corner 
 	assert.deepEqual( guideOverlay( catalog, 7, frame, clip ).quads, [], "a dungeon page is not the world's" );
 });
 
+test("a dungeon pick's ground: its tiles and icon in the floor's own coordinates (issue #3395)", () => {
+	// Real rows of the published catalogue (the importer on the pinned
+	// v1.696 client): Donwhang floor 1's Bug Ghost and the Qin-Shi
+	// tomb's first floor Tomb Soldier. Their pages' origins are the
+	// published cave pages' left and top (later-dungeon-map.json), so
+	// the ground below is checked against the cave catalogue as well.
+	const body = fixture();
+	body.pages = {
+		...body.pages,
+		dunhuang1: { origin: [ 127, 128 ], extent: [ 17, 26 ], tile: [ 256, 256 ], perTile: [ 1, 1 ], id: 2001 },
+		jinsi1: { origin: [ 125, 132 ], extent: [ 17, 26 ], tile: [ 128, 128 ], perTile: [ 1, 1 ], id: 2005 },
+		temple: { origin: [ 128, 128 ], extent: [ 17, 26 ], tile: [ 128, 128 ], perTile: [ 1, 1 ], id: 2017 }
+	};
+	body.monsters = [
+		...body.monsters,
+		monster( "Bug Ghost", [ 12101, 12101, 12101 ], {
+			page: "dunhuang1",
+			sector: [ -1, -1 ],
+			point: [ 432, 507 ],
+			tiles: [ [ 128, 127, "worldmap/guide-mask/m8_128x127" ], [ 128, 126, "worldmap/guide-mask/m8_128x126" ] ]
+		} ),
+		monster( "Tomb Soldier", [ 12201, 12201, 12201 ], {
+			page: "jinsi1",
+			sector: [ -1, -1 ],
+			point: [ 381, 734 ],
+			tiles: [
+				[ 127, 128, "worldmap/guide-mask/m9_127x128" ],
+				[ 127, 127, "worldmap/guide-mask/m9_127x127" ],
+				[ 127, 126, "worldmap/guide-mask/m9_127x126" ],
+				[ 128, 128, "worldmap/guide-mask/m9_128x128" ],
+				[ 128, 127, "worldmap/guide-mask/m9_128x127" ],
+				[ 128, 126, "worldmap/guide-mask/m9_128x126" ]
+			]
+		} ),
+		monster( "Temple Guard", [ 12301, 12301, 12301 ], { page: "temple", sector: [ -1, -1 ], point: [ 10, 10 ] } ),
+		monster( "Sector Ghost", [ 12401, 12401, 12401 ], {
+			page: "dunhuang1",
+			sector: [ 128, 128 ],
+			point: [ 10, 20 ]
+		} )
+	];
+	const catalog = worldMapGuideCatalog( body );
+	const tintColor = [ 0xe9 / 255, 0xc6 / 255, 0x24 / 255, 0x80 / 255 ];
+	// Donwhang counts sectors from 128 like the region frame does, so
+	// its two tiles stand at the region's west edge, one above the
+	// other, each a sector across (1920 of a pose's units).
+	const donwhang = guideDungeonGround( catalog, 8 );
+	assert.deepEqual( donwhang?.tiles, [
+		{
+			x: 0,
+			z: 0,
+			w: 1920,
+			h: 1920,
+			texture: "/assets/images/Media_extracted/interface/worldmap/guide-mask/m8_128x127.png",
+			color: tintColor
+		},
+		{
+			x: 0,
+			z: -1920,
+			w: 1920,
+			h: 1920,
+			texture: "/assets/images/Media_extracted/interface/worldmap/guide-mask/m8_128x126.png",
+			color: tintColor
+		}
+	] );
+	// The page point 432x507 is the icon's anchor: 1320 east and
+	// 1882.5 south of the region origin, in a pose's units.
+	assert.deepEqual( donwhang?.icon, {
+		x: 1320,
+		z: -1882.5,
+		size: 32,
+		texture: "/assets/images/Media_extracted/interface/worldmap/wmap_monster_icon.png"
+	} );
+	assert.deepEqual(
+		donwhang?.paths,
+		donwhang?.tiles.map( tile => tile.texture )
+			.concat( donwhang?.icon?.texture ?? "" ),
+		"every mask and the icon are demanded"
+	);
+	// The tomb's first floor starts two sectors west of the frame's
+	// origin: its north-west tile stands at (-1920, 1920).
+	const tomb = guideDungeonGround( catalog, 9 );
+	assert.equal( tomb?.tiles.length, 6 );
+	assert.deepEqual( tomb?.tiles[0], {
+		x: -1920,
+		z: 1920,
+		w: 1920,
+		h: 1920,
+		texture: "/assets/images/Media_extracted/interface/worldmap/guide-mask/m9_127x128.png",
+		color: tintColor
+	} );
+	assert.deepEqual( tomb?.tiles[5], {
+		x: 0,
+		z: -1920,
+		w: 1920,
+		h: 1920,
+		texture: "/assets/images/Media_extracted/interface/worldmap/guide-mask/m9_128x126.png",
+		color: tintColor
+	} );
+	assert.deepEqual( tomb?.icon, {
+		x: -45,
+		z: -1410,
+		size: 32,
+		texture: "/assets/images/Media_extracted/interface/worldmap/wmap_monster_icon.png"
+	} );
+	// A sector-anchored pick stands on its tile's corner plus its point:
+	// tile 128x128 at 256 pixels a sector, the point 10x20 within it.
+	assert.deepEqual( guideDungeonGround( catalog, 11 )?.icon, {
+		x: 75,
+		z: 1770,
+		size: 32,
+		texture: "/assets/images/Media_extracted/interface/worldmap/wmap_monster_icon.png"
+	} );
+	assert.equal( guideDungeonGround( catalog, 2 ), null, "a world-page monster has no cave ground" );
+	assert.equal( guideDungeonGround( catalog, 0 ), null, "a main row has no ground" );
+	assert.equal( guideDungeonGround( catalog, 7 ), null, "a page the build did not publish" );
+	assert.equal( guideDungeonGround( catalog, 10 ), null, "the port has no temple floors" );
+	assert.equal( guideDungeonGround( catalog, 99 ), null, "no such row" );
+});
+
 /*
 ================
 worldPose
@@ -417,6 +538,39 @@ test("the tools load the guide and fill the Monster tab from it", () => {
 	assert.equal( hud.guidePick()?.index, 2 );
 	assert.equal( hud.mark(), null, "the shard's marker gives way to the overlay" );
 	assert.equal( control( paint( hud ), "map-guide-monster:2" ).selected, true, "the picked row's lamp" );
+	hud.dispose();
+});
+
+test("a guide monster pick holds its point for the minimap until another row replaces it (#3394)", () => {
+	const body = fixture();
+	// The Wolf stands apart from the Mangyang, so the move names which.
+	body.monsters[4].point = [ 40, 10 ];
+	const hud = loadedTools( body );
+	assert.equal( hud.guideWaypoint(), null );
+	hud.activate( "map-guide-main:0", undefined, 10 );
+	const mangyang = hud.activate( "map-guide-monster:2", undefined, 10 );
+	assert.notEqual( mangyang, null );
+	assert.deepEqual( hud.guideWaypoint(), mangyang, "the pick's point is the waypoint" );
+	// Another monster's pick moves it to that monster's point.
+	hud.activate( "map-guide-main:1", undefined, 10 );
+	const wolf = hud.activate( "map-guide-monster:4", undefined, 10 );
+	assert.notDeepEqual( wolf, mangyang );
+	assert.deepEqual( hud.guideWaypoint(), wolf );
+	// A main row's pick clears it.
+	hud.activate( "map-guide-main:1", undefined, 10 );
+	assert.equal( hud.guideWaypoint(), null, "a main row clears the waypoint" );
+	// A dungeon pick has no world point, so it clears it too.
+	hud.activate( "map-guide-main:0", undefined, 10 );
+	hud.activate( "map-guide-monster:2", undefined, 10 );
+	assert.notEqual( hud.guideWaypoint(), null );
+	hud.activate( "map-guide-monster:7", undefined, 10 );
+	assert.equal( hud.guideWaypoint(), null, "a dungeon pick leaves no point" );
+	// An area row's pick clears it as well.
+	hud.activate( "map-guide-monster:2", undefined, 10 );
+	assert.notEqual( hud.guideWaypoint(), null );
+	hud.activate( "map-guide-tab:area", undefined, 10 );
+	hud.activate( "map-guide-area:4", undefined, 10 );
+	assert.equal( hud.guideWaypoint(), null, "an area row clears the waypoint" );
 	hud.dispose();
 });
 

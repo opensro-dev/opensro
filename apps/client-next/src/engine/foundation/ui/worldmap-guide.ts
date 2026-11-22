@@ -15,7 +15,9 @@ v1696.md): both trees iterate a std::map keyed by the row's order for
 the player's race (0xe6e6c0), a sub row hangs under the last main row,
 and a monster row reads "Lv<level> <name>" coloured by the level gap
 (sub_e6cb90). A picked monster draws its hunting-ground tiles tinted
-0x80e9c624 and wmap_monster_icon at its point (sub_e75d50).
+0x80e9c624 and wmap_monster_icon at its point (sub_e75d50); on a
+dungeon page that same drawing is this module's ground for the cave
+page of the monster's floor (issue #3395).
 
 Port-only, not native (the owner's choice, 2026-11-13): the instance
 list puts a badge on its area row; native never reads it. Every row
@@ -42,6 +44,10 @@ const LINK_LOCALINFO = 1;
 const MONSTER_ICON_SIZE = 32;
 // sub_e75d50's tint for the picked entry's tiles: half-alpha yellow.
 const PICKED_TINT = 0x80e9c624;
+// The dungeon pages count their sectors from an origin 128 sectors
+// west and south of the floor region's own: the frame the later
+// client's guide pages and the port's cave pages (cave-map.ts) share.
+const DUNGEON_TILE_ORIGIN = 128;
 // sub_e6cb90's sub row colours by L = monster level, P = player level.
 const LEVEL_FAR_ABOVE = 6;
 const LEVEL_ABOVE = 3;
@@ -565,6 +571,103 @@ export function guideOverlay(
 		clip
 	} );
 	return { quads, icon, paths: paths() };
+}
+
+/*
+================
+GuideGroundTile
+
+One hunting-ground tile of a picked dungeon monster, in its floor
+region's own coordinates - a pose's units, ten to the world unit, as
+the cave page takes them: x and z are the tile's west and north
+edges, w and h its size. The cave page (cave-map.ts) projects them
+onto the floor it shows; the texture is the importer's white mask,
+the colour sub_e75d50's tint.
+================
+*/
+export interface GuideGroundTile {
+	readonly x: number;
+	readonly z: number;
+	readonly w: number;
+	readonly h: number;
+	readonly texture: string;
+	readonly color: UiQuad["color"];
+}
+
+/*
+================
+GuideDungeonGround
+
+A picked dungeon monster's hunting ground, for the cave page of its
+floor: the tinted tiles and the monster icon's anchor, in the floor
+region's own coordinates, and the images to demand. Null when the
+pick is not a monster of a dungeon page the port has floors for:
+such a pick gets no cave-page drawing, as it gets no world-page one.
+================
+*/
+export interface GuideDungeonGround {
+	readonly tiles: readonly GuideGroundTile[];
+	readonly icon: { readonly x: number; readonly z: number; readonly size: number; readonly texture: string; } | null;
+	readonly paths: string[];
+}
+
+/*
+================
+guideDungeonGround
+
+The picked monster's ground on its dungeon floor (issue #3395): the
+overlay sub_e75d50 draws on any of the guide's pages, expressed for
+the cave page that shows the floor. A dungeon page's frame is the
+cave page's frame - the guide origin is the cave page's left and top,
+and a tile spans the same pixels in both (dunhuang 256 a sector,
+jinsi1 128) - so the placement rule's sector arithmetic only sheds
+the shared frame's 128-sector origin to land in the floor region's
+own coordinates, where caveMapView's projection takes it.
+================
+*/
+export function guideDungeonGround( catalog: WorldMapGuideCatalog, index: number ): GuideDungeonGround | null {
+	const monster = catalog.monsters[index];
+	if ( !monster || monster.main || monster.page === FIELD_PAGE ) return null;
+	const page = catalog.pages[monster.page];
+	if ( !page || !dungeonTarget( monster.page ) ) return null;
+	const color = tint( PICKED_TINT );
+	// The placement frame counts world units from its 128-sector
+	// origin; the floor's own coordinates are a pose's units counted
+	// from the region's origin. One crossing, here.
+	const local = ( units: number ) => (units - DUNGEON_TILE_ORIGIN * REGION_SIZE) * POSE_UNITS;
+	const tiles: GuideGroundTile[] = [];
+	for ( const [tx, ty, path] of monster.tiles ) {
+		const at = tileWorld( page, tx, ty );
+		tiles.push( {
+			x: local( at.x ),
+			z: local( at.z ),
+			w: page.perTile[0] * REGION_SIZE * POSE_UNITS,
+			h: page.perTile[1] * REGION_SIZE * POSE_UNITS,
+			texture: catalog.imageRoot + path + ".png",
+			color
+		} );
+	}
+	// The icon's corner stands on the point, as on the world page: on a
+	// page-local point itself, else at the tile position plus the point.
+	let icon: GuideDungeonGround["icon"] = null;
+	if ( monster.sector[0] === PAGE_POINT ) {
+		icon = {
+			x: local( (page.origin[0] + monster.point[0] * page.perTile[0] / page.tile[0]) * REGION_SIZE ),
+			z: local( (page.origin[1] + 1 - monster.point[1] * page.perTile[1] / page.tile[1]) * REGION_SIZE ),
+			size: MONSTER_ICON_SIZE,
+			texture: catalog.imageRoot + "worldmap/wmap_monster_icon.png"
+		};
+	} else {
+		const at = tileWorld( page, monster.sector[0], monster.sector[1] );
+		icon = {
+			x: local( at.x + monster.point[0] * at.scale ),
+			z: local( at.z - monster.point[1] * (page.perTile[1] * REGION_SIZE) / page.tile[1] ),
+			size: MONSTER_ICON_SIZE,
+			texture: catalog.imageRoot + "worldmap/wmap_monster_icon.png"
+		};
+	}
+	const paths = [ ...tiles.map( tile => tile.texture ), ...(icon ? [ icon.texture ] : []) ];
+	return { tiles, icon, paths };
 }
 
 // ============================================================================
