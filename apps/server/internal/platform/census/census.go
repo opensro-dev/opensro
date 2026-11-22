@@ -78,6 +78,9 @@ type Span struct {
 	NetKey      string
 	Client      string
 	NoUserAgent bool
+	// Activity is the span's traffic (connjournal/activity.go), nil while
+	// it is open or when it closed without one.
+	Activity *connjournal.Activity
 }
 
 // end returns the span's effective end: its close, or now while open.
@@ -122,7 +125,8 @@ func JournalRows(journal *connjournal.Journal) RowSource {
 		for _, row := range rows {
 			spans = append(spans, Span{Session: row.Session, Account: row.Account, Character: row.Character,
 				Transport: row.Transport, Started: row.Started, Ended: row.Ended, Estimated: row.Estimated,
-				IPKey: row.IPKey, NetKey: row.NetKey, Client: clientFingerprint(row), NoUserAgent: row.UserAgent == ""})
+				IPKey: row.IPKey, NetKey: row.NetKey, Client: clientFingerprint(row), NoUserAgent: row.UserAgent == "",
+				Activity: row.Activity})
 		}
 		return spans, nil
 	}

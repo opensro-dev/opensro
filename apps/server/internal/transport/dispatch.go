@@ -84,6 +84,11 @@ func (h *Hub) dispatch(s *Session, f Frame) {
 			Debug("transport: unhandled opcode")
 		return
 	}
+	// Noted before the handler runs: the entry frame belongs to the span
+	// its handler closes (session_activity.go).
+	if h.Census != nil {
+		s.activity.noteHandled(f.Opcode, s.now().UnixMilli())
+	}
 	if hook := h.activity.Load(); hook != nil {
 		if account := s.account.Load(); account != nil {
 			(*hook)(*account)

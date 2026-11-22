@@ -24,7 +24,9 @@ Row
 
 One connections row as the census reads it. Times are UTC
 milliseconds; Ended is 0 while the session is still entered, and
-Estimated marks a row a crash closed at its last checkpoint.
+Estimated marks a row a crash closed at its last checkpoint. Activity
+is the span's traffic (activity.go), nil while the row is open or when
+it closed without one.
 ================
 */
 type Row struct {
@@ -42,6 +44,7 @@ type Row struct {
 	UserAgent string
 	Build     string
 	Screen    string
+	Activity  *Activity
 }
 
 /*
@@ -58,7 +61,8 @@ func (j *Journal) Rows(sinceMs int64) ([]Row, error) {
 		return nil, nil
 	}
 	rows, err := j.db.Query(`SELECT session, account, character, shard, transport,
- started, seen, ended, estimated, ip_key, net_key, user_agent, build, screen
+ started, seen, ended, estimated, ip_key, net_key, user_agent, build, screen,
+ frames_in, first_handled_ms, opcodes
  FROM connections WHERE started >= ? ORDER BY started, id`, sinceMs)
 	if err != nil {
 		return nil, err
@@ -67,13 +71,19 @@ func (j *Journal) Rows(sinceMs int64) ([]Row, error) {
 	var out []Row
 	for rows.Next() {
 		var row Row
-		var estimated int64
+		var estimated, framesIn, firstHandledMs int64
+		var opcodes string
 		if err := rows.Scan(&row.Session, &row.Account, &row.Character, &row.Shard, &row.Transport,
 			&row.Started, &row.Seen, &row.Ended, &estimated, &row.IPKey, &row.NetKey,
-			&row.UserAgent, &row.Build, &row.Screen); err != nil {
+			&row.UserAgent, &row.Build, &row.Screen, &framesIn, &firstHandledMs, &opcodes); err != nil {
 			return nil, err
 		}
 		row.Estimated = estimated != 0
+		activity, err := decodeActivity(framesIn, firstHandledMs, opcodes)
+		if err != nil {
+			return nil, err
+		}
+		row.Activity = activity
 		out = append(out, row)
 	}
 	return out, rows.Err()

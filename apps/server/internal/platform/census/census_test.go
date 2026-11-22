@@ -304,3 +304,33 @@ func TestJournalRowsMarkSessionsWithoutAUserAgent(t *testing.T) {
 		t.Fatalf("the bare row %+v", byID["bare"])
 	}
 }
+
+/*
+================
+TestPersonHistoryCarriesSpanActivity
+
+A closed span's traffic summary rides its history entry; an open span
+has none.
+================
+*/
+func TestPersonHistoryCarriesSpanActivity(t *testing.T) {
+	now := nowMs()
+	closed := span("s1", "acct-a", "Anna", now-3*hourMs, now-2*hourMs, "ip-h", "net-h", "client-1")
+	closed.Activity = &connjournal.Activity{FramesIn: 77, FirstHandledMs: 1200,
+		Opcodes: []connjournal.OpcodeActivity{{Opcode: 0x7034, Count: 20, FirstMs: 1200}}}
+	spans := []Span{closed, span("s2", "acct-a", "Anna", now-hourMs, 0, "ip-h", "net-h", "client-1")}
+	person, found, err := testService(spans, nil).Person("Anna")
+	if err != nil || !found {
+		t.Fatalf("person: found=%v err=%v", found, err)
+	}
+	byID := map[string]PersonSpan{}
+	for _, entry := range person.History {
+		byID[entry.Session] = entry
+	}
+	if got := byID["s1"].Activity; got == nil || got.FramesIn != 77 || got.Opcodes[0].Count != 20 {
+		t.Fatalf("closed span activity %+v", got)
+	}
+	if byID["s2"].Activity != nil {
+		t.Fatal("an open span carried a summary")
+	}
+}

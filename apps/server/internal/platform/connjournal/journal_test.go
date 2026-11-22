@@ -182,7 +182,7 @@ func TestEnteredRowClosesAtSessionEnd(t *testing.T) {
 	if want, _ := keyHashes(testKey, "203.0.113.9"); open.ipKey != want {
 		t.Fatalf("ip key = %q, want %q", open.ipKey, want)
 	}
-	journal.CloseSession("boot:1")
+	journal.CloseSession("boot:1", nil)
 	closed := waitEnded(t, journal, "boot:1")
 	if closed.ended < closed.started {
 		t.Fatalf("closed row = %+v", closed)
@@ -255,7 +255,7 @@ func TestCheckpointPrunesClosedRowsAtRetention(t *testing.T) {
 	journal.RecordEntered(Entry{Session: "boot:4", Account: "alice", Character: "Hero", Transport: "websocket", Address: "203.0.113.9"})
 	journal.RecordEntered(Entry{Session: "boot:5", Account: "bob", Character: "Mage", Transport: "websocket", Address: "203.0.113.10"})
 	rows(t, journal, 2)
-	journal.CloseSession("boot:4")
+	journal.CloseSession("boot:4", nil)
 	waitEnded(t, journal, "boot:4")
 	// Thirty-one days on, the closed row is pruned and the open one kept.
 	journal.now = func() time.Time { return base.Add(31 * 24 * time.Hour) }

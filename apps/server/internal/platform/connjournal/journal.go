@@ -70,7 +70,9 @@ One entered session as the transport reports it. Address is the real
 client address (the transport resolved the edge's forwarding at
 accept); the journal hashes it in RecordEntered and never stores it.
 Build and Screen stay empty until a client presents them on the wire;
-no client does today, and this journal adds no client field.
+no client does today, and this journal adds no client field. Closing
+is the traffic of the span this entry closes on the same session
+(activity.go), nil when there is none to record.
 ================
 */
 type Entry struct {
@@ -83,6 +85,7 @@ type Entry struct {
 	UserAgent string
 	Build     string
 	Screen    string
+	Closing   *Activity
 }
 
 /*
@@ -107,11 +110,13 @@ type storedRow struct {
 }
 
 // write is one queued change: a row to open, or (row nil) a session
-// whose open row closes. at is when the change was recorded.
+// whose open row closes. Either way the session's open row closes at
+// at, with closing as its traffic summary when one was taken.
 type write struct {
 	row     *storedRow
 	session string
 	at      int64
+	closing *Activity
 }
 
 /*
@@ -204,7 +209,10 @@ CREATE INDEX IF NOT EXISTS connections_account ON connections(account, started);
 CREATE INDEX IF NOT EXISTS connections_ip_key ON connections(ip_key, started);
 CREATE INDEX IF NOT EXISTS connections_started ON connections(started);
 UPDATE connections SET ended=seen, estimated=1 WHERE ended=0;` + ticketSchema)
-	return err
+	if err != nil {
+		return err
+	}
+	return ensureActivityColumns(j.db)
 }
 
 /*
@@ -225,22 +233,23 @@ func (j *Journal) RecordEntered(entry Entry) bool {
 	row := &storedRow{session: entry.Session, account: entry.Account, character: entry.Character,
 		shard: entry.Shard, transport: entry.Transport, ipKey: ipKey, netKey: netKey,
 		userAgent: bounded(entry.UserAgent, maxUserAgentBytes), build: entry.Build, screen: entry.Screen}
-	return j.enqueue(write{row: row, session: entry.Session, at: millis(j.now())})
+	return j.enqueue(write{row: row, session: entry.Session, at: millis(j.now()), closing: entry.Closing})
 }
 
 /*
 ================
 CloseSession
 
-Closes the session's open row at now. A session that ends without
+Closes the session's open row at now, with closing as the row's
+traffic summary (nil leaves it unrecorded). A session that ends without
 entering has no row; the close is then a no-op on the writer.
 ================
 */
-func (j *Journal) CloseSession(session string) bool {
+func (j *Journal) CloseSession(session string, closing *Activity) bool {
 	if j == nil || session == "" {
 		return false
 	}
-	return j.enqueue(write{session: session, at: millis(j.now())})
+	return j.enqueue(write{session: session, at: millis(j.now()), closing: closing})
 }
 
 /*
@@ -309,17 +318,31 @@ the only goroutine here, so the pair cannot interleave.
 ================
 */
 func (j *Journal) apply(w write) error {
-	if w.row != nil {
-		if _, err := j.db.Exec(`UPDATE connections SET ended=? WHERE session=? AND ended=0`, w.at, w.session); err != nil {
-			return err
-		}
-		_, err := j.db.Exec(`INSERT INTO connections(session,account,character,shard,started,seen,transport,ip_key,net_key,build,user_agent,screen)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
-			w.row.session, w.row.account, w.row.character, w.row.shard, w.at, w.at,
-			w.row.transport, w.row.ipKey, w.row.netKey, w.row.build, w.row.userAgent, w.row.screen)
+	if err := j.closeOpen(w); err != nil || w.row == nil {
 		return err
 	}
-	_, err := j.db.Exec(`UPDATE connections SET ended=? WHERE session=? AND ended=0`, w.at, w.session)
+	_, err := j.db.Exec(`INSERT INTO connections(session,account,character,shard,started,seen,transport,ip_key,net_key,build,user_agent,screen)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		w.row.session, w.row.account, w.row.character, w.row.shard, w.at, w.at,
+		w.row.transport, w.row.ipKey, w.row.netKey, w.row.build, w.row.userAgent, w.row.screen)
+	return err
+}
+
+/*
+================
+closeOpen
+
+Closes the session's open row at w.at, writing the span's traffic
+summary when the write carries one.
+================
+*/
+func (j *Journal) closeOpen(w write) error {
+	if w.closing == nil {
+		_, err := j.db.Exec(`UPDATE connections SET ended=? WHERE session=? AND ended=0`, w.at, w.session)
+		return err
+	}
+	_, err := j.db.Exec(`UPDATE connections SET ended=?, frames_in=?, first_handled_ms=?, opcodes=? WHERE session=? AND ended=0`,
+		w.at, int64(w.closing.FramesIn), w.closing.FirstHandledMs, encodeOpcodes(w.closing), w.session)
 	return err
 }
 

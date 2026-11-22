@@ -39,6 +39,10 @@ type LifecycleEvent struct {
 	// (#2716) reads them; history ignores them.
 	ClientAddr, UserAgent string
 	Attached, InWorld     bool
+	// Closing is the traffic of the census span this event ends
+	// (session_activity.go): set on world_entered and ended while a
+	// census is installed, nil otherwise. History ignores it.
+	Closing *ActivitySummary
 }
 
 /*
@@ -202,6 +206,9 @@ func (s *Session) recordHistoryLocked(kind string, cause error) {
 		Kind: kind, Category: category, Code: code, Message: fmt.Sprint(cause), Transport: s.transport, Fallback: s.fallback,
 		ClientAddr: s.clientAddr, UserAgent: s.userAgent,
 		Attached: s.attached, InWorld: s.WorldReady() && kind != "world_left"}
+	if census != nil && (kind == "world_entered" || kind == "ended") {
+		event.Closing = s.activity.take(s.now().UnixMilli())
+	}
 	if j != nil {
 		j.RecordLifecycle(event)
 	}
