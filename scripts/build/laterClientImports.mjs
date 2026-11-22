@@ -415,6 +415,79 @@ export async function importLaterMacroGuideStep() {
 	return { icons: paths.length };
 }
 
+// The centre banner's plate art (#3260): interface/ifcommon/com_center_*
+// from the pinned v1.696 Media.pk2 (SRO_V1696_ROOT). v1.150 has neither
+// the banner nor the art; the success announcements wear this violet
+// plate centred on screen when the import is published.
+const LATER_CENTRE_BANNER_ROOT = "/assets/images/Media_extracted/interface/ifcommon/";
+
+/*
+================
+laterCentreBannerImportPlan
+================
+*/
+export function laterCentreBannerImportPlan( env = process.env, archiveThere = false ) {
+	const root = (env.SRO_V1696_ROOT ?? "").trim();
+	if ( !root ) {
+		return {
+			run: false,
+			line:
+				"Later centre banner: skipped (SRO_V1696_ROOT is not set; the success announcements keep the notice plate)"
+		};
+	}
+	if ( !archiveThere ) {
+		return { run: false, line: `Later centre banner: skipped (no Media.pk2 under SRO_V1696_ROOT ${root})` };
+	}
+	return { run: true, root, args: [ "scripts/import_v1696_centre_banner.py", "--v1696-root", root ] };
+}
+
+/*
+================
+laterCentreBannerPublicPaths
+================
+*/
+export function laterCentreBannerPublicPaths() {
+	return [ "corner", "edge", "edge2" ].map( ( part ) => LATER_CENTRE_BANNER_ROOT + `com_center_${part}.png` );
+}
+
+/*
+================
+importLaterCentreBannerStep
+
+Publishes the centre banner's three plate PNGs for the reinforcement
+success announcements. Without the archive the build says so in one
+line; the HUD keeps the native notice plate when the art is missing.
+================
+*/
+export async function importLaterCentreBannerStep() {
+	const root = (process.env.SRO_V1696_ROOT ?? "").trim();
+	const archiveThere = root !== "" &&
+		await stat( path.join( root, "Media.pk2" ) ).then( ( entry ) => entry.isFile(), () => false );
+	const plan = laterCentreBannerImportPlan( process.env, archiveThere );
+	if ( !plan.run ) {
+		console.log( plan.line );
+		return { skipped: true };
+	}
+	const result = await runPython( plan.args, {
+		task: "[centre-banner] later-client centre banner plate import",
+		cwd: rebuildRoot,
+		context: [
+			"The centre banner's plate art is native to the v1.696 client (#3260); the build imports " +
+			"it from the pinned archive (SRO_V1696_ROOT) beside the v1.150 notice plates."
+		]
+	} );
+	const output = result.stdout.trim();
+	if ( output ) console.log( output );
+	const paths = laterCentreBannerPublicPaths();
+	for ( const publicPath of paths ) {
+		const there = await stat( path.join( publicRoot, publicPath ) )
+			.then( ( entry ) => entry.isFile(), () => false );
+		if ( !there ) throw Error( `The centre banner import published no ${publicPath}` );
+	}
+	claimPublicPaths( paths );
+	return { plates: paths.length };
+}
+
 // The reverse return map's destination table (SRO_REVERSE_RETURN_MAP):
 // the later client's refoptionalteleport.txt, written beside the v1.150
 // extraction (extracted/VsroOptionalTeleport_extracted) for the server
