@@ -50,9 +50,9 @@ These are inferences and port choices, not native evidence:
   stone (`ITEM_MALL_NASRUN_ARCHEMY_MAGICSTONE_UMDU`) names `MATTR_NASRUN_UMDU`, which has no row in the
   v1.150 magicoption table.
 - **Built since (#3456).** The socket (#3477), the awakening clock (#3622), the unique-kill tokens (#3710), the
-  token shop (#3741) and Nasrun alchemy (below).
-- **Still open (#3456).** The extension gear's use, the lucky drops, and the awakening skill whose tiers read the
-  Spirit's plus (the +3 and +6 damage steps); until that skill is ported a Spirit's plus changes nothing.
+  token shop (#3741), Nasrun alchemy (below), what the plus gives (below), the extension gear (below) and the
+  lucky drops (below).
+- **Still open (#3456).** The mall listing (step 5, #3257) and the client step that shows the lent skills.
 
 ## Nasrun alchemy (#3456 step 3c)
 
@@ -114,3 +114,14 @@ awakening (`internal/game/action/spiritextend.go`, `internal/game/nasrun/extensi
   (CanTrade, CanSell, CanBorrow, CanDrop all 0).
 - The v1.188 server also sends 0x3078 {2, slot, seconds left}, which the v1.150 client has no handler for, so the
   port sends the use answer alone.
+
+## The lucky drops (#3456 step 3d)
+
+With `SRO_NASRUN` on, each eligible contributor to a unique kill rolls a Devil's Spirit and Sabakun's jewel into
+their bag, beside the token award (`internal/game/action/nasrun_drops.go`, odds in `internal/game/nasrun/drops.go`):
+
+- A Spirit at 0.25 % on an easy unique and 0.5 % on a hard one; the jewel at 2 % on both. The families are the
+  token ones, below the level band and one per account, as for the tokens.
+- The Spirit is the plain A grade row of the winner's sex; the colours stay a shop choice.
+- No cap and nothing saved: the roll is per kill, and a full bag keeps neither prize - the notice travels only
+  for an item that landed.

@@ -32,10 +32,24 @@ tokenKill
 
 One fatal blow by the actor on a Tiger Girl the partner has already hit
 for 99 of its 100 HP. shape edits both characters before the kill, with
-the kill's token day; on is the SRO_NASRUN switch.
+the kill's token day; on is the SRO_NASRUN switch. Every drop roll
+draws roll (0 wins everything; see nasrun_drops_test.go).
 ================
 */
 func tokenKill(t *testing.T, on bool, shape func(today int64, actor, partner *enterworld.Character)) (*enterworld.Character, *enterworld.Character, OpResult) {
+	return tokenKillRoll(t, on, 0, nil, shape)
+}
+
+/*
+================
+tokenKillRoll
+
+tokenKill drawing drop rolls of one constant value, with prizes added
+to the runtime's item refs so lucky-drop grants resolve (nil for the
+token tests).
+================
+*/
+func tokenKillRoll(t *testing.T, on bool, roll uint32, prizes map[string]*enterworld.ItemRef, shape func(today int64, actor, partner *enterworld.Character)) (*enterworld.Character, *enterworld.Character, OpResult) {
 	t.Helper()
 	rt, _, actor, target := newCombatTestRuntime(t, 100)
 	rt.NasrunTokens = on
@@ -47,6 +61,9 @@ func tokenKill(t *testing.T, on bool, shape func(today int64, actor, partner *en
 	rt.Monsters.AdvancePopulation(rt.Monsters.CurrentTimeMillis())
 	target = rt.Monsters.InstancesInRegions(testDivision, []uint16{target.Spawn.RegionID})[0]
 	deps := rt.deps.(*enterworld.Deps)
+	for codename, ref := range prizes {
+		deps.Items.(staticItemSource)[codename] = ref
+	}
 	source := fixtureCharacters(deps.Characters)
 	partner := *actor
 	partner.ID, partner.Name, partner.MissionInventory = 4, "partner", nil
@@ -61,7 +78,7 @@ func tokenKill(t *testing.T, on bool, shape func(today int64, actor, partner *en
 	if len(hits) != 1 || hits[0].Fatal {
 		t.Fatal("nonfatal contribution setup failed")
 	}
-	rt.DropRoll = constantDropRoll(0)
+	rt.DropRoll = constantDropRoll(roll)
 	result := rt.HandleTargetInteract(testDivision, actor, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
 	return actor, &partner, result
 }
@@ -70,14 +87,15 @@ func tokenKill(t *testing.T, on bool, shape func(today int64, actor, partner *en
 ================
 tokenNotices
 
-The token notices among frames: chat notices naming the Devil's Spirit
-(the notice text is UTF-16 on the wire).
+The token notices among frames: chat notices naming the tokens (the
+word "tokens", UTF-16 on the wire). The lucky drops' notices also name
+the Devil's Spirit (nasrun_drops.go), so the token word scopes this.
 ================
 */
 func tokenNotices(frames []wire.Frame) int {
 	n := 0
 	for _, frame := range frames {
-		if frame.Opcode == chat.OpChatBroadcast && strings.Contains(string(frame.Payload), "D\x00e\x00v\x00i\x00l\x00") {
+		if frame.Opcode == chat.OpChatBroadcast && strings.Contains(string(frame.Payload), "t\x00o\x00k\x00e\x00n\x00s\x00") {
 			n++
 		}
 	}
