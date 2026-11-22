@@ -13,7 +13,9 @@ step: the step's key, the summary it returned, and its recorded effect -
 every file it created or changed, by content hash, and every file it
 removed. A step's key covers what the step reads:
 
-	its code        the defining module and its static local imports
+	its code        the defining module's closure as codeStamp's
+	                codeClosure owns it: the modules it imports, the
+	                Node scripts those name, the pin data beside them
 	its flags       the SRO_* variables named in that code, by value
 	its sources     the source roots its last run opened files under,
 	                fingerprinted as variant_stamp fingerprints them,
@@ -33,8 +35,9 @@ effect. An importer whose summary cannot be journaled (a type the
 journal cannot hold) simply runs on every build.
 
 The journal and the blobs live in the tree's build state (.state), like
-the settle ledger. Blobs are hard links into the store where the file
-system allows, so recording a build costs almost no extra bytes.
+the settle ledger. Blobs are plain copies, never hard links: a linked
+blob shares its inode with the tree file, and a rewrite of either in
+place would rewrite the other.
 
 ===========================================================================
 """
@@ -135,80 +138,38 @@ def module_file(module_name: str) -> Path | None:
 	return Path(path) if path else None
 
 
-FROM_LINE = re.compile(rb"^\s*from\s+([A-Za-z_][\w.]*)\s+import\b", re.MULTILINE)
-IMPORT_LINE = re.compile(rb"^\s*import\s+([^\n#(]+)", re.MULTILINE)
+_own_code_files: dict[str, list[Path]] = {}
 
 
 # ================
-# imported_names
+# own_code_files
 #
-# The top-level module names one Python file imports, by its own text:
-# the closure below follows what a module can reach, not what one run
-# happened to import first. A line scan, not a parse: every import
-# statement names its module on its first line, a match inside a
-# string or comment only widens the closure (the safe direction), and
-# the scan costs bytes where an AST walk over a data module costs
-# seconds.
+# This runner's own closure, once per repository root per process: the
+# journal's semantics are part of every step's key, and this file does
+# not change under a running build.
 # ================
-def imported_names(path: Path) -> set[str]:
-	try:
-		content = path.read_bytes()
-	except OSError:
-		return set()
-	names = {match.group(1).split(b".")[0].decode("ascii") for match in FROM_LINE.finditer(content)}
-	for match in IMPORT_LINE.finditer(content):
-		for part in match.group(1).split(b","):
-			token = part.strip().split(None, 1)
-			if token and re.fullmatch(rb"[A-Za-z_][\w.]*", token[0]):
-				names.add(token[0].split(b".")[0].decode("ascii"))
-	return names
-
-
-_module_files: dict = {}
-
-
-# ================
-# find_module_file
-#
-# A top-level module's file beside the importing file or on sys.path,
-# without importing it. Resolutions are kept for the process, keyed by
-# the sys.path they were made under: a closure walk asks for the same
-# names from every file it visits.
-# ================
-def find_module_file(name: str, beside: Path) -> Path | None:
-	key = (name, str(beside), tuple(sys.path))
-	if key not in _module_files:
-		found = None
-		for folder in [beside, *[Path(entry) for entry in sys.path if entry]]:
-			for candidate in (folder / f"{name}.py", folder / name / "__init__.py"):
-				if candidate.is_file():
-					found = candidate
-					break
-			if found is not None:
-				break
-		_module_files[key] = found
-	return _module_files[key]
+def own_code_files(repository_root: Path | None) -> list[Path]:
+	key = str(repository_root) if repository_root is not None else ""
+	if key not in _own_code_files:
+		_own_code_files[key] = variant_stamp.code_closure(Path(__file__), repository_root)
+	return _own_code_files[key]
 
 
 # ================
 # code_files
 #
-# The files a step's behaviour is written in: its defining module, this
-# runner, and every local module those can import, transitively.
+# The files a step's behaviour is written in: its defining module's
+# closure and this runner's, both from codeStamp's codeClosure - the
+# stamp's own owner, so a step is keyed on everything it can run: the
+# Python modules it imports, the Node scripts those name (the items
+# importer runs one) and the pin data beside them. A Python-only walk
+# missed the scripts entirely, and a parser fix in one would have left
+# its step replaying an old effect.
 # ================
-def code_files(seed: Path) -> list[Path]:
-	found: dict[str, Path] = {}
-	queue = [seed, Path(__file__)]
-	while queue:
-		current = queue.pop()
-		key = str(current)
-		if key in found or not current.is_file():
-			continue
-		found[key] = current
-		for name in imported_names(current):
-			candidate = find_module_file(name, current.parent)
-			if candidate is not None and str(candidate) not in found:
-				queue.append(candidate)
+def code_files(seed: Path, repository_root: Path | None = None) -> list[Path]:
+	found = {str(path): path for path in variant_stamp.code_closure(seed, repository_root)}
+	for path in own_code_files(repository_root):
+		found[str(path)] = path
 	return [found[key] for key in sorted(found)]
 
 
@@ -407,10 +368,14 @@ def chain(state: str, rows: list[list]) -> str:
 # the build that succeeded.
 # ================
 class Runner:
-	def __init__(self, variant_root: Path, roots: list[Path], environ=None):
+	def __init__(self, variant_root: Path, roots: list[Path], environ=None, repository_root: Path | None = None):
 		self.variant = Path(variant_root)
 		self.roots = [Path(root).resolve() for root in roots]
 		self.environ = os.environ if environ is None else environ
+		# The checkout code closures are taken from; None lets the code
+		# stamp resolve this checkout itself (the step tests key a
+		# scratch repository instead).
+		self.repository_root = None if repository_root is None else Path(repository_root)
 		self.steps: list[dict] = []
 		self.journal: list[dict] | None = None
 		self.arguments: dict | None = None
@@ -470,14 +435,16 @@ class Runner:
 
 	# ================
 	# step_code_key
+	#
+	# Keyed by the module file, so steps living in one module share a
+	# single closure computation.
 	# ================
 	def step_code_key(self, step: dict) -> str:
-		name = step["name"]
-		if name not in self._code_keys:
-			seed = module_file(step["code_from"].__module__)
-			files = code_files(seed) if seed else [Path(__file__)]
-			self._code_keys[name] = code_key(files, self.environ)
-		return self._code_keys[name]
+		seed = module_file(step["code_from"].__module__) or Path(__file__)
+		key = str(seed)
+		if key not in self._code_keys:
+			self._code_keys[key] = code_key(code_files(seed, self.repository_root), self.environ)
+		return self._code_keys[key]
 
 	# ================
 	# reads_key
