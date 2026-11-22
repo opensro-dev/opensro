@@ -70,9 +70,30 @@ type petCombatIntent struct {
 	castToken    uint32
 	releaseAtMs  int64
 	pursuing     bool
-	// pursuingSinceMs is when the current approach began (petdiagnostics.go).
+	// pursuingSinceMs is when the current approach last closed the
+	// distance to its target (petdiagnostics.go): a pursuit that stops
+	// closing has stalled for as long as this has stood still.
 	pursuingSinceMs int64
+	// pursuitBest is the closest distance to the target the current
+	// approach has reached: closing past it is progress and re-arms
+	// the stall clock, so a long chase is never "stalled".
+	pursuitBest float64
 }
+
+// petPursuitProgressDistance is the distance an approach must close for
+// the closing to count as progress: anything less is the pet standing
+// where its step was refused. Destination coordinates are integers; one
+// unit sits far above that noise and far below one tick of running.
+const petPursuitProgressDistance = 1.0
+
+// petStallCooldownMs is how long a target whose approach yielded to a
+// stall is not re-acquired by sight (the mercenary acquisition): the
+// follow lane collects its tenth stop in about a second of ticks and
+// walking home takes a few more, so ten seconds lets the pet get home
+// several times over. An owner's admitted order on the yielded target
+// clears the cooldown instead of sitting it out (orderPetAttack): the
+// pet obeys its owner, and a pursuit that wedges again yields again.
+const petStallCooldownMs = 10_000
 
 /*
 ================
@@ -146,6 +167,14 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 		intent.intervalMs = state.combat.intervalMs
 	}
 	rt.cancelPetCombat(petOwnerKey{division: division, name: strings.ToLower(character.Name), gid: cosGID}, state, nowMs)
+	// An admitted order is the owner's word: re-ordering the target a
+	// stall yielded on clears that target's cooldown instead of
+	// sitting it out - the pet obeys its owner, and a pursuit that
+	// wedges again simply yields again. Only the un-ordered re-picks
+	// (the mercenary sight acquisition) sit the cooldown out.
+	if state.stallTarget == targetGID {
+		state.stallTarget, state.stallUntilMs = 0, 0
+	}
 	state.combat = intent
 	// Entering BATTLE is a state change.
 	resetPetStuck(state)
@@ -275,16 +304,50 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 	}
 	at := step.state.mover.AnyFollower().Position(step.nowMs)
 	if intent.castToken == 0 && !spacing.Contains(at, targetAt) {
+		distance := simulation.WorldDistance2D(at, targetAt)
 		if !intent.pursuing {
+			intent.pursuing = true
+			intent.pursuingSinceMs = step.nowMs
+			intent.pursuitBest = distance
+		}
+		if distance <= intent.pursuitBest-petPursuitProgressDistance {
+			// The approach is closing: re-arm the stall clock. A pet
+			// chasing a moving target may pursue for minutes without
+			// reaching strike range; only a pursuit that stops closing
+			// has stalled.
+			intent.pursuitBest = distance
 			intent.pursuingSinceMs = step.nowMs
 		}
 		if step.nowMs-intent.pursuingSinceMs >= petApproachStallMs {
 			rt.petDiagnostic(step.key.division, step.snapshot.Name, step.pet.GID, "approach not reaching strike range", log.Fields{
-				"target": intent.target, "distance": simulation.WorldDistance2D(at, targetAt), "admission": spacing.AdmissionRadius(),
+				"target": intent.target, "distance": distance, "admission": spacing.AdmissionRadius(),
 				"standOff": spacing.StandOffRadius(), "moving": step.state.mover.AnyFollower().Moving(step.nowMs), "pursuingMs": step.nowMs - intent.pursuingSinceMs,
 			})
+			// Recovery for a port defect; it restores the native
+			// outcome, it does not add a behaviour. The native mover
+			// slides along a wall toward its target, so the native
+			// pet never stands wedged; the port's collision owner
+			// instead refuses a clipped goal, so a pet here can be
+			// refused every tick at a wall (the live pet-stuck
+			// report: a wolf held 111 units from an unreachable
+			// target until its owner's return scroll). BATTLE's
+			// stuck answer retains the fight
+			// (monster.NativeStuckResponse), leaving the pet no way
+			// out, so a pursuit that has made no progress for the
+			// stall threshold ends: the pet leaves BATTLE and returns
+			// to FOLLOW, whose own stuck answer (the warp to its
+			// owner) still rescues it if it cannot walk there either.
+			// The yielded target is not re-acquired by sight until
+			// the pet has had the follow lane's whole window to get
+			// home (petStallCooldownMs); an owner's fresh order on
+			// it clears that pause and stands. Default path, no flag: the native
+			// behaviour - a pet that walks to its target or comes
+			// back - is what this restores.
+			stalledTarget := intent.target
+			rt.cancelPetCombat(step.key, step.state, step.nowMs)
+			step.state.stallTarget, step.state.stallUntilMs = stalledTarget, step.nowMs+petStallCooldownMs
+			return nil, false
 		}
-		intent.pursuing = true
 		return step.state.mover.AnyFollower().Approach(targetAt, float64(rt.cosPacedRun(step.ref, step.run)), step.nowMs, spacing.StandOffRadius(), step.constraint), true
 	}
 	intent.pursuing = false

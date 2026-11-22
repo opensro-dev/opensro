@@ -159,6 +159,14 @@ type petSession struct {
 	roar    *petRoarCast
 	// combat is the attack pet's BATTLE state (petcombat.go); nil follows.
 	combat *petCombatIntent
+	// stallTarget/stallUntilMs pause the un-ordered re-pick of a target
+	// whose wedged approach just yielded (petcombat.go): without the
+	// pause, the mercenary sight acquisition re-wedges the pet on the
+	// very next tick and the follow lane never collects the ten stops
+	// of its warp home. An admitted owner order on the target clears
+	// the pair instead of sitting it out.
+	stallTarget  uint32
+	stallUntilMs int64
 	// others holds kill-settlement frames for other characters (a party's
 	// shared experience), drained with public by advancePets.
 	others []RecipientFrames
