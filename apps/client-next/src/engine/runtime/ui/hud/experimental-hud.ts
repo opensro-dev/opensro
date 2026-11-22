@@ -422,6 +422,14 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-quest-tracker-markers",
 						label: "Quest target markers",
 						description: "Quest targets and tool spots on M and the minimap."
+					},
+					{
+						// Port-only, not native (#3394): the later client only
+						// tints the picked ground on the M map itself.
+						key: "guideWaypoint",
+						id: "experimental-guide-waypoint",
+						label: "Hunting-ground waypoint",
+						description: "A guide monster pick marks its ground on the minimap."
 					}
 				]
 			},
