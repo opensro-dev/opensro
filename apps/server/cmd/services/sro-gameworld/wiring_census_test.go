@@ -5,7 +5,8 @@ wiring_census_test.go - the census installs only behind its flag
 
 SRO_CONNECTION_JOURNAL off (the native posture) means no observer on
 the hub, no journal on the application and no files in the shard
-directory; on means all three (#2716, both settings tested).
+directory; on means all three (#2716, both settings tested), and the
+agent API's ticket outcomes reach the journal's hour buckets (#3307).
 ===========================================================================
 */
 package main
@@ -21,6 +22,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +34,7 @@ import (
 	"opensro.online/server/internal/platform/connjournal"
 	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/platform/readiness"
+	"opensro.online/server/internal/releaseprotocol"
 	"opensro.online/server/internal/security/auth"
 	"opensro.online/server/internal/testsupport/wait"
 	"opensro.online/server/internal/transport"
@@ -50,7 +54,10 @@ func installCensusForTest(t *testing.T) (*gameWorldApplication, *transport.Serve
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = named.Close() })
-	application := &gameWorldApplication{}
+	// The composition root always holds the control API before the
+	// journal installs (wiring.go), so the fixture does too.
+	api, _ := censusTestAPI(t)
+	application := &gameWorldApplication{controlAPI: api}
 	server := &transport.Server{Hub: &transport.Hub{}}
 	return application, server, named, directory
 }
@@ -110,17 +117,18 @@ func TestConnectionJournalOnInstallsTheObserver(t *testing.T) {
 censusTestAPI
 
 A real control API over a throwaway store, so the census install is
-tested through the mux it will serve on.
+tested through the mux it will serve on, and a minter of agent
+sessions it accepts, for routes that need a signed-in account.
 ================
 */
-func censusTestAPI(t *testing.T) *agentapi.API {
+func censusTestAPI(t *testing.T) (*agentapi.API, func(account string) string) {
 	t.Helper()
 	authority, err := store.Open(t.TempDir(), store.Options{Now: time.Now})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(authority.Close)
-	public, _, err := ed25519.GenerateKey(rand.Reader)
+	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +161,15 @@ func censusTestAPI(t *testing.T) *agentapi.API {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return api
+	session := func(account string) string {
+		token, err := auth.MintAgentSession(hex.EncodeToString(digest[:16]), private, account, "global-official",
+			time.Now().Add(auth.AgentSessionLifetime))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return token
+	}
+	return api, session
 }
 
 // censusOnlineCode reads the census online route through the mux.
@@ -184,7 +200,6 @@ func TestCensusReadsInstallOnlyWithTheJournal(t *testing.T) {
 
 	t.Setenv(connjournal.EnvConnectionJournal, "")
 	application, server, named, _ := installCensusForTest(t)
-	application.controlAPI = censusTestAPI(t)
 	if err := installConnectionJournal(application, server, named, "global-official"); err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +218,6 @@ func TestCensusReadsInstallOnlyWithTheJournal(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(directory, "operator-token"), []byte(token), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	application.controlAPI = censusTestAPI(t)
 	if err := installConnectionJournal(application, server, named, "global-official"); err != nil {
 		t.Fatal(err)
 	}
@@ -219,6 +233,48 @@ func TestCensusReadsInstallOnlyWithTheJournal(t *testing.T) {
 	}
 	if code := censusOnlineCode(t, application.controlAPI, token); code != http.StatusOK {
 		t.Fatalf("census on: got %d, want 200", code)
+	}
+}
+
+/*
+================
+TestConnectionJournalCountsTicketsPerAccount
+
+With the census on, a transport ticket minted through the real mux
+lands in the account's hour bucket, beside the shard-wide total the
+observatory shows.
+================
+*/
+func TestConnectionJournalCountsTicketsPerAccount(t *testing.T) {
+	t.Setenv(connjournal.EnvConnectionJournal, "on")
+	application, server, named, _ := installCensusForTest(t)
+	api, session := censusTestAPI(t)
+	application.controlAPI = api
+	if err := installConnectionJournal(application, server, named, "global-official"); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = application.connJournal.Close() }()
+	token := session("ticketer")
+	for range 2 {
+		request := httptest.NewRequest(http.MethodPost, "/auth/transport-token", strings.NewReader("{}"))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Authorization", "Bearer "+token)
+		request.Header.Set(releaseprotocol.Header, strconv.Itoa(releaseprotocol.Current))
+		recorder := httptest.NewRecorder()
+		application.controlAPI.Handler().ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("transport mint = %d %s", recorder.Code, recorder.Body.String())
+		}
+	}
+	hours, err := application.connJournal.TicketHours("ticketer", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hours) != 1 || hours[0].TransportMinted != 2 || hours[0].TransportPaced != 0 {
+		t.Fatalf("ticket hours %+v", hours)
+	}
+	if totals := application.controlAPI.TicketTotals(); totals.TransportMinted != 2 {
+		t.Fatalf("totals %+v", totals)
 	}
 }
 

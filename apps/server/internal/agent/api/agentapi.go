@@ -277,6 +277,8 @@ type API struct {
 	// per account (ticket_pace.go).
 	transportTickets  *pacer.Keyed
 	enterWorldTickets *pacer.Keyed
+	// tickets counts what the pacers decided (ticket_pace.go noteTicket).
+	tickets ticketTally
 }
 
 // New builds the API. A configured accounts file that fails to load is a

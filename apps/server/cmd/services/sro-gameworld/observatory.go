@@ -119,7 +119,7 @@ func installObservatory(api *agentapi.API, state *simulation.MonsterState, hub *
 			population = state.Observatory(shard, focus)
 		}
 		health := authority.Health()
-		return map[string]any{"version": 1, "shard": shard, "capturedAt": now.UTC().Format(time.RFC3339Nano), "uptimeSeconds": time.Since(started).Seconds(), "players": players, "registeredCharacters": registered, "population": population, "transport": hub.Metrics(), "runtime": map[string]any{"goVersion": runtime.Version(), "goroutines": runtime.NumGoroutine(), "parallelism": runtime.GOMAXPROCS(0), "metrics": values}, "storage": health, "captureMs": time.Since(now).Seconds() * 1000}
+		return map[string]any{"version": 1, "shard": shard, "capturedAt": now.UTC().Format(time.RFC3339Nano), "uptimeSeconds": time.Since(started).Seconds(), "players": players, "registeredCharacters": registered, "population": population, "transport": hub.Metrics(), "tickets": api.TicketTotals(), "runtime": map[string]any{"goVersion": runtime.Version(), "goroutines": runtime.NumGoroutine(), "parallelism": runtime.GOMAXPROCS(0), "metrics": values}, "storage": health, "captureMs": time.Since(now).Seconds() * 1000}
 	})
 	api.InstallObservatorySummary(func() any {
 		var m runtime.MemStats
