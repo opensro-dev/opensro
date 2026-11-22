@@ -9,6 +9,7 @@ control metadata and resolves those gestures against the current view.
 */
 import type { BugReportControl } from "./bug-report";
 import type { ExperimentalOptions } from "../foundation/ui/experimental-options";
+import type { UniqueNotifySettings } from "../foundation/gameplay/unique-status";
 import type { WindowPositions } from "../foundation/ui/window-positions";
 import type { SessionState } from "./session";
 import type { GameplayState } from "./gameplay";
@@ -355,6 +356,11 @@ export interface UiExtensions {
 	playSoundByName?: ( name: string ) => void;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
 	saveWindowPositions?: ( value: WindowPositions ) => void;
+	// Port-only (#3531): the Unique Status window's per-character notify
+	// book as loaded by the page, and the sink its Save button writes
+	// through. Both absent leaves the window its in-memory defaults.
+	uniqueNotifyBook?: () => Readonly<Record<string, UniqueNotifySettings>>;
+	saveUniqueNotify?: ( character: string, value: UniqueNotifySettings ) => void;
 	// Where the Item Mall notice's closes are remembered (mall-notice-memory.ts)
 	// and the release they belong to. The page leaves both out: localStorage
 	// and the build's stamped revision are used.

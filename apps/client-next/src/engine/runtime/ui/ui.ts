@@ -266,6 +266,13 @@ import {
 } from "./hud/compact-hud";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalRows, experimentalTabs } from "./hud/experimental-hud";
+import { createEventCalendarHud } from "./hud/event-calendar-hud";
+import {
+	EVENT_CALENDAR_HEIGHT,
+	EVENT_CALENDAR_WIDTH,
+	eventCalendarPictures,
+	eventCalendarView
+} from "./hud/event-calendar-view";
 import {
 	EXPERIMENTAL_DESCRIPTION_WIDTH,
 	EXPERIMENTAL_HEAD_HEIGHT,
@@ -444,6 +451,8 @@ import { textAllowed } from "@/engine/foundation/ui/character-create";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { compositeItemCaption, compositeItemLayout, createCompositeItemHud } from "./hud/composite-item-hud";
 import { createUniqueRankHud } from "./hud/unique-rank-hud";
+import { createUniqueStatusHud, notifyBrowserUnique } from "./hud/unique-status-hud";
+import { UNIQUE_STATUS_HEIGHT, UNIQUE_STATUS_WIDTH, uniqueStatusView } from "./hud/unique-status-view";
 import {
 	createServerEventHud,
 	gaugeRatio,
@@ -464,6 +473,8 @@ import { drawSroMacro, type MacroPaint, macroPotionStock } from "./hud/sro-macro
 import { createMarketHud, MARKET_BAG_FIRST_SLOT, MARKET_HOTKEY_VK } from "./hud/market-hud";
 import { drawMarketWindow, type MarketPaint } from "./hud/market-window";
 import { uniqueRankLines } from "@/engine/foundation/gameplay/unique-rank";
+import { uniqueStatusAlertText } from "@/engine/foundation/gameplay/unique-status";
+import type { UniqueStatusFlip, UniqueStatusTab } from "@/engine/foundation/gameplay/unique-status";
 import {
 	allianceButtons,
 	allianceGuildCountText,
@@ -951,7 +962,13 @@ import {
 } from "@/engine/foundation/ui/resurrection-proposal";
 import { createInstancePrompt, instanceBoxLayout, instanceQuestion } from "@/engine/foundation/ui/instance-proposal";
 import { markupLines, messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
-import { systemMenu, SYSTEM_MENU_HEIGHT, EXPERIMENTAL_MENU_ID } from "@/engine/foundation/ui/system-menu";
+import {
+	systemMenu,
+	systemMenuHeight,
+	EXPERIMENTAL_MENU_ID,
+	EVENT_CALENDAR_MENU_ID,
+	UNIQUE_STATUS_MENU_ID
+} from "@/engine/foundation/ui/system-menu";
 import {
 	bagTabRow,
 	GACHA_BAG_CELL_SHIFT,
@@ -1378,6 +1395,28 @@ export function createUi( ports: UiPorts ) {
 		extensions = ports.extensions ?? defaults.extensions;
 	const bugReport = extensions.bugReport;
 	const experimental = createExperimentalHud();
+	// Port-only, not native (#3532): the Event Calendar's feed state.
+	const eventCalendar = createEventCalendarHud();
+	// The System menu's extra rows: one menu id per Experimental row
+	// that adds an entry, in the order the entries stack (#3532's
+	// calendar, then #3531's Unique Status). One click route maps each
+	// id to the window it opens.
+	const SYSTEM_MENU_WINDOWS: Readonly<Record<number, string>> = {
+		[EVENT_CALENDAR_MENU_ID]: "Event Calendar",
+		[UNIQUE_STATUS_MENU_ID]: "Unique Status"
+	};
+
+	/*
+	================
+	systemMenuExtras
+	================
+	*/
+	function systemMenuExtras(): readonly number[] {
+		const extras: number[] = [];
+		if ( experimental.state().saved.eventCalendar ) extras.push( EVENT_CALENDAR_MENU_ID );
+		if ( experimental.state().saved.uniqueStatus ) extras.push( UNIQUE_STATUS_MENU_ID );
+		return extras;
+	}
 	const companionPotions = createCompanionPotions( pageStorage() );
 	let consolePhase: 0 | 1 | 2 | 3 = 0, consoleY = -112, consoleLast = 0, consoleText = "", gmObserved = 0;
 	let consoleHistory: string[] = [], consoleHistoryIndex = 0;
@@ -1711,6 +1750,11 @@ export function createUi( ports: UiPorts ) {
 	const compositeItemHud = createCompositeItemHud();
 	// Port-only, not native: a unique kill's damage ranking (SRO_UNIQUE_DAMAGE_RANK).
 	const uniqueRankHud = createUniqueRankHud();
+	const uniqueStatusHud = createUniqueStatusHud( extensions.uniqueNotifyBook?.() ?? {} );
+	// Port-only (#3531): the Unique Status window's last drawn list (its
+	// wheel and thumb drag find it here) and the server clock's base: the
+	// last feed's server time and the local time it landed, so the Died
+	// column's "ago" runs between updates.
 	// The v1.696 client's Server Mission gauge (CNIFServerEvent, 0x34F2): native, no row.
 	const serverEventHud = createServerEventHud();
 	// Port-only, not native (#3907): the v1.696 SRO Macro windows (SRO_AUTO_MACRO).
@@ -3770,6 +3814,13 @@ export function createUi( ports: UiPorts ) {
 			dirty = true;
 			return;
 		}
+		if ( panel === "Event Calendar" && id.startsWith( "event-calendar-event:" ) ) {
+			const [day, index] = id.slice( "event-calendar-event:".length ).split( ":" ).map( Number );
+			const event = eventCalendar.state().week[day!]?.events[index!];
+			if ( event ) eventCalendar.select( event );
+			dirty = true;
+			return;
+		}
 		// CIFCOSStatus maps no left-click message (6A9BC0: only 0x8074 and
 		// 0xD7), so the portrait's own 0x27 does nothing natively; selection is
 		// the right-button release (6A9E40), a touch hold on touch screens.
@@ -5597,6 +5648,20 @@ export function createUi( ports: UiPorts ) {
 		} else if ( id === "unique-rank-ok" || id === "unique-rank-close" ) {
 			uniqueRankHud.close();
 			dirty = true;
+		} else if ( id.startsWith( "unique-status-" ) ) {
+			// Port-only (#3531): the window's clicks; the page keeps the
+			// two platform calls a Save can ask for.
+			const action = uniqueStatusHud.click( id );
+			if ( action ) {
+				if ( action.save ) extensions.saveUniqueNotify?.( uniqueStatusHud.character(), action.save );
+				if (
+					action.askPermission && typeof Notification !== "undefined" &&
+					Notification.permission === "default"
+				) {
+					void Notification.requestPermission();
+				}
+				dirty = true;
+			}
 		} else if ( id === "server-event-close" ) {
 			serverEventHud.close();
 		} else if ( id.startsWith( MACRO_ID ) || id === "sro-macro-close" ) {
@@ -7996,6 +8061,16 @@ export function createUi( ports: UiPorts ) {
 					return;
 				}
 			}
+			if (
+				(event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end") &&
+				panel === "Unique Status"
+			) {
+				// Port-only (#3531): the list's wheel and thumb live in the hud.
+				if ( uniqueStatusHud.pointer( event ) ) {
+					dirty = true;
+					return;
+				}
+			}
 			if ( event.kind === "scroll" && panel === "Blocking" ) {
 				const area = controls.find( c => c.id === "blocking-list" );
 				if ( area && containsPoint( area.rect, event.x, event.y ) ) {
@@ -9079,10 +9154,11 @@ export function createUi( ports: UiPorts ) {
 				return;
 			}
 			if ( event.kind === "drag" && event.id === "system-drag" && panel === "System" ) {
+				const menuHeight = systemMenuHeight( systemMenuExtras().length );
 				systemX = Math.max( 0, Math.min( (view?.width ?? 214) - 214, (systemX ?? 0) + event.dx ) );
 				systemY = Math.max(
 					0,
-					Math.min( (view?.height ?? SYSTEM_MENU_HEIGHT) - SYSTEM_MENU_HEIGHT, (systemY ?? 0) + event.dy )
+					Math.min( (view?.height ?? menuHeight) - menuHeight, (systemY ?? 0) + event.dy )
 				);
 				dirty = true;
 				return;
@@ -10807,6 +10883,29 @@ export function createUi( ports: UiPorts ) {
 				phase === "world" &&
 				uniqueRankHud.reconcile( next.gameplay, experimental.state().saved.uniqueDamageRank )
 			) dirty = true;
+			if ( phase === "world" ) {
+				// Port-only (#3531): the Unique Status alerts. The notify
+				// list belongs to the character in the world; a marked
+				// unique's spawn (and death, when allowed) raises the
+				// in-game line and, once the player allowed it on Save,
+				// the browser's notification. (The panel itself follows
+				// the menu's gating, like the Event Calendar's.)
+				uniqueStatusHud.attach( next.session?.character ?? "" );
+				const alertFlips = uniqueStatusHud.reconcile(
+					next.gameplay?.uniqueStatus,
+					experimental.state().saved.uniqueStatus
+				);
+				for ( const flip of alertFlips ) {
+					sendGameplay( {
+						kind: "local-notice",
+						notice: { key: "", value: 0, text: uniqueStatusAlertText( flip ) }
+					} );
+					notifyBrowserUnique( flip, uniqueStatusHud.savedSettings().browser );
+					dirty = true;
+				}
+			}
+			// Port-only (#3532): the calendar fetches only while its panel is open.
+			eventCalendar.frame( apiBase, Date.now(), panel === "Event Calendar" );
 			if ( phase === "signed-out" || phase === "character-select" ) serverEventHud.reset();
 			if ( phase === "world" ) {
 				const before = serverEventHud.shown();
@@ -10883,6 +10982,8 @@ export function createUi( ports: UiPorts ) {
 					persistWindowPositions();
 					guildWarHud.reset( true );
 					uniqueRankHud.reset();
+					uniqueStatusHud.reset();
+					eventCalendar.reset();
 					sroMacroHud.reset();
 					windowPlacement.reset();
 					itemMall.reset();
@@ -14313,15 +14414,16 @@ export function createUi( ports: UiPorts ) {
 					// Clamp at render like the drag does: a position stored on a
 					// larger viewport must not strand the menu off screen after
 					// the window shrinks.
+					const menuHeight = systemMenuHeight( systemMenuExtras().length );
 					const sx = Math.max( 0, Math.min( w - 214, systemX ?? Math.trunc( (w - 214) / 2 ) ) ),
 						sy = Math.max(
 							0,
-							Math.min( h - SYSTEM_MENU_HEIGHT, systemY ?? Math.trunc( (h - SYSTEM_MENU_HEIGHT) / 2 ) )
+							Math.min( h - menuHeight, systemY ?? Math.trunc( (h - menuHeight) / 2 ) )
 						);
 					systemX = sx;
 					systemY = sy;
 					const authored = hudData.windows.ifsystemwnd!,
-						layout = systemMenu( authored, sx, sy ),
+						layout = systemMenu( authored, sx, sy, systemMenuExtras() ),
 						inner = authored.GDR_SYSTEM_FRAME!,
 						tile = authored.GDR_SYSTEM_BGTILE!;
 					blocks.push( layout.frame );
@@ -14358,7 +14460,10 @@ export function createUi( ports: UiPorts ) {
 					);
 					closeButton( sx + 188, sy + 10, panelCloseId( "System" ) );
 					for ( const node of layout.buttons ) {
-						const id = node.id === EXPERIMENTAL_MENU_ID ? "open-window:Experimental" : node.id === 10 ?
+						const menuWindow = SYSTEM_MENU_WINDOWS[node.id];
+						const id = node.id === EXPERIMENTAL_MENU_ID ? "open-window:Experimental" : menuWindow ?
+							"open-window:" + menuWindow :
+							node.id === 10 ?
 							"open-window:Option" :
 							node.id === 11 ?
 							"open-window:Game Guide" :
@@ -14370,8 +14475,52 @@ export function createUi( ports: UiPorts ) {
 							sx,
 							sy,
 							id,
-							node.id === EXPERIMENTAL_MENU_ID ? "Experimental" : hudCopy( node.text )
+							node.id === EXPERIMENTAL_MENU_ID ? "Experimental" : menuWindow ?? hudCopy( node.text )
 						);
+					}
+					endWindow( admission );
+				}
+				if ( panel === "Event Calendar" && hudData ) {
+					const admission = beginWindow();
+					// Port-only, not native (#3532): the window's drawing is
+					// hud/event-calendar-view.ts's ops; admission, the chrome
+					// and the op-to-quad loop stay here.
+					const [px, py] = windowOrigin( "Event Calendar", [
+						(w - EVENT_CALENDAR_WIDTH) / 2,
+						(h - EVENT_CALENDAR_HEIGHT) / 2,
+						EVENT_CALENDAR_WIDTH,
+						EVENT_CALENDAR_HEIGHT
+					] );
+					windowBox( "Event Calendar", px, py, EVENT_CALENDAR_WIDTH, EVENT_CALENDAR_HEIGHT );
+					closeButton( px + EVENT_CALENDAR_WIDTH - 26, py + 10, panelCloseId( "Event Calendar" ) );
+					const ops = eventCalendarView( {
+						origin: [ px, py ],
+						tile: hudData.windows.ifoption!.GDR_OPTION_BGTILE!.texture,
+						state: eventCalendar.state(),
+						serverNowMs: eventCalendar.serverNowMs( Date.now() )
+					} );
+					paths.push( ...eventCalendarPictures( ops ) );
+					for ( const op of ops ) {
+						if ( op.kind === "tile" ) {
+							quads.push( ...normalTile( op.rect, op.path, resources.size( op.path ), full ) );
+						} else if ( op.kind === "rect" ) {
+							rect( op.rect, op.color );
+						} else if ( op.kind === "text" ) {
+							quads.push( ...text.quads( op.value, op.rect, full, op.color, {
+								hAlign: op.hAlign,
+								vAlign: op.vAlign
+							} ) );
+						} else {
+							if ( op.texture && resources.has( op.texture ) ) rect( op.rect, op.color, op.texture );
+							controls.push( {
+								id: op.id,
+								label: op.label,
+								rect: op.rect,
+								kind: "button",
+								selected: op.selected,
+								disabled: false
+							} );
+						}
 					}
 					endWindow( admission );
 				}
@@ -17483,6 +17632,79 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					}
 					button( "unique-rank-ok", hudCopy( "UIIT_CTL_CONFIRM" ), px + (width - 120) / 2, py + height - 40 );
 					endWindow( admission, "unique-rank" );
+				}
+				const uniqueStatusState = uniqueStatusHud.state();
+				if ( panel === "Unique Status" && game ) {
+					// Port-only, not native (#3531): the window is drawn from the
+					// operations unique-status-view.ts shapes; this loop only
+					// paints them with the ordinary window primitives.
+					const feed = next.gameplay?.uniqueStatus ?? null;
+					const admission = beginWindow();
+					const statusView = uniqueStatusView( {
+						origin: windowOrigin( "UniqueStatus", [
+							(w - UNIQUE_STATUS_WIDTH) / 2,
+							Math.max( 0, (h - UNIQUE_STATUS_HEIGHT) / 3 ),
+							UNIQUE_STATUS_WIDTH,
+							UNIQUE_STATUS_HEIGHT
+						] ),
+						feed,
+						tab: uniqueStatusState.tab,
+						firstRow: uniqueStatusState.firstRow,
+						draft: uniqueStatusHud.draft(),
+						dirty: uniqueStatusHud.dirty(),
+						hover,
+						serverNowMs: uniqueStatusHud.serverNowMs( feed, next.simulationTimeMs ?? 0 )
+					} );
+					uniqueStatusHud.noteDrawn( statusView.list );
+					for ( const op of statusView.ops ) {
+						if ( op.kind === "box" ) {
+							windowBox( op.title, op.rect[0], op.rect[1], op.rect[2], op.rect[3] );
+							closeButton(
+								op.rect[0] + op.rect[2] - 26,
+								op.rect[1] + 10,
+								panelCloseId( "Unique Status" )
+							);
+						} else if ( op.kind === "button" ) {
+							button( op.id, op.label, op.rect[0], op.rect[1], op.rect[2], op.disabled, op.selected );
+						} else if ( op.kind === "image" ) {
+							image( op.rect, op.path );
+						} else if ( op.kind === "text" ) {
+							quads.push(
+								...text.quads( op.value, op.rect, op.rect, op.color, {
+									hAlign: op.hAlign,
+									vAlign: op.vAlign,
+									overflow: "ellipsis"
+								} )
+							);
+						} else if ( op.kind === "rect" ) {
+							rect( op.rect, op.color );
+						} else if ( op.kind === "hit" ) {
+							controls.push( {
+								id: op.id,
+								label: op.label,
+								kind: "button",
+								rect: op.rect,
+								selected: op.selected
+							} );
+						} else if ( op.kind === "scrollbar" ) {
+							const bar = chatScrollbar(
+								op.id,
+								op.rect,
+								op.total,
+								op.page,
+								op.value,
+								resources.size,
+								full,
+								hover,
+								pressed
+							);
+							paths.push( ...bar.paths );
+							quads.push( ...bar.quads );
+							controls.push( ...bar.controls );
+							uniqueStatusHud.noteDrawn( statusView.list, bar.travel );
+						}
+					}
+					endWindow( admission, "unique-status" );
 				}
 				// The bag scroll's box (561D50 opens type 0x21 at 562251) and
 				// 6AD990's type 0x24 box are one box: 52F460 runs 53259C for both,

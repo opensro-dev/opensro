@@ -139,6 +139,12 @@ export interface ExperimentalOptions {
 	// in a window (unique-rank-hud.ts). Off unless turned on, so each
 	// player opts in.
 	readonly uniqueDamageRank: boolean;
+	// Port-only, not native: the Unique Status window (unique-status-hud.ts)
+	// lists every unique's alive/dead state and last kill from the shard's
+	// feed (0x3FC4/0x3FC5, server SRO_UNIQUE_STATUS), and alerts - in game,
+	// and in the browser once allowed - when a marked unique spawns or
+	// dies. Off unless turned on, so each player opts in.
+	readonly uniqueStatus: boolean;
 	// Port-only, not native: holding V (UIIT_STT_USER_MOSTER_BLIND) also
 	// hides other players' pets and transports. The original hides only
 	// monsters and players (8602C0, 85E550): a COS draws through its owner
@@ -274,6 +280,10 @@ export interface ExperimentalOptions {
 	// windows and never sends 0x7554. On unless turned off (owner,
 	// 2026-11-21: the macro ships on in the next release).
 	readonly sroMacro: boolean;
+	// Port-only, not native (#3532): the Event Calendar window over the
+	// public schedule feed (#3520). Off unless turned on; off, the System
+	// menu has no calendar entry and the window never opens.
+	readonly eventCalendar: boolean;
 }
 
 /*
@@ -478,6 +488,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		breakNotices: record.breakNotices !== false,
 		highlightEventNotices: record.highlightEventNotices !== false,
 		uniqueDamageRank: enabled( "uniqueDamageRank" ),
+		uniqueStatus: enabled( "uniqueStatus" ),
 		vHidesCompanions: enabled( "vHidesCompanions" ),
 		exchangeClickShortcuts: record.exchangeClickShortcuts !== false,
 		noticeLinks: record.noticeLinks !== false,
@@ -505,7 +516,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		setBonusTooltip: enabled( "setBonusTooltip" ),
 		silkHistory: enabled( "silkHistory" ),
 		mallCategories: enabled( "mallCategories" ),
-		sroMacro: record.sroMacro !== false
+		sroMacro: record.sroMacro !== false,
+		eventCalendar: enabled( "eventCalendar" )
 	};
 }
 

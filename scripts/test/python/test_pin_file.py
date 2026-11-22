@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pin_file  # noqa: E402
+from prepare_client_resources import file_digest  # noqa: E402
 
 FORMAT = "opensro-vsro-archive-pins-v1"
 
@@ -59,6 +60,43 @@ class ReadPinField(unittest.TestCase):
 		for name, (path, message) in cases.items():
 			with self.subTest(name), self.assertRaisesRegex(SystemExit, message):
 				pin_file.read_pin_field(path, FORMAT, "archives")
+
+
+class RequirePinnedArchive(unittest.TestCase):
+	def setUp(self):
+		self.directory = tempfile.TemporaryDirectory()
+		self.addCleanup(self.directory.cleanup)
+		self.root = Path(self.directory.name)
+		(self.root / "Media.pk2").write_bytes(b"archive")
+		self.digest = file_digest(self.root / "Media.pk2")
+
+	def pins(self, archives):
+		path = self.root / "pins.json"
+		path.write_text(json.dumps({"format": FORMAT, "archives": archives}), encoding="utf-8")
+		return path
+
+	# ================
+	# test_a_matching_archive_is_returned
+	# ================
+	def test_a_matching_archive_is_returned(self):
+		path = pin_file.require_pinned_archive(self.pins({"Media": self.digest}), FORMAT, self.root, "Media", "x")
+		self.assertEqual(path, self.root / "Media.pk2")
+
+	# ================
+	# test_an_unchecked_archive_stops_the_import
+	#
+	# Unpinned, absent and changed archives each stop before a byte of
+	# them is read.
+	# ================
+	def test_an_unchecked_archive_stops_the_import(self):
+		cases = {
+			"unpinned": ({"Data": self.digest}, "Media", "pins no Media.pk2"),
+			"absent": ({"Data": self.digest}, "Data", "Data.pk2 not found; name the folder"),
+			"changed": ({"Media": "0" * 64}, "Media", "does not match its pin in pins.json"),
+		}
+		for label, (archives, name, message) in cases.items():
+			with self.subTest(label), self.assertRaisesRegex(SystemExit, message):
+				pin_file.require_pinned_archive(self.pins(archives), FORMAT, self.root, name, "name the folder")
 
 
 if __name__ == "__main__":

@@ -62,6 +62,8 @@ export const OFF = Object.freeze( {
 	highlightEventNotices: true,
 	// Off by default: each player opts in to the unique damage ranking.
 	uniqueDamageRank: false,
+	// Off by default: each player opts in to the Unique Status window (#3531).
+	uniqueStatus: false,
 	// Off by default: V hides only monsters and players, as the original does.
 	vHidesCompanions: false,
 	// On by default (owner 2026-10-24): click shortcuts stage into an exchange.
@@ -125,5 +127,8 @@ export const OFF = Object.freeze( {
 	mallCategories: false,
 	// On by default (owner 2026-11-21, #3907): the v1.696 SRO Macro
 	// windows are port-only and ship on in the next release.
-	sroMacro: true
+	sroMacro: true,
+	// Off by default (#3532): the Event Calendar is port-only; off, the
+	// System menu has no calendar entry.
+	eventCalendar: false
 } );

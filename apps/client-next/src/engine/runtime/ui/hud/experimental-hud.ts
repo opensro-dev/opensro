@@ -354,6 +354,12 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "When a unique you hit dies, show who did the most."
 					},
 					{
+						key: "uniqueStatus",
+						id: "experimental-unique-status",
+						label: "Unique status window",
+						description: "Every unique's Alive or Dead state, and alerts for the ones you mark."
+					},
+					{
 						key: "vHidesCompanions",
 						id: "experimental-v-hides-companions",
 						label: "V hides pets and transports",
@@ -364,6 +370,20 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-sro-macro",
 						label: "SRO Macro",
 						description: "Later client's auto-potion, skill and hunt windows."
+					}
+				]
+			},
+			{
+				title: "Events",
+				rows: [
+					{
+						// Port-only, not native (#3532): the calendar has no
+						// native counterpart; the row only adds its System
+						// menu entry and window over the schedule feed.
+						key: "eventCalendar",
+						id: "experimental-event-calendar",
+						label: "Event calendar",
+						description: "System menu: the week's scheduled events, in server time."
 					}
 				]
 			},

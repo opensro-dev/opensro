@@ -315,6 +315,11 @@ var Settings = []Setting{
 	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},
 	// Port-only, off by default: a unique's attackers see its damage ranking.
 	{Env: "SRO_UNIQUE_DAMAGE_RANK", NomadVar: "unique_damage_rank", Default: "off"},
+	// Port-only, not native (#3531): the in-game Unique Status window's
+	// feed - every unique's alive/dead state, death time and killer,
+	// composed from the same owners as the public API's uniques page
+	// (game/uniquestatus). Off, no frame is ever sent.
+	{Env: "SRO_UNIQUE_STATUS", NomadVar: "unique_status", Default: "off"},
 	// Owner, 2026-10-15: a login inside a closed object (a tree trunk) is
 	// rescued to the nearest open ground.
 	{Env: "SRO_CLOSED_OBJECT_RESCUE", NomadVar: "closed_object_rescue", Default: "on"},

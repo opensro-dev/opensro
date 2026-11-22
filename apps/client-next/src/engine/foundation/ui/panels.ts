@@ -32,6 +32,7 @@ export function uiPanels() {
 		"COS inventory",
 		"Character",
 		"Chat",
+		"Event Calendar",
 		"Experimental",
 		"Fortress war application",
 		"Fortress war schedule",
@@ -55,7 +56,8 @@ export function uiPanels() {
 		"Skin change",
 		"Stall network",
 		"Storage",
-		"System"
+		"System",
+		"Unique Status"
 	] as const;
 }
 

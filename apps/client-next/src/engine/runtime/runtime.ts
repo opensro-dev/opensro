@@ -20,6 +20,7 @@ import { experimentalGameplay, experimentalVideo } from "@/engine/foundation/ui/
 import { blindableCharacter, blindableCompanion } from "@/engine/foundation/ui/name-visibility";
 import { sampleWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { createWorldDoubleClick } from "@/engine/foundation/gameplay/world-double-click";
+import type { UniqueNotifySettings } from "@/engine/foundation/gameplay/unique-status";
 import type { RawInput, WorldClickInput } from "@/engine/contracts/input";
 import { createNavigationStream } from "./navigation/navigation";
 import { createFrontend } from "./frontend/frontend";
@@ -574,7 +575,10 @@ export function startRuntime(
 					pickCrestImage: (): Promise<Uint8Array | null> => platform.pickCrestImage(),
 					playSoundByName: name => audio.playByName( name ),
 					saveExperimental: value => platform.saveExperimentalOptions( value ),
-					saveWindowPositions: value => platform.saveWindowPositions( value )
+					saveWindowPositions: value => platform.saveWindowPositions( value ),
+					uniqueNotifyBook: (): Readonly<Record<string, UniqueNotifySettings>> => platform.uniqueNotifyBook(),
+					saveUniqueNotify: ( character: string, value: UniqueNotifySettings ): void =>
+						platform.saveUniqueNotify( character, value )
 				}
 			} )
 		);
