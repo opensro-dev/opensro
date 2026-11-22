@@ -146,3 +146,43 @@ func BenchmarkRecordTicket(b *testing.B) {
 		journal.RecordTicket("looper", TicketCounts{TransportMinted: 1})
 	}
 }
+
+/*
+================
+TestFailedTicketFlushIsRetriedOnce
+
+A flush whose write fails puts its counts back, merged with whatever
+was counted meanwhile; the next flush writes them exactly once.
+================
+*/
+func TestFailedTicketFlushIsRetriedOnce(t *testing.T) {
+	t.Parallel()
+
+	journal := openTestJournal(t, filepath.Join(t.TempDir(), "connections.sqlite"))
+	journal.now = func() time.Time { return time.Date(2026, 11, 22, 10, 0, 0, 0, time.UTC) }
+	journal.RecordTicket("alice", TicketCounts{TransportMinted: 2})
+	if _, err := journal.db.Exec(`DROP TABLE ticket_hours`); err != nil {
+		t.Fatal(err)
+	}
+	if err := journal.flushTickets(); err == nil {
+		t.Fatal("a flush into a missing table succeeded")
+	}
+	journal.RecordTicket("alice", TicketCounts{TransportPaced: 1})
+	if _, err := journal.db.Exec(ticketSchema); err != nil {
+		t.Fatal(err)
+	}
+	if err := journal.flushTickets(); err != nil {
+		t.Fatal(err)
+	}
+	if err := journal.flushTickets(); err != nil { // nothing pending: writes nothing more
+		t.Fatal(err)
+	}
+	var minted, paced int
+	if err := journal.db.QueryRow(`SELECT transport_minted, transport_paced FROM ticket_hours WHERE account='alice'`).
+		Scan(&minted, &paced); err != nil {
+		t.Fatal(err)
+	}
+	if minted != 2 || paced != 1 {
+		t.Fatalf("after the retry minted=%d paced=%d, want 2 and 1", minted, paced)
+	}
+}
