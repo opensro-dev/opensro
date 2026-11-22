@@ -33,7 +33,13 @@ system is the Academy's (the native check on #3530).
 - At the hour's first sight - and each time the hour turns - every entered player gets one server notice (0x3667): the hour's towns and the x1.5 rate.
 - On the route, a trader's foreign-sale points and the escort payout that sale releases are counted at 150%, still under the 250-point run cap and the account's daily cap. A thief's den sale ends at no town pair and a job kill is tied to no route, so neither is multiplied (inference from the issue's "traders reroute, thieves and hunters follow").
 
-Still later slices of #3530: the ambush, and the tier's Academy honor buff and coloured title.
+## The tier's honor buff
+
+- A tier grants, for the day, the native Academy honor buff of that tier: Silver the copper+silver set, Gold adds the gold buff, King the full crown set (the 20160..20163 skills the Training Camp honor already uses). No gold, no items.
+- The buff is the dressed job's honor: the tier a character holds for the job it is wearing. Another job's suit - or no suit - carries no job buff (inference: tiers are ranked per job, so the grant belongs to that job's suit).
+- One reconcile owns the buff set for both honors: the camp's native rank and the job tier's rank fold together, strongest wins, so a camp master keeps the stronger of the two and neither lane strips the other's grant. A convergence pass (first sight of a session, a dress change, the 05:00 change, and a 15-second sweep) keeps every entered character's buffs on its current want.
+
+Still later slices of #3530: the ambush and the coloured title.
 
 ## Days and tiers
 

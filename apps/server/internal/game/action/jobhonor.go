@@ -37,7 +37,8 @@ alone can cause.
 
 A job kill (both dressed, victim carrying goods or holding points)
 and a hunter's escort damage on a thief marked for attacking a caravan
-score below; the hot route and the ambush are later slices of #3530.
+score below; the tier's honor buff folds into honor_buffs.go, the hot
+route lives in hotroute.go, and the ambush is a later slice of #3530.
 
 ===========================================================================
 */
@@ -98,6 +99,107 @@ after a trade commits, outside the store door.
 */
 type JobHonorSink interface {
 	AwardJobHonor(account string, characterID int64, job int, points int, at time.Time) int
+	// HeldTier is the tier the newest snapshot gave a character for a
+	// job; the tier's honor buff reads it (jobHonorTierRank below).
+	HeldTier(characterID int64, job int) int
+}
+
+/*
+================
+jobHonorTierBuffRank
+
+The Academy evaluation rank a job honor tier grants for the day
+(honor_buffs.go: 1 King, 2 Gold, 3 Silver; a job tier has no Bronze).
+================
+*/
+func jobHonorTierBuffRank(tier int) uint8 {
+	switch tier {
+	case jobhonor.TierKing:
+		return 1
+	case jobhonor.TierGold:
+		return 2
+	case jobhonor.TierSilver:
+		return 3
+	}
+	return 0
+}
+
+/*
+================
+strongerHonorRank
+
+The stronger of two Academy evaluation ranks: nonzero beats none, and
+the lower number is the stronger rank.
+================
+*/
+func strongerHonorRank(a, b uint8) uint8 {
+	if a == 0 {
+		return b
+	}
+	if b == 0 || a < b {
+		return a
+	}
+	return b
+}
+
+/*
+================
+jobHonorTierRank
+
+The evaluation rank a character's job honor tier grants: the tier it
+holds for the job it is dressed as, so another job's suit - or none -
+carries no job buff. Port-only (#3530): a nil sink grants nothing, and
+off (the native default) the fold in SyncTrainingCampHonorBuffs never
+sees a rank from here.
+================
+*/
+func (rt *Runtime) jobHonorTierRank(c *enterworld.Character) uint8 {
+	if rt == nil || rt.JobHonor == nil || c == nil {
+		return 0
+	}
+	job := enterworld.DressedJob(c)
+	if job == 0 {
+		return 0
+	}
+	return jobHonorTierBuffRank(rt.JobHonor.HeldTier(c.ID, int(job)))
+}
+
+/*
+================
+CampHonorRank
+
+The Academy evaluation rank a character holds as a camp master (0 when
+it masters no camp): the mentor lane's own input to
+SyncTrainingCampHonorBuffs, read here so the job honor convergence can
+pass the same want for a master.
+================
+*/
+func (rt *Runtime) CampHonorRank(division string, charID int64) uint8 {
+	if rt == nil || rt.deps == nil || charID <= 0 {
+		return 0
+	}
+	// The action Dependencies do not name the camp store; deps that
+	// carry it (enterworld.Deps) answer through this facet, the same
+	// optional seam findCharacterByID uses for CharacterLookup.
+	source, ok := rt.deps.(interface {
+		TrainingCampAuthority() enterworld.TrainingCampStore
+	})
+	if !ok {
+		return 0
+	}
+	authority := source.TrainingCampAuthority()
+	if authority == nil {
+		return 0
+	}
+	campID, joined := authority.CampOfCharacter(division, charID)
+	if !joined {
+		return 0
+	}
+	camp, _, ok := authority.Camp(division, campID)
+	if !ok || camp.MasterCharID != charID {
+		return 0
+	}
+	return camp.EvaluationRank
 }
 
 /*
