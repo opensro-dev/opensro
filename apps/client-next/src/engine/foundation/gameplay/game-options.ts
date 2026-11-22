@@ -20,7 +20,17 @@ v1.150 catalogue cannot resolve (ui.ts hudCopy carries the text).
 // choices survive the rows arriving (#3502 slice 2). Every other row
 // stays required, and an unknown key or a non-boolean value refuses
 // the whole record, as before.
-const TITLE_OPTION_KEYS: ReadonlySet<string> = new Set( [ "ownTitle", "otherTitles" ] );
+/*
+================
+titleOption
+
+The two title rows (#3502 slice 2), named plainly: an older stored
+record may lack exactly these.
+================
+*/
+function titleOption( key: GameOption ): boolean {
+	return key === "ownTitle" || key === "otherTitles";
+}
 
 /*
 ================
@@ -100,7 +110,7 @@ gameOptions
 
 A stored record, validated whole: every row present and boolean, no
 unknown keys - except the title rows, which an older record may lack
-(see TITLE_OPTION_KEYS above) and then takes its default.
+(see titleOption above) and then takes its default.
 ================
 */
 export function gameOptions( value: unknown ): GameOptions {
@@ -110,7 +120,11 @@ export function gameOptions( value: unknown ): GameOptions {
 	if ( Object.keys( raw ).some( key => !rows.some( ( [rowKey] ) => rowKey === key ) ) ) {
 		throw Error( "Invalid local game option fields" );
 	}
-	if ( rows.some( ( [key] ) => key in raw ? typeof raw[key] !== "boolean" : !TITLE_OPTION_KEYS.has( key ) ) ) {
+	if (
+		rows.some(
+			( [key] ) => key in raw ? typeof raw[key] !== "boolean" : !titleOption( key )
+		)
+	) {
 		throw Error( "Invalid local game option fields" );
 	}
 	return Object.fromEntries(
