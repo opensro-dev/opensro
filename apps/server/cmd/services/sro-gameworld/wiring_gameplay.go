@@ -619,6 +619,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.TraderCargoDrop {
 		log.Infof("trade: transport cargo drops on rider death and field disconnect (%s)", action.EnvTraderCargoDrop)
 	}
+	// Port-only, not native: the client's sort button on the bag, the
+	// warehouses and companion bags (presentation; the moves are ordinary).
+	game.deps.InventorySort = action.InventorySortFromEnv()
+	if game.deps.InventorySort {
+		log.Infof("items: inventory sort button ON (%s)", action.EnvInventorySort)
+	}
 	// Port-only, not native: ten-billion stall prices and billion-gold warehouse deposits.
 	game.items.RaisedGoldCaps = action.RaisedGoldCapsFromEnv()
 	game.deps.RaisedGoldCaps = game.items.RaisedGoldCaps

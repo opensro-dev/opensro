@@ -1205,6 +1205,18 @@ const BUTTON_FOCUS = BUTTON.replace( ".png", "_focus.png" ),
 const CLOSE = ROOT + "interface/ifcommon/com_windowclose.png",
 	CLOSE_PRESS = CLOSE.replace( ".png", "_press.png" ),
 	CLOSE_FOCUS = CLOSE.replace( ".png", "_focus.png" );
+// Port-only, not native (SRO_INVENTORY_SORT): the target
+// window's dark "D" button (16x16, the close button's size) in its three
+// faces, drawn this far left of a container window's close button, on its
+// row.
+const INVENTORY_SORT_FACES = [
+	ROOT + "interface/ifcommon/com_d_windowclose.png",
+	ROOT + "interface/ifcommon/com_d_windowclose_focus.png",
+	ROOT + "interface/ifcommon/com_d_windowclose_press.png"
+] as const;
+const INVENTORY_SORT_SIZE = 16, INVENTORY_SORT_CLOSE_GAP = 2;
+// Each window's sort control is this prefix plus its container.
+const INVENTORY_SORT_ID = "inventory-sort:";
 
 /*
 ================
@@ -5699,6 +5711,15 @@ export function createUi( ports: UiPorts ) {
 			setPanel( "" );
 			leaveRequested = true;
 			commands( { kind: "exit" } );
+		} else if ( id.startsWith( INVENTORY_SORT_ID ) ) {
+			// Port-only, not native (SRO_INVENTORY_SORT): the
+			// button names its container; a companion's is the bound one.
+			const container = id.slice( INVENTORY_SORT_ID.length );
+			if (
+				view.gameplay?.inventorySort && !view.gameplay.inventorySorting &&
+				!view.gameplay.inventoryPending &&
+				(container === "bag" || container === "storage" || container === "cos")
+			) sendGameplay( { kind: "inventory-sort", container, gid: container === "cos" ? cosGid : undefined } );
 		} else if ( closedPanel( id ) !== undefined || id === "companion-close" || id === "potion-cancel" ) {
 			confirmDrop = "";
 			confirmAbandon = false;
@@ -12075,6 +12096,39 @@ export function createUi( ports: UiPorts ) {
 			}
 			/*
 			================
+			inventorySortButton
+
+			Port-only, not native (SRO_INVENTORY_SORT): the sort
+			button of a container's window, left of its close button at
+			(closeX, closeY). It shows pressed while that container is sorted
+			and is disabled while any is. The control is placed whether or not
+			the art has loaded, so it never drops from under the cursor.
+			================
+			*/
+			function inventorySortButton(
+				closeX: number,
+				closeY: number,
+				container: import("@/engine/contracts/gameplay").InventorySortContainer
+			) {
+				if ( !view?.gameplay?.inventorySort ) return;
+				const id = INVENTORY_SORT_ID + container,
+					running = view?.gameplay?.inventorySorting,
+					sorting = running === container,
+					face = INVENTORY_SORT_FACES[sorting || (pressed === id && hover === id) ? 2 : hover === id ? 1 : 0],
+					r: UiRect = [
+						closeX - INVENTORY_SORT_CLOSE_GAP - INVENTORY_SORT_SIZE,
+						closeY,
+						INVENTORY_SORT_SIZE,
+						INVENTORY_SORT_SIZE
+					];
+				paths.push( ...INVENTORY_SORT_FACES );
+				const drawn = resources.has( face ) ? face : INVENTORY_SORT_FACES[0];
+				if ( resources.has( drawn ) ) image( r, drawn );
+				blocks.push( r );
+				controls.push( { id, label: "Sort", rect: r, kind: "button", disabled: running !== undefined } );
+			}
+			/*
+			================
 			mainPopup
 			================
 			*/
@@ -12097,6 +12151,7 @@ export function createUi( ports: UiPorts ) {
 					py + 10,
 					page === "Inventory" && panel !== "Inventory" ? "companion-close" : panelCloseId( page )
 				);
+				if ( page === "Inventory" ) inventorySortButton( px + 362, py + 10, "bag" );
 				quads.push(
 					...text.quads( hudCopy( caption ), [ px + 10, py + 12, 367, 12 ], full, white, {
 						hAlign: 1,
@@ -18337,6 +18392,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						page = storagePanel.page( capacity ),
 						slotIds = Array.from( { length: STORAGE_PAGE_SLOTS }, ( _, i ) => storageSlotControlId( i ) );
 					nativeFrame( root, px, py, hudCopy( root.text ), panelCloseId( "Storage" ) );
+					if ( room?.phase === "open" ) inventorySortButton( px + root.rect[2] - 26, py + 10, "storage" );
 					// Slots, the spinner, the gold amount and the money button are live.
 					nativePage( layout, px, py, [ ...slotIds, 10, 11, 13 ] );
 					for ( let i = 0; i < STORAGE_PAGE_SLOTS; i++ ) {
@@ -19609,6 +19665,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// Beside a shop (trade goods loading into a transport) the bag keeps
 					// its own close identity; closing it ends the trade, as the shop's does.
 					nativeFrame( root, px, py, record?.name ?? "", panelCloseId( "COS inventory" ) );
+					if ( panel === "COS inventory" && cosTab === 1 && cosHasInventory( record ) && record?.inventory ) {
+						inventorySortButton( px + root.rect[2] - 26, py + 10, "cos" );
+					}
 					nativePage( hudData.windows.ifcos!, px, py );
 					[
 						"UIIT_STT_COSNEWUI_TABMENU_BASICINFO",

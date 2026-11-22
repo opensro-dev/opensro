@@ -143,7 +143,12 @@ REQUIRED_MISSIONS = "vf17c"
 # instead: the MEETROC_ECT talks (90D9B0, 90E1C0, 90E9C0) count the ECT
 # token in the bag (player +0x224), refuse below 7, 10 or 15 and remove
 # that many (+0x230). Their tokens come from QNO_RM_MEETROC_6's reward.
-HELD_COUNT_GATHERS = {"QNO_RM_MEETROC_ECT_1", "QNO_RM_MEETROC_ECT_2", "QNO_RM_MEETROC_ECT_3"}
+# The ARCHEMY talks (90F270 and its seven siblings, #3399 step 5d) are
+# the same shape over each quest's own trophy: refuse below 3, remove 3.
+# Their trophies come from the Roc kinds' database fixed drops.
+HELD_COUNT_GATHERS = {"QNO_RM_MEETROC_ECT_1", "QNO_RM_MEETROC_ECT_2", "QNO_RM_MEETROC_ECT_3",
+	"QNO_RM_ARCHEMY_1", "QNO_RM_ARCHEMY_2", "QNO_RM_ARCHEMY_3", "QNO_RM_ARCHEMY_4",
+	"QNO_RM_ARCHEMY_5", "QNO_RM_ARCHEMY_6", "QNO_RM_ARCHEMY_7", "QNO_RM_ARCHEMY_8"}
 
 # Classes whose v1.188 mission captions v1.150 never shipped as contents:
 # v1.150's questcontentsdata names one caption per quest, which every

@@ -2,11 +2,14 @@
 ===========================================================================
 test_roc_rewards.py - the Roc kinds' database rewards joined to a variant (#3399 step 5b).
 
-The committed evidence keeps a rule only where the variant installs its
-items: a group keeps its installed members at their authored weights, a
-rule with none waits and is listed, and with nothing kept no file is
-written. A rule the server cannot represent refuses, and evidence from
-another backup refuses.
+	The committed evidence keeps a rule only where the variant installs its
+	items: a group keeps its installed members at their authored weights, a
+	rule with none waits and is listed, and with nothing kept no file is
+	written. A rule the server cannot represent refuses, and evidence from
+	another backup refuses.
+
+	Step 5d: the trophies' evidence is the ISRO-R shard's fixed table, one
+	row per trophy; its rows join as fixed rules under the same checks.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
@@ -136,6 +139,70 @@ class RocRewardsTest(unittest.TestCase):
 			(text_root / "itemdata_110000.txt").write_bytes(utf16([]))
 			summary = rewards.add_rewards(text_root)
 			self.assertEqual((summary["fixed"], summary["random"]), (0, 0))
+			self.assertFalse((text_root / rewards.REWARDS_FILE).exists())
+
+	# ================
+	# trophy_evidence
+	# ================
+	def trophy_evidence(self):
+		return json.loads(rewards.TROPHIES_SOURCE.read_text(encoding="utf-8"))
+
+	# ================
+	# test_the_trophy_evidence_is_the_pinned_shard
+	# ================
+	def test_the_trophy_evidence_is_the_pinned_shard(self):
+		source = self.trophy_evidence()
+		self.assertEqual(source["sha256"], rewards.TROPHIES_SHA256)
+		self.assertEqual([(row["monster"], row["item"], row["min"], row["max"], row["probability"])
+			for row in source["fixed"]], [
+			("MOB_RM_DEVILSAYTAN", "ITEM_QNO_RM_ARCHEMY_4", 1, 2, 1.0),
+			("MOB_RM_ROC", "ITEM_QNO_RM_ARCHEMY_1", 1, 2, 1.0),
+			("MOB_RM_ROC", "ITEM_QNO_RM_ARCHEMY_2", 1, 2, 1.0),
+			("MOB_RM_ROC", "ITEM_QNO_RM_ARCHEMY_3", 1, 2, 1.0),
+			("MOB_RM_SPIRITS", "ITEM_QNO_RM_ARCHEMY_5", 0, 1, 1.0),
+			("MOB_RM_SPIRITS_CLON", "ITEM_QNO_RM_ARCHEMY_6", 0, 1, 1.0),
+			("MOB_RM_SPIRITS_CLON2", "ITEM_QNO_RM_ARCHEMY_7", 0, 1, 1.0),
+			("MOB_RM_SPIRITS_CLON3", "ITEM_QNO_RM_ARCHEMY_8", 0, 1, 1.0)])
+
+	# ================
+	# test_trophies_join_and_the_rest_wait
+	# ================
+	def test_trophies_join_and_the_rest_wait(self):
+		installed = {code: item_row(n, code, ("3", "3", "13", "1"))
+			for n, code in enumerate(("ITEM_QNO_RM_ARCHEMY_1", "ITEM_QNO_RM_ARCHEMY_5"), 1)}
+		kept, waiting = rewards.project_trophies(self.trophy_evidence(), installed)
+		self.assertEqual([(rule["Monster"], rule["Item"], rule["Min"], rule["Max"]) for rule in kept], [
+			("MOB_RM_ROC", "ITEM_QNO_RM_ARCHEMY_1", 1, 2), ("MOB_RM_SPIRITS", "ITEM_QNO_RM_ARCHEMY_5", 0, 1)])
+		self.assertEqual(len(waiting), 6)
+		self.assertIn("MOB_RM_DEVILSAYTAN/ITEM_QNO_RM_ARCHEMY_4", waiting)
+
+	# ================
+	# test_trophy_evidence_from_another_backup_refuses
+	# ================
+	def test_trophy_evidence_from_another_backup_refuses(self):
+		source = self.trophy_evidence()
+		source["sha256"] = "0" * 64
+		with self.assertRaisesRegex(ValueError, "pinned"):
+			rewards.project_trophies(source, {})
+
+	# ================
+	# test_add_rewards_joins_the_trophies
+	# ================
+	def test_add_rewards_joins_the_trophies(self):
+		with tempfile.TemporaryDirectory() as root:
+			text_root = Path(root)
+			trophies = [item_row(20 + n, f"ITEM_QNO_RM_ARCHEMY_{n}", ("3", "3", "13", "1")) for n in range(1, 9)]
+			(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_25000.txt"]]))
+			(text_root / "itemdata_25000.txt").write_bytes(utf16(trophies))
+			summary = rewards.add_rewards(text_root)
+			self.assertEqual((summary["trophies"], summary["waitingTrophies"]), (8, []))
+			written = json.loads((text_root / rewards.REWARDS_FILE).read_text(encoding="utf-8"))
+			self.assertEqual({rule["Item"] for rule in written["Fixed"]},
+				{f"ITEM_QNO_RM_ARCHEMY_{n}" for n in range(1, 9)})
+			self.assertEqual(summary["trophiesSourceSHA256"], rewards.TROPHIES_SHA256)
+			(text_root / "itemdata_25000.txt").write_bytes(utf16([]))
+			summary = rewards.add_rewards(text_root)
+			self.assertEqual(summary["trophies"], 0)
 			self.assertFalse((text_root / rewards.REWARDS_FILE).exists())
 
 

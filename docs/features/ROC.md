@@ -3,13 +3,14 @@
 The Roc summit is native to v1.150: its arena regions (`RN_RM_ROCAPEX`) and the entry (`RN_RM_ROCAPEXENTER`)
 are in the shipped region table, and so are the `ITEM_QNO_RM_MEETROC_*` items. The kinds that fight there, the
 gates and the wait room (25792) are not. They come from the v1.188 client and
-are built as one native chain (#3399). The switch below stays off until the whole chain has landed.
+are built as one native chain (#3399). The chain is whole with step 5d; the switch below stays off until a
+release turns it on.
 
 ## Switch
 
 | Switch | Where | Effect |
 | --- | --- | --- |
-| `SRO_ROC` | Build and server | Build: stages the Roc range's nineteen kinds with their skills, names, skill effects and characterinfo, the four gates with their links, the wait room, the six MEETROC quests and the quest kinds' nests (`roc-monsters.txt`). Server: admits those nests (`monster/roc.go`) and runs worlds 40 and 41 (`action/roc.go`). Build and server must agree |
+| `SRO_ROC` | Build and server | Build: stages the Roc range's nineteen kinds with their skills, names, skill effects and characterinfo, the four gates with their links, the wait room, the six MEETROC quests, the eight ARCHEMY trophy exchanges and the quest kinds' nests (`roc-monsters.txt`). Server: admits those nests (`monster/roc.go`) and runs worlds 40 and 41 (`action/roc.go`). Build and server must agree |
 
 The build reads the VSRO client (`SRO_VSRO_ROOT`, the variant build's own source).
 
@@ -76,8 +77,20 @@ The build reads the VSRO client (`SRO_VSRO_ROOT`, the variant build's own source
   v1.188 shard backup the population evidence pins, and commits them to `scripts/data/roc/quest-nests.json`.
   The build writes them as `roc-monsters.txt`. ISRO-R holds the same six nests at the same anchors with other
   tuning; the v1.188 rows win, as for every nest.
-- **Switching off:** the six rows leave `questdata.txt` and the three ECT rows leave `questcontentsdata.txt` by
+- **Switching off:** the quest rows leave `questdata.txt` and the staged rows leave `questcontentsdata.txt` by
   codename (both are the native tables again, byte for byte) and `roc-monsters.txt` is removed.
+
+### The trophy exchanges (step 5d)
+
+- **The quests:** eight repeatable exchanges, `QNO_RM_ARCHEMY_1` to `_8`. Their rows join `questdata.txt`
+  under the source ids 377-384, free in v1.150; the contents rows come from the client the same way, and
+  v1.150 already ships their text and their trophies. `_1` to `_3` stand at `NPC_KT_SMITH`, `NPC_KT_ARMOR`
+  and `NPC_KT_ACCESSORY`; `_4` to `_8` at `NPC_KT_MANAGER`.
+- **The exchange:** level 80 and up. Each quest takes three of its own trophy (`ITEM_QNO_RM_ARCHEMY_1` to
+  `_8`) and pays one degree-10 magic stone: `ITEM_ETC_ARCHEMY_MAGICSTONE_SHARP_10`, `_IRONWALL_10`,
+  `_GUARD_10`, `_DEVIL_10`, `_ABYSS_10`, `_HEAT_10`, `_STUPOR_10` and `_STRONGMIND_10`, in quest order.
+  The talk refuses below three held, and giving a quest up keeps the trophies. The compiled classes ride
+  the #3796 snapshot; the drops that feed them are the drops section's fixed table.
 
 ### The summit and Tahomet's room (step 4)
 
@@ -139,9 +152,9 @@ The v1.188 reference server counts the living Roc down twice. The v1.696 client 
   - the Demon God Shaitan: `_4`, one or two;
   - the four spirits: `_5` to `_8`, none or one.
 
-  The trophies are native v1.150 items (`itemdata_25000`). The quests that take them, `QNO_RM_ARCHEMY_1` to
-  `_8`, are not: v1.150 ships only their text. So the trophies wait for those quests (step 5d) rather than drop
-  with nothing to spend them on, and the build summary says so.
+  The trophies are native v1.150 items (`itemdata_25000`). The rows are committed as
+  `scripts/data/roc/trophies-source.json` (`scripts/build/import_roc_trophies.py`) and join the rewards file
+  as fixed rules with the backup's, now that the quests that take them stage too (step 5d, above).
 - **What the Roc drops there:**
   - three distinct Roc set pieces (group 1);
   - two or three degree-11 pieces (group 12);
@@ -179,8 +192,3 @@ The v1.188 reference server counts the living Roc down twice. The v1.696 client 
   - turned on over a variant built without them, they number above everything the other importers (rewards,
     honor, Nasrun, pets, mall) already published there, so no published identity moves.
 - **Off:** with `SRO_ROC` off they aren't imported, and the rest of the import is unchanged.
-
-## What is not here yet
-
-- **Content still to come**, each its own step of #3399:
-  - the trophies (`ITEM_QNO_RM_ARCHEMY_1` to `_8`) and their exchange quests (step 5d).

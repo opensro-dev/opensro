@@ -371,6 +371,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		JobSuitHidesArmor:    deps.JobSuitHidesArmor,
 		QuickFuse:            deps.QuickFuse,
 		MoonlitThiefSuit:     deps.MoonlitThiefSuit,
+		InventorySort:        deps.InventorySort,
 		Alexandria:           deps.Alexandria,
 		RaisedGoldCaps:       deps.RaisedGoldCaps,
 		UiTuning:             UiTuningFrom(tunables.Current()),

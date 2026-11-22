@@ -35,7 +35,7 @@ import {
 import { ARENA_CHEST_OPCODE, ARENA_DECISION_OPCODE } from "@/engine/foundation/gameplay/arena-chest";
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
 import { createCountJobs, countJobUseRequest } from "@/engine/foundation/gameplay/count-job";
-import { createStorageRoom, isWarehouseTicket } from "@/engine/foundation/gameplay/storage-room";
+import { createStorageRoom, isWarehouseTicket, STORAGE_MOVE_ROOM } from "@/engine/foundation/gameplay/storage-room";
 import type { PlayerModel } from "@/engine/foundation/gameplay/skin-change";
 import {
 	jobAliasRequest,
@@ -60,6 +60,8 @@ import { recallAppointmentRequest, recallAppointmentNotice } from "@/engine/foun
 import { createPickup } from "./pickup";
 import { createActionSession } from "./action-session";
 import { createCosPickup } from "./cos-pickup";
+import { createInventorySortRun } from "./inventory-sort-run";
+import type { InventorySortBag } from "@/engine/foundation/gameplay/inventory-sort";
 import {
 	withdrawalRequest,
 	withdrawalSkillBindings,
@@ -408,7 +410,12 @@ import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createHwanLevel } from "./hwan-level/hwan-level";
 import { createMostWanted } from "./most-wanted/most-wanted";
 import { createPetTraining } from "./pet-training/pet-training";
-import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
+import type {
+	GameplayCommand,
+	GameplayState,
+	InventoryItem,
+	InventorySortContainer
+} from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import { nearestMonster } from "@/engine/foundation/gameplay/select-nearest";
 import { nearestPickable } from "@/engine/foundation/gameplay/pickup-nearest";
@@ -587,6 +594,26 @@ const OP_TRADE_STAR_COUNT = 0x352d;
 // after sending a ground-targeted 0x72CD; 878410 ticks it down and 8782D0 /
 // 877D80 / 877540 / 8777B0 refuse to send any movement packet until it expires.
 const GROUND_SKILL_MOVE_SUPPRESS_MS = 500;
+// Port-only, not native: the player's own inventory, warehouse and
+// companion bag commands, each of which ends a sort in progress
+// (inventory-sort-run.ts).
+const INVENTORY_SORT_CANCELLERS: readonly GameplayCommand["kind"][] = [
+	"inventory-move",
+	"avatar-move",
+	"item-use",
+	"item-drop",
+	"gold-drop",
+	"shop-open",
+	"shop-buy",
+	"shop-sell",
+	"shop-buyback",
+	"storage-move",
+	"cos-inventory-move",
+	"cos-transfer",
+	"cos-drop",
+	"cos-shop-buy",
+	"cos-shop-sell"
+];
 
 /*
 ================
@@ -685,6 +712,7 @@ export function createGameplay(
 	// window may use the published wider overview and town pages.
 	let alexandria = false;
 	let raisedGoldCaps = false; // Port-only SRO_RAISED_GOLD_CAPS: the raised stall and warehouse caps.
+	let inventorySortRule = false; // Port-only SRO_INVENTORY_SORT: the containers' sort button.
 	// The port-only reverse return map table (reverse-return-map.ts).
 	let reverseMapPoints: readonly ReverseMapPoint[] = [];
 	let warnings = [ false, false ];
@@ -731,6 +759,9 @@ export function createGameplay(
 	const pickup = createPickup();
 	const actionSession = createActionSession();
 	const cosPickup = createCosPickup();
+	// Port-only, not native (SRO_INVENTORY_SORT): the container sort a
+	// window's sort button starts.
+	const inventorySort = createInventorySortRun();
 	const training = createTraining( send );
 	// The held skill press, the newest denial and the round-trip estimate
 	// (skill-queue.ts).
@@ -1644,6 +1675,82 @@ request went out.
 	}
 	/*
 ================
+stepInventorySort
+
+Port-only, not native (SRO_INVENTORY_SORT): one tick of a
+container sort. Returns true when the sort ended, so the view republishes.
+================
+	*/
+	function stepInventorySort( now: number ): boolean {
+		const container = inventorySort.container();
+		if ( !container ) return false;
+		const state = inventory.state(), target = inventorySortTarget( container, state );
+		const { move, ended } = inventorySort.step( {
+			items: target?.items ?? [],
+			bag: target?.bag ?? { first: 0, end: 0 },
+			pending: state.inventoryPending,
+			error: state.error,
+			locked: !target || !live || inventory.interactionWindowOpen() || inventory.tradePinned()
+		} );
+		if ( !move ) return ended;
+		try {
+			if ( container === "bag" ) inventory.move( move.source, move.destination, move.quantity, now );
+			else if ( container === "storage" ) {
+				inventory.storageMove(
+					storage.state()!,
+					{ type: STORAGE_MOVE_ROOM, ...move, gold: 0 },
+					now,
+					cosItemCaps
+				);
+			} else {
+				const record = cosRecords.get( inventorySort.gid() )!;
+				const item = record.inventory?.find( row => row.slot === move.source );
+				// A specialty good stays where it is inside a non-transport
+				// companion (the cos-inventory-move command's own refusal);
+				// the sort cannot place it.
+				if ( item && cosSpecialtyMoveRefused( item.typeFlags, record.band ) ) throw Error( "Specialty good" );
+				inventory.cosMove( cosContainerRequest( record, move.source, move.destination, move.quantity ), now );
+			}
+		} catch {
+			// The container refused to compose the request (a slot it no
+			// longer holds): nothing was sent, so the sort ends here.
+			inventorySort.cancel();
+			return true;
+		}
+		return false;
+	}
+	/*
+================
+inventorySortTarget
+
+The rows and slot range a sort of this container reads, or null when the
+container is gone: the warehouse closed, or the companion dead, dismissed
+or no longer the player's (the cos-inventory-move authority).
+================
+	*/
+	function inventorySortTarget(
+		container: InventorySortContainer,
+		state: ReturnType<typeof inventory.state>
+	): { readonly items: readonly InventoryItem[]; readonly bag: InventorySortBag; } | null {
+		if ( container === "bag" ) {
+			return {
+				items: state.inventory,
+				bag: { first: state.equipmentSlotCount ?? 13, end: state.inventorySlotCount ?? 0 }
+			};
+		}
+		if ( container === "storage" ) {
+			const room = presentedStorage();
+			return room?.phase === "open" ? { items: room.items, bag: { first: 0, end: room.capacity } } : null;
+		}
+		const record = cosRecords.get( inventorySort.gid() ), entity = record && readEntity( record.gid );
+		if (
+			!record?.inventory || record.dead || record.hp === 0 || entity?.kind !== "cos" ||
+			entity.ownerGid !== localGid || entity.refObjId !== record.refObjId
+		) return null;
+		return { items: record.inventory.map( inventory.present ), bag: { first: 0, end: record.status } };
+	}
+	/*
+================
 checkMacroPotion
 
 Port-only, not native (#3907): one tick of the SRO Macro's character
@@ -1843,6 +1950,7 @@ clears it when another character enters.
 	*/
 	function clearState( keepChat = false ) {
 		actionSession.clear();
+		inventorySort.cancel();
 		// The next character's report must not carry this one's bag rows.
 		inventoryJournal = [];
 		journalRows = null;
@@ -2088,6 +2196,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			moonlitThiefSuit = (value as { moonlitThiefSuit?: unknown; } | null)?.moonlitThiefSuit === true;
 			alexandria = (value as { alexandria?: unknown; } | null)?.alexandria === true;
 			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
+			inventorySortRule = (value as { inventorySort?: unknown; } | null)?.inventorySort === true;
 			reverseMapPoints = decodeReverseMapPoints(
 				(value as { reverseMapPoints?: unknown; } | null)?.reverseMapPoints
 			);
@@ -3358,6 +3467,18 @@ state here before a command can claim a native wire conversation.
 				}
 				return inventory.process( processCommand, now );
 			}
+			if ( command.kind === "inventory-sort" ) {
+				if (
+					!inventorySortRule ||
+					![ "bag", "storage", "cos" ].includes( command.container ) ||
+					command.container === "cos" && !cosRecords.has( command.gid ?? 0 )
+				) throw Error( "Invalid inventory sort" );
+				inventorySort.start( command.container, command.gid );
+				return null;
+			}
+			// A player's own inventory command ends a sort: the container is
+			// theirs again, and the sort never plans around a drag in flight.
+			if ( INVENTORY_SORT_CANCELLERS.includes( command.kind ) ) inventorySort.cancel();
 			if (
 				[
 					"inventory-move",
@@ -6446,10 +6567,12 @@ before take assembles the presentation snapshot.
 				) || now - runUpSince > 4 * skillPress.oneWayMs() + SKILL_ANSWER_SLACK_MS)
 			) movement.endPrediction( now );
 			const combatChanged = combat.step( now ), inventoryStepped = inventory.step( now );
+			const sortEnded = stepInventorySort( now );
 			journalClock = now;
 			journalBagChange( now, INVENTORY_JOURNAL_LOCAL, NO_PAYLOAD );
 			const trained = training.step( now ), moved = movement.step( now ), targeted = targeting.step( now );
-			dirty = combatChanged || inventoryStepped || trained || chat.step( now ) || moved || targeted || dirty;
+			dirty = combatChanged || inventoryStepped || sortEnded || trained || chat.step( now ) || moved ||
+				targeted || dirty;
 		},
 		/*
 ================
@@ -6596,6 +6719,7 @@ The published plane when something changed since the last take, else null.
 				...(moonlitThiefSuit ? { moonlitThiefSuit } : {}),
 				...(alexandria ? { alexandria } : {}),
 				...(raisedGoldCaps ? { raisedGoldCaps } : {}),
+				...(inventorySortRule ? { inventorySort: true } : {}),
 				...(homingProjectiles ? { homingProjectiles } : {}),
 				...(reverseMapPoints.length ? { reverseMapPoints } : {}),
 				storage: presentedStorage(),
@@ -6648,6 +6772,7 @@ The published plane when something changed since the last take, else null.
 				moveHeld: moveReservation.holding(),
 				pickupPredictable,
 				...i,
+				inventorySorting: inventorySort.container(),
 				...(i.shop ? { shop: liveShop( i.shop ) } : {}),
 				inventoryJournal,
 				...c,

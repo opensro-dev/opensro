@@ -10,6 +10,7 @@
     "src/engine/runtime/ui/hud/reverse-return-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/experimental-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/cos-pickup.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+    "src/engine/runtime/simulation/worker/session/world/gameplay/inventory-sort-run.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/action-session.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/characters/mall-preview.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/ui/hud/withdrawal.ts": "src/engine/runtime/ui/ui.ts",

@@ -91,6 +91,7 @@
 		"hunting-guide-ui.test.mjs",
 		"id-plates.test.mjs",
 		"inventory-page-navigation.test.mjs",
+		"inventory-sort-button.test.mjs",
 		"item-mall-chrome.test.mjs",
 		"item-tooltip-magic.test.mjs",
 		"job-alias-window.test.mjs",

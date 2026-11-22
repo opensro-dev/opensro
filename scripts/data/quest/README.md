@@ -36,26 +36,32 @@ the Go exporter or a research checkout.
 
 The HLIL and methods dumps the class snapshot is imported from are kept
 outside the product, in `research/investigations/quest/compiled-dumps/`,
-with `SHA256SUMS`. There are two pairs, given in this order:
+with `SHA256SUMS`. There are three pairs, given in this order:
 
 - `compiled_hlil.json` (sha256 `1a23832e...`) and `compiled_methods.json`: the
   91 v1.150 classes;
 - `meetroc_hlil.json` (sha256 `8ff172d3...`) and `meetroc_methods.json`: the
   Roc chain's six (`QNO_RM_MEETROC_1`, `_2`, `_6`, `_ECT_1` to `_ECT_3`, #3399).
   The ISRO-R questdata ships exactly these six; the v1.150 text's MEETROC_3-5
-  and 7-12 symbols belong to no shipped quest.
+  and 7-12 symbols belong to no shipped quest;
+- `archemy_hlil.json` (sha256 `051eca3f...`) and `archemy_methods.json`: the
+  eight trophy exchanges (`QNO_RM_ARCHEMY_1` to `_8`, #3399 step 5d). These
+  were decoded with revtool (rizin) rather than Binary Ninja: the
+  initializers are hand-rendered in the same HLIL dialect, and the methods
+  dump carries each override's name and address with an empty body - the
+  importer reads only its keys.
 
 The snapshot's `dumpSHA256` lists the HLIL hashes in that order. A class in
 two dumps, or a method whose class its HLIL dump lacks, is refused.
-Re-importing both pairs must reproduce `compiled-quests-source.json` byte for
+Re-importing all three pairs must reproduce `compiled-quests-source.json` byte for
 byte.
 
 The Roc classes are inert on native data: v1.150's `questdata.txt` has no
-MEETROC row, and the server admits a compiled spec only for a quest the loaded
+MEETROC or ARCHEMY row, and the server admits a compiled spec only for a quest the loaded
 catalog lists. The Roc variant build (`SRO_ROC`) stages those rows.
 
 ```text
-python -B scripts/build/import_compiled_quest_evidence.py --hlil compiled_hlil.json --methods compiled_methods.json --hlil meetroc_hlil.json --methods meetroc_methods.json
+python -B scripts/build/import_compiled_quest_evidence.py --hlil compiled_hlil.json --methods compiled_methods.json --hlil meetroc_hlil.json --methods meetroc_methods.json --hlil archemy_hlil.json --methods archemy_methods.json
 python -B scripts/build/import_quest_text_evidence.py --textdata <v1.150-textdata> --sql <SR_GameRefData>
 python -B scripts/build/import_quest_text_evidence.py --textdata <v1.150-textdata>   # the text snapshot alone
 python -B scripts/build/generate_compiled_quests.py
