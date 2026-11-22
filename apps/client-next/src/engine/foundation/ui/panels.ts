@@ -56,7 +56,8 @@ export function uiPanels() {
 		"Skin change",
 		"Stall network",
 		"Storage",
-		"System"
+		"System",
+		"Unique Status"
 	] as const;
 }
 

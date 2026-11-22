@@ -212,6 +212,7 @@
 		"ui-world-chrome.test.mjs",
 		"unique-notices.test.mjs",
 		"unique-rank.test.mjs",
+		"unique-status.test.mjs",
 		"weapon-switch-ui.test.mjs",
 		"weather-publication.test.mjs",
 		"window-fit.test.mjs",

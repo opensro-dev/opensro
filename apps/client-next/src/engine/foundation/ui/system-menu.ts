@@ -5,9 +5,9 @@ system-menu.ts - Escape menu geometry and its experimental entry
 
 Native 5D1920 removes customer support and compacts four controls. The
 approved Experimental entry adds one row below Options using the same art.
-Port-only entries (the Event Calendar's, #3532; the Unique Status window's
-next, #4100) add their rows below that while their Experimental rows are
-on, in the same art; with none on, the menu is exactly the
+Port-only entries (the Event Calendar's, #3532; the Unique Status
+window's, #3531) add their rows below that while their Experimental rows
+are on, in the same art; with none on, the menu is exactly the
 native-plus-Experimental one.
 
 ===========================================================================
@@ -18,6 +18,7 @@ import type { UiRect } from "@/engine/contracts/ui";
 export const SYSTEM_MENU_HEIGHT = 246;
 export const EXPERIMENTAL_MENU_ID = 15;
 export const EVENT_CALENDAR_MENU_ID = 16;
+export const UNIQUE_STATUS_MENU_ID = 17;
 const ROW_HEIGHT = 34;
 
 /*

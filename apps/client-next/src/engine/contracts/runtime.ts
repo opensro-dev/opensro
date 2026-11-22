@@ -203,6 +203,13 @@ export interface Platform extends Disposable {
 	saveAudioOptions( value: import("@/engine/foundation/audio/options").AudioOptions ): void;
 	saveChatBlocks( value: readonly string[] ): void;
 	saveExperimentalOptions( value: import("@/engine/foundation/ui/experimental-options").ExperimentalOptions ): void;
+	uniqueNotifyBook(): Readonly<
+		Record<string, import("@/engine/foundation/gameplay/unique-status").UniqueNotifySettings>
+	>;
+	saveUniqueNotify(
+		character: string,
+		value: import("@/engine/foundation/gameplay/unique-status").UniqueNotifySettings
+	): void;
 	/** /cwsave's browser form: download the waypoint store's text as cw.txt (#1716). */
 	saveCameraWaypoints( text: string ): void;
 	/** The crest register's image pick (#2282): the chosen file's bytes, or null on cancel. */

@@ -168,6 +168,13 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			return game.contributorRosterTick(ticker, nowMs)
 		}})
 	}
+	// Port-only (#3531): the Unique Status feed's snapshots and
+	// updates; the service paces the pass itself.
+	if game.uniqueStatus != nil {
+		hooks = append(hooks, simulation.NamedTickHook{Name: "unique-status", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			return game.uniqueStatusTick(ticker, nowMs)
+		}})
+	}
 	if game.caravanAgents != nil {
 		hooks = append(hooks, simulation.NamedTickHook{Name: "caravan-ai", Hook: func(nowMs int64) []simulation.DivisionFrames {
 			return game.caravanAgentsTick(ticker, nowMs)
