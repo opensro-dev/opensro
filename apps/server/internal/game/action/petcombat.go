@@ -70,9 +70,21 @@ type petCombatIntent struct {
 	castToken    uint32
 	releaseAtMs  int64
 	pursuing     bool
-	// pursuingSinceMs is when the current approach began (petdiagnostics.go).
+	// pursuingSinceMs is when the current approach last closed the
+	// distance to its target (petdiagnostics.go): a pursuit that stops
+	// closing has stalled for as long as this has stood still.
 	pursuingSinceMs int64
+	// pursuitBest is the closest distance to the target the current
+	// approach has reached: closing past it is progress and re-arms
+	// the stall clock, so a long chase is never "stalled".
+	pursuitBest float64
 }
+
+// petPursuitProgressDistance is the distance an approach must close for
+// the closing to count as progress: anything less is the pet standing
+// where its step was refused. Destination coordinates are integers; one
+// unit sits far above that noise and far below one tick of running.
+const petPursuitProgressDistance = 1.0
 
 /*
 ================
@@ -275,16 +287,40 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 	}
 	at := step.state.mover.AnyFollower().Position(step.nowMs)
 	if intent.castToken == 0 && !spacing.Contains(at, targetAt) {
+		distance := simulation.WorldDistance2D(at, targetAt)
 		if !intent.pursuing {
+			intent.pursuing = true
+			intent.pursuingSinceMs = step.nowMs
+			intent.pursuitBest = distance
+		}
+		if distance <= intent.pursuitBest-petPursuitProgressDistance {
+			// The approach is closing: re-arm the stall clock. A pet
+			// chasing a moving target may pursue for minutes without
+			// reaching strike range; only a pursuit that stops closing
+			// has stalled.
+			intent.pursuitBest = distance
 			intent.pursuingSinceMs = step.nowMs
 		}
 		if step.nowMs-intent.pursuingSinceMs >= petApproachStallMs {
 			rt.petDiagnostic(step.key.division, step.snapshot.Name, step.pet.GID, "approach not reaching strike range", log.Fields{
-				"target": intent.target, "distance": simulation.WorldDistance2D(at, targetAt), "admission": spacing.AdmissionRadius(),
+				"target": intent.target, "distance": distance, "admission": spacing.AdmissionRadius(),
 				"standOff": spacing.StandOffRadius(), "moving": step.state.mover.AnyFollower().Moving(step.nowMs), "pursuingMs": step.nowMs - intent.pursuingSinceMs,
 			})
+			// Port-only recovery, not native: the port's collision
+			// owner refuses a clipped goal where the native mover
+			// slides toward it, so a pet can be refused every tick at
+			// a wall the native pet would walk along (the live
+			// pet-stuck report: a wolf held 111 units from an
+			// unreachable target until its owner's return scroll).
+			// BATTLE's stuck answer retains the fight
+			// (monster.NativeStuckResponse), leaving the pet no way
+			// out, so a pursuit that has made no progress for the
+			// stall threshold ends: the pet leaves BATTLE and returns
+			// to FOLLOW, whose own stuck answer (the warp to its
+			// owner) still rescues it if it cannot walk there either.
+			rt.cancelPetCombat(step.key, step.state, step.nowMs)
+			return nil, false
 		}
-		intent.pursuing = true
 		return step.state.mover.AnyFollower().Approach(targetAt, float64(rt.cosPacedRun(step.ref, step.run)), step.nowMs, spacing.StandOffRadius(), step.constraint), true
 	}
 	intent.pursuing = false
