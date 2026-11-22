@@ -234,6 +234,13 @@ snapshot's (the ledger's Previous) and the dress the live record's,
 so the roster shows the same grant the honor buff folds
 (SyncTrainingCampHonorBuffs): a title is worn in the suit whose tier
 earned it.
+
+A session that enters after the last change never saw the division
+push, so the pass keeps the set of sessions the standing bytes have
+reached - the contributor roster's reach rule (contributorRosterTick):
+on a change the division push is the delivery and the set restarts
+as the sessions it reached; between changes, each new arrival gets
+the standing roster on its own at the next sweep.
 ================
 */
 func (game *gameplayPlane) jobHonorTierTick(ticker *simulation.Ticker, nowMs int64) []simulation.DivisionFrames {
@@ -252,10 +259,12 @@ func (game *gameplayPlane) jobHonorTierTick(ticker *simulation.Ticker, nowMs int
 		}
 	}
 	var entries []wire.JobHonorTierEntry
+	online := map[string]bool{}
 	for _, view := range sessionViews(ticker.Source) {
 		if view.DivisionID != game.divisionID {
 			continue
 		}
+		online[view.SessionID] = true
 		c := game.deps.CharacterByID(game.divisionID, view.CharacterID)
 		if c == nil {
 			continue
@@ -267,10 +276,26 @@ func (game *gameplayPlane) jobHonorTierTick(ticker *simulation.Ticker, nowMs int
 		}
 	}
 	payload := wire.EncodeJobHonorTierRoster(entries)
-	if bytes.Equal(payload, game.jobHonorTierBytes) {
+	frames := []simulation.Frame{{Opcode: wire.OpJobHonorTierRoster, Payload: payload}}
+	if !bytes.Equal(payload, game.jobHonorTierBytes) {
+		game.jobHonorTierBytes = payload
+		ticker.Push.PushToDivision(game.divisionID, frames, "")
+		game.jobHonorTierReached = online
 		return nil
 	}
-	game.jobHonorTierBytes = payload
-	ticker.Push.PushToDivision(game.divisionID, []simulation.Frame{{Opcode: wire.OpJobHonorTierRoster, Payload: payload}}, "")
+	if game.jobHonorTierReached == nil {
+		game.jobHonorTierReached = map[string]bool{}
+	}
+	for sessionID := range online {
+		if !game.jobHonorTierReached[sessionID] {
+			ticker.Push.PushToSession(sessionID, frames)
+			game.jobHonorTierReached[sessionID] = true
+		}
+	}
+	for sessionID := range game.jobHonorTierReached {
+		if !online[sessionID] {
+			delete(game.jobHonorTierReached, sessionID)
+		}
+	}
 	return nil
 }
