@@ -146,21 +146,27 @@ guildStorageHoldCode
 
 Why the acting member does not hold their guild's warehouse for this
 move, as the 0xB06D code the client names (#3568); 0 when they hold
-it. Every lost hold answers the blocked code - the warehouse session
-ended, the manager is gone or is no guild manager, the membership or
-its storage permission went, another member holds the room - except an
-item move whose keeper stands beyond the hit range, which answers the
-personal warehouse's range code. Gold moves take no range test, as at
-the personal warehouse (applyStorageMove). The guildStorageMember
-category codes are the 0xB515 lane's and are not reused here: on this
-lane the same bytes would name other texts. The caller holds the
-division lock.
+it. Every lost hold within the warehouse flow answers the blocked
+code - the warehouse session ended, the manager is gone or is no guild
+manager, the membership or its storage permission went, another member
+holds the room - except an item move whose keeper stands beyond the
+hit range, which answers the personal warehouse's range code. Gold
+moves take no range test, as at the personal warehouse
+(applyStorageMove). A move with no warehouse session and no guild
+behind it is a shape the client cannot compose and keeps the generic
+code, as the forge-bound gate's fall-through pins. The
+guildStorageMember category codes are the 0xB515 lane's and are not
+reused here: on this lane the same bytes would name other texts. The
+caller holds the division lock.
 ================
 */
 func (rt *Runtime) guildStorageHoldCode(division string, c *enterworld.Character, gid uint32, itemMove bool) uint8 {
 	// The manager the warehouse was opened at, not the current selection:
 	// re-selecting it, or anything else, leaves the held room usable.
 	if open, ok := rt.storageSession(division, c.Name); !ok || open != gid {
+		if _, code := rt.guildStorageMember(division, c); code != 0 {
+			return wire.ErrCodeInvalidRequest
+		}
 		return wire.ErrCodeStorageOperationBlocked
 	}
 	npc, live := rt.npcForCurrentViewer(division, c, gid)
@@ -292,11 +298,11 @@ func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Characte
 			}
 		}
 	}
-	if store == nil {
-		return failureResult(wire.ErrCodeStorageOperationBlocked)
-	}
 	if code := rt.guildStorageHoldCode(division, c, gid, !goldMove); code != 0 {
 		return failureResult(code)
+	}
+	if store == nil {
+		return failureResult(wire.ErrCodeInvalidRequest)
 	}
 	_, refusal, err := store.TransactGuildStorageAs(division, c.ID, rt.storageMutation(personal, q))
 	var moveRefusal storageRefusal
