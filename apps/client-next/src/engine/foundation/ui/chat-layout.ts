@@ -8,6 +8,7 @@ Draft selection remains with the HUD, and never sends a message by itself.
 ===========================================================================
 */
 import { chatLineText, chatLineColor } from "./chat-presentation";
+import { staffChatColor, staffEntry, type StaffRosterEntry } from "@/engine/foundation/gameplay/staff-roster";
 import { chatLineTime } from "./chat-time";
 import { sealTier } from "../gameplay/item-seal";
 import type { GlyphStyle } from "@/engine/foundation/rendering/ui-glyphs";
@@ -190,6 +191,9 @@ export interface ChatLayoutInput {
 	// line whose sender is named here carries the contributor tag.
 	// Omitted or empty keeps every line untagged.
 	contributorTitles?: readonly string[];
+	// Port-only (staff-roster.ts): a rostered sender's public lines carry
+	// its role tag and chat colour. Omitted or empty keeps every line native.
+	staffRoster?: readonly StaffRosterEntry[];
 	chatTimestamps?: boolean;
 	// Port-only: link a drop/plus notice's player and item (Experimental
 	// "Links in notices"); omitted or false keeps every line plain.
@@ -441,7 +445,10 @@ button
 				.flatMap(
 					l => {
 						const sun = isSunDropChatLine( l ),
-							color = sealNoticeChatColor( l ) ?? chatLineColor( l.channel ),
+							staff = l.channel !== 7 ? staffEntry( state.staffRoster, l.name ) : undefined,
+							color = sealNoticeChatColor( l ) ??
+								staffChatColor( state.staffRoster, l.channel, l.name ) ??
+								chatLineColor( l.channel ),
 							style: GlyphStyle | undefined = sun ? { fontStyle: 2 } : undefined,
 							// Port-only, not native (#3358): the contributor tag
 							// before a rostered sender, notices (channel 7)
@@ -451,7 +458,10 @@ button
 								"",
 							// Port-only item links: each marker shows its item's label. A line
 							// without a marker takes none of this path (the per-frame budget).
-							raw = tag + chatLineText( l, copy ),
+							raw = tag +
+								(staff && l.name ?
+									chatLineText( { ...l, name: staff.tag + l.name }, copy ) :
+									chatLineText( l, copy )),
 							labelled = raw.includes( CHAT_LINK_MARKER ) ?
 								chatLinkSpans( raw, l.links, state.chatItemLinks === true ) :
 								null,
