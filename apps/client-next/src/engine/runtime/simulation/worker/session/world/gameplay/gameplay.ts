@@ -2500,11 +2500,14 @@ Bind the admitted local actor and initialize its authoritative movement.
 		/*
 ================
 correct
+
+keepTravel is the 0x3028 position resync, which reseeds a walk in
+flight instead of ending it (movement.correct).
 ================
 		*/
-		correct( entity: EntityState, now?: number ) {
+		correct( entity: EntityState, now?: number, keepTravel = false ) {
 			if ( entity.gid !== localGid ) throw Error( "Correction references non-local entity" );
-			movement.correct( { ...entity, angle: entity.heading }, now );
+			movement.correct( { ...entity, angle: entity.heading }, now, keepTravel );
 			dirty = true;
 		},
 		/*

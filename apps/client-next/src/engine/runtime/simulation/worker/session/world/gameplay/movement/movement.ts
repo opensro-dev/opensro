@@ -1564,9 +1564,19 @@ seed
 		/*
 ================
 correct
+
+A correction ends the walk in flight: the B2F5 stop halts the mover
+(775B50). keepTravel is the server's 0x3028 position resync
+(position_resync.go, #3723) instead: a source reseed, as entities apply
+it to every other character - authoritative progress while travel
+remains active, never a stop - so a walk in flight goes on to its goal
+from the resynced pose.
 ================
 		*/
-		correct( value: Pose, now?: number ) {
+		correct( value: Pose, now?: number, keepTravel = false ) {
+			// A resync keeps a walk's goal; a displacement (fixed timing) is
+			// no walk and ends as a correction ends it.
+			const travel = keepTravel && segment && !segment.fixedTiming ? segment.to : null;
 			// What the walk was doing when the correction came, for the report:
 			// a large one names its cause (a hold the server never settled, a
 			// walk of the wrong lead) instead of only its size.
@@ -1600,7 +1610,7 @@ correct
 			// retiring the segment; server endpoint Y can be below a hill/deck.
 			pose = authoritative = reconcile( admitPose( value ), RESOLVE_CELL );
 			if ( before ) {
-				noteReanchor( "server correction", before, pose, {
+				noteReanchor( keepTravel ? "server resync" : "server correction", before, pose, {
 					atMs: now ?? poseAtMs,
 					pending: pending.size,
 					latest: nextId,
@@ -1659,6 +1669,22 @@ correct
 					predicted = keptApproach;
 					segment = { ...rebuilt, history: transition.walkingPath };
 				}
+			}
+			// A resync mid-walk: the walk goes on to its goal from the
+			// resynced pose, as entities' source reseed walks every other
+			// character on. The server already walks it there.
+			const distance = travel && pose ? poseDistance( pose, travel ) : 0;
+			if ( travel && !segment && now !== undefined && distance > 0 && navigation.available( pose ) ) {
+				segment = {
+					from: pose,
+					to: { ...travel, angle: movementHeading( pose, travel ) },
+					start: now,
+					timing: "speed",
+					lead: "server",
+					duration: movementDuration( distance, speed ),
+					admitted: true,
+					history: transition.walkingPath
+				};
 			}
 		},
 		/*
