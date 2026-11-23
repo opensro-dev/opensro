@@ -477,6 +477,9 @@ func newGameWorldApplication(
 		return nil, err
 	}
 	gameplay.mutes = application.mutes
+	if gameplay.gmModeration != nil {
+		gameplay.gmModeration.Mutes = application.mutes
+	}
 	if err := installPlayerOperations(authority.agentAPI, gameplay, ts.Hub, authority.store, ownedShard.ID); err != nil {
 		return nil, fmt.Errorf("player operations: %w", err)
 	}
