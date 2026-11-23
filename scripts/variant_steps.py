@@ -48,6 +48,7 @@ import os
 import re
 import shutil
 import sys
+import time
 from pathlib import Path
 
 import state_document
@@ -422,15 +423,15 @@ class Runner:
 	# ================
 	# root_fingerprint
 	#
-	# One source root's fingerprint, computed at most once a build. The
-	# stage 1 import is taken by content, as the stamp takes it.
+	# One source root's fingerprint, computed at most once a build, the
+	# same way the stamp takes it (variant_stamp.source_fingerprint).
 	# ================
 	def root_fingerprint(self, root: Path) -> str:
 		key = str(root)
 		if key not in self._root_fingerprints:
-			imported = (self.arguments or {}).get("imported")
-			by_content = imported is not None and root == Path(imported).resolve()
-			self._root_fingerprints[key] = variant_stamp.tree_fingerprint(root, by_content)
+			arguments = self.arguments or {}
+			self._root_fingerprints[key] = variant_stamp.source_fingerprint(
+				root, arguments.get("native"), arguments.get("imported"))
 		return self._root_fingerprints[key]
 
 	# ================
@@ -629,12 +630,25 @@ class Runner:
 	# key moved runs, recording a fresh effect.
 	# ================
 	def result(self, index: int):
+		started = time.perf_counter()
+		value, how = self.settle_step(index)
+		# One line a step, so a slow build names the step that cost it (#4251).
+		print(f"step {self.steps[index]['name']}: {how} in {time.perf_counter() - started:.1f} s", flush=True)
+		return value
+
+	# ================
+	# settle_step
+	#
+	# One step brought to its journaled state: kept (current), its effect
+	# laid back down (replayed), or its importer run (ran).
+	# ================
+	def settle_step(self, index: int):
 		step = self.steps[index]
 		entry = None if self.fresh else (self.journal or [])[index]
 		if entry is not None and index < self.first:
 			self.state = chain(self.state, entry["effect"])
 			self.records.append(entry)
-			return decode_result(entry["result"], self.variant)
+			return decode_result(entry["result"], self.variant), "current"
 		if entry is not None and entry.get("key") == self.key_of(step, entry.get("reads"), self.state):
 			for relative, sha in entry["effect"]:
 				target = self.variant / relative
@@ -644,7 +658,7 @@ class Runner:
 					lay_blob(self.variant, sha, target)
 			self.state = chain(self.state, entry["effect"])
 			self.records.append(entry)
-			return decode_result(entry["result"], self.variant)
+			return decode_result(entry["result"], self.variant), "replayed"
 		before = snapshot(self.variant)
 		value, reads = record_reads(step["run"])
 		effect = effect_between(self.variant, before, snapshot(self.variant))
@@ -658,7 +672,7 @@ class Runner:
 		self.records.append({
 			"name": step["name"], "key": key, "reads": classified, "effect": effect, "result": encoded,
 		})
-		return value
+		return value, "ran"
 
 	# ================
 	# finish
