@@ -476,18 +476,21 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 		for ( const displacement of gameplay.takeDisplacements() ) {
 			const entity = entities.read( displacement.gid );
 			if ( !entity ) continue;
-			const resolved = gameplay.constrainDisplacement( displacement, {
-				regionId: entity.regionId,
-				x: entity.x,
-				y: entity.y,
-				z: entity.z,
-				angle: entity.heading
-			}, now );
-			entities.displace( resolved, now );
-			const localArrival = gameplay.displace( resolved, now );
-			if ( resolved.kind === 8 ) {
-				const arrival = localArrival ?? entities.castArrival( resolved.token );
-				if ( arrival !== undefined ) gameplay.guidedArrival( resolved.token, arrival );
+			// The published destination is authoritative: the server resolved
+			// it against its own navigation and already seats the actor
+			// there. Re-clipping it on the client navigation substituted a
+			// different endpoint (stopped or slid at the first edge the two
+			// navigations disagree on) and nothing reconciled the presented
+			// rest pose with the server's position afterwards, so the next
+			// ground move snapped and a follow-up cast presented from the
+			// wrong origin (#4154). The native client's guided trajectory
+			// likewise steps toward the packet point itself. Kind 2 already
+			// landed on the published point; every kind does now.
+			entities.displace( displacement, now );
+			const localArrival = gameplay.displace( displacement, now );
+			if ( displacement.kind === 8 ) {
+				const arrival = localArrival ?? entities.castArrival( displacement.token );
+				if ( arrival !== undefined ) gameplay.guidedArrival( displacement.token, arrival );
 			}
 		}
 		for ( const token of gameplay.takeCancellations() ) {
