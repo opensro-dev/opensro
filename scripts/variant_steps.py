@@ -255,7 +255,7 @@ def audit_hook(event, args):
 # function, not per call. Constants are read without running code, so
 # every module the step imports (an import statement that runs, even of
 # a module already loaded) is recorded too, apart from the code that
-# ran: module_closure takes the scripts a file names only from files
+# ran: module_closures takes the scripts a file names only from files
 # that ran.
 # ================
 def record_run(run):
@@ -540,7 +540,7 @@ class Runner:
 	# The key of the code a step's last run ran and imported, as this
 	# checkout holds it now: those files, what they import at module
 	# level, the pins beside them, and the scripts the files that ran name
-	# (variant_stamp.module_closure). Steps with the same record share one
+	# (variant_stamp.module_closures). Steps with the same record share one
 	# closure computation.
 	# ================
 	def recorded_code_key(self, ran: list[str], imported: list[str] = ()) -> str:

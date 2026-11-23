@@ -80,7 +80,7 @@ CITY_GATE_PREFIX = "GATE_SD"
 CITY_GATE_EXTRA = ("GATE_NPC_SD_M_AREA_FERRY",)
 # Port-only, not native: the far ends of the city's two outdoor crossings
 # (Delta West to Kings Valley, Delta East to the Storm Desert), which the
-# variant links (build_alexandria_variant GATE_CODES). Their regions seed
+# variant links (variant_gates.GATE_CODES). Their regions seed
 # terrain components like the field's, so a crossing never lands on a
 # region the client has no terrain for.
 CROSSING_GATE_CODES = ("GATE_STORMDESERT_GATE", "GATE_KINGSVALLEY_GATE")

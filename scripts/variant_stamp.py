@@ -139,22 +139,12 @@ def code_closure(entry: Path = BUILDER, repository_root: Path | None = None) -> 
 
 
 # ================
-# module_closure
-#
-# codeStamp's moduleClosure over what a step ran and imported: their
-# module-level imports and the pins beside them, and the scripts the
-# files that ran name.
-# ================
-def module_closure(ran: list[Path], repository_root: Path | None = None, imported: list[Path] = ()) -> list[Path]:
-	if not ran and not imported:
-		return []
-	return [Path(file) for file in code_stamp("moduleClosure", list(ran), repository_root, (list(imported),))]
-
-
-# ================
 # module_closures
 #
-# module_closure for many (ran, imported) records in one Node start.
+# codeStamp's moduleClosures: for each (ran, imported) record of a step,
+# what it ran and imported, their module-level imports and the pins beside
+# them, and the scripts the files that ran name - every record in one Node
+# start.
 # ================
 def module_closures(records: list[tuple], repository_root: Path | None = None) -> list[list[Path]]:
 	if not records:

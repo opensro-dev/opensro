@@ -176,8 +176,14 @@ def enable_regions(mapinfo, regions):
 # link_tree
 # ================
 def link_tree(source, target):
-	"""Hard-link every file of source under target (copy if links are refused)."""
-	count = 0
+	"""
+	Hard-link every file of source under target (copy if links are refused);
+	returns how many were laid down. A tree on another volume than its
+	source cannot link at all: the r204 staging on D: copied all of the
+	native H: tree's ~48k files (2.6 GB), every fresh build (#4251), so the
+	copies are reported rather than taken silently.
+	"""
+	count = copied = 0
 	for folder, _, names in os.walk(source):
 		destination = target / Path(folder).relative_to(source)
 		destination.mkdir(parents=True, exist_ok=True)
@@ -189,7 +195,10 @@ def link_tree(source, target):
 				os.link(Path(folder) / name, link)
 			except OSError:
 				shutil.copy2(Path(folder) / name, link)
+				copied += 1
 			count += 1
+	if copied:
+		log(f"{target.name}: {copied} of {count} files copied, not linked (links refused, as across volumes)")
 	return count
 
 
