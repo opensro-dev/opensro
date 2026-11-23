@@ -1518,13 +1518,6 @@
 			]
 		},
 		{
-			"consumer": "src/engine/runtime/renderer/weather/weather.ts",
-			"provider": "src/engine/runtime/renderer/world/world.ts",
-			"functions": [
-				"weatherGround"
-			]
-		},
-		{
 			"consumer": "src/engine/runtime/ui/guide/resources.ts",
 			"provider": "src/engine/runtime/assets/assets.ts",
 			"functions": [
