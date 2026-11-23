@@ -6,10 +6,10 @@ pharaoh_temple_import.py - the Pharaoh Temple's monsters and uniques.
 The job temple's seven dungeons (pharaoh_temple.py: the Temple and six
 sanctums, regions 0x800A-0x8010) ride SRO_PHARAOH_TEMPLE. That module
 stages the dungeons and gates from the VSRO client; this one stages
-what lives in them: 24 kinds and their nests, the five sanctum keepers
+what lives in them: 25 kinds and their nests, the five sanctum keepers
 (Selkis, Neith, Anubis, Isis, Seth) among them.
 
-Native source: the v1.188 server places the same 24 kinds with the same
+Native source: the v1.188 server places the same kinds with the same
 nest counts in these regions (tactics-recovered Tab_RefNest, 105 nests
 joined through Tab_RefTactics). Its recovered tactics keep 10 of the
 fields the nest controls carry, so the rows come from the pinned
@@ -18,11 +18,12 @@ and 60: the temple groups), whose tactics are whole. The kinds come
 from the pinned v1.696 client, as the other later worlds' do.
 
 The export's NPC rows (guild agents, the Mentuhotep and Berenice
-stands) are roster content and stay out. Not here: v1.188's one
-MOB_SD_OSIRIS_3 nest (a world-1 hive in the Temple region, 8-hour
-respawn), which the ISRO-R export does not carry and whose controls
-need the v1.188 database's full tactics row; and Haroeris, whom
-neither source places by nest.
+stands) are roster content and stay out. One nest rides as a named
+exception (osiris_nest below): v1.188's MOB_SD_OSIRIS_3, whose hive
+stands in the field world, not under a temple group, so the export
+does not carry it; its controls are the v1.188 database's full tactics
+row, read whole. Not here: Haroeris, whom neither source places by
+nest.
 
 No region merge: the dungeons are VSRO Data the variant build already
 stages. The import is the shared monster pass (later_world_import.
@@ -63,7 +64,8 @@ TEMPLE_WORLDS = (51, 52, 53, 54, 55, 56, 60)
 # import's characterinfo or reap.
 TEMPLE_KINDS = (
 	"MOB_SD_ANUBIS", "MOB_SD_BLOODKHEPRI", "MOB_SD_DEVIL_SANDMAN", "MOB_SD_HARSAPHETH", "MOB_SD_HARSMESS",
-	"MOB_SD_IMOUTHES", "MOB_SD_ISIS", "MOB_SD_KEISAS_BERSERK", "MOB_SD_NEITH", "MOB_SD_PRIEST_CHASTISEMENT",
+	"MOB_SD_IMOUTHES", "MOB_SD_ISIS", "MOB_SD_KEISAS_BERSERK", "MOB_SD_NEITH", "MOB_SD_OSIRIS_3",
+	"MOB_SD_PRIEST_CHASTISEMENT",
 	"MOB_SD_PRIEST_FEAR", "MOB_SD_PRIEST_FLAME", "MOB_SD_PRIEST_GALE", "MOB_SD_PRIEST_GUARD",
 	"MOB_SD_PRIEST_HEALING", "MOB_SD_PRIEST_POWER", "MOB_SD_PRIEST_REVENGE", "MOB_SD_SANDSCOUT",
 	"MOB_SD_SELKION", "MOB_SD_SELKIS", "MOB_SD_SEPTU", "MOB_SD_SETH", "MOB_SD_SPECTOR_DEMOLITION",
@@ -75,6 +77,13 @@ TEMPLE_KINDS = (
 MIN_LEVEL = 105
 MAX_LEVEL = 110
 GRADES = (0, 3)
+
+# The one unique among the temple's kinds, at the source grade its
+# tomb brothers carry (8), not the keepers' 3: admitted by name, as
+# the field admits Apis, without opening the grade to the family.
+OSIRIS_KIND = "MOB_SD_OSIRIS_3"
+OSIRIS_SOURCE_GRADE = 8
+NAMED_GRADES = {OSIRIS_KIND: OSIRIS_SOURCE_GRADE}
 
 
 # ================
@@ -102,14 +111,18 @@ def archive_pins():
 def family_admits(code, row):
 	if code not in TEMPLE_KINDS:
 		return False
-	return MIN_LEVEL <= int(row[57]) <= MAX_LEVEL and int(row[15]) in GRADES
+	grade = int(row[15])
+	return MIN_LEVEL <= int(row[57]) <= MAX_LEVEL and (grade in GRADES or NAMED_GRADES.get(code) == grade)
 
 
 # ================
 # _claim_groups
 # ================
 def _claim_groups(rows, sub_enabled):
-	return {"temple": {row["Codename"] for row in rows if row["WorldID"] in TEMPLE_WORLDS}}
+	# The export names no Osiris nest, so its kind is claimed by name:
+	# the exception nest below names it, and a claimed kind is converted
+	# here or placed on the tomb pass's standing row (place_standing).
+	return {"temple": {row["Codename"] for row in rows if row["WorldID"] in TEMPLE_WORLDS} | {OSIRIS_KIND}}
 
 
 # ================
@@ -130,6 +143,41 @@ def _admit(code, row, families):
 # ================
 def hive_key(row, cap):
 	return f"pharaoh-temple:{row['WorldID']}:{row['RegionID']}:{cap}"
+
+
+# ================
+# osiris_nest
+#
+# The one temple nest no population export carries, as the cap-110
+# row the server reads. v1.188 groups it under the field world, not a
+# temple group (Tab_RefNest 40999: hive 2761, world 1, cap 1; the
+# Temple region 0x8010, an 8-hour respawn), so the ISRO-R export has
+# no row for it and the projection would drop the one it was handed.
+# Its controls are the v1.188 database's full tactics row (57573,
+# naming the kind), read whole from the Eternity shard backup where
+# the export's were read from ISRO-R's. The hive caps its one nest at
+# one, which the row's own count already says, so no hive key rides.
+# The server names this exception (monster/pharaoh_temple.go).
+# ================
+def osiris_nest():
+	return {
+		"Codename": OSIRIS_KIND, "NestID": 40999, "WorldID": 1,
+		"RegionID": 32784, "X": -1735.0, "Y": -43.0, "Z": 1428.0,
+		"Radius": 50, "GenerateRadius": 10, "MaxCount": 1,
+		"RespawnDelayMinSec": 28800, "RespawnDelayMaxSec": 28900, "Respawn": True,
+		"InitialDir": 0, "ChampionGenPercentage": 0,
+		"Controls": {
+			"ID": 57573, "ObjectID": 38210, "AIQoS": 0, "MaxStamina": 500, "StaminaVariance": 50,
+			"SightRange": 200, "AggressType": 0, "AggressData": 0, "ChangeTarget": 2,
+			"HelpRequest": 2, "HelpResponse": 2, "BattleStyle": 0, "BattleStyleData": 0,
+			"DiversionBasis": 5, "DiversionKeepBasis": 4, "KeepDistance": 0, "KeepDistanceData": 0,
+			"TraceType": 0, "TraceBoundary": 1, "TraceData": 500, "HomingType": 0, "HomingData": 0,
+			"AggressOnHoming": 2, "FleeType": 0, "ChampionID": 0, "Flags": 112,
+			"DiversionBasisData": [0, 0, 0, 0, 0, 30, 0, 0],
+			"DiversionKeepBasisData": [0, 0, 0, 0, 0, 0, 0, 0],
+		},
+		"Champion": None,
+	}
 
 
 # ================
@@ -154,6 +202,10 @@ def _build_populations(rows, sub_enabled):
 	for projected in population["Rows"]:
 		if projected["NestID"] in caps:
 			projected["HiveKey"], projected["HiveMaxCount"] = caps[projected["NestID"]]
+	# The projection keeps the temple worlds' rows alone; the Osiris
+	# exception (osiris_nest) rides beside them, in nest order.
+	population["Rows"].append(osiris_nest())
+	population["Rows"].sort(key=lambda row: row["NestID"])
 	return {"temple": population}
 
 
@@ -187,6 +239,10 @@ SPEC = later_world_import.WorldImport(
 	admit=_admit,
 	build_populations=_build_populations,
 	summarize_populations=_summarize_populations,
+	# The Osiris kind is the tomb pass's too (its world-59 nest): when
+	# that pass has staged it, this one places its nest on the
+	# standing row instead of staging a second.
+	place_standing=True,
 )
 
 

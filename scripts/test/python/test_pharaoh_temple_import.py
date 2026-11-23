@@ -2,12 +2,13 @@
 ===========================================================================
 test_pharaoh_temple_import.py - the Pharaoh Temple's monster import.
 
-The temple admits its 24 named kinds alone (the cap-110 desert field
-shares their MOB_SD_ prefix), projects its nests as authored, and
-keeps a capped hive whole: the four priest nests of the Sanctum of
-Punishment share one cap of three, never three each. Off reads no
-archive. The shard band and the engine's monster pass are pinned in
-test_later_shard_bands and test_later_world_import.
+The temple admits its 25 named kinds alone (the cap-110 desert field
+shares their MOB_SD_ prefix), projects its nests as authored plus the
+one v1.188 Osiris exception, and keeps a capped hive whole: the four
+priest nests of the Sanctum of Punishment share one cap of three,
+never three each. Off reads no archive. The shard band and the
+engine's monster pass are pinned in test_later_shard_bands and
+test_later_world_import.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
@@ -68,9 +69,20 @@ class PharaohTempleAdmissionTest(unittest.TestCase):
 		self.assertFalse(temple.family_admits("MOB_SD_ANUBIS", later_row("MOB_SD_ANUBIS", 111, 3)))
 		self.assertFalse(temple.family_admits("MOB_SD_ANUBIS", later_row("MOB_SD_ANUBIS", 107, 8)))
 
-	def test_only_the_temple_worlds_claim(self):
+	def test_osiris_enters_by_name_at_its_source_grade_alone(self):
+		# The v1.188 row (grade 8, level 110) enters; the keepers' grade
+		# on the Osiris row does not, and the named exception opens no
+		# grade for the family (Anubis at 8 stays refused, above).
+		self.assertTrue(temple.family_admits(temple.OSIRIS_KIND, later_row(temple.OSIRIS_KIND, 110, 8)))
+		self.assertFalse(temple.family_admits(temple.OSIRIS_KIND, later_row(temple.OSIRIS_KIND, 110, 6)))
+		self.assertFalse(temple.family_admits(temple.OSIRIS_KIND, later_row(temple.OSIRIS_KIND, 104, 8)))
+
+	def test_only_the_temple_worlds_claim_and_osiris_by_name(self):
 		rows = [nest(1, "MOB_SD_ANUBIS"), nest(2, "MOB_SD_APIS", world=1, region=24929)]
-		self.assertEqual(temple._claim_groups(rows, False), {"temple": {"MOB_SD_ANUBIS"}})
+		self.assertEqual(temple._claim_groups(rows, False), {"temple": {"MOB_SD_ANUBIS", "MOB_SD_OSIRIS_3"}})
+
+	def test_the_spec_places_on_a_standing_tomb_row(self):
+		self.assertTrue(temple.SPEC.place_standing)
 
 
 # ================
@@ -83,7 +95,7 @@ class PharaohTemplePopulationTest(unittest.TestCase):
 			nest(29591, "MOB_SD_ANUBIS")]
 		population = temple._build_populations(rows, False)["temple"]
 		by_nest = {row["NestID"]: row for row in population["Rows"]}
-		self.assertEqual(sorted(by_nest), [29551, 29552, 29553, 29554, 29591])
+		self.assertEqual(sorted(by_nest), [29551, 29552, 29553, 29554, 29591, 40999])
 		keys = {(by_nest[nest_id].get("HiveKey"), by_nest[nest_id].get("HiveMaxCount"))
 			for nest_id in (29551, 29552, 29553, 29554)}
 		self.assertEqual(keys, {(f"pharaoh-temple:{PUNISHMENT_WORLD}:{PUNISHMENT_REGION}:3", 3)})
@@ -99,7 +111,22 @@ class PharaohTemplePopulationTest(unittest.TestCase):
 	def test_another_world_stays_out_of_the_population(self):
 		rows = [nest(1, "MOB_SD_ANUBIS"), nest(2, "MOB_SD_APIS", world=1, region=24929)]
 		population = temple._build_populations(rows, False)["temple"]
-		self.assertEqual([row["NestID"] for row in population["Rows"]], [1])
+		self.assertEqual([row["NestID"] for row in population["Rows"]], [1, 40999])
+
+	def test_osiris_rides_as_the_v1188_row(self):
+		# Nest 40999 as the cap-110 reader sees it: the field world, the
+		# Temple region, an 8-hour respawn, and the whole tactics row.
+		row = temple.osiris_nest()
+		self.assertEqual((row["Codename"], row["NestID"]), ("MOB_SD_OSIRIS_3", 40999))
+		self.assertEqual((row["WorldID"], row["RegionID"]), (1, 32784))
+		self.assertEqual((row["Radius"], row["GenerateRadius"], row["MaxCount"]), (50, 10, 1))
+		self.assertEqual((row["RespawnDelayMinSec"], row["RespawnDelayMaxSec"]), (28800, 28900))
+		self.assertTrue(row["Respawn"])
+		self.assertNotIn("HiveKey", row)
+		controls = row["Controls"]
+		self.assertEqual((controls["ID"], controls["ObjectID"]), (57573, 38210))
+		self.assertEqual((controls["SightRange"], controls["Flags"], controls["AggressOnHoming"]), (200, 112, 2))
+		self.assertEqual(controls["DiversionBasisData"], [0, 0, 0, 0, 0, 30, 0, 0])
 
 
 # ================

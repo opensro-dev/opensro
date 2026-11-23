@@ -14,6 +14,7 @@ their public add functions, pinned below.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import dataclasses
 import json
 import os
 import sys
@@ -626,6 +627,29 @@ class MapWorldTest(unittest.TestCase):
 			spec, _native, _out, root, regions, _monsters = merge.call_args.args
 			self.assertIs(spec, self.SPEC)
 			self.assertEqual((root, regions), (Path(temp), [25580]))
+
+
+# ================
+# LaterWorldStagedRefsTest
+#
+# The place_standing seam (the Pharaoh Temple's Osiris, #3786): a kind
+# another layer staged stays on its standing row; every other spec
+# stages them all.
+# ================
+class LaterWorldStagedRefsTest(unittest.TestCase):
+	def test_a_default_spec_stages_every_claimed_kind(self):
+		refs = {"MOB_SD_OSIRIS_3": ["row"]}
+		self.assertIs(later.staged_refs(jupiter.SPEC, Path("."), refs), refs)
+
+	def test_a_placing_spec_leaves_a_standing_kind_on_its_row(self):
+		with tempfile.TemporaryDirectory() as temp:
+			text_root = Path(temp)
+			(text_root / "characterdata_120000.txt").write_bytes(utf16([
+				["1", "38210", "MOB_SD_OSIRIS_3"] + ["0"] * 10,
+				["1", "38211", "MOB_SD_OTHER"] + ["0"] * 10]))
+			spec = dataclasses.replace(jupiter.SPEC, place_standing=True)
+			refs = {"MOB_SD_OSIRIS_3": ["a"], "MOB_SD_NEW": ["b"]}
+			self.assertEqual(later.staged_refs(spec, text_root, refs), {"MOB_SD_NEW": ["b"]})
 
 
 if __name__ == "__main__":

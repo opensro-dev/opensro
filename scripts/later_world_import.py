@@ -137,6 +137,10 @@ class WorldImport:
 	build_populations: Callable = None
 	summarize_populations: Callable = None
 	regions_of: Callable = None
+	# A claimed kind another layer may already have staged is placed on
+	# its standing row, never staged twice (one codename, one row).
+	# Off, stage_kinds refuses such a kind by name.
+	place_standing: bool = False
 
 
 #============================================================================
@@ -391,7 +395,8 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 			missing = sorted(codes - set(refs))
 			if missing:
 				raise ValueError(f"{spec.label} {family} nests name unadmitted monsters: {missing}")
-		staged = stage_kinds(spec.label, read, has, refs, text_root, prior, spec.character_shard, spec.skill_shard,
+		staged = stage_kinds(spec.label, read, has, staged_refs(spec, text_root, refs), text_root, prior,
+			spec.character_shard, spec.skill_shard,
 			lambda code: code.startswith(spec.info_prefixes))
 		populations = spec.build_populations(rows, sub_enabled)
 		for group, filename in spec.population_files:
@@ -423,6 +428,22 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 # ================
 def later_characters(read):
 	return {row[2]: row for shard in tables.table_rows(read("characterdata.txt")) for row in tables.table_rows(read(shard[0]))}
+
+
+# ================
+# staged_refs
+#
+# The claimed kinds a pass stages. A spec that places standing kinds
+# (place_standing) leaves a kind another layer already staged on its
+# row: one codename, one row, so this pass's nests name the standing
+# row and it writes no second one (hunting2's rule). Every other spec
+# stages them all, and stage_kinds refuses a standing kind by name.
+# ================
+def staged_refs(spec, text_root, refs):
+	if not spec.place_standing:
+		return refs
+	standing = {row[2] for row in cap110.tree_characters(text_root, spec.character_shard) if len(row) > 2}
+	return {code: row for code, row in refs.items() if code not in standing}
 
 
 # ================
