@@ -34,7 +34,7 @@ dialog contract needs both, and inventing a line or a fallback is a
 design decision, recorded on #4134. That holds back the QNO_AR_001 to
 004 chain, QNO_AR_019, QNO_AR_026 and the hunts QNO_AR_010 and
 QNO_AR_027. The collects and deliveries (ITEM_QNO_AR_* quest items)
-wait for the quest-items import, and QNO_AR_059 (the hideout boss) and
+live in arabia_quests_collect.go, and QNO_AR_059 (the hideout boss) and
 QNO_AR_066/068 (target kinds no source places) stay out with the
 hideout verdict on #4134.
 
@@ -139,5 +139,6 @@ func arabiaSpecs() []QuestSpec {
 }
 
 // arabiaQuestSpecs is the registered table (generated.go admits a spec
-// only while its questdata row is in the build).
-var arabiaQuestSpecs = arabiaSpecs()
+// only while its questdata row is in the build): the talks and hunts
+// above plus the collects and deliveries of arabia_quests_collect.go.
+var arabiaQuestSpecs = append(arabiaSpecs(), arabiaCollectSpecs()...)
