@@ -76,6 +76,15 @@ func TestSharedNavigationBlockedRetryAndCancellation(t *testing.T) {
 	for _, mode := range []monster.MoverMode{monster.MoverChasing, monster.MoverFollowing, monster.MoverReturning} {
 		t.Run(mode.String(), func(t *testing.T) {
 			ops, instance, mover := routedFixture(t, mode)
+			if mode == monster.MoverReturning {
+				// A returning mover marches when the search fails
+				// (#4124); pin the wait that remains when the ground
+				// itself cannot move it either.
+				ops.PlanPath = func(from, goal monster.Pose) *monster.NavigationPath {
+					return monster.NewNavigationPath(from, goal, from, monster.NavResultBlocked,
+						func(float64, monster.Pose) (float64, bool) { return 20, true })
+				}
+			}
 			goal := mover.Pose
 			goal.X += 120
 			calls := 0
@@ -160,9 +169,9 @@ func TestFollowRouteSurvivesClosedTimerAndControllerDeath(t *testing.T) {
 	}
 }
 
-func TestHomingRouteProductionTickContinuesAndRetainsRunOnRetry(t *testing.T) {
+func TestHomingRouteProductionTickContinuesAndRetainsRun(t *testing.T) {
 	for _, blocked := range []bool{false, true} {
-		t.Run(map[bool]string{false: "corners", true: "retry"}[blocked], func(t *testing.T) {
+		t.Run(map[bool]string{false: "corners", true: "march"}[blocked], func(t *testing.T) {
 			ops, instance, mover := routedFixture(t, monster.MoverChasing)
 			mover.Pose.X += 110
 			ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
@@ -180,18 +189,20 @@ func TestHomingRouteProductionTickContinuesAndRetainsRunOnRetry(t *testing.T) {
 			ops.startReturnLeg(monsterTestDivision, &instance, monster.ResolveTactics(&instance), mover, monster.MoverEventTargetLost, 10000)
 			mover, _ = ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 			if blocked {
-				if !mover.NavigationWaiting(10001) || mover.Mode() != monster.MoverReturning {
-					t.Fatal("failed home plan discarded return intent")
+				// The failed search no longer parks the walk home:
+				// the mover marches the local path instead (#4124).
+				if mover.NavigationWaiting(10001) || mover.Mode() != monster.MoverReturning || !mover.InFlight(10000) {
+					t.Fatal("failed home plan discarded return intent or parked the march")
 				}
-				frames, _ := ops.advanceInstance(monsterTestDivision, instance, nil, 10500)
-				if len(frames) != 0 || calls != 1 {
-					t.Fatal("blocked home flooded")
+				if mover.Channel != wire.MoveStateRun {
+					t.Fatal("march home inherited old walking channel")
 				}
-				ops.advanceInstance(monsterTestDivision, instance, nil, 11000)
+				frames, _ := ops.advanceInstance(monsterTestDivision, instance, nil, mover.ArriveMs)
 				mover, _ = ops.Monsters.Mover(monsterTestDivision, instance.Gid)
-				if mover.Channel != wire.MoveStateRun || !mover.InFlight(11000) {
-					t.Fatal("retry inherited old walking channel")
+				if mover.Mode() != monster.MoverIdle || len(frames) != 1 || frames[0].Opcode != wire.OpObjectSourceCorrection {
+					t.Fatal("marched home arrival not settled")
 				}
+				return
 			}
 			before := calls
 			frames, _ := ops.advanceInstance(monsterTestDivision, instance, nil, mover.ArriveMs)
