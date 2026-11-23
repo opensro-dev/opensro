@@ -1092,15 +1092,6 @@ export function createWorldRenderer(
 	}
 	/*
 	================
-	weatherGround
-	================
-	*/
-	function weatherGround( x: number, y: number, z: number ) {
-		const distance = pick( { start: [ x, y, z ], delta: [ 0, -1, 0 ] }, 1e6, true );
-		return distance === null ? null : y - distance;
-	}
-	/*
-	================
 	pick
 	================
 	*/
@@ -2011,7 +2002,6 @@ export function createWorldRenderer(
 				seconds,
 				current?.originRegion ?? 0,
 				!!current && current.residency !== "frontend" && planeKindOf( current.originRegion ) === "outdoor",
-				weatherGround,
 				[ camera.target[0] + dx, camera.target[1], camera.target[2] + dz ]
 			);
 			if ( hasStars ) {

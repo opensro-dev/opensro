@@ -825,6 +825,18 @@ func (rt *Runtime) LineOfSight(from simulation.Spawn, fromOwner simulation.NavOw
 
 /*
 ================
+spawnDistanceSquared
+
+The squared 3D distance between two spawns already in one frame.
+================
+*/
+func spawnDistanceSquared(a, b simulation.Spawn) float64 {
+	dx, dy, dz := a.X-b.X, a.Y-b.Y, a.Z-b.Z
+	return dx*dx + dy*dy + dz*dz
+}
+
+/*
+================
 lineOfSightSettles
 
 lineOfSightSettles reports whether a continued leg started within the

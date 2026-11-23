@@ -293,6 +293,100 @@ func TestLineOfSightOpenDeckExit(t *testing.T) {
 	}
 }
 
+/*
+================
+talkStation
+
+A stand point in Jangan (region 25000) on its resolved surface: the
+ground the talk sight fixtures stand on.
+================
+*/
+func talkStation(t *testing.T, v *WaterValidator, x, z float64) simulation.Spawn {
+	t.Helper()
+	at := simulation.Spawn{RegionID: 25000, X: x, Z: z}
+	_, height, ok := v.ResolveNavOwner(at, simulation.NavOwner{})
+	if !ok {
+		t.Fatalf("no surface under %+v", at)
+	}
+	at.Y = height
+	return at
+}
+
+// #4125: the talk test's two arms on real town geometry. The Jangan
+// potion merchant (NPC_CH_POTION's nest anchor) stands behind her stall
+// counter to the east: from her customer side the line is blocked by the
+// counter's nav block, but the walk rests at its face, inside talk
+// distance, so she stays usable. From the north-east building corner
+// both arms fail - no line, and the walk rests beyond talk distance -
+// so that NPC is out of reach until the player walks around.
+func TestTalkSightMerchantStallAndCorner(t *testing.T) {
+	validator := realAuthorityValidator(t)
+	rt := &Runtime{ClientClip: &ClientClip{Mode: ClipApply, Validator: validator}}
+
+	station := talkStation(t, validator, 1584.08, 1407.29)
+
+	customer := talkStation(t, validator, station.X+20, station.Z)
+	if rt.LineOfSight(customer, simulation.NavOwner{}, station) {
+		t.Fatal("the stall chord reported a clear line")
+	}
+	if !rt.TalkSight(customer, simulation.NavOwner{}, station) {
+		t.Fatal("merchant across her own stall counter refused")
+	}
+
+	corner := talkStation(t, validator, station.X+40*0.7071, station.Z+40*0.7071)
+	if rt.TalkSight(corner, simulation.NavOwner{}, station) {
+		t.Fatal("NPC behind the building corner reported talkable")
+	}
+
+	open := talkStation(t, validator, station.X-20, station.Z)
+	if !rt.TalkSight(open, simulation.NavOwner{}, station) {
+		t.Fatal("merchant in plain view reported unreachable")
+	}
+}
+
+// The talk test takes LineOfSight's posture: with no clip authority
+// applied, every NPC is talkable (the line test already answers clear).
+func TestTalkSightPosture(t *testing.T) {
+	from := spawnAt(0x6B4F, 30, 110)
+	to := spawnAt(0x6B4F, 190, 110)
+	blocked := &fakeClipValidator{report: ClipReport{Outcome: ClipBlocked}}
+
+	if !(&Runtime{}).TalkSight(from, simulation.NavOwner{}, to) {
+		t.Fatal("no clip refused a talk")
+	}
+	observing := &ClientClip{Mode: ClipObserve, Validator: blocked}
+	if !(&Runtime{ClientClip: observing}).TalkSight(from, simulation.NavOwner{}, to) {
+		t.Fatal("observing clip refused a talk")
+	}
+}
+
+// With the line blocked, the walk arm decides by where the walk rests:
+// a rest inside talk distance of the station admits (the stall), a rest
+// beyond it refuses (the wall). The first queued leg answers the line
+// test; the second walks.
+func TestTalkSightWalkRestDecides(t *testing.T) {
+	from := spawnAt(0x6B4F, 30, 110)
+	to := spawnAt(0x6B4F, 190, 110)
+
+	near := &fakeSegmentClipValidator{reports: []ClipReport{
+		{Outcome: ClipBlocked, NativeResult: monster.NavResultBlocked, Rest: from, continuation: true},
+		{Outcome: ClipBlocked, Rest: spawnAt(0x6B4F, 170, 110)},
+	}}
+	rt := &Runtime{ClientClip: &ClientClip{Mode: ClipApply, Validator: near}}
+	if !rt.TalkSight(from, simulation.NavOwner{}, to) {
+		t.Fatal("walk resting 20 units short of the station refused the talk")
+	}
+
+	far := &fakeSegmentClipValidator{reports: []ClipReport{
+		{Outcome: ClipBlocked, NativeResult: monster.NavResultBlocked, Rest: from, continuation: true},
+		{Outcome: ClipBlocked, Rest: spawnAt(0x6B4F, 90, 110)},
+	}}
+	rt = &Runtime{ClientClip: &ClientClip{Mode: ClipApply, Validator: far}}
+	if rt.TalkSight(from, simulation.NavOwner{}, to) {
+		t.Fatal("walk resting 100 units short of the station admitted the talk")
+	}
+}
+
 // Outdoor and dungeon positions never see each other.
 func TestLineOfSightCrossPlane(t *testing.T) {
 	clear := &fakeClipValidator{report: ClipReport{Outcome: ClipArrived}}

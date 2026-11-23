@@ -50,9 +50,8 @@ function fixture() {
 		step: (
 			t,
 			region = 0,
-			enabled = true,
-			ground = () => null
-		) => (weather.update( camera, t, region, enabled, ground ), weather.prepare( gpu, images, camera, matrix )),
+			enabled = true
+		) => (weather.update( camera, t, region, enabled ), weather.prepare( gpu, images, camera, matrix )),
 		stats: () => ({ calls, uploads, releases, updates }),
 		gpu
 	};
@@ -79,17 +78,37 @@ test("weather emits into retained GPU batches, consumes shared RNG, and resets w
 	f.weather.dispose( f.gpu );
 	assert.equal( f.stats().releases, 1 );
 });
-test("weather clear drains existing rain and ground contacts become finite-lived ripples", () => {
+test("weather clear drains existing rain as drops fall past the cull", () => {
 	const f = fixture();
 	f.weather.set( { mode: 2, amount: 10 } );
 	f.step( 0 );
-	f.step( 1, 0, true, () => 0 );
+	f.step( 1 );
 	assert.equal( f.weather.stats().particles, 4 );
-	assert.equal( f.meshes[0].instances.length, 16 );
 	f.weather.set( { mode: 1, amount: 0 } );
-	f.step( 2.3 );
+	// No ground stops a drop now (#4108): two capped 3 s steps (the
+	// native elapsed cap) carry every spawned drop past the
+	// below-eye cull, and mode 1 emits no replacements.
+	f.step( 4 );
+	f.step( 7 );
 	assert.equal( f.weather.stats().particles, 0 );
 });
+test("max rain settles at the steady state the emission, fall law and cull set", () => {
+	// #4108 cost pin. Emission at the 255 cap is amount*dt*2 = 8.5
+	// drops a step (the shared remainder carries the half). A drop
+	// spawns 100 above the reference (midpoint stub) with start
+	// y+490 and dies when 4.9*((age+10000)/1000)^2 passes 490+100+500
+	// (start, spawn height, eye-500 cull): age 4916 ms, 294 steps.
+	// Steady state is therefore 8.5 * 294 = 2499 live drops, and no
+	// per-drop scene work exists to price: update takes no ground
+	// callback at all. A reintroduced pick, splash or second death
+	// rule moves this count.
+	const weather = createWeather( { range: ( a, b ) => Math.trunc( (a + b) / 2 ) } );
+	const view = { ...camera, eye: [ 0, 100, 0 ], target: [ 0, 100, 1 ] };
+	weather.set( { mode: 2, amount: 255 } );
+	for ( let i = 0; i <= 600; i++ ) weather.update( view, i / 60, 0, true );
+	assert.equal( weather.stats().particles, 2499 );
+});
+
 test("interior weather gate prevents emission and region rebasing keeps particle coordinates finite", () => {
 	const f = fixture();
 	f.weather.set( { mode: 3, amount: 10 } );
@@ -138,7 +157,7 @@ test("camera zoom cannot relocate precipitation or change snow variant probabili
 		};
 		weather.set( { mode: 3, amount: 10 } );
 		for ( const time of [ 0, 1 ] ) {
-			(weather.update( { ...camera, eye }, time, 0, true, () => null, [ 10, 20, 30 ] ),
+			(weather.update( { ...camera, eye }, time, 0, true, [ 10, 20, 30 ] ),
 				weather.prepare( gpu, images, { ...camera, eye }, matrix ));
 		}
 		return mesh;
@@ -154,56 +173,38 @@ test("camera zoom cannot relocate precipitation or change snow variant probabili
 	assert.equal( defined( rare ).m.positions[1], 110.5 );
 	assert.equal( defined( common ).m.positions[1], 108.5 );
 });
-test("a landed rain drop's splash keeps its six hoisted corners and uniform fade", () => {
-	// The splash path writes its six vertices and alphas directly (the
-	// hoisted corner block): one flat quad pair around the landing point,
-	// every y at ground + .5, and one alpha shared by the six, set by the
-	// same age-over-300 scale the corners use.
+test("rain never lands: no splash batch is uploaded and drops fall through the old ground line", () => {
+	// #4108: native rain computes no ground height (the 8CE9C0
+	// census), so the port grounds nothing either. The old code
+	// grounded each drop with a scene pick at y=20 here and splashed
+	// it into a second (rain2, six-vertex, one-instance) batch; now
+	// the rain1 streak batch is the only upload, every batch keeps
+	// the nine-instance shape, and drops fall past 20 until the
+	// below-eye cull retires them.
 	const images = new Map(
-		[ "rain1", "rain2" ].map( n => [ "/assets/images/Map_extracted/weather/" + n + ".png", n ] )
+		[ "rain1", "rain2", "snow1", "snow2" ].map( n => [ "/assets/images/Map_extracted/weather/" + n + ".png", n ] )
 	);
-	let mesh;
+	const uploaded = [], meshes = [];
 	const gpu = {
-		upload( m, image ) {
-			if ( image === "rain2" ) mesh = m;
-			return {};
+		upload( mesh, image ) {
+			uploaded.push( image );
+			meshes.push( mesh );
+			return { image };
 		},
 		release() {},
 		updatePositions() {}
 	};
 	const weather = createWeather( { range: ( a, b ) => Math.trunc( (a + b) / 2 ) } );
-	weather.set( { mode: 2, amount: 10 } );
-	for ( let t = 0; t <= 14; t += .25 ) {
-		weather.update(
-			{ ...camera, eye: [ 0, 100, 0 ] },
-			t,
-			0,
-			true,
-			() => 20,
-			[ 10, 100, 30 ]
-		);
-		weather.prepare( gpu, images, { ...camera, eye: [ 0, 100, 0 ] }, matrix );
-		if ( mesh && mesh.positions[6] - mesh.positions[0] > 0 ) break;
-		mesh = undefined;
+	weather.set( { mode: 2, amount: 255 } );
+	for ( let i = 0; i <= 360; i++ ) {
+		const t = i / 60, view = { ...camera, eye: [ 0, 100, 0 ], target: [ 0, 100, 1 ] };
+		weather.update( view, t, 0, true );
+		weather.prepare( gpu, images, view, matrix );
 	}
-	if ( !mesh ) throw Error( "No splash batch was drawn" );
-	const at = mesh.positions;
-	assert.equal( at[1], 20.5 );
-	for ( let j = 0; j < 6; j++ ) assert.equal( at[j * 3 + 1], 20.5, "Every splash corner sits at the ground" );
-	const scale = (at[6] - at[0]) / 2;
-	assert.ok( scale > 0, "The splash has opened" );
-	// Corner order: (-s,+s) (+s,+s) (+s,-s) (-s,+s) (+s,-s) (-s,-s) around x/z.
-	assert.equal( at[3] - at[0], scale * 2 );
-	assert.equal( at[8] - at[2], -scale * 2 );
-	assert.equal( at[9], at[0] );
-	assert.equal( at[11], at[2] );
-	assert.equal( at[12], at[6] );
-	assert.equal( at[14], at[8] );
-	assert.equal( at[15], at[0] );
-	assert.equal( at[17], at[8] );
-	const alpha = mesh.colors[3];
-	for ( let j = 0; j < 6; j++ ) assert.equal( mesh.colors[j * 4 + 3], alpha );
-	assert.ok( Math.abs( alpha - (255 - Math.trunc( scale * 63 )) / 255 ) < 1e-6 );
+	assert.ok( uploaded.length > 0 );
+	assert.ok( uploaded.every( image => image === "rain1" ), "a splash (rain2) batch was uploaded" );
+	assert.ok( meshes.every( mesh => mesh.instances.length === 9 * 16 ), "a one-instance splash batch was uploaded" );
+	assert.ok( weather.stats().particles > 0 );
 });
 
 test("late texture arrival cannot consume a different shared random stream or freeze snow drift", () => {
@@ -228,7 +229,7 @@ test("late texture arrival cannot consume a different shared random stream or fr
 		};
 		weather.set( { mode: 3, amount: 80 } );
 		for ( let i = 0; i <= 40; i++ ) {
-			(weather.update( camera, i / 20, 0, true, () => null ),
+			(weather.update( camera, i / 20, 0, true ),
 				weather.prepare( gpu, late && i < 40 ? new Map() : images, camera, matrix ));
 		}
 		return { calls, positions: [ ...defined( mesh ).positions ], stats: weather.stats() };
@@ -249,7 +250,7 @@ test("Kerberos event rain preserves snow, targets density ten, and owns one ambi
 	weather.set( { mode: 3, amount: 80, eventRain: true } );
 	weather.set( { mode: 3, amount: 80, eventRain: true } );
 	for ( const time of [ 0, 1 ] ) {
-		(weather.update( camera, time, 0, true, () => null ), weather.prepare( gpu, new Map(), camera, matrix ));
+		(weather.update( camera, time, 0, true ), weather.prepare( gpu, new Map(), camera, matrix ));
 	}
 	assert.equal( weather.stats().amount, 2 );
 	assert.equal( weather.stats().particles, 5 );
@@ -274,7 +275,7 @@ test("native app caps elapsed weather simulation at three seconds after a stall"
 			};
 		weather.set( { mode: 3, amount: 80 } );
 		for ( const time of [ 0, end ] ) {
-			(weather.update( camera, time, 0, true, () => null ), weather.prepare( gpu, new Map(), camera, matrix ));
+			(weather.update( camera, time, 0, true ), weather.prepare( gpu, new Map(), camera, matrix ));
 		}
 		return weather.stats();
 	}
@@ -305,7 +306,7 @@ test("weather uploads track the live rows and the padded tail stays zero", () =>
 				n => [ "/assets/images/Map_extracted/weather/" + n + ".png", n ]
 			)
 		),
-		step = t => (weather.update( camera, t, 0, true, () => 0 ), weather.prepare( gpu, images, camera, matrix ));
+		step = t => (weather.update( camera, t, 0, true ), weather.prepare( gpu, images, camera, matrix ));
 	weather.set( { mode: 2, amount: 255 } );
 	for ( let i = 0; i <= 120; i++ ) step( i / 20 );
 	const steady = spans.get( "rain1" );

@@ -560,6 +560,48 @@ class RocImportTest(unittest.TestCase):
 			self.assertEqual([row[1] for row in rows], ["UIIT_MSG_QUEST_ROC_BERSERKER_START"])
 
 	# ================
+	# test_a_multi_line_message_keeps_its_bytes
+	#
+	# An earlier layer has written the interface table, with a native
+	# multi-line message: CRLF ends its record, a bare LF and a blank line
+	# sit inside it. On twice and then off, that record's bytes stay as
+	# they were and off gives back the earlier layer's table exactly
+	# (r204's English coverage gate found 12 such messages cut).
+	# ================
+	def test_a_multi_line_message_keeps_its_bytes(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, text_root, pins = self.fixture(Path(root))
+			message = "1\tUIIT_MSG_LONG\tfirst\nsecond\n\nafter a blank\t\t\t\t\t\tEnglish\r\n"
+			earlier = "\ufeff" + "\t".join(NATIVE_UI[0]) + "\r\n" + message
+			(text_root / roc.UI_TABLE).write_bytes(earlier.encode("utf-16-le"))
+			for _ in range(2):
+				self.run_import(vsro, native, output, pins, "on")
+				text = (text_root / roc.UI_TABLE).read_bytes().decode("utf-16")
+				self.assertIn(message, text)
+				self.assertEqual(text.count(AGAIN), 1)
+			self.run_import(vsro, native, output, pins, "")
+			self.assertEqual((text_root / roc.UI_TABLE).read_bytes(), earlier.encode("utf-16-le"))
+
+	# ================
+	# test_a_dropped_record_ends_where_the_build_ends_it
+	#
+	# The records dropped are the ones the asset build reads
+	# (splitTextDataRecords): a bare CR inside a message does not start a
+	# line, so a "<digits>\t" after it stays inside the dropped message,
+	# and a "//" line ends the record, so the comment after it survives.
+	# ================
+	def test_a_dropped_record_ends_where_the_build_ends_it(self):
+		with tempfile.TemporaryDirectory() as root:
+			text_root = Path(root)
+			table = ("\ufeff1\tUIIT_KEEP\tkept\r\n"
+					 "2\tUIIT_DROP\tfirst\r9\tstill the message\r\n"
+					 "// a comment the build skips\r\n"
+					 "3\tUIIT_TAIL\ttail\r\n")
+			(text_root / roc.UI_TABLE).write_bytes(table.encode("utf-16-le"))
+			kept = roc.without_ui_texts(text_root, {"UIIT_DROP"}).decode("utf-16")
+			self.assertEqual(kept, "1\tUIIT_KEEP\tkept\r\n// a comment the build skips\r\n3\tUIIT_TAIL\ttail\r\n")
+
+	# ================
 	# test_a_client_without_the_again_line_refuses
 	# ================
 	def test_a_client_without_the_again_line_refuses(self):

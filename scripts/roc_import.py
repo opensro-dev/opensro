@@ -91,6 +91,7 @@ the later client, the switch is the port's until the chain is whole.
 """
 import json
 import os
+import re
 from pathlib import Path
 
 import alexandria_npcs as characters
@@ -387,17 +388,43 @@ def add_quests(read, text_root, prior):
 	return [row[2] for row in added]
 
 
+# A textuisystem record starts on a "<digits>\t" line and a "//" line
+# ends it without joining any record; every other line, blank ones
+# included, continues the record above it (a multi-line message). Lines
+# end at LF only. The asset build splits the table by this rule
+# (textResources.mjs splitTextDataRecords), so a record dropped here is
+# exactly a record the build would have read.
+UI_RECORD_START = re.compile(r"\d+\t")
+UI_LINE = re.compile(r"[^\n]*\n|[^\n]+")
+
+
 # ================
 # without_ui_texts
 #
-# The variant's textuisystem.txt rows without the given symbols, or None
-# when the variant has not written that table (it is the native one).
+# The variant's textuisystem.txt bytes without the records of the given
+# symbols, or None when the variant has not written that table (it is
+# the native one). Every other byte stays as it was: the rows are not
+# re-encoded. Read row by row and written back with CRLF, the table lost
+# the blank lines inside its multi-line messages, and r204's English
+# coverage gate found 12 of them stale.
 # ================
 def without_ui_texts(text_root, symbols):
 	path = text_root / UI_TABLE
 	if not path.exists():
 		return None
-	return [row for row in tables.table_rows(path.read_bytes()) if len(row) < 2 or row[1] not in symbols]
+	raw = path.read_bytes()
+	if not symbols:
+		return raw
+	kept, dropping = [], False
+	for line in UI_LINE.findall(tables.decode_table(raw).lstrip("\ufeff")):
+		if UI_RECORD_START.match(line):
+			columns = line.split("\t")
+			dropping = len(columns) > 1 and columns[1].strip() in symbols
+		elif line.strip().startswith("//"):
+			dropping = False
+		if not dropping:
+			kept.append(line)
+	return b"\xff\xfe" + "".join(kept).encode("utf-16-le")
 
 
 # ================
@@ -409,7 +436,7 @@ def without_ui_texts(text_root, symbols):
 # ================
 def add_ui_texts(read, native, text_root, prior):
 	kept = without_ui_texts(text_root, set(prior.get("uiTexts", [])))
-	base = cap110.encode_rows(kept) if kept is not None else (native / TEXT_ROOT / UI_TABLE).read_bytes()
+	base = kept if kept is not None else (native / TEXT_ROOT / UI_TABLE).read_bytes()
 	merged, added = cap110_items.merge_ui_texts(base, tables.table_rows(read(UI_TABLE)), UI_SYMBOLS)
 	missing = UI_SYMBOLS - set(added) - {row[1] for row in tables.table_rows(base) if len(row) > 1}
 	if missing:
@@ -495,7 +522,7 @@ def add_roc(vsro_root, native, output):
 		if prior.get("uiTexts"):
 			kept = without_ui_texts(text_root, set(prior["uiTexts"]))
 			if kept is not None:
-				write_atomically(text_root / UI_TABLE, cap110.encode_rows(kept))
+				write_atomically(text_root / UI_TABLE, kept)
 		roc_rewards.remove_rewards(text_root)
 		later_world_import.reap_world(SPEC, native, output)
 		return {"enabled": False}
