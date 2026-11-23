@@ -40,8 +40,13 @@ import (
 )
 
 const (
-	// tombGateSource is the gate building whose link the job sets.
-	tombGateSource = "STORE_TQ_SNAKEGATE"
+	// tombGateSource is the teleport row whose link the job sets:
+	// teleportdata row 125, the teleport of building 23280,
+	// STORE_TQ_SNAKEGATE (teleportbuilding). The catalogue keys a
+	// source by its row's code, not its building's.
+	tombGateSource = "GATE_JINSI_04x01-bldg"
+	// tombGateBuildingRef is that building's ref, which the test pins.
+	tombGateBuildingRef = 23280
 
 	// The 0x3058 kinds: the low bytes of the later 0x0C10 and 0x0C11.
 	tombGateKindOpened byte = 0x10

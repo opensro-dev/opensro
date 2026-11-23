@@ -25,6 +25,7 @@ var tombGateTestHour = time.Date(2026, 11, 23, 14, 0, 0, 0, time.UTC)
 ================
 TestTombGateAdmitsOnlyInsideItsWindow
 
+The shipped catalogue's Sarin gate row names the snake gate building.
 The gate catalogue's first city gate, renamed the Sarin gate: at
 14:20 (window closed) a trip through it is refused and costs nothing;
 at 14:05 (open) the same trip enters. Another gate is never refused
@@ -41,6 +42,16 @@ func TestTombGateAdmitsOnlyInsideItsWindow(t *testing.T) {
 	}
 	rt.ConfigureTombGate(true)
 	rt.tombGate.loc = time.UTC
+	// The shipped catalogue's Sarin gate row is the one the schedule names.
+	var gate portalDestination
+	for _, d := range rt.portals.destinations {
+		if d.code == tombGateSource {
+			gate = d
+		}
+	}
+	if gate.ref != tombGateBuildingRef {
+		t.Fatalf("teleport row %q names building %d, want the snake gate %d", tombGateSource, gate.ref, tombGateBuildingRef)
+	}
 	source := rt.portals.destinations[1]
 	source.code = tombGateSource
 	rt.portals.destinations[1] = source
