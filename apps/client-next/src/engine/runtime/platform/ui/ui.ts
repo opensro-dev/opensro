@@ -15,7 +15,7 @@ focus from a disabled element and never returns it.
 ===========================================================================
 */
 import type { UiBridge, UiControl, UiEvent, UiSemantics } from "@/engine/contracts/ui";
-import { controlHitRect } from "@/engine/foundation/ui/hit-test";
+import { controlHitRect, rangePressOnThumb } from "@/engine/foundation/ui/hit-test";
 import { createLayoutKeys } from "@/engine/foundation/ui/layout-keys";
 import { configureCredentialHints } from "./credential-hints";
 import { createDragShield } from "./drag-shield";
@@ -375,6 +375,29 @@ export function createUiBridge(
 	root.addEventListener( "wheel", event => {
 		if ( event.target instanceof HTMLInputElement && event.target.type === "range" ) event.preventDefault();
 	}, { passive: false, signal: lifetime.signal } );
+	// A thumbDragOnly range (creation sliders) takes its value from the
+	// drawn prev/next buttons and the thumb drag alone. A browser answers
+	// a press anywhere else on the invisible groove by jumping the value
+	// to the press point, silently re-picking the choice: a press beside
+	// the thumb moved a new character's weapon off the daggers its player
+	// picked (#4121). Refuse the press before the browser acts on it; it
+	// also leaves the slider unfocused, so no key or wheel gesture can
+	// follow it up.
+	root.addEventListener( "pointerdown", event => {
+		const el = event.target;
+		if ( !(el instanceof HTMLInputElement) || el.type !== "range" || el.disabled ) return;
+		if ( !current( el )?.value.thumbDragOnly ) return;
+		const box = el.getBoundingClientRect();
+		if (
+			!rangePressOnThumb(
+				Number( el.min || 0 ),
+				Number( el.max || 0 ),
+				Number( el.value || 0 ),
+				box.width,
+				event.clientX - box.left
+			)
+		) event.preventDefault();
+	}, { capture: true, signal: lifetime.signal } );
 	document.addEventListener( "selectionchange", () => {
 		const el = document.activeElement;
 		if ( (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && root.contains( el ) ) {
