@@ -33,6 +33,14 @@ def guide(code, identity):
 	return ["1", str(identity), "name", "1", "140000", "SN_PAYCON_" + code, "SN_" + code, "0"]
 
 
+def quest_guide(code, identity):
+	return ["1", str(identity), "name", "1", "300000", "SN_PAYCON_" + code, "SN_" + code, code]
+
+
+def text_row(key, korean, english):
+	return ["1", key, korean, "", "", "", "", "", english, english]
+
+
 # ================
 # table
 # ================
@@ -185,6 +193,56 @@ class ArabiaQuestTablesTest(unittest.TestCase):
 			appended = table("1\t1\tA", "1\t2\tB" + (ending or "\r\n"), "1\t9\tNEW")
 			self.assertEqual(quest_tables.drop_rows(appended, 1, {"9"}, bool(ending)), native)
 			self.assertEqual(len(tables.table_rows(quest_tables.drop_rows(appended, 1, {"9"}, bool(ending)))), 2)
+
+	# ================
+	# test_a_guide_row_whose_quest_exists_nowhere_leaves
+	#
+	# v1.696's 370005 names QNO_AR_109: no questdata row and no text. It
+	# leaves; a row with a quest, or with only its title text, or a
+	# category row, stays.
+	# ================
+	def test_a_guide_row_whose_quest_exists_nowhere_leaves(self):
+		rows = [quest_guide("QNO_AR_001", 300001), quest_guide("QNO_AR_071", 340001), quest_guide("QNO_AR_109", 370005),
+			["1", "300000", "town", "0", "7", "SRO_GGW_MENU", "SRO_GGW_MENU", "xxx"]]
+		kept = quest_tables.guide_rows(rows, [quest("QNO_AR_001", 1448)], {"SN_QNO_AR_071"})
+		self.assertEqual([row[1] for row in kept], ["300001", "340001", "300000"])
+
+	# ================
+	# test_a_missing_guide_body_is_composed_from_the_quests_lines
+	#
+	# 300002 (QNO_AR_002) names a body v1.696 never wrote; it is the
+	# quest's task lines in step order and its format line, per language.
+	# A row whose body exists, or whose quest has no lines, gets none.
+	# ================
+	def test_a_missing_guide_body_is_composed_from_the_quests_lines(self):
+		texts = [[text_row("SN_CON_QNO_AR_002_2", "둘", "Second"), text_row("SN_CON_QNO_AR_002_1", "하나", "First"),
+			text_row("SN_NC_QNO_AR_002", "1회", "One-time"), text_row("SN_PAYCON_QNO_AR_001", "본문", "Body")]]
+		guide_rows = [quest_guide("QNO_AR_001", 300001), quest_guide("QNO_AR_002", 300002), quest_guide("QNO_AR_003", 300003)]
+		bodies = quest_tables.composed_guide_bodies(guide_rows, texts)
+		self.assertEqual([body[1] for body in bodies], ["SN_PAYCON_QNO_AR_002"])
+		english = bodies[0][8]
+		self.assertTrue(english.startswith("<sml2>") and english.endswith("One-time</sml2>"), english)
+		self.assertLess(english.index("First"), english.index("Second"))
+		self.assertIn("Task", english)
+		self.assertIn("임무", bodies[0][2])
+		self.assertEqual(bodies[0][3], "")
+
+	# ================
+	# test_a_guide_row_without_text_refuses_at_import
+	#
+	# The client refuses an article whose title or body has no text
+	# (quest-guide.ts); the import refuses it first, by the build's own
+	# no-text rule, and accepts text the variant already carries.
+	# ================
+	def test_a_guide_row_without_text_refuses_at_import(self):
+		row = quest_guide("QNO_AR_002", 300002)
+		quest_tables.check_guide_text([row], {"SN_QNO_AR_002": "Threat", "SN_PAYCON_QNO_AR_002": "Body"}, set())
+		quest_tables.check_guide_text([row], {"SN_QNO_AR_002": "Threat"}, {"SN_PAYCON_QNO_AR_002"})
+		for texts in ({"SN_QNO_AR_002": "Threat"}, {"SN_QNO_AR_002": "0", "SN_PAYCON_QNO_AR_002": "Body"}):
+			with self.assertRaisesRegex(ValueError, "300002"):
+				quest_tables.check_guide_text([row], texts, set())
+		heading = row[:3] + ["0"] + row[4:]
+		quest_tables.check_guide_text([heading], {"SN_QNO_AR_002": "Threat"}, set())
 
 
 if __name__ == "__main__":
