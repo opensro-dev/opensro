@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-tomb_spawn_fill_test.go - Ch'in Tomb Floor 3 monsters spread over the floor
+tomb_spawn_fill_test.go - Ch'in Tomb monsters spread over their floors
 
 Players reported on 2026-11-20 (#4149, #4150) that the tomb floors look
 empty between camps while each camp stands about ten monsters on top of each
@@ -14,6 +14,13 @@ shows. The containment radius is below the generate radius, so every
 monster hatched outside it walks back to the centre. These tests run the
 population with the production ground resolver and move test on the shipped
 cave geometry.
+
+The same report reached Floor 1 (the level 80-82 camps) on 2026-11-23
+(#4234), filed on a build that carried neither the native nest balance
+(#4161) nor the homing march that ended battlefield parking (#4180, #4124).
+The Floor 1 tests below are that report's measurement on this data: the
+fill and spread of its nests, and a route home from the worst drag a
+fight on the floor can make.
 
 ===========================================================================
 */
@@ -34,6 +41,7 @@ import (
 
 const (
 	tombFloor3Region = 0x8005
+	tombFloor1Region = 0x8007
 	// The six tomb floors, Floor 6 (0x8002) to Floor 1 (0x8007).
 	tombFirstFloorRegion = 0x8002
 	tombLastFloorRegion  = 0x8007
@@ -58,14 +66,14 @@ const (
 
 /*
 ================
-floor3Template
+floorTemplate
 
-The tomb template cut down to Floor 3's ordinary respawning nests, so the
-fill measures only the floor the players reported. operator replaces every
+The tomb template cut down to one floor's ordinary respawning nests, so
+the fill measures only the floor under test. operator replaces every
 nest's radii with ISRO-R's active-table tuning.
 ================
 */
-func floor3Template(t *testing.T, operator bool) (monster.Template, int) {
+func floorTemplate(t *testing.T, region uint16, operator bool) (monster.Template, int) {
 	t.Helper()
 	textdata := gamedatatest.TextdataDir(t)
 	tomb, err := monster.LoadTemplate(textdata).WithQinShiTomb(textdata)
@@ -80,7 +88,7 @@ func floor3Template(t *testing.T, operator bool) (monster.Template, int) {
 	for i := range nests {
 		nest := &nests[i]
 		ref := tomb.Refs[nest.RefObjID]
-		if nest.RegionID != tombFloor3Region || !nest.Respawn || monster.NestIsUnique(*nest, ref) {
+		if nest.RegionID != region || !nest.Respawn || monster.NestIsUnique(*nest, ref) {
 			nest.MaxCount = 0
 			continue
 		}
@@ -90,7 +98,7 @@ func floor3Template(t *testing.T, operator bool) (monster.Template, int) {
 		slots += nest.MaxCount
 	}
 	if slots == 0 {
-		t.Fatal("no Floor 3 nests in the tomb template")
+		t.Fatalf("no nests in region %#x in the tomb template", region)
 	}
 	tomb.Nests = nests
 	return tomb, slots
@@ -98,13 +106,13 @@ func floor3Template(t *testing.T, operator bool) (monster.Template, int) {
 
 /*
 ================
-fillFloor3State
+fillFloorState
 
 Runs the population for tombFillSimulatedMs with the production spawn
 authority and returns it with the validator that placed it.
 ================
 */
-func fillFloor3State(t *testing.T, template monster.Template) (*simulation.MonsterState, *WaterValidator) {
+func fillFloorState(t *testing.T, template monster.Template) (*simulation.MonsterState, *WaterValidator) {
 	t.Helper()
 	t.Setenv(simulation.EnvJanganCaveRespawn, "on")
 	v := NewAuthorityValidator(gamedatatest.WorldAuthorityDir(t))
@@ -124,24 +132,37 @@ func fillFloor3State(t *testing.T, template monster.Template) (*simulation.Monst
 
 /*
 ================
-fillFloor3
+fillFloor
 
 Runs the population for tombFillSimulatedMs with the production spawn
-authority and returns how many monsters stand on Floor 3 and the median
+authority and returns how many monsters stand on the floor and the median
 planar distance from each to its nearest neighbour.
 ================
 */
-func fillFloor3(t *testing.T, template monster.Template) (int, float64) {
+func fillFloor(t *testing.T, template monster.Template, region uint16) (int, float64) {
 	t.Helper()
-	s, _ := fillFloor3State(t, template)
+	s, _ := fillFloorState(t, template)
 	var points [][2]float64
 	for _, instance := range s.MaterializedInstances("tomb") {
-		if instance.Spawn.RegionID == tombFloor3Region {
+		if instance.Spawn.RegionID == region {
 			points = append(points, [2]float64{instance.Spawn.X, instance.Spawn.Z})
 		}
 	}
+	return len(points), medianNearest(points)
+}
+
+/*
+================
+medianNearest
+
+The median planar distance from each point to its nearest neighbour: a
+camp spread over its generate radius measures in the dozens, a pile in
+single digits.
+================
+*/
+func medianNearest(points [][2]float64) float64 {
 	if len(points) < 2 {
-		return len(points), 0
+		return 0
 	}
 	nearest := make([]float64, len(points))
 	for i, p := range points {
@@ -153,7 +174,7 @@ func fillFloor3(t *testing.T, template monster.Template) (int, float64) {
 		}
 	}
 	sort.Float64s(nearest)
-	return len(points), nearest[len(nearest)/2]
+	return nearest[len(nearest)/2]
 }
 
 /*
@@ -168,10 +189,10 @@ the defect the 2026-11-20 reports described.
 */
 func TestTombFloor3MonstersDoNotPile(t *testing.T) {
 	tier.Long(t, "Floor 3 of the Ch'in Tomb fills with its monsters spread on the real cave geometry")
-	shipped, slots := floor3Template(t, false)
-	standing, spacing := fillFloor3(t, shipped)
-	operator, _ := floor3Template(t, true)
-	operatorStanding, operatorSpacing := fillFloor3(t, operator)
+	shipped, slots := floorTemplate(t, tombFloor3Region, false)
+	standing, spacing := fillFloor(t, shipped, tombFloor3Region)
+	operator, _ := floorTemplate(t, tombFloor3Region, true)
+	operatorStanding, operatorSpacing := fillFloor(t, operator, tombFloor3Region)
 	t.Logf("Floor 3: %d slots; native %d standing, median neighbour %.0f; operator tuning %d standing, median neighbour %.0f",
 		slots, standing, spacing, operatorStanding, operatorSpacing)
 	if standing*100 < slots*tombFillMinPercent {
@@ -183,6 +204,165 @@ func TestTombFloor3MonstersDoNotPile(t *testing.T) {
 	}
 	if operatorSpacing >= tombNeighbourMedianMin {
 		t.Fatalf("the operator tuning spaces monsters %.0f apart: the fixture no longer shows the defect", operatorSpacing)
+	}
+}
+
+// The level band of the camps the Floor 1 report named (#4234).
+const (
+	tombFloor1BandFirstLevel = 80
+	tombFloor1BandLastLevel  = 82
+)
+
+/*
+================
+floor1Band
+
+Floor 1's standing points, whole floor and the reported 80-82 band.
+================
+*/
+func floor1Band(s *simulation.MonsterState) (all, band [][2]float64) {
+	for _, instance := range s.MaterializedInstances("tomb") {
+		if instance.Spawn.RegionID != tombFloor1Region {
+			continue
+		}
+		point := [2]float64{instance.Spawn.X, instance.Spawn.Z}
+		all = append(all, point)
+		if instance.Ref.Level >= tombFloor1BandFirstLevel && instance.Ref.Level <= tombFloor1BandLastLevel {
+			band = append(band, point)
+		}
+	}
+	return all, band
+}
+
+/*
+================
+TestTombFloor1MonstersDoNotPile
+
+The #4234 measurement on the shipped data: Floor 1 fills to
+tombFillMinPercent of its slots with the median monster (and the median
+monster of the reported 80-82 band) at least tombNeighbourMedianMin from
+its nearest neighbour; the operator's tuning, on the same geometry and
+seed, piles them - the report's single point.
+================
+*/
+func TestTombFloor1MonstersDoNotPile(t *testing.T) {
+	tier.Long(t, "Floor 1 of the Ch'in Tomb fills with its monsters spread on the real cave geometry")
+	shipped, slots := floorTemplate(t, tombFloor1Region, false)
+	s, _ := fillFloorState(t, shipped)
+	all, band := floor1Band(s)
+	bandSlots := 0
+	for _, nest := range shipped.Nests {
+		ref := shipped.Refs[nest.RefObjID]
+		if nest.RegionID == tombFloor1Region && nest.MaxCount > 0 &&
+			ref.Level >= tombFloor1BandFirstLevel && ref.Level <= tombFloor1BandLastLevel {
+			bandSlots += nest.MaxCount
+		}
+	}
+	operator, _ := floorTemplate(t, tombFloor1Region, true)
+	operatorState, _ := fillFloorState(t, operator)
+	operatorAll, operatorBand := floor1Band(operatorState)
+	spacing, bandSpacing := medianNearest(all), medianNearest(band)
+	operatorSpacing, operatorBandSpacing := medianNearest(operatorAll), medianNearest(operatorBand)
+	t.Logf("Floor 1: %d slots, %d standing, median neighbour %.0f; 80-82 band %d slots, %d standing, median neighbour %.0f; operator tuning median neighbour %.0f (band %.0f)",
+		slots, len(all), spacing, bandSlots, len(band), bandSpacing, operatorSpacing, operatorBandSpacing)
+	if len(all)*100 < slots*tombFillMinPercent {
+		t.Fatalf("Floor 1 stands at %d of %d slots after %d s, under %d%%", len(all), slots, tombFillSimulatedMs/1000, tombFillMinPercent)
+	}
+	if spacing < tombNeighbourMedianMin {
+		t.Fatalf("the median Floor 1 monster stands %.0f from its nearest neighbour, under %d", spacing, tombNeighbourMedianMin)
+	}
+	if bandSlots == 0 || len(band)*100 < bandSlots*tombFillMinPercent || bandSpacing < tombNeighbourMedianMin {
+		t.Fatalf("the 80-82 band stands %d of %d with median neighbour %.0f", len(band), bandSlots, bandSpacing)
+	}
+	if operatorSpacing >= tombNeighbourMedianMin || operatorBandSpacing >= tombNeighbourMedianMin {
+		t.Fatalf("the operator tuning spaces Floor 1 monsters %.0f apart (band %.0f): the fixture no longer shows the defect",
+			operatorSpacing, operatorBandSpacing)
+	}
+}
+
+/*
+================
+TestTombFloor1HomingRoutesHome
+
+The parking half of the #4234 report on this floor's geometry: a monster
+dragged to the furthest standing point of its floor (the worst drag a
+fight can make) gets home on the production cave route, or, where the
+route cannot see, by the homing march of #4180 - never parked where the
+fight ended. Forty monsters sampled across the filled floor.
+================
+*/
+func TestTombFloor1HomingRoutesHome(t *testing.T) {
+	tier.Long(t, "Floor 1 monsters dragged across the floor route or march home on the real cave geometry")
+	template, _ := floorTemplate(t, tombFloor1Region, false)
+	s, v := fillFloorState(t, template)
+	var gids []uint32
+	for _, instance := range s.MaterializedInstances("tomb") {
+		if instance.Spawn.RegionID == tombFloor1Region {
+			gids = append(gids, instance.Gid)
+		}
+	}
+	if len(gids) < 40 {
+		t.Fatalf("only %d Floor 1 monsters filled", len(gids))
+	}
+	now := s.CurrentTimeMillis()
+	poseOf := func(gid uint32) (monster.Pose, bool) {
+		mover, ok := s.Mover("tomb", gid)
+		if !ok {
+			return monster.Pose{}, false
+		}
+		return mover.Pose, true
+	}
+	sampled, routed, marched := 0, 0, 0
+	for i := 0; i < len(gids); i += len(gids) / 40 {
+		gid := gids[i]
+		home, ok := poseOf(gid)
+		if !ok {
+			continue
+		}
+		mover, _ := s.Mover("tomb", gid)
+		owner := mover.LiveNavOwner(now)
+		// The kite point: the furthest other standing point on the floor.
+		var kite monster.Pose
+		kiteDist := -1.0
+		for _, other := range gids {
+			if other == gid {
+				continue
+			}
+			if p, ok := poseOf(other); ok {
+				if d := math.Hypot(p.X-home.X, p.Z-home.Z); d > kiteDist {
+					kite, kiteDist = p, d
+				}
+			}
+		}
+		sampled++
+		if route := v.planCaveRouteFrom(kite, owner, home); route != nil && route.Status() == monster.NavigationRouteReady {
+			routed++
+			continue
+		}
+		// No region route: the homing march (the furthest walkable pose
+		// toward home, re-planned per leg), as planSegment falls back.
+		cur := kite
+		for leg := 0; leg < 400 && math.Hypot(cur.X-home.X, cur.Z-home.Z) > 25; leg++ {
+			path := v.PlanMonsterPathFrom(cur, owner, home)
+			if path == nil {
+				break
+			}
+			next := path.Rest()
+			if math.Hypot(next.X-cur.X, next.Z-cur.Z) < 0.5 {
+				break
+			}
+			cur = next
+		}
+		if math.Hypot(cur.X-home.X, cur.Z-home.Z) <= 25 {
+			marched++
+			continue
+		}
+		t.Errorf("gid %d: no route home and the march wedges %.0f short of its nest", gid,
+			math.Hypot(cur.X-home.X, cur.Z-home.Z))
+	}
+	t.Logf("Floor 1 homing: %d sampled, %d routed, %d marched", sampled, routed, marched)
+	if sampled < 30 || routed+marched != sampled {
+		t.Fatalf("homing answered %d of %d sampled monsters", routed+marched, sampled)
 	}
 }
 
