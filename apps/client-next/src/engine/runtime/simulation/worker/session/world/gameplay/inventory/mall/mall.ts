@@ -25,20 +25,35 @@ const MAX_BALANCE = 0xffffffff;
 ================
 mallBalance
 
-Strictly decode a balance push: exactly silk, giftSilk and points.
+Strictly decode a balance push: exactly silk, giftSilk and points, with
+earnedSilk (#4133) allowed but never required - the push body is frozen
+at the three fields so a server of this split still talks to a client
+that predates it, and the earned half rides the catalogue instead.
+When earnedSilk is absent the caller keeps the catalogue's figure.
 ================
 */
-function mallBalance( payload: Uint8Array ): { silk: number; giftSilk: number; points: number; } {
+function mallBalance(
+	payload: Uint8Array
+): { silk: number; giftSilk: number; points: number; earnedSilk?: number; } {
 	const decoded: unknown = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( payload ) );
 	if ( !decoded || typeof decoded !== "object" || Array.isArray( decoded ) ) throw Error( "Invalid mall balance" );
 	const row = decoded as Record<string, unknown>;
 	const keys = Object.keys( row ).sort().join( "," );
 	const field = ( value: unknown ) =>
 		typeof value === "number" && Number.isInteger( value ) && value >= 0 && value <= MAX_BALANCE;
-	if ( keys !== "giftSilk,points,silk" || !field( row.silk ) || !field( row.giftSilk ) || !field( row.points ) ) {
+	if (
+		(keys !== "giftSilk,points,silk" && keys !== "earnedSilk,giftSilk,points,silk") || !field( row.silk ) ||
+		!field( row.giftSilk ) || !field( row.points ) ||
+		(row.earnedSilk !== undefined && !field( row.earnedSilk ))
+	) {
 		throw Error( "Invalid mall balance" );
 	}
-	return { silk: row.silk as number, giftSilk: row.giftSilk as number, points: row.points as number };
+	return {
+		silk: row.silk as number,
+		giftSilk: row.giftSilk as number,
+		points: row.points as number,
+		...(row.earnedSilk !== undefined ? { earnedSilk: row.earnedSilk as number } : {})
+	};
 }
 
 // The Buying list's periods, the native combo's order: 1 day, 7 days,
@@ -134,7 +149,8 @@ export function createMall() {
 			if (
 				!offer || next.quantity > offer.purchaseLimit || next.points > state.points ||
 				next.points > offer.silk * next.quantity || next.points !== 0 && !offer.allowsPoints ||
-				offer.silk * next.quantity - next.points > state.silk || offer.giftSilk * next.quantity > state.giftSilk
+				offer.silk * next.quantity - next.points > state.silk + state.earnedSilk ||
+				offer.giftSilk * next.quantity > state.giftSilk
 			) throw Error( "Mall purchase exceeds current authority" );
 			request = { ...next };
 			deadline = now + REQUEST_TIMEOUT_MS;

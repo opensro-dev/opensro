@@ -82,7 +82,7 @@ func TestSilkHistoryRecordsPurchaseInCommit(t *testing.T) {
 	if _, err := s.syncDBLocked().Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", "history-account", 100, 20, 10); err != nil {
 		t.Fatal(err)
 	}
-	grant := func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) { return rows, nil }
+	grant := func(rows []domain.InventoryRow, _ bool) ([]domain.InventoryRow, error) { return rows, nil }
 	s.FailCommits(errors.New("disk failure"))
 	if _, err := s.PurchaseMall(first, domain.MallBalance{Silk: 30, GiftSilk: 2, Points: 3}, grant); err == nil {
 		t.Fatal("accepted a failed durable commit")
@@ -137,7 +137,7 @@ func TestSilkHistoryPeriodsLimitAndTotal(t *testing.T) {
 	if _, err := s.syncDBLocked().Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", "period-account", 1000, 0, 0); err != nil {
 		t.Fatal(err)
 	}
-	grant := func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) { return rows, nil }
+	grant := func(rows []domain.InventoryRow, _ bool) ([]domain.InventoryRow, error) { return rows, nil }
 	buy := func(silk uint32) {
 		t.Helper()
 		if _, err := s.PurchaseMall(character, domain.MallBalance{Silk: silk}, grant); err != nil {

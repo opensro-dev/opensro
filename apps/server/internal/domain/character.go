@@ -69,6 +69,14 @@ type InventoryRow struct {
 	// only, issue #1980): it refuses trade, NPC sale, stall offer and
 	// player drop. Absent on every native row.
 	ForgeBound bool `json:"forgeBound,omitempty"`
+	// EarnedBought marks an Item Mall item paid for wholly with earned
+	// Silk (port only, issue #4133): the instance carries the
+	// tradability its reference row denies - every shipped mall row is
+	// record-bound, so the row alone can never say it. The trade doors
+	// read it through the one predicate (action Runtime.Tradeable); the
+	// seal above still refuses first. Absent on every other row, which
+	// is the migration: pre-split mall items read as granted/bound.
+	EarnedBought bool `json:"earnedBought,omitempty"`
 }
 
 /*

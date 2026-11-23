@@ -33,6 +33,7 @@ function catalog() {
 	return {
 		version: 1,
 		silk: 100,
+		earnedSilk: 0,
 		giftSilk: 20,
 		points: 10,
 		tabs: [ { shop: 2, tab: 3, category: "MALL_CONSUME", label: "SN_TAB" } ],
@@ -77,6 +78,7 @@ function delivery() {
 	return {
 		...catalog(),
 		silk: 45,
+		earnedSilk: 0,
 		giftSilk: 16,
 		points: 5,
 		items: [ { slot: 13, refObjId: 3630, typeFlags: 0x8ec, name: "Potion", body: [ 46, 14, 0, 0, 20, 0 ] } ]

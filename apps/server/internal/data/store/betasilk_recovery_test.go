@@ -71,7 +71,7 @@ Check existence separately: a missing row and a zero wallet both read as
 zero through the mall API, but only the latter suppresses another starter.
 ================
 */
-func assertBetaSilkWallet(t *testing.T, s *Store, want uint32, exists bool) {
+func assertBetaSilkWallet(t *testing.T, s *Store, want domain.MallBalance, exists bool) {
 	t.Helper()
 	var count int
 	if err := s.syncDBLocked().QueryRow("SELECT COUNT(*) FROM mall_accounts WHERE account_id = ?", betaSilkRecoveryAccount).Scan(&count); err != nil {
@@ -81,8 +81,8 @@ func assertBetaSilkWallet(t *testing.T, s *Store, want uint32, exists bool) {
 		t.Fatalf("wallet rows=%d, want exists=%v", count, exists)
 	}
 	balance, err := readMallBalance(s.syncDBLocked(), betaSilkRecoveryAccount)
-	if err != nil || balance != (domain.MallBalance{Silk: want}) {
-		t.Fatalf("persisted balance=%+v err=%v, want silk=%d with no gift silk or points", balance, err, want)
+	if err != nil || balance != want {
+		t.Fatalf("persisted balance=%+v err=%v, want %+v", balance, err, want)
 	}
 }
 
@@ -119,26 +119,30 @@ func TestBetaSilkStarterFailureRecoversBeforeHourlyCredit(t *testing.T) {
 		if frames := beta.Tick(now, online, lookup); len(frames) != 0 {
 			t.Fatalf("failed starter pushed frames: %+v", frames)
 		}
-		assertBetaSilkWallet(t, s, 0, false)
+		assertBetaSilkWallet(t, s, domain.MallBalance{}, false)
 	}
 	unblockBetaSilkStarter(t, s)
 	const recoveredMs = startedMs + 2*minuteMs
 	beta.Tick(recoveredMs, online, lookup)
-	assertBetaSilkWallet(t, s, starterSilk, true)
+	assertBetaSilkWallet(t, s, domain.MallBalance{Silk: starterSilk}, true)
 	for minute := int64(1); minute < 60; minute++ {
 		if frames := beta.Tick(recoveredMs+minute*minuteMs, online, lookup); len(frames) != 0 {
 			t.Fatalf("credited before a full recovered hour at minute %d: %+v", minute, frames)
 		}
 	}
-	assertBetaSilkWallet(t, s, starterSilk, true)
+	assertBetaSilkWallet(t, s, domain.MallBalance{Silk: starterSilk}, true)
 	frames := beta.Tick(recoveredMs+60*minuteMs, online, lookup)
-	assertBetaSilkWallet(t, s, starterSilk+hourlySilk, true)
+	assertBetaSilkWallet(t, s, domain.MallBalance{Silk: starterSilk, EarnedSilk: hourlySilk}, true)
 	if len(frames) != 1 || frames[0].DivisionID != testDivision || frames[0].OnlyCharacterID != character.ID || len(frames[0].Frames) != 1 {
 		t.Fatalf("hourly balance push=%+v", frames)
 	}
 	var pushed domain.MallBalance
 	frame := frames[0].Frames[0]
-	if err := json.Unmarshal(frame.Payload, &pushed); err != nil || frame.Opcode != 17 || pushed != (domain.MallBalance{Silk: starterSilk + hourlySilk}) {
+	// The push body is the frozen pre-split shape (silk, giftSilk,
+	// points): the earned half the wallet assertion above holds rides
+	// the mall catalogue, never this frame, so an old client still
+	// decodes it (#4133).
+	if err := json.Unmarshal(frame.Payload, &pushed); err != nil || frame.Opcode != 17 || pushed != (domain.MallBalance{Silk: starterSilk}) || strings.Contains(string(frame.Payload), "earnedSilk") {
 		t.Fatalf("hourly frame=%+v balance=%+v err=%v", frame, pushed, err)
 	}
 	s.Close()
@@ -150,7 +154,7 @@ func TestBetaSilkStarterFailureRecoversBeforeHourlyCredit(t *testing.T) {
 	resumed := action.NewBetaSilk(reopened, hourlySilk)
 	resumed.Starter(characters[0])
 	resumed.Starter(characters[0])
-	assertBetaSilkWallet(t, reopened, starterSilk+hourlySilk, true)
+	assertBetaSilkWallet(t, reopened, domain.MallBalance{Silk: starterSilk, EarnedSilk: hourlySilk}, true)
 }
 
 /*
@@ -178,7 +182,7 @@ func TestBetaSilkStarterRecoveryBeforeMallUse(t *testing.T) {
 				t.Fatal("enabled beta owner missing")
 			}
 			grants := 0
-			grant := func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) {
+			grant := func(rows []domain.InventoryRow, _ bool) ([]domain.InventoryRow, error) {
 				grants++
 				rows[0].StackCount++
 				return rows, nil
@@ -198,7 +202,7 @@ func TestBetaSilkStarterRecoveryBeforeMallUse(t *testing.T) {
 			if grants != 0 || character.MissionInventory[0].StackCount != 1 {
 				t.Fatal("failed starter reached delivery or changed inventory")
 			}
-			assertBetaSilkWallet(t, s, 0, false)
+			assertBetaSilkWallet(t, s, domain.MallBalance{}, false)
 			unblockBetaSilkStarter(t, s)
 			if firstUse == "balance" {
 				balance, err := beta.MallBalance(character)
@@ -214,7 +218,7 @@ func TestBetaSilkStarterRecoveryBeforeMallUse(t *testing.T) {
 			if err != nil || balance != (domain.MallBalance{Silk: starterSilk - purchaseSilk}) {
 				t.Fatalf("repeat mall read regranted starter: balance=%+v err=%v", balance, err)
 			}
-			assertBetaSilkWallet(t, s, starterSilk-purchaseSilk, true)
+			assertBetaSilkWallet(t, s, domain.MallBalance{Silk: starterSilk - purchaseSilk}, true)
 			s.Close()
 			reopened := openTest(t, dir, newTestClock())
 			characters := reopened.Characters().CharactersForDivision(testDivision)
@@ -222,7 +226,7 @@ func TestBetaSilkStarterRecoveryBeforeMallUse(t *testing.T) {
 				t.Fatalf("purchase inventory not durable: %+v", characters)
 			}
 			action.NewBetaSilk(reopened, hourlySilk).Starter(characters[0])
-			assertBetaSilkWallet(t, reopened, starterSilk-purchaseSilk, true)
+			assertBetaSilkWallet(t, reopened, domain.MallBalance{Silk: starterSilk - purchaseSilk}, true)
 		})
 	}
 }

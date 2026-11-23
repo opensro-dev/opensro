@@ -168,6 +168,7 @@ so the list cannot change while the GameWorld runs.
 func publicRules() publicstats.RulesResponse {
 	silkRate, _ := action.BetaSilkFromEnv()
 	silkActiveOnly, _ := action.BetaSilkActiveOnlyFromEnv()
+	earnedTradable, _ := action.EarnedSilkTradableFromEnv()
 	stackSizes, _ := enterworld.StackSizesFromEnv()
 	alchemyRates, _ := alchemy.ReinforceRatesFromEnv()
 	alchemyMaxPlus, _ := alchemy.ReinforceMaxPlusFromEnv()
@@ -429,6 +430,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Silk is bought for the account.",
 				Now:    "The hourly silk counts only while you play: each action keeps it going for ten minutes.",
 				Why:    "A character left idle in town earned as much as one playing."},
+			{Flag: action.EnvEarnedSilkTradable, On: earnedTradable,
+				Native: "Item Mall purchases are bound to the account.",
+				Now:    "Silk you earn by playing is its own balance, spent first: an item it pays for whole can be traded. Anything the starter, a grant or a referral paid for stays bound. The mall shows both balances and says which way a buy lands before you confirm.",
+				Why:    "Retail binds mall items because its silk is bought with money; ours is earned by playing, so earned silk buys tradable goods. Granted silk cannot be farmed into tradable items."},
 			{Flag: enterworld.EnvBetaStarterKit, On: enterworld.BetaStarterKitEnabled(),
 				Native: "Characters start with the retail creation items only.",
 				Now:    "Every character also holds a return scroll and a speed scroll that are never used up.",

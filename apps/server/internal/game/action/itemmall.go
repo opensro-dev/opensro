@@ -50,6 +50,10 @@ type mallSilkHistoryRequest struct {
 /*
 ================
 mallSilkHistoryEntry
+
+One recorded use on the wire: exactly at and charged, the key set every
+shipped client's decoder pins. The earned part of the charge stays in
+the store's split (#4133); it does not ride this frame.
 ================
 */
 type mallSilkHistoryEntry struct {
@@ -77,10 +81,14 @@ mallProjection
 type mallProjection struct {
 	Version int `json:"version"`
 	domain.MallBalance
-	Tabs   []commerce.MallTab     `json:"tabs"`
-	Offers []commerce.MallPackage `json:"offers"`
-	Items  []shopInventoryRow     `json:"items,omitempty"`
-	Error  string                 `json:"error,omitempty"`
+	// EarnedTradable tells the mall whether a purchase paid wholly
+	// from earned silk comes out tradable (#4133), so its confirm can
+	// say which way this buy lands before the player commits.
+	EarnedTradable bool                   `json:"earnedTradable"`
+	Tabs           []commerce.MallTab     `json:"tabs"`
+	Offers         []commerce.MallPackage `json:"offers"`
+	Items          []shopInventoryRow     `json:"items,omitempty"`
+	Error          string                 `json:"error,omitempty"`
 }
 
 /*
@@ -120,7 +128,7 @@ mallFrame
 ================
 */
 func (rt *Runtime) mallFrame(balance domain.MallBalance, items []shopInventoryRow) (wire.Frame, error) {
-	payload, err := json.Marshal(mallProjection{Version: 1, MallBalance: balance, Tabs: rt.mallCatalog.Tabs, Offers: rt.mallCatalog.Offers, Items: items})
+	payload, err := json.Marshal(mallProjection{Version: 1, MallBalance: balance, EarnedTradable: rt.MallEarnedTradable, Tabs: rt.mallCatalog.Tabs, Offers: rt.mallCatalog.Offers, Items: items})
 	return wire.Frame{Opcode: opMallCatalog, Payload: payload}, err
 }
 
@@ -220,11 +228,19 @@ func (rt *Runtime) HandleMallPurchase(division string, character *enterworld.Cha
 	var delivery []shopInventoryRow
 	var response []byte
 	var reference wire.Frame
-	balance, err := rt.mallAuthority.PurchaseMall(character, quote.Cost, func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) {
+	balance, err := rt.mallAuthority.PurchaseMall(character, quote.Cost, func(rows []domain.InventoryRow, earnedOnly bool) ([]domain.InventoryRow, error) {
+		// The one delivery decision (#4133): what paid is stamped on
+		// the items - the earned mark records the payment, the seal
+		// carries the tradable rule. Earned silk alone paid and the
+		// rule on delivers unsealed and marked (tradable); anything
+		// else lands sealed. Every door reads the outcome from the
+		// item, through the one predicate (Runtime.Tradeable) or the
+		// seal.
+		bound := !earnedOnly || !rt.MallEarnedTradable
 		bagEnd := inventory.BagEnd(character)
 		before := invItemsFromRowsWithin(rows, int64(bagEnd))
 		inv := inventory.New(before, bagEnd)
-		destinations, err := commerce.GrantPackage(inv, quote.Offer.Contents, quote.Quantity, uint16(bagEnd-inventory.EquipmentSlotEnd))
+		destinations, err := commerce.GrantPackage(inv, quote.Offer.Contents, quote.Quantity, uint16(bagEnd-inventory.EquipmentSlotEnd), commerce.GrantMarks{Bound: bound, EarnedBought: earnedOnly})
 		if err != nil {
 			return nil, err
 		}

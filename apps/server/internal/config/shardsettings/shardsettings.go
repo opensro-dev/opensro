@@ -284,6 +284,10 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_MALL_STARTER_SILK", NomadVar: "mall_starter_silk", Default: "700"},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
+	// Port-only, not native (#4133, owner decision 2026-11-23): an Item
+	// Mall purchase paid wholly from earned silk is tradable. "off" is
+	// native: every mall item stays bound, whatever paid for it.
+	{Env: "SRO_EARNED_SILK_TRADABLE", NomadVar: "earned_silk_tradable", Default: "on"},
 	// Port-only, not native: maintenance refusals answer MAINTENANCE instead
 	// of SHARD_OFFLINE (#2331). The one value fills both jobs: sro-nomad
 	// passes it to the Agent too (agentVariables), so the two can never

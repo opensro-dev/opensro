@@ -14,6 +14,7 @@ package action
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -131,6 +132,12 @@ func TestBetaSilkEarnsPerInWorldHourUpToTheCap(t *testing.T) {
 	if frame := pushed[0].Frames[0]; frame.Opcode != opMallBalance || json.Unmarshal(frame.Payload, &balance) != nil || balance.Silk != wallet.silk {
 		t.Fatalf("push: %+v", pushed[0].Frames[0])
 	}
+	// The push body is frozen at the three fields every shipped client
+	// decodes (#4133): an earnedSilk key here would toss the frame on
+	// an old tab.
+	if frame := pushed[0].Frames[0]; strings.Contains(string(frame.Payload), "earnedSilk") {
+		t.Fatalf("push carries earnedSilk: %s", frame.Payload)
+	}
 
 	// Time away (no session in the tick) never counts.
 	now += 5 * betaSilkHourMs
@@ -192,11 +199,11 @@ func (w *fakeSilkWallet) MallBalance(*domain.Character) (domain.MallBalance, err
 PurchaseMall
 ================
 */
-func (w *fakeSilkWallet) PurchaseMall(_ *domain.Character, cost domain.MallBalance, grant func([]domain.InventoryRow) ([]domain.InventoryRow, error)) (domain.MallBalance, error) {
+func (w *fakeSilkWallet) PurchaseMall(_ *domain.Character, cost domain.MallBalance, grant func(rows []domain.InventoryRow, earnedOnly bool) ([]domain.InventoryRow, error)) (domain.MallBalance, error) {
 	if cost.Silk > w.silk {
 		return domain.MallBalance{}, domain.MallInsufficientCurrency{}
 	}
-	if _, err := grant(nil); err != nil {
+	if _, err := grant(nil, false); err != nil {
 		return domain.MallBalance{}, err
 	}
 	w.silk -= cost.Silk
@@ -253,7 +260,7 @@ func TestBetaSilkCapPausesTimeUntilPurchase(t *testing.T) {
 	for minute := int64(0); minute <= 59; minute++ {
 		beta.Tick(minute*betaSilkMaxStepMs, online, lookup)
 	}
-	_, err := beta.PurchaseMall(character, domain.MallBalance{Silk: 100}, func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) { return rows, nil })
+	_, err := beta.PurchaseMall(character, domain.MallBalance{Silk: 100}, func(rows []domain.InventoryRow, _ bool) ([]domain.InventoryRow, error) { return rows, nil })
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -563,6 +563,14 @@ type Runtime struct {
 	// nothing extra.
 	NameChangeScroll bool
 
+	// MallEarnedTradable is the mall purchase rule (#4133,
+	// SRO_EARNED_SILK_TRADABLE; itemmall.go): a purchase paid wholly
+	// from earned silk delivers a tradable item. The zero value is
+	// native: every mall purchase is account-bound, whatever paid.
+	// Composition assigns EarnedSilkTradableFromEnv, whose shipped
+	// default is on.
+	MallEarnedTradable bool
+
 	// EquipSwitch enables each port-only equipment switch scroll by kind
 	// (SRO_WEAPON_SWITCH_SCROLL, SRO_ARMOR_SWITCH_SCROLL,
 	// SRO_ACCESSORY_SWITCH_SCROLL; commerce/equipswitch.go). A missing

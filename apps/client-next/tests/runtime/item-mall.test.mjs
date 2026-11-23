@@ -11,6 +11,7 @@ import { test } from "node:test";
 const { createItemMall } = await import( "../../src/engine/runtime/ui/hud/item-mall.ts" );
 const {
 	mallCurrencyRows,
+	mallPurchaseTradable,
 	mallPageLayout,
 	mallPageNumberPresentation,
 	compactMallBagLayout,
@@ -51,6 +52,8 @@ function catalogue() {
 		tabs: [ { shop: 2, tab: 0, category: "MALL_CONSUME", label: "Consumables" } ],
 		offers,
 		silk: 100,
+		earnedSilk: 0,
+		earnedTradable: false,
 		giftSilk: 0,
 		points: 15,
 		pending: false,
@@ -435,6 +438,8 @@ function laterCatalogue() {
 			offer( 5, 1, 0, 90004, "Halloween Dress", "hot" )
 		],
 		silk: 100,
+		earnedSilk: 0,
+		earnedTradable: false,
 		giftSilk: 0,
 		points: 0,
 		pending: false,
@@ -539,6 +544,7 @@ test("the catalogue decoder keeps a known badge and drops an unknown one", () =>
 		tabs: [ { shop: 0, tab: 0, category: "MALL_ARCHEMY", label: "Astral" } ],
 		offers: [ offer( 0, "new" ), offer( 1, "bogus" ), offer( 2, null ) ],
 		silk: 0,
+		earnedSilk: 0,
 		giftSilk: 0,
 		points: 0
 	} ) );
@@ -562,4 +568,19 @@ test("the lump-buy boxes caption their total row with the total-price line", () 
 	// The reservation and removal boxes draw no total row.
 	assert.equal( mallQuestionLayout( "reserve", 1 ).totalCaption, undefined );
 	assert.equal( mallQuestionLayout( "remove", 1 ).totalCaption, undefined );
+});
+
+test("the purchase outcome follows what pays (#4133)", () => {
+	const state = { ...catalogue(), earnedSilk: 100, earnedTradable: true };
+	// Silk only, earned covers it: tradable.
+	assert.equal( mallPurchaseTradable( state, 60, 0, 0 ), true );
+	// Past the earned balance the granted half pays too: bound.
+	assert.equal( mallPurchaseTradable( state, 160, 0, 0 ), false );
+	// Gift silk or points in the price: bound.
+	assert.equal( mallPurchaseTradable( state, 60, 5, 0 ), false );
+	assert.equal( mallPurchaseTradable( state, 60, 0, 5 ), false );
+	// A free package has no earned payment behind it: bound.
+	assert.equal( mallPurchaseTradable( state, 0, 0, 0 ), false );
+	// The shard rule off: everything bound, as native.
+	assert.equal( mallPurchaseTradable( { ...state, earnedTradable: false }, 60, 0, 0 ), false );
 });

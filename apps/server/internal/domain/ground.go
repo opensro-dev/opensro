@@ -66,6 +66,9 @@ type GroundItemRecord struct {
 	// ForgeBound carries the forge mark onto the ground plane so a bound
 	// drop stays bound through pickup and restart (issue #1980).
 	ForgeBound bool `json:"forgeBound,omitempty"`
+	// EarnedBought carries the earned-Silk mall mark (issue #4133) the
+	// same way, so a dropped earned-bought item stays tradable.
+	EarnedBought bool `json:"earnedBought,omitempty"`
 }
 
 // GroundSnapshot is the complete ground registry at one instant, including
