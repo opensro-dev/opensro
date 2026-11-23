@@ -98,7 +98,7 @@ type ObjectPositionUpdate struct {
 // Encode returns the 0x3028 payload:
 // [u16 region][f32 x][f32 y][f32 z][u16 heading][u32 gid].
 func (u ObjectPositionUpdate) Encode() []byte {
-	return ObjectSourceMove{Position: u.Position, Gid: u.Gid}.Encode()
+	return ObjectSourceMove(u).Encode()
 }
 
 // DecodeObjectPositionUpdate parses a 0x3028 payload.
@@ -107,7 +107,7 @@ func DecodeObjectPositionUpdate(payload []byte) (ObjectPositionUpdate, error) {
 	if err != nil {
 		return ObjectPositionUpdate{}, err
 	}
-	return ObjectPositionUpdate{Position: move.Position, Gid: move.Gid}, nil
+	return ObjectPositionUpdate(move), nil
 }
 
 // ObjectSourceCorrection is the 0xB2F5 remote-entity position correction, the
