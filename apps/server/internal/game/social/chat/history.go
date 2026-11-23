@@ -82,9 +82,9 @@ type Runtime struct {
 	// Feed receives every published public line for the website
 	// (chatfeed, port-only); nil keeps the transcript in-game only.
 	Feed *chatfeed.Feed
-	// ShadowMuted reports a staff shadow-muted account (shadowmute,
+	// ShadowMuted reports a staff shadow-muted line, by account or by word (shadowmute,
 	// port-only, not native); nil mutes no one.
-	ShadowMuted func(accountID string) bool
+	ShadowMuted func(accountID, text string) bool
 	// ModerationLog keeps every accepted line for the staff (chatlog,
 	// port-only, not native), muted lines included and marked; nil
 	// keeps no log.

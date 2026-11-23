@@ -113,7 +113,7 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 		outcome := HandleChat(deps, Views{Presence: presence, Parties: parties, Unions: rt.Unions, Stalls: rt.Stalls, Links: rt.ItemLinks}, divisionID, character, payload)
 		// Port-only, not native: a shadow-muted author's lines reach only
 		// the author, who sees the same echo and acknowledgement as ever.
-		muted := rt.ShadowMuted != nil && rt.ShadowMuted(character.AccountID)
+		muted := rt.ShadowMuted != nil && rt.ShadowMuted(character.AccountID, outcome.PlainText)
 		rt.recordModerationLine(outcome, muted, character, payload)
 		if outcome.Refusal == "" && outcome.Broadcast != nil && ClosedBetaGlobalChat {
 			// The author's echo precedes the keyed receipt on the same reliable
