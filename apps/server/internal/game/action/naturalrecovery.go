@@ -287,7 +287,7 @@ func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64, out []simulatio
 		if casting {
 			return false
 		}
-		world := rt.Worlds.Snapshot(simulation.WorldKey(key.division, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) })
+		world := rt.liveWorld(simulation.WorldKey(key.division, c.Name), c, nowMs)
 		if nowMs < world.PostureTransitionUntilMs || world.MovingAt(nowMs) {
 			return false
 		}

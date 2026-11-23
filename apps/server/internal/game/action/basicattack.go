@@ -865,7 +865,7 @@ func (rt *Runtime) enterBasicAttackRange(
 	nowMs int64,
 	doors characterDoors,
 ) (OpResult, bool) {
-	world := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState { return simulation.SeedWorldState(snapshot) })
+	world := rt.liveWorld(worldKey, snapshot, nowMs)
 	live := world.LiveSpawnAt(nowMs)
 	heading, hasHeading := simulation.HeadingFromMovement(live, target)
 	needsCorrection := world.MoveSegment.Valid() || (hasHeading && live.Angle != heading)

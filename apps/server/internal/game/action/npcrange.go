@@ -84,9 +84,7 @@ func (rt *Runtime) npcWithinHitRange(divisionID string, character *enterworld.Ch
 	nowMs := rt.Now().UnixMilli()
 	// The same snapshot liveSpawn samples, kept whole so the sight test
 	// below starts from the viewer's retained surface owner.
-	world := rt.Worlds.Snapshot(simulation.WorldKey(divisionID, character.Name), func() simulation.WorldState {
-		return simulation.SeedWorldState(character)
-	})
+	world := rt.liveWorld(simulation.WorldKey(divisionID, character.Name), character, nowMs)
 	viewer := world.LiveSpawnAt(nowMs)
 	station := simulation.NpcStation(npc, rt.NpcSpawn.Anchor(simulation.SeedWorldState(character).Spawn))
 	distance := monster.NativeActorDistance(
