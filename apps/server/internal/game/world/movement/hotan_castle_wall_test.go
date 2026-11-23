@@ -11,8 +11,9 @@ point stands on the precinct apron inside the wall - its height is the
 apron cell's plane (256.78), not the flat terrain (243.58) - so the
 reporter was inside the grounds, walking out through a wall section.
 The native client walls exactly here: entry from outside crosses the
-outline only at open edges (client CRTNavMeshObj_EnterFromOutside
-0x00428300, CRTNavMeshTerrain_StepPlacedObject 0x00403FB0), and a
+outline only at open edges (client CRTNavMeshObj_EnterFromOutside,
+client 0x00428300; client CRTNavMeshTerrain_StepPlacedObject,
+client 0x00403FB0), and a
 walker who owns the apron cells meets the same outline as a hard stop.
 The shipped assets are the native bytes (payload sha-verified against
 the retail BMS), so there is nothing to repair; this test pins the
