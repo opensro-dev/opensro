@@ -44,6 +44,15 @@ import { createReportArchive, createDiagnosticUpload, diagnosticUploadBudget, di
 import { fitTrack } from "./transcode";
 import { createJournal, JOURNAL_WINDOW_MS, refusalReason, timelineEvents } from "./journal";
 import { createAssetHistory } from "./asset-history";
+import { diagnosticActors, diagnosticCompanions, type DiagnosticState } from "./diagnostic-state";
+
+export {
+	diagnosticActors,
+	diagnosticCompanions,
+	type DiagnosticActor,
+	type DiagnosticCompanion,
+	type DiagnosticState
+} from "./diagnostic-state";
 
 const ROUTE = "/title/bug-report";
 const MAX_ERRORS = 50;
@@ -78,79 +87,6 @@ export interface ServerSettings {
 	readonly maxDiagnosticsBytes: number;
 	readonly replaySeconds: number;
 	readonly destinations: readonly string[];
-}
-
-/*
-================
-DiagnosticState
-================
-*/
-export interface DiagnosticState {
-	readonly session: import("@/engine/contracts/session").SessionState | null;
-	readonly gameplay: import("@/engine/contracts/gameplay").GameplayState | null;
-	readonly target: import("@/engine/contracts/world").EntityState | undefined;
-	readonly entities: number;
-	// A thunk, not a list: state() runs on every HUD assembly (refusal) and
-	// each timeline sample, and only a composed report needs the sorted poses.
-	readonly actors: () => readonly DiagnosticActor[];
-}
-
-/*
-================
-DiagnosticActor
-
-One presented actor as state.json carries it: gid, kind, name and the
-pose the client drew, so a pose complaint (a ground item or a pet
-reported sunk, #2997) can be checked against the surface at its own XZ
-instead of parked for want of a capture. Staff diagnostics only: the
-shared archive (archive.ts) selects its state.json fields by name and
-never selects actors, so names stay out of it.
-================
-*/
-export interface DiagnosticActor {
-	readonly gid: number;
-	readonly kind: string;
-	readonly name: string;
-	readonly region: string;
-	readonly x: number;
-	readonly y: number;
-	readonly z: number;
-}
-
-// How many actor poses one report carries, nearest the local player
-// first: the actors a pose complaint is about stand next to the
-// reporter, and the bound keeps state.json small next to the replay.
-const MAX_DIAGNOSTIC_ACTORS = 512;
-
-/*
-================
-diagnosticActors
-
-The presented entities shaped for DiagnosticState: nearest the local
-pose first (presented order when there is no local pose), capped at
-MAX_DIAGNOSTIC_ACTORS, coordinates at millimetre precision so a
-partial sink of well under a unit survives the rounding.
-================
-*/
-export function diagnosticActors(
-	entities: readonly import("@/engine/contracts/world").EntityState[],
-	local: { readonly x: number; readonly z: number; } | null | undefined
-): DiagnosticActor[] {
-	const ordered = [ ...entities ];
-	if ( local ) {
-		ordered.sort( ( a, b ) =>
-			((a.x - local.x) ** 2 + (a.z - local.z) ** 2) - ((b.x - local.x) ** 2 + (b.z - local.z) ** 2)
-		);
-	}
-	return ordered.slice( 0, MAX_DIAGNOSTIC_ACTORS ).map( entity => ({
-		gid: entity.gid,
-		kind: entity.kind,
-		name: entity.name,
-		region: "0x" + entity.regionId.toString( 16 ).toUpperCase(),
-		x: +entity.x.toFixed( 3 ),
-		y: +entity.y.toFixed( 3 ),
-		z: +entity.z.toFixed( 3 )
-	}) );
 }
 
 /*
@@ -668,6 +604,9 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 			events: timelineEvents( journal.since( fromMs ), zeroMs )
 		};
 		const current = options.state();
+		// Compact COS rows before the size omit: fat cosRecords inventories
+		// are often dropped, and a pet report then has no pet (#4222).
+		const companions = diagnosticCompanions( current.gameplay?.cosRecords );
 		const gameplay: Record<string, unknown> = {};
 		for ( const [key, value] of Object.entries( current.gameplay ?? {} ) ) {
 			const text = json( value );
@@ -680,6 +619,7 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 			target: current.target ?? null,
 			entities: current.entities,
 			actors: current.actors(),
+			companions,
 			gameplay
 		};
 		return {

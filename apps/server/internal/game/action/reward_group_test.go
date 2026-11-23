@@ -246,11 +246,10 @@ func TestPetBurstKillCreditsNoQuest(t *testing.T) {
 		}
 		row := rt.deps.SkillData().(staticSkillSource)[2]
 		snapshot := rt.characterSnapshot(testDivision, c)
-		commit := rt.commitCreditedMonsterHit
-		if companion {
-			commit = rt.commitCompanionCreditedMonsterHit
-		}
-		hit, ok := commit(testDivision, c, snapshot, row, mob, combat.Result{Damage: 50, ResultFlags: 1}, "test-kill", clock.NowMs())
+		hit, ok := rt.commitCredited(creditedHitRequest{
+			division: testDivision, c: c, snapshot: snapshot, row: row, target: mob,
+			formula: combat.Result{Damage: 50, ResultFlags: 1}, reason: "test-kill", now: clock.NowMs(), companion: companion,
+		})
 		if !ok || !hit.impacts[0].Fatal {
 			t.Fatalf("companion=%v: the kill did not commit", companion)
 		}

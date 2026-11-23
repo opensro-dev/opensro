@@ -55,7 +55,9 @@ func (rt *Runtime) arenaReward(run *sookArenaRun, c *enterworld.Character, stage
 	}
 	if index%12 == 1 && rt.AttackPetExpansion {
 		degree := min(9, max(1, (int(level)+7)/8))
-		if parent, found := items.ItemRefByCodename(parent); found && parent != nil {
+		if d10 := companion.D.Gear[9]; level >= d10.MinPetLevel {
+			degree = d10.Degree
+		} else if parent, found := items.ItemRefByCodename(parent); found && parent != nil {
 			degree = min(9, max(1, (int(parent.NativeFields.Get("itemClass"))-1)/3+1))
 		}
 		g := companion.D.Gear[degree-1]

@@ -40,8 +40,8 @@ CaveWakeBlocks square around it.
 */
 func TestTombFloor3ArrivalWakesItsBlockSquare(t *testing.T) {
 	tier.Long(t, "Floor 3 of the Ch'in Tomb wakes one block square per arrival on the real cave geometry")
-	template, _ := floor3Template(t, false)
-	s, v := fillFloor3State(t, template)
+	template, _ := floorTemplate(t, tombFloor3Region, false)
+	s, v := fillFloorState(t, template)
 	t.Cleanup(worldgeom.InstallDungeonMessageGrids(v.DungeonMessageGrids()))
 
 	perBlock := make(map[[2]int]int)

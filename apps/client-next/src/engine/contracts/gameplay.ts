@@ -686,6 +686,8 @@ export interface CosRecord {
 	readonly level?: number;
 	readonly satiety?: number;
 	readonly commandMode?: number;
+	// The GID the owner last ordered this attack pet onto (0x769E tag 2; #4222).
+	readonly assistTarget?: number;
 	readonly name?: string;
 	readonly inventorySlot?: number;
 }

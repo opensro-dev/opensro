@@ -30,6 +30,7 @@ import {
 } from "@/engine/foundation/animation/sound-selectors";
 import { trimToEffectBudget } from "@/engine/foundation/animation/effect-room";
 import {
+	petGearChainDelay,
 	WOLF_EFFECT_MAX_PARTS,
 	WOLF_EFFECT_SECONDS,
 	wolfEffectSound,
@@ -3959,7 +3960,7 @@ export function createCharacterEffects(
 					const action = entity.emote?.action ?? 0;
 					if (
 						!(entity.kind === "cos" && action >= 1 && action <= 6) && !(action >= 0xf0 && action <= 0xf4) &&
-						!(action >= 0xd0 && action <= 0xda) && !(entity.kind === "cos" && action >= 34 && action <= 36)
+						!(action >= 0xd0 && action <= 0xde) && !(entity.kind === "cos" && action >= 34 && action <= 36)
 					) {
 						continue;
 					}
@@ -3986,7 +3987,7 @@ export function createCharacterEffects(
 					const elapsed = Math.max( 0, now - skill.startedAt );
 					const penguinCasting = skill.action >= 34 && skill.action <= 36;
 					const frost = (skill.action >= 0xd0 && skill.action <= 0xd6) || penguinCasting;
-					const gear = skill.action >= 0xd7 && skill.action <= 0xda;
+					const gear = skill.action >= 0xd7 && skill.action <= 0xde;
 					const lifetime = skill.action >= 0xd3 && skill.action <= 0xd5 ?
 						PENGUIN_BLIZZARD_SECONDS :
 						penguinCasting ?
@@ -4001,6 +4002,7 @@ export function createCharacterEffects(
 						continue;
 					}
 					const parts = frost ? [] : wolfEffectParts( skill.action );
+					const chainDelay = petGearChainDelay( skill.action );
 					const kind = penguinCasting ? "follow" : skill.action >= 0xd0 && skill.action <= 0xd6 ?
 						"victim" :
 						wolfEffectKind( skill.action );
@@ -4039,6 +4041,18 @@ export function createCharacterEffects(
 						}
 						continue;
 					}
+					if ( chainDelay !== undefined && elapsed >= chainDelay && elapsed < chainDelay + .4 ) {
+						const strength = 1 - (elapsed - chainDelay) / .4;
+						roarAppearances.set( gid, {
+							pointLight: {
+								pose: { ...pose, y: pose.y + 12 },
+								ambient: [ .15 * strength, .35 * strength, .8 * strength ],
+								diffuse: [ .25 * strength, .6 * strength, 1.5 * strength ],
+								range: 70,
+								attenuation: .32
+							}
+						} );
+					}
 					// A short blood-red flare at the strike, a slower one for the howl.
 					const glow = kind === "howl" ?
 						Math.max( 0, Math.sin( Math.PI * Math.min( 1, elapsed / 1.4 ) ) ) :
@@ -4070,6 +4084,7 @@ export function createCharacterEffects(
 							time: age,
 							loop: false,
 							scale: part.scale ?? 1,
+							effectEntity: true,
 							pickable: false,
 							pose: {
 								regionId: at.regionId,

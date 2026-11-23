@@ -36,6 +36,8 @@ func (game *gameplayPlane) installSessionLifecycle(hub *transport.Hub, authority
 	hub.SetStoreLockMetrics(func() any { return authorityStore.LockTiming() })
 	// Attack pet fights that ended on a dead or departed target (petdiagnostics.go).
 	hub.SetPetCombatMetrics(game.items.PetCombatCounters)
+	// DiagnosticRefusal reasons a request returned (register.go, #4222).
+	hub.SetDiagnosticRefusalMetrics(game.items.DiagnosticRefusalCounters)
 	// Players a non-walk path placed inside a closed object (placementguard.go).
 	hub.SetPlacementMetrics(game.items.PlacementCounters)
 	game.deps.LockPublication = game.items.LockPublication
