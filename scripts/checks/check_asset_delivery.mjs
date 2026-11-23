@@ -36,19 +36,34 @@ const RUNTIME_EFFECT_CATALOGS = [
 const index = JSON.parse( await readFile( path.join( publicRoot, "assets/packs/manifest.json" ), "utf8" ) );
 validateAssetDelivery( index );
 await validatePackedFontAtlases( index, publicRoot );
+const published = new Set( index.assets.map( e => e.path.toLowerCase() ) );
+
+/*
+================
+delivered
+
+Whether the packs deliver a path the way the worker asks for it: the member
+itself, or for a .json its .json.gz member, which the worker decompresses
+(packs.ts, the pathname + ".gz" fallback). Effect programs publish gzip only.
+================
+*/
+function delivered( file ) {
+	const key = file.toLowerCase();
+	return published.has( key ) || (key.endsWith( ".json" ) && published.has( key + ".gz" ));
+}
+
 // Effect records are runtime inputs, including the named table loaded on the
 // first item/cure event. Loose files are not evidence of worker delivery.
 for ( const catalog of RUNTIME_EFFECT_CATALOGS ) {
-	if ( !index.assets.some( e => e.path === catalog || e.path === catalog + ".gz" ) ) {
+	if ( !delivered( catalog ) ) {
 		throw Error( "Missing runtime effect catalog in asset publication: " + catalog );
 	}
 }
 // The worker reads one effect file and its meshes per effect (#3951): every
 // file the effect index names must be a published member.
-const published = new Set( index.assets.map( e => e.path.toLowerCase() ) );
 const effectIndex = JSON.parse( readPublishedAssetBytesSync( EFFECT_PROGRAM_INDEX, publicRoot ).toString( "utf8" ) );
 for ( const file of effectProgramIndexFiles( effectIndex ) ) {
-	if ( !published.has( file.toLowerCase() ) ) {
+	if ( !delivered( file ) ) {
 		throw Error( "Missing effect program file in asset publication: " + file );
 	}
 }
