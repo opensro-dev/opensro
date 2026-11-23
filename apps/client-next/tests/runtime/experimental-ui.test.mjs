@@ -20,6 +20,9 @@ const { panelCloseId } = await import( "../../src/engine/foundation/ui/panels.ts
 const SCALE_PREFIX = "experimental-render-scale:";
 const { EXPERIMENTAL_TABS, experimentalRows } = await import( "../../src/engine/runtime/ui/hud/experimental-hud.ts" );
 const ROW_IDS = new Set( EXPERIMENTAL_TABS.flatMap( experimentalRows ).map( row => row.id ) );
+// The Graphics tab's last row, where its list ends (read, not named, so a
+// dropped or added row does not break the scroll tests).
+const GRAPHICS_LAST_ROW = defined( experimentalRows( EXPERIMENTAL_TABS[0] ).at( -1 ) ).id;
 const SETTLE_STEPS = 12;
 const STEP_MS = 100;
 
@@ -323,8 +326,10 @@ test("the five filter kinds are dimmed while the filter is off and still toggle"
 			const row = defined( view.controls.find( control => control.id === "experimental-pet-filter-gold" ) );
 			return defined(
 				f.scenes.at( -1 ).quads.find( quad =>
+					// Two rows share a line: the box is inside the row both ways.
 					quad.texture.includes( "com_checkbutton_" ) && quad.rect[1] >= row.rect[1] &&
-					quad.rect[1] < row.rect[1] + row.rect[3]
+					quad.rect[1] < row.rect[1] + row.rect[3] && quad.rect[0] >= row.rect[0] &&
+					quad.rect[0] < row.rect[0] + row.rect[2]
 				)
 			);
 		};
@@ -368,7 +373,7 @@ test("every wheel notch moves the open list by one row", () => {
 		const seen = [ firstRow( view ) ];
 		for (
 			let notch = 0;
-			notch < 40 && !view.controls.some( c => c.id === "experimental-dungeon-character-pvs" );
+			notch < 40 && !view.controls.some( c => c.id === GRAPHICS_LAST_ROW );
 			notch++
 		) {
 			view = f.wheel( 1 );
@@ -395,7 +400,7 @@ test("the arrows scroll and stop at the ends", () => {
 		let view = top;
 		for ( let press = 0; press < 30; press++ ) view = f.activate( "experimental-scroll-down" );
 		// The list ends on its last row, with nothing past it.
-		assert.equal( lastRow( view ), "experimental-dungeon-character-pvs" );
+		assert.equal( lastRow( view ), GRAPHICS_LAST_ROW );
 	} finally {
 		f.dispose();
 	}
@@ -405,7 +410,7 @@ test("dragging the thumb to the bottom shows the last row", () => {
 	const f = fixture();
 	try {
 		f.activate( "open-window:Experimental" );
-		assert.equal( lastRow( f.drag( "experimental-scroll-thumb", 1000 ) ), "experimental-dungeon-character-pvs" );
+		assert.equal( lastRow( f.drag( "experimental-scroll-thumb", 1000 ) ), GRAPHICS_LAST_ROW );
 		assert.ok(
 			f.drag( "experimental-scroll-thumb", -1000 ).controls.some( control => control.id === SCALE_PREFIX + "100" )
 		);

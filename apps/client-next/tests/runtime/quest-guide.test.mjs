@@ -16,11 +16,13 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { readdirSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { questGuideRecords } from "../../../../scripts/build/shared/questGuideRecords.mjs";
 import { completeGuideTitles, GUIDE_TITLE_COMPLETIONS } from "../../../../scripts/build/shared/textResources.mjs";
 import { readLocalizedTextDataRowsSync } from "../../../../scripts/build/shared/textDataIo.mjs";
 import { textDataDir } from "../../../../scripts/build/shared/resourceIo.mjs";
+import { extractedRoot } from "../../../../scripts/build/world/paths.mjs";
 import path from "node:path";
 
 const { decodeQuestGuide, questGuideRows } = await import(
@@ -49,13 +51,37 @@ function catalog( records ) {
 		]
 	};
 }
+/*
+================
+importedQuests
+
+The quest symbols later-world imports added to questdata, read from each
+enabled import's marker in the extraction (the Roc's MEETROC and ARCHEMY
+chain, roc_import.py step 3c). The native capture predates them, so the
+guide equals the capture plus exactly these.
+================
+*/
+function importedQuests() {
+	const symbols = new Set();
+	for ( const name of readdirSync( extractedRoot ) ) {
+		if ( !/^\.opensro-.+\.json$/.test( name ) ) {
+			continue;
+		}
+		const marker = JSON.parse( readFileSync( path.join( extractedRoot, name ), "utf8" ) );
+		if ( marker.enabled === true && Array.isArray( marker.quests ) ) {
+			for ( const symbol of marker.quests ) symbols.add( symbol );
+		}
+	}
+	return symbols;
+}
 const children = rows => rows.filter( r => r.depth === 1 );
 
 test("raw guide projection matches native capture; published captions apply explicit localization corrections", async () => {
 	const native = JSON.parse( await readFile( "tests/fixtures/quest-guide-retail.json", "utf8" ) );
 	const data = JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/data/questData.json", "utf8" ) );
 	assert.equal( native.binarySha256, "375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a" );
-	assert.deepEqual( data.guideRecords, native.records );
+	const imported = importedQuests();
+	assert.deepEqual( data.guideRecords.filter( record => !imported.has( record.symbol ) ), native.records );
 	// This oracle comes from ReadProcessMemory of the hash-bound original client.
 	// Never overwrite it with hashes of our generated/localized product output.
 	const raw = {};
