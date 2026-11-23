@@ -439,6 +439,7 @@ type divisionTickState struct {
 	npcScope            NpcScopeBuffer
 	shownPeers          map[string]map[uint32]bool
 	peerPaths           map[string]map[uint32]peerPath
+	peerResync          map[uint32]peerResyncState
 	peerReferences      map[string]map[uint32]bool
 	peerVisibilityKeys  []peerVisibilityKey
 	peerVisibilityValid bool
@@ -939,6 +940,10 @@ func (t *Ticker) runSessionLegs(state *divisionTickState, session SessionSnapsho
 
 	// Legs 2+3: the other-player movement broadcast (peer_motion.go).
 	t.runPeerMovement(state, session, nowMs)
+
+	// Leg 4: the 5 s position resync for this session's own character
+	// (position_resync.go).
+	t.runPeerResync(state, session, nowMs)
 }
 
 /*

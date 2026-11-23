@@ -23,6 +23,7 @@ foundation/gameplay/arena-chest.ts.
 
 // 0x3xxx: one-way notices (mostly server pushes; 0x3012 rides client to server)
 export const GAME_READY_OPCODE = 0x3012;
+export const OBJECT_POSITION_UPDATE_OPCODE = 0x3028;
 export const EVENT_NOTICE_OPCODE = 0x3058;
 export const FLAG_WAR_EVENT_OPCODE = 0x30a9;
 export const POINTS_UPDATE_OPCODE = 0x30b3;
