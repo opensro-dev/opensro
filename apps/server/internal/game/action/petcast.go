@@ -67,9 +67,7 @@ func (rt *Runtime) cancelPetCombat(key petOwnerKey, state *petSession, now int64
 	if state == nil || state.combat == nil {
 		return
 	}
-	if token := state.combat.castToken; token != 0 {
-		rt.queueSkillFinalize(key.division, fmt.Sprintf("@pet:%d", key.gid), key.gid, now, wire.SkillCastFinalizeFrame(token))
-	}
+	rt.closePetCast(key, state.combat, now)
 	state.combat = nil
 	// Leaving BATTLE is a state change.
 	resetPetStuck(state)
@@ -93,7 +91,19 @@ func (rt *Runtime) pausePetCombat(key petOwnerKey, state *petSession, now int64)
 	if state == nil || state.combat == nil {
 		return
 	}
-	intent := state.combat
+	rt.closePetCast(key, state.combat, now)
+}
+
+/*
+================
+closePetCast
+
+Closes the intent's prepared cast once, if one is open, and clears it
+from the intent: the one finalize both leaving BATTLE and a paused
+fight send.
+================
+*/
+func (rt *Runtime) closePetCast(key petOwnerKey, intent *petCombatIntent, now int64) {
 	if intent.castToken == 0 {
 		return
 	}
