@@ -19,29 +19,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from checkout_root import resolve_main_checkout
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-
-# ================
-# _resolve_main_checkout
-#
-# The main checkout: this one, or the one a linked worktree's .git file
-# names ("gitdir: <main>/.git/worktrees/<name>"); a main checkout's .git is
-# a directory.
-# ================
-def _resolve_main_checkout(checkout: Path) -> Path:
-	dot_git = checkout / ".git"
-	if not dot_git.is_file():
-		return checkout
-	for line in dot_git.read_text(encoding="utf-8").splitlines():
-		if line.startswith("gitdir:"):
-			worktree_git_dir = (checkout / line[len("gitdir:"):].strip()).resolve()
-			# parents: [0] .git/worktrees, [1] .git, [2] main checkout
-			return worktree_git_dir.parents[2]
-	raise RuntimeError(f"Unreadable worktree link {dot_git}")
-
-
-MAIN_CHECKOUT_ROOT = _resolve_main_checkout(REPO_ROOT)
+# The main checkout rule lives in checkout_root.py, the side-effect-free
+# module revtool resolves through too (#4033).
+MAIN_CHECKOUT_ROOT = resolve_main_checkout(REPO_ROOT)
 
 # The trees a worktree must never hold itself, each exempt only while its
 # own override names another tree (scripts/lib/generatedRoot.mjs).

@@ -133,12 +133,15 @@ The rizin backend and the live commands use the venv from the quick
 start above (`.state/re-venv`: pefile, capstone, rzpipe 0.6.2).
 
 Per-machine state (overlay DB, JSONL ledger, evidence lock, derived
-evidence tree) lives in `.state/revtool/` inside the repo and is never
-committed. Every path resolves through `revtool_paths`:
+evidence tree) lives in `.state/revtool/` inside the main checkout and
+is never committed: run from a linked worktree, revtool resolves there
+(the worktree rule's one owner is `scripts/checkout_root.py`, which
+`sro_paths` resolves through too). Every path resolves through
+`revtool_paths`:
 
 | override | default |
 | --- | --- |
-| `REVTOOL_DATA_DIR` | `<repo>/.state/revtool` |
+| `REVTOOL_DATA_DIR` | `<main checkout>/.state/revtool` |
 | `REVTOOL_DB` / `--db` | `<data>/revtool.db` |
 | `REVTOOL_DUMP` / `--dump` | `<data>/SRO_Client_psuedo.txt` |
 | `REVTOOL_BINARY` / `--binary` | the workspace's `SRO_Client.exe` |

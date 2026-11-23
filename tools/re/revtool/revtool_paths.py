@@ -18,7 +18,7 @@ overrides; nothing names a drive letter.
 
 Layout:
   repo root          three parents up from this file (tools/re/revtool)
-  per-machine data   <repo>/.state/revtool (REVTOOL_DATA_DIR overrides)
+  per-machine data   <main checkout>/.state/revtool (REVTOOL_DATA_DIR overrides)
                      the overlay DB, JSONL ledger, evidence lock and
                      the derived-evidence tree live here; .state is
                      ignored scratch, rebuilt by the producers
@@ -32,6 +32,8 @@ Layout:
 """
 
 import os
+import sys
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOL_DIR = HERE
@@ -41,8 +43,23 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 REBUILD_ROOT = REPO_ROOT
 WORKSPACE_ROOT = os.path.dirname(REPO_ROOT)
 
+# The worktree rule has one owner, scripts/checkout_root.py, which
+# sro_paths resolves through too. Importing it takes the rule only: the
+# module is side-effect free, unlike sro_paths (which resolves the game
+# and generated roots and refuses worktree copies). A revtool copied out
+# of the repo has no scripts/ beside it and keeps the old default.
+_SCRIPTS_DIR = os.path.join(REPO_ROOT, "scripts")
+if os.path.isdir(_SCRIPTS_DIR) and _SCRIPTS_DIR not in sys.path:
+	sys.path.insert(0, _SCRIPTS_DIR)
+try:
+	from checkout_root import resolve_main_checkout
+
+	MAIN_CHECKOUT_ROOT = str(resolve_main_checkout(Path(REPO_ROOT)))
+except ImportError:
+	MAIN_CHECKOUT_ROOT = REPO_ROOT
+
 DATA_DIR = os.environ.get("REVTOOL_DATA_DIR") or os.path.join(
-    REPO_ROOT, ".state", "revtool")
+    MAIN_CHECKOUT_ROOT, ".state", "revtool")
 RECONSTRUCT_DIR = DATA_DIR
 EVIDENCE_DIR = os.path.join(DATA_DIR, "evidence")
 EVIDENCE_CURRENT = os.path.join(EVIDENCE_DIR, "current")
