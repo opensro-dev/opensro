@@ -748,6 +748,7 @@ import {
 	visibleTitleFormat,
 	withoutBoardPass
 } from "@/engine/foundation/ui/overhead-layout";
+import { staffBoardName } from "@/engine/foundation/gameplay/staff-roster";
 import { vitalWarning } from "@/engine/foundation/ui/vital-warning";
 import {
 	beginnerMarkShown,
@@ -13473,6 +13474,8 @@ export function createUi( ports: UiPorts ) {
 					key.push( experimental.state().saved.eventChatTab );
 					// Port-only (#3358): the contributor roster retags lines.
 					key.push( ...(game?.contributorTitles ?? []) );
+					// Port-only (staff-roster.ts): a grant or role edit retags lines.
+					for ( const entry of game?.staffRoster ?? [] ) key.push( entry.name, entry.tag, entry.chatColor );
 					// Port-only item links: the row and the input's labels change the layout.
 					key.push( chatLinksOn() );
 					key.push( ...chatLinkHud.labels( "chat-text" ) );
@@ -13494,6 +13497,7 @@ export function createUi( ports: UiPorts ) {
 							chatLayout( {
 								chatTimestamps: experimental.state().saved.chatTimestamps,
 								contributorTitles: game?.contributorTitles,
+								staffRoster: game?.staffRoster,
 								noticeLinks: experimental.state().saved.noticeLinks,
 								chatItemLinks: chatLinksOn(),
 								inputLabels: chatLinkHud.labels( "chat-text" ),
@@ -23762,13 +23766,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						tierTitleWidth = tierTitle ? text.run( tierTitle, 2 ).width : 0,
 						tierLead = tierTitleWidth ? (title ? TITLE_NAME_GAP : 0) + tierTitleWidth : 0;
 					if ( named && beginnerMarkShown( entity, options ) ) {
-						const name = titledDisplayName(
-								boardText(
-									entity,
-									entity.boardName ?? entity.name ??
-										(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
+						const name = staffBoardName(
+								entity,
+								titledDisplayName(
+									boardText(
+										entity,
+										entity.boardName ?? entity.name ??
+											(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
+									),
+									visibleTitleFormat( entity, game?.localGid, options )
 								),
-								visibleTitleFormat( entity, game?.localGid, options )
+								game?.staffRoster
 							),
 							width = text.run( name, selected ? 2 : 0 ).width,
 							height = text.boardHeight();
@@ -23791,13 +23799,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						}
 					}
 					if ( !named ) continue;
-					const name = titledDisplayName(
-							boardText(
-								entity,
-								entity.boardName ?? entity.name ??
-									(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
+					const name = staffBoardName(
+							entity,
+							titledDisplayName(
+								boardText(
+									entity,
+									entity.boardName ?? entity.name ??
+										(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
+								),
+								visibleTitleFormat( entity, game?.localGid, options )
 							),
-							visibleTitleFormat( entity, game?.localGid, options )
+							game?.staffRoster
 						),
 						width = text.run( name, selected ? 2 : 0 ).width,
 						height = text.boardHeight();

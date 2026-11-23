@@ -854,6 +854,10 @@ export interface GameplayState extends MoverPublication {
 	// Port-only (#3358): the shown Contributor character names
 	// (contributor-titles.ts), under SRO_CONTRIBUTOR_TITLES.
 	readonly contributorTitles?: readonly string[];
+	// Port-only (staff-roster.ts): the staff roster and this character's
+	// capability bits; absent or empty on a shard without staff.
+	readonly staffRoster?: readonly import("@/engine/foundation/gameplay/staff-roster").StaffRosterEntry[];
+	readonly staffCapabilities?: number;
 	// Port-only damage ranking of the latest unique kill (unique-rank.ts).
 	readonly uniqueDamageRank?: import("./unique-rank").UniqueDamageRank | null;
 	// Port-only job honor board and own standing (job-honor.ts), under SRO_JOB_HONOR.

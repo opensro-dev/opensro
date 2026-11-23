@@ -39,6 +39,7 @@ import (
 	"opensro.online/server/internal/game/social/crest"
 	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/union"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/optionalteleport"
 	"opensro.online/server/internal/game/world/simulation"
@@ -940,6 +941,10 @@ type Runtime struct {
 	// burst after the authority door closes. Pending pickups use captured
 	// delivery when configured; detached runtimes retain this actor fallback.
 	PushCharacterFrames func(divisionID, characterName string, frames []wire.Frame)
+	// StaffRoster is the division's staff tags and colours (the staff
+	// book plus the host allowlist; staff.go, port-only). Nil sends no
+	// roster, the native behaviour.
+	StaffRoster func(divisionID string) []staff.RosterEntry
 	// PushGuildFrames delivers one member's guild frames: its 0x3B29 deltas
 	// only to a session holding guildID's block, every other frame as
 	// PushCharacterFrames would (guild/baseline.go). Nil falls back to

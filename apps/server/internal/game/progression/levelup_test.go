@@ -19,6 +19,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 )
 
 /*
@@ -661,8 +662,17 @@ func TestHandleDevGrantExpDecodesAndRefusesSilently(t *testing.T) {
 		}
 	}
 
+	// A GM whose staff grant lacks set_level is refused like a player.
 	character := levelupTestCharacter()
 	character.GMPrivilege = true
+	character.GMCapabilities = uint32(staff.All &^ staff.SetLevel)
+	if result := newTestRuntime(character).HandleDevGrantExp(testDivision, character, []byte{50, 0, 0, 0, 0, 0, 0, 0}); len(result.Frames) != 0 || character.Experience != nil {
+		t.Fatal("a GM without set_level granted EXP")
+	}
+
+	character = levelupTestCharacter()
+	character.GMPrivilege = true
+	character.GMCapabilities = uint32(staff.SetLevel)
 	rt := newTestRuntime(character)
 	// [exp=50][skillExp=0], little-endian.
 	result := rt.HandleDevGrantExp(testDivision, character, []byte{50, 0, 0, 0, 0, 0, 0, 0})

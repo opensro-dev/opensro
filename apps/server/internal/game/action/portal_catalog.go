@@ -215,8 +215,10 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 		}
 		// Port-only, not native: the Baghdad dungeon's gates exist only
 		// while SRO_BAGHDAD_DUNGEON is on (#4134); off, they and every
-		// link to them are skipped, as the Pharaoh Temple's are.
-		if !monster.BaghdadDungeonEnabled() && arabia.IsDungeonWorld(int(world)) {
+		// link to them are skipped, as the Pharaoh Temple's are. The
+		// hideout's field entry names the field's world, as the source
+		// authored it, so it hides by its code beside them.
+		if !monster.BaghdadDungeonEnabled() && (arabia.IsDungeonWorld(int(world)) || arabia.HidesGateCode(r[2])) {
 			hiddenIDs[id] = true
 			hiddenCodes[r[2]] = true
 			continue

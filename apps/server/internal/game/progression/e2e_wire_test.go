@@ -190,6 +190,18 @@ func startProgressionServer(t *testing.T, dir string, seed *enterworld.Character
 			t.Fatalf("CreateCharacter: %v", err)
 		}
 	}
+	// Mirror the GameWorld boot (wiring_staff.go openStaffSources): the
+	// reconcile projects staff capabilities, which are never persisted, so
+	// every reopen re-derives them. The test host allowlists its seeded GMs.
+	var gms []store.GMIdentity
+	authority.ReadCharacters(e2eDivision, func(characters []*enterworld.Character) {
+		for _, c := range characters {
+			if c.GMPrivilege {
+				gms = append(gms, store.GMIdentity{DivisionID: e2eDivision, CharacterName: c.Name, Capabilities: ^uint32(0)})
+			}
+		}
+	})
+	authority.ReconcileGMPrivilege(gms)
 
 	// Mirror server.go: ONE deps pointer, with the store-owned collaborators
 	// and the authority tables attached to the shared pointer before Register

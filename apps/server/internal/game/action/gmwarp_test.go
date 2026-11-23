@@ -7,6 +7,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/simulation"
 	"testing"
 )
@@ -39,7 +40,7 @@ func TestGMWarpAuthorityAndReentry(t *testing.T) {
 	if missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}) != before {
 		t.Fatal("nonGM mutated position")
 	}
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	rt.Selected.Set(testDivision, c.Name, 999)
 	hp, mp := *c.CurrentHP, *c.CurrentMP
 	out := gmcommand.HandleGmCommand(deps, nil, testDivision, c, warpFrame(), rt)
@@ -81,7 +82,7 @@ ResolveGMWarpDestination and then rewritten by ReentryPackets.
 */
 func TestGMWarpSurfaceStandAndStrandedAgreement(t *testing.T) {
 	c := rebirthTestCharacter(20, 100)
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	rt, _ := newTestRuntime(c, testItems())
 	deps := rt.deps.(*enterworld.Deps)
 	deps.CanEnterWorldRegion = func(*enterworld.Character, uint16) bool { return true }
@@ -113,7 +114,7 @@ func TestGMWarpRefusals(t *testing.T) {
 	for _, kind := range []string{"denied-region", "missing-terrain", "stranded", "pet", "dead", "malformed", "nonfinite", "out-of-region"} {
 		t.Run(kind, func(t *testing.T) {
 			c := rebirthTestCharacter(20, 100)
-			c.GMPrivilege = true
+			c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 			rt, _ := newTestRuntime(c, testItems())
 			deps := rt.deps.(*enterworld.Deps)
 			deps.CanEnterWorldRegion = func(*enterworld.Character, uint16) bool { return kind != "denied-region" }
@@ -151,7 +152,7 @@ type failedWarpEntry struct{ *enterworld.Deps }
 func (*failedWarpEntry) ReentryPackets(string, string) ([]enterworld.Packet, bool) { return nil, false }
 func TestGMWarpEntryFailureRestoresMovement(t *testing.T) {
 	c := rebirthTestCharacter(20, 100)
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	rt, clock := newTestRuntime(c, testItems())
 	installMidMove(rt, c, clock)
 	deps := rt.deps.(*enterworld.Deps)

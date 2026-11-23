@@ -18,6 +18,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -43,7 +44,7 @@ type gmTeleportFixture struct {
 func newGMTeleportFixture(t *testing.T) *gmTeleportFixture {
 	t.Helper()
 	gm := rebirthTestCharacter(20, 100)
-	gm.GMPrivilege = true
+	gm.GMPrivilege, gm.GMCapabilities = true, uint32(staff.All)
 	target := rebirthTestCharacter(20, 100)
 	target.ID, target.Name = 4, "Target"
 	rt, clock := newTestRuntime(gm, testItems())
