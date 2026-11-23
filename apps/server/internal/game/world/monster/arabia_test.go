@@ -110,10 +110,10 @@ func TestArabiaRefusesOutsideItsWindow(t *testing.T) {
 ================
 TestArabiaWorlds
 
-The dungeon's nests join GROUP_ARABIA_DUNGEON; a row naming any other
-world (the boss lair's 113, Petra's 114, the garden's 115 - none of
-them registered) is refused, as is a codename the installed references
-do not carry.
+The dungeon's nests join GROUP_ARABIA_DUNGEON and the boss lair's
+GROUP_ARABIA_FIELD_02_BOSS; a row naming any other world (Petra's
+114, the garden's 115 - neither registered) is refused, as is a
+codename the installed references do not carry.
 ================
 */
 func TestArabiaWorlds(t *testing.T) {
@@ -125,7 +125,14 @@ func TestArabiaWorlds(t *testing.T) {
 	if nest := got.Nests[1]; nest.WorldCode != "GROUP_ARABIA_DUNGEON" || nest.RegionID != 23378 {
 		t.Fatalf("dungeon nest joined %+v", nest)
 	}
-	for _, world := range []int{0, 57, 113, 114, 115} {
+	got, err = appendArabiaData(template, arabiaWorldSource(t, "MOB_ARABIA_KARKADANN", 32793, arabia.HideoutWorldID), true, true)
+	if err != nil {
+		t.Fatalf("boss lair nest refused: %v", err)
+	}
+	if nest := got.Nests[1]; nest.WorldCode != "GROUP_ARABIA_FIELD_02_BOSS" || nest.RegionID != 32793 {
+		t.Fatalf("boss lair nest joined %+v", nest)
+	}
+	for _, world := range []int{0, 57, 114, 115} {
 		template := tombTemplate("MOB_AR_KOBOLD", 125, 0)
 		if _, err := appendArabiaData(template, arabiaWorldSource(t, "MOB_AR_KOBOLD", 21850, world), true, true); err == nil {
 			t.Fatalf("arabia row in world %d admitted", world)
@@ -237,6 +244,9 @@ func TestArabiaDungeonFollowsItsOwnSwitch(t *testing.T) {
 		{Codename: "MOB_AR_KOBOLD", NestID: 42022, WorldID: arabia.DungeonWorldID, RegionID: 23378,
 			X: -400, Y: 58, Z: -300, MaxCount: 1, Respawn: true, RespawnDelayMinSec: 60, RespawnDelayMaxSec: 120,
 			Controls: TacticsControls{SightRange: 100}},
+		{Codename: "MOB_AR_KOBOLD", NestID: 42023, WorldID: arabia.HideoutWorldID, RegionID: 32793,
+			X: 0, Y: 8, Z: 15, MaxCount: 1, Respawn: false,
+			Controls: TacticsControls{SightRange: 100}},
 	}}
 	data, err := json.Marshal(source)
 	if err != nil {
@@ -255,9 +265,9 @@ func TestArabiaDungeonFollowsItsOwnSwitch(t *testing.T) {
 		dungeon   bool
 		want      []string
 	}{
-		{"both on", true, true, []string{"INS_DEFAULT", "GROUP_ARABIA_DUNGEON"}},
+		{"both on", true, true, []string{"INS_DEFAULT", "GROUP_ARABIA_DUNGEON", "GROUP_ARABIA_FIELD_02_BOSS"}},
 		{"continent only", true, false, []string{"INS_DEFAULT"}},
-		{"dungeon only", false, true, []string{"GROUP_ARABIA_DUNGEON"}},
+		{"dungeon only", false, true, []string{"GROUP_ARABIA_DUNGEON", "GROUP_ARABIA_FIELD_02_BOSS"}},
 		{"both off", false, false, nil},
 	} {
 		template := tombTemplate("MOB_AR_KOBOLD", 125, 0)

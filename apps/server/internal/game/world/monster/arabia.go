@@ -115,6 +115,9 @@ func appendArabiaData(template Template, data []byte, continentEnabled, dungeonE
 			return !continentEnabled
 		},
 		WorldOf: arabiaWorldCode,
+		// The lair's region carries the dungeon bit the default
+		// nest rule refuses; the leaf owns which regions are its own.
+		Region: arabia.IsRegion,
 	})
 }
 

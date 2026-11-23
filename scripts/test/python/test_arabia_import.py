@@ -11,6 +11,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import arabia_gates
 import arabia_gates as gates
 import arabia_import as arabia
 import arabia_quest_items as quest_items
@@ -22,6 +23,7 @@ import skytemple_import
 import sro_pk2
 from test_skytemple_import import (
 	FakeClosure,
+	chained_folder,
 	character,
 	data_archive,
 	map_archive,
@@ -122,15 +124,20 @@ def gate_tables():
 		["1", "247", "GATE_ARABIA_DUNGEON_END", "40798", "SN_NPC_AR_DSTARTPORTAL", "23891", "959", "-236", "527", "0", "0", "0", "112"],
 		["1", "249", "GATE_BAGH_TO_ARABIA_DUNGEON", "40489", "SN_NPC_AR_KAREMPORTAL", "22106", "443", "-432", "1529", "0", "0", "0", "1"],
 		["1", "353", "GATE_TO_LAST_FIELD_IN_BAGHDAD", "43990", "SN_ZONE_22010", "22106", "1579", "-433", "1738", "0", "0", "0", "1"],
+		["1", "245", "GATE_MONG_TO_BOSS", "40796", "SN_STORE_MONGPORTAL", "18769", "961", "-341", "574", "0", "0", "0", "1"],
+		["1", "248", "GATE_BOSS_TO_MONG", "40799", "SN_STORE_BOSSPORTAL", "-32743", "0", "7", "360", "0", "0", "0", "113"],
 	] + [["1", identity, code, building_id, name, "22106", "1316", "-432", "832", "0", "0", "0", "1"]
 		for identity, code, building_id, name in CITY_GATES]
 	buildings = [
 		building("40797", "STORE_ARABIA_DUNGEON_START_GATE", "SN_STORE_ARABIA_DUNGEON_START_GATE", "23378", "1589", "-430", "1200"),
 		building("40798", "STORE_ARABIA_DUNGEON_END_GATE", "SN_STORE_ARABIA_DUNGEON_END_GATE", "23891", "1012", "-236", "606"),
+		building("40796", "STORE_MONG_TO_BOSS_GATE", "SN_STORE_MONG_TO_BOSS_GATE", "18769", "961", "-341", "574"),
+		building("40799", "STORE_BOSS_TO_MONG_GATE", "SN_STORE_BOSS_TO_MONG_GATE", "-32743", "0", "7", "360"),
 	] + [building(building_id, "STORE_AR_GATE" + code[7:], "SN_STORE_AR_GATE" + code[7:], "22106", "1224", "-432", "767")
 		for _identity, code, building_id, _name in CITY_GATES]
 	link = ["1", "249", "246", "0", "1", "1", "121", "999"] + ["0"] * 15
-	links = [link, ["1", "246", "249"] + link[3:], ["1", "247", "249"] + link[3:]]
+	links = [link, ["1", "246", "249"] + link[3:], ["1", "247", "249"] + link[3:],
+		["1", "245", "248"] + link[3:], ["1", "248", "245"] + link[3:]]
 	# The city network: every Portal to the other three, condition-free.
 	city_ids = [identity for identity, _code, _building, _name in CITY_GATES]
 	links += [["1", a, b] + ["0"] * 20 for a in city_ids for b in city_ids if a != b]
@@ -199,7 +206,7 @@ class ArabiaHelpersTest(unittest.TestCase):
 				with self.assertRaises(ValueError):
 					arabia.load_nests(path, REGION_IDS)
 
-		broken(lambda rows: rows[0].update({"WorldID": 113}))
+		broken(lambda rows: rows[0].update({"WorldID": 114}))
 		# An extraction from ISRO-R's active Tab_RefNest, its operator's
 		# tuning (#4149), or one that names no table.
 		for table in ("Tab_RefNest", None):
@@ -215,6 +222,28 @@ class ArabiaHelpersTest(unittest.TestCase):
 		broken(lambda rows: rows[0].update({"Codename": "MOB_SD_BASTET"}))
 		broken(lambda rows: rows[0]["Controls"].update({"Bogus": 1}))
 		broken(lambda rows: rows[0].update({"Hive": {"OverwriteMaxTotalCount": 0, "KeepMonsterCountType": 1}}))
+
+	# ================
+	# test_load_nests_projects_the_hideout_world
+	#
+	# World 113 (the Kalia hideout, region 32793) projects like the
+	# dungeon's world; a world with no nests in either source (114,
+	# Petra) still refuses.
+	# ================
+	def test_load_nests_projects_the_hideout_world(self):
+		data = extraction()
+		data["rows"].append(nest(16, "MOB_AR_TEST", 32793, world=113, continent="ARABIA_FIELD_02_BOSS"))
+		data["rows"].append(nest(17, "MOB_AR_TEST", 21325, world=114, continent="ARABIA_PETRA"))
+		with tempfile.TemporaryDirectory() as tmp:
+			path = Path(tmp) / "nests.json"
+			path.write_text(json.dumps(data))
+			with self.assertRaisesRegex(ValueError, "names world 114"):
+				arabia.load_nests(path, REGION_IDS | {32793})
+			data["rows"].pop()
+			path.write_text(json.dumps(data))
+			loaded = arabia.load_nests(path, REGION_IDS | {32793})
+		hideout = [row for row in loaded["monsters"] if row["NestID"] == 16]
+		self.assertEqual([(row["WorldID"], row["RegionID"]) for row in hideout], [(113, 32793)])
 
 	# ================
 	# test_npc_placements_union
@@ -296,6 +325,40 @@ class ArabiaHelpersTest(unittest.TestCase):
 			gates.prepare_gates(later, NATIVE_GATE_DATA, {"1"}, {"2094"})
 
 	# ================
+	# test_prepare_gates_hideout_chain
+	#
+	# The Kalia hideout's pair stands as the source authored it (the
+	# field gate in world 1, its exit in world 113 with the region
+	# spelled signed), linked both ways on the source's level-121
+	# condition, and only while the import stages the lair: the
+	# default preparation authors the chain exactly as before.
+	# ================
+	def test_prepare_gates_hideout_chain(self):
+		data, buildings, links = gate_tables()
+		later = {"teleportdata.txt": data, "teleportbuilding.txt": buildings,
+			"teleportlink.txt": links, "text": b""}
+		encoded, codes = gates.prepare_gates(later, NATIVE_GATE_DATA, {"1"}, {"2094"})
+		self.assertEqual(codes, gates.GATE_CODES)
+		self.assertNotIn("GATE_MONG_TO_BOSS",
+			{row[2] for row in tables.table_rows(encoded["teleportdata.txt"])})
+
+		encoded, codes = gates.prepare_gates(later, NATIVE_GATE_DATA, {"1"}, {"2094"}, hideout=True)
+		self.assertEqual(codes, gates.GATE_CODES + gates.HIDEOUT_GATES)
+		rows = {row[2]: row for row in tables.table_rows(encoded["teleportdata.txt"])}
+		self.assertEqual((rows["GATE_MONG_TO_BOSS"][12], rows["GATE_MONG_TO_BOSS"][5]), ("1", "18769"))
+		self.assertEqual((rows["GATE_BOSS_TO_MONG"][12], rows["GATE_BOSS_TO_MONG"][5]), ("113", "-32743"))
+		built = {row[2] for row in tables.table_rows(encoded["teleportbuilding.txt"])}
+		self.assertIn("STORE_MONG_TO_BOSS_GATE", built)
+		self.assertIn("STORE_BOSS_TO_MONG_GATE", built)
+		entry, exit_ = rows["GATE_MONG_TO_BOSS"][1], rows["GATE_BOSS_TO_MONG"][1]
+		link_rows = {(row[1], row[2]): row for row in tables.table_rows(encoded["teleportlink.txt"])}
+		self.assertEqual((link_rows[(entry, exit_)][6], link_rows[(exit_, entry)][6]), ("121", "121"))
+		# Nothing authored leads into the lair from the city network:
+		# the source's entry is a field gate, reached on foot.
+		jangan = rows["GATE_CH"][1]
+		self.assertFalse({pair for pair in link_rows if pair[1] == entry and pair[0] != exit_})
+
+	# ================
 	# test_prepare_gates_renumbers_on_collision
 	# ================
 	def test_prepare_gates_renumbers_on_collision(self):
@@ -333,10 +396,51 @@ def quest_item(code, identity, name_symbol="xxx"):
 	return row
 
 
+# ================
+# data_archive_nested
+#
+# The shared data_archive lays one folder level; the hideout's
+# dungeon tree nests three. The same builder, chained per folder.
+# ================
+def data_archive_nested(files):
+	from test_client_preparation import ArchiveBuilder
+	builder = ArchiveBuilder()
+	root = builder.folder([])
+	chains = {}
+	folders = {"": {}}
+	for name, raw in files.items():
+		parts = name.split("/")
+		for depth in range(1, len(parts)):
+			folders.setdefault("/".join(parts[:depth]), {})
+		folders["/".join(parts[:-1])][parts[-1]] = raw
+
+	def entries(path):
+		items = []
+		for name in sorted(folders[path]):
+			raw = folders[path][name]
+			if isinstance(raw, bytes):
+				items.append((2, name.encode("ascii"), *builder.add_payload(raw)))
+		for child in sorted(folders):
+			if child and child.rpartition("/")[0] == path:
+				items.append((1, child.rpartition("/")[2].encode("ascii"), offsets[child], 0))
+		return items
+
+	offsets = {}
+	for path in sorted(folders, key=lambda candidate: -candidate.count("/")):
+		if path:
+			offsets[path] = chained_folder(builder, entries(path), chains)
+	builder.blocks[root] = entries("")
+	return builder.build(chains)
+
+
 # A native extracted root, a variant output root and a v1.696 source
 # root in tmp, small but complete. Returns (native, output, source, nests).
+# hideout=True adds the Kalia hideout (region 32793, world 113) to the
+# regioncode and the nest extraction; its archive ground (the DOF and
+# the AINavData) stands in the source either way, so a plain build
+# proves the presence-only staging posture.
 # ================
-def build_trees(base):
+def build_trees(base, hideout=False):
 	native, output, source = base / "native", base / "output", base / "source"
 	text = arabia.TEXT_ROOT
 	native_buildings = [["1", "2094", "STORE_CH_GATE"] + ["0"] * 38 + ["25000", "0", "1254", "-6", "1374"] + ["0"] * 12]
@@ -425,7 +529,8 @@ def build_trees(base):
 			["50006", "21325", "13", "1", "23"]]),
 		"npcchat.txt": utf16([["1", "NPC_AR_TEST", "SN_NPC_AR_TEST_CHAT", "SN_NPC_AR_TEST_PS"],
 			["1", "NPC_NATIVE_NAMED", "SN_NATIVE_CHAT", "0"]]),
-		"regioncode.txt": utf16([["1", str(region), f"RN_ARABIA_{family}", ""] for region, family in REGIONS]),
+		"regioncode.txt": utf16([["1", str(region), f"RN_ARABIA_{family}", ""]
+			for region, family in REGIONS + ([(32793, "FIELD_02_BOSS")] if hideout else [])]),
 		# v1.696 shape: an index of shards, rows with a text id after the service cell.
 		"textzonename.txt": utf16([["TextZoneName_3000.txt"]]),
 		"textzonename_3000.txt": utf16([
@@ -439,6 +544,10 @@ def build_trees(base):
 			object_row("SN_MOB_ARABIA_UNIQUE", "Test Unique"),
 			object_row("SN_NPC_AR_TEST", "Test Arab"),
 			object_row("SN_NPC_AR_DSTARTPORTAL", "Baghdad Dungeon"),
+			object_row("SN_STORE_MONGPORTAL", "Boss Portal"),
+			object_row("SN_STORE_BOSSPORTAL", "Field Portal"),
+			object_row("SN_STORE_MONG_TO_BOSS_GATE", "Boss Portal"),
+			object_row("SN_STORE_BOSS_TO_MONG_GATE", "Field Portal"),
 		]),
 		"textquest_speech&name.txt": utf16([["TextQuest_Speech&Name_100.txt"]]),
 		"textquest_speech&name_100.txt": utf16([
@@ -484,10 +593,18 @@ def build_trees(base):
 	data_files = {f"navmesh/nv_{region:04x}.nvm": region_navmesh(*([TOWN_OBJECT] if region == TOWN_REGION else []))
 		for region, _family in REGIONS}
 	del data_files[f"navmesh/nv_{31734:04x}.nvm"]
-	(source / "Data.pk2").write_bytes(data_archive(data_files))
+	# The hideout's ground stands in the source archive whether or
+	# not the extraction carries its nests.
+	data_files["dungeon/arabia/bagh_mong/bagh_mong_boss.dof"] = b"dof-bytes"
+	data_files["navmesh/ainavdata_32793.dat"] = b"ainav-bytes"
+	(source / "Data.pk2").write_bytes(data_archive_nested(data_files))
 	(source / "Particles.pk2").write_bytes(data_archive({}))
+	nests_data = extraction()
+	if hideout:
+		nests_data["rows"].append(nest(16, "MOB_AR_TEST", 32793, world=113, continent="ARABIA_FIELD_02_BOSS"))
+		nests_data["worlds"]["113"] = {"CodeName": "GROUP_ARABIA_FIELD_02_BOSS", "Type": 0, "Regions": [32793]}
 	nests = base / "nests.json"
-	nests.write_text(json.dumps(extraction()))
+	nests.write_text(json.dumps(nests_data))
 	return native, output, source, nests
 
 
@@ -523,6 +640,19 @@ class ArabiaImportTest(unittest.TestCase):
 			self.assertIn("res/npc/arabia/test_2.bsr", closure.seeds)
 			self.assertNotIn("res/npc/arabia/test_1.bsr,npc/arabia/test_2.bsr", closure.seeds)
 			self.assertEqual(summary["hiveCapped"], [13, 14])
+			# The source archive carries the hideout's ground, but
+			# this extraction carries no world-113 nests: nothing of
+			# the lair stages and nothing of it is owned.
+			self.assertEqual(summary["hideoutNests"], 0)
+			self.assertNotIn(arabia.HIDEOUT_BLOCK_SEED, closure.seeds)
+			self.assertFalse((output / arabia.HIDEOUT_DOF_PATH).exists())
+			self.assertFalse((output / arabia.HIDEOUT_NAV_PATH).exists())
+			self.assertFalse({arabia.HIDEOUT_DOF_PATH, arabia.HIDEOUT_NAV_PATH} & set(summary["files"]))
+			# ...and its gates do not stand either: the source rows
+			# ride only with the lair's nests.
+			self.assertEqual(summary["gateCodes"], list(arabia_gates.GATE_CODES))
+			self.assertNotIn("GATE_MONG_TO_BOSS",
+				{row[2] for row in read_rows(text / "teleportdata.txt")})
 			self.assertEqual(summary["sectors"],
 				sorted([region & 0xFF, (region >> 8) & 0xFF] for region, _f in REGIONS if region != 31734))
 
@@ -666,6 +796,56 @@ class ArabiaImportTest(unittest.TestCase):
 				{row[1] for row in read_rows(text / "textdataname.txt") if len(row) > 1})
 			regions = read_rows(text / "regioncode.txt")
 			self.assertFalse(any(row[2].startswith("RN_ARABIA") for row in regions))
+
+	# ================
+	# test_hideout_ground_follows_its_nests
+	#
+	# The Kalia hideout (#4134): an extraction carrying world-113
+	# nests stages the lair's ground (DOF template, AINavData, the
+	# template's block as a closure seed) and owns it in the marker;
+	# the flag-off run reaps it; a build whose archive holds the
+	# files but whose nests do not (test_on_then_off) stages nothing.
+	# ================
+	def test_hideout_ground_follows_its_nests(self):
+		with tempfile.TemporaryDirectory() as tmp:
+			native, output, source, nests = build_trees(Path(tmp), hideout=True)
+			text = output / arabia.TEXT_ROOT
+			closure = FakeClosure()
+			with mock.patch.dict(os.environ, {arabia.FLAG: "1"}), \
+					mock.patch.object(cap110_item_import, "resource_dependencies",
+						side_effect=lambda requests: [[] for _ in requests]):
+				summary = arabia.add_arabia(native, output, source, nests, closure)
+			self.assertEqual((summary["nests"], summary["hideoutNests"]), (5, 1))
+			self.assertIn("res/dun/arabia/bagh_mong/bagh_mong_boss.bsr", closure.seeds)
+			dof = output / "Data_extracted" / "dungeon" / "Arabia" / "Bagh_mong" / "bagh_mong_boss.dof"
+			nav = output / "Data_extracted" / "navmesh" / "ainavdata_32793.dat"
+			self.assertEqual(dof.read_bytes(), b"dof-bytes")
+			self.assertEqual(nav.read_bytes(), b"ainav-bytes")
+			self.assertIn(arabia.HIDEOUT_DOF_PATH, summary["files"])
+			self.assertIn(arabia.HIDEOUT_NAV_PATH, summary["files"])
+			# A dungeon-bit region takes no sector: no terrain was
+			# built for it, and the population projects its world.
+			self.assertNotIn([25, 128], summary["sectors"])
+			population = json.loads((text / arabia.POPULATION_FILE).read_text())
+			self.assertEqual({row["NestID"]: row["WorldID"] for row in population["Rows"]}[16], 113)
+			# The lair's own gates stand with its ground: the exit
+			# in world 113, the entry out in the field, owned by
+			# the marker like the rest of the chain.
+			merged = {row[2]: row for row in read_rows(text / "teleportdata.txt")}
+			self.assertEqual(merged["GATE_BOSS_TO_MONG"][12], "113")
+			self.assertEqual(merged["GATE_MONG_TO_BOSS"][5], "18769")
+			self.assertTrue(set(gates.HIDEOUT_GATES) <= set(summary["gateCodes"]))
+			pairs = {(row[1], row[2]) for row in read_rows(text / "teleportlink.txt") if len(row) > 2}
+			self.assertIn((merged["GATE_MONG_TO_BOSS"][1], merged["GATE_BOSS_TO_MONG"][1]), pairs)
+			self.assertIn((merged["GATE_BOSS_TO_MONG"][1], merged["GATE_MONG_TO_BOSS"][1]), pairs)
+
+			with mock.patch.dict(os.environ, {arabia.FLAG: "off"}):
+				self.assertEqual(arabia.add_arabia(native, output, source, nests, closure),
+					{"enabled": False})
+			self.assertFalse(dof.exists())
+			self.assertFalse(nav.exists())
+			self.assertFalse({"GATE_MONG_TO_BOSS", "GATE_BOSS_TO_MONG"}
+				& {row[2] for row in read_rows(text / "teleportdata.txt")})
 
 	# ================
 	# test_later_speech_texts_keeps_untranslated_rows
