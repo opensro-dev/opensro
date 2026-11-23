@@ -133,10 +133,14 @@ test("the module closure follows module-level Python imports only, from every en
 		"scripts/table_pins.json"
 	] );
 	// The full closure still follows the function-level import.
-	assert.ok( relative( await codeClosure( path.join( root, "scripts/step.py" ), root ) ).includes( "scripts/monsters.py" ) );
+	assert.ok(
+		relative( await codeClosure( path.join( root, "scripts/step.py" ), root ) ).includes( "scripts/monsters.py" )
+	);
 	// Several entries: their union, each file once.
 	assert.deepEqual(
-		relative( await moduleClosure( [ "scripts/step.py", "scripts/other.py" ].map( ( f ) => path.join( root, f ) ), root ) ),
+		relative(
+			await moduleClosure( [ "scripts/step.py", "scripts/other.py" ].map( ( f ) => path.join( root, f ) ), root )
+		),
 		[ "scripts/other.py", "scripts/step.py", "scripts/table.py", "scripts/table_pins.json" ]
 	);
 });
