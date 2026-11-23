@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/world"
+	"opensro.online/server/internal/game/world/pharaohtemple"
 )
 
 // The Sanctum of Punishment (Anubis): dungeoninfo id 12, source world 53.
@@ -99,6 +100,49 @@ func TestPharaohTempleRefusesWhatIsNotTheTemples(t *testing.T) {
 			tombWorldSource(t, "MOB_GOD_ANUBIS", anubisSanctum, anubisSourceWorld)},
 	}
 	for _, c := range cases {
+		if _, err := appendPharaohTempleData(c.template, c.source); err == nil {
+			t.Errorf("%s was appended", c.name)
+		}
+	}
+}
+
+/*
+================
+TestPharaohTempleOsirisJoinsTheTempleFromTheFieldWorld
+
+The one exception (#3786): v1.188 groups the Temple's Osiris under the
+field world (hive 2761, world 1), not under the Temple's world 60. The
+authored row joins the default world in the Temple region at its
+source grade (8); the field world opens for no other kind, in no other
+sanctum, and the named grade opens for no other kind.
+================
+*/
+func TestPharaohTempleOsirisJoinsTheTempleFromTheFieldWorld(t *testing.T) {
+	osiris := tombTemplate(pharaohTempleOsirisCodename, 110, pharaohTempleOsirisGrade)
+	got, err := appendPharaohTempleData(osiris,
+		tombWorldSource(t, pharaohTempleOsirisCodename, pharaohtemple.TempleRegionID, cap110FieldWorldID))
+	if err != nil {
+		t.Fatalf("the Osiris nest was refused: %v", err)
+	}
+	nest := got.Nests[len(got.Nests)-1]
+	if nest.RegionID != pharaohtemple.TempleRegionID || nest.WorldCode != "INS_DEFAULT" {
+		t.Fatalf("the Osiris nest lost its temple or world: %+v", nest)
+	}
+	refusals := []struct {
+		name     string
+		template Template
+		source   []byte
+	}{
+		{"the field world in a sanctum", osiris,
+			tombWorldSource(t, pharaohTempleOsirisCodename, anubisSanctum, cap110FieldWorldID)},
+		{"the field world on a keeper kind", tombTemplate("MOB_SD_ANUBIS", 107, pharaohTempleGradeKeeper),
+			tombWorldSource(t, "MOB_SD_ANUBIS", pharaohtemple.TempleRegionID, cap110FieldWorldID)},
+		{"a sanctum's world on the Osiris row", osiris,
+			tombWorldSource(t, pharaohTempleOsirisCodename, pharaohtemple.TempleRegionID, anubisSourceWorld)},
+		{"an unnamed grade on the Osiris row", tombTemplate(pharaohTempleOsirisCodename, 110, 6),
+			tombWorldSource(t, pharaohTempleOsirisCodename, pharaohtemple.TempleRegionID, cap110FieldWorldID)},
+	}
+	for _, c := range refusals {
 		if _, err := appendPharaohTempleData(c.template, c.source); err == nil {
 			t.Errorf("%s was appended", c.name)
 		}

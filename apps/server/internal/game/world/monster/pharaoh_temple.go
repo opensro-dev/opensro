@@ -5,7 +5,7 @@ pharaoh_temple.go - the Pharaoh Temple's population (port-only, not native)
 
 The job temple's seven dungeons (package pharaohtemple: the Temple and six
 sanctums, regions 0x800A-0x8010) ride SRO_PHARAOH_TEMPLE. The variant build
-stages their 24 kinds and nests (scripts/pharaoh_temple_import.py) into
+stages their 25 kinds and nests (scripts/pharaoh_temple_import.py) into
 pharaoh-temple.txt, the cap-110 Version-2 row schema; this file appends them
 while the switch is on. The five sanctum keepers (Selkis, Neith, Anubis,
 Isis, Seth) are among them.
@@ -14,7 +14,11 @@ The temple is a dungeon region of the persistent world, as the Donwhang cave
 and the Qin-Shi floors are: every nest joins the default world. The source
 groups each dungeon's nests under a world of its own (51-56, 60), which
 pharaohtemple keeps as the dungeon's SourceWorld; a row whose world is not
-its region's is refused, so a nest can never land in the wrong sanctum.
+its region's is refused, so a nest can never land in the wrong sanctum. One
+nest is the exception: v1.188 groups the Temple's MOB_SD_OSIRIS_3 under the
+field world (its hive), not under the Temple's world 60, and that authored
+row alone joins the default world from the field world
+(pharaohTempleOsirisNest).
 
 The native v1.188 server places the same kinds with the same nest counts in
 these regions (the importer's banner has the evidence).
@@ -42,6 +46,14 @@ const (
 	pharaohTempleFirstLevel  = 105
 	pharaohTempleLastLevel   = 110
 	pharaohTempleGradeKeeper = 3
+)
+
+// The one unique among the temple's kinds, at the source grade its tomb
+// brothers carry (8), not the keepers' 3: admitted by name, as the field
+// admits Apis, without opening the grade to the family.
+const (
+	pharaohTempleOsirisCodename = "MOB_SD_OSIRIS_3"
+	pharaohTempleOsirisGrade    = 8
 )
 
 /*
@@ -105,7 +117,8 @@ func admitPharaohTemple(ref MonsterRef, codename string) bool {
 	if ref.Level < pharaohTempleFirstLevel || ref.Level > pharaohTempleLastLevel {
 		return false
 	}
-	return ref.MonsterType == 0 || ref.MonsterType == pharaohTempleGradeKeeper
+	return ref.MonsterType == 0 || ref.MonsterType == pharaohTempleGradeKeeper ||
+		(codename == pharaohTempleOsirisCodename && ref.MonsterType == pharaohTempleOsirisGrade)
 }
 
 /*
@@ -121,11 +134,27 @@ func pharaohTempleWorldCode(row cap110Nest) (string, error) {
 		if dungeon.Region != row.RegionID {
 			continue
 		}
-		if dungeon.SourceWorld != row.WorldID {
-			return "", fmt.Errorf("pharaoh temple nest %d stands in %s (region %#x) but names world %d, not %d",
-				row.NestID, dungeon.Name, row.RegionID, row.WorldID, dungeon.SourceWorld)
+		if dungeon.SourceWorld == row.WorldID || pharaohTempleOsirisNest(row, dungeon) {
+			return "INS_DEFAULT", nil
 		}
-		return "INS_DEFAULT", nil
+		return "", fmt.Errorf("pharaoh temple nest %d stands in %s (region %#x) but names world %d, not %d",
+			row.NestID, dungeon.Name, row.RegionID, row.WorldID, dungeon.SourceWorld)
 	}
 	return "", fmt.Errorf("pharaoh temple nest %d is in region %#x, not a temple dungeon", row.NestID, row.RegionID)
+}
+
+/*
+================
+pharaohTempleOsirisNest
+
+The one nest its dungeon's source world does not own: v1.188 groups the
+Temple's Osiris under the field world (hive 2761, world 1), not under the
+Temple's world 60. That authored row alone joins the default world from
+the field world; every other row naming the field world in a temple
+region is refused.
+================
+*/
+func pharaohTempleOsirisNest(row cap110Nest, dungeon pharaohtemple.Dungeon) bool {
+	return dungeon.ID == pharaohtemple.TempleDungeonID && row.Codename == pharaohTempleOsirisCodename &&
+		row.WorldID == cap110FieldWorldID
 }

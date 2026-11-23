@@ -8,7 +8,7 @@ one for the thief job. With the switch on, the dungeons, their gates and their m
 
 | Switch | Where | Effect |
 | --- | --- | --- |
-| `SRO_PHARAOH_TEMPLE` | Build and server | The seven dungeons (regions `0x800A`-`0x8010`), the four gates, and the 24 kinds and 101 nests in them, `pharaoh-temple.txt` |
+| `SRO_PHARAOH_TEMPLE` | Build and server | The seven dungeons (regions `0x800A`-`0x8010`), the four gates, and the 25 kinds and 102 nests in them, `pharaoh-temple.txt` |
 
 The live shard profile (`apps/server/config/shard-settings.json`) turns it on. The code default stays off.
 
@@ -28,17 +28,19 @@ stages.
 
 | Part | Result (real inputs) |
 | --- | --- |
-| Monsters | 24 kinds in `characterdata_270000.txt`, 83 skills in `skilldata_270000.txt` |
-| Placements | 101 nests across the seven dungeons, joining the default world |
+| Monsters | 25 kinds admitted, in `characterdata_270000.txt` (the Osiris kind rides the Pharaoh Tomb pass's standing row when that pass staged it first), 83 skills in `skilldata_270000.txt` |
+| Placements | 102 nests across the seven dungeons, joining the default world |
 | Keepers | Selkis, Neith, Anubis, Isis and Seth (grade 3), one each in their sanctums (Anubis two), on a 3-hour respawn |
+| Unique | Osiris (`MOB_SD_OSIRIS_3`, grade 8), one nest in the Temple on an 8-hour respawn |
 
 The server loader (`monster.AppendPharaohTemple`) admits a nest only in one of the seven dungeon regions, and only
-when its source world is the one its dungeon is grouped under (51-56, and 60 for the Temple). Every other population
-keeps refusing dungeon regions.
+when its source world is the one its dungeon is grouped under (51-56, and 60 for the Temple); the one exception is
+the Osiris nest, which v1.188 groups under the field world and which is admitted from there alone. Every other
+population keeps refusing dungeon regions.
 
 ## Native evidence and decisions
 
-- **Source.** The v1.188 server places the same 24 kinds in these regions, with the same nest counts and the same
+- **Source.** The v1.188 server places the same 25 kinds in these regions, with the same nest counts and the same
   keeper counts and respawns (research `tactics-recovered/Tab_RefNest.json`, 105 nests joined through
   `Tab_RefTactics.json`). Its recovered tactics keep 10 of the fields a nest's controls carry, so the rows come from the
   ISRO-R export, whose tactics are whole.
@@ -47,7 +49,11 @@ keeps refusing dungeon regions.
   world, region and cap. The server caps the four nests as one (`HiveKey` / `HiveMaxCount`).
 - **NPC rows.** The export's guild agents and the Mentuhotep and Berenice stands are roster content and stay out of
   the population.
+- **The Osiris exception.** v1.188's one `MOB_SD_OSIRIS_3` nest (40999) is grouped under the field world
+  (hive 2761), not under the Temple's world 60, so the ISRO-R export carries no row for it and the projection
+  would drop the one it was handed. The import names it as a single authored row with the v1.188 database's
+  full tactics row (57573, read whole), and the server admits it alone from the field world into the Temple
+  region, at the grade its tomb brothers carry (8). The kind is the Pharaoh Tomb's too: whichever pass stages
+  it first, the other places its nest on the standing row (one codename, one row).
 - **Not yet here.**
-  - `MOB_SD_OSIRIS_3`: v1.188 has one nest of it, a world-1 hive in the Temple with an 8-hour respawn. The ISRO-R
-    export doesn't carry it, and its controls need the v1.188 database's full tactics row.
   - Haroeris: neither source places it by a nest.
