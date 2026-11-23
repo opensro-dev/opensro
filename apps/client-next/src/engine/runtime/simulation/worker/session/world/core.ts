@@ -535,7 +535,10 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 							heading: mover.heading
 						} :
 						rider,
-					now
+					now,
+					// The 0x3028 resync reseeds a walk in flight; a source move or a
+					// B2F5 correction ends it.
+					frame.opcode === OBJECT_POSITION_UPDATE_OPCODE
 				);
 			}
 		}
