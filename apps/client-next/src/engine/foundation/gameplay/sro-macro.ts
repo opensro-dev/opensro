@@ -46,13 +46,17 @@ const CONFIG_AVAILABILITY = 2;
 export const MACRO_POTION_BYTES = 0x48;
 export const MACRO_POTION_SLOTS = 9;
 const POTION_SLOT_STRIDE = 8;
-// The character rows the auto-potion readers serve (004c2ce0). Row 3 is the
-// buff-item / speed-scroll gate (006930a0), not an anomaly check. Pet rows
-// 4..8 are not automated yet.
+// Character readers 004c2ce0; pet readers 004c2b90. Row 3 is the buff-item /
+// speed-scroll gate (006930a0), not an anomaly check.
 export const MACRO_ROW_HP = 0;
 export const MACRO_ROW_MP = 1;
 export const MACRO_ROW_CURE = 2;
 export const MACRO_ROW_BUFF_ITEM = 3;
+export const MACRO_ROW_PET_HP = 4;
+export const MACRO_ROW_PET_HUNGER = 5;
+export const MACRO_ROW_PET_CURE = 6;
+export const MACRO_ROW_PET_RESURRECT = 7;
+export const MACRO_ROW_PET_SUMMON = 8;
 export const MACRO_GAUGE_SLOTS = [ 0, 1, 4, 5 ] as const;
 export const MACRO_HUNT_BYTES = 0x0c;
 export const MACRO_SKILL_FLAGS = 4;

@@ -100,10 +100,12 @@ export const MACRO_POTION_ROWS: Readonly<Record<MacroPotionPage, readonly MacroP
 		{ slot: 2, caption: "Abnormal status", gauge: false },
 		{ slot: 3, caption: "Moving speed", gauge: false }
 	],
+	// Official Pet page (macro_1.2dt): two gauges, then Cure / Resurrect /
+	// Summon Trigger share one row of three. Captions match the later UI.
 	pet: [
 		{ slot: 4, caption: "HP", gauge: true },
 		{ slot: 5, caption: "Hunger", gauge: true },
-		{ slot: 6, caption: "Abnormal status", gauge: false },
+		{ slot: 6, caption: "Cure Status Anomaly", gauge: false },
 		{ slot: 7, caption: "Resurrect", gauge: false },
 		{ slot: 8, caption: "Summon Trigger", gauge: false }
 	]
