@@ -26,18 +26,24 @@ What the sources author, and what this import does with them:
 	          the garden). The ISRO-R backup binds only 173 of them;
 	          the reconciliation is explicit - terrain, navmesh, tile
 	          and object catalogues merge for every sector the client
-	          built (263: the boss lair's sector is a region code
-	          with no terrain or navmesh anywhere, skipped and
-	          logged), nests land only where the authored population
-	          names them.
+	          built (263: the boss lair is a dungeon-bit region with
+	          no sector files anywhere; its ground is its DOF
+	          template, below), nests land only where the authored
+	          population names them.
 	monsters  the 51 MOB_AR_*/MOB_ARABIA_* kinds the authored nests
 	          place, converted from the client's characterdata at
 	          their authored levels 120-130. Kinds the nests never
 	          place stay out, as the Sky Temple's unplaced kinds do.
-	nests     the extraction's 1,656 authored rows, projected into the
+	nests     the extraction's authored rows, projected into the
 	          population envelope the cap-110 families use: the town
 	          and fields in world 1, the dungeon (spawn kind 1) in
-	          world 112. The two uniques whose points share an
+	          world 112, and - while the extraction carries them -
+	          the Kalia hideout's nests in world 113, whose ground
+	          stages with them (the later client's dungeoninfo row 25:
+	          the Bagh_mong DOF template, the region's AINavData and
+	          the template's block through the resource closure) and
+	          leaves when they do; an extraction without them builds
+	          byte-identical to before. The two uniques whose points share an
 	          overwrite cap (MOB_ARABIA_KARKADANN, MOB_ARABIA_MUSTAFA)
 	          project onto the loader's hive key with the authored
 	          cap, the shared-cap projection the extraction asked
@@ -58,9 +64,12 @@ What the sources author, and what this import does with them:
 	gates     the dungeon chain stands as authored (its town portal
 	          building, absent from the source, is authored beside
 	          its arrival); travel into Baghdad is authored at Jangan,
-	          see arabia_gates.py. Worlds 113-115 (boss lair, Petra,
-	          garden) carry no nests and no gates in either source and
-	          stay unregistered; their regions import with the map.
+	          see arabia_gates.py. Worlds 114-115 (Petra, garden)
+	          carry no nests in either source and stay unregistered;
+	          their regions import with the map. The boss lair (world
+	          113, the Kalia hideout) is the nests exception above; its
+	          gate rides the gates step, and the server admits the
+	          world only under its own SRO_BAGHDAD_DUNGEON switch.
 
 Turning the flag off removes the shards, the population, the NPC
 standings and talk rows, the copied files and the owned table rows
@@ -137,6 +146,22 @@ FIRST_LEVEL = 120
 LAST_LEVEL = 130
 FIELD_WORLD = 1
 DUNGEON_WORLD = 112
+HIDEOUT_WORLD = 113
+HIDEOUT_REGION = 32793
+# The hideout's ground (the later client's own binding, v1.696
+# Data.pk2 dungeon\Dungeoninfo.txt row 25 -> Dungeon\Arabia\Bagh_mong\
+# bagh_mong_boss.dof, and the DOF's embedded generalRegionId is this
+# region): the template beside the table, the region's AINavData and
+# the template's block, staged only while the extraction carries
+# hideout nests (below). Archive names are the archive index's folded
+# keys; the DOF's written path is the dungeonInfo probe's own casing.
+HIDEOUT_DOF_ARCHIVE = "dungeon/arabia/bagh_mong/bagh_mong_boss.dof"
+HIDEOUT_DOF_PATH = "Data_extracted/dungeon/Arabia/Bagh_mong/bagh_mong_boss.dof"
+HIDEOUT_NAV_ARCHIVE = f"navmesh/ainavdata_{HIDEOUT_REGION}.dat"
+HIDEOUT_NAV_PATH = f"Data_extracted/navmesh/ainavdata_{HIDEOUT_REGION}.dat"
+HIDEOUT_BLOCK_SEED = "res/dun/arabia/bagh_mong/bagh_mong_boss.bsr"
+HIDEOUT_BLOCK_PATH = "Data_extracted/res/dun/arabia/bagh_mong/bagh_mong_boss.bsr"
+HIDEOUT_GROUND_PATHS = (HIDEOUT_DOF_PATH, HIDEOUT_NAV_PATH, HIDEOUT_BLOCK_PATH)
 # The population envelope's tactics shape (cap110_monsters.tactics_controls);
 # an extraction row naming anything else is a contract break, refused.
 CONTROL_KEYS = {
@@ -224,7 +249,7 @@ def project_row(row, regions):
 	champion = row.get("Champion")
 	if champion is not None and set(champion) != CONTROL_KEYS:
 		raise ValueError(f"Arabia nest {row['NestID']} champion tactics are malformed")
-	if int(row["WorldID"]) not in (FIELD_WORLD, DUNGEON_WORLD):
+	if int(row["WorldID"]) not in (FIELD_WORLD, DUNGEON_WORLD, HIDEOUT_WORLD):
 		raise ValueError(f"Arabia nest {row['NestID']} names world {row['WorldID']}")
 	if int(row["RegionID"]) not in regions:
 		raise ValueError(f"Arabia nest {row['NestID']} names region {row['RegionID']} outside the client continent")
@@ -490,6 +515,32 @@ def arabia_resource_closure(seeds, archives, native, output):
 
 
 # ================
+# copy_hideout_ground
+#
+# The Kalia hideout's ground: its DOF template and the region's
+# AINavData out of the v1.696 Data.pk2 (the template's block rides the
+# resource closure as a seed of add_arabia's). Both files are the
+# region's whole geometry - a dungeon-bit region has no sector files -
+# so a missing one is a source break, refused by name. A copy already
+# standing with the same bytes is left (the marker keeps owning it).
+# ================
+def copy_hideout_ground(data, data_index, output):
+	copied = []
+	for archive_name, relative in ((HIDEOUT_DOF_ARCHIVE, HIDEOUT_DOF_PATH),
+		(HIDEOUT_NAV_ARCHIVE, HIDEOUT_NAV_PATH)):
+		entry = data_index.get(archive_name)
+		if entry is None:
+			raise ValueError(f"v1.696 Data.pk2 has no {archive_name}")
+		target = output / relative
+		stored = sro_pk2.payload(data, entry)
+		if target.exists() and target.read_bytes() == stored:
+			continue
+		variant.replace_file(target, stored)
+		copied.append(relative)
+	return copied
+
+
+# ================
 # add_arabia
 # ================
 def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_closure):
@@ -528,6 +579,11 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		regions = continent_regions(tables.table_rows(read("regioncode.txt")))
 		extraction = load_nests(nests, regions)
 		population = build_population(extraction["monsters"])
+		# The hideout rides its nests: an extraction carrying world-113
+		# rows stages the lair's ground with them (and the run that
+		# stops carrying them takes it away below); an extraction
+		# without them builds byte-identical to before.
+		hideout = any(int(row["WorldID"]) == HIDEOUT_WORLD for row in extraction["monsters"])
 		placements = npc_placements(extraction["npcs"], tables.table_rows(read("npcpos.txt")),
 			codename_by_id, regions)
 
@@ -799,9 +855,11 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 				if any(path not in map_index for path in paths):
 					# The later client authors this region's code
 					# but never built its sector (the field-02 boss
-					# lair has no terrain or navmesh anywhere):
-					# the sector is skipped and logged, never
-					# fabricated; its region code row still imports.
+					# lair, a dungeon-bit region whose ground is
+					# the DOF template staged with its nests, not
+					# sector terrain): the sector is skipped and
+					# logged, never fabricated; its region code
+					# row still imports.
 					tables.log(f"arabia map: sector {sector_x}/{sector_y} has no terrain in the "
 						"v1.696 Map.pk2 and is skipped")
 					continue
@@ -872,6 +930,8 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			archives = {"Data": (data, data_index),
 				"Particles": (particles, tables.archive_index(particles))}
 			copied += copy_sector_navmesh(data, data_index, sectors, output, object_remap)
+			if hideout:
+				copied += copy_hideout_ground(data, data_index, output)
 			merged_objects = tables.object_catalog((output / "Map_extracted" / "object.ifo").read_bytes())
 			final_ids = {object_remap.get(object_id, object_id) for object_id in used_objects}
 			if not final_ids <= set(merged_objects):
@@ -884,6 +944,10 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 				for row in all_refs.values()
 				for model in row[characters.MODEL_COLUMN].split(",")
 				if model not in ("", "xxx")}
+			# The hideout template's block is a seed of its own: the
+			# dungeon bundle reads the block's meshes from the tree.
+			if hideout:
+				seeds.add(HIDEOUT_BLOCK_SEED)
 			closure_result = closure(seeds, archives, native, output)
 			copied += closure_result["files"]
 		finally:
@@ -905,11 +969,22 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 
 		files = sorted({entry for entry in set(prior.get("files", [])) | set(copied)
 			if not entry.startswith("clash:") and entry not in replaced_tiles})
+		if not hideout:
+			# The extraction carries no hideout nests: the lair's
+			# ground leaves with this run and the marker stops
+			# owning it. The block's own dependency bytes follow
+			# the closure's shared ownership, as every seed's do;
+			# without the template nothing publishes them.
+			for relative in HIDEOUT_GROUND_PATHS:
+				(output / relative).unlink(missing_ok=True)
+			files = [entry for entry in files if entry not in HIDEOUT_GROUND_PATHS]
 		summary = {
 			"enabled": True,
 			"characters": {code: int(row[1]) for code, row in all_refs.items()},
 			"skills": {row[3]: int(row[1]) for row in added},
 			"nests": len(population["Rows"]),
+			"hideoutNests": sum(1 for row in population["Rows"]
+				if int(row["WorldID"]) == HIDEOUT_WORLD),
 			"kinds": len(refs),
 			"npcs": len(npc_refs),
 			"npcPlacements": len(placements),
