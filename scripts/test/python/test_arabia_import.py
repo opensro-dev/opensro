@@ -13,6 +13,7 @@ from unittest import mock
 
 import arabia_gates as gates
 import arabia_import as arabia
+import arabia_quest_tables as quest_tables
 import cap110_item_import
 import import_vsro_alexandria as tables
 import skytemple_import
@@ -346,6 +347,12 @@ def build_trees(base):
 	write_table(output / text, "regioncode.txt", [["1", "25000", "RN_CH_JANGAN", ""], ["1", "22106", "xxx", ""]])
 	write_table(output / text, "textzonename.txt", [["1", "25000", "x", "", "", "Jangan", "", "", "", "", ""]])
 	write_table(output / text, "textquest.txt", [["1", "SN_NATIVE_QUEST", "x", "", "", "", "", "", "Quest", "", ""]])
+	write_table(output / text, "questdata.txt", [["1", "27", "QNO_KT_SMITH_1", "10", "desc", "SN_QNO_KT_SMITH_1",
+		"SN_PAY_QNO_KT_SMITH_1", "xxx", "SN_PAYCON_QNO_KT_SMITH_1", "SN_NN_QNO_KT_SMITH_1", "SN_NC_QNO_KT_SMITH_1"]])
+	write_table(output / text, "questcontentsdata.txt", [["QNO_KT_SMITH_1", "name", "3", "xxx", "1",
+		"SN_CON_QNO_KT_SMITH_1", "xxx", "xxx", "xxx", "xxx", "xxx", "xxx", "xxx"]])
+	write_table(output / text, "gameguidedata.txt", [["1", "140013", "name", "1", "140000",
+		"SN_PAYCON_QNO_KT_SMITH_1", "SN_QNO_KT_SMITH_1", "0"]])
 	write_table(output / text, "npcpos.txt", [["100", "25000", "1", "1", "1"], ["101", "25000", "2", "1", "2"]])
 	write_table(output / text, "npcchat.txt", [["1", "NPC_NATIVE", "SN_NATIVE", "0"],
 		["1", "NPC_NATIVE_NAMED", "SN_NATIVE_CHAT", "0"]])
@@ -400,6 +407,15 @@ def build_trees(base):
 			["1", "500", "SN_NPC_AR_TEST_CHAT", "Korean", "0", "0", "0", "0", "0", "Greetings",
 				"0", "0", "0", "Greetings", "Greetings", "Greetings", "Greetings"],
 		]),
+		"questdata.txt": utf16([["QuestData_250.txt"]]),
+		"questdata_250.txt": utf16([["1", "1448", "QNO_AR_001", "121", "desc", "SN_QNO_AR_001",
+			"SN_PAY_QNO_AR_001", "xxx", "SN_PAYCON_QNO_AR_001", "SN_NN_QNO_AR_001", "SN_NC_QNO_AR_001"]]),
+		"questcontentsdata.txt": utf16([["QNO_AR_001", "name", "3", "xxx", "1", "SN_CON_QNO_AR_001_1"] + ["xxx"] * 13]),
+		"gameguidedata.txt": utf16([["1", "140015", "name", "1", "140000", "SN_PAYCON_QNO_AR_001", "SN_QNO_AR_001", "0"]]),
+		"textquest_queststring.txt": utf16([["TextQuest_QuestString_100.txt"]]),
+		"textquest_queststring_100.txt": utf16([object_row("SN_QNO_AR_001", "Quest Name")]),
+		"textquest_otherstring.txt": utf16([["TextQuest_OtherString_100.txt"]]),
+		"textquest_otherstring_100.txt": utf16([object_row("SN_PAYCON_QNO_AR_001", "Reward text")]),
 		"skilleffect.txt": b"\xff\xfe" + (
 			"#section\tcharacterinfo\r\n" + "\t".join(["MOB_AR_TEST"] + ["0"] * 12) + "\r\n"
 			"#section\tskillaniset2\r\n1\tname\tSKILL_LATER\tANI_TEST\r\n"
@@ -535,6 +551,12 @@ class ArabiaImportTest(unittest.TestCase):
 			# table, with its English at the native column 8.
 			quest = {row[1]: row for row in read_rows(text / "textquest.txt") if len(row) > 8}
 			self.assertEqual(quest["SN_NPC_AR_TEST_CHAT"][8], "Greetings")
+			# The quests land with the layer: rows in the variant's
+			# tables, strings with English at the native column.
+			self.assertEqual(summary["quests"]["quests"], ["QNO_AR_001"])
+			self.assertEqual([row[2] for row in read_rows(text / "questdata.txt")], ["QNO_KT_SMITH_1", "QNO_AR_001"])
+			self.assertEqual(quest["SN_QNO_AR_001"][8], "Quest Name")
+			self.assertEqual(quest["SN_PAYCON_QNO_AR_001"][8], "Reward text")
 			# The dangling _PS twin is recorded, never demanded.
 			self.assertEqual(summary["speechUnresolved"], ["SN_NPC_AR_TEST_PS"])
 			self.assertNotIn("SN_NPC_AR_TEST_PS", quest)
@@ -569,6 +591,12 @@ class ArabiaImportTest(unittest.TestCase):
 			# The native talk row rides through the whole cycle.
 			self.assertTrue(any(row[1] == "NPC_NATIVE_NAMED" for row in read_rows(text / "npcchat.txt")))
 			self.assertFalse(any(len(row) > 1 and row[1] == "SN_NPC_AR_TEST_CHAT"
+				for row in read_rows(text / "textquest.txt")))
+			# Off reaps the quest rows and strings against their own
+			# marker; the native quest keeps its row.
+			self.assertFalse((output / quest_tables.MARKER).exists())
+			self.assertEqual([row[2] for row in read_rows(text / "questdata.txt")], ["QNO_KT_SMITH_1"])
+			self.assertFalse(any(len(row) > 1 and row[1].startswith("SN_QNO_AR_")
 				for row in read_rows(text / "textquest.txt")))
 			gates = {row[2] for row in read_rows(text / "teleportdata.txt")}
 			self.assertNotIn("GATE_TO_LAST_FIELD_IN_BAGHDAD", gates)

@@ -366,7 +366,9 @@ import { createSroMacro } from "./sro-macro/sro-macro";
 import {
 	BAG_FIRST_SLOT,
 	emptyMacroPotionQueue,
+	MACRO_ROW_BUFF_ITEM,
 	macroPotionBagSlot,
+	macroPotionBuffSkillId,
 	macroPotionFired,
 	macroPotionWants,
 	rearmMacroPotion
@@ -1779,10 +1781,23 @@ tick, so a standing refusal would otherwise repeat its notice.
 			macroPotionQueue = emptyMacroPotionQueue();
 			return;
 		}
+		const bag = inventory.state().inventory;
+		// 006930a0 asks 00809330 → 00abd630 whether the item's buff is live.
+		const activeBuffSkills = combat.state().attachedEffects
+			.filter( effect => {
+				if ( effect.gid !== localGid ) return false;
+				if ( effect.remainingMs === undefined ) return true;
+				const elapsed = Math.max( 0, now - (effect.receivedAtMs ?? now) );
+				return effect.remainingMs - elapsed > 0;
+			} )
+			.map( effect => effect.skill );
+		const facts = { ...potionFacts, activeBuffSkills };
+		const buffSkillId = macroPotionBuffSkillId( settings.potion, bag );
 		macroPotionQueue = rearmMacroPotion( macroPotionQueue, now );
 		for ( const row of macroPotionQueue.ready ) {
-			if ( !macroPotionWants( settings.potion, row, potionFacts ) ) continue;
-			const slot = macroPotionBagSlot( settings.potion, row, inventory.state().inventory );
+			const skillId = row === MACRO_ROW_BUFF_ITEM ? buffSkillId : 0;
+			if ( !macroPotionWants( settings.potion, row, facts, skillId ) ) continue;
+			const slot = macroPotionBagSlot( settings.potion, row, bag );
 			if ( slot === undefined || !useAutomaticItem( slot, now, true ) ) continue;
 			macroPotionQueue = macroPotionFired( macroPotionQueue, row, now );
 			return;
@@ -3262,7 +3277,11 @@ state here before a command can claim a native wire conversation.
 				}
 				return sendFrame( academyOpenRequest() );
 			}
-			if ( command.kind === "academy-page" || command.kind === "academy-join" ) {
+			if (
+				command.kind === "academy-page" || command.kind === "academy-join" ||
+				command.kind === "academy-register" || command.kind === "academy-modify" ||
+				command.kind === "academy-delete"
+			) {
 				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
 				const next = academyRequest( academy, command, progression.level );
 				send( next.frame );
@@ -4886,7 +4905,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 				}
 				if ( academy ) {
-					const next = academyPacket( academy, frame, now );
+					const next = academyPacket( academy, frame, now, social.localName );
 					if ( next ) {
 						const statusNotice = academyStatusNotice( academy, next, frame );
 						if ( statusNotice ) {

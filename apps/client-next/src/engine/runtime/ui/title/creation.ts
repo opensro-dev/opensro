@@ -271,6 +271,10 @@ export function drawCreation(
 				kind: "range",
 				label: catalog["UIO_NEWCHAR_STT_" + key.toUpperCase()] ?? key,
 				rect: [ r[0] + 20, r[1], 100, 24 ],
+				// The groove between the drawn arrows is inert: only the
+				// arrows and the drawn thumb's drag pick the choice. A
+				// browser groove press would jump it (#4121).
+				thumbDragOnly: true,
 				min,
 				max,
 				value: String( selection[key] ),

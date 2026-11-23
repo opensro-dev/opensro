@@ -39,7 +39,7 @@ const { createGameplay } = await import(
 );
 const { uiFixture } = await import( "../helpers/ui-fixture.mjs" );
 
-const empty = { member: false, page: 0, pages: 0, rows: [], request: null, result: null };
+const empty = { member: false, page: 0, pages: 0, rows: [], own: null, request: null, result: null };
 
 /*
 ================
@@ -268,7 +268,7 @@ test("CIFApprenticeShipSlot button 18 enforces strict > for leader and >= for se
 	const app40 = { ...leader, id: 5, name: "App40", kind: 2, level: 40 };
 	const app41 = { ...leader, id: 6, name: "App41", kind: 2, level: 41 };
 	const members = [ leader, sub60, sub61, app39, app40, app41 ];
-	const baseCamp = { member: true, page: 0, pages: 0, rows: [], request: null, result: null, members };
+	const baseCamp = { member: true, page: 0, pages: 0, rows: [], own: null, request: null, result: null, members };
 
 	// Leader view: strict `>` (level > 40 for kind 2, level > 60 for kind 1).
 	const asLeader = { ...baseCamp, localMemberId: 1 };

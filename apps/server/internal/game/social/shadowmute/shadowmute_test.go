@@ -30,11 +30,11 @@ func TestListFollowsItsFile(t *testing.T) {
 	}
 	list := Open(dir)
 	for _, id := range []string{"spammer", "SPAMMER", "other"} {
-		if !list.Muted(id) {
+		if !list.Muted(id, "") {
 			t.Fatalf("%q not muted after boot", id)
 		}
 	}
-	if list.Muted("# staff list") || list.Muted("someone") || list.Muted("") {
+	if list.Muted("# staff list", "") || list.Muted("someone", "") || list.Muted("", "") {
 		t.Fatal("a comment, a stranger or an empty id is muted")
 	}
 
@@ -43,7 +43,7 @@ func TestListFollowsItsFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	list.refresh()
-	if list.Muted("spammer") || !list.Muted("other") {
+	if list.Muted("spammer", "") || !list.Muted("other", "") {
 		t.Fatal("the edited list was not re-read")
 	}
 	// Deleting the file mutes no one.
@@ -51,12 +51,47 @@ func TestListFollowsItsFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	list.refresh()
-	if list.Muted("other") {
+	if list.Muted("other", "") {
 		t.Fatal("deleted list still mutes")
 	}
 	var none *List
-	if none.Muted("other") {
+	if none.Muted("other", "") {
 		t.Fatal("nil list muted")
+	}
+}
+
+/*
+================
+TestWordsMuteMatchingLines
+
+A listed word mutes any line containing it, from any account, through
+case, spacing and punctuation; a too-short entry is ignored rather than
+silencing everyone, and removing the file lifts the word mutes.
+================
+*/
+func TestWordsMuteMatchingLines(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, WordsFileName)
+	if err := os.WriteFile(path, []byte("# advertising\nRival Server\nab\n.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	list := Open(dir)
+	for _, text := range []string{"rivalserver", "come to RIVAL.SERVER now", "r i v a l s e r v e r", "rival-server.example"} {
+		if !list.Muted("anyone", text) {
+			t.Fatalf("%q not muted", text)
+		}
+	}
+	for _, text := range []string{"", "hello", "a server rival", "ab", "rival serve"} {
+		if list.Muted("anyone", text) {
+			t.Fatalf("%q muted", text)
+		}
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	list.refresh()
+	if list.Muted("anyone", "rival server") {
+		t.Fatal("deleted word list still mutes")
 	}
 }
 
@@ -78,10 +113,10 @@ func TestMutedRefreshesInTheBackground(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Fresh snapshot: no refresh starts and the old answer holds.
-	if list.Muted("spammer") {
+	if list.Muted("spammer", "") {
 		t.Fatal("read the file inside the recheck interval")
 	}
 	now = now.Add(recheckInterval)
-	list.Muted("spammer")
-	wait.Eventually(t, 5*time.Second, "the stale snapshot refreshed", func() bool { return list.Muted("spammer") })
+	list.Muted("spammer", "")
+	wait.Eventually(t, 5*time.Second, "the stale snapshot refreshed", func() bool { return list.Muted("spammer", "") })
 }

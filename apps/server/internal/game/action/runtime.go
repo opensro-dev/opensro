@@ -986,10 +986,10 @@ type Runtime struct {
 	// port-only): the Global Chatting line enters it, a GM ban purges the
 	// banned character's lines. Nil keeps both in-game only.
 	PublicChat *chatfeed.Feed
-	// ChatShadowMuted reports a staff shadow-muted account (shadowmute,
+	// ChatShadowMuted reports a staff shadow-muted line, by account or by word (shadowmute,
 	// port-only, not native): its Global Chatting line reaches only
 	// itself. Nil mutes no one.
-	ChatShadowMuted func(accountID string) bool
+	ChatShadowMuted func(accountID, text string) bool
 	// ChatItemLinks is the port-only SRO_CHAT_ITEM_LINKS switch for the
 	// Global Chatting line (globalchat.go); nil keeps the native tail.
 	ChatItemLinks *chat.ItemLinks

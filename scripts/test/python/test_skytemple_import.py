@@ -83,8 +83,10 @@ def media_archive(files):
 	builder.blocks[root] = [(1, b"server_dep", server, 0)]
 	builder.blocks[server] = [(1, b"silkroad", silkroad, 0)]
 	builder.blocks[silkroad] = [(1, b"textdata", textdata, 0)]
-	builder.blocks[textdata] = [(2, name.encode("ascii"), *builder.add_payload(raw)) for name, raw in files.items()]
-	return builder.build()
+	chains = {}
+	items = [(2, name.encode("ascii"), *builder.add_payload(raw)) for name, raw in files.items()]
+	chained_folder(builder, items, chains, textdata)
+	return builder.build(chains)
 
 
 # ================
