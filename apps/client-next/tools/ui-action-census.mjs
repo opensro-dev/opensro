@@ -60,6 +60,7 @@ const { fortressPacket } = await import( "../src/engine/foundation/gameplay/fort
 const { fortressProductionQuery } = await import(
 	"../src/engine/foundation/gameplay/fortress-production.ts"
 );
+const { academyBootstrap } = await import( "../src/engine/foundation/gameplay/academy.ts" );
 
 const CENSUS_PATH = path.join( root, "tests/runtime/ui-action-census.json" );
 const KEYS = [ "Escape", "Enter", "F1", "F2", "F3", "F4", "KeyR" ];
@@ -234,17 +235,12 @@ const OPENERS = {
 		f.ui.event( { kind: "activate", id: "open-window:Storage" } );
 	},
 	"Academy Matching"( f ) {
-		f.state.gameplay.academy = { member: false, rows: [], request: null, page: 0 };
+		f.state.gameplay.academy = academyBootstrap( { academyMember: false } );
 		f.ui.event( { kind: "activate", id: "open-window:Academy Matching" } );
 	},
 	"Academy honor"( f ) {
 		f.state.gameplay.academy = {
-			member: false,
-			rows: [],
-			request: null,
-			page: 0,
-			pages: 0,
-			result: null,
+			...academyBootstrap( { academyMember: false } ),
 			honorRanks: {
 				rows: [ { ranking: 1, rank: 1, name: "Mentor", level: 60, maxLevel: 80, graduates: 3, guild: "" } ],
 				sequence: 1
