@@ -1855,8 +1855,13 @@ refusal would otherwise repeat its notice.
 				row === MACRO_ROW_PET_HP || row === MACRO_ROW_PET_HUNGER || row === MACRO_ROW_PET_CURE
 			) {
 				if ( !petGid ) continue;
-				cosSelection.select( petGid, cosRecords );
-				used = useAutomaticItem( slot, now, true );
+				// Aim the pet item at the living pet through its use context,
+				// as resurrect does: the pet window's selection is the
+				// player's choice, and the macro never moves it.
+				const flags = inventory.state().inventory.find( item => item.slot === slot )?.typeFlags;
+				const aimed = flags === undefined ? null : autoPotionTarget( flags, [ ...cosRecords.values() ], petGid );
+				if ( !aimed ) continue;
+				used = useAutomaticItem( slot, now, true, aimed );
 			} else {
 				used = useAutomaticItem( slot, now, true );
 			}
