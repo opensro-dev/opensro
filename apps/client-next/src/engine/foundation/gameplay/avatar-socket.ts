@@ -44,6 +44,17 @@ export function isAvatarItem( typeFlags: number ): boolean {
 
 /*
 ================
+isSpiritItem
+
+A Devil's / Angel's Spirit (TID 3/1/14), the item the Spirit socket holds.
+================
+*/
+export function isSpiritItem( typeFlags: number ): boolean {
+	return (typeFlags & TYPE_KIND_MASK) === SPIRIT_KIND;
+}
+
+/*
+================
 avatarSocket
 
 The socket an item is worn in: TID4 (1..4) for a v1.150 avatar,

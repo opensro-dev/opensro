@@ -62,7 +62,7 @@ same exclusions as payNasrunTokensInsideDoor.
 ================
 */
 func (rt *Runtime) payNasrunLuckyDropsInsideDoor(division string, actor *enterworld.Character, roster rewardRoster, impact simulation.MonsterDamageResult, at simulation.Spawn, arena bool, now int64) ([]wire.Frame, []RecipientFrames) {
-	if !rt.NasrunTokens || arena || !impact.Fatal || impact.Instance.GMSpawned || impact.Instance.Rarity()&15 != uniqueRarityGrade {
+	if !rt.NasrunTokens || arena || !impact.Fatal || impact.Instance.GMSpawned || !impact.Instance.IsUnique() {
 		return nil, nil
 	}
 	spiritBps, jewelBps, ok := nasrun.LuckyDropOdds(impact.Instance.Ref.Codename)

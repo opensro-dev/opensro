@@ -99,7 +99,7 @@ reference, nest, spawn, heading and HP.
 ================
 */
 func (a *monsterArchive) put(row monster.Instance) (archivedMonster, bool) {
-	if row.Rarity()&15 == 3 {
+	if row.IsUnique() {
 		return archivedMonster{}, false
 	}
 	cold := archivedMonster{

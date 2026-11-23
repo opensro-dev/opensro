@@ -131,7 +131,7 @@ Whether a kill of this spawn grade runs the unique prepass: grades 3 and 8
 ================
 */
 func RollsUniqueDrops(rarity uint8) bool {
-	return rarity&15 == 3 || rarity&15 == 8
+	return monster.RarityIsUnique(rarity)
 }
 
 /*

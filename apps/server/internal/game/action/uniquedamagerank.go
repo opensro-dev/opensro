@@ -31,11 +31,6 @@ import (
 // EnvUniqueDamageRank turns the ranking on ("on", "1", "true").
 const EnvUniqueDamageRank = "SRO_UNIQUE_DAMAGE_RANK"
 
-// uniqueRarityGrade is the rarity nibble of a unique, the grade the native
-// kill notice announces (RecordUniqueKiller). Grade 8 rolls unique drops but
-// is not announced, so it is not ranked either.
-const uniqueRarityGrade = 3
-
 /*
 ================
 UniqueDamageRankFromEnv
@@ -133,7 +128,7 @@ on the request's reply.
 ================
 */
 func (rt *Runtime) uniqueDamageRankFrames(actor *enterworld.Character, roster rewardRoster, impact simulation.MonsterDamageResult) ([]wire.Frame, []RecipientFrames) {
-	if !rt.UniqueDamageRank || !impact.Fatal || impact.Instance.Rarity()&15 != uniqueRarityGrade {
+	if !rt.UniqueDamageRank || !impact.Fatal || !impact.Instance.IsUnique() {
 		return nil, nil
 	}
 	places, total := uniqueDamageRanking(impact.Contributions, roster.actors)
