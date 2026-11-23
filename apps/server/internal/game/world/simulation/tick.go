@@ -365,6 +365,11 @@ type Ticker struct {
 	// before a peer's spawn row names those items (peervis.go); nil sends
 	// none.
 	ItemReferences func(ids []uint32) []Frame
+	// Parties returns the division's live parties as member-gid groups
+	// (peer_visibility.go). It is consulted only while a GM-invisible
+	// character is in the division; nil means no party knowledge, and an
+	// invisible character is then shown to no other player.
+	Parties func(division string) []PeerParty
 	// StallReport is how long a tick runs before the watchdog logs what it
 	// is doing (tick_watchdog.go). Values <= 0 use DefaultTickStallReport.
 	StallReport time.Duration

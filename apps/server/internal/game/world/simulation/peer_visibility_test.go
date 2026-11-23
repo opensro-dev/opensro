@@ -131,7 +131,7 @@ func TestPeerVisibilityKeepsTheFullRelation(t *testing.T) {
 			live[sessions[i].SessionID] = true
 		}
 		nowMs := int64(tick * 100)
-		if full, crossers := state.clone().peerVisibilityChanges(sessions, nowMs, live); !full && len(crossers) > 0 {
+		if full, crossers := state.clone().peerVisibilityChanges(sessions, nowMs, live, nil); !full && len(crossers) > 0 {
 			incremental++
 		}
 		push.toSession = nil
