@@ -263,7 +263,11 @@ func (rt *Runtime) hawkStrike(h summonedHawk, c, snapshot *enterworld.Character,
 	if hit.impacts[0].Fatal {
 		word |= wire.HawkFatalBit
 	}
-	return rt.creditedHitResult(h.division, target, hit, []wire.Frame{wire.HawkStrikeFrame(h.token, target.Gid, word)}, now)
+	public := []wire.Frame{wire.HawkStrikeFrame(h.token, target.Gid, word)}
+	// The strike frame carries no result of its own, so the hit's
+	// committed abnormal publications ride after it (#3680).
+	public = append(public, rt.monsterImpactAbnormalFrames(h.division, target.Gid, hit.impacts)...)
+	return rt.creditedHitResult(h.division, target, hit, public, now)
 }
 
 /*
