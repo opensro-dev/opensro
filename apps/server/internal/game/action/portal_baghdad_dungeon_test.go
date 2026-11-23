@@ -29,6 +29,10 @@ import (
 const (
 	baghdadTownTeleport    uint32 = 49001
 	baghdadDungeonTeleport uint32 = 49002
+	hideoutEntryTeleport   uint32 = 49003
+	hideoutExitTeleport    uint32 = 49004
+	hideoutEntryBuilding   uint32 = 27751
+	hideoutExitBuilding    uint32 = 27752
 )
 
 /*
@@ -114,5 +118,93 @@ func TestBaghdadDungeonGatesFollowTheirSwitch(t *testing.T) {
 	}
 	if _, ok := on.links[[2]uint32{baghdadDungeonTeleport, baghdadTownTeleport}]; !ok {
 		t.Fatal("on: the link out of the dungeon is missing")
+	}
+}
+
+/*
+================
+TestHideoutGatesFollowTheirSwitch
+
+The Kalia hideout's own chain (#4134): the source's field gate
+(GATE_MONG_TO_BOSS, world 1 as authored) and the exit on the
+template's doorstep (GATE_BOSS_TO_MONG, world 113, its region spelled
+signed as the later table spells it). With the dungeon switch off
+neither row loads - the entry hides by its code beside its world-113
+exit - and with it on the round trip loads, the signed region landing
+on the hideout's own.
+================
+*/
+func TestHideoutGatesFollowTheirSwitch(t *testing.T) {
+	dir := t.TempDir()
+	link := func(source, target uint32) string {
+		fields := []string{"1", strconv.Itoa(int(source)), strconv.Itoa(int(target)), "0", "1", "0"}
+		for len(fields) < 21 {
+			fields = append(fields, "0")
+		}
+		return strings.Join(fields, "\t")
+	}
+	files := map[string]string{
+		"teleportbuilding.txt": strings.Join([]string{
+			"1\t27751\tSTORE_MONG_TO_BOSS_GATE",
+			"1\t27752\tSTORE_BOSS_TO_MONG_GATE",
+		}, "\n"),
+		"teleportdata.txt": strings.Join([]string{
+			"1\t49003\tGATE_MONG_TO_BOSS\t27751\t0\t18769\t961\t-341\t574\t0\t0\t0\t1",
+			"1\t49004\tGATE_BOSS_TO_MONG\t27752\t0\t-32743\t0\t7\t360\t0\t0\t0\t113",
+		}, "\n"),
+		"teleportlink.txt": strings.Join([]string{
+			link(hideoutEntryTeleport, hideoutExitTeleport),
+			link(hideoutExitTeleport, hideoutEntryTeleport),
+		}, "\n"),
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv(monster.EnvBaghdadDungeon, "off")
+	off, err := loadPortalCatalog(dir)
+	if err != nil {
+		t.Fatalf("off: the catalogue refused the hidden hideout rows: %v", err)
+	}
+	for _, id := range []uint32{hideoutEntryTeleport, hideoutExitTeleport} {
+		if _, ok := off.destinations[id]; ok {
+			t.Fatalf("off: hideout gate %d loaded", id)
+		}
+	}
+	for _, ref := range []uint32{hideoutEntryBuilding, hideoutExitBuilding} {
+		if _, ok := off.sources[ref]; ok {
+			t.Fatalf("off: hideout building %d answers clicks", ref)
+		}
+	}
+	if len(off.links) != 0 {
+		t.Fatalf("off: %d hideout links loaded", len(off.links))
+	}
+	if err := instance.RegisterPortOnly(instance.ArabiaDefinitions()); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(monster.EnvBaghdadDungeon, "on")
+	on, err := loadPortalCatalog(dir)
+	if err != nil {
+		t.Fatalf("on: %v", err)
+	}
+	exit, ok := on.destinations[hideoutExitTeleport]
+	if !ok {
+		t.Fatal("on: the hideout exit is missing")
+	}
+	if exit.spawn.RegionID != arabia.HideoutRegionID {
+		t.Fatalf("on: the hideout exit stands in region %d, want %d", exit.spawn.RegionID, arabia.HideoutRegionID)
+	}
+	if exit.world != instance.DefinitionID(arabia.HideoutWorldID) {
+		t.Fatalf("on: the hideout exit names world %d", exit.world)
+	}
+	if on.sources[hideoutEntryBuilding] != hideoutEntryTeleport {
+		t.Fatal("on: the field gate's building answers no clicks")
+	}
+	if _, ok := on.links[[2]uint32{hideoutEntryTeleport, hideoutExitTeleport}]; !ok {
+		t.Fatal("on: the way in is missing")
+	}
+	if _, ok := on.links[[2]uint32{hideoutExitTeleport, hideoutEntryTeleport}]; !ok {
+		t.Fatal("on: the way out is missing")
 	}
 }

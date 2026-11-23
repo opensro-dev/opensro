@@ -60,6 +60,19 @@ func TestWorldIsTheBaghdadDungeon(t *testing.T) {
 	if !IsRegion(23378) || !IsRegion(HideoutRegionID) || IsRegion(32769) {
 		t.Fatalf("IsRegion must admit 23378 and %d but not 32769", HideoutRegionID)
 	}
+	// The hideout's gates hide by code while the dungeon switch is
+	// off: its field entry names the field's world, so IsDungeonWorld
+	// alone cannot close it; no other gate hides by name.
+	for _, code := range []string{HideoutEntryGateCode, HideoutExitGateCode} {
+		if !HidesGateCode(code) {
+			t.Fatalf("gate %s must hide with the hideout", code)
+		}
+	}
+	for _, code := range []string{"GATE_ARABIA_DUNGEON_START", "GATE_AR_S", ""} {
+		if HidesGateCode(code) {
+			t.Fatalf("gate %s must not hide with the hideout", code)
+		}
+	}
 	worlds[0].CodeName = "MUTATED"
 	if code, _ := CodeName(DungeonWorldID); code != "GROUP_ARABIA_DUNGEON" {
 		t.Fatalf("Worlds leaked the table: %q", code)
