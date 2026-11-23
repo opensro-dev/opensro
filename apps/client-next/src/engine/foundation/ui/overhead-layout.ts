@@ -23,6 +23,7 @@ import { fortressActive, fortressStatus } from "@/engine/foundation/gameplay/for
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 import { NAME_COLOR_WHITE, nameColorRgba } from "@/engine/foundation/gameplay/name-color";
 import { TRADE_STARS_MAX, tradeStarTint } from "@/engine/foundation/gameplay/cos-trade-info";
+import { tierName } from "./job-honor";
 
 // CICCos 855CBC subtracts the double 20.0 at C46198 before drawing the owner.
 const COMPANION_OWNER_Y = -20;
@@ -48,6 +49,28 @@ export const CONTRIBUTOR_TITLE_TEXT = "Contributor";
 export const CONTRIBUTOR_TITLE_COLOR = [ 1, 1, 0, 1 ] as const;
 // The gap between the title and the name on the board, in pixels.
 export const TITLE_NAME_GAP = 4;
+
+/*
+================
+jobTierColor
+
+Port-only, not native (#3530): the colour a tier title is drawn in -
+amber for a King, gold for Gold, pale silver for Silver, mirroring
+the metal the tier names. The word itself is job-honor.ts's tierName.
+================
+*/
+export function jobTierColor( tier: number ): UiQuad["color"] {
+	switch ( tier ) {
+		case 3:
+			return [ 1, 0.6, 0.08, 1 ];
+		case 2:
+			return [ 1, 0.83, 0.25, 1 ];
+		case 1:
+			return [ 0.8, 0.85, 0.95, 1 ];
+		default:
+			return [ 1, 1, 1, 1 ];
+	}
+}
 
 /*
 ================
@@ -211,6 +234,14 @@ export function overheadLayout(
 			game.contributorTitles?.includes( entity.name ) ?
 		CONTRIBUTOR_TITLE_TEXT :
 		"";
+	// Port-only, not native (#3530): the tier's coloured title in front
+	// of a rostered player's name, the local player's own included. The
+	// roster (job-honor-tiers.ts) is the server's word; with
+	// SRO_JOB_HONOR off no frame arrives and no title ever shows.
+	const tier = (entity.kind === "player" || entity.kind === "local-player") && entity.name ?
+			game.jobHonorTiers?.get( entity.name ) ?? 0 :
+			0,
+		tierText = tier ? tierName( tier ) : "";
 	const status = quickStatus( entity, local, game, options ),
 		guildY = guildText ? -20 : 0,
 		ownerY = companionOwnerShown( entity, options ) ? COMPANION_OWNER_Y : 0,
@@ -265,6 +296,8 @@ export function overheadLayout(
 		guildY,
 		contributorText,
 		contributorColor: CONTRIBUTOR_TITLE_COLOR,
+		tierText,
+		tierColor: jobTierColor( tier ),
 		status,
 		statusY,
 		speechY,
@@ -298,6 +331,7 @@ export function withoutBoardPass( layout: OverheadLayout ): OverheadLayout {
 		guildText: "",
 		guildY: 0,
 		contributorText: "",
+		tierText: "",
 		status: null,
 		statusY: 0,
 		fortressMark: null,

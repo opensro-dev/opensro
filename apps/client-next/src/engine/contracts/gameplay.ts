@@ -858,6 +858,10 @@ export interface GameplayState extends MoverPublication {
 	readonly uniqueDamageRank?: import("./unique-rank").UniqueDamageRank | null;
 	// Port-only job honor board and own standing (job-honor.ts), under SRO_JOB_HONOR.
 	readonly jobHonor?: import("./job-honor").JobHonorFeed | null;
+	// Port-only (#3530): the tier titles' roster (job-honor-tiers.ts) -
+	// the held tier (1 Silver, 2 Gold, 3 King) by character name, under
+	// SRO_JOB_HONOR.
+	readonly jobHonorTiers?: ReadonlyMap<string, number>;
 	readonly uniqueStatus?: import("./unique-status").UniqueStatusFeed | null;
 	// Port-only most-wanted state of the local player (most-wanted.ts).
 	readonly mostWanted?: import("./most-wanted").MostWantedState;

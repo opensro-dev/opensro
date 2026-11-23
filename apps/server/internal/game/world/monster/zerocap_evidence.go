@@ -1,11 +1,16 @@
 /*
 ===========================================================================
 
-zerocap_evidence.go - ISRO-R live caps for the nests the v1.188 shard zeroed
+zerocap_evidence.go - native caps for the nests the v1.188 shard zeroed
 
 Generated evidence (scripts/build/import_isror_zero_caps.py) keyed like the
 population evidence: codename, region and float32 anchor. restoreZeroCapNests
 (catalog.go) reads it.
+
+Every row must come from ISRO-R's archived Tab_RefNest_Back. Its active
+Tab_RefNest holds the operator's tuning (cap 5 and radii 20 / 40 where the
+archive and the v1.188 data agree on the native values, #4149), so a row
+naming it stops the load.
 
 ===========================================================================
 */
@@ -19,6 +24,9 @@ import (
 
 //go:embed data/isror_zero_cap_caps.tsv
 var zeroCapCapsTSV string
+
+// zeroCapNativeTable is the only ISRO-R table a zero-cap row may come from.
+const zeroCapNativeTable = "Tab_RefNest_Back"
 
 /*
 ==================
@@ -37,6 +45,9 @@ func loadZeroCapCaps(text string) map[populationEvidenceKey]int {
 			panic(fmt.Sprintf("zero-cap evidence line %d: expected seven columns", lineNumber+1))
 		}
 		key := evidenceKey(c[0], uint16(mustEvidenceUint(c[1], 16, lineNumber)), mustEvidenceFloat(c[2], lineNumber), mustEvidenceFloat(c[3], lineNumber), mustEvidenceFloat(c[4], lineNumber))
+		if c[6] != zeroCapNativeTable {
+			panic(fmt.Sprintf("zero-cap evidence line %d: cap from %s, not the native %s", lineNumber+1, c[6], zeroCapNativeTable))
+		}
 		cap := mustEvidenceInt(c[5], lineNumber)
 		if cap <= 0 {
 			panic("zero-cap evidence holds a non-positive cap")

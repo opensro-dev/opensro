@@ -736,6 +736,7 @@ import {
 	overheadLayout,
 	titledDisplayName,
 	titledNameRow,
+	TITLE_NAME_GAP,
 	visibleTitleFormat,
 	withoutBoardPass
 } from "@/engine/foundation/ui/overhead-layout";
@@ -23428,7 +23429,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						) continue;
 						if (
 							overlay.fortressMark || overlay.caravanMark || overlay.guildText ||
-							overlay.contributorText ||
+							overlay.contributorText || overlay.tierText ||
 							overlay.status || overlay.stallText
 						) {
 							overlaid.add( entity.gid );
@@ -23672,6 +23673,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// board, left of the name (overhead-layout.ts titledNameRow).
 					const title = overheads.get( entity.gid )?.contributorText ?? "",
 						titleWidth = title ? text.run( title, selected ? 2 : 0 ).width : 0;
+					// Port-only (#3530): the tier's coloured title rides the
+					// same board, between the Contributor title and the name;
+					// one combined lead keeps the whole line centred.
+					const tierTitle = overheads.get( entity.gid )?.tierText ?? "",
+						tierTitleWidth = tierTitle ? text.run( tierTitle, 2 ).width : 0,
+						tierLead = tierTitleWidth ? (title ? TITLE_NAME_GAP : 0) + tierTitleWidth : 0;
 					if ( named && beginnerMarkShown( entity, options ) ) {
 						const name = titledDisplayName(
 								boardText(
@@ -23688,7 +23695,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							quads.push( {
 								characterAnchor: entity.gid,
 								alphaCutoff: 128 / 255,
-								rect: [ titledNameRow( titleWidth, width ).left - 21.5, -(height >> 1) - 1.5, 16, 16 ],
+								rect: [
+									titledNameRow( titleWidth + tierLead, width ).left - 21.5,
+									-(height >> 1) - 1.5,
+									16,
+									16
+								],
 								clip: full,
 								uv: [ 0, 0, 1, 1 ],
 								texture: path,
@@ -23707,7 +23719,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						),
 						width = text.run( name, selected ? 2 : 0 ).width,
 						height = text.boardHeight();
-					const row = titledNameRow( name ? titleWidth : 0, width ),
+					const row = titledNameRow( name ? titleWidth + tierLead : 0, width ),
 						left = row.nameLeft,
 						top = -(height >> 1);
 					if ( name && height ) {
@@ -23751,6 +23763,22 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								[ left - titleWidth - HWAN_TITLE_GAP, top, titleWidth, height ],
 								full,
 								HWAN_TITLE_COLOR,
+								{
+									vAlign: 0,
+									fontStyle: 2
+								}
+							).map( q => ({ ...q, characterAnchor: entity.gid }) )
+						);
+					}
+					// Port-only (#3530): the tier title, bold in its tier's
+					// colour, just before the name (its lead is in the row).
+					if ( tierTitle && name && height ) {
+						quads.push(
+							...text.quads(
+								tierTitle,
+								[ left - tierTitleWidth - TITLE_NAME_GAP, top, tierTitleWidth, height ],
+								full,
+								overheads.get( entity.gid )?.tierColor ?? [ 1, 1, 1, 1 ],
 								{
 									vAlign: 0,
 									fontStyle: 2

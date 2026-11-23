@@ -86,7 +86,7 @@ def extraction():
 			hive={"OverwriteMaxTotalCount": 1, "KeepMonsterCountType": 0}),
 		nest(15, "NPC_AR_TEST", 22106, continent="ARABIA_TOWN"),
 	]
-	return {"source": "fake.bak", "sourceSha256": "ab" * 32,
+	return {"source": "fake.bak", "sourceSha256": "ab" * 32, "nestTable": "Tab_RefNest_Back",
 		"worlds": {"112": {"CodeName": "GROUP_ARABIA_DUNGEON", "Type": 0, "Regions": [23378]}},
 		"rows": rows}
 
@@ -197,6 +197,16 @@ class ArabiaHelpersTest(unittest.TestCase):
 					arabia.load_nests(path, REGION_IDS)
 
 		broken(lambda rows: rows[0].update({"WorldID": 113}))
+		# An extraction from ISRO-R's active Tab_RefNest, its operator's
+		# tuning (#4149), or one that names no table.
+		for table in ("Tab_RefNest", None):
+			data = extraction()
+			data["nestTable"] = table
+			with tempfile.TemporaryDirectory() as tmp:
+				path = Path(tmp) / "nests.json"
+				path.write_text(json.dumps(data))
+				with self.assertRaisesRegex(ValueError, "Tab_RefNest_Back"):
+					arabia.load_nests(path, REGION_IDS)
 		broken(lambda rows: rows[0].update({"RegionID": 25000}))
 		broken(lambda rows: rows[0].update({"NestFlag": 1}))
 		broken(lambda rows: rows[0].update({"Codename": "MOB_SD_BASTET"}))

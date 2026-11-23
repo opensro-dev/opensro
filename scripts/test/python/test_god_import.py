@@ -142,7 +142,7 @@ class GodImportTest(unittest.TestCase):
 		media_bytes = archive_bytes(media)
 		(v1696 / "Media.pk2").write_bytes(media_bytes)
 		(source / god.POPULATION_NAME).write_text(json.dumps({
-			"source": "fixture", "sourceSha256": god.POPULATION_SOURCE_SHA256,
+			"source": "fixture", "sourceSha256": god.POPULATION_SOURCE_SHA256, "nestTable": "Tab_RefNest_Back",
 			"worlds": WORLDS, "rows": export_rows,
 		}), encoding="utf-8")
 		pins = {"Media": hashlib.sha256(media_bytes).hexdigest()}
@@ -160,7 +160,7 @@ class GodImportTest(unittest.TestCase):
 			with self.assertRaises(ValueError):
 				god.read_population(source)
 			(source / god.POPULATION_NAME).write_text(json.dumps({
-				"sourceSha256": god.POPULATION_SOURCE_SHA256, "worlds": {"63": WORLDS["63"]}, "rows": [],
+				"sourceSha256": god.POPULATION_SOURCE_SHA256, "nestTable": "Tab_RefNest_Back", "worlds": {"63": WORLDS["63"]}, "rows": [],
 			}), encoding="utf-8")
 			with self.assertRaises(ValueError):
 				god.read_population(source)

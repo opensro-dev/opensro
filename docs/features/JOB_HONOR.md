@@ -39,13 +39,17 @@ system is the Academy's (the native check on #3530).
 - The buff is the dressed job's honor: the tier a character holds for the job it is wearing. Another job's suit - or no suit - carries no job buff (inference: tiers are ranked per job, so the grant belongs to that job's suit).
 - One reconcile owns the buff set for both honors: the camp's native rank and the job tier's rank fold together, strongest wins, so a camp master keeps the stronger of the two and neither lane strips the other's grant. A convergence pass (first sight of a session, a dress change, the 05:00 change, and a 15-second sweep) keeps every entered character's buffs on its current want.
 
+## The coloured title
+
+- A tier holder wears its tier's word as a coloured title on the name board, in front of the name: Silver in pale silver, Gold in gold, King in amber - the word the Job Honor window's `tierName` speaks, coloured by its metal.
+- The server pushes a tier roster (wire 0x3FC7) to the division: every entered character holding a tier for the job it is dressed as, rebuilt on a 5-second sweep and sent when the bytes change. The nameplate matches by character name, the way the Contributor roster (0x3FC1) does, so the title shows in the suit whose tier earned it and comes off with it.
+- A malformed roster can only cost the roster: the client lane decodes contained and records a degradation, never the session.
+
 ## The ambush
 
 - A run - goods bought, or a thief's fresh haul - rolls a one-in-ten chance of an NPC bandit ambush when it opens (inference: the issue's "small chance" gives no number). The roll has its own domain, so the native bandit draws fall exactly where they fall natively.
 - The ambush meets the caravan on the road: at the caravan timer's fire - the carrier alive, its vehicle loaded, standing in a battlefield region, the native pack's own gates - two more bandits of the caravan's own tables spawn beside the native pack and must be fought off. They are ordinary monsters of that fight: if they kill the carrier or its vehicle, the cargo is lost the native way (the death drop). The ledger pays nothing for them: the ambush is a run's risk, never a score.
 - The mark fires once per run; a run whose cargo sold or emptied first never meets its bandits.
-
-Still later slices of #3530: the coloured title.
 
 ## Days and tiers
 

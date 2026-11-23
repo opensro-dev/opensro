@@ -42,9 +42,12 @@ import contextlib
 import json
 import mmap
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "build"))
 
 import alexandria_npcs as characters
 from alexandria_map_tables import (
@@ -56,6 +59,7 @@ import import_vsro_alexandria as tables
 import published_ids
 import skilldata_enc as skill_tables
 import sro_pk2
+from isror_nest_table import require_native_nest_table
 from pin_file import read_pin_field
 from prepare_client_resources import file_digest, write_atomically
 from sro_paths import trees_overlap
@@ -213,7 +217,8 @@ def require_pairing(spec, env=os.environ):
 # read_population
 #
 # The population export: its recorded backup hash must be the pinned
-# one, and the spec's worlds must all be present.
+# one, its nests must come from ISRO-R's native table, and the spec's
+# worlds must all be present.
 # ================
 def read_population(spec, source_root):
 	path = Path(source_root) / spec.population_name
@@ -226,6 +231,7 @@ def read_population(spec, source_root):
 			f"population export {path} records backup {export.get('sourceSha256') or 'none'}, "
 			f"not the pinned shard backup ({spec.source_sha256})"
 		)
+	require_native_nest_table(export.get("nestTable"), f"population export {path}")
 	worlds = export.get("worlds") or {}
 	for world in spec.worlds_required:
 		if str(world) not in worlds:
