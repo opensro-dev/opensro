@@ -24,6 +24,7 @@ import {
 	dataExtractedRoot,
 	extractedRoot,
 	gameRoot,
+	normalizeRegionId,
 	publicRoot,
 	rebuildRoot,
 	retailTextdataRoot,
@@ -430,7 +431,9 @@ export async function assertPopulationMovementCoherence( bundleRoot, regionsById
 	const population = JSON.parse( await readFile( populationPath, "utf8" ) );
 	const missing = new Set();
 	for ( const row of population.Rows ?? [] ) {
-		const regionKey = `0x${Number( row.RegionID ).toString( 16 )}`;
+		// The catalog's own key form (0x + four hex digits); RegionID is a
+		// decimal number, so it is read as one before normalizing.
+		const regionKey = normalizeRegionId( Number( row.RegionID ) );
 		if ( !regionsById || !(regionKey in regionsById) ) {
 			missing.add( regionKey );
 		}

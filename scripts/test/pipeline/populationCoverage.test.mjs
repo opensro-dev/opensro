@@ -64,3 +64,10 @@ test("a population region the movement authority lacks is refused and named", as
 		await assert.rejects( assertPopulationMovementCoherence( bundle, { "0x4a39": [] } ), /0x5441/ );
 	} );
 });
+
+test("a region id below 0x1000 is keyed as the catalog keys it", async () => {
+	// 612 is 0x264; the region catalog writes it padded, 0x0264.
+	await withBundle( [ { RegionID: 612 } ], async ( bundle ) => {
+		await assertPopulationMovementCoherence( bundle, { "0x0264": [] } );
+	} );
+});
