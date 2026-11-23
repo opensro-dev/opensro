@@ -236,3 +236,43 @@ func TestPeerResyncGates(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestPeerResyncForgetsADepartedCharacter
+
+A character that leaves the division takes its resync book with it:
+when it comes back far from where it left, long after its old book
+fell due, it is seeded afresh (the spawn row carries its position), so
+the first ticks after the return draw no resync; the next 5 s tick
+judges it against the return position.
+================
+*/
+func TestPeerResyncForgetsADepartedCharacter(t *testing.T) {
+	const startMs = int64(1_784_000_000_000)
+	source, push, ticker := resyncPair(t, startMs)
+	mover := source.sessions[0]
+
+	// The mover leaves; the viewer keeps the division ticking.
+	source.sessions = source.sessions[1:]
+	ticker.RunTick(startMs + 1000)
+
+	// It returns 60 s later, 50 units from where it left.
+	returned := EuropeStartProfile()
+	returned.X += 50
+	mover.World = CloneWorldState(DefaultWorldState(returned))
+	source.sessions = append([]SessionSnapshot{mover}, source.sessions...)
+	push.toSession = nil
+	backMs := startMs + 60_000
+	ticker.RunTick(backMs)
+	ticker.RunTick(backMs + 1000)
+	if got := peerFramesTo(push, "viewer", wire.OpObjectPositionUpdate); len(got) != 0 {
+		t.Fatalf("viewer drew %d resyncs on the return, want 0 (stale book judged the return)", len(got))
+	}
+
+	// The fresh book is live: the next due tick still finds no drift.
+	ticker.RunTick(backMs + ResyncIntervalMs)
+	if got := peerFramesTo(push, "viewer", wire.OpObjectPositionUpdate); len(got) != 0 {
+		t.Fatalf("viewer drew %d resyncs at the first due tick after the return, want 0", len(got))
+	}
+}

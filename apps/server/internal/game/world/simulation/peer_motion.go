@@ -129,12 +129,15 @@ func (state *divisionTickState) forEachPeerWatcher(gid uint32, fn func(viewer st
 ================
 divisionTickState.dropDepartedMovers
 
-Forgets the last fanned-out path of every player no longer in the
-division (moverPaths, publishPeerPath).
+Forgets the last fanned-out path (moverPaths, publishPeerPath) and the
+5 s resync book (peerResync, position_resync.go) of every player no
+longer in the division, so neither map outlives its character and a
+character that comes back is seeded afresh instead of judged against
+the position it left from.
 ================
 */
 func (state *divisionTickState) dropDepartedMovers(sessions []SessionSnapshot) {
-	if len(state.moverPaths) == 0 {
+	if len(state.moverPaths) == 0 && len(state.peerResync) == 0 {
 		return
 	}
 	if state.liveGids == nil {
@@ -147,6 +150,11 @@ func (state *divisionTickState) dropDepartedMovers(sessions []SessionSnapshot) {
 	for gid := range state.moverPaths {
 		if !state.liveGids[gid] {
 			delete(state.moverPaths, gid)
+		}
+	}
+	for gid := range state.peerResync {
+		if !state.liveGids[gid] {
+			delete(state.peerResync, gid)
 		}
 	}
 }
