@@ -62,13 +62,44 @@ export const BAG_FIRST_SLOT = 13;
 const CONSUMABLE_MASK = 0x1c;
 const CONSUMABLE = 0x0c;
 const CONSUMABLE_BAND = 0x60;
-// COS summoner bag items (row 8 drop 0x690aa0): TypeId family 0xcc.
-const SUMMONER_FAMILY = 0xcc;
-const SUMMONER_FAMILY_MASK = 0x7fe;
+// typeFlags low-word families: PackTypeFlags(TID1,TID2,TID3,0) & 0x7fe.
+// Native TypeId mid-byte (>>16) is TID3; (>>10)&0x3f is TID2; high byte is TID4.
+const TYPE_FAMILY_MASK = 0x7fe;
+const POTION_FAMILY = 0xec; // 3/3/1 - potion helper 0x690f30
+const PILL_FAMILY = 0x16c; // 3/3/2 - pill helper 0x690ec0
+const SUMMONER_FAMILY = 0xcc; // 3/2/1 - summoner helper 0x6908e0
 // Grass of Life / dead summoner state (696490 case 6 / f0f190).
 export const PET_SUMMON_STATE_DEAD = 4;
 // Summon Trigger admits states 1 and 3 (00691b60).
 export const PET_SUMMON_STATE_OK = [ 1, 3 ] as const;
+/*
+
+
+================
+macroPotionFamily
+
+Native 0x690f30 / 0x690ec0 / 0x6908e0 mid-byte helpers, mapped onto the
+port's typeFlags (TID2/TID3 in the low word). Potion and pill also need
+the expendable band; summoners sit in TID2=2 and skip that band check.
+================
+*/
+function macroIsExpendable( typeFlags: number ): boolean {
+	return (typeFlags & 2) === 0 &&
+		(typeFlags & CONSUMABLE_MASK) === CONSUMABLE &&
+		(typeFlags & CONSUMABLE_BAND) === CONSUMABLE_BAND;
+}
+
+function macroIsPotion( typeFlags: number ): boolean {
+	return macroIsExpendable( typeFlags ) && (typeFlags & TYPE_FAMILY_MASK) === POTION_FAMILY;
+}
+
+function macroIsPill( typeFlags: number ): boolean {
+	return macroIsExpendable( typeFlags ) && (typeFlags & TYPE_FAMILY_MASK) === PILL_FAMILY;
+}
+
+function macroIsSummoner( typeFlags: number ): boolean {
+	return (typeFlags & TYPE_FAMILY_MASK) === SUMMONER_FAMILY;
+}
 
 /*
 ================
@@ -94,50 +125,35 @@ export interface MacroPetFacts {
 macroPotionAdmits
 
 CNIFMacroAutoPotionSlot drop (0xdafff0): kind 0x46 then per-row TypeId
-checks. Native high byte (>>24) is the port's TID4 (bits 11..15).
+checks. Native high byte (>>24) is the port's TID4; mid-byte helpers
+0x690f30 / 0x690ec0 / 0x6908e0 are TID3 (and TID2) via the families above.
 ================
 */
 export function macroPotionAdmits( row: number, typeFlags: number ): boolean {
 	if ( !Number.isInteger( row ) || row < 0 || row >= 9 ) return false;
 	const tid3 = typeFlags >>> 7 & 15;
 	const tid4 = typeFlags >>> 11 & 31;
-	// 0x690aa0: COS summoner bag items (and a high-3 potion-helper path).
+	// 0x690aa0: 0x6908e0 then high 1/2/3 (0x690880 covers 1/2; high 3 is OR'd).
 	if ( row === MACRO_ROW_PET_SUMMON ) {
-		if ( (typeFlags & SUMMONER_FAMILY_MASK) === SUMMONER_FAMILY ) return true;
-		if (
-			(typeFlags & 2) !== 0 || (typeFlags & CONSUMABLE_MASK) !== CONSUMABLE ||
-			(typeFlags & CONSUMABLE_BAND) !== CONSUMABLE_BAND
-		) {
-			return false;
-		}
-		return tid4 === 3;
+		return macroIsSummoner( typeFlags ) && (tid4 === 1 || tid4 === 2 || tid4 === 3);
 	}
-	if (
-		(typeFlags & 2) !== 0 || (typeFlags & CONSUMABLE_MASK) !== CONSUMABLE ||
-		(typeFlags & CONSUMABLE_BAND) !== CONSUMABLE_BAND
-	) {
-		return false;
-	}
-	// Elixirs / lucky powder (10) and stones / tablets (11).
-	if ( tid3 === 10 || tid3 === 11 ) return false;
-	// 690b70 / 690bf0: high byte (TID4) 1=HP, 2=MP, 3=both.
-	if ( row === MACRO_ROW_HP ) return tid4 === 1 || tid4 === 3;
-	if ( row === MACRO_ROW_MP ) return tid4 === 2 || tid4 === 3;
-	// 690ec0 + high 1/6/8/9: character cure pills (0x16c family).
+	// 690b70 / 690bf0: potion helper then high 1 or 3 / 2 or 3.
+	if ( row === MACRO_ROW_HP ) return macroIsPotion( typeFlags ) && (tid4 === 1 || tid4 === 3);
+	if ( row === MACRO_ROW_MP ) return macroIsPotion( typeFlags ) && (tid4 === 2 || tid4 === 3);
+	// 690b00: pill helper then high 1/6/8/9.
 	if ( row === MACRO_ROW_CURE ) {
-		return (typeFlags & 0x7fe) === 0x16c && (tid4 === 1 || tid4 === 6 || tid4 === 8 || tid4 === 9);
+		return macroIsPill( typeFlags ) && (tid4 === 1 || tid4 === 6 || tid4 === 8 || tid4 === 9);
 	}
-	// 690c70 CodeName whitelist; port approximates with scroll TID3s.
-	if ( row === MACRO_ROW_BUFF_ITEM ) return tid3 === 3 || tid3 === 13;
-	// 690a20 / 6909e0: potion helper 690f30 then high 4 / 9.
-	if ( row === MACRO_ROW_PET_HP ) return tid4 === 4;
-	if ( row === MACRO_ROW_PET_HUNGER ) return tid4 === 9;
-	// 690990: pill helper 690ec0 then high 7 (pet universal pill).
-	if ( row === MACRO_ROW_PET_CURE ) {
-		return tid4 === 7 && ((typeFlags & 0x7fe) === 0x16c || tid3 === 2);
+	// 690c70 CodeName whitelist; port approximates with scroll TID3s on the expendable band.
+	if ( row === MACRO_ROW_BUFF_ITEM ) {
+		return macroIsExpendable( typeFlags ) && (tid3 === 3 || tid3 === 13);
 	}
-	// 690a60: potion helper then high 6 (Grass of Life).
-	if ( row === MACRO_ROW_PET_RESURRECT ) return tid4 === 6;
+	// 690a20 / 6909e0 / 690a60: potion helper then high 4 / 9 / 6.
+	if ( row === MACRO_ROW_PET_HP ) return macroIsPotion( typeFlags ) && tid4 === 4;
+	if ( row === MACRO_ROW_PET_HUNGER ) return macroIsPotion( typeFlags ) && tid4 === 9;
+	if ( row === MACRO_ROW_PET_RESURRECT ) return macroIsPotion( typeFlags ) && tid4 === 6;
+	// 690990: pill helper then high 7.
+	if ( row === MACRO_ROW_PET_CURE ) return macroIsPill( typeFlags ) && tid4 === 7;
 	return false;
 }
 
@@ -267,7 +283,7 @@ export function macroPetFacts( input: {
 		undefined :
 		input.bag.find( entry =>
 			entry.slot >= BAG_FIRST_SLOT && entry.refObjId === input.summonRef &&
-			(entry.typeFlags & SUMMONER_FAMILY_MASK) === SUMMONER_FAMILY
+			(entry.typeFlags & TYPE_FAMILY_MASK) === SUMMONER_FAMILY
 		) ??
 			input.bag.find( entry => entry.slot >= BAG_FIRST_SLOT && entry.refObjId === input.summonRef );
 	const summonState = summoner?.summon?.state ?? 0;
