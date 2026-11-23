@@ -5,16 +5,16 @@ tombgate.go - the Gate of the Sarin Tribe opens on its schedule (#4135)
 
 The Qin-Shi tomb's floor-4 gate (the STORE_TQ_SNAKEGATE building, its
 link down to floor 5) is a schedule job on the v1.188 game server,
-SCHEDULE_DEF_CHINS_TOMB. Its start (0x677cf0) links the gate's teleport
-(0x678010) and tells every world notice kind 0x0C10 (written 0x6780e8);
-its end (0x678210) clears the link (0x6783e3) and sends 0x0C11
-(0x678463). A cleared link is a link the gate does not have, so a
-traveller outside the window is refused as for a missing link. The
-v1.696 client shows the two kinds as UIIT_TQ_F4_TELEPORT_OPEN and _CLOSE
-("Gate of Sarin Tribe has opened/closed", in v1.150's own textuisystem)
-on the banner and in chat (its 0x300C cases 0xDA07B8 and 0xDA082B); this
-port sends their low bytes on v1.150's 0x3058 event notice, as the
-Roc's countdowns do (roc.go), and the browser client decodes them.
+SCHEDULE_DEF_CHINS_TOMB. The job's start links the gate's teleport and
+tells every world notice kind 0x0C10; its end clears the link and
+sends 0x0C11. A cleared link is a link the gate does not have, so a
+traveller outside the window is refused as for a missing link.
+The v1.696 client shows the two kinds as UIIT_TQ_F4_TELEPORT_OPEN and
+_CLOSE ("Gate of Sarin Tribe has opened/closed", in v1.150's own
+textuisystem) on the banner and in chat (v1.696 client 0x300C cases
+0xDA07B8 and 0xDA082B, a client-labelled citation); this port sends
+their low bytes on v1.150's 0x3058 event notice, as the Roc's
+countdowns do (roc.go), and the browser client decodes them.
 
 The window is the owner's call (2026-11-23), not a native row: the only
 _Schedule rows on file for this job are the iSRO-R shard's (define 9:
