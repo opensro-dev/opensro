@@ -3262,7 +3262,11 @@ state here before a command can claim a native wire conversation.
 				}
 				return sendFrame( academyOpenRequest() );
 			}
-			if ( command.kind === "academy-page" || command.kind === "academy-join" ) {
+			if (
+				command.kind === "academy-page" || command.kind === "academy-join" ||
+				command.kind === "academy-register" || command.kind === "academy-modify" ||
+				command.kind === "academy-delete"
+			) {
 				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
 				const next = academyRequest( academy, command, progression.level );
 				send( next.frame );

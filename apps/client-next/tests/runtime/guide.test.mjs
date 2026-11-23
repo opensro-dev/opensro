@@ -288,12 +288,14 @@ test("academy page and join are independent of persisted membership and clear on
 		"src/engine/foundation/gameplay/academy.ts"
 	);
 	const original = academyBootstrap( { academyMember: false } ),
-		page = academyRequest( original, { kind: "academy-page", page: 0 } );
-	assert.deepEqual( [ ...page.frame.payload ], [ 0 ] );
+		page = academyRequest( original, { kind: "academy-page", page: 1 } );
+	assert.equal( original.page, 1, "pages are 1-based, the party board's convention" );
+	assert.deepEqual( [ ...page.frame.payload ], [ 1 ] );
 	assert.equal( page.frame.opcode, 0x7701 );
 	assert.equal( original.request, null );
+	assert.throws( () => academyRequest( original, { kind: "academy-page", page: 0 } ) );
 	assert.throws( () => academyRequest( page.state, { kind: "academy-page", page: 1 } ) );
-	const bytes = [ 1, 0, 1, 1 ],
+	const bytes = [ 1, 1, 1, 1 ],
 		u32 = n => bytes.push( n & 255, n >>> 8 & 255, n >>> 16 & 255, n >>> 24 ),
 		str = ( s, wide ) => {
 			bytes.push( s.length, 0 );
@@ -316,6 +318,7 @@ test("academy page and join are independent of persisted membership and clear on
 	u32( 0 );
 	const frame = { opcode: 0xb701, payload: Uint8Array.from( bytes ) }, listed = academyPacket( page.state, frame );
 	assert.equal( listed.request, null );
+	assert.equal( listed.page, 1, "the answer's page byte is stored as shown" );
 	assert.equal( listed.rows[0].name, "Guardian" );
 	assert.equal( listed.rows[0].detail, "Welcome" );
 	const join = academyRequest( listed, { kind: "academy-join", id: 7 }, 59 );
@@ -376,6 +379,59 @@ test("academy page and join are independent of persisted membership and clear on
 	assert.equal( admitted.members[0].entryLevel, 39 );
 	assert.throws( () => academyPacket( listed, { ...frame, payload: frame.payload.subarray( 0, -1 ) } ) );
 	assert.throws( () => academyRequest( { ...listed, member: true }, { kind: "academy-join", id: 7 }, 39 ) );
+});
+
+test("academy own entry registers, modifies and deletes through its acks", async () => {
+	const { academyBootstrap, academyRequest, academyPacket } = await load(
+		"src/engine/foundation/gameplay/academy.ts"
+	);
+	const u32 = n => [ n & 255, n >>> 8 & 255, n >>> 16 & 255, n >>> 24 & 255 ],
+		wide = s => {
+			const out = [ s.length & 255, s.length >>> 8 & 255 ];
+			for ( const c of s ) out.push( c.charCodeAt( 0 ) & 255, c.charCodeAt( 0 ) >>> 8 );
+			return out;
+		};
+	const base = academyBootstrap( { academyMember: false } );
+	assert.equal( base.own, null );
+	// Ownership gates close before any frame is composed.
+	assert.throws( () => academyRequest( base, { kind: "academy-modify", recruit: 0, detail: "Hi" } ) );
+	assert.throws( () => academyRequest( base, { kind: "academy-delete" } ) );
+	assert.throws( () => academyRequest( base, { kind: "academy-register", recruit: 2, detail: "Hi" } ) );
+	assert.throws( () => academyRequest( base, { kind: "academy-register", recruit: 0, detail: "" } ) );
+	assert.throws( () => academyRequest( base, { kind: "academy-register", recruit: 0, detail: "x".repeat( 51 ) } ) );
+	const reg = academyRequest( base, { kind: "academy-register", recruit: 1, detail: "Need a guardian" } );
+	assert.equal( reg.frame.opcode, 0x755d );
+	assert.deepEqual( [ ...reg.frame.payload ], [ ...u32( 0 ), ...u32( 0 ), 1, ...wide( "Need a guardian" ) ] );
+	assert.deepEqual( reg.state.request, { kind: "register", id: 0 } );
+	const registered = academyPacket( reg.state, {
+		opcode: 0xb55d,
+		payload: Uint8Array.from( [ 1, ...u32( 9 ), ...u32( 0 ), 1, ...wide( "Need a guardian" ), ...u32( 3 ) ] )
+	} );
+	assert.deepEqual( registered.own, { id: 9, kind: 1, detail: "Need a guardian" } );
+	assert.equal( registered.request, null );
+	assert.throws( () => academyRequest( registered, { kind: "academy-register", recruit: 0, detail: "x" } ) );
+	const mod = academyRequest( registered, { kind: "academy-modify", recruit: 0, detail: "Edited" } );
+	assert.equal( mod.frame.opcode, 0x713e );
+	assert.deepEqual( [ ...mod.frame.payload ], [ ...u32( 9 ), ...u32( 0 ), 0, ...wide( "Edited" ) ] );
+	const modified = academyPacket( mod.state, {
+		opcode: 0xb13e,
+		payload: Uint8Array.from( [ 1, ...u32( 9 ), ...u32( 0 ), 0, ...wide( "Edited" ) ] )
+	} );
+	assert.deepEqual( modified.own, { id: 9, kind: 0, detail: "Edited" } );
+	assert.equal( modified.request, null );
+	const del = academyRequest( modified, { kind: "academy-delete" } );
+	assert.equal( del.frame.opcode, 0x770b );
+	assert.deepEqual( [ ...del.frame.payload ], u32( 9 ) );
+	const deleted = academyPacket( del.state, { opcode: 0xb70b, payload: Uint8Array.from( [ 1, ...u32( 9 ) ] ) } );
+	assert.equal( deleted.own, null );
+	assert.equal( deleted.request, null );
+	// A foreign delete ack and a failure arm leave the snapshot standing.
+	const foreign = academyPacket( modified, { opcode: 0xb70b, payload: Uint8Array.from( [ 1, ...u32( 4 ) ] ) } );
+	assert.deepEqual( foreign.own, { id: 9, kind: 0, detail: "Edited" } );
+	const refused = academyPacket( reg.state, { opcode: 0xb55d, payload: Uint8Array.of( 2, 2 ) } );
+	assert.equal( refused.own, null );
+	assert.equal( refused.request, null );
+	assert.equal( refused.result, 2 );
 });
 
 test("anchored UI retains native sampling and drops retired character products", async () => {

@@ -1181,6 +1181,71 @@ test("Academy main popup and matching board have separate native entry lifecycle
 	}
 });
 
+test("Academy Matching registers, modifies and deletes its own entry", () => {
+	const sent = [], f = uiFixture( c => sent.push( c ) );
+	try {
+		f.state.gameplay = {
+			...f.state.gameplay,
+			academy: { member: false, page: 2, pages: 3, rows: [], own: null, request: null, result: null }
+		};
+		for ( let t = 0; t < 1200; t += 100 ) f.ui.step( f.state, t );
+		f.ui.event( { kind: "activate", id: "open-window:Academy Matching" } );
+		let scene = f.ui.step( f.state, 1300 );
+		// Page 2 of 3: the scrollbar and both page directions are live, and
+		// only Register is offered while no entry is owned.
+		assert.ok( scene.controls.find( c => c.id === "academy-scroll-thumb" && !c.disabled ) );
+		assert.ok( scene.controls.find( c => c.id === "academy-prev" && !c.disabled ) );
+		assert.ok( scene.controls.find( c => c.id === "academy-register" && !c.disabled ) );
+		assert.ok( scene.controls.find( c => c.id === "academy-modify" && c.disabled ) );
+		assert.ok( scene.controls.find( c => c.id === "academy-delete" && c.disabled ) );
+		f.ui.event( { kind: "activate", id: "academy-register" } );
+		scene = f.ui.step( f.state, 1400 );
+		assert.ok( scene.controls.some( c => c.id === "academy-form-detail" ) );
+		assert.ok( scene.controls.find( c => c.id === "academy-form-confirm" && c.disabled ) );
+		assert.ok( scene.controls.find( c => c.id === "academy-form-kind:0" && c.selected ) );
+		f.ui.event( {
+			kind: "edit",
+			id: "academy-form-detail",
+			value: "Need a guardian",
+			start: 15,
+			end: 15,
+			composing: false
+		} );
+		scene = f.ui.step( f.state, 1450 );
+		assert.ok( scene.controls.find( c => c.id === "academy-form-confirm" && !c.disabled ) );
+		f.ui.event( { kind: "activate", id: "academy-form-kind:1" } );
+		f.ui.event( { kind: "activate", id: "academy-form-confirm" } );
+		assert.deepEqual( sent.at( -1 ).command, {
+			kind: "academy-register",
+			recruit: 1,
+			detail: "Need a guardian"
+		} );
+		scene = f.ui.step( f.state, 1500 );
+		assert.ok( !scene.controls.some( c => c.id === "academy-form-detail" ) );
+		// With an entry owned, Register closes and Modify/Delete open; the
+		// form reopens on the entry's own kind and title.
+		f.state.gameplay = {
+			...f.state.gameplay,
+			academy: {
+				...f.state.gameplay.academy,
+				own: { id: 9, kind: 1, detail: "Need a guardian" }
+			}
+		};
+		scene = f.ui.step( f.state, 1600 );
+		assert.ok( scene.controls.find( c => c.id === "academy-register" && c.disabled ) );
+		assert.ok( scene.controls.find( c => c.id === "academy-modify" && !c.disabled ) );
+		f.ui.event( { kind: "activate", id: "academy-modify" } );
+		scene = f.ui.step( f.state, 1700 );
+		assert.equal( scene.controls.find( c => c.id === "academy-form-detail" ).value, "Need a guardian" );
+		assert.ok( scene.controls.find( c => c.id === "academy-form-kind:1" && c.selected ) );
+		f.ui.event( { kind: "activate", id: "academy-form-cancel" } );
+		f.ui.event( { kind: "activate", id: "academy-delete" } );
+		assert.deepEqual( sent.at( -1 ).command, { kind: "academy-delete" } );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("the player panel selects the local character and frames itself while selected", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	const framed = () => f.scenes.at( -1 ).quads.some( q => q.texture?.endsWith( "/playerminiinfo/pmi_select.png" ) );
