@@ -101,7 +101,8 @@ test("the presented Ghost Walk ends where the server put the character, and the 
 
 test("a peer's dash also lands on the published point", () => {
 	const motion = createEntityMotion( undefined, ( _from, to ) => to );
-	const peer = { ...START, gid: 2, kind: "player", heading: 0 };
+	/** @type {import("../../src/engine/contracts/world.ts").EntityState} */
+	const peer = { ...START, gid: 2, refObjId: 1907, kind: "player", name: "peer", heading: 0 };
 	motion.displace( peer, { gid: 2, token: 9, kind: 8, destination: { ...START, x: 330 } }, 400 );
 	let pose;
 	for ( const now of [ 1000, 2000 ] ) pose = motion.step( now ).find( step => step.gid === 2 ) ?? pose;
