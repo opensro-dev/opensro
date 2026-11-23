@@ -65,10 +65,13 @@ MAX_LEVEL = 110
 APIS_CODENAME = "MOB_SD_APIS"
 APIS_SOURCE_GRADE = 8
 # The VSRO test-shard backup every imported nest, tactic, monster skill and
-# drop row comes from, as the author pinned it (docs/features/CAP110.md,
-# Building). The export records this hash in summary.json.
+# drop row comes from (docs/features/CAP110.md, Building). The export
+# (build/export_cap110_database.py) records this hash in summary.json.
+# The author's copy (b4d85a04) is not available; the Eternity v5.0 copy
+# the population evidence already pins keeps the authored nest spread
+# the other surviving copy flattened (owner's choice, 2026-11-23, #4135).
 SOURCE_BACKUP_NAME = "SRO_VT_SHARD.bak"
-SOURCE_BACKUP_SHA256 = "b4d85a043ebce36c8704768dce0dfa63ff9418c8489241d8441b7902e28fa37a"
+SOURCE_BACKUP_SHA256 = "9b9179e598f303f3293df1771ed7a9339a5e9c9de0dd2401884db2817d5dd9a4"
 TOMB_FLAG = "SRO_PHARAOH_TOMB"
 TOMB_FILE = "cap110-tomb.txt"
 FIELD_WORLD = 1
