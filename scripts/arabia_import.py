@@ -78,6 +78,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent / "build"))
 import alexandria_npcs as characters  # noqa: E402
 import build_alexandria_variant as variant  # noqa: E402
 import variant_gates  # noqa: E402
@@ -109,6 +110,7 @@ from skytemple_import import (  # noqa: E402
 	source_root,
 	verify_archives,
 )
+from isror_nest_table import require_native_nest_table  # noqa: E402
 from later_world_import import missing_export  # noqa: E402
 from sro_paths import trees_overlap  # noqa: E402
 
@@ -257,6 +259,7 @@ def load_nests(path, regions):
 	rows = data.get("rows") if isinstance(data, dict) else None
 	if not isinstance(rows, list) or not rows:
 		raise ValueError(f"{path} is not an Arabia nest extraction")
+	require_native_nest_table(data.get("nestTable"), f"Arabia nest extraction {path}")
 	seen, monster_rows, npc_rows, capped, normalised = set(), [], [], [], []
 	for row in rows:
 		projected = project_row(row, regions)

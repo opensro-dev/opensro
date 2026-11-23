@@ -21,6 +21,7 @@ import hashlib
 import pathlib
 import struct
 
+from isror_nest_table import NATIVE_NEST_TABLE
 from loot_sql_pages import Backup
 
 # Anchors match within this distance: the evidence prints float32 values
@@ -28,9 +29,6 @@ from loot_sql_pages import Backup
 ANCHOR_EPSILON = 0.05
 # Tab_RefNest fixed-row offsets.
 NEST_REGION, NEST_POSITION, NEST_MAX_TOTAL = 12, 14, 48
-# The native nest table. The output's last column names it, and the server's
-# loader refuses a row from any other table.
-NATIVE_NEST_TABLE = "Tab_RefNest_Back"
 
 
 # ================
