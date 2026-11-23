@@ -357,7 +357,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "uniqueStatus",
 						id: "experimental-unique-status",
 						label: "Unique status window",
-						description: "Every unique's Alive or Dead state, and alerts for the ones you mark."
+						description: "Each unique alive or dead; alerts for the ones you mark."
 					},
 					{
 						// Port-only, not native (#3529): the market has no
@@ -366,7 +366,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "consignmentMarket",
 						id: "experimental-consignment-market",
 						label: "Consignment market",
-						description: "System menu: buy and sell items while the seller is offline."
+						description: "System menu: trade items while the seller is offline."
 					},
 					{
 						key: "vHidesCompanions",
@@ -392,7 +392,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "eventCalendar",
 						id: "experimental-event-calendar",
 						label: "Event calendar",
-						description: "System menu: the week's scheduled events, in server time."
+						description: "System menu: this week's events, in server time."
 					},
 					{
 						// Port-only, not native (#3530): the Job Honor Rank
