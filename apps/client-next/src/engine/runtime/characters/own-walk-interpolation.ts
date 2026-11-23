@@ -164,6 +164,11 @@ createOwnWalkInterpolation
 export function createOwnWalkInterpolation() {
 	let history: TickState[] = [];
 	let leg: Leg | undefined;
+	// The worker time the buffered walk ends at: the admitted leg's arrival,
+	// or the newest path window's tick. Standing samples (a turn in place
+	// turns the heading through the history) never extend it, so the gait
+	// ends with the walking, not with the sample stream (#4155).
+	let walkEndMs: number | undefined;
 	let delayMs = MIN_DELAY_MS;
 	// Recent publication latencies (arrival minus tick, worker milliseconds).
 	let latencies: number[] = [];
@@ -297,6 +302,17 @@ export function createOwnWalkInterpolation() {
 			const last = newest();
 			if ( last && sample.atMs < last.atMs ) return;
 			const nextLeg = legOf( sample );
+			// A walking sample extends the buffered walk to its own end: the
+			// leg's arrival, or the sample's tick for a path window or a
+			// pathless moving tick. A standing sample never extends it, but it
+			// does end a walk stopped short of its leg's arrival: the walk
+			// cannot outlast the tick that published the stand.
+			if ( nextLeg ) walkEndMs = nextLeg.startMs + nextLeg.length / nextLeg.speed;
+			else if ( sample.moving || (sample.from && sample.to && (sample.durationMs ?? 0) > 0) ) {
+				walkEndMs = sample.atMs;
+			} else if ( walkEndMs !== undefined && walkEndMs > sample.atMs ) {
+				walkEndMs = sample.atMs;
+			}
 			// Only walking ticks measure latency: a standing pose may be
 			// republished long after its tick (a spawn, a stop), which says
 			// nothing about how late the next walk's ticks will arrive.
@@ -427,13 +443,16 @@ export function createOwnWalkInterpolation() {
 		moving
 
 		Whether the drawn body is still walking: its render time has not
-		reached the end of the buffered walk.
+		reached the end of the buffered walk. The end is the walking's own
+		(a leg's arrival, a path window's tick), never the newest sample:
+		a turn in place keeps fresh standing samples coming, and keyed to
+		those, the gait outlasted the whole turn (#4155).
 		================
 		*/
 		moving( nowMs: number ): boolean {
 			const last = newest();
 			if ( !last ) return false;
-			return !!leg || nowMs - delayMs < last.atMs;
+			return !!leg || (walkEndMs !== undefined && nowMs - delayMs < walkEndMs);
 		},
 		/*
 		================
@@ -482,6 +501,7 @@ export function createOwnWalkInterpolation() {
 		reset() {
 			history = [];
 			leg = undefined;
+			walkEndMs = undefined;
 			delayMs = MIN_DELAY_MS;
 			latencies = [];
 			offset = [ 0, 0, 0 ];
