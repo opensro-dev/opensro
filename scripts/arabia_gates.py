@@ -42,10 +42,21 @@ into the Sky Temple fields. Authored at import, and recorded here:
 	         longer offer; its level condition (121) and the Jangan
 	         pair's (the same link's) clamp through the merge like
 	         every imported gate's.
+	hideout  the boss lair's own chain stands as authored too:
+	         GATE_MONG_TO_BOSS at the field-02 mound (a field gate with
+	         its building, world 1) and GATE_BOSS_TO_MONG on the
+	         template's doorstep (world 113), linked both ways on the
+	         source's level-121 condition. The pair prepares only
+	         while the import stages the lair (its nests are in the
+	         extraction, arabia_import.py); a run without them authors
+	         the chain exactly as before. The server admits the exit's
+	         world under SRO_BAGHDAD_DUNGEON and hides the pair, the
+	         world-1 entry beside its exit, while that is off.
 
 Every row names the world it names in the source: the dungeon pair
 names world 112 (GROUP_ARABIA_DUNGEON, registered port-only while
-SRO_BAGHDAD_DUNGEON is on, #4134), the rest world 1. The Jangan gate's row rides in the
+SRO_BAGHDAD_DUNGEON is on, #4134), the hideout's exit world 113 (its
+entry names the field's world 1), the rest world 1. The Jangan gate's row rides in the
 prepared tables only so the merge renumbers its links by code; it is
 not one of GATE_CODES and the merge never appends it. The later link rows carry two
 trailing columns the v1.150 table has no place for; they sit outside
@@ -69,6 +80,13 @@ DUNGEON_TOWN_GATE = "GATE_BAGH_TO_ARABIA_DUNGEON"
 DUNGEON_START_GATE = "GATE_ARABIA_DUNGEON_START"
 DUNGEON_END_GATE = "GATE_ARABIA_DUNGEON_END"
 CITY_GATES = ("GATE_AR_S", "GATE_AR_W", "GATE_AR_M", "GATE_AR_N")
+# The Kalia hideout's own chain (#4134): the field-02 mound's portal
+# and the one on the template's doorstep, linked both ways by the
+# source. They import only while the extraction carries the lair's
+# nests (the ground staging's posture in arabia_import.py).
+HIDEOUT_ENTRY_GATE = "GATE_MONG_TO_BOSS"
+HIDEOUT_EXIT_GATE = "GATE_BOSS_TO_MONG"
+HIDEOUT_GATES = (HIDEOUT_ENTRY_GATE, HIDEOUT_EXIT_GATE)
 # The arrivals whose source buildings no client ships.
 ARRIVAL_GATES = (DUNGEON_TOWN_GATE, TOWN_GATE)
 SOURCE_GATES = (DUNGEON_START_GATE, DUNGEON_END_GATE, DUNGEON_TOWN_GATE, TOWN_GATE) + CITY_GATES
@@ -114,12 +132,16 @@ def renumbered_buildings(rows, taken_ids):
 # lists and its textdata_object raw bytes; native_data is the v1.150
 # teleportdata the Jangan gate is read from; current_ids and current_building_ids are the identities the variant's
 # tables already use (the source identities stand unless one collides).
+# hideout adds the lair's own two gates (their buildings and links
+# stand in the same source tables), prepared only while the
+# extraction carries the lair's nests.
 # Returns (tables, codes) with tables mapping the three table names and
 # "text" to encoded bytes, ready for variant_gates.merge_gate_tables.
 # ================
-def prepare_gates(later, native_data, current_ids, current_building_ids):
+def prepare_gates(later, native_data, current_ids, current_building_ids, hideout=False):
+	wanted = SOURCE_GATES + (HIDEOUT_GATES if hideout else ())
 	data_by_code = {row[2]: row for row in later["teleportdata.txt"] if len(row) >= TELEPORT_COLUMNS}
-	missing = [code for code in SOURCE_GATES if code not in data_by_code]
+	missing = [code for code in wanted if code not in data_by_code]
 	if missing:
 		raise ValueError(f"v1.696 teleportdata lacks the Arabia gates: {missing}")
 	buildings_by_id = {row[1]: row for row in later["teleportbuilding.txt"] if len(row) >= BUILDING_COLUMNS}
@@ -128,7 +150,7 @@ def prepare_gates(later, native_data, current_ids, current_building_ids):
 	if anchor is None:
 		raise ValueError(f"native teleportdata has no {ANCHOR_GATE} to list Baghdad on")
 
-	source_data = [data_by_code[code] for code in SOURCE_GATES]
+	source_data = [data_by_code[code] for code in wanted]
 	built = [row for row in source_data if row[2] not in ARRIVAL_GATES]
 	unshipped = [row[2] for row in built if row[3] not in buildings_by_id]
 	if unshipped:
@@ -195,4 +217,4 @@ def prepare_gates(later, native_data, current_ids, current_building_ids):
 		"teleportlink.txt": monsters.encode_rows(link_rows),
 		"text": later["text"],
 	}
-	return encoded, GATE_CODES
+	return encoded, wanted

@@ -690,6 +690,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			tables.table_rows((native_text_root / "teleportdata.txt").read_bytes()),
 			{row[1] for row in tables.table_rows(current["teleportdata.txt"]) if len(row) > 1},
 			variant_gates.gate_building_taken(current["teleportbuilding.txt"], text_root, CHARACTER_SHARD, allocated),
+			hideout=hideout,
 		)
 		merged_gates, gate_summary = variant_gates.merge_gate_tables(
 			current, gate_tables, codes=gate_codes, level_cap=variant_gates.gate_level_cap())

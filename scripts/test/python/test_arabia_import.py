@@ -11,6 +11,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import arabia_gates
 import arabia_gates as gates
 import arabia_import as arabia
 import arabia_quest_items as quest_items
@@ -123,15 +124,20 @@ def gate_tables():
 		["1", "247", "GATE_ARABIA_DUNGEON_END", "40798", "SN_NPC_AR_DSTARTPORTAL", "23891", "959", "-236", "527", "0", "0", "0", "112"],
 		["1", "249", "GATE_BAGH_TO_ARABIA_DUNGEON", "40489", "SN_NPC_AR_KAREMPORTAL", "22106", "443", "-432", "1529", "0", "0", "0", "1"],
 		["1", "353", "GATE_TO_LAST_FIELD_IN_BAGHDAD", "43990", "SN_ZONE_22010", "22106", "1579", "-433", "1738", "0", "0", "0", "1"],
+		["1", "245", "GATE_MONG_TO_BOSS", "40796", "SN_STORE_MONGPORTAL", "18769", "961", "-341", "574", "0", "0", "0", "1"],
+		["1", "248", "GATE_BOSS_TO_MONG", "40799", "SN_STORE_BOSSPORTAL", "-32743", "0", "7", "360", "0", "0", "0", "113"],
 	] + [["1", identity, code, building_id, name, "22106", "1316", "-432", "832", "0", "0", "0", "1"]
 		for identity, code, building_id, name in CITY_GATES]
 	buildings = [
 		building("40797", "STORE_ARABIA_DUNGEON_START_GATE", "SN_STORE_ARABIA_DUNGEON_START_GATE", "23378", "1589", "-430", "1200"),
 		building("40798", "STORE_ARABIA_DUNGEON_END_GATE", "SN_STORE_ARABIA_DUNGEON_END_GATE", "23891", "1012", "-236", "606"),
+		building("40796", "STORE_MONG_TO_BOSS_GATE", "SN_STORE_MONG_TO_BOSS_GATE", "18769", "961", "-341", "574"),
+		building("40799", "STORE_BOSS_TO_MONG_GATE", "SN_STORE_BOSS_TO_MONG_GATE", "-32743", "0", "7", "360"),
 	] + [building(building_id, "STORE_AR_GATE" + code[7:], "SN_STORE_AR_GATE" + code[7:], "22106", "1224", "-432", "767")
 		for _identity, code, building_id, _name in CITY_GATES]
 	link = ["1", "249", "246", "0", "1", "1", "121", "999"] + ["0"] * 15
-	links = [link, ["1", "246", "249"] + link[3:], ["1", "247", "249"] + link[3:]]
+	links = [link, ["1", "246", "249"] + link[3:], ["1", "247", "249"] + link[3:],
+		["1", "245", "248"] + link[3:], ["1", "248", "245"] + link[3:]]
 	# The city network: every Portal to the other three, condition-free.
 	city_ids = [identity for identity, _code, _building, _name in CITY_GATES]
 	links += [["1", a, b] + ["0"] * 20 for a in city_ids for b in city_ids if a != b]
@@ -319,6 +325,40 @@ class ArabiaHelpersTest(unittest.TestCase):
 			gates.prepare_gates(later, NATIVE_GATE_DATA, {"1"}, {"2094"})
 
 	# ================
+	# test_prepare_gates_hideout_chain
+	#
+	# The Kalia hideout's pair stands as the source authored it (the
+	# field gate in world 1, its exit in world 113 with the region
+	# spelled signed), linked both ways on the source's level-121
+	# condition, and only while the import stages the lair: the
+	# default preparation authors the chain exactly as before.
+	# ================
+	def test_prepare_gates_hideout_chain(self):
+		data, buildings, links = gate_tables()
+		later = {"teleportdata.txt": data, "teleportbuilding.txt": buildings,
+			"teleportlink.txt": links, "text": b""}
+		encoded, codes = gates.prepare_gates(later, NATIVE_GATE_DATA, {"1"}, {"2094"})
+		self.assertEqual(codes, gates.GATE_CODES)
+		self.assertNotIn("GATE_MONG_TO_BOSS",
+			{row[2] for row in tables.table_rows(encoded["teleportdata.txt"])})
+
+		encoded, codes = gates.prepare_gates(later, NATIVE_GATE_DATA, {"1"}, {"2094"}, hideout=True)
+		self.assertEqual(codes, gates.GATE_CODES + gates.HIDEOUT_GATES)
+		rows = {row[2]: row for row in tables.table_rows(encoded["teleportdata.txt"])}
+		self.assertEqual((rows["GATE_MONG_TO_BOSS"][12], rows["GATE_MONG_TO_BOSS"][5]), ("1", "18769"))
+		self.assertEqual((rows["GATE_BOSS_TO_MONG"][12], rows["GATE_BOSS_TO_MONG"][5]), ("113", "-32743"))
+		built = {row[2] for row in tables.table_rows(encoded["teleportbuilding.txt"])}
+		self.assertIn("STORE_MONG_TO_BOSS_GATE", built)
+		self.assertIn("STORE_BOSS_TO_MONG_GATE", built)
+		entry, exit_ = rows["GATE_MONG_TO_BOSS"][1], rows["GATE_BOSS_TO_MONG"][1]
+		link_rows = {(row[1], row[2]): row for row in tables.table_rows(encoded["teleportlink.txt"])}
+		self.assertEqual((link_rows[(entry, exit_)][6], link_rows[(exit_, entry)][6]), ("121", "121"))
+		# Nothing authored leads into the lair from the city network:
+		# the source's entry is a field gate, reached on foot.
+		jangan = rows["GATE_CH"][1]
+		self.assertFalse({pair for pair in link_rows if pair[1] == entry and pair[0] != exit_})
+
+	# ================
 	# test_prepare_gates_renumbers_on_collision
 	# ================
 	def test_prepare_gates_renumbers_on_collision(self):
@@ -504,6 +544,10 @@ def build_trees(base, hideout=False):
 			object_row("SN_MOB_ARABIA_UNIQUE", "Test Unique"),
 			object_row("SN_NPC_AR_TEST", "Test Arab"),
 			object_row("SN_NPC_AR_DSTARTPORTAL", "Baghdad Dungeon"),
+			object_row("SN_STORE_MONGPORTAL", "Boss Portal"),
+			object_row("SN_STORE_BOSSPORTAL", "Field Portal"),
+			object_row("SN_STORE_MONG_TO_BOSS_GATE", "Boss Portal"),
+			object_row("SN_STORE_BOSS_TO_MONG_GATE", "Field Portal"),
 		]),
 		"textquest_speech&name.txt": utf16([["TextQuest_Speech&Name_100.txt"]]),
 		"textquest_speech&name_100.txt": utf16([
@@ -604,6 +648,11 @@ class ArabiaImportTest(unittest.TestCase):
 			self.assertFalse((output / arabia.HIDEOUT_DOF_PATH).exists())
 			self.assertFalse((output / arabia.HIDEOUT_NAV_PATH).exists())
 			self.assertFalse({arabia.HIDEOUT_DOF_PATH, arabia.HIDEOUT_NAV_PATH} & set(summary["files"]))
+			# ...and its gates do not stand either: the source rows
+			# ride only with the lair's nests.
+			self.assertEqual(summary["gateCodes"], list(arabia_gates.GATE_CODES))
+			self.assertNotIn("GATE_MONG_TO_BOSS",
+				{row[2] for row in read_rows(text / "teleportdata.txt")})
 			self.assertEqual(summary["sectors"],
 				sorted([region & 0xFF, (region >> 8) & 0xFF] for region, _f in REGIONS if region != 31734))
 
@@ -779,12 +828,24 @@ class ArabiaImportTest(unittest.TestCase):
 			self.assertNotIn([25, 128], summary["sectors"])
 			population = json.loads((text / arabia.POPULATION_FILE).read_text())
 			self.assertEqual({row["NestID"]: row["WorldID"] for row in population["Rows"]}[16], 113)
+			# The lair's own gates stand with its ground: the exit
+			# in world 113, the entry out in the field, owned by
+			# the marker like the rest of the chain.
+			merged = {row[2]: row for row in read_rows(text / "teleportdata.txt")}
+			self.assertEqual(merged["GATE_BOSS_TO_MONG"][12], "113")
+			self.assertEqual(merged["GATE_MONG_TO_BOSS"][5], "18769")
+			self.assertTrue(set(gates.HIDEOUT_GATES) <= set(summary["gateCodes"]))
+			pairs = {(row[1], row[2]) for row in read_rows(text / "teleportlink.txt") if len(row) > 2}
+			self.assertIn((merged["GATE_MONG_TO_BOSS"][1], merged["GATE_BOSS_TO_MONG"][1]), pairs)
+			self.assertIn((merged["GATE_BOSS_TO_MONG"][1], merged["GATE_MONG_TO_BOSS"][1]), pairs)
 
 			with mock.patch.dict(os.environ, {arabia.FLAG: "off"}):
 				self.assertEqual(arabia.add_arabia(native, output, source, nests, closure),
 					{"enabled": False})
 			self.assertFalse(dof.exists())
 			self.assertFalse(nav.exists())
+			self.assertFalse({"GATE_MONG_TO_BOSS", "GATE_BOSS_TO_MONG"}
+				& {row[2] for row in read_rows(text / "teleportdata.txt")})
 
 	# ================
 	# test_later_speech_texts_keeps_untranslated_rows
