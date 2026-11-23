@@ -330,7 +330,6 @@ func (rt *Runtime) applyPeriodicPulse(effect linkedpulse.Effect, c, snapshot *en
 	public := []wire.Frame{wire.SkillPulseFrame(effect.SourceGID, skill.ID, []wire.SkillAreaTarget{
 		{GID: target.Gid, Impacts: []wire.SkillCastTargetImpact{committedSkillImpact(formula, hit.impacts[0])}},
 	})}
-	public = append(public, rt.monsterImpactAbnormalFrames(effect.Division, target.Gid, hit.impacts)...)
 	return rt.creditedHitResult(effect.Division, target, hit, public, now)
 }
 

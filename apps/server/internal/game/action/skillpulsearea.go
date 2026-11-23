@@ -184,9 +184,7 @@ func (rt *Runtime) pulseArea(division string, c *enterworld.Character, row enter
 			}
 			targets = append(targets, wire.SkillAreaTarget{GID: target.Gid,
 				Impacts: []wire.SkillCastTargetImpact{committedSkillImpact(victim.formulas[0], hit.impacts[0])}})
-			// The pulse frame is the only result, so the hit's committed
-			// abnormal publications ride with it (#3680).
-			result = rt.creditedHitResult(division, target, hit, rt.monsterImpactAbnormalFrames(division, target.Gid, hit.impacts), now)
+			result = rt.creditedHitResult(division, target, hit, nil, now)
 		}
 		after = append(after, result.Broadcast...)
 		private = append(private, result.ActorPrivate...)

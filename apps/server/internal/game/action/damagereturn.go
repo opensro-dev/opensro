@@ -146,9 +146,6 @@ func (rt *Runtime) returnDamageToMonster(division string, c *enterworld.Characte
 	public := []wire.Frame{wire.SkillPulseFrame(source, attackSkill, []wire.SkillAreaTarget{
 		{GID: live.Gid, Impacts: []wire.SkillCastTargetImpact{committedSkillImpact(formula, hit.impacts[0])}},
 	})}
-	// The pulse frame is the only result, so the hit's committed
-	// abnormal publications ride with it (#3680).
-	public = append(public, rt.monsterImpactAbnormalFrames(division, live.Gid, hit.impacts)...)
 	return rt.creditedHitResult(division, live, hit, public, now)
 }
 
