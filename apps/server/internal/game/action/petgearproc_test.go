@@ -197,6 +197,12 @@ func TestPetGearProcDamageAndTriggerIsolation(t *testing.T) {
 				} else if mob.CurrentHP-after.CurrentHP != want {
 					t.Fatalf("total damage=%d, want%d", mob.CurrentHP-after.CurrentHP, want)
 				}
+				if group != "ProcMend" {
+					if after.Opponents[0].GID != c.ActiveCOS.GID ||
+						after.Opponents[1].GID == enterworld.ObjectIDForCharacter(c) {
+						t.Fatalf("proc threat did not go to the pet: %+v", after.Opponents)
+					}
+				}
 				var shown uint32
 				var visuals int
 				for _, batch := range rt.drainMonsterLegRecipients() {
@@ -355,6 +361,22 @@ func TestPetGearChainDistinctHopsAndSight(t *testing.T) {
 		after, _ := rt.Monsters.Get(testDivision, mobs[i].Gid)
 		if mobs[i].CurrentHP-after.CurrentHP != want {
 			t.Fatalf("hop%d damage=%d want%d", i, mobs[i].CurrentHP-after.CurrentHP, want)
+		}
+	}
+	visuals := map[uint32]uint8{}
+	for _, batch := range rt.drainMonsterLegRecipients() {
+		for _, frame := range batch.Frames {
+			if frame.Opcode == 0x324b {
+				visuals[binary.LittleEndian.Uint32(frame.Payload)] = frame.Payload[4]
+			}
+		}
+	}
+	if len(visuals) != 5 {
+		t.Fatalf("chain signalled %d targets, want 5", len(visuals))
+	}
+	for hop, signal := range []uint8{0xd7, 0xdb, 0xdc, 0xdd, 0xde} {
+		if visuals[mobs[hop].Gid] != signal {
+			t.Fatalf("missing or out-of-order animation at hop %d: %v", hop+1, visuals)
 		}
 	}
 	rt.LineOfSight = func(simulation.Spawn, simulation.NavOwner, simulation.Spawn) bool { return false }

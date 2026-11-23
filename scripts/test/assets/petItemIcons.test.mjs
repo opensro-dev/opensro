@@ -12,11 +12,11 @@ import { createHash } from "node:crypto";
 import { runPython } from "../../build/shared/pythonRun.mjs";
 import { decodePngRgba } from "../lib/pngRgba.mjs";
 
-test("all27 pet icons are distinct32x32 RGBA images with visible object detail", async () => {
+test("all 30 pet icons are distinct 32x32 RGBA images with visible object detail", async () => {
 	const script = fileURLToPath( new URL( "../../build/shared/pet_item_icons.py", import.meta.url ) );
 	const { stdout } = await runPython( [ script ], { task: "Pet icon asset test" } );
 	const icons = JSON.parse( stdout );
-	assert.equal( icons.length, 27 );
+	assert.equal( icons.length, 30 );
 	const hashes = new Set();
 	for ( const icon of icons ) {
 		const bytes = Buffer.from( icon.png, "base64" );
@@ -26,7 +26,7 @@ test("all27 pet icons are distinct32x32 RGBA images with visible object detail",
 		assert.ok( rgba.some( ( value, index ) => index % 4 !== 3 && value > 100 ), "not a blank background" );
 		hashes.add( createHash( "sha256" ).update( bytes ).digest( "hex" ) );
 	}
-	assert.equal( hashes.size, 27, "every slot and degree has different artwork" );
+	assert.equal( hashes.size, 30, "every slot and degree has different artwork" );
 });
 
 test("all source pet skill and gear atlases are compact native-cell sheets", async () => {

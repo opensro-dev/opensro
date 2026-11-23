@@ -9,7 +9,9 @@ tick expires/publishes them; normal hit doors consume them before HP debit.
 package action
 
 import (
+	"cmp"
 	"encoding/binary"
+	"slices"
 	"strings"
 	"sync"
 
@@ -23,6 +25,8 @@ import (
 
 const petShieldOpcode uint16 = 0x3FB2
 const petShieldDuration int64 = 5000
+const petShieldBurstPercent = 8
+const petShieldBurstTargets = 5
 const petShieldPartyRange = 200.0 // 20m, matching the expansion's game-unit scale.
 const petShieldBurstRange = 80.0  // 8m around each protected player and bear.
 
@@ -41,7 +45,7 @@ type petShield struct {
 	name             string
 	amount, maxHP    uint32
 	until, publishAt int64
-	burst            bool
+	burst            *[petShieldBurstTargets]uint32
 }
 type petShieldStore struct {
 	sync.Mutex
@@ -79,7 +83,10 @@ Replacing a shield never stacks absorption or detonates the old shield.
 ================
 */
 func (rt *Runtime) castPetShield(division string, owner, snapshot *enterworld.Character, pet *domain.CharacterCOS, skill companion.SkillDef, now int64) OpResult {
-	if rt.inTown(division, snapshot) {
+	if !rt.petShieldRecipientAllowed(division, snapshot) {
+		return petTrainingReceipt("Iron Hide cannot be cast here.")
+	}
+	if rt.inTown(division, snapshot) && rt.sookRun(division, snapshot) == nil {
 		return petTrainingReceipt("Iron Hide cannot be cast in town.")
 	}
 	mods := companion.ModifiersFor(pet)
@@ -112,9 +119,14 @@ func (rt *Runtime) castPetShield(division string, owner, snapshot *enterworld.Ch
 		return petTrainingReceipt("The shield could not be cast.")
 	}
 	source := petOwnerKey{division: division, name: owner.Name, gid: pet.GID}
+	// Each recipient burst draws from the same cast’s target budget.
+	var burst *[petShieldBurstTargets]uint32
+	if skill.Option == 3 {
+		burst = new([petShieldBurstTargets]uint32)
+	}
 	var shields []petShield
 	if shieldMaxHP > 0 {
-		shields = append(shields, petShield{key: petShieldKey{division, pet.GID}, source: source, maxHP: shieldMaxHP, burst: skill.Option == 3})
+		shields = append(shields, petShield{key: petShieldKey{division, pet.GID}, source: source, maxHP: shieldMaxHP, burst: burst})
 	}
 	from := rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, now)
 	members := map[uint32]bool{enterworld.ObjectIDForCharacter(snapshot): true}
@@ -128,7 +140,9 @@ func (rt *Runtime) castPetShield(division string, owner, snapshot *enterworld.Ch
 		if gid == enterworld.ObjectIDForCharacter(snapshot) {
 			member = snapshot
 		}
-		if member == nil || !enterworld.CharacterAlive(member) || !rt.petExpansionAllowed(member, pet) || rt.inTown(division, member) {
+		if member == nil || !enterworld.CharacterAlive(member) || !rt.petShieldRecipientAllowed(division, member) ||
+			domain.CharacterWorldInstance(member) != domain.CharacterWorldInstance(snapshot) ||
+			(rt.inTown(division, member) && rt.sookRun(division, member) == nil) {
 			continue
 		}
 		at := rt.liveSpawn(simulation.WorldKey(division, member.Name), member, now)
@@ -140,7 +154,7 @@ func (rt *Runtime) castPetShield(division string, owner, snapshot *enterworld.Ch
 			continue
 		}
 		maxHP, _, _, _ := keeperVitalsFrom(member, stats, nil)
-		shields = append(shields, petShield{key: petShieldKey{division, gid}, source: source, name: member.Name, maxHP: uint32(maxHP), burst: skill.Option == 3})
+		shields = append(shields, petShield{key: petShieldKey{division, gid}, source: source, name: member.Name, maxHP: uint32(maxHP), burst: burst})
 	}
 	public := []wire.Frame{{
 		Opcode:  wire.OpActionEmote,
@@ -199,7 +213,7 @@ func (rt *Runtime) absorbPetShield(division string, gid, damage uint32, now int6
 advancePetShields
 
 No independent timers. Revalidate the caster and recipient before expiry damage;
-death, logout, unsummon, town/instance entry cancel without detonating.
+death, logout, unsummon and departure from eligible combat cancel the shield.
 ================
 */
 func (rt *Runtime) advancePetShields(now int64) []simulation.DivisionFrames {
@@ -213,6 +227,12 @@ func (rt *Runtime) advancePetShields(now int64) []simulation.DivisionFrames {
 		}
 	}
 	rt.petShields.Unlock()
+	slices.SortFunc(due, func(a, b petShield) int {
+		if order := cmp.Compare(a.key.division, b.key.division); order != 0 {
+			return order
+		}
+		return cmp.Compare(a.key.gid, b.key.gid)
+	})
 	var out []simulation.DivisionFrames
 	for _, s := range due {
 		unlock := rt.lockDivision(s.key.division)
@@ -226,17 +246,19 @@ func (rt *Runtime) advancePetShields(now int64) []simulation.DivisionFrames {
 		}
 		s = current
 		owner := rt.characterSnapshotCompanionAdmitted(s.key.division, rt.findCharacter(s.key.division, s.source.name), nil)
-		valid := owner != nil && enterworld.CharacterAlive(owner) && !rt.inTown(s.key.division, owner)
+		valid := owner != nil && enterworld.CharacterAlive(owner) && (rt.sookRun(s.key.division, owner) != nil || !rt.inTown(s.key.division, owner))
 		if valid {
 			pet := owner.CompanionByGID(s.source.gid)
 			session := rt.petSessionFor(s.key.division, owner.Name, s.source.gid)
-			valid = pet != nil && pet.Summoned && pet.CurrentHP > 0 && session != nil && session.ready && rt.petExpansionAllowed(owner, pet)
+			valid = pet != nil && pet.Summoned && pet.CurrentHP > 0 && session != nil && session.ready && rt.petShieldRecipientAllowed(s.key.division, owner)
 		}
 		var recipient *enterworld.Character
 		if valid && s.name != "" {
 			recipient = rt.characterSnapshotCompanionAdmitted(s.key.division, rt.findCharacter(s.key.division, s.name), nil)
 			valid = recipient != nil && enterworld.CharacterAlive(recipient) &&
-				rt.petExpansionAllowed(recipient, owner.CompanionByGID(s.source.gid)) && !rt.inTown(s.key.division, recipient)
+				rt.petShieldRecipientAllowed(s.key.division, recipient) &&
+				domain.CharacterWorldInstance(recipient) == domain.CharacterWorldInstance(owner) &&
+				(rt.sookRun(s.key.division, recipient) != nil || !rt.inTown(s.key.division, recipient))
 		}
 		if valid && recipient != nil && recipient.Name != owner.Name {
 			_, valid = rt.auraParty(s.key.division, owner)[s.key.gid]
@@ -247,7 +269,7 @@ func (rt *Runtime) advancePetShields(now int64) []simulation.DivisionFrames {
 			valid = samePlaneAdjacent(a, b)
 		}
 		expired := now >= s.until
-		explode := valid && expired && s.burst && s.amount > 0
+		explode := valid && expired && s.burst != nil && s.amount > 0
 		if expired || !valid || s.amount == 0 {
 			rt.petShields.Lock()
 			delete(rt.petShields.rows, s.key)
@@ -260,7 +282,7 @@ func (rt *Runtime) advancePetShields(now int64) []simulation.DivisionFrames {
 				if recipient != nil {
 					at = rt.liveSpawn(simulation.WorldKey(s.key.division, recipient.Name), recipient, now)
 				}
-				out = append(out, rt.burstPetShield(s, owner, at, uint32(uint64(remaining)*40/100), now)...)
+				out = append(out, rt.burstPetShield(s, owner, at, uint32(uint64(remaining)*petShieldBurstPercent/100), now)...)
 			}
 		}
 		out = append(out, simulation.DivisionFrames{DivisionID: s.key.division, SourceGID: s.key.gid, Frames: simFrames([]wire.Frame{petShieldFrame(s, now, explode)})})
@@ -305,12 +327,19 @@ func (rt *Runtime) burstPetShield(s petShield, owner *enterworld.Character, at s
 		if rt.jobMonsterTargetRefusal(owner, mob) != 0 {
 			continue
 		}
+		alreadyHit := slices.Contains(s.burst[:], mob.Gid)
+		free := slices.Index(s.burst[:], 0)
+		if !alreadyHit && free < 0 {
+			continue
+		}
 		formula := combat.Result{Damage: min(damage, wire.MaxSkillActionDamage), ResultFlags: 1}
-		hit, ok := rt.commitCompanionCreditedMonsterHit(s.key.division, liveOwner, owner, row, mob, formula, "pet-shield-burst", now)
+		hit, ok := rt.commitCompanionCreditedMonsterHit(s.key.division, liveOwner, owner, s.source.gid, row, mob, formula, "pet-shield-burst", now)
 		if !ok {
 			continue
 		}
-		rt.commitSkillHostility(s.key.division, s.source.gid, mob.Gid, row, hit.impacts, now)
+		if !alreadyHit {
+			s.burst[free] = mob.Gid
+		}
 		public := []wire.Frame{wire.SkillPulseFrame(s.key.gid, row.ID, []wire.SkillAreaTarget{{GID: mob.Gid, Impacts: []wire.SkillCastTargetImpact{committedSkillImpact(formula, hit.impacts[0])}}})}
 		result := rt.creditedHitResult(s.key.division, mob, hit, public, now)
 		out = append(out, simulation.DivisionFrames{DivisionID: s.key.division, SourceGID: s.key.gid, Frames: simFrames(result.Broadcast)})
@@ -331,8 +360,9 @@ petShieldRecipientAllowed
 Hit-time exclusion without reading character storage inside its write door.
 ================
 */
-func (rt *Runtime) petShieldRecipientAllowed(c *enterworld.Character) bool {
-	return rt.AttackPetExpansion && !rt.inFreeBattle(c) && !wearsJobSuit(c, rt.deps.ItemReferences()) && domain.CharacterWorldInstance(c) == domain.DefaultWorldInstance
+func (rt *Runtime) petShieldRecipientAllowed(division string, c *enterworld.Character) bool {
+	return rt.AttackPetExpansion && !rt.inFreeBattle(c) && !wearsJobSuit(c, rt.deps.ItemReferences()) &&
+		(domain.CharacterWorldInstance(c) == domain.DefaultWorldInstance || rt.sookRun(division, c) != nil)
 }
 
 /*
@@ -348,7 +378,7 @@ func (rt *Runtime) retirePetShields(division, name string) {
 	defer rt.petShields.Unlock()
 	for key, shield := range rt.petShields.rows {
 		if key.division == division && (strings.EqualFold(shield.name, name) || strings.EqualFold(shield.source.name, name)) {
-			shield.amount, shield.publishAt, shield.burst = 0, 0, false
+			shield.amount, shield.publishAt, shield.burst = 0, 0, nil
 			rt.petShields.rows[key] = shield
 		}
 	}

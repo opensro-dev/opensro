@@ -152,6 +152,7 @@ func (rt *Runtime) petGearArea(step petCombatStep, at simulation.Spawn, damage u
 petGearChain
 
 Five distinct victims, losing 20 percent damage on each eight-meter hop.
+The animation signals carry the bounce number so the client can stagger impacts.
 ================
 */
 func (rt *Runtime) petGearChain(step petCombatStep, first uint32, at simulation.Spawn, damage uint32) {
@@ -160,7 +161,7 @@ func (rt *Runtime) petGearChain(step petCombatStep, first uint32, at simulation.
 		return
 	}
 	seen := map[uint32]bool{}
-	for hop := range 5 {
+	for hop := range petGearChainHops {
 		var candidates []uint32
 		if hop == 0 {
 			candidates = append(candidates, first)
@@ -180,7 +181,7 @@ func (rt *Runtime) petGearChain(step petCombatStep, first uint32, at simulation.
 			}
 			seen[gid] = true
 			rt.wolfBonusHit(step, *victim.monster, damage, "pet-gear-proc")
-			rt.wolfEmote(step.key.division, gid, 0xd7)
+			rt.wolfEmote(step.key.division, gid, petGearChainEmote(hop))
 			at = victim.at
 			damage = damage * 80 / 100
 			found = true
@@ -190,6 +191,22 @@ func (rt *Runtime) petGearChain(step petCombatStep, first uint32, at simulation.
 			break
 		}
 	}
+}
+
+const petGearChainHops = 5
+
+/*
+================
+petGearChainEmote
+
+Keep 0xd7 for the first strike. Continue after the other gear signals.
+================
+*/
+func petGearChainEmote(hop int) uint8 {
+	if hop == 0 {
+		return 0xd7
+	}
+	return 0xda + uint8(hop)
 }
 
 /*

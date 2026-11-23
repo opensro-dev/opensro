@@ -79,7 +79,7 @@ func (rt *Runtime) preparePetGearDrop(killer *enterworld.Character, parent groun
 		return grounditem.Item{}, false
 	}
 	class := int(parentRef.NativeFields.Get("itemClass"))
-	if class < 1 || class > 27 {
+	if class < 1 || (class-1)/3 >= len(companion.D.Gear) {
 		return grounditem.Item{}, false
 	}
 	degree := companion.D.Gear[(class-1)/3]

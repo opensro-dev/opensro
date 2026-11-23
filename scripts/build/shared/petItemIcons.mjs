@@ -24,17 +24,18 @@ export async function buildPetItemIcons() {
 	const script = fileURLToPath( new URL( "./pet_item_icons.py", import.meta.url ) );
 	const { stdout } = await runPython( [ script ], { task: "Pet gear icon export" } );
 	const icons = JSON.parse( stdout );
-	const items = PORT_ITEMS.filter( item => item.seal === 0 );
-	if ( icons.length !== items.length ) throw Error( "Incomplete pet icon export" );
+	const paths = new Set( PORT_ITEMS.map( item => item.icon ) );
 	const files = [];
-	for ( const item of items ) {
-		const icon = icons.find( row => row.slot === item.slot.toLowerCase() && row.degree === item.degree );
-		if ( !icon ) throw Error( `Missing pet icon ${item.codename}` );
+	for ( const icon of icons ) {
+		const degree = String( icon.degree ).padStart( 2, "0" );
+		const nativePath = `item\\pet\\${icon.slot}_${degree}.ddj`;
+		if ( !paths.delete( nativePath ) ) throw Error( `Unexpected pet icon ${nativePath}` );
 		const publicPath = "/assets/images/Media_extracted/icon/" +
-			item.icon.replaceAll( "\\", "/" ).replace( /\.ddj$/, ".png" );
+			nativePath.replaceAll( "\\", "/" ).replace( ".ddj", ".png" );
 		await writeIntoPublicTree( path.join( publicRoot, publicPath.slice( 1 ) ), Buffer.from( icon.png, "base64" ) );
 		files.push( publicPath );
 	}
+	if ( paths.size ) throw Error( "Incomplete pet icon export: " + [ ...paths ].join( ", " ) );
 	for ( const name of [ "pet-skills", "pet-skills-1", "pet-skills-2" ] ) {
 		const atlas = `/assets/images/Media_extracted/icon/port/${name}.png`;
 		await copyIntoPublicTree(

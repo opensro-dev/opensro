@@ -2588,6 +2588,83 @@
 					3000
 				]
 			]
+		},
+		{
+			"degree": 10,
+			"minPetLevel": 90,
+			"dropChance": 0.0015,
+			"magicChance": 0.48,
+			"rareChance": 0.14,
+			"rareWeights": [
+				34,
+				40,
+				26,
+				30
+			],
+			"maxBlues": 6,
+			"rollFloor": 0.5625,
+			"items": [
+				{
+					"slot": "Collar",
+					"name": "Dragonbone Collar",
+					"codename": "ITEM_COS_PET_COLLAR_10",
+					"id": 30100,
+					"baseStats": {
+						"physicalAttack": 180,
+						"magicalAttack": 180,
+						"physicalDefense": 0,
+						"magicalDefense": 0,
+						"hitRatio": 20,
+						"parryRatio": 0,
+						"maxHPPercent": 333.333333333333
+					}
+				},
+				{
+					"slot": "Harness",
+					"name": "Dragonscale Harness",
+					"codename": "ITEM_COS_PET_HARNESS_10",
+					"id": 30200,
+					"baseStats": {
+						"physicalAttack": 0,
+						"magicalAttack": 0,
+						"physicalDefense": 90,
+						"magicalDefense": 90,
+						"hitRatio": 0,
+						"parryRatio": 20,
+						"maxHPPercent": 333.333333333333
+					}
+				},
+				{
+					"slot": "Charm",
+					"name": "Primal Charm",
+					"codename": "ITEM_COS_PET_CHARM_10",
+					"id": 30300,
+					"baseStats": {
+						"physicalAttack": 90,
+						"magicalAttack": 90,
+						"physicalDefense": 45,
+						"magicalDefense": 45,
+						"hitRatio": 10,
+						"parryRatio": 10,
+						"maxHPPercent": 333.333333333333
+					}
+				}
+			],
+			"procDamage": 1112,
+			"procRanges": [
+				[
+					1675,
+					2237
+				],
+				[
+					1112,
+					1675
+				],
+				[
+					1112,
+					3362
+				]
+			]
 		}
 	],
 	"affixes": [
@@ -5212,6 +5289,27 @@
 			"code": 204
 		},
 		{
+			"id": "FireDegree10",
+			"name": "Infernal D10",
+			"kind": "Prefix",
+			"group": "Fire",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} fire damage",
+			"tier": 10,
+			"minDegree": 10,
+			"min": 35,
+			"max": 1112,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 232
+		},
+		{
 			"id": "ColdDegree2",
 			"name": "Hibernal D2",
 			"kind": "Prefix",
@@ -5315,6 +5413,27 @@
 			"pets": "All",
 			"status": "Implemented",
 			"code": 209
+		},
+		{
+			"id": "ColdDegree10",
+			"name": "Hibernal D10",
+			"kind": "Prefix",
+			"group": "Cold",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} cold damage",
+			"tier": 10,
+			"minDegree": 10,
+			"min": 35,
+			"max": 1112,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 233
 		},
 		{
 			"id": "LightningDegree2",
@@ -5422,6 +5541,27 @@
 			"code": 214
 		},
 		{
+			"id": "LightningDegree10",
+			"name": "Thundering D10",
+			"kind": "Prefix",
+			"group": "Lightning",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} lightning damage",
+			"tier": 10,
+			"minDegree": 10,
+			"min": 70,
+			"max": 2237,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 234
+		},
+		{
 			"id": "PoisonDegree2",
 			"name": "Pestilent D2",
 			"kind": "Prefix",
@@ -5525,6 +5665,27 @@
 			"pets": "All",
 			"status": "Implemented",
 			"code": 219
+		},
+		{
+			"id": "PoisonDegree10",
+			"name": "Pestilent D10",
+			"kind": "Prefix",
+			"group": "Poison",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} poison damage over 4 s",
+			"tier": 10,
+			"minDegree": 10,
+			"min": 90,
+			"max": 10087,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 235
 		},
 		{
 			"id": "ProcChain1WhenStruck",
@@ -6318,7 +6479,7 @@
 			"maxLevel": 10,
 			"unlockLevel": 10,
 			"rank2": "Tier II also shields party members within 20 m.",
-			"rank3": "Tier III detonates each recipient's remaining shield (including the bear) after 5 s for 40% of its remaining value within 8 m.",
+			"rank3": "Tier III detonates each recipient's remaining shield (including the bear) after 5 s for 8% of its remaining value within 8 m. Up to 5 monsters per cast.",
 			"animation": "emote0",
 			"status": "Implemented",
 			"icon": "skill\\europe\\warrior_guarda_physical_a.ddj",
@@ -6344,7 +6505,7 @@
 			"maxLevel": 10,
 			"unlockLevel": 40,
 			"rank2": "Tier II also shields party members within 20 m.",
-			"rank3": "Tier III detonates each recipient's remaining shield (including the bear) after 5 s for 40% of its remaining value within 8 m.",
+			"rank3": "Tier III detonates each recipient's remaining shield (including the bear) after 5 s for 8% of its remaining value within 8 m. Up to 5 monsters per cast.",
 			"animation": "emote0",
 			"status": "Implemented",
 			"icon": "skill\\europe\\warrior_guarda_physical_a.ddj",
@@ -6359,7 +6520,7 @@
 			"theme": "Endurance",
 			"option": 3,
 			"name": "Iron Hide III",
-			"effect": "Shields the bear and its owner for {v}% of maximum HP for 5 s. Also shields party members within 20 m. On expiry, each recipient's remaining shield (including the bear) explodes within 8 m for 40% of its remaining value as damage to monsters.",
+			"effect": "Shields the bear and its owner for {v}% of maximum HP for 5 s. Also shields party members within 20 m. On expiry, each recipient's remaining shield (including the bear) explodes within 8 m for 8% of its remaining value as damage to monsters. Up to 5 monsters per cast.",
 			"trigger": "Timer",
 			"cooldown": 21,
 			"cooldownUnit": "s",
@@ -6370,7 +6531,7 @@
 			"maxLevel": 1,
 			"unlockLevel": 90,
 			"rank2": "Tier II also shields party members within 20 m.",
-			"rank3": "Tier III detonates each recipient's remaining shield (including the bear) after 5 s for 40% of its remaining value within 8 m.",
+			"rank3": "Tier III detonates each recipient's remaining shield (including the bear) after 5 s for 8% of its remaining value within 8 m. Up to 5 monsters per cast.",
 			"animation": "emote0",
 			"status": "Implemented",
 			"icon": "skill\\europe\\warrior_guarda_physical_a.ddj",
@@ -6463,7 +6624,7 @@
 			"theme": "Guardian",
 			"option": 1,
 			"name": "Guardian's Bond I",
-			"effect": "Automatically revives the owner, restoring {v}% HP and lost EXP.",
+			"effect": "Automatically revives the owner after 5 s from any distance, restoring {v}% HP and lost EXP.",
 			"trigger": "Passive",
 			"cooldown": null,
 			"cooldownUnit": "",
@@ -6489,7 +6650,7 @@
 			"theme": "Guardian",
 			"option": 2,
 			"name": "Guardian's Bond II",
-			"effect": "Transfers {v}% of incoming HP damage to the bear.",
+			"effect": "Transfers {v}% of incoming HP damage to the bear. Automatically revives the owner after 5 s from any distance.",
 			"trigger": "Passive",
 			"cooldown": null,
 			"cooldownUnit": "",
@@ -6515,7 +6676,7 @@
 			"theme": "Guardian",
 			"option": 3,
 			"name": "Guardian's Bond III",
-			"effect": "Transfers {v}% of incoming HP damage to the bear.",
+			"effect": "Transfers {v}% of incoming HP damage to the bear. Automatically revives the owner or a party member after 5 s from any distance.",
 			"trigger": "Passive",
 			"cooldown": null,
 			"cooldownUnit": "",
