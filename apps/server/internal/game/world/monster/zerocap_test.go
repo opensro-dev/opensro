@@ -1,18 +1,20 @@
 /*
 ===========================================================================
 
-zerocap_test.go - standalone nests capped at zero take their ISRO-R cap
+zerocap_test.go - standalone nests capped at zero take their native cap
 
 The shard backup behind the population evidence zeroes single nests of
 monsters it keeps live beside them (the Bandit Stronghold building).
-restoreZeroCapNests gives them the live cap ISRO-R's Tab_RefNest holds for
-the same nest; a hive member keeps its zero, since its hive caps it.
+restoreZeroCapNests gives them the native cap ISRO-R's archived
+Tab_RefNest_Back holds for the same nest; a hive member keeps its zero,
+since its hive caps it.
 
 ===========================================================================
 */
 package monster
 
 import (
+	"fmt"
 	"testing"
 
 	"opensro.online/server/internal/testsupport/gamedatatest"
@@ -88,4 +90,25 @@ func TestShippedBanditStrongholdIsPopulated(t *testing.T) {
 	if stronghold != 19 {
 		t.Fatalf("%d nests in the Stronghold region", stronghold)
 	}
+}
+
+/*
+================
+TestZeroCapEvidenceRefusesTheOperatorTable
+
+A row whose cap came from ISRO-R's active Tab_RefNest, the operator's
+tuning, stops the load; the native archive's row loads.
+================
+*/
+func TestZeroCapEvidenceRefusesTheOperatorTable(t *testing.T) {
+	const row = "MOB_A\t10\t1\t5\t7\t%s\t%s\n"
+	if caps := loadZeroCapCaps(fmt.Sprintf(row, "14", zeroCapNativeTable)); caps[evidenceKey("MOB_A", 10, 1, 5, 7)] != 14 {
+		t.Fatalf("the native row loaded as %v", caps)
+	}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("a cap from the operator's Tab_RefNest loaded")
+		}
+	}()
+	loadZeroCapCaps(fmt.Sprintf(row, "5", "Tab_RefNest"))
 }
