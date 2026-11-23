@@ -3,6 +3,7 @@ gold
 rows
 rows[].codename
 rows[].durability
+rows[].earnedBought
 rows[].forgeBound
 rows[].magicOptions
 rows[].plus

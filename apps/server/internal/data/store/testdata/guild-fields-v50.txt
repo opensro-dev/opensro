@@ -13,6 +13,7 @@ storage.gold
 storage.rows
 storage.rows[].codename
 storage.rows[].durability
+storage.rows[].earnedBought
 storage.rows[].forgeBound
 storage.rows[].magicOptions
 storage.rows[].plus

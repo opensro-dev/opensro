@@ -7,6 +7,7 @@ activeCos.container.capacity
 activeCos.container.rows
 activeCos.container.rows[].codename
 activeCos.container.rows[].durability
+activeCos.container.rows[].earnedBought
 activeCos.container.rows[].forgeBound
 activeCos.container.rows[].magicOptions
 activeCos.container.rows[].plus
@@ -92,6 +93,7 @@ avatarInventory.capacity
 avatarInventory.rows
 avatarInventory.rows[].codename
 avatarInventory.rows[].durability
+avatarInventory.rows[].earnedBought
 avatarInventory.rows[].forgeBound
 avatarInventory.rows[].magicOptions
 avatarInventory.rows[].plus
@@ -235,6 +237,7 @@ mercenaries[].container.capacity
 mercenaries[].container.rows
 mercenaries[].container.rows[].codename
 mercenaries[].container.rows[].durability
+mercenaries[].container.rows[].earnedBought
 mercenaries[].container.rows[].forgeBound
 mercenaries[].container.rows[].magicOptions
 mercenaries[].container.rows[].plus
@@ -293,6 +296,7 @@ mission.eventGuideStateMaskUpdatedAt
 missionInventory
 missionInventory[].codename
 missionInventory[].durability
+missionInventory[].earnedBought
 missionInventory[].forgeBound
 missionInventory[].magicOptions
 missionInventory[].plus
@@ -425,6 +429,7 @@ sookChest.id
 sookChest.items
 sookChest.items[].codename
 sookChest.items[].durability
+sookChest.items[].earnedBought
 sookChest.items[].forgeBound
 sookChest.items[].magicOptions
 sookChest.items[].plus

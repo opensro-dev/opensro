@@ -35,18 +35,27 @@ func (s *Store) MallBalance(character *domain.Character) (domain.MallBalance, er
 	return readMallBalance(s.syncDBLocked(), character.AccountID)
 }
 
+// mallBalanceQuery is the one wallet read: granted silk, gift silk and
+// points from the account row, the earned half joined from its own
+// table - an absent earned row reads as zero, the pre-split migration.
+const mallBalanceQuery = `SELECT a.silk, a.gift_silk, a.points, COALESCE(e.earned_silk, 0) FROM mall_accounts a
+LEFT JOIN mall_earned_silk e ON e.account_id = a.account_id WHERE a.account_id = ?`
+
 /*
 ================
-readMallBalance
+scanMallBalance
 
-An account without a wallet row has never held game currency. Read failures
-must remain errors rather than being presented as a zero balance.
+Read one account's wallet through whichever handle the caller holds
+(a database or its transaction). An account without a wallet row has
+never held game currency. Read failures must remain errors rather
+than being presented as a zero balance.
 ================
 */
-func readMallBalance(db *sql.DB, account string) (domain.MallBalance, error) {
+func scanMallBalance(handle interface {
+	QueryRow(query string, args ...any) *sql.Row
+}, account string) (domain.MallBalance, error) {
 	var balance domain.MallBalance
-	err := db.QueryRow(`SELECT a.silk, a.gift_silk, a.points, COALESCE(e.earned_silk, 0) FROM mall_accounts a
-LEFT JOIN mall_earned_silk e ON e.account_id = a.account_id WHERE a.account_id = ?`, account).
+	err := handle.QueryRow(mallBalanceQuery, account).
 		Scan(&balance.Silk, &balance.GiftSilk, &balance.Points, &balance.EarnedSilk)
 	if errors.Is(err, sql.ErrNoRows) {
 		return balance, nil
@@ -56,21 +65,23 @@ LEFT JOIN mall_earned_silk e ON e.account_id = a.account_id WHERE a.account_id =
 
 /*
 ================
+readMallBalance
+================
+*/
+func readMallBalance(db *sql.DB, account string) (domain.MallBalance, error) {
+	return scanMallBalance(db, account)
+}
+
+/*
+================
 readMallBalanceTx
 
-readMallBalance inside a transaction: the live balances a debit splits
+scanMallBalance inside a transaction: the live balances a debit splits
 against, so a concurrent credit or purchase cannot interleave.
 ================
 */
 func readMallBalanceTx(tx *sql.Tx, account string) (domain.MallBalance, error) {
-	var balance domain.MallBalance
-	err := tx.QueryRow(`SELECT a.silk, a.gift_silk, a.points, COALESCE(e.earned_silk, 0) FROM mall_accounts a
-LEFT JOIN mall_earned_silk e ON e.account_id = a.account_id WHERE a.account_id = ?`, account).
-		Scan(&balance.Silk, &balance.GiftSilk, &balance.Points, &balance.EarnedSilk)
-	if errors.Is(err, sql.ErrNoRows) {
-		return balance, nil
-	}
-	return balance, err
+	return scanMallBalance(tx, account)
 }
 
 /*

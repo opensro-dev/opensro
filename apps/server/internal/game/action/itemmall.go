@@ -229,14 +229,18 @@ func (rt *Runtime) HandleMallPurchase(division string, character *enterworld.Cha
 	var response []byte
 	var reference wire.Frame
 	balance, err := rt.mallAuthority.PurchaseMall(character, quote.Cost, func(rows []domain.InventoryRow, earnedOnly bool) ([]domain.InventoryRow, error) {
-		// The one bound decision (#4133): earned silk alone paid and
-		// the tradable rule is on, or the items land bound through the
-		// inventory's one flag - every trade door reads it from there.
+		// The one delivery decision (#4133): what paid is stamped on
+		// the items - the earned mark records the payment, the seal
+		// carries the tradable rule. Earned silk alone paid and the
+		// rule on delivers unsealed and marked (tradable); anything
+		// else lands sealed. Every door reads the outcome from the
+		// item, through the one predicate (Runtime.Tradeable) or the
+		// seal.
 		bound := !earnedOnly || !rt.MallEarnedTradable
 		bagEnd := inventory.BagEnd(character)
 		before := invItemsFromRowsWithin(rows, int64(bagEnd))
 		inv := inventory.New(before, bagEnd)
-		destinations, err := commerce.GrantPackage(inv, quote.Offer.Contents, quote.Quantity, uint16(bagEnd-inventory.EquipmentSlotEnd), bound)
+		destinations, err := commerce.GrantPackage(inv, quote.Offer.Contents, quote.Quantity, uint16(bagEnd-inventory.EquipmentSlotEnd), commerce.GrantMarks{Bound: bound, EarnedBought: earnedOnly})
 		if err != nil {
 			return nil, err
 		}

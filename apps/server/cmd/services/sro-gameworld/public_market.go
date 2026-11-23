@@ -42,7 +42,7 @@ func marketService(gameplay *gameplayPlane, authority *store.Store, shard string
 				Race: marketRace(ref.Country), Sealed: enterworld.RaritySealed(int(ref.Rarity)), Seal: marketSeal(ref)}, true
 		},
 		Tradeable: func(row domain.InventoryRow) bool {
-			return gameplay.items.Tradeable(row.Codename, row.ForgeBound, row.Summon)
+			return gameplay.items.Tradeable(row.Codename, row.ForgeBound, row.EarnedBought, row.Summon)
 		},
 		Characters: func(account string) []*domain.Character {
 			var out []*domain.Character

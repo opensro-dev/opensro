@@ -2,6 +2,7 @@ codename
 droppedAtMs
 droppedBy
 durability
+earnedBought
 forgeBound
 gid
 goldAmount
@@ -22,6 +23,7 @@ summon.container.capacity
 summon.container.rows
 summon.container.rows[].codename
 summon.container.rows[].durability
+summon.container.rows[].earnedBought
 summon.container.rows[].forgeBound
 summon.container.rows[].magicOptions
 summon.container.rows[].plus

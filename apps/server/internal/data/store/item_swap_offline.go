@@ -298,6 +298,7 @@ func groundRow(item domain.GroundItemRecord) domain.InventoryRow {
 		MagicOptions: item.MagicOptions,
 		Data:         item.Data,
 		ForgeBound:   item.ForgeBound,
+		EarnedBought: item.EarnedBought,
 	}
 }
 
@@ -333,6 +334,7 @@ func applyGroundRow(item *domain.GroundItemRecord, row domain.InventoryRow) erro
 	item.MagicOptions = row.MagicOptions
 	item.Data = row.Data
 	item.ForgeBound = row.ForgeBound
+	item.EarnedBought = row.EarnedBought
 	return nil
 }
 

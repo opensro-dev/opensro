@@ -258,7 +258,7 @@ var storeSteps = map[int]storeStep{
 	47: {true, "no record change; layout 14 adds the AI caravan tables", 14, 15},
 	48: {true, "optional per-character SRO Macro settings", 14, 15},
 	49: {true, "optional per-character titleId (later-native titles, #3502)", 14, 15},
-	50: {true, "no record change; layout 15 adds the earned-silk wallet and silk-history split tables", 5, 15},
+	50: {true, "optional per-item earnedBought (#4133); layout 15 adds the earned-silk wallet and silk-history split tables", 5, 15},
 }
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving

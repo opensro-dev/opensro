@@ -439,6 +439,32 @@ export function mallPurchaseTradable(
 
 /*
 ================
+mallPurchaseOutcomeText
+
+The one confirm sentence (#4133): what mallPurchaseTradable decides,
+stated before the player buys. Every confirm dialog prints this and
+nothing else words the outcome, so the sentence cannot drift from the
+rule it reports.
+================
+*/
+export function mallPurchaseOutcomeText(
+	state: import("@/engine/contracts/item-mall").MallState,
+	silkTotal: number,
+	giftSilkTotal: number,
+	points: number,
+	many: boolean
+): string {
+	const tradable = mallPurchaseTradable( state, silkTotal, giftSilkTotal, points );
+	if ( many ) {
+		return tradable ?
+			"Paid with earned Silk: these items will be tradable" :
+			"These items will be account-bound";
+	}
+	return tradable ? "Paid with earned Silk: this item will be tradable" : "This item will be account-bound";
+}
+
+/*
+================
 mallQuestionLayout
 
 528920 configures reservation and bulk confirmations. 52859D creates worn

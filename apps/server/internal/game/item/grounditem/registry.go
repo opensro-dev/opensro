@@ -93,6 +93,10 @@ type Item struct {
 	// ForgeBound marks a GM-forged item on the ground plane (port only,
 	// issue #1980): pickup restores the mark, so a bound drop stays bound.
 	ForgeBound bool
+	// EarnedBought marks an earned-Silk mall item on the ground plane
+	// (port only, issue #4133): pickup restores the mark, so a dropped
+	// earned-bought item stays tradable.
+	EarnedBought bool
 	// DroppedBy records the character that dropped or earned it.
 	DroppedBy string
 	// LostTo is the account whose player kill scattered these trade goods

@@ -21,16 +21,31 @@ const maxDeliverySlots = 255
 
 /*
 ================
+GrantMarks
+
+The instance marks a delivery stamps on every item it grants. Bound seals
+the item through the inventory's one bound flag
+(inventory.Item.ForgeBound); EarnedBought records a payment made wholly
+with earned Silk (inventory.Item.EarnedBought, #4133). The Item Mall
+passes what its purchase's payment decided; a gold shop passes the zero
+value - neither mark.
+================
+*/
+type GrantMarks struct {
+	Bound        bool
+	EarnedBought bool
+}
+
+/*
+================
 GrantPackage
 
 Bound expanded quantities before iterating. Wide multiplication prevents a
 malformed authored template from wrapping into a cheap or partial delivery.
-bound marks every delivered item with the inventory's one bound flag
-(inventory.Item.ForgeBound): the Item Mall passes what the purchase's
-payment decided (#4133); a gold shop passes false.
+marks stamps every delivered item (see GrantMarks).
 ================
 */
-func GrantPackage(inv *inventory.Inventory, contents []Content, quantity uint16, capacity uint16, bound bool) ([]uint8, error) {
+func GrantPackage(inv *inventory.Inventory, contents []Content, quantity uint16, capacity uint16, marks GrantMarks) ([]uint8, error) {
 	if inv == nil || quantity == 0 || capacity == 0 || len(contents) == 0 || len(contents) > maxPackageContents {
 		return nil, fmt.Errorf("commerce: invalid grant")
 	}
@@ -56,7 +71,7 @@ func GrantPackage(inv *inventory.Inventory, contents []Content, quantity uint16,
 			if stackable {
 				amount = uint16(min(units, math.MaxUint16))
 			}
-			item := inventory.Item{TradeOwner: template.TradeOwner, RefObjID: template.Ref.RefObjID, Codename: template.Ref.Codename, TypeFlags: template.Ref.TypeFlags(), Plus: template.Plus, VarianceBits: template.Variance, Durability: template.Data, MagicOptions: append([]uint64(nil), template.Magic...), Quantity: amount, ForgeBound: bound}
+			item := inventory.Item{TradeOwner: template.TradeOwner, RefObjID: template.Ref.RefObjID, Codename: template.Ref.Codename, TypeFlags: template.Ref.TypeFlags(), Plus: template.Plus, VarianceBits: template.Variance, Durability: template.Data, MagicOptions: append([]uint64(nil), template.Magic...), Quantity: amount, ForgeBound: marks.Bound, EarnedBought: marks.EarnedBought}
 			var slot uint8
 			if stackable {
 				grant, fault := inv.GrantStack(item, template.Stack)

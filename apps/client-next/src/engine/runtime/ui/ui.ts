@@ -202,7 +202,7 @@ import {
 	mallPageNumberPresentation,
 	pageManagerLayout,
 	mallCurrencyRows,
-	mallPurchaseTradable,
+	mallPurchaseOutcomeText,
 	mallQuestionLayout,
 	mallSilkPeriodTexts,
 	mallSilkHistoryDate,
@@ -28237,14 +28237,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							// Port-only (#4133): the confirm states the outcome
 							// before the player buys.
 							mallText(
-								mallPurchaseTradable(
-										game.itemMall,
-										offer.silk * state.quantity,
-										offer.giftSilk * state.quantity,
-										state.points
-									) ?
-									"Paid with earned Silk: this item will be tradable" :
-									"This item will be account-bound",
+								mallPurchaseOutcomeText(
+									game.itemMall,
+									offer.silk * state.quantity,
+									offer.giftSilk * state.quantity,
+									state.points,
+									false
+								),
 								[ dx, h - touch - margin - 40, dw, 32 ]
 							);
 							mallButton( "item-mall-purchase", hudCopy( "UIIT_STT_BUY" ), [
@@ -28286,14 +28285,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							if ( (question.kind === "basket" || question.kind === "worn") && game.itemMall ) {
 								// Port-only (#4133): as the single purchase above.
 								mallText(
-									mallPurchaseTradable(
-											game.itemMall,
-											question.offers.reduce( ( sum, offer ) => sum + offer.silk, 0 ),
-											question.offers.reduce( ( sum, offer ) => sum + offer.giftSilk, 0 ),
-											state.points
-										) ?
-										"Paid with earned Silk: these items will be tradable" :
-										"These items will be account-bound",
+									mallPurchaseOutcomeText(
+										game.itemMall,
+										question.offers.reduce( ( sum, offer ) => sum + offer.silk, 0 ),
+										question.offers.reduce( ( sum, offer ) => sum + offer.giftSilk, 0 ),
+										state.points,
+										true
+									),
 									[ dx, h - touch - margin - 40, dw, 32 ]
 								);
 							}
@@ -29233,14 +29231,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							{ ...mallControl( page, 40 ), rect: [ 20, height - 62, dialogWidth - 40, 14 ] },
 							mx,
 							my,
-							mallPurchaseTradable(
-									game.itemMall,
-									state.selected.silk * state.quantity,
-									state.selected.giftSilk * state.quantity,
-									state.points
-								) ?
-								"Paid with earned Silk: this item will be tradable" :
-								"This item will be account-bound"
+							mallPurchaseOutcomeText(
+								game.itemMall,
+								state.selected.silk * state.quantity,
+								state.selected.giftSilk * state.quantity,
+								state.points,
+								false
+							)
 						);
 						controls.push( {
 							id: "item-mall-quantity",
@@ -29426,14 +29423,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								{ ...template, rect: [ 16, layout.buttonY - 20, layout.width - 32, 14 ] },
 								mx,
 								my,
-								mallPurchaseTradable(
-										game.itemMall,
-										question.offers.reduce( ( sum, offer ) => sum + offer.silk, 0 ),
-										question.offers.reduce( ( sum, offer ) => sum + offer.giftSilk, 0 ),
-										state.points
-									) ?
-									"Paid with earned Silk: these items will be tradable" :
-									"These items will be account-bound"
+								mallPurchaseOutcomeText(
+									game.itemMall,
+									question.offers.reduce( ( sum, offer ) => sum + offer.silk, 0 ),
+									question.offers.reduce( ( sum, offer ) => sum + offer.giftSilk, 0 ),
+									state.points,
+									true
+								)
 							);
 						}
 						authoredLabeledButton(
