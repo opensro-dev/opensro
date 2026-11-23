@@ -82,6 +82,10 @@ test("raw guide projection matches native capture; published captions apply expl
 	assert.equal( native.binarySha256, "375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a" );
 	const imported = importedQuests();
 	assert.deepEqual( data.guideRecords.filter( record => !imported.has( record.symbol ) ), native.records );
+	// ...plus exactly the imported quests: an import whose quests never
+	// reached the guide must fail here, not pass as a native guide.
+	const guided = new Set( data.guideRecords.map( record => record.symbol ) );
+	assert.deepEqual( [ ...imported ].filter( symbol => !guided.has( symbol ) ), [] );
 	// This oracle comes from ReadProcessMemory of the hash-bound original client.
 	// Never overwrite it with hashes of our generated/localized product output.
 	const raw = {};
