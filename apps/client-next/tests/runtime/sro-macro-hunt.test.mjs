@@ -41,8 +41,13 @@ const {
 	isDimensionPillarName,
 	isDimensionPillarTarget,
 	isMacroHuntNeverTarget,
-	pickMacroHuntAction
+	isMacroSpiritItem,
+	macroUsageTimeEnded,
+	pickMacroHuntAction,
+	spiritNeedsWake
 } = hunt;
+const regionCombat = await import( "../../src/engine/foundation/gameplay/region-combat.ts" );
+const { macroRegionIsTown, regionAllowsPlayerCombat } = regionCombat;
 
 /*
 ================
@@ -88,6 +93,7 @@ function facts( overrides = {} ) {
 		hasEnergyOfLife: true,
 		equipmentBroken: false,
 		usageTimeEnded: false,
+		hasSpiritToWake: false,
 		targetGid: undefined,
 		targetLivingMonster: false,
 		nearestMonsterGid: 42,
@@ -235,6 +241,67 @@ test("VIP usage-time end returns when byte 11 is on", () => {
 		),
 		{ kind: "select", gid: 42 }
 	);
+});
+
+test("macroUsageTimeEnded follows param/count remaining clocks", () => {
+	const now = 10_000;
+	assert.equal( macroUsageTimeEnded( [], [], now ), false );
+	assert.equal(
+		macroUsageTimeEnded(
+			[ { itemRefObjId: 1, remainingSec: 5, receivedAtMs: now - 6000 } ],
+			[],
+			now
+		),
+		true
+	);
+	assert.equal(
+		macroUsageTimeEnded(
+			[ { itemRefObjId: 0x7f530001, remainingSec: 0, receivedAtMs: now } ],
+			[],
+			now
+		),
+		false,
+		"survival arena param jobs do not end VIP time"
+	);
+	assert.equal(
+		macroUsageTimeEnded(
+			[],
+			[ { remainingSec: 1, receivedAtMs: now - 2000 } ],
+			now
+		),
+		true
+	);
+});
+
+test("Spirit wake fires when byte 9 is on and a dormant Spirit is in the bag", () => {
+	assert.equal( isMacroSpiritItem( 0x72c ), true );
+	assert.equal( isMacroSpiritItem( 0x6ac ), false );
+	assert.equal( spiritNeedsWake( 0 ), true );
+	assert.equal( spiritNeedsWake( 1 ), false );
+	assert.deepEqual(
+		pickMacroHuntAction(
+			block( { [HUNT_BYTE_SPIRIT]: 1 } ),
+			facts( { hasSpiritToWake: true } )
+		),
+		{ kind: "spirit-use" }
+	);
+	assert.deepEqual(
+		pickMacroHuntAction(
+			block( { [HUNT_BYTE_SPIRIT]: 1 } ),
+			facts( { hasSpiritToWake: false } )
+		),
+		{ kind: "select", gid: 42 }
+	);
+});
+
+test("macroRegionIsTown matches RegionPlayerCombat known denials", () => {
+	// regioncombat_test.go pins: 0x62a6 battlefield, 0x62a7..0x62a9 town.
+	assert.equal( regionAllowsPlayerCombat( 0x62a6 ), true );
+	assert.equal( regionAllowsPlayerCombat( 0x62a7 ), false );
+	assert.equal( macroRegionIsTown( 0x62a6 ), false );
+	assert.equal( macroRegionIsTown( 0x62a7 ), true );
+	assert.equal( macroRegionIsTown( 0 ), false, "unknown region is not town" );
+	assert.equal( macroRegionIsTown( 0xffff ), false );
 });
 
 test("Dimension pillar skip matches 68c3d0 codenames and English names", () => {

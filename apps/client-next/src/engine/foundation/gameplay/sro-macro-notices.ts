@@ -69,8 +69,7 @@ macroSwitchRefuseNotice
 
 Client-side refuse before 0x7554 (00dade90). Town blocks skill/hunt ON;
 potion ON with every row empty prints AUTO_POTION_ON_FAIL. OFF always
-passes. inTown needs a region-combat fact the worker does not have yet —
-callers pass false until that lands.
+passes. inTown is macroRegionIsTown(pose.regionId) from region-combat.ts.
 ================
 */
 export function macroSwitchRefuseNotice(

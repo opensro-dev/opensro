@@ -27,12 +27,23 @@ export const HUNT_BYTE_RETURN = 5;
 export const HUNT_BYTE_POTION_EMPTY = 6;
 export const HUNT_BYTE_REPAIR = 7;
 export const HUNT_BYTE_PICKUP = 8;
-// Byte 9 is the Spirit checkbox in the UI; its engine use is still unread.
+// Byte 9: port Spirit wake (SRO_NASRUN). v1.696 has no engine reader of
+// 017b380f (only loader 00da8e20); native UI captions put TIME_FIN on this
+// byte and Spirit on byte 11, while the engine's VIP walker is byte 11
+// (006872d0) and pillar skip is byte 10 (00686720 → 68c3d0). The port keeps
+// engine VIP/pillar indices and wakes a dormant Devil's/Angel's Spirit here.
 export const HUNT_BYTE_SPIRIT = 9;
-// 00686720 reads 017b3810 (hunt[10]) and skips via 68c3d0's MOB_GOD_PILLAR_*
-// codename prefixes. The UIIT row is UIIT_STT_MACRO_NOT_ATTACK_HOLL.
+// 00686720 / 0068d280 read 017b3810 (hunt[10]) and skip via 68c3d0's
+// MOB_GOD_PILLAR_* codename prefixes (UIIT_STT_MACRO_NOT_ATTACK_HOLL).
 export const HUNT_BYTE_PILLAR = 10;
+// 006872d0 reads 017b3811 (hunt[11]) with skill-on, walks timed items, then
+// returns to town (UIIT_STT_SRO_MACRO_TIME_FIN_TOWN meaning).
 export const HUNT_BYTE_TIME_TOWN = 11;
+// TID 3/1/14 (avatar-socket SPIRIT_KIND): Devil's / Angel's Spirit.
+const SPIRIT_TYPE_KIND = 0x72c;
+const TYPE_KIND_MASK = 0x7fe;
+// Port-only survival arena param jobs (param-job.ts SURVIVAL_POWERS).
+const SURVIVAL_PARAM_PREFIX = 0x7f530000;
 
 // 0068e700 jump table: 0 = In place (0.f), 1..4 store metres*10 as the
 // float at +0x184: 300 / 500 / 700 / 1000. Same world units as pose x/z
@@ -117,6 +128,7 @@ export type MacroHuntAction =
 	}
 	| { readonly kind: "repair-hammer"; }
 	| { readonly kind: "energy-of-life"; }
+	| { readonly kind: "spirit-use"; }
 	| { readonly kind: "berserk"; }
 	| { readonly kind: "pickup"; readonly gid: number; }
 	| { readonly kind: "select"; readonly gid: number; };
@@ -144,10 +156,66 @@ export interface MacroHuntFacts {
 	readonly equipmentBroken: boolean;
 	// 006872d0: VIP / usage-limit clock already exhausted (byte 11).
 	readonly usageTimeEnded: boolean;
+	// Port Spirit wake (byte 9): a dormant Devil's/Angel's Spirit is in the bag.
+	readonly hasSpiritToWake: boolean;
 	readonly targetGid: number | undefined;
 	readonly targetLivingMonster: boolean;
 	readonly nearestMonsterGid: number | undefined;
 	readonly nearestPickupGid: number | undefined;
+}
+
+/*
+================
+isMacroSpiritItem
+
+Devil's / Angel's Spirit (TID 3/1/14), the same kind avatar-socket.ts uses.
+================
+*/
+export function isMacroSpiritItem( typeFlags: number ): boolean {
+	return (typeFlags & TYPE_KIND_MASK) === SPIRIT_TYPE_KIND;
+}
+
+/*
+================
+spiritNeedsWake
+
+nasrun/clock.go: Data word 0 is dormant; only a dormant Spirit wakes on use.
+The inventory record stores that word in durability for band-0x20 avatars.
+================
+*/
+export function spiritNeedsWake( data: number ): boolean {
+	return data === 0;
+}
+
+/*
+================
+macroUsageTimeEnded
+
+006872d0: a premium timed board row whose remaining clock is already at or
+below zero. Param jobs skip the port-only survival arena ids; count jobs are
+Gold Time packages. The worker also requires skill-on (native +0x181).
+================
+*/
+export function macroUsageTimeEnded(
+	paramJobs: readonly {
+		readonly itemRefObjId: number;
+		readonly remainingSec: number;
+		readonly receivedAtMs: number;
+	}[],
+	countJobs: readonly { readonly remainingSec: number; readonly receivedAtMs: number; }[],
+	nowMs: number
+): boolean {
+	// Same drain as paramJobRemainingMs / countJobRemainingMs.
+	const leftMs = ( remainingSec: number, receivedAtMs: number ) =>
+		remainingSec * 1000 - Math.max( 0, nowMs - receivedAtMs );
+	for ( const row of paramJobs ) {
+		if ( (row.itemRefObjId & 0xffff0000) === SURVIVAL_PARAM_PREFIX ) continue;
+		if ( leftMs( row.remainingSec, row.receivedAtMs ) <= 0 ) return true;
+	}
+	for ( const row of countJobs ) {
+		if ( leftMs( row.remainingSec, row.receivedAtMs ) <= 0 ) return true;
+	}
+	return false;
 }
 
 /*
@@ -296,6 +364,11 @@ export function pickMacroHuntAction(
 
 	if ( (hunt[HUNT_BYTE_ENERGY] ?? 0) !== 0 && facts.hasEnergyOfLife && facts.berserkGauge < 5 ) {
 		return { kind: "energy-of-life" };
+	}
+
+	// Port-only Spirit wake (byte 9 unread in v1.696 engine; see HUNT_BYTE_SPIRIT).
+	if ( (hunt[HUNT_BYTE_SPIRIT] ?? 0) !== 0 && facts.hasSpiritToWake ) {
+		return { kind: "spirit-use" };
 	}
 
 	if ( (hunt[HUNT_BYTE_BERSERK] ?? 0) === HUNT_BERSERK_ALL && facts.berserkGauge === 5 ) {

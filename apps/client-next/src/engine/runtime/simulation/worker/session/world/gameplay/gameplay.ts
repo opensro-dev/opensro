@@ -397,7 +397,10 @@ import {
 	huntRangeReach,
 	isDimensionPillarTarget,
 	isMacroHuntNeverTarget,
-	pickMacroHuntAction
+	isMacroSpiritItem,
+	macroUsageTimeEnded,
+	pickMacroHuntAction,
+	spiritNeedsWake
 } from "@/engine/foundation/gameplay/sro-macro-hunt";
 import {
 	MACRO_NOTICE_TELEPORT_OFF,
@@ -407,6 +410,7 @@ import {
 	macroSwitchRefuseNotice,
 	macroTownDisableKinds
 } from "@/engine/foundation/gameplay/sro-macro-notices";
+import { macroRegionIsTown } from "@/engine/foundation/gameplay/region-combat";
 import {
 	MACRO_HUNT,
 	MACRO_ROW_HP,
@@ -3442,10 +3446,10 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "macro-switch" ) {
 				const macroLive = sroMacro.view();
 				// 00dade90: town / empty-potion ON refuses before 0x7554.
-				// inTown stays false until the client has region-combat facts.
+				const inTown = macroRegionIsTown( movement.state().pose?.regionId ?? -1 );
 				const refuse = macroLive ?
 					macroSwitchRefuseNotice( command.macro, command.on, {
-						inTown: false,
+						inTown,
 						potionHasItem: macroPotionHasRegisteredItem( macroLive.potion )
 					} ) :
 					undefined;
@@ -7294,10 +7298,11 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 	*/
 	function checkMacroHunt( now: number, local: EntityState | undefined ) {
 		const settings = sroMacro.view();
-		// 006861c0: skill/hunt OFF in town. inTown is false until region-combat
-		// lands on the client; the pure helper is still tested.
+		const pose = movement.state().pose;
+		const inTown = macroRegionIsTown( pose?.regionId ?? -1 );
+		// 006861c0: skill/hunt OFF in town (known non-battlefield region).
 		if ( settings && live && sroMacroEnabled ) {
-			for ( const kind of macroTownDisableKinds( settings.skillOn, settings.huntOn, false ) ) {
+			for ( const kind of macroTownDisableKinds( settings.skillOn, settings.huntOn, inTown ) ) {
 				requestMacroOff( kind );
 				api.notice( { key: "", value: 0, text: MACRO_NOTICE_TOWN_OFF, nativeType: 5 } );
 			}
@@ -7325,7 +7330,6 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 			return;
 		}
 
-		const pose = movement.state().pose;
 		const bag = inventory.state().inventory;
 		const countRef = ( ref: number ) => {
 			if ( !ref ) return 0;
@@ -7339,6 +7343,15 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 			for ( const entry of bag ) {
 				if ( entry.slot < BAG_FIRST_SLOT || entry.quantity <= 0 ) continue;
 				if ( huntItemKind( entry.typeFlags ) === kind ) return entry.slot;
+			}
+			return undefined;
+		};
+		const findSpiritWakeSlot = () => {
+			for ( const entry of bag ) {
+				if ( entry.slot < BAG_FIRST_SLOT || entry.quantity <= 0 ) continue;
+				if ( isMacroSpiritItem( entry.typeFlags ) && spiritNeedsWake( entry.durability ) ) {
+					return entry.slot;
+				}
 			}
 			return undefined;
 		};
@@ -7368,6 +7381,10 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 		const wornBroken = bag.some( entry =>
 			entry.slot < BAG_FIRST_SLOT && equipmentBroken( entry.typeFlags, entry.durability )
 		);
+		const spiritSlot = findSpiritWakeSlot();
+		// 006872d0 requires skill-on (+0x181) before the VIP walk.
+		const usageTimeEnded = !!settings.skillOn &&
+			macroUsageTimeEnded( paramJobs.state(), countJobs.state(), now );
 		const action = pickMacroHuntAction( settings.hunt, {
 			alive: potionFacts.alive,
 			startedAtMs: macroHuntStartedAtMs,
@@ -7381,9 +7398,8 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 			hasRepairHammer: findKindSlot( "repair-hammer" ) !== undefined,
 			hasEnergyOfLife: findKindSlot( "energy" ) !== undefined,
 			equipmentBroken: wornBroken,
-			// 006872d0 walks timed VIP slots; the client has no remaining-time
-			// fact yet, so the decision arm stays covered by unit tests only.
-			usageTimeEnded: false,
+			usageTimeEnded,
+			hasSpiritToWake: spiritSlot !== undefined,
 			targetGid,
 			targetLivingMonster,
 			nearestMonsterGid: nearest?.gid,
@@ -7436,6 +7452,12 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 					const slot = findKindSlot( "energy" );
 					if ( slot === undefined || !useAutomaticItem( slot, now, true ) ) return;
 					announce();
+					dirty = true;
+					return;
+				}
+				case "spirit-use": {
+					const slot = findSpiritWakeSlot();
+					if ( slot === undefined || !useAutomaticItem( slot, now, true ) ) return;
 					dirty = true;
 					return;
 				}
