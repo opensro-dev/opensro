@@ -213,21 +213,32 @@ export function createSessionDecoder() {
 		roster
 		================
 		*/
-		roster( value: unknown ): readonly CharacterRecord[] {
+		roster( value: unknown ): {
+			readonly characters: readonly CharacterRecord[];
+			// The shard's port-only suit-look rules (SRO_JOB_SUIT_HIDES_ARMOR,
+			// SRO_MOONLIT_THIEF_SUIT), when it turned them on; absent is
+			// native. The dock dresses by them exactly as the world does.
+			readonly jobSuitHidesArmor: boolean;
+			readonly moonlitThiefSuit: boolean;
+		} {
 			const v = object( value );
 			if (
 				v.characterRosterContractVersion !== CHARACTER_ROSTER_CONTRACT_VERSION || v.action !== 2 ||
 				v.nativeResult !== 1
 			) throw new Error( "Unsupported character roster response" );
 			const ids = new Set<number>();
-			return Object.freeze(
-				array( v.characters ).map( row => {
-					const result = character( row );
-					if ( ids.has( result.id ) ) throw new Error( "Duplicate character identity" );
-					ids.add( result.id );
-					return result;
-				} )
-			);
+			return Object.freeze( {
+				characters: Object.freeze(
+					array( v.characters ).map( row => {
+						const result = character( row );
+						if ( ids.has( result.id ) ) throw new Error( "Duplicate character identity" );
+						ids.add( result.id );
+						return result;
+					} )
+				),
+				jobSuitHidesArmor: v.jobSuitHidesArmor === undefined ? false : boolean( v.jobSuitHidesArmor ),
+				moonlitThiefSuit: v.moonlitThiefSuit === undefined ? false : boolean( v.moonlitThiefSuit )
+			} );
 		}
 	};
 }

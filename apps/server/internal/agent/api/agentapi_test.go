@@ -440,6 +440,65 @@ func TestCharacterVisualLoadoutWireCollectionsAreNeverNull(t *testing.T) {
 
 /*
 ================
+TestCharacterListPublishesSuitRules
+
+The roster carries the shard's port-only suit-look rules when the shard
+turned them on, so the character-select dock dresses a suited character
+exactly as the world does (#4128). Unset stays absent: native.
+================
+*/
+func TestCharacterListPublishesSuitRules(t *testing.T) {
+	list := func(t *testing.T, api *API) map[string]any {
+		t.Helper()
+		var body map[string]any
+		getJSON(t, authenticatedHandler(t, api, testAccount), "/character/list", &body)
+		return body
+	}
+
+	plain, _ := newTestAPI(t)
+	body := list(t, plain)
+	for _, key := range []string{"jobSuitHidesArmor", "moonlitThiefSuit"} {
+		if _, present := body[key]; present {
+			t.Fatalf("default roster carries %s = %v, want absent (native)", key, body[key])
+		}
+	}
+
+	now := func() time.Time { return time.UnixMilli(testNowUnixMillis) }
+	authority, err := store.Open(t.TempDir(), store.Options{Now: now, DefaultSkills: agentapiSkillSeeder})
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(authority.Close)
+	ready := readiness.NewGate()
+	suited, err := New(Config{
+		Store:                 authority,
+		CharacterPresentation: testCharacterPresentation,
+		CharacterCreationValid: func(character *domain.Character) bool {
+			return enterworld.CharacterCreationValid(character, testCharacterRoster())
+		},
+		CharacterNameAllowed: testNameFilter(t).Allowed,
+		ShardID:              testDivision,
+		AgentSessionVerifier: testAgentSessionVerifier(t),
+		EnterWorldAuthSecret: []byte(testEnterWorldSecret),
+		Readiness:            ready,
+		Now:                  now,
+		JobSuitHidesArmor:    true,
+		MoonlitThiefSuit:     true,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ready.Open()
+	body = list(t, suited)
+	for _, key := range []string{"jobSuitHidesArmor", "moonlitThiefSuit"} {
+		if body[key] != true {
+			t.Fatalf("suited roster %s = %v, want true", key, body[key])
+		}
+	}
+}
+
+/*
+================
 characterItemsForTest
 ================
 */

@@ -43,7 +43,7 @@ import { createCharacterEffects } from "./effects/effects";
 import { createCharacterSounds } from "./sounds/sounds";
 import { createCharacterResources } from "./resources/resources";
 import { createMallPreview } from "./mall-preview";
-import type { CharacterRecord } from "@/engine/contracts/session";
+import type { CharacterRecord, SuitRuleFlags } from "@/engine/contracts/session";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { RenderFrameProbe, Renderer } from "@/engine/contracts/runtime";
 import type { EntityState } from "@/engine/contracts/world";
@@ -1110,14 +1110,15 @@ export function createCharacterPresentation(
 			effectDetail = 2,
 			blindHeld = false,
 			nativeServerName?: string,
-			normalFortressClothes = false
+			normalFortressClothes = false,
+			suitRules?: SuitRuleFlags
 		) {
 			const frameSeconds = Math.max( seconds, lastSeconds );
 			lastSeconds = frameSeconds;
 			const begun = beginFrame( entities, gameplay, frameSeconds, dock, preview );
 			if (
 				dockPreview.step(
-					{ seconds: frameSeconds, dock, preview, lizard, nativeServerName },
+					{ seconds: frameSeconds, dock, preview, lizard, nativeServerName, suitRules },
 					output,
 					published
 				)

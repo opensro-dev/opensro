@@ -224,6 +224,13 @@ type Config struct {
 	// instead of SHARD_OFFLINE (EnvMaintenanceMessage). Port-only, not
 	// native: see the EnvMaintenanceMessage comment.
 	MaintenanceMessage bool
+	// JobSuitHidesArmor and MoonlitThiefSuit are the shard's port-only
+	// suit-look rules (enterworld deps, from SRO_JOB_SUIT_HIDES_ARMOR and
+	// SRO_MOONLIT_THIEF_SUIT). The world entry publishes them already; the
+	// roster publishes them too so the character-select dock dresses a
+	// character exactly as the world does (#4128). False is native.
+	JobSuitHidesArmor bool
+	MoonlitThiefSuit  bool
 }
 
 // API serves the agent HTTP surface.
@@ -268,6 +275,8 @@ type API struct {
 	now                     func() time.Time
 	maintenanceGatePath     string
 	maintenanceMessage      bool
+	jobSuitHidesArmor       bool
+	moonlitThiefSuit        bool
 
 	allowedOrigins map[string]struct{}
 	listener       httpLifecycle
@@ -347,6 +356,8 @@ func New(config Config) (*API, error) {
 		now:                     now,
 		maintenanceGatePath:     config.MaintenanceGatePath,
 		maintenanceMessage:      config.MaintenanceMessage,
+		jobSuitHidesArmor:       config.JobSuitHidesArmor,
+		moonlitThiefSuit:        config.MoonlitThiefSuit,
 		allowedOrigins:          allowedOrigins,
 		revocations:             newAccountRevoker(),
 	}

@@ -29,7 +29,12 @@ const { equipmentSocket } = await load( "src/engine/foundation/animation/equipme
 
 // ITEM_CH_SWORD_01_A, ITEM_CH_SWORD_01_A_RARE, ITEM_CH_SWORD_01_B_RARE.
 const SWORD = 71, RARE_SWORD = 4014, OTHER_RARE_SWORD = 4015;
-const WEAPON_SLOT = 6;
+// ITEM_CH_M_TRADE_THIEF_04, a hunter suit and a chest piece (#4128).
+const THIEF_SUIT = 9026, HUNTER_SUIT = 9030, CHEST = 300;
+const WEAPON_SLOT = 6, JOB_SLOT = 8, CHEST_SLOT = 1;
+const SUIT_GLB = "/assets/char/equipment/thief_02.glb";
+const MOONLIT_GLB = "/assets/char/equipment/thief_03_moonlit.glb";
+const CHEST_GLB = "/assets/char/equipment/chest.glb";
 const CHARACTER_ID = 7;
 const BODY = "CHAR_CH_MAN_ADVENTURER";
 const BODY_GLB = "/assets/char/body-preview.glb";
@@ -66,12 +71,50 @@ function dress() {
 		}
 	});
 	const glow = effectPath => [ { effectPath, bone: GLOW_BONE, scale: 1.3, offset: [ 0, 0, 0 ], root: false } ];
+	// A worn part as the build publishes it: its own socket's visual bit.
+	const suitRecord = ( thiefSuit, entry ) => ({
+		slot: JOB_SLOT,
+		armorClass: 0,
+		thiefSuit,
+		visualMask: thiefSuit ? 0x73f : 1 << JOB_SLOT,
+		visualPriority: 50,
+		model: "res/item/china/man_item/thief_02.bsr",
+		source: null,
+		bodies: { CH_M: entry }
+	});
 	return {
-		equipment: { [SWORD]: record(), [RARE_SWORD]: record(), [OTHER_RARE_SWORD]: record() },
+		equipment: {
+			[SWORD]: record(),
+			[RARE_SWORD]: record(),
+			[OTHER_RARE_SWORD]: record(),
+			[THIEF_SUIT]: suitRecord( true, {
+				glb: SUIT_GLB,
+				parts: [ "EQ0" ],
+				covers: { EQ0: [ 0 ] },
+				moonlit: { glb: MOONLIT_GLB, parts: [ "EQ0" ], covers: { EQ0: [ 0 ] } }
+			} ),
+			[HUNTER_SUIT]: suitRecord( false, {
+				glb: "/assets/char/equipment/hunter.glb",
+				parts: [ "EQ0" ],
+				covers: { EQ0: [ 0 ] }
+			} ),
+			[CHEST]: {
+				slot: CHEST_SLOT,
+				armorClass: 2,
+				thiefSuit: false,
+				visualMask: 1 << CHEST_SLOT,
+				visualPriority: 150,
+				model: "res/item/china/man_item/chest.bsr",
+				source: null,
+				bodies: { CH_M: { glb: CHEST_GLB, parts: [ "BA" ] } }
+			}
+		},
 		// An unarmoured Chinese body wears the default chest and leg garments.
 		defaultWear: {
 			CH_M_clothes_BA: { glb: "/assets/char/default-chest.glb", parts: [ "BA" ] },
-			CH_M_clothes_LA: { glb: "/assets/char/default-legs.glb", parts: [ "LA" ] }
+			CH_M_clothes_LA: { glb: "/assets/char/default-legs.glb", parts: [ "LA" ] },
+			CH_M_light_BA: { glb: "/assets/char/default-light-chest.glb", parts: [ "BA" ] },
+			CH_M_light_LA: { glb: "/assets/char/default-light-legs.glb", parts: [ "LA" ] }
 		},
 		specialGlows: { [RARE_SWORD]: glow( GLOW_EFFECT ), [OTHER_RARE_SWORD]: glow( OTHER_GLOW_EFFECT ) },
 		// Port-only, not native: the Experimental enchant sparks for the
@@ -147,6 +190,26 @@ function createDock( withheld = new Set(), sparksOn = false ) {
 			preview.step( { seconds, dock, preview: null, lizard: false }, output, published );
 			assert.equal( output.failure, null );
 			return frames.at( -1 );
+		},
+		frameLoadout( seconds, refItemIds, suitRules ) {
+			const dock = [ {
+				id: CHARACTER_ID,
+				name: "Test",
+				deletePending: false,
+				bodyShapeByte: 0,
+				volumeIndex: 0,
+				visualLoadout: {
+					modelCodename: BODY,
+					items: refItemIds.map( refObjId => ({ refObjId, plus: 0 }) ),
+					avatars: [],
+					animationSetName: "",
+					heightScale: 1,
+					volumeScale: 1
+				}
+			} ];
+			preview.step( { seconds, dock, preview: null, lizard: false, suitRules }, output, published );
+			assert.equal( output.failure, null );
+			return assemblies.at( -1 );
 		}
 	};
 }
@@ -203,6 +266,36 @@ test("the dock carries the world's enchant sparks answer, on and off (#3145)", (
 		false,
 		"the weapon part stays on the native tier with the option off"
 	);
+});
+
+test("the dock dresses the shard's suit looks, as the world does (#4128)", () => {
+	// Selection must draw the same suit the world draws: the Moonlit Ash
+	// model while the shard's moonlit rule is on, the retail model while
+	// it is off, and worn armor hidden under a job suit only while the
+	// hides-armor rule is on. Off - the native default - the retail dress.
+	const moonlit = createDock().frameLoadout(
+		10,
+		[ THIEF_SUIT ],
+		{ jobSuitHidesArmor: false, moonlitThiefSuit: true }
+	);
+	assert.ok(
+		moonlit.some( part => part.model === MOONLIT_GLB ),
+		"the moonlit model on the dock while the rule is on"
+	);
+	const plain = createDock().frameLoadout( 11, [ THIEF_SUIT ] );
+	assert.ok( plain.some( part => part.model === SUIT_GLB ), "the retail model on the dock by default" );
+	assert.ok( !plain.some( part => part.model === MOONLIT_GLB ) );
+	const hiding = createDock().frameLoadout(
+		12,
+		[ HUNTER_SUIT, CHEST ],
+		{ jobSuitHidesArmor: true, moonlitThiefSuit: false }
+	);
+	assert.ok(
+		!hiding.some( part => part.model === CHEST_GLB ),
+		"the worn chest hides under the suit rule"
+	);
+	const showing = createDock().frameLoadout( 13, [ HUNTER_SUIT, CHEST ] );
+	assert.ok( showing.some( part => part.model === CHEST_GLB ), "the worn chest shows by default" );
 });
 
 test("the glow keeps its emitter across dock frames", () => {

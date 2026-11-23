@@ -1320,7 +1320,11 @@ export function startRuntime(
 					effectDetail,
 					worldPresented && input.blindHeld(),
 					sessionState?.nativeServerName,
-					normalFortressClothes
+					normalFortressClothes,
+					{
+						jobSuitHidesArmor: sessionState?.jobSuitHidesArmor === true,
+						moonlitThiefSuit: sessionState?.moonlitThiefSuit === true
+					}
 				);
 				markStage( "character-presentation" );
 				ui.mallPreviewState( characters.mallPreviewState() );
