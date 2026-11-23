@@ -159,6 +159,8 @@ func newGameplayPlane(
 	items.ConfigureSookArena(os.Getenv(sookarena.Env))
 	// SRO_ROC (port-only, not native): the Roc worlds' schedule and steps.
 	items.ConfigureRoc(monster.RocEnabled())
+	// The Sarin gate's schedule rides the shipped tomb (#4135).
+	items.ConfigureTombGate(monster.QinShiTombFromEnv())
 	// SRO_AUTO_MACRO (port-only, not native): the SRO Macro settings lane.
 	items.ConfigureMacro(macro.Enabled(os.Getenv))
 	if err := loadPetGearPolicy(items, authorityStore); err != nil {
