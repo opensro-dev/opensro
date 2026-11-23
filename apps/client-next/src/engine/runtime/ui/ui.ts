@@ -28255,14 +28255,15 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							if ( searchTop ) {
 								rect( [ margin, 124, contentWidth, 32 ], [ .02, .025, .03, 1 ] );
 								if ( !state.search ) mallText( "Search", [ margin + 4, 132, contentWidth - 8, 16 ] );
+								// Never locked: its edits are local state, and a locked
+								// editor silently eats its editing keys (#4153).
 								controls.push( {
 									id: "item-mall-search",
 									label: "Search",
 									kind: "text",
 									rect: [ margin, 124, contentWidth, 32 ],
 									value: state.search,
-									maxLength: 32,
-									disabled: busy
+									maxLength: 32
 								} );
 							}
 							const tabWidth = (contentWidth - gap * (tabColumns - 1)) / tabColumns;
@@ -28841,14 +28842,15 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										vAlign: 0
 									} ) );
 								}
+								// Never locked: its edits are local state, and a locked
+								// editor silently eats its editing keys (#4153).
 								controls.push( {
 									id: "item-mall-search",
 									label: "Search",
 									kind: "text",
 									rect: [ sx + 26, sy + 39, 363, 32 ],
 									value: state.search,
-									maxLength: 32,
-									disabled: state.batchPending || !!game.inventoryPending
+									maxLength: 32
 								} );
 							} else {
 								authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
