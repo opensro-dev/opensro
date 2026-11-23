@@ -1575,8 +1575,14 @@ from the resynced pose.
 		*/
 		correct( value: Pose, now?: number, keepTravel = false ) {
 			// A resync keeps a walk's goal; a displacement (fixed timing) is
-			// no walk and ends as a correction ends it.
-			const travel = keepTravel && segment && !segment.fixedTiming ? segment.to : null;
+			// no walk and ends as a correction ends it. A direction walk has
+			// no goal: its leg end is only the next lookahead, so it keeps
+			// its heading and drift state instead and walks on from the
+			// resynced pose (the server resyncs every moving character).
+			const travel = keepTravel && segment && !segment.fixedTiming && !segment.direction ? segment.to : null;
+			const steer = keepTravel && segment?.direction && !segment.direction.blocked && walk ?
+				{ heading: segment.direction.heading, walk } :
+				null;
 			// What the walk was doing when the correction came, for the report:
 			// a large one names its cause (a hold the server never settled, a
 			// walk of the wrong lead) instead of only its size.
@@ -1685,6 +1691,13 @@ from the resynced pose.
 					admitted: true,
 					history: transition.walkingPath
 				};
+			}
+			if ( steer && !segment && now !== undefined ) {
+				const leg = directionSegment( pose, steer.heading, now, "server", steer.walk.factor, true );
+				if ( leg ) {
+					segment = { ...leg, history: transition.walkingPath };
+					walk = steer.walk;
+				}
 			}
 		},
 		/*
