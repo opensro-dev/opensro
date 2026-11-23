@@ -73,9 +73,11 @@ func TestArabiaCollectTableIsTheEvidenceSet(t *testing.T) {
 	if general.CollectCount != 1 || general.MonsterDrop.MonsterCodenames[0] != "MOB_ARABIA_MAD_GENERAL" {
 		t.Errorf("QNO_AR_069 %+v", general)
 	}
-	claws := known["QNO_AR_091"]
-	if claws.MaxCompletions != 5 || claws.CollectItemCodename != "ITEM_QNO_AR_091" || claws.CollectCount != 300 {
-		t.Errorf("QNO_AR_091 %+v", claws)
+	for _, code := range []string{"QNO_AR_091", "QNO_AR_095", "QNO_AR_100"} {
+		five := known[code]
+		if five.MaxCompletions != 5 || five.CollectItemCodename != "ITEM_"+code || five.CollectCount != 300 {
+			t.Errorf("%s %+v, want a 5-completion collect of 300 %s", code, five, "ITEM_"+code)
+		}
 	}
 	deliver := known["QNO_AR_016"]
 	if deliver.Objective != ObjectiveDelivery || len(deliver.RequiredQuests) != 1 || deliver.RequiredQuests[0] != "QNO_AR_011" ||
@@ -94,7 +96,7 @@ func TestArabiaCollectTableIsTheEvidenceSet(t *testing.T) {
 	}
 	// Held back, by the file's own evidence rule (the stub talk lines,
 	// the delivery behind a held collect, the unplaced kinds, the
-	// hideout boss): none of these may appear.
+	// quest whose target kind no source carries): none may appear.
 	for _, held := range []string{"QNO_AR_012", "QNO_AR_014", "QNO_AR_017", "QNO_AR_018",
 		"QNO_AR_059", "QNO_AR_066", "QNO_AR_068"} {
 		if _, ok := known[held]; ok {
