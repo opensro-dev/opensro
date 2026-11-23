@@ -196,7 +196,7 @@ def add_temple(vsro_root, native, out):
 	build left rows in is put back, and one that already matches is not
 	touched. Returns the summary.
 	"""
-	import build_alexandria_variant as variant
+	import variant_files as variant
 
 	enabled = temple_enabled()
 	dungeon_info = Path("Data_extracted") / "dungeon" / "dungeoninfo.txt"

@@ -36,6 +36,9 @@ tables already have is left alone.
 from collections import Counter
 
 import import_vsro_alexandria as stage1
+from pathlib import Path
+
+from variant_files import TEXTDATA, read_vsro_file, replace_file
 
 SERVICE_COLUMN = 0
 ID_COLUMN = 1
@@ -379,3 +382,41 @@ def merge_npc_tables(native, vsro, regions, native_text):
 		"shopGroups": [row[3] for row in groups], "shopsSkipped": sorted(set(skipped)),
 		"effects": len(effects), "texts": len(texts), "restoredPositions": restored_positions
 	}
+
+
+#============================================================================
+# The NPC step
+#============================================================================
+
+
+# The VSRO characterdata files (characterdata.txt lists them).
+VSRO_CHARACTER_FILES = (5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000)
+
+
+# ================
+# add_npcs
+# ================
+def add_npcs(vsro_root, native, out, regions):
+	"""
+	Write the city's NPCs: characterdata rows converted to the v1.150 layout,
+	positions, talk rows, shops on native stores, sizes and texts. Returns a
+	summary. The texts are added to the textdataname.txt the earlier steps left.
+	"""
+	textdata = Path("Media_extracted") / TEXTDATA
+	names = ("npcpos.txt", "npcchat.txt", "refshopgroup.txt", "refmappingshopgroup.txt", "refshop.txt", "skilleffect.txt")
+	tables = {name: (native / textdata / name).read_bytes() for name in names}
+	tables[CHARACTER_TARGET] = (native / textdata / CHARACTER_TARGET).read_bytes()
+	tables["characters"] = [
+		path.read_bytes() for path in sorted((native / textdata).glob("characterdata_*.txt"))
+	]
+	vsro = {name: read_vsro_file(vsro_root, "Media", TEXTDATA + name) for name in tuple(n for n in names if n != "refshop.txt")}
+	vsro["textdata_object.txt"] = read_vsro_file(vsro_root, "Media", TEXTDATA + "textdata_object.txt")
+	vsro["characters"] = [
+		read_vsro_file(vsro_root, "Media", TEXTDATA + f"characterdata_{start}.txt")
+		for start in VSRO_CHARACTER_FILES
+	]
+	base_text = (out / textdata / "textdataname.txt").read_bytes()
+	merged, summary = merge_npc_tables(tables, vsro, regions, base_text)
+	for name, content in merged.items():
+		replace_file(out / textdata / name, content)
+	return summary

@@ -559,7 +559,7 @@ def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for)
 # name tables are undone from the record itself (reap_regions).
 # ================
 def merge_world(spec, native, out, v1696_root, regions, build_monsters):
-	import build_alexandria_variant as variant
+	import variant_files as variant
 	native, out = Path(native), Path(out)
 	v1696_root = Path(v1696_root)
 	# The temple sets' named interiors are dungeon regions (bit 15):
@@ -808,7 +808,7 @@ def reap_regions(spec, native, out, record):
 		target.unlink(missing_ok=True)
 	sectors = [tuple(sector) for sector in record.get("sectors", [])]
 	if sectors:
-		import build_alexandria_variant as variant
+		import variant_files as variant
 		mapinfo = out / "Data_extracted" / "navmesh" / "mapinfo.mfo"
 		if mapinfo.exists():
 			native_bits = availability(variant, native / "Data_extracted" / "navmesh" / "mapinfo.mfo")

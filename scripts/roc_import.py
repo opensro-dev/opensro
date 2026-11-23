@@ -95,7 +95,7 @@ import re
 from pathlib import Path
 
 import alexandria_npcs as characters
-import build_alexandria_variant as variant
+import variant_files as variant
 import variant_gates
 import cap110_items
 import cap110_monsters as cap110

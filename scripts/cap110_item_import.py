@@ -22,7 +22,6 @@ import re
 import subprocess
 
 import alexandria_npcs as text_tables
-import build_alexandria_variant as variant
 import cap110_items as items
 import import_vsro_alexandria as tables
 import published_ids

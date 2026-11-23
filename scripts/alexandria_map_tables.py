@@ -11,6 +11,11 @@ adapters used by the variant's gate and map imports. No files are written.
 import re
 
 import import_vsro_alexandria as stage1
+from pathlib import Path
+
+import sro_pk2
+from prepare_client_resources import safe_target
+from variant_files import TEXTDATA, lower_paths, read_vsro_file, replace_file
 
 # World map and minimap (worldmap_mapinfo, worldmap_localinfo, regioncode).
 MAP_ALEXANDRIA_ID = "12"
@@ -328,3 +333,53 @@ def map_media_paths(regions, box=None, native_box=None):
 	return list(MAP_TEXTURES) + tiles + overview
 
 
+#============================================================================
+# The map step
+#============================================================================
+
+
+# ================
+# add_map
+# ================
+def add_map(vsro_root, native, out, regions, text_base):
+	"""
+	Write the map tables, local-map art and minimap tiles; returns a summary.
+	text_base is textdataname.txt as the gate step left it.
+	"""
+	textdata = Path("Media_extracted") / TEXTDATA
+	names = (
+		"regioncode.txt", "textzonename.txt", "worldmap_mapinfo.txt", "worldmap_localinfo.txt", "textdataname.txt"
+	)
+	tables = {name: (native / textdata / name).read_bytes() for name in names}
+	tables["textdataname.txt"] = text_base
+	vsro = {name: read_vsro_file(vsro_root, "Media", TEXTDATA + name) for name in names[:4]}
+	vsro["textdata_object.txt"] = read_vsro_file(vsro_root, "Media", TEXTDATA + "textdata_object.txt")
+	merged, summary = merge_map_tables(tables, vsro, regions)
+	for name, content in merged.items():
+		replace_file(out / textdata / name, content)
+
+	present = lower_paths(native / "Media_extracted")
+	native_box = overview_box(tables["worldmap_mapinfo.txt"])
+	overrides = set(page_tiles(summary["overview"], native_box, regions))
+	icons = {row[2].replace("\\", "/").lower() for row in stage1.table_rows(merged["worldmap_localinfo.txt"])
+		if len(row) == LOCALINFO_COLUMNS and row[1] == "2" and row[2].lower().endswith(".ddj")}
+	path, handle, data = stage1.open_archive(vsro_root, "Media")
+	try:
+		index = stage1.archive_index(data)
+		added, absent = 0, []
+		paths = map_media_paths(regions, summary["overview"], native_box)
+		for archive_path in dict.fromkeys(paths + sorted(icons)):
+			entry = index.get(archive_path)
+			if entry is None:
+				absent.append(archive_path)
+			elif archive_path not in present or archive_path in overrides:
+				# The v1.150 overview tiles carry the old page's frame and its
+				# sea where these regions now exist (page_tiles), so the later
+				# art replaces them, unlinking the variant's hard link first.
+				replace_file(safe_target(out / "Media_extracted", entry.path), sro_pk2.payload(data, entry))
+				added += 1
+	finally:
+		data.close()
+		handle.close()
+	summary.update({"mediaFilesAdded": added, "mediaFilesAbsent": absent, "pageTiles": len(overrides)})
+	return summary

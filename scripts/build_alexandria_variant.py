@@ -50,37 +50,32 @@ Build the variant with its own generated tree:
 """
 import argparse
 import json
-import mmap
 import os
-import re
 import shutil
-import struct
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import alexandria_npcs as npcs  # noqa: E402
+# The steps are functions of their own modules, called by the runner: no
+# step runs code of this file, so its imports key none of them (#4251).
+import alexandria_map_tables  # noqa: E402
+import alexandria_npcs  # noqa: E402
 import area_music  # noqa: E402
-from alexandria_map_tables import (  # noqa: E402
-	MAP_ALEXANDRIA_ID, MAPINFO_COLUMNS, LOCALINFO_COLUMNS, MAP_PIN_IDS,
-	OVERVIEW_ID, OVERVIEW_KIND, OVERVIEW_BOX, OVERVIEW_TEXTURE, OVERVIEW_DRAW,
-	OVERVIEW_TILE_REGIONS, MAP_TEXTURES, table_text, append_rows, native_text_row,
-	merge_map_tables, overview_box, widen_overview, page_tiles, map_media_paths
-)
 import import_vsro_alexandria as stage1  # noqa: E402
 import pharaoh_temple as temple  # noqa: E402
 import published_ids  # noqa: E402
+import variant_base  # noqa: E402
+import variant_files  # noqa: E402
 import variant_gates  # noqa: E402
-import sro_pk2  # noqa: E402
 import variant_settle  # noqa: E402
 import variant_stamp  # noqa: E402
 import variant_steps  # noqa: E402
 from build_parallelism import build_jobs  # noqa: E402
-from prepare_client_resources import safe_target, write_atomically  # noqa: E402
+from prepare_client_resources import write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT  # noqa: E402
+from variant_files import build_switch, link_file, log  # noqa: E402
 
 VARIANT_MANIFEST = ".opensro-alexandria-variant.json"
-LINKED_FOLDERS = ("Media_extracted", "Particles_extracted", "Music_mp3")
 # Game-root files the build reads besides extracted/: the doctor and the
 # builders want the client and Particles.pk2 beside it.
 LINKED_FILES = ("SRO_Client.exe", "Particles.pk2")
@@ -89,202 +84,10 @@ LINKED_FILES = ("SRO_Client.exe", "Particles.pk2")
 # slightly differently from native v1.150; a binary merge would avoid that.
 ENVIRONMENT_NOTE = "environment keys 6 and 11 differ from native in the variant"
 
-TEXTDATA = stage1.TEXTDATA
 # The shops' stock choice (#2846): unset, the Alexandria variant stocks
 # each store with the goods one official source had active; on, the
 # shop passes stock the port's own degree goods instead.
 PORT_STOCK_FLAG = "SRO_ALEXANDRIA_PORT_STOCK"
-SWITCH_OFF_VALUES = ("", "0", "off", "false")
-SWITCH_ON_VALUES = ("1", "on", "true")
-
-
-# The VSRO characterdata files (characterdata.txt lists them).
-VSRO_CHARACTER_FILES = (5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000)
-
-MFO_SIGNATURE = b"JMXVMFO 1000"
-MFO_HEADER_BYTES = 24
-TILE_ID_LIMIT = 0x0400
-MAPM_TEXTURE_SCALE_MASK = 0xFC00
-
-CATALOG_ROW = re.compile(r"^(\d+)(\s.*)$")
-
-
-# ================
-# log
-# ================
-def log(message):
-	print(message, flush=True)
-
-
-#============================================================================
-# Catalogs
-#============================================================================
-
-
-# ================
-# catalog_lines
-# ================
-def catalog_lines(raw):
-	"""(header lines, {id: row line}) of a tile2d.ifo or object.ifo."""
-	lines = stage1.decode_table(raw).splitlines()
-	rows = {}
-	for line in lines[2:]:
-		match = CATALOG_ROW.match(line.strip())
-		if match:
-			rows[int(match.group(1))] = line.strip()
-	return lines[:2], rows
-
-
-# ================
-# format_catalog
-# ================
-def format_catalog(signature, rows):
-	"""A catalog file's text: signature, count, then rows in id order."""
-	ordered = [rows[key] for key in sorted(rows)]
-	return "\r\n".join([signature, str(len(ordered)), *ordered]) + "\r\n"
-
-
-# ================
-# with_id
-# ================
-def with_id(row, tile_id):
-	"""A catalog row renumbered; ids are five digits in tile2d.ifo."""
-	return f"{tile_id:05d}" + CATALOG_ROW.match(row).group(2)
-
-
-# ================
-# merge_tile_catalog
-# ================
-def merge_tile_catalog(native_raw, vsro_raw, used_ids):
-	"""
-	The merged tile2d.ifo and the remap of the used ids it could not keep.
-	A VSRO row fills an id the native catalog lacks. A used id the native
-	catalog also defines, as a placeholder or as a different texture, moves to
-	a new id past every existing one; unused ones stay native.
-	"""
-	native_head, native_rows = catalog_lines(native_raw)
-	_, vsro_rows = catalog_lines(vsro_raw)
-	native_tiles = stage1.tile_catalog(native_raw)
-	vsro_tiles = stage1.tile_catalog(vsro_raw)
-	# Only ids the native catalog lacks are filled in place. A native
-	# placeholder is not: native regions may paint it, and giving it a real
-	# name would ask the build for a texture they never had.
-	merged, remap = dict(native_rows), {}
-	for key, row in vsro_rows.items():
-		if key not in native_rows:
-			merged[key] = row
-	next_id = max(max(native_rows), max(vsro_rows)) + 1
-	for key in sorted(used_ids):
-		if key in native_rows and native_tiles[key] != vsro_tiles[key]:
-			if next_id >= TILE_ID_LIMIT:
-				raise SystemExit("tile2d.ifo has no free tile id left for the remap")
-			merged[next_id] = with_id(vsro_rows[key], next_id)
-			remap[key] = next_id
-			next_id += 1
-	return format_catalog(native_head[0], merged).encode("cp949"), remap
-
-
-# ================
-# merge_object_catalog
-# ================
-def merge_object_catalog(native_raw, vsro_raw):
-	"""The merged object.ifo: native rows win, VSRO fills the rest."""
-	native_head, native_rows = catalog_lines(native_raw)
-	_, vsro_rows = catalog_lines(vsro_raw)
-	native_objects = stage1.object_catalog(native_raw)
-	merged = dict(native_rows)
-	for key, row in vsro_rows.items():
-		if key not in native_rows or stage1.object_placeholder(native_objects[key]):
-			merged[key] = row
-	return format_catalog(native_head[0], merged).encode("cp949")
-
-
-#============================================================================
-# Terrain and availability
-#============================================================================
-
-
-# ================
-# remap_terrain
-# ================
-def remap_terrain(terrain, remap):
-	"""A .m terrain file with its ground tile ids remapped; scale bits kept."""
-	stage1.terrain_tile_ids(terrain)
-	if not remap:
-		return terrain
-	data = bytearray(terrain)
-	for block in range(stage1.MAP_BLOCKS):
-		first = stage1.MAPM_SIGNATURE_BYTES + block * stage1.MAPM_BLOCK_BYTES + stage1.MAPM_BLOCK_HEAD_BYTES
-		for vertex in range(stage1.MAPM_VERTICES):
-			at = first + vertex * stage1.MAPM_VERTEX_BYTES + stage1.MAPM_VERTEX_TEXTURE_OFFSET
-			value = struct.unpack_from("<H", data, at)[0]
-			tile = value & stage1.MAPM_TEXTURE_ID_MASK
-			if tile in remap:
-				struct.pack_into("<H", data, at, (value & MAPM_TEXTURE_SCALE_MASK) | remap[tile])
-	return bytes(data)
-
-
-# ================
-# enable_regions
-# ================
-def enable_regions(mapinfo, regions):
-	"""mapinfo.mfo with the (sectorX, sectorY) regions' availability bits set."""
-	if mapinfo[:len(MFO_SIGNATURE)] != MFO_SIGNATURE:
-		raise ValueError("not a JMXVMFO availability file")
-	data = bytearray(mapinfo)
-	for sector_x, sector_y in regions:
-		region_id = (sector_y << 8) | sector_x
-		data[MFO_HEADER_BYTES + (region_id >> 3)] |= 0x80 >> (region_id & 7)
-	return bytes(data)
-
-
-#============================================================================
-# Gate tables
-#============================================================================
-
-
-# ================
-# link_tree
-# ================
-def link_tree(source, target):
-	"""Hard-link every file of source under target (copy if links are refused)."""
-	count = 0
-	for folder, _, names in os.walk(source):
-		destination = target / Path(folder).relative_to(source)
-		destination.mkdir(parents=True, exist_ok=True)
-		for name in names:
-			link = destination / name
-			if link.exists():
-				continue
-			try:
-				os.link(Path(folder) / name, link)
-			except OSError:
-				shutil.copy2(Path(folder) / name, link)
-			count += 1
-	return count
-
-
-# ================
-# link_file
-# ================
-def link_file(source, link):
-	"""Hard-link one file (copy if links are refused)."""
-	try:
-		os.link(source, link)
-	except OSError:
-		shutil.copy2(source, link)
-
-
-# ================
-# lower_paths
-# ================
-def lower_paths(root):
-	"""Lower-case relative paths of every file under root."""
-	return {
-		(Path(folder) / name).relative_to(root).as_posix().lower()
-		for folder, _, names in os.walk(root)
-		for name in names
-	}
 
 
 #============================================================================
@@ -317,71 +120,13 @@ def clear_content(variant, native):
 
 
 # ================
-# build_base
-#
-# The fold's first step: the native folders linked in, the map catalogs
-# merged, the imported map and data laid over them. Its summary carries
-# the counts and the tile remap the manifest is written from.
-# ================
-def build_base(vsro_root, native, imported, out, regions, stage_manifest):
-	linked = {}
-	for folder in LINKED_FOLDERS + ("Map_extracted", "Data_extracted"):
-		if not (native / folder).is_dir():
-			raise SystemExit(f"{native / folder} is missing; run pnpm assets prepare for the v1.150 client first")
-		linked[folder] = link_tree(native / folder, out / folder)
-		log(f"{folder}: {linked[folder]} files linked")
-
-	# Map: catalogs, remapped regions, tile textures.
-	vsro_catalogs = {name: (imported / "Map" / name).read_bytes() for name in stage1.CATALOGS}
-	tiles, remap = merge_tile_catalog(
-		(native / "Map_extracted" / "tile2d.ifo").read_bytes(), vsro_catalogs["tile2d.ifo"], set(stage_manifest["tileIds"])
-	)
-	objects = merge_object_catalog((native / "Map_extracted" / "object.ifo").read_bytes(), vsro_catalogs["object.ifo"])
-	replace_file(out / "Map_extracted" / "tile2d.ifo", tiles)
-	replace_file(out / "Map_extracted" / "object.ifo", objects)
-
-	added, clashes = [], []
-	for source in sorted((imported / "Map").rglob("*")):
-		if not source.is_file() or source.name in stage1.CATALOGS:
-			continue
-		relative = source.relative_to(imported / "Map").as_posix()
-		target = out / "Map_extracted" / relative
-		stored = source.read_bytes()
-		if relative.endswith(".m"):
-			stored = remap_terrain(stored, remap)
-		if target.exists() and relative.startswith("tile2d/"):
-			if target.read_bytes() != stored:
-				clashes.append(relative)
-			continue
-		replace_file(target, stored)
-		added.append("Map_extracted/" + relative)
-
-	# Data: every VSRO file the native tree lacks, the navmesh, the bitmap.
-	present = lower_paths(native / "Data_extracted")
-	data_added = add_missing_files(vsro_root, "Data", out / "Data_extracted", present, ("navmesh/",))
-	# Particles: the city's effect programs (alex_*.efp) and what they use.
-	particles_added = add_missing_files(
-		vsro_root, "Particles", out / "Particles_extracted", lower_paths(native / "Particles_extracted")
-	)
-	for source in sorted((imported / "Data").rglob("*.nvm")):
-		replace_file(out / "Data_extracted" / source.relative_to(imported / "Data").as_posix(), source.read_bytes())
-	mapinfo = out / "Data_extracted" / "navmesh" / "mapinfo.mfo"
-	replace_file(mapinfo, enable_regions((native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes(), regions))
-	return {
-		"linked": linked,
-		"tileRemap": {str(k): v for k, v in sorted(remap.items())},
-		"tileTextureClashes": clashes,
-		"mapFilesAdded": len(added),
-		"dataFilesAdded": data_added,
-		"particleFilesAdded": particles_added,
-	}
-
-
-# ================
 # build_variant
 # ================
-def build_variant(vsro_root, native, variant, imported_root=None, force=False):
-	"""Make the variant's extracted/ tree; returns its manifest."""
+def build_variant(vsro_root, native, variant, imported_root=None, force=False, explain=False):
+	"""
+	Make the variant's extracted/ tree; returns its manifest. explain only
+	prints which steps a build would rerun and why, and changes nothing.
+	"""
 	imported = Path(imported_root) if imported_root else native / stage1.OUTPUT_FOLDER
 	# Stage 1 of this build hashed these archives minutes ago (#3590); an
 	# unchanged file with today's pinned digest is not hashed again.
@@ -421,52 +166,57 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False):
 	from world_layer_import import add_layers
 	import later_mall_goods
 
+	# The tree every step writes; a fresh build clears it below, once the
+	# journal has been read.
+	out = variant / "extracted"
 	runner = variant_steps.Runner(
 		variant, variant_stamp.source_roots(native, imported, vsro_root, variant, os.environ)
 	)
 	got: dict = {}
-	runner.register("base", lambda: build_base(vsro_root, native, imported, out, regions, stage_manifest),
-		code_from=build_base, roots=(native, imported, vsro_root))
-	runner.register("gates", lambda: add_gates(vsro_root, native, out), code_from=add_gates)
-	runner.register("temple", lambda: temple.add_temple(vsro_root, native, out), code_from=temple.add_temple)
+	runner.register(
+		"base", variant_base.build_base, (vsro_root, native, imported, out, regions, stage_manifest),
+		roots=(native, imported, vsro_root)
+	)
+	runner.register("gates", variant_gates.add_gates, (vsro_root, native, out,))
+	runner.register("temple", temple.add_temple, (vsro_root, native, out,))
 	# The map step adds to textdataname.txt on top of the gates' texts.
-	runner.register("map", lambda: add_map(vsro_root, native, out, regions, got["gates"][1]["text"]), code_from=add_map)
-	runner.register("npcs", lambda: add_npcs(vsro_root, native, out, regions), code_from=add_npcs)
+	runner.register(
+		"map", alexandria_map_tables.add_map, (vsro_root, native, out, regions), later=lambda: (got["gates"][1]["text"],)
+	)
+	runner.register("npcs", alexandria_npcs.add_npcs, (vsro_root, native, out, regions))
 	# Imported equipment is independently optional; its off path also removes
 	# a shard from a previous on build so a reused variant cannot retain it.
-	runner.register("items", lambda: add_items(vsro_root, native, out), code_from=add_items)
+	runner.register("items", add_items, (vsro_root, native, out,))
 	# The mall avatars append their own shard to the manifest the item
 	# import just wrote, so they must follow it.
-	runner.register("avatars", lambda: add_avatars(vsro_root, native, out), code_from=add_avatars)
+	runner.register("avatars", add_avatars, (vsro_root, native, out,))
 	# The v1.696 client's avatars the VSRO client lacks (SRO_V1696_ROOT,
 	# pinned by v1696_archive_pins.json). Unset removes a previous import.
-	runner.register("avatars-v1696", lambda: add_source(v1696, native, out, V1696_SOURCE),
-		code_from=add_source, roots=(v1696,) if v1696 else ())
+	runner.register("avatars-v1696", add_source, (v1696, native, out, V1696_SOURCE,), roots=(v1696,) if v1696 else ())
 	# The v2.355 export's avatars from the pinned archive (SRO_AVATARS_ZIP,
 	# #3254): without it the build is byte-identical and a previous
 	# import is removed.
-	runner.register("avatars-archive", lambda: add_source(avatars, native, out, AVATARS_SOURCE),
-		code_from=add_source, roots=(avatars,) if avatars else ())
+	runner.register("avatars-archive", add_source, (avatars, native, out, AVATARS_SOURCE,), roots=(avatars,) if avatars else ())
 	# The Devil's Spirit (Nasrun) rows, inert (SRO_NASRUN, #3348): after the
 	# avatars, whose shards and identities they keep clear of.
-	runner.register("nasrun", lambda: add_nasrun(vsro_root, native, out), code_from=add_nasrun)
+	runner.register("nasrun", add_nasrun, (vsro_root, native, out,))
 	# The later clients' pets follow the avatars: their COS rows and
 	# summon scrolls append their own shards to the same manifests. The
 	# v1.696 pass and the pinned-archive pass read their sources from the
 	# environment and skip cleanly while those are not on the machine.
-	runner.register("pets", lambda: add_all_sources(vsro_root, native, out), code_from=add_all_sources)
-	runner.register("skills", lambda: add_skills(vsro_root, native, out), code_from=add_skills)
-	runner.register("skill-effects", lambda: add_skill_effects(vsro_root, native, out), code_from=add_skill_effects)
+	runner.register("pets", add_all_sources, (vsro_root, native, out,))
+	runner.register("skills", add_skills, (vsro_root, native, out,))
+	runner.register("skill-effects", add_skill_effects, (vsro_root, native, out,))
 	# The skills a worn Devil's Spirit lends (SRO_NASRUN, #3456): after
 	# the skill tier, which rewrites the skill manifest from the native
 	# one, and before the monsters, whose skill ids keep clear of them.
-	runner.register("nasrun-skills", lambda: add_nasrun_skills(vsro_root, native, out), code_from=add_nasrun_skills)
-	runner.register("monsters", lambda: add_monsters(vsro_root, native, out), code_from=add_monsters)
+	runner.register("nasrun-skills", add_nasrun_skills, (vsro_root, native, out,))
+	runner.register("monsters", add_monsters, (vsro_root, native, out,))
 	# The monsters' own database rewards follow the population they describe.
-	runner.register("rewards", lambda: add_rewards(vsro_root, native, out), code_from=add_rewards)
+	runner.register("rewards", add_rewards, (vsro_root, native, out,))
 	# The later sources' optional layers, in their load-bearing order
 	# (variant_later_layers.py owns the order and the manifest keys).
-	runner.register("later-layers", lambda: add_later_layers(native, out), code_from=add_later_layers)
+	runner.register("later-layers", add_later_layers, (native, out,))
 	# The later client's character title table (#3502): later-native,
 	# no switch, so it is a stage here rather than a layer - titles.txt
 	# joins the variant's server textdata after the layers merged
@@ -474,42 +224,43 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False):
 	# root's other tables. A tree naming no later client prints one
 	# skip line; a tree naming one that cannot produce the table
 	# fails inside title_import.
-	runner.register("titles", lambda: add_titles(native, out), code_from=add_titles)
+	runner.register("titles", add_titles, (native, out,))
 	# The Roc range's kinds (SRO_ROC, #3399): after every later layer,
 	# so their identities allocate above all of the layers' rows.
-	runner.register("roc", lambda: add_roc(vsro_root, native, out), code_from=add_roc)
+	runner.register("roc", add_roc, (vsro_root, native, out,))
 	# The two siege fortresses the v1.188 client authored and v1.150 never
 	# placed (SRO_FORT_BIJEOKDAN, SRO_FORT_HOTAN, #3886): after Roc, in a
 	# fixed order, so their structures allocate above every row before.
-	runner.register("fortress-bandit", lambda: bandit_fortress_import.add(vsro_root, native, out),
-		code_from=bandit_fortress_import.add)
-	runner.register("fortress-hotan", lambda: hotan_fortress_import.add(vsro_root, native, out),
-		code_from=hotan_fortress_import.add)
+	runner.register("fortress-bandit", bandit_fortress_import.add, (vsro_root, native, out,))
+	runner.register("fortress-hotan", hotan_fortress_import.add, (vsro_root, native, out,))
 	# The honor line the client authored and never shipped (SRO_HONOR_GOODS,
 	# #3548): after every other item import, whose identities it keeps
 	# clear of, and before the shops that sell it.
-	runner.register("honor-goods", lambda: honor_items.add_honor_items(native, out), code_from=honor_items.add_honor_items)
+	runner.register("honor-goods", honor_items.add_honor_items, (native, out,))
 	# The Blue Berserk imports follow their own switches (cap110_quest_layers.py owns the order).
-	runner.register("quest-layers", lambda: add_quest_layers(vsro_root, native, out), code_from=add_quest_layers)
-	runner.register("services", lambda: add_services(
-		vsro_root, native, out, port_stock_enabled(), got["honor-goods"]["enabled"]), code_from=add_services)
+	runner.register("quest-layers", add_quest_layers, (vsro_root, native, out,))
+	runner.register(
+		"services", add_services, (vsro_root, native, out, port_stock_enabled()),
+		later=lambda: (got["honor-goods"]["enabled"],)
+	)
 	# The v1.696 mall goods whose items the tree now holds (later-native,
 	# no switch): after every item, pet and layer import, so it sees all
 	# of their rows. Without the v1.696 client a previous listing is removed.
-	runner.register("later-mall", lambda: later_mall_goods.add_goods(v1696, native, out),
-		code_from=later_mall_goods.add_goods, roots=(v1696,) if v1696 else ())
+	runner.register("later-mall", later_mall_goods.add_goods, (v1696, native, out,), roots=(v1696,) if v1696 else ())
 	# The later client's seasonal town decoration (Halloween and the other
 	# event layers), into the object catalog and region files written above.
 	# Without the v1.696 archives a previous import is removed.
-	runner.register("world-layers", lambda: add_layers(later, native, out, source_pins(V1696_SOURCE) if later else None),
-		code_from=add_layers, roots=(later,) if later else ())
+	runner.register(
+		"world-layers", add_layers, (later, native, out, source_pins(V1696_SOURCE) if later else None),
+		roots=(later,) if later else ()
+	)
 	# Music last: its areas are those of every region the steps above left
 	# in the tree, stage 1's, the temple's and each later layer's (#3546).
-	runner.register("music", lambda: area_music.add_music(vsro_root, native, out, later),
-		code_from=area_music.add_music, roots=(later,) if later else ())
-	runner.register("environment", lambda: replace_file(
-		out / "Map_extracted" / "environment.ifo", read_vsro_file(vsro_root, "Map", "environment.ifo")),
-		code_from=read_vsro_file)
+	runner.register("music", area_music.add_music, (vsro_root, native, out, later,), roots=(later,) if later else ())
+	runner.register(
+		"environment", variant_files.copy_vsro_file,
+		(vsro_root, "Map", "environment.ifo", out / "Map_extracted" / "environment.ifo")
+	)
 
 	runner.load({
 		"native": str(Path(native).resolve()),
@@ -517,15 +268,16 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False):
 		"vsro": str(Path(vsro_root).resolve()),
 		"variant": str(Path(variant).resolve()),
 	})
+	if explain:
+		for name, verdict in runner.explain():
+			log(f"step {name}: {verdict}")
+		return None
 	runner.begin(force)
 	if runner.fresh:
 		# A build with no usable journal lays the variant down from
 		# nothing, as it always did.
-		out = clear_content(variant, native)
-		out.mkdir(parents=True)
-	else:
-		out = variant / "extracted"
-		out.mkdir(parents=True, exist_ok=True)
+		clear_content(variant, native)
+	out.mkdir(parents=True, exist_ok=True)
 	for name in LINKED_FILES:
 		source = native.parent / name
 		if not source.is_file():
@@ -638,22 +390,6 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False):
 
 
 # ================
-# build_switch
-#
-# An on/off build flag: unset or an off value is False (native), an on
-# value True. Anything else is refused, as the server refuses a value it
-# does not know.
-# ================
-def build_switch(flag, environ=None):
-	value = (os.environ if environ is None else environ).get(flag, "").strip().lower()
-	if value in SWITCH_OFF_VALUES:
-		return False
-	if value in SWITCH_ON_VALUES:
-		return True
-	raise ValueError(f"{flag} must be off, on or unset, not {value!r}")
-
-
-# ================
 # port_stock_enabled
 #
 # The shops' stock choice (#2846), from SRO_ALEXANDRIA_PORT_STOCK: off -
@@ -666,175 +402,6 @@ def port_stock_enabled(environ=None):
 
 
 # ================
-# add_gates
-# ================
-def add_gates(vsro_root, native, out):
-	"""Write the gate rows into the variant's textdata; returns their summary and tables."""
-	level_cap = variant_gates.gate_level_cap()
-	textdata = Path("Media_extracted") / TEXTDATA
-	names = ("teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt")
-	tables = {name: (native / textdata / name).read_bytes() for name in names}
-	tables["text"] = (native / textdata / "textdataname.txt").read_bytes()
-	vsro = {name: read_vsro_file(vsro_root, "Media", TEXTDATA + name) for name in names}
-	vsro["text"] = read_vsro_file(vsro_root, "Media", TEXTDATA + "textdata_object.txt")
-	from cap110_monsters import tomb_enabled
-	codes = variant_gates.GATE_CODES + variant_gates.TOMB_GATE_CODES if tomb_enabled() else variant_gates.GATE_CODES
-	if temple.temple_enabled():
-		codes += variant_gates.TEMPLE_GATE_CODES
-	# The ids the buildings must not take: every object row of the trees,
-	# and every released id, whose items later steps add (the pin).
-	taken = published_ids.occupied_objects(native / textdata) | published_ids.taken_objects(out / textdata)
-	merged, summary = variant_gates.merge_gate_tables(
-		tables, vsro, codes=codes, level_cap=level_cap, flatten=variant_gates.TEMPLE_GATE_CODES, taken=taken
-	)
-	for dropped in summary.get("droppedConditions", []):
-		log(f"gates: link {dropped['from']} -> {dropped['to']}: condition kind {dropped['kind']} "
-			f"({', '.join(dropped['operands'])}) dropped; the v1.150 server has no evaluator for it")
-	log_omitted_links("gates", summary)
-	for name, content in merged.items():
-		replace_file(out / textdata / ("textdataname.txt" if name == "text" else name), content)
-	return summary, merged
-
-
-# ================
-# log_omitted_links
-#
-# One line per keyed link variant_gates.merge_gate_tables left out: the gate it would
-# have joined stays shut rather than open without its key.
-# ================
-def log_omitted_links(label, summary):
-	for omitted in summary.get("omittedLinks", []):
-		log(f"{label}: link {omitted['from']} -> {omitted['to']} left out; the variant carries no item "
-			f"{', '.join(omitted['items'])} its condition names")
-
-
-# ================
-# add_map
-# ================
-def add_map(vsro_root, native, out, regions, text_base):
-	"""
-	Write the map tables, local-map art and minimap tiles; returns a summary.
-	text_base is textdataname.txt as the gate step left it.
-	"""
-	textdata = Path("Media_extracted") / TEXTDATA
-	names = (
-		"regioncode.txt", "textzonename.txt", "worldmap_mapinfo.txt", "worldmap_localinfo.txt", "textdataname.txt"
-	)
-	tables = {name: (native / textdata / name).read_bytes() for name in names}
-	tables["textdataname.txt"] = text_base
-	vsro = {name: read_vsro_file(vsro_root, "Media", TEXTDATA + name) for name in names[:4]}
-	vsro["textdata_object.txt"] = read_vsro_file(vsro_root, "Media", TEXTDATA + "textdata_object.txt")
-	merged, summary = merge_map_tables(tables, vsro, regions)
-	for name, content in merged.items():
-		replace_file(out / textdata / name, content)
-
-	present = lower_paths(native / "Media_extracted")
-	native_box = overview_box(tables["worldmap_mapinfo.txt"])
-	overrides = set(page_tiles(summary["overview"], native_box, regions))
-	icons = {row[2].replace("\\", "/").lower() for row in stage1.table_rows(merged["worldmap_localinfo.txt"])
-		if len(row) == LOCALINFO_COLUMNS and row[1] == "2" and row[2].lower().endswith(".ddj")}
-	path, handle, data = stage1.open_archive(vsro_root, "Media")
-	try:
-		index = stage1.archive_index(data)
-		added, absent = 0, []
-		paths = map_media_paths(regions, summary["overview"], native_box)
-		for archive_path in dict.fromkeys(paths + sorted(icons)):
-			entry = index.get(archive_path)
-			if entry is None:
-				absent.append(archive_path)
-			elif archive_path not in present or archive_path in overrides:
-				# The v1.150 overview tiles carry the old page's frame and its
-				# sea where these regions now exist (page_tiles), so the later
-				# art replaces them, unlinking the variant's hard link first.
-				replace_file(safe_target(out / "Media_extracted", entry.path), sro_pk2.payload(data, entry))
-				added += 1
-	finally:
-		data.close()
-		handle.close()
-	summary.update({"mediaFilesAdded": added, "mediaFilesAbsent": absent, "pageTiles": len(overrides)})
-	return summary
-
-
-# ================
-# add_npcs
-# ================
-def add_npcs(vsro_root, native, out, regions):
-	"""
-	Write the city's NPCs: characterdata rows converted to the v1.150 layout,
-	positions, talk rows, shops on native stores, sizes and texts. Returns a
-	summary. The texts are added to the textdataname.txt the earlier steps left.
-	"""
-	textdata = Path("Media_extracted") / TEXTDATA
-	names = ("npcpos.txt", "npcchat.txt", "refshopgroup.txt", "refmappingshopgroup.txt", "refshop.txt", "skilleffect.txt")
-	tables = {name: (native / textdata / name).read_bytes() for name in names}
-	tables[npcs.CHARACTER_TARGET] = (native / textdata / npcs.CHARACTER_TARGET).read_bytes()
-	tables["characters"] = [
-		path.read_bytes() for path in sorted((native / textdata).glob("characterdata_*.txt"))
-	]
-	vsro = {name: read_vsro_file(vsro_root, "Media", TEXTDATA + name) for name in tuple(n for n in names if n != "refshop.txt")}
-	vsro["textdata_object.txt"] = read_vsro_file(vsro_root, "Media", TEXTDATA + "textdata_object.txt")
-	vsro["characters"] = [
-		read_vsro_file(vsro_root, "Media", TEXTDATA + f"characterdata_{start}.txt")
-		for start in VSRO_CHARACTER_FILES
-	]
-	base_text = (out / textdata / "textdataname.txt").read_bytes()
-	merged, summary = npcs.merge_npc_tables(tables, vsro, regions, base_text)
-	for name, content in merged.items():
-		replace_file(out / textdata / name, content)
-	return summary
-
-
-# ================
-# replace_file
-# ================
-def replace_file(target, content):
-	"""
-	Write content to target without writing through a hard link: the old
-	file (possibly a link to the native tree) is unlinked first.
-	"""
-	target.parent.mkdir(parents=True, exist_ok=True)
-	if target.exists():
-		target.unlink()
-	write_atomically(target, content)
-
-
-# ================
-# read_vsro_file
-# ================
-def read_vsro_file(vsro_root, archive, name):
-	path, handle, data = stage1.open_archive(vsro_root, archive)
-	try:
-		entry = stage1.archive_index(data).get(name.lower())
-		if entry is None:
-			raise SystemExit(f"{path} has no {name}")
-		return sro_pk2.payload(data, entry)
-	finally:
-		data.close()
-		handle.close()
-
-
-# ================
-# add_missing_files
-# ================
-def add_missing_files(vsro_root, archive, destination, present, skip_prefix=()):
-	"""Extract the VSRO archive's files whose lower-case path is not in present."""
-	path, handle, data = stage1.open_archive(vsro_root, archive)
-	try:
-		added = 0
-		for entry in sro_pk2.read_directory(data):
-			key = entry.path.replace("\\", "/").lower()
-			if key in present or key.startswith(skip_prefix):
-				continue
-			write_atomically(safe_target(destination, entry.path), sro_pk2.payload(data, entry))
-			added += 1
-		log(f"{destination.name}: {added} VSRO files added")
-		return added
-	finally:
-		data.close()
-		handle.close()
-
-
-# ================
 # main
 # ================
 def main():
@@ -843,6 +410,10 @@ def main():
 	parser.add_argument("--variant-root", required=True, help="the new game root to create")
 	parser.add_argument("--imported-root", type=Path, help="isolated stage-1 import instead of the native extraction's import folder")
 	parser.add_argument("--force", action="store_true", help="rebuild even when the stamp says nothing changed")
+	parser.add_argument(
+		"--explain", action="store_true",
+		help="print which steps a build would rerun and which key part moved; builds nothing (seconds)"
+	)
 	args = parser.parse_args()
 	if not stage1.flag_enabled():
 		raise SystemExit(f"{stage1.FLAG_ENV} is not on. Alexandria is port-only, not native.")
@@ -853,6 +424,9 @@ def main():
 		raise SystemExit("The variant root must be a different folder from the native game root.")
 	vsro_root = Path(args.vsro_root)
 	imported = Path(args.imported_root) if args.imported_root else EXTRACTED_ROOT / stage1.OUTPUT_FOLDER
+	if args.explain:
+		build_variant(vsro_root, EXTRACTED_ROOT, variant, args.imported_root, explain=True)
+		return
 	# Same code, flags and sources as the last successful build of this
 	# tree, and the tree untouched since: nothing to do (variant_stamp.py).
 	inputs = variant_stamp.read_inputs(EXTRACTED_ROOT, imported, vsro_root, variant)
