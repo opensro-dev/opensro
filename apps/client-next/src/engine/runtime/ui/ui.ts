@@ -28963,20 +28963,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 											hAlign: 1,
 											vAlign: 1
 										} ),
-										...text.quads(
-											// Port-only (#4133): the earned part of the
-											// charge rides its cell.
-											row.earnedSilk > 0 ?
-												`${row.charged} (${row.earnedSilk} earned)` :
-												String( row.charged ),
-											[ sx + 74, y, 146, 24 ],
-											full,
-											white,
-											{
-												hAlign: 1,
-												vAlign: 1
-											}
-										),
+										...text.quads( String( row.charged ), [ sx + 74, y, 146, 24 ], full, white, {
+											hAlign: 1,
+											vAlign: 1
+										} ),
 										...text.quads(
 											mallSilkHistoryDate( row.at ),
 											[ sx + 220, y, 154, 24 ],

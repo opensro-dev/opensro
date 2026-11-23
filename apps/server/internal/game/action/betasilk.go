@@ -108,6 +108,32 @@ const betaSilkActivityWindowMs = 10 * 60 * 1000
 // updates an open mall (commerce-controls.ts MALL_BALANCE_CONTROL).
 const opMallBalance uint16 = 17
 
+/*
+================
+mallBalancePush
+
+The push body: exactly silk, giftSilk and points. Every shipped client's
+decoder pins this key set, so the earned half of the split (#4133) never
+rides the push - a fourth key would toss the frame on an old tab. Earned
+silk reaches the client in the mall catalogue instead, whose decoder
+reads field by name.
+================
+*/
+type mallBalancePush struct {
+	Silk     uint32 `json:"silk"`
+	GiftSilk uint32 `json:"giftSilk"`
+	Points   uint32 `json:"points"`
+}
+
+/*
+================
+mallBalancePushPayload
+================
+*/
+func mallBalancePushPayload(balance domain.MallBalance) ([]byte, error) {
+	return json.Marshal(mallBalancePush{Silk: balance.Silk, GiftSilk: balance.GiftSilk, Points: balance.Points})
+}
+
 // maxBetaSilkRate bounds an operator override.
 const maxBetaSilkRate = 100000
 
@@ -457,7 +483,7 @@ func (b *BetaSilk) Tick(nowMs int64, sessions []simulation.SessionView, lookup f
 		if !credited {
 			continue
 		}
-		payload, err := json.Marshal(balance)
+		payload, err := mallBalancePushPayload(balance)
 		if err != nil {
 			continue
 		}

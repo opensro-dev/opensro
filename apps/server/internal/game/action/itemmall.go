@@ -50,14 +50,15 @@ type mallSilkHistoryRequest struct {
 /*
 ================
 mallSilkHistoryEntry
+
+One recorded use on the wire: exactly at and charged, the key set every
+shipped client's decoder pins. The earned part of the charge stays in
+the store's split (#4133); it does not ride this frame.
 ================
 */
 type mallSilkHistoryEntry struct {
 	At      int64  `json:"at"`
 	Charged uint32 `json:"charged"`
-	// EarnedSilk is the earned-silk part of Charged (#4133): the
-	// history keeps the split between the two balances.
-	EarnedSilk uint32 `json:"earnedSilk"`
 }
 
 /*
@@ -191,7 +192,7 @@ func (rt *Runtime) HandleMallSilkHistory(division string, character *enterworld.
 	}
 	projection := mallSilkHistoryProjection{Version: 1, Period: request.Period, Total: total, Rows: []mallSilkHistoryEntry{}}
 	for _, row := range rows {
-		projection.Rows = append(projection.Rows, mallSilkHistoryEntry{At: row.AtMs / 1000, Charged: row.Charged, EarnedSilk: row.EarnedSilk})
+		projection.Rows = append(projection.Rows, mallSilkHistoryEntry{At: row.AtMs / 1000, Charged: row.Charged})
 	}
 	answer, err := json.Marshal(projection)
 	if err != nil {

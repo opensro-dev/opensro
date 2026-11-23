@@ -5,7 +5,10 @@ mall-balance-push.test.mjs - the beta's earned-silk balance push
 
 A MALL_BALANCE_CONTROL frame (server action/betasilk.go) updates an open
 mall's balance in place, does nothing before a catalogue has arrived, and
-rejects anything but exactly silk, earnedSilk, giftSilk and points.
+rejects anything but exactly silk, giftSilk and points with earnedSilk
+allowed but never required: the push body is frozen at the pre-split
+fields so a client predating the #4133 split still decodes it, and the
+earned half rides the catalogue projection instead.
 
 ===========================================================================
 */
@@ -68,18 +71,24 @@ test("a balance push updates an open mall and routes as a world control", () => 
 	assert.equal( isWorldControl( MALL_BALANCE_CONTROL ), true );
 	const mall = createMall();
 	// Before any catalogue there is no mall to update.
-	mall.balance( json( { silk: 350, earnedSilk: 40, giftSilk: 0, points: 0 } ) );
+	mall.balance( json( { silk: 350, giftSilk: 0, points: 0 } ) );
 	mall.open( 0 );
-	mall.projection( json( { version: 1, silk: 300, earnedSilk: 0, giftSilk: 0, points: 0, tabs: [], offers: [] } ) );
+	mall.projection(
+		json( { version: 1, silk: 300, earnedSilk: 40, giftSilk: 0, points: 0, tabs: [], offers: [] } )
+	);
 	const opened = mall.state();
 	assert.ok( opened );
 	assert.equal( opened.silk, 300 );
-	mall.balance( json( { silk: 350, earnedSilk: 45, giftSilk: 2, points: 1 } ) );
+	// The frozen three-field push leaves the catalogue's earned figure alone.
+	mall.balance( json( { silk: 350, giftSilk: 2, points: 1 } ) );
 	const pushed = mall.state();
 	assert.ok( pushed );
-	assert.deepEqual( [ pushed.silk, pushed.earnedSilk, pushed.giftSilk, pushed.points ], [ 350, 45, 2, 1 ] );
+	assert.deepEqual( [ pushed.silk, pushed.earnedSilk, pushed.giftSilk, pushed.points ], [ 350, 40, 2, 1 ] );
 	assert.notStrictEqual( pushed, opened );
 	assert.equal( pushed.revision, opened.revision );
+	// A newer server's push that does carry earnedSilk is accepted too.
+	mall.balance( json( { silk: 355, earnedSilk: 42, giftSilk: 2, points: 1 } ) );
+	assert.equal( mall.state()?.earnedSilk, 42 );
 });
 
 test("balance pushes preserve purchase and point confirmations", () => {
@@ -91,7 +100,7 @@ test("balance pushes preserve purchase and point confirmations", () => {
 	hud.observe( initial );
 	hud.choose( initial.offers[0] );
 	hud.showPoints();
-	worker.balance( json( { silk: 350, earnedSilk: 40, giftSilk: 0, points: 10 } ) );
+	worker.balance( json( { silk: 350, giftSilk: 0, points: 10 } ) );
 	const pushed = worker.state();
 	assert.ok( pushed );
 	hud.observe( pushed );
@@ -119,7 +128,7 @@ test("a balance snapshot before worker admission cannot acknowledge a basket pur
 		assert.equal( first.slot, 0 );
 
 		// This snapshot can already be in flight when the HUD posts the command.
-		worker.balance( json( { silk: 350, earnedSilk: 40, giftSilk: 0, points: 10 } ) );
+		worker.balance( json( { silk: 350, giftSilk: 0, points: 10 } ) );
 		const pushed = worker.state();
 		assert.ok( pushed );
 		assert.equal( pushed.pending, false );
@@ -160,9 +169,9 @@ test("a malformed balance push is refused", () => {
 	for (
 		const bad of [
 			{ silk: 1, giftSilk: 0 },
-			{ silk: 1, giftSilk: 0, points: 0 },
 			{ silk: -1, earnedSilk: 0, giftSilk: 0, points: 0 },
 			{ silk: 1.5, earnedSilk: 0, giftSilk: 0, points: 0 },
+			{ silk: 1, earnedSilk: -1, giftSilk: 0, points: 0 },
 			{ silk: 1, earnedSilk: 0, giftSilk: 0, points: 0, extra: 1 }
 		]
 	) {

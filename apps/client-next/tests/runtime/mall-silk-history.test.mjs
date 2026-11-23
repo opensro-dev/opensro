@@ -46,12 +46,12 @@ test("an inquiry frames the period and pends until its answer lands", () => {
 		version: 1,
 		period: 1,
 		total: 37,
-		rows: [ { at: 1700000100, charged: 32, earnedSilk: 32 }, { at: 1699999000, charged: 5, earnedSilk: 0 } ]
+		rows: [ { at: 1700000100, charged: 32 }, { at: 1699999000, charged: 5 } ]
 	} ) );
 	assert.deepEqual( mall.silkHistory(), {
 		period: 1,
 		total: 37,
-		rows: [ { at: 1700000100, charged: 32, earnedSilk: 32 }, { at: 1699999000, charged: 5, earnedSilk: 0 } ],
+		rows: [ { at: 1700000100, charged: 32 }, { at: 1699999000, charged: 5 } ],
 		pending: false
 	} );
 });
@@ -61,7 +61,7 @@ test("a superseded period's answer is dropped, not applied", () => {
 	mall.inquireSilkHistory( 0, 0 );
 	mall.inquireSilkHistory( 2, 10 );
 	mall.silkHistoryAnswer(
-		json( { version: 1, period: 0, total: 9, rows: [ { at: 1, charged: 9, earnedSilk: 9 } ] } )
+		json( { version: 1, period: 0, total: 9, rows: [ { at: 1, charged: 9 } ] } )
 	);
 	assert.deepEqual( mall.silkHistory(), { period: 2, total: 0, rows: [], pending: true } );
 	mall.silkHistoryAnswer( json( { version: 1, period: 2, total: 0, rows: [] } ) );
@@ -75,12 +75,12 @@ test("re-asking the same period keeps its rows while it pends", () => {
 	const mall = createMall();
 	mall.inquireSilkHistory( 3, 0 );
 	mall.silkHistoryAnswer(
-		json( { version: 1, period: 3, total: 5, rows: [ { at: 7, charged: 5, earnedSilk: 2 } ] } )
+		json( { version: 1, period: 3, total: 5, rows: [ { at: 7, charged: 5 } ] } )
 	);
 	mall.inquireSilkHistory( 3, 100 );
 	assert.deepEqual(
 		mall.silkHistory(),
-		{ period: 3, total: 5, rows: [ { at: 7, charged: 5, earnedSilk: 2 } ], pending: true }
+		{ period: 3, total: 5, rows: [ { at: 7, charged: 5 } ], pending: true }
 	);
 });
 

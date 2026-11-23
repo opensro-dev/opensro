@@ -91,8 +91,6 @@ silk spent, newest first in MallSilkHistoryState.
 export interface MallSilkHistoryRow {
 	readonly at: number;
 	readonly charged: number;
-	// The earned part of charged (#4133): history keeps the split.
-	readonly earnedSilk: number;
 }
 
 /*
