@@ -23,6 +23,7 @@ import { fortressActive, fortressStatus } from "@/engine/foundation/gameplay/for
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 import { NAME_COLOR_WHITE, nameColorRgba } from "@/engine/foundation/gameplay/name-color";
 import { TRADE_STARS_MAX, tradeStarTint } from "@/engine/foundation/gameplay/cos-trade-info";
+import { NO_JOB_CLASS } from "@/engine/foundation/gameplay/job-guild";
 import { tierName } from "./job-honor";
 
 // CICCos 855CBC subtracts the double 20.0 at C46198 before drawing the owner.
@@ -199,8 +200,12 @@ export function overheadLayout(
 	const social = game.social, own = entity.gid === game.localGid;
 	const guild = own ? social?.guild : undefined, name = own ? guild?.name : entity.guildName;
 	const grant = own ? guild?.members.find( m => m.name === social?.localName )?.grant : entity.guildGrantName;
-	const hold = entity.equipment?.find( i => i.slot === 8 )?.typeFlags;
-	const plain = hold === undefined || ![ 0x800, 0x1000, 0x1800 ].includes( hold & 0xf800 );
+	// 86B974: the guild row (name, grant, officer title) is built only when
+	// the active job class (vtable +0xA8) is 4 - a job suit hides the row.
+	// The class itself is the entity's word (86AFB0 classifies the spawn's
+	// slot-8 suit; the local row carries the same classification), so no
+	// equipment walk belongs here: the local entity has none to walk.
+	const plain = entity.activeJob === undefined || entity.activeJob === NO_JOB_CLASS;
 	// +7E0 is a guild office bit, not a separate attacker/defender team.
 	const role = social?.roleUpdates?.find( r => r.name === entity.name )?.role ??
 		(own ? guild?.members.find( m => m.name === social?.localName )?.role : entity.guildWarTeam);
