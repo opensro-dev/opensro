@@ -54,7 +54,7 @@ func tokenKillRoll(t *testing.T, on bool, roll uint32, prizes map[string]*enterw
 	rt, _, actor, target := newCombatTestRuntime(t, 100)
 	rt.NasrunTokens = on
 	ref := target.Ref
-	ref.Codename, ref.MonsterType = "MOB_CH_TIGERWOMAN", uniqueRarityGrade
+	ref.Codename, ref.MonsterType = "MOB_CH_TIGERWOMAN", 3
 	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{ref.RefObjID: ref}, []monster.NestRow{{SpawnPoint: target.Spawn, RetailEvidence: true, MaxCount: 1}}))
 	rt.Monsters.SetTimeSource(rt.Now)
 	rt.Monsters.StartDivision(testDivision)

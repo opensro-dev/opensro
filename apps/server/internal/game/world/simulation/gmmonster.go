@@ -56,7 +56,7 @@ value falls back to the reference's type.
 func GMSpawnRarity(requested, referenceType uint8) uint8 {
 	requested &= 0x0f
 	own := referenceType & 0x0f
-	if own == 3 || own == 8 {
+	if monster.RarityIsUnique(own) {
 		return own
 	}
 	switch requested {
