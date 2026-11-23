@@ -24,6 +24,7 @@ import {
 	dataExtractedRoot,
 	extractedRoot,
 	gameRoot,
+	normalizeRegionId,
 	publicRoot,
 	rebuildRoot,
 	retailTextdataRoot,
@@ -92,7 +93,8 @@ export async function buildServerGameDataBundle( options ) {
 		);
 		await buildCharacterAuthorityProjection( temporaryRoot, textdataRoot );
 		await buildAreaProjection( temporaryRoot, worldPublicRoot );
-		await buildMovementProjection( temporaryRoot, worldPublicRoot );
+		const regionsById = await buildMovementProjection( temporaryRoot, worldPublicRoot );
+		await assertPopulationMovementCoherence( temporaryRoot, regionsById );
 		await buildAINavProjection( temporaryRoot, options.aiNavSourceRoot ?? AINAV_SOURCE_ROOT );
 		await buildStructureZoneProjection(
 			temporaryRoot,
@@ -404,6 +406,47 @@ async function buildMovementProjection( bundleRoot, worldRoot ) {
 		version: 1,
 		regionsById
 	} );
+	return regionsById;
+}
+
+/*
+================
+assertPopulationMovementCoherence
+
+The textdata and the movement authority reach this builder through
+independent roots (textdataRoot, worldPublicRoot), so a bundle can carry the
+Alexandria population (cap110-monsters.txt) over a native-only region
+catalog. Every such nest then loads and is admitted, but its spawn region
+never resolves a surface: the server retries the spawn forever, silently,
+and the areas stand empty (#3683). Refuse the bundle instead and name the
+regions the movement authority lacks; a bundle without the population file
+is the plain native build and is left alone.
+================
+*/
+export async function assertPopulationMovementCoherence( bundleRoot, regionsById ) {
+	const populationPath = path.join( bundleRoot, "textdata", "cap110-monsters.txt" );
+	if ( !(await isRegularFile( populationPath )) ) {
+		return;
+	}
+	const population = JSON.parse( await readFile( populationPath, "utf8" ) );
+	const missing = new Set();
+	for ( const row of population.Rows ?? [] ) {
+		// The catalog's own key form (0x + four hex digits); RegionID is a
+		// decimal number, so it is read as one before normalizing.
+		const regionKey = normalizeRegionId( Number( row.RegionID ) );
+		if ( !regionsById || !(regionKey in regionsById) ) {
+			missing.add( regionKey );
+		}
+	}
+	if ( missing.size > 0 ) {
+		const named = [ ...missing ].sort();
+		throw new Error(
+			`cap110-monsters.txt names ${missing.size} region(s) the movement authority does not cover ` +
+				`(${named.slice( 0, 8 ).join( ", " )}${named.length > 8 ? ", ..." : ""}): ` +
+				"the population and the region catalog came from different builds; " +
+				"rebuild the client assets and the bundle against the same game root."
+		);
+	}
 }
 
 /*
