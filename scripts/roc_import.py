@@ -388,11 +388,14 @@ def add_quests(read, text_root, prior):
 	return [row[2] for row in added]
 
 
-# A textuisystem record starts on a "<digits>\t" line; every other line,
-# blank ones included, continues the record above it (a multi-line
-# message). The asset build splits the table by this rule
-# (textResources.mjs splitTextDataRecords).
+# A textuisystem record starts on a "<digits>\t" line and a "//" line
+# ends it without joining any record; every other line, blank ones
+# included, continues the record above it (a multi-line message). Lines
+# end at LF only. The asset build splits the table by this rule
+# (textResources.mjs splitTextDataRecords), so a record dropped here is
+# exactly a record the build would have read.
 UI_RECORD_START = re.compile(r"\d+\t")
+UI_LINE = re.compile(r"[^\n]*\n|[^\n]+")
 
 
 # ================
@@ -413,10 +416,12 @@ def without_ui_texts(text_root, symbols):
 	if not symbols:
 		return raw
 	kept, dropping = [], False
-	for line in tables.decode_table(raw).lstrip("﻿").splitlines(keepends=True):
+	for line in UI_LINE.findall(tables.decode_table(raw).lstrip("\ufeff")):
 		if UI_RECORD_START.match(line):
 			columns = line.split("\t")
 			dropping = len(columns) > 1 and columns[1].strip() in symbols
+		elif line.strip().startswith("//"):
+			dropping = False
 		if not dropping:
 			kept.append(line)
 	return b"\xff\xfe" + "".join(kept).encode("utf-16-le")
