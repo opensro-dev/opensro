@@ -84,6 +84,44 @@ SHARD_NAME = re.compile(r".*\.txt", re.IGNORECASE)
 # (key: (Korean source, English)). Translated from the v1.696 Korean.
 # ================
 QUEST_ENGLISH = {
+	"SN_PAY_QNO_AR_071": ("소원의 램프 1", "Lamp of Wishes 1"),
+	"SN_PAY_QNO_AR_072": ("소원의 램프 2", "Lamp of Wishes 2"),
+	"SN_PAY_QNO_AR_073": ("소원의 램프 3", "Lamp of Wishes 3"),
+	"SN_PAY_QNO_AR_074": ("소원의 램프 4", "Lamp of Wishes 4"),
+	"SN_PAY_QNO_AR_075": ("램프의 가디언 1", "Guardian of the Lamp 1"),
+	"SN_PAY_QNO_AR_076": ("램프의 가디언 2", "Guardian of the Lamp 2"),
+	"SN_PAY_QNO_AR_077": ("램프의 가디언 3", "Guardian of the Lamp 3"),
+	"SN_PAY_QNO_AR_078": ("악의 여신 1", "Goddess of Evil 1"),
+	"SN_PAY_QNO_AR_079": ("악의 여신 2", "Goddess of Evil 2"),
+	"SN_PAY_QNO_AR_080": ("악의 여신 3", "Goddess of Evil 3"),
+	"SN_PAY_QNO_AR_081": ("페트라 조사단", "The Petra Expedition"),
+	"SN_PAY_QNO_AR_082": ("기괴한 생명체", "Grotesque Creatures"),
+	"SN_PAY_QNO_AR_083": ("불타는 정령", "Burning Spirits"),
+	"SN_PAY_QNO_AR_084": ("모래의 악마", "Demons of the Sand"),
+	"SN_PAY_QNO_AR_085": ("수상한 꼭두각시", "Suspicious Puppets"),
+	"SN_PAY_QNO_AR_086": ("사념의 덩어리", "Masses of Malice"),
+	"SN_PAY_QNO_AR_087": ("화염의 지배자", "Lord of Flames"),
+	"SN_PAY_QNO_AR_088": ("에메랄드 바다", "The Emerald Sea"),
+	"SN_PAY_QNO_AR_089": ("램프의 샤바훈", "Shabahun of the Lamp"),
+	"SN_PAY_QNO_AR_090": ("가디언 하이리쑨", "Guardian Hairisun"),
+	"SN_PAY_QNO_AR_091": ("벌레는 질색이야", "I Hate Bugs"),
+	"SN_PAY_QNO_AR_092": ("선인장을 조심해!", "Watch Out for Cacti!"),
+	"SN_PAY_QNO_AR_093": ("사막에서 바늘 찾기", "A Needle in the Desert"),
+	"SN_PAY_QNO_AR_094": ("식인 거미", "Man-Eating Spiders"),
+	"SN_PAY_QNO_AR_095": ("선인장 뽑기", "Pulling Up Cacti"),
+	"SN_PAY_QNO_AR_096": ("불타는 나무", "Burning Trees"),
+	"SN_PAY_QNO_AR_097": ("불타는 해안", "The Burning Coast"),
+	"SN_PAY_QNO_AR_098": ("왕국 조사단 지원", "Supporting the Royal Expedition"),
+	"SN_PAY_QNO_AR_099": ("보급로 확보", "Securing the Supply Route"),
+	"SN_PAY_QNO_AR_100": ("고급 크랩 요리", "Fine Crab Cuisine"),
+	"SN_PAY_QNO_AR_101": ("특식 배달", "Special Meal Delivery"),
+	"SN_PAY_QNO_AR_102": ("진로 확보", "Clearing the Way"),
+	"SN_PAY_QNO_AR_103": ("진로 확보2", "Clearing the Way 2"),
+	"SN_PAY_QNO_AR_104": ("정원의 애완동물", "Pets of the Garden"),
+	"SN_PAY_QNO_AR_105": ("정원의 안방마님", "Mistress of the Garden"),
+	"SN_PAY_QNO_AR_106": ("섬뜩한 뜨거움", "An Eerie Heat"),
+	"SN_PAY_QNO_AR_107": ("뱀 조련사", "The Snake Tamer"),
+	"SN_PAY_QNO_AR_108": ("마녀의 흔적", "Traces of the Witch"),
 }
 
 
@@ -185,7 +223,8 @@ def text_symbols(later_texts):
 # ================
 # complete_english
 #
-# The later rows with QUEST_ENGLISH applied: a row whose English is blank
+# The later rows with QUEST_ENGLISH applied: a row whose English is a
+# placeholder (characters.is_placeholder_text, the asset build's rule)
 # takes its authored line (its recorded Korean must still match), a row
 # with English keeps it, and a blank quest row the table does not carry
 # is collected and raised, so the build refuses instead of shipping a
@@ -194,7 +233,7 @@ def text_symbols(later_texts):
 def complete_english(rows):
 	out, missing = [], []
 	for row in rows:
-		if len(row) <= blue.ENGLISH_COLUMN or row[blue.ENGLISH_COLUMN].strip():
+		if len(row) <= blue.ENGLISH_COLUMN or not characters.is_placeholder_text(row[blue.ENGLISH_COLUMN]):
 			out.append(row)
 			continue
 		key = row[blue.KEY_COLUMN]

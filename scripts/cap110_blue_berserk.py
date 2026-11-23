@@ -138,7 +138,7 @@ def fill_text(raw, later_by_key, symbols):
 			additions.append("\t".join(new))
 			continue
 		fields = lines[present[key]].split("\t")
-		if len(fields) > ENGLISH_COLUMN and fields[ENGLISH_COLUMN].strip() == "":
+		if len(fields) > ENGLISH_COLUMN and characters.is_placeholder_text(fields[ENGLISH_COLUMN]):
 			replaced[key] = lines[present[key]]
 			if len(fields) > KOREAN_COLUMN and fields[KOREAN_COLUMN].strip():
 				new[KOREAN_COLUMN] = fields[KOREAN_COLUMN]

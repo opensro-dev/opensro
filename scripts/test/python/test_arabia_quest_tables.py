@@ -13,6 +13,7 @@ import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.p
 import unittest
 from unittest import mock
 
+import alexandria_npcs as characters  # noqa: E402
 import arabia_quest_tables as quest_tables  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
 
@@ -142,6 +143,38 @@ class ArabiaQuestTablesTest(unittest.TestCase):
 				quest_tables.complete_english([row("SN_TALK_QNO_AR_001_01", "바뀐 원문", "")])
 			with self.assertRaises(ValueError):
 				quest_tables.complete_english([row("SN_TALK_QNO_AR_099_01", "원문", "")])
+
+	# ================
+	# test_a_placeholder_english_is_missing_english
+	#
+	# r204 (2026-11-24): v1.696 ships 38 SN_PAY_QNO_AR_* titles with "0"
+	# in the English cell. The import read "0" as English and the asset
+	# build refused it as untranslated; the guard now asks the build's
+	# own rule, so a "0" row takes its authored line or refuses here.
+	# ================
+	def test_a_placeholder_english_is_missing_english(self):
+		def row(key, korean, english):
+			return ["1", key, korean, "", "", "", "", "", english]
+
+		with mock.patch.dict(quest_tables.QUEST_ENGLISH, {"SN_PAY_QNO_AR_071": ("소원의 램프 1", "Lamp of Wishes 1")}, clear=True):
+			for blank in ("0", "xxx", "-", "NULL", " 0 "):
+				got = quest_tables.complete_english([row("SN_PAY_QNO_AR_071", "소원의 램프 1", blank)])
+				self.assertEqual(got[0][8], "Lamp of Wishes 1", blank)
+			with self.assertRaises(ValueError):
+				quest_tables.complete_english([row("SN_PAY_QNO_AR_072", "소원의 램프 2", "0")])
+
+	# ================
+	# test_every_shipped_placeholder_title_is_authored
+	#
+	# Each authored title names the Korean it translates and an English
+	# line that the build's rule accepts as text.
+	# ================
+	def test_every_shipped_placeholder_title_is_authored(self):
+		titles = {k: v for k, v in quest_tables.QUEST_ENGLISH.items() if k.startswith("SN_PAY_QNO_AR_")}
+		self.assertEqual(sorted(titles), [f"SN_PAY_QNO_AR_{n:03d}" for n in range(71, 109)])
+		for key, (korean, english) in titles.items():
+			self.assertTrue(korean.strip(), key)
+			self.assertFalse(characters.is_placeholder_text(english), key)
 
 	# ================
 	# test_dropping_rows_returns_the_original_bytes_with_or_without_a_final_newline
