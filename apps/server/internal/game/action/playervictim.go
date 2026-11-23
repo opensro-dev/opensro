@@ -184,7 +184,7 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 			formula = rt.shareLinkedDamageInDoor(s, formula, &out)
 		}
 		// Port-only absorption protects mana as well as HP on a fully warded hit.
-		if !formula.Slain && s.killer.monster != nil && rt.petShieldRecipientAllowed(c) {
+		if !formula.Slain && s.killer.monster != nil && rt.petShieldRecipientAllowed(s.division, c) {
 			formula.Damage = rt.absorbPetShield(s.division, enterworld.ObjectIDForCharacter(c), formula.Damage, s.now)
 		}
 		// The reference server runs dgmp per impact after the wall split, whoever struck;

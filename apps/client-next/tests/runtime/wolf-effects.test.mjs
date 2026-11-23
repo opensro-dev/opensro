@@ -17,11 +17,24 @@ import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs
 
 const wolf = await import( "../../src/engine/foundation/animation/wolf-effects.ts" );
 
+test("gear Chain Lightning renders each victim in bounce order", () => {
+	for ( const [hop, signal] of [ 0xd7, 0xdb, 0xdc, 0xdd, 0xde ].entries() ) {
+		assert.equal( wolf.wolfEffectKind( signal ), "victim" );
+		const [part] = wolf.wolfEffectParts( signal );
+		assert.equal( part?.path, "skill/china/lightning_chundung_hit_a.efp" );
+		assert.equal( part?.at, hop * .12 );
+	}
+});
+
 test("every wolf signal plays published, compiling, wolf-only effect programs", () => {
 	const published = readEffectCatalogSync( publicRoot );
 	const compiler = createCatalogEffects();
 	const signals = [
 		0xd7,
+		0xdb,
+		0xdc,
+		0xdd,
+		0xde,
 		0xd8,
 		0xd9,
 		0xda,

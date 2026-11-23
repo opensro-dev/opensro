@@ -5,7 +5,7 @@ portItemRows.mjs - port-only item rows appended to the itemdata projections
 
 Port-only, not native (owner, 2026-10-14): the attack-pet expansion's
 equipment (SRO_ATTACK_PET_EXPANSION). Every pet wears one gear family in
-three slots (collar, harness, charm) of degrees 1-9, dropped by monsters
+three slots (collar, harness, charm) of degrees 1-10, dropped by monsters
 with random blue options. The rows come from the pet design's one source,
 the server's embedded companion/petdesign.json (#1631), read in place.
 v1.150 has no pet equipment, so each piece is a plain carry item cloned

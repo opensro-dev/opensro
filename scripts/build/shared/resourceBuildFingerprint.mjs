@@ -173,6 +173,11 @@ const FINGERPRINT_ROOTS = [
 		absolutePath: path.join( rebuildRoot, "docs", "features", "assets", "survival" ),
 		source: true
 	},
+	{
+		label: "pet-art",
+		absolutePath: path.join( rebuildRoot, "docs", "pet-expansion", "assets" ),
+		source: true
+	},
 	{ label: "extracted", absolutePath: extractedRoot },
 	{ label: "client-executable", absolutePath: path.join( gameRoot, "SRO_Client.exe" ) },
 	// The effects builder checks the archive itself against its evidence.
@@ -235,7 +240,8 @@ const DATA_ROOT_LABELS = new Set( [
 	"client-executable",
 	"particle-archive",
 	"rebuild-assets",
-	"survival-art"
+	"survival-art",
+	"pet-art"
 ] );
 
 /*

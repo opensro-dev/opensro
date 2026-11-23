@@ -21,8 +21,8 @@ TestGearDegreeCapsAndRolls
 ================
 */
 func TestGearDegreeCapsAndRolls(t *testing.T) {
-	levels := []uint8{1, 8, 16, 24, 32, 42, 52, 64, 76}
-	caps := []int{1, 2, 2, 3, 3, 4, 4, 5, 6}
+	levels := []uint8{1, 8, 16, 24, 32, 42, 52, 64, 76, 90}
+	caps := []int{1, 2, 2, 3, 3, 4, 4, 5, 6, 6}
 	for i, d := range D.Gear {
 		if d.MinPetLevel != levels[i] || d.MaxBlues != caps[i] || d.RollFloor != float64(i)/16 {
 			t.Fatalf("degree %d: %+v", i+1, d)

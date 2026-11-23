@@ -55,13 +55,13 @@ commitCompanionCreditedMonsterHit
 
 commitCreditedMonsterHit for a hit a pet or COS landed in its owner's name
 (the port-only pet shield and wolf hunt bursts): the owner keeps the
-rewards, but a fatal one is a companion kill, which credits no quest and
+rewards and the pet takes the threat, but a fatal one is a companion kill, which credits no quest and
 no job EXP (reward_group.go).
 ================
 */
-func (rt *Runtime) commitCompanionCreditedMonsterHit(division string, c, snapshot *enterworld.Character, row enterworld.SkillRow, target monster.Instance, formula combat.Result, reason string, now int64) (creditedMonsterHit, bool) {
+func (rt *Runtime) commitCompanionCreditedMonsterHit(division string, c, snapshot *enterworld.Character, attacker uint32, row enterworld.SkillRow, target monster.Instance, formula combat.Result, reason string, now int64) (creditedMonsterHit, bool) {
 	return rt.commitCredited(creditedHitRequest{division: division, c: c, snapshot: snapshot, row: row, target: target,
-		formula: formula, reason: reason, now: now, companion: true})
+		formula: formula, reason: reason, now: now, companion: true, attacker: attacker})
 }
 
 /*
@@ -79,6 +79,7 @@ type creditedHitRequest struct {
 	now         int64
 	// companion: a pet or COS landed the hit in c's name.
 	companion bool
+	attacker  uint32
 }
 
 /*
@@ -136,7 +137,11 @@ func (rt *Runtime) commitCredited(in creditedHitRequest) (creditedMonsterHit, bo
 	if !committed {
 		return hit, false
 	}
-	rt.commitSkillHostility(division, enterworld.ObjectIDForCharacter(c), target.Gid, row, hit.impacts, now)
+	attacker := in.attacker
+	if attacker == 0 {
+		attacker = enterworld.ObjectIDForCharacter(c)
+	}
+	rt.commitSkillHostility(division, attacker, target.Gid, row, hit.impacts, now)
 	return hit, true
 }
 

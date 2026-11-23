@@ -327,20 +327,24 @@ export function petEffect( design: PetSkillDesign, value: number, effectiveLevel
 		return `Shields the bear and its owner for ${formatValue( Math.min( 100, value ) )}% of maximum HP for 5 s.` +
 			(design.option >= 2 ? " Also shields party members within 20 m." : "") +
 			(design.option === 3 ?
-				" After 5 s, each recipient's remaining shield (including the bear) explodes within 8 m for 40% of its remaining value as damage to monsters." :
+				" After 5 s, each recipient's remaining shield (including the bear) explodes within 8 m for 8% of its remaining value as damage to monsters. Up to 5 monsters per cast." :
 				"") +
 			" Cannot cast in town.";
 	}
 	if ( design.family === "Guardian's Bond" ) {
 		const rank = Math.min( 10, effectiveLevel );
 		if ( design.option === 1 ) {
-			return `Revives the owner with ${rank * 10}% HP and ${rank * 10}% lost EXP. ` +
+			return `Revives the owner after 5 s from any distance, restoring ${rank * 10}% HP and ${
+				rank * 10
+			}% lost EXP. ` +
 				`Shared revival cooldown: ${formatValue( 600 - (rank - 1) * 300 / 9 )} s.`;
 		}
 		const transfer = Math.min( design.option * 10, design.value + design.valuePerLevel * (rank - 1) );
 		return `Transfers ${formatValue( transfer )}% of ${
 			design.option === 3 ? "owner/party" : "owner"
-		} HP damage to the bear.`;
+		} HP damage to the bear. Revives ${
+			design.option === 3 ? "the owner or a party member" : "the owner"
+		} after 5 s from any distance.`;
 	}
 	return design.effect.replaceAll( "{v}", formatValue( value ) );
 }

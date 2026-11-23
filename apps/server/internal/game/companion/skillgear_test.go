@@ -88,12 +88,12 @@ TestElementalCapsByDegree
 */
 func TestElementalCapsByDegree(t *testing.T) {
 	for _, group := range []string{"Fire", "Cold", "Lightning", "Poison"} {
-		caps := []uint32{100, 213, 325, 438, 550, 663, 775, 888, 1000}
+		caps := []uint32{100, 213, 325, 438, 550, 663, 775, 888, 1000, 1112}
 		if group == "Lightning" {
-			caps = []uint32{100, 338, 575, 813, 1050, 1288, 1525, 1763, 2000}
+			caps = []uint32{100, 338, 575, 813, 1050, 1288, 1525, 1763, 2000, 2237}
 		}
 		if group == "Poison" {
-			caps = []uint32{300, 1388, 2475, 3563, 4650, 5738, 6825, 7913, 9000}
+			caps = []uint32{300, 1388, 2475, 3563, 4650, 5738, 6825, 7913, 9000, 10087}
 		}
 		for degree, want := range caps {
 			var eligible []AffixDef

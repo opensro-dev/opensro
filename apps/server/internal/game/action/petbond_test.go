@@ -164,7 +164,7 @@ func TestGuardianPartyRevivalAndLevelLimit(t *testing.T) {
 			c.MissionInventory = nil
 			rt.AttackPetExpansion = true
 			learnPetBook(t, c, 24+tier)
-			near := nearbyCharacter(rt, c, 21, "bond-near", 50)
+			near := nearbyCharacter(rt, c, 21, "bond-near", 300)
 			near.ActiveCOS = nil
 			rt.BindPetSession(testDivision, near, 2)
 			rt.RewardParties = func(string) []RewardParty {
@@ -251,7 +251,7 @@ func TestGuardianPartyRevivalRoutingAndOfferDrop(t *testing.T) {
 	c.MissionInventory = nil
 	rt.AttackPetExpansion = true
 	learnPetBook(t, c, 27)
-	near := nearbyCharacter(rt, c, 21, "bond-near", 50)
+	near := nearbyCharacter(rt, c, 21, "bond-near", 300)
 	near.ActiveCOS = nil
 	rt.BindPetSession(testDivision, near, 2)
 	rt.RewardParties = func(string) []RewardParty {
@@ -324,7 +324,12 @@ func TestGuardianMonsterDamageAndFatalPublication(t *testing.T) {
 				if *c.CurrentHP != 0 {
 					t.Fatal("fatal fixture did not die")
 				}
-				clock.now = clock.now.Add(time.Second)
+				clock.now = clock.now.Add(4999 * time.Millisecond)
+				rt.TickHook()(clock.NowMs())
+				if *c.CurrentHP != 0 {
+					t.Fatal("guardian revived before five seconds")
+				}
+				clock.now = clock.now.Add(time.Millisecond)
 				if len(rt.TickHook()(clock.NowMs())) == 0 || *c.CurrentHP == 0 {
 					t.Fatal("real monster death did not auto-revive")
 				}

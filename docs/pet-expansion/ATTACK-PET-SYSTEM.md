@@ -123,9 +123,9 @@ and shield portions scale together to fit the existing bar; actual HP and max HP
 stay unchanged.
 
 Tier III retains the party protection. On natural expiry, each protected
-**player and the Bear** with shield remaining releases an **8 m** burst, dealing **40% of
-that remaining shield** to monsters in range. Each explosion is centred on that recipient. Depleting a shield, death, unsummoning, logout, town or instance entry
-cancel it without a burst. No player-versus-player splash damage is added.
+**player and the Bear** with shield remaining releases an **8 m** burst, dealing **8% of
+that remaining shield** to monsters in range. The bursts share a cap of five distinct monsters per cast. Each explosion is centred on that recipient. Depleting a shield, death, unsummoning, logout and leaving eligible combat cancel it without a burst.
+Iron Hide also protects the owner and bear in Solo Survival. No player-versus-player splash damage is added.
 Iron Hide cannot be cast in town and retains the second active row's shared
 cooldown. Base shield starts at 20% / 35% / 50% maximum HP for books I / II / III
 (pet levels 10 / 40 / 90), with +1.5 percentage points per learned rank. Existing
@@ -139,14 +139,15 @@ gear-rank and Unbroken Spirit empowerment bonuses still apply.
 | Three Footed Crow | Ranged owner/party support | Rejuvenating Plume; Stormbrood | Mana Spring; Tailwind; Raven's Refuge |
 
 Bear **Guardian’s Bond** replaces Last Stand; learned book IDs and ranks are
-retained. A living summoned bear must be within 12 m. This expansion applies to
-ordinary monster combat, outside towns, jobs, PvP and instances.
+retained. Revival requires a living summoned bear and triggers five seconds after death,
+at any distance. Damage transfer still requires a bear within 12 m. Guardian’s Bond
+applies to ordinary monster combat outside towns, jobs, PvP and instances.
 
 | Book | Ranks 1 → 10 |
 | --- | --- |
 | I | Automatically revives the owner with 10% → 100% maximum HP and 10% → 100% of the latest death’s lost EXP. Shared revival cooldown falls linearly from 600 → 300 seconds. No damage transfer. |
 | II | Adds owner damage transfer of 10% → 20%. Inherits mastered book I’s full HP/EXP recovery and 300-second revival cooldown. |
-| III | Transfer rises from 20% → 30%; also protects and revives online party members in range. Inherits book I’s revival. |
+| III | Transfer rises from 20% → 30%; also transfers damage for nearby party members and revives online party members at any distance. Inherits book I’s revival. |
 
 Revival admits monster deaths only and targets at most ten levels above the
 bear. The owner has priority, followed by party members in stable GID order.
@@ -396,6 +397,7 @@ Baseline design values before item-find modifiers:
 | D7 | 52 | 4 | 42% | 9% | 37.5% |
 | D8 | 64 | 5 | 44% | 10% | 43.75% |
 | D9 | 76 | 6 | 46% | 12% | 50% |
+| D10 | 90 | 6 | 48% | 14% | 56.25% |
 
 One draw selects rare first, then the additional magic band; the remainder is
 plain. Magic gets one blue with a 40% chance of two, then the degree cap applies.
@@ -571,16 +573,17 @@ Port-only; the existing
 | D6 | 42–51 | 4 | 31.25% |
 | D7 | 52–63 | 4 | 37.5% |
 | D8 | 64–75 | 5 | 43.75% |
-| D9 | 76+ | 6 | 50% |
+| D9 | 76–89 | 6 | 50% |
+| D10 | 90+ | 6 | 56.25% |
 
 These are the character equipment degree thresholds through D9. Pet drops now
 inherit the degree of actual normal character-equipment loot, including
 lower-degree items a higher-level monster can roll. Uniques use their normal
-equipment tables; there is no additional pet-only degree promotion.
+equipment tables. Solo Survival pet-gear rewards use D10 at character level 90 and above.
 See [PET-LOOT-DB-CONFIG.md](PET-LOOT-DB-CONFIG.md) for the DB chance multiplier. White pet items may have zero
 blues. Magic drops roll one or two, subject to the degree cap. Rare drops roll
 three through six, also subject to that cap. Six-blue weight is available only
-on D9. A group may appear only once on an item, and only implemented affixes roll.
+on D9 and D10. A group may appear only once on an item, and only implemented affixes roll.
 
 Higher degrees unlock the existing stronger affix tiers and improve rolls
 within each eligible tier. The integer roll floor is

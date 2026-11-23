@@ -366,7 +366,7 @@ func (rt *Runtime) applyCOSHitInDoor(divisionID string, hit *cosHit, nowMs int64
 	var spiritFrames, spiritPrivate []wire.Frame
 	for _, formula := range hit.formulas {
 		hit.context.Magical = hit.context.Magical || formula.MagicalDamage != 0
-		if hit.monsterSource && rt.petShieldRecipientAllowed(owner) {
+		if hit.monsterSource && rt.petShieldRecipientAllowed(divisionID, owner) {
 			formula.Damage = rt.absorbPetShield(divisionID, pet.GID, formula.Damage, nowMs)
 			formula.Damage = rt.petTrainedDamageTaken(divisionID, owner, live, formula.Damage, nowMs)
 		}

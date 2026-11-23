@@ -99,6 +99,9 @@ func (rt *Runtime) relocateCharacter(division string, c *enterworld.Character, l
 		rollback()
 		return false
 	}
+	if currentWorld != arrival.world {
+		rt.retirePetShields(division, name)
+	}
 	rt.noteTeleportArrival(division, c)
 	rt.bindResidentRegion(key, rt.Now().UnixMilli())
 	rt.retireReturnForReentry(division, c)
