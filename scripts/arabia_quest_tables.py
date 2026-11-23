@@ -65,6 +65,15 @@ CONTENTS_COLUMNS = 13
 QUEST_TABLE, CONTENTS_TABLE, GUIDE_TABLE = "questdata.txt", "questcontentsdata.txt", "gameguidedata.txt"
 KEYS = {QUEST_TABLE: 2, CONTENTS_TABLE: 0, GUIDE_TABLE: 1}
 ID_COLUMN = {QUEST_TABLE: 1}
+# gameguidedata.txt: [enabled, id, Korean label, depth, parent or child
+# count, content key, title key, quest code]. A depth-1 row is one quest's
+# article; the client refuses one whose title or body has no text
+# (quest-guide.ts), so the import does too.
+GUIDE_DEPTH_COLUMN, GUIDE_CONTENT_COLUMN, GUIDE_TITLE_COLUMN, GUIDE_QUEST_COLUMN = 3, 5, 6, 7
+# A composed guide body's section heads, as the shipped bodies write them
+# (SN_PAYCON_QNO_AR_001): the Korean column and every other language.
+GUIDE_HEAD = '<strong><font color="255,226,74,0">\u25c8 {}</font></strong><br>'
+GUIDE_HEADS = {"korean": ("\uc784\ubb34", "\ud615\uc2dd"), "other": ("Task", "Format")}
 SHARD_NAME = re.compile(r".*\.txt", re.IGNORECASE)
 
 
@@ -196,6 +205,84 @@ def quest_rows(later, variant):
 
 
 # ================
+# guide_rows
+#
+# The later client's guide rows without its strays: a row whose quest exists
+# nowhere - no questdata row and no title text. v1.696 ships one: 370005
+# names QNO_AR_109 with QNO_AR_108's label ("Trace of the Witch") under a
+# parent that counts four children (370001..370004 are those four). The
+# client refused it at package time (r204, "Missing quest article text"). A
+# native data defect is not copied (owner, 2026-11-24). A row whose quest
+# has text but no questdata row (071..090, 104..108 in v1.696) stays as
+# before; any other missing text fails check_guide_text.
+# ================
+def guide_rows(rows, quests, texts):
+	codes = {row[KEYS[QUEST_TABLE]] for row in quests if len(row) > KEYS[QUEST_TABLE]}
+	return [row for row in rows if len(row) <= GUIDE_QUEST_COLUMN or not QUEST_CODE.search(row[GUIDE_QUEST_COLUMN])
+		or row[GUIDE_QUEST_COLUMN] in codes or row[GUIDE_TITLE_COLUMN] in texts]
+
+
+# ================
+# composed_guide_bodies
+#
+# A text row for each quest article whose body v1.696 never wrote: 300002
+# (QNO_AR_002) names SN_PAYCON_QNO_AR_002, which no textquest family holds,
+# while the quest's own task lines (SN_CON_<code>_<n>) and format line
+# (SN_NC_<code>) are there. The body is those two, in the shipped bodies'
+# layout; reward, NPC and scenario stay in the quest window, which reads
+# them from the quest itself. Port-only (owner, 2026-11-24: native data
+# defects are fixed, not copied).
+# ================
+def composed_guide_bodies(guide, later_texts):
+	by_key = {row[blue.KEY_COLUMN]: row for rows in later_texts for row in rows if len(row) > blue.KEY_COLUMN}
+	out = []
+	for row in guide:
+		if len(row) <= GUIDE_QUEST_COLUMN or row[GUIDE_DEPTH_COLUMN] != "1" or row[GUIDE_CONTENT_COLUMN] in by_key:
+			continue
+		code = row[GUIDE_QUEST_COLUMN]
+		prefix = "SN_CON_" + code + "_"
+		steps = sorted(int(k[len(prefix):]) for k in by_key if k.startswith(prefix) and k[len(prefix):].isdigit())
+		tasks = [by_key[f"{prefix}{step}"] for step in steps]
+		form = by_key.get("SN_NC_" + code)
+		if not tasks or form is None:
+			continue
+		body = list(form)
+		body[blue.KEY_COLUMN] = row[GUIDE_CONTENT_COLUMN]
+		for column in range(blue.KOREAN_COLUMN, len(body)):
+			if not form[column]:
+				continue
+			task, shape = GUIDE_HEADS["korean" if column == blue.KOREAN_COLUMN else "other"]
+			lines = "<br>".join(t[column] for t in tasks if len(t) > column)
+			body[column] = ("<sml2>" + GUIDE_HEAD.format(task) + lines + "<br><br>" + GUIDE_HEAD.format(shape)
+				+ form[column] + "</sml2>")
+		out.append(body)
+	return out
+
+
+# ================
+# check_guide_text
+#
+# Every quest article the import adds has a title, and a depth-1 article a
+# body, with text: the client's own rule (quest-guide.ts), read with the
+# importers' no-text rule (alexandria_npcs.is_placeholder_text), so a
+# missing key fails here at import, not at the release's package step.
+# ================
+def check_guide_text(guide, texts, variant_text):
+	missing = []
+	for row in guide:
+		if len(row) <= GUIDE_QUEST_COLUMN or not QUEST_CODE.search(row[GUIDE_QUEST_COLUMN]):
+			continue
+		keys = [row[GUIDE_TITLE_COLUMN]] + ([row[GUIDE_CONTENT_COLUMN]] if row[GUIDE_DEPTH_COLUMN] == "1" else [])
+		for key in keys:
+			english = texts.get(key)
+			absent = key not in variant_text if english is None else characters.is_placeholder_text(english)
+			if absent:
+				missing.append(f"{row[KEYS[GUIDE_TABLE]]}:{key}")
+	if missing:
+		raise ValueError("Arabia guide rows name text the import does not carry: " + ", ".join(missing))
+
+
+# ================
 # later_text_rows
 #
 # The three textquest families' rows, shards fanned out, each projected
@@ -314,14 +401,19 @@ def add_quest_tables(read, archive_sha, output):
 	if marker.exists():
 		remove_owned(text_root, prior)
 		marker.unlink()
-	later = {QUEST_TABLE: sharded_rows(read, QUEST_TABLE), CONTENTS_TABLE: tables.table_rows(read(CONTENTS_TABLE)),
-		GUIDE_TABLE: sharded_rows(read, GUIDE_TABLE)}
+	quests = sharded_rows(read, QUEST_TABLE)
+	later_texts = [complete_english(rows) for rows in later_text_rows(read)]
+	known = {row[blue.KEY_COLUMN] for rows in later_texts for row in rows if len(row) > blue.KEY_COLUMN}
+	later = {QUEST_TABLE: quests, CONTENTS_TABLE: tables.table_rows(read(CONTENTS_TABLE)),
+		GUIDE_TABLE: guide_rows(sharded_rows(read, GUIDE_TABLE), quests, known)}
 	variant = {name: tables.table_rows(safe_target(text_root, name).read_bytes()) for name in KEYS}
 	new_rows = quest_rows(later, variant)
-	later_texts = [complete_english(rows) for rows in later_text_rows(read)]
+	later_texts.append(composed_guide_bodies(new_rows[GUIDE_TABLE], later_texts))
 	symbols = text_symbols(later_texts)
 	by_key = {row[blue.KEY_COLUMN]: row for rows in later_texts for row in rows if len(row) > blue.ENGLISH_COLUMN + 1}
 	text_path = safe_target(text_root, TEXT_FILE)
+	variant_text = {row[blue.KEY_COLUMN] for row in tables.table_rows(text_path.read_bytes()) if len(row) > blue.KEY_COLUMN}
+	check_guide_text(new_rows[GUIDE_TABLE], {k: row[blue.ENGLISH_COLUMN] for k, row in by_key.items()}, variant_text)
 	raw, appended, replaced = blue.fill_text(text_path.read_bytes(), by_key, symbols)
 	ended = {}
 	for name, rows in new_rows.items():
