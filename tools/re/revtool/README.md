@@ -216,7 +216,7 @@ feature's UI or log text to its code.
 | -------- | -------------------------- | ----- |
 | index    | `aflj` + `afsj`            | names normalized `fcn.00402a70` -> `sub_402a70`; signatures are rizin's |
 | find     | overlay DB (delegated)     | identical to the dump backend |
-| view     | `pdfj`                     | disassembly at true addresses, overlay applied by revtool; rizin 0.8.2 has no `pdc`/`pdg` |
+| view     | `pdfj`                     | disassembly at true addresses, overlay applied by revtool; a call target reads as its indexed name (`call sub_964b60` -> `call Seed_NamedHelper`), and `view sub_964b60` / `fcn.00964b60` open the function by address; rizin 0.8.2 has no `pdc`/`pdg` |
 | xref     | `axtj`                     | analysis-derived; un-analyzed code is invisible (printed on every run); takes a `sub_`/`data_` token or an indexed function name |
 | strings  | `izj` + `axtj`             | refs checked at every character boundary up to the match (izj can start a string early) |
 | coverage | `aflj` call/data refs      | exact refs; field depth from disassembly (see below) |
