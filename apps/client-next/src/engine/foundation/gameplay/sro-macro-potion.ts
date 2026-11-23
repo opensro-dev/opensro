@@ -73,14 +73,13 @@ export const PET_SUMMON_STATE_DEAD = 4;
 // Summon Trigger admits states 1 and 3 (00691b60).
 export const PET_SUMMON_STATE_OK = [ 1, 3 ] as const;
 /*
-
-
 ================
-macroPotionFamily
+macroIsExpendable
 
-Native 0x690f30 / 0x690ec0 / 0x6908e0 mid-byte helpers, mapped onto the
-port's typeFlags (TID2/TID3 in the low word). Potion and pill also need
-the expendable band; summoners sit in TID2=2 and skip that band check.
+The expendable band the potion and pill helpers test first: a
+stackable consumable (TID1 3). The native mid-byte helpers 0x690f30,
+0x690ec0 and 0x6908e0 are mapped onto the port's typeFlags (TID2/TID3
+in the low word) by the families below.
 ================
 */
 function macroIsExpendable( typeFlags: number ): boolean {
@@ -89,14 +88,36 @@ function macroIsExpendable( typeFlags: number ): boolean {
 		(typeFlags & CONSUMABLE_BAND) === CONSUMABLE_BAND;
 }
 
+/*
+================
+macroIsPotion
+
+Native potion helper 0x690f30: an expendable of family 3/3/1.
+================
+*/
 function macroIsPotion( typeFlags: number ): boolean {
 	return macroIsExpendable( typeFlags ) && (typeFlags & TYPE_FAMILY_MASK) === POTION_FAMILY;
 }
 
+/*
+================
+macroIsPill
+
+Native pill helper 0x690ec0: an expendable of family 3/3/2.
+================
+*/
 function macroIsPill( typeFlags: number ): boolean {
 	return macroIsExpendable( typeFlags ) && (typeFlags & TYPE_FAMILY_MASK) === PILL_FAMILY;
 }
 
+/*
+================
+macroIsSummoner
+
+Native summoner helper 0x6908e0: family 3/2/1. Summoners sit in TID2 2
+and skip the expendable band check.
+================
+*/
 function macroIsSummoner( typeFlags: number ): boolean {
 	return (typeFlags & TYPE_FAMILY_MASK) === SUMMONER_FAMILY;
 }
