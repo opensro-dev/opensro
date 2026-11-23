@@ -25,6 +25,7 @@ import (
 	"opensro.online/server/internal/game/caravan"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/macro"
@@ -59,6 +60,7 @@ var unlistedSettings = map[string]string{
 	progression.EnvSoOkChristmasGifts:     "a tuning of the Christmas event rule, not a rule of its own",
 	action.EnvGMSetSpeed:                  "a GM command, not a rule players meet",
 	action.EnvGMItemForge:                 "a GM command, not a rule players meet",
+	gmcommand.EnvGMModeration:             "GM moderation commands, not a rule players meet",
 	monster.EnvTrainingDummy:              "GM-only training targets",
 	simulation.EnvBetaUniqueRespawn:       "unique monster spawn timing is not published",
 	simulation.EnvJanganCaveRespawn:       "spawn timing is not published",
