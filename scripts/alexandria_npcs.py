@@ -83,6 +83,22 @@ MODEL_COLUMN = 52
 
 
 # ================
+# is_placeholder_text
+#
+# A text cell that carries no text: empty, "0", "xxx", "-" or "null",
+# any case, around whitespace. The asset build's rule
+# (scripts/build/shared/englishCompletions.mjs isPlaceholderText, which
+# refuses an active row whose English is one of these), so an importer
+# that asks "is the English missing?" answers as the build will.
+# ================
+PLACEHOLDER_TEXT = ("", "0", "xxx", "-", "null")
+
+
+def is_placeholder_text(value):
+	return not isinstance(value, str) or value.strip().lower() in PLACEHOLDER_TEXT
+
+
+# ================
 # translation_rows
 #
 # The supplied object's German Tausert cell contains an unquoted newline.
