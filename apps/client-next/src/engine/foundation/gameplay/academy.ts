@@ -51,6 +51,11 @@ export const ACADEMY_OPEN_LEVEL = 60;
 // 52A9F0 caps the matching register form's title edit at 0x32 chars
 // (CIFEdit_SetMaximumTextLength on control 513).
 export const ACADEMY_DETAIL_MAX_LENGTH = 50;
+// The entry's kind byte: 526800 returns 1 for the student invitation
+// (radio 507) and 2 for the second guardian invitation (radio 508), and
+// 671F50 sends only those two; 0 is natively "no kind".
+export const ACADEMY_KIND_STUDENT = 1;
+export const ACADEMY_KIND_GUARDIAN = 2;
 export interface AcademyListing {
 	readonly id: number;
 	readonly kind: number;
@@ -253,7 +258,8 @@ export function academyRequest(
 		const modify = command.kind === "academy-modify";
 		if ( modify ? !state.own : state.own ) throw Error( "Academy registration ownership mismatch" );
 		if (
-			(command.recruit !== 0 && command.recruit !== 1) || !command.detail.length ||
+			(command.recruit !== ACADEMY_KIND_STUDENT && command.recruit !== ACADEMY_KIND_GUARDIAN) ||
+			!command.detail.length ||
 			command.detail.length > ACADEMY_DETAIL_MAX_LENGTH
 		) throw Error( "Invalid academy registration" );
 		// NetClient_Send755D / NetClient_Send713E share one body: {u32
@@ -287,7 +293,7 @@ const ACADEMY_OPEN_WAIT_CODE = 0x1c;
 academyPacket
 ================
 */
-export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 ): AcademyState | null {
+export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0, localName = "" ): AcademyState | null {
 	const p = frame.payload, v = viewOf( p );
 	let at = 0;
 	const u = ( size: number ) => {
@@ -501,11 +507,17 @@ export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 
 			rows.push( { id, kind, detail, level, model, name, students, grade, graduates } );
 		}
 		if ( at !== p.length ) throw Error( "Trailing academy page bytes" );
+		// 0x769A30: the native row loop compares each requester name with
+		// the local player's and commits the first match as the own record
+		// (MentorMatchManager_SetOwnRecord, 0x676D80), so an entry made
+		// before this session still lights Modify and Delete.
+		const mine = localName ? rows.find( row => row.name === localName ) : undefined;
 		return {
 			...state,
 			page,
 			pages,
 			rows,
+			own: mine ? { id: mine.id, kind: mine.kind, detail: mine.detail } : state.own,
 			request: state.request?.kind === "page" ? null : state.request,
 			result: null
 		};

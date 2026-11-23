@@ -1202,7 +1202,7 @@ test("Academy Matching registers, modifies and deletes its own entry", () => {
 		scene = f.ui.step( f.state, 1400 );
 		assert.ok( scene.controls.some( c => c.id === "academy-form-detail" ) );
 		assert.ok( scene.controls.find( c => c.id === "academy-form-confirm" && c.disabled ) );
-		assert.ok( scene.controls.find( c => c.id === "academy-form-kind:0" && c.selected ) );
+		assert.ok( scene.controls.find( c => c.id === "academy-form-kind:1" && c.selected ) );
 		f.ui.event( {
 			kind: "edit",
 			id: "academy-form-detail",
@@ -1213,11 +1213,11 @@ test("Academy Matching registers, modifies and deletes its own entry", () => {
 		} );
 		scene = f.ui.step( f.state, 1450 );
 		assert.ok( scene.controls.find( c => c.id === "academy-form-confirm" && !c.disabled ) );
-		f.ui.event( { kind: "activate", id: "academy-form-kind:1" } );
+		f.ui.event( { kind: "activate", id: "academy-form-kind:2" } );
 		f.ui.event( { kind: "activate", id: "academy-form-confirm" } );
 		assert.deepEqual( sent.at( -1 ).command, {
 			kind: "academy-register",
-			recruit: 1,
+			recruit: 2,
 			detail: "Need a guardian"
 		} );
 		scene = f.ui.step( f.state, 1500 );
@@ -1228,7 +1228,7 @@ test("Academy Matching registers, modifies and deletes its own entry", () => {
 			...f.state.gameplay,
 			academy: {
 				...f.state.gameplay.academy,
-				own: { id: 9, kind: 1, detail: "Need a guardian" }
+				own: { id: 9, kind: 2, detail: "Need a guardian" }
 			}
 		};
 		scene = f.ui.step( f.state, 1600 );
@@ -1237,7 +1237,7 @@ test("Academy Matching registers, modifies and deletes its own entry", () => {
 		f.ui.event( { kind: "activate", id: "academy-modify" } );
 		scene = f.ui.step( f.state, 1700 );
 		assert.equal( scene.controls.find( c => c.id === "academy-form-detail" ).value, "Need a guardian" );
-		assert.ok( scene.controls.find( c => c.id === "academy-form-kind:1" && c.selected ) );
+		assert.ok( scene.controls.find( c => c.id === "academy-form-kind:2" && c.selected ) );
 		f.ui.event( { kind: "activate", id: "academy-form-cancel" } );
 		f.ui.event( { kind: "activate", id: "academy-delete" } );
 		assert.deepEqual( sent.at( -1 ).command, { kind: "academy-delete" } );

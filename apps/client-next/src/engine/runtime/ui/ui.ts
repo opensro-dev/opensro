@@ -180,6 +180,8 @@ import { gmLocalCommand } from "@/engine/foundation/gameplay/gm-local-commands";
 import { SkillSlot_Resolve } from "./hud/skill-slot";
 import {
 	ACADEMY_DETAIL_MAX_LENGTH,
+	ACADEMY_KIND_GUARDIAN,
+	ACADEMY_KIND_STUDENT,
 	ACADEMY_OPEN_LEVEL,
 	academyJoinLabel,
 	academyRank
@@ -1846,7 +1848,7 @@ export function createUi( ports: UiPorts ) {
 	let academyName = "", academyGrade = 5, academyKind = 2, academyCombo = 0;
 	let academyFilter = { name: "", grade: 5, kind: 2 };
 	let academyDialog: "register" | "modify" | null = null;
-	let academyForm = { recruit: 0, detail: "" };
+	let academyForm = { recruit: ACADEMY_KIND_STUDENT, detail: "" };
 	let guideSidebar = false, guideTab: "general" | "events" | "quests" = "general", guideIndexScroll = 0;
 	const guideGroups = new Set<number>();
 	let guideEvent = 0, guideObserved = 0, guideRequested = 0, guidePending = 0, guideScroll = 0;
@@ -5432,7 +5434,7 @@ export function createUi( ports: UiPorts ) {
 			academyDialog = id === "academy-modify" ? "modify" : "register";
 			academyForm = academyDialog === "modify" && own ?
 				{ recruit: own.kind, detail: own.detail } :
-				{ recruit: 0, detail: "" };
+				{ recruit: ACADEMY_KIND_STUDENT, detail: "" };
 		} else if ( id === "academy-delete" ) sendGameplay( { kind: "academy-delete" } );
 		else if ( id === "academy-form-cancel" ) {
 			academyDialog = null;
@@ -25136,7 +25138,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					const node = at( id );
 					if ( node ) authoredText( node, fx, fy, hudCopy( node.text ) );
 				}
-				for ( const [nodeId, recruit] of [ [ 507, 0 ], [ 508, 1 ] ] as const ) {
+				for (
+					const [nodeId, recruit] of [ [ 507, ACADEMY_KIND_STUDENT ], [
+						508,
+						ACADEMY_KIND_GUARDIAN
+					] ] as const
+				) {
 					const node = at( nodeId );
 					if ( !node ) continue;
 					const r = authoredRect( node, fx, fy ),
@@ -25149,7 +25156,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					controls.push( {
 						id: "academy-form-kind:" + recruit,
 						label: hudCopy(
-							recruit === 0 ?
+							recruit === ACADEMY_KIND_STUDENT ?
 								"UIIT_STT_TC_STUDENT_INVITATION" :
 								"UIIT_STT_TC_SECOND_GUARDIAN_INVITATION"
 						),

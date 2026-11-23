@@ -4890,7 +4890,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 				}
 				if ( academy ) {
-					const next = academyPacket( academy, frame, now );
+					const next = academyPacket( academy, frame, now, social.localName );
 					if ( next ) {
 						const statusNotice = academyStatusNotice( academy, next, frame );
 						if ( statusNotice ) {
