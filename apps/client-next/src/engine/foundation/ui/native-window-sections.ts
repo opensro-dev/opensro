@@ -49,7 +49,10 @@ export function nativeWindowSections( name: string ): readonly string[] | undefi
 				"MsgBoxTaxLevy",
 				// 52A960 / 52DC80: the fortress production boxes.
 				"MsgBoxMakeItem",
-				"MsgBoxMakeItemCancel"
+				"MsgBoxMakeItemCancel",
+				// 52A9F0: the academy matching register form (its own modal
+				// branch; the GDR_MB_MENTOR_MATCH_* names are unique here).
+				"MentorMatchRegister"
 			];
 		case "ifapprenticeship":
 			return [ "Create", "NotifySubBox", "NotifyContents" ]; // 5C5B60.

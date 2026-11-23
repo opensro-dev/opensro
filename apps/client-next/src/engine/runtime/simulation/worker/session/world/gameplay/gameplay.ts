@@ -3277,7 +3277,11 @@ state here before a command can claim a native wire conversation.
 				}
 				return sendFrame( academyOpenRequest() );
 			}
-			if ( command.kind === "academy-page" || command.kind === "academy-join" ) {
+			if (
+				command.kind === "academy-page" || command.kind === "academy-join" ||
+				command.kind === "academy-register" || command.kind === "academy-modify" ||
+				command.kind === "academy-delete"
+			) {
 				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
 				const next = academyRequest( academy, command, progression.level );
 				send( next.frame );
@@ -4901,7 +4905,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 				}
 				if ( academy ) {
-					const next = academyPacket( academy, frame, now );
+					const next = academyPacket( academy, frame, now, social.localName );
 					if ( next ) {
 						const statusNotice = academyStatusNotice( academy, next, frame );
 						if ( statusNotice ) {

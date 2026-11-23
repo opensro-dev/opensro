@@ -178,7 +178,14 @@ import { createGmHelper, GM_HELPER_HEIGHT, GM_HELPER_ROWS, GM_HELPER_ROW_HEIGHT 
 import type { GmCatalog } from "@/engine/foundation/gameplay/gm-command";
 import { gmLocalCommand } from "@/engine/foundation/gameplay/gm-local-commands";
 import { SkillSlot_Resolve } from "./hud/skill-slot";
-import { ACADEMY_OPEN_LEVEL, academyJoinLabel, academyRank } from "@/engine/foundation/gameplay/academy";
+import {
+	ACADEMY_DETAIL_MAX_LENGTH,
+	ACADEMY_KIND_GUARDIAN,
+	ACADEMY_KIND_STUDENT,
+	ACADEMY_OPEN_LEVEL,
+	academyJoinLabel,
+	academyRank
+} from "@/engine/foundation/gameplay/academy";
 import { createWindowPlacement } from "./hud/window-placement";
 import { createItemMall } from "./hud/item-mall";
 import {
@@ -808,7 +815,7 @@ import {
 } from "@/engine/foundation/ui/hud-readouts";
 import { hudTooltipKey, sideBubble, tooltipBubble } from "@/engine/foundation/ui/helper-bubble";
 import { playerAbilityValues } from "@/engine/foundation/gameplay/player-stats";
-import { academyLayout } from "@/engine/foundation/ui/academy-layout";
+import { ACADEMY_SCROLL_TRAVEL_PX, academyLayout } from "@/engine/foundation/ui/academy-layout";
 import { createGuideResources } from "./guide/resources";
 import { createQuestInfo } from "./hud/quest-info";
 import {
@@ -1840,6 +1847,8 @@ export function createUi( ports: UiPorts ) {
 	let academySelection = 0, academySort = "ID_BTN", academyAscending = true;
 	let academyName = "", academyGrade = 5, academyKind = 2, academyCombo = 0;
 	let academyFilter = { name: "", grade: 5, kind: 2 };
+	let academyDialog: "register" | "modify" | null = null;
+	let academyForm = { recruit: ACADEMY_KIND_STUDENT, detail: "" };
 	let guideSidebar = false, guideTab: "general" | "events" | "quests" = "general", guideIndexScroll = 0;
 	const guideGroups = new Set<number>();
 	let guideEvent = 0, guideObserved = 0, guideRequested = 0, guidePending = 0, guideScroll = 0;
@@ -2714,8 +2723,9 @@ export function createUi( ports: UiPorts ) {
 		}
 		if ( next === "Academy Matching" ) {
 			academySelection = 0;
+			academyDialog = null;
 			if ( view?.gameplay?.academy && !view.gameplay.academy.request ) {
-				sendGameplay( { kind: "academy-page", page: 0 } );
+				sendGameplay( { kind: "academy-page", page: 1 } );
 			}
 		}
 		// 69C150 sounds the resulting visible window, including a hotkey retarget.
@@ -5419,7 +5429,37 @@ export function createUi( ports: UiPorts ) {
 			else if ( which === 2 && index !== undefined && index >= 0 && index <= 2 ) academyKind = index;
 			academyCombo = 0;
 		} else if ( id === "academy-join" ) sendGameplay( { kind: "academy-join", id: academySelection } );
-		else if ( id === "academy-refresh" || id === "academy-prev" || id === "academy-next" ) {
+		else if ( id === "academy-register" || id === "academy-modify" ) {
+			const own = view.gameplay?.academy?.own;
+			academyDialog = id === "academy-modify" ? "modify" : "register";
+			academyForm = academyDialog === "modify" && own ?
+				{ recruit: own.kind, detail: own.detail } :
+				{ recruit: ACADEMY_KIND_STUDENT, detail: "" };
+		} else if ( id === "academy-delete" ) sendGameplay( { kind: "academy-delete" } );
+		else if ( id === "academy-form-cancel" ) {
+			academyDialog = null;
+			focus = null;
+		} else if ( id.startsWith( "academy-form-kind:" ) ) {
+			academyForm.recruit = Number( id.slice( 18 ) );
+		} else if ( id === "academy-form-confirm" ) {
+			if ( academyDialog && academyForm.detail.length ) {
+				sendGameplay( {
+					kind: academyDialog === "modify" ? "academy-modify" : "academy-register",
+					recruit: academyForm.recruit,
+					detail: academyForm.detail
+				} );
+				academyDialog = null;
+				focus = null;
+			}
+		} else if ( id === "academy-scroll-up" || id === "academy-scroll-down" ) {
+			const a = view.gameplay?.academy;
+			if ( a && !a.request ) {
+				sendGameplay( {
+					kind: "academy-page",
+					page: id === "academy-scroll-up" ? Math.max( 1, a.page - 1 ) : a.page + 1
+				} );
+			}
+		} else if ( id === "academy-refresh" || id === "academy-prev" || id === "academy-next" ) {
 			const a = view.gameplay?.academy;
 			if ( a ) {
 				sendGameplay( {
@@ -7775,6 +7815,18 @@ export function createUi( ports: UiPorts ) {
 					!(request ? event.id.startsWith( "party-answer:" ) : event.id.startsWith( "party-form-" ))
 				) return;
 			}
+			if ( academyDialog ) {
+				if ( event.kind === "key" ) {
+					if ( event.code === "Escape" ) activate( "academy-form-cancel" );
+					else if ( event.code === "Enter" && !composing ) activate( "academy-form-confirm" );
+					return;
+				}
+				if (
+					event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end" ||
+					event.kind === "double-activate"
+				) return;
+				if ( "id" in event && event.id !== null && !event.id.startsWith( "academy-form-" ) ) return;
+			}
 			if ( shopDialog && panel === "Shop" ) {
 				if (
 					event.kind === "edit" && event.id === "shop-quantity" &&
@@ -8088,6 +8140,21 @@ export function createUi( ports: UiPorts ) {
 						blockOffset + event.dy * Math.max( 0, rows.length - 10 ) / 185
 					)
 				);
+				dirty = true;
+				return;
+			}
+			if ( event.kind === "drag" && event.id === "academy-scroll-thumb" && panel === "Academy Matching" ) {
+				const a = view?.gameplay?.academy;
+				if ( a && !a.request && a.pages > 1 ) {
+					const target = Math.max(
+						1,
+						Math.min(
+							a.pages,
+							Math.round( a.page + event.dy * (a.pages - 1) / ACADEMY_SCROLL_TRAVEL_PX )
+						)
+					);
+					if ( target !== a.page ) sendGameplay( { kind: "academy-page", page: target } );
+				}
 				dirty = true;
 				return;
 			}
@@ -9780,6 +9847,8 @@ export function createUi( ports: UiPorts ) {
 					else if ( key === "min" || key === "max" ) {
 						partyForm[key] = event.value.replace( /[^0-9]/g, "" ).slice( 0, 3 );
 					}
+				} else if ( event.id === "academy-form-detail" ) {
+					academyForm.detail = event.value.slice( 0, ACADEMY_DETAIL_MAX_LENGTH );
 				} else if ( event.id === "experimental-ui-scale" && panel === "Experimental" ) {
 					// Port-only, not native: the range control reports the slider's
 					// stop; the draft helper snaps or rejects it.
@@ -25034,6 +25103,91 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				}
 				endWindow( [ mark[0], 0, mark[2], mark[3] ], "modal:" + panel );
 				blocks.push( full );
+			}
+			const mentorBox = hud.data()?.windows.ifmessagebox;
+			if ( worldVisible && academyDialog && mentorBox && panel === "Academy Matching" ) {
+				// 52A9F0 builds this CIFMessageBox branch from ifmessagebox's
+				// MentorMatchRegister section: an invitation-kind radio pair
+				// (507/508), the title edit (513, capped at 50 chars) and
+				// Confirm/Cancel (502/501) under the MACHING_ENTER title.
+				const mark = beginWindow(),
+					layout = messageBox( w, h, 340, 224 ),
+					[fx, fy] = layout.frame;
+				controls = drawFrame.controls = [];
+				blocks.push( full );
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_CTL_TC_MACHING_ENTER" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} )
+				);
+				const section = Object.fromEntries(
+					Object.entries( mentorBox ).filter( ( [, row] ) => row.id >= 501 && row.id <= 513 )
+				);
+				nativePage( section, fx, fy, [ 501, 502, 507, 508, 509, 510, 511, 512, 513 ] );
+				const at = ( id: number ) => Object.values( section ).find( row => row.id === id );
+				for ( const id of [ 509, 510, 511, 512 ] ) {
+					const node = at( id );
+					if ( node ) authoredText( node, fx, fy, hudCopy( node.text ) );
+				}
+				for (
+					const [nodeId, recruit] of [ [ 507, ACADEMY_KIND_STUDENT ], [
+						508,
+						ACADEMY_KIND_GUARDIAN
+					] ] as const
+				) {
+					const node = at( nodeId );
+					if ( !node ) continue;
+					const r = authoredRect( node, fx, fy ),
+						checked = academyForm.recruit === recruit,
+						face = ROOT + "interface/ifcommon/com_radiobutton_" + (checked ? "on" : "off") + ".png";
+					paths.push( face );
+					if ( resources.size( face ) ) {
+						quads.push( { rect: r, clip: full, texture: face, uv: [ 0, 0, 1, 1 ], color: white } );
+					}
+					controls.push( {
+						id: "academy-form-kind:" + recruit,
+						label: hudCopy(
+							recruit === ACADEMY_KIND_STUDENT ?
+								"UIIT_STT_TC_STUDENT_INVITATION" :
+								"UIIT_STT_TC_SECOND_GUARDIAN_INVITATION"
+						),
+						kind: "button",
+						rect: r,
+						selected: checked
+					} );
+				}
+				const edit = at( 513 );
+				if ( edit ) {
+					partyEdit( edit, fx, fy, "academy-form-detail", academyForm.detail, ACADEMY_DETAIL_MAX_LENGTH );
+				}
+				for (
+					const [nodeId, control] of [
+						[ 502, "academy-form-confirm" ],
+						[ 501, "academy-form-cancel" ]
+					] as const
+				) {
+					const node = at( nodeId );
+					if ( node ) {
+						authoredLabeledButton(
+							{ ...node, rect: [ node.rect[0], node.rect[1], 76, 24 ] },
+							fx,
+							fy,
+							control,
+							hudCopy( node.text ),
+							control === "academy-form-confirm" && !academyForm.detail.length
+						);
+					}
+				}
+				endWindow( [ mark[0], 0, mark[2], mark[3] ], "modal:academy-form" );
 			}
 			if ( worldVisible && shopDialog && panel === "Shop" && game?.shop && hud.data() ) {
 				const admission = beginWindow(),
