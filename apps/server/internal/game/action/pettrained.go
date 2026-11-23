@@ -521,7 +521,7 @@ Shatter, crushing blow and deadly strike, then Execute.
 ================
 */
 func (rt *Runtime) petTrainedDamage(ts *petTrainedStrike, target monster.Instance, formulas []combat.Result) {
-	unique := target.Rarity()&0x0f == 3 || target.Rarity()&0x0f == 8
+	unique := target.IsUnique()
 	total := uint32(0)
 	lastHit := -1
 	for i := range formulas {

@@ -222,7 +222,7 @@ func (s *MonsterState) tryDormant(state *divisionMonsterState, gid uint32, m mov
 		return false
 	}
 	actor, ok := state.instances.lookup(gid)
-	if !ok || actor.Rarity()&15 == 3 || actor.SummonerGID != 0 || actor.NestDetached || !actor.Nest.Respawn || actor.Nest.NativeTacticsFlags&0x84 != 0 {
+	if !ok || actor.IsUnique() || actor.SummonerGID != 0 || actor.NestDetached || !actor.Nest.Respawn || actor.Nest.NativeTacticsFlags&0x84 != 0 {
 		return false
 	}
 	unhurt := actor.CurrentHP == actor.EffectiveMaxHP() && !actor.Help.HasPending() && actor.Abnormal == nil

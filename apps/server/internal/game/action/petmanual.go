@@ -210,7 +210,7 @@ func (rt *Runtime) advancePetRoar(step petCombatStep) bool {
 	}
 	count := 0
 	for _, mob := range rt.Monsters.CombatCandidatesInPopulation(step.key.division, lease, at, radius, step.nowMs, false) {
-		if mob.Rarity()&0x0f == 3 || mob.Rarity()&0x0f == 8 || cast.skill.Option == 1 && mob.Rarity()&0x10 != 0 {
+		if mob.IsUnique() || cast.skill.Option == 1 && mob.Rarity()&0x10 != 0 {
 			continue
 		}
 		if target, valid := rt.resolvePetCombatTarget(step, mob.Gid); valid && target.monster != nil {

@@ -565,6 +565,18 @@ func (instance Instance) Rarity() uint8 {
 
 /*
 ==================
+IsUnique
+
+Whether this instance is a unique, as the one owner of the rule
+(unique_nests.go) reads this instance's rarity.
+==================
+*/
+func (instance Instance) IsUnique() bool {
+	return RarityIsUnique(instance.Rarity())
+}
+
+/*
+==================
 EffectiveMaxHP
 
 EffectiveMaxHP returns the per-instance maximum the v1.150 target-status
