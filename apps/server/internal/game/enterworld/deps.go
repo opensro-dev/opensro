@@ -195,6 +195,10 @@ type Deps struct {
 	// runtime's clock so both agree on every pet-skill deadline; nil falls
 	// back to the wall clock.
 	Now func() time.Time
+	// PublicationHold receives a slow re-entry's parts as reentry.<part>
+	// (transport.Hub.RecordPublicationHold, publication_holds); nil drops
+	// them.
+	PublicationHold func(label string, elapsed time.Duration)
 	// TrackTimedWindows hands a character with pet-skill windows to the action
 	// runtime's tick sweep, which alone retires spent rows with the native
 	// zero pair. Without it a window re-raised at world entry would sit at
@@ -818,11 +822,19 @@ func (d *Deps) ReentryPackets(divisionID, characterName string) ([]Packet, bool)
 	if d.MutateCharacterDeferred != nil {
 		projection.MutateCharacter = d.MutateCharacterDeferred
 	}
+	// A re-entry runs under its caller's publication-gate hold (the
+	// return-scroll arrival's returnArrival.reentry part, #2802): a slow one
+	// names its own parts as reentry.<part> beside it.
+	hold := simulation.NewHoldBreakdown("reentry", d.clock)
 	result := Build(&projection, BootstrapRequest{
 		DivisionID:    divisionID,
 		CharacterName: characterName,
+		hold:          &hold,
 	})
-	return projection.encodeReentry(result)
+	packets, ok := projection.encodeReentry(result)
+	hold.Mark("encode")
+	hold.Report(d.PublicationHold)
+	return packets, ok
 }
 
 // PreparedReentry couples the packets to the resolved placement they encode.
@@ -868,7 +880,7 @@ func (d *Deps) PrepareReentry(divisionID string, character *Character) (Prepared
 		snapshot.RaiseInventoryFloor(domain.InventoryPagesBase)
 		inventoryBase = domain.InventoryPagesBase
 	}
-	result := buildCharacterProjection(&projection, divisionID, snapshot)
+	result := buildCharacterProjection(&projection, divisionID, snapshot, nil)
 	packets, ok := d.encodeReentry(result)
 	if !ok {
 		return PreparedReentry{}, false

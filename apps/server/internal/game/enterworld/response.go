@@ -187,6 +187,9 @@ BootstrapRequest is the /mission/bootstrap request body.
 type BootstrapRequest struct {
 	DivisionID    string
 	CharacterName string
+	// hold times the build's parts when a re-entry runs it under a
+	// publication-gate hold (ReentryPackets); nil times nothing.
+	hold *simulation.HoldBreakdown
 }
 
 /*
