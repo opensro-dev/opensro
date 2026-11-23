@@ -306,7 +306,7 @@ func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
 	if err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue roc population: %w", err)
 	}
-	template, err = monster.AppendArabia(template, dir, monster.ArabiaEnabled())
+	template, err = monster.AppendArabia(template, dir, monster.ArabiaEnabled(), monster.BaghdadDungeonEnabled())
 	if err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue arabia population: %w", err)
 	}

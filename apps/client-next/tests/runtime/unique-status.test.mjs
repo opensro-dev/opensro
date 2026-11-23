@@ -297,6 +297,23 @@ test("the window edits a draft and saves it once", () => {
 	assert.equal( hud.draft().browser, true );
 });
 
+test("a book getter is read when a character attaches, not when the window is built", () => {
+	// The runtime builds the UI before the platform that stores the book:
+	// reading it at construction threw before the first frame.
+	let reads = 0;
+	let book = null;
+	const hud = createUniqueStatusHud( () => {
+		reads++;
+		if ( book === null ) throw new Error( "platform not ready" );
+		return book;
+	} );
+	assert.equal( reads, 0 );
+	book = { Ann: { refs: [ URUCHI ], deathsToo: true, browser: false } };
+	hud.attach( "Ann" );
+	assert.equal( reads, 1 );
+	assert.deepEqual( hud.draft(), { refs: [ URUCHI ], deathsToo: true, browser: false } );
+});
+
 test("clicks route to the window's own ids and nothing else's", () => {
 	const hud = createUniqueStatusHud( {} );
 	hud.attach( "Ann" );

@@ -6677,22 +6677,6 @@ cancelCast
 			movement.cancelCast( token, now );
 			dirty = true;
 		},
-		// The local player's live pose is owned by movement, not by its entity
-		// row (which only follows displacements). Clipping a local dash from
-		// the entity row sent Ghost Walk back toward a stale position.
-		/*
-================
-constrainDisplacement
-================
-		*/
-		constrainDisplacement(
-			command: import("@/engine/contracts/gameplay").CastDisplacement,
-			entityPose: import("@/engine/contracts/gameplay").Pose,
-			now: number
-		) {
-			const from = command.gid === localGid ? movement.current( now ) ?? entityPose : entityPose;
-			return movement.constrainDisplacement( command, from, command.gid === localGid, now );
-		},
 		guidedArrival: combat.guidedArrival,
 		/*
 ================

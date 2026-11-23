@@ -47,7 +47,7 @@ func TestModerationLogKeepsAcceptedLinesMutedMarked(t *testing.T) {
 	at := time.UnixMilli(1_790_000_000_000)
 	server.chat.SetClock(func() time.Time { return at })
 	muted := true
-	server.chat.ShadowMuted = func(accountID string) bool { return muted && accountID == "test-account" }
+	server.chat.ShadowMuted = func(accountID, _ string) bool { return muted && accountID == "test-account" }
 	dir := filepath.Join(t.TempDir(), "modlog")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)

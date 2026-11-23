@@ -29,11 +29,11 @@ function sized( text ) {
 }
 
 test("/MUTE sends name, minutes, clause and the rejoined reason", () => {
-	const frame = gmRequest( "/mute Juke 30 C1 spamming   trade chat" );
+	const frame = gmRequest( "/mute Loud 30 C1 spamming   trade chat" );
 	assert.equal( frame?.opcode, 0x75b6 );
 	assert.deepEqual( [ ...frame.payload ], [
 		0xf5,
-		...sized( "Juke" ),
+		...sized( "Loud" ),
 		30,
 		0,
 		...sized( "C1" ),
@@ -42,10 +42,10 @@ test("/MUTE sends name, minutes, clause and the rejoined reason", () => {
 	// No reason, a zero or non-numeric duration, or one past u16 sends nothing.
 	for (
 		const line of [
-			"/MUTE Juke 30 C1",
-			"/MUTE Juke 0 C1 spam",
-			"/MUTE Juke ten C1 spam",
-			"/MUTE Juke 65536 C1 spam"
+			"/MUTE Loud 30 C1",
+			"/MUTE Loud 0 C1 spam",
+			"/MUTE Loud ten C1 spam",
+			"/MUTE Loud 65536 C1 spam"
 		]
 	) {
 		assert.equal( gmRequest( line ), null, line );
@@ -53,25 +53,25 @@ test("/MUTE sends name, minutes, clause and the rejoined reason", () => {
 });
 
 test("/SHADOWMUTE carries an optional note; the name-only commands take exactly one name", () => {
-	assert.deepEqual( [ ...(gmRequest( "/SHADOWMUTE Juke rmt spam" )?.payload ?? []) ], [
+	assert.deepEqual( [ ...(gmRequest( "/SHADOWMUTE Loud rmt spam" )?.payload ?? []) ], [
 		0xf7,
-		...sized( "Juke" ),
+		...sized( "Loud" ),
 		...sized( "rmt spam" )
 	] );
-	assert.deepEqual( [ ...(gmRequest( "/shadowmute Juke" )?.payload ?? []) ], [ 0xf7, ...sized( "Juke" ), 0, 0 ] );
+	assert.deepEqual( [ ...(gmRequest( "/shadowmute Loud" )?.payload ?? []) ], [ 0xf7, ...sized( "Loud" ), 0, 0 ] );
 	const named = { "/UNMUTE": 0xf6, "/unshadowmute": 0xf8, "/BlockLogout": 0xf9, "/ALLOWLOGOUT": 0xfa };
 	for ( const [word, code] of Object.entries( named ) ) {
-		assert.deepEqual( [ ...(gmRequest( `${word} Juke` )?.payload ?? []) ], [ code, ...sized( "Juke" ) ], word );
-		assert.equal( gmRequest( `${word} Juke extra` ), null, word );
+		assert.deepEqual( [ ...(gmRequest( `${word} Loud` )?.payload ?? []) ], [ code, ...sized( "Loud" ) ], word );
+		assert.equal( gmRequest( `${word} Loud extra` ), null, word );
 		assert.equal( gmRequest( word ), null, word );
 	}
 });
 
 test("moderation replies print the server's text on both results", () => {
 	const reply = ( result, code, text ) => Uint8Array.of( result, code, ...sized( text ) );
-	assert.deepEqual( gmReply( reply( 1, 0xf5, "Juke muted until 2026-11-23 13:53 UTC" ) ), {
+	assert.deepEqual( gmReply( reply( 1, 0xf5, "Loud muted until 2026-11-23 13:53 UTC" ) ), {
 		console: true,
-		text: "-> Juke muted until 2026-11-23 13:53 UTC"
+		text: "-> Loud muted until 2026-11-23 13:53 UTC"
 	} );
 	assert.deepEqual( gmReply( reply( 2, 0xf9, "OtherGm is a GM" ) ), {
 		console: true,

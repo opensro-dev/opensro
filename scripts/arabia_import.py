@@ -96,6 +96,7 @@ from arabia_map_tiles import (  # noqa: E402
 	remove_map_labels,
 	restore_map_tiles,
 )
+import arabia_quest_items  # noqa: E402
 import arabia_quest_tables  # noqa: E402
 from arabia_gates import prepare_gates  # noqa: E402
 from prepare_client_resources import write_atomically  # noqa: E402
@@ -500,6 +501,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 	if not enabled():
 		restore_map_tiles(output, prior)
 		remove_map_labels(output / TEXT_ROOT, prior)
+		arabia_quest_items.remove_quest_items(output)
 		arabia_quest_tables.remove_quest_tables(output)
 		return remove_owned(output, prior)
 	# Resolved before any archive is read: a missing extraction refuses
@@ -735,6 +737,10 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		speech_symbols = sorted(({row[1] for row in speech_rows}
 			| (set(prior.get("speechSymbols", [])) & quest_keys)) - native_quest_keys)
 
+		# The continent's quest items (#4134): one step of this layer,
+		# gated with it, reaped against their own marker by
+		# arabia_quest_items.
+		quest_item_summary = arabia_quest_items.add_quest_items(read, root, native, output)
 		# The continent's quest rows and their strings (#4134): one
 		# step of this layer, gated with it, reaped against their own
 		# marker by arabia_quest_tables.
@@ -940,6 +946,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 				- native_text_keys),
 			"speechSymbols": speech_symbols,
 			"speechUnresolved": speech_unresolved,
+			"questItems": quest_item_summary,
 			"quests": quest_summary,
 			"files": files,
 			"replacedTiles": replaced_tiles,

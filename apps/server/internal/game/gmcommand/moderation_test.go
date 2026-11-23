@@ -117,8 +117,8 @@ type moderationFixture struct {
 func newModerationFixture(t *testing.T, enabled bool) moderationFixture {
 	t.Helper()
 	gm := gmChar("Gm", true, 0x1000)
-	player := gmChar("Juke", false, 0x1000)
-	player.AccountID = "Youssef59"
+	player := gmChar("Loud", false, 0x1000)
+	player.AccountID = "Spammer01"
 	peer := gmChar("OtherGm", true, 0x1000)
 	peer.AccountID = "staff"
 	at := time.Date(2026, 11, 23, 13, 23, 0, 0, time.UTC)
@@ -165,21 +165,21 @@ TestMuteAndUnmuteReachTheBook
 */
 func TestMuteAndUnmuteReachTheBook(t *testing.T) {
 	f := newModerationFixture(t, true)
-	text := replyText(t, f.run(muteFrame("juke", 30, "C1", "spamming trade chat")).Ack, AckResultOK, SubChatMute)
-	if text != "Juke muted until 2026-11-23 13:53 UTC" || !f.hub.set["Juke"] {
+	text := replyText(t, f.run(muteFrame("loud", 30, "C1", "spamming trade chat")).Ack, AckResultOK, SubChatMute)
+	if text != "Loud muted until 2026-11-23 13:53 UTC" || !f.hub.set["Loud"] {
 		t.Fatalf("mute reply %q, hub %v", text, f.hub.set)
 	}
-	if mute, ok := f.owner.desk.Mutes.Active(testDivision, "Juke"); !ok || mute.Operator != "gm:Gm" || mute.Clause != "C1" {
+	if mute, ok := f.owner.desk.Mutes.Active(testDivision, "Loud"); !ok || mute.Operator != "gm:Gm" || mute.Clause != "C1" {
 		t.Fatalf("book holds %+v %v", mute, ok)
 	}
 	// The book's own rules reach the GM as the refusal text.
-	if text := replyText(t, f.run(muteFrame("Juke", 30, "C1", "no")).Ack, AckResultFail, SubChatMute); !strings.Contains(text, "reason") {
+	if text := replyText(t, f.run(muteFrame("Loud", 30, "C1", "no")).Ack, AckResultFail, SubChatMute); !strings.Contains(text, "reason") {
 		t.Fatalf("short reason refusal %q", text)
 	}
-	if text := replyText(t, f.run(nameFrame(SubChatUnmute, "Juke")).Ack, AckResultOK, SubChatUnmute); text != "Juke unmuted" || f.hub.set["Juke"] {
+	if text := replyText(t, f.run(nameFrame(SubChatUnmute, "Loud")).Ack, AckResultOK, SubChatUnmute); text != "Loud unmuted" || f.hub.set["Loud"] {
 		t.Fatalf("unmute reply %q, hub %v", text, f.hub.set)
 	}
-	if text := replyText(t, f.run(nameFrame(SubChatUnmute, "Juke")).Ack, AckResultFail, SubChatUnmute); text != "Juke is not muted" {
+	if text := replyText(t, f.run(nameFrame(SubChatUnmute, "Loud")).Ack, AckResultFail, SubChatUnmute); text != "Loud is not muted" {
 		t.Fatalf("second unmute %q", text)
 	}
 }
@@ -193,29 +193,29 @@ func TestShadowMuteEditsTheListAndKeepsHandLines(t *testing.T) {
 	// The flag does not gate the shadow-mute pair (owner, 2026-11-23).
 	f := newModerationFixture(t, false)
 	path := filepath.Join(f.dir, shadowmute.FileName)
-	if err := os.WriteFile(path, []byte("# hand list\nahm8192\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("# hand list\nhandlisted\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	list := f.owner.desk.ShadowMutes
-	frame := append(nameFrame(SubShadowMute, "Juke"), sized("rmt spam")...)
-	if text := replyText(t, f.run(frame).Ack, AckResultOK, SubShadowMute); text != "Juke's account shadow-muted" {
+	frame := append(nameFrame(SubShadowMute, "Loud"), sized("rmt spam")...)
+	if text := replyText(t, f.run(frame).Ack, AckResultOK, SubShadowMute); text != "Loud's account shadow-muted" {
 		t.Fatalf("shadow-mute reply %q", text)
 	}
-	if !list.Muted("youssef59") || !list.Muted("ahm8192") {
+	if !list.Muted("spammer01", "") || !list.Muted("handlisted", "") {
 		t.Fatal("the new account or the hand-listed one is not muted")
 	}
 	data, _ := os.ReadFile(path)
-	if !strings.Contains(string(data), "# shadowmute youssef59: Juke by GM Gm at 2026-11-23 13:23 UTC: rmt spam\nyoussef59\n") {
+	if !strings.Contains(string(data), "# shadowmute spammer01: Loud by GM Gm at 2026-11-23 13:23 UTC: rmt spam\nspammer01\n") {
 		t.Fatalf("file after add:\n%s", data)
 	}
 	if text := replyText(t, f.run(frame).Ack, AckResultFail, SubShadowMute); !strings.Contains(text, "already") {
 		t.Fatalf("second shadow-mute %q", text)
 	}
-	if text := replyText(t, f.run(nameFrame(SubShadowUnmute, "juke")).Ack, AckResultOK, SubShadowUnmute); !strings.Contains(text, "no longer") {
+	if text := replyText(t, f.run(nameFrame(SubShadowUnmute, "loud")).Ack, AckResultOK, SubShadowUnmute); !strings.Contains(text, "no longer") {
 		t.Fatalf("unshadow reply %q", text)
 	}
 	data, _ = os.ReadFile(path)
-	if string(data) != "# hand list\nahm8192\n" || list.Muted("youssef59") || !list.Muted("ahm8192") {
+	if string(data) != "# hand list\nhandlisted\n" || list.Muted("spammer01", "") || !list.Muted("handlisted", "") {
 		t.Fatalf("file after remove:\n%q", data)
 	}
 }
@@ -227,13 +227,13 @@ TestLogoutBlockPair
 */
 func TestLogoutBlockPair(t *testing.T) {
 	f := newModerationFixture(t, true)
-	if text := replyText(t, f.run(nameFrame(SubBlockLogout, "Juke")).Ack, AckResultOK, SubBlockLogout); text != "Juke cannot log out" || !f.holds.held["Juke"] {
+	if text := replyText(t, f.run(nameFrame(SubBlockLogout, "Loud")).Ack, AckResultOK, SubBlockLogout); text != "Loud cannot log out" || !f.holds.held["Loud"] {
 		t.Fatalf("block reply %q, holds %v", text, f.holds.held)
 	}
-	if text := replyText(t, f.run(nameFrame(SubBlockLogout, "Juke")).Ack, AckResultFail, SubBlockLogout); !strings.Contains(text, "already") {
+	if text := replyText(t, f.run(nameFrame(SubBlockLogout, "Loud")).Ack, AckResultFail, SubBlockLogout); !strings.Contains(text, "already") {
 		t.Fatalf("second block %q", text)
 	}
-	if text := replyText(t, f.run(nameFrame(SubAllowLogout, "Juke")).Ack, AckResultOK, SubAllowLogout); text != "Juke can log out again" || f.holds.held["Juke"] {
+	if text := replyText(t, f.run(nameFrame(SubAllowLogout, "Loud")).Ack, AckResultOK, SubAllowLogout); text != "Loud can log out again" || f.holds.held["Loud"] {
 		t.Fatalf("allow reply %q, holds %v", text, f.holds.held)
 	}
 }
@@ -248,7 +248,7 @@ frame each leave every store untouched.
 */
 func TestModerationRefusals(t *testing.T) {
 	off := newModerationFixture(t, false)
-	for _, frame := range [][]byte{muteFrame("Juke", 30, "C1", "spamming trade chat"), nameFrame(SubBlockLogout, "Juke")} {
+	for _, frame := range [][]byte{muteFrame("Loud", 30, "C1", "spamming trade chat"), nameFrame(SubBlockLogout, "Loud")} {
 		if text := replyText(t, off.run(frame).Ack, AckResultFail, frame[0]); !strings.Contains(text, EnvGMModeration) {
 			t.Fatalf("flag-off refusal %q", text)
 		}
@@ -261,17 +261,17 @@ func TestModerationRefusals(t *testing.T) {
 	if text := replyText(t, f.run(nameFrame(SubBlockLogout, "OtherGm")).Ack, AckResultFail, SubBlockLogout); text != "OtherGm is a GM" {
 		t.Fatalf("GM target refusal %q", text)
 	}
-	if text := replyText(t, f.run(append(nameFrame(SubShadowMute, "OtherGm"), sized("")...)).Ack, AckResultFail, SubShadowMute); text != "OtherGm is a GM" || f.owner.desk.ShadowMutes.Muted("staff") {
+	if text := replyText(t, f.run(append(nameFrame(SubShadowMute, "OtherGm"), sized("")...)).Ack, AckResultFail, SubShadowMute); text != "OtherGm is a GM" || f.owner.desk.ShadowMutes.Muted("staff", "") {
 		t.Fatalf("GM target shadow-mute %q", text)
 	}
 	if text := replyText(t, f.run(nameFrame(SubBlockLogout, "Nobody")).Ack, AckResultFail, SubBlockLogout); text != "no character named Nobody" {
 		t.Fatalf("unknown target %q", text)
 	}
 	player := gmChar("Cheeky", false, 0x1000)
-	if out := HandleGmCommand(f.deps, nil, testDivision, player, nameFrame(SubBlockLogout, "Juke"), f.owner); out.Ack != nil || !out.PrivilegeDenied {
+	if out := HandleGmCommand(f.deps, nil, testDivision, player, nameFrame(SubBlockLogout, "Loud"), f.owner); out.Ack != nil || !out.PrivilegeDenied {
 		t.Fatalf("non-GM sender got %+v", out)
 	}
-	trailing := append(nameFrame(SubBlockLogout, "Juke"), 0)
+	trailing := append(nameFrame(SubBlockLogout, "Loud"), 0)
 	if out := f.run(trailing); out.Ack != nil {
 		t.Fatalf("trailing byte answered %+v", out)
 	}

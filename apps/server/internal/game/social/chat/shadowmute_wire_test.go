@@ -14,11 +14,13 @@ package chat_test
 
 import (
 	"encoding/binary"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"opensro.online/server/internal/game/social/chat"
+	"opensro.online/server/internal/game/social/shadowmute"
 )
 
 /*
@@ -31,8 +33,17 @@ func TestShadowMutedChatReachesOnlyItsAuthor(t *testing.T) {
 	server := startChatServer(t, filepath.Join(t.TempDir(), "authority"), division)
 	at := time.UnixMilli(1_790_000_000_000)
 	server.chat.SetClock(func() time.Time { return at })
+	// The staff word list is the real one, so the hook is handed the
+	// line's own text; the account mute is toggled by the test.
+	words := t.TempDir()
+	if err := os.WriteFile(filepath.Join(words, shadowmute.WordsFileName), []byte("rival server\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	list := shadowmute.Open(words, nil)
 	muted := true
-	server.chat.ShadowMuted = func(accountID string) bool { return muted && accountID == "test-account" }
+	server.chat.ShadowMuted = func(accountID, text string) bool {
+		return (muted && accountID == "test-account") || list.Muted(accountID, text)
+	}
 
 	a := dialWS(t, server.srv)
 	helloWS(t, a)
@@ -56,6 +67,12 @@ func TestShadowMutedChatReachesOnlyItsAuthor(t *testing.T) {
 	expectExact(t, a, chat.OpChatBroadcast, namedBroadcast(chat.ChatTypeGlobal, e2eChatNameA, "visible"), "own line")
 	expectExact(t, a, chat.OpChatAck, []byte{1, 1, 255}, "receipt")
 	expectExact(t, b, chat.OpChatBroadcast, namedBroadcast(chat.ChatTypeGlobal, e2eChatNameA, "visible"), "unmuted line")
+
+	// A listed word mutes the line whoever sends it, however it is spelled.
+	sendFrame(t, a, chat.OpChatRequest, chatRequestFrame(chat.ChatTypeAll, "", "join Rival.Server now"))
+	expectExact(t, a, chat.OpChatBroadcast, namedBroadcast(chat.ChatTypeGlobal, e2eChatNameA, "join Rival.Server now"), "own word-muted line")
+	expectExact(t, a, chat.OpChatAck, []byte{1, 1, 255}, "word-muted receipt")
+	gameReadyBarrier(t, b, "no word-muted line")
 
 	// A later player is replayed only the unmuted line.
 	c := dialWS(t, server.srv)
