@@ -266,7 +266,7 @@ test("macroUsageTimeEnded follows param/count remaining clocks", () => {
 	assert.equal(
 		macroUsageTimeEnded(
 			[],
-			[ { remainingSec: 1, receivedAtMs: now - 2000 } ],
+			[ { packageRefObjId: 1, itemRefObjId: 2, uses: 0, remainingSec: 1, receivedAtMs: now - 2000 } ],
 			now
 		),
 		true
