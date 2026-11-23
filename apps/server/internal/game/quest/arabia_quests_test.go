@@ -18,6 +18,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 // arabiaWanted is the authored set, in table order: 9 talks, 20 hunts.
@@ -126,6 +128,11 @@ TestArabiaSpecsLoadOnlyWithTheirRows
 ================
 */
 func TestArabiaSpecsLoadOnlyWithTheirRows(t *testing.T) {
+	// LoadDefinitions validates the whole curated table against the
+	// shipped itemdata (the tutorial armor resolves only there), so
+	// this run needs the data - the same gate the curated-table test
+	// carries. The table's shape above needs none and runs anywhere.
+	clientdata.RequireGameData(t)
 	// The native fixture catalog plus the rows the Arabia import brings:
 	// the curated table resolves there (its own contract), and the
 	// Arabia specs with it.
