@@ -79,6 +79,7 @@ function everyControlField( id, helpSource ) {
 		hitPolygon: [ [ 0, 0 ], [ 10, 0 ], [ 5, 8 ] ],
 		hitRect: [ 8, 18, 34, 44 ],
 		multiline: true,
+		thumbDragOnly: true,
 		valueText: "5 of 9",
 		whisperTarget: "Friend",
 		textAlign: "left",
