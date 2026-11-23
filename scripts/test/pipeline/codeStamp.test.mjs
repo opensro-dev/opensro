@@ -145,6 +145,43 @@ test("the module closure follows module-level Python imports only, from every en
 	);
 });
 
+test("a module only imported brings its imports and pins, not the scripts it names", async () => {
+	const root = path.join( temporaryRoot, "imported" );
+	await mkdir( path.join( root, "scripts", "analysis" ), { recursive: true } );
+	const files = {
+		// The shop step ran shop.py, which imports items.py at module level;
+		// items.py runs deps.mjs from a function the step never called.
+		"scripts/shop.py": "import items\n",
+		"scripts/items.py": 'import table\nSCRIPT = "deps.mjs"\n',
+		"scripts/table.py": "X = 1\n",
+		"scripts/analysis/deps.mjs": 'import { y } from "./pipeline.mjs";\n',
+		"scripts/analysis/pipeline.mjs": "export const y = 1;\n"
+	};
+	for ( const [name, text] of Object.entries( files ) ) await writeFile( path.join( root, name ), text );
+	const relative = ( list ) => list.map( ( file ) => path.relative( root, file ).split( path.sep ).join( "/" ) );
+	const shop = path.join( root, "scripts/shop.py" );
+	const items = path.join( root, "scripts/items.py" );
+	assert.deepEqual( relative( await moduleClosure( [ shop ], root ) ), [
+		"scripts/items.py",
+		"scripts/shop.py",
+		"scripts/table.py"
+	] );
+	assert.deepEqual( relative( await moduleClosure( [], root, [ items ] ) ), [
+		"scripts/items.py",
+		"scripts/table.py"
+	] );
+	// Once items.py's own code ran, its script and what that imports count.
+	assert.deepEqual( relative( await moduleClosure( [ shop, items ], root ) ), [
+		"scripts/analysis/deps.mjs",
+		"scripts/analysis/pipeline.mjs",
+		"scripts/items.py",
+		"scripts/shop.py",
+		"scripts/table.py"
+	] );
+	// Reached by import first and as run code later, it is walked again.
+	assert.ok( relative( await moduleClosure( [ items ], root, [ items ] ) ).includes( "scripts/analysis/deps.mjs" ) );
+});
+
 test("a stamp is current only for the hash it recorded", async () => {
 	assert.equal( await stampIsCurrent( "example", "a" ), false );
 	await writeStamp( "example", "a" );

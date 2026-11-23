@@ -23,16 +23,16 @@ from pathlib import Path
 
 import import_vsro_alexandria as stage1
 import sro_pk2
-from prepare_client_resources import safe_target, write_atomically
+from prepare_client_resources import log, safe_target, write_atomically
 
 
 TEXTDATA = stage1.TEXTDATA
 
 
+# A build switch's values: the on values are stage 1's (FLAG_ON), the one
+# list every importer's flag reads.
 SWITCH_OFF_VALUES = ("", "0", "off", "false")
-
-
-SWITCH_ON_VALUES = ("1", "on", "true")
+SWITCH_ON_VALUES = stage1.FLAG_ON
 
 
 MFO_SIGNATURE = b"JMXVMFO 1000"
@@ -48,13 +48,6 @@ MAPM_TEXTURE_SCALE_MASK = 0xFC00
 
 
 CATALOG_ROW = re.compile(r"^(\d+)(\s.*)$")
-
-
-# ================
-# log
-# ================
-def log(message):
-	print(message, flush=True)
 
 
 #============================================================================

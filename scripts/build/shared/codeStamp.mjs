@@ -81,67 +81,117 @@ are not followed.
 ================
 */
 export async function codeClosure( entryFile, repositoryRoot = rebuildRoot ) {
-	return walkClosure( [ entryFile ], repositoryRoot, PYTHON_IMPORT );
+	return walkClosure( [ entryFile ], [], repositoryRoot, await sourceIndexes( repositoryRoot ), PYTHON_IMPORT, true );
 }
 
 /*
 ================
 moduleClosure
 
-codeClosure over several entries, following a Python file's module-level
-imports only. The variant step journal records which Python files a step
-actually ran and imported (variant_steps.py, #4251); the imports inside
-functions the step never called are not its code. JS imports, named
-scripts and JSON beside a module are followed exactly as codeClosure
-follows them.
+The code of what a step ran (variant_steps.py, #4251): ranFiles are the
+Python files whose code ran, importedFiles those the step only imported.
+A Python file's module-level imports are followed, not the imports inside
+functions the step never called. A file that ran also brings the Node
+scripts it names (it may have run them); a file reached only by import
+brings its own imports and the JSON beside it, never its scripts: a
+module-level import of cap110_item_import put its asset-dependency script,
+and the ~75 pipeline modules behind it, into the shop step's key.
 ================
 */
-export async function moduleClosure( entryFiles, repositoryRoot = rebuildRoot ) {
-	return walkClosure( entryFiles, repositoryRoot, PYTHON_MODULE_IMPORT );
+export async function moduleClosure( ranFiles, repositoryRoot = rebuildRoot, importedFiles = [] ) {
+	const indexes = await sourceIndexes( repositoryRoot );
+	return walkClosure( ranFiles, importedFiles, repositoryRoot, indexes, PYTHON_MODULE_IMPORT, false );
+}
+
+/*
+================
+moduleClosures
+
+moduleClosure for many records at once, [ ranFiles, importedFiles ] each:
+the variant runner keys every step of a build in one process, indexing the
+source roots once, instead of one Node start per step (~0.5 s each).
+================
+*/
+export async function moduleClosures( records, repositoryRoot = rebuildRoot ) {
+	const indexes = await sourceIndexes( repositoryRoot );
+	const closures = [];
+	for ( const [ranFiles, importedFiles] of records ) {
+		closures.push(
+			await walkClosure( ranFiles, importedFiles, repositoryRoot, indexes, PYTHON_MODULE_IMPORT, false )
+		);
+	}
+	return closures;
+}
+
+/*
+================
+sourceIndexes
+
+The Python and script indexes one walk resolves names against.
+================
+*/
+async function sourceIndexes( repositoryRoot ) {
+	return { python: await sourceIndex( repositoryRoot, ".py" ), scripts: await sourceIndex( repositoryRoot, ".mjs" ) };
 }
 
 /*
 ================
 walkClosure
 
-The one closure walk behind codeClosure and moduleClosure; pythonImport is
-the pattern a Python file's followed imports match.
+The one closure walk behind codeClosure and moduleClosure. ranFiles are
+walked in full; importedFiles, and with importsRun false the Python modules
+any file imports, are walked without the scripts they name. pythonImport is
+the pattern a Python file's followed imports match. A file reached first
+by import and later as run code is walked again for its scripts.
 ================
 */
-async function walkClosure( entryFiles, repositoryRoot, pythonImport ) {
-	const python = await sourceIndex( repositoryRoot, ".py" );
-	const scripts = await sourceIndex( repositoryRoot, ".mjs" );
-	const seen = new Set();
-	const pending = entryFiles.map( ( file ) => path.resolve( file ) );
-	for ( let file = pending.pop(); file !== undefined; file = pending.pop() ) {
-		if ( seen.has( file ) ) continue;
-		seen.add( file );
+async function walkClosure( ranFiles, importedFiles, repositoryRoot, { python, scripts }, pythonImport, importsRun ) {
+	// file -> whether it was walked as code that ran.
+	const seen = new Map();
+	const pending = [
+		...importedFiles.map( ( file ) => [ path.resolve( file ), false ] ),
+		...ranFiles.map( ( file ) => [ path.resolve( file ), true ] )
+	];
+	for ( let next = pending.pop(); next !== undefined; next = pending.pop() ) {
+		const [file, ran] = next;
+		if ( seen.has( file ) && (seen.get( file ) || !ran) ) continue;
+		seen.set( file, ran );
 		const directory = path.dirname( file );
 		if ( file.endsWith( ".py" ) ) {
 			const text = await readFile( file, "utf8" );
 			for ( const match of text.matchAll( pythonImport ) ) {
-				pending.push( ...(python.get( `${match[1] ?? match[2]}.py` ) ?? []) );
+				for ( const module of python.get( `${match[1] ?? match[2]}.py` ) ?? [] ) {
+					pending.push( [ module, importsRun ] );
+				}
 			}
 			const code = text.replace( PYTHON_COMMENT, "" );
-			for ( const match of code.matchAll( SCRIPT_LITERAL ) ) {
-				pending.push( resolveNamed( match[1], { file, directory, repositoryRoot, index: scripts } ) );
+			if ( ran ) {
+				for ( const match of code.matchAll( SCRIPT_LITERAL ) ) {
+					pending.push( [
+						resolveNamed( match[1], { file, directory, repositoryRoot, index: scripts } ),
+						true
+					] );
+				}
 			}
 			for ( const match of code.matchAll( DATA_LITERAL ) ) {
 				// Only beside the module: any other JSON a module names is
 				// build input or output, which the caller fingerprints itself.
 				const data = path.join( directory, match[1] );
-				if ( existsSync( data ) ) seen.add( data );
+				if ( existsSync( data ) ) seen.set( data, true );
 			}
 			continue;
 		}
 		if ( !file.endsWith( ".mjs" ) && !file.endsWith( ".js" ) ) continue;
+		// A script is walked in full: whatever names it ran it.
 		const source = (await readFile( file, "utf8" )).replace( COMMENTS, "" );
-		for ( const match of source.matchAll( RELATIVE_IMPORT ) ) pending.push( path.resolve( directory, match[1] ) );
+		for ( const match of source.matchAll( RELATIVE_IMPORT ) ) {
+			pending.push( [ path.resolve( directory, match[1] ), true ] );
+		}
 		for ( const match of source.matchAll( PYTHON_LITERAL ) ) {
-			pending.push( resolveNamed( match[1], { file, directory, repositoryRoot, index: python } ) );
+			pending.push( [ resolveNamed( match[1], { file, directory, repositoryRoot, index: python } ), true ] );
 		}
 	}
-	return [ ...seen ].sort();
+	return [ ...seen.keys() ].sort();
 }
 
 /*

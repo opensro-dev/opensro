@@ -84,18 +84,19 @@ SOURCE_VARIABLE = re.compile(r"SRO_\w+_(?:ROOT|ZIP|DATABASE|NESTS)")
 OUTPUT_ROOTS = frozenset(("SRO_GAME_ROOT", "SRO_GENERATED_ROOT", "SRO_SERVER_GAME_DATA_ROOT", SHARED_CACHE_ROOT_ENV))
 # A single source file up to this size is hashed by content, not stat.
 SMALL_FILE = 64 << 20
-# Calls one export of codeStamp.mjs and prints its result. The entry (a
-# file, or a list of files for moduleClosure) arrives as JSON on stdin,
-# so a step that ran a hundred files never meets the command line's
-# length limit; the repository root is passed only by callers keying a
-# tree other than this checkout (the variant step tests).
+# Calls one export of codeStamp.mjs and prints its result. Its arguments
+# (the entry - a file, or the files a step ran - and any after the
+# repository root) arrive as JSON on stdin, so a step that ran a hundred
+# files never meets the command line's length limit; the repository root
+# is passed only by callers keying a tree other than this checkout (the
+# variant step tests).
 CODE_STAMP_SCRIPT = (
 	"const { pathToFileURL } = await import( 'node:url' );"
 	"const { readFileSync } = await import( 'node:fs' );"
 	"const [ owner, name, root ] = process.argv.slice( 1 );"
-	"const entry = JSON.parse( readFileSync( 0, 'utf8' ) );"
+	"const [ entry, ...rest ] = JSON.parse( readFileSync( 0, 'utf8' ) );"
 	"const stamp = await import( pathToFileURL( owner ).href );"
-	"console.log( JSON.stringify( await stamp[name]( entry, root || undefined ) ) );"
+	"console.log( JSON.stringify( await stamp[name]( entry, root || undefined, ...rest ) ) );"
 )
 
 
@@ -115,13 +116,15 @@ def stamp_path(variant_root: Path) -> Path:
 # module). The entry defaults to the builder; the step journal keys each
 # step from its own module through here (variant_steps.py).
 # ================
-def code_stamp(export: str, entry=BUILDER, repository_root: Path | None = None):
+def code_stamp(export: str, entry=BUILDER, repository_root: Path | None = None, rest=()):
 	argv = ["node", "--input-type=module", "-e", CODE_STAMP_SCRIPT, str(CODE_STAMP), export]
 	if repository_root is not None:
 		argv.append(str(repository_root))
-	payload = [str(item) for item in entry] if isinstance(entry, (list, tuple)) else str(entry)
+	def plain(value):
+		return [plain(item) for item in value] if isinstance(value, (list, tuple)) else str(value)
 	result = subprocess.run(
-		argv, cwd=REPO_ROOT, input=json.dumps(payload), capture_output=True, text=True, encoding="utf-8", check=False
+		argv, cwd=REPO_ROOT, input=json.dumps([plain(entry)] + [plain(item) for item in rest]),
+		capture_output=True, text=True, encoding="utf-8", check=False
 	)
 	if result.returncode != 0:
 		raise SystemExit(f"variant stamp: {export} failed (exit {result.returncode}):\n{result.stderr}")
@@ -138,13 +141,25 @@ def code_closure(entry: Path = BUILDER, repository_root: Path | None = None) -> 
 # ================
 # module_closure
 #
-# codeStamp's moduleClosure over the files a step ran: their module-level
-# imports, the scripts they name and the pins beside them.
+# codeStamp's moduleClosure over what a step ran and imported: their
+# module-level imports and the pins beside them, and the scripts the
+# files that ran name.
 # ================
-def module_closure(entries: list[Path], repository_root: Path | None = None) -> list[Path]:
-	if not entries:
+def module_closure(ran: list[Path], repository_root: Path | None = None, imported: list[Path] = ()) -> list[Path]:
+	if not ran and not imported:
 		return []
-	return [Path(file) for file in code_stamp("moduleClosure", entries, repository_root)]
+	return [Path(file) for file in code_stamp("moduleClosure", list(ran), repository_root, (list(imported),))]
+
+
+# ================
+# module_closures
+#
+# module_closure for many (ran, imported) records in one Node start.
+# ================
+def module_closures(records: list[tuple], repository_root: Path | None = None) -> list[list[Path]]:
+	if not records:
+		return []
+	return [[Path(file) for file in closure] for closure in code_stamp("moduleClosures", records, repository_root)]
 
 
 # ================

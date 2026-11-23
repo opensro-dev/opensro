@@ -244,7 +244,8 @@ def audit_hook(event, args):
 # record_run
 #
 # Run one step with the recorders on; returns (result, the paths it
-# opened for reading, the source files of the code it ran).
+# opened for reading, the source files of the code it ran, those of the
+# modules it only imported).
 #
 # The code is what ran, not what its modules could reach: the static
 # import closure of any importer was nearly the whole build (160 files,
@@ -253,8 +254,9 @@ def audit_hook(event, args):
 # and is then switched off for it, so the recorder costs one call per
 # function, not per call. Constants are read without running code, so
 # every module the step imports (an import statement that runs, even of
-# a module already loaded) counts too, and code_files adds what those
-# files import at module level.
+# a module already loaded) is recorded too, apart from the code that
+# ran: module_closure takes the scripts a file names only from files
+# that ran.
 # ================
 def record_run(run):
 	global _hook_installed
@@ -293,14 +295,14 @@ def record_run(run):
 		monitoring.set_events(CODE_TOOL, 0)
 		monitoring.register_callback(CODE_TOOL, monitoring.events.PY_START, None)
 		monitoring.free_tool_id(CODE_TOOL)
-	for name in imported:
-		path = getattr(sys.modules.get(name), "__file__", None)
-		if path:
-			ran.add(path)
 	own = str(Path(__file__).resolve())
-	code = {str(Path(path).resolve()) for path in ran if not is_installed_code(path)}
-	code.discard(own)
-	return value, reads, sorted(code)
+
+	def own_code(paths):
+		return {str(Path(path).resolve()) for path in paths if path and not is_installed_code(path)} - {own}
+
+	code = own_code(ran)
+	modules = own_code(getattr(sys.modules.get(name), "__file__", None) for name in imported) - code
+	return value, reads, sorted(code), sorted(modules)
 
 
 #============================================================================
@@ -535,18 +537,55 @@ class Runner:
 	# ================
 	# recorded_code_key
 	#
-	# The key of the code a step's last run ran, as this checkout holds
-	# it now: those files, what they import at module level, the scripts
-	# and pins they name (variant_stamp.module_closure). Steps that ran
-	# the same files share one closure computation.
+	# The key of the code a step's last run ran and imported, as this
+	# checkout holds it now: those files, what they import at module
+	# level, the pins beside them, and the scripts the files that ran name
+	# (variant_stamp.module_closure). Steps with the same record share one
+	# closure computation.
 	# ================
-	def recorded_code_key(self, locations: list[str]) -> str:
-		key = tuple(locations)
+	def recorded_code_key(self, ran: list[str], imported: list[str] = ()) -> str:
+		key = (tuple(ran), tuple(imported))
 		if key not in self._code_keys:
-			files = [code_path(location, self.code_root) for location in locations]
-			closure = variant_stamp.module_closure([file for file in files if file.is_file()], self.repository_root)
-			self._code_keys[key] = code_key(sorted(set(closure) | set(files)), self.code_root, self.environ)
+			self.key_code([key])
 		return self._code_keys[key]
+
+	# ================
+	# key_code
+	#
+	# The code keys of these (ran, imported) records, in one closure
+	# computation for all of them (variant_stamp.module_closures). A file
+	# a record names that is gone keys as gone (code_key).
+	# ================
+	def key_code(self, keys: list[tuple]):
+		records = []
+		for ran, imported in keys:
+			records.append((
+				[code_path(location, self.code_root) for location in ran],
+				[code_path(location, self.code_root) for location in imported],
+			))
+		closures = variant_stamp.module_closures(
+			[([f for f in ran if f.is_file()], [f for f in imported if f.is_file()]) for ran, imported in records],
+			self.repository_root,
+		)
+		for key, (ran, imported), closure in zip(keys, records, closures):
+			files = set(closure) | set(ran) | set(imported)
+			self._code_keys[key] = code_key(sorted(files), self.code_root, self.environ)
+
+	# ================
+	# key_journal_code
+	#
+	# Every journaled step's code key at once, before begin or explain
+	# walks the steps: one Node start for the build instead of one a step.
+	# ================
+	def key_journal_code(self):
+		keys = []
+		for entry in self.journal or []:
+			reads = entry.get("reads") or {}
+			key = (tuple(reads.get("code", [])), tuple(reads.get("imported", [])))
+			if key not in self._code_keys and key not in keys:
+				keys.append(key)
+		if keys:
+			self.key_code(keys)
 
 	# ================
 	# sources_key
@@ -571,18 +610,21 @@ class Runner:
 	# classify_reads
 	#
 	# A run's raw read paths and code as the journal holds them: the
-	# source roots touched; the code it ran with every checkout file it
-	# opened (a pin, a table beside the code), by checkout-relative
-	# location, so a fresh freeze checkout keys the same; and the loose
-	# files outside both, each with the key it must keep. Compiled caches
-	# (__pycache__) follow their source and are not recorded.
+	# source roots touched; the code it ran with every checkout data file
+	# it opened (a pin, a table beside the code), and the modules it only
+	# imported with every checkout .py the importer opened, both by
+	# checkout-relative location, so a fresh freeze checkout keys the
+	# same; and the loose files outside both, each with the key it must
+	# keep. Compiled caches (__pycache__) follow their source and are not
+	# recorded.
 	# ================
-	def classify_reads(self, reads: set[str], code: list[str] = ()) -> dict:
+	def classify_reads(self, reads: set[str], code: list[str] = (), imported: list[str] = ()) -> dict:
 		own = str(self.variant.resolve())
 		checkout = self.code_root.resolve()
 		roots: set[str] = set()
 		files: dict[str, str] = {}
 		locations = {code_location(Path(path), checkout) for path in code}
+		modules = {code_location(Path(path), checkout) for path in imported}
 		for raw in reads:
 			try:
 				path = Path(raw).resolve()
@@ -596,10 +638,15 @@ class Runner:
 				roots.add(str(owner))
 			elif checkout == path or checkout in path.parents:
 				if path.is_file():
-					locations.add(code_location(path, checkout))
+					# A module's source is opened by its import, which is not a
+					# sign it ran; monitoring says which code did.
+					(modules if path.suffix == ".py" else locations).add(code_location(path, checkout))
 			elif path.is_file():
 				files[text] = variant_stamp.file_key(path, True)
-		return {"roots": sorted(roots), "code": sorted(locations), "files": files}
+		return {
+			"roots": sorted(roots), "code": sorted(locations), "imported": sorted(modules - locations),
+			"files": files,
+		}
 
 	# ================
 	# key_parts
@@ -615,7 +662,9 @@ class Runner:
 				**recorded_reads,
 				"roots": sorted(set(recorded_reads.get("roots", [])) | set(step["roots"])),
 			}
-		code = "unrecorded" if recorded_reads is None else self.recorded_code_key(recorded_reads.get("code", []))
+		code = "unrecorded" if recorded_reads is None else self.recorded_code_key(
+			recorded_reads.get("code", []), recorded_reads.get("imported", [])
+		)
 		return {
 			"arguments": step["argumentsKey"], "later": later_key, "code": code,
 			"sources": self.sources_key(recorded_reads), "state": state,
@@ -644,6 +693,7 @@ class Runner:
 			return [(step["name"], "no usable journal: every step runs") for step in self.steps]
 		lines = []
 		state = EMPTY_STATE
+		self.key_journal_code()
 		for step, entry in zip(self.steps, self.journal):
 			now = self.key_parts(step, entry.get("reads"), state, entry.get("laterKey", ""))
 			if parts_key(step["name"], now) == entry.get("key"):
@@ -670,6 +720,7 @@ class Runner:
 			return
 		first = len(self.steps)
 		state = EMPTY_STATE
+		self.key_journal_code()
 		for index, (step, entry) in enumerate(zip(self.steps, self.journal)):
 			# Over a prefix that still matches, every earlier result is the
 			# journal's, so the arguments they supplied are the recorded ones.
@@ -813,9 +864,9 @@ class Runner:
 			return decode_result(entry["result"], self.variant), "replayed"
 		arguments = step["arguments"] + later
 		before = snapshot(self.variant)
-		value, reads, code = record_run(lambda: step["function"](*arguments))
+		value, reads, code, imported = record_run(lambda: step["function"](*arguments))
 		effect = effect_between(self.variant, before, snapshot(self.variant))
-		classified = self.classify_reads(reads, code)
+		classified = self.classify_reads(reads, code, imported)
 		try:
 			encoded = encode_result(value, self.variant)
 			parts = self.key_parts(step, classified, self.state, later_key)
