@@ -25,6 +25,7 @@ import (
 	"opensro.online/server/internal/game/caravan"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/macro"
@@ -59,6 +60,7 @@ var unlistedSettings = map[string]string{
 	progression.EnvSoOkChristmasGifts:     "a tuning of the Christmas event rule, not a rule of its own",
 	action.EnvGMSetSpeed:                  "a GM command, not a rule players meet",
 	action.EnvGMItemForge:                 "a GM command, not a rule players meet",
+	gmcommand.EnvGMModeration:             "GM moderation commands, not a rule players meet",
 	monster.EnvTrainingDummy:              "GM-only training targets",
 	simulation.EnvBetaUniqueRespawn:       "unique monster spawn timing is not published",
 	simulation.EnvJanganCaveRespawn:       "spawn timing is not published",
@@ -244,8 +246,12 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "The way to the Roc, the later clients' Roc mountain boss, opens one step at a time."},
 			{Flag: monster.EnvArabia, On: monster.ArabiaEnabled(),
 				Native: "There is no Arabia.",
-				Now:    "The Arabia continent opens east of Jangan: Baghdad town, its three fields and Petra, and the Baghdad dungeon, hunting grounds of monsters at levels 120 to 130.",
+				Now:    "The Arabia continent opens east of Jangan: Baghdad town, its three fields and Petra, hunting grounds of monsters at levels 120 to 130.",
 				Why:    "Higher hunting grounds for the optional expansion's upper levels."},
+			{Flag: monster.EnvBaghdadDungeon, On: monster.BaghdadDungeonEnabled(),
+				Native: "There is no Baghdad dungeon.",
+				Now:    "The Baghdad dungeon opens from the city's own portals: a shared dungeon of monsters at levels 120 to 130 beneath Baghdad.",
+				Why:    "The dungeon half of the Arabia expansion, opened apart from the continent."},
 			{Flag: monster.EnvConstantinople, On: monster.ConstantinopleEnabled(),
 				Native: "Constantinople has no fortress; Jangan's is the only fortress war.",
 				Now:    "The Constantinople fortress stands west of the city with its gates, towers and fort stone, and joins the fortress war beside Jangan's.",

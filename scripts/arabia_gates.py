@@ -45,7 +45,7 @@ into the Sky Temple fields. Authored at import, and recorded here:
 
 Every row names the world it names in the source: the dungeon pair
 names world 112 (GROUP_ARABIA_DUNGEON, registered port-only while
-SRO_ARABIA is on), the rest world 1. The Jangan gate's row rides in the
+SRO_BAGHDAD_DUNGEON is on, #4134), the rest world 1. The Jangan gate's row rides in the
 prepared tables only so the merge renumbers its links by code; it is
 not one of GATE_CODES and the merge never appends it. The later link rows carry two
 trailing columns the v1.150 table has no place for; they sit outside

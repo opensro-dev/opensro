@@ -28,7 +28,7 @@ func TestListFollowsItsFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte("\ufeffSpammer\n# staff list\n\n  other  \n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	list := Open(dir)
+	list := Open(dir, writeFile)
 	for _, id := range []string{"spammer", "SPAMMER", "other"} {
 		if !list.Muted(id, "") {
 			t.Fatalf("%q not muted after boot", id)
@@ -75,7 +75,7 @@ func TestWordsMuteMatchingLines(t *testing.T) {
 	if err := os.WriteFile(path, []byte("# advertising\nRival Server\nab\n.\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	list := Open(dir)
+	list := Open(dir, writeFile)
 	for _, text := range []string{"rivalserver", "come to RIVAL.SERVER now", "r i v a l s e r v e r", "rival-server.example"} {
 		if !list.Muted("anyone", text) {
 			t.Fatalf("%q not muted", text)
@@ -106,7 +106,7 @@ the next answer follows the file.
 func TestMutedRefreshesInTheBackground(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Date(2026, 10, 28, 16, 0, 0, 0, time.UTC)
-	list := Open(dir)
+	list := Open(dir, writeFile)
 	list.now = func() time.Time { return now }
 	list.checkedAt.Store(now.UnixNano())
 	if err := os.WriteFile(filepath.Join(dir, FileName), []byte("spammer\n"), 0o600); err != nil {
@@ -119,4 +119,15 @@ func TestMutedRefreshesInTheBackground(t *testing.T) {
 	now = now.Add(recheckInterval)
 	list.Muted("spammer", "")
 	wait.Eventually(t, 5*time.Second, "the stale snapshot refreshed", func() bool { return list.Muted("spammer", "") })
+}
+
+/*
+================
+writeFile
+
+The tests' writer: a plain write stands in for the server's atomic one.
+================
+*/
+func writeFile(path string, payload []byte) error {
+	return os.WriteFile(path, payload, 0o600)
 }

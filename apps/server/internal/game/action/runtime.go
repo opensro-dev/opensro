@@ -84,6 +84,9 @@ type Runtime struct {
 	marketProceedsAt atomic.Int64
 	// gmSpeeds holds each GM's /SETSPEED percent (gmspeed.go), session only.
 	gmSpeeds sync.Map
+	// logoutBlocks holds the characters a GM's /BLOCKLOGOUT keeps in the
+	// world (departure.go), until /ALLOWLOGOUT or a GameWorld restart.
+	logoutBlocks sync.Map
 	// GMSetSpeed admits /SETSPEED (port-only, SRO_GM_SETSPEED; off is native).
 	GMSetSpeed bool
 	// GMItemForge admits /FORGE (port-only, SRO_GM_ITEM_FORGE, issue #1980;

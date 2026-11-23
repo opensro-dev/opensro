@@ -57,6 +57,11 @@ const (
 	Berserk
 	Quests
 	Siege
+	// Mute and HoldLogout are the in-game moderation commands (#4207,
+	// gmcommand/moderation.go). New capabilities append here so a
+	// stored bit never changes meaning.
+	Mute
+	HoldLogout
 	capabilityEnd
 )
 
@@ -84,6 +89,8 @@ var Rows = []Row{
 	{FindUser, "find_user", "Find user, real name", "Players", false},
 	{MovePlayers, "move_players", "Recall or send players and guilds", "Players", false},
 	{Ban, "ban", "Ban", "Players", false},
+	{Mute, "mute", "Mute and shadow-mute chat", "Players", false},
+	{HoldLogout, "hold_logout", "Block or allow a player's logout", "Players", false},
 	{TeleportSelf, "teleport", "Warp and move to user, NPC or town", "Movement", false},
 	{Speed, "speed", "Set speed", "Movement", false},
 	{Invisible, "invisible", "Invisible", "Visibility", false},

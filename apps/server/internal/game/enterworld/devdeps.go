@@ -249,15 +249,15 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
-		if monster.ArabiaEnabled() {
-			// Port-only (#3268): the Baghdad dungeon world joins the
-			// catalogue only while its switch is on, before any
-			// division opens.
+		if monster.BaghdadDungeonEnabled() {
+			// Port-only (#4134): the Baghdad dungeon worlds join the
+			// catalogue only while their own switch is on, apart from
+			// the continent's, before any division opens.
 			if err := instance.RegisterPortOnly(instance.ArabiaDefinitions()); err != nil {
 				return nil, fmt.Errorf("bootstrap: %w", err)
 			}
 		}
-		template, err = monster.AppendArabia(template, textdataDir, monster.ArabiaEnabled())
+		template, err = monster.AppendArabia(template, textdataDir, monster.ArabiaEnabled(), monster.BaghdadDungeonEnabled())
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}

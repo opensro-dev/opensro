@@ -26,6 +26,7 @@ import (
 	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/honorfeed"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
@@ -100,6 +101,9 @@ type gameplayPlane struct {
 	// mutes is the chat mute book (moderation_wiring.go), set once the
 	// shard is known; the console's conduct actions reach it.
 	mutes *moderation.Book
+	// gmModeration is what the GM's moderation commands act on
+	// (moderation_wiring.go); its mute book is filled in beside mutes.
+	gmModeration *gmcommand.Moderation
 	// staff is the staff book and host allowlist (wiring_staff.go); nil
 	// leaves the console's staff actions refused.
 	staff        *staffSources

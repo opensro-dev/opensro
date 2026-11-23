@@ -35,11 +35,19 @@ Muted never touches the files: it reads the current snapshot, and when
 that is stale it starts one background refresh. The Global Chatting item
 asks from inside a store door, where file I/O must not run.
 
+Add and Remove are the GM's /SHADOWMUTE and /UNSHADOWMUTE (gmcommand):
+they edit the account file in place, keeping every line staff wrote by
+hand, and swap the new snapshot in at once so the next chat line obeys
+it. The word file is staff data from the operations repository and is
+never edited here.
+
 ===========================================================================
 */
 package shadowmute
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,6 +76,13 @@ const recheckInterval = 5 * time.Second
 // would match nearly every line.
 const minWordRunes = 3
 
+// notePrefix opens the comment line Add writes above an account, so
+// Remove can take that line away with the account.
+const notePrefix = "# shadowmute "
+
+// byteOrderMark is the UTF-8 mark an editor may save ahead of the first line.
+const byteOrderMark = "\ufeff"
+
 /*
 ================
 List
@@ -82,6 +97,9 @@ type List struct {
 	// refreshing single-flights the background refresh.
 	checkedAt  atomic.Int64
 	refreshing atomic.Bool
+
+	// write is the durable file writer Add and Remove publish through.
+	write func(path string, payload []byte) error
 }
 
 /*
@@ -97,7 +115,7 @@ type listFile struct {
 
 	entries atomic.Pointer[map[string]bool]
 
-	// mu serializes refreshes and guards the file identity below.
+	// mu serializes refreshes and edits and guards the file identity below.
 	mu      sync.Mutex
 	modTime time.Time
 	size    int64
@@ -108,14 +126,16 @@ type listFile struct {
 Open
 
 The lists kept in dir, read once now so the first chat line after boot
-already obeys them.
+already obeys them. write is the durable atomic writer Add and Remove
+publish through (store.WriteFileAtomic in the server).
 ================
 */
-func Open(dir string) *List {
+func Open(dir string, write func(path string, payload []byte) error) *List {
 	list := &List{
 		accounts: listFile{path: filepath.Join(dir, FileName), parse: parseAccounts},
 		words:    listFile{path: filepath.Join(dir, WordsFileName), parse: parseWords},
 		now:      time.Now,
+		write:    write,
 	}
 	list.refresh()
 	return list
@@ -180,6 +200,15 @@ the file was briefly unreadable mid-edit. A missing file empties it.
 func (file *listFile) refresh() {
 	file.mu.Lock()
 	defer file.mu.Unlock()
+	file.refreshLocked()
+}
+
+/*
+================
+listFile.refreshLocked
+================
+*/
+func (file *listFile) refreshLocked() {
 	info, err := os.Stat(file.path)
 	if os.IsNotExist(err) {
 		file.entries.Store(nil)
@@ -211,7 +240,7 @@ skipped.
 */
 func lines(text string) []string {
 	var out []string
-	for _, line := range strings.Split(strings.TrimPrefix(text, "\ufeff"), "\n") {
+	for _, line := range strings.Split(strings.TrimPrefix(text, byteOrderMark), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -275,4 +304,110 @@ func foldText(text string) string {
 		}
 	}
 	return b.String()
+}
+
+/*
+================
+Add
+
+Puts the account on the account list under a comment line naming who did
+it and why. An account already on it is left alone and reports false.
+The file is re-read first, so a hand edit made a moment ago is never lost.
+================
+*/
+func (list *List) Add(accountID, note string) (bool, error) {
+	folded := domain.FoldAccountID(strings.TrimSpace(accountID))
+	if list == nil || folded == "" || strings.ContainsAny(folded, "\r\n#") {
+		return false, errors.New("shadowmute: account id required")
+	}
+	file := &list.accounts
+	file.mu.Lock()
+	defer file.mu.Unlock()
+	text, err := file.readLocked()
+	if err != nil {
+		return false, err
+	}
+	if parseAccounts(text)[folded] {
+		return false, nil
+	}
+	if text != "" && !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	// One line: a typed note can never start a new account line.
+	note = strings.Join(strings.Fields(note), " ")
+	text += notePrefix + folded + ": " + note + "\n" + folded + "\n"
+	return true, file.publishLocked(list.write, text)
+}
+
+/*
+================
+Remove
+
+Takes every line naming the account off the account list, with the
+comment line Add wrote for it. Lines staff wrote by hand stay. An account
+not on the list reports false.
+================
+*/
+func (list *List) Remove(accountID string) (bool, error) {
+	folded := domain.FoldAccountID(strings.TrimSpace(accountID))
+	if list == nil || folded == "" {
+		return false, errors.New("shadowmute: account id required")
+	}
+	file := &list.accounts
+	file.mu.Lock()
+	defer file.mu.Unlock()
+	text, err := file.readLocked()
+	if err != nil {
+		return false, err
+	}
+	if !parseAccounts(text)[folded] {
+		return false, nil
+	}
+	var kept []string
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(strings.TrimPrefix(line, byteOrderMark))
+		if domain.FoldAccountID(trimmed) == folded || strings.HasPrefix(trimmed, notePrefix+folded+":") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return true, file.publishLocked(list.write, strings.Join(kept, "\n"))
+}
+
+/*
+================
+listFile.readLocked
+
+The file as it stands; a missing file is an empty list.
+================
+*/
+func (file *listFile) readLocked() (string, error) {
+	data, err := os.ReadFile(file.path)
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("shadowmute: read %s: %w", file.path, err)
+	}
+	return string(data), nil
+}
+
+/*
+================
+listFile.publishLocked
+
+Writes the new text and loads it at once: the snapshot never lags a
+change the GM was told succeeded.
+================
+*/
+func (file *listFile) publishLocked(write func(path string, payload []byte) error, text string) error {
+	if write == nil {
+		return errors.New("shadowmute: the list is read-only here")
+	}
+	if err := write(file.path, []byte(text)); err != nil {
+		return fmt.Errorf("shadowmute: save %s: %w", file.path, err)
+	}
+	file.modTime, file.size = time.Time{}, -1
+	file.refreshLocked()
+	return nil
 }

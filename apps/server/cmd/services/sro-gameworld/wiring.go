@@ -477,6 +477,9 @@ func newGameWorldApplication(
 		return nil, err
 	}
 	gameplay.mutes = application.mutes
+	if gameplay.gmModeration != nil {
+		gameplay.gmModeration.Mutes = application.mutes
+	}
 	// Staff grants (port-only; owner decision 2026-11-23): the roster and
 	// entry frames join the finished lanes, before the console hooks.
 	gameplay.wireStaff(authority.staff)

@@ -64,6 +64,13 @@ var subcommandCapability = map[uint8]staff.Capability{
 
 	SubSiegeStructure: staff.Siege,
 	SubSiegePeriod:    staff.Siege,
+
+	SubChatMute:     staff.Mute,
+	SubChatUnmute:   staff.Mute,
+	SubShadowMute:   staff.Mute,
+	SubShadowUnmute: staff.Mute,
+	SubBlockLogout:  staff.HoldLogout,
+	SubAllowLogout:  staff.HoldLogout,
 }
 
 /*

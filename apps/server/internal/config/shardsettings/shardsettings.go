@@ -193,6 +193,12 @@ var Settings = []Setting{
 	// continent rides the Alexandria variant build; the switch admits
 	// their kinds here. "off" is native.
 	{Env: "SRO_ARABIA", NomadVar: "arabia", Default: "off", Catalogue: true},
+	// Port-only, not native: the Baghdad dungeon and its boss lair
+	// (worlds 112/113), split out of SRO_ARABIA so a shard opens the
+	// dungeon apart from the continent (#4134). The import still rides
+	// the Arabia build; this switch registers the dungeon worlds and
+	// admits their nests and gates. "off" is native.
+	{Env: "SRO_BAGHDAD_DUNGEON", NomadVar: "baghdad_dungeon", Default: "off", Catalogue: true},
 	// Port-only, not native: the Jupiter field population and its world
 	// (#3267). Build and server read the same switch; off leaves every
 	// imported row out of the build and the population unread.
@@ -521,6 +527,10 @@ var Settings = []Setting{
 	// enable it. Forged items are bound, so an enabled shard can only
 	// mint items its GMs cannot move into the economy.
 	{Env: "SRO_GM_ITEM_FORGE", NomadVar: "gm_item_forge", Default: "off"},
+	// Port-only, not native (owner, 2026-11-23): the GM's in-game /MUTE,
+	// /UNMUTE, /BLOCKLOGOUT and /ALLOWLOGOUT (gmcommand/moderation.go).
+	// "off" is native; /SHADOWMUTE is always on.
+	{Env: "SRO_GM_MODERATION", NomadVar: "gm_moderation", Default: "off"},
 	{Env: "SRO_ALCHEMY_RATES", NomadVar: "alchemy_rates", Default: "on", Catalogue: true},
 	// Owner, 2026-10-18: reversed the 2026-10-13 +11 cap; the deployment
 	// default stays native ("off", ceiling 250).

@@ -408,6 +408,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/ui/hud/unique-status-hud.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"callback:createUniqueStatusHud:0"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/ui/hud/quest-banner.ts",
 			"provider": "src/engine/runtime/ui/hud/unique-banner.ts",
 			"functions": [

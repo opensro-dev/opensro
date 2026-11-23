@@ -9,6 +9,7 @@ package staff
 
 import (
 	"errors"
+	"math/bits"
 	"os"
 	"path/filepath"
 	"testing"
@@ -162,7 +163,7 @@ func TestAllowsReadsTheProjectedBits(t *testing.T) {
 	if Allows(c, TeleportSelf) || Allows(nil, TeleportSelf) {
 		t.Fatal("a non-GM was allowed")
 	}
-	if Capability(All) != capabilityEnd-1 || len(Rows) != 17 {
+	if Capability(All) != capabilityEnd-1 || len(Rows) != bits.OnesCount32(uint32(All)) {
 		t.Fatalf("table and All disagree: %d rows", len(Rows))
 	}
 	var seen Capability
