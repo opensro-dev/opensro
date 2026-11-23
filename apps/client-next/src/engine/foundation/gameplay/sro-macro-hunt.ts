@@ -17,6 +17,9 @@ player click would (item use, rebirth, berserk, select, pickup).
 ===========================================================================
 */
 
+import { type CountJobRow, countJobRemainingMs } from "./count-job";
+import { isSurvivalParamJob, type ParamJobRow, paramJobRemainingMs } from "./param-job";
+
 // Hunt block byte indices (live 017b3806.., writer 00da8bb0).
 export const HUNT_BYTE_RANGE = 0;
 export const HUNT_BYTE_FLAG = 1;
@@ -39,11 +42,6 @@ export const HUNT_BYTE_PILLAR = 10;
 // 006872d0 reads 017b3811 (hunt[11]) with skill-on, walks timed items, then
 // returns to town (UIIT_STT_SRO_MACRO_TIME_FIN_TOWN meaning).
 export const HUNT_BYTE_TIME_TOWN = 11;
-// TID 3/1/14 (avatar-socket SPIRIT_KIND): Devil's / Angel's Spirit.
-const SPIRIT_TYPE_KIND = 0x72c;
-const TYPE_KIND_MASK = 0x7fe;
-// Port-only survival arena param jobs (param-job.ts SURVIVAL_POWERS).
-const SURVIVAL_PARAM_PREFIX = 0x7f530000;
 
 // 0068e700 jump table: 0 = In place (0.f), 1..4 store metres*10 as the
 // float at +0x184: 300 / 500 / 700 / 1000. Same world units as pose x/z
@@ -166,17 +164,6 @@ export interface MacroHuntFacts {
 
 /*
 ================
-isMacroSpiritItem
-
-Devil's / Angel's Spirit (TID 3/1/14), the same kind avatar-socket.ts uses.
-================
-*/
-export function isMacroSpiritItem( typeFlags: number ): boolean {
-	return (typeFlags & TYPE_KIND_MASK) === SPIRIT_TYPE_KIND;
-}
-
-/*
-================
 spiritNeedsWake
 
 nasrun/clock.go: Data word 0 is dormant; only a dormant Spirit wakes on use.
@@ -192,28 +179,22 @@ export function spiritNeedsWake( data: number ): boolean {
 macroUsageTimeEnded
 
 006872d0: a premium timed board row whose remaining clock is already at or
-below zero. Param jobs skip the port-only survival arena ids; count jobs are
-Gold Time packages. The worker also requires skill-on (native +0x181).
+below zero, by the board's own drain. Param jobs skip the port-only
+survival arena rows; count jobs are Gold Time packages. The worker also
+requires skill-on (native +0x181).
 ================
 */
 export function macroUsageTimeEnded(
-	paramJobs: readonly {
-		readonly itemRefObjId: number;
-		readonly remainingSec: number;
-		readonly receivedAtMs: number;
-	}[],
-	countJobs: readonly { readonly remainingSec: number; readonly receivedAtMs: number; }[],
+	paramJobs: readonly ParamJobRow[],
+	countJobs: readonly CountJobRow[],
 	nowMs: number
 ): boolean {
-	// Same drain as paramJobRemainingMs / countJobRemainingMs.
-	const leftMs = ( remainingSec: number, receivedAtMs: number ) =>
-		remainingSec * 1000 - Math.max( 0, nowMs - receivedAtMs );
 	for ( const row of paramJobs ) {
-		if ( (row.itemRefObjId & 0xffff0000) === SURVIVAL_PARAM_PREFIX ) continue;
-		if ( leftMs( row.remainingSec, row.receivedAtMs ) <= 0 ) return true;
+		if ( isSurvivalParamJob( row.itemRefObjId ) ) continue;
+		if ( paramJobRemainingMs( row, nowMs ) <= 0 ) return true;
 	}
 	for ( const row of countJobs ) {
-		if ( leftMs( row.remainingSec, row.receivedAtMs ) <= 0 ) return true;
+		if ( countJobRemainingMs( row, nowMs ) <= 0 ) return true;
 	}
 	return false;
 }

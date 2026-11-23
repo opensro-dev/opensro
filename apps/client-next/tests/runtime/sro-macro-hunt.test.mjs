@@ -41,13 +41,13 @@ const {
 	isDimensionPillarName,
 	isDimensionPillarTarget,
 	isMacroHuntNeverTarget,
-	isMacroSpiritItem,
 	macroUsageTimeEnded,
 	pickMacroHuntAction,
 	spiritNeedsWake
 } = hunt;
 const regionCombat = await import( "../../src/engine/foundation/gameplay/region-combat.ts" );
 const { macroRegionIsTown, regionAllowsPlayerCombat } = regionCombat;
+const { isSpiritItem } = await import( "../../src/engine/foundation/gameplay/avatar-socket.ts" );
 
 /*
 ================
@@ -274,8 +274,8 @@ test("macroUsageTimeEnded follows param/count remaining clocks", () => {
 });
 
 test("Spirit wake fires when byte 9 is on and a dormant Spirit is in the bag", () => {
-	assert.equal( isMacroSpiritItem( 0x72c ), true );
-	assert.equal( isMacroSpiritItem( 0x6ac ), false );
+	assert.equal( isSpiritItem( 0x72c ), true );
+	assert.equal( isSpiritItem( 0x6ac ), false );
 	assert.equal( spiritNeedsWake( 0 ), true );
 	assert.equal( spiritNeedsWake( 1 ), false );
 	assert.deepEqual(

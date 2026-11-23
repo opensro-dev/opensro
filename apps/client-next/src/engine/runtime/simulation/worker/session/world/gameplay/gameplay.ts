@@ -397,7 +397,6 @@ import {
 	huntRangeReach,
 	isDimensionPillarTarget,
 	isMacroHuntNeverTarget,
-	isMacroSpiritItem,
 	macroUsageTimeEnded,
 	pickMacroHuntAction,
 	spiritNeedsWake
@@ -410,6 +409,7 @@ import {
 	macroSwitchRefuseNotice,
 	macroTownDisableKinds
 } from "@/engine/foundation/gameplay/sro-macro-notices";
+import { isSpiritItem } from "@/engine/foundation/gameplay/avatar-socket";
 import { macroRegionIsTown } from "@/engine/foundation/gameplay/region-combat";
 import {
 	MACRO_HUNT,
@@ -7349,7 +7349,7 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 		const findSpiritWakeSlot = () => {
 			for ( const entry of bag ) {
 				if ( entry.slot < BAG_FIRST_SLOT || entry.quantity <= 0 ) continue;
-				if ( isMacroSpiritItem( entry.typeFlags ) && spiritNeedsWake( entry.durability ) ) {
+				if ( isSpiritItem( entry.typeFlags ) && spiritNeedsWake( entry.durability ) ) {
 					return entry.slot;
 				}
 			}
