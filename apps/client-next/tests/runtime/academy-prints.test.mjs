@@ -50,7 +50,17 @@ An academy state holding the given roster.
 ================
 */
 function camp( members ) {
-	return { member: true, page: 0, pages: 0, rows: [], request: null, result: null, members, localMemberId: 1 };
+	return {
+		member: true,
+		page: 0,
+		pages: 0,
+		rows: [],
+		own: null,
+		request: null,
+		result: null,
+		members,
+		localMemberId: 1
+	};
 }
 
 /*

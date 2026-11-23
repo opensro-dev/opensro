@@ -5,7 +5,9 @@ academy.ts - the Academy (training camp) state: matching, roster, notice
 and opening
 
 Decodes the academy frames into AcademyState and composes its requests:
-the matching board (0x7701 / 0x7592), the notice (0x7220) and the opening
+the matching board (0x7701 / 0x7592), its own-entry register, modify and
+delete (0x755D / 0x713E / 0x770B, answered by 0xB55D / 0xB13E / 0xB70B),
+the notice (0x7220) and the opening
 at the storage NPC (0x72EC, answered by 0xB2EC). The 0x3AC5 status
 machine and the 0xB2EC opening carry the same camp record (82AA10).
 The cumulated-buff frames ride along: the saved-buff state (0x3CC1,
@@ -17,8 +19,11 @@ board's slots 7 and 8, and the slot-7 pass confirm sends 0x700C.
 import { encodeWindows1252 } from "./windows1252";
 import type { WireFrame } from "@/engine/contracts/network";
 import {
+	MENTOR_DELETE_ACK_OPCODE,
 	MENTOR_JOIN_ACK_OPCODE,
 	MENTOR_LISTING_PAGE_OPCODE,
+	MENTOR_MODIFY_ACK_OPCODE,
+	MENTOR_REGISTER_ACK_OPCODE,
 	TC_BUFF_LIST_OPCODE,
 	TC_BUFF_STATE_OPCODE,
 	TC_COMPULSORY_GRADUATE_REQUEST_OPCODE,
@@ -43,6 +48,14 @@ export const ACADEMY_OPEN_FEE = 100000;
 // ACADEMY_OPEN_LEVEL is 5D9100's floor for the "Academy Establishment" row
 // (g_pLocalPlayer+0x820 >= 0x3C).
 export const ACADEMY_OPEN_LEVEL = 60;
+// 52A9F0 caps the matching register form's title edit at 0x32 chars
+// (CIFEdit_SetMaximumTextLength on control 513).
+export const ACADEMY_DETAIL_MAX_LENGTH = 50;
+// The entry's kind byte: 526800 returns 1 for the student invitation
+// (radio 507) and 2 for the second guardian invitation (radio 508), and
+// 671F50 sends only those two; 0 is natively "no kind".
+export const ACADEMY_KIND_STUDENT = 1;
+export const ACADEMY_KIND_GUARDIAN = 2;
 export interface AcademyListing {
 	readonly id: number;
 	readonly kind: number;
@@ -101,6 +114,14 @@ export interface AcademyReceivedBuff {
 	readonly value: number;
 	readonly receivedAtMs: number;
 }
+// The player's own matching entry, held from the register/modify acks
+// (0xB55D / 0xB13E) until the delete ack (0xB70B) clears it. The listing
+// never carries it separately: the board puts the own row first instead.
+export interface AcademyOwnEntry {
+	readonly id: number;
+	readonly kind: number;
+	readonly detail: string;
+}
 export interface AcademyState {
 	readonly members?: readonly AcademyMember[];
 	readonly localMemberId?: number;
@@ -111,7 +132,11 @@ export interface AcademyState {
 	readonly page: number;
 	readonly pages: number;
 	readonly rows: readonly AcademyListing[];
-	readonly request: { readonly kind: "page" | "join"; readonly id: number; } | null;
+	readonly own: AcademyOwnEntry | null;
+	readonly request: {
+		readonly kind: "page" | "join" | "register" | "modify" | "delete";
+		readonly id: number;
+	} | null;
 	readonly result: number | null;
 	// Count of accepted openings (0xB2EC [1]); 76FBA0 then opens the
 	// Academy tab (CGInterface_OpenAcademyTab), which the UI does on a change.
@@ -133,6 +158,12 @@ export type AcademyCommand =
 		readonly kind: "academy-join";
 		readonly id: number;
 	}
+	| {
+		readonly kind: "academy-register" | "academy-modify";
+		readonly recruit: number;
+		readonly detail: string;
+	}
+	| { readonly kind: "academy-delete"; }
 	| { readonly kind: "academy-notice"; readonly subject: string; readonly contents: string; }
 	| {
 		readonly kind: "academy-open";
@@ -153,7 +184,9 @@ export function academyBootstrap( value: unknown ): AcademyState | undefined {
 	const member = (value as { academyMember?: unknown; }).academyMember;
 	if ( member === undefined ) return undefined;
 	if ( typeof member !== "boolean" ) throw Error( "Invalid academy membership" );
-	return { member, page: 0, pages: 0, rows: [], request: null, result: null };
+	// Pages are 1-based, the party matching board's convention: the listing
+	// answer's page byte is the page shown, starting at 1.
+	return { member, page: 1, pages: 0, rows: [], own: null, request: null, result: null };
 }
 /*
 ================
@@ -193,32 +226,60 @@ academyRequest
 */
 export function academyRequest(
 	state: AcademyState,
-	command: Extract<AcademyCommand, { kind: "academy-page" | "academy-join"; }>,
+	command: Extract<
+		AcademyCommand,
+		{ kind: "academy-page" | "academy-join" | "academy-register" | "academy-modify" | "academy-delete"; }
+	>,
 	level?: number
 ): { state: AcademyState; frame: WireFrame; } {
 	if ( state.request ) throw Error( "Academy request in progress" );
-	let payload: Uint8Array, opcode: number;
+	let payload: Uint8Array, opcode: number, pending: NonNullable<AcademyState["request"]>;
 	if ( command.kind === "academy-page" ) {
-		if ( !Number.isInteger( command.page ) || command.page < 0 || command.page > 255 ) {
+		if ( !Number.isInteger( command.page ) || command.page < 1 || command.page > 255 ) {
 			throw Error( "Invalid academy page" );
 		}
 		payload = Uint8Array.of( command.page );
 		opcode = 0x7701;
-	} else {
+		pending = { kind: "page", id: command.page };
+	} else if ( command.kind === "academy-join" ) {
 		if ( !academyCanJoin( state, command.id, level ) ) throw Error( "No eligible academy selection" );
 		payload = new Uint8Array( 4 );
 		new DataView( payload.buffer ).setUint32( 0, command.id, true );
 		opcode = 0x7592;
+		pending = { kind: "join", id: command.id };
+	} else if ( command.kind === "academy-delete" ) {
+		if ( !state.own ) throw Error( "No owned academy entry" );
+		payload = new Uint8Array( 4 );
+		new DataView( payload.buffer ).setUint32( 0, state.own.id, true );
+		// NetClient_Send770B: {u32 entryId}, answered by 0xB70B.
+		opcode = 0x770b;
+		pending = { kind: "delete", id: state.own.id };
+	} else {
+		const modify = command.kind === "academy-modify";
+		if ( modify ? !state.own : state.own ) throw Error( "Academy registration ownership mismatch" );
+		if (
+			(command.recruit !== ACADEMY_KIND_STUDENT && command.recruit !== ACADEMY_KIND_GUARDIAN) ||
+			!command.detail.length ||
+			command.detail.length > ACADEMY_DETAIL_MAX_LENGTH
+		) throw Error( "Invalid academy registration" );
+		// NetClient_Send755D / NetClient_Send713E share one body: {u32
+		// entryId (0 before a registration exists), u32 dword04, u8 kind,
+		// wide detail}, answered by 0xB55D / 0xB13E.
+		const bytes: number[] = [], detail = command.detail;
+		const u32 = ( n: number ) => bytes.push( n & 255, n >>> 8 & 255, n >>> 16 & 255, n >>> 24 & 255 );
+		u32( modify ? state.own!.id : 0 );
+		u32( 0 );
+		bytes.push( command.recruit, detail.length & 255, detail.length >>> 8 & 255 );
+		for ( let i = 0; i < detail.length; i++ ) {
+			const c = detail.charCodeAt( i );
+			bytes.push( c & 255, c >>> 8 );
+		}
+		payload = Uint8Array.from( bytes );
+		opcode = modify ? 0x713e : 0x755d;
+		pending = { kind: modify ? "modify" : "register", id: modify ? state.own!.id : 0 };
 	}
 	return {
-		state: {
-			...state,
-			request: {
-				kind: command.kind === "academy-page" ? "page" : "join",
-				id: command.kind === "academy-page" ? command.page : command.id
-			},
-			result: null
-		},
+		state: { ...state, request: pending, result: null },
 		frame: { opcode, payload }
 	};
 }
@@ -232,7 +293,7 @@ const ACADEMY_OPEN_WAIT_CODE = 0x1c;
 academyPacket
 ================
 */
-export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 ): AcademyState | null {
+export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0, localName = "" ): AcademyState | null {
 	const p = frame.payload, v = viewOf( p );
 	let at = 0;
 	const u = ( size: number ) => {
@@ -446,11 +507,17 @@ export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 
 			rows.push( { id, kind, detail, level, model, name, students, grade, graduates } );
 		}
 		if ( at !== p.length ) throw Error( "Trailing academy page bytes" );
+		// 0x769A30: the native row loop compares each requester name with
+		// the local player's and commits the first match as the own record
+		// (MentorMatchManager_SetOwnRecord, 0x676D80), so an entry made
+		// before this session still lights Modify and Delete.
+		const mine = localName ? rows.find( row => row.name === localName ) : undefined;
 		return {
 			...state,
 			page,
 			pages,
 			rows,
+			own: mine ? { id: mine.id, kind: mine.kind, detail: mine.detail } : state.own,
 			request: state.request?.kind === "page" ? null : state.request,
 			result: null
 		};
@@ -459,6 +526,36 @@ export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 
 		const flag = u( 1 ), result = u( 1 );
 		if ( (flag !== 1 && flag !== 2) || at !== p.length ) throw Error( "Invalid academy join result" );
 		return { ...state, request: state.request?.kind === "join" ? null : state.request, result };
+	}
+	// The own-entry acks: 0xB55D carries one more u32 (the camp's student
+	// count) than 0xB13E; both commit the own snapshot they describe.
+	if ( frame.opcode === MENTOR_REGISTER_ACK_OPCODE || frame.opcode === MENTOR_MODIFY_ACK_OPCODE ) {
+		const pending = frame.opcode === MENTOR_REGISTER_ACK_OPCODE ? "register" : "modify",
+			request = state.request?.kind === pending ? null : state.request,
+			flag = u( 1 );
+		if ( flag !== 1 ) {
+			const result = u( 1 );
+			if ( flag !== 2 || at !== p.length ) throw Error( "Invalid academy registration result" );
+			return { ...state, request, result };
+		}
+		const id = u( 4 );
+		u( 4 );
+		const kind = u( 1 ), detail = str( true );
+		if ( frame.opcode === MENTOR_REGISTER_ACK_OPCODE ) u( 4 );
+		if ( at !== p.length ) throw Error( "Trailing academy registration bytes" );
+		if ( !id ) throw Error( "Invalid academy registration" );
+		return { ...state, own: { id, kind, detail }, request, result: null };
+	}
+	if ( frame.opcode === MENTOR_DELETE_ACK_OPCODE ) {
+		const request = state.request?.kind === "delete" ? null : state.request, flag = u( 1 );
+		if ( flag !== 1 ) {
+			const result = u( 1 );
+			if ( flag !== 2 || at !== p.length ) throw Error( "Invalid academy delete result" );
+			return { ...state, request, result };
+		}
+		const id = u( 4 );
+		if ( at !== p.length ) throw Error( "Trailing academy delete bytes" );
+		return { ...state, own: state.own?.id === id ? null : state.own, request, result: null };
 	}
 	// 771750: [1] and up to 50 honor-rank rows; [2] and one category-0x1D error byte.
 	if ( frame.opcode === TC_HONOR_RANK_ANSWER_OPCODE ) {
