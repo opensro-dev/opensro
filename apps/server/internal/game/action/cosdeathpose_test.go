@@ -98,6 +98,28 @@ func assertCargoAt(t *testing.T, ground []grounditem.Item, want simulation.Spawn
 
 /*
 ================
+assertVehicleUnmounted
+
+The bag alone cannot pin the ridden death's pose hand-off: while
+Mounted still reads true the settle falls back to the rider, so a bag
+at the rider's pose proves nothing about the vehicle's own mover.
+What proves the hand-off ran is its other half: the commit's unmount
+(cosabnormal.go) is the one call that parks the mover at the rider's
+pose and clears Mounted, in that order, before the settle reads the
+pose back. Mounted surviving the kill is the park having never run.
+(The mover itself cannot be read after the kill to check the park:
+the death publication retires it at once.)
+================
+*/
+func assertVehicleUnmounted(t *testing.T, pet *enterworld.CharacterCOS) {
+	t.Helper()
+	if pet.Mounted {
+		t.Fatal("the killed vehicle still reads mounted: the commit's unmount never parked it at the rider's pose")
+	}
+}
+
+/*
+================
 TestPlayerKillOfARiddenTransportDropsWhereItDied
 
 The reported lane: a thief player kills the transport its trader rides.
@@ -107,7 +129,8 @@ func TestPlayerKillOfARiddenTransportDropsWhereItDied(t *testing.T) {
 	rt, _, attacker, owner := newPvpPair(t)
 	equipStrikeTestCOS(t, rt, owner)
 	died := rideAwayFromAnchor(t, rt, owner)
-	gid := owner.ActiveCOS.GID
+	pet := owner.ActiveCOS
+	gid := pet.GID
 	out := rt.HandleTargetInteract(testDivision, attacker, wire.BasicAttackEngage{TargetGid: gid}.Encode())
 	if _, ok := findFrame(out.Frames, wire.OpSkillCastResult); !ok {
 		t.Fatalf("no cast result: %+v (%s)", out.Frames, out.DiagnosticRefusal)
@@ -116,6 +139,7 @@ func TestPlayerKillOfARiddenTransportDropsWhereItDied(t *testing.T) {
 		t.Fatal("the killed transport kept its record")
 	}
 	assertCargoAt(t, rt.Ground.All(testDivision), died)
+	assertVehicleUnmounted(t, pet)
 }
 
 /*
@@ -124,8 +148,10 @@ TestPlayerKillOfAFollowingTransportDropsWhereItDied
 
 The unridden half of the report: the transport is parked at the shop,
 the trader walks far with the follow rule on so it walks after him,
-and a thief player kills it where it walked to. The goods land at the
-walked-to spot, not back at the parked summon spot.
+then walks on alone. A thief player kills the transport where it
+stands - more than the scatter slack from both the parked summon spot
+and the trader, so "dropped at the owner" and "dropped at the
+transport" give different answers. The goods land at the transport.
 ================
 */
 func TestPlayerKillOfAFollowingTransportDropsWhereItDied(t *testing.T) {
@@ -148,45 +174,33 @@ func TestPlayerKillOfAFollowingTransportDropsWhereItDied(t *testing.T) {
 			func(w *simulation.WorldState) { w.Spawn = pose; w.SpawnSet = true })
 	}
 	moveOwner(field)
-	rt.Worlds.Update(simulation.WorldKey(testDivision, attacker.Name), func() simulation.WorldState { return simulation.SeedWorldState(attacker) },
-		func(w *simulation.WorldState) { spot := field; spot.X += 3; w.Spawn = spot; w.SpawnSet = true })
 	for i := 0; i < 60; i++ {
 		clock.Advance(500_000_000)
 		rt.advancePets(clock.NowMs())
 	}
-	if at := rt.companionLiveSpawn(testDivision, owner, pet, clock.NowMs()); simulation.WorldDistance2D(at, shop) < 100 {
-		t.Fatalf("fixture: the transport never walked from the shop: at %+v", at)
+	// The trader walks on alone; no pet tick runs again, so the
+	// transport stands where the follow left it.
+	ownerFar := field
+	ownerFar.X += 200
+	moveOwner(ownerFar)
+	died := rt.companionLiveSpawn(testDivision, owner, pet, clock.NowMs())
+	if simulation.WorldDistance2D(died, shop) < 100 || simulation.WorldDistance2D(died, ownerFar) < 100 {
+		t.Fatalf("fixture: the transport is not apart from both anchors: at %+v, shop %+v, trader %+v", died, shop, ownerFar)
 	}
+	// The thief stands at the transport, not at the trader.
+	rt.Worlds.Update(simulation.WorldKey(testDivision, attacker.Name), func() simulation.WorldState { return simulation.SeedWorldState(attacker) },
+		func(w *simulation.WorldState) { spot := died; spot.X += 3; w.Spawn = spot; w.SpawnSet = true })
 	pet.CurrentHP = 1
 	rt.HandleTargetInteract(testDivision, attacker, wire.BasicAttackEngage{TargetGid: pet.GID}.Encode())
-	var died simulation.Spawn
-	for i := 0; i < 40; i++ {
+	for i := 0; i < 3 && owner.ActiveCOS != nil; i++ {
 		clock.Advance(100_000_000)
 		rt.advanceProjectileCasts(clock.NowMs())
 		rt.TickHook()(clock.NowMs())
-		if owner.ActiveCOS == nil {
-			died = rt.liveSpawn(simulation.WorldKey(testDivision, owner.Name), owner, clock.NowMs())
-			break
-		}
 	}
 	if owner.ActiveCOS != nil {
 		t.Fatal("the following transport survived the thief's strike")
 	}
-	// died is the rider's pose at the death tick; the transport died
-	// within follow distance of it, far inside the scatter slack of
-	// neither anchor - assert on the shop instead: the bag must be
-	// nowhere near the parked summon spot.
-	ground := rt.Ground.All(testDivision)
-	if len(ground) != 1 {
-		t.Fatalf("cargo %+v, want the one 7-potion bag", ground)
-	}
-	at := ground[0].Position
-	if d := math.Hypot(float64(at.X)-shop.X, float64(at.Z)-shop.Z); d < staleAnchorOffset-100 {
-		t.Fatalf("cargo landed %.0f from the shop anchor %+v, want it with the walked-to transport near %+v: bag %+v", d, shop, died, at)
-	}
-	if d := math.Hypot(float64(at.X)-field.X, float64(at.Z)-field.Z); d > 120 {
-		t.Fatalf("cargo landed %.0f from the field the transport walked to: bag %+v", d, at)
-	}
+	assertCargoAt(t, rt.Ground.All(testDivision), died)
 }
 
 /*
@@ -204,7 +218,7 @@ func TestPlayerKillOfAResummonedTransportDropsWhereItDied(t *testing.T) {
 	equipStrikeTestCOS(t, rt, owner)
 	died1 := rideAwayFromAnchor(t, rt, owner)
 	gid := owner.ActiveCOS.GID
-	kill := func() {
+	kill := func(pet *enterworld.CharacterCOS) {
 		t.Helper()
 		rt.HandleTargetInteract(testDivision, attacker, wire.BasicAttackEngage{TargetGid: gid}.Encode())
 		for i := 0; i < 40 && owner.ActiveCOS != nil; i++ {
@@ -215,8 +229,9 @@ func TestPlayerKillOfAResummonedTransportDropsWhereItDied(t *testing.T) {
 		if owner.ActiveCOS != nil {
 			t.Fatal("the transport survived the thief's strike")
 		}
+		assertVehicleUnmounted(t, pet)
 	}
-	kill()
+	kill(owner.ActiveCOS)
 	assertCargoAt(t, rt.Ground.All(testDivision), died1)
 	// The trader summons the next transport where he stands (at A) -
 	// the mover-relevant tail of the item-use summon door - and the
@@ -242,7 +257,7 @@ func TestPlayerKillOfAResummonedTransportDropsWhereItDied(t *testing.T) {
 	moveOwner(died2)
 	rt.Worlds.Update(simulation.WorldKey(testDivision, attacker.Name), func() simulation.WorldState { return simulation.SeedWorldState(attacker) },
 		func(w *simulation.WorldState) { spot := died2; spot.X += 3; w.Spawn = spot; w.SpawnSet = true })
-	kill()
+	kill(pet)
 	assertCargoAt(t, rt.Ground.All(testDivision), died2)
 }
 
