@@ -82,6 +82,11 @@ func TestGhostWalkShippedRanksAndAuthority(t *testing.T) {
 				before := rt.liveSpawn(key, c, clock.NowMs())
 				called := false
 				rt.ConstrainMovement = func(_ string, from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) {
+					// The cast's chord is the first walk; later ones are the
+					// landing's exit probes, which start at the seat (#2807).
+					if called {
+						return to, nil
+					}
 					called = true
 					if from != before {
 						t.Fatalf("stale source %+v != %+v", from, before)
