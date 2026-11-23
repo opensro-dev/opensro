@@ -49,6 +49,7 @@ export default {
 		"scripts/test/assets/resourceBuildGraph.test.mjs",
 		"scripts/test/assets/laterDungeonMapStep.test.mjs",
 		"scripts/test/assets/laterWorldMapButtonsStep.test.mjs",
+		"scripts/test/assets/laterResLayoutsStep.test.mjs",
 		"scripts/test/assets/laterWorldMapGuideStep.test.mjs",
 		"scripts/test/assets/laterMacroGuideStep.test.mjs",
 		"scripts/test/assets/laterCentreBannerStep.test.mjs",

@@ -208,6 +208,31 @@ class ArabiaQuestTablesTest(unittest.TestCase):
 		self.assertEqual([row[1] for row in kept], ["300001", "340001", "300000"])
 
 	# ================
+	# test_a_region_header_comes_with_its_quests
+	#
+	# 300000 (Baghdad) names no quest, but heads QNO_AR_001; without it
+	# the client refuses the guide ("Orphan quest guide article", r204h).
+	# A header that heads no imported quest stays out, and the header's
+	# title comes from the later help strings.
+	# ================
+	def test_a_region_header_comes_with_its_quests(self):
+		head = ["1", "300000", "town", "0", "7", "SRO_GGW_MENU_QSD_AR_01_MSG", "SRO_GGW_MENU_QSD_AR_01_MSG", "xxx"]
+		other = ["1", "140000", "elsewhere", "0", "3", "SRO_GGW_MENU_X", "SRO_GGW_MENU_X", "xxx"]
+		rows = [head, other, quest_guide("QNO_AR_001", 300001)]
+		self.assertEqual(quest_tables.guide_heads(rows), {"300000"})
+		later = {quest_tables.QUEST_TABLE: [quest("QNO_AR_001", 1448)], quest_tables.CONTENTS_TABLE: [],
+			quest_tables.GUIDE_TABLE: rows}
+		variant = {name: [] for name in quest_tables.KEYS}
+		chosen = quest_tables.quest_rows(later, variant)[quest_tables.GUIDE_TABLE]
+		self.assertEqual([row[1] for row in chosen], ["300000", "300001"])
+		raw = ["1", "271", "SRO_GGW_MENU_QSD_AR_01_MSG", "바그다드", "0", "0", "0", "0", "0", "Baghdad",
+			"0", "0", "0", "Baghdad", "Baghdad", "Baghdad", "Baghdad"]
+		unrelated = ["1", "272", "SRO_GGW_MENU_X", "x", "0", "0", "0", "0", "0", "X", "0", "0", "0", "X", "X", "X", "X"]
+		help_table = table("\t".join(raw), "\t".join(unrelated))
+		titles = quest_tables.head_help_rows(lambda name: help_table, chosen)
+		self.assertEqual([(row[1], row[8]) for row in titles], [("SRO_GGW_MENU_QSD_AR_01_MSG", "Baghdad")])
+
+	# ================
 	# test_a_missing_guide_body_is_composed_from_the_quests_lines
 	#
 	# 300002 (QNO_AR_002) names a body v1.696 never wrote; it is the

@@ -179,24 +179,58 @@ def file_key(path: Path, content: bool) -> str:
 
 
 # ================
+# native_skipped
+#
+# The top folders of the native root no variant build reads through it:
+# the stage 1 import's own output. When that folder is the import in
+# use it is a source root of its own (taken by content); when the build
+# names another --imported-root (a release staging) it is never read. A
+# stage 1 run in the hub rewrote it and so invalidated every variant
+# step of an unrelated release build (r204h, 2188 s, #4251).
+# ================
+def native_skipped() -> tuple[str, ...]:
+	# Imported here, not at load: it imports build_alexandria_variant, which
+	# imports this module.
+	import import_vsro_alexandria
+	return (import_vsro_alexandria.OUTPUT_FOLDER,)
+
+
+# ================
 # tree_fingerprint
 #
 # sha256 over (relative path, file key) of a file or of every file under a
-# folder. A single file up to SMALL_FILE is always taken by content.
+# folder. A single file up to SMALL_FILE is always taken by content. skip
+# names top folders of root left out (native_skipped).
 # ================
-def tree_fingerprint(root: Path, content: bool = False) -> str:
+def tree_fingerprint(root: Path, content: bool = False, skip: tuple[str, ...] = ()) -> str:
 	digest = hashlib.sha256()
 	if root.is_file():
 		digest.update(file_key(root, content or root.stat().st_size <= SMALL_FILE).encode())
 		return digest.hexdigest()
 	rows = []
-	for directory, _, names in os.walk(root):
+	for directory, folders, names in os.walk(root):
+		if skip and Path(directory) == root:
+			folders[:] = [folder for folder in folders if folder not in skip]
 		for name in names:
 			absolute = Path(directory, name)
 			rows.append(f"{absolute.relative_to(root).as_posix()}\0{file_key(absolute, content)}")
 	for row in sorted(rows):
 		digest.update(row.encode("utf-8") + b"\n")
 	return digest.hexdigest()
+
+
+# ================
+# source_fingerprint
+#
+# One source root's fingerprint under the build's arguments: the stage 1
+# import in use is taken by content, and the native root leaves out the
+# folders native_skipped names. The stamp and the step journal both ask
+# here, so a root fingerprints the same way in both.
+# ================
+def source_fingerprint(root: Path, native=None, imported=None) -> str:
+	by_content = imported is not None and root == Path(imported).resolve()
+	skip = native_skipped() if native is not None and root == Path(native).resolve() else ()
+	return tree_fingerprint(root, by_content, skip)
 
 
 # ================
@@ -221,7 +255,7 @@ def read_inputs(native: Path, imported: Path, vsro_root: Path, variant: Path, en
 			"variant": str(Path(variant).resolve())
 		},
 		"sources": {
-			str(root): tree_fingerprint(root, root == Path(imported).resolve())
+			str(root): source_fingerprint(root, native, imported)
 			for root in source_roots(native, imported, vsro_root, variant, environ)
 		}
 	}
