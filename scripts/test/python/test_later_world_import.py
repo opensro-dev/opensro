@@ -26,6 +26,7 @@ from unittest import mock
 import hunting2_import as hunting2  # noqa: E402
 import jupiter_import as jupiter  # noqa: E402
 import later_world_import as later  # noqa: E402
+import later_world_population as population  # noqa: E402
 import muhan_import as muhan  # noqa: E402
 
 
@@ -639,7 +640,7 @@ class MapWorldTest(unittest.TestCase):
 class LaterWorldStagedRefsTest(unittest.TestCase):
 	def test_a_default_spec_stages_every_claimed_kind(self):
 		refs = {"MOB_SD_OSIRIS_3": ["row"]}
-		self.assertIs(later.staged_refs(jupiter.SPEC, Path("."), refs), refs)
+		self.assertIs(population.staged_refs(jupiter.SPEC, Path("."), refs), refs)
 
 	def test_a_placing_spec_leaves_a_standing_kind_on_its_row(self):
 		with tempfile.TemporaryDirectory() as temp:
@@ -649,7 +650,7 @@ class LaterWorldStagedRefsTest(unittest.TestCase):
 				["1", "38211", "MOB_SD_OTHER"] + ["0"] * 10]))
 			spec = dataclasses.replace(jupiter.SPEC, place_standing=True)
 			refs = {"MOB_SD_OSIRIS_3": ["a"], "MOB_SD_NEW": ["b"]}
-			self.assertEqual(later.staged_refs(spec, text_root, refs), {"MOB_SD_NEW": ["b"]})
+			self.assertEqual(population.staged_refs(spec, text_root, refs), {"MOB_SD_NEW": ["b"]})
 
 
 if __name__ == "__main__":

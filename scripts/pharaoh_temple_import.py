@@ -37,6 +37,7 @@ from pathlib import Path
 
 import import_vsro_alexandria as tables
 import later_world_import
+import later_world_population
 
 FLAG = "SRO_PHARAOH_TEMPLE"
 ROOT_ENV = "SRO_V1696_ROOT"
@@ -198,7 +199,7 @@ def _build_populations(rows, sub_enabled):
 			caps[row["NestID"]] = (hive_key(row, cap), cap)
 			row = {**row, "Hive": {**row["Hive"], "OverwriteMaxTotalCount": 0}}
 		plain.append(row)
-	population = later_world_import.project_population(SPEC, plain, TEMPLE_WORLDS)
+	population = later_world_population.project_population(SPEC, plain, TEMPLE_WORLDS)
 	for projected in population["Rows"]:
 		if projected["NestID"] in caps:
 			projected["HiveKey"], projected["HiveMaxCount"] = caps[projected["NestID"]]

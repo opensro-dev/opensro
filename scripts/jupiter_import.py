@@ -43,6 +43,7 @@ from pathlib import Path
 
 import import_vsro_alexandria as tables
 import later_world_import
+import later_world_population
 
 FLAG = "SRO_JUPITER"
 TEMPLE_FLAG = "SRO_JUPITER_TEMPLE"
@@ -232,7 +233,7 @@ def require_v1696_pin(root, names):
 # ================
 def read_population(source_root):
 	"""The pinned population export, all seven worlds present."""
-	return later_world_import.read_population(SPEC, source_root)
+	return later_world_population.read_population(SPEC, source_root)
 
 
 # ================
@@ -240,7 +241,7 @@ def read_population(source_root):
 # ================
 def project_population(rows, worlds):
 	"""The nest rows of the given worlds in the Version-2 row schema."""
-	return later_world_import.project_population(SPEC, rows, worlds)
+	return later_world_population.project_population(SPEC, rows, worlds)
 
 
 # ================
