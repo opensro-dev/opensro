@@ -54,6 +54,9 @@ const COMMENTS = /\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm;
 // A Python import of a top-level name; it is followed when the repository
 // holds a module of that name (scripts/sro_paths.py), else it is a package.
 const PYTHON_IMPORT = /^\s*(?:from\s+([A-Za-z_]\w*)[\w.]*\s+import|import\s+([A-Za-z_]\w*))/gm;
+// The same import at module level only (column 0): what loading the module
+// runs, without the imports its functions make when they are called.
+const PYTHON_MODULE_IMPORT = /^(?:from\s+([A-Za-z_]\w*)[\w.]*\s+import|import\s+([A-Za-z_]\w*))/gm;
 
 /*
 ================
@@ -78,17 +81,45 @@ are not followed.
 ================
 */
 export async function codeClosure( entryFile, repositoryRoot = rebuildRoot ) {
+	return walkClosure( [ entryFile ], repositoryRoot, PYTHON_IMPORT );
+}
+
+/*
+================
+moduleClosure
+
+codeClosure over several entries, following a Python file's module-level
+imports only. The variant step journal records which Python files a step
+actually ran and imported (variant_steps.py, #4251); the imports inside
+functions the step never called are not its code. JS imports, named
+scripts and JSON beside a module are followed exactly as codeClosure
+follows them.
+================
+*/
+export async function moduleClosure( entryFiles, repositoryRoot = rebuildRoot ) {
+	return walkClosure( entryFiles, repositoryRoot, PYTHON_MODULE_IMPORT );
+}
+
+/*
+================
+walkClosure
+
+The one closure walk behind codeClosure and moduleClosure; pythonImport is
+the pattern a Python file's followed imports match.
+================
+*/
+async function walkClosure( entryFiles, repositoryRoot, pythonImport ) {
 	const python = await sourceIndex( repositoryRoot, ".py" );
 	const scripts = await sourceIndex( repositoryRoot, ".mjs" );
 	const seen = new Set();
-	const pending = [ path.resolve( entryFile ) ];
+	const pending = entryFiles.map( ( file ) => path.resolve( file ) );
 	for ( let file = pending.pop(); file !== undefined; file = pending.pop() ) {
 		if ( seen.has( file ) ) continue;
 		seen.add( file );
 		const directory = path.dirname( file );
 		if ( file.endsWith( ".py" ) ) {
 			const text = await readFile( file, "utf8" );
-			for ( const match of text.matchAll( PYTHON_IMPORT ) ) {
+			for ( const match of text.matchAll( pythonImport ) ) {
 				pending.push( ...(python.get( `${match[1] ?? match[2]}.py` ) ?? []) );
 			}
 			const code = text.replace( PYTHON_COMMENT, "" );

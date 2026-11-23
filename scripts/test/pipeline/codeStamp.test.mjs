@@ -21,7 +21,7 @@ import { pathToFileURL } from "node:url";
 
 const temporaryRoot = await mkdtemp( path.join( os.tmpdir(), "sro-code-stamp-" ) );
 process.env.SRO_GENERATED_ROOT = path.join( temporaryRoot, "generated" );
-const { codeClosure, codeHash, invalidateStamp, stampIsCurrent, writeStamp } = await import(
+const { codeClosure, codeHash, invalidateStamp, moduleClosure, stampIsCurrent, writeStamp } = await import(
 	"../../build/shared/codeStamp.mjs"
 );
 
@@ -110,6 +110,34 @@ test("a Python name the stamp cannot resolve fails instead of leaving a gap", as
 	await assert.rejects(
 		codeClosure( path.join( root, "scripts/build/entry.mjs" ), root ),
 		/renamed_away\.py.*matches 0/
+	);
+});
+
+test("the module closure follows module-level Python imports only, from every entry", async () => {
+	const root = path.join( temporaryRoot, "module" );
+	await mkdir( path.join( root, "scripts" ), { recursive: true } );
+	const files = {
+		// The step ran step.py: its module-level import is code, the import
+		// inside a function it never called is not.
+		"scripts/step.py": "import table\n\n\ndef rare():\n\timport monsters\n\treturn monsters.X\n",
+		"scripts/table.py": 'PINS = "table_pins.json"\n',
+		"scripts/table_pins.json": "{}\n",
+		"scripts/monsters.py": "X = 1\n",
+		"scripts/other.py": "import table\n"
+	};
+	for ( const [name, text] of Object.entries( files ) ) await writeFile( path.join( root, name ), text );
+	const relative = ( list ) => list.map( ( file ) => path.relative( root, file ).split( path.sep ).join( "/" ) );
+	assert.deepEqual( relative( await moduleClosure( [ path.join( root, "scripts/step.py" ) ], root ) ), [
+		"scripts/step.py",
+		"scripts/table.py",
+		"scripts/table_pins.json"
+	] );
+	// The full closure still follows the function-level import.
+	assert.ok( relative( await codeClosure( path.join( root, "scripts/step.py" ), root ) ).includes( "scripts/monsters.py" ) );
+	// Several entries: their union, each file once.
+	assert.deepEqual(
+		relative( await moduleClosure( [ "scripts/step.py", "scripts/other.py" ].map( ( f ) => path.join( root, f ) ), root ) ),
+		[ "scripts/other.py", "scripts/step.py", "scripts/table.py", "scripts/table_pins.json" ]
 	);
 });
 
