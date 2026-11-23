@@ -120,6 +120,134 @@ func TestPlayerKillOfARiddenTransportDropsWhereItDied(t *testing.T) {
 
 /*
 ================
+TestPlayerKillOfAFollowingTransportDropsWhereItDied
+
+The unridden half of the report: the transport is parked at the shop,
+the trader walks far with the follow rule on so it walks after him,
+and a thief player kills it where it walked to. The goods land at the
+walked-to spot, not back at the parked summon spot.
+================
+*/
+func TestPlayerKillOfAFollowingTransportDropsWhereItDied(t *testing.T) {
+	rt, clock, attacker, owner := newPvpPair(t)
+	equipStrikeTestCOS(t, rt, owner)
+	pet := owner.ActiveCOS
+	potion := testItems()["ITEM_ETC_HP_POTION_01"]
+	pet.Container = &domain.COSContainer{Capacity: 4, Rows: []enterworld.InventoryRow{{
+		Slot: 0, RefObjID: potion.RefObjID, Codename: potion.Codename, TypeFlags: potion.TypeFlags(), StackCount: 7}}}
+	rt.BindPetSession(testDivision, owner, 1)
+	rt.TransportFollow = true
+	// An open field: every step lands where it aims (as dismountedTransportApart).
+	rt.ConstrainMovement = func(_ string, _, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return to, nil }
+	shop := rt.liveSpawn(simulation.WorldKey(testDivision, owner.Name), owner, clock.NowMs())
+	rt.rememberTransportCOS(testDivision, owner, shop)
+	field := shop
+	field.X += staleAnchorOffset
+	moveOwner := func(pose simulation.Spawn) {
+		rt.Worlds.Update(simulation.WorldKey(testDivision, owner.Name), func() simulation.WorldState { return simulation.SeedWorldState(owner) },
+			func(w *simulation.WorldState) { w.Spawn = pose; w.SpawnSet = true })
+	}
+	moveOwner(field)
+	rt.Worlds.Update(simulation.WorldKey(testDivision, attacker.Name), func() simulation.WorldState { return simulation.SeedWorldState(attacker) },
+		func(w *simulation.WorldState) { spot := field; spot.X += 3; w.Spawn = spot; w.SpawnSet = true })
+	for i := 0; i < 60; i++ {
+		clock.Advance(500_000_000)
+		rt.advancePets(clock.NowMs())
+	}
+	if at := rt.companionLiveSpawn(testDivision, owner, pet, clock.NowMs()); simulation.WorldDistance2D(at, shop) < 100 {
+		t.Fatalf("fixture: the transport never walked from the shop: at %+v", at)
+	}
+	pet.CurrentHP = 1
+	rt.HandleTargetInteract(testDivision, attacker, wire.BasicAttackEngage{TargetGid: pet.GID}.Encode())
+	var died simulation.Spawn
+	for i := 0; i < 40; i++ {
+		clock.Advance(100_000_000)
+		rt.advanceProjectileCasts(clock.NowMs())
+		rt.TickHook()(clock.NowMs())
+		if owner.ActiveCOS == nil {
+			died = rt.liveSpawn(simulation.WorldKey(testDivision, owner.Name), owner, clock.NowMs())
+			break
+		}
+	}
+	if owner.ActiveCOS != nil {
+		t.Fatal("the following transport survived the thief's strike")
+	}
+	// died is the rider's pose at the death tick; the transport died
+	// within follow distance of it, far inside the scatter slack of
+	// neither anchor - assert on the shop instead: the bag must be
+	// nowhere near the parked summon spot.
+	ground := rt.Ground.All(testDivision)
+	if len(ground) != 1 {
+		t.Fatalf("cargo %+v, want the one 7-potion bag", ground)
+	}
+	at := ground[0].Position
+	if d := math.Hypot(float64(at.X)-shop.X, float64(at.Z)-shop.Z); d < staleAnchorOffset-100 {
+		t.Fatalf("cargo landed %.0f from the shop anchor %+v, want it with the walked-to transport near %+v: bag %+v", d, shop, died, at)
+	}
+	if d := math.Hypot(float64(at.X)-field.X, float64(at.Z)-field.Z); d > 120 {
+		t.Fatalf("cargo landed %.0f from the field the transport walked to: bag %+v", d, at)
+	}
+}
+
+/*
+================
+TestPlayerKillOfAResummonedTransportDropsWhereItDied
+
+The report's third case: a first kill drops the goods at A, the trader
+summons a fresh transport at A, loads the recovered goods and rides to
+C, and a thief player kills that one too. The second drop lands at C,
+not back at the earlier death point A.
+================
+*/
+func TestPlayerKillOfAResummonedTransportDropsWhereItDied(t *testing.T) {
+	rt, clock, attacker, owner := newPvpPair(t)
+	equipStrikeTestCOS(t, rt, owner)
+	died1 := rideAwayFromAnchor(t, rt, owner)
+	gid := owner.ActiveCOS.GID
+	kill := func() {
+		t.Helper()
+		rt.HandleTargetInteract(testDivision, attacker, wire.BasicAttackEngage{TargetGid: gid}.Encode())
+		for i := 0; i < 40 && owner.ActiveCOS != nil; i++ {
+			clock.Advance(100_000_000)
+			rt.advanceProjectileCasts(clock.NowMs())
+			rt.TickHook()(clock.NowMs())
+		}
+		if owner.ActiveCOS != nil {
+			t.Fatal("the transport survived the thief's strike")
+		}
+	}
+	kill()
+	assertCargoAt(t, rt.Ground.All(testDivision), died1)
+	// The trader summons the next transport where he stands (at A) -
+	// the mover-relevant tail of the item-use summon door - and the
+	// recovered goods go aboard.
+	pet := &enterworld.CharacterCOS{GID: gid, RefObjID: 9, Codename: "PET", Level: 1,
+		CurrentHP: 1, CurrentMP: 600, StateFlags: 1, Summoned: true}
+	potion := testItems()["ITEM_ETC_HP_POTION_01"]
+	pet.Container = &domain.COSContainer{Capacity: 4, Rows: []enterworld.InventoryRow{{
+		Slot: 0, RefObjID: potion.RefObjID, Codename: potion.Codename, TypeFlags: potion.TypeFlags(), StackCount: 7}}}
+	owner.ActiveCOS = pet
+	rideNewVehicle(pet)
+	rt.rememberTransportCOS(testDivision, owner, rt.liveSpawn(simulation.WorldKey(testDivision, owner.Name), owner, clock.NowMs()))
+	// The recovered bag leaves the ground (the pickup), the ride to C begins.
+	for _, item := range rt.Ground.All(testDivision) {
+		rt.Ground.Remove(testDivision, item.Gid)
+	}
+	died2 := died1
+	died2.X += 300
+	moveOwner := func(pose simulation.Spawn) {
+		rt.Worlds.Update(simulation.WorldKey(testDivision, owner.Name), func() simulation.WorldState { return simulation.SeedWorldState(owner) },
+			func(w *simulation.WorldState) { w.Spawn = pose; w.SpawnSet = true })
+	}
+	moveOwner(died2)
+	rt.Worlds.Update(simulation.WorldKey(testDivision, attacker.Name), func() simulation.WorldState { return simulation.SeedWorldState(attacker) },
+		func(w *simulation.WorldState) { spot := died2; spot.X += 3; w.Spawn = spot; w.SpawnSet = true })
+	kill()
+	assertCargoAt(t, rt.Ground.All(testDivision), died2)
+}
+
+/*
+================
 TestMonsterKillOfARiddenTransportDropsWhereItDied
 
 The same death dealt by a monster thief: one settlement, one pose.
