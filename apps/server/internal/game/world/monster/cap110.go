@@ -181,15 +181,18 @@ func appendNests(template Template, data []byte, label string, admit func(Monste
 nestRules
 
 What one optional population may hold (appendNests' arguments, see its
-banner). Region is the one rule appendNests does not take: nil admits
-outdoor regions only (every field and band population); a population
-whose nests stand in dungeon regions names the regions it owns.
+banner). Skip judges the installed reference; SkipRow judges the row's
+own fields, for the rows a switched-off world holds back. Region is the
+one rule appendNests does not take: nil admits outdoor regions only
+(every field and band population); a population whose nests stand in
+dungeon regions names the regions it owns.
 ================
 */
 type nestRules struct {
 	Label   string
 	Admit   func(MonsterRef, string) bool
 	Skip    func(MonsterRef, string) bool
+	SkipRow func(cap110Nest) bool
 	WorldOf func(cap110Nest) (string, error)
 	Region  func(uint16) bool
 }
@@ -260,6 +263,10 @@ func appendNestRows(template Template, data []byte, rules nestRules) (Template, 
 		}
 		seen[row.NestID] = true
 		if rules.Skip != nil && rules.Skip(ref, row.Codename) {
+			skipped++
+			continue
+		}
+		if rules.SkipRow != nil && rules.SkipRow(row) {
 			skipped++
 			continue
 		}
