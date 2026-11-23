@@ -6738,6 +6738,7 @@ The published plane when something changed since the last take, else null.
 				...(reverseMapPoints.length ? { reverseMapPoints } : {}),
 				storage: presentedStorage(),
 				playerModels: localPlayerModels(),
+				localSex: localPlayerSex(),
 				job,
 				jobRanks,
 				jobOutcome,
