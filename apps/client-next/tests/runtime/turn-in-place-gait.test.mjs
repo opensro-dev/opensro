@@ -27,6 +27,7 @@ const { createGameplay } = await import(
 );
 const { createLocalMover } = await import( "../../src/engine/runtime/movement/local-mover.ts" );
 const { createPosePresentation } = await import( "../../src/engine/runtime/characters/pose-presentation.ts" );
+const { createOwnWalkInterpolation } = await import( "../../src/engine/runtime/characters/own-walk-interpolation.ts" );
 const { ARROW_TURN_WORDS_PER_MS } = await import( "../../src/engine/foundation/gameplay/direction-movement.ts" );
 
 const REGION = 257, TICK_MS = 16, PUBLISH_MS = 32, IN_LATENCY_MS = 20, OUT_LATENCY_MS = 25;
@@ -182,4 +183,17 @@ test("a turn in place after a walk reads standing throughout, the walk reads mov
 		turning.every( f => !f.presentedMoving ),
 		"a turn in place plays no walk gait"
 	);
+});
+
+test("a walk stopped short of its leg's arrival ends its gait at the stop", () => {
+	// A stand published mid-leg ends the buffered walk at its own tick: the
+	// gait must not run on to the arrival the leg had planned (1000 ms).
+	const walk = createOwnWalkInterpolation();
+	const at = x => ({ regionId: 1, x, y: 0, z: 0, angle: 0 });
+	const from = at( 0 ), to = at( 100 );
+	walk.push( { atMs: 0, pose: at( 0 ), moving: true, from, to, durationMs: 1000, arrivedAtMs: 0 } );
+	walk.push( { atMs: 100, pose: at( 10 ), moving: true, from, to, durationMs: 1000, arrivedAtMs: 100 } );
+	assert.equal( walk.moving( 150 ), true, "the walk reads moving while it walks" );
+	walk.push( { atMs: 200, pose: at( 20 ), moving: false, arrivedAtMs: 200 } );
+	assert.equal( walk.moving( 600 ), false, "the gait ends with the stop, not at the planned arrival" );
 });

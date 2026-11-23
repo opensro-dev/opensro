@@ -304,9 +304,13 @@ export function createOwnWalkInterpolation() {
 			const nextLeg = legOf( sample );
 			// A walking sample extends the buffered walk to its own end: the
 			// leg's arrival, or the sample's tick for a path window or a
-			// pathless moving tick. A standing sample never does.
+			// pathless moving tick. A standing sample never extends it, but it
+			// does end a walk stopped short of its leg's arrival: the walk
+			// cannot outlast the tick that published the stand.
 			if ( nextLeg ) walkEndMs = nextLeg.startMs + nextLeg.length / nextLeg.speed;
 			else if ( sample.moving || (sample.from && sample.to && (sample.durationMs ?? 0) > 0) ) {
+				walkEndMs = sample.atMs;
+			} else if ( walkEndMs !== undefined && walkEndMs > sample.atMs ) {
 				walkEndMs = sample.atMs;
 			}
 			// Only walking ticks measure latency: a standing pose may be
@@ -497,6 +501,7 @@ export function createOwnWalkInterpolation() {
 		reset() {
 			history = [];
 			leg = undefined;
+			walkEndMs = undefined;
 			delayMs = MIN_DELAY_MS;
 			latencies = [];
 			offset = [ 0, 0, 0 ];
