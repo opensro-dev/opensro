@@ -78,11 +78,28 @@ func (v *WaterValidator) worldPointOnObjectDeck(worldX, worldZ, y float64) bool 
 	if surface == nil {
 		return false
 	}
-	localX := worldX - float64(sectorX)*simulation.NativeRegionSize
-	localZ := worldZ - float64(sectorY)*simulation.NativeRegionSize
-	baseX := localX + float64(sectorX-simulation.SectorX(surface.seedRegionID))*surface.regionSize
-	baseZ := localZ + float64(sectorY-simulation.SectorY(surface.seedRegionID))*surface.regionSize
+	baseX, baseZ := surfaceBaseAt(surface, worldX, worldZ)
 	return v.objectDeckStandAt(surface, baseX, baseZ, y) != nil
+}
+
+/*
+================
+surfaceBaseAt
+
+Maps a world point (sector * NativeRegionSize + local) into a surface's
+seed frame, whose regions are surface.regionSize wide. The two sizes
+differ when a surface's navmesh names its own size (water_assets.go), so
+the sector offset is rescaled rather than subtracted in world units.
+================
+*/
+func surfaceBaseAt(surface *groundSurface, worldX, worldZ float64) (float64, float64) {
+	sectorX := math.Floor(worldX / simulation.NativeRegionSize)
+	sectorZ := math.Floor(worldZ / simulation.NativeRegionSize)
+	localX := worldX - sectorX*simulation.NativeRegionSize
+	localZ := worldZ - sectorZ*simulation.NativeRegionSize
+	baseX := localX + (sectorX-float64(simulation.SectorX(surface.seedRegionID)))*surface.regionSize
+	baseZ := localZ + (sectorZ-float64(simulation.SectorY(surface.seedRegionID)))*surface.regionSize
+	return baseX, baseZ
 }
 
 // ---- segment-vs-object-edge first contact (the clip's object class) ----
@@ -667,9 +684,9 @@ func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, to
 					}
 					walkerAt := func(t float64) float64 { return math.Max(visit, walk.lastExitBefore(t)) }
 					terrainYAt := func(x, z float64) (float64, bool) {
-						groundY, ok := surface.terrainHeightAt(
-							cosYaw*x-sinYaw*z+placement.x+anchorWX-float64(simulation.SectorX(surface.seedRegionID))*simulation.NativeRegionSize,
-							sinYaw*x+cosYaw*z+placement.z+anchorWZ-float64(simulation.SectorY(surface.seedRegionID))*simulation.NativeRegionSize)
+						groundY, ok := surface.terrainHeightAt(surfaceBaseAt(surface,
+							cosYaw*x-sinYaw*z+placement.x+anchorWX,
+							sinYaw*x+cosYaw*z+placement.z+anchorWZ))
 						if !ok {
 							return 0, false
 						}
