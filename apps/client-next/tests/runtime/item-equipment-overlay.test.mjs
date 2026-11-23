@@ -14,7 +14,7 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { itemEquipmentOverlay: overlay, equipmentWarningUv } = await import(
+const { itemEquipmentOverlay: overlay, equipmentWarningUv, wearerSex } = await import(
 	sourceFileUrl( "src/engine/foundation/ui/item-equipment-overlay.ts" ).href
 );
 const flags = ( group, sub = 1 ) => 0x2c | (group << 7) | (sub << 11);
@@ -67,6 +67,32 @@ test("clothes incompatibility includes the replaced socket but permits light/hea
 		check( item( {}, { typeFlags: flags( 1 ) } ), [ item( {}, { slot: 13, typeFlags: flags( 3 ) } ) ] ),
 		null
 	);
+});
+test("the wearer sex is the live model's, with the login roster only before it is known", () => {
+	// The roster lists creation's gender (0 male, 1 female); the live
+	// selector is the model value ReqGender speaks (1 male, 0 female).
+	assert.equal( wearerSex( undefined, 0 ), 1 );
+	assert.equal( wearerSex( undefined, 1 ), 0 );
+	assert.equal( wearerSex( undefined, undefined ), undefined );
+	// After a gender change the roster still lists the old gender; the
+	// live model must win or the new wrong-gender items stay unmarked
+	// (#4126). Created male, now female: an item cut for males is
+	// refused (drawn disabled), where the roster alone allowed it.
+	assert.equal( wearerSex( 0, 0 ), 0 );
+	assert.equal(
+		overlay( item( { reqGender: 1 } ), progression, { country: 0, sex: wearerSex( 0, 0 ) }, [] ),
+		"icon_disable"
+	);
+	// Created female, now male: an item cut for females is refused.
+	assert.equal( wearerSex( 1, 1 ), 1 );
+	assert.equal(
+		overlay( item( { reqGender: 0 } ), progression, { country: 0, sex: wearerSex( 1, 1 ) }, [] ),
+		"icon_disable"
+	);
+	// An item cut for the wearer's new sex still passes, and one cut
+	// for both always does.
+	assert.equal( overlay( item( { reqGender: 0 } ), progression, { country: 0, sex: wearerSex( 0, 0 ) }, [] ), null );
+	assert.equal( overlay( item( { reqGender: 2 } ), progression, { country: 0, sex: wearerSex( 0, 0 ) }, [] ), null );
 });
 test("ammunition and consumables do not acquire equipment refusal overlays", () => {
 	assert.equal( check( item( { country: 1, reqGender: 0 }, { typeFlags: 0x6c | (4 << 7) | (1 << 11) } ) ), null );

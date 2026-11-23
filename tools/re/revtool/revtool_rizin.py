@@ -323,7 +323,11 @@ def bn_signature(entry, sig_parts, token):
 
 
 def token_maps(con):
-	"""VA -> overlay token for functions and named data (from the DB)."""
+	"""(func_by_va, data_by_va): VA -> token for functions and named data.
+
+	normalize_line and function_lines take the pair whole: a call target
+	needs the function names, a bare address the data names.
+	"""
 	func_by_va = {}
 	for addr, name in con.execute("SELECT addr,name FROM functions"):
 		va = int(addr, 16)
@@ -340,18 +344,30 @@ def token_maps(con):
 	return func_by_va, data_by_va
 
 
-_FCN_TEXT_RE = re.compile(r"\b(?:fcn|sub)\.([0-9a-fA-F]{8})\b")
+# A call target as rizin spells it: its analysis name (`fcn.00964b60`) or
+# a seeded project's own flag (`sub_964b60`).
+_FCN_TEXT_RE = re.compile(r"\b(?:(?:fcn|sub)\.([0-9a-fA-F]{8})|sub_([0-9a-fA-F]+))\b")
 _DATA_TEXT_RE = re.compile(r"\b0x([0-9a-fA-F]{4,8})\b")
 
 
-def normalize_line(text, data_by_va):
+def normalize_line(text, tokens):
 	"""BN spelling inside one disassembly line.
 
-	Call targets become `sub_...`; a bare address that the overlay
-	knows as a named datum becomes its `data_...` token. Everything
-	else (registers, immediates, comments) is rizin's text unchanged.
+	tokens is token_maps' pair. A call target becomes the name the index
+	holds for it (a seed-applied project names most of them), else its
+	`sub_...` token: rizin's own flags lag the seed, and a raw `sub_` on
+	a named function reads as unexplored code. A bare address that the
+	overlay knows as a named datum becomes its `data_...` token.
+	Everything else (registers, immediates, comments) is rizin's text
+	unchanged.
 	"""
-	text = _FCN_TEXT_RE.sub(lambda m: "sub_" + m.group(1).lower().lstrip("0"), text)
+	func_by_va, data_by_va = tokens
+
+	def fcn_sub(m):
+		digits = m.group(1) or m.group(2)
+		return func_by_va.get(int(digits, 16)) or "sub_" + digits.lower().lstrip("0")
+
+	text = _FCN_TEXT_RE.sub(fcn_sub, text)
 
 	def data_sub(m):
 		va = int(m.group(1), 16)
@@ -360,7 +376,7 @@ def normalize_line(text, data_by_va):
 	return _DATA_TEXT_RE.sub(data_sub, text)
 
 
-def function_lines(rz, va, signature, data_by_va, raw=False):
+def function_lines(rz, va, signature, tokens, raw=False):
 	"""Addressed text lines for one function, header first.
 
 	Each line is `<8hex><2sp><code>` - the dump's wire shape - but the
@@ -376,7 +392,7 @@ def function_lines(rz, va, signature, data_by_va, raw=False):
 			continue
 		code = op.get("disasm") or op.get("opcode") or ""
 		if not raw:
-			code = normalize_line(code, data_by_va)
+			code = normalize_line(code, tokens)
 		lines.append(f"{off:08x}  {code}")
 	return lines
 
@@ -554,8 +570,7 @@ def cmd_view(args, con, rz):
 	gate = revtool.investigation_gate(con, args, name)
 	if gate is not None:
 		return gate
-	_func_by_va, data_by_va = token_maps(con)
-	lines = function_lines(rz, va, sig, data_by_va, raw=args.raw)
+	lines = function_lines(rz, va, sig, token_maps(con), raw=args.raw)
 
 	# --lines is a FUNCTION-LOCAL 1-based range under this backend
 	# (the dump's are whole-dump line numbers; see module docstring).
@@ -701,9 +716,8 @@ def cmd_rename(args, con, rz):
 		if row:
 			session = open_session(args, con, True)
 			try:
-				_func_by_va, data_by_va = token_maps(con)
 				args.gate_lines = function_lines(
-					session, int(row[0], 16), row[2], data_by_va)
+					session, int(row[0], 16), row[2], token_maps(con))
 			finally:
 				session.close()
 	return revtool.cmd_rename(args, con)
@@ -737,7 +751,7 @@ def cmd_xref(args, con, rz):
 	func_rows = sorted(
 		(int(a, 16), n) for a, n in
 		con.execute("SELECT addr,name FROM functions"))
-	_func_by_va, data_by_va = token_maps(con)
+	tokens = token_maps(con)
 
 	refs = rz.xrefs_to(va)
 	hits = []
@@ -750,7 +764,7 @@ def cmd_xref(args, con, rz):
 		if doc:
 			line = doc[0].get("disasm") or doc[0].get("opcode") or ""
 		hits.append((f"{src:08x}", owner_of(func_rows, src),
-		             normalize_line(line, data_by_va), ref.get("type")))
+		             normalize_line(line, tokens), ref.get("type")))
 
 	applied = gmap.get(scan_sym)
 	label = scan_sym + (f" ({applied[0]})" if applied else "")
@@ -921,8 +935,7 @@ def cmd_coverage(args, con, rz):
 	renamed = len(refs) - n_unl - n_noteonly
 	read_pct = 100.0 if not refs else 100.0 * renamed / len(refs)
 
-	_func_by_va, data_by_va = token_maps(con)
-	lines = function_lines(rz, va, sig, data_by_va)
+	lines = function_lines(rz, va, sig, token_maps(con))
 	offsets = revtool.function_field_offsets(lines)
 	bindings = revtool.load_bindings(con, addr)
 	fields_by_type = {t: revtool.load_fields(con, t)

@@ -911,6 +911,11 @@ export interface GameplayState extends MoverPublication {
 	readonly sroMacro?: import("@/engine/foundation/gameplay/sro-macro").MacroSettings;
 	readonly storage?: import("@/engine/foundation/gameplay/storage-room").StorageRoom | null;
 	readonly playerModels?: readonly import("@/engine/foundation/gameplay/skin-change").PlayerModel[];
+	// The local player's sex selector (its model reference's +0x1AC):
+	// the wearer value the native 789C60 compares an item's ReqGender
+	// against, read off the live actor's model. Undefined until the
+	// local actor and its model are known.
+	readonly localSex?: number;
 	readonly job?: import("@/engine/foundation/gameplay/job-guild").LocalJob;
 	// The cached job rank lists and the one whose window last opened.
 	readonly jobRanks?: import("@/engine/foundation/gameplay/job-guild").JobRanks;

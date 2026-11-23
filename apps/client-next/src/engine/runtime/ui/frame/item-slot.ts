@@ -51,8 +51,9 @@ unlimited items all come from it.
 */
 export interface ItemSlotContext {
 	readonly gameplay: GameplayState | null | undefined;
-	// The character's gender as the session lists it.
-	readonly gender: number | undefined;
+	// The local player's sex selector, off its live model (the value
+	// 789C60 reads), never the login roster's stale gender.
+	readonly sex: number | undefined;
 	readonly simulationTimeMs: number;
 	readonly warningPhase: number;
 	iconPath( icon: string | undefined ): string | null;
@@ -77,10 +78,9 @@ export function equipmentOverlay(
 ) {
 	const gameplay = slots.gameplay;
 	if ( !item || !gameplay ) return;
-	const gender = slots.gender;
 	const overlay = itemEquipmentOverlay( item, gameplay.progression ?? { masteries: [] }, {
 		country: gameplay.guide?.country,
-		sex: gender === 0 ? 1 : gender === 1 ? 0 : undefined
+		sex: slots.sex
 	}, gameplay.inventory );
 	if ( overlay ) {
 		const warning = overlay === EQUIPMENT_WARNING;

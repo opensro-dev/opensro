@@ -133,12 +133,15 @@ The rizin backend and the live commands use the venv from the quick
 start above (`.state/re-venv`: pefile, capstone, rzpipe 0.6.2).
 
 Per-machine state (overlay DB, JSONL ledger, evidence lock, derived
-evidence tree) lives in `.state/revtool/` inside the repo and is never
-committed. Every path resolves through `revtool_paths`:
+evidence tree) lives in `.state/revtool/` inside the main checkout and
+is never committed: run from a linked worktree, revtool resolves there
+(the worktree rule's one owner is `scripts/checkout_root.py`, which
+`sro_paths` resolves through too). Every path resolves through
+`revtool_paths`:
 
 | override | default |
 | --- | --- |
-| `REVTOOL_DATA_DIR` | `<repo>/.state/revtool` |
+| `REVTOOL_DATA_DIR` | `<main checkout>/.state/revtool` |
 | `REVTOOL_DB` / `--db` | `<data>/revtool.db` |
 | `REVTOOL_DUMP` / `--dump` | `<data>/SRO_Client_psuedo.txt` |
 | `REVTOOL_BINARY` / `--binary` | the workspace's `SRO_Client.exe` |
@@ -216,7 +219,7 @@ feature's UI or log text to its code.
 | -------- | -------------------------- | ----- |
 | index    | `aflj` + `afsj`            | names normalized `fcn.00402a70` -> `sub_402a70`; signatures are rizin's |
 | find     | overlay DB (delegated)     | identical to the dump backend |
-| view     | `pdfj`                     | disassembly at true addresses, overlay applied by revtool; rizin 0.8.2 has no `pdc`/`pdg` |
+| view     | `pdfj`                     | disassembly at true addresses, overlay applied by revtool; a call target reads as its indexed name (`call sub_964b60` -> `call Seed_NamedHelper`), and `view sub_964b60` / `fcn.00964b60` open the function by address; rizin 0.8.2 has no `pdc`/`pdg` |
 | xref     | `axtj`                     | analysis-derived; un-analyzed code is invisible (printed on every run); takes a `sub_`/`data_` token or an indexed function name |
 | strings  | `izj` + `axtj`             | refs checked at every character boundary up to the match (izj can start a string early) |
 | coverage | `aflj` call/data refs      | exact refs; field depth from disassembly (see below) |

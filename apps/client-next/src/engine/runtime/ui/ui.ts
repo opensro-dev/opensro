@@ -643,6 +643,7 @@ import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
 import { AUTO_SELECT_ACTION_ID, offeredActions } from "@/engine/foundation/ui/action-layout";
 import { itemTooltip, weaponTypeSymbol } from "@/engine/foundation/ui/item-tooltip";
+import { wearerSex } from "@/engine/foundation/ui/item-equipment-overlay";
 import { itemTooltipSet, tooltipSetViewer } from "@/engine/foundation/ui/item-tooltip-set";
 import { isWeaponSwitchScroll, weaponRaceName } from "@/engine/foundation/gameplay/weapon-switch";
 import { raceSwitchKindOf } from "@/engine/foundation/gameplay/race-switch";
@@ -11226,7 +11227,10 @@ export function createUi( ports: UiPorts ) {
 			};
 			const itemSlots: ItemSlotContext = {
 				gameplay: next.gameplay,
-				gender: next.session?.characters?.find( row => row.name === next.session?.character )?.gender,
+				sex: wearerSex(
+					next.gameplay?.localSex,
+					next.session?.characters?.find( row => row.name === next.session?.character )?.gender
+				),
 				simulationTimeMs: next.simulationTimeMs ?? 0,
 				warningPhase: equipmentWarningPhase,
 				iconPath,
@@ -29638,7 +29642,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						const country = game.guide?.country,
 							gender = next.session?.characters?.find( row => row.name === next.session?.character )
 								?.gender,
-							sex = gender === 0 ? 1 : gender === 1 ? 0 : undefined,
+							sex = wearerSex( game.localSex, gender ),
 							sealUnderHeading = experimental.state().saved.sealUnderHeading,
 							expansion = game.levelCap === EXPANSION_LEVEL_CAP,
 							// Port-only set block: the published groups with the bag they are counted in.

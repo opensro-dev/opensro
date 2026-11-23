@@ -72,6 +72,8 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	// A slow publication-gate hold names its holder there too
 	// (publication_holds), so a waiting step is not mistaken for the stall.
 	game.items.PublicationHold = game.hub.RecordPublicationHold
+	// The re-entry rebuild those holds wait on names its own parts (#2802).
+	game.deps.PublicationHold = game.hub.RecordPublicationHold
 	// Every hook carries the name slow-hook reports print (#2294): the
 	// closures below would otherwise report as newMissionTicker.funcN.
 	hooks := []simulation.NamedTickHook{
