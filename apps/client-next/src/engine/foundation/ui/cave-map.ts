@@ -195,6 +195,10 @@ export interface CaveMapInput {
 	// A picked species' anchor on this page, in region-local
 	// coordinates; drawn as the monster sign (issue #3239).
 	readonly mark?: { readonly x: number; readonly z: number; } | null;
+	// The party and academy signs on this page, in region-local
+	// coordinates (issue #3775): the roster the caller admitted to
+	// the floor the player stands on, drawn under the player's sign.
+	readonly roster?: readonly { readonly x: number; readonly z: number; readonly path: string; }[];
 	// A picked guide monster's hunting ground on this floor, in
 	// region-local coordinates (worldmap-guide.ts guideDungeonGround):
 	// its tinted tiles and its icon's anchor, projected into the
@@ -243,8 +247,8 @@ export function cavePageLocal(
 ================
 caveMapView
 
-The page image, gate signs, a picked species' sign and the player's
-sign (only on their own floor) in paint order, its room names at
+The page image, gate signs, a picked species' sign, the roster signs
+and the player's sign (only on their own floor) in paint order, its room names at
 screen positions, the pan after clamping, and the inverse pick from a
 screen pixel back to the floor region's coordinates. A picked guide
 monster's ground (issue #3395) is projected beside the page quads, in
@@ -253,7 +257,7 @@ mask's image is in, as the world page's overlay does.
 ================
 */
 export function caveMapView( input: CaveMapInput ) {
-	const { pose, center, page, catalog, clip, pan, local, mark, ground: groundIn } = input;
+	const { pose, center, page, catalog, clip, pan, local, mark, roster, ground: groundIn } = input;
 	const unitX = page.width / page.columns, unitY = page.height / page.rows;
 	const mapX = ( x: number ) => (x / REGION_SIZE + CAVE_TILE_ORIGIN - page.left) * unitX,
 		mapY = ( z: number ) => (page.top + 1 - CAVE_TILE_ORIGIN - z / REGION_SIZE) * unitY;
@@ -288,6 +292,20 @@ export function caveMapView( input: CaveMapInput ) {
 			rect: [
 				left + mapX( mark.x ) - CAVE_MARKER_SIZE / 2,
 				top + mapY( mark.z ) - CAVE_MARKER_SIZE / 2,
+				CAVE_MARKER_SIZE,
+				CAVE_MARKER_SIZE
+			],
+			uv: [ 0, 0, 1, 1 ],
+			color: white,
+			clip
+		} );
+	}
+	for ( const row of roster ?? [] ) {
+		quads.push( {
+			texture: row.path,
+			rect: [
+				left + mapX( row.x ) - CAVE_MARKER_SIZE / 2,
+				top + mapY( row.z ) - CAVE_MARKER_SIZE / 2,
 				CAVE_MARKER_SIZE,
 				CAVE_MARKER_SIZE
 			],

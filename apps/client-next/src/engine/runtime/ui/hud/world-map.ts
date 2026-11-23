@@ -691,6 +691,13 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					caveFloor.regionId === cavePage.regionId && caveFloor.floorIndex === cavePage.floorIndex ?
 				guideDungeonGround( cavePick.catalog, cavePick.index ) :
 				null;
+			// The roster signs stand only on the page of the floor
+			// the player stands on (issue #3775): the roster is
+			// already admitted to that floor, so a page of another
+			// floor - or one browsed from above ground - is a chart.
+			const caveLocal = pose && cavePage && input.caveMaps ?
+				cavePageLocal( input.caveMaps, cavePage, pose, game?.navigationFloor ) :
+				false;
 			const caveMap = mapOpen && pose && cavePage && input.caveMaps ?
 				caveMapView( {
 					pose,
@@ -702,8 +709,17 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					pan: mapFollow ? [ 0, 0 ] : mapPan,
 					// The "you are here" sign stands only on the floor
 					// the player is on (issue #3239).
-					local: cavePageLocal( input.caveMaps, cavePage, pose, game?.navigationFloor ),
+					local: caveLocal,
 					mark: caveMark && caveMark.regionId === cavePage.regionId ? caveMark : null,
+					roster: caveLocal ?
+						roster
+							.filter( row => row.regionId === cavePage.regionId )
+							.map( row => ({
+								x: row.x,
+								z: row.z,
+								path: ROOT + "interface/worldmap/wmap_sign_" + row.kind + ".png"
+							}) ) :
+						undefined,
 					ground: guideCaveGround
 				} ) :
 				null;
