@@ -250,13 +250,26 @@ export async function importLaterWorldMapButtonsStep( stamped = stampedVsroRoot(
 	const output = result.stdout.trim();
 	if ( output ) console.log( output );
 	const paths = laterWorldMapButtonPublicPaths();
-	for ( const publicPath of paths ) {
-		const there = await stat( path.join( publicRoot, publicPath ) )
-			.then( ( entry ) => entry.isFile(), () => false );
-		if ( !there ) throw Error( `The world map button import published no ${publicPath}` );
-	}
+	await assertPublishedFiles( publicRoot, paths, "world map button" );
 	claimPublicPaths( paths );
 	return { buttons: paths.length };
+}
+
+/*
+================
+assertPublishedFiles
+
+Every public path an import step is about to claim must be a file under
+root: a step never claims what its importer did not write. label names
+the import in the refusal.
+================
+*/
+export async function assertPublishedFiles( root, publicPaths, label ) {
+	for ( const publicPath of publicPaths ) {
+		const there = await stat( path.join( root, publicPath ) )
+			.then( ( entry ) => entry.isFile(), () => false );
+		if ( !there ) throw Error( `The ${label} import published no ${publicPath}` );
+	}
 }
 
 // The later client's quest windows (#4245): res_ui/questlist.2dt and
@@ -326,11 +339,7 @@ export async function importLaterResLayoutsStep( stamped = stampedVsroRoot() ) {
 	if ( output ) console.log( output );
 	const index = JSON.parse( await readFile( path.join( publicRoot, LATER_RES_LAYOUT_INDEX ), "utf8" ) );
 	const paths = laterResLayoutPublicPaths( index );
-	for ( const publicPath of paths ) {
-		const there = await stat( path.join( publicRoot, publicPath ) )
-			.then( ( entry ) => entry.isFile(), () => false );
-		if ( !there ) throw Error( `The quest layout import published no ${publicPath}` );
-	}
+	await assertPublishedFiles( publicRoot, paths, "quest layout" );
 	claimPublicPaths( paths );
 	return { layouts: index.layouts.length, files: paths.length };
 }
