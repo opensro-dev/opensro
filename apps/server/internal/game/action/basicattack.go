@@ -722,7 +722,7 @@ func (rt *Runtime) pursuitSteerDue(intent basicAttackIntent, worldKey string, sn
 	if !intent.HasApproach {
 		return true
 	}
-	world := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState { return simulation.SeedWorldState(snapshot) })
+	world := rt.liveWorld(worldKey, snapshot, nowMs)
 	approachInFlight := world.MovingAt(nowMs)
 	targetMoved := simulation.WorldDistance2D(intent.ApproachTargetSample, target) > 0.01
 	young := nowMs-intent.ApproachIssuedAtMs < attackPursuitResteerMinMs

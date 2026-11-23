@@ -464,9 +464,7 @@ func (rt *Runtime) playerMotionState(division string, c *enterworld.Character, n
 	if rt.Worlds == nil {
 		return simulation.MotionNone
 	}
-	world := rt.Worlds.Snapshot(simulation.WorldKey(division, c.Name), func() simulation.WorldState {
-		return simulation.SeedWorldState(c)
-	})
+	world := rt.liveWorld(simulation.WorldKey(division, c.Name), c, nowMs)
 	if state := world.MotionStateAt(nowMs); state != simulation.MotionNone {
 		return state
 	}

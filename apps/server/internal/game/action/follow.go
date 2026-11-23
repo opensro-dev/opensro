@@ -190,7 +190,7 @@ func (rt *Runtime) advanceFollowIntent(character *enterworld.Character, intent b
 	if !move || !rt.pursuitSteerDue(intent, key, snapshot, to, nowMs) {
 		return OpResult{}
 	}
-	world := rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(snapshot) })
+	world := rt.liveWorld(key, snapshot, nowMs)
 	if world.MovingAt(nowMs) {
 		heading, valid := simulation.HeadingFromMovement(from, goal)
 		turn := float64(int16(heading-from.Angle)) * 2 * math.Pi / 65536
@@ -233,7 +233,7 @@ func (rt *Runtime) commitRiddenIntentMovement(character, snapshot *enterworld.Ch
 	if !acknowledged {
 		return OpResult{}
 	}
-	world := rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(snapshot) })
+	world := rt.liveWorld(key, snapshot, nowMs)
 	intent.ApproachTargetSample = move.target
 	intent.ApproachIssuedAtMs = nowMs
 	intent.HasApproach = true
