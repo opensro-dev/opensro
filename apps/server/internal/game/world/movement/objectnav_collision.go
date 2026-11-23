@@ -221,6 +221,11 @@ type objectContactOptions struct {
 	// same reason (navowner.go). Entry crossings are unaffected, and a
 	// sealed lane at the walker's feet keeps its walls. Nil: no permit.
 	sealedExit func(cell int) bool
+	// terrainYAt is the ground height in this placement's local frame
+	// (outdoor terrain or the interior floor grid), for the
+	// buried-lane test at the block decision. Nil: every unowned edge
+	// keeps its wall.
+	terrainYAt func(x, z float64) (float64, bool)
 }
 
 /*
@@ -391,6 +396,31 @@ func objectEdgeGroupChordContactDetail(
 		}
 		if !owned && opts.terrainEntry != nil && !opts.terrainEntry(t) {
 			continue
+		}
+		// An unowned edge walls only a walker its surface can meet: a
+		// chord crossing onto a cell whose plane lies far below the
+		// ground at that point never feels the edge - the ground itself
+		// stands over the lane. Asset 435's sealed strip lies 129 under
+		// the road it shadows (#3667), so its walls are inert, while every
+		// surface at or above its ground keeps them: building floors and
+		// wall tops, the rock's deck at the ground it sits on (0x5C6D),
+		// the tree skirt at its ground (#4148). The chord's own height is
+		// not the measure: a high approach over a ground-standing solid
+		// (a building entered from 40 up) stays refused. The band is
+		// closedObjectYSlack (placementguard.go), the closed mesh's.
+		if !owned && opts.terrainYAt != nil {
+			arriveCell := int(edges.srcCell[i])
+			if !outline {
+				arriveCell = int(edges.dstCell[i])
+			}
+			if arriveCell >= 0 && arriveCell < mesh.cellCount() {
+				crossX, crossZ := x0+rX*t, z0+rZ*t
+				if entryY, onCell := objectCellPlaneYAt(mesh, arriveCell, crossX, crossZ); onCell {
+					if groundY, onGround := opts.terrainYAt(crossX, crossZ); onGround && groundY-entryY > closedObjectYSlack {
+						continue
+					}
+				}
+			}
 		}
 		if !owned && opts.terrainEntry == nil && math.Abs(chordY-edgeY) > objectEdgeContactWindowUnits {
 			continue
@@ -636,6 +666,15 @@ func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, to
 						continue
 					}
 					walkerAt := func(t float64) float64 { return math.Max(visit, walk.lastExitBefore(t)) }
+					terrainYAt := func(x, z float64) (float64, bool) {
+						groundY, ok := surface.terrainHeightAt(
+							cosYaw*x-sinYaw*z+placement.x+anchorWX-float64(simulation.SectorX(surface.seedRegionID))*simulation.NativeRegionSize,
+							sinYaw*x+cosYaw*z+placement.z+anchorWZ-float64(simulation.SectorY(surface.seedRegionID))*simulation.NativeRegionSize)
+						if !ok {
+							return 0, false
+						}
+						return groundY - placement.y, true
+					}
 					// Sealed-lane exit permit (#4148): computed lazily per
 					// cell - most chords never evaluate an exit crossing.
 					var sealedCells map[int]bool
@@ -650,7 +689,7 @@ func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, to
 						}
 						return verdict
 					}
-					if t, ok := objectMeshChordContactDetail(mesh, ox0, oz0, oy0, ox1, oz1, oy1, math.Inf(1), func(edge int, _ bool, _ float64) bool { return passages.permits(i, edge) }, &local, objectContactOptions{exits: true, path: path, ownedMesh: path != nil, terrainEntry: terrainEntry, walk: walk, placementY: placement.y, placementLinked: placement.linkEdgeCount != 0, walkerAt: walkerAt, sealedExit: sealedExit}); ok {
+					if t, ok := objectMeshChordContactDetail(mesh, ox0, oz0, oy0, ox1, oz1, oy1, math.Inf(1), func(edge int, _ bool, _ float64) bool { return passages.permits(i, edge) }, &local, objectContactOptions{exits: true, path: path, ownedMesh: path != nil, terrainEntry: terrainEntry, walk: walk, placementY: placement.y, placementLinked: placement.linkEdgeCount != 0, walkerAt: walkerAt, sealedExit: sealedExit, terrainYAt: terrainYAt}); ok {
 						key := visit
 						if path != nil {
 							key = t // an owned mesh is walked cell by cell: its own contact order
