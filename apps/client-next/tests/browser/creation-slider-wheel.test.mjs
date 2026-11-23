@@ -34,18 +34,26 @@ test( "the weapon slider ignores the wheel and keeps its authored gestures", { t
 		await page.goto( CLIENT_NEXT_BASE_URL );
 		await control( "frontend:reveal" ).click( { timeout: 30000 } );
 		await control( "login" ).waitFor();
-		await page.waitForFunction( () => !document.querySelector( '[data-ui-id="login"]' )?.disabled );
+		await page.waitForFunction( () =>
+			!/** @type {HTMLInputElement | HTMLButtonElement | null} */ (document.querySelector(
+				'[data-ui-id="login"]'
+			))?.disabled
+		);
 		const { loginId, loginPassword } = resolveProbeCredentials();
 		await control( "account" ).fill( loginId );
 		await control( "password" ).fill( loginPassword );
 		await control( "password" ).press( "Enter" );
 		await control( "frontend:create" ).click( { timeout: 30000 } );
 		await page.waitForFunction( () =>
-			/Frontend: create\n/.test( document.querySelector( "output" )?.textContent )
+			/Frontend: create\n/.test( document.querySelector( "output" )?.textContent ?? "" )
 		);
 		await page.mouse.click( 260, 280 );
 		await control( "create:weapon" ).waitFor( { timeout: 30000 } );
-		await page.waitForFunction( () => !document.querySelector( '[data-ui-id="create:weapon"]' )?.disabled );
+		await page.waitForFunction( () =>
+			!/** @type {HTMLInputElement | HTMLButtonElement | null} */ (document.querySelector(
+				'[data-ui-id="create:weapon"]'
+			))?.disabled
+		);
 
 		// The deliberate choice: daggers, Europe weapon choice 1.
 		await control( "create:weapon" ).fill( "1" );
