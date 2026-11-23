@@ -35,15 +35,16 @@ export function controlHitRect( control: UiControl ): UiRect {
 }
 
 // How far from a range thumb's centre a press still counts as a press
-// on the thumb (CSS pixels): the thumb the canvas draws is 16 units
-// wide, plus a few pixels of slack for the finger or cursor.
-const RANGE_THUMB_GRAB_PX = 14;
+// on the thumb, in UI units (the caller converts the press from CSS
+// pixels, so the grab scales with the UI): the thumb the canvas draws
+// is 16 units wide, plus a few units of slack for the finger or cursor.
+const RANGE_THUMB_GRAB_UNITS = 14;
 
 /*
 ================
 rangePressOnThumb
 
-Whether a press at offsetX in a range element width wide lands on the
+Whether a press at offsetX (UI units) in a range width units wide lands on the
 thumb itself, given the element's current value between min and max.
 A thumbDragOnly range refuses any other press: a browser moves the
 value to wherever the groove was pressed, which silently re-picks the
@@ -58,7 +59,7 @@ export function rangePressOnThumb(
 	offsetX: number
 ): boolean {
 	const fraction = max > min ? Math.min( 1, Math.max( 0, (value - min) / (max - min) ) ) : 0;
-	return Math.abs( offsetX - fraction * width ) <= RANGE_THUMB_GRAB_PX;
+	return Math.abs( offsetX - fraction * width ) <= RANGE_THUMB_GRAB_UNITS;
 }
 
 /*

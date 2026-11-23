@@ -386,15 +386,20 @@ export function createUiBridge(
 	root.addEventListener( "pointerdown", event => {
 		const el = event.target;
 		if ( !(el instanceof HTMLInputElement) || el.type !== "range" || el.disabled ) return;
-		if ( !current( el )?.value.thumbDragOnly ) return;
-		const box = el.getBoundingClientRect();
+		const control = current( el )?.value;
+		if ( !control?.thumbDragOnly ) return;
+		// The thumb is drawn in UI units and the element is that hit width
+		// times the UI scale, so the press is judged in UI units: the grab
+		// covers the drawn thumb at every scale.
+		const box = el.getBoundingClientRect(), units = controlHitRect( control )[2];
+		if ( box.width <= 0 ) return;
 		if (
 			!rangePressOnThumb(
 				Number( el.min || 0 ),
 				Number( el.max || 0 ),
 				Number( el.value || 0 ),
-				box.width,
-				event.clientX - box.left
+				units,
+				(event.clientX - box.left) * units / box.width
 			)
 		) event.preventDefault();
 	}, { capture: true, signal: lifetime.signal } );
