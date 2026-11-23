@@ -180,10 +180,15 @@ test("pointer goal stops at resident collision before sending the ground request
 	assert.equal( defined( m.state().pose ).x, 100 );
 });
 
-test("a local dash is clipped from the live movement pose, never from the stale local entity row", () => {
-	// Repro 2026-09-23: the local entity row only follows displacements, so it
-	// lagged ~750 units behind. Clipping from it stopped the dash on an unrelated
-	// wall and sent the character back the way it came.
+test("a received dash ends at the server-published destination, never a client-clipped substitute", () => {
+	// #4154: the worker core used to re-clip the published destination on the
+	// client navigation before stepping it. From a stale entity row (or any
+	// spot where the two navigations disagree) the clip stopped or slid the
+	// dash at an edge while the server had already seated the actor at the
+	// published point, and nothing reconciled the presented rest pose with
+	// the server's position afterwards. The destination is authoritative:
+	// the wall band below used to cut a peer's dash short from the stale
+	// row; it has no say over a received displacement any more.
 	const g = createGameplay( () => {} );
 	g.bootstrap( { character: { skills: [ 19636 ] }, refSkillSnapshot: [ ref ] } );
 	g.seed( { ...pose, gid: 1, heading: 0 } );
@@ -211,12 +216,14 @@ test("a local dash is clipped from the live movement pose, never from the stale 
 			}
 		}
 	}, 100 );
-	const stale = { ...pose, x: 310, z: 500 },
-		dash = gid => ({ gid, token: 9, kind: 8, destination: { regionId: pose.regionId, x: 310, y: 20, z: 100 } });
-	const local = g.constrainDisplacement( dash( 1 ), stale, 100 ).destination;
-	assert.equal( local.x, 310 );
-	assert.equal( local.z, 100, "live path 100,100 -> 310,100 is open" );
-	const remote = g.constrainDisplacement( dash( 2 ), stale, 100 ).destination;
-	assert.ok( remote.z > 400, "a peer is still clipped from its own entity pose" );
+	const arrival = g.displace(
+		{ gid: 1, token: 9, kind: 8, destination: { regionId: pose.regionId, x: 310, y: 20, z: 100 } },
+		100
+	);
+	assert.ok( arrival !== undefined && arrival > 100 );
+	g.step( arrival + 1 );
+	const end = defined( g.take() );
+	assert.equal( end.pose?.x, 310, "the dash ends at the published point" );
+	assert.equal( end.pose?.z, 100 );
 	g.dispose();
 });

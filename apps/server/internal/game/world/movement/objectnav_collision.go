@@ -78,11 +78,28 @@ func (v *WaterValidator) worldPointOnObjectDeck(worldX, worldZ, y float64) bool 
 	if surface == nil {
 		return false
 	}
-	localX := worldX - float64(sectorX)*simulation.NativeRegionSize
-	localZ := worldZ - float64(sectorY)*simulation.NativeRegionSize
-	baseX := localX + float64(sectorX-simulation.SectorX(surface.seedRegionID))*surface.regionSize
-	baseZ := localZ + float64(sectorY-simulation.SectorY(surface.seedRegionID))*surface.regionSize
+	baseX, baseZ := surfaceBaseAt(surface, worldX, worldZ)
 	return v.objectDeckStandAt(surface, baseX, baseZ, y) != nil
+}
+
+/*
+================
+surfaceBaseAt
+
+Maps a world point (sector * NativeRegionSize + local) into a surface's
+seed frame, whose regions are surface.regionSize wide. The two sizes
+differ when a surface's navmesh names its own size (water_assets.go), so
+the sector offset is rescaled rather than subtracted in world units.
+================
+*/
+func surfaceBaseAt(surface *groundSurface, worldX, worldZ float64) (float64, float64) {
+	sectorX := math.Floor(worldX / simulation.NativeRegionSize)
+	sectorZ := math.Floor(worldZ / simulation.NativeRegionSize)
+	localX := worldX - sectorX*simulation.NativeRegionSize
+	localZ := worldZ - sectorZ*simulation.NativeRegionSize
+	baseX := localX + (sectorX-float64(simulation.SectorX(surface.seedRegionID)))*surface.regionSize
+	baseZ := localZ + (sectorZ-float64(simulation.SectorY(surface.seedRegionID)))*surface.regionSize
+	return baseX, baseZ
 }
 
 // ---- segment-vs-object-edge first contact (the clip's object class) ----
@@ -124,6 +141,15 @@ func (v *WaterValidator) worldPointOnObjectDeck(worldX, worldZ, y float64) bool 
 // surface. This constant is not evidence of a native Y cutoff. Replacing the
 // outside-object path requires the complete client 403FB0/428300 probe semantics.
 const objectEdgeContactWindowUnits = 2.0
+
+// sealedDeckBelowGradeUnits is how far the plane of the cell containing
+// a walker must lie below the walker's own height before the lane reads
+// as a sunken nav artifact (the 0x61A8 tree skirt: cells at -1.25 under
+// flat terrain at 0) rather than the floor under the walker's feet (a
+// building floor at the walker's height, a stall counter at grade).
+// Only a sunken sealed lane loses its seat and its exit walls against a
+// terrain walker standing on the ground above it (#4148).
+const sealedDeckBelowGradeUnits = 0.5
 
 // deckWallBackoffUnits is how far short of a closed object's wall a walker
 // crossing another object's deck is taken to stand (closedWallAtStand): one
@@ -204,6 +230,40 @@ type objectContactOptions struct {
 	// stepped this object (native visit or its last exit back onto terrain).
 	// 428300's blocked branch nudges that position, not the chord start.
 	walkerAt func(t float64) float64
+	// sealedExit reports whether the given cell's lane is sealed (no
+	// reachable terrain exit, objectLinkedLaneSealed). Combined with
+	// the sunken-residence test at the block decision, it lets a
+	// terrain-owned walker walk back out of a sealed sunken lane (the
+	// 0x61A8 tree skirt, #4148) whose resident seat is refused for the
+	// same reason (navowner.go). Entry crossings are unaffected, and a
+	// sealed lane at the walker's feet keeps its walls. Nil: no permit.
+	sealedExit func(cell int) bool
+	// terrainYAt is the ground height in this placement's local frame
+	// (outdoor terrain or the interior floor grid), for the
+	// buried-lane test at the block decision. Nil: every unowned edge
+	// keeps its wall.
+	terrainYAt func(x, z float64) (float64, bool)
+}
+
+/*
+================
+objectMeshCellPlaneAt
+
+The plane height of the cell containing the object-local point, if any:
+the residence half of the sealed-sunken exit permit (#4148). A chord
+that merely crosses the srcCell side of an edge line starts outside the
+lane and keeps the wall (the merchant-stall sight chord), and a walker
+whose containing cell is the floor at their feet keeps it too (the
+Jangan potion building).
+================
+*/
+func objectMeshCellPlaneAt(mesh *objectNavMesh, x, z float64) (float64, bool) {
+	for cell := 0; cell < mesh.cellCount(); cell++ {
+		if y, inside := objectCellPlaneYAt(mesh, cell, x, z); inside {
+			return y, true
+		}
+	}
+	return 0, false
 }
 
 /*
@@ -306,6 +366,10 @@ func objectEdgeGroupChordContactDetail(
 	const parallelEps = 1e-12
 	rX, rZ := x1-x0, z1-z0
 	found := false
+	// sunkenStart caches the sealed-sunken residence test (#4148):
+	// -1 unknown, 0 the chord start is not resident over a sunken cell
+	// of this mesh, 1 it is.
+	sunkenStart := -1
 	for i := range edges.flags {
 		flags := edges.flags[i]
 		if opts.terrainEntry != nil && !opts.ownedMesh && (!outline || flags&0x10 != 0) {
@@ -349,6 +413,31 @@ func objectEdgeGroupChordContactDetail(
 		}
 		if !owned && opts.terrainEntry != nil && !opts.terrainEntry(t) {
 			continue
+		}
+		// An unowned edge walls only a walker its surface can meet: a
+		// chord crossing onto a cell whose plane lies far below the
+		// ground at that point never feels the edge - the ground itself
+		// stands over the lane. Asset 435's sealed strip lies 129 under
+		// the road it shadows (#3667), so its walls are inert, while every
+		// surface at or above its ground keeps them: building floors and
+		// wall tops, the rock's deck at the ground it sits on (0x5C6D),
+		// the tree skirt at its ground (#4148). The chord's own height is
+		// not the measure: a high approach over a ground-standing solid
+		// (a building entered from 40 up) stays refused. The band is
+		// closedObjectYSlack (placementguard.go), the closed mesh's.
+		if !owned && opts.terrainYAt != nil {
+			arriveCell := int(edges.srcCell[i])
+			if !outline {
+				arriveCell = int(edges.dstCell[i])
+			}
+			if arriveCell >= 0 && arriveCell < mesh.cellCount() {
+				crossX, crossZ := x0+rX*t, z0+rZ*t
+				if entryY, onCell := objectCellPlaneYAt(mesh, arriveCell, crossX, crossZ); onCell {
+					if groundY, onGround := opts.terrainYAt(crossX, crossZ); onGround && groundY-entryY > closedObjectYSlack {
+						continue
+					}
+				}
+			}
 		}
 		if !owned && opts.terrainEntry == nil && math.Abs(chordY-edgeY) > objectEdgeContactWindowUnits {
 			continue
@@ -398,6 +487,31 @@ func objectEdgeGroupChordContactDetail(
 		}
 		if outline && flags&8 != 0 && linked != nil && linked(i, fromSrcSide, t) {
 			continue
+		}
+		if outline && fromSrcSide && !opts.ownedMesh && opts.walk != nil && opts.sealedExit != nil &&
+			!withinOutlineNudgeMargin(mesh, x0, z0) {
+			// Leaving a sealed sunken lane on the terrain plane: the
+			// outline walls entry, never this departure (#4148). The
+			// conditions keep the neighbouring pins: the cell under the
+			// walker's feet must lie below their own height (a floor at
+			// their feet keeps its walls - the Jangan potion building),
+			// the chord must start resident in the mesh's cells, not in
+			// the 0.01u outline nudge sliver (whose escapes the nudge
+			// rule above governs - the 0x5C6D rock), and a walker the
+			// walk puts on another surface keeps the deck-wall rules
+			// (objectAt elsewhere), so this fires only for a walker
+			// standing on no object's surface at the crossing.
+			if sunkenStart < 0 {
+				sunkenStart = 0
+				if planeY, inside := objectMeshCellPlaneAt(mesh, x0, z0); inside && y0-planeY > sealedDeckBelowGradeUnits {
+					sunkenStart = 1
+				}
+			}
+			if sunkenStart == 1 {
+				if _, _, elsewhere := opts.walk.objectAt(t); !elsewhere && opts.sealedExit(int(edges.srcCell[i])) {
+					continue
+				}
+			}
 		}
 		reflection := (owned || opts.walk == nil) && opts.exits && outline && fromSrcSide && flags&0x1a == 0
 		if !reflection && !objectNavEdgeBlocks(flags, outline, fromSrcSide) {
@@ -569,7 +683,30 @@ func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, to
 						continue
 					}
 					walkerAt := func(t float64) float64 { return math.Max(visit, walk.lastExitBefore(t)) }
-					if t, ok := objectMeshChordContactDetail(mesh, ox0, oz0, oy0, ox1, oz1, oy1, math.Inf(1), func(edge int, _ bool, _ float64) bool { return passages.permits(i, edge) }, &local, objectContactOptions{exits: true, path: path, ownedMesh: path != nil, terrainEntry: terrainEntry, walk: walk, placementY: placement.y, placementLinked: placement.linkEdgeCount != 0, walkerAt: walkerAt}); ok {
+					terrainYAt := func(x, z float64) (float64, bool) {
+						groundY, ok := surface.terrainHeightAt(surfaceBaseAt(surface,
+							cosYaw*x-sinYaw*z+placement.x+anchorWX,
+							sinYaw*x+cosYaw*z+placement.z+anchorWZ))
+						if !ok {
+							return 0, false
+						}
+						return groundY - placement.y, true
+					}
+					// Sealed-lane exit permit (#4148): computed lazily per
+					// cell - most chords never evaluate an exit crossing.
+					var sealedCells map[int]bool
+					sealedExit := func(cell int) bool {
+						if sealedCells == nil {
+							sealedCells = map[int]bool{}
+						}
+						verdict, ok := sealedCells[cell]
+						if !ok {
+							verdict = objectLinkedLaneSealed(set, i, mesh, cell)
+							sealedCells[cell] = verdict
+						}
+						return verdict
+					}
+					if t, ok := objectMeshChordContactDetail(mesh, ox0, oz0, oy0, ox1, oz1, oy1, math.Inf(1), func(edge int, _ bool, _ float64) bool { return passages.permits(i, edge) }, &local, objectContactOptions{exits: true, path: path, ownedMesh: path != nil, terrainEntry: terrainEntry, walk: walk, placementY: placement.y, placementLinked: placement.linkEdgeCount != 0, walkerAt: walkerAt, sealedExit: sealedExit, terrainYAt: terrainYAt}); ok {
 						key := visit
 						if path != nil {
 							key = t // an owned mesh is walked cell by cell: its own contact order

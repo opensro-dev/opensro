@@ -298,6 +298,9 @@ type WireItem struct {
 	// ForgeBound mirrors InventoryRow.ForgeBound for the roster path
 	// (port only, issue #1980); never set for starter items.
 	ForgeBound bool
+	// EarnedBought mirrors InventoryRow.EarnedBought (port only,
+	// issue #4133); never set for starter items.
+	EarnedBought bool
 }
 
 /*
@@ -416,7 +419,8 @@ func EnsureMissionInventory(character *Character, equipRoster []WireItem) []Inve
 				StackCount:   stackCount,
 				MagicOptions: copyMagicOptions(item.MagicOptions),
 				Data:         item.Data, Summon: domain.CloneCOS(item.Summon),
-				ForgeBound: item.ForgeBound,
+				ForgeBound:   item.ForgeBound,
+				EarnedBought: item.EarnedBought,
 			})
 		}
 		character.MissionInventory = rows
@@ -540,7 +544,8 @@ func InventoryWireItems(rows []InventoryRow) []WireItem {
 			StackCount:   row.StackCount,
 			MagicOptions: copyMagicOptions(row.MagicOptions),
 			Data:         row.Data, Summon: domain.CloneCOS(row.Summon),
-			ForgeBound: row.ForgeBound,
+			ForgeBound:   row.ForgeBound,
+			EarnedBought: row.EarnedBought,
 		})
 	}
 	return out

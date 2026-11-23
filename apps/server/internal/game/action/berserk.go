@@ -176,6 +176,76 @@ func (rt *Runtime) expireBerserkInDivision(key string, job berserkExpiry, now in
 
 /*
 ================
+endBerserkForLoading
+
+A teleport ends berserk (#4145). The reference server never writes the
+body mode on its teleport path, so its timed restore still fires after
+the move - but no client presents that residue: state channels are
+published only by the state setters, never at an entry, a player spawn
+row carries no body byte, and the v1.150 client's berserk answer
+handler (client 0x00778260) records nothing, its HUD following the
+local player's state (client 0x006B41F0). A teleport therefore reads
+as berserk ending on every screen of the original, while the port
+kept the mode, its publication and the speed with it. End it here,
+through this owner, the way death retires it: clear the deadline,
+drop the tick index,
+retire the body mode and publish the change. A successor body mode
+keeps its own lifecycle; only berserk's own mode 1 is retired.
+================
+*/
+func (rt *Runtime) endBerserkForLoading(division string, c *enterworld.Character) {
+	rt.endBerserkForLoadingVia(division, c, rt.deps.Update)
+}
+
+/*
+================
+endBerserkForLoadingDeferred
+
+endBerserkForLoading for the tick's return-scroll completion: its
+commit joins the tick's batched commit (#1820). Handler re-entries
+(portal, relocation) keep the immediate door, so their answer still
+follows its commit.
+================
+*/
+func (rt *Runtime) endBerserkForLoadingDeferred(division string, c *enterworld.Character) {
+	rt.endBerserkForLoadingVia(division, c, rt.deps.UpdateDeferred)
+}
+
+/*
+================
+endBerserkForLoadingVia
+
+The shared body behind both doors. The tick index is the cheap
+pre-check: body mode 1 exists only alongside a live berserk deadline
+(the body transition refuses value 1 to every other producer).
+================
+*/
+func (rt *Runtime) endBerserkForLoadingVia(division string, c *enterworld.Character, door func(*enterworld.Character, string, func() bool) bool) {
+	if c == nil {
+		return
+	}
+	key := simulation.WorldKey(division, c.Name)
+	if _, ok := rt.berserkActors.Load(key); !ok {
+		return
+	}
+	var frames []wire.Frame
+	door(c, "berserk-loading-end", func() bool {
+		if c.BerserkUntilMs == 0 && c.NativeBodyStatus != 1 {
+			return false
+		}
+		c.BerserkUntilMs = 0
+		rt.berserkActors.Delete(key)
+		if c.NativeBodyStatus == 1 && c.TransitionBodyStatus(domain.BodyStatusTransition{}) {
+			frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), 0))
+		}
+		frames = append(frames, rt.refreshMovementEffects(division, c, rt.Now().UnixMilli())...)
+		return true
+	})
+	rt.publishBodyStatus(division, c.Name, frames)
+}
+
+/*
+================
 berserkKillAward
 The native berserk point gain, consumed as unsigned16 when results apply.
 Preserve native CRT modulo sampling: threshold 800 is not an exact uniform

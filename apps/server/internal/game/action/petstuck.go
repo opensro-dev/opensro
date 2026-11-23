@@ -72,9 +72,7 @@ drops its order.
 ================
 */
 func (rt *Runtime) relocateStuckPet(key petOwnerKey, state *petSession, snapshot *enterworld.Character, pet *enterworld.CharacterCOS, nowMs int64) []simulation.Frame {
-	world := rt.Worlds.Snapshot(simulation.WorldKey(key.division, snapshot.Name), func() simulation.WorldState {
-		return simulation.SeedWorldState(snapshot)
-	})
+	world := rt.liveWorld(simulation.WorldKey(key.division, snapshot.Name), snapshot, nowMs)
 	from, owner := state.mover.AnyFollower().Position(nowMs), world.LiveSpawnAt(nowMs)
 	frames := state.mover.AnyFollower().Stop(nowMs)
 	resetPetStuck(state)

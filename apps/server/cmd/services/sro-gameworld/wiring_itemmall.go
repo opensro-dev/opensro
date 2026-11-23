@@ -67,6 +67,16 @@ func configureItemMall(items *action.Runtime, textdataDir string, mallAuthority 
 	if mallCategories {
 		log.Infof("mall: later category layout from %s (port-only, not native)", commerce.EnvMallCategories)
 	}
+	// SRO_EARNED_SILK_TRADABLE (port-only, not native, #4133): the mall
+	// purchase rule. On (the shipped default) a purchase paid wholly
+	// from earned silk is tradable; off every mall purchase stays bound.
+	items.MallEarnedTradable, err = action.EarnedSilkTradableFromEnv()
+	if err != nil {
+		return err
+	}
+	if !items.MallEarnedTradable {
+		log.Infof("mall: earned-silk purchases stay bound (%s=off, native)", action.EnvEarnedSilkTradable)
+	}
 	if err := items.ConfigureMall(textdataDir, mallAuthority, mallExtra, mallCategories); err != nil {
 		return fmt.Errorf("mall catalogue: %w", err)
 	}

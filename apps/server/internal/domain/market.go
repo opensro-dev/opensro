@@ -192,8 +192,9 @@ MarketListRequest
 
 One listing: from the warehouse (Character nil, the website) or from a
 character's bag (the game, on the action lane). Admit is the trade rule
-(the exchange's: RefObjCommon CanTrade, not forge-bound, not a summoned
-pet); the store knows no item references, so the caller supplies it.
+(the exchange's: RefObjCommon CanTrade or an earned-bought mall mark,
+not forge-bound, not a summoned pet); the store knows no item
+references, so the caller supplies it.
 ================
 */
 type MarketListRequest struct {

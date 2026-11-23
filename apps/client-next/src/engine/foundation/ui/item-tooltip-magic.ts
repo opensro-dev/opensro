@@ -13,6 +13,7 @@ go through MagicOption_FormatAvatarParam (553980).
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { TooltipRow } from "./tooltip-rows";
 import { avatarMagicOptionText } from "@/engine/foundation/gameplay/avatar-magic-option";
+import { isGachaVoucher } from "./gacha-window";
 import type { ItemMagicReference } from "@/engine/foundation/gameplay/item-tooltip-reference";
 import { petAffixLine } from "./pet-training";
 
@@ -52,6 +53,20 @@ itemTooltipMagic
 ================
 */
 export function itemTooltipMagic( item: InventoryItem, text: ( symbol: string ) => string ): TooltipRow[] {
+	// Port-only, not native: a Magic Pop result voucher (TID 3.3.14.2)
+	// carries its reward pair [RefObjID, quantity] in the two indexed
+	// params, not magic options. The native deserialize stores them keyed
+	// by index 0 and 1 under the gacha-card branch (0x78B266 calls
+	// 0x550870, then inserts at item+0xA4 with the index as key), and the
+	// tooltip walk (563700) looks every key up with 0x7E10C0 and formats
+	// it through 0x55B540 without a null check, so key 1 reads as
+	// MATTR_DEC_MAXDUR and the retail voucher prints a bogus stat line.
+	// That is a pure display defect with no gameplay or wire effect, so it
+	// is fixed as the default, with no row (owner, 2026-11-21: input-miss
+	// and defect fixes ship plain). The name keeps its blue: the native
+	// name colour reads the raw param count (0x564230), which the pair
+	// still raises.
+	if ( isGachaVoucher( item.typeFlags ) ) return [];
 	const rows: TooltipRow[] = [],
 		references = item.magicReferences ?? [],
 		// 55B608 uses signed division toward zero: class zero still selects degree one.

@@ -693,7 +693,9 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 	}
 	if rt.companionMovementBlocked(key.division, snapshot, cos) {
 		state.roar = nil
-		rt.cancelPetCombat(key, state, nowMs)
+		// A blocking status pauses the fight; the intent resumes on
+		// expiry (#4214).
+		rt.pausePetCombat(key, state, nowMs)
 		return state.mover.AnyFollower().Stop(nowMs)
 	}
 	block := rt.cosAbnormal(key.division, snapshot.Name, cos.GID)
@@ -899,7 +901,9 @@ func (rt *Runtime) companionPresentation(division string, state *petSession, cos
 		}
 		world, _ = state.mover.World(cos.GID)
 		if cos.Mounted {
-			world = rt.Worlds.Snapshot(simulation.WorldKey(division, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) })
+			// The tick reads the rider at its own time (liveWorld), not a
+			// re-step of the walk prepare already advanced (2026-11-24 profile).
+			world = rt.liveWorld(simulation.WorldKey(division, c.Name), c, now)
 		}
 	} else {
 		if state.mover.AnyFollower() == nil || cos.GID != state.mover.AnyFollower().GID() || cos.RefObjID != state.refObjID {

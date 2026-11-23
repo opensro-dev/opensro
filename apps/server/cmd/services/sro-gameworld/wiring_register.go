@@ -418,9 +418,15 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.items.PublicChat = game.chatFeed
 	// Port-only, not native: the staff's chat shadow-mute list, kept beside
 	// the shard's other operator stores (shadowmute).
-	shadowMutes := shadowmute.Open(store.DirForShardFromEnv(game.divisionID))
+	shadowMutes := shadowmute.Open(store.DirForShardFromEnv(game.divisionID), store.WriteFileAtomic)
 	game.chat.ShadowMuted = shadowMutes.Muted
 	game.items.ChatShadowMuted = shadowMutes.Muted
+	// The GM's moderation commands (gmcommand/moderation.go): the
+	// shadow-mute pair always, the rest behind SRO_GM_MODERATION.
+	game.gmModeration = &gmcommand.Moderation{Enabled: gmcommand.GMModerationFromEnv(), ShadowMutes: shadowMutes, Logout: game.items}
+	if game.gmModeration.Enabled {
+		log.Infof("gm: /MUTE, /UNMUTE, /BLOCKLOGOUT and /ALLOWLOGOUT ON (%s)", gmcommand.EnvGMModeration)
+	}
 	// Port-only, not native: the staff's moderation chat log (chatlog),
 	// daily files beside the mute list in the shard's authority
 	// directory - never the public site or API. Retention is
@@ -445,7 +451,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	// optional port: a missing method would silently fall back to the
 	// saved row, so the build pins it).
 	var _ gmcommand.LivePositions = game.items
-	gmcommand.Register(hub, game.deps, game.presence, game.items)
+	gmcommand.Register(hub, game.deps, game.presence, gmLaneOwner{Runtime: game.items, desk: game.gmModeration})
 	game.matches.Register(hub)
 	game.parties.Register(hub)
 	guild.Register(hub, game.deps, game.presence, game.items, game.unions)

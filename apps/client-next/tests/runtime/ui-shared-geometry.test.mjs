@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 async function load( file ) {
 	return import( sourceFileUrl( "src/engine/foundation/ui/" + file + ".ts" ).href );
 }
-const { containsPoint, topmostControlAt } = await load( "hit-test" );
+const { containsPoint, topmostControlAt, rangePressOnThumb } = await load( "hit-test" );
 const { mainPopupFrame } = await load( "main-popup" );
 const { authoredClientRect } = await load( "authored-layout" );
 test("topmost hit preserves paint order, disabled occlusion and half-open edges", () => {
@@ -30,6 +30,22 @@ test("topmost hit preserves paint order, disabled occlusion and half-open edges"
 	assert.equal( topmostControlAt( controls, 20, 10 ), undefined );
 	assert.equal( containsPoint( [ 0, 0, 0, 20 ], 0, 1 ), false );
 	assert.deepEqual( controls.map( c => c.id ), [ "under", "over" ] );
+});
+test("range thumb press verdict tracks the thumb, never the groove", () => {
+	// Creation weapon slider: choices 0..9 across a 100px groove, the
+	// thumb centre rides at value/9 of the width.
+	assert.equal( rangePressOnThumb( 0, 9, 1, 100, 11 ), true );
+	assert.equal( rangePressOnThumb( 0, 9, 1, 100, 25 ), true );
+	assert.equal( rangePressOnThumb( 0, 9, 1, 100, 26 ), false );
+	// The press that re-picked the daggers as the darkstaff (#4121):
+	// two-thirds along the groove with the thumb at choice 1.
+	assert.equal( rangePressOnThumb( 0, 9, 1, 100, 67 ), false );
+	assert.equal( rangePressOnThumb( 0, 9, 6, 100, 67 ), true );
+	// Endpoints and a degenerate range stay on the thumb.
+	assert.equal( rangePressOnThumb( 0, 9, 0, 100, 0 ), true );
+	assert.equal( rangePressOnThumb( 0, 9, 9, 100, 100 ), true );
+	assert.equal( rangePressOnThumb( 1, 1, 1, 100, 0 ), true );
+	assert.equal( rangePressOnThumb( 1, 1, 1, 100, 60 ), false );
 });
 test("main popup retains native minimum-left and overflow policy for small viewports", () => {
 	assert.deepEqual( mainPopupFrame( 1600, 900, null ), [ 1212, 422, 388, 408 ] );

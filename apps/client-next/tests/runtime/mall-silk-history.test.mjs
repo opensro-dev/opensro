@@ -60,7 +60,9 @@ test("a superseded period's answer is dropped, not applied", () => {
 	const mall = createMall();
 	mall.inquireSilkHistory( 0, 0 );
 	mall.inquireSilkHistory( 2, 10 );
-	mall.silkHistoryAnswer( json( { version: 1, period: 0, total: 9, rows: [ { at: 1, charged: 9 } ] } ) );
+	mall.silkHistoryAnswer(
+		json( { version: 1, period: 0, total: 9, rows: [ { at: 1, charged: 9 } ] } )
+	);
 	assert.deepEqual( mall.silkHistory(), { period: 2, total: 0, rows: [], pending: true } );
 	mall.silkHistoryAnswer( json( { version: 1, period: 2, total: 0, rows: [] } ) );
 	assert.deepEqual( mall.silkHistory(), { period: 2, total: 0, rows: [], pending: false } );
@@ -72,9 +74,14 @@ test("a superseded period's answer is dropped, not applied", () => {
 test("re-asking the same period keeps its rows while it pends", () => {
 	const mall = createMall();
 	mall.inquireSilkHistory( 3, 0 );
-	mall.silkHistoryAnswer( json( { version: 1, period: 3, total: 5, rows: [ { at: 7, charged: 5 } ] } ) );
+	mall.silkHistoryAnswer(
+		json( { version: 1, period: 3, total: 5, rows: [ { at: 7, charged: 5 } ] } )
+	);
 	mall.inquireSilkHistory( 3, 100 );
-	assert.deepEqual( mall.silkHistory(), { period: 3, total: 5, rows: [ { at: 7, charged: 5 } ], pending: true } );
+	assert.deepEqual(
+		mall.silkHistory(),
+		{ period: 3, total: 5, rows: [ { at: 7, charged: 5 } ], pending: true }
+	);
 });
 
 test("a lost history answer unpends in step and never expires the session", () => {

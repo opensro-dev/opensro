@@ -399,5 +399,6 @@ func groundInventoryItem(g grounditem.Item, quantity uint16) inventory.Item {
 		Data:         g.Data,
 		Summon:       domain.CloneCOS(g.Summon),
 		ForgeBound:   g.ForgeBound,
+		EarnedBought: g.EarnedBought,
 	}
 }

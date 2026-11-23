@@ -19,6 +19,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -342,7 +343,7 @@ func TestALoadingAreaEndsTheMask(t *testing.T) {
 	if r := useMask(rt, c); r.Frames[0].Payload[0] != 1 {
 		t.Fatalf("mask use refused: %+v", r)
 	}
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	rt.PushCharacterFrames = func(string, string, []wire.Frame) {}
 	rt.PushDivisionPeerFrames = func(string, string, []wire.Frame) {}
 	deps := rt.deps.(*enterworld.Deps)

@@ -17,6 +17,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/testsupport/wait"
 	"opensro.online/server/internal/transport"
 )
@@ -75,7 +76,7 @@ func TestPickupScenePublicationAfterGMWarp(t *testing.T) {
 				armPublicationPickup(h, shared)
 				pickupPublicationPresence(t, h, shared)
 				h.deps.StarterRefills = refills
-				h.character.GMPrivilege = true
+				h.character.GMPrivilege, h.character.GMCapabilities = true, uint32(staff.All)
 				h.deps.CanEnterWorldRegion = func(_ *enterworld.Character, region uint16) bool { return region == 25416 }
 				h.deps.SpawnTerrainHeight = func(uint16, float64, float64) (float64, bool) { return 20, true }
 				paused, release := make(chan struct{}), make(chan struct{})

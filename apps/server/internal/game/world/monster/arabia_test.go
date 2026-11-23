@@ -62,7 +62,7 @@ func TestArabiaAdmitsItsWindow(t *testing.T) {
 	for _, level := range []uint8{arabiaFirstLevel, 125, arabiaLastLevel} {
 		for _, grade := range []uint8{0, 3, 8} {
 			template := tombTemplate("MOB_AR_KOBOLD", level, grade)
-			got, err := appendArabiaData(template, arabiaSource(t, "MOB_AR_KOBOLD", 21850))
+			got, err := appendArabiaData(template, arabiaSource(t, "MOB_AR_KOBOLD", 21850), true, true)
 			if err != nil {
 				t.Fatalf("level %d grade %d refused: %v", level, grade, err)
 			}
@@ -100,7 +100,7 @@ func TestArabiaRefusesOutsideItsWindow(t *testing.T) {
 	}
 	for _, c := range cases {
 		template := tombTemplate(c.codename, c.level, 0)
-		if _, err := appendArabiaData(template, arabiaSource(t, c.codename, 21850)); err == nil {
+		if _, err := appendArabiaData(template, arabiaSource(t, c.codename, 21850), true, true); err == nil {
 			t.Fatalf("%s admitted", c.name)
 		}
 	}
@@ -110,29 +110,36 @@ func TestArabiaRefusesOutsideItsWindow(t *testing.T) {
 ================
 TestArabiaWorlds
 
-The dungeon's nests join GROUP_ARABIA_DUNGEON; a row naming any other
-world (the boss lair's 113, Petra's 114, the garden's 115 - none of
-them registered) is refused, as is a codename the installed references
-do not carry.
+The dungeon's nests join GROUP_ARABIA_DUNGEON and the boss lair's
+GROUP_ARABIA_FIELD_02_BOSS; a row naming any other world (Petra's
+114, the garden's 115 - neither registered) is refused, as is a
+codename the installed references do not carry.
 ================
 */
 func TestArabiaWorlds(t *testing.T) {
 	template := tombTemplate("MOB_ARABIA_KARKADANN", 125, 0)
-	got, err := appendArabiaData(template, arabiaWorldSource(t, "MOB_ARABIA_KARKADANN", 23378, arabia.DungeonWorldID))
+	got, err := appendArabiaData(template, arabiaWorldSource(t, "MOB_ARABIA_KARKADANN", 23378, arabia.DungeonWorldID), true, true)
 	if err != nil {
 		t.Fatalf("dungeon nest refused: %v", err)
 	}
 	if nest := got.Nests[1]; nest.WorldCode != "GROUP_ARABIA_DUNGEON" || nest.RegionID != 23378 {
 		t.Fatalf("dungeon nest joined %+v", nest)
 	}
-	for _, world := range []int{0, 57, 113, 114, 115} {
+	got, err = appendArabiaData(template, arabiaWorldSource(t, "MOB_ARABIA_KARKADANN", 32793, arabia.HideoutWorldID), true, true)
+	if err != nil {
+		t.Fatalf("boss lair nest refused: %v", err)
+	}
+	if nest := got.Nests[1]; nest.WorldCode != "GROUP_ARABIA_FIELD_02_BOSS" || nest.RegionID != 32793 {
+		t.Fatalf("boss lair nest joined %+v", nest)
+	}
+	for _, world := range []int{0, 57, 114, 115} {
 		template := tombTemplate("MOB_AR_KOBOLD", 125, 0)
-		if _, err := appendArabiaData(template, arabiaWorldSource(t, "MOB_AR_KOBOLD", 21850, world)); err == nil {
+		if _, err := appendArabiaData(template, arabiaWorldSource(t, "MOB_AR_KOBOLD", 21850, world), true, true); err == nil {
 			t.Fatalf("arabia row in world %d admitted", world)
 		}
 	}
 	template = tombTemplate("MOB_AR_KOBOLD", 125, 0)
-	if _, err := appendArabiaData(template, arabiaSource(t, "MOB_AR_NOT_INSTALLED", 21850)); err == nil {
+	if _, err := appendArabiaData(template, arabiaSource(t, "MOB_AR_NOT_INSTALLED", 21850), true, true); err == nil {
 		t.Fatal("row naming a species the references do not carry admitted")
 	}
 }
@@ -161,7 +168,7 @@ func TestArabiaHiveCapRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	template := tombTemplate("MOB_ARABIA_KARKADANN", 125, 0)
-	got, err := appendArabiaData(template, data)
+	got, err := appendArabiaData(template, data, true, true)
 	if err != nil {
 		t.Fatalf("capped points refused: %v", err)
 	}
@@ -181,7 +188,7 @@ func TestArabiaHiveCapRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := appendArabiaData(template, data); err == nil {
+	if _, err := appendArabiaData(template, data, true, true); err == nil {
 		t.Fatal("hive cap without its key admitted")
 	}
 }
@@ -190,26 +197,93 @@ func TestArabiaHiveCapRows(t *testing.T) {
 ================
 TestArabiaOffAndOn
 
-Off never reads the optional file; on refuses missing input and needs
-no other family's switch (its drops are the native posture). A valid
-file appends.
+Both switches off never reads the optional file; either on refuses
+missing input and needs no other family's switch (its drops are the
+native posture). A valid file appends.
 ================
 */
 func TestArabiaOffAndOn(t *testing.T) {
 	template := tombTemplate("MOB_AR_KOBOLD", 125, 0)
-	if _, err := AppendArabia(template, t.TempDir(), false); err != nil {
+	if _, err := AppendArabia(template, t.TempDir(), false, false); err != nil {
 		t.Fatalf("off read optional data: %v", err)
 	}
-	if _, err := AppendArabia(template, t.TempDir(), true); err == nil {
-		t.Fatal("on admitted missing input")
+	if _, err := AppendArabia(template, t.TempDir(), true, false); err == nil {
+		t.Fatal("continent on admitted missing input")
+	}
+	if _, err := AppendArabia(template, t.TempDir(), false, true); err == nil {
+		t.Fatal("dungeon on admitted missing input")
 	}
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, arabiaPopulationFile), arabiaSource(t, "MOB_AR_KOBOLD", 21850), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	got, err := AppendArabia(template, dir, true)
+	got, err := AppendArabia(template, dir, true, true)
 	if err != nil || len(got.Nests) != 2 {
 		t.Fatalf("installed population refused: %v", err)
+	}
+}
+
+/*
+================
+TestArabiaDungeonFollowsItsOwnSwitch
+
+The one population file carries both sides: the continent's rows join
+only while SRO_ARABIA admits them, the dungeon's only while
+SRO_BAGHDAD_DUNGEON does (#4134). A switched-off side's rows are held
+back - never misjoined into the other side's world, never refused.
+================
+*/
+func TestArabiaDungeonFollowsItsOwnSwitch(t *testing.T) {
+	source := struct {
+		Version int
+		Rows    []cap110Nest
+	}{cap110PopulationVersion, []cap110Nest{
+		{Codename: "MOB_AR_KOBOLD", NestID: 42021, WorldID: cap110FieldWorldID, RegionID: 21850,
+			X: 100, Y: 0, Z: 200, MaxCount: 1, Respawn: true, RespawnDelayMinSec: 60, RespawnDelayMaxSec: 120,
+			Controls: TacticsControls{SightRange: 100}},
+		{Codename: "MOB_AR_KOBOLD", NestID: 42022, WorldID: arabia.DungeonWorldID, RegionID: 23378,
+			X: -400, Y: 58, Z: -300, MaxCount: 1, Respawn: true, RespawnDelayMinSec: 60, RespawnDelayMaxSec: 120,
+			Controls: TacticsControls{SightRange: 100}},
+		{Codename: "MOB_AR_KOBOLD", NestID: 42023, WorldID: arabia.HideoutWorldID, RegionID: 32793,
+			X: 0, Y: 8, Z: 15, MaxCount: 1, Respawn: false,
+			Controls: TacticsControls{SightRange: 100}},
+	}}
+	data, err := json.Marshal(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	worlds := func(got Template) []string {
+		var out []string
+		for _, nest := range got.Nests[1:] {
+			out = append(out, nest.WorldCode)
+		}
+		return out
+	}
+	for _, run := range []struct {
+		name      string
+		continent bool
+		dungeon   bool
+		want      []string
+	}{
+		{"both on", true, true, []string{"INS_DEFAULT", "GROUP_ARABIA_DUNGEON", "GROUP_ARABIA_FIELD_02_BOSS"}},
+		{"continent only", true, false, []string{"INS_DEFAULT"}},
+		{"dungeon only", false, true, []string{"GROUP_ARABIA_DUNGEON", "GROUP_ARABIA_FIELD_02_BOSS"}},
+		{"both off", false, false, nil},
+	} {
+		template := tombTemplate("MOB_AR_KOBOLD", 125, 0)
+		got, err := appendArabiaData(template, data, run.continent, run.dungeon)
+		if err != nil {
+			t.Fatalf("%s refused: %v", run.name, err)
+		}
+		joined := worlds(got)
+		if len(joined) != len(run.want) {
+			t.Fatalf("%s joined %v, want %v", run.name, joined, run.want)
+		}
+		for index, code := range run.want {
+			if joined[index] != code {
+				t.Fatalf("%s joined %v, want %v", run.name, joined, run.want)
+			}
+		}
 	}
 }
 
@@ -222,6 +296,20 @@ func TestArabiaFlagWords(t *testing.T) {
 	for word, want := range map[string]bool{"": false, "off": false, "0": false, "on": true, "1": true, "TRUE": true} {
 		t.Setenv(EnvArabia, word)
 		if got := ArabiaEnabled(); got != want {
+			t.Fatalf("%q = %t, want %t", word, got, want)
+		}
+	}
+}
+
+/*
+================
+TestBaghdadDungeonFlagWords
+================
+*/
+func TestBaghdadDungeonFlagWords(t *testing.T) {
+	for word, want := range map[string]bool{"": false, "off": false, "0": false, "on": true, "1": true, "TRUE": true} {
+		t.Setenv(EnvBaghdadDungeon, word)
+		if got := BaghdadDungeonEnabled(); got != want {
 			t.Fatalf("%q = %t, want %t", word, got, want)
 		}
 	}

@@ -5,7 +5,10 @@ mall-balance-push.test.mjs - the beta's earned-silk balance push
 
 A MALL_BALANCE_CONTROL frame (server action/betasilk.go) updates an open
 mall's balance in place, does nothing before a catalogue has arrived, and
-rejects anything but exactly silk, giftSilk and points.
+rejects anything but exactly silk, giftSilk and points with earnedSilk
+allowed but never required: the push body is frozen at the pre-split
+fields so a client predating the #4133 split still decodes it, and the
+earned half rides the catalogue projection instead.
 
 ===========================================================================
 */
@@ -40,6 +43,8 @@ function catalogue() {
 	return {
 		version: 1,
 		silk: 300,
+		earnedSilk: 40,
+		earnedTradable: true,
 		giftSilk: 0,
 		points: 10,
 		tabs: [ { shop: 2, tab: 0, category: "MALL_CONSUME", label: "Consumables" } ],
@@ -68,16 +73,22 @@ test("a balance push updates an open mall and routes as a world control", () => 
 	// Before any catalogue there is no mall to update.
 	mall.balance( json( { silk: 350, giftSilk: 0, points: 0 } ) );
 	mall.open( 0 );
-	mall.projection( json( { version: 1, silk: 300, giftSilk: 0, points: 0, tabs: [], offers: [] } ) );
+	mall.projection(
+		json( { version: 1, silk: 300, earnedSilk: 40, giftSilk: 0, points: 0, tabs: [], offers: [] } )
+	);
 	const opened = mall.state();
 	assert.ok( opened );
 	assert.equal( opened.silk, 300 );
+	// The frozen three-field push leaves the catalogue's earned figure alone.
 	mall.balance( json( { silk: 350, giftSilk: 2, points: 1 } ) );
 	const pushed = mall.state();
 	assert.ok( pushed );
-	assert.deepEqual( [ pushed.silk, pushed.giftSilk, pushed.points ], [ 350, 2, 1 ] );
+	assert.deepEqual( [ pushed.silk, pushed.earnedSilk, pushed.giftSilk, pushed.points ], [ 350, 40, 2, 1 ] );
 	assert.notStrictEqual( pushed, opened );
 	assert.equal( pushed.revision, opened.revision );
+	// A newer server's push that does carry earnedSilk is accepted too.
+	mall.balance( json( { silk: 355, earnedSilk: 42, giftSilk: 2, points: 1 } ) );
+	assert.equal( mall.state()?.earnedSilk, 42 );
 });
 
 test("balance pushes preserve purchase and point confirmations", () => {
@@ -158,13 +169,71 @@ test("a malformed balance push is refused", () => {
 	for (
 		const bad of [
 			{ silk: 1, giftSilk: 0 },
-			{ silk: -1, giftSilk: 0, points: 0 },
-			{ silk: 1.5, giftSilk: 0, points: 0 },
-			{ silk: 1, giftSilk: 0, points: 0, extra: 1 }
+			{ silk: -1, earnedSilk: 0, giftSilk: 0, points: 0 },
+			{ silk: 1.5, earnedSilk: 0, giftSilk: 0, points: 0 },
+			{ silk: 1, earnedSilk: -1, giftSilk: 0, points: 0 },
+			{ silk: 1, earnedSilk: 0, giftSilk: 0, points: 0, extra: 1 }
 		]
 	) {
 		assert.throws( () => mall.balance( json( bad ) ), /Invalid mall balance/ );
 	}
+});
+
+/*
+================
+a purchase draws on the earned balance
+
+The store draws earned first (#4133), so the client's own admission
+accepts a purchase the two balances together cover and refuses one
+past their sum.
+================
+*/
+test("a purchase draws on the earned balance", () => {
+	const mall = createMall();
+	mall.open( 0 );
+	mall.projection( json( { ...catalogue(), silk: 0, earnedSilk: 50 } ) );
+	const state = mall.state();
+	assert.ok( state );
+	const offer = state.offers[0];
+	assert.ok( offer );
+	// 20 silk against 0 granted + 50 earned: admitted.
+	const frame = mall.purchase(
+		{
+			group: offer.group,
+			shop: offer.shop,
+			tab: offer.tab,
+			slot: offer.slot,
+			packageId: offer.packageId,
+			quantity: 1,
+			points: 0
+		},
+		1
+	);
+	assert.equal( frame.opcode, 0x706d );
+
+	const short = createMall();
+	short.open( 0 );
+	short.projection( json( { ...catalogue(), silk: 0, earnedSilk: 10 } ) );
+	const shortState = short.state();
+	assert.ok( shortState );
+	const shortOffer = shortState.offers[0];
+	assert.ok( shortOffer );
+	assert.throws(
+		() =>
+			short.purchase(
+				{
+					group: shortOffer.group,
+					shop: shortOffer.shop,
+					tab: shortOffer.tab,
+					slot: shortOffer.slot,
+					packageId: shortOffer.packageId,
+					quantity: 1,
+					points: 0
+				},
+				1
+			),
+		/Mall purchase exceeds current authority/
+	);
 });
 
 /*

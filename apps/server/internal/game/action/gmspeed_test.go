@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -26,7 +27,7 @@ TestGMSetSpeedScalesTheGMsOwnSpeedUntilTheyLeave
 */
 func TestGMSetSpeedScalesTheGMsOwnSpeedUntilTheyLeave(t *testing.T) {
 	c := rebirthTestCharacter(1, 0)
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	rt, _ := newTestRuntime(c, testItems())
 	var pushed []wire.Frame
 	rt.PushCharacterFrames = func(_, _ string, frames []wire.Frame) { pushed = append(pushed, frames...) }
@@ -84,7 +85,7 @@ applies after it, so a masked GM moves at the percent of the mask's speed.
 */
 func TestGMSetSpeedScalesATransformedGM(t *testing.T) {
 	rt, _, c, _ := maskFixture(t, 1, 0)
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	c.TransformMode, c.TransformRefObjID = 1, maskMonsterRef
 	rt.GMSetSpeed = true
 	if !rt.SetGMSpeed(testDivision, c.Name, 200) {

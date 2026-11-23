@@ -67,6 +67,12 @@ export interface MallState {
 	readonly tabs: readonly MallTab[];
 	readonly offers: readonly MallOffer[];
 	readonly silk: number;
+	// The earned half of the port's two Silk balances (#4133): the
+	// playtime-earned credits a purchase draws first. silk stays the
+	// granted half; a purchase paid wholly from earnedSilk is tradable
+	// while earnedTradable holds (SRO_EARNED_SILK_TRADABLE).
+	readonly earnedSilk: number;
+	readonly earnedTradable: boolean;
 	readonly giftSilk: number;
 	readonly points: number;
 	readonly pending: boolean;

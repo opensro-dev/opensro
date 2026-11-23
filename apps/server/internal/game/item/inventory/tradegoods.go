@@ -71,6 +71,9 @@ func stackIdentityMatches(a, b Item) bool {
 	if a.ForgeBound != b.ForgeBound {
 		return false
 	}
+	if a.EarnedBought != b.EarnedBought {
+		return false
+	}
 	if wire.EtcCarriesPlusByte(a.TypeFlags) || wire.EtcCarriesPlusByte(b.TypeFlags) {
 		return a.Plus == b.Plus
 	}
@@ -92,7 +95,7 @@ to the plain row swap so each row keeps its own mark.
 */
 func wholeStackIdentityMatches(a, b Item, stackCap uint16) bool {
 	if stackCap == 1 && a.Quantity == 1 && b.Quantity == 1 {
-		return a.ForgeBound == b.ForgeBound && nativeStackIdentityMatches(a, b)
+		return a.ForgeBound == b.ForgeBound && a.EarnedBought == b.EarnedBought && nativeStackIdentityMatches(a, b)
 	}
 	return stackIdentityMatches(a, b)
 }

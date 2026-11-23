@@ -62,6 +62,19 @@ test("the player's sign sits at the centre of the view", () => {
 	assert.deepEqual( sign?.rect.slice( 0, 2 ), [ CLIP[0] + 150 - 8, CLIP[1] + 150 - 8 ] );
 });
 
+test("roster signs stand on the page at their points, under the player's sign", () => {
+	const shown = view( {
+		roster: [ { x: 0, z: 0, path: "/assets/images/x/wmap_sign_party.png" } ]
+	} );
+	const sign = shown.quads.find( quad => quad.texture.endsWith( "wmap_sign_party.png" ) );
+	assert.ok( sign, "the party sign is drawn" );
+	// World zero is the view centre: a 16x16 sign centred on it.
+	assert.deepEqual( sign?.rect, [ CLIP[0] + 150 - 8, CLIP[1] + 150 - 8, 16, 16 ] );
+	// The player's sign still paints last, as 57CE80's pass order ends.
+	assert.equal( shown.quads.at( -1 )?.texture.endsWith( "mm_sign_character.png" ), true );
+	assert.equal( view().quads.some( quad => quad.texture.endsWith( "wmap_sign_party.png" ) ), false );
+});
+
 test("one image holds the floor, with world zero on tile 128's corner", () => {
 	const pages = view().quads.filter( quad => quad.texture.endsWith( "map_world_jinf02.png" ) );
 	assert.equal( pages.length, 1 );

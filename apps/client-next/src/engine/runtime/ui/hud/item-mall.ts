@@ -112,7 +112,7 @@ export function createItemMall() {
 		if ( question.offers.some( offer => !currentOffer( offer, state ) ) ) return false;
 		const silk = question.offers.reduce( ( sum, offer ) => sum + offer.silk, 0 );
 		const gift = question.offers.reduce( ( sum, offer ) => sum + offer.giftSilk, 0 );
-		return points <= state.points && points <= pointLimit() && silk - points <= state.silk &&
+		return points <= state.points && points <= pointLimit() && silk - points <= state.silk + state.earnedSilk &&
 			gift <= state.giftSilk;
 	}
 
@@ -507,7 +507,10 @@ export function createItemMall() {
 				quantity > current.purchaseLimit || points > state.points || points > current.silk * quantity ||
 				points !== 0 && !current.allowsPoints
 			) return null;
-			if ( selected.silk * quantity - points > state.silk || selected.giftSilk * quantity > state.giftSilk ) {
+			if (
+				selected.silk * quantity - points > state.silk + state.earnedSilk ||
+				selected.giftSilk * quantity > state.giftSilk
+			) {
 				return null;
 			}
 			return { ...selected, quantity, points };
@@ -793,7 +796,7 @@ export function createItemMall() {
 			const current = currentOffer( next, state );
 			if (
 				!current || current.silk !== next.silk || current.giftSilk !== next.giftSilk ||
-				current.silk - next.points > state.silk || current.giftSilk > state.giftSilk ||
+				current.silk - next.points > state.silk + state.earnedSilk || current.giftSilk > state.giftSilk ||
 				next.points > state.points
 			) {
 				queue = [];

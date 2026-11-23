@@ -59,7 +59,7 @@ function campRecord() {
 }
 
 const opened = () => ({ opcode: 0xb2ec, payload: Uint8Array.from( [ 1, ...campRecord() ] ) });
-const empty = { member: false, page: 0, pages: 0, rows: [], request: null, result: null };
+const empty = { member: false, page: 0, pages: 0, rows: [], own: null, request: null, result: null };
 
 test("0xB2EC [1] seats the master in the new camp; [2] changes nothing (76FBA0)", () => {
 	const camp = defined( academyPacket( empty, opened() ) );

@@ -390,6 +390,7 @@ func TestModelledSettingsMoveTheOutput(t *testing.T) {
 		"SRO_PHARAOH_TOMB_GEAR_RATE":    "the modelled counts are pinned by the catalogue package's TestPharaohGearRateScalesTheTombDrops and the env read by the monster package's TestAppendPharaohTombReadsTheGearRate; over the shipped data the tomb build refuses before the rate can differ",
 		"SRO_ALEXANDRIA_HIDE_D11_GOODS": "the withholding is pinned by the commerce package's TestWithholdAlexandriaD11 and the env read by its TestAlexandriaHideD11GoodsFromEnv; over the shipped data no Alexandria shop tab exists, so no shop output can differ",
 		"SRO_EXPORT_WORLD":              "the admission is pinned by the monster package's TestAppendExportWorldAdmitsOnlyTheIndex and the exportworld package's TestLoadAdmitsWhatTheManifestNames; over the shipped data no area is packed, so no monster output can differ",
+		"SRO_BAGHDAD_DUNGEON":           "the dungeon slice's admission is pinned by the monster package's TestArabiaDungeonFollowsItsOwnSwitch and TestBaghdadDungeonFlagWords; over the shipped data the arabia population is absent, so the catalogue build refuses before the slice can differ",
 	}
 	flipped := map[string]bool{}
 	for _, flip := range flips {

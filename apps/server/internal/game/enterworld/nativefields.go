@@ -37,7 +37,11 @@ nativeFieldSchema
 ================
 */
 func nativeFieldSchema() ([]string, map[string]int) {
-	names := []string{"maxDurability", "useCooldownGroup524", "useCooldownDuration528", "useSkillId", "useSkillDurationMs", "stoneFamilyMask", "stoneTooltipMask"}
+	// associatedSkillId is the resolved Desc1 skill (itemdata col 119) the
+	// client reads for the SRO Macro buff-item row (v1.696 006930a0: item
+	// data +0x4d0 -> skill id at +0x1c). useSkillId stays the fortress
+	// repair kit's countdown skill.
+	names := []string{"associatedSkillId", "maxDurability", "useCooldownGroup524", "useCooldownDuration528", "useSkillId", "useSkillDurationMs", "stoneFamilyMask", "stoneTooltipMask"}
 	for _, c := range itemdataRecordColumns {
 		names = append(names, c.Name)
 	}

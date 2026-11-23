@@ -1,6 +1,7 @@
 import type { EntityState } from "@/engine/contracts/world";
 import type { SocialState } from "./social";
 import { fortressActive, fortressStatus, type FortressState } from "./fortress";
+import { staffEntry, type StaffRosterEntry } from "./staff-roster";
 
 // ARGB values written by 858810/8567F0, retained by the entity owner.
 export const NAME_COLOR_WHITE = 0xffffffff;
@@ -18,6 +19,9 @@ export interface NameColorContext {
 	readonly localItem?: { readonly typeFlags: number; readonly refObjId: number; };
 	readonly capeTeam: ( refObjId: number ) => number | undefined;
 	readonly attackedName?: string;
+	// Port-only (staff-roster.ts): the staff roster; a rostered player's
+	// name takes its role's colour ahead of every native rule.
+	readonly staffRoster?: readonly StaffRosterEntry[];
 }
 export function isNameColorGuard( e: Pick<EntityState, "kind" | "tidWord"> ): boolean {
 	return e.kind === "npc" && ((e.tidWord ?? 0) & 0x7fc) === 0x244;
@@ -68,6 +72,8 @@ export function refreshNameColor( e: EntityState, c: NameColorContext ): number 
 		hold = entityHoldType( e );
 	const enemy = ( name: string | undefined ) => name !== undefined && !!c.social.wars?.some( r => r.name === name );
 	if ( user ) {
+		const staff = e.boardName === undefined ? staffEntry( c.staffRoster, e.name ) : undefined;
+		if ( staff ) return staff.nameColor >>> 0;
 		if ( e.name.startsWith( "[GM]" ) ) return NAME_COLOR_GM;
 		const team = c.local.arenaTeam ?? 0xff;
 		if ( team !== 0xff ) return team === (e.arenaTeam ?? 0xff) ? NAME_COLOR_WHITE : NAME_COLOR_HOSTILE;

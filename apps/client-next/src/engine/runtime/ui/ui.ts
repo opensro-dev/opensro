@@ -178,7 +178,14 @@ import { createGmHelper, GM_HELPER_HEIGHT, GM_HELPER_ROWS, GM_HELPER_ROW_HEIGHT 
 import type { GmCatalog } from "@/engine/foundation/gameplay/gm-command";
 import { gmLocalCommand } from "@/engine/foundation/gameplay/gm-local-commands";
 import { SkillSlot_Resolve } from "./hud/skill-slot";
-import { ACADEMY_OPEN_LEVEL, academyJoinLabel, academyRank } from "@/engine/foundation/gameplay/academy";
+import {
+	ACADEMY_DETAIL_MAX_LENGTH,
+	ACADEMY_KIND_GUARDIAN,
+	ACADEMY_KIND_STUDENT,
+	ACADEMY_OPEN_LEVEL,
+	academyJoinLabel,
+	academyRank
+} from "@/engine/foundation/gameplay/academy";
 import { createWindowPlacement } from "./hud/window-placement";
 import { createItemMall } from "./hud/item-mall";
 import {
@@ -195,6 +202,7 @@ import {
 	mallPageNumberPresentation,
 	pageManagerLayout,
 	mallCurrencyRows,
+	mallPurchaseOutcomeText,
 	mallQuestionLayout,
 	mallSilkPeriodTexts,
 	mallSilkHistoryDate,
@@ -740,6 +748,7 @@ import {
 	visibleTitleFormat,
 	withoutBoardPass
 } from "@/engine/foundation/ui/overhead-layout";
+import { staffBoardName } from "@/engine/foundation/gameplay/staff-roster";
 import { vitalWarning } from "@/engine/foundation/ui/vital-warning";
 import {
 	beginnerMarkShown,
@@ -808,7 +817,7 @@ import {
 } from "@/engine/foundation/ui/hud-readouts";
 import { hudTooltipKey, sideBubble, tooltipBubble } from "@/engine/foundation/ui/helper-bubble";
 import { playerAbilityValues } from "@/engine/foundation/gameplay/player-stats";
-import { academyLayout } from "@/engine/foundation/ui/academy-layout";
+import { ACADEMY_SCROLL_TRAVEL_PX, academyLayout } from "@/engine/foundation/ui/academy-layout";
 import { createGuideResources } from "./guide/resources";
 import { createQuestInfo } from "./hud/quest-info";
 import {
@@ -1775,7 +1784,7 @@ export function createUi( ports: UiPorts ) {
 	const compositeItemHud = createCompositeItemHud();
 	// Port-only, not native: a unique kill's damage ranking (SRO_UNIQUE_DAMAGE_RANK).
 	const uniqueRankHud = createUniqueRankHud();
-	const uniqueStatusHud = createUniqueStatusHud( extensions.uniqueNotifyBook );
+	const uniqueStatusHud = createUniqueStatusHud( () => extensions.uniqueNotifyBook?.() ?? {} );
 	// Port-only (#3531): the Unique Status window's last drawn list (its
 	// wheel and thumb drag find it here) and the server clock's base: the
 	// last feed's server time and the local time it landed, so the Died
@@ -1840,6 +1849,8 @@ export function createUi( ports: UiPorts ) {
 	let academySelection = 0, academySort = "ID_BTN", academyAscending = true;
 	let academyName = "", academyGrade = 5, academyKind = 2, academyCombo = 0;
 	let academyFilter = { name: "", grade: 5, kind: 2 };
+	let academyDialog: "register" | "modify" | null = null;
+	let academyForm = { recruit: ACADEMY_KIND_STUDENT, detail: "" };
 	let guideSidebar = false, guideTab: "general" | "events" | "quests" = "general", guideIndexScroll = 0;
 	const guideGroups = new Set<number>();
 	let guideEvent = 0, guideObserved = 0, guideRequested = 0, guidePending = 0, guideScroll = 0;
@@ -2714,8 +2725,9 @@ export function createUi( ports: UiPorts ) {
 		}
 		if ( next === "Academy Matching" ) {
 			academySelection = 0;
+			academyDialog = null;
 			if ( view?.gameplay?.academy && !view.gameplay.academy.request ) {
-				sendGameplay( { kind: "academy-page", page: 0 } );
+				sendGameplay( { kind: "academy-page", page: 1 } );
 			}
 		}
 		// 69C150 sounds the resulting visible window, including a hotkey retarget.
@@ -5419,7 +5431,37 @@ export function createUi( ports: UiPorts ) {
 			else if ( which === 2 && index !== undefined && index >= 0 && index <= 2 ) academyKind = index;
 			academyCombo = 0;
 		} else if ( id === "academy-join" ) sendGameplay( { kind: "academy-join", id: academySelection } );
-		else if ( id === "academy-refresh" || id === "academy-prev" || id === "academy-next" ) {
+		else if ( id === "academy-register" || id === "academy-modify" ) {
+			const own = view.gameplay?.academy?.own;
+			academyDialog = id === "academy-modify" ? "modify" : "register";
+			academyForm = academyDialog === "modify" && own ?
+				{ recruit: own.kind, detail: own.detail } :
+				{ recruit: ACADEMY_KIND_STUDENT, detail: "" };
+		} else if ( id === "academy-delete" ) sendGameplay( { kind: "academy-delete" } );
+		else if ( id === "academy-form-cancel" ) {
+			academyDialog = null;
+			focus = null;
+		} else if ( id.startsWith( "academy-form-kind:" ) ) {
+			academyForm.recruit = Number( id.slice( 18 ) );
+		} else if ( id === "academy-form-confirm" ) {
+			if ( academyDialog && academyForm.detail.length ) {
+				sendGameplay( {
+					kind: academyDialog === "modify" ? "academy-modify" : "academy-register",
+					recruit: academyForm.recruit,
+					detail: academyForm.detail
+				} );
+				academyDialog = null;
+				focus = null;
+			}
+		} else if ( id === "academy-scroll-up" || id === "academy-scroll-down" ) {
+			const a = view.gameplay?.academy;
+			if ( a && !a.request ) {
+				sendGameplay( {
+					kind: "academy-page",
+					page: id === "academy-scroll-up" ? Math.max( 1, a.page - 1 ) : a.page + 1
+				} );
+			}
+		} else if ( id === "academy-refresh" || id === "academy-prev" || id === "academy-next" ) {
 			const a = view.gameplay?.academy;
 			if ( a ) {
 				sendGameplay( {
@@ -7775,6 +7817,18 @@ export function createUi( ports: UiPorts ) {
 					!(request ? event.id.startsWith( "party-answer:" ) : event.id.startsWith( "party-form-" ))
 				) return;
 			}
+			if ( academyDialog ) {
+				if ( event.kind === "key" ) {
+					if ( event.code === "Escape" ) activate( "academy-form-cancel" );
+					else if ( event.code === "Enter" && !composing ) activate( "academy-form-confirm" );
+					return;
+				}
+				if (
+					event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end" ||
+					event.kind === "double-activate"
+				) return;
+				if ( "id" in event && event.id !== null && !event.id.startsWith( "academy-form-" ) ) return;
+			}
 			if ( shopDialog && panel === "Shop" ) {
 				if (
 					event.kind === "edit" && event.id === "shop-quantity" &&
@@ -8088,6 +8142,21 @@ export function createUi( ports: UiPorts ) {
 						blockOffset + event.dy * Math.max( 0, rows.length - 10 ) / 185
 					)
 				);
+				dirty = true;
+				return;
+			}
+			if ( event.kind === "drag" && event.id === "academy-scroll-thumb" && panel === "Academy Matching" ) {
+				const a = view?.gameplay?.academy;
+				if ( a && !a.request && a.pages > 1 ) {
+					const target = Math.max(
+						1,
+						Math.min(
+							a.pages,
+							Math.round( a.page + event.dy * (a.pages - 1) / ACADEMY_SCROLL_TRAVEL_PX )
+						)
+					);
+					if ( target !== a.page ) sendGameplay( { kind: "academy-page", page: target } );
+				}
 				dirty = true;
 				return;
 			}
@@ -9780,6 +9849,8 @@ export function createUi( ports: UiPorts ) {
 					else if ( key === "min" || key === "max" ) {
 						partyForm[key] = event.value.replace( /[^0-9]/g, "" ).slice( 0, 3 );
 					}
+				} else if ( event.id === "academy-form-detail" ) {
+					academyForm.detail = event.value.slice( 0, ACADEMY_DETAIL_MAX_LENGTH );
 				} else if ( event.id === "experimental-ui-scale" && panel === "Experimental" ) {
 					// Port-only, not native: the range control reports the slider's
 					// stop; the draft helper snaps or rejects it.
@@ -13403,6 +13474,8 @@ export function createUi( ports: UiPorts ) {
 					key.push( experimental.state().saved.eventChatTab );
 					// Port-only (#3358): the contributor roster retags lines.
 					key.push( ...(game?.contributorTitles ?? []) );
+					// Port-only (staff-roster.ts): a grant or role edit retags lines.
+					for ( const entry of game?.staffRoster ?? [] ) key.push( entry.name, entry.tag, entry.chatColor );
 					// Port-only item links: the row and the input's labels change the layout.
 					key.push( chatLinksOn() );
 					key.push( ...chatLinkHud.labels( "chat-text" ) );
@@ -13424,6 +13497,7 @@ export function createUi( ports: UiPorts ) {
 							chatLayout( {
 								chatTimestamps: experimental.state().saved.chatTimestamps,
 								contributorTitles: game?.contributorTitles,
+								staffRoster: game?.staffRoster,
 								noticeLinks: experimental.state().saved.noticeLinks,
 								chatItemLinks: chatLinksOn(),
 								inputLabels: chatLinkHud.labels( "chat-text" ),
@@ -23692,13 +23766,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						tierTitleWidth = tierTitle ? text.run( tierTitle, 2 ).width : 0,
 						tierLead = tierTitleWidth ? (title ? TITLE_NAME_GAP : 0) + tierTitleWidth : 0;
 					if ( named && beginnerMarkShown( entity, options ) ) {
-						const name = titledDisplayName(
-								boardText(
-									entity,
-									entity.boardName ?? entity.name ??
-										(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
+						const name = staffBoardName(
+								entity,
+								titledDisplayName(
+									boardText(
+										entity,
+										entity.boardName ?? entity.name ??
+											(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
+									),
+									visibleTitleFormat( entity, game?.localGid, options )
 								),
-								visibleTitleFormat( entity, game?.localGid, options )
+								game?.staffRoster
 							),
 							width = text.run( name, selected ? 2 : 0 ).width,
 							height = text.boardHeight();
@@ -23721,13 +23799,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						}
 					}
 					if ( !named ) continue;
-					const name = titledDisplayName(
-							boardText(
-								entity,
-								entity.boardName ?? entity.name ??
-									(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
+					const name = staffBoardName(
+							entity,
+							titledDisplayName(
+								boardText(
+									entity,
+									entity.boardName ?? entity.name ??
+										(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
+								),
+								visibleTitleFormat( entity, game?.localGid, options )
 							),
-							visibleTitleFormat( entity, game?.localGid, options )
+							game?.staffRoster
 						),
 						width = text.run( name, selected ? 2 : 0 ).width,
 						height = text.boardHeight();
@@ -25034,6 +25116,91 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				}
 				endWindow( [ mark[0], 0, mark[2], mark[3] ], "modal:" + panel );
 				blocks.push( full );
+			}
+			const mentorBox = hud.data()?.windows.ifmessagebox;
+			if ( worldVisible && academyDialog && mentorBox && panel === "Academy Matching" ) {
+				// 52A9F0 builds this CIFMessageBox branch from ifmessagebox's
+				// MentorMatchRegister section: an invitation-kind radio pair
+				// (507/508), the title edit (513, capped at 50 chars) and
+				// Confirm/Cancel (502/501) under the MACHING_ENTER title.
+				const mark = beginWindow(),
+					layout = messageBox( w, h, 340, 224 ),
+					[fx, fy] = layout.frame;
+				controls = drawFrame.controls = [];
+				blocks.push( full );
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_CTL_TC_MACHING_ENTER" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} )
+				);
+				const section = Object.fromEntries(
+					Object.entries( mentorBox ).filter( ( [, row] ) => row.id >= 501 && row.id <= 513 )
+				);
+				nativePage( section, fx, fy, [ 501, 502, 507, 508, 509, 510, 511, 512, 513 ] );
+				const at = ( id: number ) => Object.values( section ).find( row => row.id === id );
+				for ( const id of [ 509, 510, 511, 512 ] ) {
+					const node = at( id );
+					if ( node ) authoredText( node, fx, fy, hudCopy( node.text ) );
+				}
+				for (
+					const [nodeId, recruit] of [ [ 507, ACADEMY_KIND_STUDENT ], [
+						508,
+						ACADEMY_KIND_GUARDIAN
+					] ] as const
+				) {
+					const node = at( nodeId );
+					if ( !node ) continue;
+					const r = authoredRect( node, fx, fy ),
+						checked = academyForm.recruit === recruit,
+						face = ROOT + "interface/ifcommon/com_radiobutton_" + (checked ? "on" : "off") + ".png";
+					paths.push( face );
+					if ( resources.size( face ) ) {
+						quads.push( { rect: r, clip: full, texture: face, uv: [ 0, 0, 1, 1 ], color: white } );
+					}
+					controls.push( {
+						id: "academy-form-kind:" + recruit,
+						label: hudCopy(
+							recruit === ACADEMY_KIND_STUDENT ?
+								"UIIT_STT_TC_STUDENT_INVITATION" :
+								"UIIT_STT_TC_SECOND_GUARDIAN_INVITATION"
+						),
+						kind: "button",
+						rect: r,
+						selected: checked
+					} );
+				}
+				const edit = at( 513 );
+				if ( edit ) {
+					partyEdit( edit, fx, fy, "academy-form-detail", academyForm.detail, ACADEMY_DETAIL_MAX_LENGTH );
+				}
+				for (
+					const [nodeId, control] of [
+						[ 502, "academy-form-confirm" ],
+						[ 501, "academy-form-cancel" ]
+					] as const
+				) {
+					const node = at( nodeId );
+					if ( node ) {
+						authoredLabeledButton(
+							{ ...node, rect: [ node.rect[0], node.rect[1], 76, 24 ] },
+							fx,
+							fy,
+							control,
+							hudCopy( node.text ),
+							control === "academy-form-confirm" && !academyForm.detail.length
+						);
+					}
+				}
+				endWindow( [ mark[0], 0, mark[2], mark[3] ], "modal:academy-form" );
 			}
 			if ( worldVisible && shopDialog && panel === "Shop" && game?.shop && hud.data() ) {
 				const admission = beginWindow(),
@@ -27989,9 +28156,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					authoredChrome( { ...frame, type: "CIFFrame", rect: full, text: "" }, 0, 0 );
 					mallText( hudCopy( frame.text ), [ margin, 12, contentWidth - 72, 22 ] );
 					mallText(
-						`Silk ${game.itemMall?.silk ?? 0}   Gift ${game.itemMall?.giftSilk ?? 0}   Points ${
-							game.itemMall?.points ?? 0
-						}`,
+						`Silk ${game.itemMall?.silk ?? 0}   Earned ${game.itemMall?.earnedSilk ?? 0}   Gift ${
+							game.itemMall?.giftSilk ?? 0
+						}   Points ${game.itemMall?.points ?? 0}`,
 						[ margin, 52, Math.max( 1, contentWidth - 64 ), 28 ]
 					);
 					if ( state.pointDialog || state.selected || state.question ) {
@@ -28067,6 +28234,18 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									busy
 								);
 							}
+							// Port-only (#4133): the confirm states the outcome
+							// before the player buys.
+							mallText(
+								mallPurchaseOutcomeText(
+									game.itemMall,
+									offer.silk * state.quantity,
+									offer.giftSilk * state.quantity,
+									state.points,
+									false
+								),
+								[ dx, h - touch - margin - 40, dw, 32 ]
+							);
 							mallButton( "item-mall-purchase", hudCopy( "UIIT_STT_BUY" ), [
 								dx,
 								h - touch - margin,
@@ -28102,6 +28281,19 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										busy
 									);
 								}
+							}
+							if ( (question.kind === "basket" || question.kind === "worn") && game.itemMall ) {
+								// Port-only (#4133): as the single purchase above.
+								mallText(
+									mallPurchaseOutcomeText(
+										game.itemMall,
+										question.offers.reduce( ( sum, offer ) => sum + offer.silk, 0 ),
+										question.offers.reduce( ( sum, offer ) => sum + offer.giftSilk, 0 ),
+										state.points,
+										true
+									),
+									[ dx, h - touch - margin - 40, dw, 32 ]
+								);
 							}
 							mallButton( "item-mall-question-confirm", hudCopy( quote.confirm ), [
 								dx,
@@ -28616,6 +28808,24 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								String( value ?? "" )
 							);
 						}
+						// Port-only (#4133): the earned Silk balance rides the
+						// Point row's place (22 caption, 18 value), which this
+						// client never draws (6BDA60 above); no native string
+						// names earned silk, so the caption is the port's own.
+						if ( game.itemMall ) {
+							authoredText(
+								mallControl( info, 22 ),
+								ox + infoOrigin[0],
+								oy + infoOrigin[1],
+								"Earned silk"
+							);
+							authoredText(
+								mallControl( info, 18 ),
+								ox + infoOrigin[0],
+								oy + infoOrigin[1],
+								String( game.itemMall.earnedSilk )
+							);
+						}
 						const trunkOrigin = mallControl( root, 102 ).rect;
 						const tx = ox + trunkOrigin[0], ty = oy + trunkOrigin[1];
 						nativePage( data.windows.ifitemmalltrunk!, tx, ty );
@@ -29015,6 +29225,20 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							authoredText( mallControl( row, 3 ), mx, cy, String( currency.amount ) );
 							authoredText( mallControl( row, 4 ), mx, cy, hudCopy( currency.label ) );
 						}
+						// Port-only (#4133): the confirm states the outcome
+						// before the player buys; no native string names it.
+						authoredText(
+							{ ...mallControl( page, 40 ), rect: [ 20, height - 62, dialogWidth - 40, 14 ] },
+							mx,
+							my,
+							mallPurchaseOutcomeText(
+								game.itemMall,
+								state.selected.silk * state.quantity,
+								state.selected.giftSilk * state.quantity,
+								state.points,
+								false
+							)
+						);
 						controls.push( {
 							id: "item-mall-quantity",
 							label: hudCopy( "UIIT_STT_AMOUNT" ),
@@ -29192,6 +29416,21 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									!!game.inventoryPending
 								);
 							}
+						}
+						if ( question.kind === "basket" || question.kind === "worn" ) {
+							// Port-only (#4133): as the single purchase above.
+							authoredText(
+								{ ...template, rect: [ 16, layout.buttonY - 20, layout.width - 32, 14 ] },
+								mx,
+								my,
+								mallPurchaseOutcomeText(
+									game.itemMall,
+									question.offers.reduce( ( sum, offer ) => sum + offer.silk, 0 ),
+									question.offers.reduce( ( sum, offer ) => sum + offer.giftSilk, 0 ),
+									state.points,
+									true
+								)
+							);
 						}
 						authoredLabeledButton(
 							{ ...mallControl( store, 215 ), rect: [ layout.buttonX, layout.buttonY, 76, 22 ] },

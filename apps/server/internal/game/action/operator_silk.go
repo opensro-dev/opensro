@@ -16,7 +16,6 @@ the store, so nothing waits on a session.
 package action
 
 import (
-	"encoding/json"
 	"fmt"
 
 	log "github.com/sirupsen/logrus"
@@ -92,7 +91,7 @@ func (rt *Runtime) GrantSilk(division, grantor, source, name string, amount uint
 	}
 	// An open mall shows the new balance at once, as a purchase or an
 	// earned credit does (MALL_BALANCE_CONTROL).
-	if payload, err := json.Marshal(balance); err == nil && rt.PushCharacterFrames != nil {
+	if payload, err := mallBalancePushPayload(balance); err == nil && rt.PushCharacterFrames != nil {
 		rt.PushCharacterFrames(division, c.Name, []wire.Frame{{Opcode: opMallBalance, Payload: payload}})
 	}
 	return balance, nil

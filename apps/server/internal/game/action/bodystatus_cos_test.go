@@ -17,6 +17,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -28,7 +29,7 @@ TestGMStatusSummonMountAndSessionLifecycle
 func TestGMStatusSummonMountAndSessionLifecycle(t *testing.T) {
 	for _, command := range []byte{gmcommand.SubInvisible, gmcommand.SubInvincible} {
 		c := testCharacter()
-		c.GMPrivilege = true
+		c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 		dressTrader(c)
 		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
 			Slot: 22, RefObjID: 3905, Codename: "ITEM_COS_T_DHORSE3",

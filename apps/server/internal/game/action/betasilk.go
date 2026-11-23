@@ -5,8 +5,9 @@ betasilk.go - the closed beta's earned Item Mall silk (port-only, not native)
 
 Native silk is what the account's mall wallet holds. For the closed beta
 (SRO_BETA_SILK) testers EARN silk by playing: every full hour a character
-spends in the world credits the hourly rate to the account's real wallet
-(mall_accounts.silk), until the wallet holds betaSilkBankCap. A first world
+spends in the world credits the hourly rate to the account's earned
+balance (mall_earned_silk, #4133), until the wallet's whole silk -
+earned and granted together - holds betaSilkBankCap. A first world
 entry also creates the wallet with the BetaSilkStarter tunable (700 by default), once per account (the
 wallet row is the persisted marker).
 
@@ -61,6 +62,13 @@ const EnvBetaSilk = "SRO_BETA_SILK"
 // shipped rule: world-ready time accrues.
 const EnvBetaSilkActiveOnly = "SRO_BETA_SILK_ACTIVE_ONLY"
 
+// EnvEarnedSilkTradable is the mall purchase rule (port-only, not
+// native, #4133): a purchase paid wholly from earned silk delivers a
+// tradable item; anything else stays account-bound, as native. On (or
+// unset) is the shipped rule, the owner's 2026-11-23 default; off makes
+// every mall purchase bound, the native reading, whatever paid for it.
+const EnvEarnedSilkTradable = "SRO_EARNED_SILK_TRADABLE"
+
 // BetaSilkHourlyDefault is the silk one in-world hour earns.
 const BetaSilkHourlyDefault = 50
 
@@ -99,6 +107,32 @@ const betaSilkActivityWindowMs = 10 * 60 * 1000
 // opMallBalance pushes an account's mall balance to its session; the client
 // updates an open mall (commerce-controls.ts MALL_BALANCE_CONTROL).
 const opMallBalance uint16 = 17
+
+/*
+================
+mallBalancePush
+
+The push body: exactly silk, giftSilk and points. Every shipped client's
+decoder pins this key set, so the earned half of the split (#4133) never
+rides the push - a fourth key would toss the frame on an old tab. Earned
+silk reaches the client in the mall catalogue instead, whose decoder
+reads field by name.
+================
+*/
+type mallBalancePush struct {
+	Silk     uint32 `json:"silk"`
+	GiftSilk uint32 `json:"giftSilk"`
+	Points   uint32 `json:"points"`
+}
+
+/*
+================
+mallBalancePushPayload
+================
+*/
+func mallBalancePushPayload(balance domain.MallBalance) ([]byte, error) {
+	return json.Marshal(mallBalancePush{Silk: balance.Silk, GiftSilk: balance.GiftSilk, Points: balance.Points})
+}
 
 // maxBetaSilkRate bounds an operator override.
 const maxBetaSilkRate = 100000
@@ -166,6 +200,36 @@ func ParseBetaSilkActiveOnly(raw string) (bool, error) {
 		return true, nil
 	}
 	return false, fmt.Errorf("%s must be off or on", EnvBetaSilkActiveOnly)
+}
+
+/*
+================
+EarnedSilkTradableFromEnv
+
+Composition reads this once, beside BetaSilkFromEnv.
+================
+*/
+func EarnedSilkTradableFromEnv() (bool, error) {
+	return ParseEarnedSilkTradable(os.Getenv(EnvEarnedSilkTradable))
+}
+
+/*
+================
+ParseEarnedSilkTradable
+
+On is the shipped default (the owner's 2026-11-23 rule), so empty reads
+on; off is the native reading, every mall item bound. Anything else is
+refused at startup, as a mistyped rate is.
+================
+*/
+func ParseEarnedSilkTradable(raw string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "on", "1", "true":
+		return true, nil
+	case "off", "0", "false":
+		return false, nil
+	}
+	return false, fmt.Errorf("%s must be off or on", EnvEarnedSilkTradable)
 }
 
 /*
@@ -273,7 +337,7 @@ func (b *BetaSilk) observeBalance(account string, balance domain.MallBalance) *b
 		clock = &betaSilkClock{}
 		b.clocks[account] = clock
 	}
-	capped := balance.Silk >= betaSilkBankCap
+	capped := uint64(balance.Silk)+uint64(balance.EarnedSilk) >= betaSilkBankCap
 	if clock.capped && !capped {
 		clock.generation = 0
 	}
@@ -317,7 +381,7 @@ The real wallet still owns the atomic debit and grant. Observing the
 committed balance resumes capped earnings without polling SQL per tick.
 ================
 */
-func (b *BetaSilk) PurchaseMall(character *domain.Character, cost domain.MallBalance, grant func([]domain.InventoryRow) ([]domain.InventoryRow, error)) (domain.MallBalance, error) {
+func (b *BetaSilk) PurchaseMall(character *domain.Character, cost domain.MallBalance, grant func(rows []domain.InventoryRow, earnedOnly bool) ([]domain.InventoryRow, error)) (domain.MallBalance, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if character == nil {
@@ -419,7 +483,7 @@ func (b *BetaSilk) Tick(nowMs int64, sessions []simulation.SessionView, lookup f
 		if !credited {
 			continue
 		}
-		payload, err := json.Marshal(balance)
+		payload, err := mallBalancePushPayload(balance)
 		if err != nil {
 			continue
 		}

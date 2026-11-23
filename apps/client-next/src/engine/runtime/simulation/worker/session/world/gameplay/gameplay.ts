@@ -30,7 +30,8 @@ import {
 	autoPotionTarget,
 	autoPotionTargetNotice,
 	createCosSelection,
-	isRideStateRefusedItem
+	isRideStateRefusedItem,
+	type CosItemUseContext
 } from "@/engine/foundation/gameplay/cos-item-use";
 import { ARENA_CHEST_OPCODE, ARENA_DECISION_OPCODE } from "@/engine/foundation/gameplay/arena-chest";
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
@@ -366,7 +367,16 @@ import { createSroMacro } from "./sro-macro/sro-macro";
 import {
 	BAG_FIRST_SLOT,
 	emptyMacroPotionQueue,
+	MACRO_ROW_BUFF_ITEM,
+	MACRO_ROW_PET_CURE,
+	MACRO_ROW_PET_HP,
+	MACRO_ROW_PET_HUNGER,
+	MACRO_ROW_PET_RESURRECT,
+	MACRO_ROW_PET_SUMMON,
+	macroPetFacts,
+	macroPetLiving,
 	macroPotionBagSlot,
+	macroPotionBuffSkillId,
 	macroPotionFired,
 	macroPotionWants,
 	rearmMacroPotion
@@ -411,6 +421,13 @@ import { createJobHonor } from "./job-honor/job-honor";
 import { createJobHonorTiers } from "./job-honor/job-honor-tiers";
 import { createUniqueStatus } from "./unique-status/unique-status";
 import { createHwanLevel } from "./hwan-level/hwan-level";
+import {
+	decodeStaffRoster,
+	decodeStaffState,
+	OP_STAFF_ROSTER,
+	OP_STAFF_STATE,
+	type StaffRosterEntry
+} from "@/engine/foundation/gameplay/staff-roster";
 import { createMostWanted } from "./most-wanted/most-wanted";
 import { createPetTraining } from "./pet-training/pet-training";
 import type {
@@ -722,6 +739,9 @@ export function createGameplay(
 	let warnings = [ false, false ];
 	let options = initialGameOptions();
 	let eligibility = { gm: false, pcRoomEvent: false };
+	// Port-only (staff-roster.ts): the staff roster, and this character's
+	// capability bits; 0x3FCC flips eligibility.gm live.
+	let staffRoster: readonly StaffRosterEntry[] = [], staffCapabilities = 0;
 	let autoPotionInputBlocked = false, autoPotionItemMallOpen = false;
 	let autoPotion = autoPotionBootstrap( {} );
 	let potionFacts: AutoPotionFacts = { alive: false, hp: 0, mp: 0, maxHp: 0, maxMp: 0, abnormal: 0 };
@@ -1645,7 +1665,12 @@ the use target and one open inventory transaction. True when the use
 request went out.
 ================
 	*/
-	function useAutomaticItem( slot: number, now: number, quiet = false ): boolean {
+	function useAutomaticItem(
+		slot: number,
+		now: number,
+		quiet = false,
+		override?: CosItemUseContext
+	): boolean {
 		// 561E57..561E6B tests the visible stall control, including the owner
 		// editing a closed stall and a visitor. Naming and network are separate windows.
 		const stallVisible = inventory.stallPhase() === "owner" || inventory.stallPhase() === "visitor";
@@ -1661,7 +1686,7 @@ request went out.
 		}
 		const item = inventory.state().inventory.find( row => row.slot === slot )!;
 		if ( itemCooldown( inventory.state().itemCooldowns, item.typeFlags, now ) ) return false;
-		const context = autoPotionTarget(
+		const context = override ?? autoPotionTarget(
 			item.typeFlags,
 			[ ...cosRecords.values() ],
 			cosSelection.selected(),
@@ -1766,11 +1791,13 @@ or no longer the player's (the cos-inventory-move authority).
 ================
 checkMacroPotion
 
-Port-only, not native (#3907): one tick of the SRO Macro's character
-auto-potion (sro-macro-potion.ts), while the Experimental row is on and
+Port-only, not native (#3907): one tick of the SRO Macro's character and
+pet auto-potion (sro-macro-potion.ts), while the Experimental row is on and
 the server has accepted Auto-Potion ON. A row's item is the first bag
-stack of its RefItem ID. The attempts are quiet: the loop retries every
-tick, so a standing refusal would otherwise repeat its notice.
+stack of its RefItem ID. Pet revive (row 7) uses Grass with the summoner
+slot (006921a0 / 0x803dc0); summon (row 8) uses the summoner alone.
+The attempts are quiet: the loop retries every tick, so a standing
+refusal would otherwise repeat its notice.
 ================
 	*/
 	function checkMacroPotion( now: number ) {
@@ -1779,11 +1806,68 @@ tick, so a standing refusal would otherwise repeat its notice.
 			macroPotionQueue = emptyMacroPotionQueue();
 			return;
 		}
+		const bag = inventory.state().inventory;
+		// 006930a0 asks 00809330 → 00abd630 whether the item's buff is live.
+		const activeBuffSkills = combat.state().attachedEffects
+			.filter( effect => {
+				if ( effect.gid !== localGid ) return false;
+				if ( effect.remainingMs === undefined ) return true;
+				const elapsed = Math.max( 0, now - (effect.receivedAtMs ?? now) );
+				return effect.remainingMs - elapsed > 0;
+			} )
+			.map( effect => effect.skill );
+		const facts = { ...potionFacts, activeBuffSkills };
+		const buffSkillId = macroPotionBuffSkillId( settings.potion, bag );
+		// COS vitals never carry max HP (0x33A6); the spawn catalog and the
+		// pet-training combat profile do (native pet object +0x2c / vtable).
+		const training = petTraining.state();
+		const pet = macroPetFacts( {
+			records: [ ...cosRecords.values() ].map( record => {
+				const trained = training?.gid === record.gid ? training.stats?.maxHp : undefined;
+				const spawned = readEntity( record.gid )?.maxHp;
+				return {
+					...record,
+					maxHp: trained || spawned || 0
+				};
+			} ),
+			selectedGid: cosSelection.selected(),
+			vitals: combat.state().vitals,
+			bag,
+			summonRef: potionSlot( settings.potion, MACRO_ROW_PET_SUMMON ).item
+		} );
+		const petGid = pet.present ? macroPetLiving( [ ...cosRecords.values() ], cosSelection.selected() ) : 0;
 		macroPotionQueue = rearmMacroPotion( macroPotionQueue, now );
 		for ( const row of macroPotionQueue.ready ) {
-			if ( !macroPotionWants( settings.potion, row, potionFacts ) ) continue;
-			const slot = macroPotionBagSlot( settings.potion, row, inventory.state().inventory );
-			if ( slot === undefined || !useAutomaticItem( slot, now, true ) ) continue;
+			const skillId = row === MACRO_ROW_BUFF_ITEM ? buffSkillId : 0;
+			if ( !macroPotionWants( settings.potion, row, facts, skillId, pet ) ) continue;
+			const slot = macroPotionBagSlot( settings.potion, row, bag );
+			if ( slot === undefined ) continue;
+			let used = false;
+			if ( row === MACRO_ROW_PET_RESURRECT ) {
+				const summonSlot = macroPotionBagSlot( settings.potion, MACRO_ROW_PET_SUMMON, bag );
+				if ( summonSlot === undefined ) continue;
+				used = useAutomaticItem( slot, now, true, {
+					records: [ ...cosRecords.values() ],
+					selectedGid: cosSelection.selected(),
+					revivalSlot: summonSlot
+				} );
+			} else if (
+				row === MACRO_ROW_PET_HP || row === MACRO_ROW_PET_HUNGER || row === MACRO_ROW_PET_CURE
+			) {
+				if ( !petGid ) continue;
+				// Aim the pet item at the living pet through its use context,
+				// as resurrect does: the pet window's selection is the
+				// player's choice, and the macro never moves it.
+				const flags = inventory.state().inventory.find( item => item.slot === slot )?.typeFlags;
+				const aimed = flags === undefined ?
+					null :
+					autoPotionTarget( flags, [ ...cosRecords.values() ], petGid );
+				if ( !aimed ) continue;
+				used = useAutomaticItem( slot, now, true, aimed );
+			} else {
+				used = useAutomaticItem( slot, now, true );
+			}
+			if ( !used ) continue;
 			macroPotionQueue = macroPotionFired( macroPotionQueue, row, now );
 			return;
 		}
@@ -1996,6 +2080,8 @@ clears it when another character enters.
 		entryVitals = {};
 		warnings = [ false, false ];
 		eligibility = { gm: false, pcRoomEvent: false };
+		staffRoster = [];
+		staffCapabilities = 0;
 		autoPotion = autoPotionBootstrap( {} );
 		potionFacts = { alive: false, hp: 0, mp: 0, maxHp: 0, maxMp: 0, abnormal: 0 };
 		potionTimers.fill( emptyAutoPotionTimer() );
@@ -2473,11 +2559,14 @@ Bind the admitted local actor and initialize its authoritative movement.
 		/*
 ================
 correct
+
+keepTravel is the 0x3028 position resync, which reseeds a walk in
+flight instead of ending it (movement.correct).
 ================
 		*/
-		correct( entity: EntityState, now?: number ) {
+		correct( entity: EntityState, now?: number, keepTravel = false ) {
 			if ( entity.gid !== localGid ) throw Error( "Correction references non-local entity" );
-			movement.correct( { ...entity, angle: entity.heading }, now );
+			movement.correct( { ...entity, angle: entity.heading }, now, keepTravel );
 			dirty = true;
 		},
 		/*
@@ -2495,7 +2584,8 @@ nameInputs
 				fortress,
 				attackedName: combat.nameAttack( now ),
 				localItem: inventory.nameItem(),
-				localLevel: progression.level
+				localLevel: progression.level,
+				staffRoster
 			};
 		},
 		/*
@@ -3262,7 +3352,11 @@ state here before a command can claim a native wire conversation.
 				}
 				return sendFrame( academyOpenRequest() );
 			}
-			if ( command.kind === "academy-page" || command.kind === "academy-join" ) {
+			if (
+				command.kind === "academy-page" || command.kind === "academy-join" ||
+				command.kind === "academy-register" || command.kind === "academy-modify" ||
+				command.kind === "academy-delete"
+			) {
 				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
 				const next = academyRequest( academy, command, progression.level );
 				send( next.frame );
@@ -4710,6 +4804,18 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( frame.opcode === OP_STAFF_STATE ) {
+					const state = decodeStaffState( frame.payload );
+					eligibility = { ...eligibility, gm: state.gm };
+					staffCapabilities = state.capabilities;
+					dirty = true;
+					return true;
+				}
+				if ( frame.opcode === OP_STAFF_ROSTER ) {
+					staffRoster = decodeStaffRoster( frame.payload );
+					dirty = true;
+					return true;
+				}
 				if ( frame.opcode === DEATH_NOTICE ) {
 					if ( frame.payload.length !== 1 ) throw Error( "Invalid death notice" );
 					rebirthMode = frame.payload[0]!;
@@ -4886,7 +4992,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 				}
 				if ( academy ) {
-					const next = academyPacket( academy, frame, now );
+					const next = academyPacket( academy, frame, now, social.localName );
 					if ( next ) {
 						const statusNotice = academyStatusNotice( academy, next, frame );
 						if ( statusNotice ) {
@@ -6658,22 +6764,6 @@ cancelCast
 			movement.cancelCast( token, now );
 			dirty = true;
 		},
-		// The local player's live pose is owned by movement, not by its entity
-		// row (which only follows displacements). Clipping a local dash from
-		// the entity row sent Ghost Walk back toward a stale position.
-		/*
-================
-constrainDisplacement
-================
-		*/
-		constrainDisplacement(
-			command: import("@/engine/contracts/gameplay").CastDisplacement,
-			entityPose: import("@/engine/contracts/gameplay").Pose,
-			now: number
-		) {
-			const from = command.gid === localGid ? movement.current( now ) ?? entityPose : entityPose;
-			return movement.constrainDisplacement( command, from, command.gid === localGid, now );
-		},
 		guidedArrival: combat.guidedArrival,
 		/*
 ================
@@ -6841,6 +6931,10 @@ The published plane when something changed since the last take, else null.
 				// Port-only (#3358): the shown Contributor roster
 				// (contributor-titles.ts), under SRO_CONTRIBUTOR_TITLES.
 				contributorTitles: contributorTitles.names(),
+				// Port-only (staff-roster.ts): every staff member's tag and colours,
+				// and this character's own capability bits.
+				staffRoster,
+				staffCapabilities,
 				// Port-only (#3907): the SRO Macro settings (sro-macro.ts),
 				// under SRO_AUTO_MACRO.
 				...(sroMacro.view() ? { sroMacro: sroMacro.view() } : {}),

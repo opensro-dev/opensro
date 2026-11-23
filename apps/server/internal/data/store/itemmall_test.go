@@ -38,7 +38,7 @@ func TestMallPurchaseAtomicity(t *testing.T) {
 		t.Fatal(err)
 	}
 	cost := domain.MallBalance{Silk: 30, GiftSilk: 2, Points: 3}
-	grant := func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) {
+	grant := func(rows []domain.InventoryRow, _ bool) ([]domain.InventoryRow, error) {
 		rows[0].StackCount = 2
 		return rows, nil
 	}
@@ -49,7 +49,7 @@ func TestMallPurchaseAtomicity(t *testing.T) {
 			t.Fatalf("failed purchase changed authority: %+v, %v, %+v", balance, err, first.MissionInventory)
 		}
 	}
-	if _, err := s.PurchaseMall(first, cost, func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) {
+	if _, err := s.PurchaseMall(first, cost, func(rows []domain.InventoryRow, _ bool) ([]domain.InventoryRow, error) {
 		rows[0].StackCount = 99
 		return nil, errors.New("inventory full")
 	}); err == nil {
@@ -111,7 +111,10 @@ func TestMallPurchaseUntrustedAccountIdentity(t *testing.T) {
 		}
 	}
 	var granted atomic.Int32
-	grant := func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) { granted.Add(1); return rows, nil }
+	grant := func(rows []domain.InventoryRow, _ bool) ([]domain.InventoryRow, error) {
+		granted.Add(1)
+		return rows, nil
+	}
 	impostor := *character
 	if _, err := s.PurchaseMall(&impostor, domain.MallBalance{Silk: 1}, grant); err == nil {
 		t.Fatal("accepted a character outside store ownership")
@@ -154,7 +157,7 @@ func TestMallRacePurchasesCannotDoubleSpend(t *testing.T) {
 	for _, character := range characters {
 		go func(character *domain.Character) {
 			<-start
-			_, err := s.PurchaseMall(character, domain.MallBalance{Silk: 60}, func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) {
+			_, err := s.PurchaseMall(character, domain.MallBalance{Silk: 60}, func(rows []domain.InventoryRow, _ bool) ([]domain.InventoryRow, error) {
 				granted.Add(1)
 				rows[0].StackCount = 2
 				return rows, nil

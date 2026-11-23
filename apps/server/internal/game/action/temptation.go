@@ -180,6 +180,9 @@ func (rt *Runtime) monsterHitMonster(division string, instance, target monster.I
 		target.Gid,
 		impacts,
 	))}
+	// The result bracket is the only publication, so the hit's committed
+	// abnormal publications ride with it (#3680).
+	public = append(public, rt.monsterImpactAbnormalFrames(division, target.Gid, committed)...)
 	bracket := fmt.Sprintf("@monster:%d", instance.Gid)
 	closeAt := nowMs + max(int64(lifecycle), projectileFlightMs(from, to, skill.ProjectileSpeed)+1)
 	rt.queueSkillFinalize(division, bracket, instance.Gid, nowMs, wire.SkillCastReleaseFrame(token, target.Gid))

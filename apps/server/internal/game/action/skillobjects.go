@@ -155,6 +155,8 @@ func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.Sessio
 	if !settled {
 		after = rt.SkillObjects.Snapshot()
 	}
+	scope := rt.Steps.Begin(skillObjectScopeStep)
+	defer scope.End()
 	for _, session := range sessions {
 		if session.PublishedObjects == nil {
 			continue
@@ -326,7 +328,14 @@ func (rt *Runtime) advanceSkillObjectCommits(nowMs int64, out, results *[]simula
 		if rt.skillObjectWaiting(object, nowMs) {
 			continue
 		}
-		for _, batch := range rt.advanceSkillObject(object, nowMs) {
+		// Each pass is a named step (step:skillObject*), so a slow
+		// skill-objects hook says which kind of object held it; until
+		// 2026-11-24 the hook's 23 ms a tick named nothing and only a
+		// CPU profile found the field scan.
+		span := rt.Steps.Begin(skillObjectStepName(object))
+		batches := rt.advanceSkillObject(object, nowMs)
+		span.End()
+		for _, batch := range batches {
 			if batch.SourceGID == object.Spawn.GID {
 				*results = append(*results, batch)
 			} else {
@@ -336,6 +345,36 @@ func (rt *Runtime) advanceSkillObjectCommits(nowMs int64, out, results *[]simula
 	}
 	*out = append(*out, rt.sealTickPrivate(routed)...)
 	return before, generation
+}
+
+// The skill-objects hook's step names (tick_zones step: rows).
+const (
+	skillObjectFieldStep  = "skillObjectField"
+	skillObjectPulseStep  = "skillObjectPulse"
+	skillObjectCombatStep = "skillObjectCombat"
+	skillObjectOtherStep  = "skillObjectOther"
+	skillObjectScopeStep  = "skillObjectScope"
+)
+
+/*
+================
+skillObjectStepName
+
+The step one object's pass is timed under, by the program branch
+advanceSkillObject takes for it: a buff field, a pulsing trap field,
+a combat trap, or any other object.
+================
+*/
+func skillObjectStepName(object skillobject.Object) string {
+	switch {
+	case object.Program.Field:
+		return skillObjectFieldStep
+	case object.Program.Pulse:
+		return skillObjectPulseStep
+	case object.Program.Combat:
+		return skillObjectCombatStep
+	}
+	return skillObjectOtherStep
 }
 
 /*

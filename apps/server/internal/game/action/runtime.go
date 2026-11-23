@@ -39,6 +39,7 @@ import (
 	"opensro.online/server/internal/game/social/crest"
 	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/union"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/optionalteleport"
 	"opensro.online/server/internal/game/world/simulation"
@@ -83,6 +84,9 @@ type Runtime struct {
 	marketProceedsAt atomic.Int64
 	// gmSpeeds holds each GM's /SETSPEED percent (gmspeed.go), session only.
 	gmSpeeds sync.Map
+	// logoutBlocks holds the characters a GM's /BLOCKLOGOUT keeps in the
+	// world (departure.go), until /ALLOWLOGOUT or a GameWorld restart.
+	logoutBlocks sync.Map
 	// GMSetSpeed admits /SETSPEED (port-only, SRO_GM_SETSPEED; off is native).
 	GMSetSpeed bool
 	// GMItemForge admits /FORGE (port-only, SRO_GM_ITEM_FORGE, issue #1980;
@@ -559,6 +563,14 @@ type Runtime struct {
 	// nothing extra.
 	NameChangeScroll bool
 
+	// MallEarnedTradable is the mall purchase rule (#4133,
+	// SRO_EARNED_SILK_TRADABLE; itemmall.go): a purchase paid wholly
+	// from earned silk delivers a tradable item. The zero value is
+	// native: every mall purchase is account-bound, whatever paid.
+	// Composition assigns EarnedSilkTradableFromEnv, whose shipped
+	// default is on.
+	MallEarnedTradable bool
+
 	// EquipSwitch enables each port-only equipment switch scroll by kind
 	// (SRO_WEAPON_SWITCH_SCROLL, SRO_ARMOR_SWITCH_SCROLL,
 	// SRO_ACCESSORY_SWITCH_SCROLL; commerce/equipswitch.go). A missing
@@ -929,6 +941,10 @@ type Runtime struct {
 	// burst after the authority door closes. Pending pickups use captured
 	// delivery when configured; detached runtimes retain this actor fallback.
 	PushCharacterFrames func(divisionID, characterName string, frames []wire.Frame)
+	// StaffRoster is the division's staff tags and colours (the staff
+	// book plus the host allowlist; staff.go, port-only). Nil sends no
+	// roster, the native behaviour.
+	StaffRoster func(divisionID string) []staff.RosterEntry
 	// PushGuildFrames delivers one member's guild frames: its 0x3B29 deltas
 	// only to a session holding guildID's block, every other frame as
 	// PushCharacterFrames would (guild/baseline.go). Nil falls back to
@@ -986,10 +1002,10 @@ type Runtime struct {
 	// port-only): the Global Chatting line enters it, a GM ban purges the
 	// banned character's lines. Nil keeps both in-game only.
 	PublicChat *chatfeed.Feed
-	// ChatShadowMuted reports a staff shadow-muted account (shadowmute,
+	// ChatShadowMuted reports a staff shadow-muted line, by account or by word (shadowmute,
 	// port-only, not native): its Global Chatting line reaches only
 	// itself. Nil mutes no one.
-	ChatShadowMuted func(accountID string) bool
+	ChatShadowMuted func(accountID, text string) bool
 	// ChatItemLinks is the port-only SRO_CHAT_ITEM_LINKS switch for the
 	// Global Chatting line (globalchat.go); nil keeps the native tail.
 	ChatItemLinks *chat.ItemLinks

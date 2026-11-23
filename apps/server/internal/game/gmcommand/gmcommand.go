@@ -70,7 +70,25 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 	if err != nil {
 		return refused(err.Error())
 	}
+	// Port-only, not native (owner decision 2026-11-23): a staff grant
+	// opens only its ticked commands (capability.go). The sender is the
+	// live record, so a revoke or an unticked box applies right here.
+	if !capabilityAllows(sender, request.Subcmd) {
+		return Outcome{Ack: EncodeRequestFailure(request),
+			Refusal: fmt.Sprintf("gmcommand: subcommand 0x%02X not in %s's staff grant", request.Subcmd, sender.Name)}
+	}
+	return dispatchGmCommand(deps, presence, divisionID, sender, payload, request, status)
+}
 
+/*
+================
+dispatchGmCommand
+
+Runs one admitted request (payload is its raw body): the sender is a GM whose grant carries the
+subcommand's capability.
+================
+*/
+func dispatchGmCommand(deps Dependencies, presence PresenceView, divisionID string, sender *enterworld.Character, payload []byte, request Request, status []BodyStatusCommands) Outcome {
 	switch request.Subcmd {
 	case SubWarp:
 		if len(status) > 0 {
@@ -198,6 +216,8 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 		return handleBan(deps, presence, divisionID, sender, request, status)
 	case SubRecallGuild:
 		return handleRecallGuild(divisionID, sender, request, status)
+	case SubChatMute, SubChatUnmute, SubShadowMute, SubShadowUnmute, SubBlockLogout, SubAllowLogout:
+		return handleModeration(deps, divisionID, sender, request, status)
 	case SubLieName, SubRealName:
 		return handleWho(deps, presence, divisionID, request)
 	case SubFindUser:

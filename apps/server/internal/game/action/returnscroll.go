@@ -612,6 +612,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64, hold *simu
 	var destination simulation.Spawn
 	var arrival travelPoint
 	cancelled := false
+	inPlaceReload := false
 	currentWorld := instance.ID(domain.CharacterWorldInstance(c))
 	rt.bindResidentRegionDeferred(key, now)
 	if !rt.deps.UpdateDeferred(c, "return-scroll-complete", func() bool {
@@ -619,6 +620,9 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64, hold *simu
 			rt.returnCasts.Delete(key)
 			return false
 		}
+		// A mode-3 completion reloads the actor where it stands (skin
+		// change, job dress); it is not a teleport and keeps berserk.
+		inPlaceReload = c.NativeTeleportMode == skinTeleportMode
 		// Death cancels the job (cancelReturnOnDeathInDoor); a corpse that
 		// reached here by another path is never teleported.
 		if !enterworld.CharacterAlive(c) {
@@ -676,6 +680,9 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64, hold *simu
 	}
 	rt.endTransformForLoadingDeferred(job.division, c)
 	rt.endPartyAurasForLoadingDeferred(job.division, c)
+	if !inPlaceReload {
+		rt.endBerserkForLoadingDeferred(job.division, c)
+	}
 	previousPets := rt.relocateReturningPet(job.division, c, destination)
 	hold.Mark("unload")
 	packets, accepted := rt.deps.ReentryPackets(job.division, job.name)

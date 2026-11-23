@@ -97,6 +97,12 @@ type Item struct {
 	// part of stack identity (tradegoods.go) so a merge can never pour
 	// bound quantity into an unbound row.
 	ForgeBound bool
+	// EarnedBought marks an Item Mall item paid for wholly with earned
+	// Silk (port only, issue #4133): the tradability its reference row
+	// denies, decided at delivery and read by Runtime.Tradeable. Part
+	// of stack identity for the same reason as the seal: a merge can
+	// never pour quantity into or out of a marked row.
+	EarnedBought bool
 }
 
 // Body returns the CSOItem body for this row, the remainder of a type-0x06

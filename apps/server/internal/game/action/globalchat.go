@@ -154,7 +154,7 @@ func (rt *Runtime) useGlobalChatting(use globalChatUse, tail []byte, result *OpR
 	// the shard push and the website line below, so it waits for the
 	// post-commit step: a door that rolls the use back must not keep a
 	// line that was never said, for an item that was never spent.
-	muted := rt.ChatShadowMuted != nil && rt.ChatShadowMuted(c.AccountID)
+	muted := rt.ChatShadowMuted != nil && rt.ChatShadowMuted(c.AccountID, text)
 	record := func() {
 		if rt.ModerationLog != nil {
 			rt.ModerationLog.Record(chatlog.Entry{

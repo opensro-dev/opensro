@@ -141,7 +141,12 @@ the page can be tried on (parallel to browse.offers).
 export interface RenewalMallInput {
 	readonly data: RenewalMallData;
 	readonly browse: RenewalMallBrowse;
-	readonly balance: { readonly silk: number; readonly giftSilk: number; readonly points: number; } | undefined;
+	readonly balance: {
+		readonly silk: number;
+		readonly earnedSilk: number;
+		readonly giftSilk: number;
+		readonly points: number;
+	} | undefined;
 	readonly character: { readonly name: string; readonly level: number | undefined; };
 	readonly origin: readonly [number, number];
 	readonly strings: Readonly<Record<string, string>>;
@@ -503,6 +508,27 @@ export function renewalMallView( input: RenewalMallInput ): RenewalMallOp[] {
 		const markControl = infoControl( mark );
 		if ( markControl.texture ) authored( markControl, ix, iy );
 		else label( copy( markControl.text ), infoRect( mark ), WHITE );
+	}
+	// Port-only (#4133): a fourth row under Point shows the earned Silk
+	// balance next to the granted one above. No native control or string
+	// names it, so the caption is the port's own and the row steps by the
+	// authored pitch.
+	{
+		const giftRect = infoRect( "GDR_ITEM_MALL_MYINFO_GIFT_SILK" );
+		const pointRect = infoRect( "GDR_ITEM_MALL_MYINFO_POINT" );
+		const pointCaption = infoRect( "GDR_ITEM_MALL_MYINFO_STA_POINT_STR" );
+		const pitch = pointRect[1] - giftRect[1];
+		label(
+			"Earned silk",
+			[ pointCaption[0], pointCaption[1] + pitch, pointCaption[2], pointCaption[3] ],
+			WHITE
+		);
+		label(
+			String( input.balance?.earnedSilk ?? 0 ),
+			[ pointRect[0], pointRect[1] + pitch, pointRect[2], pointRect[3] ],
+			GOLD,
+			2
+		);
 	}
 	// Buy silk and Coupon open retail web pages; the port has none to
 	// link to, so both stay disabled as the classic window's do.

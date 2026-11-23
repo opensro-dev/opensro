@@ -155,6 +155,11 @@ and the other recipients' frames.
 ================
 */
 func (rt *Runtime) creditedHitResult(division string, target monster.Instance, hit creditedMonsterHit, public []wire.Frame, now int64) OpResult {
+	// Every credited lane publishes the status its hit landed here, after
+	// the lane's own frame: the result frames of a hawk strike, a pulse,
+	// a returned hit or a linked tick carry no status answer (#3680). A
+	// hit that landed none publishes nothing; a kill publishes no status.
+	public = append(public, rt.monsterImpactAbnormalFrames(division, target.Gid, hit.impacts)...)
 	if hit.impacts[0].Fatal {
 		public = append(public, monsterLifeDeadFrame(target.Gid))
 		public = append(public, rt.groundReferences(hit.settlement.drops)...)

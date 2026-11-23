@@ -18,6 +18,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 )
 
 /*
@@ -71,7 +72,7 @@ func gmQuestFrame(sub uint8, codename string) []byte {
 
 func TestGMQuestToolsRunOnTheGMAndDeliverTheirFrames(t *testing.T) {
 	f := newGMQuestFixture(t)
-	f.c.GMPrivilege = true
+	f.c.GMPrivilege, f.c.GMCapabilities = true, uint32(staff.All)
 	f.result = GMQuestResult{
 		Frames:    []wire.Frame{{Opcode: 0x31ED, Payload: []byte{4}}},
 		Broadcast: []wire.Frame{{Opcode: 0x3054, Payload: []byte{9}}},
@@ -101,7 +102,7 @@ func TestGMQuestToolsRunOnTheGMAndDeliverTheirFrames(t *testing.T) {
 
 func TestGMQuestToolRefusalStillDeliversWhatWasCommitted(t *testing.T) {
 	f := newGMQuestFixture(t)
-	f.c.GMPrivilege = true
+	f.c.GMPrivilege, f.c.GMCapabilities = true, uint32(staff.All)
 	f.result = GMQuestResult{Frames: []wire.Frame{{Opcode: 0x31ED, Payload: []byte{2}}}}
 	f.err = errors.New("stage 4 refused")
 
@@ -131,7 +132,7 @@ func TestGMQuestToolsRefuseAPlayerWithoutTouchingTheJournal(t *testing.T) {
 
 func TestGMQuestToolsAreRefusedWhenTheQuestRuntimeIsNotWired(t *testing.T) {
 	f := newGMQuestFixture(t)
-	f.c.GMPrivilege = true
+	f.c.GMPrivilege, f.c.GMCapabilities = true, uint32(staff.All)
 	f.rt.GMQuests = GMQuestHooks{}
 	out := gmcommand.HandleGmCommand(f.deps, nil, testDivision, f.c, gmQuestFrame(gmcommand.SubRemoveQ, "QNO_X"), f.rt)
 	if !bytes.Equal(out.Ack, []byte{gmcommand.AckResultFail, gmcommand.SubRemoveQ}) {

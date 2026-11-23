@@ -83,6 +83,7 @@ var layoutSteps = []layoutStep{
 	{12, true, "empty silk-history table", []string{"silk_history"}, silkHistorySchema},
 	{13, true, "empty trade-history table", []string{"trade_history"}, tradeHistorySchema},
 	{14, true, "empty AI caravan memory and route-heat tables", []string{"caravan_agent_memories", "caravan_route_heat"}, caravanAgentSchema},
+	{15, true, "empty earned-silk wallet and silk-history split tables", []string{"mall_earned_silk", "silk_history_earned"}, mallEarnedSilkSchema + silkHistoryEarnedSchema},
 }
 
 /*

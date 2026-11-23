@@ -25,6 +25,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/data/store"
+	"opensro.online/server/internal/game/action"
+	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/moderation"
 	"opensro.online/server/internal/game/social/chatreport"
 	"opensro.online/server/internal/transport"
@@ -105,6 +107,28 @@ func conductOperations(game *gameplayPlane, book *moderation.Book, shard string,
 		return read(request.Character)
 	}
 	return mute, unmute, kick
+}
+
+/*
+================
+gmLaneOwner
+
+The GM lane's owner: the action runtime, which answers every command it
+always has, plus the moderation desk the moderation commands act on.
+================
+*/
+type gmLaneOwner struct {
+	*action.Runtime
+	desk *gmcommand.Moderation
+}
+
+/*
+================
+GMModeration
+================
+*/
+func (owner gmLaneOwner) GMModeration() *gmcommand.Moderation {
+	return owner.desk
 }
 
 /*

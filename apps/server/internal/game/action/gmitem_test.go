@@ -7,6 +7,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 )
 
 type gmItemSource struct{ staticItemSource }
@@ -33,7 +34,7 @@ func TestMakeItemAuthorityDropAndNormalPickup(t *testing.T) {
 	if out := gmcommand.HandleGmCommand(deps, nil, testDivision, c, command, rt); out.Ack != nil || rt.Ground.Count(testDivision) != 0 {
 		t.Fatal("non-GM created item")
 	}
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	out := gmcommand.HandleGmCommand(deps, nil, testDivision, c, command, rt)
 	if !bytes.Equal(out.Ack, []byte{1, 7}) || rt.Ground.Count(testDivision) != 1 {
 		t.Fatalf("creation: %+v", out)
@@ -76,7 +77,7 @@ func TestMakeItemEquipmentStartsAtItsVarianceDurability(t *testing.T) {
 	refs[ref.Codename] = ref
 	deps.Items = gmItemSource{refs}
 	rt.PushCharacterFrames = func(_, _ string, _ []wire.Frame) {}
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	if !rt.MakeGMItem(testDivision, c.Name, ref.RefObjID, 11) {
 		t.Fatal("the GM item was not made")
 	}

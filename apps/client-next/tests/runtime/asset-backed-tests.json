@@ -47,6 +47,7 @@
 		"debug-field-of-view.test.mjs",
 		"drawn-effect-anchors.test.mjs",
 		"dungeon-presentation.test.mjs",
+		"dungeon-region-lights.test.mjs",
 		"effect-link-mode.test.mjs",
 		"effect-material.test.mjs",
 		"effect-record-alias.test.mjs",
