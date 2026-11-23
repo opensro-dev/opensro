@@ -13,7 +13,10 @@ from unittest import mock
 
 import arabia_gates as gates
 import arabia_import as arabia
+import arabia_quest_items as quest_items
+import arabia_quest_tables as quest_tables
 import cap110_item_import
+import cap110_items
 import import_vsro_alexandria as tables
 import skytemple_import
 import sro_pk2
@@ -308,6 +311,28 @@ class ArabiaHelpersTest(unittest.TestCase):
 # ================
 # build_trees
 #
+# ================
+# quest_item
+#
+# One itemdata row of the quest-item kind (3/3/9/0), the Arabia items'
+# shape in both clients.
+# ================
+def quest_item(code, identity, name_symbol="xxx"):
+	row = ["0"] * cap110_items.ITEM_COLUMNS
+	row[cap110_items.SERVICE] = "1"
+	row[cap110_items.IDENTITY] = str(identity)
+	row[cap110_items.CODENAME] = code
+	row[cap110_items.PLACEHOLDER_NAME] = "korean"
+	row[cap110_items.NAME_KEY] = name_symbol
+	row[cap110_items.DESCRIPTION_KEY] = "xxx"
+	row[cap110_items.TYPE_FIRST:cap110_items.TYPE_FOURTH + 1] = ["3", "3", "9", "0"]
+	for column in range(cap110_items.PARAM_FIRST, cap110_items.PARAM_LAST, cap110_items.PARAM_STRIDE):
+		row[column], row[column + 1] = "-1", "xxx"
+	row[cap110_items.DROP_MODEL] = "item\\quest_drop.bsr"
+	row[cap110_items.ICON] = "item_quest.ddj"
+	return row
+
+
 # A native extracted root, a variant output root and a v1.696 source
 # root in tmp, small but complete. Returns (native, output, source, nests).
 # ================
@@ -321,6 +346,12 @@ def build_trees(base):
 		["1", "SN_NATIVE", "x", "", "", "Native", "", "", "", "", ""],
 		["1", "SN_NPC_NATIVE_NAMED", "x", "", "", "Native Named", "", "", "", "", ""],
 	])
+	# The quest item's drop model and icon, native-held (the item
+	# closure copies native files first).
+	(native / "Data_extracted" / "res" / "item").mkdir(parents=True)
+	(native / "Data_extracted" / "res" / "item" / "quest_drop.bsr").write_bytes(b"drop")
+	(native / "Media_extracted" / "icon").mkdir(parents=True)
+	(native / "Media_extracted" / "icon" / "item_quest.ddj").write_bytes(b"icon")
 	write_table(native / text, "textquest.txt", [["1", "SN_NATIVE_QUEST", "x", "", "", "", "", "", "Quest", "", ""]])
 	write_table(native / text, "npcchat.txt", [["1", "NPC_NATIVE_NAMED", "SN_NATIVE_CHAT", "0"]])
 
@@ -331,6 +362,8 @@ def build_trees(base):
 	native_npc = ["0"] * 120
 	native_npc[0], native_npc[1], native_npc[2] = "1", "101", "NPC_CH_NATIVE_SHOP"
 	write_table(output / text, "characterdata_5000.txt", [native_char, native_npc])
+	write_table(output / text, "itemdata.txt", [["itemdata_5000.txt"]])
+	write_table(output / text, "itemdata_5000.txt", [quest_item("ITEM_NATIVE_TEST", 200)])
 	write_table(output / text, "skilldata.txt", [["skilldata_5000.txt"]])
 	write_table(output / text, "skilldata_5000.txt", [skill(50, "SKILL_NATIVE")])
 	write_table(output / text, "textdataname.txt", [
@@ -346,6 +379,12 @@ def build_trees(base):
 	write_table(output / text, "regioncode.txt", [["1", "25000", "RN_CH_JANGAN", ""], ["1", "22106", "xxx", ""]])
 	write_table(output / text, "textzonename.txt", [["1", "25000", "x", "", "", "Jangan", "", "", "", "", ""]])
 	write_table(output / text, "textquest.txt", [["1", "SN_NATIVE_QUEST", "x", "", "", "", "", "", "Quest", "", ""]])
+	write_table(output / text, "questdata.txt", [["1", "27", "QNO_KT_SMITH_1", "10", "desc", "SN_QNO_KT_SMITH_1",
+		"SN_PAY_QNO_KT_SMITH_1", "xxx", "SN_PAYCON_QNO_KT_SMITH_1", "SN_NN_QNO_KT_SMITH_1", "SN_NC_QNO_KT_SMITH_1"]])
+	write_table(output / text, "questcontentsdata.txt", [["QNO_KT_SMITH_1", "name", "3", "xxx", "1",
+		"SN_CON_QNO_KT_SMITH_1", "xxx", "xxx", "xxx", "xxx", "xxx", "xxx", "xxx"]])
+	write_table(output / text, "gameguidedata.txt", [["1", "140013", "name", "1", "140000",
+		"SN_PAYCON_QNO_KT_SMITH_1", "SN_QNO_KT_SMITH_1", "0"]])
 	write_table(output / text, "npcpos.txt", [["100", "25000", "1", "1", "1"], ["101", "25000", "2", "1", "2"]])
 	write_table(output / text, "npcchat.txt", [["1", "NPC_NATIVE", "SN_NATIVE", "0"],
 		["1", "NPC_NATIVE_NAMED", "SN_NATIVE_CHAT", "0"]])
@@ -375,6 +414,12 @@ def build_trees(base):
 		]),
 		"skilldata.txt": utf16([["skilldata_5000.txt"]]),
 		"skilldata_5000.txt": utf16([skill(70, "SKILL_LATER")]),
+		"itemdata.txt": utf16([["itemdata_20000.txt"]]),
+		"itemdata_20000.txt": utf16([quest_item("ITEM_QNO_AR_001_01", 40329, "SN_ITEM_QNO_AR_001_01")]),
+		# The later name files are sharded: the base file names its
+		# shards, and textdata_new.txt does not exist later at all.
+		"textdata_equip&skill.txt": utf16([["textdata_equip&skill_100.txt"]]),
+		"textdata_equip&skill_100.txt": utf16([object_row("SN_ITEM_QNO_AR_001_01", "Weapon Chest")]),
 		"npcpos.txt": utf16([["50003", "21325", "10", "1", "20"], ["50001", "19792", "1", "1", "1"],
 			["50004", "22106", "11", "1", "21"], ["50005", "21325", "12", "1", "22"],
 			["50006", "21325", "13", "1", "23"]]),
@@ -400,6 +445,15 @@ def build_trees(base):
 			["1", "500", "SN_NPC_AR_TEST_CHAT", "Korean", "0", "0", "0", "0", "0", "Greetings",
 				"0", "0", "0", "Greetings", "Greetings", "Greetings", "Greetings"],
 		]),
+		"questdata.txt": utf16([["QuestData_250.txt"]]),
+		"questdata_250.txt": utf16([["1", "1448", "QNO_AR_001", "121", "desc", "SN_QNO_AR_001",
+			"SN_PAY_QNO_AR_001", "xxx", "SN_PAYCON_QNO_AR_001", "SN_NN_QNO_AR_001", "SN_NC_QNO_AR_001"]]),
+		"questcontentsdata.txt": utf16([["QNO_AR_001", "name", "3", "xxx", "1", "SN_CON_QNO_AR_001_1"] + ["xxx"] * 13]),
+		"gameguidedata.txt": utf16([["1", "140015", "name", "1", "140000", "SN_PAYCON_QNO_AR_001", "SN_QNO_AR_001", "0"]]),
+		"textquest_queststring.txt": utf16([["TextQuest_QuestString_100.txt"]]),
+		"textquest_queststring_100.txt": utf16([object_row("SN_QNO_AR_001", "Quest Name")]),
+		"textquest_otherstring.txt": utf16([["TextQuest_OtherString_100.txt"]]),
+		"textquest_otherstring_100.txt": utf16([object_row("SN_PAYCON_QNO_AR_001", "Reward text")]),
 		"skilleffect.txt": b"\xff\xfe" + (
 			"#section\tcharacterinfo\r\n" + "\t".join(["MOB_AR_TEST"] + ["0"] * 12) + "\r\n"
 			"#section\tskillaniset2\r\n1\tname\tSKILL_LATER\tANI_TEST\r\n"
@@ -458,7 +512,9 @@ class ArabiaImportTest(unittest.TestCase):
 			native, output, source, nests = build_trees(Path(tmp))
 			text = output / arabia.TEXT_ROOT
 			closure = FakeClosure()
-			with mock.patch.dict(os.environ, {arabia.FLAG: "1"}):
+			with mock.patch.dict(os.environ, {arabia.FLAG: "1"}), \
+					mock.patch.object(cap110_item_import, "resource_dependencies",
+						side_effect=lambda requests: [[] for _ in requests]):
 				summary = arabia.add_arabia(native, output, source, nests, closure)
 			self.assertTrue(summary["enabled"])
 			self.assertEqual((summary["kinds"], summary["npcs"], summary["nests"]), (2, 2, 4))
@@ -535,14 +591,29 @@ class ArabiaImportTest(unittest.TestCase):
 			# table, with its English at the native column 8.
 			quest = {row[1]: row for row in read_rows(text / "textquest.txt") if len(row) > 8}
 			self.assertEqual(quest["SN_NPC_AR_TEST_CHAT"][8], "Greetings")
+			# The quests land with the layer: rows in the variant's
+			# tables, strings with English at the native column.
+			self.assertEqual(summary["quests"]["quests"], ["QNO_AR_001"])
+			self.assertEqual([row[2] for row in read_rows(text / "questdata.txt")], ["QNO_KT_SMITH_1", "QNO_AR_001"])
+			self.assertEqual(quest["SN_QNO_AR_001"][8], "Quest Name")
+			self.assertEqual(quest["SN_PAYCON_QNO_AR_001"][8], "Reward text")
 			# The dangling _PS twin is recorded, never demanded.
 			self.assertEqual(summary["speechUnresolved"], ["SN_NPC_AR_TEST_PS"])
 			self.assertNotIn("SN_NPC_AR_TEST_PS", quest)
+			# The quest items land with the layer: their shard joins
+			# the item manifest and the item's name the name table.
+			self.assertEqual(summary["questItems"]["codenames"], ["ITEM_QNO_AR_001_01"])
+			self.assertTrue((text / quest_items.OUTPUT_SHARD).exists())
+			self.assertIn(quest_items.OUTPUT_SHARD, [row[0] for row in read_rows(text / "itemdata.txt")])
+			self.assertIn("SN_ITEM_QNO_AR_001_01",
+				{row[1] for row in read_rows(text / "textdataname.txt") if len(row) > 1})
 
 			# A rebuild must keep owning the gate texts the first
 			# run wrote (ownership is measured against the native
 			# tables, not the current ones).
-			with mock.patch.dict(os.environ, {arabia.FLAG: "1"}):
+			with mock.patch.dict(os.environ, {arabia.FLAG: "1"}), \
+					mock.patch.object(cap110_item_import, "resource_dependencies",
+						side_effect=lambda requests: [[] for _ in requests]):
 				rebuilt = arabia.add_arabia(native, output, source, nests, closure)
 			self.assertIn("SN_NPC_AR_DSTARTPORTAL", rebuilt["gateTextSymbols"])
 			# ...and the rebuild re-derives the same gate identities
@@ -560,6 +631,13 @@ class ArabiaImportTest(unittest.TestCase):
 			for name in (arabia.CHARACTER_SHARD, arabia.SKILL_SHARD, arabia.POPULATION_FILE):
 				self.assertFalse((text / name).exists(), name)
 			self.assertFalse((output / arabia.MARKER).exists())
+			# Off reaps the quest item shard, its manifest line and
+			# its name against their own marker.
+			self.assertFalse((output / quest_items.MARKER).exists())
+			self.assertFalse((text / quest_items.OUTPUT_SHARD).exists())
+			self.assertEqual([row[0] for row in read_rows(text / "itemdata.txt")], ["itemdata_5000.txt"])
+			self.assertNotIn("SN_ITEM_QNO_AR_001_01",
+				{row[1] for row in read_rows(text / "textdataname.txt") if len(row) > 1})
 			self.assertEqual([row[0] for row in read_rows(text / "skilldata.txt")], ["skilldata_5000.txt"])
 			# Off removes the Arabia standing of the native kind by its
 			# exact row and keeps the native standing under the same id.
@@ -569,6 +647,12 @@ class ArabiaImportTest(unittest.TestCase):
 			# The native talk row rides through the whole cycle.
 			self.assertTrue(any(row[1] == "NPC_NATIVE_NAMED" for row in read_rows(text / "npcchat.txt")))
 			self.assertFalse(any(len(row) > 1 and row[1] == "SN_NPC_AR_TEST_CHAT"
+				for row in read_rows(text / "textquest.txt")))
+			# Off reaps the quest rows and strings against their own
+			# marker; the native quest keeps its row.
+			self.assertFalse((output / quest_tables.MARKER).exists())
+			self.assertEqual([row[2] for row in read_rows(text / "questdata.txt")], ["QNO_KT_SMITH_1"])
+			self.assertFalse(any(len(row) > 1 and row[1].startswith("SN_QNO_AR_")
 				for row in read_rows(text / "textquest.txt")))
 			gates = {row[2] for row in read_rows(text / "teleportdata.txt")}
 			self.assertNotIn("GATE_TO_LAST_FIELD_IN_BAGHDAD", gates)

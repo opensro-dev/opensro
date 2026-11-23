@@ -168,8 +168,9 @@ export const surfaceRecipes: readonly ExtendedRecipe[] = [
 		async open( context ) {
 			await OPENERS["Academy Matching"]!( context, context.step );
 			context.state.gameplay.academy = {
+				own: null,
 				member: false,
-				page: 0,
+				page: 1,
 				pages: 1,
 				request: null,
 				result: null,

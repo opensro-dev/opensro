@@ -34,9 +34,9 @@ dialog contract needs both, and inventing a line or a fallback is a
 design decision, recorded on #4134. That holds back the QNO_AR_001 to
 004 chain, QNO_AR_019, QNO_AR_026 and the hunts QNO_AR_010 and
 QNO_AR_027. The collects and deliveries (ITEM_QNO_AR_* quest items)
-live in arabia_quests_collect.go, and QNO_AR_059 (the hideout boss) and
-QNO_AR_066/068 (target kinds no source places) stay out with the
-hideout verdict on #4134.
+live in arabia_quests_collect.go. QNO_AR_059 (its hunt names a kind
+no source carries) and QNO_AR_066/068 (target kinds no source places)
+stay out, recorded on #4134.
 
 KindByte is 1, the authored policy of definitions.go (the tiger chain
 and the Blue Berserk quests): these quests complete at their NPC, not

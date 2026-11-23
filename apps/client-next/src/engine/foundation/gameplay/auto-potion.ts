@@ -137,6 +137,10 @@ export interface AutoPotionFacts {
 	readonly maxHp: number;
 	readonly maxMp: number;
 	readonly abnormal: number;
+	// Port-only (#3907 slice 4): skill ids of live attached effects on the
+	// local player. The SRO Macro buff-item row (006930a0) refuses while its
+	// associated skill id is in this list. The v1.150 auto-potion ignores it.
+	readonly activeBuffSkills?: readonly number[];
 }
 // 70C550/70C5D0/70C640 keep the repeating timer armed while blocked by an abnormal bit.
 /*

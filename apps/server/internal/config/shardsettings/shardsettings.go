@@ -193,6 +193,12 @@ var Settings = []Setting{
 	// continent rides the Alexandria variant build; the switch admits
 	// their kinds here. "off" is native.
 	{Env: "SRO_ARABIA", NomadVar: "arabia", Default: "off", Catalogue: true},
+	// Port-only, not native: the Baghdad dungeon and its boss lair
+	// (worlds 112/113), split out of SRO_ARABIA so a shard opens the
+	// dungeon apart from the continent (#4134). The import still rides
+	// the Arabia build; this switch registers the dungeon worlds and
+	// admits their nests and gates. "off" is native.
+	{Env: "SRO_BAGHDAD_DUNGEON", NomadVar: "baghdad_dungeon", Default: "off", Catalogue: true},
 	// Port-only, not native: the Jupiter field population and its world
 	// (#3267). Build and server read the same switch; off leaves every
 	// imported row out of the build and the population unread.

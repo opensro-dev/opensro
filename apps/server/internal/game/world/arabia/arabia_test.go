@@ -40,6 +40,19 @@ func TestWorldIsTheBaghdadDungeon(t *testing.T) {
 			t.Fatalf("world %d must not name an Arabia world", other)
 		}
 	}
+	// The dungeon's own worlds ride their own switch (#4134): the
+	// dungeon and its boss lair, never the continent's worlds or
+	// Petra and the garden.
+	for _, dungeon := range []int{DungeonWorldID, HideoutWorldID} {
+		if !IsDungeonWorld(dungeon) {
+			t.Fatalf("world %d must name a Baghdad dungeon world", dungeon)
+		}
+	}
+	for _, other := range []int{0, 1, 111, 114, 115, 116} {
+		if IsDungeonWorld(other) {
+			t.Fatalf("world %d must not name a Baghdad dungeon world", other)
+		}
+	}
 	worlds[0].CodeName = "MUTATED"
 	if code, _ := CodeName(DungeonWorldID); code != "GROUP_ARABIA_DUNGEON" {
 		t.Fatalf("Worlds leaked the table: %q", code)

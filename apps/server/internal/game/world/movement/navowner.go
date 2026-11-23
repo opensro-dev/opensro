@@ -522,13 +522,22 @@ func (v *WaterValidator) outdoorOwnerWalk(from simulation.Spawn, fromOwner simul
 		// seat, a terrain-owned stand on the Hotan terrace (0x5E87) could
 		// never board the stair ramp under it: every town-ward chord
 		// clipped at the first blocked terrain tile (#3006).
+		//
+		// The seat is refused on a sealed lane sunk below the mover's
+		// own height: seating converts a free terrain walker into a
+		// trapped object-owned one - the sealed sunken tree skirt at
+		// 0x61A8 (asset 574, cells 1.25 below the flat terrain) wedged
+		// a retained terrain stand this way (#4148). A sealed lane at
+		// grade (a building floor) keeps its seat. The walker stays on
+		// the terrain it stands on, and the chord contact lets it walk
+		// back out (sealedExit in objectnav_collision.go).
 		if t == 0 && retained && !seatTried {
 			// Tried once only: a seated stand whose cell trace yields no
 			// span (the cell test and the trace disagree on a boundary
 			// point) must fall through to the terrain walk below, not
 			// re-seat until the leg budget runs out.
 			seatTried = true
-			if seated := v.residentObjectStand(a.X, a.Z, from.Y); seated != nil {
+			if seated := v.residentObjectStand(a.X, a.Z, from.Y); seated != nil && !sunkenSealedStand(v, seated, a.X, a.Z, from.Y) {
 				stand = seated
 				continue
 			}
@@ -717,6 +726,25 @@ func (v *WaterValidator) residentObjectStand(gx, gz float64, y float64) *objectD
 		}
 	}
 	return best
+}
+
+/*
+================
+sunkenSealedStand
+
+Whether seating on this stand would trap the mover: the stand's lane is
+sealed (no reachable terrain exit) and its plane lies more than
+sealedDeckBelowGradeUnits below the mover's own height, so the mover
+stands on real ground above a sunken nav artifact (the 0x61A8 tree
+skirt), not on a floor the seat would board them onto (#4148).
+================
+*/
+func sunkenSealedStand(v *WaterValidator, stand *objectDeckStand, gx, gz, y float64) bool {
+	planeY, ok := stand.heightAt(gx, gz)
+	if !ok || y-planeY <= sealedDeckBelowGradeUnits {
+		return false
+	}
+	return v.objectDeckStandSealed(stand)
 }
 
 // terrainOutlineEntry finds the first object the terrain walker enters on

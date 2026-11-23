@@ -1297,26 +1297,6 @@ current
 		},
 		/*
 ================
-constrainDisplacement
-================
-		*/
-		constrainDisplacement(
-			command: import("@/engine/contracts/gameplay").CastDisplacement,
-			from: Pose,
-			local = false,
-			now = 0
-		) {
-			if ( command.kind === 2 ) return command;
-			const to = { ...command.destination, angle: from.angle },
-				resolved = navigation.clip( from, to, {
-					slide: true,
-					sourceOwner: local ? liveOwner( now ) : undefined,
-					sourceTerrainRetained: local ? liveTerrainRetained( now ) : undefined
-				} );
-			return resolved ? { ...command, destination: resolved } : command;
-		},
-		/*
-================
 groundSkillGoal
 ================
 		*/
