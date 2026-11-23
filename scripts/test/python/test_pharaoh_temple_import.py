@@ -2,7 +2,7 @@
 ===========================================================================
 test_pharaoh_temple_import.py - the Pharaoh Temple's monster import.
 
-The temple admits its 25 named kinds alone (the cap-110 desert field
+The temple admits its 26 named kinds alone (the cap-110 desert field
 shares their MOB_SD_ prefix), projects its nests as authored plus the
 one v1.188 Osiris exception, and keeps a capped hive whole: the four
 priest nests of the Sanctum of Punishment share one cap of three,
@@ -77,9 +77,18 @@ class PharaohTempleAdmissionTest(unittest.TestCase):
 		self.assertFalse(temple.family_admits(temple.OSIRIS_KIND, later_row(temple.OSIRIS_KIND, 110, 6)))
 		self.assertFalse(temple.family_admits(temple.OSIRIS_KIND, later_row(temple.OSIRIS_KIND, 104, 8)))
 
-	def test_only_the_temple_worlds_claim_and_osiris_by_name(self):
+	def test_haroeris_enters_at_the_keeper_grade_alone(self):
+		# The summoned unique is a keeper-grade kind (grade 3, level 109
+		# in the pinned client): the keepers' rule admits him, and no
+		# named grade opens for him (his grade-8 decoy stays out).
+		self.assertTrue(temple.family_admits(temple.HAROERIS_KIND, later_row(temple.HAROERIS_KIND, 109, 3)))
+		self.assertFalse(temple.family_admits(temple.HAROERIS_KIND, later_row(temple.HAROERIS_KIND, 109, 8)))
+		self.assertFalse(temple.family_admits(temple.HAROERIS_KIND, later_row(temple.HAROERIS_KIND, 104, 3)))
+
+	def test_only_the_temple_worlds_claim_and_the_exceptions_by_name(self):
 		rows = [nest(1, "MOB_SD_ANUBIS"), nest(2, "MOB_SD_APIS", world=1, region=24929)]
-		self.assertEqual(temple._claim_groups(rows, False), {"temple": {"MOB_SD_ANUBIS", "MOB_SD_OSIRIS_3"}})
+		self.assertEqual(temple._claim_groups(rows, False),
+			{"temple": {"MOB_SD_ANUBIS", "MOB_SD_OSIRIS_3", "MOB_SD_HAROERIS"}})
 
 	def test_the_spec_places_on_a_standing_tomb_row(self):
 		self.assertTrue(temple.SPEC.place_standing)
@@ -95,7 +104,7 @@ class PharaohTemplePopulationTest(unittest.TestCase):
 			nest(29591, "MOB_SD_ANUBIS")]
 		population = temple._build_populations(rows, False)["temple"]
 		by_nest = {row["NestID"]: row for row in population["Rows"]}
-		self.assertEqual(sorted(by_nest), [29551, 29552, 29553, 29554, 29591, 40999])
+		self.assertEqual(sorted(by_nest), [29551, 29552, 29553, 29554, 29591, 40998, 40999])
 		keys = {(by_nest[nest_id].get("HiveKey"), by_nest[nest_id].get("HiveMaxCount"))
 			for nest_id in (29551, 29552, 29553, 29554)}
 		self.assertEqual(keys, {(f"pharaoh-temple:{PUNISHMENT_WORLD}:{PUNISHMENT_REGION}:3", 3)})
@@ -111,7 +120,23 @@ class PharaohTemplePopulationTest(unittest.TestCase):
 	def test_another_world_stays_out_of_the_population(self):
 		rows = [nest(1, "MOB_SD_ANUBIS"), nest(2, "MOB_SD_APIS", world=1, region=24929)]
 		population = temple._build_populations(rows, False)["temple"]
-		self.assertEqual([row["NestID"] for row in population["Rows"]], [1, 40999])
+		self.assertEqual([row["NestID"] for row in population["Rows"]], [1, 40998, 40999])
+
+	def test_haroeris_rides_as_the_authored_row(self):
+		# No source places him: he stands authored in his sanctum on
+		# the keepers' pattern (one alive, their 10,800 s respawn),
+		# with controls re-keyed to his own client object.
+		row = temple.haroeris_nest()
+		self.assertEqual((row["Codename"], row["NestID"]), ("MOB_SD_HAROERIS", 40998))
+		self.assertEqual((row["WorldID"], row["RegionID"]), (55, 32782))
+		self.assertEqual((row["Radius"], row["GenerateRadius"], row["MaxCount"]), (50, 10, 1))
+		self.assertEqual((row["RespawnDelayMinSec"], row["RespawnDelayMaxSec"]), (10800, 10800))
+		self.assertTrue(row["Respawn"])
+		self.assertNotIn("HiveKey", row)
+		controls = row["Controls"]
+		self.assertEqual((controls["ID"], controls["ObjectID"]), (38691, 26681))
+		self.assertEqual((controls["SightRange"], controls["Flags"], controls["AggressOnHoming"]), (600, 0, 1))
+		self.assertEqual(controls["DiversionBasisData"], [0, 0, 0, 0, 0, 30, 0, 0])
 
 	def test_osiris_rides_as_the_v1188_row(self):
 		# Nest 40999 as the cap-110 reader sees it: the field world, the

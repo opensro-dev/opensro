@@ -28,6 +28,11 @@ var anubisSanctum = world.DungeonRegionID(12)
 
 const anubisSourceWorld = 53
 
+// The Sanctum of Immortality (Haroeris): dungeoninfo id 14, source world 55.
+var haroSanctum = world.DungeonRegionID(14)
+
+const haroSourceWorld = 55
+
 /*
 ================
 TestPharaohTempleOffAndAbsent
@@ -141,6 +146,49 @@ func TestPharaohTempleOsirisJoinsTheTempleFromTheFieldWorld(t *testing.T) {
 			tombWorldSource(t, pharaohTempleOsirisCodename, pharaohtemple.TempleRegionID, anubisSourceWorld)},
 		{"an unnamed grade on the Osiris row", tombTemplate(pharaohTempleOsirisCodename, 110, 6),
 			tombWorldSource(t, pharaohTempleOsirisCodename, pharaohtemple.TempleRegionID, cap110FieldWorldID)},
+	}
+	for _, c := range refusals {
+		if _, err := appendPharaohTempleData(c.template, c.source); err == nil {
+			t.Errorf("%s was appended", c.name)
+		}
+	}
+}
+
+/*
+================
+TestPharaohTempleHaroerisJoinsHisSanctum
+
+The summoned unique (#3787): no source places him by nest, so the
+importer stands him authored in his own sanctum (world 55). The loader
+needs no exception for him: he is a keeper-grade kind (grade 3, level
+109 in the pinned client) inside the temple window, and his row names
+its sanctum's own source world, so the ordinary keeper rule and the
+source-world mapping place him; the unique grade and the field world
+stay refused for him as for every keeper.
+================
+*/
+func TestPharaohTempleHaroerisJoinsHisSanctum(t *testing.T) {
+	template := tombTemplate("MOB_SD_HAROERIS", 109, pharaohTempleGradeKeeper)
+	got, err := appendPharaohTempleData(template,
+		tombWorldSource(t, "MOB_SD_HAROERIS", haroSanctum, haroSourceWorld))
+	if err != nil {
+		t.Fatalf("the Haroeris nest was refused: %v", err)
+	}
+	nest := got.Nests[len(got.Nests)-1]
+	if nest.RegionID != haroSanctum || nest.WorldCode != "INS_DEFAULT" || !nest.Respawn {
+		t.Fatalf("the Haroeris nest lost its sanctum or world: %+v", nest)
+	}
+	refusals := []struct {
+		name     string
+		template Template
+		source   []byte
+	}{
+		{"the field world", template,
+			tombWorldSource(t, "MOB_SD_HAROERIS", haroSanctum, cap110FieldWorldID)},
+		{"another sanctum's world", template,
+			tombWorldSource(t, "MOB_SD_HAROERIS", haroSanctum, anubisSourceWorld)},
+		{"a unique grade on the keeper-grade kind", tombTemplate("MOB_SD_HAROERIS", 109, 8),
+			tombWorldSource(t, "MOB_SD_HAROERIS", haroSanctum, haroSourceWorld)},
 	}
 	for _, c := range refusals {
 		if _, err := appendPharaohTempleData(c.template, c.source); err == nil {

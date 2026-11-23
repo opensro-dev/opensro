@@ -6,7 +6,7 @@ pharaoh_temple_import.py - the Pharaoh Temple's monsters and uniques.
 The job temple's seven dungeons (pharaoh_temple.py: the Temple and six
 sanctums, regions 0x800A-0x8010) ride SRO_PHARAOH_TEMPLE. That module
 stages the dungeons and gates from the VSRO client; this one stages
-what lives in them: 25 kinds and their nests, the five sanctum keepers
+what lives in them: 26 kinds and their nests, the five sanctum keepers
 (Selkis, Neith, Anubis, Isis, Seth) among them.
 
 Native source: the v1.188 server places the same kinds with the same
@@ -18,12 +18,14 @@ and 60: the temple groups), whose tactics are whole. The kinds come
 from the pinned v1.696 client, as the other later worlds' do.
 
 The export's NPC rows (guild agents, the Mentuhotep and Berenice
-stands) are roster content and stay out. One nest rides as a named
-exception (osiris_nest below): v1.188's MOB_SD_OSIRIS_3, whose hive
-stands in the field world, not under a temple group, so the export
-does not carry it; its controls are the v1.188 database's full tactics
-row, read whole. Not here: Haroeris, whom neither source places by
-nest.
+stands) are roster content and stay out. Two nests ride as named
+exceptions the export does not carry (osiris_nest, haroeris_nest
+below): the Temple's MOB_SD_OSIRIS_3, whose hive stands in the field
+world, not under a temple group - its controls are the later
+database's full tactics row, read whole - and MOB_SD_HAROERIS, whom
+no source places by nest and no tactics row survives for: he stands
+authored in his own sanctum on the sanctum keepers' pattern, the
+inference recorded at haroeris_nest (#3787).
 
 No region merge: the dungeons are VSRO Data the variant build already
 stages. The import is the shared monster pass (later_world_import.
@@ -64,7 +66,8 @@ TEMPLE_WORLDS = (51, 52, 53, 54, 55, 56, 60)
 # (the cap-110 desert field's) never draws the field's rows into this
 # import's characterinfo or reap.
 TEMPLE_KINDS = (
-	"MOB_SD_ANUBIS", "MOB_SD_BLOODKHEPRI", "MOB_SD_DEVIL_SANDMAN", "MOB_SD_HARSAPHETH", "MOB_SD_HARSMESS",
+	"MOB_SD_ANUBIS", "MOB_SD_BLOODKHEPRI", "MOB_SD_DEVIL_SANDMAN", "MOB_SD_HAROERIS", "MOB_SD_HARSAPHETH",
+	"MOB_SD_HARSMESS",
 	"MOB_SD_IMOUTHES", "MOB_SD_ISIS", "MOB_SD_KEISAS_BERSERK", "MOB_SD_NEITH", "MOB_SD_OSIRIS_3",
 	"MOB_SD_PRIEST_CHASTISEMENT",
 	"MOB_SD_PRIEST_FEAR", "MOB_SD_PRIEST_FLAME", "MOB_SD_PRIEST_GALE", "MOB_SD_PRIEST_GUARD",
@@ -85,6 +88,13 @@ GRADES = (0, 3)
 OSIRIS_KIND = "MOB_SD_OSIRIS_3"
 OSIRIS_SOURCE_GRADE = 8
 NAMED_GRADES = {OSIRIS_KIND: OSIRIS_SOURCE_GRADE}
+
+# The temple's summoned unique (#3787): a keeper-grade kind (grade 3,
+# level 109 in the pinned client) with no nest in any source. His
+# authored nest id is chosen beside the Osiris row's native 40999;
+# the ids read whole from the client at conversion time.
+HAROERIS_KIND = "MOB_SD_HAROERIS"
+HAROERIS_NEST_ID = 40998
 
 
 # ================
@@ -120,10 +130,12 @@ def family_admits(code, row):
 # _claim_groups
 # ================
 def _claim_groups(rows, sub_enabled):
-	# The export names no Osiris nest, so its kind is claimed by name:
-	# the exception nest below names it, and a claimed kind is converted
-	# here or placed on the tomb pass's standing row (place_standing).
-	return {"temple": {row["Codename"] for row in rows if row["WorldID"] in TEMPLE_WORLDS} | {OSIRIS_KIND}}
+	# The export names no Osiris or Haroeris nest, so their kinds are
+	# claimed by name: the exception nests below name them, and a claimed
+	# kind is converted here or placed on the tomb pass's standing row
+	# (place_standing).
+	return {"temple": {row["Codename"] for row in rows if row["WorldID"] in TEMPLE_WORLDS}
+		| {OSIRIS_KIND, HAROERIS_KIND}}
 
 
 # ================
@@ -182,6 +194,49 @@ def osiris_nest():
 
 
 # ================
+# haroeris_nest
+#
+# The one temple unique no population export carries, as the cap-110
+# row the server reads. Neither the ISRO-R export nor the recovered
+# native nest and tactics tables place MOB_SD_HAROERIS by nest (#3787:
+# he is a summoned unique, and the chain that calls him survives only
+# as later-client objects no pinned source converts), so no native row
+# can be read whole the way the Osiris row was. Recorded inference,
+# in the open: he stands in his own sanctum (GROUP_TEMPLE_HARO, world
+# 55, region 32782) at its specter nests' anchor, on the sanctum
+# keepers' pattern - one alive, the keepers' 10,800 s respawn, a
+# 50-unit ground - with controls mirrored from the paired keeper's
+# export row (Seth: the schedule names the two together), re-keyed to
+# Haroeris's own client object (26681) and an authored tactics id
+# beside Seth's (38691, free in the export), so no champion or help
+# link can mistake the two. His authored nest id (40998) sits beside
+# the Osiris row's native 40999. The server admits him by the keepers'
+# own rule - MOB_SD_ at keeper grade inside the temple window - and
+# places the row under its sanctum's source world, so no loader
+# exception rides along (monster/pharaoh_temple.go).
+# ================
+def haroeris_nest():
+	return {
+		"Codename": HAROERIS_KIND, "NestID": HAROERIS_NEST_ID, "WorldID": 55,
+		"RegionID": 32782, "X": 9612.509765625, "Y": 101.83999633789062, "Z": 29.829999923706055,
+		"Radius": 50, "GenerateRadius": 10, "MaxCount": 1,
+		"RespawnDelayMinSec": 10800, "RespawnDelayMaxSec": 10800, "Respawn": True,
+		"InitialDir": 0, "ChampionGenPercentage": 0,
+		"Controls": {
+			"ID": 38691, "ObjectID": 26681, "AIQoS": 0, "MaxStamina": 150, "StaminaVariance": 50,
+			"SightRange": 600, "AggressType": 0, "AggressData": 0, "ChangeTarget": 2,
+			"HelpRequest": 2, "HelpResponse": 2, "BattleStyle": 0, "BattleStyleData": 0,
+			"DiversionBasis": 5, "DiversionKeepBasis": 4, "KeepDistance": 0, "KeepDistanceData": 0,
+			"TraceType": 0, "TraceBoundary": 1, "TraceData": 500, "HomingType": 0, "HomingData": 0,
+			"AggressOnHoming": 1, "FleeType": 0, "ChampionID": 0, "Flags": 0,
+			"DiversionBasisData": [0, 0, 0, 0, 0, 30, 0, 0],
+			"DiversionKeepBasisData": [0, 0, 0, 0, 0, 0, 0, 0],
+		},
+		"Champion": None,
+	}
+
+
+# ================
 # _build_populations
 #
 # The engine's projection, except for capped nests: it keeps one nest
@@ -204,7 +259,9 @@ def _build_populations(rows, sub_enabled):
 		if projected["NestID"] in caps:
 			projected["HiveKey"], projected["HiveMaxCount"] = caps[projected["NestID"]]
 	# The projection keeps the temple worlds' rows alone; the Osiris
-	# exception (osiris_nest) rides beside them, in nest order.
+	# and Haroeris exceptions (osiris_nest, haroeris_nest) ride beside
+	# them, in nest order.
+	population["Rows"].append(haroeris_nest())
 	population["Rows"].append(osiris_nest())
 	population["Rows"].sort(key=lambda row: row["NestID"])
 	return {"temple": population}
