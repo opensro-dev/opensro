@@ -847,6 +847,15 @@ type Runtime struct {
 	// LineOfSight). Nil admits every line; the composition root wires it.
 	LineOfSight func(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) bool
 
+	// TalkSight is the NPC talk test (port-only, #4125; owner ruling
+	// 2026-11-23: a native bug is not copied, and natively neither the
+	// client pick nor the server gate tests sight at all). Like
+	// LineOfSight, except a walk that arrives within talk distance also
+	// admits, so a merchant behind her stall counter stays usable while
+	// an NPC behind a wall does not (movement.Runtime.TalkSight). Nil
+	// admits every NPC; the composition root wires it.
+	TalkSight func(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) bool
+
 	// ProposalPending reports an unanswered 0x3393 prompt of any lane for
 	// a character. The native transaction manager holds one per player
 	// (it inserts uniquely), so a second proposal is dropped.

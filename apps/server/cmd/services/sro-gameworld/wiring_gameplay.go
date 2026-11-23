@@ -435,6 +435,8 @@ func newGameplayPlane(
 	items.PlanCompanionRoute = simulation.PetRouteFromPlanes(planes)
 	items.AdmitGroundWalk = movementRuntime.AdmitGroundWalk
 	items.LineOfSight = movementRuntime.LineOfSight
+	// The NPC talk gate's sight arm (#4125, owner ruling 2026-11-23).
+	items.TalkSight = movementRuntime.TalkSight
 	items.ResolveNavOwner = water.ResolveNavOwner
 	items.WalkInZoneAt = water.WalkInZoneAt
 	items.MoveCOS = movementRuntime.HandleCOSMove

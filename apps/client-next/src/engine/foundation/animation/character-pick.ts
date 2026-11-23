@@ -56,6 +56,27 @@ export function selectPickCandidate( candidates: readonly PickCandidate[] ) {
 
 /*
 ================
+dropOccludedCandidates
+
+#4125 (owner ruling 2026-11-23: a native bug is not copied): native
+692680 keeps the nearest box hit and never asks whether scenery stands
+between the camera and it, so an NPC behind a wall can be selected. The
+port drops a candidate whose every hit ray is occluded before it
+reaches the box (visible answers that for one ray at its hit depth);
+a candidate with one clear ray stays, because the player can see and
+click that part of it. The winner rule itself is untouched: selection
+still runs selectPickCandidate over what remains.
+================
+*/
+export function dropOccludedCandidates(
+	candidates: readonly PickCandidate[],
+	visible: ( ray: number, depth: number ) => boolean
+): PickCandidate[] {
+	return candidates.filter( candidate => candidate.hits.some( hit => visible( hit.ray, hit.depth ) ) );
+}
+
+/*
+================
 meshUnderRays
 
 True when any ray meets the candidate's triangles at its current clip and

@@ -22,7 +22,7 @@ import { damageTextAssets, damageTextQuads } from "@/engine/foundation/ui/damage
 import { pickDestination } from "@/engine/foundation/rendering/pick-destination";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { readPickAlpha } from "./readback/readback";
-import { pickRay, pickRayProjector } from "@/engine/foundation/rendering/picking";
+import { pickRay, pickRayProjector, type PickRay } from "@/engine/foundation/rendering/picking";
 import { viewProjection } from "@/engine/foundation/rendering/world-math";
 import { prepareUi, createUiPreparation, DOLL2_TEXTURE } from "@/engine/foundation/ui/ui";
 import { dollBounds, DOLL_FRONT, viewerCamera } from "@/engine/foundation/rendering/viewer-camera";
@@ -370,7 +370,7 @@ export function createRenderer(
 			if ( disposed || failure || !pickView || device.phase() !== "running" ) return null;
 			const project = pickRayProjector( pickView );
 			if ( !project ) return null;
-			const rays = [];
+			const rays: PickRay[] = [];
 			for ( let row = 0; row < 3; row++ ) {
 				for ( let col = 0; col < 3; col++ ) {
 					const ray = project(
@@ -381,7 +381,14 @@ export function createRenderer(
 					rays.push( ray );
 				}
 			}
-			let hit = characters.pick( rays, excluded, blindHeld, filtered ),
+			// #4125 (owner ruling 2026-11-23: a native bug is not copied):
+			// a pick counts only where scenery does not reach the target
+			// first. The occlusion-only scene pick answers that for one
+			// ray at the hit's depth; water and blend-add surfaces never
+			// veto (world.pick's occlusion material rules).
+			const visible = ( ray: number, depth: number ) =>
+				world.pick( rays[ray]!, depth, true, false, true ) === null;
+			let hit = characters.pick( rays, excluded, blindHeld, filtered, visible ),
 				best = hit ?
 					hit.depth * hypot3( rays[hit.ray]!.delta[0]!, rays[hit.ray]!.delta[1]!, rays[hit.ray]!.delta[2]! ) :
 					Infinity;
@@ -418,6 +425,8 @@ export function createRenderer(
 						b.radius
 					], matrix );
 					if ( depth === null ) continue;
+					// #4125: the same scenery veto as the character pick.
+					if ( !visible( r, depth ) ) continue;
 					const distance = depth * hypot3( rays[r]!.delta[0]!, rays[r]!.delta[1]!, rays[r]!.delta[2]! );
 					if ( distance < best || (hit?.ray !== 4 && r === 4) ) {
 						hit = { gid: gate.gid, depth, ray: r };
@@ -425,8 +434,11 @@ export function createRenderer(
 					}
 				}
 			}
-			// 692680 returns the winning entity virtual pick directly. Map scenery
-			// is not a second veto (698740 consumes that same winner).
+			// Native 692680 returns the winning entity virtual pick directly -
+			// map scenery is not a second veto there (698740 consumes that
+			// same winner), which is the through-wall pick #4125 fixes. The
+			// veto above is the deliberate deviation the issue's ruling
+			// orders; the winner rule itself is unchanged.
 			return hit?.gid ?? null;
 		},
 		setUi: scene => {

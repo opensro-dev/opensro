@@ -18,7 +18,9 @@ import { publicRoot } from "../../../../scripts/build/world/paths.mjs";
 import { avatarToGlb } from "../../../../scripts/build/char/exportGlb.mjs";
 
 const load = async path => import( sourceFileUrl( path ).href );
-const { selectPickCandidate, meshUnderRays } = await load( "src/engine/foundation/animation/character-pick.ts" );
+const { selectPickCandidate, meshUnderRays, dropOccludedCandidates } = await load(
+	"src/engine/foundation/animation/character-pick.ts"
+);
 const { characterPickVolume } = await load( "src/engine/foundation/animation/character-pick-volume.ts" );
 const { createCharacterPose } = await load( "src/engine/foundation/animation/animation-pose.ts" );
 const { createCharacterDecoder } = await load( "src/engine/runtime/assets/worker/model/character/character.ts" );
@@ -69,6 +71,29 @@ test("the nearest box hit wins and an exact-center hit replaces an off-center wi
 	const closerOffCenter = { actor: actor( 3 ), hits: [ { ray: 1, depth: .05, distance: 5 } ] };
 	assert.equal( selectPickCandidate( [ near, center, closerOffCenter ] ).gid, 3 );
 	assert.equal( selectPickCandidate( [] ), null );
+});
+
+test("the scenery veto drops a fully occluded candidate and keeps one clear ray (#4125)", () => {
+	const actor = gid => ({ gid, clip: "", time: 0 });
+	// The nearer NPC stands behind a wall: both its hit rays lose to scenery.
+	const walled = {
+		actor: actor( 1 ),
+		hits: [ { ray: 0, depth: .1, distance: 10 }, { ray: 1, depth: .1, distance: 10 } ]
+	};
+	// The farther one peeks past the wall's edge: its center ray is clear.
+	const peeking = {
+		actor: actor( 2 ),
+		hits: [ { ray: 0, depth: .2, distance: 20 }, { ray: 4, depth: .2, distance: 20 } ]
+	};
+	const visible = ray => ray === 4;
+	assert.deepEqual( dropOccludedCandidates( [ walled, peeking ], visible ).map( c => c.actor.gid ), [ 2 ] );
+	// The visible farther candidate wins over the nearer occluded one.
+	assert.equal( selectPickCandidate( dropOccludedCandidates( [ walled, peeking ], visible ) ).gid, 2 );
+	// Nothing occluded keeps every candidate in actor order (selection
+	// over the kept set is the native rule the first test pins).
+	assert.deepEqual( dropOccludedCandidates( [ walled, peeking ], () => true ).map( c => c.actor.gid ), [ 1, 2 ] );
+	// Everything occluded leaves nothing to select.
+	assert.equal( selectPickCandidate( dropOccludedCandidates( [ walled, peeking ], () => false ) ), null );
 });
 
 test("a giant's empty rest-pose box does not confirm its mesh; its body does", () => {
