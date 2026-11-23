@@ -30,6 +30,7 @@ import { readFileSync } from "node:fs";
 const { createCharacterEffects } = await import( "../../src/engine/runtime/characters/effects/effects.ts" );
 const { createPresentationRandom } = await import( "../../src/engine/runtime/random/random.ts" );
 const { createEffectDecoder } = await import( "../../src/engine/runtime/assets/worker/effects/effects.ts" );
+const { radians } = await import( "../../src/engine/foundation/math/angles.ts" );
 const manifest = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skillfx/manifest.json", "utf8" ) );
 const raw = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json", "utf8" ) );
 
@@ -51,8 +52,12 @@ function harness( skillIds ) {
 	);
 	let serial = 0;
 	const jobs = new Map();
-	const owner = createCharacterEffects(
-		{
+	// The asset owner, the entity and the gameplay state are partial
+	// fixtures: the presenter reads only the members given here, so the
+	// casts state the contract types without inventing the rest (the
+	// gameplay type is module-private, hence any).
+	const assets = /** @type {import("../../src/engine/contracts/assets.ts").AssetOwner} */ (
+		/** @type {unknown} */ ({
 			available: () => 4,
 			request( url, limit, type ) {
 				jobs.set(
@@ -71,22 +76,13 @@ function harness( skillIds ) {
 			cancel( id ) {
 				jobs.delete( id );
 			}
-		},
-		"http://localhost",
-		() => {},
-		createPresentationRandom( 1 )
+		})
 	);
-	const entities = [ {
-		gid: 1,
-		kind: "local-player",
-		regionId: 257,
-		x: 0,
-		y: 0,
-		z: 0,
-		heading: 0,
-		heightFactor: 1
-	} ];
-	const game = { localGid: 1, inventory: [], casts: [], attachedEffects: [] };
+	const owner = createCharacterEffects( assets, "http://localhost", () => {}, createPresentationRandom( 1 ) );
+	const entities = /** @type {import("../../src/engine/contracts/world.ts").EntityState[]} */ (
+		/** @type {unknown} */ ([ { gid: 1, kind: "local-player", regionId: 257, x: 0, y: 0, z: 0, heading: 0 } ])
+	);
+	const game = /** @type {any} */ ({ localGid: 1, inventory: [], casts: [], attachedEffects: [] });
 	const step = ( now, events = [] ) =>
 		owner.step(
 			entities,
@@ -95,11 +91,11 @@ function harness( skillIds ) {
 			() => true,
 			() => 1,
 			events,
-			() => ({ regionId: 257, x: 0, y: 0, z: 0, yaw: 0 }),
+			() => ({ regionId: 257, x: 0, y: 0, z: 0, yaw: radians( 0 ) }),
 			[ {
 				gid: 1,
 				model: "/assets/body.glb",
-				pose: { regionId: 257, x: 0, y: 0, z: 0, yaw: 0 },
+				pose: { regionId: 257, x: 0, y: 0, z: 0, yaw: radians( 0 ) },
 				clip: "stand",
 				time: 0,
 				loop: true,

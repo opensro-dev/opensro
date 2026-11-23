@@ -17,6 +17,7 @@
 		"button-captions.test.mjs",
 		"caravan-star-nameplate.test.mjs",
 		"cast-motion-census.test.mjs",
+		"cast-visual-lifetime.test.mjs",
 		"character-bounds-exact.test.mjs",
 		"character-creation.test.mjs",
 		"character-effects.test.mjs",
