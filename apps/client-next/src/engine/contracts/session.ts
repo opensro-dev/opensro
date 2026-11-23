@@ -139,6 +139,10 @@ export type SessionState = Readonly<{
 	entityCount?: number;
 	crestPrefix?: number;
 	nativeServerName?: string;
+	// The shard's port-only suit-look rules as the roster published them
+	// (SRO_JOB_SUIT_HIDES_ARMOR / SRO_MOONLIT_THIEF_SUIT); absent is native.
+	jobSuitHidesArmor?: boolean;
+	moonlitThiefSuit?: boolean;
 	// A server answered that it speaks another release protocol (426): this
 	// page must be refreshed into the newer release.
 	releaseOutdated?: boolean;
@@ -205,6 +209,14 @@ export interface ServerRecord {
 export interface CharacterItem {
 	readonly refObjId: number;
 	readonly plus: number;
+}
+// The shard's port-only suit-look rules (SRO_JOB_SUIT_HIDES_ARMOR,
+// SRO_MOONLIT_THIEF_SUIT); both false is native. The roster and the world
+// entry publish the same pair, and a character is dressed by them the
+// same way on the select dock as in the world (#4128).
+export interface SuitRuleFlags {
+	readonly jobSuitHidesArmor: boolean;
+	readonly moonlitThiefSuit: boolean;
 }
 export interface CharacterRecord {
 	readonly id: number;

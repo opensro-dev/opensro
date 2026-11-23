@@ -926,7 +926,7 @@ baseUrl
 										nativeResult: 1,
 										characterRosterContractVersion: body.characterRosterContractVersion,
 										characters: [ body.character ]
-									} );
+									} ).characters;
 									const index = (characters ?? []).findIndex( c => c.id === character!.id );
 									if ( character!.name !== result.expectedCharacter ) {
 										throw Error( "Character operation returned a different character" );
@@ -961,7 +961,8 @@ baseUrl
 							if ( result.kind === "servers" ) {
 								publish( { phase: "signed-out", servers: decoder.servers( result.value.body ) } );
 							} else {
-								const characters = decoder.roster( result.value.body ),
+								const roster = decoder.roster( result.value.body ),
+									characters = roster.characters,
 									resume = characters.find( row =>
 										row.name === resumeCharacter && !row.deletePending
 									);
@@ -970,7 +971,9 @@ baseUrl
 									phase: "character-select",
 									crestPrefix,
 									divisionId: identity!.divisionId,
-									characters
+									characters,
+									jobSuitHidesArmor: roster.jobSuitHidesArmor,
+									moonlitThiefSuit: roster.moonlitThiefSuit
 								} );
 								if ( resume ) {
 									entryCharacter = resume.name;

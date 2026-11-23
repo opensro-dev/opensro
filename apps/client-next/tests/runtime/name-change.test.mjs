@@ -144,6 +144,25 @@ const characterRow = {
 	}
 };
 
+test("a roster answer carries the shard's suit rules, off by default", () => {
+	const decoder = createSessionDecoder();
+	const envelope = suitRules => ({
+		characterRosterContractVersion: 2,
+		action: 2,
+		nativeResult: 1,
+		characters: [ characterRow ],
+		...suitRules
+	});
+	const flagged = decoder.roster( envelope( { jobSuitHidesArmor: true, moonlitThiefSuit: true } ) );
+	assert.equal( flagged.jobSuitHidesArmor, true );
+	assert.equal( flagged.moonlitThiefSuit, true );
+	// A roster from an older server names neither rule: both read as the
+	// native default, off.
+	const bare = decoder.roster( envelope( {} ) );
+	assert.equal( bare.jobSuitHidesArmor, false );
+	assert.equal( bare.moonlitThiefSuit, false );
+});
+
 test("a roster row carries a reasoned rename cancellation, and only those", () => {
 	const decoder = createSessionDecoder();
 	const answer = row => ({
@@ -152,9 +171,9 @@ test("a roster row carries a reasoned rename cancellation, and only those", () =
 		nativeResult: 1,
 		characters: [ row ]
 	});
-	const [row] = decoder.roster( answer( { ...characterRow, renameCancelled: "taken" } ) );
+	const [row] = decoder.roster( answer( { ...characterRow, renameCancelled: "taken" } ) ).characters;
 	assert.equal( row?.renameCancelled, "taken" );
-	const [plain] = decoder.roster( answer( characterRow ) );
+	const [plain] = decoder.roster( answer( characterRow ) ).characters;
 	assert.equal( plain?.renameCancelled, undefined );
 	assert.throws( () => decoder.roster( answer( { ...characterRow, renameCancelled: "bogus" } ) ) );
 	assert.match( renameCancelledText( "taken", "fixture" ), /fixture.*taken/ );
