@@ -39,7 +39,7 @@ func TestShadowMutedChatReachesOnlyItsAuthor(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(words, shadowmute.WordsFileName), []byte("rival server\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	list := shadowmute.Open(words)
+	list := shadowmute.Open(words, nil)
 	muted := true
 	server.chat.ShadowMuted = func(accountID, text string) bool {
 		return (muted && accountID == "test-account") || list.Muted(accountID, text)

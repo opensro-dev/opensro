@@ -112,8 +112,8 @@ func TestArabiaTableIsTheEvidenceSet(t *testing.T) {
 	if known["QNO_AR_097"].MaxCompletions != 5 || known["QNO_AR_102"].MaxCompletions != 5 || known["QNO_AR_103"].MaxCompletions != 5 {
 		t.Error("the 5-times hunts lost their limit")
 	}
-	// Held back, by the file's own evidence rule (dialog gaps, quest
-	// items not imported, the hideout boss): none of these may appear.
+	// Held back, by the file's own evidence rule (dialog gaps, kinds
+	// no source carries or places): none of these may appear.
 	for _, held := range []string{"QNO_AR_001", "QNO_AR_002", "QNO_AR_003", "QNO_AR_004", "QNO_AR_010",
 		"QNO_AR_019", "QNO_AR_026", "QNO_AR_027", "QNO_AR_059", "QNO_AR_063", "QNO_AR_066", "QNO_AR_068"} {
 		if _, ok := known[held]; ok {

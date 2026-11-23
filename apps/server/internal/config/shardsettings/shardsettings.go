@@ -527,6 +527,10 @@ var Settings = []Setting{
 	// enable it. Forged items are bound, so an enabled shard can only
 	// mint items its GMs cannot move into the economy.
 	{Env: "SRO_GM_ITEM_FORGE", NomadVar: "gm_item_forge", Default: "off"},
+	// Port-only, not native (owner, 2026-11-23): the GM's in-game /MUTE,
+	// /UNMUTE, /BLOCKLOGOUT and /ALLOWLOGOUT (gmcommand/moderation.go).
+	// "off" is native; /SHADOWMUTE is always on.
+	{Env: "SRO_GM_MODERATION", NomadVar: "gm_moderation", Default: "off"},
 	{Env: "SRO_ALCHEMY_RATES", NomadVar: "alchemy_rates", Default: "on", Catalogue: true},
 	// Owner, 2026-10-18: reversed the 2026-10-13 +11 cap; the deployment
 	// default stays native ("off", ceiling 250).
