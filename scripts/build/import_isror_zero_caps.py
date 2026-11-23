@@ -1,14 +1,18 @@
 """
 ===========================================================================
-import_isror_zero_caps.py - live caps for the nests the v1.188 shard zeroed
+import_isror_zero_caps.py - native caps for the nests the v1.188 shard zeroed
 
 The population evidence (scripts/analysis/extract_shard_bak.py, from the
 v1.188 shard backup) sets dwMaxTotalCount 0 on standalone nests the shard
-had disabled. ISRO-R's active Tab_RefNest keeps the same nests, by region
-and float32 anchor, with their live caps. For every zero-cap evidence row
-that no hive caps (v1188_hive_caps.tsv max-live 0) this writes the ISRO-R
-cap, and refuses to write anything if one has none. Reads the backup; it
-never restores or modifies a database.
+had disabled. ISRO-R's archived Tab_RefNest_Back keeps the same nests, by
+region and float32 anchor, with their native caps. For every zero-cap
+evidence row that no hive caps (v1188_hive_caps.tsv max-live 0) this writes
+that cap, and refuses to write anything if a row has no single one.
+
+ISRO-R's active Tab_RefNest is never read: it holds its operator's tuning
+(cap 5, radius 20, generate radius 40 on 5,124 outdoor nests), where
+Tab_RefNest_Back holds the values the v1.188 data shows (#4149). Reads the
+backup; it never restores or modifies a database.
 ===========================================================================
 """
 
@@ -24,6 +28,9 @@ from loot_sql_pages import Backup
 ANCHOR_EPSILON = 0.05
 # Tab_RefNest fixed-row offsets.
 NEST_REGION, NEST_POSITION, NEST_MAX_TOTAL = 12, 14, 48
+# The native nest table. The output's last column names it, and the server's
+# loader refuses a row from any other table.
+NATIVE_NEST_TABLE = "Tab_RefNest_Back"
 
 
 # ================
@@ -38,26 +45,37 @@ def evidence_rows(path):
 # ================
 # read_nests
 #
-# Region -> [(x, z, cap, table)] for the active table, then the archived
-# _Back table for a nest the active one lacks.
+# Region -> [(x, z, cap)] from the native table.
 # ================
 def read_nests(path):
 	backup = Backup(path)
 	nests = {}
 	try:
-		for table in ("Tab_RefNest", "Tab_RefNest_Back"):
-			for _, at, page in backup.named_rows(table):
-				fixed = struct.unpack_from("<H", page, at + 2)[0]
-				raw = page[at + 4: at + fixed]
-				if len(raw) < NEST_MAX_TOTAL + 4:
-					raise ValueError("Unsupported %s row layout %d" % (table, fixed))
-				region = struct.unpack_from("<H", raw, NEST_REGION)[0]
-				x, _, z = struct.unpack_from("<fff", raw, NEST_POSITION)
-				cap = struct.unpack_from("<i", raw, NEST_MAX_TOTAL)[0]
-				nests.setdefault(region, []).append((x, z, cap, table))
+		for _, at, page in backup.named_rows(NATIVE_NEST_TABLE):
+			fixed = struct.unpack_from("<H", page, at + 2)[0]
+			raw = page[at + 4: at + fixed]
+			if len(raw) < NEST_MAX_TOTAL + 4:
+				raise ValueError("Unsupported %s row layout %d" % (NATIVE_NEST_TABLE, fixed))
+			region = struct.unpack_from("<H", raw, NEST_REGION)[0]
+			x, _, z = struct.unpack_from("<fff", raw, NEST_POSITION)
+			cap = struct.unpack_from("<i", raw, NEST_MAX_TOTAL)[0]
+			nests.setdefault(region, []).append((x, z, cap))
 	finally:
 		backup.close()
 	return nests
+
+
+# ================
+# native_cap
+#
+# The one positive cap the native table gives the nest at this anchor.
+# ================
+def native_cap(nests, row):
+	x, z = float(row[2]), float(row[4])
+	caps = {cap for nx, nz, cap in nests.get(int(row[1]), []) if abs(nx - x) < ANCHOR_EPSILON and abs(nz - z) < ANCHOR_EPSILON and cap > 0}
+	if len(caps) != 1:
+		raise ValueError("No single native cap for %s at %s: %s" % (row[0], row[1:5], sorted(caps)))
+	return caps.pop()
 
 
 # ================
@@ -76,15 +94,7 @@ def main():
 	for r in evidence_rows(args.evidence):
 		if r[10] != "0" or (r[0], r[1], r[2], r[3], r[4]) in hived:
 			continue
-		x, z = float(r[2]), float(r[4])
-		found = None
-		for nx, nz, cap, table in nests.get(int(r[1]), []):
-			if abs(nx - x) < ANCHOR_EPSILON and abs(nz - z) < ANCHOR_EPSILON and cap > 0:
-				if found is None or found[1] == "Tab_RefNest_Back" and table == "Tab_RefNest":
-					found = (cap, table)
-		if found is None:
-			raise ValueError("No ISRO-R cap for %s at %s" % (r[0], r[1:5]))
-		lines.append("\t".join(r[0:5] + [str(found[0]), found[1]]))
+		lines.append("\t".join(r[0:5] + [str(native_cap(nests, r)), NATIVE_NEST_TABLE]))
 	with args.backup.open("rb") as source:
 		digest = hashlib.file_digest(source, "sha256").hexdigest()
 	header = [
@@ -93,7 +103,7 @@ def main():
 		"# codename\tregion\tx\ty\tz\tdwMaxTotalCount\ttable",
 	]
 	args.output.write_text("\n".join(header + lines) + "\n", encoding="utf-8", newline="\n")
-	print(f"Wrote {len(lines)} zero-cap nests with ISRO-R caps")
+	print(f"Wrote {len(lines)} zero-cap nests with native caps")
 
 
 if __name__ == "__main__":
