@@ -73,14 +73,21 @@ func compileStructureRepair(fields []string, row SkillRow) SkillStructureRepair 
 ================
 ItemUseNativeFields
 
-CIFDelayInfoRow_InitCountdown mode 4 resolves the first item-owned skill
-and reads its authored duration. Publish that resolved reference on both
-bootstrap and incremental item-reference paths.
+Resolves the item's AssociatedSkillCodename (Desc1) onto numeric fields the
+browser can read without a second catalog join:
+
+  - associatedSkillId — every item that names a skill (scrolls, capsules,
+    repair kits). The SRO Macro buff-item row (006930a0) gates on this id
+    being absent from the local attached-effect list.
+  - useSkillId / useSkillDurationMs — fortress repair kits only
+    (CIFDelayInfoRow_InitCountdown mode 4), as before.
+
+Published on both bootstrap and incremental item-reference paths.
 ================
 */
 func ItemUseNativeFields(ref *ItemRef, skills SkillDataSource) NativeFields {
 	fields := ref.NativeFields
-	if ref.TypeIDs != [4]int64{3, 3, 1, 10} {
+	if ref.AssociatedSkillCodename == "" {
 		return fields
 	}
 	source, ok := skills.(interface{ SkillByCodename(string) (SkillRow, bool) })
@@ -88,7 +95,11 @@ func ItemUseNativeFields(ref *ItemRef, skills SkillDataSource) NativeFields {
 		return fields
 	}
 	skill, ok := source.SkillByCodename(ref.AssociatedSkillCodename)
-	if !ok || !skill.StructureRepair.Pinned {
+	if !ok {
+		return fields
+	}
+	fields = fields.With("associatedSkillId", float64(skill.ID))
+	if ref.TypeIDs != [4]int64{3, 3, 1, 10} || !skill.StructureRepair.Pinned {
 		return fields
 	}
 	return fields.With("useSkillId", float64(skill.ID)).With("useSkillDurationMs", float64(skill.StructureRepair.DurationMs))

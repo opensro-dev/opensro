@@ -10,19 +10,21 @@ row whose reader fires uses its item; that row then sits out a 500 ms
 re-arm (table 0x17b3688) and rejoins at the back of the order.
 
 This module is pure: the rows' conditions and the ready/waiting order.
-The worker supplies the vitals and performs the use through the same
-inventory gates as the v1.150 auto-potion.
+The worker supplies the vitals (and live buff skill ids for row 3) and
+performs the use through the same inventory gates as the v1.150 auto-potion.
 
-Row 3 (UIIT "European Status Anomaly") keeps its settings but never fires
-here: its reader (006930a0) is a buff-item gate (item data +0x4d0 -> buff
-id, fire only while that buff is absent), and that link is not read yet.
-The pet rows (4..8) are not automated.
+Row 3 (HUD "Moving speed", as on the later official client) is a buff-item
+gate (006930a0): it fires while
+the bound item's associated skill (item data +0x4d0 -> +0x1c, published as
+nativeFields.associatedSkillId) is absent from the local attached-effect
+list (00809330 → 00abd630). The pet rows (4..8) are not automated.
 
 ===========================================================================
 */
 import type { AutoPotionFacts } from "./auto-potion";
 import {
 	MACRO_POTION_SLOTS,
+	MACRO_ROW_BUFF_ITEM,
 	MACRO_ROW_CURE,
 	MACRO_ROW_HP,
 	MACRO_ROW_MP,
@@ -32,8 +34,9 @@ import {
 	withPotionRowItem
 } from "./sro-macro";
 
-// UIIT "European Status Anomaly" — reader 006930a0 / drop 0x690c70.
-const MACRO_ROW_BUFF_ITEM = 3;
+// Re-export so tests and the worker can name the buff-item row without
+// reaching into the codec module for every call.
+export { MACRO_ROW_BUFF_ITEM };
 
 // 00692ba0 seeds every row's re-arm with 0x1f4.
 export const MACRO_POTION_REARM_MS = 500;
@@ -117,9 +120,13 @@ export function scrubMacroPotion(
 	return potion === settings.potion ? settings : { ...settings, potion };
 }
 
-export type MacroPotionRow = typeof MACRO_ROW_HP | typeof MACRO_ROW_MP | typeof MACRO_ROW_CURE;
-// MACRO_ROW_HP, MACRO_ROW_MP, MACRO_ROW_CURE: the executor's initial order.
-export const MACRO_POTION_ORDER = [ 0, 1, 2 ] as const;
+export type MacroPotionRow =
+	| typeof MACRO_ROW_HP
+	| typeof MACRO_ROW_MP
+	| typeof MACRO_ROW_CURE
+	| typeof MACRO_ROW_BUFF_ITEM;
+// Character readers 004c2ce0: HP, MP, cure, buff-item. Pet rows stay out.
+export const MACRO_POTION_ORDER = [ 0, 1, 2, 3 ] as const;
 
 /*
 ================
@@ -148,19 +155,57 @@ export function emptyMacroPotionQueue(): MacroPotionQueue {
 macroPotionWants
 
 Whether a row's reader would try its item now: on, an item bound, and its
-vital condition met. The item's presence, cooldown and use are the
-worker's.
+condition met. buffSkillId is the bound item's associatedSkillId for the
+buff-item row (006930a0); other rows ignore it. The item's presence,
+cooldown and use are the worker's.
 ================
 */
-export function macroPotionWants( potion: readonly number[], row: MacroPotionRow, facts: AutoPotionFacts ): boolean {
+export function macroPotionWants(
+	potion: readonly number[],
+	row: MacroPotionRow,
+	facts: AutoPotionFacts,
+	buffSkillId = 0
+): boolean {
 	if ( !facts.alive || !potionRowOn( potion, row ) ) return false;
 	const slot = potionSlot( potion, row );
 	if ( slot.item === 0 ) return false;
+	if ( row === MACRO_ROW_BUFF_ITEM ) {
+		// 006930a0: fire only while 00809330(1, id, 0) → 00abd630 says absent.
+		if ( !buffSkillId ) return false;
+		return !(facts.activeBuffSkills ?? []).includes( buffSkillId );
+	}
 	if ( row === MACRO_ROW_CURE ) return (facts.abnormal & MACRO_CURE_ABNORMAL) !== 0;
 	if ( row === MACRO_ROW_HP && (facts.abnormal & HP_BLOCKING_ABNORMAL) !== 0 ) return false;
 	const current = row === MACRO_ROW_HP ? facts.hp : facts.mp;
 	const max = row === MACRO_ROW_HP ? facts.maxHp : facts.maxMp;
 	return max * (slot.a * PERCENT_SCALE) >= current;
+}
+
+/*
+================
+macroPotionBuffSkillId
+
+The associated skill id on the first bag stack of a bound buff-item row,
+from nativeFields.associatedSkillId (server ItemUseNativeFields). Zero
+when the row is empty or the stack has no resolved skill.
+================
+*/
+export function macroPotionBuffSkillId(
+	potion: readonly number[],
+	inventory: readonly {
+		readonly slot: number;
+		readonly refObjId: number;
+		readonly nativeFields?: Readonly<Record<string, number>>;
+	}[]
+): number {
+	const ref = potionSlot( potion, MACRO_ROW_BUFF_ITEM ).item;
+	if ( !ref ) return 0;
+	for ( const entry of inventory ) {
+		if ( entry.slot < BAG_FIRST_SLOT || entry.refObjId !== ref ) continue;
+		const id = entry.nativeFields?.associatedSkillId ?? 0;
+		if ( Number.isInteger( id ) && id > 0 ) return id;
+	}
+	return 0;
 }
 
 /*
