@@ -20,11 +20,10 @@ for this change and described in words, as #1701 asks):
   - A resync position is sent from a timer of 5 when a living character
     stands more than 10 from its last sent position or in another
     region, or is on a direction walk more than 100 from it. The port
-    does not run this timer: its unit is not read (seconds by inference
-    from its siblings), and the drift it repairs needs a standing player
-    moved without a packet, which no port owner is known to do (stops,
-    teleports and spawns publish their own). A shard that sees such
-    drift turns the stream on.
+    runs this timer (position_resync.go): its unit is seconds, and it
+    repairs what the client cannot see - a peer its own collision
+    stopped at a contact point, or a long walk's drift (#3723). It is
+    native, so it runs under both stream settings.
 
 SRO_POSITION_STREAM=on (port-only, not native) restores the stream the
 port inherited from its Node fixture: every tick a live 0x30E3 sample of

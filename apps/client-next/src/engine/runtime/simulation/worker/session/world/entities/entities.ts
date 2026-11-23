@@ -61,6 +61,7 @@ import {
 	OBJECT_LIST_CHUNK_OPCODE,
 	OBJECT_LIST_FINALIZE_OPCODE,
 	OBJECT_LIST_START_OPCODE,
+	OBJECT_POSITION_UPDATE_OPCODE,
 	OBJECT_SOURCE_CORRECTION_OPCODE,
 	OBJECT_SOURCE_MOVE_OPCODE,
 	OBJECT_STATE_REFRESH_OPCODE,
@@ -1807,16 +1808,23 @@ export function createEntities(
 				}
 				return;
 			}
-			if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ) {
+			// 0x3028 is the server's position resync: the 0x30E3 layout
+			// (gid last) and its source treatment - authoritative progress
+			// while travel remains active, never a stop.
+			if (
+				frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ||
+				frame.opcode === OBJECT_POSITION_UPDATE_OPCODE
+			) {
 				if ( p.length !== 20 ) {
 					throw new Error( "Invalid entity position" );
 				}
-				const gid = v.getUint32( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ? 16 : 0, true ),
+				const sourced = frame.opcode !== OBJECT_SOURCE_CORRECTION_OPCODE;
+				const gid = v.getUint32( sourced ? 16 : 0, true ),
 					source = entities.get( gid );
 				// A rider's position belongs to its active mover, the mount (0x85E000).
 				const entity = source?.mountedOn ? entities.get( source.mountedOn ) ?? source : source;
 				// Source movement is advisory travel; LIFE-dead retires it.
-				if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE && entity?.appearanceState?.[0] === 2 ) return;
+				if ( sourced && entity?.appearanceState?.[0] === 2 ) return;
 				// 775B50 (0x775C1A): once the mover is resolved (85E000), a
 				// monster or COS mover whose life state (+0x263) is 2 (dead)
 				// ignores its B2F5 - no halt, no reseed. Players are not
@@ -1827,7 +1835,7 @@ export function createEntities(
 					(entity.kind === "monster" || entity.kind === "cos")
 				) return;
 				if ( entity ) {
-					const corrected = position( v, frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ? 0 : 4 );
+					const corrected = position( v, sourced ? 0 : 4 );
 					// The local mover has one navigation owner in gameplay. Its
 					// entity row does not follow B738 or prediction; projecting a
 					// correction from that stale row can replace the arena floor
@@ -1856,7 +1864,7 @@ export function createEntities(
 										{ moving: false, movementPath: undefined } :
 										{})
 								} :
-								frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ?
+								sourced ?
 								motion.source( entity, { ...corrected, angle: corrected.heading }, now ) :
 								motion.correct( entity, { ...corrected, angle: corrected.heading } ))
 						} )

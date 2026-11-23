@@ -86,6 +86,30 @@ func DecodeObjectSourceMove(payload []byte) (ObjectSourceMove, error) {
 	return out, nil
 }
 
+// ObjectPositionUpdate is the 0x3028 position resync: one character's
+// authoritative position, broadcast when its replica may have drifted
+// (simulation/position_resync.go). The payload is the 0x30E3 layout -
+// region, x/y/z, heading, gid last - so one layout owner serves both.
+type ObjectPositionUpdate struct {
+	Position
+	Gid uint32
+}
+
+// Encode returns the 0x3028 payload:
+// [u16 region][f32 x][f32 y][f32 z][u16 heading][u32 gid].
+func (u ObjectPositionUpdate) Encode() []byte {
+	return ObjectSourceMove(u).Encode()
+}
+
+// DecodeObjectPositionUpdate parses a 0x3028 payload.
+func DecodeObjectPositionUpdate(payload []byte) (ObjectPositionUpdate, error) {
+	move, err := DecodeObjectSourceMove(payload)
+	if err != nil {
+		return ObjectPositionUpdate{}, err
+	}
+	return ObjectPositionUpdate(move), nil
+}
+
 // ObjectSourceCorrection is the 0xB2F5 remote-entity position correction, the
 // lenient (strict=0) sibling of the 0xB738 move ack. It hard-stops the
 // entity's PathCtl and repositions it.

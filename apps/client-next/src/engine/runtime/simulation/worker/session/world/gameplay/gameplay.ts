@@ -471,6 +471,7 @@ import {
 	MOVEMENT_ACK_OPCODE,
 	NPC_INTERACTION_ACK_OPCODE,
 	OBJECT_DESPAWN_OPCODE,
+	OBJECT_POSITION_UPDATE_OPCODE,
 	OBJECT_SELECT_RESULT_OPCODE,
 	OBJECT_SOURCE_CORRECTION_OPCODE,
 	OBJECT_SOURCE_MOVE_OPCODE,
@@ -6290,7 +6291,9 @@ Packet handling must not depend on which HUD panel is currently open.
 						)
 					);
 				}
-				if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ) dirty = true;
+				if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_POSITION_UPDATE_OPCODE ) {
+					dirty = true;
+				}
 				if (
 					item || target || fight || frame.opcode === PORTAL_RESULT_OPCODE ||
 					frame.opcode === REBIRTH_POINT_APPOINT_RESULT_OPCODE

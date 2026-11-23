@@ -67,6 +67,11 @@ const (
 	// OpObjectSourceMove repositions a remote entity. Handler: the
 	// client's CPSMission_OnEntitySpeedMode0x30E3.
 	OpObjectSourceMove uint16 = 0x30E3
+	// OpObjectPositionUpdate is the server's periodic position resync
+	// for one character (simulation/position_resync.go): the 0x30E3
+	// payload layout under its own opcode, so the client applies it
+	// as a source reseed, never as a stop.
+	OpObjectPositionUpdate uint16 = 0x3028
 	// OpObjectSourceCorrection hard-corrects a remote entity's position.
 	// Handler: the client's CPSMission_OnEntityMoveUpdate0xB2F5.
 	OpObjectSourceCorrection uint16 = 0xB2F5
