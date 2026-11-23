@@ -2743,14 +2743,18 @@ state here before a command can claim a native wire conversation.
 			movement.holdPrediction( movementDropped() );
 			if ( command.kind === "arena-decision" ) {
 				if ( command.operation === 0 && !inventory.requestArenaState() ) return null;
-				if ( !localGid || ![ 0, 1, 2 ].includes( command.operation ) || command.id.length > 128 ) {
+				if ( !localGid || ![ 0, 1, 2, 4, 5 ].includes( command.operation ) || command.id.length > 128 ) {
 					throw Error( "Invalid arena decision" );
 				}
 				const id = new TextEncoder().encode( command.id );
 				if ( id.length > 128 ) throw Error( "Invalid arena identity" );
+				const slots = command.operation === 4 ? [ command.source, command.destination ] : [];
+				if ( slots.some( slot => !Number.isInteger( slot ) || slot < 0 || slot > 255 ) ) {
+					throw Error( "Invalid arena reward slot" );
+				}
 				return sendFrame( {
 					opcode: ARENA_DECISION_OPCODE,
-					payload: Uint8Array.of( command.operation, ...id )
+					payload: Uint8Array.of( command.operation, ...slots, ...id )
 				} );
 			}
 			if ( command.kind === "arena-dismiss" ) {

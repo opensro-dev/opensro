@@ -2034,6 +2034,9 @@ export function createUi( ports: UiPorts ) {
 		carried: NonNullable<typeof carriedItem>,
 		game: UiView["gameplay"] | undefined
 	) {
+		if ( carried.source.startsWith( "arena-chest-item:" ) ) {
+			return game?.arenaChest?.items.find( row => row.slot === carried.slot );
+		}
 		if ( carried.source.startsWith( "storage-slot:" ) ) {
 			return game?.storage?.items.find( row => row.slot === carried.slot );
 		}
@@ -3787,6 +3790,7 @@ export function createUi( ports: UiPorts ) {
 	================
 	*/
 	let arenaPage = 0, arenaPageKey = "", arenaHiddenID = "";
+	const arenaDiscard = { chestID: "" };
 	function activate( id: string ) {
 		if ( (id.startsWith( "market-" ) || id === "system-menu-market") && activateMarket( id ) ) return;
 		if ( id === "arena-prev" || id === "arena-next" ) {
@@ -3801,10 +3805,28 @@ export function createUi( ports: UiPorts ) {
 			return;
 		}
 		if ( id === "arena-close" ) {
+			arenaDiscard.chestID = "";
 			sendGameplay( { kind: "arena-dismiss" } );
 			return;
 		}
+		if ( id === "arena-inventory" ) {
+			setPanel( "Inventory", "toggle" );
+			return;
+		}
+		if ( id === "arena-discard" ) {
+			const chest = view?.gameplay?.arenaChest;
+			if ( chest?.phase !== "claimable" ) return;
+			if ( arenaDiscard.chestID === chest.id ) {
+				arenaDiscard.chestID = "";
+				sendGameplay( { kind: "arena-decision", operation: 5, id: chest.id } );
+			} else {
+				arenaDiscard.chestID = chest.id;
+			}
+			dirty = true;
+			return;
+		}
 		if ( (id === "arena-claim" || id === "arena-continue") && view?.gameplay?.arenaChest ) {
+			arenaDiscard.chestID = "";
 			if ( id === "arena-continue" ) {
 				arenaHiddenID = view.gameplay.arenaChest.id;
 				dirty = true;
@@ -8341,7 +8363,10 @@ export function createUi( ports: UiPorts ) {
 			if (
 				event.kind === "key" &&
 				view?.gameplay?.arenaChest?.phase === "checkpoint"
-			) return;
+			) {
+				if ( virtualKey( event.code ) === bindings.keys[1] ) activate( "arena-inventory" );
+				return;
+			}
 			if (
 				event.kind === "key" && event.code === "Escape" &&
 				(view?.gameplay?.arenaChest?.phase === "claimable" ||
@@ -8675,6 +8700,22 @@ export function createUi( ports: UiPorts ) {
 				) {
 					carriedItem = null;
 					dirty = true;
+				}
+				if ( event.id.startsWith( "arena-chest-item:" ) ) {
+					arenaDiscard.chestID = "";
+					const game = view?.gameplay, chest = game?.arenaChest;
+					const target = topmostControlAt( controls, event.x, event.y );
+					const source = Number( event.id.slice( 17 ) );
+					const destination = target?.id.startsWith( "slot:" ) ? Number( target.id.slice( 5 ) ) : -1;
+					if (
+						chest?.phase === "claimable" && !game?.inventoryPending && target && !target.disabled &&
+						destination >= (game?.equipmentSlotCount ?? 13) && chest.items.some( item =>
+							item.slot === source
+						)
+					) {
+						sendGameplay( { kind: "arena-decision", operation: 4, id: chest.id, source, destination } );
+					}
+					return;
 				}
 				// Port-only: a worn wolf gear piece dragged onto a bag slot comes off.
 				if ( event.id.startsWith( "pet-gear:" ) && view?.gameplay && !view.gameplay.inventoryPending ) {
@@ -9178,7 +9219,7 @@ export function createUi( ports: UiPorts ) {
 			}
 			if (
 				event.kind === "drag" && ITEM_SLOT_PREFIXES.some( prefix => event.id.startsWith( prefix ) ) &&
-				ITEM_CARRY_PANELS.includes( panel )
+				(ITEM_CARRY_PANELS.includes( panel ) || event.id.startsWith( "arena-chest-item:" ))
 			) {
 				const node = controls.find( c => c.id === event.id && !c.disabled && c.draggable );
 				if ( !node ) return;
@@ -29488,6 +29529,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				}
 			}
 			if ( game?.arenaChest?.phase === "closed" || game?.arenaChest?.error ) arenaHiddenID = "";
+			if ( game?.arenaChest?.phase !== "claimable" ) arenaDiscard.chestID = "";
 			if (
 				worldVisible && game?.arenaChest && game.arenaChest.phase !== "closed" &&
 				game.arenaChest.phase !== "countdown" && game.arenaChest.id !== arenaHiddenID
@@ -29500,10 +29542,20 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				}
 				const pages = Math.max( 1, Math.ceil( chest.items.length / 32 ) );
 				arenaPage = Math.min( arenaPage, pages - 1 );
-				const px = Math.floor( (w - width) / 2 ), py = Math.floor( (h - height) / 2 );
-				controls = drawFrame.controls = [];
 				const admission = beginWindow();
-				blocks.push( full );
+				const [px, py] = windowOrigin( "Survival Arena", [
+					Math.max( 0, Math.floor( (w - width - 380) / 2 ) ),
+					Math.floor( (h - height) / 2 ),
+					width,
+					height
+				] );
+				controls.push( {
+					id: "arena-chest-body",
+					label: "Survival rewards",
+					kind: "region",
+					rect: [ px, py + 34, width, height - 34 ]
+				} );
+				if ( chest.phase === "checkpoint" ) blocks.push( full );
 				windowBox( "Survival Arena", px, py, width, height );
 				paths.push( MESSAGE_TILE, ...PARTS.map( part => FRAME + part + ".png" ) );
 				quads.push(
@@ -29526,21 +29578,27 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						hAlign: 2
 					} )
 				);
+				button( "arena-inventory", "Inventory", px + width - 107, py + 44, 83 );
 				rect( [ px + 30, py + 100, width - 60, 1 ], [ 0.46, 0.4, 0.28, 0.8 ] );
 				for ( let slot = 0; slot < 32; slot++ ) {
 					const x = px + 86 + (slot % 8) * 36, y = py + 120 + Math.floor( slot / 8 ) * 36;
 					rect( [ x - 1, y - 1, 34, 34 ], [ 0.38, 0.34, 0.25, 1 ] );
 					rect( [ x, y, 32, 32 ], [ 0.035, 0.04, 0.035, 1 ] );
 				}
-				for ( const item of chest.items.slice( arenaPage * 32, (arenaPage + 1) * 32 ) ) {
-					const local = item.slot - arenaPage * 32;
+				for ( const [local, item] of chest.items.slice( arenaPage * 32, (arenaPage + 1) * 32 ).entries() ) {
 					nativeItem( `arena-chest-item:${item.slot}`, item, [
 						px + 86 + (local % 8) * 36,
 						py + 120 + Math.floor( local / 8 ) * 36,
 						32,
 						32
 					] );
-					controls[controls.length - 1] = { ...controls[controls.length - 1]!, draggable: false };
+					if ( chest.phase !== "claimable" || game.inventoryPending ) {
+						controls[controls.length - 1] = {
+							...controls[controls.length - 1]!,
+							draggable: false,
+							carry: false
+						};
+					}
 				}
 				button( "arena-prev", "Previous", px + 50, py + 274, 100, arenaPage === 0 );
 				button( "arena-next", "Next page", px + 310, py + 274, 100, arenaPage >= pages - 1 );
@@ -29556,7 +29614,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				const saved = chest.phase === "claimable" || chest.phase === "recoverable";
 				quads.push(
 					...text.quads(
-						saved ?
+						chest.phase === "claimable" ?
+							"Drag rewards into your inventory or take all." :
+							saved ?
 							"Speak to Event So-ok to collect or resume." :
 							`Automatic collection in ${Math.floor( seconds / 60 )}:${
 								String( seconds % 60 ).padStart( 2, "0" )
@@ -29576,8 +29636,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						{ hAlign: 1 }
 					)
 				);
-				const notice = chest.error ??
-					(chest.stage === 5 ?
+				const discarding = chest.phase === "claimable" && arenaDiscard.chestID === chest.id;
+				const notice = discarding ? "Discard the remaining items? You keep your gold." : chest.error ??
+					(chest.phase === "claimable" ?
+						"Close to save any remaining items for later." :
+						chest.stage === 5 ?
 						"All five stages cleared. Collect your rewards!" :
 						"Next clear replaces this chest. Death loses it.");
 				quads.push(
@@ -29589,17 +29652,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						{ hAlign: 1 }
 					)
 				);
-				button( "arena-claim", "Collect & leave", px + 42, py + 394, 160 );
-				if ( chest.phase === "claimable" ) button( "arena-close", "Close", px + 258, py + 394, 160 );
-				else {button(
-						"arena-continue",
-						"Next stage",
-						px + 258,
-						py + 394,
-						160,
-						chest.stage >= 5 || chest.phase !== "checkpoint" && chest.phase !== "recoverable"
-					);}
-				if ( chest.phase === "recoverable" ) button( "arena-close", "Close", px + width - 76, py + 44, 50 );
+				if ( chest.phase === "claimable" ) {
+					button( "arena-claim", "Take all", px + 24, py + 394, 130 );
+					button( "arena-discard", discarding ? "Confirm discard" : "Discard rest", px + 165, py + 394, 130 );
+					button( "arena-close", "Close", px + 306, py + 394, 130 );
+				} else {
+					const hasNextStage = chest.stage < 5;
+					button( "arena-claim", "Take all & end run", px + (hasNextStage ? 42 : 150), py + 394, 160 );
+					if ( hasNextStage ) button( "arena-continue", "Next stage", px + 258, py + 394, 160 );
+				}
+				if ( chest.phase === "recoverable" ) button( "arena-close", "Close", px + width - 74, py + 5, 62 );
 
 				endWindow( admission, "arena-chest" );
 			}
