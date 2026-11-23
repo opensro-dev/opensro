@@ -39,7 +39,7 @@ on the next boot; a revoke is gone after it.
 func TestBookSurvivesARestart(t *testing.T) {
 	dir := t.TempDir()
 	book := openTestBook(t, dir)
-	if _, err := book.SetRole(Role{ID: "mod", Tag: "[MOD]", NameColor: "#7ad8ff", ChatColor: "#c0f0ff"}); err != nil {
+	if _, err := book.SetRole(Role{ID: "mod", Tag: "[MOD]", NameColor: "#ead8ff", ChatColor: "#f0f0ff"}); err != nil {
 		t.Fatal(err)
 	}
 	grant, mask, err := book.Grant(Request{Division: "global-official", Character: "Hundred", Role: "mod",
@@ -58,7 +58,7 @@ func TestBookSurvivesARestart(t *testing.T) {
 	}
 	roster := again.Roster("global-official", []string{"HostGM"})
 	if len(roster) != 2 || roster[0].Character != "HostGM" || roster[0].Tag != "[GM]" || roster[0].NameColor != 0xFFFFD87A ||
-		roster[0].ChatColor != 0xFFFFAEC3 || roster[1].Tag != "[MOD]" || roster[1].NameColor != 0xFF7AD8FF {
+		roster[0].ChatColor != 0xFFFFAEC3 || roster[1].Tag != "[MOD]" || roster[1].NameColor != 0xFFEAD8FF {
 		t.Fatalf("roster = %+v", roster)
 	}
 	if again.Roster("other-division", nil) != nil {

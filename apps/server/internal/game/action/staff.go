@@ -15,7 +15,8 @@ clients, so a grant or revoke applies with no restart and no relog:
 	       u16 len + UTF-8 tag, u32 name ARGB, u32 chat ARGB
 
 The browser client flips its GM console and default chat channel on
-0x3FCC (the original reads that bit only at world entry, CICPlayer+0x1890),
+0x3FCC (INFERENCE: the original learns GM only with world entry, as this
+server sent it until now),
 and draws each roster name's tag and colours from 0x3FCD. Both are sent
 at world entry too. A shard with no staff sends neither, which is the
 native behaviour. Both opcodes are free in the v1.150 client and this

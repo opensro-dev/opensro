@@ -8,6 +8,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -250,7 +251,7 @@ func TestGMWarpLeavesTheFortressForTheField(t *testing.T) {
 	deps.SpawnTerrainHeight = func(uint16, float64, float64) (float64, bool) { return 20, true }
 	rt.PushCharacterFrames = func(_, _ string, _ []wire.Frame) {}
 	rt.PushDivisionPeerFrames = func(_, _ string, _ []wire.Frame) {}
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	if !rt.WarpGM(testDivision, c.Name, wire.Position{RegionID: 25416, X: 703, Y: 42, Z: 1575}) {
 		t.Fatal("warp refused")
 	}

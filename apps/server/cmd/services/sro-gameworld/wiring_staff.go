@@ -17,6 +17,9 @@ can neither change nor revoke them.
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -141,6 +144,19 @@ func (game *gameplayPlane) wireStaff(sources staffSources) {
 
 /*
 ================
+staffRequest
+
+The staff book's request for a console staff-grant: the one place a
+console role becomes the approver authority the book checks.
+================
+*/
+func staffRequest(request agentapi.PlayerOperation, shard, name string) staff.Request {
+	return staff.Request{Division: shard, Character: name, Role: request.Role, Capabilities: request.Capabilities,
+		Operator: request.Operator, Approver: request.ConsoleRole == "approver"}
+}
+
+/*
+================
 staffOperations
 
 The console's staff hooks. A grant or revoke resolves the character first,
@@ -170,7 +186,10 @@ func staffOperations(game *gameplayPlane, sources staffSources, shard string) *a
 			if err != nil {
 				return nil, err
 			}
-			grant, mask, err := sources.book.Grant(request.StaffRequest(shard, name))
+			grant, mask, err := sources.book.Grant(staffRequest(request, shard, name))
+			if errors.Is(err, staff.ErrElevated) {
+				return nil, fmt.Errorf("%w: %w", agentapi.ErrForbidden, err)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -194,7 +213,13 @@ func staffOperations(game *gameplayPlane, sources staffSources, shard string) *a
 			return grant, nil
 		},
 		SetRole: func(request agentapi.PlayerOperation) (any, error) {
-			role, err := sources.book.SetRole(*request.StaffRole)
+			var edit staff.Role
+			decoder := json.NewDecoder(bytes.NewReader(request.StaffRole))
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&edit); err != nil {
+				return nil, fmt.Errorf("staff role: %w", err)
+			}
+			role, err := sources.book.SetRole(edit)
 			if err != nil {
 				return nil, err
 			}

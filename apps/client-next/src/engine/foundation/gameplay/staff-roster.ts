@@ -48,7 +48,6 @@ export interface StaffRosterEntry {
 	readonly chatColor: number;
 }
 
-
 /*
 ================
 decodeStaffState

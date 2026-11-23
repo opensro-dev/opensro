@@ -11,6 +11,8 @@ package agentapi
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -46,8 +48,14 @@ func TestStaffActionsReachTheBookWithTheConsoleRole(t *testing.T) {
 		Rescue: func(PlayerOperation) (any, error) { t.Fatal("staff dispatched to rescue"); return nil, nil },
 		Staff: &StaffOperations{
 			Read: func() (any, error) { return map[string]any{"grants": book.Grants("d")}, nil },
+			// The GameWorld's hook in miniature (wiring_staff.go): the console
+			// role becomes the book's approver, and the book's refusal 403.
 			Grant: func(request PlayerOperation) (any, error) {
-				grant, _, err := book.Grant(request.StaffRequest("d", request.Character))
+				grant, _, err := book.Grant(staff.Request{Division: "d", Character: request.Character, Role: request.Role,
+					Capabilities: request.Capabilities, Operator: request.Operator, Approver: request.ConsoleRole == "approver"})
+				if errors.Is(err, staff.ErrElevated) {
+					return nil, fmt.Errorf("%w: %w", ErrForbidden, err)
+				}
 				return grant, err
 			},
 			Revoke:  func(PlayerOperation) (any, error) { revoked++; return map[string]any{"ok": true}, nil },
@@ -62,7 +70,10 @@ func TestStaffActionsReachTheBookWithTheConsoleRole(t *testing.T) {
 	send := func(input PlayerOperation) int {
 		n++
 		input.ID = "staff-request-" + strings.Repeat("x", n)
-		input.Operator, input.Character, input.Reason = "staff-a", "Hundred", "new event GM"
+		input.Operator, input.Reason = "staff-a", "new event GM"
+		if input.Action != "staff-role" {
+			input.Character = "Hundred"
+		}
 		data, _ := json.Marshal(input)
 		request := httptest.NewRequest("POST", "http://127.0.0.1:8791/internal/operations/player", strings.NewReader(string(data)))
 		request.RemoteAddr = "127.0.0.1:1234"
@@ -74,15 +85,15 @@ func TestStaffActionsReachTheBookWithTheConsoleRole(t *testing.T) {
 	}
 
 	for _, bad := range []PlayerOperation{
-		{Action: "staff-grant", Role: staff.GMRole},                                 // no console role
-		{Action: "staff-grant", Role: staff.GMRole, ConsoleRole: "player"},          // not a console role
-		{Action: "staff-grant", ConsoleRole: "operator"},                            // no role
-		{Action: "staff-role", ConsoleRole: "operator"},                             // no role to edit
-		{Action: "rescue", ConsoleRole: "operator"},                                 // console role elsewhere
-		{Action: "rescue", Capabilities: []string{"ban"}},                           // staff field elsewhere
-		{Action: "staff-revoke", ConsoleRole: "operator", Role: staff.GMRole},       // grant field on a revoke
-		{Action: "staff-grant", ConsoleRole: "operator", Role: "gm", Silk: 5},       // foreign field
-		{Action: "staff-revoke", ConsoleRole: "operator", StaffRole: &staff.Role{}}, // role on a revoke
+		{Action: "staff-grant", Role: staff.GMRole},                                         // no console role
+		{Action: "staff-grant", Role: staff.GMRole, ConsoleRole: "player"},                  // not a console role
+		{Action: "staff-grant", ConsoleRole: "operator"},                                    // no role
+		{Action: "staff-role", ConsoleRole: "operator"},                                     // no role to edit
+		{Action: "rescue", ConsoleRole: "operator"},                                         // console role elsewhere
+		{Action: "rescue", Capabilities: []string{"ban"}},                                   // staff field elsewhere
+		{Action: "staff-revoke", ConsoleRole: "operator", Role: staff.GMRole},               // grant field on a revoke
+		{Action: "staff-grant", ConsoleRole: "operator", Role: "gm", Silk: 5},               // foreign field
+		{Action: "staff-revoke", ConsoleRole: "operator", StaffRole: json.RawMessage(`{}`)}, // role on a revoke
 	} {
 		if code := send(bad); code != http.StatusBadRequest {
 			t.Fatalf("%+v answered %d", bad, code)
@@ -107,7 +118,7 @@ func TestStaffActionsReachTheBookWithTheConsoleRole(t *testing.T) {
 		t.Fatalf("revoke answered %d, hook ran %d", code, revoked)
 	}
 	edit := PlayerOperation{Action: "staff-role", ConsoleRole: "operator",
-		StaffRole: &staff.Role{ID: "mod", Tag: "[MOD]", NameColor: "#7AD8FF", ChatColor: "#C0F0FF"}}
+		StaffRole: json.RawMessage(`{"id":"mod","tag":"[MOD]","nameColor":"#EAD8FF","chatColor":"#F0F0FF"}`)}
 	if code := send(edit); code != http.StatusOK || roles != 1 {
 		t.Fatalf("role edit answered %d, hook ran %d", code, roles)
 	}

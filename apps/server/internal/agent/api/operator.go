@@ -25,8 +25,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"opensro.online/server/internal/game/staff"
 )
 
 const operatorBodyLimit = 4096
@@ -89,22 +87,16 @@ type PlayerOperation struct {
 	Role         string   `json:"role,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
 	ConsoleRole  string   `json:"consoleRole,omitempty"`
-	// StaffRole is a staff-role operation's role, added or edited.
-	StaffRole *staff.Role `json:"staffRole,omitempty"`
+	// StaffRole is a staff-role operation's role, added or edited. The
+	// endpoint carries it whole; the staff book owns its shape and rules
+	// (this package may not import game code: internal/gates).
+	StaffRole json.RawMessage `json:"staffRole,omitempty"`
 }
 
-/*
-================
-PlayerOperation.StaffRequest
-
-The staff book's request for a staff-grant: the one place a console role
-becomes the approver authority the book checks.
-================
-*/
-func (request PlayerOperation) StaffRequest(division, character string) staff.Request {
-	return staff.Request{Division: division, Character: character, Role: request.Role,
-		Capabilities: request.Capabilities, Operator: request.Operator, Approver: request.ConsoleRole == "approver"}
-}
+// ErrForbidden marks an operation the signed-in console role may not
+// perform (a staff grant's elevated capability from an operator); the
+// endpoint answers 403 for it.
+var ErrForbidden = errors.New("agentapi: forbidden for this console role")
 
 /*
 ================
@@ -265,7 +257,7 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	var request PlayerOperation
 	if err := decodeJSONRequest(http.MaxBytesReader(w, r.Body, operatorBodyLimit), &request); err != nil ||
 		!operatorRequestID.MatchString(request.ID) || len(request.Operator) == 0 || len(request.Operator) > 80 ||
-		len(request.Character) == 0 || len(request.Character) > 64 || len(strings.TrimSpace(request.Reason)) < 5 || len(request.Reason) > 500 {
+		(len(request.Character) == 0) != (request.Action == "staff-role") || len(request.Character) > 64 || len(strings.TrimSpace(request.Reason)) < 5 || len(request.Reason) > 500 {
 		http.Error(w, "invalid player operation", http.StatusBadRequest)
 		return
 	}
@@ -381,7 +373,7 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		case "staff-revoke":
 			operation = hooks.Revoke
 		default:
-			if request.StaffRole == nil {
+			if len(request.StaffRole) == 0 {
 				http.Error(w, "a staff-role action needs the role", http.StatusBadRequest)
 				return
 			}
@@ -419,7 +411,7 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "operation outcome audit failed; inspect player before retrying", http.StatusServiceUnavailable)
 		return
 	}
-	if errors.Is(operationErr, staff.ErrElevated) {
+	if errors.Is(operationErr, ErrForbidden) {
 		http.Error(w, operationErr.Error(), http.StatusForbidden)
 		return
 	}

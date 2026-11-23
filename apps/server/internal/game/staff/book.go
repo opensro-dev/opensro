@@ -13,7 +13,7 @@ A role is presentation data staff edit in the console: the tag drawn
 before the name and the two colours (name, chat). The seeded "gm" role
 wears the original's GM look: the client paints a name starting with
 "[GM]" 0xFFFFD87A (v1.150 00858848) and a GM chat line, type 3,
-0xFFFFAEC3 (the 752A2B colour table).
+0xFFFFAEC3 (the v1.150 client colour table at 752A2B).
 
 A grant names a character, a role and a capability set (capabilities.go).
 The book never touches characters: the game world projects a grant onto

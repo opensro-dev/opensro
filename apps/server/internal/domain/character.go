@@ -647,7 +647,11 @@ type Character struct {
 	// has one GM bit; the staff book splits it per command, and the GM
 	// lane checks the bit at command time. Projected beside GMPrivilege
 	// by the same two setters; meaningless while GMPrivilege is false.
-	GMCapabilities uint32 `json:"gmCapabilities,omitempty"`
+	// A projection, never persisted: the staff book and the host
+	// allowlist are the durable sources, and the boot reconcile writes
+	// these bits onto every stored character (store.ReconcileGMPrivilege),
+	// so a record never outlives a revoked capability.
+	GMCapabilities uint32 `json:"-"`
 
 	// PC-room event eligibility is server-owned: client
 	// CICPlayer_PcRoomEventEligible_862a80 -> CIFEventInterface_OnCreate(1).
