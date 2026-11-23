@@ -55,6 +55,9 @@ export interface SystemNotice {
 	readonly key: string;
 	readonly value: number;
 	readonly text?: string;
+	// Port-only, not native (#4136): a literal tail the one notice text
+	// formatter appends after the localized line; native data has none.
+	readonly suffix?: string;
 	readonly arguments?: readonly string[];
 	readonly banner?: true;
 	readonly bannerUsesFormattedKey?: true;

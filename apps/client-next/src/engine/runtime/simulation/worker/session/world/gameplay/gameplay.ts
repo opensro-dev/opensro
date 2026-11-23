@@ -1414,6 +1414,12 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	// those codes and must stay exact for every other use, so the
 	// translation lives here, keyed on the flight, not in the mapper.
 	let renameUseInFlight = false;
+	// Port-only, not native (#4136): the required level of the gate link
+	// whose 0x7495 request is still unanswered, noted by the world core
+	// as the request goes out (noteGateTravel). The 0xB495 answer reads
+	// it (the level refusal names it) and retires it, whatever it says,
+	// so a later walk-in refusal never inherits a stale level.
+	let gateTravelLevel = 0;
 	// A crest register upload (#2282) stays in flight until the upload
 	// lane answers; a second confirmed register is held while one is
 	// outstanding. The success box is the 0xB5BD answer's business, not
@@ -6244,11 +6250,16 @@ Packet handling must not depend on which HUD panel is currently open.
 					weaponSwitchUseInFlight = false;
 					raceSwitchUseInFlight = null;
 				}
+				// Port-only (#4136): a 0xB495 answer retires the noted
+				// gate level; the level refusal below reads the note.
+				const notedGateLevel = gateTravelLevel;
+				if ( frame.opcode === PORTAL_RESULT_OPCODE ) gateTravelLevel = 0;
 				const refusal = (portLine ?
 					{ key: "", value: 0, text: portLine, nativeType: 5 as const } :
 					undefined) ??
 					recallAppointmentNotice( frame.opcode, frame.payload ) ??
-					targetNotice( frame.opcode, frame.payload ) ?? portalNotice( frame.opcode, frame.payload ) ??
+					targetNotice( frame.opcode, frame.payload ) ??
+					portalNotice( frame.opcode, frame.payload, notedGateLevel ) ??
 					repairNotice( frame.opcode, frame.payload ) ??
 					inventoryNotice( frame.opcode, frame.payload, localCountry, mallRequest ) ??
 					alchemyNotice( frame.opcode, frame.payload ) ??
@@ -6315,6 +6326,19 @@ Packet handling must not depend on which HUD panel is currently open.
 					flushBindingRepairs();
 				}
 			}
+		},
+		/*
+================
+noteGateTravel
+
+Port-only, not native (#4136): the world core notes the clicked gate
+link's required level as its 0x7495 request goes out; the 0xB495
+answer reads the note (a level refusal names the level) and retires
+it. A level of 0 notes nothing.
+================
+		*/
+		noteGateTravel( level: number ) {
+			gateTravelLevel = level;
 		},
 		/*
 ================

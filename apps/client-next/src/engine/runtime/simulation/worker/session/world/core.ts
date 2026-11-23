@@ -610,6 +610,11 @@ UI and quickslot commands. A skill aims at the newest selection intent
 				if ( !entities.read( command.gid ) ) throw Error( "Travel source is not admitted" );
 				loadingMode = 2;
 				send( frame );
+				// Port-only, not native (#4136): note the clicked link's
+				// required level for the refusal that may answer it.
+				if ( command.kind === "travel-gate" && command.type === 2 ) {
+					gameplay.noteGateTravel( command.minLevel ?? 0 );
+				}
 				return;
 			}
 			// The worker chooses the shortcut's item: its table already holds every
