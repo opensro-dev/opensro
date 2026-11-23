@@ -35,6 +35,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/pk"
+	"opensro.online/server/internal/game/staff"
 )
 
 // LevelCap is the Legend III era character level cap: 90, pinned by the
@@ -112,7 +113,8 @@ const statPointWordMax int64 = 0xffff
 // it is REGISTERED ONLY when SRO_DEV_EXP_GRANT=1 (default off - see
 // Runtime.Register).
 //
-// The bound character must carry host-reconciled GMPrivilege. The env flag
+// The bound character must be a GM whose staff grant carries set_level
+// (staff.SetLevel; host-allowlist GMs hold every capability). The env flag
 // controls whether the diagnostic opcode exists at all; it never grants an
 // ordinary player a levelling primitive.
 //
@@ -146,7 +148,7 @@ It shares the production grant transaction after admission.
 ================
 */
 func (rt *Runtime) HandleDevGrantExp(divisionID string, character *enterworld.Character, payload []byte) OpResult {
-	if character == nil || !character.GMPrivilege {
+	if !staff.Allows(character, staff.SetLevel) {
 		return OpResult{}
 	}
 	r := wire.NewReader(payload)

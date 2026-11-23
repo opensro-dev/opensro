@@ -104,6 +104,9 @@ type gameplayPlane struct {
 	// gmModeration is what the GM's moderation commands act on
 	// (moderation_wiring.go); its mute book is filled in beside mutes.
 	gmModeration *gmcommand.Moderation
+	// staff is the staff book and host allowlist (wiring_staff.go); nil
+	// leaves the console's staff actions refused.
+	staff        *staffSources
 	chat         *chat.Runtime
 	chatFeed     *chatfeed.Feed
 	parties      *party.Runtime

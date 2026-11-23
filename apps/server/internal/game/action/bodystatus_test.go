@@ -9,6 +9,7 @@ import (
 	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -31,7 +32,7 @@ func TestGMBodyStatusProductionDispatchPublicationAndDamage(t *testing.T) {
 	if out := request(gmcommand.SubInvisible); out.Ack != nil || c.NativeBodyStatus != 0 || len(actor) != 0 {
 		t.Fatalf("unprivileged mutation: %+v", out)
 	}
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	for _, step := range []struct{ command, want uint8 }{{14, 4}, {15, 3}, {15, 0}, {14, 4}, {14, 0}} {
 		actor, peers = nil, nil
 		out := request(step.command)
@@ -180,7 +181,7 @@ func TestBodyEffectReplacementCancellationExpiryAndGMOwnership(t *testing.T) {
 		t.Fatal("cancel did not retire owned status")
 	}
 	apply(101, 52, 1200)
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	if !rt.ToggleGMBodyStatus(testDivision, c.Name, 4) {
 		t.Fatal("GM replacement refused")
 	}
@@ -212,7 +213,7 @@ func TestBodyEffectReplacementCancellationExpiryAndGMOwnership(t *testing.T) {
 
 func TestGMStatusPreservedByRebirthAndClearedAtDisconnect(t *testing.T) {
 	c := rebirthTestCharacter(1, 0)
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	rt, _ := newTestRuntime(c, testItems())
 	if !rt.ToggleGMBodyStatus(testDivision, c.Name, 4) {
 		t.Fatal("toggle refused")
@@ -264,7 +265,7 @@ func TestEffectRetirementEnqueuesBeforeWireTokenReuse(t *testing.T) {
 		}
 	}
 	apply(101, 1000)
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	if !rt.ToggleGMBodyStatus(testDivision, c.Name, 4) {
 		t.Fatal("GM override refused")
 	}

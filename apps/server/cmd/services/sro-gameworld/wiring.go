@@ -480,6 +480,10 @@ func newGameWorldApplication(
 	if gameplay.gmModeration != nil {
 		gameplay.gmModeration.Mutes = application.mutes
 	}
+	// Staff grants (port-only; owner decision 2026-11-23): the roster and
+	// entry frames join the finished lanes, before the console hooks.
+	gameplay.wireStaff(authority.staff)
+	gameplay.staff = &authority.staff
 	if err := installPlayerOperations(authority.agentAPI, gameplay, ts.Hub, authority.store, ownedShard.ID); err != nil {
 		return nil, fmt.Errorf("player operations: %w", err)
 	}

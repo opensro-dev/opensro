@@ -17,6 +17,7 @@ import {
 	type NameColorContext
 } from "@/engine/foundation/gameplay/name-color";
 import { fortressActive } from "@/engine/foundation/gameplay/fortress";
+import { OP_STAFF_ROSTER } from "@/engine/foundation/gameplay/staff-roster";
 import type { EntityState, WorldEvent } from "@/engine/contracts/world";
 import { travelMode, resetTravelRegion, gateRequest, isReturnScroll } from "@/engine/foundation/gameplay/travel";
 import { commerceReferences } from "@/engine/foundation/gameplay/commerce";
@@ -435,6 +436,10 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 			frame.opcode === GUILD_WAR_SEED_OPCODE ||
 			frame.opcode === GUILD_UPDATE_PUSH_OPCODE && (frame.payload[0] === 0x19 || frame.payload[0] === 0x1c)
 		) entities.recolor( e => e.kind === "player" || e.kind === "local-player" );
+		// Port-only (staff-roster.ts): a grant or revoke recolours every player.
+		if ( frame.opcode === OP_STAFF_ROSTER ) {
+			entities.recolor( e => e.kind === "player" || e.kind === "local-player" );
+		}
 		if ( frame.opcode === MOVEMENT_SPEED_OPCODE ) {
 			const local = entities.read( localGid ),
 				effective = local?.mountedOn ? entities.read( local.mountedOn ) : local;

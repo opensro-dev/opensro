@@ -27,9 +27,12 @@ const EnvGMCharacters = "SRO_GM_CHARACTERS"
 
 // GMIdentity is the complete privilege subject. Character names alone are
 // insufficient because equal names may exist on different divisions.
+// Capabilities are the staff.Capability bits the GM holds: every bit for a
+// host allowlist entry, the book's set for a console grant (package staff).
 type GMIdentity struct {
 	DivisionID    string
 	CharacterName string
+	Capabilities  uint32
 }
 
 func (identity GMIdentity) key() string {
@@ -72,17 +75,20 @@ func ParseGMCharacters(value string) ([]GMIdentity, error) {
 	return identities, nil
 }
 
-// ReconcileGMPrivilege makes the allowlist the single authority over the
-// persisted GMPrivilege flags: listed characters promote, every other
-// record demotes. Runs at boot (wiring.go, right after the matured-
+// ReconcileGMPrivilege makes the staff sources (the host allowlist and the
+// console's staff book, merged by the caller) the single authority over
+// the persisted GMPrivilege flags and GMCapabilities bits: listed
+// characters promote with their bits, every other record demotes. Runs at boot (wiring.go, right after the matured-
 // deletion reap); one commit carries every changed record. Returns the
 // promoted and demoted names so the boot log states the resulting GM set
 // explicitly. A listed name matching no character warns loudly - a typo
 // here would otherwise read as a silently missing GM.
 func (s *Store) ReconcileGMPrivilege(allowed []GMIdentity) (promoted, demoted []string) {
 	want := make(map[string]bool, len(allowed))
+	capabilities := make(map[string]uint32, len(allowed))
 	for _, identity := range allowed {
 		want[identity.key()] = true
+		capabilities[identity.key()] |= identity.Capabilities
 	}
 
 	s.mu.Lock()
@@ -96,12 +102,16 @@ func (s *Store) ReconcileGMPrivilege(allowed []GMIdentity) (promoted, demoted []
 				matched[key] = true
 			}
 			target := want[key]
-			if c.GMPrivilege == target {
+			if c.GMPrivilege == target && c.GMCapabilities == capabilities[key] {
 				continue
 			}
 			s.beginDoorLocked(c)
-			c.GMPrivilege = target
+			flipped := c.GMPrivilege != target
+			c.GMPrivilege, c.GMCapabilities = target, capabilities[key]
 			changed = append(changed, c)
+			if !flipped {
+				continue
+			}
 			if target {
 				promoted = append(promoted, identity.String())
 			} else {

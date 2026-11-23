@@ -8,6 +8,7 @@ import (
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport/worldsession"
 )
@@ -65,7 +66,7 @@ func TestWorldSnapshotCombatEligibilityLifecycle(t *testing.T) {
 		t.Fatalf("expected non-zero region for live character")
 	}
 	initialRegion := snap.World.Spawn.RegionID
-	deps.Mutate(character, "grant-test-gm", func() { character.GMPrivilege = true })
+	deps.Mutate(character, "grant-test-gm", func() { character.GMPrivilege, character.GMCapabilities = true, uint32(staff.All) })
 	statusOwner := action.NewRuntime(deps, nil)
 	set := func() {
 		outcome := gmcommand.HandleGmCommand(deps, nil, doorTestDivision, character, []byte{gmcommand.SubInvisible}, statusOwner)

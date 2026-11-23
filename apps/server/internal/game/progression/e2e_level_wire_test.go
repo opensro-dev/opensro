@@ -56,14 +56,15 @@ func TestLevellingPathEndToEndOverWire(t *testing.T) {
 	// cannot coincide with a per-level or per-grant value. The 500/400
 	// maxima are the usual decoys: derived maxima must never echo them.
 	seed := &enterworld.Character{
-		Name:          e2eLevelCharName,
-		ModelCodename: "CHAR_CH_MAN_ADVENTURER",
-		RaceIndex:     e2eInt64(enterworld.RaceChina),
-		Gender:        e2eInt64(enterworld.GenderMale),
-		Level:         e2eInt64(1),
-		StatPoints:    e2eInt64(1),
-		SkillPoints:   e2eInt64(0),
-		GMPrivilege:   true,
+		Name:           e2eLevelCharName,
+		ModelCodename:  "CHAR_CH_MAN_ADVENTURER",
+		RaceIndex:      e2eInt64(enterworld.RaceChina),
+		Gender:         e2eInt64(enterworld.GenderMale),
+		Level:          e2eInt64(1),
+		StatPoints:     e2eInt64(1),
+		SkillPoints:    e2eInt64(0),
+		GMPrivilege:    true,
+		GMCapabilities: ^uint32(0),
 		// The authority store supplies the racial base-skill seed required
 		// by the current character schema.
 		Skills: []uint32{},

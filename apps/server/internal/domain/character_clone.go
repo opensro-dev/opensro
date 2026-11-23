@@ -147,7 +147,7 @@ func cloneCharacterCompanion(source *Character) *Character {
 		ID: source.ID, AccountID: source.AccountID, Name: source.Name, DeletePending: source.DeletePending,
 		ModelCodename: source.ModelCodename, BroodGeneration: source.BroodGeneration,
 		NativeTeleportMode: source.NativeTeleportMode, NativeBodyStatus: source.NativeBodyStatus,
-		BattleUntilMs: source.BattleUntilMs, Job: source.Job, GMPrivilege: source.GMPrivilege,
+		BattleUntilMs: source.BattleUntilMs, Job: source.Job, GMPrivilege: source.GMPrivilege, GMCapabilities: source.GMCapabilities,
 		PublicHidden: source.PublicHidden, TransformRefObjID: source.TransformRefObjID,
 		TransformMode: source.TransformMode, TransformShape: source.TransformShape,
 		TransformEquipment: source.TransformEquipment,

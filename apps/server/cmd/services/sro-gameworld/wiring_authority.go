@@ -68,6 +68,9 @@ type authorityPlane struct {
 	// the Agent API (the /marks/ resolver). Nil when no marks
 	// directory is configured - uploads have nowhere to live.
 	crests *crest.Store
+	// staff is the console's staff book and the host allowlist, already
+	// projected onto the stored characters (wiring_staff.go).
+	staff staffSources
 }
 
 /*
@@ -347,12 +350,11 @@ func openAuthorityPlane(
 			err,
 		)
 	}
-	gmIdentities, err := store.GMCharactersFromEnv()
+	staffSources, err := openStaffSources(authorityStore, ownedShard.ID)
 	if err != nil {
 		authorityStore.Close()
-		return authorityPlane{}, fmt.Errorf("GM allowlist: %w", err)
+		return authorityPlane{}, err
 	}
-	authorityStore.ReconcileGMPrivilege(gmIdentities)
 
 	levelCap, err := progression.LevelCapFromEnv()
 	if err != nil {
@@ -440,6 +442,7 @@ func openAuthorityPlane(
 		loadQuests: loaded.loadQuests,
 		textdata:   textdata,
 		crests:     crests,
+		staff:      staffSources,
 	}, nil
 }
 

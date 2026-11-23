@@ -17,6 +17,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/siege"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 )
@@ -200,7 +201,7 @@ The GM command shares the same reply and roster burst as a battle-aide request.
 */
 func TestStructureUpgradeGMOrdersReplyBeforeRoster(t *testing.T) {
 	rt, c, _, jangan, _, _ := upgradeFixture(t)
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	var frames []wire.Frame
 	rt.PushCharacterFrames = func(_, name string, sent []wire.Frame) {
 		if name == c.Name {

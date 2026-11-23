@@ -413,6 +413,13 @@ import { createJobHonor } from "./job-honor/job-honor";
 import { createJobHonorTiers } from "./job-honor/job-honor-tiers";
 import { createUniqueStatus } from "./unique-status/unique-status";
 import { createHwanLevel } from "./hwan-level/hwan-level";
+import {
+	decodeStaffRoster,
+	decodeStaffState,
+	OP_STAFF_ROSTER,
+	OP_STAFF_STATE,
+	type StaffRosterEntry
+} from "@/engine/foundation/gameplay/staff-roster";
 import { createMostWanted } from "./most-wanted/most-wanted";
 import { createPetTraining } from "./pet-training/pet-training";
 import type {
@@ -724,6 +731,9 @@ export function createGameplay(
 	let warnings = [ false, false ];
 	let options = initialGameOptions();
 	let eligibility = { gm: false, pcRoomEvent: false };
+	// Port-only (staff-roster.ts): the staff roster, and this character's
+	// capability bits; 0x3FCC flips eligibility.gm live.
+	let staffRoster: readonly StaffRosterEntry[] = [], staffCapabilities = 0;
 	let autoPotionInputBlocked = false, autoPotionItemMallOpen = false;
 	let autoPotion = autoPotionBootstrap( {} );
 	let potionFacts: AutoPotionFacts = { alive: false, hp: 0, mp: 0, maxHp: 0, maxMp: 0, abnormal: 0 };
@@ -2011,6 +2021,8 @@ clears it when another character enters.
 		entryVitals = {};
 		warnings = [ false, false ];
 		eligibility = { gm: false, pcRoomEvent: false };
+		staffRoster = [];
+		staffCapabilities = 0;
 		autoPotion = autoPotionBootstrap( {} );
 		potionFacts = { alive: false, hp: 0, mp: 0, maxHp: 0, maxMp: 0, abnormal: 0 };
 		potionTimers.fill( emptyAutoPotionTimer() );
@@ -2510,7 +2522,8 @@ nameInputs
 				fortress,
 				attackedName: combat.nameAttack( now ),
 				localItem: inventory.nameItem(),
-				localLevel: progression.level
+				localLevel: progression.level,
+				staffRoster
 			};
 		},
 		/*
@@ -4729,6 +4742,18 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( frame.opcode === OP_STAFF_STATE ) {
+					const state = decodeStaffState( frame.payload );
+					eligibility = { ...eligibility, gm: state.gm };
+					staffCapabilities = state.capabilities;
+					dirty = true;
+					return true;
+				}
+				if ( frame.opcode === OP_STAFF_ROSTER ) {
+					staffRoster = decodeStaffRoster( frame.payload );
+					dirty = true;
+					return true;
+				}
 				if ( frame.opcode === DEATH_NOTICE ) {
 					if ( frame.payload.length !== 1 ) throw Error( "Invalid death notice" );
 					rebirthMode = frame.payload[0]!;
@@ -6844,6 +6869,10 @@ The published plane when something changed since the last take, else null.
 				// Port-only (#3358): the shown Contributor roster
 				// (contributor-titles.ts), under SRO_CONTRIBUTOR_TITLES.
 				contributorTitles: contributorTitles.names(),
+				// Port-only (staff-roster.ts): every staff member's tag and colours,
+				// and this character's own capability bits.
+				staffRoster,
+				staffCapabilities,
 				// Port-only (#3907): the SRO Macro settings (sro-macro.ts),
 				// under SRO_AUTO_MACRO.
 				...(sroMacro.view() ? { sroMacro: sroMacro.view() } : {}),
