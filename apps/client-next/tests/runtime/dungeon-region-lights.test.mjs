@@ -34,6 +34,7 @@ const { createNavigationResources } = await import( "../../src/engine/runtime/as
 const { dungeonPointLight } = await import(
 	"@/engine/foundation/rendering/dungeon-lights"
 );
+const { radians } = await import( "@/engine/foundation/math/angles" );
 const { fillRowPointLights } = await import(
 	"../../src/engine/runtime/renderer/characters/characters.ts"
 );
@@ -89,7 +90,13 @@ test("the reported pose binds block 41's nearest light at a visible strength", a
 	const floats = fillRowPointLights(
 		{},
 		[ {
-			pose: { regionId: 32773, x: pose.x, y: pose.y, z: pose.z, yaw: 0 },
+			gid: 1,
+			model: "",
+			pose: { regionId: 32773, x: pose.x, y: pose.y, z: pose.z, yaw: radians( 0 ) },
+			clip: "",
+			time: 0,
+			loop: false,
+			scale: 1,
 			dungeonBlock: 41
 		} ],
 		0,
