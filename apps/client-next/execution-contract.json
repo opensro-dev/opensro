@@ -237,6 +237,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/animation/character-pick.ts",
+			"provider": "src/engine/runtime/renderer/renderer.ts",
+			"functions": [
+				"visible"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/ui/alchemy-result.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
