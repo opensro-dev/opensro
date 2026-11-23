@@ -26,16 +26,17 @@ without a petdesign entry. A kind of any other prefix is deferred
 and reported, never half imported: its rows wait for a lane.
 
 A chosen kind brings its characterdata rows, the summon scrolls whose
-itemdata column 119 names it, and the name text for both. The pet's model
-(.bsr, characterdata column 52) must exist in the later archives or the
-native tree, or the kind is skipped and reported; the mesh, material and
-animation closure below the .bsr is the character model builder's, as it
-is for every imported monster. What an import does not bring is the
-server's rule for the kind: companion/petdesign.json is the owner's
-single source for pet rules, so the report names, per added kind, the
-design entry (and, for attack kinds, the pet skill rows) a follow-up
-still owes. No retail table is committed to Git; rows land in the variant
-staging tree beside the avatar shards.
+itemdata column 119 names it, the name text for both, and the skilldata
+rows its DefaultSkillIDs name (so an attack or fellow pet can fight the
+moment it is summoned). The pet's model (.bsr, characterdata column 52)
+must exist in the later archives or the native tree, or the kind is
+skipped and reported; the mesh, material and animation closure below
+the .bsr is the character model builder's, as it is for every imported
+monster. What an import does not bring is the expansion's trained-skill
+tree: companion/petdesign.json is the owner's single source for those
+rules, so the report names, per added attack kind, the design entry and
+pet skill rows a follow-up still owes. No retail table is committed to
+Git; rows land in the variant staging tree beside the avatar shards.
 
 Rows keep their later-client identity when it is free in the native
 tables and the character data; the few that clash take a fresh one above
@@ -61,6 +62,7 @@ import cap110_items as items
 import import_vsro_alexandria as tables
 import published_ids
 import later_world_import
+import skilldata_enc as skill_tables
 from pin_file import read_pin_field
 from prepare_client_resources import safe_target, write_atomically
 import sro_pk2
@@ -92,14 +94,16 @@ CHAR_LEVEL = 57
 ITEM_ASSOCIATED_CHAR = 119
 SERVICE_ON = "1"
 
-# One shard pair and one marker per source, in import order: a kind is
-# imported once, from the earliest source that holds it.
+# One shard triple and one marker per source, in import order: a kind is
+# imported once, from the earliest source that holds it. Skill shards sit
+# on the same band as the character/item shards (nasrun already owns
+# skilldata_130000, so the VSRO pet pass writes skilldata_131000).
 VSRO_SOURCE = {"name": "vsro", "char_shard": "characterdata_130000.txt", "item_shard": "itemdata_130000.txt",
-	"report": ".opensro-pets.json", "pins": None}
+	"skill_shard": "skilldata_131000.txt", "report": ".opensro-pets.json", "pins": None}
 V1696_SOURCE = {"name": "v1696", "char_shard": "characterdata_140000.txt", "item_shard": "itemdata_140000.txt",
-	"report": ".opensro-pets-v1696.json", "pins": V1696_PIN_FILE}
+	"skill_shard": "skilldata_140000.txt", "report": ".opensro-pets-v1696.json", "pins": V1696_PIN_FILE}
 ARCHIVE_SOURCE = {"name": "archive", "char_shard": "characterdata_150000.txt", "item_shard": "itemdata_150000.txt",
-	"report": ".opensro-pets-archive.json", "pins": AVATARS_PIN_FILE}
+	"skill_shard": "skilldata_150000.txt", "report": ".opensro-pets-archive.json", "pins": AVATARS_PIN_FILE}
 SOURCES = (VSRO_SOURCE, V1696_SOURCE, ARCHIVE_SOURCE)
 
 EXCLUDED_PREFIXES = ("COS_GUARD_", "COS_GUILD_")
@@ -109,6 +113,10 @@ LEVEL_SUFFIX = re.compile(r"_\d+$")
 # lane exists. Fellows need no petdesign entry: they run their native
 # rows, and the report's design-entry need stays attack-only.
 LANE_KINDS = ("pickup", "attack", "transport", "vehicle", "fellow")
+# RefObjChar default-skill columns in the v1.150 layout (convert_character
+# lands the later client's ten actions here; the server reads the same).
+CHAR_DEFAULT_SKILL1 = 89
+CHAR_DEFAULT_SKILL_N = 98
 
 
 # ================
@@ -326,11 +334,66 @@ def later_tables_from_pk2(root):
 		return later_tables_from_media(media, tables.archive_index(media))
 
 
-def native_tables(native):
+def native_tables(native, exclude_shards=()):
+	# exclude_shards drops this source's own overlay when native and
+	# output share a tree, so a rebuild still sees its kinds as fresh
+	# and can restage their skills (later_world_import's tree_characters
+	# rule).
+	excluded = {name.lower() for name in exclude_shards}
 	text_root = Path(native) / TEXT_ROOT
-	chars = [row for path in sorted(text_root.glob("characterdata_*.txt")) for row in tables.table_rows(path.read_bytes())]
-	item_rows = [row for path in sorted(text_root.glob("itemdata_*.txt")) for row in tables.table_rows(path.read_bytes())]
+	chars = [row for path in sorted(text_root.glob("characterdata_*.txt"))
+		if path.name.lower() not in excluded
+		for row in tables.table_rows(path.read_bytes())]
+	item_rows = [row for path in sorted(text_root.glob("itemdata_*.txt"))
+		if path.name.lower() not in excluded
+		for row in tables.table_rows(path.read_bytes())]
 	return chars, item_rows
+
+
+# ================
+# stage_pet_skills
+#
+# The DefaultSkillIDs on the staged character rows (native columns
+# 89..98): pull those skilldata rows from the later client, merge them
+# onto skill_shard the way later_world_import.stage_kinds does, and
+# remap the character columns through the identity map. An empty need
+# drops the shard so a rebuild that stages no fighters leaves no
+# orphan skill file. Returns (char_rows, skill code->id map).
+# ================
+def stage_pet_skills(read, has, text_root, skill_shard, char_rows, previous_skills=None):
+	text_root = Path(text_root)
+	needed = {
+		int(value) for row in char_rows for value in row[CHAR_DEFAULT_SKILL1:CHAR_DEFAULT_SKILL_N + 1]
+		if len(row) > CHAR_DEFAULT_SKILL_N and value.isdigit() and int(value)
+	}
+	if not needed:
+		_drop_skill_shard(text_root, skill_shard)
+		return char_rows, {}
+	native_skills = [
+		row for path in text_root.glob("skilldata_*.txt") if path.name.lower() != skill_shard.lower()
+		for row in tables.table_rows(path.read_bytes()) if len(row) == 118
+	]
+	client_skills = [row for row in skill_tables.client_skill_rows(read, has) if len(row) > 3 and row[1].isdigit()]
+	added, skill_map = cap110_monsters.merge_skills(native_skills, client_skills, needed, previous_skills or {})
+	for row in char_rows:
+		row[CHAR_DEFAULT_SKILL1:CHAR_DEFAULT_SKILL_N + 1] = [
+			str(skill_map[int(value)]) if value.isdigit() and int(value) else "0"
+			for value in row[CHAR_DEFAULT_SKILL1:CHAR_DEFAULT_SKILL_N + 1]
+		]
+	write_atomically(text_root / skill_shard, cap110_monsters.encode_rows(added))
+	manifest = tables.table_rows((text_root / "skilldata.txt").read_bytes()) if (text_root / "skilldata.txt").exists() else []
+	manifest = [row for row in manifest if row and row[0].lower() != skill_shard.lower()] + [[skill_shard]]
+	write_atomically(text_root / "skilldata.txt", cap110_monsters.encode_rows(manifest))
+	return char_rows, {row[3]: int(row[1]) for row in added}
+
+
+def _drop_skill_shard(text_root, skill_shard):
+	text_root = Path(text_root)
+	manifest = text_root / "skilldata.txt"
+	if manifest.exists():
+		kept = [row for row in tables.table_rows(manifest.read_bytes()) if not row or row[0].lower() != skill_shard.lower()]
+		write_atomically(manifest, cap110_monsters.encode_rows(kept))
+	(text_root / skill_shard).unlink(missing_ok=True)
 
 
 def read_marker(output, source):
@@ -365,6 +428,7 @@ def remove_import(output, source):
 	for manifest_name, shard in (("characterdata.txt", source["char_shard"]), ("itemdata.txt", source["item_shard"])):
 		_drop_manifest_line(output, manifest_name, shard)
 		(text_root / shard).unlink(missing_ok=True)
+	_drop_skill_shard(text_root, source["skill_shard"])
 	_remove_icons(output, read_marker(output, source))
 	(Path(output) / source["report"]).unlink(missing_ok=True)
 
@@ -477,6 +541,7 @@ def _write_pass(output, source, char_rows, item_rows, report):
 		# missing shard fails the table assembly that reads it.
 		_drop_manifest_line(output, "characterdata.txt", source["char_shard"])
 		(text_root / source["char_shard"]).unlink(missing_ok=True)
+		_drop_skill_shard(text_root, source["skill_shard"])
 	if item_rows:
 		write_atomically(safe_target(text_root, source["item_shard"]), _encode(sorted(item_rows, key=lambda row: int(row[items.IDENTITY]))))
 		_manifest_with(output, "itemdata.txt", source["item_shard"])
@@ -512,11 +577,14 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 			remove_import(output, source)
 			return _disabled(source, "archive pins not in tree")
 		tables.require_vsro_pin(root, tuple(FOLDERS), read_pin_field(source["pins"], PIN_FORMAT, "archives"))
-	native_chars, native_items = native_tables(native)
+	own_shards = (source["char_shard"], source["item_shard"], source["skill_shard"])
+	native_chars, native_items = native_tables(native, exclude_shards=own_shards)
 	later_chars, later_items, later_text = later_tables_from_pk2(root)
 	res_root = Path(native) / "Data_extracted" / "res"
 	native_models = {path.name.lower() for path in res_root.rglob("*.bsr")} if res_root.exists() else set()
-	with open(Path(root) / "Data.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as data:
+	with open(Path(root) / "Media.pk2", "rb") as media_handle, mmap.mmap(media_handle.fileno(), 0, access=mmap.ACCESS_READ) as media, \
+			open(Path(root) / "Data.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as data:
+		media_index = tables.archive_index(media)
 		data_index = tables.archive_index(data)
 
 		def missing(family, rows):
@@ -526,11 +594,19 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 					return ["model"]
 			return []
 
+		def read(name):
+			return tables.table_text(media, media_index, name.lower())
+
 		prior = read_marker(output, source)
 		char_rows, item_rows, report = select_pets(
 			native_chars, native_items, set(earlier_codes), later_chars, later_items,
 			previous=previous_targets(prior), missing=missing,
 			reserved_ids=published_ids.occupied_objects(Path(output) / TEXT_ROOT, (source["char_shard"], source["item_shard"])), pinned=published_ids.published(published_ids.OBJECTS))
+		if char_rows:
+			char_rows, skills = stage_pet_skills(
+				read, lambda name: tables.TEXTDATA + name.lower() in media_index,
+				Path(output) / TEXT_ROOT, source["skill_shard"], char_rows, prior.get("skills", {}))
+			report["skills"] = skills
 	if char_rows:
 		_merge_name_text(output, char_rows, item_rows, later_text, report)
 	report["_prior"] = prior
@@ -562,7 +638,8 @@ def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 			or tables.TEXTDATA + "itemdata.txt" not in media_index):
 		remove_import(output, ARCHIVE_SOURCE)
 		return _disabled(ARCHIVE_SOURCE, "archive carries no pet tables")
-	native_chars, native_items = native_tables(native)
+	own_shards = (ARCHIVE_SOURCE["char_shard"], ARCHIVE_SOURCE["item_shard"], ARCHIVE_SOURCE["skill_shard"])
+	native_chars, native_items = native_tables(native, exclude_shards=own_shards)
 	later_chars, later_items, later_text = later_tables_from_media(media, media_index, object_text_required=False)
 
 	def missing(family, rows):
@@ -573,12 +650,23 @@ def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 				return ["model"]
 		return []
 
+	def read(name):
+		return tables.table_text(media, media_index, name.lower())
+
 	prior = read_marker(output, ARCHIVE_SOURCE)
 	char_rows, item_rows, report = select_pets(
 		native_chars, native_items, set(earlier_codes), later_chars, later_items,
 		previous=previous_targets(prior), missing=missing,
 		reserved_ids=published_ids.occupied_objects(Path(output) / TEXT_ROOT, (ARCHIVE_SOURCE["char_shard"], ARCHIVE_SOURCE["item_shard"])), pinned=published_ids.published(published_ids.OBJECTS))
 	if char_rows:
+		# An archive that ships no skilldata cannot feed fighters; merge
+		# refuses a missing dependency. Pickup/vehicle kinds name no
+		# DefaultSkillIDs and stage an empty skill map.
+		if any(tables.TEXTDATA + name in media_index for name in ("skilldata.txt", "skilldataenc.txt")):
+			char_rows, skills = stage_pet_skills(
+				read, lambda name: tables.TEXTDATA + name.lower() in media_index,
+				Path(output) / TEXT_ROOT, ARCHIVE_SOURCE["skill_shard"], char_rows, prior.get("skills", {}))
+			report["skills"] = skills
 		_merge_name_text(output, char_rows, item_rows, later_text, report)
 		# The archive's resources join the staging tree at their pk2
 		# paths, so the model builder reads one tree for every source.
