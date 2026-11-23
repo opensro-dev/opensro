@@ -423,17 +423,15 @@ class Runner:
 	# ================
 	# root_fingerprint
 	#
-	# One source root's fingerprint, computed at most once a build. The
-	# stage 1 import is taken by content, as the stamp takes it.
+	# One source root's fingerprint, computed at most once a build, the
+	# same way the stamp takes it (variant_stamp.source_fingerprint).
 	# ================
 	def root_fingerprint(self, root: Path) -> str:
 		key = str(root)
 		if key not in self._root_fingerprints:
-			imported = (self.arguments or {}).get("imported")
-			native = (self.arguments or {}).get("native")
-			by_content = imported is not None and root == Path(imported).resolve()
-			skip = variant_stamp.native_skipped() if native is not None and root == Path(native).resolve() else ()
-			self._root_fingerprints[key] = variant_stamp.tree_fingerprint(root, by_content, skip)
+			arguments = self.arguments or {}
+			self._root_fingerprints[key] = variant_stamp.source_fingerprint(
+				root, arguments.get("native"), arguments.get("imported"))
 		return self._root_fingerprints[key]
 
 	# ================

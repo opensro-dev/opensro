@@ -220,6 +220,20 @@ def tree_fingerprint(root: Path, content: bool = False, skip: tuple[str, ...] = 
 
 
 # ================
+# source_fingerprint
+#
+# One source root's fingerprint under the build's arguments: the stage 1
+# import in use is taken by content, and the native root leaves out the
+# folders native_skipped names. The stamp and the step journal both ask
+# here, so a root fingerprints the same way in both.
+# ================
+def source_fingerprint(root: Path, native=None, imported=None) -> str:
+	by_content = imported is not None and root == Path(imported).resolve()
+	skip = native_skipped() if native is not None and root == Path(native).resolve() else ()
+	return tree_fingerprint(root, by_content, skip)
+
+
+# ================
 # read_inputs
 #
 # Everything the stamp covers, as one JSON-able record. The code digest is
@@ -241,11 +255,7 @@ def read_inputs(native: Path, imported: Path, vsro_root: Path, variant: Path, en
 			"variant": str(Path(variant).resolve())
 		},
 		"sources": {
-			str(root): tree_fingerprint(
-				root,
-				root == Path(imported).resolve(),
-				native_skipped() if root == Path(native).resolve() else ()
-			)
+			str(root): source_fingerprint(root, native, imported)
 			for root in source_roots(native, imported, vsro_root, variant, environ)
 		}
 	}
