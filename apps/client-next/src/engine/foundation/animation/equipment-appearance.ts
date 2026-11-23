@@ -344,7 +344,26 @@ export function assembleEquipmentAppearance( input: AppearanceInput ): Appearanc
 			parts.push( { model: entry.auxiliary.glb, parts: [], covers: coverIndices( entry.auxiliary, resource ) } );
 			continue;
 		}
-		parts.push( { model: entry.glb, parts: entry.parts, covers: coverIndices( entry, resource ) } );
+		parts.push( {
+			model: entry.glb,
+			parts: entry.parts,
+			...(entry.branches ? { branches: { slot: visual.avatarSlot, entries: entry.branches } } : {}),
+			covers: coverIndices( entry, resource )
+		} );
+		// The avatar resource's own ambient set (the noblesse and halloween
+		// dresses' fires) on its private bones, as an equipment branch's
+		// does: a worn avatar is a CRes like any other model, so its
+		// ModDataParticle kind-2 set starts through the same path. The
+		// slot is the avatar's own socket, not a compound slot.
+		for ( const branch of entry.branches ?? [] ) {
+			for ( const particle of ambientModelParticles( branch.particleModifiers ) ) {
+				particles.push( {
+					...particle,
+					source: "equipment",
+					bone: equipmentSocket( visual.avatarSlot, branch.part, particle.bone )
+				} );
+			}
+		}
 		if ( dress.avatarVisualOverrides?.[item.refObjId]?.additionalBsr ) {
 			const extra = dress.avatarAuxiliary?.[item.refObjId];
 			if ( !extra ) throw Error( "Missing auxiliary avatar " + item.refObjId );
