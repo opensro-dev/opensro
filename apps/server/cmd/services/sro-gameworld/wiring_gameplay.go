@@ -99,7 +99,10 @@ type gameplayPlane struct {
 	presence *livepresence.Directory
 	// mutes is the chat mute book (moderation_wiring.go), set once the
 	// shard is known; the console's conduct actions reach it.
-	mutes        *moderation.Book
+	mutes *moderation.Book
+	// staff is the staff book and host allowlist (wiring_staff.go); nil
+	// leaves the console's staff actions refused.
+	staff        *staffSources
 	chat         *chat.Runtime
 	chatFeed     *chatfeed.Feed
 	parties      *party.Runtime

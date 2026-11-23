@@ -630,15 +630,24 @@ type Character struct {
 	// Client_IsDebugCommandAllowed (console / GM-command availability),
 	// the GM default chat channel
 	// mode 3 in CIFChatViewer_HandleChatInputKey, and the 30F2/33C4/3647
-	// mission handlers. It is never writable from any
-	// network path. Normal startup requires strict accounts plus
+	// mission handlers. It is never writable from any gameplay or
+	// player network path. Normal startup requires strict accounts plus
 	// character-bound EnterWorld tickets; even the explicitly insecure
-	// local-development posture has no privilege setter. The only setter
-	// is the boot-time division-qualified operator allowlist reconcile
-	// (store.ReconcileGMPrivilege over SRO_GM_CHARACTERS), which is
-	// host-access-only by construction.
+	// local-development posture has no privilege setter. Two setters
+	// exist, both staff-only: the boot-time division-qualified host
+	// allowlist reconcile (store.ReconcileGMPrivilege over
+	// SRO_GM_CHARACTERS) and the staff book (package staff), changed
+	// only through the authenticated console operator endpoint, which
+	// projects its grants here at boot and through the character's
+	// mutation door on every grant or revoke.
 	// False means an ordinary player.
 	GMPrivilege bool `json:"gmPrivilege,omitempty"`
+	// GMCapabilities are the staff.Capability bits the GM may use
+	// (port-only, not native; owner decision 2026-11-23). The original
+	// has one GM bit; the staff book splits it per command, and the GM
+	// lane checks the bit at command time. Projected beside GMPrivilege
+	// by the same two setters; meaningless while GMPrivilege is false.
+	GMCapabilities uint32 `json:"gmCapabilities,omitempty"`
 
 	// PC-room event eligibility is server-owned: client
 	// CICPlayer_PcRoomEventEligible_862a80 -> CIFEventInterface_OnCreate(1).
