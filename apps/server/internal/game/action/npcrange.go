@@ -101,7 +101,14 @@ func (rt *Runtime) npcWithinHitRange(divisionID string, character *enterworld.Ch
 	// can neither see nor walk up to is out of reach. An unwired sight
 	// test admits, the posture LineOfSight's nil takes; the composition
 	// root wires movement.Runtime.TalkSight.
-	if rt.TalkSight != nil && !rt.TalkSight(viewer, world.LiveOwnerAt(nowMs), station) {
+	//
+	// Teleport gates keep the range-only gate. The client approaches a
+	// gate to 640 of its 800 and uses it from there (698740), so the
+	// talk test's 25-unit walk arrival does not describe a gate use: a
+	// town gate measured on real geometry (Jangan, STORE_CH_GATE) fails
+	// both arms from most sides at 35-50 units already. The client pick
+	// still refuses a gate hidden behind scenery.
+	if npc.Teleport == nil && rt.TalkSight != nil && !rt.TalkSight(viewer, world.LiveOwnerAt(nowMs), station) {
 		return false
 	}
 	return true

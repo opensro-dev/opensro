@@ -178,3 +178,34 @@ func TestTradeNeedsOpenShopNotDistance(t *testing.T) {
 		t.Fatal("a new selection kept the previous shop open")
 	}
 }
+
+/*
+================
+TestNpcTalkSightSparesTeleportGates
+
+#4125: the talk sight test is the NPC class's, not the gate class's. A
+gate is used from up to its approach distance, far beyond the talk
+test's walk arrival, so a gate in range admits whatever the sight test
+says, while the same station as a plain NPC is refused.
+================
+*/
+func TestNpcTalkSightSparesTeleportGates(t *testing.T) {
+	rt, c := merchantFixture(t)
+	asked := 0
+	rt.TalkSight = func(simulation.Spawn, simulation.NavOwner, simulation.Spawn) bool {
+		asked++
+		return false
+	}
+	npc := rt.NpcRoster[0]
+	if rt.npcWithinHitRange(testDivision, c, npc) {
+		t.Fatal("a walled-off NPC was admitted")
+	}
+	gate := npc
+	gate.Teleport = &simulation.TeleportGateBounds{Radius: 10, Height: 25}
+	if !rt.npcWithinHitRange(testDivision, c, gate) {
+		t.Fatal("a teleport gate in range was refused by the talk sight test")
+	}
+	if asked != 1 {
+		t.Fatalf("sight asked %d times, want 1 (the plain NPC only)", asked)
+	}
+}
