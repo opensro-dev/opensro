@@ -412,7 +412,13 @@ func TestRingResumeRefusalNamesTheGap(t *testing.T) {
 	}
 
 	// The one capacity refusal left is the byte bound: a small
-	// outbound byte cap against kilobyte ring frames.
+	// outbound byte cap against kilobyte ring frames. The conn is
+	// gated, so the writer parks on its WELCOME write and never
+	// reaches the frames the snapshot reads, and the queue is
+	// filled the way every producer fills it, bytes counted with
+	// the frames: enqueued here by hand without queueBytes, the
+	// writer's dequeue subtracted bytes never counted and the
+	// snapshot read a negative queue (#4162).
 	byteCfg := testCfg()
 	byteCfg.OutboundQueueBytes = 1024
 	byteHub := newHub(byteCfg)
@@ -421,15 +427,19 @@ func TestRingResumeRefusalNamesTheGap(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { byteHub.closeSession(full, nil) })
-	if err := full.attach(newFakeConn(false), false, 0); err != nil {
+	if err := full.attach(newFakeConn(true), false, 0); err != nil {
 		t.Fatal(err)
 	}
 	full.mu.Lock()
 	for i := 0; i < 4; i++ {
 		full.noteWrittenLocked(Frame{Opcode: ringTestOp, Payload: make([]byte, 512)}, true)
 	}
+	queuedBytes := 0
 	for i := 0; i < 2; i++ {
-		full.queue = append(full.queue, Frame{Opcode: ringTestOp, Payload: []byte{2}})
+		f := Frame{Opcode: ringTestOp, Payload: []byte{2}}
+		full.queue = append(full.queue, f)
+		full.queueBytes += f.EncodedLen()
+		queuedBytes += f.EncodedLen()
 	}
 	if full.resumeFromLocked(0) {
 		full.mu.Unlock()
@@ -437,7 +447,7 @@ func TestRingResumeRefusalNamesTheGap(t *testing.T) {
 	}
 	full.mu.Unlock()
 	d = full.ResumeRefusal(0)
-	if d.Reason != "resend-overflow" || d.QueuedFrames == 0 || d.RingFrames == 0 {
+	if d.Reason != "resend-overflow" || d.QueuedFrames < 2 || d.RingFrames == 0 || d.QueuedBytes < queuedBytes {
 		t.Fatalf("byte refusal = %+v, want resend-overflow with ring and queue populated", d)
 	}
 }
