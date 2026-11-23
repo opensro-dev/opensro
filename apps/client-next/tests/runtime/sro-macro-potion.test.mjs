@@ -225,15 +225,18 @@ function optionsHud() {
 	return { hud, live };
 }
 
-test("HP/MP rows admit by TID4 (690b70 / 690bf0 high byte), not TID3", () => {
+test("HP/MP rows admit by potion mid-byte then TID4 (690f30 / 690b70 / 690bf0)", () => {
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_HP, 0x8ec ), true, "HP recovery (tid4=1)" );
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_MP, 0x10ec ), true, "MP recovery (tid4=2)" );
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_HP, 0x10ec ), false, "MP refuses HP row" );
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_MP, 0x8ec ), false, "HP refuses MP row" );
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_HP, 0x18ec ), true, "universal tid4=3 on HP" );
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_MP, 0x18ec ), true, "universal tid4=3 on MP" );
-	// Old wrong mapping: TID3=2 (0x16c) is the pill family, not MP recovery.
+	// Pill family (TID3=2 / 0x16c): mid-byte helper 690ec0, not the potion helper.
+	const CURE_PILL_TID4_1 = 0x16c | 1 << 11;
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_HP, CURE_PILL_TID4_1 ), false, "pill refuses HP" );
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_MP, 0x16c ), false );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_CURE, CURE_PILL_TID4_1 ), true );
 });
 
 test("a consumable dropped on a row binds its item; a click on the slot clears it", () => {
@@ -394,7 +397,7 @@ function pet( over = {} ) {
 	return { ...loop.emptyMacroPetFacts(), ...over };
 }
 
-test("pet rows admit by TID4 (690a20 / 6909e0 / 690990 / 690a60) and summoner family (690aa0)", () => {
+test("pet rows admit by mid-byte helpers then TID4 (690f30 / 690ec0 / 6908e0)", () => {
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_HP, PET_HP_TYPE ), true );
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_HP, PET_HUNGER_TYPE ), false );
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_HUNGER, PET_HUNGER_TYPE ), true );
@@ -404,6 +407,18 @@ test("pet rows admit by TID4 (690a20 / 6909e0 / 690990 / 690a60) and summoner fa
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_SUMMON, PET_SUMMONER_TYPE ), true );
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_SUMMON, PET_HP_TYPE ), false );
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_HP, PET_HP_TYPE ), false, "pet HP refuses character row" );
+	// Pill mid-byte (690ec0) never binds a potion-helper pet row.
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_HP, PET_CURE_TYPE ), false );
+	assert.equal(
+		loop.macroPotionAdmits( MACRO_ROW_PET_RESURRECT, 0x16c | 6 << 11 ),
+		false,
+		"pill tid4=6 is not Grass"
+	);
+	// Summoner helper (6908e0) then high 1/2/3 only (690aa0 / 690880).
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_SUMMON, 0xcc | 2 << 11 ), true );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_SUMMON, 0xcc | 3 << 11 ), true );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_SUMMON, 0xcc | 4 << 11 ), false, "summoner tid4=4 refused" );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_SUMMON, 0x18ec ), false, "potion tid4=3 is not a summoner" );
 });
 
 test("pet HP / hunger / cure fire from the companion's vitals (00691c70 / 00691e20 / 00691a20)", () => {
