@@ -519,11 +519,13 @@ func timeBombFrame(gid, damage uint32, fatal bool) wire.Frame {
 ==================
 monsterImpactAbnormalFrames
 
-monsterImpactAbnormalFrames follows committed direct impacts on a survivor:
+monsterImpactAbnormalFrames follows committed impacts on a survivor:
 withdrawn casts, the stop, the speed pair and, when its status changed,
 the status frame (flags 4). Its HP rides no public frame: the reference
 server broadcasts a monster's status alone and sends its HP only to the
-players that hold it, once per tick (monstervitals.go).
+players that hold it, once per tick (monstervitals.go). Lanes whose own
+result frame carries no status answer (a hawk strike, a pulse or a
+returned hit, a Temptation fight) publish through here too (#3680).
 ==================
 */
 func (rt *Runtime) monsterImpactAbnormalFrames(division string, gid uint32, impacts []simulation.MonsterDamageResult) []wire.Frame {

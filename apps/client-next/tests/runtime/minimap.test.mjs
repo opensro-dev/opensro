@@ -387,6 +387,82 @@ test("a walking dungeon entity keeps its floor answer across the query round tri
 	m.minimapFloors( minimapFloorQueries( { pose: p }, [], [ upper ] ) );
 	assert.equal( minimapSameFloor( p, { ...upper, x: upper.x + 3 }, m.state() ), false );
 });
+test("a party member on the same Ch'in Tomb floor passes the floor gate (issue #3775)", async () => {
+	// The Tomb spreads its floors over regions 0x8002..0x8007, one DOF
+	// each; B3 is jinsi_floor03 (32773). Its blocks all author floor 0,
+	// so a member broadcast on the player's own floor resolves to it.
+	const { dungeonNavigation } = await import( "../../src/engine/foundation/navigation/dungeon-navigation.ts" );
+	const { rosterPositions } = await import( "../../src/engine/foundation/ui/minimap-markers.ts" );
+	const { gunzipSync } = await import( "node:zlib" );
+	const raw = await readFile( `${CLIENT_PUBLIC_ROOT}/assets/world/dungeon/dungeon-resources.json.gz` );
+	const manifest = JSON.parse( gunzipSync( raw ).toString( "utf8" ) );
+	const regionId = 32773, product = dungeonNavigation( manifest, regionId );
+	// A standable point: the yaw-applied centroid of the first object's
+	// mesh that owns one (decorative pieces own no cell within 2 units).
+	const stand = ( object ) => {
+		const vs = object.mesh.vertices, c = Math.cos( object.yaw ), s = Math.sin( object.yaw );
+		let x = 0, y = 0, z = 0;
+		for ( let i = 0; i < vs.length; i += 3 ) {
+			x += object.x + c * vs[i] - s * vs[i + 2];
+			y += object.y + vs[i + 1];
+			z += object.z + s * vs[i] + c * vs[i + 2];
+		}
+		const n = vs.length / 3;
+		return { regionId, x: x / n, y: y / n, z: z / n, angle: 0 };
+	};
+	const m = createMovement( () => {} );
+	let p, stood;
+	for ( const object of product.objects ) {
+		const candidate = stand( object );
+		m.seed( candidate );
+		m.navigation( regionId, product );
+		if ( m.state().navigationFloor === 0 ) {
+			p = candidate;
+			stood = object;
+			break;
+		}
+	}
+	assert.ok( p && stood, "a standable point on B3 resolves floor 0" );
+	// The mate stands on a vertex of the same floor mesh.
+	const vs = stood.mesh.vertices, c = Math.cos( stood.yaw ), s = Math.sin( stood.yaw );
+	const mate = {
+		x: stood.x + c * vs[0] - s * vs[2],
+		y: stood.y + vs[1],
+		z: stood.z + s * vs[0] + c * vs[2]
+	};
+	const social = {
+		localName: "me",
+		self: 1,
+		members: [
+			{
+				id: 1,
+				name: "me",
+				region: regionId,
+				x: Math.trunc( p.x ),
+				y: Math.trunc( p.y ),
+				z: Math.trunc( p.z ),
+				war: 0x10001
+			},
+			{
+				id: 2,
+				name: "mate",
+				region: regionId,
+				x: Math.trunc( mate.x ),
+				y: Math.trunc( mate.y ),
+				z: Math.trunc( mate.z ),
+				war: 0x10001
+			}
+		]
+	};
+	const game = { pose: p, fortress: { worldId: 0x10001 }, social };
+	m.minimapFloors( minimapFloorQueries( game, [], [] ) );
+	const state = m.state();
+	assert.equal( state.navigationFloor, 0 );
+	assert.deepEqual(
+		rosterPositions( p, { ...state, fortress: { worldId: 0x10001 }, social }, [] ).map( row => row.name ),
+		[ "mate" ]
+	);
+});
 test("dungeon tiles use floor-specific art and negative logical coordinate sectors; absent art stays absent", () => {
 	const floor = {
 		floorIndex: 1,
