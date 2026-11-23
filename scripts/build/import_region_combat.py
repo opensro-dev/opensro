@@ -90,17 +90,13 @@ def client_lines(digest, rows, ranges):
 		"// _RefRegion source SHA256: " + digest,
 		"// Catalog rows: " + str(rows),
 		"",
-		"export type RegionCombatRange = {",
-		"\treadonly first: number;",
-		"\treadonly last: number;",
-		"\treadonly allowed: boolean;",
-		"};",
-		"",
-		"export const REGION_COMBAT_RANGES: readonly RegionCombatRange[] = [",
+		# A shared client module holds only `as const` literal tables
+		# (apps/client-next/tools/verify-ownership.mjs).
+		"export const REGION_COMBAT_RANGES = [",
 	]
 	for first, last, allowed in ranges:
 		lines.append(f"\t{{ first: 0x{first:04x}, last: 0x{last:04x}, allowed: {str(bool(allowed)).lower()} }},")
-	lines.extend(["];", ""])
+	lines.extend(["] as const;", ""])
 	return lines
 
 

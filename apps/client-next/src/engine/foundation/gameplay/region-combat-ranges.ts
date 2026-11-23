@@ -2,13 +2,7 @@
 // _RefRegion source SHA256: 9b9179e598f303f3293df1771ed7a9339a5e9c9de0dd2401884db2817d5dd9a4
 // Catalog rows: 3194
 
-export type RegionCombatRange = {
-	readonly first: number;
-	readonly last: number;
-	readonly allowed: boolean;
-};
-
-export const REGION_COMBAT_RANGES: readonly RegionCombatRange[] = [
+export const REGION_COMBAT_RANGES = [
 	{ first: 0x3944, last: 0x3948, allowed: true },
 	{ first: 0x3a44, last: 0x3a48, allowed: true },
 	{ first: 0x3b44, last: 0x3b48, allowed: true },
@@ -380,4 +374,4 @@ export const REGION_COMBAT_RANGES: readonly RegionCombatRange[] = [
 	{ first: 0x7ee1, last: 0x7ee8, allowed: true },
 	{ first: 0x8001, last: 0x8007, allowed: true },
 	{ first: 0x8009, last: 0x8020, allowed: true },
-];
+] as const;
