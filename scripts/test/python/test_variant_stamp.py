@@ -89,6 +89,14 @@ class Stamp(unittest.TestCase):
 		(self.imported / "Map" / "r.m").write_bytes(b"other region")
 		self.assertEqual(self.stale(), [f"sources:{self.imported.resolve()}"])
 
+	def test_the_hubs_own_stage1_output_is_not_a_native_input(self):
+		# A stage 1 run in the hub rewrites extracted/Alexandria_extracted;
+		# a build that imports from elsewhere never reads it (#4251).
+		self.write(self.native / "Alexandria_extracted" / "Data" / "navmesh" / "nv_4838.nvm", b"rewritten")
+		self.assertEqual(self.stale(), [])
+		(self.native / "Media_extracted" / "a.txt").write_bytes(b"changed native")
+		self.assertEqual(self.stale(), [f"sources:{self.native.resolve()}"])
+
 	def test_a_changed_flag_is_named(self):
 		self.assertEqual(self.stale({**self.env, "SRO_ALEXANDRIA": "on"}), ["env:SRO_ALEXANDRIA"])
 
