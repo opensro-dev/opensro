@@ -365,6 +365,16 @@ export function createUiBridge(
 			edit( event.target, event.target.dataset.uiId! );
 		}
 	}, { signal: lifetime.signal } );
+	// A range element's value belongs to its own slider gestures (the drawn
+	// prev/next buttons and the thumb drag): a focused range input also steps
+	// on the mouse wheel, a browser behaviour no window here authors - the
+	// native creation and option sliders take no wheel input. Left through,
+	// scrolling while a creation slider holds focus silently re-picks its
+	// choice (one wheel gesture moved a new character's weapon from the
+	// daggers its player picked to the darkstaff, robe included, #4121).
+	root.addEventListener( "wheel", event => {
+		if ( event.target instanceof HTMLInputElement && event.target.type === "range" ) event.preventDefault();
+	}, { passive: false, signal: lifetime.signal } );
 	document.addEventListener( "selectionchange", () => {
 		const el = document.activeElement;
 		if ( (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && root.contains( el ) ) {
