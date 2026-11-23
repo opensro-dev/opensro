@@ -75,14 +75,21 @@ test("the roster decodes whole, UTF-8 tags included, and refuses a partial one",
 
 test("a rostered player's name takes its role colour ahead of the native [GM] rule", () => {
 	const local = { gid: 1, kind: "local-player", name: "Local", arenaTeam: 255 };
-	const context = {
-		local,
-		social: { localName: "Local", self: 1, leader: 0, members: [], guild: null },
-		fortress: { worldId: 1, worlds: [], fortresses: [], wars: [], registered: [], listId: 0 },
-		capeTeam: () => 1,
-		staffRoster: [ gm, mod ]
-	};
-	const peer = name => ({ gid: 2, kind: "player", name, arenaTeam: 255 });
+	const context = /** @type {import("../../src/engine/foundation/gameplay/name-color.ts").NameColorContext} */ (
+		/** @type {unknown} */ ({
+			local,
+			social: { localName: "Local", self: 1, leader: 0, members: [], guild: null },
+			fortress: { worldId: 1, worlds: [], fortresses: [], wars: [], registered: [], listId: 0 },
+			capeTeam: () => 1,
+			staffRoster: [ gm, mod ]
+		})
+	);
+	// Partial fixtures: the colour rule reads only these fields.
+	const peer = (
+		/** @type {string} */ name
+	) => /** @type {import("../../src/engine/contracts/world.ts").EntityState} */ (
+		/** @type {unknown} */ ({ gid: 2, kind: "player", name, arenaTeam: 255 })
+	);
 	assert.equal( refreshNameColor( peer( "helper" ), context ), mod.nameColor );
 	assert.equal( refreshNameColor( peer( "Hundred" ), context ), gm.nameColor );
 	// The native rule still holds for a name the roster does not carry.
