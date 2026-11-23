@@ -255,6 +255,19 @@ test("shared concurrency, recursive walking, binary, and dungeon readers retain 
 		{ regionId: 32790, dofName: "Dungeon\\jupiter\\hide\\hide.dof" }
 	] );
 
+	// The Kalia Hideout row (the later client's dungeoninfo index 25,
+	// region 0x8000 | 25) rides the same existence rule on the Arabia
+	// import's staged DOF (#4134).
+	const arabiaDungeon = path.join( root, "Arabia", "Bagh_mong" );
+	await mkdir( arabiaDungeon, { recursive: true } );
+	await writeFile( path.join( arabiaDungeon, "bagh_mong_boss.dof" ), "x" );
+	assert.deepEqual( await readDungeonInfoRows( path.join( root, "dungeoninfo.txt" ) ), [
+		{ regionId: 17, dofName: "dungeon\\alpha.dof" },
+		{ regionId: 32787, dofName: "Dungeon\\jupiter\\piety\\piety_boss_di.dof" },
+		{ regionId: 32790, dofName: "Dungeon\\jupiter\\hide\\hide.dof" },
+		{ regionId: 25, dofName: "Dungeon\\Arabia\\Bagh_mong\\bagh_mong_boss.dof" }
+	] );
+
 	// A row the table itself declares keeps its authored name and is not
 	// appended twice.
 	await writeFile( path.join( root, "dungeoninfo.txt" ), '32787 "authored\\interior.dof"\r\n' );
@@ -262,7 +275,8 @@ test("shared concurrency, recursive walking, binary, and dungeon readers retain 
 	assert.deepEqual( await readDungeonInfoRows( path.join( root, "dungeoninfo.txt" ) ), [
 		{ regionId: 32787, dofName: "authored\\interior.dof" },
 		{ regionId: 32788, dofName: "Dungeon\\jupiter\\piety\\piety_boss_uno.dof" },
-		{ regionId: 32790, dofName: "Dungeon\\jupiter\\hide\\hide.dof" }
+		{ regionId: 32790, dofName: "Dungeon\\jupiter\\hide\\hide.dof" },
+		{ regionId: 25, dofName: "Dungeon\\Arabia\\Bagh_mong\\bagh_mong_boss.dof" }
 	] );
 
 	let active = 0;
