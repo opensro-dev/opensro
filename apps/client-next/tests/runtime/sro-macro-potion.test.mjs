@@ -4,9 +4,9 @@
 sro-macro-potion.test.mjs - the SRO Macro's character auto-potion
 
 Port-only, not native (#3907): the v1.696 auto-potion rows (readers
-00692e00, 00692f60, 00692d20), the executor's order and 500 ms re-arm
-(006931b0), binding a bag item to a row, and the worker running the loop
-only with the Experimental row on and the server's Auto-Potion ON.
+00692e00, 00692f60, 00692d20, 006930a0), the executor's order and 500 ms
+re-arm (006931b0), binding a bag item to a row, and the worker running
+the loop only with the Experimental row on and the server's Auto-Potion ON.
 
 ===========================================================================
 */
@@ -25,7 +25,7 @@ const { experimentalGameplay, experimentalOptions } = await import(
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
-const { MACRO_ROW_HP, MACRO_ROW_MP, MACRO_ROW_CURE } = codec;
+const { MACRO_ROW_HP, MACRO_ROW_MP, MACRO_ROW_CURE, MACRO_ROW_BUFF_ITEM } = codec;
 
 const POTION_REF = 7;
 const OTHER_REF = 8;
@@ -98,16 +98,68 @@ test("cure fires on any curable abnormal bit; an off or empty row never fires", 
 
 test("a fired row sits out its re-arm, then rejoins at the back of the order", () => {
 	let queue = loop.emptyMacroPotionQueue();
-	assert.deepEqual( queue.ready, [ MACRO_ROW_HP, MACRO_ROW_MP, MACRO_ROW_CURE ] );
+	assert.deepEqual( queue.ready, [ MACRO_ROW_HP, MACRO_ROW_MP, MACRO_ROW_CURE, MACRO_ROW_BUFF_ITEM ] );
 	queue = loop.macroPotionFired( queue, MACRO_ROW_HP, 0 );
 	queue = loop.macroPotionFired( queue, MACRO_ROW_MP, 10 );
-	assert.deepEqual( queue.ready, [ MACRO_ROW_CURE ] );
+	assert.deepEqual( queue.ready, [ MACRO_ROW_CURE, MACRO_ROW_BUFF_ITEM ] );
 	assert.equal( loop.rearmMacroPotion( queue, 499 ), queue, "nothing has re-armed yet" );
 	queue = loop.rearmMacroPotion( queue, 600 );
-	assert.deepEqual( queue.ready, [ MACRO_ROW_CURE, MACRO_ROW_HP ], "one row returns per tick" );
+	assert.deepEqual( queue.ready, [ MACRO_ROW_CURE, MACRO_ROW_BUFF_ITEM, MACRO_ROW_HP ], "one row returns per tick" );
 	queue = loop.rearmMacroPotion( queue, 600 );
-	assert.deepEqual( queue.ready, [ MACRO_ROW_CURE, MACRO_ROW_HP, MACRO_ROW_MP ] );
+	assert.deepEqual( queue.ready, [ MACRO_ROW_CURE, MACRO_ROW_BUFF_ITEM, MACRO_ROW_HP, MACRO_ROW_MP ] );
 	assert.deepEqual( queue.waiting, [] );
+});
+
+test("buff-item row fires only while its associated skill is absent (006930a0)", () => {
+	const potion = row( MACRO_ROW_BUFF_ITEM, { item: OTHER_REF, a: 1, b: 0 } );
+	const skillId = 4242;
+	assert.equal( loop.macroPotionWants( potion, MACRO_ROW_BUFF_ITEM, facts(), 0 ), false, "no skill id" );
+	assert.equal(
+		loop.macroPotionWants( potion, MACRO_ROW_BUFF_ITEM, facts(), skillId ),
+		true,
+		"buff absent"
+	);
+	assert.equal(
+		loop.macroPotionWants(
+			potion,
+			MACRO_ROW_BUFF_ITEM,
+			facts( { activeBuffSkills: [ skillId ] } ),
+			skillId
+		),
+		false,
+		"buff live"
+	);
+	assert.equal(
+		loop.macroPotionWants(
+			potion,
+			MACRO_ROW_BUFF_ITEM,
+			facts( { activeBuffSkills: [ 7 ] } ),
+			skillId
+		),
+		true,
+		"other buff does not block"
+	);
+	const off = row( MACRO_ROW_BUFF_ITEM, { item: OTHER_REF, a: 0, b: 0 } );
+	assert.equal( loop.macroPotionWants( off, MACRO_ROW_BUFF_ITEM, facts(), skillId ), false );
+});
+
+test("buff-item skill id comes from the bag stack's associatedSkillId", () => {
+	const potion = row( MACRO_ROW_BUFF_ITEM, { item: OTHER_REF, a: 1, b: 0 } );
+	assert.equal( loop.macroPotionBuffSkillId( potion, [] ), 0 );
+	assert.equal(
+		loop.macroPotionBuffSkillId( potion, [
+			{ slot: 5, refObjId: OTHER_REF, nativeFields: { associatedSkillId: 99 } },
+			{ slot: 14, refObjId: OTHER_REF, nativeFields: { associatedSkillId: 55 } }
+		] ),
+		55,
+		"first bag stack, not equipment"
+	);
+	assert.equal(
+		loop.macroPotionBuffSkillId( potion, [
+			{ slot: 14, refObjId: OTHER_REF, nativeFields: {} }
+		] ),
+		0
+	);
 });
 
 test("a row uses the first bag stack of its item, never an equipment socket", () => {
