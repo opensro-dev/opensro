@@ -5,26 +5,26 @@ hold_breakdown.go - where a slow publication-gate hold spent its time
 
 publication_holds names the holder of a long gate hold ("returnArrival",
 "requestOp"), not the part of its work that kept the gate. A holder that
-runs several steps under the gate marks each boundary on a holdBreakdown,
-and when the whole hold reaches simulation.SlowHookThreshold it reports
+runs several steps under the gate marks each boundary on a HoldBreakdown,
+and when the whole hold reaches SlowHookThreshold it reports
 every part as "<label>.<part>" beside its own row, the shape
 requestOp.prepare already has (register.go). A calm hold reports nothing
 and the breakdown allocates nothing: the parts sit in a fixed array.
 
+It lives here, beside SlowHookThreshold, so every holder shares one:
+the return-scroll arrival (action) and the re-entry rebuild it waits on
+(enterworld) both mark their parts on it.
+
 Safe for any goroutine that owns its breakdown value; the sink it reports
-to (Runtime.PublicationHold, transport.Hub.RecordPublicationHold) takes
-its own lock.
+to (action.Runtime.PublicationHold, transport.Hub.RecordPublicationHold)
+takes its own lock.
 
 ===========================================================================
 */
 
-package action
+package simulation
 
-import (
-	"time"
-
-	"opensro.online/server/internal/game/world/simulation"
-)
+import "time"
 
 // maxHoldParts bounds the parts one breakdown keeps; a mark past it is
 // folded into the last part, so the total still adds up.
@@ -46,14 +46,14 @@ type holdPart struct {
 
 /*
 ================
-holdBreakdown
+HoldBreakdown
 
 One gate hold's parts, timed from the moment the holder took the gate.
 The zero value records nothing (a nil-sink runtime, or a caller that
 passes no breakdown), so callers need no branch.
 ================
 */
-type holdBreakdown struct {
+type HoldBreakdown struct {
 	label   string
 	now     func() time.Time
 	started time.Time
@@ -64,27 +64,27 @@ type holdBreakdown struct {
 
 /*
 ================
-newHoldBreakdown
+NewHoldBreakdown
 
 A breakdown for a gate taken just now under label, on clock now: the
 holder's own clock (Runtime.Now), so a test drives it without sleeping.
 ================
 */
-func newHoldBreakdown(label string, now func() time.Time) holdBreakdown {
+func NewHoldBreakdown(label string, now func() time.Time) HoldBreakdown {
 	at := now()
-	return holdBreakdown{label: label, now: now, started: at, last: at}
+	return HoldBreakdown{label: label, now: now, started: at, last: at}
 }
 
 /*
 ================
-holdBreakdown.mark
+HoldBreakdown.Mark
 
 Closes the part that ran since the previous mark under name. Nil-safe
 and a no-op on the zero value, so a completion shared with callers that
 time nothing (tests, other lanes) takes a nil breakdown.
 ================
 */
-func (b *holdBreakdown) mark(name string) {
+func (b *HoldBreakdown) Mark(name string) {
 	if b == nil || b.started.IsZero() {
 		return
 	}
@@ -101,18 +101,18 @@ func (b *holdBreakdown) mark(name string) {
 
 /*
 ================
-holdBreakdown.report
+HoldBreakdown.Report
 
 When the hold as a whole reached the slow threshold, sends each part of
 at least minHoldPart to sink as "<label>.<part>". The label strings are
 built only on this slow path.
 ================
 */
-func (b *holdBreakdown) report(sink func(label string, elapsed time.Duration)) {
+func (b *HoldBreakdown) Report(sink func(label string, elapsed time.Duration)) {
 	if b == nil || sink == nil || b.started.IsZero() {
 		return
 	}
-	if b.now().Sub(b.started) < simulation.SlowHookThreshold {
+	if b.now().Sub(b.started) < SlowHookThreshold {
 		return
 	}
 	for _, part := range b.parts[:b.n] {

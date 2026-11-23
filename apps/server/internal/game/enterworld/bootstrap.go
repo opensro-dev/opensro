@@ -120,11 +120,13 @@ func buildBootstrap(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	if liveCharacter == nil {
 		return Failure(nativeErrorCharacter, "characterNotFound")
 	}
+	request.hold.Mark("lookup")
 
 	character := readCharacterSnapshot(deps, divisionID, liveCharacter)
 	if character == nil {
 		return Failure(nativeErrorCharacter, "characterNotFound")
 	}
+	request.hold.Mark("snapshot")
 	if character.DeletePending {
 		return Failure(nativeErrorInvalidRequest, "deletePending")
 	}
@@ -187,6 +189,7 @@ func buildBootstrap(deps *Deps, request BootstrapRequest) *BootstrapResult {
 		// inventory and companion state, not the snapshot taken before restoration.
 		character = readCharacterSnapshot(deps, divisionID, liveCharacter)
 	}
+	request.hold.Mark("prepare")
 	if deps.NormalizeEntryQuests != nil {
 		if err := deps.NormalizeEntryQuests(character); err != nil {
 			return Failure(nativeErrorInvalidRequest, "invalidQuestState: "+err.Error())
@@ -217,11 +220,12 @@ func buildBootstrap(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	// an expansion quest paid become usable here (inventory_capacity.go).
 	// The port-only inventory-pages base rides the same presentation: the
 	// encoded entry shows it, and the live record adopts it on encode.
+	request.hold.Mark("normalize")
 	presented := character.PresentInventoryExpansion()
 	if deps.InventoryPages {
 		presented = character.RaiseInventoryFloor(domain.InventoryPagesBase) || presented
 	}
-	result := buildCharacterProjection(deps, divisionID, character)
+	result := buildCharacterProjection(deps, divisionID, character, request.hold)
 	if result.NativeResult == nativeResultSuccess {
 		result.liveOwner = liveCharacter
 		if presented {
@@ -242,7 +246,7 @@ never seeds or mutates the live character, so re-entry can be prepared before
 an authoritative relocation/revival commits.
 ================
 */
-func buildCharacterProjection(deps *Deps, divisionID string, character *Character) *BootstrapResult {
+func buildCharacterProjection(deps *Deps, divisionID string, character *Character, hold *simulation.HoldBreakdown) *BootstrapResult {
 	// Both callers pass a snapshot, so the running events' groups join the
 	// entry without touching the stored record; a fresh slice keeps the
 	// snapshot from sharing the record's backing array.
@@ -292,6 +296,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 	}
 
 	localPlayerPayload := BuildLocalPlayerEntryPayload(character, &entry, eventGuideStateMask, inventoryRows)
+	hold.Mark("entry")
 	objectID := ObjectIDForCharacter(character)
 
 	encodeItems := func(rows []WireItem) []EquipItemRow {
@@ -311,6 +316,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		return equipItems
 	}
 	equipItems := encodeItems(inventoryRows)
+	hold.Mark("items")
 	var avatarItems []EquipItemRow
 	if character.AvatarInventory != nil {
 		avatarItems = encodeItems(InventoryWireItems(character.AvatarInventory.Rows))
@@ -327,6 +333,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 	if packetErr != nil {
 		return FailureCause(nativeErrorInvalidRequest, "invalidCOSRestoration", packetErr)
 	}
+	hold.Mark("packets")
 	academyMember := false
 	var skillSnapshot []SpawnSkillRow
 	if deps.BrowserReferences == nil {
