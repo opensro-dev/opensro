@@ -800,6 +800,7 @@ func (rt *Runtime) commitGateTravel(travel gateTravel, admit func() (int64, OpRe
 	}
 	rt.endTransformForLoading(division, c)
 	rt.endPartyAurasForLoading(division, c)
+	rt.endBerserkForLoading(division, c)
 	previousPets := rt.relocateReturningPet(division, c, destination)
 	packets, accepted := rt.deps.ReentryPackets(division, c.Name)
 	if !accepted || len(packets) == 0 || packets[0].NativeOpcode != enterworld.OpcodeResetClient {

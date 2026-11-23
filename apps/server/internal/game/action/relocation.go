@@ -86,6 +86,7 @@ func (rt *Runtime) relocateCharacter(division string, c *enterworld.Character, l
 	destination := arrival.spawn
 	rt.endTransformForLoading(division, c)
 	rt.endPartyAurasForLoading(division, c)
+	rt.endBerserkForLoading(division, c)
 	previousPets := rt.relocateReturningPet(division, c, destination)
 	packets, ok := rt.deps.ReentryPackets(division, name)
 	if !ok || len(packets) == 0 || packets[0].NativeOpcode != enterworld.OpcodeResetClient {
