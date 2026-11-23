@@ -1859,7 +1859,9 @@ refusal would otherwise repeat its notice.
 				// as resurrect does: the pet window's selection is the
 				// player's choice, and the macro never moves it.
 				const flags = inventory.state().inventory.find( item => item.slot === slot )?.typeFlags;
-				const aimed = flags === undefined ? null : autoPotionTarget( flags, [ ...cosRecords.values() ], petGid );
+				const aimed = flags === undefined ?
+					null :
+					autoPotionTarget( flags, [ ...cosRecords.values() ], petGid );
 				if ( !aimed ) continue;
 				used = useAutomaticItem( slot, now, true, aimed );
 			} else {
