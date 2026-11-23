@@ -63,13 +63,15 @@ CONTENTS_COLUMNS = 13
 # its key or by any of its fields (the game guide names the quest in a symbol
 # column).
 QUEST_TABLE, CONTENTS_TABLE, GUIDE_TABLE = "questdata.txt", "questcontentsdata.txt", "gameguidedata.txt"
+# The later client's help strings: the guide's region headers name theirs here.
+HELP_TABLE = "texthelp.txt"
 KEYS = {QUEST_TABLE: 2, CONTENTS_TABLE: 0, GUIDE_TABLE: 1}
 ID_COLUMN = {QUEST_TABLE: 1}
 # gameguidedata.txt: [enabled, id, Korean label, depth, parent or child
 # count, content key, title key, quest code]. A depth-1 row is one quest's
 # article; the client refuses one whose title or body has no text
 # (quest-guide.ts), so the import does too.
-GUIDE_DEPTH_COLUMN, GUIDE_CONTENT_COLUMN, GUIDE_TITLE_COLUMN, GUIDE_QUEST_COLUMN = 3, 5, 6, 7
+GUIDE_DEPTH_COLUMN, GUIDE_PARENT_COLUMN, GUIDE_CONTENT_COLUMN, GUIDE_TITLE_COLUMN, GUIDE_QUEST_COLUMN = 3, 4, 5, 6, 7
 # A composed guide body's section heads, as the shipped bodies write them
 # (SN_PAYCON_QNO_AR_001): the Korean column and every other language.
 GUIDE_HEAD = '<strong><font color="255,226,74,0">\u25c8 {}</font></strong><br>'
@@ -189,9 +191,11 @@ def sharded_rows(read, name):
 # ================
 def quest_rows(later, variant):
 	out = {}
+	heads = guide_heads(later[GUIDE_TABLE])
 	for name, key in KEYS.items():
 		have = {row[key] for row in variant[name] if len(row) > key}
-		chosen = [row for row in later[name] if is_quest_row(name, row) and row[key] not in have]
+		chosen = [row for row in later[name] if (is_quest_row(name, row) or name == GUIDE_TABLE and row[key] in heads)
+			and row[key] not in have]
 		if name == CONTENTS_TABLE:
 			chosen = [row[:CONTENTS_COLUMNS] for row in chosen]
 		out[name] = chosen
@@ -202,6 +206,38 @@ def quest_rows(later, variant):
 	if not out[QUEST_TABLE]:
 		raise ValueError("the later client holds none of the Arabia quests")
 	return out
+
+
+# ================
+# guide_heads
+#
+# The ids of the region headers (depth 0) that head an Arabia quest article.
+# Five of them name no quest (300000 Baghdad, 310000 Kirk field, 320000
+# Phantom Desert, 330000 Baghdad (Dungeon), 360000 Arabia Coast), so the
+# quest-code filter alone left their articles orphaned and the client
+# refused the whole guide at package time (r204h, "Orphan quest guide
+# article", 82 tests).
+# ================
+def guide_heads(rows):
+	parents = {row[GUIDE_PARENT_COLUMN] for row in rows
+		if len(row) > GUIDE_QUEST_COLUMN and row[GUIDE_DEPTH_COLUMN] == "1" and is_quest_row(GUIDE_TABLE, row)}
+	return {row[KEYS[GUIDE_TABLE]] for row in rows
+		if len(row) > GUIDE_QUEST_COLUMN and row[GUIDE_DEPTH_COLUMN] == "0" and row[KEYS[GUIDE_TABLE]] in parents}
+
+
+# ================
+# head_help_rows
+#
+# The later help strings the imported region headers name, in the shape
+# of the quest strings the import already fills.
+# ================
+def head_help_rows(read, guide):
+	keys = {row[column] for row in guide if row[GUIDE_DEPTH_COLUMN] == "0"
+		for column in (GUIDE_CONTENT_COLUMN, GUIDE_TITLE_COLUMN)}
+	if not keys:
+		return []
+	rows = (map_tables.later_text_row(row) for row in sharded_rows(read, HELP_TABLE))
+	return [row for row in rows if len(row) > blue.ENGLISH_COLUMN and row[blue.KEY_COLUMN] in keys]
 
 
 # ================
@@ -409,7 +445,10 @@ def add_quest_tables(read, archive_sha, output):
 	variant = {name: tables.table_rows(safe_target(text_root, name).read_bytes()) for name in KEYS}
 	new_rows = quest_rows(later, variant)
 	later_texts.append(composed_guide_bodies(new_rows[GUIDE_TABLE], later_texts))
+	heads = head_help_rows(read, new_rows[GUIDE_TABLE])
+	later_texts.append(heads)
 	symbols = text_symbols(later_texts)
+	symbols += tuple(row[blue.KEY_COLUMN] for row in heads if row[blue.KEY_COLUMN] not in symbols)
 	by_key = {row[blue.KEY_COLUMN]: row for rows in later_texts for row in rows if len(row) > blue.ENGLISH_COLUMN + 1}
 	text_path = safe_target(text_root, TEXT_FILE)
 	variant_text = {row[blue.KEY_COLUMN] for row in tables.table_rows(text_path.read_bytes()) if len(row) > blue.KEY_COLUMN}
