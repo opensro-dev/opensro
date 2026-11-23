@@ -142,7 +142,9 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 	}
 	if rt.cosMovementBlockedKeyed(state.judgedCosAbnormalKey(key.division, state.character.Name, key.gid)) {
 		state.roar = nil
-		rt.cancelPetCombat(key, state, nowMs)
+		// A blocking status pauses the fight; the intent resumes on
+		// expiry (#4214).
+		rt.pausePetCombat(key, state, nowMs)
 		return state.mover.AnyFollower().Stop(nowMs), true
 	}
 	block := rt.cosAbnormalKeyed(state.judgedCosAbnormalKey(key.division, state.character.Name, pet.GID))

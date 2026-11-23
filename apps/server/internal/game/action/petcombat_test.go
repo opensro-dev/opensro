@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
@@ -133,6 +134,60 @@ func TestAttackPetKillsOrderedMonsterForItsOwner(t *testing.T) {
 	state := rt.petSessionFor(testDivision, c.Name, petGID)
 	if state == nil || state.combat != nil {
 		t.Fatal("the pet stayed in BATTLE after its target died")
+	}
+}
+
+/*
+================
+TestAttackPetResumesItsFightAfterAStunExpires
+
+The pet's strikes stop while the stun holds, but the fight is only
+paused: the intent stays on the monster and, once the stun expires,
+the pet strikes again with no new order from the owner (#4214).
+================
+*/
+func TestAttackPetResumesItsFightAfterAStunExpires(t *testing.T) {
+	rt, clock, c, m := newPetCombatRuntime(t, 100000, attackPetBand)
+	petGID := c.ActiveCOS.GID
+	state := rt.petSessionFor(testDivision, c.Name, petGID)
+	if state == nil {
+		t.Fatal("fixture pet has no session")
+	}
+	rt.HandleCosCommand(testDivision, c, petAttackOrder(petGID, m.Gid))
+	hp := func() uint32 {
+		live, _ := rt.Monsters.Get(testDivision, m.Gid)
+		return live.CurrentHP
+	}
+	tickPetCombat(t, rt, clock, 100, func() bool { return hp() < 100000 })
+
+	stunnedAt := clock.NowMs()
+	owner := rt.newCosAbnormalOwnerForPet(testDivision, c, c.ActiveCOS, stunnedAt)
+	record := abnormal.Record{Status: abnormal.Stun, Level: 1, DurationMs: 2000, SourceGID: m.Gid}
+	owner.sources = rt.captureAbnormalSources(testDivision, owner.block, []abnormal.Record{record})
+	if !owner.block.Apply(owner, record, stunnedAt) {
+		t.Fatal("the stun did not install on the pet")
+	}
+	owner.commit()
+
+	frozenHP := hp()
+	for i := 0; i < 10; i++ {
+		clock.now = clock.now.Add(100 * time.Millisecond)
+		rt.TickHook()(clock.NowMs())
+		if hp() != frozenHP {
+			t.Fatalf("the pet struck through its stun: HP %d -> %d", frozenHP, hp())
+		}
+		if state.combat == nil || state.combat.target != m.Gid {
+			t.Fatal("the stun ended the pet's fight instead of pausing it")
+		}
+	}
+	resumed := false
+	for i := 0; i < 100 && !resumed; i++ {
+		clock.now = clock.now.Add(100 * time.Millisecond)
+		rt.TickHook()(clock.NowMs())
+		resumed = hp() < frozenHP
+	}
+	if !resumed {
+		t.Fatal("the pet never struck again after the stun expired")
 	}
 }
 
