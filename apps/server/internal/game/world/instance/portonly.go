@@ -99,8 +99,9 @@ func TempleDefinitions() []Definition {
 ================
 ArabiaDefinitions
 
-The one port-only Arabia dungeon world. Type zero, one resident
-layer, no player limit: the default world's own shape.
+The port-only Arabia dungeon worlds (the dungeon and its boss lair).
+Type zero, one resident layer, no player limit: the default world's
+own shape.
 ================
 */
 func ArabiaDefinitions() []Definition {
