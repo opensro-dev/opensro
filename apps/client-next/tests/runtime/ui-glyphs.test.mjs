@@ -213,7 +213,11 @@ test("shared projection fits actual neighboring-column collisions, preserving na
 	assert.equal( read( resolveTextOverlaps( native ) ), "Retained number" );
 	const neighbor = titleText( atlas, "48", [ 105, 106, 41, 19 ], clip, color, { overflow: "clip", vAlign: 0 } );
 	const output = resolveTextOverlaps( [ ...native, ...neighbor ] );
-	assert.equal( read( output ), "Retained ...48" );
+	// Port-only fit, the default since #4048: the colliding label is kept
+	// whole on two lines ("Retained" over "number", read back as one
+	// string) instead of the original's shortened "Retained ...";
+	// label-fit-overlaps.test.mjs pins the wrap itself.
+	assert.equal( read( output ), "Retainednumber48" );
 	assert.ok( output.every( q => !("textLayout" in q) ), "GPU scene carries no layout sidecars" );
 	assert.equal( read( native ), "Retained number", "retained source projection stays immutable" );
 	const far = titleText( atlas, "48", [ 150, 106, 41, 19 ], clip, color, { overflow: "clip", vAlign: 0 } );
@@ -246,10 +250,14 @@ test("shared projection fits actual neighboring-column collisions, preserving na
 referenceResolveTextOverlaps
 
 resolveTextOverlaps as it was before quads without a layout stopped being
-copied (#3563): the oracle the shipped pass must match value for value.
+copied (#3563), with the original's only repair (the shortened run): the
+oracle the shipped pass must match value for value wherever it repairs
+nothing. Since #4048 the pass first tries the port-only fit on a run this
+oracle shortens, so those runs are compared by the fit tests instead.
+repaired, when given, collects the layouts the oracle repairs.
 ================
 */
-function referenceResolveTextOverlaps( quads ) {
+function referenceResolveTextOverlaps( quads, repaired = new Set() ) {
 	const inkEnters = ( r, c, o ) =>
 		Math.max( r[0], c[0], o[0] ) < Math.min( r[0] + r[2], c[0] + c[2], o[0] + o[2] ) &&
 		Math.max( r[1], c[1], o[1] ) < Math.min( r[1] + r[3], c[1] + c[3], o[1] + o[3] );
@@ -272,6 +280,7 @@ function referenceResolveTextOverlaps( quads ) {
 			if ( !(box[0] + box[2] <= other[0] || other[0] + other[2] <= box[0]) ) continue;
 			if ( runInkEnters( q, other ) ) {
 				fitted.add( layout );
+				repaired.add( layout );
 				break;
 			}
 		}
@@ -329,21 +338,31 @@ function labelSet( seed, dense ) {
 	return quads;
 }
 
-test("the overlap pass equals its reference over seeded label sets and passes unlaid quads on as themselves", () => {
+test("the overlap pass equals its reference wherever it repairs nothing and passes unlaid quads on as themselves", () => {
 	let overlapping = 0;
 	for ( let seed = 1; seed <= 200; seed++ ) {
-		const dense = seed % 2 === 0, input = labelSet( seed, dense );
-		const expected = referenceResolveTextOverlaps( input ), actual = resolveTextOverlaps( input );
-		assert.deepStrictEqual( actual, expected, "seed " + seed );
+		const dense = seed % 2 === 0, input = labelSet( seed, dense ), repaired = new Set();
+		const expected = referenceResolveTextOverlaps( input, repaired ), actual = resolveTextOverlaps( input );
+		if ( !dense ) assert.equal( repaired.size, 0, "sparse seed " + seed + " fits nothing" );
+		if ( repaired.size ) overlapping++;
+		// What the oracle leaves alone - unlaid quads and runs no neighbour
+		// enters - the pass must leave alone too, in order and by value.
+		const kept = input.filter( q => !q.textLayout || !repaired.has( q.textLayout ) );
+		const keptRuns = new Set( kept.map( q => q.run ).filter( Boolean ) );
 		const given = new Set( input );
-		actual.forEach( ( q, i ) => {
-			assert.equal( given.has( q ), given.has( expected[i] ), "seed " + seed + " quad " + i );
-			if ( given.has( q ) ) assert.equal( q, expected[i] );
-		} );
+		const keptOf = quads => quads.filter( q => given.has( q ) || keptRuns.has( q.run ) );
 		const fittedRuns = new Set( input.map( q => q.textLayout?.fitted?.run ).filter( Boolean ) );
-		const fitted = expected.some( q => fittedRuns.has( q.run ) );
-		if ( !dense ) assert.equal( fitted, false, "sparse seed " + seed + " fits nothing" );
-		if ( fitted ) overlapping++;
+		assert.deepStrictEqual(
+			keptOf( actual ),
+			keptOf( expected.filter( q => !fittedRuns.has( q.run ) ) ),
+			"seed " + seed
+		);
+		keptOf( actual ).forEach( ( q, i ) => {
+			const reference = keptOf( expected.filter( r => !fittedRuns.has( r.run ) ) )[i];
+			assert.equal( given.has( q ), given.has( reference ), "seed " + seed + " quad " + i );
+			if ( given.has( q ) ) assert.equal( q, reference );
+		} );
+		if ( !repaired.size ) assert.deepStrictEqual( actual, expected, "seed " + seed );
 	}
-	assert.ok( overlapping > 20, "dense sets fit runs: " + overlapping );
+	assert.ok( overlapping > 20, "dense sets collide: " + overlapping );
 });

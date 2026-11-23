@@ -191,6 +191,36 @@ test("missing degree definitions suppress positive rows while class zero resolve
 	inventory.clear();
 });
 
+test("a Magic Pop result voucher shows no magic option lines for its reward pair (#4151)", () => {
+	// The worker presents a win/loss voucher (TID 3.3.14.2, type word 5996)
+	// with magic holding the indexed pair [reward RefObjID, quantity]; the
+	// quantity word resolves to magicoption id 1 in the definition lookup,
+	// which the tooltip must not read as an option. The pair itself stays
+	// on the item for the exchange reader.
+	const voucher = {
+		slot: 13,
+		refObjId: 9239,
+		typeFlags: 5996,
+		quantity: 1,
+		plus: 0,
+		durability: 0,
+		variance: "0",
+		magic: [ "4140", "1" ],
+		tooltip: { fields: { itemClass: 1 } },
+		magicReferences: [ {
+			paramId: 1,
+			optionName: "MATTR_DEC_MAXDUR",
+			degree: 1,
+			paramName: "-",
+			rangeWords: /** @type {[number,number,number]} */ ([ 65545, 0, 0 ])
+		} ]
+	};
+	assert.deepEqual( itemTooltipMagic( voucher, s => s ), [] );
+	// The same words on an ordinary item still format: only the voucher
+	// type is exempt, not the option.
+	assert.equal( itemTooltipMagic( { ...voucher, typeFlags: 13100 }, s => s ).length, 1 );
+});
+
 test("v1.188 avatar Lucky and 4x stacking dress options format via avatarMagicOptionText", () => {
 	for ( const suffix of [ "", "_2", "_3", "_4" ] ) {
 		const lucky = optionItem( `MATTR_AVATAR_LUCK${suffix}`, 1 );

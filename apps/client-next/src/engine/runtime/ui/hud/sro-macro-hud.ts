@@ -90,19 +90,20 @@ export interface MacroPotionRow {
 	readonly gauge: boolean;
 }
 
-// Slot order from macro_1.2dt (hypothesis, sro-macro.md); captions are the
-// v1.696 rows UIIT_STT_MACROPOTION_HP/MP, UIIT_STT_SRO_MACRO_*.
+// Slot order from macro_1.2dt (hypothesis, sro-macro.md). Captions match the
+// later official Auto-Potion rows (HP/MP/Abnormal status/Moving speed): the
+// readers are 00692e00, 00692d20 and 006930a0 (buff-item / speed scroll).
 export const MACRO_POTION_ROWS: Readonly<Record<MacroPotionPage, readonly MacroPotionRow[]>> = {
 	character: [
 		{ slot: 0, caption: "HP", gauge: true },
 		{ slot: 1, caption: "MP", gauge: true },
-		{ slot: 2, caption: "Chinese Status Anomaly", gauge: false },
-		{ slot: 3, caption: "European Status Anomaly", gauge: false }
+		{ slot: 2, caption: "Abnormal status", gauge: false },
+		{ slot: 3, caption: "Moving speed", gauge: false }
 	],
 	pet: [
 		{ slot: 4, caption: "HP", gauge: true },
 		{ slot: 5, caption: "Hunger", gauge: true },
-		{ slot: 6, caption: "Cure Status Anomaly", gauge: false },
+		{ slot: 6, caption: "Abnormal status", gauge: false },
 		{ slot: 7, caption: "Resurrect", gauge: false },
 		{ slot: 8, caption: "Summon Trigger", gauge: false }
 	]

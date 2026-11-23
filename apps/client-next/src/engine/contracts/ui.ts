@@ -192,6 +192,11 @@ export interface UiControl {
 	// through an Alt press on another control, so an Alt+click on an item
 	// links it into the line being typed (chat-link-hud.ts).
 	readonly keepFocusOnAltPress?: boolean;
+	// A range only its thumb's drag may move: the bridge refuses a press
+	// on the groove, which a browser answers by jumping the value to the
+	// press point. The drawn prev/next buttons still step the choice
+	// (creation sliders, #4121).
+	readonly thumbDragOnly?: boolean;
 	readonly min?: number;
 	readonly max?: number;
 	readonly maxLength?: number;
