@@ -38,6 +38,12 @@ const KIND_ROC_BERSERK = 0x14;
 const KIND_ROC_DEPARTURE = 0x15;
 const ROC_BERSERK_START = 0;
 const ROC_BERSERK_AGAIN = 0xff;
+// The Sarin gate's schedule edges (#4135): the later 0x0C10 and 0x0C11,
+// which v1.696 0xDA07B8 and 0xDA082B show on the banner and in chat.
+const TOMB_GATE_KEYS: Readonly<Record<number, string>> = {
+	0x10: "UIIT_TQ_F4_TELEPORT_OPEN",
+	0x11: "UIIT_TQ_F4_TELEPORT_CLOSE"
+} as const;
 
 // The badge byte's key (750FF7/751018/75105B/7510A0 via the table at
 // 7511A4): the 2005-10-21 event lines. No live server sends kind 7;
@@ -204,6 +210,8 @@ export function uniqueNotice(
 	const kind = p[0]!;
 	if ( kind === KIND_BADGE_EVENT ) return badgeNotice( p );
 	if ( kind === KIND_ROC_BERSERK || kind === KIND_ROC_DEPARTURE ) return rocCountdownNotice( p );
+	const gateKey = TOMB_GATE_KEYS[kind];
+	if ( gateKey ) return { key: gateKey, value: 0, nativeType: 0, banner: true };
 	// 7508C0 reads only the kind for these; anything after it is ignored.
 	if ( kind !== KIND_UNIQUE_APPEARED && kind !== KIND_UNIQUE_KILLED ) return eventNotice( kind );
 	if ( p.length < 5 ) throw Error( "Truncated unique reference" );

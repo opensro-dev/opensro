@@ -269,6 +269,9 @@ type Runtime struct {
 	sookArena *sookArenaRuntime
 	// roc runs the Roc worlds (roc.go); nil with SRO_ROC off.
 	roc *rocRuntime
+	// tombGate is the Sarin gate's schedule (tombgate.go); nil with the
+	// shipped tomb off.
+	tombGate *tombGateRuntime
 	// macro opens the SRO Macro settings lane (macro.go); false, the
 	// default, is native: SRO_AUTO_MACRO off.
 	macro bool

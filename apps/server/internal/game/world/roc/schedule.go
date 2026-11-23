@@ -27,7 +27,11 @@ Times are the shard's local time, as the siege schedule's are.
 
 package roc
 
-import "time"
+import (
+	"time"
+
+	"opensro.online/server/internal/game/world/schedule"
+)
 
 // The SCHEDULE_DEF_MEET_ROC row (iSRO-R ScheduleIdx 2506).
 const (
@@ -38,23 +42,15 @@ const (
 	scheduleDurationSeconds = 14400
 )
 
-// daysPerWeek steps a weekly start back one week.
-const daysPerWeek = 7
-
 /*
 ================
 Window
 
-The summit window as the schedule row states it: one weekday (Go's
-Sunday-based count), a start clock in seconds after midnight, and a
-duration that may run past midnight.
+The summit window: the shared schedule row type (world/schedule), kept
+under this name for the Roc's callers.
 ================
 */
-type Window struct {
-	Day         time.Weekday
-	StartSecond int
-	Duration    time.Duration
-}
+type Window = schedule.Window
 
 /*
 ================
@@ -65,54 +61,10 @@ The SCHEDULE_DEF_MEET_ROC row: Saturday 22:00 for four hours.
 */
 func SummitWindow() Window {
 	return Window{
+		Every: schedule.Weekly,
 		// DATEPART(dw) counts 1 = Sunday; Go counts 0 = Sunday.
 		Day:         time.Weekday(scheduleDayOfWeek - 1),
 		StartSecond: scheduleStartHour * 3600,
 		Duration:    scheduleDurationSeconds * time.Second,
 	}
-}
-
-/*
-================
-Window.Current
-
-The window holding t, read in loc: its start and end, and ok true while
-t lies inside it. The latest start at or before t is the only one that
-can hold t, since a window is shorter than the week between starts.
-================
-*/
-func (w Window) Current(t time.Time, loc *time.Location) (start, end time.Time, ok bool) {
-	start = w.latestStart(t, loc)
-	end = start.Add(w.Duration)
-	return start, end, t.Before(end)
-}
-
-/*
-================
-Window.Next
-
-The first start strictly after t, read in loc.
-================
-*/
-func (w Window) Next(t time.Time, loc *time.Location) time.Time {
-	return w.latestStart(t, loc).AddDate(0, 0, daysPerWeek)
-}
-
-/*
-================
-Window.latestStart
-
-The latest start at or before t: this week's start day at the start
-clock, or the week before when that is still ahead of t.
-================
-*/
-func (w Window) latestStart(t time.Time, loc *time.Location) time.Time {
-	t = t.In(loc)
-	back := (int(t.Weekday()) - int(w.Day) + daysPerWeek) % daysPerWeek
-	day := time.Date(t.Year(), t.Month(), t.Day()-back, 0, 0, 0, 0, loc)
-	start := day.Add(time.Duration(w.StartSecond) * time.Second)
-	if start.After(t) {
-		start = start.AddDate(0, 0, -daysPerWeek)
-	}
-	return start
 }

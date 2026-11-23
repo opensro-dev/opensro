@@ -664,7 +664,9 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 	}
 
 	link, ok := rt.portals.links[[2]uint32{sourceID, target}]
-	if !ok {
+	// Outside its window the Sarin gate's schedule job has cleared its
+	// link (tombgate.go): no link, the same refusal.
+	if !ok || rt.tombGateShut(source.code) {
 		return portalFailure(2)
 	}
 	arrival := rt.portals.destinations[target]
