@@ -1775,7 +1775,7 @@ export function createUi( ports: UiPorts ) {
 	const compositeItemHud = createCompositeItemHud();
 	// Port-only, not native: a unique kill's damage ranking (SRO_UNIQUE_DAMAGE_RANK).
 	const uniqueRankHud = createUniqueRankHud();
-	const uniqueStatusHud = createUniqueStatusHud( extensions.uniqueNotifyBook?.() ?? {} );
+	const uniqueStatusHud = createUniqueStatusHud( extensions.uniqueNotifyBook );
 	// Port-only (#3531): the Unique Status window's last drawn list (its
 	// wheel and thumb drag find it here) and the server clock's base: the
 	// last feed's server time and the local time it landed, so the Died

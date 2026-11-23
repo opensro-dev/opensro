@@ -107,7 +107,7 @@ export function notifyBrowserUnique( flip: UniqueStatusFlip, allowed: boolean ):
 createUniqueStatusHud
 ================
 */
-export function createUniqueStatusHud( book: Readonly<Record<string, UniqueNotifySettings>> ) {
+export function createUniqueStatusHud( book?: () => Readonly<Record<string, UniqueNotifySettings>> ) {
 	let tab: UniqueStatusTab = "all";
 	let firstRow = 0;
 	// The character the settings belong to, its saved list, and the draft.
@@ -200,7 +200,7 @@ any unsaved edits; the same one keeps them.
 		attach( name: string ) {
 			if ( name === character ) return;
 			character = name;
-			saved = name ? uniqueNotifySettings( book[name] ) : emptyUniqueNotify();
+			saved = name ? uniqueNotifySettings( book?.()[name] ) : emptyUniqueNotify();
 			draft = saved;
 			firstRow = 0;
 		},

@@ -271,7 +271,12 @@ test("a stored notify list reads back sanitized", () => {
 });
 
 test("the window edits a draft and saves it once", () => {
-	const hud = createUniqueStatusHud( { Ann: { refs: [ TIGER_GIRL ], deathsToo: false, browser: false } } );
+	let ready = false;
+	const hud = createUniqueStatusHud( () => {
+		assert.ok( ready, "saved settings are read only after startup" );
+		return { Ann: { refs: [ TIGER_GIRL ], deathsToo: false, browser: false } };
+	} );
+	ready = true;
 	hud.attach( "Ann" );
 	assert.deepEqual( hud.draft(), { refs: [ TIGER_GIRL ], deathsToo: false, browser: false } );
 	assert.equal( hud.dirty(), false );
@@ -298,7 +303,7 @@ test("the window edits a draft and saves it once", () => {
 });
 
 test("clicks route to the window's own ids and nothing else's", () => {
-	const hud = createUniqueStatusHud( {} );
+	const hud = createUniqueStatusHud();
 	hud.attach( "Ann" );
 	assert.equal( hud.click( "unique-rank-close" ), null );
 	assert.equal( hud.click( "unique-status" ), null );
@@ -313,7 +318,7 @@ test("clicks route to the window's own ids and nothing else's", () => {
 });
 
 test("the list scrolls by wheel, thumb and buttons against the drawn geometry", () => {
-	const hud = createUniqueStatusHud( {} );
+	const hud = createUniqueStatusHud();
 	hud.attach( "Ann" );
 	// Nothing drawn yet: the pointer is not the list's.
 	assert.equal( hud.pointer( { kind: "scroll", x: 5, y: 5, delta: 120 } ), false );
@@ -339,7 +344,7 @@ test("the list scrolls by wheel, thumb and buttons against the drawn geometry", 
 });
 
 test("the server clock runs forward between feed frames", () => {
-	const hud = createUniqueStatusHud( {} );
+	const hud = createUniqueStatusHud();
 	assert.equal( hud.serverNowMs( null, 5000 ), 0 );
 	const feed = { serverNowMs: 100000, rows: [], revision: 3 };
 	assert.equal( hud.serverNowMs( feed, 1000 ), 100000 );
@@ -351,7 +356,7 @@ test("the server clock runs forward between feed frames", () => {
 });
 
 test("alerts follow the saved list and never the first feed", () => {
-	const hud = createUniqueStatusHud( {} );
+	const hud = createUniqueStatusHud();
 	hud.attach( "Ann" );
 	hud.click( `unique-status-mark:${TIGER_GIRL}` );
 	hud.click( "unique-status-save" );
@@ -610,7 +615,7 @@ test("the System menu lists both port-only rows together", t => {
 });
 
 test("with the row off changes are consumed silently", () => {
-	const hud = createUniqueStatusHud( {} );
+	const hud = createUniqueStatusHud();
 	hud.attach( "Ann" );
 	hud.click( `unique-status-mark:${TIGER_GIRL}` );
 	hud.click( "unique-status-deaths" );
