@@ -218,6 +218,10 @@ type Metrics struct {
 	// departed target, which the pet log no longer reports
 	// (action/petdiagnostics.go).
 	PetCombat map[string]uint64 `json:"pet_combat,omitempty"`
+	// DiagnosticRefusals counts each DiagnosticRefusal reason a request
+	// returned since start (action/register.go, #4222): a refused pet
+	// order leaves no 0xB69E, so this is how a live read names the cause.
+	DiagnosticRefusals map[string]uint64 `json:"diagnostic_refusals,omitempty"`
 	// PlacementInsideObject counts players a non-walk path placed inside an
 	// object no walk can enter, by the path (action/placementguard.go).
 	PlacementInsideObject map[string]uint64 `json:"placement_inside_object,omitempty"`
@@ -257,6 +261,9 @@ type metricsProviders struct {
 	// petCombatMetrics reads the attack pets' ended-target counters
 	// (SetPetCombatMetrics).
 	petCombatMetrics atomic.Pointer[func() map[string]uint64]
+	// diagnosticRefusalMetrics reads DiagnosticRefusal totals by reason
+	// (SetDiagnosticRefusalMetrics, #4222).
+	diagnosticRefusalMetrics atomic.Pointer[func() map[string]uint64]
 	// placementMetrics reads the placement guard's counters
 	// (SetPlacementMetrics).
 	placementMetrics atomic.Pointer[func() map[string]uint64]
@@ -351,6 +358,19 @@ does: the transport never imports the action runtime that counts.
 */
 func (h *Hub) SetPetCombatMetrics(read func() map[string]uint64) {
 	h.petCombatMetrics.Store(&read)
+}
+
+/*
+==================
+SetDiagnosticRefusalMetrics
+
+Installs the provider of the diagnostic_refusals block (#4222), as
+SetPetCombatMetrics does: the transport never imports the action
+runtime that counts.
+==================
+*/
+func (h *Hub) SetDiagnosticRefusalMetrics(read func() map[string]uint64) {
+	h.diagnosticRefusalMetrics.Store(&read)
 }
 
 /*
@@ -470,6 +490,11 @@ func (h *Hub) Metrics() Metrics {
 	}
 	if read := h.petCombatMetrics.Load(); read != nil && *read != nil {
 		metrics.PetCombat = (*read)()
+	}
+	if read := h.diagnosticRefusalMetrics.Load(); read != nil && *read != nil {
+		if counts := (*read)(); len(counts) > 0 {
+			metrics.DiagnosticRefusals = counts
+		}
 	}
 	if read := h.storeLockMetrics.Load(); read != nil && *read != nil {
 		metrics.StoreLock = (*read)()

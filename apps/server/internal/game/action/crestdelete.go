@@ -84,7 +84,9 @@ func (rt *Runtime) admitCrestDeleteUse(character *enterworld.Character, ref *ent
 	}
 	if kind == "" || character.GuildID == nil {
 		*result = itemUseFailure(wire.ErrCodeInvalidRequest)
-		result.DiagnosticRefusal = "item-use: crest delete names no crest for " + character.Name
+		// A fixed reason: the counter keys on it (countDiagnosticRefusal),
+		// and the handler's refusal log already names the character.
+		result.DiagnosticRefusal = "item-use: crest delete names no crest"
 		return ""
 	}
 	return kind

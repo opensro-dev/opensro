@@ -6891,12 +6891,14 @@ The published plane when something changed since the last take, else null.
 				cosStatusRecords: cosSelection.statusRecords( cosRecords ),
 				cosRecords: [ ...cosRecords.values() ].map( record => {
 					const v = c.vitals.find( row => row.gid === record.gid );
+					const assistTarget = petAssists.get( record.gid );
 					return {
 						...record,
 						inventory: record.inventory?.map( inventory.present ),
 						hp: v?.hp ?? record.hp,
 						mp: v?.mp ?? record.mp,
-						satiety: v?.satiety ?? record.satiety
+						satiety: v?.satiety ?? record.satiety,
+						...(assistTarget ? { assistTarget } : {})
 					};
 				} ),
 				worldClock,
