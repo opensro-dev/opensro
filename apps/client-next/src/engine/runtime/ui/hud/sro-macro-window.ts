@@ -41,6 +41,7 @@ import {
 	macroSkillBound,
 	macroSkillFitsPage,
 	type MacroHudState,
+	type MacroPotionRow,
 	type MacroSkillPage
 } from "./sro-macro-hud";
 
@@ -64,6 +65,11 @@ const MENU_PITCH = 36;
 // CNIFMacroAutoSkillWnd: acquired grid | Weapon/Shield + skills-to-use.
 const OPTIONS_WIDTH = 460;
 const OPTIONS_WIDTH_SKILL = 560;
+// Gauge caption column, then a short gap before the percent stepper.
+const POTION_GAUGE_CAPTION = 88;
+const POTION_GAUGE_STEP_GAP = 12;
+// Space between the Pet gauge rows and the Cure / Resurrect / Summon band.
+const PET_UTIL_GAP = 14;
 const OPTIONS_FOOTER = 52;
 const OPTIONS_HEIGHT_SKILL = 420;
 const TAB_TOP = 40;
@@ -115,11 +121,19 @@ function optionsSize(
 ): { readonly width: number; readonly height: number; } {
 	const chrome = BODY_TOP + OPTIONS_FOOTER;
 	if ( tab === MACRO_POTION ) {
-		const rows = MACRO_POTION_ROWS[potionPage].length;
 		const pitch = Math.max( ROW, ITEM_SLOT ) + ROW_GAP;
+		if ( potionPage === "pet" ) {
+			// Two gauges, then one taller band: slot over check + caption.
+			const gauges = MACRO_POTION_ROWS.pet.filter( row => row.gauge ).length;
+			const utilH = ITEM_SLOT + 4 + ROW;
+			return {
+				width: OPTIONS_WIDTH,
+				height: chrome + 8 + BUTTON_HEIGHT + 12 + gauges * pitch + PET_UTIL_GAP + utilH + 8
+			};
+		}
 		return {
 			width: OPTIONS_WIDTH,
-			height: chrome + 8 + BUTTON_HEIGHT + 12 + rows * pitch + 8
+			height: chrome + 8 + BUTTON_HEIGHT + 12 + MACRO_POTION_ROWS.character.length * pitch + 8
 		};
 	}
 	if ( tab === MACRO_HUNT ) {
@@ -307,15 +321,22 @@ function penOf( frame: UiAuthoredFrame, paint: MacroPaint ) {
 		*/
 		itemSlot( id: string, r: UiRect, item: number, stock: ReadonlyMap<number, MacroPotionStock> ) {
 			const held = item ? stock.get( item ) : undefined;
-			paint.rect( frame, { r, color: PANEL } );
-			paint.rect( frame, { r: [ r[0], r[1] + r[3] - 1, r[2], 1 ], color: LINE } );
+			const [sx, sy, sw, sh] = r;
+			// Same recess + gold rim as Weapon / Shield: empty wells read
+			// against the dark Auto-Potion panel.
+			paint.rect( frame, { r, color: SLOT_WELL } );
+			paint.rect( frame, { r: [ sx + 1, sy + 1, sw - 2, sh - 2 ], color: SLOT_SHADE } );
+			paint.rect( frame, { r: [ sx, sy, sw, 1 ], color: SLOT_RIM } );
+			paint.rect( frame, { r: [ sx, sy + sh - 1, sw, 1 ], color: SLOT_RIM } );
+			paint.rect( frame, { r: [ sx, sy, 1, sh ], color: SLOT_RIM } );
+			paint.rect( frame, { r: [ sx + sw - 1, sy, 1, sh ], color: SLOT_RIM } );
 			// A bound RefItem with no bag stack (scrubbed equipment, spent
 			// potion) paints as empty — a dim "0" looked like a broken icon.
 			if ( held?.icon ) {
-				paint.image( frame, { r: [ r[0] + 2, r[1] + 2, r[2] - 4, r[3] - 4 ], path: held.icon } );
+				paint.image( frame, { r: [ sx + 2, sy + 2, sw - 4, sh - 4 ], path: held.icon } );
 			}
 			if ( held ) {
-				this.text( String( held.quantity ), [ r[0], r[1] + r[3] - 12, r[2] - 2, 12 ], frame.white, 2 );
+				this.text( String( held.quantity ), [ sx, sy + sh - 12, sw - 2, 12 ], frame.white, 2 );
 			}
 			const label = held ? "Clear the potion" : "Drop a potion from the inventory";
 			// Occupied slots are draggable: releasing outside clears the bind
@@ -533,11 +554,92 @@ function drawOptions( frame: UiAuthoredFrame, paint: MacroPaint, view: MacroWind
 
 /*
 ================
+potionGaugeRow
+
+One HP / MP / Hunger row: item slot, check, percent with - and +.
+================
+*/
+function potionGaugeRow(
+	pen: Pen,
+	view: MacroWindowView,
+	draft: MacroSettings,
+	row: MacroPotionRow,
+	x: number,
+	top: number,
+	_width: number
+) {
+	const slot = potionSlot( draft.potion, row.slot ), on = potionRowOn( draft.potion, row.slot );
+	pen.itemSlot( `item:${row.slot}`, [ x + 12, top, ITEM_SLOT, ITEM_SLOT ], slot.item, view.potionStock );
+	const checkX = x + 12 + ITEM_SLOT + 8;
+	const labelTop = top + (ITEM_SLOT - ROW) / 2;
+	pen.check( `check:${row.slot}`, row.caption, [ checkX, labelTop, POTION_GAUGE_CAPTION, ROW ], on );
+	// Sit the percent next to the caption, not against the window's right edge.
+	const stepX = checkX + POTION_GAUGE_CAPTION + POTION_GAUGE_STEP_GAP;
+	pen.button( `percent:${row.slot}:-1`, "-", stepX, labelTop, STEP_WIDTH, !on );
+	pen.text(
+		`${slot.a || MACRO_PERCENT_DEFAULT}%`,
+		[ stepX + STEP_WIDTH, labelTop, 48, ROW ],
+		on ? GOLD : DIM,
+		1
+	);
+	pen.button( `percent:${row.slot}:1`, "+", stepX + STEP_WIDTH + 48, labelTop, STEP_WIDTH, !on );
+}
+
+/*
+================
+potionCheckRow
+
+One full-width check-only row (Character Abnormal status / Moving speed).
+================
+*/
+function potionCheckRow(
+	pen: Pen,
+	view: MacroWindowView,
+	draft: MacroSettings,
+	row: MacroPotionRow,
+	x: number,
+	top: number,
+	width: number
+) {
+	const slot = potionSlot( draft.potion, row.slot ), on = potionRowOn( draft.potion, row.slot );
+	pen.itemSlot( `item:${row.slot}`, [ x + 12, top, ITEM_SLOT, ITEM_SLOT ], slot.item, view.potionStock );
+	const checkX = x + 12 + ITEM_SLOT + 8;
+	const labelTop = top + (ITEM_SLOT - ROW) / 2;
+	pen.check( `check:${row.slot}`, row.caption, [ checkX, labelTop, x + width - 12 - checkX, ROW ], on );
+}
+
+/*
+================
+potionUtilityCell
+
+One cell of the Pet Cure / Resurrect / Summon Trigger band: left-aligned
+slot, then check + caption under it so the long labels are not clipped
+beside a narrow column.
+================
+*/
+function potionUtilityCell(
+	pen: Pen,
+	view: MacroWindowView,
+	draft: MacroSettings,
+	row: MacroPotionRow,
+	x: number,
+	top: number,
+	width: number
+) {
+	const slot = potionSlot( draft.potion, row.slot ), on = potionRowOn( draft.potion, row.slot );
+	pen.itemSlot( `item:${row.slot}`, [ x, top, ITEM_SLOT, ITEM_SLOT ], slot.item, view.potionStock );
+	pen.check( `check:${row.slot}`, row.caption, [ x, top + ITEM_SLOT + 4, width, ROW ], on );
+}
+
+/*
+================
 potionTab
 
-CNIFMacroAutoPotionWnd: Character and Pet pages of rows. Each row is an
-item slot (CNIFMacroAutoPotionSlot: drop a bag item on it, click to
-clear), a check box and, on a gauge row, its percent with - and +.
+CNIFMacroAutoPotionWnd: Character and Pet pages. Character stacks its
+rows; Pet puts Cure / Resurrect / Summon Trigger in one row of three
+(official Auto-Potion Pet page). Each control is an item slot
+(CNIFMacroAutoPotionSlot: drop a bag item on it, click to clear), a
+check box and, on a gauge row, its percent with - and +.
 ================
 */
 function potionTab( pen: Pen, view: MacroWindowView, draft: MacroSettings, body: UiRect ) {
@@ -547,28 +649,21 @@ function potionTab( pen: Pen, view: MacroWindowView, draft: MacroSettings, body:
 	const rowsTop = y + 8 + BUTTON_HEIGHT + 12;
 	pen.button( "page:character", "Character", x + 8, y + 8, 110, false, page === "character" );
 	pen.button( "page:pet", "Pet", x + 124, y + 8, 110, false, page === "pet" );
-	MACRO_POTION_ROWS[page].forEach( ( row, i ) => {
+	if ( page === "pet" ) {
+		const gauges = MACRO_POTION_ROWS.pet.filter( row => row.gauge );
+		const utilities = MACRO_POTION_ROWS.pet.filter( row => !row.gauge );
+		gauges.forEach( ( row, i ) => potionGaugeRow( pen, view, draft, row, x, rowsTop + i * pitch, width ) );
+		const utilTop = rowsTop + gauges.length * pitch + PET_UTIL_GAP;
+		const colW = Math.floor( (width - 24) / utilities.length );
+		utilities.forEach( ( row, i ) => {
+			potionUtilityCell( pen, view, draft, row, x + 12 + i * colW, utilTop, colW - 4 );
+		} );
+		return;
+	}
+	MACRO_POTION_ROWS.character.forEach( ( row, i ) => {
 		const top = rowsTop + i * pitch;
-		const slot = potionSlot( draft.potion, row.slot ), on = potionRowOn( draft.potion, row.slot );
-		pen.itemSlot( `item:${row.slot}`, [ x + 12, top, ITEM_SLOT, ITEM_SLOT ], slot.item, view.potionStock );
-		const checkX = x + 12 + ITEM_SLOT + 8;
-		const labelTop = top + (ITEM_SLOT - ROW) / 2;
-		pen.check(
-			`check:${row.slot}`,
-			row.caption,
-			[ checkX, labelTop, row.gauge ? 170 : x + width - 12 - checkX, ROW ],
-			on
-		);
-		if ( !row.gauge ) return;
-		const stepX = x + width - 150;
-		pen.button( `percent:${row.slot}:-1`, "-", stepX, labelTop, STEP_WIDTH, !on );
-		pen.text(
-			`${slot.a || MACRO_PERCENT_DEFAULT}%`,
-			[ stepX + STEP_WIDTH, labelTop, 60, ROW ],
-			on ? GOLD : DIM,
-			1
-		);
-		pen.button( `percent:${row.slot}:1`, "+", stepX + STEP_WIDTH + 60, labelTop, STEP_WIDTH, !on );
+		if ( row.gauge ) potionGaugeRow( pen, view, draft, row, x, top, width );
+		else potionCheckRow( pen, view, draft, row, x, top, width );
 	} );
 }
 

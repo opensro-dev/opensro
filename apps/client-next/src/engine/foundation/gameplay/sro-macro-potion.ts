@@ -1,23 +1,21 @@
 /*
 ===========================================================================
 
-sro-macro-potion.ts - the SRO Macro's character auto-potion loop (port-only)
+sro-macro-potion.ts - the SRO Macro's auto-potion loop (port-only)
 
 Port-only, not native (#3907): the v1.696 macro's auto-potion, read from
-the v1.696 client (research note sro-macro.md, "Auto-potion engine").
+the v1.696 client (sro_client.exe 8af7afc2..., research note sro-macro.md).
 Each tick the executor (006931b0) walks its rows in order and the first
 row whose reader fires uses its item; that row then sits out a 500 ms
 re-arm (table 0x17b3688) and rejoins at the back of the order.
 
 This module is pure: the rows' conditions and the ready/waiting order.
-The worker supplies the vitals (and live buff skill ids for row 3) and
-performs the use through the same inventory gates as the v1.150 auto-potion.
+The worker supplies character vitals, pet facts, and live buff skill ids
+for row 3, and performs the use through the same inventory gates as the
+v1.150 auto-potion (with Grass / summoner tails for pet revive / summon).
 
-Row 3 (HUD "Moving speed", as on the later official client) is a buff-item
-gate (006930a0): it fires while
-the bound item's associated skill (item data +0x4d0 -> +0x1c, published as
-nativeFields.associatedSkillId) is absent from the local attached-effect
-list (00809330 → 00abd630). The pet rows (4..8) are not automated.
+Character: 00692e00 / 00692f60 / 00692d20 / 006930a0.
+Pet: 00691c70 / 00691e20 / 00691a20 / 006921a0 / 00691b60.
 
 ===========================================================================
 */
@@ -28,80 +26,124 @@ import {
 	MACRO_ROW_CURE,
 	MACRO_ROW_HP,
 	MACRO_ROW_MP,
+	MACRO_ROW_PET_CURE,
+	MACRO_ROW_PET_HP,
+	MACRO_ROW_PET_HUNGER,
+	MACRO_ROW_PET_RESURRECT,
+	MACRO_ROW_PET_SUMMON,
 	type MacroSettings,
 	potionRowOn,
 	potionSlot,
 	withPotionRowItem
 } from "./sro-macro";
 
-// Re-export so tests and the worker can name the buff-item row without
-// reaching into the codec module for every call.
-export { MACRO_ROW_BUFF_ITEM };
+export {
+	MACRO_ROW_BUFF_ITEM,
+	MACRO_ROW_PET_CURE,
+	MACRO_ROW_PET_HP,
+	MACRO_ROW_PET_HUNGER,
+	MACRO_ROW_PET_RESURRECT,
+	MACRO_ROW_PET_SUMMON
+};
 
-// 00692ba0 seeds every row's re-arm with 0x1f4.
+// 00692ba0 / 006918a0 seed every row's re-arm with 0x1f4.
 export const MACRO_POTION_REARM_MS = 500;
-// 00692e00 refuses HP while this abnormal bit stands, as 70C550 does in v1.150.
+// 00692e00 / 00691c70 refuse HP while this abnormal bit stands.
 const HP_BLOCKING_ABNORMAL = 0x20;
-// 00692d20 fires while any of these abnormal bits stands.
+// 00692d20 / 00691a20 fire while any of these abnormal bits stands.
 export const MACRO_CURE_ABNORMAL = 0x17fafff;
-// 00692e00 / 00692f60 scale the percent byte by this double (0x12befb8).
+// 00692e00 / 00692f60 / 00691c70 / 00691e20 scale the percent by this double (0x12befb8).
 const PERCENT_SCALE = 0.01;
+// Native pet HGP / satiety scale (CosRecord.satiety, item +0x34).
+export const PET_SATIETY_MAX = 10000;
 // Slots below this are the equipment sockets, never a potion source.
 export const BAG_FIRST_SLOT = 13;
 // Expendable class bits, same mask autoPotionItemSlot reads.
 const CONSUMABLE_MASK = 0x1c;
 const CONSUMABLE = 0x0c;
 const CONSUMABLE_BAND = 0x60;
+// COS summoner bag items (row 8 drop 0x690aa0): TypeId family 0xcc.
+const SUMMONER_FAMILY = 0xcc;
+const SUMMONER_FAMILY_MASK = 0x7fe;
+// Grass of Life / dead summoner state (696490 case 6 / f0f190).
+export const PET_SUMMON_STATE_DEAD = 4;
+// Summon Trigger admits states 1 and 3 (00691b60).
+export const PET_SUMMON_STATE_OK = [ 1, 3 ] as const;
+
+/*
+================
+MacroPetFacts
+
+What the pet readers need from the selected companion and its summoner
+bag item. Absent when no eligible pet / summoner is in play.
+================
+*/
+export interface MacroPetFacts {
+	readonly present: boolean;
+	readonly hp: number;
+	readonly maxHp: number;
+	readonly satiety: number;
+	readonly abnormal: number;
+	readonly dead: boolean;
+	// Summoner bag item's summon.state (f0f190), or 0 when unbound.
+	readonly summonState: number;
+}
+
 /*
 ================
 macroPotionAdmits
 
 CNIFMacroAutoPotionSlot drop (0xdafff0): kind 0x46 then per-row TypeId
-checks (0x690b70 HP, 0x690bf0 MP, 0x690b00 cure, 0x690c70 buff-item).
-Native reads the TypeId high byte (>>24): HP admits 1 or 3, MP admits
-2 or 3, after potion helper 690f30. On the port's typeFlags word that
-high byte is TID4 (bits 11..15); recovery potions are PackTypeFlags
-(3,3,1,tid4) — e.g. HP XL 0x8ec, MP XL 0x10ec, universal 0x18ec.
-
-Every row requires the expendable band (typeFlags & 0x60) === 0x60 —
-equipment shares class bits 0x0c but sits in band 0x20. Alchemy stones
-and elixirs (TID3 10/11) never bind on any row.
+checks. Native high byte (>>24) is the port's TID4 (bits 11..15).
 ================
 */
 export function macroPotionAdmits( row: number, typeFlags: number ): boolean {
 	if ( !Number.isInteger( row ) || row < 0 || row >= 9 ) return false;
+	const tid3 = typeFlags >>> 7 & 15;
+	const tid4 = typeFlags >>> 11 & 31;
+	// 0x690aa0: COS summoner bag items (and a high-3 potion-helper path).
+	if ( row === MACRO_ROW_PET_SUMMON ) {
+		if ( (typeFlags & SUMMONER_FAMILY_MASK) === SUMMONER_FAMILY ) return true;
+		if (
+			(typeFlags & 2) !== 0 || (typeFlags & CONSUMABLE_MASK) !== CONSUMABLE ||
+			(typeFlags & CONSUMABLE_BAND) !== CONSUMABLE_BAND
+		) {
+			return false;
+		}
+		return tid4 === 3;
+	}
 	if (
 		(typeFlags & 2) !== 0 || (typeFlags & CONSUMABLE_MASK) !== CONSUMABLE ||
 		(typeFlags & CONSUMABLE_BAND) !== CONSUMABLE_BAND
 	) {
 		return false;
 	}
-	const tid3 = typeFlags >>> 7 & 15;
-	const tid4 = typeFlags >>> 11 & 31;
 	// Elixirs / lucky powder (10) and stones / tablets (11).
 	if ( tid3 === 10 || tid3 === 11 ) return false;
 	// 690b70 / 690bf0: high byte (TID4) 1=HP, 2=MP, 3=both.
 	if ( row === MACRO_ROW_HP ) return tid4 === 1 || tid4 === 3;
 	if ( row === MACRO_ROW_MP ) return tid4 === 2 || tid4 === 3;
-	// 690ec0 (pill mid-byte) + high byte in {1,6,8,9}: port maps to the
-	// 0x16c cure family (item-cooldowns' universal pill lane) with those TID4s.
+	// 690ec0 + high 1/6/8/9: character cure pills (0x16c family).
 	if ( row === MACRO_ROW_CURE ) {
 		return (typeFlags & 0x7fe) === 0x16c && (tid4 === 1 || tid4 === 6 || tid4 === 8 || tid4 === 9);
 	}
-	// 690c70 is a CodeName whitelist of speed scrolls. Without CodeName on
-	// the bag row, admit only scroll-like TID3s (3 etc / 13 mall) — never
-	// potions, pills, or alchemy elements.
+	// 690c70 CodeName whitelist; port approximates with scroll TID3s.
 	if ( row === MACRO_ROW_BUFF_ITEM ) return tid3 === 3 || tid3 === 13;
-	return true;
+	// 690a20 / 6909e0: potion helper 690f30 then high 4 / 9.
+	if ( row === MACRO_ROW_PET_HP ) return tid4 === 4;
+	if ( row === MACRO_ROW_PET_HUNGER ) return tid4 === 9;
+	// 690990: pill helper 690ec0 then high 7 (pet universal pill).
+	if ( row === MACRO_ROW_PET_CURE ) {
+		return tid4 === 7 && ((typeFlags & 0x7fe) === 0x16c || tid3 === 2);
+	}
+	// 690a60: potion helper then high 6 (Grass of Life).
+	if ( row === MACRO_ROW_PET_RESURRECT ) return tid4 === 6;
+	return false;
 }
 
 /*
 ================
 scrubMacroPotion
-
-Drop any bound RefItem whose bag stack fails macroPotionAdmits (equipment
-left on the anomaly rows from an earlier looser check). Unknown refs that
-are not in the bag are left alone.
 ================
 */
 export function scrubMacroPotion(
@@ -124,16 +166,19 @@ export type MacroPotionRow =
 	| typeof MACRO_ROW_HP
 	| typeof MACRO_ROW_MP
 	| typeof MACRO_ROW_CURE
-	| typeof MACRO_ROW_BUFF_ITEM;
-// Character readers 004c2ce0: HP, MP, cure, buff-item. Pet rows stay out.
-export const MACRO_POTION_ORDER = [ 0, 1, 2, 3 ] as const;
+	| typeof MACRO_ROW_BUFF_ITEM
+	| typeof MACRO_ROW_PET_HP
+	| typeof MACRO_ROW_PET_HUNGER
+	| typeof MACRO_ROW_PET_CURE
+	| typeof MACRO_ROW_PET_RESURRECT
+	| typeof MACRO_ROW_PET_SUMMON;
+
+// Character 004c2ce0 then pet 004c2b90 (00690790 builds both).
+export const MACRO_POTION_ORDER = [ 0, 1, 2, 3, 4, 5, 6, 7, 8 ] as const;
 
 /*
 ================
 MacroPotionQueue
-
-ready is the executor's ordered list; waiting holds the rows that fired,
-each with the time its re-arm runs out.
 ================
 */
 export interface MacroPotionQueue {
@@ -152,42 +197,167 @@ export function emptyMacroPotionQueue(): MacroPotionQueue {
 
 /*
 ================
+emptyMacroPetFacts
+================
+*/
+export function emptyMacroPetFacts(): MacroPetFacts {
+	return { present: false, hp: 0, maxHp: 0, satiety: 0, abnormal: 0, dead: false, summonState: 0 };
+}
+
+/*
+================
+macroPetLiving
+
+The one companion the pet readers share (native 0xc92b80): the selected
+COS when it is a living band 1..3 pet, else the first living owned one.
+================
+*/
+export function macroPetLiving(
+	records: readonly {
+		readonly gid: number;
+		readonly band: number;
+		readonly hp: number;
+		readonly dead: boolean;
+	}[],
+	selectedGid: number
+): number {
+	const living = ( row: { readonly band: number; readonly hp: number; readonly dead: boolean; } ) =>
+		!row.dead && row.hp > 0 && row.band >= 1 && row.band <= 3;
+	const selected = records.find( row => row.gid === selectedGid );
+	if ( selected && living( selected ) ) return selected.gid;
+	return records.find( living )?.gid ?? 0;
+}
+
+/*
+================
+macroPetFacts
+
+Facts the pet readers need. When a companion is out, rows 4..6 read it;
+when it is not, rows 7/8 read the bound summoner's state (f0f190).
+================
+*/
+export function macroPetFacts( input: {
+	readonly records: readonly {
+		readonly gid: number;
+		readonly band: number;
+		readonly hp: number;
+		readonly dead: boolean;
+		readonly satiety?: number;
+		readonly inventorySlot?: number;
+		// Catalog / training max HP (vitals 0x33A6 never carry max for a COS).
+		readonly maxHp?: number;
+	}[];
+	readonly selectedGid: number;
+	readonly vitals: readonly {
+		readonly gid: number;
+		readonly hp?: number;
+		readonly maxHp?: number;
+		readonly abnormal?: number;
+		readonly satiety?: number;
+	}[];
+	readonly bag: readonly {
+		readonly slot: number;
+		readonly refObjId: number;
+		readonly typeFlags: number;
+		readonly summon?: { readonly state: number; };
+	}[];
+	readonly summonRef: number;
+} ): MacroPetFacts {
+	const summoner = input.summonRef === 0 ?
+		undefined :
+		input.bag.find( entry =>
+			entry.slot >= BAG_FIRST_SLOT && entry.refObjId === input.summonRef &&
+			(entry.typeFlags & SUMMONER_FAMILY_MASK) === SUMMONER_FAMILY
+		) ??
+			input.bag.find( entry => entry.slot >= BAG_FIRST_SLOT && entry.refObjId === input.summonRef );
+	const summonState = summoner?.summon?.state ?? 0;
+	const gid = macroPetLiving( input.records, input.selectedGid );
+	if ( !gid ) {
+		return { ...emptyMacroPetFacts(), summonState };
+	}
+	const record = input.records.find( row => row.gid === gid )!;
+	const vital = input.vitals.find( row => row.gid === gid );
+	const hp = vital?.hp ?? record.hp;
+	const linked = record.inventorySlot !== undefined ?
+		input.bag.find( entry => entry.slot === record.inventorySlot ) :
+		undefined;
+	return {
+		present: true,
+		hp,
+		// Prefer a live vital, then the caller's catalog/training stamp.
+		maxHp: vital?.maxHp || record.maxHp || 0,
+		satiety: vital?.satiety ?? record.satiety ?? 0,
+		abnormal: vital?.abnormal ?? 0,
+		dead: record.dead || hp <= 0,
+		summonState: linked?.summon?.state ?? summonState
+	};
+}
+
+/*
+================
 macroPotionWants
 
-Whether a row's reader would try its item now: on, an item bound, and its
-condition met. buffSkillId is the bound item's associatedSkillId for the
-buff-item row (006930a0); other rows ignore it. The item's presence,
-cooldown and use are the worker's.
+buffSkillId is the bound item's associatedSkillId for the buff-item row;
+pet is the selected companion's facts for rows 4..8. Other rows ignore them.
 ================
 */
 export function macroPotionWants(
 	potion: readonly number[],
 	row: MacroPotionRow,
 	facts: AutoPotionFacts,
-	buffSkillId = 0
+	buffSkillId = 0,
+	pet: MacroPetFacts = emptyMacroPetFacts()
 ): boolean {
-	if ( !facts.alive || !potionRowOn( potion, row ) ) return false;
+	if ( !potionRowOn( potion, row ) ) return false;
 	const slot = potionSlot( potion, row );
 	if ( slot.item === 0 ) return false;
+
 	if ( row === MACRO_ROW_BUFF_ITEM ) {
-		// 006930a0: fire only while 00809330(1, id, 0) → 00abd630 says absent.
+		if ( !facts.alive ) return false;
 		if ( !buffSkillId ) return false;
 		return !(facts.activeBuffSkills ?? []).includes( buffSkillId );
 	}
-	if ( row === MACRO_ROW_CURE ) return (facts.abnormal & MACRO_CURE_ABNORMAL) !== 0;
-	if ( row === MACRO_ROW_HP && (facts.abnormal & HP_BLOCKING_ABNORMAL) !== 0 ) return false;
-	const current = row === MACRO_ROW_HP ? facts.hp : facts.mp;
-	const max = row === MACRO_ROW_HP ? facts.maxHp : facts.maxMp;
-	return max * (slot.a * PERCENT_SCALE) >= current;
+	if ( row === MACRO_ROW_CURE ) {
+		if ( !facts.alive ) return false;
+		return (facts.abnormal & MACRO_CURE_ABNORMAL) !== 0;
+	}
+	if ( row === MACRO_ROW_HP || row === MACRO_ROW_MP ) {
+		if ( !facts.alive ) return false;
+		if ( row === MACRO_ROW_HP && (facts.abnormal & HP_BLOCKING_ABNORMAL) !== 0 ) return false;
+		const current = row === MACRO_ROW_HP ? facts.hp : facts.mp;
+		const max = row === MACRO_ROW_HP ? facts.maxHp : facts.maxMp;
+		return max * (slot.a * PERCENT_SCALE) >= current;
+	}
+
+	// Pet rows 4..6 need a living companion in the world (00691c70 / 00691e20 / 00691a20).
+	if ( row === MACRO_ROW_PET_HP || row === MACRO_ROW_PET_HUNGER || row === MACRO_ROW_PET_CURE ) {
+		if ( !pet.present || pet.dead || pet.hp <= 0 || !(pet.maxHp > 0) ) return false;
+		if ( row === MACRO_ROW_PET_CURE ) return (pet.abnormal & MACRO_CURE_ABNORMAL) !== 0;
+		if ( row === MACRO_ROW_PET_HP ) {
+			if ( (pet.abnormal & HP_BLOCKING_ABNORMAL) !== 0 ) return false;
+			return pet.maxHp * (slot.a * PERCENT_SCALE) >= pet.hp;
+		}
+		// 00691e20: satiety[+0x34] <= floor(max * pct * 0.01) via 00fc5590.
+		return pet.satiety <= PET_SATIETY_MAX * (slot.a * PERCENT_SCALE);
+	}
+
+	// 006921a0: Grass + dead summoner (state 4), pet not already out.
+	if ( row === MACRO_ROW_PET_RESURRECT ) {
+		if ( pet.present ) return false;
+		if ( pet.summonState !== PET_SUMMON_STATE_DEAD ) return false;
+		return potionSlot( potion, MACRO_ROW_PET_SUMMON ).item !== 0;
+	}
+	// 00691b60: summoner item alone while state is 1 or 3, pet not out.
+	if ( row === MACRO_ROW_PET_SUMMON ) {
+		if ( pet.present ) return false;
+		return (PET_SUMMON_STATE_OK as readonly number[]).includes( pet.summonState );
+	}
+	return false;
 }
 
 /*
 ================
 macroPotionBuffSkillId
-
-The associated skill id on the first bag stack of a bound buff-item row,
-from nativeFields.associatedSkillId (server ItemUseNativeFields). Zero
-when the row is empty or the stack has no resolved skill.
 ================
 */
 export function macroPotionBuffSkillId(
@@ -211,11 +381,6 @@ export function macroPotionBuffSkillId(
 /*
 ================
 macroPotionBagSlot
-
-The bag slot a row uses: the first stack of its RefItem ID. The v1.696 UI
-resolves the ID to one slot when it loads the row (00db29e0); taking the
-first live stack each tick is the inferred equivalent once that stack is
-spent.
 ================
 */
 export function macroPotionBagSlot(
@@ -237,11 +402,6 @@ export function macroPotionBagSlot(
 /*
 ================
 rearmMacroPotion
-
-The start of an executor tick: the first waiting row whose re-arm ran out
-returns to the back of the order, one per tick, as 006931b0 does. The
-worker then walks ready in order and hands the first row whose use went
-out to macroPotionFired.
 ================
 */
 export function rearmMacroPotion( queue: MacroPotionQueue, now: number ): MacroPotionQueue {
@@ -256,8 +416,6 @@ export function rearmMacroPotion( queue: MacroPotionQueue, now: number ): MacroP
 /*
 ================
 macroPotionFired
-
-A row whose use went out leaves the order for its 500 ms re-arm.
 ================
 */
 export function macroPotionFired( queue: MacroPotionQueue, row: MacroPotionRow, now: number ): MacroPotionQueue {

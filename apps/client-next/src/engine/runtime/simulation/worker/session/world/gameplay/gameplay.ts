@@ -30,7 +30,8 @@ import {
 	autoPotionTarget,
 	autoPotionTargetNotice,
 	createCosSelection,
-	isRideStateRefusedItem
+	isRideStateRefusedItem,
+	type CosItemUseContext
 } from "@/engine/foundation/gameplay/cos-item-use";
 import { ARENA_CHEST_OPCODE, ARENA_DECISION_OPCODE } from "@/engine/foundation/gameplay/arena-chest";
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
@@ -367,6 +368,13 @@ import {
 	BAG_FIRST_SLOT,
 	emptyMacroPotionQueue,
 	MACRO_ROW_BUFF_ITEM,
+	MACRO_ROW_PET_CURE,
+	MACRO_ROW_PET_HP,
+	MACRO_ROW_PET_HUNGER,
+	MACRO_ROW_PET_RESURRECT,
+	MACRO_ROW_PET_SUMMON,
+	macroPetFacts,
+	macroPetLiving,
 	macroPotionBagSlot,
 	macroPotionBuffSkillId,
 	macroPotionFired,
@@ -1657,7 +1665,12 @@ the use target and one open inventory transaction. True when the use
 request went out.
 ================
 	*/
-	function useAutomaticItem( slot: number, now: number, quiet = false ): boolean {
+	function useAutomaticItem(
+		slot: number,
+		now: number,
+		quiet = false,
+		override?: CosItemUseContext
+	): boolean {
 		// 561E57..561E6B tests the visible stall control, including the owner
 		// editing a closed stall and a visitor. Naming and network are separate windows.
 		const stallVisible = inventory.stallPhase() === "owner" || inventory.stallPhase() === "visitor";
@@ -1673,7 +1686,7 @@ request went out.
 		}
 		const item = inventory.state().inventory.find( row => row.slot === slot )!;
 		if ( itemCooldown( inventory.state().itemCooldowns, item.typeFlags, now ) ) return false;
-		const context = autoPotionTarget(
+		const context = override ?? autoPotionTarget(
 			item.typeFlags,
 			[ ...cosRecords.values() ],
 			cosSelection.selected(),
@@ -1778,11 +1791,13 @@ or no longer the player's (the cos-inventory-move authority).
 ================
 checkMacroPotion
 
-Port-only, not native (#3907): one tick of the SRO Macro's character
-auto-potion (sro-macro-potion.ts), while the Experimental row is on and
+Port-only, not native (#3907): one tick of the SRO Macro's character and
+pet auto-potion (sro-macro-potion.ts), while the Experimental row is on and
 the server has accepted Auto-Potion ON. A row's item is the first bag
-stack of its RefItem ID. The attempts are quiet: the loop retries every
-tick, so a standing refusal would otherwise repeat its notice.
+stack of its RefItem ID. Pet revive (row 7) uses Grass with the summoner
+slot (006921a0 / 0x803dc0); summon (row 8) uses the summoner alone.
+The attempts are quiet: the loop retries every tick, so a standing
+refusal would otherwise repeat its notice.
 ================
 	*/
 	function checkMacroPotion( now: number ) {
@@ -1803,12 +1818,49 @@ tick, so a standing refusal would otherwise repeat its notice.
 			.map( effect => effect.skill );
 		const facts = { ...potionFacts, activeBuffSkills };
 		const buffSkillId = macroPotionBuffSkillId( settings.potion, bag );
+		// COS vitals never carry max HP (0x33A6); the spawn catalog and the
+		// pet-training combat profile do (native pet object +0x2c / vtable).
+		const training = petTraining.state();
+		const pet = macroPetFacts( {
+			records: [ ...cosRecords.values() ].map( record => {
+				const trained = training?.gid === record.gid ? training.stats?.maxHp : undefined;
+				const spawned = readEntity( record.gid )?.maxHp;
+				return {
+					...record,
+					maxHp: trained || spawned || 0
+				};
+			} ),
+			selectedGid: cosSelection.selected(),
+			vitals: combat.state().vitals,
+			bag,
+			summonRef: potionSlot( settings.potion, MACRO_ROW_PET_SUMMON ).item
+		} );
+		const petGid = pet.present ? macroPetLiving( [ ...cosRecords.values() ], cosSelection.selected() ) : 0;
 		macroPotionQueue = rearmMacroPotion( macroPotionQueue, now );
 		for ( const row of macroPotionQueue.ready ) {
 			const skillId = row === MACRO_ROW_BUFF_ITEM ? buffSkillId : 0;
-			if ( !macroPotionWants( settings.potion, row, facts, skillId ) ) continue;
+			if ( !macroPotionWants( settings.potion, row, facts, skillId, pet ) ) continue;
 			const slot = macroPotionBagSlot( settings.potion, row, bag );
-			if ( slot === undefined || !useAutomaticItem( slot, now, true ) ) continue;
+			if ( slot === undefined ) continue;
+			let used = false;
+			if ( row === MACRO_ROW_PET_RESURRECT ) {
+				const summonSlot = macroPotionBagSlot( settings.potion, MACRO_ROW_PET_SUMMON, bag );
+				if ( summonSlot === undefined ) continue;
+				used = useAutomaticItem( slot, now, true, {
+					records: [ ...cosRecords.values() ],
+					selectedGid: cosSelection.selected(),
+					revivalSlot: summonSlot
+				} );
+			} else if (
+				row === MACRO_ROW_PET_HP || row === MACRO_ROW_PET_HUNGER || row === MACRO_ROW_PET_CURE
+			) {
+				if ( !petGid ) continue;
+				cosSelection.select( petGid, cosRecords );
+				used = useAutomaticItem( slot, now, true );
+			} else {
+				used = useAutomaticItem( slot, now, true );
+			}
+			if ( !used ) continue;
 			macroPotionQueue = macroPotionFired( macroPotionQueue, row, now );
 			return;
 		}

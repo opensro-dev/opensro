@@ -1,12 +1,13 @@
 /*
 ===========================================================================
 
-sro-macro-potion.test.mjs - the SRO Macro's character auto-potion
+sro-macro-potion.test.mjs - the SRO Macro's character and pet auto-potion
 
-Port-only, not native (#3907): the v1.696 auto-potion rows (readers
-00692e00, 00692f60, 00692d20, 006930a0), the executor's order and 500 ms
-re-arm (006931b0), binding a bag item to a row, and the worker running
-the loop only with the Experimental row on and the server's Auto-Potion ON.
+Port-only, not native (#3907): the v1.696 auto-potion rows (character
+00692e00..006930a0, pet 00691c70..00691b60), the executor's order and
+500 ms re-arm (006931b0), binding a bag item to a row, and the worker
+running the loop only with the Experimental row on and the server's
+Auto-Potion ON.
 
 ===========================================================================
 */
@@ -25,7 +26,17 @@ const { experimentalGameplay, experimentalOptions } = await import(
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
-const { MACRO_ROW_HP, MACRO_ROW_MP, MACRO_ROW_CURE, MACRO_ROW_BUFF_ITEM } = codec;
+const {
+	MACRO_ROW_HP,
+	MACRO_ROW_MP,
+	MACRO_ROW_CURE,
+	MACRO_ROW_BUFF_ITEM,
+	MACRO_ROW_PET_HP,
+	MACRO_ROW_PET_HUNGER,
+	MACRO_ROW_PET_CURE,
+	MACRO_ROW_PET_RESURRECT,
+	MACRO_ROW_PET_SUMMON
+} = codec;
 
 const POTION_REF = 7;
 const OTHER_REF = 8;
@@ -98,15 +109,39 @@ test("cure fires on any curable abnormal bit; an off or empty row never fires", 
 
 test("a fired row sits out its re-arm, then rejoins at the back of the order", () => {
 	let queue = loop.emptyMacroPotionQueue();
-	assert.deepEqual( queue.ready, [ MACRO_ROW_HP, MACRO_ROW_MP, MACRO_ROW_CURE, MACRO_ROW_BUFF_ITEM ] );
+	assert.deepEqual( queue.ready, loop.MACRO_POTION_ORDER );
 	queue = loop.macroPotionFired( queue, MACRO_ROW_HP, 0 );
 	queue = loop.macroPotionFired( queue, MACRO_ROW_MP, 10 );
-	assert.deepEqual( queue.ready, [ MACRO_ROW_CURE, MACRO_ROW_BUFF_ITEM ] );
+	assert.deepEqual(
+		queue.ready,
+		[
+			MACRO_ROW_CURE,
+			MACRO_ROW_BUFF_ITEM,
+			MACRO_ROW_PET_HP,
+			MACRO_ROW_PET_HUNGER,
+			MACRO_ROW_PET_CURE,
+			MACRO_ROW_PET_RESURRECT,
+			MACRO_ROW_PET_SUMMON
+		]
+	);
 	assert.equal( loop.rearmMacroPotion( queue, 499 ), queue, "nothing has re-armed yet" );
 	queue = loop.rearmMacroPotion( queue, 600 );
-	assert.deepEqual( queue.ready, [ MACRO_ROW_CURE, MACRO_ROW_BUFF_ITEM, MACRO_ROW_HP ], "one row returns per tick" );
+	assert.deepEqual(
+		queue.ready,
+		[
+			MACRO_ROW_CURE,
+			MACRO_ROW_BUFF_ITEM,
+			MACRO_ROW_PET_HP,
+			MACRO_ROW_PET_HUNGER,
+			MACRO_ROW_PET_CURE,
+			MACRO_ROW_PET_RESURRECT,
+			MACRO_ROW_PET_SUMMON,
+			MACRO_ROW_HP
+		],
+		"one row returns per tick"
+	);
 	queue = loop.rearmMacroPotion( queue, 600 );
-	assert.deepEqual( queue.ready, [ MACRO_ROW_CURE, MACRO_ROW_BUFF_ITEM, MACRO_ROW_HP, MACRO_ROW_MP ] );
+	assert.deepEqual( queue.ready.at( -1 ), MACRO_ROW_MP );
 	assert.deepEqual( queue.waiting, [] );
 });
 
@@ -340,4 +375,176 @@ test("the worker drinks a bound potion only with the row on and Auto-Potion ON",
 		if ( uses ) assert.equal( used[0]?.payload[0], 13 );
 		g.dispose();
 	}
+});
+
+// PackTypeFlags ETC 3/3/1/tid4: pet HP=4, hunger=9, grass=6; pill 0x16c tid4=7.
+const PET_HP_TYPE = 0x6c | 1 << 7 | 4 << 11;
+const PET_HUNGER_TYPE = 0x6c | 1 << 7 | 9 << 11;
+const PET_CURE_TYPE = 0x16c | 7 << 11;
+const PET_GRASS_TYPE = 0x6c | 1 << 7 | 6 << 11;
+const PET_SUMMONER_TYPE = 0x8cc;
+
+/*
+================
+pet
+================
+*/
+/** @param {Partial<import("../../src/engine/foundation/gameplay/sro-macro-potion.ts").MacroPetFacts>} [over] */
+function pet( over = {} ) {
+	return { ...loop.emptyMacroPetFacts(), ...over };
+}
+
+test("pet rows admit by TID4 (690a20 / 6909e0 / 690990 / 690a60) and summoner family (690aa0)", () => {
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_HP, PET_HP_TYPE ), true );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_HP, PET_HUNGER_TYPE ), false );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_HUNGER, PET_HUNGER_TYPE ), true );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_CURE, PET_CURE_TYPE ), true );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_CURE, PET_HP_TYPE ), false );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_RESURRECT, PET_GRASS_TYPE ), true );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_SUMMON, PET_SUMMONER_TYPE ), true );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_PET_SUMMON, PET_HP_TYPE ), false );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_HP, PET_HP_TYPE ), false, "pet HP refuses character row" );
+});
+
+test("pet HP / hunger / cure fire from the companion's vitals (00691c70 / 00691e20 / 00691a20)", () => {
+	const potion = row(
+		MACRO_ROW_PET_CURE,
+		{ item: 3, a: 1, b: 0 },
+		row(
+			MACRO_ROW_PET_HUNGER,
+			{ item: 2, a: 50, b: 1 },
+			row( MACRO_ROW_PET_HP, { item: 1, a: 50, b: 1 } )
+		)
+	);
+	const living = pet( { present: true, hp: 40, maxHp: 100, satiety: 4000 } );
+	assert.equal( loop.macroPotionWants( potion, MACRO_ROW_PET_HP, facts(), 0, living ), true );
+	assert.equal(
+		loop.macroPotionWants( potion, MACRO_ROW_PET_HP, facts(), 0, pet( { present: true, hp: 51, maxHp: 100 } ) ),
+		false
+	);
+	assert.equal(
+		loop.macroPotionWants(
+			potion,
+			MACRO_ROW_PET_HP,
+			facts(),
+			0,
+			pet( { present: true, hp: 10, maxHp: 100, abnormal: 0x20 } )
+		),
+		false,
+		"pet HP waits out abnormal bit 0x20"
+	);
+	assert.equal( loop.macroPotionWants( potion, MACRO_ROW_PET_HUNGER, facts(), 0, living ), true );
+	assert.equal(
+		loop.macroPotionWants(
+			potion,
+			MACRO_ROW_PET_HUNGER,
+			facts(),
+			0,
+			pet( { present: true, hp: 100, maxHp: 100, satiety: 5001 } )
+		),
+		false
+	);
+	assert.equal(
+		loop.macroPotionWants(
+			potion,
+			MACRO_ROW_PET_CURE,
+			facts(),
+			0,
+			pet( { present: true, hp: 100, maxHp: 100, abnormal: 1 } )
+		),
+		true
+	);
+	assert.equal(
+		loop.macroPotionWants( potion, MACRO_ROW_PET_HP, facts(), 0, pet() ),
+		false,
+		"no companion out"
+	);
+});
+
+test("pet resurrect and summon need the summoner state and no living pet (006921a0 / 00691b60)", () => {
+	const potion = row(
+		MACRO_ROW_PET_SUMMON,
+		{ item: 9, a: 1, b: 0 },
+		row( MACRO_ROW_PET_RESURRECT, { item: 8, a: 1, b: 0 } )
+	);
+	assert.equal(
+		loop.macroPotionWants(
+			potion,
+			MACRO_ROW_PET_RESURRECT,
+			facts(),
+			0,
+			pet( { summonState: loop.PET_SUMMON_STATE_DEAD } )
+		),
+		true
+	);
+	assert.equal(
+		loop.macroPotionWants(
+			potion,
+			MACRO_ROW_PET_RESURRECT,
+			facts(),
+			0,
+			pet( { present: true, hp: 10, maxHp: 100, summonState: loop.PET_SUMMON_STATE_DEAD } )
+		),
+		false,
+		"pet already out"
+	);
+	assert.equal(
+		loop.macroPotionWants( potion, MACRO_ROW_PET_RESURRECT, facts(), 0, pet( { summonState: 1 } ) ),
+		false
+	);
+	assert.equal(
+		loop.macroPotionWants( potion, MACRO_ROW_PET_SUMMON, facts(), 0, pet( { summonState: 1 } ) ),
+		true
+	);
+	assert.equal(
+		loop.macroPotionWants( potion, MACRO_ROW_PET_SUMMON, facts(), 0, pet( { summonState: 3 } ) ),
+		true
+	);
+	assert.equal(
+		loop.macroPotionWants( potion, MACRO_ROW_PET_SUMMON, facts(), 0, pet( { summonState: 2 } ) ),
+		false
+	);
+});
+
+test("macroPetFacts prefers the selected living companion and falls back to the summoner state", () => {
+	const records = [
+		{ gid: 1, band: 3, hp: 0, dead: true, satiety: 0 },
+		{ gid: 2, band: 3, hp: 40, dead: false, satiety: 2500, inventorySlot: 14 }
+	];
+	const bag = [
+		{ slot: 14, refObjId: 9, typeFlags: PET_SUMMONER_TYPE, summon: { state: 1 } },
+		{ slot: 15, refObjId: 9, typeFlags: PET_SUMMONER_TYPE, summon: { state: 4 } }
+	];
+	const out = loop.macroPetFacts( {
+		records,
+		selectedGid: 2,
+		vitals: [ { gid: 2, hp: 40, maxHp: 100, abnormal: 2, satiety: 2500 } ],
+		bag,
+		summonRef: 9
+	} );
+	assert.equal( out.present, true );
+	assert.equal( out.hp, 40 );
+	assert.equal( out.maxHp, 100 );
+	assert.equal( out.satiety, 2500 );
+	assert.equal( out.abnormal, 2 );
+	assert.equal( out.summonState, 1, "linked inventory slot wins" );
+
+	const fromCatalog = loop.macroPetFacts( {
+		records: [ { gid: 2, band: 3, hp: 40, dead: false, maxHp: 200 } ],
+		selectedGid: 2,
+		vitals: [ { gid: 2, hp: 40 } ],
+		bag: [],
+		summonRef: 0
+	} );
+	assert.equal( fromCatalog.maxHp, 200, "COS vitals omit maxHp; the catalog stamp fills it" );
+
+	const idle = loop.macroPetFacts( {
+		records: [ { gid: 1, band: 3, hp: 0, dead: true } ],
+		selectedGid: 0,
+		vitals: [],
+		bag,
+		summonRef: 9
+	} );
+	assert.equal( idle.present, false );
+	assert.equal( idle.summonState, 1, "first bag stack of the summon ref" );
 });
