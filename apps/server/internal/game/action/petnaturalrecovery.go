@@ -115,9 +115,7 @@ func (rt *Runtime) advancePetNaturalRecoverySession(key petOwnerKey, petState *p
 		}
 		var rider *simulation.WorldState
 		if pet.Mounted && rt.Worlds != nil {
-			world := rt.Worlds.Snapshot(simulation.WorldKey(key.division, c.Name), func() simulation.WorldState {
-				return simulation.SeedWorldState(c)
-			})
+			world := rt.liveWorld(simulation.WorldKey(key.division, c.Name), c, nowMs)
 			rider = &world
 		}
 		if motion := petNaturalRecoveryMotion(petState, key.gid, rider, nowMs); motion != simulation.MotionNone &&

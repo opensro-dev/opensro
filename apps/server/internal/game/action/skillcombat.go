@@ -68,10 +68,7 @@ func (rt *Runtime) skillCastPostureBlocked(
 	if character == nil || rt.Worlds == nil {
 		return true
 	}
-	world := rt.Worlds.Snapshot(
-		simulation.WorldKey(divisionID, character.Name),
-		func() simulation.WorldState { return simulation.SeedWorldState(character) },
-	)
+	world := rt.liveWorld(simulation.WorldKey(divisionID, character.Name), character, nowMs)
 	// A knocked-down player's commands wait out its hold (motion 8).
 	return world.Sitting || nowMs < world.PostureTransitionUntilMs || rt.playerCastBlocked(divisionID, character.Name) ||
 		rt.PlayerKnockedDown(divisionID, character.Name, nowMs)
