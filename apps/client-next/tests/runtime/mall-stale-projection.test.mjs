@@ -40,6 +40,7 @@ function catalogue() {
 	return {
 		version: 1,
 		silk: 300,
+		earnedSilk: 0,
 		giftSilk: 0,
 		points: 10,
 		tabs: [ { shop: 2, tab: 0, category: "MALL_CONSUME", label: "Consumables" } ],
@@ -74,6 +75,7 @@ function refusal() {
 	return json( {
 		version: 1,
 		silk: 0,
+		earnedSilk: 0,
 		giftSilk: 0,
 		points: 0,
 		tabs: null,

@@ -417,6 +417,28 @@ export function mallCurrencyRows(
 
 /*
 ================
+mallPurchaseTradable
+
+Whether a purchase with these totals comes out tradable (#4133): the
+shard allows it (SRO_EARNED_SILK_TRADABLE), silk is the only currency
+spent, and the earned balance alone covers it - the store draws earned
+first, so the whole purchase is earned-paid. Anything else is
+account-bound. The confirm dialogs print this before the player buys;
+the server's bound flag at delivery is the authority.
+================
+*/
+export function mallPurchaseTradable(
+	state: import("@/engine/contracts/item-mall").MallState,
+	silkTotal: number,
+	giftSilkTotal: number,
+	points: number
+): boolean {
+	return state.earnedTradable && silkTotal > 0 && giftSilkTotal === 0 && points === 0 &&
+		silkTotal <= state.earnedSilk;
+}
+
+/*
+================
 mallQuestionLayout
 
 528920 configures reservation and bulk confirmations. 52859D creates worn

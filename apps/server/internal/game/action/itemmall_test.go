@@ -51,19 +51,24 @@ func (a *mallTestAuthority) MallBalance(*domain.Character) (domain.MallBalance, 
 PurchaseMall
 ================
 */
-func (a *mallTestAuthority) PurchaseMall(c *domain.Character, cost domain.MallBalance, grant func([]domain.InventoryRow) ([]domain.InventoryRow, error)) (domain.MallBalance, error) {
+func (a *mallTestAuthority) PurchaseMall(c *domain.Character, cost domain.MallBalance, grant func(rows []domain.InventoryRow, earnedOnly bool) ([]domain.InventoryRow, error)) (domain.MallBalance, error) {
 	a.calls++
 	if cost.Silk > a.balance.Silk || cost.GiftSilk > a.balance.GiftSilk || cost.Points > a.balance.Points {
 		return a.balance, domain.MallInsufficientCurrency{}
 	}
-	rows, err := grant(c.Snapshot().MissionInventory)
+	// The fake decides earnedOnly the way the store does (earned first,
+	// silk alone): the handler's bound marking is what is under test here.
+	earnedOnly := cost.Silk > 0 && cost.GiftSilk == 0 && cost.Points == 0 && cost.Silk <= a.balance.EarnedSilk
+	rows, err := grant(c.Snapshot().MissionInventory, earnedOnly)
 	if err != nil {
 		return a.balance, err
 	}
 	if a.fail {
 		return a.balance, errors.New("durable commit failed")
 	}
-	a.balance.Silk -= cost.Silk
+	earnedTaken := min(cost.Silk, a.balance.EarnedSilk)
+	a.balance.EarnedSilk -= earnedTaken
+	a.balance.Silk -= cost.Silk - earnedTaken
 	a.balance.GiftSilk -= cost.GiftSilk
 	a.balance.Points -= cost.Points
 	c.MissionInventory = rows

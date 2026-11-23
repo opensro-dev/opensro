@@ -55,6 +55,9 @@ mallSilkHistoryEntry
 type mallSilkHistoryEntry struct {
 	At      int64  `json:"at"`
 	Charged uint32 `json:"charged"`
+	// EarnedSilk is the earned-silk part of Charged (#4133): the
+	// history keeps the split between the two balances.
+	EarnedSilk uint32 `json:"earnedSilk"`
 }
 
 /*
@@ -77,10 +80,14 @@ mallProjection
 type mallProjection struct {
 	Version int `json:"version"`
 	domain.MallBalance
-	Tabs   []commerce.MallTab     `json:"tabs"`
-	Offers []commerce.MallPackage `json:"offers"`
-	Items  []shopInventoryRow     `json:"items,omitempty"`
-	Error  string                 `json:"error,omitempty"`
+	// EarnedTradable tells the mall whether a purchase paid wholly
+	// from earned silk comes out tradable (#4133), so its confirm can
+	// say which way this buy lands before the player commits.
+	EarnedTradable bool                   `json:"earnedTradable"`
+	Tabs           []commerce.MallTab     `json:"tabs"`
+	Offers         []commerce.MallPackage `json:"offers"`
+	Items          []shopInventoryRow     `json:"items,omitempty"`
+	Error          string                 `json:"error,omitempty"`
 }
 
 /*
@@ -120,7 +127,7 @@ mallFrame
 ================
 */
 func (rt *Runtime) mallFrame(balance domain.MallBalance, items []shopInventoryRow) (wire.Frame, error) {
-	payload, err := json.Marshal(mallProjection{Version: 1, MallBalance: balance, Tabs: rt.mallCatalog.Tabs, Offers: rt.mallCatalog.Offers, Items: items})
+	payload, err := json.Marshal(mallProjection{Version: 1, MallBalance: balance, EarnedTradable: rt.MallEarnedTradable, Tabs: rt.mallCatalog.Tabs, Offers: rt.mallCatalog.Offers, Items: items})
 	return wire.Frame{Opcode: opMallCatalog, Payload: payload}, err
 }
 
@@ -184,7 +191,7 @@ func (rt *Runtime) HandleMallSilkHistory(division string, character *enterworld.
 	}
 	projection := mallSilkHistoryProjection{Version: 1, Period: request.Period, Total: total, Rows: []mallSilkHistoryEntry{}}
 	for _, row := range rows {
-		projection.Rows = append(projection.Rows, mallSilkHistoryEntry{At: row.AtMs / 1000, Charged: row.Charged})
+		projection.Rows = append(projection.Rows, mallSilkHistoryEntry{At: row.AtMs / 1000, Charged: row.Charged, EarnedSilk: row.EarnedSilk})
 	}
 	answer, err := json.Marshal(projection)
 	if err != nil {
@@ -220,11 +227,15 @@ func (rt *Runtime) HandleMallPurchase(division string, character *enterworld.Cha
 	var delivery []shopInventoryRow
 	var response []byte
 	var reference wire.Frame
-	balance, err := rt.mallAuthority.PurchaseMall(character, quote.Cost, func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) {
+	balance, err := rt.mallAuthority.PurchaseMall(character, quote.Cost, func(rows []domain.InventoryRow, earnedOnly bool) ([]domain.InventoryRow, error) {
+		// The one bound decision (#4133): earned silk alone paid and
+		// the tradable rule is on, or the items land bound through the
+		// inventory's one flag - every trade door reads it from there.
+		bound := !earnedOnly || !rt.MallEarnedTradable
 		bagEnd := inventory.BagEnd(character)
 		before := invItemsFromRowsWithin(rows, int64(bagEnd))
 		inv := inventory.New(before, bagEnd)
-		destinations, err := commerce.GrantPackage(inv, quote.Offer.Contents, quote.Quantity, uint16(bagEnd-inventory.EquipmentSlotEnd))
+		destinations, err := commerce.GrantPackage(inv, quote.Offer.Contents, quote.Quantity, uint16(bagEnd-inventory.EquipmentSlotEnd), bound)
 		if err != nil {
 			return nil, err
 		}

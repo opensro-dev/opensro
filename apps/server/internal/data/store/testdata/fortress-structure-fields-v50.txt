@@ -1,0 +1,7 @@
+eventStructId
+fortressId
+hp
+madeAtMs
+ownerGuildId
+refObjId
+state

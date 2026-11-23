@@ -4,17 +4,16 @@
 betasilk.go - beta silk credits into the account's real mall wallet
 
 The closed beta's earned silk (action/betasilk.go, port-only, not native) is
-credited into mall_accounts.silk, the same persisted wallet the Item Mall
-debits. It therefore survives restarts and deploys, and switching the beta
-off stops new credits but leaves what was earned: credited silk is real.
+credited into the wallet's earned balance (mall_earned_silk, #4133), the
+same persisted wallet the Item Mall debits - earned first. It therefore
+survives restarts and deploys, and switching the beta off stops new credits
+but leaves what was earned: credited silk is real.
 
 ===========================================================================
 */
 package store
 
 import (
-	"database/sql"
-	"errors"
 	"fmt"
 
 	"opensro.online/server/internal/domain"
@@ -56,7 +55,7 @@ ON CONFLICT(account_id) DO NOTHING`, accountID, starter)
 	// The starter silk is a charge like any other credit (silkhistory.go):
 	// it lands in the history with the wallet row that creates it.
 	atMs := s.now().UnixMilli()
-	if err := insertSilkHistoryTx(tx, accountID, atMs, silkHistoryCharge, domain.MallBalance{Silk: starter}); err != nil {
+	if _, err := insertSilkHistoryTx(tx, accountID, atMs, silkHistoryCharge, domain.MallBalance{Silk: starter}); err != nil {
 		return false, err
 	}
 	if err := addGrantDayTx(tx, atMs, accountID, domain.GrantStarterSilk, grantItemSilk, int64(starter)); err != nil {
@@ -69,9 +68,11 @@ ON CONFLICT(account_id) DO NOTHING`, accountID, starter)
 ================
 CreditBetaSilk
 
-Add amount to the account's silk while it is below bankCap, never past it.
-At or above the cap nothing changes and credited is false. One transaction,
-so a purchase can never interleave between the read and the write.
+Add amount to the account's earned silk (#4133: playtime credits are
+the earned balance) while the wallet's whole silk - earned and granted
+together - is below bankCap, never past it. At or above the cap nothing
+changes and credited is false. One transaction, so a purchase can never
+interleave between the read and the write.
 ================
 */
 func (s *Store) CreditBetaSilk(accountID string, amount, bankCap uint32) (domain.MallBalance, bool, error) {
@@ -85,29 +86,37 @@ func (s *Store) CreditBetaSilk(accountID string, amount, bankCap uint32) (domain
 		return domain.MallBalance{}, false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var balance domain.MallBalance
-	err = tx.QueryRow("SELECT silk, gift_silk, points FROM mall_accounts WHERE account_id = ?", accountID).
-		Scan(&balance.Silk, &balance.GiftSilk, &balance.Points)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	balance, err := readMallBalanceTx(tx, accountID)
+	if err != nil {
 		return domain.MallBalance{}, false, err
 	}
-	if balance.Silk >= bankCap || amount == 0 {
+	if uint64(balance.Silk)+uint64(balance.EarnedSilk) >= uint64(bankCap) || amount == 0 {
 		return balance, false, nil
 	}
-	before := balance.Silk
-	balance.Silk = uint32(min(uint64(balance.Silk)+uint64(amount), uint64(bankCap)))
+	credited := uint32(min(uint64(amount), uint64(bankCap)-uint64(balance.Silk)-uint64(balance.EarnedSilk)))
+	balance.EarnedSilk += credited
+	// The mall_accounts upsert only anchors the wallet row for an
+	// account that earned before it ever held one; its granted columns
+	// are written back unchanged.
 	_, err = tx.Exec(`INSERT INTO mall_accounts (account_id, silk, gift_silk, points) VALUES (?, ?, ?, ?)
 ON CONFLICT(account_id) DO UPDATE SET silk = excluded.silk`, accountID, balance.Silk, balance.GiftSilk, balance.Points)
 	if err != nil {
 		return domain.MallBalance{}, false, err
 	}
+	if err := setEarnedSilkTx(tx, accountID, balance.EarnedSilk); err != nil {
+		return domain.MallBalance{}, false, err
+	}
 	// Only what actually landed is a charge (silkhistory.go): the cap can
 	// trim the credit below the amount asked for.
 	atMs := s.now().UnixMilli()
-	if err := insertSilkHistoryTx(tx, accountID, atMs, silkHistoryCharge, domain.MallBalance{Silk: balance.Silk - before}); err != nil {
+	seq, err := insertSilkHistoryTx(tx, accountID, atMs, silkHistoryCharge, domain.MallBalance{Silk: credited})
+	if err != nil {
 		return domain.MallBalance{}, false, err
 	}
-	if err := addGrantDayTx(tx, atMs, accountID, domain.GrantBetaSilk, grantItemSilk, int64(balance.Silk-before)); err != nil {
+	if err := insertSilkHistoryEarnedTx(tx, seq, credited); err != nil {
+		return domain.MallBalance{}, false, err
+	}
+	if err := addGrantDayTx(tx, atMs, accountID, domain.GrantBetaSilk, grantItemSilk, int64(credited)); err != nil {
 		return domain.MallBalance{}, false, err
 	}
 	return balance, true, tx.Commit()

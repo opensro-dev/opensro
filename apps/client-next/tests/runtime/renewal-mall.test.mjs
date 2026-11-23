@@ -302,6 +302,8 @@ function state( count = 14 ) {
 		],
 		offers: offers( count ),
 		silk: 700,
+		earnedSilk: 0,
+		earnedTradable: false,
 		giftSilk: 20,
 		points: 5,
 		pending: false,
@@ -323,7 +325,7 @@ function view( mall, options = {} ) {
 	return renewalMallView( {
 		data,
 		browse,
-		balance: { silk: 700, giftSilk: 20, points: 5 },
+		balance: { silk: 700, earnedSilk: 25, giftSilk: 20, points: 5 },
 		character: { name: "Hero", level: 42 },
 		origin: [ 0, 0 ],
 		strings: {
@@ -815,6 +817,9 @@ test("the native text wins and the later strings fill the keys v1.150 lacks", ()
 	assert.ok( texts.includes( "Hero" ) );
 	assert.ok( texts.includes( "Lv. 42" ) );
 	assert.ok( texts.includes( "700" ) );
+	// Port-only (#4133): the earned balance shows beside the granted one.
+	assert.ok( texts.includes( "Earned silk" ) );
+	assert.ok( texts.includes( "25" ) );
 });
 
 test("the popup buys, tries on and reserves the card it opened on", () => {

@@ -5,8 +5,9 @@ betasilk.go - the closed beta's earned Item Mall silk (port-only, not native)
 
 Native silk is what the account's mall wallet holds. For the closed beta
 (SRO_BETA_SILK) testers EARN silk by playing: every full hour a character
-spends in the world credits the hourly rate to the account's real wallet
-(mall_accounts.silk), until the wallet holds betaSilkBankCap. A first world
+spends in the world credits the hourly rate to the account's earned
+balance (mall_earned_silk, #4133), until the wallet's whole silk -
+earned and granted together - holds betaSilkBankCap. A first world
 entry also creates the wallet with the BetaSilkStarter tunable (700 by default), once per account (the
 wallet row is the persisted marker).
 
@@ -60,6 +61,13 @@ const EnvBetaSilk = "SRO_BETA_SILK"
 // has acted within the last betaSilkActivityWindowMs. Off (or unset) is the
 // shipped rule: world-ready time accrues.
 const EnvBetaSilkActiveOnly = "SRO_BETA_SILK_ACTIVE_ONLY"
+
+// EnvEarnedSilkTradable is the mall purchase rule (port-only, not
+// native, #4133): a purchase paid wholly from earned silk delivers a
+// tradable item; anything else stays account-bound, as native. On (or
+// unset) is the shipped rule, the owner's 2026-11-23 default; off makes
+// every mall purchase bound, the native reading, whatever paid for it.
+const EnvEarnedSilkTradable = "SRO_EARNED_SILK_TRADABLE"
 
 // BetaSilkHourlyDefault is the silk one in-world hour earns.
 const BetaSilkHourlyDefault = 50
@@ -170,6 +178,36 @@ func ParseBetaSilkActiveOnly(raw string) (bool, error) {
 
 /*
 ================
+EarnedSilkTradableFromEnv
+
+Composition reads this once, beside BetaSilkFromEnv.
+================
+*/
+func EarnedSilkTradableFromEnv() (bool, error) {
+	return ParseEarnedSilkTradable(os.Getenv(EnvEarnedSilkTradable))
+}
+
+/*
+================
+ParseEarnedSilkTradable
+
+On is the shipped default (the owner's 2026-11-23 rule), so empty reads
+on; off is the native reading, every mall item bound. Anything else is
+refused at startup, as a mistyped rate is.
+================
+*/
+func ParseEarnedSilkTradable(raw string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "on", "1", "true":
+		return true, nil
+	case "off", "0", "false":
+		return false, nil
+	}
+	return false, fmt.Errorf("%s must be off or on", EnvEarnedSilkTradable)
+}
+
+/*
+================
 BetaSilkWallet
 
 The persisted wallet the credits land in (store/betasilk.go).
@@ -273,7 +311,7 @@ func (b *BetaSilk) observeBalance(account string, balance domain.MallBalance) *b
 		clock = &betaSilkClock{}
 		b.clocks[account] = clock
 	}
-	capped := balance.Silk >= betaSilkBankCap
+	capped := uint64(balance.Silk)+uint64(balance.EarnedSilk) >= betaSilkBankCap
 	if clock.capped && !capped {
 		clock.generation = 0
 	}
@@ -317,7 +355,7 @@ The real wallet still owns the atomic debit and grant. Observing the
 committed balance resumes capped earnings without polling SQL per tick.
 ================
 */
-func (b *BetaSilk) PurchaseMall(character *domain.Character, cost domain.MallBalance, grant func([]domain.InventoryRow) ([]domain.InventoryRow, error)) (domain.MallBalance, error) {
+func (b *BetaSilk) PurchaseMall(character *domain.Character, cost domain.MallBalance, grant func(rows []domain.InventoryRow, earnedOnly bool) ([]domain.InventoryRow, error)) (domain.MallBalance, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if character == nil {

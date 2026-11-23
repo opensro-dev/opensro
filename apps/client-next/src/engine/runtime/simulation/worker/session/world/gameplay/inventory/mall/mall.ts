@@ -25,20 +25,31 @@ const MAX_BALANCE = 0xffffffff;
 ================
 mallBalance
 
-Strictly decode a balance push: exactly silk, giftSilk and points.
+Strictly decode a balance push: exactly silk, earnedSilk, giftSilk and
+points (the two Silk balances of #4133).
 ================
 */
-function mallBalance( payload: Uint8Array ): { silk: number; giftSilk: number; points: number; } {
+function mallBalance(
+	payload: Uint8Array
+): { silk: number; earnedSilk: number; giftSilk: number; points: number; } {
 	const decoded: unknown = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( payload ) );
 	if ( !decoded || typeof decoded !== "object" || Array.isArray( decoded ) ) throw Error( "Invalid mall balance" );
 	const row = decoded as Record<string, unknown>;
 	const keys = Object.keys( row ).sort().join( "," );
 	const field = ( value: unknown ) =>
 		typeof value === "number" && Number.isInteger( value ) && value >= 0 && value <= MAX_BALANCE;
-	if ( keys !== "giftSilk,points,silk" || !field( row.silk ) || !field( row.giftSilk ) || !field( row.points ) ) {
+	if (
+		keys !== "earnedSilk,giftSilk,points,silk" || !field( row.silk ) || !field( row.earnedSilk ) ||
+		!field( row.giftSilk ) || !field( row.points )
+	) {
 		throw Error( "Invalid mall balance" );
 	}
-	return { silk: row.silk as number, giftSilk: row.giftSilk as number, points: row.points as number };
+	return {
+		silk: row.silk as number,
+		earnedSilk: row.earnedSilk as number,
+		giftSilk: row.giftSilk as number,
+		points: row.points as number
+	};
 }
 
 // The Buying list's periods, the native combo's order: 1 day, 7 days,
@@ -72,10 +83,13 @@ function decodeSilkHistory( payload: Uint8Array ): MallSilkHistoryState {
 	const rows = row.rows.map( entry => {
 		if ( !entry || typeof entry !== "object" || Array.isArray( entry ) ) throw Error( "Invalid silk history" );
 		const use = entry as Record<string, unknown>;
-		if ( Object.keys( use ).sort().join( "," ) !== "at,charged" || !uint( use.at ) || !uint( use.charged ) ) {
+		if (
+			Object.keys( use ).sort().join( "," ) !== "at,charged,earnedSilk" || !uint( use.at ) ||
+			!uint( use.charged ) || !uint( use.earnedSilk )
+		) {
 			throw Error( "Invalid silk history" );
 		}
-		return { at: use.at as number, charged: use.charged as number };
+		return { at: use.at as number, charged: use.charged as number, earnedSilk: use.earnedSilk as number };
 	} );
 	return { period: row.period as number, total: row.total as number, rows, pending: false };
 }
@@ -134,7 +148,8 @@ export function createMall() {
 			if (
 				!offer || next.quantity > offer.purchaseLimit || next.points > state.points ||
 				next.points > offer.silk * next.quantity || next.points !== 0 && !offer.allowsPoints ||
-				offer.silk * next.quantity - next.points > state.silk || offer.giftSilk * next.quantity > state.giftSilk
+				offer.silk * next.quantity - next.points > state.silk + state.earnedSilk ||
+				offer.giftSilk * next.quantity > state.giftSilk
 			) throw Error( "Mall purchase exceeds current authority" );
 			request = { ...next };
 			deadline = now + REQUEST_TIMEOUT_MS;

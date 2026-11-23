@@ -202,6 +202,7 @@ import {
 	mallPageNumberPresentation,
 	pageManagerLayout,
 	mallCurrencyRows,
+	mallPurchaseTradable,
 	mallQuestionLayout,
 	mallSilkPeriodTexts,
 	mallSilkHistoryDate,
@@ -28143,9 +28144,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					authoredChrome( { ...frame, type: "CIFFrame", rect: full, text: "" }, 0, 0 );
 					mallText( hudCopy( frame.text ), [ margin, 12, contentWidth - 72, 22 ] );
 					mallText(
-						`Silk ${game.itemMall?.silk ?? 0}   Gift ${game.itemMall?.giftSilk ?? 0}   Points ${
-							game.itemMall?.points ?? 0
-						}`,
+						`Silk ${game.itemMall?.silk ?? 0}   Earned ${game.itemMall?.earnedSilk ?? 0}   Gift ${
+							game.itemMall?.giftSilk ?? 0
+						}   Points ${game.itemMall?.points ?? 0}`,
 						[ margin, 52, Math.max( 1, contentWidth - 64 ), 28 ]
 					);
 					if ( state.pointDialog || state.selected || state.question ) {
@@ -28221,6 +28222,19 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									busy
 								);
 							}
+							// Port-only (#4133): the confirm states the outcome
+							// before the player buys.
+							mallText(
+								mallPurchaseTradable(
+										game.itemMall,
+										offer.silk * state.quantity,
+										offer.giftSilk * state.quantity,
+										state.points
+									) ?
+									"Paid with earned Silk: this item will be tradable" :
+									"This item will be account-bound",
+								[ dx, h - touch - margin - 40, dw, 32 ]
+							);
 							mallButton( "item-mall-purchase", hudCopy( "UIIT_STT_BUY" ), [
 								dx,
 								h - touch - margin,
@@ -28256,6 +28270,20 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										busy
 									);
 								}
+							}
+							if ( (question.kind === "basket" || question.kind === "worn") && game.itemMall ) {
+								// Port-only (#4133): as the single purchase above.
+								mallText(
+									mallPurchaseTradable(
+											game.itemMall,
+											question.offers.reduce( ( sum, offer ) => sum + offer.silk, 0 ),
+											question.offers.reduce( ( sum, offer ) => sum + offer.giftSilk, 0 ),
+											state.points
+										) ?
+										"Paid with earned Silk: these items will be tradable" :
+										"These items will be account-bound",
+									[ dx, h - touch - margin - 40, dw, 32 ]
+								);
 							}
 							mallButton( "item-mall-question-confirm", hudCopy( quote.confirm ), [
 								dx,
@@ -28770,6 +28798,24 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								String( value ?? "" )
 							);
 						}
+						// Port-only (#4133): the earned Silk balance rides the
+						// Point row's place (22 caption, 18 value), which this
+						// client never draws (6BDA60 above); no native string
+						// names earned silk, so the caption is the port's own.
+						if ( game.itemMall ) {
+							authoredText(
+								mallControl( info, 22 ),
+								ox + infoOrigin[0],
+								oy + infoOrigin[1],
+								"Earned silk"
+							);
+							authoredText(
+								mallControl( info, 18 ),
+								ox + infoOrigin[0],
+								oy + infoOrigin[1],
+								String( game.itemMall.earnedSilk )
+							);
+						}
 						const trunkOrigin = mallControl( root, 102 ).rect;
 						const tx = ox + trunkOrigin[0], ty = oy + trunkOrigin[1];
 						nativePage( data.windows.ifitemmalltrunk!, tx, ty );
@@ -28917,10 +28963,20 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 											hAlign: 1,
 											vAlign: 1
 										} ),
-										...text.quads( String( row.charged ), [ sx + 74, y, 146, 24 ], full, white, {
-											hAlign: 1,
-											vAlign: 1
-										} ),
+										...text.quads(
+											// Port-only (#4133): the earned part of the
+											// charge rides its cell.
+											row.earnedSilk > 0 ?
+												`${row.charged} (${row.earnedSilk} earned)` :
+												String( row.charged ),
+											[ sx + 74, y, 146, 24 ],
+											full,
+											white,
+											{
+												hAlign: 1,
+												vAlign: 1
+											}
+										),
 										...text.quads(
 											mallSilkHistoryDate( row.at ),
 											[ sx + 220, y, 154, 24 ],
@@ -29169,6 +29225,21 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							authoredText( mallControl( row, 3 ), mx, cy, String( currency.amount ) );
 							authoredText( mallControl( row, 4 ), mx, cy, hudCopy( currency.label ) );
 						}
+						// Port-only (#4133): the confirm states the outcome
+						// before the player buys; no native string names it.
+						authoredText(
+							{ ...mallControl( page, 40 ), rect: [ 20, height - 62, dialogWidth - 40, 14 ] },
+							mx,
+							my,
+							mallPurchaseTradable(
+									game.itemMall,
+									state.selected.silk * state.quantity,
+									state.selected.giftSilk * state.quantity,
+									state.points
+								) ?
+								"Paid with earned Silk: this item will be tradable" :
+								"This item will be account-bound"
+						);
 						controls.push( {
 							id: "item-mall-quantity",
 							label: hudCopy( "UIIT_STT_AMOUNT" ),
@@ -29346,6 +29417,22 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									!!game.inventoryPending
 								);
 							}
+						}
+						if ( question.kind === "basket" || question.kind === "worn" ) {
+							// Port-only (#4133): as the single purchase above.
+							authoredText(
+								{ ...template, rect: [ 16, layout.buttonY - 20, layout.width - 32, 14 ] },
+								mx,
+								my,
+								mallPurchaseTradable(
+										game.itemMall,
+										question.offers.reduce( ( sum, offer ) => sum + offer.silk, 0 ),
+										question.offers.reduce( ( sum, offer ) => sum + offer.giftSilk, 0 ),
+										state.points
+									) ?
+									"Paid with earned Silk: these items will be tradable" :
+									"These items will be account-bound"
+							);
 						}
 						authoredLabeledButton(
 							{ ...mallControl( store, 215 ), rect: [ layout.buttonX, layout.buttonY, 76, 22 ] },

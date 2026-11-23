@@ -159,6 +159,7 @@ var tableOnlySchemaSteps = map[int]string{
 	39: "layout 12 adds silk_history (silkhistory.go)",
 	45: "layout 13 adds trade_history (trade_history.go)",
 	47: "layout 14 adds caravan_agent_memories and caravan_route_heat (caravan_agents.go)",
+	50: "layout 15 adds mall_earned_silk and silk_history_earned (db.go)",
 }
 
 /*
