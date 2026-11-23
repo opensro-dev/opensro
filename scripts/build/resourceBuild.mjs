@@ -85,6 +85,7 @@ import {
 	importLaterMacroGuideStep,
 	importLaterCentreBannerStep,
 	importLaterWorldMapButtonsStep,
+	importLaterResLayoutsStep,
 	importLaterWorldMapGuideStep
 } from "./laterClientImports.mjs";
 
@@ -102,6 +103,8 @@ export {
 	laterTombMinimapPublicPaths,
 	laterWorldMapButtonsImportPlan,
 	laterWorldMapButtonPublicPaths,
+	laterResLayoutsImportPlan,
+	laterResLayoutPublicPaths,
 	laterWorldMapGuideImportPlan,
 	laterWorldMapGuidePublicPaths
 } from "./laterClientImports.mjs";
@@ -226,6 +229,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	buildHdTexturePacks: buildHdTexturePacksStep,
 	importLaterDungeonMaps: importLaterDungeonMapsStep,
 	importLaterWorldMapButtons: importLaterWorldMapButtonsStep,
+	importLaterResLayouts: importLaterResLayoutsStep,
 	importLaterWorldMapGuide: importLaterWorldMapGuideStep,
 	importLaterMacroGuide: importLaterMacroGuideStep,
 	importLaterCentreBanner: importLaterCentreBannerStep,
@@ -620,6 +624,8 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// The dungeon pages' own buttons ride the same archive and rule
 	// (issue #3210): the step claims them before the pack tail.
 	const laterWorldMapButtons = await timed( "laterWorldMapButtons", () => steps.importLaterWorldMapButtons() );
+	// The quest windows' layouts and art (#4245), same archive and rule.
+	const laterResLayouts = await timed( "laterResLayouts", () => steps.importLaterResLayouts() );
 	// The M map guide's tables and art (#3387) come from the v1.696
 	// archive under the same rule, claimed before the pack tail.
 	const laterWorldMapGuide = await timed( "laterWorldMapGuide", () => steps.importLaterWorldMapGuide() );
@@ -710,6 +716,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		hdTexturePacks,
 		laterDungeonMaps,
 		laterWorldMapButtons,
+		laterResLayouts,
 		laterWorldMapGuide,
 		laterMacroGuide,
 		laterCentreBanner,

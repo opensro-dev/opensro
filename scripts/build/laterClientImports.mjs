@@ -250,13 +250,98 @@ export async function importLaterWorldMapButtonsStep( stamped = stampedVsroRoot(
 	const output = result.stdout.trim();
 	if ( output ) console.log( output );
 	const paths = laterWorldMapButtonPublicPaths();
-	for ( const publicPath of paths ) {
-		const there = await stat( path.join( publicRoot, publicPath ) )
-			.then( ( entry ) => entry.isFile(), () => false );
-		if ( !there ) throw Error( `The world map button import published no ${publicPath}` );
-	}
+	await assertPublishedFiles( publicRoot, paths, "world map button" );
 	claimPublicPaths( paths );
 	return { buttons: paths.length };
+}
+
+/*
+================
+assertPublishedFiles
+
+Every public path an import step is about to claim must be a file under
+root: a step never claims what its importer did not write. label names
+the import in the refusal.
+================
+*/
+export async function assertPublishedFiles( root, publicPaths, label ) {
+	for ( const publicPath of publicPaths ) {
+		const there = await stat( path.join( root, publicPath ) )
+			.then( ( entry ) => entry.isFile(), () => false );
+		if ( !there ) throw Error( `The ${label} import published no ${publicPath}` );
+	}
+}
+
+// The later client's quest windows (#4245): res_ui/questlist.2dt and
+// res_ui/questminilist.2dt as JSON layouts, with the art they name.
+const LATER_RES_LAYOUT_INDEX = "/assets/data/res-ui/index.json";
+
+/*
+================
+laterResLayoutsImportPlan
+
+What the quest layout step does with one environment: the same contract
+as the world map buttons, because one pinned archive carries both.
+================
+*/
+export function laterResLayoutsImportPlan( env = process.env, archiveThere = false, stamped = stampedVsroRoot() ) {
+	return vsroImportPlan(
+		{
+			label: "Later quest window layouts",
+			without: "the quest list keeps the v1.150 page",
+			script: "scripts/import_vsro_res_layouts.py"
+		},
+		env,
+		archiveThere,
+		stamped
+	);
+}
+
+/*
+================
+laterResLayoutPublicPaths
+
+The public paths one layout import owns, read from the index it writes:
+the importer decides which art the layouts name, so the claim follows
+its record instead of a second list here.
+================
+*/
+export function laterResLayoutPublicPaths( index ) {
+	if ( !index || !Array.isArray( index.published ) || !Array.isArray( index.layouts ) ) {
+		throw Error( "The quest layout import wrote no usable index" );
+	}
+	return [ LATER_RES_LAYOUT_INDEX, ...index.published ];
+}
+
+/*
+================
+importLaterResLayoutsStep
+
+Runs the importer against the pinned archive, checks every file its index
+names is there, and claims them; skipped with one line without the archive.
+================
+*/
+export async function importLaterResLayoutsStep( stamped = stampedVsroRoot() ) {
+	const plan = await vsroStepPlan( laterResLayoutsImportPlan, stamped );
+	if ( !plan.run ) {
+		console.log( plan.line );
+		return { skipped: true };
+	}
+	const result = await runPython( plan.args, {
+		task: "[quest-layouts] later-client res_ui layout import",
+		cwd: rebuildRoot,
+		context: [
+			"The quest list and the mini quest tracker are the later client's res_ui windows (#4245); " +
+			"the build imports their layouts and art from the pinned VSRO archive (SRO_VSRO_ROOT)."
+		]
+	} );
+	const output = result.stdout.trim();
+	if ( output ) console.log( output );
+	const index = JSON.parse( await readFile( path.join( publicRoot, LATER_RES_LAYOUT_INDEX ), "utf8" ) );
+	const paths = laterResLayoutPublicPaths( index );
+	await assertPublishedFiles( publicRoot, paths, "quest layout" );
+	claimPublicPaths( paths );
+	return { layouts: index.layouts.length, files: paths.length };
 }
 
 // The renewal M map's guide (issue #3387): its tables, the hunting
