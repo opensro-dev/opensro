@@ -43,7 +43,7 @@ real function instead (bug-report-actors.test.mjs).
 ================
 */
 const plainExports = {
-	"bug-report": [ "diagnosticActors" ]
+	"bug-report": [ "diagnosticActors", "diagnosticCompanions" ]
 };
 const compiled = await build( {
 	entryPoints: [ "src/engine/runtime/runtime.ts" ],

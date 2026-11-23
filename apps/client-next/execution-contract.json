@@ -2255,6 +2255,20 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/bug-report/bug-report.ts",
+			"provider": "src/engine/runtime/bug-report/diagnostic-state.ts",
+			"functions": [
+				"diagnosticCompanions"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/runtime.ts",
+			"provider": "src/engine/runtime/bug-report/diagnostic-state.ts",
+			"functions": [
+				"diagnosticActors"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/bug-report/recorder.ts",
 			"provider": "src/engine/runtime/runtime.ts",
 			"functions": [

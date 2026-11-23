@@ -12,6 +12,7 @@ package action
 
 import (
 	"encoding/json"
+	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -248,6 +249,7 @@ func (rt *Runtime) hubHandlerPrepared(hub *transport.Hub, op opFunc, prepare opP
 			result = op(divisionID, character, payload)
 		}
 		if result.DiagnosticRefusal != "" {
+			rt.countDiagnosticRefusal(result.DiagnosticRefusal)
 			log.Debugf(
 				"action: 0x%04X refused for %s: %s",
 				opcode, character.Name, result.DiagnosticRefusal,
@@ -269,6 +271,42 @@ func (rt *Runtime) hubHandlerPrepared(hub *transport.Hub, op opFunc, prepare opP
 			}
 		}
 	}
+}
+
+/*
+================
+countDiagnosticRefusal
+
+Counts one DiagnosticRefusal reason for /transport/metrics (#4222). The
+live server used to drop these: a refused pet order left no 0xB69E and
+no log line, so the next report could not name its cause. Reasons must
+stay fixed literals (no Sprintf or per-request interpolation): the map
+never forgets a key, so a growing vocabulary would grow forever.
+================
+*/
+func (rt *Runtime) countDiagnosticRefusal(reason string) {
+	if reason == "" {
+		return
+	}
+	entry, _ := rt.diagnosticRefusalTotals.LoadOrStore(reason, &atomic.Uint64{})
+	entry.(*atomic.Uint64).Add(1)
+}
+
+/*
+================
+DiagnosticRefusalCounters
+
+The metrics' diagnostic_refusals block: each DiagnosticRefusal reason
+seen since start, counted once per refused request.
+================
+*/
+func (rt *Runtime) DiagnosticRefusalCounters() map[string]uint64 {
+	out := make(map[string]uint64)
+	rt.diagnosticRefusalTotals.Range(func(key, value any) bool {
+		out[key.(string)] = value.(*atomic.Uint64).Load()
+		return true
+	})
+	return out
 }
 
 /*
