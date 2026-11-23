@@ -239,12 +239,24 @@ class TestSpelling(unittest.TestCase):
 		self.assertEqual(fallback, "sub_401100(int32_t arg_4h)")
 
 	def test_normalize_line(self):
-		data = {0xF5B3D8: "data_f5b3d8"}
-		self.assertEqual(rz.normalize_line("call fcn.00401100", data),
+		tokens = ({}, {0xF5B3D8: "data_f5b3d8"})
+		self.assertEqual(rz.normalize_line("call fcn.00401100", tokens),
 		                 "call sub_401100")
-		self.assertEqual(rz.normalize_line("mov dword [0xf5b3d8], eax", data),
+		self.assertEqual(rz.normalize_line("mov dword [0xf5b3d8], eax", tokens),
 		                 "mov dword [data_f5b3d8], eax")
-		self.assertEqual(rz.normalize_line("cmp eax, 0x80", data), "cmp eax, 0x80")
+		self.assertEqual(rz.normalize_line("cmp eax, 0x80", tokens), "cmp eax, 0x80")
+
+	def test_normalize_line_names_an_indexed_call_target(self):
+		# rizin prints its own flag; the index holds the seed's name for it.
+		tokens = ({0x964B60: "Seed_NamedHelper"}, {})
+		self.assertEqual(rz.normalize_line("call fcn.00964b60", tokens),
+		                 "call Seed_NamedHelper")
+		# A seeded project's flag already reads `sub_`; it is named too, and
+		# an unindexed or suffixed token keeps its spelling.
+		self.assertEqual(rz.normalize_line("call sub_964b60", tokens),
+		                 "call Seed_NamedHelper")
+		self.assertEqual(rz.normalize_line("call sub_401000", tokens), "call sub_401000")
+		self.assertEqual(rz.normalize_line("call sub_401000_1", tokens), "call sub_401000_1")
 
 
 @unittest.skipIf(_MISSING, _MISSING)

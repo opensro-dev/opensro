@@ -300,6 +300,10 @@ def locate_claim(con, target):
 	return None
 
 
+# The anonymous spellings of a function token, ahead of its address.
+ANONYMOUS_FUNC_TOKEN_RE = re.compile(r"^(?:sub_|fcn\.)(?=[0-9a-fA-F]+$)")
+
+
 def norm_addr(s):
 	"""Normalise an address-ish string to 8-hex lowercase, or None."""
 	s = s.strip().lower()
@@ -636,8 +640,10 @@ def resolve_func(con, ident):
 			"FROM functions WHERE name=?", (g[0],)).fetchone()
 		if row:
 			return row
-	# by address
-	a = norm_addr(ident)
+	# by address; an anonymous token (`sub_964b60`, rizin's `fcn.00964b60`)
+	# that no name matched is its address: the seed may have named the
+	# function since the disassembly that printed the token
+	a = norm_addr(ANONYMOUS_FUNC_TOKEN_RE.sub("", ident))
 	if a:
 		row = con.execute(
 			"SELECT addr,name,signature,start_byte,end_byte,start_line,end_line "
