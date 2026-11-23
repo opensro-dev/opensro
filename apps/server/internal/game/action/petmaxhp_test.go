@@ -409,3 +409,32 @@ func TestWearPetGearSwapClampsHP(t *testing.T) {
 		t.Fatal("swap published no HP refresh at the clamped value")
 	}
 }
+
+/*
+================
+TestFullD10GearKeepsTheLastHPPoint
+
+A full degree-10 set authors 1000/3 % per piece, so the pieces sum to
+999.999...% rather than 1000%. The geared max is rounded, so the wolf's
+bare 1000 HP becomes exactly 11000; truncation lost the last point.
+================
+*/
+func TestFullD10GearKeepsTheLastHPPoint(t *testing.T) {
+	rt, _, pet := petMaxRuntime(t, true)
+	// Degree 10 is worn from its own minimum pet level.
+	pet.Level = companion.D.Gear[9].MinPetLevel
+	pet.Training.Gear = [3]domain.PetGear{}
+	for i, gear := range companion.D.Gear[9].Items {
+		pet.Training.Gear[i] = domain.PetGear{RefObjID: gear.ID}
+	}
+	if sum := companion.ModifiersFor(pet).GearStats.MaxHPPercent; sum >= 1000 || sum < 999.99 {
+		t.Fatalf("full D10 maximum-HP bonus = %v, want just under 1000%% (the authored thirds)", sum)
+	}
+	ref, ok := rt.cosReference(pet)
+	if !ok {
+		t.Fatal("wolf reference did not resolve")
+	}
+	if ref.MaxHP != 11000 {
+		t.Fatalf("full D10 geared max = %d, want 11000", ref.MaxHP)
+	}
+}
