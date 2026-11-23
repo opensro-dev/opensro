@@ -237,6 +237,19 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	ticker.BeforeHooks = []simulation.NamedTickHook{{Name: "monster-actions", Hook: game.items.MonsterActionTickHook()}}
 	// A peer's spawn row is preceded by the item references it names (#340).
 	ticker.ItemReferences = peerReferences.Frames
+	// A GM-invisible character spawns for its current party only (#4122):
+	// the division's parties as member-gid groups for the peer leg.
+	ticker.Parties = func(division string) []simulation.PeerParty {
+		var out []simulation.PeerParty
+		for _, p := range game.parties.Registry().RewardSnapshots(division) {
+			row := simulation.PeerParty{Order: p.ObjectOrder}
+			for _, m := range p.Members {
+				row.Members = append(row.Members, m.MemberID)
+			}
+			out = append(out, row)
+		}
+		return out
+	}
 	// A deadlocked tick dumps its stacks and exits for the supervisor to
 	// restart (tick_watchdog.go); the dumps sit beside the authority store.
 	ticker.StallExit = simulation.TickStallExitFromEnv()
