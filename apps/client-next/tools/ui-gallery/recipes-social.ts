@@ -16,6 +16,7 @@ academy
 */
 async function academy( context: RecipeContext, master: boolean ) {
 	context.state.gameplay.academy = {
+		own: null,
 		member: true,
 		localMemberId: master ? 7 : 8,
 		members: [ {
