@@ -491,7 +491,8 @@ test("Iron Hide tooltips and shieldGauge scale health + shield like League of Le
 	assert.doesNotMatch( t1, /party members/ );
 	assert.match( t2, /Also shields party members within 20 m\./ );
 	assert.doesNotMatch( t2, /explodes/ );
-	assert.match( t3, /explodes within 8 m for 40% of its remaining value/ );
+	assert.match( t3, /explodes within 8 m for 8% of its remaining value/ );
+	assert.match( t3, /Up to 5 monsters per cast\./ );
 	assert.equal( defined( petSkillDesign( 19 ) ).value, 20 );
 	assert.equal( defined( petSkillDesign( 20 ) ).value, 35 );
 	assert.equal( defined( petSkillDesign( 21 ) ).value, 63.5 ); // book III's single rank = former rank 10
