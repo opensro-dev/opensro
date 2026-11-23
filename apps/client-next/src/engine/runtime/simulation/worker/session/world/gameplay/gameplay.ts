@@ -408,6 +408,7 @@ import { createTradeProgress } from "./trade-progress/trade-progress";
 import { createServerEvent } from "./server-event/server-event";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createJobHonor } from "./job-honor/job-honor";
+import { createJobHonorTiers } from "./job-honor/job-honor-tiers";
 import { createUniqueStatus } from "./unique-status/unique-status";
 import { createHwanLevel } from "./hwan-level/hwan-level";
 import { createMostWanted } from "./most-wanted/most-wanted";
@@ -786,6 +787,7 @@ export function createGameplay(
 		serverEvent = createServerEvent(),
 		uniqueRank = createUniqueDamageRank(),
 		jobHonor = createJobHonor(),
+		jobHonorTiers = createJobHonorTiers(),
 		uniqueStatus = createUniqueStatus(),
 		mostWanted = createMostWanted(),
 		hwanLevel = createHwanLevel(),
@@ -1975,6 +1977,7 @@ clears it when another character enters.
 		macroHuntLastActionAtMs = 0;
 		uniqueRank.clear();
 		jobHonor.clear();
+		jobHonorTiers.clear();
 		uniqueStatus.clear();
 		mostWanted.clear();
 		hwanLevel.clear();
@@ -4682,6 +4685,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				// Port-only (#3530): the tier titles' roster. Contained:
+				// a malformed roster costs the roster, never the session.
+				if ( jobHonorTiers.receiveContained( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( petTraining.receive( frame, now, localGid ) ) {
 					dirty = true;
 					return true;
@@ -6605,9 +6614,14 @@ die
 		},
 		takeDisplacements: combat.takeDisplacements,
 		takeCancellations: combat.takeCancellations,
-		// The inventory and social lanes' skipped cosmetic steps, for the
-		// world's degraded reports (core takeDegradations drains both owners).
-		takeDegradations: () => [ ...inventory.takeDegradations(), ...socialDegradations.splice( 0 ) ],
+		// The inventory, social and tier-roster lanes' skipped cosmetic
+		// steps, for the world's degraded reports (core takeDegradations
+		// drains every owner).
+		takeDegradations: () => [
+			...inventory.takeDegradations(),
+			...jobHonorTiers.takeDegradations(),
+			...socialDegradations.splice( 0 )
+		],
 		/*
 ================
 cancelCast
@@ -6804,6 +6818,9 @@ The published plane when something changed since the last take, else null.
 				...(sroMacro.view() ? { sroMacro: sroMacro.view() } : {}),
 				uniqueDamageRank: uniqueRank.current(),
 				jobHonor: jobHonor.current(),
+				// Port-only (#3530): the tier titles' roster
+				// (job-honor-tiers.ts), under SRO_JOB_HONOR.
+				jobHonorTiers: jobHonorTiers.tiers(),
 				// Port-only (#3531): the Unique Status feed
 				// (unique-status.ts), under SRO_UNIQUE_STATUS.
 				uniqueStatus: uniqueStatus.current(),

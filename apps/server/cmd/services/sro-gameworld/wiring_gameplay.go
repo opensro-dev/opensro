@@ -83,8 +83,16 @@ type gameplayPlane struct {
 	// reconciled against (wiring_jobhonor.go's honorBuffTick; only
 	// used while honorFeed is built).
 	honorBuffSeen map[string]honorBuffKey
-	movement      *movement.Runtime
-	water         *movement.WaterValidator
+	// jobHonorTierBytes is the last tier roster pushed,
+	// jobHonorTierReached the sessions those bytes have reached, and
+	// jobHonorTierNext the tick time it is next rebuilt (wiring_
+	// jobhonor.go's jobHonorTierTick; only used while honorFeed is
+	// built).
+	jobHonorTierBytes   []byte
+	jobHonorTierReached map[string]bool
+	jobHonorTierNext    int64
+	movement            *movement.Runtime
+	water               *movement.WaterValidator
 	// planes owns every AI route, monster and pet alike: the outdoor
 	// detour in the field, the cave's region route on a dungeon floor.
 	planes   simulation.Planes

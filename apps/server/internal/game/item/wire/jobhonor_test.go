@@ -144,3 +144,35 @@ func TestJobHonorSnapshotCapsRowsAndAliases(t *testing.T) {
 		t.Fatalf("%d undecoded bytes left", len(r.buf))
 	}
 }
+
+func TestJobHonorTierRosterSortsAndBounds(t *testing.T) {
+	body := EncodeJobHonorTierRoster([]JobHonorTierEntry{
+		{Name: "Zed", Tier: 3},
+		{Name: "Ann", Tier: 1},
+		{Name: strings.Repeat("n", 70), Tier: 2},
+	})
+	r := &snapshotReader{buf: body}
+	if got := r.u16(); got != 3 {
+		t.Fatalf("count = %d, want 3", got)
+	}
+	seen := []string{}
+	for i := 0; i < 3; i++ {
+		n := r.u16()
+		name := string(r.buf[:n])
+		r.buf = r.buf[n:]
+		seen = append(seen, name)
+		r.u8()
+	}
+	if seen[0] != "Ann" || seen[1] != "Zed" {
+		t.Fatalf("names out of sorted order: %v", seen)
+	}
+	if len(seen[2]) != jobHonorMaxAlias {
+		t.Fatalf("a long name kept %d bytes, want the %d bound", len(seen[2]), jobHonorMaxAlias)
+	}
+	if len(r.buf) != 0 {
+		t.Fatalf("%d undecoded bytes left", len(r.buf))
+	}
+	if got := (&snapshotReader{buf: EncodeJobHonorTierRoster(nil)}).u16(); got != 0 {
+		t.Fatalf("empty roster count = %d, want 0", got)
+	}
+}

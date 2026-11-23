@@ -16,6 +16,16 @@ The rows are the public board's (platform/jobhonor's BoardRows over
 the ledger's standings): the job alias, never the character name, and
 no respawn or timing secret - honor has none to keep.
 
+The tier roster (0x3FC7, the next free opcode in the band, searched
+the same way) names who wears a tier's coloured title: the division's
+entered characters holding a tier for the job they are dressed as,
+rebuilt on a sweep and pushed to the division when the bytes change.
+Body, little-endian: u16 count, then count x { u16 name length, name
+bytes, u8 tier } (platform/jobhonor's tiers: 1 Silver, 2 Gold,
+3 King), names in sorted order so the bytes are stable. The name is a
+character name here, not an alias: a nameplate matches its own name,
+as the contributor roster (0x3FC1) does.
+
 Body, little-endian:
 
 	u64 serverNowMs, u64 nextChangeMs, u64 previousPeriodEndMs (0 = none)
@@ -34,10 +44,20 @@ Body, little-endian:
 
 package wire
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"sort"
+)
 
 // OpJobHonorSnapshot is the port-only S->C job honor board and standing.
 const OpJobHonorSnapshot uint16 = 0x3FC6
+
+// OpJobHonorTierRoster is the port-only S->C job honor tier roster.
+const OpJobHonorTierRoster uint16 = 0x3FC7
+
+// JobHonorTierMax bounds one tier roster frame, the contributor
+// roster's own cap (0x3FC1).
+const JobHonorTierMax = 1024
 
 // JobHonorMaxRows bounds one period's rows in a snapshot.
 const JobHonorMaxRows = 256
@@ -137,6 +157,45 @@ func EncodeJobHonorSnapshot(serverNowMs, nextChangeMs, previousEndMs int64,
 	}
 	for _, points := range own.Month {
 		out = binary.LittleEndian.AppendUint32(out, uint32(max(0, points)))
+	}
+	return out
+}
+
+/*
+================
+JobHonorTierEntry
+
+One rostered coloured title: the character's stored name and the tier
+it holds for the job it is dressed as.
+================
+*/
+type JobHonorTierEntry struct {
+	Name string
+	Tier int
+}
+
+/*
+================
+EncodeJobHonorTierRoster
+
+The roster body: the entries sorted by name (stable bytes, the tick's
+change test), at most JobHonorTierMax of them.
+================
+*/
+func EncodeJobHonorTierRoster(entries []JobHonorTierEntry) []byte {
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	if len(entries) > JobHonorTierMax {
+		entries = entries[:JobHonorTierMax]
+	}
+	out := binary.LittleEndian.AppendUint16(nil, uint16(len(entries)))
+	for _, entry := range entries {
+		name := entry.Name
+		if len(name) > jobHonorMaxAlias {
+			name = name[:jobHonorMaxAlias]
+		}
+		out = binary.LittleEndian.AppendUint16(out, uint16(len(name)))
+		out = append(out, name...)
+		out = append(out, uint8(entry.Tier))
 	}
 	return out
 }
