@@ -41,7 +41,11 @@ import {
 import { createCharacterHierarchy } from "@/engine/foundation/animation/character-hierarchy";
 import { attachedOpacity } from "@/engine/foundation/animation/character-fade";
 import { characterBindBounds, characterPickVolume } from "@/engine/foundation/animation/character-pick-volume";
-import { selectPickCandidate, type PickCandidate } from "@/engine/foundation/animation/character-pick";
+import {
+	dropOccludedCandidates,
+	selectPickCandidate,
+	type PickCandidate
+} from "@/engine/foundation/animation/character-pick";
 import { pickVolume, pickVolumeDepth } from "@/engine/foundation/rendering/pick-volume";
 import {
 	createRibbonChain,
@@ -3282,7 +3286,13 @@ the next full prepare pass, so this may run between frames.
 		Resolve world selection against visible actor volumes in ray order.
 		================
 		*/
-		pick( rays: readonly PickRay[], excluded: number, blindHeld = false, filtered = false ) {
+		pick(
+			rays: readonly PickRay[],
+			excluded: number,
+			blindHeld = false,
+			filtered = false,
+			visible?: ( ray: number, depth: number ) => boolean
+		) {
 			const current = snapshots.index, ride = current.get( excluded )?.mountedOn;
 			// Native 856540 uses the aggregate transformed box, independent of
 			// texture alpha and animated limb triangles. Preserve actor order.
@@ -3321,7 +3331,11 @@ the next full prepare pass, so this may run between frames.
 			// here used to hand such clicks to the farther confirmed body -
 			// the transport - and is removed for the native rule (thread
 			// 1562057167144493107 item 7).
-			const result = selectPickCandidate( candidates );
+			// #4125 (owner ruling 2026-11-23): when the caller supplies the
+			// scenery test, a candidate every hit ray loses to scenery is
+			// dropped first (dropOccludedCandidates); the nearest-box rule
+			// above then runs unchanged over what the player can see.
+			const result = selectPickCandidate( visible ? dropOccludedCandidates( candidates, visible ) : candidates );
 			if ( !result ) return null;
 			// 692680: a mounted winner answers with its rider, as does a linked ride.
 			const rider = actors.find( actor => actor.mountedOn === result!.gid ),
