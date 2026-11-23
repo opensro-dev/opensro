@@ -55,6 +55,10 @@ import import_vsro_alexandria as tables
 from pin_file import read_pin_field
 import published_ids
 import sro_pk2
+from mall_tables import (  # noqa: F401  (re-exported: the tests and callers read them here)
+	MALL_PRICE_AMOUNT, MALL_SLOTS, MALL_TABLES, NATIVE_SOURCE, PACKAGE_FLAG_COLUMN, SERVICE_ON, SILK_CURRENCY,
+	LaterPackage, copy_later_package, in_packages, strip_mall, without_packages,
+)
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import EXTRACTED_ROOT, REPO_ROOT, trees_overlap
 
@@ -90,7 +94,6 @@ TEXT_ROOT = shared.TEXT_ROOT
 CODE_PREFIX = "ITEM_MALL_AVATAR_"
 EXCLUDED_WORDS = ("_TEST",)
 AVATAR_TYPES = ["3", "1", "13"]
-SERVICE_ON = "1"
 FRESH_ID_BASE = 50000
 HAT_SUFFIX = "_HAT"
 # Rows whose model the v1.150 item-model builder refuses: their material has an
@@ -102,11 +105,6 @@ RENDER_UNSUPPORTED = {
 	"ITEM_MALL_AVATAR_M_EARTHSPIRIT_HAT": "environment-mapped material",
 	"ITEM_MALL_AVATAR_W_EARTHSPIRIT_HAT": "environment-mapped material",
 }
-# Package, scrap, price and goods tables with the column holding the package code.
-MALL_TABLES = (
-	("refpackageitem.txt", 3), ("refscrapofpackageitem.txt", 2),
-	("refpricepolicyofitem.txt", 2), ("refshopgoods.txt", 3),
-)
 # Attachments take the later clients' own attachment tab (owner 2026-11-12,
 # replacing the 2026-10-13 hat-tab rule once the hats and attachments
 # together passed a tab's 256 slots). v1.150 ships the tab's label
@@ -116,17 +114,13 @@ ATTACH_TAB = "MALL_AVATAR_ATTACH"
 SHOP_TAB_TABLE = "refshoptab.txt"
 SHOP_TAB_CODE = 3
 MALL_TAB_FOR = {"MALL_AVATAR_DRESS": "MALL_AVATAR_DRESS", "MALL_AVATAR_HAT": "MALL_AVATAR_HAT", ATTACH_TAB: ATTACH_TAB}
-NATIVE_SOURCE = "11"
 # The silk price of every listed avatar is the v1.150 mall's own tier, not the
 # later client's authored amount (owner, 2026-11-04: "same as the others"):
 # the European wedding dress sells at 130 and its hat at 30, and the native
 # Halloween attachment is priced 15 (mallextra.go carries the same figures).
-SILK_CURRENCY = "2"
 SILK_PRICE = {"dress": "130", "hat": "30", "attach": "15"}
 HAT_CODE = re.compile(r"_HAT(_|$)")
 ATTACH_CODE = re.compile(r"_ATTACH(_|$)")
-PACKAGE_FLAG_COLUMN = 4
-MALL_PRICE_AMOUNT = 5
 # Port-only, not native (owner 2026-11-12: "we need it all"): an imported
 # avatar the later client never packaged or sold is listed anyway, with
 # the rows the server's authored mall goods carry (mallextra.go
@@ -137,8 +131,6 @@ KIND_TAB = {"dress": "MALL_AVATAR_DRESS", "hat": "MALL_AVATAR_HAT", "attach": AT
 PACKAGE_PREFIX = "PACKAGE_"
 SCRAP_ZERO_COLUMNS = 16
 SCRAP_SERIAL = 28
-# A goods row's slot is one byte on the wire (mallcatalog.go MallAddress.Slot).
-MALL_SLOTS = 256
 # Port-only, not native (design comment on #3254): the archive source's
 # avatars list on two authored boards in the avatar shop's group - custom
 # sets, and event sets under their own board - one generated refshoptab
@@ -268,57 +260,12 @@ def select_avatars(native_rows, later_rows, reserved_ids=(), previous=None, miss
 
 
 # ================
-# in_packages
-#
-# Whether one mall table row belongs to these packages, by the table's
-# package-code column (MALL_TABLES).
-# ================
-def in_packages(fields, column, packages):
-	return len(fields) > column and fields[column] in packages
-
-
-# ================
-# strip_mall
-#
-# Drops the rows a previous run added to the four mall tables, by package
-# code, leaving every other line (including comments) untouched.
-# ================
-def strip_mall(output, packages):
-	if not packages:
-		return
-	for name, column in MALL_TABLES:
-		path = safe_target(output / TEXT_ROOT, name)
-		if not path.exists():
-			continue
-		lines = tables.decode_table(path.read_bytes()).splitlines()
-		kept = [line for line in lines if not in_packages(line.split("\t"), column, packages)]
-		if len(kept) != len(lines):
-			write_atomically(path, b"\xff\xfe" + ("\r\n".join(kept) + "\r\n").encode("utf-16-le"))
-
-
-# ================
 # avatar_kind
 # ================
 def avatar_kind(code):
 	if ATTACH_CODE.search(code):
 		return "attach"
 	return "hat" if HAT_CODE.search(code) else "dress"
-
-
-# ================
-# without_packages
-#
-# The mall tables without the rows of these packages, by each table's
-# package-code column. A later source's rows from a previous build are
-# read through this before an earlier source allocates past them.
-# ================
-def without_packages(current, packages):
-	if not packages:
-		return current
-	return {
-		name: [row for row in current[name] if not in_packages(row, column, packages)]
-		for name, column in MALL_TABLES
-	}
 
 
 # ================
@@ -372,18 +319,8 @@ def mall_rows(later, avatars, current, native_package_ids, list_all=False):
 		tab = MALL_TAB_FOR[sale[package][0]]
 		if int(package_row[package][2]) in native_package_ids:
 			raise ValueError(f"package identity clash: {package}")
-		package_cells = list(package_row[package])
-		package_cells[1], package_cells[PACKAGE_FLAG_COLUMN] = NATIVE_SOURCE, "0"
-		rows["refpackageitem.txt"].append(package_cells)
-		for scrap in later["refscrapofpackageitem.txt"]:
-			if scrap[0] == SERVICE_ON and len(scrap) >= 20 and scrap[2] == package:
-				rows["refscrapofpackageitem.txt"].append(scrap[:1] + [NATIVE_SOURCE] + scrap[2:])
-		for price in prices[package]:
-			converted = price[:1] + [NATIVE_SOURCE] + price[2:MALL_PRICE_AMOUNT - 1] + price[MALL_PRICE_AMOUNT:]
-			if converted[3] == SILK_CURRENCY:
-				converted[4] = SILK_PRICE[avatar_kind(code)]
-			rows["refpricepolicyofitem.txt"].append(converted)
-		rows["refshopgoods.txt"].append(["1", NATIVE_SOURCE, tab, package, str(next_slot[tab])] + ["-1", items.UNUSED] * 4)
+		copy_later_package(rows, later, LaterPackage(package_row[package], prices[package], tab, next_slot[tab],
+			SILK_PRICE[avatar_kind(code)]))
 		next_slot[tab] += 1
 		packages.append(package)
 	for tab, slots in next_slot.items():

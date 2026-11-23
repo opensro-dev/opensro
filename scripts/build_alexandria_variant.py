@@ -419,6 +419,7 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False):
 	from cap110_quest_layers import add_quest_layers
 	from alexandria_npc_services import add_services
 	from world_layer_import import add_layers
+	import later_mall_goods
 
 	runner = variant_steps.Runner(
 		variant, variant_stamp.source_roots(native, imported, vsro_root, variant, os.environ)
@@ -492,6 +493,11 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False):
 	runner.register("quest-layers", lambda: add_quest_layers(vsro_root, native, out), code_from=add_quest_layers)
 	runner.register("services", lambda: add_services(
 		vsro_root, native, out, port_stock_enabled(), got["honor-goods"]["enabled"]), code_from=add_services)
+	# The v1.696 mall goods whose items the tree now holds (later-native,
+	# no switch): after every item, pet and layer import, so it sees all
+	# of their rows. Without the v1.696 client a previous listing is removed.
+	runner.register("later-mall", lambda: later_mall_goods.add_goods(v1696, native, out),
+		code_from=later_mall_goods.add_goods, roots=(v1696,) if v1696 else ())
 	# The later client's seasonal town decoration (Halloween and the other
 	# event layers), into the object catalog and region files written above.
 	# Without the v1.696 archives a previous import is removed.
@@ -556,9 +562,10 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False):
 	got["honor-goods"] = runner.result(21)
 	got["quest-layers"] = runner.result(22)
 	got["services"] = runner.result(23)
-	got["world-layers"] = runner.result(24)
-	got["music"] = runner.result(25)
-	got["environment"] = runner.result(26)
+	got["later-mall"] = runner.result(24)
+	got["world-layers"] = runner.result(25)
+	got["music"] = runner.result(26)
+	got["environment"] = runner.result(27)
 
 	base = got["base"]
 	manifest = {
@@ -585,6 +592,7 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False):
 		"mallAvatars": got["avatars"],
 		"mallAvatarsV1696": got["avatars-v1696"],
 		"mallAvatarsArchive": got["avatars-archive"],
+		"laterMallGoods": {key: value for key, value in got["later-mall"].items() if key != "packages"},
 		"nasrun": got["nasrun"],
 		"nasrunSkills": got["nasrun-skills"],
 		"roc": got["roc"],
