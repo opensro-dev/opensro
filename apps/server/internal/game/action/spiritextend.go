@@ -32,6 +32,12 @@ const (
 	spiritExtendErrSlot   uint8 = 0x82 // 0x1882: not a bag slot
 	spiritExtendErrTarget uint8 = 0x03 // 3: no item, or not a Spirit
 	spiritExtendErrAsleep uint8 = 0xF8 // 0x18F8: never woken
+	// Port-only: no v1.188 byte names the worn aim - the bag-only read
+	// answers it 0x1882. The port pairs this byte with
+	// UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE, which the v1.150
+	// category-1 table does not carry, so a client without the pair
+	// shows nothing (old-tab safe).
+	spiritExtendErrWorn uint8 = 0xFA
 )
 
 /*
@@ -50,7 +56,19 @@ func (rt *Runtime) useSpiritExtension(use skillItemUse, c *enterworld.Character,
 	}
 	r := wire.NewReader(tail)
 	target, err := r.U8()
-	if err != nil || r.Done() != nil || !inventory.IsBagSlot(target, inventory.BagEnd(c)) {
+	if err != nil || r.Done() != nil {
+		*result = itemUseFailure(spiritExtendErrSlot)
+		return false
+	}
+	if !inventory.IsBagSlot(target, inventory.BagEnd(c)) {
+		// The v1.696 client (and this port's) refuses this aim before
+		// sending; a sender without that gate gets the worn refusal
+		// when a Spirit is worn, the plain slot refusal otherwise.
+		if spiritIsWorn(c) {
+			*result = itemUseFailure(spiritExtendErrWorn)
+			result.DiagnosticRefusal = "item-use: the extension gear was aimed at the worn Devil's Spirit"
+			return false
+		}
 		*result = itemUseFailure(spiritExtendErrSlot)
 		return false
 	}
@@ -83,4 +101,25 @@ func (rt *Runtime) useSpiritExtension(use skillItemUse, c *enterworld.Character,
 	*result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse,
 		Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)}}}
 	return true
+}
+
+/*
+================
+spiritIsWorn
+
+A Devil's Spirit sits in the avatar storage, awake or lapsed: wearing
+is a storage fact. The derived AvatarInventory.Spirit record is the
+awake effect alone, so the rows are scanned.
+================
+*/
+func spiritIsWorn(c *enterworld.Character) bool {
+	if c.AvatarInventory == nil {
+		return false
+	}
+	for _, row := range c.AvatarInventory.Rows {
+		if nasrun.IsSpirit(row.TypeFlags) {
+			return true
+		}
+	}
+	return false
 }

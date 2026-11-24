@@ -109,6 +109,11 @@ awakening (`internal/game/action/spiritextend.go`, `internal/game/nasrun/extensi
   (2026-11-16). The VSRO row's own Param1 is four weeks with no ceiling, and it is not used.
 - Refusals use the v1.188 codes: a slot outside the bag (0x1882), no Spirit there (3), a Spirit never woken
   (0x18F8). The ceiling has no native code and answers the generic refusal.
+- The worn Spirit is refused properly (#3909): the later client stops the use before sending and prints
+  `UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE` ("You cannot use this while you are wearing it.", imported into
+  the text build). This port's client refuses it the same way at the drop and at the armed cursor; a sender
+  without that gate gets refusal byte 0xFA from the server (port-only: the reference's bag-only read answers
+  the worn aim 0x1882), which the client maps to the same line.
 - Every honor shop's second tab sells the gear twice: for 10 tokens and for 5,000,000 gold, the owner's upkeep price.
 - The Spirits and the gear are staged bound, as v1.150's own honor goods: no trade, merchant sale, warehouse or drop
   (CanTrade, CanSell, CanBorrow, CanDrop all 0).

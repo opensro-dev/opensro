@@ -6,6 +6,11 @@ export function resolveNativeNotice(category:number,code:number,context:NativeNo
  const route=nativeNoticeRoute(category,code);
  const notice=(key:string,guide:0|1|4|5|null,banner:boolean):NoticeResolution=>key?{kind:'notice',notice:{key,value:0,nativeType:guide??0,...(banner?{banner:true as const}:{}),...(guide===null?{bannerOnly:true as const}:{})}}:{kind:'silent'};
  if(route.kind==='notice')return notice(route.key,route.guideType,route.banner||(category===1&&code===7&&context.itemMallOpen===true));
+ // Port-only (#3909): the extension gear's worn refusal. The spirit
+ // family's byte 0xFA rides the item-use answer; the v1.150 table
+ // carries no 01:FA entry (the silent default above), so a client
+ // without this pair shows nothing for it.
+ if(category===1&&code===0xfa)return notice('UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE',5,false);
  if(route.kind==='silent')return route;
  if(category===1&&code===50){if(context.country===undefined)return route;return notice(context.country===0?'UIIT_MSG_STRGERR_CANT_MIX_EXCLUSIVE_ARMOR_TYPE':context.country===1?'UIIT_MSG_STRGERR_EU_CANT_MIX_EXCLUSIVE_ARMOR_TYPE':'',5,true);}
  if(category===4&&code===14){if(context.country===undefined)return route;return notice(context.country===0?'UIIT_SKILL_USE_FAIL_RUNOUT_AMMO':context.country===1?'UIIT_SKILL_USE_FAIL_RUNOUT_AMMO_VOLT':'',null,true);}
