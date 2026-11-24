@@ -52,7 +52,7 @@ test( "login retains native presentation through authenticated roster arrival", 
 		await page.goto( CLIENT_NEXT_BASE_URL );
 		await control( "frontend:reveal" ).click( { timeout: 30000 } );
 		await page.waitForFunction( () =>
-			getComputedStyle( document.documentElement ).cursor.includes( "sro_client_cursor_0x95.cur" )
+			getComputedStyle( document.documentElement ).cursor.includes( "sro_client_cursor_0x95.png" )
 		);
 		await control( "login" ).waitFor( { timeout: 15000 } );
 		await page.waitForFunction( () =>
