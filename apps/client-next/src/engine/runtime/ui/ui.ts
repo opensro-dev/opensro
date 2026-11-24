@@ -1398,6 +1398,19 @@ function pictureClip( face: string, rect: UiRect ): NonNullable<UiQuad["mask"]> 
 createUi
 ================
 */
+/*
+================
+authoredEditAlign
+
+The editor alignment for an authored horizontal alignment (0 left, 1
+centre, 2 right). The editor is transparent over the canvas drawing, so
+its text layout must start where the drawing does (#4153).
+================
+*/
+function authoredEditAlign( hAlign: number ): "left" | "center" | "right" {
+	return hAlign === 2 ? "right" : hAlign === 1 ? "center" : "left";
+}
+
 export function createUi( ports: UiPorts ) {
 	const defaults = defaultUiPorts();
 	const assets = ports.assets,
@@ -12092,7 +12105,7 @@ export function createUi( ports: UiPorts ) {
 					...(native ?
 						{
 							textInsets: node.client,
-							textAlign: hAlign === 2 ? "right" : hAlign === 1 ? "center" : "left"
+							textAlign: authoredEditAlign( hAlign )
 						} :
 						{})
 				} );
@@ -25445,7 +25458,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							value: shopQuantity,
 							maxLength: 5,
 							disabled: locked,
-							textAlign: amount.hAlign === 2 ? "right" : amount.hAlign === 1 ? "center" : "left",
+							textAlign: authoredEditAlign( amount.hAlign ),
 							textInsets: amount.client
 						} );
 					}
@@ -29361,7 +29374,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							kind: "text",
 							value: String( state.quantity ),
 							maxLength: 5,
-							disabled: game.inventoryPending
+							disabled: game.inventoryPending,
+							// GDR_ITEMMALL_CONFIRM_EDIT_COUNT draws by its authored
+							// alignment (right, authoredText above).
+							textAlign: authoredEditAlign( mallControl( page, 42 ).hAlign )
 						} );
 						if ( state.selected.allowsPoints ) {
 							authoredLabeledButton(
@@ -29588,7 +29604,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							kind: "text",
 							value: String( state.pointDraft ),
 							maxLength: 10,
-							disabled: game.inventoryPending
+							disabled: game.inventoryPending,
+							// GDR_ITEMMALL_USE_POINT_EDIT_USE_POINT draws by its
+							// authored alignment (right, authoredText above).
+							textAlign: authoredEditAlign( mallControl( pointPage, 41 ).hAlign )
 						} );
 						authoredLabeledButton(
 							mallControl( pointPage, 50 ),
