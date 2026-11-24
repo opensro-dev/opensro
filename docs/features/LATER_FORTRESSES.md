@@ -37,7 +37,9 @@ now uses too. Each import stages:
 
 The Bandit import also publishes the fortress's world-map page: the v1.188 `worldmap_mapinfo.txt` row for
 page 1002, the `worldmap_localinfo.txt` icon rows that name it (the two `fort_small_worldmap` icons at
-91009-91010 and the page's own markers), and the Media art the native tree lacks (`map_fort_bijuckdan.ddj`,
+91009-91010 and the page's eleven markers, rows 95016-95026: the staff trio and the revival, charge,
+pulley, fort and glory gate icons - thirteen rows name the page in all, and the engine imports each
+one), and the Media art the native tree lacks (`map_fort_bijuckdan.ddj`,
 `fort_small_worldmap.ddj`, the fortress crest). The M map opens the page from those icons, as it opens
 Jangan's page 1001, and the battle aide's fortress map reads the same page row.
 
