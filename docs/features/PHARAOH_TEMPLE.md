@@ -55,5 +55,31 @@ population keeps refusing dungeon regions.
   full tactics row (57573, read whole), and the server admits it alone from the field world into the Temple
   region, at the grade its tomb brothers carry (8). The kind is the Pharaoh Tomb's too: whichever pass stages
   it first, the other places its nest on the standing row (one codename, one row).
-- **Not yet here.**
-  - Haroeris: neither source places it by a nest.
+## Sanctum gates
+
+With the switch on, each pair of sanctums opens twice a day, as the later server opens them. The windows are
+`_Schedule_copy1` defines 12-14 of the pinned shard, two hours each, in shard time:
+
+| Pair | Windows | Gates open |
+| --- | --- | --- |
+| Selkis & Neith | 00:00, 09:30 | 00:30, 10:00 |
+| Anubis & Isis | 01:30, 11:00 | 02:00, 11:30 |
+| Haroeris & Seth | 03:00, 12:30 | 03:30, 13:00 |
+
+- **Open.** Half an hour into a window, the pair's enter gates stand in the Temple and its leave gates in the
+  sanctums. The gates are the two teleporter buildings the VSRO client carries (`INS_TEMPLE_TELEPORT`,
+  `INS_TEMPLE_SETH_TELEPORT`), at the points `_RefGameWorldGroup_Config` gives each `GROUP_TEMPLE_*` group.
+- **Haroeris and Seth.** The Haroeris window spawns Haroeris once at the native wave's point, for the rest of the
+  window. Seth's gate stands in Haroeris's sanctum once he is dead.
+- **Close.** At the window's end the gates come down, and everyone still inside one of the pair's sanctums leaves to
+  that sanctum's leave target in the Temple.
+
+The server owns the table (`pharaohtemple/sanctum.go`, with its evidence) and the runtime
+(`action/temple_sanctum.go`). The build stages the two teleporters (`pharaoh_temple.TELEPORTER_CODES`).
+
+- **Not yet here** (#3787):
+  - the countdown notices before an open;
+  - the temple association reputation the native entry check reads;
+  - the keepers living only while their sanctum is open (today they stand on their 3-hour respawn);
+  - Haroeris's kind and skills, which #4259 imports. Until then his spawn fails, it is logged, and Seth's gate
+    stays shut.

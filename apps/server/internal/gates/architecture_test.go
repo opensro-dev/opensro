@@ -78,10 +78,13 @@ func TestCorePackageBoundaries(t *testing.T) {
 	checkPackageImports(t, root, modulePath, "internal/game/world/jupiter", nil, false)
 	// The Pharaoh Temple (port-only, the job temple): the switch and the
 	// identity table the portal catalogue and the movement authority ask.
-	// Its one dependency is world's dependency-free plane geometry, which
-	// owns how a dungeon id becomes a region (world.DungeonRegionID).
+	// Its dependencies are world's dependency-free plane geometry, which
+	// owns how a dungeon id becomes a region (world.DungeonRegionID), and
+	// the schedule row type (world/schedule, time alone), in which the
+	// sanctum pairs' windows are written as the Roc's are.
 	checkPackageImports(t, root, modulePath, "internal/game/world/pharaohtemple", map[string]bool{
-		modulePath + "/internal/game/world": true,
+		modulePath + "/internal/game/world":          true,
+		modulePath + "/internal/game/world/schedule": true,
 	}, false)
 	// The Muhan wave worlds (port-only): the same leaf shape again.
 	checkPackageImports(t, root, modulePath, "internal/game/world/muhan", nil, false)
