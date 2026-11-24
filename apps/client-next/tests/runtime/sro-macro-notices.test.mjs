@@ -101,3 +101,22 @@ test("hunt action notices queue the matching UIIT keys", () => {
 	assert.equal( MACRO_NOTICE_TOWN_OFF, "UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_MACRO_OFF" );
 	assert.equal( MACRO_NOTICE_POTION_ON_FAIL.startsWith( "UIIT_STT_SRO_MACRO_" ), true );
 });
+
+test("every queued MACRO_NOTICE_* key has a catalog completion", async () => {
+	const { MACRO_NOTICE_UIIT_COMPLETIONS, completeUiText } = await import(
+		"../../../../scripts/build/shared/textResources.mjs"
+	);
+	const queued = Object.entries( notices )
+		.filter( ( [name, value] ) => name.startsWith( "MACRO_NOTICE_" ) && typeof value === "string" )
+		.map( ( [, value] ) => value );
+	assert.equal( queued.length, 14, "fourteen system-chat keys" );
+	assert.deepEqual(
+		[ ...queued ].sort(),
+		Object.keys( MACRO_NOTICE_UIIT_COMPLETIONS ).sort(),
+		"worker keys match MACRO_NOTICE_UIIT_COMPLETIONS"
+	);
+	const catalog = completeUiText( {} );
+	for ( const key of queued ) {
+		assert.ok( catalog[key]?.trim(), `${key} must resolve to English` );
+	}
+});

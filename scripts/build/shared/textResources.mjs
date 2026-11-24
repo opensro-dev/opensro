@@ -187,23 +187,17 @@ export const UI_TEXT_COMPLETIONS = Object.freeze( {
 // column (CANTUSEMACRO's English cell is empty there: product English
 // follows the Korean meaning, same wording the port already shipped).
 export const MACRO_NOTICE_UIIT_COMPLETIONS = Object.freeze( {
-	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_CANTUSEMACRO:
-		"You cannot start the skill/hunting macro in town.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_CANTUSEMACRO: "You cannot start the skill/hunting macro in town.",
 	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_MACRO_OFF: "The skill/hunting macro is disabled in towns.",
 	UIIT_STT_SRO_MACRO_AUTO_POTION_ON_FAIL:
 		"There is no registered item in auto potion. Please register items and try again.",
-	UIIT_STT_SRO_MACRO_AUTO_HUNTING_TELEPORT_OFF:
-		"You've moved out of the map, Hunting Macro will end.",
-	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_HP_POTION_EMPTY:
-		"Insufficient HP Potions.  Using Return Scroll.",
-	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_MP_POTION_EMPTY:
-		"Insufficient MP Potions.  Using Return Scroll.",
-	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_ITEM_DURA:
-		"Item durability has reached 0.  Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_AUTO_HUNTING_TELEPORT_OFF: "You've moved out of the map, Hunting Macro will end.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_HP_POTION_EMPTY: "Insufficient HP Potions.  Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_MP_POTION_EMPTY: "Insufficient MP Potions.  Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_ITEM_DURA: "Item durability has reached 0.  Using Return Scroll.",
 	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_NOT_HAMMER: "No Repair Hammer.  Using Return Scroll.",
 	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_TIME_OVER: "Auto-Hunt time expired.  Using Return Scroll.",
-	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_NOT_REVIVAL_SCROLL:
-		"No Resurrection Scroll.  Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_NOT_REVIVAL_SCROLL: "No Resurrection Scroll.  Using Return Scroll.",
 	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_DIE: "Character is dead.  Resurrecting in town.",
 	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_ERORR: "Using Return Scroll.",
 	UIIT_STT_SRO_MACRO_SYSTEM_WHAN_POTION: "Using Energy of Life",
