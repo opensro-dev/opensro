@@ -8,11 +8,12 @@ mallcatalog_test.go - complete authored mall coverage and native shop addresses
 package commerce
 
 import (
-	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/testsupport/tier"
+	"strings"
 	"testing"
 
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/testsupport/gamedatatest"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -113,5 +114,117 @@ func TestMallCatalogRejectsAmbiguousAndUnsupportedData(t *testing.T) {
 	tables["refpricepolicyofitem"][1][4] = "1"
 	if _, err := buildMallCatalog(tables); err == nil {
 		t.Fatal("fixed point charge silently ignored")
+	}
+}
+
+// rentScrapFixture is a mall fixture whose one scrap rents its item for
+// the named refrentitem term (#4240).
+/*
+================
+rentScrapFixture
+================
+*/
+func rentScrapFixture(term string) map[string][][]string {
+	tables := mallFixtureTables()
+	row := tables["refscrapofpackageitem"][0]
+	row[3] = "ITEM_ETC_ARCHEMY_RONDO_02"
+	for len(row) <= 21 {
+		row = append(row, "xxx")
+	}
+	row[21] = term
+	tables["refscrapofpackageitem"][0] = row
+	return tables
+}
+
+// rentTermRow is a refrentitem row: the term at cell 1, RentTime at 9.
+/*
+================
+rentTermRow
+================
+*/
+func rentTermRow(term, minutes string) []string {
+	row := make([]string, 15)
+	row[0] = "1"
+	row[1] = term
+	row[9] = minutes
+	return row
+}
+
+/*
+================
+TestRentTermsParse
+
+Periods resolve to their minutes, fixed windows are kept apart, and a
+row too short or unparseable is skipped, never priced.
+================
+*/
+func TestRentTermsParse(t *testing.T) {
+	terms := parseRentTerms([][]string{
+		rentTermRow("RENT_ITEM_D1", "1440"),
+		rentTermRow("RENT_ITEM_D7", "10080"),
+		rentTermRow("RENT_ITEM_WINDOW", "0"),
+		{"1", "RENT_ITEM_SHORT"},
+		rentTermRow("RENT_ITEM_BAD", "abc"),
+	})
+	if terms.periods["RENT_ITEM_D1"] != 1440 || terms.periods["RENT_ITEM_D7"] != 10080 {
+		t.Fatalf("periods = %v, want the one-day and seven-day terms", terms.periods)
+	}
+	if !terms.windows["RENT_ITEM_WINDOW"] {
+		t.Fatalf("windows = %v, want RENT_ITEM_WINDOW", terms.windows)
+	}
+	for _, code := range []string{"RENT_ITEM_SHORT", "RENT_ITEM_BAD"} {
+		if terms.periods[code] != 0 || terms.windows[code] {
+			t.Fatalf("%s resolved; want it skipped", code)
+		}
+	}
+}
+
+/*
+================
+TestRentTermStampsItsContent
+
+A rented scrap delivers with its refrentitem period on the content;
+a term with no row, and a fixed-window term, both fail hydration
+instead (a rental without a clock would ship permanently).
+================
+*/
+func TestRentTermStampsItsContent(t *testing.T) {
+	tier.Long(t, "a rented scrap resolves its refrentitem period")
+	dir := gamedatatest.TextdataDir(t)
+	items := enterworld.NewTextdataItems(dir)
+	for _, test := range []struct {
+		name    string
+		term    string
+		rents   rentTerms
+		minutes uint32
+		refusal string
+	}{
+		{"daily", "RENT_ITEM_D1", parseRentTerms([][]string{rentTermRow("RENT_ITEM_D1", "1440")}), 1440, ""},
+		{"no row", "RENT_ITEM_MISSING", parseRentTerms(nil), 0, "has no refrentitem row"},
+		{"window", "RENT_ITEM_WINDOW", parseRentTerms([][]string{rentTermRow("RENT_ITEM_WINDOW", "0")}), 0, "fixed window"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			catalog, err := buildMallCatalog(rentScrapFixture(test.term))
+			if err != nil {
+				t.Fatal(err)
+			}
+			catalog.rents = test.rents
+			err = catalog.Hydrate(items)
+			if test.refusal != "" {
+				if err == nil || !strings.Contains(err.Error(), test.refusal) {
+					t.Fatalf("Hydrate = %v, want a refusal naming %q", err, test.refusal)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(catalog.Offers) != 1 || len(catalog.Offers[0].Contents) != 1 {
+				t.Fatalf("offers = %+v, want one hydrated offer", catalog.Offers)
+			}
+			if got := catalog.Offers[0].Contents[0].RentMinutes; got != test.minutes {
+				t.Fatalf("RentMinutes = %d, want %d", got, test.minutes)
+			}
+		})
 	}
 }

@@ -55,6 +55,14 @@ type ItemBody struct {
 	// The count byte is derived from the length.
 	MagicOptions []uint64
 	Data         uint32 // item record data word (+0x38): capsule monster, Spirit clock
+	// RentExpiresUnixMs is a rented item's deletion deadline in unix
+	// milliseconds (native _RentItemInfo PeriodEndTime; the later
+	// client's tooltip reads the same value as its rent remainder,
+	// #4240). It rides the equipment body after the magic options,
+	// present only on a rented row: 0 writes no leg, and a tab whose
+	// itemdata predates the rental goods refuses the frame's unknown
+	// reference atomically, as it does for any later-imported item.
+	RentExpiresUnixMs int64
 }
 
 // EncodedSize is the body's variable wire length.
@@ -92,7 +100,11 @@ func (b ItemBody) EncodedSize() int {
 		}
 		return size
 	}
-	return ItemBodySize + 8*options
+	size := ItemBodySize + 8*options
+	if b.RentExpiresUnixMs > 0 {
+		size += 8
+	}
+	return size
 }
 
 // Encode returns the CSOItem body bytes (EncodedSize long).
@@ -152,6 +164,9 @@ func (b ItemBody) Encode() []byte {
 	for _, encoded := range options {
 		w.U64(encoded)
 	}
+	if b.RentExpiresUnixMs > 0 {
+		w.U64(uint64(b.RentExpiresUnixMs))
+	}
 	return w.Payload()
 }
 
@@ -160,7 +175,12 @@ func (b ItemBody) Encode() []byte {
 readItemBody
 ================
 */
-func readItemBody(r *Reader, typeFlags uint16) (ItemBody, error) {
+// readItemBody reads one body the encoder wrote. rented answers
+// whether the row's reference rents by period (enterworld.ItemRef.Rent):
+// only such a row's equipment body carries the rent deadline leg. It may
+// be nil where no rental can arrive (ground pickups: a rental is
+// record-bound and never drops).
+func readItemBody(r *Reader, typeFlags uint16, rented func(refObjID uint32) bool) (ItemBody, error) {
 	var out ItemBody
 	out.TypeFlags = typeFlags
 
@@ -259,6 +279,13 @@ func readItemBody(r *Reader, typeFlags uint16) (ItemBody, error) {
 	out.VarianceBits = varianceBits
 	out.Durability = durability
 	out.MagicOptions = magicOptions
+	if rented != nil && rented(refObjID) {
+		deadline, err := r.U64()
+		if err != nil {
+			return out, err
+		}
+		out.RentExpiresUnixMs = int64(deadline)
+	}
 	return out, nil
 }
 
@@ -794,7 +821,9 @@ func DecodeItemMoveResult(payload []byte, pickupTypeFlags uint16) (ItemMoveResul
 				return out, err
 			}
 		} else {
-			if out.Item, err = readItemBody(r, pickupTypeFlags); err != nil {
+			// A rental is record-bound and never drops, so a pickup
+			// body carries no rent deadline leg.
+			if out.Item, err = readItemBody(r, pickupTypeFlags, nil); err != nil {
 				return out, err
 			}
 		}

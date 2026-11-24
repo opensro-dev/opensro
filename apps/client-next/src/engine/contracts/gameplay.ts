@@ -410,7 +410,9 @@ export type GameplayCommand =
 	| { readonly kind: "mastery-train"; readonly id: number; }
 	| { readonly kind: "quickslot-bind"; readonly slot: number; readonly skillId: number; }
 	| { readonly kind: "quest-abandon"; readonly refId: number; }
-	| { readonly kind: "quest-reward"; readonly refId: number; }
+	// picks: the reward window's chosen item RefObjIDs (a selection quest's
+	// claim); absent for a plain kind-2 claim.
+	| { readonly kind: "quest-reward"; readonly refId: number; readonly picks?: readonly number[]; }
 	| {
 		readonly kind: "chat";
 		readonly channel: number;
@@ -576,6 +578,10 @@ export interface InventoryItem {
 		}[];
 	};
 	readonly transformRefObjId?: number;
+	// A rented row's deletion deadline in unix milliseconds (native
+	// _RentItemInfo PeriodEndTime, #4240); absent on every other row.
+	// The tooltip's Time Remains counts down from it.
+	readonly rentExpiresUnixMs?: number;
 	readonly name?: string;
 	// The reference's codename, as the server's reference rows name it;
 	// the port-only scrolls that are build-staged items (their RefObjID is
@@ -1051,6 +1057,9 @@ export interface GameplayState extends MoverPublication {
 	readonly quests?: readonly QuestRecord[];
 	readonly questProgress?: readonly QuestProgressEvent[];
 	readonly questPending?: number;
+	// The last refused reward claim (result 2, with the server's reason
+	// byte); the HUD answers it with the reward error line.
+	readonly questRefusal?: { readonly refId: number; readonly reason: number; };
 	readonly questGathering?: QuestGathering;
 	readonly inventorySlotCount?: number;
 	readonly equipmentSlotCount?: number;

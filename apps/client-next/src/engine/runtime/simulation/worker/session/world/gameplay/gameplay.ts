@@ -3985,7 +3985,11 @@ state here before a command can claim a native wire conversation.
 				return frame;
 			}
 			if ( command.kind === "quest-abandon" || command.kind === "quest-reward" ) {
-				quests.request( command.refId, command.kind === "quest-reward" );
+				quests.request(
+					command.refId,
+					command.kind === "quest-reward",
+					command.kind === "quest-reward" ? command.picks : undefined
+				);
 				return null;
 			}
 			if ( command.kind === "whisper-block" ) {
@@ -4880,7 +4884,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if (
-					storage.receive( frame, cosItemRefs, inventory.objectRefs() ) &&
+					storage.receive( frame, cosItemRefs, inventory.objectRefs(), inventory.rentRefs() ) &&
 					frame.opcode !== NPC_INTERACTION_ACK_OPCODE
 				) {
 					dirty = true;

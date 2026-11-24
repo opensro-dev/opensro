@@ -216,6 +216,22 @@ func buildBootstrap(deps *Deps, request BootstrapRequest) *BootstrapResult {
 			}
 		}
 	}
+	// Native deletes an out-of-period rental when its storage loads
+	// (_DelExpiredRentItemInStorage), so the expiry takes the row at
+	// the first entry past it; the conditional door writes only then.
+	if deps.RemoveExpiredRentItems != nil {
+		removed := false
+		deps.Update(liveCharacter, "expired-rent-items", func() bool {
+			removed = deps.RemoveExpiredRentItems(liveCharacter)
+			return removed
+		})
+		if removed {
+			character = readCharacterSnapshot(deps, divisionID, liveCharacter)
+			if character == nil {
+				return Failure(nativeErrorCharacter, "characterNotFound")
+			}
+		}
+	}
 	// World entry is where the v1.150 client learns its capacity, so slots
 	// an expansion quest paid become usable here (inventory_capacity.go).
 	// The port-only inventory-pages base rides the same presentation: the
@@ -844,6 +860,7 @@ func (c *refItemCollector) add(codename string, typeFlags *uint16) {
 		Kind:         "equipment",
 		Name:         row.Name,
 		NativeFields: row.NativeFields,
+		Rent:         row.Rent,
 	})
 }
 

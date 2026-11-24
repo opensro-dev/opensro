@@ -240,7 +240,7 @@ func (rt *Runtime) HandleMallPurchase(division string, character *enterworld.Cha
 		bagEnd := inventory.BagEnd(character)
 		before := invItemsFromRowsWithin(rows, int64(bagEnd))
 		inv := inventory.New(before, bagEnd)
-		destinations, err := commerce.GrantPackage(inv, quote.Offer.Contents, quote.Quantity, uint16(bagEnd-inventory.EquipmentSlotEnd), commerce.GrantMarks{Bound: bound, EarnedBought: earnedOnly})
+		destinations, err := commerce.GrantPackage(inv, quote.Offer.Contents, quote.Quantity, uint16(bagEnd-inventory.EquipmentSlotEnd), commerce.GrantMarks{Bound: bound, EarnedBought: earnedOnly, NowUnix: rt.Now().Unix()})
 		if err != nil {
 			return nil, err
 		}

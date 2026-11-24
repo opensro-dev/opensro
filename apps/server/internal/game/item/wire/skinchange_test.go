@@ -58,12 +58,12 @@ func TestBand40ItemBodies(t *testing.T) {
 		if !bytes.Equal(got, tc.want) || tc.body.EncodedSize() != len(tc.want) {
 			t.Fatalf("%#x body %x (size %d), want %x", tc.body.TypeFlags, got, tc.body.EncodedSize(), tc.want)
 		}
-		back, err := readItemBody(NewReader(got), tc.body.TypeFlags)
+		back, err := readItemBody(NewReader(got), tc.body.TypeFlags, nil)
 		if err != nil || back.RefObjID != tc.body.RefObjID || back.Data != tc.body.Data {
 			t.Fatalf("%#x read back %+v %v", tc.body.TypeFlags, back, err)
 		}
 	}
-	if _, err := readItemBody(NewReader(concat(u32le(2000), []byte{2})), summoner.TypeFlags); err == nil {
+	if _, err := readItemBody(NewReader(concat(u32le(2000), []byte{2})), summoner.TypeFlags, nil); err == nil {
 		t.Fatal("a summoner with a pet record was accepted")
 	}
 }
