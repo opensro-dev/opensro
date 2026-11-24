@@ -188,6 +188,27 @@ test( "Item Mall search field deletes with Backspace and Delete", { timeout: 120
 		await page.keyboard.press( "Delete" );
 		await page.evaluate( () => mallSearchFixture.draw() );
 		assert.equal( await search.inputValue(), "SN_PT", "Delete removes the character after the caret" );
+		// The player clicks the drawn glyphs at the field's left, where the
+		// search text is drawn, not the box's centre: that click must put
+		// the caret inside the text. It used to land at 0 - the editor's
+		// text was centred while the drawing is left-aligned - where
+		// Backspace has nothing before it and only Delete eats forward
+		// (#4153).
+		await search.click( { position: { x: 10, y: 10 } } );
+		await page.keyboard.press( "Backspace" );
+		await page.evaluate( () => mallSearchFixture.draw() );
+		assert.equal(
+			(await search.inputValue()).length,
+			4,
+			"Backspace deletes after a click on the drawn text"
+		);
+		await page.keyboard.press( "Backspace" );
+		await page.evaluate( () => mallSearchFixture.draw() );
+		assert.equal(
+			(await search.inputValue()).length,
+			3,
+			"Backspace keeps deleting after a click on the drawn text"
+		);
 		await page.keyboard.press( "Control+A" );
 		await page.keyboard.press( "Backspace" );
 		await page.evaluate( () => mallSearchFixture.draw() );
