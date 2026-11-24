@@ -5,9 +5,11 @@ test_later_mall_goods.py - which v1.696 mall goods the tree lists
 
 The selection rules of later_mall_goods.goods_rows, on hand-built tables
 in the v1.696 layout: a good lists only when its tab, package, price,
-scraps, items and summoned creature are all there and it is no rental;
-it keeps its later price, drops the payments v1.150 never knew, and
-takes the tab's next slot and a free package identity.
+scraps, items and summoned creature are all there, and a rental only
+when its refrentitem term resolves to a period naming the scrap's own
+item (its row is then written with the good); it keeps its later price,
+drops the payments v1.150 never knew, and takes the tab's next slot and
+a free package identity.
 
 ===========================================================================
 """
@@ -67,8 +69,9 @@ class LaterMallGoodsTest(unittest.TestCase):
 	# ================
 	# test_a_good_the_tree_cannot_serve_stays_out
 	#
-	# No item, no summoned creature, a rental term, a tab the tree lacks,
-	# a second-currency shop: each is reported and nothing of it is written.
+	# No item, no summoned creature, a rental term with no row behind it,
+	# a tab the tree lacks, a second-currency shop: each is reported and
+	# nothing of it is written.
 	# ================
 	def test_a_good_the_tree_cannot_serve_stays_out(self):
 		later = empty()
@@ -83,8 +86,64 @@ class LaterMallGoodsTest(unittest.TestCase):
 		self.assertEqual(summary["listed"], 0)
 		self.assertTrue(all(not table for table in rows.values()))
 		self.assertEqual(sorted(summary["unlisted"]), sorted([
-			"item not in the tree", "creature not in the tree", "rental term", "no tab MALL_PREMIUM_NASRUN",
+			"item not in the tree", "creature not in the tree", "rent term without a row", "no tab MALL_PREMIUM_NASRUN",
 			"second-currency shop PRE_MALL_ARCHEMY_ATHANASIA"]))
+
+	# ================
+	# test_a_rental_lists_and_writes_its_rent_row
+	#
+	# The 1-day Arabia dress at 14 silk: its term resolves to a 1440
+	# minute period naming the scrap's own item, so the good lists and
+	# the term's refrentitem row is written for the server's clock.
+	# ================
+	def test_a_rental_lists_and_writes_its_rent_row(self):
+		later = empty()
+		package = later_good(later, "MALL_AVATAR_DRESS", "ITEM_MALL_AVATAR_M_ARABIA_2", 3, "14", 3,
+			rent="RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D")
+		rent_row = ["1", "RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D", "4242", "0", "0", "2",
+			"NULL", "NULL", "1", "1440", "0", "0", "0", "0"]
+		rows, summary = goods.goods_rows(later, tree_of({"ITEM_MALL_AVATAR_M_ARABIA_2"}),
+			rent_rows={rent_row[1]: rent_row}, item_by_id={"4242": "ITEM_MALL_AVATAR_M_ARABIA_2"})
+		self.assertEqual(summary["packages"], [package])
+		self.assertEqual(summary["rentals"], 1)
+		self.assertEqual(summary["rentTerms"], ["RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D"])
+		self.assertEqual(rows["refrentitem.txt"], [rent_row])
+		self.assertEqual(rows["refscrapofpackageitem.txt"][0][21], "RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D")
+
+	# ================
+	# test_a_rental_window_stays_out
+	#
+	# A fixed begin/end window instead of a period is the other native
+	# rental kind; no mall good names one and the server takes periods
+	# only, so the good is reported, never half listed.
+	# ================
+	def test_a_rental_window_stays_out(self):
+		later = empty()
+		later_good(later, "MALL_AVATAR_DRESS", "ITEM_MALL_AVATAR_M_ARABIA_2", 3, "14", 3,
+			rent="RENT_ITEM_MALL_AVATAR_M_ARABIA_2_EVENT")
+		rent_row = ["1", "RENT_ITEM_MALL_AVATAR_M_ARABIA_2_EVENT", "4242", "0", "0", "1",
+			"2026-12-20 00:00:00", "2027-01-03 00:00:00", "0", "0", "0", "0", "0", "0"]
+		rows, summary = goods.goods_rows(later, tree_of({"ITEM_MALL_AVATAR_M_ARABIA_2"}),
+			rent_rows={rent_row[1]: rent_row}, item_by_id={"4242": "ITEM_MALL_AVATAR_M_ARABIA_2"})
+		self.assertEqual(summary["listed"], 0)
+		self.assertEqual(summary["unlisted"], {"rental window": 1})
+		self.assertTrue(all(not table for table in rows.values()))
+
+	# ================
+	# test_a_rent_term_naming_another_item_refuses_the_build
+	#
+	# The native load fatals on this data; the step raises instead of
+	# listing the good under a period that belongs to another item.
+	# ================
+	def test_a_rent_term_naming_another_item_refuses_the_build(self):
+		later = empty()
+		later_good(later, "MALL_AVATAR_DRESS", "ITEM_MALL_AVATAR_M_ARABIA_2", 3, "14", 3,
+			rent="RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D")
+		rent_row = ["1", "RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D", "4242", "0", "0", "2",
+			"NULL", "NULL", "1", "1440", "0", "0", "0", "0"]
+		with self.assertRaisesRegex(ValueError, "names item 4242"):
+			goods.goods_rows(later, tree_of({"ITEM_MALL_AVATAR_M_ARABIA_2"}),
+				rent_rows={rent_row[1]: rent_row}, item_by_id={"4242": "ITEM_MALL_AVATAR_M_OTHER"})
 
 	# ================
 	# test_a_summon_scroll_lists_once_its_creature_is_in_the_tree
