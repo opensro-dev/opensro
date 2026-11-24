@@ -237,11 +237,12 @@ var Settings = []Setting{
 	// the build and the fortress unregistered. Not a catalogue setting:
 	// the catalogue publishes no fortress state.
 	{Env: "SRO_FORT_CONSTANTINOPLE", NomadVar: "fort_constantinople", Default: "off"},
-	// Port-only, not native: the Bandit and Hotan fortresses from the
-	// v1.188 client (enterworld/fortressdata.go, #3886), one switch each.
-	// Build and server read the same switch; off leaves every imported
-	// row out of the build. Not catalogue settings, as Constantinople.
-	{Env: "SRO_FORT_BIJEOKDAN", NomadVar: "fort_bijeokdan", Default: "off"},
+	// Port-only, not native: the Hotan fortress from the v1.188 client
+	// (enterworld/fortressdata.go, #3886). Build and server read the
+	// same switch; off leaves every imported row out of the build. Not
+	// a catalogue setting, as Constantinople. The Bandit fortress has
+	// no row here: it is later-native content the game ships (#3586),
+	// so it stands in every build and needs no switch.
 	{Env: "SRO_FORT_HOTAN", NomadVar: "fort_hotan", Default: "off"},
 	// Port-only, not native: the export-world areas from the pinned
 	// content archive (#3329). Build and server read the same switch;

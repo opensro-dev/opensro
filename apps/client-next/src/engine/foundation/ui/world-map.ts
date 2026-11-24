@@ -248,6 +248,11 @@ the page the three fort_worldmap icons (localinfo 91006-91008) open. Its
 regions (69..74 across, 71..67 down) lie outside the overview, so the
 town-page projection places the fortress's own positions unchanged.
 576949 captions it SN_FORTRESS_JANGAN.
+
+Row 1002 is the Bandit fortress (world INS_FORT_BJ), the same table's
+row in the v1.188 client, which the build imports (#3586): the two
+fort_small_worldmap icons (91009-91010) open it, and the caption case
+for page 1002 is already in the client (576949, SN_FORTRESS_BIJEOKDAN).
 ================
 */
 function worldMapFortressPages() {
@@ -261,6 +266,16 @@ function worldMapFortressPages() {
 			texture: [ 1024, 1024 ],
 			picture: [ 1024, 819 ],
 			bounds: [ 69, 71, 74, 67, -48, 48, 48, 0 ]
+		},
+		{
+			id: 1002,
+			name: "FORTRESS_BIJEOKDAN",
+			caption: "SN_FORTRESS_BIJEOKDAN",
+			image: "fort_bijuckdan",
+			size: [ 964, 1024 ],
+			texture: [ 1024, 1024 ],
+			picture: [ 964, 1024 ],
+			bounds: [ 77, 71, 81, 67, 48, 0, 48, -48 ]
 		}
 	] as const;
 }

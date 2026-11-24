@@ -229,8 +229,10 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False, e
 	# so their identities allocate above all of the layers' rows.
 	runner.register("roc", add_roc, (vsro_root, native, out,))
 	# The two siege fortresses the v1.188 client authored and v1.150 never
-	# placed (SRO_FORT_BIJEOKDAN, SRO_FORT_HOTAN, #3886): after Roc, in a
-	# fixed order, so their structures allocate above every row before.
+	# placed (#3886): after Roc, in a fixed order, so their structures
+	# allocate above every row before. The Bandit fortress is shipped
+	# content, imported unconditionally (#3586); Hotan keeps its switch
+	# (SRO_FORT_HOTAN).
 	runner.register("fortress-bandit", bandit_fortress_import.add, (vsro_root, native, out,))
 	runner.register("fortress-hotan", hotan_fortress_import.add, (vsro_root, native, out,))
 	# The honor line the client authored and never shipped (SRO_HONOR_GOODS,

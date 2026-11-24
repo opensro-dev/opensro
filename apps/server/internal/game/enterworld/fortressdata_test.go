@@ -12,18 +12,19 @@ import (
 TestSiegeFortressRowsConstantinopleSwitch
 
 Port-only, not native (#3275): the Constantinople row joins the
-client-facing fortress list only while SRO_FORT_CONSTANTINOPLE is on;
-off is exactly the shipped Jangan row.
+client-facing fortress list only while SRO_FORT_CONSTANTINOPLE is on.
+Off is the shipped Jangan row plus the Bandit fortress's, which is
+later-native content and always joins (#3586).
 ================
 */
 func TestSiegeFortressRowsConstantinopleSwitch(t *testing.T) {
 	rows := siegeFortressRows(nil)
-	if len(rows) != 1 || rows[0].CodeName != "FORTRESS_JANGAN" {
+	if len(rows) != 2 || rows[0].CodeName != "FORTRESS_JANGAN" || rows[1].CodeName != "FORTRESS_BIJEOKDAN" {
 		t.Fatalf("switch off: rows %+v", rows)
 	}
 	t.Setenv(monster.EnvConstantinople, "on")
 	rows = siegeFortressRows(nil)
-	if len(rows) != 2 {
+	if len(rows) != 3 {
 		t.Fatalf("switch on: rows %+v", rows)
 	}
 	got := rows[1]
@@ -40,14 +41,16 @@ func TestSiegeFortressRowsConstantinopleSwitch(t *testing.T) {
 
 /*
 ================
-TestSiegeFortressRowsLaterFortressSwitches
+TestSiegeFortressRowsLaterFortresses
 
-Port-only, not native (#3886): the Hotan (id 3) and Bandit (id 6) rows
-join only while their own switches are on, in id order around
-Constantinople's; each switch alone adds only its own row.
+The Bandit row (id 6) is later-native content: it joins with no switch
+set, and the retired SRO_FORT_BIJEOKDAN name in the environment no
+longer switches it (#3586). The Hotan row (id 3) stays port-only
+(#3886): it joins while its own switch is on. Rows keep fortress id
+order around Constantinople's.
 ================
 */
-func TestSiegeFortressRowsLaterFortressSwitches(t *testing.T) {
+func TestSiegeFortressRowsLaterFortresses(t *testing.T) {
 	codes := func() string {
 		var out []string
 		for _, row := range siegeFortressRows(nil) {
@@ -55,16 +58,18 @@ func TestSiegeFortressRowsLaterFortressSwitches(t *testing.T) {
 		}
 		return strings.Join(out, " ")
 	}
-	t.Setenv(monster.EnvBanditFortress, "on")
 	if got := codes(); got != "FORTRESS_JANGAN FORTRESS_BIJEOKDAN" {
-		t.Fatalf("bandit alone: %v", got)
+		t.Fatalf("no switches: %v", got)
 	}
-	t.Setenv(monster.EnvBanditFortress, "off")
+	// A shard still carrying the retired variable behaves natively.
+	t.Setenv("SRO_FORT_BIJEOKDAN", "off")
+	if got := codes(); got != "FORTRESS_JANGAN FORTRESS_BIJEOKDAN" {
+		t.Fatalf("retired switch off: %v", got)
+	}
 	t.Setenv(monster.EnvHotanFortress, "on")
-	if got := codes(); got != "FORTRESS_JANGAN FORTRESS_HOTAN" {
-		t.Fatalf("hotan alone: %v", got)
+	if got := codes(); got != "FORTRESS_JANGAN FORTRESS_HOTAN FORTRESS_BIJEOKDAN" {
+		t.Fatalf("hotan on: %v", got)
 	}
-	t.Setenv(monster.EnvBanditFortress, "on")
 	t.Setenv(monster.EnvConstantinople, "on")
 	if got := codes(); got != "FORTRESS_JANGAN FORTRESS_HOTAN FORTRESS_CONSTANTINOPLE FORTRESS_BIJEOKDAN" {
 		t.Fatalf("all on: %v", got)
