@@ -143,10 +143,13 @@ export function questListTitle(
 ================
 questContentFace
 
-The content view button's face for this quest. The v1.696 client
-(0xc275fa) takes the player's level less the quest's: ten or more
-picks the blue face (a quest far below the player), zero or more the
-plain face, and a quest above the player the red face.
+The content view button's face for this quest.
+CIFQuestList_SetQuestContentFace (research isro1696 sro_client.exe
+0x00B4A820; the mini list's twin CIFQuestMiniList_SetQuestContentFace
+0x00B4CB10) takes the player's level (byte +0x9BC of the player at
+0x17D6160) less the quest's (byte +0x1C): ten or more picks the blue
+face (a quest far below the player), zero or more the plain face, and
+a quest above the player the red face.
 ================
 */
 export function questContentFace( questLevel: number, playerLevel: number ): "blue" | "normal" | "red" {
