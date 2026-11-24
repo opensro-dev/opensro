@@ -93,7 +93,7 @@ func TestArabiaTableIsTheEvidenceSet(t *testing.T) {
 	// The evidence pins: the Kak Farm talk, the first hunt's two 390
 	// lines twice over, the three-line 054 hunt, a 5-times hunt.
 	farm := known["QNO_AR_005"]
-	if farm.Objective != ObjectiveTalk || farm.StartNpcCodename != "NPC_AR_SOLDIER_1" || farm.EndNpcCodename != "NPC_AR_FARMER_1" ||
+	if farm.Objective != ObjectiveTalk || farm.StartNpcCodename != "NPC_AR_SOLDIER_1" || farm.EndNpcCodename != "NPC_AR_FARMER1" ||
 		farm.MaxCompletions != 1 || farm.RewardExp != 34546860 || farm.RewardGold != 47050 || farm.RewardSkillExp != 671 {
 		t.Errorf("QNO_AR_005 %+v", farm)
 	}

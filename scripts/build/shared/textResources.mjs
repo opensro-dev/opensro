@@ -181,6 +181,31 @@ export const UI_TEXT_COMPLETIONS = Object.freeze( {
 	SN_STORE_ACCESSORY_EU_GROUP1: "Purchase/sell European goods"
 } );
 
+// v1.696 SRO Macro system-chat rows (00dade90 / 68ea80 / 68b330). v1.150
+// textuisystem has none of these keys; the product catalog completes them
+// so api.notice({ key }) resolves. English follows the v1.696 English
+// column where present; town-refuse uses the exe key CANUSEMACRO
+// (00dade90 @ 0x00daded9 / 0x00dadf73) — Media.pk2 misspells that row
+// CANTUSEMACRO with empty English, so product English follows the
+// Korean meaning (same wording the port already shipped).
+export const MACRO_NOTICE_UIIT_COMPLETIONS = Object.freeze( {
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_CANUSEMACRO: "You cannot start the skill/hunting macro in town.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_MACRO_OFF: "The skill/hunting macro is disabled in towns.",
+	UIIT_STT_SRO_MACRO_AUTO_POTION_ON_FAIL:
+		"There is no registered item in auto potion. Please register items and try again.",
+	UIIT_STT_SRO_MACRO_AUTO_HUNTING_TELEPORT_OFF: "You’ve moved out of the map, Hunting Macro will end.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_HP_POTION_EMPTY: "Insufficient HP Potions.  Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_MP_POTION_EMPTY: "Insufficient MP Potions.  Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_ITEM_DURA: "Item durability has reached 0.  Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_NOT_HAMMER: "No Repair Hammer.  Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_TIME_OVER: "Auto-Hunt time expired.  Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_NOT_REVIVAL_SCROLL: "No Resurrection Scroll.  Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_DIE: "Character is dead.  Resurrecting in town.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_ERORR: "Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_WHAN_POTION: "Using Energy of Life",
+	UIIT_STT_SRO_MACRO_SYSTEM_USE_HAMMER: "Using Repair Hammer"
+} );
+
 // Product correction for defective shipped English, not a claim of native output
 // for those inputs. 74BFF0 supplies six arguments: year/month/day/period/hour/minute.
 // Preserve already-correct translations and retain the original typo key as data.
@@ -214,9 +239,13 @@ export function completeUiText( entries ) {
 	if ( !entries.UIIT_MSG_DEAD_TAHOMET?.trim() ) {
 		entries.UIIT_MSG_DEAD_TAHOMET = "Main shaitan has disappeared from Mt. Roc.";
 	}
-	for ( const [key, english] of Object.entries( LATER_UI_TEXT_COMPLETIONS ) ) {
-		if ( !entries[key]?.trim() ) {
-			entries[key] = english;
+	// Rows the v1.150 data lacks: the SRO Macro system chat (#3907) and
+	// the later client's lines (#3909). Fill-if-blank, so a shipped row wins.
+	for ( const table of [ MACRO_NOTICE_UIIT_COMPLETIONS, LATER_UI_TEXT_COMPLETIONS ] ) {
+		for ( const [key, english] of Object.entries( table ) ) {
+			if ( !entries[key]?.trim() ) {
+				entries[key] = english;
+			}
 		}
 	}
 	for ( const [key, english] of Object.entries( UI_TEXT_COMPLETIONS ) ) {

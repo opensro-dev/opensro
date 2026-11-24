@@ -87,6 +87,10 @@ KINDS = ("MOB_AM_IVY_L2", "MOB_EU_KERBEROS_L2", "MOB_TQ_BLACKSNAKE_L2", "MOB_TQ_
 # name and description symbols, required level.
 ITEM_ID, ITEM_CODE, ITEM_NAME, ITEM_DESC, ITEM_REQ_LEVEL = 1, 2, 5, 6, 33
 ITEM_COLUMNS = 160
+# The twenty parameter slots: value at 118 + 2k, description at 119 + 2k.
+# A slot whose description is "xxx" is unused; "-1" is the "no value"
+# every other unused slot in the shipped tables reads.
+PARAM_FIRST, PARAM_SLOTS, PARAM_UNUSED, PARAM_NONE = 118, 20, "xxx", "-1"
 # Scroll codename -> (monster codename, display name for the authored
 # texts). The monster link is the native row's first parameter
 # description; the port's handler carries the same table
@@ -120,11 +124,12 @@ SPEC = later_world_import.WorldImport(
 # ================
 # scroll_rows
 #
-# The eight extracted item rows, verbatim from the committed
-# extraction (scripts/build/import_rigid_scroll_rows.py refills it
-# from the ISRO-R shard backup). The extraction is pinned here: a
-# row that drifts from its monster link, family type, required level
-# or cooltime refuses the build rather than staging silently.
+# The eight extracted item rows from the committed extraction
+# (scripts/build/import_rigid_scroll_rows.py refills it from the
+# ISRO-R shard backup), verbatim but for unused_parameters below. The
+# extraction is pinned here: a row that drifts from its monster link,
+# family type, required level or cooltime refuses the build rather
+# than staging silently.
 # ================
 def scroll_rows():
 	document = json.loads(ROWS_FILE.read_text(encoding="utf-8"))
@@ -140,10 +145,36 @@ def scroll_rows():
 			raise ValueError(f"{code}: unexpected family type or required level in the extraction")
 		if row[118] != "-1" or row[119] != monster or row[124] != "600000" or row[125] != "COOLTIME:0x000000F1":
 			raise ValueError(f"{code}: unexpected monster link or cooltime in the extraction")
-		rows.append(row)
+		rows.append(unused_parameters(row))
 	if {row[ITEM_CODE] for row in rows} != set(SCROLLS):
 		raise ValueError("the extraction does not carry every rigid scroll")
 	return rows
+
+
+# ================
+# unused_parameters
+#
+# The backup carries two damaged unused slots: URUCHI parameter 5 is
+# -257 (0xFFFFFEFF) and IVY parameter 18 is -65537 (0xFFFEFFFF), each
+# the "no value" -1 with one bit cleared. Across every staged itemdata
+# row (about 200,000 unused slots) no other value below -1 occurs, and
+# the item loaders refuse one (alchemy.LoadCatalog: "parameter %d"),
+# which stopped the r204k catalogue. The value is unread, since its
+# description is "xxx", so the repair is the value the slot means: an
+# unused slot holding a negative number other than -1 reads -1 again.
+# A positive value in an unused slot is a real one (retail rows hold
+# 0, 1, 50 and 100 there) and is kept. A defect in the source is
+# fixed, not copied (owner, 2026-11-24).
+# ================
+def unused_parameters(row):
+	fixed = list(row)
+	for k in range(PARAM_SLOTS):
+		value, description = PARAM_FIRST + 2 * k, PARAM_FIRST + 2 * k + 1
+		if fixed[description] != PARAM_UNUSED or fixed[value] == PARAM_NONE:
+			continue
+		if fixed[value].startswith("-") and fixed[value][1:].isdigit():
+			fixed[value] = PARAM_NONE
+	return fixed
 
 
 # ================

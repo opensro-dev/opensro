@@ -250,8 +250,10 @@ a constant rotation reassigned over a frame window is the same static transform
 The later client's dun/demon_altar_*.efp schedule a SetRotation (flags 2)
 over frames 0-100. Its parameter is one constant matrix and the native
 command overwrites last-wins (AF4410), so every frame writes the same
-value: the node decodes as the single assignment does. A spacing other
-than one is still refused.
+value: the node decodes as the single assignment does. The spacing only
+picks the frames that write it, so any whole spacing of one frame or more
+from frame 0 is the same transform (the v1.188 Haroeris head impact
+schedules spacing 2 at frame 0). A spacing below one frame is refused.
 ================
 */
 test("a constant rotation reassigned over a frame window is the same static transform", () => {
@@ -271,12 +273,21 @@ test("a constant rotation reassigned over a frame window is the same static tran
 	const window = createCatalogEffects().decode( encode( rotated( 100 ) ), "hit.efp" ).model;
 	assert.ok( once.nodes.some( n => n.name.includes( ":rotation" ) ) );
 	assert.deepEqual( window.nodes, once.nodes );
-	const spaced = rotated( 100 );
-	spaced.effects["hit.efp"].root.renderProgram.at( -1 ).spacing = 2;
-	assert.throws(
-		() => createCatalogEffects().decode( encode( spaced ), "hit.efp" ),
-		/Unsupported particle rotation assignment/
-	);
+	const spacedAs = ( end, spacing ) => {
+		const value = rotated( end );
+		value.effects["hit.efp"].root.renderProgram.at( -1 ).spacing = spacing;
+		return value;
+	};
+	for ( const [end, spacing] of [ [ 0, 2 ], [ 100, 2 ], [ 100, 7 ] ] ) {
+		const spaced = createCatalogEffects().decode( encode( spacedAs( end, spacing ) ), "hit.efp" ).model;
+		assert.deepEqual( spaced.nodes, once.nodes, `end ${end} spacing ${spacing}` );
+	}
+	for ( const spacing of [ 0.5, -1 ] ) {
+		assert.throws(
+			() => createCatalogEffects().decode( encode( spacedAs( 100, spacing ) ), "hit.efp" ),
+			/Unsupported particle rotation assignment/
+		);
+	}
 });
 
 test("MOV_UP uses native zero arc coefficients and works within a dungeon region", () => {

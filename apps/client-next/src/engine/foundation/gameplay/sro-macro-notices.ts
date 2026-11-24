@@ -1,14 +1,14 @@
 /*
 ===========================================================================
 
-sro-macro-notices.ts - SRO Macro system chat lines (port-only)
+sro-macro-notices.ts - SRO Macro system chat lines (UIIT keys)
 
-Port-only, not native (#3907): the v1.696 client prints UIIT_STT_SRO_MACRO_*
-rows from 00dade90 (town / empty-potion ON refuse), the hunt return helpers
-(68ea80 reasons), Energy of Life / hammer use, and map-move hunt end
-(68b330). v1.150 has none of those keys, so the port keeps the English
-text from textuisystem (research media/macro_rows.txt) the same way the
-settings lane already hard-codes "ON/OFF Error" / "Save Error".
+The v1.696 client prints UIIT_STT_SRO_MACRO_* rows from 00dade90 (town /
+empty-potion ON refuse), the hunt return helpers (68ea80 reasons), Energy
+of Life / hammer use, and map-move hunt end (68b330). v1.150 has none of
+those keys; the product text catalog completes them
+(scripts/build/shared/textResources.mjs) and the worker queues the key
+so the HUD resolves English through textuisystem.en.json.
 
 ===========================================================================
 */
@@ -22,22 +22,25 @@ import {
 } from "@/engine/foundation/gameplay/sro-macro";
 import type { MacroHuntAction } from "@/engine/foundation/gameplay/sro-macro-hunt";
 
-// 00dade90 / 006861c0 / return-reason strings (English column).
-export const MACRO_NOTICE_TOWN_REFUSE = "You cannot start the skill/hunting macro in town.";
-export const MACRO_NOTICE_TOWN_OFF = "The skill/hunting macro is disabled in towns.";
-export const MACRO_NOTICE_POTION_ON_FAIL =
-	"There is no registered item in auto potion. Please register items and try again.";
-export const MACRO_NOTICE_TELEPORT_OFF = "You've moved out of the map, Hunting Macro will end.";
-export const MACRO_NOTICE_HP_POTION_EMPTY = "Insufficient HP Potions.  Using Return Scroll.";
-export const MACRO_NOTICE_MP_POTION_EMPTY = "Insufficient MP Potions.  Using Return Scroll.";
-export const MACRO_NOTICE_ITEM_DURA = "Item durability has reached 0.  Using Return Scroll.";
-export const MACRO_NOTICE_NOT_HAMMER = "No Repair Hammer.  Using Return Scroll.";
-export const MACRO_NOTICE_TIME_OVER = "Auto-Hunt time expired.  Using Return Scroll.";
-export const MACRO_NOTICE_NOT_REVIVAL = "No Resurrection Scroll.  Using Return Scroll.";
-export const MACRO_NOTICE_DIE_TOWN = "Character is dead.  Resurrecting in town.";
-export const MACRO_NOTICE_RETURN = "Using Return Scroll.";
-export const MACRO_NOTICE_ENERGY = "Using Energy of Life";
-export const MACRO_NOTICE_HAMMER = "Using Repair Hammer";
+// 00dade90 / 006861c0 / return-reason UIIT keys (v1.696 client).
+// 00dade90 pushes CANUSEMACRO (exe @ 0x01347b70 / 0x00daded9); Media.pk2
+// misspells that row CANTUSEMACRO with an empty English cell — the
+// product catalog completes the exe key.
+export const MACRO_NOTICE_TOWN_REFUSE = "UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_CANUSEMACRO";
+export const MACRO_NOTICE_TOWN_OFF = "UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_MACRO_OFF";
+export const MACRO_NOTICE_POTION_ON_FAIL = "UIIT_STT_SRO_MACRO_AUTO_POTION_ON_FAIL";
+export const MACRO_NOTICE_TELEPORT_OFF = "UIIT_STT_SRO_MACRO_AUTO_HUNTING_TELEPORT_OFF";
+export const MACRO_NOTICE_HP_POTION_EMPTY = "UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_HP_POTION_EMPTY";
+export const MACRO_NOTICE_MP_POTION_EMPTY = "UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_MP_POTION_EMPTY";
+export const MACRO_NOTICE_ITEM_DURA = "UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_ITEM_DURA";
+export const MACRO_NOTICE_NOT_HAMMER = "UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_NOT_HAMMER";
+export const MACRO_NOTICE_TIME_OVER = "UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_TIME_OVER";
+export const MACRO_NOTICE_NOT_REVIVAL = "UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_NOT_REVIVAL_SCROLL";
+export const MACRO_NOTICE_DIE_TOWN = "UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_DIE";
+// Native key spelling keeps ERORR.
+export const MACRO_NOTICE_RETURN = "UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_ERORR";
+export const MACRO_NOTICE_ENERGY = "UIIT_STT_SRO_MACRO_SYSTEM_WHAN_POTION";
+export const MACRO_NOTICE_HAMMER = "UIIT_STT_SRO_MACRO_SYSTEM_USE_HAMMER";
 
 /*
 ================
@@ -70,6 +73,7 @@ macroSwitchRefuseNotice
 Client-side refuse before 0x7554 (00dade90). Town blocks skill/hunt ON;
 potion ON with every row empty prints AUTO_POTION_ON_FAIL. OFF always
 passes. inTown is macroRegionIsTown(pose.regionId) from region-combat.ts.
+Returns the UIIT key to queue, or undefined when the switch may proceed.
 ================
 */
 export function macroSwitchRefuseNotice(
@@ -91,7 +95,7 @@ export function macroSwitchRefuseNotice(
 ================
 macroHuntNoticeText
 
-Chat line for a hunt action that the native prints when it fires the
+UIIT key for a hunt action that the native prints when it fires the
 matching return / use helper. undefined when the action is silent.
 ================
 */
