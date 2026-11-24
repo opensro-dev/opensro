@@ -63,17 +63,6 @@ test("all 8448 dispatch inputs preserve native constant routes or explicit conte
 		lines: [ "UIIT_MSG_GUILDWAR_SUGGESTIONS_01", "UIIT_MSG_GUILDWAR_SUGGESTIONS_02" ]
 	} );
 });
-test("the extension gear's worn refusal pairs byte 0xFA with the later client's line (port-only, #3909)", () => {
-	// The generated table above stays the v1.150 evidence (silent for
-	// the whole spirit family); the pair lives in the resolver, so a
-	// client without it shows nothing for the worn aim.
-	assert.deepEqual( resolveNativeNotice( 1, 0xfa ), {
-		kind: "notice",
-		notice: { key: "UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE", value: 0, nativeType: 5 }
-	} );
-	assert.equal( resolveNativeNotice( 1, 0xf8 ).kind, "silent" );
-	assert.equal( resolveNativeNotice( 1, 0xf9 ).kind, "silent" );
-});
 test("learning, matching and guild refusals reach gameplay notices without placeholder text", () => {
 	const bindings = [
 		[ 0xb2cb, 5 ],

@@ -108,7 +108,9 @@ func TestExtensionGearRefusalsKeepTheGear(t *testing.T) {
 		{"aimed at the gear itself", true, false, extendTestGearSlot, 3, spiritExtendErrTarget},
 		{"aimed at an empty slot", true, false, 30, 3, spiritExtendErrTarget},
 		{"aimed outside the bag", true, false, 5, 3, spiritExtendErrSlot},
-		{"aimed at the worn Spirit", true, true, uint8(nasrun.SpiritSlot), 3, spiritExtendErrWorn},
+		// The v1.188 bag-only read answers the worn aim with the slot
+		// refusal; the client refuses it before sending (#3909).
+		{"aimed at the worn Spirit", true, true, uint8(nasrun.SpiritSlot), 3, spiritExtendErrSlot},
 		{"worn with the switch off", false, true, uint8(nasrun.SpiritSlot), 3, 0},
 		{"past the ceiling", true, false, extendTestSpiritSlot, 22, wire.ErrCodeInvalidRequest},
 		{"switch off", false, false, extendTestSpiritSlot, 3, 0},
