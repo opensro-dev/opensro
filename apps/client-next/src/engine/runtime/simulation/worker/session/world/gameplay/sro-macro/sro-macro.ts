@@ -42,7 +42,8 @@ import {
 } from "@/engine/foundation/gameplay/sro-macro";
 
 // The v1.696 client's chat lines for a failed answer (00cfcbb3 and the
-// save branch). v1.150 carries no UIIT_STT_SRO_MACRO_* rows.
+// save branch). System-chat UIIT rows are completed in textResources;
+// these two save/switch errors stay hardcoded (no matching UIIT key).
 const SWITCH_ERROR_TEXT = "ON/OFF Error";
 const SWITCH_ERROR_OTHER_TEXT = "ON/OFF Error!";
 const SAVE_ERROR_TEXT = "Save Error";

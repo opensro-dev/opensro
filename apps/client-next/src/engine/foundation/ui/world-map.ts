@@ -231,8 +231,11 @@ function worldMapPagesAround( layout: WorldMapLayout ) {
 ================
 worldMapPageCaption
 
-The string key a page's caption names after UIIT_PAG_LOCALMAP (576949):
+The string key a page's caption names after UIIT_PAG_LOCALMAP:
 a town's UIIT_STT_ string, page 1001's SN_FORTRESS_JANGAN object text.
+The mode-caption switch picks the key per page (compares at 0x576a92
+for 1001, 0x576acc for 1002); 0x576949, cited here before, is a
+UIIT_PAG_LOCALMAP push in a sibling path, not the caption case.
 ================
 */
 export function worldMapPageCaption( page: { readonly name: string; readonly caption?: string; } ): string {
@@ -247,12 +250,14 @@ worldmap_mapinfo.txt row 1001, the Jangan fortress (world INS_FORT_JA):
 the page the three fort_worldmap icons (localinfo 91006-91008) open. Its
 regions (69..74 across, 71..67 down) lie outside the overview, so the
 town-page projection places the fortress's own positions unchanged.
-576949 captions it SN_FORTRESS_JANGAN.
+The mode-caption switch (page compare at 0x576a92) captions it
+SN_FORTRESS_JANGAN.
 
 Row 1002 is the Bandit fortress (world INS_FORT_BJ), the same table's
 row in the v1.188 client, which the build imports (#3586): the two
 fort_small_worldmap icons (91009-91010) open it, and the caption case
-for page 1002 is already in the client (576949, SN_FORTRESS_BIJEOKDAN).
+for page 1002 is already in the client (cmp esi, 0x3ea at 0x576acc,
+the SN_FORTRESS_BIJEOKDAN push at 0x576ad4).
 ================
 */
 function worldMapFortressPages() {

@@ -203,6 +203,55 @@ test( "renewal Item Mall search field deletes with Backspace and Delete after En
 		await page.keyboard.press( "Backspace" );
 		await page.evaluate( () => mallRenewalSearchFixture.draw() );
 		assert.equal( await search.inputValue(), "", "Backspace clears a full selection" );
+		// The player clicks the drawn glyphs at the field's left, where the
+		// draft is drawn, not the box's centre: that click must put the
+		// caret inside the text. It used to land at 0 - the editor's text
+		// was centred while the drawing is left-aligned - where Backspace
+		// has nothing before it and only Delete eats forward (#4153).
+		await page.keyboard.type( "DRESS" );
+		await page.evaluate( () => mallRenewalSearchFixture.draw() );
+		await search.click( { position: { x: 10, y: 10 } } );
+		await page.keyboard.press( "Backspace" );
+		await page.evaluate( () => mallRenewalSearchFixture.draw() );
+		assert.equal(
+			(await search.inputValue()).length,
+			4,
+			"Backspace deletes after a click on the drawn text"
+		);
+		// Enter applies the draft from the focused field, as the Search
+		// button does: the open category's tabs stand while the draft is
+		// unapplied and give way once the search takes.
+		await page.evaluate( () => {
+			mallRenewalSearchFixture.event( { kind: "activate", id: "item-mall-category:0" } );
+			mallRenewalSearchFixture.draw();
+		} );
+		assert.equal(
+			await page.evaluate( () =>
+				mallRenewalSearchFixture.semantics.controls.some( c => c.id.startsWith( "item-mall-tab:" ) )
+			),
+			true,
+			"the open category shows its tabs before the search"
+		);
+		await page.keyboard.press( "Control+A" );
+		await page.keyboard.type( "ZZZZ" );
+		await page.evaluate( () => mallRenewalSearchFixture.draw() );
+		assert.equal(
+			await page.evaluate( () =>
+				mallRenewalSearchFixture.semantics.controls.some( c => c.id.startsWith( "item-mall-tab:" ) )
+			),
+			true,
+			"an unapplied draft leaves the category tabs standing"
+		);
+		await page.keyboard.press( "Enter" );
+		await page.evaluate( () => mallRenewalSearchFixture.draw() );
+		assert.equal( await search.inputValue(), "ZZZZ", "Enter keeps the draft it applied" );
+		assert.equal(
+			await page.evaluate( () =>
+				mallRenewalSearchFixture.semantics.controls.some( c => c.id.startsWith( "item-mall-tab:" ) )
+			),
+			false,
+			"Enter applies the search from the focused field"
+		);
 		assert.deepEqual( errors, [], "no page errors" );
 		await page.evaluate( () => mallRenewalSearchFixture.dispose() );
 	} finally {

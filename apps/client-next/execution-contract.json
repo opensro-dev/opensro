@@ -2860,6 +2860,61 @@
 				"createSunDropMarkers",
 				"step"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/quest-list.ts",
+			"provider": "src/engine/runtime/ui/res-layout/res-layout.ts",
+			"functions": ["createResLayoutWindow"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/ui/res-layout/res-layout-resources.ts",
+			"functions": ["step", "data", "error"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/ui/hud/quest-list.ts",
+			"functions": ["createQuestList", "observe", "trackedCount", "handleControl", "drawList", "drawTracker", "scrollBy", "locateQuest", "lastLocated", "trackerEntries"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/ui/hud/world-map.ts",
+			"functions": ["activate", "surface", "drag", "scroll", "step", "present", "details", "position", "shortcut", "follow", "reset", "restorePosition", "guideWaypoint", "locate"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/quest-list.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": ["quads"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/res-layout/res-layout-resources.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": ["take", "available", "request", "cancel"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/res-layout/res-layout.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": ["has", "size"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/res-layout/res-layout.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": ["quads"]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/quest-list.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": ["hudCopy"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/quest-list.ts",
+			"provider": "src/engine/runtime/ui/hud/quest-timers.ts",
+			"functions": ["text"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/quest-list.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": ["hudCopy"]
 		}
 	],
 	"boundaries": [
