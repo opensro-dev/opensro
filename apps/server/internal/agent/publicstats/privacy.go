@@ -9,6 +9,8 @@ privacy.go - the website's privacy setting (port-only)
 	PUT /v1/accounts/{id}/characters/{name}/gear-hidden  {"hidden": bool} -> 204
 	PUT /v1/accounts/{id}/characters/{name}/break-notice {"on": bool} -> 204
 	PUT /v1/accounts/{id}/characters/{name}/plus-fail-notice {"on": bool} -> 204 (#3682: "on" is announcements on; the stored field is the opt-out)
+	The two notice routes are registered, and their character-row fields
+	sent, only while their shard announcement flag is on (#4305).
 	GET /v1/accounts/{id}/contributor-title              -> 200 this account's title (#135)
 	PUT /v1/accounts/{id}/contributor-title              -> 204 the title moves here
 
@@ -307,7 +309,20 @@ func (s *Service) ownCharacters(w http.ResponseWriter, account string) {
 			continue
 		}
 		race, _ := raceGender(c.ModelCodename)
-		out.Characters = append(out.Characters, OwnCharacter{Name: c.Name, Level: level(c), Race: race, Hidden: c.PublicHidden, GearHidden: c.PublicGearHidden, BreakNotice: c.BreakNotice, PlusFailNotice: !c.PlusFailOptOut})
+		row := OwnCharacter{Name: c.Name, Level: level(c), Race: race, Hidden: c.PublicHidden, GearHidden: c.PublicGearHidden}
+		// A notice field is sent exactly while its setter is wired,
+		// which wiring keeps to its shard flag being on (#4305): a
+		// flag-off shard sends neither field, and the account page
+		// hides both switches.
+		if s.src.SetBreakNotice != nil {
+			breakNotice := c.BreakNotice
+			row.BreakNotice = &breakNotice
+		}
+		if s.src.SetPlusFailNotice != nil {
+			plusFailNotice := !c.PlusFailOptOut
+			row.PlusFailNotice = &plusFailNotice
+		}
+		out.Characters = append(out.Characters, row)
 	}
 	s.mu.Unlock()
 	sort.Slice(out.Characters, func(i, j int) bool { return out.Characters[i].Name < out.Characters[j].Name })

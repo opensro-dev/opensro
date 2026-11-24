@@ -134,11 +134,15 @@ type Sources struct {
 	// SetGearHidden commits the "hide my gear" choice the same way.
 	SetGearHidden func(accountID, name string, hidden bool) error
 	// SetBreakNotice commits the item-break notice opt-in (#1738) the
-	// same way.
+	// same way. Wiring leaves it nil while SRO_ALCHEMY_BREAK_NOTICE is
+	// off (#4305): the route stays unregistered and the character row
+	// sends no breakNotice field.
 	SetBreakNotice func(accountID, name string, on bool) error
 	// SetPlusFailNotice commits the failed-reinforcement announcement
 	// choice (#3682) the same way, in its positive sense: on stores
-	// the character's opt-out (plusFailOptOut) off.
+	// the character's opt-out (plusFailOptOut) off. Wiring leaves it
+	// nil while SRO_ANNOUNCE_PLUS_FAIL is off (#4305), with the same
+	// route and field consequence.
 	SetPlusFailNotice func(accountID, name string, on bool) error
 	WriteToken        string
 	// ContributorTitleOf reads the Contributor title an account sees
