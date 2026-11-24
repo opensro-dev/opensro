@@ -162,12 +162,19 @@ apart from failures; a refused entry files as a software failure with the
 stage it happened in. Each code reports once - except asset failures,
 which file once per terminal episode: the stream owners hand each out
 exactly once (#2337), so a code dedupe would eat a later episode whole.
+The one uncaught_error code is the journal's fault port instead: it hands
+over the first throw of each distinct failure (journal.ts recordError,
+bounded there), so those dedupe by the failure itself - message and top
+frame - or a storm's second signature never files (#3684).
 ================
 	*/
 	function reportClient( command: Extract<SessionCommand, { kind: "client-report"; }> ) {
 		if ( command.incidentKind !== "asset" ) {
-			if ( clientReports.has( command.code ) || clientReports.size >= CLIENT_REPORT_CODES ) return;
-			clientReports.add( command.code );
+			const key = command.code === "uncaught_error" ?
+				command.code + "\n" + command.message + "\n" + (command.stack?.split( "\n" )[0] ?? "") :
+				command.code;
+			if ( clientReports.has( key ) || clientReports.size >= CLIENT_REPORT_CODES ) return;
+			clientReports.add( key );
 		}
 		reportIncident( {
 			id: crypto.randomUUID().replaceAll( "-", "" ),
