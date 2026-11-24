@@ -38,7 +38,11 @@ but with no English cell, so the quest-table import leaves it out and
 the line never ships - and QNO_AR_017, which stands behind
 QNO_AR_012. QNO_AR_066 and QNO_AR_068 stay out too: their target
 kinds (MOB_AR_TELBASTA2_ARMOR, MOB_AR_MAD_GENERAL_CLON) are placed by
-no nest and shipped in no character row.
+no nest and shipped in no character row. So does QNO_AR_091: its NPC,
+NPC_AR_SPECIAL_SOLDIER_11 (v1.696 characterdata 40523), has no npcpos
+placement in the later client, so no one could hand it in. The NPC
+names follow the character table (arabia_quests.go: the later contents
+table misspells the farmers and Yamain).
 
 KindByte is 1, as the whole Arabia table: these quests complete at
 their NPC, not through the reward window.
@@ -115,12 +119,12 @@ them Karem's unlimited essence collects) and 13 deliveries.
 */
 func arabiaCollectSpecs() []QuestSpec {
 	return []QuestSpec{
-		arabiaDeliver("QNO_AR_006", "NPC_AR_SOLDIER_2", "NPC_AR_FARMER_3", arabiaReward{47050, 41456232, 806}, "ITEM_QNO_AR_006_01"),
-		arabiaDeliver("QNO_AR_007", "NPC_AR_KHALED", "NPC_AR_FARMER_1", arabiaReward{47050, 41456232, 806}, "ITEM_QNO_AR_007_01"),
-		arabiaCollect("QNO_AR_011", 2, "NPC_AR_FARMER_1", arabiaReward{185848, 82912465, 1611}, "ITEM_QNO_AR_011_01", 180, "MOB_AR_BARUSWOLF_ADONIS1_CLONE"),
-		arabiaCollect("QNO_AR_013", 2, "NPC_AR_FARMER_3", arabiaReward{185848, 82912465, 1611}, "ITEM_QNO_AR_013_01", 90, "MOB_AR_UNEG"),
-		arabiaCollect("QNO_AR_015", 2, "NPC_AR_FARMER_2", arabiaReward{185848, 82912465, 1611}, "ITEM_QNO_AR_015_01", 40, "MOB_AR_MANGYANG_PLUNDER2_CLONE"),
-		arabiaDeliver("QNO_AR_016", "NPC_AR_FARMER_1", "NPC_AR_SPECIAL", arabiaReward{47050, 41456232, 806}, "ITEM_QNO_AR_016_01", "QNO_AR_011"),
+		arabiaDeliver("QNO_AR_006", "NPC_AR_SOLDIER_2", "NPC_AR_FARMER3", arabiaReward{47050, 41456232, 806}, "ITEM_QNO_AR_006_01"),
+		arabiaDeliver("QNO_AR_007", "NPC_AR_KHALED", "NPC_AR_FARMER1", arabiaReward{47050, 41456232, 806}, "ITEM_QNO_AR_007_01"),
+		arabiaCollect("QNO_AR_011", 2, "NPC_AR_FARMER1", arabiaReward{185848, 82912465, 1611}, "ITEM_QNO_AR_011_01", 180, "MOB_AR_BARUSWOLF_ADONIS1_CLONE"),
+		arabiaCollect("QNO_AR_013", 2, "NPC_AR_FARMER3", arabiaReward{185848, 82912465, 1611}, "ITEM_QNO_AR_013_01", 90, "MOB_AR_UNEG"),
+		arabiaCollect("QNO_AR_015", 2, "NPC_AR_FARMER2", arabiaReward{185848, 82912465, 1611}, "ITEM_QNO_AR_015_01", 40, "MOB_AR_MANGYANG_PLUNDER2_CLONE"),
+		arabiaDeliver("QNO_AR_016", "NPC_AR_FARMER1", "NPC_AR_SPECIAL", arabiaReward{47050, 41456232, 806}, "ITEM_QNO_AR_016_01", "QNO_AR_011"),
 		arabiaCollect("QNO_AR_022", 2, "NPC_AR_SPECIAL_SOLDIER_2", arabiaReward{232260, 135250958, 2887}, "ITEM_QNO_AR_022_01", 240, "MOB_AR_BLOOD_HYENA_FASTWOLF"),
 		arabiaCollect("QNO_AR_023", 2, "NPC_AR_SPECIAL_SOLDIER_2", arabiaReward{232260, 135250958, 2887}, "ITEM_QNO_AR_023_01", 360, "MOB_AR_WENEG"),
 		arabiaDeliver("QNO_AR_024", "NPC_AR_SPECIAL_SOLDIER_3", "NPC_AR_SOLDIER_1", arabiaReward{47400, 52597595, 1123}, "ITEM_QNO_AR_024_01", "QNO_AR_022"),
@@ -130,9 +134,9 @@ func arabiaCollectSpecs() []QuestSpec {
 		arabiaCollect("QNO_AR_034", 1, "NPC_AR_SPECIAL_SOLDIER_5", arabiaReward{478000, 220945965, 5151}, "ITEM_QNO_AR_034_01", 500, "MOB_AR_BLACKROBBERARCHER_MAD", "MOB_AR_BLACKROBBER_MAD"),
 		arabiaCollect("QNO_AR_035", 1, "NPC_AR_SPECIAL_SOLDIER_5", arabiaReward{239000, 110472983, 2575}, "ITEM_QNO_AR_035_01", 250, "MOB_AR_BLOOD_HYENA_WILDWOLF"),
 		arabiaCollect("QNO_AR_036", 1, "NPC_AR_SPECIAL_SOLDIER_5", arabiaReward{239000, 110472983, 2575}, "ITEM_QNO_AR_036_01", 120, "MOB_AR_DARKKHEPRI_EVIL"),
-		arabiaDeliver("QNO_AR_037", "NPC_AR_SPECIAL_SOLDIER_6", "NPC_AR_FARMER_2", arabiaReward{47800, 52597595, 1169}, "ITEM_QNO_AR_037_01", "QNO_AR_033"),
+		arabiaDeliver("QNO_AR_037", "NPC_AR_SPECIAL_SOLDIER_6", "NPC_AR_FARMER2", arabiaReward{47800, 52597595, 1169}, "ITEM_QNO_AR_037_01", "QNO_AR_033"),
 		arabiaDeliver("QNO_AR_038", "NPC_AR_SPECIAL_SOLDIER_6", "NPC_AR_MAHMUD", arabiaReward{47800, 71602859, 1169}, "ITEM_QNO_AR_038_01", "QNO_AR_034"),
-		arabiaDeliver("QNO_AR_039", "NPC_AR_SPECIAL_SOLDIER_6", "NPC_AR_YAMAI", arabiaReward{47800, 71602859, 1169}, "ITEM_QNO_AR_039_01", "QNO_AR_035"),
+		arabiaDeliver("QNO_AR_039", "NPC_AR_SPECIAL_SOLDIER_6", "NPC_AR_YAMAIN", arabiaReward{47800, 71602859, 1169}, "ITEM_QNO_AR_039_01", "QNO_AR_035"),
 		arabiaCollect("QNO_AR_044", 1, "NPC_AR_SPECIAL_SOLDIER_7", arabiaReward{478000, 220945965, 5151}, "ITEM_QNO_AR_044_01", 500, "MOB_AR_BASTET_MAD_THIEF", "MOB_AR_BLACKROBBERARCHER_THIEF"),
 		arabiaCollect("QNO_AR_046", 2, "NPC_AR_SPECIAL_SOLDIER_8", arabiaReward{207045, 223583508, 5653}, "ITEM_QNO_AR_046_01", 200, "MOB_AR_BLACKROBBER_THIEF"),
 		arabiaCollect("QNO_AR_048", 2, "NPC_AR_SPECIAL_SOLDIER_8", arabiaReward{207045, 223583508, 5653}, "ITEM_QNO_AR_048_01", 200, "MOB_AR_BLOOD_HYENA_FASTWOLF_CLONE"),
@@ -149,7 +153,6 @@ func arabiaCollectSpecs() []QuestSpec {
 		arabiaEssence("QNO_AR_065", arabiaReward{3395, 33123483, 872}, "ITEM_QNO_AR_065_01", 70, "MOB_AR_SNAKEDEMON_WARAN"),
 		arabiaEssence("QNO_AR_067", arabiaReward{4850, 45533747, 1245}, "ITEM_QNO_AR_067_01", 100, "MOB_AR_BLACKROBBER_ARMOR"),
 		arabiaEssence("QNO_AR_069", arabiaReward{24250, 45533747, 1245}, "ITEM_QNO_AR_069_01", 1, "MOB_ARABIA_MAD_GENERAL"),
-		arabiaCollect("QNO_AR_091", 5, "NPC_AR_SPECIAL_SOLDIER_11", arabiaReward{146700, 231196843, 6942}, "ITEM_QNO_AR_091", 300, "MOB_AR_WHITESPIDER_MADNESS_CLONE1"),
 		arabiaCollect("QNO_AR_095", 5, "NPC_AR_SPECIAL_SOLDIER_13", arabiaReward{147750, 159063428, 5160}, "ITEM_QNO_AR_095", 300, "MOB_AR_KARMUS_STRANGE"),
 		arabiaCollect("QNO_AR_100", 5, "NPC_AR_SPECIAL_INVESTIGATION_2", arabiaReward{150000, 184806947, 6998}, "ITEM_QNO_AR_100", 300, "MOB_AR_CRAB"),
 		arabiaDeliver("QNO_AR_101", "NPC_AR_SPECIAL_INVESTIGATION_2", "NPC_AR_SPECIAL_SOLDIER_15", arabiaReward{49600, 61557546, 2158}, "ITEM_QNO_AR_101", "QNO_AR_100"),
