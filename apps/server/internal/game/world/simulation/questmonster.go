@@ -96,6 +96,22 @@ func (s *MonsterState) SpawnQuestMonster(request QuestMonsterSpawn) bool {
 
 /*
 ================
+QuestMonsterSpawn.atNamedPoint
+
+Whether the monster lands on the point the owner named, with no radius
+sample. A cave floor refuses the outdoor radius sample (PlaneFeatures.
+QuestMonsterSpawns), but a named point samples nothing: it is grounded as
+a cave nest's own respawn is (the same normalize and ground pair), which
+is how the temple's Haroeris lands in his sanctum (action/
+temple_sanctum.go).
+================
+*/
+func (request QuestMonsterSpawn) atNamedPoint() bool {
+	return request.FixedPosition && request.RadiusMin == 0 && request.RadiusSpan == 0
+}
+
+/*
+================
 SpawnQuestMonsterGID
 
 SpawnQuestMonster, answering the landed monster's gid for an owner that
@@ -103,7 +119,7 @@ follows it (action/pandorabox.go's waves).
 ================
 */
 func (s *MonsterState) SpawnQuestMonsterGID(request QuestMonsterSpawn) (uint32, bool) {
-	if !FeaturesAt(request.Position.RegionID).QuestMonsterSpawns {
+	if !FeaturesAt(request.Position.RegionID).QuestMonsterSpawns && !request.atNamedPoint() {
 		return 0, false
 	}
 	ref, exists := s.ReferenceByCodename(request.Codename)

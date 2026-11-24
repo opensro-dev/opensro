@@ -63,6 +63,43 @@ func TestQuestGuardianUsesExactPopulationAndDoesNotRespawn(t *testing.T) {
 
 /*
 ================
+TestQuestMonsterLandsOnANamedCavePoint
+
+A cave floor refuses the radius sample, but a spawn at its named point
+(fixed, no radius) lands there: the temple's Haroeris in his sanctum.
+================
+*/
+func TestQuestMonsterLandsOnANamedCavePoint(t *testing.T) {
+	const code = "MOB_SD_HAROERIS"
+	state := NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{
+		1: {RefObjID: 1, Codename: code, TidWord: 0xc6, MaxHP: 100, WalkSpeed: 8, RunSpeed: 20},
+	}, nil))
+	state.SetRandomSource(func() float64 { return 0.5 })
+	state.StartDivision("temple")
+	lease, exists := state.PopulationLease("temple", instance.Pack(1, 1))
+	if !exists {
+		t.Fatal("ordinary population absent")
+	}
+	at := Spawn{RegionID: 0x800E, X: 9919, Y: 100, Z: 24}
+	gid, ok := state.SpawnQuestMonsterGID(QuestMonsterSpawn{Division: "temple", Population: lease, Codename: code,
+		Position: at, FixedPosition: true, NowMs: 1000})
+	if !ok {
+		t.Fatal("the named cave point was refused")
+	}
+	actors := state.MaterializedInstances("temple")
+	if len(actors) != 1 || actors[0].Gid != gid || actors[0].Spawn.RegionID != at.RegionID ||
+		actors[0].Spawn.X != at.X || actors[0].Spawn.Z != at.Z {
+		t.Fatalf("landed at %+v, want %+v", actors, at)
+	}
+	sampled := QuestMonsterSpawn{Division: "temple", Population: lease, Codename: code,
+		Position: at, FixedPosition: true, NowMs: 1000, RadiusSpan: 20}
+	if _, ok := state.SpawnQuestMonsterGID(sampled); ok {
+		t.Fatal("a radius sample in a cave was admitted")
+	}
+}
+
+/*
+================
 TestQuestSpawnRedrawsAPointInsideAClosedObject
 
 A spawn that asks to avoid closed objects redraws its angle and radius while the
