@@ -69,6 +69,7 @@ var catalogueReaders = map[string]string{
 	"SRO_UNIQUE_POP_TICKET":                  "BuildDropTables publishes it in the unique object (unique.popTicket and popTicketItem, progression.UniqueRulesFromEnv)",
 	"SRO_UNIQUE_MAX_LEVEL_LOOT":              "BuildDropTables publishes it in the unique object (unique.maxLevelLoot, progression.UniqueRulesFromEnv)",
 	"SRO_UNIQUE_SEAL_DROPS":                  "BuildDropTables publishes it in the unique object (unique.sealDrops, progression.UniqueRulesFromEnv)",
+	"SRO_STR_INT_UNIQUES":                    "shardPopulation reads it (monster.StrIntUniquesEnabled) to append the build-locked STR and INT copies of the field uniques",
 	"SRO_SHOP_EXTRA_GOODS":                   "shardShops reads it (commerce.ExtraGoodsFromEnv) into the shops' extra tabs",
 	"SRO_JANGAN_ALCHEMY_SHOP":                "shardShops reads it through the extra goods (commerce.JanganAlchemyShopFromEnv regroups Jangan's alchemy tabs)",
 	"SRO_JANGAN_XL_POTIONS":                  "shardShops reads it (commerce.JanganXLPotionGoodsFromEnv) into Jangan's potion tab",

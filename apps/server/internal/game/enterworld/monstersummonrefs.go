@@ -32,7 +32,7 @@ valid later spawn disappear in the client.
 func WithMonsterSummonReferences(template monster.Template, skills SkillDataSource) (monster.Template, error) {
 	var seeds []uint32
 	for id, ref := range template.Refs {
-		if monster.UniqueSummonPolicy(ref.Codename) != monster.NoSummonPolicy {
+		if monster.UniqueSummonPolicy(ref.BaseCodename()) != monster.NoSummonPolicy {
 			seeds = append(seeds, id)
 		}
 	}

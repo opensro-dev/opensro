@@ -652,7 +652,16 @@ func (s *MonsterState) tickOverwriteHive(state *divisionMonsterState, key string
 	// Native: a full hive neither ticks nor advances its callback phase.
 	if h.live < limit && nowMs-h.tickMs >= monster.NestHiveTickMs {
 		h.tickMs = nowMs
-		if h.selected >= 0 {
+		if s.template.Nests[members[0]].UniqueShare != "" {
+			// Port-only, not native (SRO_STR_INT_UNIQUES): the copies share
+			// one anchor list, so the next location is a draw among the
+			// points no other copy holds rather than a fixed member.
+			if pick, ok := s.sharedHivePick(state, members, nowMs); ok {
+				members = []int{pick}
+			} else {
+				members = nil
+			}
+		} else if h.selected >= 0 {
 			members = []int{h.selected}
 		}
 		for _, index := range members {
@@ -693,6 +702,11 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 	nest := s.template.Nests[index]
 	if n.occupant != 0 {
 		nest.RefObjID = n.occupant
+	}
+	// Port-only (SRO_STR_INT_UNIQUES): a copy never spawns on a point another
+	// living copy of the species already holds.
+	if s.anchorHeld(state, nest) {
+		return false
 	}
 	ref := s.template.Refs[nest.RefObjID]
 	roll := monster.RollNativeSpawn(ref, nest, n.partyArmed, s.randomWord)
@@ -749,6 +763,7 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 	state.behavior.set(gid, 0)
 	state.listRegionGid(spawn.RegionID, gid)
 	state.gidNests[gid] = index
+	s.holdAnchor(state, nest)
 	// Native bookkeeping: count the spawn before re-rolling the delay.
 	n.live++
 	n.lastMs = nowMs
@@ -882,6 +897,11 @@ nestDeath
 func (s *MonsterState) nestDeath(state *divisionMonsterState, index int, nowMs int64) {
 	n := state.nests[index]
 	nest := s.template.Nests[index]
+	// Port-only (SRO_STR_INT_UNIQUES): the point is free again for the
+	// species' other copies. A detachment reaches here with the actor still
+	// alive; that is the native release path and the actor keeps its ground
+	// only until the next spawn draws the point.
+	s.releaseAnchor(state, nest)
 	if n.live == nest.InstanceLimit() {
 		n.lastMs = nowMs
 	}

@@ -95,6 +95,15 @@ type MonsterRef struct {
 	// NativeTypeWord packs it into bits 11-15.
 	TypeID4  uint8
 	Codename string
+	// VariantOf names the reference this one is a build-locked copy of
+	// (strint_uniques.go, SRO_STR_INT_UNIQUES); empty for every shipped row.
+	// Callers that ask "which unique is this" by codename (summon policy,
+	// reward rules keyed on a species) read BaseCodename, so a copy keeps its
+	// base's behaviour.
+	VariantOf string
+	// UniqueBuild is the permanent allocation a build-locked copy admits
+	// (strint_uniques.go); UniqueBuildAny is the native rule, any attacker.
+	UniqueBuild UniqueBuild
 	// Own characterdata OrgObjCodeName128, used by native default-tactics fallback.
 	OriginalCodename string
 	// NameStrID is characterdata+column 5 (the SN_MOB_* localization key);
@@ -699,6 +708,48 @@ func textdataSection(cols []string) (string, bool) {
 		return "", true
 	}
 	return fields[1], true
+}
+
+/*
+==================
+BaseCodename
+
+The shipped codename of the species this reference belongs to: its own,
+unless it is a build-locked copy (strint_uniques.go).
+==================
+*/
+func (ref MonsterRef) BaseCodename() string {
+	if ref.VariantOf != "" {
+		return ref.VariantOf
+	}
+	return ref.Codename
+}
+
+/*
+==================
+AttackRefused
+
+Whether a build-locked copy refuses this attacker (SRO_STR_INT_UNIQUES,
+port-only). The permanent allocation decides: a strictly physical total
+(strength above intelligence) is the STR build, and every other total -
+balanced included - is the INT build. A balanced character therefore
+attacks the INT copy and is refused by the STR one. Every shipped
+reference is UniqueBuildAny and refuses nobody, so the native path is
+unchanged.
+==================
+*/
+func (ref MonsterRef) AttackRefused(strength, intellect int64) bool {
+	switch ref.UniqueBuild {
+	case UniqueBuildSTR:
+		// Strictly physical: an allocation with more intelligence is not
+		// physical, so a balanced character is refused here.
+		return strength <= intellect
+	case UniqueBuildINT:
+		// Magical covers intelligence and balance; only a strictly physical
+		// allocation is refused.
+		return strength > intellect
+	}
+	return false
 }
 
 /*

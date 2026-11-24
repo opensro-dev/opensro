@@ -78,6 +78,9 @@ type divisionMonsterState struct {
 	// uniqueTimes is the public tracker's spawn and death record
 	// (unique_states.go, port-only).
 	uniqueTimes map[uint32]*uniqueTimeline
+	// uniqueAnchors marks the shared spawn points a live unique of a
+	// shared species holds (uniqueshare.go, port-only).
+	uniqueAnchors map[uniqueAnchor]bool
 	// lifetimes holds the native monster tick timers (monsterlifetime.go).
 	lifetimes map[uint32]monsterLifetime
 	// byRegion indexes generated spawn regions for nest/lifecycle queries

@@ -110,7 +110,7 @@ SummonDue
 func SummonDue(instance Instance) bool {
 	maximum := instance.EffectiveMaxHP()
 	return instance.CurrentHP != 0 && maximum != 0 && instance.SummonActionUntilMs == 0 &&
-		UniqueSummonPolicy(instance.Ref.Codename) != NoSummonPolicy &&
+		UniqueSummonPolicy(instance.Ref.BaseCodename()) != NoSummonPolicy &&
 		float32(float64(instance.DamageSinceSummon)/float64(maximum)*100) >= 10
 }
 
@@ -129,7 +129,7 @@ func SelectSummon(instance Instance, skills []SummonSkill, sample float64) (int,
 		return 0, false
 	}
 	band := summonHealthBand(instance.CurrentHP, instance.EffectiveMaxHP())
-	switch UniqueSummonPolicy(instance.Ref.Codename) {
+	switch UniqueSummonPolicy(instance.Ref.BaseCodename()) {
 	case SummonByHealthBand:
 		wanted := min(3, 4-band)
 		for i, skill := range skills {

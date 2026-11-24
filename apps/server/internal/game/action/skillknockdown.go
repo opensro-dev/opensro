@@ -99,6 +99,12 @@ Player and companion attacks share displacement, status and HP admission.
 */
 func (rt *Runtime) planCreatureMonsterImpacts(caster monsterImpactCaster, skill enterworld.SkillRow, target monster.Instance, formulas []combat.Result, now int64) ([]simulation.MonsterDamagePlan, bool) {
 	division, from := caster.division, caster.from
+	// Port-only, not native (SRO_STR_INT_UNIQUES): a build-locked copy admits
+	// no plan from a character whose permanent allocation does not match. The
+	// refusal happens before any status is rolled or any reward credited.
+	if rt.monsterImpactRefused(caster, target) {
+		return nil, false
+	}
 	mover, ok := rt.Monsters.Mover(division, target.Gid)
 	if !ok {
 		return nil, false
