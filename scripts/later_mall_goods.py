@@ -129,6 +129,28 @@ class TreeView:
 
 
 # ================
+# rent_verdict
+#
+# What one scrap's rent term resolves to: None with its refrentitem
+# row for a sellable period, or the reason the good carrying it stays
+# out. The native load fatals when a rent term names another item than
+# the one being granted (_RefRentItem lookup, sub_6a61b0); that is a
+# build error, not a listing choice, so it raises.
+# ================
+def rent_verdict(term, scrap, rent_rows, item_by_id):
+	rent_row = rent_rows.get(term)
+	if rent_row is None:
+		return "rent term without a row", None
+	if len(rent_row) <= RENT_MINUTES or not rent_row[RENT_MINUTES].isdigit() or int(rent_row[RENT_MINUTES]) == 0:
+		return "rental window", None
+	if item_by_id.get(rent_row[RENT_ITEM_ID]) != scrap[SCRAP_ITEM]:
+		raise ValueError(
+			f"rent term {term} names item {rent_row[RENT_ITEM_ID]}, "
+			f"not the {scrap[SCRAP_ITEM]} its scrap sells")
+	return None, rent_row
+
+
+# ================
 # unlisted_reason
 #
 # Why one later good stays out, or None when it lists.
@@ -147,17 +169,9 @@ def unlisted_reason(tab, package, later_index, tree):
 	for row in rows:
 		if len(row) <= SCRAP_RENT or row[SCRAP_RENT] in (NO_RENT, ""):
 			continue
-		rent_row = rent_rows.get(row[SCRAP_RENT])
-		if rent_row is None:
-			return "rent term without a row"
-		if len(rent_row) <= RENT_MINUTES or not rent_row[RENT_MINUTES].isdigit() or int(rent_row[RENT_MINUTES]) == 0:
-			return "rental window"
-		if item_by_id.get(rent_row[RENT_ITEM_ID]) != row[SCRAP_ITEM]:
-			# The native load fatals when a rent term names another item
-			# than the one being granted; refuse the build, not the good.
-			raise ValueError(
-				f"rent term {row[SCRAP_RENT]} names item {rent_row[RENT_ITEM_ID]}, "
-				f"not the {row[SCRAP_ITEM]} its scrap sells")
+		reason, _ = rent_verdict(row[SCRAP_RENT], row, rent_rows, item_by_id)
+		if reason is not None:
+			return reason
 	held = [row[SCRAP_ITEM] for row in rows]
 	absent = [code for code in held if code not in tree.item_codes]
 	if absent:
@@ -233,11 +247,37 @@ def goods_rows(later, tree, rent_rows=None, item_by_id=None):
 			if term not in rent_terms:
 				rent_terms.add(term)
 				rows[RENT_TABLE].append(rent_rows[term])
+	# Goods an earlier step already staged (the avatar import lists the
+	# avatars it carries before this step runs) sell through the same
+	# goods table, so their rent rows must ship too: a staged rental
+	# without its row stops the mall load, the runtime shape of the
+	# native refusal. A term the shipped table cannot sell unstages
+	# the good instead (the summary names it for add_goods to strip).
+	staged_rentals, unstage = 0, set()
+	for package in sorted(have):
+		package_scraps = scraps.get(package, [])
+		terms = sorted({row[SCRAP_RENT] for row in package_scraps
+			if len(row) > SCRAP_RENT and row[SCRAP_RENT] not in (NO_RENT, "")})
+		if not terms:
+			continue
+		for term in terms:
+			scrap = next(row for row in package_scraps if len(row) > SCRAP_RENT and row[SCRAP_RENT] == term)
+			reason, rent_row = rent_verdict(term, scrap, rent_rows, item_by_id)
+			if reason is not None:
+				unlisted[reason.split(":")[0]] += 1
+				unstage.add(package)
+				break
+			if term not in rent_terms:
+				rent_terms.add(term)
+				rows[RENT_TABLE].append(rent_row)
+		else:
+			staged_rentals += 1
 	for tab, slots in next_slot.items():
 		if slots > mall.MALL_SLOTS:
 			raise ValueError(f"{tab} would hold {slots} goods; the mall's one-byte slot holds {mall.MALL_SLOTS}")
-	return rows, {"packages": listed, "listed": len(listed), "rentals": rentals,
-		"rentTerms": sorted(rent_terms), "unlisted": dict(sorted(unlisted.items()))}
+	return rows, {"packages": listed, "listed": len(listed), "rentals": rentals + staged_rentals,
+		"rentTerms": sorted(rent_terms), "unstage": sorted(unstage),
+		"unlisted": dict(sorted(unlisted.items()))}
 
 
 # ================
@@ -303,6 +343,8 @@ def add_goods(later_root, native, output):
 			if row and row[0] == mall.SERVICE_ON and len(row) > RENT_CODE}
 		item_by_id = {row[1]: row[2] for row in avatars.later_table_rows(media, index, "itemdata.txt") if len(row) > 2}
 	rows, summary = goods_rows(later, read_tree(read), rent_rows, item_by_id)
+	if summary.get("unstage"):
+		mall.strip_mall(output, set(summary["unstage"]))
 	for name, _ in mall.MALL_TABLES:
 		raw = read(name)
 		if raw is None:

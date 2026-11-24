@@ -146,6 +146,53 @@ class LaterMallGoodsTest(unittest.TestCase):
 				rent_rows={rent_row[1]: rent_row}, item_by_id={"4242": "ITEM_MALL_AVATAR_M_OTHER"})
 
 	# ================
+	# test_a_staged_rental_ships_its_rent_row
+	#
+	# A good an earlier step already staged sells through the same
+	# goods table; its rent row ships with it or the mall load stops.
+	# Nothing else is written: the good is already listed.
+	# ================
+	def test_a_staged_rental_ships_its_rent_row(self):
+		current = empty()
+		later_good(current, "MALL_AVATAR_DRESS", "ITEM_MALL_AVATAR_M_ARABIA_2", 3, "14", 3,
+			rent="RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D")
+		later = empty()
+		later_good(later, "MALL_AVATAR_DRESS", "ITEM_MALL_AVATAR_M_ARABIA_2", 3, "14", 3,
+			rent="RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D")
+		rent_row = ["1", "RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D", "4242", "0", "0", "2",
+			"NULL", "NULL", "1", "1440", "0", "0", "0", "0"]
+		rows, summary = goods.goods_rows(later, tree_of({"ITEM_MALL_AVATAR_M_ARABIA_2"}, current=current),
+			rent_rows={rent_row[1]: rent_row}, item_by_id={"4242": "ITEM_MALL_AVATAR_M_ARABIA_2"})
+		self.assertEqual(summary["packages"], [])
+		self.assertEqual(summary["rentals"], 1)
+		self.assertEqual(summary["rentTerms"], ["RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D"])
+		self.assertEqual(rows["refrentitem.txt"], [rent_row])
+		self.assertEqual(summary["unstage"], [])
+
+	# ================
+	# test_a_staged_rental_window_unstages
+	#
+	# A staged good whose term is a fixed window cannot be sold (the
+	# server takes periods only); it is unstaged for add_goods to
+	# strip instead of breaking the mall load.
+	# ================
+	def test_a_staged_rental_window_unstages(self):
+		current = empty()
+		later_good(current, "MALL_AVATAR_DRESS", "ITEM_MALL_AVATAR_M_ARABIA_2", 3, "14", 3,
+			rent="RENT_ITEM_MALL_AVATAR_M_ARABIA_2_EVENT")
+		later = empty()
+		package = later_good(later, "MALL_AVATAR_DRESS", "ITEM_MALL_AVATAR_M_ARABIA_2", 3, "14", 3,
+			rent="RENT_ITEM_MALL_AVATAR_M_ARABIA_2_EVENT")
+		rent_row = ["1", "RENT_ITEM_MALL_AVATAR_M_ARABIA_2_EVENT", "4242", "0", "0", "1",
+			"2026-12-20 00:00:00", "2027-01-03 00:00:00", "0", "0", "0", "0", "0", "0"]
+		rows, summary = goods.goods_rows(later, tree_of({"ITEM_MALL_AVATAR_M_ARABIA_2"}, current=current),
+			rent_rows={rent_row[1]: rent_row}, item_by_id={"4242": "ITEM_MALL_AVATAR_M_ARABIA_2"})
+		self.assertEqual(summary["rentals"], 0)
+		self.assertEqual(summary["unlisted"], {"rental window": 1})
+		self.assertEqual(summary["unstage"], [package])
+		self.assertFalse(rows["refrentitem.txt"])
+
+	# ================
 	# test_a_summon_scroll_lists_once_its_creature_is_in_the_tree
 	# ================
 	def test_a_summon_scroll_lists_once_its_creature_is_in_the_tree(self):
