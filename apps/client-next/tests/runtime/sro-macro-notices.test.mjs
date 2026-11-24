@@ -1,10 +1,11 @@
 /*
 ===========================================================================
 
-sro-macro-notices.test.mjs - SRO Macro system chat lines
+sro-macro-notices.test.mjs - SRO Macro system chat UIIT keys
 
-Port-only, not native (#3907): 00dade90 switch refuses and hunt return /
-use notices from sro-macro-notices.ts.
+00dade90 switch refuses and hunt return / use notices queue
+UIIT_STT_SRO_MACRO_* keys (sro-macro-notices.ts); English lives in the
+text catalog completion.
 
 ===========================================================================
 */
@@ -77,7 +78,7 @@ test("town disable turns skill and hunt off together", () => {
 	assert.deepEqual( macroTownDisableKinds( true, true, false ), [] );
 });
 
-test("hunt action notices match the English UIIT rows", () => {
+test("hunt action notices queue the matching UIIT keys", () => {
 	assert.equal(
 		macroHuntNoticeText( { kind: "return-scroll", reason: "potion-hp", endHunt: true } ),
 		MACRO_NOTICE_HP_POTION_EMPTY
@@ -97,5 +98,6 @@ test("hunt action notices match the English UIIT rows", () => {
 	assert.equal( macroHuntNoticeText( { kind: "resurrect-town" } ), MACRO_NOTICE_DIE_TOWN );
 	assert.equal( macroHuntNoticeText( { kind: "energy-of-life" } ), MACRO_NOTICE_ENERGY );
 	assert.equal( macroHuntNoticeText( { kind: "select", gid: 1 } ), undefined );
-	assert.equal( MACRO_NOTICE_TOWN_OFF.includes( "disabled in towns" ), true );
+	assert.equal( MACRO_NOTICE_TOWN_OFF, "UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_MACRO_OFF" );
+	assert.equal( MACRO_NOTICE_POTION_ON_FAIL.startsWith( "UIIT_STT_SRO_MACRO_" ), true );
 });
