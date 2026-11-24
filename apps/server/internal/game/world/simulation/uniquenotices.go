@@ -3,7 +3,7 @@
 
 uniquenotices.go - the shard's unique appearance and death notices
 
-A rarity-3 monster's spawn and death are told to the whole division
+A unique's spawn and death are told to the whole division
 (0x3058, kinds 5 and 6). Each population queues its own notices; the tick
 drains them once per division. The overworld population always speaks.
 An instance layer speaks only when its world announces its uniques
@@ -58,7 +58,7 @@ func (s *MonsterState) RecordUniqueKiller(division string, gid uint32, name stri
 	defer s.mu.Unlock()
 	state := s.populationForObject(division, gid)
 	instance, ok := state.instances.lookup(gid)
-	if !ok || instance.Arena || instance.CurrentHP != 0 || instance.Rarity()&15 != 3 || state.uniqueDeaths[gid] {
+	if !ok || instance.Arena || instance.CurrentHP != 0 || !instance.IsUnique() || state.uniqueDeaths[gid] {
 		return 0, false
 	}
 	if state.uniqueDeaths == nil {

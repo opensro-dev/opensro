@@ -347,6 +347,7 @@ export function buildQuestDataAsset() {
 	// Untranslated region-group titles ship as literal "0"/empty English cells
 	// (verified in raw texthelp.txt); completed from the shared attested map.
 	completeGuideTitles( guideTextEntries );
+	const guideLevelCap = configuredGuideLevelCap();
 	const catalog = {
 		sourcePaths: [
 			questDataPath,
@@ -378,8 +379,13 @@ export function buildQuestDataAsset() {
 		guideRecords: questGuideRecords(
 			readTextDataRowsSync( questDataPath ),
 			readTextDataRowsSync( questContentsDataPath ),
-			configuredGuideLevelCap()
+			guideLevelCap
 		),
+		// The level cap the guide records were cut at: a quest above it is
+		// out of the guide by design (the Arabia quests, 121-130, on a cap-90
+		// shard), and a reader checks that against this, not against its own
+		// reading of SRO_LEVEL_CAP.
+		guideLevelCap,
 		guideTextEntries,
 		textEntries
 	};

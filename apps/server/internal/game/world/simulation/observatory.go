@@ -151,7 +151,7 @@ func (s *MonsterState) observatory(division string, focus []uint16, limit int) O
 		now := s.nowMillis()
 		for gid := range state.instances.ids() {
 			ref, rarity, hp, maxHP := state.instances.projection(gid)
-			if hp > 0 && rarity&15 == 3 {
+			if hp > 0 && monster.RarityIsUnique(rarity) {
 				out.UniqueAlive++
 			}
 			pose := monster.Pose{}

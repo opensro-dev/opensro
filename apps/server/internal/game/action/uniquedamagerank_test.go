@@ -114,17 +114,21 @@ TestUniqueDamageRankFramesFollowTheFlagAndGrade
 */
 func TestUniqueDamageRankFramesFollowTheFlagAndGrade(t *testing.T) {
 	rt := &Runtime{}
-	impact, roster, characters := uniqueKillImpact(uniqueRarityGrade, 14)
+	impact, roster, characters := uniqueKillImpact(3, 14)
 	actor := characters[0]
 	if frames, others := rt.uniqueDamageRankFrames(actor, roster, impact); frames != nil || others != nil {
 		t.Fatal("the flag off sent a ranking")
 	}
 	rt.UniqueDamageRank = true
-	for _, grade := range []uint8{0, 1, 8} {
+	for _, grade := range []uint8{0, 1} {
 		other, otherRoster, _ := uniqueKillImpact(grade, 3)
 		if frames, others := rt.uniqueDamageRankFrames(actor, otherRoster, other); frames != nil || others != nil {
 			t.Fatalf("grade %d sent a ranking", grade)
 		}
+	}
+	late, lateRoster, _ := uniqueKillImpact(8, 3)
+	if frames, others := rt.uniqueDamageRankFrames(actor, lateRoster, late); frames == nil && others == nil {
+		t.Fatal("a grade-8 unique kill sent no ranking")
 	}
 	nonFatal := impact
 	nonFatal.Fatal = false
@@ -169,7 +173,7 @@ func TestUniqueDamageRankThroughAKill(t *testing.T) {
 		rt, _, actor, target := newCombatTestRuntime(t, 100)
 		rt.UniqueDamageRank = on
 		ref := target.Ref
-		ref.Codename, ref.MonsterType = "MOB_CH_TIGERWOMAN", uniqueRarityGrade
+		ref.Codename, ref.MonsterType = "MOB_CH_TIGERWOMAN", 3
 		rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{ref.RefObjID: ref}, []monster.NestRow{{SpawnPoint: target.Spawn, RetailEvidence: true, MaxCount: 1}}))
 		rt.Monsters.SetTimeSource(rt.Now)
 		rt.Monsters.StartDivision(testDivision)

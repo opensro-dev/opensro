@@ -377,6 +377,66 @@ class ArchiveTests(unittest.TestCase):
 				self.assertFalse((text_root / shard).exists())
 
 
+class SkillStagingTests(unittest.TestCase):
+	"""DefaultSkillIDs on staged pets pull their skilldata rows with them."""
+
+	@staticmethod
+	def _skill_row(identity, code, next_id="0"):
+		row = ["1"] + ["0"] * 117
+		row[1] = str(identity)
+		row[3] = code
+		row[6] = str(next_id)
+		return row
+
+	def test_stage_pet_skills_writes_the_shard_and_remaps_ids(self):
+		with tempfile.TemporaryDirectory() as folder:
+			text_root = Path(folder) / importer.TEXT_ROOT
+			text_root.mkdir(parents=True)
+			(text_root / "skilldata.txt").write_bytes(importer._encode([["skilldata_5000.txt"]]))
+			(text_root / "skilldata_5000.txt").write_bytes(importer._encode([
+				self._skill_row(100, "PSKILL_NATIVE")]))
+			# Native layout: DefaultSkillIDs start at column 89.
+			char = ["0"] * characters.NATIVE_CHARACTER_COLUMNS
+			char[importer.CHAR_ID] = "1"
+			char[importer.CHAR_CODE] = "COS_P_FOX_001"
+			char[importer.CHAR_DEFAULT_SKILL1] = "5001"
+			client = {5001: self._skill_row(5001, "PSKILL_P_FOX_01_ATTACK01")}
+
+			def read(name):
+				if name == "skilldata.txt":
+					return importer._encode([["skilldata_9000.txt"]])
+				if name == "skilldata_9000.txt":
+					return importer._encode([client[5001]])
+				raise KeyError(name)
+
+			chars, skills = importer.stage_pet_skills(
+				read, lambda name: name in ("skilldata.txt", "skilldata_9000.txt"),
+				text_root, "skilldata_140000.txt", [char])
+			self.assertEqual(set(skills), {"PSKILL_P_FOX_01_ATTACK01"})
+			assigned = skills["PSKILL_P_FOX_01_ATTACK01"]
+			self.assertEqual(chars[0][importer.CHAR_DEFAULT_SKILL1], str(assigned))
+			shard = importer.tables.table_rows((text_root / "skilldata_140000.txt").read_bytes())
+			self.assertEqual([(row[1], row[3]) for row in shard], [(str(assigned), "PSKILL_P_FOX_01_ATTACK01")])
+			manifest = [row[0] for row in importer.tables.table_rows((text_root / "skilldata.txt").read_bytes()) if row]
+			self.assertIn("skilldata_140000.txt", manifest)
+
+	def test_stage_pet_skills_drops_the_shard_when_nothing_is_needed(self):
+		with tempfile.TemporaryDirectory() as folder:
+			text_root = Path(folder) / importer.TEXT_ROOT
+			text_root.mkdir(parents=True)
+			(text_root / "skilldata.txt").write_bytes(importer._encode([
+				["skilldata_5000.txt"], ["skilldata_140000.txt"]]))
+			(text_root / "skilldata_140000.txt").write_bytes(importer._encode([
+				self._skill_row(5001, "PSKILL_STALE")]))
+			char = ["0"] * characters.NATIVE_CHARACTER_COLUMNS
+			chars, skills = importer.stage_pet_skills(
+				lambda name: b"", lambda name: False, text_root, "skilldata_140000.txt", [char])
+			self.assertEqual((skills, chars[0][importer.CHAR_DEFAULT_SKILL1]), ({}, "0"))
+			self.assertFalse((text_root / "skilldata_140000.txt").exists())
+			manifest = [row[0] for row in importer.tables.table_rows((text_root / "skilldata.txt").read_bytes()) if row]
+			self.assertNotIn("skilldata_140000.txt", manifest)
+
+
 class PetIconTest(unittest.TestCase):
 	"""An added kind's icons come from the later source when the native tree lacks them."""
 

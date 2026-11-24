@@ -174,7 +174,7 @@ func (rt *Runtime) applyPetStatus(step petCombatStep, row enterworld.SkillRow, g
 		return nil, false
 	}
 	mob := *target.monster
-	if rarity := mob.Rarity() & 0x0f; rarity == 3 || rarity == 8 {
+	if mob.IsUnique() {
 		return nil, false
 	}
 	actor := criticalActor{division: step.key.division, monster: step.pet.GID}

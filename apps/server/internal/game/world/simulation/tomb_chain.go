@@ -714,7 +714,7 @@ func (s *MonsterState) spawnChainInstanceLocked(state *divisionMonsterState, nes
 	state.instances.set(gid, instance)
 	state.spawns++
 	armLifetimeLocked(state, instance, nowMs)
-	if instance.Rarity()&15 == 3 {
+	if instance.IsUnique() {
 		state.uniqueNotices = append(state.uniqueNotices, uniqueNotice(5, ref.RefObjID, ""))
 		state.markUniqueSpawn(ref.RefObjID, nest.RegionID, nowMs)
 	}

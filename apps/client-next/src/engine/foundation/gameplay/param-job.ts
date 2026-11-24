@@ -158,6 +158,19 @@ export function paramJobPacket( frame: WireFrame, nowMs: number ): ParamJobUpdat
 	return { kind: "set", row: { itemRefObjId, remainingSec: v.getUint32( 4, true ), receivedAtMs: nowMs } };
 }
 
+/*
+================
+isSurvivalParamJob
+
+One of the survival arena's virtual rows: they ride the timed board but
+are no bought item, so the board capacity and the macro's VIP clock skip
+them.
+================
+*/
+export function isSurvivalParamJob( itemRefObjId: number ): boolean {
+	return SURVIVAL_POWERS[itemRefObjId] !== undefined;
+}
+
 const MS_PER_SECOND = 1000;
 const MS_PER_MINUTE = 60000;
 const MS_PER_HOUR = 3600000;
@@ -260,8 +273,8 @@ True when the frame was a param job row.
 				return true;
 			}
 			if (
-				!SURVIVAL_POWERS[id] &&
-				kept.filter( row => !SURVIVAL_POWERS[row.itemRefObjId] ).length >= PARAM_JOB_CAPACITY
+				!isSurvivalParamJob( id ) &&
+				kept.filter( row => !isSurvivalParamJob( row.itemRefObjId ) ).length >= PARAM_JOB_CAPACITY
 			) throw Error( "Param job capacity" );
 			rows = [ ...kept, update.row ];
 			return true;
