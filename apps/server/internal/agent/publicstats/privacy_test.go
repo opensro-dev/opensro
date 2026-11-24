@@ -58,6 +58,15 @@ func privacyService(f *fixture, token string) *Service {
 		}
 		return ErrNotOwned
 	}
+	s.src.SetPlusFailNotice = func(account, name string, on bool) error {
+		for _, c := range f.chars {
+			if strings.EqualFold(c.Name, name) && c.AccountID == account {
+				c.PlusFailOptOut = !on
+				return nil
+			}
+		}
+		return ErrNotOwned
+	}
 	return s
 }
 
@@ -293,6 +302,60 @@ func TestBreakNoticeOptInWritesAtOnce(t *testing.T) {
 		t.Fatalf("own characters %s %v", rec.Body.String(), err)
 	}
 	if code := put(s, "/v1/accounts/alpha/characters/Kekw/break-notice", "", `{"on":false}`); code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated write = %d", code)
+	}
+}
+
+/*
+================
+TestPlusFailNoticeOptOutWritesAtOnce
+
+#3682's announcement choice is on until the account page turns it off:
+the write carries "on" in its positive sense while the stored field
+is the opt-out, and the owner's list shows the choice at once. The
+route answers exactly like the break notice's: 404 across accounts,
+400 on a malformed body, 401 without the token.
+================
+*/
+func TestPlusFailNoticeOptOutWritesAtOnce(t *testing.T) {
+	f := newFixture()
+	s := privacyService(f, testWriteToken)
+	if code := put(s, "/v1/accounts/beta/characters/kekw/plus-fail-notice", testWriteToken, `{"on":false}`); code != http.StatusNotFound {
+		t.Fatalf("another account's write = %d, want 404", code)
+	}
+	if code := put(s, "/v1/accounts/alpha/characters/kekw/plus-fail-notice", testWriteToken, `{"onn":false}`); code != http.StatusBadRequest {
+		t.Fatalf("malformed body = %d, want 400", code)
+	}
+	ownCharacters := func() OwnCharactersResponse {
+		rec := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/v1/accounts/alpha/characters", nil)
+		request.Header.Set("Authorization", "Bearer "+testWriteToken)
+		s.Handler().ServeHTTP(rec, request)
+		var own OwnCharactersResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &own); err != nil || len(own.Characters) != 1 {
+			t.Fatalf("own characters %s %v", rec.Body.String(), err)
+		}
+		return own
+	}
+	if own := ownCharacters(); !own.Characters[0].PlusFailNotice {
+		t.Fatalf("own characters %+v, want the announcements on by default", own.Characters)
+	}
+	if code := put(s, "/v1/accounts/alpha/characters/kekw/plus-fail-notice", testWriteToken, `{"on":false}`); code != http.StatusNoContent {
+		t.Fatalf("opt out = %d", code)
+	}
+	if !f.chars[0].PlusFailOptOut {
+		t.Fatal("the write left the stored opt-out off")
+	}
+	if own := ownCharacters(); own.Characters[0].PlusFailNotice {
+		t.Fatalf("own characters %+v, want the announcements off at once", own.Characters)
+	}
+	if code := put(s, "/v1/accounts/alpha/characters/kekw/plus-fail-notice", testWriteToken, `{"on":true}`); code != http.StatusNoContent {
+		t.Fatalf("opt back in = %d", code)
+	}
+	if f.chars[0].PlusFailOptOut {
+		t.Fatal("the write left the stored opt-out on")
+	}
+	if code := put(s, "/v1/accounts/alpha/characters/Kekw/plus-fail-notice", "", `{"on":false}`); code != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated write = %d", code)
 	}
 }
