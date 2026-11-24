@@ -364,10 +364,19 @@ export async function buildMonsterPortraitAssets() {
 			server: { host: "127.0.0.1", port: 0 },
 			plugins: [ publishedAssets() ]
 		} );
-		await server.listen();
-		const launched = await launchProbeBrowser( {
-			viewport: { width: MONSTER_PORTRAIT_SIZE, height: MONSTER_PORTRAIT_SIZE }
-		} );
+		// A launch that fails here is the GPU-less case this family falls
+		// back for (#4015): the server must not outlive it, or its open
+		// listener keeps the build process from exiting.
+		let launched;
+		try {
+			await server.listen();
+			launched = await launchProbeBrowser( {
+				viewport: { width: MONSTER_PORTRAIT_SIZE, height: MONSTER_PORTRAIT_SIZE }
+			} );
+		} catch ( error ) {
+			await server.close();
+			throw error;
+		}
 		return {
 			server,
 			browser: launched.browser,
