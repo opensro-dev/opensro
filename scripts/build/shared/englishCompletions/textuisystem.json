@@ -991,32 +991,32 @@
  },
  "UIO_SECOND_HWAN_CH_NAME_LEVEL_1": {
   "english": "Captain",
-  "basis": "translated-retail-korean",
+  "basis": "later-client-english",
   "source": "편장군"
  },
  "UIO_SECOND_HWAN_CH_NAME_LEVEL_2": {
   "english": "General",
-  "basis": "translated-retail-korean",
+  "basis": "later-client-english",
   "source": "소무장군"
  },
  "UIO_SECOND_HWAN_CH_NAME_LEVEL_3": {
   "english": "Senior General",
-  "basis": "translated-retail-korean",
+  "basis": "later-client-english",
   "source": "분무장군"
  },
  "UIO_SECOND_HWAN_CH_NAME_LEVEL_4": {
   "english": "Chief General",
-  "basis": "translated-retail-korean",
+  "basis": "later-client-english",
   "source": "진무장군"
  },
  "UIO_SECOND_HWAN_CH_NAME_LEVEL_5": {
   "english": "Vice General Lord",
-  "basis": "translated-retail-korean",
+  "basis": "later-client-english",
   "source": "건무장군"
  },
  "UIO_SECOND_HWAN_CH_NAME_LEVEL_6": {
   "english": "General Lord",
-  "basis": "translated-retail-korean",
+  "basis": "later-client-english",
   "source": "보국장군"
  },
  "UIO_SECOND_HWAN_EU_NAME_LEVEL_1": {
