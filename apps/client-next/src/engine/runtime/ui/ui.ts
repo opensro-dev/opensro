@@ -61,6 +61,10 @@ const CHAT_STRIP_INPUT = 20;
 const PARTY_CHAT_GAP = 4;
 // The quest detail page's default body color (the native quest texts' own 255,44,15,1 as ARGB).
 const QUEST_DETAIL_TEXT: UiQuad["color"] = [ 44 / 255, 15 / 255, 1 / 255, 1 ];
+// The selection reward layout on the contents plate (#3920): the body
+// band, then the value rows, then one row per pickable choice.
+const REWARD_BODY_HEIGHT = 84;
+const REWARD_CHOICE_ROW = 36;
 // A Berserk body that returns within this long of vanishing, with the minute not yet spent, is the same Berserk.
 const BERSERK_RESUME_WINDOW_MS = 30000;
 const BERSERK_RESUME_ELAPSED_MS = 59000;
@@ -2304,6 +2308,9 @@ export function createUi( ports: UiPorts ) {
 	}
 	const expandedQuests = new Set<number>();
 	let selectedQuest = 0, trackedQuest = 0, confirmAbandon = false, questPage = 0, chatPage = 0;
+	// The reward window's pick (chosen item RefObjIDs) and its take-reward
+	// confirm (#3920), plus the refusal line last answered.
+	let rewardPicks: readonly number[] = [], confirmReward = false, rewardRefusalKey = "";
 	let chatText = "", chatTarget = "", chatChannel = 1, chatFeedbackObserved = 0;
 	let caretDue = 0, caretVisible = true;
 	let focusRevision = 0;
@@ -2694,7 +2701,10 @@ export function createUi( ports: UiPorts ) {
 		if ( panel && !next ) sound( "close" );
 		if ( !next ) {
 			for ( const owner of admittedWindows.keys() ) {
-				if ( questDetails && (owner === "quest-details" || owner === "quest-abandon") ) continue;
+				if (
+					questDetails &&
+					(owner === "quest-details" || owner === "quest-abandon" || owner === "quest-reward-confirm")
+				) continue;
 				admittedWindows.delete( owner );
 			}
 		} else if ( !(isMainPopupPage( panel ) && isMainPopupPage( next )) ) {
@@ -4218,6 +4228,7 @@ export function createUi( ports: UiPorts ) {
 		if ( withdrawal.confirming() ) return;
 		if ( practice && !id.startsWith( "skill-confirm-" ) ) return;
 		if ( confirmAbandon && !id.startsWith( "quest-abandon-" ) ) return;
+		if ( confirmReward && !id.startsWith( "quest-reward-" ) ) return;
 		const phase = view.session?.phase ?? "signed-out";
 		if ( npcPanel.event( { kind: "activate", id } ) ) {
 			dirty = true;
@@ -5691,6 +5702,8 @@ export function createUi( ports: UiPorts ) {
 				questDetailScroll = 0;
 				questDetails = true;
 				confirmAbandon = false;
+				confirmReward = false;
+				rewardPicks = [];
 			}
 		} else if ( id === "quest-abandon" ) confirmAbandon = true;
 		else if ( id === "quest-abandon-yes" ) {
@@ -5698,10 +5711,44 @@ export function createUi( ports: UiPorts ) {
 			confirmAbandon = false;
 			questDetails = false;
 		} else if ( id === "quest-abandon-no" ) confirmAbandon = false;
-		else if ( id === "quest-reward" ) {
-			sendGameplay( { kind: "quest-reward", refId: selectedQuest } );
+		else if ( id.startsWith( "quest-choice:" ) ) {
+			// Toggle one pick. The cap refuses with the window's own line
+			// (the later client's "You cannot select more."); the choice
+			// list itself comes from the quest's reward block.
+			const choiceId = Number( id.slice( 13 ) ),
+				reward = guideResources.data()?.questPresentation.records[selectedQuest]?.reward;
+			if ( reward && reward.choices.some( choice => choice.refId === choiceId ) ) {
+				if ( rewardPicks.includes( choiceId ) ) {
+					rewardPicks = rewardPicks.filter( picked => picked !== choiceId );
+				} else if ( rewardPicks.length >= reward.selectionCount ) {
+					hudMessages.append( hudCopy( "UIIT_STT_QUESTREWARD_MSG03" ), 0xffff7070 );
+				} else {
+					rewardPicks = [ ...rewardPicks, choiceId ];
+				}
+			}
+		} else if ( id === "quest-reward" ) {
+			const reward = guideResources.data()?.questPresentation.records[selectedQuest]?.reward;
+			if ( reward ) {
+				// The window's own prompts: none picked, then not all picked,
+				// then the take-reward confirm.
+				if ( rewardPicks.length === 0 ) {
+					hudMessages.append( hudCopy( "UIIT_STT_QUESTREWARD_MSG01" ), 0xffff7070 );
+				} else if ( rewardPicks.length < reward.selectionCount ) {
+					hudMessages.append( hudCopy( "UIIT_STT_QUESTREWARD_MSG04" ), 0xffff7070 );
+				} else {
+					confirmReward = true;
+				}
+			} else {
+				sendGameplay( { kind: "quest-reward", refId: selectedQuest } );
+				questDetails = false;
+			}
+		} else if ( id === "quest-reward-yes" ) {
+			sendGameplay( { kind: "quest-reward", refId: selectedQuest, picks: rewardPicks } );
+			confirmReward = false;
 			questDetails = false;
-		} else if (
+			rewardPicks = [];
+		} else if ( id === "quest-reward-no" ) confirmReward = false;
+		else if (
 			id === "chat-send" && BUG_COMMAND.test( chatText.slice( chatTabPrefix( chatTab ).length ) )
 		) {
 			// /bug opens the bug reporter (issue #90); it is never sent as chat.
@@ -10772,6 +10819,14 @@ export function createUi( ports: UiPorts ) {
 						if ( action.kind === "helper-full" ) {
 							hudMessages.append( hudCopy( "UIIT_CTL_QUEST_HELPER_FULL" ), 0xffff7070 );
 						}
+					}
+					// A refused reward claim answers with the window's error
+					// line, once per refusal.
+					const refusal = next.gameplay?.questRefusal,
+						refusalKey = refusal ? refusal.refId + ":" + refusal.reason : "";
+					if ( refusalKey && refusalKey !== rewardRefusalKey ) {
+						rewardRefusalKey = refusalKey;
+						hudMessages.append( hudCopy( "UIIT_STT_QUESTREWARD_ERROR" ), 0xffff7070 );
 					}
 				}
 			}
@@ -17509,20 +17564,106 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					authoredText( page.GDR_QUESTREWARD_TITLE!, px, py, meta?.rewardTitle ?? "" );
 					if ( q ) {
 						const r = authoredRect( page.GDR_QUESTREWARD_CONTENTS!, px, py );
-						// The default color of a body without its own font tag. Every v1.150 quest text sets
-						// 255,44,15,1 itself; the later client's strings (the cap-110 chains) leave the
-						// section bodies to the default, which must read on the parchment.
-						const result = text.guide(
-							guideTokens( meta?.rewardBody ?? "" ),
-							[ r[0], r[1] - questDetailScroll, r[2], r[3] ],
-							r,
-							QUEST_DETAIL_TEXT,
-							resources.size
-						);
-						questDetailMax = Math.max( 0, result.height - r[3] );
-						questDetailScroll = Math.min( questDetailScroll, questDetailMax );
-						quads.push( ...result.quads );
-						paths.push( ...result.paths );
+						if ( meta?.reward ) {
+							// A selection quest (#3920): the body keeps the top
+							// of the contents plate, then the six value rows,
+							// then the pickable choices (icon, name, count);
+							// the scroll track walks the choice list. The
+							// layout is the later client's CIFQuestReward
+							// drawn on the v1.150 plate.
+							const reward = meta.reward;
+							const body = text.guide(
+								guideTokens( meta.rewardBody ),
+								[ r[0], r[1], r[2], REWARD_BODY_HEIGHT ],
+								[ r[0], r[1], r[2], REWARD_BODY_HEIGHT ],
+								QUEST_DETAIL_TEXT,
+								resources.size
+							);
+							quads.push( ...body.quads );
+							paths.push( ...body.paths );
+							const values: readonly (readonly [string, number])[] = [
+								[ "UIIT_STT_QUESTREWARD_GOLD", reward.gold ],
+								[ "UIIT_STT_QUESTREWARD_EXP", reward.exp ],
+								[ "UIIT_STT_QUESTREWARD_SP", reward.skillPoints ],
+								[ "UIIT_STT_QUESTREWARD_SPEXP", reward.skillExp ],
+								[ "UIIT_STT_QUESTREWARD_AP", reward.ap ],
+								[ "UIIT_STT_QUESTREWARD_JOBEXP", reward.jobExp ]
+							];
+							values.forEach( ( [key, amount], i ) => {
+								const column = i % 2 ? 150 : 0,
+									row = Math.floor( i / 2 ),
+									y = r[1] + REWARD_BODY_HEIGHT + 8 + row * 15;
+								quads.push( ...text.quads(
+									hudCopy( key ),
+									[ r[0] + column, y, 64, 13 ],
+									full,
+									QUEST_DETAIL_TEXT,
+									{ hAlign: 0, vAlign: 0 }
+								) );
+								quads.push( ...text.quads(
+									String( amount ),
+									[ r[0] + column + 66, y, 74, 13 ],
+									full,
+									QUEST_DETAIL_TEXT,
+									{ hAlign: 2, vAlign: 0 }
+								) );
+							} );
+							const listTop = r[1] + REWARD_BODY_HEIGHT + 58,
+								listHeight = r[1] + r[3] - listTop;
+							questDetailMax = Math.max(
+								0,
+								reward.choices.length * REWARD_CHOICE_ROW - listHeight
+							);
+							questDetailScroll = Math.min( questDetailScroll, questDetailMax );
+							reward.choices.forEach( ( choice, i ) => {
+								const row: UiRect = [
+									r[0],
+									listTop + i * REWARD_CHOICE_ROW - questDetailScroll,
+									r[2],
+									REWARD_CHOICE_ROW - 4
+								];
+								if ( row[1] + row[3] < listTop || row[1] > r[1] + r[3] ) return;
+								const picked = rewardPicks.includes( choice.refId );
+								if ( picked ) {
+									rect( row, [ 1, 156 / 255, 104 / 255, 0.45 ] );
+								}
+								const icon = choice.icon ? iconPath( choice.icon ) : undefined;
+								if ( icon ) {
+									paths.push( icon );
+									if ( resources.has( icon ) ) {
+										rect( [ row[0] + 2, row[1] + 2, 28, 28 ], white, icon );
+									}
+								}
+								quads.push( ...text.quads(
+									choice.count > 1 ? `${choice.name} x${choice.count}` : choice.name,
+									[ row[0] + 38, row[1], row[2] - 38, row[3] ],
+									full,
+									QUEST_DETAIL_TEXT,
+									{ hAlign: 0, vAlign: 1 }
+								) );
+								controls.push( {
+									id: "quest-choice:" + choice.refId,
+									label: choice.name,
+									rect: row,
+									kind: "button"
+								} );
+							} );
+						} else {
+							// The default color of a body without its own font tag. Every v1.150 quest text sets
+							// 255,44,15,1 itself; the later client's strings (the cap-110 chains) leave the
+							// section bodies to the default, which must read on the parchment.
+							const result = text.guide(
+								guideTokens( meta?.rewardBody ?? "" ),
+								[ r[0], r[1] - questDetailScroll, r[2], r[3] ],
+								r,
+								QUEST_DETAIL_TEXT,
+								resources.size
+							);
+							questDetailMax = Math.max( 0, result.height - r[3] );
+							questDetailScroll = Math.min( questDetailScroll, questDetailMax );
+							quads.push( ...result.quads );
+							paths.push( ...result.paths );
+						}
 					}
 					const give = page.GDR_QUESTREWARD_GIVEUP!,
 						caption = hudCopy( q?.u10 === 2 ? "UIIT_STT_QUEST_REWARD" : "UIIT_STT_QUEST_GIVEUP" );
@@ -17816,6 +17957,20 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						no: "quest-abandon-no"
 					} );
 					endWindow( admission, "quest-abandon" );
+				}
+				if ( confirmReward && questDetails ) {
+					controls = drawFrame.controls = [];
+					const admission = beginWindow();
+					blocks.push( full );
+					// The take-reward confirm asks the window's own line
+					// (the later client's "Will you take this reward?").
+					simpleMessageBox( {
+						title: hudCopy( "UIIT_STT_AGREEMENT_BOX" ),
+						lines: [ hudCopy( "UIIT_STT_QUESTREWARD_MSG02" ) ],
+						yes: "quest-reward-yes",
+						no: "quest-reward-no"
+					} );
+					endWindow( admission, "quest-reward-confirm" );
 				}
 				const compositePackage = compositeItemHud.packageId(),
 					compositeRoot = hudData?.root.GDR_COMPOSITE_ITEM,

@@ -220,6 +220,46 @@ test("owner commits tag order and detached events atomically; new tags are silen
 	assert.deepEqual( q.state().questProgress, [] );
 });
 
+test("a reward pick composes the native pick body and a refused claim keeps its reason", () => {
+	const sent = [], q = createQuests( frame => sent.push( frame ) );
+	q.bootstrap( { character: { activeQuests: [ row( [ c( 0 ) ], { u10: 2 } ) ] } } );
+	q.request( 150, true, [ 10415, 10414 ] );
+	assert.equal( sent.length, 1 );
+	assert.equal( sent[0].opcode, 0x729a );
+	assert.deepEqual(
+		[ ...sent[0].payload ],
+		[ 150, 0, 0, 0, 2, 0xaf, 0x28, 0, 0, 0xae, 0x28, 0, 0 ]
+	);
+	assert.equal( q.state().questPending, 150 );
+	assert.equal( q.state().questRefusal, undefined );
+	// The refusal answer ([2, reason]) releases the transaction and keeps
+	// the reason for the HUD's error line.
+	q.receive( { opcode: 0xb29a, payload: new Uint8Array( [ 2, 1 ] ) } );
+	assert.equal( q.state().questPending, 0 );
+	assert.deepEqual( q.state().questRefusal, { refId: 150, reason: 1 } );
+	// A plain claim stays the bare four bytes, and a refused give-up
+	// carries no reward refusal.
+	q.request( 150, true );
+	assert.deepEqual( [ ...sent[1].payload ], [ 150, 0, 0, 0 ] );
+	q.receive( { opcode: 0xb29a, payload: new Uint8Array( [ 1, 150, 0, 0, 0 ] ) } );
+	// The success ack alone does not release the transaction; the op-3
+	// journal delta does.
+	q.receive( packet( row(), 3 ) );
+	q.bootstrap( { character: { activeQuests: [ row( [ c( 0 ) ], { u10: 2 } ) ] } } );
+	q.request( 150, false );
+	assert.equal( sent[2].opcode, 0x71eb );
+	assert.equal( q.state().questRefusal, undefined );
+	q.receive( { opcode: 0xb1eb, payload: new Uint8Array( [ 2, 0 ] ) } );
+	assert.equal( q.state().questRefusal, undefined );
+	// Picks on a give-up, a pick past the count byte, and a claim on a
+	// non-window quest all refuse before anything is sent.
+	assert.throws( () => q.request( 150, false, [ 1 ] ), /reward claim/ );
+	assert.throws( () => q.request( 150, true, new Array( 256 ).fill( 1 ) ), /pick budget/ );
+	const plain = createQuests( () => {} );
+	plain.bootstrap( { character: { activeQuests: [ row() ] } } );
+	assert.throws( () => plain.request( 150, true ), /action unavailable/ );
+});
+
 test("quest banner waits for localization and chrome, replaces in order, quantizes fade and resets", () => {
 	const b = createQuestBanner( createNoticeBanner() ), entries = { counter: "Hunt (%d)" };
 	const events = [ { sequence: 1, refId: 150, before: c( 0 ), after: c( 1 ) }, {

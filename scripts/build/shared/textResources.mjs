@@ -252,6 +252,9 @@ export function completeRestrictionText( entries ) {
 //   adds two reverse return scroll destinations (a party member, a
 //   user-registered location). The v1.150 textuisystem ships none of
 //   these keys; the English column is the later client's own wording.
+// - QUESTREWARD (row ids 4763-4773) and QUEST_HELPER_FULL (id 4443): the
+//   reward-selection window's prompts, refusals and value labels, and
+//   the quick quest window's full line (#3920).
 export const LATER_UI_TEXT_COMPLETIONS = Object.freeze( {
 	UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE: "You cannot use this while you are wearing it.",
 	UIIT_CLT_REVERSE_RETRUN_SCROLL_TO_APPOINT_CHANGE: "Move to certain location at the map.",
@@ -277,7 +280,19 @@ export const LATER_UI_TEXT_COMPLETIONS = Object.freeze( {
 	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_MOVE_INTRODUCTION_1: "This button does not have a set location.",
 	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_MOVE_FAIL_1: "Failed to save user location.",
 	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_MOVE_FAIL_2: "Failed to move to set user location.",
-	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_MOVE_FAIL_3: "Cannot set location."
+	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_MOVE_FAIL_3: "Cannot set location.",
+	UIIT_STT_QUESTREWARD_MSG01: "You must select your reward.",
+	UIIT_STT_QUESTREWARD_MSG02: "Will you take this reward?",
+	UIIT_STT_QUESTREWARD_MSG03: "You cannot select more.",
+	UIIT_STT_QUESTREWARD_MSG04: "You must select all items.",
+	UIIT_STT_QUESTREWARD_GOLD: "Gold",
+	UIIT_STT_QUESTREWARD_EXP: "EXP",
+	UIIT_STT_QUESTREWARD_SP: "SP",
+	UIIT_STT_QUESTREWARD_SPEXP: "SP EXP",
+	UIIT_STT_QUESTREWARD_AP: "AP",
+	UIIT_STT_QUESTREWARD_ERROR: "The reward was not given due to an unknown error.",
+	UIIT_STT_QUESTREWARD_JOBEXP: "JOB EXP",
+	UIIT_CTL_QUEST_HELPER_FULL: "Max. of three quests can be listed in quick window."
 } );
 
 export function completeUiText( entries ) {
