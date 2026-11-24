@@ -151,11 +151,6 @@ func (rt *Runtime) directionalVictims(q areaQuery, caster simulation.Spawn, cast
 		if candidate.target.gid == primary.gid {
 			continue
 		}
-		// Port-only (SRO_STR_INT_UNIQUES): a copy this caster may not damage
-		// takes no target slot in a directional sweep either.
-		if candidate.target.monster != nil && uniqueVariantRefused(q.caster, *candidate.target.monster) {
-			continue
-		}
 		if !inDirectionalShape(relative(caster, candidate.target.at), dir, int32(casterRadius), int32(candidate.radius), area.width) {
 			continue
 		}

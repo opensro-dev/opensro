@@ -14,6 +14,7 @@ package action
 import (
 	"testing"
 
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/monster"
 )
@@ -81,8 +82,9 @@ func TestMonsterImpactRefused(t *testing.T) {
 	}{
 		{"player refused by the other build", monsterImpactCaster{character: magical}, strengthCopy, true},
 		{"player admitted by its own build", monsterImpactCaster{character: magical}, magicCopy, false},
-		{"pet asked through its owner", monsterImpactCaster{owner: magical, credit: 100001}, strengthCopy, true},
-		{"pet admitted through its owner", monsterImpactCaster{owner: physical, credit: 100001}, magicCopy, true},
+		{"pet owner refused by the other build", monsterImpactCaster{owner: magical, credit: 100001}, strengthCopy, true},
+		{"pet owner admitted by its own build", monsterImpactCaster{owner: physical, credit: 100001}, strengthCopy, false},
+		{"pet owner admitted by the INT copy", monsterImpactCaster{owner: magical, credit: 100001}, magicCopy, false},
 		{"unattributed hit on a copy", monsterImpactCaster{}, strengthCopy, true},
 		{"shipments admit anyone", monsterImpactCaster{character: magical}, shipped, false},
 	} {
@@ -91,6 +93,33 @@ func TestMonsterImpactRefused(t *testing.T) {
 				t.Fatalf("monsterImpactRefused = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+/*
+================
+TestImpactPlanningRefusesACopyOfTheOtherBuild
+
+The funnel every direct hit passes through refuses the wrong build and
+plans for the right one: delete the check from planCreatureMonsterImpacts
+and this test fails.
+================
+*/
+func TestImpactPlanningRefusesACopyOfTheOtherBuild(t *testing.T) {
+	rt, _, c, target := newCombatTestRuntimeMonsterTuned(t, 500, 20, 0, func(ref *monster.MonsterRef) {
+		ref.MonsterType = 3
+		ref.UniqueBuild = monster.UniqueBuildSTR
+	})
+	now := rt.Now().UnixMilli()
+	formulas := []combat.Result{{Damage: 10}}
+	c.Strength, c.Intellect = testInt64(100), testInt64(300)
+	if plans, planned := rt.planMonsterImpacts(testDivision, c, enterworld.SkillRow{}, target, formulas, now); planned || len(plans) != 0 {
+		t.Fatalf("a magical caster planned %d impacts on the STR copy", len(plans))
+	}
+	c.Strength, c.Intellect = testInt64(300), testInt64(100)
+	plans, planned := rt.planMonsterImpacts(testDivision, c, enterworld.SkillRow{}, target, formulas, now)
+	if !planned || len(plans) == 0 {
+		t.Fatal("a physical caster was refused by the STR copy")
 	}
 }
 
