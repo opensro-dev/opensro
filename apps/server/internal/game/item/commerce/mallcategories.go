@@ -346,7 +346,9 @@ with its badge. Since #4241 the build imports the v1.696 mall row for
 the winter snowman scroll (MALL_PET_B_SILK, 88 silk, the layout's own
 tab and price), and authoring it again refused the GameWorld boot
 ("already has package data"). A later native row wins over the
-layout's stand-in.
+layout's stand-in. The data's own mall listing was removed with the
+others above, so the layout's row is its one listing. The layout
+naming one package in two tabbed goods is still refused.
 ================
 */
 func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSource) (map[string]string, error) {
@@ -426,7 +428,14 @@ func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSo
 		}
 	}
 	badges := map[string]string{}
+	laidOut := map[string]bool{}
 	for _, good := range mallCategoryGoods {
+		if good.Tab != "" {
+			if laidOut[good.Package] {
+				return nil, fmt.Errorf("%s: the layout lists %s twice", EnvMallCategories, good.Package)
+			}
+			laidOut[good.Package] = true
+		}
 		if good.Imported && !itemRefPresent(refs, good.Item) {
 			continue
 		}

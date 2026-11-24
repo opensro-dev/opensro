@@ -14,6 +14,7 @@ reference data.
 package commerce
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -341,6 +342,36 @@ func TestMallCategoriesKeepAPackageTheDataAlreadySells(t *testing.T) {
 	if offer.Silk != dataSilk || offer.Badge != mallBadgeNew || offer.Shop != cat.Shop || offer.Tab != cat.Tab {
 		t.Fatalf("snowman offer = %+v, want the data's %d silk, badged new, in the cat's tab %d/%d",
 			offer, dataSilk, cat.Shop, cat.Tab)
+	}
+}
+
+/*
+================
+TestMallCategoriesRefuseALayoutPackageTwice
+
+A layout table naming one package in two tabbed goods would list it
+twice; the boot refuses it naming the setting.
+================
+*/
+func TestMallCategoriesRefuseALayoutPackageTwice(t *testing.T) {
+	tier.Long(t, "a layout package named twice refuses the boot")
+	saved := mallCategoryGoods
+	t.Cleanup(func() { mallCategoryGoods = saved })
+	var twice mallCategoryGood
+	for _, good := range saved {
+		if good.Tab != "" && good.Item == "" {
+			twice = good
+			break
+		}
+	}
+	if twice.Package == "" {
+		t.Fatal("no tabbed layout good to repeat")
+	}
+	mallCategoryGoods = append(slices.Clone(saved), twice)
+	dir := gamedatatest.TextdataDir(t)
+	_, err := LoadMall(dir, nil, true, enterworld.NewTextdataItems(dir))
+	if err == nil || !strings.Contains(err.Error(), "the layout lists "+twice.Package+" twice") {
+		t.Fatalf("a repeated layout package: err %v, want the layout lists %s twice", err, twice.Package)
 	}
 }
 
