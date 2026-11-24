@@ -72,10 +72,12 @@ test("title: level, name and counts", () => {
 	assert.equal( title, "Lv. 20 Alpha (1/3)" );
 });
 
-test("content face: blue far above the player, normal in reach, red below", () => {
-	assert.equal( model.questContentFace( 30, 20 ), "blue" );
-	assert.equal( model.questContentFace( 25, 20 ), "normal" );
-	assert.equal( model.questContentFace( 18, 20 ), "red" );
+test("content face: blue for a quest far below the player, plain in reach, red above", () => {
+	// Player level less quest level: >= 10 blue, >= 0 plain, < 0 red.
+	assert.equal( model.questContentFace( 20, 30 ), "blue" );
+	assert.equal( model.questContentFace( 21, 30 ), "normal" );
+	assert.equal( model.questContentFace( 30, 30 ), "normal" );
+	assert.equal( model.questContentFace( 31, 30 ), "red" );
 });
 
 test("track: adding stops at three, toggling removes, a full set says full", () => {

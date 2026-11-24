@@ -143,14 +143,14 @@ export function questListTitle(
 ================
 questContentFace
 
-The content view button's face for this quest: the native rule picks
-the blue face when the quest sits more than nine levels above the
-player, the plain face within reach, and the red face below the
-player.
+The content view button's face for this quest. The v1.696 client
+(0xc275fa) takes the player's level less the quest's: ten or more
+picks the blue face (a quest far below the player), zero or more the
+plain face, and a quest above the player the red face.
 ================
 */
 export function questContentFace( questLevel: number, playerLevel: number ): "blue" | "normal" | "red" {
-	const diff = questLevel - playerLevel;
+	const diff = playerLevel - questLevel;
 	return diff >= 10 ? "blue" : diff >= 0 ? "normal" : "red";
 }
 
