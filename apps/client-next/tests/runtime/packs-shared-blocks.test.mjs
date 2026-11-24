@@ -69,20 +69,30 @@ test("two windows that miss the same block at once download it once", async t =>
 	second.dispose();
 });
 
-test("a block's other members are stored by the window that fetched it", async t => {
+test("a window queued on a block finds its member stored by the window that fetched it", async t => {
 	disk( t );
 	const { counts, download } = largePack();
-	const first = createPacks( download );
-	await read( first, "/assets/a.bin" );
-	// Another window demands the neighbour at once: it waits on the
-	// block's lock, which the first holds until the block is stored.
-	const second = createPacks( download );
-	assert.deepEqual( JSON.parse( new TextDecoder().decode( await read( second, "/assets/b.json" ) ) ), {
-		fixture: true
-	} );
+	const first = createPacks( download ), second = createPacks( download );
+	// The second window wants the block's other member while the first holds
+	// the block: the first stores the neighbours before it lets go.
+	const [a, b] = await Promise.all( [ read( first, "/assets/a.bin" ), read( second, "/assets/b.json" ) ] );
+	assert.deepEqual( [ ...a ], [ 1, 2, 3 ] );
+	assert.deepEqual( JSON.parse( new TextDecoder().decode( b ) ), { fixture: true } );
 	assert.equal( counts.blocks, 1 );
 	first.dispose();
 	second.dispose();
+});
+
+test("a lone window stores only the member it demanded", async t => {
+	disk( t );
+	const { download } = largePack();
+	const packs = createPacks( download );
+	await read( packs, "/assets/a.bin" );
+	await packs.flush();
+	// No other window waited on the block: its neighbour is neither hashed
+	// nor written (storing every neighbour doubled a world entry).
+	assert.equal( packs.stats().hashCalls, 1 );
+	packs.dispose();
 });
 
 test("without Web Locks each window still reads its member", async t => {
