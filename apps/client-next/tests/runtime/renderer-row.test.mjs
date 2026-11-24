@@ -51,7 +51,7 @@ test("a value the crowd capture could not encode is refused", () => {
 	assert.throws( () => sameRow( new Map(), new Map() ), /Unsupported renderer row object/ );
 });
 test("nesting past the limit is refused", () => {
-	let deep = 0;
+	let deep = /** @type {any} */ (0);
 	for ( let i = 0; i < 70; i++ ) deep = [ deep ];
 	assert.throws( () => sameRow( deep, deep ), /Renderer row nesting limit/ );
 });
