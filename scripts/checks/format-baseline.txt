@@ -211,7 +211,6 @@ apps/client-next/tests/browser/quest-progress.test.mjs
 apps/client-next/tests/browser/quickslot-inventory.test.mjs
 apps/client-next/tests/browser/rebirth-self-selection-live.test.mjs
 apps/client-next/tests/browser/region-music-live.test.mjs
-apps/client-next/tests/browser/restart-live.test.mjs
 apps/client-next/tests/browser/return-scroll-live.test.mjs
 apps/client-next/tests/browser/return-scroll-presentation.test.mjs
 apps/client-next/tests/browser/ring-equip-live.test.mjs

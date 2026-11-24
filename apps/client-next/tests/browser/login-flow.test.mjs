@@ -17,6 +17,7 @@ import { launchProbeBrowser } from "../../../../scripts/lib/probeBrowser.mjs";
 import { CLIENT_NEXT_BASE_URL } from "../../../../scripts/lib/probeEndpoints.mjs";
 import { resolveProbeCredentials } from "../../../../scripts/lib/probeSession.mjs";
 import { checkNativeButton } from "./helpers/native-button-oracle.mjs";
+import { waitShownCharacters } from "./helpers/shown-characters.mjs";
 test( "login retains native presentation through authenticated roster arrival", { timeout: 120000 }, async () => {
 	const { browser, page } = await launchProbeBrowser( { viewport: { width: 1024, height: 768 } } ),
 		events = [],
@@ -69,14 +70,8 @@ test( "login retains native presentation through authenticated roster arrival", 
 		assert.equal( await page.locator( "img[data-retail-cursor]" ).count(), 0 );
 		await control( "password" ).press( "Enter" );
 		await control( "frontend:create" ).waitFor( { timeout: 30000 } );
-		await page.waitForFunction(
-			count =>
-				new RegExp( "Characters: " + count + " actors" ).test(
-					document.querySelector( "output" )?.textContent
-				),
-			Math.min( 4, roster.length ),
-			{ timeout: 30000 }
-		);
+		// The dock shows at most four of the roster's characters.
+		await waitShownCharacters( page, Math.min( 4, roster.length ) );
 		await page.waitForFunction( () => /Frontend: dock\n/.test( document.querySelector( "output" )?.textContent ) );
 		const status = await page.locator( "output" ).textContent(),
 			labels = await page.locator( "[data-gpu-ui] button" ).allTextContents();
@@ -88,7 +83,6 @@ test( "login retains native presentation through authenticated roster arrival", 
 		assert.deepEqual( errors, [] );
 		assert.match( status, /Frontend: dock\n/ );
 		assert.ok( roster.length > 0 );
-		assert.match( status, new RegExp( "Characters: " + Math.min( 4, roster.length ) + " actors" ) );
 		assert.ok(
 			await page.evaluate( () => window.__uiSoundStarts ) > 0,
 			"Native UI buffers must actually start playback"

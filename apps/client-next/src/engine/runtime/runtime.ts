@@ -1632,7 +1632,7 @@ Frontend: ${frontendState.phase}
 Frontend error: ${frontendState.error ?? "none"}
 Frontend loading: ${frontendState.loadingStatus ?? "none"}; dock ready: ${characters.dockReady()}
 Dock pick: ${lastDockPick}
-Characters: ${renderer.characterStats().actors} actors, ${renderer.characterStats().draws} draws; ${
+Characters: ${renderer.characterStats().actors} actors (${characters.shownCharacters()} shown), ${renderer.characterStats().draws} draws; ${
 						characters.error() ?? "running"
 					}
 Navigation: ${navigation.error() ?? navigation.phase()}; admitted ${presentation.gameplay()?.navigationRegion ?? "none"}
