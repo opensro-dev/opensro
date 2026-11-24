@@ -181,6 +181,26 @@ export const UI_TEXT_COMPLETIONS = Object.freeze( {
 	SN_STORE_ACCESSORY_EU_GROUP1: "Purchase/sell European goods"
 } );
 
+// The later client's brightness rows (#3908): v1.696 textuisystem_200.txt
+// rows 100-104 and 107 (the five steps of the video page's brightness spin
+// and its section title), plus textuisystem_1000.txt row 923
+// (UIIT_STT_LUMINOSITY, the label the v1.150-authored video layout already
+// names at GDR_OPT_VIDEO_ST_BR). v1.150 ships neither the rows nor the
+// behaviour, so the built catalog has no value for these keys at all.
+// Applied only when the built value has no ASCII letters, so a shipped
+// row wins over the completion. The later client's own English for the
+// section title reads "Set Brigntness"; the typo is fixed, not copied
+// (UIIT_STT_LUMINOSITY's shipped English is already "Set Brightness").
+export const BRIGHTNESS_TEXT_COMPLETIONS = Object.freeze( {
+	UIIT_STT_LUMINOSITY: "Set Brightness",
+	UILM_TEXT_BRIGHT: "Set Brightness",
+	UILM_TEXT_BRIGHT_FIRST: "Very dark",
+	UILM_TEXT_BRIGHT_SECOND: "Dark",
+	UILM_TEXT_BRIGHT_THIRD: "Normal",
+	UILM_TEXT_BRIGHT_FORTH: "Bright",
+	UILM_TEXT_BRIGHT_FIFTH: "Very bright"
+} );
+
 // Product correction for defective shipped English, not a claim of native output
 // for those inputs. 74BFF0 supplies six arguments: year/month/day/period/hour/minute.
 // Preserve already-correct translations and retain the original typo key as data.
@@ -204,6 +224,11 @@ export function completeUiText( entries ) {
 	// Product completion uses the shipped Shaitan appearance/kill wording.
 	if ( !entries.UIIT_MSG_DEAD_TAHOMET?.trim() ) {
 		entries.UIIT_MSG_DEAD_TAHOMET = "Main shaitan has disappeared from Mt. Roc.";
+	}
+	for ( const [key, english] of Object.entries( BRIGHTNESS_TEXT_COMPLETIONS ) ) {
+		if ( !/[A-Za-z]/.test( entries[key] ?? "" ) ) {
+			entries[key] = english;
+		}
 	}
 	for ( const [key, english] of Object.entries( UI_TEXT_COMPLETIONS ) ) {
 		if ( key in entries ) {
@@ -397,7 +422,8 @@ export function assertTextEnglishCoverage( textDataDirectory = textDataDir ) {
 	const layers = new Set( [
 		...Object.keys( ITEM_TEXT_COMPLETIONS ),
 		...Object.keys( GUIDE_TITLE_COMPLETIONS ),
-		...Object.keys( UI_TEXT_COMPLETIONS )
+		...Object.keys( UI_TEXT_COMPLETIONS ),
+		...Object.keys( BRIGHTNESS_TEXT_COMPLETIONS )
 	] );
 	for ( const file of ENGLISH_COMPLETION_FILES ) {
 		const rows = readLocalizedTextDataRowsSync( path.join( textDataDirectory, file ) );

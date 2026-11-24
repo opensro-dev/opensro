@@ -185,7 +185,11 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 		) {
 			const sceneScale = experimental?.sceneScale;
 			const msaa = experimental?.msaa;
-			const sceneView = bloom?.view ?? experimental?.hdr?.view ?? sceneScale?.view ?? view;
+			// The brightness stage (#3908) is the outermost scene target:
+			// inner stages resolve into it and its gamma pass presents
+			// into the frame before the UI composes.
+			const brightness = experimental?.brightness;
+			const sceneView = bloom?.view ?? experimental?.hdr?.view ?? sceneScale?.view ?? brightness?.view ?? view;
 			const uiDepth = sceneScale?.frameDepth ?? depth;
 			// The HDR stage resolves the world before UI. Its float target can
 			// then be reused for an independently composited character preview.
@@ -195,13 +199,14 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			// UI, read the resolved target single-sampled.
 			//
 			// resolvedScene: the stages whose scene must be resolved (tone
-			// mapped, upscaled or multisample-resolved) before the world labels
+			// mapped, upscaled, brightness-resolved or multisample-resolved)
+			// before the world labels
 			// draw, so the labels move to the full-resolution label pass.
 			// separateScene: every stage that renders the scene away from the
 			// frame target (those, plus the bloom capture), so the labels, the
 			// background and the UI wait for a later pass instead of the main
 			// pass or the deferred tail.
-			const resolvedScene = hdrScene || !!sceneScale || !!msaa;
+			const resolvedScene = hdrScene || !!sceneScale || !!msaa || !!brightness;
 			const separateScene = !!bloom || resolvedScene;
 			if ( ui !== recordedUi ) {
 				/*
@@ -448,12 +453,17 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 				// of every post chain; while off the owner is absent and
 				// the depth above was discarded as natively.
 				if ( experimental?.ao && depth ) experimental.ao.encode( encoder, depth );
-				bloom?.encode( encoder, view );
+				// The inner stages resolve into the brightness intermediate
+				// while it is on; its gamma pass then presents the frame, the
+				// last scene resolve (the UI composes after it).
+				const sceneTarget = brightness && sceneView !== brightness.view ? brightness.view : view;
+				bloom?.encode( encoder, sceneTarget );
 				if ( bloom ) blendFactor = bloomBlendFactor;
 				// Without bloom the HDR stage owns its tone-map pass; with it,
 				// the chain's copy-back step already tonemapped into the frame.
-				if ( !bloom && experimental?.hdr ) experimental.hdr.encode( encoder, view );
-				else if ( !bloom && sceneScale ) sceneScale.resolve( encoder, view );
+				if ( !bloom && experimental?.hdr ) experimental.hdr.encode( encoder, sceneTarget );
+				else if ( !bloom && sceneScale ) sceneScale.resolve( encoder, sceneTarget );
+				if ( brightness ) brightness.encode( encoder, view );
 				if ( flares ) {
 					const compute = encoder.beginComputePass( {
 						timestampWrites: timing?.pass( "flare-visibility" ),

@@ -166,6 +166,9 @@ export interface ExperimentalFrame {
 		resolveDepth( encoder: GPUCommandEncoder ): void;
 	};
 	readonly hdr?: HdrDraw;
+	/** The video page's brightness stage (a native setting, not an
+	 * experiment): the scene's gamma resolve, device/brightness.ts. */
+	readonly brightness?: BloomDraw;
 	readonly sunShadow?: SunShadowOwner;
 	readonly casters?: readonly GeometryDraw[];
 	readonly ao?: AmbientOcclusionDraw;
@@ -205,6 +208,7 @@ export interface DeviceOwner extends Disposable {
 	experimentalVideo( value: import("@/engine/foundation/ui/experimental-options").ExperimentalVideo ): void;
 	bloom( width: number, height: number, enabled: boolean ): BloomDraw | undefined;
 	hdr( width: number, height: number, enabled: boolean ): HdrDraw | undefined;
+	brightness( width: number, height: number, gamma: number ): BloomDraw | undefined;
 	msaa( width: number, height: number, enabled: boolean ): MsaaDraw | undefined;
 	sunShadow(): SunShadowOwner;
 	ambientOcclusion(
