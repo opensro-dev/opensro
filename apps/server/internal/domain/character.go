@@ -159,14 +159,8 @@ type CharacterWorld struct {
 	// return scroll takes the player back to either, in its world.
 	LastRecallPoint *WorldPoint `json:"lastRecallPoint,omitempty"`
 	LastDeathPoint  *WorldPoint `json:"lastDeathPoint,omitempty"`
-	// UserReversePoint is the saved location of the reverse return
-	// scroll's user window (later-native v1.696, #3903; schema 54): the
-	// point its enroll button records and its move button returns to.
-	// Absent until the player enrolls one; like the recall and death
-	// points it records only in a type-0 world.
-	UserReversePoint *WorldPoint `json:"userReversePoint,omitempty"`
-	MovementMode     *int64      `json:"movementMode"`
-	SpawnSet         bool        `json:"spawnSet"`
+	MovementMode    *int64      `json:"movementMode"`
+	SpawnSet        bool        `json:"spawnSet"`
 	// DungeonFloorIndex is semantic game state. The browser combines it with
 	// its packed minimap catalogue; presentation prefixes, labels, tile paths
 	// and bounds never belong in the authority record.
@@ -417,6 +411,16 @@ type Character struct {
 	// character opted out. Set: their failed high-plus attempts are
 	// never announced.
 	PlusFailOptOut bool `json:"plusFailOptOut,omitempty"`
+	// ReverseUserPoint is the saved location of the reverse return
+	// scroll's user window (later-native v1.696, #3903; schema 52): the
+	// point its enroll button records and its move button returns to.
+	// It is the reverse-return twin of the world's LastRecallPoint and
+	// LastDeathPoint, but lives at the top level: a field nested in
+	// world cannot ride an additive schema step (a previous binary
+	// refuses nested additions on a rewrite, #3090), and this one must
+	// stay additive. Absent until the player enrolls one; like the
+	// recall and death points it records only in a type-0 world.
+	ReverseUserPoint *WorldPoint `json:"reverseUserPoint,omitempty"`
 	// MostWanted is the character's job-kill streak (port-only, not native:
 	// SRO_MOST_WANTED, action/mostwanted.go; schema 24). Nil is no streak.
 	MostWanted *MostWanted `json:"mostWanted,omitempty"`

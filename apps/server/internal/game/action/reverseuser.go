@@ -14,8 +14,8 @@ and move to the user's set location (CNIFReversePortalUserSave, interface
 location: its enroll button records where the player stands, its move
 button returns there, and the refusals are the native lines (party member
 left, member in an unmovable location, no location set, location cannot
-be set here). A stored location is per character (world.userReversePoint,
-schema 54).
+be set here). A stored location is per character (reverseUserPoint,
+schema 52).
 
 The later client's request bytes for these two modes were not isolated,
 so the port's wire is port-shaped, the same class as choice 7's gating in
@@ -69,8 +69,8 @@ The owner's saved location as one port-only frame (OpReverseUserPoint).
 func ReverseUserPointFrame(c *enterworld.Character) wire.Frame {
 	writer := wire.NewWriter(15)
 	var point *domain.WorldPoint
-	if c != nil && c.World != nil {
-		point = c.World.UserReversePoint
+	if c != nil {
+		point = c.ReverseUserPoint
 	}
 	if point == nil || point.RegionID == nil || *point.RegionID == 0 {
 		return wire.Frame{Opcode: OpReverseUserPoint, Payload: writer.U8(0).Payload()}
@@ -98,7 +98,7 @@ arrive at entry.
 ================
 */
 func (rt *Runtime) reverseUserPointEntryFrames(c *enterworld.Character) []enterworld.Packet {
-	if c == nil || c.World == nil || c.World.UserReversePoint == nil {
+	if c == nil || c.ReverseUserPoint == nil {
 		return nil
 	}
 	return []enterworld.Packet{enterworld.NewPacket(OpReverseUserPoint, ReverseUserPointFrame(c).Payload)}
@@ -134,8 +134,8 @@ none was enrolled (id 4220's line, on its port byte).
 */
 func reverseUserPoint(c *enterworld.Character) (travelPoint, uint8) {
 	var point *domain.WorldPoint
-	if c.World != nil {
-		point = c.World.UserReversePoint
+	if c != nil {
+		point = c.ReverseUserPoint
 	}
 	return recordedTravelPoint(point, errCodeReverseUserMoveFail)
 }
@@ -160,7 +160,7 @@ func (rt *Runtime) enrollReverseUserPoint(division string, c *enterworld.Charact
 		*result = itemUseFailure(errCodeReverseUserSetBarred)
 		return false
 	}
-	c.World.UserReversePoint = point
+	c.ReverseUserPoint = point
 	*result = OpResult{Frames: []wire.Frame{
 		{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)},
 		ReverseUserPointFrame(c),

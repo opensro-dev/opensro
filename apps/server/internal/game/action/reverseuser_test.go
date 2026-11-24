@@ -91,9 +91,9 @@ func TestReverseUserEnrollRecordsTheStandingPoint(t *testing.T) {
 	if reverseScrollStack(c) != 2 || c.NativeTeleportMode != 0 {
 		t.Fatal("the enroll spent a scroll or started a cast")
 	}
-	if c.World.UserReversePoint == nil ||
-		missionSpawnFromWorld(&c.World.UserReversePoint.WorldSpawn, simulation.Spawn{}) != at {
-		t.Fatalf("enrolled %+v, standing at %+v", c.World.UserReversePoint, at)
+	if c.ReverseUserPoint == nil ||
+		missionSpawnFromWorld(&c.ReverseUserPoint.WorldSpawn, simulation.Spawn{}) != at {
+		t.Fatalf("enrolled %+v, standing at %+v", c.ReverseUserPoint, at)
 	}
 	entry := rt.reverseUserPointEntryFrames(c)
 	if len(entry) != 1 || entry[0].NativeOpcode != OpReverseUserPoint {
@@ -114,7 +114,7 @@ func TestReverseUserEnrollRefusedInsideAnInstance(t *testing.T) {
 	if len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, wire.EncodeItemUseError(errCodeReverseUserSetBarred)) {
 		t.Fatalf("the enroll in an instance answered %+v", out.Frames)
 	}
-	if c.World.UserReversePoint != nil || reverseScrollStack(c) != 2 {
+	if c.ReverseUserPoint != nil || reverseScrollStack(c) != 2 {
 		t.Fatal("the refused enroll recorded a point or spent a scroll")
 	}
 }
@@ -143,7 +143,7 @@ TestReverseUserMoveTravelsToTheEnrolledPoint
 func TestReverseUserMoveTravelsToTheEnrolledPoint(t *testing.T) {
 	rt, c, clock := reverseReturnFixture(t)
 	useReverseScroll(rt, c, reverseReturnEnrollChoice)
-	enrolled := missionSpawnFromWorld(&c.World.UserReversePoint.WorldSpawn, simulation.Spawn{})
+	enrolled := missionSpawnFromWorld(&c.ReverseUserPoint.WorldSpawn, simulation.Spawn{})
 	// Stand somewhere else, then move back on the user choice.
 	rt.Worlds.Update(simulation.WorldKey(testDivision, c.Name),
 		func() simulation.WorldState { return simulation.SeedWorldState(c) },

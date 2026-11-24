@@ -10,7 +10,7 @@ row opens a member list (CNIFReversePortalParty, interface 0x2ca); the
 user row opens the settings window (CNIFReversePortalUserSave, 0x2cb),
 whose enroll button records where the player stands and whose move
 button returns there. The server owns the party rule, the stored
-location (schema 54) and every refusal; this file owns the wire shapes
+location (schema 52) and every refusal; this file owns the wire shapes
 the two share.
 
 The later client's request bytes for these modes were not isolated, so
@@ -20,7 +20,10 @@ the wire is port-shaped, the same class as the map choice's gating
 byte; refusals ride the 0xB5BD channel on port bytes past the family's
 native codes, mapped here to the later client's own lines (ids 4204,
 4205, 4220, 4221); and the saved location arrives on the port-only
-0x3FCE frame at world entry and after an enroll (protocol 21).
+0x3FCE frame at world entry and after an enroll. No release-protocol
+bump: a client that does not know the frame drops it unhandled (the
+receive chain matches opcodes one by one) and merely shows no set
+location until it reloads.
 
 ===========================================================================
 */

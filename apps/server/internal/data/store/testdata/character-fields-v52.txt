@@ -414,6 +414,13 @@ quickSlots[].slot
 raceIndex
 ravenRefugeReadyAtMs
 renameNoticeFrom
+reverseUserPoint
+reverseUserPoint.angle
+reverseUserPoint.regionId
+reverseUserPoint.world
+reverseUserPoint.x
+reverseUserPoint.y
+reverseUserPoint.z
 sharedSkillCooldowns
 skillActionRecoveryUntilMs
 skillExp
@@ -564,10 +571,3 @@ world.spawn.y
 world.spawn.z
 world.spawnSet
 world.updatedAt
-world.userReversePoint
-world.userReversePoint.angle
-world.userReversePoint.regionId
-world.userReversePoint.world
-world.userReversePoint.x
-world.userReversePoint.y
-world.userReversePoint.z
