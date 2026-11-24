@@ -93,6 +93,6 @@ test('live window chrome drags through real pointer input',{timeout:300000},asyn
   assert.deepEqual(errors,[]);
  }catch(error){
   await writeFile(directory+'/failure.json',JSON.stringify({error:String(error),errors,stages,state:await page.evaluate(()=>({session:globalThis.__playableRuntime?.sessionState(),panel:globalThis.__chromeProbe?.owner.stats()})).catch(()=>null)},null,2));
-  await page.screenshot({path:directory+'/failure.png'}).catch(()=>{});throw error;
+  throw error;
  }finally{await browser.close();}
 });

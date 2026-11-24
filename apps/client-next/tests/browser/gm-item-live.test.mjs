@@ -35,6 +35,6 @@ test('authenticated GM console creates and picks up a native speed scroll',{skip
   await page.keyboard.press('KeyI');await page.screenshot({path:directory+'/inventory.png'});
   await writeFile(directory+'/incident.json',JSON.stringify({character,before,gid,result,errors},null,2));
   assert.deepEqual(errors,[]);
- }catch(error){await page.screenshot({path:directory+'/failure.png'}).catch(()=>{});await writeFile(directory+'/failure.json',JSON.stringify({error:String(error),errors},null,2));throw error;}
+ }catch(error){await writeFile(directory+'/failure.json',JSON.stringify({error:String(error),errors},null,2));throw error;}
  finally{await browser.close();}
 });

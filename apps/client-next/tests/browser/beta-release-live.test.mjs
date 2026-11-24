@@ -148,7 +148,6 @@ test( "beta package authenticates, renders panels, restores login and retains as
 			error: String( e ),
 			status: page ? await page.locator( "output" ).textContent().catch( () => null ) : null
 		} );
-		if ( page ) await page.screenshot( { path: path.join( directory, "failure.png" ) } ).catch( () => {} );
 		throw e;
 	} finally {
 		if ( page ) {

@@ -87,7 +87,7 @@ export function createCharacterPresentation(...args){
   const segment=receipt.body.world.moveSegment;
   assert.ok(death.at-receipt.event.at<segment.arrivesAtMs-receipt.body.serverTimeMs,'death must occur before accepted travel finishes');
   assert.deepEqual(evidence.errors,[]);evidence.verdict='PASS';
- }catch(error){evidence.error=String(error);if(page){evidence.wire=await page.evaluate(()=>globalThis.__pursuit?.events??[]).catch(()=>[]);await page.screenshot({path:out+'/failure.png'}).catch(()=>{});}throw error;}
+ }catch(error){evidence.error=String(error);if(page){evidence.wire=await page.evaluate(()=>globalThis.__pursuit?.events??[]).catch(()=>[]);}throw error;}
  finally{
   if(tracing)await page.context().tracing.stop({path:out+'/trace.zip'});
   if(page){evidence.animation=await page.evaluate(()=>globalThis.__rebirthAnimation?.samples??[]).catch(()=>[]);await page.evaluate(()=>__playableRuntime.session({kind:'logout'})).catch(()=>{});}

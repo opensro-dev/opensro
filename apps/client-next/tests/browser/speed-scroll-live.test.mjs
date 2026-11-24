@@ -61,6 +61,6 @@ test('live authored speed item consumes once, publishes speed and buff, and show
   const effect=result.effects.find(e=>e.skill===skillId);assert.ok(effect.remainingMs>0&&effect.remainingMs<=3600000);
   await page.screenshot({path:directory+'/active.png'});
   await writeFile(directory+'/incident.json',JSON.stringify({character,item,result,errors,packets},null,2));assert.deepEqual(errors,[]);
- }catch(error){await page.screenshot({path:directory+'/failure.png'}).catch(()=>{});await writeFile(directory+'/failure.json',JSON.stringify({error:String(error),errors,packets,session:await page.evaluate(()=>globalThis.__playableRuntime?.sessionState()).catch(()=>null),state:await page.evaluate(()=>globalThis.__playableRuntime?.gameplay()).catch(()=>null)},null,2));throw error;}
+ }catch(error){await writeFile(directory+'/failure.json',JSON.stringify({error:String(error),errors,packets,session:await page.evaluate(()=>globalThis.__playableRuntime?.sessionState()).catch(()=>null),state:await page.evaluate(()=>globalThis.__playableRuntime?.gameplay()).catch(()=>null)},null,2));throw error;}
  finally{await browser.close();}
 });
