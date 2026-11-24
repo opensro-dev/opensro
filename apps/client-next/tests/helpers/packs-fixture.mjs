@@ -109,7 +109,7 @@ function disk( t ) {
 	} );
 	t.after( () => {
 		if ( old ) Object.defineProperty( globalThis, "caches", old );
-		else delete globalThis.caches;
+		else Reflect.deleteProperty( globalThis, "caches" );
 	} );
 	return {
 		rows,

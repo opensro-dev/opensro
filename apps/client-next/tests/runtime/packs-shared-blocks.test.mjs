@@ -91,7 +91,7 @@ test("without Web Locks each window still reads its member", async t => {
 	Object.defineProperty( globalThis, "navigator", { configurable: true, value: {} } );
 	t.after( () => {
 		if ( old ) Object.defineProperty( globalThis, "navigator", old );
-		else delete globalThis.navigator;
+		else Reflect.deleteProperty( globalThis, "navigator" );
 	} );
 	const { download } = largePack();
 	const first = createPacks( download ), second = createPacks( download );
