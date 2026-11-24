@@ -333,6 +333,7 @@ func cloneCharacterFilteredFrom(source *Character, rows cloneRows, previous *Cha
 	clone.Skills = stagedChild(source.Skills, previousChild.Skills, cloneSlice)
 	clone.OffensiveSkillCooldowns = stagedChild(source.OffensiveSkillCooldowns, previousChild.OffensiveSkillCooldowns, cloneMapValue)
 	clone.SharedSkillCooldowns = stagedChild(source.SharedSkillCooldowns, previousChild.SharedSkillCooldowns, cloneMapValue)
+	clone.ReverseUserPoint = stagedChild(source.ReverseUserPoint, previousChild.ReverseUserPoint, cloneWorldPoint)
 	clone.MostWanted = stagedChild(source.MostWanted, previousChild.MostWanted, clonePointer)
 	clone.VisualFlags = stagedChild(source.VisualFlags, previousChild.VisualFlags, clonePointer)
 	clone.Mission = stagedChild(source.Mission, previousChild.Mission, cloneMissionRuntime)
