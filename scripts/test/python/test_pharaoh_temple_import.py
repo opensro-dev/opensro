@@ -70,9 +70,11 @@ class PharaohTempleAdmissionTest(unittest.TestCase):
 		self.assertFalse(temple.family_admits("MOB_SD_ANUBIS", later_row("MOB_SD_ANUBIS", 107, 8)))
 
 	def test_osiris_enters_by_name_at_its_source_grade_alone(self):
-		# The v1.188 row (grade 8, level 110) enters; the keepers' grade
-		# on the Osiris row does not, and the named exception opens no
-		# grade for the family (Anubis at 8 stays refused, above).
+		# The later character row (grade 8, level 110) enters. The v1.188
+		# database row carries grade 3; only its nest and tactics are
+		# taken. Another grade on the Osiris row does not enter, and the
+		# named exception opens no grade for the family (Anubis at 8
+		# stays refused, above).
 		self.assertTrue(temple.family_admits(temple.OSIRIS_KIND, later_row(temple.OSIRIS_KIND, 110, 8)))
 		self.assertFalse(temple.family_admits(temple.OSIRIS_KIND, later_row(temple.OSIRIS_KIND, 110, 6)))
 		self.assertFalse(temple.family_admits(temple.OSIRIS_KIND, later_row(temple.OSIRIS_KIND, 104, 8)))
