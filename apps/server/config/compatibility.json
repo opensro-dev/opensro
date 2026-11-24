@@ -7,7 +7,7 @@
 		"protocolMin": 20,
 		"protocolMax": 20,
 		"storeReadMin": 51,
-		"storeReadMax": 51,
+		"storeReadMax": 53,
 		"storeWrite": 51,
 		"storeUpgradeFrom": 13
 	}

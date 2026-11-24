@@ -367,7 +367,8 @@ func TestBothGenerationsCorruptRefuses(t *testing.T) {
 
 }
 
-// TestFutureVersionRefusesInPlace: a store from a NEWER binary refuses
+// TestFutureVersionRefusesInPlace: a store from a newer binary past
+// this binary's read window (StoreReadHeadroom, 2 since #3093) refuses
 // WITHOUT quarantining the file and WITHOUT falling back to the older
 // bak generation (that would be a silent rollback).
 func TestFutureVersionRefusesInPlace(t *testing.T) {
@@ -382,14 +383,14 @@ func TestFutureVersionRefusesInPlace(t *testing.T) {
 	s1.Close()
 	openTest(t, dir, clock).Close() // bak now holds a perfectly loadable OLD generation
 
-	// Stamp the database as a FUTURE schema version (a newer binary's
+	// Stamp the database past the read window (a much newer binary's
 	// store).
 	dbPath := filepath.Join(dir, DBFileName)
 	db, err := openDB(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion+1)); err != nil {
+	if _, err := db.Exec("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion+StoreReadHeadroom+1)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {

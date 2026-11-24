@@ -3,9 +3,10 @@
 
 read_window_test.go - a store inside the read window boots and stays newer
 
-Part 2 of #3082 (#3091). StoreReadHeadroom is 0 until part 4, so these
-tests open with the package-only wider window (Options.readHeadroom) and
-play both binaries on one file: the current code is the vN binary, and a
+Part 2 of #3082 (#3091). StoreReadHeadroom is 2 since part 4 (#3093),
+so the vN binary below is the production Open; wider package-only
+windows (Options.readHeadroom) play the parts past it. The tests play
+both binaries on one file: the current code is the vN binary, and a
 store stamped one version and one layout higher, carrying a top-level
 record field and a table vN does not know, is what the v(N+1) binary
 left behind.
@@ -26,7 +27,8 @@ import (
 ================
 openWithHeadroom
 
-openTest with a read window headroom versions wide.
+openTest with the read window widened to at least headroom versions:
+Options.readHeadroom never narrows the production window, only widens it.
 ================
 */
 func openWithHeadroom(t *testing.T, dir string, clock *testClock, headroom int) (*Store, error) {
@@ -114,10 +116,9 @@ func TestNewerStoreInsideTheWindowBootsAndStaysNewer(t *testing.T) {
 	dir, clock := t.TempDir(), newTestClock()
 	name := newerStore(t, dir, clock)
 
-	s, err := openWithHeadroom(t, dir, clock, 1)
-	if err != nil {
-		t.Fatalf("the vN binary refused a store inside its window: %v", err)
-	}
+	// The vN binary is the production Open: its window (2 since #3093)
+	// covers the v(N+1) store.
+	s := openTest(t, dir, clock)
 	c := storedCharacter(t, s, name)
 	gold := int64(9876)
 	s.MutateCharacter(c, "vN change", func() { c.Gold = &gold })
@@ -154,10 +155,11 @@ func TestNewerStoreInsideTheWindowBootsAndStaysNewer(t *testing.T) {
 ================
 TestStoresOutsideTheWindowStillRefuse
 
-Today's window (StoreReadHeadroom 0) refuses the newer store with the
-"exactly" wording; a wider window still refuses a store past it, and no
-window admits a store below CurrentVersion, which stays the offline
-upgrader's.
+The production window (StoreReadHeadroom, 2 since #3093) refuses a
+store past it with the "through" wording, and a wider test window
+refuses a store past itself; a zero window - only the offline callers
+still pass one - refuses with "exactly". No window admits a store
+below CurrentVersion, which stays the offline upgrader's.
 ================
 */
 func TestStoresOutsideTheWindowStillRefuse(t *testing.T) {
@@ -168,8 +170,8 @@ func TestStoresOutsideTheWindowStillRefuse(t *testing.T) {
 		headroom int
 		want     string
 	}{
-		{"newer store, today's window", CurrentVersion + 1, 0, "exactly"},
-		{"store past a one-step window", CurrentVersion + 2, 1, "through"},
+		{"store past the production window", CurrentVersion + StoreReadHeadroom + 1, 0, "through"},
+		{"store past a wider window", CurrentVersion + StoreReadHeadroom + 2, StoreReadHeadroom + 1, "through"},
 		{"older store", CurrentVersion - 1, 1, "sro-authority-upgrade"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -191,9 +193,24 @@ func TestStoresOutsideTheWindowStillRefuse(t *testing.T) {
 	dir, clock := t.TempDir(), newTestClock()
 	s := openTest(t, dir, clock)
 	s.Close()
-	rewriteDatabaseMeta(t, dir, metaKeyLayoutVersion, CurrentLayoutVersion+1)
+	rewriteDatabaseMeta(t, dir, metaKeyLayoutVersion, CurrentLayoutVersion+StoreReadHeadroom+1)
 	if _, err := openWithHeadroom(t, dir, clock, 0); !errors.Is(err, errIncompatibleSchema) {
 		t.Fatalf("a newer layout outside the window opened: %v", err)
+	}
+
+	// A zero window refuses with "exactly"; only the offline callers
+	// (loadDB headroom 0) still pass one.
+	dir, clock = t.TempDir(), newTestClock()
+	s = openTest(t, dir, clock)
+	s.Close()
+	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, CurrentVersion+1)
+	db, err := openDB(filepath.Join(dir, DBFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := loadDB(db, CurrentVersion, CurrentLayoutVersion, 0); !isVersionMismatch(err) || !strings.Contains(err.Error(), "exactly") {
+		t.Fatalf("zero-window load = %v, want an incompatible-schema refusal naming \"exactly\"", err)
 	}
 }
 
