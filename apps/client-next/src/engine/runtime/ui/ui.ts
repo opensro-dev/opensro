@@ -699,6 +699,8 @@ import {
 } from "@/engine/foundation/ui/buff-viewer";
 import { matchingSlots } from "@/engine/foundation/ui/matching-slots";
 import {
+	BRIGHTNESS_STEP_DEFAULT,
+	brightnessStepKeys,
 	defaultVideoOptions,
 	DEFAULT_FRAME_LIMIT,
 	frameLimits,
@@ -1063,8 +1065,10 @@ const EXPERIMENTAL_HEAD_TEXT_INSET = 12;
 // The ON / OFF word: gold when on, grey when off.
 const EXPERIMENTAL_ON_COLOR = [ 1, 0.85, 0.54, 1 ] as const;
 const EXPERIMENTAL_OFF_COLOR = [ 0.55, 0.55, 0.5, 1 ] as const;
-// No video option combo is open (slot -1 is the screen-size combo).
+// No video option combo is open (slot -1 is the screen-size combo;
+// slot -2 is the later client's brightness spin, #3908).
 const VIDEO_COMBO_CLOSED = -99;
+const VIDEO_BRIGHTNESS_SLOT = -2;
 const VIDEO_FRAME_LIMIT_SLOT = -3;
 const VIDEO_VISIBLE_ROWS = 6;
 const VIDEO_SCROLL_MAX = videoRows().length + 1 - VIDEO_VISIBLE_ROWS;
@@ -4708,7 +4712,10 @@ export function createUi( ports: UiPorts ) {
 			}
 		} else if ( id.startsWith( "option-video-combo:" ) ) {
 			const n = Number( id.slice( 19 ) );
-			if ( n === -1 || n === VIDEO_FRAME_LIMIT_SLOT || videoRows().some( r => r.slot === n ) ) {
+			if (
+				n === -1 || n === VIDEO_BRIGHTNESS_SLOT || n === VIDEO_FRAME_LIMIT_SLOT ||
+				videoRows().some( r => r.slot === n )
+			) {
 				videoCombo = videoCombo === n ?
 					VIDEO_COMBO_CLOSED :
 					n;
@@ -4718,6 +4725,9 @@ export function createUi( ports: UiPorts ) {
 			if ( Number( slot ) === VIDEO_FRAME_LIMIT_SLOT ) {
 				const frameLimit = frameLimits()[Number( value )];
 				if ( frameLimit !== undefined ) videoDraft = { ...videoDraft, frameLimit };
+			} else if ( Number( slot ) === VIDEO_BRIGHTNESS_SLOT ) {
+				const brightness = Number( value );
+				if ( brightnessStepKeys()[brightness] ) videoDraft = { ...videoDraft, brightness };
 			} else if ( Number( slot ) === -1 ) {
 				const size = displaySizes()[Number( value )];
 				if ( size ) {
@@ -15878,12 +15888,15 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							label: hudCopy( page.GDR_OPT_VIDEO_ST_SS!.text ),
 							disabled: false
 						}, {
-							slot: -2,
+							// The later client's brightness spin (GDR_OPT_VIDEO_SP_BR,
+							// #3908): five steps, the video draft's choice among
+							// them presented by the device's gamma stage.
+							slot: VIDEO_BRIGHTNESS_SLOT,
 							r: authoredRect( page.GDR_OPT_VIDEO_SP_BR!, ox, oy ),
-							entries: [ "UIIT_STT_NORMAL" ],
-							selected: 0,
+							entries: brightnessStepKeys(),
+							selected: videoDraft.brightness ?? BRIGHTNESS_STEP_DEFAULT,
 							label: hudCopy( page.GDR_OPT_VIDEO_ST_BR!.text ),
-							disabled: true
+							disabled: false
 						} );
 						for (
 							const [i, row] of rows.slice( Math.round( videoScroll ), Math.round( videoScroll ) + 6 )
@@ -15947,7 +15960,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							);
 						}
 						const open = combos.find( c =>
-							c.slot === videoCombo && (c.slot >= -1 || c.slot === VIDEO_FRAME_LIMIT_SLOT)
+							c.slot === videoCombo &&
+							(c.slot >= -1 || c.slot === VIDEO_FRAME_LIMIT_SLOT || c.slot === VIDEO_BRIGHTNESS_SLOT)
 						);
 						if ( open ) {
 							const r = open.r, list: UiRect = [ r[0], r[1] + 20, r[2], open.entries.length * 18 ];

@@ -296,6 +296,7 @@
     "src/engine/runtime/assets/worker/world/mesh-admission/mesh-admission.ts": "src/engine/runtime/assets/worker/world/world.ts",
     "src/engine/runtime/renderer/device/water-reflection.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/hdr.ts": "src/engine/runtime/renderer/device/device.ts",
+    "src/engine/runtime/renderer/device/brightness.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/ambient-occlusion.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/msaa.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/sun-shadow.ts": "src/engine/runtime/renderer/device/device.ts",
