@@ -894,9 +894,14 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			"animationBases": sorted(set(prior.get("animationBases", []))
 				| {base for rows in selected.values() for base, _ in rows}),
 			"characterInfo": sorted(owned_info | {row[0] for row in info}),
-			"nameSymbols": sorted((({r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
-				| {r[1] for r in texts}) & ({r[5] for r in all_refs.values()} | chat_keys))
-				- native_text_keys),
+			# Owned names follow characters.owned_name_symbols
+			# (#3767): the old union with the base table claimed rows
+			# an earlier layer added, and the off strip drops them.
+			# A native row is never in the added set, so the old
+			# native subtraction is subsumed.
+			"nameSymbols": characters.owned_name_symbols(
+				texts, prior.get("nameSymbols", []),
+				{r[5] for r in all_refs.values()} | chat_keys),
 			"speechSymbols": speech_symbols,
 			"speechUnresolved": speech_unresolved,
 			"questItems": quest_item_summary,

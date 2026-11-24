@@ -935,8 +935,11 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 			"animationBases": sorted(set(prior.get("animationBases", []))
 				| {base for rows in selected.values() for base, _ in rows}),
 			"characterInfo": sorted(owned_info | {row[0] for row in info}),
-			"nameSymbols": sorted(({r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
-				| {r[1] for r in texts}) & {r[5] for r in refs.values()}),
+			# Owned names follow characters.owned_name_symbols
+			# (#3767): the old union with the base table claimed rows
+			# this build never added, and the off reap drops them.
+			"nameSymbols": characters.owned_name_symbols(texts, prior.get("nameSymbols", []),
+				{r[5] for r in refs.values()}),
 			"files": files,
 			"archives": archive_hashes,
 		}
