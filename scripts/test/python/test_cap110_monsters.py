@@ -405,6 +405,65 @@ class Cap110MonstersTest(unittest.TestCase):
 		self.assertEqual(monsters.characterinfo_codenames(scrubbed), {"MOB_SD_FIELD"})
 
 	# ================
+	# family_trees
+	#
+	# A variant tree holding the native kind and its name row, plus a
+	# VSRO archive and monster export whose later kinds are species -
+	# (codename, name symbol, level, object name, name cell) - on the
+	# same two-nest export. Returns the roots and the text root the
+	# builds stage into.
+	# ================
+	def family_trees(self, base, species):
+		vsro, native, output, source = base / "vsro", base / "native", base / "output", base / "source"
+		text_root = output / monsters.TEXT_ROOT
+		text_root.mkdir(parents=True)
+		vsro.mkdir()
+		native.mkdir()
+		source.mkdir()
+
+		def later_monster(code, symbol, level):
+			row = self.later_row(code, 0, level)
+			row[5] = symbol
+			return row
+
+		native_char = ["0"] * 104
+		native_char[1], native_char[2] = "100", "MOB_NATIVE"
+		(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char]))
+		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
+		(text_root / "skilldata_5000.txt").write_bytes(utf16([]))
+		(text_root / "textdataname.txt").write_bytes(utf16([["1", "UIO_OBJ_MOB_NATIVE", "Native"]]))
+		(text_root / "skilleffect.txt").write_bytes(utf16([
+			["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
+		media = {
+			"characterdata.txt": utf16([["characterdata_6000.txt"]]),
+			"characterdata_6000.txt": utf16([later_monster(code, symbol, level)
+				for code, symbol, level, _name, _cell in species]),
+			"skilldata.txt": utf16([["skilldata_6000.txt"]]),
+			"skilldata_6000.txt": utf16([]),
+			"textdata_object.txt": utf16([
+				[str(i + 1), symbol, "x", "x", name, cell, "x", "a", "b", "c"]
+				for i, (_code, symbol, _level, name, cell) in enumerate(species)]),
+			"skilleffect.txt": utf16([
+				["#section", "characterinfo"],
+				*[[code] + ["0"] * 12 for code, _symbol, _level, _name, _cell in species],
+				["#section", "skillaniset"]]),
+		}
+		(vsro / "Media.pk2").write_bytes(archive_bytes(media))
+		(source / "summary.json").write_text(
+			json.dumps({"backup_sha256": monsters.SOURCE_BACKUP_SHA256}), encoding="utf-8")
+		(source / "all-spawns.json").write_text(json.dumps(
+			[self.nest_fixture(i + 1, code) for i, (code, _s, _l, _n, _c) in enumerate(species)]), encoding="utf-8")
+		(source / "Tab_RefNest.json").write_text(json.dumps(
+			[{"dwNestID": i + 1, "nChampionGenPercentage": 0} for i in range(len(species))]), encoding="utf-8")
+		(source / "Tab_RefTactics.json").write_text(json.dumps([self.tactics_fixture()[1]]), encoding="utf-8")
+		(source / "Tab_RefHive.json").write_text(json.dumps(
+			[{"dwHiveID": 1, "dwOverwriteMaxTotalCount": 0, "btKeepMonsterCountType": 0}]), encoding="utf-8")
+		for name in ("vsro-outdoor-monster-skills", "vsro-outdoor-drop-assignments",
+			"vsro-outdoor-drop-classes", "vsro-outdoor-rare-classes"):
+			(source / (name + ".json")).write_text("[]", encoding="utf-8")
+		return vsro, native, output, source, text_root
+
+	# ================
 	# test_family_off_rebuild_reaps_what_the_first_build_enrolled
 	#
 	# Build level: the first enabled build writes the new family's
@@ -417,56 +476,11 @@ class Cap110MonstersTest(unittest.TestCase):
 		import os
 		from unittest import mock
 
-		def later_monster(code, symbol, level):
-			row = self.later_row(code, 0, level)
-			row[5] = symbol
-			return row
-
 		with tempfile.TemporaryDirectory() as root:
-			base = Path(root)
-			vsro, native, output, source = base / "vsro", base / "native", base / "output", base / "source"
-			text_root = output / monsters.TEXT_ROOT
-			text_root.mkdir(parents=True)
-			vsro.mkdir()
-			native.mkdir()
-			source.mkdir()
-			native_char = ["0"] * 104
-			native_char[1], native_char[2] = "100", "MOB_NATIVE"
-			(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char]))
-			(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
-			(text_root / "skilldata_5000.txt").write_bytes(utf16([]))
-			(text_root / "textdataname.txt").write_bytes(utf16([["1", "UIO_OBJ_MOB_NATIVE", "Native"]]))
-			(text_root / "skilleffect.txt").write_bytes(utf16([
-				["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
-			media = {
-				"characterdata.txt": utf16([["characterdata_6000.txt"]]),
-				"characterdata_6000.txt": utf16([
-					later_monster("MOB_SD_FIELD", "UIO_OBJ_MOB_SD_FIELD", 105),
-					later_monster("MOB_TQ_SOLDIER", "UIO_OBJ_MOB_TQ_SOLDIER", 95)]),
-				"skilldata.txt": utf16([["skilldata_6000.txt"]]),
-				"skilldata_6000.txt": utf16([]),
-				"textdata_object.txt": utf16([
-					["1", "UIO_OBJ_MOB_SD_FIELD", "x", "x", "Field monster", "f", "x", "a", "b", "c"],
-					["2", "UIO_OBJ_MOB_TQ_SOLDIER", "x", "x", "Tomb soldier", "t", "x", "a", "b", "c"]]),
-				"skilleffect.txt": utf16([
-					["#section", "characterinfo"],
-					["MOB_SD_FIELD"] + ["0"] * 12,
-					["MOB_TQ_SOLDIER"] + ["0"] * 12,
-					["#section", "skillaniset"]]),
-			}
-			(vsro / "Media.pk2").write_bytes(archive_bytes(media))
-			(source / "summary.json").write_text(
-				json.dumps({"backup_sha256": monsters.SOURCE_BACKUP_SHA256}), encoding="utf-8")
-			(source / "all-spawns.json").write_text(json.dumps(
-				[self.nest_fixture(1, "MOB_SD_FIELD"), self.nest_fixture(2, "MOB_TQ_SOLDIER")]), encoding="utf-8")
-			(source / "Tab_RefNest.json").write_text(json.dumps(
-				[{"dwNestID": 1, "nChampionGenPercentage": 0}, {"dwNestID": 2, "nChampionGenPercentage": 0}]), encoding="utf-8")
-			(source / "Tab_RefTactics.json").write_text(json.dumps([self.tactics_fixture()[1]]), encoding="utf-8")
-			(source / "Tab_RefHive.json").write_text(json.dumps(
-				[{"dwHiveID": 1, "dwOverwriteMaxTotalCount": 0, "btKeepMonsterCountType": 0}]), encoding="utf-8")
-			for name in ("vsro-outdoor-monster-skills", "vsro-outdoor-drop-assignments",
-				"vsro-outdoor-drop-classes", "vsro-outdoor-rare-classes"):
-				(source / (name + ".json")).write_text("[]", encoding="utf-8")
+			vsro, native, output, source, text_root = self.family_trees(Path(root), [
+				("MOB_SD_FIELD", "UIO_OBJ_MOB_SD_FIELD", 105, "Field monster", "f"),
+				("MOB_TQ_SOLDIER", "UIO_OBJ_MOB_TQ_SOLDIER", 95, "Tomb soldier", "t"),
+			])
 			env = {"SRO_CAP110_MONSTERS": "on", "SRO_PHARAOH_TOMB": "", "SRO_CAP110_TEMPLE": ""}
 			marker = output / monsters.MARKER
 			with mock.patch.object(loot, "stage_field_equipment", return_value=0):
@@ -500,56 +514,11 @@ class Cap110MonstersTest(unittest.TestCase):
 		import os
 		from unittest import mock
 
-		def later_monster(code, symbol, level):
-			row = self.later_row(code, 0, level)
-			row[5] = symbol
-			return row
-
 		with tempfile.TemporaryDirectory() as root:
-			base = Path(root)
-			vsro, native, output, source = base / "vsro", base / "native", base / "output", base / "source"
-			text_root = output / monsters.TEXT_ROOT
-			text_root.mkdir(parents=True)
-			vsro.mkdir()
-			native.mkdir()
-			source.mkdir()
-			native_char = ["0"] * 104
-			native_char[1], native_char[2] = "100", "MOB_NATIVE"
-			(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char]))
-			(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
-			(text_root / "skilldata_5000.txt").write_bytes(utf16([]))
-			(text_root / "textdataname.txt").write_bytes(utf16([["1", "UIO_OBJ_MOB_NATIVE", "Native"]]))
-			(text_root / "skilleffect.txt").write_bytes(utf16([
-				["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
-			media = {
-				"characterdata.txt": utf16([["characterdata_6000.txt"]]),
-				"characterdata_6000.txt": utf16([
-					later_monster("MOB_SD_FIELD", "UIO_OBJ_MOB_NATIVE", 105),
-					later_monster("MOB_TQ_SOLDIER", "UIO_OBJ_MOB_TQ_SOLDIER", 95)]),
-				"skilldata.txt": utf16([["skilldata_6000.txt"]]),
-				"skilldata_6000.txt": utf16([]),
-				"textdata_object.txt": utf16([
-					["1", "UIO_OBJ_MOB_NATIVE", "x", "x", "Native name", "n", "x", "a", "b", "c"],
-					["2", "UIO_OBJ_MOB_TQ_SOLDIER", "x", "x", "Tomb soldier", "t", "x", "a", "b", "c"]]),
-				"skilleffect.txt": utf16([
-					["#section", "characterinfo"],
-					["MOB_SD_FIELD"] + ["0"] * 12,
-					["MOB_TQ_SOLDIER"] + ["0"] * 12,
-					["#section", "skillaniset"]]),
-			}
-			(vsro / "Media.pk2").write_bytes(archive_bytes(media))
-			(source / "summary.json").write_text(
-				json.dumps({"backup_sha256": monsters.SOURCE_BACKUP_SHA256}), encoding="utf-8")
-			(source / "all-spawns.json").write_text(json.dumps(
-				[self.nest_fixture(1, "MOB_SD_FIELD"), self.nest_fixture(2, "MOB_TQ_SOLDIER")]), encoding="utf-8")
-			(source / "Tab_RefNest.json").write_text(json.dumps(
-				[{"dwNestID": 1, "nChampionGenPercentage": 0}, {"dwNestID": 2, "nChampionGenPercentage": 0}]), encoding="utf-8")
-			(source / "Tab_RefTactics.json").write_text(json.dumps([self.tactics_fixture()[1]]), encoding="utf-8")
-			(source / "Tab_RefHive.json").write_text(json.dumps(
-				[{"dwHiveID": 1, "dwOverwriteMaxTotalCount": 0, "btKeepMonsterCountType": 0}]), encoding="utf-8")
-			for name in ("vsro-outdoor-monster-skills", "vsro-outdoor-drop-assignments",
-				"vsro-outdoor-drop-classes", "vsro-outdoor-rare-classes"):
-				(source / (name + ".json")).write_text("[]", encoding="utf-8")
+			vsro, native, output, source, text_root = self.family_trees(Path(root), [
+				("MOB_SD_FIELD", "UIO_OBJ_MOB_NATIVE", 105, "Native name", "n"),
+				("MOB_TQ_SOLDIER", "UIO_OBJ_MOB_TQ_SOLDIER", 95, "Tomb soldier", "t"),
+			])
 			env = {"SRO_CAP110_MONSTERS": "on", "SRO_PHARAOH_TOMB": "", "SRO_CAP110_TEMPLE": ""}
 			marker = output / monsters.MARKER
 			with mock.patch.object(loot, "stage_field_equipment", return_value=0):
