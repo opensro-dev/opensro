@@ -256,6 +256,73 @@ test("an Agent edge route resolves against the API URL, so the socket stays on t
 	}
 });
 
+test("an Agent edge route dials no WebTransport; a transport host still tries it first", async t => {
+	const sockets = [], transports = [];
+	class Socket {
+		static OPEN = 1;
+		readyState = 0;
+		bufferedAmount = 0;
+		constructor( url ) {
+			sockets.push( String( url ) );
+		}
+		send() {}
+		close() {}
+	}
+	// A QUIC path that refuses at once, so the host case falls back too.
+	class Transport {
+		ready = Promise.reject( new Error( "refused" ) );
+		closed = new Promise( () => {} );
+		constructor( url ) {
+			this.ready.catch( () => {} );
+			transports.push( String( url ) );
+		}
+		close() {}
+	}
+	for ( const [name, value] of [ [ "WebSocket", Socket ], [ "WebTransport", Transport ] ] ) {
+		const descriptor = Object.getOwnPropertyDescriptor( globalThis, name );
+		Object.defineProperty( globalThis, name, { value, configurable: true, writable: true } );
+		t.after( () => {
+			if ( descriptor ) Object.defineProperty( globalThis, name, descriptor );
+			else Reflect.deleteProperty( globalThis, name );
+		} );
+	}
+	const { experimentalGameplay, experimentalOptions } = await import(
+		sourceFileUrl( path.join( root, "src/engine/foundation/ui/experimental-options.ts" ) ).href
+	);
+	for (
+		const [transportUrl, quic] of [ [ "/shards/shard", 0 ], [ "https://play.example.com/eu", 1 ] ]
+	) {
+		sockets.length = 0;
+		transports.length = 0;
+		t.mock.method(
+			globalThis,
+			"fetch",
+			async url =>
+				Response.json(
+					url.endsWith( "/title/login" ) ?
+						{ ...response, transportUrl } :
+						{ ok: true, token: "fixture-ticket" }
+				)
+		);
+		const session = createSession();
+		// The shipped default turns the WebTransport row on.
+		session.command( { kind: "experimental-gameplay", value: experimentalGameplay( experimentalOptions() ) } );
+		session.command( { ...command, apiBase: "https://192.168.1.20:5180/api" } );
+		session.step( 0 );
+		await settle();
+		session.step( 1 );
+		session.command( { kind: "enter-world", character: "fixture" } );
+		for ( let i = 0; i < 20 && !sockets.length; i++ ) {
+			await new Promise( resolve => setTimeout( resolve, 5 ) );
+			session.step( 2 + i );
+		}
+		assert.equal( transports.length, quic, transportUrl + " WebTransport dials" );
+		assert.equal( sockets.length, 1, transportUrl + " reaches the socket" );
+		session.dispose();
+		t.mock.restoreAll();
+	}
+});
+
 test("native login argument is validated, published and cleared on retry and success", async t => {
 	let body = {
 		ok: false,

@@ -998,7 +998,7 @@ export function createNetwork(
 		webTransport( enabled: boolean ) {
 			wtEnabled = enabled;
 		},
-		connect( url, admission, resume ) {
+		connect( url, admission, resume, edgeRoute = false ) {
 			if ( disposed ) {
 				throw new Error( "Transport disposed" );
 			}
@@ -1018,6 +1018,16 @@ export function createNetwork(
 			attempt = { endpoint, hello, fellBack: false };
 			const generation = epoch;
 			transportFallback = 0;
+			if ( wtEnabled && edgeRoute ) {
+				// An edge route (catalog.go PublicTransportURL) is proxied by
+				// the web edge over HTTP: a QUIC dial there can only reset
+				// (the local stack's Vite, a LAN HTTPS edge). The socket goes
+				// straight in; the report names it like any route the client
+				// cannot map (reason 1).
+				transportFallback = 1;
+				connectSocket( endpoint, hello, generation );
+				return;
+			}
 			if ( wtEnabled && !wtFailed && typeof WebTransport !== "undefined" ) {
 				void connectWebTransport( endpoint, hello, generation ).then( linked => {
 					// The attempt failed before the hello went out: the
