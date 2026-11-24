@@ -424,6 +424,25 @@ func (ops *MonsterMoverOps) planRouteTimed(caller navCaller, from monster.Pose, 
 
 /*
 ================
+MonsterMoverOps.planGlobalRouteTimed
+
+PlanGlobalRoute with the leg's attribution, the same contract as
+planRouteTimed: the homing search can spend ~a second at its budget,
+so its cost must land on the leg record that caused it.
+================
+*/
+func (ops *MonsterMoverOps) planGlobalRouteTimed(caller navCaller, from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationRoute {
+	if ops.leg == nil {
+		return ops.PlanGlobalRoute(from, fromOwner, goal)
+	}
+	started := time.Now()
+	route := ops.PlanGlobalRoute(from, fromOwner, goal)
+	ops.leg.notePlan(caller, route, time.Since(started))
+	return route
+}
+
+/*
+================
 MonsterMoverOps.noteWoken
 
 Folds one prepareDormancy pass's woken sets into the leg record and

@@ -98,6 +98,12 @@ type Plane interface {
 	// owner: outdoors the direction-gate detour, in a cave the native
 	// region route from the retained cell (#1645, #1732).
 	NextWaypoint(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationRoute
+	// GlobalRoute is NextWaypoint at the homing budget: the global
+	// search a returning mover consults when the bounded detour cannot
+	// see around a terrain barrier (#4124). A plane with no global
+	// search (the caves, whose region route already spans regions)
+	// returns nil.
+	GlobalRoute(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationRoute
 	// PureRoutes reports whether NextWaypoint is a pure function of
 	// (from, owner, goal) over geometry fixed at boot: identical inputs
 	// always produce the identical route, so a failed search may be

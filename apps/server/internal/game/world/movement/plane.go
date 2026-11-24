@@ -154,6 +154,19 @@ func (o outdoorPlane) NextWaypoint(from monster.Pose, _ simulation.NavOwner, goa
 
 /*
 ================
+outdoorPlane.GlobalRoute
+
+The homing-budget search (PlanMonsterGlobalRoute): the same outdoor
+geometry with the global probe budget, for a returning mover whose
+bounded detour cannot see around a barrier (#4124).
+================
+*/
+func (o outdoorPlane) GlobalRoute(from monster.Pose, _ simulation.NavOwner, goal monster.Pose) *monster.NavigationRoute {
+	return o.water.PlanMonsterGlobalRoute(from, goal)
+}
+
+/*
+================
 outdoorPlane.PureRoutes
 
 The outdoor search ignores the owner outright and walks geometry
@@ -238,6 +251,20 @@ portal route.
 */
 func (c cavePlane) NextWaypoint(from monster.Pose, fromOwner simulation.NavOwner, goal monster.Pose) *monster.NavigationRoute {
 	return c.water.planCaveRouteFrom(from, fromOwner, goal)
+}
+
+/*
+================
+cavePlane.GlobalRoute
+
+No cave global search: the cave's NextWaypoint already routes across
+regions through the native route tables and portals, so a homing mover
+in a cave never needs the outdoor homing budget (#4124 changes no cave
+behaviour; a cross-region cave strand is #1698's work).
+================
+*/
+func (cavePlane) GlobalRoute(monster.Pose, simulation.NavOwner, monster.Pose) *monster.NavigationRoute {
+	return nil
 }
 
 /*

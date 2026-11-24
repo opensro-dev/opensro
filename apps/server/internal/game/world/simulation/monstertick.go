@@ -158,6 +158,11 @@ type MonsterMoverOps struct {
 	PlanPathFrom func(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationPath
 	// AI route policy, separate from raw clipping used by sight/help probes.
 	PlanRoute func(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationRoute
+	// PlanGlobalRoute is PlanRoute with the homing budget: the global
+	// search a returning mover consults when the bounded detour and the
+	// march have both failed (#4124). Nil (unit fixtures) means no
+	// global search: the wait stands exactly as before.
+	PlanGlobalRoute func(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationRoute
 	// RouteMemo gates the failed-route memo (#1820 part B): may a failed
 	// search between these poses be answered from the mover's record
 	// instead of recomputed? Production wires it from the planes (same

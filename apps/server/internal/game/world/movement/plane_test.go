@@ -219,6 +219,32 @@ func TestOutdoorPlaneWrapsTodaysNavigation(t *testing.T) {
 
 /*
 ================
+TestGlobalRouteDelegatesByPlane
+
+The global search is the outdoor plane's homing budget (#4124); the
+cave plane has none - its NextWaypoint already routes across regions.
+================
+*/
+func TestGlobalRouteDelegatesByPlane(t *testing.T) {
+	v := realAuthorityValidator(t)
+	rt := &Runtime{ClientClip: &ClientClip{Mode: ClipApply, Validator: v}}
+	planes := NewPlanes(rt, v)
+	from := monster.Pose{RegionID: planeOutdoorRegion, X: 623, Y: 3.04, Z: 1271}
+	goal := monster.Pose{RegionID: planeOutdoorRegion, X: 680, Y: 3.04, Z: 1271}
+	route := planes.For(planeOutdoorRegion).GlobalRoute(from, simulation.NavOwner{}, goal)
+	if want := v.PlanMonsterGlobalRoute(from, goal); !reflect.DeepEqual(route, want) {
+		t.Fatalf("outdoor GlobalRoute differs from the wrapped search: %+v vs %+v", route, want)
+	}
+	if route == nil {
+		t.Fatal("outdoor GlobalRoute = nil, want the wrapped search's answer")
+	}
+	if route := planes.For(planeCaveRegion).GlobalRoute(from, simulation.NavOwner{}, goal); route != nil {
+		t.Fatalf("cave GlobalRoute = %+v, want nil (no cave global search)", route)
+	}
+}
+
+/*
+================
 TestCavePlaneWrapsTodaysNavigation
 ================
 */
