@@ -174,6 +174,45 @@ class TempleGateTests(unittest.TestCase):
 		self.assertEqual([(r[1], r[2]) for r in links], [("171", "173"), ("172", "174"), ("173", "171"), ("174", "172")])
 		self.assertTrue(all(r[6:9] == ["1", "105", "999"] for r in links))
 
+	def teleporter_tables(self):
+		native, vsro = self.tables()
+		rows = list(stage1.table_rows(vsro["teleportbuilding.txt"]))
+		rows += [building("27760", "INS_TEMPLE_TELEPORT", "SN_INS_TEMPLE_TELEPORT"),
+			building("27759", "INS_TEMPLE_SETH_TELEPORT", "SN_INS_TEMPLE_SETH_TELEPORT")]
+		vsro["teleportbuilding.txt"] = table(rows)
+		texts = list(stage1.table_rows(vsro["text"]))
+		texts += [text("SN_INS_TEMPLE_TELEPORT", "k", "t", "s", "j", "Temple gate"),
+			text("SN_INS_TEMPLE_SETH_TELEPORT", "k", "t", "s", "j", "Seth gate")]
+		vsro["text"] = table(texts)
+		return native, vsro
+
+	def test_the_sanctum_teleporters_ride_in_by_code_with_their_names(self):
+		native, vsro = self.teleporter_tables()
+		merged, summary = variant_gates.merge_gate_tables(
+			native, vsro, codes=self.CODES, level_cap=110, flatten=self.CODES, buildings=temple.TELEPORTER_CODES)
+		self.assertEqual(summary["buildings"], 4)
+		codes = {r[2]: r for r in stage1.table_rows(merged["teleportbuilding.txt"])}
+		for code in temple.TELEPORTER_CODES:
+			self.assertIn(code, codes)
+		names = {r[1] for r in stage1.table_rows(merged["text"])}
+		self.assertTrue({"SN_INS_TEMPLE_TELEPORT", "SN_INS_TEMPLE_SETH_TELEPORT"} <= names)
+		# No teleport row names a teleporter: the server places them.
+		pointed = {r[3] for r in stage1.table_rows(merged["teleportdata.txt"])}
+		self.assertFalse({codes[code][1] for code in temple.TELEPORTER_CODES} & pointed)
+
+	def test_without_the_teleporters_the_merge_is_unchanged(self):
+		native, vsro = self.teleporter_tables()
+		merged, summary = variant_gates.merge_gate_tables(
+			native, vsro, codes=self.CODES, level_cap=110, flatten=self.CODES)
+		self.assertEqual(summary["buildings"], 2)
+		self.assertFalse({r[2] for r in stage1.table_rows(merged["teleportbuilding.txt"])} & set(temple.TELEPORTER_CODES))
+
+	def test_a_teleporter_the_source_lacks_is_refused(self):
+		native, vsro = self.tables()
+		with self.assertRaises(SystemExit):
+			variant_gates.merge_gate_tables(
+				native, vsro, codes=self.CODES, level_cap=110, flatten=self.CODES, buildings=temple.TELEPORTER_CODES)
+
 	def test_the_world_column_is_flattened_to_the_persistent_world(self):
 		native, vsro = self.tables()
 		merged, summary = variant_gates.merge_gate_tables(

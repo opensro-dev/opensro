@@ -224,7 +224,8 @@ def translate_link(row, ids, level_cap, dropped=None, items=None):
 # merge_gate_tables
 # ================
 def merge_gate_tables(
-	native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP, flatten=(), items=None, taken=frozenset()
+	native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP, flatten=(), items=None, taken=frozenset(),
+	buildings=()
 ):
 	"""
 	The native tables with the gates in codes added. native and vsro map
@@ -237,8 +238,11 @@ def merge_gate_tables(
 	source client's item ids to the variant's for item conditions
 	(translate_link); a link whose item does not map is left out and
 	listed under omittedLinks. taken is the object ids other rows hold
-	(gate_buildings). Returns {name: bytes} for the changed files, and the
-	list of gates added.
+	(gate_buildings). buildings names teleportbuilding rows no teleport row
+	points at, by code: objects the server places itself (the temple's
+	sanctum teleporters), numbered and named as every gate building is.
+	Returns {name: bytes} for the changed files, and the list of gates
+	added.
 	"""
 	native_gates = by_column(native["teleportdata.txt"], 2, TELEPORT_COLUMNS)
 	vsro_gates = by_column(vsro["teleportdata.txt"], 2, TELEPORT_COLUMNS)
@@ -258,10 +262,14 @@ def merge_gate_tables(
 			row[TELEPORT_WORLD_COLUMN] = temple.SOURCE_WORLD_COLUMN_VALUE
 		data_rows.append(row)
 	building_ids = {row[3] for row in data_rows}
+	standalone = set(buildings)
 	buildings = [
 		list(row) for row in stage1.table_rows(vsro["teleportbuilding.txt"])
-		if len(row) >= BUILDING_COLUMNS and row[1] in building_ids
+		if len(row) >= BUILDING_COLUMNS and (row[1] in building_ids or row[2] in standalone)
 	]
+	missing = standalone - {row[2] for row in buildings}
+	if missing:
+		raise SystemExit(f"VSRO teleportbuilding lacks {sorted(missing)}")
 	moved = gate_buildings(buildings, taken | by_ids(native["teleportbuilding.txt"]))
 	for row in data_rows:
 		row[3] = moved.get(row[3], row[3])
