@@ -223,6 +223,15 @@ export function completeRestrictionText( entries ) {
 	return entries;
 }
 
+// Rows the v1.150 textuisystem does not ship at all, imported from the
+// v1.696 client's textuisystem (Media textuisystem_4200.txt). Injected
+// only when blank in completeUiText, so a shipped row would win.
+// - NASRUN_WEAR_EXTENSION (row id 4174): the v1.696 client refuses the
+//   Devil's Spirit extension gear aimed at the worn Spirit with this line.
+export const LATER_UI_TEXT_COMPLETIONS = Object.freeze( {
+	UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE: "You cannot use this while you are wearing it."
+} );
+
 export function completeUiText( entries ) {
 	completeRestrictionText( entries );
 	// Client 7508C0 requests this key, but v1.150 omits the entire row.
@@ -230,10 +239,14 @@ export function completeUiText( entries ) {
 	if ( !entries.UIIT_MSG_DEAD_TAHOMET?.trim() ) {
 		entries.UIIT_MSG_DEAD_TAHOMET = "Main shaitan has disappeared from Mt. Roc.";
 	}
-	// SRO Macro system chat (#3907): v1.150 omits every UIIT_STT_SRO_MACRO_*
-	// notice row; inject the English the HUD resolves for api.notice keys.
-	for ( const [key, english] of Object.entries( MACRO_NOTICE_UIIT_COMPLETIONS ) ) {
-		if ( !entries[key]?.trim() ) entries[key] = english;
+	// Rows the v1.150 data lacks: the SRO Macro system chat (#3907) and
+	// the later client's lines (#3909). Fill-if-blank, so a shipped row wins.
+	for ( const table of [ MACRO_NOTICE_UIIT_COMPLETIONS, LATER_UI_TEXT_COMPLETIONS ] ) {
+		for ( const [key, english] of Object.entries( table ) ) {
+			if ( !entries[key]?.trim() ) {
+				entries[key] = english;
+			}
+		}
 	}
 	for ( const [key, english] of Object.entries( UI_TEXT_COMPLETIONS ) ) {
 		if ( key in entries ) {
