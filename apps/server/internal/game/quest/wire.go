@@ -67,8 +67,8 @@ const (
 	QuestUpdateOpAbandon  uint8 = 4
 )
 
-// DecodeQuestRefRequest strict-decodes the shared 0x71EB/0x729A body:
-// exactly [u32 questRefId] (both composers append nothing else). Short
+// DecodeQuestRefRequest strict-decodes the 0x71EB body: exactly
+// [u32 questRefId] (the give-up composer appends nothing else). Short
 // and oversized payloads refuse like every sibling decoder.
 func DecodeQuestRefRequest(payload []byte) (uint32, error) {
 	r := wire.NewReader(payload)
@@ -80,6 +80,42 @@ func DecodeQuestRefRequest(payload []byte) (uint32, error) {
 		return 0, fmt.Errorf("quest ref request: %w", err)
 	}
 	return refID, nil
+}
+
+// DecodeQuestRewardRequest decodes the 0x729A body: [u32 questRefId]
+// alone (a plain reward claim), or the selection pick the later client
+// composes - [u32 questRefId][u8 pickCount][pickCount x u32 itemRefId] -
+// the body the v1.188 server's reward-selection handler reads. Strict:
+// a pick count the tail does not exactly carry, or more picks than any
+// selection lists (maxRewardPicks), refuses.
+func DecodeQuestRewardRequest(payload []byte) (uint32, []uint32, error) {
+	r := wire.NewReader(payload)
+	refID, err := r.U32()
+	if err != nil {
+		return 0, nil, fmt.Errorf("quest reward request: %w", err)
+	}
+	if err := r.Done(); err == nil {
+		return refID, nil, nil
+	}
+	count, err := r.U8()
+	if err != nil {
+		return 0, nil, fmt.Errorf("quest reward request: %w", err)
+	}
+	if count == 0 || int(count) > maxRewardPicks {
+		return 0, nil, fmt.Errorf("quest reward request: pick count %d", count)
+	}
+	picks := make([]uint32, 0, count)
+	for i := 0; i < int(count); i++ {
+		id, err := r.U32()
+		if err != nil {
+			return 0, nil, fmt.Errorf("quest reward request: %w", err)
+		}
+		picks = append(picks, id)
+	}
+	if err := r.Done(); err != nil {
+		return 0, nil, fmt.Errorf("quest reward request: %w", err)
+	}
+	return refID, picks, nil
 }
 
 // appendWireString appends the NativePacketWriter.string layout the

@@ -75,6 +75,17 @@
 // lookup, not a hardcoded false. Computed from cols[13] when a future
 // table authors it.
 //
+// VERSION 6 (quest reward choices, #3920): a selection quest's window
+// (the later client's CIFQuestReward) lists the reward row's values and
+// the pickable items; the player picks SelectionCnt before claiming.
+// Ships as `rewards`, keyed by quest id: {selectionCount, gold, exp,
+// skillPoints, skillExp, ap, choices:[{item, refId, count}]}. The data
+// is the checked-in SQL snapshot the server catalog generator reads
+// (scripts/data/quest/sql-rewards-source.json: refqusetreward SelectionCnt
+// and refquestrewarditems rows) joined by codename; each choice's refId
+// resolves through the itemdata shards (column 1). Additive - format
+// version stays 5, as with the seasonal talk merge above.
+//
 // PINNED COLUMN MISS (the expansion audit, 2026-07-28): questdata.txt
 // has NO objective/description column the EXPANSION consumes -
 // CIFQuestSlotSub_ExpandDetail's text arrives on the wire (SQuestContents+0x08).
@@ -105,7 +116,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { exportDataAsset } from "../shared/dataAssetExport.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
-import { readTextDataRowsSync, readLocalizedTextDataRowsSync } from "../shared/textDataIo.mjs";
+import {
+	readTextDataRowsSync,
+	readLocalizedTextDataRowsSync,
+	listTextDataShardNamesSync
+} from "../shared/textDataIo.mjs";
 import { questGuideRecords } from "../shared/questGuideRecords.mjs";
 import { completeGuideTitles } from "../shared/textResources.mjs";
 import { completedEnglish, isPlaceholderText } from "../shared/englishCompletions.mjs";
@@ -126,6 +141,23 @@ const textEventPath = path.join( textdataRoot, "textevent.txt" );
 const textDataNamePath = path.join( textdataRoot, "textdataname.txt" );
 const textHelpPath = path.join( textdataRoot, "texthelp.txt" );
 const guideDataPath = path.join( textdataRoot, "gameguidedata.txt" );
+// The checked-in SQL reward snapshot (scripts/data/quest): the same join
+// source the server's compiled-quest generator reads (SelectionCnt and
+// the choice items, VERSION 6 above).
+const sqlRewardsPath = path.join(
+	import.meta.dirname,
+	"..",
+	"..",
+	"data",
+	"quest",
+	"sql-rewards-source.json"
+);
+// itemdata columns: column 1 is the RefObjID the pick names, column 2
+// the codename, column 5 the NameStrID (the buildMissionPresentationAsset
+// .mjs shard read; column 4 is the loader-discarded placeholder).
+const ITEMDATA_REF_OBJ_ID_COLUMN = 1;
+const ITEMDATA_CODENAME_COLUMN = 2;
+const ITEMDATA_NAME_STR_ID_COLUMN = 5;
 
 // The projected source columns, in shipped order (see the contract above).
 const PROJECTED_COLUMNS = [ 1, 3, 5, 6, 8, 9, 10 ];
@@ -207,6 +239,9 @@ export function buildQuestDataAsset() {
 	const giveupWarnBytes = [];
 	const countryBytes = [];
 	const progressClearBytes = [];
+	// The kept rows' (id, codename) pairs, parallel to `rows`: the VERSION 6
+	// reward join keys on the codename and ships by id.
+	const keptQuests = [];
 	for ( const cols of readTextDataRowsSync( questDataPath ) ) {
 		// The table loader keeps Service==1 rows (CTextParser_ReadInt @0x7f44fd); short
 		// rows would underrun the native parse.
@@ -214,11 +249,118 @@ export function buildQuestDataAsset() {
 			continue;
 		}
 		rows.push( PROJECTED_COLUMNS.map( ( index ) => cols[index] ).join( "\t" ) );
+		keptQuests.push( {
+			id: Number.parseInt( cols[1] ?? "", 10 ),
+			codename: cols[QUEST_CODENAME_COLUMN]?.trim() ?? ""
+		} );
 		// Unjoined rows keep the SQuestReference_Construct ctor zeroes at payload+0xb1/+0xb0/+0xc0.
 		const codename = cols[QUEST_CODENAME_COLUMN]?.trim();
 		giveupWarnBytes.push( giveupWarnByCodename.get( codename ) ?? 0 );
 		countryBytes.push( countryByCodename.get( codename ) ?? 0 );
 		progressClearBytes.push( progressClearByCodename.get( codename ) ?? 0 );
+	}
+
+	// The VERSION 6 reward blocks, keyed by quest id. A selection quest
+	// the questdata table does not keep cannot open its window and is
+	// skipped; one it keeps must resolve whole - an unresolved choice
+	// item fails the build, as a missing seasonal talk row does above.
+	const rewards = {};
+	{
+		const sqlQuests = JSON.parse( fs.readFileSync( sqlRewardsPath, "utf8" ) ).quests ?? {};
+		// The textdataname slice the choice names resolve through (the same
+		// table the helmet merge below reads): key column 1, English column 8.
+		const textDataNameEntries = {};
+		for ( const cols of readLocalizedTextDataRowsSync( textDataNamePath ) ) {
+			const key = cols[1]?.trim();
+			if ( key && !(key in textDataNameEntries) ) {
+				textDataNameEntries[key] = (cols[8]?.trim() ?? "").replaceAll( "\\n", "\n" );
+			}
+		}
+		let itemByCodename = null;
+		for ( const kept of keptQuests ) {
+			const row = sqlQuests[kept.codename];
+			if ( !row || !row.selectionCount ) {
+				continue;
+			}
+			if ( !Number.isSafeInteger( kept.id ) || kept.id <= 0 ) {
+				throw new Error( `[questdata] selection quest ${kept.codename} has no quest id` );
+			}
+			const items = row.items ?? [];
+			if (
+				items.some( ( item ) => item.choice !== 0 ) || items.length < 2 ||
+				row.selectionCount > items.length
+			) {
+				throw new Error(
+					`[questdata] selection quest ${kept.codename} picks ${row.selectionCount} of ${items.length}`
+				);
+			}
+			if ( !itemByCodename ) {
+				itemByCodename = new Map();
+				for ( const shardName of listTextDataShardNamesSync( textdataRoot, /^itemdata.*\.txt$/i ) ) {
+					for ( const cols of readTextDataRowsSync( path.join( textdataRoot, shardName ) ) ) {
+						const codename = cols[ITEMDATA_CODENAME_COLUMN]?.trim() ?? "";
+						const refId = Number.parseInt( cols[ITEMDATA_REF_OBJ_ID_COLUMN] ?? "", 10 );
+						if (
+							!codename.startsWith( "ITEM_" ) || !Number.isSafeInteger( refId ) || refId <= 0 ||
+							itemByCodename.has( codename )
+						) {
+							continue;
+						}
+						// The icon is the row's .ddj (the mission builder's
+						// scan), shipped as its native path under Media/icon,
+						// the form the client's iconPath resolves.
+						let icon;
+						for ( const rawValue of cols ) {
+							const value = rawValue.trim();
+							if ( /\.ddj$/i.test( value ) ) {
+								icon = value.replaceAll( "\\", "/" ).toLowerCase();
+								break;
+							}
+						}
+						itemByCodename.set( codename, {
+							refId,
+							nameStrId: cols[ITEMDATA_NAME_STR_ID_COLUMN]?.trim() ?? "",
+							...(icon ? { icon } : {})
+						} );
+					}
+				}
+			}
+			const choices = items.map( ( item ) => {
+				const found = itemByCodename.get( item.item );
+				if ( !found ) {
+					throw new Error(
+						`[questdata] selection quest ${kept.codename} choice ${item.item} has no itemdata row`
+					);
+				}
+				// The window names a choice by its NameStrID resolved
+				// through the textdataname slice.
+				const name = textDataNameEntries[found.nameStrId] ?? "";
+				if ( !name ) {
+					throw new Error(
+						`[questdata] selection quest ${kept.codename} choice ${item.item} name ${found.nameStrId} has no textdataname row`
+					);
+				}
+				return {
+					item: item.item,
+					refId: found.refId,
+					count: item.count,
+					name,
+					...(found.icon ? { icon: found.icon } : {})
+				};
+			} );
+			rewards[String( kept.id )] = {
+				selectionCount: row.selectionCount,
+				gold: row.gold ?? 0,
+				exp: row.exp ?? 0,
+				skillPoints: row.skillPoints ?? 0,
+				skillExp: row.skillExp ?? 0,
+				ap: row.ap ?? 0,
+				// The later client's window lists a Job EXP row; no v1.150
+				// reward row grants it (the snapshot has no such column).
+				jobExp: 0,
+				choices
+			};
+		}
 	}
 
 	// The FULL textquest table (version 2): key column 1, English column 8
@@ -375,6 +517,9 @@ export function buildQuestDataAsset() {
 		// codename (payload+0xc0, the SQuestInfo_Deserialize progress-sentinel clear -
 		// all zeros in the shipped table, see the VERSION 5 banner note).
 		progressClearBytes,
+		// VERSION 6 (additive): the selection quests' reward blocks by quest
+		// id (see the banner). Quests without one claim as before.
+		rewards,
 		// Additive guide projection: preserves the existing quest-journal schema.
 		guideRecords: questGuideRecords(
 			readTextDataRowsSync( questDataPath ),

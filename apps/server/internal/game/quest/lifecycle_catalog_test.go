@@ -255,13 +255,14 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 			}
 			complete := func() (OpResult, error) {
 				if def.EndNpcCodename != "" && len(def.RewardChoices) > 0 {
-					// A selection quest completes through one of the rows its
-					// end NPC offers this character, as a player picks one.
-					rows := rewardChoiceOptions(def, enterworld.NativeCountryByte9C(character))
-					if len(rows) == 0 {
-						t.Fatal("selection quest offers this character no reward row")
+					// A selection quest claims in the reward window with
+					// the first pick it offers this character.
+					picks := firstOfferedChoices(def, enterworld.NativeCountryByte9C(character))
+					if len(picks) == 0 {
+						t.Fatal("selection quest offers this character no pick")
 					}
-					return rt.AdvanceNpcQuest(character, rows[0].Codename, def.EndNpcCodename)
+					payload := append(append(u32le(def.RefID), 1), u32le(def.RewardChoices[picks[0]].refID)...)
+					return rt.HandleRewardSelect(character, payload)
 				}
 				if def.EndNpcCodename != "" {
 					return rt.AdvanceNpcQuest(character, def.Codename, def.EndNpcCodename)
