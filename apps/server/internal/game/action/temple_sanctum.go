@@ -45,7 +45,7 @@ import (
 
 const (
 	// haroerisCodename is the one monster of the native wave
-	// Temple_Of_Haroeris (GameServer 0x67cce0: MobShower, Count 1).
+	// Temple_Of_Haroeris (a MobShower of count 1).
 	haroerisCodename = "MOB_SD_HAROERIS"
 	// sanctumGateLabel names a sanctum gate's move in the store.
 	sanctumGateLabel = "temple-sanctum-gate"

@@ -23,23 +23,18 @@ unique-encounters/haroeris-seth-chain.md has the trail):
 	           TEMPLE_*): two daily rows each, 7200 s long. The live
 	           _Schedule rows (1 s and 61 s) are the operator's tuning,
 	           not the game's.
-	timeline   SR_ShardManager's CShardSJ_TempleOfHaroerisGate start
-	           (0x661d30): with an empty Param it notifies at the start,
-	           +1200 s and +1500 s (30, 10 and 5 minutes left) and opens
-	           at +1800 s; the window's end closes it. 5400 s of play is
-	           INS_TEMPLE_HARO's WorldDurationTime (5400000 ms).
-	chain      GameServer CGameSJ_TempleOfHaroerisGate opens Haroeris's
-	           sanctum with a one-monster wave whose trigger asks the
-	           shard manager to open Seth's (0x7ce6 type 1): Seth's gate
-	           opens when Haroeris dies.
-	pairs      the other two jobs open both worlds of their pair on one
-	           step: CShardSJ_TempleOfSelkisAndNeithGate's open (call
-	           0x660241 to 0x6605a0) looks up INS_TEMPLE_SELK (0x6605e6)
-	           and INS_TEMPLE_NEIT (0x660652) and opens each (failure
-	           logs 0x66093e, 0x660a28) before "now Open" (0x66025f);
-	           CShardSJ_TempleOfAnubisAndIsisGate does the same with
-	           INS_TEMPLE_ANUB and _ISIS (0x661276, 0x6612e5, 0x66186e).
-	           Neither pair has a kill trigger: only Seth waits on one.
+	timeline   the shard manager's Haroeris gate job, started with an
+	           empty Param, notifies at the start, +1200 s and +1500 s
+	           (30, 10 and 5 minutes left) and opens at +1800 s; the
+	           window's end closes it. 5400 s of play is INS_TEMPLE_HARO's
+	           WorldDurationTime (5400000 ms).
+	chain      the game server's Haroeris gate job opens his sanctum with
+	           a one-monster wave whose trigger asks the shard manager to
+	           open Seth's: Seth's gate opens when Haroeris dies.
+	pairs      the Selkis & Neith and Anubis & Isis jobs each look up both
+	           worlds of their pair and open them on one step, before
+	           their "now Open" log. Neither has a kill trigger: only
+	           Seth waits on one.
 
 This leaf owns the table. It imports only the schedule leaf.
 
@@ -63,10 +58,10 @@ const (
 )
 
 // The sanctum teleporters' teleportbuilding codenames (the build stages
-// them from the VSRO client, pharaoh_temple.py TELEPORTER_CODES). The
-// GameServer's 0xbce6 handler (0x41a9c0) points INS_TEMPLE_SETH_TELEPORT
-// at Seth's world and INS_TEMPLE_TELEPORT at the pair's: Seth's enter gate
-// is the first, every other gate the second.
+// them from the VSRO client, pharaoh_temple.py TELEPORTER_CODES). When a
+// sanctum opens, the game server points INS_TEMPLE_SETH_TELEPORT at Seth's
+// world and INS_TEMPLE_TELEPORT at the pair's: Seth's enter gate is the
+// first, every other gate the second.
 const (
 	TempleTeleporter = "INS_TEMPLE_TELEPORT"
 	SethTeleporter   = "INS_TEMPLE_SETH_TELEPORT"
