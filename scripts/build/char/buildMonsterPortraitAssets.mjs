@@ -16,6 +16,16 @@ be drawn again; the drawn bytes live in a cache outside the public tree.
 The catalogue's switch to this manifest and retirement of its old publishing
 stage are a maintainer follow-up after this family lands.
 
+A machine without a usable GPU cannot draw stills at all (#4015). The
+viewer therefore starts lazily, on the first still the cache cannot
+serve, and when it cannot draw - the browser will not launch, or the
+first draw fails before any still exists - the family falls back to the
+stills the previous published manifest carries and says so in its note,
+instead of stopping the full build. A draw that fails after a still was
+drawn still names its row and stops the family: the viewer works, and
+the model is broken. Fallback bytes never enter the fingerprint cache;
+they were drawn by an older renderer.
+
 ===========================================================================
 */
 import { createHash } from "node:crypto";
@@ -236,61 +246,187 @@ export async function renderMonsterPortrait( page, base, refObjId, row ) {
 
 /*
 ================
+portraitManifestIndex
+
+The stills a previous build published, refObjId -> public path, read
+from its manifest rows. Malformed rows are skipped: the fallback must
+never invent a name the family did not publish.
+================
+*/
+export function portraitManifestIndex( manifest ) {
+	const index = new Map();
+	for ( const row of manifest?.rows ?? [] ) {
+		if ( !Array.isArray( row ) ) continue;
+		const [refObjId, published] = row;
+		if (
+			Number.isInteger( refObjId ) && refObjId > 0 && typeof published === "string" &&
+			published.startsWith( PREFIX ) && published.endsWith( ".png" ) && !index.has( refObjId )
+		) {
+			index.set( refObjId, published );
+		}
+	}
+	return index;
+}
+
+/*
+================
+portraitRowDrawable
+
+A reference the viewer can be asked to draw: a model under the NPC tree.
+Rows without one are missing models, not failures.
+================
+*/
+function portraitRowDrawable( row ) {
+	return typeof row.glb === "string" && /^\/assets\/npc\/[a-zA-Z0-9/_.-]+\.glb$/.test( row.glb ) &&
+		!row.glb.includes( ".." );
+}
+
+/*
+================
+collectPortraitRows
+
+Where each reference's still comes from, in order: the fingerprint
+cache, the viewer, or - only when the viewer cannot draw at all - the
+still the previous manifest published. ports.cached and ports.draw
+answer PNG bytes or null; ports.publishedBytes answers the published
+still's bytes or null. The first draw failure before any still is drawn
+means the environment cannot draw (#4015): it is kept in `down` and no
+later row asks the viewer again. A draw failure after a drawn still is
+the viewer's named error and propagates.
+================
+*/
+export async function collectPortraitRows( references, ports ) {
+	const outcomes = [], missing = [];
+	let drawn = 0, reused = 0, down = null;
+	for ( const row of references ) {
+		if ( !portraitRowDrawable( row ) ) {
+			missing.push( row.refObjId );
+			continue;
+		}
+		let bytes = await ports.cached( row ), source = bytes ? "cache" : null;
+		if ( !bytes && !down ) {
+			try {
+				bytes = await ports.draw( row );
+				source = "drawn";
+				drawn++;
+			} catch ( error ) {
+				if ( drawn > 0 ) throw error;
+				down = error;
+			}
+		}
+		if ( !bytes && down ) {
+			bytes = await ports.publishedBytes( row );
+			if ( bytes ) {
+				source = "published";
+				reused++;
+			}
+		}
+		if ( !bytes ) {
+			missing.push( row.refObjId );
+			continue;
+		}
+		outcomes.push( { refObjId: row.refObjId, bytes, source } );
+	}
+	return { outcomes, missing, drawn, reused, down };
+}
+
+/*
+================
 buildMonsterPortraitAssets
 ================
 */
 export async function buildMonsterPortraitAssets() {
 	const manifestData = JSON.parse( await readFile( path.join( publicRoot, "assets/npc/manifest.json" ), "utf8" ) );
 	const references = monsterPortraitReferences( manifestData );
-	const fingerprint = await monsterPortraitRendererFingerprint( manifestData ), rows = [], missing = [], files = [];
-	const require = createRequire( path.join( CLIENT, "package.json" ) );
-	const { createServer } = await import( pathToFileURL( require.resolve( "vite" ) ).href );
-	const server = await createServer( {
-		configFile: false,
-		root: CLIENT,
-		publicDir: false,
-		logLevel: "error",
-		define: clientBuildDefinitions( CLIENT ),
-		resolve: { alias: { "@": path.join( CLIENT, "src" ) } },
-		server: { host: "127.0.0.1", port: 0 },
-		plugins: [ publishedAssets() ]
-	} );
-	let browser;
-	try {
-		await server.listen();
-		const launched = await launchProbeBrowser( {
-			viewport: { width: MONSTER_PORTRAIT_SIZE, height: MONSTER_PORTRAIT_SIZE }
+	const fingerprint = await monsterPortraitRendererFingerprint( manifestData ), rows = [], files = [];
+	const publishedIndex = await readFile( path.join( publicRoot, (PREFIX + "manifest.json").slice( 1 ) ), "utf8" )
+		.then( text => portraitManifestIndex( JSON.parse( text ) ) ).catch( () => new Map() );
+	// The viewer starts on the first still the cache cannot serve, so a
+	// fully cached build never needs a browser - or a GPU - at all.
+	let viewer = null;
+	/*
+	================
+	startViewer
+
+	The Vite server and probe browser behind ports.draw, started once.
+	================
+	*/
+	async function startViewer() {
+		const require = createRequire( path.join( CLIENT, "package.json" ) );
+		const { createServer } = await import( pathToFileURL( require.resolve( "vite" ) ).href );
+		const server = await createServer( {
+			configFile: false,
+			root: CLIENT,
+			publicDir: false,
+			logLevel: "error",
+			define: clientBuildDefinitions( CLIENT ),
+			resolve: { alias: { "@": path.join( CLIENT, "src" ) } },
+			server: { host: "127.0.0.1", port: 0 },
+			plugins: [ publishedAssets() ]
 		} );
-		browser = launched.browser;
-		const base = `http://127.0.0.1:${server.httpServer.address().port}/`;
-		let rendered = 0;
-		for ( const row of references ) {
-			if (
-				typeof row.glb !== "string" || !/^\/assets\/npc\/[a-zA-Z0-9/_.-]+\.glb$/.test( row.glb ) ||
-				row.glb.includes( ".." )
-			) {
-				missing.push( row.refObjId );
-				continue;
-			}
-			// Ref ids have their own presentation (rides, scale, effects). Never
-			// collapse them solely because they alias the same base GLB.
-			const cacheFile = path.join( CACHE_ROOT, monsterPortraitCacheKey( fingerprint, row.refObjId ) + ".png" );
-			let bytes = await stat( cacheFile ).then( value => value.size > 100 ).catch( () => false ) ?
-				await readFile( cacheFile ) :
-				null;
-			if ( !bytes ) {
-				bytes = await renderMonsterPortrait( launched.page, base, row.refObjId, row );
+		// A launch that fails here is the GPU-less case this family falls
+		// back for (#4015): the server must not outlive it, or its open
+		// listener keeps the build process from exiting.
+		let launched;
+		try {
+			await server.listen();
+			launched = await launchProbeBrowser( {
+				viewport: { width: MONSTER_PORTRAIT_SIZE, height: MONSTER_PORTRAIT_SIZE }
+			} );
+		} catch ( error ) {
+			await server.close();
+			throw error;
+		}
+		return {
+			server,
+			browser: launched.browser,
+			page: launched.page,
+			base: `http://127.0.0.1:${server.httpServer.address().port}/`
+		};
+	}
+	try {
+		const collected = await collectPortraitRows( references, {
+			async cached( row ) {
+				const cacheFile = path.join(
+					CACHE_ROOT,
+					monsterPortraitCacheKey( fingerprint, row.refObjId ) + ".png"
+				);
+				return await stat( cacheFile ).then( value => value.size > 100 ).catch( () => false ) ?
+					await readFile( cacheFile ) :
+					null;
+			},
+			async draw( row ) {
+				viewer ??= await startViewer();
+				// Ref ids have their own presentation (rides, scale, effects). Never
+				// collapse them solely because they alias the same base GLB.
+				const bytes = await renderMonsterPortrait( viewer.page, viewer.base, row.refObjId, row );
+				const cacheFile = path.join(
+					CACHE_ROOT,
+					monsterPortraitCacheKey( fingerprint, row.refObjId ) + ".png"
+				);
 				await mkdir( CACHE_ROOT, { recursive: true } );
 				await writeFile( cacheFile, bytes );
-				rendered++;
+				return bytes;
+			},
+			async publishedBytes( row ) {
+				const published = publishedIndex.get( row.refObjId );
+				if ( !published ) return null;
+				const file = containedPublicFile( publicRoot, published );
+				return await stat( file ).then( value => value.size > 100 ).catch( () => false ) ?
+					await readFile( file ) :
+					null;
 			}
-			const output = monsterPortraitPublishedPath( bytes ), target = path.join( publicRoot, output.slice( 1 ) );
+		} );
+		for ( const outcome of collected.outcomes ) {
+			const output = monsterPortraitPublishedPath( outcome.bytes ),
+				target = path.join( publicRoot, output.slice( 1 ) );
 			if ( await stat( target ).then( value => value.size > 100 ).catch( () => false ) ) {
 				claimPublicFile( target );
-			} else await writeIntoPublicTree( target, bytes );
-			rows.push( [ row.refObjId, output ] );
+			} else await writeIntoPublicTree( target, outcome.bytes );
+			rows.push( [ outcome.refObjId, output ] );
 			files.push( output );
 		}
+		const missing = collected.missing;
 		const manifest = path.join( publicRoot, (PREFIX + "manifest.json").slice( 1 ) );
 		await writeJsonIfChanged( manifest, {
 			format: "sro-hunting-portraits",
@@ -306,12 +442,16 @@ export async function buildMonsterPortraitAssets() {
 		} );
 		await refreshPrecompressedSidecars( [ manifest ], { onlyWhenStale: true } );
 		files.push( PREFIX + "manifest.json.gz" );
+		const note = `${rows.length} native references (${collected.drawn} rendered), ${missing.length} missing models`;
 		return {
 			files,
-			note: `${rows.length} native references (${rendered} rendered), ${missing.length} missing models`
+			note: collected.down ?
+				`${note}; the viewer could not draw (${collected.down.message}), ` +
+				`${collected.reused} stills reused from the published set` :
+				note
 		};
 	} finally {
-		await browser?.close();
-		await server.close();
+		await viewer?.browser?.close();
+		await viewer?.server.close();
 	}
 }
