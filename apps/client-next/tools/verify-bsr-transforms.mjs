@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {build} from 'esbuild';
+import {pythonExecutable} from '../../../scripts/build/shared/pythonRun.mjs';
 const source='src/engine/foundation/animation/bsr-particle-transform.ts';
 const r=await build({entryPoints:[source],bundle:true,platform:'node',format:'esm',write:false});
 const m=await import('data:text/javascript;base64,'+Buffer.from(r.outputFiles[0].contents).toString('base64'));
@@ -16,5 +17,5 @@ for(const scale of [.5,1,2])for(const root of [true,false])for(const rotated of 
 }
 fs.mkdirSync('temp/artifacts/bsr-parity',{recursive:true});
 fs.writeFileSync('temp/artifacts/bsr-parity/rotation-candidates.json',JSON.stringify({sourceSha256:createHash('sha256').update(fs.readFileSync(source)).digest('hex'),cases,transforms}));
-const result=spawnSync(process.env.SRO_PYTHON??'C:/Program Files/Python312/python.exe',['tools/verify-native-bsr-transforms.py'],{encoding:'utf8',timeout:120000});
+const PY=pythonExecutable();const result=spawnSync(PY.command,[...PY.args,'tools/verify-native-bsr-transforms.py'],{encoding:'utf8',timeout:120000});
 process.stdout.write(result.stdout??'');process.stderr.write(result.stderr??'');if(result.status!==0)process.exitCode=1;

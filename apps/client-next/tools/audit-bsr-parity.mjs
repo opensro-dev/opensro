@@ -9,6 +9,7 @@ import { parseCharacterBsr } from "../../../scripts/build/char/formats.mjs";
 import { entitySource } from "../../../scripts/build/char/publishEntityBsrModifiers.mjs";
 import { readPublishedAssetBytesSync, readPackedAssetBytesSync } from "../../../scripts/lib/publishedAsset.mjs";
 import { npcManifestModels } from "../../../scripts/build/shared/npcManifest.mjs";
+import { pythonExecutable } from "../../../scripts/build/shared/pythonRun.mjs";
 import { isOwnedModel } from "../../../scripts/build/char/ownedModels.mjs";
 import { bakeTables, skillScopedAnimationSets } from "../../../scripts/build/char/npcResourceBake.mjs";
 import { UNSELECTABLE_STATE_ID } from "../../../scripts/build/char/authoredAnimationBindings.mjs";
@@ -305,7 +306,8 @@ if ( process.argv.includes( "--verify" ) ) {
 	} );
 	if ( transforms.status !== 0 ) report.issues.push( { reason: "original particle transform verification failed" } );
 	for ( const script of [ "../../scripts/analysis/verify_particle_archive.py", "tools/verify-native-bsr.py" ] ) {
-		const result = spawnSync( process.env.SRO_PYTHON ?? "C:/Program Files/Python312/python.exe", [ script ], {
+		const python = pythonExecutable();
+		const result = spawnSync( python.command, [ ...python.args, script ], {
 			cwd: root,
 			encoding: "utf8",
 			timeout: 120000
