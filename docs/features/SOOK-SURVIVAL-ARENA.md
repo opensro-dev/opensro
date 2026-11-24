@@ -47,13 +47,13 @@ immediately, so clearing the budget finishes the stage sooner. If monsters
 remain, timed reinforcements still arrive. Five minutes remains the spawning
 cutoff; survivors must then be cleared. Decisions can extend the total event.
 
-| Stage | Monster levels relative to player | Average monsters per Pandora | Total chest items |
-| --- | --- | ---: | ---: |
-| 1 | −8 to −5 | 2.8 | 3–7 |
-| 2 | −6 to −3 | 4.95 | 8–15 |
-| 3 | −3 to 0 | 8.1 | 18–28 |
-| 4 | −1 to +2 | 11.25 | 32–45 |
-| 5 | +1 to +4 | 14.4 | 50–70 |
+| Stage | Monster levels relative to player | Average monsters per Pandora | Total chest items | Cash-out gold |
+| --- | --- | ---: | ---: | ---: |
+| 1 | −8 to −5 | 2.8 | 9–13 | 40 million |
+| 2 | −6 to −3 | 4.95 | 13–20 | 70 million |
+| 3 | −3 to 0 | 8.1 | 20–30 | 100 million |
+| 4 | −1 to +2 | 11.25 | 33–46 | 130 million |
+| 5 | +1 to +4 | 14.4 | 50–70 | 150 million |
 
 Level 1 is the floor. References, including uniques, must fit their stage's
 band; an unavailable unique is skipped. The safety cap is 200 living
@@ -122,14 +122,18 @@ Previous/Next page buttons. Bundles include:
 - Native HP, MP and vigor recovery grains, in stacks of **50**. Regular HP/MP
   potions and universal pills are excluded from new rewards; saved rewards and
   carried items are not rewritten.
-- Guaranteed kill-bracket gold, separate from chest items; no ordinary gold heaps.
+- Guaranteed gold for the last stage cleared when you cash out, paid separately from chest items.
 
 Death forfeits the unclaimed chest, but preserves carried items and pays kill
 gold once. Combat disconnect forfeits; a checkpoint reconnect preserves its
 chest and may resume without another entry. Graceful server shutdown preserves
-earned rewards. Full bags retain a saved entitlement at So-ok: close its window,
-make space, select So-ok and choose the arena option again. Claims are atomic;
-partial grants, repeated decisions and stale run IDs cannot duplicate rewards.
+earned rewards. At a checkpoint, **Next stage** continues the run and
+**Take all & end run** returns you to town with your gold. If all items fit,
+they go into your inventory. Otherwise, the chest stays open and you can drag
+rewards into empty bag slots or compatible stacks with space. Close the window
+to save the rest at So-ok, or confirm **Discard rest** to clear the chest before
+your next run. Claims are atomic, and repeated decisions and stale run IDs
+cannot duplicate rewards.
 
 ## Eggs
 

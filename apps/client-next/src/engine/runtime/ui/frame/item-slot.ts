@@ -36,7 +36,8 @@ export const ITEM_SLOT_PREFIXES = [
 	"cos-slot:",
 	"gacha-bag:",
 	"gacha-card",
-	"stall-slot:"
+	"stall-slot:",
+	"arena-chest-item:"
 ] as const;
 
 /*

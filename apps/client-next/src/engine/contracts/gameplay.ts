@@ -530,7 +530,14 @@ export type GameplayCommand =
 	| { readonly kind: "cos-select"; readonly gid: number; }
 	| { readonly kind: "npc-talk"; }
 	| { readonly kind: "arena-dismiss"; }
-	| { readonly kind: "arena-decision"; readonly operation: 0 | 1 | 2; readonly id: string; }
+	| { readonly kind: "arena-decision"; readonly operation: 0 | 1 | 2 | 5; readonly id: string; }
+	| {
+		readonly kind: "arena-decision";
+		readonly operation: 4;
+		readonly id: string;
+		readonly source: number;
+		readonly destination: number;
+	}
 	| { readonly kind: "npc-withdraw"; }
 	| { readonly kind: "npc-event-exchange"; }
 	| { readonly kind: "npc-choice"; readonly choice: number; }
