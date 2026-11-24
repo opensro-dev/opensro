@@ -64,9 +64,6 @@ const QUEST_DETAIL_TEXT: UiQuad["color"] = [ 44 / 255, 15 / 255, 1 / 255, 1 ];
 // A Berserk body that returns within this long of vanishing, with the minute not yet spent, is the same Berserk.
 const BERSERK_RESUME_WINDOW_MS = 30000;
 const BERSERK_RESUME_ELAPSED_MS = 59000;
-// Gap between a Blue Berserk title and the name, and its bold gold.
-const HWAN_TITLE_GAP = 4;
-const HWAN_TITLE_COLOR: UiQuad["color"] = [ 1, 0.84, 0.2, 1 ];
 // The overhead job mark sits 4 px past the name board, which reaches 1.5 px
 // past the text (the beginner mark mirrors it at -21.5 = -20 - 1.5).
 const JOB_MARK_GAP = 5.5;
@@ -129,7 +126,7 @@ import {
 } from "@/engine/foundation/gameplay/storage-room";
 import { berserkHud, berserkEntryFlash } from "@/engine/foundation/ui/berserk-hud";
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
-import { hwanSkin, hwanTitleKey } from "@/engine/foundation/gameplay/hwan-skin";
+import { hwanSkin } from "@/engine/foundation/gameplay/hwan-skin";
 import { questLocationTargets } from "@/engine/foundation/ui/quest-locations";
 import { portalMenu } from "@/engine/foundation/gameplay/portal";
 import { restoreSlotEntry } from "@/engine/foundation/gameplay/commerce";
@@ -24093,8 +24090,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// same board, between the Contributor title and the name;
 					// one combined lead keeps the whole line centred.
 					const tierTitle = overheads.get( entity.gid )?.tierText ?? "",
-						tierTitleWidth = tierTitle ? text.run( tierTitle, 2 ).width : 0,
-						tierLead = tierTitleWidth ? (title ? TITLE_NAME_GAP : 0) + tierTitleWidth : 0;
+						tierTitleWidth = tierTitle ? text.run( tierTitle, 2 ).width : 0;
+					// The Hwan title (native in the later client, #3919) rides
+					// the same board closest to the name, after the tier title.
+					// Every title's width is in the one lead, so the centred
+					// board stands behind the whole line and no two titles
+					// ever share a slot.
+					const hwanTitle = overheads.get( entity.gid )?.hwanText ?? "",
+						hwanTitleWidth = hwanTitle ? text.run( hwanTitle, 2 ).width : 0,
+						titleWidths = [ titleWidth, tierTitleWidth, hwanTitleWidth ].filter( w => w > 0 ),
+						leadWidth = titleWidths.reduce( ( sum, w ) => sum + w, 0 ) +
+							TITLE_NAME_GAP * Math.max( 0, titleWidths.length - 1 );
 					if ( named && beginnerMarkShown( entity, options ) ) {
 						const name = staffBoardName(
 								entity,
@@ -24116,7 +24122,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								characterAnchor: entity.gid,
 								alphaCutoff: 128 / 255,
 								rect: [
-									titledNameRow( titleWidth + tierLead, width ).left - 21.5,
+									titledNameRow( leadWidth, width ).left - 21.5,
 									-(height >> 1) - 1.5,
 									16,
 									16
@@ -24143,7 +24149,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						),
 						width = text.run( name, selected ? 2 : 0 ).width,
 						height = text.boardHeight();
-					const row = titledNameRow( name ? titleWidth + tierLead : 0, width ),
+					const row = titledNameRow( name ? leadWidth : 0, width ),
 						left = row.nameLeft,
 						top = -(height >> 1);
 					if ( name && height ) {
@@ -24174,19 +24180,19 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							} );
 						}
 					}
-					// Port-only Blue Berserk title (not native): bold gold, just before the
-					// character's name, for every player the server's level roster named (0x3FCB).
-					const titleText = entity.kind === "local-player" || entity.kind === "player" ?
-						hudCopy( hwanTitleKey( game?.hwanLevels?.[entity.gid], entity.countryByte9c ) ) :
-						"";
-					if ( titleText && name && height ) {
-						const titleWidth = text.run( titleText, 2 ).width;
+					// The board's titles stand left of the name in board
+					// order: Contributor, tier, then the Hwan title closest
+					// to the name (its lead is in the row, like the rest).
+					const tierLeft = row.left + (title ? titleWidth + TITLE_NAME_GAP : 0),
+						hwanLeft = tierLeft + (tierTitle ? tierTitleWidth + TITLE_NAME_GAP : 0);
+					// Port-only (#3530): the tier title, bold in its tier's colour.
+					if ( tierTitle && name && height ) {
 						quads.push(
 							...text.quads(
-								titleText,
-								[ left - titleWidth - HWAN_TITLE_GAP, top, titleWidth, height ],
+								tierTitle,
+								[ tierLeft, top, tierTitleWidth, height ],
 								full,
-								HWAN_TITLE_COLOR,
+								overheads.get( entity.gid )?.tierColor ?? [ 1, 1, 1, 1 ],
 								{
 									vAlign: 0,
 									fontStyle: 2
@@ -24194,15 +24200,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							).map( q => ({ ...q, characterAnchor: entity.gid }) )
 						);
 					}
-					// Port-only (#3530): the tier title, bold in its tier's
-					// colour, just before the name (its lead is in the row).
-					if ( tierTitle && name && height ) {
+					// The Hwan title (native in the later client, #3919):
+					// bold, in its gold, just before the name, for every
+					// player the server's level roster named.
+					if ( hwanTitle && name && height ) {
 						quads.push(
 							...text.quads(
-								tierTitle,
-								[ left - tierTitleWidth - TITLE_NAME_GAP, top, tierTitleWidth, height ],
+								hwanTitle,
+								[ hwanLeft, top, hwanTitleWidth, height ],
 								full,
-								overheads.get( entity.gid )?.tierColor ?? [ 1, 1, 1, 1 ],
+								overheads.get( entity.gid )?.hwanColor ?? [ 1, 1, 1, 1 ],
 								{
 									vAlign: 0,
 									fontStyle: 2
