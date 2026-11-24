@@ -301,6 +301,9 @@ type WireItem struct {
 	// EarnedBought mirrors InventoryRow.EarnedBought (port only,
 	// issue #4133); never set for starter items.
 	EarnedBought bool
+	// RentExpiresUnix mirrors InventoryRow.RentExpiresUnix (native
+	// _RentItemInfo, #4240); never set for starter items.
+	RentExpiresUnix int64
 }
 
 /*
@@ -419,8 +422,9 @@ func EnsureMissionInventory(character *Character, equipRoster []WireItem) []Inve
 				StackCount:   stackCount,
 				MagicOptions: copyMagicOptions(item.MagicOptions),
 				Data:         item.Data, Summon: domain.CloneCOS(item.Summon),
-				ForgeBound:   item.ForgeBound,
-				EarnedBought: item.EarnedBought,
+				ForgeBound:      item.ForgeBound,
+				EarnedBought:    item.EarnedBought,
+				RentExpiresUnix: item.RentExpiresUnix,
 			})
 		}
 		character.MissionInventory = rows
@@ -544,8 +548,9 @@ func InventoryWireItems(rows []InventoryRow) []WireItem {
 			StackCount:   row.StackCount,
 			MagicOptions: copyMagicOptions(row.MagicOptions),
 			Data:         row.Data, Summon: domain.CloneCOS(row.Summon),
-			ForgeBound:   row.ForgeBound,
-			EarnedBought: row.EarnedBought,
+			ForgeBound:      row.ForgeBound,
+			EarnedBought:    row.EarnedBought,
+			RentExpiresUnix: row.RentExpiresUnix,
 		})
 	}
 	return out

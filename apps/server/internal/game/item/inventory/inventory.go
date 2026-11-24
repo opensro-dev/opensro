@@ -103,6 +103,10 @@ type Item struct {
 	// of stack identity for the same reason as the seal: a merge can
 	// never pour quantity into or out of a marked row.
 	EarnedBought bool
+	// RentExpiresUnix is a rental's expiry in unix seconds (native
+	// _RentItemInfo PeriodEndTime): the world-entry sweep deletes the
+	// row at or past it. Zero is not a rental (issue #4240).
+	RentExpiresUnix int64
 }
 
 // Body returns the CSOItem body for this row, the remainder of a type-0x06
