@@ -3385,16 +3385,24 @@ the next full prepare pass, so this may run between frames.
 					parents.add( child.gid );
 				}
 			}
-			// The worn items' effect glows (a rare weapon's itemrare rows, a
-			// garment's ambient set): effect actors on an equipment socket of
-			// the character. The doll runs no occlusion query, so they draw
-			// without the world's deferred-particle gate.
+			// The worn items' effects: a rare weapon's itemrare rows and a
+			// garment's ambient set ride an equipment socket of the character,
+			// and an animated worn handle (an avatar's wings, a garment's own
+			// skeleton) carries its ambient set on its own bones, emitted onto
+			// the handle's actor. Both belong to the composite the native doll
+			// rebuilds (8EAA90), so both follow it; effects the world hung on
+			// the character itself (skill and buff decorations) are no part of
+			// the composite and stay out. The doll runs no occlusion query, so
+			// they draw without the world's deferred-particle gate.
 			for ( const child of candidates ) {
 				if (
 					!child.attachment || !parents.has( child.attachment.gid ) ||
-					!child.attachment.bone?.startsWith( EQUIPMENT_SOCKET_PREFIX ) ||
 					!isEffectProgramModel( child.model )
 				) {
+					continue;
+				}
+				const onWornHandle = child.attachment.gid !== gid;
+				if ( !onWornHandle && !child.attachment.bone?.startsWith( EQUIPMENT_SOCKET_PREFIX ) ) {
 					continue;
 				}
 				const childResource = models.get( child.model );
