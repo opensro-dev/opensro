@@ -60,6 +60,11 @@ class TempleSwitchTests(unittest.TestCase):
 		with self.assertRaises(ValueError):
 			temple.temple_enabled({temple.FLAG: "yes please"})
 
+	def test_the_two_teleporters_are_named_once(self):
+		# The server names the same two (pharaohtemple.TeleporterCodes).
+		self.assertEqual(temple.TELEPORTER_CODES, ("INS_TEMPLE_TELEPORT", "INS_TEMPLE_SETH_TELEPORT"))
+		self.assertFalse(set(temple.TELEPORTER_CODES) & set(temple.GATE_CODES), "a teleporter has no teleport row")
+
 
 # ================
 # DungeonTableTests
