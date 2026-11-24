@@ -2193,6 +2193,7 @@
 			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
 			"functions": [
 				"country",
+				"monsterCodename",
 				"npcs",
 				"playerModels"
 			]

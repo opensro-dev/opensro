@@ -52,7 +52,7 @@ export const MACRO_POTION_REARM_MS = 500;
 // 690c70 push list (v1.696 sro_client.exe 8af7afc2…): CodeNames that bind
 // the buff-item / "European Status Anomaly" / Moving-speed row. Compared
 // exactly (524a60) against the item's CodeName; TID bands do not admit.
-export const MACRO_BUFF_ITEM_CODENAMES: ReadonlySet<string> = new Set( [
+export const MACRO_BUFF_ITEM_CODENAMES = [
 	"ITEM_MALL_MOVE_SPEED_UP_50",
 	"ITEM_MALL_MOVE_SPEED_UP_100",
 	"ITEM_PRE_MALL_MOVE_SPEED_UP_50",
@@ -74,7 +74,7 @@ export const MACRO_BUFF_ITEM_CODENAMES: ReadonlySet<string> = new Set( [
 	"ITEM_ETC_ARCHEMY_LEVEL_POTION_SPEED_02",
 	"ITEM_ETC_ARCHEMY_LEVEL_POTION_SPEED_05",
 	"ITEM_ETC_ARCHEMY_LEVEL_POTION_SPEED_11"
-] );
+] as const;
 // 00692e00 / 00691c70 refuse HP while this abnormal bit stands.
 const HP_BLOCKING_ABNORMAL = 0x20;
 // 00692d20 / 00691a20 fire while any of these abnormal bits stands.
@@ -194,7 +194,7 @@ export function macroPotionAdmits( row: number, typeFlags: number, codename = ""
 	// 690c70: exact CodeName match against the speed-scroll whitelist (524a60
 	// on the item's CodeName at +8). typeFlags alone never admit this row.
 	if ( row === MACRO_ROW_BUFF_ITEM ) {
-		return !!codename && MACRO_BUFF_ITEM_CODENAMES.has( codename );
+		return !!codename && (MACRO_BUFF_ITEM_CODENAMES as readonly string[]).includes( codename );
 	}
 	// 690a20 / 6909e0 / 690a60: potion helper then high 4 / 9 / 6.
 	if ( row === MACRO_ROW_PET_HP ) return macroIsPotion( typeFlags ) && tid4 === 4;
