@@ -10,6 +10,7 @@ apps/client-next/src/engine/runtime/characters/pose-presentation.ts # one sample
 apps/client-next/src/engine/runtime/characters/effects/effects.ts # formatted 2026-10-01; step() still owns cast stages, attached buffs, status, item and system effects and flights: split along those owners
 apps/client-next/src/engine/runtime/platform/platform.ts # platform composition root: the returned handle carries one row per platform owner (canvas, cursor, telemetry, display); rows join and leave with their owners and no responsibility boundary runs inside the table
 apps/client-next/src/engine/runtime/platform/ui/ui.ts # one DOM bridge owner: control lifetime, pointer/touch routing, focus and IME share each control's element and its per-frame publication; the drag shield and cursor are already separate owners
+apps/client-next/src/engine/runtime/renderer/device/device.ts # the device composition owner: every GPU stage (bloom, hdr, brightness, occlusion, msaa, finish) is created, prepared and disposed through this one lifecycle table; each stage is already its own owner file
 apps/client-next/src/engine/runtime/renderer/device/geometry.ts # cohesive draw-resource and binding lifetime owner; upload snapshots have a separate owner
 apps/client-next/src/engine/runtime/renderer/characters/characters.ts # synchronous model, pose and draw-batch lifetime owner; shared admission and retirement must stay ordered
 apps/client-next/src/engine/runtime/renderer/world/world.ts # not yet analysed; split on its responsibility boundaries when formatted
@@ -36,6 +37,7 @@ apps/client-next/tests/runtime/world-renderer.test.mjs # test file; split by fea
 apps/client-next/tests/runtime/world.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/session.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/sro-macro-skill.test.mjs # test file; split by feature
+apps/server/internal/domain/character.go # the character record and every row type it owns: one persisted shape whose fields cannot split across files; it grows a field per schema step (51: plusFailOptOut) and no responsibility boundary runs through the record
 apps/server/internal/game/action/petai.go # one pet-tick coordinator: the pet session book, the per-owner lane sequence and its frame routing share the tick's ordering; the lanes it calls are separate owners, and the sequence must stay readable in call order
 apps/server/internal/game/action/runtime.go # the action Runtime state owner: one struct holds every shard switch's runtime state (TradeTiers, SunEventOnly, the Alexandria switches), so it grows a field per feature and no responsibility boundary runs through it
 apps/server/internal/game/quest/runtime.go # one quest-runtime owner: definition lookup, acceptance, NPC option projection and the reward transaction share the character door and the active-quest list; the per-programme composition rows (acceptance grants, grant-day stamps, offer and re-grant hooks) join their programmes here, with no responsibility boundary inside the transaction owner

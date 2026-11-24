@@ -32,6 +32,50 @@ export function frameLimits(): readonly number[] {
 }
 /*
 ================
+BRIGHTNESS_STEP_DEFAULT
+
+The video page's brightness spin (GDR_OPT_VIDEO_SP_BR): five steps from
+the later client, which v1.150's client never wired. The middle step is
+the default. Like the frame limit this is a browser presentation
+preference, never encoded into the native detail banks.
+================
+*/
+export const BRIGHTNESS_STEP_DEFAULT = 2;
+/*
+================
+brightnessStepKeys
+
+The five step labels in spin order, darkest first: v1.696
+textuisystem_200.txt rows 100-104. The fourth key keeps the later
+client's FORTH spelling; it is a text-table key, not prose.
+================
+*/
+export function brightnessStepKeys(): readonly string[] {
+	return [
+		"UILM_TEXT_BRIGHT_FIRST",
+		"UILM_TEXT_BRIGHT_SECOND",
+		"UILM_TEXT_BRIGHT_THIRD",
+		"UILM_TEXT_BRIGHT_FORTH",
+		"UILM_TEXT_BRIGHT_FIFTH"
+	];
+}
+/*
+================
+brightnessGamma
+
+The presentation gamma of one step, 1 at the default. The later
+client's mechanism is the D3D9 gamma ramp (the v1.696 client links
+SetDeviceGammaRamp), so each step is a power curve over the presented
+frame; its per-step exponents were not located in the binary, and
+these evenly spaced exponents around Normal are the port's values,
+not native constants.
+================
+*/
+export function brightnessGamma( step: number | undefined ): number {
+	return [ 0.7, 0.85, 1, 1.15, 1.3 ][step ?? BRIGHTNESS_STEP_DEFAULT] ?? 1;
+}
+/*
+================
 VideoRecords
 ================
 */
@@ -228,6 +272,7 @@ VideoOptions
 */
 export interface VideoOptions {
 	readonly frameLimit?: number;
+	readonly brightness?: number;
 	readonly custom?: VideoRecords;
 	readonly active: 0 | 1;
 	readonly records: readonly [readonly number[], readonly number[]];
@@ -242,7 +287,12 @@ defaultVideoOptions
 */
 export function defaultVideoOptions(): VideoOptions {
 	const row = [ 1, 0, 2, 2, 0, 1, 1, 1, 1, 2, 1, 0, 1, 2, 0, 0 ];
-	return { active: 0, records: [ [ ...row ], [ ...row ] ], frameLimit: DEFAULT_FRAME_LIMIT };
+	return {
+		active: 0,
+		records: [ [ ...row ], [ ...row ] ],
+		frameLimit: DEFAULT_FRAME_LIMIT,
+		brightness: BRIGHTNESS_STEP_DEFAULT
+	};
 }
 // Slots 3 and 5 are selectable but change nothing, as in the native client:
 // 713EC0 maps them to SWorld properties 9 and 7, which 8A54C0 only stores
@@ -348,8 +398,15 @@ export function videoOptions( value: unknown ): VideoOptions {
 	if ( v.frameLimit !== undefined && !frameLimits().includes( v.frameLimit ) ) {
 		throw Error( "Invalid frame limit" );
 	}
+	if (
+		v.brightness !== undefined &&
+		(!Number.isInteger( v.brightness ) || v.brightness < 0 || v.brightness >= brightnessStepKeys().length)
+	) {
+		throw Error( "Invalid brightness" );
+	}
 	return {
 		frameLimit: v.frameLimit ?? DEFAULT_FRAME_LIMIT,
+		brightness: v.brightness ?? BRIGHTNESS_STEP_DEFAULT,
 		active: v.active,
 		records: [ [ ...v.records[0] ], [ ...v.records[1] ] ],
 		...(v.custom ? { custom: [ [ ...v.custom[0] ], [ ...v.custom[1] ] ] as VideoRecords } : {}),
@@ -419,5 +476,5 @@ export function resetVideoRecord( options: VideoOptions ): VideoOptions {
 		custom = (options.custom ?? options.records).map( r => [ ...r ] ) as [number[], number[]];
 	records[options.active] = [ ...defaults.records[options.active] ];
 	custom[options.active] = [ ...defaults.records[options.active] ];
-	return { ...options, records, custom, frameLimit: DEFAULT_FRAME_LIMIT };
+	return { ...options, records, custom, frameLimit: DEFAULT_FRAME_LIMIT, brightness: BRIGHTNESS_STEP_DEFAULT };
 }

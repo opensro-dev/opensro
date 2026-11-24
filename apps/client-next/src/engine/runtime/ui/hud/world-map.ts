@@ -141,6 +141,7 @@ interface MapPaint {
 		| null
 		| undefined;
 	trackedQuest: number;
+	locatedQuest?: number | undefined;
 	minimapResources: { positions(): ReturnType<typeof minimapNpcPositions> | undefined; };
 	// The dungeon pages, read by the caller this frame.
 	caveMaps?: CaveMapCatalog | undefined;
@@ -334,6 +335,22 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				return true;
 			}
 			return false;
+		},
+		/*
+		================
+		locate
+
+		Centres the map on an external point (the quest list's locate
+		button, issue #4245): the view leaves follow mode, holds this
+		centre and picks its page, like the guide pick in activate.
+		================
+		*/
+		locate( center: Pose ) {
+			mapTools.clearView();
+			mapFollow = false;
+			mapPan = [ 0, 0 ];
+			mapCenter = { ...center };
+			mapPage = worldMapPageAt( center, mapLayout );
 		},
 		/*
 		================
@@ -603,6 +620,25 @@ export function createWorldMapHud( options: MapHudOptions ) {
 							rotation: 0,
 							path: ROOT + "interface/worldmap/wmap_sign_questnpc.png"
 						} );
+					}
+				}
+				// Issue #4245: the located quest's own sign (the later
+				// client's wmap_quest_icon), over its NPC sign pass.
+				if ( input.locatedQuest !== undefined && game ) {
+					for ( const quest of game.quests ?? [] ) {
+						if ( quest.refId !== input.locatedQuest ) continue;
+						for ( const id of quest.targetIds ) {
+							const target = minimapResources.positions()?.get( id );
+							if ( target && minimapSameFloor( pose, target, game ?? null ) ) {
+								mapMarkers.push( {
+									regionId: target.regionId,
+									x: target.x,
+									z: target.z,
+									rotation: 0,
+									path: ROOT + "interface/worldmap/wmap_quest_icon.png"
+								} );
+							}
+						}
 					}
 				}
 				// Port-only: the spot a quest tool is used at (quest-locations.ts).

@@ -13,6 +13,7 @@ import {
 	reportedGpuFeatures
 } from "@/engine/foundation/rendering/gpu-facts";
 import { createBloom } from "./bloom";
+import { createBrightness } from "./brightness";
 import { createSingleUseBundleEncoder } from "./bundle-encoder";
 import { createFinish } from "./finish";
 import { createHdr } from "./hdr";
@@ -120,6 +121,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 	let flares: ReturnType<typeof createFlares> | null = null;
 	let bloom: ReturnType<typeof createBloom> | null = null;
 	let hdr: ReturnType<typeof createHdr> | null = null;
+	let brightness: ReturnType<typeof createBrightness> | null = null;
 	let occlusion: ReturnType<typeof createAmbientOcclusion> | null = null;
 	let msaaStage: ReturnType<typeof createMsaa> | null = null;
 	let finish: ReturnType<typeof createFinish> | null = null;
@@ -509,6 +511,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 
 			hdr = createHdr( created, navigator.gpu.getPreferredCanvasFormat(), retirement.retire );
 
+			brightness = createBrightness( created, navigator.gpu.getPreferredCanvasFormat(), retirement.retire );
+
 			occlusion = createAmbientOcclusion( created, retirement.retire );
 			msaaStage = createMsaa( created, retirement.retire );
 
@@ -604,6 +608,19 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		hdr( width, height, enabled ) {
 			if ( phase !== "running" || !hdr ) throw Error( "HDR device is not ready" );
 			return hdr.prepare( width, height, enabled && hdrOn );
+		},
+		/*
+		================
+		brightness
+
+		The video page's gamma resolve (the later client's brightness
+		setting, #3908): the scene intermediate for the presented size,
+		or undefined while the Normal step is chosen.
+		================
+		*/
+		brightness( width, height, gamma ) {
+			if ( phase !== "running" || !brightness ) throw Error( "Brightness device is not ready" );
+			return brightness.prepare( width, height, gamma );
 		},
 		/*
 		================
@@ -961,6 +978,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 			bloom = null;
 			hdr?.dispose();
 			hdr = null;
+			brightness?.dispose();
+			brightness = null;
 			occlusion?.dispose();
 			occlusion = null;
 			msaaStage?.dispose();

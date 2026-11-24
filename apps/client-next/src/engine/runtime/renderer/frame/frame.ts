@@ -185,7 +185,13 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 		) {
 			const sceneScale = experimental?.sceneScale;
 			const msaa = experimental?.msaa;
-			const sceneView = bloom?.view ?? experimental?.hdr?.view ?? sceneScale?.view ?? view;
+			// The brightness stage (#3908) is the outermost scene target:
+			// inner stages resolve into it, and while it is on the labels,
+			// the UI and everything else presented composes into it too -
+			// its gamma pass writes the presented frame last.
+			const brightness = experimental?.brightness;
+			const sceneView = bloom?.view ?? experimental?.hdr?.view ?? sceneScale?.view ?? brightness?.view ?? view;
+			const composedView = brightness ? brightness.view : view;
 			const uiDepth = sceneScale?.frameDepth ?? depth;
 			// The HDR stage resolves the world before UI. Its float target can
 			// then be reused for an independently composited character preview.
@@ -195,13 +201,14 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			// UI, read the resolved target single-sampled.
 			//
 			// resolvedScene: the stages whose scene must be resolved (tone
-			// mapped, upscaled or multisample-resolved) before the world labels
+			// mapped, upscaled, brightness-resolved or multisample-resolved)
+			// before the world labels
 			// draw, so the labels move to the full-resolution label pass.
 			// separateScene: every stage that renders the scene away from the
 			// frame target (those, plus the bloom capture), so the labels, the
 			// background and the UI wait for a later pass instead of the main
 			// pass or the deferred tail.
-			const resolvedScene = hdrScene || !!sceneScale || !!msaa;
+			const resolvedScene = hdrScene || !!sceneScale || !!msaa || !!brightness;
 			const separateScene = !!bloom || resolvedScene;
 			if ( ui !== recordedUi ) {
 				/*
@@ -448,12 +455,16 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 				// of every post chain; while off the owner is absent and
 				// the depth above was discarded as natively.
 				if ( experimental?.ao && depth ) experimental.ao.encode( encoder, depth );
-				bloom?.encode( encoder, view );
+				// The inner stages resolve into the brightness intermediate
+				// while it is on; what is presented after them composes into
+				// it as well, and the gamma pass writes the frame last.
+				const sceneTarget = brightness && sceneView !== brightness.view ? brightness.view : view;
+				bloom?.encode( encoder, sceneTarget );
 				if ( bloom ) blendFactor = bloomBlendFactor;
 				// Without bloom the HDR stage owns its tone-map pass; with it,
 				// the chain's copy-back step already tonemapped into the frame.
-				if ( !bloom && experimental?.hdr ) experimental.hdr.encode( encoder, view );
-				else if ( !bloom && sceneScale ) sceneScale.resolve( encoder, view );
+				if ( !bloom && experimental?.hdr ) experimental.hdr.encode( encoder, sceneTarget );
+				else if ( !bloom && sceneScale ) sceneScale.resolve( encoder, sceneTarget );
 				if ( flares ) {
 					const compute = encoder.beginComputePass( {
 						timestampWrites: timing?.pass( "flare-visibility" ),
@@ -466,7 +477,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					const overlay = encoder.beginRenderPass( {
 						timestampWrites: timing?.pass( "flare-chain" ),
 						label: "flare-chain",
-						colorAttachments: [ { view, loadOp: "load", storeOp: "store" } ]
+						colorAttachments: [ { view: composedView, loadOp: "load", storeOp: "store" } ]
 					} );
 					overlay.setBlendConstant( blendFactor );
 					if ( flareBundle ) overlay.executeBundles( [ flareBundle ] );
@@ -497,7 +508,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 								}
 							} :
 							{}),
-						colorAttachments: [ { view, loadOp: "load", storeOp: "store" } ]
+						colorAttachments: [ { view: composedView, loadOp: "load", storeOp: "store" } ]
 					} );
 					if ( hudDrawsLabels ) hud.executeBundles( [ worldUiBundle! ] );
 					if ( backgroundBundle ) hud.executeBundles( [ backgroundBundle ] );
@@ -509,11 +520,11 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 						// Port-only, not native: preserve background -> preview ->
 						// foreground without sending authored UI through the curve.
 						previewPass( encoder, experimental.hdr.view );
-						experimental.hdr.encodePreview( encoder, view );
+						experimental.hdr.encodePreview( encoder, composedView );
 						if ( uiBundle ) {
 							const foreground = encoder.beginRenderPass( {
 								label: "hdr-preview-ui",
-								colorAttachments: [ { view, loadOp: "load", storeOp: "store" } ],
+								colorAttachments: [ { view: composedView, loadOp: "load", storeOp: "store" } ],
 								...(uiDepth ?
 									{
 										depthStencilAttachment: {
@@ -528,8 +539,14 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							foreground.executeBundles( [ uiBundle ] );
 							foreground.end();
 						}
-					} else previewPass( encoder, view );
+					} else previewPass( encoder, composedView );
 				}
+				// The gamma ramp covers the whole presented image (the native
+				// SetDeviceGammaRamp is a display ramp): with a step chosen,
+				// the brightness pass is the frame's final colour pass, after
+				// the labels, the UI and the preview composed into its
+				// intermediate. At Normal there is no stage and no pass.
+				if ( brightness ) brightness.encode( encoder, view );
 				// Preserve every pass and depth operation above. Only append the
 				// final presentation here instead of submitting it separately.
 				presentation?.encodePresent( encoder );

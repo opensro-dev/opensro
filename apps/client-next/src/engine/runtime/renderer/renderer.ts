@@ -6,7 +6,12 @@ renderer.ts - GPU resource lifetime and ordered scene, character and UI passes
 ===========================================================================
 */
 import { pickVolumeDepth } from "@/engine/foundation/rendering/pick-volume";
-import { defaultVideoOptions, videoOptions, backgroundDrawDistance } from "@/engine/foundation/rendering/video-options";
+import {
+	backgroundDrawDistance,
+	brightnessGamma,
+	defaultVideoOptions,
+	videoOptions
+} from "@/engine/foundation/rendering/video-options";
 import {
 	browserDisplayClass,
 	experimentalOptions,
@@ -1030,6 +1035,14 @@ export function createRenderer(
 							sceneHeight,
 							!preview && experimental.ambientOcclusion,
 							scene.camera
+						),
+						// The video page's brightness step (#3908): prepared
+						// against the presented size, since its intermediate
+						// receives the inner stages' full-size resolves.
+						brightness: device.brightness(
+							viewport.width,
+							viewport.height,
+							brightnessGamma( video.brightness )
 						)
 					},
 					targetSurface

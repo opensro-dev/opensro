@@ -9,7 +9,11 @@ row over its transport; speech rises above the highest row.
 withoutBoardPass is the same stack with the /id byte clear: only the stall
 title and speech board remain. A Contributor's title (port-only, #3358)
 is no row of its own: it rides the name board, left of the name, as
-the owner asked (titledNameRow).
+the owner asked (titledNameRow). The Hwan title (native in the later
+client, #3919) rides the same board, closest to the name: the word of
+the character's Hwan level for its race, from the level table the later
+client loads (hwanleveldata.txt, textdata type 0x44 in its loader at
+0x87cec0), resolved through the system-text catalog.
 
 ===========================================================================
 */
@@ -24,6 +28,7 @@ import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-appro
 import { NAME_COLOR_WHITE, nameColorRgba } from "@/engine/foundation/gameplay/name-color";
 import { TRADE_STARS_MAX, tradeStarTint } from "@/engine/foundation/gameplay/cos-trade-info";
 import { NO_JOB_CLASS } from "@/engine/foundation/gameplay/job-guild";
+import { hwanTitleKey } from "@/engine/foundation/gameplay/hwan-skin";
 import { tierName } from "./job-honor";
 
 // CICCos 855CBC subtracts the double 20.0 at C46198 before drawing the owner.
@@ -50,6 +55,11 @@ export const CONTRIBUTOR_TITLE_TEXT = "Contributor";
 export const CONTRIBUTOR_TITLE_COLOR = [ 1, 1, 0, 1 ] as const;
 // The gap between the title and the name on the board, in pixels.
 export const TITLE_NAME_GAP = 4;
+// The Hwan title's colour on the name board: bold gold, the colour the
+// cap-110 presentation chose for the Blue Berserk grades (#3919). The
+// word is the later client's own (hwanTitleKey); the level is the one
+// the server's roster tells (hwan-level.ts), the local player's too.
+export const HWAN_TITLE_COLOR = [ 1, 0.84, 0.2, 1 ] as const;
 
 /*
 ================
@@ -247,6 +257,14 @@ export function overheadLayout(
 			game.jobHonorTiers?.get( entity.name ) ?? 0 :
 			0,
 		tierText = tier ? tierName( tier ) : "";
+	// The Hwan title (native in the later client, #3919): the title word
+	// of the level the server's roster last told for this character, in
+	// its race's column of the level table. No level told (a native
+	// shard, or a character who never turned blue) - no title.
+	const hwanKey = (entity.kind === "player" || entity.kind === "local-player") ?
+			hwanTitleKey( game.hwanLevels?.[entity.gid], entity.countryByte9c ) :
+			"",
+		hwanText = hwanKey ? copy( hwanKey ) : "";
 	const status = quickStatus( entity, local, game, options ),
 		guildY = guildText ? -20 : 0,
 		ownerY = companionOwnerShown( entity, options ) ? COMPANION_OWNER_Y : 0,
@@ -303,6 +321,8 @@ export function overheadLayout(
 		contributorColor: CONTRIBUTOR_TITLE_COLOR,
 		tierText,
 		tierColor: jobTierColor( tier ),
+		hwanText,
+		hwanColor: HWAN_TITLE_COLOR,
 		status,
 		statusY,
 		speechY,
@@ -337,6 +357,7 @@ export function withoutBoardPass( layout: OverheadLayout ): OverheadLayout {
 		guildY: 0,
 		contributorText: "",
 		tierText: "",
+		hwanText: "",
 		status: null,
 		statusY: 0,
 		fortressMark: null,
