@@ -183,11 +183,13 @@ export const UI_TEXT_COMPLETIONS = Object.freeze( {
 
 // v1.696 SRO Macro system-chat rows (00dade90 / 68ea80 / 68b330). v1.150
 // textuisystem has none of these keys; the product catalog completes them
-// so api.notice({ key }) resolves. English matches the v1.696 English
-// column (CANTUSEMACRO's English cell is empty there: product English
-// follows the Korean meaning, same wording the port already shipped).
+// so api.notice({ key }) resolves. English follows the v1.696 English
+// column where present; town-refuse uses the exe key CANUSEMACRO
+// (00dade90 @ 0x00daded9 / 0x00dadf73) — Media.pk2 misspells that row
+// CANTUSEMACRO with empty English, so product English follows the
+// Korean meaning (same wording the port already shipped).
 export const MACRO_NOTICE_UIIT_COMPLETIONS = Object.freeze( {
-	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_CANTUSEMACRO: "You cannot start the skill/hunting macro in town.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_CANUSEMACRO: "You cannot start the skill/hunting macro in town.",
 	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_MACRO_OFF: "The skill/hunting macro is disabled in towns.",
 	UIIT_STT_SRO_MACRO_AUTO_POTION_ON_FAIL:
 		"There is no registered item in auto potion. Please register items and try again.",
