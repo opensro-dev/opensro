@@ -32,9 +32,9 @@ test(
 					`${CLIENT_NEXT_BASE_URL}/assets/cursors/sro_client_cursor_0x${id.toString( 16 )}.png`
 				);
 				assert.equal( response.ok(), true );
+				// A PNG carries no hotspot; the cursor style below pins x y.
 				const bytes = await response.body();
-				assert.equal( bytes.readUInt16LE( 10 ), x );
-				assert.equal( bytes.readUInt16LE( 12 ), y );
+				assert.deepEqual( [ ...bytes.subarray( 0, 8 ) ], [ 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a ] );
 				await page.evaluate( id => window.__cursorOwner.world( id ), id );
 				assert.match(
 					await page.locator( "body" ).evaluate( el => getComputedStyle( el ).cursor ),
