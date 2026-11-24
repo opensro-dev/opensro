@@ -578,7 +578,8 @@ func clonePopulatedCharacter() *Character {
 		EventMembership: &EventMembership{ID: 1},
 		Aggressions:     map[uint32]uint32{1: 1},
 		Mission:         &MissionRuntime{EventGuideStateMask: &mask, EventGuideStateMaskUpdatedAt: "t"},
-		MostWanted:      &MostWanted{Streak: 1},
+		MostWanted:       &MostWanted{Streak: 1},
+		ReverseUserPoint: &WorldPoint{WorldSpawn: *spawn()},
 		World: &CharacterWorld{
 			SavedReturn:        &SavedReturnLocation{Definition: 1},
 			PackedInstance:     u32p(1),
