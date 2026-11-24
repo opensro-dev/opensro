@@ -57,6 +57,21 @@ func (definition Definition) AdvertisedTransportURL() string {
 	return definition.TransportURL
 }
 
+// TransportEdgeRoute reports whether AdvertisedTransportURL is an edge route
+// ("/shards/<id>") rather than a transport host. The web edge serving the
+// client proxies a route over HTTP and carries no QUIC, so clients dial the
+// socket alone; a host is the GameWorld's own and offers WebTransport. Sent
+// beside the URL so no client infers the form from the string.
+func (definition Definition) TransportEdgeRoute() bool {
+	return isEdgeRoute(definition.AdvertisedTransportURL())
+}
+
+// isEdgeRoute is the one test of the advertised form: a route is a path,
+// a host is an absolute URL (validatePublicTransport admits nothing else).
+func isEdgeRoute(raw string) bool {
+	return strings.HasPrefix(raw, "/")
+}
+
 // Catalog is the single source of truth for shards served by this process.
 // It is immutable after construction and safe for concurrent readers.
 type Catalog struct {
@@ -179,7 +194,7 @@ func validateDefinition(definition Definition) error {
 // validatePublicTransport admits an absolute clean URL or an edge route: a
 // canonical absolute path below the site root, never protocol-relative.
 func validatePublicTransport(shardID, raw string) error {
-	if !strings.HasPrefix(raw, "/") {
+	if !isEdgeRoute(raw) {
 		return validateEndpoint(shardID, "publicTransportUrl", raw)
 	}
 	route, err := url.Parse(raw)

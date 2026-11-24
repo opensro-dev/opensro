@@ -1054,6 +1054,7 @@ baseUrl
 							typeof value.sessionToken !== "string" || !value.sessionToken.trim() ||
 							value.sessionToken.length > 4096 || !result.expectedShard ||
 							value.divisionId !== result.expectedShard || typeof value.transportUrl !== "string" ||
+							(value.transportRoute !== undefined && typeof value.transportRoute !== "boolean") ||
 							value.nextScene !== "character-select"
 						) {
 							throw new Error( "Invalid authentication route" );
@@ -1077,7 +1078,9 @@ baseUrl
 							token: value.sessionToken,
 							divisionId: result.expectedShard,
 							transportUrl: baseUrl( value.transportUrl, result.apiBase ),
-							edgeRoute: value.transportUrl.startsWith( "/" )
+							// The Agent states the form (catalog.go TransportEdgeRoute);
+							// an Agent that does not is a host, as before.
+							edgeRoute: value.transportRoute === true
 						};
 						if (
 							result.kind === "restore" && typeof value.resumeCharacter === "string" &&

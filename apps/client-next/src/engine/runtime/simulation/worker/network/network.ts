@@ -598,19 +598,30 @@ export function createNetwork(
 	}
 	/*
 	================
+	transportSibling
+
+	A resource beside the socket's path (".../transport/ws" ->
+	".../transport/<leaf>") on the same authority, or null when the socket
+	path is not a transport's. Whether that authority offers QUIC at all is
+	the Agent's statement (connect's edgeRoute), not this path's.
+	================
+	*/
+	function transportSibling( endpoint: URL, leaf: string, protocol: string ): URL | null {
+		if ( !endpoint.pathname.endsWith( "/transport/ws" ) ) return null;
+		const url = new URL( endpoint );
+		url.protocol = protocol;
+		url.pathname = endpoint.pathname.slice( 0, endpoint.pathname.length - 2 ) + leaf;
+		return url;
+	}
+	/*
+	================
 	wtEndpoint
 
-	The WebTransport URL beside the socket's: same authority, the
-	transport's WT path over https. Null when the socket path is not the
-	transport's own (an edge route the client cannot map): no attempt.
+	The WebTransport URL beside the socket's, over https.
 	================
 	*/
 	function wtEndpoint( endpoint: URL ): string | null {
-		if ( !endpoint.pathname.endsWith( "/transport/ws" ) ) return null;
-		const url = new URL( endpoint );
-		url.protocol = "https:";
-		url.pathname = endpoint.pathname.slice( 0, endpoint.pathname.length - 2 ) + "wt";
-		return url.toString();
+		return transportSibling( endpoint, "wt", "https:" )?.toString() ?? null;
 	}
 	/*
 	================
@@ -626,10 +637,8 @@ export function createNetwork(
 	*/
 	async function certHashes( endpoint: URL ): Promise<WebTransportHash[] | undefined> {
 		try {
-			if ( !endpoint.pathname.endsWith( "/transport/ws" ) ) return undefined;
-			const url = new URL( endpoint );
-			url.protocol = endpoint.protocol === "wss:" ? "https:" : "http:";
-			url.pathname = endpoint.pathname.slice( 0, endpoint.pathname.length - 2 ) + "cert-hash";
+			const url = transportSibling( endpoint, "cert-hash", endpoint.protocol === "wss:" ? "https:" : "http:" );
+			if ( !url ) return undefined;
 			const response = await fetch( url, { signal: AbortSignal.timeout( WT_CONNECT_DEADLINE_MS ) } );
 			if ( !response.ok ) return undefined;
 			const doc = await response.json() as {

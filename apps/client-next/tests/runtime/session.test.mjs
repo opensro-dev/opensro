@@ -256,7 +256,7 @@ test("an Agent edge route resolves against the API URL, so the socket stays on t
 	}
 });
 
-test("an Agent edge route dials no WebTransport; a transport host still tries it first", async t => {
+test("the Agent's transportRoute alone decides whether WebTransport is dialed", async t => {
 	const sockets = [], transports = [];
 	class Socket {
 		static OPEN = 1;
@@ -289,8 +289,15 @@ test("an Agent edge route dials no WebTransport; a transport host still tries it
 	const { experimentalGameplay, experimentalOptions } = await import(
 		sourceFileUrl( path.join( root, "src/engine/foundation/ui/experimental-options.ts" ) ).href
 	);
+	// The Agent states the form (catalog.go TransportEdgeRoute). The client
+	// reads that, never the string: an Agent that sends no statement is a
+	// host as before, whatever its URL looks like.
 	for (
-		const [transportUrl, quic] of [ [ "/shards/shard", 0 ], [ "https://play.example.com/eu", 1 ] ]
+		const [transportUrl, transportRoute, quic] of [
+			[ "/shards/shard", true, 0 ],
+			[ "https://play.example.com/eu", false, 1 ],
+			[ "/shards/shard", undefined, 1 ]
+		]
 	) {
 		sockets.length = 0;
 		transports.length = 0;
@@ -300,7 +307,7 @@ test("an Agent edge route dials no WebTransport; a transport host still tries it
 			async url =>
 				Response.json(
 					url.endsWith( "/title/login" ) ?
-						{ ...response, transportUrl } :
+						{ ...response, transportUrl, transportRoute } :
 						{ ok: true, token: "fixture-ticket" }
 				)
 		);
@@ -316,8 +323,8 @@ test("an Agent edge route dials no WebTransport; a transport host still tries it
 			await new Promise( resolve => setTimeout( resolve, 5 ) );
 			session.step( 2 + i );
 		}
-		assert.equal( transports.length, quic, transportUrl + " WebTransport dials" );
-		assert.equal( sockets.length, 1, transportUrl + " reaches the socket" );
+		assert.equal( transports.length, quic, `${transportUrl} (${transportRoute}) WebTransport dials` );
+		assert.equal( sockets.length, 1, `${transportUrl} (${transportRoute}) reaches the socket` );
 		session.dispose();
 		t.mock.restoreAll();
 	}

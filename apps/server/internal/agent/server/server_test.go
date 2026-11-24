@@ -500,6 +500,26 @@ func TestClientsReceivePublicTransportRoute(t *testing.T) {
 		if body := decodeObject(t, login); body["ok"] != true || body["transportUrl"] != transport {
 			t.Fatalf("login to %q = %s, want transportUrl %q", id, login.Body.String(), transport)
 		}
+		// The form is stated, not left for the client to read off the string:
+		// a route carries no QUIC, so the client dials the socket alone.
+		route := id == "beta"
+		if body := decodeObject(t, login); body["transportRoute"] != route {
+			t.Fatalf("login to %q = %s, want transportRoute %v", id, login.Body.String(), route)
+		}
+		cookies := login.Result().Cookies()
+		if len(cookies) == 0 {
+			t.Fatalf("login to %q set no session cookie", id)
+		}
+		restore := httptest.NewRequest(http.MethodPost, "/title/session", strings.NewReader(`{}`))
+		declareBrowser(restore)
+		restore.Header.Set("Content-Type", "application/json")
+		restore.AddCookie(cookies[0])
+		restored := httptest.NewRecorder()
+		fixture.handler.ServeHTTP(restored, restore)
+		if body := decodeObject(t, restored); body["ok"] != true || body["transportUrl"] != transport ||
+			body["transportRoute"] != route {
+			t.Fatalf("restore of %q = %s, want transportUrl %q and transportRoute %v", id, restored.Body.String(), transport, route)
+		}
 	}
 }
 
