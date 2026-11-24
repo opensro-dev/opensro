@@ -80,6 +80,14 @@ test("content face: blue for a quest far below the player, plain in reach, red a
 	assert.equal( model.questContentFace( 31, 30 ), "red" );
 });
 
+test("content face: the textures are the client's own button names", () => {
+	// qst_contentviewblue_button / qst_contentviewred_button (no "_" before
+	// the colour); the plain face keeps the layout's texture.
+	assert.equal( model.questContentFaceTexture( "blue" ), "interface/quest/qst_contentviewblue_button" );
+	assert.equal( model.questContentFaceTexture( "red" ), "interface/quest/qst_contentviewred_button" );
+	assert.equal( model.questContentFaceTexture( "normal" ), "" );
+});
+
 test("track: adding stops at three, toggling removes, a full set says full", () => {
 	let tracked = [];
 	tracked = model.questToggleTracked( tracked, 1 ).tracked;

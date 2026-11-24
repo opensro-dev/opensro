@@ -26,6 +26,7 @@ import type { QuestListRow, QuestTrackerEntry } from "@/engine/foundation/ui/que
 import {
 	QUEST_TRACKED_MAX,
 	questContentFace,
+	questContentFaceTexture,
 	questListRows,
 	questListTitle,
 	questToggleTracked,
@@ -339,14 +340,10 @@ export function createQuestList( questList: ResLayout, questMiniList: ResLayout 
 						"quest-list-track:" + row.quest.refId
 					);
 					window.setId( msgKey( slotKey, QUEST_LOCATE_ID ), "quest-list-locate:" + row.quest.refId );
-					const face = levelFace.get( row.quest.refId ) ?? "normal";
-					if ( face === "normal" ) window.setImage( msgKey( slotKey, QUEST_CONTENT_ID ), "" );
-					else {
-						window.setImage(
-							msgKey( slotKey, QUEST_CONTENT_ID ),
-							`interface/quest/qst_contentview_${face}_button`
-						);
-					}
+					window.setImage(
+						msgKey( slotKey, QUEST_CONTENT_ID ),
+						questContentFaceTexture( levelFace.get( row.quest.refId ) ?? "normal" )
+					);
 					window.setId( msgKey( slotKey, QUEST_CONTENT_ID ), "quest-list-content:" + row.quest.refId );
 				} else if ( row.objective ) {
 					// An objective row: the small face with its

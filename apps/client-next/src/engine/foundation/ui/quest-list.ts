@@ -159,6 +159,22 @@ export function questContentFace( questLevel: number, playerLevel: number ): "bl
 
 /*
 ================
+questContentFaceTexture
+
+The texture stem SetQuestContentFace pushes for a face (0x00B4A8A2 and
+its two siblings): qst_contentviewblue_button, qst_contentview_button
+and qst_contentviewred_button. The colour joins "contentview" with no
+underscore. The plain face returns "" so the layout keeps its own
+texture, which is the plain button.
+================
+*/
+export function questContentFaceTexture( face: "blue" | "normal" | "red" ): string {
+	if ( face === "normal" ) return "";
+	return `interface/quest/qst_contentview${face}_button`;
+}
+
+/*
+================
 questToggleTracked
 
 Toggles one quest's track state. The tracker keeps at most
