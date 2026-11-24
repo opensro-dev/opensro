@@ -212,6 +212,8 @@ presentUpdate
 	} );
 	owners.characters.previewReady = () => false;
 	owners.characters.dockReady = () => false;
+	// The diagnostics' shown-character count (characters.ts shownCharacters).
+	owners.characters.shownCharacters = () => 0;
 	owners.characters.entryReady = () => false;
 	owners.ui.entryReady = () => false;
 	owners.characters.profile = () => {};

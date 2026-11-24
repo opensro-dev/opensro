@@ -1182,6 +1182,16 @@ export function createCharacterPresentation(
 		dockReady: () => output.dockReady,
 		/*
 		================
+		shownCharacters
+
+		The characters this frame presents: the roster's models at the dock,
+		the world's characters in world. The renderer's actor count also holds
+		the item glows and scenery emitters beside them, so it is not this.
+		================
+		*/
+		shownCharacters: () => output.displayed.size,
+		/*
+		================
 		profile
 		================
 		*/

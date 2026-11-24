@@ -382,6 +382,7 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		"sessionToken":      token,
 		"divisionId":        definition.ID,
 		"transportUrl":      definition.AdvertisedTransportURL(),
+		"transportRoute":    definition.TransportEdgeRoute(),
 		"nextScene":         "character-select",
 	})
 }

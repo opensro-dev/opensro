@@ -239,7 +239,7 @@ func (server *Server) handleBrowserSession(w http.ResponseWriter, r *http.Reques
 	// authoritative, including across Agent restarts and signing-key rotation.
 	definition := identity.definition
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "sessionToken": identity.token, "divisionId": definition.ID,
-		"nativeServerId": definition.NativeServerID, "nativeServerName": definition.Name, "transportUrl": definition.AdvertisedTransportURL(), "nextScene": "character-select", "resumeCharacter": identity.character})
+		"nativeServerId": definition.NativeServerID, "nativeServerName": definition.Name, "transportUrl": definition.AdvertisedTransportURL(), "transportRoute": definition.TransportEdgeRoute(), "nextScene": "character-select", "resumeCharacter": identity.character})
 }
 
 /*
