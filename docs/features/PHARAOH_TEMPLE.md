@@ -29,15 +29,14 @@ stages.
 | Part | Result (real inputs) |
 | --- | --- |
 | Monsters | 26 kinds admitted, in `characterdata_270000.txt` (the Osiris kind rides the Pharaoh Tomb pass's standing row when that pass staged it first), 104 skills in `skilldata_270000.txt` |
-| Placements | 103 nests across the seven dungeons, joining the default world |
+| Placements | 102 nests across the seven dungeons, joining the default world |
 | Keepers | Selkis, Neith, Anubis, Isis and Seth (grade 3), one each in their sanctums (Anubis two), on a 3-hour respawn |
-| Uniques | Osiris (`MOB_SD_OSIRIS_3`, grade 8), one nest in the Temple on an 8-hour respawn; Haroeris (`MOB_SD_HAROERIS`, grade 3), one authored nest in the Sanctum of Immortality on the keepers' 3-hour respawn (no source places him by nest; below) |
+| Uniques | Osiris (`MOB_SD_OSIRIS_3`, grade 8), one nest in the Temple on an 8-hour respawn; Haroeris (`MOB_SD_HAROERIS`, grade 3), his kind and skills only: no nest places him (below) |
 
 The server loader (`monster.AppendPharaohTemple`) admits a nest only in one of the seven dungeon regions, and only
 when its source world is the one its dungeon is grouped under (51-56, and 60 for the Temple); the one exception is
-the Osiris nest, which v1.188 groups under the field world and which is admitted from there alone. Haroeris needs
-no exception: his row names his own sanctum's world, so the ordinary keeper-grade admission and the source-world
-mapping place him. Every other population keeps refusing dungeon regions.
+the Osiris nest, which v1.188 groups under the field world and which is admitted from there alone. Every other
+population keeps refusing dungeon regions.
 
 ## Native evidence and decisions
 
@@ -56,13 +55,9 @@ mapping place him. Every other population keeps refusing dungeon regions.
   full tactics row (57573, read whole), and the server admits it alone from the field world into the Temple
   region, at the grade its tomb brothers carry (8). The kind is the Pharaoh Tomb's too: whichever pass stages
   it first, the other places its nest on the standing row (one codename, one row).
-- **The Haroeris exception (#3787).** Neither source places him by a nest: the ISRO-R export's 106 rows name none
-  of his kinds, and the recovered native nest and tactics extractions carry no row for him either; his SET,
-  decoy, summon and heart kin survive only as later-client object and effect rows no pinned source converts into
-  placements. The import therefore authors him standing in his own sanctum (the Sanctum of Immortality, world 55)
-  on the sanctum keepers' pattern - one alive, their 3-hour respawn, controls mirrored from the paired keeper
-  Seth's export row and re-keyed to Haroeris's own client object - and records the placement as an inference in
-  the importer. The native chain that calls him (a scheduled temple event and a skill-engaged summon) is not
-  ported; standing in his sanctum is the reachable slice, behind the same switch.
+- **Haroeris has no nest (#3787).** Natively he is never placed by a nest. The Haroeris gate job spawns him once
+  when his sanctum opens, and his death opens Seth's (research `unique-encounters/haroeris-seth-chain.md`). The
+  import claims his kind by name, so his character and skills are staged, and places no row. The server's sanctum
+  schedule spawns him (#4270).
 - **Not yet here.**
-  - The summon chain itself: Haroeris's summoned kin and whatever calls him (see above).
+  - His skill summons (`ssou`) and decoys, on the iSRO-R counts and `_RefGameWorldNPC` points.
