@@ -469,8 +469,12 @@ acquired-scroll:<+1|-1>, skill-scroll:<+1|-1>, save, cancel, close.
 			id: string,
 			live: MacroSettings | undefined,
 			acquired: readonly SkillMetadata[] = [],
-			inventory: readonly { readonly slot: number; readonly refObjId: number; readonly typeFlags: number; }[] =
-				[],
+			inventory: readonly {
+				readonly slot: number;
+				readonly refObjId: number;
+				readonly typeFlags: number;
+				readonly codename?: string;
+			}[] = [],
 			skillIndex?: ReadonlyMap<number, SkillMetadata>
 		): GameplayCommand[] {
 			if ( !id.startsWith( MACRO_ID ) ) return [];
@@ -624,11 +628,16 @@ wrong-row potions return false and leave the row alone. Admission is
 macroPotionAdmits.
 ================
 		*/
-		bindItem( id: string, item: { readonly refObjId: number; readonly typeFlags: number; } ): boolean {
+		bindItem(
+			id: string,
+			item: { readonly refObjId: number; readonly typeFlags: number; readonly codename?: string; }
+		): boolean {
 			const prefix = MACRO_ID + "item:";
 			if ( window !== "options" || tab !== MACRO_POTION || !id.startsWith( prefix ) ) return false;
 			const slot = Number( id.slice( prefix.length ) );
-			if ( !isPotionRow( slot ) || !macroPotionAdmits( slot, item.typeFlags ) ) return false;
+			if ( !isPotionRow( slot ) || !macroPotionAdmits( slot, item.typeFlags, item.codename ?? "" ) ) {
+				return false;
+			}
 			editDraft( settings => ({
 				...settings,
 				potion: withPotionRowItem( settings.potion, slot, item.refObjId )

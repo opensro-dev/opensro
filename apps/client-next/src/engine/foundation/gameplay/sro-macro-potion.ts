@@ -48,6 +48,33 @@ export {
 
 // 00692ba0 / 006918a0 seed every row's re-arm with 0x1f4.
 export const MACRO_POTION_REARM_MS = 500;
+
+// 690c70 push list (v1.696 sro_client.exe 8af7afc2…): CodeNames that bind
+// the buff-item / "European Status Anomaly" / Moving-speed row. Compared
+// exactly (524a60) against the item's CodeName; TID bands do not admit.
+export const MACRO_BUFF_ITEM_CODENAMES = [
+	"ITEM_MALL_MOVE_SPEED_UP_50",
+	"ITEM_MALL_MOVE_SPEED_UP_100",
+	"ITEM_PRE_MALL_MOVE_SPEED_UP_50",
+	"ITEM_PRE_MALL_MOVE_SPEED_UP_100",
+	"ITEM_ETC_SPEED_UP_BASIC",
+	"ITEM_EVENT_SPEED_UP_SUPER_SCROLL_SUPPORT",
+	"ITEM_ETC_E051123_SPEED_UP_SCROLL",
+	"ITEM_EVENT_EVATION_SUPER_SCROLL",
+	"ITEM_ETC_E090930_SPEED_UP_SUPER_SCROLL",
+	"ITEM_ETC_EVENT_SPEED_UP_SUPER_SCROLL",
+	"ITEM_ETC_SIEGE_SPEED_UP",
+	"ITEM_ETC_E110314_PINK_CANDY",
+	"ITEM_ETC_ARCHEMY_POTION_SPEED_02",
+	"ITEM_ETC_ARCHEMY_POTION_SPEED_05",
+	"ITEM_ETC_ARCHEMY_POTION_SPEED_08",
+	"ITEM_ETC_ARCHEMY_POTION_SPEED_11",
+	"ITEM_EVENT_ARCHEMY_POTION_SPEED_11",
+	"ITEM_EVENT_RENT_ARCHEMY_POTION_SPEED_11",
+	"ITEM_ETC_ARCHEMY_LEVEL_POTION_SPEED_02",
+	"ITEM_ETC_ARCHEMY_LEVEL_POTION_SPEED_05",
+	"ITEM_ETC_ARCHEMY_LEVEL_POTION_SPEED_11"
+] as const;
 // 00692e00 / 00691c70 refuse HP while this abnormal bit stands.
 const HP_BLOCKING_ABNORMAL = 0x20;
 // 00692d20 / 00691a20 fire while any of these abnormal bits stands.
@@ -150,9 +177,8 @@ checks. Native high byte (>>24) is the port's TID4; mid-byte helpers
 0x690f30 / 0x690ec0 / 0x6908e0 are TID3 (and TID2) via the families above.
 ================
 */
-export function macroPotionAdmits( row: number, typeFlags: number ): boolean {
+export function macroPotionAdmits( row: number, typeFlags: number, codename = "" ): boolean {
 	if ( !Number.isInteger( row ) || row < 0 || row >= 9 ) return false;
-	const tid3 = typeFlags >>> 7 & 15;
 	const tid4 = typeFlags >>> 11 & 31;
 	// 0x690aa0: 0x6908e0 then high 1/2/3 (0x690880 covers 1/2; high 3 is OR'd).
 	if ( row === MACRO_ROW_PET_SUMMON ) {
@@ -165,9 +191,10 @@ export function macroPotionAdmits( row: number, typeFlags: number ): boolean {
 	if ( row === MACRO_ROW_CURE ) {
 		return macroIsPill( typeFlags ) && (tid4 === 1 || tid4 === 6 || tid4 === 8 || tid4 === 9);
 	}
-	// 690c70 CodeName whitelist; port approximates with scroll TID3s on the expendable band.
+	// 690c70: exact CodeName match against the speed-scroll whitelist (524a60
+	// on the item's CodeName at +8). typeFlags alone never admit this row.
 	if ( row === MACRO_ROW_BUFF_ITEM ) {
-		return macroIsExpendable( typeFlags ) && (tid3 === 3 || tid3 === 13);
+		return !!codename && (MACRO_BUFF_ITEM_CODENAMES as readonly string[]).includes( codename );
 	}
 	// 690a20 / 6909e0 / 690a60: potion helper then high 4 / 9 / 6.
 	if ( row === MACRO_ROW_PET_HP ) return macroIsPotion( typeFlags ) && tid4 === 4;
@@ -185,14 +212,19 @@ scrubMacroPotion
 */
 export function scrubMacroPotion(
 	settings: MacroSettings,
-	inventory: readonly { readonly slot: number; readonly refObjId: number; readonly typeFlags: number; }[]
+	inventory: readonly {
+		readonly slot: number;
+		readonly refObjId: number;
+		readonly typeFlags: number;
+		readonly codename?: string;
+	}[]
 ): MacroSettings {
 	let potion = settings.potion;
 	for ( let row = 0; row < MACRO_POTION_SLOTS; row++ ) {
 		const ref = potionSlot( potion, row ).item;
 		if ( !ref ) continue;
 		const item = inventory.find( entry => entry.slot >= BAG_FIRST_SLOT && entry.refObjId === ref );
-		if ( item && !macroPotionAdmits( row, item.typeFlags ) ) {
+		if ( item && !macroPotionAdmits( row, item.typeFlags, item.codename ?? "" ) ) {
 			potion = withPotionRowItem( potion, row, 0 );
 		}
 	}
