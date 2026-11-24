@@ -212,6 +212,19 @@ export function createGuideResources(
 					) {
 						for ( const token of tokens ) if ( token.kind === "image" ) warm.add( token.path );
 					}
+					// The reward window's choice icons warm with the rest of
+					// the quest art (#3920): the icon/ paths the build
+					// resolved per pickable item.
+					for ( const block of Object.values(
+						(values[6] as { rewards?: Record<string, { choices?: { icon?: unknown; }[]; }>; }).rewards ??
+							{}
+					) ) {
+						for ( const choice of block.choices ?? [] ) {
+							if ( typeof choice.icon === "string" ) {
+								warm.add( "/assets/images/Media_extracted/" + choice.icon.slice( 0, -4 ) + ".png" );
+							}
+						}
+					}
 					data = {
 						warmPaths: [ ...warm ],
 						artwork: GUIDE_ARTWORK,
