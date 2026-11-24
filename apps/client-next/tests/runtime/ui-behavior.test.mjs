@@ -18,6 +18,7 @@ import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
 import { uiFixture, fontAtlas } from "../helpers/ui-fixture.mjs";
 import { correctedUiSystemCatalog } from "../helpers/corrected-text.mjs";
+const { academyBootstrap } = await import( "../../src/engine/foundation/gameplay/academy.ts" );
 /*
 ================
 load
@@ -5738,7 +5739,7 @@ test("native popup menu, selected tab weight, localized EU mastery and empty-par
 			...f.state.gameplay,
 			guide: { country: 1 },
 			progression: { level: 1, masteries: [ { id: 513, level: 0 }, { id: 515, level: 0 } ] },
-			academy: { member: false, rows: [], request: null },
+			academy: academyBootstrap( { academyMember: false } ),
 			social: { leader: 0, members: [], options: 0 }
 		};
 		let now = 0;

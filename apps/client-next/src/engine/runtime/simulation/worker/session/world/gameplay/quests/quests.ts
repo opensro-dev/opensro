@@ -31,7 +31,9 @@ import {
 } from "@/engine/contracts/opcodes";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
 
-const MAX_QUESTS = 256;
+// The active quests one character's state holds; a login or an add past it
+// is refused whole. Exported for the tests that walk the published catalog.
+export const MAX_QUESTS = 256;
 const MAX_COMPLETED = 65535;
 const MAX_MARKERS = 255;
 const MAX_PROGRESS = 100;
