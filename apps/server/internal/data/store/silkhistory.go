@@ -151,6 +151,7 @@ validateSilkHistory
 
 Startup reads the table's shape without scanning it: the history grows
 with play and its rows are never decoded into the authority graph.
+The layout-15 split table is validateSilkHistoryEarned's.
 ================
 */
 func validateSilkHistory(db *sql.DB) error {
@@ -160,11 +161,19 @@ func validateSilkHistory(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return err
-	}
+	defer rows.Close()
+	return rows.Err()
+}
+
+/*
+================
+validateSilkHistoryEarned
+
+The silk-history split table's shape (layout 15, #4133), called from
+layout 15 on, as validateEarnedSilk.
+================
+*/
+func validateSilkHistoryEarned(db *sql.DB) error {
 	split, err := db.Query("SELECT seq, earned_silk FROM silk_history_earned LIMIT 0")
 	if err != nil {
 		return err

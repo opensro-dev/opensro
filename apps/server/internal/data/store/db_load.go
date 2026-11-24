@@ -128,6 +128,16 @@ func loadDB(db *sql.DB, current int, currentLayout int, headroom int) (*loadedDB
 			return nil, fmt.Errorf("validating trade history: %w", err)
 		}
 	}
+	// Each validator runs from the layout that creates its tables: the
+	// offline upgrader loads an older source at its own layout.
+	if currentLayout >= 15 {
+		if err := validateEarnedSilk(db); err != nil {
+			return nil, fmt.Errorf("validating earned silk: %w", err)
+		}
+		if err := validateSilkHistoryEarned(db); err != nil {
+			return nil, fmt.Errorf("validating silk history: %w", err)
+		}
+	}
 	out := &loadedDB{
 		characters:   map[string][]*domain.Character{},
 		deleted:      map[string][]json.RawMessage{},
