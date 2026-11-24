@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-user_reverse_point_upgrade_test.go - the schema 52 step (world.userReversePoint)
+user_reverse_point_upgrade_test.go - the schema 54 step (world.userReversePoint)
 
 ===========================================================================
 */
@@ -18,13 +18,13 @@ import (
 ================
 TestUserReversePointUpgradeRewritesNothing
 
-A schema 51 authority upgrades to 52 with its records untouched (the
+A schema 51 authority upgrades to 54 with its records untouched (the
 saved location is optional and absent, so every character simply has
 none); a second upgrade has nothing to do.
 ================
 */
 func TestUserReversePointUpgradeRewritesNothing(t *testing.T) {
-	tier.Long(t, "a schema-51 authority upgrades to 52 with its records untouched")
+	tier.Long(t, "a schema-51 authority upgrades to 54 with its records untouched")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()

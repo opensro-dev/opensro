@@ -10,7 +10,7 @@ row opens a member list (CNIFReversePortalParty, interface 0x2ca); the
 user row opens the settings window (CNIFReversePortalUserSave, 0x2cb),
 whose enroll button records where the player stands and whose move
 button returns there. The server owns the party rule, the stored
-location (schema 52) and every refusal; this file owns the wire shapes
+location (schema 54) and every refusal; this file owns the wire shapes
 the two share.
 
 The later client's request bytes for these modes were not isolated, so

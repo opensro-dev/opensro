@@ -15,7 +15,7 @@ location: its enroll button records where the player stands, its move
 button returns there, and the refusals are the native lines (party member
 left, member in an unmovable location, no location set, location cannot
 be set here). A stored location is per character (world.userReversePoint,
-schema 52).
+schema 54).
 
 The later client's request bytes for these two modes were not isolated,
 so the port's wire is port-shaped, the same class as choice 7's gating in

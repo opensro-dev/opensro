@@ -33,7 +33,16 @@ func TestOpenRefusesThePreviousSchemaUntilUpgraded(t *testing.T) {
 	dir := t.TempDir()
 	clock := newTestClock()
 	openTest(t, dir, clock).Close()
-	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, CurrentVersion-1)
+	// The previous schema a store can hold: the newest step below the
+	// current one (a non-additive step skips the versions past its
+	// window, and no binary ever stamped them).
+	previous := 0
+	for version := range storeSteps {
+		if version < CurrentVersion && version > previous {
+			previous = version
+		}
+	}
+	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, previous)
 
 	if s, err := Open(dir, Options{Now: clock.Now, DefaultSkills: testSkillSeeder}); err == nil {
 		s.Close()

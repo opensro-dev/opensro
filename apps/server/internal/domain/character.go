@@ -160,7 +160,7 @@ type CharacterWorld struct {
 	LastRecallPoint *WorldPoint `json:"lastRecallPoint,omitempty"`
 	LastDeathPoint  *WorldPoint `json:"lastDeathPoint,omitempty"`
 	// UserReversePoint is the saved location of the reverse return
-	// scroll's user window (later-native v1.696, #3903; schema 52): the
+	// scroll's user window (later-native v1.696, #3903; schema 54): the
 	// point its enroll button records and its move button returns to.
 	// Absent until the player enrolls one; like the recall and death
 	// points it records only in a type-0 world.
