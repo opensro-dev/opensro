@@ -85,8 +85,14 @@ test("the tooltip renders time remaining, then the over state", () => {
 		},
 		text = s => english[s] ?? s;
 	const item = {
+		slot: 0,
+		refObjId: DRESS,
 		name: "Rental dress",
 		typeFlags: 0xeec,
+		quantity: 1,
+		plus: 0,
+		durability: 0,
+		variance: "0",
 		magic: [],
 		tooltip: { fields: { maxStack: 20 } },
 		rentExpiresUnixMs: Date.now() + 90_000_000
@@ -95,8 +101,6 @@ test("the tooltip renders time remaining, then the over state", () => {
 	assert.ok( rows.some( r => /^Time Remains: (24|25) hour\(s\) \d+ min\(s\)$/.test( r.value ) ) );
 	const over = itemTooltip( { ...item, rentExpiresUnixMs: Date.now() - 1000 }, { masteries: [] }, text );
 	assert.ok( over.some( r => r.value === "Time Period is over" ) );
-	const plain = itemTooltip( { name: "Dress", typeFlags: 0xeec, magic: [], tooltip: { fields: { maxStack: 20 } } }, {
-		masteries: []
-	}, text );
+	const plain = itemTooltip( { ...item, name: "Dress", rentExpiresUnixMs: undefined }, { masteries: [] }, text );
 	assert.ok( !plain.some( r => r.value.includes( "Time Remains" ) ) );
 });

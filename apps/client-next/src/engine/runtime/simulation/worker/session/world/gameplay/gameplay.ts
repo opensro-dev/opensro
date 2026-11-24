@@ -3985,7 +3985,11 @@ state here before a command can claim a native wire conversation.
 				return frame;
 			}
 			if ( command.kind === "quest-abandon" || command.kind === "quest-reward" ) {
-				quests.request( command.refId, command.kind === "quest-reward" );
+				quests.request(
+					command.refId,
+					command.kind === "quest-reward",
+					command.kind === "quest-reward" ? command.picks : undefined
+				);
 				return null;
 			}
 			if ( command.kind === "whisper-block" ) {

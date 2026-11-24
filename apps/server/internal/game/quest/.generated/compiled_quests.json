@@ -431,6 +431,7 @@
 		"RewardGold": 0,
 		"RewardSkillExp": 0,
 		"RewardItems": [],
+		"RewardSelectionCount": 1,
 		"RewardChoices": [
 			{
 				"TitleSymbol": "",
@@ -675,6 +676,7 @@
 		"RewardGold": 0,
 		"RewardSkillExp": 0,
 		"RewardItems": [],
+		"RewardSelectionCount": 1,
 		"RewardChoices": [
 			{
 				"TitleSymbol": "",

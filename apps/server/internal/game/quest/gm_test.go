@@ -299,20 +299,21 @@ func TestGMCompleteQuestCompletesWhenTheExperienceIsCapped(t *testing.T) {
 	}
 }
 
-func TestFirstOfferedChoiceSkipsTheOtherCountrysReward(t *testing.T) {
+func TestFirstOfferedChoicesSkipsTheOtherCountrysReward(t *testing.T) {
 	def := &Definition{QuestSpec: QuestSpec{
 		RewardChoiceCheckCountry: true,
+		RewardSelectionCount:     1,
 		RewardChoices:            []RewardChoice{{country: 0}, {country: countryEvery}},
 	}}
-	if got := firstOfferedChoice(def, 1); got != 1 {
-		t.Fatalf("choice %d, want the country-free reward", got)
+	if got := firstOfferedChoices(def, 1); len(got) != 1 || got[0] != 1 {
+		t.Fatalf("picks %v, want the country-free reward", got)
 	}
 	def.RewardChoices[0].country = 1
-	if got := firstOfferedChoice(def, 1); got != 0 {
-		t.Fatalf("choice %d, want the first reward of the character's country", got)
+	if got := firstOfferedChoices(def, 1); len(got) != 1 || got[0] != 0 {
+		t.Fatalf("picks %v, want the first reward of the character's country", got)
 	}
-	if got := firstOfferedChoice(&Definition{}, 1); got != noRewardChoice {
-		t.Fatalf("choice %d, want none for a quest without choices", got)
+	if got := firstOfferedChoices(&Definition{}, 1); len(got) != 0 {
+		t.Fatalf("picks %v, want none for a quest without choices", got)
 	}
 }
 
