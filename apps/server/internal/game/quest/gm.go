@@ -262,7 +262,7 @@ func (rt *Runtime) GMCompleteQuest(c *enterworld.Character, codename string) (Op
 			}
 			expected, npc = &stage, current.EndNpcCodename
 		}
-		result, err := rt.settleReward(c, def, expected, npc, noRewardChoice, true)
+		result, err := rt.settleReward(c, def, expected, npc, nil, true)
 		out.Frames = append(out.Frames, result.Frames...)
 		out.Broadcast = append(out.Broadcast, result.Broadcast...)
 		if err != nil {
@@ -288,23 +288,6 @@ func (rt *Runtime) gmActiveStage(c *enterworld.Character, def *Definition) (stag
 		return false
 	})
 	return stage, active
-}
-
-/*
-================
-firstOfferedChoice
-
-The reward choice /COMPQ takes when the quest offers several: the first one
-the character may pick.
-================
-*/
-func firstOfferedChoice(def *Definition, country int) int {
-	for i := range def.RewardChoices {
-		if rewardChoiceOffered(def, country, i) {
-			return i
-		}
-	}
-	return noRewardChoice
 }
 
 /*

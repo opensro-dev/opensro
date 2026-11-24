@@ -271,11 +271,16 @@ func TestHandleRewardSelectRefusals(t *testing.T) {
 	rt := testRuntime(t)
 	character := questCharacter()
 
-	if _, err := rt.HandleRewardSelect(character, u32le(0x7fffffff)); err == nil {
-		t.Fatal("an unknown id must refuse")
+	if result, err := rt.HandleRewardSelect(character, u32le(0x7fffffff)); err != nil || len(result.Frames) != 1 || !bytes.Equal(result.Frames[0].Payload, []byte{2, rewardRefusalUnknown}) {
+		t.Fatalf("an unknown id must answer the unknown refusal: %v %+v", err, result.Frames)
 	}
 	if _, err := rt.HandleRewardSelect(character, u32le(2)); err == nil {
 		t.Fatal("a kind-1 quest cannot compose 0x729A - refuse")
+	}
+	if def, ok := rt.Defs.ByCodename("QNO_CH_SHAMAN_1"); ok {
+		if result, err := rt.HandleRewardSelect(character, u32le(def.RefID)); err != nil || len(result.Frames) != 1 || !bytes.Equal(result.Frames[0].Payload, []byte{2, rewardRefusalCount}) {
+			t.Fatalf("a selection quest without its pick must answer the count refusal: %v %+v", err, result.Frames)
+		}
 	}
 	character.MissionInventory = potionInventory(3)
 	if _, err := rt.StartQuest(character, "QSP_ALL_POTION_1"); err != nil {

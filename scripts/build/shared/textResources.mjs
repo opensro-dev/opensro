@@ -248,8 +248,23 @@ export function completeRestrictionText( entries ) {
 // only when blank in completeUiText, so a shipped row would win.
 // - NASRUN_WEAR_EXTENSION (row id 4174): the v1.696 client refuses the
 //   Devil's Spirit extension gear aimed at the worn Spirit with this line.
+// - QUESTREWARD (row ids 4763-4773) and QUEST_HELPER_FULL (id 4443): the
+//   reward-selection window's prompts, refusals and value labels, and
+//   the quick quest window's full line (#3920).
 export const LATER_UI_TEXT_COMPLETIONS = Object.freeze( {
-	UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE: "You cannot use this while you are wearing it."
+	UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE: "You cannot use this while you are wearing it.",
+	UIIT_STT_QUESTREWARD_MSG01: "You must select your reward.",
+	UIIT_STT_QUESTREWARD_MSG02: "Will you take this reward?",
+	UIIT_STT_QUESTREWARD_MSG03: "You cannot select more.",
+	UIIT_STT_QUESTREWARD_MSG04: "You must select all items.",
+	UIIT_STT_QUESTREWARD_GOLD: "Gold",
+	UIIT_STT_QUESTREWARD_EXP: "EXP",
+	UIIT_STT_QUESTREWARD_SP: "SP",
+	UIIT_STT_QUESTREWARD_SPEXP: "SP EXP",
+	UIIT_STT_QUESTREWARD_AP: "AP",
+	UIIT_STT_QUESTREWARD_ERROR: "The reward was not given due to an unknown error.",
+	UIIT_STT_QUESTREWARD_JOBEXP: "JOB EXP",
+	UIIT_CTL_QUEST_HELPER_FULL: "Max. of three quests can be listed in quick window."
 } );
 
 export function completeUiText( entries ) {
