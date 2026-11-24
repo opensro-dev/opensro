@@ -270,6 +270,13 @@ test("a consumable dropped on a row binds its item; a click on the slot clears i
 	const SPEED_CODE = "ITEM_ETC_SPEED_UP_BASIC";
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_BUFF_ITEM, ELIXIR_TYPE ), false, "no CodeName" );
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_BUFF_ITEM, ELIXIR_TYPE, "ITEM_FAKE" ), false );
+	// 524a60 compares the whole CodeName: a name that only extends a
+	// whitelist entry is refused (a prefix match would admit it).
+	assert.equal(
+		loop.macroPotionAdmits( MACRO_ROW_BUFF_ITEM, ELIXIR_TYPE, SPEED_CODE + "_2" ),
+		false,
+		"exact CodeName match, not a prefix"
+	);
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_BUFF_ITEM, ELIXIR_TYPE, SPEED_CODE ), true );
 	assert.equal(
 		hud.bindItem( "sro-macro:item:3", { refObjId: OTHER_REF, typeFlags: ELIXIR_TYPE, codename: SPEED_CODE } ),
