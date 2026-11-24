@@ -16,8 +16,10 @@ Port-only, not native: the original has no public read API.
 package publicstats
 
 // SchemaVersion moves when a response shape changes incompatibly. 2: a
-// unique no longer carries its respawn delay or return window.
-const SchemaVersion = 2
+// unique no longer carries its respawn delay or return window. 3: a
+// character row's notice fields (breakNotice, plusFailNotice) are sent
+// only while their shard announcement flag is on (#4305).
+const SchemaVersion = 3
 
 // LastKill is a unique's most recent recorded kill.
 type LastKill struct {
@@ -158,17 +160,22 @@ type CharacterSummary struct {
 // OwnCharacter is one of an account's characters with its privacy flag
 // and its item-break notice opt-in (#1738).
 type OwnCharacter struct {
-	Name        string `json:"name"`
-	Level       int64  `json:"level"`
-	Race        string `json:"race"`
-	Hidden      bool   `json:"hidden"`
-	GearHidden  bool   `json:"gearHidden"`
-	BreakNotice bool   `json:"breakNotice"`
+	Name       string `json:"name"`
+	Level      int64  `json:"level"`
+	Race       string `json:"race"`
+	Hidden     bool   `json:"hidden"`
+	GearHidden bool   `json:"gearHidden"`
+	// The two notice choices are sent only while their shard flag is
+	// on (#4305): a nil pointer leaves the field out of the row, and
+	// the account page hides a switch whose field is absent. Wiring
+	// keeps each setter nil while its flag is off, and ownCharacters
+	// sends the field on exactly that condition.
+	BreakNotice *bool `json:"breakNotice,omitempty"`
 	// PlusFailNotice is the failed-reinforcement announcement choice in
 	// its positive sense (#3682): true means the character's failed
 	// high-plus attempts are announced (the stored field is the
 	// opt-out, so the account page shows the plain state).
-	PlusFailNotice bool `json:"plusFailNotice"`
+	PlusFailNotice *bool `json:"plusFailNotice,omitempty"`
 }
 
 // OwnCharactersResponse is the website's authenticated
