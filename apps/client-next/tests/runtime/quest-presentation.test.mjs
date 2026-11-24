@@ -149,7 +149,7 @@ test("a selection quest's reward block rides its record; malformed blocks refuse
 		ap: 0,
 		jobExp: 0,
 		choices: [
-			{ item: "ITEM_A", refId: 10414, count: 1, name: "Str Scroll", icon: "icon/item/etc/a.ddj" },
+			{ item: "ITEM_A", refId: 10414, count: 1, name: "Str Scroll", icon: "item/etc/a.ddj" },
 			{ item: "ITEM_B", refId: 10415, count: 2, name: "Int Scroll" }
 		]
 	};

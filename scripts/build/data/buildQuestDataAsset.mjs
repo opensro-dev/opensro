@@ -307,12 +307,13 @@ export function buildQuestDataAsset() {
 							continue;
 						}
 						// The icon is the row's .ddj (the mission builder's
-						// scan), shipped as its icon/ path.
+						// scan), shipped as its native path under Media/icon,
+						// the form the client's iconPath resolves.
 						let icon;
 						for ( const rawValue of cols ) {
 							const value = rawValue.trim();
 							if ( /\.ddj$/i.test( value ) ) {
-								icon = ("icon/" + value).replaceAll( "\\", "/" ).toLowerCase();
+								icon = value.replaceAll( "\\", "/" ).toLowerCase();
 								break;
 							}
 						}

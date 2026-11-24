@@ -22,6 +22,7 @@ import { NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import { decodeAuthoredLayout, type AuthoredLayout } from "@/engine/foundation/ui/authored-layout";
 import { guideTokens, type GuideToken } from "@/engine/foundation/ui/guide-content";
+import { iconPath } from "@/engine/foundation/ui/icon";
 const IMAGE_ROOT = "/assets/images/Media_extracted/interface/";
 // These controls are assembled by the native guide at runtime, outside CIF layouts.
 const GUIDE_ARTWORK = {
@@ -213,16 +214,15 @@ export function createGuideResources(
 						for ( const token of tokens ) if ( token.kind === "image" ) warm.add( token.path );
 					}
 					// The reward window's choice icons warm with the rest of
-					// the quest art (#3920): the icon/ paths the build
-					// resolved per pickable item.
-					for ( const block of Object.values(
+					// the quest art (#3920): each pickable item's native icon
+					// path, resolved by iconPath exactly as the window draws it.
+					const rewardBlocks =
 						(values[6] as { rewards?: Record<string, { choices?: { icon?: unknown; }[]; }>; }).rewards ??
-							{}
-					) ) {
+							{};
+					for ( const block of Object.values( rewardBlocks ) ) {
 						for ( const choice of block.choices ?? [] ) {
-							if ( typeof choice.icon === "string" ) {
-								warm.add( "/assets/images/Media_extracted/" + choice.icon.slice( 0, -4 ) + ".png" );
-							}
+							const icon = typeof choice.icon === "string" ? iconPath( choice.icon ) : null;
+							if ( icon ) warm.add( icon );
 						}
 					}
 					data = {
