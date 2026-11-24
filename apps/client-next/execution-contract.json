@@ -2915,6 +2915,24 @@
 			"consumer": "src/engine/runtime/ui/hud/quest-list.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": ["hudCopy"]
+		},
+		{
+			"consumer": "src/engine/runtime/assets/worker/packs/packs.ts",
+			"provider": "src/engine/runtime/assets/worker/packs/shared-blocks.ts",
+			"functions": [
+				"createSharedBlocks",
+				"read",
+				"sharedLocks"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/assets/worker/packs/shared-blocks.ts",
+			"provider": "src/engine/runtime/assets/worker/packs/packs.ts",
+			"functions": [
+				"fetched",
+				"neighbours",
+				"stored"
+			]
 		}
 	],
 	"boundaries": [
@@ -4702,6 +4720,27 @@
 			"function": "readBytes",
 			"kind": "callback",
 			"reason": "Asset loader keeps each accepted chunk through ReadBytesOptions so a stalled read resumes after it (#3354); callers that do not resume leave it absent."
+		},
+		{
+			"file": "src/engine/runtime/assets/worker/packs/shared-blocks.ts",
+			"expression": "want.resolve",
+			"function": "serve",
+			"kind": "callback",
+			"reason": "Queued block member: each want carries its own caller's promise settlement, settled once when the member is served or fails (shared-blocks, #4324)."
+		},
+		{
+			"file": "src/engine/runtime/assets/worker/packs/shared-blocks.ts",
+			"expression": "want.reject",
+			"function": "serve",
+			"kind": "callback",
+			"reason": "Queued block member: each want carries its own caller's promise settlement, settled once when the member is served or fails (shared-blocks, #4324)."
+		},
+		{
+			"file": "src/engine/runtime/assets/worker/packs/shared-blocks.ts",
+			"expression": "queued.reject",
+			"function": "abandon",
+			"kind": "callback",
+			"reason": "Queued block member: each want carries its own caller's promise settlement, settled once when the member is served or fails (shared-blocks, #4324)."
 		}
 	],
 	"sequences": [
