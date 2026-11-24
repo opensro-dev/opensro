@@ -600,7 +600,8 @@ export const LOOSE_FAMILIES = {
 		packFolder: "native-window",
 		defaultGroup: "native-ui",
 		async produce() {
-			const output = execFileSync( pythonExecutable(), [ NATIVE_WINDOW_SCRIPT ], {
+			const python = pythonExecutable();
+			const output = execFileSync( python.command, [ ...python.args, NATIVE_WINDOW_SCRIPT ], {
 				encoding: "utf8",
 				env: process.env
 			} );
