@@ -62,8 +62,10 @@ test( "login retains native presentation through authenticated roster arrival", 
 		const { loginId, loginPassword } = resolveProbeCredentials();
 		await control( "account" ).fill( loginId );
 		await control( "password" ).fill( loginPassword );
-		assert.equal( await control( "account" ).getAttribute( "autocomplete" ), "off" );
-		assert.equal( await control( "password" ).getAttribute( "autocomplete" ), "off" );
+		// The login edits are the only ones a password manager may fill
+		// (credential-hints.ts, since ae653a5e6); every other edit opts out.
+		assert.equal( await control( "account" ).getAttribute( "autocomplete" ), "username" );
+		assert.equal( await control( "password" ).getAttribute( "autocomplete" ), "current-password" );
 		assert.equal( await page.locator( "img[data-retail-cursor]" ).count(), 0 );
 		await control( "password" ).press( "Enter" );
 		await control( "frontend:create" ).waitFor( { timeout: 30000 } );
