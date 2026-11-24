@@ -416,6 +416,16 @@ type Character struct {
 	// character opted out. Set: their failed high-plus attempts are
 	// never announced.
 	PlusFailOptOut bool `json:"plusFailOptOut,omitempty"`
+	// ReverseUserPoint is the saved location of the reverse return
+	// scroll's user window (later-native v1.696, #3903; schema 52): the
+	// point its enroll button records and its move button returns to.
+	// It is the reverse-return twin of the world's LastRecallPoint and
+	// LastDeathPoint, but lives at the top level: a field nested in
+	// world cannot ride an additive schema step (a previous binary
+	// refuses nested additions on a rewrite, #3090), and this one must
+	// stay additive. Absent until the player enrolls one; like the
+	// recall and death points it records only in a type-0 world.
+	ReverseUserPoint *WorldPoint `json:"reverseUserPoint,omitempty"`
 	// MostWanted is the character's job-kill streak (port-only, not native:
 	// SRO_MOST_WANTED, action/mostwanted.go; schema 24). Nil is no streak.
 	MostWanted *MostWanted `json:"mostWanted,omitempty"`

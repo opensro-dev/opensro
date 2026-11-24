@@ -15,6 +15,12 @@ import type { CosRecord, GameplayCommand, InventoryItem } from "@/engine/contrac
 import { isSkinChangeScroll, skinChangeTail, type SkinChoice } from "./skin-change";
 import { REVERSE_RETURN_LAST_DEATH, REVERSE_RETURN_LAST_RECALL } from "./count-job";
 import { REVERSE_RETURN_MAP, reverseMapTail } from "./reverse-return-map";
+import {
+	REVERSE_RETURN_ENROLL,
+	REVERSE_RETURN_PARTY,
+	REVERSE_RETURN_USER,
+	reversePartyTail
+} from "./reverse-user-point";
 
 /*
 ================
@@ -39,6 +45,9 @@ export interface CosItemUseContext {
 	// port-only 7, a map point).
 	readonly reverseChoice?: number;
 	readonly reverseMapPoint?: number;
+	// The party member a party move (choice 4) names, by gid
+	// (reverse-user-point.ts, #3903).
+	readonly reversePartyGid?: number;
 	// The name-change scroll's new name (#1689, port-only), from its
 	// entry window.
 	readonly renameName?: string;
@@ -134,7 +143,11 @@ export function cosItemUseTail(
 		// 6971B0 case 0x1E: the choice box's row is the one byte after the type.
 		const choice = context?.reverseChoice;
 		if ( choice === REVERSE_RETURN_MAP ) return reverseMapTail( context?.reverseMapPoint ?? 0 );
-		if ( choice !== REVERSE_RETURN_LAST_RECALL && choice !== REVERSE_RETURN_LAST_DEATH ) {
+		if ( choice === REVERSE_RETURN_PARTY ) return reversePartyTail( context?.reversePartyGid ?? 0 );
+		if (
+			choice !== REVERSE_RETURN_LAST_RECALL && choice !== REVERSE_RETURN_LAST_DEATH &&
+			choice !== REVERSE_RETURN_USER && choice !== REVERSE_RETURN_ENROLL
+		) {
 			throw Error( "Choose where the reverse return scroll goes" );
 		}
 		return Uint8Array.of( choice );

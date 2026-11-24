@@ -239,6 +239,10 @@ func (rt *Runtime) handleItemUse(
 	// is spent and the guild is asked after this door closes
 	// (guildrecall.go).
 	var recallUse *guildRecallUse
+	// A reverse party move the closure admitted: the member's standing
+	// point is judged and the cast started after this door closes
+	// (reverseuser.go).
+	var reverseParty *reversePartyMove
 	// The object the 0x3449 sparkle plays on: the user, unless the item
 	// names a pet (petItemVisualTarget).
 	var visualGID uint32
@@ -404,14 +408,28 @@ func (rt *Runtime) handleItemUse(
 		}
 		if family == itemUseReverseReturn {
 			// The tail is the u8 point the client's choice box picked (6971B0),
-			// or the port-only map choice 7 with its u32 point id (reversemap.go).
+			// or the port-only map choice 7 with its u32 point id (reversemap.go),
+			// or one of the two later destinations (reverseuser.go): the party
+			// choice 4 with its u32 member gid, the user choice 5 and the
+			// enroll choice 6 with no tail behind the byte.
 			target := reverseReturnTarget{}
 			switch {
 			case len(tail) == 1:
 				target.choice = tail[0]
 			case len(tail) == reverseMapTailBytes && tail[0] == reverseReturnMapChoice:
 				target.choice, target.point = tail[0], binary.LittleEndian.Uint32(tail[1:])
+			case len(tail) == reverseMapTailBytes && tail[0] == reverseReturnPartyChoice:
+				target.choice, target.member = tail[0], binary.LittleEndian.Uint32(tail[1:])
 			default:
+				return false
+			}
+			if target.choice == reverseReturnEnrollChoice {
+				return rt.enrollReverseUserPoint(divisionID, character, request, uint16(row.StackCount), nowMs, &result)
+			}
+			if target.choice == reverseReturnPartyChoice {
+				// The member's standing point is read after this door
+				// closes (finishReversePartyMove): admit the shape here.
+				reverseParty = &reversePartyMove{member: target.member, nowMs: nowMs}
 				return false
 			}
 			return rt.beginReverseReturnScroll(divisionID, character, ref, rowIndex, target, nowMs, &result)
@@ -921,6 +939,9 @@ func (rt *Runtime) handleItemUse(
 	}
 	if recallUse != nil {
 		rt.finishGuildRecallUse(divisionID, character, request, used, recallUse, &result)
+	}
+	if reverseParty != nil {
+		rt.finishReversePartyMove(divisionID, character, request, used, reverseParty, &result)
 	}
 	return result
 }

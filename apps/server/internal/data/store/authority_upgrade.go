@@ -77,6 +77,7 @@ const preSroMacroVersion = 47
 const preTitleVersion = 48
 const prePlusFailOptOutVersion = 50
 const preRentalVersion = 51
+const preUserReversePointVersion = 54
 
 /*
 ================
