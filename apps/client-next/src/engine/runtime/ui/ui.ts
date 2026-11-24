@@ -30616,6 +30616,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						`Health ${local?.hp ?? "unknown"}; mana ${local?.mp ?? "unknown"}; target ${
 							target?.name ?? "none"
 						}. ${next.entities.length} nearby entities.` :
+						// A failed session names its reason (Session HTTP request
+						// rejected, ...): the bare phase told a screen reader only
+						// "failed" while the cause reached the diagnostics alone.
+						phase === "failed" && next.session?.error ?
+						title.message( next.session.error ) :
 						phase),
 				controls
 			};
