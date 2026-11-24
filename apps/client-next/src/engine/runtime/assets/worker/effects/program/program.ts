@@ -423,10 +423,13 @@ export function compileEffectProgram(
 					// constant matrix (particle-rotation.ts), and AF4410 overwrites
 					// last-wins, so a window of any length writes the same value
 					// each frame. The later client's dun/demon_altar_*.efp schedule
-					// it over frames 0-100.
+					// it over frames 0-100. The spacing only picks which frames
+					// write it: from frame 0, every spacing of one frame or more
+					// leaves the same matrix in place (v1.188 Haroeris,
+					// monster/sd/skill_haroeris_ac1_headimpact.efp, spacing 2).
 					((op.flags === 2 || op.flags === 3) && typeof op.end === "number" &&
 						Number.isInteger( op.end ) && op.end >= 0 &&
-						op.spacing === 1)
+						typeof op.spacing === "number" && Number.isInteger( op.spacing ) && op.spacing >= 1)
 				);
 				if (
 					!validSchedule || !Array.isArray( matrix ) || matrix.length !== 16 || matrix.some( v =>
