@@ -62,7 +62,7 @@
   "{\"disabled\":false,\"id\":\"chat-channel:4\",\"kind\":\"button\",\"label\":\"Party\",\"rect\":[766,272,64,24],\"selected\":false}",
   "{\"disabled\":false,\"id\":\"chat-channel:5\",\"kind\":\"button\",\"label\":\"Guild\",\"rect\":[834,272,64,24],\"selected\":false}",
   "{\"disabled\":false,\"id\":\"chat-channel:11\",\"kind\":\"button\",\"label\":\"Union\",\"rect\":[902,272,64,24],\"selected\":false}",
-  "{\"id\":\"chat-text\",\"kind\":\"text\",\"label\":\"Chat message\",\"maxLength\":140,\"rect\":[632,540,336,26],\"value\":\"\"}",
+  "{\"id\":\"chat-text\",\"kind\":\"text\",\"label\":\"Chat message\",\"maxLength\":140,\"rect\":[632,540,336,26],\"textInsets\":[6,0,0,0],\"value\":\"\"}",
   "{\"disabled\":true,\"id\":\"chat-send\",\"kind\":\"button\",\"label\":\"Send\",\"rect\":[860,575,108,24],\"selected\":false}",
   "{\"disabled\":false,\"id\":\"mall-notice-enter\",\"kind\":\"button\",\"label\":\"Shortcut To Item Mall\",\"rect\":[1380,773,136,24]}",
   "{\"disabled\":false,\"id\":\"mall-notice-close\",\"kind\":\"button\",\"label\":\"Close\",\"rect\":[1530,773,52,24]}"

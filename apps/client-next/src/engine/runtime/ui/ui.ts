@@ -1398,6 +1398,19 @@ function pictureClip( face: string, rect: UiRect ): NonNullable<UiQuad["mask"]> 
 createUi
 ================
 */
+/*
+================
+authoredEditAlign
+
+The editor alignment for an authored horizontal alignment (0 left, 1
+centre, 2 right). The editor is transparent over the canvas drawing, so
+its text layout must start where the drawing does (#4153).
+================
+*/
+function authoredEditAlign( hAlign: number ): "left" | "center" | "right" {
+	return hAlign === 2 ? "right" : hAlign === 1 ? "center" : "left";
+}
+
 export function createUi( ports: UiPorts ) {
 	const defaults = defaultUiPorts();
 	const assets = ports.assets,
@@ -6794,6 +6807,17 @@ export function createUi( ports: UiPorts ) {
 					);
 					return;
 				}
+				// Enter in the focused renewal search field reaches this gate as
+				// the platform's submit, not as a key event (the key path above
+				// only fires while the canvas holds the keys): it applies the
+				// draft, as the Search button does (#4153).
+				if (
+					event.kind === "activate" && event.id === "submit" && focus === "item-mall-search" &&
+					itemMall.read().renewal
+				) {
+					activate( "item-mall-search-find" );
+					return;
+				}
 				if ( event.kind === "activate" && event.id.startsWith( "item-mall" ) ) {
 					activate( event.id );
 					return;
@@ -12081,7 +12105,7 @@ export function createUi( ports: UiPorts ) {
 					...(native ?
 						{
 							textInsets: node.client,
-							textAlign: hAlign === 2 ? "right" : hAlign === 1 ? "center" : "left"
+							textAlign: authoredEditAlign( hAlign )
 						} :
 						{})
 				} );
@@ -23501,7 +23525,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						*/
 						function editBox( id: string, name: string, value: string, yy: number, maxLength: number ) {
 							const r: UiRect = [ px + 22, yy, 336, 26 ];
-							controls.push( { id, label: name, kind: "text", value, rect: r, maxLength } );
+							// The value is drawn 6 px into the box (the text quad below).
+							controls.push( {
+								id,
+								label: name,
+								kind: "text",
+								value,
+								rect: r,
+								maxLength,
+								textInsets: [ 6, 0, 0, 0 ]
+							} );
 							rect( r, [ .02, .03, .02, 1 ] );
 							quads.push(
 								...text.quads(
@@ -25425,7 +25458,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							value: shopQuantity,
 							maxLength: 5,
 							disabled: locked,
-							textAlign: amount.hAlign === 2 ? "right" : amount.hAlign === 1 ? "center" : "left",
+							textAlign: authoredEditAlign( amount.hAlign ),
 							textInsets: amount.client
 						} );
 					}
@@ -27469,7 +27502,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					kind: "text",
 					value: promptAmount,
 					rect: edit,
-					maxLength: 5
+					maxLength: 5,
+					// The count is drawn centred in its box (hAlign 1 below).
+					textAlign: "center"
 				} );
 				quads.push(
 					...text.quads( promptAmount, edit, edit, white, { hAlign: 1, vAlign: 1, overflow: "clip" } )
@@ -27555,7 +27590,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					kind: "text",
 					value: amount,
 					rect: edit,
-					maxLength: 20
+					maxLength: 20,
+					// The amount is drawn right-aligned in its box (hAlign 2 below).
+					textAlign: "right"
 				} );
 				quads.push(
 					...text.quads( amount, [ edit[0], edit[1], edit[2] - 2, edit[3] ], edit, white, {
@@ -28225,7 +28262,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							rect: r,
 							value: String( value ),
 							maxLength,
-							disabled: busy
+							disabled: busy,
+							// The value is drawn 4 px into the box (mallText above).
+							textInsets: [ 4, 0, 0, 0 ]
 						} );
 					}
 					authoredChrome( { ...mallControl( root, 21 ), rect: [ 12, 40, w - 24, h - 52 ], text: "" }, 0, 0 );
@@ -28531,7 +28570,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									kind: "text",
 									rect: [ margin, 124, contentWidth, 32 ],
 									value: state.search,
-									maxLength: 32
+									maxLength: 32,
+									// The prompt is drawn 4 px into the box (mallText above).
+									textInsets: [ 4, 0, 0, 0 ]
 								} );
 							}
 							const tabWidth = (contentWidth - gap * (tabColumns - 1)) / tabColumns;
@@ -28735,7 +28776,15 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									rect: op.rect,
 									kind: "text",
 									value: op.value,
-									maxLength: op.maxLength
+									maxLength: op.maxLength,
+									// The value is drawn at the op's textRect, inside
+									// its hit rect: the editor's text starts there.
+									textInsets: [
+										op.textRect[0] - op.rect[0],
+										op.textRect[1] - op.rect[1],
+										0,
+										0
+									]
 								} );
 								// The focused field's blinking caret, after its text and
 								// centred on its line, as every single-line edit draws it.
@@ -29136,7 +29185,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									kind: "text",
 									rect: [ sx + 26, sy + 39, 363, 32 ],
 									value: state.search,
-									maxLength: 32
+									maxLength: 32,
+									// The prompt is drawn 4 px into the box (the text
+									// quad above, at sx + 30).
+									textInsets: [ 4, 0, 0, 0 ]
 								} );
 							} else {
 								authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
@@ -29322,7 +29374,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							kind: "text",
 							value: String( state.quantity ),
 							maxLength: 5,
-							disabled: game.inventoryPending
+							disabled: game.inventoryPending,
+							// GDR_ITEMMALL_CONFIRM_EDIT_COUNT draws by its authored
+							// alignment (right, authoredText above).
+							textAlign: authoredEditAlign( mallControl( page, 42 ).hAlign )
 						} );
 						if ( state.selected.allowsPoints ) {
 							authoredLabeledButton(
@@ -29549,7 +29604,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							kind: "text",
 							value: String( state.pointDraft ),
 							maxLength: 10,
-							disabled: game.inventoryPending
+							disabled: game.inventoryPending,
+							// GDR_ITEMMALL_USE_POINT_EDIT_USE_POINT draws by its
+							// authored alignment (right, authoredText above).
+							textAlign: authoredEditAlign( mallControl( pointPage, 41 ).hAlign )
 						} );
 						authoredLabeledButton(
 							mallControl( pointPage, 50 ),
