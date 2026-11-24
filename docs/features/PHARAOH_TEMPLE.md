@@ -55,9 +55,30 @@ population keeps refusing dungeon regions.
   full tactics row (57573, read whole), and the server admits it alone from the field world into the Temple
   region, at the grade its tomb brothers carry (8). The kind is the Pharaoh Tomb's too: whichever pass stages
   it first, the other places its nest on the standing row (one codename, one row).
-- **Haroeris has no nest (#3787).** Natively he is never placed by a nest. The Haroeris gate job spawns him once
-  when his sanctum opens, and his death opens Seth's (research `unique-encounters/haroeris-seth-chain.md`). The
-  import claims his kind by name, so his character and skills are staged, and places no row. The server's sanctum
-  schedule spawns him (#4270).
-- **Not yet here.**
-  - His skill summons (`ssou`) and decoys, on the iSRO-R counts and `_RefGameWorldNPC` points.
+## Sanctum gates
+
+With the switch on, each pair of sanctums opens twice a day, as the later server opens them. The windows are
+_Schedule_copy1 defines 12-14 of the pinned shard, two hours each, in shard time:
+
+| Pair | Windows | Gates open |
+| --- | --- | --- |
+| Selkis & Neith | 00:00, 09:30 | 00:30, 10:00 |
+| Anubis & Isis | 01:30, 11:00 | 02:00, 11:30 |
+| Haroeris & Seth | 03:00, 12:30 | 03:30, 13:00 |
+
+- **Open.** Half an hour into a window, the pair's enter gates stand in the Temple and its leave gates in the
+  sanctums. The gates are the two teleporter buildings the VSRO client carries (INS_TEMPLE_TELEPORT,
+  INS_TEMPLE_SETH_TELEPORT), at the points _RefGameWorldGroup_Config gives each GROUP_TEMPLE_* group.
+- **Haroeris and Seth.** The Haroeris window spawns Haroeris once at the native wave's point, for the rest of the
+  window. Seth's gate stands in Haroeris's sanctum once he is dead.
+- **Close.** At the window's end the gates come down, and everyone still inside one of the pair's sanctums leaves to
+  that sanctum's leave target in the Temple.
+
+The server owns the table (pharaohtemple/sanctum.go, with its evidence) and the runtime
+(ction/temple_sanctum.go). The build stages the two teleporters (pharaoh_temple.TELEPORTER_CODES).
+
+- **Not yet here** (#3787):
+  - the countdown notices before an open;
+  - the temple association reputation the native entry check reads;
+  - the keepers living only while their sanctum is open (today they stand on their 3-hour respawn);
+  - Haroeris's skill summons (ssou) and decoys, on the iSRO-R counts and _RefGameWorldNPC points.

@@ -317,7 +317,7 @@ func (rt *Runtime) InstanceGM(division string, worldID, layerID uint16) bool {
 		return false
 	}
 	rt.Monsters.BeginPopulationRetirement(division, lease)
-	for _, resident := range rt.fortressResidents(division, target) {
+	for _, resident := range rt.worldResidents(division, target) {
 		rt.relocateCharacter(division, resident, "gm-instance-close", func() (travelPoint, bool) {
 			return rt.instanceEvacuationPoint(division, resident), true
 		})

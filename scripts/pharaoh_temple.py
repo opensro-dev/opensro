@@ -22,7 +22,8 @@ hunting2_import.py). The tables:
 	                   233): the temple gates have no object, a player walks
 	                   into them, as the Donwhang cave's gates (#1018).
 	teleport tables    the four gates, merged by build_alexandria_variant like
-	                   TOMB_GATE_CODES; the codes are named here.
+	                   TOMB_GATE_CODES, and the two sanctum teleporter
+	                   buildings (TELEPORTER_CODES); the codes are named here.
 
 The dungeon files themselves (Dungeon\\Asiam\\*.dof and every /asiam/ model,
 material, lightmap and animation they use) are VSRO Data.pk2 files the
@@ -66,6 +67,14 @@ DUNGEONS = (
 DESERT_GATE_CODES = ("GATE_DESERT_MERCHANT_HUNTER_GATE", "GATE_DESERT_THIEF_GATE")
 TEMPLE_ZONE_CODES = ("GATE_TEMPLE_MERCHANT_HUNTER_GATE", "GATE_TEMPLE_THIEF_GATE")
 GATE_CODES = DESERT_GATE_CODES + TEMPLE_ZONE_CODES
+
+# The sanctum teleporters: buildings no teleport row names, which the server
+# places while a sanctum is open (internal/game/world/pharaohtemple/
+# sanctum.go, #3787). INS_TEMPLE_TELEPORT is the five Temple-side gates'
+# object, INS_TEMPLE_SETH_TELEPORT the one in Haroeris's sanctum. Both are
+# VSRO teleportbuilding rows (27760 and 27759) drawn with
+# alex_raid_portal.bsr, which the variant already stages.
+TELEPORTER_CODES = ("INS_TEMPLE_TELEPORT", "INS_TEMPLE_SETH_TELEPORT")
 
 # The destination world of every temple gate in the source (the Temple is
 # database world 60, the sanctums 51-56). The port has no such worlds: the

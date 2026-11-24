@@ -337,7 +337,7 @@ type Ticker struct {
 	// (quest gates and static world NPCs, action/worldnpc.go). They join the
 	// static roster in that world's sessions' NPC scope pass only. Nil
 	// means none.
-	WorldNpcs func(world uint32) []NpcDef
+	WorldNpcs func(division string, world uint32) []NpcDef
 	// RosterAt: Roster or its seasonal look variant (npc_looks.go).
 	RosterAt func(nowMs int64) []NpcDef
 	Interval time.Duration
@@ -927,7 +927,7 @@ func (t *Ticker) runSessionLegs(state *divisionTickState, session SessionSnapsho
 
 	// All authored NPCs (including ferry managers and city gates) must enter
 	// and leave with the viewer throughout travel, not only during login.
-	roster := t.sessionRoster(session.WorldInstance, nowMs)
+	roster := t.sessionRoster(session.DivisionID, session.WorldInstance, nowMs)
 	// The legs of one division run in order on one worker, so the
 	// division's scope scratch is free to carry from session to session;
 	// the push below copies the frames before it returns.

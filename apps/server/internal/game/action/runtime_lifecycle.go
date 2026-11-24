@@ -159,6 +159,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		frames("advanceEventGroups", rt.advanceEventGroups)
 		frames("advanceWeather", rt.advanceWeather)
 		frames("advanceRoc", rt.advanceRoc)
+		step("advanceTempleSanctums", func() { rt.advanceTempleSanctums(nowMs) })
 		frames("advanceTombGate", rt.advanceTombGate)
 		// Retirement is presentation-only. Reward state was already committed
 		// by the fatal hit, while the zero-HP source remains resolvable through

@@ -141,6 +141,16 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 			}
 			c.questGate = gate
 		}
+		if len(r) > 2 && (r[2] == pharaohtemple.TempleTeleporter || r[2] == pharaohtemple.SethTeleporter) {
+			gate, e := questGateBuildingRow(r)
+			if e != nil {
+				return nil, e
+			}
+			if c.teleporters == nil {
+				c.teleporters = map[string]*questGateBuilding{}
+			}
+			c.teleporters[r[2]] = gate
+		}
 	}
 	rows := enterworld.ReadTextdataFile(filepath.Join(dir, "teleportdata.txt"))
 	if len(rows) == 0 {

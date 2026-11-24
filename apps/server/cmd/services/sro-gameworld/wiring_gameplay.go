@@ -52,6 +52,7 @@ import (
 	"opensro.online/server/internal/game/uniquestatus"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
+	"opensro.online/server/internal/game/world/pharaohtemple"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
 	"opensro.online/server/internal/platform/jobhonor"
@@ -166,6 +167,8 @@ func newGameplayPlane(
 	items.ConfigureSookArena(os.Getenv(sookarena.Env))
 	// SRO_ROC (port-only, not native): the Roc worlds' schedule and steps.
 	items.ConfigureRoc(monster.RocEnabled())
+	// SRO_PHARAOH_TEMPLE (port-only, not native): the sanctums' scheduled gates.
+	items.ConfigureTempleSanctums(pharaohtemple.Enabled())
 	// The Sarin gate's schedule rides the shipped tomb (#4135).
 	items.ConfigureTombGate(monster.QinShiTombFromEnv())
 	// SRO_AUTO_MACRO (port-only, not native): the SRO Macro settings lane.

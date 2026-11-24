@@ -238,11 +238,11 @@ nor selectable from it; its own world publishes it.
 func TestWorldNpcStandsInItsOwnWorldOnly(t *testing.T) {
 	rt, c, npc := changeFixture(t, true, 1)
 	own := domain.CharacterWorldInstance(c)
-	if npcs := rt.WorldNpcs(own); len(npcs) != 1 || npcs[0].ObjectID != npc.ObjectID {
+	if npcs := rt.WorldNpcs("", own); len(npcs) != 1 || npcs[0].ObjectID != npc.ObjectID {
 		t.Fatalf("own world publishes %+v, want the change NPC", npcs)
 	}
 	rt.worldNpcs[0].World++
-	if npcs := rt.WorldNpcs(own); len(npcs) != 0 {
+	if npcs := rt.WorldNpcs("", own); len(npcs) != 0 {
 		t.Fatalf("another world's NPC published here: %+v", npcs)
 	}
 	if selected := selectChangeNpc(t, rt, c); len(selected) == 1 &&

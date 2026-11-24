@@ -106,7 +106,7 @@ world's scope pass, and goes when the layer's gates are removed.
 */
 func TestQuestGateStandsInItsWorldOnly(t *testing.T) {
 	rt, _, lease, gid := questGateFixture(t)
-	gates := rt.QuestGateNpcs(uint32(lease.ID))
+	gates := rt.QuestGateNpcs("", uint32(lease.ID))
 	if len(gates) != 1 || gates[0].ObjectID != gid {
 		t.Fatalf("gates in the layer = %+v", gates)
 	}
@@ -123,11 +123,11 @@ func TestQuestGateStandsInItsWorldOnly(t *testing.T) {
 	if gid < questGateGIDBase || gid >= questGateGIDBase+questGateGIDSpan {
 		t.Fatalf("gate gid %d outside its band", gid)
 	}
-	if other := rt.QuestGateNpcs(domain.DefaultWorldInstance); len(other) != 0 {
+	if other := rt.QuestGateNpcs("", domain.DefaultWorldInstance); len(other) != 0 {
 		t.Fatalf("the gate leaked into the field: %+v", other)
 	}
 	rt.RemoveQuestExitGates(lease.ID)
-	if left := rt.QuestGateNpcs(uint32(lease.ID)); len(left) != 0 {
+	if left := rt.QuestGateNpcs("", uint32(lease.ID)); len(left) != 0 {
 		t.Fatalf("gates after removal = %+v", left)
 	}
 }

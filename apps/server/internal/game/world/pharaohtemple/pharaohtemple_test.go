@@ -132,6 +132,14 @@ func TestHidesFollowTheSwitch(t *testing.T) {
 	if !HidesBuilding(DesertMerchantHunterBuilding) || !HidesBuilding(DesertThiefBuilding) || HidesBuilding("STORE_CH_GATE") {
 		t.Fatal("off: building hiding is wrong")
 	}
+	for _, code := range TeleporterCodes() {
+		if !HidesBuilding(code) {
+			t.Fatalf("off showed the teleporter %s", code)
+		}
+	}
+	if HidesBuilding("INS_QUEST_TELEPORT") {
+		t.Fatal("off hid the quest exit gate")
+	}
 	t.Setenv(EnvPharaohTemple, "on")
 	for _, code := range GateCodes() {
 		if Hides(code, TempleRegionID) {
@@ -140,5 +148,35 @@ func TestHidesFollowTheSwitch(t *testing.T) {
 	}
 	if HidesBuilding(DesertMerchantHunterBuilding) || HidesBuilding(DesertThiefBuilding) {
 		t.Fatal("on hid a desert gate object")
+	}
+	for _, code := range TeleporterCodes() {
+		if HidesBuilding(code) {
+			t.Fatalf("on hid the teleporter %s", code)
+		}
+	}
+}
+
+/*
+================
+TestTeleportersAreTheTwo
+
+The two teleporter codes, as the build stages them (pharaoh_temple.py
+TELEPORTER_CODES pins the same two): Seth's sanctum is the one entered
+through its own.
+================
+*/
+func TestTeleportersAreTheTwo(t *testing.T) {
+	got := TeleporterCodes()
+	if len(got) != 2 || got[0] != "INS_TEMPLE_TELEPORT" || got[1] != "INS_TEMPLE_SETH_TELEPORT" {
+		t.Fatalf("teleporters %v", got)
+	}
+	for _, sanctum := range Sanctums() {
+		want := TempleTeleporter
+		if sanctum.Keeper == "MOB_SD_SETH" {
+			want = SethTeleporter
+		}
+		if sanctum.EnterTeleporter() != want {
+			t.Errorf("%s enters through %s, want %s", sanctum.Group, sanctum.EnterTeleporter(), want)
+		}
 	}
 }
