@@ -54,7 +54,10 @@ export interface NetworkOwner {
 	// report to the transport's session log lines (#2558). Undefined
 	// before the first WELCOME.
 	transportSessionId(): string | undefined;
-	connect( url: string, admission: string, resume?: Uint8Array ): void;
+	// edgeRoute: the Agent advertised a route (a path) that the web edge
+	// serving the client proxies over HTTP, not a transport host. Such an
+	// edge carries no QUIC, so the connect skips WebTransport for the socket.
+	connect( url: string, admission: string, resume?: Uint8Array, edgeRoute?: boolean ): void;
 	// Experimental (#1448): attempt WebTransport (QUIC) before the socket
 	// on connect, the socket the fallback when the path fails. Applies
 	// from the next connect; off is the socket alone.
