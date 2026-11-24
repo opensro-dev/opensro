@@ -212,7 +212,9 @@ export function drawCreation(
 				rect: r,
 				value: selection.name,
 				maxLength: 12,
-				disabled: !enabled
+				disabled: !enabled,
+				// The name is drawn in the authored client inset (area above).
+				textInsets: [ inset.x, inset.y, inset.width, inset.height ]
 			} );
 			text( n, selection.name, area );
 			if ( input.focus === "create:name" && Math.floor( input.now / 500 ) % 2 === 0 ) {

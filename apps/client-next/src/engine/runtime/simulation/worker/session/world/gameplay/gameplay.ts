@@ -3460,7 +3460,7 @@ state here before a command can claim a native wire conversation.
 					} ) :
 					undefined;
 				if ( refuse ) {
-					api.notice( { key: "", value: 0, text: refuse, nativeType: 5 } );
+					api.notice( { key: refuse, value: 0, nativeType: 5 } );
 					return null;
 				}
 				const frame = sroMacro.switchFrame( command.macro, command.on );
@@ -7312,7 +7312,7 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 		if ( settings && live && sroMacroEnabled ) {
 			for ( const kind of macroTownDisableKinds( settings.skillOn, settings.huntOn, inTown ) ) {
 				requestMacroOff( kind );
-				api.notice( { key: "", value: 0, text: MACRO_NOTICE_TOWN_OFF, nativeType: 5 } );
+				api.notice( { key: MACRO_NOTICE_TOWN_OFF, value: 0, nativeType: 5 } );
 			}
 		}
 		const huntOn = !!(live && sroMacroEnabled && settings?.huntOn);
@@ -7331,7 +7331,7 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 		// id change alone is a walk across a 192 m cell, not a teleport.
 		if ( teleportMode === 1 ) {
 			if ( !macroHuntRepeats( "teleport-off", now ) ) {
-				api.notice( { key: "", value: 0, text: MACRO_NOTICE_TELEPORT_OFF, nativeType: 5 } );
+				api.notice( { key: MACRO_NOTICE_TELEPORT_OFF, value: 0, nativeType: 5 } );
 				requestMacroOff( MACRO_HUNT );
 				dirty = true;
 			}
@@ -7416,8 +7416,8 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 		} );
 
 		const announce = () => {
-			const text = macroHuntNoticeText( action );
-			if ( text ) api.notice( { key: "", value: 0, text, nativeType: 5 } );
+			const key = macroHuntNoticeText( action );
+			if ( key ) api.notice( { key, value: 0, nativeType: 5 } );
 		};
 
 		if ( action.kind !== "none" && action.kind !== "wait-resurrect" ) {

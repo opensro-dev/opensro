@@ -8,6 +8,7 @@ The worker owns selection; admitted records nominate pets or summoner items.
 
 ===========================================================================
 */
+import { isSpiritItem } from "./avatar-socket";
 import { constantNativeNotice } from "./native-notice";
 import type { SystemNotice } from "./system-notices";
 import type { CosRecord, GameplayCommand, InventoryItem } from "@/engine/contracts/gameplay";
@@ -261,6 +262,29 @@ The Devil's Spirit extension gear, 3/3/13/16 (port-only, SRO_NASRUN,
 */
 export function isSpiritExtensionGear( flags: number ): boolean {
 	return (flags & 0x7c) === 0x6c && (flags >>> 7 & 15) === 13 && (flags >>> 11 & 31) === 16;
+}
+
+/*
+================
+spiritExtensionWornNotice
+
+The later client refuses the extension gear aimed at the worn Spirit
+before anything is sent and prints
+UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE as a type-5 system line
+(the key's only use in the v1.696 client sits in its item-use
+admission, ahead of the send). v1.150 has neither the gear nor the
+refusal; the port's gear exists only behind SRO_NASRUN (#3456), and
+this refusal rides with it. The target the caller passes is a row of
+the avatar storage, so it is worn by construction; any Spirit there
+arms the refusal, awake or lapsed.
+================
+*/
+export function spiritExtensionWornNotice(
+	sourceTypeFlags: number,
+	targetTypeFlags: number
+): SystemNotice | null {
+	if ( !isSpiritExtensionGear( sourceTypeFlags ) || !isSpiritItem( targetTypeFlags ) ) return null;
+	return { key: "UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE", value: 0, nativeType: 5 };
 }
 
 /*

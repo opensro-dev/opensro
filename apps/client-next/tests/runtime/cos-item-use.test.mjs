@@ -16,7 +16,8 @@ const {
 	autoPotionTarget,
 	autoPotionTargetNotice,
 	createCosSelection,
-	isRideStateRefusedItem
+	isRideStateRefusedItem,
+	spiritExtensionWornNotice
 } = await import(
 	"../../src/engine/foundation/gameplay/cos-item-use.ts"
 );
@@ -705,4 +706,21 @@ test("the Devil's Spirit extension gear arms the target cursor and carries the b
 	assert.equal( companionItemTargetCommand( source, { ...spirit, slot: 4 } ), null );
 	assert.deepEqual( [ ...cosItemUseTail( gear, [], { records: [], targetSlot: 20 } ) ], [ 20 ] );
 	assert.throws( () => cosItemUseTail( gear, [] ), /Drop the gear/ );
+});
+
+test("the extension gear aimed at the worn Spirit is refused with the later client's line (#3909)", () => {
+	const gear = flags( 13, 16 );
+	// The worn Spirit's own type word (3/1/14, TID4 the hat's), as the
+	// avatar storage rows carry it.
+	const wornSpirit = 3 << 2 | 1 << 5 | 14 << 7 | 1 << 11;
+	assert.deepEqual( spiritExtensionWornNotice( gear, wornSpirit ), {
+		key: "UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE",
+		value: 0,
+		nativeType: 5
+	} );
+	// Nothing else refuses: another avatar in the Spirit's window, and
+	// another tool on the Spirit itself.
+	assert.equal( spiritExtensionWornNotice( gear, 3 << 2 | 1 << 5 | 13 << 7 | 1 << 11 ), null );
+	assert.equal( spiritExtensionWornNotice( flags( 13, 8 ), wornSpirit ), null );
+	assert.equal( spiritExtensionWornNotice( flags( 13, 12 ), wornSpirit ), null );
 });
