@@ -363,13 +363,16 @@ def add_gates(vsro_root, native, out):
 	vsro["text"] = read_vsro_file(vsro_root, "Media", TEXTDATA + "textdata_object.txt")
 	from cap110_monsters import tomb_enabled
 	codes = GATE_CODES + TOMB_GATE_CODES if tomb_enabled() else GATE_CODES
+	buildings = ()
 	if temple.temple_enabled():
 		codes += TEMPLE_GATE_CODES
+		buildings = temple.TELEPORTER_CODES
 	# The ids the buildings must not take: every object row of the trees,
 	# and every released id, whose items later steps add (the pin).
 	taken = published_ids.occupied_objects(native / textdata) | published_ids.taken_objects(out / textdata)
 	merged, summary = merge_gate_tables(
-		tables, vsro, codes=codes, level_cap=level_cap, flatten=TEMPLE_GATE_CODES, taken=taken
+		tables, vsro, codes=codes, level_cap=level_cap, flatten=TEMPLE_GATE_CODES, taken=taken,
+		buildings=buildings
 	)
 	for dropped in summary.get("droppedConditions", []):
 		log(f"gates: link {dropped['from']} -> {dropped['to']}: condition kind {dropped['kind']} "
