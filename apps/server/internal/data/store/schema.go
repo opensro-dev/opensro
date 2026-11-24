@@ -280,7 +280,7 @@ var storeSteps = map[int]storeStep{
 	49: {true, "optional per-character titleId (later-native titles, #3502)", 14, 15},
 	50: {true, "optional per-item earnedBought (#4133); layout 15 adds the earned-silk wallet and silk-history split tables", 15, 15},
 	51: {true, "optional per-character plusFailOptOut (failed-reinforcement announcement opt-out, #3682)", 15, 15},
-	54: {false, "optional per-item rentExpiresUnix (native _RentItemInfo, #4240)", 5, 15},
+	54: {false, "optional per-item rentExpiresUnix (native _RentItemInfo, #4240)", 15, 15},
 	55: {true, "optional per-character reverseUserPoint (reverse return scroll saved location, #3903)", 5, 15},
 }
 
