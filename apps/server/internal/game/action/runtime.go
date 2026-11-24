@@ -274,6 +274,9 @@ type Runtime struct {
 	sookArena *sookArenaRuntime
 	// roc runs the Roc worlds (roc.go); nil with SRO_ROC off.
 	roc *rocRuntime
+	// sanctums runs the temple sanctums' scheduled gates
+	// (temple_sanctum.go); nil with SRO_PHARAOH_TEMPLE off.
+	sanctums *sanctumRuntime
 	// tombGate is the Sarin gate's schedule (tombgate.go); nil with the
 	// shipped tomb off.
 	tombGate *tombGateRuntime

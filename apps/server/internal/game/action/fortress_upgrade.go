@@ -228,7 +228,7 @@ func (rt *Runtime) fortressStructureUpgrade(division string, c *enterworld.Chara
 		reply := wire.NewWriter(11).U8(siege.ActionUpgrade).U8(1).U32(fortressID).U32(zone).U8(index)
 		result := OpResult{Frames: []wire.Frame{{Opcode: opFortressInteractionResult, Payload: reply.Payload()}}}
 		roster := wire.Frame{Opcode: opFortressWarState, Payload: rt.structureRoster(division, fortressID, world)}
-		for _, resident := range rt.fortressResidents(division, world) {
+		for _, resident := range rt.worldResidents(division, world) {
 			if resident.ID == c.ID {
 				// Client 75529A reads the old zone reference and level to choose
 				// construction versus upgrade wording. Publish its replacement

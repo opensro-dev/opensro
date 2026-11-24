@@ -165,13 +165,13 @@ static roster, or its seasonal look variant when RosterAt is set
 session's world instance (WorldNpcs: a quest instance's exit gate).
 ================
 */
-func (t *Ticker) sessionRoster(world uint32, nowMs int64) []NpcDef {
+func (t *Ticker) sessionRoster(division string, world uint32, nowMs int64) []NpcDef {
 	roster := t.Roster
 	if t.RosterAt != nil {
 		roster = t.RosterAt(nowMs)
 	}
 	if t.WorldNpcs != nil {
-		if extra := t.WorldNpcs(world); len(extra) > 0 {
+		if extra := t.WorldNpcs(division, world); len(extra) > 0 {
 			roster = append(append(make([]NpcDef, 0, len(roster)+len(extra)), roster...), extra...)
 		}
 	}

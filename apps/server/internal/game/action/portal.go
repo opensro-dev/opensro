@@ -191,6 +191,9 @@ type portalCatalog struct {
 	// questGate is the quest instance exit gate's building row
 	// (INS_QUEST_TELEPORT, questgate.go); nil when the data lacks it.
 	questGate *questGateBuilding
+	// teleporters are the temple sanctums' gate buildings by codename
+	// (temple_sanctum.go); absent while the temple is off or unstaged.
+	teleporters map[string]*questGateBuilding
 }
 
 /*

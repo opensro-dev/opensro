@@ -238,7 +238,7 @@ func (rt *Runtime) fortressStructureRepair(division string, c *enterworld.Charac
 	}
 	hp := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(row.Gid, 0x40, restored)}
 	if rt.PushCharacterFrames != nil {
-		for _, resident := range rt.fortressResidents(division, world) {
+		for _, resident := range rt.worldResidents(division, world) {
 			rt.PushCharacterFrames(division, resident.Name, []wire.Frame{hp})
 		}
 	}

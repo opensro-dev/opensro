@@ -120,7 +120,7 @@ func (rt *Runtime) runFortressPhase(phase fortressPhase) {
 			continue
 		}
 		world := instance.Pack(definition.ID, portalWorldLayer)
-		for _, c := range rt.fortressResidents(phase.division, world) {
+		for _, c := range rt.worldResidents(phase.division, world) {
 			if phase.mode == fortressPhaseEnd {
 				rt.retireFortressBattleRank(phase.division, c, fortressID, phase.dueMs)
 			}
@@ -144,12 +144,12 @@ func (rt *Runtime) runFortressPhase(phase fortressPhase) {
 
 /*
 ================
-fortressResidents
+worldResidents
 
 The characters admitted to a world's layer, in name order.
 ================
 */
-func (rt *Runtime) fortressResidents(division string, world instance.ID) []*enterworld.Character {
+func (rt *Runtime) worldResidents(division string, world instance.ID) []*enterworld.Character {
 	var out []*enterworld.Character
 	rt.characterAdmissions.Range(func(_, value any) bool {
 		admission := value.(populationAdmission)

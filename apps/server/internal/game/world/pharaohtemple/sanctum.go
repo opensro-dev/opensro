@@ -62,6 +62,16 @@ const (
 	scheduleWindowDuration = 7200 * time.Second
 )
 
+// The sanctum teleporters' teleportbuilding codenames (the build stages
+// them from the VSRO client, pharaoh_temple.py TELEPORTER_CODES). The
+// GameServer's 0xbce6 handler (0x41a9c0) points INS_TEMPLE_SETH_TELEPORT
+// at Seth's world and INS_TEMPLE_TELEPORT at the pair's: Seth's enter gate
+// is the first, every other gate the second.
+const (
+	TempleTeleporter = "INS_TEMPLE_TELEPORT"
+	SethTeleporter   = "INS_TEMPLE_SETH_TELEPORT"
+)
+
 // The timeline inside a window: the shard manager's start with an empty
 // Param. Each notice carries the minutes left until the open.
 const (
@@ -175,6 +185,31 @@ var scheduleStarts = map[int][]int{
 	ScheduleSelkisNeith:  {0, 9*3600 + 30*60},         // rows 152 and 151: 00:00, 09:30
 	ScheduleAnubisIsis:   {1*3600 + 30*60, 11 * 3600}, // rows 154 and 153: 01:30, 11:00
 	ScheduleHaroerisSeth: {3 * 3600, 12*3600 + 30*60}, // rows 155 and 156: 03:00, 12:30
+}
+
+/*
+================
+Sanctum.EnterTeleporter
+
+The building that stands as the sanctum's enter gate.
+================
+*/
+func (s Sanctum) EnterTeleporter() string {
+	if s.OpenedBy != "" {
+		return SethTeleporter
+	}
+	return TempleTeleporter
+}
+
+/*
+================
+TeleporterCodes
+
+The two teleporter buildings, in the order the build stages them.
+================
+*/
+func TeleporterCodes() []string {
+	return []string{TempleTeleporter, SethTeleporter}
 }
 
 /*

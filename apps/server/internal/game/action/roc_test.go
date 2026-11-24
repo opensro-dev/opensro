@@ -245,7 +245,7 @@ func TestRocSummitStepsToTheRocAndItsGate(t *testing.T) {
 	rt.noteRocKill(rocCodename, gid, fell)
 	monsters.alive[gid] = false
 	rocTick(rt, clock)
-	gates := rt.QuestGateNpcs(uint32(top.lease.ID))
+	gates := rt.QuestGateNpcs("", uint32(top.lease.ID))
 	if len(gates) != 1 || gates[0].Spawn.X != fell.X+questGateOffsetMin || gates[0].Spawn.RegionID != fell.RegionID {
 		t.Fatalf("the Roc's gate: %+v", gates)
 	}
@@ -261,7 +261,7 @@ func TestRocSummitStepsToTheRocAndItsGate(t *testing.T) {
 	}
 	clock.now = clock.now.Add(time.Second)
 	rocTick(rt, clock)
-	if rocLayerOpen(rt, rocTopWorld) || len(rt.QuestGateNpcs(uint32(top.lease.ID))) != 0 {
+	if rocLayerOpen(rt, rocTopWorld) || len(rt.QuestGateNpcs("", uint32(top.lease.ID))) != 0 {
 		t.Fatal("the summit or its gate outlived the thirty minutes")
 	}
 	if domain.CharacterWorldInstance(c) != domain.DefaultWorldInstance || c.World.InstanceReturn != nil {
@@ -332,7 +332,7 @@ func TestRocFrontGateAndSendOut(t *testing.T) {
 	}
 	monsters.alive[front.tahomet] = false
 	rocTick(rt, clock)
-	if len(rt.QuestGateNpcs(uint32(front.lease.ID))) != 1 {
+	if len(rt.QuestGateNpcs("", uint32(front.lease.ID))) != 1 {
 		t.Fatal("Tahomet's fall raised no gate")
 	}
 	if refusal := rt.rocEntry(testDivision, c, rocFrontWorld); refusal == 0 {

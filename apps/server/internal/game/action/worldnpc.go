@@ -31,13 +31,13 @@ import (
 ================
 WorldNpcs
 
-Every NPC standing in this packed world instance beside the roster:
-its quest gates, then the static world NPCs of its definition. The
+Every NPC standing in this division's packed world instance beside the
+roster: its gates, then the static world NPCs of its definition. The
 ticker's scope pass publishes them to that world's sessions only.
 ================
 */
-func (rt *Runtime) WorldNpcs(world uint32) []simulation.NpcDef {
-	npcs := rt.QuestGateNpcs(world)
+func (rt *Runtime) WorldNpcs(division string, world uint32) []simulation.NpcDef {
+	npcs := rt.QuestGateNpcs(division, world)
 	definition := instance.ID(world).Definition()
 	for index := range rt.worldNpcs {
 		if rt.worldNpcs[index].World == definition {

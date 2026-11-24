@@ -195,7 +195,7 @@ func (rt *Runtime) captureFortress(division string, record fortress.Record, worl
 	rt.forceFortressSave(division)
 	rt.pushStructureRoster(division, record.ID, world)
 	gate, haveGate := rt.fortressTownGate(record.TownGate)
-	for _, c := range rt.fortressResidents(division, world) {
+	for _, c := range rt.worldResidents(division, world) {
 		if c.GuildID != nil && *c.GuildID == guild {
 			if rt.FortressList != nil && rt.PushCharacterFrames != nil {
 				rt.PushCharacterFrames(division, c.Name, []wire.Frame{{Opcode: opFortressWarState, Payload: rt.FortressList(guild)}})
@@ -291,7 +291,7 @@ func (rt *Runtime) pushFortressWorld(division string, world instance.ID, payload
 	if rt.PushCharacterFrames == nil {
 		return
 	}
-	for _, c := range rt.fortressResidents(division, world) {
+	for _, c := range rt.worldResidents(division, world) {
 		rt.PushCharacterFrames(division, c.Name, []wire.Frame{{Opcode: opFortressWarState, Payload: payload}})
 	}
 }
