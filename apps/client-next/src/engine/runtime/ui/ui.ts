@@ -8461,7 +8461,7 @@ export function createUi( ports: UiPorts ) {
 				// Wheel lines over the quest list scroll its rows
 				// (the layout's scrollbar region claims the wheel like
 				// the old page's scrollbar did).
-				const hit = ( ) => {
+				const hit = () => {
 					const rect = windowPlacement.read( "quest-list" );
 					return panel === "Quests" && rect &&
 						event.x >= rect[0] + 236 && event.x < rect[0] + 800 &&
@@ -12556,7 +12556,8 @@ export function createUi( ports: UiPorts ) {
 			const x = Math.max( 0, Math.round( (w - 380) / 2 ) ), y = Math.max( 0, Math.round( (h - 520) / 2 ) );
 			const operationStatus = next.frontend?.creation?.status ?? next.frontend?.status;
 			diagnosticError = next.worldError ?? next.resourceError ?? next.session?.error ?? game?.error ??
-				game?.chat?.error ?? next.frontend?.error ?? guideResources.error() ?? resLayoutResources.error() ?? minimapResources.error() ??
+				game?.chat?.error ?? next.frontend?.error ?? guideResources.error() ?? resLayoutResources.error() ??
+				minimapResources.error() ??
 				hud.error() ?? text.error() ?? resources.error() ?? null;
 			// CPSTitle 73E7B0 replaces timer 1000 with a 15000 ms deadline. A camera
 			// phase never renews it; 7425E0 retires the title process after its fade.
@@ -17538,7 +17539,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// quests at the right edge from y=267, stepping
 					// around the windows already occupying the screen.
 					const entries = questList.trackerEntries( hudCopy ), [, height] = questTrackerSize( entries, 30 );
-					const obstacles = [...admittedWindows.values()].flatMap( win => win.blocks );
+					const obstacles = [ ...admittedWindows.values() ].flatMap( win => win.blocks );
 					const beside = obstacles.filter( r => r[0] + r[2] >= w - 324 ),
 						above = obstacles.filter( r => !(r[0] + r[2] >= w - 324) );
 					const [tx, ty] = questTrackerPlacement( {

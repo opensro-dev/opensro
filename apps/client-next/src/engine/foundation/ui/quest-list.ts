@@ -220,7 +220,7 @@ export function questTrackerEntries(
 	folded: ReadonlySet<number>,
 	records: Readonly<Record<number, QuestListMeta>>,
 	entries: Readonly<Record<string, string>>,
-	copy: ( key:string ) => string
+	copy: ( key: string ) => string
 ): readonly QuestTrackerEntry[] {
 	const byRef = new Map( quests.map( q => [ q.refId, q ] ) );
 	const result: QuestTrackerEntry[] = [];
@@ -250,7 +250,7 @@ export function questTrackerEntries(
 questTrackerTitle
 ================
 */
-function questTrackerTitle( quest: QuestRecord, title: string, copy: ( key:string ) => string ): string {
+function questTrackerTitle( quest: QuestRecord, title: string, copy: ( key: string ) => string ): string {
 	if ( quest.u09 === 1 ) return `[${copy( "UIIT_STT_PARTY" )}] ${title}`;
 	if ( quest.u09 === 2 ) return `[${copy( "UIIT_STT_GUILDVIEW" )}] ${title}`;
 	return title;

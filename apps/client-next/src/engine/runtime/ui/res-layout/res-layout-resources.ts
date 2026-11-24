@@ -61,7 +61,10 @@ export function createResLayoutResources(
 						error = String( e );
 					}
 				} else if ( needed && s.kind === "idle" && assets.available() > 0 ) {
-					states[i] = { kind: "loading", id: assets.request( new URL( paths[i]!, base ).href, MAX_LAYOUT_BYTES ) };
+					states[i] = {
+						kind: "loading",
+						id: assets.request( new URL( paths[i]!, base ).href, MAX_LAYOUT_BYTES )
+					};
 				}
 			}
 			return changed;

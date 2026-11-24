@@ -44,7 +44,7 @@ function layoutImage(
 ) {
 	if ( !path ) return;
 	frame.paths.push( path );
-	if ( frame.resources.has( path ) )
+	if ( frame.resources.has( path ) ) {
 		frame.quads.push( {
 			rect: r,
 			texture: path,
@@ -52,6 +52,7 @@ function layoutImage(
 			clip: frame.full,
 			color: tint ? [ tint[0] ?? 1, tint[1] ?? 1, tint[2] ?? 1, tint[3] ?? 1 ] : frame.white
 		} );
+	}
 }
 
 // Later-client control types (the .2dt type word, the import's own
@@ -209,9 +210,14 @@ export function createResLayoutWindow( layout: ResLayout ): ResLayoutWindow {
 			}
 		} else if ( control.type === RES_LAYOUT_TYPE_TILE ) {
 			paths.push( resLayoutImagePath( control.texture ) );
-			frame.quads.push( ...normalTile( r, resLayoutImagePath( control.texture ), resources.size(
-				resLayoutImagePath( control.texture )
-			), full ) );
+			frame.quads.push( ...normalTile(
+				r,
+				resLayoutImagePath( control.texture ),
+				resources.size(
+					resLayoutImagePath( control.texture )
+				),
+				full
+			) );
 		} else if ( control.type === RES_LAYOUT_TYPE_BUTTON ) {
 			const overlay = stateOverlay.get( control.key );
 			const pressed = overlay?.press ?? (frame.pressed === id && id !== undefined);

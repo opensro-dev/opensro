@@ -22,10 +22,7 @@ owner the coordinator feeds.
 */
 
 import type { QuestRecord } from "@/engine/contracts/gameplay";
-import type {
-	QuestListRow,
-	QuestTrackerEntry
-} from "@/engine/foundation/ui/quest-list";
+import type { QuestListRow, QuestTrackerEntry } from "@/engine/foundation/ui/quest-list";
 import {
 	QUEST_TRACKED_MAX,
 	questContentFace,
@@ -97,8 +94,11 @@ createQuestList
 export function createQuestList( questList: ResLayout, questMiniList: ResLayout ) {
 	const listWindow: ResLayoutWindow = createResLayoutWindow( questList ),
 		trackerWindow: ResLayoutWindow = createResLayoutWindow( questMiniList );
-	let quests: readonly QuestRecord[] = [], tracked: readonly number[] = [], folded = new Set<number>(),
-		scrollOffset = 0, playerLevel = 0;
+	let quests: readonly QuestRecord[] = [],
+		tracked: readonly number[] = [],
+		folded = new Set<number>(),
+		scrollOffset = 0,
+		playerLevel = 0;
 	let presentation: QuestPresentation | undefined;
 	let actions: QuestListAction[] = [];
 	// The last quest the player located (world-map marking); 0 clears.
@@ -408,9 +408,15 @@ export function createQuestList( questList: ResLayout, questMiniList: ResLayout 
 				for ( const line of entry.lines ) {
 					const rect = [ ox + QUEST_TRACKER_LINE_X, y, 304, 16 ] as const;
 					frame.quads.push(
-						...frame.text.quads( line.text, [ rect[0], rect[1], rect[2], rect[3] ], frame.full, line.color, {
-							vAlign: 0
-						} )
+						...frame.text.quads(
+							line.text,
+							[ rect[0], rect[1], rect[2], rect[3] ],
+							frame.full,
+							line.color,
+							{
+								vAlign: 0
+							}
+						)
 					);
 					y += 16;
 				}
