@@ -42,7 +42,10 @@ hwanTitleKey
 The system-text symbol of a Blue Berserk level's title (Knight, Baronet, ... for
 the European race, the generals for the Chinese), or "" below level 1. The race
 is the character's country byte (0 Chinese, 1 European), as the server's notice
-chooses it.
+chooses it. Native in the later client (#3919): its level table
+(hwanleveldata.txt, loaded as textdata type 0x44) holds exactly this
+symbol per level and race column, and the text catalog resolves it
+(textuisystem ids 4122-4133 in the later client's table).
 ================
 */
 export function hwanTitleKey( level: number | undefined, country: number | undefined ): string {

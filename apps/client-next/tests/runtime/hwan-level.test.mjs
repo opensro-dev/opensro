@@ -99,3 +99,67 @@ test("the roster keeps every player's level and drops one told as 0", () => {
 	levels.clear();
 	assert.deepEqual( levels.all(), {} );
 });
+
+const { overheadLayout, titledNameRow, TITLE_NAME_GAP, HWAN_TITLE_COLOR, withoutBoardPass } = await import(
+	"../../src/engine/foundation/ui/overhead-layout.ts"
+);
+const { defaultGameOptions } = await import( "../../src/engine/foundation/gameplay/game-options.ts" );
+const { emptySocial } = await import( "../../src/engine/foundation/gameplay/social.ts" );
+
+const titleCopy = key => ({
+	UIO_SECOND_HWAN_CH_NAME_LEVEL_6: "General Lord",
+	UIO_SECOND_HWAN_EU_NAME_LEVEL_1: "Knight"
+}[key] ?? key);
+const selfEntity = {
+	gid: 1,
+	refObjId: 1907,
+	kind: "local-player",
+	name: "Me",
+	heading: 0,
+	regionId: 257,
+	x: 0,
+	y: 0,
+	z: 0,
+	countryByte9c: 0
+};
+const euPlayer = { ...selfEntity, gid: 5, kind: "player", name: "Hero", countryByte9c: 1 };
+
+/*
+================
+hwanLayoutFor
+
+The overhead layout for one entity under a roster, with the text
+catalog standing in for the two title words these tests resolve.
+================
+*/
+function hwanLayoutFor( entity, hwanLevels ) {
+	const game = { localGid: 1, social: emptySocial( "Me" ), vitals: [], hwanLevels };
+	return overheadLayout( entity, selfEntity, /** @type {any} */ (game), defaultGameOptions(), titleCopy );
+}
+
+test("the name board carries the roster level's title word, per race", () => {
+	const knight = hwanLayoutFor( euPlayer, { 5: 1 } );
+	assert.equal( knight.hwanText, "Knight" );
+	assert.deepEqual( knight.hwanColor, HWAN_TITLE_COLOR );
+	// The local player's own title shows too, from its own roster entry.
+	assert.equal( hwanLayoutFor( selfEntity, { 1: 6 } ).hwanText, "General Lord" );
+	// No level told, no title: an untold player and a monster alike.
+	assert.equal( hwanLayoutFor( euPlayer, {} ).hwanText, "" );
+	assert.equal( hwanLayoutFor( euPlayer, { 5: 0 } ).hwanText, "" );
+	assert.equal( hwanLayoutFor( { ...euPlayer, kind: "monster" }, { 5: 3 } ).hwanText, "" );
+	// The /id-off pass hides it with the rest of the name board.
+	assert.equal( withoutBoardPass( knight ).hwanText, "" );
+});
+
+test("a titled name line centres every title and the name as one board", () => {
+	// Contributor 60, tier 40, Hwan 30, name 100: the board's lead is
+	// the three titles with a gap between each pair, and the Hwan title
+	// ends one gap before the name.
+	const lead = 60 + TITLE_NAME_GAP + 40 + TITLE_NAME_GAP + 30;
+	const row = titledNameRow( lead, 100 );
+	assert.equal( row.total, lead + TITLE_NAME_GAP + 100 );
+	assert.equal( row.nameLeft, row.left + lead + TITLE_NAME_GAP );
+	assert.ok( row.left < row.nameLeft );
+	// No title at all: the name alone, centred exactly as before.
+	assert.deepEqual( titledNameRow( 0, 40 ), { left: -20, nameLeft: -20, total: 40 } );
+});

@@ -990,32 +990,32 @@
   "source": "pmang.sayclub.com/silkroad/silkroad_home.nwz?target=http://silkroad2.sayclub.com/member/member_point.asp&log=in&firstlogon=1"
  },
  "UIO_SECOND_HWAN_CH_NAME_LEVEL_1": {
-  "english": "Lieutenant General",
+  "english": "Captain",
   "basis": "translated-retail-korean",
   "source": "편장군"
  },
  "UIO_SECOND_HWAN_CH_NAME_LEVEL_2": {
-  "english": "Shining Martial General",
+  "english": "General",
   "basis": "translated-retail-korean",
   "source": "소무장군"
  },
  "UIO_SECOND_HWAN_CH_NAME_LEVEL_3": {
-  "english": "Valiant Martial General",
+  "english": "Senior General",
   "basis": "translated-retail-korean",
   "source": "분무장군"
  },
  "UIO_SECOND_HWAN_CH_NAME_LEVEL_4": {
-  "english": "Rousing Martial General",
+  "english": "Chief General",
   "basis": "translated-retail-korean",
   "source": "진무장군"
  },
  "UIO_SECOND_HWAN_CH_NAME_LEVEL_5": {
-  "english": "Founding Martial General",
+  "english": "Vice General Lord",
   "basis": "translated-retail-korean",
   "source": "건무장군"
  },
  "UIO_SECOND_HWAN_CH_NAME_LEVEL_6": {
-  "english": "Nation-Guarding General",
+  "english": "General Lord",
   "basis": "translated-retail-korean",
   "source": "보국장군"
  },
