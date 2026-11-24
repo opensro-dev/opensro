@@ -532,6 +532,8 @@ export interface RuntimeControl extends Disposable {
 	berserkGauge(): import("./orb").BerserkGauge | undefined;
 	/** What the last world entry waited on, by condition and time; null before one. */
 	worldEntry(): WorldEntryReport | null;
+	/** The persistent asset store's counters (hits, misses, ranged bytes fetched against those demanded); null before the worker reports. */
+	assetStore(): import("./assets").AssetStoreStats | null;
 	/** The actors the renderer draws this frame. */
 	characterActors(): readonly import("./character").CharacterActor[];
 	/** Copied counters and retained-pose eligibility; does not advance animation. */
