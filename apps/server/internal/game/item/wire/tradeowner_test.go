@@ -23,12 +23,12 @@ func TestTradeOwnerItemBodyRoundTripAndTruncation(t *testing.T) {
 	if !bytes.Equal(encoded, expected) || body.EncodedSize() != len(encoded) {
 		t.Fatalf("body %x", encoded)
 	}
-	got, err := readItemBody(NewReader(encoded), body.TypeFlags)
+	got, err := readItemBody(NewReader(encoded), body.TypeFlags, nil)
 	if err != nil || got.TradeOwner != body.TradeOwner || got.Quantity != 3 {
 		t.Fatalf("round trip %+v %v", got, err)
 	}
 	for n := 0; n < len(encoded); n++ {
-		if _, err := readItemBody(NewReader(encoded[:n]), body.TypeFlags); err == nil {
+		if _, err := readItemBody(NewReader(encoded[:n]), body.TypeFlags, nil); err == nil {
 			t.Fatalf("accepted truncation %d", n)
 		}
 	}

@@ -69,6 +69,12 @@ type ItemRef struct {
 	// this row's cap (port-only, stacksizes.go); 0 when the row keeps its
 	// native cap. Read it through NativeStackCap.
 	NativeMaxStack uint16
+	// Rent marks an item the Item Mall rents by period (native
+	// _RefRentItem: a delivered instance carries a deletion time,
+	// issue #4240). TextdataItems joins the built tree's refrentitem
+	// onto the row; the native tree writes no such table, so no
+	// shipped item is a rental.
+	Rent bool
 	// SetID is itemdata column 62 (RefItem+0x1ac): the refsetitemgroup id
 	// a set piece belongs to, 0 for a piece in no set. The v1.150 rows
 	// carry no set ids; only the port-only cap-110 overlay rows do, and
@@ -301,6 +307,9 @@ type WireItem struct {
 	// EarnedBought mirrors InventoryRow.EarnedBought (port only,
 	// issue #4133); never set for starter items.
 	EarnedBought bool
+	// RentExpiresUnix mirrors InventoryRow.RentExpiresUnix (native
+	// _RentItemInfo, #4240); never set for starter items.
+	RentExpiresUnix int64
 }
 
 /*
@@ -419,8 +428,9 @@ func EnsureMissionInventory(character *Character, equipRoster []WireItem) []Inve
 				StackCount:   stackCount,
 				MagicOptions: copyMagicOptions(item.MagicOptions),
 				Data:         item.Data, Summon: domain.CloneCOS(item.Summon),
-				ForgeBound:   item.ForgeBound,
-				EarnedBought: item.EarnedBought,
+				ForgeBound:      item.ForgeBound,
+				EarnedBought:    item.EarnedBought,
+				RentExpiresUnix: item.RentExpiresUnix,
 			})
 		}
 		character.MissionInventory = rows
@@ -544,8 +554,9 @@ func InventoryWireItems(rows []InventoryRow) []WireItem {
 			StackCount:   row.StackCount,
 			MagicOptions: copyMagicOptions(row.MagicOptions),
 			Data:         row.Data, Summon: domain.CloneCOS(row.Summon),
-			ForgeBound:   row.ForgeBound,
-			EarnedBought: row.EarnedBought,
+			ForgeBound:      row.ForgeBound,
+			EarnedBought:    row.EarnedBought,
+			RentExpiresUnix: row.RentExpiresUnix,
 		})
 	}
 	return out

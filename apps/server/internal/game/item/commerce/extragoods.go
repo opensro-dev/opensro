@@ -212,7 +212,7 @@ func (c *Catalog) AddExtraGoods(goods []ExtraGood, refs enterworld.ItemRefSource
 		if !known {
 			return fmt.Errorf("%s: unknown shop tab %s", EnvShopExtraGoods, good.Tab)
 		}
-		content, err := packageContent(extraTemplate(good.Codename), refs)
+		content, err := packageContent(extraTemplate(good.Codename), refs, rentTerms{})
 		if err != nil {
 			return fmt.Errorf("%s: %s: %w", EnvShopExtraGoods, good.Codename, err)
 		}

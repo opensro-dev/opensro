@@ -87,6 +87,59 @@ MallCatalog
 type MallCatalog struct {
 	Tabs   []MallTab
 	Offers []MallPackage
+
+	// rents is the built tree's refrentitem (the listed goods' terms,
+	// written by scripts/later_mall_goods.py): how long a delivered
+	// rental lasts. No table in the tree: no rentals.
+	rents rentTerms
+}
+
+// rentTerms is refrentitem by code: the terms that rent for a period of
+// minutes, and the terms that rent over a fixed begin/end window (no
+// mall good names those; only periods are sold, issue #4240).
+/*
+================
+rentTerms
+================
+*/
+type rentTerms struct {
+	periods map[string]uint32
+	windows map[string]bool
+}
+
+// rentTermColumns is a refrentitem row's code and period cells: the
+// code, the rented item's RefObjID, and RentTime in minutes (0 with a
+// fixed window in the begin/end cells instead).
+const (
+	rentTermCode    = 1
+	rentTermMinutes = 9
+)
+
+/*
+================
+parseRentTerms
+
+Malformed rows are skipped, never priced: a scrap naming such a term
+then fails hydration as a term without a row, which names the data.
+================
+*/
+func parseRentTerms(rows [][]string) rentTerms {
+	terms := rentTerms{periods: map[string]uint32{}, windows: map[string]bool{}}
+	for _, row := range rows {
+		if len(row) <= rentTermMinutes || row[rentTermCode] == "" {
+			continue
+		}
+		minutes, err := strconv.ParseUint(row[rentTermMinutes], 10, 32)
+		if err != nil {
+			continue
+		}
+		if minutes == 0 {
+			terms.windows[row[rentTermCode]] = true
+			continue
+		}
+		terms.periods[row[rentTermCode]] = uint32(minutes)
+	}
+	return terms
 }
 
 /*
@@ -148,10 +201,26 @@ func LoadMall(dir string, extra []MallExtraGood, categories bool, refs enterworl
 			return nil, err
 		}
 	}
+	// refrentitem is the one optional mall table: the native tree has
+	// none, and only the later goods' terms are written into it.
+	if _, err := os.Stat(filepath.Join(dir, "refrentitem.txt")); err == nil {
+		rows, err := mallTable(dir, "refrentitem")
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			if len(row) > 0 && row[0] == "1" {
+				tables["refrentitem"] = append(tables["refrentitem"], row)
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
 	catalog, err := buildMallCatalog(tables)
 	if err != nil {
 		return nil, err
 	}
+	catalog.rents = parseRentTerms(tables["refrentitem"])
 	// One package keeps one listing (addMallCategoryRows), so a
 	// package's badge stamps its only offer.
 	for index := range catalog.Offers {

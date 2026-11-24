@@ -174,7 +174,12 @@ type Deps struct {
 	// container (port-only, action/halloween.go); false leaves every row
 	// untouched, so the entry door writes only for a character that
 	// actually held a box past the window's end.
-	RemoveExpiredEventBoxes      func(character *Character) bool
+	RemoveExpiredEventBoxes func(character *Character) bool
+	// RemoveExpiredRentItems deletes out-of-period mall rentals from
+	// every container (native _DelExpiredRentItemInStorage at storage
+	// load, action/rental_items.go); false leaves every row untouched,
+	// so the entry door writes only for a renter past the period's end.
+	RemoveExpiredRentItems       func(character *Character) bool
 	AdmitCharacterSession        func(divisionID, characterName string, session uint64) error
 	RetireCharacterSession       func(divisionID, characterName string, session uint64)
 	EntryActionSpeed             func(divisionID, characterName string) float32
