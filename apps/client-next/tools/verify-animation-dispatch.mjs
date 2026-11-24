@@ -2,6 +2,7 @@ import {build} from 'esbuild';
 import {spawnSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import {pythonExecutable} from '../../../scripts/build/shared/pythonRun.mjs';
 const buildResult=await build({entryPoints:['src/engine/foundation/animation/animation-dispatch.ts'],bundle:true,platform:'node',format:'esm',write:false});
 const {createAnimationDispatch}=await import('data:text/javascript;base64,'+Buffer.from(buildResult.outputFiles[0].contents).toString('base64'));
 const cases=[];
@@ -10,7 +11,7 @@ for(const durations of [[1000,2000],[333,777]])cases.push({layers:durations.map(
 cases.push({layers:[{duration:600,weight:1},{duration:4000,weight:0}],steps:[350,...Array(49).fill(4)],weights:[[1,0],...Array.from({length:49},(_,i)=>[1-(i+1)/50,(i+1)/50])]});
 // Exact boundaries, stationary equality and the subsequent overflow wrap.
 for(const duration of [1,333,1000])cases.push({layers:[{duration,weight:1}],steps:[duration-1,1,0,1,1,duration,0]});
-const native=spawnSync(process.env.SRO_PYTHON??'C:/Program Files/Python312/python.exe',['tools/native-animation-dispatch.py'],{input:JSON.stringify(cases),encoding:'utf8',timeout:60000});
+const PY=pythonExecutable();const native=spawnSync(PY.command,[...PY.args,'tools/native-animation-dispatch.py'],{input:JSON.stringify(cases),encoding:'utf8',timeout:60000});
 if(native.status!==0)throw Error(native.stderr);
 const actual=cases.map(c=>{const owner=createAnimationDispatch(),layers=c.layers.map((l,i)=>({clip:String(i),time:0,weight:l.weight,loop:true,lane:'timed',activation:Object.freeze({started:0})}));return c.steps.map((dt,index)=>{if(c.weights)for(let i=0;i<layers.length;i++)layers[i].weight=c.weights[index][i];return owner.step(layers,dt,clip=>c.layers[Number(clip)].duration).flatMap(row=>row.ranges.map(([from,to])=>[Number(row.layer.clip),from,to]));});});
 const expected=JSON.parse(native.stdout);

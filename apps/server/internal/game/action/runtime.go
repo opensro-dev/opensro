@@ -287,6 +287,12 @@ type Runtime struct {
 	// (muhan_change.go). Port-only, not native: empty unless SRO_MUHAN is on.
 	muhanChanges map[string]muhanChange
 
+	// rigidScrollReady is the Rigid summon scrolls' family cooltime,
+	// the next usable millisecond by character name (rigidsummonscroll.go,
+	// later-native). Runtime-only, like the native per-user timer:
+	// a relog starts it over.
+	rigidScrollReady map[string]int64
+
 	// NpcSpawn scopes the 0x745A liveness gate's NPC-gid domain to the
 	// same env gates that put the roster on the wire (select.go); tests
 	// override it directly.

@@ -1297,7 +1297,9 @@
 				"academy-join": null,
 				"academy-modify": null,
 				"academy-name": null,
-				"academy-next": {
+				"academy-next": null,
+				"academy-prev": null,
+				"academy-refresh": {
 					"added": [],
 					"commands": [
 						{
@@ -1313,34 +1315,17 @@
 					"panel": "Academy Matching",
 					"removed": []
 				},
-				"academy-prev": null,
-				"academy-refresh": {
-					"added": [],
-					"commands": [
-						{
-							"command": {
-								"kind": "academy-page",
-								"page": 0
-							},
-							"kind": "gameplay"
-						}
-					],
-					"focus": null,
-					"hash": "cfa2cba115d68414",
-					"panel": "Academy Matching",
-					"removed": []
-				},
 				"academy-register": {
 					"added": [
 						"academy-form-cancel",
 						"academy-form-confirm",
 						"academy-form-detail",
-						"academy-form-kind:0",
-						"academy-form-kind:1"
+						"academy-form-kind:1",
+						"academy-form-kind:2"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "4cb37b373a7ff6d6",
+					"hash": "587a9baf10fd4dd5",
 					"panel": "Academy Matching",
 					"removed": [
 						"ability-details",
@@ -1427,22 +1412,7 @@
 						"window-drag:Academy Matching"
 					]
 				},
-				"academy-scroll-down": {
-					"added": [],
-					"commands": [
-						{
-							"command": {
-								"kind": "academy-page",
-								"page": 1
-							},
-							"kind": "gameplay"
-						}
-					],
-					"focus": null,
-					"hash": "cfa2cba115d68414",
-					"panel": "Academy Matching",
-					"removed": []
-				},
+				"academy-scroll-down": null,
 				"academy-scroll-thumb": null,
 				"academy-scroll-up": null,
 				"academy-search": null,

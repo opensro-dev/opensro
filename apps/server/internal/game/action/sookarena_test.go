@@ -109,10 +109,11 @@ func TestSookAdmissionIsolationAndVictory(t *testing.T) {
 	ra.program.Kills = 31
 	ra.program.PausedAt = clock.Now().UnixMilli()
 	ra.program.Completed = 5
+	a.SookChest.Stage = 5
 	ra.program.DecisionUntil = clock.Now().UnixMilli() + sookarena.DecisionMs
 	clock.now = time.UnixMilli(ra.program.DecisionUntil)
 	rt.advanceSookArena(clock.Now().UnixMilli())
-	if domain.CharacterWorldInstance(a) != domain.DefaultWorldInstance || a.SookArenaActive || goldOf(a) != before+60000 {
+	if domain.CharacterWorldInstance(a) != domain.DefaultWorldInstance || a.SookArenaActive || goldOf(a) != before+150_000_000 {
 		t.Fatal("victory did not commit and return")
 	}
 	if _, live := rt.Monsters.PopulationLease(testDivision, ra.lease.ID); live {
@@ -125,7 +126,7 @@ func TestSookAdmissionIsolationAndVictory(t *testing.T) {
 		t.Fatal("first player's finish released the second player's arena")
 	}
 	rt.advanceSookArena(clock.Now().UnixMilli())
-	if goldOf(a) != before+60000 {
+	if goldOf(a) != before+150_000_000 {
 		t.Fatal("duplicate payout")
 	}
 }

@@ -187,12 +187,16 @@ export function classifyPythonFailure( attempt ) {
 }
 
 /**
- * The interpreter a plain `python` command means on this host: SRO_PYTHON,
- * else `python` on Windows and `python3` elsewhere (no bare `python` on macOS).
- * @returns {string}
+ * The one interpreter every synchronous caller spawns: the first candidate
+ * of pythonAttempts(), as a spawn-ready command plus its leading arguments
+ * (`py -3` on Windows, SRO_PYTHON wherever it points). There is no second
+ * rule: a caller picking anything else can land on an interpreter without
+ * the build's packages while runPython's candidates succeed (#3955).
+ * @returns {{ command: string, args: string[] }}
  */
 export function pythonExecutable() {
-	return process.env.SRO_PYTHON || (process.platform === "win32" ? "python" : "python3");
+	const first = pythonAttempts( [] )[0];
+	return { command: first.command, args: first.args };
 }
 
 /**

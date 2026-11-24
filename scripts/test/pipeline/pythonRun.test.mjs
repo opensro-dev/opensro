@@ -10,7 +10,7 @@ SRO_PYTHON always comes first; Windows keeps the py launcher, other hosts
 */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { pythonAttempts } from "../../build/shared/pythonRun.mjs";
+import { pythonAttempts, pythonExecutable } from "../../build/shared/pythonRun.mjs";
 
 /*
 ================
@@ -57,18 +57,28 @@ test("SRO_PYTHON comes first on every platform", () => {
 	}
 });
 
+test("pythonExecutable is the first pythonAttempts entry on every platform", () => {
+	for ( const platform of [ "win32", "darwin", "linux" ] ) {
+		for ( const sroPython of [ undefined, "/venv/bin/python" ] ) {
+			const executable = withEnvironment( platform, sroPython, () => pythonExecutable() );
+			const first = withEnvironment( platform, sroPython, () => pythonAttempts( [] )[0] );
+			assert.deepEqual( executable, { command: first.command, args: first.args } );
+		}
+	}
+});
+
 test("a plain python task command resolves per platform", async () => {
 	const { resolveProcessCommand } = await import( "../../tasks/processCommand.mjs" );
-	assert.equal(
-		withEnvironment( "darwin", undefined, () => resolveProcessCommand( "python", [] ).executable ),
-		"python3"
+	assert.deepEqual(
+		withEnvironment( "darwin", undefined, () => resolveProcessCommand( "python", [ "x.py" ] ) ),
+		{ executable: "python3", args: [ "x.py" ] }
 	);
-	assert.equal(
-		withEnvironment( "win32", undefined, () => resolveProcessCommand( "python", [] ).executable ),
-		"python"
+	assert.deepEqual(
+		withEnvironment( "win32", undefined, () => resolveProcessCommand( "python", [ "x.py" ] ) ),
+		{ executable: "py", args: [ "-3", "x.py" ] }
 	);
-	assert.equal(
-		withEnvironment( "darwin", "/venv/bin/python", () => resolveProcessCommand( "python", [] ).executable ),
-		"/venv/bin/python"
+	assert.deepEqual(
+		withEnvironment( "darwin", "/venv/bin/python", () => resolveProcessCommand( "python", [ "x.py" ] ) ),
+		{ executable: "/venv/bin/python", args: [ "x.py" ] }
 	);
 });

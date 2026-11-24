@@ -268,6 +268,19 @@ func TestKillRewardBrackets(t *testing.T) {
 
 /*
 ================
+TestStageReward
+================
+*/
+func TestStageReward(t *testing.T) {
+	for stage, want := range []uint64{0, 40_000_000, 70_000_000, 100_000_000, 130_000_000, 150_000_000, 0} {
+		if got := StageReward(stage); got != want {
+			t.Errorf("stage %d gold = %d, want %d", stage, got, want)
+		}
+	}
+}
+
+/*
+================
 TestStageMonsterLevelBands
 ================
 */

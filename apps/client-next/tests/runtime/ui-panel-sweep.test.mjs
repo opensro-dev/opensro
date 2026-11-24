@@ -23,6 +23,7 @@ const { uiPanels, panelCloseId, closedPanel } = await import( "../../src/engine/
 const { emptyStall, stallRequest } = await import( "../../src/engine/foundation/gameplay/stall.ts" );
 const { fortressPacket } = await import( "../../src/engine/foundation/gameplay/fortress.ts" );
 const { fortressProductionQuery } = await import( "../../src/engine/foundation/gameplay/fortress-production.ts" );
+const { academyBootstrap } = await import( "../../src/engine/foundation/gameplay/academy.ts" );
 
 const OFFICIAL = 17;
 // A type word isGlobalChatItem accepts (global-chat.ts): TID 3/3/5/2.
@@ -74,17 +75,12 @@ const OPENERS = {
 		f.ui.event( { kind: "activate", id: "open-window:Storage" } );
 	},
 	"Academy Matching"( f ) {
-		f.state.gameplay.academy = { member: false, rows: [], request: null, page: 0 };
+		f.state.gameplay.academy = academyBootstrap( { academyMember: false } );
 		f.ui.event( { kind: "activate", id: "open-window:Academy Matching" } );
 	},
 	"Academy honor"( f ) {
 		f.state.gameplay.academy = {
-			member: false,
-			rows: [],
-			request: null,
-			page: 0,
-			pages: 0,
-			result: null,
+			...academyBootstrap( { academyMember: false } ),
 			honorRanks: {
 				rows: [ { ranking: 1, rank: 1, name: "Mentor", level: 60, maxLevel: 80, graduates: 3, guild: "" } ],
 				sequence: 1

@@ -8,7 +8,7 @@ one for the thief job. With the switch on, the dungeons, their gates and their m
 
 | Switch | Where | Effect |
 | --- | --- | --- |
-| `SRO_PHARAOH_TEMPLE` | Build and server | The seven dungeons (regions `0x800A`-`0x8010`), the four gates, and the 25 kinds and 102 nests in them, `pharaoh-temple.txt` |
+| `SRO_PHARAOH_TEMPLE` | Build and server | The seven dungeons (regions `0x800A`-`0x8010`), the four gates, and the 26 kinds and 103 nests in them, `pharaoh-temple.txt` |
 
 The live shard profile (`apps/server/config/shard-settings.json`) turns it on. The code default stays off.
 
@@ -28,10 +28,10 @@ stages.
 
 | Part | Result (real inputs) |
 | --- | --- |
-| Monsters | 25 kinds admitted, in `characterdata_270000.txt` (the Osiris kind rides the Pharaoh Tomb pass's standing row when that pass staged it first), 83 skills in `skilldata_270000.txt` |
+| Monsters | 26 kinds admitted, in `characterdata_270000.txt` (the Osiris kind rides the Pharaoh Tomb pass's standing row when that pass staged it first), 104 skills in `skilldata_270000.txt` |
 | Placements | 102 nests across the seven dungeons, joining the default world |
 | Keepers | Selkis, Neith, Anubis, Isis and Seth (grade 3), one each in their sanctums (Anubis two), on a 3-hour respawn |
-| Unique | Osiris (`MOB_SD_OSIRIS_3`, grade 8), one nest in the Temple on an 8-hour respawn |
+| Uniques | Osiris (`MOB_SD_OSIRIS_3`, grade 8), one nest in the Temple on an 8-hour respawn; Haroeris (`MOB_SD_HAROERIS`, grade 3), his kind and skills only: no nest places him (below) |
 
 The server loader (`monster.AppendPharaohTemple`) admits a nest only in one of the seven dungeon regions, and only
 when its source world is the one its dungeon is grouped under (51-56, and 60 for the Temple); the one exception is
@@ -58,7 +58,7 @@ population keeps refusing dungeon regions.
 ## Sanctum gates
 
 With the switch on, each pair of sanctums opens twice a day, as the later server opens them. The windows are
-`_Schedule_copy1` defines 12-14 of the pinned shard, two hours each, in shard time:
+_Schedule_copy1 defines 12-14 of the pinned shard, two hours each, in shard time:
 
 | Pair | Windows | Gates open |
 | --- | --- | --- |
@@ -67,19 +67,18 @@ With the switch on, each pair of sanctums opens twice a day, as the later server
 | Haroeris & Seth | 03:00, 12:30 | 03:30, 13:00 |
 
 - **Open.** Half an hour into a window, the pair's enter gates stand in the Temple and its leave gates in the
-  sanctums. The gates are the two teleporter buildings the VSRO client carries (`INS_TEMPLE_TELEPORT`,
-  `INS_TEMPLE_SETH_TELEPORT`), at the points `_RefGameWorldGroup_Config` gives each `GROUP_TEMPLE_*` group.
+  sanctums. The gates are the two teleporter buildings the VSRO client carries (INS_TEMPLE_TELEPORT,
+  INS_TEMPLE_SETH_TELEPORT), at the points _RefGameWorldGroup_Config gives each GROUP_TEMPLE_* group.
 - **Haroeris and Seth.** The Haroeris window spawns Haroeris once at the native wave's point, for the rest of the
   window. Seth's gate stands in Haroeris's sanctum once he is dead.
 - **Close.** At the window's end the gates come down, and everyone still inside one of the pair's sanctums leaves to
   that sanctum's leave target in the Temple.
 
-The server owns the table (`pharaohtemple/sanctum.go`, with its evidence) and the runtime
-(`action/temple_sanctum.go`). The build stages the two teleporters (`pharaoh_temple.TELEPORTER_CODES`).
+The server owns the table (pharaohtemple/sanctum.go, with its evidence) and the runtime
+(ction/temple_sanctum.go). The build stages the two teleporters (pharaoh_temple.TELEPORTER_CODES).
 
 - **Not yet here** (#3787):
   - the countdown notices before an open;
   - the temple association reputation the native entry check reads;
   - the keepers living only while their sanctum is open (today they stand on their 3-hour respawn);
-  - Haroeris's kind and skills, which #4259 imports. Until then his spawn fails, it is logged, and Seth's gate
-    stays shut.
+  - Haroeris's skill summons (ssou) and decoys, on the iSRO-R counts and _RefGameWorldNPC points.

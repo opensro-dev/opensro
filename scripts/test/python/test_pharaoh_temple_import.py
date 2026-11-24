@@ -2,7 +2,7 @@
 ===========================================================================
 test_pharaoh_temple_import.py - the Pharaoh Temple's monster import.
 
-The temple admits its 25 named kinds alone (the cap-110 desert field
+The temple admits its 26 named kinds alone (the cap-110 desert field
 shares their MOB_SD_ prefix), projects its nests as authored plus the
 one v1.188 Osiris exception, and keeps a capped hive whole: the four
 priest nests of the Sanctum of Punishment share one cap of three,
@@ -70,16 +70,34 @@ class PharaohTempleAdmissionTest(unittest.TestCase):
 		self.assertFalse(temple.family_admits("MOB_SD_ANUBIS", later_row("MOB_SD_ANUBIS", 107, 8)))
 
 	def test_osiris_enters_by_name_at_its_source_grade_alone(self):
-		# The v1.188 row (grade 8, level 110) enters; the keepers' grade
-		# on the Osiris row does not, and the named exception opens no
-		# grade for the family (Anubis at 8 stays refused, above).
+		# The later character row (grade 8, level 110) enters. The v1.188
+		# database row carries grade 3; only its nest and tactics are
+		# taken. Another grade on the Osiris row does not enter, and the
+		# named exception opens no grade for the family (Anubis at 8
+		# stays refused, above).
 		self.assertTrue(temple.family_admits(temple.OSIRIS_KIND, later_row(temple.OSIRIS_KIND, 110, 8)))
 		self.assertFalse(temple.family_admits(temple.OSIRIS_KIND, later_row(temple.OSIRIS_KIND, 110, 6)))
 		self.assertFalse(temple.family_admits(temple.OSIRIS_KIND, later_row(temple.OSIRIS_KIND, 104, 8)))
 
-	def test_only_the_temple_worlds_claim_and_osiris_by_name(self):
+	def test_haroeris_enters_at_the_keeper_grade_alone(self):
+		# The scheduled unique is a keeper-grade kind (grade 3, level 109
+		# in the pinned client): the keepers' rule admits him, and no
+		# named grade opens for him (his grade-8 decoy stays out).
+		self.assertTrue(temple.family_admits(temple.HAROERIS_KIND, later_row(temple.HAROERIS_KIND, 109, 3)))
+		self.assertFalse(temple.family_admits(temple.HAROERIS_KIND, later_row(temple.HAROERIS_KIND, 109, 8)))
+		self.assertFalse(temple.family_admits(temple.HAROERIS_KIND, later_row(temple.HAROERIS_KIND, 104, 3)))
+
+	def test_only_the_temple_worlds_claim_and_the_exceptions_by_name(self):
 		rows = [nest(1, "MOB_SD_ANUBIS"), nest(2, "MOB_SD_APIS", world=1, region=24929)]
-		self.assertEqual(temple._claim_groups(rows, False), {"temple": {"MOB_SD_ANUBIS", "MOB_SD_OSIRIS_3"}})
+		self.assertEqual(temple._claim_groups(rows, False),
+			{"temple": {"MOB_SD_ANUBIS", "MOB_SD_OSIRIS_3", "MOB_SD_HAROERIS"}})
+
+	def test_haroeris_is_claimed_but_never_placed(self):
+		# His kind is staged; the server's schedule spawns him (#3787),
+		# so no population row names him.
+		rows = [nest(1, "MOB_SD_ANUBIS")]
+		population = temple._build_populations(rows, False)["temple"]
+		self.assertNotIn(temple.HAROERIS_KIND, {row["Codename"] for row in population["Rows"]})
 
 	def test_the_spec_places_on_a_standing_tomb_row(self):
 		self.assertTrue(temple.SPEC.place_standing)

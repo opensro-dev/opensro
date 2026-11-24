@@ -16,6 +16,8 @@ the rows a move actually touches.
 
 ===========================================================================
 */
+import "./native-source-loader.mjs";
+const { academyBootstrap } = await import( "../../src/engine/foundation/gameplay/academy.ts" );
 
 /*
 ================
@@ -262,7 +264,7 @@ export const SCENE_SCRIPTS = [
 		name: "panel-academy-matching",
 		guard: true,
 		beats: openPanel( "Academy Matching", ctx => {
-			ctx.state.gameplay.academy = { member: false, rows: [], request: null, page: 0 };
+			ctx.state.gameplay.academy = academyBootstrap( { academyMember: false } );
 		} )
 	},
 	{

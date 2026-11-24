@@ -6,7 +6,7 @@ pharaoh_temple_import.py - the Pharaoh Temple's monsters and uniques.
 The job temple's seven dungeons (pharaoh_temple.py: the Temple and six
 sanctums, regions 0x800A-0x8010) ride SRO_PHARAOH_TEMPLE. That module
 stages the dungeons and gates from the VSRO client; this one stages
-what lives in them: 25 kinds and their nests, the five sanctum keepers
+what lives in them: 26 kinds and their nests, the five sanctum keepers
 (Selkis, Neith, Anubis, Isis, Seth) among them.
 
 Native source: the v1.188 server places the same kinds with the same
@@ -22,8 +22,10 @@ stands) are roster content and stay out. One nest rides as a named
 exception (osiris_nest below): v1.188's MOB_SD_OSIRIS_3, whose hive
 stands in the field world, not under a temple group, so the export
 does not carry it; its controls are the v1.188 database's full tactics
-row, read whole. Not here: Haroeris, whom neither source places by
-nest.
+row, read whole. Haroeris (MOB_SD_HAROERIS) is claimed by name too,
+for his kind and skills alone: he has no nest natively. The temple's
+schedule spawns him when his sanctum opens (the server's
+action/temple_sanctum.go, #3787), so no row places him here.
 
 No region merge: the dungeons are VSRO Data the variant build already
 stages. The import is the shared monster pass (later_world_import.
@@ -64,7 +66,8 @@ TEMPLE_WORLDS = (51, 52, 53, 54, 55, 56, 60)
 # (the cap-110 desert field's) never draws the field's rows into this
 # import's characterinfo or reap.
 TEMPLE_KINDS = (
-	"MOB_SD_ANUBIS", "MOB_SD_BLOODKHEPRI", "MOB_SD_DEVIL_SANDMAN", "MOB_SD_HARSAPHETH", "MOB_SD_HARSMESS",
+	"MOB_SD_ANUBIS", "MOB_SD_BLOODKHEPRI", "MOB_SD_DEVIL_SANDMAN", "MOB_SD_HAROERIS", "MOB_SD_HARSAPHETH",
+	"MOB_SD_HARSMESS",
 	"MOB_SD_IMOUTHES", "MOB_SD_ISIS", "MOB_SD_KEISAS_BERSERK", "MOB_SD_NEITH", "MOB_SD_OSIRIS_3",
 	"MOB_SD_PRIEST_CHASTISEMENT",
 	"MOB_SD_PRIEST_FEAR", "MOB_SD_PRIEST_FLAME", "MOB_SD_PRIEST_GALE", "MOB_SD_PRIEST_GUARD",
@@ -85,6 +88,13 @@ GRADES = (0, 3)
 OSIRIS_KIND = "MOB_SD_OSIRIS_3"
 OSIRIS_SOURCE_GRADE = 8
 NAMED_GRADES = {OSIRIS_KIND: OSIRIS_SOURCE_GRADE}
+
+# The temple's scheduled unique (#3787): a keeper-grade kind (grade 3,
+# level 109 in the pinned client) that no nest places. The native
+# Haroeris gate job spawns him once when his sanctum opens; the server
+# ports that (action/temple_sanctum.go), so the import stages his kind
+# and skills and no nest.
+HAROERIS_KIND = "MOB_SD_HAROERIS"
 
 
 # ================
@@ -120,10 +130,12 @@ def family_admits(code, row):
 # _claim_groups
 # ================
 def _claim_groups(rows, sub_enabled):
-	# The export names no Osiris nest, so its kind is claimed by name:
-	# the exception nest below names it, and a claimed kind is converted
+	# The export names no Osiris or Haroeris nest, so their kinds are
+	# claimed by name: the Osiris exception nest below names his, the
+	# server's schedule spawns Haroeris, and a claimed kind is converted
 	# here or placed on the tomb pass's standing row (place_standing).
-	return {"temple": {row["Codename"] for row in rows if row["WorldID"] in TEMPLE_WORLDS} | {OSIRIS_KIND}}
+	return {"temple": {row["Codename"] for row in rows if row["WorldID"] in TEMPLE_WORLDS}
+		| {OSIRIS_KIND, HAROERIS_KIND}}
 
 
 # ================
