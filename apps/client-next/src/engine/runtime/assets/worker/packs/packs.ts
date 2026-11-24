@@ -106,6 +106,23 @@ function sharedLocks(): LockManager | null {
 
 /*
 ================
+otherWindowWaits
+
+True when a request for the lock is queued, which while this window holds
+it can only be another window's (sharedMember takes each block once per
+window). False where the browser cannot say.
+================
+*/
+async function otherWindowWaits( locks: LockManager, name: string ): Promise<boolean> {
+	try {
+		return (await locks.query()).pending?.some( request => request.name === name ) ?? false;
+	} catch {
+		return false;
+	}
+}
+
+/*
+================
 storedSizes
 
 The persistent store's size for every digest an index names: a pack is
@@ -141,6 +158,24 @@ export function createPacks(
 	const unpacked = new Set<string>();
 	// Store writes still in flight, by origin and digest (persistedMember).
 	const stores = new Map<string, Promise<void>>();
+	// This window's hold of a block's cross-window lock, by lock name
+	// (sharedMember): the members it still wants from that block.
+	type BlockWant = {
+		entry: PackEntry;
+		resolve: ( bytes: Uint8Array<ArrayBuffer> ) => void;
+		reject: ( error: unknown ) => void;
+	};
+	type BlockHold = {
+		queued: BlockWant[];
+		served: PackEntry[];
+		active: number;
+		// Null until the lock is granted; then whether this window had to
+		// wait behind another one for it.
+		waited: boolean | null;
+		// Settles when the last member in flight finishes (serve).
+		idle: () => void;
+	};
+	const holds = new Map<string, BlockHold>();
 	const loading = new Map<string, Promise<Loaded>>(), cache = new Map<string, Loaded>();
 	let storedBytes = 0, decodedBytes = 0, hashCalls = 0, hashBytes = 0;
 	// The texture variant this device is served, decided once (textureVariant).
@@ -260,25 +295,98 @@ export function createPacks(
 	function sharedMember( base: string, descriptor: PackDescriptor, start: number, entry: PackEntry ) {
 		const locks = sharedLocks();
 		if ( !locks ) return fetchedMember( base, descriptor, start, entry );
+		const name = blocks.blockName( base, descriptor, start, entry );
 		return new Promise<Uint8Array<ArrayBuffer>>( ( resolve, reject ) => {
+			const want = { entry, resolve, reject };
+			// One acquisition per block per window: a member wanted from a
+			// block this window holds or awaits joins that hold. A lock per
+			// member queued a scene's members of one block behind each other.
+			const joined = holds.get( name );
+			if ( joined ) {
+				if ( joined.waited === null ) joined.queued.push( want );
+				else serve( base, descriptor, start, joined, want );
+				return;
+			}
+			const hold: BlockHold = { queued: [ want ], served: [], active: 0, waited: null, idle: () => {} };
+			holds.set( name, hold );
+			const held = async ( waited: boolean ) => {
+				hold.waited = waited;
+				// The hold stays this window's until the lock is let go: a member
+				// asked for meanwhile, even while the neighbours are stored, is
+				// served under it, never queued behind this window's own lock
+				// (queuing behind itself cost a lone window 6 s of an entry).
+				do {
+					const idle = new Promise<void>( settle => {
+						hold.idle = settle;
+					} );
+					for ( const queued of hold.queued.splice( 0 ) ) serve( base, descriptor, start, hold, queued );
+					if ( hold.active ) await idle;
+					await releasedBlock( locks, base, descriptor, start, name, hold );
+				} while ( hold.active || hold.queued.length );
+				holds.delete( name );
+			};
+			// Taken at once when free: a lone window pays nothing for the
+			// sharing (the unconditional store read and neighbour writes
+			// doubled a world entry, 17 s against 9 s measured). Only a window
+			// that waits behind another one reads the store first.
 			locks.request(
-				blocks.blockName( base, descriptor, start, entry ),
-				{ signal: lifetime.signal },
-				async () => {
-					try {
-						// Another window may have stored it while this one waited.
-						const saved = await storedMember( base, entry );
-						if ( saved ) return resolve( saved );
-						resolve( await fetchedMember( base, descriptor, start, entry ) );
-						// Held until the block's members are stored: the window
-						// waiting next reads them instead of downloading again.
-						await storedNeighbours( base, descriptor, start, entry );
-					} catch ( error ) {
-						reject( error );
-					}
-				}
-			).catch( reject );
+				name,
+				{ ifAvailable: true },
+				lock => lock ? held( false ) : locks.request( name, { signal: lifetime.signal }, () => held( true ) )
+			).catch( error => {
+				holds.delete( name );
+				for ( const queued of hold.queued.splice( 0 ) ) queued.reject( error );
+			} );
 		} );
+	}
+	/*
+	================
+	serve
+
+	One member of a held block: from the store when this window waited
+	behind another (that window stored the block before letting go), else
+	fetched.
+	================
+	*/
+	function serve(
+		base: string,
+		descriptor: PackDescriptor,
+		start: number,
+		hold: BlockHold,
+		want: BlockWant
+	) {
+		hold.active++;
+		void (async () => {
+			try {
+				const saved = hold.waited ? await storedMember( base, want.entry ) : null;
+				want.resolve( saved ?? await fetchedMember( base, descriptor, start, want.entry ) );
+				hold.served.push( want.entry );
+			} catch ( error ) {
+				want.reject( error );
+			} finally {
+				if ( --hold.active === 0 ) hold.idle();
+			}
+		})();
+	}
+	/*
+	================
+	releasedBlock
+
+	Before the lock goes: when another window is queued for this block, the
+	block's other members are stored so it reads them instead of
+	downloading again. A lone window stores only what it demanded.
+	================
+	*/
+	async function releasedBlock(
+		locks: LockManager,
+		base: string,
+		descriptor: PackDescriptor,
+		start: number,
+		name: string,
+		hold: BlockHold
+	) {
+		const first = hold.served[0];
+		if ( first && await otherWindowWaits( locks, name ) ) await storedNeighbours( base, descriptor, start, first );
 	}
 	/*
 	================
@@ -319,6 +427,12 @@ export function createPacks(
 		const writes = [ stores.get( base + "/" + entry.sha256 ) ];
 		for ( const neighbour of blocks.neighbours( base, descriptor, start, entry ) ) {
 			if ( disposed ) break;
+			// A member this hold served is already being written: wait on it.
+			const writing = stores.get( base + "/" + neighbour.entry.sha256 );
+			if ( writing ) {
+				writes.push( writing );
+				continue;
+			}
 			if ( await persistent.has( base, neighbour.entry.sha256, lifetime.signal ) !== false ) continue;
 			try {
 				await persistedMember( base, neighbour.entry, neighbour.stored );
