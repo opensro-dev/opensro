@@ -102,17 +102,21 @@ test("hunt action notices queue the matching UIIT keys", () => {
 	assert.equal( MACRO_NOTICE_POTION_ON_FAIL.startsWith( "UIIT_STT_SRO_MACRO_" ), true );
 });
 
-test("every macro notice key has the English the text build completes, and no completion is orphaned", async () => {
-	// The worker queues these keys and the build injects their English
-	// (completeUiText): a rename on either side would draw an empty chat line.
-	const { MACRO_NOTICE_UIIT_COMPLETIONS } = await import( "../../../../scripts/build/shared/textResources.mjs" );
+test("every queued MACRO_NOTICE_* key has a catalog completion", async () => {
+	const { MACRO_NOTICE_UIIT_COMPLETIONS, completeUiText } = await import(
+		"../../../../scripts/build/shared/textResources.mjs"
+	);
 	const queued = Object.entries( notices )
 		.filter( ( [name, value] ) => name.startsWith( "MACRO_NOTICE_" ) && typeof value === "string" )
-		.map( ( [, key] ) => key )
-		.sort();
-	const completed = Object.keys( MACRO_NOTICE_UIIT_COMPLETIONS ).sort();
-	assert.deepEqual( queued, completed );
-	for ( const key of completed ) {
-		assert.ok( MACRO_NOTICE_UIIT_COMPLETIONS[key].trim().length > 0, `${key} has English` );
+		.map( ( [, value] ) => value );
+	assert.equal( queued.length, 14, "fourteen system-chat keys" );
+	assert.deepEqual(
+		[ ...queued ].sort(),
+		Object.keys( MACRO_NOTICE_UIIT_COMPLETIONS ).sort(),
+		"worker keys match MACRO_NOTICE_UIIT_COMPLETIONS"
+	);
+	const catalog = completeUiText( {} );
+	for ( const key of queued ) {
+		assert.ok( catalog[key]?.trim(), `${key} must resolve to English` );
 	}
 });
