@@ -365,7 +365,7 @@ def add_music(vsro_root, native, out, later_root=None):
 	files they name from the VSRO Music.pk2 to MP3, exactly as
 	prepare_client_resources does for the native tracks. Returns a summary.
 	"""
-	import build_alexandria_variant as variant
+	import variant_files as variant
 	textdata = Path("Media_extracted") / stage1.TEXTDATA
 	names = ("regioninfo.txt", "effectenvsnd.txt")
 	tables = {name: (native / textdata / name).read_bytes() for name in names}
@@ -432,7 +432,7 @@ def add_later_music(later_root, merged, regions):
 	regions and that no native or VSRO area already holds; returns (tables,
 	tracks, area names). The v1.696 Data and Media archives are pin-checked.
 	"""
-	import build_alexandria_variant as variant
+	import variant_files as variant
 	from mall_avatar_import import V1696_SOURCE, source_pins
 	stage1.require_vsro_pin(later_root, ("Data", "Media"), source_pins(V1696_SOURCE))
 	later_regions = table_lines(variant.read_vsro_file(later_root, "Data", "regioninfo.txt"))

@@ -20,7 +20,13 @@ import path from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 
-import { acquireHeavyLock, heavyLockTarget, isAncestorPid, pidAlive } from "../../checks/heavyLock.mjs";
+import {
+	acquireHeavyLock,
+	heavyLockTarget,
+	isAncestorPid,
+	isHeldOpenError,
+	pidAlive
+} from "../../checks/heavyLock.mjs";
 
 const MODULE_URL = pathToFileURL( path.resolve( import.meta.dirname, "../../checks/heavyLock.mjs" ) ).href;
 // A child that takes the named lock, says so, and releases on stdin data.
@@ -275,4 +281,16 @@ test("a linked worktree locks beside the main checkout, not beside itself", asyn
 	await writeFile( path.join( worktree, ".git" ), `gitdir: ${path.join( hub, ".git", "worktrees", "wt" )}\n` );
 	const target = heavyLockTarget( {}, worktree );
 	assert.equal( target.lockPath, path.join( dir, "workflow", "state", "heavy.lock" ) );
+});
+
+test("a lock file being released reads as held on Windows, and only there", () => {
+	// EEXIST is a holder on every platform.
+	assert.equal( isHeldOpenError( { code: "EEXIST" }, "linux" ), true );
+	// A Windows file its holder just unlinked opens EPERM/EACCES while it
+	// is delete pending: the waiter retries instead of failing.
+	assert.equal( isHeldOpenError( { code: "EPERM" }, "win32" ), true );
+	assert.equal( isHeldOpenError( { code: "EACCES" }, "win32" ), true );
+	// Elsewhere a permission refusal is a real fault and still throws.
+	assert.equal( isHeldOpenError( { code: "EPERM" }, "linux" ), false );
+	assert.equal( isHeldOpenError( { code: "ENOENT" }, "win32" ), false );
 });

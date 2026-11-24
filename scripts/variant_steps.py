@@ -13,9 +13,12 @@ step: the step's key, the summary it returned, and its recorded effect -
 every file it created or changed, by content hash, and every file it
 removed. A step's key covers what the step reads:
 
-	its code        the defining module's closure as codeStamp's
-	                codeClosure owns it: the modules it imports, the
-	                Node scripts those name, the pin data beside them
+	its code        the files its last run ran and imported, and every
+	                checkout file it opened, plus what those import at
+	                module level, the Node scripts they name and the pin
+	                data beside them (codeStamp's moduleClosure), each
+	                by checkout-relative path, so a fresh freeze
+	                checkout keys the same
 	its flags       the SRO_* variables named in that code, by value
 	its sources     the source roots its last run opened files under,
 	                fingerprinted as variant_stamp fingerprints them,
@@ -43,11 +46,15 @@ place would rewrite the other.
 """
 from __future__ import annotations
 
+import ast
+import builtins
 import hashlib
+import json
 import os
 import re
 import shutil
 import sys
+import sysconfig
 import time
 from pathlib import Path
 
@@ -55,15 +62,25 @@ import state_document
 import variant_settle
 import variant_stamp
 from prepare_client_resources import file_digest, write_atomically
-from sro_paths import tree_state_root
+from sro_paths import REPO_ROOT, tree_state_root
 
 JOURNAL_FORMAT = "sro-variant-steps"
-JOURNAL_VERSION = 1
+# 2: a step's code is what it ran, keyed by repository-relative path (#4251).
+# The runner's own code is no step's input; a change to what the journal
+# means bumps this instead, and an older journal starts the record over.
+JOURNAL_VERSION = 2
 JOURNAL_NAME = "variant-steps.json"
 BLOB_ROOT = "variant-blobs"
 FLAG_LITERAL = re.compile(r"SRO_[A-Z0-9_]+")
 # The chain every build starts from: the empty tree, in this format.
-EMPTY_STATE = hashlib.sha256(b"sro-variant-steps/1").hexdigest()
+EMPTY_STATE = hashlib.sha256(f"sro-variant-steps/{JOURNAL_VERSION}".encode("ascii")).hexdigest()
+# The sys.monitoring tool slot the code recorder takes while a step runs
+# (0-2 and 5 are the debugger, coverage, profiler and optimizer slots).
+CODE_TOOL = 4
+# Where interpreter and package code lives: never a step's own code.
+INSTALLED_CODE = tuple(
+	str(Path(path).resolve()) for path in {sysconfig.get_path(name) for name in ("stdlib", "platstdlib", "purelib", "platlib")}
+)
 
 
 # ================
@@ -126,76 +143,116 @@ def lay_blob(variant_root: Path, sha: str, target: Path) -> None:
 
 
 #============================================================================
-# A step's code: the defining module and its static local imports
+# A step's code: what it ran, and what that code names
 #============================================================================
 
 
 # ================
-# module_file
-# ================
-def module_file(module_name: str) -> Path | None:
-	module = sys.modules.get(module_name)
-	path = getattr(module, "__file__", None)
-	return Path(path) if path else None
-
-
-_own_code_files: dict[str, list[Path]] = {}
-
-
-# ================
-# own_code_files
+# is_installed_code
 #
-# This runner's own closure, once per repository root per process: the
-# journal's semantics are part of every step's key, and this file does
-# not change under a running build.
+# A file of the interpreter or of an installed package: pinned by the
+# toolchain, never a step's own code.
 # ================
-def own_code_files(repository_root: Path | None) -> list[Path]:
-	key = str(repository_root) if repository_root is not None else ""
-	if key not in _own_code_files:
-		_own_code_files[key] = variant_stamp.code_closure(Path(__file__), repository_root)
-	return _own_code_files[key]
+def is_installed_code(path: str) -> bool:
+	return path.startswith("<") or path.startswith(INSTALLED_CODE)
 
 
 # ================
-# code_files
+# code_location
 #
-# The files a step's behaviour is written in: its defining module's
-# closure and this runner's, both from codeStamp's codeClosure - the
-# stamp's own owner, so a step is keyed on everything it can run: the
-# Python modules it imports, the Node scripts those name (the items
-# importer runs one) and the pin data beside them. A Python-only walk
-# missed the scripts entirely, and a parser fix in one would have left
-# its step replaying an old effect.
+# How the journal names one code file: repository-relative inside the
+# checkout, so a release built from a fresh freeze checkout keys every
+# step exactly as the last one did (r204i: each new rel-<sha> checkout
+# moved every key, #4251); absolute outside it.
 # ================
-def code_files(seed: Path, repository_root: Path | None = None) -> list[Path]:
-	found = {str(path): path for path in variant_stamp.code_closure(seed, repository_root)}
-	for path in own_code_files(repository_root):
-		found[str(path)] = path
-	return [found[key] for key in sorted(found)]
+def code_location(path: Path, repository_root: Path) -> str:
+	try:
+		return path.resolve().relative_to(repository_root.resolve()).as_posix()
+	except ValueError:
+		return str(path.resolve())
+
+
+# ================
+# code_path
+#
+# The file a recorded code location names under this checkout.
+# ================
+def code_path(location: str, repository_root: Path) -> Path:
+	path = Path(location)
+	return path if path.is_absolute() else repository_root / location
 
 
 # ================
 # code_key
 #
-# A digest of the step's code files and of the SRO_* flags they name:
-# the step reruns when its code changes or when a flag it names moves.
+# A digest of the step's code files, each by its location and content,
+# and of the SRO_* flags they name: the step reruns when its code changes
+# or when a flag it names moves. A file that is gone keys as gone.
+#
+# A Python file keys by its syntax tree (code_content), not its bytes: a
+# comment or a blank line is not code. ran names the files whose code the
+# step ran (record_run); every other Python file in the closure was only
+# imported, so its function bodies key as empty. The smoke's one-comment
+# edit to alexandria_npcs.py had made 22 of 28 steps stale (#4251).
 # ================
-def code_key(seeds: list[Path], environ) -> str:
+def code_key(files: list[Path], repository_root: Path, environ, ran: frozenset[str] = frozenset()) -> str:
 	digest = hashlib.sha256()
 	flags: dict[str, str] = {}
-	for path in seeds:
+	for path in sorted(files, key=lambda item: code_location(item, repository_root)):
+		location = code_location(path, repository_root)
+		digest.update(location.encode("utf-8") + b"\0")
 		try:
 			content = path.read_bytes()
 		except OSError:
+			digest.update(b"gone\n")
 			continue
-		digest.update(str(path).encode("utf-8") + b"\0")
-		digest.update(hashlib.sha256(content).hexdigest().encode("ascii") + b"\n")
+		keyed = code_content(path, content, location in ran)
+		digest.update(hashlib.sha256(keyed).hexdigest().encode("ascii") + b"\n")
 		for name in FLAG_LITERAL.findall(content.decode("utf-8", "ignore")):
 			value = environ.get(name)
 			flags[name] = hashlib.sha256(value.encode("utf-8")).hexdigest() if value is not None else ""
 	for name in sorted(flags):
 		digest.update(f"flag\0{name}\0{flags[name]}\n".encode("utf-8"))
 	return digest.hexdigest()
+
+
+# ================
+# BodyStripper
+#
+# Empties every function body, leaving the def itself: its name, its
+# decorators and the defaults its arguments evaluate when the module
+# loads, which is all a module the step never ran a function of can do.
+# ================
+class BodyStripper(ast.NodeTransformer):
+	def visit_FunctionDef(self, node):
+		node.body = [ast.Pass()]
+		return node
+
+	visit_AsyncFunctionDef = visit_FunctionDef
+
+
+# ================
+# code_content
+#
+# What a code file keys by. A Python file is its syntax tree, which
+# drops comments, blank lines and layout; when its code did not run in
+# the step, the tree has its function bodies emptied (BodyStripper). The
+# recorder sees every function that starts (record_run), so a body it
+# did not see start cannot have touched the step; no step runs Python in
+# a child process (the children are Node scripts and ffmpeg, keyed as
+# bytes). A file that does not parse, and every other file, keys by its
+# bytes.
+# ================
+def code_content(path: Path, content: bytes, ran: bool) -> bytes:
+	if path.suffix != ".py":
+		return content
+	try:
+		tree = ast.parse(content)
+	except (SyntaxError, ValueError):
+		return content
+	if not ran:
+		tree = BodyStripper().visit(tree)
+	return ast.dump(tree).encode("utf-8")
 
 
 #============================================================================
@@ -232,21 +289,68 @@ def audit_hook(event, args):
 
 
 # ================
-# record_reads
+# record_run
 #
-# Run one step with the read log on; returns (result, the paths read).
+# Run one step with the recorders on; returns (result, the paths it
+# opened for reading, the source files of the code it ran, those of the
+# modules it only imported).
+#
+# The code is what ran, not what its modules could reach: the static
+# import closure of any importer was nearly the whole build (160 files,
+# 70 of the 98 modules in one import cycle), so one edit anywhere reran
+# every step (#4251). sys.monitoring reports each function's first start
+# and is then switched off for it, so the recorder costs one call per
+# function, not per call. Constants are read without running code, so
+# every module the step imports (an import statement that runs, even of
+# a module already loaded) is recorded too, apart from the code that
+# ran: module_closures takes the scripts a file names only from files
+# that ran.
 # ================
-def record_reads(run):
+def record_run(run):
 	global _hook_installed
 	if not _hook_installed:
 		sys.addaudithook(audit_hook)
 		_hook_installed = True
 	reads: set[str] = set()
+	ran: set[str] = set()
+	imported: set[str] = set()
+	monitoring = sys.monitoring
+
+	def started(code, offset):
+		ran.add(code.co_filename)
+		return monitoring.DISABLE
+
+	original_import = builtins.__import__
+
+	def recording_import(name, globals=None, locals=None, fromlist=(), level=0):
+		module = original_import(name, globals, locals, fromlist, level)
+		imported.add(module.__name__.partition(".")[0] if level else name.partition(".")[0])
+		return module
+
+	monitoring.use_tool_id(CODE_TOOL, "variant-steps")
+	monitoring.register_callback(CODE_TOOL, monitoring.events.PY_START, started)
+	monitoring.set_events(CODE_TOOL, monitoring.events.PY_START)
+	# Code a previous step already reported was switched off; this step
+	# must see it again.
+	monitoring.restart_events()
 	_recording["reads"] = reads
+	builtins.__import__ = recording_import
 	try:
-		return run(), reads
+		value = run()
 	finally:
+		builtins.__import__ = original_import
 		_recording["reads"] = None
+		monitoring.set_events(CODE_TOOL, 0)
+		monitoring.register_callback(CODE_TOOL, monitoring.events.PY_START, None)
+		monitoring.free_tool_id(CODE_TOOL)
+	own = str(Path(__file__).resolve())
+
+	def own_code(paths):
+		return {str(Path(path).resolve()) for path in paths if path and not is_installed_code(path)} - {own}
+
+	code = own_code(ran)
+	modules = own_code(getattr(sys.modules.get(name), "__file__", None) for name in imported) - code
+	return value, reads, sorted(code), sorted(modules)
 
 
 #============================================================================
@@ -258,12 +362,18 @@ class Unrecordable(Exception):
 	"""A summary holds a type the journal cannot carry."""
 
 
+# The single-key dicts encode_result writes in place of a value.
+RESULT_MARKERS = ({"@bytes"}, {"@tuple"}, {"@pairs"})
+
+
 # ================
 # encode_result
 #
-# JSON, with bytes held as blobs and tuples kept tuples. Anything else
-# the journal cannot hold raises Unrecordable, and the step just runs
-# on every build.
+# JSON, with bytes held as blobs and tuples kept tuples. A dict keyed by
+# anything but strings (the skill summary's counts by mastery), or one
+# whose keys would read as a marker, is held as its pairs, so it comes
+# back with the same keys. Anything else the journal cannot hold raises
+# Unrecordable, and the step runs on every build and says why.
 # ================
 def encode_result(value, variant_root: Path):
 	if value is None or isinstance(value, (bool, int, float, str)):
@@ -275,12 +385,13 @@ def encode_result(value, variant_root: Path):
 	if isinstance(value, list):
 		return [encode_result(item, variant_root) for item in value]
 	if isinstance(value, dict):
-		encoded = {}
-		for key, item in value.items():
-			if not isinstance(key, str):
+		if all(isinstance(key, str) for key in value) and set(value) not in RESULT_MARKERS:
+			return {key: encode_result(item, variant_root) for key, item in value.items()}
+		for key in value:
+			if key is not None and not isinstance(key, (bool, int, float, str, tuple)):
 				raise Unrecordable(f"a summary key of type {type(key).__name__}")
-			encoded[key] = encode_result(item, variant_root)
-		return encoded
+		return {"@pairs": [[encode_result(key, variant_root), encode_result(item, variant_root)]
+			for key, item in value.items()]}
 	raise Unrecordable(f"a summary value of type {type(value).__name__}")
 
 
@@ -293,6 +404,9 @@ def decode_result(value, variant_root: Path):
 			return blob_path(variant_root, value["@bytes"]).read_bytes()
 		if set(value) == {"@tuple"}:
 			return tuple(decode_result(item, variant_root) for item in value["@tuple"])
+		if set(value) == {"@pairs"}:
+			return {decode_result(key, variant_root): decode_result(item, variant_root)
+				for key, item in value["@pairs"]}
 		return {key: decode_result(item, variant_root) for key, item in value.items()}
 	if isinstance(value, list):
 		return [decode_result(item, variant_root) for item in value]
@@ -354,6 +468,41 @@ def chain(state: str, rows: list[list]) -> str:
 	return hashlib.sha256(f"{state}\0{effect_digest(rows)}".encode("ascii")).hexdigest()
 
 
+# ================
+# parts_key
+#
+# A step's key from its name and its key parts, in a fixed order.
+# ================
+def parts_key(name: str, parts: dict) -> str:
+	ordered = [name] + [parts[part] for part in ("arguments", "later", "code", "sources", "state")]
+	return hashlib.sha256("\0".join(ordered).encode("utf-8")).hexdigest()
+
+
+# ================
+# arguments_digest
+#
+# A step's own arguments by value, so a flag the builder reads for it
+# (the shops' port_stock) keys the step that receives it. Paths key as
+# their text, bytes by content, sets in order.
+# ================
+def arguments_digest(values) -> str:
+	def plain(value):
+		if isinstance(value, Path):
+			return {"@path": str(value)}
+		if isinstance(value, bytes):
+			return {"@bytes": hashlib.sha256(value).hexdigest()}
+		if isinstance(value, (tuple, list)):
+			return [plain(item) for item in value]
+		if isinstance(value, (set, frozenset)):
+			return {"@set": sorted(json.dumps(plain(item), sort_keys=True) for item in value)}
+		if isinstance(value, dict):
+			return {str(key): plain(item) for key, item in value.items()}
+		if value is None or isinstance(value, (bool, int, float, str)):
+			return value
+		raise Unrecordable(f"a step argument of type {type(value).__name__}")
+	return hashlib.sha256(json.dumps(plain(values), sort_keys=True).encode("utf-8")).hexdigest()
+
+
 #============================================================================
 # The runner
 #============================================================================
@@ -377,6 +526,8 @@ class Runner:
 		# stamp resolve this checkout itself (the step tests key a
 		# scratch repository instead).
 		self.repository_root = None if repository_root is None else Path(repository_root)
+		# The checkout code locations are relative to.
+		self.code_root = REPO_ROOT if repository_root is None else Path(repository_root)
 		self.steps: list[dict] = []
 		self.journal: list[dict] | None = None
 		self.arguments: dict | None = None
@@ -385,20 +536,27 @@ class Runner:
 		self.state = EMPTY_STATE
 		self.records: list[dict] = []
 		self._root_fingerprints: dict[str, str] = {}
-		self._code_keys: dict[str, str] = {}
+		self._code_keys: dict[tuple[str, ...], str] = {}
 
 	# ================
 	# register
 	#
-	# code_from names the function whose module the step's code lives
-	# in, when the callable itself is a closure in the builder. roots
-	# names source roots the step reads without opening files under
-	# them (the base step links and walks the native tree): they are
-	# fingerprinted into its key on every build, audited or not.
+	# A step is a function and the arguments it is called with, never a
+	# closure in the builder: the builder's code would then run inside
+	# every step and key all of them (#4251). arguments are known now
+	# and key the step by value; later is called just before the step
+	# runs, outside the recorder, for the arguments an earlier step's
+	# result supplies (the chain state answers for those). roots names
+	# source roots the step reads without opening files under them (the
+	# base step links and walks the native tree): they are fingerprinted
+	# into its key on every build, audited or not.
 	# ================
-	def register(self, name: str, run, code_from=None, roots=()):
+	def register(self, name: str, function, arguments=(), later=None, roots=()):
 		self.steps.append({
-			"name": name, "run": run, "code_from": code_from or run,
+			# Digested now: an argument the key cannot hold fails at
+			# registration, not halfway through a build.
+			"name": name, "function": function, "arguments": tuple(arguments), "later": later,
+			"argumentsKey": arguments_digest(tuple(arguments)),
 			"roots": [str(Path(root).resolve()) for root in roots],
 		})
 
@@ -435,26 +593,66 @@ class Runner:
 		return self._root_fingerprints[key]
 
 	# ================
-	# step_code_key
+	# recorded_code_key
 	#
-	# Keyed by the module file, so steps living in one module share a
-	# single closure computation.
+	# The key of the code a step's last run ran and imported, as this
+	# checkout holds it now: those files, what they import at module
+	# level, the pins beside them, and the scripts the files that ran name
+	# (variant_stamp.module_closures). Steps with the same record share one
+	# closure computation.
 	# ================
-	def step_code_key(self, step: dict) -> str:
-		seed = module_file(step["code_from"].__module__) or Path(__file__)
-		key = str(seed)
+	def recorded_code_key(self, ran: list[str], imported: list[str] = ()) -> str:
+		key = (tuple(ran), tuple(imported))
 		if key not in self._code_keys:
-			self._code_keys[key] = code_key(code_files(seed, self.repository_root), self.environ)
+			self.key_code([key])
 		return self._code_keys[key]
 
 	# ================
-	# reads_key
+	# key_code
+	#
+	# The code keys of these (ran, imported) records, in one closure
+	# computation for all of them (variant_stamp.module_closures). A file
+	# a record names that is gone keys as gone (code_key).
+	# ================
+	def key_code(self, keys: list[tuple]):
+		records = []
+		for ran, imported in keys:
+			records.append((
+				[code_path(location, self.code_root) for location in ran],
+				[code_path(location, self.code_root) for location in imported],
+			))
+		closures = variant_stamp.module_closures(
+			[([f for f in ran if f.is_file()], [f for f in imported if f.is_file()]) for ran, imported in records],
+			self.repository_root,
+		)
+		for key, (ran, imported), closure in zip(keys, records, closures):
+			files = set(closure) | set(ran) | set(imported)
+			self._code_keys[key] = code_key(sorted(files), self.code_root, self.environ, frozenset(key[0]))
+
+	# ================
+	# key_journal_code
+	#
+	# Every journaled step's code key at once, before begin or explain
+	# walks the steps: one Node start for the build instead of one a step.
+	# ================
+	def key_journal_code(self):
+		keys = []
+		for entry in self.journal or []:
+			reads = entry.get("reads") or {}
+			key = (tuple(reads.get("code", [])), tuple(reads.get("imported", [])))
+			if key not in self._code_keys and key not in keys:
+				keys.append(key)
+		if keys:
+			self.key_code(keys)
+
+	# ================
+	# sources_key
 	#
 	# What a step's recorded reads cost now: each source root it read
 	# under, refingerprinted, and each loose file outside them, taken
 	# again. A step with no record reads as a sentinel nothing matches.
 	# ================
-	def reads_key(self, recorded: dict | None) -> str:
+	def sources_key(self, recorded: dict | None) -> str:
 		if recorded is None:
 			return "unrecorded"
 		digest = hashlib.sha256()
@@ -469,44 +667,101 @@ class Runner:
 	# ================
 	# classify_reads
 	#
-	# A run's raw read paths as the journal holds them: the source roots
-	# touched, and the loose files (the pins beside the code, a named
-	# source file), each with the key it must keep.
+	# A run's raw read paths and code as the journal holds them: the
+	# source roots touched; the code it ran with every checkout data file
+	# it opened (a pin, a table beside the code), and the modules it only
+	# imported with every checkout .py the importer opened, both by
+	# checkout-relative location, so a fresh freeze checkout keys the
+	# same; and the loose files outside both, each with the key it must
+	# keep. Compiled caches (__pycache__) follow their source and are not
+	# recorded.
 	# ================
-	def classify_reads(self, reads: set[str]) -> dict:
+	def classify_reads(self, reads: set[str], code: list[str] = (), imported: list[str] = ()) -> dict:
 		own = str(self.variant.resolve())
-		stdlib = os.path.dirname(os.__file__)
+		checkout = self.code_root.resolve()
 		roots: set[str] = set()
 		files: dict[str, str] = {}
+		locations = {code_location(Path(path), checkout) for path in code}
+		modules = {code_location(Path(path), checkout) for path in imported}
 		for raw in reads:
 			try:
 				path = Path(raw).resolve()
 			except (OSError, RuntimeError):
 				continue
 			text = str(path)
-			if text.startswith(own) or text.startswith(stdlib):
+			if text.startswith(own) or is_installed_code(text) or "__pycache__" in path.parts:
 				continue
 			owner = next((root for root in self.roots if path == root or root in path.parents), None)
 			if owner is not None:
 				roots.add(str(owner))
+			elif checkout == path or checkout in path.parents:
+				if path.is_file():
+					# A module's source is opened by its import, which is not a
+					# sign it ran; monitoring says which code did.
+					(modules if path.suffix == ".py" else locations).add(code_location(path, checkout))
 			elif path.is_file():
 				files[text] = variant_stamp.file_key(path, True)
-		return {"roots": sorted(roots), "files": files}
+		return {
+			"roots": sorted(roots), "code": sorted(locations), "imported": sorted(modules - locations),
+			"files": files,
+		}
+
+	# ================
+	# key_parts
+	#
+	# What a step's key is made of, by name, so a stale step can say which
+	# part moved (explain): its arguments, those an earlier step's result
+	# supplied (later_key), its code, its sources, and the chain state in
+	# front of it.
+	# ================
+	def key_parts(self, step: dict, recorded_reads: dict | None, state: str, later_key: str = "") -> dict:
+		if recorded_reads is not None and step["roots"]:
+			recorded_reads = {
+				**recorded_reads,
+				"roots": sorted(set(recorded_reads.get("roots", [])) | set(step["roots"])),
+			}
+		code = "unrecorded" if recorded_reads is None else self.recorded_code_key(
+			recorded_reads.get("code", []), recorded_reads.get("imported", [])
+		)
+		return {
+			"arguments": step["argumentsKey"], "later": later_key, "code": code,
+			"sources": self.sources_key(recorded_reads), "state": state,
+		}
 
 	# ================
 	# key_of
 	#
-	# The key a step must match to skip, from its recorded reads and
-	# the chain state in front of it.
+	# The key a step must match to skip: its name and its key parts.
 	# ================
-	def key_of(self, step: dict, recorded_reads: dict | None, state: str) -> str:
-		if recorded_reads is not None and step["roots"]:
-			recorded_reads = {
-				"roots": sorted(set(recorded_reads.get("roots", [])) | set(step["roots"])),
-				"files": recorded_reads.get("files", {}),
-			}
-		parts = [step["name"], self.step_code_key(step), self.reads_key(recorded_reads), state]
-		return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
+	def key_of(self, step: dict, recorded_reads: dict | None, state: str, later_key: str = "") -> str:
+		return parts_key(step["name"], self.key_parts(step, recorded_reads, state, later_key))
+
+	# ================
+	# explain
+	#
+	# The smoke for a code change (#4251): with the journal loaded and
+	# before begin, each step's verdict as begin would reach it - current,
+	# or stale with the key parts that moved - in seconds, without
+	# building anything. A step after the first stale one is judged
+	# against the journal's chain, so it reads as it would if the earlier
+	# ones came back byte-identical.
+	# ================
+	def explain(self) -> list[tuple[str, str]]:
+		if self.journal is None:
+			return [(step["name"], "no usable journal: every step runs") for step in self.steps]
+		lines = []
+		state = EMPTY_STATE
+		self.key_journal_code()
+		for step, entry in zip(self.steps, self.journal):
+			now = self.key_parts(step, entry.get("reads"), state, entry.get("laterKey", ""))
+			if parts_key(step["name"], now) == entry.get("key"):
+				lines.append((step["name"], "current"))
+			else:
+				was = entry.get("parts") or {}
+				moved = [name for name in now if was.get(name) != now[name]] if was else ["result not journaled"]
+				lines.append((step["name"], "stale: " + ", ".join(moved)))
+			state = chain(state, entry["effect"])
+		return lines
 
 	# ================
 	# begin
@@ -523,8 +778,11 @@ class Runner:
 			return
 		first = len(self.steps)
 		state = EMPTY_STATE
+		self.key_journal_code()
 		for index, (step, entry) in enumerate(zip(self.steps, self.journal)):
-			if entry.get("key") != self.key_of(step, entry.get("reads"), state):
+			# Over a prefix that still matches, every earlier result is the
+			# journal's, so the arguments they supplied are the recorded ones.
+			if entry.get("key") != self.key_of(step, entry.get("reads"), state, entry.get("laterKey", "")):
 				first = index
 				break
 			state = chain(state, entry["effect"])
@@ -649,7 +907,10 @@ class Runner:
 			self.state = chain(self.state, entry["effect"])
 			self.records.append(entry)
 			return decode_result(entry["result"], self.variant), "current"
-		if entry is not None and entry.get("key") == self.key_of(step, entry.get("reads"), self.state):
+		# Every earlier step is settled, so their results are in hand.
+		later = tuple(step["later"]()) if step["later"] else ()
+		later_key = arguments_digest(later) if later else ""
+		if entry is not None and entry.get("key") == self.key_of(step, entry.get("reads"), self.state, later_key):
 			for relative, sha in entry["effect"]:
 				target = self.variant / relative
 				if sha is None:
@@ -659,18 +920,24 @@ class Runner:
 			self.state = chain(self.state, entry["effect"])
 			self.records.append(entry)
 			return decode_result(entry["result"], self.variant), "replayed"
+		arguments = step["arguments"] + later
 		before = snapshot(self.variant)
-		value, reads = record_reads(step["run"])
+		value, reads, code, imported = record_run(lambda: step["function"](*arguments))
 		effect = effect_between(self.variant, before, snapshot(self.variant))
-		classified = self.classify_reads(reads)
+		classified = self.classify_reads(reads, code, imported)
 		try:
 			encoded = encode_result(value, self.variant)
-			key = self.key_of(step, classified, self.state)
-		except Unrecordable:
-			encoded, key = None, None
+			parts = self.key_parts(step, classified, self.state, later_key)
+			key = parts_key(step["name"], parts)
+		except Unrecordable as refusal:
+			# Said, not silent: the skills step reran on every build for an
+			# int-keyed summary nobody saw (#4251).
+			print(f"step {step['name']}: not journaled ({refusal}); it runs on every build", flush=True)
+			encoded, key, parts = None, None, None
 		self.state = chain(self.state, effect)
 		self.records.append({
-			"name": step["name"], "key": key, "reads": classified, "effect": effect, "result": encoded,
+			"name": step["name"], "key": key, "parts": parts, "reads": classified, "effect": effect,
+			"result": encoded, "laterKey": later_key,
 		})
 		return value, "ran"
 

@@ -49,7 +49,7 @@ import struct
 from contextlib import ExitStack
 from pathlib import Path
 
-import build_alexandria_variant as variant
+import variant_files as variant
 import import_vsro_alexandria as tables
 import sro_pk2
 from cap110_item_import import FOLDERS, copy_resource_closure, normalized_path

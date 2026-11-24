@@ -84,14 +84,19 @@ SOURCE_VARIABLE = re.compile(r"SRO_\w+_(?:ROOT|ZIP|DATABASE|NESTS)")
 OUTPUT_ROOTS = frozenset(("SRO_GAME_ROOT", "SRO_GENERATED_ROOT", "SRO_SERVER_GAME_DATA_ROOT", SHARED_CACHE_ROOT_ENV))
 # A single source file up to this size is hashed by content, not stat.
 SMALL_FILE = 64 << 20
-# Calls one export of codeStamp.mjs on an entry file and prints its
-# result; the repository root is passed only by callers keying a tree
-# other than this checkout (the variant step tests).
+# Calls one export of codeStamp.mjs and prints its result. Its arguments
+# (the entry - a file, or the files a step ran - and any after the
+# repository root) arrive as JSON on stdin, so a step that ran a hundred
+# files never meets the command line's length limit; the repository root
+# is passed only by callers keying a tree other than this checkout (the
+# variant step tests).
 CODE_STAMP_SCRIPT = (
 	"const { pathToFileURL } = await import( 'node:url' );"
-	"const [ owner, name, entry, root ] = process.argv.slice( 1 );"
+	"const { readFileSync } = await import( 'node:fs' );"
+	"const [ owner, name, root ] = process.argv.slice( 1 );"
+	"const [ entry, ...rest ] = JSON.parse( readFileSync( 0, 'utf8' ) );"
 	"const stamp = await import( pathToFileURL( owner ).href );"
-	"console.log( JSON.stringify( await stamp[name]( entry, root || undefined ) ) );"
+	"console.log( JSON.stringify( await stamp[name]( entry, root || undefined, ...rest ) ) );"
 )
 
 
@@ -111,12 +116,15 @@ def stamp_path(variant_root: Path) -> Path:
 # module). The entry defaults to the builder; the step journal keys each
 # step from its own module through here (variant_steps.py).
 # ================
-def code_stamp(export: str, entry: Path = BUILDER, repository_root: Path | None = None):
-	argv = ["node", "--input-type=module", "-e", CODE_STAMP_SCRIPT, str(CODE_STAMP), export, str(entry)]
+def code_stamp(export: str, entry=BUILDER, repository_root: Path | None = None, rest=()):
+	argv = ["node", "--input-type=module", "-e", CODE_STAMP_SCRIPT, str(CODE_STAMP), export]
 	if repository_root is not None:
 		argv.append(str(repository_root))
+	def plain(value):
+		return [plain(item) for item in value] if isinstance(value, (list, tuple)) else str(value)
 	result = subprocess.run(
-		argv, cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8", check=False
+		argv, cwd=REPO_ROOT, input=json.dumps([plain(entry)] + [plain(item) for item in rest]),
+		capture_output=True, text=True, encoding="utf-8", check=False
 	)
 	if result.returncode != 0:
 		raise SystemExit(f"variant stamp: {export} failed (exit {result.returncode}):\n{result.stderr}")
@@ -128,6 +136,20 @@ def code_stamp(export: str, entry: Path = BUILDER, repository_root: Path | None 
 # ================
 def code_closure(entry: Path = BUILDER, repository_root: Path | None = None) -> list[Path]:
 	return [Path(file) for file in code_stamp("codeClosure", entry, repository_root)]
+
+
+# ================
+# module_closures
+#
+# codeStamp's moduleClosures: for each (ran, imported) record of a step,
+# what it ran and imported, their module-level imports and the pins beside
+# them, and the scripts the files that ran name - every record in one Node
+# start.
+# ================
+def module_closures(records: list[tuple], repository_root: Path | None = None) -> list[list[Path]]:
+	if not records:
+		return []
+	return [[Path(file) for file in closure] for closure in code_stamp("moduleClosures", records, repository_root)]
 
 
 # ================

@@ -33,7 +33,6 @@ import os
 from pathlib import Path
 
 import alexandria_npcs as characters
-import build_alexandria_variant as variant
 import variant_gates
 import cap110_item_import as item_import
 import cap110_items as items

@@ -18,7 +18,7 @@ import re
 import alexandria_npcs as text_tables
 import import_vsro_alexandria as tables
 import published_ids
-from build_alexandria_variant import native_text_row
+from alexandria_map_tables import native_text_row
 
 ITEM_COLUMNS = 160
 SERVICE = 0

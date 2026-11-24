@@ -49,7 +49,7 @@ without its key - and the build log says so.
 
 The teleport, building, link and name tables need no reap: the
 Alexandria stage rewrites them from the native bytes on every build
-before this pass runs (build_alexandria_variant: add_gates, add_map),
+before this pass runs (variant_gates.add_gates, alexandria_map_tables.add_map),
 as it does the two map catalogs merge_world documents. The region
 merge's files are enrolled in the marker and reaped off.
 
@@ -95,7 +95,7 @@ import re
 from pathlib import Path
 
 import alexandria_npcs as characters
-import build_alexandria_variant as variant
+import variant_files as variant
 import variant_gates
 import cap110_items
 import cap110_monsters as cap110

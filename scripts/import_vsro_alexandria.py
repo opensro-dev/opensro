@@ -53,7 +53,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sro_pk2  # noqa: E402
 from pin_file import read_pin_field  # noqa: E402
 import state_document  # noqa: E402
-from prepare_client_resources import file_digest, safe_target, write_atomically  # noqa: E402
+from prepare_client_resources import file_digest, log, safe_target, write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT, shared_cache_path  # noqa: E402
 
 FLAG_ENV = "SRO_ALEXANDRIA"
@@ -80,7 +80,7 @@ CITY_GATE_PREFIX = "GATE_SD"
 CITY_GATE_EXTRA = ("GATE_NPC_SD_M_AREA_FERRY",)
 # Port-only, not native: the far ends of the city's two outdoor crossings
 # (Delta West to Kings Valley, Delta East to the Storm Desert), which the
-# variant links (build_alexandria_variant GATE_CODES). Their regions seed
+# variant links (variant_gates.GATE_CODES). Their regions seed
 # terrain components like the field's, so a crossing never lands on a
 # region the client has no terrain for.
 CROSSING_GATE_CODES = ("GATE_STORMDESERT_GATE", "GATE_KINGSVALLEY_GATE")
@@ -119,10 +119,6 @@ PLACEHOLDER_TILE = re.compile(r"^x+\.ddj$", re.IGNORECASE)
 TILE_ROW = re.compile(r'^(\d+)\s+(0x[0-9a-fA-F]+|\d+)\s+"([^"]*)"\s+"([^"]*)"')
 OBJECT_ROW = re.compile(r'^(\d+)\s+(0x[0-9a-fA-F]+|\d+)\s+"([^"]*)"')
 HASH_CHUNK = 1 << 20
-
-
-def log(message):
-	print(message, flush=True)
 
 
 #============================================================================

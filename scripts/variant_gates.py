@@ -7,16 +7,20 @@ The gate rows the variant carries (the city's gates and ferry, the
 authored crossings, the tomb and temple gates behind their flags), the
 level cap their conditions are clamped to, and the pure merge of the
 VSRO teleportdata, teleportbuilding and teleportlink rows into the native
-tables. Pure functions over table bytes: build_alexandria_variant.add_gates
-reads the tables and writes the merge, and the later importers (Arabia,
-Roc, Sky Temple, the cap-110 quests) reuse the merge for their own gates.
-Split out of build_alexandria_variant.py, which kept the file writing.
+tables. The merge is pure functions over table bytes; the gates step
+(add_gates, at the end) reads the tables and writes the merge, and the
+later importers (Arabia, Roc, Sky Temple, the cap-110 quests) reuse the
+merge for their own gates. Split out of build_alexandria_variant.py; the
+step moved here too, so its key is this module's code (#4251).
 
 ===========================================================================
 """
 import os
 
 import import_vsro_alexandria as stage1
+from pathlib import Path
+
+from variant_files import TEXTDATA, log, log_omitted_links, read_vsro_file, replace_file
 import pharaoh_temple as temple
 import published_ids
 from alexandria_map_tables import append_rows, native_text_row
@@ -338,3 +342,39 @@ def gate_level_cap(environ=None):
 	if value in LEVEL_CAP_EXPANSION_VALUES:
 		return EXPANSION_LEVEL_CAP
 	raise ValueError(f"{LEVEL_CAP_FLAG} must be off, 90 or 110, not {value!r}")
+
+
+#============================================================================
+# The gates step
+#============================================================================
+
+
+# ================
+# add_gates
+# ================
+def add_gates(vsro_root, native, out):
+	"""Write the gate rows into the variant's textdata; returns their summary and tables."""
+	level_cap = gate_level_cap()
+	textdata = Path("Media_extracted") / TEXTDATA
+	names = ("teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt")
+	tables = {name: (native / textdata / name).read_bytes() for name in names}
+	tables["text"] = (native / textdata / "textdataname.txt").read_bytes()
+	vsro = {name: read_vsro_file(vsro_root, "Media", TEXTDATA + name) for name in names}
+	vsro["text"] = read_vsro_file(vsro_root, "Media", TEXTDATA + "textdata_object.txt")
+	from cap110_monsters import tomb_enabled
+	codes = GATE_CODES + TOMB_GATE_CODES if tomb_enabled() else GATE_CODES
+	if temple.temple_enabled():
+		codes += TEMPLE_GATE_CODES
+	# The ids the buildings must not take: every object row of the trees,
+	# and every released id, whose items later steps add (the pin).
+	taken = published_ids.occupied_objects(native / textdata) | published_ids.taken_objects(out / textdata)
+	merged, summary = merge_gate_tables(
+		tables, vsro, codes=codes, level_cap=level_cap, flatten=TEMPLE_GATE_CODES, taken=taken
+	)
+	for dropped in summary.get("droppedConditions", []):
+		log(f"gates: link {dropped['from']} -> {dropped['to']}: condition kind {dropped['kind']} "
+			f"({', '.join(dropped['operands'])}) dropped; the v1.150 server has no evaluator for it")
+	log_omitted_links("gates", summary)
+	for name, content in merged.items():
+		replace_file(out / textdata / ("textdataname.txt" if name == "text" else name), content)
+	return summary, merged

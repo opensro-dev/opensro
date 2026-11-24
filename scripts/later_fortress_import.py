@@ -53,7 +53,7 @@ from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import alexandria_npcs as characters  # noqa: E402
-import build_alexandria_variant as variant  # noqa: E402
+import variant_files as variant  # noqa: E402
 import cap110_monsters as monsters  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
 import published_ids  # noqa: E402
