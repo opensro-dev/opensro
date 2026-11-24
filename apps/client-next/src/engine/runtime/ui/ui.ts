@@ -10669,8 +10669,9 @@ export function createUi( ports: UiPorts ) {
 					// a system message; content/locate are serviced at
 					// the control click itself.
 					for ( const action of questList.actions() ) {
-						if ( action.kind === "helper-full" )
+						if ( action.kind === "helper-full" ) {
 							hudMessages.append( hudCopy( "UIIT_CTL_QUEST_HELPER_FULL" ), 0xffff7070 );
+						}
 					}
 				}
 			}
