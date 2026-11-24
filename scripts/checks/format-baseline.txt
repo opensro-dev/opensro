@@ -53,7 +53,6 @@ apps/client-next/src/engine/foundation/gameplay/chat-blocks.ts
 apps/client-next/src/engine/foundation/gameplay/chat-feedback.ts
 apps/client-next/src/engine/foundation/gameplay/cos-behavior.ts
 apps/client-next/src/engine/foundation/gameplay/equipment-drop.ts
-apps/client-next/src/engine/foundation/gameplay/feedback-levels.ts
 apps/client-next/src/engine/foundation/gameplay/guide.ts
 apps/client-next/src/engine/foundation/gameplay/item-activation.ts
 apps/client-next/src/engine/foundation/gameplay/item-tooltip-reference.ts
