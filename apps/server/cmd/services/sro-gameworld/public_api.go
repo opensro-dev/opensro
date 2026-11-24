@@ -30,6 +30,7 @@ import (
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/market"
 	"opensro.online/server/internal/game/referral"
@@ -447,10 +448,6 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			return setPrivacyFlag(authority, shard, account, name, "public-gear-hidden", hidden,
 				func(c *domain.Character) *bool { return &c.PublicGearHidden })
 		},
-		SetBreakNotice: func(account, name string, on bool) error {
-			return setPrivacyFlag(authority, shard, account, name, "break-notice", on,
-				func(c *domain.Character) *bool { return &c.BreakNotice })
-		},
 		// The Contributor title's read and pick (port-only, not native; #135)
 		// reach the registry at call time (wiring_contributor.go): with
 		// SRO_CONTRIBUTOR_TITLES off there is none, and both answer not found.
@@ -496,6 +493,26 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			})
 		},
 		Events: func() []chatfeed.Line { return gameplay.chatFeed.Events(shard) },
+	}
+	// The account page's notice switches (#1738, #3682) exist only
+	// while their shard flag is on (#4305), read the way the in-game
+	// /plusfail switch reads it (wiring_plusfail.go): with the flag
+	// off the setter stays nil, so the route is never registered and
+	// the character row sends no field.
+	announce := action.AnnouncementsFromEnv()
+	if announce.Break {
+		sources.SetBreakNotice = func(account, name string, on bool) error {
+			return setPrivacyFlag(authority, shard, account, name, "break-notice", on,
+				func(c *domain.Character) *bool { return &c.BreakNotice })
+		}
+	}
+	if announce.PlusFail {
+		sources.SetPlusFailNotice = func(account, name string, on bool) error {
+			// The route carries the choice in its positive sense; the
+			// stored field is the opt-out (#3682).
+			return setPrivacyFlag(authority, shard, account, name, "plus-fail-notice", !on,
+				func(c *domain.Character) *bool { return &c.PlusFailOptOut })
+		}
 	}
 	// The weekly seal board (#1641): a nil counter leaves the route
 	// unserved (404), which is SRO_SEAL_BOARD off.

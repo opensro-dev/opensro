@@ -58,6 +58,15 @@ func privacyService(f *fixture, token string) *Service {
 		}
 		return ErrNotOwned
 	}
+	s.src.SetPlusFailNotice = func(account, name string, on bool) error {
+		for _, c := range f.chars {
+			if strings.EqualFold(c.Name, name) && c.AccountID == account {
+				c.PlusFailOptOut = !on
+				return nil
+			}
+		}
+		return ErrNotOwned
+	}
 	return s
 }
 
@@ -289,11 +298,132 @@ func TestBreakNoticeOptInWritesAtOnce(t *testing.T) {
 	request.Header.Set("Authorization", "Bearer "+testWriteToken)
 	s.Handler().ServeHTTP(rec, request)
 	var own OwnCharactersResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &own); err != nil || len(own.Characters) != 1 || !own.Characters[0].BreakNotice {
+	if err := json.Unmarshal(rec.Body.Bytes(), &own); err != nil || len(own.Characters) != 1 ||
+		own.Characters[0].BreakNotice == nil || !*own.Characters[0].BreakNotice {
 		t.Fatalf("own characters %s %v", rec.Body.String(), err)
 	}
 	if code := put(s, "/v1/accounts/alpha/characters/Kekw/break-notice", "", `{"on":false}`); code != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated write = %d", code)
+	}
+}
+
+/*
+================
+TestPlusFailNoticeOptOutWritesAtOnce
+
+#3682's announcement choice is on until the account page turns it off:
+the write carries "on" in its positive sense while the stored field
+is the opt-out, and the owner's list shows the choice at once. The
+route answers exactly like the break notice's: 404 across accounts,
+400 on a malformed body, 401 without the token.
+================
+*/
+func TestPlusFailNoticeOptOutWritesAtOnce(t *testing.T) {
+	f := newFixture()
+	s := privacyService(f, testWriteToken)
+	if code := put(s, "/v1/accounts/beta/characters/kekw/plus-fail-notice", testWriteToken, `{"on":false}`); code != http.StatusNotFound {
+		t.Fatalf("another account's write = %d, want 404", code)
+	}
+	if code := put(s, "/v1/accounts/alpha/characters/kekw/plus-fail-notice", testWriteToken, `{"onn":false}`); code != http.StatusBadRequest {
+		t.Fatalf("malformed body = %d, want 400", code)
+	}
+	ownCharacters := func() OwnCharactersResponse {
+		rec := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/v1/accounts/alpha/characters", nil)
+		request.Header.Set("Authorization", "Bearer "+testWriteToken)
+		s.Handler().ServeHTTP(rec, request)
+		var own OwnCharactersResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &own); err != nil || len(own.Characters) != 1 {
+			t.Fatalf("own characters %s %v", rec.Body.String(), err)
+		}
+		return own
+	}
+	if own := ownCharacters(); own.Characters[0].PlusFailNotice == nil || !*own.Characters[0].PlusFailNotice {
+		t.Fatalf("own characters %+v, want the announcements on by default", own.Characters)
+	}
+	if code := put(s, "/v1/accounts/alpha/characters/kekw/plus-fail-notice", testWriteToken, `{"on":false}`); code != http.StatusNoContent {
+		t.Fatalf("opt out = %d", code)
+	}
+	if !f.chars[0].PlusFailOptOut {
+		t.Fatal("the write left the stored opt-out off")
+	}
+	if own := ownCharacters(); own.Characters[0].PlusFailNotice == nil || *own.Characters[0].PlusFailNotice {
+		t.Fatalf("own characters %+v, want the announcements off at once", own.Characters)
+	}
+	if code := put(s, "/v1/accounts/alpha/characters/kekw/plus-fail-notice", testWriteToken, `{"on":true}`); code != http.StatusNoContent {
+		t.Fatalf("opt back in = %d", code)
+	}
+	if f.chars[0].PlusFailOptOut {
+		t.Fatal("the write left the stored opt-out on")
+	}
+	if code := put(s, "/v1/accounts/alpha/characters/Kekw/plus-fail-notice", "", `{"on":false}`); code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated write = %d", code)
+	}
+}
+
+/*
+================
+TestNoticeSwitchesFollowTheirShardFlags
+
+#4305: a notice setter wiring leaves nil while its shard flag is off
+(public_api.go reads action.AnnouncementsFromEnv), and the service
+answers for that exactly: the write route is not registered (404)
+and the character row sends no field, so the account page hides the
+switch. Each notice follows its own flag, independently.
+================
+*/
+func TestNoticeSwitchesFollowTheirShardFlags(t *testing.T) {
+	ownRow := func(s *Service) map[string]any {
+		rec := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/v1/accounts/alpha/characters", nil)
+		request.Header.Set("Authorization", "Bearer "+testWriteToken)
+		s.Handler().ServeHTTP(rec, request)
+		var own struct {
+			Characters []map[string]any `json:"characters"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &own); err != nil || len(own.Characters) != 1 {
+			t.Fatalf("own characters %s %v", rec.Body.String(), err)
+		}
+		return own.Characters[0]
+	}
+	for _, tc := range []struct {
+		name       string
+		breakOn    bool
+		plusFailOn bool
+	}{
+		{"both flags off", false, false},
+		{"break on, plus fail off", true, false},
+		{"break off, plus fail on", false, true},
+	} {
+		f := newFixture()
+		s := privacyService(f, testWriteToken)
+		if !tc.breakOn {
+			s.src.SetBreakNotice = nil
+		}
+		if !tc.plusFailOn {
+			s.src.SetPlusFailNotice = nil
+		}
+		row := ownRow(s)
+		if _, sent := row["breakNotice"]; sent != tc.breakOn {
+			t.Fatalf("%s: the row sent breakNotice = %v, want sent = %v (%v)", tc.name, sent, tc.breakOn, row)
+		}
+		if _, sent := row["plusFailNotice"]; sent != tc.plusFailOn {
+			t.Fatalf("%s: the row sent plusFailNotice = %v, want sent = %v (%v)", tc.name, sent, tc.plusFailOn, row)
+		}
+		breakCode := put(s, "/v1/accounts/alpha/characters/kekw/break-notice", testWriteToken, `{"on":true}`)
+		if tc.breakOn && breakCode != http.StatusNoContent {
+			t.Fatalf("%s: break-notice write = %d, want 204", tc.name, breakCode)
+		}
+		if !tc.breakOn && breakCode != http.StatusNotFound {
+			t.Fatalf("%s: break-notice write = %d, want 404 (unregistered)", tc.name, breakCode)
+		}
+		plusFailCode := put(s, "/v1/accounts/alpha/characters/kekw/plus-fail-notice", testWriteToken, `{"on":true}`)
+		if tc.plusFailOn && plusFailCode != http.StatusNoContent {
+			t.Fatalf("%s: plus-fail-notice write = %d, want 204", tc.name, plusFailCode)
+		}
+		if !tc.plusFailOn && plusFailCode != http.StatusNotFound {
+			t.Fatalf("%s: plus-fail-notice write = %d, want 404 (unregistered)", tc.name, plusFailCode)
+		}
 	}
 }
 

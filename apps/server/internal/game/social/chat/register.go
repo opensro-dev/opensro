@@ -96,6 +96,19 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 				}
 			}
 		}
+		// Port-only, not native (#3682): a /plusfail line sets whether
+		// the speaker's failed high-plus reinforcements are announced
+		// and is consumed the same way. With no setter wired the line
+		// falls through as ordinary chat.
+		if rt.PlusFailNotice != nil {
+			if request, err := DecodeChatRequestWithLinks(payload); err == nil {
+				if answer, handled := PlusFailCommand(character, request.Message, rt.PlusFailNotice); handled {
+					_ = s.Send(OpChatAck, EncodeChatAckSuccess(request.ChatType, request.Second))
+					_ = s.Send(OpChatBroadcast, EncodeChatNotice(answer))
+					return
+				}
+			}
+		}
 		// Port-only, not native (#2959): a /report line is consumed
 		// whole - the reporter gets the ack and one notice line, and
 		// nothing reaches the room, the transcript or the feed. With

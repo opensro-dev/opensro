@@ -9,7 +9,6 @@ rows[].magicOptions
 rows[].plus
 rows[].recordId
 rows[].refObjId
-rows[].rentExpiresUnix
 rows[].slot
 rows[].stackCount
 rows[].summon

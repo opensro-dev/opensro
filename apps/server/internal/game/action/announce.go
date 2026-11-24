@@ -32,11 +32,15 @@ GameWorld's Nomad job turns them on:
 	                          committed Magic Pop win (#2852); the native
 	                          0x30C0 banner is unchanged either way.
 	SRO_ANNOUNCE_PLUS_FAIL  "[<alias>] has failed in augmenting <<item>> to [+N]: ..."
-	                          for an opted-in character's failed reinforce at
+	                          for a failed reinforce at
 	                          SRO_ANNOUNCE_PLUS_FAIL_MIN (default 9) or
-	                          above (#2852; #1738's alias rule: never a
-	                          character name; rides the break channel,
-	                          its chat line linking the item, #3260).
+	                          above, unless the character opted out on the
+	                          account page or with "/plusfail off"
+	                          (#2852 as an opt-in on the break notice's
+	                          field; #3682 made it an opt-out of its own;
+	                          #1738's alias rule: never a character name;
+	                          rides the break channel, its chat line
+	                          linking the item, #3260).
 
 A notice is the native notification packet the operator notices use
 (wire.NotificationFrame), sent to every session of the division and kept
@@ -94,9 +98,10 @@ const (
 	// committed Magic Pop win (#2852). The native win banner (0x30C0)
 	// carries no winner and is sent either way.
 	EnvAnnounceGachaWin = "SRO_ANNOUNCE_GACHA_WIN"
-	// EnvAnnouncePlusFail announces an opted-in character's failed
-	// reinforce at or above EnvAnnouncePlusFailMin, by job alias
-	// (#2852; failures keep #1738's alias-only, opt-in rule).
+	// EnvAnnouncePlusFail announces a failed reinforce at or above
+	// EnvAnnouncePlusFailMin, by job alias, unless the character opted
+	// out (#2852 on the break notice's opt-in; #3682 made it an opt-out
+	// of its own, plusFailOptOut; failures keep #1738's alias-only rule).
 	EnvAnnouncePlusFail = "SRO_ANNOUNCE_PLUS_FAIL"
 	// EnvAnnouncePlusFailMin is the lowest attempted plus (the plus
 	// before the attempt, +1) a failure notice announces.
@@ -648,15 +653,18 @@ func announceAlias(character *enterworld.Character) string {
 ================
 Runtime.announcePlusFail
 
-#2852 (port-only, not native): a failed reinforce whose attempted plus
-(the plus before the attempt, +1, outcome.From) reaches
-SRO_ANNOUNCE_PLUS_FAIL_MIN, when the shard flag is on AND the character
-opted in on the account page - the break notice's opt-in
-(character.BreakNotice) and its privacy rule: the job alias or
-"a player", never the character name. The line takes the success
-line's later-client wording (#3260): "[<alias>] has failed in
-augmenting <<item>> to [+N]", and still names the outcome after it:
-destroyed, saved by its Immortal option, or dropped to its new plus.
+#2852 (port-only, not native), opt-out since #3682 (owner decision
+2026-11-14): a failed reinforce whose attempted plus (the plus before
+the attempt, +1, outcome.From) reaches SRO_ANNOUNCE_PLUS_FAIL_MIN is
+announced when the shard flag is on, unless the character opted out -
+character.PlusFailOptOut, set on the account page or with "/plusfail
+off" in game. (It rode the break notice's opt-in, character.BreakNotice,
+until #3682 gave it a field of its own; the break notice keeps that
+opt-in.) The privacy rule is #1738's: the job alias or "a player",
+never the character name. The line takes the success line's
+later-client wording (#3260): "[<alias>] has failed in augmenting
+<<item>> to [+N]", and still names the outcome after it: destroyed,
+saved by its Immortal option, or dropped to its new plus.
 The chat line links the item inside the <<>> - the item as it stands
 after the attempt, or, destroyed, the item as the door read it before
 the commit (target) - and links no player, so the alias cannot lead
@@ -669,7 +677,7 @@ reinforcement's outcome stands either way.
 ================
 */
 func (rt *Runtime) announcePlusFail(division string, character *enterworld.Character, target inventory.Item, outcome alchemy.Outcome, nowMs int64) bool {
-	if !rt.Announce.PlusFail || character == nil || !character.BreakNotice || outcome.Success {
+	if !rt.Announce.PlusFail || character == nil || character.PlusFailOptOut || outcome.Success {
 		return false
 	}
 	attempted := int(outcome.From) + 1

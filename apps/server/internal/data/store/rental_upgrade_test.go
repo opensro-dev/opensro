@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-rental_upgrade_test.go - the schema 51 step (per-item rentExpiresUnix)
+rental_upgrade_test.go - the schema 52 step (per-item rentExpiresUnix)
 
 ===========================================================================
 */
@@ -18,13 +18,13 @@ import (
 ================
 TestRentalUpgradeRewritesNothing
 
-A schema 50 authority at layout 15 upgrades to 51 with its records
+A schema 51 authority at layout 15 upgrades to 52 with its records
 untouched (the rental expiry is optional and absent, so every saved
 item is no rental); a second upgrade has nothing to do.
 ================
 */
 func TestRentalUpgradeRewritesNothing(t *testing.T) {
-	tier.Long(t, "a schema-50 layout-15 authority upgrades to 51 with its records untouched")
+	tier.Long(t, "a schema-51 layout-15 authority upgrades to 52 with its records untouched")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()
