@@ -24,6 +24,7 @@ import type { UniqueNotifySettings } from "@/engine/foundation/gameplay/unique-s
 import type { RawInput, WorldClickInput } from "@/engine/contracts/input";
 import { createNavigationStream } from "./navigation/navigation";
 import { createFrontend } from "./frontend/frontend";
+import { createWorldEntryGate, worldEntryLine } from "./frontend/world-entry-gate";
 import { createUi } from "./ui/ui";
 import { createAudio } from "./audio/audio";
 import { createCharacterPresentation } from "./characters/characters";
@@ -863,6 +864,8 @@ export function startRuntime(
 		}
 		let worldPointer: readonly [number, number] | null = null, hoveredEntity: number | null = null;
 		let readySent = false;
+		// What the world entry waits on, by name and time (world-entry-gate.ts).
+		const worldEntry = createWorldEntryGate();
 		// The display stopped asking for frames while the document stays visible.
 		let starved = false;
 		const world = own( createWorldStream( assets, renderer, new URL( "/", import.meta.url ).href, random ) );
@@ -1413,9 +1416,22 @@ export function startRuntime(
 				const worldStats = renderer.worldStats(),
 					localReady = characters.ready( presentation.gameplay()?.localGid ?? 0 ),
 					navReady = navigation.phase() === "ready",
-					baselineReady = characters.entryReady() && ui.entryReady();
-				const worldReady = world.ready() && worldStats.visibleGroups > 0 && worldStats.pendingGroups === 0 &&
-					worldStats.pendingTextures === 0 && localReady && navReady && audio.ready() && baselineReady;
+					characterBaseline = characters.entryReady(),
+					interfaceBaseline = ui.entryReady(),
+					baselineReady = characterBaseline && interfaceBaseline;
+				const entryConditions = {
+					"scene": world.ready(),
+					"visible groups": worldStats.visibleGroups > 0,
+					"group admission": worldStats.pendingGroups === 0,
+					"textures": worldStats.pendingTextures === 0,
+					"local character": localReady,
+					"navigation": navReady,
+					"audio": audio.ready(),
+					"character baseline": characterBaseline,
+					"interface baseline": interfaceBaseline
+				};
+				const worldReady = Object.values( entryConditions ).every( Boolean );
+				worldEntry.step( sessionState?.phase === "world" && !readySent, entryConditions, now );
 				const loadingProgress = sessionState?.phase !== "world" || !presentation.gameplay()?.localGid ?
 					0 :
 					worldReady ?
@@ -1642,7 +1658,8 @@ World: ${
 						world.error() ??
 							`${renderer.worldStats().visibleGroups} visible groups; ${renderer.worldStats().pendingTextures} pending textures`
 					}
-World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldStats().pendingGroups} pending groups` );
+World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldStats().pendingGroups} pending groups
+${worldEntryLine( worldEntry.report() )}` );
 				}
 				frameProbe()?.end();
 				raf = requestAnimationFrame( displayFrame );
@@ -1699,6 +1716,7 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 			gameplay: () => presentation.gameplay(),
 			entities: () => presentation.entities(),
 			berserkGauge: () => characters.orbGauge(),
+			worldEntry: () => worldEntry.report(),
 			characterActors: () => renderer.characterActors(),
 			characterStats: () => renderer.characterStats( true ),
 			characterCullCensus: () => renderer.characterStats( true, true ),

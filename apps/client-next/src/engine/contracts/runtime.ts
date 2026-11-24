@@ -481,6 +481,42 @@ RuntimeControl
 External controls enter through the runtime owner rather than mutating subsystems.
 ================
 */
+/*
+================
+WorldEntryCondition
+
+The conditions the loading screen holds on after world entry, as
+runtime.ts computes worldReady (frontend/world-entry-gate.ts keeps their
+timeline).
+================
+*/
+export type WorldEntryCondition =
+	| "scene"
+	| "visible groups"
+	| "group admission"
+	| "textures"
+	| "local character"
+	| "navigation"
+	| "audio"
+	| "character baseline"
+	| "interface baseline";
+
+/*
+================
+WorldEntryReport
+
+elapsedMs: since the entry began, frozen once every condition held.
+settledMs: when each condition last turned true after the entry began;
+absent while it is false.
+================
+*/
+export interface WorldEntryReport {
+	readonly ready: boolean;
+	readonly elapsedMs: number;
+	readonly waiting: readonly WorldEntryCondition[];
+	readonly settledMs: Readonly<Partial<Record<WorldEntryCondition, number>>>;
+}
+
 export interface RuntimeControl extends Disposable {
 	audioSnapshot(): import("./audio").AudioResidencySnapshot;
 	/** Bounded copied diagnostics; collecting them never waits for GPU readback. */
@@ -494,6 +530,8 @@ export interface RuntimeControl extends Disposable {
 	entities(): readonly import("./world").EntityState[];
 	/** The Berserk orb gauge the UI presents. */
 	berserkGauge(): import("./orb").BerserkGauge | undefined;
+	/** What the last world entry waited on, by condition and time; null before one. */
+	worldEntry(): WorldEntryReport | null;
 	/** The actors the renderer draws this frame. */
 	characterActors(): readonly import("./character").CharacterActor[];
 	/** Copied counters and retained-pose eligibility; does not advance animation. */
