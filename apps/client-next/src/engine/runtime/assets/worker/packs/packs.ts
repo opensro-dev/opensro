@@ -94,6 +94,18 @@ const RESIDENT_PACK_BYTES = 32 << 20;
 
 /*
 ================
+sharedLocks
+
+The origin's Web Locks, shared by every window and worker of the site,
+or null where the browser has none (tests, old engines).
+================
+*/
+function sharedLocks(): LockManager | null {
+	return typeof navigator !== "undefined" && navigator.locks ? navigator.locks : null;
+}
+
+/*
+================
 storedSizes
 
 The persistent store's size for every digest an index names: a pack is
@@ -127,6 +139,8 @@ export function createPacks(
 	type Loaded = { bytes: Uint8Array<ArrayBuffer>; start: number; };
 	let origin: string | null = null, index: Promise<Index> | null = null, disposed = false, residentBytes = 0;
 	const unpacked = new Set<string>();
+	// Store writes still in flight, by origin and digest (persistedMember).
+	const stores = new Map<string, Promise<void>>();
 	const loading = new Map<string, Promise<Loaded>>(), cache = new Map<string, Loaded>();
 	let storedBytes = 0, decodedBytes = 0, hashCalls = 0, hashBytes = 0;
 	// The texture variant this device is served, decided once (textureVariant).
@@ -223,19 +237,103 @@ export function createPacks(
 		// Checking and persisting them is shared work too: a read cancelled
 		// as the player moved on used to drop bytes it had already paid for,
 		// so the next visit downloaded them again.
-		const verified = blocks.read( base, descriptor, start, entry ).then( stored =>
-			persistedMember( base, entry, stored )
-		);
-		const bytes = await untilCancelled( verified, signal );
+		const bytes = await untilCancelled( sharedMember( base, descriptor, start, entry ), signal );
 		if ( disposed || signal.aborted ) throw Error( "Asset request cancelled" );
 		return bytes;
+	}
+	/*
+	================
+	sharedMember
+
+	A large pack's member read once for every window of the origin (#4268).
+	Game windows share the persistent store but not their in-flight reads:
+	five windows teleporting together each missed the same new area and
+	each downloaded every block of it, the same 1 MiB block up to eleven
+	times on one connection. The block's cross-window lock admits one
+	window at a time; the first fetches the block and stores all of its
+	members before it lets go, so the next finds its member stored.
+
+	The lock is optional: a browser without navigator.locks reads as a
+	lone window did before.
+	================
+	*/
+	function sharedMember( base: string, descriptor: PackDescriptor, start: number, entry: PackEntry ) {
+		const locks = sharedLocks();
+		if ( !locks ) return fetchedMember( base, descriptor, start, entry );
+		return new Promise<Uint8Array<ArrayBuffer>>( ( resolve, reject ) => {
+			locks.request(
+				blocks.blockName( base, descriptor, start, entry ),
+				{ signal: lifetime.signal },
+				async () => {
+					try {
+						// Another window may have stored it while this one waited.
+						const saved = await storedMember( base, entry );
+						if ( saved ) return resolve( saved );
+						resolve( await fetchedMember( base, descriptor, start, entry ) );
+						// Held until the block's members are stored: the window
+						// waiting next reads them instead of downloading again.
+						await storedNeighbours( base, descriptor, start, entry );
+					} catch ( error ) {
+						reject( error );
+					}
+				}
+			).catch( reject );
+		} );
+	}
+	/*
+	================
+	fetchedMember
+
+	A member read through its block, verified and queued for the store.
+	================
+	*/
+	async function fetchedMember( base: string, descriptor: PackDescriptor, start: number, entry: PackEntry ) {
+		const stored = await blocks.read( base, descriptor, start, entry );
+		return persistedMember( base, entry, stored );
+	}
+	/*
+	================
+	storedMember
+
+	A member's verified bytes from the persistent store, or null.
+	================
+	*/
+	async function storedMember( base: string, entry: PackEntry ) {
+		const saved = await persistent.read( base, entry.sha256, entry.length, lifetime.signal );
+		if ( !saved ) return null;
+		if ( await sha( saved ) === entry.sha256 ) return saved;
+		void persistent.remove( base, entry.sha256 );
+		return null;
+	}
+	/*
+	================
+	storedNeighbours
+
+	The entry's own store write and every other member of its resident
+	block, verified and written, before the block's lock is released. The
+	bytes are already paid for. A member that fails its check is left out
+	(the window that demands it reads it again), never an error here.
+	================
+	*/
+	async function storedNeighbours( base: string, descriptor: PackDescriptor, start: number, entry: PackEntry ) {
+		const writes = [ stores.get( base + "/" + entry.sha256 ) ];
+		for ( const neighbour of blocks.neighbours( base, descriptor, start, entry ) ) {
+			if ( disposed ) break;
+			if ( await persistent.has( base, neighbour.entry.sha256, lifetime.signal ) !== false ) continue;
+			try {
+				await persistedMember( base, neighbour.entry, neighbour.stored );
+				writes.push( stores.get( base + "/" + neighbour.entry.sha256 ) );
+			} catch {}
+		}
+		await Promise.all( writes );
 	}
 	/*
 	================
 	persistedMember
 
 	A large pack's member decoded, checked against the manifest's length
-	and SHA-256, and queued for the persistent store.
+	and SHA-256, and queued for the persistent store. The write stays in
+	`stores` until it settles, for the block lock to wait on.
 	================
 	*/
 	async function persistedMember( base: string, entry: PackEntry, stored: Uint8Array<ArrayBuffer> ) {
@@ -243,7 +341,13 @@ export function createPacks(
 		// A short or substituted body: wrong bytes, transient (#2337).
 		if ( bytes.length !== entry.length ) throw assetFailure( "Asset length disagrees with manifest", true );
 		if ( await sha( bytes ) !== entry.sha256 ) throw assetFailure( "Asset SHA-256 mismatch", true );
-		if ( !disposed ) persistent.enqueue( base, entry.sha256, bytes );
+		if ( !disposed ) {
+			const id = base + "/" + entry.sha256;
+			const write: Promise<void> = persistent.enqueue( base, entry.sha256, bytes ).finally( () => {
+				if ( stores.get( id ) === write ) stores.delete( id );
+			} );
+			stores.set( id, write );
+		}
 		return bytes;
 	}
 	/*

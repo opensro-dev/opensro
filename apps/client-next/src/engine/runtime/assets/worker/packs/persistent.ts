@@ -86,7 +86,8 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	let hits = 0, misses = 0, writes = 0, errors = 0, evictions = 0, queuedBytes = 0, skipped = 0;
 	// Set once the origin's quota cannot hold a pack (the header above).
 	let writesStopped = false;
-	const pending = new Set<string>(), touched = new Set<string>();
+	// Queued writes by key, each settling when its write has (enqueue).
+	const pending = new Map<string, Promise<void>>(), touched = new Set<string>();
 	// Operations past their deadline that have not settled yet. While any is
 	// open the store takes no new work: a stuck backend stays suspended, a
 	// slow one resumes when its late operation settles. A timeout fails only
@@ -608,25 +609,32 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		/*
 		================
 		enqueue
+
+		Queues verified bytes for the store. The promise settles (never
+		rejects) once the write has been tried or skipped: the admission
+		path ignores it, while a pack block shared across windows waits on
+		it so the next window finds the bytes stored (packs.ts sharedMember).
 		================
 		*/
-		enqueue( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ) {
+		enqueue( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ): Promise<void> {
 			const id = key( origin, digest );
-			if ( pending.has( id ) ) return;
+			const queued = pending.get( id );
+			if ( queued ) return queued;
 			if (
 				stalled > 0 || pending.size >= MAX_PENDING_WRITES ||
 				queuedBytes + bytes.length > MAX_QUEUED_BYTES
 			) {
 				skipped++;
-				return;
+				return Promise.resolve();
 			}
 			const owned = bytes.slice();
 			queuedBytes += owned.length;
-			pending.add( id );
-			void write( origin, digest, owned ).finally( () => {
+			const operation = write( origin, digest, owned ).finally( () => {
 				queuedBytes -= owned.length;
 				pending.delete( id );
 			} );
+			pending.set( id, operation );
+			return operation;
 		},
 		// The admitted manifest's startup packs and members: the entries eviction
 		// keeps. Replacing the set releases whatever only an older release named.
