@@ -37,7 +37,7 @@ function fakeHost( search, known ) {
 		picture: { clientWidth: 0, clientHeight: 0, addEventListener() {} },
 		search,
 		wake: () => wakes++,
-		renderer: { setViewerLight() {}, phase: () => "ready", setUi() {}, frame() {} },
+		renderer: { setViewerLight() {}, phase: () => "running", setUi() {}, frame() {} },
 		characters: {
 			receiveLifecycle: events => lifecycle.push( ...events ),
 			step() {},
@@ -132,7 +132,7 @@ function framingHost( search, known, glowing ) {
 		wake: () => {},
 		renderer: {
 			setViewerLight() {},
-			phase: () => "ready",
+			phase: () => "running",
 			setUi() {},
 			frame() {},
 			characterBounds: () => [ -1, 0, -1, 1, 2, 1 ],
@@ -187,7 +187,7 @@ function latchHost( search ) {
 		wake: () => {},
 		renderer: {
 			setViewerLight() {},
-			phase: () => "ready",
+			phase: () => "running",
 			setUi() {},
 			frame() {},
 			characterBounds: () => [ -1, 0, -1, 1, 2, 1 ],
@@ -320,7 +320,7 @@ function clockHost( search, loadFrames ) {
 		wake: () => {},
 		renderer: {
 			setViewerLight() {},
-			phase: () => "ready",
+			phase: () => "running",
 			setUi() {},
 			frame() {},
 			characterBounds: () => [ -1, 0, -1, 1, 2, 1 ],

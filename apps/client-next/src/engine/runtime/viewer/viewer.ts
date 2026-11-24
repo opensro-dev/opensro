@@ -363,6 +363,9 @@ export function createViewer( host: ViewerHost ) {
 	// dresses it once the catalogue can type the items.
 	let entity = viewerEntity( request ), entities = [ entity ], dressed = request?.kind !== "look";
 	let last = -1, elapsed = 0, revision = 0, settled = 0, reading = false, finished = false;
+	// Why the doll readback refused, when it did: a "render" failure names
+	// its cause instead of discarding it (#4015).
+	let readbackError: string | null = null;
 	// When the framed doll began waiting for its glows, and when they all drew.
 	let glowWaitAt = -1, glowingAt = -1;
 	// A still's presentation clock in seconds (STILL_FRAME_SECONDS): it stands still until
@@ -388,8 +391,10 @@ export function createViewer( host: ViewerHost ) {
 		// rejection cannot tell one monster's model from another's by
 		// "asset-load" alone.
 		const failure = reason === "asset-load" ? host.characters.failure?.() ?? null : null;
-		const detail = failure ? (failure.path ? `${failure.path}: ${failure.message}` : failure.message) : undefined;
-		post( { type: "viewer-error", reason, stage: at } );
+		let detail: string | undefined;
+		if ( failure ) detail = failure.path ? `${failure.path}: ${failure.message}` : failure.message;
+		else if ( reason === "render" && readbackError ) detail = readbackError;
+		post( { type: "viewer-error", reason, stage: at, ...(detail ? { detail } : {}) } );
 		settle( { reason, stage: at, detail } );
 	};
 	/*
@@ -580,6 +585,13 @@ export function createViewer( host: ViewerHost ) {
 				fail( "render" );
 				return stopped();
 			}
+			// The renderer draws nothing until its device is running: the
+			// warm-up compiles the pipelines first, which a software adapter
+			// (SwiftShader, the only WebGPU in a GPU-less VM) needs seconds
+			// for. Counting those frames as settled would read the doll back
+			// before its target exists (#4015). The timeout above still
+			// bounds a renderer that never starts.
+			if ( host.renderer.phase() !== "running" ) return "draw";
 			const known = host.characters.knows( entity );
 			if ( known === false ) {
 				fail( request?.kind === "look" ? "bad-request" : "unknown-monster" );
@@ -673,7 +685,10 @@ export function createViewer( host: ViewerHost ) {
 				// A change while the readback ran draws again, and a doll with
 				// effect particles keeps animating them.
 				if ( changed || host.characters.glows( entity.gid ) ) host.wake();
-			} ).catch( () => fail( "render" ) );
+			} ).catch( error => {
+				readbackError = error instanceof Error ? error.message : String( error );
+				fail( "render" );
+			} );
 			return request?.still ? "draw" : "idle";
 		}
 	};
