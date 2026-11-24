@@ -379,7 +379,7 @@ func TestGoldGroupItemBodyCarriesU32Quantity(t *testing.T) {
 	if len(got) != body.EncodedSize() {
 		t.Fatalf("EncodedSize = %d, body is %d bytes", body.EncodedSize(), len(got))
 	}
-	back, err := readItemBody(NewReader(got), sdToken)
+	back, err := readItemBody(NewReader(got), sdToken, nil)
 	if err != nil || back.Quantity != 5 || back.RefObjID != 42864 {
 		t.Fatalf("round trip = %+v, %v", back, err)
 	}
