@@ -21,12 +21,15 @@ handler (traced 2026-11-23):
     The port's rows carry the codename in the same place; the table
     below mirrors the eight staged rows (rigid_import.py's
     SCROLLS), as the mall scrolls carry their counts in code.
-  - The family cooltime is the item rows' COOLTIME parameter: the
-    item reader scans the parameter descriptions for the keyword,
-    parses the hex word after it (0xF1 = 241, the family timer
-    category) and the paired parameter value is the delay -
-    600000 ms on every scroll row. The native timer is per user
-    and shared by the family; the port keeps it on the Runtime,
+  - The family cooltime rides the item rows' COOLTIME parameter:
+    the descriptions carry the category word 0xF1 (241) and the
+    paired parameter value is the delay - 600000 ms on every scroll
+    row. Where the keyword is parsed into the timer does not live
+    in the game-server binary (a census of it finds no such string;
+    its home is more likely the DB/tooling side of the row
+    pipeline), so the port mirrors the constant, as the mall
+    scrolls mirror theirs. What the use handler consults is the
+    per-user timer itself; the port keeps it on the Runtime,
     session-scoped like the native timer.
   - The monster stays until it is killed: the handler asks the
     factory for no lifetime. A rarity-3 kind announces itself

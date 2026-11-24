@@ -74,7 +74,11 @@ CHARACTER_SHARD = "characterdata_320000.txt"
 SKILL_SHARD = "skilldata_320000.txt"
 ITEM_SHARD = "itemdata_320000.txt"
 PIN_FILE = Path(__file__).with_name("v1696_archive_pins.json")
-ARCHIVES = ("Media",)
+# Data too, not Media alone: the scrolls' drop model resolves from
+# it through the item asset closure, and the tuple feeds the pin
+# (the pin file carries Data). Dropping it kills the build's rigid
+# layer at the closure (review T5145).
+ARCHIVES = ("Data", "Media")
 ROWS_FILE = Path(__file__).with_name("data") / "rigid-scroll-rows.json"
 # The kinds this import stages: the L2 copies (and the Black Snake's
 # L3) the v1.150 character tables lack.

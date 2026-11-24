@@ -27,6 +27,38 @@ def utf16(rows):
 
 
 # ================
+# pk2
+#
+# A test archive holding files at nested paths ({"a/b.txt": bytes}),
+# the shape test_later_world_import.py builds with the same writer.
+# ================
+def pk2(files):
+	from test_client_preparation import ArchiveBuilder
+	builder = ArchiveBuilder()
+	tree = {}
+	for path, raw in files.items():
+		node = tree
+		*folders, name = path.split("/")
+		for folder in folders:
+			node = node.setdefault(folder, {})
+		node[name] = raw
+
+	def emit(node):
+		offset = builder.folder([])
+		entries = []
+		for name, child in node.items():
+			if isinstance(child, dict):
+				entries.append((1, name.encode("ascii"), emit(child), 0))
+			else:
+				entries.append((2, name.encode("ascii"), *builder.add_payload(child)))
+		builder.blocks[offset] = entries
+		return offset
+
+	emit(tree)
+	return builder.build()
+
+
+# ================
 # RigidScrollRowsTest
 # ================
 class RigidScrollRowsTest(unittest.TestCase):
@@ -113,6 +145,17 @@ class RigidItemStagingTest(unittest.TestCase):
 		return native, out, text_root
 
 	# ================
+	# archives
+	#
+	# The empty archives add_rigid builds from the layer's declared
+	# set: the staging runs against whatever the declaration names,
+	# so a declaration that drops an archive fails here (it dropped
+	# Data once, and the real build died at the model closure).
+	# ================
+	def archives(self):
+		return {name: (b"", {}) for name in rigid.ARCHIVES}
+
+	# ================
 	# test_stage_then_reap_round_trip
 	#
 	# The asset parser behind the icon/model closure is the cap110
@@ -124,7 +167,7 @@ class RigidItemStagingTest(unittest.TestCase):
 				mock.patch.object(rigid.item_import, "resource_dependencies",
 					lambda requests: [[] for _ in requests]):
 			native, out, text_root = self.fixture(Path(temp))
-			summary = rigid.add_items(native, out, {"Data": (b"", {}), "Media": (b"", {})}, {})
+			summary = rigid.add_items(native, out, self.archives(), {})
 			shard_rows = rigid.tables.table_rows((text_root / rigid.ITEM_SHARD).read_bytes())
 			self.assertEqual(len(shard_rows), 8)
 			ids = [int(row[rigid.ITEM_ID]) for row in shard_rows]
@@ -137,7 +180,7 @@ class RigidItemStagingTest(unittest.TestCase):
 				self.assertIn(symbol, names)
 			self.assertIn("SN_NATIVE", names)
 
-			again = rigid.add_items(native, out, {"Data": (b"", {}), "Media": (b"", {})}, summary)
+			again = rigid.add_items(native, out, self.archives(), summary)
 			self.assertEqual(again["items"], summary["items"])
 			manifest = [row[0] for row in rigid.tables.table_rows((text_root / "itemdata.txt").read_bytes()) if row]
 			self.assertEqual(manifest.count(rigid.ITEM_SHARD), 1)
@@ -150,6 +193,33 @@ class RigidItemStagingTest(unittest.TestCase):
 			self.assertIn("SN_NATIVE", names)
 			for symbol in summary["itemSymbols"]:
 				self.assertNotIn(symbol, names)
+
+	# ================
+	# test_the_item_closure_resolves_the_drop_model_from_the_data_archive
+	#
+	# The scrolls' drop model is a Data record, not a Media one: with
+	# the model absent from the native tree the closure must take it
+	# from the layer's Data archive, enrol it in the marker and reap
+	# it (T5145: declared as Media alone, the layer died here).
+	# ================
+	def test_the_item_closure_resolves_the_drop_model_from_the_data_archive(self):
+		with tempfile.TemporaryDirectory() as temp, \
+				mock.patch.object(rigid.item_import, "resource_dependencies",
+					lambda requests: [[] for _ in requests]):
+			native, out, text_root = self.fixture(Path(temp))
+			(native / "Data_extracted" / "res" / "item" / "etc" / "drop_scroll.bsr").unlink()
+			data = pk2({"res/item/etc/drop_scroll.bsr": b"JMXVRES 0109" + bytes(64)})
+			index = {rigid.item_import.normalized_path(entry.path): entry
+				for entry in rigid.sro_pk2.read_directory(data)}
+			archives = self.archives()
+			archives["Data"] = (data, index)
+			summary = rigid.add_items(native, out, archives, {})
+			model = out / "Data_extracted" / "res" / "item" / "etc" / "drop_scroll.bsr"
+			self.assertTrue(model.exists())
+			self.assertEqual([record["path"] for record in summary["itemResources"]],
+				["res/item/etc/drop_scroll.bsr"])
+			rigid.reap_items(out, summary)
+			self.assertFalse(model.exists())
 
 
 # ================
