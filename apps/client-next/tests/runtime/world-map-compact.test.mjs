@@ -162,3 +162,26 @@ test("a compact area away from the origin clamps the window to the area, not the
 	assert.equal( box[0] + box[2] - pin[0], PIN_RIGHT );
 	assert.deepEqual( source, [ box[0], box[1], box[2], box[3] + FOOT_DEPTH ] );
 });
+
+test("a window squeezed below its frame insets clips to nothing, never to a negative extent", async () => {
+	const { mapPanel } = await import( "../../src/engine/runtime/ui/hud/map-chrome.ts" );
+	const { worldMapPresentation, worldMapPages } = await import( "../../src/engine/foundation/ui/world-map.ts" );
+	const { copyUi } = await import( "../../src/engine/foundation/ui/ui.ts" );
+	// A user's crash: DevTools docked left a 34 x 34 UI area, the window
+	// shrank to 0 x 0 at its right edge, and the render panel inside it came
+	// out 10 narrower and 38 shorter than nothing.
+	const clip = mapPanel( [ 34, 0, 0, 0 ] );
+	assert.ok( clip[2] >= 0 && clip[3] >= 0, "the render panel has no negative extent: " + clip );
+	// Wherever a drag left the page, every quad it paints passes the
+	// renderer's admission (copyUi throws "Invalid UI extent or color").
+	const pose = { regionId: 24743, x: 960, y: 0, z: 960, angle: 0 };
+	for ( const page of [ 0, ...worldMapPages().map( p => p.id ) ] ) {
+		for ( let px = -4000; px <= 0; px += 32 ) {
+			for ( let py = -3000; py <= 0; py += 64 ) {
+				const shown = worldMapPresentation( pose, page, clip, [ px, py ] );
+				const quads = [ ...shown.background, ...shown.overlay, ...shown.markers ];
+				copyUi( { revision: 1, width: 34, height: 34, quads, damageText: false } );
+			}
+		}
+	}
+});
