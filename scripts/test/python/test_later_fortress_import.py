@@ -8,8 +8,10 @@ later_fortress_import.py places a fortress the v1.150 client never placed
 tests pin what the engine owns beyond the Constantinople suite: the off
 path puts native bytes back, the staff's standings come and go,
 the v1.188 name rows read in the shared shape, the resource walk admits
-only the gaps the variant already ships, and the three specs never share
-a band, a placement file or a marker.
+only the gaps the variant already ships, the three specs never share
+a band, a placement file or a marker, the Bandit fortress ships with no
+switch (#3586), and a published world-map page joins its tables and
+leaves them again.
 
 ===========================================================================
 """
@@ -50,6 +52,8 @@ class SpecsTest(unittest.TestCase):
 	def test_no_two_fortresses_share_an_owned_file(self):
 		for field in ("flag", "marker", "character_shard", "portonly_ifo", "fortress_code", "world"):
 			values = [getattr(spec, field) for spec in SPECS]
+			# Two switchless fortresses share no flag; the rest must differ.
+			values = [value for value in values if value is not None]
 			self.assertEqual(len(values), len(set(values)), field)
 
 	def test_every_placement_file_is_one_the_bundle_merges(self):
@@ -79,11 +83,17 @@ class SpecsTest(unittest.TestCase):
 					self.assertNotRegex(path, r"[\x00-\x1f]")
 					self.assertIn("\\", path)
 
-	def test_the_flags_are_off_unless_on(self):
-		for spec in (bandit.SPEC, hotan.SPEC):
-			self.assertFalse(fortress.enabled(spec, {}))
-			self.assertFalse(fortress.enabled(spec, {spec.flag: "off"}))
-			self.assertTrue(fortress.enabled(spec, {spec.flag: "on"}))
+	def test_the_flagged_fortress_is_off_unless_on(self):
+		self.assertFalse(fortress.enabled(hotan.SPEC, {}))
+		self.assertFalse(fortress.enabled(hotan.SPEC, {hotan.SPEC.flag: "off"}))
+		self.assertTrue(fortress.enabled(hotan.SPEC, {hotan.SPEC.flag: "on"}))
+
+	def test_the_bandit_fortress_has_no_switch(self):
+		# Later-native content (#3586): no flag, enabled under any
+		# environment, including one that names the retired switch.
+		self.assertIsNone(bandit.SPEC.flag)
+		self.assertTrue(fortress.enabled(bandit.SPEC, {}))
+		self.assertTrue(fortress.enabled(bandit.SPEC, {"SRO_FORT_BIJEOKDAN": "off"}))
 
 	def test_a_missing_client_folder_stops_the_on_path(self):
 		with self.assertRaises(SystemExit):
@@ -159,6 +169,93 @@ class EngineTest(unittest.TestCase):
 				["FORTRESS_JANGAN"])
 			self.assertFalse((text_root / hotan.CHARACTER_SHARD).exists())
 			self.assertFalse((navmesh / hotan.PORTONLY_IFO).exists())
+
+
+def vsro_mapinfo_row(page, image, world):
+	return [page, "1", "fortress map", image, "1024", "1024", "964", "1024", "964", "1024",
+		"77", "71", "81", "67", "48", "0", "48", "-48", world, "SN_FORTRESS_X", "0", "xxx", ""]
+
+
+def vsro_localinfo_row(pin, kind, icon, destination, page):
+	return ["1", pin, kind, icon, "nation", "fortress", "page name", destination, page,
+		"162", "93", "28", "16", "20", "32", "0", "0", "0", "0", "0", "1", "xxx"]
+
+
+class MapPageTest(unittest.TestCase):
+	"""
+	================
+	MapPageTest
+
+	The world-map page a fortress publishes (#3586): the source page
+	row trimmed to the native width, its icon rows converted without
+	the source's service column, and the art those rows draw.
+	================
+	"""
+
+	def read(self, pages, pins):
+		sources = {
+			"worldmap_mapinfo.txt": monsters.encode_rows(pages),
+			"worldmap_localinfo.txt": monsters.encode_rows(pins),
+		}
+		return lambda name: sources[name]
+
+	def page_sources(self):
+		pages = [vsro_mapinfo_row("1001", r"interface\worldmap\map\map_fort_jangan.ddj", "INS_FORT_JA"),
+			vsro_mapinfo_row("1002", r"interface\worldmap\map\map_fort_bijuckdan.ddj", "INS_FORT_BJ"),
+			["1002"]]
+		pins = [vsro_localinfo_row("91006", "2", r"interface\worldmap\map\fort_worldmap.ddj", "1001", "0"),
+			vsro_localinfo_row("91009", "2", r"interface\worldmap\map\fort_small_worldmap.ddj", "1002", "0"),
+			vsro_localinfo_row("95017", "2", r"icon\npc\fortress_manager.ddj", "0", "1002"),
+			vsro_localinfo_row("95028", "2", r"icon\npc\fortress_manager.ddj", "0", "1003"),
+			vsro_localinfo_row("99999", "1", "", "1002", "0"),
+			["0"] + vsro_localinfo_row("95018", "2", r"icon\npc\fortress_battleaide.ddj", "0", "1002")[1:]]
+		return pages, pins
+
+	def test_the_page_and_its_icons_convert(self):
+		pages, pins = fortress.map_page_rows(bandit.SPEC, self.read(*self.page_sources()))
+		self.assertEqual([row[0] for row in pages], ["1002"])
+		self.assertEqual(len(pages[0]), 19)
+		self.assertEqual(pages[0][18], "INS_FORT_BJ")
+		self.assertEqual([row[0] for row in pins], ["91009", "95017"])
+		for row in pins:
+			self.assertEqual(len(row), 20)
+		self.assertEqual(pins[0][1], "2")
+
+	def test_a_spec_without_a_page_publishes_nothing(self):
+		self.assertEqual(fortress.map_page_rows(hotan.SPEC, self.read([], [])), ([], []))
+
+	def test_a_page_the_source_lacks_is_refused(self):
+		with self.assertRaisesRegex(ValueError, "worldmap_mapinfo"):
+			fortress.map_page_rows(bandit.SPEC, self.read([], []))
+		pages, pins = self.page_sources()
+		with self.assertRaisesRegex(ValueError, "worldmap_localinfo"):
+			fortress.map_page_rows(bandit.SPEC, self.read(pages, pins[:1]))
+
+	def test_the_art_is_the_picture_the_icons_and_the_crest(self):
+		pages, pins = fortress.map_page_rows(bandit.SPEC, self.read(*self.page_sources()))
+		siege = ["1", "6", "FORTRESS_BIJEOKDAN", "kr", "SN_FORTRESS_BIJEOKDAN", "GATE_CH",
+			"1", "200", "15", "20", "96", "500000", r"etc\fort_bijeokdan.ddj", "NPC_CH_FORTRESS_OFFICIAL"]
+		self.assertEqual(fortress.map_art_paths(pages, pins, siege), [
+			"icon/etc/fort_bijeokdan.ddj", "icon/npc/fortress_manager.ddj",
+			"interface/worldmap/map/fort_small_worldmap.ddj",
+			"interface/worldmap/map/map_fort_bijuckdan.ddj"])
+
+	def test_the_off_path_reaps_the_page_and_its_icons(self):
+		with tempfile.TemporaryDirectory() as tmp:
+			native, output = Path(tmp) / "native", Path(tmp) / "out"
+			native.mkdir()
+			text_root = output / fortress.TEXT_ROOT
+			text_root.mkdir(parents=True)
+			(text_root / "worldmap_mapinfo.txt").write_bytes(monsters.encode_rows(
+				[["1001", "1"], ["1002", "1"]]))
+			(text_root / "worldmap_localinfo.txt").write_bytes(monsters.encode_rows(
+				[["91006", "2"], ["91009", "2"]]))
+			prior = {"mapPageIds": [1002], "localInfoIds": [91009], "files": []}
+			fortress.remove_owned(hotan.SPEC, native, output, prior)
+			self.assertEqual([row[0] for row in tables.table_rows(
+				(text_root / "worldmap_mapinfo.txt").read_bytes())], ["1001"])
+			self.assertEqual([row[0] for row in tables.table_rows(
+				(text_root / "worldmap_localinfo.txt").read_bytes())], ["91006"])
 
 
 class ShippedClosureTest(unittest.TestCase):

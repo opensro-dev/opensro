@@ -3,24 +3,25 @@ r"""
 
 bandit_fortress_import.py - the Bandit Fortress by Jangan (v1.188)
 
-PORT-ONLY, NOT NATIVE to v1.150. Off unless SRO_FORT_BIJEOKDAN is "1", "on" or
-"true" when the variant builds; the server reads the same switch.
+Later-native content, imported by every variant build: the later
+client has the fortress, so the game does (owner, #3586). There is no
+switch; the spec's flag is None and the engine imports it on every run.
 
 v1.150 ships the ground (its 16 RN_FORT_BIJEOKDAN sectors beside the
 Jangan fortress) and the world (INS_FORT_BJ, gameworld row 7), but not
 the fortress: siegefortress.txt holds Jangan alone, the 43 INS_FORT_BJ
 event zones are absent, and the sectors are the ground before the
-fortress was built. This stages the v1.188 sectors over them (the off
-path puts the native bytes back), the FORTRESS_BIJEOKDAN row (id 6),
-its zones and their placements, and the fort stone and small gate the
-shipped tables lack. Its registration desk is Jangan's: the row names
-NPC_CH_FORTRESS_OFFICIAL, who already stands in Jangan.
+fortress was built. This stages the v1.188 sectors over them, the
+FORTRESS_BIJEOKDAN row (id 6), its zones and their placements, the fort
+stone and small gate the shipped tables lack, and the fortress's
+world-map page (1002) with its icons and art. Its registration desk is
+Jangan's: the row names NPC_CH_FORTRESS_OFFICIAL, who already stands
+in Jangan.
 
 The source is the one pinned VSRO client (SRO_VSRO_ROOT, its Map,
 Media, Data and Particles archives verified against
 vsro_archive_pins.json); the engine is later_fortress_import.add_fortress,
-which records everything it adds in .opensro-bandit-fortress.json and removes
-exactly that when the switch is off.
+which records everything it adds in .opensro-bandit-fortress.json.
 
 The 290000 identity band: one importer owns one shard file in a build
 (test_later_shard_bands.py).
@@ -35,7 +36,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import import_vsro_alexandria as tables  # noqa: E402
 import later_fortress_import as fortress  # noqa: E402
 
-FLAG = "SRO_FORT_BIJEOKDAN"
 MARKER = ".opensro-bandit-fortress.json"
 CHARACTER_SHARD = "characterdata_290000.txt"
 PORTONLY_IFO = "objectstring.bijeokdan.portonly.ifo"
@@ -45,13 +45,14 @@ ARCHIVES = ("Map", "Media", "Data", "Particles")
 # ================
 # vsro_root
 #
-# The pinned client the variant build names; a switch on without it
-# stops the build by name.
+# The pinned client the variant build names; a standalone run without
+# it stops by name (the variant build itself always names one: stage 1
+# reads the same client).
 # ================
 def vsro_root(env=os.environ):
 	configured = env.get(tables.ROOT_ENV, "").strip()
 	if not configured:
-		raise SystemExit(f"{FLAG} is on: set {tables.ROOT_ENV} to the VSRO client folder.")
+		raise SystemExit(f"set {tables.ROOT_ENV} to the VSRO client folder.")
 	return Path(configured)
 
 
@@ -76,7 +77,7 @@ MODEL_FALLBACKS = (
 SPEC = fortress.FortressSpec(
 	label="bandit fortress",
 	source_label="v1.188",
-	flag=FLAG,
+	flag=None,
 	marker=MARKER,
 	character_shard=CHARACTER_SHARD,
 	portonly_ifo=PORTONLY_IFO,
@@ -86,6 +87,7 @@ SPEC = fortress.FortressSpec(
 	world="INS_FORT_BJ",
 	expected_regions=16,
 	expected_zones=43,
+	map_page=1002,
 	open_archive=lambda root, name: tables.open_archive(root, name),
 	verify_archives=lambda root: tables.require_vsro_pin(root, ARCHIVES),
 	default_root=lambda: vsro_root(),

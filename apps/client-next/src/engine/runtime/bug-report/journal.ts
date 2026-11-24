@@ -57,6 +57,14 @@ const MAX_KEPT_ERRORS = 8;
 // never the same failure twice in a row.
 const ERROR_RATE_LIMIT = 10;
 const ERROR_RATE_WINDOW_MS = 60000;
+// A failure that missed the kept slots can still prove itself a storm
+// (#3684): it files once it has thrown this many times. Late filings are
+// capped at MAX_KEPT_ERRORS a page, like the kept slots themselves, so a
+// loop of ever-new failures cannot flood the Agent either.
+const STORM_FILE_REPEATS = 4;
+// Repeat counts of failures that missed the kept slots; a storm needs
+// one entry, so the table stays small and drops its oldest when full.
+const MAX_OVERFLOW_SIGNATURES = 256;
 
 /*
 ================
@@ -258,7 +266,7 @@ export interface JournalOptions {
 	readonly scriptPaths?: () => ReadonlySet<string>;
 	/** The first throw of each distinct uncaught failure, redacted for an
 	 * automatic incident (uncaughtIncident); at most MAX_KEPT_ERRORS per
-	 * page. */
+	 * page, plus one late filing per proven storm (recordError). */
 	readonly firstError?: ( failure: UncaughtFailure ) => void;
 }
 
@@ -325,6 +333,7 @@ export function createJournal( canvas: HTMLCanvasElement, options: JournalOption
 	let errorTimes: number[] = [], lastErrorSignature = "";
 	// signature -> the failure's first throw, its count and its last time.
 	let keptErrors = new Map<string, JournalEvent>();
+	let overflowRepeats = new Map<string, number>(), overflowFiled = new Set<string>();
 
 	/*
 	================
@@ -380,6 +389,10 @@ export function createJournal( canvas: HTMLCanvasElement, options: JournalOption
 	distinct failures are kept do new ones go to the ring, rate-limited:
 	repeats in a row and storms past ERROR_RATE_LIMIT in the window are
 	dropped, so a throwing loop cannot evict the player's input history.
+	A ring failure is still counted, and one that reaches
+	STORM_FILE_REPEATS files its incident late: a storm that begins in a
+	session already carrying eight failures must not read as silence
+	(#3684).
 	================
 	*/
 	function recordError( error: unknown, fallback: string ) {
@@ -395,6 +408,25 @@ export function createJournal( canvas: HTMLCanvasElement, options: JournalOption
 			keptErrors.set( signature, { ...fields, atMs, kind: "error", count: 1, lastAtMs: atMs } );
 			options.firstError?.( uncaughtFailure( error, fields.frames ) );
 			return;
+		}
+		// A storm that began after the kept slots filled still files its
+		// incident, once it has proven itself by repetition (#3684).
+		// Counted before the ring's own drops below, which discard
+		// consecutive repeats by design and would starve the count.
+		const repeats = (overflowRepeats.get( signature ) ?? 0) + 1;
+		if ( !overflowRepeats.has( signature ) && overflowRepeats.size >= MAX_OVERFLOW_SIGNATURES ) {
+			for ( const oldest of overflowRepeats.keys() ) {
+				overflowRepeats.delete( oldest );
+				break;
+			}
+		}
+		overflowRepeats.set( signature, repeats );
+		if (
+			repeats >= STORM_FILE_REPEATS && overflowFiled.size < MAX_KEPT_ERRORS &&
+			!overflowFiled.has( signature )
+		) {
+			overflowFiled.add( signature );
+			options.firstError?.( uncaughtFailure( error, fields.frames ) );
 		}
 		errorTimes = errorTimes.filter( time => atMs - time < ERROR_RATE_WINDOW_MS );
 		if ( signature === lastErrorSignature || errorTimes.length >= ERROR_RATE_LIMIT ) return;

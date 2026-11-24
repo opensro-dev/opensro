@@ -164,7 +164,7 @@ test("return timer fires before potion-empty and acquire", () => {
 
 test("potion-empty return needs potion ON and a found stack of at most 10", () => {
 	// 68b4c0: found stack and quantity <= 10 (cmp 0xa; jg). Count 10 fires;
-	// count 0 (no stacks found) and count 11 do not.
+	// count 0 (no stacks found) and count 11 do not. HP is checked before MP.
 	assert.deepEqual(
 		pickMacroHuntAction(
 			block( { [HUNT_BYTE_POTION_EMPTY]: 1 } ),
@@ -182,9 +182,33 @@ test("potion-empty return needs potion ON and a found stack of at most 10", () =
 	assert.deepEqual(
 		pickMacroHuntAction(
 			block( { [HUNT_BYTE_POTION_EMPTY]: 1 } ),
+			facts( { hpPotionCount: 50, mpPotionCount: 5 } )
+		),
+		{ kind: "return-scroll", reason: "potion-mp", endHunt: true },
+		"MP empty fires when HP stack is above the empty threshold"
+	);
+	assert.deepEqual(
+		pickMacroHuntAction(
+			block( { [HUNT_BYTE_POTION_EMPTY]: 1 } ),
+			facts( { hpPotionCount: 5, mpPotionCount: 3 } )
+		),
+		{ kind: "return-scroll", reason: "potion-hp", endHunt: true },
+		"HP empty wins when both stacks are low"
+	);
+	assert.deepEqual(
+		pickMacroHuntAction(
+			block( { [HUNT_BYTE_POTION_EMPTY]: 1 } ),
 			facts( { hpPotionCount: 0 } )
 		),
 		{ kind: "select", gid: 42 }
+	);
+	assert.deepEqual(
+		pickMacroHuntAction(
+			block( { [HUNT_BYTE_POTION_EMPTY]: 1 } ),
+			facts( { hpPotionCount: 50, mpPotionCount: 0 } )
+		),
+		{ kind: "select", gid: 42 },
+		"MP count 0 (no stacks found) does not fire"
 	);
 	assert.deepEqual(
 		pickMacroHuntAction(
@@ -196,7 +220,7 @@ test("potion-empty return needs potion ON and a found stack of at most 10", () =
 	assert.deepEqual(
 		pickMacroHuntAction(
 			block( { [HUNT_BYTE_POTION_EMPTY]: 1 } ),
-			facts( { potionOn: false, hpPotionCount: 5 } )
+			facts( { potionOn: false, hpPotionCount: 5, mpPotionCount: 5 } )
 		),
 		{ kind: "select", gid: 42 }
 	);
@@ -600,6 +624,13 @@ test("Auto-Hunt ends on teleportMode, not a region walk, and paces unanswered se
 	);
 	assert.ok( huntOff, "hunt OFF request" );
 	assert.equal( huntOff.payload[2], 0, "hunt OFF" );
+	const afterTeleport = g.take();
+	assert.ok(
+		(afterTeleport?.notices ?? []).some(
+			n => n.key === "UIIT_STT_SRO_MACRO_AUTO_HUNTING_TELEPORT_OFF" && n.nativeType === 5
+		),
+		"teleport OFF queues the TELEPORT_OFF UIIT notice"
+	);
 	g.step( 2600, local );
 	assert.equal(
 		sent.filter(
@@ -609,5 +640,83 @@ test("Auto-Hunt ends on teleportMode, not a region walk, and paces unanswered se
 		1,
 		"teleport OFF is not resent every tick"
 	);
+	g.dispose();
+});
+
+test("macro-switch ON in town queues CANUSEMACRO and sends no 0x7554", async () => {
+	const { createGameplay } = await import(
+		"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
+	);
+	const { experimentalGameplay, experimentalOptions } = await import(
+		"../../src/engine/foundation/ui/experimental-options.ts"
+	);
+	const { macroReplay } = await import( "../helpers/sro-macro-frames.mjs" );
+	const { OP_MACRO_REQUEST, MACRO_HUNT, MACRO_ACTION_SWITCH } = codec;
+	const LOCAL_GID = 1;
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const local = {
+		gid: LOCAL_GID,
+		refObjId: 1907,
+		kind: /** @type {const} */ ("local-player"),
+		name: "townie",
+		countryByte9c: 0,
+		// 0x62a7 is a known non-battlefield / town region (region-combat).
+		regionId: 0x62a7,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	const g = createGameplay(
+		f => sent.push( f ),
+		() => {},
+		() => {},
+		gid => gid === LOCAL_GID ? local : undefined,
+		() => {},
+		() => [],
+		() => []
+	);
+	g.bootstrap( {
+		character: {
+			hp: 100,
+			mp: 100,
+			maxHp: 100,
+			maxMp: 100,
+			skills: [],
+			autoPotion: { hp: 0x3211, mp: 0x3212, cure: 0x13, timing: 0x8a }
+		},
+		refSkillSnapshot: []
+	} );
+	g.worldReady();
+	g.seed( local );
+	g.experimental( experimentalGameplay( experimentalOptions( { sroMacro: true } ) ) );
+	// Seed server state with macros OFF so the refuse path is the client gate.
+	g.receive( macroReplay( { huntOn: 0, skillOn: 0, hunt: codec.defaultHuntBlock(), buff: [], attack: [] } ), 0 );
+	sent.length = 0;
+	g.take();
+	g.command( { kind: "macro-switch", macro: MACRO_HUNT, on: true }, 0, undefined, local );
+	assert.equal(
+		sent.filter( f => f.opcode === OP_MACRO_REQUEST ).length,
+		0,
+		"town refuse must not send 0x7554"
+	);
+	const after = g.take();
+	const notice = (after?.notices ?? []).at( -1 );
+	assert.equal( notice?.key, "UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_CANUSEMACRO" );
+	assert.equal( notice?.nativeType, 5 );
+	assert.equal( notice?.value, 0 );
+	// Sanity: outside town the same switch does send.
+	local.regionId = 0x62a6;
+	g.seed( local );
+	sent.length = 0;
+	g.take();
+	g.command( { kind: "macro-switch", macro: MACRO_HUNT, on: true }, 100, undefined, local );
+	const switchFrames = sent.filter(
+		f => f.opcode === OP_MACRO_REQUEST && f.payload[0] === MACRO_ACTION_SWITCH &&
+			f.payload[1] === MACRO_HUNT && f.payload[2] === 1
+	);
+	assert.equal( switchFrames.length, 1, "field hunt ON sends 0x7554" );
 	g.dispose();
 });

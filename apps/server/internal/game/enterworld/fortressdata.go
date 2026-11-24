@@ -44,10 +44,13 @@ var constantinopleSiegeFortressRow = SiegeFortressDataRow{
 }
 
 // banditSiegeFortressRow and hotanSiegeFortressRow are the v1.188
-// siegefortress.txt rows (ids 6 and 3), projected as Jangan's. Port-only,
-// not native (#3886): each joins only while its switch is on, the switch
-// that also builds the fortress's zones and structures. The Bandit row
-// names the Chinese official, as the v1.188 table does.
+// siegefortress.txt rows (ids 6 and 3), projected as Jangan's. The Bandit
+// row is later-native content the game ships (#3586): the import stages
+// it into every build, so it joins this list unconditionally. The Hotan
+// row is port-only, not native (#3886): it joins only while its switch
+// is on, the switch that also builds the fortress's zones and
+// structures. The Bandit row names the Chinese official, as the v1.188
+// table does.
 var banditSiegeFortressRow = SiegeFortressDataRow{
 	FortressID:      6,
 	Icon:            "etc/fort_bijeokdan.ddj",
@@ -73,10 +76,11 @@ var hotanSiegeFortressRow = SiegeFortressDataRow{
 siegeFortressRows
 
 The shipped rows with each official's RefObjID resolved from character
-data. Each later fortress whose switch is on joins the list (port-only,
-not native), in fortress id order as the later tables list them; the
-authority catalog and the world's structures come from the built
-tables, not from this projection.
+data. The Bandit fortress joins unconditionally (later-native content,
+#3586); each port-only fortress whose switch is on joins too, in
+fortress id order as the later tables list them. The authority catalog
+and the world's structures come from the built tables, not from this
+projection.
 ================
 */
 func siegeFortressRows(deps *Deps) []SiegeFortressDataRow {
@@ -87,9 +91,7 @@ func siegeFortressRows(deps *Deps) []SiegeFortressDataRow {
 	if monster.ConstantinopleEnabled() {
 		rows = append(rows, constantinopleSiegeFortressRow)
 	}
-	if monster.BanditFortressEnabled() {
-		rows = append(rows, banditSiegeFortressRow)
-	}
+	rows = append(rows, banditSiegeFortressRow)
 	if deps == nil {
 		return rows
 	}

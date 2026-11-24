@@ -106,7 +106,8 @@ import {
 import {
 	companionItemTargetCommand,
 	armsItemTargetCursor,
-	isReverseReturnScroll
+	isReverseReturnScroll,
+	spiritExtensionWornNotice
 } from "@/engine/foundation/gameplay/cos-item-use";
 import {
 	createStoragePanel,
@@ -7653,6 +7654,26 @@ export function createUi( ports: UiPorts ) {
 					}
 					return;
 				}
+				if ( event.kind === "activate" && event.id.startsWith( "avatar:" ) ) {
+					// The armed cursor aimed at the avatar window: the
+					// bag-target path never sees it. The extension gear on
+					// the worn Spirit is refused here and the cursor comes
+					// down, as a serviced target use does; any other armed
+					// click on an avatar keeps the fall-through below.
+					const source = cosHud.itemTargetSource(),
+						worn = view?.gameplay?.avatarInventory?.find( row =>
+							avatarSocket( row.typeFlags ) === Number( event.id.slice( 7 ) )
+						);
+					if ( source && worn && spiritExtensionWornNotice( source.typeFlags, worn.typeFlags ) !== null ) {
+						hudMessages.append(
+							hudCopy( "UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE" ),
+							0xffff7070
+						);
+						cosHud.takeTargetUse();
+						dirty = true;
+						return;
+					}
+				}
 				if (
 					event.kind === "drag" || event.kind === "drag-end" || event.kind === "double-activate"
 				) return;
@@ -9026,6 +9047,20 @@ export function createUi( ports: UiPorts ) {
 						return;
 					}
 					if ( target?.id.startsWith( "avatar:" ) ) {
+						// The extension gear dropped on the avatar window
+						// while a Spirit is worn is refused with its line;
+						// the drop equips nothing and sends nothing.
+						if (
+							item && view?.gameplay?.avatarInventory?.some( row =>
+								spiritExtensionWornNotice( item.typeFlags, row.typeFlags ) !== null
+							)
+						) {
+							hudMessages.append(
+								hudCopy( "UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE" ),
+								0xffff7070
+							);
+							return;
+						}
 						moveAvatar( true, carried.slot );
 						return;
 					}

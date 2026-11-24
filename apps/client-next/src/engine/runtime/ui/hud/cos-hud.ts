@@ -88,6 +88,20 @@ export function createCosHud() {
 		},
 		/*
 		================
+		itemTargetSource
+
+		The item the armed target cursor will act for, or null while it
+		is not armed. An avatar-window click cannot travel the bag-target
+		path (chooseItemTarget), so the caller reads the source's type
+		word itself to answer one: the extension gear aimed at the worn
+		Spirit (spiritExtensionWornNotice).
+		================
+		*/
+		itemTargetSource(): InventoryItem | null {
+			return source && !targetUse ? source : null;
+		},
+		/*
+		================
 		chooseItemTarget
 
 		567372 checks cursor A6: any occupied inventory or equipment slot opens

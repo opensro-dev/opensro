@@ -486,3 +486,72 @@ test("a mint refusal publishes its typed refusal on the entry failure", async t 
 		session.dispose();
 	}
 });
+
+/*
+================
+each distinct uncaught failure files its own incident
+
+The journal hands the first throw of each distinct failure to the
+incident port, all under the one uncaught_error code (#4141). The
+#3684 storm has two signatures (message and top frame); both stacks
+must reach the Agent, while a repeat of one failure files nothing
+more and another code still reports once.
+================
+*/
+test("each distinct uncaught failure files its own incident; a repeat of one failure files once", async t => {
+	/** @type {{ url: string; body: any; headers: Record<string, string>; }[]} */
+	const reports = [];
+	t.mock.method( globalThis, "fetch", async ( url, options ) => {
+		if ( url.endsWith( "/client/incident" ) ) {
+			const body = JSON.parse( options.body );
+			reports.push( { url, body, headers: options.headers } );
+			return Response.json( { ok: true, id: body.id } );
+		}
+		return Response.json( [] );
+	} );
+	const session = createSession();
+	t.after( () => session.dispose() );
+	session.command( { kind: "servers", apiBase: command.apiBase } );
+	session.step();
+	await settle();
+	const first = {
+		kind: "client-report",
+		incidentKind: "runtime",
+		code: "uncaught_error",
+		message: "RangeError: Maximum call stack size exceeded",
+		stack: "    at /assets/index.js:100:5\n    at /assets/index.js:200:9"
+	};
+	const second = {
+		...first,
+		stack: "    at /assets/index.js:300:3\n    at /assets/index.js:200:9"
+	};
+	session.command( first );
+	session.step();
+	await settle();
+	session.command( first );
+	session.step();
+	await settle();
+	session.command( second );
+	session.step();
+	await settle();
+	session.step();
+	await settle();
+	const filed = reports.filter( r => r.body.code === "uncaught_error" );
+	assert.equal( filed.length, 2, "one incident per distinct failure" );
+	assert.equal( filed[0].body.stack, first.stack );
+	assert.equal( filed[1].body.stack, second.stack );
+	// Another code keeps the once-per-code rule beside them.
+	const fault = {
+		kind: "client-report",
+		incidentKind: "runtime",
+		code: "title_fault",
+		message: "Runtime failed"
+	};
+	session.command( fault );
+	session.step();
+	await settle();
+	session.command( fault );
+	session.step();
+	await settle();
+	assert.equal( reports.filter( r => r.body.code === "title_fault" ).length, 1 );
+});

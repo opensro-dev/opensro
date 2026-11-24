@@ -38,6 +38,14 @@ live in arabia_quests_collect.go. QNO_AR_059 (its hunt names a kind
 no source carries) and QNO_AR_066/068 (target kinds no source places)
 stay out, recorded on #4134.
 
+The later questcontentsdata misspells four NPCs its own character table
+names: NPC_AR_FARMER_1..3 for NPC_AR_FARMER1..3 and NPC_AR_YAMAI for
+NPC_AR_YAMAIN (v1.696 characterdata ids 40508/40509/40517 and 40498,
+each placed once by its npcpos). The specs use the character table's
+names: under the misspelling no NPC carries the marker and the GameWorld
+refuses the roster at boot (r204k). A defect in the source is fixed, not
+copied (owner, 2026-11-24).
+
 KindByte is 1, the authored policy of definitions.go (the tiger chain
 and the Blue Berserk quests): these quests complete at their NPC, not
 through the reward window.
@@ -106,9 +114,9 @@ The 29 quests, in codename order: 9 talks and 20 hunts.
 func arabiaSpecs() []QuestSpec {
 	return []QuestSpec{
 
-		arabiaTalk("QNO_AR_005", 1, "NPC_AR_SOLDIER_1", "NPC_AR_FARMER_1", arabiaReward{47050, 34546860, 671}),
-		arabiaKill("QNO_AR_008", 2, "NPC_AR_FARMER_1", arabiaReward{366990, 165824929, 3222}, arabiaHunt{symbol: "SN_CON_QNO_AR_008_1", monsters: []string{"MOB_AR_BARUSWOLF_ADONIS1_CLONE"}, count: 390}, arabiaHunt{symbol: "SN_CON_QNO_AR_008_2", monsters: []string{"MOB_AR_BARUSWOLF_ADONIS2_CLONE"}, count: 390}),
-		arabiaKill("QNO_AR_009", 2, "NPC_AR_FARMER_3", arabiaReward{185848, 82912465, 1611}, arabiaHunt{symbol: "SN_CON_QNO_AR_009_1", monsters: []string{"MOB_AR_UNEG"}, count: 395}),
+		arabiaTalk("QNO_AR_005", 1, "NPC_AR_SOLDIER_1", "NPC_AR_FARMER1", arabiaReward{47050, 34546860, 671}),
+		arabiaKill("QNO_AR_008", 2, "NPC_AR_FARMER1", arabiaReward{366990, 165824929, 3222}, arabiaHunt{symbol: "SN_CON_QNO_AR_008_1", monsters: []string{"MOB_AR_BARUSWOLF_ADONIS1_CLONE"}, count: 390}, arabiaHunt{symbol: "SN_CON_QNO_AR_008_2", monsters: []string{"MOB_AR_BARUSWOLF_ADONIS2_CLONE"}, count: 390}),
+		arabiaKill("QNO_AR_009", 2, "NPC_AR_FARMER3", arabiaReward{185848, 82912465, 1611}, arabiaHunt{symbol: "SN_CON_QNO_AR_009_1", monsters: []string{"MOB_AR_UNEG"}, count: 395}),
 		arabiaKill("QNO_AR_020", 2, "NPC_AR_SPECIAL_SOLDIER_1", arabiaReward{232260, 135250958, 2887}, arabiaHunt{symbol: "SN_CON_QNO_AR_020_1", monsters: []string{"MOB_AR_BLOOD_HYENA_FASTWOLF"}, count: 490}),
 		arabiaKill("QNO_AR_021", 2, "NPC_AR_SPECIAL_SOLDIER_1", arabiaReward{232260, 135250958, 2887}, arabiaHunt{symbol: "SN_CON_QNO_AR_021_1", monsters: []string{"MOB_AR_WENEG"}, count: 490}),
 		arabiaKill("QNO_AR_028", 2, "NPC_AR_SPECIAL_SOLDIER_4", arabiaReward{232260, 135250958, 2887}, arabiaHunt{symbol: "SN_CON_QNO_AR_028_1", monsters: []string{"MOB_AR_BASTET_MAD"}, count: 490}),
