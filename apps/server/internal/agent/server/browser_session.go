@@ -203,6 +203,14 @@ func (server *Server) setBrowserSessionUntil(w http.ResponseWriter, r *http.Requ
 /*
 ================
 handleBrowserSession
+
+The client's reload restore. A request with no session cookie at all is
+a visitor with nothing to restore, not a failed authentication: it gets
+200 {"ok": false}, so every first page load stops logging a 401 in the
+browser console and the access log. A cookie that is present but forged,
+expired or revoked still gets 401, and the cookie is cleared. The client
+reads anything but 200 {"ok": true} as "no session" either way
+(session.ts restore).
 ================
 */
 func (server *Server) handleBrowserSession(w http.ResponseWriter, r *http.Request) {
@@ -219,7 +227,7 @@ func (server *Server) handleBrowserSession(w http.ResponseWriter, r *http.Reques
 	}
 	identity, present, ok := server.resolveBrowserIdentity(r)
 	if !present {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false})
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false})
 		return
 	}
 	if !ok {
