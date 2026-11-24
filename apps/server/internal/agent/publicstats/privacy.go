@@ -8,6 +8,7 @@ privacy.go - the website's privacy setting (port-only)
 	PUT /v1/accounts/{id}/characters/{name}/hidden       {"hidden": bool} -> 204
 	PUT /v1/accounts/{id}/characters/{name}/gear-hidden  {"hidden": bool} -> 204
 	PUT /v1/accounts/{id}/characters/{name}/break-notice {"on": bool} -> 204
+	PUT /v1/accounts/{id}/characters/{name}/plus-fail-notice {"on": bool} -> 204 (#3682: "on" is announcements on; the stored field is the opt-out)
 	GET /v1/accounts/{id}/contributor-title              -> 200 this account's title (#135)
 	PUT /v1/accounts/{id}/contributor-title              -> 204 the title moves here
 
@@ -97,7 +98,12 @@ func (s *Service) installPrivacy(mux *http.ServeMux) {
 	}
 	if s.src.SetBreakNotice != nil {
 		mux.HandleFunc("PUT /v1/accounts/{id}/characters/{name}/break-notice", func(w http.ResponseWriter, r *http.Request) {
-			s.putBreakNotice(w, r, digest)
+			s.putOnFlag(w, r, digest, s.src.SetBreakNotice)
+		})
+	}
+	if s.src.SetPlusFailNotice != nil {
+		mux.HandleFunc("PUT /v1/accounts/{id}/characters/{name}/plus-fail-notice", func(w http.ResponseWriter, r *http.Request) {
+			s.putOnFlag(w, r, digest, s.src.SetPlusFailNotice)
 		})
 	}
 	// The Contributor title's read and pick (port-only, not native; #135)
@@ -162,15 +168,18 @@ func (s *Service) putFlag(w http.ResponseWriter, r *http.Request, digest [sha256
 
 /*
 ================
-putBreakNotice
+putOnFlag
 
-The item-break notice opt-in (#1738), {"on": bool}, through
-SetBreakNotice: the same contract as putFlag (204, 404 for a character
-the account does not own, 503 when the store did not take it), and the
-same cache drop, so the character list shows the change at once.
+One {"on": bool} write through set: the item-break notice opt-in
+(#1738, SetBreakNotice) and the failed-reinforcement announcement
+choice (#3682, SetPlusFailNotice, "on" in its positive sense while
+the stored field is the opt-out). The same contract as putFlag (204,
+404 for a character the account does not own, 503 when the store did
+not take it), and the same cache drop, so the character list shows
+the change at once.
 ================
 */
-func (s *Service) putBreakNotice(w http.ResponseWriter, r *http.Request, digest [sha256.Size]byte) {
+func (s *Service) putOnFlag(w http.ResponseWriter, r *http.Request, digest [sha256.Size]byte, set func(accountID, name string, on bool) error) {
 	if !authorized(w, r, digest) {
 		return
 	}
@@ -188,7 +197,7 @@ func (s *Service) putBreakNotice(w http.ResponseWriter, r *http.Request, digest 
 		writeStatus(w, http.StatusNotFound, "not found")
 		return
 	}
-	if err := s.src.SetBreakNotice(account, name, *body.On); err != nil {
+	if err := set(account, name, *body.On); err != nil {
 		if errors.Is(err, ErrNotOwned) {
 			writeStatus(w, http.StatusNotFound, "not found")
 			return
@@ -298,7 +307,7 @@ func (s *Service) ownCharacters(w http.ResponseWriter, account string) {
 			continue
 		}
 		race, _ := raceGender(c.ModelCodename)
-		out.Characters = append(out.Characters, OwnCharacter{Name: c.Name, Level: level(c), Race: race, Hidden: c.PublicHidden, GearHidden: c.PublicGearHidden, BreakNotice: c.BreakNotice})
+		out.Characters = append(out.Characters, OwnCharacter{Name: c.Name, Level: level(c), Race: race, Hidden: c.PublicHidden, GearHidden: c.PublicGearHidden, BreakNotice: c.BreakNotice, PlusFailNotice: !c.PlusFailOptOut})
 	}
 	s.mu.Unlock()
 	sort.Slice(out.Characters, func(i, j int) bool { return out.Characters[i].Name < out.Characters[j].Name })

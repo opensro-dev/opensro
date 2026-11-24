@@ -439,6 +439,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if err := wireContributorTitles(game); err != nil {
 		return err
 	}
+	wirePlusFailNotice(game)
 	game.chat.Unions = game.unions
 	game.chat.Stalls = game.items.Stalls
 	if game.deps.ChatItemLinks > 0 {

@@ -403,6 +403,14 @@ type Character struct {
 	// the opensro.online account-page choice, schema 32). Off: their
 	// alchemy breaks are never announced.
 	BreakNotice bool `json:"breakNotice,omitempty"`
+	// PlusFailOptOut is the character's opt-out of the shard's failed
+	// reinforcement announcements (port-only, not native:
+	// SRO_ANNOUNCE_PLUS_FAIL, #3682, the opensro.online account-page
+	// choice or "/plusfail off" in game, schema 51). The #2852 failure
+	// notice rode the breakNotice opt-in; it is announced unless the
+	// character opted out. Set: their failed high-plus attempts are
+	// never announced.
+	PlusFailOptOut bool `json:"plusFailOptOut,omitempty"`
 	// MostWanted is the character's job-kill streak (port-only, not native:
 	// SRO_MOST_WANTED, action/mostwanted.go; schema 24). Nil is no streak.
 	MostWanted *MostWanted `json:"mostWanted,omitempty"`

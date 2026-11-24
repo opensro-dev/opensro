@@ -451,6 +451,12 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			return setPrivacyFlag(authority, shard, account, name, "break-notice", on,
 				func(c *domain.Character) *bool { return &c.BreakNotice })
 		},
+		SetPlusFailNotice: func(account, name string, on bool) error {
+			// The route carries the choice in its positive sense; the
+			// stored field is the opt-out (#3682).
+			return setPrivacyFlag(authority, shard, account, name, "plus-fail-notice", !on,
+				func(c *domain.Character) *bool { return &c.PlusFailOptOut })
+		},
 		// The Contributor title's read and pick (port-only, not native; #135)
 		// reach the registry at call time (wiring_contributor.go): with
 		// SRO_CONTRIBUTOR_TITLES off there is none, and both answer not found.

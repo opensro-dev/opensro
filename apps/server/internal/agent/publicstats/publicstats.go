@@ -136,7 +136,11 @@ type Sources struct {
 	// SetBreakNotice commits the item-break notice opt-in (#1738) the
 	// same way.
 	SetBreakNotice func(accountID, name string, on bool) error
-	WriteToken     string
+	// SetPlusFailNotice commits the failed-reinforcement announcement
+	// choice (#3682) the same way, in its positive sense: on stores
+	// the character's opt-out (plusFailOptOut) off.
+	SetPlusFailNotice func(accountID, name string, on bool) error
+	WriteToken        string
 	// ContributorTitleOf reads the Contributor title an account sees
 	// (contributor.Registry.TitleOf, port-only, #135): whether this
 	// account carries it, whether it hides it, and ok false for an

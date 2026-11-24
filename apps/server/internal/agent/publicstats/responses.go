@@ -164,6 +164,11 @@ type OwnCharacter struct {
 	Hidden      bool   `json:"hidden"`
 	GearHidden  bool   `json:"gearHidden"`
 	BreakNotice bool   `json:"breakNotice"`
+	// PlusFailNotice is the failed-reinforcement announcement choice in
+	// its positive sense (#3682): true means the character's failed
+	// high-plus attempts are announced (the stored field is the
+	// opt-out, so the account page shows the plain state).
+	PlusFailNotice bool `json:"plusFailNotice"`
 }
 
 // OwnCharactersResponse is the website's authenticated
