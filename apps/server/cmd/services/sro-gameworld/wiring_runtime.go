@@ -301,6 +301,16 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 				}
 				return plane.NextWaypoint(from, fromOwner, goal)
 			},
+			// The homing budget's global search, through the same
+			// plane gate: a plane with no global search (the caves)
+			// answers nil and the mover keeps its wait (#4124).
+			PlanGlobalRoute: func(from monster.Pose, fromOwner simulation.NavOwner, goal monster.Pose) *monster.NavigationRoute {
+				plane, ok := planes.Between(from.RegionID, goal.RegionID)
+				if !ok {
+					return monster.UnresolvedNavigationRoute(goal, monster.NavigationRouteBlocked)
+				}
+				return plane.GlobalRoute(from, fromOwner, goal)
+			},
 			// The failed-route memo may answer a retry only where the
 			// plane's routes are pure (#1820 part B).
 			RouteMemo: func(from, goal monster.Pose) bool {

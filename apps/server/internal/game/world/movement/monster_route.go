@@ -19,6 +19,19 @@ import (
 )
 
 const monsterRouteProbeBudget = 256
+
+// monsterGlobalRouteProbeBudget bounds the homing search
+// (PlanMonsterGlobalRoute): a returning mover can be regions from home
+// behind a terrain barrier, and the search only runs when the bounded
+// search and the march have both failed, on the mover's one-second
+// retry cadence. Sized from the real Taklamakan wedge (#4124): the
+// rim-to-nest crossing measures 117046 probes (~0.8 s on the dev box)
+// because the Euclidean heuristic floods the gorge basin before it
+// finds the pass, so the budget carries ~2.2x that with room for
+// longer kites; the worst case is ~1.8 s for a mover whose home is
+// unreachable, after which it rejoins the normal wait. See
+// TestGlobalRouteCrossesTheGorgeRim.
+const monsterGlobalRouteProbeBudget = 262144
 const monsterRouteGrid = 32.0
 
 /*
@@ -27,7 +40,24 @@ PlanMonsterRoute
 ================
 */
 func (v *WaterValidator) PlanMonsterRoute(from, goal monster.Pose) *monster.NavigationRoute {
-	return findMonsterRouteWithStep(from, goal, v.probeMonsterRouteStep)
+	return findMonsterRouteWithBudget(from, goal, v.probeMonsterRouteStep, monsterRouteProbeBudget)
+}
+
+/*
+================
+PlanMonsterGlobalRoute
+
+The same search with the homing budget (monsterGlobalRouteProbeBudget):
+a returning mover's stored goal can sit regions away behind terrain the
+local budget cannot see around (the Taklamakan gorge rim, #4124), where
+the native mover simply walks its global path home. Only the returning
+mode's fallback consults this entry (simulation's globalRoute); chase
+and follow keep the bounded budget above. Geometry, tie order and the
+step probe are identical - the budget is the only difference.
+================
+*/
+func (v *WaterValidator) PlanMonsterGlobalRoute(from, goal monster.Pose) *monster.NavigationRoute {
+	return findMonsterRouteWithBudget(from, goal, v.probeMonsterRouteStep, monsterGlobalRouteProbeBudget)
 }
 
 /*
@@ -140,6 +170,19 @@ findMonsterRouteWithStep
 ================
 */
 func findMonsterRouteWithStep(from, goal monster.Pose, step func(monster.Pose, monster.Pose, bool) (float64, bool, bool)) *monster.NavigationRoute {
+	return findMonsterRouteWithBudget(from, goal, step, monsterRouteProbeBudget)
+}
+
+/*
+================
+findMonsterRouteWithBudget
+
+The detour search itself, parameterized only by its probe budget: the
+bounded local search (PlanMonsterRoute) and the homing search
+(PlanMonsterGlobalRoute) share every rule but how far they may look.
+================
+*/
+func findMonsterRouteWithBudget(from, goal monster.Pose, step func(monster.Pose, monster.Pose, bool) (float64, bool, bool), budget int) *monster.NavigationRoute {
 	goal = routeNormalize(goal)
 	_, firstClear, firstAvailable := step(from, goal, true)
 	if !firstAvailable {
@@ -156,7 +199,7 @@ func findMonsterRouteWithStep(from, goal monster.Pose, step func(monster.Pose, m
 	type key struct{ x, z, y int }
 	best := map[key]float64{{0, 0, int(math.Round(from.Y))}: 0}
 	directions := [8][2]int{{1, 0}, {0, 1}, {-1, 0}, {0, -1}, {1, 1}, {-1, 1}, {-1, -1}, {1, -1}}
-	for open.Len() > 0 && count < monsterRouteProbeBudget {
+	for open.Len() > 0 && count < budget {
 		n := heap.Pop(&open).(*routeNode)
 		if n.cost > best[key{n.x, n.z, int(math.Round(n.pose.Y))}] {
 			continue
@@ -175,7 +218,7 @@ func findMonsterRouteWithStep(from, goal monster.Pose, step func(monster.Pose, m
 			}
 		}
 		for _, d := range directions {
-			if count >= monsterRouteProbeBudget {
+			if count >= budget {
 				break
 			}
 			x, z := n.x+d[0], n.z+d[1]
@@ -200,7 +243,7 @@ func findMonsterRouteWithStep(from, goal monster.Pose, step func(monster.Pose, m
 		}
 	}
 	status := monster.NavigationRouteBlocked
-	if count >= monsterRouteProbeBudget {
+	if count >= budget {
 		status = monster.NavigationSearchExhausted
 	}
 	return monster.UnresolvedNavigationRoute(goal, status).WithProbes(count)
