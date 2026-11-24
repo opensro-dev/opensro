@@ -144,6 +144,7 @@ rentTermRow
 */
 func rentTermRow(term, minutes string) []string {
 	row := make([]string, 15)
+	row[0] = "1"
 	row[1] = term
 	row[9] = minutes
 	return row

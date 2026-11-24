@@ -60,7 +60,7 @@ table, fingerprinted by path, size and modification time.
 ================
 */
 func itemTextdataKey(dir string) string {
-	paths := []string{filepath.Join(dir, "textdataname.txt")}
+	paths := []string{filepath.Join(dir, "textdataname.txt"), filepath.Join(dir, "refrentitem.txt")}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return "absent:" + dir

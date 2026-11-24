@@ -860,6 +860,7 @@ func (c *refItemCollector) add(codename string, typeFlags *uint16) {
 		Kind:         "equipment",
 		Name:         row.Name,
 		NativeFields: row.NativeFields,
+		Rent:         row.Rent,
 	})
 }
 
