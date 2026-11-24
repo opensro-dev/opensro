@@ -338,6 +338,17 @@ Recommended picks) must already be listed; they gain no row. Returns
 each authored package's badge for LoadMall to stamp on its one offer.
 A layout package whose data is missing refuses the boot naming the
 setting, like a bad extra-goods entry.
+
+A good the layout would author (Item set) whose package the data
+already carries is sold as the data has it: the layout writes no second
+package and keeps the data's price, and only lists it in its layout tab
+with its badge. Since #4241 the build imports the v1.696 mall row for
+the winter snowman scroll (MALL_PET_B_SILK, 88 silk, the layout's own
+tab and price), and authoring it again refused the GameWorld boot
+("already has package data"). A later native row wins over the
+layout's stand-in. The data's own mall listing was removed with the
+others above, so the layout's row is its one listing. The layout
+naming one package in two tabbed goods is still refused.
 ================
 */
 func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSource) (map[string]string, error) {
@@ -417,7 +428,14 @@ func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSo
 		}
 	}
 	badges := map[string]string{}
+	laidOut := map[string]bool{}
 	for _, good := range mallCategoryGoods {
+		if good.Tab != "" {
+			if laidOut[good.Package] {
+				return nil, fmt.Errorf("%s: the layout lists %s twice", EnvMallCategories, good.Package)
+			}
+			laidOut[good.Package] = true
+		}
 		if good.Imported && !itemRefPresent(refs, good.Item) {
 			continue
 		}
@@ -433,10 +451,7 @@ func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSo
 			}
 			continue
 		}
-		if good.Item != "" {
-			if authored[good.Package] {
-				return nil, fmt.Errorf("%s: %s already has package data", EnvMallCategories, good.Package)
-			}
+		if good.Item != "" && !authored[good.Package] {
 			entry := MallExtraGood{Tab: good.Tab, Package: good.Package, Item: good.Item, Silk: good.Silk}
 			if err := authorMallPackage(tables, entry, refs, uint32(nextPackageID)); err != nil {
 				return nil, err
