@@ -5774,6 +5774,29 @@ export function createUi( ports: UiPorts ) {
 			// Port-only: the box hands the scroll to the world map.
 			if ( reverseMapOffered() && reverseScrollHud.openMap( view ) ) setPanel( "Map" );
 			dirty = true;
+		} else if ( id === "reverse-scroll-party" ) {
+			// Later-native (#3903): the box hands the scroll to the party window.
+			reverseScrollHud.openParty( view );
+			dirty = true;
+		} else if ( id === "reverse-scroll-user" ) {
+			// Later-native (#3903): the box hands the scroll to the user window.
+			reverseScrollHud.openUser( view );
+			dirty = true;
+		} else if ( id.startsWith( "reverse-party:" ) ) {
+			const command = reverseScrollHud.chooseParty( Number( id.slice( "reverse-party:".length ) ), view );
+			if ( command ) sendGameplay( command );
+			dirty = true;
+		} else if ( id === "reverse-user-enroll" ) {
+			const command = reverseScrollHud.enroll( view );
+			if ( command ) sendGameplay( command );
+			dirty = true;
+		} else if ( id === "reverse-user-move" ) {
+			const command = reverseScrollHud.chooseUser( view );
+			if ( command ) sendGameplay( command );
+			dirty = true;
+		} else if ( id === "reverse-window-close" ) {
+			reverseScrollHud.back();
+			dirty = true;
 		} else if ( id.startsWith( "reverse-map-point:" ) ) {
 			const point = reverseScrollHud.mapping() ?
 				view.gameplay?.reverseMapPoints?.find( row =>
@@ -6903,14 +6926,25 @@ export function createUi( ports: UiPorts ) {
 				) return;
 			}
 			if ( reverseScrollHud.reconcile( view ) ) dirty = true;
-			if ( reverseScrollHud.active() ) {
+			if ( reverseScrollHud.active() || reverseScrollHud.party() || reverseScrollHud.user() ) {
+				const inBox = reverseScrollHud.active();
 				const boxControl = ( id: string | null ) =>
 					id !== null &&
-					[ "reverse-scroll:2", "reverse-scroll:3", "reverse-scroll-map", "reverse-scroll-cancel" ].includes(
-						id
-					);
+					(inBox ?
+						[
+							"reverse-scroll:2",
+							"reverse-scroll:3",
+							"reverse-scroll-map",
+							"reverse-scroll-party",
+							"reverse-scroll-user",
+							"reverse-scroll-cancel"
+						].includes( id ) :
+						id === "reverse-window-close" || id === "reverse-user-enroll" ||
+						id === "reverse-user-move" || id.startsWith( "reverse-party:" ));
 				if ( event.kind === "key" && event.code === "Escape" ) {
-					reverseScrollHud.close();
+					// Escape leaves a sub-window for the box, and the box for the world.
+					if ( inBox ) reverseScrollHud.close();
+					else reverseScrollHud.back();
 					dirty = true;
 				} else if ( event.kind === "activate" && boxControl( event.id ) ) {
 					activate( event.id );
@@ -18050,7 +18084,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					controls = drawFrame.controls = [];
 					// Port-only: the scroll's box grows a map row when it is offered.
 					const mapRow = reverseScrollHud.active() && reverseMapOffered();
-					const admission = beginWindow(), box = reverseReturnLayout( w, h, mapRow ? 3 : 2 );
+					// Later-native (#3903): the scroll's box always grows the
+					// party and user rows (the premium box keeps its two).
+					const laterRows = reverseScrollHud.active() ? 2 : 0;
+					const admission = beginWindow(),
+						box = reverseReturnLayout( w, h, 2 + (mapRow ? 1 : 0) + laterRows );
 					blocks.push( full );
 					paths.push( ...partyProposalAssets() );
 					quads.push(
@@ -18079,15 +18117,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							{ hAlign: 1, vAlign: 0 }
 						)
 					);
+					let pointRow = 0;
 					authoredLabeledButton(
-						reverseReturnButton( box.points[0]! ),
+						reverseReturnButton( box.points[pointRow++]! ),
 						0,
 						0,
 						reverseBox.prefix + REVERSE_RETURN_LAST_RECALL,
 						hudCopy( "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_RETURN" )
 					);
 					authoredLabeledButton(
-						reverseReturnButton( box.points[1]! ),
+						reverseReturnButton( box.points[pointRow++]! ),
 						0,
 						0,
 						reverseBox.prefix + REVERSE_RETURN_LAST_DEATH,
@@ -18095,11 +18134,27 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					);
 					if ( mapRow ) {
 						authoredLabeledButton(
-							reverseReturnButton( box.points[2]! ),
+							reverseReturnButton( box.points[pointRow++]! ),
 							0,
 							0,
 							"reverse-scroll-map",
-							"Move to a location on the map."
+							hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_TO_APPOINT_CHANGE" )
+						);
+					}
+					if ( laterRows ) {
+						authoredLabeledButton(
+							reverseReturnButton( box.points[pointRow++]! ),
+							0,
+							0,
+							"reverse-scroll-party",
+							hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_PARTY_MOVE" )
+						);
+						authoredLabeledButton(
+							reverseReturnButton( box.points[pointRow++]! ),
+							0,
+							0,
+							"reverse-scroll-user",
+							hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_USER_APPOINT" )
 						);
 					}
 					// 5327AE captions id 201 UIO_COMMON_CTL_CANCEL; the port's text
@@ -18112,6 +18167,139 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						hudCopy( "UIIT_CTL_CANCEL" )
 					);
 					endWindow( admission, "premium-reverse-return" );
+				}
+				// Later-native (#3903): the party window the box's party row
+				// opens (v1.696 CNIFReversePortalParty, 0x2ca): one button
+				// per member but the player; the member is the answer.
+				if ( reverseScrollHud.party() ) {
+					controls = drawFrame.controls = [];
+					const members = (game?.social?.members ?? []).filter( member => member.id !== game?.localGid );
+					const admission = beginWindow(),
+						box = reverseReturnLayout( w, h, Math.max( 1, members.length ) );
+					blocks.push( full );
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...frameRing(
+							box.frame,
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						)
+					);
+					quads.push( ...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
+					quads.push(
+						...text.quads( hudCopy( "UIIT_PAG_REVERSE_RETRUN_SCROLL_PARTY_MOVE" ), box.title, full, white, {
+							hAlign: 1,
+							vAlign: 0
+						} )
+					);
+					members.forEach( ( member, index ) => {
+						authoredLabeledButton(
+							reverseReturnButton( box.points[index]! ),
+							0,
+							0,
+							"reverse-party:" + member.id,
+							member.name
+						);
+					} );
+					authoredLabeledButton(
+						reverseReturnButton( box.refuse ),
+						0,
+						0,
+						"reverse-window-close",
+						hudCopy( "UIIT_CTL_CANCEL" )
+					);
+					endWindow( admission, "reverse-party" );
+				}
+				// Later-native (#3903): the user settings window the box's
+				// user row opens (v1.696 CNIFReversePortalUserSave, 0x2cb).
+				// The later client splits enroll and move into their own
+				// windows; this one panel carries both buttons, the
+				// overwrite question and the no-location line.
+				if ( reverseScrollHud.user() ) {
+					controls = drawFrame.controls = [];
+					const saved = game?.reverseUserPoint;
+					const admission = beginWindow(), box = reverseReturnLayout( w, h, 2 );
+					blocks.push( full );
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...frameRing(
+							box.frame,
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						)
+					);
+					quads.push( ...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
+					quads.push(
+						...text.quads(
+							hudCopy( "UIIT_PAG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION" ),
+							box.title,
+							full,
+							white,
+							{ hAlign: 1, vAlign: 0 }
+						)
+					);
+					if ( reverseScrollHud.confirmEnroll() ) {
+						quads.push(
+							...text.quads(
+								hudCopy( "UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_RE_CHECK" ),
+								box.question,
+								full,
+								white,
+								{ hAlign: 1, vAlign: 0 }
+							)
+						);
+					} else {
+						const intro = hudCopy(
+							"UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_INTRODUCTION"
+						).split( "\n" );
+						intro.forEach( ( line, index ) => {
+							quads.push(
+								...text.quads(
+									line,
+									[ box.question[0], box.question[1] - 6 + index * 16, box.question[2], 16 ],
+									full,
+									white,
+									{ hAlign: 1, vAlign: 0 }
+								)
+							);
+						} );
+					}
+					authoredLabeledButton(
+						reverseReturnButton( box.points[0]! ),
+						0,
+						0,
+						"reverse-user-enroll",
+						hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_USER_APPOINT_BUTTON" )
+					);
+					if ( saved ) {
+						authoredLabeledButton(
+							reverseReturnButton( box.points[1]! ),
+							0,
+							0,
+							"reverse-user-move",
+							hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_USER_MOVE" )
+						);
+					} else {
+						quads.push(
+							...text.quads(
+								hudCopy( "UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_MOVE_INTRODUCTION_1" ),
+								box.points[1]!,
+								full,
+								white,
+								{ hAlign: 1, vAlign: 0 }
+							)
+						);
+					}
+					authoredLabeledButton(
+						reverseReturnButton( box.refuse ),
+						0,
+						0,
+						"reverse-window-close",
+						hudCopy( "UIIT_CTL_CANCEL" )
+					);
+					endWindow( admission, "reverse-user" );
 				}
 				if ( panel === "Blocking" && hudData ) {
 					const admission = beginWindow(),

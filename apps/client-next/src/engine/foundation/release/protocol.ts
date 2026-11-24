@@ -18,6 +18,8 @@ checks) reads the same numbers the client ships.
 ===========================================================================
 */
 
+// Protocol 21 reads the port-only 0x3FCE saved reverse-return location
+// (reverse-user-point.ts, #3903), which 20 would drop as an unknown frame.
 // Protocol 20 admits the port-only skill reset control (opcode 21,
 // commerce-controls.ts SKILL_RECALL_CONTROL; SRO_SKILL_RESET_SCROLL), which
 // 19's world gate ended the session on.
@@ -57,7 +59,7 @@ checks) reads the same numbers the client ships.
 // every creatable monster's row in the reference file (#369); 5 added
 // populated persistent summoners and concurrent COS lifetimes.
 // Protocol 17 also adds survival checkpoint rewards (#3189).
-export const RELEASE_PROTOCOL = 20;
+export const RELEASE_PROTOCOL = 21;
 // The public reference file's contract (releaseprotocol.ReferencesContract).
 export const REFERENCES_CONTRACT = 3;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";

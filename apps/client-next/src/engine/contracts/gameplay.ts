@@ -501,6 +501,8 @@ export type GameplayCommand =
 		readonly reverseChoice?: number;
 		// The port-only map choice's point id (reverse-return-map.ts).
 		readonly reverseMapPoint?: number;
+		// The party member a party move names, by gid (reverse-user-point.ts).
+		readonly reversePartyGid?: number;
 		// The name-change scroll's new name (#1689, port-only): the entry
 		// window's text, carried raw in the use tail.
 		readonly renameName?: string;
@@ -984,6 +986,9 @@ export interface GameplayState extends MoverPublication {
 	readonly homingProjectiles?: boolean;
 	// The server's port-only SRO_REVERSE_RETURN_MAP option is on (reverse-return-map.ts).
 	readonly reverseMapPoints?: readonly import("@/engine/foundation/gameplay/reverse-return-map").ReverseMapPoint[];
+	// The owner's enrolled reverse return location, told on the port-only
+	// 0x3FCE frame (reverse-user-point.ts); absent while none is enrolled.
+	readonly reverseUserPoint?: import("@/engine/foundation/gameplay/reverse-user-point").ReverseUserPoint;
 	// The shard's configured character level cap, published at world entry
 	// (level-cap.ts): the party form and the quest guide bound their level
 	// windows by it. Absent means the native cap (foundation/gameplay/level-cap.ts).

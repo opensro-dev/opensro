@@ -76,6 +76,7 @@ const preCaravanAgentsLayoutVersion = 13
 const preSroMacroVersion = 47
 const preTitleVersion = 48
 const prePlusFailOptOutVersion = 50
+const preUserReversePointVersion = 51
 
 /*
 ================

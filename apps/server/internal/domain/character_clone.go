@@ -680,6 +680,7 @@ func cloneCharacterWorld(source *CharacterWorld) *CharacterWorld {
 	clone.RebirthPoint = cloneWorldSpawn(source.RebirthPoint)
 	clone.LastRecallPoint = cloneWorldPoint(source.LastRecallPoint)
 	clone.LastDeathPoint = cloneWorldPoint(source.LastDeathPoint)
+	clone.UserReversePoint = cloneWorldPoint(source.UserReversePoint)
 	clone.DungeonFloorIndex = clonePointer(source.DungeonFloorIndex)
 	clone.PackedInstance = clonePointer(source.PackedInstance)
 	if source.InstanceReturn != nil {
