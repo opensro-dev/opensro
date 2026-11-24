@@ -71,6 +71,10 @@ export function createSession(): SessionOwner {
 		token: string;
 		divisionId: string;
 		transportUrl: string;
+		// The Agent advertised a route ("/shards/<id>", catalog.go
+		// PublicTransportURL) rather than a transport host: the web edge
+		// proxies it over HTTP, so the world session dials no WebTransport.
+		edgeRoute: boolean;
 		nativeServerName?: string;
 	} | null = null;
 	let completion: {
@@ -550,7 +554,12 @@ baseUrl
 					if ( command.kind === "enter-world" ) {
 						if ( !identity ) throw new Error( "Authentication required" );
 						entryCharacter = command.character;
-						world.enter( command.character, identity.divisionId, identity.transportUrl );
+						world.enter(
+							command.character,
+							identity.divisionId,
+							identity.transportUrl,
+							identity.edgeRoute
+						);
 						cancelTitleRequest();
 						scope = "world";
 					} else if ( command.kind === "disconnect" ) {
@@ -984,7 +993,12 @@ baseUrl
 								} );
 								if ( resume ) {
 									entryCharacter = resume.name;
-									world.enter( resume.name, identity!.divisionId, identity!.transportUrl );
+									world.enter(
+										resume.name,
+										identity!.divisionId,
+										identity!.transportUrl,
+										identity!.edgeRoute
+									);
 									cancelTitleRequest();
 									scope = "world";
 									restoringWorld = true;
@@ -1040,6 +1054,7 @@ baseUrl
 							typeof value.sessionToken !== "string" || !value.sessionToken.trim() ||
 							value.sessionToken.length > 4096 || !result.expectedShard ||
 							value.divisionId !== result.expectedShard || typeof value.transportUrl !== "string" ||
+							(value.transportRoute !== undefined && typeof value.transportRoute !== "boolean") ||
 							value.nextScene !== "character-select"
 						) {
 							throw new Error( "Invalid authentication route" );
@@ -1062,7 +1077,10 @@ baseUrl
 							apiBase: result.apiBase,
 							token: value.sessionToken,
 							divisionId: result.expectedShard,
-							transportUrl: baseUrl( value.transportUrl, result.apiBase )
+							transportUrl: baseUrl( value.transportUrl, result.apiBase ),
+							// The Agent states the form (catalog.go TransportEdgeRoute);
+							// an Agent that does not is a host, as before.
+							edgeRoute: value.transportRoute === true
 						};
 						if (
 							result.kind === "restore" && typeof value.resumeCharacter === "string" &&
