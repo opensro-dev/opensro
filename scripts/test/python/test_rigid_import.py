@@ -11,6 +11,7 @@ source carries), and the item shard's stage/reap round trip.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -83,6 +84,40 @@ class RigidScrollRowsTest(unittest.TestCase):
 			self.assertEqual(row[125], "COOLTIME:0x000000F1")
 			self.assertEqual(row[53], "item\\etc\\drop_scroll.bsr")
 			self.assertEqual(row[54], "item\\etc\\e050729_summon_scroll.ddj")
+
+	# ================
+	# test_no_staged_parameter_is_below_the_none_value
+	#
+	# The item loaders refuse a parameter below -1; the extraction's
+	# two damaged unused slots (URUCHI p5 -257, IVY p18 -65537) stage
+	# as -1, and every other slot stays as extracted.
+	# ================
+	def test_no_staged_parameter_is_below_the_none_value(self):
+		raw = {entry["codename"]: entry["row"]
+			for entry in json.loads(rigid.ROWS_FILE.read_text(encoding="utf-8"))["rows"]}
+		rows = {row[rigid.ITEM_CODE]: row for row in rigid.scroll_rows()}
+		self.assertEqual(raw["ITEM_RIGID_URUCHI_L2_SUMMON_SCROLL"][126], "-257")
+		self.assertEqual(raw["ITEM_RIGID_IVY_L2_SUMMON_SCROLL"][152], "-65537")
+		for code, row in rows.items():
+			for k in range(rigid.PARAM_SLOTS):
+				self.assertGreaterEqual(int(row[rigid.PARAM_FIRST + 2 * k]), -1, f"{code} parameter {k + 1}")
+			changed = [i for i, (a, b) in enumerate(zip(raw[code], row)) if a != b]
+			expected = {"ITEM_RIGID_URUCHI_L2_SUMMON_SCROLL": [126], "ITEM_RIGID_IVY_L2_SUMMON_SCROLL": [152]}
+			self.assertEqual(changed, expected.get(code, []), code)
+
+	# ================
+	# test_an_unused_slot_keeps_a_real_value
+	#
+	# Retail unused slots hold 0, 1, 50 and 100; only a negative
+	# value other than -1 is damage.
+	# ================
+	def test_an_unused_slot_keeps_a_real_value(self):
+		row = ["0"] * rigid.ITEM_COLUMNS
+		for k in range(rigid.PARAM_SLOTS):
+			row[rigid.PARAM_FIRST + 2 * k], row[rigid.PARAM_FIRST + 2 * k + 1] = "-1", "xxx"
+		row[120], row[122], row[128], row[129] = "50", "-9", "-3", "MOB_X"
+		fixed = rigid.unused_parameters(row)
+		self.assertEqual((fixed[120], fixed[122], fixed[128]), ("50", "-1", "-3"))
 
 	# ================
 	# test_the_uruchi_name_symbol_keeps_the_extraction_spelling
