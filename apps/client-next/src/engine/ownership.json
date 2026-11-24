@@ -97,6 +97,7 @@
     "src/engine/runtime/assets/worker/packs/packs.ts": "src/engine/runtime/assets/worker/loader.ts",
     "src/engine/runtime/assets/worker/packs/blocks.ts": "src/engine/runtime/assets/worker/packs/packs.ts",
     "src/engine/runtime/assets/worker/packs/persistent.ts": "src/engine/runtime/assets/worker/packs/packs.ts",
+    "src/engine/runtime/assets/worker/packs/shared-blocks.ts": "src/engine/runtime/assets/worker/packs/packs.ts",
     "src/engine/runtime/assets/worker/packs/index/index.ts": "src/engine/runtime/assets/worker/packs/packs.ts",
     "src/engine/runtime/assets/worker/model/model.ts": "src/engine/runtime/assets/worker/loader.ts",
     "src/engine/runtime/simulation/worker/session/world/world.ts": "src/engine/runtime/simulation/worker/session/session.ts",

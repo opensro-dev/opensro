@@ -29,6 +29,8 @@ const ASYNC_OWNERS = [
 	runtime + "assets/worker/packs/packs.ts",
 	runtime + "assets/worker/packs/blocks.ts",
 	runtime + "assets/worker/packs/persistent.ts",
+	// The cross-window block lock and its hold (#4324).
+	runtime + "assets/worker/packs/shared-blocks.ts",
 	runtime + "assets/worker/world/resources/resources.ts",
 	runtime + "assets/worker/navigation/navigation.ts",
 	// Background install of the combat presentation set; worker-only I/O.
