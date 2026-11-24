@@ -32,11 +32,14 @@ unique-encounters/haroeris-seth-chain.md has the trail):
 	           sanctum with a one-monster wave whose trigger asks the
 	           shard manager to open Seth's (0x7ce6 type 1): Seth's gate
 	           opens when Haroeris dies.
-
-Inference, recorded as the rules require: the Selkis & Neith and Anubis &
-Isis jobs were not read instruction by instruction. Both sanctums of each
-pair have their enter gate in the Temple itself, where Seth's stands in
-Haroeris's sanctum, so each pair opens together at its schedule's open.
+	pairs      the other two jobs open both worlds of their pair on one
+	           step: CShardSJ_TempleOfSelkisAndNeithGate's open (call
+	           0x660241 to 0x6605a0) looks up INS_TEMPLE_SELK (0x6605e6)
+	           and INS_TEMPLE_NEIT (0x660652) and opens each (failure
+	           logs 0x66093e, 0x660a28) before "now Open" (0x66025f);
+	           CShardSJ_TempleOfAnubisAndIsisGate does the same with
+	           INS_TEMPLE_ANUB and _ISIS (0x661276, 0x6612e5, 0x66186e).
+	           Neither pair has a kill trigger: only Seth waits on one.
 
 This leaf owns the table. It imports only the schedule leaf.
 
