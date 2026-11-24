@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import build_alexandria_variant as variant  # noqa: E402
+import variant_files as variant  # noqa: E402
 import sro_pk2  # noqa: E402
 from alexandria_map_tables import LOCALINFO_COLUMNS, MAPINFO_COLUMNS, append_rows, overview_tiles  # noqa: E402
 from import_vsro_alexandria import TEXTDATA, decode_table, table_rows  # noqa: E402

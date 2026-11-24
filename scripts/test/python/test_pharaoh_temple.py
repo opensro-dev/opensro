@@ -19,7 +19,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import build_alexandria_variant as variant  # noqa: E402
+import variant_files as variant  # noqa: E402
 import variant_gates  # noqa: E402
 import import_vsro_alexandria as stage1  # noqa: E402
 import pharaoh_temple as temple  # noqa: E402

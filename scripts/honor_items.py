@@ -58,7 +58,7 @@ import published_ids
 import import_vsro_alexandria as tables
 import nasrun_import as nasrun
 import sro_pk2
-from build_alexandria_variant import build_switch
+from variant_files import build_switch
 from prepare_client_resources import safe_target, write_atomically
 
 FLAG = "SRO_HONOR_GOODS"

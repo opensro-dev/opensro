@@ -45,8 +45,8 @@ MJS = ".m" + "js"
 def run_build(variant: Path, steps: list, roots=(), repository_root=None):
 	(variant / "extracted").mkdir(parents=True, exist_ok=True)
 	runner = variant_steps.Runner(variant, roots, repository_root=repository_root)
-	for name, body, code_from in steps:
-		runner.register(name, body, code_from=code_from)
+	for name, function, arguments in steps:
+		runner.register(name, function, arguments)
 	runner.load({"variant": str(variant)})
 	runner.begin()
 	results = [runner.result(index) for index in range(len(steps))]
@@ -76,7 +76,7 @@ class VariantSteps(unittest.TestCase):
 			target.write_bytes(data)
 			return result
 
-		return (name, body, body)
+		return (name, body, ())
 
 	# ================
 	# test_unchanged_build_replays_every_step
@@ -98,7 +98,7 @@ class VariantSteps(unittest.TestCase):
 			(out / "c.txt").write_bytes((out / "a.txt").read_bytes() + b"!")
 			return {"done": True}
 
-		steps = [("first", first_body, first_body), ("second", second_body, second_body)]
+		steps = [("first", first_body, ()), ("second", second_body, ())]
 		results = run_build(self.variant, steps)
 		tree = self.variant / "extracted"
 		self.assertEqual((tree / "a.txt").read_bytes(), b"one")
@@ -132,7 +132,7 @@ class VariantSteps(unittest.TestCase):
 			(self.variant / "extracted" / "d.txt").write_bytes(b"down:" + data)
 			return {"echo": data.decode("ascii")}
 
-		steps = [("reader", reader, reader), ("downstream", downstream, downstream)]
+		steps = [("reader", reader, ()), ("downstream", downstream, ())]
 		roots = (source,)
 		run_build(self.variant, steps, roots)
 		# A change the reader's effect does not show: the reader reruns,
@@ -181,8 +181,8 @@ class VariantSteps(unittest.TestCase):
 		finally:
 			sys.path.remove(str(modules))
 		steps = [
-			("flagged", lambda: flagged.run(self.variant), flagged.run),
-			("plain", lambda: plain.run(self.variant), plain.run),
+			("flagged", flagged.run, (self.variant,)),
+			("plain", plain.run, (self.variant,)),
 		]
 		saved = os.environ.pop("SRO_FLAG_A", None)
 		try:
@@ -230,7 +230,7 @@ class VariantSteps(unittest.TestCase):
 		counters: dict = {}
 		plain = self.write_step(counters, "plain", "plain.txt", b"p", {"p": 1})
 		steps = [
-			("scripted", lambda: stepmod.run(self.variant), stepmod.run),
+			("scripted", stepmod.run, (self.variant,)),
 			plain,
 		]
 		try:
@@ -273,7 +273,7 @@ class VariantSteps(unittest.TestCase):
 			(self.variant / "extracted" / "z.txt").write_bytes(b"z")
 			return {"ids": {1, 2}}
 
-		steps = [("loose", body, body)]
+		steps = [("loose", body, ())]
 		run_build(self.variant, steps)
 		run_build(self.variant, steps)
 		self.assertEqual(counters["loose"], 2)
@@ -287,7 +287,7 @@ class VariantSteps(unittest.TestCase):
 			raise RuntimeError("boom")
 
 		runner = variant_steps.Runner(self.variant, ())
-		runner.register("bad", body, code_from=body)
+		runner.register("bad", body)
 		runner.load({"variant": str(self.variant)})
 		runner.begin()
 		with self.assertRaises(RuntimeError):
@@ -304,6 +304,251 @@ class VariantSteps(unittest.TestCase):
 		run_build(self.variant, [one, two])
 		run_build(self.variant, [one])
 		self.assertEqual(counters["one"], 2)
+
+	# ================
+	# load_module
+	#
+	# A fresh import of one scratch module from a folder.
+	# ================
+	def load_module(self, folder: Path, name: str):
+		sys.modules.pop(name, None)
+		sys.path.insert(0, str(folder))
+		try:
+			return importlib.import_module(name)
+		finally:
+			sys.path.remove(str(folder))
+
+	# ================
+	# write_repository
+	#
+	# A scratch checkout holding one step module: run() writes a file and
+	# calls helper.used(); rare() imports a module only it names, and the
+	# step never calls it.
+	# ================
+	def write_repository(self, root: Path, used="1", rare="1"):
+		scripts = root / "scripts"
+		scripts.mkdir(parents=True, exist_ok=True)
+		(scripts / "stepmod.py").write_text(
+			"import helper\n\nCALLS = {'n': 0}\n\n\n"
+			"def run(variant):\n"
+			"\tCALLS['n'] += 1\n"
+			"\tout = variant / 'extracted'\n"
+			"\tout.mkdir(parents=True, exist_ok=True)\n"
+			"\t(out / 'step.txt').write_text(str(helper.used()))\n"
+			"\treturn {'n': 1}\n\n\n"
+			"def rare():\n"
+			"\timport rarely\n"
+			"\treturn rarely.VALUE\n",
+			encoding="utf-8",
+		)
+		(scripts / "helper.py").write_text(f"def used():\n\treturn {used}\n", encoding="utf-8")
+		(scripts / "rarely.py").write_text(f"VALUE = {rare}\n", encoding="utf-8")
+		return scripts
+
+	# ================
+	# test_a_fresh_checkout_at_another_path_replays
+	#
+	# Every release builds from a new freeze checkout (rel-<sha>): the
+	# journal names code by checkout-relative path, so the same code at
+	# another path is the same key. Keyed by absolute path, r204i reran
+	# every step (#4251).
+	# ================
+	def test_a_fresh_checkout_at_another_path_replays(self):
+		first = Path(self.temp.name) / "rel-a"
+		stepmod = self.load_module(self.write_repository(first), "stepmod")
+		run_build(self.variant, [("step", stepmod.run, (self.variant,))], repository_root=first)
+		second = Path(self.temp.name) / "rel-b"
+		first.rename(second)
+		for name in ("helper", "rarely"):
+			sys.modules.pop(name, None)
+		stepmod = self.load_module(second / "scripts", "stepmod")
+		try:
+			run_build(self.variant, [("step", stepmod.run, (self.variant,))], repository_root=second)
+		finally:
+			for name in ("stepmod", "helper", "rarely"):
+				sys.modules.pop(name, None)
+		self.assertEqual(stepmod.CALLS["n"], 0)
+
+	# ================
+	# test_only_code_the_step_ran_keys_it
+	#
+	# A module only an uncalled function imports is not the step's code;
+	# the helper it called is. The static closure took both, and with them
+	# most of the build (#4251).
+	# ================
+	def test_only_code_the_step_ran_keys_it(self):
+		repo = Path(self.temp.name) / "repo"
+		scripts = self.write_repository(repo)
+		stepmod = self.load_module(scripts, "stepmod")
+		steps = [("step", stepmod.run, (self.variant,))]
+		try:
+			run_build(self.variant, steps, repository_root=repo)
+			(scripts / "rarely.py").write_text("VALUE = 2\n", encoding="utf-8")
+			run_build(self.variant, steps, repository_root=repo)
+			self.assertEqual(stepmod.CALLS["n"], 1)
+			(scripts / "helper.py").write_text("def used():\n\treturn 2\n", encoding="utf-8")
+			run_build(self.variant, steps, repository_root=repo)
+			self.assertEqual(stepmod.CALLS["n"], 2)
+		finally:
+			for name in ("stepmod", "helper", "rarely"):
+				sys.modules.pop(name, None)
+
+	# ================
+	# test_explain_names_the_part_that_moved
+	#
+	# The seconds-long smoke for a code change: no build, the journal
+	# untouched, and the verdict names the moved key part.
+	# ================
+	def test_explain_names_the_part_that_moved(self):
+		repo = Path(self.temp.name) / "repo"
+		scripts = self.write_repository(repo)
+		stepmod = self.load_module(scripts, "stepmod")
+
+		def explain():
+			runner = variant_steps.Runner(self.variant, (), repository_root=repo)
+			runner.register("step", stepmod.run, (self.variant,))
+			runner.load({"variant": str(self.variant)})
+			return runner.explain()
+
+		try:
+			self.assertEqual(explain(), [("step", "no usable journal: every step runs")])
+			run_build(self.variant, [("step", stepmod.run, (self.variant,))], repository_root=repo)
+			journal = variant_steps.journal_path(self.variant).read_bytes()
+			self.assertEqual(explain(), [("step", "current")])
+			(scripts / "helper.py").write_text("def used():\n\treturn 3\n", encoding="utf-8")
+			self.assertEqual(explain(), [("step", "stale: code")])
+			self.assertEqual(stepmod.CALLS["n"], 1)
+			self.assertEqual(variant_steps.journal_path(self.variant).read_bytes(), journal)
+		finally:
+			for name in ("stepmod", "helper", "rarely"):
+				sys.modules.pop(name, None)
+
+	# ================
+	# test_a_comment_and_a_body_that_never_ran_are_not_code
+	#
+	# The step runs stepmod.run and helper.used and reads table.X, which
+	# stepmod imports at module level. A comment in the step's own module,
+	# or a new body for table.unused (which never ran), keeps it current;
+	# table's constant and helper's body are its code. Keyed by bytes, a
+	# one-comment edit to alexandria_npcs.py made 22 of 28 steps stale
+	# (#4251).
+	# ================
+	def test_a_comment_and_a_body_that_never_ran_are_not_code(self):
+		repo = Path(self.temp.name) / "repo"
+		scripts = repo / "scripts"
+		scripts.mkdir(parents=True)
+		(scripts / "stepmod.py").write_text(
+			"import helper\nimport table\n\nCALLS = {'n': 0}\n\n\n"
+			"def run(variant):\n"
+			"\tCALLS['n'] += 1\n"
+			"\tout = variant / 'extracted'\n"
+			"\tout.mkdir(parents=True, exist_ok=True)\n"
+			"\t(out / 'step.txt').write_text(str(helper.used() + table.X))\n"
+			"\treturn {'n': 1}\n",
+			encoding="utf-8",
+		)
+		(scripts / "helper.py").write_text("def used():\n\treturn 1\n", encoding="utf-8")
+		(scripts / "table.py").write_text("X = 1\n\n\ndef unused():\n\treturn 1\n", encoding="utf-8")
+		stepmod = self.load_module(scripts, "stepmod")
+		steps = [("step", stepmod.run, (self.variant,))]
+
+		def edit(name, text):
+			(scripts / name).write_text(text, encoding="utf-8")
+			run_build(self.variant, steps, repository_root=repo)
+			return stepmod.CALLS["n"]
+
+		try:
+			run_build(self.variant, steps, repository_root=repo)
+			source = (scripts / "stepmod.py").read_text(encoding="utf-8")
+			self.assertEqual(edit("stepmod.py", source + "\n# a note, not code\n"), 1)
+			self.assertEqual(edit("table.py", "X = 1\n\n\ndef unused():\n\treturn 2\n"), 1)
+			self.assertEqual(edit("table.py", "X = 2\n\n\ndef unused():\n\treturn 2\n"), 2)
+			self.assertEqual(edit("helper.py", "def used():\n\treturn 3\n"), 3)
+		finally:
+			for name in ("stepmod", "helper", "table"):
+				sys.modules.pop(name, None)
+
+	# ================
+	# test_a_summary_keyed_by_numbers_replays
+	#
+	# The skill import's summary counts by mastery id: an int-keyed dict
+	# json writes but the journal refused, so the step reran on every
+	# build without a word (#4251). It replays now, with its keys intact.
+	# ================
+	def test_a_summary_keyed_by_numbers_replays(self):
+		counters: dict = {}
+		summary = {"masteries": {257: 3, 258: 1}, "pairs": (1, 2), "named": {"@bytes": "a key, not a blob"}}
+		step = self.write_step(counters, "skills", "skills.txt", b"s", summary)
+		first = run_build(self.variant, [step])
+		second = run_build(self.variant, [step])
+		self.assertEqual(counters["skills"], 1)
+		self.assertEqual(first, [summary])
+		self.assertEqual(second, [summary])
+
+	# ================
+	# test_an_argument_from_an_earlier_result_keys_its_step
+	#
+	# The map step takes the gates' text: a different value reruns it, the
+	# same value replays it, and a step taking nothing is left alone.
+	# ================
+	def test_an_argument_from_an_earlier_result_keys_its_step(self):
+		counters: dict = {}
+
+		# The source writes nothing, so the tree state after it never moves:
+		# only its result tells the taker its input changed.
+		def source(text):
+			counters["source"] = counters.get("source", 0) + 1
+			return {"text": text.upper()}
+
+		def taker(text):
+			counters["taker"] = counters.get("taker", 0) + 1
+			(self.variant / "extracted" / "taken.txt").write_bytes(text.encode("ascii"))
+			return {"length": len(text)}
+
+		def build(given):
+			(self.variant / "extracted").mkdir(parents=True, exist_ok=True)
+			got: dict = {}
+			runner = variant_steps.Runner(self.variant, ())
+			runner.register("source", source, (given,))
+			runner.register("taker", taker, later=lambda: (got["source"]["text"],))
+			runner.load({"variant": str(self.variant)})
+			runner.begin()
+			got["source"] = runner.result(0)
+			got["taker"] = runner.result(1)
+			runner.finish()
+
+		build("one")
+		build("one")
+		self.assertEqual(counters, {"source": 1, "taker": 1})
+		# The source reruns on its own argument and returns the same result:
+		# the taker replays.
+		build("ONE")
+		self.assertEqual(counters, {"source": 2, "taker": 1})
+		# Its result moves: the taker reruns.
+		build("two")
+		self.assertEqual(counters, {"source": 3, "taker": 2})
+		self.assertEqual((self.variant / "extracted" / "taken.txt").read_bytes(), b"TWO")
+
+	# ================
+	# test_an_argument_keys_its_step_by_value
+	#
+	# A flag the builder reads and passes in (the shops' port_stock) keys
+	# the step it is passed to.
+	# ================
+	def test_an_argument_keys_its_step_by_value(self):
+		counters: dict = {}
+
+		def stock(port_stock):
+			counters["stock"] = counters.get("stock", 0) + 1
+			(self.variant / "extracted" / "stock.txt").write_text(str(port_stock))
+			return {"port": port_stock}
+
+		run_build(self.variant, [("stock", stock, (False,))])
+		run_build(self.variant, [("stock", stock, (False,))])
+		run_build(self.variant, [("stock", stock, (True,))])
+		self.assertEqual(counters, {"stock": 2})
+		with self.assertRaises(variant_steps.Unrecordable):
+			variant_steps.Runner(self.variant, ()).register("bad", stock, (object(),))
 
 
 if __name__ == "__main__":

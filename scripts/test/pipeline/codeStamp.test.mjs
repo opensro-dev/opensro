@@ -21,7 +21,7 @@ import { pathToFileURL } from "node:url";
 
 const temporaryRoot = await mkdtemp( path.join( os.tmpdir(), "sro-code-stamp-" ) );
 process.env.SRO_GENERATED_ROOT = path.join( temporaryRoot, "generated" );
-const { codeClosure, codeHash, invalidateStamp, stampIsCurrent, writeStamp } = await import(
+const { codeClosure, codeHash, invalidateStamp, moduleClosure, stampIsCurrent, writeStamp } = await import(
 	"../../build/shared/codeStamp.mjs"
 );
 
@@ -111,6 +111,75 @@ test("a Python name the stamp cannot resolve fails instead of leaving a gap", as
 		codeClosure( path.join( root, "scripts/build/entry.mjs" ), root ),
 		/renamed_away\.py.*matches 0/
 	);
+});
+
+test("the module closure follows module-level Python imports only, from every entry", async () => {
+	const root = path.join( temporaryRoot, "module" );
+	await mkdir( path.join( root, "scripts" ), { recursive: true } );
+	const files = {
+		// The step ran step.py: its module-level import is code, the import
+		// inside a function it never called is not.
+		"scripts/step.py": "import table\n\n\ndef rare():\n\timport monsters\n\treturn monsters.X\n",
+		"scripts/table.py": 'PINS = "table_pins.json"\n',
+		"scripts/table_pins.json": "{}\n",
+		"scripts/monsters.py": "X = 1\n",
+		"scripts/other.py": "import table\n"
+	};
+	for ( const [name, text] of Object.entries( files ) ) await writeFile( path.join( root, name ), text );
+	const relative = ( list ) => list.map( ( file ) => path.relative( root, file ).split( path.sep ).join( "/" ) );
+	assert.deepEqual( relative( await moduleClosure( [ path.join( root, "scripts/step.py" ) ], root ) ), [
+		"scripts/step.py",
+		"scripts/table.py",
+		"scripts/table_pins.json"
+	] );
+	// The full closure still follows the function-level import.
+	assert.ok(
+		relative( await codeClosure( path.join( root, "scripts/step.py" ), root ) ).includes( "scripts/monsters.py" )
+	);
+	// Several entries: their union, each file once.
+	assert.deepEqual(
+		relative(
+			await moduleClosure( [ "scripts/step.py", "scripts/other.py" ].map( ( f ) => path.join( root, f ) ), root )
+		),
+		[ "scripts/other.py", "scripts/step.py", "scripts/table.py", "scripts/table_pins.json" ]
+	);
+});
+
+test("a module only imported brings its imports and pins, not the scripts it names", async () => {
+	const root = path.join( temporaryRoot, "imported" );
+	await mkdir( path.join( root, "scripts", "analysis" ), { recursive: true } );
+	const files = {
+		// The shop step ran shop.py, which imports items.py at module level;
+		// items.py runs deps.mjs from a function the step never called.
+		"scripts/shop.py": "import items\n",
+		"scripts/items.py": 'import table\nSCRIPT = "deps.mjs"\n',
+		"scripts/table.py": "X = 1\n",
+		"scripts/analysis/deps.mjs": 'import { y } from "./pipeline.mjs";\n',
+		"scripts/analysis/pipeline.mjs": "export const y = 1;\n"
+	};
+	for ( const [name, text] of Object.entries( files ) ) await writeFile( path.join( root, name ), text );
+	const relative = ( list ) => list.map( ( file ) => path.relative( root, file ).split( path.sep ).join( "/" ) );
+	const shop = path.join( root, "scripts/shop.py" );
+	const items = path.join( root, "scripts/items.py" );
+	assert.deepEqual( relative( await moduleClosure( [ shop ], root ) ), [
+		"scripts/items.py",
+		"scripts/shop.py",
+		"scripts/table.py"
+	] );
+	assert.deepEqual( relative( await moduleClosure( [], root, [ items ] ) ), [
+		"scripts/items.py",
+		"scripts/table.py"
+	] );
+	// Once items.py's own code ran, its script and what that imports count.
+	assert.deepEqual( relative( await moduleClosure( [ shop, items ], root ) ), [
+		"scripts/analysis/deps.mjs",
+		"scripts/analysis/pipeline.mjs",
+		"scripts/items.py",
+		"scripts/shop.py",
+		"scripts/table.py"
+	] );
+	// Reached by import first and as run code later, it is walked again.
+	assert.ok( relative( await moduleClosure( [ items ], root, [ items ] ) ).includes( "scripts/analysis/deps.mjs" ) );
 });
 
 test("a stamp is current only for the hash it recorded", async () => {

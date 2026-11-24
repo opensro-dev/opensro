@@ -89,7 +89,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent / "build"))
 import alexandria_npcs as characters  # noqa: E402
-import build_alexandria_variant as variant  # noqa: E402
+import variant_files as variant  # noqa: E402
 import variant_gates  # noqa: E402
 import cap110_monsters as monsters  # noqa: E402
 import cap110_skill_effects as effects  # noqa: E402

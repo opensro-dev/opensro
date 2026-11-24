@@ -24,7 +24,7 @@ The ledger lives in the build state beside the tree (<root>/.state), never
 in the checkout, so every worktree that rebuilds the variant shares it.
 
 settle only re-times files the variant owns. The variant build hard-links
-the native extraction's folders (build_alexandria_variant.link_tree), and
+the native extraction's folders (variant_files.link_tree), and
 a time set on a link is set on the native file too, so a file with more
 than one link keeps whatever time it has: settle records it as it stands.
 
