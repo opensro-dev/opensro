@@ -8,7 +8,7 @@ import (
 
 // equipRequirements builds the per-operation character-vs-itemdata equip
 // gate (inventory.EquipRequirements): the server-authority mirror of the
-// native client's full-mask requirement bits (CSOItem_Query_789C60). Data sources:
+// native client's full-mask requirement bits (native requirement check). Data sources:
 //
 //   - the character's level/gender/race off the bound enterworld.Character
 //     (the authority store rows);
@@ -102,9 +102,9 @@ func quadWalk(ref *enterworld.ItemRef, levelFor func(quadType int64) (int64, boo
 // PreExclusivity runs the native pre-0x080 requirement bits in evaluation
 // order: razed (0x004), STR (0x008), INT (0x010), level (0x020),
 // mastery (0x100), gender (0x040). The expired rental runs first: the
-// native equip write validates the rental's period itself
-// (CGStorage::UpdateRentItemInEquipSlot; "Not in use or time period is
-// over"), and an instance check needs no itemdata row to refuse.
+// native equip write validates the rental's period itself and refuses
+// "not in use or time period is over"; an instance check needs no
+// itemdata row to refuse.
 func (r *characterEquipRequirements) PreExclusivity(item inventory.Item) *inventory.Fault {
 	if item.RentExpiresUnix > 0 && item.RentExpiresUnix <= r.nowUnix {
 		return inventory.NewFault(wire.ErrCodeCantEquip, "rentExpired")
@@ -116,7 +116,7 @@ func (r *characterEquipRequirements) PreExclusivity(item inventory.Item) *invent
 
 	// Bit 0x004 (client @0x00789cc7): the razed/broken gate. Native refuses when the
 	// item instance CARRIES a durability attribute (blob (+0xc0)[5] set)
-	// AND its current durability (CSOItem field +0x78) reads 0. The
+	// AND its current durability (the item's +0x78 durability word) reads 0. The
 	// class-level attribute marker is the itemdata Dur_U column (weapons/
 	// armor > 0, accessories 0), so a durability-less accessory at
 	// Durability 0 passes exactly like native.
