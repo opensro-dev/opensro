@@ -601,13 +601,14 @@ def rewards(code, text, sql):
 	if not row or row["selectionCount"] == 0:
 		spec["RewardItems"] = leads
 		return spec
-	# A selection reward: the player picks SelectionCnt of the listed items.
-	# The v1.150 rows pick one; the server offers each as an NPC row titled
-	# by the item's name (rewardchoice.go). Reward kinds 1-5 index dialogue
-	# rewards and never appear with a selection.
-	if row["selectionCount"] != 1 or any(i["choice"] != 0 for i in items) or len(items) < 2:
+	# A selection reward: the player picks SelectionCnt of the listed
+	# items in the reward window (rewardchoice.go). Reward kinds 1-5
+	# index dialogue rewards and never appear with a selection; choice
+	# indices above 0 would group items and refuse here.
+	if any(i["choice"] != 0 for i in items) or len(items) < 2 or row["selectionCount"] < 1 or row["selectionCount"] > len(items):
 		raise Unsupported("selection of %d" % row["selectionCount"])
 	spec["RewardItems"] = []
+	spec["RewardSelectionCount"] = row["selectionCount"]
 	spec["RewardChoices"] = [{"TitleSymbol": "", "Items": [lead]} for lead in leads]
 	if row["checkCountry"]:
 		spec["RewardChoiceCheckCountry"] = True

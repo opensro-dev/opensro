@@ -33,6 +33,35 @@ func TestDecodeQuestRefRequest(t *testing.T) {
 	}
 }
 
+// TestDecodeQuestRewardRequest pins the 0x729A body: a bare refId alone
+// (a plain claim), or the pick form [refId][count][itemRefIds] the
+// selection window composes. Truncated, trailing and absurd-count forms
+// all refuse.
+func TestDecodeQuestRewardRequest(t *testing.T) {
+	t.Parallel()
+	refID, picks, err := DecodeQuestRewardRequest(u32le(0x2001))
+	if err != nil || refID != 0x2001 || picks != nil {
+		t.Fatalf("bare decode = %d, %v, %v; want 0x2001 without picks", refID, picks, err)
+	}
+	picked := append(u32le(0x2001), 1)
+	picked = append(picked, u32le(42)...)
+	refID, picks, err = DecodeQuestRewardRequest(picked)
+	if err != nil || refID != 0x2001 || len(picks) != 1 || picks[0] != 42 {
+		t.Fatalf("pick decode = %d, %v, %v; want 0x2001 [42]", refID, picks, err)
+	}
+	for name, bad := range map[string][]byte{
+		"short refId":  {1, 2, 3},
+		"zero count":   append(u32le(0x2001), 0),
+		"short picks":  append(u32le(0x2001), 2, 1, 0, 0, 0),
+		"trailing":     append(picked, 9),
+		"absurd count": append(u32le(0x2001), maxRewardPicks+1),
+	} {
+		if _, _, err := DecodeQuestRewardRequest(bad); err == nil {
+			t.Fatalf("%s must refuse", name)
+		}
+	}
+}
+
 // TestQuestUpdateRemoveLegs pins the op-3/op-4 payloads: [op][refId u32],
 // nothing further (the client's remove leg reads nothing past the header).
 func TestQuestUpdateRemoveLegs(t *testing.T) {
