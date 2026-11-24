@@ -77,6 +77,11 @@ type InventoryRow struct {
 	// seal above still refuses first. Absent on every other row, which
 	// is the migration: pre-split mall items read as granted/bound.
 	EarnedBought bool `json:"earnedBought,omitempty"`
+	// RentExpiresUnix is a rental's deletion time in unix seconds
+	// (native _RentItemInfo: a rented item's PeriodEndTime, filled from
+	// its scrap's refrentitem term at delivery, #4240). The world-entry
+	// sweep deletes a row at or past it; absent or zero is not a rental.
+	RentExpiresUnix int64 `json:"rentExpiresUnix,omitempty"`
 }
 
 /*

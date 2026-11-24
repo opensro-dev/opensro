@@ -19,6 +19,7 @@ storage.rows[].magicOptions
 storage.rows[].plus
 storage.rows[].recordId
 storage.rows[].refObjId
+storage.rows[].rentExpiresUnix
 storage.rows[].slot
 storage.rows[].stackCount
 storage.rows[].summon

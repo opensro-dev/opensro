@@ -248,13 +248,25 @@ export function completeRestrictionText( entries ) {
 // only when blank in completeUiText, so a shipped row would win.
 // - NASRUN_WEAR_EXTENSION (row id 4174): the v1.696 client refuses the
 //   Devil's Spirit extension gear aimed at the worn Spirit with this line.
-// - REVERSE_RETRUN_SCROLL (row ids 4200..4221, #3903): the v1.696 client
-//   adds two reverse return scroll destinations (a party member, a
-//   user-registered location). The v1.150 textuisystem ships none of
-//   these keys; the English column is the later client's own wording.
-// - QUESTREWARD (row ids 4763-4773) and QUEST_HELPER_FULL (id 4443): the
+// - REVERSE_RETRUN_SCROLL (#3903): the v1.696 client adds two reverse
+//   return scroll destinations (a party member, a user-registered
+//   location). In its textuisystem_4300.txt the band ids 4200..4221
+//   ships 20 of these rows, with holes at 4207 and 4214; those 20
+//   English texts below are the later client's own wording,
+//   byte-for-byte. The two keys in the holes
+//   (UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_INTRODUCTION
+//   and ..._SELECTION_RE_CHECK) are port-written: no native row exists
+//   for the settings window's introduction or its overwrite question.
+// - QUESTREWARD (textuisystem_4800.txt row ids 4763-4773) and
+//   QUEST_HELPER_FULL (textuisystem_4500.txt row id 4443): the
 //   reward-selection window's prompts, refusals and value labels, and
 //   the quick quest window's full line (#3920).
+// - The rental item strings (#4240): the later client's tooltip renders
+//   the remainder from the instance's millisecond deadline
+//   (ItemTooltip_BuildLines kind 0x15) with the first, and the expired
+//   state with the second. The native template names its units through
+//   <PARAM_HOUR> / <PARAM_MINUTE>; the completion carries them as %s for
+//   the same tooltipFormat that fills them.
 export const LATER_UI_TEXT_COMPLETIONS = Object.freeze( {
 	UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE: "You cannot use this while you are wearing it.",
 	UIIT_CLT_REVERSE_RETRUN_SCROLL_TO_APPOINT_CHANGE: "Move to certain location at the map.",
@@ -264,6 +276,7 @@ export const LATER_UI_TEXT_COMPLETIONS = Object.freeze( {
 	UIIT_MSG_REVERSE_RETRUN_SCROLL_PARTY_MOVE: "Cannot move because the user has left the party.",
 	UIIT_MSG_REVERSE_RETRUN_SCROLL_PARTY_MOVE_1: "A party member is in a location you cannot move to.",
 	UIIT_PAG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION: "User Settings Window",
+	// Port-written (#3903; id 4207 is a hole in the v1.696 band).
 	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_INTRODUCTION:
 		"Setting Location: Register current location as user location.\nMovement: Move to registered location.",
 	UIIT_CLT_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION: "Setting Location",
@@ -272,6 +285,7 @@ export const LATER_UI_TEXT_COMPLETIONS = Object.freeze( {
 	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_ENROLL_INTRODUCTION: "Click button to set location.",
 	UIIT_CLT_REVERSE_RETRUN_SCROLL_USER_APPOINT_BUTTON: "Set location",
 	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_ENROLL_INTRODUCTION_1: "This location cannot be set.",
+	// Port-written (#3903; id 4214 is a hole in the v1.696 band).
 	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_RE_CHECK:
 		"Do you want to delete the existing location and register a new location?",
 	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_END: "Location has been set.",
@@ -292,7 +306,9 @@ export const LATER_UI_TEXT_COMPLETIONS = Object.freeze( {
 	UIIT_STT_QUESTREWARD_AP: "AP",
 	UIIT_STT_QUESTREWARD_ERROR: "The reward was not given due to an unknown error.",
 	UIIT_STT_QUESTREWARD_JOBEXP: "JOB EXP",
-	UIIT_CTL_QUEST_HELPER_FULL: "Max. of three quests can be listed in quick window."
+	UIIT_CTL_QUEST_HELPER_FULL: "Max. of three quests can be listed in quick window.",
+	UIIT_STT_RENT_REMNANTS_TIME: "Time Remains: %d %s %d %s",
+	UIIT_STT_RENT_USED_TIME_OVER: "Time Period is over"
 } );
 
 export function completeUiText( entries ) {

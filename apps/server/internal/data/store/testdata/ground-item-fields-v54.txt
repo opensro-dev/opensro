@@ -29,6 +29,7 @@ summon.container.rows[].magicOptions
 summon.container.rows[].plus
 summon.container.rows[].recordId
 summon.container.rows[].refObjId
+summon.container.rows[].rentExpiresUnix
 summon.container.rows[].slot
 summon.container.rows[].stackCount
 summon.container.rows[].summon

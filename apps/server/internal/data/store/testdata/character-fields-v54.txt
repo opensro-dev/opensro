@@ -13,6 +13,7 @@ activeCos.container.rows[].magicOptions
 activeCos.container.rows[].plus
 activeCos.container.rows[].recordId
 activeCos.container.rows[].refObjId
+activeCos.container.rows[].rentExpiresUnix
 activeCos.container.rows[].slot
 activeCos.container.rows[].stackCount
 activeCos.container.rows[].summon
@@ -99,6 +100,7 @@ avatarInventory.rows[].magicOptions
 avatarInventory.rows[].plus
 avatarInventory.rows[].recordId
 avatarInventory.rows[].refObjId
+avatarInventory.rows[].rentExpiresUnix
 avatarInventory.rows[].slot
 avatarInventory.rows[].stackCount
 avatarInventory.rows[].summon
@@ -243,6 +245,7 @@ mercenaries[].container.rows[].magicOptions
 mercenaries[].container.rows[].plus
 mercenaries[].container.rows[].recordId
 mercenaries[].container.rows[].refObjId
+mercenaries[].container.rows[].rentExpiresUnix
 mercenaries[].container.rows[].slot
 mercenaries[].container.rows[].stackCount
 mercenaries[].container.rows[].summon
@@ -302,6 +305,7 @@ missionInventory[].magicOptions
 missionInventory[].plus
 missionInventory[].recordId
 missionInventory[].refObjId
+missionInventory[].rentExpiresUnix
 missionInventory[].slot
 missionInventory[].stackCount
 missionInventory[].summon
@@ -414,13 +418,6 @@ quickSlots[].slot
 raceIndex
 ravenRefugeReadyAtMs
 renameNoticeFrom
-reverseUserPoint
-reverseUserPoint.angle
-reverseUserPoint.regionId
-reverseUserPoint.world
-reverseUserPoint.x
-reverseUserPoint.y
-reverseUserPoint.z
 sharedSkillCooldowns
 skillActionRecoveryUntilMs
 skillExp
@@ -443,6 +440,7 @@ sookChest.items[].magicOptions
 sookChest.items[].plus
 sookChest.items[].recordId
 sookChest.items[].refObjId
+sookChest.items[].rentExpiresUnix
 sookChest.items[].slot
 sookChest.items[].stackCount
 sookChest.items[].summon

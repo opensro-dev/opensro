@@ -103,6 +103,10 @@ type Item struct {
 	// of stack identity for the same reason as the seal: a merge can
 	// never pour quantity into or out of a marked row.
 	EarnedBought bool
+	// RentExpiresUnix is a rental's expiry in unix seconds (native
+	// _RentItemInfo PeriodEndTime): the world-entry sweep deletes the
+	// row at or past it. Zero is not a rental (issue #4240).
+	RentExpiresUnix int64
 }
 
 // Body returns the CSOItem body for this row, the remainder of a type-0x06
@@ -113,7 +117,7 @@ Body
 ================
 */
 func (i Item) Body() wire.ItemBody {
-	return wire.ItemBody{
+	body := wire.ItemBody{
 		TradeOwner:   i.TradeOwner,
 		RefObjID:     i.RefObjID,
 		TypeFlags:    i.TypeFlags,
@@ -124,6 +128,10 @@ func (i Item) Body() wire.ItemBody {
 		MagicOptions: append([]uint64(nil), i.MagicOptions...),
 		Data:         i.Data, Summon: domain.CloneCOS(i.Summon),
 	}
+	if i.RentExpiresUnix > 0 {
+		body.RentExpiresUnixMs = i.RentExpiresUnix * 1000
+	}
+	return body
 }
 
 // Inventory is a character's authoritative slot map.

@@ -32,7 +32,9 @@ test("the later client's NASRUN worn line completes the v1.150 table", () => {
 });
 
 test("the later client's reverse scroll destinations complete the v1.150 table", () => {
-	// textuisystem ids 4200..4221 in the v1.696 client (#3903); the
+	// The v1.696 band (textuisystem_4300.txt ids 4200..4221) ships 20 of
+	// these keys (#3903); ids 4207 and 4214 are holes there, so the
+	// introduction and overwrite-question rows are port-written. The
 	// v1.150 table ships none of these keys.
 	const entries = {};
 	completeUiText( entries );

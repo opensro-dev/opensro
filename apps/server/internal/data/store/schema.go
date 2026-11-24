@@ -183,7 +183,13 @@ func isVersionMismatch(err error) bool {
 // announced unless the character opted out on the account page or with
 // "/plusfail off" in game. The offline upgrade rewrites no record; an
 // absent field announces.
-// Version 52 adds the optional per-character reverse return scroll
+// Version 54 adds the optional rental expiry on item rows (the step
+// skips 52-53: the field sits inside item rows an older binary strictly
+// decodes, so it cannot ride the read window, #3093).
+// (rentExpiresUnix, native _RentItemInfo, #4240): the unix second an
+// Item Mall rental is deleted at world entry. Rows saved earlier carry
+// none and are no rentals; the offline upgrade rewrites no record.
+// Version 55 adds the optional per-character reverse return scroll
 // saved location (reverseUserPoint, later-native v1.696, #3903): the
 // point the scroll's user window enrolls and later moves to, the
 // reverse-return twin of the world's recall and death points. It
@@ -191,7 +197,7 @@ func isVersionMismatch(err error) bool {
 // field nested in world is one the previous binary refuses on a
 // rewrite (#3090). Characters saved earlier carry none and have no
 // saved location; the offline upgrade rewrites no record.
-const CurrentVersion = 52
+const CurrentVersion = 55
 
 /*
 ================
@@ -265,7 +271,7 @@ var storeSteps = map[int]storeStep{
 	// 44 to 51 are no longer the current schema: each low end is the
 	// layout it ran at, and its high end follows the current layout
 	// (layouts 25 and up always end at the current one). The current
-	// schema (52) takes the wide low end.
+	// schema (55) takes the wide low end.
 	44: {true, "optional top-level ravenRefugeReadyAtMs recovery deadline", 12, 15},
 	45: {true, "no record change; layout 13 adds trade_history", 13, 15},
 	46: {true, "optional per-character Nasrun token balance and daily count", 13, 15},
@@ -274,7 +280,8 @@ var storeSteps = map[int]storeStep{
 	49: {true, "optional per-character titleId (later-native titles, #3502)", 14, 15},
 	50: {true, "optional per-item earnedBought (#4133); layout 15 adds the earned-silk wallet and silk-history split tables", 15, 15},
 	51: {true, "optional per-character plusFailOptOut (failed-reinforcement announcement opt-out, #3682)", 15, 15},
-	52: {true, "optional per-character reverseUserPoint (reverse return scroll saved location, #3903)", 5, 15},
+	54: {false, "optional per-item rentExpiresUnix (native _RentItemInfo, #4240)", 5, 15},
+	55: {true, "optional per-character reverseUserPoint (reverse return scroll saved location, #3903)", 5, 15},
 }
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving

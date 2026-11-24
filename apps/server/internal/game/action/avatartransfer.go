@@ -104,7 +104,7 @@ func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Characte
 			if socket == avatarAttachmentSocket && !dress {
 				return false
 			}
-			requirements := equipRequirements(rt.deps.ItemReferences(), c, rt.FortressGuildRole)
+			requirements := equipRequirements(rt.deps.ItemReferences(), c, rt.FortressGuildRole, rt.Now().Unix())
 			if requirements != nil {
 				if requirements.PreExclusivity(item) != nil || requirements.PostExclusivity(item) != nil {
 					return false

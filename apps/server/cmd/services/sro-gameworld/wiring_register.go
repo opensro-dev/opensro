@@ -302,6 +302,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	}
 	game.deps.NormalizeEntryQuests = quests.NormalizeEntryRecords
 	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredEventItems
+	game.deps.RemoveExpiredRentItems = game.items.RemoveExpiredRentItems
 	game.deps.EntryEventFrames = game.items.EntryEventFrames
 	game.deps.EntryEventGroups = game.items.EntryEventGroups
 	game.deps.SceneWeatherFrames = game.items.SceneWeatherFrames

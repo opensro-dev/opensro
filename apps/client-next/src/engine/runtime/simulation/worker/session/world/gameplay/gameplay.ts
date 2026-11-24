@@ -4910,7 +4910,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if (
-					storage.receive( frame, cosItemRefs, inventory.objectRefs() ) &&
+					storage.receive( frame, cosItemRefs, inventory.objectRefs(), inventory.rentRefs() ) &&
 					frame.opcode !== NPC_INTERACTION_ACK_OPCODE
 				) {
 					dirty = true;
