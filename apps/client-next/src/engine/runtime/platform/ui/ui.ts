@@ -950,7 +950,16 @@ export function createUiBridge(
 				}
 				// Match authored edit hit bounds while retaining its text client insets.
 				if ( el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ) {
-					const align = control.textAlign ?? "center", insets = control.textInsets ?? [ 0, 0, 0, 0 ];
+					// The editor is transparent: the canvas draws its value, and the
+					// browser places the caret by the editor's own text layout. The
+					// layout must therefore start where the drawing starts, or a
+					// click on the drawn glyphs lands at the wrong caret (a click
+					// left of centred text puts the caret at 0, where Backspace
+					// has nothing to delete and only Delete eats forward, #4153).
+					// Native edits draw from the left, so left is the default; a
+					// control whose drawing is centred or right-aligned declares
+					// textAlign, and textInsets carries its drawn offset.
+					const align = control.textAlign ?? "left", insets = control.textInsets ?? [ 0, 0, 0, 0 ];
 					if ( el.style.textAlign !== align ) el.style.textAlign = align;
 					for (
 						const [key, n] of [ [ "paddingLeft", insets[0] ], [ "paddingTop", insets[1] ], [
