@@ -294,6 +294,28 @@ export function itemTooltip(
 			add( `${text( "UIIT_STT_AMOUNT" )} ${item.quantity}`, 0xffffffff );
 		}
 	}
+	// The rental clock native keeps on the instance (#4240): the later
+	// client renders the remainder from the 64-bit milliseconds it holds
+	// (ItemTooltip_BuildLines kind 0x15, 9AFB10), whole hours and minutes
+	// with the UIIT_STT_RENT_... rows. The deadline rides the item body
+	// only for a rental kind the session's references taught it.
+	if ( item.rentExpiresUnixMs !== undefined ) {
+		const remainingMs = item.rentExpiresUnixMs - Date.now();
+		if ( remainingMs <= 0 ) {
+			add( text( "UIIT_STT_RENT_USED_TIME_OVER" ), 0xffffffff );
+		} else {
+			add(
+				tooltipFormat(
+					text( "UIIT_STT_RENT_REMNANTS_TIME" ),
+					Math.trunc( remainingMs / 3600000 ),
+					text( "PARAM_HOUR" ),
+					Math.trunc( remainingMs % 3600000 / 60000 ),
+					text( "PARAM_MINUTE" )
+				),
+				0xffffffff
+			);
+		}
+	}
 	if ( petDegree ) {
 		space();
 		add( `Level: Pet level ${petDegree.minPetLevel} required`, 0xffffffff );

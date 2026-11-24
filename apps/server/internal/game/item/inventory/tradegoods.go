@@ -74,6 +74,11 @@ func stackIdentityMatches(a, b Item) bool {
 	if a.EarnedBought != b.EarnedBought {
 		return false
 	}
+	// A merge keeps the destination row: two rentals of the same item
+	// with different clocks must never pour into one row (#4240).
+	if a.RentExpiresUnix != b.RentExpiresUnix {
+		return false
+	}
 	if wire.EtcCarriesPlusByte(a.TypeFlags) || wire.EtcCarriesPlusByte(b.TypeFlags) {
 		return a.Plus == b.Plus
 	}
@@ -95,7 +100,8 @@ to the plain row swap so each row keeps its own mark.
 */
 func wholeStackIdentityMatches(a, b Item, stackCap uint16) bool {
 	if stackCap == 1 && a.Quantity == 1 && b.Quantity == 1 {
-		return a.ForgeBound == b.ForgeBound && a.EarnedBought == b.EarnedBought && nativeStackIdentityMatches(a, b)
+		return a.ForgeBound == b.ForgeBound && a.EarnedBought == b.EarnedBought &&
+			a.RentExpiresUnix == b.RentExpiresUnix && nativeStackIdentityMatches(a, b)
 	}
 	return stackIdentityMatches(a, b)
 }

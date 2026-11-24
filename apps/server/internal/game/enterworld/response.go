@@ -90,6 +90,10 @@ type RefItemRow struct {
 	Kind                       string       `json:"kind"`
 	Name                       string       `json:"name"`
 	NativeFields               NativeFields `json:"nativeFields,omitempty"`
+	// Rent names a rental kind (native _RefRentItem, #4240): an owned
+	// row of this reference carries a rent deadline leg in its item
+	// body, which the client's decoder reads only for these refs.
+	Rent bool `json:"rent,omitempty"`
 }
 
 /*

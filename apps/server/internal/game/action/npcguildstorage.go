@@ -222,6 +222,17 @@ func (rt *Runtime) HandleGuildStorageList(division string, c *enterworld.Charact
 	if refusal.Refused() || err != nil {
 		return guildNpcAnswer(opGuildStorageListed, guildRefusalCode(refusal))
 	}
+	// Native deletes an out-of-period rental as the guild chest loads
+	// (_DelExpiredRentItemInStorage, rental_items.go).
+	if rentalRowsExpired(room.Rows, rt.Now().Unix()) {
+		room, refusal, err = store.TransactGuildStorageAs(division, c.ID, func(_ *domain.Character, chest *domain.AccountStorage) error {
+			removeExpiredRentRows(&chest.Rows, rt.Now().Unix())
+			return nil
+		})
+		if refusal.Refused() || err != nil {
+			return guildNpcAnswer(opGuildStorageListed, guildRefusalCode(refusal))
+		}
+	}
 	list, err := rt.storageListPayload(room)
 	if err != nil {
 		log.Warnf("guild storage: %s list: %v", c.Name, err)

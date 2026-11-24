@@ -618,7 +618,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			if container != nil {
 				capacity = uint16(container.Capacity)
 			}
-			dest, grantErr := commerce.GrantPackage(inv, contents, q.Quantity, capacity, commerce.GrantMarks{})
+			dest, grantErr := commerce.GrantPackage(inv, contents, q.Quantity, capacity, commerce.GrantMarks{NowUnix: rt.Now().Unix()})
 			if grantErr != nil {
 				refusal = commerceFailureCode(grantErr)
 				return false

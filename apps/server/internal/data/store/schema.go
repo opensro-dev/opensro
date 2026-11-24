@@ -183,7 +183,13 @@ func isVersionMismatch(err error) bool {
 // announced unless the character opted out on the account page or with
 // "/plusfail off" in game. The offline upgrade rewrites no record; an
 // absent field announces.
-const CurrentVersion = 51
+// Version 54 adds the optional rental expiry on item rows (the step
+// skips 52-53: the field sits inside item rows an older binary strictly
+// decodes, so it cannot ride the read window, #3093).
+// (rentExpiresUnix, native _RentItemInfo, #4240): the unix second an
+// Item Mall rental is deleted at world entry. Rows saved earlier carry
+// none and are no rentals; the offline upgrade rewrites no record.
+const CurrentVersion = 54
 
 /*
 ================
@@ -254,10 +260,10 @@ var storeSteps = map[int]storeStep{
 	41: {true, "optional account gourdCount", 12, 15},
 	42: {true, "optional arena entry markers and reward chest", 12, 15},
 	43: {false, "the survival arena count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 12, 15},
-	// 44 to 50 are no longer the current schema: each low end is the
+	// 44 to 51 are no longer the current schema: each low end is the
 	// layout it ran at, and its high end follows the current layout
 	// (layouts 25 and up always end at the current one). The current
-	// schema (51) takes the wide low end.
+	// schema (54) takes the wide low end.
 	44: {true, "optional top-level ravenRefugeReadyAtMs recovery deadline", 12, 15},
 	45: {true, "no record change; layout 13 adds trade_history", 13, 15},
 	46: {true, "optional per-character Nasrun token balance and daily count", 13, 15},
@@ -265,7 +271,8 @@ var storeSteps = map[int]storeStep{
 	48: {true, "optional per-character SRO Macro settings", 14, 15},
 	49: {true, "optional per-character titleId (later-native titles, #3502)", 14, 15},
 	50: {true, "optional per-item earnedBought (#4133); layout 15 adds the earned-silk wallet and silk-history split tables", 15, 15},
-	51: {true, "optional per-character plusFailOptOut (failed-reinforcement announcement opt-out, #3682)", 5, 15},
+	51: {true, "optional per-character plusFailOptOut (failed-reinforcement announcement opt-out, #3682)", 15, 15},
+	54: {false, "optional per-item rentExpiresUnix (native _RentItemInfo, #4240)", 5, 15},
 }
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
