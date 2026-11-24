@@ -15,12 +15,16 @@ import (
 //   - the item's requirement columns off the typed ItemRef fields
 //     (itemdata media columns 14/33/58/59/60).
 //
-// A nil item source or a missing itemdata row passes - the documented
-// degraded no-textdata boot, same as the socket resolver's behavior.
+// nowUnix is the operation's clock for the one instance-state leg (an
+// expired rental, rental_items.go): it needs no itemdata row, so it
+// runs before the reference lookup. A nil item source or a missing
+// itemdata row passes - the documented degraded no-textdata boot, same
+// as the socket resolver's behavior.
 func equipRequirements(
 	items enterworld.ItemRefSource,
 	character *enterworld.Character,
 	fortressRole FortressGuildRoleResolver,
+	nowUnix int64,
 ) inventory.EquipRequirements {
 	if items == nil || character == nil {
 		return nil
@@ -29,6 +33,7 @@ func equipRequirements(
 		items:        items,
 		character:    character,
 		fortressRole: fortressRole,
+		nowUnix:      nowUnix,
 	}
 }
 
@@ -36,6 +41,7 @@ type characterEquipRequirements struct {
 	items        enterworld.ItemRefSource
 	character    *enterworld.Character
 	fortressRole FortressGuildRoleResolver
+	nowUnix      int64
 }
 
 // characterLevel coerces the pointer stat with the same fallback the
@@ -95,8 +101,14 @@ func quadWalk(ref *enterworld.ItemRef, levelFor func(quadType int64) (int64, boo
 
 // PreExclusivity runs the native pre-0x080 requirement bits in evaluation
 // order: razed (0x004), STR (0x008), INT (0x010), level (0x020),
-// mastery (0x100), gender (0x040).
+// mastery (0x100), gender (0x040). The expired rental runs first: the
+// native equip write validates the rental's period itself
+// (CGStorage::UpdateRentItemInEquipSlot; "Not in use or time period is
+// over"), and an instance check needs no itemdata row to refuse.
 func (r *characterEquipRequirements) PreExclusivity(item inventory.Item) *inventory.Fault {
+	if item.RentExpiresUnix > 0 && item.RentExpiresUnix <= r.nowUnix {
+		return inventory.NewFault(wire.ErrCodeCantEquip, "rentExpired")
+	}
 	ref, ok := r.items.ItemRefByCodename(item.Codename)
 	if !ok || ref == nil {
 		return nil

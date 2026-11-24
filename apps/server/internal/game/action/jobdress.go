@@ -229,7 +229,7 @@ func (rt *Runtime) jobWearRefusal(division string, c *enterworld.Character, sour
 	}
 	// The ordinary equip gates (level, sex, country) on a trial move.
 	inv := bagOf(c)
-	inv.Requirements = equipRequirements(rt.deps.ItemReferences(), c, rt.FortressGuildRole)
+	inv.Requirements = equipRequirements(rt.deps.ItemReferences(), c, rt.FortressGuildRole, rt.Now().Unix())
 	if _, fault := inv.Transfer(source, jobSuitSlot, 1, 1); fault != nil {
 		return fault.Code
 	}
