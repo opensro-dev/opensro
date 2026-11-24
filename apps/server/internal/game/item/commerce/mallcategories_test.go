@@ -301,6 +301,51 @@ func TestMallCategoriesWithExtraGoods(t *testing.T) {
 
 /*
 ================
+TestMallCategoriesKeepAPackageTheDataAlreadySells
+
+The winter snowman scroll reaches the data as its own v1.696 mall row
+(#4241). Here SRO_MALL_EXTRA_GOODS stands in for that import, at a price
+the layout does not use. The layout then sells the data's package: one
+listing, in its own pet tab, at the data's price, badged new. Before the
+fix this refused the boot with "already has package data".
+================
+*/
+func TestMallCategoriesKeepAPackageTheDataAlreadySells(t *testing.T) {
+	tier.Long(t, "a layout good the data already sells keeps the data's package")
+	const snowmanPackage, dataSilk = "PACKAGE_ITEM_COS_P_WINTER_SNOWMAN_SCROLL", 77
+	dir := gamedatatest.TextdataDir(t)
+	shipped := enterworld.NewTextdataItems(dir)
+	base, ok := shipped.ItemRefByCodename("ITEM_COS_P_CAT_SCROLL")
+	if !ok {
+		t.Fatal("no shipped pet scroll to model the snowman on")
+	}
+	snowman := *base
+	snowman.RefObjID, snowman.Codename = 88019, "ITEM_COS_P_WINTER_SNOWMAN_SCROLL"
+	items := importedItems{ItemRefSource: shipped, extra: map[string]*enterworld.ItemRef{snowman.Codename: &snowman}}
+	native := []MallExtraGood{{Tab: "MALL_PET_B_SILK", Package: snowmanPackage, Item: snowman.Codename, Silk: dataSilk}}
+	catalog, err := LoadMall(dir, native, true, items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listings := 0
+	for _, offer := range catalog.Offers {
+		if offer.Code == snowmanPackage {
+			listings++
+		}
+	}
+	offer := mallOfferNamed(catalog, snowmanPackage)
+	cat := mallOfferNamed(catalog, "PACKAGE_ITEM_COS_P_CAT_SCROLL")
+	if listings != 1 || offer == nil || cat == nil {
+		t.Fatalf("snowman lists %d times (offer %+v), want once beside the cat", listings, offer)
+	}
+	if offer.Silk != dataSilk || offer.Badge != mallBadgeNew || offer.Shop != cat.Shop || offer.Tab != cat.Tab {
+		t.Fatalf("snowman offer = %+v, want the data's %d silk, badged new, in the cat's tab %d/%d",
+			offer, dataSilk, cat.Shop, cat.Tab)
+	}
+}
+
+/*
+================
 importedItems
 
 The shipped item table plus rows only the later-client import authors,
