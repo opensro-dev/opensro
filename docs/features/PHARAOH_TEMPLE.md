@@ -8,7 +8,7 @@ one for the thief job. With the switch on, the dungeons, their gates and their m
 
 | Switch | Where | Effect |
 | --- | --- | --- |
-| `SRO_PHARAOH_TEMPLE` | Build and server | The seven dungeons (regions `0x800A`-`0x8010`), the four gates, and the 25 kinds and 102 nests in them, `pharaoh-temple.txt` |
+| `SRO_PHARAOH_TEMPLE` | Build and server | The seven dungeons (regions `0x800A`-`0x8010`), the four gates, and the 26 kinds and 103 nests in them, `pharaoh-temple.txt` |
 
 The live shard profile (`apps/server/config/shard-settings.json`) turns it on. The code default stays off.
 
@@ -28,10 +28,10 @@ stages.
 
 | Part | Result (real inputs) |
 | --- | --- |
-| Monsters | 25 kinds admitted, in `characterdata_270000.txt` (the Osiris kind rides the Pharaoh Tomb pass's standing row when that pass staged it first), 83 skills in `skilldata_270000.txt` |
+| Monsters | 26 kinds admitted, in `characterdata_270000.txt` (the Osiris kind rides the Pharaoh Tomb pass's standing row when that pass staged it first), 104 skills in `skilldata_270000.txt` |
 | Placements | 102 nests across the seven dungeons, joining the default world |
 | Keepers | Selkis, Neith, Anubis, Isis and Seth (grade 3), one each in their sanctums (Anubis two), on a 3-hour respawn |
-| Unique | Osiris (`MOB_SD_OSIRIS_3`, grade 8), one nest in the Temple on an 8-hour respawn |
+| Uniques | Osiris (`MOB_SD_OSIRIS_3`, grade 8), one nest in the Temple on an 8-hour respawn; Haroeris (`MOB_SD_HAROERIS`, grade 3), his kind and skills only: no nest places him (below) |
 
 The server loader (`monster.AppendPharaohTemple`) admits a nest only in one of the seven dungeon regions, and only
 when its source world is the one its dungeon is grouped under (51-56, and 60 for the Temple); the one exception is
@@ -55,5 +55,9 @@ population keeps refusing dungeon regions.
   full tactics row (57573, read whole), and the server admits it alone from the field world into the Temple
   region, at the grade its tomb brothers carry (8). The kind is the Pharaoh Tomb's too: whichever pass stages
   it first, the other places its nest on the standing row (one codename, one row).
+- **Haroeris has no nest (#3787).** Natively he is never placed by a nest. The Haroeris gate job spawns him once
+  when his sanctum opens, and his death opens Seth's (research `unique-encounters/haroeris-seth-chain.md`). The
+  import claims his kind by name, so his character and skills are staged, and places no row. The server's sanctum
+  schedule spawns him (#4270).
 - **Not yet here.**
-  - Haroeris: neither source places it by a nest.
+  - His skill summons (`ssou`) and decoys, on the iSRO-R counts and `_RefGameWorldNPC` points.

@@ -5,7 +5,7 @@ pharaoh_temple.go - the Pharaoh Temple's population (port-only, not native)
 
 The job temple's seven dungeons (package pharaohtemple: the Temple and six
 sanctums, regions 0x800A-0x8010) ride SRO_PHARAOH_TEMPLE. The variant build
-stages their 25 kinds and nests (scripts/pharaoh_temple_import.py) into
+stages their 26 kinds and nests (scripts/pharaoh_temple_import.py) into
 pharaoh-temple.txt, the cap-110 Version-2 row schema; this file appends them
 while the switch is on. The five sanctum keepers (Selkis, Neith, Anubis,
 Isis, Seth) are among them.
