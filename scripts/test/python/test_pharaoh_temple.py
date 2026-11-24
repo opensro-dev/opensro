@@ -244,6 +244,72 @@ class TempleGateTests(unittest.TestCase):
 
 
 # ================
+# AddGatesTempleTests
+# ================
+class AddGatesTempleTests(unittest.TestCase):
+	"""variant_gates.add_gates with the temple on and off.
+
+	The gate step itself must name the sanctum teleporters: through the merge
+	alone a variant build added neither teleporter while the gate tests stayed
+	green (7712aa385 dropped the buildings argument when main's add_gates move
+	took the file over). The fixture's baseline gates are named out so the
+	temple codes are the only ones in play (the AddGatesTests pattern).
+	"""
+
+	def run_add_gates(self, flag):
+		native_tables, vsro_tables = TempleGateTests().teleporter_tables()
+		vsro_files = {
+			variant.TEXTDATA + "teleportdata.txt": vsro_tables["teleportdata.txt"],
+			variant.TEXTDATA + "teleportbuilding.txt": vsro_tables["teleportbuilding.txt"],
+			variant.TEXTDATA + "teleportlink.txt": vsro_tables["teleportlink.txt"],
+			variant.TEXTDATA + "textdata_object.txt": vsro_tables["text"]
+		}
+		saved_read, saved_codes = variant_gates.read_vsro_file, variant_gates.GATE_CODES
+		saved_env = {
+			name: variant.os.environ.get(name)
+			for name in (temple.FLAG, variant_gates.LEVEL_CAP_FLAG, "SRO_PHARAOH_TOMB")
+		}
+		variant.os.environ[temple.FLAG] = flag
+		variant.os.environ[variant_gates.LEVEL_CAP_FLAG] = "110"
+		variant.os.environ.pop("SRO_PHARAOH_TOMB", None)
+		with tempfile.TemporaryDirectory() as scratch:
+			native, out = Path(scratch) / "native", Path(scratch) / "out"
+			textdata = native / "Media_extracted" / variant.TEXTDATA
+			textdata.mkdir(parents=True)
+			for name in ("teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt"):
+				(textdata / name).write_bytes(native_tables[name])
+			(textdata / "textdataname.txt").write_bytes(native_tables["text"])
+			variant_gates.read_vsro_file = lambda root, archive, name: vsro_files[name]
+			variant_gates.GATE_CODES = ()
+			try:
+				summary, merged = variant_gates.add_gates(Path(scratch) / "vsro", native, out)
+				written = (out / "Media_extracted" / variant.TEXTDATA / "teleportbuilding.txt").read_bytes()
+			finally:
+				variant_gates.read_vsro_file, variant_gates.GATE_CODES = saved_read, saved_codes
+				for name, value in saved_env.items():
+					if value is None:
+						variant.os.environ.pop(name, None)
+					else:
+						variant.os.environ[name] = value
+		return summary, merged, written
+
+	def written_building_codes(self, written):
+		return {row[2] for row in stage1.table_rows(written)}
+
+	def test_temple_on_adds_both_sanctum_teleporters_through_the_step(self):
+		summary, merged, written = self.run_add_gates("on")
+		self.assertTrue(set(temple.TELEPORTER_CODES) <= set(summary["buildingCodes"]))
+		self.assertTrue(set(temple.TELEPORTER_CODES) <= self.written_building_codes(merged["teleportbuilding.txt"]))
+		self.assertTrue(set(temple.TELEPORTER_CODES) <= self.written_building_codes(written))
+		self.assertEqual(summary["gates"], list(temple.GATE_CODES))
+
+	def test_temple_off_writes_no_sanctum_teleporter(self):
+		summary, _, written = self.run_add_gates("off")
+		self.assertFalse(set(temple.TELEPORTER_CODES) & set(summary["buildingCodes"]))
+		self.assertFalse(set(temple.TELEPORTER_CODES) & self.written_building_codes(written))
+
+
+# ================
 # AddTempleTests
 # ================
 class AddTempleTests(unittest.TestCase):
