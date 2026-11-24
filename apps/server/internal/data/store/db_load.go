@@ -22,8 +22,9 @@ import (
 StoreReadHeadroom
 
 How many store versions past its own this binary opens (#3091, part 2
-of #3082). 0 until part 4 (#3093) turns it on, which keeps today's
-rule: exactly CurrentVersion. A store inside the window may only carry
+of #3082), turned on at 2 by part 4 (#3093): a release window may hold
+two additive steps, so a misclassified step reaches at most two
+releases back. A store inside the window may only carry
 additive steps (#3092); its newer top-level record fields survive this
 binary's writes (json.go, #3090), its meta stamps never go down
 (Store.schemaStamp, stampVersionTx), and the tables its newer layout
@@ -35,7 +36,7 @@ so far rode on a schema step (layouts 8 through 12 came with schemas
 21, 22, 25, 33 and 39), so K schema steps hold at most K layout bumps.
 ================
 */
-const StoreReadHeadroom = 0
+const StoreReadHeadroom = 2
 
 // StoreReadMaxVersion is the newest schema this binary opens: the top of
 // the read window, as the release contract publishes it.
