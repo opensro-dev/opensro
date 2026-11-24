@@ -8,6 +8,7 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { resolveOnDiskPath } from "../world/io.mjs";
 import { extractedRoot, imageSourceRoot, normalizeAssetPath } from "../world/paths.mjs";
 import { parseJmxBmtMaterialSet, resolveBmtTexturePath } from "../world/objects/formats.mjs";
 import { noteRead } from "../graph/reads.mjs";
@@ -22,7 +23,10 @@ export function dataAssetPath( gamePath ) {
 
 /** Read a game-relative asset from Data_extracted (noted for actions, graph/reads.mjs). */
 export async function loadDataAsset( gamePath ) {
-	const file = dataAssetPath( gamePath );
+	// dataAssetPath folds the reference; a file the extractor stored
+	// with authored case (c_rudolph01.BMS) only opens by that spelling
+	// on a case-sensitive file system, so read the on-disk path (#3962).
+	const file = await resolveOnDiskPath( dataAssetPath( gamePath ) );
 	noteRead( file );
 	return readFile( file );
 }

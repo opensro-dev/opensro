@@ -343,6 +343,5 @@ scripts/test/mission/missionMinimapBuild.test.mjs
 scripts/test/suites/cif.mjs
 scripts/test/suites/index.mjs
 scripts/test/suites/region.mjs
-scripts/test/suites/world.mjs
 scripts/test/world/authoredWorldRegionResources.test.mjs
 scripts/test/world/worldMapImageReferences.test.mjs
