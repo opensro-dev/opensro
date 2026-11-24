@@ -260,36 +260,6 @@ func (t *TextdataItems) parse() {
 	log.Infof("bootstrap: textdata loaded from %s (%d item row(s), %d character row(s), %d summonable COS row(s))", t.dir, rows, characterRows, len(t.summonableCharacters))
 }
 
-// rentTermColumns is a refrentitem row's rented-item cell: the term
-// code sits at 1 and the rented item's RefObjID at 2 (the period
-// columns are the mall catalog's, mallcatalog.go).
-const rentTermItemID = 2
-
-/*
-================
-markRentItems
-
-The built tree's refrentitem (written only where later mall goods are
-listed, scripts/later_mall_goods.py) names every rented item; those
-references are rentals, and a delivered instance of one carries a
-deletion time (#4240). No table (the native tree): nothing is.
-================
-*/
-func (t *TextdataItems) markRentItems() {
-	for _, fields := range readTextdataFile(filepath.Join(t.dir, "refrentitem.txt")) {
-		if len(fields) <= rentTermItemID || fields[0] != "1" {
-			continue
-		}
-		id, err := strconv.ParseUint(fields[rentTermItemID], 10, 32)
-		if err != nil {
-			continue
-		}
-		if ref, ok := t.byID[uint32(id)]; ok && ref != nil {
-			ref.Rent = true
-		}
-	}
-}
-
 /*
 ================
 characterTidWord
