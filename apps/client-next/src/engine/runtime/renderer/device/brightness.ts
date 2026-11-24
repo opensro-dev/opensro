@@ -7,13 +7,15 @@ The later client's brightness setting (the video page's
 GDR_OPT_VIDEO_SP_BR spin, five steps from "Very dark" to "Very
 bright") applies through the D3D9 gamma ramp: the presented frame
 takes the step's power curve. This stage is that resolve for the
-browser frame. While a step other than Normal is chosen, the scene
-renders into this owner's intermediate and one fullscreen pass
-applies pow(color, 1 / gamma) into the presented frame; the UI then
-composes into the frame after the pass, exactly where it composes
-after the HDR stage (device/hdr.ts). At the Normal step the stage
-owns nothing and the scene renders straight into the presented
-frame, byte-identical to the path without it.
+browser frame. While a step other than Normal is chosen, the whole
+presented image - scene, world labels, UI and preview - composes
+into this owner's intermediate and one fullscreen pass applies
+pow(color, 1 / gamma) into the presented frame as the frame's last
+colour pass: a display ramp brightens every pixel alike, where the
+HDR stage's tone map is scene-only by design (device/hdr.ts). At
+the Normal step the stage owns nothing and the scene renders
+straight into the presented frame, byte-identical to the path
+without it.
 
 The step exponents are the port's (foundation/rendering/video-options.ts
 brightnessGamma): the native per-step values were not located in the
