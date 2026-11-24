@@ -1,17 +1,22 @@
-# Optional Bandit and Hotan fortresses
+# The Bandit fortress, and the optional Hotan fortress
 
-Port-only, not native. The default stays v1.150, and both switches below are off by default (#3886). v1.150
-ships both fortresses' siege worlds (`INS_FORT_BJ`, `INS_FORT_HT`), their emblems and every fortress staff
-character, but no siegefortress row, event zone, structure or staff standing for either. The imports add
-the v1.188 client's, on top of the native tables, joined by codename and region id. The flag-off build is
-byte-identical to the build without these imports.
+The Bandit fortress is later-native content and ships in every build (#3586): the v1.188 client has it, so
+the game does, exactly as Jangan's fortress ships. It has no switch. The Hotan fortress is port-only, not
+native: its switch below is off by default (#3886). v1.150 ships both fortresses' siege worlds (`INS_FORT_BJ`,
+`INS_FORT_HT`), their emblems and every fortress staff character, but no siegefortress row, event zone,
+structure or staff standing for either. The imports add the v1.188 client's, on top of the native tables,
+joined by codename and region id. With the Hotan switch off, the build is byte-identical to the build
+without that import.
 
 ## Switches
 
 | Switch | Where | Effect |
 | --- | --- | --- |
-| `SRO_FORT_BIJEOKDAN` | Build and server | The Bandit fortress near Jangan: 16 regions, 43 event zones, its fort stone and small gate, its siegefortress row (id 6) and its staff |
 | `SRO_FORT_HOTAN` | Build and server | The Hotan fortress: 40 regions, 52 event zones, its fort stone and big gate, its siegefortress row (id 3) and its staff |
+
+The Bandit fortress has no switch: `scripts/bandit_fortress_import.py` imports it on every variant build
+(it reads the same pinned v1.188 client stage 1 requires) and the server lists its siege row
+unconditionally.
 
 The build reads the v1.188 client from `SRO_VSRO_ROOT` (checked against `vsro_archive_pins.json`).
 
@@ -30,6 +35,12 @@ now uses too. Each import stages:
 - the fortress staff's v1.188 `npcpos` standings, by the shipped character ids;
 - the zones' placements as `Data_extracted/navmesh/objectstring.<fortress>.portonly.ifo`.
 
+The Bandit import also publishes the fortress's world-map page: the v1.188 `worldmap_mapinfo.txt` row for
+page 1002, the `worldmap_localinfo.txt` icon rows that name it (the two `fort_small_worldmap` icons at
+91009-91010 and the page's own markers), and the Media art the native tree lacks (`map_fort_bijuckdan.ddj`,
+`fort_small_worldmap.ddj`, the fortress crest). The M map opens the page from those icons, as it opens
+Jangan's page 1001, and the battle aide's fortress map reads the same page row.
+
 The server bundle's structure-zones projection merges every `objectstring.*portonly.ifo` beside the native
 `objectstring.ifo`. A zone two files place differently stops the build.
 
@@ -39,16 +50,17 @@ The server bundle's structure-zones projection merges every `objectstring.*porto
 | Zones | 43 | 52 |
 | Characters | `STRUCTURE_FORT_STONE_BJ_01`, `STRUCTURE_SMALL_GATE_BJ_01` in `characterdata_290000.txt` | `STRUCTURE_BIG_GATE_HT_01`, `STRUCTURE_FORT_STONE_HT_01` in `characterdata_300000.txt` |
 | Staff | `NPC_CH_FORTRESS_MANAGER2`, `_BATTLEAIDE2`, `_SMITH2` | `NPC_KT_FORTRESS_OFFICIAL` (in Hotan town), `_MANAGER`, `_BATTLEAIDE`, `_SMITH`, `_TRAINER` |
-| Registration | siegefortress id 6, fee 500,000, tax targets 96 | siegefortress id 3, fee 1,000,000, tax targets 63 |
+| Registration | siegefortress id 6, fee 500,000, tax targets 96; world-map page 1002 | siegefortress id 3, fee 1,000,000, tax targets 63 |
 
-The off path is exact. It removes every row the marker (`.opensro-bandit-fortress.json`,
-`.opensro-hotan-fortress.json`) names, and puts back the native bytes of every file it replaced, such as
-the Bandit sectors. A marker is written before the first change, so a run that stops partway still leaves
-the off path what it needs.
+The Hotan off path is exact. It removes every row the marker (`.opensro-hotan-fortress.json`) names, and
+puts back the native bytes of every file it replaced. A marker is written before the first change, so a
+run that stops partway still leaves the off path what it needs. The Bandit marker
+(`.opensro-bandit-fortress.json`) records the same ownership (identities, rows, files) but never reaps:
+there is no off state.
 
 The fortresses then run on the port's existing fortress line. The authority catalog binds each siege world
 to its fortress by the world's first string column, `appendFortressStructures` stands each zone's default
-structure, and `enterworld.siegeFortressRows` adds the rows to the client's fortress list in id order
+structure, and `enterworld.siegeFortressRows` carries the rows to the client's fortress list in id order
 (Jangan 1, Hotan 3, Constantinople 4, Bandit 6).
 
 ## Decisions recorded
@@ -80,5 +92,6 @@ These are inferences and port choices, not native evidence:
   allocate after Roc, so their structure identities stay above every earlier layer's rows. They are kept
   in the marker across rebuilds.
 
-Both switches are registered in `shardsettings`. Neither is a catalogue setting, because the catalogue
-publishes no fortress state. Both are described on the public rules page.
+The Hotan switch is registered in `shardsettings` and described on the public rules page. It is not a
+catalogue setting, because the catalogue publishes no fortress state. The Bandit fortress, being shipped
+content, has no settings row and no rules entry.
