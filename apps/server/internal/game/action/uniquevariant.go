@@ -67,8 +67,18 @@ func (rt *Runtime) monsterImpactRefused(caster monsterImpactCaster, target monst
 	if caster.character != nil {
 		return uniqueVariantRefused(caster.character, target)
 	}
-	if caster.credit == 0 {
-		return false
+	// A pet lane already holds its owner's combat copy; ask that, never the
+	// store, because this runs under the division lock.
+	if caster.owner != nil {
+		return uniqueVariantRefused(caster.owner, target)
 	}
-	return uniqueVariantRefused(rt.findCharacterByGid(caster.division, caster.credit), target)
+	if caster.credit == 0 {
+		// No owner at all: a copy admits no unattributed hit.
+		return true
+	}
+	owner := rt.findCharacterByGid(caster.division, caster.credit)
+	if owner == nil {
+		return true
+	}
+	return uniqueVariantRefused(owner, target)
 }

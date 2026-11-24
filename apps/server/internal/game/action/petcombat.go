@@ -532,6 +532,7 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 		level = step.ref.Level
 	}
 	plans, planned := rt.planCreatureMonsterImpacts(monsterImpactCaster{division: division,
+		owner: step.snapshot,
 		actor: actor, credit: ownerGID, level: level, from: step.state.mover.AnyFollower().Position(step.nowMs)}, skill, target, formulas, step.nowMs)
 	if !planned {
 		return petStrikeResult{}, false

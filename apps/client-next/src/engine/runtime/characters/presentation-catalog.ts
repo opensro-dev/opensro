@@ -235,6 +235,42 @@ function readTradeBandits( value: unknown ): ReadonlyMap<number, TradeBandit> {
 
 /*
 ================
+strIntUniqueModels
+
+The model a build-locked STR/INT copy of a field unique wears, keyed by the
+copy's reference id and holding its base's id. Port-only (SRO_STR_INT_UNIQUES):
+the copies are synthetic references, so the published NPC manifest has no row
+for them. The ids are the server's own, assigned in roster order
+(apps/server/internal/game/world/monster/strint_uniques.go); a copy the server
+publishes without a base row here would stream with no model.
+================
+*/
+const strIntUniqueModels: Readonly<Record<number, number>> = {
+	// Tiger Girl
+	5001000: 1954,
+	5001001: 1954,
+	// Cerberus
+	5001002: 5871,
+	5001003: 5871,
+	// Captain Ivy
+	5001004: 14778,
+	5001005: 14778,
+	// Uruchi
+	5001006: 1982,
+	5001007: 1982,
+	// Isyutaru
+	5001008: 2002,
+	5001009: 2002,
+	// Lord Yarkan
+	5001010: 3810,
+	5001011: 3810,
+	// Main Shaitan
+	5001012: 3875,
+	5001013: 3875
+} as const;
+
+/*
+================
 createPresentationCatalog
 ================
 */
@@ -751,6 +787,15 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 				heightFactors.clear();
 				for ( const [key, factor] of nextHeightFactors ) heightFactors.set( key, factor );
 				catalog.clear();
+				// Port-only (SRO_STR_INT_UNIQUES): a build-locked copy of a
+				// field unique is a synthetic reference the published NPC
+				// manifest has no row for, so it wears its base's model. The
+				// ids are the server's constants, assigned in roster order
+				// (apps/server/internal/game/world/monster/strint_uniques.go).
+				for ( const [copy, base] of Object.entries( strIntUniqueModels ) ) {
+					const row = nextCatalog.get( base );
+					if ( row ) nextCatalog.set( Number( copy ), { ...row, refObjId: Number( copy ) } );
+				}
 				for ( const [key, row] of nextCatalog ) catalog.set( key, row );
 				ridesByRider.clear();
 				for ( const [key, row] of nextRides ) ridesByRider.set( key, row );

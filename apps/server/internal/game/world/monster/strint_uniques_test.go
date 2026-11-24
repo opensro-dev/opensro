@@ -4,15 +4,16 @@
 strint_uniques_test.go - the build-locked copies' references and anchors
 
 Pins the shape of SRO_STR_INT_UNIQUES: off changes nothing, on adds one STR
-and one INT copy of each roster unique and deals the species' anchors to
-the three builds in turn, so all three can stand at once on ground no other
-build holds.
+and one INT copy of each roster unique over the species' whole anchor list,
+each in a hive of its own, so all three can stand at once and only the spawn
+choice keeps them off the same point.
 
 ===========================================================================
 */
 package monster
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -68,9 +69,8 @@ func TestStrIntUniquesOffIsNative(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AppendStrIntUniques(off): %v", err)
 	}
-	if len(got.Refs) != len(base.Refs) || len(got.Nests) != len(base.Nests) {
-		t.Fatalf("off changed the template: %d refs / %d nests, want %d / %d",
-			len(got.Refs), len(got.Nests), len(base.Refs), len(base.Nests))
+	if !reflect.DeepEqual(got.Nests, base.Nests) || !reflect.DeepEqual(got.Refs, base.Refs) {
+		t.Fatal("off changed the loaded population")
 	}
 }
 

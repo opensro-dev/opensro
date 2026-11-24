@@ -686,9 +686,9 @@ var Settings = []Setting{
 	{Env: "SRO_UNIQUE_SEAL_DROPS", NomadVar: "unique_seal_drops", Default: "off", Catalogue: true},
 	// Port-only, not native (owner 2026-11-24): the field uniques also spawn
 	// as build-locked STR and INT copies, each admitting only a character
-	// whose permanent allocation is dominated by that stat. Off is the native
-	// one-unique-per-species population; on adds the copies and their
-	// staggered respawn windows (monster/strint_uniques.go).
+	// whose permanent allocation matches. Off is the native population; on
+	// adds the copies, which share the species' spawn points and never stand
+	// on one already held (monster/strint_uniques.go).
 	{Env: "SRO_STR_INT_UNIQUES", NomadVar: "str_int_uniques", Default: "off", Catalogue: true},
 	// Owner, 2026-10-18: respawning unique nests draw over 45-90 minutes
 	// instead of the operator backup's 20-36 minute rows. "off" keeps the

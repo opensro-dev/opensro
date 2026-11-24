@@ -84,10 +84,14 @@ and GID. Reward credit is independent of the actor that rolled the hit.
 type monsterImpactCaster struct {
 	division  string
 	character *enterworld.Character
-	actor     criticalActor
-	credit    uint32
-	level     uint8
-	from      simulation.Spawn
+	// owner is the character a companion acts for: it decides a build-locked
+	// unique's admission without a store lookup, while the hit itself stays
+	// the companion's (uniquevariant.go).
+	owner  *enterworld.Character
+	actor  criticalActor
+	credit uint32
+	level  uint8
+	from   simulation.Spawn
 }
 
 /*

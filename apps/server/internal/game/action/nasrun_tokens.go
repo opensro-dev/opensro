@@ -124,7 +124,7 @@ func (rt *Runtime) payNasrunTokensInsideDoor(division string, actor *enterworld.
 	if !rt.NasrunTokens || arena || !impact.Fatal || impact.Instance.GMSpawned || !impact.Instance.IsUnique() {
 		return nil, nil
 	}
-	award := nasrun.UniqueTokens(impact.Instance.Ref.Codename)
+	award := nasrun.UniqueTokens(impact.Instance.Ref.BaseCodename())
 	if award == 0 {
 		return nil, nil
 	}

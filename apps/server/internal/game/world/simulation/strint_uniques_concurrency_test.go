@@ -22,7 +22,13 @@ import (
 // strIntAnchorXs are the species' three shared spawn points.
 var strIntAnchorXs = []float64{10, 20, 30}
 
-// strIntConcurrentRef is one build of the species.
+/*
+================
+strIntConcurrentRef
+
+One build of the species, as the append shapes it.
+================
+*/
 func strIntConcurrentRef(id uint32, build monster.UniqueBuild) monster.MonsterRef {
 	codename := map[monster.UniqueBuild]string{
 		monster.UniqueBuildAny: "MOB_CONCURRENT",
@@ -35,7 +41,13 @@ func strIntConcurrentRef(id uint32, build monster.UniqueBuild) monster.MonsterRe
 	}
 }
 
-// strIntConcurrentNest is one anchor of one build, in that build's hive.
+/*
+================
+strIntConcurrentNest
+
+One anchor of one build, in that build's hive.
+================
+*/
 func strIntConcurrentNest(refID uint32, hive string, x float64) monster.NestRow {
 	return monster.NestRow{
 		SpawnPoint:         monster.SpawnPoint{RefObjID: refID, RegionID: lifecycleRegion, X: x, Y: 10, Z: 100},

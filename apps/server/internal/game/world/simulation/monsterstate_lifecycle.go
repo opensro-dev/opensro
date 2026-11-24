@@ -763,7 +763,7 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 	state.behavior.set(gid, 0)
 	state.listRegionGid(spawn.RegionID, gid)
 	state.gidNests[gid] = index
-	s.holdAnchor(state, nest)
+	s.holdAnchor(state, nest, gid)
 	// Native bookkeeping: count the spawn before re-rolling the delay.
 	n.live++
 	n.lastMs = nowMs
@@ -871,6 +871,7 @@ func (s *MonsterState) Defeat(divisionID string, gid uint32, at time.Time) bool 
 	delete(state.uniqueKillers, gid)
 	delete(state.lifetimes, gid)
 	state.instances.remove(gid)
+	s.releaseAnchorHeldBy(state, gid)
 	state.forgetDormant(gid)
 	delete(state.contributions, gid)
 	state.releaseApproachActor(gid)
@@ -897,11 +898,6 @@ nestDeath
 func (s *MonsterState) nestDeath(state *divisionMonsterState, index int, nowMs int64) {
 	n := state.nests[index]
 	nest := s.template.Nests[index]
-	// Port-only (SRO_STR_INT_UNIQUES): the point is free again for the
-	// species' other copies. A detachment reaches here with the actor still
-	// alive; that is the native release path and the actor keeps its ground
-	// only until the next spawn draws the point.
-	s.releaseAnchor(state, nest)
 	if n.live == nest.InstanceLimit() {
 		n.lastMs = nowMs
 	}

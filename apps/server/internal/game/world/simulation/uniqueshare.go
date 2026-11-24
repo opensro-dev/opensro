@@ -56,7 +56,8 @@ func (s *MonsterState) anchorHeld(state *divisionMonsterState, nest monster.Nest
 	if nest.UniqueShare == "" {
 		return false
 	}
-	return state.uniqueAnchors[uniqueAnchorOf(nest)]
+	_, held := state.uniqueAnchors[uniqueAnchorOf(nest)]
+	return held
 }
 
 /*
@@ -64,26 +65,34 @@ func (s *MonsterState) anchorHeld(state *divisionMonsterState, nest monster.Nest
 holdAnchor
 ================
 */
-func (s *MonsterState) holdAnchor(state *divisionMonsterState, nest monster.NestRow) {
+func (s *MonsterState) holdAnchor(state *divisionMonsterState, nest monster.NestRow, gid uint32) {
 	if nest.UniqueShare == "" {
 		return
 	}
 	if state.uniqueAnchors == nil {
-		state.uniqueAnchors = map[uniqueAnchor]bool{}
+		state.uniqueAnchors = map[uniqueAnchor]uint32{}
 	}
-	state.uniqueAnchors[uniqueAnchorOf(nest)] = true
+	state.uniqueAnchors[uniqueAnchorOf(nest)] = gid
 }
 
 /*
 ================
-releaseAnchor
+releaseAnchorHeldBy
+
+The point goes back to the species when the instance that holds it leaves
+the world - not when its nest is released, because a detached unique stays
+alive on its ground (monsternest_attachment.go).
 ================
 */
-func (s *MonsterState) releaseAnchor(state *divisionMonsterState, nest monster.NestRow) {
-	if nest.UniqueShare == "" {
+func (s *MonsterState) releaseAnchorHeldBy(state *divisionMonsterState, gid uint32) {
+	if len(state.uniqueAnchors) == 0 {
 		return
 	}
-	delete(state.uniqueAnchors, uniqueAnchorOf(nest))
+	for anchor, holder := range state.uniqueAnchors {
+		if holder == gid {
+			delete(state.uniqueAnchors, anchor)
+		}
+	}
 }
 
 /*

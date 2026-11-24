@@ -581,6 +581,11 @@ func (rt *Runtime) areaVictims(division string, c *enterworld.Character, skill e
 		if candidate.target.gid == primary.gid {
 			continue
 		}
+		// Port-only (SRO_STR_INT_UNIQUES): a copy this caster may not damage
+		// takes no target slot either, so it cannot push a real victim out.
+		if candidate.target.monster != nil && uniqueVariantRefused(c, *candidate.target.monster) {
+			continue
+		}
 		out = append(out, candidate.target)
 		if len(out) == int(area.MaxTargets) {
 			break
