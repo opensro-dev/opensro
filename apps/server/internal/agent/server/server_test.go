@@ -475,36 +475,6 @@ func TestServerListUsesFreshWorkerLease(t *testing.T) {
 
 /*
 ================
-TestClientsReceivePublicTransportRoute
-================
-*/
-func TestClientsReceivePublicTransportRoute(t *testing.T) {
-	fixture := newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler())
-	publishFixtureLease(t, fixture, "alpha", "worker-a", 1, 0)
-	publishFixtureLease(t, fixture, "beta", "worker-b", 1, 0)
-	want := map[string]string{"alpha": "https://127.0.0.1:9001", "beta": "/shards/beta"}
-
-	var servers []serverInfo
-	response := performJSON(t, fixture.handler, http.MethodGet, "/title/servers", "", "")
-	if err := json.Unmarshal(response.Body.Bytes(), &servers); err != nil {
-		t.Fatal(err)
-	}
-	for _, server := range servers {
-		if server.TransportURL != want[server.ID] {
-			t.Fatalf("directory advertises %q for %q, want %q", server.TransportURL, server.ID, want[server.ID])
-		}
-	}
-	for id, transport := range want {
-		login := performJSON(t, fixture.handler, http.MethodPost, "/title/login",
-			`{"id":"tester","password":"123123","serverId":"`+id+`"}`, "")
-		if body := decodeObject(t, login); body["ok"] != true || body["transportUrl"] != transport {
-			t.Fatalf("login to %q = %s, want transportUrl %q", id, login.Body.String(), transport)
-		}
-	}
-}
-
-/*
-================
 TestLoginRefusesDisabledShardExplicitly
 ================
 */

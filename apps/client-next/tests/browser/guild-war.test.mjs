@@ -573,7 +573,6 @@ test(
 			);
 		} catch ( error ) {
 			await mkdir( "temp/artifacts/guild-war", { recursive: true } );
-			await page.screenshot( { path: "temp/artifacts/guild-war/failure.png" } );
 			await writeFile(
 				"temp/artifacts/guild-war/failure.json",
 				JSON.stringify(

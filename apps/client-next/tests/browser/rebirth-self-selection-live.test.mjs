@@ -46,7 +46,7 @@ test('live corpse canvas selection reopens the rescued-by-player prompt twice',{
   evidence.commands=await page.evaluate(()=>__rebirthCommands);
   assert.deepEqual(evidence.commands.filter(c=>['select','rebirth','move','ground-move','attack','cos-attack','pickup'].includes(c.kind)),[],'dismissal and self-selection must send no player action');
   assert.deepEqual(evidence.errors,[]);evidence.verdict='PASS SUCCESS';
- }catch(error){evidence.error=String(error);await page.screenshot({path:out+'/failure.png'}).catch(()=>{});throw error;}
+ }catch(error){evidence.error=String(error);throw error;}
  finally{
   if(tracing)await page.context().tracing.stop({path:out+'/trace.zip'});
   await page.evaluate(()=>__playableRuntime.session({kind:'logout'})).catch(()=>{});await browser.close();

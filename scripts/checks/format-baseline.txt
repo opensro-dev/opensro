@@ -140,7 +140,6 @@ apps/client-next/tests/browser/audio-loop.test.mjs
 apps/client-next/tests/browser/background-resume.test.mjs
 apps/client-next/tests/browser/baroi-moving-target.test.mjs
 apps/client-next/tests/browser/beta-performance.test.mjs
-apps/client-next/tests/browser/beta-release-live.test.mjs
 apps/client-next/tests/browser/blocking.test.mjs
 apps/client-next/tests/browser/buff-dismiss.test.mjs
 apps/client-next/tests/browser/champion-material.test.mjs
@@ -151,8 +150,6 @@ apps/client-next/tests/browser/character-texture-live.test.mjs
 apps/client-next/tests/browser/cosmetics.test.mjs
 apps/client-next/tests/browser/creation-body-shape.test.mjs
 apps/client-next/tests/browser/crests-war-buffs.test.mjs
-apps/client-next/tests/browser/cursor-focus.test.mjs
-apps/client-next/tests/browser/cursor.test.mjs
 apps/client-next/tests/browser/damage-occlusion.test.mjs
 apps/client-next/tests/browser/death-movement-live.test.mjs
 apps/client-next/tests/browser/deferred-particles.test.mjs
@@ -213,7 +210,6 @@ apps/client-next/tests/browser/quest-progress.test.mjs
 apps/client-next/tests/browser/quickslot-inventory.test.mjs
 apps/client-next/tests/browser/rebirth-self-selection-live.test.mjs
 apps/client-next/tests/browser/region-music-live.test.mjs
-apps/client-next/tests/browser/restart-live.test.mjs
 apps/client-next/tests/browser/return-scroll-live.test.mjs
 apps/client-next/tests/browser/return-scroll-presentation.test.mjs
 apps/client-next/tests/browser/ring-equip-live.test.mjs
@@ -245,7 +241,6 @@ apps/client-next/tests/browser/window-chrome-live.test.mjs
 apps/client-next/tests/browser/world-admission.test.mjs
 apps/client-next/tests/browser/world-character-lighting.test.mjs
 apps/client-next/tests/browser/world-chat.test.mjs
-apps/client-next/tests/browser/world-cursor.test.mjs
 apps/client-next/tests/browser/world-foliage-region.test.mjs
 apps/client-next/tests/browser/world-gestures.test.mjs
 apps/client-next/tests/browser/world-lifecycle.test.mjs

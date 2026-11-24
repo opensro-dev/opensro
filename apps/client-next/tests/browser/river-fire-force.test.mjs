@@ -61,7 +61,6 @@ test('River Fire Force hand attachment survives browser decode and GPU teardown'
  }catch(error){
   await mkdir('temp/artifacts/vfx-regression/river-fire',{recursive:true});
   await writeFile('temp/artifacts/vfx-regression/river-fire/failure.txt',String(error.stack??error));
-  await page.screenshot({path:'temp/artifacts/vfx-regression/river-fire/failure.png'});
   throw error;
  }finally{await browser.close();}
 });

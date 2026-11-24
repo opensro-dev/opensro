@@ -61,7 +61,6 @@ test('authenticated server effect bytes survive browser decode, restoration and 
  }catch(error){
   await mkdir('temp/artifacts/effect-lifecycle',{recursive:true});
   await writeFile('temp/artifacts/effect-lifecycle/failure.txt',String(error.stack??error));
-  await page.screenshot({path:'temp/artifacts/effect-lifecycle/failure.png'});
   throw error;
  }finally{await browser.close();}
 });

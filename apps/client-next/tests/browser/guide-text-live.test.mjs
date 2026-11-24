@@ -43,6 +43,6 @@ test('live guide text shows completed titles without placeholder glyphs',{timeou
   assert.deepEqual(errors,[]);
  }catch(error){
   await writeFile(directory+'/h-fix-failure.json',JSON.stringify({error:String(error),errors,stages},null,2));
-  await page.screenshot({path:directory+'/h-fix-failure.png'}).catch(()=>{});throw error;
+  throw error;
  }finally{await browser.close();}
 });
