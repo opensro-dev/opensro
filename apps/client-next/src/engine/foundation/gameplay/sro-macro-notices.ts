@@ -23,6 +23,11 @@ import {
 import type { MacroHuntAction } from "@/engine/foundation/gameplay/sro-macro-hunt";
 
 // 00dade90 / 006861c0 / return-reason UIIT keys (v1.696 textuisystem).
+// TOWN_REFUSE (CANTUSEMACRO) is evidenced by the v1.696 string table
+// only: the client pushes no reference to it and its English cell is
+// empty, so the town refuse using this row is the port's inference from
+// the key's name, not a traced call (the other 13 keys are pushed by
+// their handlers).
 export const MACRO_NOTICE_TOWN_REFUSE = "UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_CANTUSEMACRO";
 export const MACRO_NOTICE_TOWN_OFF = "UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_MACRO_OFF";
 export const MACRO_NOTICE_POTION_ON_FAIL = "UIIT_STT_SRO_MACRO_AUTO_POTION_ON_FAIL";

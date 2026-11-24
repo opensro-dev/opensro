@@ -191,7 +191,7 @@ export const MACRO_NOTICE_UIIT_COMPLETIONS = Object.freeze( {
 	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_MACRO_OFF: "The skill/hunting macro is disabled in towns.",
 	UIIT_STT_SRO_MACRO_AUTO_POTION_ON_FAIL:
 		"There is no registered item in auto potion. Please register items and try again.",
-	UIIT_STT_SRO_MACRO_AUTO_HUNTING_TELEPORT_OFF: "You've moved out of the map, Hunting Macro will end.",
+	UIIT_STT_SRO_MACRO_AUTO_HUNTING_TELEPORT_OFF: "You’ve moved out of the map, Hunting Macro will end.",
 	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_HP_POTION_EMPTY: "Insufficient HP Potions.  Using Return Scroll.",
 	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_MP_POTION_EMPTY: "Insufficient MP Potions.  Using Return Scroll.",
 	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_ITEM_DURA: "Item durability has reached 0.  Using Return Scroll.",
