@@ -424,6 +424,68 @@ class VariantSteps(unittest.TestCase):
 				sys.modules.pop(name, None)
 
 	# ================
+	# test_a_comment_and_a_body_that_never_ran_are_not_code
+	#
+	# The step runs stepmod.run and helper.used and reads table.X, which
+	# stepmod imports at module level. A comment in the step's own module,
+	# or a new body for table.unused (which never ran), keeps it current;
+	# table's constant and helper's body are its code. Keyed by bytes, a
+	# one-comment edit to alexandria_npcs.py made 22 of 28 steps stale
+	# (#4251).
+	# ================
+	def test_a_comment_and_a_body_that_never_ran_are_not_code(self):
+		repo = Path(self.temp.name) / "repo"
+		scripts = repo / "scripts"
+		scripts.mkdir(parents=True)
+		(scripts / "stepmod.py").write_text(
+			"import helper\nimport table\n\nCALLS = {'n': 0}\n\n\n"
+			"def run(variant):\n"
+			"\tCALLS['n'] += 1\n"
+			"\tout = variant / 'extracted'\n"
+			"\tout.mkdir(parents=True, exist_ok=True)\n"
+			"\t(out / 'step.txt').write_text(str(helper.used() + table.X))\n"
+			"\treturn {'n': 1}\n",
+			encoding="utf-8",
+		)
+		(scripts / "helper.py").write_text("def used():\n\treturn 1\n", encoding="utf-8")
+		(scripts / "table.py").write_text("X = 1\n\n\ndef unused():\n\treturn 1\n", encoding="utf-8")
+		stepmod = self.load_module(scripts, "stepmod")
+		steps = [("step", stepmod.run, (self.variant,))]
+
+		def edit(name, text):
+			(scripts / name).write_text(text, encoding="utf-8")
+			run_build(self.variant, steps, repository_root=repo)
+			return stepmod.CALLS["n"]
+
+		try:
+			run_build(self.variant, steps, repository_root=repo)
+			source = (scripts / "stepmod.py").read_text(encoding="utf-8")
+			self.assertEqual(edit("stepmod.py", source + "\n# a note, not code\n"), 1)
+			self.assertEqual(edit("table.py", "X = 1\n\n\ndef unused():\n\treturn 2\n"), 1)
+			self.assertEqual(edit("table.py", "X = 2\n\n\ndef unused():\n\treturn 2\n"), 2)
+			self.assertEqual(edit("helper.py", "def used():\n\treturn 3\n"), 3)
+		finally:
+			for name in ("stepmod", "helper", "table"):
+				sys.modules.pop(name, None)
+
+	# ================
+	# test_a_summary_keyed_by_numbers_replays
+	#
+	# The skill import's summary counts by mastery id: an int-keyed dict
+	# json writes but the journal refused, so the step reran on every
+	# build without a word (#4251). It replays now, with its keys intact.
+	# ================
+	def test_a_summary_keyed_by_numbers_replays(self):
+		counters: dict = {}
+		summary = {"masteries": {257: 3, 258: 1}, "pairs": (1, 2), "named": {"@bytes": "a key, not a blob"}}
+		step = self.write_step(counters, "skills", "skills.txt", b"s", summary)
+		first = run_build(self.variant, [step])
+		second = run_build(self.variant, [step])
+		self.assertEqual(counters["skills"], 1)
+		self.assertEqual(first, [summary])
+		self.assertEqual(second, [summary])
+
+	# ================
 	# test_an_argument_from_an_earlier_result_keys_its_step
 	#
 	# The map step takes the gates' text: a different value reruns it, the

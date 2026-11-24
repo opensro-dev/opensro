@@ -46,6 +46,7 @@ place would rewrite the other.
 """
 from __future__ import annotations
 
+import ast
 import builtins
 import hashlib
 import json
@@ -187,24 +188,71 @@ def code_path(location: str, repository_root: Path) -> Path:
 # A digest of the step's code files, each by its location and content,
 # and of the SRO_* flags they name: the step reruns when its code changes
 # or when a flag it names moves. A file that is gone keys as gone.
+#
+# A Python file keys by its syntax tree (code_content), not its bytes: a
+# comment or a blank line is not code. ran names the files whose code the
+# step ran (record_run); every other Python file in the closure was only
+# imported, so its function bodies key as empty. The smoke's one-comment
+# edit to alexandria_npcs.py had made 22 of 28 steps stale (#4251).
 # ================
-def code_key(files: list[Path], repository_root: Path, environ) -> str:
+def code_key(files: list[Path], repository_root: Path, environ, ran: frozenset[str] = frozenset()) -> str:
 	digest = hashlib.sha256()
 	flags: dict[str, str] = {}
 	for path in sorted(files, key=lambda item: code_location(item, repository_root)):
-		digest.update(code_location(path, repository_root).encode("utf-8") + b"\0")
+		location = code_location(path, repository_root)
+		digest.update(location.encode("utf-8") + b"\0")
 		try:
 			content = path.read_bytes()
 		except OSError:
 			digest.update(b"gone\n")
 			continue
-		digest.update(hashlib.sha256(content).hexdigest().encode("ascii") + b"\n")
+		keyed = code_content(path, content, location in ran)
+		digest.update(hashlib.sha256(keyed).hexdigest().encode("ascii") + b"\n")
 		for name in FLAG_LITERAL.findall(content.decode("utf-8", "ignore")):
 			value = environ.get(name)
 			flags[name] = hashlib.sha256(value.encode("utf-8")).hexdigest() if value is not None else ""
 	for name in sorted(flags):
 		digest.update(f"flag\0{name}\0{flags[name]}\n".encode("utf-8"))
 	return digest.hexdigest()
+
+
+# ================
+# BodyStripper
+#
+# Empties every function body, leaving the def itself: its name, its
+# decorators and the defaults its arguments evaluate when the module
+# loads, which is all a module the step never ran a function of can do.
+# ================
+class BodyStripper(ast.NodeTransformer):
+	def visit_FunctionDef(self, node):
+		node.body = [ast.Pass()]
+		return node
+
+	visit_AsyncFunctionDef = visit_FunctionDef
+
+
+# ================
+# code_content
+#
+# What a code file keys by. A Python file is its syntax tree, which
+# drops comments, blank lines and layout; when its code did not run in
+# the step, the tree has its function bodies emptied (BodyStripper). The
+# recorder sees every function that starts (record_run), so a body it
+# did not see start cannot have touched the step; no step runs Python in
+# a child process (the children are Node scripts and ffmpeg, keyed as
+# bytes). A file that does not parse, and every other file, keys by its
+# bytes.
+# ================
+def code_content(path: Path, content: bytes, ran: bool) -> bytes:
+	if path.suffix != ".py":
+		return content
+	try:
+		tree = ast.parse(content)
+	except (SyntaxError, ValueError):
+		return content
+	if not ran:
+		tree = BodyStripper().visit(tree)
+	return ast.dump(tree).encode("utf-8")
 
 
 #============================================================================
@@ -314,12 +362,18 @@ class Unrecordable(Exception):
 	"""A summary holds a type the journal cannot carry."""
 
 
+# The single-key dicts encode_result writes in place of a value.
+RESULT_MARKERS = ({"@bytes"}, {"@tuple"}, {"@pairs"})
+
+
 # ================
 # encode_result
 #
-# JSON, with bytes held as blobs and tuples kept tuples. Anything else
-# the journal cannot hold raises Unrecordable, and the step just runs
-# on every build.
+# JSON, with bytes held as blobs and tuples kept tuples. A dict keyed by
+# anything but strings (the skill summary's counts by mastery), or one
+# whose keys would read as a marker, is held as its pairs, so it comes
+# back with the same keys. Anything else the journal cannot hold raises
+# Unrecordable, and the step runs on every build and says why.
 # ================
 def encode_result(value, variant_root: Path):
 	if value is None or isinstance(value, (bool, int, float, str)):
@@ -331,12 +385,13 @@ def encode_result(value, variant_root: Path):
 	if isinstance(value, list):
 		return [encode_result(item, variant_root) for item in value]
 	if isinstance(value, dict):
-		encoded = {}
-		for key, item in value.items():
-			if not isinstance(key, str):
+		if all(isinstance(key, str) for key in value) and set(value) not in RESULT_MARKERS:
+			return {key: encode_result(item, variant_root) for key, item in value.items()}
+		for key in value:
+			if key is not None and not isinstance(key, (bool, int, float, str, tuple)):
 				raise Unrecordable(f"a summary key of type {type(key).__name__}")
-			encoded[key] = encode_result(item, variant_root)
-		return encoded
+		return {"@pairs": [[encode_result(key, variant_root), encode_result(item, variant_root)]
+			for key, item in value.items()]}
 	raise Unrecordable(f"a summary value of type {type(value).__name__}")
 
 
@@ -349,6 +404,9 @@ def decode_result(value, variant_root: Path):
 			return blob_path(variant_root, value["@bytes"]).read_bytes()
 		if set(value) == {"@tuple"}:
 			return tuple(decode_result(item, variant_root) for item in value["@tuple"])
+		if set(value) == {"@pairs"}:
+			return {decode_result(key, variant_root): decode_result(item, variant_root)
+				for key, item in value["@pairs"]}
 		return {key: decode_result(item, variant_root) for key, item in value.items()}
 	if isinstance(value, list):
 		return [decode_result(item, variant_root) for item in value]
@@ -569,7 +627,7 @@ class Runner:
 		)
 		for key, (ran, imported), closure in zip(keys, records, closures):
 			files = set(closure) | set(ran) | set(imported)
-			self._code_keys[key] = code_key(sorted(files), self.code_root, self.environ)
+			self._code_keys[key] = code_key(sorted(files), self.code_root, self.environ, frozenset(key[0]))
 
 	# ================
 	# key_journal_code
@@ -700,7 +758,7 @@ class Runner:
 				lines.append((step["name"], "current"))
 			else:
 				was = entry.get("parts") or {}
-				moved = [name for name in now if was.get(name) != now[name]] if was else ["unrecorded parts"]
+				moved = [name for name in now if was.get(name) != now[name]] if was else ["result not journaled"]
 				lines.append((step["name"], "stale: " + ", ".join(moved)))
 			state = chain(state, entry["effect"])
 		return lines
@@ -871,7 +929,10 @@ class Runner:
 			encoded = encode_result(value, self.variant)
 			parts = self.key_parts(step, classified, self.state, later_key)
 			key = parts_key(step["name"], parts)
-		except Unrecordable:
+		except Unrecordable as refusal:
+			# Said, not silent: the skills step reran on every build for an
+			# int-keyed summary nobody saw (#4251).
+			print(f"step {step['name']}: not journaled ({refusal}); it runs on every build", flush=True)
 			encoded, key, parts = None, None, None
 		self.state = chain(self.state, effect)
 		self.records.append({
