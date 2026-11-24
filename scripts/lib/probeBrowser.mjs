@@ -13,6 +13,7 @@ import { chromium } from "playwright-core";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { watchProbeBrowser } from "./probeFailureCapture.mjs";
 
 const BACKGROUND_THROTTLING_OVERRIDES = [
 	"--disable-background-timer-throttling",
@@ -156,7 +157,7 @@ export async function launchProbeBrowser( {
 		if ( userDataDir || deviceScaleFactor !== undefined ) {
 			throw Error( "Background scheduling probes require a fresh profile and native device scale" );
 		}
-		return launchBackgroundBrowser( launchOptions, pageOptions );
+		return watched( await launchBackgroundBrowser( launchOptions, pageOptions ) );
 	}
 	if ( userDataDir ) {
 		const context = await chromium.launchPersistentContext( userDataDir, {
@@ -169,12 +170,25 @@ export async function launchProbeBrowser( {
 			throw new Error( "persistent probe context did not expose its browser" );
 		}
 		const page = context.pages()[0] ?? (await context.newPage());
-		return { browser, page };
+		return watched( { browser, page } );
 	}
 
 	const browser = await chromium.launch( launchOptions );
 	const page = await browser.newPage( {
 		...pageOptions
 	} );
-	return { browser, page };
+	return watched( { browser, page } );
+}
+
+/*
+================
+watched
+
+Every launch's page is kept for a failed test's stuck capture
+(probeFailureCapture.mjs).
+================
+*/
+function watched( launched ) {
+	watchProbeBrowser( launched.browser, launched.page );
+	return launched;
 }
