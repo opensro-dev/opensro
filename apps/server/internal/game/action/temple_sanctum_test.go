@@ -150,8 +150,9 @@ func TestSanctumGatesOpenHalfAnHourIntoTheWindow(t *testing.T) {
 		t.Fatalf("%d spawns, want Haroeris once", len(monsters.spawned))
 	}
 	haroeris := monsters.spawned[monsters.gidOf(haroerisCodename)]
-	if haroeris.Position != haroerisSpawn || !haroeris.FixedPosition {
-		t.Fatalf("Haroeris at %+v (fixed %v), want %+v", haroeris.Position, haroeris.FixedPosition, haroerisSpawn)
+	if haroeris.Position != haroerisSpawn || !haroeris.FixedPosition || !haroeris.Aggressive {
+		t.Fatalf("Haroeris at %+v (fixed %v, aggressive %v), want %+v, fixed and aggressive",
+			haroeris.Position, haroeris.FixedPosition, haroeris.Aggressive, haroerisSpawn)
 	}
 	if want := sanctumTestEnd.Sub(sanctumTestOpen).Milliseconds(); haroeris.LifetimeMs != want {
 		t.Fatalf("Haroeris lives %d ms, want the window's rest %d", haroeris.LifetimeMs, want)

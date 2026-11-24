@@ -240,12 +240,18 @@ spawnHaroeris
 The wave's one monster at its fixed point, living until the window
 ends. Zero when the data lacks him: Seth's gate then never opens, as the
 native wave whose spawn failed never fires its trigger.
+
+Aggressive, by inference: the native wave hands him the monster
+factory's default tactics, and the port's default tactics table holds
+only the v1.150 kinds, none of the temple's. A sanctum's lord standing
+passive in the room built for his fight is not the game, so he takes
+the port's fill for tactics without controls (attack on sight).
 ================
 */
 func (rt *Runtime) spawnHaroeris(population simulation.WorldPopulation, lifetimeMs, nowMs int64) uint32 {
 	gid, ok := rt.sanctums.spawn(simulation.QuestMonsterSpawn{
 		Division: population.Division, Population: population.Lease, Codename: haroerisCodename,
-		Position: haroerisSpawn, FixedPosition: true, NowMs: nowMs, LifetimeMs: lifetimeMs,
+		Position: haroerisSpawn, FixedPosition: true, NowMs: nowMs, LifetimeMs: lifetimeMs, Aggressive: true,
 	})
 	if !ok {
 		log.Printf("temple: division %s: %s did not spawn", population.Division, haroerisCodename)
