@@ -28,6 +28,7 @@ import jupiter_import
 import muhan_import
 import pharaoh_temple_import
 import reset_scroll_import
+import rigid_import
 import skytemple_import
 import styria_import
 import switch_scroll_import
@@ -82,6 +83,11 @@ LATER_LAYERS = (
 	# The winter event's monsters ride the Christmas event's switch
 	# (SRO_CHRISTMAS_EVENT): their own identity band, no placement.
 	("winterEvent", winter_event_import.add_winter_monsters),
+	# The Rigid L2 summon scrolls (#3785): later-native content with
+	# no switch of their own - on whenever the later client root is
+	# there, like the sources every layer above reads; band 320000,
+	# no placement.
+	("rigidScrolls", rigid_import.add_rigid),
 )
 
 
