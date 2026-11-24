@@ -101,23 +101,31 @@ ON CONFLICT(account_id) DO UPDATE SET earned_silk = excluded.earned_silk`, accou
 
 /*
 ================
+validateEarnedSilk
+
+The earned-silk wallet's shape (layout 15, #4133). Its own validator,
+called from layout 15 on: a layout-5 to 14 source the offline upgrader
+validates has no such table yet (the r204j upgrade of a layout-14
+authority failed here when this probe sat in validateMallAccounts).
+================
+*/
+func validateEarnedSilk(db *sql.DB) error {
+	earned, err := db.Query("SELECT account_id, earned_silk FROM mall_earned_silk LIMIT 0")
+	if err != nil {
+		return err
+	}
+	defer earned.Close()
+	return earned.Err()
+}
+
+/*
+================
 validateMallAccounts
 
 Validate every stored balance at boot, including accounts without characters.
 ================
 */
 func validateMallAccounts(db *sql.DB) error {
-	earned, err := db.Query("SELECT account_id, earned_silk FROM mall_earned_silk LIMIT 0")
-	if err != nil {
-		return err
-	}
-	// The probe only proves the table's shape; close before the real
-	// query, as the store's single connection cannot serve both.
-	if err := earned.Err(); err != nil {
-		earned.Close()
-		return err
-	}
-	earned.Close()
 	rows, err := db.Query("SELECT account_id, silk, gift_silk, points FROM mall_accounts")
 	if err != nil {
 		return err
