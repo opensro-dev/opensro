@@ -1717,6 +1717,7 @@ ${worldEntryLine( worldEntry.report() )}` );
 			entities: () => presentation.entities(),
 			berserkGauge: () => characters.orbGauge(),
 			worldEntry: () => worldEntry.report(),
+			assetStore: () => assets.progress()?.store ?? null,
 			characterActors: () => renderer.characterActors(),
 			characterStats: () => renderer.characterStats( true ),
 			characterCullCensus: () => renderer.characterStats( true, true ),
