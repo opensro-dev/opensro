@@ -10664,6 +10664,14 @@ export function createUi( ports: UiPorts ) {
 					const lut = questList.tracked();
 					if ( lut.length === 0 ) trackedQuest = 0;
 					else if ( !lut.includes( trackedQuest ) ) trackedQuest = lut[0]!;
+					// The owner's answers the callers must service:
+					// the helper-full refusal posts the helper copy as
+					// a system message; content/locate are serviced at
+					// the control click itself.
+					for ( const action of questList.actions() ) {
+						if ( action.kind === "helper-full" )
+							hudMessages.append( hudCopy( "UIIT_CTL_QUEST_HELPER_FULL" ), 0xffff7070 );
+					}
 				}
 			}
 			guildManagerHud.observeSoldiers(
