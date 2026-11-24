@@ -48,6 +48,6 @@ test('live hotbar skill drives native motion, hit effects and deferred fatal pre
   }
   assert.ok(rows.some(r=>r.casts.some(c=>c.token===accepted.token&&c.cancelledAtMs!==undefined)),'server closes the same cast token');
   assert.deepEqual(errors,[]);
- }catch(error){if(capture)evidence.rows=await capture.catch(()=>[]);evidence.failure=String(error);evidence.state=await page.evaluate(()=>({game:globalThis.__playableRuntime?.gameplay(),status:document.querySelector('output')?.textContent})).catch(()=>null);await page.screenshot({path:directory+'/failure.png'}).catch(()=>{});throw error;
+ }catch(error){if(capture)evidence.rows=await capture.catch(()=>[]);evidence.failure=String(error);evidence.state=await page.evaluate(()=>({game:globalThis.__playableRuntime?.gameplay(),status:document.querySelector('output')?.textContent})).catch(()=>null);throw error;
  }finally{await writeFile(directory+'/incident.json',JSON.stringify({...evidence,errors},null,2));await browser.close();await capture?.catch(()=>{});}
 });

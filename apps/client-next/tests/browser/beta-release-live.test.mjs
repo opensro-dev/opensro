@@ -44,6 +44,6 @@ test('beta package authenticates, renders panels, restores login and retains ass
   assert.equal(await page.locator('output').isHidden(),true);assert.ok(!requests.some(p=>/^\/(src|@vite|@fs|__client-next-dev)/.test(p)));
   assert.deepEqual(errors,[]);assert.deepEqual(failed,[]);assert.equal(transfers.warm,0,'fully warm reload must not retransmit asset bodies, including publication manifest');
   await note('PASS',{servedAssetBodyBytes:transfers});
- }catch(e){await note('FAIL',{error:String(e),status:page?await page.locator('output').textContent().catch(()=>null):null});if(page)await page.screenshot({path:path.join(directory,'failure.png')}).catch(()=>{});throw e;}
+ }catch(e){await note('FAIL',{error:String(e),status:page?await page.locator('output').textContent().catch(()=>null):null});throw e;}
  finally{if(page)await page.context().tracing.stop({path:path.join(directory,'trace.zip')}).catch(()=>{});if(browser)await browser.close();await service.close();}
 });
