@@ -557,6 +557,8 @@ interface WorldReferences {
 	readonly monster: (
 		codename: string
 	) => import("@/engine/foundation/gameplay/gm-command").GmMonsterReference | undefined;
+	// Catalog CodeName for a living monster's RefObjID (68c3d0 pillar skip).
+	readonly monsterCodename?: ( refObjId: number ) => string | undefined;
 	readonly npcs: () => readonly EntityState[];
 }
 
@@ -7367,8 +7369,9 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 		const skipPillar = (settings.hunt[HUNT_BYTE_PILLAR] ?? 0) !== 0;
 		// 68c310 always drops summon flowers; 68c3d0 drops pillars when byte 10 is on.
 		const monsters = listMonsters().filter( monster => {
-			if ( isMacroHuntNeverTarget( monster.name ) ) return false;
-			if ( skipPillar && isDimensionPillarTarget( monster.name ) ) return false;
+			const code = worldReferences.monsterCodename?.( monster.refObjId ) ?? "";
+			if ( isMacroHuntNeverTarget( monster.name, code ) ) return false;
+			if ( skipPillar && isDimensionPillarTarget( monster.name, code ) ) return false;
 			return true;
 		} );
 		const nearest = pose ? nearestMonster( monsters, pose, reach ) : undefined;

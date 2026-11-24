@@ -304,14 +304,19 @@ test("macroRegionIsTown matches RegionPlayerCombat known denials", () => {
 	assert.equal( macroRegionIsTown( 0xffff ), false );
 });
 
-test("Dimension pillar skip matches 68c3d0 codenames and English names", () => {
-	assert.equal( isDimensionPillarName( "Dimension Pillar" ), true );
+test("Dimension pillar skip matches 68c3d0 CodeNames; English name is fallback only", () => {
+	assert.equal( isDimensionPillarName( "Dimension Pillar" ), true, "no CodeName: English fallback" );
 	assert.equal( isDimensionPillarName( "Dimensional Pillar" ), true );
 	assert.equal( isDimensionPillarName( "Tiger" ), false );
 	assert.equal( isDimensionPillarTarget( "Flame", "MOB_GOD_PILLAR_FLAME_01" ), true );
 	assert.equal( isDimensionPillarTarget( "Togui", "MOB_GOD_PILLAR_TOGUI_A" ), true );
 	assert.equal( isDimensionPillarTarget( "Wreck", "MOB_GOD_PILLAR_WRECK_B" ), true );
 	assert.equal( isDimensionPillarTarget( "Tiger", "MOB_TIGER" ), false );
+	assert.equal(
+		isDimensionPillarTarget( "Dimension Pillar", "MOB_TIGER" ),
+		false,
+		"CodeName present: English name is ignored"
+	);
 	assert.equal( isMacroHuntNeverTarget( "Flower", "STRUCTURE_SUMMON_FLOWER_01" ), true );
 	assert.equal( isMacroHuntNeverTarget( "Tiger", "MOB_TIGER" ), false );
 	assert.equal( HUNT_BYTE_PILLAR, 10, "00686720 reads 017b3810" );

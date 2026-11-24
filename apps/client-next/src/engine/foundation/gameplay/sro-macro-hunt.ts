@@ -242,14 +242,17 @@ const SUMMON_FLOWER_CODENAME_PREFIX = "STRUCTURE_SUMMON_FLOWER_";
 isDimensionPillarTarget
 
 Hunt byte 10 (00686720 → 68c3d0): true when the target is a Dimension
-pillar. Native matches the character's codename prefixes; the port also
-keeps the English display-name heuristic for rows that only publish a name.
+pillar. Native 68c3d0 matches the character's CodeName against the
+MOB_GOD_PILLAR_* prefixes. The English display-name check remains only
+when no CodeName is fed (a catalog gap), not as the primary path.
 ================
 */
 export function isDimensionPillarTarget( name: string, codename = "" ): boolean {
-	const code = codename || name;
-	for ( const prefix of PILLAR_CODENAME_PREFIXES ) {
-		if ( code.startsWith( prefix ) ) return true;
+	if ( codename ) {
+		for ( const prefix of PILLAR_CODENAME_PREFIXES ) {
+			if ( codename.startsWith( prefix ) ) return true;
+		}
+		return false;
 	}
 	const lower = name.toLowerCase();
 	return lower.includes( "dimension pillar" ) || lower.includes( "dimensional pillar" );

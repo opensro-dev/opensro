@@ -152,6 +152,9 @@ export function createEntities(
 	// /LOADMONSTER resolves a typed codename here, as the native client reads
 	// its own character data (GlobalDataManager_GetItemRecordByCodeName).
 	const monsterCodenames = new Map<string, { readonly refObjId: number; readonly monsterType: number; }>();
+	// Reverse of monsterCodenames: hunt pillar skip (68c3d0) reads CodeName
+	// by the living monster's RefObjID.
+	const monsterCodenameByRef = new Map<number, string>();
 	// Port-only (#1640): the Experimental Sun drop marker's admission state:
 	// the row's byte and the local player's gid (its drops are the marked).
 	let sunMarkerOn = false, ownGid = 0;
@@ -788,6 +791,18 @@ export function createEntities(
 		monsterReference( codename: string ): { readonly refObjId: number; readonly monsterType: number; } | undefined {
 			return monsterCodenames.get( codename );
 		},
+		/*
+		================
+		monsterCodename
+
+		The catalog CodeName for a monster RefObjID, or undefined when the
+		snapshot never named that row. Hunt byte 10 feeds this into
+		isDimensionPillarTarget.
+		================
+		*/
+		monsterCodename( refObjId: number ): string | undefined {
+			return monsterCodenameByRef.get( refObjId );
+		},
 		characterCountry( refObjId: number ): number | undefined {
 			return refs.get( refObjId )?.countryByte9c;
 		},
@@ -942,6 +957,7 @@ export function createEntities(
 			itemRefs.clear();
 			itemNames.clear();
 			monsterCodenames.clear();
+			monsterCodenameByRef.clear();
 			for ( const row of b.refObjSnapshot ) {
 				if (
 					!row || typeof row.refObjId !== "number" || !Number.isInteger( row.refObjId ) ||
@@ -979,6 +995,7 @@ export function createEntities(
 				) throw Error( "Invalid entity reference monsterType" );
 				if ( row.kind === "monster" && typeof row.codename === "string" && row.codename ) {
 					monsterCodenames.set( row.codename, { refObjId: row.refObjId, monsterType: row.monsterType ?? 0 } );
+					monsterCodenameByRef.set( row.refObjId, row.codename );
 				}
 				if (
 					row.kind === "teleport" &&

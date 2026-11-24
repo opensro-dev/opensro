@@ -266,6 +266,16 @@ test("a consumable dropped on a row binds its item; a click on the slot clears i
 	const CURE_PILL_TYPE = 0x16c | 1 << 11;
 	assert.equal( loop.macroPotionAdmits( 2, CURE_PILL_TYPE ), true );
 	assert.equal( loop.macroPotionAdmits( 3, CURE_PILL_TYPE ), false );
+	// 690c70: row 3 admits only the speed-scroll CodeName whitelist.
+	const SPEED_CODE = "ITEM_ETC_SPEED_UP_BASIC";
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_BUFF_ITEM, ELIXIR_TYPE ), false, "no CodeName" );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_BUFF_ITEM, ELIXIR_TYPE, "ITEM_FAKE" ), false );
+	assert.equal( loop.macroPotionAdmits( MACRO_ROW_BUFF_ITEM, ELIXIR_TYPE, SPEED_CODE ), true );
+	assert.equal(
+		hud.bindItem( "sro-macro:item:3", { refObjId: OTHER_REF, typeFlags: ELIXIR_TYPE, codename: SPEED_CODE } ),
+		true,
+		"whitelisted CodeName binds Moving-speed row"
+	);
 	const dirty = codec.withPotionRowItem(
 		codec.withPotionRowItem( codec.defaultMacroSettings().potion, 2, OTHER_REF ),
 		3,
