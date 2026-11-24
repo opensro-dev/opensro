@@ -490,7 +490,8 @@ decodeShopItems
 			if ( nextRefs.has( id ) && nextRefs.get( id ) !== flags ) throw Error( "Conflicting shop item reference" );
 			nextRefs.set( id, flags );
 			nextNames.set( id, row.name );
-			const bytes = Uint8Array.from( row.body ), decoded = decodeInventoryItem( bytes, 0, nextRefs, objRefs, rentRefs );
+			const bytes = Uint8Array.from( row.body ),
+				decoded = decodeInventoryItem( bytes, 0, nextRefs, objRefs, rentRefs );
 			if ( !decoded.item || decoded.item.refObjId !== id || decoded.next !== bytes.length ) {
 				throw Error( "Invalid shop item body" );
 			}
@@ -776,6 +777,17 @@ pet record names, for decoders of rows held elsewhere (the storage room).
 		*/
 		objectRefs(): ReadonlyMap<number, number> {
 			return objRefs;
+		},
+		/*
+================
+rentRefs
+
+The rental kinds whose bodies carry the rent deadline leg (#4240), for
+the storage-room list decoder the same way objectRefs serves it.
+================
+		*/
+		rentRefs(): ReadonlySet<number> {
+			return rentRefs;
 		},
 		/*
 ================

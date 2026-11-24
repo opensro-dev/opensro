@@ -248,8 +248,16 @@ export function completeRestrictionText( entries ) {
 // only when blank in completeUiText, so a shipped row would win.
 // - NASRUN_WEAR_EXTENSION (row id 4174): the v1.696 client refuses the
 //   Devil's Spirit extension gear aimed at the worn Spirit with this line.
+// - The rental item strings (#4240): the later client's tooltip renders
+//   the remainder from the instance's millisecond deadline
+//   (ItemTooltip_BuildLines kind 0x15) with the first, and the expired
+//   state with the second. The native template names its units through
+//   <PARAM_HOUR> / <PARAM_MINUTE>; the completion carries them as %s for
+//   the same tooltipFormat that fills them.
 export const LATER_UI_TEXT_COMPLETIONS = Object.freeze( {
-	UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE: "You cannot use this while you are wearing it."
+	UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE: "You cannot use this while you are wearing it.",
+	UIIT_STT_RENT_REMNANTS_TIME: "Time Remains: %d %s %d %s",
+	UIIT_STT_RENT_USED_TIME_OVER: "Time Period is over"
 } );
 
 export function completeUiText( entries ) {
