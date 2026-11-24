@@ -153,6 +153,10 @@ type Deps struct {
 	// (action/goldcaps.go): the client's stall price editor and warehouse
 	// deposit dialog raise their native caps; false is native.
 	RaisedGoldCaps bool
+	// StorageGoldDepositLimit publishes the rule's effective warehouse
+	// deposit cap beside RaisedGoldCaps (action/goldcaps.go); zero
+	// (unset) omits it and the client keeps the native cap.
+	StorageGoldDepositLimit uint32
 	// StarterRefills are the beta's HP/MP potion refills (starterrefill.go);
 	// empty when the kit is disabled.
 	StarterRefills []StarterRefill

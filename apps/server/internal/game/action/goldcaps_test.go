@@ -50,4 +50,39 @@ func TestGoldCapsFollowTheSwitch(t *testing.T) {
 		t.Fatalf("on: stall %d deposit %d, want %d/%d", rt.stallPriceLimit(), rt.storageGoldDepositLimit(),
 			RaisedStallPriceLimit, RaisedStorageGoldDepositLimit)
 	}
+	rt.StorageGoldDepositLimit = 2_000_000_000
+	if rt.storageGoldDepositLimit() != 2_000_000_000 {
+		t.Fatalf("configured: deposit %d, want 2000000000", rt.storageGoldDepositLimit())
+	}
+}
+
+/*
+================
+TestStorageGoldDepositLimitFromEnv
+
+The switch's raised value, a shard's bare number clamped to the u32 a
+gold move carries, and the native cap for everything else.
+================
+*/
+func TestStorageGoldDepositLimitFromEnv(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  uint64
+	}{
+		{"", NativeStorageGoldDepositLimit},
+		{"off", NativeStorageGoldDepositLimit},
+		{"junk", NativeStorageGoldDepositLimit},
+		{"0", NativeStorageGoldDepositLimit},
+		{"on", RaisedStorageGoldDepositLimit},
+		{"1", RaisedStorageGoldDepositLimit},
+		{"true", RaisedStorageGoldDepositLimit},
+		{"500000000", 500_000_000},
+		{"4294967295", MaxStorageGoldDepositLimit},
+		{"99999999999999999999", MaxStorageGoldDepositLimit},
+	} {
+		t.Setenv(EnvRaisedGoldCaps, tc.value)
+		if got := StorageGoldDepositLimitFromEnv(); got != tc.want {
+			t.Fatalf("%s=%q: %d, want %d", EnvRaisedGoldCaps, tc.value, got, tc.want)
+		}
+	}
 }

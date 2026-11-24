@@ -666,6 +666,10 @@ type Runtime struct {
 	// warehouse gold deposit (goldcaps.go; port-only, not native). False is
 	// native: 1,000,000,000 and 100,000,000, with the native u32 offer wire.
 	RaisedGoldCaps bool
+	// StorageGoldDepositLimit is the shard's chosen warehouse deposit cap
+	// (goldcaps.go; port-only, not native). Zero keeps the switch's two
+	// values: 1,000,000,000 with RaisedGoldCaps, else the native 100,000,000.
+	StorageGoldDepositLimit uint64
 	// TeleportGrace makes a teleport arrival untouchable for the revival's
 	// grace (teleportprotection.go; port-only, not native). False is native.
 	TeleportGrace bool

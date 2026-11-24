@@ -107,12 +107,15 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.deps.InventorySort {
 		log.Infof("items: inventory sort button ON (%s)", action.EnvInventorySort)
 	}
-	// Port-only, not native: ten-billion stall prices and billion-gold warehouse deposits.
+	// Port-only, not native: ten-billion stall prices and wider warehouse
+	// deposits (a billion, or the shard's chosen value).
 	game.items.RaisedGoldCaps = action.RaisedGoldCapsFromEnv()
+	game.items.StorageGoldDepositLimit = action.StorageGoldDepositLimitFromEnv()
 	game.deps.RaisedGoldCaps = game.items.RaisedGoldCaps
-	if game.items.RaisedGoldCaps {
+	game.deps.StorageGoldDepositLimit = uint32(game.items.StorageGoldDepositLimit)
+	if game.items.RaisedGoldCaps || game.items.StorageGoldDepositLimit != action.NativeStorageGoldDepositLimit {
 		log.Infof("trade: stall prices to %d and warehouse deposits to %d ON (%s)",
-			action.RaisedStallPriceLimit, action.RaisedStorageGoldDepositLimit, action.EnvRaisedGoldCaps)
+			action.StallPriceLimitFromEnv(), game.items.StorageGoldDepositLimit, action.EnvRaisedGoldCaps)
 	}
 	// Port-only, not native: caravans rated by cargo gold, Jangan route profit.
 	game.deps.TradeTiers = game.items.TradeTiers

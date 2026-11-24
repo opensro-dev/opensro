@@ -739,6 +739,8 @@ export function createGameplay(
 	// window may use the published wider overview and town pages.
 	let alexandria = false;
 	let raisedGoldCaps = false; // Port-only SRO_RAISED_GOLD_CAPS: the raised stall and warehouse caps.
+	// Port-only SRO_RAISED_GOLD_CAPS: the shard's chosen warehouse deposit cap, when published.
+	let publishedStorageGoldDepositLimit: number | undefined;
 	let inventorySortRule = false; // Port-only SRO_INVENTORY_SORT: the containers' sort button.
 	// The port-only reverse return map table (reverse-return-map.ts).
 	let reverseMapPoints: readonly ReverseMapPoint[] = [];
@@ -2304,6 +2306,13 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			moonlitThiefSuit = (value as { moonlitThiefSuit?: unknown; } | null)?.moonlitThiefSuit === true;
 			alexandria = (value as { alexandria?: unknown; } | null)?.alexandria === true;
 			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
+			const publishedDepositLimit = (value as { storageGoldDepositLimit?: unknown; } | null)
+				?.storageGoldDepositLimit;
+			publishedStorageGoldDepositLimit = typeof publishedDepositLimit === "number" &&
+					Number.isInteger( publishedDepositLimit ) && publishedDepositLimit >= 1 &&
+					publishedDepositLimit <= 0xffffffff ?
+				publishedDepositLimit :
+				undefined;
 			inventorySortRule = (value as { inventorySort?: unknown; } | null)?.inventorySort === true;
 			reverseMapPoints = decodeReverseMapPoints(
 				(value as { reverseMapPoints?: unknown; } | null)?.reverseMapPoints
@@ -6874,6 +6883,9 @@ The published plane when something changed since the last take, else null.
 				...(moonlitThiefSuit ? { moonlitThiefSuit } : {}),
 				...(alexandria ? { alexandria } : {}),
 				...(raisedGoldCaps ? { raisedGoldCaps } : {}),
+				...(publishedStorageGoldDepositLimit !== undefined ?
+					{ storageGoldDepositLimit: publishedStorageGoldDepositLimit } :
+					{}),
 				...(inventorySortRule ? { inventorySort: true } : {}),
 				...(homingProjectiles ? { homingProjectiles } : {}),
 				...(reverseMapPoints.length ? { reverseMapPoints } : {}),

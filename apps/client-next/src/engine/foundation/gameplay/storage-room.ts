@@ -65,21 +65,25 @@ export const STORAGE_GOLD_WITHDRAW = 0x0b;
 export const STORAGE_GOLD_DEPOSIT = 0x0c;
 
 // 59A430 caps one warehouse gold deposit at 100,000,000 natively;
-// SRO_RAISED_GOLD_CAPS raises both the dialog and the server check to
-// 1,000,000,000 (port-only, not native).
+// SRO_RAISED_GOLD_CAPS raises both the dialog and the server check, to
+// 1,000,000,000 or to the shard's chosen value (port-only, not native).
 export const STORAGE_GOLD_DEPOSIT_LIMIT = 100000000n;
-export const STORAGE_GOLD_DEPOSIT_LIMIT_RAISED = 1000000000n;
 
 /*
 ================
 storageGoldDepositLimit
 
-The highest amount one deposit dialog accepts, for the shard's
-raised-gold-caps rule.
+The highest amount one deposit dialog accepts: the shard's published cap
+(enterworld storageGoldDepositLimit, beside raisedGoldCaps), or the
+native 59A430 cap when the server published none. A published value
+counts only as a whole u32, the most one gold move carries.
 ================
 */
-export function storageGoldDepositLimit( raisedGoldCaps: boolean ): bigint {
-	return raisedGoldCaps ? STORAGE_GOLD_DEPOSIT_LIMIT_RAISED : STORAGE_GOLD_DEPOSIT_LIMIT;
+export function storageGoldDepositLimit( published?: number ): bigint {
+	if ( published !== undefined && Number.isInteger( published ) && published >= 1 && published <= 0xffffffff ) {
+		return BigInt( published );
+	}
+	return STORAGE_GOLD_DEPOSIT_LIMIT;
 }
 
 // The guild warehouse's function mask and requests.

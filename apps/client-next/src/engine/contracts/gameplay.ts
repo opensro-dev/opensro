@@ -975,6 +975,9 @@ export interface GameplayState extends MoverPublication {
 	readonly alexandria?: boolean;
 	// Port-only SRO_RAISED_GOLD_CAPS: the stall and warehouse deposit caps are raised.
 	readonly raisedGoldCaps?: boolean;
+	// Port-only SRO_RAISED_GOLD_CAPS: the shard's chosen warehouse deposit
+	// cap, published at world entry; absent keeps the native deposit cap.
+	readonly storageGoldDepositLimit?: number;
 	// Port-only SRO_INVENTORY_SORT, published at world entry: the bag, the
 	// warehouses and companion bags carry a sort button (inventory-sort-run.ts).
 	readonly inventorySort?: boolean;
