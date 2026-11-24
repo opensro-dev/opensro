@@ -101,6 +101,7 @@ export default {
 		"scripts/test/assets/bsrAuthoredBox.test.mjs",
 		"scripts/test/assets/englishCorrections.test.mjs",
 		"scripts/test/assets/regionCodeCatalog.test.mjs",
+		"scripts/test/assets/brightnessText.test.mjs",
 		"scripts/test/assets/textCompletions.test.mjs",
 		"scripts/test/assets/memberCompression.test.mjs",
 		"scripts/test/assets/servedSize.test.mjs",

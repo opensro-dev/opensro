@@ -74,6 +74,7 @@ const finish = runtime + "renderer/device/finish.ts";
 const shadows = runtime + "renderer/device/character-shadows.ts";
 const sunShadow = runtime + "renderer/device/sun-shadow.ts";
 const hdr = runtime + "renderer/device/hdr.ts";
+const brightness = runtime + "renderer/device/brightness.ts";
 const ambientOcclusion = runtime + "renderer/device/ambient-occlusion.ts";
 // Port-only: the experimental 4x multisampled scene buffers (device/msaa.ts).
 const msaa = runtime + "renderer/device/msaa.ts";
@@ -108,6 +109,7 @@ const deviceInternals = [
 	shadows,
 	sunShadow,
 	hdr,
+	brightness,
 	ambientOcclusion,
 	msaa
 ];
@@ -381,6 +383,20 @@ for (
 		"beginRenderPass"
 	]
 ) rules[name].push( hdr );
+// The video page's brightness owner (#3908): the scene intermediate and
+// the gamma pass the frame presents through.
+for (
+	const name of [
+		"createShaderModule",
+		"createRenderPipeline",
+		"createSampler",
+		"createTexture",
+		"createBindGroup",
+		"createBuffer",
+		"writeBuffer",
+		"beginRenderPass"
+	]
+) rules[name].push( brightness );
 // The experimental occlusion owner (#2094): it totals the frame's
 // stored depth into the half-resolution factor the surfaces sample.
 for (
