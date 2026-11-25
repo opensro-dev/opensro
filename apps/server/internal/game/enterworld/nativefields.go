@@ -181,9 +181,10 @@ covers every path a row's fields travel: the wire `nativeFields`, the
 directly and through its aliases - `f`, `fields`, `targetFields`,
 `stoneFields`), and the direct `nativeFields` reads that bypass the
 tooltip (mall-use, cos-timer, the macro rows); the output is pasted
-in PR #4447. Making the compiler enforce this list - the client-owned
-typed contract (ITEM_WIRE_FIELDS) - is #4448; until then this list is
-maintained by hand against the readers named in each group.
+in PR #4447. The client owns the list as the typed ITEM_WIRE_FIELDS
+contract (#4448): itemwirefields.json beside this file is generated
+from it, and a test here plus one in the client keep both copies
+equal, so a new client read means a new tuple entry first.
 ================
 */
 var wireItemFieldNames = []string{
@@ -207,13 +208,17 @@ var wireItemFieldNames = []string{
 	// Tooltip rows, prices and gates.
 	"cashItem", "rarity", "canRepair", "price", "repairCostB4", "reviveCostB8",
 	"country", "reqStr", "reqInt",
-	"reqLevelType1", "requiredLevel", "maxStack", "reqGender", "itemClass", "setId",
+	"reqLevelType1", "requiredLevel",
+	"reqLevelType2", "requiredLevel2",
+	"reqLevelType3", "requiredLevel3",
+	"reqLevelType4", "requiredLevel4",
+	"maxStack", "reqGender", "itemClass", "setId",
 	"maxDurability", "itemParam2_2a0", "itemParam6_2b0",
 	"maxMagicOptions51c", "avatarAttachment51d",
 	// Use, cooldown, macro and stone readers.
 	"useCooldownGroup524", "useCooldownDuration528",
 	"associatedSkillId", "useSkillId", "useSkillDurationMs",
-	"canUse", "itemParam1_29c", "itemParam3_2a4", "itemParam4_2a8",
+	"canUse", "itemParam1_29c", "itemParam3_2a4", "itemParam4_2a8", "itemParam5_2ac",
 	"stoneFamilyMask", "stoneTooltipMask",
 }
 

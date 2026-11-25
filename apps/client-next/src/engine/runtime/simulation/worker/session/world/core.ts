@@ -19,6 +19,7 @@ import {
 import { fortressActive } from "@/engine/foundation/gameplay/fortress";
 import { OP_STAFF_ROSTER } from "@/engine/foundation/gameplay/staff-roster";
 import type { EntityState, WorldEvent } from "@/engine/contracts/world";
+import type { ItemFieldValues } from "@/engine/contracts/item-wire-fields";
 import { travelMode, resetTravelRegion, gateRequest, isReturnScroll } from "@/engine/foundation/gameplay/travel";
 import { commerceReferences } from "@/engine/foundation/gameplay/commerce";
 import { SKILL_RECALL_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
@@ -569,7 +570,7 @@ the entry continues it like the one after a world transfer.
 					refItemSnapshot?: {
 						refObjId: number;
 						typeFlags: number;
-						nativeFields?: Record<string, number>;
+						nativeFields?: ItemFieldValues;
 					}[];
 				}).refItemSnapshot ?? []
 			) admitCape( row.refObjId, row.typeFlags, row.nativeFields?.itemParam2_2a0 );

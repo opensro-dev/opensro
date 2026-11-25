@@ -41,7 +41,7 @@ func TestItemWireFieldsKeepsTheReadSet(t *testing.T) {
 		"canSell":        1,
 		"twoHanded":      1,
 		"sellPrice":      427,
-		"requiredLevel3": 40,
+		"canTrade":       1,
 		"itemParam9_2bc": 7,
 	})
 	wire := ItemWireFields(fields)
@@ -50,7 +50,7 @@ func TestItemWireFieldsKeepsTheReadSet(t *testing.T) {
 			t.Errorf("read field %q missing from the wire value", name)
 		}
 	}
-	for _, name := range []string{"canSell", "twoHanded", "sellPrice", "requiredLevel3", "itemParam9_2bc"} {
+	for _, name := range []string{"canSell", "twoHanded", "sellPrice", "canTrade", "itemParam9_2bc"} {
 		if _, ok := wire.Lookup(name); ok {
 			t.Errorf("unread field %q passed to the wire value", name)
 		}
