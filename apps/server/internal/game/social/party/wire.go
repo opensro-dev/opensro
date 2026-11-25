@@ -190,9 +190,9 @@ const (
 // composes the full-info subset: id + name/model + level + hp/mp status
 // + region/position + guild name. Bit 0x40 is the GUILD NAME column of
 // the party window (CPartyMemberInfo_ReadMasked reads it after the
-// position block at 0x75DBF4 into record +0x20; the 0x3E58 type-6 arm
-// applies it through 0x822090, and the slot update 0x6E9350 falls back to
-// UIIT_STT_NO_GUILD on an empty string). Inferred, not read: the v1.188
+// position block at client 0x75DBF4 into record +0x20; the 0x3E58
+// type-6 arm applies it through client 0x822090, and the slot update
+// at client 0x6E9350 falls back to UIIT_STT_NO_GUILD on an empty string). Inferred, not read: the v1.188
 // server writer was not available to check, and the +0x20 -> slot copy
 // is untraced; no other string in the record fits the column. It
 // rides every row built from a live character record, empty for a

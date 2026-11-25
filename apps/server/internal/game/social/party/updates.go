@@ -52,8 +52,8 @@ Retail CPartyMemberInfo_ReadMasked reads the masked row.
 CPSMission_OnPartyJobMemberJoinLogout0x3E58 type 6 applies position
 through CCharacterDependentData_SetPartyMemberPosition, including
 the packed world even outside entity interest, and the guild name
-(bit 0x40) through 0x822090, so a member who joins or leaves a guild
-mid-party renames in the window on the next sweep.
+(bit 0x40) through client 0x822090, so a member who joins or leaves a
+guild mid-party renames in the window on the next sweep.
 ================
 */
 func encodeMemberUpdate(row MemberRow) []byte {
