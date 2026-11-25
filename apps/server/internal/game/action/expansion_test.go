@@ -9,6 +9,7 @@ expansion_test.go - the later inventory and warehouse addition items
 package action
 
 import (
+	"errors"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -118,5 +119,84 @@ func TestWarehouseAdditionGrowsTheRoomTwice(t *testing.T) {
 	assertItemUseRefusedUnchanged(t, rt, c, use, wire.ErrCodeInvalidRequest)
 	if authority.room.Capacity != 210 {
 		t.Fatalf("refused use grew the room: %+v", authority.room)
+	}
+}
+
+/*
+================
+warehouseCommitStub
+
+A storage authority whose door-side read and commit-side room
+differ, or whose commit fails: the two ways the growth can refuse
+after the door admitted the use.
+================
+*/
+type warehouseCommitStub struct {
+	view domain.AccountStorage
+	room domain.AccountStorage
+	err  error
+}
+
+func (s *warehouseCommitStub) AccountStorage(*domain.Character) (domain.AccountStorage, error) {
+	return s.view, nil
+}
+
+func (s *warehouseCommitStub) TransactStorage(character *domain.Character, mutate func(*domain.Character, *domain.AccountStorage) error) (domain.AccountStorage, error) {
+	if s.err != nil {
+		return s.room, s.err
+	}
+	room := s.room
+	if err := mutate(character, &room); err != nil {
+		return s.room, err
+	}
+	s.room = room
+	return room, nil
+}
+
+/*
+================
+TestWarehouseAdditionRefusedAtCommitKeepsTheItem
+
+The door admitted the use on a one-use room, but a sibling character
+spent the second use before the growth committed: the item stays in
+the bag and the room keeps its slots.
+================
+*/
+func TestWarehouseAdditionRefusedAtCommitKeepsTheItem(t *testing.T) {
+	c, rt, item := expansionCharacter(t, "ITEM_MALL_WAREHOUSE_ADDITION", 24406, map[string]float64{
+		"itemParam1_29c": 30, "itemParam2_2a0": 1})
+	authority := &warehouseCommitStub{
+		view: domain.AccountStorage{Capacity: 180, ExpansionUses: 1},
+		room: domain.AccountStorage{Capacity: 210, ExpansionUses: 2},
+	}
+	rt.ConfigureStorage(authority)
+	use := wire.NewWriter(3).U8(25).U16(item.TypeFlags()).Payload()
+	assertItemUseRefusedUnchanged(t, rt, c, use, wire.ErrCodeInvalidRequest)
+	if authority.room.Capacity != 210 || authority.room.ExpansionUses != 2 {
+		t.Fatalf("refused commit changed the room: %+v", authority.room)
+	}
+}
+
+/*
+================
+TestWarehouseAdditionStoreErrorKeepsTheItem
+
+The growth itself fails to commit: the item stays in the bag and the
+client hears the failure.
+================
+*/
+func TestWarehouseAdditionStoreErrorKeepsTheItem(t *testing.T) {
+	c, rt, item := expansionCharacter(t, "ITEM_MALL_WAREHOUSE_ADDITION", 24406, map[string]float64{
+		"itemParam1_29c": 30, "itemParam2_2a0": 1})
+	authority := &warehouseCommitStub{
+		view: domain.NewAccountStorage(),
+		room: domain.NewAccountStorage(),
+		err:  errors.New("store unavailable"),
+	}
+	rt.ConfigureStorage(authority)
+	use := wire.NewWriter(3).U8(25).U16(item.TypeFlags()).Payload()
+	assertItemUseRefusedUnchanged(t, rt, c, use, wire.ErrCodeInvalidRequest)
+	if authority.room.Capacity != domain.StorageDefaultCapacity {
+		t.Fatalf("failed commit changed the room: %+v", authority.room)
 	}
 }

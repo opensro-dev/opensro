@@ -235,6 +235,9 @@ func (rt *Runtime) handleItemUse(
 	// A crest delete the closure admitted: the crest clears after this
 	// door closes, then the item is spent (crestdelete.go).
 	var crestDelete string
+	// A warehouse addition the closure admitted: the room grows after
+	// this door closes, then the item is spent (expansion.go).
+	var warehouseUse *pendingWarehouseUse
 	// A guild recall the closure admitted: the gates judge, the scroll
 	// is spent and the guild is asked after this door closes
 	// (guildrecall.go).
@@ -487,7 +490,7 @@ func (rt *Runtime) handleItemUse(
 		if family == itemUseExpansion {
 			return rt.useExpansion(skillItemUse{
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
-			}, character, tail, &result, &after)
+			}, character, tail, &result, &warehouseUse)
 		}
 		if family == itemUseNameChange {
 			// The queue door takes the store's own lock, so it cannot
@@ -946,6 +949,9 @@ func (rt *Runtime) handleItemUse(
 	}
 	if crestDelete != "" {
 		rt.finishCrestDeleteUse(divisionID, character, request, used, crestDelete, &result)
+	}
+	if warehouseUse != nil {
+		rt.finishWarehouseAddition(divisionID, character, warehouseUse, &result)
 	}
 	if recallUse != nil {
 		rt.finishGuildRecallUse(divisionID, character, request, used, recallUse, &result)
