@@ -581,7 +581,7 @@ test("the lump-buy boxes caption their total row with the total-price line", () 
 });
 
 test("the lump-buy boxes grow one band for the outcome line, the other boxes do not (#4424)", () => {
-	for ( const kind of [ "basket", "worn" ] ) {
+	for ( const kind of /** @type {const} */ ([ "basket", "worn" ]) ) {
 		const layout = mallQuestionLayout( kind, 3 );
 		assert.equal( layout.noticeY, layout.pointY + 22, `${kind}: the notice takes the row under the points row` );
 		assert.ok( layout.noticeY + 14 < layout.buttonY, `${kind}: the notice clears the buttons` );
