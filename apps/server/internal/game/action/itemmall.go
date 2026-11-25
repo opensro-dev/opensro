@@ -14,12 +14,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
+	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/transport"
 )
 
@@ -108,8 +112,34 @@ func (rt *Runtime) ConfigureMall(dir string, authority domain.MallAuthority, ext
 	if err := catalog.Hydrate(rt.deps.ItemReferences()); err != nil {
 		return err
 	}
+	rt.withholdUniqueOnlyGoods(catalog)
 	rt.mallCatalog, rt.mallAuthority = catalog, authority
 	return nil
+}
+
+/*
+================
+withholdUniqueOnlyGoods
+
+Port-only, not native (owner 2026-11-25): while SRO_UNIQUE_POP_TICKET
+guarantees one Magic Pop card per unique kill, uniques are the card's
+only source and the mall stops selling it, every package that holds it
+included. Off, the native v1.150 mall sells it (MALL_CONSUME_SPECIAL).
+The wiring sets UniqueRules before the mall loads (wiring_gameplay.go).
+================
+*/
+func (rt *Runtime) withholdUniqueOnlyGoods(catalog *commerce.MallCatalog) {
+	if !rt.UniqueRules.PopTicket {
+		return
+	}
+	ref, ok := rt.deps.ItemReferences().ItemRefByCodename(gacha.CardCodename)
+	if !ok || ref == nil {
+		return
+	}
+	if removed := catalog.WithholdItem(ref.RefObjID); removed > 0 {
+		log.Infof("mall: %d Magic Pop card offer(s) withheld; uniques are its source (%s, port-only)",
+			removed, progression.EnvUniquePopTicket)
+	}
 }
 
 /*
