@@ -426,6 +426,10 @@ func DecodeWelcome(b []byte) (Welcome, error) {
 // MaxAuthTokenLen bounds the required EnterWorld auth token.
 const MaxAuthTokenLen = 512
 
+// MaxSessionConstantsLen bounds the optional EnterWorld session-constants
+// digest tail (a sha256 hex digest is 64 bytes).
+const MaxSessionConstantsLen = 128
+
 // EnterWorld is the parsed OpEnterWorld payload: the post-WELCOME identity
 // bind. The bootstrap lane owns what happens with it.
 //
@@ -435,15 +439,25 @@ type EnterWorld struct {
 	Division  string
 	CharName  string
 	AuthToken []byte
+	// SessionConstants is the digest of the session constants (the
+	// EnterWorld snapshot sections and the commerce seed, #4421) this
+	// client already holds, stated so a re-entry can omit them. Empty
+	// states nothing: the answer carries everything.
+	SessionConstants string
 }
 
 // EncodeEnterWorld builds the OpEnterWorld payload:
 // [u16 LE divLen][division][u16 LE nameLen][charName]
-// [u16 LE tokenLen][token]. An empty token deliberately produces an invalid
-// payload; callers must obtain a launcher-issued token before encoding.
+// [u16 LE tokenLen][token], plus - when SessionConstants is stated -
+// [u16 LE digestLen][digest]. An empty token deliberately produces an
+// invalid payload; callers must obtain a launcher-issued token before
+// encoding.
 func EncodeEnterWorld(e EnterWorld) []byte {
-	div, name := []byte(e.Division), []byte(e.CharName)
+	div, name, digest := []byte(e.Division), []byte(e.CharName), []byte(e.SessionConstants)
 	size := 2 + len(div) + 2 + len(name) + 2 + len(e.AuthToken)
+	if len(digest) > 0 {
+		size += 2 + len(digest)
+	}
 	buf := make([]byte, size)
 	binary.LittleEndian.PutUint16(buf[0:2], uint16(len(div)))
 	copy(buf[2:], div)
@@ -453,6 +467,11 @@ func EncodeEnterWorld(e EnterWorld) []byte {
 	off += 2 + len(name)
 	binary.LittleEndian.PutUint16(buf[off:off+2], uint16(len(e.AuthToken)))
 	copy(buf[off+2:], e.AuthToken)
+	off += 2 + len(e.AuthToken)
+	if len(digest) > 0 {
+		binary.LittleEndian.PutUint16(buf[off:off+2], uint16(len(digest)))
+		copy(buf[off+2:], digest)
+	}
 	return buf
 }
 
@@ -488,10 +507,27 @@ func DecodeEnterWorld(b []byte) (EnterWorld, error) {
 	if tokenLen > MaxAuthTokenLen {
 		return EnterWorld{}, fmt.Errorf("transport: ENTERWORLD token %d bytes exceeds max %d", tokenLen, MaxAuthTokenLen)
 	}
-	if len(rest) != 2+tokenLen {
-		return EnterWorld{}, fmt.Errorf("transport: ENTERWORLD token tail %d bytes, want %d", len(rest), 2+tokenLen)
+	if len(rest) < 2+tokenLen {
+		return EnterWorld{}, fmt.Errorf("transport: ENTERWORLD token tail %d bytes, want at least %d", len(rest), 2+tokenLen)
 	}
 	ew.AuthToken = append([]byte(nil), rest[2:2+tokenLen]...)
+	// The one optional tail: the session-constants digest the client
+	// already holds (#4421). Anything else after the token is malformed.
+	tail := rest[2+tokenLen:]
+	if len(tail) == 0 {
+		return ew, nil
+	}
+	if len(tail) < 2 {
+		return EnterWorld{}, fmt.Errorf("transport: ENTERWORLD digest tail %d bytes, need at least 2", len(tail))
+	}
+	digestLen := int(binary.LittleEndian.Uint16(tail[0:2]))
+	if digestLen == 0 || digestLen > MaxSessionConstantsLen {
+		return EnterWorld{}, fmt.Errorf("transport: ENTERWORLD digest %d bytes outside 1..%d", digestLen, MaxSessionConstantsLen)
+	}
+	if len(tail) != 2+digestLen {
+		return EnterWorld{}, fmt.Errorf("transport: ENTERWORLD digest tail %d bytes, want %d", len(tail), 2+digestLen)
+	}
+	ew.SessionConstants = string(tail[2:])
 	return ew, nil
 }
 

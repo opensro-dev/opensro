@@ -43,7 +43,7 @@ test("unseeded higher-level loot receives public metadata before single spawn an
 			return b;
 		};
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [],
@@ -90,7 +90,7 @@ test("unseeded higher-level loot receives public metadata before single spawn an
 test("single drops request native ITEM audio once; visibility lists do not replay it", () => {
 	const e = createEntities();
 	e.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [ { refObjId: 3810, typeFlags: 0x2ec, codename: "Gold" } ],
@@ -120,7 +120,7 @@ test("single drops request native ITEM audio once; visibility lists do not repla
 test("non-gold single drops reach the category resolver without inventing a gold cue", () => {
 	const e = createEntities();
 	e.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [ { refObjId: 11459, typeFlags: 0x8ac } ],
@@ -144,7 +144,7 @@ test("non-gold single drops reach the category resolver without inventing a gold
 test("ownership expiry preserves the ground item and publishes its released ownership", () => {
 	const e = createEntities();
 	e.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [ { refObjId: 3810, typeFlags: 0x2ec, codename: "Gold" } ],
@@ -216,7 +216,7 @@ test("item selection/pickup is wire-driven and despawn clears the selected item"
 			return b;
 		};
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [ { refObjId: 3810, typeFlags: 0x2ec, codename: "Gold" } ],
@@ -262,7 +262,7 @@ test("gold grant and balance refresh reach gameplay without an unhandled packet 
 			return b;
 		};
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [],
@@ -299,7 +299,7 @@ test("an item pickup prints the native gain line: the stack it lands as, then on
 			return b;
 		};
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
@@ -330,7 +330,7 @@ test("COS record gates mounting; result feedback never invents a ride and the re
 		return b;
 	};
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: 3914, tidWord: 0x11c6, kind: "cos" } ],
 		refItemSnapshot: [],
@@ -394,7 +394,7 @@ test("a mounted rider's position correction moves the local pose to the mount, n
 		return b;
 	};
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: 3914, tidWord: 0x11c6, kind: "cos" } ],
 		refItemSnapshot: [],
@@ -439,7 +439,7 @@ test("a correction naming the ridden mount stops the rider there, and only the r
 		return b;
 	};
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: 3914, tidWord: 0x11c6, kind: "cos" } ],
 		refItemSnapshot: [],
@@ -540,7 +540,7 @@ test("pickup shortcut uses native strict 50-unit 3D distance, adjacent sectors a
 test("pickup claims persist for a live character and release when the claimant leaves", () => {
 	const e = createEntities();
 	e.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [ { refObjId: 3810, typeFlags: 0x2ec, codename: "Gold" } ],
@@ -597,7 +597,7 @@ test("ground item spawn and late navigation resolve surface height before model 
 	let height = 125;
 	const e = createEntities( p => ({ ...p, y: height }) );
 	e.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [ { refObjId: 3810, typeFlags: 0x2ec, codename: "Gold" } ],

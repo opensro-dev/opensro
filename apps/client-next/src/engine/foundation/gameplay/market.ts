@@ -635,6 +635,7 @@ export function createMarket( preview: ( row: CommercePreview ) => InventoryItem
 					offersOut: decodeList( m.offersOut, decodeOffer ),
 					purchases: decodeList( m.purchases, decodePurchase ),
 					silk: commerceInteger( m.silk ),
+					earnedSilk: commerceInteger( m.earnedSilk ),
 					warehouseGold: commerceInteger( m.warehouseGold, Number.MAX_SAFE_INTEGER ),
 					rules: {
 						feePercent: commerceInteger( rules.feePercent, 100 ),

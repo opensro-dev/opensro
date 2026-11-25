@@ -124,6 +124,7 @@ test("the account page reads sellers, both offer lists and the offer cap", () =>
 				item: "Bow"
 			} ],
 			silk: 9,
+			earnedSilk: 50,
 			warehouseGold: 0,
 			rules
 		}
@@ -135,6 +136,9 @@ test("the account page reads sellers, both offer lists and the offer cap", () =>
 	assert.equal( mine.offersOut[0].to, "warehouse" );
 	assert.equal( mine.purchases[0].item, "Bow" );
 	assert.equal( mine.rules.offerCap, 20 );
+	// Silk and the earned balance a Silk purchase draws first (#4133).
+	assert.equal( mine.silk, 9 );
+	assert.equal( mine.earnedSilk, 50 );
 	assert.equal( market.state().pending, null );
 	assert.equal( market.state().notice, null );
 });
@@ -172,6 +176,7 @@ test("a malformed answer costs the window its request, never the session", () =>
 			offersOut: [],
 			purchases: [],
 			silk: 0,
+			earnedSilk: 0,
 			warehouseGold: 0,
 			rules
 		}
@@ -198,7 +203,16 @@ test("a malformed answer costs the window its request, never the session", () =>
 		version: 2,
 		op: "mine",
 		ok: true,
-		mine: { listings: [ row( 1 ) ], offersIn: [], offersOut: [], purchases: [], silk: 3, warehouseGold: 0, rules }
+		mine: {
+			listings: [ row( 1 ) ],
+			offersIn: [],
+			offersOut: [],
+			purchases: [],
+			silk: 3,
+			earnedSilk: 0,
+			warehouseGold: 0,
+			rules
+		}
 	} ) );
 	assert.equal( defined( market.state().mine ).listings.length, 1 );
 });

@@ -94,9 +94,18 @@ export function createCodec() {
 				resume: payload.slice( 11 )
 			};
 		},
-		enterWorld( division: string, character: string, admission: string ): WireFrame {
+		enterWorld( division: string, character: string, admission: string, sessionConstants = "" ): WireFrame {
 			const parts = [ text.encode( division ), text.encode( character ), text.encode( admission ) ];
-			if ( parts.some( p => p.length > 65535 ) || parts[2]!.length < 1 || parts[2]!.length > 512 ) {
+			// A held session-constants digest (#4421) rides as one
+			// optional tail after the token; the server refuses a longer
+			// one, so the same cap is spent here first.
+			if ( sessionConstants ) {
+				parts.push( text.encode( sessionConstants ) );
+			}
+			if (
+				parts.some( p => p.length > 65535 ) || parts[2]!.length < 1 || parts[2]!.length > 512 ||
+				(parts[3] !== undefined && parts[3].length > 128)
+			) {
 				throw new Error( "Invalid world admission" );
 			}
 			const size = parts.reduce( ( sum, p ) => sum + 2 + p.length, 0 );

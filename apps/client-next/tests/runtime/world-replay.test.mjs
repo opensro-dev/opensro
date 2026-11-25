@@ -22,7 +22,7 @@ const fixture = JSON.parse(
 );
 const pose = { regionId: 25256, x: 1, y: 2, z: 3, angle: 0 };
 const bootstrap = {
-	protocolVersion: 2,
+	protocolVersion: 3,
 	nativeResult: 1,
 	simulationProtocolVersion: 1,
 	refObjSnapshot: fixture.refObjSnapshot,

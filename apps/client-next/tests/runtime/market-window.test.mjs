@@ -108,6 +108,7 @@ const market = ( extra = {} ) => ({
 		offersOut: [],
 		purchases: [],
 		silk: 40,
+		earnedSilk: 25,
 		warehouseGold: 0,
 		rules
 	},

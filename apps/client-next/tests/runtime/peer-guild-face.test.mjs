@@ -32,7 +32,7 @@ world
 function world() {
 	const owner = createEntities();
 	owner.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: peer.modelRefObjId, kind: "player", tidWord: peer.modelTidWord } ],
 		localPlayerEntry: {
