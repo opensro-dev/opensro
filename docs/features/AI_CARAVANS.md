@@ -50,7 +50,8 @@ The GameWorld log must contain `AI caravan & thief agents ON`. In Jangan, Bao an
 Adventurer Flora: region **25000**, approximately **X=1681/1691, Y=11, Z=261**. The stable is a different
 landmark. GM testing can use `/warp 25000 1675 11 260` while dismounted. Other agents travel or stage
 at Donwhang and Hotan. Only the default outdoor world receives them. Use `!caravans` for status;
-admin world-map markers show current positions. Use full agent names, e.g. `!hire [AI]Hunter_Kwan`.
+the world map shows their positions to GM characters only (never to players, even with
+SRO_BETA_PLAYER_MAP on). Use full agent names, e.g. `!hire [AI]Hunter_Kwan`.
 
 ## Verification checkpoint (2026-11-17)
 

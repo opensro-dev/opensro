@@ -300,7 +300,9 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 		}
 		pose := view.World.LiveSpawnAt(nowMs)
 
-		if c.GMPrivilege || simulation.BetaPlayerMapEnabled() {
+		// The agents on the world map are an operator's test view: only GM
+		// sessions get them, whatever SRO_BETA_PLAYER_MAP shows players.
+		if c.GMPrivilege {
 			adminSessions = append(adminSessions, view.SessionID)
 		}
 		mapPlayers = append(mapPlayers, wire.BetaMapPlayer{
