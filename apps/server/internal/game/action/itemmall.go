@@ -105,6 +105,15 @@ func (rt *Runtime) ConfigureMall(dir string, authority domain.MallAuthority, ext
 	if err != nil {
 		return err
 	}
+	// Port-only, not native (owner decision 2026-11-25, #4360): while
+	// the unique pop ticket runs, the Magic Pop card is uniques-only,
+	// so its mall package is withheld; with the ticket off the
+	// configured mall is the shipped one and lists the card. The card
+	// item itself is untouched: uniques drop it and Magic Pop spends
+	// it as before.
+	if rt.UniqueRules.PopTicket {
+		catalog.WithholdPackage(commerce.MallGachaCardPackage)
+	}
 	if err := catalog.Hydrate(rt.deps.ItemReferences()); err != nil {
 		return err
 	}

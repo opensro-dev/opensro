@@ -23,6 +23,12 @@ import (
 
 const mallGroupCode = "GROUP_MALL"
 
+// MallGachaCardPackage is the later mall's Magic Pop card package (the
+// sale of ITEM_MALL_GACHA_CARD) on MALL_CONSUME_SPECIAL. The configured
+// mall withholds it while the unique pop ticket runs (#4360); see
+// action.ConfigureMall.
+const MallGachaCardPackage = "PACKAGE_ITEM_MALL_GACHA_CARD"
+
 /*
 ================
 MallAddress
@@ -229,6 +235,31 @@ func LoadMall(dir string, extra []MallExtraGood, categories bool, refs enterworl
 		catalog.Offers[index].Badge = badges[catalog.Offers[index].Code]
 	}
 	return catalog, nil
+}
+
+/*
+================
+WithholdPackage
+
+Removes every offer selling the named package and returns how many
+went. The package's slots stay unused, as with the NPC catalogue's
+withheld goods (WithholdGoods): the other offers keep their addresses,
+so a client holding a stale catalogue still buys what it sees, and a
+purchase addressed at a withheld slot finds no offer and is refused.
+================
+*/
+func (c *MallCatalog) WithholdPackage(code string) int {
+	kept := c.Offers[:0]
+	removed := 0
+	for _, offer := range c.Offers {
+		if offer.Code == code {
+			removed++
+			continue
+		}
+		kept = append(kept, offer)
+	}
+	c.Offers = kept
+	return removed
 }
 
 // nasrunMallTabCodes are the later mall's Devil's Spirit shelves
