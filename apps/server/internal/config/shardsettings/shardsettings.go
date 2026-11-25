@@ -236,8 +236,10 @@ var Settings = []Setting{
 	// adds no monsters. "off" is native.
 	{Env: "SRO_STYRIA_CLASH", NomadVar: "styria_clash", Default: "off"},
 	// Port-only, not native: AI caravan and thief agents on the Jangan -
-	// Donwhang - Hotan highway (#3650, epic #3704). Slice 1 sends no
-	// frames to a client and pays no reward. Its brain settings
+	// Donwhang - Hotan highway (#3650, epic #3704): server-owned
+	// Traders, Hunters and Thieves players meet, rob and hire, with the
+	// hire window and party lead frames (0x3FCF/0x7FCF, 0x3FD0, 0x3FD1)
+	// and escort rewards (docs/features/AI_CARAVANS.md). Its brain settings
 	// (SRO_AGENT_*) are deliberately not job variables: the LLM brain is
 	// off by owner decision and refuses any URL that is not loopback
 	// (caravanai.LoopbackURL). Not a catalogue setting: the catalogue
