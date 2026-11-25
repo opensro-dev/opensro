@@ -97,6 +97,10 @@ type styriaMatch struct {
 	// the outcome lands, paid by the match tick's drain with no
 	// lane held.
 	pendingRewards []styriaDue
+
+	// Each side's next blessing (styria_buffs.go): the family's
+	// grant cursor, advanced by that side's box openings.
+	blessings [2]int
 }
 
 /*
@@ -301,6 +305,23 @@ func (rt *Runtime) styriaTickMatch(match *styriaMatch, nowMs int64) []simulation
 	if !ended {
 		return nil
 	}
+	// The clock ends every blessing with the match: the holders
+	// still stand in the arena until the close evacuates them, but
+	// the blessing is the match's, not theirs to carry out.
+	match.mu.Lock()
+	standing := make([]*styriaParticipant, 0, len(match.order))
+	for _, id := range match.order {
+		if p := match.participants[id]; p != nil && p.entered {
+			standing = append(standing, p)
+		}
+	}
+	match.mu.Unlock()
+	for _, p := range standing {
+		unlock := rt.lockDivision(match.division)
+		character := rt.findCharacter(match.division, p.registrant.Name)
+		unlock()
+		rt.styriaRetireBlessings(match.division, character, nowMs)
+	}
 	return styriaEndFrames(match)
 }
 
@@ -378,6 +399,7 @@ func (rt *Runtime) styriaReconcile(match *styriaMatch) {
 	}
 
 	var dead []*enterworld.Character
+	var departed []*enterworld.Character
 	match.mu.Lock()
 	for _, s := range sightings {
 		if !s.p.entered {
@@ -385,6 +407,9 @@ func (rt *Runtime) styriaReconcile(match *styriaMatch) {
 		}
 		if s.gone || s.dead {
 			s.p.entered = false
+			if s.character != nil {
+				departed = append(departed, s.character)
+			}
 			if s.dead && s.character != nil {
 				dead = append(dead, s.character)
 			}
@@ -392,6 +417,11 @@ func (rt *Runtime) styriaReconcile(match *styriaMatch) {
 	}
 	match.mu.Unlock()
 
+	// Leaving the match ends the leaver's blessings with their seat.
+	nowMs := rt.Now().UnixMilli()
+	for _, character := range departed {
+		rt.styriaRetireBlessings(match.division, character, nowMs)
+	}
 	for _, character := range dead {
 		rt.ReturnCharacterFromInstance(match.division, character)
 	}
