@@ -17,7 +17,6 @@ world carries the score while the match runs.
 import type { StyriaFeed } from "@/engine/contracts/styria";
 import type { UiRect } from "@/engine/contracts/ui";
 import { styriaClockText, styriaCountdown, styriaResultWord, styriaSideName } from "@/engine/foundation/ui/styria";
-import type { StyriaHudState } from "./styria-hud";
 
 type Color = readonly [number, number, number, number];
 
@@ -64,6 +63,21 @@ export type StyriaOp =
 
 /*
 ================
+StyriaViewState
+
+The parts of the state owner's state() these windows draw. Declared
+here, not imported from the hud: the two are siblings under ui.ts,
+and the renderer hands the state across.
+================
+*/
+export interface StyriaViewState {
+	readonly feed: StyriaFeed | null;
+	readonly result: StyriaFeed | null;
+	readonly serverNowMs: number;
+}
+
+/*
+================
 StyriaViewInput
 
 Everything the panel reads, in one struct: the screen origin, the
@@ -75,7 +89,7 @@ choice numbers the Apply and Cancel buttons send).
 export interface StyriaViewInput {
 	readonly origin: readonly [number, number];
 	readonly tile: string;
-	readonly state: StyriaHudState;
+	readonly state: StyriaViewState;
 	readonly copy: ( key: string ) => string;
 	readonly choices: { readonly apply?: number; readonly cancel?: number; };
 }
@@ -299,7 +313,7 @@ score and the clock, on a washed strip.
 */
 export function styriaStripOps( input: {
 	readonly origin: readonly [number, number];
-	readonly state: StyriaHudState;
+	readonly state: StyriaViewState;
 } ): StyriaOp[] {
 	const feed = input.state.feed;
 	if ( !feed || feed.phase !== "match" ) return [];
