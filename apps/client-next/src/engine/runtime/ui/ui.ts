@@ -278,6 +278,12 @@ import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
 import { createMallUseHud } from "./hud/mall-use-hud";
 import { isMallUseConfirmItem } from "@/engine/foundation/gameplay/mall-use";
+import { createMagicCubeHud } from "./hud/magic-cube-hud";
+import {
+	isMagicCube,
+	MAGIC_CUBE_USE_CONFIRM_KEY,
+	magicCubeMatchesFilter
+} from "@/engine/foundation/gameplay/magic-cube";
 import {
 	createCompactHud,
 	compactHudLayout,
@@ -1855,6 +1861,7 @@ export function createUi( ports: UiPorts ) {
 		questTimers = createQuestTimers();
 	const cosHud = createCosHud();
 	const mallUse = createMallUseHud();
+	const magicCubeHud = createMagicCubeHud();
 	const autoPotionInput = createAutoPotionInput();
 	const repairHud = createRepairHud();
 	const skinHud = createSkinChangeHud();
@@ -2189,6 +2196,11 @@ export function createUi( ports: UiPorts ) {
 		}
 		if ( carried.source.startsWith( "cos-slot:" ) ) {
 			return game?.cosRecords?.find( r => r.gid === cosGid )?.inventory?.find( row => row.slot === carried.slot );
+		}
+		if ( carried.source.startsWith( "magic-cube-slot:" ) ) {
+			const cubeSlot = magicCubeHud.cubeSlot();
+			const cube = cubeSlot === null ? undefined : game?.inventory.find( row => row.slot === cubeSlot );
+			return cube?.linkedStorage?.rows.find( row => row.slot === carried.slot );
 		}
 		return (carried.avatar ? game?.avatarInventory : game?.inventory)?.find( row => row.slot === carried.slot );
 	}
@@ -2545,6 +2557,15 @@ export function createUi( ports: UiPorts ) {
 		// the catalogue's own "Indicate ..." voice.
 		if ( key === "UIIT_STT_CHAR_TITLE_SIGN" ) return "Indicate own title";
 		if ( key === "UIIT_STT_OTHER_TITLE_SIGN" ) return "Indicate other titles";
+		// Port-only (#3906): v1.150 has no Magic Cube UIIT_* rows; the
+		// v1.696 English text stands until the later text tables ship.
+		if ( key === "UIIT_MSG_MAGIC_CUBE_USE" ) return "Will you use the Magic Cube?";
+		if ( key === "UIIT_STT_MAGIC_CUBE_INVENTORY_FULL" ) {
+			return "Insufficient space. You cannot put any more items in the Magic Cube.";
+		}
+		if ( key === "UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR" ) {
+			return "You cannot sell the Magic Cube with items still in it";
+		}
 		// The Contributor login prompt (port-only, contributor-titles.ts).
 		const contributorCopy = CONTRIBUTOR_PROMPT_COPY[key];
 		if ( contributorCopy ) return contributorCopy;
@@ -3197,6 +3218,14 @@ export function createUi( ports: UiPorts ) {
 				command.skin === undefined && command.companionGid === undefined
 			) {
 				mallUse.ask( item );
+				dirty = true;
+				return;
+			}
+			// Port-only (#3906): Magic Cube use is client-local. Ask
+			// UIIT_MSG_MAGIC_CUBE_USE, then open the linked-storage window
+			// without sending an item-use (v1.150 admits none).
+			if ( item && isMagicCube( item.typeFlags ) ) {
+				magicCubeHud.ask( item );
 				dirty = true;
 				return;
 			}
@@ -7918,6 +7947,35 @@ export function createUi( ports: UiPorts ) {
 				}
 				if ( event.kind !== "hover" ) return;
 			}
+			if ( magicCubeHud.pending() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "magic-cube-use-cancel"
+				) {
+					magicCubeHud.dismiss();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "magic-cube-use-confirm"
+				) {
+					magicCubeHud.take( view?.gameplay?.inventory ?? [] );
+					if ( panel !== "Inventory" ) setPanel( "Inventory" );
+					dirty = true;
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			if (
+				event.kind === "activate" && event.id === "magic-cube-close" ||
+				event.kind === "key" && event.code === "Escape" && magicCubeHud.cubeSlot() !== null &&
+					magicCubeHud.pending() === null
+			) {
+				magicCubeHud.close();
+				dirty = true;
+				return;
+			}
 			if ( cosHud.itemTargetCursor() !== null ) {
 				if ( event.kind === "right-activate" || event.kind === "key" && event.code === "Escape" ) {
 					cosHud.takeTargetUse();
@@ -9190,6 +9248,32 @@ export function createUi( ports: UiPorts ) {
 					dirty = true;
 					return;
 				}
+				// Port-only (#3906): release a Magic Cube elixir onto a bag slot.
+				if (
+					event.id.startsWith( "magic-cube-slot:" ) && view?.gameplay &&
+					!view.gameplay.inventoryPending && magicCubeHud.cubeSlot() !== null
+				) {
+					const target = topmostControlAt( controls, event.x, event.y ),
+						linkedSlot = Number( event.id.slice( 16 ) ),
+						cubeSlot = magicCubeHud.cubeSlot()!,
+						cube = view.gameplay.inventory.find( row => row.slot === cubeSlot ),
+						item = cube?.linkedStorage?.rows.find( row => row.slot === linkedSlot );
+					if ( item && target && !target.disabled && target.id.startsWith( "slot:" ) ) {
+						const destination = Number( target.id.slice( 5 ) ),
+							equipmentEnd = view.gameplay.equipmentSlotCount ?? 13;
+						if ( destination >= equipmentEnd ) {
+							sendGameplay( {
+								kind: "magic-cube-pop",
+								cubeSlot,
+								destination,
+								refObjId: item.refObjId,
+								quantity: item.quantity
+							} );
+						}
+					}
+					dirty = true;
+					return;
+				}
 				const carried = carriedItem;
 				carriedItem = null;
 				dirty = true;
@@ -9319,6 +9403,23 @@ export function createUi( ports: UiPorts ) {
 							source: item.slot,
 							destination: Number( target.id.slice( 9 ) )
 						} );
+						return;
+					}
+					// Port-only (#3906): drop a matching elixir onto the open Magic Cube.
+					if (
+						item && target && !target.disabled && magicCubeHud.cubeSlot() !== null &&
+						(target.id.startsWith( "magic-cube-slot:" ) || target.id === "magic-cube-body")
+					) {
+						const cubeSlot = magicCubeHud.cubeSlot()!,
+							cube = view?.gameplay?.inventory.find( row => row.slot === cubeSlot );
+						if ( cube && magicCubeMatchesFilter( cube, item ) ) {
+							sendGameplay( {
+								kind: "magic-cube-push",
+								source: item.slot,
+								cubeSlot,
+								quantity: item.quantity
+							} );
+						}
 						return;
 					}
 					if ( item && target && panel === "Shop" && target.id.startsWith( "shop-" ) ) {
@@ -9580,7 +9681,8 @@ export function createUi( ports: UiPorts ) {
 			}
 			if (
 				event.kind === "drag" && ITEM_SLOT_PREFIXES.some( prefix => event.id.startsWith( prefix ) ) &&
-				(ITEM_CARRY_PANELS.includes( panel ) || event.id.startsWith( "arena-chest-item:" ))
+				(ITEM_CARRY_PANELS.includes( panel ) || event.id.startsWith( "arena-chest-item:" ) ||
+					event.id.startsWith( "magic-cube-slot:" ) && magicCubeHud.cubeSlot() !== null)
 			) {
 				const node = controls.find( c => c.id === event.id && !c.disabled && c.draggable );
 				if ( !node ) return;
@@ -10589,6 +10691,12 @@ export function createUi( ports: UiPorts ) {
 			) dirty = true;
 			if (
 				mallUse.reconcile(
+					next.gameplay?.inventory ?? [],
+					next.session?.phase === "world" && !next.travel
+				)
+			) dirty = true;
+			if (
+				magicCubeHud.reconcile(
 					next.gameplay?.inventory ?? [],
 					next.session?.phase === "world" && !next.travel
 				)
@@ -28015,6 +28123,45 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
 			}
+			if ( worldVisible && magicCubeHud.pending() !== null ) {
+				// Port-only (#3906): same 308x148 confirm shape as mall-use,
+				// body UIIT_MSG_MAGIC_CUBE_USE from the v1.696 text table.
+				const layout = guildProposalLayout( w, h ),
+					message = text.guide(
+						guideTokens( "<center>" + hudCopy( MAGIC_CUBE_USE_CONFIRM_KEY ) + "</center>" ),
+						[ layout.frame[0] + 4, layout.frame[1] + 48, 300, 49 ],
+						full,
+						white,
+						resources.size
+					);
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
+				paths.push( ...partyProposalAssets(), ...message.paths );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...message.quads
+				);
+				button(
+					"magic-cube-use-confirm",
+					hudCopy( "UIIT_CTL_YES" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				button(
+					"magic-cube-use-cancel",
+					hudCopy( "UIIT_CTL_NO" ),
+					...layout.refuse.slice( 0, 3 ) as [number, number, number]
+				);
+			}
 			const teleportShown = mapTeleport.pending();
 			if ( worldVisible && teleportShown ) {
 				// Map teleport: the recall-appoint message box geometry.
@@ -30590,6 +30737,62 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						);
 					}
 					endWindow( mallAdmission, "item-mall" );
+				}
+			}
+			// Port-only (#3906): Magic Cube linked-storage window. Client-local
+			// after the use confirm; contents from linkedStorage on the bag row.
+			if ( worldVisible && game && magicCubeHud.cubeSlot() !== null ) {
+				const cubeSlot = magicCubeHud.cubeSlot()!,
+					cube = game.inventory.find( row => row.slot === cubeSlot ),
+					capacity = cube?.linkedStorage?.capacity ?? cube?.nativeFields?.itemParam9_2bc ?? 0,
+					cols = 5,
+					rows = Math.max( 1, Math.ceil( capacity / cols ) ),
+					width = 36 + cols * 36 + 20,
+					height = 70 + rows * 36 + 48,
+					busy = !!game.inventoryPending;
+				if ( cube && isMagicCube( cube.typeFlags ) && capacity > 0 ) {
+					const admission = beginWindow();
+					const [px, py] = windowOrigin( "Magic Cube", [
+						Math.max( 0, Math.floor( (w - width) / 2 ) - 120 ),
+						Math.floor( (h - height) / 2 ),
+						width,
+						height
+					] );
+					controls.push( {
+						id: "magic-cube-body",
+						label: cube.name ?? "Magic Cube",
+						kind: "region",
+						rect: [ px, py + 34, width, height - 34 ]
+					} );
+					windowBox( cube.name ?? "Magic Cube", px, py, width, height );
+					paths.push( MESSAGE_TILE, ...PARTS.map( part => FRAME + part + ".png" ) );
+					quads.push(
+						...normalTile(
+							[ px + 12, py + 40, width - 24, height - 56 ],
+							MESSAGE_TILE,
+							resources.size( MESSAGE_TILE ),
+							full
+						)
+					);
+					quads.push(
+						...text.quads(
+							`${cube.quantity} / ${capacity}`,
+							[ px + 16, py + 44, width - 32, 18 ],
+							full,
+							white,
+							{ hAlign: 1 }
+						)
+					);
+					for ( let slot = 0; slot < capacity; slot++ ) {
+						const x = px + 18 + (slot % cols) * 36,
+							y = py + 68 + Math.floor( slot / cols ) * 36;
+						rect( [ x - 1, y - 1, 34, 34 ], [ 0.38, 0.34, 0.25, 1 ] );
+						rect( [ x, y, 32, 32 ], [ 0.035, 0.04, 0.035, 1 ] );
+						const item = cube.linkedStorage?.rows.find( row => row.slot === slot );
+						nativeItem( `magic-cube-slot:${slot}`, item, [ x, y, 32, 32 ], busy );
+					}
+					button( "magic-cube-close", hudCopy( "UIIT_CTL_CLOSE" ) || "Close", px + width - 74, py + 5, 62 );
+					endWindow( admission, "magic-cube" );
 				}
 			}
 			if ( game?.arenaChest?.phase === "closed" || game?.arenaChest?.error ) arenaHiddenID = "";

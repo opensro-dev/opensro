@@ -87,7 +87,11 @@ type Item struct {
 	// equipment-family rows carry them; they ride every move/drop/pickup
 	// so a bag shuffle can never strip a persisted option.
 	MagicOptions []uint64
-	Data         uint32 // item record data word (+0x38): capsule monster, Spirit clock
+	Data         uint32 // item record data word (+0x38): capsule monster, Spirit clock, Magic Cube StoredItemCount
+	// LinkedStorage holds a Magic Cube's elixir rows (#3906). Absent on
+	// every other item; bag moves must carry it or a shuffle drops the
+	// cube's contents.
+	LinkedStorage *domain.COSContainer
 	// RecordID projects the native item-record +20/+24 search identity when
 	// supplied by an owner. Its DB allocation/load lifecycle is not implemented
 	// by this field. A newly split row starts at zero; RefObjID is not a substitute.

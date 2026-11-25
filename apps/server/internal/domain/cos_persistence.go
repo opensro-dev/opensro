@@ -44,11 +44,21 @@ func CloneCOS(source *CharacterCOS) *CharacterCOS {
 	copy := *source
 	copy.Rentals = cloneSlice(source.Rentals)
 	if source.Container != nil {
-		bag := *source.Container
-		bag.Rows = cloneInventoryRows(source.Container.Rows)
-		copy.Container = &bag
+		copy.Container = CloneCOSContainer(source.Container)
 	}
 	return &copy
+}
+
+/*
+================
+CloneCOSContainer
+
+Detach a COS (or Magic Cube linked) bag so a door copy cannot mutate
+the live rows.
+================
+*/
+func CloneCOSContainer(source *COSContainer) *COSContainer {
+	return cloneLinkedStorage(source)
 }
 
 /*

@@ -482,8 +482,26 @@ func cloneInventoryRows(source []InventoryRow) []InventoryRow {
 		clone[index].Summon = CloneCOS(source[index].Summon)
 		clone[index].MagicOptions =
 			cloneSlice(source[index].MagicOptions)
+		clone[index].LinkedStorage = cloneLinkedStorage(source[index].LinkedStorage)
 	}
 	return clone
+}
+
+/*
+================
+cloneLinkedStorage
+
+A Magic Cube's elixir bag (#3906): capacity and rows, detached so a
+door copy cannot mutate the live cube.
+================
+*/
+func cloneLinkedStorage(source *COSContainer) *COSContainer {
+	if source == nil {
+		return nil
+	}
+	bag := *source
+	bag.Rows = cloneInventoryRows(source.Rows)
+	return &bag
 }
 
 /*
@@ -525,6 +543,7 @@ func stagedInventoryRows(source, previous []InventoryRow) []InventoryRow {
 		clone[index] = source[index]
 		clone[index].Summon = CloneCOS(source[index].Summon)
 		clone[index].MagicOptions = cloneSlice(source[index].MagicOptions)
+		clone[index].LinkedStorage = cloneLinkedStorage(source[index].LinkedStorage)
 	}
 	if shared {
 		// Nothing moved: the previous slice itself, as stagedChild

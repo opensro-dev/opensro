@@ -301,6 +301,10 @@ type WireItem struct {
 	// wire grammar and content authority).
 	MagicOptions []uint64
 	Data         uint32 // item record data word (+0x38): capsule monster, Spirit clock
+	// LinkedStorage is a Magic Cube's elixir rows (#3906). Absent on
+	// every other item; the browser bootstrap publishes it beside the
+	// CSOItem body (StoredItemCount alone).
+	LinkedStorage *domain.COSContainer
 	// ForgeBound mirrors InventoryRow.ForgeBound for the roster path
 	// (port only, issue #1980); never set for starter items.
 	ForgeBound bool
@@ -543,17 +547,19 @@ func InventoryWireItems(rows []InventoryRow) []WireItem {
 			variance = 0
 		}
 		out = append(out, WireItem{
-			TradeOwner:   row.TradeOwner,
-			Slot:         row.Slot,
-			RefObjID:     row.RefObjID,
-			TypeFlags:    row.TypeFlags,
-			Codename:     row.Codename,
-			Plus:         row.Plus,
-			VarianceBits: variance,
-			Durability:   row.Durability,
-			StackCount:   row.StackCount,
-			MagicOptions: copyMagicOptions(row.MagicOptions),
-			Data:         row.Data, Summon: domain.CloneCOS(row.Summon),
+			TradeOwner:      row.TradeOwner,
+			Slot:            row.Slot,
+			RefObjID:        row.RefObjID,
+			TypeFlags:       row.TypeFlags,
+			Codename:        row.Codename,
+			Plus:            row.Plus,
+			VarianceBits:    variance,
+			Durability:      row.Durability,
+			StackCount:      row.StackCount,
+			MagicOptions:    copyMagicOptions(row.MagicOptions),
+			Data:            row.Data,
+			Summon:          domain.CloneCOS(row.Summon),
+			LinkedStorage:   domain.CloneCOSContainer(row.LinkedStorage),
 			ForgeBound:      row.ForgeBound,
 			EarnedBought:    row.EarnedBought,
 			RentExpiresUnix: row.RentExpiresUnix,

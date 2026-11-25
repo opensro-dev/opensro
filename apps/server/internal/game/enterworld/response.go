@@ -107,6 +107,22 @@ type EquipItemRow struct {
 	RefObjID uint32 `json:"refObjId"`
 	Slot     int64  `json:"slot"`
 	Body     []int  `json:"body"`
+	// LinkedStorage is a Magic Cube's elixir rows (#3906, port-only
+	// browser bootstrap). Absent on every other item; the CSOItem body
+	// only carries StoredItemCount.
+	LinkedStorage *LinkedStorageRow `json:"linkedStorage,omitempty"`
+}
+
+/*
+================
+LinkedStorageRow
+
+A Magic Cube's linked elixir bag as the browser bootstrap publishes it.
+================
+*/
+type LinkedStorageRow struct {
+	Capacity uint8          `json:"capacity"`
+	Rows     []EquipItemRow `json:"rows"`
 }
 
 /*

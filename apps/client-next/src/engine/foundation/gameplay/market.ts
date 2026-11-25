@@ -124,6 +124,7 @@ const MARKET_REFUSALS = {
 	"cap": "You already have the most listings allowed. Items waiting in My listings count too.",
 	"own-listing": "That is your own listing.",
 	"not-tradeable": "That item cannot be traded.",
+	"magic-cube": "Empty the Magic Cube before listing it on the market.",
 	"funds": "You do not have enough to pay for it.",
 	"price": "Enter a price the market accepts.",
 	"no-character": "That character cannot pay.",
