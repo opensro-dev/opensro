@@ -120,8 +120,6 @@ always has, plus the moderation desk the moderation commands act on.
 type gmLaneOwner struct {
 	*action.Runtime
 	desk *gmcommand.Moderation
-	// notice is SRO_GM_NOTICE, read once at start (gmcommand/notice.go).
-	notice bool
 }
 
 /*
@@ -131,15 +129,6 @@ GMModeration
 */
 func (owner gmLaneOwner) GMModeration() *gmcommand.Moderation {
 	return owner.desk
-}
-
-/*
-================
-GMNoticeEnabled
-================
-*/
-func (owner gmLaneOwner) GMNoticeEnabled() bool {
-	return owner.notice
 }
 
 /*

@@ -203,7 +203,6 @@ var catalogueExempt = map[string]string{
 	"SRO_GM_SETSPEED":                          "a GM command; no catalogue file carries it",
 	"SRO_GM_ITEM_FORGE":                        "a GM command; no catalogue file carries it",
 	"SRO_GM_MODERATION":                        "GM commands; no catalogue file carries it",
-	"SRO_GM_NOTICE":                            "a GM command; no catalogue file carries it",
 	"SRO_EARNED_SILK_TRADABLE":                 "whether a mall purchase paid wholly from earned silk trades at runtime; no catalogue file carries it",
 	"SRO_GM_TRAINING_DUMMY":                    "GM-only training targets; the catalogue publishes the shipped population, not GM summons",
 	"SRO_TEAM_DEATH_REVIVE":                    "where a battle death revives at runtime; no catalogue file carries it",

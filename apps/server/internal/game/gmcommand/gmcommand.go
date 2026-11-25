@@ -223,7 +223,7 @@ func dispatchGmCommand(deps Dependencies, presence PresenceView, divisionID stri
 	case SubChatMute, SubChatUnmute, SubShadowMute, SubShadowUnmute, SubBlockLogout, SubAllowLogout:
 		return handleModeration(deps, divisionID, sender, request, status)
 	case SubNotice:
-		return handleNotice(divisionID, sender, request, status)
+		return handleNotice(divisionID, sender, request)
 	case SubLieName, SubRealName:
 		return handleWho(deps, presence, divisionID, request)
 	case SubFindUser:

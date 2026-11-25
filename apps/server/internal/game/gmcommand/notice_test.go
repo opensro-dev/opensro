@@ -23,17 +23,6 @@ import (
 
 /*
 ================
-noticeOwner
-================
-*/
-type noticeOwner struct{ enabled bool }
-
-func (noticeOwner) ToggleGMBodyStatus(string, string, uint8) bool { return false }
-
-func (o noticeOwner) GMNoticeEnabled() bool { return o.enabled }
-
-/*
-================
 noticeFrame
 ================
 */
@@ -75,7 +64,7 @@ the text is trimmed.
 */
 func TestNoticeSendsTheBannerLine(t *testing.T) {
 	gm := gmChar("Gm", true, 0x1000)
-	out := HandleGmCommand(testDeps(gm), nil, testDivision, gm, noticeFrame("  Event at Jangan  "), noticeOwner{enabled: true})
+	out := HandleGmCommand(testDeps(gm), nil, testDivision, gm, noticeFrame("  Event at Jangan  "))
 	if out.Refusal != "" {
 		t.Fatalf("refused: %s", out.Refusal)
 	}
@@ -91,7 +80,7 @@ func TestNoticeSendsTheBannerLine(t *testing.T) {
 ================
 TestNoticeRefusesWithoutSendingAnything
 
-Off, empty, too long, a control character, a grant without the box, a
+Empty, too long, a control character, a grant without the box, a
 non-GM: none of them produces a notice line. The GM's refusals carry a
 reason; the non-GM's is silent.
 ================
@@ -102,28 +91,20 @@ func TestNoticeRefusesWithoutSendingAnything(t *testing.T) {
 	limited.GMCapabilities = uint32(staff.All &^ staff.Notice)
 	player := gmChar("Player", false, 0x1000)
 	deps := testDeps(gm, limited, player)
-	on := noticeOwner{enabled: true}
 	cases := []struct {
 		label  string
 		sender *enterworld.Character
 		frame  []byte
-		owner  BodyStatusCommands
 		reason string
 	}{
-		{"off", gm, noticeFrame("hello"), noticeOwner{}, EnvGMNotice},
-		{"no owner", gm, noticeFrame("hello"), nil, EnvGMNotice},
-		{"blank", gm, noticeFrame("   "), on, "type the notice text"},
-		{"control", gm, noticeFrame("line\nbreak"), on, "control character"},
-		{"too long", gm, noticeFrame(strings.Repeat("a", chat.MaxChatNoticeUnits+1)), on, "101 characters"},
-		{"no grant", limited, noticeFrame("hello"), on, ""},
-		{"non-GM", player, noticeFrame("hello"), on, ""},
+		{"blank", gm, noticeFrame("   "), "type the notice text"},
+		{"control", gm, noticeFrame("line\nbreak"), "control character"},
+		{"too long", gm, noticeFrame(strings.Repeat("a", chat.MaxChatNoticeUnits+1)), "101 characters"},
+		{"no grant", limited, noticeFrame("hello"), ""},
+		{"non-GM", player, noticeFrame("hello"), ""},
 	}
 	for _, c := range cases {
-		var status []BodyStatusCommands
-		if c.owner != nil {
-			status = append(status, c.owner)
-		}
-		out := HandleGmCommand(deps, nil, testDivision, c.sender, c.frame, status...)
+		out := HandleGmCommand(deps, nil, testDivision, c.sender, c.frame)
 		if out.Notice != nil {
 			t.Errorf("%s: sent a notice", c.label)
 		}
@@ -136,11 +117,11 @@ func TestNoticeRefusesWithoutSendingAnything(t *testing.T) {
 	}
 	// A banner of exactly the limit is accepted; astral characters count
 	// two units each, as the client counts them.
-	full := HandleGmCommand(deps, nil, testDivision, gm, noticeFrame(strings.Repeat("a", chat.MaxChatNoticeUnits)), on)
+	full := HandleGmCommand(deps, nil, testDivision, gm, noticeFrame(strings.Repeat("a", chat.MaxChatNoticeUnits)))
 	if full.Notice == nil {
 		t.Fatalf("a %d-unit notice was refused: %s", chat.MaxChatNoticeUnits, full.Refusal)
 	}
-	astral := HandleGmCommand(deps, nil, testDivision, gm, noticeFrame(strings.Repeat("\U0001F600", chat.MaxChatNoticeUnits/2+1)), on)
+	astral := HandleGmCommand(deps, nil, testDivision, gm, noticeFrame(strings.Repeat("\U0001F600", chat.MaxChatNoticeUnits/2+1)))
 	if astral.Notice != nil {
 		t.Fatal("a notice past the limit in UTF-16 units was sent")
 	}

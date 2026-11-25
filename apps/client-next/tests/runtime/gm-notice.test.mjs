@@ -50,8 +50,8 @@ test("/NOTICE without text, or past the server's byte bound, sends nothing", () 
 test("the /NOTICE replies print the server's text on both results", () => {
 	const reply = ( result, text ) => Uint8Array.of( result, 0xfb, ...sized( text ) );
 	assert.deepEqual( gmReply( reply( 1, "notice sent" ) ), { console: true, text: "-> notice sent" } );
-	assert.deepEqual( gmReply( reply( 2, "this command is off on this server (SRO_GM_NOTICE)" ) ), {
+	assert.deepEqual( gmReply( reply( 2, "the notice is 101 characters; the banner holds 100" ) ), {
 		console: true,
-		text: "Failed. -> this command is off on this server (SRO_GM_NOTICE)"
+		text: "Failed. -> the notice is 101 characters; the banner holds 100"
 	} );
 });

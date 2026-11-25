@@ -6,8 +6,8 @@ e2e_notice_wire_test.go - /NOTICE over the real transport
 A GM and a player enter the world through the production frame protocol
 (the chat lane's e2e precedent). The GM's 0x75B6 /NOTICE reaches both
 sessions as the byte-exact 0x3667 type 7 line, after the GM's own reply;
-with SRO_GM_NOTICE off, the GM reads the refusal and nobody receives a
-line.
+a refused notice (past the banner's limit) reaches nobody, and the GM
+reads why.
 
 ===========================================================================
 */
@@ -42,26 +42,13 @@ const (
 
 /*
 ================
-noticeLaneOwner
-
-The lane owner the GameWorld wiring composes, cut to what /NOTICE reads.
-================
-*/
-type noticeLaneOwner struct{ enabled bool }
-
-func (noticeLaneOwner) ToggleGMBodyStatus(string, string, uint8) bool { return false }
-
-func (o noticeLaneOwner) GMNoticeEnabled() bool { return o.enabled }
-
-/*
-================
 startNoticeServer
 
 The authority store with a GM and a player, and the transport with the
 world-entry and GM lanes registered as wiring_register.go does.
 ================
 */
-func startNoticeServer(t *testing.T, enabled bool) *transport.Server {
+func startNoticeServer(t *testing.T) *transport.Server {
 	t.Helper()
 	authority, err := store.Open(t.TempDir(), store.Options{DefaultSkills: func(string, []uint32) ([]uint32, error) {
 		return nil, nil
@@ -112,7 +99,7 @@ func startNoticeServer(t *testing.T, enabled bool) *transport.Server {
 		}
 	}
 	enterworld.Register(srv.Hub, deps)
-	gmcommand.Register(srv.Hub, deps, presence.NewDirectory(srv.Hub), noticeLaneOwner{enabled: enabled})
+	gmcommand.Register(srv.Hub, deps, presence.NewDirectory(srv.Hub))
 	if err := srv.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +203,7 @@ TestNoticeReachesEveryPlayerOverWire
 ================
 */
 func TestNoticeReachesEveryPlayerOverWire(t *testing.T) {
-	srv := startNoticeServer(t, true)
+	srv := startNoticeServer(t)
 	gm := enterNoticeWorld(t, srv, noticeGMName)
 	player := enterNoticeWorld(t, srv, noticePlayer)
 
@@ -236,18 +223,18 @@ func TestNoticeReachesEveryPlayerOverWire(t *testing.T) {
 
 /*
 ================
-TestNoticeOffSendsNothingOverWire
+TestRefusedNoticeSendsNothingOverWire
 ================
 */
-func TestNoticeOffSendsNothingOverWire(t *testing.T) {
-	srv := startNoticeServer(t, false)
+func TestRefusedNoticeSendsNothingOverWire(t *testing.T) {
+	srv := startNoticeServer(t)
 	gm := enterNoticeWorld(t, srv, noticeGMName)
 	player := enterNoticeWorld(t, srv, noticePlayer)
 
-	sendNoticeFrame(t, gm, gmcommand.OpGmCommand, noticeRequest("hello"))
+	sendNoticeFrame(t, gm, gmcommand.OpGmCommand, noticeRequest(strings.Repeat("a", chat.MaxChatNoticeUnits+1)))
 	reply := expectNoticeFrame(t, gm, gmcommand.OpGmCommandAck, "GM refusal")
-	if reply[0] != gmcommand.AckResultFail || !strings.Contains(string(reply), gmcommand.EnvGMNotice) {
-		t.Fatalf("GM refusal % q does not name %s", reply, gmcommand.EnvGMNotice)
+	if reply[0] != gmcommand.AckResultFail || !strings.Contains(string(reply), "the banner holds") {
+		t.Fatalf("GM refusal % q does not say why", reply)
 	}
 	wiretest.AssertQueueDrained(t, gm, "GM after the refusal")
 	wiretest.AssertQueueDrained(t, player, "player after the refusal")

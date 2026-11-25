@@ -51,8 +51,8 @@ const GM_BLOCK_LOGOUT = 0xf9;
 const GM_ALLOW_LOGOUT = 0xfa;
 const MAX_MUTE_MINUTES = 0xffff;
 const MAX_MODERATION_TEXT_BYTES = 1024;
-// The port's /NOTICE <text...> (GM tooling, not native; the server's
-// SRO_GM_NOTICE, off unless a shard enables it): subcommand 0xFB and a
+// The port's /NOTICE <text...> (GM tooling, not native; always on, for a
+// GM whose staff grant carries the notice box): subcommand 0xFB and a
 // u16-sized UTF-8 text the server shows in every player's notice banner.
 // The original client has no notice word. The byte bound is the server
 // decoder's; the banner's 100-character limit is the server's to answer,
