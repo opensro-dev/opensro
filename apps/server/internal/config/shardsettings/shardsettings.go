@@ -120,6 +120,11 @@ var Settings = []Setting{
 	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "90", Catalogue: true},
 	// Port-only, not native: database-authored Alexandria field population.
 	{Env: "SRO_CAP110_MONSTERS", NomadVar: "cap110_monsters", Default: "off", Catalogue: true},
+	// Port-only, not native (owner 2026-11-25, #4393: "default off, and
+	// off on server"): monsters of level 95-110 roll a Seal of Star of
+	// their level's degree at the native level-94 rare rate
+	// (loot/highlevelseals.go). Natively no rare row exists above 94.
+	{Env: "SRO_HIGH_LEVEL_SEALS", NomadVar: "high_level_seals", Default: "off", Catalogue: true},
 	// Port-only, not native: the level-100 slice of that population,
 	// admitted for hunting separately (#1741); switches on with the
 	// cap-110 catalogue (#1607).

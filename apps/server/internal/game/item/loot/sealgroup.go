@@ -26,7 +26,19 @@ row keeps the seal and drops the degree below it.
 ================
 */
 func SealGroupAt(level uint8, tier int) (int, bool) {
-	group, ok := SpecialEquipmentGroup(level)
+	return equipment.sealGroupAt(level, tier)
+}
+
+/*
+================
+sealGroupAt
+
+SealGroupAt against one catalog (highlevelseals.go builds its rows from a
+catalog before it is installed).
+================
+*/
+func (c equipmentCatalog) sealGroupAt(level uint8, tier int) (int, bool) {
+	group, ok := c.equipmentGroup(level, false, 0)
 	if !ok {
 		return 0, false
 	}
@@ -35,7 +47,7 @@ func SealGroupAt(level uint8, tier int) (int, bool) {
 		return 0, false
 	}
 	rare := group/seals*seals + tier
-	if rare >= equipment.widths[1] {
+	if rare >= c.widths[1] {
 		return 0, false
 	}
 	return rare, true

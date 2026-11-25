@@ -24,6 +24,7 @@ var catalogueReaders = map[string]string{
 	"SRO_BETA_MASTERY":                       "run passes it (progression.BetaMasteryFromEnv) to BuildLevels: levels.json's beta mastery allowance",
 	"SRO_LEVEL_CAP":                          "run passes it (progression.LevelCapFromEnv) to BuildLevels: levels.json's level cap",
 	"SRO_CAP110_MONSTERS":                    "shardPopulation reads it (monster.Cap110Enabled) to append the cap-110 population",
+	"SRO_HIGH_LEVEL_SEALS":                   "main installs it (loot.InitHighLevelSeals) before the drop tables read the rare rows",
 	"SRO_CAP110_LEVEL100":                    "the cap-110 population's admission reads it (monster.Cap110Level100Enabled) while shardPopulation appends",
 	"SRO_PHARAOH_TOMB":                       "shardPopulation reads it (monster.PharaohTombEnabled) to append the tomb population",
 	"SRO_CAP110_QINSHI":                      "shardPopulation reads it (monster.QinshiEnabled) to append the tomb's upper floors",
