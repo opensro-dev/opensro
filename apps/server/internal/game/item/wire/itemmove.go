@@ -158,7 +158,7 @@ func (b ItemBody) Encode() []byte {
 	}
 	w.U8(b.Plus).
 		U64(b.VarianceBits).
-		U32(b.Durability).
+		U32(b.durabilityWord()).
 		U8(uint8(len(options)))
 	for _, encoded := range options {
 		w.U64(encoded)
@@ -180,6 +180,25 @@ the body by the reference, never by the value (rentrefs.go).
 */
 func (b ItemBody) carriesRentLeg() bool {
 	return b.RentExpiresUnixMs > 0 || IsRentRef(b.RefObjID)
+}
+
+/*
+================
+durabilityWord
+
+The equipment body's durability field. A Devil's Spirit (3/1/14,
+port-only behind SRO_NASRUN) has no durability: the record's data word
+in that field is its awakening clock (nasrun/clock.go), which the client
+reads there to tell a dormant Spirit from an awake one
+(avatar-socket.ts isDormantSpirit, #4381). Every other body writes its
+durability.
+================
+*/
+func (b ItemBody) durabilityWord() uint32 {
+	if IsDevilSpirit(b.TypeFlags) {
+		return b.Data
+	}
+	return b.Durability
 }
 
 /*
@@ -290,6 +309,10 @@ func readItemBody(r *Reader, typeFlags uint16, rented func(refObjID uint32) bool
 	out.Plus = plus
 	out.VarianceBits = varianceBits
 	out.Durability = durability
+	if IsDevilSpirit(typeFlags) {
+		// The field carries the Spirit's clock (durabilityWord).
+		out.Data = durability
+	}
 	out.MagicOptions = magicOptions
 	if rented != nil && rented(refObjID) {
 		deadline, err := r.U64()

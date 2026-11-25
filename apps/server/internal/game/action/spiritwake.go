@@ -45,6 +45,25 @@ func (rt *Runtime) wakeSpirit(c *enterworld.Character, ref *enterworld.ItemRef, 
 	}
 	row.Data = next
 	*result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse,
-		Payload: wire.EncodeItemUseSuccess(request.Slot, uint16(row.StackCount), request.TypeWord)}}}
+		Payload: wire.EncodeItemUseSuccess(request.Slot, uint16(row.StackCount), request.TypeWord)},
+		spiritClockFrame(request.Slot, next)}}
 	return true
+}
+
+/*
+================
+spiritClockFrame
+
+The Spirit's new clock, sent to its owner after a wake or an extension.
+The use's success row carries no data word, so without this the client
+keeps the clock the row arrived with and a woken Spirit still reads as
+dormant until the next entry (#4381). It rides the durability frame:
+the body carries the clock in its durability field (wire durabilityWord),
+and the client writes a Spirit's frame silently. Inference (no native
+trace of the v1.188 server's wake answer): the item keeps its slot and
+only that field changes, which is the frame's whole shape.
+================
+*/
+func spiritClockFrame(slot uint8, clock uint32) wire.Frame {
+	return wire.ItemDurabilityFrame(slot, clock)
 }

@@ -81,6 +81,7 @@ func (rt *Runtime) useSpiritExtension(use skillItemUse, c *enterworld.Character,
 	spirit.Data = next
 	remaining := rt.consumeItemUseRow(c, use.row)
 	*result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse,
-		Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)}}}
+		Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)},
+		spiritClockFrame(target, next)}}
 	return true
 }

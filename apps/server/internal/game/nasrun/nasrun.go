@@ -19,7 +19,11 @@ nothing can be put in slot 4 and the avatar rules are v1.150's.
 */
 package nasrun
 
-import "strings"
+import (
+	"strings"
+
+	"opensro.online/server/internal/game/item/wire"
+)
 
 const (
 	Env = "SRO_NASRUN"
@@ -27,9 +31,9 @@ const (
 	// typeKindMask keeps TID1..TID3 of an item's packed type word
 	// (tid1<<2 | tid2<<5 | tid3<<7 | tid4<<11), dropping bit 0.
 	typeKindMask uint16 = 0x7fe
-	// avatarKind is 3/1/13, a v1.150 avatar; spiritKind is 3/1/14.
+	// avatarKind is 3/1/13, a v1.150 avatar (a Spirit, 3/1/14, is
+	// wire.IsDevilSpirit).
 	avatarKind uint16 = 0x6ac
-	spiritKind uint16 = 0x72c
 	tid4Shift         = 11
 
 	// Sockets 1..4 are the v1.150 avatar sockets, numbered by TID4 (hat,
@@ -63,7 +67,7 @@ func Enabled(value string) bool {
 IsSpirit - the item is a Devil's Spirit wearable (3/1/14).
 ================
 */
-func IsSpirit(typeFlags uint16) bool { return typeFlags&typeKindMask == spiritKind }
+func IsSpirit(typeFlags uint16) bool { return wire.IsDevilSpirit(typeFlags) }
 
 /*
 ================
