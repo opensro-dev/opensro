@@ -168,10 +168,9 @@ test("a Devil's Spirit's tooltip names its awakening: dormant, the time left, or
 
 test("a lent skill drags from the strip onto the hotbar; an unlent one does not", async () => {
 	const { quickSlotDrag } = await import( "../../src/engine/foundation/gameplay/quickslots.ts" );
-	const state = ( /** @type {number[]} */ spiritSkills ) =>
-		/** @type {import("../../src/engine/contracts/gameplay.ts").GameplayState} */ (
-			/** @type {unknown} */ ({ skills: [], spiritSkills })
-		);
+	/** @typedef {import("../../src/engine/contracts/gameplay.ts").GameplayState} GameplayState */
+	/** @param {number[]} spiritSkills */
+	const state = spiritSkills => /** @type {GameplayState} */ (/** @type {unknown} */ ({ skills: [], spiritSkills }));
 	const lent = quickSlotDrag( "skill:" + SPIRIT_SKILL, 3, state( [ SPIRIT_SKILL ] ) );
 	assert.equal( lent?.kind, 0x49 );
 	assert.equal( lent?.payload, SPIRIT_SKILL );
