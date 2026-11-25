@@ -533,7 +533,7 @@ func TestCaravanPartyAndMovementPolish(t *testing.T) {
 		str := int64(300)
 		intel := int64(300)
 		hp := int64(20000)
-		gold := int64(50000)
+		gold := int64(5_000_000)
 		c := &enterworld.Character{
 			Name:          name,
 			ModelCodename: "CHAR_CH_MAN_ADVENTURER",
@@ -642,7 +642,7 @@ func TestCaravanPartyAndMovementPolish(t *testing.T) {
 	}
 	deps.MutateCharacter(hirer, "stage hirer", func() {
 		hirer.World.Spawn = ptrSpawn(kwanAt.RegionID, kwanAt.X, kwanAt.Y, kwanAt.Z)
-		gold := int64(50000)
+		gold := int64(5_000_000)
 		hirer.Gold = &gold
 		hirer.MissionInventory = []domain.InventoryRow{
 			{Slot: enterworld.JobSuitSlot, RefObjID: 8986, Codename: "ITEM_CH_M_TRADE_TRADER_04", TypeFlags: wire.PackTypeFlags(3, 1, 7, domain.JobTrader), StackCount: 1},

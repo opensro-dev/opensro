@@ -28,7 +28,7 @@ Mercenary contract records and ContractBook
 const (
 	// BaseHunterHireFeeGold is the base gold fee for a real Trader player to
 	// hire an AI Hunter escort for one town-to-town leg.
-	BaseHunterHireFeeGold int64 = 15_000
+	BaseHunterHireFeeGold int64 = 1_500_000
 
 	// BaseAITraderEscortRewardPerStar is multiplied by the AI Trader's cargo
 	// star rating (3★-5★) to compute the bonus gold paid to a real Hunter

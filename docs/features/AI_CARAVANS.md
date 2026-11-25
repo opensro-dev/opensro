@@ -27,7 +27,7 @@ proximity, admission, and the native fare. Escorts board their trader's link and
 on the far bank. Route variants include the Dead Ravine, Central-Tarim, Highland Oasis, and Tiger Mountain.
 
 Escort commands require the correct worn job suit, a living nearby player and an available recruiter
-in town. `!hire <hunter>` charges 15,000 gold once. `!accept <trader>` requires a Hunter to remain within
+in town. `!hire <hunter>` charges 1,500,000 gold once. `!accept <trader>` requires a Hunter to remain within
 320 units for at least 90% of a surviving run (minimum 30 seconds; observation gaps invalidate it).
 Rewards are limited to three per character per UTC day and persist with the gold credit. Schema 48
 adds these optional counters; the local launcher retains a backup and runs the offline upgrade.
@@ -381,7 +381,7 @@ Distances use 10 world units per in-game metre (skill ranges: 180 units = 18m); 
   first: a Hunter or Thief shows the fee, a Trader also picks 1-5 stars of goods (100,000 gold per
   star) with the total; nothing is paid until "Hire".
   Hunters and Traders hire Hunters and Traders; Thieves hire Thieves; the player must be dressed and in
-  town. Flat fee 15000 gold plus a Trader's goods. At most 7 hires at once. Hunters and Thieves appear
+  town. Flat fee 1,500,000 gold plus a Trader's goods. At most 7 hires at once. Hunters and Thieves appear
   at the hirer; a Trader is hired only in the town it waits in and walks over. Everyone hired is invited
   to the party. `!hire <name>` still works from chat (a Trader then carries goods of its own rating).
 - **Leading:** hired Hunters/Thieves follow the hirer. Hired Traders follow one leader: the hirer or one
