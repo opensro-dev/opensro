@@ -14,34 +14,42 @@ import { SCRIPT_OBJ_ANIMATION_NAME_ID_ROWS } from "./scriptObjAnimationRegistry.
  * increments a phase count on a hit. It does not use the larger 171-row
  * CICScriptObjManager registry.
  */
-function belongsToSkillEffectAnimationTable(name: string): boolean {
-  if (/^ANI_ATTACK[1-9]$/.test(name)) return true;
-  if (/^ANI_READY0[1-4]$/.test(name)) return true;
-  if (/^ANI_WAIT0[1-4]$/.test(name)) return true;
-  const skill = /^ANI_SKILL_(\d+)$/.exec(name);
-  if (skill) {
-    const ordinal = Number(skill[1]);
-    return ordinal >= 1 && ordinal <= 100;
-  }
-  return name === "ANI_HAMMER" || name === "ANI_HANDLOOF" || name === "ANI_TROW";
+function belongsToSkillEffectAnimationTable( name: string ): boolean {
+	if ( /^ANI_ATTACK[1-9]$/.test( name ) ) return true;
+	if ( /^ANI_READY0[1-4]$/.test( name ) ) return true;
+	if ( /^ANI_WAIT0[1-4]$/.test( name ) ) return true;
+	const skill = /^ANI_SKILL_(\d+)$/.exec( name );
+	if ( skill ) {
+		const ordinal = Number( skill[1] );
+		return ordinal >= 1 && ordinal <= 100;
+	}
+	return name === "ANI_HAMMER" || name === "ANI_HANDLOOF" || name === "ANI_TROW";
 }
 
 export const SKILL_EFFECT_ANIMATION_NAME_ID_ROWS = Object.freeze(
-  SCRIPT_OBJ_ANIMATION_NAME_ID_ROWS.filter(([name]) =>
-    belongsToSkillEffectAnimationTable(name)
-  )
+	SCRIPT_OBJ_ANIMATION_NAME_ID_ROWS.filter( ( [name] ) => belongsToSkillEffectAnimationTable( name ) )
 ) as readonly (readonly [name: string, id: number])[];
 
 /** `none` is the 121st native row and maps to the absent sentinel -1. */
-export const SKILL_EFFECT_ANIMATION_NAME_ID_ROW_COUNT =
-  SKILL_EFFECT_ANIMATION_NAME_ID_ROWS.length + 1;
+export const SKILL_EFFECT_ANIMATION_NAME_ID_ROW_COUNT = SKILL_EFFECT_ANIMATION_NAME_ID_ROWS.length + 1;
 
-if (SKILL_EFFECT_ANIMATION_NAME_ID_ROW_COUNT !== 121) {
-  throw new Error(
-    `data_ccd620 skill-effect animation registry drifted: expected 121 rows, got ${SKILL_EFFECT_ANIMATION_NAME_ID_ROW_COUNT}`
-  );
+if ( SKILL_EFFECT_ANIMATION_NAME_ID_ROW_COUNT !== 121 ) {
+	throw new Error(
+		`data_ccd620 skill-effect animation registry drifted: expected 121 rows, got ${SKILL_EFFECT_ANIMATION_NAME_ID_ROW_COUNT}`
+	);
 }
 
 export const SKILL_EFFECT_ANIMATION_ID_BY_NAME = new Map<string, number>(
-  SKILL_EFFECT_ANIMATION_NAME_ID_ROWS
+	SKILL_EFFECT_ANIMATION_NAME_ID_ROWS
 );
+
+/**
+ * Port-only, not native (SRO_NASRUN, #4407): the later clients' Devil's
+ * Spirit skill rows name their shot ANI_SHOT, a token data_ccd620 does not
+ * hold. The VSRO avatar_nasrun sets author that phase at state 191 (the
+ * shot clip, nasrun1_man_shot.ban). Only those rows, which SRO_NASRUN
+ * stages, carry the token; a native build never meets it.
+ */
+export const LATER_SKILL_EFFECT_ANIMATION_ID_BY_NAME = new Map<string, number>( [
+	[ "ANI_SHOT", 191 ]
+] );

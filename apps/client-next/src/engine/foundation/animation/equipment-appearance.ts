@@ -82,6 +82,9 @@ export interface DressCatalog {
 	avatarAuxiliary?: Record<string, AuxiliaryEntry>;
 	equipment?: Record<string, EquipmentRecord>;
 	hwan?: Record<string, SetEntry & { clip: string; bone: string; }>;
+	// Port-only (SRO_NASRUN, #4407): each lent Spirit skill's costume
+	// pieces, avatar records of equipment by reserved id (visual-changes.ts).
+	visualChanges?: Record<string, readonly number[]>;
 }
 
 export interface AppearanceResource {

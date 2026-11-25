@@ -270,6 +270,7 @@ function cameraWorldFixture( t ) {
 		dispose: unexpectedCameraWork,
 		scenery: unexpectedCameraWork,
 		gpuTiming: unexpectedCameraWork,
+		gpuWork: unexpectedCameraWork,
 		adapterFacts: unexpectedCameraWork,
 		videoOptions: unexpectedCameraWork,
 		experimentalVideo: unexpectedCameraWork,

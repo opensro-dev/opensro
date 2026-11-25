@@ -109,7 +109,8 @@ test("a fetch burst arms asset_offline, a sustained streak files it, silence bur
 			limits: { maxBufferSize: 0, maxStorageBufferBindingSize: 0, maxTextureDimension2D: 0 }
 		}),
 		characterStats: () => ({ actors: 0, draws: 0 }),
-		gpuTiming: () => undefined
+		gpuTiming: () => undefined,
+		gpuWork: () => ({ submits: 0, uploadWrites: 0, uploadBytes: 0 })
 	} );
 	Object.assign( owners.platform, {
 		presentUi() {},

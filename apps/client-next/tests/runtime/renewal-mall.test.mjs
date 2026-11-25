@@ -822,6 +822,34 @@ test("the native text wins and the later strings fill the keys v1.150 lacks", ()
 	assert.ok( texts.includes( "25" ) );
 });
 
+test("the wallet rows stack Silk, Earned, Point and Gift Silk without sharing a row", () => {
+	// #4133 follow-up: the earned row stepped one authored pitch past Point,
+	// but Gift Silk sits below Point, so it landed on the Silk row.
+	const ops = view( renewalMall() );
+	const texts = ops.filter( op => op.kind === "text" );
+	const silkValue = defined( texts.find( op => op.value === "700" ) ).rect;
+	// The balances (silk 700, earned 25, points 5, gift 20) in the value column.
+	const rows = [ "700", "25", "5", "20" ].map( value =>
+		defined( texts.find( op => op.value === value && op.rect[0] === silkValue[0] ), value ).rect
+	);
+	for ( let i = 1; i < rows.length; i++ ) {
+		assert.ok(
+			rows[i][1] - rows[i - 1][1] >= 14,
+			`row ${i} at ${rows[i][1]} crowds row ${i - 1} at ${rows[i - 1][1]}`
+		);
+	}
+	// The earned caption shares its value's row, under the Silk row.
+	const earnedCaption = defined( texts.find( op => op.value === "Earned silk" ) ).rect;
+	assert.equal( earnedCaption[1], rows[1][1] );
+	// The last row stays inside the box's background, above the buttons.
+	const bg = defined(
+		ops.find( op => op.kind === "image" && op.path.endsWith( "mall_charac_textbox.png" ) ),
+		"wallet background"
+	).rect;
+	const last = rows[rows.length - 1];
+	assert.ok( last[1] + last[3] <= bg[1] + bg[3], `the last row ends at ${last[1] + last[3]}, past ${bg[1] + bg[3]}` );
+});
+
 test("the popup buys, tries on and reserves the card it opened on", () => {
 	const mall = renewalMall();
 	mall.browse( 1, 1 );
