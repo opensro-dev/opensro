@@ -72,6 +72,56 @@ func IsSpirit(typeFlags uint16) bool { return wire.IsDevilSpirit(typeFlags) }
 
 /*
 ================
+MallCopy
+
+Port-only, not native (#4459): a Spirit the Item Mall delivered. The
+token shop, the unique drops and the mall hand out the same codenames,
+and the import strips their rows bound (#3456: nasrun_import.py clears
+CanTrade, CanSell, CanBorrow and CanDrop), so only the delivery's own
+marks tell a mall copy apart. Every mall delivery since #4133 is either
+sealed (forgeBound) or carries the earned-Silk mark; no token, drop or
+GM grant carries the earned mark, and only /FORGE seals outside the
+mall. A forged Spirit therefore counts as a mall copy too, and its seal
+keeps refusing what the seal refuses.
+
+A mall copy follows the later client's own row instead: VSRO
+Media.pk2 itemdata_25000.txt gives every ITEM_MALL_AVATAR_*_NASRUN
+CanSell 1, CanBorrow 223 or 192 (both carry the warehouse bit 0x80)
+and CanDrop 0, with SellPrice 0. Callers read StorableMallCopy and
+SellableMallCopy rather than this.
+================
+*/
+func MallCopy(typeFlags uint16, forgeBound, earnedBought bool) bool {
+	return IsSpirit(typeFlags) && (forgeBound || earnedBought)
+}
+
+/*
+================
+StorableMallCopy
+
+A mall copy enters the warehouse, sealed or not: the seal never refused
+the owner's own room (npcguildstorage.go keeps it out of the guild's).
+================
+*/
+func StorableMallCopy(typeFlags uint16, forgeBound, earnedBought bool) bool {
+	return MallCopy(typeFlags, forgeBound, earnedBought)
+}
+
+/*
+================
+SellableMallCopy
+
+A merchant takes a Spirit only when it is a mall copy and the seal does
+not refuse the sale: an earned-Silk purchase (#4133). Its sell price is
+0, so the sale never turns tokens, or Silk, into gold.
+================
+*/
+func SellableMallCopy(typeFlags uint16, forgeBound, earnedBought bool) bool {
+	return MallCopy(typeFlags, forgeBound, earnedBought) && !forgeBound
+}
+
+/*
+================
 Socket
 
 The avatar socket an item is worn in: TID4 for a v1.150 avatar (1..4),

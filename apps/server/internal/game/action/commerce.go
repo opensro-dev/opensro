@@ -20,7 +20,6 @@ import (
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 	"reflect"
@@ -649,15 +648,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			if !found || ref == nil || ref.RefObjID != item.RefObjID || ref.TypeFlags() != item.TypeFlags {
 				return false
 			}
-			if !commerceSaleAdmitted(ref) {
-				refusal = wire.ErrCodeCannotDealAtShop
-				return false
-			}
-			// Port-only, not native (SRO_NASRUN, #3456 3b): a Devil's
-			// Spirit is bought with tokens, so no merchant buys one for
-			// gold whatever its imported row says; tokens never become
-			// gold. v1.150 has no Spirit, so no native sale changes.
-			if nasrun.IsSpirit(item.TypeFlags) {
+			if !commerceItemSaleAdmitted(ref, item) {
 				refusal = wire.ErrCodeCannotDealAtShop
 				return false
 			}
