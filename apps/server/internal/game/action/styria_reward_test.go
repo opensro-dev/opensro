@@ -97,8 +97,9 @@ TestStyriaMatchPaysRewardsAtTheClock
 
 A decided match pays every entered participant: the winner's job
 EXP over the loser's, the same banded skill exp to both, and the
-reward items skipped (not yet in the item data) without failing
-the exps beside them.
+reward items skipped (this fixture's item table has no reward
+rows) without failing the exps beside them. The granted half is
+TestStyriaDoneWhenHunterAndThief's (#4375).
 ================
 */
 func TestStyriaMatchPaysRewardsAtTheClock(t *testing.T) {

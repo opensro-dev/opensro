@@ -32,6 +32,7 @@ import reset_scroll_import
 import rigid_import
 import skytemple_import
 import styria_import
+import styria_items_import
 import switch_scroll_import
 import winter_event_import
 
@@ -53,6 +54,10 @@ LATER_LAYERS = (
 	# The Styria Clash arena map (#3272): its own switch, on the
 	# later-world engine; the match rules are #3648.
 	("styria", styria_import.add_styria),
+	# The Styria Clash reward items (#4375): the same switch stages
+	# the four v1.696 rows the match reward grants, in their own
+	# item shard beside the arena.
+	("styriaItems", styria_items_import.add_styria_items),
 	# The Survival Arena's Colosseum (#3931): the arena's own switch,
 	# the map alone on the same engine path as the Styria Clash.
 	("colosseum", colosseum_import.add_colosseum),

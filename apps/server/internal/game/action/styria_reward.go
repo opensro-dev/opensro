@@ -158,9 +158,11 @@ func (rt *Runtime) styriaPayReward(match *styriaMatch, due styriaDue) {
 styriaGrantableItems
 
 The grants whose codename the tree's item data already knows.
-The reward items arrive with their own data import; until then
-they are reported missing, not granted into a refused batch that
-would also sink the stones beside them once some rows land.
+The reward items arrive with their own data import
+(scripts/styria_items_import.py, behind the same switch); a tree
+built without it reports them missing here, never granted into a
+refused batch that would also sink the stones beside them once
+some rows land.
 ================
 */
 func (rt *Runtime) styriaGrantableItems(items []inventory.ItemAmount) (grantable []inventory.ItemAmount, missing []string) {
