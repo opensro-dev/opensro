@@ -26,10 +26,6 @@ const EnvBetaPlayerMap = "SRO_BETA_PLAYER_MAP"
 // playerMapIntervalMs paces the roster push: the world map is a slow view.
 const playerMapIntervalMs = 2000
 
-// gmInvisibleBodyStatus is the body status /INVISIBLE sets
-// (domain.GMToggleBodyStatus requests 4).
-const gmInvisibleBodyStatus = 4
-
 /*
 ================
 BetaPlayerMapEnabled
@@ -52,15 +48,16 @@ leg reads. A session without appearance (never spawned) is left out, and
 so is a GM in /INVISIBLE (body status 4).
 
 The roster is port-only (wire.OpBetaPlayerMap): the v1.150 world map draws
-only the local player and the party, so no native rule covers it. Native
-/INVISIBLE hides the GM from every other client (the port relays the
-status-4 body frame to peers, action.ToggleGMBodyStatus), so a roster that
-still drew them would give away what the native state hides. The rule is
-inferred, not read from a binary: rizin was not available when it was
-written. The frame is rebuilt every playerMapIntervalMs from the live
-status, so the marker returns on the first frame after /INVISIBLE is
-turned off. The GM's own position stays on their map: the client draws
-the local player from its own pose and skips its gid in this roster.
+only the local player and the party, so no native rule covers it. A
+GM-invisible character spawns for its party only (peer_visibility.go,
+gmInvisibleBodyStatus), so a roster that drew it for everyone would give
+away what the spawn leg hides. Party members still see the GM through the
+map's native party signs, so the roster leaves the GM out for every
+recipient instead of building a frame per viewer. The frame is rebuilt
+every playerMapIntervalMs from the live status, so the marker returns on
+the first frame after /INVISIBLE is turned off. The GM's own position
+stays on their map: the client draws the local player from its own pose
+and skips its gid in this roster.
 ================
 */
 func (t *Ticker) runPlayerMap(state *divisionTickState, nowMs int64, sessions []SessionSnapshot) {
