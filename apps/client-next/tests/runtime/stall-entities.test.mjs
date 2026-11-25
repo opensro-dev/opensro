@@ -37,7 +37,7 @@ function flushCore( core ) {
 test("core publishes an owner rename only after its successful title-edit receipt", () => {
 	const sent = [], core = createWorldCore( frame => sent.push( frame ) );
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [],
@@ -102,7 +102,7 @@ world
 function world() {
 	const owner = createEntities();
 	owner.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: peer.modelRefObjId, kind: "player", tidWord: peer.modelTidWord } ],
 		localPlayerEntry: {

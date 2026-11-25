@@ -44,7 +44,7 @@ function world( { suited } ) {
 		typeFlags: row.typeFlags
 	}) );
 	owner.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ {
 			refObjId: scenarios[0].modelRefObjId,

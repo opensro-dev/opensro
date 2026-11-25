@@ -591,6 +591,7 @@ export function createRenderer(
 			...(device.gpuTiming() ??
 				{ supported: false, skipped: 0, failed: 0, attempted: 0, completed: 0, omittedPasses: 0, samples: [] })
 		}),
+		gpuWork: () => device.gpuWork(),
 		// A failure with attempts left is a device still starting: the runtime
 		// ends the session on "failed", and the simulation is fine (#2337).
 		phase: () =>

@@ -41,7 +41,7 @@ createPeer
 function createPeer() {
 	const owner = createEntities( undefined, undefined, undefined, ( _from, to ) => to );
 	owner.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: 1, kind: "npc" } ],
 		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: REGION, x: 1, y: 2, z: 3, angle: 0 } }
@@ -189,7 +189,7 @@ correction-death tests spawn from.
 function figureOwner() {
 	const owner = createEntities( undefined, undefined, undefined, ( _from, to ) => to );
 	owner.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [
 			{ refObjId: 2, kind: "monster", tidWord: 0xc6 },
@@ -242,7 +242,7 @@ test("a dead player's position correction still applies (775B50 checks monsters 
 	const row = fixture.scenarios[0];
 	const owner = createEntities( undefined, undefined, undefined, ( _from, to ) => to );
 	owner.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: row.modelRefObjId, kind: "player" } ],
 		refItemSnapshot: row.equipment ?? [],

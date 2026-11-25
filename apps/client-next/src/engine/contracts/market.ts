@@ -167,6 +167,8 @@ export interface MarketMine {
 	readonly offersOut: readonly MarketOffer[];
 	readonly purchases: readonly MarketPurchase[];
 	readonly silk: number;
+	// The earned balance a Silk purchase draws first (#4133).
+	readonly earnedSilk: number;
 	readonly warehouseGold: number;
 	readonly rules: MarketRules;
 }

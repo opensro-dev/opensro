@@ -284,7 +284,7 @@ test("world incidents carry the admitted region and a 401 transport-token refusa
 	await settle();
 	session.step( 4 );
 	const bootstrap = {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 22387, x: 1, y: 2, z: 3, angle: 0 } }

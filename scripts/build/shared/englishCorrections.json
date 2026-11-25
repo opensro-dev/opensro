@@ -450,6 +450,10 @@
 			"before": "Abnomal state setting",
 			"after": "Abnormal state setting"
 		},
+		"UIIT_STT_GUILD_JOIN": {
+			"before": "Joining",
+			"after": "Invite"
+		},
 		"UIIT_STT_INPUT_TTDESC_03": {
 			"before": "Opens character information window.  Can check basic information on character such as equpiment equipped status, character's strength, and intelligence from character information window.",
 			"after": "Opens character information window.  Can check basic information on character such as equipment equipped status, character's strength, and intelligence from character information window."

@@ -26,6 +26,14 @@ type sessionPlayerContext struct {
 	objectID      uint32
 	worldReady    bool
 	worldSnapshot any
+	// sessionConstants: the digest of the session-constant sections
+	// (reference snapshot, magic options, commerce seed) this session
+	// proved it holds (#4421). Empty until a full entry answer lands.
+	sessionConstants string
+	// seedDigest: the commerce-seed digest this session was actually
+	// sent (#4421). The seed publishes once per digest per session,
+	// whichever of entry or game-ready comes first on this socket.
+	seedDigest string
 	// rebound: the last BindCharacter named the character this session
 	// already carried (a resumed transport's repeated EnterWorld).
 	rebound bool
@@ -176,6 +184,63 @@ func (s *Session) WorldReady() bool {
 	s.player.mu.RLock()
 	defer s.player.mu.RUnlock()
 	return s.player.worldReady
+}
+
+/*
+================
+MarkSessionConstants
+
+Records the session-constants digest a full entry answer carried
+(#4421). Later entries stating the same digest omit the constant
+sections, and the commerce seed is not republished while it stands.
+================
+*/
+func (s *Session) MarkSessionConstants(digest string) {
+	s.player.mu.Lock()
+	defer s.player.mu.Unlock()
+	s.player.sessionConstants = digest
+}
+
+/*
+================
+SessionConstants
+
+The digest MarkSessionConstants recorded, or "" when this session has
+not yet taken a full entry answer.
+================
+*/
+func (s *Session) SessionConstants() string {
+	s.player.mu.RLock()
+	defer s.player.mu.RUnlock()
+	return s.player.sessionConstants
+}
+
+/*
+================
+MarkSeedPublished
+
+Records the commerce-seed digest this session was sent (#4421); the
+seed is published once per digest per session.
+================
+*/
+func (s *Session) MarkSeedPublished(digest string) {
+	s.player.mu.Lock()
+	defer s.player.mu.Unlock()
+	s.player.seedDigest = digest
+}
+
+/*
+================
+SeedPublishedDigest
+
+The commerce-seed digest MarkSeedPublished recorded, or "" when this
+session has not been sent the seed yet.
+================
+*/
+func (s *Session) SeedPublishedDigest() string {
+	s.player.mu.RLock()
+	defer s.player.mu.RUnlock()
+	return s.player.seedDigest
 }
 
 // DivisionID returns the session's current division membership.

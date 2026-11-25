@@ -13,10 +13,10 @@ creation, and codenames from the reference appearance and the title crowd
 */
 import { buildDefaultWear } from "./buildDefaultWear.mjs";
 import { defaultWearLanguage } from "./defaultWearPolicy.mjs";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { retailTextdataRoot, clientV150ResinfoRoot } from "../world/paths.mjs";
+import { clientV150ResinfoRoot, extractedRoot, retailTextdataRoot } from "../world/paths.mjs";
 import { loadAvatarVisualOverrides } from "./avatarVisualOverrides.mjs";
 import { resolveRoster } from "./resolveCharRoster.mjs";
 import {
@@ -34,6 +34,8 @@ import { claimPublicFile } from "../shared/publicationLedger.mjs";
 import { buildStatePath } from "../../lib/generatedRoot.mjs";
 import { parseCharacterBsr } from "./formats.mjs";
 import { loadEquipmentRecords } from "./equipmentVisualRecords.mjs";
+import { loadVisualChanges, NASRUN_SKILL_MARKER } from "./visualChanges.mjs";
+import { wornEffectRows } from "./equipmentParticles.mjs";
 import { equipmentGlowCatalog, equipmentGlowModelIds, equipmentGlowGlb } from "./equipmentGlowMetadata.mjs";
 import { publishEquipmentParticleMetadata } from "./equipmentParticles.mjs";
 import { modelReadRoots, publicAssetsRoot, publicRoot } from "../world/paths.mjs";
@@ -267,6 +269,26 @@ conversion between items with the same native source paths, then builds the
 default and fortress wear and the enhancement glow metadata.
 ================
 */
+/*
+================
+costumeEffects
+
+Port-only (SRO_NASRUN, #4407): each costume piece that names an effect
+set carries that set's steady auras as a worn avatar's (avatarEffects),
+read from the Nasrun skill import's marker.
+================
+*/
+function costumeEffects( pieces ) {
+	const marker = path.join( extractedRoot, NASRUN_SKILL_MARKER );
+	if ( !pieces.length || !existsSync( marker ) ) return {};
+	const sets = JSON.parse( readFileSync( marker, "utf8" ) ).costumeEffects ?? {}, out = {};
+	for ( const piece of pieces ) {
+		const rows = piece.effectSet ? sets[piece.effectSet] : undefined;
+		if ( rows?.length ) out[piece.id] = wornEffectRows( piece.effectSet, rows );
+	}
+	return out;
+}
+
 export async function buildEquipmentVisuals( dress, options = {} ) {
 	dress.defaultWearLanguage = defaultWearLanguage();
 	const rows = loadEquipmentRecords( retailTextdataRoot ),
@@ -349,6 +371,51 @@ export async function buildEquipmentVisuals( dress, options = {} ) {
 			}
 		}
 	}
+	// Port-only (SRO_NASRUN, #4407): the lent Spirit skills' costume pieces,
+	// avatar records under reserved ids (visualChanges.mjs).
+	dress.visualChanges = {};
+	const visualPieces = loadVisualChanges( retailTextdataRoot );
+	for ( const piece of visualPieces ) {
+		const record = { ...piece.record, model: piece.models.M, bodies: {} };
+		out[piece.id] = record;
+		(dress.visualChanges[piece.skillId] ??= []).push( piece.id );
+		// The costume's AnimationName (avatar_nasrun1..3) moves the wearer
+		// onto the transformation's own stand, run and wait while it is
+		// worn, through the worn-avatar override path (8EADF0) an
+		// avataritemdata row takes; those sets come from the later bodies
+		// (laterAnimationSets.mjs). The costume replaces every worn avatar,
+		// so no other override competes with it.
+		if ( piece.animation && piece.animation.toLowerCase() !== "xxx" ) {
+			dress.avatarVisualOverrides[piece.id] = {
+				animation: piece.animation.toLowerCase(),
+				priority: 0,
+				additionalBsr: ""
+			};
+		}
+		for ( const race of [ "CH", "EU" ] ) {
+			for ( const sex of [ "M", "W" ] ) {
+				const body = `${race}_${sex}`, paths = [ sex === "M" ? piece.models.M : piece.models.W ];
+				const key = cacheKey( body, paths );
+				let entry = cache.get( key );
+				if ( !entry ) {
+					const donor = chooseDonor( roster, race, sex );
+					if ( !donor ) throw Error( `Missing donor ${body}` );
+					entry = {};
+					cache.set( key, entry );
+					sets.push( {
+						entry,
+						body,
+						donor,
+						paths,
+						code: record.code,
+						key: body + "_" + sha256Hex( key ).slice( 0, 20 ),
+						held: false
+					} );
+				}
+				record.bodies[body] = entry;
+			}
+		}
+	}
 	const stored = await buildItemSets( sets, hold, options );
 	console.log(
 		`[equipment] ${Object.keys( out ).length} native item mappings; ${sets.length} additional models ` +
@@ -383,6 +450,6 @@ export async function buildEquipmentVisuals( dress, options = {} ) {
 	await publishEquipmentParticleMetadata( metadata );
 	dress.specialGlows = metadata.specialGlows;
 	dress.enchantSparks = metadata.enchantSparks;
-	dress.avatarEffects = metadata.avatarEffects;
+	dress.avatarEffects = { ...metadata.avatarEffects, ...costumeEffects( visualPieces ) };
 	return out;
 }

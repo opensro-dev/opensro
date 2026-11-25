@@ -107,6 +107,13 @@ type EnterWorldOutcome struct {
 	// (only meaningful when OK).
 	DivisionID    string
 	CharacterName string
+	// SessionConstants is the constants digest the entry answer carried
+	// (#4421); the hub marks it on the session once the answer is out.
+	SessionConstants string
+	// FullConstants reports the answer carried the constant sections
+	// (#4421): the tab took them fresh, so its commerce-seed mark is
+	// cleared and the next game-ready publishes the seed again.
+	FullConstants bool
 	// ResultPayload is the encoded OpEnterWorldResult payload.
 	ResultPayload []byte
 	// Frames are the bootstrap packets as native frames.
@@ -159,6 +166,8 @@ func buildEnterWorld(deps *Deps, payload []byte) (*BootstrapResult, EnterWorldOu
 	result := Build(deps, BootstrapRequest{
 		DivisionID:    decoded.Division,
 		CharacterName: decoded.CharName,
+		// The constants digest the tab states it already holds (#4421).
+		SessionConstants: decoded.SessionConstants,
 	})
 	if result.NativeResult != 1 {
 		return nil, enterWorldFailureOutcome(result), false
@@ -227,12 +236,14 @@ func encodeEnterWorld(deps *Deps, result *BootstrapResult, session string) Enter
 		frames = combined
 	}
 	return EnterWorldOutcome{
-		OK:            true,
-		DivisionID:    result.DivisionID,
-		CharacterName: characterName,
-		ResultPayload: resultPayload,
-		Frames:        frames,
-		Result:        result,
+		OK:               true,
+		DivisionID:       result.DivisionID,
+		CharacterName:    characterName,
+		SessionConstants: result.SessionConstants,
+		FullConstants:    !result.OmitSessionConstants,
+		ResultPayload:    resultPayload,
+		Frames:           frames,
+		Result:           result,
 	}
 }
 
@@ -506,6 +517,20 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 			// refusal): the transport's unenqueued-window watchdog
 			// stands down for this admission.
 			s.MarkSceneBootstrapEnqueued()
+			// A full entry answer teaches the session which constants
+			// digest it holds (#4421): later entries may state it and
+			// skip the constant sections, and the commerce seed is not
+			// republished while it stands.
+			if outcome.OK && outcome.SessionConstants != "" {
+				s.MarkSessionConstants(outcome.SessionConstants)
+			}
+			// A full answer means the tab (re)took its tables from
+			// scratch — e.g. a fresh tab on a resumed session: its
+			// commerce seed is gone too, so the mark clears and the
+			// next game-ready publishes it again (#4421).
+			if outcome.OK && outcome.FullConstants {
+				s.MarkSeedPublished("")
+			}
 		}
 		// A slow entry names its phases while the trail is warm: the
 		// gate wait, the build and the publish all hide behind the same
@@ -657,12 +682,20 @@ func RegisterGameReady(hub *transport.Hub, deps *Deps) {
 				return
 			}
 		}
-		if deps.SceneReferenceFrames != nil {
-			for _, frame := range deps.SceneReferenceFrames() {
+		// The commerce seed is a session constant (#4421): it is sent
+		// once per digest per session and never republished while the
+		// session stands, which was the second half of the teleport
+		// stall. A tab that joins mid-session still gets it exactly
+		// once, whichever of entry or game-ready arrives first. Fixtures
+		// that configure no seed digest keep the per-entry publishing.
+		if deps.SceneReferenceFrames != nil && (deps.SeedDigest == "" || s.SeedPublishedDigest() != deps.SeedDigest) {
+			frames := deps.SceneReferenceFrames()
+			for _, frame := range frames {
 				if err := s.Send(frame.Opcode, frame.Payload); err != nil {
 					return
 				}
 			}
+			s.MarkSeedPublished(deps.SeedDigest)
 		}
 		if deps.SceneWeatherFrames != nil {
 			for _, frame := range deps.SceneWeatherFrames(divisionID, snapshot) {

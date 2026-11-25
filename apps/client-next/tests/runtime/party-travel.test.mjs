@@ -42,7 +42,7 @@ One enter-world bootstrap for a character.
 */
 function entry( name ) {
 	return {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 0x694f, x: 10, y: 20, z: 30, angle: 0 } },
