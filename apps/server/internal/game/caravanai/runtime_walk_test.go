@@ -168,3 +168,71 @@ func TestCaravansFlagOnAndOff(t *testing.T) {
 		t.Fatalf("%s=on left the caravans disabled: %+v", EnvAICaravans, cfg)
 	}
 }
+
+// carriedHeight is the surface height heightWalker reports: any value no
+// anchor holds, so a pose carrying it is told apart from an anchor's own.
+const carriedHeight = 123.5
+
+// heightWalker walks like straightWalker but reports carriedHeight as the
+// surface height, as the nav march does on real ground.
+type heightWalker struct{}
+
+/*
+================
+heightWalker.Step
+================
+*/
+func (heightWalker) Step(from, to Pose, maxDist float64) (Pose, bool) {
+	next, arrived := straightWalker{}.Step(from, to, maxDist)
+	next.Y = carriedHeight
+	return next, arrived
+}
+
+/*
+==================
+TestAgentsStartFromTheProvenAnchorHeights
+
+The march proof (world/movement caravan_highway_test) plans every hop
+from the anchor's own pose, Y included. So an agent spawns at its
+anchor's Y (the terminals carry real heights: Donwhang -106.6, Hotan
+244), and a ferry hop lands on the far dock's Y, not the height the
+walk carried to the near dock.
+==================
+*/
+func TestAgentsStartFromTheProvenAnchorHeights(t *testing.T) {
+	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, WorldHooks{Walker: heightWalker{}})
+	const div = "div"
+	for _, unit := range rt.EnsureDivisionRoster(div) {
+		found := false
+		for _, wp := range unit.Route {
+			if wp.RegionID == unit.RegionID && wp.X == unit.X && wp.Z == unit.Z {
+				found = true
+				if unit.Y != wp.Y {
+					t.Fatalf("%s spawned at Y %v, want its anchor %q's Y %v", unit.Name, unit.Y, wp.Name, wp.Y)
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("%s spawned off its route's anchors: %+v", unit.Name, unit)
+		}
+	}
+
+	ctx := context.Background()
+	nowMs := int64(0)
+	prev := uint16(0)
+	for step := 0; step < 6000; step++ {
+		nowMs += 1000
+		_, snap, ok := rt.StepAgent(ctx, div, "[AI]Trader_Jin", nil, nowMs)
+		if !ok || snap == nil {
+			t.Fatalf("step %d: agent missing", step)
+		}
+		if prev == RegionJanganFerry && snap.RegionID == RegionDonwhangFerry {
+			if snap.Y != waypointDonwhangFerry.Y {
+				t.Fatalf("ferry hop landed at Y %v, want the far dock's Y %v", snap.Y, waypointDonwhangFerry.Y)
+			}
+			return
+		}
+		prev = snap.RegionID
+	}
+	t.Fatal("agent never took the Jangan-Donwhang ferry hop")
+}

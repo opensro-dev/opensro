@@ -351,6 +351,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			DestTown:       TownDonwhang,
 			RegionID:       jangan.RegionID,
 			X:              jangan.X,
+			Y:              jangan.Y,
 			Z:              jangan.Z,
 			MaxHP:          12000,
 			HP:             12000,
@@ -375,6 +376,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			DestTown:       TownHotan,
 			RegionID:       donwhang.RegionID,
 			X:              donwhang.X,
+			Y:              donwhang.Y,
 			Z:              donwhang.Z,
 			MaxHP:          11500,
 			HP:             11500,
@@ -399,6 +401,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			DestTown:       TownJangan,
 			RegionID:       hotan.RegionID,
 			X:              hotan.X,
+			Y:              hotan.Y,
 			Z:              hotan.Z,
 			MaxHP:          14000,
 			HP:             14000,
@@ -420,6 +423,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			DestTown:       TownDonwhang,
 			RegionID:       viperDock.RegionID,
 			X:              viperDock.X,
+			Y:              viperDock.Y,
 			Z:              viperDock.Z,
 			MaxHP:          11000,
 			HP:             11000,
@@ -683,6 +687,9 @@ func (r *Runtime) advanceAlongRouteLocked(unit *AgentUnit, nowMs int64) {
 		unit.RegionID = target.RegionID
 		unit.X = target.X
 		unit.Z = target.Z
+		// The far dock's own anchor height, the pose the march proof
+		// starts the next hop from (not the near dock's carried height).
+		unit.Y = target.Y
 		unit.lastAdvanceMs = nowMs
 		unit.WaypointIndex++
 		if unit.WaypointIndex >= len(unit.Route) {
