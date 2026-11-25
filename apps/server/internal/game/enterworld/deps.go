@@ -183,8 +183,11 @@ type Deps struct {
 	// every container (native _DelExpiredRentItemInStorage at storage
 	// load, action/rental_items.go); false leaves every row untouched,
 	// so the entry door writes only for a renter past the period's end.
-	RemoveExpiredRentItems       func(character *Character) bool
-	AdmitCharacterSession        func(divisionID, characterName string, session uint64) error
+	RemoveExpiredRentItems func(character *Character) bool
+	AdmitCharacterSession  func(divisionID, characterName string, session uint64) error
+	// SpiritSkills names the skills the character's worn, awake Devil's
+	// Spirit lends at entry (port-only, SRO_NASRUN, #4384); nil lends none.
+	SpiritSkills                 func(divisionID string, character *Character) []uint32
 	RetireCharacterSession       func(divisionID, characterName string, session uint64)
 	EntryActionSpeed             func(divisionID, characterName string) float32
 	EntryCompanionActionSpeed    func(division string, character *Character, pet *CharacterCOS) float32

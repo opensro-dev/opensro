@@ -17,7 +17,11 @@ client 0x730690) and the darkstaff as Europe weapon choice 6.
 
 package enterworld
 
-import "sort"
+import (
+	"sort"
+
+	"opensro.online/server/internal/game/nasrun"
+)
 
 // VisualItem is one worn or avatar item: native (RefItemID, plus).
 type VisualItem struct {
@@ -349,7 +353,9 @@ func ResolveVisualLoadout(character *Character, roster *Roster, modelRef uint32)
 	}
 	if character.AvatarInventory != nil {
 		for _, row := range character.AvatarInventory.Rows {
-			if row.RefObjID != 0 {
+			// A worn Devil's Spirit (port-only, SRO_NASRUN) has no worn
+			// model: the select dock dresses only the four avatars (#4384).
+			if row.RefObjID != 0 && !nasrun.IsSpirit(row.TypeFlags) {
 				loadout.Avatars = append(loadout.Avatars, VisualItem{RefObjID: row.RefObjID, Plus: row.Plus})
 			}
 		}

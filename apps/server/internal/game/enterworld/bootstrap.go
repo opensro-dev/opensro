@@ -366,6 +366,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		EventGuideStateMask:     eventGuideStateMask,
 		RefObjSnapshot:          refObjSnapshot,
 		RefSkillSnapshot:        skillSnapshot,
+		SpiritSkills:            entrySpiritSkills(deps, divisionID, character),
 		SkillCooldowns:          entrySkillCooldowns(deps, character),
 		ItemCooldowns:           entryItemCooldowns(deps, character),
 		RefItemSnapshot:         buildRefItemSnapshot(deps, divisionID, character),
@@ -965,4 +966,21 @@ func withEventGroups(own, running []uint32) []uint32 {
 		}
 	}
 	return out
+}
+
+/*
+================
+entrySpiritSkills
+
+The skills the worn, awake Devil's Spirit lends at entry, derived from
+the stored avatar rows by the runtime that owns the rule (Deps.SpiritSkills;
+action/spiritability.go): the runtime-only Spirit record is not part of
+the character this projection reads.
+================
+*/
+func entrySpiritSkills(deps *Deps, divisionID string, character *Character) []uint32 {
+	if deps.SpiritSkills == nil || character == nil {
+		return nil
+	}
+	return deps.SpiritSkills(divisionID, character)
 }

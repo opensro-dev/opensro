@@ -242,6 +242,7 @@ func newGameplayPlane(
 	deps.TrackMostWanted = items.TrackMostWanted
 	deps.RestoreEntryEffects = items.RestoreTimedSkillJobs
 	deps.AdmitCharacterSession = items.AdmitCharacterSession
+	deps.SpiritSkills = items.SpiritSkillsAt
 	deps.RetireCharacterSession = items.ForgetCharacterSession
 	deps.EntryPopulationLease = items.EntryPopulationLease
 	deps.EntrySkills = items.EntrySkills
