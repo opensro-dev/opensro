@@ -138,11 +138,9 @@ func TestBetaSilkStarterFailureRecoversBeforeHourlyCredit(t *testing.T) {
 	}
 	var pushed domain.MallBalance
 	frame := frames[0].Frames[0]
-	// The push body is the frozen pre-split shape (silk, giftSilk,
-	// points): the earned half the wallet assertion above holds rides
-	// the mall catalogue, never this frame, so an old client still
-	// decodes it (#4133).
-	if err := json.Unmarshal(frame.Payload, &pushed); err != nil || frame.Opcode != 17 || pushed != (domain.MallBalance{Silk: starterSilk}) || strings.Contains(string(frame.Payload), "earnedSilk") {
+	// The push carries the earned half the wallet assertion above holds:
+	// without it the open mall showed the credit nowhere (#4429).
+	if err := json.Unmarshal(frame.Payload, &pushed); err != nil || frame.Opcode != 17 || pushed != (domain.MallBalance{Silk: starterSilk, EarnedSilk: hourlySilk}) {
 		t.Fatalf("hourly frame=%+v balance=%+v err=%v", frame, pushed, err)
 	}
 	s.Close()
