@@ -14,6 +14,57 @@ import type { WorldTexture } from "@/engine/contracts/texture";
 import type { ModelDocument } from "./model";
 /*
 ================
+AssetStoreOperation
+
+The store's operations a failure is counted against (packs/persistent.ts).
+================
+*/
+export type AssetStoreOperation = "open" | "has" | "read" | "write" | "remove";
+
+/*
+================
+AssetStoreFailureReason
+
+Why a store operation failed, as an enumerated word: bug reports carry no
+free-form error text (bug-report/archive.ts), so the browser's message is
+classified, never copied.
+
+  timeout     an operation outlived its deadline
+  suspended   refused while an overdue operation had not settled
+  queue-full  refused at the waiter bound
+  quota       the origin refused the bytes (QuotaExceededError)
+  too-large   a cache too large to list ("Operation too large", #4370)
+  unavailable the browser refused Cache Storage itself
+  corrupt     a stored entry did not match its length
+  other       anything else
+================
+*/
+export type AssetStoreFailureReason =
+	| "timeout"
+	| "suspended"
+	| "queue-full"
+	| "quota"
+	| "too-large"
+	| "unavailable"
+	| "corrupt"
+	| "other";
+
+/*
+================
+AssetStoreFailure
+
+The latest failed store operation: what it was, why, and when on the
+worker's clock (performance.now() milliseconds).
+================
+*/
+export interface AssetStoreFailure {
+	readonly operation: AssetStoreOperation;
+	readonly reason: AssetStoreFailureReason;
+	readonly atMs: number;
+}
+
+/*
+================
 AssetStoreStats
 
 The persistent asset store's counters since the asset worker started
@@ -28,10 +79,19 @@ export interface AssetStoreStats {
 	readonly writes: number;
 	// Verified bytes not stored: backlog full, store suspended, over budget.
 	readonly skipped: number;
+	// Failed store operations, the sum of failures. A caller's own
+	// cancellation is not a failure and is not counted.
 	readonly errors: number;
+	// Failed operations by kind, and the latest one (#4432): the sum alone
+	// cannot say whether a climb is quota, a stalled backend or a cache too
+	// large to list.
+	readonly failures: Readonly<Record<AssetStoreOperation, number>>;
+	readonly lastFailure: AssetStoreFailure | null;
 	readonly evictions: number;
 	// The origin's quota refused a write with nothing left to evict.
 	readonly writesStopped: boolean;
+	// Shards dropped because they could not be listed (persistent.ts rebuild).
+	readonly resets: number;
 	readonly budget: number;
 	// Bytes ranged pack reads fetched, and the members' share of them.
 	readonly rangeBytes: number;
