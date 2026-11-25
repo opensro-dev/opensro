@@ -46,11 +46,15 @@ import (
 // maxMarketBody bounds a market request body.
 const maxMarketBody = 512
 
-// The search's bounds (the site's parser keeps to them too).
+// The search's bounds (the site's parser keeps to them too). The degree
+// ceiling is the catalog's highest equipment degree (enterworld
+// EquipmentDegree over the v1.150 itemdata): the fortress weapons
+// ITEM_FORT_FORTRESS_HAMMER_12 / _AXE_12 are ItemClass 34, degree 12;
+// nothing reaches 13.
 const (
 	MarketPageSize  = 15
 	MarketMaxPage   = 100
-	MarketMaxDegree = 11
+	MarketMaxDegree = 12
 	maxMarketQuery  = 64
 )
 
