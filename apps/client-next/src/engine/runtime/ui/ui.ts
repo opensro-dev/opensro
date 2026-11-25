@@ -271,7 +271,7 @@ import {
 } from "./hud/unique-banner";
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
-import { createQuestList } from "./hud/quest-list";
+import { createQuestList, QUEST_LIST_SLOTS } from "./hud/quest-list";
 import { createResLayoutResources } from "./res-layout/res-layout-resources";
 import { createCompanionPotions } from "./hud/companion-potions";
 import { createAutoPotionInput } from "./hud/auto-potion-input";
@@ -5586,7 +5586,7 @@ export function createUi( ports: UiPorts ) {
 		} else if ( id.startsWith( "quest-tracker-fold:" ) ) {
 			questList?.toggleFolded( Number( id.slice( 19 ) ) );
 		} else if ( id === "quest-scroll-up" || id === "quest-scroll-down" ) {
-			questPage = Math.max( 0, questPage + (id.endsWith( "up" ) ? -1 : 1) );
+			questList?.scrollBy( id.endsWith( "up" ) ? -1 : 1 );
 		} else if ( id.startsWith( "skill-learn:" ) ) practice = { mode: PRACTICE_SKILL, id: Number( id.slice( 12 ) ) };
 		else if ( id === "skill-confirm-cancel" ) practice = null;
 		else if ( id === "skill-confirm-ok" && practice ) {
@@ -8749,8 +8749,8 @@ export function createUi( ports: UiPorts ) {
 				const hit = () => {
 					const rect = windowPlacement.read( "quest-list" );
 					return panel === "Quests" && rect &&
-						event.x >= rect[0] + 236 && event.x < rect[0] + 800 &&
-						event.y >= rect[1] + 60 && event.y < rect[1] + 350;
+						event.x >= rect[0] && event.x < rect[0] + rect[2] &&
+						event.y >= rect[1] && event.y < rect[1] + rect[3];
 				};
 				if ( hit() ) {
 					questList?.scrollBy( Math.sign( event.delta ) );
@@ -9751,23 +9751,14 @@ export function createUi( ports: UiPorts ) {
 					up = controls.find( c => c.id === prefix + "-up" ),
 					down = controls.find( c => c.id === prefix + "-down" );
 				if ( up && down ) {
-					const travel = Math.max( 1, down.rect[1] - up.rect[1] - 32 ),
-						range = panel === "Skills" ?
-							Math.max(
-								0,
-								(hud.data()?.skillUi.groups.filter( g => g.mastery === selectedMastery ).length ?? 0) -
-									4
-							) :
-							Math.max(
-								0,
-								(view?.gameplay?.quests ?? []).reduce(
-									( n, q ) => n + 1 + (expandedQuests.has( q.refId ) ? q.contents.length : 0),
-									0
-								) - 12
-							);
+					const travel = Math.max( 1, down.rect[1] - up.rect[1] - 32 );
 					if ( panel === "Skills" ) {
+						const range = Math.max(
+							0,
+							(hud.data()?.skillUi.groups.filter( g => g.mastery === selectedMastery ).length ?? 0) - 4
+						);
 						skillScroll = Math.max( 0, Math.min( range, skillScroll + event.dy * range / travel ) );
-					} else questPage = Math.max( 0, Math.min( range, questPage + event.dy * range / travel ) );
+					} else questList?.dragScroll( event.dy * (questList.maxScroll()) / travel );
 				}
 				dirty = true;
 				return;
@@ -9781,7 +9772,7 @@ export function createUi( ports: UiPorts ) {
 					event.y <= down.rect[1] + 16
 				) {
 					if ( panel === "Skills" ) skillScroll = Math.max( 0, skillScroll + Math.sign( event.delta ) );
-					else questPage = Math.max( 0, questPage + Math.sign( event.delta ) );
+					else questList?.scrollBy( Math.sign( event.delta ) );
 					dirty = true;
 				}
 				return;
@@ -17900,6 +17891,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						rect: placed
 					} );
 					questList.drawList( drawFrame, placed[0], placed[1], hudCopy, questTimers );
+					// The layout's scrollbar (id 6) carries no art; the shared
+					// scrollbar draws over its rect, its arrows inside it.
+					const bar = questList.scrollRect( placed[0], placed[1] ),
+						scroll = chatScrollbar(
+							"quest-scroll",
+							[ bar[0], bar[1] + 16, bar[2], Math.max( 0, bar[3] - 48 ) ],
+							questList.maxScroll() + QUEST_LIST_SLOTS,
+							QUEST_LIST_SLOTS,
+							questList.maxScroll() - questList.scroll(),
+							resources.size,
+							full,
+							hover,
+							pressed
+						);
+					paths.push( ...scroll.paths );
+					quads.push( ...scroll.quads );
+					controls.push( ...scroll.controls );
 					endWindow( admission );
 				}
 				if ( questDetails && hudData ) {

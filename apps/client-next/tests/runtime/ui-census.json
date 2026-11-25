@@ -1866,7 +1866,7 @@
 					"writes": 0
 				},
 				"panel:Quests": {
-					"reads": 1,
+					"reads": 2,
 					"writes": 0
 				},
 				"panel:Shop": {
@@ -3153,7 +3153,7 @@
 					"reads": 6,
 					"writes": 4
 				},
-				"event#anon95": {
+				"event#anon94": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4105,6 +4105,10 @@
 					"reads": 3,
 					"writes": 0
 				},
+				"panel:Quests": {
+					"reads": 1,
+					"writes": 0
+				},
 				"panel:Shop": {
 					"reads": 1,
 					"writes": 0
@@ -5006,7 +5010,7 @@
 					"writes": 0
 				},
 				"panel:Skills": {
-					"reads": 9,
+					"reads": 8,
 					"writes": 0
 				},
 				"panel:Storage": {
@@ -5513,6 +5517,10 @@
 					"reads": 2,
 					"writes": 0
 				},
+				"panel:Quests": {
+					"reads": 1,
+					"writes": 0
+				},
 				"panel:Shop": {
 					"reads": 14,
 					"writes": 0
@@ -5945,6 +5953,10 @@
 					"reads": 3,
 					"writes": 0
 				},
+				"panel:Quests": {
+					"reads": 1,
+					"writes": 0
+				},
 				"panel:Shop": {
 					"reads": 1,
 					"writes": 0
@@ -6092,11 +6104,15 @@
 					"writes": 0
 				},
 				"panel:Quests": {
-					"reads": 2,
+					"reads": 6,
+					"writes": 0
+				},
+				"panel:Skills": {
+					"reads": 3,
 					"writes": 0
 				},
 				"quest": {
-					"reads": 3,
+					"reads": 4,
 					"writes": 0
 				},
 				"step": {
@@ -6109,13 +6125,9 @@
 		},
 		{
 			"buckets": {
-				"panel:Skills": {
+				"quest": {
 					"reads": 2,
 					"writes": 2
-				},
-				"quest": {
-					"reads": 3,
-					"writes": 3
 				},
 				"step": {
 					"reads": 0,
@@ -7811,10 +7823,6 @@
 				},
 				"panel:Shop": {
 					"reads": 12,
-					"writes": 0
-				},
-				"panel:Skills": {
-					"reads": 1,
 					"writes": 0
 				},
 				"panel:Storage": {
