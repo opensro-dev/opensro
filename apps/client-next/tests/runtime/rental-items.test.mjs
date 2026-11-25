@@ -64,6 +64,16 @@ test("a permanent dress body keeps its exact length beside a rented one", () => 
 	assert.equal( rented.next - permanent.next, 8 );
 });
 
+test("a permanent row of a rental kind reads its zero leg as no deadline", () => {
+	// The r204l outage: a permanent Halloween avatar's body now carries
+	// the leg as 0; it must decode to the full length and not read as an
+	// expired rental.
+	const refs = new Map( [ [ DRESS, FLAGS ] ] ), body = rentalBody( 0 );
+	const permanent = decodeInventoryItem( body, 0, refs, new Map(), new Set( [ DRESS ] ) );
+	assert.equal( permanent.next, body.length );
+	assert.equal( permanent.item?.rentExpiresUnixMs, undefined );
+});
+
 test("a warehouse list row carries the rental deadline to the storage room", () => {
 	const list = new Uint8Array( 29 ), v = new DataView( list.buffer );
 	list[0] = 30;

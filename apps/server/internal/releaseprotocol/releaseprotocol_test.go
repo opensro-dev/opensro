@@ -119,16 +119,18 @@ func TestEveryServedProtocolPasses(t *testing.T) {
 
 /*
 ================
-TestProtocol19ClientsStayServed
+TestPreRentLegClientsAreRefused
 
-Protocol 20 added only the skill reset reply, which a client meets by
-using a reset scroll itself; every other frame a protocol-19 client
-reads unchanged. Its clients (open tabs, automation clients) stay served.
+Protocol 21 writes the rent leg on every row of a rental reference; a
+protocol-19 or 20 tab has no such decode and would be refused entry
+(S2) on a permanent rental-kind avatar, so it gets the 426 that reloads it.
 ================
 */
-func TestProtocol19ClientsStayServed(t *testing.T) {
-	if reached, recorder := serve(t, http.MethodPost, "19"); !reached {
-		t.Fatalf("protocol 19 refused with %d", recorder.Code)
+func TestPreRentLegClientsAreRefused(t *testing.T) {
+	for _, protocol := range []string{"19", "20"} {
+		if reached, recorder := serve(t, http.MethodPost, protocol); reached || recorder.Code != http.StatusUpgradeRequired {
+			t.Fatalf("protocol %s served; it cannot read the rent leg", protocol)
+		}
 	}
 }
 

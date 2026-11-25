@@ -61,6 +61,11 @@ type Contracts struct {
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
+	// Protocol 21 writes the rent deadline leg on every row of a rental
+	// reference, as 0 on a permanent one (item/wire rentrefs.go, #4240). A
+	// tab without the leg decode (protocol 19, or a 20 built before
+	// #4311) misreads a permanent Halloween or Sparta avatar and is
+	// refused entry (S2), so Oldest moves with Current.
 	// Protocol 20 admits the port-only skill reset control (opcode 21,
 	// progression/skillrecall.go SkillRecallControl; SRO_SKILL_RESET_SCROLL),
 	// which a protocol-19 tab's world gate would end the session on.
@@ -71,7 +76,7 @@ const (
 	// rewards and tags the seasonal decoration's placements with their
 	// world layer (see WorldContract 1). Protocol 16 grows a pet chat
 	// link to name its pet (see ChatContract 2).
-	Current = 20
+	Current = 21
 	// Oldest is the oldest protocol this server still serves. A bump
 	// whose change an older client cannot survive in ordinary play moves
 	// Oldest with Current; a bump whose change only a new, opt-in action
@@ -80,11 +85,9 @@ const (
 	// out by a release it never needed (r204k, 2026-11-25: protocol 20
 	// refused every protocol-19 client with 426 although 19 and 20 differ
 	// only in the skill reset reply).
-	// 20 keeps 19: control 21 is sent only in reply to the player's own
-	// skill reset scroll use (progression/skillrecall.go), so a protocol-19
-	// client meets it only by using one, and that ends its own session as
-	// a 19 tab always did. Every other frame 20 sends, 19 reads.
-	Oldest = 19
+	// 21 serves only 21: the rent leg is ordinary play (any character
+	// holding a permanent rental-kind avatar), which no older tab reads.
+	Oldest = 21
 	// The market contract: 1 carries the port-only consignment market
 	// (SRO_CONSIGNMENT) on control opcode 20 both ways, and the server
 	// pushes it unasked: a sale's proceeds and notice to an online
