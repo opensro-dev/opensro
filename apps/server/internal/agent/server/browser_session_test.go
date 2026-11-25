@@ -207,7 +207,7 @@ func TestOutdatedTabLeavingStillForgetsTheBrowser(t *testing.T) {
 	cookie := login.Result().Cookies()[0]
 	outdated := func(path, contentType string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
-		r.Header.Set(releaseprotocol.Header, strconv.Itoa(releaseprotocol.Current-1))
+		r.Header.Set(releaseprotocol.Header, strconv.Itoa(releaseprotocol.Oldest-1))
 		r.Header.Set("Content-Type", contentType)
 		r.AddCookie(cookie)
 		w := httptest.NewRecorder()
