@@ -283,11 +283,16 @@ export async function buildBeta(
 	add
 	================
 	*/
+	// What add inspected, by path and sha256: verifyDirectory below skips
+	// re-inspecting a file whose bytes still match (#4337).
+	const inspected = new Map();
 	const add = async ( file, bytes, kind ) => {
 		safeName( file );
 		inspect( file, bytes, { application: kind === "application" } );
 		await write( path.join( packageRoot, file ), bytes );
-		manifest.files.push( { path: file, length: bytes.length, sha256: sha( bytes ), kind } );
+		const digest = sha( bytes );
+		inspected.set( file, digest );
+		manifest.files.push( { path: file, length: bytes.length, sha256: digest, kind } );
 	};
 	/*
 	================
@@ -434,7 +439,7 @@ export async function buildBeta(
 	manifest.routes.sort( ( a, b ) => a.url.localeCompare( b.url ) );
 	manifest.releaseId = releaseIdentity( manifest );
 	await write( path.join( packageRoot, "release.json" ), JSON.stringify( manifest, null, 2 ) );
-	await verifyDirectory( packageRoot );
+	await verifyDirectory( packageRoot, { inspected } );
 	if ( makeArchive ) await archiveRelease( packageRoot, path.join( destination, "client-beta.tar" ) );
 	await write( path.join( privateRoot, "release-id.txt" ), manifest.releaseId );
 	await write(
