@@ -83,6 +83,7 @@ export default {
 		"scripts/test/assets/pictureClipDiscs.test.mjs",
 		"scripts/test/assets/actorLocomotionRootMotion.test.mjs",
 		"scripts/test/assets/banTimeline.test.mjs",
+		"scripts/test/assets/cosWalkClearance.test.mjs",
 		"scripts/test/assets/npcAnimationContactMarkers.test.mjs",
 		"scripts/test/mission/missionMinimapBuild.test.mjs",
 		"scripts/test/mission/minimapArtCoverage.test.mjs",
