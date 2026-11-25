@@ -11,6 +11,11 @@
     "monster/mco_sys_appear.efp",
     "monster/mco_wrong_frostbite.efp",
     "monster/msk_waterghost_gas.efp",
-    "monster/system_appear.efp"
+    "monster/system_appear.efp",
+    "system/system_hwan2_disappear.efp",
+    "system/system_hwan2_keep.efp",
+    "system/system_hwan2_keep_s.efp",
+    "system/system_hwan2_keep_s_01.efp",
+    "system/system_hwan2_motion.efp"
   ]
 }
