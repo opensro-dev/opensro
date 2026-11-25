@@ -18,6 +18,7 @@ import (
 	"strconv"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/nasrun"
 )
 
 const mallGroupCode = "GROUP_MALL"
@@ -193,6 +194,7 @@ func LoadMall(dir string, extra []MallExtraGood, categories bool, refs enterworl
 	if err := addMallExtraRows(tables, extra, refs); err != nil {
 		return nil, err
 	}
+	dropNasrunMallTables(tables)
 	var badges map[string]string
 	if categories {
 		var err error
@@ -227,6 +229,49 @@ func LoadMall(dir string, extra []MallExtraGood, categories bool, refs enterworl
 		catalog.Offers[index].Badge = badges[catalog.Offers[index].Code]
 	}
 	return catalog, nil
+}
+
+// nasrunMallTabCodes are the later mall's Devil's Spirit shelves
+// (v1.696 refshoptab 4409/4410), carried into the built tree by
+// scripts/later_mall_goods.py (#4240 part 4).
+var nasrunMallTabCodes = map[string]bool{
+	"MALL_PREMIUM_NASRUN":     true,
+	"MALL_PREMIUM_NASRUN_ETC": true,
+}
+
+/*
+================
+dropNasrunMallTables
+
+Port-only, not native (#4240 part 4). The built tree carries the
+later mall's two Nasrun shelves whenever the build stamped them
+(SRO_NASRUN at build time), but the server owns the same switch at
+run time: while it is off, the shelves and their listings leave
+with it, so a Nasrun build on a native shard still serves the
+v1.150 mall exactly. Runs before the category layout, whose own
+Nasrun goods are gated the same way (mallcategories.go).
+================
+*/
+func dropNasrunMallTables(tables map[string][][]string) {
+	if nasrun.Enabled(os.Getenv(nasrun.Env)) {
+		return
+	}
+	goods := tables["refshopgoods"][:0]
+	for _, row := range tables["refshopgoods"] {
+		if len(row) > 2 && nasrunMallTabCodes[row[2]] {
+			continue
+		}
+		goods = append(goods, row)
+	}
+	tables["refshopgoods"] = goods
+	tabs := tables["refshoptab"][:0]
+	for _, row := range tables["refshoptab"] {
+		if len(row) > 3 && nasrunMallTabCodes[row[3]] {
+			continue
+		}
+		tabs = append(tabs, row)
+	}
+	tables["refshoptab"] = tabs
 }
 
 /*
