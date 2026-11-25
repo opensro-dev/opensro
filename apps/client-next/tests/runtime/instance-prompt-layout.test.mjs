@@ -25,10 +25,11 @@ test("the quest instance prompt is the centred simple message box, and its drag 
 	t.after( () => f.dispose() );
 	f.ui.step( f.state, 0 );
 	Object.assign( f.state.gameplay, { social: { ...(f.state.gameplay.social ?? {}), instance: { gid: 7 } } } );
-	let now = 0, frame;
+	let now = 0, frame, controls = [];
 	const draw = () => {
 		for ( let i = 0; i < 4; i++ ) frame = f.ui.step( f.state, now += 100 ) ?? frame;
 		assert.ok( frame );
+		controls = frame.controls;
 		const body = frame.controls.find( control => control.id === "instance-body" );
 		assert.ok( body, "the instance prompt draws" );
 		return body.rect;
@@ -39,8 +40,8 @@ test("the quest instance prompt is the centred simple message box, and its drag 
 		Math.floor( (f.state.width - SIMPLE_BOX_WIDTH) / 2 ),
 		Math.floor( (f.state.height - SIMPLE_BOX_HEIGHT) / 2 )
 	] );
-	assert.ok( frame.controls.some( control => control.id === "instance-accept" ) );
-	assert.ok( frame.controls.some( control => control.id === "instance-refuse" ) );
+	assert.ok( controls.some( control => control.id === "instance-accept" ) );
+	assert.ok( controls.some( control => control.id === "instance-refuse" ) );
 	f.ui.event( { kind: "drag", id: "instance-drag", dx: -40, dy: 25 } );
 	assert.deepEqual( draw(), [ rect[0] - 40, rect[1] + 25, SIMPLE_BOX_WIDTH, SIMPLE_BOX_HEIGHT ] );
 });
