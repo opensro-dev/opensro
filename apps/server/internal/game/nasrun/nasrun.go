@@ -34,7 +34,8 @@ const (
 	// avatarKind is 3/1/13, a v1.150 avatar (a Spirit, 3/1/14, is
 	// wire.IsDevilSpirit).
 	avatarKind uint16 = 0x6ac
-	tid4Shift         = 11
+
+	tid4Shift = 11
 
 	// Sockets 1..4 are the v1.150 avatar sockets, numbered by TID4 (hat,
 	// dress, attachment, flag). SpiritSocket is the Spirit's own.

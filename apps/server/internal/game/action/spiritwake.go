@@ -59,7 +59,9 @@ The use's success row carries no data word, so without this the client
 keeps the clock the row arrived with and a woken Spirit still reads as
 dormant until the next entry (#4381). It rides the durability frame:
 the body carries the clock in its durability field (wire durabilityWord),
-and the client writes a Spirit's frame silently. Inference (no native
+and the client writes it on the held item, with the frame's rising-value
+cue (a wake from 0 plays the revive sound, an extension the repair one,
+inventory.ts 0x31E8). Inference (no native
 trace of the v1.188 server's wake answer): the item keeps its slot and
 only that field changes, which is the frame's whole shape.
 ================
