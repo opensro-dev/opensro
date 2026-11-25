@@ -178,13 +178,22 @@ export function decideClaim( { lease, actor, seat, association, nowMs, held = 0,
 ================
 decideUnclaim
 
-What an /unclaim does: release for the holder (any seat of the holder's
-account, so a maintainer clears its own stale seat) or a maintainer,
-refuse for anyone else, none when nothing is held.
+What an /unclaim does. A bare /unclaim releases for the holder (any seat
+of the holder's account, so a maintainer clears its own stale seat) or a
+maintainer, and is refused for anyone else. An /unclaim <seat> names the
+lease it gives back, so it releases only that seat's own lease on the
+actor's account and is refused otherwise: the maintainers' task tool
+posts it when it cancels a seat's task, and on 11-25 such a post
+released a contributor's live claim on #3907, because the seat word was
+ignored and a maintainer may release anything. none when nothing is held.
 ================
 */
-export function decideUnclaim( { lease, actor, association } ) {
+export function decideUnclaim( { lease, actor, seat = "", association } ) {
 	if ( !lease ) return { action: "none" };
+	if ( seat ) {
+		if ( lease.holder === actor && lease.seat === seat ) return { action: "release" };
+		return { action: "refuse", lease, seat };
+	}
 	if ( lease.holder === actor || isMaintainer( association ) ) return { action: "release" };
 	return { action: "refuse", lease };
 }
@@ -429,15 +438,16 @@ async function handleComment( { github, context, botLogin, nowMs } ) {
 		}
 		return;
 	}
-	const decision = decideUnclaim( { lease, actor, association } );
+	const decision = decideUnclaim( { lease, actor, seat: command.seat, association } );
 	if ( decision.action === "refuse" ) {
+		const holder = holderName( decision.lease.holder, decision.lease.seat );
 		await github.rest.issues.createComment( {
 			owner,
 			repo,
 			issue_number: number,
-			body: `Only ${
-				holderName( decision.lease.holder, decision.lease.seat )
-			} or a maintainer can release this claim.`
+			body: decision.seat ?
+				`${holderName( actor, decision.seat )} holds no claim here; ${holder} does, and keeps it.` :
+				`Only ${holder} or a maintainer can release this claim.`
 		} );
 		return;
 	}
