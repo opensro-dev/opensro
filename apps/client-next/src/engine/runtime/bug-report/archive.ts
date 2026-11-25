@@ -44,8 +44,22 @@ const SHARED_STORE_COUNTERS = [
 	"evictions",
 	"budget",
 	"rangeBytes",
-	"demandedBytes"
+	"demandedBytes",
+	"resets"
 ] as const;
+// The store's operations and failure reasons (AssetStoreOperation,
+// AssetStoreFailureReason): the only words lastFailure may carry.
+const SHARED_STORE_OPERATIONS = [ "open", "has", "read", "write", "remove" ] as const;
+const SHARED_STORE_REASONS = new Set( [
+	"timeout",
+	"suspended",
+	"queue-full",
+	"quota",
+	"too-large",
+	"unavailable",
+	"corrupt",
+	"other"
+] );
 const MIN_DIAGNOSTIC_BYTES = 4096;
 const MAX_USER_AGENT_LENGTH = 512;
 const SHARED_GAMEPLAY_FIELDS = [
@@ -672,8 +686,16 @@ function sharedAssets( value: Record<string, unknown> ): Record<string, unknown>
 	const store = ( raw: unknown ) => {
 		if ( !raw || typeof raw !== "object" ) return null;
 		const s = raw as Record<string, unknown>;
+		const failures = s.failures && typeof s.failures === "object" ? s.failures as Record<string, unknown> : {};
+		const last = s.lastFailure && typeof s.lastFailure === "object" ?
+			s.lastFailure as Record<string, unknown> :
+			null;
+		const operation = SHARED_STORE_OPERATIONS.find( name => name === last?.operation ) ?? null;
+		const reason = typeof last?.reason === "string" && SHARED_STORE_REASONS.has( last.reason ) ? last.reason : null;
 		return {
 			...Object.fromEntries( SHARED_STORE_COUNTERS.map( name => [ name, number( s[name] ) ] ) ),
+			failures: Object.fromEntries( SHARED_STORE_OPERATIONS.map( name => [ name, number( failures[name] ) ] ) ),
+			lastFailure: operation && reason ? { operation, reason, atMs: number( last?.atMs ) } : null,
 			writesStopped: s.writesStopped === true
 		};
 	};

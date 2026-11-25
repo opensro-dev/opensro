@@ -10,6 +10,10 @@ stored and a refresh downloaded the scene again (2026-11-25, Jangan). The
 store now spreads its keys over named shards, caps each below the limit,
 drops a shard that still cannot be listed, and deletes the v1 cache.
 
+Its failures are counted by operation, with the latest one's reason as a
+word (#4432): the bare sum climbed 412 to 773 in one report and could not
+say why.
+
 The Cache Storage here is name-aware, as a browser's is: each name is its
 own cache, and keys() on one never lists another's entries.
 
@@ -18,7 +22,7 @@ own cache, and keys() on one never lists another's entries.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-const { createPersistentAssets, MAX_SHARD_ENTRIES } = await import(
+const { createPersistentAssets, MAX_SHARD_ENTRIES, failureReason } = await import(
 	"../../src/engine/runtime/assets/worker/packs/persistent.ts"
 );
 
@@ -151,4 +155,60 @@ test("a shard never holds more than MAX_SHARD_ENTRIES: the least recently used l
 	assert.equal( await store.read( ORIGIN, digest( 0 ), BYTES.length ), null, "the oldest entry stayed" );
 	assert.deepEqual( await store.read( ORIGIN, digest( MAX_SHARD_ENTRIES ), BYTES.length ), BYTES );
 	assert.equal( store.stats().evictions, 1 );
+});
+
+test("a write that meets a cache too large to list is a write failure of reason too-large", async t => {
+	const { stores, refuseKeys } = namedStorage( t );
+	const seed = createPersistentAssets();
+	await seed.write( ORIGIN, "1old", BYTES );
+	const [shard] = holding( stores, "1old" );
+	refuseKeys.add( shard );
+	const store = createPersistentAssets();
+	await store.write( ORIGIN, "2first", BYTES );
+	const stats = store.stats();
+	assert.equal( stats.errors, 1 );
+	assert.deepEqual( stats.failures, { open: 0, has: 0, read: 0, write: 1, remove: 0 } );
+	assert.equal( stats.lastFailure?.operation, "write" );
+	assert.equal( stats.lastFailure?.reason, "too-large", "Chrome raises it as an AbortError; the message decides" );
+	assert.equal( typeof stats.lastFailure?.atMs, "number" );
+});
+
+test("a caller's own cancellation is not a store failure", async t => {
+	namedStorage( t );
+	const store = createPersistentAssets();
+	await store.write( ORIGIN, "0a", BYTES );
+	const cancelled = new AbortController();
+	cancelled.abort( new DOMException( "left the area", "AbortError" ) );
+	await assert.rejects( store.read( ORIGIN, "0a", BYTES.length, cancelled.signal ), { name: "AbortError" } );
+	await assert.rejects( store.has( ORIGIN, "0a", cancelled.signal ), { name: "AbortError" } );
+	assert.equal( store.stats().errors, 0 );
+	assert.equal( store.stats().lastFailure, null );
+});
+
+test("a backend refusal counts against its own operation", async t => {
+	const { named } = namedStorage( t );
+	const store = createPersistentAssets();
+	await store.write( ORIGIN, "0a", BYTES );
+	const cache = named( "sro-next-verified-v2-0" );
+	cache.match = async () => {
+		throw new DOMException( "backend gone", "UnknownError" );
+	};
+	assert.equal( await store.read( ORIGIN, "0a", BYTES.length ), null );
+	assert.equal( await store.has( ORIGIN, "0a" ), null );
+	const stats = store.stats();
+	assert.deepEqual( stats.failures, { open: 0, has: 1, read: 1, write: 0, remove: 0 } );
+	assert.equal( stats.errors, 2 );
+	assert.equal( stats.lastFailure?.operation, "has" );
+	assert.equal( stats.lastFailure?.reason, "unavailable" );
+});
+
+test("failure reasons are words, never the browser's message", () => {
+	assert.equal( failureReason( Error( "Cache operation timed out" ) ), "timeout" );
+	assert.equal( failureReason( Error( "Cache suspended" ) ), "suspended" );
+	assert.equal( failureReason( Error( "Cache queue full" ) ), "queue-full" );
+	assert.equal( failureReason( new DOMException( "full", "QuotaExceededError" ) ), "quota" );
+	assert.equal( failureReason( Error( "Incomplete persistent asset" ) ), "corrupt" );
+	assert.equal( failureReason( new DOMException( "denied", "SecurityError" ) ), "unavailable" );
+	assert.equal( failureReason( Error( "https://example.test/secret?x=1" ) ), "other" );
+	assert.equal( failureReason( "not an error" ), "other" );
 });
