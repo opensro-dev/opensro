@@ -519,6 +519,7 @@ LATER_BODY_ROOT = "res/char/"
 LATER_BSR_DIR = ".opensro-nasrun-bsr"
 TRANSFORM_CLIP_ROOT = "prim/ani/avatar/nasrun"
 BAN_PATH = re.compile(rb"prim[\\/]ani[\\/][ -~]+?\.ban", re.IGNORECASE)
+TRANSFORM_EFFECT_PATH = re.compile(rb"system[\\/]avatar_nasrun[ -~]+?\.efp", re.IGNORECASE)
 
 
 # ================
@@ -526,8 +527,9 @@ BAN_PATH = re.compile(rb"prim[\\/]ani[\\/][ -~]+?\.ban", re.IGNORECASE)
 #
 # The later client's character BSRs that author the transformation sets,
 # for the bodies the tree has: {archive path: bytes}, and the Nasrun clips
-# they play. The locomotion build takes only those sets from them
-# (laterAnimationSets.mjs); every other clip they name is the body's own.
+# and state-bound effects they play, as (archive, path) pairs. The builds
+# take only those sets from them (laterAnimationSets.mjs); every other
+# clip they name is the body's own.
 # ================
 def later_bodies(data, index, trees):
 	bodies, clips = {}, set()
@@ -543,7 +545,10 @@ def later_bodies(data, index, trees):
 		for match in BAN_PATH.findall(body):
 			clip = shared.normalized_path(match.decode("ascii"))
 			if clip.startswith(TRANSFORM_CLIP_ROOT):
-				clips.add(clip)
+				clips.add(("Data", clip))
+		# The state-bound auras of those sets (ModDataParticle), keep03.
+		for match in TRANSFORM_EFFECT_PATH.findall(body):
+			clips.add(("Particles", shared.normalized_path(match.decode("ascii"))))
 	return bodies, clips
 
 
@@ -633,7 +638,7 @@ def add_nasrun_skills(vsro_root, native, output):
 		if merged_effects is not None and "Data" in archives:
 			data, data_index = archives["Data"]
 			bodies, clips = later_bodies(data, data_index, (output, native))
-		icons.update(("Data", clip) for clip in clips)
+		icons.update(clips)
 		assets = shared.copy_resource_closure(icons, native, output, archives)
 		# The costume's steady auras, its effect files now in the tree.
 		particles = (output / "Particles_extracted", native / "Particles_extracted")

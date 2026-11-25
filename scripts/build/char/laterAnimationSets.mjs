@@ -72,3 +72,35 @@ normalizedBsrPath
 function normalizedBsrPath( value ) {
 	return String( value ).replaceAll( "\\", "/" ).toLowerCase();
 }
+
+/*
+================
+laterStateModifiers
+
+The later body's animation-state modifiers for the named sets, in the
+fields an NPC model publishes for the same native mechanism (ModDataSet
+kind 1 selected by set and state, its ModDataParticle programs started at
+their authored clip time; animation-emission.ts): the modifier sets, their
+particle payloads and the set/state -> clip bindings that select them.
+Only avatar_nasrun3's stand (0), alternate stand (61) and combat stance (6)
+carry a particle, keep03 at the character's origin. null when the body has
+no later source.
+================
+*/
+export function laterStateModifiers( bsrPath, later ) {
+	const file = later?.sources.get( normalizedBsrPath( bsrPath ) );
+	if ( !file ) return null;
+	const bsr = parseCharacterBsr( fs.readFileSync( file ), file );
+	const named = row => row.kind === 1 && later.setNames.has( row.animationSetName.toLowerCase() );
+	const particleModifiers = bsr.particleModifiers.filter( named );
+	if ( !particleModifiers.length ) return null;
+	const animationBindings = bsr.animationSets.filter( set => later.setNames.has( set.name.toLowerCase() ) ).flatMap(
+		set =>
+			set.states.filter( state => state.animationPath ).map( state => ({
+				set: set.name,
+				stateId: state.stateId,
+				clip: `native:${set.name.toLowerCase()}:${state.stateId}`
+			}) )
+	);
+	return { animationBindings, modifierSets: bsr.modifierSets.filter( named ), particleModifiers };
+}
