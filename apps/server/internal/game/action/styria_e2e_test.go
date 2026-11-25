@@ -8,9 +8,11 @@ the switch on, a Hunter and a Thief select the arena manager in the
 live roster, talk, and apply through the real conversation choice;
 the start matches them into world 107; they fight over the treasure
 boxes through the object-select lane; the clock returns them and
-pays the win and lose rewards, with the status snapshots recording
-each phase. With the switch off there is no manager, no rows and no
-tick. The draw reward shares this path (TestStyriaClockDecidesWinAndDraw).
+pays the win and lose rewards - the EXP and, since #4375 staged the
+reward items, the rune seals and stones too - with the status
+snapshots recording each phase. With the switch off there is no
+manager, no rows and no tick. The draw reward shares this path
+(TestStyriaClockDecidesWinAndDraw).
 
 ===========================================================================
 */
@@ -96,10 +98,41 @@ func styriaApplyAtManager(t *testing.T, rt *Runtime, character *enterworld.Chara
 
 /*
 ================
+styriaAssertRewardItems
+
+One paid character's item half (#4375): every expected codename
+resolves in the tree's item data, and the character holds exactly
+the expected count of each (and of nothing else the reward names).
+================
+*/
+func styriaAssertRewardItems(t *testing.T, rt *Runtime, character *enterworld.Character, want map[string]int64) {
+	t.Helper()
+	refs := rt.deps.ItemReferences()
+	held := map[string]int64{}
+	for codename := range want {
+		ref, ok := refs.ItemRefByCodename(codename)
+		if !ok {
+			t.Fatalf("reward item %s is not in the item data", codename)
+		}
+		for _, row := range character.MissionInventory {
+			if row.RefObjID == ref.RefObjID {
+				held[codename] += row.StackCount
+			}
+		}
+	}
+	for codename, count := range want {
+		if held[codename] != count {
+			t.Fatalf("%s holds %d of %s, want %d (all held: %v)", character.Name, held[codename], codename, count, held)
+		}
+	}
+}
+
+/*
+================
 TestStyriaDoneWhenHunterAndThief
 
 The done-when with the flag on: apply, be matched, fight for
-treasure, and get the win and lose rewards.
+treasure, and get the win and lose rewards, EXP and items alike.
 ================
 */
 func TestStyriaDoneWhenHunterAndThief(t *testing.T) {
@@ -111,6 +144,7 @@ func TestStyriaDoneWhenHunterAndThief(t *testing.T) {
 	rt, clock := newStyriaRuntime(t, hunter, thief)
 	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true}
 	rt.deps.(*enterworld.Deps).Levels = enterworld.NewTextdataLevels(gamedatatest.TextdataDir(t))
+	rt.deps.(*enterworld.Deps).Items = enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
 	prog := progression.NewRuntime(rt.deps)
 	rt.UpdateExperience = prog.ExperienceUpdater()
 	rt.UpdateJobExperience = prog.JobExperienceUpdater()
@@ -187,6 +221,19 @@ func TestStyriaDoneWhenHunterAndThief(t *testing.T) {
 	if got := skillHolding(thief) - thiefSkill; got != 670 {
 		t.Fatalf("loser skill exp gained %d, want the level-20 band 670", got)
 	}
+	// The item half (#4375): the tree's reward rows resolve, so the
+	// grants land - the winner holds a seal of each rune and five of
+	// each stone, the loser one of each stone.
+	styriaAssertRewardItems(t, rt, hunter, map[string]int64{
+		styria.MagicRuneSealCodename:    styria.RewardRuneSealsWin,
+		styria.StrengthRuneSealCodename: styria.RewardRuneSealsWin,
+		styria.BlueStoneCodename:        styria.RewardStonesWin,
+		styria.BlackStoneCodename:       styria.RewardStonesWin,
+	})
+	styriaAssertRewardItems(t, rt, thief, map[string]int64{
+		styria.BlueStoneCodename:  styria.RewardStonesLose,
+		styria.BlackStoneCodename: styria.RewardStonesLose,
+	})
 	if status, ok := statusLog.last("Hunter"); !ok || status.Phase != 2 || status.Outcome != 1 ||
 		int64(status.JobExp) != styria.RewardJobExpWin || status.SkillExp != 670 {
 		t.Fatalf("hunter result snapshot = %+v, %v", status, ok)
@@ -208,6 +255,12 @@ func TestStyriaDoneWhenHunterAndThief(t *testing.T) {
 	if got := hunter.Job.WeeklyReward; int64(got) != styria.RewardJobExpWin {
 		t.Fatalf("winner paid twice: job contribution = %d", got)
 	}
+	styriaAssertRewardItems(t, rt, hunter, map[string]int64{
+		styria.MagicRuneSealCodename:    styria.RewardRuneSealsWin,
+		styria.StrengthRuneSealCodename: styria.RewardRuneSealsWin,
+		styria.BlueStoneCodename:        styria.RewardStonesWin,
+		styria.BlackStoneCodename:       styria.RewardStonesWin,
+	})
 }
 
 /*
