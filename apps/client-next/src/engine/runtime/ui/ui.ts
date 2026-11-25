@@ -13814,9 +13814,9 @@ export function createUi( ports: UiPorts ) {
 				const caravanLeadBadge = ( x: number, y: number, name: string, display: string, self = false ) => {
 					const leads = caravanLead?.leader.toLowerCase() === name.toLowerCase(),
 						id = "caravan-lead:" + name,
-						r: UiRect = [ x, y, 16, 16 ];
+						r: UiRect = [ x, y, 12, 12 ];
 					paths.push( caravanLeadIcon );
-					if ( leads ) rect( [ x - 1, y - 1, 18, 18 ], [ 1, 0.84, 0.4, 0.35 ] );
+					if ( leads ) rect( [ x - 1, y - 1, 14, 14 ], [ 1, 0.84, 0.4, 0.35 ] );
 					image(
 						r,
 						caravanLeadIcon,
@@ -13957,7 +13957,11 @@ export function createUi( ports: UiPorts ) {
 						const leadRow = caravanLead?.candidates.find( c =>
 							c.name.toLowerCase() === row.member.name.toLowerCase()
 						);
-						if ( leadRow ) caravanLeadBadge( x + 104, y + 3, leadRow.name, leadRow.display );
+						// On the mastery icons' line under the MP bar, right-aligned to it.
+						if ( leadRow ) {
+							const mp = authoredRect( slot.GDR_QPS_GAUGE_MP!, x, y );
+							caravanLeadBadge( mp[0] + mp[2] - 12, y + 39, leadRow.name, leadRow.display );
+						}
 						// The member's two main masteries: roster data, so they show for a member
 						// out of view and without the buff preference.
 						for ( const entry of row.masteries ) {
@@ -14013,10 +14017,13 @@ export function createUi( ports: UiPorts ) {
 					}
 					// The hirer itself is not on the board: its badge sits under its
 					// own panel.
-					const self = caravanLead?.candidates[0], mini = hudData.root.GDR_PLAYER_MINI_INFO;
-					if ( self && mini ) {
-						const r = authoredRect( mini, 0, 0 );
-						caravanLeadBadge( r[0] + r[2] - 20, r[1] + r[3] + 2, self.name, "You", true );
+					const self = caravanLead?.candidates[0],
+						mini = hudData.root.GDR_PLAYER_MINI_INFO,
+						mpNode = hudData.player.GDR_PMI_GAUGE_MP;
+					if ( self && mini && mpNode ) {
+						// Right under the panel's MP bar, right-aligned to it.
+						const mp = authoredRect( mpNode, mini.rect[0], mini.rect[1] );
+						caravanLeadBadge( mp[0] + mp[2] - 12, mp[1] + mp[3] + 2, self.name, "You", true );
 					}
 				}
 				// The chat is part of the native HUD a fine pointer keeps, so it

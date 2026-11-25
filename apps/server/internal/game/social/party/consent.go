@@ -350,6 +350,26 @@ func (r *Runtime) InvitePlayerFromRuntimeActor(divisionID, actorName, playerName
 			r.dropMember(divisionID, actor.Name, PartyLeaveReasonSecede, nil)
 		}
 	}
+	if _, actorInParty := r.registry.PartyOf(divisionID, actor.Name); !actorInParty {
+		// Port-only, not native: the player consented by hiring (the hire
+		// window's confirm, or !hire/!accept), so no prompt follows. The
+		// hirer forms the party and leads it, so it can put an agent out
+		// or disband the party, which ends that hire (caravanai).
+		leader := Member{MemberID: enterworld.ObjectIDForCharacter(target), Name: target.Name}
+		second := Member{MemberID: actorID, Name: actor.Name}
+		opts := uint8(PartyOptionExpShare | PartyOptionItemShare | PartyOptionJoinAnyone)
+		snapshot, refusal := r.registry.Form(divisionID, leader, second, opts)
+		if refusal != "" {
+			return false
+		}
+		sendPartySeed(targetSession, leader.MemberID, snapshot, r.rosterRows(divisionID, snapshot))
+		if r.PartyChanged != nil {
+			for _, member := range snapshot.Members {
+				r.PartyChanged(divisionID, member.Name)
+			}
+		}
+		return true
+	}
 	if r.proposalPending(divisionID, target.Name) {
 		return false
 	}
@@ -360,15 +380,7 @@ func (r *Runtime) InvitePlayerFromRuntimeActor(divisionID, actorName, playerName
 			OptionBits:  actorSnap.OptionBits,
 		})
 		_ = targetSession.Send(OpInvitationProposal, EncodeInvitationPrompt3393(InvitationTypePartyJoin, actorID, actorSnap.OptionBits))
-		return true
 	}
-	opts := uint8(PartyOptionExpShare | PartyOptionItemShare | PartyOptionJoinAnyone)
-	r.registry.SetPendingInvite(divisionID, target.Name, PendingInvite{
-		Kind:        PendingInviteForm,
-		InviterName: actor.Name,
-		OptionBits:  opts,
-	})
-	_ = targetSession.Send(OpInvitationProposal, EncodeInvitationPrompt3393(InvitationTypeParty, actorID, opts))
 	return true
 }
 

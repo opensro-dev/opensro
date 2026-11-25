@@ -13,6 +13,7 @@ package caravanai
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"sort"
 	"strings"
@@ -333,6 +334,11 @@ func (r *Runtime) refreshHireLeaderLocked(unit *AgentUnit) {
 	}
 	traders := r.hiredTradersLocked(unit.Division, unit.HiredBy)
 	if len(traders) == 0 || traders[0] == unit {
+		if unit.EscortingTrader != "" {
+			// It takes over the driving: whatever route it had was planned
+			// from somewhere else, so it plans afresh from here.
+			unit.Route, unit.WaypointIndex = nil, 0
+		}
 		unit.EscortingTrader = ""
 		return
 	}
@@ -486,14 +492,120 @@ func (r *Runtime) stepHiredLeadLocked(unit *AgentUnit, nowMs int64) {
 		return
 	}
 	p, ok := r.hooks.Player(unit.Division, unit.HiredBy)
-	if !ok || WaypointDistance(position(unit), p.At) > EscortFollowDistance {
+	if !ok || WaypointDistance(position(unit), p.At) > EscortFollowDistance || r.hiredTraderBehindLocked(unit) {
 		unit.lastMoveAtMs, unit.progressAtMs = nowMs, 0
 		return
 	}
 	if len(unit.Route) == 0 {
-		unit.Route, unit.WaypointIndex = r.route(unit), 0
+		r.planHiredRunLocked(unit, nowMs)
 	}
 	r.advanceAlongRouteLocked(unit, nowMs)
+}
+
+// HiredTraderGatherDistance is how far the hire's other Traders may fall
+// behind the leading one before it waits for them.
+const HiredTraderGatherDistance float64 = 50 * UnitsPerMeter
+
+/*
+================
+hiredTraderBehindLocked
+
+The leading hired Trader waits while another living Trader of the same
+hire is more than HiredTraderGatherDistance behind.
+================
+*/
+func (r *Runtime) hiredTraderBehindLocked(lead *AgentUnit) bool {
+	for _, u := range r.hiresOfLocked(lead.Division, lead.HiredBy) {
+		if u == lead || u.Role != RoleTrader || u.HP <= 0 || u.DeadUntilMs > 0 || u.RespawnPending {
+			continue
+		}
+		if WaypointDistance(position(u), position(lead)) > HiredTraderGatherDistance {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
+planHiredRunLocked
+
+A hired Trader that takes the lead heads for the nearest town it may sell
+in, from where it stands: every known road between two towns is measured
+from its nearest point to the Trader to its end, and the shortest wins.
+The town it was hired in counts only after HireRunMinOutMs out; until
+then it is never the goal (a quick step out is no run).
+================
+*/
+func (r *Runtime) planHiredRunLocked(unit *AgentUnit, nowMs int64) {
+	at := position(unit)
+	homeAllowed := unit.hireLeftTown && nowMs-unit.leftTownAtMs >= HireRunMinOutMs
+	type plan struct {
+		origin, dest TownID
+		points       []Waypoint
+		index        int
+		cost         float64
+	}
+	var best *plan
+	consider := func(key [2]TownID, points []Waypoint) {
+		if len(points) == 0 || key[1] == TownThiefDen || (key[1] == unit.HireTown && !homeAllowed) {
+			return
+		}
+		points = append([]Waypoint(nil), points...)
+		for i, point := range points {
+			if terminal, ok := r.cfg.Terminals[point.Town]; ok {
+				points[i] = terminal
+			}
+		}
+		index, cost := routeCostFrom(at, points)
+		if best == nil || cost < best.cost {
+			best = &plan{origin: key[0], dest: key[1], points: points, index: index, cost: cost}
+		}
+	}
+	for key, points := range r.cfg.Highway {
+		consider(key, points)
+	}
+	for key, points := range r.cfg.Detours {
+		consider(key, points)
+	}
+	for key, variants := range r.cfg.Routes {
+		for _, points := range variants {
+			consider(key, points)
+		}
+	}
+	if best == nil {
+		unit.Route, unit.WaypointIndex = r.route(unit), 0
+		return
+	}
+	unit.OriginTown, unit.DestTown = best.origin, best.dest
+	unit.Route, unit.WaypointIndex = best.points, best.index
+}
+
+/*
+================
+routeCostFrom
+
+Where on a road a traveller at `at` joins it and how far it then is to
+the end: the nearest waypoint, or the one after it when the traveller is
+already between the two, plus the road from there on.
+================
+*/
+func routeCostFrom(at Waypoint, points []Waypoint) (int, float64) {
+	nearest, nearestDist := 0, math.Inf(1)
+	for i, point := range points {
+		if d := WaypointDistance(at, point); d < nearestDist {
+			nearest, nearestDist = i, d
+		}
+	}
+	join := nearest
+	if nearest+1 < len(points) && WaypointDistance(at, points[nearest+1]) < WaypointDistance(points[nearest], points[nearest+1]) {
+		join = nearest + 1
+	}
+	cost := WaypointDistance(at, points[join])
+	for i := join; i+1 < len(points); i++ {
+		cost += WaypointDistance(points[i], points[i+1])
+	}
+	return join, cost
 }
 
 /*

@@ -729,3 +729,64 @@ func TestFollowersSetOffOnTheirOwnTime(t *testing.T) {
 		t.Fatalf("both followers set off on the same tick %d", started[names[0]])
 	}
 }
+
+/*
+================
+TestTakenLeadHeadsForTheNearestTownFromHere
+
+A hired Trader that takes the lead plans from where it stands: of the
+roads it knows, the one whose end is nearest along the road wins, joined
+at the waypoint ahead of it, never back where its old route left off. The
+lead waits while another hired Trader is more than 50m behind.
+================
+*/
+func TestTakenLeadHeadsForTheNearestTownFromHere(t *testing.T) {
+	players := map[string]*hirePlayer{"Boss": {at: TownWaypoint(TownJangan), job: domain.JobTrader, online: true}}
+	paid := map[string]int64{}
+	rt := hireRuntime(t, players, &paid)
+	wp := func(x float32, town TownID) Waypoint { return Waypoint{RegionID: 25239, X: x, Z: 500, Town: town} }
+	// One straight road: Jangan at x=0 ... Donwhang at x=1800; its reverse.
+	road := []Waypoint{wp(0, TownJangan), wp(600, ""), wp(1200, ""), wp(1800, TownDonwhang)}
+	back := []Waypoint{road[3], road[2], road[1], road[0]}
+	rt.cfg.Highway = map[[2]TownID][]Waypoint{{TownJangan, TownDonwhang}: road, {TownDonwhang, TownJangan}: back}
+	rt.cfg.Terminals = map[TownID]Waypoint{}
+	rt.mu.Lock()
+	jin := rt.findAgentLocked("division", "[AI]Trader_Jin")
+	rt.mu.Unlock()
+	rt.HireAgent("division", "Boss", domain.JobTrader, "[AI]Trader_Jin", 1000)
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	jin.place(wp(1300, ""), 1000)
+
+	// Hired in Jangan, out only a moment: Donwhang is the goal, joined ahead.
+	jin.hireLeftTown, jin.leftTownAtMs = true, 900
+	rt.planHiredRunLocked(jin, 1000)
+	if jin.DestTown != TownDonwhang || jin.WaypointIndex != 3 {
+		t.Fatalf("lead plans %s from waypoint %d, want Donwhang from 3", jin.DestTown, jin.WaypointIndex)
+	}
+	// Long enough out that Jangan counts, and standing near it: Jangan wins.
+	jin.place(wp(400, ""), 1000)
+	rt.planHiredRunLocked(jin, 900+HireRunMinOutMs)
+	if jin.DestTown != TownJangan {
+		t.Fatalf("lead plans %s, want the nearer Jangan", jin.DestTown)
+	}
+
+	// Taking the lead back drops the old route.
+	jin.EscortingTrader, jin.Route = "Boss", road
+	rt.refreshHireLeaderLocked(jin)
+	if jin.EscortingTrader != "" || jin.Route != nil {
+		t.Fatalf("the new lead kept its old route (%d points) or leader %q", len(jin.Route), jin.EscortingTrader)
+	}
+
+	// Another hired Trader 60m behind holds the lead; 40m does not.
+	bao := rt.findAgentLocked("division", "[AI]Trader_Bao")
+	bindHire(bao, "Boss", TownJangan, 0, 1000)
+	bao.place(Waypoint{RegionID: jin.RegionID, X: jin.X + 600, Z: jin.Z}, 1000)
+	if !rt.hiredTraderBehindLocked(jin) {
+		t.Fatal("the lead does not wait for a Trader 60m behind")
+	}
+	bao.place(Waypoint{RegionID: jin.RegionID, X: jin.X + 400, Z: jin.Z}, 1000)
+	if rt.hiredTraderBehindLocked(jin) {
+		t.Fatal("the lead waits for a Trader 40m away")
+	}
+}

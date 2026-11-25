@@ -702,18 +702,18 @@ func TestCaravanPartyAndMovementPolish(t *testing.T) {
 		t.Fatalf("expected non-hirer 0x70D5 refusal {2, 0x0c}, got payload=% X", ack.Payload)
 	}
 
-	// !hire auto-invites the hiring player (0x3393 prompt) and accepting forms the party.
+	// !hire forms the party at once, the hirer leading it: hiring was the
+	// player's consent, so no 0x3393 prompt asks again.
 	reply, handled := rt.HandlePlayerCommand(wiringPublicationDivision, hirer.Name, domain.JobTrader, "!hire [AI]Hunter_Kwan", 1000)
 	if !handled || !strings.Contains(reply, "joins you for one trade run") {
 		t.Fatalf("!hire unexpected reply=%q handled=%v", reply, handled)
 	}
-	_ = waitForOpcode(hirerConn, party.OpInvitationProposal)
-
-	hirerConn.in <- transport.Frame{Opcode: party.OpInvitationProposal, Payload: []byte{1, 1}}
 	_ = waitForOpcode(hirerConn, party.OpCreatePartyAck)
 	_ = waitForOpcode(hirerConn, party.OpPartyInfo)
-	if _, ok := parties.Registry().PartyOf(wiringPublicationDivision, "[AI]Hunter_Kwan"); !ok {
-		t.Fatal("expected party formed after accepting !hire prompt")
+	if snapshot, ok := parties.Registry().PartyOf(wiringPublicationDivision, "[AI]Hunter_Kwan"); !ok {
+		t.Fatal("expected the hire to form the party")
+	} else if snapshot.LeaderID != enterworld.ObjectIDForCharacter(hirer) {
+		t.Fatalf("the hirer does not lead the hire's party (leader %d)", snapshot.LeaderID)
 	}
 
 	// Leaving dissolves bot-only party, then hirer manually sending 0x70D5 auto-accepts immediately.
