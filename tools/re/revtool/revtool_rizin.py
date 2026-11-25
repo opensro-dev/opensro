@@ -78,6 +78,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import revtool_pipe
 try:
 	import revtool
 except ImportError:  # repo layout not merged yet: allow an explicit home
@@ -120,31 +121,25 @@ STRING_CHAR_BYTES = {"utf16le": 2, "utf16be": 2, "utf32le": 4, "utf32be": 4}
 # =====================================================================
 
 class RizinSession:
-	"""One rzpipe connection to one retail binary."""
+	"""One rizin process on one retail binary."""
 
 	def __init__(self, binary, rzdb=None, analyze="aac"):
-		try:
-			import rzpipe
-		except ImportError as exc:
-			raise SystemExit(
-				"error: rzpipe is not importable; use the pinned venv "
-				"(docs/native/REVERSE_ENGINEERING.md).") from exc
 		self.binary = binary
 		self.rzdb = rzdb
 		self.from_project = bool(rzdb and os.path.exists(rzdb))
 		self._functions = None
 		self._strings = None
-		# No CLI flags: rzpipe adds its own; an unknown flag makes rizin
-		# print usage, exit, and rzpipe spin forever on a dead pipe.
-		self._pipe = rzpipe.open(binary)
-		self._pipe.cmd("e scr.color=false")
+		# revtool_pipe owns the process: rzpipe's readers spin forever at
+		# full CPU once rizin has exited.
+		self._pipe = revtool_pipe.open(binary)
+		self.cmd("e scr.color=false")
 		if rzdb and os.path.exists(rzdb):
-			self._pipe.cmd(f'Po "{rzdb}"')
+			self.cmd(f'Po "{rzdb}"')
 		elif analyze and analyze != "none":
-			self._pipe.cmd(analyze)
+			self.cmd(analyze)
 
 	def cmd(self, text):
-		return self._pipe.cmd(text) or ""
+		return revtool_pipe.command(self._pipe, text)
 
 	def cmdj(self, text):
 		out = self.cmd(text)
@@ -277,10 +272,7 @@ class RizinSession:
 				os.remove(lock_path)
 
 	def close(self):
-		try:
-			self._pipe.quit()
-		except Exception:
-			pass
+		revtool_pipe.close(self._pipe)
 
 
 # =====================================================================

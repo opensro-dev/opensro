@@ -51,6 +51,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from pe_image import PEImage
 from revtool_paths import DATA_DIR, DEFAULT_BINARY
+import revtool_pipe
 
 SEED_FORMAT = "sro-revtool-seed"
 SEED_VERSION = 1
@@ -334,14 +335,8 @@ def scan_seed(seed_path, binary_path):
 # =====================================================================
 
 def open_session(binary):
-	"""One rzpipe connection, no auto-analysis (cf. revtool_rizin)."""
-	try:
-		import rzpipe
-	except ImportError as exc:
-		raise SeedError(
-			"rzpipe is not importable; use the pinned venv "
-			"(docs/native/REVERSE_ENGINEERING.md)") from exc
-	return rzpipe.open(binary)
+	"""One rizin process, no auto-analysis (cf. revtool_rizin)."""
+	return revtool_pipe.open(binary)
 
 
 def _batched(pipe, commands):
@@ -349,12 +344,12 @@ def _batched(pipe, commands):
 	for command in commands:
 		if batch and (len(batch) >= APPLY_CHUNK_COMMANDS
 					  or size + len(command) + 1 > APPLY_CHUNK_BYTES):
-			pipe.cmd("\n".join(batch))
+			revtool_pipe.command(pipe, "\n".join(batch))
 			batch, size = [], 0
 		batch.append(command)
 		size += len(command) + 1
 	if batch:
-		pipe.cmd("\n".join(batch))
+		revtool_pipe.command(pipe, "\n".join(batch))
 
 
 def rizin_names(functions):
@@ -429,10 +424,10 @@ Returns (retried, ghosts removed).
 		head = command.split()
 		va = int(head[-1] if head[0] in ("af+", "afn") else head[1], 16)
 		if va in missing:
-			pipe.cmd(command)
+			revtool_pipe.command(pipe, command)
 	ghosts = [va for va in present if va not in seed and va not in preexisting]
 	for va in ghosts:
-		pipe.cmd(f"af- @ {va:#x}")
+		revtool_pipe.command(pipe, f"af- @ {va:#x}")
 	return len(missing), len(ghosts)
 
 
@@ -465,15 +460,15 @@ address inside a neighbour's block) is reported, never assumed.
 		lock_fd = None
 		pipe = opener(binary_path)
 		try:
-			pipe.cmd("e scr.color=false")
-			preexisting = {row["offset"] for row in (pipe.cmdj("aflj") or [])}
+			revtool_pipe.command(pipe, "e scr.color=false")
+			preexisting = {row["offset"] for row in (revtool_pipe.command_json(pipe, "aflj") or [])}
 			_batched(pipe, _seed_commands(functions, preexisting))
-			rows = pipe.cmdj("aflj") or []
+			rows = revtool_pipe.command_json(pipe, "aflj") or []
 			present = {row["offset"]: row.get("name", "") for row in rows}
 			stats["retried"], stats["ghosts"] = _repair_apply(
 				pipe, functions, preexisting, present)
 			if stats["retried"] or stats["ghosts"]:
-				rows = pipe.cmdj("aflj") or []
+				rows = revtool_pipe.command_json(pipe, "aflj") or []
 				present = {row["offset"]: row.get("name", "") for row in rows}
 			defined = [va for va, _ in functions if va in present]
 			stats["preexisting"] = sum(1 for va, _ in functions if va in preexisting)
@@ -484,12 +479,9 @@ address inside a neighbour's block) is reported, never assumed.
 						if va in present and not is_anonymous(name)]
 			sample = labelled[::max(1, len(labelled) // 20)][:20] if labelled else []
 			sampled_ok = sum(1 for va, name in sample if present.get(va) == name)
-			pipe.cmd(f'Ps "{tmp_path}"')
+			revtool_pipe.command(pipe, f'Ps "{tmp_path}"')
 		finally:
-			try:
-				pipe.cmd("q!")
-			except Exception:
-				pass
+			revtool_pipe.close(pipe)
 		if not os.path.exists(tmp_path):
 			raise SeedError(f"rizin did not write {tmp_path}")
 		os.replace(tmp_path, rzdb_path)
