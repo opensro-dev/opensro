@@ -135,22 +135,26 @@ func TestMarketSearchIsStrict(t *testing.T) {
 	if code, _ := authorizedGet(s, "/v1/market/listings", ""); code != http.StatusUnauthorized {
 		t.Fatalf("no token answered %d, want 401", code)
 	}
-	for _, query := range []string{"category=nope", "degree=12", "degree=x", "currency=gems", "sort=cheap", "page=0", "page=101",
+	for _, query := range []string{"category=nope", "degree=13", "degree=x", "currency=gems", "sort=cheap", "page=0", "page=101",
 		"q=" + strings.Repeat("a", 65)} {
 		if code, _ := authorizedGet(s, "/v1/market/listings?"+query, testWriteToken); code != http.StatusBadRequest {
 			t.Errorf("%s answered %d, want 400", query, code)
 		}
+	}
+	// Degree 12 is the catalog's highest (the fortress weapons, #4412).
+	if code, _ := authorizedGet(s, "/v1/market/listings?degree=12", testWriteToken); code != http.StatusOK {
+		t.Errorf("degree=12 answered %d, want 200", code)
 	}
 	code, body := authorizedGet(s, "/v1/market/listings?q=Sw&category=weapon&degree=1&currency=gold&sort=price-asc&page=2", testWriteToken)
 	if code != http.StatusOK {
 		t.Fatalf("search answered %d: %s", code, body)
 	}
 	want := MarketSearch{Q: "Sw", Category: "weapon", Degree: 1, Currency: "gold", Sort: MarketSortPriceAsc, Page: 2}
-	if len(market.searched) != 1 || market.searched[0] != want {
-		t.Fatalf("searched %+v, want %+v", market.searched, want)
+	if len(market.searched) != 2 || market.searched[0].Degree != 12 || market.searched[1] != want {
+		t.Fatalf("searched %+v, want the degree-12 probe then %+v", market.searched, want)
 	}
 	authorizedGet(s, "/v1/market/listings", testWriteToken)
-	if got := market.searched[1]; got.Sort != MarketSortNewest || got.Page != 1 {
+	if got := market.searched[2]; got.Sort != MarketSortNewest || got.Page != 1 {
 		t.Fatalf("defaults %+v, want newest page 1", got)
 	}
 }

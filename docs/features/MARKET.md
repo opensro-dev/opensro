@@ -46,7 +46,7 @@ No make-an-offer and no minimum price in the first version.
 | Route                                              | Does                                                                   |
 | -------------------------------------------------- | ---------------------------------------------------------------------- |
 | `GET /v1/market/categories`                        | the category picker (`slug`, `name`)                                   |
-| `GET /v1/market/listings`                          | search: `q`, `category`, `degree` 1-11, `currency`, `sort`, `page` (15 a page, 1-100) |
+| `GET /v1/market/listings`                          | search: `q`, `category`, `degree` 1-12, `currency`, `sort`, `page` (15 a page, 1-100) |
 | `GET /v1/accounts/{id}/market`                     | own listings, purchases, warehouse, characters, Silk, rules            |
 | `POST /v1/accounts/{id}/market/list`               | `{slot, currency, price}` from the warehouse -> 201                    |
 | `POST /v1/accounts/{id}/market/buy`                | `{listing, version, character}` -> 201                                 |
