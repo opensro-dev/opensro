@@ -117,6 +117,12 @@ func (r *Runtime) AgentEntities(division string) []AgentEntity {
 	defer r.mu.Unlock()
 	entities := make([]AgentEntity, 0, len(units))
 	for _, unit := range units {
+		// The dead are not in the world: omitting them is what
+		// despawns the corpse for every viewer, and respawn
+		// re-enters the slice, which re-shows the agent.
+		if unit.State == StateDead {
+			continue
+		}
 		entities = append(entities, unit.entityLocked())
 	}
 	return entities

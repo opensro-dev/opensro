@@ -39,6 +39,11 @@ const (
 	StateInCombat   AgentState = "IN_COMBAT"
 	StateParleying  AgentState = "PARLEYING"
 	StateDelivering AgentState = "DELIVERING"
+	// StateDead: the agent fell where it stands and waits out its
+	// respawn delay (agentRespawnDelayMs) before reappearing at its
+	// home town. Port-only pacing; native players own a different
+	// death flow and agents are not native.
+	StateDead AgentState = "DEAD"
 )
 
 // AgentUnit represents one active AI Caravan or Thief agent on the Silkroad.
@@ -75,6 +80,9 @@ type AgentUnit struct {
 	WaypointIndex  int
 	UnderAttack    bool
 	LastAttacker   string
+	// DeadUntilMs is when a dead agent (StateDead) respawns at its
+	// home town; zero while the agent lives.
+	DeadUntilMs    int64
 	LastPotionAtMs int64
 	LastSpokeAtMs  int64
 	LastSpokenLine string
@@ -497,6 +505,16 @@ func (r *Runtime) StepAgent(
 		r.mu.Unlock()
 		return Decision{}, nil, false
 	}
+	if unit.State == StateDead {
+		if nowMs < unit.DeadUntilMs {
+			// Dead agents neither decide nor move; the snapshot
+			// still reports them so callers see the corpse's place.
+			snapshot := *unit
+			r.mu.Unlock()
+			return Decision{}, &snapshot, true
+		}
+		unit.respawnAtHomeLocked(nowMs)
+	}
 
 	enriched := make([]ObservedPlayer, len(nearby))
 	for i, p := range nearby {
@@ -768,59 +786,6 @@ func (r *Runtime) deliverAgentLocked(unit *AgentUnit, nowMs int64) {
 }
 
 /*
-==================
-RecordPlayerAttack
-
-RecordPlayerAttack applies damage from attackerPlayerName onto agentName. If
-agentName was inside an active parley truce window, the attack immediately
-triggers a -100 Betrayal Vendetta. If the blow defeats the agent, robbery and
-route danger heat are recorded in the persistent MemoryBook.
-==================
-*/
-func (r *Runtime) RecordPlayerAttack(
-	division, agentName, attackerPlayerName string,
-	damage int,
-	nowMs int64,
-) (betrayedParley bool, defeated bool, memRow domain.CaravanAgentMemoryRow) {
-	r.EnsureDivisionRoster(division)
-	if _, row, betrayed := r.parleys.OnDamageDuringParley(division, agentName, attackerPlayerName, nowMs, r.memories); betrayed {
-		betrayedParley = true
-		memRow = row
-	}
-
-	r.mu.Lock()
-	unit := r.findAgentLocked(division, agentName)
-	if unit == nil {
-		r.mu.Unlock()
-		return betrayedParley, false, memRow
-	}
-	unit.UnderAttack = true
-	unit.LastAttacker = attackerPlayerName
-	if damage > 0 {
-		unit.HP -= damage
-	}
-	var stolenGold int64
-	regionID := unit.RegionID
-	if unit.HP <= 0 {
-		defeated = true
-		stolenGold = int64(unit.CargoStacks) * unit.StackValueGold
-		unit.CargoStacks = 0
-		home := TownWaypoint(unit.HomeTown)
-		unit.RegionID = home.RegionID
-		unit.X = home.X
-		unit.Z = home.Z
-		unit.HP = unit.MaxHP
-		unit.UnderAttack = false
-		unit.State = StateIdleInTown
-	}
-	r.mu.Unlock()
-
-	if defeated {
-		memRow = r.memories.RecordRobberyOrKill(division, agentName, attackerPlayerName, stolenGold, regionID, "", nowMs)
-	}
-	return betrayedParley, defeated, memRow
-}
-
 /*
 ==================
 HandlePlayerCommand
