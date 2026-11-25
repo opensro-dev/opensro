@@ -29,6 +29,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -299,10 +300,13 @@ refusalLog.note
 ================
 */
 func (l *refusalLog) note(declared string, now time.Time) {
-	if declared == "" {
+	// The header is client text and becomes a log field key: only a
+	// short run of digits is named; anything else (spaces, "=", line
+	// breaks that could forge log text) is counted as other.
+	switch {
+	case declared == "":
 		declared = "none"
-	}
-	if len(declared) > 8 {
+	case len(declared) > 8 || strings.Trim(declared, "0123456789") != "":
 		declared = "other"
 	}
 	l.mu.Lock()
