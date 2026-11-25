@@ -80,7 +80,7 @@ func ResolveStarterRefills(items ItemRefSource) []StarterRefill {
 			}
 			refill.Grades = append(refill.Grades, WireItem{
 				RefObjID: row.RefObjID, TypeFlags: row.TypeFlags(), Codename: row.Codename,
-				Name: row.Name, NativeFields: row.NativeFields, Icon: row.Icon, Kind: "item",
+				Name: row.Name, NativeFields: ItemWireFields(row.NativeFields), Icon: row.Icon, Kind: "item",
 			})
 			refill.Stack = append(refill.Stack, stack)
 		}

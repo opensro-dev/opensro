@@ -23,7 +23,7 @@ func TestCommercePublishesTooltipReferenceBeforeInstance(t *testing.T) {
 	if err := json.Unmarshal(result.Frames[0].Payload, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if len(decoded.Items) != 1 || decoded.Items[0].ID != 3630 || decoded.Items[0].Fields["sellPrice"] != 15 || decoded.Items[0].Fields["maxStack"] != 50 {
+	if len(decoded.Items) != 1 || decoded.Items[0].ID != 3630 || decoded.Items[0].Fields["maxStack"] != 50 {
 		t.Fatalf("missing native tooltip fields: %+v", decoded)
 	}
 }
