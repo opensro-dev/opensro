@@ -55,3 +55,40 @@ func offerHolds(offer Offer, excluded func(*enterworld.ItemRef) bool) bool {
 	}
 	return false
 }
+
+/*
+================
+MallCatalog.WithholdPackagesHolding
+
+Removes every mall offer whose package holds an item excluded names; the
+count is the offers removed. Like the NPC shelves above, the removed
+offers' slots stay unused: every other good keeps its mall address, and
+a purchase of a withheld address finds no offer and is refused.
+================
+*/
+func (c *MallCatalog) WithholdPackagesHolding(excluded func(refObjID uint32) bool) int {
+	kept, removed := c.Offers[:0], 0
+	for _, offer := range c.Offers {
+		if packageHolds(offer.ItemIDs, excluded) {
+			removed++
+			continue
+		}
+		kept = append(kept, offer)
+	}
+	c.Offers = kept
+	return removed
+}
+
+/*
+================
+packageHolds
+================
+*/
+func packageHolds(itemIDs []uint32, excluded func(refObjID uint32) bool) bool {
+	for _, id := range itemIDs {
+		if excluded(id) {
+			return true
+		}
+	}
+	return false
+}
