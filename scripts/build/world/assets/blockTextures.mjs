@@ -28,7 +28,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { publishFileFromTemp } from "../../shared/atomicPublish.mjs";
 import { claimPublicFile } from "../../shared/publicationLedger.mjs";
-import { exists } from "../io.mjs";
+import { exists, resolveOnDiskPath } from "../io.mjs";
 import { noteRead } from "../../graph/reads.mjs";
 import { generatedRoot } from "../paths.mjs";
 import { sha256Hex } from "../../shared/hash.mjs";
@@ -102,13 +102,16 @@ format, or null. Missing files return null (the caller owns that error).
 ================
 */
 export async function probeBlockTextureFile( absolutePath ) {
+	// Callers name the file by its folded data spelling; the probe opens
+	// the on-disk spelling so a case-sensitive file system finds it (#4468).
+	const source = await resolveOnDiskPath( absolutePath );
 	// Noted before the cache: a later tracked step probing it must see it too.
-	noteRead( absolutePath );
-	const cached = probedFiles.get( absolutePath );
+	noteRead( source );
+	const cached = probedFiles.get( source );
 	if ( cached !== undefined ) return cached;
 	let format = null;
-	if ( await exists( absolutePath ) ) {
-		const handle = await open( absolutePath, "r" );
+	if ( await exists( source ) ) {
+		const handle = await open( source, "r" );
 		try {
 			const header = Buffer.alloc( DDS_HEADER_BYTES );
 			const { bytesRead } = await handle.read( header, 0, DDS_HEADER_BYTES, 0 );
@@ -123,7 +126,7 @@ export async function probeBlockTextureFile( absolutePath ) {
 			await handle.close();
 		}
 	}
-	probedFiles.set( absolutePath, format );
+	probedFiles.set( source, format );
 	return format;
 }
 
@@ -253,7 +256,8 @@ Resolve when the NTX1 container of the authored source exists at target
 ================
 */
 export async function publishBlockTextureFile( source, target ) {
-	const result = await enqueueBlockTexture( { source, target } );
+	// The encoder opens the source itself: hand it the on-disk spelling (#4468).
+	const result = await enqueueBlockTexture( { source: await resolveOnDiskPath( source ), target } );
 	// A cache hit resolves without writing; the existing container is still this run's.
 	claimPublicFile( target );
 	return result;

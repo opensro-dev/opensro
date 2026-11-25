@@ -49,7 +49,7 @@ import { laterStateModifiers, loadLaterAnimationSources } from "../char/laterAni
 
 import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { compareText } from "../shared/textOrder.mjs";
-import { dataAssetPath } from "../shared/jmxAssetIO.mjs";
+import { dataAssetPathOnDisk } from "../shared/jmxAssetIO.mjs";
 import { parseCharacterBsr } from "../char/formats.mjs";
 import { parseCompound } from "../world/objects/compound.mjs";
 import { qinshiTombBranchFallback } from "../shared/qinshiTomb.mjs";
@@ -340,8 +340,8 @@ and an absent branch with no stand-in refuses as the bake does.
 */
 export function readEntityModel(
 	resourcePath,
-	readFile = gamePath => fs.readFileSync( dataAssetPath( gamePath ) ),
-	exists = gamePath => fs.existsSync( dataAssetPath( gamePath ) )
+	readFile = gamePath => fs.readFileSync( dataAssetPathOnDisk( gamePath ) ),
+	exists = gamePath => fs.existsSync( dataAssetPathOnDisk( gamePath ) )
 ) {
 	if ( !/\.cpd$/i.test( resourcePath ) ) {
 		return parseCharacterBsr( readFile( resourcePath ), resourcePath );
@@ -373,7 +373,8 @@ modifiers of its stage models (CICATStruct_SetVisualStage loads them).
 export function collectStructureEffectReferences(
 	text = fs.readFileSync( path.join( retailTextdataRoot, "atstructeffect.txt" ), "utf16le" ),
 	known = knownCharacter(),
-	readModel = resourcePath => parseCharacterBsr( fs.readFileSync( dataAssetPath( resourcePath ) ), resourcePath )
+	readModel = resourcePath =>
+		parseCharacterBsr( fs.readFileSync( dataAssetPathOnDisk( resourcePath ) ), resourcePath )
 ) {
 	const references = new Map();
 	for ( const [codename, target] of parseStructureEffects( text, known ) ) {
@@ -428,7 +429,7 @@ export function collectSceneryParticleReferences(
 	for ( const root of index.bsr ) {
 		for ( const branch of root.branches ?? [ root ] ) {
 			const modifiers = branch.modifiers ??
-				parseCharacterBsr( fs.readFileSync( dataAssetPath( branch.sourcePath ) ), branch.sourcePath );
+				parseCharacterBsr( fs.readFileSync( dataAssetPathOnDisk( branch.sourcePath ) ), branch.sourcePath );
 			for ( const modifier of modifiers.particleModifiers ?? [] ) {
 				for ( const entry of modifier.entries ) {
 					const effectPath = normalizeAssetPath( entry.effectPath );
@@ -475,7 +476,7 @@ export function collectDungeonParticleReferences(
 	}
 	for ( const branch of branches ) {
 		const modifiers = branch.modifiers ??
-			parseJmxResourceBsr( fs.readFileSync( dataAssetPath( branch.sourcePath ) ), branch.sourcePath )
+			parseJmxResourceBsr( fs.readFileSync( dataAssetPathOnDisk( branch.sourcePath ) ), branch.sourcePath )
 				.modifiers;
 		for ( const modifier of modifiers?.particleModifiers ?? [] ) {
 			for ( const entry of modifier.entries ?? [] ) {
@@ -505,7 +506,8 @@ from enabled records, not from every BSR in the extracted tree.
 */
 export function collectModelParticleReferences(
 	table,
-	readModel = resourcePath => parseCharacterBsr( fs.readFileSync( dataAssetPath( resourcePath ) ), resourcePath )
+	readModel = resourcePath =>
+		parseCharacterBsr( fs.readFileSync( dataAssetPathOnDisk( resourcePath ) ), resourcePath )
 ) {
 	const models = new Set();
 	for ( const record of Object.values( table ) ) {

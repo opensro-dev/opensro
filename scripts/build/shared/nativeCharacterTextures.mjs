@@ -29,7 +29,7 @@ import { buildStatePath } from "../../lib/generatedRoot.mjs";
 import { fileHashCacheDisabled, openFileHashCache } from "./fileHashCache.mjs";
 import { readJsonOrUndefined } from "./jsonOut.mjs";
 import { writeStateJson } from "./stateFile.mjs";
-import { dataAssetPath, convertedTexturePath, dataRoot } from "./jmxAssetIO.mjs";
+import { convertedTexturePath, dataAssetPathOnDisk, dataRoot } from "./jmxAssetIO.mjs";
 import { noteRead } from "../graph/reads.mjs";
 import { characterTextureRoot } from "../world/paths.mjs";
 import { listFiles, isMainScript } from "./fsUtils.mjs";
@@ -236,8 +236,9 @@ A missing native cache fails the build instead of silently publishing PNGs.
 */
 export function readCharacterTexture( gamePath, pngPath ) {
 	if ( gamePath ) {
-		noteRead( dataAssetPath( gamePath ) );
-		const source = fs.readFileSync( dataAssetPath( gamePath ) );
+		const sourcePath = dataAssetPathOnDisk( gamePath );
+		noteRead( sourcePath );
+		const source = fs.readFileSync( sourcePath );
 		if ( compressedSource( source ) ) {
 			const target = cachedPath( source );
 			if ( !target ) {
