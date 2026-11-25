@@ -20,6 +20,33 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+// caravanTestItems is the item source the directory test serves.
+type caravanTestItems map[string]*enterworld.ItemRef
+
+/*
+==================
+caravanTestItems.ItemRefByCodename
+==================
+*/
+func (s caravanTestItems) ItemRefByCodename(codename string) (*enterworld.ItemRef, bool) {
+	ref, ok := s[codename]
+	return ref, ok
+}
+
+/*
+==================
+caravanTestItems.ItemRefByID
+==================
+*/
+func (s caravanTestItems) ItemRefByID(id uint32) (*enterworld.ItemRef, bool) {
+	for _, ref := range s {
+		if ref.RefObjID == id {
+			return ref, true
+		}
+	}
+	return nil, false
+}
+
 /*
 ==================
 TestCaravanAgentDirectory
@@ -35,9 +62,22 @@ func TestCaravanAgentDirectory(t *testing.T) {
 	rt.EnsureDivisionRoster(div)
 	game := &gameplayPlane{
 		caravanAgents: rt,
-		deps: &enterworld.Deps{Roster: &enterworld.Roster{Models: []enterworld.RosterModel{
-			{Codename: "CHAR_CH_MAN_MERCHANT", RefObjID: 1908, BodyRadius: 4},
-		}}},
+		deps: &enterworld.Deps{
+			Roster: &enterworld.Roster{Models: []enterworld.RosterModel{
+				{Codename: "CHAR_CH_MAN_MERCHANT", RefObjID: 1908, BodyRadius: 4},
+			}},
+			Items: caravanTestItems{
+				"ITEM_CH_SPEAR_07_C_RARE": {
+					Codename: "ITEM_CH_SPEAR_07_C_RARE",
+					Combat: &enterworld.ItemCombatRef{
+						PhysicalAttack: enterworld.ItemAttackRange{
+							Minimum: enterworld.ItemStatRange{Min: 100},
+							Maximum: enterworld.ItemStatRange{Max: 140},
+						},
+					},
+				},
+			},
+		},
 	}
 	dir := caravanAgentDirectory{game: game}
 	gid := simulation.PlayerObjectID(caravanai.AgentCharacterIDBase)
@@ -54,6 +94,12 @@ func TestCaravanAgentDirectory(t *testing.T) {
 	}
 	if target.HP != target.MaxHP || target.HP <= 0 || target.Level == 0 {
 		t.Fatalf("vitals = %d/%d HP level %d, want full HP and a level", target.HP, target.MaxHP, target.Level)
+	}
+	if target.GID != gid || target.SkillID != 318 {
+		t.Fatalf("identity = gid %d skill %d, want %d and Jin's strike skill 318", target.GID, target.SkillID, gid)
+	}
+	if target.PhysicalAttackMin != 100 || target.PhysicalAttackMax != 140 {
+		t.Fatalf("weapon range = %v..%v, want the spear's 100..140", target.PhysicalAttackMin, target.PhysicalAttackMax)
 	}
 
 	if dir.ApplyAgentDamage(div, "[AI]Trader_Jin", "ViperPlayer", 100, 1_000) {

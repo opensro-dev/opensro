@@ -84,6 +84,12 @@ type AgentUnit struct {
 	WaypointIndex  int
 	UnderAttack    bool
 	LastAttacker   string
+	// CombatTarget is the player the agent is currently fighting
+	// (its brain's attack decision), empty at peace. It is what lets
+	// the struck player legally fight back (slice 3c's refusal).
+	CombatTarget string
+	// lastStrikeAtMs paces the agent's own strikes (slice 3e).
+	lastStrikeAtMs int64
 	// DeadUntilMs is when a dead agent (StateDead) respawns at its
 	// home town; zero while the agent lives.
 	DeadUntilMs    int64
@@ -124,7 +130,11 @@ type WorldHooks struct {
 	OnAgentChat       func(division, agentName string, regionID uint16, message string)
 	OnParleyCargoDrop func(division, agentName string, regionID uint16, x, y, z float32, stacks int, stackGoldValue int64)
 	OnContractReward  func(division, hunterPlayerName string, rewardGold int64, traderAgentName string)
-	Walker            Walker
+	// OnAgentStrike lands one of the agent's strikes on a player
+	// (slice 3e): the consumer strikes through the player-victim
+	// lanes and reports whether the player fell.
+	OnAgentStrike func(division, agentName, targetPlayerName string, nowMs int64) (defeated bool)
+	Walker        Walker
 }
 
 const (
@@ -141,6 +151,12 @@ const (
 	// on-foot walk pace the world uses for characters (simulation
 	// WalkSpeed, 20 units/sec). Port-only tuning, not native.
 	walkSpeedUnitsPerSec = 20.0
+
+	// agentStrikeRangeUnits is how close a player must be for an
+	// agent's strike to land, and agentStrikeIntervalMs the pace of
+	// one agent's strikes. Port-only tuning, not native.
+	agentStrikeRangeUnits = 10.0
+	agentStrikeIntervalMs = 1_500
 )
 
 // Runtime manages the division roster of AI Caravan & Thief agents.
@@ -566,9 +582,28 @@ func (r *Runtime) StepAgent(
 		decision = remote
 	}
 	r.applyDecisionLocked(unit, decision, nowMs)
+	// A strike lands when the brain's attack target stands within
+	// reach and the agent's own pace allows it; the consumer strikes
+	// through the player-victim lanes (hooks.OnAgentStrike).
+	strikeTarget := ""
+	if decision.Action == ActionAttackTarget && decision.TargetName != "" &&
+		nowMs-unit.lastStrikeAtMs >= agentStrikeIntervalMs {
+		for _, p := range enriched {
+			if p.Name == decision.TargetName && p.Distance <= agentStrikeRangeUnits {
+				strikeTarget = p.Name
+				unit.lastStrikeAtMs = nowMs
+				break
+			}
+		}
+	}
 	snapshot := *unit
 	r.mu.Unlock()
 
+	if strikeTarget != "" && r.hooks.OnAgentStrike != nil {
+		if r.hooks.OnAgentStrike(division, snapshot.Name, strikeTarget, nowMs) {
+			r.memories.RecordAgentKill(division, snapshot.Name, strikeTarget, snapshot.RegionID, "", nowMs)
+		}
+	}
 	if decision.Dialogue != "" && r.hooks.OnAgentChat != nil {
 		r.hooks.OnAgentChat(division, snapshot.Name, snapshot.RegionID, decision.Dialogue)
 	}
@@ -688,8 +723,10 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, nowMs int64) 
 		}
 	case ActionAttackTarget:
 		unit.State = StateInCombat
+		unit.CombatTarget = d.TargetName
 	case ActionContinueRoute:
 		unit.State = StateTraveling
+		unit.CombatTarget = ""
 		r.advanceAlongRouteLocked(unit, nowMs)
 	}
 	if d.Dialogue != "" {
