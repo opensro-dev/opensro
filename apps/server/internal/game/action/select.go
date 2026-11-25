@@ -298,8 +298,6 @@ to an object this division's world actually contains:
     region it stands in now (its mover's live pose; the generated home
     point only for a monster without a mover) is inside the acting
     character's current visibility ring;
-  - a live caravan agent from the combat directory (port-only), on
-    the same ring, answered with the monster writer's HP grant;
   - a live ground drop in the division registry.
 
 Anything else refuses: an object-interaction acceptor on a live server
@@ -433,12 +431,6 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 			Payload: wire.EncodeMonsterObjectSelectResult(gid, target.cosHP),
 		}}
 	}
-	if target.agent {
-		outcome.Frames = []wire.Frame{{
-			Opcode:  wire.OpObjectSelectResult,
-			Payload: wire.EncodeMonsterObjectSelectResult(gid, target.agentHP),
-		}}
-	}
 	if rt.AttackPetExpansion {
 		outcome.Frames = append(outcome.Frames, rt.petRecipientBuffFrames(divisionID, gid, rt.Now().UnixMilli())...)
 	}
@@ -458,11 +450,6 @@ type selectedObject struct {
 	// client reads CICCos through the same non-user arm (7651F1).
 	cosHP uint32
 	cos   bool
-	// agent and agentHP are a selected caravan agent and its current
-	// HP (agentstrike.go, port-only): the agent takes the monster's
-	// writer too, so the client shows its HP gauge on selection.
-	agent   bool
-	agentHP uint32
 }
 
 /*
@@ -519,12 +506,6 @@ func (rt *Runtime) resolveLiveObject(
 				return selectedObject{monster: &instance}, true
 			}
 		}
-	}
-	// A caravan agent (port-only): the directory's snapshot decides,
-	// on the same visibility ring as a monster.
-	if agent, ok := rt.agentTarget(divisionID, gid); ok &&
-		regionInScope(agent.Pose.RegionID, simulation.RegionScopeRing(viewerRegion)) {
-		return selectedObject{agent: true, agentHP: uint32(max(agent.HP, 0))}, true
 	}
 	// Summoned companions, every owner's (the native select takes any character in
 	// hit range): the presented pose decides the same visibility ring.

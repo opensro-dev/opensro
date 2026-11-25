@@ -137,19 +137,6 @@ type gameplayPlane struct {
 	// caravanAgents is the AI Caravan & Thief runtime (nil when
 	// SRO_AI_CARAVANS is off; wiring_caravanai.go).
 	caravanAgents *caravanai.Runtime
-	// caravanPeers is the agents' peer-presentation leg (slice 3a,
-	// wiring_caravanai.go); peerReferences is the item reference
-	// catalog every peer-shaped spawn draws from (wiring.go).
-	caravanPeers   *caravanPeerLeg
-	peerReferences *action.PeerReferenceCatalog
-	// caravanStrikeFrames are this tick's agent-strike publications,
-	// filled by the strike hook while the roster steps and flushed
-	// by caravanAgentsTick (slice 3e).
-	caravanStrikeFrames []simulation.DivisionFrames
-	// caravanChatLines are the lines the agents spoke this tick,
-	// filled by the chat hook while the roster steps and flushed as
-	// local chat by caravanAgentsTick (slice 4).
-	caravanChatLines []caravanChatLine
 }
 
 /*

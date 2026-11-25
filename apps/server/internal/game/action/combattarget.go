@@ -42,9 +42,6 @@ type combatTarget struct {
 	at       simulation.Spawn
 	cos      *enterworld.CharacterCOS
 	cosRef   *enterworld.CharacterRef
-	// agent is a caravan agent (agentstrike.go, port-only): a detached
-	// snapshot of the agent the gid names, never a stored character.
-	agent *AgentTarget
 }
 
 /*
@@ -111,11 +108,6 @@ func (rt *Runtime) resolveMonsterOrPlayerTarget(division string, attacker *enter
 	}
 	player := rt.findCharacterByGid(division, gid)
 	if player == nil {
-		// A caravan agent's gid sits in the player band but names no
-		// stored character; the directory answers for it (port-only).
-		if agent, ok := rt.agentTarget(division, gid); ok {
-			return combatTarget{gid: gid, agent: &agent, at: agent.Pose}, true, true
-		}
 		return combatTarget{}, false, false
 	}
 	if player.ID == attacker.ID {
@@ -184,9 +176,6 @@ func (rt *Runtime) combatTargetExistsFor(division string, attackerID int64, atta
 			return !live.DeletePending && enterworld.CharacterAlive(live) &&
 				domain.CharacterWorldInstance(live) == attackerWorld
 		})
-	}
-	if _, ok := rt.agentTarget(division, gid); ok {
-		return true
 	}
 	owner := rt.characterByCosGID(division, gid)
 	var pet *enterworld.CharacterCOS
@@ -318,15 +307,6 @@ func (rt *Runtime) combatTargetSpacing(attacker *enterworld.Character, target co
 		}
 		spacing := simulation.CombatSpacing{ActorBodyRadius: simulation.BodyRadius(radius),
 			TargetBodyRadius: simulation.BodyRadius(target.cosRef.Parameters.BodyRadius), ActionReach: reach}
-		return spacing, spacing.Valid()
-	}
-	if target.agent != nil {
-		radius, ok := rt.deps.CharacterBodyRadius(attacker)
-		if !ok {
-			return simulation.CombatSpacing{}, false
-		}
-		spacing := simulation.CombatSpacing{ActorBodyRadius: simulation.BodyRadius(radius),
-			TargetBodyRadius: simulation.BodyRadius(target.agent.BodyRadius), ActionReach: reach}
 		return spacing, spacing.Valid()
 	}
 	return rt.playerToPlayerCombatSpacing(attacker, target.snapshot, reach)

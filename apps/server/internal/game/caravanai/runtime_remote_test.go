@@ -146,7 +146,7 @@ func TestStaleRemoteAnswerIsDropped(t *testing.T) {
 	// The hunter meets a thief on its route: it is now in combat.
 	rt.mu.Lock()
 	unit := rt.findAgentLocked("div", "[AI]Hunter_Kwan")
-	unit.RegionID = RegionJanganFerry
+	unit.RegionID = RegionJanganFerryEast
 	rt.mu.Unlock()
 	if d := stepWithin(t, rt, "[AI]Hunter_Kwan", thief, 1_100); d.Action != ActionAttackTarget {
 		t.Fatalf("combat step = %+v, want the local attack", d)
@@ -201,8 +201,8 @@ for the next flush.
 func TestMemoriesReachTheStoreOnlyThroughFlush(t *testing.T) {
 	store := &recordingStore{}
 	book := NewMemoryBook(store)
-	book.RecordRobberyOrKill("div", "[AI]Trader_Jin", "Raider", 1000, RegionJanganFerry, "", 1)
-	book.RecordRobberyOrKill("div", "[AI]Trader_Jin", "Raider", 1000, RegionJanganFerry, "", 2)
+	book.RecordRobberyOrKill("div", "[AI]Trader_Jin", "Raider", 1000, RegionJanganFerryEast, "", 1)
+	book.RecordRobberyOrKill("div", "[AI]Trader_Jin", "Raider", 1000, RegionJanganFerryEast, "", 2)
 	if store.memories != 0 || store.heat != 0 {
 		t.Fatalf("a mutation wrote to the store: %d memories, %d heat", store.memories, store.heat)
 	}

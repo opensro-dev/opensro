@@ -27,95 +27,35 @@ import (
 ==================
 TestHighwayRouteDetoursWhenFerryHeatIsHigh
 
-Verifies that a Cautious or 4-5 star caravan crosses Jangan->Donwhang at
-the main ferry under normal conditions and diverts to the northern ferry
-once ambush heat at the main dock reaches DetourHeatThreshold; the
-Donwhang->Hotan leg likewise leaves its hot west dock for the far-west
-crossing. A low-star Greedy caravan ignores the heat.
+Verifies that a Cautious or 4★-5★ caravan between Jangan and Donwhang uses the
+Jangan Ferry crossing under normal conditions, and switches to the Northern
+Mountain Detour once ambush heat at the Ferry reaches DetourHeatThreshold.
 ==================
 */
 func TestHighwayRouteDetoursWhenFerryHeatIsHigh(t *testing.T) {
 	normal := SelectRoute(TownJangan, TownDonwhang, 4, PersonalityCautious, map[uint16]int{
-		RegionJanganFerry: 20,
+		RegionJanganFerryEast: 20,
 	})
-	if normal[0].Town != TownJangan || normal[len(normal)-1].Town != TownDonwhang {
-		t.Fatalf("unexpected endpoints on Jangan->Donwhang: %+v -> %+v", normal[0], normal[len(normal)-1])
-	}
-	if !routeHasFerry(normal, RegionJanganFerry) || routeHasRegion(normal, RegionJanganFerryNorth) {
-		t.Fatalf("expected the main-ferry crossing, got regions %v", routeRegions(normal))
+	if len(normal) != 5 || normal[2].RegionID != RegionJanganFerryEast {
+		t.Fatalf("expected normal Jangan->Donwhang crossing at Ferry (%d), got %+v", RegionJanganFerryEast, normal)
 	}
 
 	hot := SelectRoute(TownJangan, TownDonwhang, 4, PersonalityCautious, map[uint16]int{
-		RegionJanganFerry: DetourHeatThreshold,
+		RegionJanganFerryEast: DetourHeatThreshold,
 	})
-	if !routeHasFerry(hot, RegionJanganFerryNorth) || routeHasRegion(hot, RegionJanganFerry) {
-		t.Fatalf("expected the northern detour, got regions %v", routeRegions(hot))
-	}
-
-	lowStar := SelectRoute(TownJangan, TownDonwhang, 1, PersonalityGreedy, map[uint16]int{
-		RegionJanganFerry: 75,
-	})
-	if !routeHasFerry(lowStar, RegionJanganFerry) {
-		t.Fatalf("a low-star Greedy caravan should ignore the heat, got regions %v", routeRegions(lowStar))
-	}
-
-	hotWest := SelectRoute(TownDonwhang, TownHotan, 4, PersonalityCautious, map[uint16]int{
-		RegionDonwhangFerryWest: DetourHeatThreshold,
-	})
-	if !routeHasFerry(hotWest, RegionDonwhangFerryFarWest) || routeHasRegion(hotWest, RegionDonwhangFerryWest) {
-		t.Fatalf("expected the far-west crossing, got regions %v", routeRegions(hotWest))
+	if len(hot) != 5 || hot[2].RegionID != RegionJanganNorthDetour {
+		t.Fatalf("expected hot Jangan->Donwhang crossing to detour via %d, got %+v", RegionJanganNorthDetour, hot)
 	}
 
 	fullHighway := SelectRoute(TownJangan, TownHotan, 5, PersonalityGreedy, map[uint16]int{
-		RegionJanganFerry: 75,
+		RegionJanganFerryEast: 75,
 	})
+	if len(fullHighway) != 9 {
+		t.Fatalf("expected 9 waypoints for Jangan->Donwhang->Hotan, got %d", len(fullHighway))
+	}
 	if fullHighway[0].Town != TownJangan || fullHighway[len(fullHighway)-1].Town != TownHotan {
 		t.Fatalf("unexpected endpoints on full highway: %+v -> %+v", fullHighway[0], fullHighway[len(fullHighway)-1])
 	}
-	if n := routeCountShop(fullHighway, "NPC_WC_SPECIAL"); n != 1 {
-		t.Fatalf("full highway should pass the Donwhang terminal once, got %d in regions %v", n, routeRegions(fullHighway))
-	}
-}
-
-// routeHasRegion reports whether any anchor sits in the region.
-func routeHasRegion(route []Waypoint, regionID uint16) bool {
-	for _, wp := range route {
-		if wp.RegionID == regionID {
-			return true
-		}
-	}
-	return false
-}
-
-// routeHasFerry reports whether the route crosses at the ferry landing
-// in the region (a Ferry anchor, not just any anchor passing through).
-func routeHasFerry(route []Waypoint, regionID uint16) bool {
-	for _, wp := range route {
-		if wp.RegionID == regionID && wp.Ferry {
-			return true
-		}
-	}
-	return false
-}
-
-// routeCountShop counts anchors carrying the specialty shop codename.
-func routeCountShop(route []Waypoint, shop string) int {
-	n := 0
-	for _, wp := range route {
-		if wp.SpecialtyShop == shop {
-			n++
-		}
-	}
-	return n
-}
-
-// routeRegions lists the route's anchor regions for failure messages.
-func routeRegions(route []Waypoint) []uint16 {
-	out := make([]uint16, len(route))
-	for i, wp := range route {
-		out[i] = wp.RegionID
-	}
-	return out
 }
 
 /*
@@ -135,7 +75,7 @@ func TestHardcodedBrainParleyVendettaAndAllyDecisions(t *testing.T) {
 		AgentName:    "[AI]Trader_Jin",
 		Role:         RoleTrader,
 		Personality:  PersonalityCautious,
-		RegionID:     RegionJanganFerry,
+		RegionID:     RegionJanganFerryEast,
 		HPPercent:    28,
 		CargoStars:   4,
 		CargoStacks:  10,
@@ -155,7 +95,7 @@ func TestHardcodedBrainParleyVendettaAndAllyDecisions(t *testing.T) {
 		AgentName:   "[AI]Hunter_Kwan",
 		Role:        RoleHunter,
 		Personality: PersonalityVengeful,
-		RegionID:    RegionDonwhangFerryWest,
+		RegionID:    RegionKarakoramPass,
 		HPPercent:   90,
 		Players: []ObservedPlayer{
 			{
@@ -177,7 +117,7 @@ func TestHardcodedBrainParleyVendettaAndAllyDecisions(t *testing.T) {
 		AgentName:   "[AI]Trader_Jin",
 		Role:        RoleTrader,
 		Personality: PersonalityHonorable,
-		RegionID:    RegionDonwhangFerry,
+		RegionID:    RegionDonwhangEastRoad,
 		HPPercent:   95,
 		Players: []ObservedPlayer{
 			{
@@ -233,7 +173,7 @@ func TestLLMBrainSuccessAndFallbackToHardcoded(t *testing.T) {
 		AgentName:   "[AI]Hunter_Kwan",
 		Role:        RoleHunter,
 		Personality: PersonalityHonorable,
-		RegionID:    RegionJanganFerry,
+		RegionID:    RegionJanganFerryEast,
 		HPPercent:   85,
 		Players: []ObservedPlayer{
 			{Name: "ShadowBlade", JobType: domain.JobThief, HPPercent: 90, Distance: 30},
@@ -412,7 +352,7 @@ func TestLLMBrainFollowsNoRedirect(t *testing.T) {
 	dec := brain.Decide(context.Background(), Situation{
 		AgentName: "[AI]Hunter_Kwan",
 		Role:      RoleHunter,
-		RegionID:  RegionJanganFerry,
+		RegionID:  RegionJanganFerryEast,
 		HPPercent: 85,
 		Players:   []ObservedPlayer{{Name: "ShadowBlade", JobType: domain.JobThief, HPPercent: 90, Distance: 30}},
 	})

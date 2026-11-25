@@ -123,27 +123,6 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 				}
 			}
 		}
-		// Port-only, not native (#3704 slice 4): a caravan command line
-		// (!accept/!hire/!memory) the AI caravan runtime claims is
-		// consumed the same way: the speaker gets the success ack and
-		// the agent's whispered answer (a notice when no agent
-		// answers, silence at the rate limit), and nothing reaches
-		// the room, the transcript or the feed. With no runtime wired
-		// the lines fall through as ordinary chat.
-		if rt.CaravanCommands != nil {
-			if request, err := DecodeChatRequestWithLinks(payload); err == nil && request.ChatType == ChatTypeAll {
-				if speaker, reply, handled := rt.CaravanCommands(divisionID, character, request.Message); handled {
-					_ = s.Send(OpChatAck, EncodeChatAckSuccess(request.ChatType, request.Second))
-					switch {
-					case speaker != "" && reply != "":
-						_ = s.Send(OpChatBroadcast, EncodeChatBroadcastNamed(ChatTypeWhisper, speaker, reply))
-					case reply != "":
-						_ = s.Send(OpChatBroadcast, EncodeChatNotice(reply))
-					}
-					return
-				}
-			}
-		}
 		outcome := HandleChat(deps, Views{Presence: presence, Parties: parties, Unions: rt.Unions, Stalls: rt.Stalls, Links: rt.ItemLinks}, divisionID, character, payload)
 		// Port-only, not native: a shadow-muted author's lines reach only
 		// the author, who sees the same echo and acknowledgement as ever.
