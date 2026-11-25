@@ -109,7 +109,8 @@ export {
 	laterWorldMapGuidePublicPaths
 } from "./laterClientImports.mjs";
 import { createLaneMemo, outputSignatures, signatureHash } from "./shared/laneMemo.mjs";
-import { dataRootsHash, serverRosterRoots } from "./shared/resourceBuildFingerprint.mjs";
+import { dataRootsHash } from "./shared/resourceBuildFingerprint.mjs";
+import { serverRosterKey } from "./char/npcModelRoster.mjs";
 import { fileURLToPath } from "node:url";
 
 /*
@@ -477,7 +478,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		audioLane,
 		cursorAssetsLane,
 		lane( "title-characters", { modules: laneModules( "titleCharacters" ) }, titleCharacterAssetsLane ),
-		lane( "npc", { modules: laneModules( "npc" ), roots: serverRosterRoots() }, npcAssetsLane ),
+		lane( "npc", { modules: laneModules( "npc" ), key: serverRosterKey }, npcAssetsLane ),
 		worldLane
 	] );
 	const titleRosterAssets = titleCharacterAssets.roster;

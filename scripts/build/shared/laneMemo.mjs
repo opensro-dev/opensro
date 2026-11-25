@@ -203,6 +203,21 @@ function changedParts( recorded, current ) {
 
 /*
 ================
+rootsPart
+
+The roots key part: the lane's own roots and its computed key. A lane
+with neither keeps the empty part older records hold.
+================
+*/
+async function rootsPart( roots, key ) {
+	const hashed = roots.length > 0 ? await hashRoots( roots ) : "";
+	return key ?
+		`${hashed}\nkey ${await key()}` :
+		hashed;
+}
+
+/*
+================
 createLaneMemo
 
 options: upstream ({ data, startup } hashes of everything before the
@@ -227,7 +242,7 @@ export function createLaneMemo( {
 	laneParts
 	================
 	*/
-	async function laneParts( { modules, roots = [] } ) {
+	async function laneParts( { modules, roots = [], key } ) {
 		entryHash ??= createHash( "sha256" ).update( await readFile( entry ) ).digest( "hex" );
 		const code = {};
 		for ( const module of modules ) {
@@ -239,7 +254,7 @@ export function createLaneMemo( {
 			startup: upstream.startup,
 			environment,
 			entry: entryHash,
-			roots: roots.length > 0 ? await hashRoots( roots ) : "",
+			roots: await rootsPart( roots, key ),
 			code
 		};
 	}
@@ -297,7 +312,8 @@ export function createLaneMemo( {
 
 		Runs the lane, or replays its record. inputs.modules are the files (URL
 		or path) that hold the lane's steps; inputs.roots are fingerprint roots
-		the lane alone reads beyond the shared upstream.
+		the lane alone reads beyond the shared upstream; inputs.key, when set,
+		digests an input that is no file tree (the npc lane's server rosters).
 		================
 		*/
 		async lane( name, inputs, run ) {

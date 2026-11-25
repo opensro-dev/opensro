@@ -104,6 +104,25 @@ test("an unchanged lane replays its result; code, upstream and output changes ru
 	} );
 });
 
+test("a lane keyed on a computed digest replays while it holds and runs when it moves", async () => {
+	// The npc lane keys on its server roster exports, not the server's
+	// sources: equal exports replay however much Go changed (r204m, #4353).
+	await withLane( async ( { memo, module, logs } ) => {
+		const counter = { runs: 0 };
+		let digest = "rosters-a";
+		const inputs = { modules: [ module ], key: async () => digest };
+		const first = memo();
+		await first.lane( "lane", inputs, produce( counter ) );
+		await first.commit();
+		await memo().lane( "lane", inputs, produce( counter ) );
+		assert.equal( counter.runs, 1, "an unchanged key must not run the lane" );
+		digest = "rosters-b";
+		await memo().lane( "lane", inputs, produce( counter ) );
+		assert.equal( counter.runs, 2 );
+		assert.match( logs.at( -1 ), /roots changed/ );
+	} );
+});
+
 test("a record written before folder keys replays and learns them; a moved folder then names itself", async () => {
 	await withLane( async ( { memo, module, logs } ) => {
 		const counter = { runs: 0 }, inputs = { modules: [ module ] };
