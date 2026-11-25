@@ -57,7 +57,7 @@ The caster's half of the transaction, shared by both recipients.
 func (rt *Runtime) chargeDebuff(c debuffCast) (OpResult, bool) {
 	var refusal uint16
 	if !c.doors.update(c.character, "skill-hostile-debuff", func() bool {
-		if !enterworld.CharacterAlive(c.character) || !enterworld.SkillLearned(c.character, c.skill.ID) {
+		if !enterworld.CharacterAlive(c.character) || !enterworld.SkillUsable(c.character, c.skill) {
 			return false
 		}
 		cost, code := rt.offensivePhaseCost(c.division, c.character, c.skill, c.now, nil)

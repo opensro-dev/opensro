@@ -106,7 +106,7 @@ func (rt *Runtime) acceptLinkedTargetEffect(division string, c, snapshot, target
 
 	var refusal uint16
 	if !rt.deps.Update(c, "linked-effect-cost", func() bool {
-		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
+		if !enterworld.CharacterAlive(c) || !enterworld.SkillUsable(c, skill) {
 			return false
 		}
 		cost, code := rt.offensivePhaseCost(division, c, skill, now, nil)

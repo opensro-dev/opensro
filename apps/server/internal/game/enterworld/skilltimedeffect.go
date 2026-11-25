@@ -496,6 +496,14 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		if (result.Area.Present || disguise) && col == 21 {
 			continue // an area buff's range word is not a target reach
 		}
+		// The operator Harmony (SKILL_OP_HARMONY_A_01, the /GMSKILL cast)
+		// authors Self (column 26) on a buff field; the player Harmony does
+		// not. A field stands where its caster stands and its select word
+		// already names the caster, so Self adds no reach. Inferred: the
+		// original reads it the same way, or /GMSKILL could never cast.
+		if result.Field.Present && col == 26 {
+			continue
+		}
 		if fields[col] != "0" {
 			return
 		}

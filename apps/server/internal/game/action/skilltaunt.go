@@ -54,7 +54,7 @@ as the targeted attack owner. No selection is inferred from a stale UI target.
 func (rt *Runtime) acceptUntargetedTaunt(c tauntCast, cast wire.SkillAction) OpResult {
 	c.now = rt.Now().UnixMilli()
 	if cast.HasTarget || cast.HasGroundTarget || !c.skill.Threat.Only || c.skill.TargetRequired ||
-		!enterworld.CharacterAlive(c.snapshot) || !enterworld.SkillLearned(c.snapshot, c.skill.ID) || rt.Monsters == nil {
+		!enterworld.CharacterAlive(c.snapshot) || !enterworld.SkillUsable(c.snapshot, c.skill) || rt.Monsters == nil {
 		return offensiveRefusal(0x3011)
 	}
 	if rt.skillCastPostureBlocked(c.division, c.snapshot, c.now) || rt.hasOpenSkillCast(c.division, c.snapshot.Name) {
@@ -157,7 +157,7 @@ func (rt *Runtime) releaseTaunt(c tauntCast) (OpResult, skillCastDecision) {
 	}
 	var refusal uint16
 	if !c.doors.update(c.character, "skill-taunt", func() bool {
-		if !enterworld.CharacterAlive(c.character) || !enterworld.SkillLearned(c.character, c.skill.ID) {
+		if !enterworld.CharacterAlive(c.character) || !enterworld.SkillUsable(c.character, c.skill) {
 			return false
 		}
 		cost, code := rt.offensivePhaseCost(c.division, c.character, c.skill, c.now, nil)

@@ -40,7 +40,7 @@ func (rt *Runtime) acceptTimedTargetEffect(division string, c, snapshot *enterwo
 	}
 	if !skill.TimedEffect.Pinned || !skill.TimedEffect.Targeted || skill.TimedEffect.Persistent ||
 		!cast.HasTarget || cast.HasGroundTarget || cast.TargetGid == 0 ||
-		!enterworld.CharacterAlive(snapshot) || !enterworld.SkillLearned(snapshot, skill.ID) {
+		!enterworld.CharacterAlive(snapshot) || !enterworld.SkillUsable(snapshot, skill) {
 		return OpResult{DiagnosticRefusal: "timed-target-admission-refused"}
 	}
 	target := rt.findCharacterByGid(division, cast.TargetGid)
@@ -90,7 +90,7 @@ func (rt *Runtime) acceptTimedTargetEffect(division string, c, snapshot *enterwo
 	effectToken := atomic.AddUint32(&rt.castTokenCounter, 1)
 	var refusal uint16
 	if !rt.deps.Update(c, "timed-target-cost", func() bool {
-		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
+		if !enterworld.CharacterAlive(c) || !enterworld.SkillUsable(c, skill) {
 			return false
 		}
 		cost, code := rt.offensivePhaseCost(division, c, skill, now, nil)
