@@ -1234,11 +1234,12 @@ const INVENTORY_POPUP_PANELS: readonly string[] = [
 	"COS inventory",
 	"Storage"
 ];
+// Quests is not one: the quest list window (#4245) stands outside the main
+// popup, so a stall opening the inventory tab leaves it open.
 const MAIN_POPUP_PANELS: readonly string[] = [
 	"Character",
 	"Party",
 	"Skills",
-	"Quests",
 	"Actions",
 	"Academy",
 	...INVENTORY_POPUP_PANELS
