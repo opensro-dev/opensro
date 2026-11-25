@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
@@ -23,7 +24,7 @@ import (
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/transport"
 )
 
@@ -121,24 +122,44 @@ func (rt *Runtime) ConfigureMall(dir string, authority domain.MallAuthority, ext
 ================
 withholdUniqueOnlyGoods
 
-Port-only, not native (owner 2026-11-25): while SRO_UNIQUE_POP_TICKET
-guarantees one Magic Pop card per unique kill, uniques are the card's
-only source and the mall stops selling it, every package that holds it
-included. Off, the native v1.150 mall sells it (MALL_CONSUME_SPECIAL).
-The wiring sets UniqueRules before the mall loads (wiring_gameplay.go).
+Port-only, not native (owner 2026-11-25): goods a unique kill guarantees
+or rolls come from uniques only, so the mall stops selling every package
+that holds one. While SRO_UNIQUE_POP_TICKET adds a Magic Pop card to each
+unique kill the card leaves the mall; while SRO_NASRUN rolls a Devil's
+Spirit on each unique kill (nasrun_drops.go) every Spirit leaves it (the
+token shop keeps selling them: its tokens are unique rewards too). Both
+off, the mall is the one the built tree carries. The wiring sets
+UniqueRules before the mall loads (wiring_gameplay.go).
 ================
 */
 func (rt *Runtime) withholdUniqueOnlyGoods(catalog *commerce.MallCatalog) {
-	if !rt.UniqueRules.PopTicket {
+	refs := rt.deps.ItemReferences()
+	if refs == nil {
 		return
 	}
-	ref, ok := rt.deps.ItemReferences().ItemRefByCodename(gacha.CardCodename)
-	if !ok || ref == nil {
+	var card uint32
+	if rt.UniqueRules.PopTicket {
+		if ref, ok := refs.ItemRefByCodename(gacha.CardCodename); ok && ref != nil {
+			card = ref.RefObjID
+		}
+	}
+	spirits := nasrun.Enabled(os.Getenv(nasrun.Env))
+	if card == 0 && !spirits {
 		return
 	}
-	if removed := catalog.WithholdItem(ref.RefObjID); removed > 0 {
-		log.Infof("mall: %d Magic Pop card offer(s) withheld; uniques are its source (%s, port-only)",
-			removed, progression.EnvUniquePopTicket)
+	removed := catalog.WithholdPackagesHolding(func(refObjID uint32) bool {
+		if card != 0 && refObjID == card {
+			return true
+		}
+		if !spirits {
+			return false
+		}
+		ref, ok := refs.ItemRefByID(refObjID)
+		return ok && ref != nil && nasrun.IsSpirit(ref.TypeFlags())
+	})
+	if removed > 0 {
+		log.Infof("mall: %d unique-only offer(s) withheld (Magic Pop card %t, Devil's Spirit %t; port-only)",
+			removed, card != 0, spirits)
 	}
 }
 

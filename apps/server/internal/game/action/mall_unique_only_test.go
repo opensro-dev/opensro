@@ -1,8 +1,8 @@
 /*
 ===========================================================================
 
-mall_unique_only_test.go - the Magic Pop card leaves the mall while
-uniques guarantee it (owner 2026-11-25, port-only, not native)
+mall_unique_only_test.go - unique-only goods (the Magic Pop card, the
+Devil's Spirit) leave the mall (owner 2026-11-25, port-only, not native)
 
 ===========================================================================
 */
@@ -14,37 +14,62 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/gacha"
+	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/game/progression"
 )
 
 /*
 ================
-TestPopTicketWithholdsTheMallCard
+TestUniqueOnlyGoodsLeaveTheMall
 
-With SRO_UNIQUE_POP_TICKET on the card's package leaves the mall and
-every other good stays; off, the native mall keeps selling it.
+The pop ticket withholds the card, SRO_NASRUN withholds every Devil's
+Spirit (both sexes and colours) and leaves the extension gear listed;
+with both off the mall keeps every good.
 ================
 */
-func TestPopTicketWithholdsTheMallCard(t *testing.T) {
+func TestUniqueOnlyGoodsLeaveTheMall(t *testing.T) {
 	items := testItems()
 	items[gacha.CardCodename] = &enterworld.ItemRef{RefObjID: 900, Codename: gacha.CardCodename, TypeIDs: [4]int64{3, 3, 14, 1}}
-	catalog := func() *commerce.MallCatalog {
-		return &commerce.MallCatalog{Offers: []commerce.MallPackage{
-			{Code: "PACKAGE_ITEM_MALL_GACHA_CARD", ItemIDs: []uint32{900}},
-			{Code: "PACKAGE_POTION", ItemIDs: []uint32{7}},
-		}}
-	}
-	for _, on := range []bool{true, false} {
-		rt, _ := newTestRuntime(testCharacter(), gmItemSource{items})
-		rt.UniqueRules = progression.UniqueRules{PopTicket: on}
-		mall := catalog()
-		rt.withholdUniqueOnlyGoods(mall)
-		want := 2
-		if on {
-			want = 1
+	items["ITEM_MALL_AVATAR_M_NASRUN"] = &enterworld.ItemRef{RefObjID: 51676, Codename: "ITEM_MALL_AVATAR_M_NASRUN", TypeIDs: [4]int64{3, 1, 14, 1}}
+	items["ITEM_MALL_AVATAR_W_NASRUN_BLUE"] = &enterworld.ItemRef{RefObjID: 51681, Codename: "ITEM_MALL_AVATAR_W_NASRUN_BLUE", TypeIDs: [4]int64{3, 1, 14, 1}}
+	items["ITEM_MALL_NASRUN_EXTENSION"] = &enterworld.ItemRef{RefObjID: 51684, Codename: "ITEM_MALL_NASRUN_EXTENSION", TypeIDs: [4]int64{3, 3, 13, 16}}
+	codes := func(mall *commerce.MallCatalog) map[string]bool {
+		out := map[string]bool{}
+		for _, offer := range mall.Offers {
+			out[offer.Code] = true
 		}
-		if len(mall.Offers) != want || mall.Offers[len(mall.Offers)-1].Code != "PACKAGE_POTION" {
-			t.Fatalf("pop ticket %t: offers %+v, want %d with the potion kept", on, mall.Offers, want)
+		return out
+	}
+	cases := []struct {
+		popTicket bool
+		nasrun    string
+		want      []string
+	}{
+		{true, "off", []string{"SPIRIT_M", "SPIRIT_W_BLUE", "EXTENSION", "POTION"}},
+		{false, "on", []string{"CARD", "EXTENSION", "POTION"}},
+		{true, "on", []string{"EXTENSION", "POTION"}},
+		{false, "off", []string{"CARD", "SPIRIT_M", "SPIRIT_W_BLUE", "EXTENSION", "POTION"}},
+	}
+	for _, tc := range cases {
+		t.Setenv(nasrun.Env, tc.nasrun)
+		rt, _ := newTestRuntime(testCharacter(), gmItemSource{items})
+		rt.UniqueRules = progression.UniqueRules{PopTicket: tc.popTicket}
+		mall := &commerce.MallCatalog{Offers: []commerce.MallPackage{
+			{Code: "CARD", ItemIDs: []uint32{900}},
+			{Code: "SPIRIT_M", ItemIDs: []uint32{51676}},
+			{Code: "SPIRIT_W_BLUE", ItemIDs: []uint32{51681}},
+			{Code: "EXTENSION", ItemIDs: []uint32{51684}},
+			{Code: "POTION", ItemIDs: []uint32{7}},
+		}}
+		rt.withholdUniqueOnlyGoods(mall)
+		got := codes(mall)
+		if len(got) != len(tc.want) {
+			t.Fatalf("pop ticket %t, nasrun %s: kept %v, want %v", tc.popTicket, tc.nasrun, got, tc.want)
+		}
+		for _, code := range tc.want {
+			if !got[code] {
+				t.Fatalf("pop ticket %t, nasrun %s: %s withheld; kept %v", tc.popTicket, tc.nasrun, code, got)
+			}
 		}
 	}
 }
