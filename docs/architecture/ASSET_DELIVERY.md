@@ -418,8 +418,12 @@ All reads happen in the asset worker
 `packs/packs.ts` resolves the path through the manifest (a request for
 `x.json` also finds `x.json.gz`) and tries, in order:
 
-1. **Cache Storage** (`packs/persistent.ts`, cache `sro-next-verified-v1`),
-   keyed by the member's digest. A hit is re-hashed; a mismatch is removed.
+1. **Cache Storage** (`packs/persistent.ts`, caches `sro-next-verified-v2-<hex>`
+   by the digest's first hex digit), keyed by the member's digest. A hit is
+   re-hashed; a mismatch is removed. A read these miss is answered from the
+   older single cache `sro-next-verified-v1` when the browser still has it,
+   and that copy moves; the older cache is deleted 14 days after its first
+   open, or when the origin refuses a write for quota.
 2. **A resident pack** already in memory (up to 128 MiB of whole packs).
 3. **The pack**:
    - a pack of at most 4 MiB is fetched whole, verified and kept;

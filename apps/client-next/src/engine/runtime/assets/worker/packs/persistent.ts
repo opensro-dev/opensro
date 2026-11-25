@@ -16,7 +16,15 @@ downloaded again on every refresh). Its reads still hit, but the inventory
 rebuild failed before every write, so nothing new was stored and nothing
 was evicted. A shard holds a sixteenth of the entries. A shard that still
 cannot be listed is dropped and starts empty rather than freezing the
-store, and the v1 cache is deleted on the first open.
+store.
+
+The v1 cache still holds what its player paid for, and its reads work at
+any size, so it is emptied by use instead of downloaded again: a read the
+shards miss is answered from it, the bytes are queued for their shard, and
+the v1 copy goes once the shard holds them. Nothing is ever added to it and
+it is never listed. It is deleted LEGACY_KEEP_MS after its first open by
+this store, or as soon as the origin refuses a write for quota, so what
+only an older release named does not stay.
 
 The budget is half the origin quota, between MIN_BUDGET_BYTES and
 MAX_BUDGET_BYTES: browsers grant an origin 60% of the disk (Chrome,
@@ -59,7 +67,11 @@ const STORE_SHARDS = 16;
 // store keys and refused 18,000 ("Operation too large", measured
 // 2026-11-25); 12,000 keeps a third in reserve, about 190,000 entries in all.
 export const MAX_SHARD_ENTRIES = 12000;
-const LEGACY_STORES = [ "sro-next-verified-v1" ];
+const LEGACY_STORE = "sro-next-verified-v1";
+// How long the legacy cache is kept for its entries to move, and the entry in
+// it that records when that ends.
+export const LEGACY_KEEP_MS = 14 * 24 * 60 * 60 * 1000;
+const LEGACY_EXPIRY_KEY = "/assets/.verified/legacy-expiry", LEGACY_EXPIRY_HEADER = "x-sro-expires";
 // The deadline storage() gives an operation; its rejection is a slow backend,
 // not a store that cannot be listed.
 const CACHE_TIMEOUT_MESSAGE = "Cache operation timed out";
@@ -139,9 +151,10 @@ budgetOf turns the origin quota into this store's byte budget
 */
 export function createPersistentAssets( budgetOf: ( quota: number | undefined ) => number = budgetFromQuota ) {
 	let opened: Promise<Shards | null> | null = null, tail: Promise<void> = Promise.resolve();
-	// Shards dropped because they could not be listed (rebuild), and whether
-	// this worker has deleted the legacy single cache yet.
-	let resets = 0, legacyDeleted = false;
+	// Shards dropped because they could not be listed (rebuild).
+	let resets = 0;
+	// The legacy cache while it has entries to move, and reads it answered.
+	let legacy: Cache | null = null, legacyHits = 0;
 	// Inventory entries per shard (shardOf), kept with the inventory.
 	let shardEntries: number[] = new Array( STORE_SHARDS ).fill( 0 );
 	let inventory: Map<string, number> | null = null, total = 0, budget = MIN_BUDGET_BYTES, estimatedAt = -Infinity;
@@ -341,6 +354,30 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 
 	/*
 	================
+	openLegacy
+
+	The legacy cache, or null when there is none or its time is over (it is
+	then deleted in the background). The first open starts that time.
+	================
+	*/
+	async function openLegacy(): Promise<Cache | null> {
+		if ( !await caches.has( LEGACY_STORE ) ) return null;
+		const cache = await caches.open( LEGACY_STORE );
+		const marker = await cache.match( LEGACY_EXPIRY_KEY );
+		if ( !marker ) {
+			const expires = String( Date.now() + LEGACY_KEEP_MS );
+			await cache.put(
+				LEGACY_EXPIRY_KEY,
+				new Response( null, { headers: { [LEGACY_EXPIRY_HEADER]: expires } } )
+			);
+			return cache;
+		}
+		if ( Date.now() < Number( marker.headers.get( LEGACY_EXPIRY_HEADER ) ) ) return cache;
+		void caches.delete( LEGACY_STORE ).catch( () => {} );
+		return null;
+	}
+	/*
+	================
 	open
 	================
 	*/
@@ -350,17 +387,14 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		// the session.
 		opened ??= storage( async () => {
 			if ( typeof caches === "undefined" ) return null;
-			const shards: Cache[] = await Promise.all(
-				Array.from( { length: STORE_SHARDS }, ( _, n ) => caches.open( STORE_PREFIX + n.toString( 16 ) ) )
-			);
-			// The legacy cache serves nothing the shards do, and one that outgrew
-			// keys() can never be evicted: delete it once, in the background.
-			if ( !legacyDeleted ) {
-				legacyDeleted = true;
-				for ( const name of LEGACY_STORES ) {
-					void Promise.resolve().then( () => caches.delete( name ) ).catch( () => {} );
-				}
-			}
+			// Without its legacy cache the store still works.
+			const [shards, older] = await Promise.all( [
+				Promise.all(
+					Array.from( { length: STORE_SHARDS }, ( _, n ) => caches.open( STORE_PREFIX + n.toString( 16 ) ) )
+				),
+				openLegacy().catch( () => null )
+			] );
+			legacy = older;
 			return shards;
 		} ).catch( error => {
 			noteFailure( "open", error );
@@ -463,6 +497,8 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				await storage( () => cacheFor( shards, url ).delete( url ) );
 				forget( url );
 				touched.delete( url );
+				const older = legacy;
+				if ( older ) await storage( () => older.delete( url ) );
 			} catch ( error ) {
 				noteFailure( "remove", error );
 				// A timed-out delete may still commit before admission resumes.
@@ -554,6 +590,23 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	}
 	/*
 	================
+	dropLegacyEntry
+
+	Removes a key's legacy copy now that its shard holds it. A failure only
+	leaves the copy for the legacy cache's own end.
+	================
+	*/
+	async function dropLegacyEntry( url: string ) {
+		const older = legacy;
+		if ( !older ) return;
+		try {
+			await storage( () => older.delete( url ) );
+		} catch ( error ) {
+			noteFailure( "remove", error );
+		}
+	}
+	/*
+	================
 	publish
 	================
 	*/
@@ -579,6 +632,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			const target = key( origin, digest );
 			if ( inventory.has( target ) ) {
 				touch( target );
+				await dropLegacyEntry( target );
 				return;
 			}
 			/*
@@ -632,16 +686,23 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				await storage( put );
 			} catch ( error ) {
 				if ( !(error instanceof DOMException) || error.name !== "QuotaExceededError" ) throw error;
-				const count = Math.max( 1, Math.ceil( inventory.size / 4 ) );
-				let freed = 0;
-				for ( let i = 0; i < count; i++ ) {
-					if ( !await evict() ) break;
-					freed++;
-				}
-				if ( !freed ) {
-					writesStopped = true;
-					skipped++;
-					return;
+				if ( legacy ) {
+					// The legacy cache goes before any current entry. The browser may
+					// free its space late; a later refusal then evicts.
+					legacy = null;
+					await storage( () => caches.delete( LEGACY_STORE ) );
+				} else {
+					const count = Math.max( 1, Math.ceil( inventory.size / 4 ) );
+					let freed = 0;
+					for ( let i = 0; i < count; i++ ) {
+						if ( !await evict() ) break;
+						freed++;
+					}
+					if ( !freed ) {
+						writesStopped = true;
+						skipped++;
+						return;
+					}
 				}
 				await storage( put );
 			}
@@ -649,6 +710,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			total += bytes.length;
 			shardEntries[shard]!++;
 			writes++;
+			await dropLegacyEntry( target );
 		} catch ( error ) {
 			noteFailure( "write", error );
 			inventory = null;
@@ -665,6 +727,38 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			noteFailure( "write", error );
 		} );
 		return tail;
+	}
+	// Copy before the caller transfers/detaches its buffer. Never wait for disk on
+	// the admission path; excess demand skips optional persistence, not rendering.
+	/*
+	================
+	enqueue
+
+	Queues verified bytes for the store. The promise settles (never
+	rejects) once the write has been tried or skipped: the admission
+	path ignores it, while a pack block shared across windows waits on
+	it so the next window finds the bytes stored (packs.ts sharedMember).
+	================
+	*/
+	function enqueue( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ): Promise<void> {
+		const id = key( origin, digest );
+		const queued = pending.get( id );
+		if ( queued ) return queued;
+		if (
+			stalled > 0 || pending.size >= MAX_PENDING_WRITES ||
+			queuedBytes + bytes.length > MAX_QUEUED_BYTES
+		) {
+			skipped++;
+			return Promise.resolve();
+		}
+		const owned = bytes.slice();
+		queuedBytes += owned.length;
+		const operation = write( origin, digest, owned ).finally( () => {
+			queuedBytes -= owned.length;
+			pending.delete( id );
+		} );
+		pending.set( id, operation );
+		return operation;
 	}
 	return {
 		// Whether verified bytes are stored, without reading them: null when the
@@ -711,7 +805,10 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				if ( removals.has( url ) ) return null;
 				const shards = await open( signal );
 				if ( !shards ) return null;
-				const response = await storage( () => cacheFor( shards, url ).match( url ), signal, release );
+				let response = await storage( () => cacheFor( shards, url ).match( url ), signal, release );
+				// The shards hold no copy: the legacy cache may, and it moves.
+				const older = response ? null : legacy;
+				if ( older ) response = await storage( () => older.match( url ), signal, release );
 				unclaimed = response;
 				if ( !response ) {
 					forget( url );
@@ -753,6 +850,10 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				}
 				hits++;
 				touch( url );
+				if ( older ) {
+					legacyHits++;
+					void enqueue( origin, digest, bytes );
+				}
 				return bytes;
 			} catch ( error ) {
 				if ( !signal?.aborted ) noteFailure( "read", error );
@@ -764,38 +865,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		},
 		remove,
 		write,
-		// Copy before the caller transfers/detaches its buffer. Never wait for disk on
-		// the admission path; excess demand skips optional persistence, not rendering.
-		/*
-		================
-		enqueue
-
-		Queues verified bytes for the store. The promise settles (never
-		rejects) once the write has been tried or skipped: the admission
-		path ignores it, while a pack block shared across windows waits on
-		it so the next window finds the bytes stored (packs.ts sharedMember).
-		================
-		*/
-		enqueue( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ): Promise<void> {
-			const id = key( origin, digest );
-			const queued = pending.get( id );
-			if ( queued ) return queued;
-			if (
-				stalled > 0 || pending.size >= MAX_PENDING_WRITES ||
-				queuedBytes + bytes.length > MAX_QUEUED_BYTES
-			) {
-				skipped++;
-				return Promise.resolve();
-			}
-			const owned = bytes.slice();
-			queuedBytes += owned.length;
-			const operation = write( origin, digest, owned ).finally( () => {
-				queuedBytes -= owned.length;
-				pending.delete( id );
-			} );
-			pending.set( id, operation );
-			return operation;
-		},
+		enqueue,
 		// The admitted manifest's startup packs and members: the entries eviction
 		// keeps. Replacing the set releases whatever only an older release named.
 		/*
@@ -832,6 +902,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			skipped,
 			writesStopped,
 			resets,
+			legacyHits,
 			budget,
 			pinned: inventory ? [ ...inventory.keys() ].filter( url => startup.has( url ) ).length : 0
 		})
