@@ -126,6 +126,7 @@ func (game *gameplayPlane) worldBound(
 	game.items.AbandonExchange(divisionID, character.Name)
 	game.items.AbandonStall(divisionID, character.Name)
 	game.items.DropInstanceInvite(divisionID, character.Name)
+	game.items.DropPartySummon(divisionID, character.Name)
 	game.mentorInvites.WorldBound(session, divisionID, character)
 	var guildID int64
 	var cooldown []wire.Frame
@@ -183,6 +184,7 @@ func (game *gameplayPlane) sessionClosed(session *transport.Session, cause error
 		game.items.AbandonExchange(divisionID, character.Name)
 		game.items.AbandonStall(divisionID, character.Name)
 		game.items.DropInstanceInvite(divisionID, character.Name)
+		game.items.DropPartySummon(divisionID, character.Name)
 		game.items.DropDisconnectedCargo(divisionID, character.Name, session.ID, cause)
 		game.items.ForgetCharacterSession(divisionID, character.Name, session.ID)
 		authorityStore.ReleaseCommittedCopy(divisionID, character.ID)

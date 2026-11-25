@@ -1159,6 +1159,9 @@ type Runtime struct {
 	// instanceInvites holds the unanswered instance invitations, one
 	// per invited party member (instance_invite.go).
 	instanceInvites instanceInviteBook
+	// partySummons holds the unanswered party summon invitations, one
+	// per summoned party member (party_summon.go).
+	partySummons partySummonBook
 	// InstanceEventSink receives instanced-world lifecycle events for
 	// the quest handler registry (instance_events.go); the composition
 	// root points it at the quest runtime's dispatch.

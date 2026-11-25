@@ -128,6 +128,9 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	rt.registerStorage(hub)
 	rt.registerNpcDialogResponse(hub)
 	hub.Handle(wire.OpRebirthPointAppointRequest, rt.hubHandler(hub, rt.HandleRebirthPointAppointment))
+	// 0x34C6 is the party leader's summon into an instanced world
+	// (party_summon.go; the later client's staged request bytes).
+	hub.Handle(opPartySummonRequest, rt.hubHandler(hub, rt.HandlePartySummon))
 	// Gacha's roll request shares this runtime's selected NPC, inventory
 	// authority and per-division operation lock. Generic 0x7338 is registered
 	// above by the NPC owner, never conditionally by this child feature.

@@ -45,6 +45,13 @@ export type SocialCommand =
 		accept: boolean;
 	}
 	| {
+		kind: "party-summon-roster" | "party-summon";
+	}
+	| {
+		kind: "party-summon-answer";
+		accept: boolean;
+	}
+	| {
 		kind: "guild-create";
 		gid: number;
 		name: string;
@@ -229,6 +236,26 @@ export function socialRequest( state: SocialState, c: SocialCommand ): WireFrame
 			u8( 1 );
 			u8( c.accept ? 1 : 2 );
 			opcode = 0x3393;
+			break;
+		case "party-summon-roster":
+		case "party-summon":
+			// The summon conversation (party_summon.go): the roster
+			// request {0, 0} is the port's completion; the summon
+			// {1, 0} is the later client's staged request bytes.
+			if ( !state.leader || state.self !== state.leader ) {
+				throw Error( "Only the party leader may summon" );
+			}
+			u8( c.kind === "party-summon" ? 1 : 0 );
+			u8( 0 );
+			opcode = 0x34c6;
+			break;
+		case "party-summon-answer":
+			if ( !state.summonPrompt ) {
+				throw Error( "Party summon is no longer available" );
+			}
+			u8( 2 );
+			u8( c.accept ? 1 : 0 );
+			opcode = 0x34c6;
 			break;
 		case "guild-create":
 			if ( state.guild ) {

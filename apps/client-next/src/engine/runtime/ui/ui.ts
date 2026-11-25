@@ -990,6 +990,14 @@ import {
 	resurrectionQuestion
 } from "@/engine/foundation/ui/resurrection-proposal";
 import { createInstancePrompt, instanceBoxLayout, instanceQuestion } from "@/engine/foundation/ui/instance-proposal";
+import {
+	createPartySummonPrompt,
+	partySummonBoxLayout,
+	partySummonQuestion,
+	partySummonWindowLayout,
+	PARTY_SUMMON_POSSIBLE
+} from "@/engine/foundation/ui/party-summon";
+import { createPartySummonHud } from "./hud/party-summon-hud";
 import { markupLines, messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 import {
 	systemMenu,
@@ -1855,6 +1863,9 @@ export function createUi( ports: UiPorts ) {
 	const storagePanel = createStoragePanel();
 	const resurrectionPrompt = createResurrectionPrompt();
 	const instancePrompt = createInstancePrompt();
+	// The party summon window and its invitation box (#3918).
+	const partySummonPrompt = createPartySummonPrompt();
+	const partySummonHud = createPartySummonHud();
 	const itemMall = createItemMall();
 	// CIFMallNotifyWnd (mall-notify.ts): "pending" until the session's first
 	// world entry decides it, as 683B40's +0x6FC latch; then shown or closed.
@@ -4952,6 +4963,15 @@ export function createUi( ports: UiPorts ) {
 			sendGameplay( { kind: "resurrection-consent", accept: id === "resurrection-accept" } );
 		} else if ( id === "instance-accept" || id === "instance-refuse" ) {
 			sendGameplay( { kind: "instance-consent", accept: id === "instance-accept" } );
+		} else if ( id === "party-summon-accept" || id === "party-summon-refuse" ) {
+			sendGameplay( { kind: "party-summon-answer", accept: id === "party-summon-accept" } );
+		} else if ( id === "party-summon-open" ) {
+			partySummonHud.request();
+			sendGameplay( { kind: "party-summon-roster" } );
+		} else if ( id === "party-summon" ) {
+			sendGameplay( { kind: "party-summon" } );
+		} else if ( id === "party-summon-close" ) {
+			partySummonHud.close();
 		} else if ( id === "party-invite" && view.gameplay?.target ) {
 			sendGameplay( {
 				kind: "party-invite",
@@ -9481,6 +9501,27 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
+			if ( event.kind === "drag" && event.id === "party-summon-drag" && view ) {
+				const layout = partySummonBoxLayout( view.width, view.height, partySummonPrompt.position() ),
+					next = partySummonBoxLayout( view.width, view.height, [
+						layout.frame[0] + event.dx,
+						layout.frame[1] + event.dy
+					] );
+				partySummonPrompt.place( [ next.frame[0], next.frame[1] ] );
+				dirty = true;
+				return;
+			}
+			if ( event.kind === "drag" && event.id === "party-summon-window-drag" && view ) {
+				const rows = view.gameplay?.social?.summon?.rows.length ?? 0,
+					layout = partySummonWindowLayout( view.width, view.height, rows, partySummonHud.position() ),
+					next = partySummonWindowLayout( view.width, view.height, rows, [
+						layout.frame[0] + event.dx,
+						layout.frame[1] + event.dy
+					] );
+				partySummonHud.place( [ next.frame[0], next.frame[1] ] );
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "drag" && event.id === "invite-drag" && view ) {
 				const type = view.gameplay?.social?.invitation?.type,
 					layout = proposalLayout( type, view.width, view.height, undefined, invitePosition ),
@@ -11217,6 +11258,11 @@ export function createUi( ports: UiPorts ) {
 			resurrectionPrompt.sync( proposer );
 			const instanceLeader = phase === "world" || retainedWorld ? next.gameplay?.social?.instance?.gid ?? 0 : 0;
 			instancePrompt.sync( instanceLeader );
+			const summonLeader = phase === "world" || retainedWorld ? next.gameplay?.social?.summonPrompt?.gid ?? 0 : 0;
+			partySummonPrompt.sync( summonLeader );
+			if ( partySummonHud.sync( phase === "world" || retainedWorld ? next.gameplay?.social : null ) ) {
+				dirty = true;
+			}
 			if ( phase !== "disconnected" ) disconnectPosition = null;
 			const gachaVisible = phase === "world" && !!next.gameplay?.gacha?.visible;
 			if ( gachaVisible && !gachaWasVisible ) {
@@ -16853,6 +16899,19 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					if ( partySettings ) {
 						controls = drawFrame.controls = controls.filter( c => c.id.startsWith( "party-setting" ) );
 						blocks.push( full );
+					}
+					// The party summon entry (#3918, port-drawn): the
+					// authored party window has no free control, so the
+					// leader's Summon rides as a tab under the window's
+					// frame; it asks the server for the roster.
+					if ( social?.leader && social.self === social.leader && !partySettings ) {
+						button(
+							"party-summon-open",
+							hudCopy( "UIIT_CTL_PARTY_SUMMON" ),
+							px + 8,
+							py + popup.frame[3] + 4,
+							96
+						);
 					}
 				}
 				if (
@@ -28369,6 +28428,138 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				);
 				button( "instance-accept", hudCopy( "UIIT_CTL_YES" ), layout.accept[0], layout.accept[1], 76 );
 				button( "instance-refuse", hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
+			}
+			// The party summon invitation (0xB4C6 kind 2, #3918): the
+			// shared confirm box with the leader's question line. The
+			// server never offers two prompts at once (one-transaction
+			// rule), so this simply draws after the instance box.
+			if ( game?.social?.summonPrompt && worldVisible ) {
+				const kept = ( id: string | null ) =>
+					!!id &&
+					(id.startsWith( "rebirth-" ) || id.startsWith( "invite-" ) || id.startsWith( "resurrection-" ) ||
+						id.startsWith( "instance-" ) || id.startsWith( "party-summon-" ));
+				controls = drawFrame.controls = controls.filter( c => kept( c.id ) );
+				blocks = drawFrame.blocks = [ full ];
+				if ( !kept( focus ) ) {
+					focus = drawFrame.focus = null;
+					composing = false;
+				}
+				paths.push( ...partyProposalAssets() );
+				const layout = partySummonBoxLayout( w, h, partySummonPrompt.position() ),
+					question = partySummonQuestion( game.social.summonPrompt.name );
+				controls.push( {
+					id: "party-summon-body",
+					label: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					kind: "region",
+					rect: layout.frame
+				}, {
+					id: "party-summon-drag",
+					label: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					kind: "region",
+					draggable: true,
+					rect: layout.drag
+				} );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...text.quads(
+						hudCopy( question.key ).replace( "%s", question.arg ),
+						layout.question,
+						full,
+						white,
+						{ vAlign: 0 }
+					)
+				);
+				button( "party-summon-accept", hudCopy( "UIIT_CTL_YES" ), layout.accept[0], layout.accept[1], 76 );
+				button( "party-summon-refuse", hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
+			}
+			// The party summon window (0xB4C6 kind 1, #3918; the later
+			// client's interface 214, drawn programmatically as no
+			// authored layout for it ships here): title, the native
+			// header lines, member rows with their eligibility, and
+			// the Summon button. Non-modal: the party window and the
+			// world stay usable beside it.
+			if ( partySummonHud.visible() && game?.social?.summon && worldVisible ) {
+				const summon = game.social.summon,
+					layout = partySummonWindowLayout( w, h, summon.rows.length, partySummonHud.position() ),
+					remaining = summon.rows[0]?.remaining ?? Math.max( 0, summon.allowed - summon.summoned ),
+					minutes = Math.floor( summon.limitSeconds / 60 ),
+					seconds = String( summon.limitSeconds % 60 ).padStart( 2, "0" ),
+					headers = [
+						hudCopy( "UIIT_STT_PARTY_SUMMON" ).replace( "%d", String( summon.allowed ) ),
+						hudCopy( "UIIT_STT_PARTY_SUMMON_PERSONNEL" ).replace( "%d", String( summon.summoned ) ),
+						hudCopy( "UIIT_STT_PARTY_SUMMON_LIMIT_TIME" ) + ": " +
+						(summon.limitSeconds ? minutes + ":" + seconds : "-"),
+						hudCopy( "UIIT_STT_PARTY_SUMMON_LIMIT_COUNT" ) + ": " + remaining
+					];
+				paths.push( ...partyProposalAssets() );
+				controls.push( {
+					id: "party-summon-window-body",
+					label: hudCopy( "UIIT_PAG_PARTY_SUMMON" ),
+					kind: "region",
+					rect: layout.frame
+				}, {
+					id: "party-summon-window-drag",
+					label: hudCopy( "UIIT_PAG_PARTY_SUMMON" ),
+					kind: "region",
+					draggable: true,
+					rect: layout.drag
+				} );
+				quads.push(
+					...normalTile( layout.frame, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_PAG_PARTY_SUMMON" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} )
+				);
+				for ( let i = 0; i < headers.length; i++ ) {
+					quads.push( ...text.quads( headers[i]!, layout.headers[i]!, full, white, { vAlign: 0 } ) );
+				}
+				quads.push(
+					...text.quads( hudCopy( "UIIT_STT_PARTY_SUMMON_MEMBER_NAME" ), layout.columns[0], full, white, {
+						vAlign: 0
+					} ),
+					...text.quads( hudCopy( "UIIT_STT_PARTY_SUMMON_ENTRANCE" ), layout.columns[1], full, white, {
+						vAlign: 0
+					} )
+				);
+				for ( let i = 0; i < summon.rows.length; i++ ) {
+					const row = summon.rows[i]!,
+						name = game.social.members.find( m => m.id === row.gid )?.name ?? String( row.gid ),
+						possible = row.eligibility === PARTY_SUMMON_POSSIBLE,
+						color: readonly [number, number, number, number] = row.entered ?
+							[ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] :
+							possible ?
+							[ 0x02 / 255, 0xda / 255, 0x11 / 255, 1 ] :
+							white;
+					quads.push(
+						...text.quads( name, layout.rows[i]!.name, full, white, { vAlign: 0 } ),
+						...text.quads(
+							hudCopy( possible ? "UIIT_CTL_PARTY_SUMMON_POSSILBE" : "UIIT_CTL_PARTY_SUMMON_IMPOSSILBE" ),
+							layout.rows[i]!.state,
+							full,
+							color,
+							{ vAlign: 0 }
+						)
+					);
+				}
+				button( "party-summon", hudCopy( "UIIT_CTL_PARTY_SUMMON" ), layout.summon[0], layout.summon[1], 96 );
+				button( "party-summon-close", hudCopy( "UIIT_CTL_CLOSE" ), layout.close[0], layout.close[1], 76 );
 			}
 			const fatalAssetFailure = next.frontend?.error ?? next.resourceError ?? hud.error() ?? text.error() ??
 				guideResources.error() ??
