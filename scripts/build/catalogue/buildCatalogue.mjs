@@ -14,8 +14,9 @@ usage: node scripts/build/catalogue/buildCatalogue.mjs [--release <id>] [--out <
 (--out writes the catalogue somewhere else, for a trial run; the inputs
 always come from the generated tree. --since is the previous release's
 commit: notes.json lists the player notes of the merges after it.
---portraits draws each monster's portrait through the client's viewer,
-which must already be served at that URL, e.g. http://127.0.0.1:5173/.)
+--portraits takes each monster's portrait from the published still family
+(/assets/npc/hunting-portraits/, drawn by the asset build's viewer pass)
+of the release served at that URL, e.g. http://127.0.0.1:5173/.)
 
 ===========================================================================
 */
@@ -32,7 +33,7 @@ import { sharedCacheEnvironment } from "../../lib/goEnvironment.mjs";
 import { runPython } from "../shared/pythonRun.mjs";
 import { fillFormerIds, readFormerIds } from "./formerIds.mjs";
 import { playerNotes } from "./playerNotes.mjs";
-import { renderPortraits } from "./renderPortraits.mjs";
+import { publishedPortraits } from "./publishedPortraits.mjs";
 
 // The client's TypeScript loads through the loader above, so these import
 // late: an item's tooltip as the game prints it, and the website's bundle.
@@ -51,9 +52,6 @@ const SHARD_SETTINGS = path.join( serverRoot, "config", "shard-settings.json" );
 // The WebP encoders' content cache (webp_pool.py): an image unchanged since
 // any earlier build is copied, not encoded again.
 const WEBP_CACHE = buildStatePath( "catalogue-webp-cache" );
-// The portrait stills, kept under the key of the viewer and packs that
-// drew them (renderPortraits.mjs portraitKey).
-const PORTRAIT_CACHE = buildStatePath( "catalogue-portrait-cache" );
 // A requirement value no item asks for: requirements read as met (white),
 // since the catalogue has no player to compare against.
 const MET = 0xffff;
@@ -402,11 +400,10 @@ async function main() {
 		const monsters = readJSON( path.join( work, "monsters.json" ) );
 		const portraitPairs = [];
 		if ( options.portraits ) {
-			const { drawn, failed } = await renderPortraits( {
+			const { drawn, failed } = await publishedPortraits( {
 				viewerBase: options.portraits,
 				monsters: monsters.monsters,
-				workDir: path.join( work, "portraits" ),
-				cacheDir: PORTRAIT_CACHE
+				workDir: path.join( work, "portraits" )
 			} );
 			for ( const monster of monsters.monsters ) {
 				const png = drawn.get( monster.id );
