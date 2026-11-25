@@ -7,8 +7,8 @@ The six v1.696 mall scrolls (3/3/13/21, ITEM_MALL_*_EXP_SCROLL_*TIME)
 author Param1 as a duration in seconds, Param2 as the reward kind and
 Param3 as a percent: kind 1 raises the EXP keeper for that long, kind 2
 the skill-EXP keeper. The port keeps both as param jobs (paramjob.go),
-the same CTJ_CharParamKeeper rows the native premium tickets raise on
-their own keepers: the kill-reward distributor sums the param-job
+the same character-param keeper rows the native premium tickets raise
+on their own keepers: the kill-reward distributor sums the param-job
 keeper with the premium keeper, so a scroll and a premium stack. A
 second scroll of the same item and kind restarts the job, as any
 param-job upsert does.
