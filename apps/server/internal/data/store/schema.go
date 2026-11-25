@@ -311,7 +311,7 @@ var storeSteps = map[int]storeStep{
 	55: {true, "optional per-character reverseUserPoint (reverse return scroll saved location, #3903)", 15, 17},
 	58: {false, "optional per-character inventoryAdditionUsed and account expansionUses (later capacity addition items, #4240); the warehouse count nests in the guild record", 15, 17},
 	59: {true, "no record change; layout 16 adds beta_silk_progress (the hourly silk clock, #4429)", 16, 17},
-	60: {true, "no record change; layout 17 adds caravan_escort_days (the AI caravan daily escort cap, #3704 slice 5)", 5, 17},
+	60: {true, "no record change; layout 17 adds caravan_escort_days (the AI caravan daily escort cap, #3704 slice 5)", 17, 17},
 	63: {false, "optional per-item linkedStorage (Magic Cube elixir rows, #3906)", 5, 17},
 }
 
