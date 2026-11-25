@@ -53,6 +53,13 @@ type AgentEntity struct {
 	Pose        Pose
 	Target      Pose
 	Moving      bool
+	// HP and MaxHP are the live vitals (gauge and combat snapshots);
+	// Level and LastAttacker feed the combat directory (slice 3c):
+	// the defender level, and who the agent is already fighting.
+	HP           int
+	MaxHP        int
+	Level        uint8
+	LastAttacker string
 }
 
 /*
@@ -84,13 +91,17 @@ The entity snapshot of one agent. Callers hold r.mu (AgentEntities).
 */
 func (u *AgentUnit) entityLocked() AgentEntity {
 	entity := AgentEntity{
-		CharacterID: u.CharacterID,
-		Name:        u.Name,
-		JobType:     jobTypeForRole(u.Role),
-		ModelCode:   u.ModelCode,
-		SuitCode:    u.JobSuitCode,
-		WeaponCode:  u.WeaponCode,
-		Pose:        Pose{RegionID: u.RegionID, X: u.X, Y: u.Y, Z: u.Z},
+		CharacterID:  u.CharacterID,
+		Name:         u.Name,
+		JobType:      jobTypeForRole(u.Role),
+		ModelCode:    u.ModelCode,
+		SuitCode:     u.JobSuitCode,
+		WeaponCode:   u.WeaponCode,
+		Pose:         Pose{RegionID: u.RegionID, X: u.X, Y: u.Y, Z: u.Z},
+		HP:           u.HP,
+		MaxHP:        u.MaxHP,
+		Level:        u.Level,
+		LastAttacker: u.LastAttacker,
 	}
 	entity.Target = entity.Pose
 	if u.State == StateTraveling && u.WaypointIndex >= 0 && u.WaypointIndex < len(u.Route) {

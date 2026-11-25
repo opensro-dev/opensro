@@ -73,6 +73,10 @@ type AgentUnit struct {
 	// (entities.go): the roster's men and women match their suits.
 	ModelCode      string
 	PrimarySkillID uint32
+	// Level is the agent's combat level for damage taken (slice 3c):
+	// the defender level the strike formula weighs. Port-only flavour;
+	// agents mitigate nothing in this slice.
+	Level          uint8
 	CargoStars     uint8
 	CargoStacks    int
 	StackValueGold int64
@@ -376,6 +380,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			WeaponCode:     "ITEM_CH_SPEAR_07_C_RARE",
 			JobSuitCode:    "ITEM_CH_M_TRADE_TRADER_02",
 			PrimarySkillID: 318,
+			Level:          60,
 			CargoStars:     4,
 			CargoStacks:    10,
 			StackValueGold: 25000,
@@ -403,6 +408,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			WeaponCode:     "ITEM_CH_BOW_07_C_RARE",
 			JobSuitCode:    "ITEM_CH_W_TRADE_TRADER_04",
 			PrimarySkillID: 260,
+			Level:          60,
 			CargoStars:     5,
 			CargoStacks:    12,
 			StackValueGold: 30000,
@@ -430,6 +436,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			WeaponCode:     "ITEM_CH_BLADE_07_C_RARE",
 			JobSuitCode:    "ITEM_CH_M_TRADE_HUNTER_02",
 			PrimarySkillID: 112,
+			Level:          65,
 			Route:          routeHJ,
 		},
 		{
@@ -454,6 +461,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			WeaponCode:     "ITEM_CH_TBLADE_07_C_RARE",
 			JobSuitCode:    "ITEM_CH_M_TRADE_THIEF_02",
 			PrimarySkillID: 318,
+			Level:          65,
 			Route:          routeJD,
 			WaypointIndex:  viperIndex,
 		},
