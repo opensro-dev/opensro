@@ -18,6 +18,7 @@ live owner is an error.
 ===========================================================================
 */
 import { RENDERED_ACTORS } from "@/engine/foundation/animation/character-budget";
+import type { GpuWork } from "@/engine/foundation/rendering/gpu-work";
 
 /*
 ================
@@ -36,7 +37,7 @@ function noPointsVisible( count: number ): readonly boolean[] {
 createParticleQuery
 ================
 */
-export function createParticleQuery( device: GPUDevice, format: GPUTextureFormat ) {
+export function createParticleQuery( device: GPUDevice, format: GPUTextureFormat, work?: GpuWork ) {
 	const shader = device.createShaderModule( {
 		label: "native-particle-query",
 		code: `
@@ -152,6 +153,7 @@ export function createParticleQuery( device: GPUDevice, format: GPUTextureFormat
 				encoder.resolveQuerySet( queries!, 0, count, resolve!, 0 );
 				encoder.copyBufferToBuffer( resolve!, 0, read!, 0, count * 8 );
 				device.queue.submit( [ encoder.finish() ] );
+				work?.noteSubmit();
 				try {
 					await read!.mapAsync( GPUMapMode.READ, 0, count * 8 );
 				} catch ( error ) {

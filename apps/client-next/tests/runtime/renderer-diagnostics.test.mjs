@@ -80,6 +80,7 @@ function diagnosticDevices( t, features = () => Promise.resolve( [] ) ) {
 				row.video.push( value );
 			},
 			gpuTiming: () => null,
+			gpuWork: () => ({ submits: 0, uploadWrites: 0, uploadBytes: 0 }),
 			textureFeatures: () => rowFeatures,
 			geometry: () => null,
 			images: () => null,
