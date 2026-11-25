@@ -350,6 +350,55 @@ test("a guild master outside any party can donate and open the authority panel w
 	}
 });
 
+test("one donate confirm sends one donation and closes the window, as 5F49F0 does (#4413)", () => {
+	const sent = [];
+	const fixture = uiFixture( message => {
+		if ( message.kind === "gameplay" ) sent.push( message.command );
+	} );
+	let time = 0, published;
+	/*
+	================
+	draw
+	================
+	*/
+	function draw() {
+		published = fixture.ui.step( fixture.state, ++time * 100 ) ?? published;
+		assert.equal( fixture.ui.stats().error, null, "Guild draw must not fail" );
+		return defined( published );
+	}
+	const donateOpen = () => draw().controls.some( control => control.id === "guild-donate" );
+	try {
+		Object.assign( fixture.state.gameplay, { social: { ...guildState(), self: 0 } } );
+		fixture.state.width = 1600;
+		fixture.state.height = 900;
+		draw();
+		fixture.ui.event( { kind: "activate", id: "mall-notice-close" } );
+		draw();
+		fixture.ui.event( { kind: "activate", id: "open-window:Guild" } );
+		draw();
+		fixture.ui.event( { kind: "activate", id: "guild-tab:0" } );
+		draw();
+		fixture.ui.event( { kind: "activate", id: "guild-dialog:donate" } );
+		assert.ok( donateOpen(), "the donate window opens" );
+		fixture.ui.event( { kind: "edit", id: "social-amount", value: "250", start: 3, end: 3, composing: false } );
+		assert.equal( draw().controls.find( control => control.id === "guild-donate" )?.disabled, false );
+		fixture.ui.event( { kind: "activate", id: "guild-donate" } );
+		assert.deepEqual( sent.filter( command => command.kind === "guild-donate" ), [ {
+			kind: "guild-donate",
+			amount: 250
+		} ] );
+		assert.equal( donateOpen(), false, "the confirm closes the window" );
+		// The amount is over the fixture's 0 SP: OK still sends it, and the
+		// server's refusal is the feedback. A blank box keeps OK greyed.
+		fixture.ui.event( { kind: "activate", id: "guild-dialog:donate" } );
+		const reopened = draw().controls.find( control => control.id === "guild-donate" );
+		assert.equal( reopened?.disabled, true, "a blank box cannot confirm" );
+		assert.equal( sent.filter( command => command.kind === "guild-donate" ).length, 1 );
+	} finally {
+		fixture.dispose();
+	}
+});
+
 /*
 ================
 friendRows

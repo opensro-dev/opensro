@@ -5352,8 +5352,15 @@ export function createUi( ports: UiPorts ) {
 			if ( socialSubject.split( "\0", 1 )[0] && socialContents.split( "\0", 1 )[0] ) guildDialog = "";
 		} else if ( id === "guild-notice" ) {
 			sendGameplay( { kind: id, subject: socialSubject, contents: socialContents } );
-		} else if ( id === "guild-donate" ) sendGameplay( { kind: id, amount: Number( socialAmount ) } );
-		else if ( id === "guild-title" ) {
+		} else if ( id === "guild-donate" ) {
+			// CIFGuildPointUp_OnConfirm 5F49F0 sends the typed amount and closes
+			// the window (5E3730 with 0): one press is one donation, and the
+			// server's 0xB40F answer is the feedback. OK stays greyed for a
+			// blank or zero box (native would send 0, refused silently).
+			const amount = Number( socialAmount );
+			if ( Number.isInteger( amount ) && amount > 0 ) sendGameplay( { kind: id, amount } );
+			guildDialog = "";
+		} else if ( id === "guild-title" ) {
 			// 5E35E0: the nickname under the guild-name filter, then box 0x17's
 			// question; the input box closes unless the name is too long.
 			const rules = hud.data()?.guildNameRules;
@@ -26344,9 +26351,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								my,
 								id,
 								hudCopy( node.text ),
+								// No SP comparison: native 5F4B00/5F49F0 have none, and an
+								// OK greyed by it gave no reason (#4413); the server's
+								// 0xB40F refusal names the SP shortage.
 								!cancel && (donate ?
-									!/^\d+$/.test( socialAmount ) || Number( socialAmount ) < 1 ||
-									Number( socialAmount ) > (game.progression?.skillPoints ?? 0) :
+									!/^\d+$/.test( socialAmount ) || Number( socialAmount ) < 1 :
 									notice ?
 									false :
 									!socialMember)

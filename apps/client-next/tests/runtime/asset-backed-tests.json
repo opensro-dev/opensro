@@ -185,6 +185,7 @@
 		"sound-presentation.test.mjs",
 		"sox-presentation.test.mjs",
 		"specialty-deal-list.test.mjs",
+		"sro-macro-notices.test.mjs",
 		"stall-presentation.test.mjs",
 		"status-notices.test.mjs",
 		"storage-contents.test.mjs",

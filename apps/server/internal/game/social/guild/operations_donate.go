@@ -14,18 +14,15 @@ import (
 // the FULL member list INCLUDING the actor (both deltas are silent data
 // writes on the client and the ack carries no state, so excluding the
 // donor would leave their own pane stale - the notice-edit inclusion
-// rationale, DECISION). EVERY refusal stays fully wire-silent -
-// deliberately no ErrorPayload slot: the client's 0xB40F result-2 arm
-// exists (client CNetProcess_OnResponse0xB40F -> cat 0x10), but
-// no donate trigger->code pair is pinned in the v1.150 dump or the
-// v1.188 server dump (the recon chased the GP_Donation schema
-// column only), so
-// emitting a code would invent the pairing (errors.go posture; the
-// insufficient-SP guard is client-LOCAL - the edit seeds against
-// CICPlayer+0x838 and UIIT_MSG_GUILD_ERROR_GP_SUBSCRIPION_SP has no
-// pinned wire carrier).
+// rationale, DECISION). ErrorPayload is the 0xB40F {u8 2}{u8 code}
+// refusal for the actor when the v1.188 server names one
+// (donateRefusalCode); the native client has no SP check of its own
+// (CIFGuildPointUp_OnCreate 5F4B00 only shows the SP, and
+// CIFGuildPointUp_OnConfirm 5F49F0 sends the typed amount unchecked),
+// so this answer is the player's only feedback.
 type GpDonateOutcome struct {
 	AckPayload         []byte
+	ErrorPayload       []byte
 	GuildGpPushPayload []byte
 	DonorGpPushPayload []byte
 	MemberNames        []string
@@ -34,6 +31,27 @@ type GpDonateOutcome struct {
 
 func refusedGpDonate(reason string) GpDonateOutcome {
 	return GpDonateOutcome{Refusal: reason}
+}
+
+/*
+================
+donateRefusalCode
+
+The v1.188 code for a donation-door refusal (errors.go
+GuildErrDonate*), or false for the refusals the native server has no
+code for (overflow, a torn roster), which stay silent.
+================
+*/
+func donateRefusalCode(refusal enterworld.GuildRefusal) (byte, bool) {
+	switch refusal {
+	case enterworld.GuildRefusalInvalidAmount:
+		return GuildErrDonateInvalidAmount, true
+	case enterworld.GuildRefusalNotMember:
+		return GuildErrDonateNotMember, true
+	case enterworld.GuildRefusalInsufficientPoints:
+		return GuildErrDonateSPDeficit, true
+	}
+	return 0, false
 }
 
 // HandleGpDonate applies one decoded 0x740F request through the ATOMIC
@@ -71,11 +89,15 @@ func HandleGpDonate(deps Dependencies, divisionID string, actor *enterworld.Char
 		request.Amount,
 	)
 	if refusal.Refused() {
-		return refusedGpDonate(fmt.Sprintf(
+		outcome := refusedGpDonate(fmt.Sprintf(
 			"the donation door refused amount %d (%s; re-validated under the store lock)",
 			request.Amount,
 			guildRefusalReason(refusal),
 		))
+		if code, named := donateRefusalCode(refusal); named {
+			outcome.ErrorPayload = EncodeGuildErrorResult(code)
+		}
+		return outcome
 	}
 
 	names := make([]string, 0, len(donation.Snapshot.Members))

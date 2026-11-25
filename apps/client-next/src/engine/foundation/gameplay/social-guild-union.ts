@@ -644,6 +644,18 @@ export function socialGuildUnionPacket( lane: SocialGuildLane ): SocialState | n
 						arguments: [ String( Math.floor( hours / 24 ) ), String( hours % 24 ), String( minutes % 60 ) ]
 					}
 				};
+			} else if ( op === 0xb40f && code === 0x32 ) {
+				// The donation's SP shortage (v1.188 5C7880 -> 0x4C32). The
+				// native category row 0x32 reads "Cannot promote the guild due
+				// to insufficient GP", the level-up text; this answer names the
+				// SP the player typed instead, with the client's own line for it.
+				// Native text mismatch, fixed (#4413).
+				next = {
+					...next,
+					error: null,
+					unresolvedNotice: undefined,
+					notice: { key: "UIIT_MSG_GUILD_ERROR_GP_SUBSCRIPION_SP", value: 0, nativeType: 0 }
+				};
 			} else if ( op === 0xb515 && code === 0x48 ) {
 				// 7682F0: the warehouse is in a member's hands; it names them.
 				next = {

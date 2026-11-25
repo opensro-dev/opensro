@@ -35,6 +35,15 @@ const (
 	GuildErrLevelUpFull        byte = 0x21
 	GuildErrLevelUpGoldDeficit byte = 0x31
 	GuildErrLevelUpGPDeficit   byte = 0x32
+	// The manual GP donation's refusals (v1.188 0x7258 ->
+	// CGuildMgr_ValidateManualGPDonation 5C7880, sent by
+	// CGObjPC_HandleGuildDonate7258 517CC0 as the B258 error; the v1.150
+	// client reads them as 0xB40F result 2, CNetProcess_OnResponse0xB40F
+	// 766B6F -> category 0x10): amount 0 -> 0x02, not in a guild -> 0x0D
+	// (0x4C0D), more than the character's SP -> 0x32 (0x4C32).
+	GuildErrDonateInvalidAmount byte = 0x02
+	GuildErrDonateNotMember     byte = 0x0D
+	GuildErrDonateSPDeficit     byte = 0x32
 )
 
 // The category is supplied by the client opcode handler, not on the wire.

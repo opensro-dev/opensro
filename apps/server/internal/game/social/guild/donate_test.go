@@ -129,11 +129,13 @@ func TestHandleGpDonateSuccess(t *testing.T) {
 	}
 }
 
-// TestHandleGpDonateRefusals proves every donate refusal is fully
-// wire-silent (no ack, no deltas) and mutates nothing: a zero amount,
-// an amount over the donor's SP, a donor with NO SP field at all, a
-// guildless character, nil/delete-pending identities and malformed
-// bodies.
+// TestHandleGpDonateRefusals proves every donate refusal mutates
+// nothing and sends no ack or deltas: a zero amount, an amount over the
+// donor's SP, a donor with NO SP field at all, a guildless character,
+// nil/delete-pending identities and malformed bodies. The refusals the
+// v1.188 server names (5C7880) answer with their 0xB40F {2}{code}
+// error, so an over-SP donation is never silent (#4413); the rest stay
+// silent.
 func TestHandleGpDonateRefusals(t *testing.T) {
 	t.Parallel()
 	deps, authority, alfa, berk, guildID := newTwoMemberGuildFixture(t)
@@ -147,14 +149,15 @@ func TestHandleGpDonateRefusals(t *testing.T) {
 		actor   *enterworld.Character
 		payload []byte
 		want    string
+		error   []byte
 	}{
-		{"zero amount", berk, mutatorDonatePayload(0), "donation door refused"},
-		{"over SP", berk, mutatorDonatePayload(101), "donation door refused"},
-		{"no SP field", alfa, mutatorDonatePayload(1), "donation door refused"},
-		{"nil character", nil, mutatorDonatePayload(1), "characterNotFound"},
-		{"delete pending", pending, mutatorDonatePayload(1), "deletePending"},
-		{"malformed short", berk, []byte{0x01}, ""},
-		{"malformed trailing", berk, append(mutatorDonatePayload(1), 0x00), ""},
+		{"zero amount", berk, mutatorDonatePayload(0), "donation door refused", []byte{2, 0x02}},
+		{"over SP", berk, mutatorDonatePayload(101), "donation door refused", []byte{2, 0x32}},
+		{"no SP field", alfa, mutatorDonatePayload(1), "donation door refused", []byte{2, 0x32}},
+		{"nil character", nil, mutatorDonatePayload(1), "characterNotFound", nil},
+		{"delete pending", pending, mutatorDonatePayload(1), "deletePending", nil},
+		{"malformed short", berk, []byte{0x01}, "", nil},
+		{"malformed trailing", berk, append(mutatorDonatePayload(1), 0x00), "", nil},
 	}
 	for _, tc := range cases {
 		outcome := guild.HandleGpDonate(deps, mutatorDivision, tc.actor, tc.payload)
@@ -167,6 +170,9 @@ func TestHandleGpDonateRefusals(t *testing.T) {
 		}
 		if outcome.AckPayload != nil || outcome.GuildGpPushPayload != nil || outcome.DonorGpPushPayload != nil {
 			t.Errorf("%s: refusal carries frames (ack % X gp % X donor % X)", tc.name, outcome.AckPayload, outcome.GuildGpPushPayload, outcome.DonorGpPushPayload)
+		}
+		if !bytes.Equal(outcome.ErrorPayload, tc.error) {
+			t.Errorf("%s: error payload % X, want % X", tc.name, outcome.ErrorPayload, tc.error)
 		}
 	}
 
@@ -183,7 +189,11 @@ func TestHandleGpDonateRefusals(t *testing.T) {
 	if err := authority.CreateCharacter(mutatorDivision, "test-account", loner); err != nil {
 		t.Fatalf("CreateCharacter(%s): %v", loner.Name, err)
 	}
-	if outcome := guild.HandleGpDonate(deps, mutatorDivision, loner, mutatorDonatePayload(1)); !strings.Contains(outcome.Refusal, "not in a guild") {
+	outcome := guild.HandleGpDonate(deps, mutatorDivision, loner, mutatorDonatePayload(1))
+	if !strings.Contains(outcome.Refusal, "not in a guild") {
 		t.Errorf("guildless refusal = %q, want not-in-a-guild", outcome.Refusal)
+	}
+	if !bytes.Equal(outcome.ErrorPayload, []byte{2, 0x0D}) {
+		t.Errorf("guildless error payload % X, want 02 0D", outcome.ErrorPayload)
 	}
 }

@@ -231,6 +231,9 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 		guildID := characterGuild(actor)
 		outcome := HandleGpDonate(deps, divisionID, actor, payload)
 		if outcome.Refusal != "" {
+			if outcome.ErrorPayload != nil {
+				_ = s.Send(OpGuildGpDonateAck, outcome.ErrorPayload)
+			}
 			log.Debugf("guild: 0x740F (gp-donate) refused for %s: %s", actor.Name, outcome.Refusal)
 			return
 		}
